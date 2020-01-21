@@ -21,7 +21,7 @@ Installing dependencies:
 ```
 sudo apt install libsdl2-2.0-0
 
-sudo apt libassimp-dev
+sudo apt install libassimp-dev
 
 mkdir ~/catch2 && cd ~/catch2
 git clone https://github.com/catchorg/Catch2.git .
