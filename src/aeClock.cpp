@@ -69,7 +69,10 @@ aeFixedTimeStep::aeFixedTimeStep()
 
 void aeFixedTimeStep::Wait()
 {
-  AE_ASSERT( m_timeStep );
+  if ( m_timeStep == 0.0f )
+  {
+    return;
+  }
 
   if ( m_first )
   {
