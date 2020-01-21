@@ -101,7 +101,7 @@ private:
 
 public:
   // Internal use
-  void* GetObj();
+  void* GetObj() override;
 };
 
 //------------------------------------------------------------------------------

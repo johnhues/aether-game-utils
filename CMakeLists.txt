@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 # project name and supported languages
-project(aegame LANGUAGES CXX VERSION 0.1.0)
-set(LIBRARY_NAME ${PROJECT_NAME})
+project(aether-game-utils LANGUAGES CXX VERSION 0.1.0)
+set(AE_LIBRARY_NAME ae)
 
 # guard against in-source builds and bad build-type strings
 include(cmake/safeguards.cmake)

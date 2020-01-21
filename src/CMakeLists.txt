@@ -1,22 +1,30 @@
+cmake_minimum_required(VERSION 3.10)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
+
 # reference opengl
-find_package(OpenGL REQUIRED)
+INCLUDE(FindOpenGL)
 message(STATUS "Found OpenGL in ${OPENGL_INCLUDE_DIR}")
 
-# reference sdl (apt libsdl2-2.0-0)
-find_package(SDL2 REQUIRED)
-message(STATUS "Found SDL2 in ${SDL2_INCLUDE_DIRS}")
-include_directories(${SDL2_INCLUDE_DIRS})
+# reference sdl2
+INCLUDE(FindSDL2)
+message(STATUS "Found SDL2 in ${SDL2_INCLUDE_DIR}")
+include_directories(${SDL2_INCLUDE_DIR})
 
-# reference assimp (apt libassimp-dev)
+# reference libpng
+INCLUDE(FindPNG)
+message(STATUS "Found libpng in ${PNG_INCLUDE_DIRS}")
+include_directories(${PNG_INCLUDE_DIRS})
+
+# reference assimp
 find_package(ASSIMP REQUIRED)
 message(STATUS "Found assimp in ${ASSIMP_INCLUDE_DIRS}")
 include_directories(${ASSIMP_INCLUDE_DIRS})
 
 # library
-add_library(${LIBRARY_NAME} STATIC "")
+add_library(${AE_LIBRARY_NAME} STATIC "")
 
 target_sources(
-  ${LIBRARY_NAME}
+  ${AE_LIBRARY_NAME}
   PRIVATE
     aeAlloc.cpp
     aeClock.cpp
@@ -58,4 +66,4 @@ target_sources(
     ${CMAKE_CURRENT_LIST_DIR}/aeVfs.h
 )
 
-target_include_directories(${LIBRARY_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(${AE_LIBRARY_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
