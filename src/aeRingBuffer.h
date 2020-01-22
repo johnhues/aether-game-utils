@@ -25,12 +25,18 @@
 #define AERINGBUFFER_H
 
 //------------------------------------------------------------------------------
+// Headers
+//------------------------------------------------------------------------------
+#include "aeArray.h"
+
+//------------------------------------------------------------------------------
 // aeRingBuffer class
 //------------------------------------------------------------------------------
 template < typename T, uint32_t N >
 class aeRingBuffer
 {
 public:
+  aeRingBuffer();
   void Append( const T& val );
   void Clear();
 
@@ -39,14 +45,21 @@ public:
   uint32_t Size() const { return N; }
 
 private:
-  uint32_t m_first = 0;
-  uint32_t m_count = 0;
-  T m_buffer[ N ]; // @TODO: Should not construct object until PushBack
+  uint32_t m_first;
+  uint32_t m_count;
+  aeArray< T > m_buffer;
 };
 
 //------------------------------------------------------------------------------
 // aeRingBuffer member functions
 //------------------------------------------------------------------------------
+template < typename T, uint32_t N >
+aeRingBuffer< T, N >::aeRingBuffer() :
+  m_first( 0 ),
+  m_count( 0 ),
+  m_buffer( N, T() ) // @TODO: Should not construct object until PushBack
+{}
+
 template < typename T, uint32_t N >
 void aeRingBuffer< T, N >::Append( const T& val )
 {

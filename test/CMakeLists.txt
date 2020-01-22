@@ -9,7 +9,7 @@ add_executable(
 
 target_link_libraries(
   unit_tests
-  ${AE_LIBRARY_NAME}
+  ${AE_LIBRARIES}
   Catch2::Catch2
 )
 

@@ -39,8 +39,8 @@ class aeArray
 {
 public:
   aeArray();
-  aeArray( uint32_t size ); // Reserve size
-  aeArray( uint32_t length, const T& val ); // Init array with 'length' number of 'val's
+  aeArray( uint32_t size ); // Reserve size (with length of 0)
+  aeArray( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'vals'
   aeArray( const aeArray< T >& other );
   ~aeArray();
   void operator =( const aeArray< T >& other );
@@ -115,6 +115,7 @@ aeArray< T >::aeArray( uint32_t length, const T& value )
 
   Reserve( length );
 
+  m_length = length;
   for ( uint32_t i = 0; i < length; i++ )
   {
     m_array[ i ] = value;
@@ -260,6 +261,11 @@ int32_t aeArray< T >::Find( Fn testFn, const U& value ) const
 template < typename T >
 void aeArray< T >::Reserve( uint32_t size )
 {
+  if ( size == 0 )
+  {
+    return;
+  }
+
   // Next power of two
   size--;
   size |= size >> 1;
@@ -268,6 +274,8 @@ void aeArray< T >::Reserve( uint32_t size )
   size |= size >> 8;
   size |= size >> 16;
   size++;
+
+  AE_ASSERT( size );
 
   if ( size <= m_size )
   {
@@ -304,7 +312,7 @@ template < typename T >
 T& aeArray< T >::operator[]( int32_t index )
 {
   AE_ASSERT( index >= 0 );
-  AE_ASSERT( index < (int32_t)m_length );
+  AE_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
   return m_array[ index ];
 }
 

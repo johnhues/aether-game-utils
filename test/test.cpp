@@ -82,3 +82,11 @@ TEST_CASE( "arrays can be sized and resized", "[aeArray]" )
     REQUIRE( a.Size() == 8 );
   }
 }
+
+TEST_CASE( "arrays can be constructed with a specified length", "[aeArray]" )
+{
+  aeArray< int > a( 5, 7 );
+
+  REQUIRE( a.Length() == 5 );
+  REQUIRE( a.Size() == 8 );
+}

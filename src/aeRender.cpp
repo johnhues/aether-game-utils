@@ -1682,7 +1682,7 @@ void aeRenderer::Initialize( aeWindow* window, uint32_t width, uint32_t height )
   SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
   SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
   SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 );
-  SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 2 );
+  SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 16 );
 
   // @TODO: Add aeWindow to avoid assumed type and SDL_WINDOW cast
   m_context = SDL_GL_CreateContext( (SDL_Window*)m_window->window );

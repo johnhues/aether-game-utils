@@ -11,7 +11,7 @@ include_directories(${ASSIMP_INCLUDE_DIRS})
 add_executable(example example.cpp)
 target_link_libraries(
   example
-  ${AE_LIBRARY_NAME}
+  ${AE_LIBRARIES}
   ${OPENGL_LIBRARIES}
   ${PNG_LIBRARIES}
   ${SDL2_LIBRARY}
