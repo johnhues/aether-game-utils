@@ -548,12 +548,26 @@ aeFloat3 aeFloat3::Lerp(const aeFloat3& end, float t) const
 
 aeFloat3 aeFloat3::Slerp( const aeFloat3& end, float t ) const
 {
+  if ( Length() < 0.001f || end.Length() < 0.001f )
+  {
+    return aeFloat3( 0.0f );
+  }
+
   aeFloat3 v0 = NormalizeCopy();
   aeFloat3 v1 = end.NormalizeCopy();
   
   float d = aeMath::Clip( v0.Dot( v1 ), -1.0f, 1.0f );
+  if ( d > 0.999f )
+  {
+    return v1;
+  }
+
+  if ( d < -0.99f )
+  {
+    return v0;
+  }
+
   float angle = acosf( d ) * t;
-  if ( d > 0.99f ) { return v1; }
   aeFloat3 v2 = v1 - v0 * d;
   v2.Normalize();
   return ( ( v0 * cosf( angle ) ) + ( v2 * sinf( angle ) ) );
