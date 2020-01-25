@@ -37,7 +37,7 @@
 aeId< _C > GetId() const { return m_refable.GetId(); }\
 static _C* GetById( aeId< _C > id ) { return aeRefable< _C >::GetById( id ); }\
 private:\
-aeRefable< _C > m_refable;\
+aeRefable< _C > m_refable = this;\
 public:\
 
 //------------------------------------------------------------------------------
@@ -93,7 +93,7 @@ public:
   static T* GetById( aeId< T > id ) { return s_GetMap()->Get( id, nullptr ); }
 
 private:
-  aeRefable( const aeRefable& ) = delete;
+  //aeRefable( const aeRefable& ) = delete; // @HACK: Disabled this to support automatic 'this' assignment with AE_REFABLE
   aeRefable& operator= ( const aeRefable& ) = delete;
 
   typedef aeMap< aeId< T >, T* > RefMap;
@@ -140,6 +140,28 @@ private:
   U* m_Get( ... );
 
   aeId< T > m_id;
+};
+
+//------------------------------------------------------------------------------
+// aeRefPair class
+//------------------------------------------------------------------------------
+template < typename T, typename S >
+class aeRefPair
+{
+public:
+  aeRefPair( T* self );
+  ~aeRefPair();
+  
+  void Pair( aeRefPair< S, T >& other );
+  void Clear();
+  
+  S* Get();
+  const S* Get() const;
+  
+private:
+  friend class aeRefPair< S, T >;
+  T* m_self;
+  aeRefPair< S, T >* m_other;
 };
 
 //------------------------------------------------------------------------------
@@ -241,6 +263,63 @@ template < typename U >
 U* aeRef< T >::m_Get( ... )
 {
   return nullptr;
+}
+
+//------------------------------------------------------------------------------
+// aeRefPair member functions
+//------------------------------------------------------------------------------
+template < typename T, typename S >
+aeRefPair< T, S >::aeRefPair( T* self ) :
+  m_self( self ),
+  m_other( nullptr )
+{
+  AE_ASSERT( self );
+}
+
+template < typename T, typename S >
+aeRefPair< T, S >::~aeRefPair()
+{
+  Clear();
+}
+
+template < typename T, typename S >
+void aeRefPair< T, S >::Pair( aeRefPair< S, T >& other )
+{
+  if ( m_other == &other )
+  {
+    return;
+  }
+  
+  if ( m_other )
+  {
+    m_other->Clear();
+  }
+  other.Clear();
+  
+  m_other = &other;
+  other.m_other = this;
+}
+
+template < typename T, typename S >
+void aeRefPair< T, S >::Clear()
+{
+  if ( m_other )
+  {
+    m_other->m_other = nullptr;
+    m_other = nullptr;
+  }
+}
+
+template < typename T, typename S >
+S* aeRefPair< T, S >::Get()
+{
+  return m_other ? m_other->m_self : nullptr;
+}
+
+template < typename T, typename S >
+const S* aeRefPair< T, S >::Get() const
+{
+  return m_other ? m_other->m_self : nullptr;
 }
 
 #endif
