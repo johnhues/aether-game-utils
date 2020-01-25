@@ -1,3 +1,6 @@
+# Git
+*.orig
+
 # Prerequisites
 *.d
 
