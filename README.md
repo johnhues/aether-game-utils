@@ -22,14 +22,11 @@ A complete working example showing a window with a red background:
 ```
 #include "aeClock.h"
 #include "aeInput.h"
-#include "aeLog.h"
 #include "aeRender.h"
 #include "aeWindow.h"
 
 int main()
 {
-	AE_LOG( "Initialize" );
-
 	aeWindow window;
 	aeRenderer renderer;
 	aeInput input;
@@ -50,8 +47,6 @@ int main()
 		renderer.EndFrame();
 		timeStep.Wait();
 	}
-
-	AE_LOG( "Terminate" );
 
 	input.Terminate();
 	renderer.Terminate();
