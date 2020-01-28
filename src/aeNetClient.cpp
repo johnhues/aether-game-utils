@@ -1,0 +1,402 @@
+//------------------------------------------------------------------------------
+// aeNetClient.cpp
+//------------------------------------------------------------------------------
+// Copyright (c) 2020 John Hughes
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files( the "Software" ), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and /or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions :
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//------------------------------------------------------------------------------
+// Headers
+//------------------------------------------------------------------------------
+#include "aeNet.h"
+#include <vector>
+// #include <lua.hpp>
+#include "aeUuid.h"
+#include "aeLog.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include "EmSocket.h"
+#else
+#include <enet/enet.h>
+#endif
+
+//------------------------------------------------------------------------------
+// AetherUuid member functions
+//------------------------------------------------------------------------------
+AetherUuid AetherUuid::Generate()
+{
+  UuidGenerator gen;
+  Uuid localUuid = gen.newUuid();
+  AE_ASSERT( localUuid._bytes.size() == 16 );
+
+  AetherUuid result;
+  memcpy( result.uuid, localUuid._bytes.data(), 16 );
+  return result;
+}
+
+//------------------------------------------------------------------------------
+// AetherClient member functions
+//------------------------------------------------------------------------------
+namespace
+{
+  struct AetherClientInternal
+  {
+    AetherClient pub;
+    struct
+    {
+      std::vector<AetherPlayer> players;
+#ifdef __EMSCRIPTEN__
+      EmSocket sock;
+      uint8_t connBuffer[ 2048 ];
+      double prevTime;
+#else
+      ENetHost* host;
+#endif
+    } priv;
+  };
+}
+
+AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid )
+{
+  int32_t playerCount = ac->pub.playerCount;
+  for ( int32_t i = 0; i < playerCount; i++ )
+  {
+    AetherPlayer* p = ac->pub.allPlayers + i;
+    if ( memcmp( &p->uuid, &uuid, sizeof(uuid) ) == 0 ) { return p; }
+  }
+  
+  AE_FAIL();
+  return nullptr;
+}
+
+AetherPlayer* AetherClient_AddPlayer( AetherClientInternal* ac, AetherUuid uuid )
+{
+  AetherPlayer player;
+  player.uuid = uuid;
+  player.netId = 0;
+  player.userData = nullptr;
+  player.luaRef = LUA_NOREF;
+  player.alive = true;
+  player.pendingLevel = "";
+  player.pendingLink = "";
+  player.hasPendingLevelChange = false;
+  
+  ac->priv.players.push_back( player );
+  ac->pub.playerCount = ac->priv.players.size();
+  ac->pub.allPlayers = ac->priv.players.data();
+  ac->pub.localPlayer = ac->pub.allPlayers;
+  
+  return &ac->priv.players.back();
+}
+
+void AetherClient_Connect( AetherClient* _ac )
+{
+  AetherClientInternal* ac = (AetherClientInternal*)_ac;
+
+  AE_ASSERT( !ac->pub.isConnected );
+
+#ifdef __EMSCRIPTEN__
+  ac->priv.sock.Connect( ac->pub.serverAddress.host, ac->pub.serverAddress.port );
+#else
+  ENetAddress address;
+  enet_address_set_host( &address, ac->pub.serverAddress.host );
+  address.port = ac->pub.serverAddress.port;
+  enet_host_connect( ac->priv.host, &address, 2, 0 );
+#endif
+
+  ac->pub.isConnected = false;
+  ac->pub.m_isConnecting = true;
+}
+
+AetherClient* AetherClient_New( AetherUuid uuid, const char* ip, uint16_t port )
+{
+  AetherClientInternal* ac = new AetherClientInternal();
+
+#ifdef __EMSCRIPTEN__
+  ac->priv.sock.Initialize( ac->priv.connBuffer, sizeof(ac->priv.connBuffer) );
+  ac->priv.prevTime = 0.0;
+#else
+  enet_initialize();
+  ac->priv.host = enet_host_create( nullptr, 1, 2, 0, 0 );
+  AE_ASSERT( ac->priv.host );
+#endif
+  
+  AetherClient_AddPlayer( ac, uuid );
+  
+  ac->pub.isConnected = false;
+  ac->pub.m_isConnecting = false;
+  
+  strcpy( ac->pub.serverAddress.host, ip );
+  ac->pub.serverAddress.port = port;
+  
+  return (AetherClient*)ac;
+}
+
+void AetherClient_Delete( AetherClient* _ac )
+{
+  AetherClientInternal* ac = (AetherClientInternal*)_ac;
+
+#ifndef __EMSCRIPTEN__
+  enet_host_destroy( ac->priv.host );
+  enet_deinitialize();
+#endif
+
+  delete ac;
+}
+
+bool AetherClient_SystemReceive( AetherClientInternal* ac, AetherServerHeader header, const uint8_t* data, int32_t length, ReceiveInfo* infoOut )
+{
+  switch ( header.msgId )
+  {
+    case kSysMsgPlayerConnect:
+    {
+      AetherMsgConnect msg;
+      AE_ASSERT( sizeof(AetherMsgConnect) == length );
+      memcpy( &msg, data, length );
+      
+      AetherPlayer* player = AetherClient_AddPlayer( ac, msg.uuid );
+      infoOut->msgId = kSysMsgPlayerConnect;
+      // infoOut->player = player;
+      infoOut->length = 0;
+      return true;
+    }
+    default:
+    {
+      AE_FAIL();
+      return false;
+    }
+  }
+}
+
+bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
+{
+  AetherClientInternal* ac = (AetherClientInternal*)_ac;
+  
+#ifdef __EMSCRIPTEN__
+
+  double t = emscripten_get_now();
+  float dt = ( t - ac->priv.prevTime ) / 1000.0;
+  ac->priv.prevTime = t;
+
+  EmSocket* s = &ac->priv.sock;
+  if ( !s->IsOpen() )
+  {
+    ac->pub.isConnected = false;
+    ac->pub.m_isConnecting = false;
+    return false;
+  }
+  else if ( s->Service( dt ) )
+  {
+    if ( ac->pub.m_isConnecting )
+    {
+      ac->pub.isConnected = true;
+      ac->pub.m_isConnecting = false;
+
+      AE_LOG( "EMSCRIPTEN Connect" );
+      
+      AetherMsgConnect msg;
+      msg.uuid = ac->pub.localPlayer->uuid;
+      
+      SendInfo info;
+      info.msgId = kSysMsgPlayerConnect;
+      info.length = sizeof(AetherMsgConnect);
+      memcpy( info.data, &msg, info.length );
+      info.reliable = true;
+      AetherClient_QueueSend( _ac, &info );
+      
+      infoOut->msgId = kSysMsgServerConnect;
+      // infoOut->player = ac->pub.localPlayer;
+      infoOut->length = 0;
+      
+      return true;
+    }
+
+    uint8_t msg[ kMaxMessageSize ];
+    while ( 1 )
+    {
+      uint32_t msgLength = s->Recv( msg, sizeof(msg) );
+      if ( msgLength == 0 )
+      {
+        break;
+      }
+
+      AetherServerHeader header = *(AetherServerHeader*)msg;
+      uint8_t* data = msg + sizeof(header);
+      uint32_t length = msgLength - sizeof(header);
+
+      // AE_LOG( "server seq %u", header.msgSeq );
+      
+      if ( header.msgId & kSysMsgMask )
+      {
+        if ( AetherClient_SystemReceive( ac, header, data, length, infoOut ) )
+        {
+          return true;
+        }
+      }
+      else
+      {
+        infoOut->msgId = header.msgId;
+        // infoOut->player = nullptr;
+        infoOut->length = length;
+        memcpy( infoOut->data, data, length );
+        return true;
+      }
+    }
+  }
+
+#else
+
+  ENetEvent e;
+  memset( &e, 0, sizeof(e) );
+  while ( enet_host_service( ac->priv.host, &e, 0 ) > 0 )
+  {
+    switch( e.type )
+    {
+      case ENET_EVENT_TYPE_CONNECT:
+      {
+        AE_LOG( "ENET Connect" );
+        
+        AetherMsgConnect msg;
+        msg.uuid = ac->pub.localPlayer->uuid;
+        
+        SendInfo info;
+        info.msgId = kSysMsgPlayerConnect;
+        info.length = sizeof(AetherMsgConnect);
+        memcpy( info.data, &msg, info.length );
+        info.reliable = true;
+        AetherClient_QueueSend( _ac, &info );
+        
+        ac->pub.isConnected = true;
+        ac->pub.m_isConnecting = false;
+        
+        infoOut->msgId = kSysMsgServerConnect;
+        // infoOut->player = ac->pub.localPlayer;
+        infoOut->length = 0;
+        
+        return true;
+      }
+      case ENET_EVENT_TYPE_RECEIVE:
+      {
+        AetherServerHeader header = *(AetherServerHeader*)e.packet->data;
+        uint8_t* data = e.packet->data + sizeof(header);
+        int32_t length = e.packet->dataLength - sizeof(header);
+        
+        bool success = false;
+        if ( header.msgId & kSysMsgMask )
+        {
+          if ( AetherClient_SystemReceive( ac, header, data, length, infoOut ) )
+          {
+            success = true;
+          }
+        }
+        else
+        {
+          infoOut->msgId = header.msgId;
+          // infoOut->player = nullptr;
+          infoOut->length = length;
+          memcpy( infoOut->data, data, length );
+          success = true;
+        }
+
+        enet_packet_destroy( e.packet );
+        if ( success )
+        {
+          return true;
+        }
+
+        break;
+      }
+      case ENET_EVENT_TYPE_DISCONNECT:
+      {
+        if ( ac->pub.isConnected )
+        {
+          AE_LOG( "ENET Disconnect" );
+          //TODO should free/store old client info
+          ac->pub.playerCount = 1;
+          ac->pub.isConnected = false;
+          ac->pub.m_isConnecting = false;
+          
+          infoOut->msgId = kSysMsgServerDisconnect;
+          // infoOut->player = 0;
+          infoOut->length = 0;
+          
+          return true;
+        }
+        else
+        {
+          AE_LOG( "ENET Could not connect to Aether" );
+          break;
+        }
+      }
+      default:
+      {
+        AE_FAIL();
+        break;
+      }
+    }
+  }
+
+#endif
+  
+  return false;
+}
+
+void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
+{
+  AetherClientInternal* ac = (AetherClientInternal*)_ac;
+#ifdef __EMSCRIPTEN__
+  if ( !ac->pub.isConnected )
+  {
+    return;
+  }
+#else
+  ENetPeer* peer = ac->priv.host->peers;
+  if ( peer->state != ENET_PEER_STATE_CONNECTED )
+  {
+    return;
+  }
+#endif
+
+  uint32_t dataLength = sizeof(AetherClientHeader) + info->length;
+  AE_ASSERT( dataLength <= kMaxMessageSize);
+  uint8_t data[ kMaxMessageSize ];
+  AetherClientHeader header;
+  header.msgId = info->msgId;
+  header.uuid = ac->pub.localPlayer->uuid;
+
+  memcpy( data, &header, sizeof(header) );
+  memcpy( data + sizeof(AetherClientHeader), info->data, info->length );
+
+#ifdef __EMSCRIPTEN__
+  ac->priv.sock.Send( data, dataLength );
+#else
+  bool reliable = info->reliable;
+  uint32_t flags = reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
+  int32_t channel = reliable ? kNetChannelReliable : kNetChannelUnreliable;
+  ENetPacket* p = enet_packet_create( data, dataLength, flags );
+  enet_peer_send( peer, channel, p );
+#endif
+}
+
+void AetherClient_SendAll( AetherClient* _ac )
+{
+#ifndef __EMSCRIPTEN__
+  AetherClientInternal* ac = (AetherClientInternal*)_ac;
+  enet_host_flush( ac->priv.host );
+#endif
+}

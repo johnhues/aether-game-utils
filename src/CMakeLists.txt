@@ -13,6 +13,7 @@ IF (NOT WIN32)
 	INCLUDE(FindPNG)
 	INCLUDE(FindSDL2)
 	find_package(ASSIMP REQUIRED)
+	INCLUDE(FindEnet)
 ENDIF()
 
 message(STATUS "Found OpenGL in ${OPENGL_INCLUDE_DIR}")
@@ -58,6 +59,8 @@ target_sources(${AE_LIBRARY_NAME}
 	aeMath.cpp
 	aeMesh.cpp
 	aeMeta.cpp
+	aeNetClient.cpp
+	aeNetServer.cpp
 	aeRender.cpp
 	aeVfs.cpp
 	aeWindow.cpp
