@@ -1,19 +1,6 @@
-cmake_minimum_required(VERSION 3.10)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
-
-INCLUDE(FindOpenGL)
-INCLUDE(FindPNG)
-INCLUDE(FindSDL2)
-find_package(ASSIMP REQUIRED)
-link_directories(${ASSIMP_LIBRARY_DIRS})
-include_directories(${ASSIMP_INCLUDE_DIRS})
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+# set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
 
 add_executable(example example.cpp)
-target_link_libraries(
-  example
-  ${AE_LIBRARIES}
-  ${OPENGL_LIBRARIES}
-  ${PNG_LIBRARIES}
-  ${SDL2_LIBRARY}
-  ${ASSIMP_LIBRARIES}
-)
+add_dependencies(example ${AE_LIBRARY_NAME})
+target_link_libraries(example ${AE_LIBRARIES})

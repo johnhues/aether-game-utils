@@ -13,38 +13,89 @@ Modules and utilities include:
 
 Dependencies:
 * [SDL2](https://www.libsdl.org/)
-* [libpng](http://www.libpng.org/pub/png/)
 * [Assimp](https://github.com/assimp/assimp)
+* [libpng](http://www.libpng.org/pub/png/)
 * [Catch2](https://github.com/catchorg/Catch2)
+
+## Example
+A complete working example showing a window with a red background:
+```
+#include "aeClock.h"
+#include "aeInput.h"
+#include "aeLog.h"
+#include "aeRender.h"
+#include "aeWindow.h"
+
+int main()
+{
+	AE_LOG( "Initialize" );
+
+	aeWindow window;
+	aeRenderer renderer;
+	aeInput input;
+	
+	window.Initialize( 800, 600, false, true );
+	window.SetTitle( "example" );
+	renderer.Initialize( &window, 400, 300 );
+	renderer.SetClearColor( aeColor::Red );
+	input.Initialize( &window, &renderer );
+	
+	aeFixedTimeStep timeStep;
+	timeStep.SetTimeStep( 1.0f / 60.0f );
+
+	while ( !input.GetState()->esc )
+	{
+		input.Pump();
+		renderer.StartFrame();
+		renderer.EndFrame();
+		timeStep.Wait();
+	}
+
+	AE_LOG( "Terminate" );
+
+	input.Terminate();
+	renderer.Terminate();
+	window.Terminate();
+
+	return 0;
+}
+```
 
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libsdl2-2.0-0
-
-sudo apt install libassimp-dev
-
-mkdir ~/catch2 && cd ~/catch2
-git clone https://github.com/catchorg/Catch2.git .
+sudo apt install libpng-dev libsdl2-2.0-0 libassimp-dev
+```
+Building:
+```
+mkdir ~/aether-game-utils && cd ~/aether-game-utils
+git clone https://github.com/johnhues/aether-game-utils.git .
 mkdir ./build && cd ./build
 cmake ..
 make
-sudo make install
 ```
 
 ## MacOSX Setup
 Installing dependencies:
 ```
-brew install sdl2
-
-brew install assimp
-
-brew install libpng
-
-mkdir ~/catch2 && cd ~/catch2
-git clone https://github.com/catchorg/Catch2.git .
-mkdir ~/catch2/build && cd ~/catch2/build
+brew install libpng sdl2 assimp
+```
+Building:
+```
+mkdir ~/aether-game-utils && cd ~/aether-game-utils
+git clone https://github.com/johnhues/aether-game-utils.git .
+mkdir ./build && cd ./build
 cmake ..
 make
-make install
+```
+
+## Windows Setup
+```
+mkdir C:\Library
+cd C:\Library
+git clone https://github.com/johnhues/aether-game-utils.git aether-game-utils
+
+Use cmake to generate VS projects:
+Source should point to 'C:\Library\aether-game-utils'
+Build should point to 'C:\Library\aether-game-utils/build'
 ```
