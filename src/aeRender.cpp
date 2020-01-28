@@ -618,14 +618,27 @@ const aeVertexAttribute* aeVertexData::m_GetAttributeByName( const char* name ) 
 //------------------------------------------------------------------------------
 // aeShader member functions
 //------------------------------------------------------------------------------
-void aeShader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
+aeShader::aeShader()
 {
   m_fragmentShader = 0;
   m_vertexShader = 0;
+  m_program = 0;
+  
   m_blending = false;
   m_depthTest = false;
   m_depthWrite = false;
+
   m_attributeCount = 0;
+}
+
+aeShader::~aeShader()
+{
+  Destroy();
+}
+
+void aeShader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
+{
+  AE_ASSERT( !m_program );
 
   m_program = glCreateProgram();
   
@@ -720,7 +733,7 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   }
 }
 
-void aeShader::Destroy(void)
+void aeShader::Destroy()
 {
   if( m_fragmentShader != 0 )
   {
@@ -1253,6 +1266,8 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
       AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
     }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+
+  AE_ASSERT( glGetError() == GL_NO_ERROR );
 }
 
 void aeRenderTexture::Destroy()
@@ -1701,6 +1716,8 @@ void aeRenderer::Initialize( aeWindow* window, uint32_t width, uint32_t height )
   SDL_JoystickEventState( SDL_ENABLE );
 
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
+
+  AE_ASSERT( glGetError() == GL_NO_ERROR );
 }
 
 void aeRenderer::Terminate()
@@ -1710,6 +1727,8 @@ void aeRenderer::Terminate()
 
 void aeRenderer::StartFrame()
 {
+  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  
   if ( m_targetWidth != m_canvas.GetWidth() || m_targetHeight != m_canvas.GetHeight() )
   {
     m_canvas.Destroy();
@@ -1726,10 +1745,14 @@ void aeRenderer::StartFrame()
 
   glDisable( GL_CULL_FACE ); // @TODO: Should probably be a VertexData parameter
   glEnable( GL_MULTISAMPLE ); // @TODO: Should probably be a VertexData parameter
+
+  AE_ASSERT( glGetError() == GL_NO_ERROR );
 }
 
 void aeRenderer::EndFrame()
 {
+  AE_ASSERT( glGetError() == GL_NO_ERROR );
+
   glBindFramebuffer( GL_FRAMEBUFFER, m_defaultFbo );
 
   glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
@@ -1747,6 +1770,8 @@ void aeRenderer::EndFrame()
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)m_window->window );
 #endif
+
+  AE_ASSERT( glGetError() == GL_NO_ERROR );
 }
 
 void aeRenderer::Resize( uint32_t width, uint32_t height )

@@ -249,6 +249,9 @@ struct aeShaderUniform
 class aeShader
 {
 public:
+  aeShader();
+  ~aeShader();
+  
   void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
   void Destroy();
 
