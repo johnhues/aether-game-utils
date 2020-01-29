@@ -26,6 +26,7 @@
 #include "aeClock.h"
 #include "aeInput.h"
 #include "aeLog.h"
+#include "aeNet.h"
 #include "aeRender.h"
 #include "aeWindow.h"
 
@@ -39,12 +40,14 @@ int main()
 	aeWindow window;
 	aeRenderer renderer;
 	aeInput input;
+	AetherClient* client;
 	
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "example" );
+	window.SetTitle( "client" );
 	renderer.Initialize( &window, 400, 300 );
 	renderer.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &renderer );
+	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -52,13 +55,53 @@ int main()
 	while ( !input.GetState()->esc )
 	{
 		input.Pump();
+		if ( !client->IsConnected() && !client->IsConnecting() )
+		{
+			AE_LOG( "Connecting to server" );
+			AetherClient_Connect( client );
+		}
+		
+		ReceiveInfo receiveInfo;
+		while ( AetherClient_Receive( client, &receiveInfo ) )
+		{
+			switch ( receiveInfo.msgId )
+			{
+				case kSysMsgServerConnect:
+					AE_LOG( "Connected to server" );
+					break;
+				case kSysMsgServerDisconnect:
+					AE_LOG( "Disconnected from server" );
+					break;
+				default:
+					char recvData[ kMaxMessageSize + 1 ];
+					AE_ASSERT( receiveInfo.length <= sizeof(recvData) );
+					memcpy( recvData, receiveInfo.data, receiveInfo.length );
+					recvData[ receiveInfo.length ] = 0;
+					AE_LOG( "Received '#'", recvData );
+					break;
+			}
+		}
+
+		if ( input.GetState()->space && !input.GetPrevState()->space )
+		{
+			AE_LOG( "Send ping to server" );
+			
+			char msg[] = "ping";
+			AetherClient_QueueSend( client, 5, true, msg );
+		}
+
+		AetherClient_SendAll( client );
+
 		renderer.StartFrame();
 		renderer.EndFrame();
+
 		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );
 
+	AetherClient_Delete( client );
+	client = nullptr;
 	input.Terminate();
 	renderer.Terminate();
 	window.Terminate();

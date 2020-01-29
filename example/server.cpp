@@ -26,6 +26,7 @@
 #include "aeClock.h"
 #include "aeInput.h"
 #include "aeLog.h"
+#include "aeNet.h"
 #include "aeRender.h"
 #include "aeWindow.h"
 
@@ -39,12 +40,14 @@ int main()
 	aeWindow window;
 	aeRenderer renderer;
 	aeInput input;
+	AetherServer* server;
 	
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "example" );
+	window.SetTitle( "server" );
 	renderer.Initialize( &window, 400, 300 );
 	renderer.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &renderer );
+	server = AetherServer_New( 3500, 0 );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -52,13 +55,51 @@ int main()
 	while ( !input.GetState()->esc )
 	{
 		input.Pump();
+		AetherServer_Update( server );
+		
+		ServerReceiveInfo receiveInfo;
+		while ( AetherServer_Receive( server, &receiveInfo ) )
+		{
+			switch ( receiveInfo.msgId )
+			{
+				case kSysMsgPlayerConnect:
+				{
+					AE_LOG( "Player # connected", receiveInfo.player->uuid );
+					break;
+				}
+				case kSysMsgPlayerDisconnect:
+				{
+					AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
+					break;
+				}
+				default:
+				{
+					char recvData[ kMaxMessageSize + 1 ];
+					AE_ASSERT( receiveInfo.length <= sizeof(recvData) );
+					memcpy( recvData, receiveInfo.data, receiveInfo.length );
+					recvData[ receiveInfo.length ] = 0;
+					AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, recvData );
+					
+					char msg[] = "pong";
+					AetherServer_QueueSendToPlayer( server, 5, true, msg, receiveInfo.player );
+					
+					break;
+				}
+			}
+		}
+		
+		AetherServer_SendAll( server );
+
 		renderer.StartFrame();
 		renderer.EndFrame();
+
 		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );
 
+	AetherServer_Delete( server );
+	server = nullptr;
 	input.Terminate();
 	renderer.Terminate();
 	window.Terminate();
