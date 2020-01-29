@@ -50,8 +50,8 @@ THE SOFTWARE.
 #include <jni.h>
 #endif
 
-typedef aeUuid class Guid;
-typedef aeUuidGenerator class GuidGenerator;
+typedef class Guid aeUuid;
+typedef class GuidGenerator aeUuidGenerator;
 
 // Class to represent a GUID/UUID. Each instance acts as a wrapper around a
 // 16 byte value that can be passed around by value. It also supports

@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-# set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
+
+# use c++11
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# use unicode
+add_definitions(-D_UNICODE -DUNICODE)
 
 include_directories(${CATCH_INCLUDE_DIRS})
 

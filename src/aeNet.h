@@ -31,53 +31,31 @@
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
-// Constants
-//------------------------------------------------------------------------------
-typedef uint32_t NetInstId;
-const uint32_t kMaxSyncData = 128;
-
-//------------------------------------------------------------------------------
-// Aether Common
+// AetherUuid class
 //------------------------------------------------------------------------------
 struct AetherUuid
 {
-  AetherUuid() {}
-
-  AetherUuid( const char* str )
-  {
-// #define _aescn8  "%2" SCNx8
-//     sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-"
-//       _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-"
-//       _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8,
-//       &uuid[0], &uuid[1], &uuid[2], &uuid[3],
-//       &uuid[4], &uuid[5], &uuid[6], &uuid[7], &uuid[8], &uuid[9],
-//       &uuid[10], &uuid[11], &uuid[12], &uuid[13], &uuid[14], &uuid[15] );
-// #undef _aescn8
-  }
+  AetherUuid() = default;
+  AetherUuid( const char* str );
   
   bool operator==( const AetherUuid& other ) const { return memcmp( uuid, other.uuid, 16 ) == 0; }
   bool operator!=( const AetherUuid& other ) const { return memcmp( uuid, other.uuid, 16 ) != 0; }
 
   static AetherUuid Generate();
+  static AetherUuid Zero();
 
-  static AetherUuid Zero()
-  {
-    AetherUuid result;
-    memset( &result, 0, sizeof(result) );
-    return result;
-  }
-
-  void ToString( char* str, uint32_t max ) const
-  {
-    AE_ASSERT( max >= 37 );
-    sprintf( str, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", 
-      uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
-      uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15] );
-  }
+  void ToString( char* str, uint32_t max ) const;
 
   uint8_t uuid[ 16 ];
 };
 
+std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+typedef uint32_t NetInstId;
+const uint32_t kMaxSyncData = 128;
 const uint32_t kMaxMessageSize = 1024;
 typedef uint16_t AetherMsgId;
 const AetherMsgId kSysMsgMask = 1 << ( sizeof(AetherMsgId) * 8 - 1 );
@@ -115,7 +93,6 @@ struct AetherPlayer
   AetherUuid uuid;
   NetInstId netId;
   void* userData;
-  int luaRef;
   bool alive;
 
   aeStr32 pendingLevel;
@@ -146,7 +123,7 @@ void AetherClient_Delete( AetherClient* );
 
 void AetherClient_Connect( AetherClient* _ac );
 bool AetherClient_Receive( AetherClient*, ReceiveInfo* infoOut );
-void AetherClient_QueueSend( AetherClient*, const SendInfo* infoIn );
+void AetherClient_QueueSend( AetherClient*, const SendInfo* infoIn ); // @TODO: Easy to mess up, should be private? Or SendInfo should have better default values
 void AetherClient_SendAll( AetherClient* );
 
 template<typename T>
@@ -196,7 +173,7 @@ void AetherServer_Delete( AetherServer* );
 void AetherServer_Update( AetherServer* );
 
 bool AetherServer_Receive( AetherServer*, ServerReceiveInfo* infoOut );
-void AetherServer_QueueSendInfo( AetherServer*, const ServerSendInfo* infoIn );
+void AetherServer_QueueSendInfo( AetherServer*, const ServerSendInfo* infoIn ); // @TODO: Easy to mess up, should be private? Or SendInfo should have better default values
 void AetherServer_SendAll( AetherServer* );
 
 AetherPlayer* AetherServer_GetPlayerByNetInstId( AetherServer*, NetInstId id );

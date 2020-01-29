@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeNet.h"
-// #include <lua.hpp>
 #include <vector>
 #include <algorithm>
 #include <enet/enet.h>
@@ -90,7 +89,6 @@ AetherPlayer* AetherServer_AddPlayer( AetherServerInternal* as, AetherUuid uuid 
   player->uuid = uuid;
   player->netId = 0;
   player->userData = nullptr;
-  player->luaRef = LUA_NOREF;
   player->alive = true;
   player->pendingLevel = "";
   player->pendingLink = "";
@@ -254,7 +252,7 @@ void AetherServer_Update( AetherServer* _as )
     {
       char uuidStr[ 64 ];
       player->uuid.ToString( uuidStr, sizeof(uuidStr) );
-      AE_LOG( "AETHER remove disconnected player %s", uuidStr );
+      // AE_LOG( "AETHER remove disconnected player %s", uuidStr );
 
       delete player;
 
@@ -277,7 +275,7 @@ bool AetherServer_SystemReceive( AetherServerInternal* as, void** userdata, Aeth
     {
       char uuidStr[ 64 ];
       header.uuid.ToString( uuidStr, sizeof(uuidStr) );
-      AE_LOG( "AETHER player connect %s", uuidStr );
+      // AE_LOG( "AETHER player connect %s", uuidStr );
       
       // TODO: Make sure player isn't already connected
       AetherPlayer* player = AetherServer_AddPlayer( as, header.uuid );
@@ -311,7 +309,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
     {
       case ENET_EVENT_TYPE_CONNECT:
       {
-        AE_LOG( "ENET Connect" );
+        // AE_LOG( "ENET Connect" );
         // uint32_t timeoutLimit = 32;
         // uint32_t timeoutMinimum = 2000;
         // uint32_t timeoutMaximum = 4000;
@@ -357,7 +355,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
         {
           char uuidStr[ 64 ];
           player->uuid.ToString( uuidStr, sizeof(uuidStr) );
-          AE_LOG( "ENET Disconnect %s", uuidStr );
+          // AE_LOG( "ENET Disconnect %s", uuidStr );
 
           player->alive = false;
           
@@ -368,7 +366,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
           return true;
         }
 
-        AE_LOG( "ENET Player disconnected before finishing connection process" );
+        // AE_LOG( "ENET Player disconnected before finishing connection process" );
         break;
       }
       default:
@@ -387,7 +385,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
     {
       case kWebConn_Connect:
       {
-        AE_LOG( "WEBCONN Connect" );
+        // AE_LOG( "WEBCONN Connect" );
         break;
       }
       case kWebConn_Receive:
@@ -421,7 +419,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
       }
       case kWebConn_Disconnect:
       {
-        AE_LOG( "WEBCONN Disconnect" );
+        // AE_LOG( "WEBCONN Disconnect" );
         
         AetherPlayer* player = (AetherPlayer*)event.userdata;
         if ( player )

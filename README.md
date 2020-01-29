@@ -59,7 +59,7 @@ int main()
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libpng-dev libsdl2-2.0-0 libassimp-dev
+sudo apt install libpng-dev libsdl2-2.0-0 libassimp-dev libenet-dev
 ```
 Building:
 ```
@@ -73,7 +73,7 @@ make
 ## MacOSX Setup
 Installing dependencies:
 ```
-brew install libpng sdl2 assimp
+brew install libpng sdl2 assimp enet
 ```
 Building:
 ```

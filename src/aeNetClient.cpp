@@ -24,8 +24,8 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeNet.h"
+#include <inttypes.h>
 #include <vector>
-// #include <lua.hpp>
 #include "aeUuid.h"
 #include "aeLog.h"
 #ifdef __EMSCRIPTEN__
@@ -38,15 +38,49 @@
 //------------------------------------------------------------------------------
 // AetherUuid member functions
 //------------------------------------------------------------------------------
+AetherUuid::AetherUuid( const char* str )
+{
+#define _aescn8 "%2" SCNx8
+  sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-"
+    _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-"
+    _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8,
+    &uuid[0], &uuid[1], &uuid[2], &uuid[3],
+    &uuid[4], &uuid[5], &uuid[6], &uuid[7], &uuid[8], &uuid[9],
+    &uuid[10], &uuid[11], &uuid[12], &uuid[13], &uuid[14], &uuid[15] );
+#undef _aescn8
+}
+
 AetherUuid AetherUuid::Generate()
 {
-  UuidGenerator gen;
-  Uuid localUuid = gen.newUuid();
+  aeUuidGenerator gen;
+  aeUuid localUuid = gen.newGuid(); // @TODO: Should match naming convention
   AE_ASSERT( localUuid._bytes.size() == 16 );
 
   AetherUuid result;
   memcpy( result.uuid, localUuid._bytes.data(), 16 );
   return result;
+}
+
+AetherUuid AetherUuid::Zero()
+{
+  AetherUuid result;
+  memset( &result, 0, sizeof(result) );
+  return result;
+}
+
+void AetherUuid::ToString( char* str, uint32_t max ) const
+{
+  AE_ASSERT( max >= 37 );
+  sprintf( str, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", 
+    uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
+    uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15] );
+}
+
+std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid )
+{
+  char str[ 64 ];
+  uuid.ToString( str, countof(str) );
+  return os << str;
 }
 
 //------------------------------------------------------------------------------
@@ -90,7 +124,6 @@ AetherPlayer* AetherClient_AddPlayer( AetherClientInternal* ac, AetherUuid uuid 
   player.uuid = uuid;
   player.netId = 0;
   player.userData = nullptr;
-  player.luaRef = LUA_NOREF;
   player.alive = true;
   player.pendingLevel = "";
   player.pendingLink = "";
@@ -108,7 +141,10 @@ void AetherClient_Connect( AetherClient* _ac )
 {
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
 
-  AE_ASSERT( !ac->pub.isConnected );
+  if ( ac->pub.IsConnected() || ac->pub.IsConnecting() )
+  {
+    return;
+  }
 
 #ifdef __EMSCRIPTEN__
   ac->priv.sock.Connect( ac->pub.serverAddress.host, ac->pub.serverAddress.port );
@@ -207,7 +243,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
       ac->pub.isConnected = true;
       ac->pub.m_isConnecting = false;
 
-      AE_LOG( "EMSCRIPTEN Connect" );
+      // AE_LOG( "EMSCRIPTEN Connect" );
       
       AetherMsgConnect msg;
       msg.uuid = ac->pub.localPlayer->uuid;
@@ -269,7 +305,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
     {
       case ENET_EVENT_TYPE_CONNECT:
       {
-        AE_LOG( "ENET Connect" );
+        // AE_LOG( "ENET Connect" );
         
         AetherMsgConnect msg;
         msg.uuid = ac->pub.localPlayer->uuid;
@@ -325,7 +361,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
       {
         if ( ac->pub.isConnected )
         {
-          AE_LOG( "ENET Disconnect" );
+          // AE_LOG( "ENET Disconnect" );
           //TODO should free/store old client info
           ac->pub.playerCount = 1;
           ac->pub.isConnected = false;
@@ -339,7 +375,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         }
         else
         {
-          AE_LOG( "ENET Could not connect to Aether" );
+          // AE_LOG( "ENET Could not connect to Aether" );
           break;
         }
       }
