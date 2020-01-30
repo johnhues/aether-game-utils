@@ -96,6 +96,7 @@ private:
   //aeRefable( const aeRefable& ) = delete; // @HACK: Disabled this to support automatic 'this' assignment with AE_REFABLE
   aeRefable& operator= ( const aeRefable& ) = delete;
 
+  // uint32_t s_sequence = 1; @TODO: Increment a 'dirty' sequence number whenever a T is destroyed so aeRef can keep a pointer to the referenced object and avoid a lookup
   typedef aeMap< aeId< T >, T* > RefMap;
   static RefMap* s_GetMap() { static RefMap s_map; return &s_map; }
 
@@ -140,6 +141,8 @@ private:
   U* m_Get( ... );
 
   aeId< T > m_id;
+  // uint32_t m_sequence = 0; @TODO: Keep a pointer to the referenced object and a local copy aeRef< T >::s_sequence so sequential lookups are fast
+  // T* m_cached = nullptr;
 };
 
 //------------------------------------------------------------------------------

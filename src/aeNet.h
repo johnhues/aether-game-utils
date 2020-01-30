@@ -27,7 +27,11 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
+#include "aeBinaryStream.h"
+#include "aeMap.h"
+#include "aeMeta.h"
 #include "aePlatform.h"
+#include "aeRef.h"
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
@@ -52,7 +56,134 @@ struct AetherUuid
 std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
 
 //------------------------------------------------------------------------------
-// Constants
+// aeRpc class
+//------------------------------------------------------------------------------
+class aeRpc : public aeInheritor< aeObject, aeRpc >
+{
+public:
+  aeRpc() : aetherPlayer( nullptr ), userdata( nullptr ) {}
+  virtual ~aeRpc() {}
+
+  virtual void Run() {}
+  virtual void Serialize( class BinaryStream* stream ) {}
+
+  struct AetherPlayer* aetherPlayer = nullptr;
+  void* userdata = nullptr;
+};
+
+const uint32_t kMaxNetInst = 256;
+const uint32_t kMaxNetMessages = 256;
+
+//------------------------------------------------------------------------------
+// aeNetReplication
+//------------------------------------------------------------------------------
+enum class aeNetReplicaEventType
+{
+  Create,
+  Destroy,
+  Update
+};
+
+struct aeNetReplicaEvent
+{
+  aeNetReplicaEventType type;
+};
+
+class aeNetData
+{
+public:
+  AE_REFABLE( aeNetData );
+
+  uint8_t* Get() const { return m_data; }
+  uint32_t Length() const { return m_length; }
+
+private:
+  uint8_t* m_data = nullptr;
+  uint32_t m_length = 0;
+};
+
+enum class aeNetType
+{
+  Float,
+  Int,
+  Uint
+};
+
+class aeNetReplicaClient
+{
+public:
+  void Receive( const uint8_t* data, uint32_t length ) {}
+  bool Pump( aeNetReplicaEvent* event ) { return false;  }
+
+private:
+  aeMap< aeId< aeNetData >, aeNetData* > m_objects;
+  aeArray< aeNetReplicaEvent > m_events;
+};
+
+class aeNetReplicaServer
+{
+public:
+  void Update();
+
+  const uint8_t* GetSendData() const;
+  uint32_t GetSendLength() const;
+
+private:
+  aeMap< aeId< aeNetData >, aeNetData* > m_objects;
+  aeArray< uint8_t > m_sendData;
+};
+
+// //------------------------------------------------------------------------------
+// // Net structs
+// //------------------------------------------------------------------------------
+// struct NetPlayer
+// {
+//   uint8_t uuid[ 16 ];
+// };
+
+// struct NetInstInfo
+// {
+//   GameObjId gameId;
+//   struct Game* game;
+//   NetInstId netId;
+//   aeMetaTypeId type;
+//   bool levelObject;
+// };
+
+// struct Net
+// {
+//   double lastSendTime;
+  
+//   NetInstInfo netInsts[ kMaxNetInst ];
+//   uint32_t netInstCount;
+
+//   MsgObject messages[ kMaxNetMessages ];
+//   uint32_t messageCount;
+// };
+
+// //------------------------------------------------------------------------------
+// // Net Public Functions
+// //------------------------------------------------------------------------------
+// Net* Net_New();
+// void Net_Delete( Net* );
+// void Net_UpdateServer( struct Net* net, struct AetherServer* aether, struct Game* games, uint32_t count );
+// void Net_UpdateClient( struct Net* net, struct AetherClient* aether, struct Game* game );
+// void Net_RemoveObject( GameObject* go );
+// GameObject* Net_GetGameObject( Net* net, Game* game, NetInstId id );
+// GameObject* Net_GetGameObject( Net* net, Game* game, NetInstInfo info );
+// AetherPlayer* Net_GetPlayer( Net* net, AetherServer* aether, NetInstId id );
+// bool Net_CanChangeLevel( Net* net, struct AetherServer* aether, struct Player* player, const char* level );
+// bool Net_PlayerChangeLevel( Net* net, struct AetherServer* aether, struct Player* player, const char* level, const char* link );
+
+// void Net_SendObjectMessage( struct Net* net, struct AetherServer* aether, void* group, NetInstId id, uint8_t type, const uint8_t* data, uint32_t length );
+// uint32_t Net_RecvObjectMessage( struct Net* net, NetInstId id, uint8_t* typeOut, uint8_t* dataOut );
+
+// void Net_AddObject( Net* net, GameObject* go, bool levelObject );
+
+// void Aether_SendRpc( struct AetherClient* aether, class Rpc* rpc );
+
+//------------------------------------------------------------------------------
+// Client / server constants
 //------------------------------------------------------------------------------
 typedef uint32_t NetInstId;
 const uint32_t kMaxSyncData = 128;
@@ -134,6 +265,17 @@ void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable,
   info.reliable = reliable;
   info.length = sizeof(msg);
   memcpy( info.data, &msg, info.length );
+  AetherClient_QueueSend( ac, &info );
+}
+
+template<typename T>
+void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, uint8_t* data, uint32_t length )
+{
+  SendInfo info;
+  info.msgId = msgId;
+  info.reliable = reliable;
+  info.length = length;
+  memcpy( info.data, data, length );
   AetherClient_QueueSend( ac, &info );
 }
 

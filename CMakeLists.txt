@@ -30,14 +30,16 @@ IF (WIN32)
 	set(AE_LIBPNG_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/libpng)
 	set(AE_SDL2_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/SDL2)
 	set(AE_ASSIMP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/assimp)
+	set(AE_ENET_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/enet)
 
 	set(AE_GLEW_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/glew)
 	set(AE_ZLIB_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/zlib)
 	set(AE_LIBPNG_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/libpng)
 	set(AE_SDL2_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/SDL2)
 	set(AE_ASSIMP_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/assimp)
+	set(AE_ENET_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/enet)
 
-	set(WIN_LIBRARIES version Winmm Imm32 Setupapi)
+	set(WIN_LIBRARIES version Winmm Imm32 Setupapi Ws2_32)
 
 	ExternalProject_Add(glew
 		PREFIX glew
@@ -90,6 +92,18 @@ IF (WIN32)
 	set(ASSIMP_LIBRARY_DIRS ${AE_ASSIMP_INSTALL}/lib)
 	set(ASSIMP_LIBRARIES assimp-vc142-mtd)
 
+	ExternalProject_Add(Enet
+		PREFIX Enet
+		SOURCE_DIR ${AE_ENET_SRC}
+		URL http://enet.bespin.org/download/enet-1.3.14.tar.gz
+		CONFIGURE_COMMAND ""
+		BUILD_COMMAND ""
+		INSTALL_COMMAND ""
+	)
+	set(ENET_INCLUDE_DIR ${AE_ENET_SRC}/include)
+	set(ENET_LIBRARY_DIRS ${AE_ENET_SRC})
+	set(ENET_LIBRARY ${AE_ENET_SRC}/enet64.lib) # Use path so 'lib' is not prepended
+
 	# dependency library directories
 	link_directories(${GLEW_LIBRARY_DIRS})
 	link_directories(${GLEW_LIBRARY_DIRS})
@@ -97,6 +111,7 @@ IF (WIN32)
 	link_directories(${PNG_LIBRARY_DIRS})
 	link_directories(${SDL2_LIBRARY_DIRS})
 	link_directories(${ASSIMP_LIBRARY_DIRS})
+	link_directories(${ENET_LIBRARY_DIRS})
 ENDIF()
 
 set(AE_CATCH_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/Catch2)

@@ -23,6 +23,7 @@ THE SOFTWARE.
 */
 
 #include "aeUuid.h"
+#include "aePlatform.h"
 
 #ifdef GUID_LIBUUID
 #include <uuid/uuid.h>

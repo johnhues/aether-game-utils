@@ -14,6 +14,7 @@ IF (NOT WIN32)
 	INCLUDE(FindSDL2)
 	INCLUDE(Findassimp)
 	INCLUDE(FindEnet)
+	INCLUDE(Finduuid)
 ENDIF()
 
 message(STATUS "Found OpenGL in ${OPENGL_INCLUDE_DIR}")
@@ -21,11 +22,13 @@ message(STATUS "Found libpng in ${PNG_INCLUDE_DIRS}")
 message(STATUS "Found SDL2 in ${SDL2_INCLUDE_DIR}")
 message(STATUS "Found assimp in ${ASSIMP_INCLUDE_DIRS}")
 message(STATUS "Found enet in ${ENET_INCLUDE_DIR}")
+message(STATUS "Found uuid in ${UUID_INCLUDE_DIR}")
 include_directories(${GLEW_INCLUDE_DIRS})
 include_directories(${PNG_INCLUDE_DIRS})
 include_directories(${SDL2_INCLUDE_DIR})
 include_directories(${ASSIMP_INCLUDE_DIRS})
 include_directories(${ENET_INCLUDE_DIR})
+include_directories(${UUID_INCLUDE_DIR})
 
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
@@ -37,7 +40,7 @@ IF (WIN32)
 		libpng
 		SDL2
 		assimp
-		enet
+		Enet
 	)
 ENDIF()
 
@@ -49,6 +52,7 @@ target_link_libraries(${AE_LIBRARY_NAME}
 	${SDL2_LIBRARY}
 	${ASSIMP_LIBRARIES}
 	${ENET_LIBRARY}
+	${UUID_LIBRARY}
 	${WIN_LIBRARIES}
 )
 
@@ -63,6 +67,7 @@ target_sources(${AE_LIBRARY_NAME}
 	aeMath.cpp
 	aeMesh.cpp
 	aeMeta.cpp
+	aeNet.cpp
 	aeNetClient.cpp
 	aeNetServer.cpp
 	aeRender.cpp
@@ -72,6 +77,7 @@ target_sources(${AE_LIBRARY_NAME}
   PUBLIC
 	${CMAKE_CURRENT_LIST_DIR}/aeAlloc.h
 	${CMAKE_CURRENT_LIST_DIR}/aeArray.h
+	${CMAKE_CURRENT_LIST_DIR}/aeBinaryStream.h
 	${CMAKE_CURRENT_LIST_DIR}/aeClock.h
 	${CMAKE_CURRENT_LIST_DIR}/aeCommand.h
 	${CMAKE_CURRENT_LIST_DIR}/aeCommandLineArgs.h
