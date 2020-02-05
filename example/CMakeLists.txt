@@ -18,10 +18,10 @@ add_executable(client client.cpp)
 add_dependencies(client ${AE_LIBRARY_NAME})
 target_link_libraries(client ${AE_LIBRARIES})
 
-add_executable(replication_server ReplicationServer.cpp)
+add_executable(replication_server ReplicationServer.cpp ReplicationCommon.h)
 add_dependencies(replication_server ${AE_LIBRARY_NAME})
 target_link_libraries(replication_server ${AE_LIBRARIES})
 
-add_executable(replication_client ReplicationClient.cpp)
+add_executable(replication_client ReplicationClient.cpp ReplicationCommon.h)
 add_dependencies(replication_client ${AE_LIBRARY_NAME})
 target_link_libraries(replication_client ${AE_LIBRARIES})

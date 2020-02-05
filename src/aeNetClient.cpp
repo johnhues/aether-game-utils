@@ -105,6 +105,8 @@ namespace
   };
 }
 
+void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info );
+	
 AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid )
 {
   int32_t playerCount = ac->pub.playerCount;
@@ -207,7 +209,6 @@ bool AetherClient_SystemReceive( AetherClientInternal* ac, AetherServerHeader he
       
       AetherPlayer* player = AetherClient_AddPlayer( ac, msg.uuid );
       infoOut->msgId = kSysMsgPlayerConnect;
-      // infoOut->player = player;
       infoOut->length = 0;
       return true;
     }
@@ -435,4 +436,14 @@ void AetherClient_SendAll( AetherClient* _ac )
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
   enet_host_flush( ac->priv.host );
 #endif
+}
+
+void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+{
+  SendInfo info;
+  info.msgId = msgId;
+  info.reliable = reliable;
+  info.length = length;
+  memcpy( info.data, data, length );
+  AetherClient_QueueSend( ac, &info );
 }

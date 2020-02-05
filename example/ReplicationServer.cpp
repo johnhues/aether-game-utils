@@ -29,80 +29,125 @@
 #include "aeNet.h"
 #include "aeRender.h"
 #include "aeWindow.h"
+#include "ReplicationCommon.h"
+
+//------------------------------------------------------------------------------
+// ClientInfo class
+//------------------------------------------------------------------------------
+class ClientInfo
+{
+public:
+  AetherUuid uuid;
+  aeNetReplicaServer* replicaServer = nullptr;
+};
 
 //------------------------------------------------------------------------------
 // main
 //------------------------------------------------------------------------------
 int main()
 {
-	AE_LOG( "Initialize" );
+  AE_LOG( "Initialize" );
 
-	aeWindow window;
-	aeRenderer renderer;
-	aeInput input;
-	AetherServer* server;
-	
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "Replication Server" );
-	renderer.Initialize( &window, 400, 300 );
-	renderer.SetClearColor( aeColor::Red );
-	input.Initialize( &window, &renderer );
-	server = AetherServer_New( 3500, 0 );
-	
-	aeFixedTimeStep timeStep;
-	timeStep.SetTimeStep( 1.0f / 60.0f );
+  // System modules
+  aeWindow window;
+  aeRenderer renderer;
+  aeInput input;
+  aeSpriteRenderer spriteRenderer;
+  aeTexture2D texture;
+  aeFixedTimeStep timeStep;
+  window.Initialize( 800, 600, false, true );
+  window.SetTitle( "Replication Server" );
+  renderer.Initialize( &window, 400, 300 );
+  renderer.SetClearColor( aeColor::Black );
+  input.Initialize( &window, &renderer );
+  spriteRenderer.Initialize( 32 );
+  uint8_t texInfo[] = { 255, 255, 255 };
+  texture.Initialize( texInfo, 1, 1, 3, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
+  timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.GetState()->esc )
-	{
-		input.Pump();
-		AetherServer_Update( server );
-		
-		ServerReceiveInfo receiveInfo;
-		while ( AetherServer_Receive( server, &receiveInfo ) )
-		{
-			switch ( receiveInfo.msgId )
-			{
-				case kSysMsgPlayerConnect:
-				{
-					AE_LOG( "Player # connected", receiveInfo.player->uuid );
-					break;
-				}
-				case kSysMsgPlayerDisconnect:
-				{
-					AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
-					break;
-				}
-				default:
-				{
-					char recvData[ kMaxMessageSize + 1 ];
-					AE_ASSERT( receiveInfo.length <= sizeof(recvData) );
-					memcpy( recvData, receiveInfo.data, receiveInfo.length );
-					recvData[ receiveInfo.length ] = 0;
-					AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, recvData );
-					
-					char msg[] = "pong";
-					AetherServer_QueueSendToPlayer( server, 5, true, msg, receiveInfo.player );
-					
-					break;
-				}
-			}
-		}
-		
-		AetherServer_SendAll( server );
+  // Server modules
+  AetherServer* server = AetherServer_New( 3500, 0 );
+  aeNetReplicaDB replicaDB;
+  aeMap< AetherUuid, aeNetReplicaServer* > replicaServers;
 
-		renderer.StartFrame();
-		renderer.EndFrame();
+  // Game data
+  aeArray< Green > greens;
+  greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
+  greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
+  greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
 
-		timeStep.Wait();
-	}
+  while ( !input.GetState()->esc )
+  {
+    input.Pump();
+    AetherServer_Update( server );
+    
+    ServerReceiveInfo receiveInfo;
+    while ( AetherServer_Receive( server, &receiveInfo ) )
+    {
+      switch ( receiveInfo.msgId )
+      {
+        case kSysMsgPlayerConnect:
+        {
+          AE_LOG( "Player # connected", receiveInfo.player->uuid );
+          replicaServers.Set( receiveInfo.player->uuid, replicaDB.CreateServer() );
+          break;
+        }
+        case kSysMsgPlayerDisconnect:
+        {
+          AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
 
-	AE_LOG( "Terminate" );
+          aeNetReplicaServer* replicaServer = nullptr;
+          if ( replicaServers.TryGet( receiveInfo.player->uuid, &replicaServer ) )
+          {
+            replicaServers.Remove( receiveInfo.player->uuid );
+            replicaDB.DestroyServer( replicaServer );
+          }
 
-	AetherServer_Delete( server );
-	server = nullptr;
-	input.Terminate();
-	renderer.Terminate();
-	window.Terminate();
+          break;
+        }
+        default:
+        {
+          break;
+        }
+      }
+    }
 
-	return 0;
+    // Game Update
+    for ( uint32_t i = 0; i < greens.Length(); i++ )
+    {
+      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRenderer, &texture );
+    }
+    
+    // Send replication data
+    for ( uint32_t i = 0; i < server->playerCount; i++ )
+    {
+      AetherPlayer* player = server->allPlayers[ i ];
+      aeNetReplicaServer* replicaServer = nullptr;
+      if ( replicaServers.TryGet( player->uuid, &replicaServer ) )
+      {
+        replicaServer->UpdateSendData();
+        AetherServer_QueueSendToPlayer( server, player, kReplicaInfoMsg, true, replicaServer->GetSendData(), replicaServer->GetSendLength() );
+      }
+    }
+    AetherServer_SendAll( server );
+
+    renderer.StartFrame();
+    spriteRenderer.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * renderer.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
+    renderer.EndFrame();
+
+    timeStep.Wait();
+  }
+
+  AE_LOG( "Terminate" );
+
+  AetherServer_Delete( server );
+  server = nullptr;
+  
+  texture.Destroy();
+  spriteRenderer.Destroy();
+  input.Terminate();
+  renderer.Terminate();
+  window.Terminate();
+
+  return 0;
 }

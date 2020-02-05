@@ -597,3 +597,41 @@ uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userDat
 
   return count;
 }
+
+void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+{
+  ServerSendInfo info;
+  info.msgId = msgId;
+  info.reliable = reliable;
+  info.length = length;
+  memcpy( info.data, data, length );
+  info.player = nullptr;
+  info.group = nullptr;
+  AetherServer_QueueSendInfo( as, &info );
+}
+
+void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+{
+  AE_ASSERT( player );
+  ServerSendInfo info;
+  info.msgId = msgId;
+  info.reliable = reliable;
+  info.length = length;
+  memcpy( info.data, data, length );
+  info.player = player;
+  info.group = nullptr;
+  AetherServer_QueueSendInfo( as, &info );
+}
+
+void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+{
+  AE_ASSERT( group );
+  ServerSendInfo info;
+  info.msgId = msgId;
+  info.reliable = reliable;
+  info.length = length;
+  memcpy( info.data, data, length );
+  info.player = nullptr;
+  info.group = group;
+  AetherServer_QueueSendInfo( as, &info );
+}

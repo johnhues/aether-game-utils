@@ -42,7 +42,7 @@ TEST_CASE( "arrays elements can be removed by value", "[aeArray]" )
 
   SECTION( "removing a value based on function results in empty search" )
   {
-    array.RemoveAll( []( int a, int v ) { return a >= v; }, 6 );
+    array.RemoveAllFn( []( int a ){ return a >= 6; } );
     REQUIRE( array.Find( 5 ) == 10 );
     REQUIRE( array.Find( 6 ) == -1 );
     REQUIRE( array.Find( 7 ) == -1 );

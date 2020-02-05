@@ -87,7 +87,7 @@ int main()
 			AE_LOG( "Send ping to server" );
 			
 			char msg[] = "ping";
-			AetherClient_QueueSend( client, 5, true, msg );
+			AetherClient_QueueSend( client, 5, true, (uint8_t*)msg, sizeof(msg) );
 		}
 
 		AetherClient_SendAll( client );

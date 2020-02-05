@@ -81,7 +81,7 @@ int main()
 					AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, recvData );
 					
 					char msg[] = "pong";
-					AetherServer_QueueSendToPlayer( server, 5, true, msg, receiveInfo.player );
+					AetherServer_QueueSendToPlayer( server, receiveInfo.player, 5, true, (uint8_t*)msg, sizeof(msg) );
 					
 					break;
 				}

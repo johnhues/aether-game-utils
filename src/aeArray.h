@@ -48,12 +48,16 @@ public:
   T& Append( const T& value );
   void Append( const T* values, uint32_t count );
 
+  template < typename U >
+  int32_t Find( const U& value ) const;
+  template < typename Fn >
+  int32_t FindFn( Fn testFn ) const;
   void Remove( uint32_t index );
-  template < typename U > uint32_t RemoveAll( const U& value );
-  template < typename Fn, typename U > uint32_t RemoveAll( Fn testFn, const U& value );
-  
-  template < typename U > int32_t Find( const U& value ) const;
-  template < typename Fn, typename U > int32_t Find( Fn testFn, const U& value ) const;
+
+  template < typename U >
+  uint32_t RemoveAll( const U& value );
+  template < typename Fn >
+  uint32_t RemoveAllFn( Fn testFn );
 
   void Reserve( uint32_t total );
   void Clear();
@@ -217,12 +221,12 @@ uint32_t aeArray< T >::RemoveAll( const U& value )
 }
 
 template < typename T >
-template < typename Fn, typename U >
-uint32_t aeArray< T >::RemoveAll( Fn testFn, const U& value )
+template < typename Fn >
+uint32_t aeArray< T >::RemoveAllFn( Fn testFn )
 {
   uint32_t count = 0;
   int32_t index = 0;
-  while ( ( index = Find( testFn, value ) ) >= 0 )
+  while ( ( index = FindFn( testFn ) ) >= 0 )
   {
     Remove( index );
     count++;
@@ -245,12 +249,12 @@ int32_t aeArray< T >::Find( const U& value ) const
 }
 
 template < typename T >
-template < typename Fn, typename U >
-int32_t aeArray< T >::Find( Fn testFn, const U& value ) const
+template < typename Fn >
+int32_t aeArray< T >::FindFn( Fn testFn ) const
 {
   for ( uint32_t i = 0; i < m_length; i++ )
   {
-    if ( testFn( m_array[ i ], value ) )
+    if ( testFn( m_array[ i ] ) )
     {
       return i;
     }

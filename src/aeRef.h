@@ -36,9 +36,7 @@
 #define AE_REFABLE( _C )\
 aeId< _C > GetId() const { return m_refable.GetId(); }\
 static _C* GetById( aeId< _C > id ) { return aeRefable< _C >::GetById( id ); }\
-private:\
-aeRefable< _C > m_refable = this;\
-public:\
+aeRefable< _C > m_refable = this;
 
 //------------------------------------------------------------------------------
 // aeId class
@@ -71,6 +69,8 @@ private:
   explicit aeId( uint32_t id ) { m_id = id; }
   
   uint32_t m_id;
+public:
+  uint32_t GetInternalId() const { return m_id; }
 };
 
 template < typename T >

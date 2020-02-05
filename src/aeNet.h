@@ -56,81 +56,97 @@ struct AetherUuid
 std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
 
 //------------------------------------------------------------------------------
-// aeRpc class
+// aeNetData class
 //------------------------------------------------------------------------------
-class aeRpc : public aeInheritor< aeObject, aeRpc >
-{
-public:
-  aeRpc() : aetherPlayer( nullptr ), userdata( nullptr ) {}
-  virtual ~aeRpc() {}
-
-  virtual void Run() {}
-  virtual void Serialize( class BinaryStream* stream ) {}
-
-  struct AetherPlayer* aetherPlayer = nullptr;
-  void* userdata = nullptr;
-};
-
-const uint32_t kMaxNetInst = 256;
-const uint32_t kMaxNetMessages = 256;
-
-//------------------------------------------------------------------------------
-// aeNetReplication
-//------------------------------------------------------------------------------
-enum class aeNetReplicaEventType
-{
-  Create,
-  Destroy,
-  Update
-};
-
-struct aeNetReplicaEvent
-{
-  aeNetReplicaEventType type;
-};
-
 class aeNetData
 {
 public:
+  uint32_t GetType() const { return m_type; }
+  bool IsLocal() const { return m_local; }
+	
+  const uint8_t* GetInitData() const;
+  uint32_t InitDataLength() const;
+
+  // Server
+  void Set( const uint8_t* data, uint32_t length );
+
+  //Client
+  const uint8_t* Get() const;
+  uint32_t Length() const;
+
+  // @TODO: The following should be private while still allowing aeNetReplicaClient to set initData etc on creation.
+// private:
+  bool m_local = false;
+  uint32_t m_type = 0;
+  aeArray< uint8_t > m_initData;
+  aeArray< uint8_t > m_data;
+public:
+  // Internal
+  aeNetData( uint32_t type ) { m_type = type; }
   AE_REFABLE( aeNetData );
-
-  uint8_t* Get() const { return m_data; }
-  uint32_t Length() const { return m_length; }
-
-private:
-  uint8_t* m_data = nullptr;
-  uint32_t m_length = 0;
+  void m_SetLocal() { m_local = true; }
+  void m_SetClientData( const uint8_t* data, uint32_t length );
 };
 
-enum class aeNetType
-{
-  Float,
-  Int,
-  Uint
-};
-
+//------------------------------------------------------------------------------
+// aeNetReplicaClient class
+//------------------------------------------------------------------------------
 class aeNetReplicaClient
 {
 public:
-  void Receive( const uint8_t* data, uint32_t length ) {}
-  bool Pump( aeNetReplicaEvent* event ) { return false;  }
+  void ReceiveData( const uint8_t* data, uint32_t length ); // Handle raw data from server
+  aeRef< aeNetData > PumpCreated(); // Call this repeatedly until no net data is returned
 
 private:
-  aeMap< aeId< aeNetData >, aeNetData* > m_objects;
-  aeArray< aeNetReplicaEvent > m_events;
+  void m_CreateNetData( aeBinaryStream* rStream );
+  aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;
+  aeMap< uint32_t, aeId< aeNetData > > m_remoteToLocalIdMap;
+  aeArray< aeRef< aeNetData > > m_created;
 };
 
+//------------------------------------------------------------------------------
+// aeNetReplicaServer class
+//------------------------------------------------------------------------------
 class aeNetReplicaServer
 {
 public:
-  void Update();
+  void UpdateSendData(); // Call this right before getting send data and length
+  const uint8_t* GetSendData() const; // Call UpdateSendData() first
+  uint32_t GetSendLength() const; // Call UpdateSendData() first
 
-  const uint8_t* GetSendData() const;
-  uint32_t GetSendLength() const;
+public:
+  class aeNetReplicaDB* m_owner = nullptr;
+  bool m_pendingClear = false;
+  aeArray< uint8_t > m_sendData;
+  // Internal
+  enum class EventType : uint8_t
+  {
+    Connect,
+    Create,
+    Destroy,
+    Update
+  };
+};
+
+//------------------------------------------------------------------------------
+// aeNetReplicaDB class
+//------------------------------------------------------------------------------
+class aeNetReplicaDB
+{
+public:
+  aeNetData* CreateNetData( uint32_t type, const uint8_t* initData, uint32_t initDataLength );
+  void DestroyNetData( aeNetData* netData );
+
+  aeNetReplicaServer* CreateServer();
+  void DestroyServer( aeNetReplicaServer* server );
 
 private:
-  aeMap< aeId< aeNetData >, aeNetData* > m_objects;
-  aeArray< uint8_t > m_sendData;
+  aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;
+  aeArray< aeNetReplicaServer* > m_servers;
+public:
+  // Internal
+  aeNetData* GetNetData( uint32_t index ) { return m_netDatas.GetValue( index ); }
+  uint32_t GetNetDataCount() const { return m_netDatas.Length(); }
 };
 
 // //------------------------------------------------------------------------------
@@ -254,30 +270,8 @@ void AetherClient_Delete( AetherClient* );
 
 void AetherClient_Connect( AetherClient* _ac );
 bool AetherClient_Receive( AetherClient*, ReceiveInfo* infoOut );
-void AetherClient_QueueSend( AetherClient*, const SendInfo* infoIn ); // @TODO: Easy to mess up, should be private? Or SendInfo should have better default values
 void AetherClient_SendAll( AetherClient* );
-
-template<typename T>
-void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const T& msg )
-{
-  SendInfo info;
-  info.msgId = msgId;
-  info.reliable = reliable;
-  info.length = sizeof(msg);
-  memcpy( info.data, &msg, info.length );
-  AetherClient_QueueSend( ac, &info );
-}
-
-template<typename T>
-void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, uint8_t* data, uint32_t length )
-{
-  SendInfo info;
-  info.msgId = msgId;
-  info.reliable = reliable;
-  info.length = length;
-  memcpy( info.data, data, length );
-  AetherClient_QueueSend( ac, &info );
-}
+void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
 
 //------------------------------------------------------------------------------
 // Aether Server
@@ -315,52 +309,14 @@ void AetherServer_Delete( AetherServer* );
 void AetherServer_Update( AetherServer* );
 
 bool AetherServer_Receive( AetherServer*, ServerReceiveInfo* infoOut );
-void AetherServer_QueueSendInfo( AetherServer*, const ServerSendInfo* infoIn ); // @TODO: Easy to mess up, should be private? Or SendInfo should have better default values
 void AetherServer_SendAll( AetherServer* );
 
 AetherPlayer* AetherServer_GetPlayerByNetInstId( AetherServer*, NetInstId id );
 uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userData, AetherPlayer* (&playersOut)[ 32 ] );
 
-template<typename T>
-void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const T& msg )
-{
-  ServerSendInfo info;
-  info.msgId = msgId;
-  info.reliable = reliable;
-  info.length = sizeof(msg);
-  memcpy( info.data, &msg, info.length );
-  info.player = nullptr;
-  info.group = nullptr;
-  AetherServer_QueueSendInfo( as, &info );
-}
-
-template<typename T>
-void AetherServer_QueueSendToPlayer( AetherServer* as, AetherMsgId msgId, bool reliable, const T& msg, AetherPlayer* player )
-{
-  AE_ASSERT( player );
-  ServerSendInfo info;
-  info.msgId = msgId;
-  info.reliable = reliable;
-  info.length = sizeof(msg);
-  memcpy( info.data, &msg, info.length );
-  info.player = player;
-  info.group = nullptr;
-  AetherServer_QueueSendInfo( as, &info );
-}
-
-template<typename T>
-void AetherServer_QueueSendToGroup( AetherServer* as, AetherMsgId msgId, bool reliable, const T& msg, void* group )
-{
-  AE_ASSERT( group );
-  ServerSendInfo info;
-  info.msgId = msgId;
-  info.reliable = reliable;
-  info.length = sizeof(msg);
-  memcpy( info.data, &msg, info.length );
-  info.player = nullptr;
-  info.group = group;
-  AetherServer_QueueSendInfo( as, &info );
-}
+void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
+void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
+void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
 
 //------------------------------------------------------------------------------
 // Aether Internal

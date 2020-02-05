@@ -307,12 +307,12 @@ void aeSignalList< S >::Add( T* obj, Fn fn )
     return;
   }
 
-  auto findFn = [ obj ]( aeSignalBase* signal, int )
+  auto findFn = [ obj ]( aeSignalBase* signal )
   {
     // @HACK: Should also check fn, so an object can register multiple functions at a time
     return signal->GetObj() == obj;
   };
-  int32_t signalIndex = m_signals.Find( findFn, 0 );
+  int32_t signalIndex = m_signals.FindFn( findFn );
   if ( signalIndex >= 0 )
   {
     *m_signals[ signalIndex ] = aeSignal< T, S >( obj, fn );
@@ -332,12 +332,12 @@ void aeSignalList< S >::Add( aeRef< T > ref, Fn fn )
     return;
   }
 
-  auto findFn = [ obj ]( aeSignalBase* signal, int )
+  auto findFn = [ obj ]( aeSignalBase* signal )
   {
     // @HACK: Should also check fn, so an object can register multiple functions at a time
     return signal->GetObj() == obj;
   };
-  int32_t signalIndex = m_signals.Find( findFn, 0 );
+  int32_t signalIndex = m_signals.FindFn( findFn );
   if ( signalIndex >= 0 )
   {
     *m_signals[ signalIndex ] = aeSignal< T, S >( ref, fn );
@@ -350,14 +350,14 @@ void aeSignalList< S >::Add( aeRef< T > ref, Fn fn )
 template < typename S >
 void aeSignalList< S >::Remove( void* obj )
 {
-  auto fn = []( aeSignalBase* s, void* obj )
+  auto fn = [ obj ]( aeSignalBase* s )
   {
     void* o = s->GetObj();
     return !o || ( o == obj );
   };
 
   int32_t index = 0;
-  while ( ( index = m_signals.Find( fn, obj ) ) >= 0 )
+  while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
     aeAlloc::Release( m_signals[ index ] );
     m_signals.Remove( index ); // Remove signals for the given obj and any signals with null references
@@ -367,13 +367,13 @@ void aeSignalList< S >::Remove( void* obj )
 template < typename S >
 void aeSignalList< S >::Send()
 {
-  auto fn = []( aeSignalBase* s, int )
+  auto fn = []( aeSignalBase* s )
   {
     return !s->GetObj();
   };
 
   int32_t index = 0;
-  while ( ( index = m_signals.Find( fn, 0 ) ) >= 0 )
+  while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
     aeAlloc::Release( m_signals[ index ] );
     m_signals.Remove( index ); // Remove null references before send
@@ -390,13 +390,13 @@ template < typename S >
 template < typename T >
 void aeSignalList< S >::Send( const T& value )
 {
-  auto fn = []( aeSignalBase* s, int )
+  auto fn = []( aeSignalBase* s )
   {
     return !s->GetObj();
   };
 
   int32_t index = -1;
-  while ( ( index = m_signals.Find( fn, 0 ) ) >= 0 )
+  while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
     aeAlloc::Release( m_signals[ index ] );
     m_signals.Remove( index ); // Remove null references before send

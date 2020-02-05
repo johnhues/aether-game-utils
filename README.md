@@ -73,7 +73,7 @@ make
 ## MacOSX Setup
 Installing dependencies:
 ```
-brew install libpng sdl2 assimp enet
+brew install libpng sdl2 assimp enet ossp-uuid
 ```
 Building:
 ```
