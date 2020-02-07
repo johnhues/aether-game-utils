@@ -184,6 +184,16 @@ void aeBinaryStream::SerializeDouble( const double& v )
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
+void aeBinaryStream::SerializeBool( bool& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void aeBinaryStream::SerializeBool( const bool& v )
+{
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
 void aeBinaryStream::SerializeArray( uint8_t* data, uint32_t length )
 {
   AE_FAIL_MSG( "Not implemented" );

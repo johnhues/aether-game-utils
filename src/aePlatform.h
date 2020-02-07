@@ -235,4 +235,6 @@ strlcpy(char       *dst,        /* O - Destination string */
 # define strtok_r strtok_s
 #endif
 
+#define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
+
 #endif

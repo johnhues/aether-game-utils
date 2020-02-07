@@ -64,6 +64,9 @@ public:
   void SerializeDouble( double& v );
   void SerializeDouble( const double& v );
 
+  void SerializeBool( bool& v );
+  void SerializeBool( const bool& v );
+
   template< typename T >
   void SerializeObject( T& v );
   template< typename T >

@@ -83,8 +83,7 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
 
         uint32_t length = 0;
         rStream.SerializeUint32( length );
-        AE_ASSERT( length < 10 ); // @HACK- Dont submit
-        for ( uint32_t i = 0; i < length; i++ )
+        for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
         {
           m_CreateNetData( &rStream );
         }
@@ -248,8 +247,8 @@ aeNetData* aeNetReplicaDB::CreateNetData( uint32_t type, const uint8_t* initData
 
     aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
     wStream.SerializeRaw( aeNetReplicaServer::EventType::Create );
-    wStream.SerializeUint32( type );
     wStream.SerializeUint32( netData->GetId().GetInternalId() );
+    wStream.SerializeUint32( type );
     wStream.SerializeArray( netData->m_initData );
   }
 
@@ -258,6 +257,11 @@ aeNetData* aeNetReplicaDB::CreateNetData( uint32_t type, const uint8_t* initData
 
 void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
 {
+  if ( !netData )
+  {
+    return;
+  }
+
   aeId< aeNetData > id = netData->GetId();
   AE_ASSERT_MSG( m_netDatas.Remove( id ), "aeNetData was not found." );
 
@@ -301,6 +305,11 @@ aeNetReplicaServer* aeNetReplicaDB::CreateServer()
 
 void aeNetReplicaDB::DestroyServer( aeNetReplicaServer* server )
 {
+  if ( !server )
+  {
+    return;
+  }
+
   int32_t index = m_servers.Find( server );
   if ( index >= 0 )
   {

@@ -48,16 +48,12 @@ public:
   T& Append( const T& value );
   void Append( const T* values, uint32_t count );
 
-  template < typename U >
-  int32_t Find( const U& value ) const;
-  template < typename Fn >
-  int32_t FindFn( Fn testFn ) const;
+  template < typename U > int32_t Find( const U& value ) const;
+  template < typename Fn > int32_t FindFn( Fn testFn ) const;
   void Remove( uint32_t index );
 
-  template < typename U >
-  uint32_t RemoveAll( const U& value );
-  template < typename Fn >
-  uint32_t RemoveAllFn( Fn testFn );
+  template < typename U > uint32_t RemoveAll( const U& value );
+  template < typename Fn > uint32_t RemoveAllFn( Fn testFn );
 
   void Reserve( uint32_t total );
   void Clear();
