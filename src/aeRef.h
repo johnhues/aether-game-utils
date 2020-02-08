@@ -126,6 +126,8 @@ public:
   T* operator ->();
   T& operator *();
 
+  bool Lost() const;
+
 private:
   // Provide m_Get() defaults to allow templated types that don't support T::GetById()
   template < typename U, bool result = std::is_same< decltype( ((U*)nullptr)->GetById( aeId< U >() ) ), U* >::value >
@@ -238,6 +240,12 @@ T& aeRef< T >::operator *()
   auto obj = m_Get< T >( 0 );
   AE_ASSERT( obj );
   return *aeCast< T >( obj );
+}
+
+template < typename T >
+bool aeRef< T >::Lost() const
+{
+  return m_Get< T >( 0 ) == nullptr && m_id != aeId< T >();
 }
 
 template < typename T >

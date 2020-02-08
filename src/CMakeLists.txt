@@ -7,9 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # use unicode
 add_definitions(-D_UNICODE -DUNICODE)
 
+# find dependencies
 INCLUDE(FindOpenGL)
-
-IF (NOT WIN32)
+IF (NOT AE_DOWNLOAD_DEPS)
 	INCLUDE(FindPNG)
 	INCLUDE(FindSDL2)
 	INCLUDE(Findassimp)
@@ -17,15 +17,20 @@ IF (NOT WIN32)
 	INCLUDE(Finduuid)
 ENDIF()
 
+# include directories
 message(STATUS "Found OpenGL in ${OPENGL_INCLUDE_DIR}")
 message(STATUS "Found libpng in ${PNG_INCLUDE_DIRS}")
-message(STATUS "Found SDL2 in ${SDL2_INCLUDE_DIR}")
+IF (NOT EMSCRIPTEN)
+	message(STATUS "Found SDL2 in ${SDL2_INCLUDE_DIR}")
+ENDIF()
 message(STATUS "Found assimp in ${ASSIMP_INCLUDE_DIRS}")
 message(STATUS "Found enet in ${ENET_INCLUDE_DIR}")
 message(STATUS "Found uuid in ${UUID_INCLUDE_DIR}")
 include_directories(${GLEW_INCLUDE_DIRS})
 include_directories(${PNG_INCLUDE_DIRS})
-include_directories(${SDL2_INCLUDE_DIR})
+IF (NOT EMSCRIPTEN)
+	include_directories(${SDL2_INCLUDE_DIR})
+ENDIF()
 include_directories(${ASSIMP_INCLUDE_DIRS})
 include_directories(${ENET_INCLUDE_DIR})
 include_directories(${UUID_INCLUDE_DIR})
@@ -33,29 +38,36 @@ include_directories(${UUID_INCLUDE_DIR})
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
 
-IF (WIN32)
+# build dependencies
+IF (AE_DOWNLOAD_DEPS)
 	add_dependencies(${AE_LIBRARY_NAME}
 		glew
 		zlib
 		libpng
-		SDL2
 		assimp
 		Enet
 	)
+	IF (NOT EMSCRIPTEN)
+		add_dependencies(${AE_LIBRARY_NAME} SDL2)
+	ENDIF()
 ENDIF()
 
+# dependency linking
 target_link_libraries(${AE_LIBRARY_NAME}
 	${OPENGL_LIBRARIES}
 	${GLEW_LIBRARIES}
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
-	${SDL2_LIBRARY}
 	${ASSIMP_LIBRARIES}
 	${ENET_LIBRARY}
 	${UUID_LIBRARY}
 	${WIN_LIBRARIES}
 )
+IF (NOT EMSCRIPTEN)
+	target_link_libraries(${AE_LIBRARY_NAME} ${SDL2_LIBRARY})
+ENDIF()
 
+# source files
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		aeAlloc.cpp

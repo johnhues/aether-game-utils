@@ -114,6 +114,11 @@ inline void AE_ASSERT_INTERNAL()
 {
   __debugbreak();
 }
+#elif _AE_EMSCRIPTEN_
+inline void AE_ASSERT_INTERNAL()
+{
+  // @TODO: Handle asserts with emscripten builds
+}
 #else
 inline void AE_ASSERT_INTERNAL()
 {

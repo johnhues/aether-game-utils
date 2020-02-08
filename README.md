@@ -59,7 +59,7 @@ int main()
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libpng-dev libsdl2-2.0-0 libassimp-dev libenet-dev uuid-dev
+sudo apt install libpng-dev libsdl2-dev libassimp-dev libenet-dev uuid-dev
 ```
 Building:
 ```

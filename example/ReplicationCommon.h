@@ -48,7 +48,7 @@ public:
 
   void Update( float dt, aeSpriteRenderer* spriteRenderer, const aeTexture2D* texture )
   {
-    if ( !netData->IsLocal() )
+    if ( !netData->IsAuthority() )
     {
       // Client - read net data
       aeBinaryStream rStream = aeBinaryStream::Reader( netData->Get(), netData->Length() );
@@ -59,7 +59,7 @@ public:
     aeFloat4x4 modelToWorld = aeFloat4x4::Translation( pos );
     spriteRenderer->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green );
 
-    if ( netData->IsLocal() )
+    if ( netData->IsAuthority() )
     {
     // Server - write net data
       aeBinaryStream wStream = aeBinaryStream::Writer();

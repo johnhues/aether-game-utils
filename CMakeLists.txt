@@ -23,21 +23,27 @@ configure_file(
 
 include(ExternalProject)
 
-IF (WIN32)
+IF (WIN32 OR EMSCRIPTEN)
+	set(AE_DOWNLOAD_DEPS ON CACHE BOOL "Download dependencies instead of searching system directories")
+ELSE()
+	set(AE_DOWNLOAD_DEPS OFF CACHE BOOL "Download dependencies instead of searching system directories")
+ENDIF()
 
-	set(AE_GLEW_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/glew)
-	set(AE_ZLIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/zlib)
-	set(AE_LIBPNG_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/libpng)
-	set(AE_SDL2_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/SDL2)
-	set(AE_ASSIMP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/assimp)
-	set(AE_ENET_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/enet)
+IF (AE_DOWNLOAD_DEPS)
 
-	set(AE_GLEW_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/glew)
-	set(AE_ZLIB_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/zlib)
-	set(AE_LIBPNG_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/libpng)
-	set(AE_SDL2_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/SDL2)
-	set(AE_ASSIMP_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/assimp)
-	set(AE_ENET_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/enet)
+	set(AE_GLEW_SRC ${CMAKE_BINARY_DIR}/thirdparty/glew)
+	set(AE_ZLIB_SRC ${CMAKE_BINARY_DIR}/thirdparty/zlib)
+	set(AE_LIBPNG_SRC ${CMAKE_BINARY_DIR}/thirdparty/libpng)
+	set(AE_SDL2_SRC ${CMAKE_BINARY_DIR}/thirdparty/SDL2)
+	set(AE_ASSIMP_SRC ${CMAKE_BINARY_DIR}/thirdparty/assimp)
+	set(AE_ENET_SRC ${CMAKE_BINARY_DIR}/thirdparty/enet)
+
+	set(AE_GLEW_INSTALL ${CMAKE_BINARY_DIR}/glew)
+	set(AE_ZLIB_INSTALL ${CMAKE_BINARY_DIR}/zlib)
+	set(AE_LIBPNG_INSTALL ${CMAKE_BINARY_DIR}/libpng)
+	set(AE_SDL2_INSTALL ${CMAKE_BINARY_DIR}/SDL2)
+	set(AE_ASSIMP_INSTALL ${CMAKE_BINARY_DIR}/assimp)
+	set(AE_ENET_INSTALL ${CMAKE_BINARY_DIR}/enet)
 
 	set(WIN_LIBRARIES version Winmm Imm32 Setupapi Ws2_32)
 
@@ -72,15 +78,17 @@ IF (WIN32)
 	set(PNG_LIBRARY_DIRS ${AE_LIBPNG_INSTALL}/lib)
 	set(PNG_LIBRARIES libpng16_staticd)
 
-	ExternalProject_Add(SDL2
-		PREFIX SDL2
-		SOURCE_DIR ${AE_SDL2_SRC}
-		URL https://www.libsdl.org/release/SDL2-2.0.10.tar.gz
-		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL}
-	)
-	set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
-	set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
-	set(SDL2_LIBRARY SDL2-staticd)
+	IF (NOT EMSCRIPTEN)
+		ExternalProject_Add(SDL2
+			PREFIX SDL2
+			SOURCE_DIR ${AE_SDL2_SRC}
+			URL https://www.libsdl.org/release/SDL2-2.0.10.tar.gz
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL}
+		)
+		set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
+		set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
+		set(SDL2_LIBRARY SDL2-staticd)
+	ENDIF()
 
 	ExternalProject_Add(assimp
 		PREFIX assimp
@@ -106,16 +114,17 @@ IF (WIN32)
 
 	# dependency library directories
 	link_directories(${GLEW_LIBRARY_DIRS})
-	link_directories(${GLEW_LIBRARY_DIRS})
 	link_directories(${ZLIB_LIBRARY_DIRS})
 	link_directories(${PNG_LIBRARY_DIRS})
-	link_directories(${SDL2_LIBRARY_DIRS})
+	IF (NOT EMSCRIPTEN)
+		link_directories(${SDL2_LIBRARY_DIRS})
+	ENDIF()
 	link_directories(${ASSIMP_LIBRARY_DIRS})
 	link_directories(${ENET_LIBRARY_DIRS})
 ENDIF()
 
-set(AE_CATCH_SRC ${CMAKE_CURRENT_SOURCE_DIR}/build/thirdparty/Catch2)
-set(AE_CATCH_INSTALL ${CMAKE_CURRENT_SOURCE_DIR}/build/Catch2)
+set(AE_CATCH_SRC ${CMAKE_BINARY_DIR}/thirdparty/Catch2)
+set(AE_CATCH_INSTALL ${CMAKE_BINARY_DIR}/Catch2)
 ExternalProject_Add(Catch2
 	PREFIX Catch2
 	SOURCE_DIR ${AE_CATCH_SRC}

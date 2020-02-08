@@ -40,7 +40,7 @@ uint32_t aeNetData::InitDataLength() const
 
 void aeNetData::Set( const uint8_t* data, uint32_t length )
 {
-  AE_ASSERT_MSG( IsLocal(), "Cannot set net data from client. The aeNetReplicaServer has exclusive ownership." );
+  AE_ASSERT_MSG( IsAuthority(), "Cannot set net data from client. The aeNetReplicaServer has exclusive ownership." );
   m_data.Clear();
   m_data.Append( data, length );
 }
@@ -53,6 +53,11 @@ const uint8_t* aeNetData::Get() const
 uint32_t aeNetData::Length() const
 {
   return m_data.Length();
+}
+
+void aeNetData::Clear()
+{
+  m_data.Clear();
 }
 
 void aeNetData::m_SetClientData( const uint8_t* data, uint32_t length )

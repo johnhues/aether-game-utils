@@ -62,7 +62,7 @@ class aeNetData
 {
 public:
   uint32_t GetType() const { return m_type; }
-  bool IsLocal() const { return m_local; }
+  bool IsAuthority() const { return m_local; }
 	
   const uint8_t* GetInitData() const;
   uint32_t InitDataLength() const;
@@ -70,9 +70,10 @@ public:
   // Server
   void Set( const uint8_t* data, uint32_t length );
 
-  //Client
+  // Client
   const uint8_t* Get() const;
   uint32_t Length() const;
+  void Clear(); // Call to clear local received data. Check ( Length() > 0 ) for new data.
 
   // @TODO: The following should be private while still allowing aeNetReplicaClient to set initData etc on creation.
 // private:
@@ -203,7 +204,7 @@ public:
 //------------------------------------------------------------------------------
 typedef uint32_t NetInstId;
 const uint32_t kMaxSyncData = 128;
-const uint32_t kMaxMessageSize = 1024;
+const uint32_t kMaxMessageSize = 1024 * 8;
 typedef uint16_t AetherMsgId;
 const AetherMsgId kSysMsgMask = 1 << ( sizeof(AetherMsgId) * 8 - 1 );
 const AetherMsgId kSysMsgServerConnect = 1 | kSysMsgMask;
