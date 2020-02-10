@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # project name and supported languages
 project(aether-game-utils LANGUAGES CXX VERSION 0.1.0)
@@ -7,10 +8,8 @@ set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 
 # guard against in-source builds and bad build-type strings
 include(cmake/safeguards.cmake)
-
-# detect operating system and host processor
-message(STATUS "We are on a ${CMAKE_SYSTEM_NAME} system")
-message(STATUS "The host processor is ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+# import external projects module
+include(ExternalProject)
 
 # get git hash
 include(cmake/git_revision.cmake)
@@ -21,16 +20,32 @@ configure_file(
   ${PROJECT_BINARY_DIR}/config.h
 )
 
-include(ExternalProject)
-
-IF (WIN32 OR EMSCRIPTEN)
+# configure project to download dependencies instead of searching for them
+if(WIN32 OR EMSCRIPTEN)
 	set(AE_DOWNLOAD_DEPS ON CACHE BOOL "Download dependencies instead of searching system directories")
-ELSE()
+else()
 	set(AE_DOWNLOAD_DEPS OFF CACHE BOOL "Download dependencies instead of searching system directories")
-ENDIF()
+endif()
+# codesigning configuration
+if(APPLE)
+	set(AE_CODESIGN_IDENTITY "" CACHE STRING "Codesigning identity to use for apple builds")
+endif()
 
-IF (AE_DOWNLOAD_DEPS)
+# find dependencies
+include(FindOpenGL)
+if (NOT AE_DOWNLOAD_DEPS)
+	include(FindPNG)
+	include(FindSDL2)
+	include(Findassimp)
+	include(FindEnet)
+	include(Finduuid)
 
+	# @HACK: This should be found by the above, or the following variable names should be fixed
+	set(ASSIMP_LIBRARY_DIRS /usr/local/Cellar/assimp/5.0.1/lib)
+	set(PNG_LIBRARY_DIRS /usr/local/Cellar/libpng/1.6.37/lib)
+	set(ENET_LIBRARY_DIRS /usr/local/Cellar/enet/1.3.14/lib)
+	set(UUID_LIBRARY_DIRS /usr/local/Cellar/ossp-uuid/1.6.2_2/lib)
+else()
 	set(AE_GLEW_SRC ${CMAKE_BINARY_DIR}/thirdparty/glew)
 	set(AE_ZLIB_SRC ${CMAKE_BINARY_DIR}/thirdparty/zlib)
 	set(AE_LIBPNG_SRC ${CMAKE_BINARY_DIR}/thirdparty/libpng)
@@ -45,18 +60,18 @@ IF (AE_DOWNLOAD_DEPS)
 	set(AE_ASSIMP_INSTALL ${CMAKE_BINARY_DIR}/assimp)
 	set(AE_ENET_INSTALL ${CMAKE_BINARY_DIR}/enet)
 
-	set(WIN_LIBRARIES version Winmm Imm32 Setupapi Ws2_32)
-
-	ExternalProject_Add(glew
-		PREFIX glew
-		SOURCE_DIR ${AE_GLEW_SRC}
-		URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0.tgz
-		SOURCE_SUBDIR build/cmake
-		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_GLEW_INSTALL}
-	)
-	set(GLEW_INCLUDE_DIRS ${AE_GLEW_INSTALL}/include)
-	set(GLEW_LIBRARY_DIRS ${AE_GLEW_INSTALL}/lib)
-	set(GLEW_LIBRARIES libglew32d)
+	if(WIN32)
+		ExternalProject_Add(glew
+			PREFIX glew
+			SOURCE_DIR ${AE_GLEW_SRC}
+			URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0.tgz
+			SOURCE_SUBDIR build/cmake
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_GLEW_INSTALL}
+		)
+		set(GLEW_INCLUDE_DIRS ${AE_GLEW_INSTALL}/include)
+		set(GLEW_LIBRARY_DIRS ${AE_GLEW_INSTALL}/lib)
+		set(GLEW_LIBRARIES libglew32d)
+	endif()
 
 	ExternalProject_Add(zlib
 		PREFIX zlib
@@ -78,7 +93,7 @@ IF (AE_DOWNLOAD_DEPS)
 	set(PNG_LIBRARY_DIRS ${AE_LIBPNG_INSTALL}/lib)
 	set(PNG_LIBRARIES libpng16_staticd)
 
-	IF (NOT EMSCRIPTEN)
+	if(NOT EMSCRIPTEN)
 		ExternalProject_Add(SDL2
 			PREFIX SDL2
 			SOURCE_DIR ${AE_SDL2_SRC}
@@ -88,7 +103,7 @@ IF (AE_DOWNLOAD_DEPS)
 		set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
 		set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
 		set(SDL2_LIBRARY SDL2-staticd)
-	ENDIF()
+	endif()
 
 	ExternalProject_Add(assimp
 		PREFIX assimp
@@ -111,29 +126,63 @@ IF (AE_DOWNLOAD_DEPS)
 	set(ENET_INCLUDE_DIR ${AE_ENET_SRC}/include)
 	set(ENET_LIBRARY_DIRS ${AE_ENET_SRC})
 	set(ENET_LIBRARY ${AE_ENET_SRC}/enet64.lib) # Use path so 'lib' is not prepended
+endif()
 
-	# dependency library directories
-	link_directories(${GLEW_LIBRARY_DIRS})
-	link_directories(${ZLIB_LIBRARY_DIRS})
-	link_directories(${PNG_LIBRARY_DIRS})
-	IF (NOT EMSCRIPTEN)
-		link_directories(${SDL2_LIBRARY_DIRS})
-	ENDIF()
-	link_directories(${ASSIMP_LIBRARY_DIRS})
-	link_directories(${ENET_LIBRARY_DIRS})
-ENDIF()
-
-set(AE_CATCH_SRC ${CMAKE_BINARY_DIR}/thirdparty/Catch2)
-set(AE_CATCH_INSTALL ${CMAKE_BINARY_DIR}/Catch2)
-ExternalProject_Add(Catch2
-	PREFIX Catch2
-	SOURCE_DIR ${AE_CATCH_SRC}
-	GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-	CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_CATCH_INSTALL}
+# dependency include directories
+set(AE_DEPS_LIBRARY_INCLUDE_DIRS
+	${GLEW_INCLUDE_DIRS}
+	${PNG_INCLUDE_DIRS}
+	${ASSIMP_INCLUDE_DIRS}
+	${ENET_INCLUDE_DIR}
+	${UUID_INCLUDE_DIR}
 )
-set(CATCH_INCLUDE_DIRS ${AE_CATCH_INSTALL}/include)
+if(NOT EMSCRIPTEN)
+	list(APPEND AE_DEPS_LIBRARY_INCLUDE_DIRS ${SDL2_INCLUDE_DIR})
+endif()
 
-# library and tests
+# dependency library directories
+set(AE_DEPS_LIBRARY_DIRS
+	${GLEW_LIBRARY_DIRS}
+	${ZLIB_LIBRARY_DIRS}
+	${PNG_LIBRARY_DIRS}
+	${SDL2_LIBRARY_DIRS}
+	${ASSIMP_LIBRARY_DIRS}
+	${ENET_LIBRARY_DIRS}
+	${UUID_LIBRARY_DIRS}
+)
+
+# dependency libraries
+set(AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
+if(APPLE)
+	list(APPEND AE_DEPS_LIBARARIES "-framework Cocoa")
+elseif(WIN32)
+	list(APPEND AE_DEPS_LIBARARIES
+		version
+		Winmm
+		Imm32
+		Setupapi
+		Ws2_32
+	)
+endif()
+list(APPEND AE_DEPS_LIBARARIES
+	${GLEW_LIBRARIES}
+	${ZLIB_LIBRARIES}
+	${PNG_LIBRARIES}
+	${ASSIMP_LIBRARIES}
+	${ENET_LIBRARY}
+	${UUID_LIBRARY}
+)
+if(NOT EMSCRIPTEN)
+	list(APPEND AE_DEPS_LIBARARIES ${SDL2_LIBRARY})
+endif()
+
+# use c++11
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# use unicode
+add_definitions(-D_UNICODE -DUNICODE)
+
+# library, tests, and examples
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(example)

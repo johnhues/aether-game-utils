@@ -1,27 +1,26 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
-# use c++11
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# use unicode
-add_definitions(-D_UNICODE -DUNICODE)
+set(AE_CURRENT_BUNDLE_NAME "Example")
+set(AE_CURRENT_EXECUTABLE_NAME example)
+set(AE_CURRENT_SOURCE_FILES example.cpp)
+include(AddExecutable)
 
-add_executable(example example.cpp)
-add_dependencies(example ${AE_LIBRARY_NAME})
-target_link_libraries(example ${AE_LIBRARIES})
+set(AE_CURRENT_BUNDLE_NAME "Server")
+set(AE_CURRENT_EXECUTABLE_NAME server)
+set(AE_CURRENT_SOURCE_FILES server.cpp)
+include(AddExecutable)
 
-add_executable(server server.cpp)
-add_dependencies(server ${AE_LIBRARY_NAME})
-target_link_libraries(server ${AE_LIBRARIES})
+set(AE_CURRENT_BUNDLE_NAME "Client")
+set(AE_CURRENT_EXECUTABLE_NAME client)
+set(AE_CURRENT_SOURCE_FILES client.cpp)
+include(AddExecutable)
 
-add_executable(client client.cpp)
-add_dependencies(client ${AE_LIBRARY_NAME})
-target_link_libraries(client ${AE_LIBRARIES})
+set(AE_CURRENT_BUNDLE_NAME "Replication Server")
+set(AE_CURRENT_EXECUTABLE_NAME replication_server)
+set(AE_CURRENT_SOURCE_FILES ReplicationServer.cpp ReplicationCommon.h)
+include(AddExecutable)
 
-add_executable(replication_server ReplicationServer.cpp ReplicationCommon.h)
-add_dependencies(replication_server ${AE_LIBRARY_NAME})
-target_link_libraries(replication_server ${AE_LIBRARIES})
-
-add_executable(replication_client ReplicationClient.cpp ReplicationCommon.h)
-add_dependencies(replication_client ${AE_LIBRARY_NAME})
-target_link_libraries(replication_client ${AE_LIBRARIES})
+set(AE_CURRENT_BUNDLE_NAME "Replication Client")
+set(AE_CURRENT_EXECUTABLE_NAME replication_client)
+set(AE_CURRENT_SOURCE_FILES ReplicationClient.cpp ReplicationCommon.h)
+include(AddExecutable)

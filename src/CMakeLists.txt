@@ -1,45 +1,20 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake")
-
-# use c++11
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# use unicode
-add_definitions(-D_UNICODE -DUNICODE)
-
-# find dependencies
-INCLUDE(FindOpenGL)
-IF (NOT AE_DOWNLOAD_DEPS)
-	INCLUDE(FindPNG)
-	INCLUDE(FindSDL2)
-	INCLUDE(Findassimp)
-	INCLUDE(FindEnet)
-	INCLUDE(Finduuid)
-ENDIF()
-
-# include directories
-message(STATUS "Found OpenGL in ${OPENGL_INCLUDE_DIR}")
-message(STATUS "Found libpng in ${PNG_INCLUDE_DIRS}")
-IF (NOT EMSCRIPTEN)
-	message(STATUS "Found SDL2 in ${SDL2_INCLUDE_DIR}")
-ENDIF()
-message(STATUS "Found assimp in ${ASSIMP_INCLUDE_DIRS}")
-message(STATUS "Found enet in ${ENET_INCLUDE_DIR}")
-message(STATUS "Found uuid in ${UUID_INCLUDE_DIR}")
-include_directories(${GLEW_INCLUDE_DIRS})
-include_directories(${PNG_INCLUDE_DIRS})
-IF (NOT EMSCRIPTEN)
-	include_directories(${SDL2_INCLUDE_DIR})
-ENDIF()
-include_directories(${ASSIMP_INCLUDE_DIRS})
-include_directories(${ENET_INCLUDE_DIR})
-include_directories(${UUID_INCLUDE_DIR})
 
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
+target_include_directories(${AE_LIBRARY_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
-# build dependencies
-IF (AE_DOWNLOAD_DEPS)
+# dependency include directories
+include_directories(${AE_DEPS_LIBRARY_INCLUDE_DIRS})
+# dependency library directories
+if (AE_DOWNLOAD_DEPS)
+	link_directories(${AE_DEPS_LIBRARY_DIRS})
+endif()
+# dependency linking
+target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
+
+# dependency building
+if(AE_DOWNLOAD_DEPS)
 	add_dependencies(${AE_LIBRARY_NAME}
 		glew
 		zlib
@@ -47,25 +22,10 @@ IF (AE_DOWNLOAD_DEPS)
 		assimp
 		Enet
 	)
-	IF (NOT EMSCRIPTEN)
+	if(NOT EMSCRIPTEN)
 		add_dependencies(${AE_LIBRARY_NAME} SDL2)
-	ENDIF()
-ENDIF()
-
-# dependency linking
-target_link_libraries(${AE_LIBRARY_NAME}
-	${OPENGL_LIBRARIES}
-	${GLEW_LIBRARIES}
-	${ZLIB_LIBRARIES}
-	${PNG_LIBRARIES}
-	${ASSIMP_LIBRARIES}
-	${ENET_LIBRARY}
-	${UUID_LIBRARY}
-	${WIN_LIBRARIES}
-)
-IF (NOT EMSCRIPTEN)
-	target_link_libraries(${AE_LIBRARY_NAME} ${SDL2_LIBRARY})
-ENDIF()
+	endif()
+endif()
 
 # source files
 target_sources(${AE_LIBRARY_NAME}
@@ -117,5 +77,3 @@ target_sources(${AE_LIBRARY_NAME}
 		${CMAKE_CURRENT_LIST_DIR}/aeVfs.h
 		${CMAKE_CURRENT_LIST_DIR}/aeWindow.h
 )
-
-target_include_directories(${AE_LIBRARY_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
