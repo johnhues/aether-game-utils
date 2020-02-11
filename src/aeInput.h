@@ -102,6 +102,8 @@ public:
 
   aeInt2 mousePixelPos;
   int32_t scroll;
+
+  bool exit; // Window 'X' etc
 };
 
 //------------------------------------------------------------------------------

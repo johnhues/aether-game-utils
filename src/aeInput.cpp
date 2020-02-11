@@ -64,6 +64,8 @@ InputState::InputState()
 
   mousePixelPos = aeInt2( 0 );
   scroll = 0;
+
+  exit = false;
 }
 
 bool InputState::Get( InputType type ) const
@@ -264,7 +266,7 @@ void aeInput::Pump()
       }
       else if ( event.type == SDL_QUIT )
       {
-        exit( 0 );
+        m_input.exit = true;
       }
     }
   }
