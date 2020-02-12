@@ -124,42 +124,42 @@ void aeBinaryStream::SerializeUint64( const uint64_t& v )
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt8( uint8_t& v )
+void aeBinaryStream::SerializeInt8( int8_t& v )
 {
   SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt8( const uint8_t& v )
+void aeBinaryStream::SerializeInt8( const int8_t& v )
 {
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt16( uint16_t& v )
+void aeBinaryStream::SerializeInt16( int16_t& v )
 {
   SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt16( const uint16_t& v )
+void aeBinaryStream::SerializeInt16( const int16_t& v )
 {
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt32( uint32_t& v )
+void aeBinaryStream::SerializeInt32( int32_t& v )
 {
   SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt32( const uint32_t& v )
+void aeBinaryStream::SerializeInt32( const int32_t& v )
 {
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt64( uint64_t& v )
+void aeBinaryStream::SerializeInt64( int64_t& v )
 {
   SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeInt64( const uint64_t& v )
+void aeBinaryStream::SerializeInt64( const int64_t& v )
 {
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }

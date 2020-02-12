@@ -31,6 +31,9 @@
 #include "aeVfs.h"
 #include "aeWindow.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #if _AE_EMSCRIPTEN_
 #define GL_SAMPLER_3D 0x0
 #define GL_TEXTURE_3D 0x0
@@ -905,7 +908,9 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
 #endif
 
   // Utility
-  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x) { return _x * _x; }\n";
+  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return _x * _x; }\n";
+  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return sqrt( _x ); }\n";
+  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return _x * _x; }\n";
   shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return sqrt( _x ); }\n";
   shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( _x.rgb * _x.rgb, _x.a ); }\n";
   shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( sqrt( _x.rgb ), _x.a ); }\n";
@@ -979,146 +984,8 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
 }
 
 //------------------------------------------------------------------------------
-// aeTexture
+// aeTexture2D member functions
 //------------------------------------------------------------------------------
-#include <png.h>
-
-namespace
-{
-  struct PngData
-  {
-    const uint8_t* data;
-    uint32_t current;
-    uint32_t length;
-  };
-
-  void read_data_fn( png_structp png_ptr, png_bytep buffer, png_size_t count )
-  {
-    PngData *data = (PngData*)png_get_io_ptr( png_ptr );
-    AE_ASSERT( data->current + count <= data->length );
-    memcpy( buffer, data->data + data->current, count );
-    data->current += count;
-  }
-}
-
-bool get_png_info( const uint8_t* data, uint32_t length, uint32_t* widthOut, uint32_t* heightOut, uint32_t* depthOut )
-{
-  png_structp png_ptr = png_create_read_struct( PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr );
-  png_infop info_ptr = png_create_info_struct( png_ptr );
-  png_infop end_info = png_create_info_struct( png_ptr );
-  
-  PngData pngData;
-  pngData.data = data;
-  pngData.current = 0;
-  pngData.length = length;
-  png_set_read_fn( png_ptr, &pngData, read_data_fn );
-  
-  png_read_info(png_ptr, info_ptr);
-  
-  int bit_depth;
-  int color_type;
-  int interlace_method;
-  int compression_method;
-  int filter_method;
-  uint32_t png_width;
-  uint32_t png_height;
-  png_get_IHDR( png_ptr, info_ptr, &png_width, &png_height,
-    &bit_depth, &color_type, &interlace_method,
-    &compression_method, &filter_method );
-
-  AE_ASSERT( bit_depth == 8 );
-
-  int32_t perPixel = 0;
-  switch( color_type )
-  {
-    case 2:
-      perPixel = 3;
-      break;
-    case 6:
-      perPixel = 4;
-      break;
-    default:
-      return false;
-  }
-
-  png_destroy_read_struct( &png_ptr, &info_ptr, &end_info );
-  
-  *widthOut = png_width;
-  *heightOut = png_height;
-  *depthOut = perPixel;
-
-  return true;
-}
-
-bool load_png( const uint8_t* data, uint32_t length, uint8_t* dataOut, uint32_t maxOut )
-{
-  png_structp png_ptr = png_create_read_struct( PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr );
-  png_infop info_ptr = png_create_info_struct( png_ptr );
-  png_infop end_info = png_create_info_struct( png_ptr );
-  
-  PngData pngData;
-  pngData.data = data;
-  pngData.current = 0;
-  pngData.length = length;
-  png_set_read_fn( png_ptr, &pngData, read_data_fn );
-  
-  png_read_info( png_ptr, info_ptr );
-  
-  int bit_depth;
-  int color_type;
-  int interlace_method;
-  int compression_method;
-  int filter_method;
-  uint32_t png_width;
-  uint32_t png_height;
-  png_get_IHDR( png_ptr, info_ptr, &png_width, &png_height,
-    &bit_depth, &color_type, &interlace_method,
-    &compression_method, &filter_method );
-
-  // @TODO: Get png gamma info
-  // double fileGamma = 0.45455;
-  // double screenGamma = 2.2;
-  // if ( !png_get_gAMA( png_ptr, info_ptr, &fileGamma ) ) { fileGamma = 0.45455; }
-  // png_set_gamma( png_ptr, screenGamma, fileGamma );
-  // png_read_update_info( png_ptr, info_ptr );
-
-  AE_ASSERT( bit_depth == 8 );
-  
-  int32_t perPixel = 0;
-  switch( color_type )
-  {
-    case 2:
-      perPixel = 3;
-      break;
-    case 6:
-      perPixel = 4;
-      break;
-    default:
-      return false;
-  }
-  
-  const uint32_t byteCount = png_width * png_height * perPixel;
-  if ( maxOut < byteCount )
-  {
-    return false;
-  }
-
-  uint8_t** rows = new uint8_t*[ png_height ];
-  for ( uint32_t i = 0; i < png_height; i++ )
-  {
-    rows[ png_height - i - 1 ] = dataOut + i * png_width * perPixel;
-  }
-  png_set_rows( png_ptr, info_ptr, rows );
-  
-  png_read_image( png_ptr, rows );
-  png_read_end( png_ptr, end_info );
-  
-  png_destroy_read_struct( &png_ptr, &info_ptr, &end_info );
-  delete[] rows;
-  
-  return true;
-}
-
 aeTexture2D::aeTexture2D()
 {
   m_width = 0;
@@ -1175,20 +1042,37 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
   uint32_t fileSize = aeVfs::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
   
-  uint8_t* fileBuffer = new uint8_t[ fileSize ];
+  uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
   aeVfs::Read( file, fileBuffer, fileSize );
 
-  uint32_t width = 0;
-  uint32_t height = 0;
-  uint32_t depth = 0;
-  get_png_info( fileBuffer, fileSize, &width, &height, &depth );
-  uint8_t* imageBuf = new uint8_t[ width * height * depth ];
-  load_png( fileBuffer, fileSize, imageBuf, width * height * depth );
-  
-  Initialize( imageBuf, width, height, depth, filter, wrap );
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t channels = 0;
+  stbi_set_flip_vertically_on_load( true );
+  uint8_t* image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  AE_ASSERT( image );
 
-  delete[] imageBuf;
-  delete[] fileBuffer;
+  uint32_t depth = 0;
+  switch ( channels )
+  {
+    case STBI_grey:
+      depth = 1;
+      break;
+    case STBI_grey_alpha:
+      AE_FAIL();
+      break;
+    case STBI_rgb:
+      depth = 3;
+      break;
+    case STBI_rgb_alpha:
+      depth = 4;
+      break;
+  }
+  
+  Initialize( image, width, height, depth, filter, wrap );
+  
+  stbi_image_free( image );
+  free( fileBuffer );
 }
 
 void aeTexture2D::Destroy()
@@ -1483,17 +1367,33 @@ void aeTextRenderer::Initialize( const char* imagePath, aeTextureFilter::Type fi
       v_color = a_color;\
       gl_Position = u_uiToScreen * vec4( a_position, 1.0 );\
     }";
-  const char* fragStr = "\
-    uniform sampler2D u_tex;\
-    AE_IN_HIGHP vec2 v_uv;\
-    AE_IN_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
-      AE_COLOR.rgb = AE_SRGB_TO_RGB( AE_COLOR.rgb );\
-      AE_COLOR *= v_color;\
-      AE_COLOR.rgb = AE_RGB_TO_SRGB( AE_COLOR.rgb );\
-    }";
+  const char* fragStr = "";
+  if ( filterType == aeTextureFilter::Linear )
+  {
+    fragStr = "\
+      uniform sampler2D u_tex;\
+      AE_IN_HIGHP vec2 v_uv;\
+      AE_IN_HIGHP vec4 v_color;\
+      void main()\
+      {\
+        AE_COLOR.rgb = vec3( 1.0 );\
+        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) > 0.25 ? 1.0 : 0.0;\
+        AE_COLOR *= v_color;\
+      }";
+  }
+  else
+  {
+    fragStr = "\
+      uniform sampler2D u_tex;\
+      AE_IN_HIGHP vec2 v_uv;\
+      AE_IN_HIGHP vec4 v_color;\
+      void main()\
+      {\
+        AE_COLOR.rgb = vec3( 1.0 );\
+        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r );\
+        AE_COLOR *= v_color;\
+      }";
+  }
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
   m_shader.SetBlending( true );
 
@@ -1518,6 +1418,7 @@ void aeTextRenderer::Render( const aeFloat4x4& uiToScreen )
   {
     const TextRect& rect = m_rects[ i ];
     aeFloat2 pos = rect.pos;
+    pos.y -= rect.size.y;
 
     const char* start = rect.text.c_str();
     const char* str = start;
@@ -1525,11 +1426,9 @@ void aeTextRenderer::Render( const aeFloat4x4& uiToScreen )
     {
       if ( !isspace( str[ 0 ] ) )
       {
-        AE_ASSERT_MSG( str[ 0 ] >= 33 && str[ 0 ] <= 126, "Text::Render string value '#': #", (int)str[ 0 ], rect.text.c_str() );
-
-        int32_t index = str[ 0 ] - 33;
+        int32_t index = str[ 0 ];
         uint32_t columns = m_texture.GetWidth() / m_charSize;
-        aeFloat2 offset( index % columns, index / columns );
+        aeFloat2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
 
         for ( uint32_t j = 0; j < aeQuadIndexCount; j++ )
         {

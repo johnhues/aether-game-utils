@@ -34,7 +34,7 @@
 //------------------------------------------------------------------------------
 // aeRender constants
 //------------------------------------------------------------------------------
-const uint32_t kMaxShaderAttributeCount = 8;
+const uint32_t kMaxShaderAttributeCount = 16;
 const uint32_t kMaxShaderAttributeNameLength = 16;
 const uint32_t kMaxShaderDefines = 4;
 
@@ -411,6 +411,11 @@ private:
 class aeTextRenderer
 {
 public:
+  // @NOTE: 'imagePath' should be the path to a square texture with ascii
+  //        characters evenly spaced from top left to bottom right. The
+  //        texture can be a single channel without transparency. Luminance
+  //        of the red channel is used for transparency.
+  //        'charSize' is the width and height of each character in the texture.
   void Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t charSize );
   void Terminate();
   void Render( const aeFloat4x4& uiToScreen );
