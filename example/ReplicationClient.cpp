@@ -62,7 +62,7 @@ int main()
   // Game data
   aeArray< Green > greens;
 
-  while ( !input.GetState()->esc )
+  while ( !input.GetState()->exit )
   {
     input.Pump();
     

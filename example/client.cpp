@@ -52,7 +52,7 @@ int main()
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.GetState()->esc )
+	while ( !input.GetState()->exit )
 	{
 		input.Pump();
 		if ( !client->IsConnected() && !client->IsConnecting() )

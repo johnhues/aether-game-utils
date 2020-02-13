@@ -76,7 +76,7 @@ int main()
   greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
   greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
 
-  while ( !input.GetState()->esc )
+  while ( !input.GetState()->exit )
   {
     input.Pump();
     AetherServer_Update( server );
