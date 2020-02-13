@@ -34,8 +34,9 @@
 *.out
 *.app
 
-# CMake
+# CMake / CLion
 build
+cmake-build-debug
 
 # System
 .DS_Store
