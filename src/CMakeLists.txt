@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
+# @TODO: Fix install directory. This installs to /usr/local on linux, not /usr/local/lib
 set(AE_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/${AE_LIBRARY_NAME})
 
 # library
