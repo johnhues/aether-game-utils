@@ -14,14 +14,8 @@ include(ExternalProject)
 # get git hash
 include(cmake/git_revision.cmake)
 
-# configure header file
-configure_file(
-  ${PROJECT_SOURCE_DIR}/cmake/config.h.in
-  ${PROJECT_BINARY_DIR}/config.h
-)
-
 # configure project to download dependencies instead of searching for them
-if(WIN32 OR EMSCRIPTEN)
+if((WIN32 AND NOT CYGWIN) OR EMSCRIPTEN)
 	set(AE_DOWNLOAD_DEPS ON CACHE BOOL "Download dependencies instead of searching system directories")
 else()
 	set(AE_DOWNLOAD_DEPS OFF CACHE BOOL "Download dependencies instead of searching system directories")
@@ -60,7 +54,7 @@ else()
 	set(AE_ASSIMP_INSTALL ${CMAKE_BINARY_DIR}/assimp)
 	set(AE_ENET_INSTALL ${CMAKE_BINARY_DIR}/enet)
 
-	if(WIN32)
+	if(WIN32 AND NOT CYGWIN)
 		ExternalProject_Add(glew
 			PREFIX glew
 			SOURCE_DIR ${AE_GLEW_SRC}
@@ -155,7 +149,7 @@ set(AE_DEPS_LIBRARY_DIRS
 set(AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
 if(APPLE)
 	list(APPEND AE_DEPS_LIBARARIES "-framework Cocoa")
-elseif(WIN32)
+elseif(WIN32 AND NOT CYGWIN)
 	list(APPEND AE_DEPS_LIBARARIES
 		version
 		Winmm

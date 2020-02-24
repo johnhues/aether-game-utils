@@ -1,8 +1,23 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
+set(AE_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/${AE_LIBRARY_NAME})
+
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
-target_include_directories(${AE_LIBRARY_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+
+target_include_directories(${AE_LIBRARY_NAME}
+	PRIVATE
+		${PROJECT_SOURCE_DIR}/src
+	PUBLIC
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> # for headers when building
+		$<INSTALL_INTERFACE:${AE_INSTALL_DIR}/include> # for headers when installing
+)
+
+# configure header file
+configure_file(
+	${PROJECT_SOURCE_DIR}/cmake/config.h.in
+	${PROJECT_BINARY_DIR}/config.h
+)
 
 # dependency include directories
 include_directories(${AE_DEPS_LIBRARY_INCLUDE_DIRS})
@@ -27,6 +42,38 @@ if(AE_DOWNLOAD_DEPS)
 	endif()
 endif()
 
+set(AE_HEADER_FILES
+	${PROJECT_BINARY_DIR}/config.h
+	aeAlloc.h
+	aeArray.h
+	aeBinaryStream.h
+	aeClock.h
+	aeCommand.h
+	aeCommandLineArgs.h
+	aeDict.h
+	aeInitializer.h
+	aeInput.h
+	aeInventoryGrid.h
+	aeList.h
+	aeLog.h
+	aeMap.h
+	aeMath.h
+	aeMesh.h
+	aeMeta.h
+	aeNet.h
+	aeObjectPool.h
+	aePlatform.h
+	aeRef.h
+	aeRender.h
+	aeRingBuffer.h
+	aeSignal.h
+	aeSparseGrid.h
+	aeString.h
+	aeUuid.h
+	aeVfs.h
+	aeWindow.h
+)
+
 # source files
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
@@ -47,33 +94,14 @@ target_sources(${AE_LIBRARY_NAME}
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp
-	PUBLIC
-		${CMAKE_CURRENT_LIST_DIR}/aeAlloc.h
-		${CMAKE_CURRENT_LIST_DIR}/aeArray.h
-		${CMAKE_CURRENT_LIST_DIR}/aeBinaryStream.h
-		${CMAKE_CURRENT_LIST_DIR}/aeClock.h
-		${CMAKE_CURRENT_LIST_DIR}/aeCommand.h
-		${CMAKE_CURRENT_LIST_DIR}/aeCommandLineArgs.h
-		${CMAKE_CURRENT_LIST_DIR}/aeDict.h
-		${CMAKE_CURRENT_LIST_DIR}/aeInitializer.h
-		${CMAKE_CURRENT_LIST_DIR}/aeInput.h
-		${CMAKE_CURRENT_LIST_DIR}/aeInventoryGrid.h
-		${CMAKE_CURRENT_LIST_DIR}/aeList.h
-		${CMAKE_CURRENT_LIST_DIR}/aeLog.h
-		${CMAKE_CURRENT_LIST_DIR}/aeMap.h
-		${CMAKE_CURRENT_LIST_DIR}/aeMath.h
-		${CMAKE_CURRENT_LIST_DIR}/aeMesh.h
-		${CMAKE_CURRENT_LIST_DIR}/aeMeta.h
-		${CMAKE_CURRENT_LIST_DIR}/aeNet.h
-		${CMAKE_CURRENT_LIST_DIR}/aeObjectPool.h
-		${CMAKE_CURRENT_LIST_DIR}/aePlatform.h
-		${CMAKE_CURRENT_LIST_DIR}/aeRef.h
-		${CMAKE_CURRENT_LIST_DIR}/aeRender.h
-		${CMAKE_CURRENT_LIST_DIR}/aeRingBuffer.h
-		${CMAKE_CURRENT_LIST_DIR}/aeSignal.h
-		${CMAKE_CURRENT_LIST_DIR}/aeSparseGrid.h
-		${CMAKE_CURRENT_LIST_DIR}/aeString.h
-		${CMAKE_CURRENT_LIST_DIR}/aeUuid.h
-		${CMAKE_CURRENT_LIST_DIR}/aeVfs.h
-		${CMAKE_CURRENT_LIST_DIR}/aeWindow.h
 )
+
+# ae lib installation
+install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION "${AE_INSTALL_DIR}/include")
+install(
+	FILES ${PROJECT_SOURCE_DIR}/cmake/Config.cmake.in
+	RENAME ${AE_LIBRARY_NAME}Config.cmake
+	DESTINATION "${AE_INSTALL_DIR}"
+)
+install(EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
