@@ -68,6 +68,7 @@ git clone https://github.com/johnhues/aether-game-utils.git .
 mkdir ./build && cd ./build
 cmake ..
 make
+sudo make install
 ```
 
 ## MacOSX Setup
@@ -82,6 +83,7 @@ git clone https://github.com/johnhues/aether-game-utils.git .
 mkdir ./build && cd ./build
 cmake ..
 make
+sudo make install
 ```
 
 ## Windows Setup
