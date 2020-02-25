@@ -24,6 +24,17 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeMesh.h"
+#if _AE_EMSCRIPTEN_
+
+bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension ) { return false; }
+void aeMesh::Transform( aeFloat4x4 transform ) {}
+const aeMeshVertex* aeMesh::GetVertices() const { return nullptr; }
+const aeMeshIndex* aeMesh::GetIndices() const { return nullptr; }
+uint32_t aeMesh::GetVertexCount() const { return 0; }
+uint32_t aeMesh::GetIndexCount() const { return 0; }
+
+#else // !_AE_EMSCRIPTEN_
+
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -157,3 +168,4 @@ uint32_t aeMesh::GetIndexCount() const
 {
   return m_indices.Length();
 }
+#endif

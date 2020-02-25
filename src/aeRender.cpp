@@ -155,12 +155,7 @@ aeFloat3 aeColor::GetSRGB() const
 
 aeFloat4 aeColor::GetSRGBA() const
 {
-  return aeFloat4(
-    aeMath::Pow( r, 1.0f / 2.2f ),
-    aeMath::Pow( g, 1.0f / 2.2f ),
-    aeMath::Pow( b, 1.0f / 2.2f ),
-    a
-  );
+  return aeFloat4( GetSRGB(), a );
 }
 
 aeColor aeColor::Lerp( const aeColor& end, float t ) const
@@ -1132,6 +1127,7 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   m_quad.SetVertices( quadVerts, aeQuadVertCount );
   m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
 
+  // @TODO: Figure out if there are any implicit SRGB conversions happening here. Improve interface and visibility to user if there are.
   const char* vertexStr = "\
     AE_UNIFORM_HIGHP mat4 u_localToNdc;\
     AE_IN_HIGHP vec3 a_position;\
@@ -1379,6 +1375,7 @@ void aeTextRenderer::Initialize( const char* imagePath, aeTextureFilter::Type fi
         AE_COLOR.rgb = vec3( 1.0 );\
         AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) > 0.25 ? 1.0 : 0.0;\
         AE_COLOR *= v_color;\
+        AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
       }";
   }
   else
@@ -1392,6 +1389,7 @@ void aeTextRenderer::Initialize( const char* imagePath, aeTextureFilter::Type fi
         AE_COLOR.rgb = vec3( 1.0 );\
         AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r );\
         AE_COLOR *= v_color;\
+        AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
       }";
   }
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
