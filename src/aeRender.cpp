@@ -117,9 +117,9 @@ aeColor::aeColor( aeColor c, float a )
 aeColor aeColor::SRGB( float r, float g, float b )
 {
   return aeColor(
-    aeMath::Pow( r, 2.2f ),
-    aeMath::Pow( g, 2.2f ),
-    aeMath::Pow( b, 2.2f ),
+    SRGBToRGB( r ),
+    SRGBToRGB( g ),
+    SRGBToRGB( b ),
     1.0f
   );
 }
@@ -127,9 +127,9 @@ aeColor aeColor::SRGB( float r, float g, float b )
 aeColor aeColor::SRGBA( float r, float g, float b, float a )
 {
   return aeColor(
-    aeMath::Pow( r, 2.2f ),
-    aeMath::Pow( g, 2.2f ),
-    aeMath::Pow( b, 2.2f ),
+    SRGBToRGB( r ),
+    SRGBToRGB( g ),
+    SRGBToRGB( b ),
     a
   );
 }
@@ -137,9 +137,9 @@ aeColor aeColor::SRGBA( float r, float g, float b, float a )
 aeColor aeColor::PS( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
 {
   return aeColor(
-    aeMath::Pow( r / 255.0f, 2.2f ),
-    aeMath::Pow( g / 255.0f, 2.2f ),
-    aeMath::Pow( b / 255.0f, 2.2f ),
+    SRGBToRGB( r / 255.0f ),
+    SRGBToRGB( g / 255.0f ),
+    SRGBToRGB( b / 255.0f ),
     a / 255.0f
   );
 }
@@ -147,9 +147,9 @@ aeColor aeColor::PS( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
 aeFloat3 aeColor::GetSRGB() const
 {
   return aeFloat3(
-    aeMath::Pow( r, 1.0f / 2.2f ),
-    aeMath::Pow( g, 1.0f / 2.2f ),
-    aeMath::Pow( b, 1.0f / 2.2f )
+    RGBToSRGB( r ),
+    RGBToSRGB( g ),
+    RGBToSRGB( b )
   );
 }
 
@@ -166,6 +166,16 @@ aeColor aeColor::Lerp( const aeColor& end, float t ) const
     aeMath::Lerp( b, end.b, t ),
     aeMath::Lerp( a, end.a, t )
   );
+}
+
+float aeColor::SRGBToRGB( float x )
+{
+  return pow( x , 2.2 );
+}
+
+float aeColor::RGBToSRGB( float x )
+{
+  return pow( x, 1.0 / 2.2 );
 }
 
 //------------------------------------------------------------------------------
@@ -903,12 +913,12 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
 #endif
 
   // Utility
-  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return _x * _x; }\n";
-  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return sqrt( _x ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return _x * _x; }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return sqrt( _x ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( _x.rgb * _x.rgb, _x.a ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( sqrt( _x.rgb ), _x.a ); }\n";
+  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
+  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
+  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return vec3( AE_SRGB_TO_RGB( _x.r ), AE_SRGB_TO_RGB( _x.g ), AE_SRGB_TO_RGB( _x.b ) ); }\n";
+  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return vec3( AE_RGB_TO_SRGB( _x.r ), AE_RGB_TO_SRGB( _x.g ), AE_RGB_TO_SRGB( _x.b ) ); }\n";
+  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( AE_SRGB_TO_RGB( _x.rgb ), _x.a ); }\n";
+  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( AE_RGB_TO_SRGB( _x.rgb ), _x.a ); }\n";
 
   // Input/output
 #if _AE_IOS_
@@ -1373,7 +1383,7 @@ void aeTextRenderer::Initialize( const char* imagePath, aeTextureFilter::Type fi
       void main()\
       {\
         AE_COLOR.rgb = vec3( 1.0 );\
-        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) > 0.25 ? 1.0 : 0.0;\
+        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) > 0.5 ? 1.0 : 0.0;\
         AE_COLOR *= v_color;\
         AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
       }";

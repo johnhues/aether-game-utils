@@ -51,6 +51,7 @@ extern const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ];
 struct aeColor
 {
   aeColor() {}
+  aeColor( const aeColor& ) = default;
   aeColor( float rgb );
   aeColor( float r, float g, float b );
   aeColor( float r, float g, float b, float a );
@@ -73,6 +74,9 @@ struct aeColor
   aeColor ScaleRGB( float s ) const { return aeColor( r * s, g * s, b * s, a ); }
   aeColor ScaleA( float s ) const { return aeColor( r, g, b, a * s ); }
   aeColor SetA( float alpha ) const { return aeColor( r, g, b, alpha ); }
+
+  static float SRGBToRGB( float x );
+  static float RGBToSRGB( float x );
 
   static const aeColor White;
   static const aeColor Red;
