@@ -22,19 +22,14 @@ configure_file(
 
 # dependency include directories
 include_directories(${AE_DEPS_LIBRARY_INCLUDE_DIRS})
-# dependency library directories
-if (AE_DOWNLOAD_DEPS)
-	link_directories(${AE_DEPS_LIBRARY_DIRS})
-endif()
 # dependency linking
 target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # dependency building
-if(AE_DOWNLOAD_DEPS)
+if(AE_BUILD_DEPS)
 	add_dependencies(${AE_LIBRARY_NAME}
 		glew
 		zlib
-		libpng
 		assimp
 		Enet
 	)

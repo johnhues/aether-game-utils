@@ -14,7 +14,6 @@ Modules and utilities include:
 Dependencies:
 * [SDL2](https://www.libsdl.org/)
 * [Assimp](https://github.com/assimp/assimp)
-* [libpng](http://www.libpng.org/pub/png/)
 * [Catch2](https://github.com/catchorg/Catch2)
 
 ## Example
@@ -59,7 +58,7 @@ int main()
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libpng-dev libsdl2-dev libassimp-dev libenet-dev uuid-dev
+sudo apt install libsdl2-dev libassimp-dev libenet-dev uuid-dev
 ```
 Building:
 ```
@@ -74,7 +73,7 @@ sudo make install
 ## MacOSX Setup
 Installing dependencies:
 ```
-brew install libpng sdl2 assimp enet ossp-uuid
+brew install sdl2 assimp enet ossp-uuid
 ```
 Building:
 ```

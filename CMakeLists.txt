@@ -16,9 +16,9 @@ include(cmake/git_revision.cmake)
 
 # configure project to download dependencies instead of searching for them
 if((WIN32 AND NOT CYGWIN) OR EMSCRIPTEN)
-	set(AE_DOWNLOAD_DEPS ON CACHE BOOL "Download dependencies instead of searching system directories")
+	set(AE_BUILD_DEPS ON CACHE BOOL "Build dependencies instead of searching system directories")
 else()
-	set(AE_DOWNLOAD_DEPS OFF CACHE BOOL "Download dependencies instead of searching system directories")
+	set(AE_BUILD_DEPS OFF CACHE BOOL "Build dependencies instead of searching system directories")
 endif()
 # codesigning configuration
 if(APPLE)
@@ -27,7 +27,7 @@ endif()
 
 # find dependencies
 include(FindOpenGL)
-if (NOT AE_DOWNLOAD_DEPS)
+if (NOT AE_BUILD_DEPS)
 	include(FindPNG)
 	include(FindSDL2)
 	include(Findassimp)
@@ -36,20 +36,17 @@ if (NOT AE_DOWNLOAD_DEPS)
 
 	# @HACK: This should be found by the above, or the following variable names should be fixed
 	set(ASSIMP_LIBRARY_DIRS /usr/local/Cellar/assimp/5.0.1/lib)
-	set(PNG_LIBRARY_DIRS /usr/local/Cellar/libpng/1.6.37/lib)
 	set(ENET_LIBRARY_DIRS /usr/local/Cellar/enet/1.3.14/lib)
 	set(UUID_LIBRARY_DIRS /usr/local/Cellar/ossp-uuid/1.6.2_2/lib)
 else()
 	set(AE_GLEW_SRC ${CMAKE_BINARY_DIR}/thirdparty/glew)
 	set(AE_ZLIB_SRC ${CMAKE_BINARY_DIR}/thirdparty/zlib)
-	set(AE_LIBPNG_SRC ${CMAKE_BINARY_DIR}/thirdparty/libpng)
 	set(AE_SDL2_SRC ${CMAKE_BINARY_DIR}/thirdparty/SDL2)
 	set(AE_ASSIMP_SRC ${CMAKE_BINARY_DIR}/thirdparty/assimp)
 	set(AE_ENET_SRC ${CMAKE_BINARY_DIR}/thirdparty/enet)
 
 	set(AE_GLEW_INSTALL ${CMAKE_BINARY_DIR}/glew)
 	set(AE_ZLIB_INSTALL ${CMAKE_BINARY_DIR}/zlib)
-	set(AE_LIBPNG_INSTALL ${CMAKE_BINARY_DIR}/libpng)
 	set(AE_SDL2_INSTALL ${CMAKE_BINARY_DIR}/SDL2)
 	set(AE_ASSIMP_INSTALL ${CMAKE_BINARY_DIR}/assimp)
 	set(AE_ENET_INSTALL ${CMAKE_BINARY_DIR}/enet)
@@ -64,28 +61,19 @@ else()
 		)
 		set(GLEW_INCLUDE_DIRS ${AE_GLEW_INSTALL}/include)
 		set(GLEW_LIBRARY_DIRS ${AE_GLEW_INSTALL}/lib)
-		set(GLEW_LIBRARIES libglew32d)
+		set(GLEW_LIBRARIES ${GLEW_LIBRARY_DIRS}/libglew32d.lib)
 	endif()
 
 	ExternalProject_Add(zlib
 		PREFIX zlib
 		SOURCE_DIR ${AE_ZLIB_SRC}
 		GIT_REPOSITORY https://github.com/madler/zlib.git
+		GIT_TAG v1.2.11
 		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ZLIB_INSTALL}
 	)
 	set(ZLIB_INCLUDE_DIRS ${AE_ZLIB_INSTALL}/include)
 	set(ZLIB_LIBRARY_DIRS ${AE_ZLIB_INSTALL}/lib)
-	set(ZLIB_LIBRARIES zlibstaticd)
-
-	ExternalProject_Add(libpng
-		PREFIX libpng
-		SOURCE_DIR ${AE_LIBPNG_SRC}
-		GIT_REPOSITORY git://git.code.sf.net/p/libpng/code
-		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_LIBPNG_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL}
-	)
-	set(PNG_INCLUDE_DIRS ${AE_LIBPNG_INSTALL}/include)
-	set(PNG_LIBRARY_DIRS ${AE_LIBPNG_INSTALL}/lib)
-	set(PNG_LIBRARIES libpng16_staticd)
+	set(ZLIB_LIBRARIES ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib)
 
 	if(NOT EMSCRIPTEN)
 		ExternalProject_Add(SDL2
@@ -96,18 +84,19 @@ else()
 		)
 		set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
 		set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
-		set(SDL2_LIBRARY SDL2-staticd)
+		set(SDL2_LIBRARY ${SDL2_LIBRARY_DIRS}/SDL2-staticd.lib)
 	endif()
 
 	ExternalProject_Add(assimp
 		PREFIX assimp
 		SOURCE_DIR ${AE_ASSIMP_SRC}
 		GIT_REPOSITORY https://github.com/assimp/assimp.git
+		GIT_TAG v5.0.0
 		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ASSIMP_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL}
 	)
 	set(ASSIMP_INCLUDE_DIRS ${AE_ASSIMP_INSTALL}/include)
 	set(ASSIMP_LIBRARY_DIRS ${AE_ASSIMP_INSTALL}/lib)
-	set(ASSIMP_LIBRARIES assimp-vc142-mtd)
+	set(ASSIMP_LIBRARIES ${ASSIMP_LIBRARY_DIRS}/assimp-vc142-mtd.lib)
 
 	ExternalProject_Add(Enet
 		PREFIX Enet
@@ -119,7 +108,7 @@ else()
 	)
 	set(ENET_INCLUDE_DIR ${AE_ENET_SRC}/include)
 	set(ENET_LIBRARY_DIRS ${AE_ENET_SRC})
-	set(ENET_LIBRARY ${AE_ENET_SRC}/enet64.lib) # Use path so 'lib' is not prepended
+	set(ENET_LIBRARY ${ENET_LIBRARY_DIRS}/enet64.lib) # Use path so 'lib' is not prepended
 endif()
 
 # dependency include directories
