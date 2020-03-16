@@ -12,9 +12,13 @@ Modules and utilities include:
 * Logging
 
 Dependencies:
+* [GLEW](http://glew.sourceforge.net/) (Windows only)
 * [SDL2](https://www.libsdl.org/)
 * [Assimp](https://github.com/assimp/assimp)
-* [Catch2](https://github.com/catchorg/Catch2)
+* [ENet](http://enet.bespin.org/)
+* [zlib](https://github.com/madler/zlib)
+* [OSSP uuid](http://www.ossp.org/pkg/lib/uuid/)
+* [Catch2](https://github.com/catchorg/Catch2) (Test framework)
 
 ## Example
 A complete working example showing a window with a red background:
