@@ -370,9 +370,9 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// aeSpriteRenderer class
+// aeSpriteRender class
 //------------------------------------------------------------------------------
-class aeSpriteRenderer
+class aeSpriteRender
 {
 public:
   void Initialize( uint32_t maxCount );
@@ -410,9 +410,9 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// aeTextRenderer class
+// aeTextRender class
 //------------------------------------------------------------------------------
-class aeTextRenderer
+class aeTextRender
 {
 public:
   // @NOTE: 'imagePath' should be the path to a square texture with ascii
@@ -458,42 +458,42 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// aeRenderer class
+// aeRender class
 //------------------------------------------------------------------------------
-class aeRenderer
+class aeRender
 {
 public:
-  aeRenderer();
-  void Initialize( class aeWindow* window, uint32_t width, uint32_t height );
+  aeRender();
+  ~aeRender();
+
+  void InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height );
   void Terminate();
   void StartFrame();
   void EndFrame();
 
-  void Resize( uint32_t width, uint32_t height );
+  class aeWindow* GetWindow() { return m_window; }
+  aeRenderTexture* GetCanvas() { return &m_canvas; }
 
   void SetClearColor( aeColor color );
   aeColor GetClearColor() const;
 
+  void Resize( uint32_t width, uint32_t height );
   uint32_t GetWidth() const { return m_targetWidth; }
   uint32_t GetHeight() const { return m_targetHeight; }
   float GetAspectRatio() const { return m_targetWidth / (float)m_targetHeight; }
 
   aeFloat4x4 GetWindowToRenderTransform();
+  aeRect GetNDCRect() const;
 
 private:
-  aeRect m_GetNDCRect() const;
+  class aeRenderInternal* m_renderInternal;
 
   class aeWindow* m_window;
-  void* m_context;
-
   uint32_t m_targetWidth;
   uint32_t m_targetHeight;
 
   aeRenderTexture m_canvas;
-
   aeColor m_clearColor;
-
-  int32_t m_defaultFbo;
 };
 
 #endif

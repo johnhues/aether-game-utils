@@ -169,10 +169,12 @@ const char* InputState::GetName( InputType type ) const
 //------------------------------------------------------------------------------
 // aeInput member functions
 //------------------------------------------------------------------------------
-void aeInput::Initialize( aeWindow* window, aeRenderer* renderer )
+void aeInput::Initialize( aeWindow* window, aeRender* render )
 {
+  SDL_JoystickEventState( SDL_ENABLE );
+
   m_window = window;
-  m_renderer = renderer;
+  m_render = render;
 
   // Input key mapping
   {

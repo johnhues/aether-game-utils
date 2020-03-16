@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeInput.h
+// aeCommonRender.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,112 +21,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AEINPUT_H
-#define AEINPUT_H
+#ifndef AECOMMONRENDER_H
+#define AECOMMONRENDER_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeMap.h"
-#include "aeMath.h"
+#include "aeRender.h"
 
 //------------------------------------------------------------------------------
-// InputType enum
+// aeRenderInternal class
 //------------------------------------------------------------------------------
-enum InputType
+class aeRenderInternal
 {
-  kInputType_Up,
-  kInputType_Down,
-  kInputType_Left,
-  kInputType_Right,
+public:
+  virtual ~aeRenderInternal() {}
 
-  kInputType_Start,
-  kInputType_Select,
-
-  kInputType_A,
-  kInputType_B,
-  kInputType_X,
-  kInputType_Y,
-  kInputType_L,
-  kInputType_R,
-
-  kInputType_MouseLeft,
-  kInputType_MouseRight,
-  kInputType_MouseMiddle,
-
-  kInputType_Space,
-  kInputType_Control,
-  kInputType_Shift,
-  kInputType_Delete,
-  kInputType_Escape,
-
-  kInputTypeCount
+  virtual void Initialize( aeRender* render ) = 0;
+  virtual void Terminate( aeRender* render ) = 0;
+  virtual void StartFrame( aeRender* render ) = 0;
+  virtual void EndFrame( aeRender* render ) = 0;
 };
 
 //------------------------------------------------------------------------------
-// InputState class
+// aeOpenGLRender class
 //------------------------------------------------------------------------------
-class InputState
+class aeOpenGLRender : public aeRenderInternal
 {
 public:
-  InputState();
-  bool Get( InputType type ) const;
-  const char* GetName( InputType type ) const;
+  aeOpenGLRender();
 
-  bool gamepad;
-
-  bool up;
-  bool down;
-  bool left;
-  bool right;
-
-  bool start;
-  bool select;
-
-  bool a;
-  bool b;
-  bool x;
-  bool y;
-  bool l;
-  bool r;
-
-  bool mouseLeft;
-  bool mouseRight;
-  bool mouseMiddle;
-
-  bool space;
-  bool ctrl;
-  bool shift;
-  bool del;
-  bool esc;
-
-  aeInt2 mousePixelPos;
-  int32_t scroll;
-
-  bool exit; // Window 'X' etc
-};
-
-//------------------------------------------------------------------------------
-// aeInput class
-//------------------------------------------------------------------------------
-class aeInput
-{
-public:
-  void Initialize( class aeWindow* window, class aeRender* render );
-  void Terminate();
-  void Pump();
-
-  const InputState* GetState() const { return &m_input; }
-  const InputState* GetPrevState() const { return &m_prevInput; }
+  void Initialize( aeRender* render ) override;
+  void Terminate( aeRender* render ) override;
+  void StartFrame( aeRender* render ) override;
+  void EndFrame( aeRender* render ) override;
 
 private:
-  class aeWindow* m_window;
-  class aeRender* m_render;
-
-  aeMap< uint32_t, bool* > m_keyMap;
-  
-  InputState m_input;
-  InputState m_prevInput;
+  void* m_context;
+  int32_t m_defaultFbo;
 };
 
 #endif

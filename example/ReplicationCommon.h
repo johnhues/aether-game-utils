@@ -46,7 +46,7 @@ public:
     rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
   }
 
-  void Update( float dt, aeSpriteRenderer* spriteRenderer, const aeTexture2D* texture )
+  void Update( float dt, aeSpriteRender* spriteRender, const aeTexture2D* texture )
   {
     if ( !netData->IsAuthority() )
     {
@@ -57,7 +57,7 @@ public:
 
     // Update pos and rotation
     aeFloat4x4 modelToWorld = aeFloat4x4::Translation( pos );
-    spriteRenderer->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green );
+    spriteRender->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green );
 
     if ( netData->IsAuthority() )
     {

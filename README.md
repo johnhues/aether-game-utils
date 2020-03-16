@@ -27,14 +27,14 @@ A complete working example showing a window with a red background:
 int main()
 {
 	aeWindow window;
-	aeRenderer renderer;
+	aeRender render;
 	aeInput input;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "example" );
-	renderer.Initialize( &window, 400, 300 );
-	renderer.SetClearColor( aeColor::Red );
-	input.Initialize( &window, &renderer );
+	render.InitializeOpenGL( &window, 400, 300 );
+	render.SetClearColor( aeColor::Red );
+	input.Initialize( &window, &render );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -42,13 +42,13 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		renderer.StartFrame();
-		renderer.EndFrame();
+		render.StartFrame();
+		render.EndFrame();
 		timeStep.Wait();
 	}
 
 	input.Terminate();
-	renderer.Terminate();
+	render.Terminate();
 	window.Terminate();
 
 	return 0;

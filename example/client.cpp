@@ -38,15 +38,15 @@ int main()
 	AE_LOG( "Initialize" );
 
 	aeWindow window;
-	aeRenderer renderer;
+	aeRender render;
 	aeInput input;
 	AetherClient* client;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "client" );
-	renderer.Initialize( &window, 400, 300 );
-	renderer.SetClearColor( aeColor::Red );
-	input.Initialize( &window, &renderer );
+	render.InitializeOpenGL( &window, 400, 300 );
+	render.SetClearColor( aeColor::Red );
+	input.Initialize( &window, &render );
 	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
 	
 	aeFixedTimeStep timeStep;
@@ -92,8 +92,8 @@ int main()
 
 		AetherClient_SendAll( client );
 
-		renderer.StartFrame();
-		renderer.EndFrame();
+		render.StartFrame();
+		render.EndFrame();
 
 		timeStep.Wait();
 	}
@@ -103,7 +103,7 @@ int main()
 	AetherClient_Delete( client );
 	client = nullptr;
 	input.Terminate();
-	renderer.Terminate();
+	render.Terminate();
 	window.Terminate();
 
 	return 0;

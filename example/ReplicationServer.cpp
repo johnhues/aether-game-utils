@@ -50,17 +50,17 @@ int main()
 
   // System modules
   aeWindow window;
-  aeRenderer renderer;
+  aeRender render;
   aeInput input;
-  aeSpriteRenderer spriteRenderer;
+  aeSpriteRender spriteRender;
   aeTexture2D texture;
   aeFixedTimeStep timeStep;
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Replication Server" );
-  renderer.Initialize( &window, 400, 300 );
-  renderer.SetClearColor( aeColor::Black );
-  input.Initialize( &window, &renderer );
-  spriteRenderer.Initialize( 32 );
+  render.InitializeOpenGL( &window, 400, 300 );
+  render.SetClearColor( aeColor::Black );
+  input.Initialize( &window, &render );
+  spriteRender.Initialize( 32 );
   uint8_t texInfo[] = { 255, 255, 255 };
   texture.Initialize( texInfo, 1, 1, 3, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
   timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -115,7 +115,7 @@ int main()
     // Game Update
     for ( uint32_t i = 0; i < greens.Length(); i++ )
     {
-      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRenderer, &texture );
+      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture );
     }
     
     // Send replication data
@@ -131,9 +131,9 @@ int main()
     }
     AetherServer_SendAll( server );
 
-    renderer.StartFrame();
-    spriteRenderer.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * renderer.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-    renderer.EndFrame();
+    render.StartFrame();
+    spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
+    render.EndFrame();
 
     timeStep.Wait();
   }
@@ -144,9 +144,9 @@ int main()
   server = nullptr;
   
   texture.Destroy();
-  spriteRenderer.Destroy();
+  spriteRender.Destroy();
   input.Terminate();
-  renderer.Terminate();
+  render.Terminate();
   window.Terminate();
 
   return 0;

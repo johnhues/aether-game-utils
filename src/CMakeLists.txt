@@ -77,6 +77,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeBinaryStream.cpp
 		aeClock.cpp
 		aeCommandLineArgs.cpp
+		aeCommonRender.cpp
 		aeDict.cpp
 		aeInput.cpp
 		aeLog.cpp
@@ -86,7 +87,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeNet.cpp
 		aeNetClient.cpp
 		aeNetServer.cpp
-		aeRender.cpp
+		aeOpenGLRender.cpp
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp
