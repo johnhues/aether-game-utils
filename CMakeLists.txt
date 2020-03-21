@@ -27,6 +27,7 @@ endif()
 
 # find dependencies
 include(FindOpenGL)
+include(FindVulkan)
 if (NOT AE_BUILD_DEPS)
 	include(FindPNG)
 	include(FindSDL2)
@@ -113,6 +114,7 @@ endif()
 
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
+	${Vulkan_INCLUDE_DIRS}
 	${GLEW_INCLUDE_DIRS}
 	${PNG_INCLUDE_DIRS}
 	${ASSIMP_INCLUDE_DIRS}
@@ -135,7 +137,8 @@ set(AE_DEPS_LIBRARY_DIRS
 )
 
 # dependency libraries
-set(AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
+list(APPEND AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
+list(APPEND AE_DEPS_LIBARARIES ${Vulkan_LIBRARIES})
 if(APPLE)
 	list(APPEND AE_DEPS_LIBARARIES "-framework Cocoa")
 elseif(WIN32 AND NOT CYGWIN)

@@ -467,6 +467,7 @@ public:
   ~aeRender();
 
   void InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height );
+  void InitializeVulkan( class aeWindow* window, uint32_t width, uint32_t height );
   void Terminate();
   void StartFrame();
   void EndFrame();

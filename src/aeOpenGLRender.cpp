@@ -31,22 +31,6 @@
 #include "aeVfs.h"
 #include "aeWindow.h"
 
-#if _AE_WINDOWS_
-  #include <SDL.h>
-  #define GLEW_STATIC 1
-  #include <GL\glew.h>
-#elif _AE_EMSCRIPTEN_
-  #include <SDL/SDL.h>
-  #include <GLES2/gl2.h>
-#elif _AE_LINUX_
-  #include <SDL.h>
-  #include <GL/gl.h>
-  #include <GLES3/gl3.h>
-#else
-  #include <SDL.h>
-  #include <OpenGL/gl3.h>
-#endif
-
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 

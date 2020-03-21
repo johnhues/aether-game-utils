@@ -90,6 +90,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeOpenGLRender.cpp
 		aeUuid.cpp
 		aeVfs.cpp
+		aeVulkanRender.cpp
 		aeWindow.cpp
 )
 

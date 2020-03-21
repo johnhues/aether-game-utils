@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeRenderCommon.cpp
+// aeCommonRender.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -611,6 +611,19 @@ void aeRender::InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_
   m_renderInternal->Initialize( this );
 }
 
+void aeRender::InitializeVulkan( class aeWindow* window, uint32_t width, uint32_t height )
+{
+  AE_ASSERT( !m_renderInternal );
+
+  m_targetWidth = width;
+  m_targetHeight = height;
+
+  m_window = window;
+
+  m_renderInternal = aeAlloc::Allocate< aeVulkanRender >();
+  m_renderInternal->Initialize( this );
+}
+
 void aeRender::Terminate()
 {
   if ( m_renderInternal )
@@ -625,12 +638,12 @@ void aeRender::StartFrame()
 {
   AE_ASSERT( m_renderInternal );
 
-  if ( m_targetWidth != m_canvas.GetWidth() || m_targetHeight != m_canvas.GetHeight() )
-  {
-    m_canvas.Destroy();
-    m_canvas.Initialize( m_targetWidth, m_targetHeight, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
-  }
-  m_canvas.Activate();
+  //if ( m_targetWidth != m_canvas.GetWidth() || m_targetHeight != m_canvas.GetHeight() )
+  //{
+  //  m_canvas.Destroy();
+  //  m_canvas.Initialize( m_targetWidth, m_targetHeight, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+  //}
+  //m_canvas.Activate();
 
   m_renderInternal->StartFrame( this );
 }

@@ -42,7 +42,7 @@ int main()
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "example" );
-	render.InitializeOpenGL( &window, 400, 300 );
+	render.InitializeVulkan( &window, 400, 300 );
 	render.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &render );
 	
