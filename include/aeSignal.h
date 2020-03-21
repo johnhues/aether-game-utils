@@ -48,21 +48,21 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// aeSignalT class
+// aeSignalValue class
 //------------------------------------------------------------------------------
-template < typename S >
-class aeSignalT : public aeSignalBase
+template < typename V >
+class aeSignalValue : public aeSignalBase
 {
 public:
-  aeSignalT();
-  aeSignalT( const S& val );
-  virtual ~aeSignalT() {}
+  aeSignalValue();
+  aeSignalValue( const V& val );
+  virtual ~aeSignalValue() {}
 
-  virtual bool Send( const S& value ) = 0;
+  virtual bool Send( const V& value ) = 0;
 
 protected:
   bool m_valSet;
-  S m_val;
+  V m_val;
 
 public:
   // Internal use
@@ -72,30 +72,30 @@ public:
 //------------------------------------------------------------------------------
 // aeSignal class
 //------------------------------------------------------------------------------
-template < typename T, typename S = int32_t >
-class aeSignal : public aeSignalT< S >
+template < typename T, typename V = int32_t >
+class aeSignal : public aeSignalValue< V >
 {
 public:
   aeSignal();
   ~aeSignal();
   
   aeSignal( T* obj, void ( T::* fn ) () );
-  aeSignal( T* obj, void ( T::* fn ) ( S ) );
-  aeSignal( T* obj, void ( T::* fn ) ( S ), const S& value );
+  aeSignal( T* obj, void ( T::* fn ) ( V ) );
+  aeSignal( T* obj, void ( T::* fn ) ( V ), const V& value );
 
   aeSignal( aeRef< T >& ref, void ( T::* fn ) () );
-  aeSignal( aeRef< T >& ref, void ( T::* fn ) ( S ) );
-  aeSignal( aeRef< T >& ref, void ( T::* fn ) ( S ), const S& value );
+  aeSignal( aeRef< T >& ref, void ( T::* fn ) ( V ) );
+  aeSignal( aeRef< T >& ref, void ( T::* fn ) ( V ), const V& value );
 
   bool Send() override;
-  bool Send( const S& value ) override;
+  bool Send( const V& value ) override;
 
 private:
   T* m_obj;
   aeRef< T > m_ref;
   
   void ( T::* m_fn )();
-  void ( T::* m_fnVal )( S );
+  void ( T::* m_fnVal )( V );
 
   bool m_isCalled;
 
@@ -107,7 +107,7 @@ public:
 //------------------------------------------------------------------------------
 // aeSignalList class
 //------------------------------------------------------------------------------
-template < typename S = int >
+template < typename V = int32_t >
 class aeSignalList
 {
 public:
@@ -124,27 +124,27 @@ public:
   uint32_t Length() const;
 
 private:
-  aeArray< aeSignalT< S >* > m_signals;
+  aeArray< aeSignalValue< V >* > m_signals;
 };
 
 //------------------------------------------------------------------------------
-// aeSignalT member functions
+// aeSignalValue member functions
 //------------------------------------------------------------------------------
-template < typename S >
-aeSignalT< S >::aeSignalT() :
+template < typename V >
+aeSignalValue< V >::aeSignalValue() :
   m_valSet( false ),
-  m_val( S() )
+  m_val( V() )
 {}
 
-template < typename S >
-aeSignalT< S >::aeSignalT( const S& val ) :
+template < typename V >
+aeSignalValue< V >::aeSignalValue( const V& val ) :
   m_valSet( true ),
   m_val( val )
 {}
 
 // @TODO: Const
-template < typename S >
-bool aeSignalT< S >::HasValue()
+template < typename V >
+bool aeSignalValue< V >::HasValue()
 {
   return m_valSet;
 }
@@ -152,41 +152,41 @@ bool aeSignalT< S >::HasValue()
 //------------------------------------------------------------------------------
 // aeSignal member functions
 //------------------------------------------------------------------------------
-template < typename T, typename S >
-aeSignal< T, S >::aeSignal() :
+template < typename T, typename V >
+aeSignal< T, V >::aeSignal() :
   m_obj( nullptr ),
   m_fn( nullptr ),
   m_fnVal( nullptr ),
   m_isCalled( false )
 {}
 
-template < typename T, typename S >
-aeSignal< T, S >::aeSignal( T* obj, void ( T::* fn ) () ) :
+template < typename T, typename V >
+aeSignal< T, V >::aeSignal( T* obj, void ( T::* fn ) () ) :
   m_obj( obj ),
   m_fn( fn ),
   m_fnVal( nullptr ),
   m_isCalled( false )
 {}
 
-template < typename T, typename S >
-aeSignal< T, S >::aeSignal( T* obj, void ( T::* fn ) ( S ) ) :
+template < typename T, typename V >
+aeSignal< T, V >::aeSignal( T* obj, void ( T::* fn ) ( V ) ) :
   m_obj( obj ),
   m_fn( nullptr ),
   m_fnVal( fn ),
   m_isCalled( false )
 {}
 
-template < typename T, typename S >
-aeSignal< T, S >::aeSignal( T* obj, void ( T::* fn ) ( S ), const S& value ) :
-  aeSignalT< S >( value ),
+template < typename T, typename V >
+aeSignal< T, V >::aeSignal( T* obj, void ( T::* fn ) ( V ), const V& value ) :
+  aeSignalValue< V >( value ),
   m_obj( obj ),
   m_fn( nullptr ),
   m_fnVal( fn ),
   m_isCalled( false )
 {}
 
-template < typename T, typename S >
-aeSignal< T, S >::aeSignal( aeRef< T >& ref, void ( T::* fn ) () ) :
+template < typename T, typename V >
+aeSignal< T, V >::aeSignal( aeRef< T >& ref, void ( T::* fn ) () ) :
   m_obj( nullptr ),
   m_ref( ref ),
   m_fn( fn ),
@@ -194,8 +194,8 @@ aeSignal< T, S >::aeSignal( aeRef< T >& ref, void ( T::* fn ) () ) :
   m_isCalled( false )
 {}
 
-template < typename T, typename S >
-aeSignal< T, S >::aeSignal( aeRef< T >& ref, void ( T::* fn ) ( S ) ) :
+template < typename T, typename V >
+aeSignal< T, V >::aeSignal( aeRef< T >& ref, void ( T::* fn ) ( V ) ) :
   m_obj( nullptr ),
   m_ref( ref ),
   m_fn( nullptr ),
@@ -203,9 +203,9 @@ aeSignal< T, S >::aeSignal( aeRef< T >& ref, void ( T::* fn ) ( S ) ) :
   m_isCalled( false )
 {}
 
-template < typename T, typename S >
-aeSignal< T, S >::aeSignal( aeRef< T >& ref, void ( T::* fn ) ( S ), const S& value ) :
-  aeSignalT< S >( value ),
+template < typename T, typename V >
+aeSignal< T, V >::aeSignal( aeRef< T >& ref, void ( T::* fn ) ( V ), const V& value ) :
+  aeSignalValue< V >( value ),
   m_obj( nullptr ),
   m_ref( ref ),
   m_fn( nullptr ),
@@ -213,14 +213,14 @@ aeSignal< T, S >::aeSignal( aeRef< T >& ref, void ( T::* fn ) ( S ), const S& va
   m_isCalled( false )
 {}
 
-template < typename T, typename S >
-aeSignal< T, S >::~aeSignal()
+template < typename T, typename V >
+aeSignal< T, V >::~aeSignal()
 {
   AE_ASSERT_MSG( !m_isCalled, "Signal call destroyed itself" );
 }
 
-template < typename T, typename S >
-bool aeSignal< T, S >::Send()
+template < typename T, typename V >
+bool aeSignal< T, V >::Send()
 {
   AE_ASSERT_MSG( !m_isCalled, "aeSignal::Send() called recursively" );
 
@@ -241,11 +241,11 @@ bool aeSignal< T, S >::Send()
     m_isCalled = false;
     return true;
   }
-  else if ( m_fnVal && aeSignalT< S >::m_valSet )
+  else if ( m_fnVal && aeSignalValue< V >::m_valSet )
   {
     m_isCalled = true;
 
-    ( obj->*m_fnVal )( aeSignalT< S >::m_val );
+    ( obj->*m_fnVal )( aeSignalValue< V >::m_val );
 
     m_isCalled = false;
     return true;
@@ -256,8 +256,8 @@ bool aeSignal< T, S >::Send()
   }
 }
 
-template < typename T, typename S >
-bool aeSignal< T, S >::Send( const S& value )
+template < typename T, typename V >
+bool aeSignal< T, V >::Send( const V& value )
 {
   AE_ASSERT_MSG( !m_isCalled, "aeSignal::Send() called recursively" );
 
@@ -278,8 +278,8 @@ bool aeSignal< T, S >::Send( const S& value )
 }
 
 // @TODO: Const
-template < typename T, typename S >
-void* aeSignal< T, S >::GetObj()
+template < typename T, typename V >
+void* aeSignal< T, V >::GetObj()
 {
   T* obj = m_obj;
   obj = obj ? obj : (T*)m_ref;
@@ -289,8 +289,8 @@ void* aeSignal< T, S >::GetObj()
 //------------------------------------------------------------------------------
 // aeSignalList member functions
 //------------------------------------------------------------------------------
-template < typename S >
-aeSignalList< S >::~aeSignalList()
+template < typename V >
+aeSignalList< V >::~aeSignalList()
 {
   for ( uint32_t i = 0; i < m_signals.Length(); i++ )
   {
@@ -298,9 +298,9 @@ aeSignalList< S >::~aeSignalList()
   }
 }
 
-template < typename S >
+template < typename V >
 template < typename T, typename Fn >
-void aeSignalList< S >::Add( T* obj, Fn fn )
+void aeSignalList< V >::Add( T* obj, Fn fn )
 {
   if ( !obj )
   {
@@ -315,16 +315,16 @@ void aeSignalList< S >::Add( T* obj, Fn fn )
   int32_t signalIndex = m_signals.FindFn( findFn );
   if ( signalIndex >= 0 )
   {
-    *m_signals[ signalIndex ] = aeSignal< T, S >( obj, fn );
+    *m_signals[ signalIndex ] = aeSignal< T, V >( obj, fn );
     return;
   }
 
-  m_signals.Append( aeAlloc::Allocate< aeSignal< T, S > >( obj, fn ) );
+  m_signals.Append( aeAlloc::Allocate< aeSignal< T, V > >( obj, fn ) );
 }
 
-template < typename S >
+template < typename V >
 template < typename T, typename Fn >
-void aeSignalList< S >::Add( aeRef< T > ref, Fn fn )
+void aeSignalList< V >::Add( aeRef< T > ref, Fn fn )
 {
   T* obj = (T*)ref;
   if ( !obj )
@@ -340,19 +340,19 @@ void aeSignalList< S >::Add( aeRef< T > ref, Fn fn )
   int32_t signalIndex = m_signals.FindFn( findFn );
   if ( signalIndex >= 0 )
   {
-    *m_signals[ signalIndex ] = aeSignal< T, S >( ref, fn );
+    *m_signals[ signalIndex ] = aeSignal< T, V >( ref, fn );
     return;
   }
 
-  m_signals.Append( aeAlloc::Allocate< aeSignal< T, S > >( ref, fn ) );
+  m_signals.Append( aeAlloc::Allocate< aeSignal< T, V > >( ref, fn ) );
 }
 
-template < typename S >
-void aeSignalList< S >::Remove( void* obj )
+template < typename V >
+void aeSignalList< V >::Remove( void* obj )
 {
-  auto fn = [ obj ]( aeSignalBase* s )
+  auto fn = [ obj ]( aeSignalBase* base )
   {
-    void* o = s->GetObj();
+    void* o = base->GetObj();
     return !o || ( o == obj );
   };
 
@@ -364,12 +364,12 @@ void aeSignalList< S >::Remove( void* obj )
   }
 }
 
-template < typename S >
-void aeSignalList< S >::Send()
+template < typename V >
+void aeSignalList< V >::Send()
 {
-  auto fn = []( aeSignalBase* s )
+  auto fn = []( aeSignalBase* signal )
   {
-    return !s->GetObj();
+    return !signal->GetObj();
   };
 
   int32_t index = 0;
@@ -381,18 +381,18 @@ void aeSignalList< S >::Send()
 
   for ( uint32_t i = 0; i < m_signals.Length(); i++ )
   {
-    aeSignalT< S >* signal = m_signals[ i ];
+    aeSignalValue< V >* signal = m_signals[ i ];
     ((aeSignalBase*)signal)->Send();
   }
 }
 
-template < typename S >
+template < typename V >
 template < typename T >
-void aeSignalList< S >::Send( const T& value )
+void aeSignalList< V >::Send( const T& value )
 {
-  auto fn = []( aeSignalBase* s )
+  auto fn = []( aeSignalBase* signal )
   {
-    return !s->GetObj();
+    return !signal->GetObj();
   };
 
   int32_t index = -1;
@@ -404,7 +404,7 @@ void aeSignalList< S >::Send( const T& value )
 
   for ( uint32_t i = 0; i < m_signals.Length(); i++ )
   {
-    aeSignalT< S >* signal = m_signals[ i ];
+    aeSignalValue< V >* signal = m_signals[ i ];
     if ( !signal->Send( value ) )
     {
       ((aeSignalBase*)signal)->Send();
@@ -412,8 +412,8 @@ void aeSignalList< S >::Send( const T& value )
   }
 }
 
-template < typename S >
-uint32_t aeSignalList< S >::Length() const
+template < typename V >
+uint32_t aeSignalList< V >::Length() const
 {
   return m_signals.Length();
 }

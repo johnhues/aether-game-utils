@@ -74,7 +74,10 @@ TEST_CASE( "signal send should result in the correct functions being called", "[
     REQUIRE( thing.callCount == 1 );
   }
 
-  SECTION( "removing object from signal should result in no function call" )
+  // @TODO: Add two objects by reference
+  // @TODO: Add one object by reference the other by pointer
+
+  SECTION( "removing pointer object from signal should result in no function call" )
   {
     REQUIRE( thing.callCount == 0 );
     signal.Add( &thing, &Thing::Fn );
@@ -84,6 +87,9 @@ TEST_CASE( "signal send should result in the correct functions being called", "[
     signal.Send();
     REQUIRE( thing.callCount == 1 );
   }
+
+  // @TODO: Remove reference by reference test
+  // @TODO: Remove reference by pointer test
 
   SECTION( "null pointers to objects should not be added" )
   {
