@@ -163,7 +163,7 @@ endif()
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # use unicode
-add_definitions(-D_UNICODE -DUNICODE)
+add_definitions(-D_UNICODE -DUNICODE -D_CRT_SECURE_NO_WARNINGS)
 
 # library, tests, and examples
 add_subdirectory(src)

@@ -75,7 +75,9 @@
 // Warnings
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-  #define _CRT_SECURE_NO_WARNINGS
+  #ifndef _CRT_SECURE_NO_WARNINGS
+    #define _CRT_SECURE_NO_WARNINGS
+  #endif
   #pragma warning( disable : 4244 )
   #pragma warning( disable : 4800 )
 #endif

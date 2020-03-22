@@ -15,6 +15,7 @@ include_directories(${AE_CATCH_INSTALL}/include)
 add_executable(
 	unit_tests
 	SignalTest.cpp
+	StringTest.cpp
 	test.cpp
 )
 

@@ -105,7 +105,7 @@ public:
 
   inline char& operator[]( uint32_t i );
   inline const char operator[]( uint32_t i ) const;
-  
+
   inline uint32_t Length() const;
   inline uint32_t Size() const;
   inline bool Empty() const;
@@ -124,6 +124,13 @@ public:
   inline uint32_t FNV1a() const;
 
 private:
+  template < uint32_t N2 > friend bool operator ==( const char*, const aeStr< N2 >& );
+  template < uint32_t N2 > friend bool operator !=( const char*, const aeStr< N2 >& );
+  template < uint32_t N2 > friend bool operator <( const char*, const aeStr< N2 >& );
+  template < uint32_t N2 > friend bool operator >( const char*, const aeStr< N2 >& );
+  template < uint32_t N2 > friend bool operator <=( const char*, const aeStr< N2 >& );
+  template < uint32_t N2 > friend bool operator >=( const char*, const aeStr< N2 >& );
+
   void m_Format( const char* format );
 
   template < typename T, typename... Args >
@@ -197,7 +204,9 @@ inline aeStr16 ToString( double value )
 template < uint32_t N >
 aeStr< N >::aeStr()
 {
-  AE_STATIC_ASSERT_MSG( sizeof(*this) == N, "Incorrect aeStr size" );
+  AE_STATIC_ASSERT_MSG( sizeof( *this ) == N, "Incorrect aeStr size" );
+  m_length = 0;
+  m_str[ 0 ] = 0;
 }
 
 template < uint32_t N >
@@ -305,6 +314,12 @@ inline bool aeStr< N >::operator ==( const char* str ) const
 }
 
 template < uint32_t N >
+bool operator ==( const char* str0, const aeStr<N>& str1 )
+{
+  return strcmp( str0, str1.m_str ) == 0;
+}
+
+template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator !=( const aeStr<N2>& str ) const
 {
@@ -318,67 +333,201 @@ inline bool aeStr< N >::operator !=( const char* str ) const
 }
 
 template < uint32_t N >
+bool operator !=( const char* str0, const aeStr<N>& str1 )
+{
+  return !operator==( str0, str1 );
+}
+
+template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator <( const aeStr<N2>& str ) const
 {
+  if ( m_length < str.m_length )
+  {
+    return true;
+  }
+  else if ( m_length > str.m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str.c_str() ) < 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator <( const char* str ) const
 {
+  uint32_t otherLen = (uint32_t)strlen( str );
+  if ( m_length < otherLen )
+  {
+    return true;
+  }
+  else if ( otherLen < m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str ) < 0;
+}
+
+template < uint32_t N >
+bool operator <( const char* str0, const aeStr<N>& str1 )
+{
+  uint32_t otherLen = (uint32_t)strlen( str0 );
+  if ( otherLen < str1.m_length )
+  {
+    return true;
+  }
+  else if ( str1.m_length < otherLen )
+  {
+    return false;
+  }
+  return strcmp( str0, str1.m_str ) < 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator >( const aeStr<N2>& str ) const
 {
+  if ( m_length > str.m_length )
+  {
+    return true;
+  }
+  else if ( str.m_length > m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str.c_str() ) > 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator >( const char* str ) const
 {
+  uint32_t otherLen = (uint32_t)strlen( str );
+  if ( m_length > otherLen )
+  {
+    return true;
+  }
+  else if ( otherLen > m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str ) > 0;
+}
+
+template < uint32_t N >
+bool operator >( const char* str0, const aeStr<N>& str1 )
+{
+  uint32_t otherLen = (uint32_t)strlen( str0 );
+  if ( otherLen > str1.m_length )
+  {
+    return true;
+  }
+  else if ( str1.m_length > otherLen )
+  {
+    return false;
+  }
+  return strcmp( str0, str1.m_str ) > 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator <=( const aeStr<N2>& str ) const
 {
+  if ( m_length < str.m_length )
+  {
+    return true;
+  }
+  else if ( str.m_length < m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str.c_str() ) <= 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator <=( const char* str ) const
 {
+  uint32_t otherLen = (uint32_t)strlen( str );
+  if ( m_length < otherLen )
+  {
+    return true;
+  }
+  else if ( otherLen < m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str ) <= 0;
+}
+
+template < uint32_t N >
+bool operator <=( const char* str0, const aeStr<N>& str1 )
+{
+  uint32_t otherLen = (uint32_t)strlen( str0 );
+  if ( otherLen < str1.m_length )
+  {
+    return true;
+  }
+  else if ( str1.m_length < otherLen )
+  {
+    return false;
+  }
+  return strcmp( str0, str1.m_str ) <= 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator >=( const aeStr<N2>& str ) const
 {
+  if ( m_length > str.m_length )
+  {
+    return true;
+  }
+  else if ( str.m_length > m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str.c_str() ) >= 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator >=( const char* str ) const
 {
+  uint32_t otherLen = (uint32_t)strlen( str );
+  if ( m_length > otherLen )
+  {
+    return true;
+  }
+  else if ( otherLen > m_length )
+  {
+    return false;
+  }
   return strcmp( m_str, str ) >= 0;
+}
+
+template < uint32_t N >
+bool operator >=( const char* str0, const aeStr<N>& str1 )
+{
+  uint32_t otherLen = (uint32_t)strlen( str0 );
+  if ( otherLen > str1.m_length )
+  {
+    return true;
+  }
+  else if ( str1.m_length > otherLen )
+  {
+    return false;
+  }
+  return strcmp( str0, str1.m_str ) >= 0;
 }
 
 template < uint32_t N >
 inline char& aeStr< N >::operator[]( uint32_t i )
 {
-  AE_ASSERT( i < m_length ); return m_str[ i ];
+  AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
 }
 
 template < uint32_t N >
 inline const char aeStr< N >::operator[]( uint32_t i ) const
 {
-  AE_ASSERT( i < m_length ); return m_str[ i ];
+  AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
 }
 
 template < uint32_t N >
@@ -448,7 +597,7 @@ void aeStr< N >::m_Format( const char* format, T value, Args... args )
   {
     return;
   }
-  
+
   const char* head = format;
   while ( *head && *head != '#' )
   {
