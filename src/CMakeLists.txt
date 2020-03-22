@@ -42,6 +42,7 @@ set(AE_HEADER_FILES
 	${PROJECT_BINARY_DIR}/config.h
 	aeAlloc.h
 	aeArray.h
+	aeAudio.h
 	aeBinaryStream.h
 	aeClock.h
 	aeCommand.h
@@ -74,6 +75,7 @@ set(AE_HEADER_FILES
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		aeAlloc.cpp
+		aeAudio.cpp
 		aeBinaryStream.cpp
 		aeClock.cpp
 		aeCommandLineArgs.cpp
