@@ -26,15 +26,15 @@
 #include "aeAudio.h"
 #include "aeLog.h"
 
-#if defined(__EMSCRIPTEN__)
-#include <AL/al.h>
-#include <AL/alc.h>
-#elif defined(_MSC_VER)
+#if _AE_WINDOWS_
 #include <al.h>
 #include <alc.h>
-#elif defined(__APPLE__)
+#elif _AE_APPLE_
 #include <OpenAL/al.h>
 #include <OpenAL/alc.h>
+#else
+#include <AL/al.h>
+#include <AL/alc.h>
 #endif
 
 //------------------------------------------------------------------------------

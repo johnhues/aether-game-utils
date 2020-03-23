@@ -27,6 +27,7 @@ endif()
 
 # find dependencies
 include(FindOpenGL)
+include(FindOpenAL)
 if (NOT AE_BUILD_DEPS)
 	include(FindPNG)
 	include(FindSDL2)

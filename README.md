@@ -62,7 +62,7 @@ int main()
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libsdl2-dev libassimp-dev libenet-dev uuid-dev
+sudo apt install libsdl2-dev libassimp-dev libenet-dev uuid-dev libopenal-dev
 ```
 Building:
 ```
