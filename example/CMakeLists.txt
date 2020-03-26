@@ -5,6 +5,11 @@ set(AE_CURRENT_EXECUTABLE_NAME example)
 set(AE_CURRENT_SOURCE_FILES example.cpp)
 include(AddExecutable)
 
+set(AE_CURRENT_BUNDLE_NAME "Sprites")
+set(AE_CURRENT_EXECUTABLE_NAME sprites)
+set(AE_CURRENT_SOURCE_FILES sprites.cpp)
+include(AddExecutable)
+
 set(AE_CURRENT_BUNDLE_NAME "Server")
 set(AE_CURRENT_EXECUTABLE_NAME server)
 set(AE_CURRENT_SOURCE_FILES server.cpp)
