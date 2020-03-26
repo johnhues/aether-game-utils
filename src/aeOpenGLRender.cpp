@@ -363,6 +363,9 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
 
   shader->Activate( uniforms );
 
+  glDisable( GL_CULL_FACE ); // @TODO: Should probably be a VertexData parameter
+  glEnable( GL_MULTISAMPLE ); // @TODO: Should probably be a VertexData parameter
+
   glBindVertexArray( m_array );
   AE_ASSERT( glGetError() == GL_NO_ERROR );
 
@@ -613,17 +616,17 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     glDisable( GL_BLEND );
   }
 
+  glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
+
   if ( m_depthTest )
   {
-    glEnable( GL_DEPTH_TEST );
     glDepthFunc( GL_LEQUAL );
+    glEnable( GL_DEPTH_TEST );
   }
   else
   {
     glDisable( GL_DEPTH_TEST );
   }
-  
-  glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
 
   // Set shader uniforms
   uint32_t textureIndex = 0;
@@ -928,6 +931,7 @@ void aeTexture2D::Destroy()
 aeRenderTexture::aeRenderTexture()
 {
   m_fbo = 0;
+  m_depthTexture = 0;
 
   m_width = 0;
   m_height = 0;
@@ -958,6 +962,15 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
   glBindTexture( GL_TEXTURE_2D, 0 );
   glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0 );
+
+  glGenTextures( 1, &m_depthTexture );
+  glBindTexture( GL_TEXTURE_2D, m_depthTexture );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_depthTexture, 0 );
 
   Vertex quadVerts[] =
   {
@@ -1005,6 +1018,12 @@ void aeRenderTexture::Destroy()
   {
     glDeleteTextures( 1, &m_texture );
     m_texture = 0;
+  }
+
+  if ( m_depthTexture )
+  {
+    glDeleteTextures( 1, &m_depthTexture );
+    m_depthTexture = 0;
   }
 
   if ( m_fbo )
@@ -1087,11 +1106,9 @@ void aeOpenGLRender::StartFrame( aeRender* render )
   aeFloat3 clearColor = render->GetClearColor().GetSRGB(); // Unclear why glClearColor() expects srgb. Maybe because of framebuffer type.
   glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
   glClearDepth( 1.0f );
-  glDepthMask( GL_TRUE ); // Must be true for glClear to work
+  glDepthMask( GL_TRUE );
+  glDisable( GL_DEPTH_TEST );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
-  glDisable( GL_CULL_FACE ); // @TODO: Should probably be a VertexData parameter
-  glEnable( GL_MULTISAMPLE ); // @TODO: Should probably be a VertexData parameter
 
   AE_ASSERT( glGetError() == GL_NO_ERROR );
 }
@@ -1101,16 +1118,14 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   AE_ASSERT( glGetError() == GL_NO_ERROR );
 
   glBindFramebuffer( GL_FRAMEBUFFER, m_defaultFbo );
-
   glViewport( 0, 0, render->GetWindow()->GetWidth(), render->GetWindow()->GetHeight() );
 
+  // Clear window target in case canvas doesn't fit exactly
   glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
   glClearDepth( 1.0f );
-  glDepthMask( GL_TRUE ); // Must be true for glClear to work
+  glDepthMask( GL_TRUE );
+  glDisable( GL_DEPTH_TEST );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
-  glDisable( GL_CULL_FACE );
-  glEnable( GL_MULTISAMPLE ); // @TODO: Probably not needed
 
   render->GetCanvas()->Render2D( render->GetNDCRect(), 0.5f );
 

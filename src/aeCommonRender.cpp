@@ -210,8 +210,17 @@ const aeUniformList::Value* aeUniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // aeSpriteRender member functions
 //------------------------------------------------------------------------------
+aeSpriteRender::aeSpriteRender()
+{
+  m_count = 0;
+  m_maxCount = 0;
+  m_sprites = nullptr;
+}
+
 void aeSpriteRender::Initialize( uint32_t maxCount )
 {
+  AE_ASSERT( maxCount );
+
   m_maxCount = maxCount;
   m_count = 0;
   m_sprites = aeAlloc::AllocateArray< Sprite >( m_maxCount );
@@ -256,8 +265,6 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
       AE_COLOR = AE_RGBA_TO_SRGBA( AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color );\
     }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  m_shader.SetBlending( true );
-  m_shader.SetDepthTest( true );
 }
 
 void aeSpriteRender::Destroy()
@@ -318,8 +325,23 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
   Clear();
 }
 
+void aeSpriteRender::SetBlending( bool enabled )
+{
+  m_shader.SetBlending( enabled );
+}
+void aeSpriteRender::SetDepthTest( bool enabled )
+{
+  m_shader.SetDepthTest( enabled );
+}
+void aeSpriteRender::SetDepthWrite( bool enabled )
+{
+  m_shader.SetDepthWrite( enabled );
+}
+
 void aeSpriteRender::AddSprite( const aeTexture2D* texture, aeFloat4x4 transform, aeFloat2 uvMin, aeFloat2 uvMax, aeColor color )
 {
+  AE_ASSERT_MSG( m_maxCount, "aeSpriteRender is not initialized" );
+
   if ( !texture )
   {
     return;
@@ -377,37 +399,17 @@ void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filt
       v_color = a_color;\
       gl_Position = u_uiToScreen * vec4( a_position, 1.0 );\
     }";
-  const char* fragStr = "";
-  if ( filterType == aeTextureFilter::Linear )
-  {
-    fragStr = "\
-      uniform sampler2D u_tex;\
-      AE_IN_HIGHP vec2 v_uv;\
-      AE_IN_HIGHP vec4 v_color;\
-      void main()\
-      {\
-        AE_COLOR.rgb = vec3( 1.0 );\
-        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) > 0.5 ? 1.0 : 0.0;\
-        AE_COLOR *= v_color;\
-        AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
-      }";
-  }
-  else
-  {
-    fragStr = "\
-      uniform sampler2D u_tex;\
-      AE_IN_HIGHP vec2 v_uv;\
-      AE_IN_HIGHP vec4 v_color;\
-      void main()\
-      {\
-        AE_COLOR.rgb = vec3( 1.0 );\
-        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r );\
-        AE_COLOR *= v_color;\
-        AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
-      }";
-  }
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      if ( AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) < 0.5 ) { discard; };\
+      AE_COLOR = v_color;\
+      AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
+    }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  m_shader.SetBlending( true );
 
   m_texture.Initialize( imagePath, filterType, aeTextureWrap::Clamp );
 }

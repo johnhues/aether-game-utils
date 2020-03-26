@@ -361,6 +361,7 @@ private:
   };
 
   uint32_t m_fbo;
+  uint32_t m_depthTexture;
 
   uint32_t m_width;
   uint32_t m_height;
@@ -375,10 +376,15 @@ private:
 class aeSpriteRender
 {
 public:
+  aeSpriteRender();
   void Initialize( uint32_t maxCount );
   void Destroy();
   // @TODO: change name to ndc space or remove and just use AddSprite transform
   void Render( const aeFloat4x4& worldToScreen );
+
+  void SetBlending( bool enabled );
+  void SetDepthTest( bool enabled );
+  void SetDepthWrite( bool enabled );
 
   // @NOTE: Each sprite is also transformed by the Render( worldToScreen ) above
   void AddSprite( const aeTexture2D* texture, aeFloat4x4 transform, aeFloat2 uvMin, aeFloat2 uvMax, aeColor color );
