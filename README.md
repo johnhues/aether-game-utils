@@ -115,7 +115,7 @@ sudo make install
 ## Windows Setup
 These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments.
 
-Depending on your environment you may need to append the cmake directory to your path:
+Depending on your environment you may need to append your cmake directory to your path:
 ```
 SET PATH=%PATH%;C:\Program Files\CMake\bin;
 ```
@@ -127,4 +127,4 @@ cd C:\temp\aether-game-utils\build
 cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=C:\Library ..
 cmake --build . --config Debug --target INSTALL
 ```
-If successful you should see the installed library files in `C:\Library\ae`. You can safely delete `C:\temp\aether-game-utils` without affecting installed library.
+If successful you should see the installed library files in `C:\Library\ae`. You can safely delete `C:\temp\aether-game-utils` without affecting the installed library.
