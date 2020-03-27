@@ -134,6 +134,20 @@ public:
   uint32_t m_position = 0;
   aeArray< uint8_t >* m_extArray = nullptr;
   aeArray< uint8_t > m_array;
+
+public:
+  // Prevent the above functions from being called accidentally through automatic conversions
+  template < typename T > void SerializeUint8( T ) = delete;
+  template < typename T > void SerializeUint16( T ) = delete;
+  template < typename T > void SerializeUint32( T ) = delete;
+  template < typename T > void SerializeUint64( T ) = delete;
+  template < typename T > void SerializeInt8( T ) = delete;
+  template < typename T > void SerializeInt16( T ) = delete;
+  template < typename T > void SerializeInt32( T ) = delete;
+  template < typename T > void SerializeInt64( T ) = delete;
+  template < typename T > void SerializeFloat( T ) = delete;
+  template < typename T > void SerializeDouble( T ) = delete;
+  template < typename T > void SerializeBool( T ) = delete;
 };
 
 //------------------------------------------------------------------------------

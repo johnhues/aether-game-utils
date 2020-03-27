@@ -91,6 +91,7 @@ void aeBinaryStream::SerializeUint8( uint8_t& v )
 
 void aeBinaryStream::SerializeUint8( const uint8_t& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( &v, sizeof(v) );
 }
 
@@ -101,6 +102,7 @@ void aeBinaryStream::SerializeUint16( uint16_t& v )
 
 void aeBinaryStream::SerializeUint16( const uint16_t& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -111,6 +113,7 @@ void aeBinaryStream::SerializeUint32( uint32_t& v )
 
 void aeBinaryStream::SerializeUint32( const uint32_t& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -121,6 +124,7 @@ void aeBinaryStream::SerializeUint64( uint64_t& v )
 
 void aeBinaryStream::SerializeUint64( const uint64_t& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -131,6 +135,7 @@ void aeBinaryStream::SerializeInt8( int8_t& v )
 
 void aeBinaryStream::SerializeInt8( const int8_t& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -141,6 +146,7 @@ void aeBinaryStream::SerializeInt16( int16_t& v )
 
 void aeBinaryStream::SerializeInt16( const int16_t& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -151,6 +157,7 @@ void aeBinaryStream::SerializeInt32( int32_t& v )
 
 void aeBinaryStream::SerializeInt32( const int32_t& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -161,36 +168,40 @@ void aeBinaryStream::SerializeInt64( int64_t& v )
 
 void aeBinaryStream::SerializeInt64( const int64_t& v )
 {
-  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
 }
 
 void aeBinaryStream::SerializeFloat( float& v )
 {
-  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
 }
 
 void aeBinaryStream::SerializeFloat( const float& v )
 {
-  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
 }
 
 void aeBinaryStream::SerializeDouble( double& v )
 {
-  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
 }
 
 void aeBinaryStream::SerializeDouble( const double& v )
 {
-  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
 }
 
 void aeBinaryStream::SerializeBool( bool& v )
 {
-  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
 }
 
 void aeBinaryStream::SerializeBool( const bool& v )
 {
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
