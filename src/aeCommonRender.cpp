@@ -231,7 +231,7 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_vertexData.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof(Vertex, uv) );
 
   aeAlloc::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
-  uint16_t* indices = scratch.GetData();
+  uint16_t* indices = scratch.Data();
   for ( uint32_t i = 0; i < m_maxCount; i++ )
   {
     indices[ i * aeQuadIndexCount + 0 ] = i * aeQuadVertCount + aeQuadIndices[ 0 ];
@@ -288,7 +288,7 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
     uint32_t textureId = texture->GetTexture();
 
     aeAlloc::Scratch< Vertex > scratch( m_count * aeQuadVertCount );
-    Vertex* vertices = scratch.GetData();
+    Vertex* vertices = scratch.Data();
     for ( uint32_t j = 0; j < m_count; j++ )
     {
       Sprite* sprite = &m_sprites[ j ];
@@ -313,7 +313,7 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
       vertices[ j * aeQuadVertCount + 3 ].color = sprite->color.GetLinearRGBA();
     }
     // @TODO: Should set all vertices first then render multiple times
-    m_vertexData.SetVertices( vertices, scratch.GetCount() );
+    m_vertexData.SetVertices( vertices, scratch.Length() );
 
     aeUniformList uniforms;
     uniforms.Set( "u_worldToScreen", worldToScreen );
@@ -450,7 +450,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
           indexCount++;
         }
 
-        AE_ASSERT( vertCount + aeQuadVertCount <= verts.GetCount() );
+        AE_ASSERT( vertCount + aeQuadVertCount <= verts.Length() );
         // Bottom Left
         verts[ vertCount ].pos = aeFloat3( pos.x, pos.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
@@ -486,8 +486,8 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
     }
   }
 
-  m_vertexData.SetVertices( verts.GetData(), vertCount );
-  m_vertexData.SetIndices( indices.GetData(), indexCount );
+  m_vertexData.SetVertices( verts.Data(), vertCount );
+  m_vertexData.SetIndices( indices.Data(), indexCount );
 
   aeUniformList uniforms;
   uniforms.Set( "u_uiToScreen", uiToScreen );

@@ -36,9 +36,9 @@
 class aeVfs
 {
 public:
-  enum Root { Data, Temp, User };
+  enum Root { Data, User };
 
-  void Initialize( const char* dataDir, const char* tempDir, const char* userDir );
+  void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
 
   uint32_t GetSize( Root root, const char* fileName );
   uint32_t Read( Root root, const char* fileName, void* buffer, uint32_t bufferSize );
@@ -52,7 +52,6 @@ public:
 
 private:
   aeStr128 m_dataDir;
-  aeStr128 m_tempDir;
   aeStr128 m_userDir;
 };
 
