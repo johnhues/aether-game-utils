@@ -27,8 +27,10 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # dependency building
 if(AE_BUILD_DEPS)
+	if(WIN32 AND NOT CYGWIN)
+		add_dependencies(${AE_LIBRARY_NAME} glew)
+	endif()
 	add_dependencies(${AE_LIBRARY_NAME}
-		glew
 		zlib
 		assimp
 		Enet
