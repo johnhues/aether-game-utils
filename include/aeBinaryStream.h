@@ -154,16 +154,40 @@ public:
 // aeBinaryStream member functions
 //------------------------------------------------------------------------------
 template< typename T >
+void aeBinaryStream_SerializeObjectInternal( aeBinaryStream* stream, T& v, decltype( &T::Serialize ) )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+void aeBinaryStream_SerializeObjectInternalConst( aeBinaryStream* stream, const T& v, decltype( &T::Serialize ) )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+void aeBinaryStream_SerializeObjectInternal( aeBinaryStream* stream, T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
+void aeBinaryStream_SerializeObjectInternalConst( aeBinaryStream* stream, const T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
 void aeBinaryStream::SerializeObject( T& v )
 {
-  v.Serialize( this );
+  aeBinaryStream_SerializeObjectInternal< T >( this, v, 0 );
 }
 
 template< typename T >
 void aeBinaryStream::SerializeObject( const T& v )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
-  v.Serialize( this );
+  aeBinaryStream_SerializeObjectInternalConst< T >( this, v, 0 );
 }
 
 template< typename T >
