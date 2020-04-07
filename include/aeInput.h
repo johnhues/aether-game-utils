@@ -29,6 +29,7 @@
 //------------------------------------------------------------------------------
 #include "aeMap.h"
 #include "aeMath.h"
+#include "aeString.h"
 
 //------------------------------------------------------------------------------
 // InputType enum
@@ -58,6 +59,7 @@ enum InputType
   kInputType_Control,
   kInputType_Shift,
   kInputType_Delete,
+  kInputType_Tilde,
   kInputType_Escape,
 
   kInputTypeCount
@@ -98,6 +100,7 @@ public:
   bool ctrl;
   bool shift;
   bool del;
+  bool tilde;
   bool esc;
 
   aeInt2 mousePixelPos;
@@ -112,12 +115,18 @@ public:
 class aeInput
 {
 public:
+  aeInput();
   void Initialize( class aeWindow* window, class aeRender* render );
   void Terminate();
   void Pump();
 
   const InputState* GetState() const { return &m_input; }
   const InputState* GetPrevState() const { return &m_prevInput; }
+
+  void SetTextMode( bool enabled );
+  bool GetTextMode() const { return m_textMode; }
+  void SetText( const char* text ) { m_text = text; }
+  const char* GetText() const { return m_text.c_str(); }
 
 private:
   class aeWindow* m_window;
@@ -127,6 +136,9 @@ private:
   
   InputState m_input;
   InputState m_prevInput;
+
+  bool m_textMode;
+  aeStr512 m_text;
 };
 
 #endif

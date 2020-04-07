@@ -375,9 +375,9 @@ const uint32_t kCharsPerString = 64;
 //------------------------------------------------------------------------------
 // aeTextRender member functions
 //------------------------------------------------------------------------------
-void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t charSize )
+void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t fontSize )
 {
-  m_charSize = charSize;
+  m_fontSize = fontSize;
   m_rectCount = 0;
 
   m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * aeQuadVertCount, kMaxTextRects * kCharsPerString * aeQuadIndexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
@@ -431,7 +431,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
   for ( uint32_t i = 0; i < m_rectCount; i++ )
   {
     const TextRect& rect = m_rects[ i ];
-    aeFloat2 pos = rect.pos;
+    aeFloat3 pos = rect.pos;
     pos.y -= rect.size.y;
 
     const char* start = rect.text.c_str();
@@ -441,7 +441,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
       if ( !isspace( str[ 0 ] ) )
       {
         int32_t index = str[ 0 ];
-        uint32_t columns = m_texture.GetWidth() / m_charSize;
+        uint32_t columns = m_texture.GetWidth() / m_fontSize;
         aeFloat2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
 
         for ( uint32_t j = 0; j < aeQuadIndexCount; j++ )
@@ -452,22 +452,22 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
 
         AE_ASSERT( vertCount + aeQuadVertCount <= verts.Length() );
         // Bottom Left
-        verts[ vertCount ].pos = aeFloat3( pos.x, pos.y, 0.0f );
+        verts[ vertCount ].pos = pos;
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Bottom Right
-        verts[ vertCount ].pos = aeFloat3( pos.x + rect.size.x, pos.y, 0.0f );
+        verts[ vertCount ].pos = pos + aeFloat3( rect.size.x, 0.0f, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Top Right
-        verts[ vertCount ].pos = aeFloat3( pos.x + rect.size.x, pos.y + rect.size.y, 0.0f );
+        verts[ vertCount ].pos = pos + aeFloat3( rect.size.x, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Top Left
-        verts[ vertCount ].pos = aeFloat3( pos.x, pos.y + rect.size.y, 0.0f );
+        verts[ vertCount ].pos = pos + aeFloat3( 0.0f, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
@@ -497,7 +497,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
   m_rectCount = 0;
 }
 
-void aeTextRender::Add( aeFloat2 pos, aeFloat2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit )
+void aeTextRender::Add( aeFloat3 pos, aeFloat2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit )
 {
   if ( m_rectCount >= kMaxTextRects )
   {

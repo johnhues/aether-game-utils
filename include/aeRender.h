@@ -426,11 +426,13 @@ public:
   //        texture can be a single channel without transparency. Luminance
   //        of the red channel is used for transparency.
   //        'charSize' is the width and height of each character in the texture.
-  void Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t charSize );
+  void Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t fontSize );
   void Terminate();
   void Render( const aeFloat4x4& uiToScreen );
 
-  void Add( aeFloat2 pos, aeFloat2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit );
+  uint32_t GetFontSize() const { return m_fontSize; }
+
+  void Add( aeFloat3 pos, aeFloat2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit );
   uint32_t GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const;
 
 private:
@@ -448,12 +450,12 @@ private:
   struct TextRect
   {
     aeStr512 text;
-    aeFloat2 pos;
+    aeFloat3 pos;
     aeFloat2 size;
     aeColor color;
   };
 
-  uint32_t m_charSize;
+  uint32_t m_fontSize;
 
   aeVertexData m_vertexData;
   aeShader m_shader;
