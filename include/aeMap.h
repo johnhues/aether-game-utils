@@ -39,6 +39,7 @@ class aeMap
 {
 public:
   V& Set( const K& key, const V& value );
+  V& Get( const K& key );
   const V& Get( const K& key, const V& defaultValue ) const;
   
   V* TryGet( const K& key );
@@ -128,6 +129,12 @@ V& aeMap< K, V >::Set( const K& key, const V& value )
   {
     return m_entries.Append( Entry( key, value ) ).value;
   }
+}
+
+template < typename K, typename V >
+V& aeMap< K, V >::Get( const K& key )
+{
+  return m_entries[ m_FindIndex( key ) ].value;
 }
 
 template < typename K, typename V >
