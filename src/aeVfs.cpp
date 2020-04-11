@@ -28,6 +28,9 @@
 
 void aeVfs::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
+  AE_ASSERT_MSG( organizationName[ 0 ], "Organization name must not be empty" );
+  AE_ASSERT_MSG( applicationName[ 0 ], "Application name must not be empty" );
+
   const char* validateOrgName = organizationName;
   while ( *validateOrgName )
   {
@@ -46,11 +49,12 @@ void aeVfs::Initialize( const char* dataDir, const char* organizationName, const
   m_dataDir = dataDir;
   m_userDir = sdlUserDir;
 
-
-  if ( m_dataDir[ m_dataDir.Length() - 1 ] != '/' )
+  // Allow data dir prefix to be empty
+  if ( m_dataDir.Length() != 0 && m_dataDir[ m_dataDir.Length() - 1 ] != '/' )
   {
     m_dataDir.Append( "/" );
   }
+  AE_ASSERT( m_userDir.Length() );
   if ( m_userDir[ m_userDir.Length() - 1 ] != '/' )
   {
     m_userDir.Append( "/" );
