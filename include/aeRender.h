@@ -476,6 +476,8 @@ public:
 
   void InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height );
   void Terminate();
+  // @TODO: StartFrame and EndFrame aren't accurate. Rendering can first happen on render textures.
+  //        Maybe change to Activate() and Present()?
   void StartFrame();
   void EndFrame();
 
