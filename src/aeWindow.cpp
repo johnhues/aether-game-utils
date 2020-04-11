@@ -44,13 +44,17 @@ void aeWindow::Initialize( uint32_t width, uint32_t height, bool fullScreen, boo
 {
   AE_ASSERT( !window );
 
-  m_pos = aeInt2( (int)SDL_WINDOWPOS_CENTERED );
   m_width = width;
   m_height = height;
   m_fullScreen = fullScreen;
   
-  m_Initialize();
+  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
+  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
+  window = SDL_CreateWindow( "", (int)SDL_WINDOWPOS_CENTERED, (int)SDL_WINDOWPOS_CENTERED, m_width, m_height, flags );
+
   SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
+
+  SDL_GetWindowPosition( (SDL_Window*)window, &m_pos.x, &m_pos.y );
 }
 
 void aeWindow::Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool showCursor )
@@ -62,7 +66,10 @@ void aeWindow::Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool sho
   m_height = height;
   m_fullScreen = false;
 
-  m_Initialize();
+  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
+  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
+  window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
+
   SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
 }
 
@@ -102,11 +109,4 @@ void aeWindow::SetFullScreen( bool fullScreen )
 
     m_fullScreen = fullScreen;
   }
-}
-
-void aeWindow::m_Initialize()
-{
-  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
-  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
-  window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
 }

@@ -36,6 +36,7 @@ class aeWindow
 {
 public:
   aeWindow();
+  // @TODO: Init should take window title, since SetTitle is practically always called after Init()
   void Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor );
   void Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool showCursor );
   void Terminate();
