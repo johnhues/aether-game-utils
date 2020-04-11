@@ -26,10 +26,7 @@
 #include "aeAudio.h"
 #include "aeLog.h"
 
-#if _AE_WINDOWS_
-#include <al.h>
-#include <alc.h>
-#elif _AE_APPLE_
+#if _AE_APPLE_
 #include <OpenAL/al.h>
 #include <OpenAL/alc.h>
 #else

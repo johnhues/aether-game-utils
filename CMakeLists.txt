@@ -41,12 +41,14 @@ if (NOT AE_BUILD_DEPS)
 	set(UUID_LIBRARY_DIRS /usr/local/Cellar/ossp-uuid/1.6.2_2/lib)
 else()
 	set(AE_GLEW_SRC ${CMAKE_BINARY_DIR}/thirdparty/glew)
+	set(AE_OPENAL_SRC ${CMAKE_BINARY_DIR}/thirdparty/openal)
 	set(AE_ZLIB_SRC ${CMAKE_BINARY_DIR}/thirdparty/zlib)
 	set(AE_SDL2_SRC ${CMAKE_BINARY_DIR}/thirdparty/SDL2)
 	set(AE_ASSIMP_SRC ${CMAKE_BINARY_DIR}/thirdparty/assimp)
 	set(AE_ENET_SRC ${CMAKE_BINARY_DIR}/thirdparty/enet)
 
 	set(AE_GLEW_INSTALL ${CMAKE_BINARY_DIR}/glew)
+	set(AE_OPENAL_INSTALL ${CMAKE_BINARY_DIR}/openal)
 	set(AE_ZLIB_INSTALL ${CMAKE_BINARY_DIR}/zlib)
 	set(AE_SDL2_INSTALL ${CMAKE_BINARY_DIR}/SDL2)
 	set(AE_ASSIMP_INSTALL ${CMAKE_BINARY_DIR}/assimp)
@@ -63,6 +65,17 @@ else()
 		set(GLEW_INCLUDE_DIRS ${AE_GLEW_INSTALL}/include)
 		set(GLEW_LIBRARY_DIRS ${AE_GLEW_INSTALL}/lib)
 		set(GLEW_LIBRARIES ${GLEW_LIBRARY_DIRS}/libglew32d.lib)
+
+		ExternalProject_Add(openal
+			PREFIX openal
+			SOURCE_DIR ${AE_OPENAL_SRC}
+			GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+			GIT_TAG openal-soft-1.20.1
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
+		)
+		set(OPENAL_INCLUDE_DIRS ${AE_OPENAL_INSTALL}/include)
+		set(OPENAL_LIBRARY_DIRS ${AE_OPENAL_INSTALL}/lib)
+		set(OPENAL_LIBRARIES ${OPENAL_LIBRARY_DIRS}/OpenAL32.lib)
 	endif()
 
 	ExternalProject_Add(zlib
@@ -115,6 +128,7 @@ endif()
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 	${GLEW_INCLUDE_DIRS}
+	${OPENAL_INCLUDE_DIRS}
 	${PNG_INCLUDE_DIRS}
 	${ASSIMP_INCLUDE_DIRS}
 	${ENET_INCLUDE_DIR}
@@ -127,6 +141,7 @@ endif()
 # dependency library directories
 set(AE_DEPS_LIBRARY_DIRS
 	${GLEW_LIBRARY_DIRS}
+	${OPENAL_LIBRARY_DIRS}
 	${ZLIB_LIBRARY_DIRS}
 	${PNG_LIBRARY_DIRS}
 	${SDL2_LIBRARY_DIRS}
@@ -150,6 +165,7 @@ elseif(WIN32 AND NOT CYGWIN)
 endif()
 list(APPEND AE_DEPS_LIBARARIES
 	${GLEW_LIBRARIES}
+	${OPENAL_LIBRARIES}
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
 	${ASSIMP_LIBRARIES}

@@ -25,10 +25,13 @@ include_directories(${AE_DEPS_LIBRARY_INCLUDE_DIRS})
 # dependency linking
 target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
-# dependency building
+# build dependencies
 if(AE_BUILD_DEPS)
+	if(WIN32 AND NOT CYGWIN)
+		add_dependencies(${AE_LIBRARY_NAME} glew)
+		add_dependencies(${AE_LIBRARY_NAME} openal)
+	endif()
 	add_dependencies(${AE_LIBRARY_NAME}
-		glew
 		zlib
 		assimp
 		Enet
@@ -38,48 +41,51 @@ if(AE_BUILD_DEPS)
 	endif()
 endif()
 
+# source files
 set(AE_HEADER_FILES
 	${PROJECT_BINARY_DIR}/config.h
-	aeAlloc.h
-	aeArray.h
-	aeAudio.h
-	aeBinaryStream.h
-	aeClock.h
-	aeCommand.h
-	aeCommandLineArgs.h
-	aeDict.h
-	aeInitializer.h
-	aeInput.h
-	aeInventoryGrid.h
-	aeList.h
-	aeLog.h
-	aeMap.h
-	aeMath.h
-	aeMesh.h
-	aeMeta.h
-	aeNet.h
-	aeObjectPool.h
-	aePlatform.h
-	aeRef.h
-	aeRender.h
-	aeRingBuffer.h
-	aeSignal.h
-	aeSparseGrid.h
-	aeString.h
-	aeUuid.h
-	aeVfs.h
-	aeWindow.h
+	../include/aeAlloc.h
+	../include/aeArray.h
+	../include/aeAudio.h
+	../include/aeBinaryStream.h
+	../include/aeClock.h
+	../include/aeCommand.h
+	../include/aeCommandLineArgs.h
+	../include/aeDict.h
+	../include/aeInitializer.h
+	../include/aeInput.h
+	../include/aeInventoryGrid.h
+	../include/aeList.h
+	../include/aeLog.h
+	../include/aeMap.h
+	../include/aeMath.h
+	../include/aeMesh.h
+	../include/aeMeta.h
+	../include/aeNet.h
+	../include/aeObjectPool.h
+	../include/aePlatform.h
+	../include/aeRef.h
+	../include/aeRender.h
+	../include/aeRingBuffer.h
+	../include/aeSignal.h
+	../include/aeSparseGrid.h
+	../include/aeString.h
+	../include/aeUuid.h
+	../include/aeVfs.h
+	../include/aeWindow.h
 )
 
-# source files
+# @HACK: Include header files as private source so they are added to generated projects
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
+		${AE_HEADER_FILES}
 		aeAlloc.cpp
 		aeAudio.cpp
 		aeBinaryStream.cpp
 		aeClock.cpp
 		aeCommandLineArgs.cpp
 		aeCommonRender.cpp
+		aeCommonRender.h
 		aeDict.cpp
 		aeInput.cpp
 		aeLog.cpp
@@ -93,6 +99,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp
+		stb_image.h
 )
 
 # ae lib installation
