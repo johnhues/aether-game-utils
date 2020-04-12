@@ -24,32 +24,43 @@
 // Header files
 //------------------------------------------------------------------------------
 #include "aeVfs.h"
-#if _AE_WINDOWS_
-#include "atlstr.h"
-#include "Combaseapi.h"
-#endif
+#include "SDL.h"
 
-void aeVfs::Initialize( const char* dataDir, const char* tempDir, const char* userDir )
+void aeVfs::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
+  AE_ASSERT_MSG( organizationName[ 0 ], "Organization name must not be empty" );
+  AE_ASSERT_MSG( applicationName[ 0 ], "Application name must not be empty" );
+
+  const char* validateOrgName = organizationName;
+  while ( *validateOrgName )
+  {
+    AE_ASSERT_MSG( isalnum( *validateOrgName ) || ( *validateOrgName == '_' ), "Invalid VFS organization name '#'. Only alphanumeric characters and undersrcores are supported.", organizationName );
+    validateOrgName++;
+  }
+  const char* validateAppName = applicationName;
+  while ( *validateAppName )
+  {
+    AE_ASSERT_MSG( isalnum( *validateAppName ) || ( *validateAppName == '_' ), "Invalid VFS application name '#'. Only alphanumeric characters and undersrcores are supported.", applicationName );
+    validateAppName++;
+  }
+
+  char* sdlUserDir = SDL_GetPrefPath( organizationName, applicationName );
+
   m_dataDir = dataDir;
-  m_tempDir = tempDir;
-  m_userDir = userDir;
-  if ( m_dataDir[ m_dataDir.Length() - 1 ] != '/' )
+  m_userDir = sdlUserDir;
+
+  // Allow data dir prefix to be empty
+  if ( m_dataDir.Length() != 0 && m_dataDir[ m_dataDir.Length() - 1 ] != '/' )
   {
     m_dataDir.Append( "/" );
   }
-  if ( m_tempDir[ m_tempDir.Length() - 1 ] != '/' )
-  {
-    m_tempDir.Append( "/" );
-  }
+  AE_ASSERT( m_userDir.Length() );
   if ( m_userDir[ m_userDir.Length() - 1 ] != '/' )
   {
     m_userDir.Append( "/" );
   }
 
-#if _AE_WINDOWS_
-  CoInitializeEx( nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE ); // @TODO: CoUninitialize();
-#endif
+  SDL_free( sdlUserDir );
 }
 
 uint32_t aeVfs::GetSize( Root root, const char* fileName )
@@ -143,7 +154,6 @@ uint32_t aeVfs::Write( const char* fileDir, const void* buffer, uint32_t bufferS
 const char* aeVfs::GetRootDir( Root root )
 {
   if ( root == aeVfs::Data ) { return m_dataDir.c_str(); }
-  if ( root == aeVfs::Temp ) { return m_tempDir.c_str(); }
   if ( root == aeVfs::User ) { return m_userDir.c_str(); }
   return nullptr;
 }

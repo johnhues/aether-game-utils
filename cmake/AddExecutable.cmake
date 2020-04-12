@@ -1,4 +1,11 @@
-add_executable(${AE_CURRENT_EXECUTABLE_NAME} ${AE_CURRENT_SOURCE_FILES})
+if(WIN32)
+	# Create a regular windowed application instead of the default console subsystem target
+	set(AE_EXE_TYPE WIN32)
+	# Use main instead of WinMain
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup")
+endif()
+
+add_executable(${AE_CURRENT_EXECUTABLE_NAME}  ${AE_EXE_TYPE} ${AE_CURRENT_SOURCE_FILES})
 add_dependencies(${AE_CURRENT_EXECUTABLE_NAME} ${AE_LIBRARY_NAME})
 target_link_libraries(${AE_CURRENT_EXECUTABLE_NAME} ${AE_LIBRARIES})
 

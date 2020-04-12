@@ -91,9 +91,8 @@ namespace aeAlloc
       Release( m_data );
     }
 
-    T* GetData() { return m_data; }
-    uint32_t GetCount() const { return m_count; }
-    uint32_t GetSize() const { return m_count * sizeof(T); }
+    T* Data() { return m_data; }
+    uint32_t Length() const { return m_count; }
 
     T& operator[] ( int32_t index ) { return m_data[ index ]; }
     const T& operator[] ( int32_t index ) const { return m_data[ index ]; }

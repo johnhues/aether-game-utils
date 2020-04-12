@@ -134,22 +134,60 @@ public:
   uint32_t m_position = 0;
   aeArray< uint8_t >* m_extArray = nullptr;
   aeArray< uint8_t > m_array;
+
+public:
+  // Prevent the above functions from being called accidentally through automatic conversions
+  template < typename T > void SerializeUint8( T ) = delete;
+  template < typename T > void SerializeUint16( T ) = delete;
+  template < typename T > void SerializeUint32( T ) = delete;
+  template < typename T > void SerializeUint64( T ) = delete;
+  template < typename T > void SerializeInt8( T ) = delete;
+  template < typename T > void SerializeInt16( T ) = delete;
+  template < typename T > void SerializeInt32( T ) = delete;
+  template < typename T > void SerializeInt64( T ) = delete;
+  template < typename T > void SerializeFloat( T ) = delete;
+  template < typename T > void SerializeDouble( T ) = delete;
+  template < typename T > void SerializeBool( T ) = delete;
 };
 
 //------------------------------------------------------------------------------
 // aeBinaryStream member functions
 //------------------------------------------------------------------------------
 template< typename T >
+void aeBinaryStream_SerializeObjectInternal( aeBinaryStream* stream, T& v, decltype( &T::Serialize ) )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+void aeBinaryStream_SerializeObjectInternalConst( aeBinaryStream* stream, const T& v, decltype( &T::Serialize ) )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+void aeBinaryStream_SerializeObjectInternal( aeBinaryStream* stream, T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
+void aeBinaryStream_SerializeObjectInternalConst( aeBinaryStream* stream, const T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
 void aeBinaryStream::SerializeObject( T& v )
 {
-  v.Serialize( this );
+  aeBinaryStream_SerializeObjectInternal< T >( this, v, 0 );
 }
 
 template< typename T >
 void aeBinaryStream::SerializeObject( const T& v )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
-  v.Serialize( this );
+  aeBinaryStream_SerializeObjectInternalConst< T >( this, v, 0 );
 }
 
 template< typename T >

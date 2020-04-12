@@ -60,6 +60,7 @@ InputState::InputState()
   ctrl = false;
   shift = false;
   del = false;
+  tilde = 0;
   esc = false;
 
   mousePixelPos = aeInt2( 0 );
@@ -110,6 +111,8 @@ bool InputState::Get( InputType type ) const
     return shift;
   case kInputType_Delete:
     return del;
+  case kInputType_Tilde:
+    return tilde;
   case kInputType_Escape:
     return esc;
   default:
@@ -159,6 +162,8 @@ const char* InputState::GetName( InputType type ) const
     return "Shift";
   case kInputType_Delete:
     return "Delete";
+  case kInputType_Tilde:
+    return "Tilde";
   case kInputType_Escape:
     return "Escape";
   default:
@@ -169,6 +174,13 @@ const char* InputState::GetName( InputType type ) const
 //------------------------------------------------------------------------------
 // aeInput member functions
 //------------------------------------------------------------------------------
+aeInput::aeInput()
+{
+  m_window = nullptr;
+  m_render = nullptr;
+  m_textMode = 0;
+}
+
 void aeInput::Initialize( aeWindow* window, aeRender* render )
 {
   SDL_JoystickEventState( SDL_ENABLE );
@@ -201,6 +213,7 @@ void aeInput::Initialize( aeWindow* window, aeRender* render )
 #endif
     m_keyMap.Set( SDL_SCANCODE_LSHIFT, &m_input.shift );
     m_keyMap.Set( SDL_SCANCODE_BACKSPACE, &m_input.del );
+    m_keyMap.Set( SDL_SCANCODE_GRAVE, &m_input.tilde );
     m_keyMap.Set( SDL_SCANCODE_ESCAPE, &m_input.esc );
   }
 }
@@ -216,6 +229,16 @@ void aeInput::Pump()
   m_prevInput = m_input;
 
   m_input.scroll = 0;
+
+  bool sdlTextMode = SDL_IsTextInputActive();
+  if ( m_textMode && !sdlTextMode )
+  {
+    SDL_StartTextInput();
+  }
+  else if ( !m_textMode && sdlTextMode )
+  {
+    SDL_StopTextInput();
+  }
 
   SDL_Event events[ 32 ];
   // Get all events at once, this function can be very slow. Returns -1 while shutting down.
@@ -233,14 +256,6 @@ void aeInput::Pump()
       else if ( event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
       {
         m_window->UpdatePos( aeInt2( event.window.data1, event.window.data2 ) );
-      }
-      else if ( event.type == SDL_KEYDOWN || event.type == SDL_KEYUP )
-      {
-        bool** target = m_keyMap.TryGet( event.key.keysym.scancode );
-        if ( target )
-        {
-          **target = ( event.type == SDL_KEYDOWN );
-        }
       }
       else if ( event.type == SDL_MOUSEMOTION )
       {
@@ -266,6 +281,47 @@ void aeInput::Pump()
       {
         m_input.scroll = event.wheel.y * ( event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1 );
       }
+      else if ( m_textMode && event.type == SDL_TEXTINPUT )
+      {
+        // @NOTE: Ignore keys while modifier is pressed so below copy and paste work as expected
+        if ( !( SDL_GetModState() & KMOD_CTRL ) )
+        {
+          m_text += event.text.text;
+        }
+      }
+      else if ( event.type == SDL_KEYDOWN || event.type == SDL_KEYUP )
+      {
+        // @NOTE: Always capture key ups even while in text mode to avoid creating inconsistent input state.
+        //        Don't capture key downs to avoid creating game inputs while typing.
+        if ( !m_textMode || event.type == SDL_KEYUP )
+        {
+          bool** target = m_keyMap.TryGet( event.key.keysym.scancode );
+          if ( target )
+          {
+            **target = ( event.type == SDL_KEYDOWN );
+          }
+        }
+
+        if ( m_textMode && event.type == SDL_KEYDOWN )
+        {
+          if ( event.key.keysym.sym == SDLK_BACKSPACE && m_text.Length() )
+          {
+            m_text.Trim( m_text.Length() - 1 );
+          }
+          else if ( event.key.keysym.sym == SDLK_RETURN )
+          {
+            m_text += "\n";
+          }
+          else if ( event.key.keysym.sym == SDLK_c && SDL_GetModState() & KMOD_CTRL )
+          {
+            SDL_SetClipboardText( m_text.c_str() );
+          }
+          else if ( event.key.keysym.sym == SDLK_v && SDL_GetModState() & KMOD_CTRL )
+          {
+            m_text += SDL_GetClipboardText();
+          }
+        }
+      }
       else if ( event.type == SDL_QUIT )
       {
         m_input.exit = true;
@@ -273,4 +329,9 @@ void aeInput::Pump()
     }
   }
 #endif
+}
+
+void aeInput::SetTextMode( bool enabled )
+{
+  m_textMode = enabled;
 }

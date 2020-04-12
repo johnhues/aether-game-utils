@@ -104,27 +104,26 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         uint32_t remoteId = 0;
         rStream.SerializeUint32( remoteId );
 
-        aeId< aeNetData > localId;
-        if ( m_remoteToLocalIdMap.TryGet( remoteId, &localId ) )
+        // @TODO: What happens if the client is somehow out of sync here?
+        //        Currently if the net data is not found this Get() will assert.
+        aeId< aeNetData > localId = m_remoteToLocalIdMap.Get( remoteId );
+        m_remoteToLocalIdMap.Remove( remoteId );
+
+        int32_t createdIndex = m_created.FindFn( [localId]( aeRef< aeNetData >& ref ){ return ref.GetId() == localId; } );
+        if ( createdIndex >= 0 )
         {
-          m_remoteToLocalIdMap.Remove( remoteId );
+          // @TODO: Removing this from the created list will prevent the client from ever knowing about the object.
+          //        How should objects that are created and destroyed within a single network frame be handled?
+          //        Maybe deletion should be queued and happen after one network frame has passed.
+          m_created.Remove( createdIndex );
+        }
 
-          int32_t createdIndex = m_created.FindFn( [localId]( aeRef< aeNetData >& ref ){ return ref.GetId() == localId; } );
-          if ( createdIndex >= 0 )
-          {
-            // @TODO: Removing this from the created list will prevent the client from ever knowing about the object.
-            //        How should objects that are created and destroyed within a single network frame be handled?
-            //        Maybe deletion should be queued and happen after one network frame has passed.
-            m_created.Remove( createdIndex );
-          }
-
-          aeNetData* netData = nullptr;
-          if ( m_netDatas.TryGet( localId, &netData ) )
-          {
-            AE_ASSERT( netData );
-            m_netDatas.Remove( localId );
-            aeAlloc::Release( netData );
-          }
+        aeNetData* netData = nullptr;
+        if ( m_netDatas.TryGet( localId, &netData ) )
+        {
+          AE_ASSERT( netData );
+          m_netDatas.Remove( localId );
+          aeAlloc::Release( netData );
         }
 
         break;

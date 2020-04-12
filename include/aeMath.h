@@ -38,24 +38,26 @@ namespace aeMath
   extern const float TWO_PI;
   extern const float HALF_PI;
 
-  template < typename T >
-  inline T Min( T x, T y )
+  template< typename T >
+  T&& Min( T&& v )
   {
-    if( x <= y )
-    {
-      return x;
-    }
-    return y;
+    return std::forward< T >( v );
+  }
+  template< typename T0, typename T1, typename... Tn >
+  auto Min( T0&& v0, T1&& v1, Tn&&... vn )
+  {
+    return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
   }
 
-  template < typename T >
-  inline T Max( T x, T y )
+  template< typename T >
+  T&& Max( T&& v )
   {
-    if( x >= y )
-    {
-      return x;
-    }
-    return y;
+    return std::forward< T >( v );
+  }
+  template< typename T0, typename T1, typename... Tn >
+  auto Max( T0&& v0, T1&& v1, Tn&&... vn )
+  {
+    return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
   }
 
   template<typename T>

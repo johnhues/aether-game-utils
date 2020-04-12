@@ -101,3 +101,25 @@ void aeFixedTimeStep::Wait()
     m_frameStart = std::chrono::steady_clock::now();
   }
 }
+
+//------------------------------------------------------------------------------
+// aeTicker member functions
+//------------------------------------------------------------------------------
+aeTicker::aeTicker( double interval )
+{
+  m_interval = interval;
+  m_accumulate = 0.0;
+}
+
+bool aeTicker::Tick( double dt )
+{
+  m_accumulate += dt;
+
+  if ( m_accumulate >= 0.0 )
+  {
+    m_accumulate -= m_interval;
+    return true;
+  }
+
+  return false;
+}

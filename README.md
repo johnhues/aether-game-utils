@@ -21,7 +21,8 @@ Dependencies:
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)
 
 ## Example
-A complete working example showing a window with a red background:
+A complete working example showing a window with a red background.
+`main.cpp`
 ```
 #include "aeClock.h"
 #include "aeInput.h"
@@ -58,6 +59,28 @@ int main()
 	return 0;
 }
 ```
+This is a cmake file that will configure main.cpp to be compiled and linked with aether-game-utils. It's not necessary that your project uses cmake, but it might be easier for initial setup.
+`CMakeLists.txt`
+```
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+project(MyProject LANGUAGES CXX VERSION 0.1.0)
+
+include(ExternalProject)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_definitions(-D_UNICODE -DUNICODE)
+
+set(CMAKE_BUILD_TYPE Debug)
+
+find_package(ae REQUIRED)
+
+add_executable(game main.cpp)
+target_link_libraries(
+	game
+	ae
+)
+```
 
 ## Linux Setup
 Installing dependencies:
@@ -90,12 +113,18 @@ sudo make install
 ```
 
 ## Windows Setup
-```
-mkdir C:\Library
-cd C:\Library
-git clone https://github.com/johnhues/aether-game-utils.git aether-game-utils
+These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments.
 
-Use cmake to generate VS projects:
-Source should point to 'C:\Library\aether-game-utils'
-Build should point to 'C:\Library\aether-game-utils/build'
+Depending on your environment you may need to append your cmake directory to your path:
 ```
+SET PATH=%PATH%;C:\Program Files\CMake\bin;
+```
+You may need to individually copy and paste the following commands as cmake may prevent later commands from running.
+```
+git clone https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
+mkdir C:\temp\aether-game-utils\build
+cd C:\temp\aether-game-utils\build
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=C:\Library ..
+cmake --build . --config Debug --target INSTALL
+```
+If successful you should see the installed library files in `C:\Library\ae`. You can safely delete `C:\temp\aether-game-utils` without affecting the installed library.

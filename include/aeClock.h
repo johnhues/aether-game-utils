@@ -59,4 +59,18 @@ private:
   std::chrono::steady_clock::time_point m_frameStart;
 };
 
+//------------------------------------------------------------------------------
+// aeTicker
+//------------------------------------------------------------------------------
+class aeTicker
+{
+public:
+  aeTicker( double interval );
+  bool Tick( double currentTime );
+
+private:
+  double m_interval;
+  double m_accumulate;
+};
+
 #endif

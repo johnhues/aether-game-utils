@@ -210,8 +210,17 @@ const aeUniformList::Value* aeUniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // aeSpriteRender member functions
 //------------------------------------------------------------------------------
+aeSpriteRender::aeSpriteRender()
+{
+  m_count = 0;
+  m_maxCount = 0;
+  m_sprites = nullptr;
+}
+
 void aeSpriteRender::Initialize( uint32_t maxCount )
 {
+  AE_ASSERT( maxCount );
+
   m_maxCount = maxCount;
   m_count = 0;
   m_sprites = aeAlloc::AllocateArray< Sprite >( m_maxCount );
@@ -222,7 +231,7 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_vertexData.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof(Vertex, uv) );
 
   aeAlloc::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
-  uint16_t* indices = scratch.GetData();
+  uint16_t* indices = scratch.Data();
   for ( uint32_t i = 0; i < m_maxCount; i++ )
   {
     indices[ i * aeQuadIndexCount + 0 ] = i * aeQuadVertCount + aeQuadIndices[ 0 ];
@@ -256,8 +265,6 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
       AE_COLOR = AE_RGBA_TO_SRGBA( AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color );\
     }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  m_shader.SetBlending( true );
-  m_shader.SetDepthTest( true );
 }
 
 void aeSpriteRender::Destroy()
@@ -281,7 +288,7 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
     uint32_t textureId = texture->GetTexture();
 
     aeAlloc::Scratch< Vertex > scratch( m_count * aeQuadVertCount );
-    Vertex* vertices = scratch.GetData();
+    Vertex* vertices = scratch.Data();
     for ( uint32_t j = 0; j < m_count; j++ )
     {
       Sprite* sprite = &m_sprites[ j ];
@@ -306,7 +313,7 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
       vertices[ j * aeQuadVertCount + 3 ].color = sprite->color.GetLinearRGBA();
     }
     // @TODO: Should set all vertices first then render multiple times
-    m_vertexData.SetVertices( vertices, scratch.GetCount() );
+    m_vertexData.SetVertices( vertices, scratch.Length() );
 
     aeUniformList uniforms;
     uniforms.Set( "u_worldToScreen", worldToScreen );
@@ -318,8 +325,23 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
   Clear();
 }
 
+void aeSpriteRender::SetBlending( bool enabled )
+{
+  m_shader.SetBlending( enabled );
+}
+void aeSpriteRender::SetDepthTest( bool enabled )
+{
+  m_shader.SetDepthTest( enabled );
+}
+void aeSpriteRender::SetDepthWrite( bool enabled )
+{
+  m_shader.SetDepthWrite( enabled );
+}
+
 void aeSpriteRender::AddSprite( const aeTexture2D* texture, aeFloat4x4 transform, aeFloat2 uvMin, aeFloat2 uvMax, aeColor color )
 {
+  AE_ASSERT_MSG( m_maxCount, "aeSpriteRender is not initialized" );
+
   if ( !texture )
   {
     return;
@@ -353,9 +375,9 @@ const uint32_t kCharsPerString = 64;
 //------------------------------------------------------------------------------
 // aeTextRender member functions
 //------------------------------------------------------------------------------
-void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t charSize )
+void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t fontSize )
 {
-  m_charSize = charSize;
+  m_fontSize = fontSize;
   m_rectCount = 0;
 
   m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * aeQuadVertCount, kMaxTextRects * kCharsPerString * aeQuadIndexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
@@ -377,37 +399,17 @@ void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filt
       v_color = a_color;\
       gl_Position = u_uiToScreen * vec4( a_position, 1.0 );\
     }";
-  const char* fragStr = "";
-  if ( filterType == aeTextureFilter::Linear )
-  {
-    fragStr = "\
-      uniform sampler2D u_tex;\
-      AE_IN_HIGHP vec2 v_uv;\
-      AE_IN_HIGHP vec4 v_color;\
-      void main()\
-      {\
-        AE_COLOR.rgb = vec3( 1.0 );\
-        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) > 0.5 ? 1.0 : 0.0;\
-        AE_COLOR *= v_color;\
-        AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
-      }";
-  }
-  else
-  {
-    fragStr = "\
-      uniform sampler2D u_tex;\
-      AE_IN_HIGHP vec2 v_uv;\
-      AE_IN_HIGHP vec4 v_color;\
-      void main()\
-      {\
-        AE_COLOR.rgb = vec3( 1.0 );\
-        AE_COLOR.a = AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r );\
-        AE_COLOR *= v_color;\
-        AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
-      }";
-  }
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      if ( AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) < 0.5 ) { discard; };\
+      AE_COLOR = v_color;\
+      AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
+    }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  m_shader.SetBlending( true );
 
   m_texture.Initialize( imagePath, filterType, aeTextureWrap::Clamp );
 }
@@ -429,7 +431,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
   for ( uint32_t i = 0; i < m_rectCount; i++ )
   {
     const TextRect& rect = m_rects[ i ];
-    aeFloat2 pos = rect.pos;
+    aeFloat3 pos = rect.pos;
     pos.y -= rect.size.y;
 
     const char* start = rect.text.c_str();
@@ -439,7 +441,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
       if ( !isspace( str[ 0 ] ) )
       {
         int32_t index = str[ 0 ];
-        uint32_t columns = m_texture.GetWidth() / m_charSize;
+        uint32_t columns = m_texture.GetWidth() / m_fontSize;
         aeFloat2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
 
         for ( uint32_t j = 0; j < aeQuadIndexCount; j++ )
@@ -448,24 +450,24 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
           indexCount++;
         }
 
-        AE_ASSERT( vertCount + aeQuadVertCount <= verts.GetCount() );
+        AE_ASSERT( vertCount + aeQuadVertCount <= verts.Length() );
         // Bottom Left
-        verts[ vertCount ].pos = aeFloat3( pos.x, pos.y, 0.0f );
+        verts[ vertCount ].pos = pos;
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Bottom Right
-        verts[ vertCount ].pos = aeFloat3( pos.x + rect.size.x, pos.y, 0.0f );
+        verts[ vertCount ].pos = pos + aeFloat3( rect.size.x, 0.0f, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Top Right
-        verts[ vertCount ].pos = aeFloat3( pos.x + rect.size.x, pos.y + rect.size.y, 0.0f );
+        verts[ vertCount ].pos = pos + aeFloat3( rect.size.x, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Top Left
-        verts[ vertCount ].pos = aeFloat3( pos.x, pos.y + rect.size.y, 0.0f );
+        verts[ vertCount ].pos = pos + aeFloat3( 0.0f, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
@@ -484,8 +486,8 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
     }
   }
 
-  m_vertexData.SetVertices( verts.GetData(), vertCount );
-  m_vertexData.SetIndices( indices.GetData(), indexCount );
+  m_vertexData.SetVertices( verts.Data(), vertCount );
+  m_vertexData.SetIndices( indices.Data(), indexCount );
 
   aeUniformList uniforms;
   uniforms.Set( "u_uiToScreen", uiToScreen );
@@ -495,7 +497,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
   m_rectCount = 0;
 }
 
-void aeTextRender::Add( aeFloat2 pos, aeFloat2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit )
+void aeTextRender::Add( aeFloat3 pos, aeFloat2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit )
 {
   if ( m_rectCount >= kMaxTextRects )
   {

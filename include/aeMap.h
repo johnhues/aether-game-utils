@@ -39,6 +39,8 @@ class aeMap
 {
 public:
   V& Set( const K& key, const V& value );
+  V& Get( const K& key );
+  const V& Get( const K& key ) const;
   const V& Get( const K& key, const V& defaultValue ) const;
   
   V* TryGet( const K& key );
@@ -131,6 +133,18 @@ V& aeMap< K, V >::Set( const K& key, const V& value )
 }
 
 template < typename K, typename V >
+V& aeMap< K, V >::Get( const K& key )
+{
+  return m_entries[ m_FindIndex( key ) ].value;
+}
+
+template < typename K, typename V >
+const V& aeMap< K, V >::Get( const K& key ) const
+{
+  return m_entries[ m_FindIndex( key ) ].value;
+}
+
+template < typename K, typename V >
 const V& aeMap< K, V >::Get( const K& key, const V& defaultValue ) const
 {
   int32_t index = m_FindIndex( key );
@@ -169,7 +183,10 @@ bool aeMap< K, V >::TryGet( const K& key, V* valueOut ) const
   const V* val = TryGet( key );
   if ( val )
   {
-    *valueOut = *val;
+    if ( valueOut )
+    {
+      *valueOut = *val;
+    }
     return true;
   }
   return false;
