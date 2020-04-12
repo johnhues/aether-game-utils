@@ -346,6 +346,7 @@ public:
   void Destroy();
 
   void Activate();
+  void Render( aeShader* shader, const aeUniformList& uniforms );
   void Render2D( aeRect ndc, float z );
 
   uint32_t GetWidth() const { return m_width; }

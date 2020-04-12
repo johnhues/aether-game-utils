@@ -1039,6 +1039,11 @@ void aeRenderTexture::Activate()
   glViewport( 0, 0, GetWidth(), GetHeight() );
 }
 
+void aeRenderTexture::Render( aeShader* shader, const aeUniformList& uniforms )
+{
+  m_quad.Render( shader, uniforms );
+}
+
 void aeRenderTexture::Render2D( aeRect ndc, float z )
 {
   aeUniformList uniforms;
