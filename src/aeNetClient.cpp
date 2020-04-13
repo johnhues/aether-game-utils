@@ -219,7 +219,7 @@ bool AetherClient_SystemReceive( AetherClientInternal* ac, AetherServerHeader he
       AE_ASSERT( sizeof(AetherMsgConnect) == length );
       memcpy( &msg, data, length );
       
-      AetherPlayer* player = AetherClient_AddPlayer( ac, msg.uuid );
+      AetherClient_AddPlayer( ac, msg.uuid );
       infoOut->msgId = kSysMsgPlayerConnect;
       infoOut->length = 0;
       return true;
@@ -326,7 +326,8 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         SendInfo info;
         info.msgId = kSysMsgPlayerConnect;
         info.length = sizeof(AetherMsgConnect);
-        memcpy( info.data, &msg, info.length );
+//        memcpy( info.data, &msg, info.length );
+        info.data2 = &msg;
         info.reliable = true;
         AetherClient_QueueSend( _ac, &info );
         
@@ -421,23 +422,28 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
   }
 #endif
 
-  uint32_t dataLength = sizeof(AetherClientHeader) + info->length;
-  AE_ASSERT( dataLength <= kMaxMessageSize);
-  uint8_t data[ kMaxMessageSize ];
-  AetherClientHeader header;
-  header.msgId = info->msgId;
-  header.uuid = ac->pub.localPlayer->uuid;
-
-  memcpy( data, &header, sizeof(header) );
-  memcpy( data + sizeof(AetherClientHeader), info->data, info->length );
-
+	uint32_t dataLength = sizeof(AetherClientHeader) + info->length;
+	
+	AetherClientHeader header;
+	header.msgId = info->msgId;
+	header.uuid = ac->pub.localPlayer->uuid;
+	
 #ifdef __EMSCRIPTEN__
+//	AE_ASSERT( dataLength <= kMaxMessageSize);
+//	uint8_t data[ kMaxMessageSize ];
+	memcpy( data, &header, sizeof(header) );
+	memcpy( data + sizeof(AetherClientHeader), info->data, info->length );
+
   ac->priv.sock.Send( data, dataLength );
 #else
   bool reliable = info->reliable;
   uint32_t flags = reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
   int32_t channel = reliable ? kNetChannelReliable : kNetChannelUnreliable;
-  ENetPacket* p = enet_packet_create( data, dataLength, flags );
+  ENetPacket* p = enet_packet_create( nullptr, dataLength, flags );
+
+  memcpy( p->data, &header, sizeof(header) );
+  memcpy( p->data + sizeof(AetherClientHeader), info->data2, info->length );
+
   enet_peer_send( peer, channel, p );
 #endif
 }
@@ -450,12 +456,12 @@ void AetherClient_SendAll( AetherClient* _ac )
 #endif
 }
 
-void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const void* data, uint32_t length )
 {
   SendInfo info;
   info.msgId = msgId;
   info.reliable = reliable;
+  info.data2 = data;
   info.length = length;
-  memcpy( info.data, data, length );
   AetherClient_QueueSend( ac, &info );
 }

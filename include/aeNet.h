@@ -204,7 +204,7 @@ public:
 //------------------------------------------------------------------------------
 typedef uint32_t NetInstId;
 const uint32_t kMaxSyncData = 128;
-const uint32_t kMaxMessageSize = 1024 * 8;
+const uint32_t kMaxMessageSize = 4;
 typedef uint16_t AetherMsgId;
 const AetherMsgId kSysMsgMask = 1 << ( sizeof(AetherMsgId) * 8 - 1 );
 const AetherMsgId kSysMsgServerConnect = 1 | kSysMsgMask;
@@ -227,10 +227,10 @@ struct ReceiveInfo
 
 struct SendInfo
 {
-  AetherMsgId msgId;
-  uint8_t data[ kMaxMessageSize ];
-  int32_t length;
-  bool reliable;
+  AetherMsgId msgId = 0;
+  const void* data2 = nullptr;
+  int32_t length = 0;
+  bool reliable = false;
 };
 
 //------------------------------------------------------------------------------
@@ -272,7 +272,7 @@ void AetherClient_Delete( AetherClient* );
 void AetherClient_Connect( AetherClient* _ac );
 bool AetherClient_Receive( AetherClient*, ReceiveInfo* infoOut );
 void AetherClient_SendAll( AetherClient* );
-void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
+void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
 
 //------------------------------------------------------------------------------
 // Aether Server
