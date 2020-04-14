@@ -203,9 +203,8 @@ public:
 // Client / server constants
 //------------------------------------------------------------------------------
 typedef uint32_t NetInstId;
-const uint32_t kMaxSyncData = 128;
-const uint32_t kMaxMessageSize = 4;
 typedef uint16_t AetherMsgId;
+const AetherMsgId kInvalidAetherMsgId = 0;
 const AetherMsgId kSysMsgMask = 1 << ( sizeof(AetherMsgId) * 8 - 1 );
 const AetherMsgId kSysMsgServerConnect = 1 | kSysMsgMask;
 const AetherMsgId kSysMsgServerDisconnect = 2 | kSysMsgMask;
@@ -220,15 +219,14 @@ struct AetherAddress
 
 struct ReceiveInfo
 {
-  AetherMsgId msgId;
-  uint8_t data[ kMaxMessageSize ];
-  int32_t length;
+  AetherMsgId msgId = kInvalidAetherMsgId;
+  aeArray< uint8_t > data;
 };
 
 struct SendInfo
 {
-  AetherMsgId msgId = 0;
-  const void* data2 = nullptr;
+  AetherMsgId msgId = kInvalidAetherMsgId;
+  const void* data = nullptr;
   int32_t length = 0;
   bool reliable = false;
 };
@@ -254,8 +252,7 @@ struct AetherPlayer
 struct AetherClient
 {
   AetherPlayer* localPlayer;
-  AetherPlayer* allPlayers;
-  int32_t playerCount;
+  aeArray< AetherPlayer* > allPlayers; // @TODO: Shouldn't expose players directly, since they can disconnect and become invalid
   
   AetherAddress serverAddress;
   bool isConnected;
@@ -279,15 +276,14 @@ void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable,
 //------------------------------------------------------------------------------
 struct ServerReceiveInfo
 {
-  AetherMsgId msgId;
-  uint8_t data[ kMaxMessageSize ];
-  int32_t length;
-  AetherPlayer* player;
+  AetherMsgId msgId = kInvalidAetherMsgId;
+  aeArray< uint8_t > data;
+  AetherPlayer* player = nullptr;
 };
 
 struct ServerSendInfo
 {
-  AetherMsgId msgId = ~0;
+  AetherMsgId msgId = kInvalidAetherMsgId;
   bool reliable = true;
   
   AetherPlayer* player = nullptr;
@@ -296,7 +292,7 @@ struct ServerSendInfo
   void* groupFilter = nullptr;
 
   int32_t length = 0;
-  uint8_t data[ kMaxMessageSize ];
+  const void* data = nullptr;
 };
 
 struct AetherServer
@@ -315,9 +311,9 @@ void AetherServer_SendAll( AetherServer* );
 AetherPlayer* AetherServer_GetPlayerByNetInstId( AetherServer*, NetInstId id );
 uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userData, AetherPlayer* (&playersOut)[ 32 ] );
 
-void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
-void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
-void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length );
+void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
+void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
+void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
 
 //------------------------------------------------------------------------------
 // Aether Internal

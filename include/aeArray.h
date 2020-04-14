@@ -183,6 +183,8 @@ void aeArray< T >::Append( const T* values, uint32_t count )
 {
   Reserve( m_length + count );
 
+  // @TODO: Should have a separate Append() for trivially constructed types
+  //        so memcpy can be used (for large uint8 arrays etc)
   AE_ASSERT( m_size >= m_length + count );
   for ( uint32_t i = 0; i < count; i++ )
   {

@@ -72,19 +72,20 @@ int main()
 					AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
 					break;
 				}
-				default:
+				case 666:
 				{
-					char recvData[ kMaxMessageSize + 1 ];
-					AE_ASSERT( receiveInfo.length <= sizeof(recvData) );
-					memcpy( recvData, receiveInfo.data, receiveInfo.length );
-					recvData[ receiveInfo.length ] = 0;
-					AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, recvData );
-					
-					char msg[] = "pong";
-					AetherServer_QueueSendToPlayer( server, receiveInfo.player, 5, true, (uint8_t*)msg, sizeof(msg) );
-					
+					if ( receiveInfo.data.Length() )
+					{
+						AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, &receiveInfo.data[ 0 ] );
+
+						char msg[] = "pong";
+						AE_LOG( "Send (#) '#'", receiveInfo.player->uuid, msg );
+						AetherServer_QueueSendToPlayer( server, receiveInfo.player, 777, true, msg, sizeof(msg) );
+					}
 					break;
 				}
+				default:
+					break;
 			}
 		}
 		

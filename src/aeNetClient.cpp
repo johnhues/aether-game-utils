@@ -93,7 +93,6 @@ namespace
     AetherClient pub;
     struct
     {
-      std::vector<AetherPlayer> players;
 #ifdef __EMSCRIPTEN__
       EmSocket sock;
       uint8_t connBuffer[ 2048 ];
@@ -109,10 +108,10 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info );
 	
 AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid )
 {
-  int32_t playerCount = ac->pub.playerCount;
+  int32_t playerCount = ac->pub.allPlayers.Length();
   for ( int32_t i = 0; i < playerCount; i++ )
   {
-    AetherPlayer* p = ac->pub.allPlayers + i;
+    AetherPlayer* p = ac->pub.allPlayers[ i ];
     if ( memcmp( &p->uuid, &uuid, sizeof(uuid) ) == 0 ) { return p; }
   }
   
@@ -122,21 +121,18 @@ AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid 
 
 AetherPlayer* AetherClient_AddPlayer( AetherClientInternal* ac, AetherUuid uuid )
 {
-  AetherPlayer player;
-  player.uuid = uuid;
-  player.netId = 0;
-  player.userData = nullptr;
-  player.alive = true;
-  player.pendingLevel = "";
-  player.pendingLink = "";
-  player.hasPendingLevelChange = false;
+  AetherPlayer* player = aeAlloc::Allocate< AetherPlayer >();
+  player->uuid = uuid;
+  player->netId = 0;
+  player->userData = nullptr;
+  player->alive = true;
+  player->pendingLevel = "";
+  player->pendingLink = "";
+  player->hasPendingLevelChange = false;
   
-  ac->priv.players.push_back( player );
-  ac->pub.playerCount = ac->priv.players.size();
-  ac->pub.allPlayers = ac->priv.players.data();
-  ac->pub.localPlayer = ac->pub.allPlayers;
+  ac->pub.allPlayers.Append( player );
   
-  return &ac->priv.players.back();
+  return player;
 }
 
 void AetherClient_Connect( AetherClient* _ac )
@@ -174,7 +170,7 @@ AetherClient* AetherClient_New( AetherUuid uuid, const char* ip, uint16_t port )
   AE_ASSERT( ac->priv.host );
 #endif
   
-  AetherClient_AddPlayer( ac, uuid );
+  ac->pub.localPlayer = AetherClient_AddPlayer( ac, uuid );
   
   ac->pub.isConnected = false;
   ac->pub.m_isConnecting = false;
@@ -192,6 +188,12 @@ void AetherClient_Delete( AetherClient* _ac )
   {
     return;
   }
+
+  for ( uint32_t i = 0; i < ac->pub.allPlayers.Length(); i++ )
+  {
+    aeAlloc::Release( ac->pub.allPlayers[ i ] );
+  }
+  ac->pub.allPlayers.Clear();
 
 #ifndef __EMSCRIPTEN__
   ENetPeer* peer = ac->priv.host->peerCount ? ac->priv.host->peers : nullptr;
@@ -221,7 +223,6 @@ bool AetherClient_SystemReceive( AetherClientInternal* ac, AetherServerHeader he
       
       AetherClient_AddPlayer( ac, msg.uuid );
       infoOut->msgId = kSysMsgPlayerConnect;
-      infoOut->length = 0;
       return true;
     }
     default:
@@ -325,9 +326,8 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         
         SendInfo info;
         info.msgId = kSysMsgPlayerConnect;
-        info.length = sizeof(AetherMsgConnect);
-//        memcpy( info.data, &msg, info.length );
-        info.data2 = &msg;
+        info.length = sizeof( msg );
+        info.data = &msg;
         info.reliable = true;
         AetherClient_QueueSend( _ac, &info );
         
@@ -335,8 +335,6 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         ac->pub.m_isConnecting = false;
         
         infoOut->msgId = kSysMsgServerConnect;
-        // infoOut->player = ac->pub.localPlayer;
-        infoOut->length = 0;
         
         return true;
       }
@@ -344,7 +342,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
       {
         AetherServerHeader header = *(AetherServerHeader*)e.packet->data;
         uint8_t* data = e.packet->data + sizeof(header);
-        int32_t length = e.packet->dataLength - sizeof(header);
+        uint32_t length = (uint32_t)e.packet->dataLength - sizeof(header);
         
         bool success = false;
         if ( header.msgId & kSysMsgMask )
@@ -357,9 +355,8 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         else
         {
           infoOut->msgId = header.msgId;
-          // infoOut->player = nullptr;
-          infoOut->length = length;
-          memcpy( infoOut->data, data, length );
+          infoOut->data.Clear();
+          infoOut->data.Append( data, length );
           success = true;
         }
 
@@ -376,14 +373,23 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         if ( ac->pub.isConnected )
         {
           // AE_LOG( "ENET Disconnect" );
-          //TODO should free/store old client info
-          ac->pub.playerCount = 1;
+
+          AE_ASSERT( ac->pub.allPlayers.Length() );
+          AE_ASSERT( ac->pub.allPlayers[ 0 ] == ac->pub.localPlayer );
+
+          for ( uint32_t i = ac->pub.allPlayers.Length() - 1; i > 1; i-- )
+          {
+            aeAlloc::Release( ac->pub.allPlayers[ i ] );
+            ac->pub.allPlayers.Remove( i );
+          }
+          
           ac->pub.isConnected = false;
           ac->pub.m_isConnecting = false;
           
           infoOut->msgId = kSysMsgServerDisconnect;
-          // infoOut->player = 0;
-          infoOut->length = 0;
+
+          AE_ASSERT( ac->pub.allPlayers.Length() == 1 );
+          AE_ASSERT( ac->pub.allPlayers[ 0 ] == ac->pub.localPlayer );
           
           return true;
         }
@@ -408,6 +414,8 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
 
 void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
 {
+  AE_ASSERT( info->msgId != kInvalidAetherMsgId );
+
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
 #ifdef __EMSCRIPTEN__
   if ( !ac->pub.isConnected )
@@ -442,7 +450,7 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
   ENetPacket* p = enet_packet_create( nullptr, dataLength, flags );
 
   memcpy( p->data, &header, sizeof(header) );
-  memcpy( p->data + sizeof(AetherClientHeader), info->data2, info->length );
+  memcpy( p->data + sizeof(AetherClientHeader), info->data, info->length );
 
   enet_peer_send( peer, channel, p );
 #endif
@@ -461,7 +469,7 @@ void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable,
   SendInfo info;
   info.msgId = msgId;
   info.reliable = reliable;
-  info.data2 = data;
+  info.data = data;
   info.length = length;
   AetherClient_QueueSend( ac, &info );
 }

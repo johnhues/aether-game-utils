@@ -72,22 +72,22 @@ int main()
 				case kSysMsgServerDisconnect:
 					AE_LOG( "Disconnected from server" );
 					break;
+				case 777:
+					if ( receiveInfo.data.Length() )
+					{
+						AE_LOG( "Received (#) '#'", client->localPlayer->uuid, (char*)&receiveInfo.data[ 0 ] );
+					}
+					break;
 				default:
-					char recvData[ kMaxMessageSize + 1 ];
-					AE_ASSERT( receiveInfo.length <= sizeof(recvData) );
-					memcpy( recvData, receiveInfo.data, receiveInfo.length );
-					recvData[ receiveInfo.length ] = 0;
-					AE_LOG( "Received '#'", recvData );
 					break;
 			}
 		}
 
 		if ( input.GetState()->space && !input.GetPrevState()->space )
 		{
-			AE_LOG( "Send ping to server" );
-			
 			char msg[] = "ping";
-			AetherClient_QueueSend( client, 5, true, (uint8_t*)msg, sizeof(msg) );
+			AE_LOG( "Send (#) '#'", client->localPlayer->uuid, msg );
+			AetherClient_QueueSend( client, 666, true, msg, sizeof(msg) );
 		}
 
 		AetherClient_SendAll( client );

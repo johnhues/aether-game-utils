@@ -282,7 +282,6 @@ bool AetherServer_SystemReceive( AetherServerInternal* as, void** userdata, Aeth
       
       infoOut->msgId = kSysMsgPlayerConnect;
       infoOut->player = player;
-      infoOut->length = 0;
 
       
       *userdata = (void*)player;
@@ -334,8 +333,8 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
         {
           infoOut->msgId = header.msgId;
           infoOut->player = AetherServer_GetPlayer( as, header.uuid );
-          infoOut->length = length;
-          memcpy( infoOut->data, data, length );
+          infoOut->data.Clear();
+          infoOut->data.Append( data, length );
           success = true;
         }
 
@@ -361,7 +360,6 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
           
           infoOut->msgId = kSysMsgPlayerDisconnect;
           infoOut->player = player;
-          infoOut->length = 0;
           
           return true;
         }
@@ -442,6 +440,8 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
 
 void AetherServer_QueueSendInfo( AetherServer* _as, const ServerSendInfo* info )
 {
+  AE_ASSERT( info->msgId != kInvalidAetherMsgId );
+
   AetherServerInternal* as = (AetherServerInternal*)_as;
   AE_ASSERT( as );
   AE_ASSERT( as->priv.host );
@@ -451,14 +451,9 @@ void AetherServer_QueueSendInfo( AetherServer* _as, const ServerSendInfo* info )
   int32_t channel = reliable ? kNetChannelReliable : kNetChannelUnreliable;
   
   uint32_t dataLength = sizeof(AetherServerHeader) + info->length;
-  AE_ASSERT( dataLength <= kMaxMessageSize );
-  uint8_t data[ kMaxMessageSize ];
   
   AetherServerHeader header;
   header.msgId = info->msgId;
-  
-  memcpy( data, &header, sizeof(header) );
-  memcpy( data + sizeof(header), info->data, info->length );
   
   ENetPeer* peers = as->priv.host->peers;
   int32_t peerCount = as->priv.host->peerCount;
@@ -505,7 +500,10 @@ void AetherServer_QueueSendInfo( AetherServer* _as, const ServerSendInfo* info )
 
     if ( !enetPacket )
     {
-      enetPacket = enet_packet_create( data, dataLength, flags );
+      enetPacket = enet_packet_create( nullptr, dataLength, flags );
+      AE_ASSERT( enetPacket );
+      memcpy( enetPacket->data, &header, sizeof( header ) );
+      memcpy( enetPacket->data + sizeof( header ), info->data, info->length );
     }
     enet_peer_send( peers + i , channel, enetPacket );
 
@@ -517,6 +515,12 @@ void AetherServer_QueueSendInfo( AetherServer* _as, const ServerSendInfo* info )
   }
 
 #ifdef USE_WEBWOCKETS
+  AE_ASSERT( dataLength <= kMaxMessageSize );
+  uint8_t data[ kMaxMessageSize ];
+
+  memcpy( data, &header, sizeof( header ) );
+  memcpy( data + sizeof( header ), info->data, info->length );
+
   for ( uint32_t i = 0; i < webConnCount; i++ )
   {
     AetherPlayer* player = (AetherPlayer*)connections[ i ]->userdata;
@@ -598,39 +602,39 @@ uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userDat
   return count;
 }
 
-void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const void* data, uint32_t length )
 {
   ServerSendInfo info;
   info.msgId = msgId;
   info.reliable = reliable;
   info.length = length;
-  memcpy( info.data, data, length );
+  info.data = data;
   info.player = nullptr;
   info.group = nullptr;
   AetherServer_QueueSendInfo( as, &info );
 }
 
-void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const void* data, uint32_t length )
 {
   AE_ASSERT( player );
   ServerSendInfo info;
   info.msgId = msgId;
   info.reliable = reliable;
   info.length = length;
-  memcpy( info.data, data, length );
+  info.data = data;
   info.player = player;
   info.group = nullptr;
   AetherServer_QueueSendInfo( as, &info );
 }
 
-void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const uint8_t* data, uint32_t length )
+void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const void* data, uint32_t length )
 {
   AE_ASSERT( group );
   ServerSendInfo info;
   info.msgId = msgId;
   info.reliable = reliable;
   info.length = length;
-  memcpy( info.data, data, length );
+  info.data = data;
   info.player = nullptr;
   info.group = group;
   AetherServer_QueueSendInfo( as, &info );
