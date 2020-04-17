@@ -85,7 +85,10 @@ int main()
           AE_LOG( "Disconnected from server" );
           break;
         case kReplicaInfoMsg:
-          replicationClient.ReceiveData( receiveInfo.data, receiveInfo.length );
+          if ( receiveInfo.data.Length() )
+          {
+            replicationClient.ReceiveData( &receiveInfo.data[ 0 ], receiveInfo.data.Length() );
+          }
           break;
         default:
           break;
