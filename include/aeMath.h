@@ -783,12 +783,15 @@ struct aeRect
   aeRect( const aeRect& ) = default;
 
   aeRect( float x, float y, float w, float h ) : x(x), y(y), w(w), h(h) {}
+  aeRect( aeFloat2 p0, aeFloat2 p1 );
   static aeRect Zero();
 
   explicit operator aeFloat4() const { return aeFloat4( x, y, w, h ); }
   
-  aeFloat2 GetPos() const { return aeFloat2( x, y ); }
+  aeFloat2 GetMin() const { return aeFloat2( x, y ); }
+  aeFloat2 GetMax() const { return aeFloat2( x + w, y + h ); }
   aeFloat2 GetSize() const { return aeFloat2( w, h ); }
+
   bool Contains( aeFloat2 pos ) const;
   void Expand( aeFloat2 pos ); // @NOTE: Zero size rect is maintained by Expand()
   

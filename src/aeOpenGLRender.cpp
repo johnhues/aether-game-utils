@@ -834,6 +834,11 @@ aeTexture2D::aeTexture2D()
   m_hasAlpha = false;
 }
 
+aeTexture2D::~aeTexture2D()
+{
+  Destroy();
+}
+
 void aeTexture2D::Initialize( const uint8_t* data, uint32_t width, uint32_t height, uint32_t depth, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
 {
   m_width = width;
@@ -919,7 +924,10 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 void aeTexture2D::Destroy()
 {
   glDeleteTextures( 1, &m_texture );
-  *this = aeTexture2D();
+
+  m_width = 0;
+  m_height = 0;
+  m_hasAlpha = false;
 }
 
 //------------------------------------------------------------------------------
@@ -932,6 +940,11 @@ aeRenderTexture::aeRenderTexture()
 
   m_width = 0;
   m_height = 0;
+}
+
+aeRenderTexture::~aeRenderTexture()
+{
+  Destroy();
 }
 
 void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )

@@ -1757,6 +1757,31 @@ aeFloat4x4& aeFloat4x4::RotateZ( float angle )
 //------------------------------------------------------------------------------
 // aeRect member functions
 //------------------------------------------------------------------------------
+aeRect::aeRect( aeFloat2 p0, aeFloat2 p1 )
+{
+  if ( p0.x < p1.x )
+  {
+    x = p0.x;
+    w = p1.x - p0.x;
+  }
+  else
+  {
+    x = p1.x;
+    w = p0.x - p1.x;
+  }
+
+  if ( p0.y < p1.y )
+  {
+    y = p0.y;
+    h = p1.y - p0.y;
+  }
+  else
+  {
+    y = p1.y;
+    h = p0.y - p1.y;
+  }
+}
+
 aeRect aeRect::Zero()
 {
   return aeRect( 0.0f, 0.0f, 0.0f, 0.0f );

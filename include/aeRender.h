@@ -324,6 +324,7 @@ class aeTexture2D : public aeTexture
 {
 public:
   aeTexture2D();
+  ~aeTexture2D();
   // @TODO: Rename depth or change it to an alpha bool
   void Initialize( const uint8_t* data, uint32_t width, uint32_t height, uint32_t depth, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
   void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
@@ -342,6 +343,7 @@ class aeRenderTexture : public aeTexture
 {
 public:
   aeRenderTexture();
+  ~aeRenderTexture();
   void Initialize( uint32_t width, uint32_t height, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
   void Destroy();
 
