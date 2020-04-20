@@ -113,6 +113,7 @@ AE_LOG_INTERNAL( os, __VA_ARGS__ ); \
 inline void AE_ASSERT_INTERNAL()
 {
   __debugbreak();
+  // @TODO: Use __analysis_assume( someBool ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 }
 #elif _AE_EMSCRIPTEN_
 inline void AE_ASSERT_INTERNAL()
