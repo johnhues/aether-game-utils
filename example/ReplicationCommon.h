@@ -41,9 +41,10 @@ class Green
 public:
   Green()
   {
-    pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
-    size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
-    rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
+    pos = aeFloat3( 0.0f );
+    size = aeFloat3( 1.0f );
+    rotation = 0.0f;
+    life = aeMath::MaxValue< float >();
   }
 
   void Update( float dt, aeSpriteRender* spriteRender, const aeTexture2D* texture )
@@ -51,20 +52,32 @@ public:
     if ( !netData->IsAuthority() )
     {
       // Client - read net data
-      aeBinaryStream rStream = aeBinaryStream::Reader( netData->Get(), netData->Length() );
+      aeBinaryStream rStream = aeBinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
       Serialize( &rStream );
+
+      aeNetData::Msg msg;
+      if ( netData->PumpMessages( &msg ) )
+      {
+        AE_LOG( "Received Message: #", (const char*)msg.data );
+      }
     }
 
     // Update pos and rotation
     aeFloat4x4 modelToWorld = aeFloat4x4::Translation( pos );
     spriteRender->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green );
+    life -= dt;
 
     if ( netData->IsAuthority() )
     {
-    // Server - write net data
+      // Server - write net data
       aeBinaryStream wStream = aeBinaryStream::Writer();
       Serialize( &wStream );
-      netData->Set( wStream.GetData(), wStream.GetOffset() );
+      netData->SetSyncData( wStream.GetData(), wStream.GetOffset() );
+
+      const char* someMessage = "message 1";
+      netData->SendMessage( someMessage, (uint32_t)strlen( someMessage ) + 1 );
+      someMessage = "message number 2";
+      netData->SendMessage( someMessage, (uint32_t)strlen( someMessage ) + 1 );
     }
   }
 
@@ -74,11 +87,13 @@ public:
     stream->SerializeFloat( pos.y );
     stream->SerializeFloat( pos.z );
     stream->SerializeFloat( rotation );
+    stream->SerializeFloat( life );
   }
 
   aeFloat3 pos;
   aeFloat3 size;
   float rotation;
+  float life;
 
   aeRef< aeNetData > netData;
 };

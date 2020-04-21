@@ -61,32 +61,54 @@ std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
 class aeNetData
 {
 public:
+  struct Msg
+  {
+    const uint8_t* data;
+    uint32_t length;
+  };
+
+  // General
   uint32_t GetType() const { return m_type; }
   bool IsAuthority() const { return m_local; }
 	
+  // Server
+  void SetSyncData( const void* data, uint32_t length );
+  void SendMessage( const void* data, uint32_t length );
+
+  // Client
   const uint8_t* GetInitData() const;
   uint32_t InitDataLength() const;
 
-  // Server
-  void Set( const uint8_t* data, uint32_t length );
+  const uint8_t* GetSyncData() const;
+  uint32_t SyncDataLength() const;
+  void ClearSyncData(); // Call to clear local received data. Check ( Length() > 0 ) for new data.
 
-  // Client
-  const uint8_t* Get() const;
-  uint32_t Length() const;
-  void Clear(); // Call to clear local received data. Check ( Length() > 0 ) for new data.
+  bool PumpMessages( Msg* msgOut );
 
-  // @TODO: The following should be private while still allowing aeNetReplicaClient to set initData etc on creation.
-// private:
+  bool IsPendingDelete() const;
+
+private:
+  // @TODO: Expose internals in a safer way
+  friend class aeNetReplicaClient;
+  friend class aeNetReplicaServer;
+  friend class aeNetReplicaDB;
+
+  void m_SetLocal() { m_local = true; }
+  void m_SetClientData( const uint8_t* data, uint32_t length );
+  void m_AppendMessages( const uint8_t* data, uint32_t length );
+  void FlagForDeletion() { m_isPendingDelete = true; }
+
   bool m_local = false;
   uint32_t m_type = 0;
   aeArray< uint8_t > m_initData;
   aeArray< uint8_t > m_data;
+  aeArray< uint8_t > m_messageData;
+  uint32_t m_messageDataOffset = 0;
+  bool m_isPendingDelete = false;
 public:
   // Internal
   aeNetData( uint32_t type ) { m_type = type; }
   AE_REFABLE( aeNetData );
-  void m_SetLocal() { m_local = true; }
-  void m_SetClientData( const uint8_t* data, uint32_t length );
 };
 
 //------------------------------------------------------------------------------
@@ -95,14 +117,18 @@ public:
 class aeNetReplicaClient
 {
 public:
-  void ReceiveData( const uint8_t* data, uint32_t length ); // Handle raw data from server
-  aeRef< aeNetData > PumpCreated(); // Call this repeatedly until no net data is returned
+  // The following sequence should be performed each frame
+  void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
+  aeRef< aeNetData > PumpCreated(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
+  // 3) Handle new sync data with aeNetData::GetSyncData() and process incoming messages with aeNetData::PumpMessages()
+  void DestroyPending(); // 4) Destroy all objects flagged for destruction (call once)
 
 private:
   void m_CreateNetData( aeBinaryStream* rStream );
   aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;
   aeMap< uint32_t, aeId< aeNetData > > m_remoteToLocalIdMap;
   aeArray< aeRef< aeNetData > > m_created;
+  aeArray< aeRef< aeNetData > > m_destroyed;
 };
 
 //------------------------------------------------------------------------------
@@ -111,12 +137,13 @@ private:
 class aeNetReplicaServer
 {
 public:
-  void UpdateSendData(); // Call this right before getting send data and length
-  const uint8_t* GetSendData() const; // Call UpdateSendData() first
-  uint32_t GetSendLength() const; // Call UpdateSendData() first
+  const uint8_t* GetSendData() const; // Call aeNetReplicaDB::UpdateSendData() first
+  uint32_t GetSendLength() const; // Call aeNetReplicaDB::UpdateSendData() first
 
 public:
-  class aeNetReplicaDB* m_owner = nullptr;
+  void m_UpdateSendData();
+
+  class aeNetReplicaDB* m_replicaDB = nullptr;
   bool m_pendingClear = false;
   aeArray< uint8_t > m_sendData;
   // Internal
@@ -125,7 +152,8 @@ public:
     Connect,
     Create,
     Destroy,
-    Update
+    Update,
+    Messages
   };
 };
 
@@ -140,6 +168,8 @@ public:
 
   aeNetReplicaServer* CreateServer();
   void DestroyServer( aeNetReplicaServer* server );
+
+  void UpdateSendData(); // Call each frame before aeNetReplicaServer::GetSendData()
 
 private:
   aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;

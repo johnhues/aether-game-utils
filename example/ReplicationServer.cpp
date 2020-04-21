@@ -63,7 +63,7 @@ int main()
   spriteRender.Initialize( 32 );
   uint8_t texInfo[] = { 255, 255, 255 };
   texture.Initialize( texInfo, 1, 1, 3, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
-  timeStep.SetTimeStep( 1.0f / 60.0f );
+  timeStep.SetTimeStep( 1.0f / 10.0f );
 
   // Server modules
   AetherServer* server = AetherServer_New( 3500, 0 );
@@ -72,9 +72,16 @@ int main()
 
   // Game data
   aeArray< Green > greens;
-  greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
-  greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
-  greens.Append( Green() ).netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
+  auto AddGreen = [ &greens, &replicaDB ]()
+  {
+    Green* green = &greens.Append( Green() );
+    green->pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
+    green->size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
+    green->rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
+    green->life = 5.0f + aeMath::Random( 0.7f, 1.3f );
+    green->netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
+  };
+  AddGreen();
 
   while ( !input.GetState()->exit )
   {
@@ -117,15 +124,25 @@ int main()
     {
       greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture );
     }
+
+    // Destroy dead objects
+    auto findDeadFn = []( const Green& object ){ return object.life <= 0.0f; };
+    for ( int32_t index = greens.FindFn( findDeadFn ); index >= 0; index = greens.FindFn( findDeadFn ) )
+    {
+      replicaDB.DestroyNetData( greens[ index ].netData );
+      greens.Remove( index );
+      
+      AddGreen();
+    }
     
     // Send replication data
-    for ( uint32_t i = 0; i < server->playerCount; i++ )
+    replicaDB.UpdateSendData();
+    for ( int32_t i = 0; i < server->playerCount; i++ )
     {
       AetherPlayer* player = server->allPlayers[ i ];
       aeNetReplicaServer* replicaServer = nullptr;
       if ( replicaServers.TryGet( player->uuid, &replicaServer ) )
       {
-        replicaServer->UpdateSendData();
         AetherServer_QueueSendToPlayer( server, player, kReplicaInfoMsg, true, replicaServer->GetSendData(), replicaServer->GetSendLength() );
       }
     }
