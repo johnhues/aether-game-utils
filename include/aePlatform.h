@@ -91,12 +91,14 @@
 //------------------------------------------------------------------------------
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <iostream>
 #include <sstream>
 #include <functional>
@@ -107,12 +109,21 @@
 //------------------------------------------------------------------------------
 // Utils
 //------------------------------------------------------------------------------
-#if _AE_LINUX_
-#define AE_ALIGN( _x ) __attribute__ ((aligned(_x)))
-//#elif _AE_WINDOWS_
-//#define AE_ALIGN( _x ) __declspec(align(_x)) // Windows doesn't support aligned function parameters
+#if _AE_WINDOWS_
+  #define aeAssert() __debugbreak()
+#elif _AE_EMSCRIPTEN_
+  // @TODO: Handle asserts with emscripten builds
+  #define aeAssert()
 #else
-#define AE_ALIGN( _x )
+  #define aeAssert() asm( "int $3" )
+#endif
+
+#if _AE_LINUX_
+  #define AE_ALIGN( _x ) __attribute__ ((aligned(_x)))
+//#elif _AE_WINDOWS_
+  //#define AE_ALIGN( _x ) __declspec(align(_x)) // Windows doesn't support aligned function parameters
+#else
+  #define AE_ALIGN( _x )
 #endif
 
 template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];

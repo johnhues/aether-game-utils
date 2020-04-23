@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// example.cpp
+// 00_HelloWorld.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -23,45 +23,18 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeClock.h"
-#include "aeInput.h"
 #include "aeLog.h"
-#include "aeRender.h"
-#include "aeWindow.h"
 
 //------------------------------------------------------------------------------
-// main
+// Main
 //------------------------------------------------------------------------------
 int main()
 {
-	AE_LOG( "Initialize" );
+  AE_TRACE( "Hello World" );
+  AE_DEBUG( "Hello World" );
+  AE_INFO( "Hello World" );
+  AE_WARN( "Hello World" );
+  AE_ERR( "Hello World" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
-	
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "example" );
-	render.InitializeOpenGL( &window, 400, 300 );
-	render.SetClearColor( aeColor::Red );
-	input.Initialize( &window, &render );
-	
-	aeFixedTimeStep timeStep;
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-
-	while ( !input.GetState()->exit )
-	{
-		input.Pump();
-		render.StartFrame();
-		render.EndFrame();
-		timeStep.Wait();
-	}
-
-	AE_LOG( "Terminate" );
-
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
+  return 0;
 }

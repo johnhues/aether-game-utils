@@ -71,7 +71,7 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
     uint32_t vertCount = mesh->mNumVertices;
     uint32_t uvCount = aeMath::Min( mesh->GetNumUVChannels(), countof(aeMeshVertex::tex) );
     uint32_t colorCount = aeMath::Min( mesh->GetNumColorChannels(), countof(aeMeshVertex::color) );
-    AE_LOGD( "Submesh: vertCount # uvCount # colorCount #", vertCount, uvCount, colorCount );
+    AE_DEBUG( "Submesh: vertCount # uvCount # colorCount #", vertCount, uvCount, colorCount );
 
     for ( uint32_t j = 0; j < vertCount; j++ )
     {

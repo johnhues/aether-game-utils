@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// ReplicationCommon.h
+// aeLog.hpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,66 +21,70 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef REPLICATIONCOMMON_H
-#define REPLICATIONCOMMON_H
+// Log levels
+//------------------------------------------------------------------------------
+#define _AE_LOG_TRACE_ 0
+#define _AE_LOG_DEBUG_ 1
+#define _AE_LOG_INFO_ 2
+#define _AE_LOG_WARN_ 3
+#define _AE_LOG_ERROR_ 4
+#define _AE_LOG_FATAL_ 5
+
+extern const char* aeLogLevelNames[ 6 ];
 
 //------------------------------------------------------------------------------
-// Constants
+// Log colors
 //------------------------------------------------------------------------------
-const uint32_t kReplicaInfoMsg = 1;
-
-const uint32_t kReplicaType_Red = 0;
-const uint32_t kReplicaType_Green = 1;
-const uint32_t kReplicaType_Blue = 2;
-
-//------------------------------------------------------------------------------
-// Green class
-//------------------------------------------------------------------------------
-class Green
-{
-public:
-  Green()
-  {
-    pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
-    size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
-    rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
-  }
-
-  void Update( float dt, aeSpriteRender* spriteRender, const aeTexture2D* texture )
-  {
-    if ( !netData->IsAuthority() )
-    {
-      // Client - read net data
-      aeBinaryStream rStream = aeBinaryStream::Reader( netData->Get(), netData->Length() );
-      Serialize( &rStream );
-    }
-
-    // Update pos and rotation
-    aeFloat4x4 modelToWorld = aeFloat4x4::Translation( pos );
-    spriteRender->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green );
-
-    if ( netData->IsAuthority() )
-    {
-    // Server - write net data
-      aeBinaryStream wStream = aeBinaryStream::Writer();
-      Serialize( &wStream );
-      netData->Set( wStream.GetData(), wStream.GetOffset() );
-    }
-  }
-
-  void Serialize( aeBinaryStream* stream )
-  {
-    stream->SerializeFloat( pos.x );
-    stream->SerializeFloat( pos.y );
-    stream->SerializeFloat( pos.z );
-    stream->SerializeFloat( rotation );
-  }
-
-  aeFloat3 pos;
-  aeFloat3 size;
-  float rotation;
-
-  aeRef< aeNetData > netData;
-};
-
+#if _AE_WINDOWS_
+#define _AE_LOG_COLORS_ false
+#else
+#define _AE_LOG_COLORS_ true
+extern const char* aeLogLevelColors[ 6 ];
 #endif
+
+//------------------------------------------------------------------------------
+// Platform specific logging
+//------------------------------------------------------------------------------
+void aeLogInternal( std::stringstream& os, const char* message );
+void aeLogHost( std::stringstream& os );
+
+//------------------------------------------------------------------------------
+// Internal Logging functions
+//------------------------------------------------------------------------------
+void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
+
+template < typename T, typename... Args >
+void aeLogInternal( std::stringstream& os, const char* format, T value, Args... args )
+{
+  if ( !*format )
+  {
+    os << std::endl;
+    return;
+  }
+  
+  const char* head = format;
+  while ( *head && *head != '#' )
+  {
+    head++;
+  }
+  if ( head > format )
+  {
+    os.write( format, head - format );
+  }
+
+  if ( *head == '#' )
+  {
+    os << value;
+    head++;
+  }
+
+  aeLogInternal( os, head, args... );
+}
+
+template < typename... Args >
+void aeLogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
+{
+  std::stringstream os;
+  aeLogFormat( os, severity, filePath, line, assertInfo, format );
+  aeLogInternal( os, format, args... );
+}

@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// server.cpp
+// 02_Sprites.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -26,7 +26,6 @@
 #include "aeClock.h"
 #include "aeInput.h"
 #include "aeLog.h"
-#include "aeNet.h"
 #include "aeRender.h"
 #include "aeWindow.h"
 
@@ -40,67 +39,53 @@ int main()
 	aeWindow window;
 	aeRender render;
 	aeInput input;
-	AetherServer* server;
+	aeSpriteRender spriteRender;
 	
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "server" );
+	window.SetTitle( "sprites" );
 	render.InitializeOpenGL( &window, 400, 300 );
 	render.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &render );
-	server = AetherServer_New( 3500, 0 );
+	spriteRender.Initialize( 16 );
+	spriteRender.SetDepthTest( true );
+	spriteRender.SetDepthWrite( true );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
+	aeTexture2D tex;
+	uint8_t texData[] = { 255, 255, 255 };
+	tex.Initialize( texData, 1, 1, 3, aeTextureFilter::Linear, aeTextureWrap::Repeat );
+
+	float scale = 5.0f;
+	aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
+
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		AetherServer_Update( server );
-		
-		ServerReceiveInfo receiveInfo;
-		while ( AetherServer_Receive( server, &receiveInfo ) )
-		{
-			switch ( receiveInfo.msgId )
-			{
-				case kSysMsgPlayerConnect:
-				{
-					AE_LOG( "Player # connected", receiveInfo.player->uuid );
-					break;
-				}
-				case kSysMsgPlayerDisconnect:
-				{
-					AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
-					break;
-				}
-				case 666:
-				{
-					if ( receiveInfo.data.Length() )
-					{
-						AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, &receiveInfo.data[ 0 ] );
-
-						char msg[] = "pong";
-						AE_LOG( "Send (#) '#'", receiveInfo.player->uuid, msg );
-						AetherServer_QueueSendToPlayer( server, receiveInfo.player, 777, true, msg, sizeof(msg) );
-					}
-					break;
-				}
-				default:
-					break;
-			}
-		}
-		
-		AetherServer_SendAll( server );
-
 		render.StartFrame();
-		render.EndFrame();
+		spriteRender.Clear();
 
+		aeFloat4x4 transform;
+
+		transform = aeFloat4x4::Translation( aeFloat3( 0.5f, 0.5f, -0.5f ) );
+		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue );
+
+		transform = aeFloat4x4::Translation( aeFloat3( -0.5f, -0.5f, 0.5f ) );
+		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue );
+
+		transform = aeFloat4x4::Scaling(  aeFloat3( 1.0f, 1.0f, 0.5f ) );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::White );
+
+		spriteRender.Render( screenTransform );
+		render.EndFrame();
 		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );
 
-	AetherServer_Delete( server );
-	server = nullptr;
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();

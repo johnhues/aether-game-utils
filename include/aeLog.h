@@ -1,6 +1,5 @@
 //------------------------------------------------------------------------------
 // aeLog.h
-// Logging functionality
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -29,158 +28,32 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aePlatform.h"
+#include "aeLog.hpp"
 
 //------------------------------------------------------------------------------
-// Log functions
+// Logging functions
 //------------------------------------------------------------------------------
-#if _AE_WINDOWS_
-void AE_LOG_INTERNAL( std::stringstream& os, const char* format );
-#else
-inline void AE_LOG_INTERNAL( std::stringstream& os, const char* format )
-{
-  std::cout << os.str() << format << std::endl;
-}
-#endif
+#define AE_TRACE(...) aeLogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_DEBUG(...) aeLogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_LOG(...) aeLogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_INFO(...) aeLogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_WARN(...) aeLogInternal( _AE_LOG_WARN_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_ERR(...) aeLogInternal( _AE_LOG_ERROR_, __FILE__, __LINE__, "", __VA_ARGS__ )
 
-template < typename T, typename... Args >
-inline void AE_LOG_INTERNAL( std::stringstream& os, const char* format, T value, Args... args )
-{
-  if ( !*format )
-  {
-    os << std::endl;
-    return;
-  }
-  
-  const char* head = format;
-  while ( *head && *head != '#' )
-  {
-    head++;
-  }
-  if ( head > format )
-  {
-    os.write( format, head - format );
-  }
+//------------------------------------------------------------------------------
+// Assertion functions
+//------------------------------------------------------------------------------
+// @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
+#define AE_ASSERT( _x ) do { if ( !(_x) ) { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
+#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
+#define AE_FAIL() do { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert(); } while (0)
+#define AE_FAIL_MSG( ... ) do { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert(); } while (0)
 
-  if ( *head == '#' )
-  {
-    os << value;
-    head++;
-  }
-  AE_LOG_INTERNAL( os, head, args... );
-}
-
-#define AE_LOG(...) \
-do { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << _file << ":" << __LINE__ << " Info: "; \
-AE_LOG_INTERNAL( os, __VA_ARGS__ ); \
-} while (0)
-
-#if _AE_DEBUG_
-#define AE_LOGD(...) \
-do { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << _file << ":" << __LINE__ << " Debug: "; \
-AE_LOG_INTERNAL( os, __VA_ARGS__ ); \
-} while (0)
-#else
-#define AE_LOGD(...)
-#endif
-
-#define AE_LOGI(...) \
-do { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << _file << ":" << __LINE__ << " Info: "; \
-AE_LOG_INTERNAL( os, __VA_ARGS__ ); \
-} while (0)
-
-#define AE_LOGW(...) \
-do { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << "" << _file << ":" << __LINE__ << " \033[1;33mWarning:\033[0m "; \
-AE_LOG_INTERNAL( os, __VA_ARGS__ ); \
-} while (0)
-
-#if _AE_WINDOWS_
-inline void AE_ASSERT_INTERNAL()
-{
-  __debugbreak();
-  // @TODO: Use __analysis_assume( someBool ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
-}
-#elif _AE_EMSCRIPTEN_
-inline void AE_ASSERT_INTERNAL()
-{
-  // @TODO: Handle asserts with emscripten builds
-}
-#else
-inline void AE_ASSERT_INTERNAL()
-{
-  asm( "int $3" );
-}
-#endif
-
-#define AE_ASSERT( x ) \
-do { if ( !(x) ) { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << _file << ":" << __LINE__ << " Assert( " << #x << " )" << std::endl; \
-AE_LOG_INTERNAL( os, "" ); \
-AE_ASSERT_INTERNAL(); \
-}} while (0)
-
-#define AE_ASSERT_MSG( x, ... ) \
-do { if ( !(x) ) { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << _file << ":" << __LINE__ << " Assert( " << #x << " ): "; \
-AE_LOG_INTERNAL( os, __VA_ARGS__ ); \
-AE_ASSERT_INTERNAL(); \
-}} while (0)
-
-#define AE_FAIL() \
-do { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << _file << ":" << __LINE__ << " Error" << std::endl; \
-AE_LOG_INTERNAL( os, "" ); \
-AE_ASSERT_INTERNAL(); \
-} while (0)
-
-#define AE_FAIL_MSG( ... ) \
-do { \
-std::stringstream os; \
-const char* _file = strrchr( __FILE__, '/' ); \
-_file = _file ? _file + 1 : __FILE__; \
-os << _file << ":" << __LINE__ << " Error: "; \
-AE_LOG_INTERNAL( os, __VA_ARGS__ ); \
-AE_ASSERT_INTERNAL(); \
-} while (0)
-
+//------------------------------------------------------------------------------
+// Static assertion functions
+//------------------------------------------------------------------------------
 #define AE_STATIC_ASSERT( _x ) static_assert( _x, "static assert" )
 #define AE_STATIC_ASSERT_MSG( _x, _m ) static_assert( _x, _m )
 #define AE_STATIC_FAIL( _m ) static_assert( 0, _m )
-
-#if _AE_WINDOWS_
-#define AE_WARNING( _m )
-#elif _AE_APPLE_
-#define AE_WARNING( _m )
-#elif _AE_LINUX_
-#define AE_WARNING( _m )
-#elif _AE_EMSCRIPTEN_
-#define AE_WARNING( _m )
-#else
-#define AE_WARNING( _m ) #warning _m
-#endif
 
 #endif

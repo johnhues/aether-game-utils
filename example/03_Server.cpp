@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// client.cpp
+// 03_Server.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -40,14 +40,14 @@ int main()
 	aeWindow window;
 	aeRender render;
 	aeInput input;
-	AetherClient* client;
+	AetherServer* server;
 	
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "client" );
+	window.SetTitle( "server" );
 	render.InitializeOpenGL( &window, 400, 300 );
 	render.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &render );
-	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
+	server = AetherServer_New( 3500, 0 );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -55,42 +55,41 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		if ( !client->IsConnected() && !client->IsConnecting() )
-		{
-			AE_LOG( "Connecting to server" );
-			AetherClient_Connect( client );
-		}
+		AetherServer_Update( server );
 		
-		ReceiveInfo receiveInfo;
-		while ( AetherClient_Receive( client, &receiveInfo ) )
+		ServerReceiveInfo receiveInfo;
+		while ( AetherServer_Receive( server, &receiveInfo ) )
 		{
 			switch ( receiveInfo.msgId )
 			{
-				case kSysMsgServerConnect:
-					AE_LOG( "Connected to server" );
+				case kSysMsgPlayerConnect:
+				{
+					AE_LOG( "Player # connected", receiveInfo.player->uuid );
 					break;
-				case kSysMsgServerDisconnect:
-					AE_LOG( "Disconnected from server" );
+				}
+				case kSysMsgPlayerDisconnect:
+				{
+					AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
 					break;
-				case 777:
+				}
+				case 666:
+				{
 					if ( receiveInfo.data.Length() )
 					{
-						AE_LOG( "Received (#) '#'", client->localPlayer->uuid, (char*)&receiveInfo.data[ 0 ] );
+						AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, &receiveInfo.data[ 0 ] );
+
+						char msg[] = "pong";
+						AE_LOG( "Send (#) '#'", receiveInfo.player->uuid, msg );
+						AetherServer_QueueSendToPlayer( server, receiveInfo.player, 777, true, msg, sizeof(msg) );
 					}
 					break;
+				}
 				default:
 					break;
 			}
 		}
-
-		if ( input.GetState()->space && !input.GetPrevState()->space )
-		{
-			char msg[] = "ping";
-			AE_LOG( "Send (#) '#'", client->localPlayer->uuid, msg );
-			AetherClient_QueueSend( client, 666, true, msg, sizeof(msg) );
-		}
-
-		AetherClient_SendAll( client );
+		
+		AetherServer_SendAll( server );
 
 		render.StartFrame();
 		render.EndFrame();
@@ -100,8 +99,8 @@ int main()
 
 	AE_LOG( "Terminate" );
 
-	AetherClient_Delete( client );
-	client = nullptr;
+	AetherServer_Delete( server );
+	server = nullptr;
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();

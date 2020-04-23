@@ -57,6 +57,7 @@ set(AE_HEADER_FILES
 	../include/aeInventoryGrid.h
 	../include/aeList.h
 	../include/aeLog.h
+	../include/aeLog.hpp
 	../include/aeMap.h
 	../include/aeMath.h
 	../include/aeMesh.h

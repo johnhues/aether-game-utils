@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// sprites.cpp
+// 03_Client.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -26,6 +26,7 @@
 #include "aeClock.h"
 #include "aeInput.h"
 #include "aeLog.h"
+#include "aeNet.h"
 #include "aeRender.h"
 #include "aeWindow.h"
 
@@ -39,53 +40,68 @@ int main()
 	aeWindow window;
 	aeRender render;
 	aeInput input;
-	aeSpriteRender spriteRender;
+	AetherClient* client;
 	
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "sprites" );
+	window.SetTitle( "client" );
 	render.InitializeOpenGL( &window, 400, 300 );
 	render.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &render );
-	spriteRender.Initialize( 16 );
-	spriteRender.SetDepthTest( true );
-	spriteRender.SetDepthWrite( true );
+	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	aeTexture2D tex;
-	uint8_t texData[] = { 255, 255, 255 };
-	tex.Initialize( texData, 1, 1, 3, aeTextureFilter::Linear, aeTextureWrap::Repeat );
-
-	float scale = 5.0f;
-	aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
-
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
+		if ( !client->IsConnected() && !client->IsConnecting() )
+		{
+			AE_LOG( "Connecting to server" );
+			AetherClient_Connect( client );
+		}
+		
+		ReceiveInfo receiveInfo;
+		while ( AetherClient_Receive( client, &receiveInfo ) )
+		{
+			switch ( receiveInfo.msgId )
+			{
+				case kSysMsgServerConnect:
+					AE_LOG( "Connected to server" );
+					break;
+				case kSysMsgServerDisconnect:
+					AE_LOG( "Disconnected from server" );
+					break;
+				case 777:
+					if ( receiveInfo.data.Length() )
+					{
+						AE_LOG( "Received (#) '#'", client->localPlayer->uuid, (char*)&receiveInfo.data[ 0 ] );
+					}
+					break;
+				default:
+					break;
+			}
+		}
+
+		if ( input.GetState()->space && !input.GetPrevState()->space )
+		{
+			char msg[] = "ping";
+			AE_LOG( "Send (#) '#'", client->localPlayer->uuid, msg );
+			AetherClient_QueueSend( client, 666, true, msg, sizeof(msg) );
+		}
+
+		AetherClient_SendAll( client );
+
 		render.StartFrame();
-		spriteRender.Clear();
-
-		aeFloat4x4 transform;
-
-		transform = aeFloat4x4::Translation( aeFloat3( 0.5f, 0.5f, -0.5f ) );
-		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue );
-
-		transform = aeFloat4x4::Translation( aeFloat3( -0.5f, -0.5f, 0.5f ) );
-		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue );
-
-		transform = aeFloat4x4::Scaling(  aeFloat3( 1.0f, 1.0f, 0.5f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::White );
-
-		spriteRender.Render( screenTransform );
 		render.EndFrame();
+
 		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );
 
+	AetherClient_Delete( client );
+	client = nullptr;
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();
