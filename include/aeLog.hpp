@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeLog.h
+// aeLog.hpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,39 +21,70 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AELOG_H
-#define AELOG_H
+// Log levels
+//------------------------------------------------------------------------------
+#define _AE_LOG_TRACE_ 0
+#define _AE_LOG_DEBUG_ 1
+#define _AE_LOG_INFO_ 2
+#define _AE_LOG_WARN_ 3
+#define _AE_LOG_ERROR_ 4
+#define _AE_LOG_FATAL_ 5
+
+extern const char* aeLogLevelNames[ 6 ];
 
 //------------------------------------------------------------------------------
-// Headers
+// Log colors
 //------------------------------------------------------------------------------
-#include "aePlatform.h"
-#include "aeLog.hpp"
-
-//------------------------------------------------------------------------------
-// Logging functions
-//------------------------------------------------------------------------------
-#define AE_TRACE(...) aeLogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_DEBUG(...) aeLogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_LOG(...) aeLogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_INFO(...) aeLogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_WARN(...) aeLogInternal( _AE_LOG_WARN_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_ERR(...) aeLogInternal( _AE_LOG_ERROR_, __FILE__, __LINE__, "", __VA_ARGS__ )
-
-//------------------------------------------------------------------------------
-// Assertion functions
-//------------------------------------------------------------------------------
-// @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
-#define AE_ASSERT( _x ) do { if ( !(_x) ) { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
-#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
-#define AE_FAIL() do { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert(); } while (0)
-#define AE_FAIL_MSG( ... ) do { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert(); } while (0)
-
-//------------------------------------------------------------------------------
-// Static assertion functions
-//------------------------------------------------------------------------------
-#define AE_STATIC_ASSERT( _x ) static_assert( _x, "static assert" )
-#define AE_STATIC_ASSERT_MSG( _x, _m ) static_assert( _x, _m )
-#define AE_STATIC_FAIL( _m ) static_assert( 0, _m )
-
+#if _AE_WINDOWS_
+#define _AE_LOG_COLORS_ false
+#else
+#define _AE_LOG_COLORS_ true
+extern const char* aeLogLevelColors[ 6 ];
 #endif
+
+//------------------------------------------------------------------------------
+// Platform specific logging
+//------------------------------------------------------------------------------
+void aeLogInternal( std::stringstream& os, const char* message );
+void aeLogHost( std::stringstream& os );
+
+//------------------------------------------------------------------------------
+// Internal Logging functions
+//------------------------------------------------------------------------------
+void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
+
+template < typename T, typename... Args >
+void aeLogInternal( std::stringstream& os, const char* format, T value, Args... args )
+{
+  if ( !*format )
+  {
+    os << std::endl;
+    return;
+  }
+  
+  const char* head = format;
+  while ( *head && *head != '#' )
+  {
+    head++;
+  }
+  if ( head > format )
+  {
+    os.write( format, head - format );
+  }
+
+  if ( *head == '#' )
+  {
+    os << value;
+    head++;
+  }
+
+  aeLogInternal( os, head, args... );
+}
+
+template < typename... Args >
+void aeLogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
+{
+  std::stringstream os;
+  aeLogFormat( os, severity, filePath, line, assertInfo, format );
+  aeLogInternal( os, format, args... );
+}
