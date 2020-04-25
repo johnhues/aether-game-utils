@@ -8,6 +8,7 @@ add_library(${AE_LIBRARY_NAME} STATIC "")
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
+		${AE_DEPS_LIBRARY_INCLUDE_DIRS}
 		${PROJECT_SOURCE_DIR}/src
 	PUBLIC
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> # for headers when building
@@ -19,11 +20,6 @@ configure_file(
 	${PROJECT_SOURCE_DIR}/cmake/config.h.in
 	${PROJECT_BINARY_DIR}/config.h
 )
-
-# dependency include directories
-include_directories(${AE_DEPS_LIBRARY_INCLUDE_DIRS})
-# dependency linking
-target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # build dependencies
 if(AE_BUILD_DEPS)
@@ -40,6 +36,15 @@ if(AE_BUILD_DEPS)
 		add_dependencies(${AE_LIBRARY_NAME} SDL2)
 	endif()
 endif()
+
+# dependency linking
+# @TODO: Static libraries are always marked public so they can be linked directly
+#        by the final executable. This means that any downloaded dependent libraries
+#        should also be installed.
+target_link_libraries(${AE_LIBRARY_NAME}
+	PRIVATE
+		${AE_DEPS_LIBARARIES}
+)
 
 # source files
 set(AE_HEADER_FILES
