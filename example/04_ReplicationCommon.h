@@ -56,7 +56,7 @@ public:
       Serialize( &rStream );
 
       aeNetData::Msg msg;
-      if ( netData->PumpMessages( &msg ) )
+      while ( netData->PumpMessages( &msg ) )
       {
         AE_LOG( "Received Message: #", (const char*)msg.data );
       }

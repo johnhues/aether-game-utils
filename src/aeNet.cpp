@@ -80,6 +80,7 @@ bool aeNetData::PumpMessages( Msg* msgOut )
   }
   else if ( !msgOut )
   {
+    // Early out
     return true;
   }
 
