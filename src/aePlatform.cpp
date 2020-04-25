@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeLog.hpp
+// aePlatform.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,65 +21,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-// Log levels
+// Headers
 //------------------------------------------------------------------------------
-#define _AE_LOG_TRACE_ 0
-#define _AE_LOG_DEBUG_ 1
-#define _AE_LOG_INFO_ 2
-#define _AE_LOG_WARN_ 3
-#define _AE_LOG_ERROR_ 4
-#define _AE_LOG_FATAL_ 5
-
-extern const char* aeLogLevelNames[ 6 ];
-
-//------------------------------------------------------------------------------
-// Log colors
-//------------------------------------------------------------------------------
-#if _AE_WINDOWS_ || _AE_APPLE_
-#define _AE_LOG_COLORS_ false
+#include "aePlatform.h"
+#if _AE_WINDOWS_
+  #define WIN32_LEAN_AND_MEAN
+  #include "Windows.h"
+  #include "processthreadsapi.h"
 #else
-#define _AE_LOG_COLORS_ true
-extern const char* aeLogLevelColors[ 6 ];
+#include <unistd.h>
 #endif
 
 //------------------------------------------------------------------------------
-// Internal Logging functions
+// Utilities
 //------------------------------------------------------------------------------
-void aeLogInternal( std::stringstream& os, const char* message );
-void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
-
-template < typename T, typename... Args >
-void aeLogInternal( std::stringstream& os, const char* format, T value, Args... args )
+uint32_t aeGetPID()
 {
-  if ( !*format )
-  {
-    os << std::endl;
-    return;
-  }
-  
-  const char* head = format;
-  while ( *head && *head != '#' )
-  {
-    head++;
-  }
-  if ( head > format )
-  {
-    os.write( format, head - format );
-  }
-
-  if ( *head == '#' )
-  {
-    os << value;
-    head++;
-  }
-
-  aeLogInternal( os, head, args... );
-}
-
-template < typename... Args >
-void aeLogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
-{
-  std::stringstream os;
-  aeLogFormat( os, severity, filePath, line, assertInfo, format );
-  aeLogInternal( os, format, args... );
+#if _AE_WINDOWS_
+	return GetCurrentProcessId();
+#else
+	return getpid();
+#endif
 }

@@ -97,6 +97,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeNetClient.cpp
 		aeNetServer.cpp
 		aeOpenGLRender.cpp
+		aePlatform.cpp
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp
