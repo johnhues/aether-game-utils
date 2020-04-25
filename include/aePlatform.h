@@ -174,6 +174,8 @@ const char* aeGetTypeName()
   return typeName;
 }
 
+uint32_t aeGetPID();
+
 #define AE_EXPORT extern "C"
 
 // From: https://stackoverflow.com/questions/18547251/when-i-use-strlcpy-function-in-c-the-compilor-give-me-an-error

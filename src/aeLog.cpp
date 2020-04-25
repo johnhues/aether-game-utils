@@ -29,7 +29,6 @@
 #if _AE_WINDOWS_
   #define WIN32_LEAN_AND_MEAN
   #include "Windows.h"
-  #include "processthreadsapi.h"
 #endif
 
 //------------------------------------------------------------------------------
@@ -61,15 +60,9 @@ const char* aeLogLevelColors[] =
 #endif
 
 //------------------------------------------------------------------------------
-// Platform specific logging
+// Internal Logging functions
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-void aeLogHost( std::stringstream& os )
-{
-  // @TODO: Also print process name https://stackoverflow.com/questions/4570174/how-to-get-the-process-name-in-c
-  os << " [" << GetCurrentProcessId() << "] ";
-}
-
 void aeLogInternal( std::stringstream& os, const char* message )
 {
   os << message << std::endl;
@@ -80,16 +73,8 @@ void aeLogInternal( std::stringstream& os, const char* message )
 {
   std::cout << os.str() << message << std::endl;
 }
-
-void aeLogHost( std::stringstream& os )
-{
-  os << " ";
-}
 #endif
 
-//------------------------------------------------------------------------------
-// Internal Logging functions
-//------------------------------------------------------------------------------
 void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format )
 {
   char timeBuf[ 16 ];
@@ -106,12 +91,12 @@ void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath
 
 #if _AE_LOG_COLORS_
   os << "\x1b[90m" << timeBuf;
-  aeLogHost( os );
+  os << " [" << aeGetPID() << "] ";
   os << aeLogLevelColors[ severity ] << aeLogLevelNames[ severity ];
   os << " \x1b[90m" << fileName << ":" << line;
 #else
   os << timeBuf;
-  aeLogHost( os );
+  os << " [" << aeGetPID() << "] ";
   os << aeLogLevelNames[ severity ];
   os << " " << fileName << ":" << line;
 #endif
