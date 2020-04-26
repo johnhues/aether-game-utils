@@ -25,9 +25,9 @@
 //------------------------------------------------------------------------------
 #include "aeVfs.h"
 #include "SDL.h"
-#if _AE_APPLE_
-  #include <CoreFoundation/CoreFoundation.h>
-#endif
+// #if _AE_APPLE_
+//   #include <CoreFoundation/CoreFoundation.h>
+// #endif
 
 void aeVfs::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
@@ -98,18 +98,16 @@ uint32_t aeVfs::Write( Root root, const char* fileName, const void* buffer, uint
 
 uint32_t aeVfs::GetSize( const char* fileDir )
 {
-#if _AE_APPLE_
-  CFStringRef fileDirIn = CFStringCreateWithCString( kCFAllocatorDefault, fileDir, kCFStringEncodingUTF8 );
-  CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), fileDirIn, nullptr, nullptr );
-  if ( !appUrl )
-  {
-    CFRelease( fileDirIn );
-    return 0;
-  }
-  
-  CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
-  fileDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
-#endif
+// #if _AE_APPLE_
+//   CFStringRef fileDirIn = CFStringCreateWithCString( kCFAllocatorDefault, fileDir, kCFStringEncodingUTF8 );
+//   CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), fileDirIn, nullptr, nullptr );
+//   CFStringRef bundlePath = nullptr;
+//   if ( appUrl )
+//   {
+//     bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+//     fileDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+//   }
+// #endif
   
   uint32_t fileSize = 0;
   if ( FILE* file = fopen( fileDir, "rb" ) )
@@ -119,29 +117,27 @@ uint32_t aeVfs::GetSize( const char* fileDir )
     fclose( file );
   }
   
-#if _AE_APPLE_
-  CFRelease( bundlePath );
-  CFRelease( appUrl );
-  CFRelease( fileDirIn );
-#endif
+// #if _AE_APPLE_
+//   if ( bundlePath ) { CFRelease( bundlePath ); }
+//   if ( appUrl ) { CFRelease( appUrl ); }
+//   CFRelease( fileDirIn );
+// #endif
   
   return fileSize;
 }
 
 uint32_t aeVfs::Read( const char* fileDir, void* buffer, uint32_t bufferSize )
 {
-#if _AE_APPLE_
-  CFStringRef fileDirIn = CFStringCreateWithCString( kCFAllocatorDefault, fileDir, kCFStringEncodingUTF8 );
-  CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), fileDirIn, nullptr, nullptr );
-  if ( !appUrl )
-  {
-    CFRelease( fileDirIn );
-    return 0;
-  }
-  
-  CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
-  fileDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
-#endif
+// #if _AE_APPLE_
+//   CFStringRef fileDirIn = CFStringCreateWithCString( kCFAllocatorDefault, fileDir, kCFStringEncodingUTF8 );
+//   CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), fileDirIn, nullptr, nullptr );
+//   CFStringRef bundlePath = nullptr;
+//   if ( appUrl )
+//   {
+//     CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+//     fileDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+//   }
+// #endif
 
   uint32_t fileSize = 0;
   
@@ -160,11 +156,11 @@ uint32_t aeVfs::Read( const char* fileDir, void* buffer, uint32_t bufferSize )
     fclose( file );
   }
   
-#if _AE_APPLE_
-  CFRelease( appUrl );
-  CFRelease( bundlePath );
-  CFRelease( fileDirIn );
-#endif
+// #if _AE_APPLE_
+//   if ( bundlePath ) { CFRelease( bundlePath ); }
+//   if ( appUrl ) { CFRelease( appUrl ); }
+//   CFRelease( fileDirIn );
+// #endif
 
   return fileSize;
 }
