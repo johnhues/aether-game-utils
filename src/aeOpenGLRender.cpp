@@ -353,6 +353,8 @@ void aeVertexData::Render( const aeShader* shader, const aeUniformList& uniforms
 
 void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms )
 {
+  AE_ASSERT( shader );
+  
   if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
   {
     return;

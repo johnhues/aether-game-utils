@@ -25,6 +25,9 @@
 //------------------------------------------------------------------------------
 #include "aeVfs.h"
 #include "SDL.h"
+#if _AE_APPLE_
+  #include <CoreFoundation/CoreFoundation.h>
+#endif
 
 void aeVfs::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
@@ -95,40 +98,73 @@ uint32_t aeVfs::Write( Root root, const char* fileName, const void* buffer, uint
 
 uint32_t aeVfs::GetSize( const char* fileDir )
 {
-  FILE* file = fopen( fileDir, "rb" );
-  if ( !file )
+#if _AE_APPLE_
+  CFStringRef fileDirIn = CFStringCreateWithCString( kCFAllocatorDefault, fileDir, kCFStringEncodingUTF8 );
+  CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), fileDirIn, nullptr, nullptr );
+  if ( !appUrl )
   {
+    CFRelease( fileDirIn );
     return 0;
   }
-
-  fseek( file, 0, SEEK_END );
-  uint32_t fileSize = (uint32_t)ftell( file );
-  fclose( file );
-
+  
+  CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+  fileDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+#endif
+  
+  uint32_t fileSize = 0;
+  if ( FILE* file = fopen( fileDir, "rb" ) )
+  {
+    fseek( file, 0, SEEK_END );
+    fileSize = (uint32_t)ftell( file );
+    fclose( file );
+  }
+  
+#if _AE_APPLE_
+  CFRelease( bundlePath );
+  CFRelease( appUrl );
+  CFRelease( fileDirIn );
+#endif
+  
   return fileSize;
 }
 
 uint32_t aeVfs::Read( const char* fileDir, void* buffer, uint32_t bufferSize )
 {
-  FILE* file = fopen( fileDir, "rb" );
-  if ( !file )
+#if _AE_APPLE_
+  CFStringRef fileDirIn = CFStringCreateWithCString( kCFAllocatorDefault, fileDir, kCFStringEncodingUTF8 );
+  CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), fileDirIn, nullptr, nullptr );
+  if ( !appUrl )
   {
+    CFRelease( fileDirIn );
     return 0;
   }
+  
+  CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+  fileDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+#endif
 
-  fseek( file, 0, SEEK_END );
-  uint32_t fileSize = (uint32_t)ftell( file );
-  fseek( file, 0, SEEK_SET );
-
-  if ( fileSize > bufferSize )
+  uint32_t fileSize = 0;
+  
+  if ( FILE* file = fopen( fileDir, "rb" ) )
   {
+    fseek( file, 0, SEEK_END );
+    fileSize = (uint32_t)ftell( file );
+    fseek( file, 0, SEEK_SET );
+
+    if ( fileSize <= bufferSize )
+    {
+      size_t readLen = fread( buffer, sizeof(uint8_t), fileSize, file );
+      AE_ASSERT( readLen == fileSize );
+    }
+
     fclose( file );
-    return 0;
   }
-
-  size_t readLen = fread( buffer, sizeof(uint8_t), fileSize, file );
-  AE_ASSERT( readLen == fileSize );
-  fclose( file );
+  
+#if _AE_APPLE_
+  CFRelease( appUrl );
+  CFRelease( bundlePath );
+  CFRelease( fileDirIn );
+#endif
 
   return fileSize;
 }

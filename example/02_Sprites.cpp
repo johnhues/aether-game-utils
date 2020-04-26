@@ -47,15 +47,16 @@ int main()
 	render.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &render );
 	spriteRender.Initialize( 16 );
-	spriteRender.SetDepthTest( true );
+	spriteRender.SetBlending( true );
+  spriteRender.SetDepthTest( true );
 	spriteRender.SetDepthWrite( true );
+  spriteRender.SetSorting( true );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	aeTexture2D tex;
-	uint8_t texData[] = { 255, 255, 255 };
-	tex.Initialize( texData, 1, 1, 3, aeTextureFilter::Linear, aeTextureWrap::Repeat );
+	tex.Initialize( "circle.png", aeTextureFilter::Linear, aeTextureWrap::Repeat );
 
 	float scale = 5.0f;
 	aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );

@@ -215,6 +215,15 @@ aeSpriteRender::aeSpriteRender()
   m_count = 0;
   m_maxCount = 0;
   m_sprites = nullptr;
+  
+  m_shaderAll = nullptr;
+  m_shaderOpaque = nullptr;
+  m_shaderTransparent = nullptr;
+  
+  m_blending = false;
+  m_depthTest = false;
+  m_depthWrite = false;
+  m_sorting = false;
 }
 
 void aeSpriteRender::Initialize( uint32_t maxCount )
@@ -242,34 +251,28 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
     indices[ i * aeQuadIndexCount + 5 ] = i * aeQuadVertCount + aeQuadIndices[ 5 ];
   }
   m_vertexData.SetIndices( indices, m_maxCount * aeQuadIndexCount );
-
-  const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
-    AE_IN_HIGHP vec3 a_position;\
-    AE_IN_HIGHP vec2 a_uv;\
-    AE_IN_HIGHP vec4 a_color;\
-    AE_OUT_HIGHP vec2 v_uv;\
-    AE_OUT_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      v_uv = a_uv;\
-      v_color = a_color;\
-      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
-    }";
-  const char* fragStr = "\
-    uniform sampler2D u_tex;\
-    AE_IN_HIGHP vec2 v_uv;\
-    AE_IN_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      AE_COLOR = AE_RGBA_TO_SRGBA( AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color );\
-    }";
-  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
 void aeSpriteRender::Destroy()
 {
-  m_shader.Destroy();
+  if ( m_shaderAll )
+  {
+    aeAlloc::Release( m_shaderAll );
+    m_shaderAll = nullptr;
+  }
+  
+  if ( m_shaderOpaque )
+  {
+    aeAlloc::Release( m_shaderOpaque );
+    m_shaderOpaque = nullptr;
+  }
+  
+  if ( m_shaderTransparent )
+  {
+    aeAlloc::Release( m_shaderTransparent );
+    m_shaderTransparent = nullptr;
+  }
+  
   m_vertexData.Destroy();
   
   aeAlloc::Release( m_sprites );
@@ -277,6 +280,63 @@ void aeSpriteRender::Destroy()
 }
 
 void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
+{
+  if ( m_count == 0 )
+  {
+    return;
+  }
+  
+  if ( m_sorting )
+  {
+    aeFloat3 cameraView = worldToScreen.GetRowVector( 2 ).GetXYZ();
+    for ( uint32_t i = 0; i < m_count; i++ )
+    {
+      m_sprites[ i ].sort = cameraView.Dot( m_sprites[ i ].transform.GetTranslation() );
+    }
+
+    auto sortFn = []( const Sprite& a, const Sprite& b ) -> bool
+    {
+      return a.sort > b.sort;
+    };
+    std::sort( m_sprites, m_sprites + m_count, sortFn );
+  }
+  
+  if ( m_depthWrite && m_blending )
+  {
+    if ( !m_shaderOpaque )
+    {
+      m_LoadShaderOpaque();
+      m_shaderOpaque->SetDepthWrite( true );
+    }
+    if ( !m_shaderTransparent )
+    {
+      m_LoadShaderTransparent();
+      m_shaderTransparent->SetBlending( true );
+    }
+    
+    m_shaderOpaque->SetDepthTest( m_depthTest );
+    m_shaderTransparent->SetDepthTest( m_depthTest );
+    
+    m_Render( worldToScreen, m_shaderOpaque );
+    m_Render( worldToScreen, m_shaderTransparent );
+  }
+  else
+  {
+    if ( !m_shaderAll )
+    {
+      m_LoadShaderAll();
+    }
+    
+    m_shaderAll->SetDepthTest( m_depthTest );
+    m_shaderAll->SetBlending( m_blending );
+    
+    m_Render( worldToScreen, m_shaderAll );
+  }
+  
+  Clear();
+}
+
+void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader )
 {
   for ( uint32_t i = 0; i < m_textures.Length(); i++ )
   {
@@ -319,23 +379,26 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
     uniforms.Set( "u_worldToScreen", worldToScreen );
     uniforms.Set( "u_tex", texture );
 
-    m_vertexData.Render( &m_shader, m_count * 2, uniforms );
+    m_vertexData.Render( shader, m_count * 2, uniforms );
   }
-
-  Clear();
 }
 
 void aeSpriteRender::SetBlending( bool enabled )
 {
-  m_shader.SetBlending( enabled );
+  m_blending = enabled;
 }
 void aeSpriteRender::SetDepthTest( bool enabled )
 {
-  m_shader.SetDepthTest( enabled );
+  m_depthTest = enabled;
 }
 void aeSpriteRender::SetDepthWrite( bool enabled )
 {
-  m_shader.SetDepthWrite( enabled );
+  m_depthWrite = enabled;
+}
+
+void aeSpriteRender::SetSorting( bool enabled )
+{
+  m_sorting = enabled;
 }
 
 void aeSpriteRender::AddSprite( const aeTexture2D* texture, aeFloat4x4 transform, aeFloat2 uvMin, aeFloat2 uvMax, aeColor color )
@@ -355,6 +418,7 @@ void aeSpriteRender::AddSprite( const aeTexture2D* texture, aeFloat4x4 transform
     sprite->uvMax = uvMax;
     sprite->color = color;
     sprite->textureId = texture->GetTexture();
+    sprite->sort = 0.0f;
     m_count++;
 
     m_textures.Set( texture, 0 );
@@ -365,6 +429,109 @@ void aeSpriteRender::Clear()
 {
   m_count = 0;
   m_textures.Clear();
+}
+
+void aeSpriteRender::m_LoadShaderAll()
+{
+  if ( m_shaderAll )
+  {
+    return;
+  }
+  
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec2 a_uv;\
+    AE_IN_HIGHP vec4 a_color;\
+    AE_OUT_HIGHP vec2 v_uv;\
+    AE_OUT_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      v_uv = a_uv;\
+      v_color = a_color;\
+      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      AE_COLOR = AE_RGBA_TO_SRGBA( AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color );\
+    }";
+  
+  m_shaderAll = aeAlloc::Allocate< aeShader >();
+  m_shaderAll->Initialize( vertexStr, fragStr, nullptr, 0 );
+}
+
+void aeSpriteRender::m_LoadShaderOpaque()
+{
+  if ( m_shaderOpaque )
+  {
+    return;
+  }
+  
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec2 a_uv;\
+    AE_IN_HIGHP vec4 a_color;\
+    AE_OUT_HIGHP vec2 v_uv;\
+    AE_OUT_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      v_uv = a_uv;\
+      v_color = a_color;\
+      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      vec4 color = AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color;\
+      if ( color.a < 1.0 ) { discard; }\
+      AE_COLOR = AE_RGBA_TO_SRGBA( color );\
+    }";
+  
+  m_shaderOpaque = aeAlloc::Allocate< aeShader >();
+  m_shaderOpaque->Initialize( vertexStr, fragStr, nullptr, 0 );
+}
+
+void aeSpriteRender::m_LoadShaderTransparent()
+{
+  if ( m_shaderTransparent )
+  {
+    return;
+  }
+  
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec2 a_uv;\
+    AE_IN_HIGHP vec4 a_color;\
+    AE_OUT_HIGHP vec2 v_uv;\
+    AE_OUT_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      v_uv = a_uv;\
+      v_color = a_color;\
+      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      vec4 color = AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color;\
+      if ( color.a >= 1.0 ) { discard; }\
+      AE_COLOR = AE_RGBA_TO_SRGBA( color );\
+    }";
+  
+  m_shaderTransparent = aeAlloc::Allocate< aeShader >();
+  m_shaderTransparent->Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
 //------------------------------------------------------------------------------

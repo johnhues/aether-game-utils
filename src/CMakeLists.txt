@@ -110,11 +110,15 @@ target_sources(${AE_LIBRARY_NAME}
 )
 
 # ae lib installation
-install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION "${AE_INSTALL_DIR}/include")
-install(
-	FILES ${PROJECT_SOURCE_DIR}/cmake/Config.cmake.in
-	RENAME ${AE_LIBRARY_NAME}Config.cmake
-	DESTINATION "${AE_INSTALL_DIR}"
-)
-install(EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
+# @TODO: Disable this for now when using Xcode. Xcode needs admin privileges to run this
+#        install logic, preventing the examples from being bundled.
+if(NOT "${CMAKE_GENERATOR}" STREQUAL "Xcode")
+	install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
+	install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION "${AE_INSTALL_DIR}/include")
+	install(
+		FILES ${PROJECT_SOURCE_DIR}/cmake/Config.cmake.in
+		RENAME ${AE_LIBRARY_NAME}Config.cmake
+		DESTINATION "${AE_INSTALL_DIR}"
+	)
+	install(EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
+endif()

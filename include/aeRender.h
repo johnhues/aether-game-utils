@@ -388,12 +388,18 @@ public:
   void SetBlending( bool enabled );
   void SetDepthTest( bool enabled );
   void SetDepthWrite( bool enabled );
+  void SetSorting( bool enabled );
 
   // @NOTE: Each sprite is also transformed by the Render( worldToScreen ) above
   void AddSprite( const aeTexture2D* texture, aeFloat4x4 transform, aeFloat2 uvMin, aeFloat2 uvMax, aeColor color );
   void Clear();
 
 private:
+  void m_Render( const aeFloat4x4& worldToScreen, aeShader* shader );
+  void m_LoadShaderAll();
+  void m_LoadShaderOpaque();
+  void m_LoadShaderTransparent();
+  
   struct Vertex
   {
     aeFloat3 pos;
@@ -408,14 +414,22 @@ private:
     aeFloat2 uvMax;
     aeColor color;
     uint32_t textureId;
+    float sort;
   };
 
   uint32_t m_count;
   uint32_t m_maxCount;
   Sprite* m_sprites;
   aeVertexData m_vertexData;
-  aeShader m_shader;
+  aeShader* m_shaderAll;
+  aeShader* m_shaderOpaque;
+  aeShader* m_shaderTransparent;
   aeMap< const aeTexture2D*, uint32_t > m_textures;
+  
+  bool m_blending;
+  bool m_depthTest;
+  bool m_depthWrite;
+  bool m_sorting;
 };
 
 //------------------------------------------------------------------------------
