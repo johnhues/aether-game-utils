@@ -122,10 +122,8 @@ SET PATH=%PATH%;C:\Program Files\CMake\bin;
 You may need to individually copy and paste the following commands as cmake may prevent later commands from running.
 ```
 git clone https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
-mkdir C:\temp\aether-game-utils\build
-cd C:\temp\aether-game-utils\build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=C:\Library ..
-cmake --build . --config Debug --target INSTALL
+mkdir C:\temp\aether-game-utils\build && cd C:\temp\aether-game-utils\build
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=C:\Library .. && cmake --build . --config Debug --target INSTALL
 ```
 If successful you should see the installed library files in `C:\Library\ae`. You can safely delete `C:\temp\aether-game-utils` without affecting the installed library.
 
