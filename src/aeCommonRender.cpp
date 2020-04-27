@@ -491,7 +491,7 @@ void aeSpriteRender::m_LoadShaderOpaque()
     void main()\
     {\
       vec4 color = AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color;\
-      if ( color.a < 1.0 ) { discard; }\
+      if ( color.a < 0.99 ) { discard; }\
       AE_COLOR = AE_RGBA_TO_SRGBA( color );\
     }";
   
@@ -526,7 +526,7 @@ void aeSpriteRender::m_LoadShaderTransparent()
     void main()\
     {\
       vec4 color = AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color;\
-      if ( color.a >= 1.0 ) { discard; }\
+      if ( color.a >= 0.99 ) { discard; }\
       AE_COLOR = AE_RGBA_TO_SRGBA( color );\
     }";
   
