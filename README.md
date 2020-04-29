@@ -119,12 +119,13 @@ Depending on your environment you may need to append your cmake directory to you
 ```
 SET PATH=%PATH%;C:\Program Files\CMake\bin;
 ```
-You may need to individually copy and paste the following commands as cmake may prevent later commands from running.
+You may need to individually copy and paste the following commands as cmake can cause strange behavior when multiple commands are strung together.
 ```
 git clone https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
 mkdir C:\temp\aether-game-utils\build && cd C:\temp\aether-game-utils\build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=C:\Library .. && cmake --build . --config Debug --target INSTALL
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\Library ..
+cmake --build . --config Release --target INSTALL
 ```
-If successful you should see the installed library files in `C:\Library\ae`. You can safely delete `C:\temp\aether-game-utils` without affecting the installed library.
+~~If successful you should see the installed library files in `C:\Library\ae`. You can safely delete `C:\temp\aether-game-utils` without affecting the installed library.~~ Currently the install step does not copy dependent static libraries, and so built dependencies are referenced when linking the final executable.
 
 Optional: CMake can automatically locate aeLib with an environment variable. A new environment variable `CMAKE_PREFIX_PATH` can be added with the value `C:\Library\ae`.
