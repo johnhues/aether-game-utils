@@ -110,3 +110,22 @@ void aeWindow::SetFullScreen( bool fullScreen )
     m_fullScreen = fullScreen;
   }
 }
+
+void aeWindow::SetPosition( aeInt2 pos )
+{
+  if ( window )
+  {
+    SDL_SetWindowPosition( (SDL_Window*)window, pos.x, pos.y );
+    m_pos = pos;
+  }
+}
+
+void aeWindow::SetSize( uint32_t width, uint32_t height )
+{
+  if ( window )
+  {
+    SDL_SetWindowSize( (SDL_Window*)window, width, height );
+    m_width = width;
+    m_height = height;
+  }
+}

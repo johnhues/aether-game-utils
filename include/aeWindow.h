@@ -43,24 +43,26 @@ public:
 
   void SetTitle( const char* title );
   void SetFullScreen( bool fullScreen );
+  void SetPosition( aeInt2 pos );
+  void SetSize( uint32_t width, uint32_t height );
 
-  aeInt2 GetPos() const { return m_pos; }
+  aeInt2 GetPosition() const { return m_pos; }
   int32_t GetWidth() const { return m_width; }
   int32_t GetHeight() const { return m_height; }
   bool GetFullScreen() const { return m_fullScreen; }
 
-  void UpdatePos( aeInt2 pos ) { m_pos = pos; }
-  void UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
-
-  void* window;
-
 private:
-  void m_Initialize();
-
   aeInt2 m_pos;
   int32_t m_width;
   int32_t m_height;
   bool m_fullScreen;
+
+public:
+  // Internal
+  void m_UpdatePos( aeInt2 pos ) { m_pos = pos; }
+  void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
+
+  void* window;
 };
 
 #endif

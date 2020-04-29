@@ -251,11 +251,11 @@ void aeInput::Pump()
 
       if ( event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
       {
-        m_window->UpdateWidthHeight( event.window.data1, event.window.data2 );
+        m_window->m_UpdateWidthHeight( event.window.data1, event.window.data2 );
       }
       else if ( event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
       {
-        m_window->UpdatePos( aeInt2( event.window.data1, event.window.data2 ) );
+        m_window->m_UpdatePos( aeInt2( event.window.data1, event.window.data2 ) );
       }
       else if ( event.type == SDL_MOUSEMOTION )
       {
