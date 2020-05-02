@@ -8,6 +8,9 @@ Modules and utilities include:
 * C++ reflection
 * Data structures
 * Allocation
+* Server / client utilities
+* Networked object synchronization
+* Serialization
 * Frame rate control and timing
 * Logging
 
