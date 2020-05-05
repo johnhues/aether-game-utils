@@ -95,15 +95,18 @@ private:
 
   void m_SetLocal() { m_local = true; }
   void m_SetClientData( const uint8_t* data, uint32_t length );
-  void m_AppendMessages( const uint8_t* data, uint32_t length );
+  void m_ReceiveMessages( const uint8_t* data, uint32_t length );
   void FlagForDeletion() { m_isPendingDelete = true; }
 
   bool m_local = false;
   uint32_t m_type = 0;
   aeArray< uint8_t > m_initData;
   aeArray< uint8_t > m_data;
-  aeArray< uint8_t > m_messageData;
-  uint32_t m_messageDataOffset = 0;
+
+  aeArray< uint8_t > m_messageDataOut;
+  aeArray< uint8_t > m_messageDataIn;
+  uint32_t m_messageDataInOffset = 0;
+
   bool m_isPendingDelete = false;
 public:
   // Internal
@@ -331,7 +334,7 @@ struct AetherServer
   int32_t playerCount;
 };
 
-AetherServer* AetherServer_New( uint16_t port, uint16_t webPort );
+AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPlayers );
 void AetherServer_Delete( AetherServer* );
 void AetherServer_Update( AetherServer* );
 

@@ -101,7 +101,7 @@ AetherPlayer* AetherServer_AddPlayer( AetherServerInternal* as, AetherUuid uuid 
   return player;
 }
 
-AetherServer* AetherServer_New( uint16_t port, uint16_t webPort )
+AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPlayers )
 {
   enet_initialize();
   AetherServerInternal* as = new AetherServerInternal();
@@ -109,7 +109,7 @@ AetherServer* AetherServer_New( uint16_t port, uint16_t webPort )
   ENetAddress hostAddress;
   hostAddress.host = ENET_HOST_ANY;
   hostAddress.port = port;
-  as->priv.host = enet_host_create( &hostAddress, 8, 2, 0, 0 );
+  as->priv.host = enet_host_create( &hostAddress, maxPlayers, 2, 0, 0 );
   AE_ASSERT( as->priv.host );
   
   as->pub.playerCount = 0;
