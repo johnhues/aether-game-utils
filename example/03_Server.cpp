@@ -47,7 +47,7 @@ int main()
 	render.InitializeOpenGL( &window, 400, 300 );
 	render.SetClearColor( aeColor::Red );
 	input.Initialize( &window, &render );
-	server = AetherServer_New( 3500, 0 );
+	server = AetherServer_New( 3500, 0, 1 );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );

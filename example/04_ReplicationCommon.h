@@ -25,6 +25,11 @@
 #define REPLICATIONCOMMON_H
 
 //------------------------------------------------------------------------------
+// Headers
+//------------------------------------------------------------------------------
+#include "aeBinaryStream.h"
+
+//------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
 const uint32_t kReplicaInfoMsg = 1;
@@ -32,6 +37,18 @@ const uint32_t kReplicaInfoMsg = 1;
 const uint32_t kReplicaType_Red = 0;
 const uint32_t kReplicaType_Green = 1;
 const uint32_t kReplicaType_Blue = 2;
+
+struct ChangeColorRPC
+{
+  void Serialize( aeBinaryStream* stream )
+  {
+    stream->SerializeFloat( color.r );
+    stream->SerializeFloat( color.g );
+    stream->SerializeFloat( color.b );
+    stream->SerializeFloat( color.a );
+  }
+  aeColor color;
+};
 
 //------------------------------------------------------------------------------
 // Green class
@@ -45,9 +62,11 @@ public:
     size = aeFloat3( 1.0f );
     rotation = 0.0f;
     life = aeMath::MaxValue< float >();
+
+    m_color = aeColor::Green;
   }
 
-  void Update( float dt, aeSpriteRender* spriteRender, const aeTexture2D* texture )
+  void Update( float dt, aeSpriteRender* spriteRender, const aeTexture2D* texture, aeInput* input )
   {
     if ( !netData->IsAuthority() )
     {
@@ -60,11 +79,30 @@ public:
       {
         AE_LOG( "Received Message: #", (const char*)msg.data );
       }
+
+      if ( input->GetState()->space && !input->GetPrevState()->space )
+      {
+        aeColor colors[] =
+        {
+          aeColor::White,
+          aeColor::White,
+          aeColor::Red,
+          aeColor::Blue,
+          aeColor::Orange,
+          aeColor::Gray
+        };
+
+        ChangeColorRPC rpc;
+        rpc.color = colors[ aeMath::Random( 0, countof(colors) ) ];
+
+        aeBinaryStream wStream = aeBinaryStream::Writer();
+        wStream.SerializeObject( rpc );
+        netData->SendMessage( wStream.GetData(), wStream.GetOffset() );
+      }
     }
 
     // Update pos and rotation
     aeFloat4x4 modelToWorld = aeFloat4x4::Translation( pos );
-    spriteRender->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green );
     life -= dt;
 
     if ( netData->IsAuthority() )
@@ -78,7 +116,19 @@ public:
       netData->SendMessage( someMessage, (uint32_t)strlen( someMessage ) + 1 );
       someMessage = "message number 2";
       netData->SendMessage( someMessage, (uint32_t)strlen( someMessage ) + 1 );
+
+      aeNetData::Msg msg;
+      while ( netData->PumpMessages( &msg ) )
+      {
+        ChangeColorRPC rpc;
+        aeBinaryStream rStream = aeBinaryStream::Reader( msg.data, msg.length );
+        rStream.SerializeObject( rpc );
+
+        m_color = rpc.color;
+      }
     }
+
+    spriteRender->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), m_color );
   }
 
   void Serialize( aeBinaryStream* stream )
@@ -96,6 +146,9 @@ public:
   float life;
 
   aeRef< aeNetData > netData;
+
+private:
+  aeColor m_color;
 };
 
 #endif

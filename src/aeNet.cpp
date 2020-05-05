@@ -37,11 +37,10 @@ void aeNetData::SetSyncData( const void* data, uint32_t length )
 
 void aeNetData::SendMessage( const void* data, uint32_t length )
 {
-  AE_ASSERT_MSG( IsAuthority(), "Cannot send NetData messages from client." );
   uint16_t lengthU16 = length;
-  m_messageData.Reserve( m_messageData.Length() + sizeof( lengthU16 ) + length );
-  m_messageData.Append( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
-  m_messageData.Append( (const uint8_t*)data, length );
+  m_messageDataOut.Reserve( m_messageDataOut.Length() + sizeof( lengthU16 ) + length );
+  m_messageDataOut.Append( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
+  m_messageDataOut.Append( (const uint8_t*)data, length );
 }
 
 const uint8_t* aeNetData::GetInitData() const
@@ -71,11 +70,9 @@ void aeNetData::ClearSyncData()
 
 bool aeNetData::PumpMessages( Msg* msgOut )
 {
-  AE_ASSERT_MSG( !IsAuthority(), "Cannot read NetData messages from server." );
-
-  if ( m_messageDataOffset >= m_messageData.Length() )
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
   {
-    AE_ASSERT( m_messageDataOffset == m_messageData.Length() );
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
     return false;
   }
   else if ( !msgOut )
@@ -84,20 +81,20 @@ bool aeNetData::PumpMessages( Msg* msgOut )
     return true;
   }
 
-  // Write out message data
-  msgOut->length = *(uint16_t*)&m_messageData[ m_messageDataOffset ];
-  m_messageDataOffset += sizeof( uint16_t );
+  // Write out incoming message data
+  msgOut->length = *(uint16_t*)&m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += sizeof( uint16_t );
 
-  msgOut->data = &m_messageData[ m_messageDataOffset ];
-  m_messageDataOffset += msgOut->length;
+  msgOut->data = &m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += msgOut->length;
 
-  if ( m_messageDataOffset >= m_messageData.Length() )
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
   {
-    AE_ASSERT( m_messageDataOffset == m_messageData.Length() );
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
 
     // Clear messages once they've all been read
-    m_messageDataOffset = 0;
-    m_messageData.Clear();
+    m_messageDataInOffset = 0;
+    m_messageDataIn.Clear();
   }
 
   return true;
@@ -114,9 +111,9 @@ void aeNetData::m_SetClientData( const uint8_t* data, uint32_t length )
   m_data.Append( data, length );
 }
 
-void aeNetData::m_AppendMessages( const uint8_t* data, uint32_t length )
+void aeNetData::m_ReceiveMessages( const uint8_t* data, uint32_t length )
 {
-  m_messageData.Append( data, length );
+  m_messageDataIn.Append( data, length );
 }
 
 //------------------------------------------------------------------------------
@@ -225,7 +222,7 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
           {
             if ( rStream.GetRemaining() >= dataLen )
             {
-              netData->m_AppendMessages( rStream.PeakData(), dataLen );
+              netData->m_ReceiveMessages( rStream.PeakData(), dataLen );
             }
             else
             {
@@ -311,7 +308,7 @@ void aeNetReplicaServer::m_UpdateSendData()
     {
       netDataSyncCount++;
     }
-    if ( netData->m_messageData.Length() )
+    if ( netData->m_messageDataOut.Length() )
     {
       netDataMessageCount++;
     }
@@ -342,11 +339,11 @@ void aeNetReplicaServer::m_UpdateSendData()
     for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
     {
       aeNetData* netData = m_replicaDB->GetNetData( i );
-      if ( netData->m_messageData.Length() )
+      if ( netData->m_messageDataOut.Length() )
       {
         wStream.SerializeUint32( netData->GetId().GetInternalId() );
-        wStream.SerializeUint32( netData->m_messageData.Length() );
-        wStream.SerializeRaw( &netData->m_messageData[ 0 ], netData->m_messageData.Length() );
+        wStream.SerializeUint32( netData->m_messageDataOut.Length() );
+        wStream.SerializeRaw( &netData->m_messageDataOut[ 0 ], netData->m_messageDataOut.Length() );
       }
     }
   }
@@ -465,7 +462,7 @@ void aeNetReplicaDB::UpdateSendData()
 
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {
-    m_netDatas.GetValue( i )->m_messageData.Clear();
+    m_netDatas.GetValue( i )->m_messageDataOut.Clear();
   }
 }
 

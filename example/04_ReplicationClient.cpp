@@ -113,7 +113,7 @@ int main()
     // Game Update
     for ( uint32_t i = 0; i < greens.Length(); i++ )
     {
-      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture );
+      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture, &input );
     }
     
     // Remove objects that no longer have replication data

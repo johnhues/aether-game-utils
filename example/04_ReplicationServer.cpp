@@ -66,7 +66,7 @@ int main()
   timeStep.SetTimeStep( 1.0f / 10.0f );
 
   // Server modules
-  AetherServer* server = AetherServer_New( 3500, 0 );
+  AetherServer* server = AetherServer_New( 3500, 0, 1 );
   aeNetReplicaDB replicaDB;
   aeMap< AetherUuid, aeNetReplicaServer* > replicaServers;
 
@@ -122,7 +122,7 @@ int main()
     // Game Update
     for ( uint32_t i = 0; i < greens.Length(); i++ )
     {
-      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture );
+      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture, &input );
     }
 
     // Destroy dead objects
