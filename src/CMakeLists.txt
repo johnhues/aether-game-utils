@@ -112,7 +112,7 @@ target_sources(${AE_LIBRARY_NAME}
 
 # ae lib installation
 # @TODO: Disable this for now when using Xcode. Xcode needs admin privileges to run this
-#        install logic, preventing the examples from being bundled and run at all.
+#        install logic, preventing the examples from being bundled and running at all.
 if(NOT "${CMAKE_GENERATOR}" STREQUAL "Xcode")
 	install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
 	install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION "${AE_INSTALL_DIR}/include")

@@ -26,14 +26,14 @@ if(APPLE)
 endif()
 
 # find dependencies
-include(FindOpenGL)
-include(FindOpenAL)
+find_package(OpenGL REQUIRED)
 if (NOT AE_BUILD_DEPS)
-	include(FindPNG)
-	include(FindSDL2)
-	include(Findassimp)
-	include(FindEnet)
-	include(Finduuid)
+	find_package(OpenAL REQUIRED)
+	find_package(PNG REQUIRED)
+	find_package(SDL2 REQUIRED)
+	find_package(assimp REQUIRED)
+	find_package(Enet REQUIRED)
+	find_package(uuid REQUIRED)
 
 	# @HACK: This should be found by the above, or the following variable names should be fixed
 	set(ASSIMP_LIBRARY_DIRS /usr/local/Cellar/assimp/5.0.1/lib)
@@ -131,7 +131,7 @@ else()
 	)
 	set(ASSIMP_INCLUDE_DIRS ${AE_ASSIMP_INSTALL}/include)
 	set(ASSIMP_LIBRARY_DIRS ${AE_ASSIMP_INSTALL}/lib)
-	set(ASSIMP_LIBRARY 
+	set(ASSIMP_LIBRARIES 
 		optimized ${ASSIMP_LIBRARY_DIRS}/assimp-vc${MSVC_TOOLSET_VERSION}-mt.lib
 		debug ${ASSIMP_LIBRARY_DIRS}/assimp-vc${MSVC_TOOLSET_VERSION}-mtd.lib
 	)
@@ -192,7 +192,7 @@ list(APPEND AE_DEPS_LIBARARIES
 	${OPENAL_LIBRARIES}
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
-	${ASSIMP_LIBRARY}
+	${ASSIMP_LIBRARIES}
 	${ENET_LIBRARY}
 	${UUID_LIBRARY}
 )

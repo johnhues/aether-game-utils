@@ -13,9 +13,13 @@ if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
 	message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there.")
 endif()
 
-# @HACK: Xcode defaults to Debug... Currently this is only needed for fixup_bundle
 if(NOT CMAKE_BUILD_TYPE)
-	set(CMAKE_BUILD_TYPE "Debug")
+	if(APPLE)
+		# @HACK: fixup_bundle fails for release builds currently
+	    set(CMAKE_BUILD_TYPE "Debug")
+	else()
+	    set(CMAKE_BUILD_TYPE "Release")
+	endif()
 endif()
 
 string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)
@@ -26,5 +30,5 @@ if(NOT cmake_build_type_tolower STREQUAL "debug" AND
 		NOT cmake_build_type_tolower STREQUAL "minsizerel" AND
 		NOT cmake_build_type_tolower STREQUAL "relwithdebinfo"
 	)
-		message(FATAL_ERROR "Unknown build type \"${CMAKE_BUILD_TYPE}\". Allowed values are Debug, Release, RelWithDebInfo, and MinSizeRel (case-insensitive).")
+	message(FATAL_ERROR "Unknown build type \"${CMAKE_BUILD_TYPE}\". Allowed values are Debug, Release, RelWithDebInfo, and MinSizeRel (case-insensitive).")
 endif()
