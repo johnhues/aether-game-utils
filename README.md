@@ -100,7 +100,7 @@ make
 sudo make install
 ```
 
-## MacOSX Setup
+## Mac Setup
 Installing dependencies:
 ```
 brew install sdl2 assimp enet ossp-uuid
@@ -114,6 +114,7 @@ cmake ..
 make
 sudo make install
 ```
+Using the Xcode cmake generator will work for everything except the actual library install step, and so just using make is advised on OSX instead.
 
 ## Windows Setup
 These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments.
@@ -126,8 +127,9 @@ You may need to individually copy and paste the following commands as cmake can 
 ```
 git clone https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
 mkdir C:\temp\aether-game-utils\build && cd C:\temp\aether-game-utils\build
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\Library ..
+cmake -DCMAKE_INSTALL_PREFIX=C:\Library ..
 cmake --build . --config Release --target INSTALL
+cmake --build . --config Debug --target INSTALL
 ```
 ~~If successful you should see the installed library files in `C:\Library\ae`. You can safely delete `C:\temp\aether-game-utils` without affecting the installed library.~~ Currently the install step does not copy dependent static libraries, and so built dependencies are referenced when linking the final executable.
 
