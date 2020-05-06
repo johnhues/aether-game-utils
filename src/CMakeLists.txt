@@ -5,6 +5,7 @@ set(AE_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/${AE_LIBRARY_NAME})
 
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
+set_target_properties(${AE_LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
@@ -42,7 +43,7 @@ endif()
 #        by the final executable. This means that any downloaded dependent libraries
 #        should also be installed.
 target_link_libraries(${AE_LIBRARY_NAME}
-	PRIVATE
+	LINK_PRIVATE
 		${AE_DEPS_LIBARARIES}
 )
 
@@ -111,7 +112,7 @@ target_sources(${AE_LIBRARY_NAME}
 
 # ae lib installation
 # @TODO: Disable this for now when using Xcode. Xcode needs admin privileges to run this
-#        install logic, preventing the examples from being bundled.
+#        install logic, preventing the examples from being bundled and run at all.
 if(NOT "${CMAKE_GENERATOR}" STREQUAL "Xcode")
 	install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
 	install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION "${AE_INSTALL_DIR}/include")

@@ -47,7 +47,6 @@ else()
 	set(AE_ASSIMP_SRC ${CMAKE_BINARY_DIR}/thirdparty/assimp)
 	set(AE_ENET_SRC ${CMAKE_BINARY_DIR}/thirdparty/enet)
 
-	set(AE_GLEW_INSTALL ${CMAKE_BINARY_DIR}/glew)
 	set(AE_OPENAL_INSTALL ${CMAKE_BINARY_DIR}/openal)
 	set(AE_ZLIB_INSTALL ${CMAKE_BINARY_DIR}/zlib)
 	set(AE_SDL2_INSTALL ${CMAKE_BINARY_DIR}/SDL2)
@@ -58,13 +57,16 @@ else()
 		ExternalProject_Add(glew
 			PREFIX glew
 			SOURCE_DIR ${AE_GLEW_SRC}
-			URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0.tgz
-			SOURCE_SUBDIR build/cmake
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_GLEW_INSTALL}
+			URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0-win32.zip
+			CONFIGURE_COMMAND ""
+			BUILD_COMMAND ""
+			INSTALL_COMMAND ""
 		)
-		set(GLEW_INCLUDE_DIRS ${AE_GLEW_INSTALL}/include)
-		set(GLEW_LIBRARY_DIRS ${AE_GLEW_INSTALL}/lib)
-		set(GLEW_LIBRARIES ${GLEW_LIBRARY_DIRS}/libglew32d.lib)
+		set(GLEW_INCLUDE_DIRS ${AE_GLEW_SRC}/include)
+		set(GLEW_LIBRARY_DIRS ${AE_GLEW_SRC}/lib/Release/x64)
+		set(GLEW_LIBRARIES
+			${GLEW_LIBRARY_DIRS}/glew32s.lib
+		)
 
 		ExternalProject_Add(openal
 			PREFIX openal
@@ -87,18 +89,24 @@ else()
 	)
 	set(ZLIB_INCLUDE_DIRS ${AE_ZLIB_INSTALL}/include)
 	set(ZLIB_LIBRARY_DIRS ${AE_ZLIB_INSTALL}/lib)
-	set(ZLIB_LIBRARIES ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib)
+	set(ZLIB_LIBRARIES 
+		optimized ${ZLIB_LIBRARY_DIRS}/zlibstatic.lib
+		debug ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib
+	)
 
 	if(NOT EMSCRIPTEN)
 		ExternalProject_Add(SDL2
 			PREFIX SDL2
 			SOURCE_DIR ${AE_SDL2_SRC}
 			URL https://www.libsdl.org/release/SDL2-2.0.10.tar.gz
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL}
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL} -DEXTRA_LIBS=vcruntime.dll
 		)
 		set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
 		set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
-		set(SDL2_LIBRARY ${SDL2_LIBRARY_DIRS}/SDL2-staticd.lib)
+		set(SDL2_LIBRARY 
+			optimized ${SDL2_LIBRARY_DIRS}/SDL2-static.lib
+			debug ${SDL2_LIBRARY_DIRS}/SDL2-staticd.lib
+		)
 	endif()
 
 	ExternalProject_Add(assimp
@@ -123,8 +131,11 @@ else()
 	)
 	set(ASSIMP_INCLUDE_DIRS ${AE_ASSIMP_INSTALL}/include)
 	set(ASSIMP_LIBRARY_DIRS ${AE_ASSIMP_INSTALL}/lib)
-	set(ASSIMP_LIBRARIES ${ASSIMP_LIBRARY_DIRS}/assimp-vc142-mtd.lib)
-
+	set(ASSIMP_LIBRARY 
+		optimized ${ASSIMP_LIBRARY_DIRS}/assimp-vc${MSVC_TOOLSET_VERSION}-mt.lib
+		debug ${ASSIMP_LIBRARY_DIRS}/assimp-vc${MSVC_TOOLSET_VERSION}-mtd.lib
+	)
+	
 	ExternalProject_Add(Enet
 		PREFIX Enet
 		SOURCE_DIR ${AE_ENET_SRC}
@@ -181,7 +192,7 @@ list(APPEND AE_DEPS_LIBARARIES
 	${OPENAL_LIBRARIES}
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
-	${ASSIMP_LIBRARIES}
+	${ASSIMP_LIBRARY}
 	${ENET_LIBRARY}
 	${UUID_LIBRARY}
 )
