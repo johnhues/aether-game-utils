@@ -84,10 +84,7 @@ void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath
 
   const char* fileName = strrchr( filePath, '/' );
   fileName = fileName ? fileName + 1 : strrchr( filePath, '\\' );
-  if ( !fileName )
-  {
-    fileName = filePath;
-  }
+  fileName = fileName ? fileName + 1 : filePath;
 
 #if _AE_LOG_COLORS_
   os << "\x1b[90m" << timeBuf;
