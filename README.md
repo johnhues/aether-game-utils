@@ -114,6 +114,7 @@ cmake ..
 make
 sudo make install
 ```
+Using the Xcode cmake generator will work for everything except the actual library install step, and so just using make is advised on OSX instead.
 
 ## Windows Setup
 These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments.
