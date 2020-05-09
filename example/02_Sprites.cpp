@@ -30,7 +30,7 @@
 #include "aeWindow.h"
 
 //------------------------------------------------------------------------------
-// main
+// Main
 //------------------------------------------------------------------------------
 int main()
 {
@@ -44,7 +44,7 @@ int main()
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "sprites" );
 	render.InitializeOpenGL( &window, 400, 300 );
-	render.SetClearColor( aeColor::Red );
+	render.SetClearColor( aeColor::Red() );
 	input.Initialize( &window, &render );
 	spriteRender.Initialize( 16 );
 	spriteRender.SetBlending( true );
@@ -71,14 +71,14 @@ int main()
 
 		transform = aeFloat4x4::Translation( aeFloat3( 0.5f, 0.5f, -0.5f ) );
 		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue() );
 
 		transform = aeFloat4x4::Translation( aeFloat3( -0.5f, -0.5f, 0.5f ) );
 		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue() );
 
 		transform = aeFloat4x4::Scaling(  aeFloat3( 1.0f, 1.0f, 0.5f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::White );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::White() );
 
 		spriteRender.Render( screenTransform );
 		render.EndFrame();

@@ -52,13 +52,35 @@ const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ] = {
 //------------------------------------------------------------------------------
 // aeColor
 //------------------------------------------------------------------------------
-const aeColor aeColor::White( 1.0f, 1.0f, 1.0f );
-const aeColor aeColor::Red( 1.0f, 0.0f, 0.0f );
-const aeColor aeColor::Green( 0.0f, 1.0f, 0.0f );
-const aeColor aeColor::Blue( 0.0f, 0.0f, 1.0f );
-const aeColor aeColor::Orange( 1.0f, 0.5f, 0.0f );
-const aeColor aeColor::Gray( 0.5f, 0.5f, 0.5f );
-const aeColor aeColor::Black( 0.0f, 0.0f, 0.0f );
+// Grayscale
+aeColor aeColor::White() { return aeColor::PS( 255, 255, 255 ); }
+aeColor aeColor::Gray() { return aeColor::PS( 127, 127, 127 ); }
+aeColor aeColor::Black() { return aeColor::PS( 0, 0, 0 ); }
+// Rainbow
+aeColor aeColor::Red() { return aeColor::PS( 255, 0, 0 ); }
+aeColor aeColor::Orange() { return aeColor::PS( 255, 127, 0 ); }
+aeColor aeColor::Yellow() { return aeColor::PS( 255, 255, 0 ); }
+aeColor aeColor::Green() { return aeColor::PS( 0, 255, 0 ); }
+aeColor aeColor::Blue() { return aeColor::PS( 0, 0, 255 ); }
+aeColor aeColor::Indigo() { return aeColor::PS( 75, 0, 130 ); }
+aeColor aeColor::Violet() { return aeColor::PS( 148, 0, 211 ); }
+// Pico
+aeColor aeColor::PicoBlack() { return aeColor::PS( 0, 0, 0 ); }
+aeColor aeColor::PicoDarkBlue() { return aeColor::PS( 29, 43, 83 ); }
+aeColor aeColor::PicoDarkPurple() { return aeColor::PS( 126, 37, 83 ); }
+aeColor aeColor::PicoDarkGreen() { return aeColor::PS( 0, 135, 81 ); }
+aeColor aeColor::PicoBrown() { return aeColor::PS( 171, 82, 54 ); }
+aeColor aeColor::PicoDarkGray() { return aeColor::PS( 95, 87, 79 ); }
+aeColor aeColor::PicoLightGray() { return aeColor::PS( 194, 195, 199 ); }
+aeColor aeColor::PicoWhite() { return aeColor::PS( 255, 241, 232 ); }
+aeColor aeColor::PicoRed() { return aeColor::PS( 255, 0, 77 ); }
+aeColor aeColor::PicoOrange() { return aeColor::PS( 255, 163, 0 ); }
+aeColor aeColor::PicoYellow() { return aeColor::PS( 255, 236, 39 ); }
+aeColor aeColor::PicoGreen() { return aeColor::PS( 0, 228, 54 ); }
+aeColor aeColor::PicoBlue() { return aeColor::PS( 41, 173, 255 ); }
+aeColor aeColor::PicoIndigo() { return aeColor::PS( 131, 118, 156 ); }
+aeColor aeColor::PicoPink() { return aeColor::PS( 255, 119, 168 ); }
+aeColor aeColor::PicoPeach() { return aeColor::PS( 255, 204, 170 ); }
 
 aeColor::aeColor( float rgb )
   : r( rgb ), g( rgb ), b( rgb ), a( 1.0f )
@@ -759,7 +781,7 @@ aeRender::aeRender()
   m_targetWidth = 0;
   m_targetHeight = 0;
 
-  m_clearColor = aeColor::Black;
+  m_clearColor = aeColor::Black();
 }
 
 aeRender::~aeRender()

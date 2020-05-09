@@ -42,7 +42,7 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// main
+// Main
 //------------------------------------------------------------------------------
 int main()
 {
@@ -58,7 +58,7 @@ int main()
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Replication Server" );
   render.InitializeOpenGL( &window, 400, 300 );
-  render.SetClearColor( aeColor::Black );
+  render.SetClearColor( aeColor::Black() );
   input.Initialize( &window, &render );
   spriteRender.Initialize( 32 );
   uint8_t texInfo[] = { 255, 255, 255 };

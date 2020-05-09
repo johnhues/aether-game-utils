@@ -30,7 +30,7 @@
 #include "aeWindow.h"
 
 //------------------------------------------------------------------------------
-// main
+// Main
 //------------------------------------------------------------------------------
 int main()
 {
@@ -44,7 +44,7 @@ int main()
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "example" );
 	render.InitializeOpenGL( &window, window.GetWidth() / 4, window.GetHeight() / 4 );
-	render.SetClearColor( aeColor::Green.ScaleRGB( 0.01f ) );
+	render.SetClearColor( aeColor::Green().ScaleRGB( 0.01f ) );
 	input.Initialize( &window, &render );
 	input.SetTextMode( true );
 	input.SetText( "Try typing. Copy and paste should also work." );
@@ -71,7 +71,7 @@ int main()
 		// Render text in top left corner
 		int maxLineLength = render.GetWidth() / textRender.GetFontSize() - 2;
 		aeFloat3 textPos( textRender.GetFontSize(), render.GetHeight() - textRender.GetFontSize(), 0.0f );
-		textRender.Add( textPos, aeFloat2( (float)textRender.GetFontSize() ), displayText.c_str(), aeColor::Green, maxLineLength, 0 );
+		textRender.Add( textPos, aeFloat2( (float)textRender.GetFontSize() ), displayText.c_str(), aeColor::Green(), maxLineLength, 0 );
 		textRender.Render( textToNdc );
 
 		render.EndFrame();

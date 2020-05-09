@@ -1171,6 +1171,56 @@ aeFloat4x4 aeFloat4x4::Scaling( const aeFloat3& s )
   return r;
 }
 
+aeFloat4x4 aeFloat4x4::WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat3 up )
+{
+  //xaxis.x  xaxis.y  xaxis.z  dot(xaxis, -eye)
+  //yaxis.x  yaxis.y  yaxis.z  dot(yaxis, -eye)
+  //zaxis.x  zaxis.y  zaxis.z  dot(zaxis, -eye)
+  //0        0        0        1
+
+  position = -position;
+  forward.Normalize();
+  up.Normalize();
+
+  aeFloat3 right = forward % up;
+  right.Normalize();
+  up = right % forward;
+
+  aeFloat4x4 result;
+  memset( &result, 0, sizeof( result ) );
+  result.SetRowVector( 0, right );
+  result.SetRowVector( 1, up );
+  result.SetRowVector( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
+  result.SetAxisVector( 3, aeFloat3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
+  result.data[ 15 ] = 1;
+  return result;
+}
+
+aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
+{
+  // a  0  0  0
+  // 0  b  0  0
+  // 0  0  A  B
+  // 0  0 -1  0
+
+  float r = aspectRatio * tanf( fov * 0.5f ) * 0.8f;
+  float t = tanf( fov * 0.5f ) * 0.8f;
+
+  float a = nearPlane / r;
+  float b = nearPlane / t;
+  float A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
+  float B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
+
+  aeFloat4x4 result;
+  memset( &result, 0, sizeof( result ) );
+  result.data[ 0 ] = a;
+  result.data[ 5 ] = b;
+  result.data[ 10 ] = A;
+  result.data[ 11 ] = B;
+  result.data[ 14 ] = -1;
+  return result;
+}
+
 aeFloat4 aeFloat4x4::operator*(const aeFloat4& v) const
 {
   return aeFloat4(
@@ -1685,55 +1735,6 @@ aeFloat4x4 aeFloat4x4::GetTransposeCopy(void) const
 {
   aeFloat4x4 temp(*this);
   return temp.SetTranspose();
-}
-
-aeFloat4x4& aeFloat4x4::SetWorldToView(aeFloat3 forward, aeFloat3 up)
-{
-  *this = aeFloat4x4::Identity();
-
-  //xaxis.x  xaxis.y  xaxis.z  dot(xaxis, eye)
-  //yaxis.x  yaxis.y  yaxis.z  dot(yaxis, eye)
-  //zaxis.x  zaxis.y  zaxis.z  dot(zaxis, eye)
-  //0        0        0        1
-
-  forward.Normalize();
-  up.Normalize();
-
-  aeFloat3 right = forward % up;
-  right.Normalize();
-  up = right % forward;
-
-  SetRowVector(0, right);
-  SetRowVector(1, up);
-  SetRowVector(2, -forward);
-
-  return *this;
-}
-
-aeFloat4x4& aeFloat4x4::SetViewToProjection(float fov, float aspectRatio, float nearPlane, float farPlane)
-{
-  // a  0  0  0
-  // 0  b  0  0
-  // 0  0  A  B
-  // 0  0 -1  0
-  
-  memset(data, 0, sizeof(float)*16);
-  
-  float r = aspectRatio * tanf(fov * 0.5f) * 0.8f;
-  float t = tanf(fov * 0.5f) * 0.8f;
-  
-  float a = nearPlane / r;
-  float b = nearPlane / t;
-  float A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
-  float B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
-  
-  data[0]  = a;
-  data[5]  = b;
-  data[10] = A;
-  data[11] = B;
-  data[14] = -1;
-
-  return *this;
 }
 
 aeFloat4x4& aeFloat4x4::Translate( aeFloat3 t )

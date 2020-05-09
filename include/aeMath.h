@@ -682,6 +682,8 @@ public:
   static aeFloat4x4 Translation( const aeFloat3& p );
   static aeFloat4x4 Scaling( const aeFloat3& s );
   static aeFloat4x4 RotationZ( float angle ) { aeFloat4x4 result; return result.SetRotateZ( angle ); }
+  static aeFloat4x4 WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat3 up ); // @TODO: Verify handedness
+  static aeFloat4x4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
   // Operators
   bool operator== ( const aeFloat4x4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
@@ -727,10 +729,6 @@ public:
   aeFloat4x4& Translate( aeFloat3 t );
   aeFloat4x4& Scale( aeFloat3 s );
   aeFloat4x4& RotateZ( float angle );
-
-  // Perspective
-  aeFloat4x4& SetWorldToView(aeFloat3 forward, aeFloat3 up = aeFloat3::Up);
-  aeFloat4x4& SetViewToProjection(float fov, float aspectRatio, float nearPlane, float farPlane);
 };
 
 //------------------------------------------------------------------------------

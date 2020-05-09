@@ -41,3 +41,13 @@ set(AE_CURRENT_EXECUTABLE_NAME 05_text_input)
 set(AE_CURRENT_SOURCE_FILES 05_TextInput.cpp font.png)
 set(AE_RESOURCES font.png)
 include(AddExecutable)
+
+set(AE_CURRENT_BUNDLE_NAME "Triangle")
+set(AE_CURRENT_EXECUTABLE_NAME 06_triangle)
+set(AE_CURRENT_SOURCE_FILES 06_Triangle.cpp)
+include(AddExecutable)
+
+set(AE_CURRENT_BUNDLE_NAME "Cube")
+set(AE_CURRENT_EXECUTABLE_NAME 07_cube)
+set(AE_CURRENT_SOURCE_FILES 07_Cube.cpp)
+include(AddExecutable)

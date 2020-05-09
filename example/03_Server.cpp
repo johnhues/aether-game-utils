@@ -31,7 +31,7 @@
 #include "aeWindow.h"
 
 //------------------------------------------------------------------------------
-// main
+// Main
 //------------------------------------------------------------------------------
 int main()
 {
@@ -45,7 +45,7 @@ int main()
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "server" );
 	render.InitializeOpenGL( &window, 400, 300 );
-	render.SetClearColor( aeColor::Red );
+	render.SetClearColor( aeColor::Red() );
 	input.Initialize( &window, &render );
 	server = AetherServer_New( 3500, 0, 1 );
 	

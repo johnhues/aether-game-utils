@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// 03_Client.cpp
+// 06_Triangle.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -26,9 +26,49 @@
 #include "aeClock.h"
 #include "aeInput.h"
 #include "aeLog.h"
-#include "aeNet.h"
 #include "aeRender.h"
 #include "aeWindow.h"
+
+//------------------------------------------------------------------------------
+// Shaders
+//------------------------------------------------------------------------------
+const char* kVertShader = "\
+	AE_IN_HIGHP vec4 a_position;\
+	AE_IN_HIGHP vec4 a_color;\
+	AE_OUT_HIGHP vec4 v_color;\
+	void main()\
+	{\
+		v_color = a_color;\
+		gl_Position = a_position;\
+	}";
+
+const char* kFragShader = "\
+	AE_IN_HIGHP vec4 v_color;\
+	void main()\
+	{\
+		AE_COLOR = v_color;\
+	}";
+
+//------------------------------------------------------------------------------
+// Triangle
+//------------------------------------------------------------------------------
+struct Vertex
+{
+	aeFloat4 pos;
+	aeFloat4 color;
+};
+
+Vertex kTriangleVerts[] =
+{
+	{ aeFloat4( -0.5f, -0.5f, 0.0f, 1.0f ), aeColor::PicoRed().GetLinearRGBA() },
+	{ aeFloat4( 0.5f, -0.5f, 0.0f, 1.0f ), aeColor::PicoGreen().GetLinearRGBA() },
+	{ aeFloat4( 0.0f, 0.5f, 0.0f, 1.0f ), aeColor::PicoBlue().GetLinearRGBA() },
+};
+
+uint16_t kTriangleIndices[] =
+{
+	0, 1, 2
+};
 
 //------------------------------------------------------------------------------
 // Main
@@ -40,68 +80,39 @@ int main()
 	aeWindow window;
 	aeRender render;
 	aeInput input;
-	AetherClient* client;
+	aeFixedTimeStep timeStep;
+	aeShader shader;
+	aeVertexData vertexData;
 	
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "client" );
-	render.InitializeOpenGL( &window, 400, 300 );
-	render.SetClearColor( aeColor::Red() );
+	window.SetTitle( "triangle" );
+	render.InitializeOpenGL( &window, window.GetWidth(), window.GetHeight() );
+	render.SetClearColor( aeColor::PicoDarkPurple() );
 	input.Initialize( &window, &render );
-	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
-	
-	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
+	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+
+	vertexData.Initialize( sizeof( *kTriangleVerts ), sizeof( *kTriangleIndices ), countof( kTriangleVerts ), countof( kTriangleIndices ), aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
+	vertexData.AddAttribute( "a_position", 4, aeVertexDataType::Float, offsetof( Vertex, pos ) );
+	vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof( Vertex, color ) );
+	vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
+	vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
+
+	AE_LOG( "Run" );
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		if ( !client->IsConnected() && !client->IsConnecting() )
-		{
-			AE_LOG( "Connecting to server" );
-			AetherClient_Connect( client );
-		}
-		
-		ReceiveInfo receiveInfo;
-		while ( AetherClient_Receive( client, &receiveInfo ) )
-		{
-			switch ( receiveInfo.msgId )
-			{
-				case kSysMsgServerConnect:
-					AE_LOG( "Connected to server" );
-					break;
-				case kSysMsgServerDisconnect:
-					AE_LOG( "Disconnected from server" );
-					break;
-				case 777:
-					if ( receiveInfo.data.Length() )
-					{
-						AE_LOG( "Received (#) '#'", client->localPlayer->uuid, (char*)&receiveInfo.data[ 0 ] );
-					}
-					break;
-				default:
-					break;
-			}
-		}
-
-		if ( input.GetState()->space && !input.GetPrevState()->space )
-		{
-			char msg[] = "ping";
-			AE_LOG( "Send (#) '#'", client->localPlayer->uuid, msg );
-			AetherClient_QueueSend( client, 666, true, msg, sizeof(msg) );
-		}
-
-		AetherClient_SendAll( client );
-
+		render.Resize( window.GetWidth(), window.GetHeight() );
 		render.StartFrame();
-		render.EndFrame();
 
+		vertexData.Render( &shader, aeUniformList() );
+		
+		render.EndFrame();
 		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );
-
-	AetherClient_Delete( client );
-	client = nullptr;
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();

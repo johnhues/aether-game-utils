@@ -362,9 +362,6 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
 
   shader->Activate( uniforms );
 
-  glDisable( GL_CULL_FACE ); // @TODO: Should probably be a VertexData parameter
-  glEnable( GL_MULTISAMPLE ); // @TODO: Should probably be a VertexData parameter
-
   glBindVertexArray( m_array );
   AE_ASSERT( glGetError() == GL_NO_ERROR );
 
@@ -473,6 +470,7 @@ aeShader::aeShader()
   m_blending = false;
   m_depthTest = false;
   m_depthWrite = false;
+  m_culling = aeShaderCulling::None;
 
   m_attributeCount = 0;
 }
@@ -506,19 +504,26 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   glGetProgramiv( m_program, GL_LINK_STATUS, &status );
   if( status == GL_FALSE )
   {
-    GLint logLength;
+    GLint logLength = 0;
     glGetProgramiv( m_program, GL_INFO_LOG_LENGTH, &logLength );
     
+    char* log = nullptr;
     if( logLength > 0 )
     {
-      unsigned char *log = new unsigned char[ logLength ];
+      log = new char[ logLength ];
       glGetProgramInfoLog( m_program, logLength, NULL, (GLchar*)log );
-      AE_LOG( "#", log );
-      delete [] log;
     }
     
+    if ( log )
+    {
+      AE_FAIL_MSG( log );
+      delete[] log;
+    }
+    else
+    {
+      AE_FAIL();
+    }
     Destroy();
-    AE_FAIL();
   }
   
   GLint attribCount = 0;
@@ -625,6 +630,16 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   else
   {
     glDisable( GL_DEPTH_TEST );
+  }
+
+  if ( m_culling == aeShaderCulling::None )
+  {
+    glDisable( GL_CULL_FACE );
+  }
+  else
+  {
+    glEnable( GL_CULL_FACE );
+    glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
   }
 
   // Set shader uniforms
@@ -780,6 +795,7 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
   }
 #else
   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture\n";
+  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM uniform\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform\n";
   shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP in\n";
   shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP out\n";

@@ -63,7 +63,7 @@ public:
     rotation = 0.0f;
     life = aeMath::MaxValue< float >();
 
-    m_color = aeColor::Green;
+    m_color = aeColor::Green();
   }
 
   void Update( float dt, aeSpriteRender* spriteRender, const aeTexture2D* texture, aeInput* input )
@@ -84,12 +84,12 @@ public:
       {
         aeColor colors[] =
         {
-          aeColor::White,
-          aeColor::White,
-          aeColor::Red,
-          aeColor::Blue,
-          aeColor::Orange,
-          aeColor::Gray
+          aeColor::White(),
+          aeColor::White(),
+          aeColor::Red(),
+          aeColor::Blue(),
+          aeColor::Orange(),
+          aeColor::Gray()
         };
 
         ChangeColorRPC rpc;

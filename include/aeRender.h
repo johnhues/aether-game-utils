@@ -78,13 +78,35 @@ struct aeColor
   static float SRGBToRGB( float x );
   static float RGBToSRGB( float x );
 
-  static const aeColor White;
-  static const aeColor Red;
-  static const aeColor Green;
-  static const aeColor Blue;
-  static const aeColor Orange;
-  static const aeColor Gray;
-  static const aeColor Black;
+  // Grayscale
+  static aeColor White();
+  static aeColor Gray();
+  static aeColor Black();
+  // Rainbow
+  static aeColor Red();
+  static aeColor Orange();
+  static aeColor Yellow();
+  static aeColor Green();
+  static aeColor Blue();
+  static aeColor Indigo();
+  static aeColor Violet();
+  // Pico
+  static aeColor PicoBlack();
+  static aeColor PicoDarkBlue();
+  static aeColor PicoDarkPurple();
+  static aeColor PicoDarkGreen();
+  static aeColor PicoBrown();
+  static aeColor PicoDarkGray();
+  static aeColor PicoLightGray();
+  static aeColor PicoWhite();
+  static aeColor PicoRed();
+  static aeColor PicoOrange();
+  static aeColor PicoYellow();
+  static aeColor PicoGreen();
+  static aeColor PicoBlue();
+  static aeColor PicoIndigo();
+  static aeColor PicoPink();
+  static aeColor PicoPeach();
 
   float r;
   float g;
@@ -233,6 +255,16 @@ struct aeShaderType
   };
 };
 
+struct aeShaderCulling
+{
+  enum Type
+  {
+    None,
+    ClockwiseFront,
+    CounterclockwiseFront,
+  };
+};
+
 struct aeShaderAttribute
 {
   char name[ kMaxShaderAttributeNameLength ];
@@ -249,7 +281,42 @@ struct aeShaderUniform
 
 //------------------------------------------------------------------------------
 // aeShader class
+// @NOTE: Some special built in functions and defines are automatically included
+//        for portability reasons (e.g. for OpenGL ES). There are also some
+//        convenient helper functions to convert between linear and srgb color
+//        spaces. It's not necessary to use any of these helpers and basic valid
+//        GLSL can be provided instead.
 //------------------------------------------------------------------------------
+// Example vertex shader
+/*
+AE_UNIFORM_HIGHP mat4 u_worldToScreen;
+
+AE_IN_HIGHP vec3 a_position;
+AE_IN_HIGHP vec2 a_uv;
+AE_IN_HIGHP vec4 a_color;
+
+AE_OUT_HIGHP vec2 v_uv;
+AE_OUT_HIGHP vec4 v_color;
+
+void main()
+{
+  v_uv = a_uv;
+  v_color = a_color;
+  gl_Position = u_worldToScreen * vec4( a_position, 1.0 );
+}
+*/
+// Example fragment shader
+/*
+AE_UNIFORM sampler2D u_tex;
+
+AE_IN_HIGHP vec2 v_uv;
+AE_IN_HIGHP vec4 v_color;
+
+void main()
+{
+  AE_COLOR = AE_RGBA_TO_SRGBA( AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color );
+}
+*/
 class aeShader
 {
 public:
@@ -262,6 +329,7 @@ public:
   void SetBlending( bool enabled ) { m_blending = enabled; }
   void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
   void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
+  void SetCulling( aeShaderCulling::Type culling ) { m_culling = culling; }
   
 private:
   int m_LoadShader( const char* shaderStr, aeShaderType::Type type, const char* const* defines, int32_t defineCount );
@@ -273,6 +341,7 @@ private:
   bool m_blending;
   bool m_depthTest;
   bool m_depthWrite;
+  aeShaderCulling::Type m_culling;
   
   aeShaderAttribute m_attributes[ kMaxShaderAttributeCount ];
   uint32_t m_attributeCount;
@@ -289,9 +358,6 @@ public:
 //------------------------------------------------------------------------------
 // aeTexture
 //------------------------------------------------------------------------------
-bool get_png_info( const uint8_t* data, uint32_t length, uint32_t* widthOut, uint32_t* heightOut, uint32_t* depthOut );
-bool load_png( const uint8_t* data, uint32_t length, uint8_t* dataOut, uint32_t maxOut );
-
 struct aeTextureFilter
 {
   enum Type
