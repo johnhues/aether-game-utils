@@ -45,7 +45,7 @@ const aeFloat2 aeQuadVertUvs[ aeQuadVertCount ] = {
 };
 
 const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ] = {
-  3, 1, 0,
+  3, 0, 1,
   3, 1, 2
 };
 
