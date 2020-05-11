@@ -103,16 +103,24 @@ private:
 
 void Camera::Update( const aeInput* input )
 {
+	aeFloat2 rotate = input->GetState()->leftAnalog * 0.1f;
 	if ( input->GetState()->mouseLeft )
 	{
-		aeFloat2 mouseMovement( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
-		mouseMovement *= 0.01f;
-		m_yaw -= mouseMovement.x;
-		m_pitch -= mouseMovement.y;
-		m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f );
+		rotate = aeFloat2( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos ) * -0.01f;
 	}
 
-	m_dist -= input->GetState()->scroll * 0.25f;
+	m_yaw += rotate.x;
+	m_pitch += rotate.y;
+	m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f );
+
+	if ( input->GetState()->scroll )
+	{
+		m_dist += input->GetState()->scroll * -0.25f;
+	}
+	else
+	{
+		m_dist += input->GetState()->rightAnalog.y * -0.1f;
+	}
 	m_dist = aeMath::Clip( m_dist, 1.5f, 5.0f );
 
 	m_pos = aeFloat3( aeMath::Cos( m_yaw ), aeMath::Sin( m_yaw ), 0.0f );

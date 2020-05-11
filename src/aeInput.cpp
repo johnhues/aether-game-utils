@@ -29,6 +29,31 @@
 #include "aeRender.h"
 #include "aeWindow.h"
 #include "SDL.h"
+#include "SDL_gamecontroller.h"
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const float kAnalogDeadzone = 0.2f;
+
+//------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+aeFloat2 ApplyAnalogDeadzone( aeFloat2 analog, float deadzone )
+{
+  float originalLength = analog.Length();
+  if ( originalLength <= kAnalogDeadzone )
+  {
+    return aeFloat2( 0.0f );
+  }
+  else
+  {
+    float renormalizedLength = aeMath::Delerp( deadzone, 1.0f, originalLength );
+    renormalizedLength = aeMath::Clip01( renormalizedLength );
+
+    return ( analog / originalLength ) * renormalizedLength;
+  }
+}
 
 //------------------------------------------------------------------------------
 // InputState member functions
@@ -36,7 +61,10 @@
 InputState::InputState()
 {
   gamepad = false;
+  gamepadBattery = aeBatteryLevel::None;
 
+  leftAnalog = aeFloat2( 0.0f );
+  rightAnalog = aeFloat2( 0.0f );
   up = false;
   down = false;
   left = false;
@@ -178,7 +206,13 @@ aeInput::aeInput()
 {
   m_window = nullptr;
   m_render = nullptr;
+
   m_textMode = 0;
+
+  m_joystickHandle = nullptr;
+  m_buttonCount = 0;
+  m_hatCount = 0;
+  m_axesCount = 0;
 }
 
 void aeInput::Initialize( aeWindow* window, aeRender* render )
@@ -329,6 +363,86 @@ void aeInput::Pump()
     }
   }
 #endif
+
+  if ( !m_joystickHandle && SDL_NumJoysticks() )
+  {
+    m_joystickHandle = SDL_JoystickOpen( 0 );
+    m_buttonCount = SDL_JoystickNumButtons( m_joystickHandle );
+    m_hatCount = SDL_JoystickNumHats( m_joystickHandle );
+    m_axesCount = SDL_JoystickNumAxes( m_joystickHandle );
+  }
+  else if ( m_joystickHandle && !SDL_NumJoysticks() )
+  {
+    SDL_JoystickClose( m_joystickHandle );
+    m_joystickHandle = nullptr;
+
+    m_input.gamepadBattery = aeBatteryLevel::None;
+  }
+
+  m_input.gamepad = ( m_joystickHandle != nullptr );
+
+  if ( m_joystickHandle )
+  {
+    bool* inputBtns[] =
+    {
+      &m_input.a,
+      &m_input.b,
+      &m_input.x,
+      &m_input.y,
+      &m_input.l,
+      &m_input.r,
+      &m_input.start,
+      &m_input.select
+    };
+    uint32_t btnCount = aeMath::Min( countof( inputBtns ), m_buttonCount );
+    for ( uint32_t i = 0; i < btnCount; i++ )
+    {
+      *( inputBtns[ i ] ) = SDL_JoystickGetButton( m_joystickHandle, i );
+    }
+
+    if ( m_axesCount >= 2 )
+    {
+      aeFloat2 analog;
+      analog.x = SDL_JoystickGetAxis( m_joystickHandle, 0 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = SDL_JoystickGetAxis( m_joystickHandle, 1 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = -analog.y; // @NOTE: Analog sticks are negative up for some reason on XBox controllers
+      m_input.leftAnalog = ApplyAnalogDeadzone( analog, kAnalogDeadzone );
+    }
+
+    if ( m_axesCount == 6 ) // XBox type gamepad likely
+    {
+      aeFloat2 analog;
+      analog.x = SDL_JoystickGetAxis( m_joystickHandle, 3 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = SDL_JoystickGetAxis( m_joystickHandle, 4 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = -analog.y; // @NOTE: Analog sticks are negative up for some reason on XBox controllers
+      m_input.rightAnalog = ApplyAnalogDeadzone( analog, kAnalogDeadzone );
+    }
+
+    switch ( SDL_JoystickCurrentPowerLevel( m_joystickHandle ) )
+    {
+      case SDL_JOYSTICK_POWER_EMPTY:
+        m_input.gamepadBattery = aeBatteryLevel::Empty;
+        break;
+      case SDL_JOYSTICK_POWER_LOW:
+        m_input.gamepadBattery = aeBatteryLevel::Low;
+        break;
+      case SDL_JOYSTICK_POWER_MEDIUM:
+        m_input.gamepadBattery = aeBatteryLevel::Medium;
+        break;
+      case SDL_JOYSTICK_POWER_FULL:
+      case SDL_JOYSTICK_POWER_MAX:
+        m_input.gamepadBattery = aeBatteryLevel::Full;
+        break;
+      case SDL_JOYSTICK_POWER_WIRED:
+        m_input.gamepadBattery = aeBatteryLevel::Wired;
+        break;
+      default:
+        m_input.gamepadBattery = aeBatteryLevel::None;
+        break;
+    }
+  }
+
+  m_input.gamepad = ( m_joystickHandle != nullptr );
 }
 
 void aeInput::SetTextMode( bool enabled )

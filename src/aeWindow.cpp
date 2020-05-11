@@ -47,6 +47,11 @@ void aeWindow::Initialize( uint32_t width, uint32_t height, bool fullScreen, boo
   m_width = width;
   m_height = height;
   m_fullScreen = fullScreen;
+
+  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
+  {
+    AE_FAIL_MSG( SDL_GetError() );
+  }
   
   uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
   flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
@@ -65,6 +70,11 @@ void aeWindow::Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool sho
   m_width = width;
   m_height = height;
   m_fullScreen = false;
+
+  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
+  {
+    AE_FAIL_MSG( SDL_GetError() );
+  }
 
   uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
   flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;

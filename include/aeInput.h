@@ -32,7 +32,7 @@
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
-// InputType enum
+// Input types
 //------------------------------------------------------------------------------
 enum InputType
 {
@@ -65,6 +65,16 @@ enum InputType
   kInputTypeCount
 };
 
+enum class aeBatteryLevel
+{
+  None,
+  Empty,
+  Low,
+  Medium,
+  Full,
+  Wired
+};
+
 //------------------------------------------------------------------------------
 // InputState class
 //------------------------------------------------------------------------------
@@ -76,6 +86,10 @@ public:
   const char* GetName( InputType type ) const;
 
   bool gamepad;
+  aeBatteryLevel gamepadBattery;
+
+  aeFloat2 leftAnalog;
+  aeFloat2 rightAnalog;
 
   bool up;
   bool down;
@@ -139,6 +153,11 @@ private:
 
   bool m_textMode;
   aeStr512 m_text;
+
+  struct _SDL_Joystick* m_joystickHandle;
+  uint32_t m_buttonCount;
+  uint32_t m_hatCount;
+  uint32_t m_axesCount;
 };
 
 #endif
