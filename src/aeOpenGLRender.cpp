@@ -273,7 +273,7 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
 
   if ( count && _AE_DEBUG_ )
   {
-    uint32_t badIndex = 0;
+    int32_t badIndex = -1;
     
     if ( m_indexSize == 1 )
     {
@@ -283,6 +283,7 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
         if ( indicesCheck[ i ] >= m_maxVertexCount )
         {
           badIndex = indicesCheck[ i ];
+          break;
         }
       }
     }
@@ -294,6 +295,7 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
         if ( indicesCheck[ i ] >= m_maxVertexCount )
         {
           badIndex = indicesCheck[ i ];
+          break;
         }
       }
     }
@@ -305,11 +307,12 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
         if ( indicesCheck[ i ] >= m_maxVertexCount )
         {
           badIndex = indicesCheck[ i ];
+          break;
         }
       }
     }
 
-    if ( badIndex )
+    if ( badIndex >= 0 )
     {
       AE_FAIL_MSG( "Out of range index detected #", badIndex );
     }
