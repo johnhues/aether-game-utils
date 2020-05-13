@@ -1164,6 +1164,57 @@ aeFloat4x4 aeFloat4x4::Translation( const aeFloat3& p )
   return r;
 }
 
+aeFloat4x4 aeFloat4x4::Rotation( aeFloat3 forward0, aeFloat3 up0, aeFloat3 forward1, aeFloat3 up1 )
+{
+  // Remove rotation
+  forward0.Normalize();
+  up0.Normalize();
+
+  aeFloat3 right0 = forward0 % up0;
+  right0.Normalize();
+  up0 = right0 % forward0;
+
+  aeFloat4x4 removeRotation;
+  memset( &removeRotation, 0, sizeof( removeRotation ) );
+  removeRotation.SetRowVector( 0, right0 ); // right -> ( 1, 0, 0 )
+  removeRotation.SetRowVector( 1, forward0 ); // forward -> ( 0, 1, 0 )
+  removeRotation.SetRowVector( 2, up0 ); // up -> ( 0, 0, 1 )
+  removeRotation.data[ 15 ] = 1;
+
+  // Rotate
+  forward1.Normalize();
+  up1.Normalize();
+
+  aeFloat3 right1 = forward1 % up1;
+  right1.Normalize();
+  up1 = right1 % forward1;
+
+  aeFloat4x4 newRotation;
+  memset( &newRotation, 0, sizeof( newRotation ) );
+  // Set axis vector to invert (transpose)
+  newRotation.SetAxisVector( 0, right1 ); // ( 1, 0, 0 ) -> right
+  newRotation.SetAxisVector( 1, forward1 ); // ( 0, 1, 0 ) -> forward
+  newRotation.SetAxisVector( 2, up1 ); // ( 0, 0, 1 ) -> up
+  newRotation.data[ 15 ] = 1;
+
+  return newRotation * removeRotation;
+}
+
+aeFloat4x4 aeFloat4x4::RotationX( float angle )
+{
+  aeFloat4x4 result; return result.SetRotateX( angle );
+}
+
+aeFloat4x4 aeFloat4x4::RotationY( float angle )
+{
+  aeFloat4x4 result; return result.SetRotateY( angle );
+}
+
+aeFloat4x4 aeFloat4x4::RotationZ( float angle )
+{
+  aeFloat4x4 result; return result.SetRotateZ( angle );
+}
+
 aeFloat4x4 aeFloat4x4::Scaling( const aeFloat3& s )
 {
   aeFloat4x4 r = aeFloat4x4::Identity();

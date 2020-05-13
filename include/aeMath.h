@@ -680,8 +680,12 @@ public:
 
   // Constructor helpers
   static aeFloat4x4 Translation( const aeFloat3& p );
+  static aeFloat4x4 Rotation( aeFloat3 forward0, aeFloat3 up0, aeFloat3 forward1, aeFloat3 up1 );
+  static aeFloat4x4 RotationX( float angle );
+  static aeFloat4x4 RotationY( float angle );
+  static aeFloat4x4 RotationZ( float angle );
   static aeFloat4x4 Scaling( const aeFloat3& s );
-  static aeFloat4x4 RotationZ( float angle ) { aeFloat4x4 result; return result.SetRotateZ( angle ); }
+
   static aeFloat4x4 WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat3 up ); // @TODO: Verify handedness
   static aeFloat4x4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
