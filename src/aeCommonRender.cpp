@@ -820,7 +820,9 @@ void aeRender::StartFrame()
   if ( m_targetWidth != m_canvas.GetWidth() || m_targetHeight != m_canvas.GetHeight() )
   {
     m_canvas.Destroy();
-    m_canvas.Initialize( m_targetWidth, m_targetHeight, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+    m_canvas.Initialize( m_targetWidth, m_targetHeight );
+    m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+    m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
   }
   m_canvas.Activate();
   m_canvas.Clear( GetClearColor() );
@@ -855,7 +857,7 @@ aeFloat4x4 aeRender::GetWindowToRenderTransform()
   aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
   windowToNDC.Scale( aeFloat3( 2.0f / m_window->GetWidth(), 2.0f / m_window->GetHeight(), 1.0f ) );
   
-  aeFloat4x4 ndcToQuad = aeRenderTexture::GetQuadToNDCTransform( GetNDCRect(), 0.0f );
+  aeFloat4x4 ndcToQuad = aeRenderTarget::GetQuadToNDCTransform( GetNDCRect(), 0.0f );
   ndcToQuad.Invert();
   
   aeFloat4x4 quadToRender = aeFloat4x4::Scaling( aeFloat3( m_canvas.GetWidth(), m_canvas.GetHeight(), 1.0f ) );

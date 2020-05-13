@@ -1058,24 +1058,28 @@ void aeTexture2D::Destroy()
 //------------------------------------------------------------------------------
 // aeRenderTexture member functions
 //------------------------------------------------------------------------------
-aeRenderTexture::aeRenderTexture()
+aeRenderTexture::aeRenderTexture( uint32_t texture, uint32_t target )
+{
+  m_texture = texture;
+  m_target = target;
+}
+
+aeRenderTarget::aeRenderTarget()
 {
   m_fbo = 0;
-  m_depthTexture = 0;
 
   m_width = 0;
   m_height = 0;
 }
 
-aeRenderTexture::~aeRenderTexture()
+aeRenderTarget::~aeRenderTarget()
 {
   Destroy();
 }
 
-void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+void aeRenderTarget::Initialize( uint32_t width, uint32_t height )
 {
   AE_ASSERT( m_fbo == 0 );
-  AE_ASSERT( m_texture == 0 );
 
   AE_ASSERT( width != 0 );
   AE_ASSERT( height != 0 );
@@ -1086,31 +1090,6 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   glGenFramebuffers( 1, &m_fbo );
   AE_ASSERT( m_fbo );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
-
-  m_target = GL_TEXTURE_2D;
-  glGenTextures( 1, &m_texture );
-  AE_ASSERT( m_texture );
-  glBindTexture( m_target, m_texture );
-  glTexParameteri( m_target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( m_target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( m_target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( m_target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( m_target, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_target, m_texture, 0 );
-  AE_CHECK_GL_ERROR();
-
-  GLint depthFormat = GL_DEPTH_COMPONENT24;
-  glGenTextures( 1, &m_depthTexture );
-  glBindTexture( m_target, m_depthTexture );
-  glTexParameteri( m_target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( m_target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( m_target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( m_target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( m_target, 0, depthFormat, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_target, m_depthTexture, 0 );
-  AE_CHECK_GL_ERROR();
-
-  CheckFramebufferComplete( m_fbo );
 
   AE_CHECK_GL_ERROR();
   Vertex quadVerts[] =
@@ -1151,21 +1130,23 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   AE_CHECK_GL_ERROR();
 }
 
-void aeRenderTexture::Destroy()
+void aeRenderTarget::Destroy()
 {
   m_shader.Destroy();
   m_quad.Destroy();
 
-  if ( m_texture )
+  for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
-    glDeleteTextures( 1, &m_texture );
-    m_texture = 0;
+    uint32_t tex = m_targets[ i ].GetTexture();
+    glDeleteTextures( 1, &tex );
   }
+  m_targets.Clear();
 
-  if ( m_depthTexture )
+  if ( m_depth.GetTexture() )
   {
-    glDeleteTextures( 1, &m_depthTexture );
-    m_depthTexture = 0;
+    uint32_t tex = m_depth.GetTexture();
+    glDeleteTextures( 1, &tex );
+    m_depth = aeRenderTexture();
   }
 
   if ( m_fbo )
@@ -1178,13 +1159,83 @@ void aeRenderTexture::Destroy()
   m_height = 0;
 }
 
-void aeRenderTexture::Activate()
+void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
 {
+  AE_ASSERT( m_targets.Length() < 16 );
+
+  uint32_t texture = 0;
+  uint32_t target = GL_TEXTURE_2D;
+  GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
+
+  glGenTextures( 1, &texture );
+  AE_ASSERT( texture );
+  glBindTexture( target, texture );
+  glTexParameteri( target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexImage2D( target, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
+  
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, target, texture, 0 );
+
+  m_targets.Append( aeRenderTexture( texture, target ) );
+
+  AE_CHECK_GL_ERROR();
+}
+
+void aeRenderTarget::AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+{
+  uint32_t texture = 0;
+  uint32_t target = GL_TEXTURE_2D;
+  GLint depthFormat = GL_DEPTH_COMPONENT24;
+  
+  glGenTextures( 1, &texture );
+  glBindTexture( target, texture );
+  glTexParameteri( target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexImage2D( target, 0, depthFormat, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
+
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, target, texture, 0 );
+
+  m_depth = aeRenderTexture( texture, target );
+
+  AE_CHECK_GL_ERROR();
+}
+
+void aeRenderTarget::Activate()
+{
+  CheckFramebufferComplete( m_fbo );
   glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+  
+  GLenum buffers[] =
+  {
+    GL_COLOR_ATTACHMENT0_EXT,
+    GL_COLOR_ATTACHMENT1_EXT,
+    GL_COLOR_ATTACHMENT2_EXT,
+    GL_COLOR_ATTACHMENT3_EXT,
+    GL_COLOR_ATTACHMENT4_EXT,
+    GL_COLOR_ATTACHMENT5_EXT,
+    GL_COLOR_ATTACHMENT6_EXT,
+    GL_COLOR_ATTACHMENT7_EXT,
+    GL_COLOR_ATTACHMENT8_EXT,
+    GL_COLOR_ATTACHMENT9_EXT,
+    GL_COLOR_ATTACHMENT10_EXT,
+    GL_COLOR_ATTACHMENT11_EXT,
+    GL_COLOR_ATTACHMENT12_EXT,
+    GL_COLOR_ATTACHMENT13_EXT,
+    GL_COLOR_ATTACHMENT14_EXT,
+    GL_COLOR_ATTACHMENT15_EXT
+  };
+  glDrawBuffers( m_targets.Length(), buffers );
+
   glViewport( 0, 0, GetWidth(), GetHeight() );
 }
 
-void aeRenderTexture::Clear( aeColor color )
+void aeRenderTarget::Clear( aeColor color )
 {
   Activate();
 
@@ -1201,22 +1252,32 @@ void aeRenderTexture::Clear( aeColor color )
   AE_CHECK_GL_ERROR();
 }
 
-void aeRenderTexture::Render( aeShader* shader, const aeUniformList& uniforms )
-{
-  m_quad.Render( shader, uniforms );
-}
-
-void aeRenderTexture::Render2D( aeRect ndc, float z )
+void aeRenderTarget::Render2D( uint32_t textureIndex, aeRect ndc, float z )
 {
   glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 
   aeUniformList uniforms;
-  uniforms.Set( "u_localToNdc", aeRenderTexture::GetQuadToNDCTransform( ndc, z ) );
-  uniforms.Set( "u_tex", this );
+  uniforms.Set( "u_localToNdc", aeRenderTarget::GetQuadToNDCTransform( ndc, z ) );
+  uniforms.Set( "u_tex", GetTexture( textureIndex ) );
   m_quad.Render( &m_shader, uniforms );
 }
 
-aeFloat4x4 aeRenderTexture::GetQuadToNDCTransform( aeRect ndc, float z )
+const aeRenderTexture* aeRenderTarget::GetTexture( uint32_t index ) const
+{
+  return &m_targets[ index ];
+}
+
+uint32_t aeRenderTarget::GetWidth() const
+{
+  return m_width;
+}
+
+uint32_t aeRenderTarget::GetHeight() const
+{
+  return m_height;
+}
+
+aeFloat4x4 aeRenderTarget::GetQuadToNDCTransform( aeRect ndc, float z )
 {
   aeFloat4x4 localToNdc = aeFloat4x4::Translation( aeFloat3( ndc.x, ndc.y, z ) );
   localToNdc.Scale( aeFloat3( ndc.w, ndc.h, 1.0f ) );
@@ -1289,7 +1350,7 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
-  render->GetCanvas()->Render2D( render->GetNDCRect(), 0.5f );
+  render->GetCanvas()->Render2D( 0, render->GetNDCRect(), 0.5f );
 
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );

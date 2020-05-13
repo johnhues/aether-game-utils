@@ -408,21 +408,30 @@ private:
   bool m_hasAlpha;
 };
 
-class aeRenderTexture : public aeTexture
+struct aeRenderTexture : public aeTexture
+{
+  aeRenderTexture() = default;
+  aeRenderTexture( uint32_t texture, uint32_t target );
+};
+
+class aeRenderTarget
 {
 public:
-  aeRenderTexture();
-  ~aeRenderTexture();
-  void Initialize( uint32_t width, uint32_t height, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
+  aeRenderTarget();
+  ~aeRenderTarget();
+  void Initialize( uint32_t width, uint32_t height );
   void Destroy();
+
+  void AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
+  void AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
 
   void Activate();
   void Clear( aeColor color );
-  void Render( aeShader* shader, const aeUniformList& uniforms );
-  void Render2D( aeRect ndc, float z );
+  void Render2D( uint32_t textureIndex, aeRect ndc, float z );
 
-  uint32_t GetWidth() const { return m_width; }
-  uint32_t GetHeight() const { return m_height; }
+  const aeRenderTexture* GetTexture( uint32_t index ) const;
+  uint32_t GetWidth() const;
+  uint32_t GetHeight() const;
 
   static aeFloat4x4 GetQuadToNDCTransform( aeRect ndc, float z );
 
@@ -434,7 +443,9 @@ private:
   };
 
   uint32_t m_fbo;
-  uint32_t m_depthTexture;
+
+  aeArray< aeRenderTexture > m_targets;
+  aeRenderTexture m_depth;
 
   uint32_t m_width;
   uint32_t m_height;
@@ -569,7 +580,7 @@ public:
   void EndFrame();
 
   class aeWindow* GetWindow() { return m_window; }
-  aeRenderTexture* GetCanvas() { return &m_canvas; }
+  aeRenderTarget* GetCanvas() { return &m_canvas; }
 
   void SetClearColor( aeColor color );
   aeColor GetClearColor() const;
@@ -589,7 +600,7 @@ private:
   uint32_t m_targetWidth;
   uint32_t m_targetHeight;
 
-  aeRenderTexture m_canvas;
+  aeRenderTarget m_canvas;
   aeColor m_clearColor;
 };
 
