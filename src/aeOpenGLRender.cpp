@@ -78,6 +78,103 @@ GLenum aeVertexDataTypeToGL( aeVertexDataType::Type type )
   }
 }
 
+#define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+
+void CheckFramebufferComplete( GLuint framebuffer )
+{
+  GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+  if ( fboStatus != GL_FRAMEBUFFER_COMPLETE )
+  {
+    const char* errStr = "unknown";
+    switch ( fboStatus )
+    {
+      case GL_FRAMEBUFFER_UNDEFINED:
+        errStr = "GL_FRAMEBUFFER_UNDEFINED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+        break;
+      case GL_FRAMEBUFFER_UNSUPPORTED:
+        errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+        break;
+      default:
+        break;
+    }
+    AE_FAIL_MSG( "GL FBO Error: (#) #", fboStatus, errStr );
+  }
+}
+
+#if _AE_DEBUG_
+void aeOpenGLDebugCallback( GLenum source,
+  GLenum type,
+  GLuint id,
+  GLenum severity,
+  GLsizei length,
+  const GLchar* message,
+  const void* userParam )
+{
+  AE_INFO( message );
+
+  std::cout << "---------------------opengl-callback-start------------" << std::endl;
+  std::cout << "message: " << message << std::endl;
+  std::cout << "type: ";
+  switch ( type )
+  {
+    case GL_DEBUG_TYPE_ERROR:
+      std::cout << "ERROR";
+      break;
+    case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+      std::cout << "DEPRECATED_BEHAVIOR";
+      break;
+    case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+      std::cout << "UNDEFINED_BEHAVIOR";
+      break;
+    case GL_DEBUG_TYPE_PORTABILITY:
+      std::cout << "PORTABILITY";
+      break;
+    case GL_DEBUG_TYPE_PERFORMANCE:
+      std::cout << "PERFORMANCE";
+      break;
+    case GL_DEBUG_TYPE_OTHER:
+      std::cout << "OTHER";
+      break;
+  }
+  std::cout << std::endl;
+
+  std::cout << "id: " << id << std::endl;
+  std::cout << "severity: ";
+  switch ( severity )
+  {
+    case GL_DEBUG_SEVERITY_LOW:
+      std::cout << "LOW";
+      break;
+    case GL_DEBUG_SEVERITY_MEDIUM:
+      std::cout << "MEDIUM";
+      break;
+    case GL_DEBUG_SEVERITY_HIGH:
+      std::cout << "HIGH";
+      break;
+  }
+  std::cout << std::endl;
+  std::cout << "---------------------opengl-callback-end--------------" << std::endl;
+}
+#endif
+
 //------------------------------------------------------------------------------
 // aeVertexData member functions
 //------------------------------------------------------------------------------
@@ -366,15 +463,15 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
   shader->Activate( uniforms );
 
   glBindVertexArray( m_array );
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 
   glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 
   if ( m_indexCount && m_primitive != aeVertexPrimitive::Point )
   {
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
   }
 
   for ( uint32_t i = 0; i < shader->GetAttributeCount(); i++ )
@@ -388,12 +485,12 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
     GLint location = shaderAttribute->location;
     AE_ASSERT( location != -1 );
     glEnableVertexAttribArray( location );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
 
     uint32_t componentCount = vertexAttribute->componentCount;
     uint64_t attribOffset = vertexAttribute->offset;
     glVertexAttribPointer( location, componentCount, vertexAttribute->type, GL_FALSE, m_vertexSize, (void*)attribOffset );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
   }
 
   int64_t start = 0; // TODO: Add support to start drawing at non-zero index
@@ -429,13 +526,13 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
     if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
     
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
     GLenum type = 0;
     if ( m_indexSize == sizeof(uint8_t) ) { type = GL_UNSIGNED_BYTE; }
     else if ( m_indexSize == sizeof(uint16_t) ) { type = GL_UNSIGNED_SHORT; }
     else if ( m_indexSize == sizeof(uint32_t) ) { type = GL_UNSIGNED_INT; }
     glDrawElements( mode, count, type, (void*)start );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
   }
   else
   {
@@ -444,7 +541,7 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
     if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
     
     glDrawArrays( mode, start, count );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
   }
 }
 
@@ -485,6 +582,7 @@ aeShader::~aeShader()
 
 void aeShader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
 {
+  AE_CHECK_GL_ERROR();
   AE_ASSERT( !m_program );
 
   m_program = glCreateProgram();
@@ -585,6 +683,8 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
 
     m_uniforms.Set( name, uniform );
   }
+
+  AE_CHECK_GL_ERROR();
 }
 
 void aeShader::Destroy()
@@ -610,6 +710,8 @@ void aeShader::Destroy()
 
 void aeShader::Activate( const aeUniformList& uniforms ) const
 {
+  AE_CHECK_GL_ERROR();
+
   glUseProgram( m_program );
 
   // Set rendering params
@@ -690,7 +792,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     {
       AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
       glActiveTexture( GL_TEXTURE0 + textureIndex );
-      glBindTexture( GL_TEXTURE_2D, uniformValue->sampler );
+      glBindTexture( uniformValue->target, uniformValue->sampler );
       glUniform1i( uniformVar->location, textureIndex );
       textureIndex++;
     }
@@ -732,9 +834,9 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     {
       AE_ASSERT_MSG( false, "Invalid uniform type '#': #", uniformVarName, uniformVar->type );
     }
-  }
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
+  }
 }
 
 const aeShaderAttribute* aeShader::GetAttributeByIndex( uint32_t index ) const
@@ -842,6 +944,7 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
     return 0;
   }
   
+  AE_CHECK_GL_ERROR();
   return shader;
 }
 
@@ -864,14 +967,15 @@ void aeTexture2D::Initialize( const uint8_t* data, uint32_t width, uint32_t heig
 {
   m_width = width;
   m_height = height;
+  m_target = GL_TEXTURE_2D;
 
   glGenTextures( 1, &m_texture );
-  glBindTexture( GL_TEXTURE_2D, m_texture );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  
+  glBindTexture( m_target, m_texture );
+  glTexParameteri( m_target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( m_target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( m_target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( m_target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+
   GLint internalFormat = 0;
   GLenum format = 0;
   GLint unpackAlignment;
@@ -901,7 +1005,7 @@ void aeTexture2D::Initialize( const uint8_t* data, uint32_t width, uint32_t heig
   }
 
   glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
-  glTexImage2D( GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data );
+  glTexImage2D( m_target, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data );
 }
 
 void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
@@ -983,26 +1087,32 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   AE_ASSERT( m_fbo );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
 
+  m_target = GL_TEXTURE_2D;
   glGenTextures( 1, &m_texture );
   AE_ASSERT( m_texture );
-  glBindTexture( GL_TEXTURE_2D, m_texture );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
-  glBindTexture( GL_TEXTURE_2D, 0 );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0 );
+  glBindTexture( m_target, m_texture );
+  glTexParameteri( m_target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( m_target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( m_target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( m_target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexImage2D( m_target, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_target, m_texture, 0 );
+  AE_CHECK_GL_ERROR();
 
+  GLint depthFormat = GL_DEPTH_COMPONENT24;
   glGenTextures( 1, &m_depthTexture );
-  glBindTexture( GL_TEXTURE_2D, m_depthTexture );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_depthTexture, 0 );
+  glBindTexture( m_target, m_depthTexture );
+  glTexParameteri( m_target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( m_target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( m_target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( m_target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexImage2D( m_target, 0, depthFormat, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_target, m_depthTexture, 0 );
+  AE_CHECK_GL_ERROR();
 
+  CheckFramebufferComplete( m_fbo );
+
+  AE_CHECK_GL_ERROR();
   Vertex quadVerts[] =
   {
     { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
@@ -1016,6 +1126,7 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   m_quad.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof( Vertex, uv ) );
   m_quad.SetVertices( quadVerts, aeQuadVertCount );
   m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  AE_CHECK_GL_ERROR();
 
   // @TODO: Figure out if there are any implicit SRGB conversions happening here. Improve interface and visibility to user if there are.
   const char* vertexStr = "\
@@ -1037,7 +1148,7 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
     }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 }
 
 void aeRenderTexture::Destroy()
@@ -1069,8 +1180,25 @@ void aeRenderTexture::Destroy()
 
 void aeRenderTexture::Activate()
 {
-  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
   glViewport( 0, 0, GetWidth(), GetHeight() );
+}
+
+void aeRenderTexture::Clear( aeColor color )
+{
+  Activate();
+
+  AE_CHECK_GL_ERROR();
+
+  aeFloat3 clearColor = color.GetSRGB(); // Unclear why glClearColor() expects srgb. Maybe because of framebuffer type.
+  glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
+  glClearDepth( 1.0f );
+
+  glDepthMask( GL_TRUE );
+  glDisable( GL_DEPTH_TEST );
+  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+
+  AE_CHECK_GL_ERROR();
 }
 
 void aeRenderTexture::Render( aeShader* shader, const aeUniformList& uniforms )
@@ -1080,6 +1208,8 @@ void aeRenderTexture::Render( aeShader* shader, const aeUniformList& uniforms )
 
 void aeRenderTexture::Render2D( aeRect ndc, float z )
 {
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+
   aeUniformList uniforms;
   uniforms.Set( "u_localToNdc", aeRenderTexture::GetQuadToNDCTransform( ndc, z ) );
   uniforms.Set( "u_tex", this );
@@ -1108,10 +1238,11 @@ void aeOpenGLRender::Initialize( aeRender* render )
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
+#if _AE_DEBUG_
+  SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
+#endif
   SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
   SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
-  SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 );
-  SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 16 );
 
   m_context = SDL_GL_CreateContext( (SDL_Window*)render->GetWindow()->window );
   SDL_GL_MakeCurrent( (SDL_Window*)render->GetWindow()->window, m_context );
@@ -1125,9 +1256,13 @@ void aeOpenGLRender::Initialize( aeRender* render )
   AE_ASSERT_MSG( err == GLEW_OK, "Could not initialize glew" );
 #endif
 
+#if _AE_DEBUG_
+  glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
+#endif
+
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 }
 
 void aeOpenGLRender::Terminate( aeRender* render )
@@ -1136,32 +1271,23 @@ void aeOpenGLRender::Terminate( aeRender* render )
 }
 
 void aeOpenGLRender::StartFrame( aeRender* render )
-{
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
-  
-  aeFloat3 clearColor = render->GetClearColor().GetSRGB(); // Unclear why glClearColor() expects srgb. Maybe because of framebuffer type.
-  glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
-  glClearDepth( 1.0f );
-  glDepthMask( GL_TRUE );
-  glDisable( GL_DEPTH_TEST );
-  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
-}
+{}
 
 void aeOpenGLRender::EndFrame( aeRender* render )
 {
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 
-  glBindFramebuffer( GL_FRAMEBUFFER, m_defaultFbo );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
   glViewport( 0, 0, render->GetWindow()->GetWidth(), render->GetWindow()->GetHeight() );
 
   // Clear window target in case canvas doesn't fit exactly
   glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
   glClearDepth( 1.0f );
+
   glDepthMask( GL_TRUE );
   glDisable( GL_DEPTH_TEST );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+  AE_CHECK_GL_ERROR();
 
   render->GetCanvas()->Render2D( render->GetNDCRect(), 0.5f );
 
@@ -1169,5 +1295,5 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
 #endif
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 }

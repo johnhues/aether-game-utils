@@ -222,6 +222,7 @@ void aeUniformList::Set( const char* name, const aeTexture* tex )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.sampler = tex->GetTexture();
+  uniform.target = tex->GetTarget();
 }
 
 const aeUniformList::Value* aeUniformList::Get( const char* name ) const
@@ -822,6 +823,7 @@ void aeRender::StartFrame()
     m_canvas.Initialize( m_targetWidth, m_targetHeight, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
   }
   m_canvas.Activate();
+  m_canvas.Clear( GetClearColor() );
 
   m_renderInternal->StartFrame( this );
 }
@@ -831,7 +833,6 @@ void aeRender::EndFrame()
   AE_ASSERT( m_renderInternal );
   m_renderInternal->EndFrame( this );
 }
-
 
 void aeRender::Resize( uint32_t width, uint32_t height )
 {

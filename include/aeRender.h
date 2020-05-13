@@ -169,6 +169,7 @@ public:
   struct Value
   {
     uint32_t sampler = 0;
+    uint32_t target = 0;
     int32_t size = 0;
     aeFloat4x4 value;
   };
@@ -379,11 +380,13 @@ struct aeTextureWrap
 class aeTexture
 {
 public:
-  aeTexture() : m_texture( 0 ) {}
+  aeTexture() : m_texture( 0 ), m_target( 0 ) {}
   uint32_t GetTexture() const { return m_texture; }
+  uint32_t GetTarget() const { return m_target; }
 
 protected:
   uint32_t m_texture;
+  uint32_t m_target;
 };
 
 class aeTexture2D : public aeTexture
@@ -414,6 +417,7 @@ public:
   void Destroy();
 
   void Activate();
+  void Clear( aeColor color );
   void Render( aeShader* shader, const aeUniformList& uniforms );
   void Render2D( aeRect ndc, float z );
 
