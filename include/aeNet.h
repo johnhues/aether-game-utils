@@ -344,6 +344,7 @@ void AetherServer_SendAll( AetherServer* );
 AetherPlayer* AetherServer_GetPlayerByNetInstId( AetherServer*, NetInstId id );
 uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userData, AetherPlayer* (&playersOut)[ 32 ] );
 
+void AetherServer_QueueSend( AetherServer* as, const ServerSendInfo* info );
 void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
 void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
 void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
