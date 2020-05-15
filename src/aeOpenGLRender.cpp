@@ -1358,3 +1358,8 @@ void aeOpenGLRender::EndFrame( aeRender* render )
 
   AE_CHECK_GL_ERROR();
 }
+
+void* aeOpenGLRender::GetContext() const
+{
+  return m_context;
+}

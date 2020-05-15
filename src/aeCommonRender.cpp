@@ -836,6 +836,11 @@ void aeRender::EndFrame()
   m_renderInternal->EndFrame( this );
 }
 
+void* aeRender::GetContext() const
+{
+  return m_renderInternal->GetContext();
+}
+
 void aeRender::Resize( uint32_t width, uint32_t height )
 {
   m_targetWidth = width;

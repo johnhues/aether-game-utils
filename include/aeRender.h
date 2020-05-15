@@ -578,6 +578,7 @@ public:
   //        Maybe change to Activate() and Present()?
   void StartFrame();
   void EndFrame();
+  void* GetContext() const;
 
   class aeWindow* GetWindow() { return m_window; }
   aeRenderTarget* GetCanvas() { return &m_canvas; }
