@@ -58,6 +58,7 @@ set(AE_HEADER_FILES
 	../include/aeCommand.h
 	../include/aeCommandLineArgs.h
 	../include/aeDict.h
+	../include/aeImGui.h
 	../include/aeInitializer.h
 	../include/aeInput.h
 	../include/aeInventoryGrid.h
