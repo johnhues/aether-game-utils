@@ -33,13 +33,14 @@
 // Shaders
 //------------------------------------------------------------------------------
 const char* kVertShader = "\
+	AE_UNIFORM mat4 u_modelToNdc;\
 	AE_IN_HIGHP vec4 a_position;\
 	AE_IN_HIGHP vec4 a_color;\
 	AE_OUT_HIGHP vec4 v_color;\
 	void main()\
 	{\
 		v_color = a_color;\
-		gl_Position = a_position;\
+		gl_Position = u_modelToNdc * a_position;\
 	}";
 
 const char* kFragShader = "\
@@ -60,9 +61,9 @@ struct Vertex
 
 Vertex kTriangleVerts[] =
 {
-	{ aeFloat4( -0.5f, -0.5f, 0.0f, 1.0f ), aeColor::PicoRed().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, -0.5f, 0.0f, 1.0f ), aeColor::PicoGreen().GetLinearRGBA() },
-	{ aeFloat4( 0.0f, 0.5f, 0.0f, 1.0f ), aeColor::PicoBlue().GetLinearRGBA() },
+	{ aeFloat4( -0.5f, -0.4f, 0.0f, 1.0f ), aeColor::PicoRed().GetLinearRGBA() },
+	{ aeFloat4( 0.5f, -0.4f, 0.0f, 1.0f ), aeColor::PicoGreen().GetLinearRGBA() },
+	{ aeFloat4( 0.0f, 0.4f, 0.0f, 1.0f ), aeColor::PicoBlue().GetLinearRGBA() },
 };
 
 uint16_t kTriangleIndices[] =
@@ -106,7 +107,9 @@ int main()
 		render.Resize( window.GetWidth(), window.GetHeight() );
 		render.StartFrame();
 
-		vertexData.Render( &shader, aeUniformList() );
+		aeUniformList uniformList;
+		uniformList.Set( "u_modelToNdc", aeFloat4x4::Scaling( aeFloat3( 1.0f / render.GetAspectRatio() , 1.0f, 1.0f ) ) );
+		vertexData.Render( &shader, uniformList );
 		
 		render.EndFrame();
 		timeStep.Wait();
