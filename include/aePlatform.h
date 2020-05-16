@@ -62,13 +62,12 @@
 #endif
 
 //------------------------------------------------------------------------------
-// Debug defines
+// Debug define
 //------------------------------------------------------------------------------
-#define _AE_DEBUG_ 0
-
-#if ( defined(_DEBUG) || defined(DEBUG) ) && !defined(NDEBUG)
-  #undef _AE_DEBUG_
+#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) )
   #define _AE_DEBUG_ 1
+#else
+  #define _AE_DEBUG_ 0
 #endif
 
 //------------------------------------------------------------------------------

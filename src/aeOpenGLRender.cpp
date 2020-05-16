@@ -47,6 +47,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#if _AE_DEBUG_ && !_AE_APPLE_
+  #define AE_GL_DEBUG_MODE 1
+#else
+  #define AE_GL_DEBUG_MODE 0
+#endif
+
 #if _AE_EMSCRIPTEN_
   #define GL_SAMPLER_3D 0x0
   #define GL_TEXTURE_3D 0x0
@@ -119,7 +125,7 @@ void CheckFramebufferComplete( GLuint framebuffer )
   }
 }
 
-#if _AE_DEBUG_
+#if AE_GL_DEBUG_MODE
 void aeOpenGLDebugCallback( GLenum source,
   GLenum type,
   GLuint id,
@@ -1213,22 +1219,22 @@ void aeRenderTarget::Activate()
   
   GLenum buffers[] =
   {
-    GL_COLOR_ATTACHMENT0_EXT,
-    GL_COLOR_ATTACHMENT1_EXT,
-    GL_COLOR_ATTACHMENT2_EXT,
-    GL_COLOR_ATTACHMENT3_EXT,
-    GL_COLOR_ATTACHMENT4_EXT,
-    GL_COLOR_ATTACHMENT5_EXT,
-    GL_COLOR_ATTACHMENT6_EXT,
-    GL_COLOR_ATTACHMENT7_EXT,
-    GL_COLOR_ATTACHMENT8_EXT,
-    GL_COLOR_ATTACHMENT9_EXT,
-    GL_COLOR_ATTACHMENT10_EXT,
-    GL_COLOR_ATTACHMENT11_EXT,
-    GL_COLOR_ATTACHMENT12_EXT,
-    GL_COLOR_ATTACHMENT13_EXT,
-    GL_COLOR_ATTACHMENT14_EXT,
-    GL_COLOR_ATTACHMENT15_EXT
+    GL_COLOR_ATTACHMENT0,
+    GL_COLOR_ATTACHMENT1,
+    GL_COLOR_ATTACHMENT2,
+    GL_COLOR_ATTACHMENT3,
+    GL_COLOR_ATTACHMENT4,
+    GL_COLOR_ATTACHMENT5,
+    GL_COLOR_ATTACHMENT6,
+    GL_COLOR_ATTACHMENT7,
+    GL_COLOR_ATTACHMENT8,
+    GL_COLOR_ATTACHMENT9,
+    GL_COLOR_ATTACHMENT10,
+    GL_COLOR_ATTACHMENT11,
+    GL_COLOR_ATTACHMENT12,
+    GL_COLOR_ATTACHMENT13,
+    GL_COLOR_ATTACHMENT14,
+    GL_COLOR_ATTACHMENT15
   };
   glDrawBuffers( m_targets.Length(), buffers );
 
@@ -1299,7 +1305,7 @@ void aeOpenGLRender::Initialize( aeRender* render )
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-#if _AE_DEBUG_
+#if AE_GL_DEBUG_MODE
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
 #endif
   SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
@@ -1317,7 +1323,7 @@ void aeOpenGLRender::Initialize( aeRender* render )
   AE_ASSERT_MSG( err == GLEW_OK, "Could not initialize glew" );
 #endif
 
-#if _AE_DEBUG_
+#if AE_GL_DEBUG_MODE
   glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
 #endif
 
