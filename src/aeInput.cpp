@@ -68,7 +68,7 @@ InputState::InputState()
 
   exit = false;
 
-  memset( keys, 0 ,sizeof( keys ) );
+  memset( m_keys, 0 ,sizeof( m_keys ) );
 }
 
 bool InputState::Get( InputType type ) const
@@ -171,6 +171,11 @@ const char* InputState::GetName( InputType type ) const
   default:
     return "";
   }
+}
+
+bool InputState::Get( aeKey key ) const
+{
+	return m_keys[ (uint32_t)key ];
 }
 
 //------------------------------------------------------------------------------
@@ -328,7 +333,7 @@ void aeInput::Pump()
 
   if ( m_textMode )
   {
-    memset( m_input.keys, 0, sizeof( m_input.keys ) );
+    memset( m_input.m_keys, 0, sizeof( m_input.m_keys ) );
   }
   else
   {
@@ -337,7 +342,7 @@ void aeInput::Pump()
     numKeys = aeMath::Min( (int32_t)kKeyCount, numKeys );
     for ( int32_t i = 0; i < numKeys; i++ )
     {
-      m_input.keys[ i ] = ( keys[ i ] != 0 );
+      m_input.m_keys[ i ] = ( keys[ i ] != 0 );
     }
   }
 #endif

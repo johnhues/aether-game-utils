@@ -190,13 +190,7 @@ enum class aeKey
   RightAlt = 230,
   RightSuper = 231
 };
-class aeKeyUint32Converter
-{
-public:
-  aeKeyUint32Converter( aeKey key ) : key( (uint32_t)key ) {}
-  operator uint32_t () const { return key; }
-  uint32_t key;
-};
+
 const uint32_t kKeyCount = 256;
 
 //------------------------------------------------------------------------------
@@ -208,6 +202,7 @@ public:
   InputState();
   bool Get( InputType type ) const;
   const char* GetName( InputType type ) const;
+  bool Get( aeKey key ) const;
 
   bool gamepad;
 
@@ -242,7 +237,9 @@ public:
 
   bool exit; // Window 'X' etc
 
-  bool keys[ kKeyCount ];
+private:
+  friend class aeInput;
+  bool m_keys[ kKeyCount ];
 };
 
 //------------------------------------------------------------------------------

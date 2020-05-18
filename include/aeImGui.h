@@ -52,28 +52,28 @@ namespace aeImGui
 		ImGui_ImplOpenGL3_Init( "#version 330" );
 
 		ImGuiIO& io = ImGui::GetIO();
-		io.KeyMap[ ImGuiKey_Tab ] = aeKey::Tab;
-		io.KeyMap[ ImGuiKey_LeftArrow ] = aeKey::Left;
-		io.KeyMap[ ImGuiKey_RightArrow ] = aeKey::Right;
-		io.KeyMap[ ImGuiKey_UpArrow ] = aeKey::Up;
-		io.KeyMap[ ImGuiKey_DownArrow ] = aeKey::Down;
-		io.KeyMap[ ImGuiKey_PageUp ] = aeKey::PageUp;
-		io.KeyMap[ ImGuiKey_PageDown ] = aeKey::PageDown;
-		io.KeyMap[ ImGuiKey_Home ] = aeKey::Home;
-		io.KeyMap[ ImGuiKey_End ] = aeKey::End;
-		io.KeyMap[ ImGuiKey_Insert ] = aeKey::Insert;
-		io.KeyMap[ ImGuiKey_Delete ] = aeKey::Delete;
-		io.KeyMap[ ImGuiKey_Backspace ] = aeKey::Backspace;
-		io.KeyMap[ ImGuiKey_Space ] = aeKey::Space;
-		io.KeyMap[ ImGuiKey_Enter ] = aeKey::Enter;
-		io.KeyMap[ ImGuiKey_Escape ] = aeKey::Escape;
-		io.KeyMap[ ImGuiKey_KeyPadEnter ] = aeKey::NumPadEnter;
-		io.KeyMap[ ImGuiKey_A ] = aeKey::A;
-		io.KeyMap[ ImGuiKey_C ] = aeKey::C;
-		io.KeyMap[ ImGuiKey_V ] = aeKey::V;
-		io.KeyMap[ ImGuiKey_X ] = aeKey::X;
-		io.KeyMap[ ImGuiKey_Y ] = aeKey::Y;
-		io.KeyMap[ ImGuiKey_Z ] = aeKey::Z;
+		io.KeyMap[ ImGuiKey_Tab ] = (uint32_t)aeKey::Tab;
+		io.KeyMap[ ImGuiKey_LeftArrow ] = (uint32_t)aeKey::Left;
+		io.KeyMap[ ImGuiKey_RightArrow ] = (uint32_t)aeKey::Right;
+		io.KeyMap[ ImGuiKey_UpArrow ] = (uint32_t)aeKey::Up;
+		io.KeyMap[ ImGuiKey_DownArrow ] = (uint32_t)aeKey::Down;
+		io.KeyMap[ ImGuiKey_PageUp ] = (uint32_t)aeKey::PageUp;
+		io.KeyMap[ ImGuiKey_PageDown ] = (uint32_t)aeKey::PageDown;
+		io.KeyMap[ ImGuiKey_Home ] = (uint32_t)aeKey::Home;
+		io.KeyMap[ ImGuiKey_End ] = (uint32_t)aeKey::End;
+		io.KeyMap[ ImGuiKey_Insert ] = (uint32_t)aeKey::Insert;
+		io.KeyMap[ ImGuiKey_Delete ] = (uint32_t)aeKey::Delete;
+		io.KeyMap[ ImGuiKey_Backspace ] = (uint32_t)aeKey::Backspace;
+		io.KeyMap[ ImGuiKey_Space ] = (uint32_t)aeKey::Space;
+		io.KeyMap[ ImGuiKey_Enter ] = (uint32_t)aeKey::Enter;
+		io.KeyMap[ ImGuiKey_Escape ] = (uint32_t)aeKey::Escape;
+		io.KeyMap[ ImGuiKey_KeyPadEnter ] = (uint32_t)aeKey::NumPadEnter;
+		io.KeyMap[ ImGuiKey_A ] = (uint32_t)aeKey::A;
+		io.KeyMap[ ImGuiKey_C ] = (uint32_t)aeKey::C;
+		io.KeyMap[ ImGuiKey_V ] = (uint32_t)aeKey::V;
+		io.KeyMap[ ImGuiKey_X ] = (uint32_t)aeKey::X;
+		io.KeyMap[ ImGuiKey_Y ] = (uint32_t)aeKey::Y;
+		io.KeyMap[ ImGuiKey_Z ] = (uint32_t)aeKey::Z;
 	}
 
 	inline void Terminate()
@@ -99,11 +99,10 @@ namespace aeImGui
 		io.MouseWheel += inputState->scroll;
 		io.MousePos = ImVec2( inputState->mousePixelPos.x, render->GetHeight() - inputState->mousePixelPos.y );
 		
-		const auto& keys = inputState->keys;
 		AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
 		for ( uint32_t i = 0; i < kKeyCount; i++ )
 		{
-			io.KeysDown[ i ] = keys[ i ];
+			io.KeysDown[ i ] = inputState->Get( (aeKey)i );
 		}
 		io.KeyShift = inputState->shift;
 		io.KeyCtrl = inputState->ctrl;
