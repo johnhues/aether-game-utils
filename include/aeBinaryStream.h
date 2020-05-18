@@ -85,10 +85,10 @@ public:
   void SerializeRaw( T& v );
   template< typename T >
   void SerializeRaw( const T& v );
-  void SerializeRaw( uint8_t* data, uint32_t length );
-  void SerializeRaw( const uint8_t* data, uint32_t length );
-  void SerializeRaw( aeArray< uint8_t>& array );
-  void SerializeRaw( const aeArray< uint8_t>& array );
+  void SerializeRaw( void* data, uint32_t length );
+  void SerializeRaw( const void* data, uint32_t length );
+  void SerializeRaw( aeArray< uint8_t >& array );
+  void SerializeRaw( const aeArray< uint8_t >& array );
 
   // Once the stream is invalid serialization calls will result in silent no-ops
   void Invalidate() { AE_FAIL(); m_isValid = false; }
@@ -104,7 +104,7 @@ public:
   uint32_t GetLength() const { return m_length; }
 
   // Get data past the current read head
-  const uint8_t* PeakData() const { return GetData() + m_position; }
+  const uint8_t* PeekData() const { return GetData() + m_position; }
   uint32_t GetRemaining() const { return m_length - m_position; }
   void Discard( uint32_t length ) { m_position += aeMath::Min( length, GetRemaining() ); }
 

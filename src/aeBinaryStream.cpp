@@ -236,7 +236,7 @@ void aeBinaryStream::SerializeArray( aeArray< uint8_t>& array )
       return;
     }
     
-    array.Append( PeakData(), length );
+    array.Append( PeekData(), length );
     Discard( length );
   }
   else if ( m_mode == Mode::WriteBuffer )
@@ -262,7 +262,7 @@ void aeBinaryStream::SerializeArray( const aeArray< uint8_t>& array )
   }
 }
 
-void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
+void aeBinaryStream::SerializeRaw( void* data, uint32_t length )
 {
   if ( !m_isValid )
   {
@@ -297,7 +297,7 @@ void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
     else
     {
       aeArray< uint8_t >& array = m_GetArray();
-      array.Append( data, length );
+      array.Append( (uint8_t*)data, length );
       m_position = array.Length();
       m_length = array.Size();
     }
@@ -308,10 +308,10 @@ void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
   }
 }
 
-void aeBinaryStream::SerializeRaw( const uint8_t* data, uint32_t length )
+void aeBinaryStream::SerializeRaw( const void* data, uint32_t length )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
-  SerializeRaw( const_cast< uint8_t* >( data ), length );
+  SerializeRaw( (void*)data, length );
 }
 
 void aeBinaryStream::SerializeRaw( aeArray< uint8_t>& array )

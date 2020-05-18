@@ -191,7 +191,7 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
           {
             if ( rStream.GetRemaining() >= dataLen )
             {
-              netData->m_SetClientData( rStream.PeakData(), dataLen );
+              netData->m_SetClientData( rStream.PeekData(), dataLen );
             }
             else
             {
@@ -222,7 +222,7 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
           {
             if ( rStream.GetRemaining() >= dataLen )
             {
-              netData->m_ReceiveMessages( rStream.PeakData(), dataLen );
+              netData->m_ReceiveMessages( rStream.PeekData(), dataLen );
             }
             else
             {
