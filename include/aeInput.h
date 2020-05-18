@@ -66,6 +66,140 @@ enum InputType
 };
 
 //------------------------------------------------------------------------------
+// aeKey enum
+// Based on:
+// https://hg.libsdl.org/SDL/file/eff2d605bef5/include/SDL_scancode.h
+// https://www.usb.org/sites/default/files/documents/hut1_12v2.pdf
+//------------------------------------------------------------------------------
+enum class aeKey
+{
+  Unknown = 0,
+
+  A = 4,
+  B = 5,
+  C = 6,
+  D = 7,
+  E = 8,
+  F = 9,
+  G = 10,
+  H = 11,
+  I = 12,
+  J = 13,
+  K = 14,
+  L = 15,
+  M = 16,
+  N = 17,
+  O = 18,
+  P = 19,
+  Q = 20,
+  R = 21,
+  S = 22,
+  T = 23,
+  U = 24,
+  V = 25,
+  W = 26,
+  X = 27,
+  Y = 28,
+  Z = 29,
+
+  Num1 = 30,
+  Num2 = 31,
+  Num3 = 32,
+  Num4 = 33,
+  Num5 = 34,
+  Num6 = 35,
+  Num7 = 36,
+  Num8 = 37,
+  Num9 = 38,
+  Num0 = 39,
+
+  Enter = 40,
+  Escape = 41,
+  Backspace = 42,
+  Tab = 43,
+  Space = 44,
+
+  Minus = 45,
+  Equals = 46,
+  LeftBracket = 47,
+  RightBracket = 48,
+  Backslash = 49,
+
+  Semicolon = 51,
+  Apostrophe = 52,
+  Tilde = 53,
+  Comma = 54,
+  Period = 55,
+  Slash = 56,
+  CapsLock = 57,
+
+  F1 = 58,
+  F2 = 59,
+  F3 = 60,
+  F4 = 61,
+  F5 = 62,
+  F6 = 63,
+  F7 = 64,
+  F8 = 65,
+  F9 = 66,
+  F10 = 67,
+  F11 = 68,
+  F12 = 69,
+
+  PrintScreen = 70,
+  ScrollLock = 71,
+  Pause = 72,
+
+  Insert = 73,
+  Home = 74,
+  PageUp = 75,
+  Delete = 76,
+  End = 77,
+  PageDown = 78,
+
+  Right = 79,
+  Left = 80,
+  Down = 81,
+  Up = 82,
+
+  NumLock = 84,
+  NumPadDivide = 84,
+  NumPadMultiply = 85,
+  NumPadMinus = 86,
+  NumPadPlus = 87,
+  NumPadEnter = 88,
+  NumPad1 = 89,
+  NumPad2 = 90,
+  NumPad3 = 91,
+  NumPad4 = 92,
+  NumPad5 = 93,
+  NumPad6 = 94,
+  NumPad7 = 95,
+  NumPad8 = 96,
+  NumPad9 = 97,
+  NumPad0 = 98,
+  NumPadPeriod = 99,
+  NumPadEquals = 103,
+
+  LeftControl = 224,
+  LeftShift = 225,
+  LeftAlt = 226,
+  LeftSuper = 227,
+  RightControl = 228,
+  RightShift = 229,
+  RightAlt = 230,
+  RightSuper = 231
+};
+class aeKeyUint32Converter
+{
+public:
+  aeKeyUint32Converter( aeKey key ) : key( (uint32_t)key ) {}
+  operator uint32_t () const { return key; }
+  uint32_t key;
+};
+const uint32_t kKeyCount = 256;
+
+//------------------------------------------------------------------------------
 // InputState class
 //------------------------------------------------------------------------------
 class InputState
@@ -107,6 +241,8 @@ public:
   int32_t scroll;
 
   bool exit; // Window 'X' etc
+
+  bool keys[ kKeyCount ];
 };
 
 //------------------------------------------------------------------------------
@@ -127,6 +263,7 @@ public:
   bool GetTextMode() const { return m_textMode; }
   void SetText( const char* text ) { m_text = text; }
   const char* GetText() const { return m_text.c_str(); }
+  const char* GetTextInput() const { return m_textInput.Length() ? &m_textInput[ 0 ] : ""; }
 
 private:
   class aeWindow* m_window;
@@ -139,6 +276,7 @@ private:
 
   bool m_textMode;
   aeStr512 m_text;
+  aeArray< char > m_textInput;
 };
 
 #endif

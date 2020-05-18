@@ -67,6 +67,8 @@ InputState::InputState()
   scroll = 0;
 
   exit = false;
+
+  memset( keys, 0 ,sizeof( keys ) );
 }
 
 bool InputState::Get( InputType type ) const
@@ -184,6 +186,7 @@ aeInput::aeInput()
 void aeInput::Initialize( aeWindow* window, aeRender* render )
 {
   SDL_JoystickEventState( SDL_ENABLE );
+  SDL_StartTextInput();
 
   m_window = window;
   m_render = render;
@@ -230,15 +233,7 @@ void aeInput::Pump()
 
   m_input.scroll = 0;
 
-  bool sdlTextMode = SDL_IsTextInputActive();
-  if ( m_textMode && !sdlTextMode )
-  {
-    SDL_StartTextInput();
-  }
-  else if ( !m_textMode && sdlTextMode )
-  {
-    SDL_StopTextInput();
-  }
+  m_textInput.Clear();
 
   SDL_Event events[ 32 ];
   // Get all events at once, this function can be very slow. Returns -1 while shutting down.
@@ -281,10 +276,12 @@ void aeInput::Pump()
       {
         m_input.scroll = event.wheel.y * ( event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1 );
       }
-      else if ( m_textMode && event.type == SDL_TEXTINPUT )
+      else if ( event.type == SDL_TEXTINPUT )
       {
+        m_textInput.Append( event.text.text, (uint32_t)strlen( event.text.text ) + 1 );
+
         // @NOTE: Ignore keys while modifier is pressed so below copy and paste work as expected
-        if ( !( SDL_GetModState() & KMOD_CTRL ) )
+        if ( m_textMode && !( SDL_GetModState() & KMOD_CTRL ) )
         {
           m_text += event.text.text;
         }
@@ -326,6 +323,21 @@ void aeInput::Pump()
       {
         m_input.exit = true;
       }
+    }
+  }
+
+  if ( m_textMode )
+  {
+    memset( m_input.keys, 0, sizeof( m_input.keys ) );
+  }
+  else
+  {
+    int32_t numKeys = 0;
+    const uint8_t* keys = SDL_GetKeyboardState( &numKeys );
+    numKeys = aeMath::Min( (int32_t)kKeyCount, numKeys );
+    for ( int32_t i = 0; i < numKeys; i++ )
+    {
+      m_input.keys[ i ] = ( keys[ i ] != 0 );
     }
   }
 #endif
