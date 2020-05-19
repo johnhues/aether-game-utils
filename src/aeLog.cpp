@@ -83,8 +83,18 @@ void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath
   timeBuf[ strftime( timeBuf, sizeof( timeBuf ), "%H:%M:%S", lt ) ] = '\0';
 
   const char* fileName = strrchr( filePath, '/' );
-  fileName = fileName ? fileName + 1 : strrchr( filePath, '\\' );
-  fileName = fileName ? fileName + 1 : filePath;
+  if ( fileName )
+  {
+    fileName++; // Remove end forward slash
+  }
+  else if ( ( fileName = strrchr( filePath, '\\' ) ) )
+  {
+    fileName++; // Remove end backslash
+  }
+  else
+  {
+    fileName = filePath;
+  }
 
 #if _AE_LOG_COLORS_
   os << "\x1b[90m" << timeBuf;

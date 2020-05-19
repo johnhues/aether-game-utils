@@ -331,19 +331,12 @@ void aeInput::Pump()
     }
   }
 
-  if ( m_textMode )
+  int32_t numKeys = 0;
+  const uint8_t* keys = SDL_GetKeyboardState( &numKeys );
+  numKeys = aeMath::Min( (int32_t)kKeyCount, numKeys );
+  for ( int32_t i = 0; i < numKeys; i++ )
   {
-    memset( m_input.m_keys, 0, sizeof( m_input.m_keys ) );
-  }
-  else
-  {
-    int32_t numKeys = 0;
-    const uint8_t* keys = SDL_GetKeyboardState( &numKeys );
-    numKeys = aeMath::Min( (int32_t)kKeyCount, numKeys );
-    for ( int32_t i = 0; i < numKeys; i++ )
-    {
-      m_input.m_keys[ i ] = ( keys[ i ] != 0 );
-    }
+    m_input.m_keys[ i ] = ( keys[ i ] != 0 );
   }
 #endif
 }
