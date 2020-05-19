@@ -116,6 +116,18 @@ void aeNetData::m_ReceiveMessages( const uint8_t* data, uint32_t length )
   m_messageDataIn.Append( data, length );
 }
 
+void aeNetData::m_UpdateHash()
+{
+  if ( m_data.Length() )
+  {
+    m_hash = aeFNV1a( &m_data[ 0 ], m_data.Length() );
+  }
+  else
+  {
+    m_hash = 0;
+  }
+}
+
 //------------------------------------------------------------------------------
 // aeNetReplicaClient member functions
 //------------------------------------------------------------------------------
@@ -299,15 +311,16 @@ void aeNetReplicaServer::m_UpdateSendData()
     m_pendingClear = false;
   }
 
-  uint32_t netDataSyncCount = 0;
+  aeArray< aeNetData* > toSync;
   uint32_t netDataMessageCount = 0;
   for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
   {
     aeNetData* netData = m_replicaDB->GetNetData( i );
-    if ( netData->SyncDataLength() )
+    if ( m_first || netData->m_Changed() )
     {
-      netDataSyncCount++;
+      toSync.Append( netData );
     }
+
     if ( netData->m_messageDataOut.Length() )
     {
       netDataMessageCount++;
@@ -316,19 +329,16 @@ void aeNetReplicaServer::m_UpdateSendData()
 
   aeBinaryStream wStream = aeBinaryStream::Writer( &m_sendData );
 
-  if ( netDataSyncCount )
+  if ( toSync.Length() )
   {
     wStream.SerializeRaw( aeNetReplicaServer::EventType::Update );
-    wStream.SerializeUint32( netDataSyncCount );
-    for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
+    wStream.SerializeUint32( toSync.Length() );
+    for ( uint32_t i = 0; i < toSync.Length(); i++ )
     {
-      aeNetData* netData = m_replicaDB->GetNetData( i );
-      if ( netData->SyncDataLength() )
-      {
-        wStream.SerializeUint32( netData->GetId().GetInternalId() );
-        wStream.SerializeUint32( netData->SyncDataLength() );
-        wStream.SerializeRaw( netData->GetSyncData(), netData->SyncDataLength() );
-      }
+      aeNetData* netData = toSync[ i ];
+      wStream.SerializeUint32( netData->GetId().GetInternalId() );
+      wStream.SerializeUint32( netData->SyncDataLength() );
+      wStream.SerializeRaw( netData->GetSyncData(), netData->SyncDataLength() );
     }
   }
 
@@ -349,6 +359,7 @@ void aeNetReplicaServer::m_UpdateSendData()
   }
 
   m_pendingClear = true;
+  m_first = false;
 }
 
 const uint8_t* aeNetReplicaServer::GetSendData() const
@@ -455,6 +466,11 @@ void aeNetReplicaDB::DestroyServer( aeNetReplicaServer* server )
 
 void aeNetReplicaDB::UpdateSendData()
 {
+  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  {
+    m_netDatas.GetValue( i )->m_UpdateHash();
+  }
+
   for ( uint32_t i = 0; i < m_servers.Length(); i++ )
   {
     m_servers[ i ]->m_UpdateSendData();
@@ -462,7 +478,9 @@ void aeNetReplicaDB::UpdateSendData()
 
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {
-    m_netDatas.GetValue( i )->m_messageDataOut.Clear();
+    aeNetData* netData = m_netDatas.GetValue( i );
+    netData->m_prevHash = netData->m_hash;
+    netData->m_messageDataOut.Clear();
   }
 }
 

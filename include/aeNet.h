@@ -97,6 +97,9 @@ private:
   void m_SetClientData( const uint8_t* data, uint32_t length );
   void m_ReceiveMessages( const uint8_t* data, uint32_t length );
   void FlagForDeletion() { m_isPendingDelete = true; }
+  
+  void m_UpdateHash();
+  bool m_Changed() const { return m_hash != m_prevHash; }
 
   bool m_local = false;
   uint32_t m_type = 0;
@@ -107,6 +110,8 @@ private:
   aeArray< uint8_t > m_messageDataIn;
   uint32_t m_messageDataInOffset = 0;
 
+  uint32_t m_hash = 0;
+  uint32_t m_prevHash = 0;
   bool m_isPendingDelete = false;
 public:
   // Internal
@@ -146,6 +151,7 @@ public:
 public:
   void m_UpdateSendData();
 
+  bool m_first = true;
   class aeNetReplicaDB* m_replicaDB = nullptr;
   bool m_pendingClear = false;
   aeArray< uint8_t > m_sendData;
