@@ -35,6 +35,17 @@
 //------------------------------------------------------------------------------
 // aeString tests
 //------------------------------------------------------------------------------
+TEST_CASE( "string construction should set length correctly", "[aeString]" )
+{
+  REQUIRE( ( aeStr16().Length() == 0 ) );
+  REQUIRE( ( aeStr16( "abc" ).Length() == 3 ) );
+
+  char str[ 32 ] = {};
+  memset( str, 'q', aeStr16::MaxLength );
+  const uint32_t maxLength = aeStr16::MaxLength;
+  REQUIRE( aeStr16( str ).Length() == maxLength );
+}
+
 TEST_CASE( "strings of the same length can be compared alphabetically", "[aeString]" )
 {
   aeStr32 str0 = "abc";
