@@ -45,8 +45,6 @@ const uint32_t kMaxMetaVars = 16;
 // Internal function wrappers
 //------------------------------------------------------------------------------
 template< typename T >
-static aeObject* NewInternal() { return new T(); }
-template< typename T >
 static aeObject* PlacementNewInternal( aeObject* d ) { return new( d ) T(); }
 
 //------------------------------------------------------------------------------
@@ -112,17 +110,16 @@ public:
   public:
     Type() { memset( this, 0, sizeof( *this ) ); }
     
-    aeObject* New() const
+    template < typename T = aeObject >
+    T* New( void* obj ) const
     {
-      AE_ASSERT_MSG( !m_isAbstract, "New function not available for abstract type: #", m_name.c_str() );
-      AE_ASSERT( m_new );
-      return m_new();
-    }
-    aeObject* PlacementNew( aeObject* obj ) const
-    {
+      AE_ASSERT( obj );
       AE_ASSERT_MSG( !m_isAbstract, "Placement new function not available for abstract type: #", m_name.c_str() );
       AE_ASSERT( m_placementNew );
-      return m_placementNew( obj );
+      AE_ASSERT( IsType< T >() );
+      AE_ASSERT( (uint64_t)obj % GetAlignment() == 0 );
+      
+      return (T*)m_placementNew( (T*)obj );
     }
 
     aeMetaTypeId GetId() const { return m_id; }
@@ -155,7 +152,9 @@ public:
     template < typename T >
     bool IsType() const
     {
-      return IsType( GetType< T >() );
+      const Type* type = GetType< T >();
+      AE_ASSERT( type );
+      return IsType( type );
     }
     
     //------------------------------------------------------------------------------
@@ -164,7 +163,6 @@ public:
     template < typename T >
     typename std::enable_if< !std::is_abstract<T>::value, void>::type Init( const char* name, uint32_t index )
     {
-      m_new = &( NewInternal< T > );
       m_placementNew = &( PlacementNewInternal< T > );
       m_name = name;
       m_id = m_name.FNV1a();
@@ -177,7 +175,6 @@ public:
     template < typename T >
     typename std::enable_if< std::is_abstract<T>::value, void>::type Init( const char* name, uint32_t index )
     {
-      m_new = nullptr;
       m_placementNew = nullptr;
       m_name = name;
       m_id = m_name.FNV1a();
@@ -203,7 +200,6 @@ public:
     //------------------------------------------------------------------------------
   private:
     friend class aeMeta;
-    aeObject* ( *m_new )();
     aeObject* ( *m_placementNew )( aeObject* );
     aeStr32 m_name;
     aeMetaTypeId m_id;
@@ -489,21 +485,6 @@ public:
     const Type* type = GetType( obj );
     AE_ASSERT( type );
     return m_SetObjectVarImpl( obj, type, name, value );
-  }
-
-  template < typename T >
-  static T* New()
-  {
-    const Type* metaType = GetType< T >();
-    AE_ASSERT_MSG( metaType, "No meta type '#'", typeid(T).name() );
-    return static_cast< T* >( metaType->New() );
-  }
-
-  static aeObject* New( const char* typeName )
-  {
-    const Type* metaType = GetType( typeName );
-    AE_ASSERT_MSG( metaType, "No meta type '#'", typeName );
-    return metaType->New();
   }
 
   //------------------------------------------------------------------------------
