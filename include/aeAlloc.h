@@ -73,6 +73,8 @@ namespace aeAlloc
   template < typename T, typename ... Args >
   static T* Allocate( Args ... args );
 
+  static uint8_t* AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count );
+
   template < typename T >
   static void Release( T* obj );
 
@@ -104,11 +106,20 @@ namespace aeAlloc
     uint32_t m_count;
   };
 
+  static const uint32_t kDefaultAlignment = 16;
+  static const uint32_t kHeaderSize = 16;
   struct Header
   {
+    Header()
+    {
+      AE_STATIC_ASSERT( sizeof( *this ) <= kHeaderSize );
+      AE_STATIC_ASSERT( kHeaderSize % kDefaultAlignment == 0 );
+    }
+
     uint32_t check;
     uint32_t count;
     uint32_t size;
+    uint32_t typeSize;
   };
 };
 
@@ -124,16 +135,12 @@ T* aeAlloc::Allocate()
 template < typename T >
 T* aeAlloc::AllocateArray( uint32_t count )
 {
-  AE_STATIC_ASSERT( alignof( T ) <= 16 );
+  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
+  AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
 
-  uint32_t size = sizeof( T ) * count + 16;
-  if ( size % 16 != 0 )
-  {
-    size = ( size / 16 + 1 ) * 16; // Round up
-  }
-  AE_ASSERT( size % 16 == 0 );
-  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, 16 );
-  AE_ASSERT( (intptr_t)base % 16 == 0 );
+  uint32_t size = kHeaderSize + sizeof( T ) * count;
+  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -142,8 +149,9 @@ T* aeAlloc::AllocateArray( uint32_t count )
   header->check = 0xABCD;
   header->count = count;
   header->size = size;
+  header->typeSize = sizeof( T );
 
-  T* result = (T*)( base + 16 );
+  T* result = (T*)( base + kHeaderSize );
   for ( uint32_t i = 0; i < count; i++ )
   {
     new( &result[ i ] ) T();
@@ -159,16 +167,11 @@ T* aeAlloc::AllocateArray( uint32_t count )
 template < typename T, typename ... Args >
 static T* aeAlloc::Allocate( Args ... args )
 {
-  AE_STATIC_ASSERT( alignof( T ) <= 16 );
+  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
 
-  uint32_t size = sizeof( T ) + 16;
-  if ( size % 16 != 0 )
-  {
-    size = ( size / 16 + 1 ) * 16; // Round up
-  }
-  AE_ASSERT( size % 16 == 0 );
-  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, 16 );
-  AE_ASSERT( (intptr_t)base % 16 == 0 );
+  uint32_t size = kHeaderSize + sizeof( T );
+  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -177,12 +180,38 @@ static T* aeAlloc::Allocate( Args ... args )
   header->check = 0xABCD;
   header->count = 1;
   header->size = size;
+  header->typeSize = sizeof( T );
 
 #if _AE_DEBUG_
   GetAllocInfo().Alloc( aeGetTypeName< T >(), size );
 #endif
 
-  return new( (T*)( base + 16 ) ) T( args ... );
+  return new( (T*)( base + kHeaderSize ) ) T( args ... );
+}
+
+uint8_t* aeAlloc::AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count )
+{
+  AE_ASSERT( typeAlignment <= kDefaultAlignment );
+  AE_ASSERT( typeSize % typeAlignment == 0 ); // All elements in array should have correct alignment
+
+  uint32_t size = kHeaderSize + typeSize * count;
+  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+#if _AE_DEBUG_
+  memset( (void*)base, 0xCD, size );
+#endif
+
+  Header* header = (Header*)base;
+  header->check = 0xABCD;
+  header->count = count;
+  header->size = size;
+  header->typeSize = typeSize;
+
+#if _AE_DEBUG_
+  GetAllocInfo().Alloc( "raw", size );
+#endif
+
+  return base + kHeaderSize;
 }
 
 template < typename T >
@@ -193,16 +222,18 @@ void aeAlloc::Release( T* obj )
     return;
   }
 
-  AE_ASSERT( (intptr_t)obj % 16 == 0 );
-  uint8_t* base = (uint8_t*)obj - 16;
+  AE_ASSERT( (intptr_t)obj % kDefaultAlignment == 0 );
+  uint8_t* base = (uint8_t*)obj - kHeaderSize;
 
   Header* header = (Header*)( base );
   AE_ASSERT( header->check == 0xABCD );
 
   uint32_t count = header->count;
+  AE_ASSERT_MSG( sizeof( T ) <= header->typeSize, "Released type T '#' does not match allocated type of size #", aeGetTypeName< T >(), header->typeSize );
   for ( uint32_t i = 0; i < count; i++ )
   {
-    obj->~T();
+    T* o = (T*)( (uint8_t*)obj + header->typeSize * i );
+    o->~T();
   }
 
 #if _AE_DEBUG_
