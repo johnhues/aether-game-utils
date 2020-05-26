@@ -39,6 +39,9 @@
 #endif
 #include "imgui_impl_opengl3.h"
 
+#include "aeInput.h"
+#include "aeRender.h"
+
 //------------------------------------------------------------------------------
 // Imgui helpers
 //------------------------------------------------------------------------------
@@ -67,7 +70,7 @@ public:
 		ImGui::DestroyContext();
 	}
 
-	void NewFrame( aeRender* render, aeInput* input )
+	void NewFrame( aeRender* render, aeInput* input, float dt )
 	{
 		AE_ASSERT( m_init );
 
@@ -77,7 +80,7 @@ public:
 		io.AddInputCharactersUTF8( input->GetTextInput() );
 		input->SetTextMode( io.WantTextInput );
 
-		io.DeltaTime = kTimeStep;
+		io.DeltaTime = dt;
 		
 		// @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
 		io.MouseDown[ 0 ] = inputState->mouseLeft;

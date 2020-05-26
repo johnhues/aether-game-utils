@@ -152,6 +152,11 @@ aeColor aeColor::Lerp( const aeColor& end, float t ) const
   );
 }
 
+aeColor aeColor::DtLerp( float snappiness, float dt, const aeColor& target ) const
+{
+  return Lerp( target, exp2( -exp2( snappiness ) * dt ) );
+}
+
 float aeColor::SRGBToRGB( float x )
 {
   return pow( x , 2.2 );

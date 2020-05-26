@@ -71,6 +71,7 @@ struct aeColor
   aeFloat4 GetSRGBA() const;
 
   aeColor Lerp( const aeColor& end, float t ) const;
+  aeColor DtLerp( float snappiness, float dt, const aeColor& target ) const;
   aeColor ScaleRGB( float s ) const { return aeColor( r * s, g * s, b * s, a ); }
   aeColor ScaleA( float s ) const { return aeColor( r, g, b, a * s ); }
   aeColor SetA( float alpha ) const { return aeColor( r, g, b, alpha ); }
