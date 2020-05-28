@@ -255,6 +255,11 @@ namespace aeMath
     return min + ( ( rand() / (float)RAND_MAX ) * ( max - min ) );
   }
 
+  inline bool RandomBool()
+  {
+    return Random( 0, 2 );
+  }
+
   template < typename T >
   class RandomValue
   {
