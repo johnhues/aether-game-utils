@@ -866,6 +866,19 @@ private:
   aeFloat3 m_normal;
 };
 
+class aeLineSegment
+{
+public:
+  aeLineSegment() = default;
+  aeLineSegment( aeFloat3 p0, aeFloat3 p1 );
+
+  float GetMinDistance( aeFloat3 p );
+
+private:
+  aeFloat3 m_p0;
+  aeFloat3 m_p1;
+};
+
 //------------------------------------------------------------------------------
 // aeCircle class
 //------------------------------------------------------------------------------

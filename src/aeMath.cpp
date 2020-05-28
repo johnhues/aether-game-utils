@@ -1946,6 +1946,28 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, aeFloat3* out ) const
 }
 
 //------------------------------------------------------------------------------
+// aeLineSegment member functions
+//------------------------------------------------------------------------------
+aeLineSegment::aeLineSegment( aeFloat3 p0, aeFloat3 p1 )
+{
+  m_p0 = p0;
+  m_p1 = p1;
+}
+
+float aeLineSegment::GetMinDistance( aeFloat3 p )
+{
+  float lenSq = ( m_p1 - m_p0 ).LengthSquared();
+  if ( lenSq <= 0.001f )
+  {
+    return ( p - m_p0 ).Length();
+  }
+
+  float t = aeMath::Clip01( ( p - m_p0 ).Dot( m_p1 - m_p0 ) / lenSq );
+  aeFloat3 linePos = aeMath::Lerp( m_p0, m_p1, t );
+  return ( p - linePos ).Length();
+}
+
+//------------------------------------------------------------------------------
 // aeCircle member functions
 //------------------------------------------------------------------------------
 aeCircle::aeCircle( aeFloat2 point, float radius )
