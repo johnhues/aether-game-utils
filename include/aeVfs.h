@@ -51,8 +51,8 @@ public:
   const char* GetRootDir( Root root );
 
 private:
-  aeStr128 m_dataDir;
-  aeStr128 m_userDir;
+  aeStr256 m_dataDir;
+  aeStr256 m_userDir;
 };
 
 #endif

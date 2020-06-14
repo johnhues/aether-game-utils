@@ -1190,7 +1190,7 @@ void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Ty
   glTexParameteri( target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   glTexParameteri( target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
   glTexParameteri( target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( target, 0, GL_RGBA4, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr );
+  glTexImage2D( target, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, target, texture, 0 );
 

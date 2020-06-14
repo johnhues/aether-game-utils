@@ -68,32 +68,23 @@ void aeVfs::Initialize( const char* dataDir, const char* organizationName, const
 
 uint32_t aeVfs::GetSize( Root root, const char* fileName )
 {
-  char fullName[ 256 ];
-  AE_ASSERT( sizeof(m_dataDir) + sizeof(fileName) < sizeof(fullName) );
-  strcpy( fullName, GetRootDir( root ) );
-  strcat( fullName, fileName );
-
-  return GetSize( fullName );
+  aeStr256 fullName = GetRootDir( root );
+  fullName += fileName;
+  return GetSize( fullName.c_str() );
 }
 
 uint32_t aeVfs::Read( Root root, const char* fileName, void* buffer, uint32_t bufferSize )
 {
-  char fullName[ 256 ];
-  AE_ASSERT( sizeof(m_dataDir) + sizeof(fileName) < sizeof(fullName) );
-  strcpy( fullName, GetRootDir( root ) );
-  strcat( fullName, fileName );
-
-  return Read( fullName, buffer, bufferSize );
+  aeStr256 fullName = GetRootDir( root );
+  fullName += fileName;
+  return Read( fullName.c_str(), buffer, bufferSize );
 }
 
 uint32_t aeVfs::Write( Root root, const char* fileName, const void* buffer, uint32_t bufferSize )
 {
-  char fullName[ 256 ];
-  AE_ASSERT( sizeof(m_dataDir) + sizeof(fileName) < sizeof(fullName) );
-  strcpy( fullName, GetRootDir( root ) );
-  strcat( fullName, fileName );
-
-  return Write( fullName, buffer, bufferSize );
+  aeStr256 fullName = GetRootDir( root );
+  fullName += fileName;
+  return Write( fullName.c_str(), buffer, bufferSize );
 }
 
 uint32_t aeVfs::GetSize( const char* fileDir )
