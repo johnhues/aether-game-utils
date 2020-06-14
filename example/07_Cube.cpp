@@ -126,7 +126,7 @@ private:
 
 void Camera::Update( const aeInput* input )
 {
-	if ( input->GetState()->mouseLeft )
+	if ( input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft )
 	{
 		aeFloat2 mouseMovement( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
 		mouseMovement *= 0.01f;

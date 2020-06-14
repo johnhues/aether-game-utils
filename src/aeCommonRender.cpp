@@ -797,7 +797,8 @@ aeRender::~aeRender()
 
 void aeRender::InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height )
 {
-  AE_ASSERT( !m_renderInternal );
+  AE_ASSERT_MSG( window->window, "aeWindow must be initialized prior to aeRender initialization." );
+  AE_ASSERT_MSG( !m_renderInternal, "aeRender already initialized" );
 
   m_targetWidth = width;
   m_targetHeight = height;

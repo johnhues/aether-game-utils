@@ -75,7 +75,7 @@ void aeWindow::m_Initialize()
     AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
   }
 
-#ifdef _AE_IOS_
+#if _AE_IOS_
   m_pos = aeInt2( 0 );
   m_fullScreen = true;
   
