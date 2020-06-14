@@ -26,7 +26,18 @@ if(APPLE)
 endif()
 
 # find dependencies
-find_package(OpenGL REQUIRED)
+if (IOS_TOOLCHAIN_HAS_RUN)
+	set(OpenGLES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
+	if (EXISTS ${OpenGLES})
+		message(STATUS "Found OpenGLES")
+	else()
+		message(SEND_ERROR "Could not find OpenGLES")
+		set(OpenGLES "")
+	endif()
+else()
+	find_package(OpenGL REQUIRED)
+endif()
+
 if (NOT AE_BUILD_DEPS)
 	find_package(OpenAL REQUIRED)
 	find_package(PNG REQUIRED)
@@ -189,6 +200,7 @@ elseif(WIN32 AND NOT CYGWIN)
 endif()
 list(APPEND AE_DEPS_LIBARARIES
 	${GLEW_LIBRARIES}
+	${OpenGLES}
 	${OPENAL_LIBRARIES}
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
@@ -204,7 +216,11 @@ endif()
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # use unicode
-add_definitions(-D_UNICODE -DUNICODE -D_CRT_SECURE_NO_WARNINGS)
+add_definitions(-D_UNICODE -DUNICODE)
+# disable standard library warnings on windows
+add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+# disable simd in sdl to prevent undeclared symbols error on ios
+add_definitions(-DSDL_DISABLE_IMMINTRIN_H)
 
 # library, tests, and examples
 add_subdirectory(src)

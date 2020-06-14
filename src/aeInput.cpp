@@ -191,7 +191,10 @@ aeInput::aeInput()
 void aeInput::Initialize( aeWindow* window, aeRender* render )
 {
   SDL_JoystickEventState( SDL_ENABLE );
+#if !_AE_IOS_
+  // @HACK: Disable text input here to prevent keyboard from popping open on ios
   SDL_StartTextInput();
+#endif
 
   m_window = window;
   m_render = render;

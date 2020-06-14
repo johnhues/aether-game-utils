@@ -40,6 +40,10 @@
 #elif _AE_LINUX_
   #include <GL/gl.h>
   #include <GLES3/gl3.h>
+#elif _AE_IOS_
+  #include <OpenGLES/ES3/gl.h>
+  #include <OpenGLES/ES3/glext.h>
+  #define glClearDepth glClearDepthf
 #else
   #include <OpenGL/gl3.h>
 #endif
@@ -103,21 +107,27 @@ void CheckFramebufferComplete( GLuint framebuffer )
       case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
         break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
         break;
+#endif
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
         break;
+#endif
       case GL_FRAMEBUFFER_UNSUPPORTED:
         errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
         break;
       case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
         break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS
       case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
         break;
+#endif
       default:
         break;
     }
@@ -870,31 +880,21 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
 
   // Version
 #if _AE_IOS_
-  // shaderSource[ 0 ] = "#version 300 es\n";
+  shaderSource[ sourceCount++ ] = "#version 300 es\n";
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
 #elif _AE_EMSCRIPTEN_
   // No version specified
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
 #else
   shaderSource[ sourceCount++ ] = "#version 330 core\n";
+  // No default precision specified
 #endif
 
-  // Utility
-  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return vec3( AE_SRGB_TO_RGB( _x.r ), AE_SRGB_TO_RGB( _x.g ), AE_SRGB_TO_RGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return vec3( AE_RGB_TO_SRGB( _x.r ), AE_RGB_TO_SRGB( _x.g ), AE_RGB_TO_SRGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( AE_SRGB_TO_RGB( _x.rgb ), _x.a ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( AE_RGB_TO_SRGB( _x.rgb ), _x.a ); }\n";
-
   // Input/output
-#if _AE_IOS_
-  // shaderSource[ 1 ] = "precision highp float;\n";
-  // shaderSource[ 2 ] = "precision mediump sampler3D;\n";
-#elif _AE_EMSCRIPTEN_
-  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+#if _AE_EMSCRIPTEN_
   shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  // shaderSource[ sourceCount++ ] = "#define AE_FLOAT_HIGHP highp float\n";
   if ( type == aeShaderType::Vertex )
   {
     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
@@ -916,6 +916,15 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
     shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
   }
 #endif
+    
+    // Utility
+  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
+  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
+  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return vec3( AE_SRGB_TO_RGB( _x.r ), AE_SRGB_TO_RGB( _x.g ), AE_SRGB_TO_RGB( _x.b ) ); }\n";
+  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return vec3( AE_RGB_TO_SRGB( _x.r ), AE_RGB_TO_SRGB( _x.g ), AE_RGB_TO_SRGB( _x.b ) ); }\n";
+  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( AE_SRGB_TO_RGB( _x.rgb ), _x.a ); }\n";
+  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( AE_RGB_TO_SRGB( _x.rgb ), _x.a ); }\n";
+    
   AE_ASSERT( sourceCount <= kPrependMax );
 
   for ( int32_t i = 0; i < defineCount; i++ )
@@ -1181,8 +1190,7 @@ void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Ty
   glTexParameteri( target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   glTexParameteri( target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
   glTexParameteri( target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( target, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
-  
+  glTexImage2D( target, 0, GL_RGBA4, m_width, m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, target, texture, 0 );
 
@@ -1195,7 +1203,8 @@ void aeRenderTarget::AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type
 {
   uint32_t texture = 0;
   uint32_t target = GL_TEXTURE_2D;
-  GLint depthFormat = GL_DEPTH_COMPONENT24;
+  GLint depthFormat = GL_DEPTH_COMPONENT32F;
+  GLenum depthType = GL_FLOAT;
   
   glGenTextures( 1, &texture );
   glBindTexture( target, texture );
@@ -1203,7 +1212,7 @@ void aeRenderTarget::AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type
   glTexParameteri( target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   glTexParameteri( target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
   glTexParameteri( target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( target, 0, depthFormat, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr );
+  glTexImage2D( target, 0, depthFormat, m_width, m_height, 0, GL_DEPTH_COMPONENT, depthType, nullptr );
 
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, target, texture, 0 );
@@ -1303,9 +1312,15 @@ aeOpenGLRender::aeOpenGLRender()
 
 void aeOpenGLRender::Initialize( aeRender* render )
 {
+#if _AE_IOS_
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+#else
+  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
-  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
+#endif
+
 #if AE_GL_DEBUG_MODE
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
 #endif
@@ -1313,6 +1328,7 @@ void aeOpenGLRender::Initialize( aeRender* render )
   SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
 
   m_context = SDL_GL_CreateContext( (SDL_Window*)render->GetWindow()->window );
+  AE_ASSERT( m_context );
   SDL_GL_MakeCurrent( (SDL_Window*)render->GetWindow()->window, m_context );
 
   SDL_GL_SetSwapInterval( 1 );
