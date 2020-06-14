@@ -421,10 +421,9 @@ public:
   aeRenderTarget();
   ~aeRenderTarget();
   void Initialize( uint32_t width, uint32_t height );
-  void Destroy();
-
   void AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
   void AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
+  void Destroy();
 
   void Activate();
   void Clear( aeColor color );

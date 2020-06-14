@@ -872,7 +872,7 @@ public:
   aeLineSegment() = default;
   aeLineSegment( aeFloat3 p0, aeFloat3 p1 );
 
-  float GetMinDistance( aeFloat3 p );
+  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr );
 
 private:
   aeFloat3 m_p0;
