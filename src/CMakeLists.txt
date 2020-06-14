@@ -42,10 +42,7 @@ endif()
 # @TODO: Static libraries are always marked public so they can be linked directly
 #        by the final executable. This means that any downloaded dependent libraries
 #        should also be installed.
-target_link_libraries(${AE_LIBRARY_NAME}
-	LINK_PRIVATE
-		${AE_DEPS_LIBARARIES}
-)
+target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # source files
 set(AE_HEADER_FILES

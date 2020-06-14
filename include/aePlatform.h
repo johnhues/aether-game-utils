@@ -110,11 +110,13 @@
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
   #define aeAssert() __debugbreak()
+#elif _AE_APPLE_
+  #define aeAssert() __builtin_trap()
 #elif _AE_EMSCRIPTEN_
   // @TODO: Handle asserts with emscripten builds
   #define aeAssert()
 #else
-  #define aeAssert() asm( "int $3" )
+  #define aeAssert() asm( "int $3" )
 #endif
 
 #if _AE_LINUX_

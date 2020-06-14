@@ -52,6 +52,8 @@ public:
   bool GetFullScreen() const { return m_fullScreen; }
 
 private:
+  void m_Initialize();
+    
   aeInt2 m_pos;
   int32_t m_width;
   int32_t m_height;
