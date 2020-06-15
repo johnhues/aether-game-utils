@@ -1035,7 +1035,10 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
   int32_t width = 0;
   int32_t height = 0;
   int32_t channels = 0;
-  stbi_set_flip_vertically_on_load( true );
+  stbi_set_flip_vertically_on_load( 1 );
+#if _AE_IOS_
+  stbi_convert_iphone_png_to_rgb( 1 );
+#endif
   uint8_t* image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
   AE_ASSERT( image );
 
