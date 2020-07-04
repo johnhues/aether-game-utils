@@ -67,6 +67,8 @@
   void glClearDepth( float depth ) { glClearDepthf( depth ); }
 #endif
 
+  const uint32_t kMaxFrameBufferAttachments = 16;
+
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
@@ -188,24 +190,21 @@ void aeOpenGLDebugCallback( GLenum source,
   }
   std::cout << std::endl;
   std::cout << "---------------------opengl-callback-end--------------" << std::endl;
+
+  if ( severity == GL_DEBUG_SEVERITY_HIGH )
+  {
+    AE_FAIL();
+  }
 }
 #endif
 
 //------------------------------------------------------------------------------
 // aeVertexData member functions
 //------------------------------------------------------------------------------
-aeVertexData::aeVertexData()
-{
-  memset( this, 0, sizeof(aeVertexData) );
-  m_primitive = (aeVertexPrimitive::Type)-1;
-  m_vertexUsage = (aeVertexUsage::Type)-1;
-  m_indexUsage = (aeVertexUsage::Type)-1;
-  m_vertices = ~0;
-  m_indices = ~0;
-}
-
 void aeVertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, aeVertexPrimitive::Type primitive, aeVertexUsage::Type vertexUsage, aeVertexUsage::Type indexUsage )
 {
+  Destroy();
+
   AE_ASSERT( m_vertexSize == 0 );
   AE_ASSERT( vertexSize );
   AE_ASSERT( m_indexSize == 0 );
@@ -228,19 +227,26 @@ void aeVertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t
 
 void aeVertexData::Destroy()
 {
-  if ( m_vertexReadable ) { aeAlloc::Release( (uint8_t*)m_vertexReadable ); }
-  if ( m_indexReadable ) { aeAlloc::Release( (uint8_t*)m_indexReadable ); }
+  if ( m_vertexReadable )
+  {
+    aeAlloc::Release( (uint8_t*)m_vertexReadable );
+  }
+  if ( m_indexReadable )
+  {
+    aeAlloc::Release( (uint8_t*)m_indexReadable );
+  }
   
   glDeleteVertexArrays( 1, &m_array );
-  if ( m_vertices != ~0 ) { glDeleteBuffers( 1, &m_vertices ); }
-  if ( m_indices != ~0 ) { glDeleteBuffers( 1, &m_indices ); }
+  if ( m_vertices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_vertices );
+  }
+  if ( m_indices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_indices );
+  }
   
-  memset( this, 0, sizeof(aeVertexData) );
-  m_primitive = (aeVertexPrimitive::Type)-1;
-  m_vertexUsage = (aeVertexUsage::Type)-1;
-  m_indexUsage = (aeVertexUsage::Type)-1;
-  m_vertices = ~0;
-  m_indices = ~0;
+  *this = aeVertexData();
 }
 
 void aeVertexData::AddAttribute( const char *name, uint32_t componentCount, aeVertexDataType::Type type, uint32_t offset )
@@ -965,63 +971,113 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
 }
 
 //------------------------------------------------------------------------------
-// aeTexture2D member functions
+// aeTexture member functions
 //------------------------------------------------------------------------------
-aeTexture2D::aeTexture2D()
+aeTexture::~aeTexture()
 {
-  m_width = 0;
-  m_height = 0;
-  m_hasAlpha = false;
-}
-
-aeTexture2D::~aeTexture2D()
-{
+  // @NOTE: Only aeTexture should call virtual Destroy() so it only runs once
   Destroy();
 }
 
-void aeTexture2D::Initialize( const uint8_t* data, uint32_t width, uint32_t height, uint32_t depth, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+void aeTexture::Initialize( uint32_t target )
 {
-  m_width = width;
-  m_height = height;
-  m_target = GL_TEXTURE_2D;
+  // @NOTE: To avoid undoing any initialization logic only aeTexture should
+  //        call Destroy() on initialize, and inherited Initialize()'s should
+  //        always call Base::Initialize() before any other logic.
+  Destroy();
+
+  m_target = target;
 
   glGenTextures( 1, &m_texture );
-  glBindTexture( m_target, m_texture );
-  glTexParameteri( m_target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( m_target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( m_target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( m_target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  AE_ASSERT( m_texture );
+}
 
-  GLint internalFormat = 0;
-  GLenum format = 0;
-  GLint unpackAlignment;
-  switch ( depth )
+void aeTexture::Destroy()
+{
+  if ( m_texture )
   {
-    case 1:
-      internalFormat = GL_RED;
-      format = GL_RED;
+    glDeleteTextures( 1, &m_texture );
+  }
+
+  m_texture = 0;
+  m_target = 0;
+}
+
+//------------------------------------------------------------------------------
+// aeTexture2D member functions
+//------------------------------------------------------------------------------
+void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+{
+  aeTexture::Initialize( GL_TEXTURE_2D );
+
+  m_width = width;
+  m_height = height;
+
+  glBindTexture( GetTarget(), GetTexture() );
+
+  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+
+  GLenum glType = 0;
+  switch ( type )
+  {
+    case aeTextureType::Uint8:
+      glType = GL_UNSIGNED_BYTE;
+      break;
+    case aeTextureType::HalfFloat:
+      glType = GL_HALF_FLOAT;
+      break;
+    case aeTextureType::Float:
+      glType = GL_FLOAT;
+      break;
+    default:
+      AE_FAIL_MSG( "Invalid texture type #", type );
+      return;
+  }
+
+  GLint glInternalFormat = 0;
+  GLenum glFormat = 0;
+  GLint unpackAlignment = 0;
+  switch ( format )
+  {
+    case aeTextureFormat::Depth:
+      glInternalFormat = GL_DEPTH_COMPONENT32F;
+      glFormat = GL_DEPTH_COMPONENT;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-    case 3:
-      internalFormat = GL_RGB;
-      format = GL_RGB;
+    case aeTextureFormat::R:
+      glInternalFormat = GL_RED;
+      glFormat = GL_RED;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-    case 4:
-      internalFormat = GL_RGBA;
-      format = GL_RGBA;
+    case aeTextureFormat::RGB:
+      glInternalFormat = GL_RGB;
+      glFormat = GL_RGB;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+    case aeTextureFormat::RGBA:
+      glInternalFormat = GL_RGBA; // GL_RGBA16F for render texture
+      glFormat = GL_RGBA;
       unpackAlignment = 4;
       m_hasAlpha = true;
       break;
     default:
-      AE_ASSERT_MSG( false, "Invalid texture depth #", depth );
+      AE_FAIL_MSG( "Invalid texture format #", format );
       return;
   }
 
-  glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
-  glTexImage2D( m_target, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data );
+  if ( data )
+  {
+    glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
+  }
+  glTexImage2D( GetTarget(), 0, glInternalFormat, width, height, 0, glFormat, glType, data );
+
+  AE_CHECK_GL_ERROR();
 }
 
 void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
@@ -1042,24 +1098,24 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
   uint8_t* image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
   AE_ASSERT( image );
 
-  uint32_t depth = 0;
+  aeTextureFormat::Type format;
   switch ( channels )
   {
     case STBI_grey:
-      depth = 1;
+      format = aeTextureFormat::R;
       break;
     case STBI_grey_alpha:
       AE_FAIL();
       break;
     case STBI_rgb:
-      depth = 3;
+      format = aeTextureFormat::RGB;
       break;
     case STBI_rgb_alpha:
-      depth = 4;
+      format = aeTextureFormat::RGBA;
       break;
   }
   
-  Initialize( image, width, height, depth, filter, wrap );
+  Initialize( image, width, height, format, aeTextureType::Uint8, filter, wrap );
   
   stbi_image_free( image );
   free( fileBuffer );
@@ -1067,30 +1123,16 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 
 void aeTexture2D::Destroy()
 {
-  glDeleteTextures( 1, &m_texture );
-
   m_width = 0;
   m_height = 0;
   m_hasAlpha = false;
+
+  aeTexture::Destroy();
 }
 
 //------------------------------------------------------------------------------
-// aeRenderTexture member functions
+// aeRenderTarget member functions
 //------------------------------------------------------------------------------
-aeRenderTexture::aeRenderTexture( uint32_t texture, uint32_t target )
-{
-  m_texture = texture;
-  m_target = target;
-}
-
-aeRenderTarget::aeRenderTarget()
-{
-  m_fbo = 0;
-
-  m_width = 0;
-  m_height = 0;
-}
-
 aeRenderTarget::~aeRenderTarget()
 {
   Destroy();
@@ -1098,6 +1140,8 @@ aeRenderTarget::~aeRenderTarget()
 
 void aeRenderTarget::Initialize( uint32_t width, uint32_t height )
 {
+  Destroy();
+
   AE_ASSERT( m_fbo == 0 );
 
   AE_ASSERT( width != 0 );
@@ -1156,17 +1200,12 @@ void aeRenderTarget::Destroy()
 
   for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
-    uint32_t tex = m_targets[ i ].GetTexture();
-    glDeleteTextures( 1, &tex );
+    m_targets[ i ]->Destroy();
+    aeAlloc::Release( m_targets[ i ] );
   }
   m_targets.Clear();
 
-  if ( m_depth.GetTexture() )
-  {
-    uint32_t tex = m_depth.GetTexture();
-    glDeleteTextures( 1, &tex );
-    m_depth = aeRenderTexture();
-  }
+  m_depth.Destroy();
 
   if ( m_fbo )
   {
@@ -1180,47 +1219,27 @@ void aeRenderTarget::Destroy()
 
 void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
 {
-  AE_ASSERT( m_targets.Length() < 16 );
+  AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
 
-  uint32_t texture = 0;
-  uint32_t target = GL_TEXTURE_2D;
+  aeTexture2D* tex = aeAlloc::Allocate< aeTexture2D >();
+  tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA, aeTextureType::HalfFloat, filter, wrap );
+
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
-
-  glGenTextures( 1, &texture );
-  AE_ASSERT( texture );
-  glBindTexture( target, texture );
-  glTexParameteri( target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( target, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, target, texture, 0 );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
 
-  m_targets.Append( aeRenderTexture( texture, target ) );
+  m_targets.Append( tex );
 
   AE_CHECK_GL_ERROR();
 }
 
 void aeRenderTarget::AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
 {
-  uint32_t texture = 0;
-  uint32_t target = GL_TEXTURE_2D;
-  GLint depthFormat = GL_DEPTH_COMPONENT32F;
-  GLenum depthType = GL_FLOAT;
-  
-  glGenTextures( 1, &texture );
-  glBindTexture( target, texture );
-  glTexParameteri( target, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( target, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( target, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( target, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( target, 0, depthFormat, m_width, m_height, 0, GL_DEPTH_COMPONENT, depthType, nullptr );
+  AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 
+  m_depth.Initialize( nullptr, m_width, m_height, aeTextureFormat::Depth, aeTextureType::Float, filter, wrap );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, target, texture, 0 );
-
-  m_depth = aeRenderTexture( texture, target );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 
   AE_CHECK_GL_ERROR();
 }
@@ -1249,6 +1268,7 @@ void aeRenderTarget::Activate()
     GL_COLOR_ATTACHMENT14,
     GL_COLOR_ATTACHMENT15
   };
+  AE_STATIC_ASSERT( countof( buffers ) == kMaxFrameBufferAttachments );
   glDrawBuffers( m_targets.Length(), buffers );
 
   glViewport( 0, 0, GetWidth(), GetHeight() );
@@ -1281,9 +1301,9 @@ void aeRenderTarget::Render2D( uint32_t textureIndex, aeRect ndc, float z )
   m_quad.Render( &m_shader, uniforms );
 }
 
-const aeRenderTexture* aeRenderTarget::GetTexture( uint32_t index ) const
+const aeTexture2D* aeRenderTarget::GetTexture( uint32_t index ) const
 {
-  return &m_targets[ index ];
+  return m_targets[ index ];
 }
 
 uint32_t aeRenderTarget::GetWidth() const

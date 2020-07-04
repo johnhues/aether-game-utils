@@ -194,8 +194,6 @@ private:
 class aeVertexData
 {
 public:
-  aeVertexData();
-
   void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, aeVertexPrimitive::Type primitive, aeVertexUsage::Type vertexUsage, aeVertexUsage::Type indexUsage );
   void AddAttribute( const char *name, uint32_t componentCount, aeVertexDataType::Type type, uint32_t offset );
   void Destroy();
@@ -223,26 +221,26 @@ private:
   void m_SetIndices( const void* indices, uint32_t count );
   const aeVertexAttribute* m_GetAttributeByName( const char* name ) const;
   
-  uint32_t m_array;
-  uint32_t m_vertices;
-  uint32_t m_indices;
-  uint32_t m_vertexCount;
-  uint32_t m_indexCount;
+  uint32_t m_array = 0;
+  uint32_t m_vertices = ~0;
+  uint32_t m_indices = ~0;
+  uint32_t m_vertexCount = 0;
+  uint32_t m_indexCount = 0;
   
-  uint32_t m_maxVertexCount;
-  uint32_t m_maxIndexCount;
+  uint32_t m_maxVertexCount = 0;
+  uint32_t m_maxIndexCount = 0;
   
-  aeVertexPrimitive::Type m_primitive;
-  aeVertexUsage::Type m_vertexUsage;
-  aeVertexUsage::Type m_indexUsage;
+  aeVertexPrimitive::Type m_primitive = (aeVertexPrimitive::Type)-1;
+  aeVertexUsage::Type m_vertexUsage = (aeVertexUsage::Type)-1;
+  aeVertexUsage::Type m_indexUsage = (aeVertexUsage::Type)-1;
   
   aeVertexAttribute m_attributes[ kMaxShaderAttributeCount ];
-  uint32_t m_attributeCount;
-  uint32_t m_vertexSize;
-  uint32_t m_indexSize;
+  uint32_t m_attributeCount = 0;
+  uint32_t m_vertexSize = 0;
+  uint32_t m_indexSize = 0;
   
-  void* m_vertexReadable;
-  void* m_indexReadable;
+  void* m_vertexReadable = nullptr;
+  void* m_indexReadable = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -378,47 +376,68 @@ struct aeTextureWrap
   };
 };
 
+struct aeTextureFormat
+{
+  enum Type
+  {
+    Depth,
+    R,
+    RGB,
+    RGBA
+  };
+};
+
+struct aeTextureType
+{
+  enum Type
+  {
+    Uint8,
+    HalfFloat,
+    Float
+  };
+};
+
 class aeTexture
 {
 public:
-  aeTexture() : m_texture( 0 ), m_target( 0 ) {}
+  aeTexture() = default;
+  virtual ~aeTexture();
+
+  void Initialize( uint32_t target );
+  virtual void Destroy();
+
   uint32_t GetTexture() const { return m_texture; }
   uint32_t GetTarget() const { return m_target; }
 
-protected:
-  uint32_t m_texture;
-  uint32_t m_target;
+private:
+  aeTexture( const aeTexture& ) = delete;
+  aeTexture( aeTexture&& ) = delete;
+  void operator=( const aeTexture& ) = delete;
+  void operator=( aeTexture&& ) = delete;
+
+  uint32_t m_texture = 0;
+  uint32_t m_target = 0;
 };
 
 class aeTexture2D : public aeTexture
 {
 public:
-  aeTexture2D();
-  ~aeTexture2D();
-  // @TODO: Rename depth or change it to an alpha bool
-  void Initialize( const uint8_t* data, uint32_t width, uint32_t height, uint32_t depth, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
+  void Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
   void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
-  void Destroy();
+  void Destroy() override;
 
   uint32_t GetWidth() const { return m_width; }
   uint32_t GetHeight() const { return m_height; }
 
 private:
-  uint32_t m_width;
-  uint32_t m_height;
-  bool m_hasAlpha;
-};
-
-struct aeRenderTexture : public aeTexture
-{
-  aeRenderTexture() = default;
-  aeRenderTexture( uint32_t texture, uint32_t target );
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
+  bool m_hasAlpha = false;
 };
 
 class aeRenderTarget
 {
 public:
-  aeRenderTarget();
   ~aeRenderTarget();
   void Initialize( uint32_t width, uint32_t height );
   void AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
@@ -429,7 +448,7 @@ public:
   void Clear( aeColor color );
   void Render2D( uint32_t textureIndex, aeRect ndc, float z );
 
-  const aeRenderTexture* GetTexture( uint32_t index ) const;
+  const aeTexture2D* GetTexture( uint32_t index ) const;
   uint32_t GetWidth() const;
   uint32_t GetHeight() const;
 
@@ -442,13 +461,13 @@ private:
     aeFloat2 uv;
   };
 
-  uint32_t m_fbo;
+  uint32_t m_fbo = 0;
 
-  aeArray< aeRenderTexture > m_targets;
-  aeRenderTexture m_depth;
+  aeArray< aeTexture2D* > m_targets;
+  aeTexture2D m_depth;
 
-  uint32_t m_width;
-  uint32_t m_height;
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
 
   aeVertexData m_quad;
   aeShader m_shader;

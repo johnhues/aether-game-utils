@@ -825,7 +825,6 @@ void aeRender::StartFrame()
 
   if ( m_targetWidth != m_canvas.GetWidth() || m_targetHeight != m_canvas.GetHeight() )
   {
-    m_canvas.Destroy();
     m_canvas.Initialize( m_targetWidth, m_targetHeight );
     m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
     m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );

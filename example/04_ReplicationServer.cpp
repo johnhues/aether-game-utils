@@ -62,7 +62,7 @@ int main()
   input.Initialize( &window, &render );
   spriteRender.Initialize( 32 );
   uint8_t texInfo[] = { 255, 255, 255 };
-  texture.Initialize( texInfo, 1, 1, 3, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
+  texture.Initialize( texInfo, 1, 1, aeTextureFormat::RGB, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
   timeStep.SetTimeStep( 1.0f / 10.0f );
 
   // Server modules
