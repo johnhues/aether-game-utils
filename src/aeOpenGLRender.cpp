@@ -1291,6 +1291,12 @@ void aeRenderTarget::Clear( aeColor color )
   AE_CHECK_GL_ERROR();
 }
 
+void aeRenderTarget::Render( const aeShader* shader, const aeUniformList& uniforms )
+{
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+  m_quad.Render( shader, uniforms );
+}
+
 void aeRenderTarget::Render2D( uint32_t textureIndex, aeRect ndc, float z )
 {
   glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );

@@ -446,6 +446,7 @@ public:
 
   void Activate();
   void Clear( aeColor color );
+  void Render( const aeShader* shader, const aeUniformList& uniforms );
   void Render2D( uint32_t textureIndex, aeRect ndc, float z );
 
   const aeTexture2D* GetTexture( uint32_t index ) const;
