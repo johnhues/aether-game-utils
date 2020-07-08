@@ -116,7 +116,7 @@
   // @TODO: Handle asserts with emscripten builds
   #define aeAssert()
 #else
-  #define aeAssert() asm( "int $3" )
+  #define aeAssert() asm( "int $3" )
 #endif
 
 #if _AE_LINUX_

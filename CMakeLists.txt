@@ -40,18 +40,17 @@ endif()
 
 if (NOT AE_BUILD_DEPS)
 	if (IOS_TOOLCHAIN_HAS_RUN)
-		set(OPENAL_LIBRARIES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
-		if (EXISTS ${OPENAL_LIBRARIES})
+		set(OPENAL_LIBRARY "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
+		if (EXISTS ${OPENAL_LIBRARY})
 			message(STATUS "Found OpenAL")
 		else()
 			message(SEND_ERROR "Could not find OpenAL")
-			set(OPENAL_LIBRARIES "")
+			set(OPENAL_LIBRARY "")
 		endif()
 	else()
 		find_package(OpenAL REQUIRED)
 	endif()
-	
-	message(STATUS "OPENAL_INCLUDE_DIRS ${OPENAL_INCLUDE_DIRS}")
+
 	find_package(PNG REQUIRED)
 	find_package(SDL2 REQUIRED)
 	find_package(assimp REQUIRED)
@@ -98,9 +97,9 @@ else()
 			GIT_TAG openal-soft-1.20.1
 			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
 		)
-		set(OPENAL_INCLUDE_DIRS ${AE_OPENAL_INSTALL}/include)
-		set(OPENAL_LIBRARY_DIRS ${AE_OPENAL_INSTALL}/lib)
-		set(OPENAL_LIBRARIES ${OPENAL_LIBRARY_DIRS}/OpenAL32.lib)
+		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
+		set(OPENAL_LIBRARY_DIR ${AE_OPENAL_INSTALL}/lib)
+		set(OPENAL_LIBRARY ${OPENAL_LIBRARY_DIRS}/OpenAL32.lib)
 	endif()
 
 	ExternalProject_Add(zlib
@@ -175,7 +174,7 @@ endif()
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 	${GLEW_INCLUDE_DIRS}
-	${OPENAL_INCLUDE_DIRS}
+	${OPENAL_INCLUDE_DIR}
 	${PNG_INCLUDE_DIRS}
 	${ASSIMP_INCLUDE_DIRS}
 	${ENET_INCLUDE_DIR}
@@ -188,7 +187,7 @@ endif()
 # dependency library directories
 set(AE_DEPS_LIBRARY_DIRS
 	${GLEW_LIBRARY_DIRS}
-	${OPENAL_LIBRARY_DIRS}
+	${OPENAL_LIBRARY_DIR}
 	${ZLIB_LIBRARY_DIRS}
 	${PNG_LIBRARY_DIRS}
 	${SDL2_LIBRARY_DIRS}
@@ -213,7 +212,7 @@ endif()
 list(APPEND AE_DEPS_LIBARARIES
 	${GLEW_LIBRARIES}
 	${OpenGLES}
-	${OPENAL_LIBRARIES}
+	${OPENAL_LIBRARY}
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
 	${ASSIMP_LIBRARIES}
