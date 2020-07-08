@@ -99,7 +99,7 @@ else()
 		)
 		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
 		set(OPENAL_LIBRARY_DIR ${AE_OPENAL_INSTALL}/lib)
-		set(OPENAL_LIBRARY ${OPENAL_LIBRARY_DIRS}/OpenAL32.lib)
+		set(OPENAL_LIBRARY ${OPENAL_LIBRARY_DIR}/OpenAL32.lib)
 	endif()
 
 	ExternalProject_Add(zlib
