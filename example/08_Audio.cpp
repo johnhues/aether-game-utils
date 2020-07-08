@@ -44,7 +44,7 @@ int main()
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "audio" );
-	render.InitializeOpenGL( &window, 400, 300 );
+	render.InitializeOpenGL( &window, window.GetWidth() / 4, window.GetHeight() / 4 );
 	input.Initialize( &window, &render );
 	audio.Initialize( 1, 3 );
 	
@@ -109,6 +109,7 @@ int main()
 			color = beatColors[ beat % countof( beatColors ) ];
 		}
 
+		render.Resize( window.GetWidth() / 4, window.GetHeight() / 4 );
 		float hitOpacity = aeMath::Min( 1.0f, hitFade / 0.8f );
 		hitOpacity *= hitOpacity;
 		render.SetClearColor( color.Lerp( aeColor::PicoWhite(), hitOpacity * 0.8f ) );
