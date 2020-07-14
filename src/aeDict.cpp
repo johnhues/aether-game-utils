@@ -71,6 +71,11 @@ void aeDict::SetInt2( const char* key, aeInt2 value )
   SetString( key, buf );
 }
 
+void aeDict::Clear()
+{
+  m_entryCount = 0;
+}
+
 const char* aeDict::GetString( const char* key, const char* defaultValue ) const
 {
   const KeyValue* kv = m_GetValue( key );

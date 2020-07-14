@@ -51,6 +51,7 @@ public:
   void SetBool( const char* key, bool value );
   void SetFloat2( const char* key, aeFloat2 value );
   void SetInt2( const char* key, aeInt2 value );
+  void Clear();
 
   const char* GetString( const char* key, const char* defaultValue ) const;
   int32_t GetInt( const char* key, int32_t defaultValue ) const;
@@ -59,7 +60,6 @@ public:
   aeFloat2 GetFloat2( const char* key, aeFloat2 defaultValue ) const;
   aeInt2 GetInt2( const char* key, aeInt2 defaultValue ) const;
   aeColor GetColor( const char* key, aeColor defaultValue ) const;
-
   bool Has( const char* key ) const;
 
   const char* GetKey( uint32_t idx ) const;
