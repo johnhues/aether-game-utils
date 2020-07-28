@@ -47,11 +47,12 @@ public:
 
   void SetTimeStep( float timeStep ) { m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f; }
   float GetTimeStep() const { return m_timeStepSec; }
+  uint32_t GetStepCount() const { return m_stepCount; }
   
   void Wait();
 
 private:
-  bool m_first = true;
+  uint32_t m_stepCount = 0;
   float m_timeStepSec = 0.0f;
   float m_timeStep = 0.0f;
   int64_t m_frameExcess = 0;

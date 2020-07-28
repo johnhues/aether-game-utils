@@ -236,4 +236,5 @@ add_definitions(-DSDL_DISABLE_IMMINTRIN_H)
 # library, tests, and examples
 add_subdirectory(src)
 add_subdirectory(test)
+
 add_subdirectory(example)

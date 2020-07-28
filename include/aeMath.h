@@ -382,6 +382,8 @@ struct aeInt2
   bool operator ==( const aeInt2& o ) const { return x == o.x && y == o.y; }
   bool operator !=( const aeInt2& o ) const { return !( *this == o ); }
   
+  aeInt2 operator- () const;
+
   aeInt2& operator+=( const aeInt2 &v );
   aeInt2& operator-=( const aeInt2 &v );
   aeInt2 operator+( const aeInt2 &v ) const;
@@ -395,6 +397,11 @@ struct aeInt2
   void operator/= ( const int32_t s );
   aeInt2 operator/ ( const aeInt2& v ) const;
   aeInt2& operator/= ( const aeInt2& v );
+
+  aeFloat2 operator* ( const float s ) const;
+  void operator*= ( const float s ) = delete;
+  aeFloat2 operator/ ( const float s ) const;
+  void operator/= ( const float s ) = delete;
 };
 
 inline std::ostream& operator<<( std::ostream& os, aeInt2 v )
@@ -810,6 +817,8 @@ struct aeRect
 
   bool Contains( aeFloat2 pos ) const;
   void Expand( aeFloat2 pos ); // @NOTE: Zero size rect is maintained by Expand()
+
+  bool GetIntersection( const aeRect& other, aeRect* intersectionOut ) const;
   
   float x;
   float y;

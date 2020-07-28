@@ -226,6 +226,11 @@ const aeInt2 aeInt2::Right = aeInt2( 1, 0 );
 
 aeInt2::aeInt2( const aeInt3& v ) : x( v.x ), y( v.y ) {}
 
+aeInt2 aeInt2::operator- () const
+{
+  return aeInt2( -x, -y );
+}
+
 aeInt2& aeInt2::operator+=( const aeInt2 &v )
 {
   x += v.x;
@@ -294,6 +299,16 @@ aeInt2& aeInt2::operator/= ( const aeInt2& v )
   x /= v.x;
   y /= v.y;
   return *this;
+}
+
+aeFloat2 aeInt2::operator* ( const float s ) const
+{
+  return aeFloat2( x * s, y * s );
+}
+
+aeFloat2 aeInt2::operator/ ( const float s ) const
+{
+  return aeFloat2( x / s, y / s );
 }
 
 //------------------------------------------------------------------------------
@@ -1869,8 +1884,28 @@ void aeRect::Expand( aeFloat2 pos )
   }
 }
 
+bool aeRect::GetIntersection( const aeRect& other, aeRect* intersectionOut ) const
+{
+  float x0 = aeMath::Max( x, other.x );
+  float x1 = aeMath::Min( x + w, other.x + other.w );
+  float y0 = aeMath::Max( y, other.y );
+  float y1 = aeMath::Min( y + h, other.y + other.h );
+  if ( x0 < x1 && y0 < y1 )
+  {
+    if ( intersectionOut )
+    {
+      *intersectionOut = aeRect( aeFloat2( x0, y0 ), aeFloat2( x1, y1 ) );
+    }
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
 //------------------------------------------------------------------------------
-// aeRect member functions
+// aeRectInt member functions
 //------------------------------------------------------------------------------
 aeRectInt aeRectInt::Zero()
 {
