@@ -74,6 +74,7 @@ set(AE_HEADER_FILES
 	../include/aeRingBuffer.h
 	../include/aeSignal.h
 	../include/aeSparseGrid.h
+	../include/aeSpline.h
 	../include/aeString.h
 	../include/aeUuid.h
 	../include/aeVfs.h
@@ -102,6 +103,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeNetServer.cpp
 		aeOpenGLRender.cpp
 		aePlatform.cpp
+		aeSpline.cpp
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp
