@@ -28,6 +28,11 @@
 #include "aeSpline.h"
 
 //------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const uint32_t kSplineResolution = 64;
+
+//------------------------------------------------------------------------------
 // aeSpline member functions
 //------------------------------------------------------------------------------
 aeSpline::aeSpline( aeFloat3* controlPoints, uint32_t count ) :
@@ -42,6 +47,16 @@ aeSpline::aeSpline( aeFloat3* controlPoints, uint32_t count ) :
 void aeSpline::AppendControlPoint( aeFloat3 p )
 {
   m_controlPoints.Append( p );
+  m_RecalculateSegments();
+}
+
+void aeSpline::SetLooping( bool enabled )
+{
+  if ( m_loop != enabled )
+  {
+    m_loop = enabled;
+    m_RecalculateSegments();
+  }
 }
 
 aeFloat3 aeSpline::GetControlPoint( uint32_t index ) const
@@ -65,18 +80,15 @@ aeFloat3 aeSpline::GetPoint( float distance ) const
     return m_controlPoints[ 0 ];
   }
 
-  for ( uint32_t i = 0; i < m_controlPoints.Length() - 1; i++ )
+  for ( uint32_t i = 0; i < m_segments.Length(); i++ )
   {
-    aeFloat3 p0 = m_controlPoints[ i ];
-    aeFloat3 p1 = m_controlPoints[ i + 1 ];
-
-    float length = ( p1 - p0 ).Length();
-    if ( length >= distance )
+    const Segment& segment = m_segments[ i ];
+    if ( segment.length >= distance )
     {
-      return aeMath::Lerp( p0, p1, distance / length );
+      return segment.GetPoint( distance );
     }
 
-    distance -= length;
+    distance -= segment.length;
   }
 
   return m_controlPoints[ m_controlPoints.Length() - 1 ];
@@ -84,17 +96,114 @@ aeFloat3 aeSpline::GetPoint( float distance ) const
 
 float aeSpline::GetLength() const
 {
-  if ( m_controlPoints.Length() <= 1 )
+  return m_length;
+}
+
+void aeSpline::m_RecalculateSegments()
+{
+  m_segments.Clear();
+  m_length = 0.0f;
+
+  if ( m_controlPoints.Length() < 2 )
   {
-    return 0.0f;
+    return;
   }
 
-  float length = 0.0f;
-  for ( uint32_t i = 0; i < m_controlPoints.Length() - 1; i++ )
+  int32_t segmentCount = m_controlPoints.Length();
+  if ( !m_loop )
   {
-    aeFloat3 p0 = m_controlPoints[ i ];
-    aeFloat3 p1 = m_controlPoints[ i + 1 ];
-    length += ( p1 - p0 ).Length();
+    segmentCount--;
   }
-  return length;
+  for ( int32_t i = 0; i < segmentCount; i++ )
+  {
+    aeFloat3 p0 = m_GetControlPoint( i - 1 );
+    aeFloat3 p1 = m_GetControlPoint( i );
+    aeFloat3 p2 = m_GetControlPoint( i + 1 );
+    aeFloat3 p3 = m_GetControlPoint( i + 2 );
+
+    Segment* segment = &m_segments.Append( Segment() );
+    segment->Init( p0, p1, p2, p3 );
+    
+    m_length += segment->length;
+  }
+}
+
+aeFloat3 aeSpline::m_GetControlPoint( int32_t index ) const
+{
+  if ( m_loop )
+  {
+    return m_controlPoints[ aeMath::Mod( index, (int)m_controlPoints.Length() ) ];
+  }
+  else if ( index == -1 )
+  {
+    aeFloat3 p0 = m_controlPoints[ 0 ];
+    aeFloat3 p1 = m_controlPoints[ 1 ];
+    return ( p0 + p0 - p1 );
+  }
+  else if ( index == m_controlPoints.Length() )
+  {
+    aeFloat3 p0 = m_controlPoints[ index - 2 ];
+    aeFloat3 p1 = m_controlPoints[ index - 1 ];
+    return ( p1 + p1 - p0 );
+  }
+  else
+  {
+    return m_controlPoints[ index ];
+  }
+}
+
+void aeSpline::Segment::Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3 )
+{
+  const float alpha = 0.5f;
+  const float tension = 0.0f;
+
+  float t01 = pow( ( p0 - p1 ).Length(), alpha );
+  float t12 = pow( ( p1 - p2 ).Length(), alpha );
+  float t23 = pow( ( p2 - p3 ).Length(), alpha );
+
+  aeFloat3 m1 = ( p2 - p1 + ( ( p1 - p0 ) / t01 - ( p2 - p0 ) / ( t01 + t12 ) ) * t12 ) * ( 1.0f - tension );
+  aeFloat3 m2 = ( p2 - p1 + ( ( p3 - p2 ) / t23 - ( p3 - p1 ) / ( t12 + t23 ) ) * t12 ) * ( 1.0f - tension );
+
+  a = ( p1 - p2 ) * 2.0f + m1 + m2;
+  b = ( p1 - p2 ) * -3.0f - m1 - m1 - m2;
+  c = m1;
+  d = p1;
+
+  length = 0.0f;
+  for ( uint32_t i = 0; i < kSplineResolution; i++ )
+  {
+    aeFloat3 s0 = GetPoint01( i / (float)kSplineResolution );
+    aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)kSplineResolution );
+    length += ( s1 - s0 ).Length();
+  }
+}
+
+aeFloat3 aeSpline::Segment::GetPoint01( float t ) const
+{
+  return ( a * t * t * t ) + ( b * t * t ) + ( c * t ) + d;
+}
+
+aeFloat3 aeSpline::Segment::GetPoint( float d ) const
+{
+  if ( d <= 0.0f )
+  {
+    return GetPoint01( 0.0f );
+  }
+
+  for ( uint32_t i = 0; i < kSplineResolution; i++ )
+  {
+    aeFloat3 s0 = GetPoint01( i / (float)kSplineResolution );
+    aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)kSplineResolution );
+    float l = ( s1 - s0 ).Length();
+    if ( l >= d )
+    {
+      return aeMath::Lerp( s0, s1, d / l );
+    }
+    else
+    {
+      d -= l;
+    }
+  }
+
+  return GetPoint01( 1.0f );
 }

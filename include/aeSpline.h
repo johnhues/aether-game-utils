@@ -42,6 +42,7 @@ public:
   aeSpline( aeFloat3* controlPoints, uint32_t count );
 
   void AppendControlPoint( aeFloat3 p );
+  void SetLooping( bool enabled );
 
   aeFloat3 GetControlPoint( uint32_t index ) const;
   uint32_t GetControlPointCount() const;
@@ -50,7 +51,26 @@ public:
   float GetLength() const;
 
 private:
+  struct Segment
+  {
+    void Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3 );
+    aeFloat3 GetPoint01( float t ) const;
+    aeFloat3 GetPoint( float d ) const;
+
+    aeFloat3 a;
+    aeFloat3 b;
+    aeFloat3 c;
+    aeFloat3 d;
+    float length;
+  };
+
+  void m_RecalculateSegments();
+  aeFloat3 m_GetControlPoint( int32_t index ) const;
+
+  bool m_loop = false;
   aeArray< aeFloat3 > m_controlPoints;
+  aeArray< Segment > m_segments;
+  float m_length = 0.0f;
 };
 
 #endif

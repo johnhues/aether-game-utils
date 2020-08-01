@@ -54,9 +54,11 @@ int main()
   spriteRender.SetDepthWrite( true );
   spriteRender.SetSorting( true );
   
-  spline.AppendControlPoint( aeFloat3( 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( -0.2f, -1.0f, 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( -1.0f, 1.0f, 0.0f ) );
   spline.AppendControlPoint( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( 2.0f, 0.0f, 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( 0.2f, -1.0f, 0.0f ) );
+  spline.SetLooping( true );
 
   aeFixedTimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -65,20 +67,27 @@ int main()
   tex.Initialize( "circle.png", aeTextureFilter::Linear, aeTextureWrap::Repeat );
 
   float scale = 5.0f;
-  aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
 
   float t = 0.0f;
 
   while ( !input.GetState()->exit )
   {
     input.Pump();
+    render.Resize( window.GetWidth(), window.GetHeight() );
     render.StartFrame();
     spriteRender.Clear();
 
     aeFloat4x4 transform;
 
+    for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
+    {
+      transform = aeFloat4x4::Translation( spline.GetControlPoint( i ) - aeFloat3( 0.0f, 0.0f, 0.1f ) );
+      transform.Scale( aeFloat3( 0.2f ) );
+      spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Red() );
+    }
+
     float splineLen = spline.GetLength();
-    for ( float d = 0.0f; d < splineLen; d += 0.2f )
+    for ( float d = 0.0f; d < splineLen; d += 0.25f )
     {
       transform = aeFloat4x4::Translation( spline.GetPoint( d ) );
       transform.Scale( aeFloat3( 0.1f ) );
@@ -90,10 +99,11 @@ int main()
     {
       t -= splineLen;
     }
-    transform = aeFloat4x4::Translation( spline.GetPoint( t ) - aeFloat3( 0.0f, 0.0f, 0.1f ) );
-    transform.Scale( aeFloat3( 0.2f ) );
+    transform = aeFloat4x4::Translation( spline.GetPoint( t ) - aeFloat3( 0.0f, 0.0f, 0.2f ) );
+    transform.Scale( aeFloat3( 0.3f ) );
     spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green() );
 
+    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
     spriteRender.Render( screenTransform );
     render.EndFrame();
     timeStep.Wait();
