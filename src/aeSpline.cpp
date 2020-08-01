@@ -45,6 +45,12 @@ void aeSpline::AppendControlPoint( aeFloat3 p )
   m_RecalculateSegments();
 }
 
+void aeSpline::RemoveControlPoint( uint32_t index )
+{
+  m_controlPoints.Remove( index );
+  m_RecalculateSegments();
+}
+
 void aeSpline::SetLooping( bool enabled )
 {
   if ( m_loop != enabled )

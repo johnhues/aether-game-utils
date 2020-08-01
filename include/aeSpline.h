@@ -42,6 +42,7 @@ public:
   aeSpline( aeFloat3* controlPoints, uint32_t count );
 
   void AppendControlPoint( aeFloat3 p );
+  void RemoveControlPoint( uint32_t index );
   void SetLooping( bool enabled );
 
   aeFloat3 GetControlPoint( uint32_t index ) const;
