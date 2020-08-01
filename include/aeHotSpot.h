@@ -37,7 +37,7 @@
 class HotSpotWorld
 {
 public:
-  void Initialize();
+  void Initialize( float timeStep );
   void Update( float dt );
 
   // 1) Tiles - Setup tile properties and enable collision
@@ -59,6 +59,9 @@ public:
   uint32_t GetObjectCount() const;
 
 private:
+  float m_timeStep = 0.0f;
+  float m_timeAccumulator = 0.0f;
+
   aeSparseGrid< aeSparseGridZone< uint32_t, 16, 16, 1 > > m_tiles;
 
   aeMap< uint32_t, uint32_t > m_tileProperties;

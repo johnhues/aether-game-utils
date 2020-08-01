@@ -35,6 +35,7 @@
 //------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
+// Tiles
 const uint32_t kTileMask_Open = 0;
 const uint32_t kTileMask_Collision = 1;
 
@@ -42,8 +43,24 @@ const uint32_t kTile_Air = 0;
 const uint32_t kTile_Wall = 1;
 const uint32_t kTile_Water = 2;
 
+const float kGravity = 10.0f;
+const float kAirDensity = 12.5f;
+const float kWaterDensity = 1000.0f;
+
+// Player
+const float kPlayerMass = 70.0f;
+const float kPlayerDensity = 1050.0f;
+// Movement
+const float kMoveHorizontal = 4.5f;
+// Jump
+const float kJumpInitial = 5.5f;
+const float kJumpHold = 5.5f;
 const float kJumpMaxAirTime = 0.35f;
 const float kJumpHoldTimeMax = 0.4f;
+// Swim
+const float kSwimHorizontal = 6.5f;
+const float kSwimUp = 14.0f;
+const float kSwimDown = 10.0f;
 
 //------------------------------------------------------------------------------
 // Player class
@@ -72,8 +89,8 @@ private:
 Player::Player( HotSpotWorld* world, aeFloat2 startPos )
 {
   m_body = world->CreateObject();
-  m_body->SetMass( 70.0f );
-  m_body->SetVolume( m_body->GetMass() / 1050.0f );
+  m_body->SetMass( kPlayerMass );
+  m_body->SetVolume( kPlayerMass / kPlayerDensity );
   m_startPos = startPos;
   m_body->onCollision.Add( this, &Player::OnCollision );
   m_body->Warp( startPos );
@@ -83,6 +100,7 @@ void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
 {
   if ( info->normal.y > 0 )
   {
+    // Reset jump when touching ground
     m_canJumpTimer = kJumpMaxAirTime;
     m_jumpHoldTimer = 0.0f;
   }
@@ -98,11 +116,11 @@ void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
   // Water
   if ( tile == kTile_Water )
   {
-    if ( jumpButton ) { m_body->AddForce( aeFloat2( 0.0f, 1000.0f ) ); }
-    if ( input->GetState()->down ) { m_body->AddForce( aeFloat2( 0.0f, -700.0f ) ); }
+    if ( jumpButton ) { m_body->AddForce( aeFloat2( 0.0f, kPlayerMass * kSwimUp ) ); }
+    if ( input->GetState()->down ) { m_body->AddForce( aeFloat2( 0.0f, -kPlayerMass * kSwimDown ) ); }
 
-    if ( input->GetState()->left ) { m_body->AddForce( aeFloat2( -70.0f * 6.5f, 0.0f ) ); }
-    if ( input->GetState()->right ) { m_body->AddForce( aeFloat2( 70.0f * 6.5f, 0.0f ) );  }
+    if ( input->GetState()->left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
+    if ( input->GetState()->right ) { m_body->AddForce( aeFloat2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
 
     // Always reset jump so a jump is possible immediately after leaving water
     m_canJumpTimer = kJumpMaxAirTime;
@@ -110,8 +128,8 @@ void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
   }
   else // Air / ground
   {
-    if ( input->GetState()->left ) { m_body->AddForce( aeFloat2( -70.0f * 4.5f, 0.0f ) ); }
-    if ( input->GetState()->right ) { m_body->AddForce( aeFloat2( 70.0f * 4.5f, 0.0f ) ); }
+    if ( input->GetState()->left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+    if ( input->GetState()->right ) { m_body->AddForce( aeFloat2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
 
     if ( CanJump() && jumpButton )
     {
@@ -123,17 +141,17 @@ void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
 
       m_canJumpTimer = 0.0f;
       m_jumpHoldTimer = kJumpHoldTimeMax;
-      m_body->AddImpulse( aeFloat2( 0.0f, 400.0f ) );
+      m_body->AddImpulse( aeFloat2( 0.0f, kPlayerMass * kJumpInitial ) );
     }
 
     if ( m_jumpHoldTimer > 0.0f && jumpButton )
     {
       m_jumpHoldTimer -= dt;
-      m_body->AddForce( aeFloat2( 0.0f, 400.0f ) );
+      m_body->AddForce( aeFloat2( 0.0f, kPlayerMass * kJumpHold ) );
     }
   }
 
-  m_body->AddGravity( aeFloat2( 0.0f, -10.0f ) );
+  m_body->AddGravity( aeFloat2( 0.0f, -kGravity ) );
 }
 
 void Player::Render( aeSpriteRender* spriteRender, aeTexture2D* tex )
@@ -156,7 +174,7 @@ int main()
   aeSpriteRender spriteRender;
   
   window.Initialize( 800, 600, false, true );
-  window.SetTitle( "Platformer 2D" );  render.InitializeOpenGL( &window, 400, 300 );
+  window.SetTitle( "Platformer 2D" );  render.InitializeOpenGL( &window, window.GetWidth(), window.GetHeight() );
   render.SetClearColor( aeColor::PicoDarkBlue() );
   input.Initialize( &window, &render );
   spriteRender.Initialize( 512 );
@@ -168,16 +186,17 @@ int main()
   aeFixedTimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );
 
+  //------------------------------------------------------------------------------
+  // Tile map
+  //------------------------------------------------------------------------------
   HotSpotWorld world;
-  world.Initialize();
-
-  // Resources
+  world.Initialize( 1.0f / 240.0f );
   world.SetCollisionMask( kTileMask_Collision );
   world.SetTileProperties( kTile_Air, kTileMask_Open );
-  world.SetTileFluidDensity( kTile_Air, 12.5f );
+  world.SetTileFluidDensity( kTile_Air, kAirDensity );
   world.SetTileProperties( kTile_Wall, kTileMask_Collision );
   world.SetTileProperties( kTile_Water, kTileMask_Open );
-  world.SetTileFluidDensity( kTile_Water, 1000.0f );
+  world.SetTileFluidDensity( kTile_Water, kWaterDensity );
 #define O kTile_Air
 #define B kTile_Wall
 #define W kTile_Water
@@ -204,29 +223,34 @@ int main()
   AE_STATIC_ASSERT( countof(kMapData) == kMapWidth * kMapHeight );
   world.LoadTiles( kMapData, kMapWidth, kMapHeight, true );
   
+  //------------------------------------------------------------------------------
+  // Textures
+  //------------------------------------------------------------------------------
   aeTexture2D tex;
   uint8_t texData[] = { 255, 255, 255 };
   tex.Initialize( texData, 1, 1, aeTextureFormat::RGB, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
 
-  // Camera
+  //------------------------------------------------------------------------------
+  // Game loop
+  //------------------------------------------------------------------------------
   float scale = 10.0f;
-  aeFloat2 camera( 0.0f );
-
-  // Player
   Player player( &world, aeFloat2( 2.0f, 2.0f ) );
 
-  // Game loop
   while ( !input.GetState()->exit )
   {
+    //------------------------------------------------------------------------------
+    // Update
+    //------------------------------------------------------------------------------
     input.Pump();
+    player.Update( &world, &input, timeStep.GetTimeStep() );
+    world.Update( timeStep.GetTimeStep() );
+    
+    //------------------------------------------------------------------------------
+    // Render
+    //------------------------------------------------------------------------------
     render.Resize( window.GetWidth(), window.GetHeight() );
     render.StartFrame();
     spriteRender.Clear();
-
-    player.Update( &world, &input, timeStep.GetTimeStep() );
-    world.Update( timeStep.GetTimeStep() );
-
-    camera = player.GetPosition();
 
     player.Render( &spriteRender, &tex );
 
@@ -247,13 +271,18 @@ int main()
       }
     }
 
+    aeFloat2 camera = player.GetPosition();
     aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
     screenTransform.Translate( aeFloat3( -camera.x, -camera.y, 0.0f ) );
     spriteRender.Render( screenTransform );
+
     render.EndFrame();
     timeStep.Wait();
   }
 
+  //------------------------------------------------------------------------------
+  // Cleanup
+  //------------------------------------------------------------------------------
   AE_LOG( "Terminate" );
 
   input.Terminate();

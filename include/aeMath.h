@@ -210,6 +210,11 @@ namespace aeMath
     return ( value - start ) / ( end - start );
   }
 
+  inline float Delerp01( float start, float end, float value )
+  {
+    return Clip01( ( value - start ) / ( end - start ) );
+  }
+
   template< typename T >
   T DtLerp( T value, float snappiness, float dt, T target )
   {

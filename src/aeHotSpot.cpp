@@ -33,15 +33,34 @@ const float kGroundDistanceEpsilon = 0.01f;
 //------------------------------------------------------------------------------
 // HotSpotWorld member functions
 //------------------------------------------------------------------------------
-void HotSpotWorld::Initialize()
-{}
+void HotSpotWorld::Initialize( float timeStep )
+{
+  AE_ASSERT( timeStep > 0.0f );
+  m_timeStep = timeStep;
+  m_timeAccumulator = 0.0f;
+}
 
 void HotSpotWorld::Update( float dt )
 {
+  m_timeAccumulator += dt;
+
+  while ( m_timeAccumulator >= m_timeStep )
+  {
+    for ( uint32_t i = 0; i < m_objects.Length(); i++ )
+    {
+      HotSpotObject* object = m_objects[ i ];
+      object->Update( this, m_timeStep );
+    }
+
+    m_timeAccumulator -= m_timeStep;
+  }
+
   for ( uint32_t i = 0; i < m_objects.Length(); i++ )
   {
+    // @NOTE: Reset user forces for next frame after all simulation steps
     HotSpotObject* object = m_objects[ i ];
-    object->Update( this, dt );
+    object->m_forces = aeFloat2( 0.0f );
+    object->m_gravity = aeFloat2( 0.0f );
   }
 }
 
@@ -187,6 +206,10 @@ bool HotSpotObject::IsOnGround() const
 
 void HotSpotObject::Update( HotSpotWorld* world, float dt )
 {
+  // @NOTE: Apply derived forces (drag etc) to a temporary value to
+  //        allow multiple simulation steps per frame.
+  aeFloat2 forces = m_forces;
+
   // @HACK: Shouldn't assume side-on platformer with gravity pointing -y
   {
     aeInt2 tilePos;
@@ -206,17 +229,18 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
     }
 
     const float kFrictionCoefficient = 0.2f;
-    if ( IsOnGround() && m_forces.y < 0.0f && kFrictionCoefficient > 0.0f )
+    if ( IsOnGround() && forces.y < 0.0f && kFrictionCoefficient > 0.0f )
     {
-      float friction = -m_forces.y * kFrictionCoefficient;
+      float friction = -forces.y * kFrictionCoefficient;
       AE_ASSERT( friction >= 0.0f );
+      friction *= aeMath::Delerp01( 0.0f, 0.1f, aeMath::Abs( m_velocity.x ) );
       if ( m_velocity.x > 0.0f )
       {
-        m_forces.x -= friction;
+        forces.x -= friction;
       }
       else if ( m_velocity.x < 0.0f )
       {
-        m_forces.x += friction;
+        forces.x += friction;
       }
     }
   }
@@ -230,10 +254,9 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
     // Assume surface coefficient and area of 1.0
     float speed2 = m_velocity.LengthSquared();
     aeFloat2 velDir = m_velocity.SafeNormalizeCopy();
-    m_forces -= velDir * ( speed2 * density * 0.5f );
+    forces -= velDir * ( speed2 * density * 0.5f );
   }
 
-  // Buoyancy: buoyant force = (density of liquid)(gravitational acceleration)(volume of liquid)
   {
     aeMap< aeInt2, int32_t > intersections;
     intersections.Set( HotSpotWorld::_GetTilePos( m_position ), 1 );
@@ -253,20 +276,16 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
         aeRect tileRect( tilePos.x - 0.5f, tilePos.y - 0.5f, 1.0f, 1.0f );
         if ( tileRect.GetIntersection( objRect, &intersection ) )
         {
+          // Buoyant force = (density of liquid(kg/m3))*(gravitational acceleration(m/s2))*(volume of liquid(m3))
           float displaced = intersection.w * intersection.h * m_volume;
-          // Fb = pgV
-          // Fb = buoyant force of a liquid acting on an object( N )
-          // p = density of the liquid( kg / m3 )
-          // g = gravitational acceleration( m / s2 )
-          // V = volume of liquid displaced( m3 or liters, where 1 m3 = 1000 L )
-          m_forces -= m_gravity * ( density * displaced );
+          forces -= m_gravity * ( density * displaced );
         }
       }
     }
   }
 
   // F = ma
-  aeFloat2 acceleration = m_forces / m_mass;
+  aeFloat2 acceleration = forces / m_mass;
   m_velocity += acceleration * dt;
   m_position += m_velocity * dt;
 
@@ -275,9 +294,6 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
   {
     m_airTimer += dt;
   }
-
-  m_forces = aeFloat2( 0.0f );
-  m_gravity = aeFloat2( 0.0f );
 
   if ( !m_CheckCollision( world, aeInt2( 0, -1 ) ) )
   {
