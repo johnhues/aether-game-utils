@@ -28,13 +28,15 @@
 #include "aeInput.h"
 #include "aeLog.h"
 #include "aeRender.h"
-#include "aeSignal.h"
-#include "aeSparseGrid.h"
 #include "aeWindow.h"
 
 //------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
+// Frame rate
+const uint32_t kFramesPerSecond = 60;
+const uint32_t kSimulationStepsPerSecond = 240;
+
 // Tiles
 const uint32_t kTileMask_Open = 0;
 const uint32_t kTileMask_Collision = 1;
@@ -78,7 +80,6 @@ public:
 
 private:
   HotSpotObject* m_body = nullptr;
-  aeFloat2 m_startPos = aeFloat2( 0.0f );
   float m_canJumpTimer = 0.0f;
   float m_jumpHoldTimer = 0.0f;
 };
@@ -91,7 +92,6 @@ Player::Player( HotSpotWorld* world, aeFloat2 startPos )
   m_body = world->CreateObject();
   m_body->SetMass( kPlayerMass );
   m_body->SetVolume( kPlayerMass / kPlayerDensity );
-  m_startPos = startPos;
   m_body->onCollision.Add( this, &Player::OnCollision );
   m_body->Warp( startPos );
 }
@@ -158,7 +158,7 @@ void Player::Render( aeSpriteRender* spriteRender, aeTexture2D* tex )
 {
   aeFloat4x4 transform = aeFloat4x4::Translation( aeFloat3( GetPosition(), -0.5f ) );
   transform.Scale( aeFloat3( 1.0f, 1.0f, 1.0f ) );
-  spriteRender->AddSprite( tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), CanJump() ? aeColor::Red() : aeColor::Blue() );
+  spriteRender->AddSprite( tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), CanJump() ? aeColor::PicoRed() : aeColor::PicoBlue() );
 }
 
 //------------------------------------------------------------------------------
@@ -184,13 +184,13 @@ int main()
   spriteRender.SetSorting( true );
 
   aeFixedTimeStep timeStep;
-  timeStep.SetTimeStep( 1.0f / 60.0f );
+  timeStep.SetTimeStep( 1.0f / kFramesPerSecond );
 
   //------------------------------------------------------------------------------
   // Tile map
   //------------------------------------------------------------------------------
   HotSpotWorld world;
-  world.Initialize( 1.0f / 240.0f );
+  world.Initialize( 1.0f / kSimulationStepsPerSecond );
   world.SetCollisionMask( kTileMask_Collision );
   world.SetTileProperties( kTile_Air, kTileMask_Open );
   world.SetTileFluidDensity( kTile_Air, kAirDensity );
