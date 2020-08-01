@@ -59,7 +59,7 @@ double aeClock::GetTime()
 //------------------------------------------------------------------------------
 aeFixedTimeStep::aeFixedTimeStep()
 {
-  m_first = true;
+  m_stepCount = 0;
   m_timeStep = 0.0f;
   m_frameExcess = 0;
   m_prevFrameTime = 0.0f;
@@ -74,9 +74,8 @@ void aeFixedTimeStep::Wait()
     return;
   }
 
-  if ( m_first )
+  if ( m_stepCount == 0 )
   {
-    m_first = false;
     m_prevFrameTime = m_timeStep;
     m_frameStart = std::chrono::steady_clock::now();
   }
@@ -100,6 +99,8 @@ void aeFixedTimeStep::Wait()
     m_prevFrameTime = frameDuration.count();
     m_frameStart = std::chrono::steady_clock::now();
   }
+
+  m_stepCount++;
 }
 
 //------------------------------------------------------------------------------

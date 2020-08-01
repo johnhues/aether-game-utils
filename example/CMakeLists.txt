@@ -58,6 +58,11 @@ set(AE_CURRENT_SOURCE_FILES 08_Audio.cpp music.wav sound.wav)
 set(AE_RESOURCES music.wav sound.wav)
 include(AddExecutable)
 
+set(AE_CURRENT_BUNDLE_NAME "Platformer2D")
+set(AE_CURRENT_EXECUTABLE_NAME 09_platformer2d)
+set(AE_CURRENT_SOURCE_FILES 09_Platformer2D.cpp)
+include(AddExecutable)
+
 set(AE_CURRENT_BUNDLE_NAME "Splines")
 set(AE_CURRENT_EXECUTABLE_NAME 10_splines)
 set(AE_CURRENT_SOURCE_FILES 10_Splines.cpp)
