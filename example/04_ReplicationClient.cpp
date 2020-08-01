@@ -47,7 +47,7 @@ int main()
   aeFixedTimeStep timeStep;
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Replication Client" );
-  render.InitializeOpenGL( &window, 400, 300 );
+  render.InitializeOpenGL( &window );
   render.SetClearColor( aeColor::Black() );
   input.Initialize( &window, &render );
   spriteRender.Initialize( 32 );
@@ -123,7 +123,7 @@ int main()
     // Send messages generated during game update
     AetherClient_SendAll( client );
 
-    render.StartFrame();
+    render.StartFrame( window.GetWidth(), window.GetHeight() );
     spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
     render.EndFrame();
 

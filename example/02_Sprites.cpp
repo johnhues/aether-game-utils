@@ -43,7 +43,7 @@ int main()
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "sprites" );
-	render.InitializeOpenGL( &window, 400, 300 );
+	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::Red() );
 	input.Initialize( &window, &render );
 	spriteRender.Initialize( 16 );
@@ -64,7 +64,7 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.StartFrame();
+		render.StartFrame( window.GetWidth(), window.GetHeight() );
 		spriteRender.Clear();
 
 		aeFloat4x4 transform;

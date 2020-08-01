@@ -784,8 +784,8 @@ aeRender::aeRender()
   m_renderInternal = nullptr;
 
   m_window = nullptr;
-  m_targetWidth = 0;
-  m_targetHeight = 0;
+  m_width = 0;
+  m_height = 0;
 
   m_clearColor = aeColor::Black();
 }
@@ -795,13 +795,10 @@ aeRender::~aeRender()
   Terminate();
 }
 
-void aeRender::InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height )
+void aeRender::InitializeOpenGL( class aeWindow* window )
 {
   AE_ASSERT_MSG( window->window, "aeWindow must be initialized prior to aeRender initialization." );
   AE_ASSERT_MSG( !m_renderInternal, "aeRender already initialized" );
-
-  m_targetWidth = width;
-  m_targetHeight = height;
 
   m_window = window;
 
@@ -819,13 +816,16 @@ void aeRender::Terminate()
   }
 }
 
-void aeRender::StartFrame()
+void aeRender::StartFrame( uint32_t width, uint32_t height )
 {
   AE_ASSERT( m_renderInternal );
 
-  if ( m_targetWidth != m_canvas.GetWidth() || m_targetHeight != m_canvas.GetHeight() )
+  m_width = width;
+  m_height = height;
+
+  if ( m_width != m_canvas.GetWidth() || m_height != m_canvas.GetHeight() )
   {
-    m_canvas.Initialize( m_targetWidth, m_targetHeight );
+    m_canvas.Initialize( m_width, m_height );
     m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
     m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
   }
@@ -846,12 +846,6 @@ void* aeRender::GetContext() const
   return m_renderInternal->GetContext();
 }
 
-void aeRender::Resize( uint32_t width, uint32_t height )
-{
-  m_targetWidth = width;
-  m_targetHeight = height;
-}
-
 void aeRender::SetClearColor( aeColor color )
 {
   m_clearColor = color;
@@ -860,6 +854,18 @@ void aeRender::SetClearColor( aeColor color )
 aeColor aeRender::GetClearColor() const
 {
   return m_clearColor;
+}
+
+float aeRender::GetAspectRatio() const
+{
+  if ( m_width + m_height == 0 )
+  {
+    return 0.0f;
+  }
+  else
+  {
+    return m_width / (float)m_height;
+  }
 }
 
 aeFloat4x4 aeRender::GetWindowToRenderTransform()

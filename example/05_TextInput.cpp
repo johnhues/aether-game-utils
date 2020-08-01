@@ -43,7 +43,7 @@ int main()
 	
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "example" );
-	render.InitializeOpenGL( &window, window.GetWidth() / 4, window.GetHeight() / 4 );
+	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::Green().ScaleRGB( 0.01f ) );
 	input.Initialize( &window, &render );
 	input.SetTextMode( true );
@@ -56,8 +56,7 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.Resize( window.GetWidth() / 4, window.GetHeight() / 4 );
-		render.StartFrame();
+		render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
 
 		// UI units in pixels, origin in bottom left
 		aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
