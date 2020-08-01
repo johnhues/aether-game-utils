@@ -45,7 +45,7 @@ int main()
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "splines" );
-  render.InitializeOpenGL( &window, 800, 600 );
+  render.InitializeOpenGL( &window );
   render.SetClearColor( aeColor::Black() );
   input.Initialize( &window, &render );
   spriteRender.Initialize( 64 );
@@ -74,8 +74,7 @@ int main()
   while ( !input.GetState()->exit )
   {
     input.Pump();
-    render.Resize( window.GetWidth(), window.GetHeight() );
-    render.StartFrame();
+    render.StartFrame( window.GetWidth(), window.GetHeight() );
     spriteRender.Clear();
 
     aeFloat4x4 transform;
