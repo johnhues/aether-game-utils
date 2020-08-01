@@ -81,6 +81,15 @@ aeFloat3 aeSpline::GetPoint( float distance ) const
     return m_controlPoints[ 0 ];
   }
 
+  if ( m_length < 0.001f )
+  {
+    distance = 0.0f;
+  }
+  else if ( m_loop && distance >= m_length )
+  {
+    distance = aeMath::Mod( distance, m_length );
+  }
+
   for ( uint32_t i = 0; i < m_segments.Length(); i++ )
   {
     const Segment& segment = m_segments[ i ];
