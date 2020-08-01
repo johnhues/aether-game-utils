@@ -54,10 +54,11 @@ int main()
   spriteRender.SetDepthWrite( true );
   spriteRender.SetSorting( true );
   
-  spline.AppendControlPoint( aeFloat3( -0.2f, -1.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( -1.0f, 1.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( 0.2f, -1.0f, 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( -0.4f, -2.0f, 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( -2.0f, 2.0f, 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( 0.0f, 1.0f, 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( 2.0f, 2.0f, 0.0f ) );
+  spline.AppendControlPoint( aeFloat3( 0.4f, -2.0f, 0.0f ) );
   spline.SetLooping( true );
 
   aeFixedTimeStep timeStep;

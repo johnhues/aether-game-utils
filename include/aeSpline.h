@@ -62,6 +62,7 @@ private:
     aeFloat3 c;
     aeFloat3 d;
     float length;
+    uint32_t resolution;
   };
 
   void m_RecalculateSegments();

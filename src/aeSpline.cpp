@@ -28,11 +28,6 @@
 #include "aeSpline.h"
 
 //------------------------------------------------------------------------------
-// Constants
-//------------------------------------------------------------------------------
-const uint32_t kSplineResolution = 64;
-
-//------------------------------------------------------------------------------
 // aeSpline member functions
 //------------------------------------------------------------------------------
 aeSpline::aeSpline( aeFloat3* controlPoints, uint32_t count ) :
@@ -169,13 +164,25 @@ void aeSpline::Segment::Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3
   c = m1;
   d = p1;
 
-  length = 0.0f;
-  for ( uint32_t i = 0; i < kSplineResolution; i++ )
+  length = ( p2 - p1 ).Length();
+  resolution = 1;
+
+  float nextLength = length;
+  uint32_t nextResolution = resolution;
+  do
   {
-    aeFloat3 s0 = GetPoint01( i / (float)kSplineResolution );
-    aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)kSplineResolution );
-    length += ( s1 - s0 ).Length();
-  }
+    length = nextLength;
+    resolution = nextResolution;
+
+    nextResolution = resolution * 2;
+    nextLength = 0.0f;
+    for ( uint32_t i = 0; i < nextResolution; i++ )
+    {
+      aeFloat3 s0 = GetPoint01( i / (float)nextResolution );
+      aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)nextResolution );
+      nextLength += ( s1 - s0 ).Length();
+    }
+  } while ( aeMath::Abs( nextLength - length ) > 0.001f );
 }
 
 aeFloat3 aeSpline::Segment::GetPoint01( float t ) const
@@ -190,10 +197,10 @@ aeFloat3 aeSpline::Segment::GetPoint( float d ) const
     return GetPoint01( 0.0f );
   }
 
-  for ( uint32_t i = 0; i < kSplineResolution; i++ )
+  for ( uint32_t i = 0; i < resolution; i++ )
   {
-    aeFloat3 s0 = GetPoint01( i / (float)kSplineResolution );
-    aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)kSplineResolution );
+    aeFloat3 s0 = GetPoint01( i / (float)resolution );
+    aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)resolution );
     float l = ( s1 - s0 ).Length();
     if ( l >= d )
     {
