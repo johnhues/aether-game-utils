@@ -42,7 +42,7 @@ int main()
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "example" );
-	render.InitializeOpenGL( &window, 400, 300 );
+	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::Red() );
 	input.Initialize( &window, &render );
 	
@@ -52,7 +52,7 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.StartFrame();
+		render.StartFrame( window.GetWidth(), window.GetHeight() );
 		render.EndFrame();
 		timeStep.Wait();
 	}

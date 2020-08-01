@@ -87,7 +87,7 @@ int main()
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "triangle" );
-	render.InitializeOpenGL( &window, window.GetWidth(), window.GetHeight() );
+	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::PicoDarkPurple() );
 	input.Initialize( &window, &render );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -104,8 +104,7 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.Resize( window.GetWidth(), window.GetHeight() );
-		render.StartFrame();
+		render.StartFrame( window.GetWidth(), window.GetHeight() );
 
 		aeUniformList uniformList;
 		uniformList.Set( "u_modelToNdc", aeFloat4x4::Scaling( aeFloat3( 1.0f / render.GetAspectRatio() , 1.0f, 1.0f ) ) );

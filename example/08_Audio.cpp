@@ -44,7 +44,7 @@ int main()
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "audio" );
-	render.InitializeOpenGL( &window, window.GetWidth() / 4, window.GetHeight() / 4 );
+	render.InitializeOpenGL( &window );
 	input.Initialize( &window, &render );
 	audio.Initialize( 1, 3 );
 	
@@ -73,7 +73,8 @@ int main()
 			hitFade = aeMath::Max( 0.0f, hitFade - timeStep.GetTimeStep() / 0.2f );
 		}
 		
-		if ( !input.GetState()->mouseRight && input.GetPrevState()->mouseRight )
+		if ( ( !input.GetState()->mouseRight && input.GetPrevState()->mouseRight )
+			|| ( !input.GetState()->space && input.GetPrevState()->space ) )
 		{
 			if ( musicPlaying )
 			{
@@ -82,7 +83,7 @@ int main()
 			}
 			else
 			{
-				audio.PlayMusic( &music, 0.7f, 0 );
+				audio.PlayMusic( &music, 0.5f, 0 );
 				musicPlaying = true;
 				musicTime = 0.0f;
 			}
@@ -109,11 +110,10 @@ int main()
 			color = beatColors[ beat % countof( beatColors ) ];
 		}
 
-		render.Resize( window.GetWidth() / 4, window.GetHeight() / 4 );
 		float hitOpacity = aeMath::Min( 1.0f, hitFade / 0.8f );
 		hitOpacity *= hitOpacity;
 		render.SetClearColor( color.Lerp( aeColor::PicoWhite(), hitOpacity * 0.8f ) );
-		render.StartFrame();
+		render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
 		render.EndFrame();
 		
 		timeStep.Wait();

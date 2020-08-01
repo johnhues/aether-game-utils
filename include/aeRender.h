@@ -592,11 +592,11 @@ public:
   aeRender();
   ~aeRender();
 
-  void InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height );
+  void InitializeOpenGL( class aeWindow* window );
   void Terminate();
   // @TODO: StartFrame and EndFrame aren't accurate. Rendering can first happen on render textures.
   //        Maybe change to Activate() and Present()?
-  void StartFrame();
+  void StartFrame( uint32_t width, uint32_t height );
   void EndFrame();
   void* GetContext() const;
 
@@ -606,10 +606,9 @@ public:
   void SetClearColor( aeColor color );
   aeColor GetClearColor() const;
 
-  void Resize( uint32_t width, uint32_t height );
-  uint32_t GetWidth() const { return m_targetWidth; }
-  uint32_t GetHeight() const { return m_targetHeight; }
-  float GetAspectRatio() const { return m_targetWidth / (float)m_targetHeight; }
+  uint32_t GetWidth() const { return m_width; }
+  uint32_t GetHeight() const { return m_height; }
+  float GetAspectRatio() const;
 
   aeFloat4x4 GetWindowToRenderTransform();
   aeRect GetNDCRect() const;
@@ -618,8 +617,8 @@ private:
   class aeRenderInternal* m_renderInternal;
 
   class aeWindow* m_window;
-  uint32_t m_targetWidth;
-  uint32_t m_targetHeight;
+  uint32_t m_width;
+  uint32_t m_height;
 
   aeRenderTarget m_canvas;
   aeColor m_clearColor;

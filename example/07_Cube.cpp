@@ -162,7 +162,7 @@ int main()
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "cube" );
-	render.InitializeOpenGL( &window, window.GetWidth(), window.GetHeight() );
+	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::PicoDarkPurple() );
 	input.Initialize( &window, &render );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -183,8 +183,7 @@ int main()
 	{
 		input.Pump();
 		camera.Update( &input );
-		render.Resize( window.GetWidth(), window.GetHeight() );
-		render.StartFrame();
+		render.StartFrame( window.GetWidth(), window.GetHeight() );
 
 		aeUniformList uniformList;
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
