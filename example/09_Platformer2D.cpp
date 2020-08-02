@@ -161,6 +161,9 @@ void Player::Render( aeSpriteRender* spriteRender, aeTexture2D* tex )
   spriteRender->AddSprite( tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), CanJump() ? aeColor::PicoRed() : aeColor::PicoBlue() );
 }
 
+#include <chrono>
+#include <thread>
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -174,7 +177,7 @@ int main()
   aeSpriteRender spriteRender;
   
   window.Initialize( 800, 600, false, true );
-  window.SetTitle( "Platformer 2D" );  render.InitializeOpenGL( &window );
+  window.SetTitle( "Platformer 2D" );  render.InitializeOpenGL( &window, window.GetWidth(), window.GetHeight() );
   render.SetClearColor( aeColor::PicoDarkBlue() );
   input.Initialize( &window, &render );
   spriteRender.Initialize( 512 );
@@ -236,47 +239,84 @@ int main()
   float scale = 10.0f;
   Player player( &world, aeFloat2( 2.0f, 2.0f ) );
 
+  const double kMaxFrameTime = 1.0 / 60.0;
+
+  double currentTime = aeClock::GetTime();
+  double accumulator = 0.0;
+
   while ( !input.GetState()->exit )
   {
-    //------------------------------------------------------------------------------
-    // Update
-    //------------------------------------------------------------------------------
-    input.Pump();
-    player.Update( &world, &input, timeStep.GetTimeStep() );
-    world.Update( timeStep.GetTimeStep() );
+    int testUpdateCount = 0;
+    int testRenderCount = 0;
+
+    bool didUpdate = false;
+    double newTime = aeClock::GetTime();
+    double frameTime = newTime - currentTime;
+    // @TODO: Enable this. It's important to prevent time spiraling out of control
+    frameTime = aeMath::Min( frameTime, 0.25 );
+    currentTime = newTime;
+
+    accumulator += frameTime;
+
+    while ( accumulator >= kMaxFrameTime )
+    {
+      //------------------------------------------------------------------------------
+      // Update
+      //------------------------------------------------------------------------------
+      input.Pump();
+      player.Update( &world, &input, kMaxFrameTime );
+      world.Update( kMaxFrameTime );
+      //std::this_thread::sleep_for( std::chrono::microseconds( (uint32_t)( 0.2 * 1000000 ) ) );
+
+      accumulator -= kMaxFrameTime;
+      didUpdate = true;
+      testUpdateCount++;
+    }
     
     //------------------------------------------------------------------------------
     // Render
     //------------------------------------------------------------------------------
-    render.StartFrame( window.GetWidth(), window.GetHeight() );
-    spriteRender.Clear();
-
-    player.Render( &spriteRender, &tex );
-
-    for ( uint32_t y = 0; y < kMapHeight; y++ )
+    if ( didUpdate )
     {
-      for ( uint32_t x = 0; x < kMapWidth; x++ )
+      AE_LOG( "u:# r:#", testUpdateCount, testRenderCount );
+      render.Resize( window.GetWidth(), window.GetHeight() );
+      render.StartFrame();
+      spriteRender.Clear();
+
+      player.Render( &spriteRender, &tex );
+
+      for ( uint32_t y = 0; y < kMapHeight; y++ )
       {
-        aeColor color;
-        switch ( world.GetTile( aeInt2( x, y ) ) )
+        for ( uint32_t x = 0; x < kMapWidth; x++ )
         {
-          case kTile_Air: color = aeColor::PicoPeach(); break;
-          case kTile_Water: color = aeColor::PicoPink(); break;
-          default: color = aeColor::PicoOrange(); break;
+          aeColor color;
+          switch ( world.GetTile( aeInt2( x, y ) ) )
+          {
+            case kTile_Air: color = aeColor::PicoPeach(); break;
+            case kTile_Water: color = aeColor::PicoPink(); break;
+            default: color = aeColor::PicoOrange(); break;
+          }
+          aeFloat4x4 transform = aeFloat4x4::Translation( aeFloat3( x, y, 0.0f ) );
+          transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
+          spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), color );
         }
-        aeFloat4x4 transform = aeFloat4x4::Translation( aeFloat3( x, y, 0.0f ) );
-        transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-        spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), color );
       }
+
+      aeFloat2 camera = player.GetPosition();
+      aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
+      screenTransform.Translate( aeFloat3( -camera.x, -camera.y, 0.0f ) );
+      spriteRender.Render( screenTransform );
+
+      render.EndFrame();
+      timeStep.Wait();
+
+      //std::this_thread::sleep_for( std::chrono::microseconds( (uint32_t)(0.05 * 1000000) ) );
+      testRenderCount++;
     }
-
-    aeFloat2 camera = player.GetPosition();
-    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
-    screenTransform.Translate( aeFloat3( -camera.x, -camera.y, 0.0f ) );
-    spriteRender.Render( screenTransform );
-
-    render.EndFrame();
-    timeStep.Wait();
+    else
+    {
+      AE_LOG( "skip render, didn't update" );
+    }
   }
 
   //------------------------------------------------------------------------------
