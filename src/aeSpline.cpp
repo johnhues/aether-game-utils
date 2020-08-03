@@ -211,21 +211,29 @@ aeFloat3 aeSpline::Segment::GetPoint( float d ) const
   {
     return GetPoint01( 0.0f );
   }
-
-  for ( uint32_t i = 0; i < resolution; i++ )
+  else if ( d < length )
   {
-    aeFloat3 s0 = GetPoint01( i / (float)resolution );
-    aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)resolution );
-    float l = ( s1 - s0 ).Length();
-    if ( l >= d )
+    // @NOTE: Search is required here because even within a segment
+    //        t (0-1) does not map linearly to arc length. This is
+    //        an approximate mapping from arc length -> t based on
+    //        the optimized resolution value calculated above.
+    for ( uint32_t i = 0; i < resolution; i++ )
     {
-      return aeMath::Lerp( s0, s1, d / l );
-    }
-    else
-    {
-      d -= l;
+      aeFloat3 s0 = GetPoint01( i / (float)resolution );
+      aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)resolution );
+      float l = ( s1 - s0 ).Length();
+      if ( l >= d )
+      {
+        return aeMath::Lerp( s0, s1, d / l );
+      }
+      else
+      {
+        d -= l;
+      }
     }
   }
-
-  return GetPoint01( 1.0f );
+  else
+  {
+    return GetPoint01( 1.0f );
+  }
 }
