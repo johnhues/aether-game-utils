@@ -233,7 +233,6 @@ int main()
   //------------------------------------------------------------------------------
   // Game loop
   //------------------------------------------------------------------------------
-  float scale = 10.0f;
   Player player( &world, aeFloat2( 2.0f, 2.0f ) );
 
   while ( !input.GetState()->exit )
@@ -271,7 +270,7 @@ int main()
     }
 
     aeFloat2 camera = player.GetPosition();
-    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
+    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 10.0f, render.GetAspectRatio() / 10.0f, 1.0f ) );
     screenTransform.Translate( aeFloat3( -camera.x, -camera.y, 0.0f ) );
     spriteRender.Render( screenTransform );
 

@@ -58,28 +58,33 @@ int main()
 	aeTexture2D tex;
 	tex.Initialize( "circle.png", aeTextureFilter::Linear, aeTextureWrap::Repeat );
 
-	float scale = 5.0f;
-	aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
-
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
+		int scaleFactor = input.GetState()->space ? 4 : 1;
+		render.StartFrame( window.GetWidth() / scaleFactor, window.GetHeight() / scaleFactor );
 		spriteRender.Clear();
 
 		aeFloat4x4 transform;
 
+		// @NOTE: Notice these are rendered out of order and the transparent edges of
+		//        the circles are handled correctly. Hold space to see this more clearly.
+
+		// Front
 		transform = aeFloat4x4::Translation( aeFloat3( 0.5f, 0.5f, -0.5f ) );
 		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
 		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue() );
 
+		// Back
 		transform = aeFloat4x4::Translation( aeFloat3( -0.5f, -0.5f, 0.5f ) );
 		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
 		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue() );
 
+		// Middle
 		transform = aeFloat4x4::Scaling(  aeFloat3( 1.0f, 1.0f, 0.5f ) );
 		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::White() );
 
+		aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
 		spriteRender.Render( screenTransform );
 		render.EndFrame();
 		timeStep.Wait();

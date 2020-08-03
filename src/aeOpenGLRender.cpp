@@ -712,6 +712,8 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
 
 void aeShader::Destroy()
 {
+  m_attributeCount = 0;
+
   if( m_fragmentShader != 0 )
   {
     glDeleteShader( m_fragmentShader );

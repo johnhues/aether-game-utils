@@ -67,8 +67,6 @@ int main()
   aeTexture2D tex;
   tex.Initialize( "circle.png", aeTextureFilter::Linear, aeTextureWrap::Repeat );
 
-  float scale = 5.0f;
-
   float t = 0.0f;
 
   while ( !input.GetState()->exit )
@@ -103,7 +101,7 @@ int main()
     transform.Scale( aeFloat3( 0.3f ) );
     spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green() );
 
-    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
+    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
     spriteRender.Render( screenTransform );
     render.EndFrame();
     timeStep.Wait();
