@@ -85,7 +85,7 @@ aeFloat3 aeSpline::GetPoint( float distance ) const
   {
     distance = 0.0f;
   }
-  else if ( m_loop && distance >= m_length )
+  else if ( m_loop && ( distance < 0.0f || distance >= m_length ) )
   {
     distance = aeMath::Mod( distance, m_length );
   }

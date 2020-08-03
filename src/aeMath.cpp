@@ -203,7 +203,7 @@ aeFloat2 aeFloat2::RotateCopy( float rotation ) const
 
 float aeFloat2::GetAngle() const
 {
-  if ( LengthSquared() < 0.01f )
+  if ( LengthSquared() < 0.0001f )
   {
     return 0.0f;
   }
@@ -1812,6 +1812,18 @@ aeFloat4x4& aeFloat4x4::Translate( aeFloat3 t )
 aeFloat4x4& aeFloat4x4::Scale( aeFloat3 s )
 {
   *this = *this * aeFloat4x4::Scaling( s );
+  return *this;
+}
+
+aeFloat4x4& aeFloat4x4::RotateX( float angle )
+{
+  *this = *this * aeFloat4x4::RotationX( angle );
+  return *this;
+}
+
+aeFloat4x4& aeFloat4x4::RotateY( float angle )
+{
+  *this = *this * aeFloat4x4::RotationY( angle );
   return *this;
 }
 

@@ -749,6 +749,8 @@ public:
   // Transformation helpers
   aeFloat4x4& Translate( aeFloat3 t );
   aeFloat4x4& Scale( aeFloat3 s );
+  aeFloat4x4& RotateX( float angle );
+  aeFloat4x4& RotateY( float angle );
   aeFloat4x4& RotateZ( float angle );
 };
 
