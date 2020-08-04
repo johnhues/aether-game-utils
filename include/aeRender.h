@@ -610,7 +610,8 @@ public:
   uint32_t GetHeight() const { return m_height; }
   float GetAspectRatio() const;
 
-  aeFloat4x4 GetWindowToRenderTransform();
+  aeFloat4x4 GetWindowToCanvasTransform() const; // Mouse to canvas
+  aeFloat4x4 GetWindowToWorld( const aeFloat4x4& worldToNdc ) const; // Mouse to world
   aeRect GetNDCRect() const;
 
 private:

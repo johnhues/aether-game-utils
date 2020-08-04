@@ -868,7 +868,7 @@ float aeRender::GetAspectRatio() const
   }
 }
 
-aeFloat4x4 aeRender::GetWindowToRenderTransform()
+aeFloat4x4 aeRender::GetWindowToCanvasTransform() const
 {
   aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
   windowToNDC.Scale( aeFloat3( 2.0f / m_window->GetWidth(), 2.0f / m_window->GetHeight(), 1.0f ) );
@@ -880,6 +880,13 @@ aeFloat4x4 aeRender::GetWindowToRenderTransform()
   quadToRender.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
   
   return ( quadToRender * ndcToQuad * windowToNDC );
+}
+
+aeFloat4x4 aeRender::GetWindowToWorld( const aeFloat4x4& worldToNdc ) const
+{
+  aeFloat4x4 windowToCanvas = GetWindowToCanvasTransform();
+  aeFloat4x4 canvasToNdc = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) ) * aeFloat4x4::Scaling( aeFloat3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  return ( worldToNdc.Inverse() * canvasToNdc * windowToCanvas );
 }
 
 aeRect aeRender::GetNDCRect() const
