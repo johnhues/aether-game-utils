@@ -44,6 +44,7 @@ void aeWindow::Initialize( uint32_t width, uint32_t height, bool fullScreen, boo
 {
   AE_ASSERT( !window );
 
+  m_pos = aeInt2( fullScreen ? 0 : (int)SDL_WINDOWPOS_CENTERED );
   m_width = width;
   m_height = height;
   m_fullScreen = fullScreen;
@@ -90,7 +91,7 @@ void aeWindow::m_Initialize()
 #else
   uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
   flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
-  window = SDL_CreateWindow( "", (int)SDL_WINDOWPOS_CENTERED, (int)SDL_WINDOWPOS_CENTERED, m_width, m_height, flags );
+  window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
 #endif
   AE_ASSERT( window );
 }
