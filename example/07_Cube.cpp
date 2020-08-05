@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeClock.h"
+#include "aeEditorCamera.h"
 #include "aeInput.h"
 #include "aeLog.h"
 #include "aeRender.h"
@@ -105,47 +106,6 @@ uint16_t kCubeIndices[] =
 };
 
 //------------------------------------------------------------------------------
-// Camera
-//------------------------------------------------------------------------------
-class Camera
-{
-public:
-	void Update( const aeInput* input );
-
-	aeFloat3 GetPosition() const { return m_pos; }
-	aeFloat3 GetForward() const { return m_forward; }
-
-private:
-	aeFloat3 m_pos = aeFloat3( 0.0f );
-	aeFloat3 m_forward = aeFloat3( 0.0f, 1.0f, 0.0f );
-
-	float m_yaw = 0.77f;
-	float m_pitch = 0.5f;
-	float m_dist = 2.0f;
-};
-
-void Camera::Update( const aeInput* input )
-{
-	if ( input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft )
-	{
-		aeFloat2 mouseMovement( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
-		mouseMovement *= 0.01f;
-		m_yaw -= mouseMovement.x;
-		m_pitch -= mouseMovement.y;
-		m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f );
-	}
-
-	m_dist -= input->GetState()->scroll * 0.25f;
-	m_dist = aeMath::Clip( m_dist, 1.5f, 5.0f );
-
-	m_pos = aeFloat3( aeMath::Cos( m_yaw ), aeMath::Sin( m_yaw ), 0.0f );
-	m_pos *= aeMath::Cos( m_pitch );
-	m_pos.z = aeMath::Sin( m_pitch );
-	m_forward = -m_pos;
-	m_pos *= m_dist;
-}
-
-//------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
@@ -158,7 +118,7 @@ int main()
 	aeFixedTimeStep timeStep;
 	aeShader shader;
 	aeVertexData vertexData;
-	Camera camera;
+	aeEditorCamera camera;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "cube" );
@@ -182,16 +142,21 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		camera.Update( &input );
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
 
+		if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+		{
+			camera.Refocus( aeFloat3( 0.0f ) );
+		}
+		camera.Update( &input, timeStep.GetTimeStep() );
+
+		render.StartFrame( window.GetWidth(), window.GetHeight() );
 		aeUniformList uniformList;
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		vertexData.Render( &shader, uniformList );
-
 		render.EndFrame();
+
 		timeStep.Wait();
 	}
 

@@ -55,6 +55,7 @@ set(AE_HEADER_FILES
 	../include/aeCommand.h
 	../include/aeCommandLineArgs.h
 	../include/aeDict.h
+	../include/aeEditorCamera.h
 	../include/aeHotSpot.h
 	../include/aeImGui.h
 	../include/aeInitializer.h
@@ -94,6 +95,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeCommonRender.cpp
 		aeCommonRender.h
 		aeDict.cpp
+		aeEditorCamera.cpp
 		aeHotSpot.cpp
 		aeInput.cpp
 		aeLog.cpp
