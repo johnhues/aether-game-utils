@@ -75,8 +75,8 @@ public:
   void Update( HotSpotWorld* world, aeInput* input, float dt );
 
   void Render( aeSpriteRender* spriteRender, aeTexture2D* tex );
-  aeFloat2 Player::GetPosition() const { return m_body->GetPosition(); }
-  bool Player::CanJump() const { return m_canJumpTimer > 0.0f; }
+  aeFloat2 GetPosition() const { return m_body->GetPosition(); }
+  bool CanJump() const { return m_canJumpTimer > 0.0f; }
 
 private:
   HotSpotObject* m_body = nullptr;
