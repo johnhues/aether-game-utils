@@ -53,6 +53,7 @@ set(AE_HEADER_FILES
 	../include/aeBinaryStream.h
 	../include/aeClock.h
 	../include/aeCommand.h
+	../include/aeCompactingAllocator.h
 	../include/aeCommandLineArgs.h
 	../include/aeDict.h
 	../include/aeEditorCamera.h
@@ -78,6 +79,7 @@ set(AE_HEADER_FILES
 	../include/aeSparseGrid.h
 	../include/aeSpline.h
 	../include/aeString.h
+	../include/aeTerrain.h
 	../include/aeUuid.h
 	../include/aeVfs.h
 	../include/aeWindow.h
@@ -108,6 +110,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeOpenGLRender.cpp
 		aePlatform.cpp
 		aeSpline.cpp
+		aeTerrain.cpp
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp

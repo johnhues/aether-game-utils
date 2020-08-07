@@ -67,3 +67,8 @@ set(AE_CURRENT_BUNDLE_NAME "Splines")
 set(AE_CURRENT_EXECUTABLE_NAME 10_splines)
 set(AE_CURRENT_SOURCE_FILES 10_Splines.cpp)
 include(AddExecutable)
+
+set(AE_CURRENT_BUNDLE_NAME "Terrain")
+set(AE_CURRENT_EXECUTABLE_NAME 11_terrain)
+set(AE_CURRENT_SOURCE_FILES 11_Terrain.cpp)
+include(AddExecutable)
