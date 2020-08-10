@@ -774,6 +774,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   }
 
   // Set shader uniforms
+  bool missingUniforms = false;
   uint32_t textureIndex = 0;
   for ( uint32_t i = 0; i < m_uniforms.Length(); i++ )
   {
@@ -782,7 +783,11 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     const aeUniformList::Value* uniformValue = uniforms.Get( uniformVarName );
     
     // Start validation
-    AE_ASSERT_MSG( uniformValue, "Shader uniform '#' value is not set", uniformVarName );
+    if ( !uniformValue )
+    {
+      AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
+      missingUniforms = true;
+    }
     uint32_t typeSize = 0;
     switch ( uniformVar->type )
     {
@@ -863,6 +868,8 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
 
     AE_CHECK_GL_ERROR();
   }
+
+  AE_ASSERT_MSG( !missingUniforms, "Missing shader uniform parameters" );
 }
 
 const aeShaderAttribute* aeShader::GetAttributeByIndex( uint32_t index ) const
