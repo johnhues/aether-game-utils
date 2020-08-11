@@ -2052,3 +2052,44 @@ bool aeCircle::Intersect( const aeCircle& other, aeFloat2* out ) const
   }
   return true;
 }
+
+//------------------------------------------------------------------------------
+// aeHash member functions
+//------------------------------------------------------------------------------
+aeHash::aeHash( uint32_t initialValue )
+{
+  m_hash = initialValue;
+}
+
+aeHash& aeHash::HashString( const char* str )
+{
+  while ( *str )
+  {
+    m_hash = m_hash ^ str[ 0 ];
+    m_hash *= 0x1000193;
+    str++;
+  }
+
+  return *this;
+}
+
+aeHash& aeHash::HashData( const uint8_t* data, const uint32_t length )
+{
+  for ( uint32_t i = 0; i < length; i++ )
+  {
+    m_hash = m_hash ^ data[ i ];
+    m_hash *= 0x1000193;
+  }
+
+  return *this;
+}
+
+void aeHash::Set( uint32_t hash )
+{
+  m_hash = hash;
+}
+
+uint32_t aeHash::Get() const
+{
+  return m_hash;
+}

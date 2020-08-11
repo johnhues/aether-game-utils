@@ -27,6 +27,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
+#include "aeMath.h"
 #include "aePlatform.h"
 #include "aeString.h"
 #include <map>
@@ -165,7 +166,7 @@ public:
     {
       m_placementNew = &( PlacementNewInternal< T > );
       m_name = name;
-      m_id = m_name.FNV1a();
+      m_id = aeHash().HashString( name ).Get();
       m_size = sizeof( T );
       m_align = alignof( T );
       m_parent = T::GetBaseTypeName();
@@ -177,7 +178,7 @@ public:
     {
       m_placementNew = nullptr;
       m_name = name;
-      m_id = m_name.FNV1a();
+      m_id = aeHash().HashString( name ).Get();
       m_size = sizeof( T );
       m_align = 0;
       m_parent = T::GetBaseTypeName();

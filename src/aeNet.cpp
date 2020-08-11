@@ -120,7 +120,7 @@ void aeNetData::m_UpdateHash()
 {
   if ( m_data.Length() )
   {
-    m_hash = aeFNV1a( &m_data[ 0 ], m_data.Length() );
+    m_hash = aeHash().HashData( &m_data[ 0 ], m_data.Length() ).Get();
   }
   else
   {
