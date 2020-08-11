@@ -32,19 +32,6 @@
 #include "aePlatform.h"
 
 //------------------------------------------------------------------------------
-// String hash
-//------------------------------------------------------------------------------
-inline uint32_t aeFNV1a( const uint8_t* data, const uint32_t length, uint32_t hash = 0x811c9dc5 )
-{
-  for ( uint32_t i = 0; i < length; i++ )
-  {
-    hash = hash ^ data[ i ];
-    hash *= 0x1000193;
-  }
-  return hash;
-}
-
-//------------------------------------------------------------------------------
 // Fixed length string definition
 //------------------------------------------------------------------------------
 template < uint32_t N >
@@ -120,8 +107,6 @@ public:
 
   static const uint32_t MaxLength = N - 3; // Leave room for length far and null terminator
   template < uint32_t N2 > friend class aeStr;
-
-  inline uint32_t FNV1a() const;
 
 private:
   template < uint32_t N2 > friend bool operator ==( const char*, const aeStr< N2 >& );
@@ -614,14 +599,6 @@ void aeStr< N >::m_Format( const char* format, T value, Args... args )
     head++;
   }
   m_Format( head, args... );
-}
-
-template < uint32_t N >
-uint32_t aeStr< N >::FNV1a() const
-{
-  // @TODO: Return 0x811c9dc5 on empty string or 0?
-  AE_ASSERT( m_length );
-  return aeFNV1a( (const uint8_t*)m_str, m_length );
 }
 
 #endif
