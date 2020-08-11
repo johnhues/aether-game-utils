@@ -53,6 +53,27 @@ const char* kFragShader = "\
 	}";
 
 //------------------------------------------------------------------------------
+// Shaders
+//------------------------------------------------------------------------------
+const char* kTerrainVertShader = "\
+	AE_UNIFORM mat4 u_worldToProj;\
+	AE_IN_HIGHP vec3 a_position;\
+	AE_IN_HIGHP vec3 a_normal;\
+	AE_OUT_HIGHP vec4 v_color;\
+	void main()\
+	{\
+		v_color = vec4( a_normal, 1.0 );\
+		gl_Position = u_worldToProj * vec4( a_position, 1.0 );\
+	}";
+
+const char* kTerrainFragShader = "\
+	AE_IN_HIGHP vec4 v_color;\
+	void main()\
+	{\
+		AE_COLOR = v_color;\
+	}";
+
+//------------------------------------------------------------------------------
 // Cube
 //------------------------------------------------------------------------------
 struct Vertex
@@ -94,7 +115,7 @@ int main()
 	aeRender render;
 	aeInput input;
 	aeFixedTimeStep timeStep;
-	aeShader shader;
+	aeShader shader, terrainShader;
 	aeVertexData vertexData;
 	aeEditorCamera camera;
 
@@ -110,16 +131,26 @@ int main()
 	shader.SetDepthWrite( true );
 	shader.SetCulling( aeShaderCulling::CounterclockwiseFront );
 
+	terrainShader.Initialize( kTerrainVertShader, kTerrainFragShader, nullptr, 0 );
+	terrainShader.SetDepthTest( true );
+	terrainShader.SetDepthWrite( true );
+	terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+
 	vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
 	vertexData.AddAttribute( "a_position", 4, aeVertexDataType::Float, offsetof( Vertex, pos ) );
 	vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof( Vertex, color ) );
 	vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
 	vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
 
+	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
+	terrain->Initialize();
+
 	AE_INFO( "Run" );
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
+
+		terrain->Update();
 
 		if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
 		{
@@ -128,11 +159,15 @@ int main()
 		camera.Update( &input, timeStep.GetTimeStep() );
 
 		render.StartFrame( window.GetWidth(), window.GetHeight() );
+		
 		aeUniformList uniformList;
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		vertexData.Render( &shader, uniformList );
+
+		terrain->Render( aeFloat3( 0.0f ), &terrainShader, uniformList );
+
 		render.EndFrame();
 
 		timeStep.Wait();

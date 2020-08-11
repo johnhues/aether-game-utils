@@ -109,6 +109,7 @@ struct Chunk
   uint32_t check;
   int32_t pos[ 3 ];
   bool active;
+  bool geoDirty;
   bool lightDirty;
   aeVertexData data;
   TerrainVertex* vertices;
@@ -120,13 +121,12 @@ struct Chunk
   TerrainIndex i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
 };
 
-class TerrainBoss
+class aeTerrain
 {
 public:
-  void Initialize( class ProgramInterface* program );
-  void RenderInitialize( class ProgramInterface* program );
-  void Update( class ProgramInterface* program );
-  void BuildScene( class ProgramInterface* program );
+  void Initialize();
+  void Update();
+  void Render( aeFloat3 center, const class aeShader* shader, const aeUniformList& shaderParams );
   uint8_t GetVoxel( uint32_t x, uint32_t y, uint32_t z );
   uint8_t GetVoxel( aeFloat3 position );
   bool GetCollision( uint32_t x, uint32_t y, uint32_t z );
@@ -137,7 +137,6 @@ public:
     aeFloat3* vertices, uint16_t* indices,
     uint32_t vertexCount, uint32_t indexCount,
     aeFloat4x4& modelToWorld, Block::Type type );
-  bool Loaded() const { return m_loaded; }
   
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps );
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision );
@@ -145,45 +144,41 @@ public:
   
   float GetBaseHeight( aeFloat3 p ) const;
   float TerrainValue( aeFloat3 p ) const;
+
 private:
   inline int32_t TerrainType( aeFloat3 p ) const;
   void GetChunkVerts( Chunk* chunk, TerrainVertex *vertices, TerrainIndex *indices, uint32_t* vertexCount, uint32_t* indexCount );
   void UpdateChunkLighting( Chunk* chunk );
   void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
-  Chunk* AllocChunk( int32_t cx, int32_t cy, int32_t cz );
+  Chunk* AllocChunk( aeFloat3 center, int32_t cx, int32_t cy, int32_t cz );
   void FreeChunk( Chunk* chunk );
   static void GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] );
   
   aeCompactingAllocator m_compactAlloc;
-  struct Chunk **m_chunks;
-  int16_t* m_voxelCounts;
-  public: struct Chunk *m_activeChunks[ kMaxActiveChunks ];
+  struct Chunk **m_chunks = nullptr;
+  int16_t* m_voxelCounts = nullptr;
+  struct Chunk *m_activeChunks[ kMaxActiveChunks ];
   aeObjectPool<struct Chunk, kMaxLoadedChunks> m_chunkPool;
-  uint32_t m_activeChunkCount;
-  aeShader* m_shader;
-  aeShader* m_leavesShader;
-  bool m_loaded;
+  uint32_t m_activeChunkCount = 0;
   
-  struct Chunk* m_headChunk;
-  struct Chunk* m_tailChunk;
-  uint32_t m_totalChunks;
-  uint8_t* m_chunkRawAlloc;
+  struct Chunk* m_headChunk = nullptr;
+  struct Chunk* m_tailChunk = nullptr;
+  uint32_t m_totalChunks = 0;
+  uint8_t* m_chunkRawAlloc = nullptr;
   
   bool m_blockCollision[ Block::COUNT ];
   float16_t m_blockDensity[ Block::COUNT ];
   //UMAT::Noise m_noise;
-  ProgramInterface* m_program;
   
-  aeTexture2D* grassTexture;
-  aeTexture2D* rockTexture;
-  aeTexture2D* dirtTexture;
-  aeTexture2D* treeTexture;
-  aeTexture2D* leavesTexture;
-  
-public:
-  aeTexture2D* spiralTexture;
-  aeTexture2D* m_mapWallTex;
-  aeTexture2D* m_mapFloorHeightTex;
+  aeTexture2D* grassTexture = nullptr;
+  aeTexture2D* rockTexture = nullptr;
+  aeTexture2D* dirtTexture = nullptr;
+  aeTexture2D* treeTexture = nullptr;
+  aeTexture2D* leavesTexture = nullptr;
+
+  aeTexture2D* spiralTexture = nullptr;
+  aeTexture2D* m_mapWallTex = nullptr;
+  aeTexture2D* m_mapFloorHeightTex = nullptr;
 };
 
 #endif

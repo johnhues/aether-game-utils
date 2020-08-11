@@ -28,24 +28,33 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeAlloc.h"
+#include "aePlatform.h"
 
 //------------------------------------------------------------------------------
 // aeCompactingAllocator class
+// @NOTE: 'p's must remain valid and writable until Free() is called.
+//        'p's will be rewritten to maintain zero internal fragmentation.
 //------------------------------------------------------------------------------
 class aeCompactingAllocator
 {
 public:
-  aeCompactingAllocator( uint32_t size );
+  aeCompactingAllocator() = default;
+  aeCompactingAllocator( uint32_t bytes );
+  void Expand( uint32_t totalBytes );
+  ~aeCompactingAllocator();
 
-  // @NOTE: p must remain valid and writable until Free() is called
-  void Allocate( void** p, uint32_t size );
-  void Reallocate( void** p, uint32_t size );
-  void Free( void* p );
+  template < typename T >
+  void Allocate( T** p, uint32_t size );
   
-  void Compact();
-  void Print();
-
+  //template < typename T >
+  //void Reallocate( T** p, uint32_t size );
+  
+  template < typename T >
+  void Free( T* p );
+  
 private:
+  const static intptr_t kAlignment = 16; // @TODO: Should be configurable
+
   struct Header
   {
     uint32_t check;
@@ -53,26 +62,35 @@ private:
     Header* next;
     Header* prev;
     void** external;
+    uint32_t dbgTypeId;
+
+    uint8_t pad[ 24 ];
   };
 
-  uint8_t* m_data;
-  Header* m_tail;
-  uint32_t m_size;
-  uint32_t m_allocated = 0;
+  void m_Compact();
+  Header* m_GetHeader( void** p );
+
+  bool m_isCompact = true;
+  uint8_t* m_data = nullptr;
+  Header* m_tail = nullptr;
+  uint32_t m_size = 0;
 };
 
 //------------------------------------------------------------------------------
-// aeCompactingAllocator member functions
+// aeCompactingAllocator templated member functions
 //------------------------------------------------------------------------------
-aeCompactingAllocator::aeCompactingAllocator( uint32_t size )
+template < typename T >
+void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
 {
-  m_size = size;
-  m_tail = nullptr;
-  m_data = aeAlloc::AllocateRaw( 1, 16, size );
-}
+  AE_ASSERT( m_data );
+  AE_STATIC_ASSERT( std::is_pod< T >::value );
+  AE_STATIC_ASSERT( alignof( T ) <= kAlignment );
+  void** p = (void**)_p;
 
-void aeCompactingAllocator::Allocate( void** p, uint32_t size )
-{
+  // Move all allocations to front of m_data
+  m_Compact();
+
+  // Always append newest allocation to end
   if ( m_tail )
   {
     Header* next = (Header*)( (uint8_t*)m_tail + sizeof( Header ) + m_tail->size );
@@ -80,6 +98,7 @@ void aeCompactingAllocator::Allocate( void** p, uint32_t size )
     next->size = size;
     next->next = nullptr;
     next->external = p;
+    next->dbgTypeId = aeHash().HashString( aeGetTypeName< T >() ).Get();
     next->check = 0xABABABAB;
     *p = (uint8_t*)next + sizeof( Header );
     next->prev = m_tail;
@@ -93,143 +112,53 @@ void aeCompactingAllocator::Allocate( void** p, uint32_t size )
     m_tail->next = nullptr;
     m_tail->prev = nullptr;
     m_tail->external = p;
+    m_tail->dbgTypeId = aeHash().HashString( aeGetTypeName< T >() ).Get();
     m_tail->check = 0xABABABAB;
     *p = (uint8_t*)m_tail + sizeof( Header );
   }
 
-  m_allocated = (int32_t)( (uint8_t*)*p + size - (uint8_t*)m_data );
+  AE_LOG( "sizeof(Header):#", sizeof( Header ) );
+  AE_ASSERT_MSG( (intptr_t)*p % kAlignment == 0, "Allocation alignment: #", (intptr_t)*p % kAlignment );
+  // @TODO: Handle allocation failure!
 }
 
-void aeCompactingAllocator::Reallocate( void** p, uint32_t size )
-{
-  Header* oldHeader = m_tail;
-  while ( oldHeader )
-  {
-    AE_ASSERT( oldHeader->check == 0xABABABAB );
-    if ( oldHeader->external == p )
-    {
-      break;
-    }
-    oldHeader = oldHeader->prev;
-  }
-  AE_ASSERT( oldHeader );
+//void aeCompactingAllocator::Reallocate( void** p, uint32_t size )
+//{
+//  AE_ASSERT( m_data );
+//
+//  m_Compact();
+//
+//  Header* oldHeader = m_GetHeader( p );
+//  if ( oldHeader->size > size )
+//  {
+//    oldHeader->size = size;
+//  }
+//  else if ( oldHeader->size < size )
+//  {
+//    Header* newHeader = (Header*)( (uint8_t*)m_tail + sizeof( Header ) + m_tail->size );
+//    AE_ASSERT( (uint8_t*)newHeader - m_data + size + sizeof( Header ) < m_size );
+//    memmove( newHeader, oldHeader, sizeof( Header ) + oldHeader->size );
+//    *( newHeader->external ) = (uint8_t*)newHeader + sizeof( Header );
+//    newHeader->size = size;
+//    newHeader->next = nullptr;
+//    newHeader->prev = m_tail;
+//    m_tail->next = newHeader;
+//    m_tail = newHeader;
+//  }
+//}
 
-  if ( oldHeader->size > size )
-  {
-    oldHeader->size = size;
-  }
-  else if ( oldHeader->size < size )
-  {
-    Header* newHeader = (Header*)( (uint8_t*)m_tail + sizeof( Header ) + m_tail->size );
-    AE_ASSERT( (uint8_t*)newHeader - m_data + size + sizeof( Header ) < m_size );
-    memmove( newHeader, oldHeader, sizeof( Header ) + oldHeader->size );
-    *( newHeader->external ) = (uint8_t*)newHeader + sizeof( Header );
-    newHeader->size = size;
-    newHeader->next = nullptr;
-    newHeader->prev = m_tail;
-    m_tail->next = newHeader;
-    m_tail = newHeader;
-  }
-}
-
-void aeCompactingAllocator::Free( void* p )
+template < typename T >
+void aeCompactingAllocator::Free( T* p )
 {
-  Header* header = (Header*)( (uint8_t*)p - sizeof( Header ) );
-  AE_ASSERT( *header->external == p );
-  AE_ASSERT( header->check == 0xABABABAB );
+  AE_ASSERT( m_data );
+
+  Header* header = m_GetHeader( p );
+  uint32_t typeHash = aeHash().HashString( aeGetTypeName< T >() ).Get();
+  AE_ASSERT_MSG( header->dbgTypeId == typeHash, "Type mismatch between allocation and free" );
+  *(header->external) = nullptr;
   header->external = nullptr;
-}
 
-void aeCompactingAllocator::Compact()
-{
-  if ( m_tail == nullptr )
-  {
-    m_allocated = 0;
-    return;
-  }
-
-  Header* current = m_tail;
-  AE_ASSERT( current->check == 0xABABABAB );
-  while ( current->prev )
-  {
-    AE_ASSERT( current->prev->check == 0xABABABAB );
-    current = current->prev;
-  }
-
-  uint8_t* open = m_data;
-  while ( current )
-  {
-    if ( current->external )
-    {
-      if ( open != (uint8_t*)current )
-      {
-        current->prev = m_tail;
-        memmove( open, current, sizeof( Header ) + current->size );
-        Header* currentHeader = (Header*)open;
-        *( currentHeader->external ) = open + sizeof( Header );
-        current = currentHeader;
-        m_tail->next = current;
-      }
-      open += sizeof( Header ) + current->size;
-      m_tail = current;
-    }
-    current = current->next;
-  }
-  if ( open == m_data )
-  {
-    m_tail = nullptr;
-  }
-  if ( m_tail )
-  {
-    m_tail->next = nullptr;
-  }
-
-  if ( m_tail )
-  {
-    uint8_t* end = (uint8_t*)m_tail + sizeof( Header ) + m_tail->size;
-    m_allocated = (int32_t)( end - m_data );
-  }
-  else
-  {
-    m_allocated = 0;
-  }
-
-  current = m_tail;
-  if ( !current )
-  {
-    return;
-  }
-  AE_ASSERT( current->check == 0xABABABAB );
-  while ( current->prev )
-  {
-    AE_ASSERT( current->prev->check == 0xABABABAB );
-    current = current->prev;
-  }
-  while ( current )
-  {
-    AE_ASSERT( current->check == 0xABABABAB );
-    current = current->next;
-  }
-}
-
-void aeCompactingAllocator::Print()
-{
-  if ( m_tail == nullptr )
-  {
-    return;
-  }
-
-  Header* current = m_tail;
-  while ( current->prev )
-  {
-    current = current->prev;
-  }
-
-  while ( current )
-  {
-    AE_LOG( "s:# a:#", current->size, current->external != nullptr );
-    current = current->next;
-  }
+  m_isCompact = false; // @TODO: Only set this to true for non-tail Free()s
 }
 
 #endif

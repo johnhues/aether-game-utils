@@ -55,6 +55,7 @@ set(AE_HEADER_FILES
 	../include/aeCommand.h
 	../include/aeCompactingAllocator.h
 	../include/aeCommandLineArgs.h
+	../include/aeCompactingAllocator.h
 	../include/aeDict.h
 	../include/aeEditorCamera.h
 	../include/aeHotSpot.h
@@ -96,6 +97,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeCommandLineArgs.cpp
 		aeCommonRender.cpp
 		aeCommonRender.h
+		aeCompactingAllocator.cpp
 		aeDict.cpp
 		aeEditorCamera.cpp
 		aeHotSpot.cpp
