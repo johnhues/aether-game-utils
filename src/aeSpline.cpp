@@ -232,8 +232,6 @@ aeFloat3 aeSpline::Segment::GetPoint( float d ) const
       }
     }
   }
-  else
-  {
-    return GetPoint01( 1.0f );
-  }
+  
+  return GetPoint01( 1.0f );
 }
