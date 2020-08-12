@@ -382,14 +382,16 @@ void aeTerrain::GetChunkVerts( Chunk* chunk, TerrainVertex *vertexOut, TerrainIn
           }
         }
       }
-      
-      AE_ASSERT( edgePos.x == edgePos.x && edgePos.y == edgePos.y && edgePos.z == edgePos.z );
-      te->p[ e ] = edgePos;
-      te->n[ e ] = edgeNormal;
-      
+      AE_ASSERT( edgeVoxelPos.x == edgeVoxelPos.x && edgeVoxelPos.y == edgeVoxelPos.y && edgeVoxelPos.z == edgeVoxelPos.z );
       AE_ASSERT( edgeVoxelPos.x >= 0.0f && edgeVoxelPos.x <= 1.0f );
       AE_ASSERT( edgeVoxelPos.y >= 0.0f && edgeVoxelPos.y <= 1.0f );
       AE_ASSERT( edgeVoxelPos.z >= 0.0f && edgeVoxelPos.z <= 1.0f );
+      
+      aeFloat3 edgeWorldPos( chunkOffsetX + x, chunkOffsetY + y, chunkOffsetZ + z );
+      edgeWorldPos += edgeVoxelPos;
+
+      te->p[ e ] = edgeVoxelPos;
+      te->n[ e ] = GetSurfaceDerivative( edgeWorldPos );
       
       if ( x < 0 || y < 0 || z < 0 || x >= kChunkSize || y >= kChunkSize || z >= kChunkSize )
       {
