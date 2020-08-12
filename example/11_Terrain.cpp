@@ -32,7 +32,7 @@
 #include "aeWindow.h"
 
 //------------------------------------------------------------------------------
-// Shaders
+// Cube Shader
 //------------------------------------------------------------------------------
 const char* kVertShader = "\
 	AE_UNIFORM mat4 u_worldToProj;\
@@ -53,7 +53,7 @@ const char* kFragShader = "\
 	}";
 
 //------------------------------------------------------------------------------
-// Shaders
+// Terrain Shader
 //------------------------------------------------------------------------------
 const char* kTerrainVertShader = "\
 	AE_UNIFORM mat4 u_worldToProj;\
@@ -72,6 +72,73 @@ const char* kTerrainFragShader = "\
 	{\
 		AE_COLOR = v_color;\
 	}";
+
+//------------------------------------------------------------------------------
+// Grid Shader
+//------------------------------------------------------------------------------
+const char* kGridVertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_screenToWorld;\
+    AE_IN_HIGHP vec4 a_position;\
+    AE_OUT_HIGHP vec3 v_worldPos;\
+    void main()\
+    {\
+      v_worldPos = vec3( u_screenToWorld * a_position );\
+      gl_Position = a_position;\
+    }";
+
+const char* kGridFragStr = "\
+    AE_IN_HIGHP vec3 v_worldPos;\
+    void main()\
+    {\
+      int x = int( floor( v_worldPos.x ) ) % 2;\
+      int y = int( floor( v_worldPos.y ) ) % 2;\
+      AE_COLOR.rgb = mix( vec3( 0.3 ), vec3( 0.35 ), int( x != y ) );\
+      float gridX = mod( v_worldPos.x + 16.0, 32.0 ) - 16.0;\
+      float gridY = mod( v_worldPos.y + 16.0, 32.0 ) - 16.0;\
+      if ( abs( gridX ) < 0.05 || abs( gridY ) < 0.05 ) { AE_COLOR.rgb = vec3( 0.25 ); } \
+      AE_COLOR.a = 1.0;\
+    }";
+
+class Grid
+{
+public:
+	void Initialize()
+	{
+		struct BGVertex
+		{
+			aeFloat4 pos;
+		};
+		
+		BGVertex bgVertices[ aeQuadVertCount ];
+		uint8_t bgIndices[ aeQuadIndexCount ];
+		for ( uint32_t i = 0; i < aeQuadVertCount; i++ )
+		{
+			bgVertices[ i ].pos = aeFloat4( aeQuadVertPos[ i ] * 2.0f, 1.0f );
+		}
+		for ( uint32_t i = 0; i < aeQuadIndexCount; i++ )
+		{
+			bgIndices[ i ] = aeQuadIndices[ i ];
+		}
+
+		m_bgVertexData.Initialize( sizeof( BGVertex ), sizeof( uint8_t ), countof( bgVertices ), countof( bgIndices ), aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
+		m_bgVertexData.AddAttribute( "a_position", 4, aeVertexDataType::Float, offsetof( BGVertex, pos ) );
+		m_bgVertexData.SetVertices( bgVertices, countof( bgVertices ) );
+		m_bgVertexData.SetIndices( bgIndices, countof( bgIndices ) );
+
+		m_gridShader.Initialize( kGridVertexStr, kGridFragStr, nullptr, 0 );
+	}
+
+	void Render( aeFloat4x4 worldToProj )
+	{
+		aeUniformList uniforms;
+		uniforms.Set( "u_screenToWorld", worldToProj.Inverse() );
+		m_bgVertexData.Render( &m_gridShader, uniforms );
+	}
+
+private:
+	aeShader m_gridShader;
+	aeVertexData m_bgVertexData;
+};
 
 //------------------------------------------------------------------------------
 // Cube
@@ -118,6 +185,7 @@ int main()
 	aeShader shader, terrainShader;
 	aeVertexData vertexData;
 	aeEditorCamera camera;
+	//Grid grid;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "terrain" );
@@ -125,6 +193,7 @@ int main()
 	render.SetClearColor( aeColor::PicoDarkPurple() );
 	input.Initialize( &window, &render );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
+	//grid.Initialize();
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );
@@ -159,10 +228,15 @@ int main()
 		camera.Update( &input, timeStep.GetTimeStep() );
 
 		render.StartFrame( window.GetWidth(), window.GetHeight() );
+
 		
 		aeUniformList uniformList;
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
+		aeFloat4x4 worldToProj = viewToProj * worldToView;
+
+		//grid.Render( worldToProj );
+
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		vertexData.Render( &shader, uniformList );
 

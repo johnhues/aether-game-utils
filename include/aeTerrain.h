@@ -58,7 +58,7 @@ static const float16_t kSkyBrightness = float16_t( 5.0f );
 
 struct Block
 {
-  enum Type
+  enum Type : uint8_t
   {
     Exterior,
     Interior,
@@ -82,7 +82,7 @@ typedef uint16_t TerrainIndex;
 struct RaycastResult
 {
   bool hit;
-  uint8_t type;
+  Block::Type type;
   float distance;
   int32_t posi[ 3 ];
   aeFloat3 posf;
@@ -116,7 +116,7 @@ struct Chunk
   Chunk* next;
   Chunk* prev;
   
-  uint8_t t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
+  Block::Type t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
   float16_t l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
   TerrainIndex i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
 };
@@ -144,6 +144,7 @@ public:
   
   float GetBaseHeight( aeFloat3 p ) const;
   float TerrainValue( aeFloat3 p ) const;
+  aeFloat3 GetSurfaceDerivative( aeFloat3 p ) const;
 
 private:
   inline int32_t TerrainType( aeFloat3 p ) const;
