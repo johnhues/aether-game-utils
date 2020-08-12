@@ -28,12 +28,12 @@
 
 // @TODO: SIMD GetIntersection() is currently causing nans on windows
 #if _AE_APPLE_ //|| _AE_WINDOWS_
-#define TERRAIN_SIMD 1
-#include <intrin.h>
-#endif
-
-#if _AE_OSX_ && TERRAIN_SIMD
-#include <x86intrin.h>
+  #define TERRAIN_SIMD 1
+  #ifdef _AE_WINDOWS
+    #include <intrin.h>
+  #else
+    #include <x86intrin.h>
+  #endif
 #endif
 
 static float s_test = 0.0f;
