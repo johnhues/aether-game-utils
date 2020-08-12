@@ -105,7 +105,8 @@ public:
   template < typename... Args >
   static aeStr< N > Format( const char* format, Args... args );
 
-  static const uint32_t MaxLength = N - 3; // Leave room for length far and null terminator
+//  static const uint32_t MaxLength = N - 3; // Leave room for length far and null terminator
+	static constexpr uint32_t MaxLength() { return N - 3; } // Leave room for length far and null terminator
   template < uint32_t N2 > friend class aeStr;
 
 private:
@@ -122,7 +123,7 @@ private:
   void m_Format( const char* format, T value, Args... args );
 
   uint16_t m_length;
-  char m_str[ MaxLength + 1 ];
+  char m_str[ MaxLength() + 1 ];
 };
 
 //------------------------------------------------------------------------------
@@ -157,28 +158,28 @@ inline const char* ToString( const char* value )
 
 inline aeStr16 ToString( int32_t value )
 {
-  char str[ aeStr16::MaxLength + 1 ];
+  char str[ aeStr16::MaxLength() + 1 ];
   uint32_t length = snprintf( str, sizeof( str ) - 1, "%d", value );
   return aeStr16( length, str );
 }
 
 inline aeStr16 ToString( uint32_t value )
 {
-  char str[ aeStr16::MaxLength + 1 ];
+  char str[ aeStr16::MaxLength() + 1 ];
   uint32_t length = snprintf( str, sizeof( str ) - 1, "%u", value );
   return aeStr16( length, str );
 }
 
 inline aeStr16 ToString( float value )
 {
-  char str[ aeStr16::MaxLength + 1 ];
+  char str[ aeStr16::MaxLength() + 1 ];
   uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
   return aeStr16( length, str );
 }
 
 inline aeStr16 ToString( double value )
 {
-  char str[ aeStr16::MaxLength + 1 ];
+  char str[ aeStr16::MaxLength() + 1 ];
   uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
   return aeStr16( length, str );
 }
@@ -198,7 +199,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 aeStr< N >::aeStr( const aeStr<N2>& str )
 {
-  AE_ASSERT( str.m_length <= MaxLength );
+  AE_ASSERT( str.m_length <= MaxLength() );
   m_length = str.m_length;
   memcpy( m_str, str.m_str, m_length + 1 );
 }
@@ -207,14 +208,14 @@ template < uint32_t N >
 aeStr< N >::aeStr( const char* str )
 {
   m_length = (uint16_t)strlen( str );
-  AE_ASSERT_MSG( m_length <= MaxLength, "Length:# Max:#", m_length, MaxLength );
+  AE_ASSERT_MSG( m_length <= MaxLength(), "Length:# Max:#", m_length, MaxLength() );
   memcpy( m_str, str, m_length + 1 );
 }
 
 template < uint32_t N >
 aeStr< N >::aeStr( uint32_t length, const char* str )
 {
-  AE_ASSERT( length <= MaxLength );
+  AE_ASSERT( length <= MaxLength() );
   m_length = length;
   memcpy( m_str, str, m_length );
   m_str[ length ] = 0;
@@ -245,7 +246,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 inline void aeStr< N >::operator =( const aeStr<N2>& str )
 {
-  AE_ASSERT( str.m_length <= MaxLength );
+  AE_ASSERT( str.m_length <= MaxLength() );
   m_length = str.m_length;
   memcpy( m_str, str.m_str, str.m_length + 1 );
 }
@@ -271,7 +272,7 @@ template < uint32_t N >
 inline void aeStr< N >::operator +=( const char* str )
 {
   uint32_t len = (uint32_t)strlen( str );
-  AE_ASSERT( m_length + len <= MaxLength );
+  AE_ASSERT( m_length + len <= MaxLength() );
   memcpy( m_str + m_length, str, len + 1 );
   m_length += len;
 }
@@ -280,7 +281,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 inline void aeStr< N >::operator +=( const aeStr<N2>& str )
 {
-  AE_ASSERT( m_length + str.m_length <= MaxLength );
+  AE_ASSERT( m_length + str.m_length <= MaxLength() );
   memcpy( m_str + m_length, str.c_str(), str.m_length + 1 );
   m_length += str.m_length;
 }
@@ -524,7 +525,7 @@ inline uint32_t aeStr< N >::Length() const
 template < uint32_t N >
 inline uint32_t aeStr< N >::Size() const
 {
-  return MaxLength;
+  return MaxLength();
 }
 
 template < uint32_t N >

@@ -112,8 +112,8 @@ uint32_t aeAllocInfo::GetDeallocationBytes( uint32_t index ) const
 
 void aeAllocInfo::Alloc( const char* typeName, uint32_t bytes )
 {
-  char buf[ aeStr128::MaxLength + 1 ];
-  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength );
+  char buf[ aeStr128::MaxLength() + 1 ];
+  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
   memcpy( buf, typeName, length );
   buf[ length ] = 0;
 
@@ -125,8 +125,8 @@ void aeAllocInfo::Alloc( const char* typeName, uint32_t bytes )
 
 void aeAllocInfo::Dealloc( const char* typeName, uint32_t bytes )
 {
-  char buf[ aeStr128::MaxLength + 1 ];
-  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength );
+  char buf[ aeStr128::MaxLength() + 1 ];
+  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
   memcpy( buf, typeName, length );
   buf[ length ] = 0;
 

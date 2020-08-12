@@ -675,14 +675,14 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   maxLen = 0;
   glGetProgramiv( m_program, GL_ACTIVE_UNIFORMS, &uniformCount );
   glGetProgramiv( m_program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxLen );
-  AE_ASSERT( maxLen <= aeStr32::MaxLength ); // @TODO: Read from aeShaderUniform
+  AE_ASSERT( maxLen <= aeStr32::MaxLength() ); // @TODO: Read from aeShaderUniform
 
   for( int32_t i = 0; i < uniformCount; i++ )
   {
     aeShaderUniform uniform;
 
     GLint size = 0;
-    char name[ aeStr32::MaxLength ]; // @TODO: Read from aeShaderUniform
+    char name[ aeStr32::MaxLength() ]; // @TODO: Read from aeShaderUniform
     glGetActiveUniform( m_program, i, sizeof(name), nullptr, &size, (GLenum*)&uniform.type, (GLchar*)name );
     AE_ASSERT( size == 1 );
     

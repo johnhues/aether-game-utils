@@ -119,6 +119,12 @@
   #define aeAssert() asm( "int $3" )
 #endif
 
+#if _AE_WINDOWS_
+  #define aeCompilationWarning( _msg ) _Pragma( message _msg )
+#else
+  #define aeCompilationWarning( _msg ) _Pragma( "warning #_msg" )
+#endif
+
 #if _AE_LINUX_
   #define AE_ALIGN( _x ) __attribute__ ((aligned(_x)))
 //#elif _AE_WINDOWS_
@@ -158,16 +164,10 @@ inline void* aeRealloc( void* p, uint32_t size, uint32_t boundary )
 #if _AE_WINDOWS_
   return _aligned_realloc( p, size, boundary );
 #else
-  AE_WARN( "Aligned realloc() not determined on this platform" );
+  aeCompilationWarning( "Aligned realloc() not determined on this platform" )
+  return nullptr;
 #endif
 }
-
-// aeCompilationWarning
-#if _AE_WINDOWS_
-  #define aeCompilationWarning( _msg ) _Pragma( message _msg )
-#else
-  #define aeCompilationWarning( _msg ) #warning _msg
-#endif
 
 template < typename T >
 const char* aeGetTypeName()

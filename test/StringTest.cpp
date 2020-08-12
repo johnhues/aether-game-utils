@@ -41,8 +41,8 @@ TEST_CASE( "string construction should set length correctly", "[aeString]" )
   REQUIRE( ( aeStr16( "abc" ).Length() == 3 ) );
 
   char str[ 32 ] = {};
-  memset( str, 'q', aeStr16::MaxLength );
-  const uint32_t maxLength = aeStr16::MaxLength;
+  memset( str, 'q', aeStr16::MaxLength() );
+  const uint32_t maxLength = aeStr16::MaxLength();
   REQUIRE( aeStr16( str ).Length() == maxLength );
 }
 
