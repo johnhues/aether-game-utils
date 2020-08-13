@@ -117,7 +117,7 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
     *p = (uint8_t*)m_tail + sizeof( Header );
   }
 
-  AE_LOG( "sizeof(Header):#", sizeof( Header ) );
+  //AE_LOG( "sizeof(Header):#", sizeof( Header ) );
   //AE_ASSERT_MSG( (intptr_t)*p % kAlignment == 0, "Allocation alignment: #", (intptr_t)*p % kAlignment );
   // @TODO: Handle allocation failure!
 }

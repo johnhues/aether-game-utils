@@ -95,13 +95,15 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 		m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f );
 	}
 
+	float speed = 0.1f / aeMath::Clip( 1.0f - m_dist / 100.0f, 0.1f, 1.0f );
+
 	// Zoom
 	if ( m_mode == MoveMode::Zoom )
 	{
-		m_dist -= mouseMovement.y * 0.01f;
+		m_dist -= mouseMovement.y * 0.1f * speed;
 	}
-	m_dist -= input->GetState()->scroll * 0.25f;
-	m_dist = aeMath::Clip( m_dist, 1.0f, 50.0f );
+	m_dist -= input->GetState()->scroll * 2.5f * speed;
+	m_dist = aeMath::Clip( m_dist, 1.0f, 100.0f );
 
 	// Recalculate camera offset from focus and local axis'
 	m_RecalculateOffset();
@@ -109,8 +111,8 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	// Translation
 	if ( m_mode == MoveMode::Pan )
 	{
-		m_focusPos -= m_right * mouseMovement.x * 0.01f;
-		m_focusPos -= m_up * mouseMovement.y * 0.01f;
+		m_focusPos -= m_right * ( mouseMovement.x * speed );
+		m_focusPos -= m_up * ( mouseMovement.y * speed );
 	}
 }
 

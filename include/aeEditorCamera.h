@@ -38,6 +38,8 @@ public:
 	aeEditorCamera();
 	void Update( const class aeInput* input, float dt );
 
+	void SetPosition( aeFloat3 pos ) { m_focusPos = pos - m_offset; }
+
 	aeFloat3 GetPosition() const { return m_focusPos + m_offset; }
 	aeFloat3 GetForward() const { return m_forward; }
 

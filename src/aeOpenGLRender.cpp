@@ -48,7 +48,6 @@
   #include <OpenGL/gl3.h>
 #endif
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 #if _AE_DEBUG_ && !_AE_APPLE_

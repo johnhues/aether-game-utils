@@ -286,6 +286,27 @@ namespace aeMath
     T m_min;
     T m_max;
   };
+
+  namespace Interpolation
+  {
+    template< typename T >
+    T Linear( T start, T end, float t )
+    {
+      return start + ( ( end - start ) * t );
+    }
+
+    template< typename T >
+    T Cosine( T start, T end, float t )
+    {
+      float angle;
+
+      angle = ( t * aeMath::PI ) + aeMath::PI;
+      t = aeMath::Cos( angle );
+      t = ( t + 1 ) / 2.0f;
+
+      return start + ( ( end - start ) * t );
+    }
+  }
 }
 
 //------------------------------------------------------------------------------

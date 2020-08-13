@@ -26,6 +26,132 @@
 #include "aeTerrain.h"
 #include "aeCompactingAllocator.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+void ae::Image::LoadRaw( const void* data, uint32_t width, uint32_t height, uint32_t channels )
+{
+  m_data.Append( (const uint8_t*)data, width * height * channels );
+  m_width = width;
+  m_height = height;
+  m_channels = channels;
+}
+
+bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension )
+{
+  AE_ASSERT( extension == Extension::PNG );
+
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t channels = 0;
+  stbi_set_flip_vertically_on_load( 1 );
+#if _AE_IOS_
+  stbi_convert_iphone_png_to_rgb( 1 );
+#endif
+  uint8_t* image = stbi_load_from_memory( (const uint8_t*)file, length, &width, &height, &channels, STBI_default );
+  if ( !image )
+  {
+    return false;
+  }
+
+  LoadRaw( image, width, height, channels );
+  stbi_image_free( image );
+
+  return true;
+}
+
+aeColor ae::Image::Get( aeInt2 pixel ) const
+{
+  if ( pixel.x < 0 || pixel.y < 0 || pixel.x >= m_width || pixel.y >= m_height )
+  {
+    return aeColor::Black();
+  }
+
+  uint32_t index = ( pixel.y * m_width + pixel.x ) * m_channels;
+  switch ( m_channels )
+  {
+    case 1:
+    {
+      return aeColor::RGB( m_data[ index ], 0, 0 );
+    }
+    case 2:
+    {
+      return aeColor::RGB( m_data[ index ], m_data[ index + 1 ], 0 );
+    }
+    case 3:
+    {
+      return aeColor::RGB( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ] );
+    }
+    case 4:
+    {
+      return aeColor::RGBA( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ], m_data[ index + 3 ] );
+    }
+  }
+
+  return aeColor::Black();
+}
+
+aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
+{
+  aeInt2 pi = pixel.FloorCopy();
+
+  switch ( interpolation )
+  {
+    case Interpolation::Nearest:
+    {
+      return Get( pi );
+    }
+    case Interpolation::Linear:
+    {
+      float x = pixel.x - pi.x;
+      float y = pixel.y - pi.y;
+
+      aeColor c00 = Get( pi );
+      aeColor c10 = Get( pi + aeInt2( 1, 0 ) );
+      aeColor c01 = Get( pi + aeInt2( 0, 1 ) );
+      aeColor c11 = Get( pi + aeInt2( 1, 1 ) );
+
+      aeColor c0 = c00.Lerp( c10, x );
+      aeColor c1 = c01.Lerp( c11, x );
+
+      return c0.Lerp( c1, y );
+    }
+    case Interpolation::Cosine:
+    {
+      //pixel.x -= 0.5f;
+      //pixel.y -= 0.5f;
+      //int32_t x = floorf( pixel.x );
+      //int32_t y = floorf( pixel.y );
+      //int32_t xPlus = x + 1;
+      //int32_t yPlus = y + 1;
+      //float xf = pixel.x - x;
+      //float yf = pixel.y - y;
+      //x = aeMath::Clip( x, 0, (int)m_width - 1 );
+      //y = aeMath::Clip( y, 0, (int)m_height - 1 );
+      //xPlus = aeMath::Clip( xPlus, 0, (int)m_width - 1 );
+      //yPlus = aeMath::Clip( yPlus, 0, (int)m_height - 1 );
+
+      //aeColor p0 = Get( aeInt2( x, y ) );
+      //aeColor p1 = Get( aeInt2( xPlus, y ) );
+      //aeColor p2 = Get( aeInt2( x, yPlus ) );
+      //aeColor p3 = Get( aeInt2( xPlus, yPlus ) );
+      //vec4 f0( p0.x, p0.w, p0.z, p0.w );
+      //vec4 f1( p1.x, p1.w, p1.z, p1.w );
+      //vec4 f2( p2.x, p2.w, p2.z, p2.w );
+      //vec4 f3( p3.x, p3.w, p3.z, p3.w );
+
+      //vec4 x0 = Interpolation::Cosine( f0, f1, xf );
+      //vec4 x1 = Interpolation::Cosine( f2, f3, xf );
+      //vec4 y0 = Interpolation::Cosine( x0, x1, yf );
+
+      //return vec4u8( y0.x, y0.y, y0.z, y0.w );
+
+      // @HACK
+      return Get( pixel, Interpolation::Linear );
+    }
+  }
+}
+
 // @TODO: SIMD GetIntersection() is currently causing nans on windows
 #if _AE_APPLE_ //|| _AE_WINDOWS_
   #define TERRAIN_SIMD 1
@@ -136,7 +262,7 @@ float aeTerrain::GetBaseHeight( aeFloat3 p ) const
   // float floor = 0.0f;
 
 
-  // float d = UMAT::Abs( 933.0f - p.x );
+  // float d = aeMath::Abs( 933.0f - p.x );
   // float c = (20.0f - d) / -20.0f;
   // h += d > 20.0f ? 8.0f + 8.0f * c : 0.0f;
   // h += 4.0f * m_noise.Smoothed2D< Interpolation::Cosine >( p.x * 0.1f, p.y * 0.1f );
@@ -205,6 +331,15 @@ float SmoothUnion( float d1, float d2, float k )
 
 float aeTerrain::TerrainValue( aeFloat3 p ) const
 {
+  if ( m_fn2 )
+  {
+    return m_fn2( m_userdata, p );
+  }
+  else if ( m_fn1 )
+  {
+    return m_fn1( p );
+  }
+
   float result = Ground( 6, p );
   result = Subtraction( Sphere( aeFloat3( 5, 5, 5 ), 3.5f, p ), result );
   //result = aeMath::Max( result, Sphere( aeFloat3( 4.5f ), s_test, p ) );
@@ -222,7 +357,7 @@ aeFloat3 aeTerrain::GetSurfaceDerivative( aeFloat3 p ) const
   for ( int32_t i = 0; i < 3; i++ )
   {
     aeFloat3 nt = p;
-    nt[ i ] += 0.001f;
+    nt[ i ] += 0.1f;
     normal[ i ] = TerrainValue( nt );
   }
 
@@ -242,7 +377,7 @@ int32_t aeTerrain::TerrainType( aeFloat3 p ) const
   // float d = cx * cx + cy * cy;
   // if ( d < 7 * 7 ) { return 0; }
 
-  // float d2 = UMAT::Abs( 933.0f - p.x );
+  // float d2 = aeMath::Abs( 933.0f - p.x );
   // if ( d2 < 5.0f ) { return 0; }
 
   return 255;
@@ -931,9 +1066,11 @@ void aeTerrain::Update()
 
 void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniformList& shaderParams )
 {
-  const int32_t viewRadius = 5;
+  const int32_t viewRadius = 25;
   const int32_t worldViewRadius2 = viewRadius * viewRadius * kChunkSize * kChunkSize;
   const int32_t viewDiam = viewRadius + viewRadius;
+
+  const uint32_t kMaxChunkAllocationsPerTick = 8;
   
   int32_t ci = int32_t( center.x ) / kChunkSize;
   int32_t cj = int32_t( center.y ) / kChunkSize;
@@ -951,6 +1088,8 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
     m_activeChunks[ i ]->active = false;
   }
   m_activeChunkCount = 0;
+
+  uint32_t allocatedChunks = 0;
   
   //------------------------------------------------------------------------------
   // Manage chunks based on new 'center' value
@@ -982,7 +1121,16 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
       // Allocate a new chunk when needed
       if ( !c )
       {
-        c = AllocChunk( center, cx, cy, cz );
+        if ( allocatedChunks < kMaxChunkAllocationsPerTick )
+        {
+          c = AllocChunk( center, cx, cy, cz );
+          allocatedChunks++;
+          AE_LOG( "chunks #", m_chunkPool.Length() );
+        }
+        else
+        {
+          continue;
+        }
       }
       
       // Generate vertex positions from current chunk
@@ -1071,7 +1219,20 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
   }
 }
 
-/*
+void aeTerrain::SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) )
+{
+  m_userdata = userdata;
+  m_fn1 = nullptr;
+  m_fn2 = fn;
+}
+
+void aeTerrain::SetCallback( float ( *fn )( aeFloat3 ) )
+{
+  m_userdata = nullptr;
+  m_fn1 = fn;
+  m_fn2 = nullptr;
+}
+
 bool aeTerrain::GetCollision( uint32_t x, uint32_t y, uint32_t z )
 {
   return m_blockCollision[ GetVoxel( x, y, z ) ];
@@ -1082,12 +1243,12 @@ bool aeTerrain::GetCollision( aeFloat3 position )
   return m_blockCollision[ GetVoxel( position.x, position.y, position.z ) ];
 }
 
-uint8_t aeTerrain::GetVoxel( aeFloat3 position )
+Block::Type aeTerrain::GetVoxel( aeFloat3 position )
 {
   return GetVoxel( position.x, position.y, position.z );
 }
 
-uint8_t aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z )
+Block::Type aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z )
 {
   int32_t cx = x / kChunkSize;
   int32_t cy = y / kChunkSize;
@@ -1127,9 +1288,9 @@ float16_t aeTerrain::GetLight( uint32_t x, uint32_t y, uint32_t z )
 
 bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps )
 {
-  int32_t x = UMAT::Floor( start.x );
-  int32_t y = UMAT::Floor( start.y );
-  int32_t z = UMAT::Floor( start.z );
+  int32_t x = aeMath::Floor( start.x );
+  int32_t y = aeMath::Floor( start.y );
+  int32_t z = aeMath::Floor( start.z );
   
   if ( ray.LengthSquared() < 0.001f ){ return Block::Exterior; }
   aeFloat3 dir = ray.SafeNormalizeCopy();
@@ -1143,42 +1304,42 @@ bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps )
 	{
 		stepX = 1;
     outX = ceil( start.x + ray.x );
-    outX = UMAT::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
+    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
 		cb.x = x + 1;
 	}
 	else 
 	{
 		stepX = -1;
     outX = (int32_t)( start.x + ray.x ) - 1;
-    outX = UMAT::Max( -1, outX );
+    outX = aeMath::Max( -1, outX );
 		cb.x = x;
 	}
 	if (dir.y > 0.0f)
 	{
 		stepY = 1;
     outY = ceil( start.y + ray.y );
-    outY = UMAT::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
+    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
 		cb.y = y + 1;
 	}
 	else 
 	{
 		stepY = -1;
     outY = (int32_t)( start.y + ray.y ) - 1;
-    outY = UMAT::Max( -1, outY );
+    outY = aeMath::Max( -1, outY );
 		cb.y = y;
 	}
 	if (dir.z > 0.0f)
 	{
 		stepZ = 1;
     outZ = ceil( start.z + ray.z );
-    outZ = UMAT::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
+    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
 		cb.z = z + 1;
 	}
 	else 
 	{
 		stepZ = -1;
     outZ = (int32_t)( start.z + ray.z ) - 1;
-    outZ = UMAT::Max( -1, outZ );
+    outZ = aeMath::Max( -1, outZ );
 		cb.z = z;
 	}
 	float rxr, ryr, rzr;
@@ -1247,7 +1408,7 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
 {
   RaycastResult result;
   result.hit = false;
-  result.type = ~0;
+  result.type = Block::Exterior;
   result.distance = std::numeric_limits<float>::infinity();
   result.posi[ 0 ] = ~0;
   result.posi[ 1 ] = ~0;
@@ -1256,9 +1417,9 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
   result.normal = aeFloat3( std::numeric_limits<float>::infinity() );
   result.touchedUnloaded = false;
   
-  int32_t x = UMAT::Floor( start.x );
-  int32_t y = UMAT::Floor( start.y );
-  int32_t z = UMAT::Floor( start.z );
+  int32_t x = aeMath::Floor( start.x );
+  int32_t y = aeMath::Floor( start.y );
+  int32_t z = aeMath::Floor( start.z );
   
   if ( ray.LengthSquared() < 0.001f ){ return result; }
   aeFloat3 dir = ray.SafeNormalizeCopy();
@@ -1272,42 +1433,42 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
 	{
 		stepX = 1;
     outX = ceil( start.x + ray.x );
-    outX = UMAT::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
+    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
 		cb.x = x + 1;
 	}
 	else 
 	{
 		stepX = -1;
     outX = (int32_t)( start.x + ray.x ) - 1;
-    outX = UMAT::Max( -1, outX );
+    outX = aeMath::Max( -1, outX );
 		cb.x = x;
 	}
 	if (dir.y > 0.0f)
 	{
 		stepY = 1;
     outY = ceil( start.y + ray.y );
-    outY = UMAT::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
+    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
 		cb.y = y + 1;
 	}
 	else 
 	{
 		stepY = -1;
     outY = (int32_t)( start.y + ray.y ) - 1;
-    outY = UMAT::Max( -1, outY );
+    outY = aeMath::Max( -1, outY );
 		cb.y = y;
 	}
 	if (dir.z > 0.0f)
 	{
 		stepZ = 1;
     outZ = ceil( start.z + ray.z );
-    outZ = UMAT::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
+    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
 		cb.z = z + 1;
 	}
 	else 
 	{
 		stepZ = -1;
     outZ = (int32_t)( start.z + ray.z ) - 1;
-    outZ = UMAT::Max( -1, outZ );
+    outZ = aeMath::Max( -1, outZ );
 		cb.z = z;
 	}
 	float rxr, ryr, rzr;
@@ -1421,7 +1582,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray )
 {
   RaycastResult result;
   result.hit = false;
-  result.type = ~0;
+  result.type = Block::Exterior;
   result.distance = std::numeric_limits<float>::infinity();
   result.posi[ 0 ] = ~0;
   result.posi[ 1 ] = ~0;
@@ -1430,9 +1591,9 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray )
   result.normal = aeFloat3( std::numeric_limits<float>::infinity() );
   result.touchedUnloaded = false;
   
-  int32_t x = UMAT::Floor( start.x );
-  int32_t y = UMAT::Floor( start.y );
-  int32_t z = UMAT::Floor( start.z );
+  int32_t x = aeMath::Floor( start.x );
+  int32_t y = aeMath::Floor( start.y );
+  int32_t z = aeMath::Floor( start.z );
   
   if ( ray.LengthSquared() < 0.001f ){ return result; }
   aeFloat3 dir = ray.SafeNormalizeCopy();
@@ -1446,42 +1607,42 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray )
 	{
 		stepX = 1;
     outX = ceil( start.x + ray.x );
-    outX = UMAT::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
+    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
 		cb.x = x + 1;
 	}
 	else 
 	{
 		stepX = -1;
     outX = (int32_t)( start.x + ray.x ) - 1;
-    outX = UMAT::Max( -1, outX );
+    outX = aeMath::Max( -1, outX );
 		cb.x = x;
 	}
 	if (dir.y > 0.0f)
 	{
 		stepY = 1;
     outY = ceil( start.y + ray.y );
-    outY = UMAT::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
+    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
 		cb.y = y + 1;
 	}
 	else 
 	{
 		stepY = -1;
     outY = (int32_t)( start.y + ray.y ) - 1;
-    outY = UMAT::Max( -1, outY );
+    outY = aeMath::Max( -1, outY );
 		cb.y = y;
 	}
 	if (dir.z > 0.0f)
 	{
 		stepZ = 1;
     outZ = ceil( start.z + ray.z );
-    outZ = UMAT::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
+    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
 		cb.z = z + 1;
 	}
 	else 
 	{
 		stepZ = -1;
     outZ = (int32_t)( start.z + ray.z ) - 1;
-    outZ = UMAT::Max( -1, outZ );
+    outZ = aeMath::Max( -1, outZ );
 		cb.z = z;
 	}
 	float rxr, ryr, rzr;
@@ -1590,4 +1751,3 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray )
   
   return result;
 }
-*/

@@ -27,20 +27,52 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include <cstdint>
-//#include "Vector2.h"
-//#include "Vector3.h"
-//#include "Matrix4.h"
-//#include "Noise.h"
-//#include "float.h"
-//#include "PoolAllocator.h"
-//#include "Utils.h"
-//#include "VertexData.h"
 #include "aeCompactingAllocator.h"
 #include "aeMath.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
 
+//------------------------------------------------------------------------------
+// aeImage
+//------------------------------------------------------------------------------
+namespace ae
+{
+  class Image
+  {
+  public:
+    enum class Extension
+    {
+      PNG
+    };
+
+    enum class Interpolation
+    {
+      Nearest,
+      Linear,
+      Cosine
+    };
+
+    void LoadRaw( const void* data, uint32_t width, uint32_t height, uint32_t channels );
+    bool LoadFile( const void* file, uint32_t length, Extension extension );
+
+    uint32_t GetWidth() const { return m_width; }
+    uint32_t GetHeight() const { return m_height; }
+    uint32_t GetChannels() const { return m_channels; }
+
+    aeColor Get( aeInt2 pixel ) const;
+    aeColor Get( aeFloat2 pixel, Interpolation interpolation ) const;
+
+  private:
+    aeArray< uint8_t > m_data;
+    uint32_t m_width = 0;
+    uint32_t m_height = 0;
+    uint32_t m_channels = 0;
+  };
+}
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
 typedef float float16_t;
 #define PACK( _ae_something ) _ae_something
 
@@ -50,7 +82,7 @@ static const uint32_t kWorldChunksWidth = 128;
 static const uint32_t kWorldChunksHeight = 32;
 static const uint32_t kWorldMaxWidth = kWorldChunksWidth * kChunkSize;
 static const uint32_t kWorldMaxHeight = kWorldChunksHeight * kChunkSize;
-static const uint32_t kMaxActiveChunks = 128;
+static const uint32_t kMaxActiveChunks = 512;
 static const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
 static const uint32_t kMaxChunkVerts = kChunkSize * kChunkSize * kChunkSize;
 static const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
@@ -67,8 +99,6 @@ struct Block
     Unloaded,
     COUNT
   };
-
-  static const char* Name[ Block::COUNT ];
 };
 
 PACK( struct TerrainVertex
@@ -127,16 +157,20 @@ public:
   void Initialize();
   void Update();
   void Render( aeFloat3 center, const class aeShader* shader, const aeUniformList& shaderParams );
-  uint8_t GetVoxel( uint32_t x, uint32_t y, uint32_t z );
-  uint8_t GetVoxel( aeFloat3 position );
+
+  void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
+  void SetCallback( float ( *fn )( aeFloat3 ) );
+  
+  Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z );
+  Block::Type GetVoxel( aeFloat3 position );
   bool GetCollision( uint32_t x, uint32_t y, uint32_t z );
   bool GetCollision( aeFloat3 position );
   float16_t GetLight( uint32_t x, uint32_t y, uint32_t z );
   Chunk* GetChunk( int32_t cx, int32_t cy, int32_t cz );
-  void VoxelizeAndAddMesh(
-    aeFloat3* vertices, uint16_t* indices,
-    uint32_t vertexCount, uint32_t indexCount,
-    aeFloat4x4& modelToWorld, Block::Type type );
+  //void VoxelizeAndAddMesh(
+  //  aeFloat3* vertices, uint16_t* indices,
+  //  uint32_t vertexCount, uint32_t indexCount,
+  //  aeFloat4x4& modelToWorld, Block::Type type );
   
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps );
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision );
@@ -161,6 +195,10 @@ private:
   struct Chunk *m_activeChunks[ kMaxActiveChunks ];
   aeObjectPool<struct Chunk, kMaxLoadedChunks> m_chunkPool;
   uint32_t m_activeChunkCount = 0;
+
+  void* m_userdata = nullptr;
+  float ( *m_fn1 )( aeFloat3 ) = nullptr;
+  float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
   
   struct Chunk* m_headChunk = nullptr;
   struct Chunk* m_tailChunk = nullptr;

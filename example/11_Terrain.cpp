@@ -30,6 +30,7 @@
 #include "aeRender.h"
 #include "aeTerrain.h"
 #include "aeWindow.h"
+#include "aeVfs.h"
 
 //------------------------------------------------------------------------------
 // Cube Shader
@@ -70,7 +71,9 @@ const char* kTerrainFragShader = "\
 	AE_IN_HIGHP vec4 v_color;\
 	void main()\
 	{\
-		AE_COLOR = v_color;\
+		float light = dot( normalize( v_color.xyz ), normalize( vec3( 1.0 ) ) );\
+		light = mix( 0.7, 1.0, light );\
+		AE_COLOR = vec4( vec3( light ), 1.0 );\
 	}";
 
 //------------------------------------------------------------------------------
@@ -186,6 +189,7 @@ int main()
 	aeVertexData vertexData;
 	aeEditorCamera camera;
 	//Grid grid;
+	ae::Image terrainHeightMap;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "terrain" );
@@ -194,6 +198,7 @@ int main()
 	input.Initialize( &window, &render );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	//grid.Initialize();
+	camera.SetPosition( aeFloat3( 100.0f, 100.f, 70.0f ) );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );
@@ -211,8 +216,23 @@ int main()
 	vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
 	vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
 
+	{
+		aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
+		if ( aeVfs::Read( "terrain.png", fileBuffer.Data(), fileBuffer.Length() ) )
+		{
+			terrainHeightMap.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG );
+		}
+	}
+
 	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
 	terrain->Initialize();
+	terrain->SetCallback( &terrainHeightMap, []( void* userdata, aeFloat3 p )
+	{
+		ae::Image* terrainHeightMap = ( ae::Image* )userdata;
+		float terrain = p.z - terrainHeightMap->Get( p.GetXY() * 0.25f, ae::Image::Interpolation::Cosine ).r * 100.0f;
+		float sphere = ( p - aeFloat3( 100.0f, 100.0f, 70.0f ) ).Length() - 20.0f;
+		return aeMath::Max( -sphere, terrain );
+	} );
 
 	AE_INFO( "Run" );
 	while ( !input.GetState()->exit )
@@ -229,10 +249,9 @@ int main()
 
 		render.StartFrame( window.GetWidth(), window.GetHeight() );
 
-		
 		aeUniformList uniformList;
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
+		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 250.0f );
 		aeFloat4x4 worldToProj = viewToProj * worldToView;
 
 		//grid.Render( worldToProj );
@@ -240,7 +259,7 @@ int main()
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		vertexData.Render( &shader, uniformList );
 
-		terrain->Render( aeFloat3( 0.0f ), &terrainShader, uniformList );
+		terrain->Render( camera.GetPosition(), &terrainShader, uniformList );
 
 		render.EndFrame();
 

@@ -98,6 +98,26 @@ aeColor::aeColor( aeColor c, float a )
   : r( c.r ), g( c.g ), b( c.b ), a( a )
 {}
 
+aeColor aeColor::RGB( uint8_t r, uint8_t g, uint8_t b )
+{
+  return aeColor(
+    r / 255.0f,
+    g / 255.0f,
+    b / 255.0f,
+    1.0f
+  );
+}
+
+aeColor aeColor::RGBA( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
+{
+  return aeColor(
+    r / 255.0f,
+    g / 255.0f,
+    b / 255.0f,
+    a / 255.0f
+  );
+}
+
 aeColor aeColor::SRGB( float r, float g, float b )
 {
   return aeColor(
