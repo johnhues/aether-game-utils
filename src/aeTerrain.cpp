@@ -118,36 +118,18 @@ aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
     }
     case Interpolation::Cosine:
     {
-      //pixel.x -= 0.5f;
-      //pixel.y -= 0.5f;
-      //int32_t x = floorf( pixel.x );
-      //int32_t y = floorf( pixel.y );
-      //int32_t xPlus = x + 1;
-      //int32_t yPlus = y + 1;
-      //float xf = pixel.x - x;
-      //float yf = pixel.y - y;
-      //x = aeMath::Clip( x, 0, (int)m_width - 1 );
-      //y = aeMath::Clip( y, 0, (int)m_height - 1 );
-      //xPlus = aeMath::Clip( xPlus, 0, (int)m_width - 1 );
-      //yPlus = aeMath::Clip( yPlus, 0, (int)m_height - 1 );
+      float x = pixel.x - pi.x;
+      float y = pixel.y - pi.y;
 
-      //aeColor p0 = Get( aeInt2( x, y ) );
-      //aeColor p1 = Get( aeInt2( xPlus, y ) );
-      //aeColor p2 = Get( aeInt2( x, yPlus ) );
-      //aeColor p3 = Get( aeInt2( xPlus, yPlus ) );
-      //vec4 f0( p0.x, p0.w, p0.z, p0.w );
-      //vec4 f1( p1.x, p1.w, p1.z, p1.w );
-      //vec4 f2( p2.x, p2.w, p2.z, p2.w );
-      //vec4 f3( p3.x, p3.w, p3.z, p3.w );
+      aeColor c00 = Get( pi );
+      aeColor c10 = Get( pi + aeInt2( 1, 0 ) );
+      aeColor c01 = Get( pi + aeInt2( 0, 1 ) );
+      aeColor c11 = Get( pi + aeInt2( 1, 1 ) );
 
-      //vec4 x0 = Interpolation::Cosine( f0, f1, xf );
-      //vec4 x1 = Interpolation::Cosine( f2, f3, xf );
-      //vec4 y0 = Interpolation::Cosine( x0, x1, yf );
+      aeColor c0 = aeMath::Interpolation::Cosine( c00, c10, x );
+      aeColor c1 = aeMath::Interpolation::Cosine( c01, c11, x );
 
-      //return vec4u8( y0.x, y0.y, y0.z, y0.w );
-
-      // @HACK
-      return Get( pixel, Interpolation::Linear );
+      return aeMath::Interpolation::Cosine( c0, c1, y );
     }
   }
 }

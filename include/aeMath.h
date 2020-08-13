@@ -298,13 +298,14 @@ namespace aeMath
     template< typename T >
     T Cosine( T start, T end, float t )
     {
-      float angle;
+      t = (1-cos(t*aeMath::PI))/2;
 
-      angle = ( t * aeMath::PI ) + aeMath::PI;
-      t = aeMath::Cos( angle );
-      t = ( t + 1 ) / 2.0f;
+      // float angle = ( t * aeMath::PI ) + aeMath::PI;
+      // t = aeMath::Cos( angle );
+      // t = ( t + 1 ) / 2.0f;
 
-      return start + ( ( end - start ) * t );
+      // return start + ( ( end - start ) * t );
+      return start.Lerp( end, t );
     }
   }
 }

@@ -198,7 +198,7 @@ int main()
 	input.Initialize( &window, &render );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	//grid.Initialize();
-	camera.SetPosition( aeFloat3( 100.0f, 100.f, 70.0f ) );
+	camera.SetPosition( aeFloat3( 150.0f, 150.f, 60.0f ) );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );
@@ -230,7 +230,7 @@ int main()
 	{
 		ae::Image* terrainHeightMap = ( ae::Image* )userdata;
 		float terrain = p.z - terrainHeightMap->Get( p.GetXY() * 0.25f, ae::Image::Interpolation::Cosine ).r * 100.0f;
-		float sphere = ( p - aeFloat3( 100.0f, 100.0f, 70.0f ) ).Length() - 20.0f;
+		float sphere = ( p - aeFloat3( 150.0f, 150.0f, 70.0f ) ).Length() - 20.0f;
 		return aeMath::Max( -sphere, terrain );
 	} );
 
