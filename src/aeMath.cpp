@@ -322,6 +322,12 @@ const aeFloat3 aeFloat3::Right    = aeFloat3(1.0f, 0.0f, 0.0f);
 const aeFloat3 aeFloat3::Forward  = aeFloat3(0.0f, 1.0f, 0.0f);
 const aeFloat3 aeFloat3::Backward = aeFloat3(0.0f, -1.0f, 0.0f);
 
+aeFloat3::aeFloat3( const aeInt3& v ) :
+  x( v.x ),
+  y( v.y ),
+  z( v.z )
+{}
+
 aeFloat3 aeFloat3::operator+ (const aeFloat3& v) const
 {
   return aeFloat3(x+v.x, y+v.y, z+v.z);
@@ -498,6 +504,33 @@ aeFloat3 aeFloat3::SafeNormalizeCopy(void) const
 void aeFloat3::SetZero()
 {
   x = y = z = 0.0f;
+}
+
+aeInt3 aeFloat3::NearestCopy() const
+{
+  return aeInt3(
+    x + 0.5f,
+    y + 0.5f,
+    z + 0.5f
+  );
+}
+
+aeInt3 aeFloat3::FloorCopy() const
+{
+  return aeInt3(
+    aeMath::Floor( x ),
+    aeMath::Floor( y ),
+    aeMath::Floor( z )
+  );
+}
+
+aeInt3 aeFloat3::CeilCopy() const
+{
+  return aeInt3(
+    aeMath::Ceil( x ),
+    aeMath::Ceil( y ),
+    aeMath::Ceil( z )
+  );
 }
 
 float aeFloat3::GetAngleBetween(const aeFloat3& v) const

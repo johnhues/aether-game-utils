@@ -452,6 +452,7 @@ public:
   aeFloat3( aeFloat2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad(0.0f) {}
   explicit aeFloat3( aeFloat2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad(0.0f) {}
   explicit operator aeFloat2() const { return aeFloat2( x, y ); }
+  explicit aeFloat3( const struct aeInt3& v );
   void SetZero();
 
   float& operator[]( int32_t i ) { return data[ i ]; }
@@ -497,6 +498,10 @@ public:
   void SafeNormalize();
   aeFloat3 SafeNormalizeCopy() const;
   
+  aeInt3 NearestCopy() const;
+  aeInt3 FloorCopy() const;
+  aeInt3 CeilCopy() const;
+
   float GetAngleBetween(const aeFloat3& v) const;
   void AddRotationXY(float rotation);
   aeFloat3 RotateCopy( aeFloat3 axis, float angle ) const;
