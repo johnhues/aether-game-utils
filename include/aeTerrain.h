@@ -138,7 +138,6 @@ struct Chunk
 {
   uint32_t check;
   int32_t pos[ 3 ];
-  bool active;
   bool geoDirty;
   bool lightDirty;
   aeVertexData data;
@@ -184,15 +183,14 @@ private:
   inline int32_t TerrainType( aeFloat3 p ) const;
   void GetChunkVerts( Chunk* chunk, TerrainVertex *vertices, TerrainIndex *indices, uint32_t* vertexCount, uint32_t* indexCount );
   void UpdateChunkLighting( Chunk* chunk );
-  void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
-  Chunk* AllocChunk( aeFloat3 center, int32_t cx, int32_t cy, int32_t cz );
+  //void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
+  Chunk* AllocChunk( aeFloat3 center, aeInt3 pos );
   void FreeChunk( Chunk* chunk );
   static void GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] );
   
   aeCompactingAllocator m_compactAlloc;
   struct Chunk **m_chunks = nullptr;
-  int16_t* m_voxelCounts = nullptr;
-  struct Chunk *m_activeChunks[ kMaxActiveChunks ];
+  int16_t* m_voxelCounts = nullptr; // Kept even when chunks are freed so they are not regenerated again if they are empty
   aeObjectPool<struct Chunk, kMaxLoadedChunks> m_chunkPool;
   uint32_t m_activeChunkCount = 0;
 

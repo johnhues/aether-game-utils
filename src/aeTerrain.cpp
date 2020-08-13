@@ -132,6 +132,8 @@ aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
       return aeMath::Interpolation::Cosine( c0, c1, y );
     }
   }
+
+  return aeColor::Black();
 }
 
 // @TODO: SIMD GetIntersection() is currently causing nans on windows
@@ -810,8 +812,15 @@ void aeTerrain::UpdateChunkLighting( Chunk* chunk )
   chunk->lightDirty = false;
 }
 
-Chunk* aeTerrain::AllocChunk( aeFloat3 center, int32_t cx, int32_t cy, int32_t cz )
+Chunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
 {
+  AE_ASSERT( pos.x >= 0 );
+  AE_ASSERT( pos.y >= 0 );
+  AE_ASSERT( pos.z >= 0 );
+  AE_ASSERT( pos.x < kWorldChunksWidth );
+  AE_ASSERT( pos.y < kWorldChunksWidth );
+  AE_ASSERT( pos.z < kWorldChunksHeight );
+  
   if ( m_totalChunks == kMaxLoadedChunks )
   {
     Chunk* farChunk = nullptr;
@@ -835,11 +844,11 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, int32_t cx, int32_t cy, int32_t c
     }
     
     AE_ASSERT( farChunk );
-    AE_ASSERT( !farChunk->active );
+    // @TODO: Make sure this wasn't allocated this frame to avoid wasted work
     FreeChunk( farChunk );
   }
   
-  uint32_t chunkIndex = cx + kWorldChunksWidth * ( cy + kWorldChunksWidth * cz );
+  uint32_t chunkIndex = pos.x + kWorldChunksWidth * ( pos.y + kWorldChunksWidth * pos.z );
   AE_ASSERT( m_chunks[ chunkIndex ] == nullptr );
   
   Chunk* chunk = m_chunkPool.Allocate();
@@ -849,9 +858,9 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, int32_t cx, int32_t cy, int32_t c
   
   memset( &chunk->check, 0xCD, sizeof(chunk->check) );
   AE_ASSERT( chunk->check == 0xCDCDCDCD );
-  chunk->pos[ 0 ] = cx;
-  chunk->pos[ 1 ] = cy;
-  chunk->pos[ 2 ] = cz;
+  chunk->pos[ 0 ] = pos.x;
+  chunk->pos[ 1 ] = pos.y;
+  chunk->pos[ 2 ] = pos.z;
   chunk->lightDirty = true;
   
   if ( m_headChunk == nullptr ) { m_headChunk = chunk; }
@@ -869,7 +878,6 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, int32_t cx, int32_t cy, int32_t c
 void aeTerrain::FreeChunk( Chunk* chunk )
 {
   AE_ASSERT( chunk );
-  AE_ASSERT( !chunk->active );
   
   int32_t cx = chunk->pos[ 0 ];
   int32_t cy = chunk->pos[ 1 ];
@@ -1014,8 +1022,7 @@ void aeTerrain::Initialize()
   // @TODO: This is a little too sneaky, it sets all voxel counts to -1 which is used to
   //        initialize them later on. Chunks should be flagged for initialization more explicitly.
   memset( m_voxelCounts, ~0, voxelCountBytes );
-  
-  memset( m_activeChunks, 0, sizeof(m_activeChunks) );
+
   m_headChunk = nullptr;
   m_tailChunk = nullptr;
   m_totalChunks = 0;
@@ -1048,48 +1055,80 @@ void aeTerrain::Update()
 
 void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniformList& shaderParams )
 {
-  const int32_t viewRadius = 25;
-  const int32_t worldViewRadius2 = viewRadius * viewRadius * kChunkSize * kChunkSize;
-  const int32_t viewDiam = viewRadius + viewRadius;
-
+  const int32_t kChunkViewRadius = 32;
+  const int32_t kWorldViewRadius2 = kChunkViewRadius * kChunkViewRadius * kChunkSize * kChunkSize;
+  const int32_t kChunkViewDiam = kChunkViewRadius + kChunkViewRadius;
   const uint32_t kMaxChunkAllocationsPerTick = 8;
   
-  int32_t ci = int32_t( center.x ) / kChunkSize;
-  int32_t cj = int32_t( center.y ) / kChunkSize;
-  int32_t ck = int32_t( center.z ) / kChunkSize;
-  
+  //------------------------------------------------------------------------------
+  // Sort chunks based on priority
+  //------------------------------------------------------------------------------
   struct ChunkSort
   {
     Chunk *c;
-    uint32_t pos[ 3 ];
+    aeInt3 pos;
     float centerDistance;
   };
-  
-  for( uint32_t i = 0; i < m_activeChunkCount; i++ )
-  {
-    m_activeChunks[ i ]->active = false;
-  }
-  m_activeChunkCount = 0;
 
-  uint32_t allocatedChunks = 0;
-  
+  aeInt3 chunkCenter = center.NearestCopy() / kChunkSize;
+  uint32_t sortCount = 0;
+  aeAlloc::Scratch< ChunkSort > chunkSorts( kChunkViewDiam * kChunkViewDiam * kChunkViewDiam );
+  for ( uint32_t k = 0; k < kChunkViewDiam; k++ )
+  {
+    for ( uint32_t j = 0; j < kChunkViewDiam; j++ )
+    {
+      for ( uint32_t i = 0; i < kChunkViewDiam; i++ )
+      {
+        aeInt3 chunkPos( i, j, k );
+        chunkPos -= aeInt3( kChunkViewRadius );
+        chunkPos += chunkCenter;
+
+        if ( chunkPos.x < 0 || chunkPos.x >= kWorldChunksWidth
+          || chunkPos.y < 0 || chunkPos.y >= kWorldChunksWidth
+          || chunkPos.z < 0 || chunkPos.z >= kWorldChunksHeight )
+        {
+          continue;
+        }
+
+        int32_t ci = chunkPos.x + kWorldChunksWidth * ( chunkPos.y + kWorldChunksWidth * chunkPos.z );
+        int16_t vc = m_voxelCounts[ ci ];
+        if ( vc == 0 || vc == kChunkCountMax ) // @TODO: What does it mean to skip on chunk max?
+        {
+          continue;
+        }
+
+        float centerDistance = ( center - aeFloat3( chunkPos ) * kChunkSize ).LengthSquared();
+        if ( centerDistance >= kWorldViewRadius2 )
+        {
+          continue;
+        }
+
+        Chunk* c = m_chunks[ ci ];
+        chunkSorts[ sortCount ].c = c;
+        chunkSorts[ sortCount ].pos = chunkPos;
+        chunkSorts[ sortCount ].centerDistance = centerDistance;
+        sortCount++;
+      }
+    }
+  }
+
+  // Sort chunks by distance from center, closest to farthest
+  std::sort( chunkSorts.Data(), ( chunkSorts.Data() + sortCount ),
+    []( const ChunkSort& a, const ChunkSort& b ) -> bool
+  {
+    return a.centerDistance < b.centerDistance;
+  } );
+
   //------------------------------------------------------------------------------
   // Manage chunks based on new 'center' value
   //------------------------------------------------------------------------------
-  aeAlloc::Scratch< ChunkSort > chunkSort( viewDiam * viewDiam * viewDiam );
-  uint32_t sortCount = 0;
-  for( uint32_t cz = aeMath::Max( 0, ck - viewRadius ); cz < aeMath::Min( int32_t(kWorldChunksHeight), ck + viewRadius ); cz++ )
-  for( uint32_t cy = aeMath::Max( 0, cj - viewRadius ); cy < aeMath::Min( int32_t(kWorldChunksWidth), cj + viewRadius ); cy++ )
-  for( uint32_t cx = aeMath::Max( 0, ci - viewRadius ); cx < aeMath::Min( int32_t(kWorldChunksWidth), ci + viewRadius ); cx++ )
+  uint32_t generatedChunks = 0;
+  for ( uint32_t i = 0; i < sortCount; i++ )
   {
-    int32_t ci = cx + kWorldChunksWidth * ( cy + kWorldChunksWidth * cz );
-    int16_t vc = m_voxelCounts[ ci ];
-    if ( vc == 0 || vc == kChunkCountMax ) { continue; }
-    
-    float centerDistance = ( center - aeFloat3( cx + 0.5f, cy + 0.5f, cz + 0.5f ) * kChunkSize ).LengthSquared();
-    if ( centerDistance >= worldViewRadius2 ) { continue; }
-    
-    Chunk* c = m_chunks[ ci ];
+    ChunkSort* chunkSort = &chunkSorts[ i ];
+    Chunk* c = chunkSort->c;
+    aeInt3 chunkPos = chunkSort->pos;
+
     //if ( c ) { c->geoDirty = true; } // @HACK
     if( !c || c->geoDirty )
     {
@@ -1103,10 +1142,10 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
       // Allocate a new chunk when needed
       if ( !c )
       {
-        if ( allocatedChunks < kMaxChunkAllocationsPerTick )
+        if ( generatedChunks < kMaxChunkAllocationsPerTick )
         {
-          c = AllocChunk( center, cx, cy, cz );
-          allocatedChunks++;
+          c = AllocChunk( center, chunkPos );
+          chunkSort->c = c;
           AE_LOG( "chunks #", m_chunkPool.Length() );
         }
         else
@@ -1114,25 +1153,29 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
           continue;
         }
       }
+
+      int32_t ci = chunkPos.x + kWorldChunksWidth * ( chunkPos.y + kWorldChunksWidth * chunkPos.z );
       
       // Generate vertex positions from current chunk
       uint32_t vertexCount, indexCount;
       aeAlloc::Scratch< TerrainVertex > vertexScratch( kMaxChunkVerts );
       aeAlloc::Scratch< TerrainIndex > indexScratch( kMaxChunkIndices );
       GetChunkVerts( c, vertexScratch.Data(), indexScratch.Data(), &vertexCount, &indexCount );
+      generatedChunks++;
       m_voxelCounts[ ci ] = vertexCount;
       AE_ASSERT( vertexCount <= kChunkCountMax );
       if ( vertexCount == 0 || vertexCount == kChunkCountMax )
       {
         // @TODO: It's super expensive to finally just throw away the unneeded chunk...
-        FreeChunk( c );
+        FreeChunk( c ); // :(
+        chunkSort->c = nullptr;
         continue;
       }
 
-      // Initialize aeVertexData here only once
-      if ( c->data.GetIndexCount() == 0
-        || c->data.GetMaxVertexCount() < vertexCount
-        || c->data.GetMaxIndexCount() < indexCount )
+      // (Re)initialize aeVertexData here only when needed
+      if ( c->data.GetIndexCount() == 0 // Not initialized
+        || c->data.GetMaxVertexCount() < vertexCount // Too little storage for verts
+        || c->data.GetMaxIndexCount() < indexCount ) // Too little storage for indices
       {
         c->data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), vertexCount, indexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
         c->data.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( TerrainVertex, position ) );
@@ -1152,42 +1195,22 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
       c->geoDirty = false;
       c->lightDirty = true;
     }
-    
-    chunkSort[ sortCount ].c = c;
-    chunkSort[ sortCount ].pos[ 0 ] = cx;
-    chunkSort[ sortCount ].pos[ 1 ] = cy;
-    chunkSort[ sortCount ].pos[ 2 ] = cz;
-    chunkSort[ sortCount ].centerDistance = centerDistance;
-    sortCount++;
-  }
-
-  //------------------------------------------------------------------------------
-  // Sort existing chunks for priority
-  //------------------------------------------------------------------------------
-  // Sort chunks by distance from center, closest to farthest
-  std::sort( chunkSort.Data(), (chunkSort.Data() + sortCount),
-    []( const ChunkSort &a, const ChunkSort &b ) -> bool
-  {
-      return a.centerDistance < b.centerDistance;
-  });
-  // Reactivate the closest chunks
-  for ( int32_t i = 0; i < sortCount && m_activeChunkCount < kMaxActiveChunks; i++ )
-  {
-    Chunk* c = chunkSort[ i ].c;
-    AE_ASSERT( c );
-    m_activeChunks[ m_activeChunkCount++ ] = c;
-    c->active = true;
   }
 
   //------------------------------------------------------------------------------
   // Render
   //------------------------------------------------------------------------------
   //aeFrustum frustum;
-  for( uint32_t i = 0; i < m_activeChunkCount; i++ )
+  uint32_t activeCount = 0;
+  for( uint32_t i = 0; i < sortCount && activeCount < kMaxActiveChunks; i++ )
   {
-    Chunk* chunk = m_activeChunks[ i ];
+    Chunk* chunk = chunkSorts[ i ].c;
+    if ( !chunk )
+    {
+      continue;
+    }
     AE_ASSERT( chunk->check == 0xCDCDCDCD );
-    AE_ASSERT( chunk->active );
+    
     // Only render the visible chunks
     //if( frustum.TestChunk( chunk ) ) // @TODO: Should make sure chunk is visible
     {
@@ -1196,8 +1219,8 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
       //params.Set( "spiralTex", spiralTexture );
       //params.Set( "treeTex", treeTexture );
       chunk->data.Render( shader, shaderParams );
+      activeCount++;
     }
-    AE_ASSERT( chunk->active );
   }
 }
 
