@@ -76,17 +76,18 @@ namespace ae
 typedef float float16_t;
 #define PACK( _ae_something ) _ae_something
 
-static const uint32_t kChunkSize = 16;
-static const uint32_t kChunkCountMax = kChunkSize * kChunkSize * kChunkSize;
-static const uint32_t kWorldChunksWidth = 128;
-static const uint32_t kWorldChunksHeight = 32;
-static const uint32_t kWorldMaxWidth = kWorldChunksWidth * kChunkSize;
-static const uint32_t kWorldMaxHeight = kWorldChunksHeight * kChunkSize;
-static const uint32_t kMaxActiveChunks = 512;
-static const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
-static const uint32_t kMaxChunkVerts = kChunkSize * kChunkSize * kChunkSize;
-static const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
-static const float16_t kSkyBrightness = float16_t( 5.0f );
+const uint32_t kChunkSize = 16;
+const uint32_t kChunkCountMax = kChunkSize * kChunkSize * kChunkSize;
+const uint32_t kWorldChunksWidth = 128;
+const uint32_t kWorldChunksHeight = 32;
+const uint32_t kWorldMaxWidth = kWorldChunksWidth * kChunkSize;
+const uint32_t kWorldMaxHeight = kWorldChunksHeight * kChunkSize;
+const uint32_t kMaxActiveChunks = 512;
+const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
+const uint32_t kMaxChunkVerts = kChunkSize * kChunkSize * kChunkSize;
+const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
+const uint32_t kMaxChunkAllocationsPerTick = 2;
+const float16_t kSkyBrightness = float16_t( 5.0f );
 
 struct Block
 {
@@ -165,7 +166,7 @@ public:
   bool GetCollision( uint32_t x, uint32_t y, uint32_t z );
   bool GetCollision( aeFloat3 position );
   float16_t GetLight( uint32_t x, uint32_t y, uint32_t z );
-  Chunk* GetChunk( int32_t cx, int32_t cy, int32_t cz );
+  Chunk* GetChunk( aeInt3 pos );
   //void VoxelizeAndAddMesh(
   //  aeFloat3* vertices, uint16_t* indices,
   //  uint32_t vertexCount, uint32_t indexCount,
@@ -193,6 +194,18 @@ private:
   int16_t* m_voxelCounts = nullptr; // Kept even when chunks are freed so they are not regenerated again if they are empty
   aeObjectPool<struct Chunk, kMaxLoadedChunks> m_chunkPool;
   uint32_t m_activeChunkCount = 0;
+
+  // Keep these across frames instead of allocating temporary space for each generated chunk
+  struct ChunkSort
+  {
+    Chunk* c;
+    aeInt3 pos;
+    float centerDistance;
+    bool hasNeighbor;
+  };
+  aeArray< ChunkSort > t_chunkSorts;
+  aeArray< TerrainVertex > t_chunkVertices;
+  aeArray< TerrainIndex > t_chunkIndices;
 
   void* m_userdata = nullptr;
   float ( *m_fn1 )( aeFloat3 ) = nullptr;

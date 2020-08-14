@@ -968,7 +968,8 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
     {
       unsigned char* log = new unsigned char[ logLength ];
       glGetShaderInfoLog(shader, logLength, NULL, (GLchar*)log);
-      AE_LOG( "Error compiling shader #", log );
+      const char* typeStr = ( type == aeShaderType::Vertex ? "vertex" : "fragment" );
+      AE_LOG( "Error compiling # shader #", typeStr, log );
       delete[] log;
     }
     

@@ -49,21 +49,26 @@ public:
   uint32_t GetControlPointCount() const;
 
   aeFloat3 GetPoint( float distance ) const; // 0 <= distance <= length
+  void GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceOut ) const;
   float GetLength() const;
 
 private:
-  struct Segment
+  class Segment
   {
+  public:
     void Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3 );
     aeFloat3 GetPoint01( float t ) const;
     aeFloat3 GetPoint( float d ) const;
+    void GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceOut ) const;
+    float GetLength() const { return m_length; }
 
-    aeFloat3 a;
-    aeFloat3 b;
-    aeFloat3 c;
-    aeFloat3 d;
-    float length;
-    uint32_t resolution;
+  private:
+    aeFloat3 m_a;
+    aeFloat3 m_b;
+    aeFloat3 m_c;
+    aeFloat3 m_d;
+    float m_length;
+    uint32_t m_resolution;
   };
 
   void m_RecalculateSegments();
