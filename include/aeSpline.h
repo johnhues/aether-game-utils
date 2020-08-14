@@ -49,7 +49,7 @@ public:
   uint32_t GetControlPointCount() const;
 
   aeFloat3 GetPoint( float distance ) const; // 0 <= distance <= length
-  void GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceOut ) const;
+  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr );
   float GetLength() const;
 
 private:
@@ -59,7 +59,7 @@ private:
     void Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3 );
     aeFloat3 GetPoint01( float t ) const;
     aeFloat3 GetPoint( float d ) const;
-    void GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceOut ) const;
+    float GetMinDistance( aeFloat3 p, aeFloat3* pOut ) const;
     float GetLength() const { return m_length; }
 
   private:

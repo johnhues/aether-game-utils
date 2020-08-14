@@ -186,6 +186,23 @@ uint16_t kCubeIndices[] =
 	0, 1, 5, 0, 5, 4 // Front
 };
 
+void DrawCube( aeFloat4x4 worldToProj, aeFloat3 pos, aeShader* shader, aeVertexData* cube )
+{
+  aeUniformList uniformList;
+  aeFloat4x4 localToWorld = aeFloat4x4::Translation( pos );
+  uniformList.Set( "u_worldToProj", worldToProj* localToWorld );
+
+  shader->SetDepthTest( false );
+  shader->SetDepthWrite( false );
+  uniformList.Set( "u_saturation", 0.1f );
+  cube->Render( shader, uniformList );
+
+  shader->SetDepthTest( true );
+  shader->SetDepthWrite( true );
+  uniformList.Set( "u_saturation", 1.0f );
+  cube->Render( shader, uniformList );
+}
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -245,12 +262,12 @@ int main()
 
 	terrainGen.heightMap = &terrainHeightMap;
 
-	aeFloat3 splineCenter( 100.0f, 100.0f, 25.0f );
+	aeFloat3 splineCenter( 100.0f, 100.0f, 40.0f );
 	for ( uint32_t i = 0; i < 5; i++ )
 	{
-		float angle = aeMath::TWO_PI * i / 5; 
-		aeFloat3 p( aeMath::Cos( angle ), aeMath::Cos( angle ), 0.0f );
-		p *= 15.0f;
+		float angle = aeMath::TWO_PI * i / 5.0f; 
+		aeFloat3 p( aeMath::Cos( angle ), aeMath::Sin( angle ), 0.0f );
+		p *= 12.0f;
 		p += splineCenter;
 		terrainGen.spline.AppendControlPoint( p );
 	}
@@ -261,10 +278,10 @@ int main()
 		TerrainGen* terrain = (TerrainGen*)userdata;
 
 		float height = p.z - terrain->heightMap->Get( p.GetXY() * 5.0f, ae::Image::Interpolation::Cosine ).r * 20.0f;
-		float sphere = ( p - aeFloat3( 100.0f, 100.0f, 40.0f ) ).Length() - 10.0f;
-		//float spline = terrain->spline.GetPoint();
+		float sphere = ( p - aeFloat3( 100.0f, 100.0f, 40.0f ) ).Length() - 7.0f;
+		float spline = terrain->spline.GetMinDistance( p ) - 2.5f;
 
-		return aeMath::Min( sphere, height );
+		return aeMath::Min( height, sphere, spline );
 	} );
 
 	AE_INFO( "Run" );
@@ -290,60 +307,22 @@ int main()
 
 		//grid.Render( worldToProj );
 
-		aeColor colors[] = {
-			aeColor::PS( 206, 197, 159 ), // 1
-			aeColor::PS( 84, 84, 74 ), // 2
-			aeColor::PS( 100, 129, 54 ), // 3
-			aeColor::PS( 46, 65, 35 ), // 4
-			aeColor::PS( 167, 161, 110 ), // 5
-			aeColor::PS( 175, 192, 127 ), // 6
-			aeColor::PS( 78, 70, 60 ), // 7
-		};
-		static uint32_t s_top = 3;
-		static uint32_t s_side = 1;
-		static bool s_toggle = true;
-		s_toggle = input.GetState()->Get( aeKey::Q ) && !input.GetPrevState()->Get( aeKey::Q ) ? !s_toggle : s_toggle;
-		for ( uint32_t i = 0; i < countof(colors); i++ )
-		{
-			aeKey key = aeKey((int)aeKey::Num1 + i);
-			if ( input.GetState()->Get( key ) && !input.GetPrevState()->Get( key ) )
-			{
-				if ( s_toggle )
-				{
-					s_top = i;
-				}
-				else
-				{
-					s_side = i;
-				}
-			}
-		}
-
-		aeColor top = colors[ s_top ];
-		aeColor side = colors[ s_side ];
-		//aeColor top = aeColor::PS( 46, 65, 35 );
-		//aeColor side = aeColor::PS( 84, 84, 74 );
+		aeColor top = aeColor::PS( 46, 65, 35 );
+		aeColor side = aeColor::PS( 84, 84, 74 );
 		aeUniformList uniformList;
-		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
+		uniformList.Set( "u_worldToProj", worldToProj );
 		uniformList.Set( "u_topColor", top.GetLinearRGB() );
 		uniformList.Set( "u_sideColor", side.GetLinearRGB() );
 		terrain->Render( camera.GetPosition(), &terrainShader, uniformList );
 
 		if ( result.hit )
 		{
-			aeUniformList uniformList;
-			aeFloat4x4 localToWorld = aeFloat4x4::Translation( result.posf );
-			uniformList.Set( "u_worldToProj", viewToProj * worldToView * localToWorld );
-			
-			shader.SetDepthTest( false );
-			shader.SetDepthWrite( false );
-			uniformList.Set( "u_saturation", 0.1f );
-			cube.Render( &shader, uniformList );
+			DrawCube( worldToProj, result.posf, &shader, &cube );
+		}
 
-			shader.SetDepthTest( true );
-			shader.SetDepthWrite( true );
-			uniformList.Set( "u_saturation", 1.0f );
-			cube.Render( &shader, uniformList );
+		for ( uint32_t i = 0; i < terrainGen.spline.GetControlPointCount(); i++ )
+		{
+			DrawCube( worldToProj, terrainGen.spline.GetControlPoint( i ), &shader, &cube );
 		}
 
 		render.EndFrame();

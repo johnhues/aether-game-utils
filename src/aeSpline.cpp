@@ -104,9 +104,29 @@ aeFloat3 aeSpline::GetPoint( float distance ) const
   return m_controlPoints[ m_controlPoints.Length() - 1 ];
 }
 
-void aeSpline::GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceOut ) const
+float aeSpline::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut )
 {
+  aeFloat3 closest( 0.0f );
+  float closestDistance = aeMath::MaxValue< float >();
 
+  for ( uint32_t i = 0; i < m_segments.Length(); i++ )
+  {
+    const Segment& segment = m_segments[ i ];
+
+    aeFloat3 segmentP;
+    float d = segment.GetMinDistance( p, &segmentP );
+    if ( d < closestDistance )
+    {
+      closest = segmentP;
+      closestDistance = d;
+    }
+  }
+
+  if ( nearestOut )
+  {
+    *nearestOut = closest;
+  }
+  return closestDistance;
 }
 
 float aeSpline::GetLength() const
@@ -129,6 +149,7 @@ void aeSpline::m_RecalculateSegments()
   {
     segmentCount--;
   }
+
   for ( int32_t i = 0; i < segmentCount; i++ )
   {
     aeFloat3 p0 = m_GetControlPoint( i - 1 );
@@ -214,7 +235,7 @@ aeFloat3 aeSpline::Segment::GetPoint( float d ) const
 {
   if ( d <= 0.0f )
   {
-    return m_d;
+    return m_d; // GetPoint01( 0 )
   }
   else if ( d < m_length )
   {
@@ -238,13 +259,13 @@ aeFloat3 aeSpline::Segment::GetPoint( float d ) const
     }
   }
   
-  return m_a + m_b + m_c + m_d;
+  return m_a + m_b + m_c + m_d; // GetPoint01( 1 )
 }
 
-void aeSpline::Segment::GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceOut ) const
+float aeSpline::Segment::GetMinDistance( aeFloat3 p, aeFloat3* pOut ) const
 {
   uint32_t closestIndex = 0;
-  aeFloat3 closest = m_d;
+  aeFloat3 closest = m_d; // GetPoint01( 0 )
   float closestDistSq = aeMath::MaxValue< float >();
   for ( uint32_t i = 0; i < m_resolution; i++ )
   {
@@ -254,7 +275,7 @@ void aeSpline::Segment::GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceO
     {
       closestIndex = i;
       closest = s;
-      d = closestDistSq;
+      closestDistSq = d;
     }
   }
 
@@ -269,8 +290,19 @@ void aeSpline::Segment::GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceO
   }
   else
   {
-    //aeFloat3 
+    aeFloat3 prev = GetPoint01( ( closestIndex - 1 ) / (float)m_resolution );
+    aeFloat3 next = GetPoint01( ( closestIndex + 1 ) / (float)m_resolution );
+    float prevDist = ( prev - p ).LengthSquared();
+    float nextDist = ( next - p ).LengthSquared();
+    if ( prevDist < nextDist )
+    {
+      other = prev;
+    }
+    else
+    {
+      other = next;
+    }
   }
 
-  *distanceOut = aeLineSegment( closest, other ).GetMinDistance( p, pOut );
+  return aeLineSegment( closest, other ).GetMinDistance( p, pOut );
 }
