@@ -269,7 +269,7 @@ void aeSpline::Segment::GetClosest( aeFloat3 p, aeFloat3* pOut, float* distanceO
   }
   else
   {
-    aeFloat3 
+    //aeFloat3 
   }
 
   *distanceOut = aeLineSegment( closest, other ).GetMinDistance( p, pOut );

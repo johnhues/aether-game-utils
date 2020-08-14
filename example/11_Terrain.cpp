@@ -45,7 +45,7 @@ const char* kVertShader = "\
 	void main()\
 	{\
 		float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5f;\
-		v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1f);\
+		v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);\
 		gl_Position = u_worldToProj * a_position;\
 	}";
 
@@ -83,6 +83,7 @@ const char* kTerrainFragShader = "\
 	void main()\
 	{\
 		float light = dot( normalize( v_normal ), normalize( vec3( 1.0 ) ) );\
+		light = max(0.0, light);\
 		light = mix( 0.8, 4.0, light );\
 		AE_COLOR = vec4( AE_RGB_TO_SRGB( v_color * vec3( light ) ), 1.0 );\
 	}";
