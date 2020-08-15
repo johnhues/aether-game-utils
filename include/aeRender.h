@@ -57,6 +57,10 @@ struct aeColor
   aeColor( float r, float g, float b, float a );
   aeColor( aeColor c, float a );
 
+  static aeColor R( uint8_t r );
+  static aeColor RG( uint8_t r, uint8_t g );
+  static aeColor RGB( uint8_t r, uint8_t g, uint8_t b );
+  static aeColor RGBA( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
   static aeColor SRGB( float r, float g, float b );
   static aeColor SRGBA( float r, float g, float b, float a );
   static aeColor PS( uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255 );
