@@ -183,9 +183,11 @@ void aeArray< T >::Append( const T* values, uint32_t count )
 {
   Reserve( m_length + count );
 
+#if _AE_DEBUG_
+  AE_ASSERT( m_size >= m_length + count );
+#endif
   // @TODO: Should have a separate Append() for trivially constructed types
   //        so memcpy can be used (for large uint8 arrays etc)
-  AE_ASSERT( m_size >= m_length + count );
   for ( uint32_t i = 0; i < count; i++ )
   {
     m_array[ m_length ] = values[ i ];
@@ -196,7 +198,10 @@ void aeArray< T >::Append( const T* values, uint32_t count )
 template < typename T >
 void aeArray< T >::Remove( uint32_t index )
 {
+#if _AE_DEBUG_
   AE_ASSERT( index < m_length );
+#endif
+
   m_length--;
   for ( uint32_t i = index; i < m_length; i++ )
   {
@@ -263,7 +268,7 @@ int32_t aeArray< T >::FindFn( Fn testFn ) const
 template < typename T >
 void aeArray< T >::Reserve( uint32_t size )
 {
-  if ( size == 0 )
+  if ( size <= m_size )
   {
     return;
   }
@@ -278,12 +283,6 @@ void aeArray< T >::Reserve( uint32_t size )
   size++;
 
   AE_ASSERT( size );
-
-  if ( size <= m_size )
-  {
-    return;
-  }
-
   m_size = size;
 
   T* arr = aeAlloc::AllocateArray< T >( m_size );
@@ -305,16 +304,20 @@ void aeArray< T >::Clear()
 template < typename T >
 const T& aeArray< T >::operator[]( int32_t index ) const
 {
+#if _AE_DEBUG_
   AE_ASSERT( index >= 0 );
   AE_ASSERT( index < (int32_t)m_length );
+#endif
   return m_array[ index ];
 }
 
 template < typename T >
 T& aeArray< T >::operator[]( int32_t index )
 {
+#if _AE_DEBUG_
   AE_ASSERT( index >= 0 );
   AE_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
+#endif
   return m_array[ index ];
 }
 
