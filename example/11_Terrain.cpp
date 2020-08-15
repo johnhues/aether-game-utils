@@ -247,7 +247,7 @@ int main()
 		aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
 		if ( aeVfs::Read( "terrain.png", fileBuffer.Data(), fileBuffer.Length() ) )
 		{
-			terrainHeightMap.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG );
+			terrainHeightMap.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 		}
 	}
 
@@ -279,7 +279,12 @@ int main()
 
 		float height = p.z - terrain->heightMap->Get( p.GetXY() * 5.0f, ae::Image::Interpolation::Cosine ).r * 20.0f;
 		float sphere = ( p - aeFloat3( 100.0f, 100.0f, 40.0f ) ).Length() - 7.0f;
-		float spline = terrain->spline.GetMinDistance( p ) - 2.5f;
+		
+		float spline = aeMath::MaxValue< float >();
+		if ( terrain->spline.GetAABB().GetMinDistance( p ) <= 2.5f )
+		{
+			spline = terrain->spline.GetMinDistance( p ) - 2.5f;
+		}
 
 		return aeMath::Min( height, sphere, spline );
 	} );
@@ -302,7 +307,7 @@ int main()
 		render.StartFrame( window.GetWidth(), window.GetHeight() );
 
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 500.0f );
+		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 1000.0f );
 		aeFloat4x4 worldToProj = viewToProj * worldToView;
 
 		//grid.Render( worldToProj );

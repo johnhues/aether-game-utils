@@ -52,8 +52,17 @@ namespace ae
       Cosine
     };
 
-    void LoadRaw( const void* data, uint32_t width, uint32_t height, uint32_t channels );
-    bool LoadFile( const void* file, uint32_t length, Extension extension );
+    enum class Format
+    {
+      Auto,
+      R,
+      RG,
+      RGB,
+      RGBA
+    };
+
+    void LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto );
+    bool LoadFile( const void* file, uint32_t length, Extension extension, Format storage = Format::Auto );
 
     uint32_t GetWidth() const { return m_width; }
     uint32_t GetHeight() const { return m_height; }
@@ -76,17 +85,17 @@ namespace ae
 typedef float float16_t;
 #define PACK( _ae_something ) _ae_something
 
-const uint32_t kChunkSize = 16;
+const uint32_t kChunkSize = 32;
 const uint32_t kChunkCountMax = kChunkSize * kChunkSize * kChunkSize;
 const uint32_t kWorldChunksWidth = 128;
-const uint32_t kWorldChunksHeight = 32;
+const uint32_t kWorldChunksHeight = 8;
 const uint32_t kWorldMaxWidth = kWorldChunksWidth * kChunkSize;
 const uint32_t kWorldMaxHeight = kWorldChunksHeight * kChunkSize;
 const uint32_t kMaxActiveChunks = 512;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
 const uint32_t kMaxChunkVerts = kChunkSize * kChunkSize * kChunkSize;
 const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
-const uint32_t kMaxChunkAllocationsPerTick = 2;
+const uint32_t kMaxChunkAllocationsPerTick = 1;
 const float16_t kSkyBrightness = float16_t( 5.0f );
 
 struct Block

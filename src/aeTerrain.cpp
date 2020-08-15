@@ -29,15 +29,52 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-void ae::Image::LoadRaw( const void* data, uint32_t width, uint32_t height, uint32_t channels )
+void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage )
 {
-  m_data.Append( (const uint8_t*)data, width * height * channels );
+  AE_STATIC_ASSERT( (uint32_t)Format::R == 1 );
+  AE_STATIC_ASSERT( (uint32_t)Format::RG == 2 );
+  AE_STATIC_ASSERT( (uint32_t)Format::RGB == 3 );
+  AE_STATIC_ASSERT( (uint32_t)Format::RGBA == 4 );
+
   m_width = width;
   m_height = height;
-  m_channels = channels;
+  m_channels = ( storage == Format::Auto ) ? (uint32_t)format : ( uint32_t )storage; // @NOTE: See static assert above
+
+  uint32_t length = m_width * m_height;
+  m_data.Reserve( length * m_channels );
+
+  uint32_t formatChannels = (uint32_t)format; // @NOTE: See static assert above
+  if ( formatChannels == m_channels )
+  {
+    // @NOTE: Direct copy
+    m_data.Append( data, length * m_channels );
+  }
+  else if ( formatChannels > m_channels )
+  {
+    // @NOTE: More channels provided than needed
+    for ( uint32_t i = 0; i < length; i++ )
+    {
+      m_data.Append( &data[ i * formatChannels ], m_channels );
+    }
+  }
+  else
+  {
+    // @NOTE: Fewer channels provided than needed
+    // Copy last color value into remaining channels, and set alpha to opaque
+    uint8_t p[ 4 ];
+    p[ 3 ] = 255;
+    for ( uint32_t i = 0; i < length; i++ )
+    {
+      uint32_t index = i * formatChannels;
+      memcpy( p, &data[ index ], formatChannels );
+      memset( p + formatChannels, data[ index + formatChannels - 1 ], 3 - formatChannels );
+
+      m_data.Append( p, m_channels );
+    }
+  }
 }
 
-bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension )
+bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension, Format storage )
 {
   AE_ASSERT( extension == Extension::PNG );
 
@@ -54,7 +91,8 @@ bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension
     return false;
   }
 
-  LoadRaw( image, width, height, channels );
+  Format format = (Format)channels; // @NOTE: See static assert above
+  LoadRaw( image, width, height, format, storage );
   stbi_image_free( image );
 
   return true;
@@ -72,11 +110,11 @@ aeColor ae::Image::Get( aeInt2 pixel ) const
   {
     case 1:
     {
-      return aeColor::RGB( m_data[ index ], 0, 0 );
+      return aeColor::R( m_data[ index ] );
     }
     case 2:
     {
-      return aeColor::RGB( m_data[ index ], m_data[ index + 1 ], 0 );
+      return aeColor::RG( m_data[ index ], m_data[ index + 1 ] );
     }
     case 3:
     {
@@ -1072,7 +1110,7 @@ void aeTerrain::Update()
 
 void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniformList& shaderParams )
 {
-  const int32_t kChunkViewRadius = 96;
+  const int32_t kChunkViewRadius = 48;
   const int32_t kWorldViewRadius2 = kChunkViewRadius * kChunkViewRadius * kChunkSize * kChunkSize;
   const int32_t kChunkViewDiam = kChunkViewRadius + kChunkViewRadius;
   
