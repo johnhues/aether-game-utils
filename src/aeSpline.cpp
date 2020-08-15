@@ -113,6 +113,12 @@ float aeSpline::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut )
   {
     const Segment& segment = m_segments[ i ];
 
+    if ( segment.GetAABB().GetMinDistance( p ) > closestDistance )
+    {
+      // @NOTE: Don't check segments that are further away than the already closest point
+      continue;
+    }
+
     aeFloat3 segmentP;
     float d = segment.GetMinDistance( p, &segmentP );
     if ( d < closestDistance )
@@ -150,6 +156,8 @@ void aeSpline::m_RecalculateSegments()
     segmentCount--;
   }
 
+  m_aabb = aeAABB( aeFloat3( aeMath::MaxValue< float >() ), aeFloat3( aeMath::MinValue< float >() ) );
+
   for ( int32_t i = 0; i < segmentCount; i++ )
   {
     aeFloat3 p0 = m_GetControlPoint( i - 1 );
@@ -161,6 +169,7 @@ void aeSpline::m_RecalculateSegments()
     segment->Init( p0, p1, p2, p3 );
     
     m_length += segment->GetLength();
+    m_aabb.Expand( segment->GetAABB() );
   }
 }
 
@@ -212,6 +221,8 @@ void aeSpline::Segment::Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3
   uint32_t nextResolution = m_resolution;
   do
   {
+    m_aabb = aeAABB( GetPoint0(), GetPoint0() );
+
     m_length = nextLength;
     m_resolution = nextResolution;
 
@@ -222,6 +233,8 @@ void aeSpline::Segment::Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3
       aeFloat3 s0 = GetPoint01( i / (float)nextResolution );
       aeFloat3 s1 = GetPoint01( ( i + 1 ) / (float)nextResolution );
       nextLength += ( s1 - s0 ).Length();
+
+      m_aabb.Expand( s1 );
     }
   } while ( aeMath::Abs( nextLength - m_length ) > 0.001f );
 }
@@ -231,11 +244,21 @@ aeFloat3 aeSpline::Segment::GetPoint01( float t ) const
   return ( m_a * t * t * t ) + ( m_b * t * t ) + ( m_c * t ) + m_d;
 }
 
+aeFloat3 aeSpline::Segment::GetPoint0() const
+{
+  return m_d;
+}
+
+aeFloat3 aeSpline::Segment::GetPoint1() const
+{
+  return m_a + m_b + m_c + m_d;
+}
+
 aeFloat3 aeSpline::Segment::GetPoint( float d ) const
 {
   if ( d <= 0.0f )
   {
-    return m_d; // GetPoint01( 0 )
+    return GetPoint0();
   }
   else if ( d < m_length )
   {
@@ -259,13 +282,13 @@ aeFloat3 aeSpline::Segment::GetPoint( float d ) const
     }
   }
   
-  return m_a + m_b + m_c + m_d; // GetPoint01( 1 )
+  return GetPoint1();
 }
 
 float aeSpline::Segment::GetMinDistance( aeFloat3 p, aeFloat3* pOut ) const
 {
   uint32_t closestIndex = 0;
-  aeFloat3 closest = m_d; // GetPoint01( 0 )
+  aeFloat3 closest = GetPoint0();
   float closestDistSq = aeMath::MaxValue< float >();
   for ( uint32_t i = 0; i < m_resolution; i++ )
   {

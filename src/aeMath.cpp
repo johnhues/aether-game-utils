@@ -2087,6 +2087,39 @@ bool aeCircle::Intersect( const aeCircle& other, aeFloat2* out ) const
 }
 
 //------------------------------------------------------------------------------
+// aeAABB member functions
+//------------------------------------------------------------------------------
+aeAABB::aeAABB( aeFloat3 min, aeFloat3 max ) :
+  m_min( min ),
+  m_max( max )
+{}
+
+void aeAABB::Expand( aeFloat3 p )
+{
+  m_min = aeMath::Min( p, m_min );
+  m_max = aeMath::Max( p, m_max );
+}
+
+void aeAABB::Expand( aeAABB other )
+{
+  m_min = aeMath::Min( other.m_min, m_min );
+  m_max = aeMath::Max( other.m_max, m_max );
+}
+
+float aeAABB::GetMinDistance( aeFloat3 p ) const
+{
+  aeFloat3 c = ( m_min + m_max ) * 0.5f;
+  aeFloat3 hs = ( m_max - m_min ) * 0.5f;
+
+  aeFloat3 d = p - c;
+  d.x = aeMath::Max( aeMath::Abs( d.x ) - hs.x, 0.0f );
+  d.y = aeMath::Max( aeMath::Abs( d.y ) - hs.y, 0.0f );
+  d.z = aeMath::Max( aeMath::Abs( d.z ) - hs.z, 0.0f );
+
+  return d.Length();
+}
+
+//------------------------------------------------------------------------------
 // aeHash member functions
 //------------------------------------------------------------------------------
 aeHash::aeHash( uint32_t initialValue )

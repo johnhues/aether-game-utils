@@ -52,15 +52,20 @@ public:
   float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr );
   float GetLength() const;
 
+  aeAABB GetAABB() const { return m_aabb; }
+
 private:
   class Segment
   {
   public:
     void Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3 );
     aeFloat3 GetPoint01( float t ) const;
+    aeFloat3 GetPoint0() const;
+    aeFloat3 GetPoint1() const;
     aeFloat3 GetPoint( float d ) const;
     float GetMinDistance( aeFloat3 p, aeFloat3* pOut ) const;
     float GetLength() const { return m_length; }
+    aeAABB GetAABB() const { return m_aabb; }
 
   private:
     aeFloat3 m_a;
@@ -69,6 +74,7 @@ private:
     aeFloat3 m_d;
     float m_length;
     uint32_t m_resolution;
+    aeAABB m_aabb;
   };
 
   void m_RecalculateSegments();
@@ -78,6 +84,7 @@ private:
   aeArray< aeFloat3 > m_controlPoints;
   aeArray< Segment > m_segments;
   float m_length = 0.0f;
+  aeAABB m_aabb;
 };
 
 #endif
