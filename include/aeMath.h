@@ -48,7 +48,7 @@ namespace aeMath
   {
     return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
   }
-
+  
   template< typename T >
   T&& Max( T&& v )
   {
@@ -514,6 +514,28 @@ inline std::ostream& operator<<( std::ostream& os, aeFloat3 v )
   return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
 }
 
+namespace aeMath
+{
+  inline aeFloat3 Min( aeFloat3 v0, aeFloat3 v1 )
+  {
+    return aeFloat3(
+      Min( v0.x, v1.x ),
+      Min( v0.y, v1.y ),
+      Min( v0.z, v1.z )
+    );
+  }
+
+  inline aeFloat3 Max( aeFloat3 v0, aeFloat3 v1 )
+  {
+    return aeFloat3(
+      Max( v0.x, v1.x ),
+      Max( v0.y, v1.y ),
+      Max( v0.z, v1.z )
+    );
+  }
+}
+
+
 //------------------------------------------------------------------------------
 // aeInt3 struct
 //------------------------------------------------------------------------------
@@ -929,6 +951,29 @@ inline std::ostream& operator<<( std::ostream& os, const aeCircle& c )
 {
   return os << "(" << c.m_point << " : " << c.m_radius << ")";
 }
+
+//------------------------------------------------------------------------------
+// aeAABB class
+//------------------------------------------------------------------------------
+class aeAABB
+{
+public:
+  aeAABB() = default;
+  aeAABB( const aeAABB& ) = default;
+  aeAABB( aeFloat3 min, aeFloat3 max );
+
+  void Expand( aeFloat3 p );
+  void Expand( aeAABB other );
+
+  aeFloat3 GetMin() const { return m_min; }
+  aeFloat3 GetMax() const { return m_max; }
+
+  float GetMinDistance( aeFloat3 p ) const;
+
+private:
+  aeFloat3 m_min;
+  aeFloat3 m_max;
+};
 
 //------------------------------------------------------------------------------
 // aeMath::RandomValue member functions
