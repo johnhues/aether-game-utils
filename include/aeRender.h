@@ -588,6 +588,57 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// aeDebugRender class
+//------------------------------------------------------------------------------
+class aeDebugRender
+{
+public:
+  void Initialize();
+  void Destroy();
+  void Render( const aeFloat4x4& worldToScreen );
+
+  void AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color );
+  void AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeColor color, uint32_t pointCount );
+  void AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount );
+  void AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color );
+  void AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance );
+
+private:
+  static const uint32_t kMaxDebugObjects = 64;
+
+  struct DebugVertex
+  {
+    aeFloat3 pos;
+    aeColor color;
+  };
+  aeArray< DebugVertex > m_verts;
+  aeVertexData m_vertexData;
+  aeShader m_shader;
+
+  enum class DebugType
+  {
+    Rect,
+    Circle,
+    Sphere,
+    Line,
+  };
+
+  struct DebugObject
+  {
+    DebugType type;
+    aeFloat3 pos;
+    aeFloat3 end;
+    aeQuat rotation;
+    aeFloat2 size;
+    float radius;
+    aeColor color;
+    uint32_t pointCount; // circle only
+  };
+  uint32_t m_objCount;
+  DebugObject m_objs[ kMaxDebugObjects ];
+};
+
+//------------------------------------------------------------------------------
 // aeRender class
 //------------------------------------------------------------------------------
 class aeRender

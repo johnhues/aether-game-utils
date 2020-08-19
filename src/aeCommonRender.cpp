@@ -817,6 +817,225 @@ uint32_t aeTextRender::m_ParseText( const char* str, uint32_t lineLength, uint32
 }
 
 //------------------------------------------------------------------------------
+// aeDebugRender constants
+//------------------------------------------------------------------------------
+const uint32_t kDebugVertexCountPerObject = 32;
+const uint32_t kDebugIndexCountPerObject = 24;
+
+//------------------------------------------------------------------------------
+// aeDebugRender member functions
+//------------------------------------------------------------------------------
+void aeDebugRender::Initialize()
+{
+  m_objCount = 0;
+
+  // @HACK: Should handle vert count in a safer way
+  m_vertexData.Initialize( sizeof(DebugVertex), sizeof(uint16_t), kMaxDebugObjects * kDebugVertexCountPerObject, 0, aeVertexPrimitive::Line, aeVertexUsage::Dynamic, aeVertexUsage::Static );
+  m_vertexData.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof(DebugVertex, pos) );
+  m_vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof(DebugVertex, color) );
+
+  // Load shader
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_UNIFORM float u_saturation;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec4 a_color;\
+    AE_OUT_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5;\
+      v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);\
+      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      AE_COLOR = v_color;\
+    }";
+  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  m_shader.SetBlending( true );
+  m_shader.SetDepthTest( true );
+}
+
+void aeDebugRender::Destroy()
+{
+  m_shader.Destroy();
+  m_vertexData.Destroy();
+}
+
+void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
+{
+  if ( !m_objCount )
+  {
+    return;
+  }
+
+  const uint16_t kQuadIndices[] = {
+    3, 1, 0,
+    3, 1, 2
+  };
+
+  m_verts.Clear();
+  m_verts.Reserve( kMaxDebugObjects * kDebugVertexCountPerObject );
+
+  for ( uint32_t i = 0; i < m_objCount; i++ )
+  {
+    DebugObject obj = m_objs[ i ];
+    if ( obj.type == DebugType::Rect )
+    {
+      aeFloat2 halfSize = obj.size * 0.5f;
+
+      DebugVertex verts[ 4 ];
+      
+      verts[ 0 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( -halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Left
+      verts[ 1 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Right
+      verts[ 2 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( halfSize.x, 0.0f, halfSize.y ) ); // Top Right
+      verts[ 3 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( -halfSize.x, 0.0f, halfSize.y ) ); // Top Left
+
+      verts[ 0 ].color = obj.color;
+      verts[ 1 ].color = obj.color;
+      verts[ 2 ].color = obj.color;
+      verts[ 3 ].color = obj.color;
+
+      m_verts.Append( verts[ 0 ] );
+      m_verts.Append( verts[ 1 ] );
+      m_verts.Append( verts[ 1 ] );
+      m_verts.Append( verts[ 2 ] );
+      m_verts.Append( verts[ 2 ] );
+      m_verts.Append( verts[ 3 ] );
+      m_verts.Append( verts[ 3 ] );
+      m_verts.Append( verts[ 0 ] );
+    }
+    else if ( obj.type == DebugType::Circle )
+    {
+      float angleInc = aeMath::PI * 2.0f / obj.pointCount;
+      for ( uint32_t i = 0; i < obj.pointCount; i++ )
+      {
+        float angle0 = angleInc * i;
+        float angle1 = angleInc * ( i + 1 );
+
+        DebugVertex verts[ 2 ];
+
+        verts[ 0 ].pos = aeFloat3( cosf( angle0 ) * obj.radius, 0.0f, sinf( angle0 ) * obj.radius );
+        verts[ 1 ].pos = aeFloat3( cosf( angle1 ) * obj.radius, 0.0f, sinf( angle1 ) * obj.radius );
+        verts[ 0 ].pos = obj.rotation.Rotate( verts[ 0 ].pos );
+        verts[ 1 ].pos = obj.rotation.Rotate( verts[ 1 ].pos );
+        verts[ 0 ].pos += obj.pos;
+        verts[ 1 ].pos += obj.pos;
+
+        verts[ 0 ].color = obj.color;
+        verts[ 1 ].color = obj.color;
+
+        m_verts.Append( verts, countof( verts ) );
+      }
+    }
+    else if ( obj.type == DebugType::Line )
+    {
+      DebugVertex verts[ 2 ];
+      verts[ 0 ].pos = obj.pos;
+      verts[ 0 ].color = obj.color;
+      verts[ 1 ].pos = obj.end;
+      verts[ 1 ].color = obj.color;
+
+      m_verts.Append( verts, countof( verts ) );
+    }
+  }
+
+  if ( m_verts.Length() )
+  {
+    m_vertexData.SetVertices( &m_verts[ 0 ], m_verts.Length() );
+
+    aeUniformList uniforms;
+    uniforms.Set( "u_worldToScreen", worldToScreen );
+
+    m_shader.SetDepthTest( false );
+    m_shader.SetDepthWrite( false );
+    uniforms.Set( "u_saturation", 0.1f );
+    m_vertexData.Render( &m_shader, uniforms );
+
+    m_shader.SetDepthTest( true );
+    m_shader.SetDepthWrite( true );
+    uniforms.Set( "u_saturation", 1.0f );
+    m_vertexData.Render( &m_shader, uniforms );
+  }
+
+  m_objCount = 0;
+}
+
+void aeDebugRender::AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects
+    && up.LengthSquared() > 0.001f
+    && normal.LengthSquared() > 0.001f )
+  {
+    up.SafeNormalize();
+    normal.SafeNormalize();
+    if ( normal.Dot( up ) < 0.999f )
+    {
+      m_objs[ m_objCount ].type = DebugType::Rect;
+      m_objs[ m_objCount ].pos = pos;
+      m_objs[ m_objCount ].rotation = aeQuat( normal, up );
+      m_objs[ m_objCount ].size = size;
+      m_objs[ m_objCount ].color = color;
+      m_objs[ m_objCount ].pointCount = 0;
+      m_objCount++;
+    }
+  }
+}
+
+void aeDebugRender::AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeColor color, uint32_t pointCount )
+{
+  if ( m_objCount < kMaxDebugObjects && normal.LengthSquared() > 0.001f )
+  {
+    normal.SafeNormalize();
+    float dot = normal.Dot( aeFloat3::Up );
+    
+    m_objs[ m_objCount ].type = DebugType::Circle;
+    m_objs[ m_objCount ].pos = pos;
+    m_objs[ m_objCount ].rotation = aeQuat( normal, dot < 0.99f ? aeFloat3::Up : aeFloat3::Right );
+    m_objs[ m_objCount ].radius = radius;
+    m_objs[ m_objCount ].color = color;
+    m_objs[ m_objCount ].pointCount = pointCount;
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount )
+{
+  if ( m_objCount + 3 <= kMaxDebugObjects )
+  {
+    AddCircle( pos, aeFloat3::Up, radius, color, pointCount );
+    AddCircle( pos, aeFloat3::Right, radius, color, pointCount );
+    AddCircle( pos, aeFloat3::Forward, radius, color, pointCount );
+  }
+}
+
+void aeDebugRender::AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Line;
+    m_objs[ m_objCount ].pos = p0;
+    m_objs[ m_objCount ].end = p1;
+    m_objs[ m_objCount ].color = color;
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Line;
+    m_objs[ m_objCount ].pos = p0;
+    m_objs[ m_objCount ].end = p1;
+    m_objs[ m_objCount ].color = ( ( p1 - p0 ).Length() <= distance ) ? aeColor::Green() : aeColor::Red();
+    m_objCount++;
+  }
+}
+
+//------------------------------------------------------------------------------
 // aeRender member functions
 //------------------------------------------------------------------------------
 aeRender::aeRender()
