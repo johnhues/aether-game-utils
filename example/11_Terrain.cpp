@@ -34,29 +34,6 @@
 #include "aeVfs.h"
 
 //------------------------------------------------------------------------------
-// Cube Shader
-//------------------------------------------------------------------------------
-const char* kVertShader = "\
-	AE_UNIFORM mat4 u_worldToProj;\
-	AE_UNIFORM float u_saturation;\
-	AE_IN_HIGHP vec4 a_position;\
-	AE_IN_HIGHP vec4 a_color;\
-	AE_OUT_HIGHP vec4 v_color;\
-	void main()\
-	{\
-		float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5f;\
-		v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);\
-		gl_Position = u_worldToProj * a_position;\
-	}";
-
-const char* kFragShader = "\
-	AE_IN_HIGHP vec4 v_color;\
-	void main()\
-	{\
-		AE_COLOR = AE_RGBA_TO_SRGBA(v_color);\
-	}";
-
-//------------------------------------------------------------------------------
 // Terrain Shader
 //------------------------------------------------------------------------------
 const char* kTerrainVertShader = "\
@@ -156,54 +133,6 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// Cube
-//------------------------------------------------------------------------------
-struct Vertex
-{
-	aeFloat4 pos;
-	aeFloat4 color;
-};
-
-Vertex kCubeVerts[] =
-{
-	{ aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ), aeColor::PicoRed().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ), aeColor::PicoOrange().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ), aeColor::PicoYellow().GetLinearRGBA() },
-	{ aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ), aeColor::PicoPeach().GetLinearRGBA() },
-	{ aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ), aeColor::PicoGreen().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ), aeColor::PicoPeach().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ), aeColor::PicoPink().GetLinearRGBA() },
-	{ aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ), aeColor::PicoBlue().GetLinearRGBA() },
-};
-
-uint16_t kCubeIndices[] =
-{
-	4, 5, 6, 4, 6, 7, // Top
-	0, 3, 1, 1, 3, 2, // Bottom
-	0, 4, 3, 3, 4, 7, // Left
-	1, 2, 6, 6, 5, 1, // Right
-	6, 2, 3, 6, 3, 7, // Back
-	0, 1, 5, 0, 5, 4 // Front
-};
-
-void DrawCube( aeFloat4x4 worldToProj, aeFloat3 pos, aeShader* shader, aeVertexData* cube )
-{
-  aeUniformList uniformList;
-  aeFloat4x4 localToWorld = aeFloat4x4::Translation( pos );
-  uniformList.Set( "u_worldToProj", worldToProj* localToWorld );
-
-  shader->SetDepthTest( false );
-  shader->SetDepthWrite( false );
-  uniformList.Set( "u_saturation", 0.1f );
-  cube->Render( shader, uniformList );
-
-  shader->SetDepthTest( true );
-  shader->SetDepthWrite( true );
-  uniformList.Set( "u_saturation", 1.0f );
-  cube->Render( shader, uniformList );
-}
-
-//------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
@@ -213,9 +142,9 @@ int main()
 	aeWindow window;
 	aeRender render;
 	aeInput input;
+	aeDebugRender debug;
 	aeFixedTimeStep timeStep;
-	aeShader shader, terrainShader;
-	aeVertexData cube;
+	aeShader terrainShader;
 	aeEditorCamera camera;
 	//Grid grid;
 	ae::Image terrainHeightMap;
@@ -225,23 +154,15 @@ int main()
 	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::PicoDarkPurple() );
 	input.Initialize( &window, &render );
+	debug.Initialize();
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	//grid.Initialize();
 	camera.SetPosition( aeFloat3( 150.0f, 150.f, 60.0f ) );
-
-	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
-	shader.SetCulling( aeShaderCulling::CounterclockwiseFront );
 
 	terrainShader.Initialize( kTerrainVertShader, kTerrainFragShader, nullptr, 0 );
 	terrainShader.SetDepthTest( true );
 	terrainShader.SetDepthWrite( true );
 	terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
-
-	cube.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
-	cube.AddAttribute( "a_position", 4, aeVertexDataType::Float, offsetof( Vertex, pos ) );
-	cube.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof( Vertex, color ) );
-	cube.SetVertices( kCubeVerts, countof( kCubeVerts ) );
-	cube.SetIndices( kCubeIndices, countof( kCubeIndices ) );
 
 	{
 		aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
@@ -318,17 +239,20 @@ int main()
 		uniformList.Set( "u_worldToProj", worldToProj );
 		uniformList.Set( "u_topColor", top.GetLinearRGB() );
 		uniformList.Set( "u_sideColor", side.GetLinearRGB() );
-		terrain->Render( camera.GetPosition(), &terrainShader, uniformList );
+		terrain->Render( camera.GetPosition(), 1250.0f, &terrainShader, uniformList );
 
 		if ( result.hit )
 		{
-			DrawCube( worldToProj, result.posf, &shader, &cube );
+			debug.AddLine( result.posf, result.posf + result.normal, aeColor::Red() );
+			debug.AddSphere( result.posf, 0.5f, aeColor::Red(), 24 );
 		}
 
 		for ( uint32_t i = 0; i < terrainGen.spline.GetControlPointCount(); i++ )
 		{
-			DrawCube( worldToProj, terrainGen.spline.GetControlPoint( i ), &shader, &cube );
+			debug.AddSphere( terrainGen.spline.GetControlPoint( i ), 0.5f, aeColor::Red(), 24 );
 		}
+
+		debug.Render( worldToProj );
 
 		render.EndFrame();
 

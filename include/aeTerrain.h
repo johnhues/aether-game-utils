@@ -73,8 +73,8 @@ namespace ae
 
   private:
     aeArray< uint8_t > m_data;
-    uint32_t m_width = 0;
-    uint32_t m_height = 0;
+    int32_t m_width = 0;
+    int32_t m_height = 0;
     uint32_t m_channels = 0;
   };
 }
@@ -165,25 +165,26 @@ class aeTerrain
 public:
   void Initialize();
   void Update();
-  void Render( aeFloat3 center, const class aeShader* shader, const aeUniformList& shaderParams );
+  void Render( aeFloat3 center, float radius, const class aeShader* shader, const aeUniformList& shaderParams );
 
   void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
   void SetCallback( float ( *fn )( aeFloat3 ) );
   
-  Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z );
-  Block::Type GetVoxel( aeFloat3 position );
-  bool GetCollision( uint32_t x, uint32_t y, uint32_t z );
-  bool GetCollision( aeFloat3 position );
-  float16_t GetLight( uint32_t x, uint32_t y, uint32_t z );
+  Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const;
+  Block::Type GetVoxel( aeFloat3 position ) const;
+  bool GetCollision( uint32_t x, uint32_t y, uint32_t z ) const;
+  bool GetCollision( aeFloat3 position ) const;
+  float16_t GetLight( uint32_t x, uint32_t y, uint32_t z ) const;
+  const Chunk* GetChunk( aeInt3 pos ) const;
   Chunk* GetChunk( aeInt3 pos );
   //void VoxelizeAndAddMesh(
   //  aeFloat3* vertices, uint16_t* indices,
   //  uint32_t vertexCount, uint32_t indexCount,
   //  aeFloat4x4& modelToWorld, Block::Type type );
   
-  bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps );
-  RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision );
-  RaycastResult Raycast( aeFloat3 start, aeFloat3 ray );
+  bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
+  RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
+  RaycastResult Raycast( aeFloat3 start, aeFloat3 ray ) const;
   
   float GetBaseHeight( aeFloat3 p ) const;
   float TerrainValue( aeFloat3 p ) const;

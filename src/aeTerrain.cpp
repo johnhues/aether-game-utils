@@ -1043,7 +1043,7 @@ void aeTerrain::GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3
   }
 }
 
-Chunk* aeTerrain::GetChunk( aeInt3 pos )
+const Chunk* aeTerrain::GetChunk( aeInt3 pos ) const
 {
   if ( pos.x >= kWorldChunksWidth || pos.y >= kWorldChunksWidth || pos.z >= kWorldChunksHeight )
   {
@@ -1055,6 +1055,11 @@ Chunk* aeTerrain::GetChunk( aeInt3 pos )
   Chunk* chunk = m_chunks[ c ];
   if ( chunk ) { AE_ASSERT( chunk->check == 0xCDCDCDCD ); }
   return chunk;
+}
+
+Chunk* aeTerrain::GetChunk( aeInt3 pos )
+{
+  return (Chunk*)( (const aeTerrain*)this )->GetChunk( pos );
 }
 
 void aeTerrain::Initialize()
@@ -1108,11 +1113,11 @@ void aeTerrain::Update()
   //program->game->hudBoss->AddDebugString( 330, 135, 0.5f, aeFloat3(0.0f), str );
 }
 
-void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniformList& shaderParams )
+void aeTerrain::Render( aeFloat3 center, float radius, const aeShader* shader, const aeUniformList& shaderParams )
 {
-  const int32_t kChunkViewRadius = 48;
-  const int32_t kWorldViewRadius2 = kChunkViewRadius * kChunkViewRadius * kChunkSize * kChunkSize;
-  const int32_t kChunkViewDiam = kChunkViewRadius + kChunkViewRadius;
+  int32_t chunkViewRadius = radius / kChunkSize;
+  const int32_t kWorldViewRadius2 = chunkViewRadius * chunkViewRadius * kChunkSize * kChunkSize;
+  const int32_t kChunkViewDiam = chunkViewRadius + chunkViewRadius;
   
   //------------------------------------------------------------------------------
   // Sort chunks based on priority
@@ -1122,14 +1127,14 @@ void aeTerrain::Render( aeFloat3 center, const aeShader* shader, const aeUniform
 
   aeInt3 chunkCenter = center.NearestCopy() / kChunkSize;
   //uint32_t sortCount = 0;
-  for ( uint32_t k = 0; k < kChunkViewDiam; k++ )
+  for ( int32_t k = 0; k < kChunkViewDiam; k++ )
   {
-    for ( uint32_t j = 0; j < kChunkViewDiam; j++ )
+    for ( int32_t j = 0; j < kChunkViewDiam; j++ )
     {
-      for ( uint32_t i = 0; i < kChunkViewDiam; i++ )
+      for ( int32_t i = 0; i < kChunkViewDiam; i++ )
       {
         aeInt3 chunkPos( i, j, k );
-        chunkPos -= aeInt3( kChunkViewRadius );
+        chunkPos -= aeInt3( chunkViewRadius );
         chunkPos += chunkCenter;
 
         if ( chunkPos.x < 0 || chunkPos.x >= kWorldChunksWidth
@@ -1303,22 +1308,22 @@ void aeTerrain::SetCallback( float ( *fn )( aeFloat3 ) )
   m_fn2 = nullptr;
 }
 
-bool aeTerrain::GetCollision( uint32_t x, uint32_t y, uint32_t z )
+bool aeTerrain::GetCollision( uint32_t x, uint32_t y, uint32_t z ) const
 {
   return m_blockCollision[ GetVoxel( x, y, z ) ];
 }
 
-bool aeTerrain::GetCollision( aeFloat3 position )
+bool aeTerrain::GetCollision( aeFloat3 position ) const
 {
   return m_blockCollision[ GetVoxel( position.x, position.y, position.z ) ];
 }
 
-Block::Type aeTerrain::GetVoxel( aeFloat3 position )
+Block::Type aeTerrain::GetVoxel( aeFloat3 position ) const
 {
   return GetVoxel( position.x, position.y, position.z );
 }
 
-Block::Type aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z )
+Block::Type aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const
 {
   int32_t cx = x / kChunkSize;
   int32_t cy = y / kChunkSize;
@@ -1343,20 +1348,20 @@ Block::Type aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z )
   return chunk->t[ x % kChunkSize ][ y % kChunkSize ][ z % kChunkSize ];
 }
 
-float16_t aeTerrain::GetLight( uint32_t x, uint32_t y, uint32_t z )
+float16_t aeTerrain::GetLight( uint32_t x, uint32_t y, uint32_t z ) const
 {
   uint32_t cix = x / kChunkSize;
   uint32_t ciy = y / kChunkSize;
   uint32_t ciz = z / kChunkSize;
   
   if( cix >= kWorldChunksWidth || ciy >= kWorldChunksWidth || ciz >= kWorldChunksHeight ) { return kSkyBrightness; }
-  Chunk *chunk = GetChunk( aeInt3( cix, ciy, ciz ) );
+  const Chunk *chunk = GetChunk( aeInt3( cix, ciy, ciz ) );
   if( chunk == nullptr ) { return kSkyBrightness; }
   
   return chunk->l[ x - cix * kChunkSize ][ y - ciy * kChunkSize ][ z - ciz * kChunkSize ];
 }
 
-bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps )
+bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const
 {
   int32_t x = aeMath::Floor( start.x );
   int32_t y = aeMath::Floor( start.y );
@@ -1474,7 +1479,7 @@ bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps )
   return true;
 }
 
-RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision )
+RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const
 {
   RaycastResult result;
   result.hit = false;
@@ -1612,7 +1617,7 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
   int32_t cx = x / kChunkSize;
   int32_t cy = y / kChunkSize;
   int32_t cz = z / kChunkSize;
-  Chunk* c = GetChunk( aeInt3( cx, cy, cz ) );
+  const Chunk* c = GetChunk( aeInt3( cx, cy, cz ) );
   AE_ASSERT( c );
   int32_t lx = x % kChunkSize;
   int32_t ly = y % kChunkSize;
@@ -1648,7 +1653,7 @@ aeFloat3 IntersectRayAABB( aeFloat3 p, aeFloat3 d, const int32_t v[ 3 ] )
   return p + d * tmin;
 }
 
-RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray )
+RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 {
   RaycastResult result;
   result.hit = false;
