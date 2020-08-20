@@ -215,7 +215,7 @@ int main()
 	{
 		input.Pump();
 
-		terrain->Update();
+		terrain->Update( camera.GetPosition(), 1250.0f );
 
 		RaycastResult result = terrain->Raycast( camera.GetPosition(), camera.GetForward() * 1000.0f );
 
@@ -239,7 +239,7 @@ int main()
 		uniformList.Set( "u_worldToProj", worldToProj );
 		uniformList.Set( "u_topColor", top.GetLinearRGB() );
 		uniformList.Set( "u_sideColor", side.GetLinearRGB() );
-		terrain->Render( camera.GetPosition(), 1250.0f, &terrainShader, uniformList );
+		terrain->Render( &terrainShader, uniformList );
 
 		if ( result.hit )
 		{

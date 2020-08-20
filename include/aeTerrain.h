@@ -144,28 +144,46 @@ struct DCInfo
   EdgeCompact edges[ 12 ];
 };
 
-struct Chunk
+class aeTerrainSDF
 {
-  uint32_t check;
-  int32_t pos[ 3 ];
-  bool geoDirty;
-  bool lightDirty;
-  aeVertexData data;
-  TerrainVertex* vertices;
-  Chunk* next;
-  Chunk* prev;
+public:
+  float TerrainValue( aeFloat3 p ) const;
+  aeFloat3 GetSurfaceDerivative( aeFloat3 p ) const;
+
+  void* m_userdata = nullptr;
+  float ( *m_fn1 )( aeFloat3 ) = nullptr;
+  float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
+};
+
+struct Chunk // @TODO: aeTerrainChunk
+{
+  Chunk();
+  uint32_t GetIndex() const;
+  void Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
+
+  uint32_t m_check;
+  int32_t m_pos[ 3 ];
+  bool m_geoDirty;
+  bool m_lightDirty;
+  aeVertexData m_data;
+  TerrainVertex* m_vertices;
+  Chunk* m_next;
+  Chunk* m_prev;
   
-  Block::Type t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
-  float16_t l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
-  TerrainIndex i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
+  Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
+  float16_t m_l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
+  TerrainIndex m_i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
+
+private:
+  static void m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t( &offsets )[ 4 ][ 3 ] );
 };
 
 class aeTerrain
 {
 public:
   void Initialize();
-  void Update();
-  void Render( aeFloat3 center, float radius, const class aeShader* shader, const aeUniformList& shaderParams );
+  void Update( aeFloat3 center, float radius );
+  void Render( const class aeShader* shader, const aeUniformList& shaderParams );
 
   void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
   void SetCallback( float ( *fn )( aeFloat3 ) );
@@ -186,18 +204,11 @@ public:
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
   RaycastResult Raycast( aeFloat3 start, aeFloat3 ray ) const;
   
-  float GetBaseHeight( aeFloat3 p ) const;
-  float TerrainValue( aeFloat3 p ) const;
-  aeFloat3 GetSurfaceDerivative( aeFloat3 p ) const;
-
 private:
-  inline int32_t TerrainType( aeFloat3 p ) const;
-  void GetChunkVerts( Chunk* chunk, TerrainVertex *vertices, TerrainIndex *indices, uint32_t* vertexCount, uint32_t* indexCount );
   void UpdateChunkLighting( Chunk* chunk );
   //void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
   Chunk* AllocChunk( aeFloat3 center, aeInt3 pos );
   void FreeChunk( Chunk* chunk );
-  static void GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] );
   
   aeCompactingAllocator m_compactAlloc;
   struct Chunk **m_chunks = nullptr;
@@ -214,13 +225,9 @@ private:
     bool hasNeighbor;
   };
   aeArray< ChunkSort > t_chunkSorts;
-  aeArray< TerrainVertex > t_chunkVertices;
-  aeArray< TerrainIndex > t_chunkIndices;
 
-  void* m_userdata = nullptr;
-  float ( *m_fn1 )( aeFloat3 ) = nullptr;
-  float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
-  
+  aeTerrainSDF m_sdf;
+
   struct Chunk* m_headChunk = nullptr;
   struct Chunk* m_tailChunk = nullptr;
   uint32_t m_totalChunks = 0;
@@ -228,7 +235,6 @@ private:
   
   bool m_blockCollision[ Block::COUNT ];
   float16_t m_blockDensity[ Block::COUNT ];
-  //UMAT::Noise m_noise;
   
   aeTexture2D* grassTexture = nullptr;
   aeTexture2D* rockTexture = nullptr;
