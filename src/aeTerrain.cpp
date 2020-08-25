@@ -438,7 +438,10 @@ void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
 void aeTerrainJob::Do()
 {
   m_running = true;
-  m_chunk->Generate( m_sdf, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
+  if ( m_chunk ) // HACK: This should always be true
+  {
+    m_chunk->Generate( m_sdf, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
+  }
   m_running = false;
 }
 

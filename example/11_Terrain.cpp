@@ -182,7 +182,7 @@ int main()
 		}
 	}
 
-	uint32_t terrainThreads = 1;// aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
+	uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
 	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
 	terrain->Initialize( terrainThreads, !headless );
 
