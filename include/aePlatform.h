@@ -104,6 +104,7 @@
 #include <ostream>
 #include <type_traits>
 #include <typeinfo>
+#include <utility>
 
 //------------------------------------------------------------------------------
 // Utils
@@ -192,6 +193,7 @@ const char* aeGetTypeName()
 }
 
 uint32_t aeGetPID();
+uint32_t aeGetMaxConcurrentThreads();
 
 #define AE_EXPORT extern "C"
 

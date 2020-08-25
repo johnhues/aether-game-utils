@@ -44,7 +44,7 @@ int main()
 	window.SetTitle( "example" );
 	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::Red() );
-	input.Initialize( &window, &render );
+	input.Initialize( &window );
 	
 	aeFixedTimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );

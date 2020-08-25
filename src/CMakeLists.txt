@@ -117,6 +117,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp
+		ctpl_stl.h
 		stb_image.h
 )
 

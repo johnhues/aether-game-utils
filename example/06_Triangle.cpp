@@ -89,7 +89,7 @@ int main()
 	window.SetTitle( "triangle" );
 	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::PicoDarkPurple() );
-	input.Initialize( &window, &render );
+	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );

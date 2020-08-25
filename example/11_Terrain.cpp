@@ -137,7 +137,10 @@ private:
 //------------------------------------------------------------------------------
 int main()
 {
+	{
 	AE_INFO( "Initialize" );
+
+	bool headless = _AE_LINUX_;
 
 	aeWindow window;
 	aeRender render;
@@ -146,23 +149,30 @@ int main()
 	aeFixedTimeStep timeStep;
 	aeShader terrainShader;
 	aeEditorCamera camera;
-	//Grid grid;
+	////Grid grid;
 	ae::Image terrainHeightMap;
 
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "terrain" );
-	render.InitializeOpenGL( &window );
-	render.SetClearColor( aeColor::PicoDarkPurple() );
-	input.Initialize( &window, &render );
-	debug.Initialize();
+	if ( !headless )
+	{
+		window.Initialize( 800, 600, false, true );
+		window.SetTitle( "terrain" );
+		render.InitializeOpenGL( &window );
+		render.SetClearColor( aeColor::PicoDarkPurple() );
+		debug.Initialize();
+	}
+
+	input.Initialize( headless ? nullptr : &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	//grid.Initialize();
+	////grid.Initialize();
 	camera.SetPosition( aeFloat3( 150.0f, 150.f, 60.0f ) );
 
-	terrainShader.Initialize( kTerrainVertShader, kTerrainFragShader, nullptr, 0 );
-	terrainShader.SetDepthTest( true );
-	terrainShader.SetDepthWrite( true );
-	terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+	if ( !headless )
+	{
+		terrainShader.Initialize( kTerrainVertShader, kTerrainFragShader, nullptr, 0 );
+		terrainShader.SetDepthTest( true );
+		terrainShader.SetDepthWrite( true );
+		terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+	}
 
 	{
 		aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
@@ -172,8 +182,9 @@ int main()
 		}
 	}
 
+	uint32_t terrainThreads = 1;// aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
 	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
-	terrain->Initialize();
+	terrain->Initialize( terrainThreads, !headless );
 
 	struct TerrainGen
 	{
@@ -225,44 +236,52 @@ int main()
 			camera.Refocus( result.posf );
 		}
 
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
-
-		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 1000.0f );
-		aeFloat4x4 worldToProj = viewToProj * worldToView;
-
-		//grid.Render( worldToProj );
-
-		aeColor top = aeColor::PS( 46, 65, 35 );
-		aeColor side = aeColor::PS( 84, 84, 74 );
-		aeUniformList uniformList;
-		uniformList.Set( "u_worldToProj", worldToProj );
-		uniformList.Set( "u_topColor", top.GetLinearRGB() );
-		uniformList.Set( "u_sideColor", side.GetLinearRGB() );
-		terrain->Render( &terrainShader, uniformList );
-
-		if ( result.hit )
+		if ( !headless )
 		{
-			debug.AddLine( result.posf, result.posf + result.normal, aeColor::Red() );
-			debug.AddSphere( result.posf, 0.5f, aeColor::Red(), 24 );
+			render.StartFrame( window.GetWidth(), window.GetHeight() );
+
+			aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
+			aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 1000.0f );
+			aeFloat4x4 worldToProj = viewToProj * worldToView;
+
+			//grid.Render( worldToProj );
+
+			aeColor top = aeColor::PS( 46, 65, 35 );
+			aeColor side = aeColor::PS( 84, 84, 74 );
+			aeUniformList uniformList;
+			uniformList.Set( "u_worldToProj", worldToProj );
+			uniformList.Set( "u_topColor", top.GetLinearRGB() );
+			uniformList.Set( "u_sideColor", side.GetLinearRGB() );
+			terrain->Render( &terrainShader, uniformList );
+
+			if ( result.hit )
+			{
+				debug.AddLine( result.posf, result.posf + result.normal, aeColor::Red() );
+				debug.AddSphere( result.posf, 0.5f, aeColor::Red(), 24 );
+			}
+
+			for ( uint32_t i = 0; i < terrainGen.spline.GetControlPointCount(); i++ )
+			{
+				debug.AddSphere( terrainGen.spline.GetControlPoint( i ), 0.5f, aeColor::Red(), 24 );
+			}
+
+			debug.Render( worldToProj );
+
+			render.EndFrame();
 		}
 
-		for ( uint32_t i = 0; i < terrainGen.spline.GetControlPointCount(); i++ )
-		{
-			debug.AddSphere( terrainGen.spline.GetControlPoint( i ), 0.5f, aeColor::Red(), 24 );
-		}
-
-		debug.Render( worldToProj );
-
-		render.EndFrame();
-
-		timeStep.Wait();
+			timeStep.Wait();
 	}
 
 	AE_INFO( "Terminate" );
+	terrain->Terminate();
+	aeAlloc::Release( terrain );
 	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
+	if ( !headless )
+	{
+		render.Terminate();
+		window.Terminate();
+	}
+}
 	return 0;
 }

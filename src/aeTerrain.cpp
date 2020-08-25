@@ -24,7 +24,9 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeTerrain.h"
+#include "aeClock.h"
 #include "aeCompactingAllocator.h"
+#include <ctpl_stl.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
@@ -265,29 +267,36 @@ const uint16_t EDGE_BOTTOM_BACK_BIT = 1 << EDGE_BOTTOM_BACK_INDEX;
 const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 }
 
-Chunk::Chunk()
+Chunk::Chunk() :
+  m_generatedList( this )
 {
   m_check = 0xCDCDCDCD;
 
-  m_pos[ 0 ] = 0;
-  m_pos[ 1 ] = 0;
-  m_pos[ 2 ] = 0;
+  m_pos = aeInt3( 0 );
 
   m_geoDirty = true;
   m_lightDirty = false;
 
   m_vertices = nullptr;
-  m_next = nullptr;
-  m_prev = nullptr;
 
   memset( m_t, 0, sizeof( m_t ) );
   memset( m_l, 0, sizeof( m_l ) );
   memset( m_i, ~(uint8_t)0, sizeof( m_i ) );
 }
 
+Chunk::~Chunk()
+{
+  AE_ASSERT( !m_vertices );
+}
+
+uint32_t Chunk::GetIndex( aeInt3 pos )
+{
+  return pos.x + kWorldChunksWidth * ( pos.y + kWorldChunksWidth * pos.z );
+}
+
 uint32_t Chunk::GetIndex() const
 {
-  return m_pos[ 0 ] + kWorldChunksWidth * ( m_pos[ 1 ] + kWorldChunksWidth * m_pos[ 2 ] );
+  return GetIndex( m_pos );
 }
 
 float Box( aeFloat3 p, aeFloat3 b )
@@ -401,14 +410,65 @@ aeFloat3 aeTerrainSDF::GetSurfaceDerivative( aeFloat3 p ) const
   return ( normal1 + normal0 ).SafeNormalizeCopy();
 }
 
+aeTerrainJob::aeTerrainJob() :
+  m_hasJob( false ),
+  m_running( false ),
+  m_sdf( nullptr ),
+  m_vertexCount( 0 ),
+  m_indexCount( 0 ),
+  m_vertices( kMaxChunkVerts, TerrainVertex() ),
+  m_indices( kMaxChunkIndices, TerrainIndex() ),
+  m_chunk( nullptr )
+{}
+
+void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
+{
+  AE_ASSERT( chunk );
+  AE_ASSERT_MSG( !m_chunk, "Previous job not finished" );
+
+  m_hasJob = true;
+  m_running = false;
+
+  m_sdf = sdf;
+  m_vertexCount = 0;
+  m_indexCount = 0;
+  m_chunk = chunk;
+}
+
+void aeTerrainJob::Do()
+{
+  m_running = true;
+  m_chunk->Generate( m_sdf, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
+  m_running = false;
+}
+
+void aeTerrainJob::Finish()
+{
+  AE_ASSERT( m_chunk );
+  AE_ASSERT( !m_running );
+
+  m_hasJob = false;
+  m_sdf = nullptr;
+  m_vertexCount = 0;
+  m_indexCount = 0;
+  m_chunk = nullptr;
+}
+
+bool aeTerrainJob::HasChunk( aeInt3 pos ) const
+{
+  return m_chunk && m_chunk->m_pos == pos;
+}
+
 void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
 {
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
 
-  int32_t chunkOffsetX = m_pos[ 0 ] * kChunkSize;
-  int32_t chunkOffsetY = m_pos[ 1 ] * kChunkSize;
-  int32_t chunkOffsetZ = m_pos[ 2 ] * kChunkSize;
+  AE_LOG( "Generate chunk #", m_pos );
+
+  int32_t chunkOffsetX = m_pos.x * kChunkSize;
+  int32_t chunkOffsetY = m_pos.y * kChunkSize;
+  int32_t chunkOffsetZ = m_pos.z * kChunkSize;
   
   struct TempEdges
   {
@@ -426,8 +486,8 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
   };
 
   const int32_t tempChunkSize = kChunkSize + 2;
-  aeAlloc::Scratch< TempEdges > edgeInfo( tempChunkSize * tempChunkSize * tempChunkSize );
-  memset( edgeInfo.Data(), 0, edgeInfo.Length() * sizeof(TempEdges) );
+  std::vector< TempEdges > edgeInfo( tempChunkSize * tempChunkSize * tempChunkSize, TempEdges() );
+  memset( &edgeInfo[ 0 ], 0, edgeInfo.size() * sizeof(TempEdges) );
   
   uint16_t mask[ 3 ];
   mask[ 0 ] = EDGE_TOP_FRONT_BIT;
@@ -446,6 +506,15 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
   cornerOffsets[ 2 ][ 0 ] = aeFloat3( 1, 1, 0 );
   cornerOffsets[ 2 ][ 1 ] = aeFloat3( 1, 1, 1 );
   
+
+  for ( uint32_t k = 0; k < kChunkSize; k++ )
+    for ( uint32_t j = 0; j < kChunkSize; j++ )
+      for ( uint32_t i = 0; i < kChunkSize; i++ )
+      {
+        AE_ASSERT_MSG( m_i[ i ][ j ][ k ] == 65535, "# # # : #", i, j, k, m_i[ i ][ j ][ k ] );
+      }
+
+
   // @NOTE: This phase generates the surface mesh for the current chunk. The vertex
   // positions will be centered at the end of this phase, and will be nudged later
   // to the correct position within the voxel.
@@ -485,7 +554,9 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       continue;
     }
     
-    TempEdges* te = &edgeInfo[ x + 1 + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize ) ];
+    uint32_t edgeIndex = x + 1 + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    TempEdges* te = &edgeInfo[ edgeIndex ];
     te->b = edgeBits;
     te->x = x;
     te->y = y;
@@ -596,7 +667,10 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
         else
         {
           TerrainIndex index = m_i[ ox ][ oy ][ oz ];
-          AE_ASSERT( index < vertexCount );
+          AE_ASSERT_MSG( index < vertexCount, "# < # ox:# oy:# oz:#", index, vertexCount, ox, oy, oz );
+          AE_ASSERT( ox < kChunkSize );
+          AE_ASSERT( oy < kChunkSize );
+          AE_ASSERT( oz < kChunkSize );
           AE_ASSERT( m_t[ ox ][ oy ][ oz ] == Block::Surface );
           ind[ j ] = index;
         }
@@ -660,7 +734,9 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
     if ( x < 0 || y < 0 || z < 0 ) { AE_FAIL(); }
     if ( x > kChunkSize || y > kChunkSize || z > kChunkSize ) { AE_FAIL(); }
     
-    TempEdges te = edgeInfo[ x + 1 + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize ) ];
+    uint32_t edgeIndex = x + 1 + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    TempEdges te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {
       p[ ec ] = te.p[ 0 ];
@@ -679,7 +755,9 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       n[ ec ] = te.n[ 2 ];
       ec++;
     }
-    te = edgeInfo[ x + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize ) ];
+    edgeIndex = x + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_RIGHT_BIT )
     {
       p[ ec ] = te.p[ 1 ];
@@ -694,7 +772,9 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       n[ ec ] = te.n[ 2 ];
       ec++;
     }
-    te = edgeInfo[ x + 1 + tempChunkSize * ( y + ( z + 1 ) * tempChunkSize ) ];
+    edgeIndex = x + 1 + tempChunkSize * ( y + ( z + 1 ) * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {
       p[ ec ] = te.p[ 0 ];
@@ -707,8 +787,11 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       p[ ec ] = te.p[ 2 ];
       p[ ec ].y -= 1.0f;
       n[ ec ] = te.n[ 2 ];
-      ec++; }
-    te = edgeInfo[ x + tempChunkSize * ( y + ( z + 1 ) * tempChunkSize ) ];
+      ec++;
+    }
+    edgeIndex = x + tempChunkSize * ( y + ( z + 1 ) * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
     {
       p[ ec ] = te.p[ 2 ];
@@ -717,7 +800,9 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       n[ ec ] = te.n[ 2 ];
       ec++;
     }
-    te = edgeInfo[ x + tempChunkSize * ( y + 1 + z * tempChunkSize ) ];
+    edgeIndex = x + tempChunkSize * ( y + 1 + z * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_RIGHT_BIT )
     {
       p[ ec ] = te.p[ 1 ];
@@ -726,7 +811,9 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       n[ ec ] = te.n[ 1 ];
       ec++;
     }
-    te = edgeInfo[ x + 1 + tempChunkSize * ( y + z * tempChunkSize ) ];
+    edgeIndex = x + 1 + tempChunkSize * ( y + z * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {
       p[ ec ] = te.p[ 0 ];
@@ -735,7 +822,9 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       n[ ec ] = te.n[ 0 ];
       ec++;
     }
-    te = edgeInfo[ x + 1 + tempChunkSize * ( y + 1 + z * tempChunkSize ) ];
+    edgeIndex = x + 1 + tempChunkSize * ( y + 1 + z * tempChunkSize );
+    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {
       p[ ec ] = te.p[ 0 ];
@@ -831,48 +920,16 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
   AE_ASSERT( pos.y < kWorldChunksWidth );
   AE_ASSERT( pos.z < kWorldChunksHeight );
   
-  if ( m_totalChunks == kMaxLoadedChunks )
+  Chunk* chunk = m_chunkPool.Allocate();
+  if ( !chunk )
   {
-    Chunk* farChunk = nullptr;
-    float maxDist = 0.0f;
-    
-    Chunk* current = m_headChunk;
-    while( current )
-    {
-      int32_t cx = current->m_pos[ 0 ];
-      int32_t cy = current->m_pos[ 1 ];
-      int32_t cz = current->m_pos[ 2 ];
-      float d = ( center - aeFloat3( cx + 0.5f, cy + 0.5f, cz + 0.5f ) * kChunkSize ).LengthSquared();
-      
-      if ( maxDist < d )
-      {
-        maxDist = d;
-        farChunk = current;
-      }
-      
-      current = current->m_next;
-    }
-    
-    AE_ASSERT( farChunk );
-    // @TODO: Make sure this wasn't allocated this frame to avoid wasted work
-    FreeChunk( farChunk );
+    return nullptr;
   }
   
-  Chunk* chunk = m_chunkPool.Allocate();
-  AE_ASSERT( chunk );
-  
-  chunk->m_pos[ 0 ] = pos.x;
-  chunk->m_pos[ 1 ] = pos.y;
-  chunk->m_pos[ 2 ] = pos.z;
+  chunk->m_pos = pos;
   chunk->m_lightDirty = true;
   
-  if ( m_headChunk == nullptr ) { m_headChunk = chunk; }
-  if ( m_tailChunk != nullptr ) { m_tailChunk->m_next = chunk; }
-  chunk->m_prev = m_tailChunk;
-  m_tailChunk = chunk;
-  m_tailChunk->m_next = nullptr;
-  
-  m_totalChunks++;
+  AE_ASSERT( !chunk->m_vertices );
   
   return chunk;
 }
@@ -880,21 +937,31 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
 void aeTerrain::FreeChunk( Chunk* chunk )
 {
   AE_ASSERT( chunk );
+
+  uint32_t chunkIndex = chunk->GetIndex();
+  if ( m_render )
+  {
+    if ( m_chunks[ chunkIndex ] )
+    {
+      // @NOTE: Make sure that the chunk data matches the array
+      AE_ASSERT_MSG( m_chunks[ chunkIndex ] == chunk, "Chunks value (#) at index does not match chunk (#)", m_chunks[ chunkIndex ], chunk );
+      AE_ASSERT( chunk->m_data.GetVertexCount() );
+    }
+    else
+    {
+      // @NOTE: Chunks with no vertex data should released immediately without being kept in m_chunks[]
+      AE_ASSERT( !chunk->m_data.GetVertexCount() );
+    }
+  }
+  m_chunks[ chunkIndex ] = nullptr;
   
-  int32_t cx = chunk->m_pos[ 0 ];
-  int32_t cy = chunk->m_pos[ 1 ];
-  int32_t cz = chunk->m_pos[ 2 ];
-  uint32_t c = cx + kWorldChunksWidth * ( cy + kWorldChunksWidth * cz );
-  m_chunks[ c ] = nullptr;
-  m_totalChunks--;
-  
-  Chunk* prev = chunk->m_prev;
-  Chunk* next = chunk->m_next;
-  if ( prev ) { prev->m_next = next; }
-  else { m_headChunk = next; }
-  if ( next) { next->m_prev = prev; }
-  else { m_tailChunk = prev; }
-  
+  // @TODO: Cleanup how chunk resources are released
+  //m_compactAlloc.Free( &chunk->m_vertices );
+  //AE_ASSERT( !chunk->m_vertices );
+  aeAlloc::Release( chunk->m_vertices );
+  chunk->m_vertices = nullptr;
+
+  // @NOTE: This has to be done last because CompactingAllocator keeps a pointer to m_vertices
   m_chunkPool.Free( chunk );
 }
 
@@ -1009,9 +1076,26 @@ Chunk* aeTerrain::GetChunk( aeInt3 pos )
   return (Chunk*)( (const aeTerrain*)this )->GetChunk( pos );
 }
 
-void aeTerrain::Initialize()
+int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
 {
-  m_compactAlloc.Expand( 128 * ( 1 << 20 ) );
+  if ( pos.x >= kWorldChunksWidth || pos.y >= kWorldChunksWidth || pos.z >= kWorldChunksHeight )
+  {
+    return -1;
+  }
+
+  return m_voxelCounts[ Chunk::GetIndex( pos ) ];
+}
+
+aeTerrain::~aeTerrain()
+{
+  Terminate();
+}
+
+void aeTerrain::Initialize( uint32_t maxThreads, bool render )
+{
+  m_render = render;
+
+  //m_compactAlloc.Expand( 128 * ( 1 << 20 ) );
 
   //m_chunkPool.Initialize(); @TODO: Reset pool
   
@@ -1030,15 +1114,51 @@ void aeTerrain::Initialize()
   //        initialize them later on. Chunks should be flagged for initialization more explicitly.
   memset( m_voxelCounts, ~0, voxelCountBytes );
 
-  m_headChunk = nullptr;
-  m_tailChunk = nullptr;
-  m_totalChunks = 0;
-  
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockCollision[ i ] = true; }
   m_blockCollision[ Block::Exterior ] = false;
   m_blockCollision[ Block::Unloaded ] = false;
   
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockDensity[ i ] = 1.0f; }
+
+  m_threadPool = aeAlloc::Allocate< ctpl::thread_pool >( maxThreads );
+  maxThreads = aeMath::Max( 1u, maxThreads );
+  for ( uint32_t i = 0; i < maxThreads; i++ )
+  {
+    m_terrainJobs.Append( aeAlloc::Allocate< aeTerrainJob >() );
+  }
+}
+
+void aeTerrain::Terminate()
+{
+  if ( m_threadPool )
+  {
+    m_threadPool->stop( true );
+    aeAlloc::Release( m_threadPool );
+    m_threadPool = nullptr;
+  }
+
+  for ( uint32_t i = 0; i < m_terrainJobs.Length(); i++ )
+  {
+    aeTerrainJob* job = m_terrainJobs[ i ];
+    if ( job->IsPendingFinish() )
+    {
+      job->Finish();
+    }
+    aeAlloc::Release( job );
+  }
+  m_terrainJobs.Clear();
+
+  for ( Chunk* chunk = m_chunkPool.GetFirst(); chunk; chunk = m_chunkPool.GetNext( chunk ) )
+  {
+    FreeChunk( chunk );
+  }
+  AE_ASSERT( m_chunkPool.Length() == 0 );
+
+  if ( m_chunkRawAlloc )
+  {
+    aeAlloc::Release( m_chunkRawAlloc );
+    m_chunkRawAlloc = nullptr;
+  }
 }
 
 void aeTerrain::Update( aeFloat3 center, float radius )
@@ -1046,15 +1166,19 @@ void aeTerrain::Update( aeFloat3 center, float radius )
   int32_t chunkViewRadius = radius / kChunkSize;
   const int32_t kWorldViewRadius2 = chunkViewRadius * chunkViewRadius * kChunkSize * kChunkSize;
   const int32_t kChunkViewDiam = chunkViewRadius + chunkViewRadius;
+
+  double currentTime = aeClock::GetTime();
+
+  m_center = center;
+  m_radius = radius;
   
   //------------------------------------------------------------------------------
-  // Sort chunks based on priority
+  // Determine which chunks will be processed
   //------------------------------------------------------------------------------
-  t_chunkSorts.Clear();
-  t_chunkSorts.Reserve( kChunkViewDiam * kChunkViewDiam * kChunkViewDiam );
-
-  aeInt3 chunkCenter = center.NearestCopy() / kChunkSize;
-  //uint32_t sortCount = 0;
+  //t_chunkMap.Clear();
+  //t_chunkMap.Reserve( kChunkViewDiam * kChunkViewDiam * kChunkViewDiam );
+  t_chunkMap_hack.clear();
+  aeInt3 viewChunk = ( center / kChunkSize ).NearestCopy();
   for ( int32_t k = 0; k < kChunkViewDiam; k++ )
   {
     for ( int32_t j = 0; j < kChunkViewDiam; j++ )
@@ -1063,7 +1187,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       {
         aeInt3 chunkPos( i, j, k );
         chunkPos -= aeInt3( chunkViewRadius );
-        chunkPos += chunkCenter;
+        chunkPos += viewChunk;
 
         if ( chunkPos.x < 0 || chunkPos.x >= kWorldChunksWidth
           || chunkPos.y < 0 || chunkPos.y >= kWorldChunksWidth
@@ -1079,125 +1203,252 @@ void aeTerrain::Update( aeFloat3 center, float radius )
           continue;
         }
 
-        float centerDistance = ( center - aeFloat3( chunkPos ) * kChunkSize ).LengthSquared();
+        aeFloat3 chunkCenter = ( aeFloat3( chunkPos ) + aeFloat3( 0.5f ) ) * kChunkSize;
+        float centerDistance = ( center - chunkCenter ).LengthSquared();
         if ( centerDistance >= kWorldViewRadius2 )
         {
           continue;
         }
 
         Chunk* c = m_chunks[ ci ];
-        ChunkSort& chunkSort = t_chunkSorts.Append( ChunkSort() );
+        if ( c )
+        {
+          AE_ASSERT( m_voxelCounts[ ci ] > 0 );
+          AE_ASSERT( c->m_vertices );
+        }
+
+        //ChunkSort& chunkSort = t_chunkMap.Set( chunkPos, ChunkSort() );
+        ChunkSort chunkSort;
         chunkSort.c = c;
         chunkSort.pos = chunkPos;
-        chunkSort.centerDistance = centerDistance;
+        chunkSort.score = centerDistance;
+        t_chunkMap_hack[ Chunk::GetIndex( chunkPos ) ] = chunkSort;
 
-        chunkSort.hasNeighbor = false;
-        chunkSort.hasNeighbor = chunkSort.hasNeighbor || GetChunk( chunkPos + aeInt3( 1, 0, 0 ) );
-        chunkSort.hasNeighbor = chunkSort.hasNeighbor || GetChunk( chunkPos + aeInt3( 0, 1, 0 ) );
-        chunkSort.hasNeighbor = chunkSort.hasNeighbor || GetChunk( chunkPos + aeInt3( 0, 0, 1 ) );
-        chunkSort.hasNeighbor = chunkSort.hasNeighbor || GetChunk( chunkPos + aeInt3( -1, 0, 0 ) );
-        chunkSort.hasNeighbor = chunkSort.hasNeighbor || GetChunk( chunkPos + aeInt3( 0, -1, 0 ) );
-        chunkSort.hasNeighbor = chunkSort.hasNeighbor || GetChunk( chunkPos + aeInt3( 0, 0, -1 ) );
-        if ( !chunkSort.hasNeighbor )
+        bool hasNeighbor = false;
+        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 1, 0, 0 ) );
+        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, 1, 0 ) );
+        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, 0, 1 ) );
+        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( -1, 0, 0 ) );
+        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, -1, 0 ) );
+        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, 0, -1 ) );
+        if ( !hasNeighbor )
         {
-          chunkSort.centerDistance *= chunkSort.centerDistance;
+          chunkSort.score *= chunkSort.score;
         }
       }
     }
   }
+  // Add all currently generated chunks
+  for ( Chunk* c = m_generatedList.GetFirst(); c; c = c->m_generatedList.GetNext() )
+  {
+    aeInt3 pos = c->m_pos;
+//#if _AE_DEBUG_
+//    const ChunkSort* check = t_chunkMap.TryGet( pos );
+//    AE_ASSERT( check->c == c );
+//#endif
 
-  // Sort chunks by distance from center, closest to farthest
+    //ChunkSort& chunkSort = t_chunkMap.Set( pos, ChunkSort() );
+    ChunkSort chunkSort;
+    chunkSort.c = c;
+    chunkSort.pos = pos;
+    chunkSort.score = ( center - aeFloat3( pos ) * kChunkSize ).LengthSquared();
+    t_chunkMap_hack[ Chunk::GetIndex( pos ) ] = chunkSort;
+  }
+
+  //------------------------------------------------------------------------------
+  // Sort chunks based on priority
+  //------------------------------------------------------------------------------
+  t_chunkSorts.Clear();
+  t_chunkSorts.Reserve( kChunkViewDiam * kChunkViewDiam * kChunkViewDiam );
+  //for ( uint32_t i = 0; i < t_chunkMap.Length(); i++ )
+  //{
+  //  t_chunkSorts.Append( t_chunkMap.GetValue( i ) );
+  //}
+  for ( auto element : t_chunkMap_hack )
+  {
+    t_chunkSorts.Append( element.second );
+  }
+  // Sort chunks by score, low score is best
   if ( t_chunkSorts.Length() )
   {
     std::sort( &t_chunkSorts[ 0 ], ( &t_chunkSorts[ 0 ] + t_chunkSorts.Length() ),
       []( const ChunkSort& a, const ChunkSort& b ) -> bool
     {
-      return a.centerDistance < b.centerDistance;
+      return a.score < b.score;
     } );
+  }
+  
+  //------------------------------------------------------------------------------
+  // Finish terrain jobs
+  // @NOTE: Do this as late as possible so jobs can run while sorting is happening
+  //------------------------------------------------------------------------------
+  for ( uint32_t i = 0; i < m_terrainJobs.Length(); i++ )
+  {
+    aeTerrainJob* job = m_terrainJobs[ i ];
+    if ( !job->IsPendingFinish() )
+    {
+      continue;
+    }
+
+    Chunk* chunk = job->GetChunk();
+    AE_ASSERT( chunk );
+    uint32_t vertexCount = job->GetVertexCount();
+    uint32_t indexCount = job->GetIndexCount();
+    uint32_t chunkIndex = chunk->GetIndex();
+
+    // Record that chunk has been generated
+    m_voxelCounts[ chunkIndex ] = vertexCount;
+
+    AE_ASSERT( vertexCount <= kChunkCountMax );
+    if ( vertexCount == 0 || vertexCount == kChunkCountMax )
+    {
+      // @TODO: It's super expensive to finally just throw away the unneeded chunk...
+      FreeChunk( chunk );
+    }
+    else
+    {
+      if ( m_render )
+      {
+        // (Re)initialize aeVertexData here only when needed
+        if ( chunk->m_data.GetIndexCount() == 0 // Not initialized
+          || chunk->m_data.GetMaxVertexCount() < vertexCount // Too little storage for verts
+          || chunk->m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
+        {
+          chunk->m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), vertexCount, indexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
+          chunk->m_data.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( TerrainVertex, position ) );
+          chunk->m_data.AddAttribute( "a_normal", 3, aeVertexDataType::Float, offsetof( TerrainVertex, normal ) );
+          chunk->m_data.AddAttribute( "a_info", 4, aeVertexDataType::UInt8, offsetof( TerrainVertex, info ) );
+        }
+
+        // Set vertices
+        chunk->m_data.SetVertices( job->GetVertices(), vertexCount );
+        chunk->m_data.SetIndices( job->GetIndices(), indexCount );
+      }
+
+      // @TODO: This should be handled by the Chunk
+      uint32_t vertexBytes = vertexCount * sizeof( TerrainVertex );
+      //m_compactAlloc.Allocate( &chunk->m_vertices, vertexBytes );
+      chunk->m_vertices = aeAlloc::AllocateArray< TerrainVertex >( vertexCount );
+      memcpy( chunk->m_vertices, job->GetVertices(), vertexBytes );
+
+      // Dirty flags
+      chunk->m_geoDirty = false;
+      chunk->m_lightDirty = true;
+
+      // Store chunk in world grid
+      m_chunks[ chunkIndex ] = chunk;
+      m_generatedList.Append( chunk->m_generatedList );
+    }
+
+    job->Finish();
   }
 
   //------------------------------------------------------------------------------
-  // Manage chunks based on new 'center' value
+  // Start new terrain jobs
   //------------------------------------------------------------------------------
-  uint32_t generatedChunks = 0;
   for ( uint32_t i = 0; i < t_chunkSorts.Length(); i++ )
   {
-    ChunkSort* chunkSort = &t_chunkSorts[ i ];
-    Chunk* c = chunkSort->c;
+    const ChunkSort* chunkSort = &t_chunkSorts[ i ];
     aeInt3 chunkPos = chunkSort->pos;
-
-    if( !c || c->m_geoDirty )
+    Chunk* chunk = chunkSort->c;
+    uint32_t chunkIndex = Chunk::GetIndex( chunkPos );
+    Chunk* indexPosChunk = m_chunks[ chunkIndex ];
+    if ( chunk )
     {
-      if ( c )
+      AE_ASSERT_MSG( indexPosChunk == chunk, "# #", indexPosChunk, chunk );
+      AE_ASSERT( m_voxelCounts[ chunkIndex ] > 0 );
+      AE_ASSERT( chunk->m_vertices );
+      AE_ASSERT( chunk->m_data.GetVertexCount() );
+      AE_ASSERT( chunk->m_data.GetVertexSize() );
+    }
+    else
+    {
+      // @NOTE: Grab any chunks that were finished generating after sorting completed
+      chunk = indexPosChunk;
+    }
+
+    // @TODO: Check m_geoDirty here, but chunk would need to be removed from m_chunks first
+    if( !chunk ) // || chunk->m_geoDirty
+    {
+      if ( m_threadPool->n_idle() == 0 && m_threadPool->size() > 0 )
       {
-        // @HACK: Should not need to free chunk, it should be possible to update existing
-        FreeChunk( c );
-        c = nullptr;
+        break;
       }
 
-      // Allocate a new chunk when needed
-      if ( !c )
+      int32_t jobIndex = m_terrainJobs.FindFn( []( aeTerrainJob* j ) { return !j->HasJob(); } );
+      if ( jobIndex < 0 )
       {
-        if ( generatedChunks < kMaxChunkAllocationsPerTick )
-        {
-          c = AllocChunk( center, chunkPos );
-          chunkSort->c = c;
-        }
-        else
-        {
-          continue;
-        }
+        break;
       }
 
-      // Generate vertex positions from current chunk
-      uint32_t vertexCount, indexCount;
-      aeAlloc::Scratch< TerrainVertex > vertexScratch( kMaxChunkVerts );
-      aeAlloc::Scratch< TerrainIndex > indexScratch( kMaxChunkIndices );
-      c->Generate( &m_sdf, vertexScratch.Data(), indexScratch.Data(), &vertexCount, &indexCount );
-      generatedChunks++; // @NOTE: Chunk will be thrown away if it's empty, but it's expensive so keep track of it
-      
-      uint32_t ci = c->GetIndex();
-      m_chunks[ ci ] = c;
-      m_voxelCounts[ ci ] = vertexCount;
-
-      AE_ASSERT( vertexCount <= kChunkCountMax );
-      if ( vertexCount == 0 || vertexCount == kChunkCountMax )
+      int32_t otherJobIndex = m_terrainJobs.FindFn( [chunkPos]( aeTerrainJob* j ) { return j->HasChunk( chunkPos ); } );
+      if ( otherJobIndex >= 0 )
       {
-        // @TODO: It's super expensive to finally just throw away the unneeded chunk...
-        FreeChunk( c ); // :(
-        chunkSort->c = nullptr;
+        // @NOTE: Already queued
         continue;
       }
 
-      // (Re)initialize aeVertexData here only when needed
-      if ( c->m_data.GetIndexCount() == 0 // Not initialized
-        || c->m_data.GetMaxVertexCount() < vertexCount // Too little storage for verts
-        || c->m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
+      // Allocate a new chunk
+      chunk = AllocChunk( center, chunkPos );
+      if ( !chunk )
       {
-        c->m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), vertexCount, indexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
-        c->m_data.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( TerrainVertex, position ) );
-        c->m_data.AddAttribute( "a_normal", 3, aeVertexDataType::Float, offsetof( TerrainVertex, normal ) );
-        c->m_data.AddAttribute( "a_info", 4, aeVertexDataType::UInt8, offsetof( TerrainVertex, info ) );
+        for ( int32_t i = t_chunkSorts.Length() - 1; i >= 0; i-- )
+        {
+          ChunkSort* other = &t_chunkSorts[ i ];
+          if ( other->c )
+          {
+            if ( other->score > chunkSort->score )
+            {
+              FreeChunk( other->c );
+              t_chunkSorts.Remove( i );
+
+              chunk = AllocChunk( center, chunkPos );
+              AE_ASSERT( chunk );
+            }
+            break;
+          }
+          else
+          {
+            t_chunkSorts.Remove( i );
+          }
+        }
       }
-      
-      // Set vertices
-      c->m_data.SetVertices( vertexScratch.Data(), vertexCount );
-      c->m_data.SetIndices( indexScratch.Data(), indexCount );
-      
-      // @TODO: This should be handled by the Chunk
-      uint32_t vertexBytes = vertexCount * sizeof(TerrainVertex);
-      m_compactAlloc.Allocate( &c->m_vertices, vertexBytes );
-      memcpy( c->m_vertices, vertexScratch.Data(), vertexBytes );
-      
-      // Dirty flags
-      c->m_geoDirty = false;
-      c->m_lightDirty = true;
+      if ( !chunk )
+      {
+        // Loaded chunks at equilibrium. The highest priority chunks are already loaded.
+        AE_LOG( "Chunk loading reached equilibrium" );
+        break;
+      }
+
+      for ( uint32_t k = 0; k < kChunkSize; k++ )
+      for ( uint32_t j = 0; j < kChunkSize; j++ )
+      for ( uint32_t i = 0; i < kChunkSize; i++ )
+      {
+        AE_ASSERT_MSG( chunk->m_i[ i ][ j ][ k ] == 65535, "# # # : #", i, j, k, chunk->m_i[ i ][ j ][ k ] );
+      }
+
+      aeTerrainJob* job = m_terrainJobs[ jobIndex ];
+      job->StartNew( &m_sdf, chunk );
+      if ( m_threadPool->size() )
+      {
+        m_threadPool->push( [ job ]( int id ) { job->Do(); } );
+      }
+      else
+      {
+        job->Do();
+        break;
+      }
     }
   }
 }
 
 void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParams )
 {
+  if ( !m_render )
+  {
+    return;
+  }
+
   //aeFrustum frustum;
   uint32_t activeCount = 0;
   for( uint32_t i = 0; i < t_chunkSorts.Length() && activeCount < kMaxActiveChunks; i++ )
@@ -1208,6 +1459,10 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
       continue;
     }
     AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
+    uint32_t chunkIndex = chunk->GetIndex();
+    AE_ASSERT( m_voxelCounts[ chunkIndex ] > 0 );
+    AE_ASSERT( chunk->m_data.GetVertexCount() );
+    AE_ASSERT( chunk->m_data.GetVertexSize() );
     
     // Only render the visible chunks
     //if( frustum.TestChunk( chunk ) ) // @TODO: Should make sure chunk is visible

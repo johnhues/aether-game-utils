@@ -198,6 +198,9 @@ private:
 class aeVertexData
 {
 public:
+  aeVertexData() = default;
+  ~aeVertexData();
+
   void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, aeVertexPrimitive::Type primitive, aeVertexUsage::Type vertexUsage, aeVertexUsage::Type indexUsage );
   void AddAttribute( const char *name, uint32_t componentCount, aeVertexDataType::Type type, uint32_t offset );
   void Destroy();
@@ -221,6 +224,11 @@ public:
   void Render( const class aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms );
   
 private:
+  aeVertexData( const aeVertexData& ) = delete;
+  aeVertexData( aeVertexData&& ) = delete;
+  void operator=( const aeVertexData& ) = delete;
+  void operator=( aeVertexData&& ) = delete;
+
   void m_SetVertices( const void* vertices, uint32_t count );
   void m_SetIndices( const void* indices, uint32_t count );
   const aeVertexAttribute* m_GetAttributeByName( const char* name ) const;

@@ -45,7 +45,7 @@ int main()
 	window.SetTitle( "sprites" );
 	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::Red() );
-	input.Initialize( &window, &render );
+	input.Initialize( &window );
 	spriteRender.Initialize( 16 );
 	spriteRender.SetBlending( true );
   spriteRender.SetDepthTest( true );

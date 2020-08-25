@@ -46,7 +46,7 @@ int main()
 	window.SetTitle( "client" );
 	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::Red() );
-	input.Initialize( &window, &render );
+	input.Initialize( &window );
 	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
 	
 	aeFixedTimeStep timeStep;

@@ -59,42 +59,13 @@ public:
       Entry* entry = &m_pool[ i ];
       if ( entry->allocated )
       {
-        ( (T*)entry->object )->~T();
+        T* object = (T*)entry->object;
+        object->~T();
         entry->next = nullptr;
         entry->allocated = false;
       }
     }
     m_open = nullptr;
-  }
-
-  uint32_t GetAllocated( T* (&out)[ N ] )
-  {
-    uint32_t count = 0;
-    for ( uint32_t i = 0; i < N; i++ )
-    {
-      if ( m_pool[ i ].allocated )
-      {
-        out[ count ] = (T*)&m_pool[ i ].object;
-        count++;
-      }
-    }
-    AE_ASSERT( count == m_length );
-    return count;
-  }
-
-  uint32_t GetAllocated( const T* (&out)[ N ] ) const
-  {
-    uint32_t count = 0;
-    for ( uint32_t i = 0; i < N; i++ )
-    {
-      if ( m_pool[ i ].allocated )
-      {
-        out[ count ] = (T*)&m_pool[ i ].object;
-        count++;
-      }
-    }
-    AE_ASSERT( count == m_length );
-    return count;
   }
 
   T* Allocate()
@@ -121,14 +92,45 @@ public:
       return;
     }
 
+    Entry* entry = m_GetEntry( p );
     p->~T();
-    Entry* entry = (Entry*)( (uint8_t*)p - offsetof( Entry, object ) );
-    AE_ASSERT( m_pool <= entry && entry < m_pool + N );
+    AE_ASSERT( entry->check == 0xCDCDCDCD );
     entry->next = m_open;
     entry->allocated = false;
     m_open = entry;
 
     m_length--;
+  }
+
+  const T* GetFirst() const
+  {
+    const Entry* entry = &m_pool[ 0 ];
+    const T* p = (const T*)entry->object;
+    return entry->allocated ? p : GetNext( p );
+  }
+
+  const T* GetNext( const T* p ) const
+  {
+    const Entry* entry = m_GetEntry( p );
+    for ( uint32_t i = entry - m_pool + 1; i < N; i++ )
+    {
+      if ( m_pool[ i ].allocated )
+      {
+        return (const T*)m_pool[ i ].object;
+      }
+    }
+
+    return nullptr;
+  }
+
+  T* GetFirst()
+  {
+    return const_cast< T* >( const_cast< const aeObjectPool< T, N >* >( this )->GetFirst() );
+  }
+
+  T* GetNext( T* p )
+  {
+    return const_cast< T* >( const_cast< const aeObjectPool< T, N >* >( this )->GetNext( p ) );
   }
 
   bool HasFree() const { return m_open != nullptr; }
@@ -139,8 +141,22 @@ private:
   {
     Entry* next;
     bool allocated;
+    uint32_t check = 0xCDCDCDCD;
     alignas(T) uint8_t object[ sizeof(T) ];
   };
+
+  const Entry* m_GetEntry( const T* p ) const
+  {
+    Entry* entry = (Entry*)( (uint8_t*)p - offsetof( Entry, object ) );
+    AE_ASSERT_MSG( m_pool <= entry && entry < m_pool + N, "Object is not in pool" );
+    AE_ASSERT( entry->check == 0xCDCDCDCD );
+    return entry;
+  }
+
+  Entry* m_GetEntry( T* p )
+  {
+    return const_cast< Entry* >( const_cast< const aeObjectPool< T, N >* >( this )->m_GetEntry( p ) );
+  }
 
   uint32_t m_length;
   Entry* m_open;

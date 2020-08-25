@@ -45,7 +45,7 @@ int main()
 	window.SetTitle( "example" );
 	render.InitializeOpenGL( &window );
 	render.SetClearColor( aeColor::Green().ScaleRGB( 0.01f ) );
-	input.Initialize( &window, &render );
+	input.Initialize( &window );
 	input.SetTextMode( true );
 	input.SetText( "Try typing. Copy and paste should also work." );
 	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );

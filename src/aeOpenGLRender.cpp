@@ -201,6 +201,11 @@ void aeOpenGLDebugCallback( GLenum source,
 //------------------------------------------------------------------------------
 // aeVertexData member functions
 //------------------------------------------------------------------------------
+aeVertexData::~aeVertexData()
+{
+  Destroy();
+}
+
 void aeVertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, aeVertexPrimitive::Type primitive, aeVertexUsage::Type vertexUsage, aeVertexUsage::Type indexUsage )
 {
   Destroy();
@@ -210,14 +215,11 @@ void aeVertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t
   AE_ASSERT( m_indexSize == 0 );
   AE_ASSERT( indexSize == sizeof(uint8_t) || indexSize == sizeof(uint16_t) || indexSize == sizeof(uint32_t) );
 
-  memset( this, 0, sizeof(aeVertexData) );
   m_maxVertexCount = maxVertexCount;
   m_maxIndexCount = maxIndexCount;
   m_primitive = primitive;
   m_vertexUsage = vertexUsage;
   m_indexUsage = indexUsage;
-  m_vertices = ~0;
-  m_indices = ~0;
   m_vertexSize = vertexSize;
   m_indexSize = indexSize;
   
@@ -246,7 +248,25 @@ void aeVertexData::Destroy()
     glDeleteBuffers( 1, &m_indices );
   }
   
-  *this = aeVertexData();
+  m_array = 0;
+  m_vertices = ~0;
+  m_indices = ~0;
+  m_vertexCount = 0;
+  m_indexCount = 0;
+
+  m_maxVertexCount = 0;
+  m_maxIndexCount = 0;
+
+  m_primitive = ( aeVertexPrimitive::Type ) - 1;
+  m_vertexUsage = ( aeVertexUsage::Type ) - 1;
+  m_indexUsage = ( aeVertexUsage::Type ) - 1;
+
+  m_attributeCount = 0;
+  m_vertexSize = 0;
+  m_indexSize = 0;
+
+  m_vertexReadable = nullptr;
+  m_indexReadable = nullptr;
 }
 
 void aeVertexData::AddAttribute( const char *name, uint32_t componentCount, aeVertexDataType::Type type, uint32_t offset )
@@ -674,7 +694,7 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   maxLen = 0;
   glGetProgramiv( m_program, GL_ACTIVE_UNIFORMS, &uniformCount );
   glGetProgramiv( m_program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxLen );
-  AE_ASSERT( maxLen <= aeStr32::MaxLength() ); // @TODO: Read from aeShaderUniform
+  AE_ASSERT( maxLen <= (GLint)aeStr32::MaxLength() ); // @TODO: Read from aeShaderUniform
 
   for( int32_t i = 0; i < uniformCount; i++ )
   {

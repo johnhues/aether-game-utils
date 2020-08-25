@@ -59,6 +59,8 @@ struct aeAllocInfo
 aeAllocInfo& GetAllocInfo();
 #endif
 
+#define _AE_ALLOC_DISABLE 0
+
 //------------------------------------------------------------------------------
 // aeAlloc
 //------------------------------------------------------------------------------
@@ -123,6 +125,11 @@ namespace aeAlloc
   };
 };
 
+#if _AE_ALLOC_DISABLE
+void PushArrayAlloc( void* );
+bool PopArrayAlloc( void* );
+#endif
+
 //------------------------------------------------------------------------------
 // aeAlloc member functions
 //------------------------------------------------------------------------------
@@ -135,6 +142,12 @@ T* aeAlloc::Allocate()
 template < typename T >
 T* aeAlloc::AllocateArray( uint32_t count )
 {
+#if _AE_ALLOC_DISABLE
+  T* result = new T[ count ];
+  PushArrayAlloc( result );
+  return result;
+
+#else
   AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
   AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
 
@@ -162,11 +175,15 @@ T* aeAlloc::AllocateArray( uint32_t count )
 #endif
 
   return result;
+#endif
 }
 
 template < typename T, typename ... Args >
 static T* aeAlloc::Allocate( Args ... args )
 {
+#if _AE_ALLOC_DISABLE
+  return new T( args ... );
+#else
   AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
 
   uint32_t size = kHeaderSize + sizeof( T );
@@ -187,10 +204,14 @@ static T* aeAlloc::Allocate( Args ... args )
 #endif
 
   return new( (T*)( base + kHeaderSize ) ) T( args ... );
+#endif
 }
 
 uint8_t* aeAlloc::AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count )
 {
+#if _AE_ALLOC_DISABLE
+  return AllocateArray< uint8_t >( count );
+#else
   AE_ASSERT( typeAlignment <= kDefaultAlignment );
   AE_ASSERT( typeSize % typeAlignment == 0 ); // All elements in array should have correct alignment
 
@@ -212,6 +233,7 @@ uint8_t* aeAlloc::AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32
 #endif
 
   return base + kHeaderSize;
+#endif
 }
 
 template < typename T >
@@ -222,6 +244,16 @@ void aeAlloc::Release( T* obj )
     return;
   }
 
+#if _AE_ALLOC_DISABLE
+  if ( PopArrayAlloc( obj ) )
+  {
+    delete[] obj;
+  }
+  else
+  {
+    delete obj;
+  }
+#else
   AE_ASSERT( (intptr_t)obj % kDefaultAlignment == 0 );
   uint8_t* base = (uint8_t*)obj - kHeaderSize;
 
@@ -242,6 +274,7 @@ void aeAlloc::Release( T* obj )
 #endif
 
   aeAlignedFree( base );
+#endif
 }
 
 #endif

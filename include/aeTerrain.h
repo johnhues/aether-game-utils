@@ -31,6 +31,14 @@
 #include "aeMath.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
+#include "aeList.h"
+#include <atomic>
+#include <map> // HACK
+
+namespace ctpl
+{
+  class thread_pool;
+}
 
 //------------------------------------------------------------------------------
 // aeImage
@@ -85,10 +93,10 @@ namespace ae
 typedef float float16_t;
 #define PACK( _ae_something ) _ae_something
 
-const uint32_t kChunkSize = 32;
+const uint32_t kChunkSize = 64;
 const uint32_t kChunkCountMax = kChunkSize * kChunkSize * kChunkSize;
 const uint32_t kWorldChunksWidth = 128;
-const uint32_t kWorldChunksHeight = 8;
+const uint32_t kWorldChunksHeight = 2;
 const uint32_t kWorldMaxWidth = kWorldChunksWidth * kChunkSize;
 const uint32_t kWorldMaxHeight = kWorldChunksHeight * kChunkSize;
 const uint32_t kMaxActiveChunks = 512;
@@ -155,20 +163,52 @@ public:
   float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
 };
 
+class aeTerrainJob
+{
+public:
+  aeTerrainJob();
+  void StartNew( const aeTerrainSDF* sdf, struct Chunk* chunk );
+  void Do();
+  void Finish();
+
+  bool HasJob() const { return m_hasJob; }
+  bool HasChunk( aeInt3 pos ) const;
+  bool IsPendingFinish() const { return m_hasJob && !m_running; }
+
+  Chunk* GetChunk() { return m_chunk; }
+  const TerrainVertex* GetVertices() const { return m_vertexCount ? &m_vertices[ 0 ] : nullptr; }
+  const TerrainIndex* GetIndices() const { return m_indexCount ? &m_indices[ 0 ] : nullptr; }
+  uint32_t GetVertexCount() const { return m_vertexCount; }
+  uint32_t GetIndexCount() const { return m_indexCount; }
+
+private:
+  bool m_hasJob;
+  std::atomic_bool m_running;
+
+  const aeTerrainSDF* m_sdf;
+  uint32_t m_vertexCount;
+  uint32_t m_indexCount;
+  aeArray< TerrainVertex > m_vertices;
+  aeArray< TerrainIndex > m_indices;
+  struct Chunk* m_chunk;
+};
+
 struct Chunk // @TODO: aeTerrainChunk
 {
   Chunk();
+  ~Chunk();
+
+  static uint32_t GetIndex( aeInt3 pos );
   uint32_t GetIndex() const;
   void Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
-
+  
   uint32_t m_check;
-  int32_t m_pos[ 3 ];
+  aeInt3 m_pos;
   bool m_geoDirty;
   bool m_lightDirty;
   aeVertexData m_data;
   TerrainVertex* m_vertices;
-  Chunk* m_next;
-  Chunk* m_prev;
+  aeListNode< Chunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
   float16_t m_l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -181,7 +221,10 @@ private:
 class aeTerrain
 {
 public:
-  void Initialize();
+  ~aeTerrain();
+
+  void Initialize( uint32_t maxThreads, bool render );
+  void Terminate();
   void Update( aeFloat3 center, float radius );
   void Render( const class aeShader* shader, const aeUniformList& shaderParams );
 
@@ -195,6 +238,7 @@ public:
   float16_t GetLight( uint32_t x, uint32_t y, uint32_t z ) const;
   const Chunk* GetChunk( aeInt3 pos ) const;
   Chunk* GetChunk( aeInt3 pos );
+  int32_t GetVoxelCount( aeInt3 pos ) const;
   //void VoxelizeAndAddMesh(
   //  aeFloat3* vertices, uint16_t* indices,
   //  uint32_t vertexCount, uint32_t indexCount,
@@ -209,42 +253,37 @@ private:
   //void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
   Chunk* AllocChunk( aeFloat3 center, aeInt3 pos );
   void FreeChunk( Chunk* chunk );
+
+  bool m_render = false;
+  aeFloat3 m_center = aeFloat3( 0.0f );
+  float m_radius = 0.0f;
   
-  aeCompactingAllocator m_compactAlloc;
+  //aeCompactingAllocator m_compactAlloc;
   struct Chunk **m_chunks = nullptr;
   int16_t* m_voxelCounts = nullptr; // Kept even when chunks are freed so they are not regenerated again if they are empty
-  aeObjectPool<struct Chunk, kMaxLoadedChunks> m_chunkPool;
-  uint32_t m_activeChunkCount = 0;
+  aeObjectPool< Chunk, kMaxLoadedChunks > m_chunkPool;
 
   // Keep these across frames instead of allocating temporary space for each generated chunk
   struct ChunkSort
   {
     Chunk* c;
     aeInt3 pos;
-    float centerDistance;
-    bool hasNeighbor;
+    float score;
   };
+  //aeMap< aeInt3, ChunkSort > t_chunkMap;
+  std::map< uint32_t, ChunkSort > t_chunkMap_hack;
   aeArray< ChunkSort > t_chunkSorts;
 
   aeTerrainSDF m_sdf;
 
-  struct Chunk* m_headChunk = nullptr;
-  struct Chunk* m_tailChunk = nullptr;
-  uint32_t m_totalChunks = 0;
+  aeList< Chunk > m_generatedList;
   uint8_t* m_chunkRawAlloc = nullptr;
   
   bool m_blockCollision[ Block::COUNT ];
   float16_t m_blockDensity[ Block::COUNT ];
   
-  aeTexture2D* grassTexture = nullptr;
-  aeTexture2D* rockTexture = nullptr;
-  aeTexture2D* dirtTexture = nullptr;
-  aeTexture2D* treeTexture = nullptr;
-  aeTexture2D* leavesTexture = nullptr;
-
-  aeTexture2D* spiralTexture = nullptr;
-  aeTexture2D* m_mapWallTex = nullptr;
-  aeTexture2D* m_mapFloorHeightTex = nullptr;
+  ctpl::thread_pool* m_threadPool = nullptr;
+  aeArray< aeTerrainJob* > m_terrainJobs;
 };
 
 #endif

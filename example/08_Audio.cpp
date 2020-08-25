@@ -45,7 +45,7 @@ int main()
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "audio" );
 	render.InitializeOpenGL( &window );
-	input.Initialize( &window, &render );
+	input.Initialize( &window );
 	audio.Initialize( 1, 3 );
 	
 	aeFixedTimeStep timeStep;

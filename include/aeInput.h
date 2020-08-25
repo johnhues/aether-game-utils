@@ -249,7 +249,7 @@ class aeInput
 {
 public:
   aeInput();
-  void Initialize( class aeWindow* window, class aeRender* render );
+  void Initialize( class aeWindow* window = nullptr );
   void Terminate();
   void Pump();
 
@@ -264,7 +264,6 @@ public:
 
 private:
   class aeWindow* m_window;
-  class aeRender* m_render;
 
   aeMap< uint32_t, bool* > m_keyMap;
   

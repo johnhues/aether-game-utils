@@ -29,6 +29,30 @@
 //------------------------------------------------------------------------------
 // AllocationInfo members and state
 //------------------------------------------------------------------------------
+#if _AE_ALLOC_DISABLE
+#include <map>
+std::map< void*, int > allocMap;
+
+void PushArrayAlloc( void* a )
+{
+  allocMap[ a ] = 0;
+}
+
+bool PopArrayAlloc( void* a )
+{
+  auto iter = allocMap.find( a );
+  if ( iter != allocMap.end() )
+  {
+    allocMap.erase( iter );
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+#endif
+
 #if _AE_DEBUG_
 namespace
 {

@@ -49,7 +49,7 @@ int main()
   window.SetTitle( "Replication Client" );
   render.InitializeOpenGL( &window );
   render.SetClearColor( aeColor::Black() );
-  input.Initialize( &window, &render );
+  input.Initialize( &window );
   spriteRender.Initialize( 32 );
   uint8_t texInfo[] = { 255, 255, 255 };
   texture.Initialize( texInfo, 1, 1, aeTextureFormat::RGB, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Repeat );

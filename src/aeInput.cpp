@@ -184,12 +184,21 @@ bool InputState::Get( aeKey key ) const
 aeInput::aeInput()
 {
   m_window = nullptr;
-  m_render = nullptr;
   m_textMode = 0;
+  m_text = "";
 }
 
-void aeInput::Initialize( aeWindow* window, aeRender* render )
+void aeInput::Initialize( aeWindow* window )
 {
+  if ( !window )
+  {
+    // @HACK: This has to run for SDL_PumpEvents() to work
+    if ( SDL_Init( SDL_INIT_EVENTS ) < 0 )
+    {
+      AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
+    }
+  }
+
   SDL_JoystickEventState( SDL_ENABLE );
 #if !_AE_IOS_
   // @HACK: Disable text input here to prevent keyboard from popping open on ios
@@ -197,7 +206,6 @@ void aeInput::Initialize( aeWindow* window, aeRender* render )
 #endif
 
   m_window = window;
-  m_render = render;
 
   // Input key mapping
   {
@@ -252,11 +260,11 @@ void aeInput::Pump()
     {
       const SDL_Event& event = events[ i ];
 
-      if ( event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
+      if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
       {
         m_window->m_UpdateWidthHeight( event.window.data1, event.window.data2 );
       }
-      else if ( event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
+      else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
       {
         m_window->m_UpdatePos( aeInt2( event.window.data1, event.window.data2 ) );
       }

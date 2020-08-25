@@ -47,7 +47,7 @@ int main()
   window.SetTitle( "splines" );
   render.InitializeOpenGL( &window );
   render.SetClearColor( aeColor::Black() );
-  input.Initialize( &window, &render );
+  input.Initialize( &window );
   spriteRender.Initialize( 64 );
   spriteRender.SetBlending( true );
   spriteRender.SetDepthTest( true );

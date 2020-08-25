@@ -78,97 +78,99 @@ void aeCompactingAllocator::m_Compact()
     return;
   }
 
-  if ( m_tail == nullptr )
+  //AE_LOG( "compact" );
+
+  // Get first
+  Header* first = m_tail;
+  AE_ASSERT( first->check == 0xABABABAB );
+  while ( first->prev )
   {
-    m_isCompact = true;
-    return;
+    AE_ASSERT( first->prev->check == 0xABABABAB );
+    first = first->prev;
   }
 
-  Header* current = m_tail;
-  AE_ASSERT( current->check == 0xABABABAB );
-  while ( current->prev )
-  {
-    AE_ASSERT( current->prev->check == 0xABABABAB );
-    current = current->prev;
-  }
+  m_tail = nullptr;
 
   uint8_t* open = m_data;
-  while ( current )
+  for ( Header* current = first; current; current = current->next )
   {
-    if ( current->external )
+    // Only compact current allocations. Freed headers will be squashed in Compact()
+    if ( !current->external )
     {
-      if ( open != (uint8_t*)current )
+      Header* prev = current->prev;
+      Header* next = current->next;
+      if ( prev )
       {
-        current->prev = m_tail;
-        memmove( open, current, sizeof( Header ) + current->size );
-        Header* currentHeader = (Header*)open;
-        *( currentHeader->external ) = open + sizeof( Header );
-        current = currentHeader;
-        m_tail->next = current;
+        prev->next = next;
       }
-      open += sizeof( Header ) + current->size;
-      m_tail = current;
+      if ( next )
+      {
+        next->prev = prev;
+      }
+      continue;
     }
-    current = current->next;
-  }
-  if ( open == m_data )
-  {
-    m_tail = nullptr;
-  }
-  if ( m_tail )
-  {
-    m_tail->next = nullptr;
-  }
 
-  if ( m_tail )
-  {
-    uint8_t* end = (uint8_t*)m_tail + sizeof( Header ) + m_tail->size;
-  }
+    // Check if already compact
+    if ( open != (uint8_t*)current )
+    {
+      // Move entry to front of open
+      AE_ASSERT( open >= m_data );
+      AE_ASSERT( open < m_data + m_size );
+      AE_ASSERT( open + current->size < m_data + m_size );
+      memmove( open, current, sizeof( Header ) + current->size );
+      current = (Header*)open;
+      
+      // Update linked list
+      current->prev = m_tail;
+      if ( current->prev )
+      {
+        current->prev->next = current;
+      }
+      current->next = nullptr;
 
+      // Update external pointer value
+      *( current->external ) = open + sizeof( Header );
+    }
+
+    // Increment open offset based on current link in list
+    open += sizeof( Header ) + current->size;
+    AE_ASSERT( open == (uint8_t*)current + sizeof( Header ) + current->size );
+
+    // Tail is always latest allocation
+    m_tail = current;
+  }
+  
   m_isCompact = true;
 
-  current = m_tail;
-  if ( !current )
+  if ( !m_tail )
   {
     return;
   }
-  AE_ASSERT( current->check == 0xABABABAB );
-  while ( current->prev )
-  {
-    AE_ASSERT( current->prev->check == 0xABABABAB );
-    current = current->prev;
-  }
-  while ( current )
-  {
-    AE_ASSERT( current->check == 0xABABABAB );
-    current = current->next;
-  }
+
+  m_Verify();
 }
 
-//void aeCompactingAllocator::Print()
-//{
-//  if ( m_tail == nullptr )
-//  {
-//    return;
-//  }
-//
-//  Header* current = m_tail;
-//  while ( current->prev )
-//  {
-//    current = current->prev;
-//  }
-//
-//  while ( current )
-//  {
-//    AE_LOG( "s:# a:#", current->size, current->external != nullptr );
-//    current = current->next;
-//  }
-//}
-
-aeCompactingAllocator::Header* aeCompactingAllocator::m_GetHeader( void** p )
+aeCompactingAllocator::Header* aeCompactingAllocator::m_GetHeader( void* p )
 {
   Header* header = (Header*)( (uint8_t*)p - sizeof( Header ) );
-  AE_ASSERT( *header->external == p );
   AE_ASSERT( header->check == 0xABABABAB );
+  AE_ASSERT( *header->external == p );
   return header;
+}
+
+void aeCompactingAllocator::m_Verify()
+{
+  AE_ASSERT( m_tail->check == 0xABABABAB );
+
+  Header* first = m_tail;
+  while ( first->prev )
+  {
+    AE_ASSERT( first->prev->check == 0xABABABAB );
+    first = first->prev;
+  }
+
+  for ( Header* current = first; current; current = current->next )
+  {
+    AE_ASSERT( current->check == 0xABABABAB );
+  }
 }

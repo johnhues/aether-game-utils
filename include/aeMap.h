@@ -50,6 +50,8 @@ public:
   bool TryGet( const K& key, V* valueOut ) const;
   
   bool Remove( const K& key );
+
+  void Reserve( uint32_t total );
   void Clear();
 
   K& GetKey( uint32_t index );
@@ -205,6 +207,12 @@ bool aeMap< K, V >::Remove( const K& key )
   {
     return false;
   }
+}
+
+template < typename K, typename V >
+void aeMap< K, V >::Reserve( uint32_t total )
+{
+  m_entries.Reserve( total );
 }
 
 template < typename K, typename V >

@@ -50,7 +50,7 @@ public:
   //void Reallocate( T** p, uint32_t size );
   
   template < typename T >
-  void Free( T* p );
+  void Free( T** p );
   
 private:
   const static intptr_t kAlignment = 16; // @TODO: Should be configurable
@@ -68,7 +68,8 @@ private:
   };
 
   void m_Compact();
-  Header* m_GetHeader( void** p );
+  Header* m_GetHeader( void* p );
+  void m_Verify();
 
   bool m_isCompact = true;
   uint8_t* m_data = nullptr;
@@ -94,7 +95,7 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
   if ( m_tail )
   {
     Header* next = (Header*)( (uint8_t*)m_tail + sizeof( Header ) + m_tail->size );
-    AE_ASSERT( (uint8_t*)next - m_data + size + sizeof( Header ) < m_size );
+    AE_ASSERT( (uint8_t*)next - m_data + size + sizeof( Header ) < m_size ); // @TODO: Should return null
     next->size = size;
     next->next = nullptr;
     next->external = p;
@@ -119,7 +120,10 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
 
   //AE_LOG( "sizeof(Header):#", sizeof( Header ) );
   //AE_ASSERT_MSG( (intptr_t)*p % kAlignment == 0, "Allocation alignment: #", (intptr_t)*p % kAlignment );
-  // @TODO: Handle allocation failure!
+
+  m_Verify();
+
+  //AE_LOG( "Allocate #", *p );
 }
 
 //void aeCompactingAllocator::Reallocate( void** p, uint32_t size )
@@ -148,17 +152,30 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
 //}
 
 template < typename T >
-void aeCompactingAllocator::Free( T* p )
+void aeCompactingAllocator::Free( T** p )
 {
-  AE_ASSERT( m_data );
+  AE_ASSERT( p );
+  if ( *p == nullptr )
+  {
+    return;
+  }
 
-  Header* header = m_GetHeader( p );
+  //AE_LOG( "Free #", *p );
+
+  AE_ASSERT( m_data );
+  AE_ASSERT( m_data < (uint8_t*)*p );
+  AE_ASSERT( (uint8_t*)*p < m_data + m_size );
+
+  Header* header = m_GetHeader( (void*)*p );
   uint32_t typeHash = aeHash().HashString( aeGetTypeName< T >() ).Get();
   AE_ASSERT_MSG( header->dbgTypeId == typeHash, "Type mismatch between allocation and free" );
   *(header->external) = nullptr;
   header->external = nullptr;
 
-  m_isCompact = false; // @TODO: Only set this to true for non-tail Free()s
+  // Always flag for compaction, even if only to reclaim empty tail headers
+  m_isCompact = false;
+
+  m_Verify();
 }
 
 #endif
