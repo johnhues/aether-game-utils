@@ -151,6 +151,7 @@ int main()
 	aeEditorCamera camera;
 	////Grid grid;
 	ae::Image terrainHeightMap;
+	aeTextRender textRender;
 
 	if ( !headless )
 	{
@@ -173,6 +174,8 @@ int main()
 		terrainShader.SetDepthWrite( true );
 		terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
 	}
+
+	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
 
 	{
 		aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
@@ -221,11 +224,21 @@ int main()
 		return aeMath::Min( height, sphere, spline );
 	} );
 
+	aeFloat4x4 worldToText = aeFloat4x4::Identity();
+	auto drawWorldText = [&]( aeFloat3 p, const char* str )
+	{
+		p = aeFloat3::ProjectPoint( worldToText, p );
+		aeFloat2 fontSize( (float)textRender.GetFontSize() );
+		textRender.Add( p, fontSize, str, aeColor::White(), 0, 0 );
+	};
+	terrain->SetDebugTextCallback( drawWorldText );
+
 	AE_INFO( "Run" );
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
 
+		drawWorldText( splineCenter, "SATURN" );
 		terrain->Update( camera.GetPosition(), 1250.0f );
 
 		RaycastResult result = terrain->Raycast( camera.GetPosition(), camera.GetForward() * 1000.0f );
@@ -243,6 +256,10 @@ int main()
 			aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 			aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 1000.0f );
 			aeFloat4x4 worldToProj = viewToProj * worldToView;
+			// UI units in pixels, origin in bottom left
+			aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
+			textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
+			worldToText = textToNdc.Inverse() * worldToProj;
 
 			//grid.Render( worldToProj );
 
@@ -266,11 +283,12 @@ int main()
 			}
 
 			debug.Render( worldToProj );
+			textRender.Render( textToNdc );
 
 			render.EndFrame();
 		}
 
-			timeStep.Wait();
+		timeStep.Wait();
 	}
 
 	AE_INFO( "Terminate" );

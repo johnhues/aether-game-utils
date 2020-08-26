@@ -427,7 +427,7 @@ void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
   AE_ASSERT_MSG( !m_chunk, "Previous job not finished" );
 
   m_hasJob = true;
-  m_running = false;
+  m_running = true;
 
   m_sdf = sdf;
   m_vertexCount = 0;
@@ -437,11 +437,7 @@ void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
 
 void aeTerrainJob::Do()
 {
-  m_running = true;
-  if ( m_chunk ) // HACK: This should always be true
-  {
-    m_chunk->Generate( m_sdf, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
-  }
+  m_chunk->Generate( m_sdf, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
   m_running = false;
 }
 
@@ -968,6 +964,30 @@ void aeTerrain::FreeChunk( Chunk* chunk )
   m_chunkPool.Free( chunk );
 }
 
+float aeTerrain::GetChunkScore( aeInt3 pos ) const
+{
+  aeFloat3 chunkCenter = ( aeFloat3( pos ) + aeFloat3( 0.5f ) ) * kChunkSize;
+  float centerDistance = ( m_center - chunkCenter ).Length();
+
+  bool hasNeighbor = false;
+  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 1, 0, 0 ) );
+  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, 1, 0 ) );
+  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, 0, 1 ) );
+  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( -1, 0, 0 ) );
+  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, -1, 0 ) );
+  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, 0, -1 ) );
+  
+  if ( hasNeighbor )
+  {
+    return centerDistance;
+  }
+  else
+  {
+    // @NOTE: Non-empty chunks are found faster when chunks with empty neighbors are deprioritized
+    return centerDistance * centerDistance;
+  }
+}
+
 void Chunk::m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] )
 {
   if ( edgeBit == EDGE_TOP_FRONT_BIT )
@@ -1167,7 +1187,6 @@ void aeTerrain::Terminate()
 void aeTerrain::Update( aeFloat3 center, float radius )
 {
   int32_t chunkViewRadius = radius / kChunkSize;
-  const int32_t kWorldViewRadius2 = chunkViewRadius * chunkViewRadius * kChunkSize * kChunkSize;
   const int32_t kChunkViewDiam = chunkViewRadius + chunkViewRadius;
 
   double currentTime = aeClock::GetTime();
@@ -1181,7 +1200,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
   //t_chunkMap.Clear();
   //t_chunkMap.Reserve( kChunkViewDiam * kChunkViewDiam * kChunkViewDiam );
   t_chunkMap_hack.clear();
-  aeInt3 viewChunk = ( center / kChunkSize ).NearestCopy();
+  aeInt3 viewChunk = ( m_center / kChunkSize ).NearestCopy();
   for ( int32_t k = 0; k < kChunkViewDiam; k++ )
   {
     for ( int32_t j = 0; j < kChunkViewDiam; j++ )
@@ -1207,8 +1226,8 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         }
 
         aeFloat3 chunkCenter = ( aeFloat3( chunkPos ) + aeFloat3( 0.5f ) ) * kChunkSize;
-        float centerDistance = ( center - chunkCenter ).LengthSquared();
-        if ( centerDistance >= kWorldViewRadius2 )
+        float centerDistance = ( m_center - chunkCenter ).Length();
+        if ( centerDistance >= radius )
         {
           continue;
         }
@@ -1224,20 +1243,8 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         ChunkSort chunkSort;
         chunkSort.c = c;
         chunkSort.pos = chunkPos;
-        chunkSort.score = centerDistance;
+        chunkSort.score = GetChunkScore( chunkPos );
         t_chunkMap_hack[ Chunk::GetIndex( chunkPos ) ] = chunkSort;
-
-        bool hasNeighbor = false;
-        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 1, 0, 0 ) );
-        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, 1, 0 ) );
-        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, 0, 1 ) );
-        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( -1, 0, 0 ) );
-        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, -1, 0 ) );
-        hasNeighbor = hasNeighbor || 0 < GetVoxelCount( chunkPos + aeInt3( 0, 0, -1 ) );
-        if ( !hasNeighbor )
-        {
-          chunkSort.score *= chunkSort.score;
-        }
       }
     }
   }
@@ -1254,7 +1261,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     ChunkSort chunkSort;
     chunkSort.c = c;
     chunkSort.pos = pos;
-    chunkSort.score = ( center - aeFloat3( pos ) * kChunkSize ).LengthSquared();
+    chunkSort.score = GetChunkScore( pos );
     t_chunkMap_hack[ Chunk::GetIndex( pos ) ] = chunkSort;
   }
 
@@ -1279,6 +1286,21 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     {
       return a.score < b.score;
     } );
+  }
+  if ( m_debugTextFn )
+  {
+    for ( uint32_t i = 0; i < t_chunkSorts.Length(); i++ )
+    {
+      const ChunkSort* sort = &t_chunkSorts[ i ];
+
+      aeFloat3 p = aeFloat3( sort->pos );
+      p += aeFloat3( 0.5f );
+      p *= kChunkSize;
+
+      const char* status = sort->c ? "generated" : "pending";
+      aeStr64 str = aeStr64::Format( "score:#\nstatus:#", sort->score, status );
+      m_debugTextFn( p, str.c_str() );
+    }
   }
   
   //------------------------------------------------------------------------------
@@ -1431,10 +1453,16 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       }
 
       aeTerrainJob* job = m_terrainJobs[ jobIndex ];
+      AE_ASSERT( job );
       job->StartNew( &m_sdf, chunk );
       if ( m_threadPool->size() )
       {
-        m_threadPool->push( [ job ]( int id ) { job->Do(); } );
+        m_threadPool->push( [ job ]( int id )
+        {
+          AE_ASSERT( job );
+          AE_ASSERT( job->GetChunk() );
+          job->Do();
+        } );
       }
       else
       {

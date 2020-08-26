@@ -651,6 +651,12 @@ bool aeFloat3::operator>=(const aeFloat3& v) const
   return x >= v.x && y >= v.y && z >= v.z;
 }
 
+aeFloat3 aeFloat3::ProjectPoint( const aeFloat4x4& projection, aeFloat3 p )
+{
+  aeFloat4 projected = projection * aeFloat4( p, 1.0f );
+  return projected.GetXYZ() / projected.w;
+}
+
 //------------------------------------------------------------------------------
 // aeInt3
 //------------------------------------------------------------------------------

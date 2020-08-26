@@ -529,6 +529,8 @@ public:
   aeFloat3 RotateCopy( aeFloat3 axis, float angle ) const;
   aeFloat3 Lerp(const aeFloat3& end, float t) const;
   aeFloat3 Slerp(const aeFloat3& end, float t) const;
+
+  static aeFloat3 ProjectPoint( const class aeFloat4x4& projection, aeFloat3 p );
 };
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat3 v )

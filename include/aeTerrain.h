@@ -230,6 +230,7 @@ public:
 
   void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
   void SetCallback( float ( *fn )( aeFloat3 ) );
+  void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
   
   Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const;
   Block::Type GetVoxel( aeFloat3 position ) const;
@@ -253,6 +254,7 @@ private:
   //void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
   Chunk* AllocChunk( aeFloat3 center, aeInt3 pos );
   void FreeChunk( Chunk* chunk );
+  float GetChunkScore( aeInt3 pos ) const;
 
   bool m_render = false;
   aeFloat3 m_center = aeFloat3( 0.0f );
@@ -284,6 +286,8 @@ private:
   
   ctpl::thread_pool* m_threadPool = nullptr;
   aeArray< aeTerrainJob* > m_terrainJobs;
+
+  std::function< void( aeFloat3, const char* ) > m_debugTextFn;
 };
 
 #endif
