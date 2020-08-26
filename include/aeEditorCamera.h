@@ -42,7 +42,9 @@ public:
 
 	aeFloat3 GetPosition() const { return m_focusPos + m_offset; }
 	aeFloat3 GetForward() const { return m_forward; }
+	float GetDistance() const { return m_dist; }
 
+	void SetFocusDistance( float distance );
 	void Refocus( aeFloat3 pos );
 
 private:
@@ -52,7 +54,6 @@ private:
 		Rotate,
 		Pan,
 		Zoom,
-		Refocus,
 	};
 
 	void m_RecalculateOffset();
@@ -62,6 +63,7 @@ private:
 	aeFloat3 m_focusPos = aeFloat3( 0.0f );
 	aeFloat3 m_offset = aeFloat3( 0.0f );
 	aeFloat3 m_refocusPos = aeFloat3( 0.0f );
+	bool m_refocus = false;
 
 	aeFloat3 m_forward = aeFloat3( 0.0f, 1.0f, 0.0f );
 	aeFloat3 m_right = aeFloat3( 1.0f, 0.0f, 0.0f );
@@ -69,7 +71,7 @@ private:
 
 	float m_yaw = 0.77f;
 	float m_pitch = 0.5f;
-	float m_dist = 2.0f;
+	float m_dist = 5.0f;
 };
 
 #endif

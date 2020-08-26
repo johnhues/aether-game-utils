@@ -13,13 +13,16 @@ if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
 	message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there.")
 endif()
 
-if(NOT CMAKE_BUILD_TYPE)
-	if(APPLE)
-		# @HACK: fixup_bundle fails for release builds currently
-	    set(CMAKE_BUILD_TYPE "Debug")
-	else()
-	    set(CMAKE_BUILD_TYPE "Release")
-	endif()
+# Default to Release. This is important because the install config is determined on configure.
+# This will cause the install step to fail if the release bundle has not been build yet.
+if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
+	set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+endif()
+
+if("${CMAKE_GENERATOR}" STREQUAL "Xcode")
+	# @TODO: This should cause Xcode to default to Release but it doesn't
+	# https://cmake.org/pipermail/cmake/2006-December/012288.html
+	set(CMAKE_CONFIGURATION_TYPES "Release;Debug;MinSizeRel;RelWithDebInfo" CACHE STRING "" FORCE)
 endif()
 
 string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)

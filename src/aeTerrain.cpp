@@ -463,7 +463,7 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
 
-  AE_LOG( "Generate chunk #", m_pos );
+  // AE_LOG( "Generate chunk #", m_pos );
 
   int32_t chunkOffsetX = m_pos.x * kChunkSize;
   int32_t chunkOffsetY = m_pos.y * kChunkSize;
@@ -1441,7 +1441,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       if ( !chunk )
       {
         // Loaded chunks at equilibrium. The highest priority chunks are already loaded.
-        AE_LOG( "Chunk loading reached equilibrium" );
+        // AE_LOG( "Chunk loading reached equilibrium" );
         break;
       }
 

@@ -70,6 +70,6 @@ include(AddExecutable)
 
 set(AE_CURRENT_BUNDLE_NAME "Terrain")
 set(AE_CURRENT_EXECUTABLE_NAME 11_terrain)
-set(AE_CURRENT_SOURCE_FILES 11_Terrain.cpp terrain.png)
-set(AE_RESOURCES terrain.png)
+set(AE_CURRENT_SOURCE_FILES 11_Terrain.cpp terrain.png font.png)
+set(AE_RESOURCES terrain.png font.png)
 include(AddExecutable)

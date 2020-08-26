@@ -36,21 +36,6 @@ aeEditorCamera::aeEditorCamera()
 
 void aeEditorCamera::Update( const aeInput* input, float dt )
 {
-	// Refocus
-	if ( m_mode == MoveMode::Refocus )
-	{
-		m_focusPos = aeMath::DtLerp( m_focusPos, 4.5f, dt, m_refocusPos );
-		if ( ( m_refocusPos - m_focusPos ).Length() < 0.01f )
-		{
-			m_mode = MoveMode::None;
-			m_focusPos = m_refocusPos;
-		}
-		else
-		{
-			return;
-		}
-	}
-
 	// Input
 	aeFloat2 mouseMovement( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
 	bool mouseRotate = input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft;
@@ -79,6 +64,7 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 		else if ( mousePan )
 		{
 			m_mode = MoveMode::Pan;
+			m_refocus = false;
 		}
 		else if ( mouseZoom )
 		{
@@ -111,15 +97,39 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	// Translation
 	if ( m_mode == MoveMode::Pan )
 	{
+		AE_ASSERT( !m_refocus );
 		m_focusPos -= m_right * ( mouseMovement.x * speed );
 		m_focusPos -= m_up * ( mouseMovement.y * speed );
 	}
+
+	// Refocus
+	if ( m_refocus )
+	{
+		AE_ASSERT( m_mode != MoveMode::Pan );
+		m_focusPos = aeMath::DtLerp( m_focusPos, 4.5f, dt, m_refocusPos );
+		if ( ( m_refocusPos - m_focusPos ).Length() < 0.01f )
+		{
+			m_refocus = false;
+			m_focusPos = m_refocusPos;
+		}
+	}
+}
+
+void aeEditorCamera::SetFocusDistance( float distance )
+{
+	m_dist = distance;
+	m_RecalculateOffset();
 }
 
 void aeEditorCamera::Refocus( aeFloat3 pos )
 {
-	m_mode = MoveMode::Refocus;
+	m_refocus = true;
 	m_refocusPos = pos;
+
+	if ( m_mode == MoveMode::Pan )
+	{
+		m_mode = MoveMode::None;
+	}
 }
 
 void aeEditorCamera::m_RecalculateOffset()
