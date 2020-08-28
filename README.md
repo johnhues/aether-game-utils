@@ -2,17 +2,18 @@
 A collection of cross platform utilities for quickly creating small game prototypes in C++.
 
 Modules and utilities include:
-* Graphics and windowing
-* Input
-* Math
+* Allocation
 * C++ reflection
 * Data structures
-* Allocation
-* Server / client utilities
+* Frame rate control and timing
+* Graphics and windowing
+* Input
+* Logging
+* Math
 * Networked object synchronization
 * Serialization
-* Frame rate control and timing
-* Logging
+* Server / client utilities
+* Terrain
 
 Dependencies:
 * [GLEW](http://glew.sourceforge.net/) (Windows only)
