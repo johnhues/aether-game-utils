@@ -29,7 +29,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ImGui.h"
+#include "imgui.h"
 #if _AE_WINDOWS_
 	#define IMGUI_IMPL_OPENGL_LOADER_GLEW
 #elif _AE_APPLE_
