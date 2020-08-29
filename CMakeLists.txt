@@ -25,6 +25,8 @@ if(APPLE)
 	set(AE_CODESIGN_IDENTITY "" CACHE STRING "Codesigning identity to use for apple builds")
 endif()
 
+set(AE_LEAN_AND_MEAN OFF CACHE BOOL "Disables building tests and examples")
+
 # find dependencies
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OpenGLES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
@@ -235,6 +237,7 @@ add_definitions(-DSDL_DISABLE_IMMINTRIN_H)
 
 # library, tests, and examples
 add_subdirectory(src)
-add_subdirectory(test)
-
-add_subdirectory(example)
+if(NOT ${AE_LEAN_AND_MEAN})
+	add_subdirectory(test)
+	add_subdirectory(example)
+endif()
