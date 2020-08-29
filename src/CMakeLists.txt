@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-
-# @TODO: Fix install directory. This installs to /usr/local on linux, not /usr/local/lib
-set(AE_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/${AE_LIBRARY_NAME})
+include(GNUInstallDirs)
 
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
@@ -13,14 +11,8 @@ target_include_directories(${AE_LIBRARY_NAME}
 		${AE_DEPS_LIBRARY_INCLUDE_DIRS}
 		${PROJECT_SOURCE_DIR}/src
 	PUBLIC
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> # for headers when building
-		$<INSTALL_INTERFACE:${AE_INSTALL_DIR}/include> # for headers when installing
-)
-
-# configure header file
-configure_file(
-	${PROJECT_SOURCE_DIR}/cmake/config.h.in
-	${PROJECT_BINARY_DIR}/config.h
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/${AE_LIBRARY_NAME}> # for headers when building
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${AE_LIBRARY_NAME}> # <install prefix>/include
 )
 
 # build dependencies
@@ -47,47 +39,46 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # source files
 set(AE_HEADER_FILES
-	${PROJECT_BINARY_DIR}/config.h
-	../include/aeAlloc.h
-	../include/aeArray.h
-	../include/aeAudio.h
-	../include/aeBinaryStream.h
-	../include/aeClock.h
-	../include/aeCommand.h
-	../include/aeCompactingAllocator.h
-	../include/aeCommandLineArgs.h
-	../include/aeCompactingAllocator.h
-	../include/aeDict.h
-	../include/aeEditorCamera.h
-	../include/aeHotSpot.h
-	../include/aeImGui.h
-	../include/aeInitializer.h
-	../include/aeInput.h
-	../include/aeInventoryGrid.h
-	../include/aeList.h
-	../include/aeLog.h
-	../include/aeLog.hpp
-	../include/aeMap.h
-	../include/aeMath.h
-	../include/aeMesh.h
-	../include/aeMeta.h
-	../include/aeNet.h
-	../include/aeObjectPool.h
-	../include/aePlatform.h
-	../include/aeRef.h
-	../include/aeRender.h
-	../include/aeRingBuffer.h
-	../include/aeSignal.h
-	../include/aeSparseGrid.h
-	../include/aeSpline.h
-	../include/aeString.h
-	../include/aeTerrain.h
-	../include/aeUuid.h
-	../include/aeVfs.h
-	../include/aeWindow.h
+	../include/ae/aeAlloc.h
+	../include/ae/aeArray.h
+	../include/ae/aeAudio.h
+	../include/ae/aeBinaryStream.h
+	../include/ae/aeClock.h
+	../include/ae/aeCommand.h
+	../include/ae/aeCompactingAllocator.h
+	../include/ae/aeCommandLineArgs.h
+	../include/ae/aeCompactingAllocator.h
+	../include/ae/aeDict.h
+	../include/ae/aeEditorCamera.h
+	../include/ae/aeHotSpot.h
+	../include/ae/aeImGui.h
+	../include/ae/aeInitializer.h
+	../include/ae/aeInput.h
+	../include/ae/aeInventoryGrid.h
+	../include/ae/aeList.h
+	../include/ae/aeLog.h
+	../include/ae/aeLog.hpp
+	../include/ae/aeMap.h
+	../include/ae/aeMath.h
+	../include/ae/aeMesh.h
+	../include/ae/aeMeta.h
+	../include/ae/aeNet.h
+	../include/ae/aeObjectPool.h
+	../include/ae/aePlatform.h
+	../include/ae/aeRef.h
+	../include/ae/aeRender.h
+	../include/ae/aeRingBuffer.h
+	../include/ae/aeSignal.h
+	../include/ae/aeSparseGrid.h
+	../include/ae/aeSpline.h
+	../include/ae/aeString.h
+	../include/ae/aeTerrain.h
+	../include/ae/aeUuid.h
+	../include/ae/aeVfs.h
+	../include/ae/aeWindow.h
 )
 
-# @HACK: Include header files as private source so they are added to generated projects
+# @NOTE: Include header files as private source so they are added to generated IDE projects
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		${AE_HEADER_FILES}
@@ -122,15 +113,10 @@ target_sources(${AE_LIBRARY_NAME}
 )
 
 # ae lib installation
-# @TODO: Disable this for now when using Xcode. Xcode needs admin privileges to run this
-#        install logic, preventing the examples from being bundled and running at all.
-if(NOT "${CMAKE_GENERATOR}" STREQUAL "Xcode")
-	install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
-	install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION "${AE_INSTALL_DIR}/include")
-	install(
-		FILES ${PROJECT_SOURCE_DIR}/cmake/Config.cmake.in
-		RENAME ${AE_LIBRARY_NAME}Config.cmake
-		DESTINATION "${AE_INSTALL_DIR}"
-	)
-	install(EXPORT ${AE_LIBRARY_NAME} DESTINATION "${AE_INSTALL_DIR}")
-endif()
+message(STATUS "Installation path: ${CMAKE_INSTALL_PREFIX}")
+install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME}Config
+	LIBRARY DESTINATION lib
+	INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+install(EXPORT ${AE_LIBRARY_NAME}Config DESTINATION lib/cmake/${AE_LIBRARY_NAME})
