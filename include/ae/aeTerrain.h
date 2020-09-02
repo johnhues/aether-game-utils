@@ -181,6 +181,8 @@ public:
   uint32_t GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
 
+  bool replaceDirty_CHECK;
+
 private:
   bool m_hasJob;
   std::atomic_bool m_running;
@@ -231,6 +233,7 @@ public:
   void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
   void SetCallback( float ( *fn )( aeFloat3 ) );
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
+  void Dirty( aeAABB aabb );
   
   Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const;
   Block::Type GetVoxel( aeFloat3 position ) const;

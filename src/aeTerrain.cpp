@@ -274,7 +274,7 @@ Chunk::Chunk() :
 
   m_pos = aeInt3( 0 );
 
-  m_geoDirty = true;
+  m_geoDirty = false; // @NOTE: Start false. This flag is only for chunks that need to be regenerated
   m_lightDirty = false;
 
   m_vertices = nullptr;
@@ -411,6 +411,7 @@ aeFloat3 aeTerrainSDF::GetSurfaceDerivative( aeFloat3 p ) const
 }
 
 aeTerrainJob::aeTerrainJob() :
+  replaceDirty_CHECK( false ),
   m_hasJob( false ),
   m_running( false ),
   m_sdf( nullptr ),
@@ -943,7 +944,7 @@ void aeTerrain::FreeChunk( Chunk* chunk )
     if ( m_chunks[ chunkIndex ] )
     {
       // @NOTE: Make sure that the chunk data matches the array
-      AE_ASSERT_MSG( m_chunks[ chunkIndex ] == chunk, "Chunks value (#) at index does not match chunk (#)", m_chunks[ chunkIndex ], chunk );
+      //AE_ASSERT_MSG( m_chunks[ chunkIndex ] == chunk, "Chunks value (#) at index does not match chunk (#)", m_chunks[ chunkIndex ], chunk );
       AE_ASSERT( chunk->m_data.GetVertexCount() );
     }
     else
@@ -1356,11 +1357,35 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       chunk->m_vertices = aeAlloc::AllocateArray< TerrainVertex >( vertexCount );
       memcpy( chunk->m_vertices, job->GetVertices(), vertexBytes );
 
-      // Dirty flags
-      chunk->m_geoDirty = false;
+      // Ready for lighting
       chunk->m_lightDirty = true;
 
       // Store chunk in world grid
+      Chunk* oldChunk = m_chunks[ chunkIndex ];
+      if ( job->replaceDirty_CHECK )
+      {
+        AE_ASSERT( oldChunk );
+      }
+      else
+      {
+        AE_ASSERT( !oldChunk );
+      }
+      if ( oldChunk )
+      {
+        // @NOTE: Copy dirty flag to new chunk in case it's
+        // been modified since the job started.
+        chunk->m_geoDirty = oldChunk->m_geoDirty;
+
+        // @NOTE: Replace old chunk in sorted list with job chunk
+        int32_t index = t_chunkSorts.FindFn( [oldChunk]( ChunkSort& s ) { return s.c == oldChunk; } );
+        if ( index >= 0 )
+        {
+          t_chunkSorts[ index ].c = chunk;
+        }
+
+        FreeChunk( oldChunk );
+      }
+
       m_chunks[ chunkIndex ] = chunk;
       m_generatedList.Append( chunk->m_generatedList );
     }
@@ -1392,8 +1417,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       chunk = indexPosChunk;
     }
 
-    // @TODO: Check m_geoDirty here, but chunk would need to be removed from m_chunks first
-    if( !chunk ) // || chunk->m_geoDirty
+    if( !chunk || chunk->m_geoDirty )
     {
       if ( m_threadPool->n_idle() == 0 && m_threadPool->size() > 0 )
       {
@@ -1413,7 +1437,17 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         continue;
       }
 
-      // Allocate a new chunk
+      bool chunkDirty = false;
+      if ( chunk && chunk->m_geoDirty )
+      {
+        // @NOTE: Clear dirty flag here (and not when the job is finished) so any changes
+        // made while the job is running will not be lost and will cause the chunk to be
+        // regenerated again.
+        chunk->m_geoDirty = false;
+        chunkDirty = true;
+      }
+
+      // Always allocate a new chunk (even for dirty chunks)
       chunk = AllocChunk( center, chunkPos );
       if ( !chunk )
       {
@@ -1422,7 +1456,8 @@ void aeTerrain::Update( aeFloat3 center, float radius )
           ChunkSort* other = &t_chunkSorts[ i ];
           if ( other->c )
           {
-            if ( other->score > chunkSort->score )
+            // @NOTE: Always steal the lowest priority chunk to regenerate dirty chunks
+            if ( chunkDirty || other->score > chunkSort->score )
             {
               FreeChunk( other->c );
               t_chunkSorts.Remove( i );
@@ -1445,16 +1480,12 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         break;
       }
 
-      for ( uint32_t k = 0; k < kChunkSize; k++ )
-      for ( uint32_t j = 0; j < kChunkSize; j++ )
-      for ( uint32_t i = 0; i < kChunkSize; i++ )
-      {
-        AE_ASSERT_MSG( chunk->m_i[ i ][ j ][ k ] == 65535, "# # # : #", i, j, k, chunk->m_i[ i ][ j ][ k ] );
-      }
-
       aeTerrainJob* job = m_terrainJobs[ jobIndex ];
       AE_ASSERT( job );
       job->StartNew( &m_sdf, chunk );
+      // @NOTE: replaceDirty_CHECK doesn't do anything, but is used to assert when the job
+      // is done that another chunk is being replaced.
+      job->replaceDirty_CHECK = chunkDirty;
       if ( m_threadPool->size() )
       {
         m_threadPool->push( [ job ]( int id )
@@ -1522,6 +1553,22 @@ void aeTerrain::SetCallback( float ( *fn )( aeFloat3 ) )
   m_sdf.m_userdata = nullptr;
   m_sdf.m_fn1 = fn;
   m_sdf.m_fn2 = nullptr;
+}
+
+void aeTerrain::Dirty( aeAABB aabb )
+{
+  aeInt3 minChunk = ( aabb.GetMin() / kChunkSize ).FloorCopy();
+  aeInt3 maxChunk = ( aabb.GetMax() / kChunkSize ).CeilCopy();
+
+  for ( int32_t z = minChunk.z; z < maxChunk.z; z++ )
+  for ( int32_t y = minChunk.y; y < maxChunk.y; y++ )
+  for ( int32_t x = minChunk.x; x < maxChunk.x; x++ )
+  {
+    if ( Chunk* chunk = GetChunk( aeInt3( x, y, z ) ) )
+    {
+      chunk->m_geoDirty = true;
+    }
+  }
 }
 
 bool aeTerrain::GetCollision( uint32_t x, uint32_t y, uint32_t z ) const
