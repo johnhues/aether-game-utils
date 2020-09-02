@@ -557,6 +557,15 @@ namespace aeMath
       Max( v0.z, v1.z )
     );
   }
+
+  inline aeFloat3 Abs( aeFloat3 v )
+  {
+    return aeFloat3(
+      Abs( v.x ),
+      Abs( v.y ),
+      Abs( v.z )
+    );
+  }
 }
 
 
