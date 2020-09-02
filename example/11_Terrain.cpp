@@ -132,6 +132,29 @@ private:
 	aeVertexData m_bgVertexData;
 };
 
+struct SdfBox
+{
+	aeFloat3 c = aeFloat3( 0.0f );
+	aeFloat3 b = aeFloat3( 10.0f );
+	float r = 0.5f;
+
+	float GetValue( aeFloat3 p ) const
+	{
+		aeFloat3 q = aeMath::Abs( p - c ) - b;
+		return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - r;
+	}
+
+	aeAABB GetAABB() const
+	{
+		return aeAABB( c - b * 1.1f, c + b * 1.1f );
+	}
+};
+
+float aeUnion( float d1, float d2 )
+{
+	return aeMath::Min( d1, d2 );
+}
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -193,6 +216,7 @@ int main()
 	{
 		ae::Image* heightMap;
 		aeSpline spline;
+		SdfBox box;
 	} terrainGen;
 
 	terrainGen.heightMap = &terrainHeightMap;
@@ -221,7 +245,9 @@ int main()
 			spline = terrain->spline.GetMinDistance( p ) - 2.5f;
 		}
 
-		return aeMath::Min( height, sphere, spline );
+		float box = terrain->box.GetValue( p );
+
+		return aeMath::Min( height, sphere, spline, box );
 	} );
 
 	aeFloat4x4 worldToText = aeFloat4x4::Identity();
@@ -247,6 +273,13 @@ int main()
 		if ( result.hit && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
 		{
 			camera.Refocus( result.posf );
+		}
+
+		if ( result.hit && !input.GetPrevState()->Get( aeKey::R ) && input.GetState()->Get( aeKey::R ) )
+		{
+			terrain->Dirty( terrainGen.box.GetAABB() );
+			terrainGen.box.c = result.posf;
+			terrain->Dirty( terrainGen.box.GetAABB() );
 		}
 
 		if ( !headless )
@@ -281,6 +314,7 @@ int main()
 			{
 				debug.AddSphere( terrainGen.spline.GetControlPoint( i ), 0.5f, aeColor::Red(), 24 );
 			}
+			debug.AddAABB( terrainGen.box.c, terrainGen.box.b, aeColor::Red() );
 
 			debug.Render( worldToProj );
 			textRender.Render( textToNdc );
