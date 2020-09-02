@@ -614,6 +614,7 @@ aeShader::aeShader()
   m_depthTest = false;
   m_depthWrite = false;
   m_culling = aeShaderCulling::None;
+  m_wireframe = false;
 
   m_attributeCount = 0;
 }
@@ -759,7 +760,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
 
   glUseProgram( m_program );
 
-  // Set rendering params
+  // Blending
   if ( m_blending )
   {
     glEnable( GL_BLEND );
@@ -770,8 +771,10 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     glDisable( GL_BLEND );
   }
 
+  // Depth write
   glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
 
+  // Depth test
   if ( m_depthTest )
   {
     glDepthFunc( GL_LEQUAL );
@@ -782,6 +785,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     glDisable( GL_DEPTH_TEST );
   }
 
+  // Culling
   if ( m_culling == aeShaderCulling::None )
   {
     glDisable( GL_CULL_FACE );
@@ -791,6 +795,9 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     glEnable( GL_CULL_FACE );
     glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
   }
+
+  // Wireframe
+  glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
 
   // Set shader uniforms
   bool missingUniforms = false;

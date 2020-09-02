@@ -38,11 +38,11 @@
 //------------------------------------------------------------------------------
 const char* kTerrainVertShader = "\
 	AE_UNIFORM mat4 u_worldToProj;\
-	AE_UNIFORM vec3 u_topColor;\
-	AE_UNIFORM vec3 u_sideColor;\
+	AE_UNIFORM vec4 u_topColor;\
+	AE_UNIFORM vec4 u_sideColor;\
 	AE_IN_HIGHP vec3 a_position;\
 	AE_IN_HIGHP vec3 a_normal;\
-	AE_OUT_HIGHP vec3 v_color;\
+	AE_OUT_HIGHP vec4 v_color;\
 	AE_OUT_HIGHP vec3 v_normal;\
 	void main()\
 	{\
@@ -55,14 +55,14 @@ const char* kTerrainVertShader = "\
 	}";
 
 const char* kTerrainFragShader = "\
-	AE_IN_HIGHP vec3 v_color;\
+	AE_IN_HIGHP vec4 v_color;\
 	AE_IN_HIGHP vec3 v_normal;\
 	void main()\
 	{\
 		float light = dot( normalize( v_normal ), normalize( vec3( 1.0 ) ) );\
 		light = max(0.0, light);\
 		light = mix( 0.8, 4.0, light );\
-		AE_COLOR = vec4( AE_RGB_TO_SRGB( v_color * vec3( light ) ), 1.0 );\
+		AE_COLOR = vec4( AE_RGB_TO_SRGB( v_color.rgb * vec3( light ) ), v_color.a );\
 	}";
 
 //------------------------------------------------------------------------------
@@ -189,13 +189,12 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	////grid.Initialize();
 	camera.SetPosition( aeFloat3( 150.0f, 150.f, 60.0f ) );
-
+	
 	if ( !headless )
 	{
 		terrainShader.Initialize( kTerrainVertShader, kTerrainFragShader, nullptr, 0 );
 		terrainShader.SetDepthTest( true );
 		terrainShader.SetDepthWrite( true );
-		terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
 	}
 
 	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
@@ -259,6 +258,8 @@ int main()
 	};
 	terrain->SetDebugTextCallback( drawWorldText );
 
+	bool wireframe = false;
+
 	AE_INFO( "Run" );
 	while ( !input.GetState()->exit )
 	{
@@ -270,16 +271,25 @@ int main()
 		RaycastResult result = terrain->Raycast( camera.GetPosition(), camera.GetForward() * 1000.0f );
 
 		camera.Update( &input, timeStep.GetTimeStep() );
-		if ( result.hit && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+		if ( result.hit )
 		{
-			camera.Refocus( result.posf );
-		}
+			if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+			{
+				AE_LOG( "f:# i:#", result.posf, aeInt3( result.posi ) );
+				camera.Refocus( result.posf );
+			}
 
-		if ( result.hit && !input.GetPrevState()->Get( aeKey::R ) && input.GetState()->Get( aeKey::R ) )
-		{
-			terrain->Dirty( terrainGen.box.GetAABB() );
-			terrainGen.box.c = result.posf;
-			terrain->Dirty( terrainGen.box.GetAABB() );
+			if ( input.GetState()->Get( aeKey::R ) )
+			{
+				terrain->Dirty( terrainGen.box.GetAABB() );
+				terrainGen.box.c = result.posf;
+				terrain->Dirty( terrainGen.box.GetAABB() );
+			}
+
+			if ( !input.GetPrevState()->Get( aeKey::W ) && input.GetState()->Get( aeKey::W ) )
+			{
+				wireframe = !wireframe;
+			}
 		}
 
 		if ( !headless )
@@ -300,9 +310,31 @@ int main()
 			aeColor side = aeColor::PS( 84, 84, 74 );
 			aeUniformList uniformList;
 			uniformList.Set( "u_worldToProj", worldToProj );
-			uniformList.Set( "u_topColor", top.GetLinearRGB() );
-			uniformList.Set( "u_sideColor", side.GetLinearRGB() );
-			terrain->Render( &terrainShader, uniformList );
+			if ( wireframe )
+			{
+				uniformList.Set( "u_topColor", top.GetLinearRGBA() );
+				uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
+				terrainShader.SetBlending( false );
+				terrainShader.SetCulling( aeShaderCulling::None );
+				terrainShader.SetWireframe( true );
+				terrain->Render( &terrainShader, uniformList );
+
+				uniformList.Set( "u_topColor", top.SetA( 0.5f ).GetLinearRGBA() );
+				uniformList.Set( "u_sideColor", side.SetA( 0.5f ).GetLinearRGBA() );
+				terrainShader.SetBlending( true );
+				terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+				terrainShader.SetWireframe( false );
+				terrain->Render( &terrainShader, uniformList );
+			}
+			else
+			{
+				uniformList.Set( "u_topColor", top.GetLinearRGBA() );
+				uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
+				terrainShader.SetBlending( false );
+				terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+				terrainShader.SetWireframe( false );
+				terrain->Render( &terrainShader, uniformList );
+			}
 
 			if ( result.hit )
 			{

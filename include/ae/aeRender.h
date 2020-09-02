@@ -61,6 +61,11 @@ struct aeColor
   static aeColor RG( uint8_t r, uint8_t g );
   static aeColor RGB( uint8_t r, uint8_t g, uint8_t b );
   static aeColor RGBA( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
+  static aeColor R( float r );
+  static aeColor RG( float r, float g );
+  static aeColor RGB( float r, float g, float b );
+  static aeColor RGBA( float r, float g, float b, float a );
+  static aeColor RGBA( const float* v );
   static aeColor SRGB( float r, float g, float b );
   static aeColor SRGBA( float r, float g, float b, float a );
   static aeColor PS( uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255 );
@@ -342,6 +347,7 @@ public:
   void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
   void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
   void SetCulling( aeShaderCulling::Type culling ) { m_culling = culling; }
+  void SetWireframe( bool enabled ) { m_wireframe = enabled; }
   
 private:
   int m_LoadShader( const char* shaderStr, aeShaderType::Type type, const char* const* defines, int32_t defineCount );
@@ -354,6 +360,7 @@ private:
   bool m_depthTest;
   bool m_depthWrite;
   aeShaderCulling::Type m_culling;
+  bool m_wireframe;
   
   aeShaderAttribute m_attributes[ kMaxShaderAttributeCount ];
   uint32_t m_attributeCount;

@@ -466,13 +466,14 @@ public:
   aeFloat3( const aeFloat3& ) = default;
   aeFloat3( bool ) = delete;
 
-  explicit aeFloat3(const float _v) : x(_v), y(_v), z(_v), pad(0.0f) {}
-  aeFloat3(const float _x, const float _y, const float _z ) : x(_x), y(_y), z(_z), pad(0.0f) {}
-  aeFloat3(const float (&v)[3]) : x(v[0]), y(v[1]), z(v[2]), pad(0.0f) {}
-  aeFloat3(const float (&v)[4]) : x(v[0]), y(v[1]), z(v[2]), pad(0.0f) {}
-  explicit aeFloat3(const float* v) : x(v[0]), y(v[1]), z(v[2]), pad(0.0f) {}
-  aeFloat3( aeFloat2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad(0.0f) {}
-  explicit aeFloat3( aeFloat2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad(0.0f) {}
+  explicit aeFloat3( float _v ) : x( _v ), y( _v ), z( _v ), pad( 0.0f ) {}
+  aeFloat3( float _x, float _y, float _z ) : x( _x ), y( _y ), z( _z ), pad( 0.0f ) {}
+  aeFloat3( const float( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  aeFloat3( const float( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  explicit aeFloat3( float*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  explicit aeFloat3( const float*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  aeFloat3( aeFloat2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
+  explicit aeFloat3( aeFloat2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
   explicit operator aeFloat2() const { return aeFloat2( x, y ); }
   explicit aeFloat3( const struct aeInt3& v );
   void SetZero();
@@ -593,6 +594,10 @@ struct AE_ALIGN(16) aeInt3
   explicit aeInt3( int32_t _v ) : x( _v ), y( _v ), z( _v ), pad( 0 ) {}
   aeInt3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ), pad( 0 ) {}
   aeInt3( aeInt2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ), pad( 0 ) {}
+  aeInt3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+  aeInt3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+  explicit aeInt3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+  explicit aeInt3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
   // @NOTE: No conversion from aeFloat3 because rounding type should be explicit!
   
   int32_t& operator[]( int32_t i ) { return data[ i ]; }

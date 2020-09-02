@@ -138,6 +138,31 @@ aeColor aeColor::RGBA( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
   );
 }
 
+aeColor aeColor::R( float r )
+{
+  return aeColor( r, 0.0f, 0.0f, 1.0f );
+}
+
+aeColor aeColor::RG( float r, float g )
+{
+  return aeColor( r, g, 0.0f, 1.0f );
+}
+
+aeColor aeColor::RGB( float r, float g, float b )
+{
+  return aeColor( r, g, b, 1.0f );
+}
+
+aeColor aeColor::RGBA( float r, float g, float b, float a )
+{
+  return aeColor( r, g, b, a );
+}
+
+aeColor aeColor::RGBA( const float* v )
+{
+  return aeColor( v[ 0 ], v[ 1 ], v[ 2 ], v[ 3 ] );
+}
+
 aeColor aeColor::SRGB( float r, float g, float b )
 {
   return aeColor(

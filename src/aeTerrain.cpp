@@ -506,15 +506,6 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
   cornerOffsets[ 2 ][ 0 ] = aeFloat3( 1, 1, 0 );
   cornerOffsets[ 2 ][ 1 ] = aeFloat3( 1, 1, 1 );
   
-
-  for ( uint32_t k = 0; k < kChunkSize; k++ )
-    for ( uint32_t j = 0; j < kChunkSize; j++ )
-      for ( uint32_t i = 0; i < kChunkSize; i++ )
-      {
-        AE_ASSERT_MSG( m_i[ i ][ j ][ k ] == 65535, "# # # : #", i, j, k, m_i[ i ][ j ][ k ] );
-      }
-
-
   // @NOTE: This phase generates the surface mesh for the current chunk. The vertex
   // positions will be centered at the end of this phase, and will be nudged later
   // to the correct position within the voxel.
@@ -532,6 +523,11 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       float gz = chunkOffsetZ + z + cornerOffsets[ i ][ j ].z;
       // @TODO: Should pre-calculate, or at least only look up corner (1,1,1) once
       cornerValues[ i ][ j ] = sdf->TerrainValue( aeFloat3( gx, gy, gz) );
+      if ( cornerValues[ i ][ j ] == 0.0f )
+      {
+        // @NOTE: Never let a terrain value be exactly 0, or else surface will end up with multiple vertices for the same point in the sdf
+        cornerValues[ i ][ j ] = 0.0001f;
+      }
     }
     
     // Detect if any of the 3 new edges being tested intersect the implicit surface
@@ -1529,10 +1525,6 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
     // Only render the visible chunks
     //if( frustum.TestChunk( chunk ) ) // @TODO: Should make sure chunk is visible
     {
-      //params.Set( "rockTex", rockTexture );
-      //params.Set( "dirtTex", dirtTexture );
-      //params.Set( "spiralTex", spiralTexture );
-      //params.Set( "treeTex", treeTexture );
       chunk->m_data.Render( shader, shaderParams );
       activeCount++;
     }
