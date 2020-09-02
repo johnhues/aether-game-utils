@@ -605,11 +605,14 @@ public:
   void Destroy();
   void Render( const aeFloat4x4& worldToScreen );
 
-  void AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color );
-  void AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeColor color, uint32_t pointCount );
-  void AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount );
   void AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color );
   void AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance );
+
+  void AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color );
+  void AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeColor color, uint32_t pointCount );
+
+  void AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount );
+  void AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color );
 
 private:
   static const uint32_t kMaxDebugObjects = 64;
@@ -625,10 +628,11 @@ private:
 
   enum class DebugType
   {
+    Line,
     Rect,
     Circle,
     Sphere,
-    Line,
+    AABB,
   };
 
   struct DebugObject
@@ -637,7 +641,7 @@ private:
     aeFloat3 pos;
     aeFloat3 end;
     aeQuat rotation;
-    aeFloat2 size;
+    aeFloat3 size;
     float radius;
     aeColor color;
     uint32_t pointCount; // circle only

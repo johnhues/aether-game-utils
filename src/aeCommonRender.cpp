@@ -884,7 +884,7 @@ void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
     DebugObject obj = m_objs[ i ];
     if ( obj.type == DebugType::Rect )
     {
-      aeFloat2 halfSize = obj.size * 0.5f;
+      aeFloat3 halfSize = obj.size * 0.5f;
 
       DebugVertex verts[ 4 ];
       
@@ -940,6 +940,55 @@ void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
 
       m_verts.Append( verts, countof( verts ) );
     }
+    else if ( obj.type == DebugType::AABB )
+    {
+      aeFloat3 s = obj.size;
+      aeFloat3 c[] =
+      {
+        obj.pos + aeFloat3( -s.x, s.y, s.z ),
+        obj.pos + s,
+        obj.pos + aeFloat3( s.x, -s.y, s.z ),
+        obj.pos + aeFloat3( -s.x, -s.y, s.z ),
+        obj.pos + aeFloat3( -s.x, s.y, -s.z ),
+        obj.pos + aeFloat3( s.x, s.y, -s.z ),
+        obj.pos + aeFloat3( s.x, -s.y, -s.z ),
+        obj.pos + aeFloat3( -s.x, -s.y, -s.z )
+      };
+      AE_STATIC_ASSERT( countof( c ) == 8 );
+
+      DebugVertex verts[] =
+      {
+        // Top
+        { c[ 0 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 0 ], obj.color },
+        // Sides
+        { c[ 0 ], obj.color },
+        { c[ 4 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 7 ], obj.color },
+        //Bottom
+        { c[ 4 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 4 ], obj.color },
+      };
+      
+      m_verts.Append( verts, countof( verts ) );
+    }
   }
 
   if ( m_verts.Length() )
@@ -963,6 +1012,30 @@ void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
   m_objCount = 0;
 }
 
+void aeDebugRender::AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Line;
+    m_objs[ m_objCount ].pos = p0;
+    m_objs[ m_objCount ].end = p1;
+    m_objs[ m_objCount ].color = color;
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Line;
+    m_objs[ m_objCount ].pos = p0;
+    m_objs[ m_objCount ].end = p1;
+    m_objs[ m_objCount ].color = ( ( p1 - p0 ).Length() <= distance ) ? aeColor::Green() : aeColor::Red();
+    m_objCount++;
+  }
+}
+
 void aeDebugRender::AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color )
 {
   if ( m_objCount < kMaxDebugObjects
@@ -976,7 +1049,7 @@ void aeDebugRender::AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat
       m_objs[ m_objCount ].type = DebugType::Rect;
       m_objs[ m_objCount ].pos = pos;
       m_objs[ m_objCount ].rotation = aeQuat( normal, up );
-      m_objs[ m_objCount ].size = size;
+      m_objs[ m_objCount ].size = aeFloat3( size );
       m_objs[ m_objCount ].color = color;
       m_objs[ m_objCount ].pointCount = 0;
       m_objCount++;
@@ -1011,26 +1084,16 @@ void aeDebugRender::AddSphere( aeFloat3 pos, float radius, aeColor color, uint32
   }
 }
 
-void aeDebugRender::AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color )
+void aeDebugRender::AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color )
 {
   if ( m_objCount < kMaxDebugObjects )
   {
-    m_objs[ m_objCount ].type = DebugType::Line;
-    m_objs[ m_objCount ].pos = p0;
-    m_objs[ m_objCount ].end = p1;
+    m_objs[ m_objCount ].type = DebugType::AABB;
+    m_objs[ m_objCount ].pos = pos;
+    m_objs[ m_objCount ].rotation = aeQuat::Identity();
+    m_objs[ m_objCount ].size = halfSize;
     m_objs[ m_objCount ].color = color;
-    m_objCount++;
-  }
-}
-
-void aeDebugRender::AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance )
-{
-  if ( m_objCount < kMaxDebugObjects )
-  {
-    m_objs[ m_objCount ].type = DebugType::Line;
-    m_objs[ m_objCount ].pos = p0;
-    m_objs[ m_objCount ].end = p1;
-    m_objs[ m_objCount ].color = ( ( p1 - p0 ).Length() <= distance ) ? aeColor::Green() : aeColor::Red();
+    m_objs[ m_objCount ].pointCount = 0;
     m_objCount++;
   }
 }
