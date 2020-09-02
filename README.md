@@ -135,4 +135,4 @@ cmake --build . --config Debug --target INSTALL
 ```
 If successful you should see the installed library files in `C:\Library\ae`. ~~You can safely delete `C:\temp\aether-game-utils` without affecting the installed library.~~ Currently the install step does not copy dependent static libraries, and so built dependencies are referenced when linking the final executable.
 
-Optional: CMake can automatically locate aeLib with an environment variable. A new environment variable `CMAKE_PREFIX_PATH` can be added with the value `C:\Library\ae`.
+Optional: CMake can automatically locate aeLib (and any other libraries you install!) with an environment variable. To accomplish this add a new environment variable `CMAKE_PREFIX_PATH` with the value `C:\Library`.
