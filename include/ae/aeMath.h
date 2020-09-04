@@ -516,6 +516,7 @@ public:
   float GetDistanceSquared(const aeFloat3 &other) const;
   
   aeFloat3& Trim(const float s);
+  aeFloat3& ZeroAxis( aeFloat3 axis ); // Zero components along arbitrary axis (ie vec dot axis == 0)
   void Normalize();
   aeFloat3 NormalizeCopy() const;
   void SafeNormalize();
@@ -953,7 +954,7 @@ public:
   aeLineSegment() = default;
   aeLineSegment( aeFloat3 p0, aeFloat3 p1 );
 
-  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr );
+  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr ) const;
 
 private:
   aeFloat3 m_p0;
@@ -991,6 +992,21 @@ inline std::ostream& operator<<( std::ostream& os, const aeCircle& c )
 }
 
 //------------------------------------------------------------------------------
+// aeSphere class
+//------------------------------------------------------------------------------
+class aeSphere
+{
+public:
+  aeSphere() = default;
+  aeSphere( aeFloat3 center, float radius ) : center( center ), radius( radius ) {}
+
+  bool Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut = nullptr, aeFloat3* pOut = nullptr ) const;
+
+  aeFloat3 center = aeFloat3::Zero;
+  float radius = 0.0f;
+};
+
+//------------------------------------------------------------------------------
 // aeAABB class
 //------------------------------------------------------------------------------
 class aeAABB
@@ -999,6 +1015,7 @@ public:
   aeAABB() = default;
   aeAABB( const aeAABB& ) = default;
   aeAABB( aeFloat3 min, aeFloat3 max );
+  explicit aeAABB( const aeSphere& sphere );
 
   void Expand( aeFloat3 p );
   void Expand( aeAABB other );

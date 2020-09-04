@@ -845,7 +845,6 @@ uint32_t aeTextRender::m_ParseText( const char* str, uint32_t lineLength, uint32
 // aeDebugRender constants
 //------------------------------------------------------------------------------
 const uint32_t kDebugVertexCountPerObject = 32;
-const uint32_t kDebugIndexCountPerObject = 24;
 
 //------------------------------------------------------------------------------
 // aeDebugRender member functions
@@ -1018,7 +1017,7 @@ void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
 
   if ( m_verts.Length() )
   {
-    m_vertexData.SetVertices( &m_verts[ 0 ], m_verts.Length() );
+    m_vertexData.SetVertices( &m_verts[ 0 ], aeMath::Min( m_verts.Length(), m_vertexData.GetMaxVertexCount() ) );
 
     aeUniformList uniforms;
     uniforms.Set( "u_worldToScreen", worldToScreen );

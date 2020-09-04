@@ -469,6 +469,13 @@ aeFloat3& aeFloat3::Trim(const float s)
   return *this;
 }
 
+aeFloat3& aeFloat3::ZeroAxis( aeFloat3 axis )
+{
+  axis.SafeNormalize();
+  *this -= axis * Dot( axis );
+  return *this;
+}
+
 void aeFloat3::Normalize()
 {
   (*this) *= 1.0f / Length();
@@ -2040,7 +2047,7 @@ aeLineSegment::aeLineSegment( aeFloat3 p0, aeFloat3 p1 )
   m_p1 = p1;
 }
 
-float aeLineSegment::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut )
+float aeLineSegment::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut ) const
 {
   float lenSq = ( m_p1 - m_p0 ).LengthSquared();
   if ( lenSq <= 0.001f )
@@ -2093,12 +2100,63 @@ bool aeCircle::Intersect( const aeCircle& other, aeFloat2* out ) const
 }
 
 //------------------------------------------------------------------------------
+// aeSphere member functions
+//------------------------------------------------------------------------------
+bool aeSphere::Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut, aeFloat3* pOut ) const
+{
+  direction.SafeNormalize();
+
+  aeFloat3 m = origin - center;
+  float b = m.Dot( direction );
+  float c = m.Dot( m ) - radius * radius;
+  // Exit if r’s origin outside s (c > 0) and r pointing away from s (b > 0)
+  if ( c > 0.0f && b > 0.0f )
+  {
+    return false;
+  }
+
+  // A negative discriminant corresponds to ray missing sphere
+  float discr = b * b - c;
+  if ( discr < 0.0f )
+  {
+    return false;
+  }
+
+  // Ray now found to intersect sphere, compute smallest t value of intersection
+  float t = -b - sqrtf( discr );
+  // If t is negative, ray started inside sphere so clamp t to zero
+  if ( t < 0.0f )
+  {
+    t = 0.0f;
+  }
+
+  if ( tOut )
+  {
+    *tOut = t;
+  }
+
+  if ( pOut )
+  {
+    *pOut = origin + direction * t;
+  }
+
+  return true;
+}
+
+//------------------------------------------------------------------------------
 // aeAABB member functions
 //------------------------------------------------------------------------------
 aeAABB::aeAABB( aeFloat3 min, aeFloat3 max ) :
   m_min( min ),
   m_max( max )
 {}
+
+aeAABB::aeAABB( const aeSphere& sphere )
+{
+  aeFloat3 r( sphere.radius );
+  m_min = sphere.center - r;
+  m_max = sphere.center + r;
+}
 
 void aeAABB::Expand( aeFloat3 p )
 {

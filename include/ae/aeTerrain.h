@@ -251,8 +251,15 @@ public:
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
   RaycastResult Raycast( aeFloat3 start, aeFloat3 ray ) const;
+  // @NOTE: SweepSphere returns true on collision and writes out the following:
+  // distanceOut is distance traveled before collision
+  // normalOut is ground normal
+  // posOut is ground collision point
+  bool SweepSphere( aeSphere sphere, aeFloat3 ray, float* distanceOut = nullptr, aeFloat3* normalOut = nullptr, aeFloat3* posOut = nullptr ) const;
+  bool PushOutSphere( aeSphere sphere, aeFloat3* offsetOut = nullptr, class aeDebugRender* debug = nullptr ) const;
   
 private:
+  const TerrainVertex* m_GetVertex( int32_t x, int32_t y, int32_t z ) const;
   void UpdateChunkLighting( Chunk* chunk );
   //void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
   Chunk* AllocChunk( aeFloat3 center, aeInt3 pos );

@@ -1603,6 +1603,50 @@ Block::Type aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const
   return chunk->m_t[ x % kChunkSize ][ y % kChunkSize ][ z % kChunkSize ];
 }
 
+const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) const
+{
+  int32_t cx = x / kChunkSize;
+  int32_t cy = y / kChunkSize;
+  int32_t cz = z / kChunkSize;
+
+  if ( cx < 0 || cy < 0 || cz < 0
+    || cx >= kWorldChunksWidth
+    || cy >= kWorldChunksWidth
+    || cz >= kWorldChunksHeight )
+  {
+    return nullptr;
+  }
+
+  uint32_t ci = cx + kWorldChunksWidth * ( cy + kWorldChunksWidth * cz );
+  int16_t vc = m_voxelCounts[ ci ];
+  if ( vc == 0 )
+  {
+    return nullptr;
+  }
+  // TODO AE_ASSERT( vc != -1 && vc != kChunkCountMax );
+  if ( vc == -1 )
+  {
+    return nullptr;
+  }
+  if ( vc == kChunkCountMax )
+  {
+    return nullptr;
+  }
+  Chunk* chunk = m_chunks[ ci ];
+  if ( !chunk )
+  {
+    return nullptr;
+  }
+
+  TerrainIndex index = chunk->m_i[ x % kChunkSize ][ y % kChunkSize ][ z % kChunkSize ];
+  if ( index == (TerrainIndex)~0 )
+  {
+    return nullptr;
+  }
+
+  return &chunk->m_vertices[ index ];
+}
+
 float16_t aeTerrain::GetLight( uint32_t x, uint32_t y, uint32_t z ) const
 {
   uint32_t cix = x / kChunkSize;
@@ -2027,19 +2071,9 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
           else { iv1 = p; }
         }
         
-        aeFloat3 n;
-        for ( int32_t i = 0; i < 3; i++ )
-        {
-          aeFloat3 nt = p;
-          nt[ i ] += 0.0001f;
-          n[ i ] = m_sdf.TerrainValue( nt );
-        }
-        n -= aeFloat3( fp );
-        n.SafeNormalize();
-        
         result.distance = ( p - start ).Length();
         result.posf = p;
-        result.normal = n;
+        result.normal = m_sdf.GetSurfaceDerivative( p );
         result.hit = true;
         
         return result;
@@ -2080,4 +2114,165 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 	}
   
   return result;
+}
+
+bool aeTerrain::SweepSphere( aeSphere sphere, aeFloat3 ray, float* distanceOut, aeFloat3* normalOut, aeFloat3* posOut ) const
+{
+  aeSphere sphereEnd = sphere;
+  sphereEnd.center += ray;
+
+  aeAABB bounds( sphere );
+  bounds.Expand( aeAABB( sphereEnd ) );
+  const aeInt3 min = bounds.GetMin().FloorCopy();
+  const aeInt3 max = bounds.GetMax().CeilCopy();
+
+  const aeLineSegment travelSeg( sphere.center, sphere.center + ray );
+
+  bool anyHit = false;
+  float tMin = ray.Length();
+  aeFloat3 posResult;
+  aeFloat3 normalResult;
+  for ( uint32_t z = min.z; z < max.z; z++ )
+  for ( uint32_t y = min.y; y < max.y; y++ )
+  for ( uint32_t x = min.x; x < max.x; x++ )
+  {
+    const TerrainVertex* v = m_GetVertex( x, y, z );
+    if ( !v )
+    {
+      continue;
+    }
+
+    aeFloat3 vertex = v->position;
+    if ( travelSeg.GetMinDistance( vertex ) > sphere.radius )
+    {
+      continue;
+    }
+
+    if ( ray.Dot( vertex - sphere.center ) <= 0.0f )
+    {
+      continue;
+    }
+
+    float t = 0.0f;
+    if ( sphere.Raycast( vertex, -ray, &t ) && t <= tMin )
+    {
+      anyHit = true;
+      tMin = t;
+      posResult = vertex;
+      normalResult = v->normal.SafeNormalizeCopy();
+    }
+  }
+
+  if ( anyHit )
+  {
+    if ( distanceOut )
+    {
+      *distanceOut = tMin;
+    }
+
+    if ( normalOut )
+    {
+      *normalOut = normalResult;
+    }
+
+    if ( posOut )
+    {
+      *posOut = posResult;
+    }
+
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+bool aeTerrain::PushOutSphere( aeSphere sphere, aeFloat3* offsetOut, aeDebugRender* debug ) const
+{
+  aeAABB sphereAABB( sphere );
+  aeInt3 sphereMin = sphereAABB.GetMin().FloorCopy();
+  aeInt3 sphereMax = sphereAABB.GetMax().CeilCopy();
+  if ( debug )
+  {
+    debug->AddAABB( ( sphereAABB.GetMax() + sphereAABB.GetMin() ) * 0.5f, ( sphereAABB.GetMax() - sphereAABB.GetMin() ) * 0.5f, aeColor::PicoPink() );
+  }
+
+  aeFloat3 pushOutDir( 0.0f );
+
+  for ( int32_t z = sphereMin.z; z < sphereMax.z; z++ )
+  for ( int32_t y = sphereMin.y; y < sphereMax.y; y++ )
+  for ( int32_t x = sphereMin.x; x < sphereMax.x; x++ )
+  {
+    const TerrainVertex* v = m_GetVertex( x, y, z );
+    if ( !v )
+    {
+      continue;
+    }
+
+    aeFloat3 centerToVert = v->position - sphere.center;
+    float c = centerToVert.Dot( centerToVert ) - sphere.radius * sphere.radius;
+    if ( c > 0.0f )
+    {
+      // Vertex outside sphere
+      continue;
+    }
+
+    pushOutDir += v->normal.SafeNormalizeCopy();
+  }
+  if ( pushOutDir == aeFloat3( 0.0f ) )
+  {
+    if ( debug )
+    {
+      debug->AddSphere( sphere.center, sphere.radius, aeColor::Green(), 16 );
+    }
+    return false;
+  }
+  pushOutDir.SafeNormalize();
+
+  float pushOutLength = 0.0f;
+  for ( int32_t z = sphereMin.z; z < sphereMax.z; z++ )
+  for ( int32_t y = sphereMin.y; y < sphereMax.y; y++ )
+  for ( int32_t x = sphereMin.x; x < sphereMax.x; x++ )
+  {
+    const TerrainVertex* v = m_GetVertex( x, y, z );
+    if ( !v )
+    {
+      continue;
+    }
+
+    aeFloat3 centerToVert = v->position - sphere.center;
+    float c = centerToVert.Dot( centerToVert ) - sphere.radius * sphere.radius;
+    if ( c > 0.0f )
+    {
+      // Vertex outside sphere
+      continue;
+    }
+
+    aeFloat3 normal = v->normal.SafeNormalizeCopy(); // Opposite of actual ray direction
+    float b = centerToVert.Dot( normal );
+    aeFloat3 surfaceToVert = normal * ( b + sqrtf( b * b - c ) );
+    float t2 = pushOutDir.Dot( surfaceToVert ); // Projected length of surfaceToVert on to normalized pushOut
+    if ( debug )
+    {
+      debug->AddLine( v->position, v->position - surfaceToVert, aeColor::Green() );
+      debug->AddLine( sphere.center, sphere.center + surfaceToVert, aeColor::Green() );
+    }
+    pushOutLength = aeMath::Max( pushOutLength, t2 );
+  }
+
+  if ( debug )
+  {
+    debug->AddLine( sphere.center, sphere.center + pushOutDir * pushOutLength, aeColor::Red() );
+    debug->AddLine( sphere.center, sphere.center + pushOutDir, aeColor::Blue() );
+
+    debug->AddSphere( sphere.center, sphere.radius, aeColor::Blue(), 16 );
+    debug->AddSphere( sphere.center + pushOutDir * pushOutLength, sphere.radius, aeColor::Red(), 16 );
+  }
+
+  if ( offsetOut )
+  {
+    *offsetOut = pushOutDir * pushOutLength;
+  }
+  return true;
 }
