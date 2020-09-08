@@ -1090,7 +1090,7 @@ void aeDebugRender::AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeCo
     
     m_objs[ m_objCount ].type = DebugType::Circle;
     m_objs[ m_objCount ].pos = pos;
-    m_objs[ m_objCount ].rotation = aeQuat( normal, dot < 0.99f ? aeFloat3::Up : aeFloat3::Right );
+    m_objs[ m_objCount ].rotation = aeQuat( normal, ( dot < 0.99f && dot > -0.99f ) ? aeFloat3::Up : aeFloat3::Right );
     m_objs[ m_objCount ].radius = radius;
     m_objs[ m_objCount ].color = color;
     m_objs[ m_objCount ].pointCount = pointCount;

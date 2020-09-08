@@ -622,7 +622,7 @@ public:
   void AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color );
 
 private:
-  static const uint32_t kMaxDebugObjects = 64;
+  static const uint32_t kMaxDebugObjects = 128;
 
   struct DebugVertex
   {

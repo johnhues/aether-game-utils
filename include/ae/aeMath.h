@@ -330,10 +330,11 @@ struct AE_ALIGN(16) aeFloat2
   aeFloat2() = default;
   aeFloat2( const aeFloat2& ) = default;
   aeFloat2( bool ) = delete;
-  
   explicit aeFloat2( float v ) : x( v ), y( v ) {}
   aeFloat2( float x, float y ) : x( x ), y( y ) {}
   explicit aeFloat2( const struct aeInt2& v );
+  static aeFloat2 FromAngle( float angle ) { return aeFloat2( aeMath::Cos( angle ), aeMath::Sin( angle ) );}
+
   bool operator ==( const aeFloat2& o ) const { return x == o.x && y == o.y; }
   bool operator !=( const aeFloat2& o ) const { return !( *this == o ); }
   aeFloat2 operator- () const;
@@ -941,7 +942,7 @@ public:
   aePlane() = default;
   aePlane( aeFloat3 point, aeFloat3 normal );
 
-  bool IntersectRay( aeFloat3 pos, aeFloat3 dir, aeFloat3* out ) const;
+  bool IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const;
 
 private:
   aeFloat3 m_point;
@@ -1001,6 +1002,8 @@ public:
   aeSphere( aeFloat3 center, float radius ) : center( center ), radius( radius ) {}
 
   bool Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut = nullptr, aeFloat3* pOut = nullptr ) const;
+  bool SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+    float* outNearestDistance, aeFloat3* outNearestIntersectionPoint, aeFloat3* outNearestPolygonIntersectionPoint, class aeDebugRender* debug ) const;
 
   aeFloat3 center = aeFloat3::Zero;
   float radius = 0.0f;

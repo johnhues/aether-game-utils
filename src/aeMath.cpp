@@ -2019,7 +2019,7 @@ aePlane::aePlane( aeFloat3 point, aeFloat3 normal )
   m_normal = normal.SafeNormalizeCopy();
 }
 
-bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, aeFloat3* out ) const
+bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const
 {
   dir.SafeNormalize();
 
@@ -2034,7 +2034,14 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, aeFloat3* out ) const
   float b = diff.Dot( m_normal );
   float c = b / a;
 
-  *out = pos - dir * c;
+  if ( tOut )
+  {
+    *tOut = c;
+  }
+  if ( out )
+  {
+    *out = pos - dir * c;
+  }
   return true;
 }
 
@@ -2142,6 +2149,339 @@ bool aeSphere::Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut, aeFloa
 
   return true;
 }
+
+// Test if point P lies inside the counterclockwise 3D triangle ABC
+bool PointInTriangle( aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c )
+{
+  // Translate point and triangle so that point lies at origin
+  a -= p;
+  b -= p;
+  c -= p;
+  float ab = a.Dot( b );
+  float ac = a.Dot( c );
+  float bc = b.Dot( c );
+  float cc = c.Dot( c );
+  // Make sure plane normals for pab and pbc point in the same direction
+  if ( bc * ac - cc * ab < 0.0f )
+  {
+    return false;
+  }
+  // Make sure plane normals for pab and pca point in the same direction
+  float bb = b.Dot( b );
+  if ( ab * bc - ac * bb < 0.0f )
+  {
+    return false;
+  }
+  // Otherwise P must be in (or on) the triangle
+  return true;
+}
+
+#include "aeRender.h"
+bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+  float* outNearestDistance,
+  aeFloat3* outNearestIntersectionPoint,
+  aeFloat3* outNearestPolygonIntersectionPoint, aeDebugRender* debug ) const
+{
+  direction.SafeNormalize(); // @TODO: Make sure following logic is isn't limited by direction length
+
+  // Plane origin/normal
+  aePlane triPlane( points[ 0 ], normal );
+
+  // Determine the distance from the plane to the source
+  aeFloat3 planeIntersectionPoint( 0.0f );
+  aeFloat3 planeIntersectionPoint2( 0.0f );
+  //float pDist = intersect( pOrigin, normal, source, -normal );
+  float pDist = aeMath::MaxValue< float >();
+  if ( triPlane.IntersectRay( center, -normal, &pDist, &planeIntersectionPoint ) )
+  {
+    // @TODO: Should be able to remove this
+    pDist = ( planeIntersectionPoint - center ).Length();
+    debug->AddLine( center, center - normal, aeColor::Red() );
+    debug->AddSphere( planeIntersectionPoint, 0.05f, aeColor::Red(), 8 );
+
+    planeIntersectionPoint2 = planeIntersectionPoint;
+  }
+
+  // Is the source point behind the plane?
+  // [note that you can remove this condition if your visuals are not using backface culling]
+  if ( pDist < 0.0 )
+  {
+    return false;
+  }
+
+  // Is the plane embedded (i.e. within the distance of radius of the sphere)?
+  if ( pDist <= radius )
+  {
+    // Calculate the plane intersection point
+    // @TODO: Is this already calculated above?
+    planeIntersectionPoint = center - normal * pDist;
+  }
+  else
+  {
+    aeFloat3 sphereIntersectionPoint = center - normal * radius;
+    if ( !triPlane.IntersectRay( sphereIntersectionPoint, direction, nullptr, &planeIntersectionPoint ) )
+    {
+      return false;
+    }
+
+    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, aeColor::PicoOrange() );
+  }
+
+  // Unless otherwise noted, our polygonIntersectionPoint is the
+  // same point as planeIntersectionPoint
+  aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
+  // So… are they the same?
+  // @TODO: Check edges
+  //if ( planeIntersectionPoint is not within the current polygon )
+  if ( !PointInTriangle( polygonIntersectionPoint, points[ 0 ], points[ 1 ], points[ 2 ] ) )
+  {
+    // polygonIntersectionPoint = nearest point on polygon's perimeter to planeIntersectionPoint;
+
+    aeFloat3 p0, p1;
+    aeFloat3 c0, c1, c2;
+    float d0 = aeLineSegment( points[ 0 ], points[ 1 ] ).GetMinDistance( planeIntersectionPoint, &c0 );
+    float d1 = aeLineSegment( points[ 1 ], points[ 2 ] ).GetMinDistance( planeIntersectionPoint, &c1 );
+    float d2 = aeLineSegment( points[ 2 ], points[ 0 ] ).GetMinDistance( planeIntersectionPoint, &c2 );
+    if ( d0 <= d1 && d0 <= d2 )
+    {
+      polygonIntersectionPoint = c0;
+      p0 = points[ 0 ];
+      p1 = points[ 1 ];
+    }
+    else if ( d1 <= d0 && d1 <= d2 )
+    {
+      polygonIntersectionPoint = c1;
+      p0 = points[ 1 ];
+      p1 = points[ 2 ];
+    }
+    else
+    {
+      polygonIntersectionPoint = c2;
+      p0 = points[ 2 ];
+      p1 = points[ 0 ];
+    }
+
+    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
+    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
+
+    aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+
+    float minDist = aeMath::MaxValue< float >();
+    aeFloat3 theRealThingTM;
+    aeFloat3 edgeNormalMinTemp;
+    //aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    for ( uint32_t i = 0; i < 3; i++ )
+    {
+      p0 = points[ i ];
+      p1 = points[ ( i + 1 ) % 3 ];
+
+      aeFloat3 edgeNormal = ( normal % ( p0 - p1 ) ).SafeNormalizeCopy();
+      aePlane edgePlane( p0, edgeNormal ); //  + edgeNormal * radius
+
+      float distance = 0.0f;
+      aeFloat3 testPoint = planeIntersectionPoint2;
+      edgePlane.IntersectRay( planeIntersectionPoint2, flatDir, &distance, &testPoint );
+      if ( minDist > distance )
+      {
+        minDist = distance;
+        theRealThingTM = testPoint;
+        edgeNormalMinTemp = edgeNormal;
+      }
+    }
+
+    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, aeColor::Blue() );
+    debug->AddSphere( theRealThingTM, 0.05f, aeColor::Blue(), 16 );
+
+    polygonIntersectionPoint = theRealThingTM;
+
+    float circleRad = radius; // Incorrect! This circle is the 'slice of sphere' at the point of contact with the edge
+    aeFloat3 circlePos = theRealThingTM + edgeNormalMinTemp * circleRad;
+    debug->AddCircle( circlePos, normal, circleRad, aeColor::Blue(), 16 );
+  }
+  // Invert the velocity vector
+  //aeFloat3 negativeVelocityVector = -velocityVector;
+  // Using the polygonIntersectionPoint, we need to reverse-intersect
+  // with the sphere (note: the 1.0 below is the unit-sphere’s
+  // radius)
+  //float t = intersectSphere( sourcePoint, 1.0f, polygonIntersectionPoint, negativeVelocityVector );
+  // Was there an intersection with the sphere?
+  //if ( t >= 0.0 ) // && t <= distanceToTravel ) // No limit?
+  float t = 0.0f;
+  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, aeColor::Green() );
+  if ( Raycast( polygonIntersectionPoint, -direction, &t ) )
+  {
+    if ( outNearestDistance )
+    {
+      *outNearestDistance = t;
+    }
+    if ( outNearestIntersectionPoint )
+    {
+      // Where did sphere intersected
+      *outNearestIntersectionPoint = polygonIntersectionPoint - direction * t;
+    }
+    if ( outNearestPolygonIntersectionPoint )
+    {
+      *outNearestPolygonIntersectionPoint = polygonIntersectionPoint;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+/*
+bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+  float* outNearestDistance,
+  aeFloat3* outNearestIntersectionPoint,
+  aeFloat3* outNearestPolygonIntersectionPoint, aeDebugRender* debug ) const
+{
+  direction.SafeNormalize(); // @TODO: Make sure following logic is isn't limited by direction length
+
+  // Plane origin/normal
+  aePlane triPlane( points[ 0 ], normal );
+
+  // Determine the distance from the plane to the source
+  aeFloat3 planeIntersectionPoint( 0.0f );
+  aeFloat3 planeIntersectionPoint2( 0.0f );
+  //float pDist = intersect( pOrigin, normal, source, -normal );
+  float pDist = aeMath::MaxValue< float >();
+  if ( triPlane.IntersectRay( center, -normal, &pDist, &planeIntersectionPoint ) )
+  {
+    // @TODO: Should be able to remove this
+    pDist = ( planeIntersectionPoint - center ).Length();
+    debug->AddLine( center, center - normal, aeColor::Red() );
+    debug->AddSphere( planeIntersectionPoint, 0.05f, aeColor::Red(), 8 );
+
+    planeIntersectionPoint2 = planeIntersectionPoint;
+  }
+
+  // Is the source point behind the plane?
+  // [note that you can remove this condition if your visuals are not using backface culling]
+  if ( pDist < 0.0 )
+  {
+    return false;
+  }
+
+  // Is the plane embedded (i.e. within the distance of radius of the sphere)?
+  if ( pDist <= radius )
+  {
+    // Calculate the plane intersection point
+    // @TODO: Is this already calculated above?
+    planeIntersectionPoint = center - normal * pDist;
+  }
+  else
+  {
+    aeFloat3 sphereIntersectionPoint = center - normal * radius;
+    if ( !triPlane.IntersectRay( sphereIntersectionPoint, direction, nullptr, &planeIntersectionPoint ) )
+    {
+      return false;
+    }
+
+    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, aeColor::PicoOrange() );
+  }
+
+  // Unless otherwise noted, our polygonIntersectionPoint is the
+  // same point as planeIntersectionPoint
+  aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
+  // So… are they the same?
+  // @TODO: Check edges
+  //if ( planeIntersectionPoint is not within the current polygon )
+  if ( !PointInTriangle( polygonIntersectionPoint, points[ 0 ], points[ 1 ], points[ 2 ] ) )
+  {
+    // polygonIntersectionPoint = nearest point on polygon's perimeter to planeIntersectionPoint;
+
+    aeFloat3 p0, p1;
+    aeFloat3 c0, c1, c2;
+    float d0 = aeLineSegment( points[ 0 ], points[ 1 ] ).GetMinDistance( planeIntersectionPoint, &c0 );
+    float d1 = aeLineSegment( points[ 1 ], points[ 2 ] ).GetMinDistance( planeIntersectionPoint, &c1 );
+    float d2 = aeLineSegment( points[ 2 ], points[ 0 ] ).GetMinDistance( planeIntersectionPoint, &c2 );
+    if ( d0 <= d1 && d0 <= d2 )
+    {
+      polygonIntersectionPoint = c0;
+      p0 = points[ 0 ];
+      p1 = points[ 1 ];
+    }
+    else if ( d1 <= d0 && d1 <= d2 )
+    {
+      polygonIntersectionPoint = c1;
+      p0 = points[ 1 ];
+      p1 = points[ 2 ];
+    }
+    else
+    {
+      polygonIntersectionPoint = c2;
+      p0 = points[ 2 ];
+      p1 = points[ 0 ];
+    }
+
+    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
+    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
+
+    aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+
+    float minDist = aeMath::MaxValue< float >();
+    aeFloat3 theRealThingTM;
+    aeFloat3 edgeNormalMinTemp;
+    //aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    for ( uint32_t i = 0; i < 3; i++ )
+    {
+      p0 = points[ i ];
+      p1 = points[ ( i + 1 ) % 3 ];
+
+      aeFloat3 edgeNormal = ( normal % ( p0 - p1 ) ).SafeNormalizeCopy();
+      aePlane edgePlane( p0, edgeNormal ); //  + edgeNormal * radius
+
+      float distance = 0.0f;
+      aeFloat3 testPoint = planeIntersectionPoint2;
+      edgePlane.IntersectRay( planeIntersectionPoint2, flatDir, &distance, &testPoint );
+      if ( minDist > distance )
+      {
+        minDist = distance;
+        theRealThingTM = testPoint;
+        edgeNormalMinTemp = edgeNormal;
+      }
+    }
+
+    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, aeColor::Blue() );
+    debug->AddSphere( theRealThingTM, 0.05f, aeColor::Blue(), 16 );
+
+    ////polygonIntersectionPoint = theRealThingTM;
+  }
+  // Invert the velocity vector
+  //aeFloat3 negativeVelocityVector = -velocityVector;
+  // Using the polygonIntersectionPoint, we need to reverse-intersect
+  // with the sphere (note: the 1.0 below is the unit-sphere’s
+  // radius)
+  //float t = intersectSphere( sourcePoint, 1.0f, polygonIntersectionPoint, negativeVelocityVector );
+  // Was there an intersection with the sphere?
+  //if ( t >= 0.0 ) // && t <= distanceToTravel ) // No limit?
+  float t = 0.0f;
+  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, aeColor::Green() );
+  if ( Raycast( polygonIntersectionPoint, -direction, &t ) )
+  {
+    if ( outNearestDistance )
+    {
+      *outNearestDistance = t;
+    }
+    if ( outNearestIntersectionPoint )
+    {
+      // Where did sphere intersected
+      *outNearestIntersectionPoint = polygonIntersectionPoint - direction * t;
+    }
+    if ( outNearestPolygonIntersectionPoint )
+    {
+      *outNearestPolygonIntersectionPoint = polygonIntersectionPoint;
+    }
+    return true;
+  }
+
+  return false;
+}
+*/
 
 //------------------------------------------------------------------------------
 // aeAABB member functions
