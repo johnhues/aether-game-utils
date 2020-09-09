@@ -16,7 +16,7 @@ endif()
 # Default to Release. This is important because the install config is determined on configure.
 # This will cause the install step to fail if the release bundle has not been build yet.
 if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
-	set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+	set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "" FORCE)
 endif()
 
 if("${CMAKE_GENERATOR}" STREQUAL "Xcode")
