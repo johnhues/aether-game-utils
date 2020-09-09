@@ -71,6 +71,9 @@ public:
   void SerializeObject( T& v );
   template< typename T >
   void SerializeObject( const T& v );
+  // Use SerializeObjectConditional() when an object may not be available for serialization when writing or reading. This function correctly updates read/write offsets when skipping serialization. Sends slightly more data than SerializeObject().
+  template < typename T >
+  void SerializeObjectConditional( T* obj );
 
   template< uint32_t N >
   void SerializeArray( char (&str)[ N ] );
@@ -100,13 +103,13 @@ public:
 
   // Get data buffer
   const uint8_t* GetData() const { return ( m_data || m_GetArray().Length() == 0 ) ? m_data : &m_GetArray()[ 0 ]; }
-  uint32_t GetOffset() const { return m_position; }
+  uint32_t GetOffset() const { return m_offset; }
   uint32_t GetLength() const { return m_length; }
 
   // Get data past the current read head
-  const uint8_t* PeekData() const { return GetData() + m_position; }
-  uint32_t GetRemaining() const { return m_length - m_position; }
-  void Discard( uint32_t length ) { m_position += aeMath::Min( length, GetRemaining() ); }
+  const uint8_t* PeekData() const { return GetData() + m_offset; }
+  uint32_t GetRemaining() const { return m_length - m_offset; }
+  void Discard( uint32_t length );
 
 // @TODO: The following should be private, while making it clear that the above static functions should
 //        should be used instead of directly using a constructor.
@@ -131,7 +134,7 @@ public:
   bool m_isValid = false;
   uint8_t* m_data = nullptr;
   uint32_t m_length = 0;
-  uint32_t m_position = 0;
+  uint32_t m_offset = 0;
   aeArray< uint8_t >* m_extArray = nullptr;
   aeArray< uint8_t > m_array;
 
@@ -199,23 +202,23 @@ void aeBinaryStream::SerializeRaw( T& v )
   }
   else if ( m_mode == Mode::ReadBuffer )
   {
-    AE_ASSERT( m_position + sizeof(T) <= m_length );
-    memcpy( &v, m_data + m_position, sizeof(T) );
-    m_position += sizeof(T);
+    AE_ASSERT( m_offset + sizeof(T) <= m_length );
+    memcpy( &v, m_data + m_offset, sizeof(T) );
+    m_offset += sizeof(T);
   }
   else if ( m_mode == Mode::WriteBuffer )
   {
     if ( m_data )
     {
-      AE_ASSERT( sizeof(T) <= m_length - m_position );
-      memcpy( m_data + m_position, &v, sizeof(T) );
-      m_position += sizeof(T);
+      AE_ASSERT( sizeof(T) <= m_length - m_offset );
+      memcpy( m_data + m_offset, &v, sizeof(T) );
+      m_offset += sizeof(T);
     }
     else
     {
       aeArray< uint8_t >& array = m_GetArray();
       array.Append( (uint8_t*)&v, sizeof(T) );
-      m_position = array.Length();
+      m_offset = array.Length();
       m_length = array.Size();
     }
   }
@@ -242,14 +245,14 @@ void aeBinaryStream::SerializeArray( char (&str)[ N ] )
   }
   else if ( m_mode == Mode::ReadBuffer )
   {
-    AE_ASSERT( m_position + sizeof(len) <= m_length ); // @TODO: Remove this and invalidate stream instead
-    memcpy( &len, m_data + m_position, sizeof(len) );
-    m_position += sizeof(len);
+    AE_ASSERT( m_offset + sizeof(len) <= m_length ); // @TODO: Remove this and invalidate stream instead
+    memcpy( &len, m_data + m_offset, sizeof(len) );
+    m_offset += sizeof(len);
 
-    AE_ASSERT( m_position + len + 1 <= m_length ); // @TODO: Remove this and invalidate stream instead
-    memcpy( str, m_data + m_position, len );
+    AE_ASSERT( m_offset + len + 1 <= m_length ); // @TODO: Remove this and invalidate stream instead
+    memcpy( str, m_data + m_offset, len );
     str[ len ] = 0;
-    m_position += len;
+    m_offset += len;
   }
   else if ( m_mode == Mode::WriteBuffer )
   {
@@ -257,20 +260,20 @@ void aeBinaryStream::SerializeArray( char (&str)[ N ] )
 
     if ( m_data )
     {
-      AE_ASSERT( sizeof(len) <= m_length - m_position ); // @TODO: Remove this and invalidate stream instead
-      memcpy( m_data + m_position, &len, sizeof(len) );
-      m_position += sizeof(len);
+      AE_ASSERT( sizeof(len) <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
+      memcpy( m_data + m_offset, &len, sizeof(len) );
+      m_offset += sizeof(len);
 
-      AE_ASSERT( len <= m_length - m_position ); // @TODO: Remove this and invalidate stream instead
-      memcpy( m_data + m_position, str, len );
-      m_position += len;
+      AE_ASSERT( len <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
+      memcpy( m_data + m_offset, str, len );
+      m_offset += len;
     }
     else
     {
       aeArray< uint8_t >& array = m_GetArray();
       array.Append( (uint8_t*)&len, sizeof(len) );
       array.Append( (uint8_t*)&str, len );
-      m_position = array.Length();
+      m_offset = array.Length();
       m_length = array.Size();
     }
   }
@@ -285,6 +288,78 @@ void aeBinaryStream::SerializeArray( const char (&str)[ N ] )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
   SerializeArray( const_cast< char[ N ] >( str ) );
+}
+
+template < typename T >
+void aeBinaryStream::SerializeObjectConditional( T* obj )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    uint16_t length = 0;
+    SerializeRaw( &length, sizeof( length ) );
+
+    if ( length )
+    {
+      if ( obj )
+      {
+        // Read object
+        uint32_t prevOffset = m_offset;
+        SerializeObject( *obj );
+
+        // Object should always read everything it wrote
+        if ( prevOffset + length != m_offset )
+        {
+          Invalidate();
+        }
+      }
+      else
+      {
+        Discard( length );
+      }
+    }
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    if ( obj )
+    {
+      // Reserve length
+      uint32_t lengthOffset = m_offset;
+      uint16_t lengthFake = 0xCDCD;
+      SerializeRaw( &lengthFake, sizeof( lengthFake ) ); // Raw to avoid compression
+
+      // Write object
+      uint32_t prevOffset = m_offset;
+      SerializeObject( *obj );
+
+      // Rewrite previously serialized value
+      uint32_t writeLength = m_offset - prevOffset;
+      if ( writeLength > aeMath::MaxValue< uint16_t >() )
+      {
+        Invalidate(); // Object is too large to serialize
+      }
+      else if ( IsValid() ) // Can become invalid while writing by running out of memory
+      {
+        // @NOTE: Use length offset from above (and not a pointer into the data buffer) because the data buffer may not yet bet allocated or may be reallocated while serializing
+        AE_ASSERT( GetData() );
+        uint16_t* length = (uint16_t*)( GetData() + lengthOffset );
+        AE_ASSERT( *length == 0xCDCD );
+        *length = writeLength;
+      }
+    }
+    else
+    {
+      uint16_t length = 0;
+      SerializeRaw( &length, sizeof( length ) ); // Raw to avoid compression
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with aeBinaryStream::Writer or aeBinaryStream::Reader static functions." );
+  }
 }
 
 #endif
