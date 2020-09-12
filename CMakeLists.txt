@@ -7,7 +7,7 @@ set(AE_LIBRARY_NAME ae)
 set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 
 # guard against in-source builds and bad build-type strings
-include(cmake/safeguards.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/safeguards.cmake)
 # import external projects module
 include(ExternalProject)
 
@@ -64,12 +64,12 @@ if (NOT AE_BUILD_DEPS)
 	set(ENET_LIBRARY_DIRS /usr/local/Cellar/enet/1.3.14/lib)
 	set(UUID_LIBRARY_DIRS /usr/local/Cellar/ossp-uuid/1.6.2_2/lib)
 else()
-	set(AE_GLEW_SRC ${CMAKE_BINARY_DIR}/thirdparty/glew)
-	set(AE_OPENAL_SRC ${CMAKE_BINARY_DIR}/thirdparty/openal)
-	set(AE_ZLIB_SRC ${CMAKE_BINARY_DIR}/thirdparty/zlib)
-	set(AE_SDL2_SRC ${CMAKE_BINARY_DIR}/thirdparty/SDL2)
-	set(AE_ASSIMP_SRC ${CMAKE_BINARY_DIR}/thirdparty/assimp)
-	set(AE_ENET_SRC ${CMAKE_BINARY_DIR}/thirdparty/enet)
+	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
+	set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
+	set(AE_ZLIB_SRC ${AE_THIRDPARTY_DIR}/zlib)
+	set(AE_SDL2_SRC ${AE_THIRDPARTY_DIR}/SDL2)
+	set(AE_ASSIMP_SRC ${AE_THIRDPARTY_DIR}/assimp)
+	set(AE_ENET_SRC ${AE_THIRDPARTY_DIR}/enet)
 
 	set(AE_OPENAL_INSTALL ${CMAKE_BINARY_DIR}/openal)
 	set(AE_ZLIB_INSTALL ${CMAKE_BINARY_DIR}/zlib)

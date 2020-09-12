@@ -1,10 +1,4 @@
 # Provides safeguards against in-source builds and bad build types.
-#
-# Variables used::
-#
-#   PROJECT_SOURCE_DIR
-#   PROJECT_BINARY_DIR
-#   CMAKE_BUILD_TYPE
 
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
@@ -35,3 +29,22 @@ if(NOT cmake_build_type_tolower STREQUAL "debug" AND
 	)
 	message(FATAL_ERROR "Unknown build type \"${CMAKE_BUILD_TYPE}\". Allowed values are Debug, Release, RelWithDebInfo, and MinSizeRel (case-insensitive).")
 endif()
+
+# Helpers
+get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+
+# @NOTE: Build both Release and Debug at the same time for multi-config generators. This is necessary because Xcode will only build ae once.
+# (https://stackoverflow.com/questions/16842218/how-do-i-use-cmake-externalproject-add-or-alternatives-in-a-cross-platform-way)
+if(GENERATOR_IS_MULTI_CONFIG)
+	set(AE_MULTI_CONFIG_BUILD_COMMAND
+		BUILD_COMMAND ${CMAKE_COMMAND} --build . --config RelWithDebInfo
+			COMMAND ${CMAKE_COMMAND} --build . --config Debug)
+	set(AE_MULTI_CONFIG_INSTALL_COMMAND
+		INSTALL_COMMAND ${CMAKE_COMMAND} --build . --target install --config RelWithDebInfo
+			COMMAND ${CMAKE_COMMAND} --build . --target install --config Debug)
+else()
+	set(AE_SINGLE_CONFIG_BUILD_TYPE -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
+endif()
+
+# Directory for external dependencies
+set(AE_THIRDPARTY_DIR ${CMAKE_BINARY_DIR}/thirdparty)
