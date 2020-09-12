@@ -2523,6 +2523,20 @@ float aeAABB::GetMinDistance( aeFloat3 p ) const
   return d.Length();
 }
 
+bool aeAABB::Intersect( aeAABB other ) const
+{
+  if ( m_max.x >= other.m_min.x && m_max.y >= other.m_min.y && m_max.z >= other.m_min.z )
+  {
+    return true;
+  }
+  else if ( other.m_max.x >= m_min.x && other.m_max.y >= m_min.y && other.m_max.z >= m_min.z )
+  {
+    return true;
+  }
+
+  return false;
+}
+
 //------------------------------------------------------------------------------
 // aeHash member functions
 //------------------------------------------------------------------------------

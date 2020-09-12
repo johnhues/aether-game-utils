@@ -1027,6 +1027,7 @@ public:
   aeFloat3 GetMax() const { return m_max; }
 
   float GetMinDistance( aeFloat3 p ) const;
+  bool Intersect( aeAABB other ) const;
 
 private:
   aeFloat3 m_min;
