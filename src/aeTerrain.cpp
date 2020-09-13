@@ -267,6 +267,113 @@ const uint16_t EDGE_BOTTOM_BACK_BIT = 1 << EDGE_BOTTOM_BACK_INDEX;
 const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 }
 
+SDFCache::SDFCache()
+{
+  m_chunk = aeInt3( 0 );
+  m_sdf = aeAlloc::AllocateArray< float16_t >( kDim * kDim * kDim );
+}
+
+SDFCache::~SDFCache()
+{
+  aeAlloc::Release( m_sdf );
+  m_sdf = nullptr;
+}
+
+void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
+{
+  m_chunk = chunk;
+
+  aeInt3 offset = m_chunk * kChunkSize - aeInt3( kOffset );
+  for ( int32_t z = 0; z < kDim; z++ )
+  for ( int32_t y = 0; y < kDim; y++ )
+  for ( int32_t x = 0; x < kDim; x++ )
+  {
+    uint32_t index = x + kDim * ( y + kDim * z );
+    aeFloat3 pos( offset.x + x, offset.y + y, offset.z + z );
+    m_sdf[ index ] = sdf->TerrainValue( pos );
+  }
+}
+
+float SDFCache::GetValue( aeFloat3 pos ) const
+{
+  pos -= aeFloat3( m_chunk * kChunkSize );
+  pos += aeFloat3( (float)kOffset );
+  AE_ASSERT( pos.x >= 0.0f && pos.y >= 0.0f && pos.z >= 0.0f );
+  AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
+
+  aeInt3 posi = pos.FloorCopy();
+  float values[ 8 ] =
+  {
+    m_GetValue( posi ),
+    m_GetValue( posi + aeInt3( 1, 0, 0 ) ),
+    m_GetValue( posi + aeInt3( 0, 1, 0 ) ),
+    m_GetValue( posi + aeInt3( 1, 1, 0 ) ),
+    m_GetValue( posi + aeInt3( 0, 0, 1 ) ),
+    m_GetValue( posi + aeInt3( 1, 0, 1 ) ),
+    m_GetValue( posi + aeInt3( 0, 1, 1 ) ),
+    m_GetValue( posi + aeInt3( 1, 1, 1 ) ),
+  };
+
+  pos.x -= posi.x;
+  pos.y -= posi.y;
+  pos.z -= posi.z;
+  float x0 = aeMath::Lerp( values[ 0 ], values[ 1 ], pos.x );
+  float x1 = aeMath::Lerp( values[ 2 ], values[ 3 ], pos.x );
+  float x2 = aeMath::Lerp( values[ 4 ], values[ 5 ], pos.x );
+  float x3 = aeMath::Lerp( values[ 6 ], values[ 7 ], pos.x );
+  float y0 = aeMath::Lerp( x0, x1, pos.y );
+  float y1 = aeMath::Lerp( x2, x3, pos.y );
+  return aeMath::Lerp( y0, y1, pos.z );
+}
+
+float SDFCache::GetValue( aeInt3 pos ) const
+{
+  pos -= aeInt3( m_chunk * kChunkSize );
+  pos += aeInt3( kOffset );
+  AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
+  AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
+
+  return m_GetValue( pos );
+}
+
+aeFloat3 SDFCache::GetDerivative( aeFloat3 p ) const
+{
+  aeFloat3 normal0;
+  for ( int32_t i = 0; i < 3; i++ )
+  {
+    aeFloat3 nt = p;
+    nt[ i ] += 0.2f;
+    normal0[ i ] = GetValue( nt );
+  }
+  // This should be really close to 0 because it's really
+  // close to the surface but not close enough to ignore.
+  normal0 -= aeFloat3( GetValue( p ) );
+  normal0.SafeNormalize();
+  AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
+  AE_ASSERT( normal0 == normal0 );
+
+  aeFloat3 normal1;
+  for ( int32_t i = 0; i < 3; i++ )
+  {
+    aeFloat3 nt = p;
+    nt[ i ] -= 0.2f;
+    normal1[ i ] = GetValue( nt );
+  }
+  // This should be really close to 0 because it's really
+  // close to the surface but not close enough to ignore.
+  normal1 = aeFloat3( GetValue( p ) ) - normal1;
+  normal1.SafeNormalize();
+  AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
+  AE_ASSERT( normal1 == normal1 );
+
+  return ( normal1 + normal0 ).SafeNormalizeCopy();
+}
+
+float SDFCache::m_GetValue( aeInt3 pos ) const
+{
+  return m_sdf[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
+}
+
 Chunk::Chunk() :
   m_generatedList( this )
 {
@@ -438,7 +545,10 @@ void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
 
 void aeTerrainJob::Do()
 {
-  m_chunk->Generate( m_sdf, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
+  m_sdfCache.Generate( m_chunk->m_pos, m_sdf );
+  // @TODO: Flag cache complete so terrain update can return safely
+
+  m_chunk->Generate( &m_sdfCache, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
   m_running = false;
 }
 
@@ -459,7 +569,7 @@ bool aeTerrainJob::HasChunk( aeInt3 pos ) const
   return m_chunk && m_chunk->m_pos == pos;
 }
 
-void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
+void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
 {
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
@@ -521,8 +631,7 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       float gx = chunkOffsetX + x + cornerOffsets[ i ][ j ].x;
       float gy = chunkOffsetY + y + cornerOffsets[ i ][ j ].y;
       float gz = chunkOffsetZ + z + cornerOffsets[ i ][ j ].z;
-      // @TODO: Should pre-calculate, or at least only look up corner (1,1,1) once
-      cornerValues[ i ][ j ] = sdf->TerrainValue( aeFloat3( gx, gy, gz) );
+      cornerValues[ i ][ j ] = sdf2->GetValue( aeFloat3( gx, gy, gz) ); // TODO: Use integer GetValue()
       if ( cornerValues[ i ][ j ] == 0.0f )
       {
         // @NOTE: Never let a terrain value be exactly 0, or else surface will end up with multiple vertices for the same point in the sdf
@@ -545,7 +654,7 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
         g.x = chunkOffsetX + x + 0.5f;
         g.y = chunkOffsetY + y + 0.5f;
         g.z = chunkOffsetZ + z + 0.5f;
-        m_t[ x ][ y ][ z ] = ( sdf->TerrainValue( g ) > 0.0f ) ? Block::Exterior : Block::Interior;
+        m_t[ x ][ y ][ z ] = ( sdf2->GetValue( g ) > 0.0f ) ? Block::Exterior : Block::Interior;
       }
       continue;
     }
@@ -593,7 +702,7 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
           edgeVoxelPos = ( c0 + c1 ) * 0.5f;
           aeFloat3 cw = ch + edgeVoxelPos;
           
-          float v = sdf->TerrainValue( cw );
+          float v = sdf2->GetValue( cw );
           if ( aeMath::Abs( v ) < 0.001f )
           {
             break;
@@ -617,7 +726,7 @@ void Chunk::Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, Terra
       edgeWorldPos += edgeVoxelPos;
 
       te->p[ e ] = edgeVoxelPos;
-      te->n[ e ] = sdf->GetSurfaceDerivative( edgeWorldPos );
+      te->n[ e ] = sdf2->GetDerivative( edgeWorldPos );
       
       if ( x < 0 || y < 0 || z < 0 || x >= kChunkSize || y >= kChunkSize || z >= kChunkSize )
       {
@@ -2132,9 +2241,9 @@ bool aeTerrain::SweepSphere( aeSphere sphere, aeFloat3 ray, float* distanceOut, 
   float tMin = ray.Length();
   aeFloat3 posResult;
   aeFloat3 normalResult;
-  for ( uint32_t z = min.z; z < max.z; z++ )
-  for ( uint32_t y = min.y; y < max.y; y++ )
-  for ( uint32_t x = min.x; x < max.x; x++ )
+  for ( int32_t z = min.z; z < max.z; z++ )
+  for ( int32_t y = min.y; y < max.y; y++ )
+  for ( int32_t x = min.x; x < max.x; x++ )
   {
     const TerrainVertex* v = m_GetVertex( x, y, z );
     if ( !v )

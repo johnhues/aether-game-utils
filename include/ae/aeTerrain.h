@@ -163,6 +163,26 @@ public:
   float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
 };
 
+class SDFCache
+{
+public:
+  SDFCache();
+  ~SDFCache();
+
+  void Generate( aeInt3 chunk, const aeTerrainSDF* sdf );
+  float GetValue( aeFloat3 pos ) const;
+  float GetValue( aeInt3 pos ) const;
+  aeFloat3 GetDerivative( aeFloat3 p ) const;
+
+private:
+  float m_GetValue( aeInt3 pos ) const;
+
+  const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to chunkPlus
+  static const int32_t kOffset = 2;
+  aeInt3 m_chunk;
+  float16_t* m_sdf;
+};
+
 class aeTerrainJob
 {
 public:
@@ -184,15 +204,22 @@ public:
   bool replaceDirty_CHECK;
 
 private:
+  // Management
   bool m_hasJob;
   std::atomic_bool m_running;
 
+  // Input
   const aeTerrainSDF* m_sdf;
+  struct Chunk* m_chunk;
+
+  // Pre-computed sdf
+  SDFCache m_sdfCache;
+
+  // Output
   uint32_t m_vertexCount;
   uint32_t m_indexCount;
   aeArray< TerrainVertex > m_vertices;
   aeArray< TerrainIndex > m_indices;
-  struct Chunk* m_chunk;
 };
 
 struct Chunk // @TODO: aeTerrainChunk
@@ -202,7 +229,7 @@ struct Chunk // @TODO: aeTerrainChunk
 
   static uint32_t GetIndex( aeInt3 pos );
   uint32_t GetIndex() const;
-  void Generate( const aeTerrainSDF* sdf, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
+  void Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
   
   uint32_t m_check;
   aeInt3 m_pos;
