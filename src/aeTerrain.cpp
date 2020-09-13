@@ -283,6 +283,9 @@ void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
 {
   m_chunk = chunk;
 
+  m_offseti = aeInt3( kOffset ) - aeInt3( m_chunk * kChunkSize );
+  m_offsetf = aeFloat3( (float)kOffset ) - aeFloat3( m_chunk * kChunkSize );
+
   aeInt3 offset = m_chunk * kChunkSize - aeInt3( kOffset );
   for ( int32_t z = 0; z < kDim; z++ )
   for ( int32_t y = 0; y < kDim; y++ )
@@ -296,12 +299,13 @@ void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
 
 float SDFCache::GetValue( aeFloat3 pos ) const
 {
-  pos -= aeFloat3( m_chunk * kChunkSize );
-  pos += aeFloat3( (float)kOffset );
-  AE_ASSERT( pos.x >= 0.0f && pos.y >= 0.0f && pos.z >= 0.0f );
-  AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
+  pos += m_offsetf;
 
   aeInt3 posi = pos.FloorCopy();
+  pos.x -= posi.x;
+  pos.y -= posi.y;
+  pos.z -= posi.z;
+
   float values[ 8 ] =
   {
     m_GetValue( posi ),
@@ -314,9 +318,6 @@ float SDFCache::GetValue( aeFloat3 pos ) const
     m_GetValue( posi + aeInt3( 1, 1, 1 ) ),
   };
 
-  pos.x -= posi.x;
-  pos.y -= posi.y;
-  pos.z -= posi.z;
   float x0 = aeMath::Lerp( values[ 0 ], values[ 1 ], pos.x );
   float x1 = aeMath::Lerp( values[ 2 ], values[ 3 ], pos.x );
   float x2 = aeMath::Lerp( values[ 4 ], values[ 5 ], pos.x );
@@ -328,12 +329,7 @@ float SDFCache::GetValue( aeFloat3 pos ) const
 
 float SDFCache::GetValue( aeInt3 pos ) const
 {
-  pos -= aeInt3( m_chunk * kChunkSize );
-  pos += aeInt3( kOffset );
-  AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
-  AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
-
-  return m_GetValue( pos );
+  return m_GetValue( pos + m_offseti );
 }
 
 aeFloat3 SDFCache::GetDerivative( aeFloat3 p ) const
@@ -371,6 +367,10 @@ aeFloat3 SDFCache::GetDerivative( aeFloat3 p ) const
 
 float SDFCache::m_GetValue( aeInt3 pos ) const
 {
+#if _AE_DEBUG_
+  AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
+  AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
+#endif
   return m_sdf[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
 }
 
@@ -527,7 +527,15 @@ aeTerrainJob::aeTerrainJob() :
   m_vertices( kMaxChunkVerts, TerrainVertex() ),
   m_indices( kMaxChunkIndices, TerrainIndex() ),
   m_chunk( nullptr )
-{}
+{
+  edgeInfo = aeAlloc::AllocateArray< TempEdges >( kTempChunkSize3 );
+}
+
+aeTerrainJob::~aeTerrainJob()
+{
+  aeAlloc::Release( edgeInfo );
+  edgeInfo = nullptr;
+}
 
 void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
 {
@@ -546,9 +554,7 @@ void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
 void aeTerrainJob::Do()
 {
   m_sdfCache.Generate( m_chunk->m_pos, m_sdf );
-  // @TODO: Flag cache complete so terrain update can return safely
-
-  m_chunk->Generate( &m_sdfCache, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
+  m_chunk->Generate( &m_sdfCache, edgeInfo, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
   m_running = false;
 }
 
@@ -569,7 +575,7 @@ bool aeTerrainJob::HasChunk( aeInt3 pos ) const
   return m_chunk && m_chunk->m_pos == pos;
 }
 
-void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
+void Chunk::Generate( const SDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
 {
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
@@ -580,24 +586,7 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
   int32_t chunkOffsetY = m_pos.y * kChunkSize;
   int32_t chunkOffsetZ = m_pos.z * kChunkSize;
   
-  struct TempEdges
-  {
-    int32_t x;
-    int32_t y;
-    int32_t z;
-    uint16_t b;
-
-    // 3 planes which whose intersections are used to position vertices within voxel
-    // EDGE_TOP_FRONT_BIT
-    // EDGE_TOP_RIGHT_BIT
-    // EDGE_SIDE_FRONTRIGHT_BIT
-    aeFloat3 p[ 3 ];
-    aeFloat3 n[ 3 ];
-  };
-
-  const int32_t tempChunkSize = kChunkSize + 2;
-  std::vector< TempEdges > edgeInfo( tempChunkSize * tempChunkSize * tempChunkSize, TempEdges() );
-  memset( &edgeInfo[ 0 ], 0, edgeInfo.size() * sizeof(TempEdges) );
+  memset( edgeInfo, 0, kTempChunkSize3 * sizeof( *edgeInfo ) );
   
   uint16_t mask[ 3 ];
   mask[ 0 ] = EDGE_TOP_FRONT_BIT;
@@ -628,10 +617,10 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
     for ( int32_t i = 0; i < 3; i++ )
     for ( int32_t j = 0; j < 2; j++ )
     {
-      float gx = chunkOffsetX + x + cornerOffsets[ i ][ j ].x;
-      float gy = chunkOffsetY + y + cornerOffsets[ i ][ j ].y;
-      float gz = chunkOffsetZ + z + cornerOffsets[ i ][ j ].z;
-      cornerValues[ i ][ j ] = sdf2->GetValue( aeFloat3( gx, gy, gz) ); // TODO: Use integer GetValue()
+      int32_t gx = chunkOffsetX + x + cornerOffsets[ i ][ j ].x;
+      int32_t gy = chunkOffsetY + y + cornerOffsets[ i ][ j ].y;
+      int32_t gz = chunkOffsetZ + z + cornerOffsets[ i ][ j ].z;
+      cornerValues[ i ][ j ] = sdf->GetValue( aeInt3( gx, gy, gz ) );
       if ( cornerValues[ i ][ j ] == 0.0f )
       {
         // @NOTE: Never let a terrain value be exactly 0, or else surface will end up with multiple vertices for the same point in the sdf
@@ -654,14 +643,15 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
         g.x = chunkOffsetX + x + 0.5f;
         g.y = chunkOffsetY + y + 0.5f;
         g.z = chunkOffsetZ + z + 0.5f;
-        m_t[ x ][ y ][ z ] = ( sdf2->GetValue( g ) > 0.0f ) ? Block::Exterior : Block::Interior;
+        // @TODO: This is really expensive and might not be needed. Investigate removing 'Block' type altogether
+        m_t[ x ][ y ][ z ] = ( sdf->GetValue( g ) > 0.0f ) ? Block::Exterior : Block::Interior;
       }
       continue;
     }
     
-    uint32_t edgeIndex = x + 1 + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
-    TempEdges* te = &edgeInfo[ edgeIndex ];
+    uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
+    aeTerrainJob::TempEdges* te = &edgeInfo[ edgeIndex ];
     te->b = edgeBits;
     te->x = x;
     te->y = y;
@@ -702,7 +692,7 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
           edgeVoxelPos = ( c0 + c1 ) * 0.5f;
           aeFloat3 cw = ch + edgeVoxelPos;
           
-          float v = sdf2->GetValue( cw );
+          float v = sdf->GetValue( cw );
           if ( aeMath::Abs( v ) < 0.001f )
           {
             break;
@@ -726,7 +716,7 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
       edgeWorldPos += edgeVoxelPos;
 
       te->p[ e ] = edgeVoxelPos;
-      te->n[ e ] = sdf2->GetDerivative( edgeWorldPos );
+      te->n[ e ] = sdf->GetDerivative( edgeWorldPos );
       
       if ( x < 0 || y < 0 || z < 0 || x >= kChunkSize || y >= kChunkSize || z >= kChunkSize )
       {
@@ -839,9 +829,9 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
     if ( x < 0 || y < 0 || z < 0 ) { AE_FAIL(); }
     if ( x > kChunkSize || y > kChunkSize || z > kChunkSize ) { AE_FAIL(); }
     
-    uint32_t edgeIndex = x + 1 + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
-    TempEdges te = edgeInfo[ edgeIndex ];
+    uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
+    aeTerrainJob::TempEdges te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {
       p[ ec ] = te.p[ 0 ];
@@ -860,8 +850,8 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
       n[ ec ] = te.n[ 2 ];
       ec++;
     }
-    edgeIndex = x + tempChunkSize * ( y + 1 + ( z + 1 ) * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    edgeIndex = x + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
     te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_RIGHT_BIT )
     {
@@ -877,8 +867,8 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
       n[ ec ] = te.n[ 2 ];
       ec++;
     }
-    edgeIndex = x + 1 + tempChunkSize * ( y + ( z + 1 ) * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    edgeIndex = x + 1 + kTempChunkSize * ( y + ( z + 1 ) * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
     te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {
@@ -894,8 +884,8 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
       n[ ec ] = te.n[ 2 ];
       ec++;
     }
-    edgeIndex = x + tempChunkSize * ( y + ( z + 1 ) * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    edgeIndex = x + kTempChunkSize * ( y + ( z + 1 ) * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
     te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
     {
@@ -905,8 +895,8 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
       n[ ec ] = te.n[ 2 ];
       ec++;
     }
-    edgeIndex = x + tempChunkSize * ( y + 1 + z * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    edgeIndex = x + kTempChunkSize * ( y + 1 + z * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
     te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_RIGHT_BIT )
     {
@@ -916,8 +906,8 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
       n[ ec ] = te.n[ 1 ];
       ec++;
     }
-    edgeIndex = x + 1 + tempChunkSize * ( y + z * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    edgeIndex = x + 1 + kTempChunkSize * ( y + z * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
     te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {
@@ -927,8 +917,8 @@ void Chunk::Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainI
       n[ ec ] = te.n[ 0 ];
       ec++;
     }
-    edgeIndex = x + 1 + tempChunkSize * ( y + 1 + z * tempChunkSize );
-    AE_ASSERT( edgeIndex < edgeInfo.size() );
+    edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + z * kTempChunkSize );
+    AE_ASSERT( edgeIndex < kTempChunkSize3 );
     te = edgeInfo[ edgeIndex ];
     if ( te.b & EDGE_TOP_FRONT_BIT )
     {

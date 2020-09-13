@@ -94,6 +94,8 @@ typedef float float16_t;
 #define PACK( _ae_something ) _ae_something
 
 const uint32_t kChunkSize = 64;
+const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
+const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
 const uint32_t kChunkCountMax = kChunkSize * kChunkSize * kChunkSize;
 const uint32_t kWorldChunksWidth = 128;
 const uint32_t kWorldChunksHeight = 2;
@@ -179,7 +181,11 @@ private:
 
   const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to chunkPlus
   static const int32_t kOffset = 2;
+  
   aeInt3 m_chunk;
+  aeInt3 m_offseti; // Pre-computed chunk integer offset
+  aeFloat3 m_offsetf; // Pre-computed chunk float offset
+
   float16_t* m_sdf;
 };
 
@@ -187,6 +193,7 @@ class aeTerrainJob
 {
 public:
   aeTerrainJob();
+  ~aeTerrainJob();
   void StartNew( const aeTerrainSDF* sdf, struct Chunk* chunk );
   void Do();
   void Finish();
@@ -220,6 +227,25 @@ private:
   uint32_t m_indexCount;
   aeArray< TerrainVertex > m_vertices;
   aeArray< TerrainIndex > m_indices;
+
+public:
+  // Temp edges (pre-allocate edges for all future jobs)
+  struct TempEdges
+  {
+    int32_t x;
+    int32_t y;
+    int32_t z;
+    uint16_t b;
+
+    // 3 planes which whose intersections are used to position vertices within voxel
+    // EDGE_TOP_FRONT_BIT
+    // EDGE_TOP_RIGHT_BIT
+    // EDGE_SIDE_FRONTRIGHT_BIT
+    aeFloat3 p[ 3 ];
+    aeFloat3 n[ 3 ];
+  };
+
+  TempEdges* edgeInfo;
 };
 
 struct Chunk // @TODO: aeTerrainChunk
@@ -229,7 +255,7 @@ struct Chunk // @TODO: aeTerrainChunk
 
   static uint32_t GetIndex( aeInt3 pos );
   uint32_t GetIndex() const;
-  void Generate( const SDFCache* sdf2, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
+  void Generate( const SDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
   
   uint32_t m_check;
   aeInt3 m_pos;
