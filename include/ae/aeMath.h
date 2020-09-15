@@ -541,37 +541,6 @@ inline std::ostream& operator<<( std::ostream& os, aeFloat3 v )
   return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
 }
 
-namespace aeMath
-{
-  inline aeFloat3 Min( aeFloat3 v0, aeFloat3 v1 )
-  {
-    return aeFloat3(
-      Min( v0.x, v1.x ),
-      Min( v0.y, v1.y ),
-      Min( v0.z, v1.z )
-    );
-  }
-
-  inline aeFloat3 Max( aeFloat3 v0, aeFloat3 v1 )
-  {
-    return aeFloat3(
-      Max( v0.x, v1.x ),
-      Max( v0.y, v1.y ),
-      Max( v0.z, v1.z )
-    );
-  }
-
-  inline aeFloat3 Abs( aeFloat3 v )
-  {
-    return aeFloat3(
-      Abs( v.x ),
-      Abs( v.y ),
-      Abs( v.z )
-    );
-  }
-}
-
-
 //------------------------------------------------------------------------------
 // aeInt3 struct
 //------------------------------------------------------------------------------
@@ -627,6 +596,63 @@ struct AE_ALIGN(16) aeInt3
 inline std::ostream& operator<<( std::ostream& os, aeInt3 v )
 {
   return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
+}
+
+namespace aeMath
+{
+  inline aeFloat3 Min( aeFloat3 v0, aeFloat3 v1 )
+  {
+    return aeFloat3(
+      Min( v0.x, v1.x ),
+      Min( v0.y, v1.y ),
+      Min( v0.z, v1.z )
+    );
+  }
+
+  inline aeFloat3 Max( aeFloat3 v0, aeFloat3 v1 )
+  {
+    return aeFloat3(
+      Max( v0.x, v1.x ),
+      Max( v0.y, v1.y ),
+      Max( v0.z, v1.z )
+    );
+  }
+
+  inline aeFloat3 Abs( aeFloat3 v )
+  {
+    return aeFloat3(
+      Abs( v.x ),
+      Abs( v.y ),
+      Abs( v.z )
+    );
+  }
+
+  inline aeInt3 Min( aeInt3 v0, aeInt3 v1 )
+  {
+    return aeInt3(
+      Min( v0.x, v1.x ),
+      Min( v0.y, v1.y ),
+      Min( v0.z, v1.z )
+    );
+  }
+
+  inline aeInt3 Max( aeInt3 v0, aeInt3 v1 )
+  {
+    return aeInt3(
+      Max( v0.x, v1.x ),
+      Max( v0.y, v1.y ),
+      Max( v0.z, v1.z )
+    );
+  }
+
+  inline aeInt3 Abs( aeInt3 v )
+  {
+    return aeInt3(
+      Abs( v.x ),
+      Abs( v.y ),
+      Abs( v.z )
+    );
+  }
 }
 
 //------------------------------------------------------------------------------

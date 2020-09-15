@@ -518,7 +518,6 @@ aeFloat3 aeTerrainSDF::GetSurfaceDerivative( aeFloat3 p ) const
 }
 
 aeTerrainJob::aeTerrainJob() :
-  replaceDirty_CHECK( false ),
   m_hasJob( false ),
   m_running( false ),
   m_sdf( nullptr ),
@@ -620,6 +619,7 @@ void Chunk::Generate( const SDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, Te
       int32_t gx = chunkOffsetX + x + cornerOffsets[ i ][ j ].x;
       int32_t gy = chunkOffsetY + y + cornerOffsets[ i ][ j ].y;
       int32_t gz = chunkOffsetZ + z + cornerOffsets[ i ][ j ].z;
+      // @TODO: Should pre-calculate, or at least only look up corner (1,1,1) once
       cornerValues[ i ][ j ] = sdf->GetValue( aeInt3( gx, gy, gz ) );
       if ( cornerValues[ i ][ j ] == 0.0f )
       {
@@ -1032,23 +1032,14 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
 void aeTerrain::FreeChunk( Chunk* chunk )
 {
   AE_ASSERT( chunk );
+  AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
 
+  // Only clear chunk from world if set (may not be set in the case of a new chunk with zero verts)
   uint32_t chunkIndex = chunk->GetIndex();
-  if ( m_render )
+  if ( m_chunks[ chunkIndex ] == chunk )
   {
-    if ( m_chunks[ chunkIndex ] )
-    {
-      // @NOTE: Make sure that the chunk data matches the array
-      //AE_ASSERT_MSG( m_chunks[ chunkIndex ] == chunk, "Chunks value (#) at index does not match chunk (#)", m_chunks[ chunkIndex ], chunk );
-      AE_ASSERT( chunk->m_data.GetVertexCount() );
-    }
-    else
-    {
-      // @NOTE: Chunks with no vertex data should released immediately without being kept in m_chunks[]
-      AE_ASSERT( !chunk->m_data.GetVertexCount() );
-    }
+    m_chunks[ chunkIndex ] = nullptr;
   }
-  m_chunks[ chunkIndex ] = nullptr;
   
   // @TODO: Cleanup how chunk resources are released
   //m_compactAlloc.Free( &chunk->m_vertices );
@@ -1411,78 +1402,83 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       continue;
     }
 
-    Chunk* chunk = job->GetChunk();
-    AE_ASSERT( chunk );
+    Chunk* newChunk = job->GetChunk();
+    AE_ASSERT( newChunk );
+    AE_ASSERT( newChunk->m_check == 0xCDCDCDCD );
+
+    uint32_t chunkIndex = newChunk->GetIndex();
+    Chunk* oldChunk = m_chunks[ chunkIndex ];
+
     uint32_t vertexCount = job->GetVertexCount();
     uint32_t indexCount = job->GetIndexCount();
-    uint32_t chunkIndex = chunk->GetIndex();
-
-    // Record that chunk has been generated
-    m_voxelCounts[ chunkIndex ] = vertexCount;
 
     AE_ASSERT( vertexCount <= kChunkCountMax );
     if ( vertexCount == 0 || vertexCount == kChunkCountMax )
     {
       // @TODO: It's super expensive to finally just throw away the unneeded chunk...
-      FreeChunk( chunk );
+      FreeChunk( newChunk );
+      newChunk = nullptr;
     }
     else
     {
       if ( m_render )
       {
         // (Re)initialize aeVertexData here only when needed
-        if ( chunk->m_data.GetIndexCount() == 0 // Not initialized
-          || chunk->m_data.GetMaxVertexCount() < vertexCount // Too little storage for verts
-          || chunk->m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
+        if ( newChunk->m_data.GetIndexCount() == 0 // Not initialized
+          || newChunk->m_data.GetMaxVertexCount() < vertexCount // Too little storage for verts
+          || newChunk->m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
         {
-          chunk->m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), vertexCount, indexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
-          chunk->m_data.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( TerrainVertex, position ) );
-          chunk->m_data.AddAttribute( "a_normal", 3, aeVertexDataType::Float, offsetof( TerrainVertex, normal ) );
-          chunk->m_data.AddAttribute( "a_info", 4, aeVertexDataType::UInt8, offsetof( TerrainVertex, info ) );
+          newChunk->m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), vertexCount, indexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
+          newChunk->m_data.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( TerrainVertex, position ) );
+          newChunk->m_data.AddAttribute( "a_normal", 3, aeVertexDataType::Float, offsetof( TerrainVertex, normal ) );
+          newChunk->m_data.AddAttribute( "a_info", 4, aeVertexDataType::UInt8, offsetof( TerrainVertex, info ) );
         }
 
         // Set vertices
-        chunk->m_data.SetVertices( job->GetVertices(), vertexCount );
-        chunk->m_data.SetIndices( job->GetIndices(), indexCount );
+        newChunk->m_data.SetVertices( job->GetVertices(), vertexCount );
+        newChunk->m_data.SetIndices( job->GetIndices(), indexCount );
       }
 
+      // Copy chunk verts from job
       // @TODO: This should be handled by the Chunk
       uint32_t vertexBytes = vertexCount * sizeof( TerrainVertex );
       //m_compactAlloc.Allocate( &chunk->m_vertices, vertexBytes );
-      chunk->m_vertices = aeAlloc::AllocateArray< TerrainVertex >( vertexCount );
-      memcpy( chunk->m_vertices, job->GetVertices(), vertexBytes );
+      newChunk->m_vertices = aeAlloc::AllocateArray< TerrainVertex >( vertexCount );
+      memcpy( newChunk->m_vertices, job->GetVertices(), vertexBytes );
 
       // Ready for lighting
-      chunk->m_lightDirty = true;
-
-      // Store chunk in world grid
-      Chunk* oldChunk = m_chunks[ chunkIndex ];
-      if ( job->replaceDirty_CHECK )
-      {
-        AE_ASSERT( oldChunk );
-      }
-      else
-      {
-        AE_ASSERT( !oldChunk );
-      }
+      newChunk->m_lightDirty = true;
       if ( oldChunk )
       {
-        // @NOTE: Copy dirty flag to new chunk in case it's
-        // been modified since the job started.
-        chunk->m_geoDirty = oldChunk->m_geoDirty;
-
-        // @NOTE: Replace old chunk in sorted list with job chunk
-        int32_t index = t_chunkSorts.FindFn( [oldChunk]( ChunkSort& s ) { return s.c == oldChunk; } );
-        if ( index >= 0 )
-        {
-          t_chunkSorts[ index ].c = chunk;
-        }
-
-        FreeChunk( oldChunk );
+        // @NOTE: Copy dirty flag to new chunk in case it's been modified since the job started.
+        newChunk->m_geoDirty = oldChunk->m_geoDirty;
       }
+    }
 
-      m_chunks[ chunkIndex ] = chunk;
-      m_generatedList.Append( chunk->m_generatedList );
+    if ( oldChunk )
+    {
+      // @NOTE: Replace old chunk in sorted list with the job chunk
+      int32_t sortIndex = t_chunkSorts.FindFn( [oldChunk]( ChunkSort& cs ) { return cs.c == oldChunk; } );
+      if ( sortIndex >= 0 )
+      {
+        t_chunkSorts[ sortIndex ].c = newChunk;
+      }
+      FreeChunk( oldChunk );
+    }
+
+    // Record that the chunk has been generated
+    m_voxelCounts[ chunkIndex ] = vertexCount;
+    // Set world grid chunk
+    if ( newChunk )
+    {
+      m_chunks[ chunkIndex ] = newChunk;
+      // Add new chunk to list of finished chunks
+      m_generatedList.Append( newChunk->m_generatedList );
+    }
+    else
+    {
+      // Clear old chunk
+      m_chunks[ chunkIndex ] = nullptr;
     }
 
     job->Finish();
@@ -1501,7 +1497,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     if ( chunk )
     {
       AE_ASSERT_MSG( indexPosChunk == chunk, "# #", indexPosChunk, chunk );
-      AE_ASSERT( m_voxelCounts[ chunkIndex ] > 0 );
+      AE_ASSERT_MSG( m_voxelCounts[ chunkIndex ] > 0, "count #", m_voxelCounts[ chunkIndex ] );
       AE_ASSERT( chunk->m_vertices );
       AE_ASSERT( chunk->m_data.GetVertexCount() );
       AE_ASSERT( chunk->m_data.GetVertexSize() );
@@ -1580,7 +1576,6 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       job->StartNew( &m_sdf, chunk );
       // @NOTE: replaceDirty_CHECK doesn't do anything, but is used to assert when the job
       // is done that another chunk is being replaced.
-      job->replaceDirty_CHECK = chunkDirty;
       if ( m_threadPool->size() )
       {
         m_threadPool->push( [ job ]( int id )
@@ -1650,14 +1645,21 @@ void aeTerrain::Dirty( aeAABB aabb )
 {
   aeInt3 minChunk = ( aabb.GetMin() / kChunkSize ).FloorCopy();
   aeInt3 maxChunk = ( aabb.GetMax() / kChunkSize ).CeilCopy();
+  minChunk = aeMath::Max( minChunk, aeInt3( 0 ) );
+  maxChunk = aeMath::Min( maxChunk, aeInt3( kWorldChunksWidth, kWorldChunksWidth, kWorldChunksHeight ) );
 
   for ( int32_t z = minChunk.z; z < maxChunk.z; z++ )
   for ( int32_t y = minChunk.y; y < maxChunk.y; y++ )
   for ( int32_t x = minChunk.x; x < maxChunk.x; x++ )
   {
-    if ( Chunk* chunk = GetChunk( aeInt3( x, y, z ) ) )
+    aeInt3 pos( x, y, z );
+    if ( Chunk* chunk = GetChunk( pos ) )
     {
       chunk->m_geoDirty = true;
+    }
+    else
+    {
+      m_voxelCounts[ Chunk::GetIndex( pos ) ] = ~0;
     }
   }
 }

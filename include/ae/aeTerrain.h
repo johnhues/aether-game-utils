@@ -208,8 +208,6 @@ public:
   uint32_t GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
 
-  bool replaceDirty_CHECK;
-
 private:
   // Management
   bool m_hasJob;
