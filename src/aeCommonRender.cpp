@@ -1010,7 +1010,57 @@ void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
         { c[ 7 ], obj.color },
         { c[ 4 ], obj.color },
       };
+      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
       
+      m_verts.Append( verts, countof( verts ) );
+    }
+    else if ( obj.type == DebugType::Cube )
+    {
+      aeFloat3 c[] =
+      {
+        ( obj.transform * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ()
+      };
+      AE_STATIC_ASSERT( countof( c ) == 8 );
+
+      DebugVertex verts[] =
+      {
+        // Top
+        { c[ 0 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 0 ], obj.color },
+        // Sides
+        { c[ 0 ], obj.color },
+        { c[ 4 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 7 ], obj.color },
+        //Bottom
+        { c[ 4 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 4 ], obj.color },
+      };
+      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
+
       m_verts.Append( verts, countof( verts ) );
     }
   }
@@ -1118,6 +1168,17 @@ void aeDebugRender::AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color )
     m_objs[ m_objCount ].size = halfSize;
     m_objs[ m_objCount ].color = color;
     m_objs[ m_objCount ].pointCount = 0;
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddCube( aeFloat4x4 transform, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Cube;
+    m_objs[ m_objCount ].transform = transform;
+    m_objs[ m_objCount ].color = color;
     m_objCount++;
   }
 }

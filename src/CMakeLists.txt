@@ -105,6 +105,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aePlatform.cpp
 		aeSpline.cpp
 		aeTerrain.cpp
+		aeTerrainSDF.cpp
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp

@@ -77,6 +77,11 @@ void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, F
 
 bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension, Format storage )
 {
+  if ( !file || !length )
+  {
+    return false;
+  }
+
   AE_ASSERT( extension == Extension::PNG );
 
   int32_t width = 0;
@@ -293,7 +298,7 @@ void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
   {
     uint32_t index = x + kDim * ( y + kDim * z );
     aeFloat3 pos( offset.x + x, offset.y + y, offset.z + z );
-    m_sdf[ index ] = sdf->TerrainValue( pos );
+    m_sdf[ index ] = sdf->GetValue( pos );
   }
 }
 
@@ -404,117 +409,6 @@ uint32_t Chunk::GetIndex( aeInt3 pos )
 uint32_t Chunk::GetIndex() const
 {
   return GetIndex( m_pos );
-}
-
-float Box( aeFloat3 p, aeFloat3 b )
-{
-  aeFloat3 d;
-  d.x = aeMath::Abs( p.x ) - b.x;
-  d.y = aeMath::Abs( p.y ) - b.y;
-  d.z = aeMath::Abs( p.z ) - b.z;
-  aeFloat3 d0;
-  d0.x = aeMath::Max( d.x, 0.0f );
-  d0.y = aeMath::Max( d.y, 0.0f );
-  d0.z = aeMath::Max( d.z, 0.0f );
-  float f = aeFloat3( d0 ).Length();
-  return f + fmin( fmax( d.x, fmax( d.y, d.z ) ), 0.0f );
-}
-
-float Cylinder( aeFloat3 p, aeFloat2 h )
-{
-  aeFloat2 d;
-  d.x = aeFloat2( p.x, p.y ).Length();
-  d.y = p.z;
-  d.x = fabs( d.x );
-  d.y = fabs( d.y );
-  d -= h;
-  aeFloat2 d0( fmax( d.x, 0.0f ), fmax( d.y, 0.0f ) );
-  return fmin( fmax( d.x,d.y ), 0.0f ) + d0.Length();
-}
-
-float Sphere( aeFloat3 center, float radius, aeFloat3 p )
-{
-  return ( p - center ).Length() - radius;
-}
-
-float Ground( float height, aeFloat3 p )
-{
-  return p.z - height;
-}
-
-float Union( float d1, float d2 )
-{
-  return aeMath::Min( d1, d2 );
-}
-
-float Subtraction( float d1, float d2 )
-{
-  return aeMath::Max( -d1, d2 );
-}
-
-float Intersection( float d1, float d2 )
-{
-  return aeMath::Max( d1, d2 );
-}
-
-float SmoothUnion( float d1, float d2, float k )
-{
-  float h = aeMath::Clip01( 0.5f + 0.5f * ( d2 - d1 ) / k );
-  return aeMath::Lerp( d2, d1, h ) - k * h * ( 1.0f - h );
-}
-
-float aeTerrainSDF::TerrainValue( aeFloat3 p ) const
-{
-  float f = 0.0f;
-  if ( m_fn2 )
-  {
-    f = m_fn2( m_userdata, p );
-  }
-  else if ( m_fn1 )
-  {
-    f = m_fn1( p );
-  }
-  else
-  {
-    f = Ground( 6, p );
-    f = Subtraction( Sphere( aeFloat3( 5, 5, 5 ), 3.5f, p ), f );
-  }
-
-  AE_ASSERT_MSG( f == f, "Terrain function returned NAN" );
-  return f;
-}
-
-aeFloat3 aeTerrainSDF::GetSurfaceDerivative( aeFloat3 p ) const
-{
-  aeFloat3 normal0;
-  for ( int32_t i = 0; i < 3; i++ )
-  {
-    aeFloat3 nt = p;
-    nt[ i ] += 0.2f;
-    normal0[ i ] = TerrainValue( nt );
-  }
-  // This should be really close to 0 because it's really
-  // close to the surface but not close enough to ignore.
-  normal0 -= aeFloat3( TerrainValue( p ) );
-  normal0.SafeNormalize();
-  AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
-  AE_ASSERT( normal0 == normal0 );
-
-  aeFloat3 normal1;
-  for ( int32_t i = 0; i < 3; i++ )
-  {
-    aeFloat3 nt = p;
-    nt[ i ] -= 0.2f;
-    normal1[ i ] = TerrainValue( nt );
-  }
-  // This should be really close to 0 because it's really
-  // close to the surface but not close enough to ignore.
-  normal1 = aeFloat3( TerrainValue( p ) ) - normal1;
-  normal1.SafeNormalize();
-  AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
-  AE_ASSERT( normal1 == normal1 );
-
-  return ( normal1 + normal0 ).SafeNormalizeCopy();
 }
 
 aeTerrainJob::aeTerrainJob() :
@@ -1484,6 +1378,17 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     job->Finish();
   }
 
+  if ( m_threadPool->size() == 0 || m_threadPool->n_idle() == m_threadPool->size() )
+  {
+    // "Commit" changes to sdf safely while no jobs are running
+    sdf.UpdatePending();
+  }
+  else if ( sdf.HasPending() )
+  {
+    // Don't start new terrain jobs if sdf has changed
+    return;
+  }
+
   //------------------------------------------------------------------------------
   // Start new terrain jobs
   //------------------------------------------------------------------------------
@@ -1573,7 +1478,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
 
       aeTerrainJob* job = m_terrainJobs[ jobIndex ];
       AE_ASSERT( job );
-      job->StartNew( &m_sdf, chunk );
+      job->StartNew( &sdf, chunk );
       // @NOTE: replaceDirty_CHECK doesn't do anything, but is used to assert when the job
       // is done that another chunk is being replaced.
       if ( m_threadPool->size() )
@@ -1627,22 +1532,30 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
   //AE_LOG( "chunks active:# allocated:#", activeCount, m_chunkPool.Length() );
 }
 
+void aeTerrain::RenderDebug( aeDebugRender* debug )
+{
+  sdf.RenderDebug( debug );
+}
+
 void aeTerrain::SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) )
 {
-  m_sdf.m_userdata = userdata;
-  m_sdf.m_fn1 = nullptr;
-  m_sdf.m_fn2 = fn;
+  sdf.m_userdata = userdata;
+  sdf.m_fn1 = nullptr;
+  sdf.m_fn2 = fn;
 }
 
 void aeTerrain::SetCallback( float ( *fn )( aeFloat3 ) )
 {
-  m_sdf.m_userdata = nullptr;
-  m_sdf.m_fn1 = fn;
-  m_sdf.m_fn2 = nullptr;
+  sdf.m_userdata = nullptr;
+  sdf.m_fn1 = fn;
+  sdf.m_fn2 = nullptr;
 }
 
 void aeTerrain::Dirty( aeAABB aabb )
 {
+  // @NOTE: Add a buffer region so voxels on the edge of the aabb are refreshed
+  aabb.Expand( kSdfBoundary );
+
   aeInt3 minChunk = ( aabb.GetMin() / kChunkSize ).FloorCopy();
   aeInt3 maxChunk = ( aabb.GetMax() / kChunkSize ).CeilCopy();
   minChunk = aeMath::Max( minChunk, aeInt3( 0 ) );
@@ -2153,8 +2066,8 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
       result.posi[ 2 ] = z;
       aeFloat3 iv0 = IntersectRayAABB( start, ray, result.posi );
       aeFloat3 iv1 = IntersectRayAABB( start + ray, -ray, result.posi );
-      float fv0 = m_sdf.TerrainValue( iv0 );
-      float fv1 = m_sdf.TerrainValue( iv1 );
+      float fv0 = sdf.GetValue( iv0 );
+      float fv1 = sdf.GetValue( iv1 );
       if( fv0 * fv1 <= 0.0f )
       {
         if ( fv0 > fv1 )
@@ -2167,14 +2080,14 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
         for ( int32_t ic = 0; ic < 10; ic++ )
         {
           p = iv0 * 0.5f + iv1 * 0.5f;
-          fp = m_sdf.TerrainValue( p );
+          fp = sdf.GetValue( p );
           if ( fp < 0.0f ) { iv0 = p; }
           else { iv1 = p; }
         }
         
         result.distance = ( p - start ).Length();
         result.posf = p;
-        result.normal = m_sdf.GetSurfaceDerivative( p );
+        result.normal = sdf.GetDerivative( p );
         result.hit = true;
         
         return result;

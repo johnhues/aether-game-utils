@@ -620,6 +620,7 @@ public:
 
   void AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount );
   void AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color );
+  void AddCube( aeFloat4x4 transform, aeColor color );
 
 private:
   static const uint32_t kMaxDebugObjects = 128;
@@ -640,6 +641,7 @@ private:
     Circle,
     Sphere,
     AABB,
+    Cube,
   };
 
   struct DebugObject
@@ -652,6 +654,7 @@ private:
     float radius;
     aeColor color;
     uint32_t pointCount; // circle only
+    aeFloat4x4 transform;
   };
   uint32_t m_objCount;
   DebugObject m_objs[ kMaxDebugObjects ];

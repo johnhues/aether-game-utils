@@ -830,6 +830,7 @@ public:
   aeFloat4x4& SetTranslation(float X, float Y, float Z);
   aeFloat4x4& SetTranslation(const aeFloat3 &translation);
   aeFloat3 GetTranslation() const;
+  aeFloat3 GetScale() const;
   aeFloat4x4& SetScale(float X, float Y, float Z);
   aeFloat4x4& SetScale(const aeFloat3 &scale);
   aeFloat4x4& SetScaleKeepTranslate(float X, float Y, float Z);
@@ -1048,9 +1049,12 @@ public:
 
   void Expand( aeFloat3 p );
   void Expand( aeAABB other );
+  void Expand( float boundary );
 
   aeFloat3 GetMin() const { return m_min; }
   aeFloat3 GetMax() const { return m_max; }
+  aeFloat3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
+  aeFloat4x4 GetTransform() const;
 
   float GetMinDistance( aeFloat3 p ) const;
   bool Intersect( aeAABB other ) const;

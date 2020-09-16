@@ -33,6 +33,9 @@
 #include "aeWindow.h"
 #include "aeVfs.h"
 
+#include "aeImGui.h"
+#include "ImGuizmo.h"
+
 //------------------------------------------------------------------------------
 // Terrain Shader
 //------------------------------------------------------------------------------
@@ -132,29 +135,6 @@ private:
 	aeVertexData m_bgVertexData;
 };
 
-struct SdfBox
-{
-	aeFloat3 c = aeFloat3( 0.0f );
-	aeFloat3 b = aeFloat3( 10.0f );
-	float r = 0.5f;
-
-	float GetValue( aeFloat3 p ) const
-	{
-		aeFloat3 q = aeMath::Abs( p - c ) - b;
-		return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - r;
-	}
-
-	aeAABB GetAABB() const
-	{
-		return aeAABB( c - b * 1.1f, c + b * 1.1f );
-	}
-};
-
-float aeUnion( float d1, float d2 )
-{
-	return aeMath::Min( d1, d2 );
-}
-
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -172,23 +152,28 @@ int main()
 	aeFixedTimeStep timeStep;
 	aeShader terrainShader;
 	aeEditorCamera camera;
-	////Grid grid;
-	ae::Image terrainHeightMap;
 	aeTextRender textRender;
+	class aeImGui* ui = nullptr;
 
-	if ( !headless )
+	ui = aeAlloc::Allocate< aeImGui >();
+	if ( headless )
+	{
+		ui->InitializeHeadless();
+	}
+	else
 	{
 		window.Initialize( 800, 600, false, true );
 		window.SetTitle( "terrain" );
 		render.InitializeOpenGL( &window );
 		render.SetClearColor( aeColor::PicoDarkPurple() );
 		debug.Initialize();
+		ui->Initialize();
 	}
 
 	input.Initialize( headless ? nullptr : &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	////grid.Initialize();
 	camera.SetPosition( aeFloat3( 150.0f, 150.f, 60.0f ) );
+	camera.SetFocusDistance( 100.0f );
 	
 	if ( !headless )
 	{
@@ -199,55 +184,12 @@ int main()
 
 	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
 
-	{
-		aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
-		if ( aeVfs::Read( "terrain.png", fileBuffer.Data(), fileBuffer.Length() ) )
-		{
-			terrainHeightMap.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
-		}
-	}
+	aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
+	aeVfs::Read( "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
 
 	uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
 	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
 	terrain->Initialize( terrainThreads, !headless );
-
-	struct TerrainGen
-	{
-		ae::Image* heightMap;
-		aeSpline spline;
-		SdfBox box;
-	} terrainGen;
-
-	terrainGen.heightMap = &terrainHeightMap;
-
-	aeFloat3 splineCenter( 100.0f, 100.0f, 40.0f );
-	for ( uint32_t i = 0; i < 5; i++ )
-	{
-		float angle = aeMath::TWO_PI * i / 5.0f; 
-		aeFloat3 p( aeMath::Cos( angle ), aeMath::Sin( angle ), 0.0f );
-		p *= 12.0f;
-		p += splineCenter;
-		terrainGen.spline.AppendControlPoint( p );
-	}
-	terrainGen.spline.SetLooping( true );
-
-	terrain->SetCallback( &terrainGen, []( void* userdata, aeFloat3 p )
-	{
-		TerrainGen* terrain = (TerrainGen*)userdata;
-
-		float height = p.z - terrain->heightMap->Get( p.GetXY() * 5.0f, ae::Image::Interpolation::Cosine ).r * 20.0f;
-		float sphere = ( p - aeFloat3( 100.0f, 100.0f, 40.0f ) ).Length() - 7.0f;
-		
-		float spline = aeMath::MaxValue< float >();
-		if ( terrain->spline.GetAABB().GetMinDistance( p ) <= 2.5f )
-		{
-			spline = terrain->spline.GetMinDistance( p ) - 2.5f;
-		}
-
-		float box = terrain->box.GetValue( p );
-
-		return aeMath::Min( height, sphere, spline, box );
-	} );
 
 	aeFloat4x4 worldToText = aeFloat4x4::Identity();
 	auto drawWorldText = [&]( aeFloat3 p, const char* str )
@@ -256,40 +198,98 @@ int main()
 		aeFloat2 fontSize( (float)textRender.GetFontSize() );
 		textRender.Add( p, fontSize, str, aeColor::White(), 0, 0 );
 	};
-	terrain->SetDebugTextCallback( drawWorldText );
 
 	bool wireframe = false;
+	static bool s_showTerrainDebug = false;
+
+	ae::Sdf* currentBox = nullptr;
+	{
+		ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
+		box->m_center = camera.GetFocus();
+		currentBox = box;
+	}
+
+	bool gizmoClickedPrev = false;
+	aeFloat4x4 gizmoPrevTransform = aeFloat4x4::Identity();
 
 	AE_INFO( "Run" );
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
 
-		drawWorldText( splineCenter, "SATURN" );
-		terrain->Update( camera.GetPosition(), 1250.0f );
+		ui->NewFrame( &render, &input, timeStep.GetTimeStep() );
 
-		RaycastResult result = terrain->Raycast( camera.GetPosition(), camera.GetForward() * 1000.0f );
+		ImGuizmo::SetOrthographic( false );
+		ImGuizmo::BeginFrame();
 
-		camera.Update( &input, timeStep.GetTimeStep() );
-		if ( result.hit )
+		// New terrain objects
+		if ( ImGui::Begin( "create", nullptr ) )
 		{
-			if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+			if ( ImGui::Button( "cube" ) )
 			{
-				AE_LOG( "f:# i:#", result.posf, aeInt3( result.posi ) );
-				camera.Refocus( result.posf );
+				AE_LOG( "Cube" );
+
+				ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
+				box->m_center = camera.GetFocus();
+
+				terrain->Dirty( box->GetAABB() );
+				currentBox = box;
+			}
+			else if ( ImGui::Button( "Height Map" ) )
+			{
+				AE_LOG( "create height map" );
+
+				ae::SdfHeightMap* heightMap = terrain->sdf.CreateSdf< ae::SdfHeightMap >();
+				heightMap->m_center = camera.GetFocus();
+				heightMap->m_heightMap.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
+
+				terrain->Dirty( heightMap->GetAABB() );
+				currentBox = heightMap;
+			}
+			ImGui::End();
+		}
+
+		if ( !ImGuizmo::IsUsing() )
+		{
+			if ( s_showTerrainDebug )
+			{
+				terrain->SetDebugTextCallback( drawWorldText );
+			}
+			else
+			{
+				terrain->SetDebugTextCallback( nullptr );
 			}
 
-			if ( input.GetState()->Get( aeKey::R ) )
-			{
-				terrain->Dirty( terrainGen.box.GetAABB() );
-				terrainGen.box.c = result.posf;
-				terrain->Dirty( terrainGen.box.GetAABB() );
-			}
+			// Wait for click release of gizmo before starting new terrain jobs
+			terrain->Update( camera.GetPosition(), 1250.0f );
+		}
 
-			if ( !input.GetPrevState()->Get( aeKey::W ) && input.GetState()->Get( aeKey::W ) )
-			{
-				wireframe = !wireframe;
-			}
+		// Camera input
+		if ( !ImGuizmo::IsUsing() )
+		{
+			camera.Update( &input, timeStep.GetTimeStep() );
+		}
+		// Camera focus
+		if ( currentBox && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+		{
+			camera.Refocus( currentBox->GetAABB().GetCenter() );
+		}
+
+		// Render mode
+		if ( !input.GetPrevState()->Get( aeKey::Num1 ) && input.GetState()->Get( aeKey::Num1 ) )
+		{
+			wireframe = true;
+			s_showTerrainDebug = true;
+		}
+		else if ( !input.GetPrevState()->Get( aeKey::Num2 ) && input.GetState()->Get( aeKey::Num2 ) )
+		{
+			wireframe = false;
+			s_showTerrainDebug = false;
+		}
+		else if ( input.GetState()->Get( aeKey::Num3 ) && !input.GetPrevState()->Get( aeKey::Num3 ) )
+		{
+			wireframe = false;
+			s_showTerrainDebug = true;
 		}
 
 		if ( !headless )
@@ -304,7 +304,8 @@ int main()
 			textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
 			worldToText = textToNdc.Inverse() * worldToProj;
 
-			//grid.Render( worldToProj );
+			aeFloat4x4 identity = aeFloat4x4::Identity();
+			//ImGuizmo::DrawGrid( worldToView.GetTransposeCopy().data, viewToProj.GetTransposeCopy().data, identity.data, 100.0f );
 
 			aeColor top = aeColor::PS( 46, 65, 35 );
 			aeColor side = aeColor::PS( 84, 84, 74 );
@@ -336,20 +337,65 @@ int main()
 				terrain->Render( &terrainShader, uniformList );
 			}
 
-			if ( result.hit )
+			if ( s_showTerrainDebug )
 			{
-				debug.AddLine( result.posf, result.posf + result.normal, aeColor::Red() );
-				debug.AddSphere( result.posf, 0.5f, aeColor::Red(), 24 );
+				terrain->RenderDebug( &debug );
 			}
 
-			for ( uint32_t i = 0; i < terrainGen.spline.GetControlPointCount(); i++ )
+			ImGuiIO& io = ImGui::GetIO();
+			ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
+
+			static ImGuizmo::OPERATION s_operation = ImGuizmo::TRANSLATE;
+			if ( input.GetState()->Get( aeKey::Q ) && !input.GetPrevState()->Get( aeKey::Q ) )
 			{
-				debug.AddSphere( terrainGen.spline.GetControlPoint( i ), 0.5f, aeColor::Red(), 24 );
+				currentBox = nullptr;
 			}
-			debug.AddAABB( terrainGen.box.c, terrainGen.box.b, aeColor::Red() );
+			else if ( input.GetState()->Get( aeKey::W ) && !input.GetPrevState()->Get( aeKey::W ) )
+			{
+				s_operation = ImGuizmo::TRANSLATE;
+			}
+			else if ( input.GetState()->Get( aeKey::E ) && !input.GetPrevState()->Get( aeKey::E ) )
+			{
+				s_operation = ImGuizmo::ROTATE;
+			}
+			else if ( input.GetState()->Get( aeKey::R ) && !input.GetPrevState()->Get( aeKey::R ) )
+			{
+				s_operation = ImGuizmo::SCALE;
+			}
+
+			if ( currentBox )
+			{
+				// Use ImGuizmo::IsUsing() to only update terrain when finished dragging
+				aeFloat4x4 gizmoTransform = currentBox->GetAABB().GetTransform();
+				if ( !gizmoClickedPrev && ImGuizmo::IsUsing() )
+				{
+					gizmoPrevTransform = gizmoTransform;
+					gizmoClickedPrev = true;
+				}
+
+				gizmoTransform.SetTranspose();
+				ImGuizmo::Manipulate( worldToView.GetTransposeCopy().data, viewToProj.GetTransposeCopy().data, s_operation, ImGuizmo::WORLD, gizmoTransform.data );
+				gizmoTransform.SetTranspose();
+
+				debug.AddCube( gizmoTransform, aeColor::Green() );
+
+				if ( gizmoTransform != gizmoPrevTransform )
+				{
+					currentBox->SetTransform( gizmoTransform );
+
+					aeFloat3 prevPos = gizmoPrevTransform.GetTranslation();
+					aeFloat3 prevHalfSize = gizmoPrevTransform.GetScale() * 0.5f;
+
+					aeAABB prevAABB( prevPos - prevHalfSize, prevPos + prevHalfSize );
+					terrain->Dirty( prevAABB );
+					terrain->Dirty( currentBox->GetAABB() );
+				}
+			}
 
 			debug.Render( worldToProj );
 			textRender.Render( textToNdc );
+
+			ui->Render();
 
 			render.EndFrame();
 		}
@@ -358,6 +404,7 @@ int main()
 	}
 
 	AE_INFO( "Terminate" );
+	ui->Terminate();
 	terrain->Terminate();
 	aeAlloc::Release( terrain );
 	input.Terminate();

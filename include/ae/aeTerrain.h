@@ -107,6 +107,7 @@ const uint32_t kMaxChunkVerts = kChunkSize * kChunkSize * kChunkSize;
 const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
 const uint32_t kMaxChunkAllocationsPerTick = 1;
 const float16_t kSkyBrightness = float16_t( 5.0f );
+const float kSdfBoundary = 2.0f;
 
 struct Block
 {
@@ -154,16 +155,113 @@ struct DCInfo
   EdgeCompact edges[ 12 ];
 };
 
+float aeUnion( float d1, float d2 );
+float aeSubtraction( float d1, float d2 );
+float aeIntersection( float d1, float d2 );
+float aeSmoothUnion( float d1, float d2, float k );
+
+namespace ae
+{
+  class Sdf
+  {
+  public:
+    virtual float GetValue( aeFloat3 p ) const = 0;
+    virtual aeAABB GetAABB() const = 0;
+    virtual void SetTransform( const aeFloat4x4& transform ) = 0;
+  };
+
+  struct SdfBox : public Sdf
+  {
+    float GetValue( aeFloat3 p ) const override
+    {
+      aeFloat3 q = aeMath::Abs( p - m_center ) - m_halfSize;
+      return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - r;
+    }
+
+    aeAABB GetAABB() const override
+    {
+      return aeAABB( m_center - m_halfSize, m_center + m_halfSize );
+    }
+
+    void SetTransform( const aeFloat4x4& transform ) override
+    {
+      m_center = transform.GetTranslation();
+      m_halfSize = transform.GetScale() * 0.5f;
+    }
+
+    aeFloat3 m_center = aeFloat3( 0.0f );
+    aeFloat3 m_halfSize = aeFloat3( 10.0f );
+    float r = 0.5f;
+  };
+
+  struct SdfHeightMap : public Sdf
+  {
+    float GetValue( aeFloat3 p ) const override
+    {
+      p -= m_center;
+      aeFloat2 p2 = ( p.GetXY() + m_halfSize.GetXY() ) / ( m_halfSize.GetXY() * 2.0f );
+      p2 *= aeFloat2( m_heightMap.GetWidth(), m_heightMap.GetHeight() );
+      float v0 = m_heightMap.Get( p2, ae::Image::Interpolation::Cosine ).r;
+      v0 = p.z + m_halfSize.z - v0 * m_halfSize.z * 2.0f;
+
+      aeFloat3 q = aeMath::Abs( p ) - m_halfSize;
+      float v1 = ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f );
+
+      return aeMath::Max( v0, v1 );
+
+    }
+
+    aeAABB GetAABB() const override
+    {
+      return aeAABB( m_center - m_halfSize, m_center + m_halfSize );
+    }
+
+    void SetTransform( const aeFloat4x4& transform ) override
+    {
+      m_center = transform.GetTranslation();
+      m_halfSize = transform.GetScale() * 0.5f;
+    }
+
+    aeFloat3 m_center = aeFloat3( 0.0f );
+    aeFloat3 m_halfSize = aeFloat3( 30.0f, 30.0f, 10.0f );
+    ae::Image m_heightMap;
+  };
+}
+
 class aeTerrainSDF
 {
 public:
-  float TerrainValue( aeFloat3 p ) const;
-  aeFloat3 GetSurfaceDerivative( aeFloat3 p ) const;
+  template < typename T >
+  T* CreateSdf();
+  void DestroySdf( ae::Sdf* sdf );
+
+  void UpdatePending();
+  bool HasPending() const;
+  void RenderDebug( aeDebugRender* debug );
+
+  // @NOTE: This will be called from multiple threads simultaneously and so must be const
+  float GetValue( aeFloat3 pos ) const;
+  aeFloat3 GetDerivative( aeFloat3 pos ) const;
+
+  bool TestAABB( aeAABB aabb ) const;
 
   void* m_userdata = nullptr;
   float ( *m_fn1 )( aeFloat3 ) = nullptr;
   float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
+
+private:
+  aeArray< ae::Sdf* > m_shapes;
+  aeArray< ae::Sdf* > m_pendingCreated;
+  aeArray< ae::Sdf* > m_pendingDestroy;
 };
+
+template < typename T >
+T* aeTerrainSDF::CreateSdf()
+{
+  ae::Sdf* sdf = aeAlloc::Allocate< T >();
+  m_pendingCreated.Append( sdf );
+  return static_cast< T* >( sdf );
+}
 
 class SDFCache
 {
@@ -280,6 +378,7 @@ public:
   void Terminate();
   void Update( aeFloat3 center, float radius );
   void Render( const class aeShader* shader, const aeUniformList& shaderParams );
+  void RenderDebug( class aeDebugRender* debug );
 
   void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
   void SetCallback( float ( *fn )( aeFloat3 ) );
@@ -294,11 +393,7 @@ public:
   const Chunk* GetChunk( aeInt3 pos ) const;
   Chunk* GetChunk( aeInt3 pos );
   int32_t GetVoxelCount( aeInt3 pos ) const;
-  //void VoxelizeAndAddMesh(
-  //  aeFloat3* vertices, uint16_t* indices,
-  //  uint32_t vertexCount, uint32_t indexCount,
-  //  aeFloat4x4& modelToWorld, Block::Type type );
-  
+
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
   RaycastResult Raycast( aeFloat3 start, aeFloat3 ray ) const;
@@ -309,6 +404,8 @@ public:
   bool SweepSphere( aeSphere sphere, aeFloat3 ray, float* distanceOut = nullptr, aeFloat3* normalOut = nullptr, aeFloat3* posOut = nullptr ) const;
   bool PushOutSphere( aeSphere sphere, aeFloat3* offsetOut = nullptr, class aeDebugRender* debug = nullptr ) const;
   
+  aeTerrainSDF sdf;
+
 private:
   const TerrainVertex* m_GetVertex( int32_t x, int32_t y, int32_t z ) const;
   void UpdateChunkLighting( Chunk* chunk );
@@ -336,8 +433,6 @@ private:
   //aeMap< aeInt3, ChunkSort > t_chunkMap;
   std::map< uint32_t, ChunkSort > t_chunkMap_hack;
   aeArray< ChunkSort > t_chunkSorts;
-
-  aeTerrainSDF m_sdf;
 
   aeList< Chunk > m_generatedList;
   uint8_t* m_chunkRawAlloc = nullptr;

@@ -1765,6 +1765,15 @@ aeFloat3 aeFloat4x4::GetTranslation() const
   return aeFloat3( data[ 3 ], data[ 7 ], data[ 11 ] );
 }
 
+aeFloat3 aeFloat4x4::GetScale() const
+{
+  return aeFloat3(
+    aeFloat3( data[ 0 ], data[ 4 ], data[ 8 ] ).Length(),
+    aeFloat3( data[ 1 ], data[ 5 ], data[ 9 ] ).Length(),
+    aeFloat3( data[ 2 ], data[ 6 ], data[ 10 ] ).Length()
+  );
+}
+
 aeFloat4x4& aeFloat4x4::SetScale(float X, float Y, float Z){
   data[0]  = X;    data[1] = 0.0f;  data[2] = 0.0f;  data[3] = 0.0f;
   data[4]  = 0.0f; data[5] = Y;     data[6] = 0.0f;  data[7] = 0.0f;
@@ -2508,6 +2517,17 @@ void aeAABB::Expand( aeAABB other )
 {
   m_min = aeMath::Min( other.m_min, m_min );
   m_max = aeMath::Max( other.m_max, m_max );
+}
+
+void aeAABB::Expand( float boundary )
+{
+  m_min -= aeFloat3( boundary );
+  m_max += aeFloat3( boundary );
+}
+
+aeFloat4x4 aeAABB::GetTransform() const
+{
+  return aeFloat4x4::Translation( GetCenter() ) * aeFloat4x4::Scaling( m_max - m_min );
 }
 
 float aeAABB::GetMinDistance( aeFloat3 p ) const
