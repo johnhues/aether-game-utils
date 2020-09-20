@@ -148,6 +148,9 @@ struct aeVertexDataType
     UInt8,
     UInt16,
     UInt32,
+    NormalizedUInt8,
+    NormalizedUInt16,
+    NormalizedUInt32,
     Float
   };
 };
@@ -168,6 +171,7 @@ struct aeVertexAttribute
   uint32_t componentCount;
   uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
   uint32_t offset;
+  bool normalized;
 };
 
 //------------------------------------------------------------------------------

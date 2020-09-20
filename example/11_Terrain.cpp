@@ -41,31 +41,37 @@
 //------------------------------------------------------------------------------
 const char* kTerrainVertShader = "\
 	AE_UNIFORM mat4 u_worldToProj;\
-	AE_UNIFORM vec4 u_topColor;\
-	AE_UNIFORM vec4 u_sideColor;\
 	AE_IN_HIGHP vec3 a_position;\
 	AE_IN_HIGHP vec3 a_normal;\
-	AE_OUT_HIGHP vec4 v_color;\
+	AE_IN_HIGHP vec4 a_materials;\
 	AE_OUT_HIGHP vec3 v_normal;\
+	AE_OUT_HIGHP vec4 v_materials;\
 	void main()\
 	{\
-		float top = max(0.0, a_normal.z);\
-		top *= top;\
-		top *= top;\
-		v_color = mix(u_sideColor, u_topColor, top);\
 		v_normal = a_normal;\
+		v_materials = a_materials;\
 		gl_Position = u_worldToProj * vec4( a_position, 1.0 );\
 	}";
 
 const char* kTerrainFragShader = "\
-	AE_IN_HIGHP vec4 v_color;\
+	AE_UNIFORM vec4 u_topColor;\
+	AE_UNIFORM vec4 u_sideColor;\
+	AE_UNIFORM vec4 u_pathColor;\
 	AE_IN_HIGHP vec3 v_normal;\
+	AE_IN_HIGHP vec4 v_materials;\
 	void main()\
 	{\
+		float top = max( 0.0, v_normal.z );\
+		top *= top;\
+		top *= top;\
+		vec4 color = mix( u_sideColor, u_topColor, top ) * v_materials.r;\
+		color += u_pathColor * v_materials.g;\
+		\
 		float light = dot( normalize( v_normal ), normalize( vec3( 1.0 ) ) );\
-		light = max(0.0, light);\
+		light = max( 0.0, light );\
 		light = mix( 0.8, 4.0, light );\
-		AE_COLOR = vec4( AE_RGB_TO_SRGB( v_color.rgb * vec3( light ) ), v_color.a );\
+		\
+		AE_COLOR = vec4( AE_RGB_TO_SRGB( color.rgb * vec3( light ) ), color.a );\
 	}";
 
 //------------------------------------------------------------------------------
@@ -246,6 +252,18 @@ int main()
 				terrain->Dirty( heightMap->GetAABB() );
 				currentBox = heightMap;
 			}
+			else if ( ImGui::Button( "Material 1" ) )
+			{
+				AE_LOG( "create material 1" );
+
+				ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
+				box->m_center = camera.GetFocus();
+				box->type = ae::Sdf::Type::Material;
+				box->materialId = 1;
+
+				terrain->Dirty( box->GetAABB() );
+				currentBox = box;
+			}
 			ImGui::End();
 		}
 
@@ -309,12 +327,14 @@ int main()
 
 			aeColor top = aeColor::PS( 46, 65, 35 );
 			aeColor side = aeColor::PS( 84, 84, 74 );
+			aeColor path = aeColor::PS( 64, 64, 54 );
 			aeUniformList uniformList;
 			uniformList.Set( "u_worldToProj", worldToProj );
 			if ( wireframe )
 			{
 				uniformList.Set( "u_topColor", top.GetLinearRGBA() );
 				uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
+				uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
 				terrainShader.SetBlending( false );
 				terrainShader.SetCulling( aeShaderCulling::None );
 				terrainShader.SetWireframe( true );
@@ -322,6 +342,7 @@ int main()
 
 				uniformList.Set( "u_topColor", top.SetA( 0.5f ).GetLinearRGBA() );
 				uniformList.Set( "u_sideColor", side.SetA( 0.5f ).GetLinearRGBA() );
+				uniformList.Set( "u_pathColor", path.SetA( 0.5f ).GetLinearRGBA() );
 				terrainShader.SetBlending( true );
 				terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
 				terrainShader.SetWireframe( false );
@@ -331,6 +352,7 @@ int main()
 			{
 				uniformList.Set( "u_topColor", top.GetLinearRGBA() );
 				uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
+				uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
 				terrainShader.SetBlending( false );
 				terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
 				terrainShader.SetWireframe( false );

@@ -91,6 +91,7 @@ namespace ae
 // Constants
 //------------------------------------------------------------------------------
 typedef float float16_t;
+typedef uint8_t aeTerrainMaterialId;
 #define PACK( _ae_something ) _ae_something
 
 const uint32_t kChunkSize = 64;
@@ -126,6 +127,7 @@ PACK( struct TerrainVertex
 {
   aeFloat3 position;
   aeFloat3 normal;
+  uint8_t materials[ 4 ];
   uint8_t info[ 4 ];
 });
 typedef uint16_t TerrainIndex;
@@ -149,12 +151,6 @@ struct EdgeCompact
   int8_t nz;
 };
 
-struct DCInfo
-{
-  uint16_t edgeFlags;
-  EdgeCompact edges[ 12 ];
-};
-
 float aeUnion( float d1, float d2 );
 float aeSubtraction( float d1, float d2 );
 float aeIntersection( float d1, float d2 );
@@ -168,6 +164,15 @@ namespace ae
     virtual float GetValue( aeFloat3 p ) const = 0;
     virtual aeAABB GetAABB() const = 0;
     virtual void SetTransform( const aeFloat4x4& transform ) = 0;
+
+    enum class Type
+    {
+      Union,
+      Material
+    };
+
+    Type type = Type::Union;
+    aeTerrainMaterialId materialId = 0;
   };
 
   struct SdfBox : public Sdf
@@ -242,6 +247,7 @@ public:
   // @NOTE: This will be called from multiple threads simultaneously and so must be const
   float GetValue( aeFloat3 pos ) const;
   aeFloat3 GetDerivative( aeFloat3 pos ) const;
+  aeTerrainMaterialId GetMaterial( aeFloat3 pos ) const;
 
   bool TestAABB( aeAABB aabb ) const;
 
@@ -273,6 +279,7 @@ public:
   float GetValue( aeFloat3 pos ) const;
   float GetValue( aeInt3 pos ) const;
   aeFloat3 GetDerivative( aeFloat3 p ) const;
+  uint8_t GetMaterial( aeInt3 pos ) const;
 
 private:
   float m_GetValue( aeInt3 pos ) const;
@@ -285,6 +292,7 @@ private:
   aeFloat3 m_offsetf; // Pre-computed chunk float offset
 
   float16_t* m_sdf;
+  aeTerrainMaterialId* m_material;
 };
 
 class aeTerrainJob

@@ -276,12 +276,15 @@ SDFCache::SDFCache()
 {
   m_chunk = aeInt3( 0 );
   m_sdf = aeAlloc::AllocateArray< float16_t >( kDim * kDim * kDim );
+  m_material = aeAlloc::AllocateArray< aeTerrainMaterialId >( kDim * kDim * kDim );
 }
 
 SDFCache::~SDFCache()
 {
   aeAlloc::Release( m_sdf );
+  aeAlloc::Release( m_material );
   m_sdf = nullptr;
+  m_material = nullptr;
 }
 
 void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
@@ -299,6 +302,7 @@ void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
     uint32_t index = x + kDim * ( y + kDim * z );
     aeFloat3 pos( offset.x + x, offset.y + y, offset.z + z );
     m_sdf[ index ] = sdf->GetValue( pos );
+    m_material[ index ] = sdf->GetMaterial( pos );
   }
 }
 
@@ -368,6 +372,16 @@ aeFloat3 SDFCache::GetDerivative( aeFloat3 p ) const
   AE_ASSERT( normal1 == normal1 );
 
   return ( normal1 + normal0 ).SafeNormalizeCopy();
+}
+
+uint8_t SDFCache::GetMaterial( aeInt3 pos ) const
+{
+  pos += m_offseti;
+#if _AE_DEBUG_
+  AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
+  AE_ASSERT( pos.x < kDim&& pos.y < kDim&& pos.z < kDim );
+#endif
+  return m_material[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
 }
 
 float SDFCache::m_GetValue( aeInt3 pos ) const
@@ -856,6 +870,12 @@ void Chunk::Generate( const SDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, Te
     vertex->info[ 1 ] = (uint8_t)( 1.5f ); // @HACK: Lighting values
     vertex->info[ 2 ] = 255;// @HACK: TerrainType( position );
     vertex->info[ 3 ] = 0;
+
+    uint8_t material = sdf->GetMaterial( position.FloorCopy() );
+    vertex->materials[ 0 ] = ( material == 0 ) ? 255 : 0;
+    vertex->materials[ 1 ] = ( material == 1 ) ? 255 : 0;
+    vertex->materials[ 2 ] = ( material == 2 ) ? 255 : 0;
+    vertex->materials[ 3 ] = ( material == 3 ) ? 255 : 0;
   }
   
   AE_ASSERT( vertexCount <= kMaxChunkVerts );
@@ -1326,6 +1346,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
           newChunk->m_data.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( TerrainVertex, position ) );
           newChunk->m_data.AddAttribute( "a_normal", 3, aeVertexDataType::Float, offsetof( TerrainVertex, normal ) );
           newChunk->m_data.AddAttribute( "a_info", 4, aeVertexDataType::UInt8, offsetof( TerrainVertex, info ) );
+          newChunk->m_data.AddAttribute( "a_materials", 4, aeVertexDataType::NormalizedUInt8, offsetof( TerrainVertex, materials ) );
         }
 
         // Set vertices

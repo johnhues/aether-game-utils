@@ -75,10 +75,17 @@ float aeTerrainSDF::GetValue( aeFloat3 pos ) const
       return 0.0f;
     }
 
-    f = m_shapes[ 0 ]->GetValue( pos );
-    for ( uint32_t i = 1; i < m_shapes.Length(); i++ )
+    int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf* sdf ){ return sdf->type != ae::Sdf::Type::Material; } );
+    if ( firstShapeIndex >= 0 )
     {
-      f = aeSmoothUnion( f, m_shapes[ i ]->GetValue( pos ), 5.0f );
+      f = m_shapes[ firstShapeIndex ]->GetValue( pos );
+      for ( uint32_t i = firstShapeIndex + 1; i < m_shapes.Length(); i++ )
+      {
+        if ( m_shapes[ i ]->type == ae::Sdf::Type::Union )
+        {
+          f = aeSmoothUnion( f, m_shapes[ i ]->GetValue( pos ), 5.0f );
+        }
+      }
     }
   }
 
@@ -117,6 +124,20 @@ aeFloat3 aeTerrainSDF::GetDerivative( aeFloat3 p ) const
   AE_ASSERT( normal1 == normal1 );
 
   return ( normal1 + normal0 ).SafeNormalizeCopy();
+}
+
+aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
+{
+  aeTerrainMaterialId materialId = 0;
+  for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
+  {
+    ae::Sdf* sdf = m_shapes[ i ];
+    if ( sdf->type == ae::Sdf::Type::Material && sdf->GetValue( pos ) <= 0.0f )
+    {
+      materialId = sdf->materialId;
+    }
+  }
+  return materialId;
 }
 
 bool aeTerrainSDF::TestAABB( aeAABB aabb ) const

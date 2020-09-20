@@ -81,6 +81,12 @@ GLenum aeVertexDataTypeToGL( aeVertexDataType::Type type )
       return GL_UNSIGNED_SHORT;
     case aeVertexDataType::UInt32:
       return GL_UNSIGNED_INT;
+    case aeVertexDataType::NormalizedUInt8:
+      return GL_UNSIGNED_BYTE;
+    case aeVertexDataType::NormalizedUInt16:
+      return GL_UNSIGNED_SHORT;
+    case aeVertexDataType::NormalizedUInt32:
+      return GL_UNSIGNED_INT;
     case aeVertexDataType::Float:
       return GL_FLOAT;
     default:
@@ -283,6 +289,10 @@ void aeVertexData::AddAttribute( const char *name, uint32_t componentCount, aeVe
   attribute->componentCount = componentCount;
   attribute->type = aeVertexDataTypeToGL( type );
   attribute->offset = offset;
+  attribute->normalized =
+    type == aeVertexDataType::NormalizedUInt8 ||
+    type == aeVertexDataType::NormalizedUInt16 ||
+    type == aeVertexDataType::NormalizedUInt32;
 }
 
 void aeVertexData::m_SetVertices( const void* vertices, uint32_t count )
@@ -532,7 +542,7 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
 
     uint32_t componentCount = vertexAttribute->componentCount;
     uint64_t attribOffset = vertexAttribute->offset;
-    glVertexAttribPointer( location, componentCount, vertexAttribute->type, GL_FALSE, m_vertexSize, (void*)attribOffset );
+    glVertexAttribPointer( location, componentCount, vertexAttribute->type, vertexAttribute->normalized, m_vertexSize, (void*)attribOffset );
     AE_CHECK_GL_ERROR();
   }
 
