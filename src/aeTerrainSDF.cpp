@@ -83,13 +83,19 @@ float aeTerrainSDF::GetValue( aeFloat3 pos ) const
       {
         if ( m_shapes[ i ]->type == ae::Sdf::Type::Union )
         {
-          f = aeSmoothUnion( f, m_shapes[ i ]->GetValue( pos ), 5.0f );
+          float value = m_shapes[ i ]->GetValue( pos );
+#if _AE_DEBUG_
+          AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
+#endif
+          f = aeSmoothUnion( f, value, 5.0f );
         }
       }
     }
   }
 
-  AE_ASSERT_MSG( f == f, "Terrain function returned NAN" );
+#if _AE_DEBUG_
+  AE_ASSERT_MSG( f == f, "Terrain SDF function returned NAN" );
+#endif
   return f;
 }
 
