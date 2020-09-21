@@ -190,8 +190,10 @@ int main()
 
 	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
 
+	ae::Image heightmapImage;
 	aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );
 	aeVfs::Read( "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
+	heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
 	uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
 	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
@@ -208,10 +210,10 @@ int main()
 	bool wireframe = false;
 	static bool s_showTerrainDebug = false;
 
-	ae::Sdf* currentBox = nullptr;
+	ae::Sdf::Shape* currentBox = nullptr;
 	{
-		ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
-		box->m_center = camera.GetFocus();
+		ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
+		box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) );
 		currentBox = box;
 	}
 
@@ -235,8 +237,10 @@ int main()
 			{
 				AE_LOG( "Cube" );
 
-				ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
-				box->m_center = camera.GetFocus();
+				ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
+				box->SetTransform(
+					aeFloat4x4::Translation( camera.GetFocus() ) *
+					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
 				terrain->Dirty( box->GetAABB() );
 				currentBox = box;
@@ -245,9 +249,11 @@ int main()
 			{
 				AE_LOG( "create height map" );
 
-				ae::SdfHeightMap* heightMap = terrain->sdf.CreateSdf< ae::SdfHeightMap >();
-				heightMap->m_center = camera.GetFocus();
-				heightMap->m_heightMap.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
+				ae::Sdf::Heightmap* heightMap = terrain->sdf.CreateSdf< ae::Sdf::Heightmap >();
+				heightMap->SetTransform(
+					aeFloat4x4::Translation( camera.GetFocus() ) *
+					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+				heightMap->SetImage( &heightmapImage );
 
 				terrain->Dirty( heightMap->GetAABB() );
 				currentBox = heightMap;
@@ -256,9 +262,11 @@ int main()
 			{
 				AE_LOG( "create material 1" );
 
-				ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
-				box->m_center = camera.GetFocus();
-				box->type = ae::Sdf::Type::Material;
+				ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
+				box->SetTransform(
+					aeFloat4x4::Translation( camera.GetFocus() ) *
+					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+				box->type = ae::Sdf::Shape::Type::Material;
 				box->materialId = 1;
 
 				terrain->Dirty( box->GetAABB() );
@@ -279,7 +287,7 @@ int main()
 			}
 
 			// Wait for click release of gizmo before starting new terrain jobs
-			terrain->Update( camera.GetPosition(), 1250.0f );
+			terrain->Update( camera.GetFocus(), 1250.0f );
 		}
 
 		// Camera input
@@ -388,7 +396,7 @@ int main()
 			if ( currentBox )
 			{
 				// Use ImGuizmo::IsUsing() to only update terrain when finished dragging
-				aeFloat4x4 gizmoTransform = currentBox->GetAABB().GetTransform();
+				aeFloat4x4 gizmoTransform = currentBox->GetTransform();
 				if ( !gizmoClickedPrev && ImGuizmo::IsUsing() )
 				{
 					gizmoPrevTransform = gizmoTransform;

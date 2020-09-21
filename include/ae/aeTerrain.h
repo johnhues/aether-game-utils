@@ -123,6 +123,9 @@ struct Block
   };
 };
 
+//------------------------------------------------------------------------------
+// TerrainVertex
+//------------------------------------------------------------------------------
 PACK( struct TerrainVertex
 {
   aeFloat3 position;
@@ -156,89 +159,86 @@ float aeSubtraction( float d1, float d2 );
 float aeIntersection( float d1, float d2 );
 float aeSmoothUnion( float d1, float d2, float k );
 
-namespace ae
+//------------------------------------------------------------------------------
+// ae::Sdf
+//------------------------------------------------------------------------------
+namespace ae { namespace Sdf {
+
+//------------------------------------------------------------------------------
+// Shape class
+//------------------------------------------------------------------------------
+class Shape
 {
-  class Sdf
+public:
+  Shape();
+
+  aeAABB GetAABB() const { return m_aabb; }
+  const aeFloat4x4& GetTransform() const { return m_localToWorld; }
+  void SetTransform( const aeFloat4x4& transform );
+
+  virtual float GetValue( aeFloat3 p ) const = 0;
+  virtual aeAABB OnSetTransform( aeFloat3 scale ) = 0;
+
+  enum class Type
   {
-  public:
-    virtual float GetValue( aeFloat3 p ) const = 0;
-    virtual aeAABB GetAABB() const = 0;
-    virtual void SetTransform( const aeFloat4x4& transform ) = 0;
-
-    enum class Type
-    {
-      Union,
-      Material
-    };
-
-    Type type = Type::Union;
-    aeTerrainMaterialId materialId = 0;
+    Union,
+    Material
   };
 
-  struct SdfBox : public Sdf
-  {
-    float GetValue( aeFloat3 p ) const override
-    {
-      aeFloat3 q = aeMath::Abs( p - m_center ) - m_halfSize;
-      return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - r;
-    }
+  Type type = Type::Union;
+  aeTerrainMaterialId materialId = 0;
 
-    aeAABB GetAABB() const override
-    {
-      return aeAABB( m_center - m_halfSize, m_center + m_halfSize );
-    }
+protected:
+  const aeFloat4x4& GetWorldToScaled() const { return m_worldToScaled; }
 
-    void SetTransform( const aeFloat4x4& transform ) override
-    {
-      m_center = transform.GetTranslation();
-      m_halfSize = transform.GetScale() * 0.5f;
-    }
+private:
+  aeAABB m_aabb;
+  aeFloat4x4 m_localToWorld;
+  aeFloat4x4 m_worldToScaled;
+};
 
-    aeFloat3 m_center = aeFloat3( 0.0f );
-    aeFloat3 m_halfSize = aeFloat3( 10.0f );
-    float r = 0.5f;
-  };
+//------------------------------------------------------------------------------
+// Box class
+//------------------------------------------------------------------------------
+class Box : public Shape
+{
+public:
+  float GetValue( aeFloat3 p ) const override;
+  aeAABB OnSetTransform( aeFloat3 scale ) override;
 
-  struct SdfHeightMap : public Sdf
-  {
-    float GetValue( aeFloat3 p ) const override
-    {
-      p -= m_center;
-      aeFloat2 p2 = ( p.GetXY() + m_halfSize.GetXY() ) / ( m_halfSize.GetXY() * 2.0f );
-      p2 *= aeFloat2( m_heightMap.GetWidth(), m_heightMap.GetHeight() );
-      float v0 = m_heightMap.Get( p2, ae::Image::Interpolation::Cosine ).r;
-      v0 = p.z + m_halfSize.z - v0 * m_halfSize.z * 2.0f;
+  void SetCornerSize( float cornerSize ) { m_r = cornerSize; }
 
-      aeFloat3 q = aeMath::Abs( p ) - m_halfSize;
-      float v1 = ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f );
+private:
+  aeFloat3 m_halfSize = aeFloat3( 0.0f );
+  float m_r = 0.0f;
+};
 
-      return aeMath::Max( v0, v1 );
+//------------------------------------------------------------------------------
+// Heightmap class
+//------------------------------------------------------------------------------
+class Heightmap : public Shape
+{
+public:
+  void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
+  float GetValue( aeFloat3 p ) const override;
+  aeAABB OnSetTransform( aeFloat3 scale ) override;
 
-    }
+private:
+  aeFloat3 m_halfSize = aeFloat3( 0.0f );
+  ae::Image* m_heightMap = nullptr;
+};
 
-    aeAABB GetAABB() const override
-    {
-      return aeAABB( m_center - m_halfSize, m_center + m_halfSize );
-    }
+} } // ae::Sdf
 
-    void SetTransform( const aeFloat4x4& transform ) override
-    {
-      m_center = transform.GetTranslation();
-      m_halfSize = transform.GetScale() * 0.5f;
-    }
-
-    aeFloat3 m_center = aeFloat3( 0.0f );
-    aeFloat3 m_halfSize = aeFloat3( 30.0f, 30.0f, 10.0f );
-    ae::Image m_heightMap;
-  };
-}
-
+//------------------------------------------------------------------------------
+// aeTerrainSDF class
+//------------------------------------------------------------------------------
 class aeTerrainSDF
 {
 public:
   template < typename T >
   T* CreateSdf();
-  void DestroySdf( ae::Sdf* sdf );
+  void DestroySdf( ae::Sdf::Shape* sdf );
 
   void UpdatePending();
   bool HasPending() const;
@@ -256,19 +256,22 @@ public:
   float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
 
 private:
-  aeArray< ae::Sdf* > m_shapes;
-  aeArray< ae::Sdf* > m_pendingCreated;
-  aeArray< ae::Sdf* > m_pendingDestroy;
+  aeArray< ae::Sdf::Shape* > m_shapes;
+  aeArray< ae::Sdf::Shape* > m_pendingCreated;
+  aeArray< ae::Sdf::Shape* > m_pendingDestroy;
 };
 
 template < typename T >
 T* aeTerrainSDF::CreateSdf()
 {
-  ae::Sdf* sdf = aeAlloc::Allocate< T >();
+  ae::Sdf::Shape* sdf = aeAlloc::Allocate< T >();
   m_pendingCreated.Append( sdf );
   return static_cast< T* >( sdf );
 }
 
+//------------------------------------------------------------------------------
+// SDFCache class
+//------------------------------------------------------------------------------
 class SDFCache
 {
 public:
@@ -295,6 +298,9 @@ private:
   aeTerrainMaterialId* m_material;
 };
 
+//------------------------------------------------------------------------------
+// aeTerrainJob class
+//------------------------------------------------------------------------------
 class aeTerrainJob
 {
 public:
@@ -352,6 +358,9 @@ public:
   TempEdges* edgeInfo;
 };
 
+//------------------------------------------------------------------------------
+// Terrain Chunk class
+//------------------------------------------------------------------------------
 struct Chunk // @TODO: aeTerrainChunk
 {
   Chunk();
@@ -377,6 +386,9 @@ private:
   static void m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t( &offsets )[ 4 ][ 3 ] );
 };
 
+//------------------------------------------------------------------------------
+// aeTerrain class
+//------------------------------------------------------------------------------
 class aeTerrain
 {
 public:

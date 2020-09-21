@@ -1,5 +1,33 @@
+//------------------------------------------------------------------------------
+// aeTerrainSDF.cpp
+//------------------------------------------------------------------------------
+// Copyright (c) 2020 John Hughes
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files( the "Software" ), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and /or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions :
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//------------------------------------------------------------------------------
+// Headers
+//------------------------------------------------------------------------------
 #include "aeTerrain.h"
 
+//------------------------------------------------------------------------------
+// Sdf helpers
+//------------------------------------------------------------------------------
 float Box( aeFloat3 p, aeFloat3 b )
 {
   aeFloat3 d;
@@ -57,6 +85,92 @@ float aeSmoothUnion( float d1, float d2, float k )
   return aeMath::Lerp( d2, d1, h ) - k * h * ( 1.0f - h );
 }
 
+//------------------------------------------------------------------------------
+// Sdf member functions
+//------------------------------------------------------------------------------
+ae::Sdf::Shape::Shape() :
+  m_aabb( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) ),
+  m_localToWorld( aeFloat4x4::Identity() ),
+  m_worldToScaled( aeFloat4x4::Identity() )
+{}
+
+void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
+{
+  m_localToWorld = transform;
+
+  aeFloat4x4 scaledToWorld = transform;
+  scaledToWorld.RemoveScaling();
+  m_worldToScaled = scaledToWorld.Inverse();
+
+  aeAABB scaledAABB = OnSetTransform( transform.GetScale() );
+  aeFloat4x4 localToAABB = scaledAABB.GetTransform();
+  aeFloat4x4 aabbToWorld = scaledToWorld * localToAABB;
+
+  aeFloat4 corners[] =
+  {
+    aabbToWorld * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ),
+    aabbToWorld * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ),
+    aabbToWorld * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ),
+    aabbToWorld * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ),
+    aabbToWorld * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ),
+    aabbToWorld * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ),
+    aabbToWorld * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ),
+    aabbToWorld * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ),
+  };
+  m_aabb = aeAABB( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
+  for ( uint32_t i = 2; i < countof( corners ); i++ )
+  {
+    m_aabb.Expand( corners[ i ].GetXYZ() );
+  }
+}
+
+//------------------------------------------------------------------------------
+// Box member functions
+//------------------------------------------------------------------------------
+float ae::Sdf::Box::GetValue( aeFloat3 p ) const
+{
+  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
+
+  aeFloat3 q = aeMath::Abs( p ) - m_halfSize;
+  return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - m_r;
+}
+
+aeAABB ae::Sdf::Box::OnSetTransform( aeFloat3 scale )
+{
+  m_halfSize = scale * 0.5f;
+  return aeAABB( -m_halfSize, m_halfSize );
+}
+
+//------------------------------------------------------------------------------
+// Heightmap member functions
+//------------------------------------------------------------------------------
+float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
+{
+  AE_ASSERT_MSG( m_heightMap, "Heightmap image not set" );
+
+  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
+
+  aeFloat2 p2 = ( p.GetXY() + m_halfSize.GetXY() ) / ( m_halfSize.GetXY() * 2.0f );
+  p2 *= aeFloat2( m_heightMap->GetWidth(), m_heightMap->GetHeight() );
+  float v0 = m_heightMap->Get( p2, ae::Image::Interpolation::Cosine ).r;
+  v0 = p.z + m_halfSize.z - v0 * m_halfSize.z * 2.0f;
+
+  aeFloat3 q = aeMath::Abs( p ) - m_halfSize;
+  float v1 = ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f );
+
+  return aeMath::Max( v0, v1 );
+
+}
+
+aeAABB ae::Sdf::Heightmap::OnSetTransform( aeFloat3 scale )
+{
+  m_halfSize = scale * 0.5f;
+  return aeAABB( -m_halfSize, m_halfSize );
+}
+
+//------------------------------------------------------------------------------
+// aeTerrainSDF member functions
+//------------------------------------------------------------------------------
 float aeTerrainSDF::GetValue( aeFloat3 pos ) const
 {
   float f = 0.0f;
@@ -75,19 +189,19 @@ float aeTerrainSDF::GetValue( aeFloat3 pos ) const
       return 0.0f;
     }
 
-    int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf* sdf ){ return sdf->type != ae::Sdf::Type::Material; } );
+    int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf::Shape* sdf ){ return sdf->type != ae::Sdf::Shape::Type::Material; } );
     if ( firstShapeIndex >= 0 )
     {
       f = m_shapes[ firstShapeIndex ]->GetValue( pos );
       for ( uint32_t i = firstShapeIndex + 1; i < m_shapes.Length(); i++ )
       {
-        if ( m_shapes[ i ]->type == ae::Sdf::Type::Union )
+        if ( m_shapes[ i ]->type == ae::Sdf::Shape::Type::Union )
         {
           float value = m_shapes[ i ]->GetValue( pos );
 #if _AE_DEBUG_
           AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
 #endif
-          f = aeSmoothUnion( f, value, 5.0f );
+          f = aeUnion( f, value );
         }
       }
     }
@@ -137,8 +251,8 @@ aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
   aeTerrainMaterialId materialId = 0;
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
-    ae::Sdf* sdf = m_shapes[ i ];
-    if ( sdf->type == ae::Sdf::Type::Material && sdf->GetValue( pos ) <= 0.0f )
+    ae::Sdf::Shape* sdf = m_shapes[ i ];
+    if ( sdf->type == ae::Sdf::Shape::Type::Material && sdf->GetValue( pos ) <= 0.0f )
     {
       materialId = sdf->materialId;
     }
@@ -165,7 +279,7 @@ bool aeTerrainSDF::TestAABB( aeAABB aabb ) const
   return false;
 }
 
-void aeTerrainSDF::DestroySdf( ae::Sdf* sdf )
+void aeTerrainSDF::DestroySdf( ae::Sdf::Shape* sdf )
 {
   if ( !sdf )
   {
