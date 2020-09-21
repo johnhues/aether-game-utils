@@ -158,6 +158,7 @@ float aeUnion( float d1, float d2 );
 float aeSubtraction( float d1, float d2 );
 float aeIntersection( float d1, float d2 );
 float aeSmoothUnion( float d1, float d2, float k );
+float aeSmoothSubtraction( float d1, float d2, float k );
 
 //------------------------------------------------------------------------------
 // ae::Sdf
