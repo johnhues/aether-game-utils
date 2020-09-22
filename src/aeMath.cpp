@@ -143,33 +143,36 @@ aeFloat2 aeFloat2::Lerp(const aeFloat2& end, float t) const
   return aeFloat2( x * (1.0f-t) + end.x * t, y * (1.0f-t) + end.y * t );
 }
 
-void aeFloat2::Normalize()
+float aeFloat2::Normalize()
 {
-  float l = sqrtf( x * x + y * y );
-  x /= l;
-  y /= l;
+  float length = sqrtf( x * x + y * y );
+  x /= length;
+  y /= length;
+  return length;
 }
 
-aeFloat2 aeFloat2::NormalizeCopy(void) const
+aeFloat2 aeFloat2::NormalizeCopy() const
 {
-  float l = sqrtf( x * x + y * y );
-  return aeFloat2( x / l, y / l );
+  float length = sqrtf( x * x + y * y );
+  return aeFloat2( x / length, y / length );
 }
 
-void aeFloat2::SafeNormalize()
+float aeFloat2::SafeNormalize()
 {
-  float l = sqrtf( x * x + y * y );
-  if ( l < 0.00001f )
+  float length = sqrtf( x * x + y * y );
+  if ( length < 0.00001f )
   {
     x = 0.0f;
     y = 0.0f;
-    return;
+    return 0.0f;
   }
-  x /= l;
-  y /= l;
+
+  x /= length;
+  y /= length;
+  return length;
 }
 
-aeFloat2 aeFloat2::SafeNormalizeCopy(void) const
+aeFloat2 aeFloat2::SafeNormalizeCopy() const
 {
   float l = sqrtf( x * x + y * y );
   if ( l < 0.00001f )
@@ -476,19 +479,23 @@ aeFloat3& aeFloat3::ZeroAxis( aeFloat3 axis )
   return *this;
 }
 
-void aeFloat3::Normalize()
+float aeFloat3::Normalize()
 {
-  (*this) *= 1.0f / Length();
+  float length = Length();
+  x /= length;
+  y /= length;
+  z /= length;
+  return length;
 }
 
-aeFloat3 aeFloat3::NormalizeCopy(void) const
+aeFloat3 aeFloat3::NormalizeCopy() const
 {
   aeFloat3 copy = *this;
   copy.Normalize();
   return copy;
 }
 
-void aeFloat3::SafeNormalize()
+float aeFloat3::SafeNormalize()
 {
   float length = Length();
   if ( length < 0.00001f )
@@ -496,12 +503,17 @@ void aeFloat3::SafeNormalize()
     x = 0.0f;
     y = 0.0f;
     z = 0.0f;
-    return;
+    return 0.0f;
   }
-  (*this) *= 1.0f / length;
+  
+  x /= length;
+  y /= length;
+  z /= length;
+
+  return length;
 }
 
-aeFloat3 aeFloat3::SafeNormalizeCopy(void) const
+aeFloat3 aeFloat3::SafeNormalizeCopy() const
 {
   aeFloat3 copy = *this;
   copy.SafeNormalize();
@@ -872,17 +884,44 @@ void aeFloat4::Trim(const float s)
   }
 }
 
-aeFloat4& aeFloat4::Normalize()
+float aeFloat4::Normalize()
 {
-  (*this) *= 1.0f / Length();
-
-  return *this;
+  float length = Length();
+  x /= length;
+  y /= length;
+  z /= length;
+  return length;
 }
 
-aeFloat4 aeFloat4::NormalizeCopy(void) const
+aeFloat4 aeFloat4::NormalizeCopy() const
 {
   aeFloat4 copy = *this;
   copy.Normalize();
+  return copy;
+}
+
+float aeFloat4::SafeNormalize()
+{
+  float length = Length();
+  if ( length < 0.00001f )
+  {
+    x = 0.0f;
+    y = 0.0f;
+    z = 0.0f;
+    return 0.0f;
+  }
+
+  x /= length;
+  y /= length;
+  z /= length;
+
+  return length;
+}
+
+aeFloat4 aeFloat4::SafeNormalizeCopy( void ) const
+{
+  aeFloat4 copy = *this;
+  copy.SafeNormalize();
   return copy;
 }
 

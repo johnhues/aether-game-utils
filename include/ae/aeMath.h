@@ -356,9 +356,9 @@ struct AE_ALIGN(16) aeFloat2
   aeFloat2 operator/ ( const aeFloat2 s ) const;
   void operator/= ( const aeFloat2 s );
   aeFloat2 Lerp(const aeFloat2& end, float t) const;
-  void Normalize();
+  float Normalize();
   aeFloat2 NormalizeCopy() const;
-  void SafeNormalize();
+  float SafeNormalize();
   aeFloat2 SafeNormalizeCopy() const;
   aeInt2 NearestCopy() const;
   aeInt2 FloorCopy() const;
@@ -518,9 +518,9 @@ public:
   
   aeFloat3& Trim(const float s);
   aeFloat3& ZeroAxis( aeFloat3 axis ); // Zero components along arbitrary axis (ie vec dot axis == 0)
-  void Normalize();
+  float Normalize();
   aeFloat3 NormalizeCopy() const;
-  void SafeNormalize();
+  float SafeNormalize();
   aeFloat3 SafeNormalizeCopy() const;
   
   aeInt3 NearestCopy() const;
@@ -711,8 +711,10 @@ public:
   float Length() const;
   float LengthSquared() const;
   void Trim(const float s);
-  aeFloat4& Normalize();
+  float Normalize();
   aeFloat4 NormalizeCopy() const;
+  float SafeNormalize();
+  aeFloat4 SafeNormalizeCopy() const;
   void SetZero();
   bool operator==(const aeFloat4& v) const;
   bool operator!=(const aeFloat4& v) const;
