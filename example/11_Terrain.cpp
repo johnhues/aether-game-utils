@@ -27,6 +27,7 @@
 #include "aeEditorCamera.h"
 #include "aeInput.h"
 #include "aeLog.h"
+#include "aeMeta.h"
 #include "aeRender.h"
 #include "aeSpline.h"
 #include "aeTerrain.h"
@@ -210,11 +211,11 @@ int main()
 	bool wireframe = false;
 	static bool s_showTerrainDebug = false;
 
-	ae::Sdf::Shape* currentBox = nullptr;
+	ae::Sdf::Shape* currentShape = nullptr;
 	{
 		ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
 		box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) );
-		currentBox = box;
+		currentShape = box;
 	}
 
 	bool gizmoClickedPrev = false;
@@ -243,7 +244,7 @@ int main()
 					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
 				terrain->Dirty( box->GetAABB() );
-				currentBox = box;
+				currentShape = box;
 			}
 			else if ( ImGui::Button( "Height Map" ) )
 			{
@@ -256,7 +257,7 @@ int main()
 				heightMap->SetImage( &heightmapImage );
 
 				terrain->Dirty( heightMap->GetAABB() );
-				currentBox = heightMap;
+				currentShape = heightMap;
 			}
 			else if ( ImGui::Button( "Material 1" ) )
 			{
@@ -270,8 +271,19 @@ int main()
 				box->materialId = 1;
 
 				terrain->Dirty( box->GetAABB() );
-				currentBox = box;
+				currentShape = box;
 			}
+			ImGui::End();
+		}
+
+		if ( ae::Sdf::Box* box = aeCast< ae::Sdf::Box >( currentShape ) )
+		{
+			ImGui::Begin( "object" );
+
+			float cornerSize = box->GetCornerSize();
+			ImGui::SliderFloat( "corner size", &cornerSize, 0.0f, 10.0f );
+			box->SetCornerSize( cornerSize );
+
 			ImGui::End();
 		}
 
@@ -296,9 +308,9 @@ int main()
 			camera.Update( &input, timeStep.GetTimeStep() );
 		}
 		// Camera focus
-		if ( currentBox && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+		if ( currentShape && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
 		{
-			camera.Refocus( currentBox->GetAABB().GetCenter() );
+			camera.Refocus( currentShape->GetAABB().GetCenter() );
 		}
 
 		// Render mode
@@ -378,7 +390,7 @@ int main()
 			static ImGuizmo::OPERATION s_operation = ImGuizmo::TRANSLATE;
 			if ( input.GetState()->Get( aeKey::Q ) && !input.GetPrevState()->Get( aeKey::Q ) )
 			{
-				currentBox = nullptr;
+				currentShape = nullptr;
 			}
 			else if ( input.GetState()->Get( aeKey::W ) && !input.GetPrevState()->Get( aeKey::W ) )
 			{
@@ -393,10 +405,10 @@ int main()
 				s_operation = ImGuizmo::SCALE;
 			}
 
-			if ( currentBox )
+			if ( currentShape )
 			{
 				// Use ImGuizmo::IsUsing() to only update terrain when finished dragging
-				aeFloat4x4 gizmoTransform = currentBox->GetTransform();
+				aeFloat4x4 gizmoTransform = currentShape->GetTransform();
 				if ( !gizmoClickedPrev && ImGuizmo::IsUsing() )
 				{
 					gizmoPrevTransform = gizmoTransform;
@@ -411,14 +423,14 @@ int main()
 
 				if ( gizmoTransform != gizmoPrevTransform )
 				{
-					currentBox->SetTransform( gizmoTransform );
+					currentShape->SetTransform( gizmoTransform );
 
 					aeFloat3 prevPos = gizmoPrevTransform.GetTranslation();
 					aeFloat3 prevHalfSize = gizmoPrevTransform.GetScale() * 0.5f;
 
 					aeAABB prevAABB( prevPos - prevHalfSize, prevPos + prevHalfSize );
 					terrain->Dirty( prevAABB );
-					terrain->Dirty( currentBox->GetAABB() );
+					terrain->Dirty( currentShape->GetAABB() );
 				}
 			}
 

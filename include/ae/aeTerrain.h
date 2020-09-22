@@ -183,6 +183,7 @@ public:
   enum class Type
   {
     Union,
+    Subtraction,
     Material
   };
 
@@ -208,6 +209,7 @@ public:
   aeAABB OnSetTransform( aeFloat3 scale ) override;
 
   void SetCornerSize( float cornerSize ) { m_r = cornerSize; }
+  float GetCornerSize() const { return m_r; }
 
 private:
   aeFloat3 m_halfSize = aeFloat3( 0.0f );

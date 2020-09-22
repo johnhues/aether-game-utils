@@ -137,7 +137,7 @@ float ae::Sdf::Box::GetValue( aeFloat3 p ) const
 {
   p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 
-  aeFloat3 q = aeMath::Abs( p ) - m_halfSize;
+  aeFloat3 q = aeMath::Abs( p ) - ( m_halfSize - aeFloat3( m_r ) );
   return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - m_r;
 }
 
@@ -207,7 +207,15 @@ float aeTerrainSDF::GetValue( aeFloat3 pos ) const
 #if _AE_DEBUG_
           AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
 #endif
-          f = aeUnion( f, value );
+          f = aeUnion( value, f );
+        }
+        else if ( m_shapes[ i ]->type == ae::Sdf::Shape::Type::Subtraction )
+        {
+          float value = m_shapes[ i ]->GetValue( pos );
+#if _AE_DEBUG_
+          AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
+#endif
+          f = aeSubtraction( value, f );
         }
       }
     }
