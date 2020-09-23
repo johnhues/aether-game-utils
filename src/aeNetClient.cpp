@@ -396,6 +396,8 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         else
         {
           // AE_LOG( "ENET Could not connect to Aether" );
+          ac->pub.m_isConnecting = false;
+
           break;
         }
       }

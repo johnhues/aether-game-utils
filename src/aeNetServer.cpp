@@ -148,6 +148,15 @@ void AetherServer_Delete( AetherServer* _as )
 #ifdef USE_WEBWOCKETS
   lws_context_destroy( as->priv.webContext );
 #endif
+
+  ENetPeer* peers = as->priv.host->peers;
+  int32_t peerCount = as->priv.host->peerCount;
+  for ( uint32_t i = 0; i < peerCount; i++ )
+  {
+    enet_peer_disconnect( &peers[ i ], 0 );
+  }
+  enet_host_flush( as->priv.host );
+
   enet_host_destroy( as->priv.host );
   delete as;
   enet_deinitialize();
