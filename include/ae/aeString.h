@@ -109,6 +109,9 @@ public:
   template < uint32_t N2 > friend class aeStr;
 
 private:
+  template < uint32_t N >
+  friend std::istream& operator>>( std::istream&, aeStr< N >& );
+  
   template < uint32_t N2 > friend bool operator ==( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator !=( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator <( const char*, const aeStr< N2 >& );
@@ -139,9 +142,18 @@ typedef aeStr< 512 > aeStr512;
 // Non member functions
 //------------------------------------------------------------------------------
 template < uint32_t N >
-std::ostream& operator<<( std::ostream& os, const aeStr< N >& str )
+std::ostream& operator<<( std::ostream& out, const aeStr< N >& str )
 {
-  return os << str.c_str();
+  return out << str.c_str();
+}
+
+template < uint32_t N >
+std::istream& operator>>( std::istream& in, aeStr< N >& str )
+{
+  in.getline( str.m_str, sizeof( str.m_str - 1 ) );
+  str.m_length = in.gcount();
+  str.m_str[ str.m_length ] = 0;
+  return in;
 }
 
 template < uint32_t N >
