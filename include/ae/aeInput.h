@@ -234,6 +234,7 @@ public:
 
   aeInt2 mousePixelPos;
   int32_t scroll;
+  bool windowFocus;
 
   bool exit; // Window 'X' etc
 
@@ -262,6 +263,9 @@ public:
   const char* GetText() const { return m_text.c_str(); }
   const char* GetTextInput() const { return m_textInput.Length() ? &m_textInput[ 0 ] : ""; }
 
+  void SetMouseCaptured( bool captured );
+  bool GetMouseCaptured() const { return m_mouseCaptured; }
+
 private:
   class aeWindow* m_window;
 
@@ -273,6 +277,9 @@ private:
   bool m_textMode;
   aeStr512 m_text;
   aeArray< char > m_textInput;
+
+  bool m_mouseCaptured;
+  bool m_firstPump;
 };
 
 #endif

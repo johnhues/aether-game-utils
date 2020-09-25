@@ -65,6 +65,7 @@ InputState::InputState()
 
   mousePixelPos = aeInt2( 0 );
   scroll = 0;
+  windowFocus = false;
 
   exit = false;
 
@@ -186,6 +187,8 @@ aeInput::aeInput()
   m_window = nullptr;
   m_textMode = 0;
   m_text = "";
+  m_mouseCaptured = false;
+  m_firstPump = true;
 }
 
 void aeInput::Initialize( aeWindow* window )
@@ -206,6 +209,9 @@ void aeInput::Initialize( aeWindow* window )
 #endif
 
   m_window = window;
+
+  m_mouseCaptured = SDL_GetRelativeMouseMode();
+  m_firstPump = true;
 
   // Input key mapping
   {
@@ -251,6 +257,7 @@ void aeInput::Pump()
 
   m_textInput.Clear();
 
+  bool ignoreMouseMovement = m_firstPump;
   SDL_Event events[ 32 ];
   // Get all events at once, this function can be very slow. Returns -1 while shutting down.
   int32_t eventCount = SDL_PeepEvents( events, countof( events ), SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT );
@@ -268,9 +275,28 @@ void aeInput::Pump()
       {
         m_window->m_UpdatePos( aeInt2( event.window.data1, event.window.data2 ) );
       }
-      else if ( event.type == SDL_MOUSEMOTION )
+      else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED )
       {
-        m_input.mousePixelPos = aeInt2( event.motion.x, m_window->GetHeight() - event.motion.y );
+        m_input.windowFocus = true;
+        // @NOTE: The first frame after window focus creates random movement when relative/capture mouse mode is enabled
+        ignoreMouseMovement = true;
+      }
+      else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST )
+      {
+        m_input.windowFocus = false;
+        SetMouseCaptured( false );
+      }
+      else if ( event.type == SDL_MOUSEMOTION )
+      { 
+        if ( m_mouseCaptured )
+        {
+          m_prevInput.mousePixelPos = aeInt2( 0 );
+          m_input.mousePixelPos = ignoreMouseMovement ? aeInt2( 0 ) : aeInt2( event.motion.xrel, -event.motion.yrel );
+        }
+        else
+        {
+          m_input.mousePixelPos = aeInt2( event.motion.x, m_window->GetHeight() - event.motion.y );
+        }
       }
       else if ( event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP )
       {
@@ -350,9 +376,17 @@ void aeInput::Pump()
     m_input.m_keys[ i ] = ( keys[ i ] != 0 );
   }
 #endif
+
+  m_firstPump = false;
 }
 
 void aeInput::SetTextMode( bool enabled )
 {
   m_textMode = enabled;
+}
+
+void aeInput::SetMouseCaptured( bool captured )
+{
+  SDL_SetRelativeMouseMode( captured ? SDL_TRUE : SDL_FALSE );
+  m_mouseCaptured = captured;
 }
