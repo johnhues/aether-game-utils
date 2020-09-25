@@ -823,6 +823,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     {
       AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
       missingUniforms = true;
+      continue;
     }
     uint32_t typeSize = 0;
     switch ( uniformVar->type )
