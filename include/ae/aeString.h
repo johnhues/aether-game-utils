@@ -109,15 +109,13 @@ public:
   template < uint32_t N2 > friend class aeStr;
 
 private:
-  template < uint32_t N >
-  friend std::istream& operator>>( std::istream&, aeStr< N >& );
-  
   template < uint32_t N2 > friend bool operator ==( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator !=( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator <( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator >( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator <=( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator >=( const char*, const aeStr< N2 >& );
+  template < uint32_t N2 > friend std::istream& operator>>( std::istream&, aeStr< N2 >& );
 
   void m_Format( const char* format );
 
