@@ -1209,6 +1209,12 @@ void aeRender::InitializeOpenGL( class aeWindow* window )
 
   m_window = window;
 
+  // @NOTE: This is a bit of a hack because the user might set a smaller
+  // size when calling StartFrame(). This means that getting the render size
+  // during init will return potentially unexpected values
+  m_width = window->GetWidth();
+  m_height = window->GetHeight();
+
   m_renderInternal = aeAlloc::Allocate< aeOpenGLRender >();
   m_renderInternal->Initialize( this );
 }

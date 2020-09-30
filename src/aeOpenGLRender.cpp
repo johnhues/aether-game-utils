@@ -853,7 +853,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
         AE_FAIL_MSG( "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
         break;
     }
-    AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform type mismatch '#' type:# size:#", uniformVarName, uniformVar->type, uniformValue->size );
+    AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
     // End validation
 
     if ( uniformVar->type == GL_SAMPLER_2D )
