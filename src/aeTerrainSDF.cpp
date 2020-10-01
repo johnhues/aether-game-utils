@@ -104,14 +104,19 @@ void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
 {
   m_localToWorld = transform;
 
+  // World to local with scaling removed. Translation and rotation
+  // are handled by the base Shape. Sdf functions only need to take
+  // object scaling into consideration.
   aeFloat4x4 scaledToWorld = transform;
   scaledToWorld.RemoveScaling();
   m_worldToScaled = scaledToWorld.Inverse();
 
+  // Set scale of inherited Shape object
   aeAABB scaledAABB = OnSetTransform( transform.GetScale() );
+
+  // Update shape world space AABB
   aeFloat4x4 localToAABB = scaledAABB.GetTransform();
   aeFloat4x4 aabbToWorld = scaledToWorld * localToAABB;
-
   aeFloat4 corners[] =
   {
     aabbToWorld * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ),

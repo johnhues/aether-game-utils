@@ -36,18 +36,30 @@ aeEditorCamera::aeEditorCamera()
 
 void aeEditorCamera::Update( const aeInput* input, float dt )
 {
-	// Input
-	aeFloat2 mouseMovement( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
-	bool mousePan = input->GetPrevState()->mouseMiddle && input->GetState()->mouseMiddle;
-	bool mouseZoom = input->GetPrevState()->mouseRight && input->GetState()->mouseRight;
-	bool mouseRotate = false;
-	if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
+	if ( !m_inputEnabled )
 	{
-		mouseRotate = true;
+		input = nullptr;
 	}
-	else
+
+	// Input
+	aeFloat2 mouseMovement( 0.0f );
+	bool mousePan = false;
+	bool mouseZoom = false;
+	bool mouseRotate = false;
+	if ( input )
 	{
-		mouseRotate = input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft;
+		mouseMovement = aeFloat2( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
+		mousePan = input->GetPrevState()->mouseMiddle && input->GetState()->mouseMiddle;
+		mouseZoom = input->GetPrevState()->mouseRight && input->GetState()->mouseRight;
+
+		if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
+		{
+			mouseRotate = true;
+		}
+		else
+		{
+			mouseRotate = input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft;
+		}
 	}
 
 	if ( m_mode == MoveMode::Rotate && !mouseRotate )
@@ -96,7 +108,7 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	{
 		m_dist -= mouseMovement.y * 0.1f * speed;
 	}
-	m_dist -= input->GetState()->scroll * 2.5f * speed;
+	m_dist -= input ? input->GetState()->scroll * 2.5f * speed : 0.0f;
 	m_dist = aeMath::Clip( m_dist, 1.0f, 400.0f );
 
 	// Recalculate camera offset from focus and local axis'
@@ -138,6 +150,11 @@ void aeEditorCamera::Refocus( aeFloat3 pos )
 	{
 		m_mode = MoveMode::None;
 	}
+}
+
+void aeEditorCamera::SetInputEnabled( bool enabled )
+{
+	m_inputEnabled = enabled;
 }
 
 void aeEditorCamera::m_RecalculateOffset()

@@ -39,14 +39,14 @@ public:
 	void Update( const class aeInput* input, float dt );
 
 	void SetPosition( aeFloat3 pos ) { m_focusPos = pos - m_offset; }
+	void SetFocusDistance( float distance );
+	void Refocus( aeFloat3 pos );
+	void SetInputEnabled( bool enabled ); // True by default
 
 	aeFloat3 GetPosition() const { return m_focusPos + m_offset; }
 	aeFloat3 GetFocus() const { return m_focusPos; }
 	aeFloat3 GetForward() const { return m_forward; }
 	float GetDistance() const { return m_dist; }
-
-	void SetFocusDistance( float distance );
-	void Refocus( aeFloat3 pos );
 
 private:
 	enum class MoveMode
@@ -58,6 +58,8 @@ private:
 	};
 
 	void m_RecalculateOffset();
+
+	bool m_inputEnabled = true;
 
 	MoveMode m_mode = MoveMode::None;
 
