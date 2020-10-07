@@ -247,7 +247,7 @@ int main()
     //------------------------------------------------------------------------------
     // Render
     //------------------------------------------------------------------------------
-    render.StartFrame( window.GetWidth(), window.GetHeight() );
+    render.Activate();
     spriteRender.Clear();
 
     player.Render( &spriteRender, &tex );
@@ -274,7 +274,7 @@ int main()
     screenTransform.Translate( aeFloat3( -camera.x, -camera.y, 0.0f ) );
     spriteRender.Render( screenTransform );
 
-    render.EndFrame();
+    render.Present();
     timeStep.Wait();
   }
 

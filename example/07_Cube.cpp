@@ -149,13 +149,13 @@ int main()
 		}
 		camera.Update( &input, timeStep.GetTimeStep() );
 
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
+		render.Activate();
 		aeUniformList uniformList;
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		vertexData.Render( &shader, uniformList );
-		render.EndFrame();
+		render.Present();
 
 		timeStep.Wait();
 	}

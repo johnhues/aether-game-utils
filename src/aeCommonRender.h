@@ -41,7 +41,6 @@ public:
   virtual void Terminate( aeRender* render ) = 0;
   virtual void StartFrame( aeRender* render ) = 0;
   virtual void EndFrame( aeRender* render ) = 0;
-  virtual void* GetContext() const = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -56,7 +55,6 @@ public:
   void Terminate( aeRender* render ) override;
   void StartFrame( aeRender* render ) override;
   void EndFrame( aeRender* render ) override;
-  void* GetContext() const override;
 
 private:
   void* m_context;

@@ -91,8 +91,8 @@ int main()
 		
 		AetherServer_SendAll( server );
 
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
-		render.EndFrame();
+		render.Activate();
+		render.Present();
 
 		timeStep.Wait();
 	}

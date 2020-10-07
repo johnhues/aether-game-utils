@@ -104,13 +104,13 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
+		render.Activate();
 
 		aeUniformList uniformList;
 		uniformList.Set( "u_modelToNdc", aeFloat4x4::Scaling( aeFloat3( 1.0f / render.GetAspectRatio() , 1.0f, 1.0f ) ) );
 		vertexData.Render( &shader, uniformList );
 		
-		render.EndFrame();
+		render.Present();
 		timeStep.Wait();
 	}
 

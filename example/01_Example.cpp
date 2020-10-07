@@ -52,8 +52,8 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
-		render.EndFrame();
+		render.Activate();
+		render.Present();
 		timeStep.Wait();
 	}
 

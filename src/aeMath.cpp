@@ -2596,6 +2596,103 @@ bool aeAABB::Intersect( aeAABB other ) const
   return false;
 }
 
+// Intersect ray R(t) = p + t*d against AABB a. When intersecting,
+// return intersection distance tmin and point q of intersection
+bool aeAABB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
+{
+  float tmin = 0.0f; // set to -FLT_MAX to get first hit on line
+  float tmax = FLT_MAX; // set to max distance ray can travel (for segment)
+  for ( int32_t i = 0; i < 3; i++ ) // For all three slabs
+  {
+    if ( aeMath::Abs( d[ i ] ) < 0.001f )
+    {
+      // Ray is parallel to slab. No hit if origin not within slab
+      if ( p[ i ] < m_min[ i ] || p[ i ] > m_max[ i ] )
+      {
+        return false;
+      }
+    }
+    else
+    {
+      // Compute intersection t value of ray with near and far plane of slab
+      float ood = 1.0f / d[ i ];
+      float t1 = ( m_min[ i ] - p[ i ] ) * ood;
+      float t2 = ( m_max[ i ] - p[ i ] ) * ood;
+      // Make t1 be intersection with near plane, t2 with far plane
+      if ( t1 > t2 )
+      {
+        std::swap( t1, t2 );
+      }
+
+      // Compute the intersection of slab intersection intervals
+      tmin = aeMath::Max( tmin, t1 );
+      tmax = aeMath::Min( tmax, t2 );
+
+      // Exit with no collision as soon as slab intersection becomes empty
+      if ( tmin > tmax )
+      {
+        return false;
+      }
+    }
+  }
+
+  // Ray intersects all 3 slabs. Return point (q) and intersection t value (tmin)
+  if ( tOut )
+  {
+    *tOut = tmin;
+  }
+  if ( pOut )
+  {
+    *pOut = p + d * tmin;
+  }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// aeOBB member functions
+//------------------------------------------------------------------------------
+aeOBB::aeOBB( const aeFloat4x4& transform ) :
+  m_transform( transform )
+{}
+
+void aeOBB::SetTransform( const aeFloat4x4& transform )
+{
+  m_transform = transform;
+}
+
+const aeFloat4x4& aeOBB::GetTransform() const
+{
+  return m_transform;
+}
+
+bool aeOBB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
+{
+  aeFloat4x4 objToWorld = m_transform;
+  aeFloat3 scale = objToWorld.GetScale();
+  aeAABB aabb( scale * -0.5f, scale * 0.5f );
+  objToWorld.RemoveScaling();
+  aeFloat4x4 worldToObj = objToWorld.Inverse();
+
+  aeFloat3 raySourceLocal = ( worldToObj * aeFloat4( p, 1.0f ) ).GetXYZ();
+  aeFloat3 rayLocal = ( worldToObj * aeFloat4( d, 0.0f ) ).GetXYZ();
+
+  float rayT = 0.0f;
+  if ( aabb.IntersectRay( raySourceLocal, rayLocal, nullptr, &rayT ) )
+  {
+    if ( tOut )
+    {
+      *tOut = rayT;
+    }
+    if ( pOut )
+    {
+      *pOut = p + d * rayT;
+    }
+    return true;
+  }
+
+  return false;
+}
+
 //------------------------------------------------------------------------------
 // aeHash member functions
 //------------------------------------------------------------------------------

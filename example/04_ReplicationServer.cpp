@@ -148,9 +148,9 @@ int main()
     }
     AetherServer_SendAll( server );
 
-    render.StartFrame( window.GetWidth(), window.GetHeight() );
+    render.Activate();
     spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-    render.EndFrame();
+    render.Present();
 
     timeStep.Wait();
   }

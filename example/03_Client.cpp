@@ -92,8 +92,8 @@ int main()
 
 		AetherClient_SendAll( client );
 
-		render.StartFrame( window.GetWidth(), window.GetHeight() );
-		render.EndFrame();
+		render.Activate();
+		render.Present();
 
 		timeStep.Wait();
 	}

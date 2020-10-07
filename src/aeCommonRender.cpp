@@ -1209,9 +1209,7 @@ void aeRender::InitializeOpenGL( class aeWindow* window )
 
   m_window = window;
 
-  // @NOTE: This is a bit of a hack because the user might set a smaller
-  // size when calling StartFrame(). This means that getting the render size
-  // during init will return potentially unexpected values
+  // @TODO: Allow user to pass in a scaling factor / aspect ratio parameter
   m_width = window->GetWidth();
   m_height = window->GetHeight();
 
@@ -1229,12 +1227,12 @@ void aeRender::Terminate()
   }
 }
 
-void aeRender::StartFrame( uint32_t width, uint32_t height )
+void aeRender::Activate()
 {
   AE_ASSERT( m_renderInternal );
 
-  m_width = width;
-  m_height = height;
+  m_width = m_window->GetWidth();
+  m_height = m_window->GetHeight();
 
   if ( m_width != m_canvas.GetWidth() || m_height != m_canvas.GetHeight() )
   {
@@ -1248,15 +1246,10 @@ void aeRender::StartFrame( uint32_t width, uint32_t height )
   m_renderInternal->StartFrame( this );
 }
 
-void aeRender::EndFrame()
+void aeRender::Present()
 {
   AE_ASSERT( m_renderInternal );
   m_renderInternal->EndFrame( this );
-}
-
-void* aeRender::GetContext() const
-{
-  return m_renderInternal->GetContext();
 }
 
 void aeRender::SetClearColor( aeColor color )

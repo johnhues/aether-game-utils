@@ -174,6 +174,7 @@ public:
   Shape();
 
   aeAABB GetAABB() const { return m_aabb; }
+  aeOBB GetOBB() const { return aeOBB( m_localToWorld ); }
   const aeFloat4x4& GetTransform() const { return m_localToWorld; }
   void SetTransform( const aeFloat4x4& transform );
 

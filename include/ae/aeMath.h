@@ -480,6 +480,7 @@ public:
   void SetZero();
 
   float& operator[]( int32_t i ) { return data[ i ]; }
+  float operator[]( int32_t i ) const { return data[ i ]; }
   aeFloat2 GetXY() const { return aeFloat2( x, y ); }
 
   bool operator==(const aeFloat3& v) const;
@@ -1060,10 +1061,30 @@ public:
 
   float GetMinDistance( aeFloat3 p ) const;
   bool Intersect( aeAABB other ) const;
+  bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
 
 private:
   aeFloat3 m_min;
   aeFloat3 m_max;
+};
+
+//------------------------------------------------------------------------------
+// aeOBB class
+//------------------------------------------------------------------------------
+class aeOBB
+{
+public:
+  aeOBB() = default;
+  aeOBB( const aeOBB& ) = default;
+  aeOBB( const aeFloat4x4& transform );
+
+  void SetTransform( const aeFloat4x4& transform );
+  const aeFloat4x4& GetTransform() const;
+
+  bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
+
+private:
+  aeFloat4x4 m_transform;
 };
 
 //------------------------------------------------------------------------------

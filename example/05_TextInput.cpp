@@ -56,7 +56,8 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
+		render.Activate();
+		//render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
 
 		// UI units in pixels, origin in bottom left
 		aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
@@ -73,7 +74,7 @@ int main()
 		textRender.Add( textPos, aeFloat2( (float)textRender.GetFontSize() ), displayText.c_str(), aeColor::Green(), maxLineLength, 0 );
 		textRender.Render( textToNdc );
 
-		render.EndFrame();
+		render.Present();
 		timeStep.Wait();
 	}
 

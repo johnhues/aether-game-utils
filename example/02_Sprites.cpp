@@ -62,7 +62,8 @@ int main()
 	{
 		input.Pump();
 		int scaleFactor = input.GetState()->space ? 4 : 1;
-		render.StartFrame( window.GetWidth() / scaleFactor, window.GetHeight() / scaleFactor );
+		render.Activate();
+		//render.StartFrame( window.GetWidth() / scaleFactor, window.GetHeight() / scaleFactor );
 		spriteRender.Clear();
 
 		aeFloat4x4 transform;
@@ -86,7 +87,7 @@ int main()
 
 		aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
 		spriteRender.Render( screenTransform );
-		render.EndFrame();
+		render.Present();
 		timeStep.Wait();
 	}
 

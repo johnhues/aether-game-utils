@@ -473,6 +473,7 @@ public:
   void Render2D( uint32_t textureIndex, aeRect ndc, float z );
 
   const aeTexture2D* GetTexture( uint32_t index ) const;
+  const aeTexture2D* GetDepth() const;
   uint32_t GetWidth() const;
   uint32_t GetHeight() const;
 
@@ -675,11 +676,9 @@ public:
 
   void InitializeOpenGL( class aeWindow* window );
   void Terminate();
-  // @TODO: StartFrame and EndFrame aren't accurate. Rendering can first happen on render textures.
-  //        Maybe change to Activate() and Present()?
-  void StartFrame( uint32_t width, uint32_t height );
-  void EndFrame();
-  void* GetContext() const;
+
+  void Activate();
+  void Present();
 
   class aeWindow* GetWindow() { return m_window; }
   aeRenderTarget* GetCanvas() { return &m_canvas; }

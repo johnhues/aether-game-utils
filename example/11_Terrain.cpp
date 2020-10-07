@@ -332,7 +332,7 @@ int main()
 
 		if ( !headless )
 		{
-			render.StartFrame( window.GetWidth(), window.GetHeight() );
+			render.Activate();
 
 			aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 			aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 1000.0f );
@@ -439,7 +439,7 @@ int main()
 
 			ui->Render();
 
-			render.EndFrame();
+			render.Present();
 		}
 
 		timeStep.Wait();

@@ -1360,6 +1360,11 @@ const aeTexture2D* aeRenderTarget::GetTexture( uint32_t index ) const
   return m_targets[ index ];
 }
 
+const aeTexture2D* aeRenderTarget::GetDepth() const
+{
+  return m_depth.GetTexture() ? &m_depth : nullptr;
+}
+
 uint32_t aeRenderTarget::GetWidth() const
 {
   return m_width;
@@ -1457,9 +1462,4 @@ void aeOpenGLRender::EndFrame( aeRender* render )
 #endif
 
   AE_CHECK_GL_ERROR();
-}
-
-void* aeOpenGLRender::GetContext() const
-{
-  return m_context;
 }

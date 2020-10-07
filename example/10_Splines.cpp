@@ -72,7 +72,7 @@ int main()
   while ( !input.GetState()->exit )
   {
     input.Pump();
-    render.StartFrame( window.GetWidth(), window.GetHeight() );
+    render.Activate();
     spriteRender.Clear();
 
     aeFloat4x4 transform;
@@ -103,7 +103,7 @@ int main()
 
     aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
     spriteRender.Render( screenTransform );
-    render.EndFrame();
+    render.Present();
     timeStep.Wait();
   }
 
