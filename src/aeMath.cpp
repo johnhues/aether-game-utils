@@ -2601,7 +2601,7 @@ bool aeAABB::Intersect( aeAABB other ) const
 bool aeAABB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
 {
   float tmin = 0.0f; // set to -FLT_MAX to get first hit on line
-  float tmax = FLT_MAX; // set to max distance ray can travel (for segment)
+  float tmax = aeMath::MaxValue< float >(); // set to max distance ray can travel (for segment)
   for ( int32_t i = 0; i < 3; i++ ) // For all three slabs
   {
     if ( aeMath::Abs( d[ i ] ) < 0.001f )
