@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 project(imgui LANGUAGES CXX)
 include(ExternalProject)
 
+# C++ settings
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_definitions(-D_UNICODE -DUNICODE)
+
 find_package(OpenGL REQUIRED)
 
 if(WIN32 AND NOT CYGWIN)

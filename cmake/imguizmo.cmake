@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 project(imguizmo LANGUAGES CXX)
 include(ExternalProject)
 
+# C++ settings
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_definitions(-D_UNICODE -DUNICODE)
+
 # imgui: It's difficult for two non-cmake external projects to
 # have real dependencies on each other, so clone imgui (again)
 # just for the headers.
