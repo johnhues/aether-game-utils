@@ -50,6 +50,7 @@ public:
   void SetFloat( const char* key, float value );
   void SetBool( const char* key, bool value );
   void SetFloat2( const char* key, aeFloat2 value );
+  void SetFloat3( const char* key, aeFloat3 value );
   void SetInt2( const char* key, aeInt2 value );
   void Clear();
 
@@ -58,6 +59,7 @@ public:
   float GetFloat( const char* key, float defaultValue ) const;
   bool GetBool( const char* key, bool defaultValue ) const;
   aeFloat2 GetFloat2( const char* key, aeFloat2 defaultValue ) const;
+  aeFloat3 GetFloat3( const char* key, aeFloat3 defaultValue ) const;
   aeInt2 GetInt2( const char* key, aeInt2 defaultValue ) const;
   aeColor GetColor( const char* key, aeColor defaultValue ) const;
   bool Has( const char* key ) const;
