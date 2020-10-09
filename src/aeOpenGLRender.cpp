@@ -244,7 +244,10 @@ void aeVertexData::Destroy()
     aeAlloc::Release( (uint8_t*)m_indexReadable );
   }
   
-  glDeleteVertexArrays( 1, &m_array );
+  if ( m_array )
+  {
+    glDeleteVertexArrays( 1, &m_array );
+  }
   if ( m_vertices != ~0 )
   {
     glDeleteBuffers( 1, &m_vertices );

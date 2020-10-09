@@ -186,9 +186,9 @@ int main()
 		terrainShader.Initialize( kTerrainVertShader, kTerrainFragShader, nullptr, 0 );
 		terrainShader.SetDepthTest( true );
 		terrainShader.SetDepthWrite( true );
-	}
 
-	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
+		textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
+	}
 
 	ae::Image heightmapImage;
 	aeAlloc::Scratch< uint8_t > fileBuffer( aeVfs::GetSize( "terrain.png" ) );

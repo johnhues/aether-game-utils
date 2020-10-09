@@ -1425,8 +1425,11 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       AE_ASSERT_MSG( indexPosChunk == chunk, "# #", indexPosChunk, chunk );
       AE_ASSERT_MSG( m_voxelCounts[ chunkIndex ] > 0, "count #", m_voxelCounts[ chunkIndex ] );
       AE_ASSERT( chunk->m_vertices );
-      AE_ASSERT( chunk->m_data.GetVertexCount() );
-      AE_ASSERT( chunk->m_data.GetVertexSize() );
+      if ( m_render )
+      {
+        AE_ASSERT( chunk->m_data.GetVertexCount() );
+        AE_ASSERT( chunk->m_data.GetVertexSize() );
+      }
     }
     else
     {
