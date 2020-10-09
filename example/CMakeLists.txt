@@ -30,9 +30,11 @@ else()
 endif()
 
 # imguizmo
+set(IMGUIZMO_GIT_TAG 87b50ad21a62a72de9d8d7ccc1f4947358794cc0)
 ExternalProject_Add(imguizmo
-	PREFIX ${AE_THIRDPARTY_DIR}/imguizmo
+	PREFIX "${AE_THIRDPARTY_DIR}/imguizmo_${IMGUIZMO_GIT_TAG}"
 	GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
+	GIT_TAG "${IMGUIZMO_GIT_TAG}"
 	PATCH_COMMAND ${CMAKE_COMMAND} -E copy 
 		"${CMAKE_MODULE_PATH}/imguizmo.cmake"
 		"<SOURCE_DIR>/CMakeLists.txt"
