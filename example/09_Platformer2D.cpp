@@ -175,7 +175,6 @@ int main()
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Platformer 2D" );  render.InitializeOpenGL( &window );
-  render.SetClearColor( aeColor::PicoDarkBlue() );
   input.Initialize( &window );
   spriteRender.Initialize( 512 );
   spriteRender.SetBlending( true );
@@ -248,6 +247,7 @@ int main()
     // Render
     //------------------------------------------------------------------------------
     render.Activate();
+    render.Clear( aeColor::PicoDarkBlue() );
     spriteRender.Clear();
 
     player.Render( &spriteRender, &tex );

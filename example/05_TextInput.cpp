@@ -44,7 +44,6 @@ int main()
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "example" );
 	render.InitializeOpenGL( &window );
-	render.SetClearColor( aeColor::Green().ScaleRGB( 0.01f ) );
 	input.Initialize( &window );
 	input.SetTextMode( true );
 	input.SetText( "Try typing. Copy and paste should also work." );
@@ -57,6 +56,7 @@ int main()
 	{
 		input.Pump();
 		render.Activate();
+		render.Clear( aeColor::Green().ScaleRGB( 0.01f ) );
 		//render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
 
 		// UI units in pixels, origin in bottom left

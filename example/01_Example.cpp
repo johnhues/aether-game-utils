@@ -43,7 +43,6 @@ int main()
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "example" );
 	render.InitializeOpenGL( &window );
-	render.SetClearColor( aeColor::Red() );
 	input.Initialize( &window );
 	
 	aeFixedTimeStep timeStep;
@@ -53,6 +52,7 @@ int main()
 	{
 		input.Pump();
 		render.Activate();
+		render.Clear( aeColor::PicoDarkPurple() );
 		render.Present();
 		timeStep.Wait();
 	}

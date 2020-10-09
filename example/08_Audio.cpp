@@ -112,8 +112,8 @@ int main()
 
 		float hitOpacity = aeMath::Min( 1.0f, hitFade / 0.8f );
 		hitOpacity *= hitOpacity;
-		render.SetClearColor( color.Lerp( aeColor::PicoWhite(), hitOpacity * 0.8f ) );
 		render.Activate();
+		render.Clear( color.Lerp( aeColor::PicoWhite(), hitOpacity * 0.8f ) );
 		render.Present();
 		
 		timeStep.Wait();

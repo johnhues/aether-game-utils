@@ -172,7 +172,6 @@ int main()
 		window.Initialize( 800, 600, false, true );
 		window.SetTitle( "terrain" );
 		render.InitializeOpenGL( &window );
-		render.SetClearColor( aeColor::PicoDarkPurple() );
 		debug.Initialize();
 		ui->Initialize();
 	}
@@ -214,7 +213,7 @@ int main()
 	ae::Sdf::Shape* currentShape = nullptr;
 	{
 		ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
-		box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) );
+		box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) * aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 		currentShape = box;
 	}
 
@@ -333,6 +332,7 @@ int main()
 		if ( !headless )
 		{
 			render.Activate();
+			render.Clear( aeColor::PicoDarkPurple() );
 
 			aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 			aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 1000.0f );

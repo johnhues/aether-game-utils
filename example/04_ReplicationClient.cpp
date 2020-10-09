@@ -48,7 +48,6 @@ int main()
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Replication Client" );
   render.InitializeOpenGL( &window );
-  render.SetClearColor( aeColor::Black() );
   input.Initialize( &window );
   spriteRender.Initialize( 32 );
   uint8_t texInfo[] = { 255, 255, 255 };
@@ -124,6 +123,7 @@ int main()
     AetherClient_SendAll( client );
 
     render.Activate();
+    render.Clear( aeColor::PicoDarkPurple() );
     spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
     render.Present();
 

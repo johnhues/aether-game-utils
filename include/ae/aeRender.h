@@ -678,13 +678,11 @@ public:
   void Terminate();
 
   void Activate();
+  void Clear( aeColor color );
   void Present();
 
   class aeWindow* GetWindow() { return m_window; }
   aeRenderTarget* GetCanvas() { return &m_canvas; }
-
-  void SetClearColor( aeColor color );
-  aeColor GetClearColor() const;
 
   uint32_t GetWidth() const { return m_width; }
   uint32_t GetHeight() const { return m_height; }
@@ -702,7 +700,6 @@ private:
   uint32_t m_height;
 
   aeRenderTarget m_canvas;
-  aeColor m_clearColor;
 };
 
 #endif

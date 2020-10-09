@@ -48,7 +48,6 @@ int main()
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "geometry" );
 	render.InitializeOpenGL( &window );
-	render.SetClearColor( aeColor::PicoDarkPurple() );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	debug.Initialize();
@@ -66,6 +65,7 @@ int main()
 		camera.Update( &input, timeStep.GetTimeStep() );
 
 		render.Activate();
+		render.Clear( aeColor::PicoDarkPurple() );
 		
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );

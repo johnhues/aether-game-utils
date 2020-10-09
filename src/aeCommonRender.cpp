@@ -1193,8 +1193,6 @@ aeRender::aeRender()
   m_window = nullptr;
   m_width = 0;
   m_height = 0;
-
-  m_clearColor = aeColor::Black();
 }
 
 aeRender::~aeRender()
@@ -1241,25 +1239,20 @@ void aeRender::Activate()
     m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
   }
   m_canvas.Activate();
-  m_canvas.Clear( GetClearColor() );
 
   m_renderInternal->StartFrame( this );
+}
+
+void aeRender::Clear( aeColor color )
+{
+  Activate();
+  m_canvas.Clear( color );
 }
 
 void aeRender::Present()
 {
   AE_ASSERT( m_renderInternal );
   m_renderInternal->EndFrame( this );
-}
-
-void aeRender::SetClearColor( aeColor color )
-{
-  m_clearColor = color;
-}
-
-aeColor aeRender::GetClearColor() const
-{
-  return m_clearColor;
 }
 
 float aeRender::GetAspectRatio() const
