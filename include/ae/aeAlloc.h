@@ -33,7 +33,6 @@
 #include "aeMath.h"
 #include "aePlatform.h"
 
-#if _AE_DEBUG_
 struct aeAllocInfo
 {
   // Stats
@@ -57,7 +56,6 @@ struct aeAllocInfo
   void Dealloc( const char* typeName, uint32_t bytes );
 };
 aeAllocInfo& GetAllocInfo();
-#endif
 
 #define _AE_ALLOC_DISABLE 0
 

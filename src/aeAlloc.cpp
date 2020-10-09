@@ -53,7 +53,6 @@ bool PopArrayAlloc( void* a )
 }
 #endif
 
-#if _AE_DEBUG_
 namespace
 {
   uint32_t g_allocations = 0;
@@ -159,4 +158,3 @@ void aeAllocInfo::Dealloc( const char* typeName, uint32_t bytes )
   g_deallocationCounts.SetInt( buf, g_deallocationCounts.GetInt( typeName, 0 ) + 1 );
   g_deallocationBytes.SetInt( buf, g_deallocationBytes.GetInt( typeName, 0 ) + bytes );
 }
-#endif
