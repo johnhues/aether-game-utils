@@ -31,6 +31,7 @@
 //------------------------------------------------------------------------------
 #include "aePlatform.h"
 #include "imgui.h"
+#include "imgui_internal.h" // For advanced imgui features like docking
 #if _AE_WINDOWS_
 	#define IMGUI_IMPL_OPENGL_LOADER_GLEW
 #elif _AE_APPLE_
