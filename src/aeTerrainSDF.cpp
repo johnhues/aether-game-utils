@@ -310,17 +310,20 @@ void aeTerrainSDF::DestroySdf( ae::Sdf::Shape* sdf )
 
 void aeTerrainSDF::UpdatePending()
 {
+  for ( uint32_t i = 0; i < m_pendingDestroy.Length(); i++ )
+  {
+    int32_t index = m_shapes.Find( m_pendingDestroy[ i ] );
+    AE_ASSERT( index >= 0 );
+    m_shapes.Remove( index );
+    aeAlloc::Release( m_pendingDestroy[ i ] );
+  }
+  m_pendingDestroy.Clear();
+
   for ( uint32_t i = 0; i < m_pendingCreated.Length(); i++ )
   {
     m_shapes.Append( m_pendingCreated[ i ] );
   }
   m_pendingCreated.Clear();
-
-  for ( uint32_t i = 0; i < m_pendingDestroy.Length(); i++ )
-  {
-    aeAlloc::Release( m_pendingDestroy[ i ] );
-  }
-  m_pendingDestroy.Clear();
 }
 
 bool aeTerrainSDF::HasPending() const
