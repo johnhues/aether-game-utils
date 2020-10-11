@@ -4,13 +4,11 @@ include(${CMAKE_SOURCE_DIR}/cmake/safeguards.cmake)
 include(ExternalProject)
 
 # imgui
+set(IMGUI_GIT_TAG 640bc056a97829bb38562954a9895f490a72a1bc)
 ExternalProject_Add(imgui
-	PREFIX ${AE_THIRDPARTY_DIR}/imgui
-	GIT_REPOSITORY https://github.com/ocornut/imgui.git
-	GIT_TAG v1.76
-	PATCH_COMMAND ${CMAKE_COMMAND} -E copy 
-		"${CMAKE_MODULE_PATH}/imgui.cmake"
-		"<SOURCE_DIR>/CMakeLists.txt"
+	PREFIX "${AE_THIRDPARTY_DIR}/imgui_${IMGUI_GIT_TAG}"
+	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
+	GIT_TAG "${IMGUI_GIT_TAG}"
 	${AE_MULTI_CONFIG_BUILD_COMMAND}
 	INSTALL_COMMAND ""
 )
@@ -30,14 +28,11 @@ else()
 endif()
 
 # imguizmo
-set(IMGUIZMO_GIT_TAG 87b50ad21a62a72de9d8d7ccc1f4947358794cc0)
+set(IMGUIZMO_GIT_TAG d7a1c40e0e99f8c3c471cbe7060fbae1d11899ae)
 ExternalProject_Add(imguizmo
 	PREFIX "${AE_THIRDPARTY_DIR}/imguizmo_${IMGUIZMO_GIT_TAG}"
-	GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
+	GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
 	GIT_TAG "${IMGUIZMO_GIT_TAG}"
-	PATCH_COMMAND ${CMAKE_COMMAND} -E copy 
-		"${CMAKE_MODULE_PATH}/imguizmo.cmake"
-		"<SOURCE_DIR>/CMakeLists.txt"
 	${AE_MULTI_CONFIG_BUILD_COMMAND}
 	INSTALL_COMMAND ""
 )
