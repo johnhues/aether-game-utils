@@ -114,7 +114,7 @@ target_sources(${AE_LIBRARY_NAME}
 )
 
 # ae lib installation
-message(STATUS "Installation path: ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "ae installation path: ${CMAKE_INSTALL_PREFIX}")
 install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME}Config
 	LIBRARY DESTINATION lib
 	ARCHIVE DESTINATION lib

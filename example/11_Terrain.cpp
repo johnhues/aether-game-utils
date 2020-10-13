@@ -258,6 +258,18 @@ int main()
 				terrain->Dirty( heightMap->GetAABB() );
 				currentShape = heightMap;
 			}
+			else if ( ImGui::Button( "Cone" ) )
+			{
+				AE_LOG( "create cone" );
+
+				ae::Sdf::Cone* cone = terrain->sdf.CreateSdf< ae::Sdf::Cone >();
+				cone->SetTransform(
+					aeFloat4x4::Translation( camera.GetFocus() ) *
+					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+
+				terrain->Dirty( cone->GetAABB() );
+				currentShape = cone;
+			}
 			else if ( ImGui::Button( "Material 1" ) )
 			{
 				AE_LOG( "create material 1" );
@@ -275,16 +287,19 @@ int main()
 			ImGui::End();
 		}
 
-		if ( ae::Sdf::Box* box = aeCast< ae::Sdf::Box >( currentShape ) )
+		ImGui::Begin( "object" );
+		if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
 		{
-			ImGui::Begin( "object" );
-
 			float cornerSize = box->GetCornerSize();
 			ImGui::SliderFloat( "corner size", &cornerSize, 0.0f, 10.0f );
 			box->SetCornerSize( cornerSize );
-
-			ImGui::End();
 		}
+		else if ( auto cone = aeCast< ae::Sdf::Cone >( currentShape ) )
+		{
+			ImGui::SliderFloat( "top", &cone->top, 0.0f, 1.0f );
+			ImGui::SliderFloat( "bottom", &cone->bottom, 0.0f, 1.0f );
+		}
+		ImGui::End();
 
 		if ( !ImGuizmo::IsUsing() )
 		{

@@ -153,6 +153,44 @@ aeAABB ae::Sdf::Box::OnSetTransform( aeFloat3 scale )
 }
 
 //------------------------------------------------------------------------------
+// Cone member functions
+//------------------------------------------------------------------------------
+float ae::Sdf::Cone::GetValue( aeFloat3 p ) const
+{
+  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
+	
+  float scale;
+  if ( m_halfSize.x > m_halfSize.y )
+  {
+    scale = m_halfSize.x;
+    p.y *= m_halfSize.x / m_halfSize.y;
+  }
+  else
+  {
+    scale = m_halfSize.y;
+    p.x *= m_halfSize.y / m_halfSize.x;
+  }
+
+  float r1 = aeMath::Clip01( bottom ) * scale;
+  float r2 = aeMath::Clip01( top ) * scale;
+  float h = m_halfSize.z;
+
+  aeFloat2 q( p.GetXY().Length(), p.z );
+  aeFloat2 k1(r2,h);
+  aeFloat2 k2(r2-r1,2.0*h);
+  aeFloat2 ca(q.x-aeMath::Min(q.x,(q.y<0.0)?r1:r2), aeMath::Abs(q.y)-h);
+  aeFloat2 cb = q - k1 + k2*aeMath::Clip01( (k1-q).Dot(k2)/k2.Dot(k2) );
+  float s = (cb.x<0.0 && ca.y<0.0) ? -1.0 : 1.0;
+  return s*sqrt( aeMath::Min(ca.Dot(ca),cb.Dot(cb)) );
+}
+
+aeAABB ae::Sdf::Cone::OnSetTransform( aeFloat3 scale )
+{
+  m_halfSize = scale * 0.5f;
+  return aeAABB( -m_halfSize, m_halfSize );
+}
+
+//------------------------------------------------------------------------------
 // Heightmap member functions
 //------------------------------------------------------------------------------
 float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const

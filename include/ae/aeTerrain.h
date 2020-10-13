@@ -218,6 +218,23 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// Cone class
+//------------------------------------------------------------------------------
+class Cone : public Shape
+{
+public:
+  float GetValue( aeFloat3 p ) const override;
+  aeAABB OnSetTransform( aeFloat3 scale ) override;
+
+  // Valid range is 0-1, multiplied by obb size
+  float top = 0.5f;
+	float bottom = 1.0f;
+	
+private:
+	aeFloat3 m_halfSize = aeFloat3( 0.0f );
+};
+
+//------------------------------------------------------------------------------
 // Heightmap class
 //------------------------------------------------------------------------------
 class Heightmap : public Shape
