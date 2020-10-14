@@ -1244,6 +1244,7 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 #else
 	w = width;
 	h = height;
+	
 	for ( int i = 0; i < numberOfMipmaps; ++i )
 	{
 	  glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
@@ -1252,16 +1253,18 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 	}
 #endif
 	
-  // upload the first mipmap
-  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
-
-  // autogen only works for uncompressed textures
-  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
-  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+  if ( data != nullptr )
   {
-    glGenerateMipmap( GetTarget() );
+	  // upload the first mipmap
+	  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
+
+	  // autogen only works for uncompressed textures
+	  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
+	  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+	  {
+		glGenerateMipmap( GetTarget() );
+	  }
   }
-	
 	
   AE_CHECK_GL_ERROR();
 }
