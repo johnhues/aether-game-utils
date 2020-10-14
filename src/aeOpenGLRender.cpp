@@ -66,6 +66,17 @@
   void glClearDepth( float depth ) { glClearDepthf( depth ); }
 #endif
 
+// TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2, only adding for OSX right now
+// TODO: this will break any code using the SRGB_TO_RGB macros in shaders on this platform,
+// But the colors and blends will be handled correctly.
+#if _AE_OSX_ && defined(GL_ARB_framebuffer_sRGB)
+  #define READ_FROM_SRGB 1
+  #define WRITE_TO_SRGB  1
+#else
+  #define READ_FROM_SRGB 0
+  #define WRITE_TO_SRGB  0
+#endif
+
   const uint32_t kMaxFrameBufferAttachments = 16;
 
 //------------------------------------------------------------------------------
@@ -647,17 +658,26 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   m_vertexShader = m_LoadShader( vertexStr, aeShaderType::Vertex, defines, defineCount );
   m_fragmentShader = m_LoadShader( fragStr, aeShaderType::Fragment, defines, defineCount );
   
+  if ( !m_vertexShader )
+  {
+	AE_LOG( "Failed to load vertex shader! #", vertexStr );
+  }
+  if ( !m_fragmentShader )
+  {
+    AE_LOG( "Failed to load fragment shader!", fragStr );
+  }
+	
   if ( !m_vertexShader || !m_fragmentShader )
   {
-    AE_LOG( "Failed to load shader!" );
-    AE_FAIL();
+	AE_FAIL();
   }
-  
+	
   glAttachShader( m_program, m_vertexShader );
   glAttachShader( m_program, m_fragmentShader );
   
   glLinkProgram( m_program );
   
+  // immediate reflection of shader can be delayed by compiler and optimizer and can stll
   GLint status;
   glGetProgramiv( m_program, GL_LINK_STATUS, &status );
   if( status == GL_FALSE )
@@ -973,6 +993,7 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
   }
 #endif
     
+  // TODO: don't use these macros anymore.  Fix srgb writes in engine on srgb/a textures.
     // Utility
   shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
   shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
@@ -1117,6 +1138,22 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
       unpackAlignment = 4;
       m_hasAlpha = true;
       break;
+      // TODO: fix these constants, but they differ on ES2/3 and GL
+      // WebGL1 they require loading an extension (if present) to get at the constants.
+#if READ_FROM_SRGB      
+    case aeTextureFormat::SRGB:
+      glInternalFormat = GL_SRGB;
+      glFormat = GL_SRGB8;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+    case aeTextureFormat::SRGBA:
+      glInternalFormat = GL_SRGB_ALPHA;
+      glFormat = GL_SRGB8_ALPHA8;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+#endif
     default:
       AE_FAIL_MSG( "Invalid texture format #", format );
       return;
@@ -1405,7 +1442,11 @@ void aeOpenGLRender::Initialize( aeRender* render )
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
 #endif
-
+	
+#if WRITE_TO_SRGB
+	SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
+#endif
+	
 #if AE_GL_DEBUG_MODE
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
 #endif
@@ -1454,12 +1495,22 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   glClearDepth( 1.0f );
 
   glDepthMask( GL_TRUE );
+
+
   glDisable( GL_DEPTH_TEST );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
+#if WRITE_TO_SRGB
+  glEnable(	GL_FRAMEBUFFER_SRGB );
+#endif
+
   render->GetCanvas()->Render2D( 0, render->GetNDCRect(), 0.5f );
 
+#if WRITE_TO_SRGB
+  glDisable( GL_FRAMEBUFFER_SRGB );
+#endif
+	
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
 #endif

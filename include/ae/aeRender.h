@@ -406,7 +406,10 @@ struct aeTextureFormat
     Depth,
     R,
     RGB,
-    RGBA
+    RGBA,
+    // TODO: these formats are implemented for OSX only for now
+    SRGB,
+    SRGBA,
   };
 };
 
