@@ -1110,6 +1110,7 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
+  // this is the type of data passed in, conflating with internal format type
   GLenum glType = 0;
   switch ( type )
   {
@@ -1139,33 +1140,68 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
       m_hasAlpha = false;
       break;
     case aeTextureFormat::R:
-      glInternalFormat = GL_RED;
+	  switch(type)
+	  {
+		  case aeTextureType::Uint8: glInternalFormat = GL_R8; break;
+		  case aeTextureType::HalfFloat: glInternalFormat = GL_R16F; break;
+		  case aeTextureType::Float: glInternalFormat = GL_R32F; break;
+	  }
+			
       glFormat = GL_RED;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
+		  
+#if _AE_OSX_
+	  // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
+	  case aeTextureFormat::RG:
+		switch(type)
+		{
+			case aeTextureType::Uint8: glInternalFormat = GL_RG8; break;
+			case aeTextureType::HalfFloat: glInternalFormat = GL_RG16F; break;
+			case aeTextureType::Float: glInternalFormat = GL_RG32F; break;
+		}
+			  
+		glFormat = GL_RG;
+		unpackAlignment = 1;
+		m_hasAlpha = false;
+		break;
+#endif
     case aeTextureFormat::RGB:
-      glInternalFormat = GL_RGB;
+	  switch(type)
+	  {
+	    case aeTextureType::Uint8: glInternalFormat = GL_RGB8; break;
+	    case aeTextureType::HalfFloat: glInternalFormat = GL_RGB16F; break;
+	    case aeTextureType::Float: glInternalFormat = GL_RGB32F; break;
+	  }
       glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case aeTextureFormat::RGBA:
-      glInternalFormat = GL_RGBA; // GL_RGBA16F for render texture
+	  switch(type)
+	  {
+		case aeTextureType::Uint8: glInternalFormat = GL_RGBA8; break;
+		case aeTextureType::HalfFloat: glInternalFormat = GL_RGBA16F; break;
+		case aeTextureType::Float: glInternalFormat = GL_RGBA32F; break;
+	  }
       glFormat = GL_RGBA;
-      unpackAlignment = 4;
+      unpackAlignment = 1;
       m_hasAlpha = true;
       break;
+		  
       // TODO: fix these constants, but they differ on ES2/3 and GL
       // WebGL1 they require loading an extension (if present) to get at the constants.
 #if READ_FROM_SRGB      
     case aeTextureFormat::SRGB:
+	  // ignore type
       glInternalFormat = GL_SRGB8;
       glFormat = GL_SRGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case aeTextureFormat::SRGBA:
+	  // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
       glFormat = GL_SRGB_ALPHA;
       unpackAlignment = 1;
@@ -1218,6 +1254,7 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   glTexImage2D( GetTarget(), 0, glInternalFormat, width, height, 0, glFormat, glType, data );
 
   // autogen only works for uncompressed textures
+  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
   if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
   {
     glGenerateMipmap( GetTarget() );
