@@ -1086,6 +1086,11 @@ void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
   m_objCount = 0;
 }
 
+void aeDebugRender::Clear()
+{
+	m_objCount = 0;
+}
+
 void aeDebugRender::AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color )
 {
   if ( m_objCount < kMaxDebugObjects )

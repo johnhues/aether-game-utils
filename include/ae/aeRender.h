@@ -619,6 +619,7 @@ public:
   void Initialize();
   void Destroy();
   void Render( const aeFloat4x4& worldToScreen );
+  void Clear();
 
   void AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color );
   void AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance );

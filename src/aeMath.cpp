@@ -2707,6 +2707,29 @@ bool aeOBB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) 
   return false;
 }
 
+aeAABB aeOBB::GetAABB() const
+{
+  aeFloat4 corners[] =
+  {
+    m_transform * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ),
+    m_transform * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ),
+  };
+  
+  aeAABB result( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
+  for ( uint32_t i = 2; i < countof( corners ); i++ )
+  {
+    result.Expand( corners[ i ].GetXYZ() );
+  }
+
+  return result;
+}
+
 //------------------------------------------------------------------------------
 // aeHash member functions
 //------------------------------------------------------------------------------
