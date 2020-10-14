@@ -1234,7 +1234,9 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 	}
 	
 	// allocate mip levels
-#if _AE_OSX_
+	// texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
+#define USE_TEXSTORAGE 0
+#if USE_TEXSTORAGE
 	// TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
 	// It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
 	// for compressed textures.
@@ -1251,7 +1253,7 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 #endif
 	
   // upload the first mipmap
-  glTexImage2D( GetTarget(), 0, glInternalFormat, width, height, 0, glFormat, glType, data );
+  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
 
   // autogen only works for uncompressed textures
   // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
