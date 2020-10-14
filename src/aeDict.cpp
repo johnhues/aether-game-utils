@@ -71,6 +71,13 @@ void aeDict::SetFloat3( const char* key, aeFloat3 value )
   SetString( key, buf );
 }
 
+void aeDict::SetFloat4( const char* key, aeFloat4 value )
+{
+  char buf[ 128 ];
+  sprintf( buf, "%.2f %.2f %.2f %.2f", value.x, value.y, value.z, value.w );
+  SetString( key, buf );
+}
+
 void aeDict::SetInt2( const char* key, aeInt2 value )
 {
   char buf[ 128 ];
@@ -149,6 +156,18 @@ aeFloat3 aeDict::GetFloat3( const char* key, aeFloat3 defaultValue ) const
   {
     aeFloat3 result( 0.0f );
     sscanf( kv->value.c_str(), "%f %f %f", &result.x, &result.y, &result.z );
+    return result;
+  }
+  return defaultValue;
+}
+
+aeFloat4 aeDict::GetFloat4( const char* key, aeFloat4 defaultValue ) const
+{
+  const KeyValue* kv = m_GetValue( key );
+  if ( kv )
+  {
+    aeFloat4 result( 0.0f );
+    sscanf( kv->value.c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
     return result;
   }
   return defaultValue;

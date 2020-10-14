@@ -1083,6 +1083,8 @@ public:
 
   bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
 
+  aeAABB GetAABB() const;
+
 private:
   aeFloat4x4 m_transform;
 };
