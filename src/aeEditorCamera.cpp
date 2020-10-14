@@ -106,7 +106,7 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	// Zoom
 	if ( m_mode == MoveMode::Zoom )
 	{
-		m_dist -= mouseMovement.y * 0.1f * speed;
+		m_dist += mouseMovement.y * 0.1f * speed;
 	}
 	m_dist -= input ? input->GetState()->scroll * 2.5f * speed : 0.0f;
 	m_dist = aeMath::Clip( m_dist, 1.0f, 1000.0f );
