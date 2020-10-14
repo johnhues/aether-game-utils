@@ -46,6 +46,7 @@
   #define glClearDepth glClearDepthf
 #else
   #include <OpenGL/gl3.h>
+  #include <OpenGL/gl3ext.h> // for glTexStorage2D
 #endif
 
 #include <stb_image.h>
@@ -78,6 +79,12 @@
 #endif
 
   const uint32_t kMaxFrameBufferAttachments = 16;
+
+// Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
+// enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
+// doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
+// http://www.reedbeta.com/blog/depth-precision-visualized/
+bool gReverseZ = false;
 
 //------------------------------------------------------------------------------
 // Helpers
@@ -664,7 +671,7 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   }
   if ( !m_fragmentShader )
   {
-    AE_LOG( "Failed to load fragment shader!", fragStr );
+    AE_LOG( "Failed to load fragment shader! #", fragStr );
   }
 	
   if ( !m_vertexShader || !m_fragmentShader )
@@ -791,8 +798,9 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
 {
   AE_CHECK_GL_ERROR();
 
-  glUseProgram( m_program );
-
+  // This is really context state shadow, and that should be able to override
+  // so reverseZ for example can be set without the shader knowing about that.
+	
   // Blending
   if ( m_blending )
   {
@@ -810,7 +818,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   // Depth test
   if ( m_depthTest )
   {
-    glDepthFunc( GL_LEQUAL );
+    glDepthFunc( gReverseZ ? GL_GEQUAL : GL_LEQUAL );
     glEnable( GL_DEPTH_TEST );
   }
   else
@@ -826,11 +834,21 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   else
   {
     glEnable( GL_CULL_FACE );
-    glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
+	  if ( gReverseZ )
+	  {
+		  glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CCW : GL_CW );
+	  }
+	  else
+	  {
+		  glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
+	  }
   }
 
   // Wireframe
   glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+
+  // Now setup the shader
+  glUseProgram( m_program );
 
   // Set shader uniforms
   bool missingUniforms = false;
@@ -1078,7 +1096,7 @@ void aeTexture::Destroy()
 //------------------------------------------------------------------------------
 // aeTexture2D member functions
 //------------------------------------------------------------------------------
-void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps )
 {
   aeTexture::Initialize( GL_TEXTURE_2D );
 
@@ -1142,14 +1160,14 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
       // WebGL1 they require loading an extension (if present) to get at the constants.
 #if READ_FROM_SRGB      
     case aeTextureFormat::SRGB:
-      glInternalFormat = GL_SRGB;
-      glFormat = GL_SRGB8;
+      glInternalFormat = GL_SRGB8;
+      glFormat = GL_SRGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case aeTextureFormat::SRGBA:
-      glInternalFormat = GL_SRGB_ALPHA;
-      glFormat = GL_SRGB8_ALPHA8;
+      glInternalFormat = GL_SRGB8_ALPHA8;
+      glFormat = GL_SRGB_ALPHA;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
@@ -1163,12 +1181,53 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   {
     glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
   }
+
+    // count the mip levels
+	int w = width;
+	int h = height;
+	
+	int numberOfMipmaps = 1;
+	if ( autoGenerateMipmaps )
+	{
+		while ( w > 1 || h > 1 )
+		{
+		  numberOfMipmaps++;
+		  w = (w+1) / 2;
+		  h = (h+1) / 2;
+		}
+	}
+	
+	// allocate mip levels
+#if _AE_OSX_
+	// TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
+	// It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
+	// for compressed textures.
+	glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
+#else
+	w = width;
+	h = height;
+	for ( int i = 0; i < numberOfMipmaps; ++i )
+	{
+	  glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
+	  w = (w+1) / 2;
+	  h = (h+1) / 2;
+	}
+#endif
+	
+  // upload the first mipmap
   glTexImage2D( GetTarget(), 0, glInternalFormat, width, height, 0, glFormat, glType, data );
 
+  // autogen only works for uncompressed textures
+  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+  {
+    glGenerateMipmap( GetTarget() );
+  }
+	
+	
   AE_CHECK_GL_ERROR();
 }
 
-void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps )
 {
   uint32_t fileSize = aeVfs::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
@@ -1203,7 +1262,7 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
       break;
   }
   
-  Initialize( image, width, height, format, aeTextureType::Uint8, filter, wrap );
+  Initialize( image, width, height, format, aeTextureType::Uint8, filter, wrap, autoGenerateMipmaps );
   
   stbi_image_free( image );
   free( fileBuffer );
@@ -1370,7 +1429,7 @@ void aeRenderTarget::Clear( aeColor color )
 
   aeFloat3 clearColor = color.GetSRGB(); // Unclear why glClearColor() expects srgb. Maybe because of framebuffer type.
   glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
-  glClearDepth( 1.0f );
+  glClearDepth( gReverseZ ? 0.0f : 1.0f );
 
   glDepthMask( GL_TRUE );
   glDisable( GL_DEPTH_TEST );

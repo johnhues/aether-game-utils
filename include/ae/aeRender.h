@@ -448,8 +448,8 @@ private:
 class aeTexture2D : public aeTexture
 {
 public:
-  void Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
-  void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
+  void Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false );
+  void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false );
   void Destroy() override;
 
   uint32_t GetWidth() const { return m_width; }

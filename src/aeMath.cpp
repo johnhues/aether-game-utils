@@ -1347,6 +1347,9 @@ aeFloat4x4 aeFloat4x4::WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat
   return result;
 }
 
+// this hack comes in from the renderer
+extern bool gReverseZ;
+
 aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
 {
   // a  0  0  0
@@ -1354,14 +1357,25 @@ aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nea
   // 0  0  A  B
   // 0  0 -1  0
 
-  float r = aspectRatio * tanf( fov * 0.5f ) * 0.8f;
-  float t = tanf( fov * 0.5f ) * 0.8f;
+  float r = aspectRatio * tanf( fov * 0.5f );
+  float t = tanf( fov * 0.5f ); // tan of half angle fit vertically
 
   float a = nearPlane / r;
   float b = nearPlane / t;
-  float A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
-  float B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
-
+	
+	float A;
+	float B;
+  if (gReverseZ)
+  {
+	  A = 0;
+	  B = nearPlane;
+  }
+  else
+  {
+	  A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
+	  B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
+  }
+  
   aeFloat4x4 result;
   memset( &result, 0, sizeof( result ) );
   result.data[ 0 ] = a;
