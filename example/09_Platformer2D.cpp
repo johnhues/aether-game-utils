@@ -227,7 +227,7 @@ int main()
   //------------------------------------------------------------------------------
   aeTexture2D tex;
   uint8_t texData[] = { 255, 255, 255 };
-  tex.Initialize( texData, 1, 1, aeTextureFormat::RGB, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+  tex.Initialize( texData, 1, 1, aeTextureFormat::RGB8, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
 
   //------------------------------------------------------------------------------
   // Game loop

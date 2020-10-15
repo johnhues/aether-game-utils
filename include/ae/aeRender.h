@@ -403,14 +403,38 @@ struct aeTextureFormat
 {
   enum Type
   {
-    Depth,
-    R,
-	RG,
-    RGB,
-    RGBA,
+	  Depth32F,
+	  
+	  R8, // unorm
+	  R16_UNORM, // for height fields
+	  R16F,
+	  R32F,
+	  
+	  RG8, // unorm
+	  RG16F,
+	  RG32F,
+	  
+	  RGB8, // unorm
+	  RGB8_SRGB,
+	  RGB16F,
+	  RGB32F,
+	  
+	  RGBA8, // unorm
+	  RGBA8_SRGB,
+	  RGBA16F,
+	  RGBA32F,
+	
+	// non-specific formats, prefer specific types above
+    R = RGBA8,
+	RG = RG8,
+    RGB = RGB8,
+    RGBA = RGBA8,
+	  
+	Depth = Depth32F,
+	  
     // TODO: these formats are implemented for OSX only for now
-    SRGB,
-    SRGBA,
+	SRGB = RGB8_SRGB,
+    SRGBA = RGBA8_SRGB,
   };
 };
 
@@ -419,6 +443,7 @@ struct aeTextureType
   enum Type
   {
     Uint8,
+	Uint16,
     HalfFloat,
     Float
   };
@@ -450,7 +475,9 @@ class aeTexture2D : public aeTexture
 {
 public:
   void Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false );
-  void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false );
+  void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false,
+	  bool isSRGB = false,
+	  bool is16BitImage = false );
   void Destroy() override;
 
   uint32_t GetWidth() const { return m_width; }

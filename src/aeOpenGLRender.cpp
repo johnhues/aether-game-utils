@@ -1098,8 +1098,17 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 
   glBindTexture( GetTarget(), GetTexture() );
 
-  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  if (autoGenerateMipmaps)
+  {
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+  else
+  {
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+	
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
@@ -1110,6 +1119,9 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
     case aeTextureType::Uint8:
       glType = GL_UNSIGNED_BYTE;
       break;
+	  case aeTextureType::Uint16:
+	    glType = GL_UNSIGNED_SHORT;
+	    break;
     case aeTextureType::HalfFloat:
       glType = GL_HALF_FLOAT;
       break;
@@ -1126,19 +1138,29 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   GLint unpackAlignment = 0;
   switch ( format )
   {
-    case aeTextureFormat::Depth:
-      glInternalFormat = GL_DEPTH_COMPONENT32F;
+		  // TODO: need D32F_S8 format
+    case aeTextureFormat::Depth32F:
+	    glInternalFormat = GL_DEPTH_COMPONENT32;
       glFormat = GL_DEPTH_COMPONENT;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-    case aeTextureFormat::R:
-	  switch(type)
-	  {
-		  case aeTextureType::Uint8: glInternalFormat = GL_R8; break;
-		  case aeTextureType::HalfFloat: glInternalFormat = GL_R16F; break;
-		  case aeTextureType::Float: glInternalFormat = GL_R32F; break;
-	  }
+
+    case aeTextureFormat::R8:
+  	case aeTextureFormat::R16_UNORM:
+  	case aeTextureFormat::R16F:
+  	case aeTextureFormat::R32F:	  
+  	  switch(format)
+  	  {
+  		  case aeTextureFormat::R8: glInternalFormat = GL_R8; break;
+  		  case aeTextureFormat::R16_UNORM:
+  			  glInternalFormat = GL_R16;
+  			  assert(glType == GL_UNSIGNED_SHORT);
+  			  break; // only on macOS
+  		  case aeTextureFormat::R16F: glInternalFormat = GL_R16F; break;
+  		  case aeTextureFormat::R32F: glInternalFormat = GL_R32F; break;
+  		  default: assert(false);
+  	  }
 			
       glFormat = GL_RED;
       unpackAlignment = 1;
@@ -1147,37 +1169,47 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 		  
 #if _AE_OSX_
 	  // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
-	  case aeTextureFormat::RG:
-		switch(type)
-		{
-			case aeTextureType::Uint8: glInternalFormat = GL_RG8; break;
-			case aeTextureType::HalfFloat: glInternalFormat = GL_RG16F; break;
-			case aeTextureType::Float: glInternalFormat = GL_RG32F; break;
-		}
-			  
-		glFormat = GL_RG;
-		unpackAlignment = 1;
-		m_hasAlpha = false;
-		break;
+	  case aeTextureFormat::RG8:
+	  case aeTextureFormat::RG16F:
+	  case aeTextureFormat::RG32F:
+  		switch(format)
+  		{
+  			case aeTextureFormat::RG8: glInternalFormat = GL_RG8; break;
+  			case aeTextureFormat::RG16F: glInternalFormat = GL_RG16F; break;
+  			case aeTextureFormat::RG32F: glInternalFormat = GL_RG32F; break;
+  			default: assert(false);
+  		}
+  			  
+  		glFormat = GL_RG;
+  		unpackAlignment = 1;
+  		m_hasAlpha = false;
+  		break;
 #endif
-    case aeTextureFormat::RGB:
-	  switch(type)
-	  {
-	    case aeTextureType::Uint8: glInternalFormat = GL_RGB8; break;
-	    case aeTextureType::HalfFloat: glInternalFormat = GL_RGB16F; break;
-	    case aeTextureType::Float: glInternalFormat = GL_RGB32F; break;
-	  }
+  	case aeTextureFormat::RGB8:
+  	case aeTextureFormat::RGB16F:
+    case aeTextureFormat::RGB32F:
+  	  switch(format)
+  	  {
+  	    case aeTextureFormat::RGB8: glInternalFormat = GL_RGB8; break;
+  	    case aeTextureFormat::RGB16F: glInternalFormat = GL_RGB16F; break;
+  	    case aeTextureFormat::RGB32F: glInternalFormat = GL_RGB32F; break;
+  		  default: assert(false);
+  	  }
       glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-    case aeTextureFormat::RGBA:
-	  switch(type)
-	  {
-		case aeTextureType::Uint8: glInternalFormat = GL_RGBA8; break;
-		case aeTextureType::HalfFloat: glInternalFormat = GL_RGBA16F; break;
-		case aeTextureType::Float: glInternalFormat = GL_RGBA32F; break;
-	  }
+
+    case aeTextureFormat::RGBA8:
+	  case aeTextureFormat::RGBA16F:
+	  case aeTextureFormat::RGBA32F:
+  	  switch(format)
+  	  {
+      	case aeTextureFormat::RGBA8: glInternalFormat = GL_RGBA8; break;
+      	case aeTextureFormat::RGBA16F: glInternalFormat = GL_RGBA16F; break;
+      	case aeTextureFormat::RGBA32F: glInternalFormat = GL_RGBA32F; break;
+      	default: assert(false);
+  	  }
       glFormat = GL_RGBA;
       unpackAlignment = 1;
       m_hasAlpha = true;
@@ -1186,14 +1218,14 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
       // TODO: fix these constants, but they differ on ES2/3 and GL
       // WebGL1 they require loading an extension (if present) to get at the constants.
 #if READ_FROM_SRGB      
-    case aeTextureFormat::SRGB:
+    case aeTextureFormat::RGB8_SRGB:
 	  // ignore type
       glInternalFormat = GL_SRGB8;
       glFormat = GL_SRGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-    case aeTextureFormat::SRGBA:
+    case aeTextureFormat::RGBA8_SRGB:
 	  // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
       glFormat = GL_SRGB_ALPHA;
@@ -1255,14 +1287,14 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 	  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
 	  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
 	  {
-		glGenerateMipmap( GetTarget() );
+		  glGenerateMipmap( GetTarget() );
 	  }
   }
 	
   AE_CHECK_GL_ERROR();
 }
 
-void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps )
+void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps, bool isSRGB, bool is16BitImage )
 {
   uint32_t fileSize = aeVfs::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
@@ -1277,27 +1309,43 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 #if _AE_IOS_
   stbi_convert_iphone_png_to_rgb( 1 );
 #endif
-  uint8_t* image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  uint8_t* image;
+  if (is16BitImage)
+  {
+     image = (uint8_t*)stbi_load_16_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
+  else
+  {
+	  image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
   AE_ASSERT( image );
 
   aeTextureFormat::Type format;
+  auto type = aeTextureType::Uint8;
   switch ( channels )
   {
     case STBI_grey:
-      format = aeTextureFormat::R;
-      break;
+  		format = aeTextureFormat::R8;
+  		  
+  		// for now only support R16Unorm
+  		if (is16BitImage)
+  		{
+  			format = aeTextureFormat::R16_UNORM;
+  			type = aeTextureType::Uint16;
+  		}
+  	  break;
     case STBI_grey_alpha:
       AE_FAIL();
       break;
     case STBI_rgb:
-      format = aeTextureFormat::RGB;
+      format = isSRGB ? aeTextureFormat::RGB8_SRGB : aeTextureFormat::RGB8;
       break;
     case STBI_rgb_alpha:
-      format = aeTextureFormat::RGBA;
+      format = isSRGB ? aeTextureFormat::RGBA8_SRGB : aeTextureFormat::RGBA8;
       break;
   }
   
-  Initialize( image, width, height, format, aeTextureType::Uint8, filter, wrap, autoGenerateMipmaps );
+  Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
   
   stbi_image_free( image );
   free( fileBuffer );
@@ -1404,7 +1452,7 @@ void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Ty
   AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
 
   aeTexture2D* tex = aeAlloc::Allocate< aeTexture2D >();
-  tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA, aeTextureType::HalfFloat, filter, wrap );
+  tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA16F, aeTextureType::HalfFloat, filter, wrap );
 
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
@@ -1419,7 +1467,7 @@ void aeRenderTarget::AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type
 {
   AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 
-  m_depth.Initialize( nullptr, m_width, m_height, aeTextureFormat::Depth, aeTextureType::Float, filter, wrap );
+  m_depth.Initialize( nullptr, m_width, m_height, aeTextureFormat::Depth32F, aeTextureType::Float, filter, wrap );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 
