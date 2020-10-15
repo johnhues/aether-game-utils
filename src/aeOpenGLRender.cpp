@@ -834,14 +834,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   else
   {
     glEnable( GL_CULL_FACE );
-	  if ( gReverseZ )
-	  {
-		  glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CCW : GL_CW );
-	  }
-	  else
-	  {
-		  glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
-	  }
+    glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
   }
 
   // Wireframe
