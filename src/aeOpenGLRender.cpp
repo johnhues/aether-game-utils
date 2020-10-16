@@ -1606,6 +1606,7 @@ void aeOpenGLRender::Initialize( aeRender* render )
 	
 #if WRITE_TO_SRGB
 	SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
+	glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
 	
 #if AE_GL_DEBUG_MODE
@@ -1646,16 +1647,19 @@ void aeOpenGLRender::StartFrame( aeRender* render )
 
 void aeOpenGLRender::EnableSRGBWrites( aeRender* render, bool enable )
 {
-#if WRITE_TO_SRGB
-	if (enable)
-	{
-		glEnable( GL_FRAMEBUFFER_SRGB );
-	}
-	else
-	{
-		glDisable( GL_FRAMEBUFFER_SRGB );
-	}
-#endif
+// some articles say these only need to be set once, and only affect sRGB fbo
+// TODO: eliminate this interface if that's the case.  It wasn't fixing some
+// of the ImGUI rendering to be the same as before when it was wrapped.
+//#if WRITE_TO_SRGB
+//	if (enable)
+//	{
+//		glEnable( GL_FRAMEBUFFER_SRGB );
+//	}
+//	else
+//	{
+//		glDisable( GL_FRAMEBUFFER_SRGB );
+//	}
+//#endif
 }
 
 void aeOpenGLRender::EndFrame( aeRender* render )
