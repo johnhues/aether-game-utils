@@ -337,44 +337,18 @@ template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator <( const aeStr<N2>& str ) const
 {
-  if ( m_length < str.m_length )
-  {
-    return true;
-  }
-  else if ( m_length > str.m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str.c_str() ) < 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator <( const char* str ) const
 {
-  uint32_t otherLen = (uint32_t)strlen( str );
-  if ( m_length < otherLen )
-  {
-    return true;
-  }
-  else if ( otherLen < m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str ) < 0;
 }
 
 template < uint32_t N >
 bool operator <( const char* str0, const aeStr<N>& str1 )
 {
-  uint32_t otherLen = (uint32_t)strlen( str0 );
-  if ( otherLen < str1.m_length )
-  {
-    return true;
-  }
-  else if ( str1.m_length < otherLen )
-  {
-    return false;
-  }
   return strcmp( str0, str1.m_str ) < 0;
 }
 
@@ -382,44 +356,18 @@ template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator >( const aeStr<N2>& str ) const
 {
-  if ( m_length > str.m_length )
-  {
-    return true;
-  }
-  else if ( str.m_length > m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str.c_str() ) > 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator >( const char* str ) const
 {
-  uint32_t otherLen = (uint32_t)strlen( str );
-  if ( m_length > otherLen )
-  {
-    return true;
-  }
-  else if ( otherLen > m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str ) > 0;
 }
 
 template < uint32_t N >
 bool operator >( const char* str0, const aeStr<N>& str1 )
 {
-  uint32_t otherLen = (uint32_t)strlen( str0 );
-  if ( otherLen > str1.m_length )
-  {
-    return true;
-  }
-  else if ( str1.m_length > otherLen )
-  {
-    return false;
-  }
   return strcmp( str0, str1.m_str ) > 0;
 }
 
@@ -427,44 +375,18 @@ template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator <=( const aeStr<N2>& str ) const
 {
-  if ( m_length < str.m_length )
-  {
-    return true;
-  }
-  else if ( str.m_length < m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str.c_str() ) <= 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator <=( const char* str ) const
 {
-  uint32_t otherLen = (uint32_t)strlen( str );
-  if ( m_length < otherLen )
-  {
-    return true;
-  }
-  else if ( otherLen < m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str ) <= 0;
 }
 
 template < uint32_t N >
 bool operator <=( const char* str0, const aeStr<N>& str1 )
 {
-  uint32_t otherLen = (uint32_t)strlen( str0 );
-  if ( otherLen < str1.m_length )
-  {
-    return true;
-  }
-  else if ( str1.m_length < otherLen )
-  {
-    return false;
-  }
   return strcmp( str0, str1.m_str ) <= 0;
 }
 
@@ -472,44 +394,18 @@ template < uint32_t N >
 template < uint32_t N2 >
 inline bool aeStr< N >::operator >=( const aeStr<N2>& str ) const
 {
-  if ( m_length > str.m_length )
-  {
-    return true;
-  }
-  else if ( str.m_length > m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str.c_str() ) >= 0;
 }
 
 template < uint32_t N >
 inline bool aeStr< N >::operator >=( const char* str ) const
 {
-  uint32_t otherLen = (uint32_t)strlen( str );
-  if ( m_length > otherLen )
-  {
-    return true;
-  }
-  else if ( otherLen > m_length )
-  {
-    return false;
-  }
   return strcmp( m_str, str ) >= 0;
 }
 
 template < uint32_t N >
 bool operator >=( const char* str0, const aeStr<N>& str1 )
 {
-  uint32_t otherLen = (uint32_t)strlen( str0 );
-  if ( otherLen > str1.m_length )
-  {
-    return true;
-  }
-  else if ( str1.m_length > otherLen )
-  {
-    return false;
-  }
   return strcmp( str0, str1.m_str ) >= 0;
 }
 
