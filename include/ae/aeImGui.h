@@ -44,6 +44,9 @@
 #include "aeInput.h"
 #include "aeRender.h"
 
+// this is out of aeRender for macOS/winOS
+extern bool gGL41;
+
 //------------------------------------------------------------------------------
 // Imgui helpers
 //------------------------------------------------------------------------------
@@ -112,6 +115,9 @@ public:
 			ImGui_ImplOpenGL3_NewFrame();
 		}
 		ImGui::NewFrame();
+		
+		// have to alias this, since it's not passed into Render() call
+		m_render = render;
 	}
 
 	void Render()
@@ -120,7 +126,11 @@ public:
 		ImGui::Render();
 		if ( !m_headless )
 		{
+			// TODO: this should only be enabled if fbo in GL is sRGB
+			m_render->EnableSRGBWrites(true);
 			ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
+			m_render->EnableSRGBWrites(false);
+			m_render = nullptr;
 		}
 	}
 private:
@@ -143,7 +153,7 @@ private:
 		}
 		else
 		{
-			ImGui_ImplOpenGL3_Init( "#version 330" );
+			ImGui_ImplOpenGL3_Init( gGL41 ? "#version 410 core" : "#version 330 core" );
 		}
 
 		ImGuiIO& io = ImGui::GetIO();
@@ -174,7 +184,8 @@ private:
 	}
 
 	bool m_init = false;
-	bool m_headless = false;	
+	bool m_headless = false;
+	aeRender* m_render = nullptr;
 };
 
 #endif

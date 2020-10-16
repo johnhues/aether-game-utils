@@ -56,6 +56,9 @@ public:
   void StartFrame( aeRender* render ) override;
   void EndFrame( aeRender* render ) override;
 
+  // this is so imgui and the main render copy can enable srgb writes in GL
+  void EnableSRGBWrites( aeRender* render, bool enable );
+
 private:
   void* m_context;
   int32_t m_defaultFbo;

@@ -86,6 +86,9 @@
 // http://www.reedbeta.com/blog/depth-precision-visualized/
 bool gReverseZ = false;
 
+// turn this on to run at GL4.1 instead of GL3.3
+bool gGL41 = false;
+
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
@@ -973,7 +976,19 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
   // No version specified
   shaderSource[ sourceCount++ ] = "precision highp float;\n";
 #else
-  shaderSource[ sourceCount++ ] = "#version 330 core\n";
+  if (gGL41)
+  {
+	  shaderSource[ sourceCount++ ] = "#version 410 core\n";
+	  //shaderSource[ sourceCount++ ] = "#extension GL_EXT_gpu_shader4 : enable";
+	  shaderSource[ sourceCount++ ] = "#extension GL_OES_standard_derivatives : enable";
+	  // aniso extension too, but may not need here
+  }
+  else
+  {
+	  shaderSource[ sourceCount++ ] = "#version 330 core\n";
+	  shaderSource[ sourceCount++ ] = "#extension GL_OES_standard_derivatives : enable";
+  }
+	  
   // No default precision specified
 #endif
 
@@ -1581,8 +1596,16 @@ void aeOpenGLRender::Initialize( aeRender* render )
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 #else
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
+  if (gGL41)
+  {
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
+  }
+  else
+  {
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
+  }
 #endif
 	
 #if WRITE_TO_SRGB
@@ -1625,6 +1648,20 @@ void aeOpenGLRender::Terminate( aeRender* render )
 void aeOpenGLRender::StartFrame( aeRender* render )
 {}
 
+void aeOpenGLRender::EnableSRGBWrites( aeRender* render, bool enable )
+{
+#if WRITE_TO_SRGB
+	if (enable)
+	{
+		glEnable( GL_FRAMEBUFFER_SRGB );
+	}
+	else
+	{
+		glDisable( GL_FRAMEBUFFER_SRGB );
+	}
+#endif
+}
+
 void aeOpenGLRender::EndFrame( aeRender* render )
 {
   AE_CHECK_GL_ERROR();
@@ -1638,20 +1675,16 @@ void aeOpenGLRender::EndFrame( aeRender* render )
 
   glDepthMask( GL_TRUE );
 
-
   glDisable( GL_DEPTH_TEST );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
-#if WRITE_TO_SRGB
-  glEnable(	GL_FRAMEBUFFER_SRGB );
-#endif
+  // TODO: this should only be enabled if fbo in GL is sRGB
+  EnableSRGBWrites( render, true );
 
   render->GetCanvas()->Render2D( 0, render->GetNDCRect(), 0.5f );
 
-#if WRITE_TO_SRGB
-  glDisable( GL_FRAMEBUFFER_SRGB );
-#endif
+  EnableSRGBWrites( render, false );
 	
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
