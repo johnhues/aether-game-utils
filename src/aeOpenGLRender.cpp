@@ -979,14 +979,10 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
   if (gGL41)
   {
 	  shaderSource[ sourceCount++ ] = "#version 410 core\n";
-	  //shaderSource[ sourceCount++ ] = "#extension GL_EXT_gpu_shader4 : enable";
-	  shaderSource[ sourceCount++ ] = "#extension GL_OES_standard_derivatives : enable";
-	  // aniso extension too, but may not need here
   }
   else
   {
 	  shaderSource[ sourceCount++ ] = "#version 330 core\n";
-	  shaderSource[ sourceCount++ ] = "#extension GL_OES_standard_derivatives : enable";
   }
 	  
   // No default precision specified
