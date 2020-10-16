@@ -1310,3 +1310,8 @@ aeRect aeRender::GetNDCRect() const
     return aeRect( -width, -1.0f, width * 2.0f, 2.0f );
   }
 }
+
+void aeRender::EnableSRGBWrites(bool enable)
+{
+	m_renderInternal->EnableSRGBWrites( this, enable );
+}

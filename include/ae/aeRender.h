@@ -724,6 +724,9 @@ public:
   aeFloat4x4 GetWindowToWorld( const aeFloat4x4& worldToNdc ) const; // Mouse to world
   aeRect GetNDCRect() const;
 
+  // this is so imgui and the main render copy can enable srgb writes in GL
+  void EnableSRGBWrites( bool enable );
+
 private:
   class aeRenderInternal* m_renderInternal;
 

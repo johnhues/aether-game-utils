@@ -41,6 +41,9 @@ public:
   virtual void Terminate( aeRender* render ) = 0;
   virtual void StartFrame( aeRender* render ) = 0;
   virtual void EndFrame( aeRender* render ) = 0;
+	
+  // this is so imgui and the main render copy can enable srgb writes in GL
+  virtual void EnableSRGBWrites( aeRender* render, bool enable ) = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -57,7 +60,7 @@ public:
   void EndFrame( aeRender* render ) override;
 
   // this is so imgui and the main render copy can enable srgb writes in GL
-  void EnableSRGBWrites( aeRender* render, bool enable );
+  void EnableSRGBWrites( aeRender* render, bool enable ) override;
 
 private:
   void* m_context;
