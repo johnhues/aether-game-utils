@@ -1606,8 +1606,7 @@ void aeOpenGLRender::Initialize( aeRender* render )
 	
 #if WRITE_TO_SRGB
 	SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
-	glEnable( GL_FRAMEBUFFER_SRGB );
-#endif
+endif
 	
 #if AE_GL_DEBUG_MODE
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
