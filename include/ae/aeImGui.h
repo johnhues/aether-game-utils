@@ -127,9 +127,9 @@ public:
 		if ( !m_headless )
 		{
 			// TODO: this should only be enabled if fbo in GL is sRGB
-			m_render->EnableSRGBWrites( true );
+			//m_render->EnableSRGBWrites( true );
 			ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
-			m_render->EnableSRGBWrites( false );
+			//m_render->EnableSRGBWrites( false );
 			m_render = nullptr;
 		}
 	}

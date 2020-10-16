@@ -1689,11 +1689,11 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   AE_CHECK_GL_ERROR();
 
   // TODO: this should only be enabled if fbo in GL is sRGB
-  EnableSRGBWrites( render, true );
+  //EnableSRGBWrites( render, true );
 
   render->GetCanvas()->Render2D( 0, render->GetNDCRect(), 0.5f );
 
-  EnableSRGBWrites( render, false );
+  //EnableSRGBWrites( render, false );
 	
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
