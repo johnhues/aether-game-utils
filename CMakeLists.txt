@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # project name and supported languages
 project(aether-game-utils LANGUAGES CXX VERSION 0.1.0)
@@ -7,7 +6,7 @@ set(AE_LIBRARY_NAME ae)
 set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 
 # guard against in-source builds and bad build-type strings
-include(${CMAKE_MODULE_PATH}/safeguards.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake)
 # import external projects module
 include(ExternalProject)
 
