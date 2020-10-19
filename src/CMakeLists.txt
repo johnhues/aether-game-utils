@@ -8,10 +8,11 @@ set_property(TARGET ${AE_LIBRARY_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRU
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
-		${AE_DEPS_LIBRARY_INCLUDE_DIRS}
+		${PROJECT_SOURCE_DIR}/include
 		${PROJECT_SOURCE_DIR}/src
+		${AE_DEPS_LIBRARY_INCLUDE_DIRS}
 	PUBLIC
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/${AE_LIBRARY_NAME}> # for headers when building
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> # for headers when building
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> # <install prefix>/include
 )
 
