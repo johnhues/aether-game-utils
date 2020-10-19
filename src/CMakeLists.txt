@@ -11,7 +11,7 @@ target_include_directories(${AE_LIBRARY_NAME}
 		${AE_DEPS_LIBRARY_INCLUDE_DIRS}
 		${PROJECT_SOURCE_DIR}/src
 	PUBLIC
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> # for headers when building
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/${AE_LIBRARY_NAME}> # for headers when building
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> # <install prefix>/include
 )
 
