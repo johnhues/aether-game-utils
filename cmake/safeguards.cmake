@@ -47,4 +47,4 @@ else()
 endif()
 
 # Directory for external dependencies
-set(AE_THIRDPARTY_DIR ${CMAKE_BINARY_DIR}/thirdparty)
+set(AE_THIRDPARTY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thirdparty)
