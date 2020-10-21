@@ -47,6 +47,8 @@ public:
   
   T& Append( const T& value );
   void Append( const T* values, uint32_t count );
+  
+  T& Insert( uint32_t index, const T& value );
 
   template < typename U > int32_t Find( const U& value ) const;
   template < typename Fn > int32_t FindFn( Fn testFn ) const;
@@ -193,6 +195,33 @@ void aeArray< T >::Append( const T* values, uint32_t count )
     m_array[ m_length ] = values[ i ];
     m_length++;
   }
+}
+
+template < typename T >
+T& aeArray< T >::Insert( uint32_t index, const T& value )
+{
+  AE_ASSERT( index <= m_length );
+
+  if ( m_length == m_size )
+  {
+    if ( m_size )
+    {
+      Reserve( m_size * 2 );
+    }
+    else
+    {
+      Reserve( 1 );
+    }
+  }
+
+  for ( int32_t i = m_length; i > index; i-- )
+  {
+    m_array[ i ] = m_array[ i - 1 ];
+  }
+  m_array[ index ] = value;
+  m_length++;
+
+  return m_array[ index ];
 }
 
 template < typename T >

@@ -90,3 +90,59 @@ TEST_CASE( "arrays can be constructed with a specified length", "[aeArray]" )
   REQUIRE( a.Length() == 5 );
   REQUIRE( a.Size() == 8 );
 }
+
+TEST_CASE( "arrays elements can be inserted by index", "[aeArray]" )
+{
+  aeArray< int > empty;
+  REQUIRE( empty.Length() == 0 );
+
+  aeArray< int > array;
+  for ( uint32_t i = 1; i <= 5; i++ )
+  {
+    array.Append( i );
+  }
+  REQUIRE( array.Length() == 5 );
+
+  SECTION( "insert at beginning moves all elements back" )
+  {
+    REQUIRE( array.Insert( 0, 7 ) == 7 );
+    REQUIRE( array.Length() == 6 );
+    REQUIRE( array[ 0 ] == 7 );
+    REQUIRE( array[ 1 ] == 1 );
+    REQUIRE( array[ 2 ] == 2 );
+    REQUIRE( array[ 3 ] == 3 );
+    REQUIRE( array[ 4 ] == 4 );
+    REQUIRE( array[ 5 ] == 5 );
+  }
+
+  SECTION( "insert in middle moves later elements back" )
+  {
+    REQUIRE( array.Insert( 3, 7 ) == 7 );
+    REQUIRE( array.Length() == 6 );
+    REQUIRE( array[ 0 ] == 1 );
+    REQUIRE( array[ 1 ] == 2 );
+    REQUIRE( array[ 2 ] == 3 );
+    REQUIRE( array[ 3 ] == 7 );
+    REQUIRE( array[ 4 ] == 4 );
+    REQUIRE( array[ 5 ] == 5 );
+  }
+
+  SECTION( "insert at end appends value" )
+  {
+    REQUIRE( array.Insert( 5, 7 ) == 7 );
+    REQUIRE( array.Length() == 6 );
+    REQUIRE( array[ 0 ] == 1 );
+    REQUIRE( array[ 1 ] == 2 );
+    REQUIRE( array[ 2 ] == 3 );
+    REQUIRE( array[ 3 ] == 4 );
+    REQUIRE( array[ 4 ] == 5 );
+    REQUIRE( array[ 5 ] == 7 );
+  }
+
+  SECTION( "insert into empty array" )
+  {
+    REQUIRE( empty.Insert( 0, 7 ) == 7 );
+    REQUIRE( empty.Length() == 1 );
+    REQUIRE( empty[ 0 ] == 7 );
+  }
+}
