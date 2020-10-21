@@ -7,6 +7,7 @@ set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 
 # guard against in-source builds and bad build-type strings
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake)
+
 # import external projects module
 include(ExternalProject)
 
@@ -27,6 +28,8 @@ endif()
 set(AE_LEAN_AND_MEAN OFF CACHE BOOL "Disables building tests and examples")
 
 # find dependencies
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OpenGLES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
 	if (EXISTS ${OpenGLES})
