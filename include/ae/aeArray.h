@@ -47,11 +47,11 @@ public:
   
   T& Append( const T& value );
   void Append( const T* values, uint32_t count );
-  
+
   T& Insert( uint32_t index, const T& value );
 
-  template < typename U > int32_t Find( const U& value ) const;
-  template < typename Fn > int32_t FindFn( Fn testFn ) const;
+  template < typename U > int32_t Find( const U& value ) const; // Returns -1 when not found
+  template < typename Fn > int32_t FindFn( Fn testFn ) const; // Returns -1 when not found
   void Remove( uint32_t index );
 
   template < typename U > uint32_t RemoveAll( const U& value );
