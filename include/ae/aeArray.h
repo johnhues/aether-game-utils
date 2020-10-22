@@ -200,7 +200,9 @@ void aeArray< T >::Append( const T* values, uint32_t count )
 template < typename T >
 T& aeArray< T >::Insert( uint32_t index, const T& value )
 {
+#if _AE_DEBUG_
   AE_ASSERT( index <= m_length );
+#endif
 
   if ( m_length == m_size )
   {
@@ -311,7 +313,9 @@ void aeArray< T >::Reserve( uint32_t size )
   size |= size >> 16;
   size++;
 
+#if _AE_DEBUG_
   AE_ASSERT( size );
+#endif
   m_size = size;
 
   T* arr = aeAlloc::AllocateArray< T >( m_size );
