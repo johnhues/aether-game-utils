@@ -654,6 +654,24 @@ namespace aeMath
       Abs( v.z )
     );
   }
+
+  inline aeFloat3 Ceil( aeFloat3 v )
+  {
+    return aeFloat3(
+      Ceil( v.x ),
+      Ceil( v.y ),
+      Ceil( v.z )
+    );
+  }
+
+  inline aeFloat3 Floor( aeFloat3 v )
+  {
+    return aeFloat3(
+      Floor( v.x ),
+      Floor( v.y ),
+      Floor( v.z )
+    );
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -728,6 +746,29 @@ public:
 inline std::ostream& operator<<( std::ostream& os, aeFloat4 v )
 {
   return os << "<" << v.x << ", " << v.y << ", " << v.z << ", " << v.w << ">";
+}
+
+namespace aeMath
+{
+  inline aeFloat4 Ceil( aeFloat4 v )
+  {
+    return aeFloat4(
+      Ceil( v.x ),
+      Ceil( v.y ),
+      Ceil( v.z ),
+      Ceil( v.w )
+    );
+  }
+
+  inline aeFloat4 Floor( aeFloat4 v )
+  {
+    return aeFloat4(
+      Floor( v.x ),
+      Floor( v.y ),
+      Floor( v.z ),
+      Floor( v.w )
+    );
+  }
 }
 
 template< typename T >
