@@ -1430,20 +1430,6 @@ void aeTerrain::RenderDebug( aeDebugRender* debug )
   sdf.RenderDebug( debug );
 }
 
-void aeTerrain::SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) )
-{
-  sdf.m_userdata = userdata;
-  sdf.m_fn1 = nullptr;
-  sdf.m_fn2 = fn;
-}
-
-void aeTerrain::SetCallback( float ( *fn )( aeFloat3 ) )
-{
-  sdf.m_userdata = nullptr;
-  sdf.m_fn1 = fn;
-  sdf.m_fn2 = nullptr;
-}
-
 void aeTerrain::m_Dirty( aeAABB aabb )
 {
   // @NOTE: Add a buffer region so voxels on the edge of the aabb are refreshed

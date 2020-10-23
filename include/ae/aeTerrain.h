@@ -220,12 +220,6 @@ public:
   aeFloat3 GetDerivative( aeFloat3 pos ) const;
   aeTerrainMaterialId GetMaterial( aeFloat3 pos ) const;
 
-  bool TestAABB( aeAABB aabb ) const;
-
-  void* m_userdata = nullptr;
-  float ( *m_fn1 )( aeFloat3 ) = nullptr;
-  float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
-
 private:
   friend class aeTerrain;
 
@@ -380,8 +374,6 @@ public:
   void Render( const class aeShader* shader, const aeUniformList& shaderParams );
   void RenderDebug( class aeDebugRender* debug );
 
-  void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
-  void SetCallback( float ( *fn )( aeFloat3 ) );
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
   
   Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const;
