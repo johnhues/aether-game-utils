@@ -242,10 +242,9 @@ int main()
 					aeFloat4x4::Translation( camera.GetFocus() ) *
 					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-				terrain->Dirty( box->GetAABB() );
 				currentShape = box;
 			}
-			else if ( ImGui::Button( "Height Map" ) )
+			else if ( ImGui::Button( "height map" ) )
 			{
 				AE_LOG( "create height map" );
 
@@ -255,22 +254,20 @@ int main()
 					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 				heightMap->SetImage( &heightmapImage );
 
-				terrain->Dirty( heightMap->GetAABB() );
 				currentShape = heightMap;
 			}
-			else if ( ImGui::Button( "Cone" ) )
+			else if ( ImGui::Button( "cylinder" ) )
 			{
 				AE_LOG( "create cone" );
 
-				ae::Sdf::Cone* cone = terrain->sdf.CreateSdf< ae::Sdf::Cone >();
+				ae::Sdf::Cylinder* cone = terrain->sdf.CreateSdf< ae::Sdf::Cylinder >();
 				cone->SetTransform(
 					aeFloat4x4::Translation( camera.GetFocus() ) *
 					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-				terrain->Dirty( cone->GetAABB() );
 				currentShape = cone;
 			}
-			else if ( ImGui::Button( "Material 1" ) )
+			else if ( ImGui::Button( "material 1" ) )
 			{
 				AE_LOG( "create material 1" );
 
@@ -281,23 +278,31 @@ int main()
 				box->type = ae::Sdf::Shape::Type::Material;
 				box->materialId = 1;
 
-				terrain->Dirty( box->GetAABB() );
 				currentShape = box;
 			}
 			ImGui::End();
 		}
 
 		ImGui::Begin( "object" );
-		if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
+		if ( currentShape )
 		{
-			float cornerSize = box->GetCornerSize();
-			ImGui::SliderFloat( "corner size", &cornerSize, 0.0f, 10.0f );
-			box->SetCornerSize( cornerSize );
-		}
-		else if ( auto cone = aeCast< ae::Sdf::Cone >( currentShape ) )
-		{
-			ImGui::SliderFloat( "top", &cone->top, 0.0f, 1.0f );
-			ImGui::SliderFloat( "bottom", &cone->bottom, 0.0f, 1.0f );
+			const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
+			ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
+			if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion
+				|| currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+			{
+				if ( ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, 1.0f ) ) { currentShape->Dirty(); }
+			}
+
+			if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
+			{
+				if ( ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, 1.0f ) ) { box->Dirty(); }
+			}
+			else if ( auto cone = aeCast< ae::Sdf::Cylinder >( currentShape ) )
+			{
+				if ( ImGui::SliderFloat( "top", &cone->top, 0.0f, 1.0f ) ) { cone->Dirty(); }
+				if ( ImGui::SliderFloat( "bottom", &cone->bottom, 0.0f, 1.0f ) ) { cone->Dirty(); }
+			}
 		}
 		ImGui::End();
 
@@ -317,10 +322,9 @@ int main()
 		}
 
 		// Camera input
-		if ( !ImGuizmo::IsUsing() )
-		{
-			camera.Update( &input, timeStep.GetTimeStep() );
-		}
+		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
+		camera.Update( &input, timeStep.GetTimeStep() );
+
 		// Camera focus
 		if ( currentShape && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
 		{
@@ -419,6 +423,11 @@ int main()
 			{
 				s_operation = ImGuizmo::SCALE;
 			}
+			else if ( currentShape && input.GetState()->Get( aeKey::Delete ) && !input.GetPrevState()->Get( aeKey::Delete ) )
+			{
+				terrain->sdf.DestroySdf( currentShape );
+				currentShape = nullptr;
+			}
 
 			if ( currentShape )
 			{
@@ -439,13 +448,7 @@ int main()
 				if ( gizmoTransform != gizmoPrevTransform )
 				{
 					currentShape->SetTransform( gizmoTransform );
-
-					aeFloat3 prevPos = gizmoPrevTransform.GetTranslation();
-					aeFloat3 prevHalfSize = gizmoPrevTransform.GetScale() * 0.5f;
-
-					aeAABB prevAABB( prevPos - prevHalfSize, prevPos + prevHalfSize );
-					terrain->Dirty( prevAABB );
-					terrain->Dirty( currentShape->GetAABB() );
+					currentShape->Dirty();
 				}
 			}
 

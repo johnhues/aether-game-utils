@@ -27,158 +27,6 @@
 #include "aeClock.h"
 #include "aeCompactingAllocator.h"
 #include <ctpl_stl.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
-void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage )
-{
-  AE_STATIC_ASSERT( (uint32_t)Format::R == 1 );
-  AE_STATIC_ASSERT( (uint32_t)Format::RG == 2 );
-  AE_STATIC_ASSERT( (uint32_t)Format::RGB == 3 );
-  AE_STATIC_ASSERT( (uint32_t)Format::RGBA == 4 );
-
-  m_width = width;
-  m_height = height;
-  m_channels = ( storage == Format::Auto ) ? (uint32_t)format : ( uint32_t )storage; // @NOTE: See static assert above
-
-  uint32_t length = m_width * m_height;
-  m_data.Reserve( length * m_channels );
-
-  uint32_t formatChannels = (uint32_t)format; // @NOTE: See static assert above
-  if ( formatChannels == m_channels )
-  {
-    // @NOTE: Direct copy
-    m_data.Append( data, length * m_channels );
-  }
-  else if ( formatChannels > m_channels )
-  {
-    // @NOTE: More channels provided than needed
-    for ( uint32_t i = 0; i < length; i++ )
-    {
-      m_data.Append( &data[ i * formatChannels ], m_channels );
-    }
-  }
-  else
-  {
-    // @NOTE: Fewer channels provided than needed
-    // Copy last color value into remaining channels, and set alpha to opaque
-    uint8_t p[ 4 ];
-    p[ 3 ] = 255;
-    for ( uint32_t i = 0; i < length; i++ )
-    {
-      uint32_t index = i * formatChannels;
-      memcpy( p, &data[ index ], formatChannels );
-      memset( p + formatChannels, data[ index + formatChannels - 1 ], 3 - formatChannels );
-
-      m_data.Append( p, m_channels );
-    }
-  }
-}
-
-bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension, Format storage )
-{
-  if ( !file || !length )
-  {
-    return false;
-  }
-
-  AE_ASSERT( extension == Extension::PNG );
-
-  int32_t width = 0;
-  int32_t height = 0;
-  int32_t channels = 0;
-  stbi_set_flip_vertically_on_load( 1 );
-#if _AE_IOS_
-  stbi_convert_iphone_png_to_rgb( 1 );
-#endif
-  uint8_t* image = stbi_load_from_memory( (const uint8_t*)file, length, &width, &height, &channels, STBI_default );
-  if ( !image )
-  {
-    return false;
-  }
-
-  Format format = (Format)channels; // @NOTE: See static assert above
-  LoadRaw( image, width, height, format, storage );
-  stbi_image_free( image );
-
-  return true;
-}
-
-aeColor ae::Image::Get( aeInt2 pixel ) const
-{
-  if ( pixel.x < 0 || pixel.y < 0 || pixel.x >= m_width || pixel.y >= m_height )
-  {
-    return aeColor::Black();
-  }
-
-  uint32_t index = ( pixel.y * m_width + pixel.x ) * m_channels;
-  switch ( m_channels )
-  {
-    case 1:
-    {
-      return aeColor::R( m_data[ index ] );
-    }
-    case 2:
-    {
-      return aeColor::RG( m_data[ index ], m_data[ index + 1 ] );
-    }
-    case 3:
-    {
-      return aeColor::RGB( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ] );
-    }
-    case 4:
-    {
-      return aeColor::RGBA( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ], m_data[ index + 3 ] );
-    }
-  }
-
-  return aeColor::Black();
-}
-
-aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
-{
-  aeInt2 pi = pixel.FloorCopy();
-
-  switch ( interpolation )
-  {
-    case Interpolation::Nearest:
-    {
-      return Get( pi );
-    }
-    case Interpolation::Linear:
-    {
-      float x = pixel.x - pi.x;
-      float y = pixel.y - pi.y;
-
-      aeColor c00 = Get( pi );
-      aeColor c10 = Get( pi + aeInt2( 1, 0 ) );
-      aeColor c01 = Get( pi + aeInt2( 0, 1 ) );
-      aeColor c11 = Get( pi + aeInt2( 1, 1 ) );
-
-      aeColor c0 = c00.Lerp( c10, x );
-      aeColor c1 = c01.Lerp( c11, x );
-
-      return c0.Lerp( c1, y );
-    }
-    case Interpolation::Cosine:
-    {
-      float x = pixel.x - pi.x;
-      float y = pixel.y - pi.y;
-
-      aeColor c00 = Get( pi );
-      aeColor c10 = Get( pi + aeInt2( 1, 0 ) );
-      aeColor c01 = Get( pi + aeInt2( 0, 1 ) );
-      aeColor c11 = Get( pi + aeInt2( 1, 1 ) );
-
-      aeColor c0 = aeMath::Interpolation::Cosine( c00, c10, x );
-      aeColor c1 = aeMath::Interpolation::Cosine( c01, c11, x );
-
-      return aeMath::Interpolation::Cosine( c0, c1, y );
-    }
-  }
-
-  return aeColor::Black();
-}
 
 // @TODO: SIMD GetIntersection() is currently causing nans on windows
 #if _AE_APPLE_ //|| _AE_WINDOWS_
@@ -272,14 +120,14 @@ const uint16_t EDGE_BOTTOM_BACK_BIT = 1 << EDGE_BOTTOM_BACK_INDEX;
 const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 }
 
-SDFCache::SDFCache()
+aeTerrainSDFCache::aeTerrainSDFCache()
 {
   m_chunk = aeInt3( 0 );
   m_sdf = aeAlloc::AllocateArray< float16_t >( kDim * kDim * kDim );
   m_material = aeAlloc::AllocateArray< aeTerrainMaterialId >( kDim * kDim * kDim );
 }
 
-SDFCache::~SDFCache()
+aeTerrainSDFCache::~aeTerrainSDFCache()
 {
   aeAlloc::Release( m_sdf );
   aeAlloc::Release( m_material );
@@ -287,7 +135,7 @@ SDFCache::~SDFCache()
   m_material = nullptr;
 }
 
-void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
+void aeTerrainSDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
 {
   m_chunk = chunk;
 
@@ -306,7 +154,7 @@ void SDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
   }
 }
 
-float SDFCache::GetValue( aeFloat3 pos ) const
+float aeTerrainSDFCache::GetValue( aeFloat3 pos ) const
 {
   pos += m_offsetf;
 
@@ -336,12 +184,12 @@ float SDFCache::GetValue( aeFloat3 pos ) const
   return aeMath::Lerp( y0, y1, pos.z );
 }
 
-float SDFCache::GetValue( aeInt3 pos ) const
+float aeTerrainSDFCache::GetValue( aeInt3 pos ) const
 {
   return m_GetValue( pos + m_offseti );
 }
 
-aeFloat3 SDFCache::GetDerivative( aeFloat3 p ) const
+aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
 {
   aeFloat3 normal0;
   for ( int32_t i = 0; i < 3; i++ )
@@ -374,7 +222,7 @@ aeFloat3 SDFCache::GetDerivative( aeFloat3 p ) const
   return ( normal1 + normal0 ).SafeNormalizeCopy();
 }
 
-uint8_t SDFCache::GetMaterial( aeInt3 pos ) const
+uint8_t aeTerrainSDFCache::GetMaterial( aeInt3 pos ) const
 {
   pos += m_offseti;
 #if _AE_DEBUG_
@@ -384,7 +232,7 @@ uint8_t SDFCache::GetMaterial( aeInt3 pos ) const
   return m_material[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
 }
 
-float SDFCache::m_GetValue( aeInt3 pos ) const
+float aeTerrainSDFCache::m_GetValue( aeInt3 pos ) const
 {
 #if _AE_DEBUG_
   AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
@@ -393,7 +241,7 @@ float SDFCache::m_GetValue( aeInt3 pos ) const
   return m_sdf[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
 }
 
-Chunk::Chunk() :
+aeTerrainChunk::aeTerrainChunk() :
   m_generatedList( this )
 {
   m_check = 0xCDCDCDCD;
@@ -410,17 +258,17 @@ Chunk::Chunk() :
   memset( m_i, ~(uint8_t)0, sizeof( m_i ) );
 }
 
-Chunk::~Chunk()
+aeTerrainChunk::~aeTerrainChunk()
 {
   AE_ASSERT( !m_vertices );
 }
 
-uint32_t Chunk::GetIndex( aeInt3 pos )
+uint32_t aeTerrainChunk::GetIndex( aeInt3 pos )
 {
   return pos.x + kWorldChunksWidth * ( pos.y + kWorldChunksWidth * pos.z );
 }
 
-uint32_t Chunk::GetIndex() const
+uint32_t aeTerrainChunk::GetIndex() const
 {
   return GetIndex( m_pos );
 }
@@ -444,7 +292,7 @@ aeTerrainJob::~aeTerrainJob()
   edgeInfo = nullptr;
 }
 
-void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, Chunk* chunk )
+void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, aeTerrainChunk* chunk )
 {
   AE_ASSERT( chunk );
   AE_ASSERT_MSG( !m_chunk, "Previous job not finished" );
@@ -482,7 +330,7 @@ bool aeTerrainJob::HasChunk( aeInt3 pos ) const
   return m_chunk && m_chunk->m_pos == pos;
 }
 
-void Chunk::Generate( const SDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
+void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
 {
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
@@ -884,7 +732,7 @@ void Chunk::Generate( const SDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, Te
   *indexCountOut = indexCount;
 }
 
-void aeTerrain::UpdateChunkLighting( Chunk* chunk )
+void aeTerrain::UpdateChunkLighting( aeTerrainChunk* chunk )
 {
 //  int32_t cx = chunk->pos[ 0 ] * kChunkSize;
 //  int32_t cy = chunk->pos[ 1 ] * kChunkSize;
@@ -920,7 +768,7 @@ void aeTerrain::UpdateChunkLighting( Chunk* chunk )
   chunk->m_lightDirty = false;
 }
 
-Chunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
+aeTerrainChunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
 {
   AE_ASSERT( pos.x >= 0 );
   AE_ASSERT( pos.y >= 0 );
@@ -929,7 +777,7 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
   AE_ASSERT( pos.y < kWorldChunksWidth );
   AE_ASSERT( pos.z < kWorldChunksHeight );
   
-  Chunk* chunk = m_chunkPool.Allocate();
+  aeTerrainChunk* chunk = m_chunkPool.Allocate();
   if ( !chunk )
   {
     return nullptr;
@@ -943,7 +791,7 @@ Chunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
   return chunk;
 }
 
-void aeTerrain::FreeChunk( Chunk* chunk )
+void aeTerrain::FreeChunk( aeTerrainChunk* chunk )
 {
   AE_ASSERT( chunk );
   AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
@@ -989,7 +837,7 @@ float aeTerrain::GetChunkScore( aeInt3 pos ) const
   }
 }
 
-void Chunk::m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] )
+void aeTerrainChunk::m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] )
 {
   if ( edgeBit == EDGE_TOP_FRONT_BIT )
   {
@@ -1081,7 +929,7 @@ void Chunk::m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ]
   }
 }
 
-const Chunk* aeTerrain::GetChunk( aeInt3 pos ) const
+const aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos ) const
 {
   if ( pos.x >= kWorldChunksWidth || pos.y >= kWorldChunksWidth || pos.z >= kWorldChunksHeight )
   {
@@ -1090,14 +938,14 @@ const Chunk* aeTerrain::GetChunk( aeInt3 pos ) const
 
   uint32_t c = pos.x + kWorldChunksWidth * ( pos.y + kWorldChunksWidth * pos.z );
   
-  Chunk* chunk = m_chunks[ c ];
+  aeTerrainChunk* chunk = m_chunks[ c ];
   if ( chunk ) { AE_ASSERT( chunk->m_check == 0xCDCDCDCD ); }
   return chunk;
 }
 
-Chunk* aeTerrain::GetChunk( aeInt3 pos )
+aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos )
 {
-  return (Chunk*)( (const aeTerrain*)this )->GetChunk( pos );
+  return (aeTerrainChunk*)( (const aeTerrain*)this )->GetChunk( pos );
 }
 
 int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
@@ -1107,8 +955,12 @@ int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
     return -1;
   }
 
-  return m_voxelCounts[ Chunk::GetIndex( pos ) ];
+  return m_voxelCounts[ aeTerrainChunk::GetIndex( pos ) ];
 }
+
+aeTerrain::aeTerrain() :
+  sdf( this )
+{}
 
 aeTerrain::~aeTerrain()
 {
@@ -1132,11 +984,10 @@ void aeTerrain::Initialize( uint32_t maxThreads, bool render )
   m_chunkRawAlloc = aeAlloc::AllocateRaw( 1, 1, worldChunkBytes + voxelCountBytes );
   
   memset( m_chunkRawAlloc, 0, worldChunkBytes );
-  m_chunks = (Chunk**)m_chunkRawAlloc;
+  m_chunks = (aeTerrainChunk**)m_chunkRawAlloc;
   m_voxelCounts = (int16_t*)( (int8_t*)m_chunkRawAlloc + worldChunkBytes );
-  // @TODO: This is a little too sneaky, it sets all voxel counts to -1 which is used to
-  //        initialize them later on. Chunks should be flagged for initialization more explicitly.
-  memset( m_voxelCounts, ~0, voxelCountBytes );
+  // Clear all chunk voxel counts. Chunks will be flagged dirty so they're regenerated.
+  memset( m_voxelCounts, 0, voxelCountBytes );
 
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockCollision[ i ] = true; }
   m_blockCollision[ Block::Exterior ] = false;
@@ -1172,7 +1023,7 @@ void aeTerrain::Terminate()
   }
   m_terrainJobs.Clear();
 
-  for ( Chunk* chunk = m_chunkPool.GetFirst(); chunk; chunk = m_chunkPool.GetNext( chunk ) )
+  for ( aeTerrainChunk* chunk = m_chunkPool.GetFirst(); chunk; chunk = m_chunkPool.GetNext( chunk ) )
   {
     FreeChunk( chunk );
   }
@@ -1194,6 +1045,24 @@ void aeTerrain::Update( aeFloat3 center, float radius )
 
   m_center = center;
   m_radius = radius;
+
+  //------------------------------------------------------------------------------
+  // Dirty the chunks containing sdf shapes that have been modified
+  //------------------------------------------------------------------------------
+  // @NOTE: This isn't entirely thread safe... It's possible these shapes could be accessed
+  // from a job. They should probably be duplicated and given to the job when it starts.
+  for ( uint32_t i = 0; i < sdf.GetShapeCount(); i++ )
+  {
+    ae::Sdf::Shape* shape = sdf.GetShapeAtIndex( i );
+    if ( shape->m_dirty )
+    {
+      m_Dirty( shape->m_aabbPrev );
+      m_Dirty( shape->GetAABB() );
+
+      shape->m_dirty = false;
+      shape->m_aabbPrev = shape->GetAABB();
+    }
+  }
   
   //------------------------------------------------------------------------------
   // Determine which chunks will be processed
@@ -1233,7 +1102,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
           continue;
         }
 
-        Chunk* c = m_chunks[ ci ];
+        aeTerrainChunk* c = m_chunks[ ci ];
         if ( c )
         {
           AE_ASSERT( m_voxelCounts[ ci ] > 0 );
@@ -1245,12 +1114,12 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         chunkSort.c = c;
         chunkSort.pos = chunkPos;
         chunkSort.score = GetChunkScore( chunkPos );
-        t_chunkMap_hack[ Chunk::GetIndex( chunkPos ) ] = chunkSort;
+        t_chunkMap_hack[ aeTerrainChunk::GetIndex( chunkPos ) ] = chunkSort;
       }
     }
   }
   // Add all currently generated chunks
-  for ( Chunk* c = m_generatedList.GetFirst(); c; c = c->m_generatedList.GetNext() )
+  for ( aeTerrainChunk* c = m_generatedList.GetFirst(); c; c = c->m_generatedList.GetNext() )
   {
     aeInt3 pos = c->m_pos;
 //#if _AE_DEBUG_
@@ -1263,7 +1132,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     chunkSort.c = c;
     chunkSort.pos = pos;
     chunkSort.score = GetChunkScore( pos );
-    t_chunkMap_hack[ Chunk::GetIndex( pos ) ] = chunkSort;
+    t_chunkMap_hack[ aeTerrainChunk::GetIndex( pos ) ] = chunkSort;
   }
 
   //------------------------------------------------------------------------------
@@ -1316,12 +1185,12 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       continue;
     }
 
-    Chunk* newChunk = job->GetChunk();
+    aeTerrainChunk* newChunk = job->GetChunk();
     AE_ASSERT( newChunk );
     AE_ASSERT( newChunk->m_check == 0xCDCDCDCD );
 
     uint32_t chunkIndex = newChunk->GetIndex();
-    Chunk* oldChunk = m_chunks[ chunkIndex ];
+    aeTerrainChunk* oldChunk = m_chunks[ chunkIndex ];
 
     uint32_t vertexCount = job->GetVertexCount();
     uint32_t indexCount = job->GetIndexCount();
@@ -1417,9 +1286,9 @@ void aeTerrain::Update( aeFloat3 center, float radius )
   {
     const ChunkSort* chunkSort = &t_chunkSorts[ i ];
     aeInt3 chunkPos = chunkSort->pos;
-    Chunk* chunk = chunkSort->c;
-    uint32_t chunkIndex = Chunk::GetIndex( chunkPos );
-    Chunk* indexPosChunk = m_chunks[ chunkIndex ];
+    aeTerrainChunk* chunk = chunkSort->c;
+    uint32_t chunkIndex = aeTerrainChunk::GetIndex( chunkPos );
+    aeTerrainChunk* indexPosChunk = m_chunks[ chunkIndex ];
     if ( chunk )
     {
       AE_ASSERT_MSG( indexPosChunk == chunk, "# #", indexPosChunk, chunk );
@@ -1534,7 +1403,7 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
   uint32_t activeCount = 0;
   for( uint32_t i = 0; i < t_chunkSorts.Length() && activeCount < kMaxActiveChunks; i++ )
   {
-    Chunk* chunk = t_chunkSorts[ i ].c;
+    aeTerrainChunk* chunk = t_chunkSorts[ i ].c;
     if ( !chunk )
     {
       continue;
@@ -1575,7 +1444,7 @@ void aeTerrain::SetCallback( float ( *fn )( aeFloat3 ) )
   sdf.m_fn2 = nullptr;
 }
 
-void aeTerrain::Dirty( aeAABB aabb )
+void aeTerrain::m_Dirty( aeAABB aabb )
 {
   // @NOTE: Add a buffer region so voxels on the edge of the aabb are refreshed
   aabb.Expand( kSdfBoundary );
@@ -1584,19 +1453,19 @@ void aeTerrain::Dirty( aeAABB aabb )
   aeInt3 maxChunk = ( aabb.GetMax() / kChunkSize ).CeilCopy();
   minChunk = aeMath::Max( minChunk, aeInt3( 0 ) );
   maxChunk = aeMath::Min( maxChunk, aeInt3( kWorldChunksWidth, kWorldChunksWidth, kWorldChunksHeight ) );
-
+  
   for ( int32_t z = minChunk.z; z < maxChunk.z; z++ )
   for ( int32_t y = minChunk.y; y < maxChunk.y; y++ )
   for ( int32_t x = minChunk.x; x < maxChunk.x; x++ )
   {
     aeInt3 pos( x, y, z );
-    if ( Chunk* chunk = GetChunk( pos ) )
+    if ( aeTerrainChunk* chunk = GetChunk( pos ) )
     {
       chunk->m_geoDirty = true;
     }
     else
     {
-      m_voxelCounts[ Chunk::GetIndex( pos ) ] = ~0;
+      m_voxelCounts[ aeTerrainChunk::GetIndex( pos ) ] = ~0;
     }
   }
 }
@@ -1636,7 +1505,7 @@ Block::Type aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const
   // TODO AE_ASSERT( vc != -1 && vc != kChunkCountMax );
   if ( vc == -1 ) { return Block::Unloaded; }
   if ( vc == kChunkCountMax ) { return Block::Interior; }
-  Chunk* chunk = m_chunks[ ci ];
+  aeTerrainChunk* chunk = m_chunks[ ci ];
   if ( !chunk ) { return Block::Unloaded; }
   return chunk->m_t[ x % kChunkSize ][ y % kChunkSize ][ z % kChunkSize ];
 }
@@ -1670,7 +1539,7 @@ const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) c
   {
     return nullptr;
   }
-  Chunk* chunk = m_chunks[ ci ];
+  aeTerrainChunk* chunk = m_chunks[ ci ];
   if ( !chunk )
   {
     return nullptr;
@@ -1692,7 +1561,7 @@ float16_t aeTerrain::GetLight( uint32_t x, uint32_t y, uint32_t z ) const
   uint32_t ciz = z / kChunkSize;
   
   if( cix >= kWorldChunksWidth || ciy >= kWorldChunksWidth || ciz >= kWorldChunksHeight ) { return kSkyBrightness; }
-  const Chunk *chunk = GetChunk( aeInt3( cix, ciy, ciz ) );
+  const aeTerrainChunk *chunk = GetChunk( aeInt3( cix, ciy, ciz ) );
   if( chunk == nullptr ) { return kSkyBrightness; }
   
   return chunk->m_l[ x - cix * kChunkSize ][ y - ciy * kChunkSize ][ z - ciz * kChunkSize ];
@@ -1954,7 +1823,7 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
   int32_t cx = x / kChunkSize;
   int32_t cy = y / kChunkSize;
   int32_t cz = z / kChunkSize;
-  const Chunk* c = GetChunk( aeInt3( cx, cy, cz ) );
+  const aeTerrainChunk* c = GetChunk( aeInt3( cx, cy, cz ) );
   AE_ASSERT( c );
   int32_t lx = x % kChunkSize;
   int32_t ly = y % kChunkSize;

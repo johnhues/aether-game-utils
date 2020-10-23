@@ -27,64 +27,18 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
+#include <atomic>
 #include "aeCompactingAllocator.h"
+#include "aeImage.h"
+#include "aeList.h"
 #include "aeMath.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
-#include "aeList.h"
-#include <atomic>
 #include <map> // HACK
 
 namespace ctpl
 {
   class thread_pool;
-}
-
-//------------------------------------------------------------------------------
-// aeImage
-//------------------------------------------------------------------------------
-namespace ae
-{
-  class Image
-  {
-  public:
-    enum class Extension
-    {
-      PNG
-    };
-
-    enum class Interpolation
-    {
-      Nearest,
-      Linear,
-      Cosine
-    };
-
-    enum class Format
-    {
-      Auto,
-      R,
-      RG,
-      RGB,
-      RGBA
-    };
-
-    void LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto );
-    bool LoadFile( const void* file, uint32_t length, Extension extension, Format storage = Format::Auto );
-
-    uint32_t GetWidth() const { return m_width; }
-    uint32_t GetHeight() const { return m_height; }
-    uint32_t GetChannels() const { return m_channels; }
-
-    aeColor Get( aeInt2 pixel ) const;
-    aeColor Get( aeFloat2 pixel, Interpolation interpolation ) const;
-
-  private:
-    aeArray< uint8_t > m_data;
-    int32_t m_width = 0;
-    int32_t m_height = 0;
-    uint32_t m_channels = 0;
-  };
 }
 
 //------------------------------------------------------------------------------
@@ -176,28 +130,34 @@ public:
   aeAABB GetAABB() const { return m_aabb; }
   aeOBB GetOBB() const { return aeOBB( m_localToWorld ); }
   const aeFloat4x4& GetTransform() const { return m_localToWorld; }
+  const aeFloat4x4& GetInverseTransform() const { return m_worldToLocal; }
+
   void SetTransform( const aeFloat4x4& transform );
+  void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
   virtual float GetValue( aeFloat3 p ) const = 0;
-  virtual aeAABB OnSetTransform( aeFloat3 scale ) = 0;
 
   enum class Type
   {
     Union,
     Subtraction,
+    SmoothUnion,
+    SmoothSubtraction,
     Material
   };
-
   Type type = Type::Union;
   aeTerrainMaterialId materialId = 0;
-
-protected:
-  const aeFloat4x4& GetWorldToScaled() const { return m_worldToScaled; }
+  float smoothing = 0.0f; // Works with SmoothUnion and SmoothSubtraction types
 
 private:
   aeAABB m_aabb;
   aeFloat4x4 m_localToWorld;
-  aeFloat4x4 m_worldToScaled;
+  aeFloat4x4 m_worldToLocal;
+
+public:
+  // Internal
+  bool m_dirty = false;
+  aeAABB m_aabbPrev;
 };
 
 //------------------------------------------------------------------------------
@@ -207,31 +167,21 @@ class Box : public Shape
 {
 public:
   float GetValue( aeFloat3 p ) const override;
-  aeAABB OnSetTransform( aeFloat3 scale ) override;
 
-  void SetCornerSize( float cornerSize ) { m_r = cornerSize; }
-  float GetCornerSize() const { return m_r; }
-
-private:
-  aeFloat3 m_halfSize = aeFloat3( 0.0f );
-  float m_r = 0.0f;
+  float cornerRadius = 0.0f;
 };
 
 //------------------------------------------------------------------------------
-// Cone class
+// Cylinder class
 //------------------------------------------------------------------------------
-class Cone : public Shape
+class Cylinder : public Shape
 {
 public:
   float GetValue( aeFloat3 p ) const override;
-  aeAABB OnSetTransform( aeFloat3 scale ) override;
 
-  // Valid range is 0-1, multiplied by obb size
-  float top = 0.5f;
+  // Valid range is 0-1, are multiplied by obb size
+  float top = 1.0f;
 	float bottom = 1.0f;
-	
-private:
-	aeFloat3 m_halfSize = aeFloat3( 0.0f );
 };
 
 //------------------------------------------------------------------------------
@@ -242,10 +192,8 @@ class Heightmap : public Shape
 public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
   float GetValue( aeFloat3 p ) const override;
-  aeAABB OnSetTransform( aeFloat3 scale ) override;
 
 private:
-  aeFloat3 m_halfSize = aeFloat3( 0.0f );
   ae::Image* m_heightMap = nullptr;
 };
 
@@ -257,6 +205,8 @@ private:
 class aeTerrainSDF
 {
 public:
+  aeTerrainSDF( class aeTerrain* terrain );
+
   template < typename T >
   T* CreateSdf();
   void DestroySdf( ae::Sdf::Shape* sdf );
@@ -277,9 +227,17 @@ public:
   float ( *m_fn2 )( void* userdata, aeFloat3 ) = nullptr;
 
 private:
+  friend class aeTerrain;
+
+  class aeTerrain* m_terrain;
   aeArray< ae::Sdf::Shape* > m_shapes;
+  aeArray< ae::Sdf::Shape* > m_shapesPrev;
   aeArray< ae::Sdf::Shape* > m_pendingCreated;
   aeArray< ae::Sdf::Shape* > m_pendingDestroy;
+
+  // Internal use by aeTerrain
+  uint32_t GetShapeCount() const { return m_shapes.Length(); }
+  ae::Sdf::Shape* GetShapeAtIndex( uint32_t index ) const { return m_shapes[ index ]; }
 };
 
 template < typename T >
@@ -291,13 +249,13 @@ T* aeTerrainSDF::CreateSdf()
 }
 
 //------------------------------------------------------------------------------
-// SDFCache class
+// aeTerrainSDFCache class
 //------------------------------------------------------------------------------
-class SDFCache
+class aeTerrainSDFCache
 {
 public:
-  SDFCache();
-  ~SDFCache();
+  aeTerrainSDFCache();
+  ~aeTerrainSDFCache();
 
   void Generate( aeInt3 chunk, const aeTerrainSDF* sdf );
   float GetValue( aeFloat3 pos ) const;
@@ -327,7 +285,7 @@ class aeTerrainJob
 public:
   aeTerrainJob();
   ~aeTerrainJob();
-  void StartNew( const aeTerrainSDF* sdf, struct Chunk* chunk );
+  void StartNew( const aeTerrainSDF* sdf, struct aeTerrainChunk* chunk );
   void Do();
   void Finish();
 
@@ -335,7 +293,7 @@ public:
   bool HasChunk( aeInt3 pos ) const;
   bool IsPendingFinish() const { return m_hasJob && !m_running; }
 
-  Chunk* GetChunk() { return m_chunk; }
+  aeTerrainChunk* GetChunk() { return m_chunk; }
   const TerrainVertex* GetVertices() const { return m_vertexCount ? &m_vertices[ 0 ] : nullptr; }
   const TerrainIndex* GetIndices() const { return m_indexCount ? &m_indices[ 0 ] : nullptr; }
   uint32_t GetVertexCount() const { return m_vertexCount; }
@@ -348,10 +306,10 @@ private:
 
   // Input
   const aeTerrainSDF* m_sdf;
-  struct Chunk* m_chunk;
+  struct aeTerrainChunk* m_chunk;
 
   // Pre-computed sdf
-  SDFCache m_sdfCache;
+  aeTerrainSDFCache m_sdfCache;
 
   // Output
   uint32_t m_vertexCount;
@@ -382,14 +340,14 @@ public:
 //------------------------------------------------------------------------------
 // Terrain Chunk class
 //------------------------------------------------------------------------------
-struct Chunk // @TODO: aeTerrainChunk
+struct aeTerrainChunk
 {
-  Chunk();
-  ~Chunk();
+  aeTerrainChunk();
+  ~aeTerrainChunk();
 
   static uint32_t GetIndex( aeInt3 pos );
   uint32_t GetIndex() const;
-  void Generate( const SDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
+  void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
   
   uint32_t m_check;
   aeInt3 m_pos;
@@ -397,7 +355,7 @@ struct Chunk // @TODO: aeTerrainChunk
   bool m_lightDirty;
   aeVertexData m_data;
   TerrainVertex* m_vertices;
-  aeListNode< Chunk > m_generatedList;
+  aeListNode< aeTerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
   float16_t m_l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -413,6 +371,7 @@ private:
 class aeTerrain
 {
 public:
+  aeTerrain();
   ~aeTerrain();
 
   void Initialize( uint32_t maxThreads, bool render );
@@ -424,15 +383,14 @@ public:
   void SetCallback( void* userdata, float ( *fn )( void*, aeFloat3 ) );
   void SetCallback( float ( *fn )( aeFloat3 ) );
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
-  void Dirty( aeAABB aabb );
   
   Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const;
   Block::Type GetVoxel( aeFloat3 position ) const;
   bool GetCollision( uint32_t x, uint32_t y, uint32_t z ) const;
   bool GetCollision( aeFloat3 position ) const;
   float16_t GetLight( uint32_t x, uint32_t y, uint32_t z ) const;
-  const Chunk* GetChunk( aeInt3 pos ) const;
-  Chunk* GetChunk( aeInt3 pos );
+  const aeTerrainChunk* GetChunk( aeInt3 pos ) const;
+  aeTerrainChunk* GetChunk( aeInt3 pos );
   int32_t GetVoxelCount( aeInt3 pos ) const;
 
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
@@ -449,10 +407,9 @@ public:
 
 private:
   const TerrainVertex* m_GetVertex( int32_t x, int32_t y, int32_t z ) const;
-  void UpdateChunkLighting( Chunk* chunk );
-  //void UpdateChunkLightingHelper( Chunk *chunk, uint32_t x, uint32_t y, uint32_t z, float16_t l );
-  Chunk* AllocChunk( aeFloat3 center, aeInt3 pos );
-  void FreeChunk( Chunk* chunk );
+  void UpdateChunkLighting( aeTerrainChunk* chunk );
+  aeTerrainChunk* AllocChunk( aeFloat3 center, aeInt3 pos );
+  void FreeChunk( aeTerrainChunk* chunk );
   float GetChunkScore( aeInt3 pos ) const;
 
   bool m_render = false;
@@ -460,14 +417,14 @@ private:
   float m_radius = 0.0f;
   
   //aeCompactingAllocator m_compactAlloc;
-  struct Chunk **m_chunks = nullptr;
+  struct aeTerrainChunk **m_chunks = nullptr;
   int16_t* m_voxelCounts = nullptr; // Kept even when chunks are freed so they are not regenerated again if they are empty
-  aeObjectPool< Chunk, kMaxLoadedChunks > m_chunkPool;
+  aeObjectPool< aeTerrainChunk, kMaxLoadedChunks > m_chunkPool;
 
   // Keep these across frames instead of allocating temporary space for each generated chunk
   struct ChunkSort
   {
-    Chunk* c;
+    aeTerrainChunk* c;
     aeInt3 pos;
     float score;
   };
@@ -475,7 +432,7 @@ private:
   std::map< uint32_t, ChunkSort > t_chunkMap_hack;
   aeArray< ChunkSort > t_chunkSorts;
 
-  aeList< Chunk > m_generatedList;
+  aeList< aeTerrainChunk > m_generatedList;
   uint8_t* m_chunkRawAlloc = nullptr;
   
   bool m_blockCollision[ Block::COUNT ];
@@ -485,6 +442,10 @@ private:
   aeArray< aeTerrainJob* > m_terrainJobs;
 
   std::function< void( aeFloat3, const char* ) > m_debugTextFn;
+
+public:
+  // Internal
+  void m_Dirty( aeAABB aabb );
 };
 
 #endif
