@@ -263,9 +263,32 @@ aeTerrainChunk::~aeTerrainChunk()
   AE_ASSERT( !m_vertices );
 }
 
+// https://stackoverflow.com/questions/919612/mapping-two-integers-to-one-in-a-unique-and-deterministic-way
+// https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
 uint32_t aeTerrainChunk::GetIndex( aeInt3 pos )
 {
-  return pos.x + kWorldChunksWidth * ( pos.y + kWorldChunksWidth * pos.z );
+  uint32_t x = ( x >= 0 ) ? 2 * x : -2 * x - 1;
+  uint32_t y = ( y >= 0 ) ? 2 * y : -2 * y - 1;
+  uint32_t z = ( z >= 0 ) ? 2 * z : -2 * z - 1;
+
+  uint32_t max = aeMath::Max( x, y, z );
+  uint32_t hash = max ^ 3 + ( 2 * max * z ) + z;
+  if ( max == z )
+  {
+    uint32_t xy = aeMath::Max( x, y );
+    hash += xy * xy;
+  }
+
+  if ( y >= x )
+  {
+    hash += x + y;
+  }
+  else
+  {
+    hash += y;
+  }
+
+  return hash;
 }
 
 uint32_t aeTerrainChunk::GetIndex() const
@@ -770,13 +793,6 @@ void aeTerrain::UpdateChunkLighting( aeTerrainChunk* chunk )
 
 aeTerrainChunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
 {
-  AE_ASSERT( pos.x >= 0 );
-  AE_ASSERT( pos.y >= 0 );
-  AE_ASSERT( pos.z >= 0 );
-  AE_ASSERT( pos.x < kWorldChunksWidth );
-  AE_ASSERT( pos.y < kWorldChunksWidth );
-  AE_ASSERT( pos.z < kWorldChunksHeight );
-  
   aeTerrainChunk* chunk = m_chunkPool.Allocate();
   if ( !chunk )
   {
@@ -798,9 +814,9 @@ void aeTerrain::FreeChunk( aeTerrainChunk* chunk )
 
   // Only clear chunk from world if set (may not be set in the case of a new chunk with zero verts)
   uint32_t chunkIndex = chunk->GetIndex();
-  if ( m_chunks[ chunkIndex ] == chunk )
+  if ( m_chunks2[ chunkIndex ] == chunk )
   {
-    m_chunks[ chunkIndex ] = nullptr;
+    m_chunks2.erase( chunkIndex );
   }
   
   // @TODO: Cleanup how chunk resources are released
@@ -811,6 +827,26 @@ void aeTerrain::FreeChunk( aeTerrainChunk* chunk )
 
   // @NOTE: This has to be done last because CompactingAllocator keeps a pointer to m_vertices
   m_chunkPool.Free( chunk );
+}
+
+void aeTerrain::m_SetVoxelCounts( uint32_t chunkIndex, int32_t count )
+{
+  if ( count == 0 )
+  {
+    m_voxelCounts3.erase( chunkIndex );
+  }
+  else
+  {
+    m_voxelCounts3[ chunkIndex ] = count;
+  }
+}
+
+int32_t aeTerrain::m_GetVoxelCounts( uint32_t chunkIndex ) const
+{
+  if (  )
+  {
+
+  }
 }
 
 float aeTerrain::GetChunkScore( aeInt3 pos ) const
@@ -929,18 +965,12 @@ void aeTerrainChunk::m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[
   }
 }
 
-const aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos ) const
+//------------------------------------------------------------------------------
+// aeTerrain chunk member functions
+//------------------------------------------------------------------------------
+aeTerrainChunk* aeTerrain::GetChunk( uint32_t chunkIndex )
 {
-  if ( pos.x >= kWorldChunksWidth || pos.y >= kWorldChunksWidth || pos.z >= kWorldChunksHeight )
-  {
-    return nullptr;
-  }
-
-  uint32_t c = pos.x + kWorldChunksWidth * ( pos.y + kWorldChunksWidth * pos.z );
-  
-  aeTerrainChunk* chunk = m_chunks[ c ];
-  if ( chunk ) { AE_ASSERT( chunk->m_check == 0xCDCDCDCD ); }
-  return chunk;
+  return (aeTerrainChunk*)( (const aeTerrain*)this )->GetChunk( chunkIndex );
 }
 
 aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos )
@@ -948,16 +978,37 @@ aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos )
   return (aeTerrainChunk*)( (const aeTerrain*)this )->GetChunk( pos );
 }
 
-int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
+const aeTerrainChunk* aeTerrain::GetChunk( uint32_t chunkIndex ) const
 {
-  if ( pos.x >= kWorldChunksWidth || pos.y >= kWorldChunksWidth || pos.z >= kWorldChunksHeight )
-  {
-    return -1;
-  }
+  auto iter = m_chunks2.find( chunkIndex );
+  aeTerrainChunk* chunk = ( iter == m_chunks2.end() ) ? iter->second : nullptr;
 
-  return m_voxelCounts[ aeTerrainChunk::GetIndex( pos ) ];
+  if ( chunk )
+  {
+    AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
+  }
+  return chunk;
 }
 
+const aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos ) const
+{
+  return GetChunk( aeTerrainChunk::GetIndex( pos ) );
+}
+
+int32_t aeTerrain::GetVoxelCount( uint32_t chunkIndex ) const
+{
+  auto iter = m_voxelCounts2.find( chunkIndex );
+  return ( iter == m_voxelCounts2.end() ) ? iter->second : -1;
+}
+
+int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
+{
+  return GetVoxelCount( aeTerrainChunk::GetIndex( pos ) );
+}
+
+//------------------------------------------------------------------------------
+// aeTerrain member functions
+//------------------------------------------------------------------------------
 aeTerrain::aeTerrain() :
   sdf( this )
 {}
@@ -975,20 +1026,6 @@ void aeTerrain::Initialize( uint32_t maxThreads, bool render )
 
   //m_chunkPool.Initialize(); @TODO: Reset pool
   
-  uint32_t worldChunkBytes = sizeof(m_chunks[0]) * kWorldChunksWidth * kWorldChunksWidth * kWorldChunksHeight;
-  uint32_t voxelCountBytes = sizeof(m_voxelCounts[0]) * kWorldChunksWidth * kWorldChunksWidth * kWorldChunksHeight;
-  uint32_t allocSize = worldChunkBytes + voxelCountBytes;
-
-  // @TODO: An alignment of 1 here is probably not okay. Maybe world chunks and voxels should
-  //        be separately allocated as arrays with the correct type.
-  m_chunkRawAlloc = aeAlloc::AllocateRaw( 1, 1, worldChunkBytes + voxelCountBytes );
-  
-  memset( m_chunkRawAlloc, 0, worldChunkBytes );
-  m_chunks = (aeTerrainChunk**)m_chunkRawAlloc;
-  m_voxelCounts = (int16_t*)( (int8_t*)m_chunkRawAlloc + worldChunkBytes );
-  // Clear all chunk voxel counts. Chunks will be flagged dirty so they're regenerated.
-  memset( m_voxelCounts, 0, voxelCountBytes );
-
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockCollision[ i ] = true; }
   m_blockCollision[ Block::Exterior ] = false;
   m_blockCollision[ Block::Unloaded ] = false;
@@ -1028,12 +1065,6 @@ void aeTerrain::Terminate()
     FreeChunk( chunk );
   }
   AE_ASSERT( m_chunkPool.Length() == 0 );
-
-  if ( m_chunkRawAlloc )
-  {
-    aeAlloc::Release( m_chunkRawAlloc );
-    m_chunkRawAlloc = nullptr;
-  }
 }
 
 void aeTerrain::Update( aeFloat3 center, float radius )
@@ -1081,15 +1112,8 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         chunkPos -= aeInt3( chunkViewRadius );
         chunkPos += viewChunk;
 
-        if ( chunkPos.x < 0 || chunkPos.x >= kWorldChunksWidth
-          || chunkPos.y < 0 || chunkPos.y >= kWorldChunksWidth
-          || chunkPos.z < 0 || chunkPos.z >= kWorldChunksHeight )
-        {
-          continue;
-        }
-
-        int32_t ci = chunkPos.x + kWorldChunksWidth * ( chunkPos.y + kWorldChunksWidth * chunkPos.z );
-        int16_t vc = m_voxelCounts[ ci ];
+        uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
+        int16_t vc = GetVoxelCount( ci );
         if ( vc == 0 || vc == kChunkCountMax ) // @TODO: What does it mean to skip on chunk max?
         {
           continue;
@@ -1102,10 +1126,10 @@ void aeTerrain::Update( aeFloat3 center, float radius )
           continue;
         }
 
-        aeTerrainChunk* c = m_chunks[ ci ];
+        aeTerrainChunk* c = GetChunk( ci );
         if ( c )
         {
-          AE_ASSERT( m_voxelCounts[ ci ] > 0 );
+          AE_ASSERT( vc > 0 );
           AE_ASSERT( c->m_vertices );
         }
 
@@ -1190,7 +1214,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     AE_ASSERT( newChunk->m_check == 0xCDCDCDCD );
 
     uint32_t chunkIndex = newChunk->GetIndex();
-    aeTerrainChunk* oldChunk = m_chunks[ chunkIndex ];
+    aeTerrainChunk* oldChunk = GetChunk( chunkIndex );
 
     uint32_t vertexCount = job->GetVertexCount();
     uint32_t indexCount = job->GetIndexCount();
@@ -1251,11 +1275,11 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     }
 
     // Record that the chunk has been generated
-    m_voxelCounts[ chunkIndex ] = vertexCount;
+    m_voxelCounts2[ chunkIndex ] = vertexCount;
     // Set world grid chunk
     if ( newChunk )
     {
-      m_chunks[ chunkIndex ] = newChunk;
+      m_chunks2[ chunkIndex ] = newChunk;
       // Add new chunk to list of finished chunks
       m_generatedList.Append( newChunk->m_generatedList );
     }
@@ -1437,9 +1461,7 @@ void aeTerrain::m_Dirty( aeAABB aabb )
 
   aeInt3 minChunk = ( aabb.GetMin() / kChunkSize ).FloorCopy();
   aeInt3 maxChunk = ( aabb.GetMax() / kChunkSize ).CeilCopy();
-  minChunk = aeMath::Max( minChunk, aeInt3( 0 ) );
-  maxChunk = aeMath::Min( maxChunk, aeInt3( kWorldChunksWidth, kWorldChunksWidth, kWorldChunksHeight ) );
-  
+
   for ( int32_t z = minChunk.z; z < maxChunk.z; z++ )
   for ( int32_t y = minChunk.y; y < maxChunk.y; y++ )
   for ( int32_t x = minChunk.x; x < maxChunk.x; x++ )
@@ -1451,7 +1473,7 @@ void aeTerrain::m_Dirty( aeAABB aabb )
     }
     else
     {
-      m_voxelCounts[ aeTerrainChunk::GetIndex( pos ) ] = ~0;
+      m_voxelCounts2[ aeTerrainChunk::GetIndex( pos ) ] = ~0;
     }
   }
 }

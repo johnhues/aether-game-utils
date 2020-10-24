@@ -34,7 +34,7 @@
 #include "aeMath.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
-#include <map> // HACK
+#include <map>
 
 namespace ctpl
 {
@@ -52,10 +52,6 @@ const uint32_t kChunkSize = 64;
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
 const uint32_t kChunkCountMax = kChunkSize * kChunkSize * kChunkSize;
-const uint32_t kWorldChunksWidth = 128;
-const uint32_t kWorldChunksHeight = 2;
-const uint32_t kWorldMaxWidth = kWorldChunksWidth * kChunkSize;
-const uint32_t kWorldMaxHeight = kWorldChunksHeight * kChunkSize;
 const uint32_t kMaxActiveChunks = 512;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
 const uint32_t kMaxChunkVerts = kChunkSize * kChunkSize * kChunkSize;
@@ -342,7 +338,7 @@ struct aeTerrainChunk
   static uint32_t GetIndex( aeInt3 pos );
   uint32_t GetIndex() const;
   void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
-  
+
   uint32_t m_check;
   aeInt3 m_pos;
   bool m_geoDirty;
@@ -381,8 +377,12 @@ public:
   bool GetCollision( uint32_t x, uint32_t y, uint32_t z ) const;
   bool GetCollision( aeFloat3 position ) const;
   float16_t GetLight( uint32_t x, uint32_t y, uint32_t z ) const;
-  const aeTerrainChunk* GetChunk( aeInt3 pos ) const;
+
+  aeTerrainChunk* GetChunk( uint32_t chunkIndex );
   aeTerrainChunk* GetChunk( aeInt3 pos );
+  const aeTerrainChunk* GetChunk( uint32_t chunkIndex ) const;
+  const aeTerrainChunk* GetChunk( aeInt3 pos ) const;
+  int32_t GetVoxelCount( uint32_t chunkIndex ) const;
   int32_t GetVoxelCount( aeInt3 pos ) const;
 
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
@@ -400,8 +400,11 @@ public:
 private:
   const TerrainVertex* m_GetVertex( int32_t x, int32_t y, int32_t z ) const;
   void UpdateChunkLighting( aeTerrainChunk* chunk );
+  
   aeTerrainChunk* AllocChunk( aeFloat3 center, aeInt3 pos );
   void FreeChunk( aeTerrainChunk* chunk );
+  void m_SetVoxelCounts( uint32_t chunkIndex, int32_t count );
+  int32_t m_GetVoxelCounts( uint32_t chunkIndex ) const;
   float GetChunkScore( aeInt3 pos ) const;
 
   bool m_render = false;
@@ -409,8 +412,9 @@ private:
   float m_radius = 0.0f;
   
   //aeCompactingAllocator m_compactAlloc;
-  struct aeTerrainChunk **m_chunks = nullptr;
-  int16_t* m_voxelCounts = nullptr; // Kept even when chunks are freed so they are not regenerated again if they are empty
+  std::map< uint32_t, struct aeTerrainChunk* > m_chunks3;
+  std::map< uint32_t, int16_t > m_voxelCounts3; // Kept even when chunks are freed so they are not regenerated again if they are empty
+  //aeMap<>
   aeObjectPool< aeTerrainChunk, kMaxLoadedChunks > m_chunkPool;
 
   // Keep these across frames instead of allocating temporary space for each generated chunk
@@ -425,7 +429,6 @@ private:
   aeArray< ChunkSort > t_chunkSorts;
 
   aeList< aeTerrainChunk > m_generatedList;
-  uint8_t* m_chunkRawAlloc = nullptr;
   
   bool m_blockCollision[ Block::COUNT ];
   float16_t m_blockDensity[ Block::COUNT ];
