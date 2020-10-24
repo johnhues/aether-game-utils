@@ -267,9 +267,9 @@ aeTerrainChunk::~aeTerrainChunk()
 // https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
 uint32_t aeTerrainChunk::GetIndex( aeInt3 pos )
 {
-  uint32_t x = ( x >= 0 ) ? 2 * x : -2 * x - 1;
-  uint32_t y = ( y >= 0 ) ? 2 * y : -2 * y - 1;
-  uint32_t z = ( z >= 0 ) ? 2 * z : -2 * z - 1;
+  uint32_t x = ( pos.x >= 0 ) ? 2 * pos.x : -2 * pos.x - 1;
+  uint32_t y = ( pos.y >= 0 ) ? 2 * pos.y : -2 * pos.y - 1;
+  uint32_t z = ( pos.z >= 0 ) ? 2 * pos.z : -2 * pos.z - 1;
 
   uint32_t max = aeMath::Max( x, y, z );
   uint32_t hash = max ^ 3 + ( 2 * max * z ) + z;
@@ -755,6 +755,21 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
   *indexCountOut = indexCount;
 }
 
+aeAABB aeTerrainChunk::GetAABB() const
+{
+  return GetAABB( m_pos );
+}
+
+aeAABB aeTerrainChunk::GetAABB( aeInt3 chunkPos )
+{
+  aeFloat3 min( chunkPos * kChunkSize );
+  aeFloat3 max = min + aeFloat3( (float)kChunkSize );
+  return aeAABB( min, max );
+}
+
+//------------------------------------------------------------------------------
+// aeTerrainMember functions
+//------------------------------------------------------------------------------
 void aeTerrain::UpdateChunkLighting( aeTerrainChunk* chunk )
 {
 //  int32_t cx = chunk->pos[ 0 ] * kChunkSize;
@@ -791,7 +806,7 @@ void aeTerrain::UpdateChunkLighting( aeTerrainChunk* chunk )
   chunk->m_lightDirty = false;
 }
 
-aeTerrainChunk* aeTerrain::AllocChunk( aeFloat3 center, aeInt3 pos )
+aeTerrainChunk* aeTerrain::AllocChunk( aeInt3 pos )
 {
   aeTerrainChunk* chunk = m_chunkPool.Allocate();
   if ( !chunk )
@@ -813,10 +828,10 @@ void aeTerrain::FreeChunk( aeTerrainChunk* chunk )
   AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
 
   // Only clear chunk from world if set (may not be set in the case of a new chunk with zero verts)
-  uint32_t chunkIndex = chunk->GetIndex();
-  if ( m_chunks2[ chunkIndex ] == chunk )
+  auto iter = m_chunks3.find( chunk->GetIndex() );
+  if ( iter != m_chunks3.end() && iter->second == chunk )
   {
-    m_chunks2.erase( chunkIndex );
+    m_chunks3.erase( iter );
   }
   
   // @TODO: Cleanup how chunk resources are released
@@ -829,7 +844,7 @@ void aeTerrain::FreeChunk( aeTerrainChunk* chunk )
   m_chunkPool.Free( chunk );
 }
 
-void aeTerrain::m_SetVoxelCounts( uint32_t chunkIndex, int32_t count )
+void aeTerrain::m_SetVoxelCount( uint32_t chunkIndex, int32_t count )
 {
   if ( count == 0 )
   {
@@ -837,21 +852,17 @@ void aeTerrain::m_SetVoxelCounts( uint32_t chunkIndex, int32_t count )
   }
   else
   {
+    if ( count == ~0 )
+    {
+      AE_LOG( "Dirty chunk #", chunkIndex );
+    }
     m_voxelCounts3[ chunkIndex ] = count;
-  }
-}
-
-int32_t aeTerrain::m_GetVoxelCounts( uint32_t chunkIndex ) const
-{
-  if (  )
-  {
-
   }
 }
 
 float aeTerrain::GetChunkScore( aeInt3 pos ) const
 {
-  aeFloat3 chunkCenter = ( aeFloat3( pos ) + aeFloat3( 0.5f ) ) * kChunkSize;
+  aeFloat3 chunkCenter = aeTerrainChunk::GetAABB( pos ).GetCenter();
   float centerDistance = ( m_center - chunkCenter ).Length();
 
   bool hasNeighbor = false;
@@ -980,13 +991,14 @@ aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos )
 
 const aeTerrainChunk* aeTerrain::GetChunk( uint32_t chunkIndex ) const
 {
-  auto iter = m_chunks2.find( chunkIndex );
-  aeTerrainChunk* chunk = ( iter == m_chunks2.end() ) ? iter->second : nullptr;
-
-  if ( chunk )
+  auto iter = m_chunks3.find( chunkIndex );
+  if ( iter == m_chunks3.end() )
   {
-    AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
+    return nullptr;
   }
+  
+  aeTerrainChunk* chunk = iter->second;
+  AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
   return chunk;
 }
 
@@ -997,8 +1009,8 @@ const aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos ) const
 
 int32_t aeTerrain::GetVoxelCount( uint32_t chunkIndex ) const
 {
-  auto iter = m_voxelCounts2.find( chunkIndex );
-  return ( iter == m_voxelCounts2.end() ) ? iter->second : -1;
+  auto iter = m_voxelCounts3.find( chunkIndex );
+  return ( iter == m_voxelCounts3.end() ) ? iter->second : 0;
 }
 
 int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
@@ -1112,16 +1124,16 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         chunkPos -= aeInt3( chunkViewRadius );
         chunkPos += viewChunk;
 
-        uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
-        int16_t vc = GetVoxelCount( ci );
-        if ( vc == 0 || vc == kChunkCountMax ) // @TODO: What does it mean to skip on chunk max?
+        aeFloat3 chunkCenter = aeTerrainChunk::GetAABB( chunkPos ).GetCenter();
+        float centerDistance = ( m_center - chunkCenter ).Length();
+        if ( centerDistance >= radius )
         {
           continue;
         }
 
-        aeFloat3 chunkCenter = ( aeFloat3( chunkPos ) + aeFloat3( 0.5f ) ) * kChunkSize;
-        float centerDistance = ( m_center - chunkCenter ).Length();
-        if ( centerDistance >= radius )
+        uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
+        int16_t vc = GetVoxelCount( ci );
+        if ( vc == 0 || vc == kChunkCountMax ) // @TODO: What does it mean to skip on chunk max?
         {
           continue;
         }
@@ -1208,16 +1220,16 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     {
       continue;
     }
-
+    
     aeTerrainChunk* newChunk = job->GetChunk();
     AE_ASSERT( newChunk );
     AE_ASSERT( newChunk->m_check == 0xCDCDCDCD );
-
     uint32_t chunkIndex = newChunk->GetIndex();
-    aeTerrainChunk* oldChunk = GetChunk( chunkIndex );
+    AE_LOG( "Finish terrain job # #", newChunk->GetIndex(), newChunk->GetAABB() );
 
     uint32_t vertexCount = job->GetVertexCount();
     uint32_t indexCount = job->GetIndexCount();
+    aeTerrainChunk* oldChunk = GetChunk( chunkIndex );
 
     AE_ASSERT( vertexCount <= kChunkCountMax );
     if ( vertexCount == 0 || vertexCount == kChunkCountMax )
@@ -1230,7 +1242,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     {
       if ( m_render )
       {
-        // (Re)initialize aeVertexData here only when needed
+        // (Re)Initialize aeVertexData here only when needed
         if ( newChunk->m_data.GetIndexCount() == 0 // Not initialized
           || newChunk->m_data.GetMaxVertexCount() < vertexCount // Too little storage for verts
           || newChunk->m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
@@ -1275,18 +1287,18 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     }
 
     // Record that the chunk has been generated
-    m_voxelCounts2[ chunkIndex ] = vertexCount;
+    m_SetVoxelCount( chunkIndex, vertexCount );
     // Set world grid chunk
     if ( newChunk )
     {
-      m_chunks2[ chunkIndex ] = newChunk;
+      m_chunks3[ chunkIndex ] = newChunk;
       // Add new chunk to list of finished chunks
       m_generatedList.Append( newChunk->m_generatedList );
     }
     else
     {
       // Clear old chunk
-      m_chunks[ chunkIndex ] = nullptr;
+      m_chunks3.erase( chunkIndex );
     }
 
     job->Finish();
@@ -1312,11 +1324,12 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     aeInt3 chunkPos = chunkSort->pos;
     aeTerrainChunk* chunk = chunkSort->c;
     uint32_t chunkIndex = aeTerrainChunk::GetIndex( chunkPos );
-    aeTerrainChunk* indexPosChunk = m_chunks[ chunkIndex ];
+    aeTerrainChunk* indexPosChunk = GetChunk( chunkIndex );
     if ( chunk )
     {
+      uint32_t voxelCounts = GetVoxelCount( chunkIndex );
       AE_ASSERT_MSG( indexPosChunk == chunk, "# #", indexPosChunk, chunk );
-      AE_ASSERT_MSG( m_voxelCounts[ chunkIndex ] > 0, "count #", m_voxelCounts[ chunkIndex ] );
+      AE_ASSERT_MSG( voxelCounts > 0, "count #", voxelCounts );
       AE_ASSERT( chunk->m_vertices );
       if ( m_render )
       {
@@ -1361,7 +1374,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       }
 
       // Always allocate a new chunk (even for dirty chunks)
-      chunk = AllocChunk( center, chunkPos );
+      chunk = AllocChunk( chunkPos );
       if ( !chunk )
       {
         for ( int32_t i = t_chunkSorts.Length() - 1; i >= 0; i-- )
@@ -1375,7 +1388,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
               FreeChunk( other->c );
               t_chunkSorts.Remove( i );
 
-              chunk = AllocChunk( center, chunkPos );
+              chunk = AllocChunk( chunkPos );
               AE_ASSERT( chunk );
             }
             break;
@@ -1392,6 +1405,8 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         // AE_LOG( "Chunk loading reached equilibrium" );
         break;
       }
+      
+      AE_LOG( "Start terrain job # #", chunk->GetIndex(), chunk->GetAABB() );
 
       aeTerrainJob* job = m_terrainJobs[ jobIndex ];
       AE_ASSERT( job );
@@ -1433,8 +1448,7 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
       continue;
     }
     AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
-    uint32_t chunkIndex = chunk->GetIndex();
-    AE_ASSERT( m_voxelCounts[ chunkIndex ] > 0 );
+    AE_ASSERT( GetVoxelCount( chunk->GetIndex() ) > 0 );
     AE_ASSERT( chunk->m_data.GetVertexCount() );
     AE_ASSERT( chunk->m_data.GetVertexSize() );
     
@@ -1451,6 +1465,24 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
 
 void aeTerrain::RenderDebug( aeDebugRender* debug )
 {
+  AE_LOG( "t_chunkSorts len #", t_chunkSorts.Length() );
+  for ( uint32_t i = 0; i < t_chunkSorts.Length(); i++ )
+  {
+    aeAABB chunkAABB = aeTerrainChunk::GetAABB( t_chunkSorts[ i ].pos );
+    debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::Black() );
+  }
+
+  for ( uint32_t i = 0; i < m_terrainJobs.Length(); i++ )
+  {
+    const aeTerrainJob* job = m_terrainJobs[ i ];
+    if ( job->HasJob() )
+    {
+      aeAABB chunkAABB = job->GetChunk()->GetAABB();
+      debug->AddLine( m_center, chunkAABB.GetCenter(), aeColor::Red() );
+      debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::PicoRed() );
+    }
+  }
+  
   sdf.RenderDebug( debug );
 }
 
@@ -1461,6 +1493,7 @@ void aeTerrain::m_Dirty( aeAABB aabb )
 
   aeInt3 minChunk = ( aabb.GetMin() / kChunkSize ).FloorCopy();
   aeInt3 maxChunk = ( aabb.GetMax() / kChunkSize ).CeilCopy();
+  AE_LOG( "Dirty area # (min:# max:#)", aabb, minChunk, maxChunk );
 
   for ( int32_t z = minChunk.z; z < maxChunk.z; z++ )
   for ( int32_t y = minChunk.y; y < maxChunk.y; y++ )
@@ -1473,67 +1506,56 @@ void aeTerrain::m_Dirty( aeAABB aabb )
     }
     else
     {
-      m_voxelCounts2[ aeTerrainChunk::GetIndex( pos ) ] = ~0;
+      AE_LOG( "Dirty chunk #", pos );
+      m_SetVoxelCount( aeTerrainChunk::GetIndex( pos ), ~0 );
     }
   }
 }
 
-bool aeTerrain::GetCollision( uint32_t x, uint32_t y, uint32_t z ) const
+bool aeTerrain::GetCollision( int32_t x, int32_t y, int32_t z ) const
 {
   return m_blockCollision[ GetVoxel( x, y, z ) ];
 }
 
 bool aeTerrain::GetCollision( aeFloat3 position ) const
 {
-  return m_blockCollision[ GetVoxel( position.x, position.y, position.z ) ];
+  Block::Type type = GetVoxel(
+    aeMath::Floor( position.x ),
+    aeMath::Floor( position.y ),
+    aeMath::Floor( position.z )
+  );
+  return m_blockCollision[ type ];
 }
 
 Block::Type aeTerrain::GetVoxel( aeFloat3 position ) const
 {
-  return GetVoxel( position.x, position.y, position.z );
+  return GetVoxel(
+    aeMath::Floor( position.x ),
+    aeMath::Floor( position.y ),
+    aeMath::Floor( position.z )
+  );
 }
 
-Block::Type aeTerrain::GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const
+Block::Type aeTerrain::GetVoxel( int32_t x, int32_t y, int32_t z ) const
 {
-  int32_t cx = x / kChunkSize;
-  int32_t cy = y / kChunkSize;
-  int32_t cz = z / kChunkSize;
-  
-  if( cx < 0 || cy < 0 || cz < 0
-    || cx >= kWorldChunksWidth
-    || cy >= kWorldChunksWidth
-    || cz >= kWorldChunksHeight )
-  {
-    return Block::Exterior;
-  }
-  
-  uint32_t ci = cx + kWorldChunksWidth * ( cy + kWorldChunksWidth * cz );
-  int16_t vc = m_voxelCounts[ ci ];
+  uint32_t ci = aeTerrainChunk::GetIndex( aeInt3( x, y, z ) );
+
+  int16_t vc = GetVoxelCount( ci );
   if ( vc == 0 ) { return Block::Exterior; }
   // TODO AE_ASSERT( vc != -1 && vc != kChunkCountMax );
   if ( vc == -1 ) { return Block::Unloaded; }
   if ( vc == kChunkCountMax ) { return Block::Interior; }
-  aeTerrainChunk* chunk = m_chunks[ ci ];
+
+  const aeTerrainChunk* chunk = GetChunk( ci );
   if ( !chunk ) { return Block::Unloaded; }
   return chunk->m_t[ x % kChunkSize ][ y % kChunkSize ][ z % kChunkSize ];
 }
 
 const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) const
 {
-  int32_t cx = x / kChunkSize;
-  int32_t cy = y / kChunkSize;
-  int32_t cz = z / kChunkSize;
+  uint32_t ci = aeTerrainChunk::GetIndex( aeInt3( x, y, z ) );
 
-  if ( cx < 0 || cy < 0 || cz < 0
-    || cx >= kWorldChunksWidth
-    || cy >= kWorldChunksWidth
-    || cz >= kWorldChunksHeight )
-  {
-    return nullptr;
-  }
-
-  uint32_t ci = cx + kWorldChunksWidth * ( cy + kWorldChunksWidth * cz );
-  int16_t vc = m_voxelCounts[ ci ];
+  int16_t vc = GetVoxelCount( ci );
   if ( vc == 0 )
   {
     return nullptr;
@@ -1547,7 +1569,7 @@ const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) c
   {
     return nullptr;
   }
-  aeTerrainChunk* chunk = m_chunks[ ci ];
+  const aeTerrainChunk* chunk = GetChunk( ci );
   if ( !chunk )
   {
     return nullptr;
@@ -1562,17 +1584,18 @@ const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) c
   return &chunk->m_vertices[ index ];
 }
 
-float16_t aeTerrain::GetLight( uint32_t x, uint32_t y, uint32_t z ) const
+float16_t aeTerrain::GetLight( int32_t x, int32_t y, int32_t z ) const
 {
-  uint32_t cix = x / kChunkSize;
-  uint32_t ciy = y / kChunkSize;
-  uint32_t ciz = z / kChunkSize;
-  
-  if( cix >= kWorldChunksWidth || ciy >= kWorldChunksWidth || ciz >= kWorldChunksHeight ) { return kSkyBrightness; }
-  const aeTerrainChunk *chunk = GetChunk( aeInt3( cix, ciy, ciz ) );
-  if( chunk == nullptr ) { return kSkyBrightness; }
-  
-  return chunk->m_l[ x - cix * kChunkSize ][ y - ciy * kChunkSize ][ z - ciz * kChunkSize ];
+  const aeTerrainChunk* chunk = GetChunk( aeInt3( x, y, z ) );
+  if ( chunk == nullptr )
+  {
+    return kSkyBrightness;
+  }
+
+  x = aeMath::Mod( x, (int32_t)kChunkSize );
+  y = aeMath::Mod( y, (int32_t)kChunkSize );
+  z = aeMath::Mod( z, (int32_t)kChunkSize );
+  return chunk->m_l[ x ][ y ][ z ];
 }
 
 bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const
@@ -1593,7 +1616,7 @@ bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) c
 	{
 		stepX = 1;
     outX = ceil( start.x + ray.x );
-    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
+//    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
 		cb.x = x + 1;
 	}
 	else 
@@ -1607,7 +1630,7 @@ bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) c
 	{
 		stepY = 1;
     outY = ceil( start.y + ray.y );
-    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
+//    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
 		cb.y = y + 1;
 	}
 	else 
@@ -1621,7 +1644,7 @@ bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) c
 	{
 		stepZ = 1;
     outZ = ceil( start.z + ray.z );
-    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
+//    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
 		cb.z = z + 1;
 	}
 	else 
@@ -1722,7 +1745,7 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
 	{
 		stepX = 1;
     outX = ceil( start.x + ray.x );
-    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
+//    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
 		cb.x = x + 1;
 	}
 	else 
@@ -1736,7 +1759,7 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
 	{
 		stepY = 1;
     outY = ceil( start.y + ray.y );
-    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
+//    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
 		cb.y = y + 1;
 	}
 	else 
@@ -1750,7 +1773,7 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
 	{
 		stepZ = 1;
     outZ = ceil( start.z + ray.z );
-    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
+//    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
 		cb.z = z + 1;
 	}
 	else 
@@ -1896,7 +1919,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 	{
 		stepX = 1;
     outX = ceil( start.x + ray.x );
-    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX );
+//    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
 		cb.x = x + 1;
 	}
 	else 
@@ -1910,7 +1933,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 	{
 		stepY = 1;
     outY = ceil( start.y + ray.y );
-    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY );
+//    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
 		cb.y = y + 1;
 	}
 	else 
@@ -1924,7 +1947,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 	{
 		stepZ = 1;
     outZ = ceil( start.z + ray.z );
-    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ );
+//    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
 		cb.z = z + 1;
 	}
 	else 

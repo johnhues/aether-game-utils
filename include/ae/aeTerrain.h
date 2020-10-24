@@ -283,6 +283,7 @@ public:
   bool HasChunk( aeInt3 pos ) const;
   bool IsPendingFinish() const { return m_hasJob && !m_running; }
 
+  const aeTerrainChunk* GetChunk() const { return m_chunk; }
   aeTerrainChunk* GetChunk() { return m_chunk; }
   const TerrainVertex* GetVertices() const { return m_vertexCount ? &m_vertices[ 0 ] : nullptr; }
   const TerrainIndex* GetIndices() const { return m_indexCount ? &m_indices[ 0 ] : nullptr; }
@@ -339,6 +340,9 @@ struct aeTerrainChunk
   uint32_t GetIndex() const;
   void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
 
+  aeAABB GetAABB() const;
+  static aeAABB GetAABB( aeInt3 chunkPos );
+
   uint32_t m_check;
   aeInt3 m_pos;
   bool m_geoDirty;
@@ -372,11 +376,11 @@ public:
 
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
   
-  Block::Type GetVoxel( uint32_t x, uint32_t y, uint32_t z ) const;
+  Block::Type GetVoxel( int32_t x, int32_t y, int32_t z ) const;
   Block::Type GetVoxel( aeFloat3 position ) const;
-  bool GetCollision( uint32_t x, uint32_t y, uint32_t z ) const;
+  bool GetCollision( int32_t x, int32_t y, int32_t z ) const;
   bool GetCollision( aeFloat3 position ) const;
-  float16_t GetLight( uint32_t x, uint32_t y, uint32_t z ) const;
+  float16_t GetLight( int32_t x, int32_t y, int32_t z ) const;
 
   aeTerrainChunk* GetChunk( uint32_t chunkIndex );
   aeTerrainChunk* GetChunk( aeInt3 pos );
@@ -401,10 +405,9 @@ private:
   const TerrainVertex* m_GetVertex( int32_t x, int32_t y, int32_t z ) const;
   void UpdateChunkLighting( aeTerrainChunk* chunk );
   
-  aeTerrainChunk* AllocChunk( aeFloat3 center, aeInt3 pos );
+  aeTerrainChunk* AllocChunk( aeInt3 pos );
   void FreeChunk( aeTerrainChunk* chunk );
-  void m_SetVoxelCounts( uint32_t chunkIndex, int32_t count );
-  int32_t m_GetVoxelCounts( uint32_t chunkIndex ) const;
+  void m_SetVoxelCount( uint32_t chunkIndex, int32_t count );
   float GetChunkScore( aeInt3 pos ) const;
 
   bool m_render = false;

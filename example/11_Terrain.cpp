@@ -178,7 +178,6 @@ int main()
 
 	input.Initialize( headless ? nullptr : &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	camera.SetPosition( aeFloat3( 150.0f, 150.f, 60.0f ) );
 	camera.SetFocusDistance( 100.0f );
 	
 	if ( !headless )
@@ -195,7 +194,8 @@ int main()
 	aeVfs::Read( "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
 	heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
-	uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
+  // @TODO: temp for debug
+  uint32_t terrainThreads = 0;//aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
 	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
 	terrain->Initialize( terrainThreads, !headless );
 
@@ -208,7 +208,7 @@ int main()
 	};
 
 	bool wireframe = false;
-	static bool s_showTerrainDebug = false;
+	static bool s_showTerrainDebug = true; // @TODO: temp for debug
 
 	ae::Sdf::Shape* currentShape = nullptr;
 	{
@@ -218,7 +218,6 @@ int main()
 	}
 
 	bool gizmoClickedPrev = false;
-	aeFloat4x4 gizmoPrevTransform = aeFloat4x4::Identity();
 
 	AE_INFO( "Run" );
 	while ( !input.GetState()->exit )
@@ -286,6 +285,22 @@ int main()
 		ImGui::Begin( "object" );
 		if ( currentShape )
 		{
+      bool changed = false;
+      aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
+      float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
+      ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
+      changed |= ImGui::InputFloat3( "Translation", matrixTranslation, 3 );
+      changed |= ImGui::InputFloat3( "Rotation", matrixRotation, 3 );
+      changed |= ImGui::InputFloat3( "Scale", matrixScale, 3 );
+      if ( changed )
+      {
+        ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
+        temp.SetTranspose();
+
+        currentShape->SetTransform( temp );
+        currentShape->Dirty();
+      }
+      
 			const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
 			ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
 			if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion
@@ -432,24 +447,28 @@ int main()
 			if ( currentShape )
 			{
 				// Use ImGuizmo::IsUsing() to only update terrain when finished dragging
+        bool gizmoClicked = ImGuizmo::IsUsing();
 				aeFloat4x4 gizmoTransform = currentShape->GetTransform();
-				if ( !gizmoClickedPrev && ImGuizmo::IsUsing() )
-				{
-					gizmoPrevTransform = gizmoTransform;
-					gizmoClickedPrev = true;
-				}
-
+				
 				gizmoTransform.SetTranspose();
 				ImGuizmo::Manipulate( worldToView.GetTransposeCopy().data, viewToProj.GetTransposeCopy().data, s_operation, ImGuizmo::WORLD, gizmoTransform.data );
 				gizmoTransform.SetTranspose();
 
-				debug.AddCube( gizmoTransform, aeColor::Green() );
-
-				if ( gizmoTransform != gizmoPrevTransform )
+        debug.AddCube( gizmoTransform, aeColor::Green() );
+        
+        if ( gizmoClicked )
+        {
+          // Dragging
+          currentShape->SetTransform( gizmoTransform );
+        }
+				
+        if ( gizmoClickedPrev && !gizmoClicked )
 				{
-					currentShape->SetTransform( gizmoTransform );
+          // Release
 					currentShape->Dirty();
 				}
+        
+        gizmoClickedPrev = gizmoClicked;
 			}
 
 			debug.Render( worldToProj );

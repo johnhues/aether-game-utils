@@ -1057,6 +1057,7 @@ public:
   aeFloat3 GetMin() const { return m_min; }
   aeFloat3 GetMax() const { return m_max; }
   aeFloat3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
+  aeFloat3 GetHalfSize() const { return ( m_max - m_min ) * 0.5f; }
   aeFloat4x4 GetTransform() const;
 
   float GetMinDistance( aeFloat3 p ) const;
@@ -1067,6 +1068,11 @@ private:
   aeFloat3 m_min;
   aeFloat3 m_max;
 };
+
+inline std::ostream& operator<<( std::ostream& os, aeAABB aabb )
+{
+  return os << "[" << aabb.GetMin() << ", " << aabb.GetMax() << "]";
+}
 
 //------------------------------------------------------------------------------
 // aeOBB class

@@ -1521,7 +1521,7 @@ void aeRenderTarget::Clear( aeColor color )
 
   AE_CHECK_GL_ERROR();
 
-  aeFloat3 clearColor = color.GetSRGB(); // Unclear why glClearColor() expects srgb. Maybe because of framebuffer type.
+  aeFloat3 clearColor = color.GetLinearRGB();
   glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
   glClearDepth( gReverseZ ? 0.0f : 1.0f );
 
