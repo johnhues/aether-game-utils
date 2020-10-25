@@ -373,13 +373,13 @@ int main()
 		}
 		else if ( !input.GetPrevState()->Get( aeKey::Num2 ) && input.GetState()->Get( aeKey::Num2 ) )
 		{
-			wireframe = false;
-			s_showTerrainDebug = false;
-		}
-		else if ( input.GetState()->Get( aeKey::Num3 ) && !input.GetPrevState()->Get( aeKey::Num3 ) )
-		{
-			wireframe = false;
-			s_showTerrainDebug = true;
+      wireframe = false;
+      s_showTerrainDebug = true;
+    }
+    else if ( input.GetState()->Get( aeKey::Num3 ) && !input.GetPrevState()->Get( aeKey::Num3 ) )
+    {
+      wireframe = false;
+      s_showTerrainDebug = false;
 		}
 
 		if ( !headless )
