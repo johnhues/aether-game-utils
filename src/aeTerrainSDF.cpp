@@ -254,27 +254,30 @@ aeFloat3 aeTerrainSDF::GetDerivative( aeFloat3 p ) const
 
 aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
 {
-  uint32_t i = 0;
   aeTerrainMaterialId materialId = 0;
-  
-//  for ( ; i < m_shapes.Length(); i++ )
-//  {
-//    ae::Sdf::Shape* sdf = m_shapes[ i ];
-//    if ( sdf->type != ae::Sdf::Shape::Type::Material && sdf->GetValue( pos ) <= 0.0f )
-//    {
-//      materialId = sdf->materialId;
-//    }
-//  }
-  
-  for ( ; i < m_shapes.Length(); i++ )
+  for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
     ae::Sdf::Shape* sdf = m_shapes[ i ];
-    if ( sdf->type == ae::Sdf::Shape::Type::Material && sdf->GetValue( pos ) <= 0.0f )
+    ae::Sdf::Shape::Type type = sdf->type;
+
+    bool isAdditive = type == ae::Sdf::Shape::Type::Union
+      || type == ae::Sdf::Shape::Type::SmoothUnion;
+    if ( isAdditive && sdf->GetValue( pos ) <= 0.0f )
     {
       materialId = sdf->materialId;
     }
+    else
+    {
+      bool isPaint = type == ae::Sdf::Shape::Type::Material
+        || type == ae::Sdf::Shape::Type::Subtraction
+        || type == ae::Sdf::Shape::Type::SmoothSubtraction;
+      // Expand shape slightly so subtraction paints surfaces
+      if ( isPaint && sdf->GetValue( pos ) <= 0.15f )
+      {
+        materialId = sdf->materialId;
+      }
+    }
   }
-  
   return materialId;
 }
 
