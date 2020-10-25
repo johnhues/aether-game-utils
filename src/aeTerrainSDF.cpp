@@ -254,8 +254,19 @@ aeFloat3 aeTerrainSDF::GetDerivative( aeFloat3 p ) const
 
 aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
 {
+  uint32_t i = 0;
   aeTerrainMaterialId materialId = 0;
-  for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
+  
+//  for ( ; i < m_shapes.Length(); i++ )
+//  {
+//    ae::Sdf::Shape* sdf = m_shapes[ i ];
+//    if ( sdf->type != ae::Sdf::Shape::Type::Material && sdf->GetValue( pos ) <= 0.0f )
+//    {
+//      materialId = sdf->materialId;
+//    }
+//  }
+  
+  for ( ; i < m_shapes.Length(); i++ )
   {
     ae::Sdf::Shape* sdf = m_shapes[ i ];
     if ( sdf->type == ae::Sdf::Shape::Type::Material && sdf->GetValue( pos ) <= 0.0f )
@@ -263,6 +274,7 @@ aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
       materialId = sdf->materialId;
     }
   }
+  
   return materialId;
 }
 

@@ -303,15 +303,24 @@ int main()
 					}
 
 					const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
-					ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
-					if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion
-						|| currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+					if ( ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) ) )
+          {
+            currentShape->Dirty();
+          }
+          
+					if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion || currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
 					{
 						if ( ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, 1.0f ) )
 						{
 							currentShape->Dirty();
 						}
 					}
+          
+          const char* materialNames[] = { "grass", "sand" };
+          if ( ImGui::Combo( "material", (int32_t*)&currentShape->materialId, materialNames, countof(materialNames) ) )
+          {
+            currentShape->Dirty();
+          }
 
 					if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
 					{
