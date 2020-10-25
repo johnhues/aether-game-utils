@@ -125,10 +125,11 @@ public:
 
   aeAABB GetAABB() const { return m_aabb; }
   aeOBB GetOBB() const { return aeOBB( m_localToWorld ); }
-  const aeFloat4x4& GetTransform() const { return m_localToWorld; }
-  const aeFloat4x4& GetInverseTransform() const { return m_worldToLocal; }
-
+  
   void SetTransform( const aeFloat4x4& transform );
+  const aeFloat4x4& GetTransform() const { return m_localToWorld; }
+  aeFloat3 GetHalfSize() const { return m_halfSize; }
+
   void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
   virtual float GetValue( aeFloat3 p ) const = 0;
@@ -145,10 +146,14 @@ public:
   aeTerrainMaterialId materialId = 0;
   float smoothing = 0.0f; // Works with SmoothUnion and SmoothSubtraction types
 
+protected:
+  const aeFloat4x4& GetWorldToScaled() const { return m_worldToScaled; }
+
 private:
   aeAABB m_aabb;
+  aeFloat3 m_halfSize;
   aeFloat4x4 m_localToWorld;
-  aeFloat4x4 m_worldToLocal;
+  aeFloat4x4 m_worldToScaled;
 
 public:
   // Internal

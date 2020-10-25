@@ -60,8 +60,9 @@ float aeSmoothSubtraction( float d1, float d2, float k )
 //------------------------------------------------------------------------------
 ae::Sdf::Shape::Shape() :
   m_aabb( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) ),
+  m_halfSize( 0.5f ),
   m_localToWorld( aeFloat4x4::Identity() ),
-  m_worldToLocal( aeFloat4x4::Identity() ),
+  m_worldToScaled( aeFloat4x4::Identity() ),
   m_aabbPrev( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) )
 {}
 
@@ -73,7 +74,16 @@ void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
   }
 
   m_localToWorld = transform;
-  m_worldToLocal = transform.Inverse();
+
+  // World to local with scaling removed. Translation and rotation
+  // are handled by the base Shape. Sdf functions only need to take
+  // object scaling into consideration.
+  aeFloat4x4 scaledToWorld = m_localToWorld;
+  scaledToWorld.RemoveScaling();
+  m_worldToScaled = scaledToWorld.Inverse();
+
+  // Set scale of inherited Shape object
+  m_halfSize = m_localToWorld.GetScale() * 0.5f;
 
   // Update shape world space AABB
   aeFloat4 corners[] =
@@ -99,10 +109,9 @@ void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
 //------------------------------------------------------------------------------
 float ae::Sdf::Box::GetValue( aeFloat3 p ) const
 {
-  p = ( GetInverseTransform() * aeFloat4( p, 1.0f ) ).GetXYZ();
+  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 
-  aeFloat3 m_halfSize( 0.5f );
-  aeFloat3 q = aeMath::Abs( p ) - ( m_halfSize - aeFloat3( cornerRadius ) );
+  aeFloat3 q = aeMath::Abs( p ) - ( GetHalfSize() - aeFloat3( cornerRadius ) );
   return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
 }
 
@@ -111,23 +120,24 @@ float ae::Sdf::Box::GetValue( aeFloat3 p ) const
 //------------------------------------------------------------------------------
 float ae::Sdf::Cylinder::GetValue( aeFloat3 p ) const
 {
-  p = ( GetInverseTransform() * aeFloat4( p, 1.0f ) ).GetXYZ();
+  aeFloat3 halfSize = GetHalfSize();
+  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 	
   float scale;
-  if ( 0.5f > 0.5f )
+  if ( halfSize.x > halfSize.y )
   {
-    scale = 0.5f;
-    p.y *= 0.5f / 0.5f;
+    scale = halfSize.x;
+    p.y *= halfSize.x / halfSize.y;
   }
   else
   {
-    scale = 0.5f;
-    p.x *= 0.5f / 0.5f;
+    scale = halfSize.y;
+    p.x *= halfSize.y / halfSize.x;
   }
 
   float r1 = aeMath::Clip01( bottom ) * scale;
   float r2 = aeMath::Clip01( top ) * scale;
-  float h = 0.5f;
+  float h = halfSize.z;
 
   aeFloat2 q( p.GetXY().Length(), p.z );
   aeFloat2 k1(r2,h);
@@ -145,14 +155,15 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
 {
   AE_ASSERT_MSG( m_heightMap, "Heightmap image not set" );
 
-  p = ( GetInverseTransform() * aeFloat4( p, 1.0f ) ).GetXYZ();
+  aeFloat3 halfSize = GetHalfSize();
+  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 
-  aeFloat2 p2 = ( p.GetXY() + aeFloat2( 0.5f, 0.5f ) ) / ( aeFloat2( 0.5f, 0.5f ) * 2.0f );
+  aeFloat2 p2 = ( p.GetXY() + halfSize.GetXY() ) / ( halfSize.GetXY() * 2.0f );
   p2 *= aeFloat2( m_heightMap->GetWidth(), m_heightMap->GetHeight() );
   float v0 = m_heightMap->Get( p2, ae::Image::Interpolation::Cosine ).r;
-  v0 = p.z + 0.5f - v0 * 0.5f * 2.0f;
+  v0 = p.z + halfSize.z - v0 * halfSize.z * 2.0f;
 
-  aeFloat3 q = aeMath::Abs( p ) - aeFloat3( 0.5f );
+  aeFloat3 q = aeMath::Abs( p ) - halfSize;
   float v1 = ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f );
 
   return aeMath::Max( v0, v1 );
@@ -259,12 +270,16 @@ aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
   {
     ae::Sdf::Shape* sdf = m_shapes[ i ];
     ae::Sdf::Shape::Type type = sdf->type;
+    float value = sdf->GetValue( pos );
 
     bool isAdditive = type == ae::Sdf::Shape::Type::Union
       || type == ae::Sdf::Shape::Type::SmoothUnion;
-    if ( isAdditive && sdf->GetValue( pos ) <= 0.0f )
+    if ( isAdditive )
     {
-      materialId = sdf->materialId;
+      if ( value <= 0.0f )
+      {
+        materialId = sdf->materialId;
+      }
     }
     else
     {
@@ -272,7 +287,7 @@ aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
         || type == ae::Sdf::Shape::Type::Subtraction
         || type == ae::Sdf::Shape::Type::SmoothSubtraction;
       // Expand shape slightly so subtraction paints surfaces
-      if ( isPaint && sdf->GetValue( pos ) <= 0.15f )
+      if ( isPaint && value <= 0.25f )
       {
         materialId = sdf->materialId;
       }

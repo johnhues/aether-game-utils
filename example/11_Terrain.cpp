@@ -324,7 +324,9 @@ int main()
 
 					if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
 					{
-						if ( ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, 1.0f ) )
+						aeFloat3 halfSize = box->GetHalfSize();
+						float maxValue = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
+						if ( ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, maxValue ) )
 						{
 							box->Dirty();
 						}
@@ -479,7 +481,13 @@ int main()
 				aeFloat4x4 gizmoTransform = currentShape->GetTransform();
 				
 				gizmoTransform.SetTranspose();
-				ImGuizmo::Manipulate( worldToView.GetTransposeCopy().data, viewToProj.GetTransposeCopy().data, s_operation, ImGuizmo::WORLD, gizmoTransform.data );
+				ImGuizmo::Manipulate(
+					worldToView.GetTransposeCopy().data,
+					viewToProj.GetTransposeCopy().data,
+					s_operation,
+					( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+					gizmoTransform.data
+				);
 				gizmoTransform.SetTranspose();
 
         debug.AddCube( gizmoTransform, aeColor::Green() );
