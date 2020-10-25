@@ -193,6 +193,14 @@ inline aeStr16 ToString( double value )
   return aeStr16( length, str );
 }
 
+template < typename T >
+inline aeStr64 ToString( const T& v )
+{
+  std::stringstream os;
+  os << v;
+  return os.str().c_str();
+}
+
 //------------------------------------------------------------------------------
 // aeStr member functions
 //------------------------------------------------------------------------------

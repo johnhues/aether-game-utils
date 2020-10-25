@@ -194,8 +194,7 @@ int main()
 	aeVfs::Read( "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
 	heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
-  // @TODO: temp for debug
-  uint32_t terrainThreads = 0;//aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
+  uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
 	aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
 	terrain->Initialize( terrainThreads, !headless );
 
@@ -208,7 +207,7 @@ int main()
 	};
 
 	bool wireframe = false;
-	static bool s_showTerrainDebug = true; // @TODO: temp for debug
+	static bool s_showTerrainDebug = false;
 
 	ae::Sdf::Shape* currentShape = nullptr;
 	{
@@ -229,94 +228,114 @@ int main()
 		ImGuizmo::SetOrthographic( false );
 		ImGuizmo::BeginFrame();
 
-		// New terrain objects
-		if ( ImGui::Begin( "create", nullptr ) )
+		if ( ImGui::Begin( "edit", nullptr ) )
 		{
-			if ( ImGui::Button( "cube" ) )
+			// New terrain objects
+			if ( ImGui::CollapsingHeader( "create" ) )
 			{
-				AE_LOG( "Cube" );
+				if ( ImGui::Button( "cube" ) )
+				{
+					AE_LOG( "Cube" );
 
-				ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
-				box->SetTransform(
-					aeFloat4x4::Translation( camera.GetFocus() ) *
-					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+					ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
+					box->SetTransform(
+						aeFloat4x4::Translation( camera.GetFocus() ) *
+						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-				currentShape = box;
+					currentShape = box;
+				}
+				else if ( ImGui::Button( "height map" ) )
+				{
+					AE_LOG( "create height map" );
+
+					ae::Sdf::Heightmap* heightMap = terrain->sdf.CreateSdf< ae::Sdf::Heightmap >();
+					heightMap->SetTransform(
+						aeFloat4x4::Translation( camera.GetFocus() ) *
+						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+					heightMap->SetImage( &heightmapImage );
+
+					currentShape = heightMap;
+				}
+				else if ( ImGui::Button( "cylinder" ) )
+				{
+					AE_LOG( "create cone" );
+
+					ae::Sdf::Cylinder* cone = terrain->sdf.CreateSdf< ae::Sdf::Cylinder >();
+					cone->SetTransform(
+						aeFloat4x4::Translation( camera.GetFocus() ) *
+						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+
+					currentShape = cone;
+				}
+				else if ( ImGui::Button( "material 1" ) )
+				{
+					AE_LOG( "create material 1" );
+
+					ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
+					box->SetTransform(
+						aeFloat4x4::Translation( camera.GetFocus() ) *
+						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+					box->type = ae::Sdf::Shape::Type::Material;
+					box->materialId = 1;
+
+					currentShape = box;
+				}
 			}
-			else if ( ImGui::Button( "height map" ) )
+			
+			if ( ImGui::CollapsingHeader( "object" ) )
 			{
-				AE_LOG( "create height map" );
+				if ( currentShape )
+				{
+					bool changed = false;
+					aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
+					float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
+					ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
+					changed |= ImGui::InputFloat3( "Translation", matrixTranslation, 3 );
+					changed |= ImGui::InputFloat3( "Rotation", matrixRotation, 3 );
+					changed |= ImGui::InputFloat3( "Scale", matrixScale, 3 );
+					if ( changed )
+					{
+						ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
+						temp.SetTranspose();
 
-				ae::Sdf::Heightmap* heightMap = terrain->sdf.CreateSdf< ae::Sdf::Heightmap >();
-				heightMap->SetTransform(
-					aeFloat4x4::Translation( camera.GetFocus() ) *
-					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
-				heightMap->SetImage( &heightmapImage );
+						currentShape->SetTransform( temp );
+						currentShape->Dirty();
+					}
 
-				currentShape = heightMap;
-			}
-			else if ( ImGui::Button( "cylinder" ) )
-			{
-				AE_LOG( "create cone" );
+					const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
+					ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
+					if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion
+						|| currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+					{
+						if ( ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, 1.0f ) )
+						{
+							currentShape->Dirty();
+						}
+					}
 
-				ae::Sdf::Cylinder* cone = terrain->sdf.CreateSdf< ae::Sdf::Cylinder >();
-				cone->SetTransform(
-					aeFloat4x4::Translation( camera.GetFocus() ) *
-					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
-
-				currentShape = cone;
-			}
-			else if ( ImGui::Button( "material 1" ) )
-			{
-				AE_LOG( "create material 1" );
-
-				ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
-				box->SetTransform(
-					aeFloat4x4::Translation( camera.GetFocus() ) *
-					aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
-				box->type = ae::Sdf::Shape::Type::Material;
-				box->materialId = 1;
-
-				currentShape = box;
-			}
-			ImGui::End();
-		}
-
-		ImGui::Begin( "object" );
-		if ( currentShape )
-		{
-      bool changed = false;
-      aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
-      float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
-      ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
-      changed |= ImGui::InputFloat3( "Translation", matrixTranslation, 3 );
-      changed |= ImGui::InputFloat3( "Rotation", matrixRotation, 3 );
-      changed |= ImGui::InputFloat3( "Scale", matrixScale, 3 );
-      if ( changed )
-      {
-        ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
-        temp.SetTranspose();
-
-        currentShape->SetTransform( temp );
-        currentShape->Dirty();
-      }
-      
-			const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
-			ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
-			if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion
-				|| currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
-			{
-				if ( ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, 1.0f ) ) { currentShape->Dirty(); }
-			}
-
-			if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
-			{
-				if ( ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, 1.0f ) ) { box->Dirty(); }
-			}
-			else if ( auto cone = aeCast< ae::Sdf::Cylinder >( currentShape ) )
-			{
-				if ( ImGui::SliderFloat( "top", &cone->top, 0.0f, 1.0f ) ) { cone->Dirty(); }
-				if ( ImGui::SliderFloat( "bottom", &cone->bottom, 0.0f, 1.0f ) ) { cone->Dirty(); }
+					if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
+					{
+						if ( ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, 1.0f ) )
+						{
+							box->Dirty();
+						}
+					}
+					else if ( auto cone = aeCast< ae::Sdf::Cylinder >( currentShape ) )
+					{
+						if ( ImGui::SliderFloat( "top", &cone->top, 0.0f, 1.0f ) )
+						{
+							cone->Dirty();
+						}
+						if ( ImGui::SliderFloat( "bottom", &cone->bottom, 0.0f, 1.0f ) )
+						{
+							cone->Dirty();
+						}
+					}
+				}
+				else
+				{
+					ImGui::Text( "no selection" );
+				}
 			}
 		}
 		ImGui::End();
@@ -369,7 +388,7 @@ int main()
 			render.Clear( aeColor::PicoDarkPurple() );
 
 			aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-			aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.4f, render.GetAspectRatio(), 0.5f, 1000.0f );
+			aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.525f, render.GetAspectRatio(), 0.5f, 1000.0f );
 			aeFloat4x4 worldToProj = viewToProj * worldToView;
 			// UI units in pixels, origin in bottom left
 			aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );

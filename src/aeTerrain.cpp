@@ -272,7 +272,7 @@ uint32_t aeTerrainChunk::GetIndex( aeInt3 pos )
   uint32_t z = ( pos.z >= 0 ) ? 2 * pos.z : -2 * pos.z - 1;
 
   uint32_t max = aeMath::Max( x, y, z );
-  uint32_t hash = max ^ 3 + ( 2 * max * z ) + z;
+  uint32_t hash = max * max * max + ( 2 * max * z ) + z;
   if ( max == z )
   {
     uint32_t xy = aeMath::Max( x, y );
@@ -866,12 +866,12 @@ float aeTerrain::GetChunkScore( aeInt3 pos ) const
   float centerDistance = ( m_center - chunkCenter ).Length();
 
   bool hasNeighbor = false;
-  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 1, 0, 0 ) );
-  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, 1, 0 ) );
-  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, 0, 1 ) );
-  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( -1, 0, 0 ) );
-  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, -1, 0 ) );
-  hasNeighbor = hasNeighbor || 0 < GetVoxelCount( pos + aeInt3( 0, 0, -1 ) );
+  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 1, 0, 0 ) ) > 0;
+  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, 1, 0 ) ) > 0;
+  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, 0, 1 ) ) > 0;
+  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( -1, 0, 0 ) ) > 0;
+  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, -1, 0 ) ) > 0;
+  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, 0, -1 ) ) > 0;
   
   if ( hasNeighbor )
   {
@@ -1010,7 +1010,7 @@ const aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos ) const
 int32_t aeTerrain::GetVoxelCount( uint32_t chunkIndex ) const
 {
   auto iter = m_voxelCounts3.find( chunkIndex );
-  return ( iter == m_voxelCounts3.end() ) ? iter->second : 0;
+  return ( iter == m_voxelCounts3.end() ) ? 0 : iter->second;
 }
 
 int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
@@ -1138,7 +1138,9 @@ void aeTerrain::Update( aeFloat3 center, float radius )
           continue;
         }
 
-        aeTerrainChunk* c = GetChunk( ci );
+        AE_LOG( "p:# ci:# vc:#", chunkPos, ci, vc );
+
+        aeTerrainChunk* c = GetChunk( ci ); // @TODO: Is this needed with step below?
         if ( c )
         {
           AE_ASSERT( vc > 0 );
@@ -1147,7 +1149,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
 
         //ChunkSort& chunkSort = t_chunkMap.Set( chunkPos, ChunkSort() );
         ChunkSort chunkSort;
-        chunkSort.c = c;
+        chunkSort.c = c; // @TODO: Is this needed with step below?
         chunkSort.pos = chunkPos;
         chunkSort.score = GetChunkScore( chunkPos );
         t_chunkMap_hack[ aeTerrainChunk::GetIndex( chunkPos ) ] = chunkSort;
@@ -1180,9 +1182,11 @@ void aeTerrain::Update( aeFloat3 center, float radius )
   //{
   //  t_chunkSorts.Append( t_chunkMap.GetValue( i ) );
   //}
-  for ( auto element : t_chunkMap_hack )
+  for ( auto& element : t_chunkMap_hack )
   {
     t_chunkSorts.Append( element.second );
+
+    AE_LOG( "p:# s:# c:#", element.second.pos, element.second.score, element.second.c );
   }
   // Sort chunks by score, low score is best
   if ( t_chunkSorts.Length() )
@@ -1199,13 +1203,38 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     {
       const ChunkSort* sort = &t_chunkSorts[ i ];
 
-      aeFloat3 p = aeFloat3( sort->pos );
-      p += aeFloat3( 0.5f );
-      p *= kChunkSize;
+      aeInt3 chunkPos = sort->pos;
+      int32_t otherJobIndex = m_terrainJobs.FindFn( [chunkPos]( aeTerrainJob* j )
+      {
+        return j->HasChunk( chunkPos );
+      } );
 
-      const char* status = sort->c ? "generated" : "pending";
-      aeStr64 str = aeStr64::Format( "score:#\nstatus:#", sort->score, status );
-      m_debugTextFn( p, str.c_str() );
+      const char* status;
+      if ( sort->c )
+      {
+        if ( otherJobIndex >= 0 )
+        {
+          status = "refreshing";
+        }
+        else
+        {
+          status = "generated";
+        }
+      }
+      else
+      {
+        status = "pending";
+      }
+
+      aeStr128 str = aeStr128::Format( "pos:#\nindex:#\nscore:#\nstatus:#",
+        chunkPos,
+        aeTerrainChunk::GetIndex( chunkPos ),
+        sort->score,
+        status
+      );
+
+      aeFloat3 center = aeTerrainChunk::GetAABB( sort->pos ).GetCenter();
+      m_debugTextFn( center, str.c_str() );
     }
   }
   
