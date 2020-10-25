@@ -38,6 +38,8 @@
   #endif
 #endif
 
+#define AE_TERRAIN_LOG 0
+
 static float s_test = 0.0f;
 
 namespace
@@ -852,7 +854,7 @@ void aeTerrain::m_SetVoxelCount( uint32_t chunkIndex, int32_t count )
   }
   else
   {
-    if ( count == ~0 )
+    if ( AE_TERRAIN_LOG && count == ~0 )
     {
       AE_LOG( "Dirty chunk #", chunkIndex );
     }
@@ -1138,7 +1140,10 @@ void aeTerrain::Update( aeFloat3 center, float radius )
           continue;
         }
 
-        AE_LOG( "p:# ci:# vc:#", chunkPos, ci, vc );
+        if ( AE_TERRAIN_LOG )
+        {
+          AE_LOG( "p:# ci:# vc:#", chunkPos, ci, vc );
+        }
 
         aeTerrainChunk* c = GetChunk( ci ); // @TODO: Is this needed with step below?
         if ( c )
@@ -1186,7 +1191,10 @@ void aeTerrain::Update( aeFloat3 center, float radius )
   {
     t_chunkSorts.Append( element.second );
 
-    AE_LOG( "p:# s:# c:#", element.second.pos, element.second.score, element.second.c );
+    if ( AE_TERRAIN_LOG )
+    {
+      AE_LOG( "p:# s:# c:#", element.second.pos, element.second.score, element.second.c );
+    }
   }
   // Sort chunks by score, low score is best
   if ( t_chunkSorts.Length() )
@@ -1254,7 +1262,10 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     AE_ASSERT( newChunk );
     AE_ASSERT( newChunk->m_check == 0xCDCDCDCD );
     uint32_t chunkIndex = newChunk->GetIndex();
-    AE_LOG( "Finish terrain job # #", newChunk->GetIndex(), newChunk->GetAABB() );
+    if ( AE_TERRAIN_LOG )
+    {
+      AE_LOG( "Finish terrain job # #", newChunk->GetIndex(), newChunk->GetAABB() );
+    }
 
     uint32_t vertexCount = job->GetVertexCount();
     uint32_t indexCount = job->GetIndexCount();
@@ -1431,11 +1442,16 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       if ( !chunk )
       {
         // Loaded chunks at equilibrium. The highest priority chunks are already loaded.
-        // AE_LOG( "Chunk loading reached equilibrium" );
+        if ( AE_TERRAIN_LOG )
+        {
+          AE_LOG( "Chunk loading reached equilibrium" );
+        }
         break;
       }
-      
-      AE_LOG( "Start terrain job # #", chunk->GetIndex(), chunk->GetAABB() );
+      if ( AE_TERRAIN_LOG )
+      {
+        AE_LOG( "Start terrain job # #", chunk->GetIndex(), chunk->GetAABB() );
+      }
 
       aeTerrainJob* job = m_terrainJobs[ jobIndex ];
       AE_ASSERT( job );
@@ -1489,12 +1505,18 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
     }
   }
 
-  //AE_LOG( "chunks active:# allocated:#", activeCount, m_chunkPool.Length() );
+  if ( AE_TERRAIN_LOG )
+  {
+    AE_LOG( "chunks active:# allocated:#", activeCount, m_chunkPool.Length() );
+  }
 }
 
 void aeTerrain::RenderDebug( aeDebugRender* debug )
 {
-  AE_LOG( "t_chunkSorts len #", t_chunkSorts.Length() );
+  if ( AE_TERRAIN_LOG )
+  {
+    AE_LOG( "t_chunkSorts len #", t_chunkSorts.Length() );
+  }
   for ( uint32_t i = 0; i < t_chunkSorts.Length(); i++ )
   {
     aeAABB chunkAABB = aeTerrainChunk::GetAABB( t_chunkSorts[ i ].pos );
@@ -1522,7 +1544,10 @@ void aeTerrain::m_Dirty( aeAABB aabb )
 
   aeInt3 minChunk = ( aabb.GetMin() / kChunkSize ).FloorCopy();
   aeInt3 maxChunk = ( aabb.GetMax() / kChunkSize ).CeilCopy();
-  AE_LOG( "Dirty area # (min:# max:#)", aabb, minChunk, maxChunk );
+  if ( AE_TERRAIN_LOG )
+  {
+    AE_LOG( "Dirty area # (min:# max:#)", aabb, minChunk, maxChunk );
+  }
 
   for ( int32_t z = minChunk.z; z < maxChunk.z; z++ )
   for ( int32_t y = minChunk.y; y < maxChunk.y; y++ )
@@ -1535,7 +1560,10 @@ void aeTerrain::m_Dirty( aeAABB aabb )
     }
     else
     {
-      AE_LOG( "Dirty chunk #", pos );
+      if ( AE_TERRAIN_LOG )
+      {
+        AE_LOG( "Dirty chunk #", pos );
+      }
       m_SetVoxelCount( aeTerrainChunk::GetIndex( pos ), ~0 );
     }
   }
