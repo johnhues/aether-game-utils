@@ -352,7 +352,8 @@ public:
   void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
   void SetCulling( aeShaderCulling::Type culling ) { m_culling = culling; }
   void SetWireframe( bool enabled ) { m_wireframe = enabled; }
-  
+  void SetBlendingPremul( bool enabled ) { m_blendingPremul = enabled; }
+	
 private:
   int m_LoadShader( const char* shaderStr, aeShaderType::Type type, const char* const* defines, int32_t defineCount );
   
@@ -361,6 +362,7 @@ private:
   uint32_t m_program;
 
   bool m_blending;
+  bool m_blendingPremul;
   bool m_depthTest;
   bool m_depthWrite;
   aeShaderCulling::Type m_culling;
@@ -724,8 +726,11 @@ public:
   aeFloat4x4 GetWindowToWorld( const aeFloat4x4& worldToNdc ) const; // Mouse to world
   aeRect GetNDCRect() const;
 
-  // this is so imgui and the main render copy can enable srgb writes in GL
+  // this is so imgui and the main render copy can enable srgb writes in (GL only)
   void EnableSRGBWrites( bool enable );
+	
+  // have to inject a barrier to readback from active render target (GL only)
+  void AddTextureBarrier();
 
 private:
   class aeRenderInternal* m_renderInternal;

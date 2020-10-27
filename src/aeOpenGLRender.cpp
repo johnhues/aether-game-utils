@@ -46,7 +46,7 @@
   #define glClearDepth glClearDepthf
 #else
   #include <OpenGL/gl3.h>
-  #include <OpenGL/gl3ext.h> // for glTexStorage2D
+  #include <OpenGL/gl3ext.h> // for glTexStorage2D, glTextureBarrierNV
 #endif
 
 #include <stb_image.h>
@@ -645,6 +645,7 @@ aeShader::aeShader()
   m_program = 0;
   
   m_blending = false;
+  m_blendingPremul = false;
   m_depthTest = false;
   m_depthWrite = false;
   m_culling = aeShaderCulling::None;
@@ -805,10 +806,21 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   // so reverseZ for example can be set without the shader knowing about that.
 	
   // Blending
-  if ( m_blending )
+  if ( m_blending || m_blendingPremul )
   {
     glEnable( GL_BLEND );
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	  
+	// TODO: need other modes like Add, Min, Max - switch to enum then
+	if (m_blendingPremul)
+	{
+	  // Colors coming out of shader already have alpha multiplied in.
+	  glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+						   GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	}
+	else
+	{
+	  glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	}
   }
   else
   {
@@ -836,6 +848,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   }
   else
   {
+	// TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
     glEnable( GL_CULL_FACE );
     glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
   }
@@ -1671,6 +1684,15 @@ void aeOpenGLRender::EnableSRGBWrites( aeRender* render, bool enable )
 #endif
 }
 
+void aeOpenGLRender::AddTextureBarrier( aeRender* render )
+{
+	// only GL has texture barrier for reading from previously written textures
+	// There are less draconian ways in desktop ES, and nothing in WebGL.
+#if _AE_WINDOWS_ || _AE_APPLE_
+	glTextureBarrierNV();
+#endif
+}
+
 void aeOpenGLRender::EndFrame( aeRender* render )
 {
   AE_CHECK_GL_ERROR();
@@ -1688,13 +1710,8 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
-  // TODO: this should only be enabled if fbo in GL is sRGB
-  //EnableSRGBWrites( render, true );
-
   render->GetCanvas()->Render2D( 0, render->GetNDCRect(), 0.5f );
 
-  //EnableSRGBWrites( render, false );
-	
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
 #endif

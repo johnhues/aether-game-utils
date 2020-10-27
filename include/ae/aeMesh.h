@@ -49,7 +49,7 @@ typedef uint16_t aeMeshIndex;
 class aeMesh
 {
 public:
-  bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension );
+  bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
   void Transform( aeFloat4x4 transform );
 
   const aeMeshVertex* GetVertices() const;

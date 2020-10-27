@@ -42,7 +42,7 @@ uint32_t aeMesh::GetIndexCount() const { return 0; }
 //------------------------------------------------------------------------------
 // aeMesh member functions
 //------------------------------------------------------------------------------
-bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension )
+bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization )
 {
   m_vertices.Clear();
   m_indices.Clear();
@@ -53,8 +53,15 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
 #endif
 
   uint32_t importFlags = 0;
-  importFlags |= aiProcessPreset_TargetRealtime_MaxQuality;
-  importFlags |= aiProcess_JoinIdenticalVertices;
+	
+  // Assimp doesn't process normals, tangents, bitangents correctly, so if skipMeshOptimization is true
+  // then don't run any Assimp processing for tangent or normal generation.  Just use the original mesh.
+  // Otherwise thin features have normals flipped and creases handling isn't correct either.
+  if ( skipMeshOptimization )
+  {
+    importFlags |= aiProcessPreset_TargetRealtime_MaxQuality;
+    importFlags |= aiProcess_JoinIdenticalVertices;
+  }
   importFlags |= aiProcess_PreTransformVertices;
   
   const struct aiScene* scene = aiImportFileFromMemory( (const char*)data, length, importFlags, extension );
