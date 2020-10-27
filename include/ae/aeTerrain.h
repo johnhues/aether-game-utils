@@ -362,7 +362,7 @@ struct aeTerrainChunk
   TerrainIndex m_i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
 
 private:
-  static void m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t( &offsets )[ 4 ][ 3 ] );
+  static void m_GetQuadVertexOffsetsFromEdge( uint32_t edgeBit, int32_t( &offsets )[ 4 ][ 3 ] );
 };
 
 //------------------------------------------------------------------------------

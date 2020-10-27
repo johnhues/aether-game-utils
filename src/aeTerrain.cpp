@@ -407,6 +407,9 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     if ( cornerValues[ 0 ][ 0 ] * cornerValues[ 0 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
     if ( cornerValues[ 1 ][ 0 ] * cornerValues[ 1 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
     if ( cornerValues[ 2 ][ 0 ] * cornerValues[ 2 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
+    
+    // Store block type
+    // @TODO: Remove this when raycasting uses triangle mesh
     if ( edgeBits == 0 )
     {
       if ( x >= 0 && y >= 0 && z >= 0 && x < kChunkSize && y < kChunkSize && z < kChunkSize )
@@ -442,7 +445,9 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
         return;
       }
 
+      // Get intersection of edge and implicit surface
       aeFloat3 edgeVoxelPos;
+      // Start edgeVoxelPos calculation
       {
         // Determine which end of edge is inside/outside
         aeFloat3 c0, c1;
@@ -485,6 +490,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
       AE_ASSERT( edgeVoxelPos.x >= 0.0f && edgeVoxelPos.x <= 1.0f );
       AE_ASSERT( edgeVoxelPos.y >= 0.0f && edgeVoxelPos.y <= 1.0f );
       AE_ASSERT( edgeVoxelPos.z >= 0.0f && edgeVoxelPos.z <= 1.0f );
+      // End edgeVoxelPos calculation
       
       aeFloat3 edgeWorldPos( chunkOffsetX + x, chunkOffsetY + y, chunkOffsetZ + z );
       edgeWorldPos += edgeVoxelPos;
@@ -499,8 +505,9 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
       
       TerrainIndex ind[ 4 ];
       int32_t offsets[ 4 ][ 3 ];
-      m_GetOffsetsFromEdge( mask[ e ], offsets );
+      m_GetQuadVertexOffsetsFromEdge( mask[ e ], offsets );
       
+      // Expand edge into two triangles
       // @NOTE: Add new vertices for each edge intersection (centered in voxels for now).
       // Edges are eventually expanded into quads, so each edge needs 4 vertices.
       // This does some of the work for adjacent voxels.
@@ -879,7 +886,7 @@ float aeTerrain::GetChunkScore( aeInt3 pos ) const
   }
 }
 
-void aeTerrainChunk::m_GetOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] )
+void aeTerrainChunk::m_GetQuadVertexOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] )
 {
   if ( edgeBit == EDGE_TOP_FRONT_BIT )
   {
