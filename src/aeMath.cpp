@@ -1350,6 +1350,10 @@ aeFloat4x4 aeFloat4x4::WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat
 // this hack comes in from the renderer
 extern bool gReverseZ;
 
+// fix the projection matrix, when false fov scales up/down with nearPlane
+// if this breaks stuff, then can set to false
+bool gFixProjection = true;
+
 aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
 {
   // a  0  0  0
@@ -1357,14 +1361,22 @@ aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nea
   // 0  0  A  B
   // 0  0 -1  0
 
-  float r = aspectRatio * tanf( fov * 0.5f );
-  float t = tanf( fov * 0.5f ); // tan of half angle fit vertically
-
+  // this is assuming a symmetric frustum, in this case nearPlane cancels out
+  
+  float halfAngleTangent = tanf( fov * 0.5f);
+  float r = aspectRatio * halfAngleTangent; // scaled by view aspect ratio
+  float t = halfAngleTangent; // tan of half angle fit vertically
+	  
+  if ( gFixProjection )
+  {
+	  r *= nearPlane;
+	  t *= nearPlane;
+  }
   float a = nearPlane / r;
   float b = nearPlane / t;
-	
-	float A;
-	float B;
+ 	
+  float A;
+  float B;
   if (gReverseZ)
   {
 	  A = 0;
