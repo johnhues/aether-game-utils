@@ -1315,3 +1315,8 @@ void aeRender::EnableSRGBWrites(bool enable)
 {
 	m_renderInternal->EnableSRGBWrites( this, enable );
 }
+
+void aeRender::AddTextureBarrier()
+{
+	m_renderInternal->AddTextureBarrier( this );
+}

@@ -115,9 +115,6 @@ public:
 			ImGui_ImplOpenGL3_NewFrame();
 		}
 		ImGui::NewFrame();
-		
-		// have to alias this, since it's not passed into Render() call
-		m_render = render;
 	}
 
 	void Render()
@@ -126,11 +123,7 @@ public:
 		ImGui::Render();
 		if ( !m_headless )
 		{
-			// TODO: this should only be enabled if fbo in GL is sRGB
-			//m_render->EnableSRGBWrites( true );
 			ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
-			//m_render->EnableSRGBWrites( false );
-			m_render = nullptr;
 		}
 	}
 

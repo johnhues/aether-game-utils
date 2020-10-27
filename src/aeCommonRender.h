@@ -44,6 +44,7 @@ public:
 	
   // this is so imgui and the main render copy can enable srgb writes in GL
   virtual void EnableSRGBWrites( aeRender* render, bool enable ) = 0;
+  virtual void AddTextureBarrier( aeRender* render ) = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -61,6 +62,8 @@ public:
 
   // this is so imgui and the main render copy can enable srgb writes in GL
   void EnableSRGBWrites( aeRender* render, bool enable ) override;
+
+  void AddTextureBarrier(  aeRender* render ) override;
 
 private:
   void* m_context;
