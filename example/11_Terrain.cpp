@@ -209,11 +209,19 @@ int main()
 	bool wireframe = false;
 	static bool s_showTerrainDebug = false;
 
-	ae::Sdf::Shape* currentShape = nullptr;
+	struct Object
+	{
+		Object( const char* n, ae::Sdf::Shape* s ) : name( n ), shape( s ) {}
+		aeStr16 name;
+		ae::Sdf::Shape* shape;
+	};
+	aeArray< Object* > objects;
+	Object* currentObject = nullptr;
+
 	{
 		ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
 		box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) * aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
-		currentShape = box;
+		currentObject = objects.Append( aeAlloc::Allocate< Object >( "Box", box ) );
 	}
 
 	bool gizmoClickedPrev = false;
@@ -233,60 +241,61 @@ int main()
 			// New terrain objects
 			if ( ImGui::CollapsingHeader( "create" ) )
 			{
-				if ( ImGui::Button( "cube" ) )
+				if ( ImGui::Button( "box" ) )
 				{
-					AE_LOG( "Cube" );
-
 					ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
 					box->SetTransform(
 						aeFloat4x4::Translation( camera.GetFocus() ) *
 						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-					currentShape = box;
+					currentObject = objects.Append( aeAlloc::Allocate< Object >( "Box", box ) );
 				}
-				else if ( ImGui::Button( "height map" ) )
-				{
-					AE_LOG( "create height map" );
 
+				if ( ImGui::Button( "cylinder" ) )
+				{
+					ae::Sdf::Cylinder* cylinder = terrain->sdf.CreateSdf< ae::Sdf::Cylinder >();
+					cylinder->SetTransform(
+						aeFloat4x4::Translation( camera.GetFocus() ) *
+						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+
+					currentObject = objects.Append( aeAlloc::Allocate< Object >( "Cylinder", cylinder ) );
+				}
+				
+				if ( ImGui::Button( "height map" ) )
+				{
 					ae::Sdf::Heightmap* heightMap = terrain->sdf.CreateSdf< ae::Sdf::Heightmap >();
 					heightMap->SetTransform(
 						aeFloat4x4::Translation( camera.GetFocus() ) *
 						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 					heightMap->SetImage( &heightmapImage );
 
-					currentShape = heightMap;
+					currentObject = objects.Append( aeAlloc::Allocate< Object >( "Height Map", heightMap ) );
 				}
-				else if ( ImGui::Button( "cylinder" ) )
-				{
-					AE_LOG( "create cone" );
 
-					ae::Sdf::Cylinder* cone = terrain->sdf.CreateSdf< ae::Sdf::Cylinder >();
-					cone->SetTransform(
-						aeFloat4x4::Translation( camera.GetFocus() ) *
-						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+				// @TODO: Disabled because "material" is used in properties, and having both creates a conflict
+				//if ( ImGui::Button( "material" ) )
+				//{
+				//	ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
+				//	box->SetTransform(
+				//		aeFloat4x4::Translation( camera.GetFocus() ) *
+				//		aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+				//	box->type = ae::Sdf::Shape::Type::Material;
+				//	box->materialId = 1;
 
-					currentShape = cone;
-				}
-				else if ( ImGui::Button( "material 1" ) )
-				{
-					AE_LOG( "create material 1" );
-
-					ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
-					box->SetTransform(
-						aeFloat4x4::Translation( camera.GetFocus() ) *
-						aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
-					box->type = ae::Sdf::Shape::Type::Material;
-					box->materialId = 1;
-
-					currentShape = box;
-				}
+				//	currentObject = objects.Append( aeAlloc::Allocate< Object >( "Material", box ) );
+				//}
 			}
 			
-			if ( ImGui::CollapsingHeader( "object" ) )
+			if ( ImGui::CollapsingHeader( "properties" ) )
 			{
-				if ( currentShape )
+				if ( currentObject )
 				{
+					ae::Sdf::Shape* currentShape = currentObject->shape;
+
+					aeImGui::InputText( "name", &currentObject->name );
+
 					bool changed = false;
+
 					aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
 					float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
 					ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
@@ -297,56 +306,58 @@ int main()
 					{
 						ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
 						temp.SetTranspose();
-
 						currentShape->SetTransform( temp );
-						currentShape->Dirty();
 					}
 
 					const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
-					if ( ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) ) )
-          {
-            currentShape->Dirty();
-          }
-          
+					changed |= ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
+
 					if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion || currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
 					{
-						if ( ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, 1.0f ) )
-						{
-							currentShape->Dirty();
-						}
+						aeFloat3 halfSize = currentShape->GetHalfSize();
+						float maxLength = aeMath::Max( halfSize.x, halfSize.y, halfSize.z );
+						changed |= ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, maxLength );
 					}
-          
-          const char* materialNames[] = { "grass", "sand" };
-          if ( ImGui::Combo( "material", (int32_t*)&currentShape->materialId, materialNames, countof(materialNames) ) )
-          {
-            currentShape->Dirty();
-          }
+
+					const char* materialNames[] = { "grass", "sand" };
+					changed |= ImGui::Combo( "material", (int32_t*)&currentShape->materialId, materialNames, countof( materialNames ) );
 
 					if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
 					{
 						aeFloat3 halfSize = box->GetHalfSize();
-						float maxValue = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
-						if ( ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, maxValue ) )
-						{
-							box->Dirty();
-						}
+						float minLength = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
+						changed |= ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, minLength );
 					}
-					else if ( auto cone = aeCast< ae::Sdf::Cylinder >( currentShape ) )
+					else if ( auto cylinder = aeCast< ae::Sdf::Cylinder >( currentShape ) )
 					{
-						if ( ImGui::SliderFloat( "top", &cone->top, 0.0f, 1.0f ) )
-						{
-							cone->Dirty();
-						}
-						if ( ImGui::SliderFloat( "bottom", &cone->bottom, 0.0f, 1.0f ) )
-						{
-							cone->Dirty();
-						}
+						changed |= ImGui::SliderFloat( "top", &cylinder->top, 0.0f, 1.0f );
+						changed |= ImGui::SliderFloat( "bottom", &cylinder->bottom, 0.0f, 1.0f );
+					}
+
+					if ( changed )
+					{
+						currentShape->Dirty();
 					}
 				}
 				else
 				{
 					ImGui::Text( "no selection" );
 				}
+			}
+
+			if ( ImGui::CollapsingHeader( "objects" ) )
+			{
+				ImGui::BeginChild( "ChildL" );
+				for ( uint32_t i = 0; i < objects.Length(); i++ )
+				{
+					Object* object = objects[ i ];
+					aeStr32 displayName( "(#) #", i, object->name );
+					if ( ImGui::Selectable( displayName.c_str(), object == currentObject ) )
+					{
+						currentObject = object;
+					}
+				}
+				ImGui::EndChild();
 			}
 		}
 		ImGui::End();
@@ -371,9 +382,9 @@ int main()
 		camera.Update( &input, timeStep.GetTimeStep() );
 
 		// Camera focus
-		if ( currentShape && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+		if ( currentObject && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
 		{
-			camera.Refocus( currentShape->GetAABB().GetCenter() );
+			camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
 		}
 
 		// Render mode
@@ -448,13 +459,15 @@ int main()
 				terrain->RenderDebug( &debug );
 			}
 
+			//ImGui::ShowDemoWindow();
+
 			ImGuiIO& io = ImGui::GetIO();
 			ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
 
 			static ImGuizmo::OPERATION s_operation = ImGuizmo::TRANSLATE;
 			if ( input.GetState()->Get( aeKey::Q ) && !input.GetPrevState()->Get( aeKey::Q ) )
 			{
-				currentShape = nullptr;
+				currentObject = nullptr;
 			}
 			else if ( input.GetState()->Get( aeKey::W ) && !input.GetPrevState()->Get( aeKey::W ) )
 			{
@@ -468,14 +481,18 @@ int main()
 			{
 				s_operation = ImGuizmo::SCALE;
 			}
-			else if ( currentShape && input.GetState()->Get( aeKey::Delete ) && !input.GetPrevState()->Get( aeKey::Delete ) )
+			else if ( currentObject && input.GetState()->Get( aeKey::Delete ) && !input.GetPrevState()->Get( aeKey::Delete ) )
 			{
-				terrain->sdf.DestroySdf( currentShape );
-				currentShape = nullptr;
+				objects.Remove( objects.Find( currentObject ) );
+				terrain->sdf.DestroySdf( currentObject->shape );
+				aeAlloc::Release( currentObject );
+				currentObject = nullptr;
 			}
 
-			if ( currentShape )
+			if ( currentObject )
 			{
+				ae::Sdf::Shape* currentShape = currentObject->shape;
+
 				// Use ImGuizmo::IsUsing() to only update terrain when finished dragging
         bool gizmoClicked = ImGuizmo::IsUsing();
 				aeFloat4x4 gizmoTransform = currentShape->GetTransform();
@@ -495,7 +512,7 @@ int main()
         if ( gizmoClicked )
         {
           // Dragging
-          currentShape->SetTransform( gizmoTransform );
+					currentShape->SetTransform( gizmoTransform );
         }
 				
         if ( gizmoClickedPrev && !gizmoClicked )

@@ -125,20 +125,19 @@ const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 aeTerrainSDFCache::aeTerrainSDFCache()
 {
   m_chunk = aeInt3( 0 );
-  m_sdf = aeAlloc::AllocateArray< float16_t >( kDim * kDim * kDim );
-  m_material = aeAlloc::AllocateArray< aeTerrainMaterialId >( kDim * kDim * kDim );
+  m_values = aeAlloc::AllocateArray< float16_t >( kDim * kDim * kDim );
 }
 
 aeTerrainSDFCache::~aeTerrainSDFCache()
 {
-  aeAlloc::Release( m_sdf );
-  aeAlloc::Release( m_material );
-  m_sdf = nullptr;
-  m_material = nullptr;
+  aeAlloc::Release( m_values );
+  m_values = nullptr;
 }
 
 void aeTerrainSDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
 {
+  m_sdf = sdf;
+
   m_chunk = chunk;
 
   m_offseti = aeInt3( kOffset ) - aeInt3( m_chunk * kChunkSize );
@@ -151,8 +150,7 @@ void aeTerrainSDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
   {
     uint32_t index = x + kDim * ( y + kDim * z );
     aeFloat3 pos( offset.x + x, offset.y + y, offset.z + z );
-    m_sdf[ index ] = sdf->GetValue( pos );
-    m_material[ index ] = sdf->GetMaterial( pos );
+    m_values[ index ] = sdf->GetValue( pos );
   }
 }
 
@@ -224,14 +222,9 @@ aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
   return ( normal1 + normal0 ).SafeNormalizeCopy();
 }
 
-uint8_t aeTerrainSDFCache::GetMaterial( aeInt3 pos ) const
+uint8_t aeTerrainSDFCache::GetMaterial( aeFloat3 pos ) const
 {
-  pos += m_offseti;
-#if _AE_DEBUG_
-  AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
-  AE_ASSERT( pos.x < kDim&& pos.y < kDim&& pos.z < kDim );
-#endif
-  return m_material[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
+  return m_sdf->GetMaterial( pos );
 }
 
 float aeTerrainSDFCache::m_GetValue( aeInt3 pos ) const
@@ -240,7 +233,7 @@ float aeTerrainSDFCache::m_GetValue( aeInt3 pos ) const
   AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
   AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
 #endif
-  return m_sdf[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
+  return m_values[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
 }
 
 aeTerrainChunk::aeTerrainChunk() :
@@ -744,7 +737,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     vertex->info[ 2 ] = 255;// @HACK: TerrainType( position );
     vertex->info[ 3 ] = 0;
 
-    uint8_t material = sdf->GetMaterial( position.FloorCopy() );
+    uint8_t material = sdf->GetMaterial( position );
     vertex->materials[ 0 ] = ( material == 0 ) ? 255 : 0;
     vertex->materials[ 1 ] = ( material == 1 ) ? 255 : 0;
     vertex->materials[ 2 ] = ( material == 2 ) ? 255 : 0;

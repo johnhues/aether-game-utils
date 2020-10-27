@@ -256,10 +256,12 @@ public:
   float GetValue( aeFloat3 pos ) const;
   float GetValue( aeInt3 pos ) const;
   aeFloat3 GetDerivative( aeFloat3 p ) const;
-  uint8_t GetMaterial( aeInt3 pos ) const;
+  uint8_t GetMaterial( aeFloat3 pos ) const;
 
 private:
   float m_GetValue( aeInt3 pos ) const;
+
+  const aeTerrainSDF* m_sdf;
 
   const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to chunkPlus
   static const int32_t kOffset = 2;
@@ -268,8 +270,7 @@ private:
   aeInt3 m_offseti; // Pre-computed chunk integer offset
   aeFloat3 m_offsetf; // Pre-computed chunk float offset
 
-  float16_t* m_sdf;
-  aeTerrainMaterialId* m_material;
+  float16_t* m_values;
 };
 
 //------------------------------------------------------------------------------

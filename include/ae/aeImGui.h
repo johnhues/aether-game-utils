@@ -133,6 +133,17 @@ public:
 			m_render = nullptr;
 		}
 	}
+
+	template < uint32_t N >
+	static bool InputText( const char* label, aeStr< N >* str, ImGuiInputTextFlags flags = 0 )
+	{
+		IM_ASSERT( ( flags & ImGuiInputTextFlags_CallbackEdit ) == 0 );
+		flags |= ImGuiInputTextFlags_CallbackEdit;
+		char* buffer = const_cast<char*>( str->c_str() );
+		size_t maxSize = aeStr< N >::MaxLength() + 1;
+		return ImGui::InputText( label, buffer, maxSize, flags, aeImGui::m_StringCallback< N >, (void*)str );
+	}
+
 private:
 	void m_Initialize()
 	{
@@ -181,6 +192,17 @@ private:
 		io.KeyMap[ ImGuiKey_Z ] = (uint32_t)aeKey::Z;
 
 		m_init = true;
+	}
+
+	template < uint32_t N >
+	static int m_StringCallback( ImGuiInputTextCallbackData* data )
+	{
+		if ( data->EventFlag == ImGuiInputTextFlags_CallbackEdit )
+		{
+			aeStr< N >* str = ( aeStr< N >* )data->UserData;
+			*str = aeStr< N >( data->BufTextLen, 'x' ); // Set Length() of string
+		}
+		return 0;
 	}
 
 	bool m_init = false;

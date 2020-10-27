@@ -47,6 +47,8 @@ public:
 
   aeStr( uint32_t length, const char* str );
 
+  aeStr( uint32_t length, char c );
+
   template < typename... Args >
   aeStr( const char* format, Args... args );
 
@@ -235,6 +237,15 @@ aeStr< N >::aeStr( uint32_t length, const char* str )
   AE_ASSERT( length <= (uint16_t)MaxLength() );
   m_length = length;
   memcpy( m_str, str, m_length );
+  m_str[ length ] = 0;
+}
+
+template < uint32_t N >
+aeStr< N >::aeStr( uint32_t length, char c )
+{
+  AE_ASSERT( length <= (uint16_t)MaxLength() );
+  m_length = length;
+  memset( m_str, c, m_length );
   m_str[ length ] = 0;
 }
 
