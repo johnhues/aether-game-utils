@@ -90,7 +90,7 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
 
       // Normal
       aiVector3D n = mesh->mNormals[ j ];
-      vertex.normal = aeFloat4( n.x, n.y, n.z, 1.0f );
+      vertex.normal = aeFloat4( n.x, n.y, n.z, 0.0f );
 
       // UVs
       memset( vertex.tex, 0, sizeof(vertex.tex) );
