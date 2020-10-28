@@ -28,25 +28,44 @@
 #include "aeCompactingAllocator.h"
 #include <ctpl_stl.h>
 
-// @TODO: SIMD GetIntersection() is currently causing nans on windows
-#if _AE_APPLE_ //|| _AE_WINDOWS_
-  #define TERRAIN_SIMD 1
-  #ifdef _AE_WINDOWS
-    #include <intrin.h>
-  #else
+//------------------------------------------------------------------------------
+// Configuration
+//------------------------------------------------------------------------------
+#ifndef AE_TERRAIN_LOG
+  #define AE_TERRAIN_LOG 0
+#endif
+
+#ifndef AE_TERRAIN_SIMD
+  #define AE_TERRAIN_SIMD 1
+#endif
+
+#ifndef AE_TERRAIN_SKIP_CACHE
+  #define AE_TERRAIN_SKIP_CACHE 0
+#endif
+
+#ifndef AE_TERRAIN_FANCY_NORMALS
+  #define AE_TERRAIN_FANCY_NORMALS 0
+#endif
+
+//------------------------------------------------------------------------------
+// SIMD headers
+//------------------------------------------------------------------------------
+#if AE_TERRAIN_SIMD
+  #if _AE_APPLE_
     #include <x86intrin.h>
+  #elif _AE_WINDOWS_
+    #include <intrin.h>
   #endif
 #endif
 
-#define AE_TERRAIN_LOG 0
-
-static float s_test = 0.0f;
-
+//------------------------------------------------------------------------------
+// Constants / helpers
+//------------------------------------------------------------------------------
 namespace
 {
 aeFloat3 GetIntersection( const aeFloat3* p, const aeFloat3* n, uint32_t ic )
 {
-#if TERRAIN_SIMD
+#if AE_TERRAIN_SIMD
   __m128 c128 = _mm_setzero_ps();
   for ( uint32_t i = 0; i < ic; i++ )
   {
@@ -143,6 +162,7 @@ void aeTerrainSDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
   m_offseti = aeInt3( kOffset ) - aeInt3( m_chunk * kChunkSize );
   m_offsetf = aeFloat3( (float)kOffset ) - aeFloat3( m_chunk * kChunkSize );
 
+#if !AE_TERRAIN_SKIP_CACHE
   aeInt3 offset = m_chunk * kChunkSize - aeInt3( kOffset );
   for ( int32_t z = 0; z < kDim; z++ )
   for ( int32_t y = 0; y < kDim; y++ )
@@ -152,10 +172,14 @@ void aeTerrainSDFCache::Generate( aeInt3 chunk, const aeTerrainSDF* sdf )
     aeFloat3 pos( offset.x + x, offset.y + y, offset.z + z );
     m_values[ index ] = sdf->GetValue( pos );
   }
+#endif
 }
 
 float aeTerrainSDFCache::GetValue( aeFloat3 pos ) const
 {
+#if AE_TERRAIN_SKIP_CACHE
+  return m_sdf->GetValue( aeFloat3( pos ) );
+#else
   pos += m_offsetf;
 
   aeInt3 posi = pos.FloorCopy();
@@ -182,15 +206,23 @@ float aeTerrainSDFCache::GetValue( aeFloat3 pos ) const
   float y0 = aeMath::Lerp( x0, x1, pos.y );
   float y1 = aeMath::Lerp( x2, x3, pos.y );
   return aeMath::Lerp( y0, y1, pos.z );
+#endif
 }
 
 float aeTerrainSDFCache::GetValue( aeInt3 pos ) const
 {
+#if AE_TERRAIN_SKIP_CACHE
+  return m_sdf->GetValue( aeFloat3( pos ) );
+#else
   return m_GetValue( pos + m_offseti );
+#endif
 }
 
 aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
 {
+#if AE_TERRAIN_SKIP_CACHE
+  return m_sdf->GetDerivative( p );
+#else
   aeFloat3 normal0;
   for ( int32_t i = 0; i < 3; i++ )
   {
@@ -220,6 +252,7 @@ aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
   AE_ASSERT( normal1 == normal1 );
 
   return ( normal1 + normal0 ).SafeNormalizeCopy();
+#endif
 }
 
 uint8_t aeTerrainSDFCache::GetMaterial( aeFloat3 pos ) const
@@ -350,10 +383,22 @@ bool aeTerrainJob::HasChunk( aeInt3 pos ) const
 
 void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
 {
+#if AE_TERRAIN_FANCY_NORMALS
+  struct TempTri
+  {
+    uint16_t i0, i1, i2;
+    aeFloat3 n;
+  };
+  aeArray< TempTri > tempTris;
+  aeArray< TerrainVertex > tempVerts;
+#else
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
+#endif
 
-  // AE_LOG( "Generate chunk #", m_pos );
+#if AE_TERRAIN_LOG
+  AE_LOG( "Generate chunk #", m_pos );
+#endif
 
   int32_t chunkOffsetX = m_pos.x * kChunkSize;
   int32_t chunkOffsetY = m_pos.y * kChunkSize;
@@ -438,12 +483,14 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     for ( int32_t e = 0; e < 3; e++ )
     if ( edgeBits & mask[ e ] )
     {
+#if !AE_TERRAIN_FANCY_NORMALS
       if ( vertexCount + 4 > kMaxChunkVerts || indexCount + 6 > kMaxChunkIndices )
       {
         *vertexCountOut = 0;
         *indexCountOut = 0;
         return;
       }
+#endif
 
       // Get intersection of edge and implicit surface
       aeFloat3 edgeVoxelPos;
@@ -530,8 +577,13 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
           
           AE_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
           
+#if AE_TERRAIN_FANCY_NORMALS
+          TerrainIndex index = (TerrainIndex)tempVerts.Length();
+          tempVerts.Append( vertex );
+#else
           TerrainIndex index = (TerrainIndex)vertexCount;
           verticesOut[ vertexCount++ ] = vertex;
+#endif
           ind[ j ] = index;
           
           if ( inCurrentChunk )
@@ -543,7 +595,9 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
         else
         {
           TerrainIndex index = m_i[ ox ][ oy ][ oz ];
+#if !AE_TERRAIN_FANCY_NORMALS
           AE_ASSERT_MSG( index < vertexCount, "# < # ox:# oy:# oz:#", index, vertexCount, ox, oy, oz );
+#endif
           AE_ASSERT( ox < kChunkSize );
           AE_ASSERT( oy < kChunkSize );
           AE_ASSERT( oz < kChunkSize );
@@ -563,6 +617,10 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
       // @TODO: This assumes counter clockwise culling
       if ( flip )
       {
+#if AE_TERRAIN_FANCY_NORMALS
+        tempTris.Append( { ind[ 0 ], ind[ 1 ], ind[ 2 ] } );
+        tempTris.Append( { ind[ 1 ], ind[ 3 ], ind[ 2 ] } );
+#else
         // tri0
         indexOut[ indexCount++ ] = ind[ 0 ];
         indexOut[ indexCount++ ] = ind[ 1 ];
@@ -571,9 +629,14 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
         indexOut[ indexCount++ ] = ind[ 1 ];
         indexOut[ indexCount++ ] = ind[ 3 ];
         indexOut[ indexCount++ ] = ind[ 2 ];
+#endif
       }
       else
       {
+#if AE_TERRAIN_FANCY_NORMALS
+        tempTris.Append( { ind[ 0 ], ind[ 2 ], ind[ 1 ] } );
+        tempTris.Append( { ind[ 1 ], ind[ 2 ], ind[ 3 ] } );
+#else
         // tri2
         indexOut[ indexCount++ ] = ind[ 0 ];
         indexOut[ indexCount++ ] = ind[ 2 ];
@@ -582,11 +645,16 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
         indexOut[ indexCount++ ] = ind[ 1 ];
         indexOut[ indexCount++ ] = ind[ 2 ];
         indexOut[ indexCount++ ] = ind[ 3 ];
+#endif
       }
     }
   }
   
+#if AE_TERRAIN_FANCY_NORMALS
+  if ( !tempTris.Length() )
+#else
   if ( indexCount == 0 )
+#endif
   {
     // @TODO: Should differentiate between empty chunk and full chunk. It's possible though that
     // Chunk::t's are good enough for this though.
@@ -595,10 +663,18 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     return;
   }
   
+#if AE_TERRAIN_FANCY_NORMALS
+  const int32_t vc = (int32_t)tempVerts.Length();
+#else
   const int32_t vc = (int32_t)vertexCount;
+#endif
   for ( int32_t i = 0; i < vc; i++ )
   {
+#if AE_TERRAIN_FANCY_NORMALS
+    TerrainVertex* vertex = &tempVerts[ i ];
+#else
     TerrainVertex* vertex = &verticesOut[ i ];
+#endif
     int32_t x = aeMath::Floor( vertex->position.x );
     int32_t y = aeMath::Floor( vertex->position.y );
     int32_t z = aeMath::Floor( vertex->position.z );
@@ -750,11 +826,86 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     vertex->materials[ 2 ] = ( material == 2 ) ? 255 : 0;
     vertex->materials[ 3 ] = ( material == 3 ) ? 255 : 0;
   }
+
+#if AE_TERRAIN_FANCY_NORMALS
+  // Generate triangle normals
+  for ( uint32_t i = 0; i < tempTris.Length(); i++ )
+  {
+    TempTri& tri = tempTris[ i ];
+    aeFloat3 p0 = tempVerts[ tri.i0 ].position;
+    aeFloat3 p1 = tempVerts[ tri.i1 ].position;
+    aeFloat3 p2 = tempVerts[ tri.i2 ].position;
+    tri.n = ( ( p1 - p0 ) % ( p2 - p0 ) ).SafeNormalizeCopy();
+  }
+
+  aeArray< bool > splitVerts;
+  aeArray< aeFloat3 > splitNormals;
+  for ( uint32_t i = 0; i < tempVerts.Length(); i++ )
+  {
+    splitNormals.Clear();
+    for ( uint32_t j = 0; j < tempTris.Length(); j++ )
+    {
+      TempTri tri = tempTris[ j ];
+      if ( tri.i0 == i || tri.i1 == i || tri.i2 == i )
+      {
+        splitNormals.Append( tri.n );
+      }
+    }
+
+    bool split = false;
+    for ( uint32_t j = 0; j < splitNormals.Length(); j++ )
+    {
+      for ( uint32_t k = j; k < splitNormals.Length(); k++ )
+      {
+        if ( acos( splitNormals[ j ].Dot( splitNormals[ k ] ) ) >= 0.5f )
+        {
+          split = true;
+        }
+      }
+    }
+    splitVerts.Append( split );
+  }
+  AE_ASSERT( splitVerts.Length() == tempVerts.Length() );
   
+  uint32_t tempIndex = 0;
+  for ( uint32_t i = 0; i < tempTris.Length(); i++ )
+  {
+    TempTri tri = tempTris[ i ];
+    TerrainVertex *v0, *v1, *v2;
+
+    v0 = &( verticesOut[ tempIndex ] = tempVerts[ tri.i0 ] );
+    indexOut[ i * 3 ] = tempIndex;
+    tempIndex++;
+
+    v1 = &( verticesOut[ tempIndex ] = tempVerts[ tri.i1 ] );
+    indexOut[ i * 3 + 1 ] = tempIndex;
+    tempIndex++;
+
+    v2 = &( verticesOut[ tempIndex ] = tempVerts[ tri.i2 ] );
+    indexOut[ i * 3 + 2 ] = tempIndex;
+    tempIndex++;
+
+    float threshold = 0.75f;
+    aeFloat3 n = tri.n;
+    if ( splitVerts[ tri.i0 ] ) { v0->normal = n; }
+    if ( splitVerts[ tri.i1 ] ) { v1->normal = n; }
+    if ( splitVerts[ tri.i2 ] ) { v2->normal = n; }
+    //if ( acos( n.Dot( v0->normal ) ) >= threshold ) { v0->normal = n; }
+    //if ( acos( n.Dot( v1->normal ) ) >= threshold ) { v1->normal = n; }
+    //if ( acos( n.Dot( v2->normal ) ) >= threshold ) { v2->normal = n; }
+  }
+
+  AE_ASSERT( tempIndex <= kMaxChunkVerts );
+  AE_ASSERT( tempIndex <= kMaxChunkIndices );
+
+  *vertexCountOut = tempIndex;
+  *indexCountOut = tempIndex;
+#else
   AE_ASSERT( vertexCount <= kMaxChunkVerts );
   AE_ASSERT( indexCount <= kMaxChunkIndices );
   *vertexCountOut = vertexCount;
   *indexCountOut = indexCount;
+#endif
 }
 
 aeAABB aeTerrainChunk::GetAABB() const
