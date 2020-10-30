@@ -30,7 +30,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage )
+void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage, uint32_t channelSize )
 {
   AE_STATIC_ASSERT( (uint32_t)Format::R == 1 );
   AE_STATIC_ASSERT( (uint32_t)Format::RG == 2 );
@@ -40,7 +40,9 @@ void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, F
   m_width = width;
   m_height = height;
   m_channels = ( storage == Format::Auto ) ? (uint32_t)format : ( uint32_t )storage; // @NOTE: See static assert above
-
+  m_channelSize = channelSize;
+	
+	
   uint32_t length = m_width * m_height;
   m_data.Reserve( length * m_channels );
 
@@ -48,7 +50,7 @@ void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, F
   if ( formatChannels == m_channels )
   {
     // @NOTE: Direct copy
-    m_data.Append( data, length * m_channels );
+    m_data.Append( data, length * m_channels * m_channelSize );
   }
   else if ( formatChannels > m_channels )
   {
@@ -91,14 +93,33 @@ bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension
 #if _AE_IOS_
   stbi_convert_iphone_png_to_rgb( 1 );
 #endif
-  uint8_t* image = stbi_load_from_memory( (const uint8_t*)file, length, &width, &height, &channels, STBI_default );
+  bool is16BitImage = stbi_is_16_bit_from_memory( (const uint8_t*)file, length );
+  uint32_t channelSize = 1;
+	
+  uint8_t* image;
+  if (is16BitImage)
+  {
+     image = (uint8_t*)stbi_load_16_from_memory( (const uint8_t*)file, length, &width, &height, &channels, STBI_default );
+	 channelSize = 2;
+	  
+	 if (channels != 1)
+	 {
+		 return false;
+	 }
+  }
+
+  else
+  {
+	image = stbi_load_from_memory( (const uint8_t*)file, length, &width, &height, &channels, STBI_default );
+  }
+	
   if ( !image )
   {
     return false;
   }
 
   Format format = (Format)channels; // @NOTE: See static assert above
-  LoadRaw( image, width, height, format, storage );
+  LoadRaw( image, width, height, format, storage, channelSize );
   stbi_image_free( image );
 
   return true;
@@ -116,6 +137,11 @@ aeColor ae::Image::Get( aeInt2 pixel ) const
   {
     case 1:
     {
+	  if ( m_channelSize == 2 )
+	  {
+		 const uint16_t* data16 = (const uint16_t*)&m_data[0];
+	     return aeColor(data16[ index ] / 65535.0f, 0.0f, 0.0f, 1.0f);
+	  }
       return aeColor::R( m_data[ index ] );
     }
     case 2:
@@ -170,7 +196,7 @@ aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
       aeColor c01 = Get( pi + aeInt2( 0, 1 ) );
       aeColor c11 = Get( pi + aeInt2( 1, 1 ) );
 
-      aeColor c0 = aeMath::Interpolation::Cosine( c00, c10, x );
+	  aeColor c0 = aeMath::Interpolation::Cosine( c00, c10, x );
       aeColor c1 = aeMath::Interpolation::Cosine( c01, c11, x );
 
       return aeMath::Interpolation::Cosine( c0, c1, y );

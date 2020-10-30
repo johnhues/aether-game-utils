@@ -69,12 +69,13 @@ namespace ae
       RGBA
     };
 
-    void LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto );
+    void LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto, uint32_t channelSize = 1 );
     bool LoadFile( const void* file, uint32_t length, Extension extension, Format storage = Format::Auto );
 
     uint32_t GetWidth() const { return m_width; }
     uint32_t GetHeight() const { return m_height; }
     uint32_t GetChannels() const { return m_channels; }
+	uint32_t GetPixelSize() const { return m_channels * m_channelSize; }
 
     aeColor Get( aeInt2 pixel ) const;
     aeColor Get( aeFloat2 pixel, Interpolation interpolation ) const;
@@ -84,6 +85,7 @@ namespace ae
     int32_t m_width = 0;
     int32_t m_height = 0;
     uint32_t m_channels = 0;
+	uint32_t m_channelSize = 0;
   };
 }
 

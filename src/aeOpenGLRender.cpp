@@ -1318,7 +1318,7 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   AE_CHECK_GL_ERROR();
 }
 
-void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps, bool isSRGB, bool is16BitImage )
+void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps, bool isSRGB )
 {
   uint32_t fileSize = aeVfs::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
@@ -1333,6 +1333,8 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 #if _AE_IOS_
   stbi_convert_iphone_png_to_rgb( 1 );
 #endif
+  bool is16BitImage = stbi_is_16_bit( file );
+
   uint8_t* image;
   if (is16BitImage)
   {
