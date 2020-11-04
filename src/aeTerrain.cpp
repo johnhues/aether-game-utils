@@ -40,7 +40,7 @@
 #endif
 
 #ifndef AE_TERRAIN_SKIP_CACHE
-  #define AE_TERRAIN_SKIP_CACHE 0
+  #define AE_TERRAIN_SKIP_CACHE 1
 #endif
 
 #ifndef AE_TERRAIN_FANCY_NORMALS
@@ -48,7 +48,7 @@
 #endif
 
 #ifndef AE_TERRAIN_TOUCH_UP_VERT
-  #define AE_TERRAIN_TOUCH_UP_VERT 1
+  #define AE_TERRAIN_TOUCH_UP_VERT 0
 #endif
 
 //------------------------------------------------------------------------------

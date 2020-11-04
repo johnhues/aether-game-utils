@@ -232,35 +232,18 @@ aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
 
 aeFloat3 aeTerrainSDF::GetDerivative( aeFloat3 p ) const
 {
-  aeFloat3 normal0;
-  for ( int32_t i = 0; i < 3; i++ )
-  {
-    aeFloat3 nt = p;
-    nt[ i ] += 0.2f;
-    normal0[ i ] = GetValue( nt );
-  }
-  // This should be really close to 0 because it's really
-  // close to the surface but not close enough to ignore.
-  normal0 -= aeFloat3( GetValue( p ) );
-  normal0.SafeNormalize();
-  AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
-  AE_ASSERT( normal0 == normal0 );
-
-  aeFloat3 normal1;
-  for ( int32_t i = 0; i < 3; i++ )
-  {
-    aeFloat3 nt = p;
-    nt[ i ] -= 0.2f;
-    normal1[ i ] = GetValue( nt );
-  }
-  // This should be really close to 0 because it's really
-  // close to the surface but not close enough to ignore.
-  normal1 = aeFloat3( GetValue( p ) ) - normal1;
-  normal1.SafeNormalize();
-  AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
-  AE_ASSERT( normal1 == normal1 );
-
-  return ( normal1 + normal0 ).SafeNormalizeCopy();
+  // https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+  const float h = 0.0001f;
+  const aeFloat3 xyy( 1.0f, -1.0f, -1.0f );
+  const aeFloat3 yyx( -1.0f, -1.0f, 1.0f );
+  const aeFloat3 yxy( -1.0f, 1.0f, -1.0f );
+  const aeFloat3 xxx( 1.0f, 1.0f, 1.0f );
+  const aeFloat3 n =
+    xyy * GetValue( p + xyy * h ) +
+    yyx * GetValue( p + yyx * h ) +
+    yxy * GetValue( p + yxy * h ) +
+    xxx * GetValue( p + xxx * h );
+  return n.SafeNormalizeCopy();
 }
 
 aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
