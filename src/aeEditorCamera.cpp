@@ -48,15 +48,22 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	bool mouseRotate = false;
 	if ( input )
 	{
+		aeKey panKey = aeKey::LeftAlt;
 		mouseMovement = aeFloat2( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
 		mousePan = input->GetPrevState()->mouseMiddle && input->GetState()->mouseMiddle;
+		if ( !mousePan
+			&& input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft
+			&& input->GetState()->Get( panKey ) )
+		{
+			mousePan = true;
+		}
 		mouseZoom = input->GetPrevState()->mouseRight && input->GetState()->mouseRight;
 
 		if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
 		{
 			mouseRotate = true;
 		}
-		else
+		else if ( !input->GetState()->Get( panKey ) )
 		{
 			mouseRotate = input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft;
 		}
