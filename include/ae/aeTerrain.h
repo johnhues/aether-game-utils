@@ -84,6 +84,7 @@ PACK( struct TerrainVertex
   uint8_t info[ 4 ];
 });
 typedef uint16_t TerrainIndex;
+const TerrainIndex kInvalidTerrainIndex = ~0;
 
 struct RaycastResult
 {
@@ -94,6 +95,9 @@ struct RaycastResult
   aeFloat3 posf;
   aeFloat3 normal;
   bool touchedUnloaded;
+
+  const struct aeTerrainChunk* chunk;
+  TerrainIndex index;
 };
 
 struct EdgeCompact
@@ -343,6 +347,8 @@ struct aeTerrainChunk
   ~aeTerrainChunk();
 
   static uint32_t GetIndex( aeInt3 pos );
+  static void GetPosFromWorld( aeInt3 pos, aeInt3* chunkPos, aeInt3* localPos );
+
   uint32_t GetIndex() const;
   void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
 
@@ -378,7 +384,7 @@ public:
   void Terminate();
   void Update( aeFloat3 center, float radius );
   void Render( const class aeShader* shader, const aeUniformList& shaderParams );
-  void RenderDebug( class aeDebugRender* debug );
+  void SetDebug( class aeDebugRender* debug );
 
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
   
@@ -415,6 +421,8 @@ private:
   void FreeChunk( aeTerrainChunk* chunk );
   void m_SetVoxelCount( uint32_t chunkIndex, int32_t count );
   float GetChunkScore( aeInt3 pos ) const;
+
+  aeDebugRender* m_debug = nullptr;
 
   bool m_render = false;
   aeFloat3 m_center = aeFloat3( 0.0f );

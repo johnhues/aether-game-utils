@@ -501,6 +501,18 @@ int main()
 
     if ( !headless )
     {
+      static aeFloat3 rayPos, rayDir;
+      if ( input.GetState()->Get( aeKey::R ) )
+      {
+        rayPos = camera.GetPosition();
+        rayDir = camera.GetForward() * 200.0f;
+      }
+      RaycastResult result = terrain->Raycast( rayPos, rayDir );
+      if ( result.hit )
+      {
+        debug.AddCircle( result.posf, result.normal, 0.5f, aeColor::Green(), 16 );
+      }
+
       render.Activate();
       render.Clear( aeColor::PicoDarkPurple() );
 
@@ -511,9 +523,6 @@ int main()
       aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
       textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
       worldToText = textToNdc.Inverse() * worldToProj;
-
-      aeFloat4x4 identity = aeFloat4x4::Identity();
-      //ImGuizmo::DrawGrid( worldToView.GetTransposeCopy().data, viewToProj.GetTransposeCopy().data, identity.data, 100.0f );
 
       aeColor top = aeColor::PS( 46, 65, 35 );
       aeColor side = aeColor::PS( 84, 84, 74 );
@@ -549,10 +558,7 @@ int main()
         terrain->Render( &terrainShader, uniformList );
       }
 
-      if ( s_showTerrainDebug )
-      {
-        terrain->RenderDebug( &debug );
-      }
+      terrain->SetDebug( s_showTerrainDebug ? &debug : nullptr );
 
       ImGuiIO& io = ImGui::GetIO();
       ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );

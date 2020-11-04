@@ -319,6 +319,25 @@ uint32_t aeTerrainChunk::GetIndex( aeInt3 pos )
   return hash;
 }
 
+void aeTerrainChunk::GetPosFromWorld( aeInt3 pos, aeInt3* chunkPos, aeInt3* localPos )
+{
+  aeFloat3 p( pos );
+  p /= kChunkSize;
+  aeInt3 c = p.FloorCopy();
+  if ( chunkPos )
+  {
+    *chunkPos = c;
+  }
+  if ( localPos )
+  {
+    aeInt3 l = ( pos - c * kChunkSize );
+    *localPos = aeInt3(
+      l.x % kChunkSize,
+      l.y % kChunkSize,
+      l.z % kChunkSize );
+  }
+}
+
 uint32_t aeTerrainChunk::GetIndex() const
 {
   return GetIndex( m_pos );
@@ -1625,6 +1644,28 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       }
     }
   }
+
+  if ( m_debug )
+  {
+    for ( uint32_t i = 0; i < t_chunkSorts.Length(); i++ )
+    {
+      aeAABB chunkAABB = aeTerrainChunk::GetAABB( t_chunkSorts[ i ].pos );
+      m_debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::Black() );
+    }
+
+    for ( uint32_t i = 0; i < m_terrainJobs.Length(); i++ )
+    {
+      const aeTerrainJob* job = m_terrainJobs[ i ];
+      if ( job->HasJob() )
+      {
+        aeAABB chunkAABB = job->GetChunk()->GetAABB();
+        m_debug->AddLine( m_center, chunkAABB.GetCenter(), aeColor::Red() );
+        m_debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::PicoRed() );
+      }
+    }
+
+    sdf.RenderDebug( m_debug );
+  }
 }
 
 void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParams )
@@ -1662,30 +1703,9 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
   }
 }
 
-void aeTerrain::RenderDebug( aeDebugRender* debug )
+void aeTerrain::SetDebug( aeDebugRender* debug )
 {
-  if ( AE_TERRAIN_LOG )
-  {
-    AE_LOG( "t_chunkSorts len #", t_chunkSorts.Length() );
-  }
-  for ( uint32_t i = 0; i < t_chunkSorts.Length(); i++ )
-  {
-    aeAABB chunkAABB = aeTerrainChunk::GetAABB( t_chunkSorts[ i ].pos );
-    debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::Black() );
-  }
-
-  for ( uint32_t i = 0; i < m_terrainJobs.Length(); i++ )
-  {
-    const aeTerrainJob* job = m_terrainJobs[ i ];
-    if ( job->HasJob() )
-    {
-      aeAABB chunkAABB = job->GetChunk()->GetAABB();
-      debug->AddLine( m_center, chunkAABB.GetCenter(), aeColor::Red() );
-      debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::PicoRed() );
-    }
-  }
-  
-  sdf.RenderDebug( debug );
+  m_debug = debug;
 }
 
 void aeTerrain::m_Dirty( aeAABB aabb )
@@ -1746,7 +1766,9 @@ Block::Type aeTerrain::GetVoxel( aeFloat3 position ) const
 
 Block::Type aeTerrain::GetVoxel( int32_t x, int32_t y, int32_t z ) const
 {
-  uint32_t ci = aeTerrainChunk::GetIndex( aeInt3( x, y, z ) );
+  aeInt3 chunkPos, localPos;
+  aeTerrainChunk::GetPosFromWorld( aeInt3( x, y, z ), &chunkPos, &localPos );
+  uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
 
   int16_t vc = GetVoxelCount( ci );
   if ( vc == 0 ) { return Block::Exterior; }
@@ -1756,12 +1778,15 @@ Block::Type aeTerrain::GetVoxel( int32_t x, int32_t y, int32_t z ) const
 
   const aeTerrainChunk* chunk = GetChunk( ci );
   if ( !chunk ) { return Block::Unloaded; }
-  return chunk->m_t[ x % kChunkSize ][ y % kChunkSize ][ z % kChunkSize ];
+  return chunk->m_t[ localPos.x ][ localPos.y ][ localPos.z ];
 }
 
 const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) const
 {
-  uint32_t ci = aeTerrainChunk::GetIndex( aeInt3( x, y, z ) );
+  aeInt3 chunkPos, localPos;
+  aeTerrainChunk::GetPosFromWorld( aeInt3( x, y, z ), &chunkPos, &localPos );
+
+  uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
 
   int16_t vc = GetVoxelCount( ci );
   if ( vc == 0 )
@@ -1783,7 +1808,7 @@ const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) c
     return nullptr;
   }
 
-  TerrainIndex index = chunk->m_i[ x % kChunkSize ][ y % kChunkSize ][ z % kChunkSize ];
+  TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
   if ( index == (TerrainIndex)~0 )
   {
     return nullptr;
@@ -2059,15 +2084,11 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
   result.posi[ 1 ] = y;
   result.posi[ 2 ] = z;
   
-  int32_t cx = x / kChunkSize;
-  int32_t cy = y / kChunkSize;
-  int32_t cz = z / kChunkSize;
-  const aeTerrainChunk* c = GetChunk( aeInt3( cx, cy, cz ) );
+  aeInt3 chunkPos, localPos;
+  aeTerrainChunk::GetPosFromWorld( aeInt3( x, y, z ), &chunkPos, &localPos );
+  const aeTerrainChunk* c = GetChunk( chunkPos );
   AE_ASSERT( c );
-  int32_t lx = x % kChunkSize;
-  int32_t ly = y % kChunkSize;
-  int32_t lz = z % kChunkSize;
-  TerrainIndex index = c->m_i[ lx ][ ly ][ lz ];
+  TerrainIndex index = c->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
   // TODO Can somehow skip surface and hit interior cell
   AE_ASSERT( index != (TerrainIndex)~0 );
   aeFloat3 p = c->m_vertices[ index ].position;
@@ -2110,12 +2131,40 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
   result.posf = aeFloat3( std::numeric_limits<float>::infinity() );
   result.normal = aeFloat3( std::numeric_limits<float>::infinity() );
   result.touchedUnloaded = false;
+  result.chunk = nullptr;
+  result.index = ~0;
+
+  class DebugRay
+  {
+  public:
+    DebugRay( aeFloat3 start, aeFloat3 ray, aeDebugRender* debug ) :
+      start( start ),
+      ray( ray ),
+      debug( debug )
+    {}
+
+    ~DebugRay()
+    {
+      if ( debug )
+      {
+        debug->AddLine( start, start + ray, color );
+      }
+    }
+
+    aeFloat3 start, ray;
+    aeDebugRender* debug;
+    aeColor color = aeColor::Red();
+  };
+  DebugRay debugRay( start, ray, m_debug );
   
   int32_t x = aeMath::Floor( start.x );
   int32_t y = aeMath::Floor( start.y );
   int32_t z = aeMath::Floor( start.z );
   
-  if ( ray.LengthSquared() < 0.001f ){ return result; }
+  if ( ray.LengthSquared() < 0.001f )
+  {
+    return result;
+  }
   aeFloat3 dir = ray.SafeNormalizeCopy();
   
   aeFloat3 curpos = start;
@@ -2134,7 +2183,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 	{
 		stepX = -1;
     outX = (int32_t)( start.x + ray.x ) - 1;
-    outX = aeMath::Max( -1, outX );
+    //outX = aeMath::Max( -1, outX ); // @TODO: Use terrain bounds
 		cb.x = x;
 	}
 	if (dir.y > 0.0f)
@@ -2148,7 +2197,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 	{
 		stepY = -1;
     outY = (int32_t)( start.y + ray.y ) - 1;
-    outY = aeMath::Max( -1, outY );
+    //outY = aeMath::Max( -1, outY ); // @TODO: Use terrain bounds
 		cb.y = y;
 	}
 	if (dir.z > 0.0f)
@@ -2162,7 +2211,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 	{
 		stepZ = -1;
     outZ = (int32_t)( start.z + ray.z ) - 1;
-    outZ = aeMath::Max( -1, outZ );
+    //outZ = aeMath::Max( -1, outZ ); // @TODO: Use terrain bounds
 		cb.z = z;
 	}
 	float rxr, ryr, rzr;
@@ -2191,6 +2240,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
   while ( true )
 	{
     result.type = GetVoxel( x, y, z );
+
     if ( result.type == Block::Surface )
     {
       result.posi[ 0 ] = x;
@@ -2221,24 +2271,70 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
         result.posf = p;
         result.normal = sdf.GetDerivative( p );
         result.hit = true;
+
+        aeInt3 chunkPos, localPos;
+        aeTerrainChunk::GetPosFromWorld( aeInt3( x, y, z ), &chunkPos, &localPos );
+        result.chunk = GetChunk( chunkPos );
+        AE_ASSERT( result.chunk );
+        result.index = result.chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
+        AE_ASSERT( result.index != kInvalidTerrainIndex );
+
+        if ( m_debug )
+        {
+          aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
+          m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
+
+          TerrainVertex vert = result.chunk->m_vertices[ result.index ];
+          m_debug->AddLine( v, vert.position, aeColor::Green() );
+          m_debug->AddSphere( vert.position, 0.1f, aeColor::Green(), 8 );
+          if ( m_debugTextFn )
+          {
+            aeStr64 str = aeStr64::Format( "#: # (#)", result.index, vert.position, localPos );
+            m_debugTextFn( vert.position, str.c_str() );
+          }
+
+          debugRay.color = aeColor::Green();
+        }
         
         return result;
       }
+      else if ( m_debug )
+      {
+        aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
+        m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Red() );
+
+        if ( m_debugTextFn )
+        {
+          aeStr64 str = aeStr64::Format( "#", v );
+          m_debugTextFn( v, str.c_str() );
+        }
+
+        GetVoxel( x, y, z );
+      }
     }
-    else if( result.type == Block::Unloaded ) { result.touchedUnloaded = true; }
+    else if( result.type == Block::Unloaded )
+    {
+      result.touchedUnloaded = true;
+    }
     
 		if (tmax.x < tmax.y)
 		{
 			if (tmax.x < tmax.z)
 			{
 				x = x + stepX;
-				if ( x == outX ) return result;
+        if ( x == outX )
+        {
+          return result;
+        }
 				tmax.x += tdelta.x;
 			}
 			else
 			{
 				z = z + stepZ;
-				if ( z == outZ ) return result;
+        if ( z == outZ )
+        {
+          return result;
+        }
 				tmax.z += tdelta.z;
 			}
 		}
@@ -2247,18 +2343,24 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 			if (tmax.y < tmax.z)
 			{
 				y = y + stepY;
-				if ( y == outY ) return result;
+        if ( y == outY )
+        {
+          return result;
+        }
 				tmax.y += tdelta.y;
 			}
 			else
 			{
 				z = z + stepZ;
-				if ( z == outZ ) return result;
+        if ( z == outZ )
+        {
+          return result;
+        }
 				tmax.z += tdelta.z;
 			}
 		}
 	}
-  
+
   return result;
 }
 
