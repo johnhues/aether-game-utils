@@ -47,6 +47,10 @@
   #define AE_TERRAIN_FANCY_NORMALS 0
 #endif
 
+#ifndef AE_TERRAIN_TOUCH_UP_VERT
+  #define AE_TERRAIN_TOUCH_UP_VERT 1
+#endif
+
 //------------------------------------------------------------------------------
 // SIMD headers
 //------------------------------------------------------------------------------
@@ -811,8 +815,8 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
       ec++;
     }
     
+    // Validation
     AE_ASSERT( ec != 0 );
-    
     for ( int32_t j = 0; j < ec; j++ )
     {
       AE_ASSERT( p[ j ] == p[ j ] );
@@ -821,24 +825,41 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
       AE_ASSERT( p[ j ].z >= 0.0f && p[ j ].z <= 1.0f );
       AE_ASSERT( n[ j ] == n[ j ] );
     }
-    aeFloat3 position = GetIntersection( p, n, ec );
-    AE_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
-    position.x = chunkOffsetX + x + aeMath::Clip( position.x, 0.0f, 0.999f );
-    position.y = chunkOffsetY + y + aeMath::Clip( position.y, 0.0f, 0.999f );
-    position.z = chunkOffsetZ + z + aeMath::Clip( position.z, 0.0f, 0.999f );
-    
-    vertex->position = position;
+
+    // Normal
     vertex->normal = aeFloat3( 0.0f );
     for ( int32_t j = 0; j < ec; j++ )
     {
       vertex->normal += n[ j ];
     }
     vertex->normal.SafeNormalize();
+    
+    // Position (after normals for AE_TERRAIN_TOUCH_UP_VERT)
+    aeFloat3 position = GetIntersection( p, n, ec );
+#if AE_TERRAIN_TOUCH_UP_VERT
+    //{
+    //  aeFloat3 iv0 = IntersectRayAABB( start, ray, result.posi );
+    //  aeFloat3 iv1 = IntersectRayAABB( start + ray, -ray, result.posi );
+    //  float fv0 = sdf.GetValue( iv0 );
+    //  float fv1 = sdf.GetValue( iv1 );
+    //  if ( fv0 * fv1 <= 0.0f )
+    //  {
+    //  }
+    //}
+#endif
+    AE_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
+    position.x = chunkOffsetX + x + aeMath::Clip( position.x, 0.0f, 0.999f );
+    position.y = chunkOffsetY + y + aeMath::Clip( position.y, 0.0f, 0.999f );
+    position.z = chunkOffsetZ + z + aeMath::Clip( position.z, 0.0f, 0.999f );
+    vertex->position = position;
+
+    // @TODO: Lighting?
     vertex->info[ 0 ] = 0;
     vertex->info[ 1 ] = (uint8_t)( 1.5f ); // @HACK: Lighting values
     vertex->info[ 2 ] = 255;// @HACK: TerrainType( position );
     vertex->info[ 3 ] = 0;
 
+    // Material
     uint8_t material = sdf->GetMaterial( position );
     vertex->materials[ 0 ] = ( material == 0 ) ? 255 : 0;
     vertex->materials[ 1 ] = ( material == 1 ) ? 255 : 0;
