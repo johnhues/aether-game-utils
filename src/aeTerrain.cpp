@@ -1831,309 +1831,11 @@ float16_t aeTerrain::GetLight( int32_t x, int32_t y, int32_t z ) const
   return chunk->m_l[ x ][ y ][ z ];
 }
 
-bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const
+//------------------------------------------------------------------------------
+// aeTerrain raycast helpers
+//------------------------------------------------------------------------------
+namespace
 {
-  int32_t x = aeMath::Floor( start.x );
-  int32_t y = aeMath::Floor( start.y );
-  int32_t z = aeMath::Floor( start.z );
-  
-  if ( ray.LengthSquared() < 0.001f ){ return Block::Exterior; }
-  aeFloat3 dir = ray.SafeNormalizeCopy();
-  
-  aeFloat3 curpos = start;
-  aeFloat3 cb, tmax, tdelta;
-  int stepX, outX;
-	int stepY, outY;
-	int stepZ, outZ;
-	if (dir.x > 0)
-	{
-		stepX = 1;
-    outX = ceil( start.x + ray.x );
-//    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
-		cb.x = x + 1;
-	}
-	else 
-	{
-		stepX = -1;
-    outX = (int32_t)( start.x + ray.x ) - 1;
-    outX = aeMath::Max( -1, outX );
-		cb.x = x;
-	}
-	if (dir.y > 0.0f)
-	{
-		stepY = 1;
-    outY = ceil( start.y + ray.y );
-//    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
-		cb.y = y + 1;
-	}
-	else 
-	{
-		stepY = -1;
-    outY = (int32_t)( start.y + ray.y ) - 1;
-    outY = aeMath::Max( -1, outY );
-		cb.y = y;
-	}
-	if (dir.z > 0.0f)
-	{
-		stepZ = 1;
-    outZ = ceil( start.z + ray.z );
-//    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
-		cb.z = z + 1;
-	}
-	else 
-	{
-		stepZ = -1;
-    outZ = (int32_t)( start.z + ray.z ) - 1;
-    outZ = aeMath::Max( -1, outZ );
-		cb.z = z;
-	}
-	float rxr, ryr, rzr;
-	if (dir.x != 0)
-	{
-		rxr = 1.0f / dir.x;
-		tmax.x = (cb.x - curpos.x) * rxr; 
-		tdelta.x = stepX * rxr;
-	}
-	else tmax.x = 1000000;
-	if (dir.y != 0)
-	{
-		ryr = 1.0f / dir.y;
-		tmax.y = (cb.y - curpos.y) * ryr; 
-		tdelta.y = stepY * ryr;
-	}
-	else tmax.y = 1000000;
-	if (dir.z != 0)
-	{
-		rzr = 1.0f / dir.z;
-		tmax.z = (cb.z - curpos.z) * rzr; 
-		tdelta.z = stepZ * rzr;
-	}
-	else tmax.z = 1000000;
-  
-  int32_t steps = 0;
-  while ( !GetCollision( x, y, z ) || steps < minSteps )
-	{
-    steps++;
-    
-		if (tmax.x < tmax.y)
-		{
-			if (tmax.x < tmax.z)
-			{
-				x = x + stepX;
-				if ( x == outX ) return false;
-				tmax.x += tdelta.x;
-			}
-			else
-			{
-				z = z + stepZ;
-				if ( z == outZ ) return false;
-				tmax.z += tdelta.z;
-			}
-		}
-		else
-		{
-			if (tmax.y < tmax.z)
-			{
-				y = y + stepY;
-				if ( y == outY ) return false;
-				tmax.y += tdelta.y;
-			}
-			else
-			{
-				z = z + stepZ;
-				if ( z == outZ ) return false;
-				tmax.z += tdelta.z;
-			}
-		}
-	}
-  return true;
-}
-
-RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const
-{
-  RaycastResult result;
-  result.hit = false;
-  result.type = Block::Exterior;
-  result.distance = std::numeric_limits<float>::infinity();
-  result.posi[ 0 ] = ~0;
-  result.posi[ 1 ] = ~0;
-  result.posi[ 2 ] = ~0;
-  result.posf = aeFloat3( std::numeric_limits<float>::infinity() );
-  result.normal = aeFloat3( std::numeric_limits<float>::infinity() );
-  result.touchedUnloaded = false;
-  
-  int32_t x = aeMath::Floor( start.x );
-  int32_t y = aeMath::Floor( start.y );
-  int32_t z = aeMath::Floor( start.z );
-  
-  if ( ray.LengthSquared() < 0.001f ){ return result; }
-  aeFloat3 dir = ray.SafeNormalizeCopy();
-  
-  aeFloat3 curpos = start;
-  aeFloat3 cb, tmax, tdelta;
-  int32_t stepX, outX;
-	int32_t stepY, outY;
-	int32_t stepZ, outZ;
-	if (dir.x > 0)
-	{
-		stepX = 1;
-    outX = ceil( start.x + ray.x );
-//    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
-		cb.x = x + 1;
-	}
-	else 
-	{
-		stepX = -1;
-    outX = (int32_t)( start.x + ray.x ) - 1;
-    outX = aeMath::Max( -1, outX );
-		cb.x = x;
-	}
-	if (dir.y > 0.0f)
-	{
-		stepY = 1;
-    outY = ceil( start.y + ray.y );
-//    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
-		cb.y = y + 1;
-	}
-	else 
-	{
-		stepY = -1;
-    outY = (int32_t)( start.y + ray.y ) - 1;
-    outY = aeMath::Max( -1, outY );
-		cb.y = y;
-	}
-	if (dir.z > 0.0f)
-	{
-		stepZ = 1;
-    outZ = ceil( start.z + ray.z );
-//    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
-		cb.z = z + 1;
-	}
-	else 
-	{
-		stepZ = -1;
-    outZ = (int32_t)( start.z + ray.z ) - 1;
-    outZ = aeMath::Max( -1, outZ );
-		cb.z = z;
-	}
-	float rxr, ryr, rzr;
-	if (dir.x != 0)
-	{
-		rxr = 1.0f / dir.x;
-		tmax.x = (cb.x - curpos.x) * rxr; 
-		tdelta.x = stepX * rxr;
-	}
-	else tmax.x = 1000000;
-	if (dir.y != 0)
-	{
-		ryr = 1.0f / dir.y;
-		tmax.y = (cb.y - curpos.y) * ryr; 
-		tdelta.y = stepY * ryr;
-	}
-	else tmax.y = 1000000;
-	if (dir.z != 0)
-	{
-		rzr = 1.0f / dir.z;
-		tmax.z = (cb.z - curpos.z) * rzr; 
-		tdelta.z = stepZ * rzr;
-	}
-	else tmax.z = 1000000;
-  
-  while ( ( result.type = GetVoxel( x, y, z ) ) != Block::Surface || !allowSourceCollision )
-	{
-    if( result.type == Block::Unloaded ) { result.touchedUnloaded = true; }
-      
-    allowSourceCollision = true;
-    
-		if (tmax.x < tmax.y)
-		{
-			if (tmax.x < tmax.z)
-			{
-				x = x + stepX;
-				if ( x == outX ) return result;
-				tmax.x += tdelta.x;
-			}
-			else
-			{
-				z = z + stepZ;
-				if ( z == outZ ) return result;
-				tmax.z += tdelta.z;
-			}
-		}
-		else
-		{
-			if (tmax.y < tmax.z)
-			{
-				y = y + stepY;
-				if ( y == outY ) return result;
-				tmax.y += tdelta.y;
-			}
-			else
-			{
-				z = z + stepZ;
-				if ( z == outZ ) return result;
-				tmax.z += tdelta.z;
-			}
-		}
-	}
-  
-  AE_ASSERT( result.type != Block::Exterior && result.type != Block::Unloaded );
-  
-  result.hit = true;
-  result.posi[ 0 ] = x;
-  result.posi[ 1 ] = y;
-  result.posi[ 2 ] = z;
-  
-  aeInt3 chunkPos, localPos;
-  aeTerrainChunk::GetPosFromWorld( aeInt3( x, y, z ), &chunkPos, &localPos );
-  const aeTerrainChunk* c = GetChunk( chunkPos );
-  AE_ASSERT( c );
-  TerrainIndex index = c->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
-  // TODO Can somehow skip surface and hit interior cell
-  AE_ASSERT( index != (TerrainIndex)~0 );
-  aeFloat3 p = c->m_vertices[ index ].position;
-  aeFloat3 n = c->m_vertices[ index ].normal.SafeNormalizeCopy();
-  aeFloat3 r = ray.SafeNormalizeCopy();
-  float t = n.Dot( p - start ) / n.Dot( r );
-  result.distance = t;
-  result.posf = start + r * t;
-  result.normal = n;
-  
-  return result;
-}
-
-aeFloat3 IntersectRayAABB( aeFloat3 p, aeFloat3 d, const int32_t v[ 3 ] )
-{
-  float tmin = 0.0f;
-  float tmax = std::numeric_limits<float>::max();
-  for ( int i = 0; i < 3; i++ )
-  {
-    if ( fabs( d[ i ] ) < 0.001f ) { continue; }
-    float ood = 1.0f / d[ i ];
-    float t1 = ( v[ i ] - p[ i ] ) * ood;
-    float t2 = ( v[ i ] + 1 - p[ i ] ) * ood;
-    if ( t1 > t2 ) std::swap( t1, t2 );
-    if ( t1 > tmin ) tmin = t1;
-    if ( t2 > tmax ) tmax = t2;
-  }
-  return p + d * tmin;
-}
-
-RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
-{
-  RaycastResult result;
-  result.hit = false;
-  result.type = Block::Exterior;
-  result.distance = std::numeric_limits<float>::infinity();
-  result.posi[ 0 ] = ~0;
-  result.posi[ 1 ] = ~0;
-  result.posi[ 2 ] = ~0;
-  result.posf = aeFloat3( std::numeric_limits<float>::infinity() );
-  result.normal = aeFloat3( std::numeric_limits<float>::infinity() );
-  result.touchedUnloaded = false;
-  result.chunk = nullptr;
-  result.index = ~0;
-
   class DebugRay
   {
   public:
@@ -2155,6 +1857,429 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
     aeDebugRender* debug;
     aeColor color = aeColor::Red();
   };
+
+  aeFloat3 IntersectRayAABB( aeFloat3 p, aeFloat3 d, aeInt3 v )
+  {
+    float tmin = 0.0f;
+    float tmax = std::numeric_limits<float>::max();
+    for ( int i = 0; i < 3; i++ )
+    {
+      if ( fabs( d[ i ] ) < 0.001f )
+      {
+        continue;
+      }
+
+      float ood = 1.0f / d[ i ];
+      float t1 = ( v[ i ] - p[ i ] ) * ood;
+      float t2 = ( v[ i ] + 1 - p[ i ] ) * ood;
+
+      if ( t1 > t2 )
+      {
+        std::swap( t1, t2 );
+      }
+
+      if ( t1 > tmin )
+      {
+        tmin = t1;
+      }
+
+      if ( t2 > tmax )
+      {
+        tmax = t2;
+      }
+    }
+    return p + d * tmin;
+  }
+}
+
+//------------------------------------------------------------------------------
+// aeTerrain raycast functions
+//------------------------------------------------------------------------------
+bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const
+{
+  DebugRay debugRay( start, ray, m_debug );
+
+  int32_t x = aeMath::Floor( start.x );
+  int32_t y = aeMath::Floor( start.y );
+  int32_t z = aeMath::Floor( start.z );
+  
+  if ( ray.LengthSquared() < 0.001f )
+  {
+    return false;
+  }
+  aeFloat3 dir = ray.SafeNormalizeCopy();
+  
+  aeFloat3 curpos = start;
+  aeFloat3 cb, tmax, tdelta;
+  int stepX, outX;
+	int stepY, outY;
+	int stepZ, outZ;
+	if ( dir.x > 0 )
+	{
+		stepX = 1;
+    outX = ceil( start.x + ray.x );
+    //outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
+		cb.x = x + 1;
+	}
+	else 
+	{
+		stepX = -1;
+    outX = (int32_t)( start.x + ray.x ) - 1;
+    outX = aeMath::Max( -1, outX );
+		cb.x = x;
+	}
+
+	if ( dir.y > 0.0f )
+	{
+		stepY = 1;
+    outY = ceil( start.y + ray.y );
+    //outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
+		cb.y = y + 1;
+	}
+	else 
+	{
+		stepY = -1;
+    outY = (int32_t)( start.y + ray.y ) - 1;
+    outY = aeMath::Max( -1, outY );
+		cb.y = y;
+	}
+
+	if ( dir.z > 0.0f )
+	{
+		stepZ = 1;
+    outZ = ceil( start.z + ray.z );
+    //outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
+		cb.z = z + 1;
+	}
+	else 
+	{
+		stepZ = -1;
+    outZ = (int32_t)( start.z + ray.z ) - 1;
+    //outZ = aeMath::Max( -1, outZ );
+		cb.z = z;
+	}
+
+	if ( dir.x != 0 )
+	{
+		float rxr = 1.0f / dir.x;
+		tmax.x = (cb.x - curpos.x) * rxr; 
+		tdelta.x = stepX * rxr;
+	}
+  else
+  {
+    tmax.x = 1000000;
+  }
+
+	if ( dir.y != 0 )
+	{
+		float ryr = 1.0f / dir.y;
+		tmax.y = (cb.y - curpos.y) * ryr; 
+		tdelta.y = stepY * ryr;
+	}
+  else
+  {
+    tmax.y = 1000000;
+  }
+
+	if ( dir.z != 0 )
+	{
+		float rzr = 1.0f / dir.z;
+		tmax.z = (cb.z - curpos.z) * rzr; 
+		tdelta.z = stepZ * rzr;
+	}
+  else
+  {
+    tmax.z = 1000000;
+  }
+  
+  int32_t steps = 0;
+  while ( !GetCollision( x, y, z ) || steps < minSteps )
+	{
+    if ( m_debug )
+    {
+      aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
+      m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Blue() );
+    }
+
+    steps++;
+    
+		if ( tmax.x < tmax.y )
+		{
+			if ( tmax.x < tmax.z )
+			{
+				x = x + stepX;
+        if ( x == outX )
+        {
+          return false;
+        }
+				tmax.x += tdelta.x;
+			}
+			else
+			{
+				z = z + stepZ;
+        if ( z == outZ )
+        {
+          return false;
+        }
+				tmax.z += tdelta.z;
+			}
+		}
+		else
+		{
+			if ( tmax.y < tmax.z )
+			{
+				y = y + stepY;
+				if ( y == outY )
+        {
+          return false;
+        }
+				tmax.y += tdelta.y;
+			}
+			else
+			{
+				z = z + stepZ;
+				if ( z == outZ )
+        {
+          return false;
+        }
+				tmax.z += tdelta.z;
+			}
+		}
+	}
+
+  if ( m_debug )
+  {
+    aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
+    m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
+    debugRay.color = aeColor::Green();
+  }
+
+  return true;
+}
+
+RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const
+{
+  DebugRay debugRay( start, ray, m_debug );
+
+  RaycastResult result;
+  result.hit = false;
+  result.type = Block::Exterior;
+  result.distance = std::numeric_limits<float>::infinity();
+  result.posi = aeInt3( 0 );
+  result.posf = aeFloat3( std::numeric_limits<float>::infinity() );
+  result.normal = aeFloat3( std::numeric_limits<float>::infinity() );
+  result.touchedUnloaded = false;
+  
+  int32_t x = aeMath::Floor( start.x );
+  int32_t y = aeMath::Floor( start.y );
+  int32_t z = aeMath::Floor( start.z );
+  
+  if ( ray.LengthSquared() < 0.001f )
+  {
+    return result;
+  }
+  aeFloat3 dir = ray.SafeNormalizeCopy();
+  
+  aeFloat3 curpos = start;
+  aeFloat3 cb, tmax, tdelta;
+  int32_t stepX, outX;
+	int32_t stepY, outY;
+	int32_t stepZ, outZ;
+	if ( dir.x > 0 )
+	{
+		stepX = 1;
+    outX = ceil( start.x + ray.x );
+    //outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
+		cb.x = x + 1;
+	}
+	else 
+	{
+		stepX = -1;
+    outX = (int32_t)( start.x + ray.x ) - 1;
+    //outX = aeMath::Max( -1, outX );
+		cb.x = x;
+	}
+	if ( dir.y > 0.0f )
+	{
+		stepY = 1;
+    outY = ceil( start.y + ray.y );
+    //outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
+		cb.y = y + 1;
+	}
+	else 
+	{
+		stepY = -1;
+    outY = (int32_t)( start.y + ray.y ) - 1;
+    //outY = aeMath::Max( -1, outY );
+		cb.y = y;
+	}
+	if ( dir.z > 0.0f )
+	{
+		stepZ = 1;
+    outZ = ceil( start.z + ray.z );
+    //outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
+		cb.z = z + 1;
+	}
+	else 
+	{
+		stepZ = -1;
+    outZ = (int32_t)( start.z + ray.z ) - 1;
+    //outZ = aeMath::Max( -1, outZ );
+		cb.z = z;
+	}
+	float rxr, ryr, rzr;
+	if ( dir.x != 0 )
+	{
+		rxr = 1.0f / dir.x;
+		tmax.x = (cb.x - curpos.x) * rxr; 
+		tdelta.x = stepX * rxr;
+	}
+	else tmax.x = 1000000;
+	if ( dir.y != 0 )
+	{
+		ryr = 1.0f / dir.y;
+		tmax.y = (cb.y - curpos.y) * ryr; 
+		tdelta.y = stepY * ryr;
+	}
+	else tmax.y = 1000000;
+	if ( dir.z != 0 )
+	{
+		rzr = 1.0f / dir.z;
+		tmax.z = (cb.z - curpos.z) * rzr; 
+		tdelta.z = stepZ * rzr;
+	}
+	else tmax.z = 1000000;
+  
+  while ( ( result.type = GetVoxel( x, y, z ) ) != Block::Surface || !allowSourceCollision )
+	{
+    if( result.type == Block::Unloaded )
+    {
+      result.touchedUnloaded = true;
+    }
+      
+    allowSourceCollision = true;
+    
+		if (tmax.x < tmax.y)
+		{
+			if (tmax.x < tmax.z)
+			{
+				x = x + stepX;
+        if ( x == outX )
+        {
+          return result;
+        }
+				tmax.x += tdelta.x;
+			}
+			else
+			{
+				z = z + stepZ;
+        if ( z == outZ )
+        {
+          return result;
+        }
+				tmax.z += tdelta.z;
+			}
+		}
+		else
+		{
+			if (tmax.y < tmax.z)
+			{
+				y = y + stepY;
+        if ( y == outY )
+        {
+          return result;
+        }
+				tmax.y += tdelta.y;
+			}
+			else
+			{
+				z = z + stepZ;
+        if ( z == outZ )
+        {
+          return result;
+        }
+				tmax.z += tdelta.z;
+			}
+		}
+	}
+  
+  AE_ASSERT( result.type != Block::Exterior && result.type != Block::Unloaded );
+  
+  result.hit = true;
+  result.posi = aeInt3( x, y, z );
+  
+  aeInt3 chunkPos, localPos;
+  aeTerrainChunk::GetPosFromWorld( result.posi, &chunkPos, &localPos );
+  result.chunk = GetChunk( chunkPos );
+  AE_ASSERT( result.chunk );
+
+  result.index = result.chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
+  // TODO Can somehow skip surface and hit interior cell
+  AE_ASSERT( result.index != kInvalidTerrainIndex );
+  aeFloat3 p = result.chunk->m_vertices[ result.index ].position;
+  aeFloat3 n = result.chunk->m_vertices[ result.index ].normal.SafeNormalizeCopy();
+  aeFloat3 r = ray.SafeNormalizeCopy();
+  float t = n.Dot( p - start ) / n.Dot( r );
+  result.distance = t;
+  result.posf = start + r * t;
+  result.normal = n;
+
+  // It's possible for the plane intersection above to end up outside original voxel
+  aeInt3 posi2 = result.posf.FloorCopy();
+  if ( result.posi != posi2 )
+  {
+    aeTerrainChunk::GetPosFromWorld( posi2, &chunkPos, &localPos );
+    if ( const aeTerrainChunk* chunk = GetChunk( chunkPos ) )
+    {
+      TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
+      if ( index != kInvalidTerrainIndex )
+      {
+        result.chunk = chunk;
+        result.index = index;
+        result.posi = posi2;
+      }
+    }
+  }
+
+  // Debug
+  if ( m_debug )
+  {
+    m_debug->AddCircle( result.posf, result.normal, 0.25f, aeColor::Green(), 16 );
+    m_debug->AddLine( result.posf, result.posf + result.normal, aeColor::Green() );
+
+    aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
+    m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
+
+    TerrainVertex vert = result.chunk->m_vertices[ result.index ];
+    m_debug->AddSphere( vert.position, 0.05f, aeColor::Green(), 8 );
+    m_debug->AddLine( vert.position, vert.position + vert.normal, aeColor::Green() );
+    if ( m_debugTextFn )
+    {
+      aeStr64 str = aeStr64::Format( "#: # (#)", result.index, vert.position, localPos );
+      m_debugTextFn( vert.position, str.c_str() );
+    }
+
+    debugRay.color = aeColor::Green();
+  }
+  
+  return result;
+}
+
+RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
+{
+  RaycastResult result;
+  result.hit = false;
+  result.type = Block::Exterior;
+  result.distance = std::numeric_limits<float>::infinity();
+  result.posi[ 0 ] = ~0;
+  result.posi[ 1 ] = ~0;
+  result.posi[ 2 ] = ~0;
+  result.posf = aeFloat3( std::numeric_limits<float>::infinity() );
+  result.normal = aeFloat3( std::numeric_limits<float>::infinity() );
+  result.touchedUnloaded = false;
+  result.chunk = nullptr;
+  result.index = ~0;
+
   DebugRay debugRay( start, ray, m_debug );
   
   int32_t x = aeMath::Floor( start.x );
@@ -2281,12 +2406,15 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 
         if ( m_debug )
         {
+          m_debug->AddCircle( result.posf, result.normal, 0.25f, aeColor::Green(), 16 );
+          m_debug->AddLine( result.posf, result.posf + result.normal, aeColor::Green() );
+
           aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
           m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
 
           TerrainVertex vert = result.chunk->m_vertices[ result.index ];
-          m_debug->AddLine( v, vert.position, aeColor::Green() );
-          m_debug->AddSphere( vert.position, 0.1f, aeColor::Green(), 8 );
+          m_debug->AddSphere( vert.position, 0.05f, aeColor::Green(), 8 );
+          m_debug->AddLine( vert.position, vert.position + vert.normal, aeColor::Green() );
           if ( m_debugTextFn )
           {
             aeStr64 str = aeStr64::Format( "#: # (#)", result.index, vert.position, localPos );
@@ -2305,7 +2433,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
 
         if ( m_debugTextFn )
         {
-          aeStr64 str = aeStr64::Format( "#", v );
+          aeStr64 str = aeStr64::Format( "#", aeInt3( x, y, z ) );
           m_debugTextFn( v, str.c_str() );
         }
 
@@ -2317,7 +2445,7 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
       result.touchedUnloaded = true;
     }
     
-		if (tmax.x < tmax.y)
+		if ( tmax.x < tmax.y )
 		{
 			if (tmax.x < tmax.z)
 			{
@@ -2364,6 +2492,9 @@ RaycastResult aeTerrain::Raycast( aeFloat3 start, aeFloat3 ray ) const
   return result;
 }
 
+//------------------------------------------------------------------------------
+// aeTerrain sphere collision functions
+//------------------------------------------------------------------------------
 bool aeTerrain::SweepSphere( aeSphere sphere, aeFloat3 ray, float* distanceOut, aeFloat3* normalOut, aeFloat3* posOut ) const
 {
   aeSphere sphereEnd = sphere;

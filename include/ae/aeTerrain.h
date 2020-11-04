@@ -91,7 +91,7 @@ struct RaycastResult
   bool hit;
   Block::Type type;
   float distance;
-  int32_t posi[ 3 ];
+  aeInt3 posi;
   aeFloat3 posf;
   aeFloat3 normal;
   bool touchedUnloaded;

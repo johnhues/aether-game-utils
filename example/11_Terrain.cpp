@@ -476,41 +476,70 @@ int main()
     camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
     camera.Update( &input, timeStep.GetTimeStep() );
 
-    // Camera focus
-    if ( currentObject && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
-    {
-      camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
-    }
-
-    // Render mode
-    if ( !input.GetPrevState()->Get( aeKey::Num1 ) && input.GetState()->Get( aeKey::Num1 ) )
-    {
-      wireframe = true;
-      s_showTerrainDebug = true;
-    }
-    else if ( !input.GetPrevState()->Get( aeKey::Num2 ) && input.GetState()->Get( aeKey::Num2 ) )
-    {
-      wireframe = false;
-      s_showTerrainDebug = true;
-    }
-    else if ( input.GetState()->Get( aeKey::Num3 ) && !input.GetPrevState()->Get( aeKey::Num3 ) )
-    {
-      wireframe = false;
-      s_showTerrainDebug = false;
-    }
-
     if ( !headless )
     {
+      // Camera focus
+      if ( currentObject && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+      {
+        camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
+      }
+
+      // Render mode
+      if ( !input.GetPrevState()->Get( aeKey::Num1 ) && input.GetState()->Get( aeKey::Num1 ) )
+      {
+        wireframe = true;
+        s_showTerrainDebug = true;
+      }
+      else if ( !input.GetPrevState()->Get( aeKey::Num2 ) && input.GetState()->Get( aeKey::Num2 ) )
+      {
+        wireframe = false;
+        s_showTerrainDebug = true;
+      }
+      else if ( input.GetState()->Get( aeKey::Num3 ) && !input.GetPrevState()->Get( aeKey::Num3 ) )
+      {
+        wireframe = false;
+        s_showTerrainDebug = false;
+      }
+
+      // Raycast test
       static aeFloat3 rayPos, rayDir;
       if ( input.GetState()->Get( aeKey::R ) )
       {
         rayPos = camera.GetPosition();
         rayDir = camera.GetForward() * 200.0f;
       }
-      RaycastResult result = terrain->Raycast( rayPos, rayDir );
-      if ( result.hit )
+
+      static uint32_t raycastType = 0;
+      if ( input.GetState()->Get( aeKey::Tab ) && !input.GetPrevState()->Get( aeKey::Tab ) )
       {
-        debug.AddCircle( result.posf, result.normal, 0.5f, aeColor::Green(), 16 );
+        raycastType = ( raycastType + 1 ) % 3;
+        switch ( raycastType )
+        {
+          case 0:
+            AE_LOG( "Raycast regular" );
+            break;
+          case 1:
+            AE_LOG( "Raycast fast" );
+            break;
+          case 2:
+            AE_LOG( "Voxel raycast" );
+            break;
+        }
+      }
+      if ( raycastType == 0 || raycastType == 1 )
+      {
+        RaycastResult result = raycastType ? terrain->RaycastFast( rayPos, rayDir, true ) : terrain->Raycast( rayPos, rayDir );
+        if ( result.hit )
+        {
+          if ( !input.GetState()->Get( aeKey::R ) && input.GetPrevState()->Get( aeKey::R ) )
+          {
+            camera.Refocus( result.posf );
+          }
+        }
+      }
+      else
+      {
+        terrain->VoxelRaycast( rayPos, rayDir, 0 );
       }
 
       render.Activate();
