@@ -327,7 +327,7 @@ public:
     int32_t z;
     uint16_t b;
 
-    // 3 planes which whose intersections are used to position vertices within voxel
+    // 3 planes whose intersections are used to position vertices within voxel
     // EDGE_TOP_FRONT_BIT
     // EDGE_TOP_RIGHT_BIT
     // EDGE_SIDE_FRONTRIGHT_BIT

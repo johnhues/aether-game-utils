@@ -701,13 +701,12 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     int32_t x = aeMath::Floor( vertex->position.x );
     int32_t y = aeMath::Floor( vertex->position.y );
     int32_t z = aeMath::Floor( vertex->position.z );
+    AE_ASSERT( x >= 0 && y >= 0 && z >= 0 );
+    AE_ASSERT( x < kChunkSize && y < kChunkSize && z < kChunkSize );
     
     int32_t ec = 0;
     aeFloat3 p[ 12 ];
     aeFloat3 n[ 12 ];
-    
-    if ( x < 0 || y < 0 || z < 0 ) { AE_FAIL(); }
-    if ( x > kChunkSize || y > kChunkSize || z > kChunkSize ) { AE_FAIL(); }
     
     uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
     AE_ASSERT( edgeIndex < kTempChunkSize3 );
