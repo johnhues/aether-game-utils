@@ -39,7 +39,8 @@
 #include "ImGuizmo.h"
 
 const char* kFileName = "objects.dat";
-const uint32_t kFileVersion = 1;
+const uint32_t kCurrentFileVersion = 3;
+const uint32_t kMinSupportedFileVersion = 1;
 
 //------------------------------------------------------------------------------
 // Terrain Shader
@@ -155,30 +156,50 @@ struct Object
   Object( const char* n, ae::Sdf::Shape* s ) : name( n ), shape( s ) {}
   void Serialize( aeBinaryStream* stream );
   
-  aeStr16 name;
-  ae::Sdf::Shape* shape;
+  aeStr16 name = "";
+  // Shape
+  ae::Sdf::Shape* shape = nullptr;
+  // Ray
+  aeFloat3 raySrc = aeFloat3( 0.0f );
+  aeFloat3 rayDir = aeFloat3( 0.0f );
+  float rayLength = 0.0f;
+  uint32_t rayType = 0;
 };
 
 void Object::Serialize( aeBinaryStream* stream )
 {
   stream->SerializeString( name );
   
-  if ( stream->IsWriter() )
+  if ( shape )
   {
-    stream->SerializeRaw( shape->GetTransform() );
+    if ( stream->IsWriter() )
+    {
+      stream->SerializeRaw( shape->GetTransform() );
+    }
+    else
+    {
+      aeFloat4x4 transform;
+      stream->SerializeRaw( transform );
+      shape->SetTransform( transform );
+    }
   }
   else
   {
-    aeFloat4x4 transform;
-    stream->SerializeRaw( transform );
-    shape->SetTransform( transform );
+    stream->SerializeFloat( raySrc.x );
+    stream->SerializeFloat( raySrc.y );
+    stream->SerializeFloat( raySrc.z );
+    stream->SerializeFloat( rayDir.x );
+    stream->SerializeFloat( rayDir.y );
+    stream->SerializeFloat( rayDir.z );
+    stream->SerializeFloat( rayLength );
+    stream->SerializeUint32( rayType );
   }
 }
 
 void WriteObjects( aeVfs* vfs, const aeArray< Object* >& objects )
 {
   aeBinaryStream wStream = aeBinaryStream::Writer();
-  wStream.SerializeUint32( kFileVersion );
+  wStream.SerializeUint32( kCurrentFileVersion );
 
   wStream.SerializeUint32( objects.Length() );
   for ( uint32_t i = 0; i < objects.Length(); i++ )
@@ -189,7 +210,7 @@ void WriteObjects( aeVfs* vfs, const aeArray< Object* >& objects )
     if ( aeCast< ae::Sdf::Box >( object->shape ) ) { type = "box"; }
     else if ( aeCast< ae::Sdf::Cylinder >( object->shape ) ) { type = "cylinder"; }
     else if ( aeCast< ae::Sdf::Heightmap >( object->shape ) ) { type = "heightmap"; }
-    else { AE_FAIL(); }
+    else { type = "ray"; }
     wStream.SerializeString( type );
     
     wStream.SerializeObject( *object );
@@ -205,11 +226,10 @@ bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, aeA
 
   uint32_t version = 0;
   rStream.SerializeUint32( version );
-  if ( version != kFileVersion )
+  if ( version < kMinSupportedFileVersion )
   {
     return false;
   }
-  objects.Clear();
   
   uint32_t len = 0;
   rStream.SerializeUint32( len );
@@ -218,6 +238,7 @@ bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, aeA
     return false;
   }
   
+  objects.Clear();
   for ( uint32_t i = 0; i < len; i++ )
   {
     Object* object = aeAlloc::Allocate< Object >();
@@ -232,6 +253,7 @@ bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, aeA
       heightmap->SetImage( heightmapImage );
       object->shape = heightmap;
     }
+    else if ( type == "ray" ) {}
     else { AE_FAIL(); }
     
     rStream.SerializeObject( *object );
@@ -367,6 +389,14 @@ int main()
           currentObject = objects.Append( aeAlloc::Allocate< Object >( "Height Map", heightMap ) );
         }
 
+        if ( ImGui::Button( "ray" ) )
+        {
+          currentObject = objects.Append( aeAlloc::Allocate< Object >( "Ray", nullptr ) );
+          currentObject->raySrc = camera.GetPosition();
+          currentObject->rayDir = camera.GetForward();
+          currentObject->rayLength = 100.0f;
+        }
+
         // @TODO: Disabled because "material" is used in properties, and having both creates a conflict
         //if ( ImGui::Button( "material" ) )
         //{
@@ -385,53 +415,66 @@ int main()
       {
         if ( currentObject )
         {
-          ae::Sdf::Shape* currentShape = currentObject->shape;
-
           aeImGui::InputText( "name", &currentObject->name );
 
-          bool changed = false;
-
-          aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
-          float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
-          ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
-          changed |= ImGui::InputFloat3( "Translation", matrixTranslation, 3 );
-          changed |= ImGui::InputFloat3( "Rotation", matrixRotation, 3 );
-          changed |= ImGui::InputFloat3( "Scale", matrixScale, 3 );
-          if ( changed )
+          if ( ae::Sdf::Shape* currentShape = currentObject->shape )
           {
-            ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
-            temp.SetTranspose();
-            currentShape->SetTransform( temp );
+            bool changed = false;
+
+            aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
+            float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
+            ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
+            changed |= ImGui::InputFloat3( "translation", matrixTranslation, 3 );
+            changed |= ImGui::InputFloat3( "rotation", matrixRotation, 3 );
+            changed |= ImGui::InputFloat3( "scale", matrixScale, 3 );
+            if ( changed )
+            {
+              ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
+              temp.SetTranspose();
+              currentShape->SetTransform( temp );
+            }
+
+            const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
+            changed |= ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
+
+            if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion || currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+            {
+              aeFloat3 halfSize = currentShape->GetHalfSize();
+              float maxLength = aeMath::Max( halfSize.x, halfSize.y, halfSize.z );
+              changed |= ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, maxLength );
+            }
+
+            const char* materialNames[] = { "grass", "sand" };
+            changed |= ImGui::Combo( "material", (int32_t*)&currentShape->materialId, materialNames, countof( materialNames ) );
+
+            if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
+            {
+              aeFloat3 halfSize = box->GetHalfSize();
+              float minLength = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
+              changed |= ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, minLength );
+            }
+            else if ( auto cylinder = aeCast< ae::Sdf::Cylinder >( currentShape ) )
+            {
+              changed |= ImGui::SliderFloat( "top", &cylinder->top, 0.0f, 1.0f );
+              changed |= ImGui::SliderFloat( "bottom", &cylinder->bottom, 0.0f, 1.0f );
+            }
+
+            if ( changed )
+            {
+              currentShape->Dirty();
+            }
           }
-
-          const char* types[] = { "union", "subtraction", "smooth union", "smooth subtraction", "material" };
-          changed |= ImGui::Combo( "type", (int*)&currentShape->type, types, countof( types ) );
-
-          if ( currentShape->type == ae::Sdf::Shape::Type::SmoothUnion || currentShape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+          else
           {
-            aeFloat3 halfSize = currentShape->GetHalfSize();
-            float maxLength = aeMath::Max( halfSize.x, halfSize.y, halfSize.z );
-            changed |= ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, maxLength );
-          }
+            ImGui::InputFloat3( "source", currentObject->raySrc.data, 3 );
+            if ( ImGui::InputFloat3( "direction", currentObject->rayDir.data, 3 ) )
+            {
+              currentObject->rayDir.SafeNormalize();
+            }
+            ImGui::InputFloat( "length", &currentObject->rayLength );
 
-          const char* materialNames[] = { "grass", "sand" };
-          changed |= ImGui::Combo( "material", (int32_t*)&currentShape->materialId, materialNames, countof( materialNames ) );
-
-          if ( auto box = aeCast< ae::Sdf::Box >( currentShape ) )
-          {
-            aeFloat3 halfSize = box->GetHalfSize();
-            float minLength = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
-            changed |= ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, minLength );
-          }
-          else if ( auto cylinder = aeCast< ae::Sdf::Cylinder >( currentShape ) )
-          {
-            changed |= ImGui::SliderFloat( "top", &cylinder->top, 0.0f, 1.0f );
-            changed |= ImGui::SliderFloat( "bottom", &cylinder->bottom, 0.0f, 1.0f );
-          }
-
-          if ( changed )
-          {
-            currentShape->Dirty();
+            const char* types[] = { "default", "fast", "voxel" };
+            ImGui::Combo( "type", (int*)&currentObject->rayType, types, countof( types ) );
           }
         }
         else
@@ -481,7 +524,14 @@ int main()
       // Camera focus
       if ( currentObject && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
       {
-        camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
+        if ( currentObject->shape )
+        {
+          camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
+        }
+        else
+        {
+          camera.Refocus( currentObject->raySrc );
+        }
       }
 
       // Render mode
@@ -499,47 +549,6 @@ int main()
       {
         wireframe = false;
         s_showTerrainDebug = false;
-      }
-
-      // Raycast test
-      static aeFloat3 rayPos, rayDir;
-      if ( input.GetState()->Get( aeKey::R ) )
-      {
-        rayPos = camera.GetPosition();
-        rayDir = camera.GetForward() * 200.0f;
-      }
-
-      static uint32_t raycastType = 0;
-      if ( input.GetState()->Get( aeKey::Tab ) && !input.GetPrevState()->Get( aeKey::Tab ) )
-      {
-        raycastType = ( raycastType + 1 ) % 3;
-        switch ( raycastType )
-        {
-          case 0:
-            AE_LOG( "Raycast regular" );
-            break;
-          case 1:
-            AE_LOG( "Raycast fast" );
-            break;
-          case 2:
-            AE_LOG( "Voxel raycast" );
-            break;
-        }
-      }
-      if ( raycastType == 0 || raycastType == 1 )
-      {
-        RaycastResult result = raycastType ? terrain->RaycastFast( rayPos, rayDir, true ) : terrain->Raycast( rayPos, rayDir );
-        if ( result.hit )
-        {
-          if ( !input.GetState()->Get( aeKey::R ) && input.GetPrevState()->Get( aeKey::R ) )
-          {
-            camera.Refocus( result.posf );
-          }
-        }
-      }
-      else
-      {
-        terrain->VoxelRaycast( rayPos, rayDir, 0 );
       }
 
       render.Activate();
@@ -618,36 +627,82 @@ int main()
         currentObject = nullptr;
       }
 
+      for ( uint32_t i = 0; i < objects.Length(); i++ )
+      {
+        const Object* object = objects[ i ];
+        if ( !object->shape )
+        {
+          if ( s_showTerrainDebug )
+          {
+            aeFloat3 ray = object->rayDir * object->rayLength;
+            if ( object->rayType == 0 || object->rayType == 1 )
+            {
+              object->rayType ? terrain->RaycastFast( object->raySrc, ray, true ) : terrain->Raycast( object->raySrc, ray );
+            }
+            else
+            {
+              terrain->VoxelRaycast( object->raySrc, ray, 0 );
+            }
+          }
+          else
+          {
+            aeFloat3 endPos = object->raySrc + object->rayDir * object->rayLength;
+            debug.AddLine( object->raySrc, endPos, aeColor::PicoDarkGray() );
+          }
+        }
+      }
+
       if ( currentObject )
       {
-        ae::Sdf::Shape* currentShape = currentObject->shape;
-
-        // Use ImGuizmo::IsUsing() to only update terrain when finished dragging
         bool gizmoClicked = ImGuizmo::IsUsing();
-        aeFloat4x4 gizmoTransform = currentShape->GetTransform();
 
-        gizmoTransform.SetTranspose();
-        ImGuizmo::Manipulate(
-          worldToView.GetTransposeCopy().data,
-          viewToProj.GetTransposeCopy().data,
-          s_operation,
-          ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
-          gizmoTransform.data
-        );
-        gizmoTransform.SetTranspose();
+        if ( ae::Sdf::Shape* currentShape = currentObject->shape )
+        {
+          aeFloat4x4 gizmoTransform = currentShape->GetTransform();
 
-        debug.AddCube( gizmoTransform, aeColor::Green() );
+          gizmoTransform.SetTranspose();
+          ImGuizmo::Manipulate(
+            worldToView.GetTransposeCopy().data,
+            viewToProj.GetTransposeCopy().data,
+            s_operation,
+            ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+            gizmoTransform.data
+          );
+          gizmoTransform.SetTranspose();
+
+          debug.AddCube( gizmoTransform, aeColor::Green() );
         
-        if ( gizmoClicked )
-        {
-          // Dragging
-          currentShape->SetTransform( gizmoTransform );
-        }
+          if ( gizmoClicked )
+          {
+            // Dragging
+            currentShape->SetTransform( gizmoTransform );
+          }
           
-        if ( gizmoClickedPrev && !gizmoClicked )
+          if ( gizmoClickedPrev && !gizmoClicked )
+          {
+            // Use ImGuizmo::IsUsing() to only update terrain when finished dragging
+            currentShape->Dirty();
+          }
+        }
+        else
         {
-          // Release
-          currentShape->Dirty();
+          aeFloat4x4 gizmoTransform = aeFloat4x4::Translation( currentObject->raySrc );
+
+          gizmoTransform.SetTranspose();
+          ImGuizmo::Manipulate(
+            worldToView.GetTransposeCopy().data,
+            viewToProj.GetTransposeCopy().data,
+            s_operation,
+            ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+            gizmoTransform.data
+          );
+          gizmoTransform.SetTranspose();
+
+          if ( gizmoClicked )
+          {
+            // Dragging
+            currentObject->raySrc = gizmoTransform.GetTranslation();
+          }
         }
 
         gizmoClickedPrev = gizmoClicked;

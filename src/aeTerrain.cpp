@@ -44,7 +44,7 @@
 #endif
 
 #ifndef AE_TERRAIN_FANCY_NORMALS
-  #define AE_TERRAIN_FANCY_NORMALS 0
+  #define AE_TERRAIN_FANCY_NORMALS 1
 #endif
 
 #ifndef AE_TERRAIN_TOUCH_UP_VERT
@@ -702,7 +702,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     int32_t y = aeMath::Floor( vertex->position.y );
     int32_t z = aeMath::Floor( vertex->position.z );
     AE_ASSERT( x >= 0 && y >= 0 && z >= 0 );
-    AE_ASSERT( x < kChunkSize && y < kChunkSize && z < kChunkSize );
+    AE_ASSERT( x <= kChunkSize && y <= kChunkSize && z <= kChunkSize );
     
     int32_t ec = 0;
     aeFloat3 p[ 12 ];
@@ -847,9 +847,13 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     //}
 #endif
     AE_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
-    position.x = chunkOffsetX + x + aeMath::Clip( position.x, 0.0f, 0.999f );
-    position.y = chunkOffsetY + y + aeMath::Clip( position.y, 0.0f, 0.999f );
-    position.z = chunkOffsetZ + z + aeMath::Clip( position.z, 0.0f, 0.999f );
+    // @NOTE: Do not clamp position values to voxel boundary. It's valid for a vertex to be placed
+    // outside of the voxel is was generated from. This happens when a voxel has all corners inside
+    // or outside of the sdf boundary, while also still having intersections (two normally) on one
+    // or more edges of the voxel.
+    position.x = chunkOffsetX + x + position.x;
+    position.y = chunkOffsetY + y + position.y;
+    position.z = chunkOffsetZ + z + position.z;
     vertex->position = position;
 
     // @TODO: Lighting?
