@@ -91,13 +91,10 @@ struct RaycastResult
   bool hit;
   Block::Type type;
   float distance;
-  aeInt3 posi;
+  aeInt3 posi; // @NOTE: It's possible for the intersection to end up outside original voxel
   aeFloat3 posf;
   aeFloat3 normal;
   bool touchedUnloaded;
-
-  const struct aeTerrainChunk* chunk;
-  TerrainIndex index;
 };
 
 struct EdgeCompact
