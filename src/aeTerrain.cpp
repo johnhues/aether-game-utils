@@ -79,8 +79,8 @@ aeFloat3 GetIntersection( const aeFloat3* p, const aeFloat3* n, uint32_t ic )
   __m128 div = _mm_set1_ps( 1.0f / ic );
   c128 = _mm_mul_ps( c128, div );
   
-  for ( int32_t i = 0; i < 10; i++ )
-  for ( int32_t j = 0; j < ic; j++ )
+  for ( uint32_t i = 0; i < 10; i++ )
+  for ( uint32_t j = 0; j < ic; j++ )
   {
     __m128 p128 = _mm_load_ps( (float*)( p + j ) );
     p128 = _mm_sub_ps( p128, c128 );
@@ -351,9 +351,9 @@ aeTerrainJob::aeTerrainJob() :
   m_hasJob( false ),
   m_running( false ),
   m_sdf( nullptr ),
-  m_vertexCount( 0 ),
+  m_vertexCount( kChunkCountEmpty ),
   m_indexCount( 0 ),
-  m_vertices( kMaxChunkVerts, TerrainVertex() ),
+  m_vertices( (uint32_t)kMaxChunkVerts, TerrainVertex() ),
   m_indices( kMaxChunkIndices, TerrainIndex() ),
   m_chunk( nullptr )
 {
@@ -375,7 +375,7 @@ void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, aeTerrainChunk* chunk )
   m_running = true;
 
   m_sdf = sdf;
-  m_vertexCount = 0;
+  m_vertexCount = kChunkCountEmpty;
   m_indexCount = 0;
   m_chunk = chunk;
 }
@@ -394,7 +394,7 @@ void aeTerrainJob::Finish()
 
   m_hasJob = false;
   m_sdf = nullptr;
-  m_vertexCount = 0;
+  m_vertexCount = kChunkCountEmpty;
   m_indexCount = 0;
   m_chunk = nullptr;
 }
@@ -404,7 +404,7 @@ bool aeTerrainJob::HasChunk( aeInt3 pos ) const
   return m_chunk && m_chunk->m_pos == pos;
 }
 
-void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut )
+void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeInfo, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut )
 {
 #if AE_TERRAIN_FANCY_NORMALS
   struct TempTri
@@ -693,17 +693,17 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
   {
     // @TODO: Should differentiate between empty chunk and full chunk. It's possible though that
     // Chunk::t's are good enough for this though.
-    *vertexCountOut = 0;
+    *vertexCountOut = kChunkCountEmpty;
     *indexCountOut = 0;
     return;
   }
   
 #if AE_TERRAIN_FANCY_NORMALS
-  const int32_t vc = (int32_t)tempVerts.Length();
+  const uint32_t vc = (int32_t)tempVerts.Length();
 #else
-  const int32_t vc = (int32_t)vertexCount;
+  const uint32_t vc = (int32_t)vertexCount;
 #endif
-  for ( int32_t i = 0; i < vc; i++ )
+  for ( uint32_t i = 0; i < vc; i++ )
   {
 #if AE_TERRAIN_FANCY_NORMALS
     TerrainVertex* vertex = &tempVerts[ i ].v;
@@ -922,7 +922,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
   }
   AE_ASSERT( splitVerts.Length() == tempVerts.Length() );
   
-  uint32_t tempIndex = 0;
+  TerrainIndex tempIndex = 0;
   for ( uint32_t i = 0; i < tempTris.Length(); i++ )
   {
     TempTri tri = tempTris[ i ];
@@ -973,12 +973,13 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     //if ( acos( n.Dot( v2->normal ) ) >= threshold ) { v2->normal = n; }
   }
 
-  AE_ASSERT( tempIndex <= kMaxChunkVerts );
+  // @TODO: Support kChunkCountInterior for raycasting
+  AE_ASSERT( VertexCount( tempIndex ) <= kMaxChunkVerts );
   AE_ASSERT( tempIndex <= kMaxChunkIndices );
-
-  *vertexCountOut = tempIndex;
+  *vertexCountOut = VertexCount( tempIndex );
   *indexCountOut = tempIndex;
 #else
+  // @TODO: Support kChunkCountInterior for raycasting
   AE_ASSERT( vertexCount <= kMaxChunkVerts );
   AE_ASSERT( indexCount <= kMaxChunkIndices );
   *vertexCountOut = vertexCount;
@@ -1075,19 +1076,22 @@ void aeTerrain::FreeChunk( aeTerrainChunk* chunk )
   m_chunkPool.Free( chunk );
 }
 
-void aeTerrain::m_SetVoxelCount( uint32_t chunkIndex, int32_t count )
+void aeTerrain::m_SetVertexCount( uint32_t chunkIndex, VertexCount count )
 {
-  if ( count == 0 )
+  AE_ASSERT( count == kChunkCountDirty
+    || count == kChunkCountInterior
+    || count < kMaxChunkVerts );
+  if ( count == kChunkCountEmpty )
   {
-    m_voxelCounts3.erase( chunkIndex );
+    m_vertexCounts.erase( chunkIndex );
   }
   else
   {
-    if ( AE_TERRAIN_LOG && count == ~0 )
+    if ( AE_TERRAIN_LOG && count == kChunkCountDirty )
     {
       AE_LOG( "Dirty chunk #", chunkIndex );
     }
-    m_voxelCounts3[ chunkIndex ] = count;
+    m_vertexCounts[ chunkIndex ] = count;
   }
 }
 
@@ -1097,12 +1101,12 @@ float aeTerrain::GetChunkScore( aeInt3 pos ) const
   float centerDistance = ( m_center - chunkCenter ).Length();
 
   bool hasNeighbor = false;
-  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 1, 0, 0 ) ) > 0;
-  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, 1, 0 ) ) > 0;
-  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, 0, 1 ) ) > 0;
-  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( -1, 0, 0 ) ) > 0;
-  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, -1, 0 ) ) > 0;
-  hasNeighbor = hasNeighbor || GetVoxelCount( pos + aeInt3( 0, 0, -1 ) ) > 0;
+  hasNeighbor = hasNeighbor || GetVertexCount( pos + aeInt3( 1, 0, 0 ) ) > kChunkCountEmpty;
+  hasNeighbor = hasNeighbor || GetVertexCount( pos + aeInt3( 0, 1, 0 ) ) > kChunkCountEmpty;
+  hasNeighbor = hasNeighbor || GetVertexCount( pos + aeInt3( 0, 0, 1 ) ) > kChunkCountEmpty;
+  hasNeighbor = hasNeighbor || GetVertexCount( pos + aeInt3( -1, 0, 0 ) ) > kChunkCountEmpty;
+  hasNeighbor = hasNeighbor || GetVertexCount( pos + aeInt3( 0, -1, 0 ) ) > kChunkCountEmpty;
+  hasNeighbor = hasNeighbor || GetVertexCount( pos + aeInt3( 0, 0, -1 ) ) > kChunkCountEmpty;
   
   // @NOTE: Non-empty chunks are found sooner when chunks with neighbors are prioritized
   if ( hasNeighbor )
@@ -1238,15 +1242,15 @@ const aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos ) const
   return GetChunk( aeTerrainChunk::GetIndex( pos ) );
 }
 
-int32_t aeTerrain::GetVoxelCount( uint32_t chunkIndex ) const
+VertexCount aeTerrain::GetVertexCount( uint32_t chunkIndex ) const
 {
-  auto iter = m_voxelCounts3.find( chunkIndex );
-  return ( iter == m_voxelCounts3.end() ) ? 0 : iter->second;
+  auto iter = m_vertexCounts.find( chunkIndex );
+  return ( iter == m_vertexCounts.end() ) ? kChunkCountEmpty : iter->second;
 }
 
-int32_t aeTerrain::GetVoxelCount( aeInt3 pos ) const
+VertexCount aeTerrain::GetVertexCount( aeInt3 pos ) const
 {
-  return GetVoxelCount( aeTerrainChunk::GetIndex( pos ) );
+  return GetVertexCount( aeTerrainChunk::GetIndex( pos ) );
 }
 
 //------------------------------------------------------------------------------
@@ -1263,6 +1267,10 @@ aeTerrain::~aeTerrain()
 
 void aeTerrain::Initialize( uint32_t maxThreads, bool render )
 {
+  // @NOTE: This doesn't handle the case where enough verts are split
+  // that the count surpasses TerrainIndex max.
+  AE_ASSERT( kMaxChunkVerts <= VertexCount( aeMath::MaxValue< TerrainIndex >() ) );
+
   m_render = render;
 
   //m_compactAlloc.Expand( 128 * ( 1 << 20 ) );
@@ -1364,8 +1372,8 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         }
 
         uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
-        int16_t vc = GetVoxelCount( ci );
-        if ( vc == 0 || vc == kChunkCountMax ) // @TODO: What does it mean to skip on chunk max?
+        VertexCount vc = GetVertexCount( ci );
+        if ( vc == kChunkCountEmpty || vc == kChunkCountInterior )
         {
           continue;
         }
@@ -1378,7 +1386,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         aeTerrainChunk* c = GetChunk( ci ); // @TODO: Is this needed with step below?
         if ( c )
         {
-          AE_ASSERT( vc > 0 );
+          AE_ASSERT( vc <= kMaxChunkVerts );
           AE_ASSERT( c->m_vertices );
         }
 
@@ -1497,14 +1505,15 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       AE_LOG( "Finish terrain job # #", newChunk->GetIndex(), newChunk->GetAABB() );
     }
 
-    uint32_t vertexCount = job->GetVertexCount();
+    VertexCount vertexCount = job->GetVertexCount();
     uint32_t indexCount = job->GetIndexCount();
     aeTerrainChunk* oldChunk = GetChunk( chunkIndex );
 
-    AE_ASSERT( vertexCount <= kChunkCountMax );
-    if ( vertexCount == 0 || vertexCount == kChunkCountMax )
+    AE_ASSERT( vertexCount <= kMaxChunkVerts );
+    if ( vertexCount == kChunkCountEmpty
+      || vertexCount == kChunkCountInterior )
     {
-      // @TODO: It's super expensive to finally just throw away the unneeded chunk...
+      // @NOTE: It's super expensive to finally just throw away the unneeded chunk...
       FreeChunk( newChunk );
       newChunk = nullptr;
     }
@@ -1514,10 +1523,10 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       {
         // (Re)Initialize aeVertexData here only when needed
         if ( newChunk->m_data.GetIndexCount() == 0 // Not initialized
-          || newChunk->m_data.GetMaxVertexCount() < vertexCount // Too little storage for verts
+          || VertexCount( newChunk->m_data.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
           || newChunk->m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
         {
-          newChunk->m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), vertexCount, indexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
+          newChunk->m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), (uint32_t)vertexCount, indexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
           newChunk->m_data.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( TerrainVertex, position ) );
           newChunk->m_data.AddAttribute( "a_normal", 3, aeVertexDataType::Float, offsetof( TerrainVertex, normal ) );
           newChunk->m_data.AddAttribute( "a_info", 4, aeVertexDataType::UInt8, offsetof( TerrainVertex, info ) );
@@ -1525,15 +1534,15 @@ void aeTerrain::Update( aeFloat3 center, float radius )
         }
 
         // Set vertices
-        newChunk->m_data.SetVertices( job->GetVertices(), vertexCount );
+        newChunk->m_data.SetVertices( job->GetVertices(), (uint32_t)vertexCount );
         newChunk->m_data.SetIndices( job->GetIndices(), indexCount );
       }
 
       // Copy chunk verts from job
       // @TODO: This should be handled by the Chunk
-      uint32_t vertexBytes = vertexCount * sizeof( TerrainVertex );
+      uint32_t vertexBytes = (uint32_t)vertexCount * sizeof( TerrainVertex );
       //m_compactAlloc.Allocate( &chunk->m_vertices, vertexBytes );
-      newChunk->m_vertices = aeAlloc::AllocateArray< TerrainVertex >( vertexCount );
+      newChunk->m_vertices = aeAlloc::AllocateArray< TerrainVertex >( (uint32_t)vertexCount );
       memcpy( newChunk->m_vertices, job->GetVertices(), vertexBytes );
 
       // Ready for lighting
@@ -1557,7 +1566,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     }
 
     // Record that the chunk has been generated
-    m_SetVoxelCount( chunkIndex, vertexCount );
+    m_SetVertexCount( chunkIndex, vertexCount );
     // Set world grid chunk
     if ( newChunk )
     {
@@ -1597,9 +1606,10 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     aeTerrainChunk* indexPosChunk = GetChunk( chunkIndex );
     if ( chunk )
     {
-      uint32_t voxelCounts = GetVoxelCount( chunkIndex );
+      VertexCount voxelCounts = GetVertexCount( chunkIndex );
       AE_ASSERT_MSG( indexPosChunk == chunk, "# #", indexPosChunk, chunk );
-      AE_ASSERT_MSG( voxelCounts > 0, "count #", voxelCounts );
+      AE_ASSERT_MSG( voxelCounts != kChunkCountDirty, "Chunk already existed, but had an invalid value" );
+      AE_ASSERT( voxelCounts <= kMaxChunkVerts );
       AE_ASSERT( chunk->m_vertices );
       if ( m_render )
       {
@@ -1609,6 +1619,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     }
     else
     {
+      // @TODO: Chunks are always allocated below. What is this line for?
       // @NOTE: Grab any chunks that were finished generating after sorting completed
       chunk = indexPosChunk;
     }
@@ -1707,12 +1718,6 @@ void aeTerrain::Update( aeFloat3 center, float radius )
 
   if ( m_debug )
   {
-    for ( uint32_t i = 0; i < t_chunkSorts.Length(); i++ )
-    {
-      aeAABB chunkAABB = aeTerrainChunk::GetAABB( t_chunkSorts[ i ].pos );
-      m_debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::Black() );
-    }
-
     for ( uint32_t i = 0; i < m_terrainJobs.Length(); i++ )
     {
       const aeTerrainJob* job = m_terrainJobs[ i ];
@@ -1744,8 +1749,10 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
     {
       continue;
     }
+    uint32_t index = chunk->GetIndex();
+    VertexCount vertexCount = GetVertexCount( index );
     AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
-    AE_ASSERT( GetVoxelCount( chunk->GetIndex() ) > 0 );
+    AE_ASSERT_MSG( vertexCount > kChunkCountEmpty, "vertex count: # index: #", vertexCount, index );
     AE_ASSERT( chunk->m_data.GetVertexCount() );
     AE_ASSERT( chunk->m_data.GetVertexSize() );
     
@@ -1795,7 +1802,7 @@ void aeTerrain::m_Dirty( aeAABB aabb )
       {
         AE_LOG( "Dirty chunk #", pos );
       }
-      m_SetVoxelCount( aeTerrainChunk::GetIndex( pos ), ~0 );
+      m_SetVertexCount( aeTerrainChunk::GetIndex( pos ), kChunkCountDirty );
     }
   }
 }
@@ -1830,11 +1837,10 @@ Block::Type aeTerrain::GetVoxel( int32_t x, int32_t y, int32_t z ) const
   aeTerrainChunk::GetPosFromWorld( aeInt3( x, y, z ), &chunkPos, &localPos );
   uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
 
-  int16_t vc = GetVoxelCount( ci );
-  if ( vc == 0 ) { return Block::Exterior; }
-  // TODO AE_ASSERT( vc != -1 && vc != kChunkCountMax );
-  if ( vc == -1 ) { return Block::Unloaded; }
-  if ( vc == kChunkCountMax ) { return Block::Interior; }
+  VertexCount vc = GetVertexCount( ci );
+  if ( vc == kChunkCountEmpty ) { return Block::Exterior; }
+  if ( vc == kChunkCountDirty ) { return Block::Unloaded; }
+  if ( vc == kChunkCountInterior ) { return Block::Interior; }
 
   const aeTerrainChunk* chunk = GetChunk( ci );
   if ( !chunk ) { return Block::Unloaded; }
@@ -1848,20 +1854,11 @@ const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) c
 
   uint32_t ci = aeTerrainChunk::GetIndex( chunkPos );
 
-  int16_t vc = GetVoxelCount( ci );
-  if ( vc == 0 )
-  {
-    return nullptr;
-  }
-  // TODO AE_ASSERT( vc != -1 && vc != kChunkCountMax );
-  if ( vc == -1 )
-  {
-    return nullptr;
-  }
-  if ( vc == kChunkCountMax )
-  {
-    return nullptr;
-  }
+  VertexCount vc = GetVertexCount( ci );
+  if ( vc == kChunkCountEmpty ) { return nullptr; }
+  if ( vc == kChunkCountDirty ) { return nullptr; }
+  if ( vc == kChunkCountInterior ) { return nullptr; }
+
   const aeTerrainChunk* chunk = GetChunk( ci );
   if ( !chunk )
   {
@@ -1869,7 +1866,7 @@ const TerrainVertex* aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z ) c
   }
 
   TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
-  if ( index == (TerrainIndex)~0 )
+  if ( index == kInvalidTerrainIndex )
   {
     return nullptr;
   }

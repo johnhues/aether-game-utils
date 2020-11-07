@@ -42,19 +42,54 @@ namespace ctpl
 }
 
 //------------------------------------------------------------------------------
+// aeUnit
+//------------------------------------------------------------------------------
+template < typename T >
+class aeUnit
+{
+public:
+  aeUnit() : m_v() { AE_STATIC_ASSERT( sizeof(*this) == sizeof(T) ); }
+  aeUnit( const aeUnit& o ) : m_v( o.m_v ) {}
+  explicit aeUnit( const T& vertexCount ) : m_v( vertexCount ) {}
+
+  // @TODO: More testing before enabling this operator
+  //template < typename U >
+  //explicit operator U () const { return (U)m_v; }
+  explicit operator const T& () const { return m_v; }
+  explicit operator T& () { return m_v; }
+
+  bool operator == ( const aeUnit& o ) const { return m_v == o.m_v; }
+  bool operator != ( const aeUnit& o ) const { return m_v != o.m_v; }
+  bool operator < ( const aeUnit& o ) const { return m_v < o.m_v; }
+  bool operator > ( const aeUnit& o ) const { return m_v > o.m_v; }
+  bool operator <= ( const aeUnit& o ) const { return m_v <= o.m_v; }
+  bool operator >= ( const aeUnit& o ) const { return m_v >= o.m_v; }
+
+private:
+  operator bool () const = delete;
+  T m_v;
+};
+
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
+{
+  return os << (T)u;
+}
+
+//------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
+typedef aeUnit< uint32_t > VertexCount;
 typedef float float16_t;
 typedef uint8_t aeTerrainMaterialId;
 #define PACK( _ae_something ) _ae_something
 
-const uint32_t kChunkSize = 64;
+const uint32_t kChunkSize = 32; // 32*32*32 is less than max vertex index
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
-const uint32_t kChunkCountMax = kChunkSize * kChunkSize * kChunkSize;
 const uint32_t kMaxActiveChunks = 512;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
-const uint32_t kMaxChunkVerts = kChunkSize * kChunkSize * kChunkSize;
+const VertexCount kMaxChunkVerts = VertexCount( kChunkSize * kChunkSize * kChunkSize );
 const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
 const uint32_t kMaxChunkAllocationsPerTick = 1;
 const float16_t kSkyBrightness = float16_t( 5.0f );
@@ -85,13 +120,16 @@ PACK( struct TerrainVertex
 });
 typedef uint16_t TerrainIndex;
 const TerrainIndex kInvalidTerrainIndex = ~0;
+const VertexCount kChunkCountInterior = VertexCount( ~0 - 1 ); // Whole chunk is solid. Used for raycasting
+const VertexCount kChunkCountDirty = VertexCount( ~0 ); // Flags chunks that should be (re)generated
+const VertexCount kChunkCountEmpty = VertexCount( 0 );
 
 struct RaycastResult
 {
   bool hit;
   Block::Type type;
   float distance;
-  aeInt3 posi; // @NOTE: It's possible for the intersection to end up outside original voxel
+  aeInt3 posi; // @NOTE: It's possible for the intersection to end up outside the original voxel
   aeFloat3 posf;
   aeFloat3 normal;
   bool touchedUnloaded;
@@ -292,9 +330,9 @@ public:
 
   const aeTerrainChunk* GetChunk() const { return m_chunk; }
   aeTerrainChunk* GetChunk() { return m_chunk; }
-  const TerrainVertex* GetVertices() const { return m_vertexCount ? &m_vertices[ 0 ] : nullptr; }
+  const TerrainVertex* GetVertices() const { return m_vertices.Length() ? &m_vertices[ 0 ] : nullptr; }
   const TerrainIndex* GetIndices() const { return m_indexCount ? &m_indices[ 0 ] : nullptr; }
-  uint32_t GetVertexCount() const { return m_vertexCount; }
+  VertexCount GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
 
 private:
@@ -310,7 +348,7 @@ private:
   aeTerrainSDFCache m_sdfCache;
 
   // Output
-  uint32_t m_vertexCount;
+  VertexCount m_vertexCount;
   uint32_t m_indexCount;
   aeArray< TerrainVertex > m_vertices;
   aeArray< TerrainIndex > m_indices;
@@ -347,7 +385,7 @@ struct aeTerrainChunk
   static void GetPosFromWorld( aeInt3 pos, aeInt3* chunkPos, aeInt3* localPos );
 
   uint32_t GetIndex() const;
-  void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, uint32_t* vertexCountOut, uint32_t* indexCountOut );
+  void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut );
 
   aeAABB GetAABB() const;
   static aeAABB GetAABB( aeInt3 chunkPos );
@@ -395,8 +433,8 @@ public:
   aeTerrainChunk* GetChunk( aeInt3 pos );
   const aeTerrainChunk* GetChunk( uint32_t chunkIndex ) const;
   const aeTerrainChunk* GetChunk( aeInt3 pos ) const;
-  int32_t GetVoxelCount( uint32_t chunkIndex ) const;
-  int32_t GetVoxelCount( aeInt3 pos ) const;
+  VertexCount GetVertexCount( uint32_t chunkIndex ) const;
+  VertexCount GetVertexCount( aeInt3 pos ) const;
 
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
@@ -416,7 +454,7 @@ private:
   
   aeTerrainChunk* AllocChunk( aeInt3 pos );
   void FreeChunk( aeTerrainChunk* chunk );
-  void m_SetVoxelCount( uint32_t chunkIndex, int32_t count );
+  void m_SetVertexCount( uint32_t chunkIndex, VertexCount count );
   float GetChunkScore( aeInt3 pos ) const;
 
   aeDebugRender* m_debug = nullptr;
@@ -427,7 +465,7 @@ private:
   
   //aeCompactingAllocator m_compactAlloc;
   std::map< uint32_t, struct aeTerrainChunk* > m_chunks3;
-  std::map< uint32_t, int16_t > m_voxelCounts3; // Kept even when chunks are freed so they are not regenerated again if they are empty
+  std::map< uint32_t, VertexCount > m_vertexCounts; // Kept even when chunks are freed so they are not regenerated again if they are empty
   //aeMap<>
   aeObjectPool< aeTerrainChunk, kMaxLoadedChunks > m_chunkPool;
 

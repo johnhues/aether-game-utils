@@ -164,39 +164,39 @@ namespace aeMath
   }
 
   template< typename T >
-  inline T MaxValue()
+  constexpr T MaxValue()
   {
-    return std::numeric_limits<T>::max();
+    return std::numeric_limits< T >::max();
   }
 
   template< typename T >
-  inline T MinValue()
+  constexpr T MinValue()
   {
-    return std::numeric_limits<T>::min();
+    return std::numeric_limits< T >::min();
   }
 
   template<>
-  inline float MaxValue< float >()
+  constexpr float MaxValue< float >()
   {
-    return std::numeric_limits<float>::infinity();
+    return std::numeric_limits< float >::infinity();
   }
 
   template<>
-  inline float MinValue< float >()
+  constexpr float MinValue< float >()
   {
-    return -1 * std::numeric_limits<float>::infinity();
+    return -1 * std::numeric_limits< float >::infinity();
   }
 
   template<>
-  inline double MaxValue< double >()
+  constexpr double MaxValue< double >()
   {
-    return std::numeric_limits<double>::infinity();
+    return std::numeric_limits< double >::infinity();
   }
 
   template<>
-  inline double MinValue< double >()
+  constexpr double MinValue< double >()
   {
-    return -1 * std::numeric_limits<double>::infinity();
+    return -1 * std::numeric_limits< double >::infinity();
   }
 
   template< typename T >
