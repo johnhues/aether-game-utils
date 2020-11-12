@@ -64,6 +64,13 @@ public:
   bool operator > ( const aeUnit& o ) const { return m_v > o.m_v; }
   bool operator <= ( const aeUnit& o ) const { return m_v <= o.m_v; }
   bool operator >= ( const aeUnit& o ) const { return m_v >= o.m_v; }
+  
+  aeUnit< T >& operator ++ () { m_v++; return *this; }
+  aeUnit< T >& operator -- () { m_v--; return *this; }
+  aeUnit< T > operator ++ ( int ) { aeUnit< T > temp = *this; ++*this; return temp; }
+  aeUnit< T > operator -- ( int ) { aeUnit< T > temp = *this; --*this; return temp; }
+  aeUnit< T >& operator += ( const T& v ) { m_v += v; return *this; }
+  aeUnit< T >& operator -= ( const T& v ) { m_v -= v; return *this; }
 
 private:
   operator bool () const = delete;

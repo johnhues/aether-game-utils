@@ -895,7 +895,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
   }
   
   // Split verts based on normal while writing to verticesOut
-  uint32_t tempVertCount = 0;
+  VertexCount tempVertCount( 0 );
   {
     struct SplitTri
     {
@@ -969,14 +969,14 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
         n.SafeNormalize();
         
         // Store new vertex
-        TerrainVertex* v = &verticesOut[ tempVertCount ];
+        TerrainVertex* v = &verticesOut[ (uint32_t)tempVertCount ];
         *v = tempVerts[ vi ].v;
         v->normal = n;
         
         // Update triangle indices in group with new index
         for ( SplitTri* tri = normalGroup.GetFirst(); tri; tri = tri->node.GetNext() )
         {
-          *tri->i = tempVertCount;
+          *tri->i = (uint32_t)tempVertCount;
         }
         
         tempVertCount++;
