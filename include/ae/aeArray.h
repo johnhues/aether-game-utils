@@ -127,6 +127,13 @@ aeArray< T >::aeArray( uint32_t length, const T& value )
 template < typename T >
 aeArray< T >::aeArray( const aeArray< T >& other )
 {
+  if ( m_array == other.m_array )
+  {
+    return;
+  }
+  
+  // @TODO: Could avoid reallocation here
+  aeAlloc::Release( m_array );
   m_length = 0;
   m_size = 0;
   m_array = nullptr;

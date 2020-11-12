@@ -63,6 +63,12 @@ public:
 
 private:
   friend class aeList< T >;
+  
+  // @NOTE: These operations don't make sense when either node is in a list,
+  // to avoid a potentially hard to diagnose random assert, assignment is
+  // disabled altogether
+  aeListNode( aeListNode& ) = delete;
+  void operator = ( aeListNode& ) = delete;
 
   aeList< T >* m_root;
   aeListNode* m_next;
@@ -95,6 +101,12 @@ public:
 
 private:
   friend class aeListNode< T >;
+  
+  // @NOTE: Disable assignment. Assigning a list to another list technically makes sense,
+  // but could result in unexpected orphaning of list nodes. Additionally disabing these
+  // operations is consistent with list node.
+  aeList( aeList& ) = delete;
+  void operator = ( aeList& ) = delete;
 
   aeListNode< T >* m_first;
 };
