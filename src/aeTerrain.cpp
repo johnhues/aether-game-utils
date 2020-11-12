@@ -409,7 +409,8 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
 #if AE_TERRAIN_FANCY_NORMALS
   struct TempTri
   {
-    uint16_t i0, i1, i2;
+    uint16_t i[ 3 ]; // isosurface generation
+    uint16_t i1[ 3 ]; // normal split
     aeFloat3 n;
   };
   aeArray< TempTri > tempTris;
@@ -861,7 +862,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
 #endif
     // @NOTE: Do not clamp position values to voxel boundary. It's valid for a vertex to be placed
     // outside of the voxel is was generated from. This happens when a voxel has all corners inside
-    // or outside of the sdf boundary, while also still having intersections (two normally per edge)
+    // or outside of the sdf boundary, while also still having intersections (normally two per edge)
     // on one or more edges of the voxel.
     position.x = chunkOffsetX + x + position.x;
     position.y = chunkOffsetY + y + position.y;
@@ -887,97 +888,117 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
   for ( uint32_t i = 0; i < tempTris.Length(); i++ )
   {
     TempTri& tri = tempTris[ i ];
-    aeFloat3 p0 = tempVerts[ tri.i0 ].v.position;
-    aeFloat3 p1 = tempVerts[ tri.i1 ].v.position;
-    aeFloat3 p2 = tempVerts[ tri.i2 ].v.position;
+    aeFloat3 p0 = tempVerts[ tri.i[ 0 ] ].v.position;
+    aeFloat3 p1 = tempVerts[ tri.i[ 1 ] ].v.position;
+    aeFloat3 p2 = tempVerts[ tri.i[ 2 ] ].v.position;
     tri.n = ( ( p1 - p0 ) % ( p2 - p0 ) ).SafeNormalizeCopy();
   }
-
-  aeArray< bool > splitVerts;
-  aeArray< aeFloat3 > adjacentTriNormals;
-  for ( uint32_t i = 0; i < tempVerts.Length(); i++ )
+  
+  // Split verts based on normal while writing to verticesOut
+  uint32_t tempVertCount = 0;
   {
-    adjacentTriNormals.Clear();
-    for ( uint32_t j = 0; j < tempTris.Length(); j++ )
+    struct SplitTri
     {
-      TempTri tri = tempTris[ j ];
-      if ( tri.i0 == i || tri.i1 == i || tri.i2 == i )
-      {
-        adjacentTriNormals.Append( tri.n );
-      }
-    }
-
-    bool split = false;
-    for ( uint32_t j = 0; j < adjacentTriNormals.Length(); j++ )
+      SplitTri() : node( this ) {}
+      
+      TempTri* t;
+      uint16_t* i;
+      aeListNode< SplitTri > node;
+    };
+    
+    for ( uint32_t vi = 0; vi < tempVerts.Length(); vi++ )
     {
-      for ( uint32_t k = j; k < adjacentTriNormals.Length(); k++ )
+      uint32_t vertTriCount = 0;
+      SplitTri vertTris[ 16 ]; // @TODO: What is actual max?
+      
+      uint32_t normalGroupCount = 0;
+      aeList< SplitTri > normalGroups[ countof(vertTris) ];
+      
+      for ( uint32_t ti = 0; ti < tempTris.Length(); ti++ )
       {
-        if ( acos( adjacentTriNormals[ j ].Dot( adjacentTriNormals[ k ] ) ) >= 1.3f )
+        TempTri& tri = tempTris[ ti ];
+        
+        int32_t triIndex = -1;
+        if ( tri.i[ 0 ] == vi ) { triIndex = 0; }
+        else if ( tri.i[ 1 ] == vi ) { triIndex = 1; }
+        else if ( tri.i[ 2 ] == vi ) { triIndex = 2; }
+        if ( triIndex != -1 )
         {
-          split = true;
+          // Keep info about each triangle with vert
+          AE_ASSERT( vertTriCount < countof(vertTris) );
+          SplitTri* splitTri = &vertTris[ vertTriCount ];
+          splitTri->t = &tri;
+          splitTri->i = &tri.i1[ triIndex ];
+          vertTriCount++;
+          
+          // Create or find a normal group for triangle
+          aeFloat3 n = tri.n;
+          aeList< SplitTri >* normalGroup = std::find_if( normalGroups, normalGroups + normalGroupCount, [n]( const auto& normalGroup )
+          {
+            for ( const SplitTri* tri = normalGroup.GetFirst(); tri; tri = tri->node.GetNext() )
+            {
+              if ( ( acos( n.Dot( tri->t->n ) ) >= 1.3f ) )
+              {
+                return true;
+              }
+            }
+            return false;
+          } );
+          if ( normalGroup == normalGroups + normalGroupCount ) // if end
+          {
+            normalGroup = &normalGroups[ normalGroupCount ];
+            normalGroupCount++;
+          }
+          AE_ASSERT( normalGroup );
+          
+          // Add triangle to normal group
+          normalGroup->Append( splitTri->node );
         }
       }
+      
+      for ( uint32_t ni = 0; ni < normalGroupCount; ni++ )
+      {
+        aeList< SplitTri >& normalGroup = normalGroups[ ni ];
+        
+        // Calculate average group normal
+        aeFloat3 n( 0.0f );
+        for ( const SplitTri* tri = normalGroup.GetFirst(); tri; tri = tri->node.GetNext() )
+        {
+          n += tri->t->n;
+        }
+        n.SafeNormalize();
+        
+        // Store new vertex
+        TerrainVertex* v = &verticesOut[ tempVertCount ];
+        *v = tempVerts[ vi ].v;
+        v->normal = n;
+        
+        // Update triangle indices in group with new index
+        for ( SplitTri* tri = normalGroup.GetFirst(); tri; tri = tri->node.GetNext() )
+        {
+          *tri->i = tempVertCount;
+        }
+        
+        tempVertCount++;
+      }
     }
-    splitVerts.Append( split );
   }
-  AE_ASSERT( splitVerts.Length() == tempVerts.Length() );
-  
-  uint32_t tempIndex = 0;
-  for ( uint32_t i = 0; i < tempTris.Length(); i++ )
+
+  // Write out triangle indices
+  uint32_t tempIndexCount = 0;
+  for ( uint32_t ti = 0; ti < tempTris.Length(); ti++ )
   {
-    TempTri tri = tempTris[ i ];
-
-    TerrainVertex* v0 = &verticesOut[ tempIndex ];
-    *v0 = tempVerts[ tri.i0 ].v;
-    indexOut[ i * 3 ] = tempIndex;
-    aeInt3 posi = tempVerts[ tri.i0 ].posi; // HACK
-    if ( posi.x >= 0 && posi.x < kChunkSize
-      && posi.y >= 0 && posi.y < kChunkSize
-      && posi.z >= 0 && posi.z < kChunkSize )
-    {
-      m_i[ posi.x ][ posi.y ][ posi.z ] = tempIndex; // HACK
-    }
-    tempIndex++;
-
-    TerrainVertex* v1 = &verticesOut[ tempIndex ];
-    *v1 = tempVerts[ tri.i1 ].v;
-    indexOut[ i * 3 + 1 ] = tempIndex;
-    posi = tempVerts[ tri.i1 ].posi; // HACK
-    if ( posi.x >= 0 && posi.x < kChunkSize
-      && posi.y >= 0 && posi.y < kChunkSize
-      && posi.z >= 0 && posi.z < kChunkSize )
-    {
-      m_i[ posi.x ][ posi.y ][ posi.z ] = tempIndex; // HACK
-    }
-    tempIndex++;
-
-    TerrainVertex* v2 = &verticesOut[ tempIndex ];
-    *v2 = tempVerts[ tri.i2 ].v;
-    indexOut[ i * 3 + 2 ] = tempIndex;
-    posi = tempVerts[ tri.i2 ].posi; // HACK
-    if ( posi.x >= 0 && posi.x < kChunkSize
-      && posi.y >= 0 && posi.y < kChunkSize
-      && posi.z >= 0 && posi.z < kChunkSize )
-    {
-      m_i[ posi.x ][ posi.y ][ posi.z ] = tempIndex; // HACK
-    }
-    tempIndex++;
-
-    float threshold = 0.75f;
-    aeFloat3 n = tri.n;
-    if ( splitVerts[ tri.i0 ] ) { v0->normal = n; }
-    if ( splitVerts[ tri.i1 ] ) { v1->normal = n; }
-    if ( splitVerts[ tri.i2 ] ) { v2->normal = n; }
-    //if ( acos( n.Dot( v0->normal ) ) >= threshold ) { v0->normal = n; }
-    //if ( acos( n.Dot( v1->normal ) ) >= threshold ) { v1->normal = n; }
-    //if ( acos( n.Dot( v2->normal ) ) >= threshold ) { v2->normal = n; }
+    TempTri& tri = tempTris[ ti ];
+    indexOut[ tempIndexCount++ ] = tri.i1[ 0 ];
+    indexOut[ tempIndexCount++ ] = tri.i1[ 1 ];
+    indexOut[ tempIndexCount++ ] = tri.i1[ 2 ];
   }
+  
+  AE_ASSERT( tempVertCount <= kMaxChunkVerts );
+  AE_ASSERT( tempIndexCount <= kMaxChunkIndices );
 
-  AE_ASSERT( tempIndex <= kMaxChunkVerts );
-  AE_ASSERT( tempIndex <= kMaxChunkIndices );
-
-  *vertexCountOut = tempIndex;
-  *indexCountOut = tempIndex;
+  *vertexCountOut = tempVertCount;
+  *indexCountOut = tempIndexCount;
 #else
   AE_ASSERT( vertexCount <= kMaxChunkVerts );
   AE_ASSERT( indexCount <= kMaxChunkIndices );
