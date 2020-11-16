@@ -370,7 +370,7 @@ struct AE_ALIGN(16) aeFloat2
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat2 v )
 {
-  return os << "<" << v.x << ", " << v.y << ">";
+  return os << v.x << " " << v.y;
 }
 
 //------------------------------------------------------------------------------
@@ -434,7 +434,7 @@ struct aeInt2
 
 inline std::ostream& operator<<( std::ostream& os, aeInt2 v )
 {
-  return os << "<" << v.x << ", " << v.y << ">";
+  return os << v.x << " " << v.y;
 }
 
 //------------------------------------------------------------------------------
@@ -539,7 +539,7 @@ public:
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat3 v )
 {
-  return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
+  return os << v.x << " " << v.y << " " << v.z;
 }
 
 //------------------------------------------------------------------------------
@@ -596,7 +596,7 @@ struct AE_ALIGN(16) aeInt3
 
 inline std::ostream& operator<<( std::ostream& os, aeInt3 v )
 {
-  return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
+  return os << v.x << " " << v.y << " " << v.z;
 }
 
 namespace aeMath
@@ -745,7 +745,7 @@ public:
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat4 v )
 {
-  return os << "<" << v.x << ", " << v.y << ", " << v.z << ", " << v.w << ">";
+  return os << v.x << " " << v.y << " " << v.z << " " << v.w;
 }
 
 namespace aeMath
@@ -894,10 +894,10 @@ public:
 
 inline std::ostream& operator << ( std::ostream& os, const aeFloat4x4& mat )
 {
-  os << "[ " << mat.data[ 0 ] << ", " << mat.data[ 1 ] << ", " << mat.data[ 2 ] << ", " << mat.data[ 3 ]
-    << ", " << mat.data[ 4 ] << ", " << mat.data[ 5 ] << ", " << mat.data[ 6 ] << ", " << mat.data[ 7 ]
-    << ", " << mat.data[ 8 ] << ", " << mat.data[ 9 ] << ", " << mat.data[ 10 ] << ", " << mat.data[ 11 ]
-    << ", " << mat.data[ 12 ] << ", " << mat.data[ 13 ] << ", " << mat.data[ 14 ] << ", " << mat.data[ 15 ] << " ]";
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
   return os;
 }
 
@@ -973,7 +973,7 @@ struct aeRect
 
 inline std::ostream& operator<<( std::ostream& os, aeRect r )
 {
-  return os << "<" << r.x << ", " << r.y << ", " << r.w << ", " << r.h << ">";
+  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
 
 //------------------------------------------------------------------------------
@@ -1001,7 +1001,7 @@ struct aeRectInt
 
 inline std::ostream& operator<<( std::ostream& os, aeRectInt r )
 {
-  return os << "<" << r.x << ", " << r.y << ", " << r.w << ", " << r.h << ">";
+  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
 
 //------------------------------------------------------------------------------
@@ -1020,13 +1020,16 @@ private:
   aeFloat3 m_normal;
 };
 
+//------------------------------------------------------------------------------
+// aeLineSegment class
+//------------------------------------------------------------------------------
 class aeLineSegment
 {
 public:
   aeLineSegment() = default;
   aeLineSegment( aeFloat3 p0, aeFloat3 p1 );
 
-  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr ) const;
+  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr ) const; // @TODO: GetDistance()
 
 private:
   aeFloat3 m_p0;
@@ -1088,7 +1091,7 @@ class aeAABB
 public:
   aeAABB() = default;
   aeAABB( const aeAABB& ) = default;
-  aeAABB( aeFloat3 min, aeFloat3 max );
+  aeAABB( aeFloat3 p0, aeFloat3 p1 );
   explicit aeAABB( const aeSphere& sphere );
 
   void Expand( aeFloat3 p );
@@ -1100,7 +1103,7 @@ public:
   aeFloat3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
   aeFloat4x4 GetTransform() const;
 
-  float GetMinDistance( aeFloat3 p ) const;
+  float GetMinDistance( aeFloat3 p ) const; // @TODO: GetDistanceFromSurface()
   bool Intersect( aeAABB other ) const;
   bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
 
@@ -1122,12 +1125,15 @@ public:
   void SetTransform( const aeFloat4x4& transform );
   const aeFloat4x4& GetTransform() const;
 
+  float GetMinDistance( aeFloat3 p ) const; // @TODO: GetDistanceFromSurface()
   bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
 
   aeAABB GetAABB() const;
 
 private:
   aeFloat4x4 m_transform;
+  aeFloat4x4 m_invTransRot;
+  aeAABB m_scaledAABB;
 };
 
 //------------------------------------------------------------------------------
