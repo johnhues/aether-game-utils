@@ -21,8 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AEARRAY_H
-#define AEARRAY_H
+#ifndef AE_ARRAY_H
+#define AE_ARRAY_H
 
 //------------------------------------------------------------------------------
 // Headers
@@ -30,20 +30,21 @@
 #include "aeAlloc.h"
 #include "aeLog.h"
 #include "aePlatform.h"
+namespace AE_NAMESPACE {
 
 //------------------------------------------------------------------------------
-// aeArray class
+// Array class
 //------------------------------------------------------------------------------
 template < typename T >
-class aeArray
+class Array
 {
 public:
-  aeArray();
-  aeArray( uint32_t size ); // Reserve size (with length of 0)
-  aeArray( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'vals'
-  aeArray( const aeArray< T >& other );
-  ~aeArray();
-  void operator =( const aeArray< T >& other );
+  Array();
+  Array( uint32_t size ); // Reserve size (with length of 0)
+  Array( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'vals'
+  Array( const Array< T >& other );
+  ~Array();
+  void operator =( const Array< T >& other );
   
   T& Append( const T& value );
   void Append( const T* values, uint32_t count );
@@ -67,13 +68,18 @@ public:
   uint32_t Size() const;
 
 private:
+  uint32_t m_GetNextSize() const;
+  
   uint32_t m_length;
   uint32_t m_size;
   T* m_array;
 };
 
+//------------------------------------------------------------------------------
+// Array ostream operator
+//------------------------------------------------------------------------------
 template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const aeArray< T >& array )
+inline std::ostream& operator<<( std::ostream& os, const Array< T >& array )
 {
   os << "<";
   for ( uint32_t i = 0; i < array.Length(); i++ )
@@ -88,10 +94,10 @@ inline std::ostream& operator<<( std::ostream& os, const aeArray< T >& array )
 }
 
 //------------------------------------------------------------------------------
-// aeArray member functions
+// Array member functions
 //------------------------------------------------------------------------------
 template < typename T >
-aeArray< T >::aeArray()
+Array< T >::Array()
 {
   m_length = 0;
   m_size = 0;
@@ -99,7 +105,7 @@ aeArray< T >::aeArray()
 }
 
 template < typename T >
-aeArray< T >::aeArray( uint32_t size )
+Array< T >::Array( uint32_t size )
 {
   m_length = 0;
   m_size = 0;
@@ -109,7 +115,7 @@ aeArray< T >::aeArray( uint32_t size )
 }
 
 template < typename T >
-aeArray< T >::aeArray( uint32_t length, const T& value )
+Array< T >::Array( uint32_t length, const T& value )
 {
   m_length = 0;
   m_size = 0;
@@ -120,85 +126,85 @@ aeArray< T >::aeArray( uint32_t length, const T& value )
   m_length = length;
   for ( uint32_t i = 0; i < length; i++ )
   {
-    m_array[ i ] = value;
+    new ( &m_array[ i ] ) T ( value );
   }
 }
 
 template < typename T >
-aeArray< T >::aeArray( const aeArray< T >& other )
+Array< T >::Array( const Array< T >& other )
 {
   m_length = 0;
   m_size = 0;
   m_array = nullptr;
-  (*this) = other;
+  
+  // Array must be initialized above before calling Reserve
+  Reserve( other.m_length );
+
+  m_length = other.m_length;
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    new ( &m_array[ i ] ) T ( other.m_array[ i ] );
+  }
 }
 
 template < typename T >
-aeArray< T >::~aeArray()
+Array< T >::~Array()
 {
-  aeAlloc::Release( m_array );
-  m_length = 0;
+  Clear();
+  
+  aeAlloc::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
   m_size = 0;
   m_array = nullptr;
 }
 
 template < typename T >
-void aeArray< T >::operator =( const aeArray< T >& other )
+void Array< T >::operator =( const Array< T >& other )
 {
+  Clear();
+  
   if ( m_size < other.m_length )
   {
-    aeAlloc::Release( m_array );
-    m_size = other.m_size;
-    m_array = aeAlloc::AllocateArray< T >( m_size );
+    Reserve( other.m_length );
   }
 
   m_length = other.m_length;
   for ( uint32_t i = 0; i < m_length; i++ )
   {
-    m_array[ i ] = other.m_array[ i ];
+    new ( &m_array[ i ] ) T ( other.m_array[ i ] );
   }
 }
 
 template < typename T >
-T& aeArray< T >::Append( const T& value )
+T& Array< T >::Append( const T& value )
 {
   if ( m_length == m_size )
   {
-    if ( m_size )
-    {
-      Reserve( m_size * 2 );
-    }
-    else
-    {
-      Reserve( 1 );
-    }
+    Reserve( m_GetNextSize() );
   }
 
-  m_array[ m_length ] = value;
+  new ( &m_array[ m_length ] ) T ( value );
   m_length++;
 
   return m_array[ m_length - 1 ];
 }
 
 template < typename T >
-void aeArray< T >::Append( const T* values, uint32_t count )
+void Array< T >::Append( const T* values, uint32_t count )
 {
   Reserve( m_length + count );
 
 #if _AE_DEBUG_
   AE_ASSERT( m_size >= m_length + count );
 #endif
-  // @TODO: Should have a separate Append() for trivially constructed types
-  //        so memcpy can be used (for large uint8 arrays etc)
   for ( uint32_t i = 0; i < count; i++ )
   {
-    m_array[ m_length ] = values[ i ];
+    new ( &m_array[ m_length ] ) T ( values[ i ] );
     m_length++;
   }
 }
 
 template < typename T >
-T& aeArray< T >::Insert( uint32_t index, const T& value )
+T& Array< T >::Insert( uint32_t index, const T& value )
 {
 #if _AE_DEBUG_
   AE_ASSERT( index <= m_length );
@@ -206,28 +212,30 @@ T& aeArray< T >::Insert( uint32_t index, const T& value )
 
   if ( m_length == m_size )
   {
-    if ( m_size )
-    {
-      Reserve( m_size * 2 );
-    }
-    else
-    {
-      Reserve( 1 );
-    }
+    Reserve( m_GetNextSize() );
   }
 
-  for ( int32_t i = m_length; i > index; i-- )
+  if ( index == m_length )
   {
-    m_array[ i ] = m_array[ i - 1 ];
+    new ( &m_array[ index ] ) T ( value );
   }
-  m_array[ index ] = value;
+  else
+  {
+    new ( &m_array[ m_length ] ) T ( std::move( m_array[ m_length - 1 ] ) );
+    for ( int32_t i = m_length - 1; i > index; i-- )
+    {
+      m_array[ i ] = std::move( m_array[ i - 1 ] );
+    }
+    m_array[ index ] = value;
+  }
+  
   m_length++;
 
   return m_array[ index ];
 }
 
 template < typename T >
-void aeArray< T >::Remove( uint32_t index )
+void Array< T >::Remove( uint32_t index )
 {
 #if _AE_DEBUG_
   AE_ASSERT( index < m_length );
@@ -236,18 +244,20 @@ void aeArray< T >::Remove( uint32_t index )
   m_length--;
   for ( uint32_t i = index; i < m_length; i++ )
   {
-    m_array[ i ] = m_array[ i + 1 ];
+    m_array[ i ] = std::move( m_array[ i + 1 ] );
   }
+  m_array[ m_length ].~T();
 }
 
 template < typename T >
 template < typename U >
-uint32_t aeArray< T >::RemoveAll( const U& value )
+uint32_t Array< T >::RemoveAll( const U& value )
 {
   uint32_t count = 0;
   int32_t index = 0;
   while ( ( index = Find( value ) ) >= 0 )
   {
+    // @TODO: Update this to be single loop, so array is only compacted once
     Remove( index );
     count++;
   }
@@ -256,12 +266,13 @@ uint32_t aeArray< T >::RemoveAll( const U& value )
 
 template < typename T >
 template < typename Fn >
-uint32_t aeArray< T >::RemoveAllFn( Fn testFn )
+uint32_t Array< T >::RemoveAllFn( Fn testFn )
 {
   uint32_t count = 0;
   int32_t index = 0;
   while ( ( index = FindFn( testFn ) ) >= 0 )
   {
+    // @TODO: Update this to be single loop, so array is only compacted once
     Remove( index );
     count++;
   }
@@ -270,7 +281,7 @@ uint32_t aeArray< T >::RemoveAllFn( Fn testFn )
 
 template < typename T >
 template < typename U >
-int32_t aeArray< T >::Find( const U& value ) const
+int32_t Array< T >::Find( const U& value ) const
 {
   for ( uint32_t i = 0; i < m_length; i++ )
   {
@@ -284,7 +295,7 @@ int32_t aeArray< T >::Find( const U& value ) const
 
 template < typename T >
 template < typename Fn >
-int32_t aeArray< T >::FindFn( Fn testFn ) const
+int32_t Array< T >::FindFn( Fn testFn ) const
 {
   for ( uint32_t i = 0; i < m_length; i++ )
   {
@@ -297,7 +308,7 @@ int32_t aeArray< T >::FindFn( Fn testFn ) const
 }
 
 template < typename T >
-void aeArray< T >::Reserve( uint32_t size )
+void Array< T >::Reserve( uint32_t size )
 {
   if ( size <= m_size )
   {
@@ -318,24 +329,29 @@ void aeArray< T >::Reserve( uint32_t size )
 #endif
   m_size = size;
 
-  T* arr = aeAlloc::AllocateArray< T >( m_size );
+  T* arr = (T*)aeAlloc::AllocateArray< typename std::aligned_storage< sizeof(T), alignof(T) >::type >( m_size );
   for ( uint32_t i = 0; i < m_length; i++ )
   {
-    arr[ i ] = m_array[ i ];
+    new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
+    m_array[ i ].~T();
   }
 
-  aeAlloc::Release( m_array );
+  aeAlloc::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
   m_array = arr;
 }
 
 template < typename T >
-void aeArray< T >::Clear()
+void Array< T >::Clear()
 {
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    m_array[ i ].~T();
+  }
   m_length = 0;
 }
 
 template < typename T >
-const T& aeArray< T >::operator[]( int32_t index ) const
+const T& Array< T >::operator[]( int32_t index ) const
 {
 #if _AE_DEBUG_
   AE_ASSERT( index >= 0 );
@@ -345,7 +361,7 @@ const T& aeArray< T >::operator[]( int32_t index ) const
 }
 
 template < typename T >
-T& aeArray< T >::operator[]( int32_t index )
+T& Array< T >::operator[]( int32_t index )
 {
 #if _AE_DEBUG_
   AE_ASSERT( index >= 0 );
@@ -355,15 +371,33 @@ T& aeArray< T >::operator[]( int32_t index )
 }
 
 template < typename T >
-uint32_t aeArray< T >::Length() const
+uint32_t Array< T >::Length() const
 {
   return m_length;
 }
 
 template < typename T >
-uint32_t aeArray< T >::Size() const
+uint32_t Array< T >::Size() const
 {
   return m_size;
 }
+
+template < typename T >
+uint32_t Array< T >::m_GetNextSize() const
+{
+  if ( m_size == 0 )
+  {
+    return 32 / sizeof(T); // @NOTE: Initially allocate 32 bytes (rounded down) of type
+  }
+  else
+  {
+    return m_size * 2;
+  }
+}
+
+} // ae namespace end
+
+// @TODO: Remove
+#define aeArray ae::Array
 
 #endif
