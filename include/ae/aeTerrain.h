@@ -168,6 +168,7 @@ class Shape
 {
 public:
   Shape();
+  virtual ~Shape() {}
 
   aeAABB GetAABB() const { return m_aabb; }
   aeOBB GetOBB() const { return aeOBB( m_localToWorld ); }

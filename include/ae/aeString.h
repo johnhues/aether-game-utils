@@ -150,7 +150,7 @@ std::ostream& operator<<( std::ostream& out, const aeStr< N >& str )
 template < uint32_t N >
 std::istream& operator>>( std::istream& in, aeStr< N >& str )
 {
-  in.getline( str.m_str, sizeof( str.m_str - 1 ) );
+  in.getline( str.m_str, aeStr< N >::MaxLength() );
   str.m_length = in.gcount();
   str.m_str[ str.m_length ] = 0;
   return in;
@@ -520,7 +520,10 @@ void aeStr< N >::m_Format( const char* format, T value, Args... args )
 
   if ( *head == '#' )
   {
-    *this += ToString( value );
+    // @TODO: Replace with ToString()?
+    std::ostringstream stream;
+    stream << value;
+    *this += stream.str().c_str();
     head++;
   }
   m_Format( head, args... );

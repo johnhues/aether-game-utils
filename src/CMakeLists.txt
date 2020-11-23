@@ -74,6 +74,7 @@ set(AE_HEADER_FILES
 	../include/ae/aeSpline.h
 	../include/ae/aeString.h
 	../include/ae/aeTerrain.h
+	../include/ae/aeTesting.h
 	../include/ae/aeUuid.h
 	../include/ae/aeVfs.h
 	../include/ae/aeWindow.h
@@ -108,6 +109,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeSpline.cpp
 		aeTerrain.cpp
 		aeTerrainSDF.cpp
+		aeTesting.cpp
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp

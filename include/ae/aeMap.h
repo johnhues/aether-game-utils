@@ -21,8 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AEMAP_H
-#define AEMAP_H
+#ifndef AE_MAP_H
+#define AE_MAP_H
 
 //------------------------------------------------------------------------------
 // Headers
@@ -30,12 +30,13 @@
 #include "aeArray.h"
 #include "aeLog.h"
 #include "aePlatform.h"
+namespace AE_NAMESPACE {
 
 //------------------------------------------------------------------------------
-// aeMap class
+// Map class
 //------------------------------------------------------------------------------
 template < typename K, typename V >
-class aeMap
+class Map
 {
 public:
   V& Set( const K& key, const V& value );
@@ -62,7 +63,7 @@ public:
 
 private:
   template < typename K2, typename V2 >
-  friend std::ostream& operator<<( std::ostream&, const aeMap< K2, V2 >& );
+  friend std::ostream& operator<<( std::ostream&, const Map< K2, V2 >& );
 
   struct Entry
   {
@@ -75,42 +76,42 @@ private:
 
   int32_t m_FindIndex( const K& key ) const;
 
-  aeArray< Entry > m_entries;
+  Array< Entry > m_entries;
 };
 
 //------------------------------------------------------------------------------
-// aeMap helper functions
+// Map helper functions
 //------------------------------------------------------------------------------
 template < typename K >
-bool aeMap_IsEqual( const K& k0, const K& k1 );
+bool Map_IsEqual( const K& k0, const K& k1 );
 
 template <>
-inline bool aeMap_IsEqual( const char* const & k0, const char* const & k1 )
+inline bool Map_IsEqual( const char* const & k0, const char* const & k1 )
 {
   return strcmp( k0, k1 ) == 0;
 }
 
 template < typename K >
-bool aeMap_IsEqual( const K& k0, const K& k1 )
+bool Map_IsEqual( const K& k0, const K& k1 )
 {
   return k0 == k1;
 }
 
 //------------------------------------------------------------------------------
-// aeMap member functions
+// Map member functions
 //------------------------------------------------------------------------------
 template < typename K, typename V >
-aeMap< K, V >::Entry::Entry( const K& k, const V& v ) :
+Map< K, V >::Entry::Entry( const K& k, const V& v ) :
   key( k ),
   value( v )
 {}
 
 template < typename K, typename V >
-int32_t aeMap< K, V >::m_FindIndex( const K& key ) const
+int32_t Map< K, V >::m_FindIndex( const K& key ) const
 {
   for ( uint32_t i = 0; i < m_entries.Length(); i++ )
   {
-    if ( aeMap_IsEqual( m_entries[ i ].key, key ) )
+    if ( Map_IsEqual( m_entries[ i ].key, key ) )
     {
       return i;
     }
@@ -120,7 +121,7 @@ int32_t aeMap< K, V >::m_FindIndex( const K& key ) const
 }
 
 template < typename K, typename V >
-V& aeMap< K, V >::Set( const K& key, const V& value )
+V& Map< K, V >::Set( const K& key, const V& value )
 {
   int32_t index = m_FindIndex( key );
   Entry* entry = ( index >= 0 ) ? &m_entries[ index ] : nullptr;
@@ -135,32 +136,32 @@ V& aeMap< K, V >::Set( const K& key, const V& value )
 }
 
 template < typename K, typename V >
-V& aeMap< K, V >::Get( const K& key )
+V& Map< K, V >::Get( const K& key )
 {
   return m_entries[ m_FindIndex( key ) ].value;
 }
 
 template < typename K, typename V >
-const V& aeMap< K, V >::Get( const K& key ) const
+const V& Map< K, V >::Get( const K& key ) const
 {
   return m_entries[ m_FindIndex( key ) ].value;
 }
 
 template < typename K, typename V >
-const V& aeMap< K, V >::Get( const K& key, const V& defaultValue ) const
+const V& Map< K, V >::Get( const K& key, const V& defaultValue ) const
 {
   int32_t index = m_FindIndex( key );
   return ( index >= 0 ) ? m_entries[ index ].value : defaultValue;
 }
 
 template < typename K, typename V >
-V* aeMap< K, V >::TryGet( const K& key )
+V* Map< K, V >::TryGet( const K& key )
 {
-  return const_cast< V* >( const_cast< const aeMap< K, V >* >( this )->TryGet( key ) );
+  return const_cast< V* >( const_cast< const Map< K, V >* >( this )->TryGet( key ) );
 }
 
 template < typename K, typename V >
-const V* aeMap< K, V >::TryGet( const K& key ) const
+const V* Map< K, V >::TryGet( const K& key ) const
 {
   int32_t index = m_FindIndex( key );
   if ( index >= 0 )
@@ -174,13 +175,13 @@ const V* aeMap< K, V >::TryGet( const K& key ) const
 }
 
 template < typename K, typename V >
-bool aeMap< K, V >::TryGet( const K& key, V* valueOut )
+bool Map< K, V >::TryGet( const K& key, V* valueOut )
 {
-  return const_cast< const aeMap< K, V >* >( this )->TryGet( key, valueOut );
+  return const_cast< const Map< K, V >* >( this )->TryGet( key, valueOut );
 }
 
 template < typename K, typename V >
-bool aeMap< K, V >::TryGet( const K& key, V* valueOut ) const
+bool Map< K, V >::TryGet( const K& key, V* valueOut ) const
 {
   const V* val = TryGet( key );
   if ( val )
@@ -195,7 +196,7 @@ bool aeMap< K, V >::TryGet( const K& key, V* valueOut ) const
 }
 
 template < typename K, typename V >
-bool aeMap< K, V >::Remove( const K& key )
+bool Map< K, V >::Remove( const K& key )
 {
   int32_t index = m_FindIndex( key );
   if ( index >= 0 )
@@ -210,49 +211,49 @@ bool aeMap< K, V >::Remove( const K& key )
 }
 
 template < typename K, typename V >
-void aeMap< K, V >::Reserve( uint32_t total )
+void Map< K, V >::Reserve( uint32_t total )
 {
   m_entries.Reserve( total );
 }
 
 template < typename K, typename V >
-void aeMap< K, V >::Clear()
+void Map< K, V >::Clear()
 {
   m_entries.Clear();
 }
 
 template < typename K, typename V >
-K& aeMap< K, V >::GetKey( uint32_t index )
+K& Map< K, V >::GetKey( uint32_t index )
 {
   return m_entries[ index ].key;
 }
 
 template < typename K, typename V >
-V& aeMap< K, V >::GetValue( uint32_t index )
+V& Map< K, V >::GetValue( uint32_t index )
 {
   return m_entries[ index ].value;
 }
 
 template < typename K, typename V >
-const K& aeMap< K, V >::GetKey( uint32_t index ) const
+const K& Map< K, V >::GetKey( uint32_t index ) const
 {
   return m_entries[ index ].key;
 }
 
 template < typename K, typename V >
-const V& aeMap< K, V >::GetValue( uint32_t index ) const
+const V& Map< K, V >::GetValue( uint32_t index ) const
 {
   return m_entries[ index ].value;
 }
 
 template < typename K, typename V >
-uint32_t aeMap< K, V >::Length() const
+uint32_t Map< K, V >::Length() const
 {
   return m_entries.Length();
 }
 
 template < typename K, typename V >
-std::ostream& operator<<( std::ostream& os, const aeMap< K, V >& map )
+std::ostream& operator<<( std::ostream& os, const Map< K, V >& map )
 {
   os << "{";
   for ( uint32_t i = 0; i < map.m_entries.Length(); i++ )
@@ -265,5 +266,10 @@ std::ostream& operator<<( std::ostream& os, const aeMap< K, V >& map )
   }
   return os << "}";
 }
+
+} // ae namespace end
+
+// @TODO: Remove
+#define aeMap ae::Map
 
 #endif
