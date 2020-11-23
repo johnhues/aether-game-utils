@@ -387,7 +387,7 @@ uint32_t Array< T >::m_GetNextSize() const
 {
   if ( m_size == 0 )
   {
-    return 32 / sizeof(T); // @NOTE: Initially allocate 32 bytes (rounded down) of type
+    return aeMath::Max( 1, 32 / sizeof(T) ); // @NOTE: Initially allocate 32 bytes (rounded down) of type
   }
   else
   {
