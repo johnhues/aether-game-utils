@@ -28,6 +28,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeMath.h"
+#include "aeMap.h"
 #include "aePlatform.h"
 #include "aeString.h"
 #include <map>
@@ -66,6 +67,110 @@ static aeMetaTypeId aeMetaGetObjectTypeId( const aeObject* obj );
 class aeMeta
 {
 public:
+  class Enum
+  {
+  public:
+    const char* GetName() const { return m_name.c_str(); }
+    
+    uint32_t TypeSize() const { return m_size; }
+    bool TypeIsSigned() const { return m_isSigned; }
+    
+    std::string GetNameByValue( int32_t value ) const { return m_enumValueToName.Get( value, "" ); }
+    
+    bool GetValueByName( const char* name, void* valueOut ) const
+    {
+      int32_t value = 0;
+      if ( !m_enumNameToValue.TryGet( name, &value ) )
+      {
+        return false;
+      }
+      
+      if ( m_isSigned )
+      {
+        switch ( m_size )
+        {
+          case 1:
+            *reinterpret_cast< int8_t* >( valueOut ) = value;
+            return true;
+          case 2:
+            *reinterpret_cast< int16_t* >( valueOut ) = value;
+            return true;
+          case 4:
+            *reinterpret_cast< int32_t* >( valueOut ) = value;
+            return true;
+          case 8:
+            *reinterpret_cast< int64_t* >( valueOut ) = value;
+            return true;
+          default:
+            AE_FAIL();
+            return false;
+        }
+      }
+      else
+      {
+        switch ( m_size )
+        {
+          case 1:
+            *reinterpret_cast< uint8_t* >( valueOut ) = value;
+            return true;
+          case 2:
+            *reinterpret_cast< uint16_t* >( valueOut ) = value;
+            return true;
+          case 4:
+            *reinterpret_cast< uint32_t* >( valueOut ) = value;
+            return true;
+          case 8:
+            *reinterpret_cast< uint64_t* >( valueOut ) = value;
+            return true;
+          default:
+            AE_FAIL();
+            return false;
+        }
+      }
+    }
+    
+    template < typename T >
+    bool HasValue( T value ) const { return m_enumValueToName.TryGet( value ); }
+    
+    int32_t GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
+    std::string GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
+    uint32_t Length() const { return m_enumValueToName.Length(); }
+    
+  private:
+    aeStr32 m_name;
+    uint32_t m_size;
+    bool m_isSigned;
+    ae::Map< int32_t, std::string > m_enumValueToName;
+    ae::Map< std::string, int32_t > m_enumNameToValue;
+    
+  public: // Internal
+    Enum( const char* name, uint32_t size, bool isSigned ) :
+      m_name( name ),
+      m_size( size ),
+      m_isSigned( isSigned )
+    {}
+    
+    void m_AddValue( const char* name, int32_t value )
+    {
+      m_enumValueToName.Set( value, name );
+      m_enumNameToValue.Set( name, value );
+    }
+    
+    static Enum* s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
+    {
+      static ae::Map< std::string, Enum* > enums;
+      if ( create )
+      {
+        AE_ASSERT( !enums.TryGet( enumName ) );
+        return enums.Set( enumName, aeAlloc::Allocate< Enum >( enumName, size, isSigned ) );
+      }
+      else
+      {
+        return enums.Get( enumName );
+      }
+    }
+  };
+  
   class Var
   {
   public:
@@ -83,6 +188,7 @@ public:
       // V2f,
       // V2i,
       Float4x4,
+      Enum,
       Ref
     };
 
@@ -143,6 +249,20 @@ public:
           return aeStr32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
         case Var::Float4x4:
           return aeStr256::Format( "#", *reinterpret_cast< const aeFloat4x4* >( varData ) ).c_str();
+        case Var::Enum:
+        {
+          const class Enum* enumType = GetEnum();
+          int32_t value = 0;
+          switch ( enumType->TypeSize() )
+          {
+            case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
+            case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
+            case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
+            case 8: value = *reinterpret_cast< const int64_t* >( varData ); break;
+            default: AE_FAIL();
+          }
+          return enumType->GetNameByValue( value );
+        }
         case Var::Ref:
           AE_FAIL(); // @TODO
           return "";
@@ -302,6 +422,72 @@ public:
                  v->data + 12, v->data + 13, v->data + 14, v->data + 15 );
           return true;
         }
+        case Var::Enum:
+        {
+          if ( !value[ 0 ] )
+          {
+            return false;
+          }
+          
+          const class Enum* enumType = GetEnum();
+          
+          // Set object var with a numerical enum value
+          if ( isdigit( value[ 0 ] ) || value[ 0 ] == '-' )
+          {
+            int32_t intValue = atoi( value );
+            if ( !enumType->HasValue( intValue ) )
+            {
+              return false;
+            }
+            
+            if ( enumType->TypeIsSigned() )
+            {
+              switch ( enumType->TypeSize() )
+              {
+                case 1:
+                  *reinterpret_cast< int8_t* >( varData ) = intValue;
+                  return true;
+                case 2:
+                  *reinterpret_cast< int16_t* >( varData ) = intValue;
+                  return true;
+                case 4:
+                  *reinterpret_cast< int32_t* >( varData ) = intValue;
+                  return true;
+                case 8:
+                  *reinterpret_cast< int64_t* >( varData ) = intValue;
+                  return true;
+                default:
+                  AE_FAIL_MSG( "aeMeta::Enum is in an invalid state" );
+                  return false;
+              }
+            }
+            else
+            {
+              switch ( enumType->TypeSize() )
+              {
+                case 1:
+                  *reinterpret_cast< uint8_t* >( varData ) = intValue;
+                  return true;
+                case 2:
+                  *reinterpret_cast< uint16_t* >( varData ) = intValue;
+                  return true;
+                case 4:
+                  *reinterpret_cast< uint32_t* >( varData ) = intValue;
+                  return true;
+                case 8:
+                  *reinterpret_cast< uint64_t* >( varData ) = intValue;
+                  return true;
+                default:
+                  AE_FAIL_MSG( "aeMeta::Enum is in an invalid state" );
+                  return false;
+              }
+            }
+          }
+          else // Set object var with named enum value
+          {
+            return enumType->GetValueByName( value, varData );
+          }
+        }
         case Var::Ref:
         {
           void* v = varData;
@@ -332,14 +518,30 @@ public:
       
       return true;
     }
+    
+    // Enum
+    const class Enum* GetEnum() const
+    {
+      if ( !m_enum )
+      {
+        if ( m_type != Var::Enum )
+        {
+          return nullptr;
+        }
+        m_enum = aeMeta::GetEnum( m_typeName.c_str() );
+      }
+      return m_enum;
+    }
 
+    // Members
     aeStr32 m_name;
     Var::Type m_type;
     aeStr32 m_typeName;
     uint32_t m_offset;
     uint32_t m_size;
+    mutable const class Enum* m_enum = nullptr;
   };
-
+  
   template < typename T >
   struct VarType
   {
@@ -510,6 +712,11 @@ public:
 
   static const Type* GetTypeFromObject( const aeObject* obj )
   {
+    if ( !obj )
+    {
+      return nullptr;
+    }
+    
     aeMetaTypeId id = aeMetaGetObjectTypeId( obj );
     auto it = m_GetTypeIdMap().find( id );
     if ( it != m_GetTypeIdMap().end() )
@@ -542,6 +749,11 @@ public:
       AE_ASSERT_MSG( false, "No meta info for type name: #", typeName );
       return nullptr;
     }
+  }
+  
+  static const Enum* GetEnum( const char* enumName )
+  {
+    return Enum::s_Get( enumName, false, 0 , false );
   }
 
   //------------------------------------------------------------------------------
@@ -591,7 +803,7 @@ public:
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Winvalid-offsetof"
 #endif
-      var.m_offset = Offset;
+      var.m_offset = Offset; // @TODO: Verify var is not member of base class
 #if !_AE_WINDOWS_
   #pragma clang diagnostic pop
 #endif
@@ -608,6 +820,61 @@ public:
     {
       aeMeta::Type* type = m_GetTypeNameMap().find( typeName )->second;
       type->AddProp( propName );
+    }
+  };
+  
+  template < typename T >
+  struct EnumCreator
+  {
+    EnumCreator( const char* typeName, std::string strMap )
+    {
+      class aeMeta::Enum* enumType = aeMeta::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+      
+      strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
+      strMap.erase( std::remove( strMap.begin(), strMap.end(), '(' ), strMap.end() );
+
+      T currentIndex = 0;
+      std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
+
+      for ( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
+      {
+        std::string enumName;
+        if ( iter->find( '=' ) == std::string::npos )
+        {
+          enumName = *iter;
+        }
+        else
+        {
+          std::vector<std::string> enumNameValue( m_SplitString( *iter, '=' ) );
+          enumName = enumNameValue[ 0 ];
+          if ( std::is_unsigned< T >::value )
+          {
+            currentIndex = static_cast< T >( std::stoull( enumNameValue[ 1 ], 0, 0 ) );
+          }
+          else
+          {
+            currentIndex = static_cast< T >( std::stoll( enumNameValue[ 1 ], 0, 0 ) );
+          }
+        }
+        
+        enumType->m_AddValue( enumName.c_str(), currentIndex );
+        currentIndex++;
+      }
+    }
+    
+  private:
+    static std::vector< std::string > m_SplitString( std::string str, char separator )
+    {
+      std::vector< std::string > result;
+
+      std::string item;
+      std::stringstream stringStream( str );
+      while ( std::getline( stringStream, item, separator ) )
+      {
+        result.push_back( item );
+      }
+
+      return result;
     }
   };
 
@@ -689,18 +956,36 @@ struct aeMeta::VarType< T* >
 META_FORCE_LINK_LIB( x ) \
 template <> const char* aeMeta::TypeName< x >::Get() { return #x; } \
 template <> void aeMeta::DefineType< x >( Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
-static aeMeta::TypeCreator< x > _type_creator_##x( #x );
+static aeMeta::TypeCreator< x > ae_type_creator_##x( #x );
 
 //------------------------------------------------------------------------------
 // External meta var registerer
 //------------------------------------------------------------------------------
 #define AE_META_VAR( c, v ) \
-static aeMeta::VarCreator< c, decltype(c::v), offsetof( c, v ) > _var_creator_##c##_##v( #c, #v );
+static aeMeta::VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
 //------------------------------------------------------------------------------
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_META_PROPERTY( c, p ) \
-static aeMeta::PropCreator< c > _prop_creator_##c##_##p( #c, #p );
+static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
+
+//------------------------------------------------------------------------------
+// External meta enum registerer
+//------------------------------------------------------------------------------
+#define AE_ENUM( E, T, ... ) \
+enum class E : T { \
+  __VA_ARGS__ \
+}; \
+template <> \
+struct aeMeta::VarType< E > { \
+  static aeMeta::Var::Type GetType() { return aeMeta::Var::Enum; } \
+  static const char* GetName() { return #E; } \
+}; \
+aeMeta::EnumCreator< T > ae_enum_creator_##E( #E, #__VA_ARGS__ ); \
+std::ostream &operator << ( std::ostream &os, E e ) { \
+  os << aeMeta::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
+  return os; \
+}
 
 //------------------------------------------------------------------------------
 // External base meta object
