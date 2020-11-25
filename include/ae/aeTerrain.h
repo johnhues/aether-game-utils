@@ -52,11 +52,8 @@ public:
   aeUnit( const aeUnit& o ) : m_v( o.m_v ) {}
   explicit aeUnit( const T& vertexCount ) : m_v( vertexCount ) {}
 
-  // @TODO: More testing before enabling this operator
-  //template < typename U >
-  //explicit operator U () const { return (U)m_v; }
-  explicit operator const T& () const { return m_v; }
-  explicit operator T& () { return m_v; }
+  template < typename U >
+  explicit operator U () const { return (U)m_v; }
 
   bool operator == ( const aeUnit& o ) const { return m_v == o.m_v; }
   bool operator != ( const aeUnit& o ) const { return m_v != o.m_v; }
@@ -65,6 +62,8 @@ public:
   bool operator <= ( const aeUnit& o ) const { return m_v <= o.m_v; }
   bool operator >= ( const aeUnit& o ) const { return m_v >= o.m_v; }
   
+  aeUnit< T > operator + ( const aeUnit& v ) const { return aeUnit( m_v + v.m_v ); }
+  aeUnit< T > operator - ( const aeUnit& v ) const { return aeUnit( m_v - v.m_v ); }
   aeUnit< T >& operator ++ () { m_v++; return *this; }
   aeUnit< T >& operator -- () { m_v--; return *this; }
   aeUnit< T > operator ++ ( int ) { aeUnit< T > temp = *this; ++*this; return temp; }

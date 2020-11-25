@@ -40,11 +40,11 @@
 #endif
 
 #ifndef AE_TERRAIN_SKIP_CACHE
-  #define AE_TERRAIN_SKIP_CACHE 1
+  #define AE_TERRAIN_SKIP_CACHE 0
 #endif
 
 #ifndef AE_TERRAIN_FANCY_NORMALS
-  #define AE_TERRAIN_FANCY_NORMALS 1
+  #define AE_TERRAIN_FANCY_NORMALS 0
 #endif
 
 #ifndef AE_TERRAIN_TOUCH_UP_VERT
@@ -422,7 +422,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
 };
   aeArray< TempVert > tempVerts;
 #else
-  uint32_t vertexCount = 0;
+  VertexCount vertexCount = VertexCount( 0 );
   uint32_t indexCount = 0;
 #endif
 
@@ -517,9 +517,9 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
     if ( edgeBits & mask[ e ] )
     {
 #if !AE_TERRAIN_FANCY_NORMALS
-      if ( vertexCount + 4 > kMaxChunkVerts || indexCount + 6 > kMaxChunkIndices )
+      if ( vertexCount + VertexCount( 4 ) > kMaxChunkVerts || indexCount + 6 > kMaxChunkIndices )
       {
-        *vertexCountOut = 0;
+        *vertexCountOut = VertexCount( 0 );
         *indexCountOut = 0;
         return;
       }
@@ -618,7 +618,8 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
           tempVerts.Append( { aeInt3( ox, oy, oz ), vertex } );
 #else
           TerrainIndex index = (TerrainIndex)vertexCount;
-          verticesOut[ vertexCount++ ] = vertex;
+          verticesOut[ (uint32_t)vertexCount ] = vertex;
+          vertexCount++;
 #endif
           ind[ j ] = index;
           
@@ -632,7 +633,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempE
         {
           TerrainIndex index = m_i[ ox ][ oy ][ oz ];
 #if !AE_TERRAIN_FANCY_NORMALS
-          AE_ASSERT_MSG( index < vertexCount, "# < # ox:# oy:# oz:#", index, vertexCount, ox, oy, oz );
+          AE_ASSERT_MSG( index < (TerrainIndex)vertexCount, "# < # ox:# oy:# oz:#", index, vertexCount, ox, oy, oz );
 #endif
           AE_ASSERT( ox < kChunkSize );
           AE_ASSERT( oy < kChunkSize );
