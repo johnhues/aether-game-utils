@@ -244,3 +244,33 @@ TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
   REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
   REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
 }
+
+namespace A
+{
+  namespace B
+  {
+    enum class SomeNewEnum
+    {
+      Bleep = 4,
+      Bloop,
+      Blop = 7
+    };
+  }
+}
+AE_META_ENUM_CLASS( A::B::SomeNewEnum );
+AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bleep );
+AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bloop );
+AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Blop );
+
+TEST_CASE( "can register an already existing enum class in a nested namespace", "[aeMeta]" )
+{
+  const aeMeta::Enum* enumType = aeMeta::GetEnum< A::B::SomeNewEnum >();
+  REQUIRE( enumType == aeMeta::GetEnum( "A::B::SomeNewEnum" ) );
+  REQUIRE( enumType->Length() == 3 );
+  REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
+  REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
+  REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
+  REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
+  REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
+  REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+}

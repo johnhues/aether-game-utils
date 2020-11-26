@@ -1062,12 +1062,13 @@ aeMeta::EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
     static const char* GetName() { return #E; } \
     static const char* GetPrefix() { return ""; } \
   }; \
-  aeMeta::EnumCreator2< E > ae_enum_creator_##E( #E ); \
+  namespace aeEnums::_##E { aeMeta::EnumCreator2< E > ae_enum_creator( #E ); } \
   template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { return GetEnum( #E ); }
+// @NOTE: Nested namespace declaration requires C++17
 
 // Register enum class value
 #define AE_META_ENUM_CLASS_VALUE( E, V ) \
-  aeMeta::EnumCreator2< E > ae_enum_creator_##E##_##V( #V, E::V );
+  namespace aeEnums::_##E { aeMeta::EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
 
 //------------------------------------------------------------------------------
 // External base meta object
