@@ -148,3 +148,99 @@ TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
   REQUIRE( !enumTestVar->SetObjectValueFromString( &c0, "" ) );
   REQUIRE( c0.enumTest == TestEnumClass::Four );
 }
+
+enum SomeOldEnum
+{
+  Bleep = 4,
+  Bloop,
+  Blop = 7
+};
+AE_META_ENUM( SomeOldEnum );
+AE_META_ENUM_VALUE( SomeOldEnum, Bleep );
+AE_META_ENUM_VALUE( SomeOldEnum, Bloop );
+AE_META_ENUM_VALUE( SomeOldEnum, Blop );
+
+TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
+{
+  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldEnum >();
+  REQUIRE( enumType == aeMeta::GetEnum( "SomeOldEnum" ) );
+  REQUIRE( enumType->Length() == 3 );
+  REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
+  REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
+  REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
+  REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
+  REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
+  REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+}
+
+enum SomeOldPrefixEnum
+{
+  kSomeOldPrefixEnum_Bleep = 4,
+  kSomeOldPrefixEnum_Bloop,
+  kSomeOldPrefixEnum_Blop = 7
+};
+AE_META_ENUM_PREFIX( SomeOldPrefixEnum, kSomeOldPrefixEnum_ );
+AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bleep );
+AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bloop );
+AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Blop );
+
+TEST_CASE( "can register an already existing c-style enum where each value has a prefix", "[aeMeta]" )
+{
+  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldPrefixEnum >();
+  REQUIRE( enumType == aeMeta::GetEnum( "SomeOldPrefixEnum" ) );
+  REQUIRE( enumType->Length() == 3 );
+  REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
+  REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
+  REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
+  REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
+  REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
+  REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+}
+
+enum SomeOldRenamedEnum
+{
+  BLEEP = 4,
+  BLOOP,
+  BLOP = 7
+};
+AE_META_ENUM( SomeOldRenamedEnum );
+AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLEEP, Bleep );
+AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOOP, Bloop );
+AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOP, Blop );
+
+TEST_CASE( "can register an already existing c-style enum where each value has a manually specified name", "[aeMeta]" )
+{
+  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldRenamedEnum >();
+  REQUIRE( enumType == aeMeta::GetEnum( "SomeOldRenamedEnum" ) );
+  REQUIRE( enumType->Length() == 3 );
+  REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
+  REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
+  REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
+  REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
+  REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
+  REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+}
+
+enum class SomeNewEnum
+{
+  Bleep = 4,
+  Bloop,
+  Blop = 7
+};
+AE_META_ENUM_CLASS( SomeNewEnum );
+AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bleep );
+AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bloop );
+AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Blop );
+
+TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
+{
+  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeNewEnum >();
+  REQUIRE( enumType == aeMeta::GetEnum( "SomeNewEnum" ) );
+  REQUIRE( enumType->Length() == 3 );
+  REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
+  REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
+  REQUIRE( enumType->GetNameByIndex( 2 ) == "Blop" );
+  REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
+  REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
+  REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+}
