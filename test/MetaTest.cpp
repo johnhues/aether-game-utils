@@ -79,6 +79,21 @@ TEST_CASE( "enum registration", "[aeMeta]" )
   REQUIRE( playerStateEnum->GetValueByIndex( 2 ) == 2 );
 }
 
+TEST_CASE( "static enum helpers", "[aeMeta]" )
+{
+  REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Idle ) == "Idle" );
+  REQUIRE( aeMeta::Enum::GetValueFromName( "Idle", (PlayerState)666 ) == PlayerState::Idle );
+
+  REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Run ) == "Run" );
+  REQUIRE( aeMeta::Enum::GetValueFromName( "Run", (PlayerState)666 ) == PlayerState::Run );
+
+  REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Jump ) == "Jump" );
+  REQUIRE( aeMeta::Enum::GetValueFromName( "Jump", (PlayerState)666 ) == PlayerState::Jump );
+
+  REQUIRE( aeMeta::Enum::GetNameFromValue( (PlayerState)666 ) == "" );
+  REQUIRE( aeMeta::Enum::GetValueFromName( "", PlayerState::Jump ) == PlayerState::Jump );
+}
+
 TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" )
 {
   SomeClass c0;

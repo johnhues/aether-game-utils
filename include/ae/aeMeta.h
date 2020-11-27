@@ -75,9 +75,11 @@ public:
     uint32_t TypeSize() const { return m_size; }
     bool TypeIsSigned() const { return m_isSigned; }
     
-    std::string GetNameByValue( int32_t value ) const { return m_enumValueToName.Get( value, "" ); }
-    
-    bool GetValueByName( const char* name, void* valueOut ) const
+    template < typename T >
+    std::string GetNameByValue( T value ) const { return m_enumValueToName.Get( (int32_t)value, "" ); }
+      
+    template < typename T >
+    bool GetValueByName( const char* name, T* valueOut ) const
     {
       int32_t value = 0;
       if ( !m_enumNameToValue.TryGet( name, &value ) )
@@ -85,48 +87,8 @@ public:
         return false;
       }
       
-      if ( m_isSigned )
-      {
-        switch ( m_size )
-        {
-          case 1:
-            *reinterpret_cast< int8_t* >( valueOut ) = value;
-            return true;
-          case 2:
-            *reinterpret_cast< int16_t* >( valueOut ) = value;
-            return true;
-          case 4:
-            *reinterpret_cast< int32_t* >( valueOut ) = value;
-            return true;
-          case 8:
-            *reinterpret_cast< int64_t* >( valueOut ) = value;
-            return true;
-          default:
-            AE_FAIL();
-            return false;
-        }
-      }
-      else
-      {
-        switch ( m_size )
-        {
-          case 1:
-            *reinterpret_cast< uint8_t* >( valueOut ) = value;
-            return true;
-          case 2:
-            *reinterpret_cast< uint16_t* >( valueOut ) = value;
-            return true;
-          case 4:
-            *reinterpret_cast< uint32_t* >( valueOut ) = value;
-            return true;
-          case 8:
-            *reinterpret_cast< uint64_t* >( valueOut ) = value;
-            return true;
-          default:
-            AE_FAIL();
-            return false;
-        }
-      }
+      *valueOut = (T)value;
+      return true;
     }
     
     template < typename T >
@@ -136,6 +98,23 @@ public:
     std::string GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
     uint32_t Length() const { return m_enumValueToName.Length(); }
     
+    template < typename T >
+    static std::string GetNameFromValue( T value )
+    {
+      const Enum* enumType = GetEnum< typeof(T) >();
+      AE_ASSERT( enumType );
+      return enumType->m_enumValueToName.Get( (int32_t)value, "" );
+    }
+    
+    template < typename T >
+    static T GetValueFromName( const char* name, T defaultValue )
+    {
+      const Enum* enumType = GetEnum< typeof(T) >();
+      AE_ASSERT( enumType );
+      enumType->GetValueByName( name, &defaultValue );
+      return defaultValue;
+    }
+  
   private:
     aeStr32 m_name;
     uint32_t m_size;
@@ -485,7 +464,41 @@ public:
           }
           else // Set object var with named enum value
           {
-            return enumType->GetValueByName( value, varData );
+            if ( enumType->TypeIsSigned() )
+            {
+              switch ( enumType->TypeSize() )
+              {
+              case 1:
+                return enumType->GetValueByName( value, reinterpret_cast< int8_t* >( varData ) );
+              case 2:
+                return enumType->GetValueByName( value, reinterpret_cast< int16_t* >( varData ) );
+              case 4:
+                return enumType->GetValueByName( value, reinterpret_cast< int32_t* >( varData ) );
+              case 8:
+                return enumType->GetValueByName( value, reinterpret_cast< int64_t* >( varData ) );
+              default:
+                AE_FAIL();
+                return false;
+              }
+            }
+            else
+            {
+              switch ( enumType->TypeSize() )
+              {
+              case 1:
+                return enumType->GetValueByName( value, reinterpret_cast< uint8_t* >( varData ) );
+              case 2:
+                return enumType->GetValueByName( value, reinterpret_cast< uint16_t* >( varData ) );
+              case 4:
+                return enumType->GetValueByName( value, reinterpret_cast< uint32_t* >( varData ) );
+              case 8:
+                return enumType->GetValueByName( value, reinterpret_cast< uint64_t* >( varData ) );
+              default:
+                AE_FAIL();
+                return false;
+              }
+            }
+            return false;
           }
         }
         case Var::Ref:
