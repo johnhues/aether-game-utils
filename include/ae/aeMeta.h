@@ -1013,8 +1013,8 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
-// Define a new enum (values are automatically registered)
-#define AE_ENUM_DECLARE( E, T, ... ) \
+// Define a new enum (must register with AE_ENUM_REGISTER)
+#define AE_ENUM( E, T, ... ) \
   enum class E : T { \
     __VA_ARGS__ \
   }; \
@@ -1030,7 +1030,7 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
   } \
   template <> const aeMeta::Enum* aeMeta::GetEnum< E >();
 
-// Register an enum defined with AE_ENUM_DECLARE
+// Register an enum defined with AE_ENUM
 #define AE_ENUM_REGISTER( E ) \
   AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { aeMeta::EnumCreator< E > ec( name, def ); } \
   AE_ENUM_##E ae_enum_creator_##E; \
