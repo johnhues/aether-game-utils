@@ -79,16 +79,27 @@ public:
     std::string GetNameByValue( T value ) const { return m_enumValueToName.Get( (int32_t)value, "" ); }
       
     template < typename T >
-    bool GetValueByName( const char* name, T* valueOut ) const
+    bool GetValueFromString( const char* str, T* valueOut ) const
     {
       int32_t value = 0;
-      if ( !m_enumNameToValue.TryGet( name, &value ) )
+      if ( m_enumNameToValue.TryGet( str, &value ) ) // Set object var with named enum value
+      {
+        *valueOut = (T)value;
+        return true;
+      }
+      else if ( isdigit( str[ 0 ] ) || str[ 0 ] == '-' ) // Set object var with a numerical enum value
+      {
+        value = atoi( str );
+        if ( HasValue( value ) )
+        {
+          *valueOut = (T)value;
+          return true;
+        }
+      }
+      else
       {
         return false;
       }
-      
-      *valueOut = (T)value;
-      return true;
     }
     
     template < typename T >
@@ -107,11 +118,11 @@ public:
     }
     
     template < typename T >
-    static T GetValueFromName( const char* name, T defaultValue )
+    static T GetValueFromString( const char* str, T defaultValue )
     {
       const Enum* enumType = GetEnum< typeof(T) >();
       AE_ASSERT( enumType );
-      enumType->GetValueByName( name, &defaultValue );
+      enumType->GetValueFromString( str, &defaultValue );
       return defaultValue;
     }
   
@@ -410,96 +421,41 @@ public:
           
           const class Enum* enumType = GetEnum();
           
-          // Set object var with a numerical enum value
-          if ( isdigit( value[ 0 ] ) || value[ 0 ] == '-' )
+          if ( enumType->TypeIsSigned() )
           {
-            int32_t intValue = atoi( value );
-            if ( !enumType->HasValue( intValue ) )
+            switch ( enumType->TypeSize() )
             {
+            case 1:
+              return enumType->GetValueFromString( value, reinterpret_cast< int8_t* >( varData ) );
+            case 2:
+              return enumType->GetValueFromString( value, reinterpret_cast< int16_t* >( varData ) );
+            case 4:
+              return enumType->GetValueFromString( value, reinterpret_cast< int32_t* >( varData ) );
+            case 8:
+              return enumType->GetValueFromString( value, reinterpret_cast< int64_t* >( varData ) );
+            default:
+              AE_FAIL();
               return false;
             }
-            
-            if ( enumType->TypeIsSigned() )
-            {
-              switch ( enumType->TypeSize() )
-              {
-                case 1:
-                  *reinterpret_cast< int8_t* >( varData ) = intValue;
-                  return true;
-                case 2:
-                  *reinterpret_cast< int16_t* >( varData ) = intValue;
-                  return true;
-                case 4:
-                  *reinterpret_cast< int32_t* >( varData ) = intValue;
-                  return true;
-                case 8:
-                  *reinterpret_cast< int64_t* >( varData ) = intValue;
-                  return true;
-                default:
-                  AE_FAIL_MSG( "aeMeta::Enum is in an invalid state" );
-                  return false;
-              }
-            }
-            else
-            {
-              switch ( enumType->TypeSize() )
-              {
-                case 1:
-                  *reinterpret_cast< uint8_t* >( varData ) = intValue;
-                  return true;
-                case 2:
-                  *reinterpret_cast< uint16_t* >( varData ) = intValue;
-                  return true;
-                case 4:
-                  *reinterpret_cast< uint32_t* >( varData ) = intValue;
-                  return true;
-                case 8:
-                  *reinterpret_cast< uint64_t* >( varData ) = intValue;
-                  return true;
-                default:
-                  AE_FAIL_MSG( "aeMeta::Enum is in an invalid state" );
-                  return false;
-              }
-            }
           }
-          else // Set object var with named enum value
+          else
           {
-            if ( enumType->TypeIsSigned() )
+            switch ( enumType->TypeSize() )
             {
-              switch ( enumType->TypeSize() )
-              {
-              case 1:
-                return enumType->GetValueByName( value, reinterpret_cast< int8_t* >( varData ) );
-              case 2:
-                return enumType->GetValueByName( value, reinterpret_cast< int16_t* >( varData ) );
-              case 4:
-                return enumType->GetValueByName( value, reinterpret_cast< int32_t* >( varData ) );
-              case 8:
-                return enumType->GetValueByName( value, reinterpret_cast< int64_t* >( varData ) );
-              default:
-                AE_FAIL();
-                return false;
-              }
+            case 1:
+              return enumType->GetValueFromString( value, reinterpret_cast< uint8_t* >( varData ) );
+            case 2:
+              return enumType->GetValueFromString( value, reinterpret_cast< uint16_t* >( varData ) );
+            case 4:
+              return enumType->GetValueFromString( value, reinterpret_cast< uint32_t* >( varData ) );
+            case 8:
+              return enumType->GetValueFromString( value, reinterpret_cast< uint64_t* >( varData ) );
+            default:
+              AE_FAIL();
+              return false;
             }
-            else
-            {
-              switch ( enumType->TypeSize() )
-              {
-              case 1:
-                return enumType->GetValueByName( value, reinterpret_cast< uint8_t* >( varData ) );
-              case 2:
-                return enumType->GetValueByName( value, reinterpret_cast< uint16_t* >( varData ) );
-              case 4:
-                return enumType->GetValueByName( value, reinterpret_cast< uint32_t* >( varData ) );
-              case 8:
-                return enumType->GetValueByName( value, reinterpret_cast< uint64_t* >( varData ) );
-              default:
-                AE_FAIL();
-                return false;
-              }
-            }
-            return false;
           }
+          return false;
         }
         case Var::Ref:
         {

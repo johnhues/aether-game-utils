@@ -29,6 +29,7 @@
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
+
 AE_ENUM_REGISTER( PlayerState );
 
 TEST_CASE( "enum registration", "[aeMeta]" )
@@ -55,16 +56,23 @@ TEST_CASE( "enum registration", "[aeMeta]" )
 TEST_CASE( "static enum helpers", "[aeMeta]" )
 {
   REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Idle ) == "Idle" );
-  REQUIRE( aeMeta::Enum::GetValueFromName( "Idle", (PlayerState)666 ) == PlayerState::Idle );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "Idle", (PlayerState)666 ) == PlayerState::Idle );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "0", (PlayerState)666 ) == PlayerState::Idle );
 
   REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Run ) == "Run" );
-  REQUIRE( aeMeta::Enum::GetValueFromName( "Run", (PlayerState)666 ) == PlayerState::Run );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "Run", (PlayerState)666 ) == PlayerState::Run );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "1", (PlayerState)666 ) == PlayerState::Run );
 
   REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Jump ) == "Jump" );
-  REQUIRE( aeMeta::Enum::GetValueFromName( "Jump", (PlayerState)666 ) == PlayerState::Jump );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "Jump", (PlayerState)666 ) == PlayerState::Jump );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "2", (PlayerState)666 ) == PlayerState::Jump );
+}
 
+TEST_CASE( "static enum helpers using missing values", "[aeMeta]" )
+{
   REQUIRE( aeMeta::Enum::GetNameFromValue( (PlayerState)666 ) == "" );
-  REQUIRE( aeMeta::Enum::GetValueFromName( "", PlayerState::Jump ) == PlayerState::Jump );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "3", PlayerState::Jump ) == PlayerState::Jump );
+  REQUIRE( aeMeta::Enum::GetValueFromString( "", PlayerState::Jump ) == PlayerState::Jump );
 }
 
 //------------------------------------------------------------------------------
