@@ -24,40 +24,13 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "catch2/catch.hpp"
-#include "aeMeta.h"
+#include "MetaTest.h"
 
 //------------------------------------------------------------------------------
-// Definitions
+// PlayerState
 //------------------------------------------------------------------------------
-AE_ENUM( TestEnumClass, int32_t,
-  NegativeOne = -1,
-  Zero,
-  One,
-  Two = 0x02,
-  Three = 0x03,
-  Four,
-  Five
-);
+AE_ENUM_REGISTER( PlayerState );
 
-AE_ENUM( PlayerState, uint16_t,
-  Idle,
-  Run,
-  Jump
-);
-
-class SomeClass : public aeInheritor< aeObject, SomeClass >
-{
-public:
-  int32_t intMember;
-  TestEnumClass enumTest;
-};
-AE_META_CLASS( SomeClass );
-AE_META_VAR( SomeClass, intMember );
-AE_META_VAR( SomeClass, enumTest );
-
-//------------------------------------------------------------------------------
-// Test
-//------------------------------------------------------------------------------
 TEST_CASE( "enum registration", "[aeMeta]" )
 {
   const aeMeta::Enum* playerStateEnum = aeMeta::GetEnum( "PlayerState" );
@@ -94,82 +67,102 @@ TEST_CASE( "static enum helpers", "[aeMeta]" )
   REQUIRE( aeMeta::Enum::GetValueFromName( "", PlayerState::Jump ) == PlayerState::Jump );
 }
 
+//------------------------------------------------------------------------------
+// SomeClass
+//------------------------------------------------------------------------------
+AE_META_CLASS( SomeClass );
+AE_META_VAR( SomeClass, intMember );
+AE_META_VAR( SomeClass, enumTest );
+
+AE_ENUM_REGISTER( TestEnumClass );
+
 TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" )
 {
-  SomeClass c0;
-  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c0 );
+  SomeClass c;
+  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
   const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
   
-  c0.enumTest = TestEnumClass::Five;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "Five" );
-  c0.enumTest = TestEnumClass::Four;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "Four" );
-  c0.enumTest = TestEnumClass::Three;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "Three" );
-  c0.enumTest = TestEnumClass::Two;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "Two" );
-  c0.enumTest = TestEnumClass::One;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "One" );
-  c0.enumTest = TestEnumClass::Zero;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "Zero" );
-  c0.enumTest = TestEnumClass::NegativeOne;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "NegativeOne" );
+  c.enumTest = TestEnumClass::Five;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Five" );
+  c.enumTest = TestEnumClass::Four;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Four" );
+  c.enumTest = TestEnumClass::Three;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Three" );
+  c.enumTest = TestEnumClass::Two;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Two" );
+  c.enumTest = TestEnumClass::One;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "One" );
+  c.enumTest = TestEnumClass::Zero;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Zero" );
+  c.enumTest = TestEnumClass::NegativeOne;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "NegativeOne" );
+}
+
+TEST_CASE( "can't read invalid enum values from object using meta definition", "[aeMeta]" )
+{
+  SomeClass c;
+  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
+  const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
   
-  c0.enumTest = (TestEnumClass)6;
-  REQUIRE( enumTestVar->GetObjectValueAsString( &c0 ) == "" );
+  c.enumTest = (TestEnumClass)6;
+  REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "" );
 }
 
 TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 {
-  SomeClass c0;
-  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c0 );
+  SomeClass c;
+  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
   const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
   
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "Five" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Five );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "Four" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Four );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "Three" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Three );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "Two" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Two );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "One" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::One );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "Zero" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Zero );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "NegativeOne" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::NegativeOne );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Five" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Five );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Four" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Four );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Three" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Three );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Two" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Two );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "One" ) );
+  REQUIRE( c.enumTest == TestEnumClass::One );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Zero" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Zero );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "NegativeOne" ) );
+  REQUIRE( c.enumTest == TestEnumClass::NegativeOne );
   
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "5" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Five );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "4" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Four );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "3" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Three );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "2" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Two );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "1" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::One );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "0" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Zero );
-  REQUIRE( enumTestVar->SetObjectValueFromString( &c0, "-1" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::NegativeOne );
-  
-  c0.enumTest = TestEnumClass::Four;
-  REQUIRE( !enumTestVar->SetObjectValueFromString( &c0, "Six" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Four );
-  REQUIRE( !enumTestVar->SetObjectValueFromString( &c0, "6" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Four );
-  REQUIRE( !enumTestVar->SetObjectValueFromString( &c0, "" ) );
-  REQUIRE( c0.enumTest == TestEnumClass::Four );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "5" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Five );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "4" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Four );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "3" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Three );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "2" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Two );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "1" ) );
+  REQUIRE( c.enumTest == TestEnumClass::One );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "0" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Zero );
+  REQUIRE( enumTestVar->SetObjectValueFromString( &c, "-1" ) );
+  REQUIRE( c.enumTest == TestEnumClass::NegativeOne );
 }
 
-enum SomeOldEnum
+TEST_CASE( "can't set invalid enum values on object using meta definition", "[aeMeta]" )
 {
-  Bleep = 4,
-  Bloop,
-  Blop = 7
-};
+  SomeClass c;
+  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
+  const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  
+  c.enumTest = TestEnumClass::Four;
+  REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "Six" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Four );
+  REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "6" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Four );
+  REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "" ) );
+  REQUIRE( c.enumTest == TestEnumClass::Four );
+}
+
+//------------------------------------------------------------------------------
+// SomeOldEnum
+//------------------------------------------------------------------------------
 AE_META_ENUM( SomeOldEnum );
 AE_META_ENUM_VALUE( SomeOldEnum, Bleep );
 AE_META_ENUM_VALUE( SomeOldEnum, Bloop );
@@ -188,12 +181,9 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
   REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
 }
 
-enum SomeOldPrefixEnum
-{
-  kSomeOldPrefixEnum_Bleep = 4,
-  kSomeOldPrefixEnum_Bloop,
-  kSomeOldPrefixEnum_Blop = 7
-};
+//------------------------------------------------------------------------------
+// SomeOldPrefixEnum
+//------------------------------------------------------------------------------
 AE_META_ENUM_PREFIX( SomeOldPrefixEnum, kSomeOldPrefixEnum_ );
 AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bleep );
 AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bloop );
@@ -212,12 +202,9 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
   REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
 }
 
-enum SomeOldRenamedEnum
-{
-  BLEEP = 4,
-  BLOOP,
-  BLOP = 7
-};
+//------------------------------------------------------------------------------
+// SomeOldRenamedEnum
+//------------------------------------------------------------------------------
 AE_META_ENUM( SomeOldRenamedEnum );
 AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLEEP, Bleep );
 AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOOP, Bloop );
@@ -236,12 +223,9 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
   REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
 }
 
-enum class SomeNewEnum
-{
-  Bleep = 4,
-  Bloop,
-  Blop = 7
-};
+//------------------------------------------------------------------------------
+// SomeNewEnum
+//------------------------------------------------------------------------------
 AE_META_ENUM_CLASS( SomeNewEnum );
 AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bleep );
 AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bloop );
@@ -260,18 +244,9 @@ TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
   REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
 }
 
-namespace A
-{
-  namespace B
-  {
-    enum class SomeNewEnum
-    {
-      Bleep = 4,
-      Bloop,
-      Blop = 7
-    };
-  }
-}
+//------------------------------------------------------------------------------
+// A::B::SomeNewEnum
+//------------------------------------------------------------------------------
 AE_META_ENUM_CLASS( A::B::SomeNewEnum );
 AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bleep );
 AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bloop );

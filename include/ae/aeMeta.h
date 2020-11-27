@@ -843,7 +843,7 @@ public:
     return nullptr;
   }
   
-  template < typename T >
+  template < typename E, typename T = typename std::underlying_type< E >::type >
   struct EnumCreator
   {
     EnumCreator( const char* typeName, std::string strMap )
@@ -852,10 +852,9 @@ public:
       
       strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
       strMap.erase( std::remove( strMap.begin(), strMap.end(), '(' ), strMap.end() );
-
-      T currentIndex = 0;
       std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
 
+      T currentValue = 0;
       for ( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
       {
         std::string enumName;
@@ -869,16 +868,16 @@ public:
           enumName = enumNameValue[ 0 ];
           if ( std::is_unsigned< T >::value )
           {
-            currentIndex = static_cast< T >( std::stoull( enumNameValue[ 1 ], 0, 0 ) );
+            currentValue = static_cast< T >( std::stoull( enumNameValue[ 1 ], 0, 0 ) );
           }
           else
           {
-            currentIndex = static_cast< T >( std::stoll( enumNameValue[ 1 ], 0, 0 ) );
+            currentValue = static_cast< T >( std::stoll( enumNameValue[ 1 ], 0, 0 ) );
           }
         }
         
-        enumType->m_AddValue( enumName.c_str(), currentIndex );
-        currentIndex++;
+        enumType->m_AddValue( enumName.c_str(), currentValue );
+        currentValue++;
       }
     }
     
@@ -1014,8 +1013,8 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
-// Define and register at the same time
-#define AE_ENUM( E, T, ... ) \
+// Define a new enum (values are automatically registered)
+#define AE_ENUM_DECLARE( E, T, ... ) \
   enum class E : T { \
     __VA_ARGS__ \
   }; \
@@ -1024,12 +1023,18 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
     static aeMeta::Var::Type GetType() { return aeMeta::Var::Enum; } \
     static const char* GetName() { return #E; } \
   }; \
-  aeMeta::EnumCreator< T > ae_enum_creator_##E( #E, #__VA_ARGS__ ); \
-  std::ostream &operator << ( std::ostream &os, E e ) { \
+  struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
+  static std::ostream &operator << ( std::ostream &os, E e ) { \
     os << aeMeta::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
     return os; \
   } \
-  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { return GetEnum( #E ); }
+  template <> const aeMeta::Enum* aeMeta::GetEnum< E >();
+
+// Register an enum defined with AE_ENUM_DECLARE
+#define AE_ENUM_REGISTER( E ) \
+  AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { aeMeta::EnumCreator< E > ec( name, def ); } \
+  AE_ENUM_##E ae_enum_creator_##E; \
+  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { static const aeMeta::Enum* e = GetEnum( #E ); return e; }
 
 //------------------------------------------------------------------------------
 // External c-style enum registerer
@@ -1043,7 +1048,7 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
     static const char* GetPrefix() { return ""; } \
   }; \
   aeMeta::EnumCreator2< E > ae_enum_creator_##E( #E ); \
-  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { return GetEnum( #E ); }
+  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { static const aeMeta::Enum* e = GetEnum( #E ); return e; }
 
 // Register an already defined c-style enum type where each value has a prefix
 #define AE_META_ENUM_PREFIX( E, PREFIX ) \
@@ -1054,7 +1059,7 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
     static const char* GetPrefix() { return #PREFIX; } \
   }; \
   aeMeta::EnumCreator2< E > ae_enum_creator_##E( #E ); \
-  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { return GetEnum( #E ); }
+  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { static const aeMeta::Enum* e = GetEnum( #E ); return e; }
 
 // Register c-style enum value
 #define AE_META_ENUM_VALUE( E, V ) \
@@ -1076,8 +1081,8 @@ aeMeta::EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
     static const char* GetPrefix() { return ""; } \
   }; \
   namespace aeEnums::_##E { aeMeta::EnumCreator2< E > ae_enum_creator( #E ); } \
-  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { return GetEnum( #E ); }
-// @NOTE: Nested namespace declaration requires C++17
+  template <> const aeMeta::Enum* aeMeta::GetEnum< E >() { static const aeMeta::Enum* e = GetEnum( #E ); return e; }
+  // @NOTE: Nested namespace declaration requires C++17
 
 // Register enum class value
 #define AE_META_ENUM_CLASS_VALUE( E, V ) \
