@@ -42,6 +42,7 @@
 #include "imgui_impl_opengl3.h"
 
 #include "aeInput.h"
+#include "aeMeta.h"
 #include "aeRender.h"
 
 // this is out of aeRender for macOS/winOS
@@ -202,5 +203,35 @@ private:
 	bool m_headless = false;
 	aeRender* m_render = nullptr;
 };
+
+//------------------------------------------------------------------------------
+// Var helpers
+//------------------------------------------------------------------------------
+static aeStr32 aeImGui_Enum( const aeMeta::Enum* enumType, const char* varName, const char* currentValue )
+{
+  aeStr32 result = currentValue;
+  if ( ImGui::BeginCombo( varName, currentValue ) )
+  {
+    for ( uint32_t i = 0; i < enumType->Length(); i++ )
+    {
+      auto indexName = enumType->GetNameByIndex( i );
+      if ( ImGui::Selectable( indexName.c_str(), indexName == currentValue ) )
+      {
+        result = indexName.c_str();
+      }
+    }
+    ImGui::EndCombo();
+  }
+  return result;
+}
+
+template < typename T >
+bool aeImGui_Enum( const char* varName, T* valueOut )
+{
+  const aeMeta::Enum* enumType = aeMeta::GetEnum< T >();
+  auto currentValue = enumType->GetNameByValue( *valueOut );
+  auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str() );
+  return enumType->GetValueFromString( resultName.c_str(), valueOut );
+}
 
 #endif
