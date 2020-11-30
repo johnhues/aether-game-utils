@@ -210,6 +210,7 @@ uint8_t* aeAlloc::AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32
 #if _AE_ALLOC_DISABLE
   return AllocateArray< uint8_t >( count );
 #else
+  AE_ASSERT( typeAlignment );
   AE_ASSERT( typeAlignment <= kDefaultAlignment );
   AE_ASSERT( typeSize % typeAlignment == 0 ); // All elements in array should have correct alignment
 

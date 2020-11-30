@@ -554,7 +554,7 @@ public:
     {
       AE_ASSERT( obj );
       AE_ASSERT_MSG( !m_isAbstract, "Placement new not available for abstract type: #", m_name.c_str() );
-      AE_ASSERT_MSG( m_isTriviallyConstructible, "Placement new not available for type without default constructor: #", m_name.c_str() );
+      AE_ASSERT_MSG( m_isDefaultConstructible, "Placement new not available for type without default constructor: #", m_name.c_str() );
       AE_ASSERT( m_placementNew );
       AE_ASSERT( IsType< T >() );
       AE_ASSERT( (uint64_t)obj % GetAlignment() == 0 );
@@ -588,9 +588,10 @@ public:
     uint32_t GetSize() const { return m_size; }
     uint32_t GetAlignment() const { return m_align; }
     const char* GetName() const { return m_name.c_str(); }
+    bool HasNew() const { return m_placementNew; }
     bool IsAbstract() const { return m_isAbstract; }
     bool IsPolymorphic() const { return m_isPolymorphic; }
-    bool IsTriviallyConstructible() const { return m_isTriviallyConstructible; }
+    bool IsDefaultConstructible() const { return m_isDefaultConstructible; }
 
     const char* GetBaseTypeName() const { return m_parent.c_str(); }
     const Type* GetBaseType() const { return GetTypeByName( m_parent.c_str() ); }
@@ -620,7 +621,7 @@ public:
     // Internal meta type initialization functions
     //------------------------------------------------------------------------------
     template < typename T >
-    typename std::enable_if< !std::is_abstract< T >::value && std::is_trivially_default_constructible< T >::value, void >::type
+    typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
     Init( const char* name, uint32_t index )
     {
       m_placementNew = &( PlacementNewInternal< T > );
@@ -631,10 +632,10 @@ public:
       m_parent = T::GetBaseTypeName();
       m_isAbstract = false;
       m_isPolymorphic = std::is_polymorphic< T >::value;
-      m_isTriviallyConstructible = true;
+      m_isDefaultConstructible = true;
     }
     template < typename T >
-    typename std::enable_if< std::is_abstract< T >::value || !std::is_trivially_default_constructible< T >::value, void >::type
+    typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
     Init( const char* name, uint32_t index )
     {
       m_placementNew = nullptr;
@@ -645,7 +646,7 @@ public:
       m_parent = T::GetBaseTypeName();
       m_isAbstract = std::is_abstract< T >::value;
       m_isPolymorphic = std::is_polymorphic< T >::value;
-      m_isTriviallyConstructible = std::is_trivially_default_constructible< T >::value;
+      m_isDefaultConstructible = std::is_default_constructible< T >::value;
     }
     
     void AddProp( const char* prop )
@@ -685,7 +686,7 @@ public:
     aeStr32 m_parent;
     bool m_isAbstract;
     bool m_isPolymorphic;
-    bool m_isTriviallyConstructible;
+    bool m_isDefaultConstructible;
   };
 
   //------------------------------------------------------------------------------
