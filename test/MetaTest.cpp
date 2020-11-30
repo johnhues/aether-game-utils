@@ -272,3 +272,125 @@ TEST_CASE( "can register an already existing enum class in a nested namespace", 
   REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
   REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
 }
+
+//------------------------------------------------------------------------------
+// Reference testing
+//------------------------------------------------------------------------------
+AE_META_CLASS( RefTester );
+
+std::string RefTester::GetIdString( const RefTester* obj )
+{
+  return obj ? std::to_string( obj->id ) : std::string( "0" );
+}
+
+bool RefTester::StringToId( const char* str, uint32_t* idOut )
+{
+  char* endPtr = nullptr;
+  uint32_t id = strtoul( str, &endPtr, 10 );
+  if ( endPtr != str )
+  {
+    *idOut = id;
+    return true;
+  }
+  return false;
+}
+
+AE_META_CLASS( RefTesterA );
+AE_META_VAR( RefTesterA, ref );
+
+AE_META_CLASS( RefTesterB );
+AE_META_VAR( RefTesterB, ref );
+
+void RefTesterManager::Destroy( RefTester* object )
+{
+  m_objectMap.Remove( object->id );
+  aeAlloc::Release( object );
+}
+
+RefTester* RefTesterManager::GetObjectById( uint32_t id )
+{
+  return id ? m_objectMap.Get( id, nullptr ) : nullptr;
+}
+
+TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
+{
+  const aeMeta::Type* typeA = aeMeta::GetType< RefTesterA >();
+  const aeMeta::Var* varA = typeA->GetVarByName( "ref" );
+  
+  const aeMeta::Type* typeB = aeMeta::GetType< RefTesterB >();
+  const aeMeta::Var* varB = typeB->GetVarByName( "ref" );
+  
+  RefTesterManager manager;
+  auto refStrToValFn = [&]( const char* str, aeObject** objOut )
+  {
+    uint32_t id = 0;
+    if ( RefTester::StringToId( str, &id ) )
+    {
+      *objOut = manager.GetObjectById( id );
+      return true;
+    }
+    return false;
+  };
+  auto refValToStrFn = []( const aeObject* o )
+  {
+    return RefTester::GetIdString( aeCast< RefTester >( o ) );
+  };
+  
+  RefTesterA* testerA1 = manager.Create< RefTesterA >();
+  RefTesterA* testerA2 = manager.Create< RefTesterA >();
+  RefTesterB* testerB3 = manager.Create< RefTesterB >();
+  
+  // Validate ids
+  REQUIRE( testerA1->id == 1 );
+  REQUIRE( testerA2->id == 2 );
+  REQUIRE( testerB3->id == 3 );
+  REQUIRE( RefTester::GetIdString( testerA1 ) == "1" );
+  REQUIRE( RefTester::GetIdString( testerA2 ) == "2" );
+  REQUIRE( RefTester::GetIdString( testerB3 ) == "3" );
+  
+  // Validate initial reference values
+  REQUIRE( testerA1->ref == nullptr );
+  REQUIRE( testerA2->ref == nullptr );
+  REQUIRE( testerB3->ref == nullptr );
+  REQUIRE( varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "0" );
+  REQUIRE( varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
+  REQUIRE( varB->GetObjectValueAsString( testerB3, refValToStrFn ) == "0" );
+  
+  // Set ref of type A to type A
+  REQUIRE( varA->SetObjectValueFromString( testerA1, "2", refStrToValFn ) );
+  REQUIRE( testerA1->ref == testerA2 );
+  REQUIRE( testerA2->ref == nullptr );
+  REQUIRE( testerB3->ref == nullptr );
+  
+  // Set ref of type B to type A
+  REQUIRE( varB->SetObjectValueFromString( testerB3, "2", refStrToValFn ) );
+  REQUIRE( testerA1->ref == testerA2 );
+  REQUIRE( testerA2->ref == nullptr );
+  REQUIRE( testerB3->ref == testerA2 );
+  
+  REQUIRE( varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "2" );
+  REQUIRE( varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
+  REQUIRE( varB->GetObjectValueAsString( testerB3, refValToStrFn ) == "2" );
+  
+  // Setting ref to object of wrong type fails and does nothing
+  REQUIRE( !varB->SetObjectValueFromString( testerA1, "3", refStrToValFn ) );
+  REQUIRE( testerA1->ref == testerA2 );
+  REQUIRE( testerA2->ref == nullptr );
+  REQUIRE( testerB3->ref == testerA2 );
+  
+  // Setting ref from random string value does nothing
+  REQUIRE( !varB->SetObjectValueFromString( testerA1, "qwerty", refStrToValFn ) );
+  REQUIRE( testerA1->ref == testerA2 );
+  REQUIRE( testerA2->ref == nullptr );
+  REQUIRE( testerB3->ref == testerA2 );
+  
+  // Setting ref to null value succeeds and clears ref
+  REQUIRE( varB->SetObjectValueFromString( testerA1, "0", refStrToValFn ) );
+  REQUIRE( testerA1->ref == nullptr );
+  REQUIRE( testerA2->ref == nullptr );
+  REQUIRE( testerB3->ref == testerA2 );
+  
+  manager.Destroy( testerA1 );
+  manager.Destroy( testerA2 );
+  manager.Destroy( testerB3 );
+}
