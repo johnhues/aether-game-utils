@@ -117,4 +117,47 @@ namespace A
   }
 }
 
+//------------------------------------------------------------------------------
+// Reference testing
+//------------------------------------------------------------------------------
+// RefTester
+class RefTester : public aeInheritor< aeObject, RefTester >
+{
+public:
+  
+  static std::string GetIdString( const RefTester* obj );
+  static bool StringToId( const char* str, uint32_t* idOut );
+  
+  uint32_t id = 0;
+};
+
+// RefTesterA
+class RefTesterA : public aeInheritor< RefTester, RefTesterA >
+{
+public:
+  RefTesterA* ref = nullptr;
+};
+
+// RefTesterB
+class RefTesterB : public aeInheritor< RefTester, RefTesterB >
+{
+public:
+  RefTesterA* ref = nullptr;
+};
+
+// RefTesterManager
+class RefTesterManager
+{
+public:
+  template < typename T >
+  T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, aeAlloc::Allocate< T >() ); o->id = m_nextId; m_nextId++; return o; }
+  void Destroy( RefTester* object );
+  
+  RefTester* GetObjectById( uint32_t id );
+
+private:
+  uint32_t m_nextId = 1;
+  aeMap< uint32_t, RefTester* > m_objectMap;
+};
+
 #endif
