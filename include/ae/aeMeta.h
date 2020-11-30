@@ -123,7 +123,7 @@ public:
     static T GetValueFromString( const char* str, T defaultValue )
     {
       const Enum* enumType = GetEnum< typeof(T) >();
-      AE_ASSERT( enumType );
+      AE_ASSERT_MSG( enumType, "Value '#' has no Enum #", str, typeid(T).name() ); // TODO: Pretty print
       enumType->GetValueFromString( str, &defaultValue );
       return defaultValue;
     }
@@ -824,12 +824,10 @@ public:
     }
   };
   
+  // @NOTE: Non-specialized GetEnum() has no implementation so templated GetEnum() calls (defined
+  // with AE_ENUM, AE_META_ENUM, and AE_META_ENUM_PREFIX) will call the specialized function.
   template < typename T >
-  static const Enum* GetEnum()
-  {
-    // This is specialized in enum macro
-    return nullptr;
-  }
+  static const Enum* GetEnum();
   
   template < typename E, typename T = typename std::underlying_type< E >::type >
   struct EnumCreator
@@ -902,7 +900,7 @@ public:
       AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
       
       aeMeta::Enum* enumType = const_cast< aeMeta::Enum* >( aeMeta::GetEnum< T >() );
-      AE_ASSERT( enumType );
+      AE_ASSERT_MSG( enumType, "Could not register enum value '#'. No registered Enum.", valueName );
       enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
     }
   };
@@ -1019,8 +1017,7 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
   static std::ostream &operator << ( std::ostream &os, E e ) { \
     os << aeMeta::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
     return os; \
-  } \
-  template <> const aeMeta::Enum* aeMeta::GetEnum< E >();
+  }
 
 // Register an enum defined with AE_ENUM
 #define AE_ENUM_REGISTER( E ) \

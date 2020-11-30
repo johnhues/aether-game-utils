@@ -29,9 +29,6 @@
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
-
-AE_ENUM_REGISTER( PlayerState );
-
 TEST_CASE( "enum registration", "[aeMeta]" )
 {
   const aeMeta::Enum* playerStateEnum = aeMeta::GetEnum( "PlayerState" );
@@ -76,14 +73,8 @@ TEST_CASE( "static enum helpers using missing values", "[aeMeta]" )
 }
 
 //------------------------------------------------------------------------------
-// SomeClass
+// SomeClass + TestEnumClass
 //------------------------------------------------------------------------------
-AE_META_CLASS( SomeClass );
-AE_META_VAR( SomeClass, intMember );
-AE_META_VAR( SomeClass, enumTest );
-
-AE_ENUM_REGISTER( TestEnumClass );
-
 TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" )
 {
   SomeClass c;
@@ -171,11 +162,6 @@ TEST_CASE( "can't set invalid enum values on object using meta definition", "[ae
 //------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM( SomeOldEnum );
-AE_META_ENUM_VALUE( SomeOldEnum, Bleep );
-AE_META_ENUM_VALUE( SomeOldEnum, Bloop );
-AE_META_ENUM_VALUE( SomeOldEnum, Blop );
-
 TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 {
   const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldEnum >();
@@ -192,11 +178,6 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 //------------------------------------------------------------------------------
 // SomeOldPrefixEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM_PREFIX( SomeOldPrefixEnum, kSomeOldPrefixEnum_ );
-AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bleep );
-AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bloop );
-AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Blop );
-
 TEST_CASE( "can register an already existing c-style enum where each value has a prefix", "[aeMeta]" )
 {
   const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldPrefixEnum >();
@@ -213,11 +194,6 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 //------------------------------------------------------------------------------
 // SomeOldRenamedEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM( SomeOldRenamedEnum );
-AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLEEP, Bleep );
-AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOOP, Bloop );
-AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOP, Blop );
-
 TEST_CASE( "can register an already existing c-style enum where each value has a manually specified name", "[aeMeta]" )
 {
   const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldRenamedEnum >();
@@ -234,11 +210,6 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 //------------------------------------------------------------------------------
 // SomeNewEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM_CLASS( SomeNewEnum );
-AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bleep );
-AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bloop );
-AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Blop );
-
 TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 {
   const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeNewEnum >();
@@ -255,11 +226,6 @@ TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 //------------------------------------------------------------------------------
 // A::B::SomeNewEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM_CLASS( A::B::SomeNewEnum );
-AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bleep );
-AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bloop );
-AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Blop );
-
 TEST_CASE( "can register an already existing enum class in a nested namespace", "[aeMeta]" )
 {
   const aeMeta::Enum* enumType = aeMeta::GetEnum< A::B::SomeNewEnum >();
@@ -276,8 +242,6 @@ TEST_CASE( "can register an already existing enum class in a nested namespace", 
 //------------------------------------------------------------------------------
 // Reference testing
 //------------------------------------------------------------------------------
-AE_META_CLASS( RefTester );
-
 std::string RefTester::GetIdString( const RefTester* obj )
 {
   return obj ? std::to_string( obj->id ) : std::string( "0" );
@@ -294,13 +258,6 @@ bool RefTester::StringToId( const char* str, uint32_t* idOut )
   }
   return false;
 }
-
-AE_META_CLASS( RefTesterA );
-AE_META_VAR( RefTesterA, ref );
-
-AE_META_CLASS( RefTesterB );
-AE_META_VAR( RefTesterB, ref );
-
 void RefTesterManager::Destroy( RefTester* object )
 {
   m_objectMap.Remove( object->id );
