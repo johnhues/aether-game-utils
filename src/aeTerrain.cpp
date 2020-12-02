@@ -36,7 +36,11 @@
 #endif
 
 #ifndef AE_TERRAIN_SIMD
-  #define AE_TERRAIN_SIMD 1
+  #if _AE_LINUX_
+    #define AE_TERRAIN_SIMD 0
+  #else
+    #define AE_TERRAIN_SIMD 1
+  #endif
 #endif
 
 #ifndef AE_TERRAIN_SKIP_CACHE
