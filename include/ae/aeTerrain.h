@@ -93,7 +93,7 @@ typedef uint8_t aeTerrainMaterialId;
 const uint32_t kChunkSize = 32; // 32*32*32 is less than max vertex index
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
-const uint32_t kMaxActiveChunks = 512;
+const uint32_t kMaxActiveChunks = 1024;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
 const VertexCount kMaxChunkVerts = VertexCount( kChunkSize * kChunkSize * kChunkSize );
 const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
@@ -429,6 +429,7 @@ public:
   void SetDebug( class aeDebugRender* debug );
 
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
+  uint32_t GetMaxThreads() const { return m_terrainJobs.Length(); }
   
   Block::Type GetVoxel( int32_t x, int32_t y, int32_t z ) const;
   Block::Type GetVoxel( aeFloat3 position ) const;
