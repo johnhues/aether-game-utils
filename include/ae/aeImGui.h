@@ -231,7 +231,16 @@ bool aeImGui_Enum( const char* varName, T* valueOut )
   const aeMeta::Enum* enumType = aeMeta::GetEnum< T >();
   auto currentValue = enumType->GetNameByValue( *valueOut );
   auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str() );
-  return enumType->GetValueFromString( resultName.c_str(), valueOut );
+  
+  T prev = *valueOut;
+  if ( enumType->GetValueFromString( resultName.c_str(), valueOut ) )
+  {
+    return prev != *valueOut;
+  }
+  else
+  {
+    return false;
+  }
 }
 
 #endif
