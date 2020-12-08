@@ -455,7 +455,7 @@ TEST_CASE( "append array to empty array", "[ae::Array]" )
     for ( uint32_t i = 0; i < 25; i++ )
     {
       {
-        ae::LifetimeTester t[ i ];
+        ae::LifetimeTester* t = new ae::LifetimeTester[ i ];
         ctor += i;
         current += i;
         REQUIRE( ae::LifetimeTester::ctorCount == ctor );
@@ -464,6 +464,8 @@ TEST_CASE( "append array to empty array", "[ae::Array]" )
         array.Append( t, i );
         copy += i;
         current += i;
+
+        delete[] t;
       }
       dtor += i;
       current -= i;
@@ -513,7 +515,7 @@ TEST_CASE( "append array to array", "[ae::Array]" )
     for ( uint32_t i = 0; i < 25; i++ )
     {
       {
-        ae::LifetimeTester t[ i ];
+        ae::LifetimeTester* t = new ae::LifetimeTester[ i ];
         ctor += i;
         current += i;
         REQUIRE( ae::LifetimeTester::ctorCount == ctor );
@@ -522,6 +524,8 @@ TEST_CASE( "append array to array", "[ae::Array]" )
         array.Append( t, i );
         copy += i;
         current += i;
+
+        delete[] t;
       }
       dtor += i;
       current -= i;
