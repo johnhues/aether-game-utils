@@ -213,7 +213,6 @@ bool InputState::Get( aeKey key ) const
 aeInput::aeInput()
 {
   m_window = nullptr;
-  m_render = nullptr;
 
   m_textMode = 0;
   m_text = "";

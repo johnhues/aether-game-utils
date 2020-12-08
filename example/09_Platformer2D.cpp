@@ -109,18 +109,24 @@ void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
 void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
 {
   uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
-  bool jumpButton = ( input->GetState()->space || input->GetState()->up );
+  
+  const InputState* inputState = input->GetState();
+  bool up = inputState->up || inputState->leftAnalog.y > 0.1f;
+  bool down = inputState->down || inputState->leftAnalog.y < -0.1f;
+  bool left = inputState->left || inputState->leftAnalog.x < -0.1f;
+  bool right = inputState->right || inputState->leftAnalog.x > 0.1f;
+  bool jumpButton = ( inputState->space || inputState->up || inputState->a );
 
   m_canJumpTimer -= dt;
 
   // Water
   if ( tile == kTile_Water )
   {
-    if ( jumpButton ) { m_body->AddForce( aeFloat2( 0.0f, kPlayerMass * kSwimUp ) ); }
-    if ( input->GetState()->down ) { m_body->AddForce( aeFloat2( 0.0f, -kPlayerMass * kSwimDown ) ); }
+    if ( up || jumpButton ) { m_body->AddForce( aeFloat2( 0.0f, kPlayerMass * kSwimUp ) ); }
+    if ( down ) { m_body->AddForce( aeFloat2( 0.0f, -kPlayerMass * kSwimDown ) ); }
 
-    if ( input->GetState()->left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
-    if ( input->GetState()->right ) { m_body->AddForce( aeFloat2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
+    if ( left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
+    if ( right ) { m_body->AddForce( aeFloat2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
 
     // Always reset jump so a jump is possible immediately after leaving water
     m_canJumpTimer = kJumpMaxAirTime;
@@ -128,8 +134,8 @@ void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
   }
   else // Air / ground
   {
-    if ( input->GetState()->left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
-    if ( input->GetState()->right ) { m_body->AddForce( aeFloat2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+    if ( left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+    if ( right ) { m_body->AddForce( aeFloat2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
 
     if ( CanJump() && jumpButton )
     {
