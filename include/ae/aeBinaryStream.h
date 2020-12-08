@@ -29,6 +29,7 @@
 //------------------------------------------------------------------------------
 #include "aeArray.h"
 #include "aeLog.h"
+#include "aeString.h"
 
 //------------------------------------------------------------------------------
 // aeBinaryStream class
@@ -66,6 +67,11 @@ public:
 
   void SerializeBool( bool& v );
   void SerializeBool( const bool& v );
+  
+  template < uint32_t N >
+  void SerializeString( aeStr< N >& str );
+  template < uint32_t N >
+  void SerializeString( const aeStr< N >& str );
 
   template< typename T >
   void SerializeObject( T& v );
@@ -151,11 +157,51 @@ public:
   template < typename T > void SerializeFloat( T ) = delete;
   template < typename T > void SerializeDouble( T ) = delete;
   template < typename T > void SerializeBool( T ) = delete;
+  template < typename T > void SerializeString( T ) = delete;
 };
 
 //------------------------------------------------------------------------------
 // aeBinaryStream member functions
 //------------------------------------------------------------------------------
+template < uint32_t N >
+void aeBinaryStream::SerializeString( aeStr< N >& str )
+{
+  if ( IsWriter() )
+  {
+    const uint16_t len = str.Length();
+    SerializeUint16( len );
+    SerializeRaw( str.c_str(), len );
+  }
+  else if ( IsReader() )
+  {
+    uint16_t len = 0;
+    SerializeUint16( len );
+    if ( !IsValid() )
+    {
+      return;
+    }
+
+    if ( len > aeStr< N >::MaxLength() || GetRemaining() < len )
+    {
+      Invalidate();
+    }
+    else
+    {
+      str = aeStr< N >( len, (const char*)PeekData() );
+      Discard( len );
+    }
+  }
+}
+
+template < uint32_t N >
+void aeBinaryStream::SerializeString( const aeStr< N >& str )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  const uint16_t len = str.Length();
+  SerializeUint16( len );
+  SerializeRaw( str.c_str(), len );
+}
+
 template< typename T >
 void aeBinaryStream_SerializeObjectInternal( aeBinaryStream* stream, T& v, decltype( &T::Serialize ) )
 {

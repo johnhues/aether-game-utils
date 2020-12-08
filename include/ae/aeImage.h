@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeCommonRender.h
+// aeImage.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,8 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AECOMMONRENDER_H
-#define AECOMMONRENDER_H
+#ifndef AEIMAGE_H
+#define AEIMAGE_H
 
 //------------------------------------------------------------------------------
 // Headers
@@ -30,44 +30,50 @@
 #include "aeRender.h"
 
 //------------------------------------------------------------------------------
-// aeRenderInternal class
+// aeImage
 //------------------------------------------------------------------------------
-class aeRenderInternal
+namespace ae
 {
-public:
-  virtual ~aeRenderInternal() {}
+  class Image
+  {
+  public:
+    enum class Extension
+    {
+      PNG
+    };
 
-  virtual void Initialize( aeRender* render ) = 0;
-  virtual void Terminate( aeRender* render ) = 0;
-  virtual void StartFrame( aeRender* render ) = 0;
-  virtual void EndFrame( aeRender* render ) = 0;
-	
-  // this is so imgui and the main render copy can enable srgb writes in GL
-  virtual void EnableSRGBWrites( aeRender* render, bool enable ) = 0;
-  virtual void AddTextureBarrier( aeRender* render ) = 0;
-};
+    enum class Interpolation
+    {
+      Nearest,
+      Linear,
+      Cosine
+    };
 
-//------------------------------------------------------------------------------
-// aeOpenGLRender class
-//------------------------------------------------------------------------------
-class aeOpenGLRender : public aeRenderInternal
-{
-public:
-  aeOpenGLRender();
+    enum class Format
+    {
+      Auto,
+      R,
+      RG,
+      RGB,
+      RGBA
+    };
 
-  void Initialize( aeRender* render ) override;
-  void Terminate( aeRender* render ) override;
-  void StartFrame( aeRender* render ) override;
-  void EndFrame( aeRender* render ) override;
+    void LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto );
+    bool LoadFile( const void* file, uint32_t length, Extension extension, Format storage = Format::Auto );
 
-  // this is so imgui and the main render copy can enable srgb writes in GL
-  void EnableSRGBWrites( aeRender* render, bool enable ) override;
+    uint32_t GetWidth() const { return m_width; }
+    uint32_t GetHeight() const { return m_height; }
+    uint32_t GetChannels() const { return m_channels; }
 
-  void AddTextureBarrier(  aeRender* render ) override;
+    aeColor Get( aeInt2 pixel ) const;
+    aeColor Get( aeFloat2 pixel, Interpolation interpolation ) const;
 
-private:
-  void* m_context;
-  int32_t m_defaultFbo;
-};
+  private:
+    aeArray< uint8_t > m_data;
+    int32_t m_width = 0;
+    int32_t m_height = 0;
+    uint32_t m_channels = 0;
+  };
+}
 
 #endif

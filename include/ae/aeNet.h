@@ -55,6 +55,11 @@ struct AetherUuid
 
 std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
 
+inline void Serialize( aeBinaryStream* stream, AetherUuid* uuid )
+{
+	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
+}
+
 //------------------------------------------------------------------------------
 // aeNetData class
 //------------------------------------------------------------------------------

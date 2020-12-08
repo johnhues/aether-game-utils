@@ -352,7 +352,8 @@ public:
   void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
   void SetCulling( aeShaderCulling::Type culling ) { m_culling = culling; }
   void SetWireframe( bool enabled ) { m_wireframe = enabled; }
-  
+  void SetBlendingPremul( bool enabled ) { m_blendingPremul = enabled; }
+	
 private:
   int m_LoadShader( const char* shaderStr, aeShaderType::Type type, const char* const* defines, int32_t defineCount );
   
@@ -361,6 +362,7 @@ private:
   uint32_t m_program;
 
   bool m_blending;
+  bool m_blendingPremul;
   bool m_depthTest;
   bool m_depthWrite;
   aeShaderCulling::Type m_culling;
@@ -476,8 +478,7 @@ class aeTexture2D : public aeTexture
 public:
   void Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false );
   void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false,
-	  bool isSRGB = false,
-	  bool is16BitImage = false );
+	  bool isSRGB = false );
   void Destroy() override;
 
   uint32_t GetWidth() const { return m_width; }
@@ -508,6 +509,22 @@ public:
   uint32_t GetWidth() const;
   uint32_t GetHeight() const;
 
+  // @NOTE: Get ndc space rect of this target within another target (fill but maintain aspect ratio)
+  // GetNDCFillRectForTarget( aeRender::GetWindow()::GetWidth(),  aeRender::GetWindow()::Height() )
+  // GetNDCFillRectForTarget( aeRenderTarget()::GetWidth(),  aeRenderTarget()::Height() )
+  aeRect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
+
+  // @NOTE: Other target to local transform (pixels->pixels)
+  // Useful for transforming window/mouse pixel coordinates to local pixels
+  // GetTargetPixelsToLocalTransform( aeRender::GetWindow()::GetWidth(),  aeRender::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
+  aeFloat4x4 GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, aeRect ndc ) const;
+
+  // @NOTE: Mouse/window pixel coordinates to world space
+  // GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ... ), TODO )
+  aeFloat4x4 GetTargetPixelsToWorld( const aeFloat4x4& otherTargetToLocal, const aeFloat4x4& worldToNdc ) const;
+
+  // @NOTE: Creates a transform matrix from aeQuad vertex positions to ndc space
+  // aeRenderTarget uses aeQuad vertices internally
   static aeFloat4x4 GetQuadToNDCTransform( aeRect ndc, float z );
 
 private:
@@ -720,12 +737,11 @@ public:
   uint32_t GetHeight() const { return m_height; }
   float GetAspectRatio() const;
 
-  aeFloat4x4 GetWindowToCanvasTransform() const; // Mouse to canvas
-  aeFloat4x4 GetWindowToWorld( const aeFloat4x4& worldToNdc ) const; // Mouse to world
-  aeRect GetNDCRect() const;
-
-  // this is so imgui and the main render copy can enable srgb writes in GL
+  // this is so imgui and the main render copy can enable srgb writes in (GL only)
   void EnableSRGBWrites( bool enable );
+	
+  // have to inject a barrier to readback from active render target (GL only)
+  void AddTextureBarrier();
 
 private:
   class aeRenderInternal* m_renderInternal;

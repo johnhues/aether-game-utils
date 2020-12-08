@@ -47,6 +47,8 @@ public:
 
   aeStr( uint32_t length, const char* str );
 
+  aeStr( uint32_t length, char c );
+
   template < typename... Args >
   aeStr( const char* format, Args... args );
 
@@ -148,7 +150,7 @@ std::ostream& operator<<( std::ostream& out, const aeStr< N >& str )
 template < uint32_t N >
 std::istream& operator>>( std::istream& in, aeStr< N >& str )
 {
-  in.getline( str.m_str, sizeof( str.m_str - 1 ) );
+  in.getline( str.m_str, aeStr< N >::MaxLength() );
   str.m_length = in.gcount();
   str.m_str[ str.m_length ] = 0;
   return in;
@@ -193,6 +195,14 @@ inline aeStr16 ToString( double value )
   return aeStr16( length, str );
 }
 
+template < typename T >
+inline aeStr64 ToString( const T& v )
+{
+  std::stringstream os;
+  os << v;
+  return os.str().c_str();
+}
+
 //------------------------------------------------------------------------------
 // aeStr member functions
 //------------------------------------------------------------------------------
@@ -227,6 +237,15 @@ aeStr< N >::aeStr( uint32_t length, const char* str )
   AE_ASSERT( length <= (uint16_t)MaxLength() );
   m_length = length;
   memcpy( m_str, str, m_length );
+  m_str[ length ] = 0;
+}
+
+template < uint32_t N >
+aeStr< N >::aeStr( uint32_t length, char c )
+{
+  AE_ASSERT( length <= (uint16_t)MaxLength() );
+  m_length = length;
+  memset( m_str, c, m_length );
   m_str[ length ] = 0;
 }
 
@@ -501,7 +520,10 @@ void aeStr< N >::m_Format( const char* format, T value, Args... args )
 
   if ( *head == '#' )
   {
-    *this += ToString( value );
+    // @TODO: Replace with ToString()?
+    std::ostringstream stream;
+    stream << value;
+    *this += stream.str().c_str();
     head++;
   }
   m_Format( head, args... );

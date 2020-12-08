@@ -1272,46 +1272,12 @@ float aeRender::GetAspectRatio() const
   }
 }
 
-aeFloat4x4 aeRender::GetWindowToCanvasTransform() const
-{
-  aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
-  windowToNDC.Scale( aeFloat3( 2.0f / m_window->GetWidth(), 2.0f / m_window->GetHeight(), 1.0f ) );
-  
-  aeFloat4x4 ndcToQuad = aeRenderTarget::GetQuadToNDCTransform( GetNDCRect(), 0.0f );
-  ndcToQuad.Invert();
-  
-  aeFloat4x4 quadToRender = aeFloat4x4::Scaling( aeFloat3( m_canvas.GetWidth(), m_canvas.GetHeight(), 1.0f ) );
-  quadToRender.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
-  
-  return ( quadToRender * ndcToQuad * windowToNDC );
-}
-
-aeFloat4x4 aeRender::GetWindowToWorld( const aeFloat4x4& worldToNdc ) const
-{
-  aeFloat4x4 windowToCanvas = GetWindowToCanvasTransform();
-  aeFloat4x4 canvasToNdc = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) ) * aeFloat4x4::Scaling( aeFloat3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
-  return ( worldToNdc.Inverse() * canvasToNdc * windowToCanvas );
-}
-
-aeRect aeRender::GetNDCRect() const
-{
-  float canvasAspect = m_canvas.GetWidth() / (float)m_canvas.GetHeight();
-  float windowAspect = m_window->GetWidth() / (float)m_window->GetHeight();
-  if ( canvasAspect >= windowAspect )
-  {
-    // Fit width
-    float height = windowAspect / canvasAspect;
-    return aeRect( -1.0f, -height, 2.0f, height * 2.0f );
-  }
-  else
-  {
-    // Fit height
-    float width = canvasAspect / windowAspect;
-    return aeRect( -width, -1.0f, width * 2.0f, 2.0f );
-  }
-}
-
 void aeRender::EnableSRGBWrites(bool enable)
 {
 	m_renderInternal->EnableSRGBWrites( this, enable );
+}
+
+void aeRender::AddTextureBarrier()
+{
+	m_renderInternal->AddTextureBarrier( this );
 }

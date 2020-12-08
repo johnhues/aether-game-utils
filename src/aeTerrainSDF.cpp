@@ -28,42 +28,6 @@
 //------------------------------------------------------------------------------
 // Sdf helpers
 //------------------------------------------------------------------------------
-float Box( aeFloat3 p, aeFloat3 b )
-{
-  aeFloat3 d;
-  d.x = aeMath::Abs( p.x ) - b.x;
-  d.y = aeMath::Abs( p.y ) - b.y;
-  d.z = aeMath::Abs( p.z ) - b.z;
-  aeFloat3 d0;
-  d0.x = aeMath::Max( d.x, 0.0f );
-  d0.y = aeMath::Max( d.y, 0.0f );
-  d0.z = aeMath::Max( d.z, 0.0f );
-  float f = aeFloat3( d0 ).Length();
-  return f + fmin( fmax( d.x, fmax( d.y, d.z ) ), 0.0f );
-}
-
-float Cylinder( aeFloat3 p, aeFloat2 h )
-{
-  aeFloat2 d;
-  d.x = aeFloat2( p.x, p.y ).Length();
-  d.y = p.z;
-  d.x = fabs( d.x );
-  d.y = fabs( d.y );
-  d -= h;
-  aeFloat2 d0( fmax( d.x, 0.0f ), fmax( d.y, 0.0f ) );
-  return fmin( fmax( d.x, d.y ), 0.0f ) + d0.Length();
-}
-
-float Sphere( aeFloat3 center, float radius, aeFloat3 p )
-{
-  return ( p - center ).Length() - radius;
-}
-
-float Ground( float height, aeFloat3 p )
-{
-  return p.z - height;
-}
-
 float aeUnion( float d1, float d2 )
 {
   return aeMath::Min( d1, d2 );
@@ -96,37 +60,42 @@ float aeSmoothSubtraction( float d1, float d2, float k )
 //------------------------------------------------------------------------------
 ae::Sdf::Shape::Shape() :
   m_aabb( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) ),
+  m_halfSize( 0.5f ),
   m_localToWorld( aeFloat4x4::Identity() ),
-  m_worldToScaled( aeFloat4x4::Identity() )
+  m_worldToScaled( aeFloat4x4::Identity() ),
+  m_aabbPrev( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) )
 {}
 
 void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
 {
+  if ( m_localToWorld == transform )
+  {
+    return;
+  }
+
   m_localToWorld = transform;
 
   // World to local with scaling removed. Translation and rotation
   // are handled by the base Shape. Sdf functions only need to take
   // object scaling into consideration.
-  aeFloat4x4 scaledToWorld = transform;
+  aeFloat4x4 scaledToWorld = m_localToWorld;
   scaledToWorld.RemoveScaling();
   m_worldToScaled = scaledToWorld.Inverse();
 
   // Set scale of inherited Shape object
-  aeAABB scaledAABB = OnSetTransform( transform.GetScale() );
+  m_halfSize = m_localToWorld.GetScale() * 0.5f;
 
   // Update shape world space AABB
-  aeFloat4x4 localToAABB = scaledAABB.GetTransform();
-  aeFloat4x4 aabbToWorld = scaledToWorld * localToAABB;
   aeFloat4 corners[] =
   {
-    aabbToWorld * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ),
-    aabbToWorld * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ),
-    aabbToWorld * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ),
-    aabbToWorld * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ),
-    aabbToWorld * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ),
-    aabbToWorld * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ),
-    aabbToWorld * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ),
-    aabbToWorld * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ),
+    m_localToWorld * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ),
   };
   m_aabb = aeAABB( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
   for ( uint32_t i = 2; i < countof( corners ); i++ )
@@ -142,38 +111,33 @@ float ae::Sdf::Box::GetValue( aeFloat3 p ) const
 {
   p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 
-  aeFloat3 q = aeMath::Abs( p ) - ( m_halfSize - aeFloat3( m_r ) );
-  return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - m_r;
-}
-
-aeAABB ae::Sdf::Box::OnSetTransform( aeFloat3 scale )
-{
-  m_halfSize = scale * 0.5f;
-  return aeAABB( -m_halfSize, m_halfSize );
+  aeFloat3 q = aeMath::Abs( p ) - ( GetHalfSize() - aeFloat3( cornerRadius ) );
+  return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
 }
 
 //------------------------------------------------------------------------------
-// Cone member functions
+// Cylinder member functions
 //------------------------------------------------------------------------------
-float ae::Sdf::Cone::GetValue( aeFloat3 p ) const
+float ae::Sdf::Cylinder::GetValue( aeFloat3 p ) const
 {
+  aeFloat3 halfSize = GetHalfSize();
   p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 	
   float scale;
-  if ( m_halfSize.x > m_halfSize.y )
+  if ( halfSize.x > halfSize.y )
   {
-    scale = m_halfSize.x;
-    p.y *= m_halfSize.x / m_halfSize.y;
+    scale = halfSize.x;
+    p.y *= halfSize.x / halfSize.y;
   }
   else
   {
-    scale = m_halfSize.y;
-    p.x *= m_halfSize.y / m_halfSize.x;
+    scale = halfSize.y;
+    p.x *= halfSize.y / halfSize.x;
   }
 
   float r1 = aeMath::Clip01( bottom ) * scale;
   float r2 = aeMath::Clip01( top ) * scale;
-  float h = m_halfSize.z;
+  float h = halfSize.z;
 
   aeFloat2 q( p.GetXY().Length(), p.z );
   aeFloat2 k1(r2,h);
@@ -184,12 +148,6 @@ float ae::Sdf::Cone::GetValue( aeFloat3 p ) const
   return s*sqrt( aeMath::Min(ca.Dot(ca),cb.Dot(cb)) );
 }
 
-aeAABB ae::Sdf::Cone::OnSetTransform( aeFloat3 scale )
-{
-  m_halfSize = scale * 0.5f;
-  return aeAABB( -m_halfSize, m_halfSize );
-}
-
 //------------------------------------------------------------------------------
 // Heightmap member functions
 //------------------------------------------------------------------------------
@@ -197,24 +155,19 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
 {
   AE_ASSERT_MSG( m_heightMap, "Heightmap image not set" );
 
+  aeFloat3 halfSize = GetHalfSize();
   p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 
-  aeFloat2 p2 = ( p.GetXY() + m_halfSize.GetXY() ) / ( m_halfSize.GetXY() * 2.0f );
+  aeFloat2 p2 = ( p.GetXY() + halfSize.GetXY() ) / ( halfSize.GetXY() * 2.0f );
   p2 *= aeFloat2( m_heightMap->GetWidth(), m_heightMap->GetHeight() );
   float v0 = m_heightMap->Get( p2, ae::Image::Interpolation::Cosine ).r;
-  v0 = p.z + m_halfSize.z - v0 * m_halfSize.z * 2.0f;
+  v0 = p.z + halfSize.z - v0 * halfSize.z * 2.0f;
 
-  aeFloat3 q = aeMath::Abs( p ) - m_halfSize;
+  aeFloat3 q = aeMath::Abs( p ) - halfSize;
   float v1 = ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f );
 
   return aeMath::Max( v0, v1 );
 
-}
-
-aeAABB ae::Sdf::Heightmap::OnSetTransform( aeFloat3 scale )
-{
-  m_halfSize = scale * 0.5f;
-  return aeAABB( -m_halfSize, m_halfSize );
 }
 
 //------------------------------------------------------------------------------
@@ -223,43 +176,43 @@ aeAABB ae::Sdf::Heightmap::OnSetTransform( aeFloat3 scale )
 float aeTerrainSDF::GetValue( aeFloat3 pos ) const
 {
   float f = 0.0f;
-  if ( m_fn2 )
+  if ( !m_shapes.Length() )
   {
-    f = m_fn2( m_userdata, pos );
+    return f;
   }
-  else if ( m_fn1 )
-  {
-    f = m_fn1( pos );
-  }
-  else
-  {
-    if ( !m_shapes.Length() )
-    {
-      return 0.0f;
-    }
 
-    int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf::Shape* sdf ){ return sdf->type != ae::Sdf::Shape::Type::Material; } );
-    if ( firstShapeIndex >= 0 )
+  int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf::Shape* sdf ){ return sdf->type != ae::Sdf::Shape::Type::Material; } );
+  if ( firstShapeIndex >= 0 )
+  {
+    f = m_shapes[ firstShapeIndex ]->GetValue( pos );
+    for ( uint32_t i = firstShapeIndex + 1; i < m_shapes.Length(); i++ )
     {
-      f = m_shapes[ firstShapeIndex ]->GetValue( pos );
-      for ( uint32_t i = firstShapeIndex + 1; i < m_shapes.Length(); i++ )
+      ae::Sdf::Shape* shape = m_shapes[ i ];
+      if ( shape->type == ae::Sdf::Shape::Type::Material )
       {
-        if ( m_shapes[ i ]->type == ae::Sdf::Shape::Type::Union )
-        {
-          float value = m_shapes[ i ]->GetValue( pos );
+        continue;
+      }
+
+      float value = shape->GetValue( pos );
 #if _AE_DEBUG_
-          AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
+      AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
 #endif
-          f = aeUnion( value, f );
-        }
-        else if ( m_shapes[ i ]->type == ae::Sdf::Shape::Type::Subtraction )
-        {
-          float value = m_shapes[ i ]->GetValue( pos );
-#if _AE_DEBUG_
-          AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
-#endif
-          f = aeSubtraction( value, f );
-        }
+
+      if ( shape->type == ae::Sdf::Shape::Type::Union )
+      {
+        f = aeUnion( value, f );
+      }
+      else if ( shape->type == ae::Sdf::Shape::Type::Subtraction )
+      {
+        f = aeSubtraction( value, f );
+      }
+      else if ( shape->type == ae::Sdf::Shape::Type::SmoothUnion )
+      {
+        f = aeSmoothUnion( value, f, shape->smoothing );
+      }
+      else if ( shape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+      {
+        f = aeSmoothSubtraction( value, f, shape->smoothing );
       }
     }
   }
@@ -270,37 +223,27 @@ float aeTerrainSDF::GetValue( aeFloat3 pos ) const
   return f;
 }
 
+//------------------------------------------------------------------------------
+// aeTerrainSDF member functions
+//------------------------------------------------------------------------------
+aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
+  m_terrain( terrain )
+{}
+
 aeFloat3 aeTerrainSDF::GetDerivative( aeFloat3 p ) const
 {
-  aeFloat3 normal0;
-  for ( int32_t i = 0; i < 3; i++ )
-  {
-    aeFloat3 nt = p;
-    nt[ i ] += 0.2f;
-    normal0[ i ] = GetValue( nt );
-  }
-  // This should be really close to 0 because it's really
-  // close to the surface but not close enough to ignore.
-  normal0 -= aeFloat3( GetValue( p ) );
-  normal0.SafeNormalize();
-  AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
-  AE_ASSERT( normal0 == normal0 );
-
-  aeFloat3 normal1;
-  for ( int32_t i = 0; i < 3; i++ )
-  {
-    aeFloat3 nt = p;
-    nt[ i ] -= 0.2f;
-    normal1[ i ] = GetValue( nt );
-  }
-  // This should be really close to 0 because it's really
-  // close to the surface but not close enough to ignore.
-  normal1 = aeFloat3( GetValue( p ) ) - normal1;
-  normal1.SafeNormalize();
-  AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
-  AE_ASSERT( normal1 == normal1 );
-
-  return ( normal1 + normal0 ).SafeNormalizeCopy();
+  // https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
+  const float h = 0.0001f;
+  const aeFloat3 xyy( 1.0f, -1.0f, -1.0f );
+  const aeFloat3 yyx( -1.0f, -1.0f, 1.0f );
+  const aeFloat3 yxy( -1.0f, 1.0f, -1.0f );
+  const aeFloat3 xxx( 1.0f, 1.0f, 1.0f );
+  const aeFloat3 n =
+    xyy * GetValue( p + xyy * h ) +
+    yyx * GetValue( p + yyx * h ) +
+    yxy * GetValue( p + yxy * h ) +
+    xxx * GetValue( p + xxx * h );
+  return n.SafeNormalizeCopy();
 }
 
 aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
@@ -309,31 +252,31 @@ aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
     ae::Sdf::Shape* sdf = m_shapes[ i ];
-    if ( sdf->type == ae::Sdf::Shape::Type::Material && sdf->GetValue( pos ) <= 0.0f )
+    ae::Sdf::Shape::Type type = sdf->type;
+    float value = sdf->GetValue( pos );
+
+    bool isAdditive = type == ae::Sdf::Shape::Type::Union
+      || type == ae::Sdf::Shape::Type::SmoothUnion;
+    if ( isAdditive )
     {
-      materialId = sdf->materialId;
+      if ( value <= 0.0f )
+      {
+        materialId = sdf->materialId;
+      }
+    }
+    else
+    {
+      bool isPaint = type == ae::Sdf::Shape::Type::Material
+        || type == ae::Sdf::Shape::Type::Subtraction
+        || type == ae::Sdf::Shape::Type::SmoothSubtraction;
+      // Expand shape slightly so subtraction paints surfaces
+      if ( isPaint && value <= 0.25f )
+      {
+        materialId = sdf->materialId;
+      }
     }
   }
   return materialId;
-}
-
-bool aeTerrainSDF::TestAABB( aeAABB aabb ) const
-{
-  if ( m_fn1 || m_fn2 )
-  {
-    return true;
-  }
-  
-  for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
-  {
-    aeAABB shapeAABB = m_shapes[ i ]->GetAABB();
-    if ( shapeAABB.Intersect( aabb ) )
-    {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 void aeTerrainSDF::DestroySdf( ae::Sdf::Shape* sdf )
@@ -348,18 +291,32 @@ void aeTerrainSDF::DestroySdf( ae::Sdf::Shape* sdf )
 
 void aeTerrainSDF::UpdatePending()
 {
+  // @NOTE: UpdatePending() is called when no terrain jobs are running,
+  // so it's safe to modify the terrain shapes array
+
+  // Old
   for ( uint32_t i = 0; i < m_pendingDestroy.Length(); i++ )
   {
-    int32_t index = m_shapes.Find( m_pendingDestroy[ i ] );
+    ae::Sdf::Shape* shape = m_pendingDestroy[ i ];
+    
+    int32_t index = m_shapes.Find( shape );
     AE_ASSERT( index >= 0 );
     m_shapes.Remove( index );
-    aeAlloc::Release( m_pendingDestroy[ i ] );
+
+    m_terrain->m_Dirty( shape->GetAABB() );
+    aeAlloc::Release( shape );
   }
   m_pendingDestroy.Clear();
 
+  // New
   for ( uint32_t i = 0; i < m_pendingCreated.Length(); i++ )
   {
-    m_shapes.Append( m_pendingCreated[ i ] );
+    ae::Sdf::Shape* shape = m_pendingCreated[ i ];
+    m_shapes.Append( shape );
+    m_terrain->m_Dirty( shape->GetAABB() );
+
+    shape->m_dirty = false;
+    shape->m_aabbPrev = shape->GetAABB();
   }
   m_pendingCreated.Clear();
 }

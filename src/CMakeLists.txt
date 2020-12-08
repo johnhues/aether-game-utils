@@ -51,6 +51,7 @@ set(AE_HEADER_FILES
 	../include/ae/aeDict.h
 	../include/ae/aeEditorCamera.h
 	../include/ae/aeHotSpot.h
+	../include/ae/aeImage.h
 	../include/ae/aeImGui.h
 	../include/ae/aeInitializer.h
 	../include/ae/aeInput.h
@@ -73,6 +74,7 @@ set(AE_HEADER_FILES
 	../include/ae/aeSpline.h
 	../include/ae/aeString.h
 	../include/ae/aeTerrain.h
+	../include/ae/aeTesting.h
 	../include/ae/aeUuid.h
 	../include/ae/aeVfs.h
 	../include/ae/aeWindow.h
@@ -93,6 +95,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeDict.cpp
 		aeEditorCamera.cpp
 		aeHotSpot.cpp
+		aeImage.cpp
 		aeInput.cpp
 		aeLog.cpp
 		aeMath.cpp
@@ -106,6 +109,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeSpline.cpp
 		aeTerrain.cpp
 		aeTerrainSDF.cpp
+		aeTesting.cpp
 		aeUuid.cpp
 		aeVfs.cpp
 		aeWindow.cpp

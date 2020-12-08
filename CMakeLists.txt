@@ -228,8 +228,8 @@ if(NOT EMSCRIPTEN)
 	list(APPEND AE_DEPS_LIBARARIES ${SDL2_LIBRARY})
 endif()
 
-# use c++14
-set(CMAKE_CXX_STANDARD 14)
+# use c++17
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # use unicode
 add_definitions(-D_UNICODE -DUNICODE)

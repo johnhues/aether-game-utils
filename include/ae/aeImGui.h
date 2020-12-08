@@ -42,6 +42,7 @@
 #include "imgui_impl_opengl3.h"
 
 #include "aeInput.h"
+#include "aeMeta.h"
 #include "aeRender.h"
 
 // this is out of aeRender for macOS/winOS
@@ -115,9 +116,6 @@ public:
 			ImGui_ImplOpenGL3_NewFrame();
 		}
 		ImGui::NewFrame();
-		
-		// have to alias this, since it's not passed into Render() call
-		m_render = render;
 	}
 
 	void Render()
@@ -126,13 +124,20 @@ public:
 		ImGui::Render();
 		if ( !m_headless )
 		{
-			// TODO: this should only be enabled if fbo in GL is sRGB
-			//m_render->EnableSRGBWrites( true );
 			ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
-			//m_render->EnableSRGBWrites( false );
-			m_render = nullptr;
 		}
 	}
+
+	template < uint32_t N >
+	static bool InputText( const char* label, aeStr< N >* str, ImGuiInputTextFlags flags = 0 )
+	{
+		IM_ASSERT( ( flags & ImGuiInputTextFlags_CallbackEdit ) == 0 );
+		flags |= ImGuiInputTextFlags_CallbackEdit;
+		char* buffer = const_cast<char*>( str->c_str() );
+		size_t maxSize = aeStr< N >::MaxLength() + 1;
+		return ImGui::InputText( label, buffer, maxSize, flags, aeImGui::m_StringCallback< N >, (void*)str );
+	}
+
 private:
 	void m_Initialize()
 	{
@@ -183,9 +188,59 @@ private:
 		m_init = true;
 	}
 
+	template < uint32_t N >
+	static int m_StringCallback( ImGuiInputTextCallbackData* data )
+	{
+		if ( data->EventFlag == ImGuiInputTextFlags_CallbackEdit )
+		{
+			aeStr< N >* str = ( aeStr< N >* )data->UserData;
+			*str = aeStr< N >( data->BufTextLen, 'x' ); // Set Length() of string
+		}
+		return 0;
+	}
+
 	bool m_init = false;
 	bool m_headless = false;
 	aeRender* m_render = nullptr;
 };
+
+//------------------------------------------------------------------------------
+// Var helpers
+//------------------------------------------------------------------------------
+static aeStr32 aeImGui_Enum( const aeMeta::Enum* enumType, const char* varName, const char* currentValue )
+{
+  aeStr32 result = currentValue;
+  if ( ImGui::BeginCombo( varName, currentValue ) )
+  {
+    for ( uint32_t i = 0; i < enumType->Length(); i++ )
+    {
+      auto indexName = enumType->GetNameByIndex( i );
+      if ( ImGui::Selectable( indexName.c_str(), indexName == currentValue ) )
+      {
+        result = indexName.c_str();
+      }
+    }
+    ImGui::EndCombo();
+  }
+  return result;
+}
+
+template < typename T >
+bool aeImGui_Enum( const char* varName, T* valueOut )
+{
+  const aeMeta::Enum* enumType = aeMeta::GetEnum< T >();
+  auto currentValue = enumType->GetNameByValue( *valueOut );
+  auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str() );
+  
+  T prev = *valueOut;
+  if ( enumType->GetValueFromString( resultName.c_str(), valueOut ) )
+  {
+    return prev != *valueOut;
+  }
+  else
+  {
+    return false;
+  }
+}
 
 #endif

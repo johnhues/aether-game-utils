@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeCommonRender.h
+// aeTesting.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,53 +21,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AECOMMONRENDER_H
-#define AECOMMONRENDER_H
+#ifndef AE_TESTING_H
+#define AE_TESTING_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeRender.h"
+#include "aePlatform.h"
+namespace AE_NAMESPACE {
 
 //------------------------------------------------------------------------------
-// aeRenderInternal class
+// LifeTimeTester class
 //------------------------------------------------------------------------------
-class aeRenderInternal
+class LifetimeTester
 {
 public:
-  virtual ~aeRenderInternal() {}
-
-  virtual void Initialize( aeRender* render ) = 0;
-  virtual void Terminate( aeRender* render ) = 0;
-  virtual void StartFrame( aeRender* render ) = 0;
-  virtual void EndFrame( aeRender* render ) = 0;
-	
-  // this is so imgui and the main render copy can enable srgb writes in GL
-  virtual void EnableSRGBWrites( aeRender* render, bool enable ) = 0;
-  virtual void AddTextureBarrier( aeRender* render ) = 0;
+  LifetimeTester(); // default
+  LifetimeTester( const LifetimeTester& ); // copy
+  LifetimeTester( LifetimeTester&& ) noexcept; // move
+  LifetimeTester& operator=( const LifetimeTester& ); // copy assignment
+  LifetimeTester& operator=( LifetimeTester&& ) noexcept; // move assignment
+  ~LifetimeTester();
+  
+  static const uint32_t kConstructed;
+  static const uint32_t kMoved;
+  
+  uint32_t check;
+  
+  static void ClearStats();
+  
+  static int32_t ctorCount;
+  static int32_t copyCount;
+  static int32_t moveCount;
+  static int32_t copyAssignCount;
+  static int32_t moveAssignCount;
+  static int32_t dtorCount;
+  static int32_t currentCount;
 };
 
-//------------------------------------------------------------------------------
-// aeOpenGLRender class
-//------------------------------------------------------------------------------
-class aeOpenGLRender : public aeRenderInternal
-{
-public:
-  aeOpenGLRender();
-
-  void Initialize( aeRender* render ) override;
-  void Terminate( aeRender* render ) override;
-  void StartFrame( aeRender* render ) override;
-  void EndFrame( aeRender* render ) override;
-
-  // this is so imgui and the main render copy can enable srgb writes in GL
-  void EnableSRGBWrites( aeRender* render, bool enable ) override;
-
-  void AddTextureBarrier(  aeRender* render ) override;
-
-private:
-  void* m_context;
-  int32_t m_defaultFbo;
-};
+} // ae namespace end
 
 #endif

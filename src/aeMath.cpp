@@ -1350,6 +1350,10 @@ aeFloat4x4 aeFloat4x4::WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat
 // this hack comes in from the renderer
 extern bool gReverseZ;
 
+// fix the projection matrix, when false fov scales up/down with nearPlane
+// if this breaks stuff, then can set to false
+bool gFixProjection = true;
+
 aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
 {
   // a  0  0  0
@@ -1357,14 +1361,22 @@ aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nea
   // 0  0  A  B
   // 0  0 -1  0
 
-  float r = aspectRatio * tanf( fov * 0.5f );
-  float t = tanf( fov * 0.5f ); // tan of half angle fit vertically
-
+  // this is assuming a symmetric frustum, in this case nearPlane cancels out
+  
+  float halfAngleTangent = tanf( fov * 0.5f);
+  float r = aspectRatio * halfAngleTangent; // scaled by view aspect ratio
+  float t = halfAngleTangent; // tan of half angle fit vertically
+	  
+  if ( gFixProjection )
+  {
+	  r *= nearPlane;
+	  t *= nearPlane;
+  }
   float a = nearPlane / r;
   float b = nearPlane / t;
-	
-	float A;
-	float B;
+ 	
+  float A;
+  float B;
   if (gReverseZ)
   {
 	  A = 0;
@@ -2178,7 +2190,7 @@ bool aeSphere::Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut, aeFloa
   aeFloat3 m = origin - center;
   float b = m.Dot( direction );
   float c = m.Dot( m ) - radius * radius;
-  // Exit if r’s origin outside s (c > 0) and r pointing away from s (b > 0)
+  // Exit if rï¿½s origin outside s (c > 0) and r pointing away from s (b > 0)
   if ( c > 0.0f && b > 0.0f )
   {
     return false;
@@ -2292,7 +2304,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   // Unless otherwise noted, our polygonIntersectionPoint is the
   // same point as planeIntersectionPoint
   aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
-  // So… are they the same?
+  // Soï¿½ are they the same?
   // @TODO: Check edges
   //if ( planeIntersectionPoint is not within the current polygon )
   if ( !PointInTriangle( polygonIntersectionPoint, points[ 0 ], points[ 1 ], points[ 2 ] ) )
@@ -2365,7 +2377,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   // Invert the velocity vector
   //aeFloat3 negativeVelocityVector = -velocityVector;
   // Using the polygonIntersectionPoint, we need to reverse-intersect
-  // with the sphere (note: the 1.0 below is the unit-sphere’s
+  // with the sphere (note: the 1.0 below is the unit-sphereï¿½s
   // radius)
   //float t = intersectSphere( sourcePoint, 1.0f, polygonIntersectionPoint, negativeVelocityVector );
   // Was there an intersection with the sphere?
@@ -2447,7 +2459,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   // Unless otherwise noted, our polygonIntersectionPoint is the
   // same point as planeIntersectionPoint
   aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
-  // So… are they the same?
+  // Soï¿½ are they the same?
   // @TODO: Check edges
   //if ( planeIntersectionPoint is not within the current polygon )
   if ( !PointInTriangle( polygonIntersectionPoint, points[ 0 ], points[ 1 ], points[ 2 ] ) )
@@ -2516,7 +2528,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   // Invert the velocity vector
   //aeFloat3 negativeVelocityVector = -velocityVector;
   // Using the polygonIntersectionPoint, we need to reverse-intersect
-  // with the sphere (note: the 1.0 below is the unit-sphere’s
+  // with the sphere (note: the 1.0 below is the unit-sphereï¿½s
   // radius)
   //float t = intersectSphere( sourcePoint, 1.0f, polygonIntersectionPoint, negativeVelocityVector );
   // Was there an intersection with the sphere?
@@ -2548,10 +2560,11 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
 //------------------------------------------------------------------------------
 // aeAABB member functions
 //------------------------------------------------------------------------------
-aeAABB::aeAABB( aeFloat3 min, aeFloat3 max ) :
-  m_min( min ),
-  m_max( max )
-{}
+aeAABB::aeAABB( aeFloat3 p0, aeFloat3 p1 )
+{
+  m_min = aeMath::Min( p0, p1 );
+  m_max = aeMath::Max( p0, p1 );
+}
 
 aeAABB::aeAABB( const aeSphere& sphere )
 {
@@ -2665,13 +2678,21 @@ bool aeAABB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut )
 //------------------------------------------------------------------------------
 // aeOBB member functions
 //------------------------------------------------------------------------------
-aeOBB::aeOBB( const aeFloat4x4& transform ) :
-  m_transform( transform )
-{}
+aeOBB::aeOBB( const aeFloat4x4& transform )
+{
+  SetTransform( transform );
+}
 
 void aeOBB::SetTransform( const aeFloat4x4& transform )
 {
   m_transform = transform;
+  
+  aeFloat3 scale = transform.GetScale();
+  m_scaledAABB = aeAABB( scale * -0.5f, scale * 0.5f );
+  
+  m_invTransRot = transform;
+  m_invTransRot.RemoveScaling();
+  m_invTransRot.Invert();
 }
 
 const aeFloat4x4& aeOBB::GetTransform() const
@@ -2679,19 +2700,19 @@ const aeFloat4x4& aeOBB::GetTransform() const
   return m_transform;
 }
 
+float aeOBB::GetMinDistance( aeFloat3 p ) const
+{
+  p = ( m_invTransRot * aeFloat4( p, 1.0f ) ).GetXYZ();
+  return m_scaledAABB.GetMinDistance( p );
+}
+
 bool aeOBB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
 {
-  aeFloat4x4 objToWorld = m_transform;
-  aeFloat3 scale = objToWorld.GetScale();
-  aeAABB aabb( scale * -0.5f, scale * 0.5f );
-  objToWorld.RemoveScaling();
-  aeFloat4x4 worldToObj = objToWorld.Inverse();
-
-  aeFloat3 raySourceLocal = ( worldToObj * aeFloat4( p, 1.0f ) ).GetXYZ();
-  aeFloat3 rayLocal = ( worldToObj * aeFloat4( d, 0.0f ) ).GetXYZ();
+  p = ( m_invTransRot * aeFloat4( p, 1.0f ) ).GetXYZ();
+  d = ( m_invTransRot * aeFloat4( d, 0.0f ) ).GetXYZ();
 
   float rayT = 0.0f;
-  if ( aabb.IntersectRay( raySourceLocal, rayLocal, nullptr, &rayT ) )
+  if ( m_scaledAABB.IntersectRay( p, d, nullptr, &rayT ) )
   {
     if ( tOut )
     {

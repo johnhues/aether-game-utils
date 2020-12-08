@@ -46,7 +46,7 @@
   #define glClearDepth glClearDepthf
 #else
   #include <OpenGL/gl3.h>
-  #include <OpenGL/gl3ext.h> // for glTexStorage2D
+  #include <OpenGL/gl3ext.h> // for glTexStorage2D, glTextureBarrierNV
 #endif
 
 #include <stb_image.h>
@@ -645,6 +645,7 @@ aeShader::aeShader()
   m_program = 0;
   
   m_blending = false;
+  m_blendingPremul = false;
   m_depthTest = false;
   m_depthWrite = false;
   m_culling = aeShaderCulling::None;
@@ -805,10 +806,21 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   // so reverseZ for example can be set without the shader knowing about that.
 	
   // Blending
-  if ( m_blending )
+  if ( m_blending || m_blendingPremul )
   {
     glEnable( GL_BLEND );
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	  
+	// TODO: need other modes like Add, Min, Max - switch to enum then
+	if (m_blendingPremul)
+	{
+	  // Colors coming out of shader already have alpha multiplied in.
+	  glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+						   GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	}
+	else
+	{
+	  glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	}
   }
   else
   {
@@ -836,6 +848,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   }
   else
   {
+	// TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
     glEnable( GL_CULL_FACE );
     glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
   }
@@ -1305,7 +1318,7 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   AE_CHECK_GL_ERROR();
 }
 
-void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps, bool isSRGB, bool is16BitImage )
+void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps, bool isSRGB )
 {
   uint32_t fileSize = aeVfs::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
@@ -1320,6 +1333,8 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 #if _AE_IOS_
   stbi_convert_iphone_png_to_rgb( 1 );
 #endif
+  bool is16BitImage = stbi_is_16_bit( file );
+
   uint8_t* image;
   if (is16BitImage)
   {
@@ -1521,7 +1536,7 @@ void aeRenderTarget::Clear( aeColor color )
 
   AE_CHECK_GL_ERROR();
 
-  aeFloat3 clearColor = color.GetSRGB(); // Unclear why glClearColor() expects srgb. Maybe because of framebuffer type.
+  aeFloat3 clearColor = color.GetLinearRGB();
   glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
   glClearDepth( gReverseZ ? 0.0f : 1.0f );
 
@@ -1566,6 +1581,44 @@ uint32_t aeRenderTarget::GetWidth() const
 uint32_t aeRenderTarget::GetHeight() const
 {
   return m_height;
+}
+
+aeFloat4x4 aeRenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, aeRect ndc ) const
+{
+  aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
+  windowToNDC.Scale( aeFloat3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+
+  aeFloat4x4 ndcToQuad = aeRenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
+  ndcToQuad.Invert();
+
+  aeFloat4x4 quadToRender = aeFloat4x4::Scaling( aeFloat3( m_width, m_height, 1.0f ) );
+  quadToRender.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
+
+  return ( quadToRender * ndcToQuad * windowToNDC );
+}
+
+aeRect aeRenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
+{
+  float canvasAspect = m_width / (float)m_height;
+  float targetAspect = otherWidth / (float)otherHeight;
+  if ( canvasAspect >= targetAspect )
+  {
+    // Fit width
+    float height = targetAspect / canvasAspect;
+    return aeRect( -1.0f, -height, 2.0f, height * 2.0f );
+  }
+  else
+  {
+    // Fit height
+    float width = canvasAspect / targetAspect;
+    return aeRect( -width, -1.0f, width * 2.0f, 2.0f );
+  }
+}
+
+aeFloat4x4 aeRenderTarget::GetTargetPixelsToWorld( const aeFloat4x4& otherTargetToLocal, const aeFloat4x4& worldToNdc ) const
+{
+  aeFloat4x4 canvasToNdc = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) ) * aeFloat4x4::Scaling( aeFloat3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
 }
 
 aeFloat4x4 aeRenderTarget::GetQuadToNDCTransform( aeRect ndc, float z )
@@ -1671,6 +1724,15 @@ void aeOpenGLRender::EnableSRGBWrites( aeRender* render, bool enable )
 #endif
 }
 
+void aeOpenGLRender::AddTextureBarrier( aeRender* render )
+{
+	// only GL has texture barrier for reading from previously written textures
+	// There are less draconian ways in desktop ES, and nothing in WebGL.
+#if _AE_WINDOWS_ || _AE_APPLE_
+	glTextureBarrierNV();
+#endif
+}
+
 void aeOpenGLRender::EndFrame( aeRender* render )
 {
   AE_CHECK_GL_ERROR();
@@ -1688,13 +1750,8 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
-  // TODO: this should only be enabled if fbo in GL is sRGB
-  //EnableSRGBWrites( render, true );
+  render->GetCanvas()->Render2D( 0, aeRect( aeFloat2( -1.0f ), aeFloat2( 1.0f ) ), 0.5f );
 
-  render->GetCanvas()->Render2D( 0, render->GetNDCRect(), 0.5f );
-
-  //EnableSRGBWrites( render, false );
-	
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
 #endif
