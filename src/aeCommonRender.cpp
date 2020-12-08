@@ -53,34 +53,34 @@ const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ] = {
 // aeColor
 //------------------------------------------------------------------------------
 // Grayscale
-aeColor aeColor::White() { return aeColor::PS( 255, 255, 255 ); }
-aeColor aeColor::Gray() { return aeColor::PS( 127, 127, 127 ); }
-aeColor aeColor::Black() { return aeColor::PS( 0, 0, 0 ); }
+aeColor aeColor::White() { static aeColor c = aeColor::PS( 255, 255, 255 ); return c; }
+aeColor aeColor::Gray() { static aeColor c = aeColor::PS( 127, 127, 127 ); return c; }
+aeColor aeColor::Black() { static aeColor c = aeColor::PS( 0, 0, 0 ); return c; }
 // Rainbow
-aeColor aeColor::Red() { return aeColor::PS( 255, 0, 0 ); }
-aeColor aeColor::Orange() { return aeColor::PS( 255, 127, 0 ); }
-aeColor aeColor::Yellow() { return aeColor::PS( 255, 255, 0 ); }
-aeColor aeColor::Green() { return aeColor::PS( 0, 255, 0 ); }
-aeColor aeColor::Blue() { return aeColor::PS( 0, 0, 255 ); }
-aeColor aeColor::Indigo() { return aeColor::PS( 75, 0, 130 ); }
-aeColor aeColor::Violet() { return aeColor::PS( 148, 0, 211 ); }
+aeColor aeColor::Red() { static aeColor c = aeColor::PS( 255, 0, 0 ); return c; }
+aeColor aeColor::Orange() { static aeColor c = aeColor::PS( 255, 127, 0 ); return c; }
+aeColor aeColor::Yellow() { static aeColor c = aeColor::PS( 255, 255, 0 ); return c; }
+aeColor aeColor::Green() { static aeColor c = aeColor::PS( 0, 255, 0 ); return c; }
+aeColor aeColor::Blue() { static aeColor c = aeColor::PS( 0, 0, 255 ); return c; }
+aeColor aeColor::Indigo() { static aeColor c = aeColor::PS( 75, 0, 130 ); return c; }
+aeColor aeColor::Violet() { static aeColor c = aeColor::PS( 148, 0, 211 ); return c; }
 // Pico
-aeColor aeColor::PicoBlack() { return aeColor::PS( 0, 0, 0 ); }
-aeColor aeColor::PicoDarkBlue() { return aeColor::PS( 29, 43, 83 ); }
-aeColor aeColor::PicoDarkPurple() { return aeColor::PS( 126, 37, 83 ); }
-aeColor aeColor::PicoDarkGreen() { return aeColor::PS( 0, 135, 81 ); }
-aeColor aeColor::PicoBrown() { return aeColor::PS( 171, 82, 54 ); }
-aeColor aeColor::PicoDarkGray() { return aeColor::PS( 95, 87, 79 ); }
-aeColor aeColor::PicoLightGray() { return aeColor::PS( 194, 195, 199 ); }
-aeColor aeColor::PicoWhite() { return aeColor::PS( 255, 241, 232 ); }
-aeColor aeColor::PicoRed() { return aeColor::PS( 255, 0, 77 ); }
-aeColor aeColor::PicoOrange() { return aeColor::PS( 255, 163, 0 ); }
-aeColor aeColor::PicoYellow() { return aeColor::PS( 255, 236, 39 ); }
-aeColor aeColor::PicoGreen() { return aeColor::PS( 0, 228, 54 ); }
-aeColor aeColor::PicoBlue() { return aeColor::PS( 41, 173, 255 ); }
-aeColor aeColor::PicoIndigo() { return aeColor::PS( 131, 118, 156 ); }
-aeColor aeColor::PicoPink() { return aeColor::PS( 255, 119, 168 ); }
-aeColor aeColor::PicoPeach() { return aeColor::PS( 255, 204, 170 ); }
+aeColor aeColor::PicoBlack() { static aeColor c = aeColor::PS( 0, 0, 0 ); return c; }
+aeColor aeColor::PicoDarkBlue() { static aeColor c = aeColor::PS( 29, 43, 83 ); return c; }
+aeColor aeColor::PicoDarkPurple() { static aeColor c = aeColor::PS( 126, 37, 83 ); return c; }
+aeColor aeColor::PicoDarkGreen() { static aeColor c = aeColor::PS( 0, 135, 81 ); return c; }
+aeColor aeColor::PicoBrown() { static aeColor c = aeColor::PS( 171, 82, 54 ); return c; }
+aeColor aeColor::PicoDarkGray() { static aeColor c = aeColor::PS( 95, 87, 79 ); return c; }
+aeColor aeColor::PicoLightGray() { static aeColor c = aeColor::PS( 194, 195, 199 ); return c; }
+aeColor aeColor::PicoWhite() { static aeColor c = aeColor::PS( 255, 241, 232 ); return c; }
+aeColor aeColor::PicoRed() { static aeColor c = aeColor::PS( 255, 0, 77 ); return c; }
+aeColor aeColor::PicoOrange() { static aeColor c = aeColor::PS( 255, 163, 0 ); return c; }
+aeColor aeColor::PicoYellow() { static aeColor c = aeColor::PS( 255, 236, 39 ); return c; }
+aeColor aeColor::PicoGreen() { static aeColor c = aeColor::PS( 0, 228, 54 ); return c; }
+aeColor aeColor::PicoBlue() { static aeColor c = aeColor::PS( 41, 173, 255 ); return c; }
+aeColor aeColor::PicoIndigo() { static aeColor c = aeColor::PS( 131, 118, 156 ); return c; }
+aeColor aeColor::PicoPink() { static aeColor c = aeColor::PS( 255, 119, 168 ); return c; }
+aeColor aeColor::PicoPeach() { static aeColor c = aeColor::PS( 255, 204, 170 ); return c; }
 
 aeColor::aeColor( float rgb )
   : r( rgb ), g( rgb ), b( rgb ), a( 1.0f )
@@ -97,6 +97,71 @@ aeColor::aeColor( float r, float g, float b, float a )
 aeColor::aeColor( aeColor c, float a )
   : r( c.r ), g( c.g ), b( c.b ), a( a )
 {}
+
+aeColor aeColor::R( uint8_t r )
+{
+  return aeColor(
+    r / 255.0f,
+    0.0f,
+    0.0f,
+    1.0f
+  );
+}
+
+aeColor aeColor::RG( uint8_t r, uint8_t g )
+{
+  return aeColor(
+    r / 255.0f,
+    g / 255.0f,
+    0.0f,
+    1.0f
+  );
+}
+
+aeColor aeColor::RGB( uint8_t r, uint8_t g, uint8_t b )
+{
+  return aeColor(
+    r / 255.0f,
+    g / 255.0f,
+    b / 255.0f,
+    1.0f
+  );
+}
+
+aeColor aeColor::RGBA( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
+{
+  return aeColor(
+    r / 255.0f,
+    g / 255.0f,
+    b / 255.0f,
+    a / 255.0f
+  );
+}
+
+aeColor aeColor::R( float r )
+{
+  return aeColor( r, 0.0f, 0.0f, 1.0f );
+}
+
+aeColor aeColor::RG( float r, float g )
+{
+  return aeColor( r, g, 0.0f, 1.0f );
+}
+
+aeColor aeColor::RGB( float r, float g, float b )
+{
+  return aeColor( r, g, b, 1.0f );
+}
+
+aeColor aeColor::RGBA( float r, float g, float b, float a )
+{
+  return aeColor( r, g, b, a );
+}
+
+aeColor aeColor::RGBA( const float* v )
+{
+  return aeColor( v[ 0 ], v[ 1 ], v[ 2 ], v[ 3 ] );
+}
 
 aeColor aeColor::SRGB( float r, float g, float b )
 {
@@ -150,6 +215,11 @@ aeColor aeColor::Lerp( const aeColor& end, float t ) const
     aeMath::Lerp( b, end.b, t ),
     aeMath::Lerp( a, end.a, t )
   );
+}
+
+aeColor aeColor::DtLerp( float snappiness, float dt, const aeColor& target ) const
+{
+  return Lerp( target, exp2( -exp2( snappiness ) * dt ) );
 }
 
 float aeColor::SRGBToRGB( float x )
@@ -222,6 +292,7 @@ void aeUniformList::Set( const char* name, const aeTexture* tex )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.sampler = tex->GetTexture();
+  uniform.target = tex->GetTarget();
 }
 
 const aeUniformList::Value* aeUniformList::Get( const char* name ) const
@@ -771,6 +842,353 @@ uint32_t aeTextRender::m_ParseText( const char* str, uint32_t lineLength, uint32
 }
 
 //------------------------------------------------------------------------------
+// aeDebugRender constants
+//------------------------------------------------------------------------------
+const uint32_t kDebugVertexCountPerObject = 32;
+
+//------------------------------------------------------------------------------
+// aeDebugRender member functions
+//------------------------------------------------------------------------------
+void aeDebugRender::Initialize()
+{
+  m_objCount = 0;
+
+  // @HACK: Should handle vert count in a safer way
+  m_vertexData.Initialize( sizeof(DebugVertex), sizeof(uint16_t), kMaxDebugObjects * kDebugVertexCountPerObject, 0, aeVertexPrimitive::Line, aeVertexUsage::Dynamic, aeVertexUsage::Static );
+  m_vertexData.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof(DebugVertex, pos) );
+  m_vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof(DebugVertex, color) );
+
+  // Load shader
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_UNIFORM float u_saturation;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec4 a_color;\
+    AE_OUT_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5;\
+      v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);\
+      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      AE_COLOR = v_color;\
+    }";
+  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  m_shader.SetBlending( true );
+  m_shader.SetDepthTest( true );
+}
+
+void aeDebugRender::Destroy()
+{
+  m_shader.Destroy();
+  m_vertexData.Destroy();
+}
+
+void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
+{
+  if ( !m_objCount )
+  {
+    return;
+  }
+
+  const uint16_t kQuadIndices[] = {
+    3, 1, 0,
+    3, 1, 2
+  };
+
+  m_verts.Clear();
+  m_verts.Reserve( kMaxDebugObjects * kDebugVertexCountPerObject );
+
+  for ( uint32_t i = 0; i < m_objCount; i++ )
+  {
+    DebugObject obj = m_objs[ i ];
+    if ( obj.type == DebugType::Rect )
+    {
+      aeFloat3 halfSize = obj.size * 0.5f;
+
+      DebugVertex verts[ 4 ];
+      
+      verts[ 0 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( -halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Left
+      verts[ 1 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Right
+      verts[ 2 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( halfSize.x, 0.0f, halfSize.y ) ); // Top Right
+      verts[ 3 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( -halfSize.x, 0.0f, halfSize.y ) ); // Top Left
+
+      verts[ 0 ].color = obj.color;
+      verts[ 1 ].color = obj.color;
+      verts[ 2 ].color = obj.color;
+      verts[ 3 ].color = obj.color;
+
+      m_verts.Append( verts[ 0 ] );
+      m_verts.Append( verts[ 1 ] );
+      m_verts.Append( verts[ 1 ] );
+      m_verts.Append( verts[ 2 ] );
+      m_verts.Append( verts[ 2 ] );
+      m_verts.Append( verts[ 3 ] );
+      m_verts.Append( verts[ 3 ] );
+      m_verts.Append( verts[ 0 ] );
+    }
+    else if ( obj.type == DebugType::Circle )
+    {
+      float angleInc = aeMath::PI * 2.0f / obj.pointCount;
+      for ( uint32_t i = 0; i < obj.pointCount; i++ )
+      {
+        float angle0 = angleInc * i;
+        float angle1 = angleInc * ( i + 1 );
+
+        DebugVertex verts[ 2 ];
+
+        verts[ 0 ].pos = aeFloat3( cosf( angle0 ) * obj.radius, 0.0f, sinf( angle0 ) * obj.radius );
+        verts[ 1 ].pos = aeFloat3( cosf( angle1 ) * obj.radius, 0.0f, sinf( angle1 ) * obj.radius );
+        verts[ 0 ].pos = obj.rotation.Rotate( verts[ 0 ].pos );
+        verts[ 1 ].pos = obj.rotation.Rotate( verts[ 1 ].pos );
+        verts[ 0 ].pos += obj.pos;
+        verts[ 1 ].pos += obj.pos;
+
+        verts[ 0 ].color = obj.color;
+        verts[ 1 ].color = obj.color;
+
+        m_verts.Append( verts, countof( verts ) );
+      }
+    }
+    else if ( obj.type == DebugType::Line )
+    {
+      DebugVertex verts[ 2 ];
+      verts[ 0 ].pos = obj.pos;
+      verts[ 0 ].color = obj.color;
+      verts[ 1 ].pos = obj.end;
+      verts[ 1 ].color = obj.color;
+
+      m_verts.Append( verts, countof( verts ) );
+    }
+    else if ( obj.type == DebugType::AABB )
+    {
+      aeFloat3 s = obj.size;
+      aeFloat3 c[] =
+      {
+        obj.pos + aeFloat3( -s.x, s.y, s.z ),
+        obj.pos + s,
+        obj.pos + aeFloat3( s.x, -s.y, s.z ),
+        obj.pos + aeFloat3( -s.x, -s.y, s.z ),
+        obj.pos + aeFloat3( -s.x, s.y, -s.z ),
+        obj.pos + aeFloat3( s.x, s.y, -s.z ),
+        obj.pos + aeFloat3( s.x, -s.y, -s.z ),
+        obj.pos + aeFloat3( -s.x, -s.y, -s.z )
+      };
+      AE_STATIC_ASSERT( countof( c ) == 8 );
+
+      DebugVertex verts[] =
+      {
+        // Top
+        { c[ 0 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 0 ], obj.color },
+        // Sides
+        { c[ 0 ], obj.color },
+        { c[ 4 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 7 ], obj.color },
+        //Bottom
+        { c[ 4 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 4 ], obj.color },
+      };
+      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
+      
+      m_verts.Append( verts, countof( verts ) );
+    }
+    else if ( obj.type == DebugType::Cube )
+    {
+      aeFloat3 c[] =
+      {
+        ( obj.transform * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ()
+      };
+      AE_STATIC_ASSERT( countof( c ) == 8 );
+
+      DebugVertex verts[] =
+      {
+        // Top
+        { c[ 0 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 0 ], obj.color },
+        // Sides
+        { c[ 0 ], obj.color },
+        { c[ 4 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 7 ], obj.color },
+        //Bottom
+        { c[ 4 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 4 ], obj.color },
+      };
+      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
+
+      m_verts.Append( verts, countof( verts ) );
+    }
+  }
+
+  if ( m_verts.Length() )
+  {
+    m_vertexData.SetVertices( &m_verts[ 0 ], aeMath::Min( m_verts.Length(), m_vertexData.GetMaxVertexCount() ) );
+
+    aeUniformList uniforms;
+    uniforms.Set( "u_worldToScreen", worldToScreen );
+
+    m_shader.SetDepthTest( false );
+    m_shader.SetDepthWrite( false );
+    uniforms.Set( "u_saturation", 0.1f );
+    m_vertexData.Render( &m_shader, uniforms );
+
+    m_shader.SetDepthTest( true );
+    m_shader.SetDepthWrite( true );
+    uniforms.Set( "u_saturation", 1.0f );
+    m_vertexData.Render( &m_shader, uniforms );
+  }
+
+  m_objCount = 0;
+}
+
+void aeDebugRender::Clear()
+{
+	m_objCount = 0;
+}
+
+void aeDebugRender::AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Line;
+    m_objs[ m_objCount ].pos = p0;
+    m_objs[ m_objCount ].end = p1;
+    m_objs[ m_objCount ].color = color;
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Line;
+    m_objs[ m_objCount ].pos = p0;
+    m_objs[ m_objCount ].end = p1;
+    m_objs[ m_objCount ].color = ( ( p1 - p0 ).Length() <= distance ) ? aeColor::Green() : aeColor::Red();
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects
+    && up.LengthSquared() > 0.001f
+    && normal.LengthSquared() > 0.001f )
+  {
+    up.SafeNormalize();
+    normal.SafeNormalize();
+    if ( normal.Dot( up ) < 0.999f )
+    {
+      m_objs[ m_objCount ].type = DebugType::Rect;
+      m_objs[ m_objCount ].pos = pos;
+      m_objs[ m_objCount ].rotation = aeQuat( normal, up );
+      m_objs[ m_objCount ].size = aeFloat3( size );
+      m_objs[ m_objCount ].color = color;
+      m_objs[ m_objCount ].pointCount = 0;
+      m_objCount++;
+    }
+  }
+}
+
+void aeDebugRender::AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeColor color, uint32_t pointCount )
+{
+  if ( m_objCount < kMaxDebugObjects && normal.LengthSquared() > 0.001f )
+  {
+    normal.SafeNormalize();
+    float dot = normal.Dot( aeFloat3::Up );
+    
+    m_objs[ m_objCount ].type = DebugType::Circle;
+    m_objs[ m_objCount ].pos = pos;
+    m_objs[ m_objCount ].rotation = aeQuat( normal, ( dot < 0.99f && dot > -0.99f ) ? aeFloat3::Up : aeFloat3::Right );
+    m_objs[ m_objCount ].radius = radius;
+    m_objs[ m_objCount ].color = color;
+    m_objs[ m_objCount ].pointCount = pointCount;
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount )
+{
+  if ( m_objCount + 3 <= kMaxDebugObjects )
+  {
+    AddCircle( pos, aeFloat3::Up, radius, color, pointCount );
+    AddCircle( pos, aeFloat3::Right, radius, color, pointCount );
+    AddCircle( pos, aeFloat3::Forward, radius, color, pointCount );
+  }
+}
+
+void aeDebugRender::AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::AABB;
+    m_objs[ m_objCount ].pos = pos;
+    m_objs[ m_objCount ].rotation = aeQuat::Identity();
+    m_objs[ m_objCount ].size = halfSize;
+    m_objs[ m_objCount ].color = color;
+    m_objs[ m_objCount ].pointCount = 0;
+    m_objCount++;
+  }
+}
+
+void aeDebugRender::AddCube( aeFloat4x4 transform, aeColor color )
+{
+  if ( m_objCount < kMaxDebugObjects )
+  {
+    m_objs[ m_objCount ].type = DebugType::Cube;
+    m_objs[ m_objCount ].transform = transform;
+    m_objs[ m_objCount ].color = color;
+    m_objCount++;
+  }
+}
+
+//------------------------------------------------------------------------------
 // aeRender member functions
 //------------------------------------------------------------------------------
 aeRender::aeRender()
@@ -778,10 +1196,8 @@ aeRender::aeRender()
   m_renderInternal = nullptr;
 
   m_window = nullptr;
-  m_targetWidth = 0;
-  m_targetHeight = 0;
-
-  m_clearColor = aeColor::Black();
+  m_width = 0;
+  m_height = 0;
 }
 
 aeRender::~aeRender()
@@ -789,14 +1205,16 @@ aeRender::~aeRender()
   Terminate();
 }
 
-void aeRender::InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height )
+void aeRender::InitializeOpenGL( class aeWindow* window )
 {
-  AE_ASSERT( !m_renderInternal );
-
-  m_targetWidth = width;
-  m_targetHeight = height;
+  AE_ASSERT_MSG( window->window, "aeWindow must be initialized prior to aeRender initialization." );
+  AE_ASSERT_MSG( !m_renderInternal, "aeRender already initialized" );
 
   m_window = window;
+
+  // @TODO: Allow user to pass in a scaling factor / aspect ratio parameter
+  m_width = window->GetWidth();
+  m_height = window->GetHeight();
 
   m_renderInternal = aeAlloc::Allocate< aeOpenGLRender >();
   m_renderInternal->Initialize( this );
@@ -812,71 +1230,54 @@ void aeRender::Terminate()
   }
 }
 
-void aeRender::StartFrame()
+void aeRender::Activate()
 {
   AE_ASSERT( m_renderInternal );
 
-  if ( m_targetWidth != m_canvas.GetWidth() || m_targetHeight != m_canvas.GetHeight() )
+  m_width = m_window->GetWidth();
+  m_height = m_window->GetHeight();
+
+  if ( m_width != m_canvas.GetWidth() || m_height != m_canvas.GetHeight() )
   {
-    m_canvas.Destroy();
-    m_canvas.Initialize( m_targetWidth, m_targetHeight, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+    m_canvas.Initialize( m_width, m_height );
+    m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+    m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
   }
   m_canvas.Activate();
 
   m_renderInternal->StartFrame( this );
 }
 
-void aeRender::EndFrame()
+void aeRender::Clear( aeColor color )
+{
+  Activate();
+  m_canvas.Clear( color );
+}
+
+void aeRender::Present()
 {
   AE_ASSERT( m_renderInternal );
   m_renderInternal->EndFrame( this );
 }
 
-
-void aeRender::Resize( uint32_t width, uint32_t height )
+float aeRender::GetAspectRatio() const
 {
-  m_targetWidth = width;
-  m_targetHeight = height;
-}
-
-void aeRender::SetClearColor( aeColor color )
-{
-  m_clearColor = color;
-}
-
-aeColor aeRender::GetClearColor() const
-{
-  return m_clearColor;
-}
-
-aeFloat4x4 aeRender::GetWindowToRenderTransform()
-{
-  aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
-  windowToNDC.Scale( aeFloat3( 2.0f / m_window->GetWidth(), 2.0f / m_window->GetHeight(), 1.0f ) );
-  
-  aeFloat4x4 ndcToQuad = aeRenderTexture::GetQuadToNDCTransform( GetNDCRect(), 0.0f );
-  ndcToQuad.Invert();
-  
-  aeFloat4x4 quadToRender = aeFloat4x4::Scaling( aeFloat3( m_canvas.GetWidth(), m_canvas.GetHeight(), 1.0f ) );
-  quadToRender.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
-  
-  return ( quadToRender * ndcToQuad * windowToNDC );
-}
-
-aeRect aeRender::GetNDCRect() const
-{
-  float canvasAspect = m_canvas.GetWidth() / (float)m_canvas.GetHeight();
-  float windowAspect = m_window->GetWidth() / (float)m_window->GetHeight();
-  if ( canvasAspect >= windowAspect )
+  if ( m_width + m_height == 0 )
   {
-    // Fit width
-    float height = windowAspect / canvasAspect;
-    return aeRect( -1.0f, -height, 2.0f, height * 2.0f );
+    return 0.0f;
   }
   else
   {
-    // Fit height
-    float width = canvasAspect / windowAspect;
-    return aeRect( -width, -1.0f, width * 2.0f, 2.0f );
+    return m_width / (float)m_height;
   }
+}
+
+void aeRender::EnableSRGBWrites(bool enable)
+{
+	m_renderInternal->EnableSRGBWrites( this, enable );
+}
+
+void aeRender::AddTextureBarrier()
+{
+	m_renderInternal->AddTextureBarrier( this );
 }

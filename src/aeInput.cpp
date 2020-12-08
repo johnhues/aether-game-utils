@@ -93,8 +93,11 @@ InputState::InputState()
 
   mousePixelPos = aeInt2( 0 );
   scroll = 0;
+  windowFocus = false;
 
   exit = false;
+
+  memset( m_keys, 0 ,sizeof( m_keys ) );
 }
 
 bool InputState::Get( InputType type ) const
@@ -199,6 +202,11 @@ const char* InputState::GetName( InputType type ) const
   }
 }
 
+bool InputState::Get( aeKey key ) const
+{
+	return m_keys[ (uint32_t)key ];
+}
+
 //------------------------------------------------------------------------------
 // aeInput member functions
 //------------------------------------------------------------------------------
@@ -208,6 +216,9 @@ aeInput::aeInput()
   m_render = nullptr;
 
   m_textMode = 0;
+  m_text = "";
+  m_mouseCaptured = false;
+  m_firstPump = true;
 
   m_joystickHandle = nullptr;
   m_buttonCount = 0;
@@ -215,12 +226,27 @@ aeInput::aeInput()
   m_axesCount = 0;
 }
 
-void aeInput::Initialize( aeWindow* window, aeRender* render )
+void aeInput::Initialize( aeWindow* window )
 {
+  if ( !window )
+  {
+    // @HACK: This has to run for SDL_PumpEvents() to work
+    if ( SDL_Init( SDL_INIT_EVENTS ) < 0 )
+    {
+      AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
+    }
+  }
+
   SDL_JoystickEventState( SDL_ENABLE );
+#if !_AE_IOS_
+  // @HACK: Disable text input here to prevent keyboard from popping open on ios
+  SDL_StartTextInput();
+#endif
 
   m_window = window;
-  m_render = render;
+
+  m_mouseCaptured = SDL_GetRelativeMouseMode();
+  m_firstPump = true;
 
   // Input key mapping
   {
@@ -264,16 +290,9 @@ void aeInput::Pump()
 
   m_input.scroll = 0;
 
-  bool sdlTextMode = SDL_IsTextInputActive();
-  if ( m_textMode && !sdlTextMode )
-  {
-    SDL_StartTextInput();
-  }
-  else if ( !m_textMode && sdlTextMode )
-  {
-    SDL_StopTextInput();
-  }
+  m_textInput.Clear();
 
+  bool ignoreMouseMovement = m_firstPump;
   SDL_Event events[ 32 ];
   // Get all events at once, this function can be very slow. Returns -1 while shutting down.
   int32_t eventCount = SDL_PeepEvents( events, countof( events ), SDL_GETEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT );
@@ -283,17 +302,36 @@ void aeInput::Pump()
     {
       const SDL_Event& event = events[ i ];
 
-      if ( event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
+      if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
       {
         m_window->m_UpdateWidthHeight( event.window.data1, event.window.data2 );
       }
-      else if ( event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
+      else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
       {
         m_window->m_UpdatePos( aeInt2( event.window.data1, event.window.data2 ) );
       }
-      else if ( event.type == SDL_MOUSEMOTION )
+      else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED )
       {
-        m_input.mousePixelPos = aeInt2( event.motion.x, m_window->GetHeight() - event.motion.y );
+        m_input.windowFocus = true;
+        // @NOTE: The first frame after window focus creates random movement when relative/capture mouse mode is enabled
+        ignoreMouseMovement = true;
+      }
+      else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_LOST )
+      {
+        m_input.windowFocus = false;
+        SetMouseCaptured( false );
+      }
+      else if ( event.type == SDL_MOUSEMOTION )
+      { 
+        if ( m_mouseCaptured )
+        {
+          m_prevInput.mousePixelPos = aeInt2( 0 );
+          m_input.mousePixelPos = ignoreMouseMovement ? aeInt2( 0 ) : aeInt2( event.motion.xrel, -event.motion.yrel );
+        }
+        else
+        {
+          m_input.mousePixelPos = aeInt2( event.motion.x, m_window->GetHeight() - event.motion.y );
+        }
       }
       else if ( event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP )
       {
@@ -315,10 +353,12 @@ void aeInput::Pump()
       {
         m_input.scroll = event.wheel.y * ( event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1 );
       }
-      else if ( m_textMode && event.type == SDL_TEXTINPUT )
+      else if ( event.type == SDL_TEXTINPUT )
       {
+        m_textInput.Append( event.text.text, (uint32_t)strlen( event.text.text ) + 1 );
+
         // @NOTE: Ignore keys while modifier is pressed so below copy and paste work as expected
-        if ( !( SDL_GetModState() & KMOD_CTRL ) )
+        if ( m_textMode && !( SDL_GetModState() & KMOD_CTRL ) )
         {
           m_text += event.text.text;
         }
@@ -361,6 +401,14 @@ void aeInput::Pump()
         m_input.exit = true;
       }
     }
+  }
+
+  int32_t numKeys = 0;
+  const uint8_t* keys = SDL_GetKeyboardState( &numKeys );
+  numKeys = aeMath::Min( (int32_t)kKeyCount, numKeys );
+  for ( int32_t i = 0; i < numKeys; i++ )
+  {
+    m_input.m_keys[ i ] = ( keys[ i ] != 0 );
   }
 #endif
 
@@ -443,9 +491,17 @@ void aeInput::Pump()
   }
 
   m_input.gamepad = ( m_joystickHandle != nullptr );
+
+  m_firstPump = false;
 }
 
 void aeInput::SetTextMode( bool enabled )
 {
   m_textMode = enabled;
+}
+
+void aeInput::SetMouseCaptured( bool captured )
+{
+  SDL_SetRelativeMouseMode( captured ? SDL_TRUE : SDL_FALSE );
+  m_mouseCaptured = captured;
 }

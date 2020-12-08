@@ -184,7 +184,8 @@ void aeAudio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
   ALCcontext* ctx = alcCreateContext( device, nullptr );
   alcMakeContextCurrent( ctx );
   AE_ASSERT( ctx );
-
+  CheckALError();
+	
   aeArray< ALuint > sources( musicChannels + sfxChannels, 0 );
   alGenSources( (ALuint)sources.Length(), &sources[ 0 ] );
 

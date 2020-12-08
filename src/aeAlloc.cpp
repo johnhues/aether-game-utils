@@ -29,7 +29,30 @@
 //------------------------------------------------------------------------------
 // AllocationInfo members and state
 //------------------------------------------------------------------------------
-#if _AE_DEBUG_
+#if _AE_ALLOC_DISABLE
+#include <map>
+std::map< void*, int > allocMap;
+
+void PushArrayAlloc( void* a )
+{
+  allocMap[ a ] = 0;
+}
+
+bool PopArrayAlloc( void* a )
+{
+  auto iter = allocMap.find( a );
+  if ( iter != allocMap.end() )
+  {
+    allocMap.erase( iter );
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+#endif
+
 namespace
 {
   uint32_t g_allocations = 0;
@@ -112,17 +135,26 @@ uint32_t aeAllocInfo::GetDeallocationBytes( uint32_t index ) const
 
 void aeAllocInfo::Alloc( const char* typeName, uint32_t bytes )
 {
+  char buf[ aeStr128::MaxLength() + 1 ];
+  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
+  memcpy( buf, typeName, length );
+  buf[ length ] = 0;
+
   g_allocations++;
   g_allocatedBytes += bytes;
-  g_allocationCounts.SetInt( typeName, g_allocationCounts.GetInt( typeName, 0 ) + 1 );
-  g_allocationBytes.SetInt( typeName, g_allocationBytes.GetInt( typeName, 0 ) + bytes );
+  g_allocationCounts.SetInt( buf, g_allocationCounts.GetInt( typeName, 0 ) + 1 );
+  g_allocationBytes.SetInt( buf, g_allocationBytes.GetInt( typeName, 0 ) + bytes );
 }
 
 void aeAllocInfo::Dealloc( const char* typeName, uint32_t bytes )
 {
+  char buf[ aeStr128::MaxLength() + 1 ];
+  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
+  memcpy( buf, typeName, length );
+  buf[ length ] = 0;
+
   g_deallocations++;
   g_deallocatedBytes += bytes;
-  g_deallocationCounts.SetInt( typeName, g_deallocationCounts.GetInt( typeName, 0 ) + 1 );
-  g_deallocationBytes.SetInt( typeName, g_deallocationBytes.GetInt( typeName, 0 ) + bytes );
+  g_deallocationCounts.SetInt( buf, g_deallocationCounts.GetInt( typeName, 0 ) + 1 );
+  g_deallocationBytes.SetInt( buf, g_deallocationBytes.GetInt( typeName, 0 ) + bytes );
 }
-#endif

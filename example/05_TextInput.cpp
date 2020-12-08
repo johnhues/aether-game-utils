@@ -43,9 +43,8 @@ int main()
 	
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "example" );
-	render.InitializeOpenGL( &window, window.GetWidth() / 4, window.GetHeight() / 4 );
-	render.SetClearColor( aeColor::Green().ScaleRGB( 0.01f ) );
-	input.Initialize( &window, &render );
+	render.InitializeOpenGL( &window );
+	input.Initialize( &window );
 	input.SetTextMode( true );
 	input.SetText( "Try typing. Copy and paste should also work." );
 	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
@@ -56,8 +55,9 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.Resize( window.GetWidth() / 4, window.GetHeight() / 4 );
-		render.StartFrame();
+		render.Activate();
+		render.Clear( aeColor::Green().ScaleRGB( 0.01f ) );
+		//render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
 
 		// UI units in pixels, origin in bottom left
 		aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
@@ -74,7 +74,7 @@ int main()
 		textRender.Add( textPos, aeFloat2( (float)textRender.GetFontSize() ), displayText.c_str(), aeColor::Green(), maxLineLength, 0 );
 		textRender.Render( textToNdc );
 
-		render.EndFrame();
+		render.Present();
 		timeStep.Wait();
 	}
 

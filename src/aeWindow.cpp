@@ -44,21 +44,19 @@ void aeWindow::Initialize( uint32_t width, uint32_t height, bool fullScreen, boo
 {
   AE_ASSERT( !window );
 
+  m_pos = aeInt2( fullScreen ? 0 : (int)SDL_WINDOWPOS_CENTERED );
   m_width = width;
   m_height = height;
   m_fullScreen = fullScreen;
+
+  m_Initialize();
 
   if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
   {
     AE_FAIL_MSG( SDL_GetError() );
   }
   
-  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
-  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
-  window = SDL_CreateWindow( "", (int)SDL_WINDOWPOS_CENTERED, (int)SDL_WINDOWPOS_CENTERED, m_width, m_height, flags );
-
   SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
-
   SDL_GetWindowPosition( (SDL_Window*)window, &m_pos.x, &m_pos.y );
 }
 
@@ -71,16 +69,36 @@ void aeWindow::Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool sho
   m_height = height;
   m_fullScreen = false;
 
-  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
+  m_Initialize();
+  
+  SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
+}
+
+void aeWindow::m_Initialize()
+{
+  if ( SDL_Init( SDL_INIT_VIDEO ) < 0 )
   {
-    AE_FAIL_MSG( SDL_GetError() );
+    AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
   }
 
+#if _AE_IOS_
+  m_pos = aeInt2( 0 );
+  m_fullScreen = true;
+  
+  SDL_DisplayMode displayMode;
+  if ( SDL_GetDesktopDisplayMode( 0, &displayMode ) == 0 )
+  {
+    m_width = displayMode.w;
+    m_height = displayMode.h;
+  }
+
+  window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
+#else
   uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
   flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
   window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
-
-  SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
+#endif
+  AE_ASSERT( window );
 }
 
 void aeWindow::Terminate()

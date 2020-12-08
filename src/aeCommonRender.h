@@ -41,6 +41,10 @@ public:
   virtual void Terminate( aeRender* render ) = 0;
   virtual void StartFrame( aeRender* render ) = 0;
   virtual void EndFrame( aeRender* render ) = 0;
+	
+  // this is so imgui and the main render copy can enable srgb writes in GL
+  virtual void EnableSRGBWrites( aeRender* render, bool enable ) = 0;
+  virtual void AddTextureBarrier( aeRender* render ) = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -55,6 +59,11 @@ public:
   void Terminate( aeRender* render ) override;
   void StartFrame( aeRender* render ) override;
   void EndFrame( aeRender* render ) override;
+
+  // this is so imgui and the main render copy can enable srgb writes in GL
+  void EnableSRGBWrites( aeRender* render, bool enable ) override;
+
+  void AddTextureBarrier(  aeRender* render ) override;
 
 private:
   void* m_context;

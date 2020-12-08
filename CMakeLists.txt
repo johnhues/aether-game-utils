@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # project name and supported languages
 project(aether-game-utils LANGUAGES CXX VERSION 0.1.0)
@@ -7,7 +6,8 @@ set(AE_LIBRARY_NAME ae)
 set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 
 # guard against in-source builds and bad build-type strings
-include(cmake/safeguards.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake)
+
 # import external projects module
 include(ExternalProject)
 
@@ -25,10 +25,36 @@ if(APPLE)
 	set(AE_CODESIGN_IDENTITY "" CACHE STRING "Codesigning identity to use for apple builds")
 endif()
 
+set(AE_LEAN_AND_MEAN OFF CACHE BOOL "Disables building tests and examples")
+
 # find dependencies
-find_package(OpenGL REQUIRED)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+if (IOS_TOOLCHAIN_HAS_RUN)
+	set(OpenGLES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
+	if (EXISTS ${OpenGLES})
+		message(STATUS "Found OpenGLES")
+	else()
+		message(SEND_ERROR "Could not find OpenGLES")
+		set(OpenGLES "")
+	endif()
+else()
+	find_package(OpenGL REQUIRED)
+endif()
+
 if (NOT AE_BUILD_DEPS)
-	find_package(OpenAL REQUIRED)
+	if (IOS_TOOLCHAIN_HAS_RUN)
+		set(OPENAL_LIBRARY "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
+		if (EXISTS ${OPENAL_LIBRARY})
+			message(STATUS "Found OpenAL")
+		else()
+			message(SEND_ERROR "Could not find OpenAL")
+			set(OPENAL_LIBRARY "")
+		endif()
+	else()
+		find_package(OpenAL REQUIRED)
+	endif()
+
 	find_package(PNG REQUIRED)
 	find_package(SDL2 REQUIRED)
 	find_package(assimp REQUIRED)
@@ -40,18 +66,19 @@ if (NOT AE_BUILD_DEPS)
 	set(ENET_LIBRARY_DIRS /usr/local/Cellar/enet/1.3.14/lib)
 	set(UUID_LIBRARY_DIRS /usr/local/Cellar/ossp-uuid/1.6.2_2/lib)
 else()
-	set(AE_GLEW_SRC ${CMAKE_BINARY_DIR}/thirdparty/glew)
-	set(AE_OPENAL_SRC ${CMAKE_BINARY_DIR}/thirdparty/openal)
-	set(AE_ZLIB_SRC ${CMAKE_BINARY_DIR}/thirdparty/zlib)
-	set(AE_SDL2_SRC ${CMAKE_BINARY_DIR}/thirdparty/SDL2)
-	set(AE_ASSIMP_SRC ${CMAKE_BINARY_DIR}/thirdparty/assimp)
-	set(AE_ENET_SRC ${CMAKE_BINARY_DIR}/thirdparty/enet)
+	message(STATUS "AE_THIRDPARTY_DIR: ${AE_THIRDPARTY_DIR}")
+	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
+	set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
+	set(AE_ZLIB_SRC ${AE_THIRDPARTY_DIR}/zlib)
+	set(AE_SDL2_SRC ${AE_THIRDPARTY_DIR}/SDL2)
+	set(AE_ASSIMP_SRC ${AE_THIRDPARTY_DIR}/assimp)
+	set(AE_ENET_SRC ${AE_THIRDPARTY_DIR}/enet)
 
-	set(AE_OPENAL_INSTALL ${CMAKE_BINARY_DIR}/openal)
-	set(AE_ZLIB_INSTALL ${CMAKE_BINARY_DIR}/zlib)
-	set(AE_SDL2_INSTALL ${CMAKE_BINARY_DIR}/SDL2)
-	set(AE_ASSIMP_INSTALL ${CMAKE_BINARY_DIR}/assimp)
-	set(AE_ENET_INSTALL ${CMAKE_BINARY_DIR}/enet)
+	set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
+	set(AE_ZLIB_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/zlib)
+	set(AE_SDL2_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/SDL2)
+	set(AE_ASSIMP_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/assimp)
+	set(AE_ENET_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/enet)
 
 	if(WIN32 AND NOT CYGWIN)
 		ExternalProject_Add(glew
@@ -75,9 +102,9 @@ else()
 			GIT_TAG openal-soft-1.20.1
 			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
 		)
-		set(OPENAL_INCLUDE_DIRS ${AE_OPENAL_INSTALL}/include)
-		set(OPENAL_LIBRARY_DIRS ${AE_OPENAL_INSTALL}/lib)
-		set(OPENAL_LIBRARIES ${OPENAL_LIBRARY_DIRS}/OpenAL32.lib)
+		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
+		set(OPENAL_LIBRARY_DIR ${AE_OPENAL_INSTALL}/lib)
+		set(OPENAL_LIBRARY ${OPENAL_LIBRARY_DIR}/OpenAL32.lib)
 	endif()
 
 	ExternalProject_Add(zlib
@@ -152,7 +179,7 @@ endif()
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 	${GLEW_INCLUDE_DIRS}
-	${OPENAL_INCLUDE_DIRS}
+	${OPENAL_INCLUDE_DIR}
 	${PNG_INCLUDE_DIRS}
 	${ASSIMP_INCLUDE_DIRS}
 	${ENET_INCLUDE_DIR}
@@ -165,7 +192,7 @@ endif()
 # dependency library directories
 set(AE_DEPS_LIBRARY_DIRS
 	${GLEW_LIBRARY_DIRS}
-	${OPENAL_LIBRARY_DIRS}
+	${OPENAL_LIBRARY_DIR}
 	${ZLIB_LIBRARY_DIRS}
 	${PNG_LIBRARY_DIRS}
 	${SDL2_LIBRARY_DIRS}
@@ -189,7 +216,8 @@ elseif(WIN32 AND NOT CYGWIN)
 endif()
 list(APPEND AE_DEPS_LIBARARIES
 	${GLEW_LIBRARIES}
-	${OPENAL_LIBRARIES}
+	${OpenGLES}
+	${OPENAL_LIBRARY}
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
 	${ASSIMP_LIBRARIES}
@@ -200,13 +228,19 @@ if(NOT EMSCRIPTEN)
 	list(APPEND AE_DEPS_LIBARARIES ${SDL2_LIBRARY})
 endif()
 
-# use c++14
-set(CMAKE_CXX_STANDARD 14)
+# use c++17
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # use unicode
-add_definitions(-D_UNICODE -DUNICODE -D_CRT_SECURE_NO_WARNINGS)
+add_definitions(-D_UNICODE -DUNICODE)
+# disable standard library warnings on windows
+add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+# disable simd in sdl to prevent undeclared symbols error on ios
+add_definitions(-DSDL_DISABLE_IMMINTRIN_H)
 
 # library, tests, and examples
 add_subdirectory(src)
-add_subdirectory(test)
-add_subdirectory(example)
+if(NOT ${AE_LEAN_AND_MEAN})
+	add_subdirectory(test)
+	add_subdirectory(example)
+endif()

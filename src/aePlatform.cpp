@@ -31,6 +31,7 @@
 #else
 #include <unistd.h>
 #endif
+#include <thread>
 
 //------------------------------------------------------------------------------
 // Utilities
@@ -42,4 +43,9 @@ uint32_t aeGetPID()
 #else
 	return getpid();
 #endif
+}
+
+uint32_t aeGetMaxConcurrentThreads()
+{
+	return std::thread::hardware_concurrency();
 }

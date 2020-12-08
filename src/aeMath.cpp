@@ -143,33 +143,36 @@ aeFloat2 aeFloat2::Lerp(const aeFloat2& end, float t) const
   return aeFloat2( x * (1.0f-t) + end.x * t, y * (1.0f-t) + end.y * t );
 }
 
-void aeFloat2::Normalize()
+float aeFloat2::Normalize()
 {
-  float l = sqrtf( x * x + y * y );
-  x /= l;
-  y /= l;
+  float length = sqrtf( x * x + y * y );
+  x /= length;
+  y /= length;
+  return length;
 }
 
-aeFloat2 aeFloat2::NormalizeCopy(void) const
+aeFloat2 aeFloat2::NormalizeCopy() const
 {
-  float l = sqrtf( x * x + y * y );
-  return aeFloat2( x / l, y / l );
+  float length = sqrtf( x * x + y * y );
+  return aeFloat2( x / length, y / length );
 }
 
-void aeFloat2::SafeNormalize()
+float aeFloat2::SafeNormalize()
 {
-  float l = sqrtf( x * x + y * y );
-  if ( l < 0.00001f )
+  float length = sqrtf( x * x + y * y );
+  if ( length < 0.00001f )
   {
     x = 0.0f;
     y = 0.0f;
-    return;
+    return 0.0f;
   }
-  x /= l;
-  y /= l;
+
+  x /= length;
+  y /= length;
+  return length;
 }
 
-aeFloat2 aeFloat2::SafeNormalizeCopy(void) const
+aeFloat2 aeFloat2::SafeNormalizeCopy() const
 {
   float l = sqrtf( x * x + y * y );
   if ( l < 0.00001f )
@@ -203,7 +206,7 @@ aeFloat2 aeFloat2::RotateCopy( float rotation ) const
 
 float aeFloat2::GetAngle() const
 {
-  if ( LengthSquared() < 0.01f )
+  if ( LengthSquared() < 0.0001f )
   {
     return 0.0f;
   }
@@ -225,6 +228,11 @@ const aeInt2 aeInt2::Left = aeInt2( -1, 0 );
 const aeInt2 aeInt2::Right = aeInt2( 1, 0 );
 
 aeInt2::aeInt2( const aeInt3& v ) : x( v.x ), y( v.y ) {}
+
+aeInt2 aeInt2::operator- () const
+{
+  return aeInt2( -x, -y );
+}
 
 aeInt2& aeInt2::operator+=( const aeInt2 &v )
 {
@@ -296,6 +304,16 @@ aeInt2& aeInt2::operator/= ( const aeInt2& v )
   return *this;
 }
 
+aeFloat2 aeInt2::operator* ( const float s ) const
+{
+  return aeFloat2( x * s, y * s );
+}
+
+aeFloat2 aeInt2::operator/ ( const float s ) const
+{
+  return aeFloat2( x / s, y / s );
+}
+
 //------------------------------------------------------------------------------
 // aeFloat3 struct
 //------------------------------------------------------------------------------
@@ -306,6 +324,12 @@ const aeFloat3 aeFloat3::Left     = aeFloat3(-1.0f, 0.0f, 0.0f);
 const aeFloat3 aeFloat3::Right    = aeFloat3(1.0f, 0.0f, 0.0f);
 const aeFloat3 aeFloat3::Forward  = aeFloat3(0.0f, 1.0f, 0.0f);
 const aeFloat3 aeFloat3::Backward = aeFloat3(0.0f, -1.0f, 0.0f);
+
+aeFloat3::aeFloat3( const aeInt3& v ) :
+  x( v.x ),
+  y( v.y ),
+  z( v.z )
+{}
 
 aeFloat3 aeFloat3::operator+ (const aeFloat3& v) const
 {
@@ -448,19 +472,30 @@ aeFloat3& aeFloat3::Trim(const float s)
   return *this;
 }
 
-void aeFloat3::Normalize()
+aeFloat3& aeFloat3::ZeroAxis( aeFloat3 axis )
 {
-  (*this) *= 1.0f / Length();
+  axis.SafeNormalize();
+  *this -= axis * Dot( axis );
+  return *this;
 }
 
-aeFloat3 aeFloat3::NormalizeCopy(void) const
+float aeFloat3::Normalize()
+{
+  float length = Length();
+  x /= length;
+  y /= length;
+  z /= length;
+  return length;
+}
+
+aeFloat3 aeFloat3::NormalizeCopy() const
 {
   aeFloat3 copy = *this;
   copy.Normalize();
   return copy;
 }
 
-void aeFloat3::SafeNormalize()
+float aeFloat3::SafeNormalize()
 {
   float length = Length();
   if ( length < 0.00001f )
@@ -468,12 +503,17 @@ void aeFloat3::SafeNormalize()
     x = 0.0f;
     y = 0.0f;
     z = 0.0f;
-    return;
+    return 0.0f;
   }
-  (*this) *= 1.0f / length;
+  
+  x /= length;
+  y /= length;
+  z /= length;
+
+  return length;
 }
 
-aeFloat3 aeFloat3::SafeNormalizeCopy(void) const
+aeFloat3 aeFloat3::SafeNormalizeCopy() const
 {
   aeFloat3 copy = *this;
   copy.SafeNormalize();
@@ -483,6 +523,33 @@ aeFloat3 aeFloat3::SafeNormalizeCopy(void) const
 void aeFloat3::SetZero()
 {
   x = y = z = 0.0f;
+}
+
+aeInt3 aeFloat3::NearestCopy() const
+{
+  return aeInt3(
+    x + 0.5f,
+    y + 0.5f,
+    z + 0.5f
+  );
+}
+
+aeInt3 aeFloat3::FloorCopy() const
+{
+  return aeInt3(
+    aeMath::Floor( x ),
+    aeMath::Floor( y ),
+    aeMath::Floor( z )
+  );
+}
+
+aeInt3 aeFloat3::CeilCopy() const
+{
+  return aeInt3(
+    aeMath::Ceil( x ),
+    aeMath::Ceil( y ),
+    aeMath::Ceil( z )
+  );
 }
 
 float aeFloat3::GetAngleBetween(const aeFloat3& v) const
@@ -601,6 +668,12 @@ bool aeFloat3::operator<=(const aeFloat3& v) const
 bool aeFloat3::operator>=(const aeFloat3& v) const
 {
   return x >= v.x && y >= v.y && z >= v.z;
+}
+
+aeFloat3 aeFloat3::ProjectPoint( const aeFloat4x4& projection, aeFloat3 p )
+{
+  aeFloat4 projected = projection * aeFloat4( p, 1.0f );
+  return projected.GetXYZ() / projected.w;
 }
 
 //------------------------------------------------------------------------------
@@ -811,17 +884,44 @@ void aeFloat4::Trim(const float s)
   }
 }
 
-aeFloat4& aeFloat4::Normalize()
+float aeFloat4::Normalize()
 {
-  (*this) *= 1.0f / Length();
-
-  return *this;
+  float length = Length();
+  x /= length;
+  y /= length;
+  z /= length;
+  return length;
 }
 
-aeFloat4 aeFloat4::NormalizeCopy(void) const
+aeFloat4 aeFloat4::NormalizeCopy() const
 {
   aeFloat4 copy = *this;
   copy.Normalize();
+  return copy;
+}
+
+float aeFloat4::SafeNormalize()
+{
+  float length = Length();
+  if ( length < 0.00001f )
+  {
+    x = 0.0f;
+    y = 0.0f;
+    z = 0.0f;
+    return 0.0f;
+  }
+
+  x /= length;
+  y /= length;
+  z /= length;
+
+  return length;
+}
+
+aeFloat4 aeFloat4::SafeNormalizeCopy( void ) const
+{
+  aeFloat4 copy = *this;
+  copy.SafeNormalize();
   return copy;
 }
 
@@ -1164,6 +1264,57 @@ aeFloat4x4 aeFloat4x4::Translation( const aeFloat3& p )
   return r;
 }
 
+aeFloat4x4 aeFloat4x4::Rotation( aeFloat3 forward0, aeFloat3 up0, aeFloat3 forward1, aeFloat3 up1 )
+{
+  // Remove rotation
+  forward0.Normalize();
+  up0.Normalize();
+
+  aeFloat3 right0 = forward0 % up0;
+  right0.Normalize();
+  up0 = right0 % forward0;
+
+  aeFloat4x4 removeRotation;
+  memset( &removeRotation, 0, sizeof( removeRotation ) );
+  removeRotation.SetRowVector( 0, right0 ); // right -> ( 1, 0, 0 )
+  removeRotation.SetRowVector( 1, forward0 ); // forward -> ( 0, 1, 0 )
+  removeRotation.SetRowVector( 2, up0 ); // up -> ( 0, 0, 1 )
+  removeRotation.data[ 15 ] = 1;
+
+  // Rotate
+  forward1.Normalize();
+  up1.Normalize();
+
+  aeFloat3 right1 = forward1 % up1;
+  right1.Normalize();
+  up1 = right1 % forward1;
+
+  aeFloat4x4 newRotation;
+  memset( &newRotation, 0, sizeof( newRotation ) );
+  // Set axis vector to invert (transpose)
+  newRotation.SetAxisVector( 0, right1 ); // ( 1, 0, 0 ) -> right
+  newRotation.SetAxisVector( 1, forward1 ); // ( 0, 1, 0 ) -> forward
+  newRotation.SetAxisVector( 2, up1 ); // ( 0, 0, 1 ) -> up
+  newRotation.data[ 15 ] = 1;
+
+  return newRotation * removeRotation;
+}
+
+aeFloat4x4 aeFloat4x4::RotationX( float angle )
+{
+  aeFloat4x4 result; return result.SetRotateX( angle );
+}
+
+aeFloat4x4 aeFloat4x4::RotationY( float angle )
+{
+  aeFloat4x4 result; return result.SetRotateY( angle );
+}
+
+aeFloat4x4 aeFloat4x4::RotationZ( float angle )
+{
+  aeFloat4x4 result; return result.SetRotateZ( angle );
+}
+
 aeFloat4x4 aeFloat4x4::Scaling( const aeFloat3& s )
 {
   aeFloat4x4 r = aeFloat4x4::Identity();
@@ -1196,6 +1347,13 @@ aeFloat4x4 aeFloat4x4::WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat
   return result;
 }
 
+// this hack comes in from the renderer
+extern bool gReverseZ;
+
+// fix the projection matrix, when false fov scales up/down with nearPlane
+// if this breaks stuff, then can set to false
+bool gFixProjection = true;
+
 aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
 {
   // a  0  0  0
@@ -1203,14 +1361,33 @@ aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nea
   // 0  0  A  B
   // 0  0 -1  0
 
-  float r = aspectRatio * tanf( fov * 0.5f ) * 0.8f;
-  float t = tanf( fov * 0.5f ) * 0.8f;
-
+  // this is assuming a symmetric frustum, in this case nearPlane cancels out
+  
+  float halfAngleTangent = tanf( fov * 0.5f);
+  float r = aspectRatio * halfAngleTangent; // scaled by view aspect ratio
+  float t = halfAngleTangent; // tan of half angle fit vertically
+	  
+  if ( gFixProjection )
+  {
+	  r *= nearPlane;
+	  t *= nearPlane;
+  }
   float a = nearPlane / r;
   float b = nearPlane / t;
-  float A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
-  float B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
-
+ 	
+  float A;
+  float B;
+  if (gReverseZ)
+  {
+	  A = 0;
+	  B = nearPlane;
+  }
+  else
+  {
+	  A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
+	  B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
+  }
+  
   aeFloat4x4 result;
   memset( &result, 0, sizeof( result ) );
   result.data[ 0 ] = a;
@@ -1653,6 +1830,15 @@ aeFloat3 aeFloat4x4::GetTranslation() const
   return aeFloat3( data[ 3 ], data[ 7 ], data[ 11 ] );
 }
 
+aeFloat3 aeFloat4x4::GetScale() const
+{
+  return aeFloat3(
+    aeFloat3( data[ 0 ], data[ 4 ], data[ 8 ] ).Length(),
+    aeFloat3( data[ 1 ], data[ 5 ], data[ 9 ] ).Length(),
+    aeFloat3( data[ 2 ], data[ 6 ], data[ 10 ] ).Length()
+  );
+}
+
 aeFloat4x4& aeFloat4x4::SetScale(float X, float Y, float Z){
   data[0]  = X;    data[1] = 0.0f;  data[2] = 0.0f;  data[3] = 0.0f;
   data[4]  = 0.0f; data[5] = Y;     data[6] = 0.0f;  data[7] = 0.0f;
@@ -1749,6 +1935,18 @@ aeFloat4x4& aeFloat4x4::Scale( aeFloat3 s )
   return *this;
 }
 
+aeFloat4x4& aeFloat4x4::RotateX( float angle )
+{
+  *this = *this * aeFloat4x4::RotationX( angle );
+  return *this;
+}
+
+aeFloat4x4& aeFloat4x4::RotateY( float angle )
+{
+  *this = *this * aeFloat4x4::RotationY( angle );
+  return *this;
+}
+
 aeFloat4x4& aeFloat4x4::RotateZ( float angle )
 {
   *this = *this * aeFloat4x4::RotationZ( angle );
@@ -1818,8 +2016,28 @@ void aeRect::Expand( aeFloat2 pos )
   }
 }
 
+bool aeRect::GetIntersection( const aeRect& other, aeRect* intersectionOut ) const
+{
+  float x0 = aeMath::Max( x, other.x );
+  float x1 = aeMath::Min( x + w, other.x + other.w );
+  float y0 = aeMath::Max( y, other.y );
+  float y1 = aeMath::Min( y + h, other.y + other.h );
+  if ( x0 < x1 && y0 < y1 )
+  {
+    if ( intersectionOut )
+    {
+      *intersectionOut = aeRect( aeFloat2( x0, y0 ), aeFloat2( x1, y1 ) );
+    }
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
 //------------------------------------------------------------------------------
-// aeRect member functions
+// aeRectInt member functions
 //------------------------------------------------------------------------------
 aeRectInt aeRectInt::Zero()
 {
@@ -1875,7 +2093,7 @@ aePlane::aePlane( aeFloat3 point, aeFloat3 normal )
   m_normal = normal.SafeNormalizeCopy();
 }
 
-bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, aeFloat3* out ) const
+bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const
 {
   dir.SafeNormalize();
 
@@ -1890,8 +2108,46 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, aeFloat3* out ) const
   float b = diff.Dot( m_normal );
   float c = b / a;
 
-  *out = pos - dir * c;
+  if ( tOut )
+  {
+    *tOut = c;
+  }
+  if ( out )
+  {
+    *out = pos - dir * c;
+  }
   return true;
+}
+
+//------------------------------------------------------------------------------
+// aeLineSegment member functions
+//------------------------------------------------------------------------------
+aeLineSegment::aeLineSegment( aeFloat3 p0, aeFloat3 p1 )
+{
+  m_p0 = p0;
+  m_p1 = p1;
+}
+
+float aeLineSegment::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut ) const
+{
+  float lenSq = ( m_p1 - m_p0 ).LengthSquared();
+  if ( lenSq <= 0.001f )
+  {
+    if ( nearestOut )
+    {
+      *nearestOut = m_p0;
+    }
+    return ( p - m_p0 ).Length();
+  }
+
+  float t = aeMath::Clip01( ( p - m_p0 ).Dot( m_p1 - m_p0 ) / lenSq );
+  aeFloat3 linePos = aeMath::Lerp( m_p0, m_p1, t );
+
+  if ( nearestOut )
+  {
+    *nearestOut = linePos;
+  }
+  return ( p - linePos ).Length();
 }
 
 //------------------------------------------------------------------------------
@@ -1922,4 +2178,616 @@ bool aeCircle::Intersect( const aeCircle& other, aeFloat2* out ) const
     *out = m_point + diff.SafeNormalizeCopy() * ( ( m_radius + dist - other.m_radius ) * 0.5f );
   }
   return true;
+}
+
+//------------------------------------------------------------------------------
+// aeSphere member functions
+//------------------------------------------------------------------------------
+bool aeSphere::Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut, aeFloat3* pOut ) const
+{
+  direction.SafeNormalize();
+
+  aeFloat3 m = origin - center;
+  float b = m.Dot( direction );
+  float c = m.Dot( m ) - radius * radius;
+  // Exit if r�s origin outside s (c > 0) and r pointing away from s (b > 0)
+  if ( c > 0.0f && b > 0.0f )
+  {
+    return false;
+  }
+
+  // A negative discriminant corresponds to ray missing sphere
+  float discr = b * b - c;
+  if ( discr < 0.0f )
+  {
+    return false;
+  }
+
+  // Ray now found to intersect sphere, compute smallest t value of intersection
+  float t = -b - sqrtf( discr );
+  // If t is negative, ray started inside sphere so clamp t to zero
+  if ( t < 0.0f )
+  {
+    t = 0.0f;
+  }
+
+  if ( tOut )
+  {
+    *tOut = t;
+  }
+
+  if ( pOut )
+  {
+    *pOut = origin + direction * t;
+  }
+
+  return true;
+}
+
+// Test if point P lies inside the counterclockwise 3D triangle ABC
+bool PointInTriangle( aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c )
+{
+  // Translate point and triangle so that point lies at origin
+  a -= p;
+  b -= p;
+  c -= p;
+  float ab = a.Dot( b );
+  float ac = a.Dot( c );
+  float bc = b.Dot( c );
+  float cc = c.Dot( c );
+  // Make sure plane normals for pab and pbc point in the same direction
+  if ( bc * ac - cc * ab < 0.0f )
+  {
+    return false;
+  }
+  // Make sure plane normals for pab and pca point in the same direction
+  float bb = b.Dot( b );
+  if ( ab * bc - ac * bb < 0.0f )
+  {
+    return false;
+  }
+  // Otherwise P must be in (or on) the triangle
+  return true;
+}
+
+#include "aeRender.h"
+bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+  float* outNearestDistance,
+  aeFloat3* outNearestIntersectionPoint,
+  aeFloat3* outNearestPolygonIntersectionPoint, aeDebugRender* debug ) const
+{
+  direction.SafeNormalize(); // @TODO: Make sure following logic is isn't limited by direction length
+
+  // Plane origin/normal
+  aePlane triPlane( points[ 0 ], normal );
+
+  // Determine the distance from the plane to the source
+  aeFloat3 planeIntersectionPoint( 0.0f );
+  aeFloat3 planeIntersectionPoint2( 0.0f );
+  //float pDist = intersect( pOrigin, normal, source, -normal );
+  float pDist = aeMath::MaxValue< float >();
+  if ( triPlane.IntersectRay( center, -normal, &pDist, &planeIntersectionPoint ) )
+  {
+    // @TODO: Should be able to remove this
+    pDist = ( planeIntersectionPoint - center ).Length();
+    debug->AddLine( center, center - normal, aeColor::Red() );
+    debug->AddSphere( planeIntersectionPoint, 0.05f, aeColor::Red(), 8 );
+
+    planeIntersectionPoint2 = planeIntersectionPoint;
+  }
+
+  // Is the source point behind the plane?
+  // [note that you can remove this condition if your visuals are not using backface culling]
+  if ( pDist < 0.0 )
+  {
+    return false;
+  }
+
+  // Is the plane embedded (i.e. within the distance of radius of the sphere)?
+  if ( pDist <= radius )
+  {
+    // Calculate the plane intersection point
+    // @TODO: Is this already calculated above?
+    planeIntersectionPoint = center - normal * pDist;
+  }
+  else
+  {
+    aeFloat3 sphereIntersectionPoint = center - normal * radius;
+    if ( !triPlane.IntersectRay( sphereIntersectionPoint, direction, nullptr, &planeIntersectionPoint ) )
+    {
+      return false;
+    }
+
+    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, aeColor::PicoOrange() );
+  }
+
+  // Unless otherwise noted, our polygonIntersectionPoint is the
+  // same point as planeIntersectionPoint
+  aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
+  // So� are they the same?
+  // @TODO: Check edges
+  //if ( planeIntersectionPoint is not within the current polygon )
+  if ( !PointInTriangle( polygonIntersectionPoint, points[ 0 ], points[ 1 ], points[ 2 ] ) )
+  {
+    // polygonIntersectionPoint = nearest point on polygon's perimeter to planeIntersectionPoint;
+
+    aeFloat3 p0, p1;
+    aeFloat3 c0, c1, c2;
+    float d0 = aeLineSegment( points[ 0 ], points[ 1 ] ).GetMinDistance( planeIntersectionPoint, &c0 );
+    float d1 = aeLineSegment( points[ 1 ], points[ 2 ] ).GetMinDistance( planeIntersectionPoint, &c1 );
+    float d2 = aeLineSegment( points[ 2 ], points[ 0 ] ).GetMinDistance( planeIntersectionPoint, &c2 );
+    if ( d0 <= d1 && d0 <= d2 )
+    {
+      polygonIntersectionPoint = c0;
+      p0 = points[ 0 ];
+      p1 = points[ 1 ];
+    }
+    else if ( d1 <= d0 && d1 <= d2 )
+    {
+      polygonIntersectionPoint = c1;
+      p0 = points[ 1 ];
+      p1 = points[ 2 ];
+    }
+    else
+    {
+      polygonIntersectionPoint = c2;
+      p0 = points[ 2 ];
+      p1 = points[ 0 ];
+    }
+
+    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
+    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
+
+    aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+
+    float minDist = aeMath::MaxValue< float >();
+    aeFloat3 theRealThingTM;
+    aeFloat3 edgeNormalMinTemp;
+    //aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    for ( uint32_t i = 0; i < 3; i++ )
+    {
+      p0 = points[ i ];
+      p1 = points[ ( i + 1 ) % 3 ];
+
+      aeFloat3 edgeNormal = ( normal % ( p0 - p1 ) ).SafeNormalizeCopy();
+      aePlane edgePlane( p0, edgeNormal ); //  + edgeNormal * radius
+
+      float distance = 0.0f;
+      aeFloat3 testPoint = planeIntersectionPoint2;
+      edgePlane.IntersectRay( planeIntersectionPoint2, flatDir, &distance, &testPoint );
+      if ( minDist > distance )
+      {
+        minDist = distance;
+        theRealThingTM = testPoint;
+        edgeNormalMinTemp = edgeNormal;
+      }
+    }
+
+    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, aeColor::Blue() );
+    debug->AddSphere( theRealThingTM, 0.05f, aeColor::Blue(), 16 );
+
+    polygonIntersectionPoint = theRealThingTM;
+
+    float circleRad = radius; // Incorrect! This circle is the 'slice of sphere' at the point of contact with the edge
+    aeFloat3 circlePos = theRealThingTM + edgeNormalMinTemp * circleRad;
+    debug->AddCircle( circlePos, normal, circleRad, aeColor::Blue(), 16 );
+  }
+  // Invert the velocity vector
+  //aeFloat3 negativeVelocityVector = -velocityVector;
+  // Using the polygonIntersectionPoint, we need to reverse-intersect
+  // with the sphere (note: the 1.0 below is the unit-sphere�s
+  // radius)
+  //float t = intersectSphere( sourcePoint, 1.0f, polygonIntersectionPoint, negativeVelocityVector );
+  // Was there an intersection with the sphere?
+  //if ( t >= 0.0 ) // && t <= distanceToTravel ) // No limit?
+  float t = 0.0f;
+  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, aeColor::Green() );
+  if ( Raycast( polygonIntersectionPoint, -direction, &t ) )
+  {
+    if ( outNearestDistance )
+    {
+      *outNearestDistance = t;
+    }
+    if ( outNearestIntersectionPoint )
+    {
+      // Where did sphere intersected
+      *outNearestIntersectionPoint = polygonIntersectionPoint - direction * t;
+    }
+    if ( outNearestPolygonIntersectionPoint )
+    {
+      *outNearestPolygonIntersectionPoint = polygonIntersectionPoint;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+/*
+bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+  float* outNearestDistance,
+  aeFloat3* outNearestIntersectionPoint,
+  aeFloat3* outNearestPolygonIntersectionPoint, aeDebugRender* debug ) const
+{
+  direction.SafeNormalize(); // @TODO: Make sure following logic is isn't limited by direction length
+
+  // Plane origin/normal
+  aePlane triPlane( points[ 0 ], normal );
+
+  // Determine the distance from the plane to the source
+  aeFloat3 planeIntersectionPoint( 0.0f );
+  aeFloat3 planeIntersectionPoint2( 0.0f );
+  //float pDist = intersect( pOrigin, normal, source, -normal );
+  float pDist = aeMath::MaxValue< float >();
+  if ( triPlane.IntersectRay( center, -normal, &pDist, &planeIntersectionPoint ) )
+  {
+    // @TODO: Should be able to remove this
+    pDist = ( planeIntersectionPoint - center ).Length();
+    debug->AddLine( center, center - normal, aeColor::Red() );
+    debug->AddSphere( planeIntersectionPoint, 0.05f, aeColor::Red(), 8 );
+
+    planeIntersectionPoint2 = planeIntersectionPoint;
+  }
+
+  // Is the source point behind the plane?
+  // [note that you can remove this condition if your visuals are not using backface culling]
+  if ( pDist < 0.0 )
+  {
+    return false;
+  }
+
+  // Is the plane embedded (i.e. within the distance of radius of the sphere)?
+  if ( pDist <= radius )
+  {
+    // Calculate the plane intersection point
+    // @TODO: Is this already calculated above?
+    planeIntersectionPoint = center - normal * pDist;
+  }
+  else
+  {
+    aeFloat3 sphereIntersectionPoint = center - normal * radius;
+    if ( !triPlane.IntersectRay( sphereIntersectionPoint, direction, nullptr, &planeIntersectionPoint ) )
+    {
+      return false;
+    }
+
+    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, aeColor::PicoOrange() );
+  }
+
+  // Unless otherwise noted, our polygonIntersectionPoint is the
+  // same point as planeIntersectionPoint
+  aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
+  // So� are they the same?
+  // @TODO: Check edges
+  //if ( planeIntersectionPoint is not within the current polygon )
+  if ( !PointInTriangle( polygonIntersectionPoint, points[ 0 ], points[ 1 ], points[ 2 ] ) )
+  {
+    // polygonIntersectionPoint = nearest point on polygon's perimeter to planeIntersectionPoint;
+
+    aeFloat3 p0, p1;
+    aeFloat3 c0, c1, c2;
+    float d0 = aeLineSegment( points[ 0 ], points[ 1 ] ).GetMinDistance( planeIntersectionPoint, &c0 );
+    float d1 = aeLineSegment( points[ 1 ], points[ 2 ] ).GetMinDistance( planeIntersectionPoint, &c1 );
+    float d2 = aeLineSegment( points[ 2 ], points[ 0 ] ).GetMinDistance( planeIntersectionPoint, &c2 );
+    if ( d0 <= d1 && d0 <= d2 )
+    {
+      polygonIntersectionPoint = c0;
+      p0 = points[ 0 ];
+      p1 = points[ 1 ];
+    }
+    else if ( d1 <= d0 && d1 <= d2 )
+    {
+      polygonIntersectionPoint = c1;
+      p0 = points[ 1 ];
+      p1 = points[ 2 ];
+    }
+    else
+    {
+      polygonIntersectionPoint = c2;
+      p0 = points[ 2 ];
+      p1 = points[ 0 ];
+    }
+
+    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
+    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
+
+    aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+
+    float minDist = aeMath::MaxValue< float >();
+    aeFloat3 theRealThingTM;
+    aeFloat3 edgeNormalMinTemp;
+    //aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    for ( uint32_t i = 0; i < 3; i++ )
+    {
+      p0 = points[ i ];
+      p1 = points[ ( i + 1 ) % 3 ];
+
+      aeFloat3 edgeNormal = ( normal % ( p0 - p1 ) ).SafeNormalizeCopy();
+      aePlane edgePlane( p0, edgeNormal ); //  + edgeNormal * radius
+
+      float distance = 0.0f;
+      aeFloat3 testPoint = planeIntersectionPoint2;
+      edgePlane.IntersectRay( planeIntersectionPoint2, flatDir, &distance, &testPoint );
+      if ( minDist > distance )
+      {
+        minDist = distance;
+        theRealThingTM = testPoint;
+        edgeNormalMinTemp = edgeNormal;
+      }
+    }
+
+    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, aeColor::Blue() );
+    debug->AddSphere( theRealThingTM, 0.05f, aeColor::Blue(), 16 );
+
+    ////polygonIntersectionPoint = theRealThingTM;
+  }
+  // Invert the velocity vector
+  //aeFloat3 negativeVelocityVector = -velocityVector;
+  // Using the polygonIntersectionPoint, we need to reverse-intersect
+  // with the sphere (note: the 1.0 below is the unit-sphere�s
+  // radius)
+  //float t = intersectSphere( sourcePoint, 1.0f, polygonIntersectionPoint, negativeVelocityVector );
+  // Was there an intersection with the sphere?
+  //if ( t >= 0.0 ) // && t <= distanceToTravel ) // No limit?
+  float t = 0.0f;
+  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, aeColor::Green() );
+  if ( Raycast( polygonIntersectionPoint, -direction, &t ) )
+  {
+    if ( outNearestDistance )
+    {
+      *outNearestDistance = t;
+    }
+    if ( outNearestIntersectionPoint )
+    {
+      // Where did sphere intersected
+      *outNearestIntersectionPoint = polygonIntersectionPoint - direction * t;
+    }
+    if ( outNearestPolygonIntersectionPoint )
+    {
+      *outNearestPolygonIntersectionPoint = polygonIntersectionPoint;
+    }
+    return true;
+  }
+
+  return false;
+}
+*/
+
+//------------------------------------------------------------------------------
+// aeAABB member functions
+//------------------------------------------------------------------------------
+aeAABB::aeAABB( aeFloat3 p0, aeFloat3 p1 )
+{
+  m_min = aeMath::Min( p0, p1 );
+  m_max = aeMath::Max( p0, p1 );
+}
+
+aeAABB::aeAABB( const aeSphere& sphere )
+{
+  aeFloat3 r( sphere.radius );
+  m_min = sphere.center - r;
+  m_max = sphere.center + r;
+}
+
+void aeAABB::Expand( aeFloat3 p )
+{
+  m_min = aeMath::Min( p, m_min );
+  m_max = aeMath::Max( p, m_max );
+}
+
+void aeAABB::Expand( aeAABB other )
+{
+  m_min = aeMath::Min( other.m_min, m_min );
+  m_max = aeMath::Max( other.m_max, m_max );
+}
+
+void aeAABB::Expand( float boundary )
+{
+  m_min -= aeFloat3( boundary );
+  m_max += aeFloat3( boundary );
+}
+
+aeFloat4x4 aeAABB::GetTransform() const
+{
+  return aeFloat4x4::Translation( GetCenter() ) * aeFloat4x4::Scaling( m_max - m_min );
+}
+
+float aeAABB::GetMinDistance( aeFloat3 p ) const
+{
+  aeFloat3 c = ( m_min + m_max ) * 0.5f;
+  aeFloat3 hs = ( m_max - m_min ) * 0.5f;
+
+  aeFloat3 d = p - c;
+  d.x = aeMath::Max( aeMath::Abs( d.x ) - hs.x, 0.0f );
+  d.y = aeMath::Max( aeMath::Abs( d.y ) - hs.y, 0.0f );
+  d.z = aeMath::Max( aeMath::Abs( d.z ) - hs.z, 0.0f );
+
+  return d.Length();
+}
+
+bool aeAABB::Intersect( aeAABB other ) const
+{
+  if ( m_max.x >= other.m_min.x && m_max.y >= other.m_min.y && m_max.z >= other.m_min.z )
+  {
+    return true;
+  }
+  else if ( other.m_max.x >= m_min.x && other.m_max.y >= m_min.y && other.m_max.z >= m_min.z )
+  {
+    return true;
+  }
+
+  return false;
+}
+
+// Intersect ray R(t) = p + t*d against AABB a. When intersecting,
+// return intersection distance tmin and point q of intersection
+bool aeAABB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
+{
+  float tmin = 0.0f; // set to -FLT_MAX to get first hit on line
+  float tmax = aeMath::MaxValue< float >(); // set to max distance ray can travel (for segment)
+  for ( int32_t i = 0; i < 3; i++ ) // For all three slabs
+  {
+    if ( aeMath::Abs( d[ i ] ) < 0.001f )
+    {
+      // Ray is parallel to slab. No hit if origin not within slab
+      if ( p[ i ] < m_min[ i ] || p[ i ] > m_max[ i ] )
+      {
+        return false;
+      }
+    }
+    else
+    {
+      // Compute intersection t value of ray with near and far plane of slab
+      float ood = 1.0f / d[ i ];
+      float t1 = ( m_min[ i ] - p[ i ] ) * ood;
+      float t2 = ( m_max[ i ] - p[ i ] ) * ood;
+      // Make t1 be intersection with near plane, t2 with far plane
+      if ( t1 > t2 )
+      {
+        std::swap( t1, t2 );
+      }
+
+      // Compute the intersection of slab intersection intervals
+      tmin = aeMath::Max( tmin, t1 );
+      tmax = aeMath::Min( tmax, t2 );
+
+      // Exit with no collision as soon as slab intersection becomes empty
+      if ( tmin > tmax )
+      {
+        return false;
+      }
+    }
+  }
+
+  // Ray intersects all 3 slabs. Return point (q) and intersection t value (tmin)
+  if ( tOut )
+  {
+    *tOut = tmin;
+  }
+  if ( pOut )
+  {
+    *pOut = p + d * tmin;
+  }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// aeOBB member functions
+//------------------------------------------------------------------------------
+aeOBB::aeOBB( const aeFloat4x4& transform )
+{
+  SetTransform( transform );
+}
+
+void aeOBB::SetTransform( const aeFloat4x4& transform )
+{
+  m_transform = transform;
+  
+  aeFloat3 scale = transform.GetScale();
+  m_scaledAABB = aeAABB( scale * -0.5f, scale * 0.5f );
+  
+  m_invTransRot = transform;
+  m_invTransRot.RemoveScaling();
+  m_invTransRot.Invert();
+}
+
+const aeFloat4x4& aeOBB::GetTransform() const
+{
+  return m_transform;
+}
+
+float aeOBB::GetMinDistance( aeFloat3 p ) const
+{
+  p = ( m_invTransRot * aeFloat4( p, 1.0f ) ).GetXYZ();
+  return m_scaledAABB.GetMinDistance( p );
+}
+
+bool aeOBB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
+{
+  p = ( m_invTransRot * aeFloat4( p, 1.0f ) ).GetXYZ();
+  d = ( m_invTransRot * aeFloat4( d, 0.0f ) ).GetXYZ();
+
+  float rayT = 0.0f;
+  if ( m_scaledAABB.IntersectRay( p, d, nullptr, &rayT ) )
+  {
+    if ( tOut )
+    {
+      *tOut = rayT;
+    }
+    if ( pOut )
+    {
+      *pOut = p + d * rayT;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+aeAABB aeOBB::GetAABB() const
+{
+  aeFloat4 corners[] =
+  {
+    m_transform * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ),
+    m_transform * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ),
+    m_transform * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ),
+    m_transform * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ),
+  };
+  
+  aeAABB result( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
+  for ( uint32_t i = 2; i < countof( corners ); i++ )
+  {
+    result.Expand( corners[ i ].GetXYZ() );
+  }
+
+  return result;
+}
+
+//------------------------------------------------------------------------------
+// aeHash member functions
+//------------------------------------------------------------------------------
+aeHash::aeHash( uint32_t initialValue )
+{
+  m_hash = initialValue;
+}
+
+aeHash& aeHash::HashString( const char* str )
+{
+  while ( *str )
+  {
+    m_hash = m_hash ^ str[ 0 ];
+    m_hash *= 0x1000193;
+    str++;
+  }
+
+  return *this;
+}
+
+aeHash& aeHash::HashData( const uint8_t* data, const uint32_t length )
+{
+  for ( uint32_t i = 0; i < length; i++ )
+  {
+    m_hash = m_hash ^ data[ i ];
+    m_hash *= 0x1000193;
+  }
+
+  return *this;
+}
+
+void aeHash::Set( uint32_t hash )
+{
+  m_hash = hash;
+}
+
+uint32_t aeHash::Get() const
+{
+  return m_hash;
 }

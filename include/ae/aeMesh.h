@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeClock.h
+// aeMesh.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,56 +21,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AECLOCK_H
-#define AECLOCK_H
+#ifndef AEMESH_H
+#define AEMESH_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include <chrono>
+#include "aeArray.h"
+#include "aeRender.h" // aeColor
 
 //------------------------------------------------------------------------------
-// aeClock
+// aeMesh types
 //------------------------------------------------------------------------------
-namespace aeClock
+struct aeMeshVertex
 {
-  double GetTime();
+  aeFloat4 position;
+  aeFloat4 normal;
+  aeFloat2 tex[ 4 ];
+  aeColor color[ 4 ];
 };
 
+typedef uint16_t aeMeshIndex;
+
 //------------------------------------------------------------------------------
-// aeFixedTimeStep
+// aeMesh class
 //------------------------------------------------------------------------------
-class aeFixedTimeStep
+class aeMesh
 {
 public:
-  aeFixedTimeStep();
+  bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
+  void Transform( aeFloat4x4 transform );
 
-  void SetTimeStep( float timeStep ) { m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f; }
-  float GetTimeStep() const { return m_timeStepSec; }
-  
-  void Wait();
-
-private:
-  bool m_first = true;
-  float m_timeStepSec = 0.0f;
-  float m_timeStep = 0.0f;
-  int64_t m_frameExcess = 0;
-  float m_prevFrameTime = 0.0f;
-  std::chrono::steady_clock::time_point m_frameStart;
-};
-
-//------------------------------------------------------------------------------
-// aeTicker
-//------------------------------------------------------------------------------
-class aeTicker
-{
-public:
-  aeTicker( double interval );
-  bool Tick( double currentTime );
+  const aeMeshVertex* GetVertices() const;
+  const aeMeshIndex* GetIndices() const;
+  uint32_t GetVertexCount() const;
+  uint32_t GetIndexCount() const;
 
 private:
-  double m_interval;
-  double m_accumulate;
+  aeArray< aeMeshVertex > m_vertices;
+  aeArray< aeMeshIndex > m_indices;
 };
 
 #endif

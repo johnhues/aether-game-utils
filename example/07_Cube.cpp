@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeClock.h"
+#include "aeEditorCamera.h"
 #include "aeInput.h"
 #include "aeLog.h"
 #include "aeRender.h"
@@ -49,6 +50,29 @@ const char* kFragShader = "\
 	{\
 		AE_COLOR = v_color;\
 	}";
+//const char* kVertShader = "\
+//	AE_UNIFORM mat4 u_worldToProj;\
+//	AE_IN_HIGHP vec4 a_position;\
+//	AE_IN_HIGHP vec4 a_color;\
+//	AE_OUT_HIGHP vec4 v_color;\
+//	AE_OUT_HIGHP vec4 v_pos;\
+//	void main()\
+//	{\
+//		v_color = a_color;\
+//		v_pos = u_worldToProj * a_position;\
+//		gl_Position = v_pos;\
+//	}";
+//
+//const char* kFragShader = "\
+//	AE_IN_HIGHP vec4 v_color;\
+//	AE_IN_HIGHP vec4 v_pos;\
+//	layout(location = 0) out vec4 diffuseColor;\
+//	layout(location = 1) out vec4 depth;\
+//	void main()\
+//	{\
+//		diffuseColor = v_color;\
+//		depth = vec4( vec3( v_pos.z / v_pos.w ), 1.0 );\
+//	}";
 
 //------------------------------------------------------------------------------
 // Cube
@@ -143,13 +167,12 @@ int main()
 	aeFixedTimeStep timeStep;
 	aeShader shader;
 	aeVertexData vertexData;
-	Camera camera;
+	aeEditorCamera camera;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "cube" );
-	render.InitializeOpenGL( &window, window.GetWidth(), window.GetHeight() );
-	render.SetClearColor( aeColor::PicoDarkPurple() );
-	input.Initialize( &window, &render );
+	render.InitializeOpenGL( &window );
+	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
@@ -167,17 +190,22 @@ int main()
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		camera.Update( &input );
-		render.Resize( window.GetWidth(), window.GetHeight() );
-		render.StartFrame();
 
+		if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+		{
+			camera.Refocus( aeFloat3( 0.0f ) );
+		}
+		camera.Update( &input, timeStep.GetTimeStep() );
+
+		render.Activate();
+		render.Clear( aeColor::PicoDarkPurple() );
 		aeUniformList uniformList;
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
 		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		vertexData.Render( &shader, uniformList );
+		render.Present();
 
-		render.EndFrame();
 		timeStep.Wait();
 	}
 

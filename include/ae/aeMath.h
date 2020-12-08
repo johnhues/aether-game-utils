@@ -48,7 +48,7 @@ namespace aeMath
   {
     return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
   }
-
+  
   template< typename T >
   T&& Max( T&& v )
   {
@@ -164,39 +164,39 @@ namespace aeMath
   }
 
   template< typename T >
-  inline T MaxValue()
+  constexpr T MaxValue()
   {
-    return std::numeric_limits<T>::max();
+    return std::numeric_limits< T >::max();
   }
 
   template< typename T >
-  inline T MinValue()
+  constexpr T MinValue()
   {
-    return std::numeric_limits<T>::min();
+    return std::numeric_limits< T >::min();
   }
 
   template<>
-  inline float MaxValue< float >()
+  constexpr float MaxValue< float >()
   {
-    return std::numeric_limits<float>::infinity();
+    return std::numeric_limits< float >::infinity();
   }
 
   template<>
-  inline float MinValue< float >()
+  constexpr float MinValue< float >()
   {
-    return -1 * std::numeric_limits<float>::infinity();
+    return -1 * std::numeric_limits< float >::infinity();
   }
 
   template<>
-  inline double MaxValue< double >()
+  constexpr double MaxValue< double >()
   {
-    return std::numeric_limits<double>::infinity();
+    return std::numeric_limits< double >::infinity();
   }
 
   template<>
-  inline double MinValue< double >()
+  constexpr double MinValue< double >()
   {
-    return -1 * std::numeric_limits<double>::infinity();
+    return -1 * std::numeric_limits< double >::infinity();
   }
 
   template< typename T >
@@ -208,6 +208,11 @@ namespace aeMath
   inline float Delerp( float start, float end, float value )
   {
     return ( value - start ) / ( end - start );
+  }
+
+  inline float Delerp01( float start, float end, float value )
+  {
+    return Clip01( ( value - start ) / ( end - start ) );
   }
 
   template< typename T >
@@ -255,6 +260,11 @@ namespace aeMath
     return min + ( ( rand() / (float)RAND_MAX ) * ( max - min ) );
   }
 
+  inline bool RandomBool()
+  {
+    return Random( 0, 2 );
+  }
+
   template < typename T >
   class RandomValue
   {
@@ -276,6 +286,28 @@ namespace aeMath
     T m_min;
     T m_max;
   };
+
+  namespace Interpolation
+  {
+    template< typename T >
+    T Linear( T start, T end, float t )
+    {
+      return start + ( ( end - start ) * t );
+    }
+
+    template< typename T >
+    T Cosine( T start, T end, float t )
+    {
+      t = (1-cos(t*aeMath::PI))/2;
+
+      // float angle = ( t * aeMath::PI ) + aeMath::PI;
+      // t = aeMath::Cos( angle );
+      // t = ( t + 1 ) / 2.0f;
+
+      // return start + ( ( end - start ) * t );
+      return start.Lerp( end, t );
+    }
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -298,10 +330,11 @@ struct AE_ALIGN(16) aeFloat2
   aeFloat2() = default;
   aeFloat2( const aeFloat2& ) = default;
   aeFloat2( bool ) = delete;
-  
   explicit aeFloat2( float v ) : x( v ), y( v ) {}
   aeFloat2( float x, float y ) : x( x ), y( y ) {}
   explicit aeFloat2( const struct aeInt2& v );
+  static aeFloat2 FromAngle( float angle ) { return aeFloat2( aeMath::Cos( angle ), aeMath::Sin( angle ) );}
+
   bool operator ==( const aeFloat2& o ) const { return x == o.x && y == o.y; }
   bool operator !=( const aeFloat2& o ) const { return !( *this == o ); }
   aeFloat2 operator- () const;
@@ -323,9 +356,9 @@ struct AE_ALIGN(16) aeFloat2
   aeFloat2 operator/ ( const aeFloat2 s ) const;
   void operator/= ( const aeFloat2 s );
   aeFloat2 Lerp(const aeFloat2& end, float t) const;
-  void Normalize();
+  float Normalize();
   aeFloat2 NormalizeCopy() const;
-  void SafeNormalize();
+  float SafeNormalize();
   aeFloat2 SafeNormalizeCopy() const;
   aeInt2 NearestCopy() const;
   aeInt2 FloorCopy() const;
@@ -337,7 +370,7 @@ struct AE_ALIGN(16) aeFloat2
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat2 v )
 {
-  return os << "<" << v.x << ", " << v.y << ">";
+  return os << v.x << " " << v.y;
 }
 
 //------------------------------------------------------------------------------
@@ -377,6 +410,8 @@ struct aeInt2
   bool operator ==( const aeInt2& o ) const { return x == o.x && y == o.y; }
   bool operator !=( const aeInt2& o ) const { return !( *this == o ); }
   
+  aeInt2 operator- () const;
+
   aeInt2& operator+=( const aeInt2 &v );
   aeInt2& operator-=( const aeInt2 &v );
   aeInt2 operator+( const aeInt2 &v ) const;
@@ -390,11 +425,16 @@ struct aeInt2
   void operator/= ( const int32_t s );
   aeInt2 operator/ ( const aeInt2& v ) const;
   aeInt2& operator/= ( const aeInt2& v );
+
+  aeFloat2 operator* ( const float s ) const;
+  void operator*= ( const float s ) = delete;
+  aeFloat2 operator/ ( const float s ) const;
+  void operator/= ( const float s ) = delete;
 };
 
 inline std::ostream& operator<<( std::ostream& os, aeInt2 v )
 {
-  return os << "<" << v.x << ", " << v.y << ">";
+  return os << v.x << " " << v.y;
 }
 
 //------------------------------------------------------------------------------
@@ -427,17 +467,20 @@ public:
   aeFloat3( const aeFloat3& ) = default;
   aeFloat3( bool ) = delete;
 
-  explicit aeFloat3(const float _v) : x(_v), y(_v), z(_v), pad(0.0f) {}
-  aeFloat3(const float _x, const float _y, const float _z ) : x(_x), y(_y), z(_z), pad(0.0f) {}
-  aeFloat3(const float (&v)[3]) : x(v[0]), y(v[1]), z(v[2]), pad(0.0f) {}
-  aeFloat3(const float (&v)[4]) : x(v[0]), y(v[1]), z(v[2]), pad(0.0f) {}
-  explicit aeFloat3(const float* v) : x(v[0]), y(v[1]), z(v[2]), pad(0.0f) {}
-  aeFloat3( aeFloat2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad(0.0f) {}
-  explicit aeFloat3( aeFloat2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad(0.0f) {}
+  explicit aeFloat3( float _v ) : x( _v ), y( _v ), z( _v ), pad( 0.0f ) {}
+  aeFloat3( float _x, float _y, float _z ) : x( _x ), y( _y ), z( _z ), pad( 0.0f ) {}
+  aeFloat3( const float( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  aeFloat3( const float( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  explicit aeFloat3( float*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  explicit aeFloat3( const float*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0.0f ) {}
+  aeFloat3( aeFloat2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
+  explicit aeFloat3( aeFloat2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
   explicit operator aeFloat2() const { return aeFloat2( x, y ); }
+  explicit aeFloat3( const struct aeInt3& v );
   void SetZero();
 
   float& operator[]( int32_t i ) { return data[ i ]; }
+  float operator[]( int32_t i ) const { return data[ i ]; }
   aeFloat2 GetXY() const { return aeFloat2( x, y ); }
 
   bool operator==(const aeFloat3& v) const;
@@ -475,21 +518,28 @@ public:
   float GetDistanceSquared(const aeFloat3 &other) const;
   
   aeFloat3& Trim(const float s);
-  void Normalize();
+  aeFloat3& ZeroAxis( aeFloat3 axis ); // Zero components along arbitrary axis (ie vec dot axis == 0)
+  float Normalize();
   aeFloat3 NormalizeCopy() const;
-  void SafeNormalize();
+  float SafeNormalize();
   aeFloat3 SafeNormalizeCopy() const;
   
+  aeInt3 NearestCopy() const;
+  aeInt3 FloorCopy() const;
+  aeInt3 CeilCopy() const;
+
   float GetAngleBetween(const aeFloat3& v) const;
   void AddRotationXY(float rotation);
   aeFloat3 RotateCopy( aeFloat3 axis, float angle ) const;
   aeFloat3 Lerp(const aeFloat3& end, float t) const;
   aeFloat3 Slerp(const aeFloat3& end, float t) const;
+
+  static aeFloat3 ProjectPoint( const class aeFloat4x4& projection, aeFloat3 p );
 };
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat3 v )
 {
-  return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
+  return os << v.x << " " << v.y << " " << v.z;
 }
 
 //------------------------------------------------------------------------------
@@ -516,6 +566,10 @@ struct AE_ALIGN(16) aeInt3
   explicit aeInt3( int32_t _v ) : x( _v ), y( _v ), z( _v ), pad( 0 ) {}
   aeInt3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ), pad( 0 ) {}
   aeInt3( aeInt2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ), pad( 0 ) {}
+  aeInt3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+  aeInt3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+  explicit aeInt3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+  explicit aeInt3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
   // @NOTE: No conversion from aeFloat3 because rounding type should be explicit!
   
   int32_t& operator[]( int32_t i ) { return data[ i ]; }
@@ -542,7 +596,82 @@ struct AE_ALIGN(16) aeInt3
 
 inline std::ostream& operator<<( std::ostream& os, aeInt3 v )
 {
-  return os << "<" << v.x << ", " << v.y << ", " << v.z << ">";
+  return os << v.x << " " << v.y << " " << v.z;
+}
+
+namespace aeMath
+{
+  inline aeFloat3 Min( aeFloat3 v0, aeFloat3 v1 )
+  {
+    return aeFloat3(
+      Min( v0.x, v1.x ),
+      Min( v0.y, v1.y ),
+      Min( v0.z, v1.z )
+    );
+  }
+
+  inline aeFloat3 Max( aeFloat3 v0, aeFloat3 v1 )
+  {
+    return aeFloat3(
+      Max( v0.x, v1.x ),
+      Max( v0.y, v1.y ),
+      Max( v0.z, v1.z )
+    );
+  }
+
+  inline aeFloat3 Abs( aeFloat3 v )
+  {
+    return aeFloat3(
+      Abs( v.x ),
+      Abs( v.y ),
+      Abs( v.z )
+    );
+  }
+
+  inline aeInt3 Min( aeInt3 v0, aeInt3 v1 )
+  {
+    return aeInt3(
+      Min( v0.x, v1.x ),
+      Min( v0.y, v1.y ),
+      Min( v0.z, v1.z )
+    );
+  }
+
+  inline aeInt3 Max( aeInt3 v0, aeInt3 v1 )
+  {
+    return aeInt3(
+      Max( v0.x, v1.x ),
+      Max( v0.y, v1.y ),
+      Max( v0.z, v1.z )
+    );
+  }
+
+  inline aeInt3 Abs( aeInt3 v )
+  {
+    return aeInt3(
+      Abs( v.x ),
+      Abs( v.y ),
+      Abs( v.z )
+    );
+  }
+
+  inline aeFloat3 Ceil( aeFloat3 v )
+  {
+    return aeFloat3(
+      Ceil( v.x ),
+      Ceil( v.y ),
+      Ceil( v.z )
+    );
+  }
+
+  inline aeFloat3 Floor( aeFloat3 v )
+  {
+    return aeFloat3(
+      Floor( v.x ),
+      Floor( v.y ),
+      Floor( v.z )
+    );
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -601,8 +730,10 @@ public:
   float Length() const;
   float LengthSquared() const;
   void Trim(const float s);
-  aeFloat4& Normalize();
+  float Normalize();
   aeFloat4 NormalizeCopy() const;
+  float SafeNormalize();
+  aeFloat4 SafeNormalizeCopy() const;
   void SetZero();
   bool operator==(const aeFloat4& v) const;
   bool operator!=(const aeFloat4& v) const;
@@ -614,7 +745,30 @@ public:
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat4 v )
 {
-  return os << "<" << v.x << ", " << v.y << ", " << v.z << ", " << v.w << ">";
+  return os << v.x << " " << v.y << " " << v.z << " " << v.w;
+}
+
+namespace aeMath
+{
+  inline aeFloat4 Ceil( aeFloat4 v )
+  {
+    return aeFloat4(
+      Ceil( v.x ),
+      Ceil( v.y ),
+      Ceil( v.z ),
+      Ceil( v.w )
+    );
+  }
+
+  inline aeFloat4 Floor( aeFloat4 v )
+  {
+    return aeFloat4(
+      Floor( v.x ),
+      Floor( v.y ),
+      Floor( v.z ),
+      Floor( v.w )
+    );
+  }
 }
 
 template< typename T >
@@ -680,8 +834,12 @@ public:
 
   // Constructor helpers
   static aeFloat4x4 Translation( const aeFloat3& p );
+  static aeFloat4x4 Rotation( aeFloat3 forward0, aeFloat3 up0, aeFloat3 forward1, aeFloat3 up1 );
+  static aeFloat4x4 RotationX( float angle );
+  static aeFloat4x4 RotationY( float angle );
+  static aeFloat4x4 RotationZ( float angle );
   static aeFloat4x4 Scaling( const aeFloat3& s );
-  static aeFloat4x4 RotationZ( float angle ) { aeFloat4x4 result; return result.SetRotateZ( angle ); }
+
   static aeFloat4x4 WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat3 up ); // @TODO: Verify handedness
   static aeFloat4x4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
@@ -716,6 +874,7 @@ public:
   aeFloat4x4& SetTranslation(float X, float Y, float Z);
   aeFloat4x4& SetTranslation(const aeFloat3 &translation);
   aeFloat3 GetTranslation() const;
+  aeFloat3 GetScale() const;
   aeFloat4x4& SetScale(float X, float Y, float Z);
   aeFloat4x4& SetScale(const aeFloat3 &scale);
   aeFloat4x4& SetScaleKeepTranslate(float X, float Y, float Z);
@@ -728,15 +887,17 @@ public:
   // Transformation helpers
   aeFloat4x4& Translate( aeFloat3 t );
   aeFloat4x4& Scale( aeFloat3 s );
+  aeFloat4x4& RotateX( float angle );
+  aeFloat4x4& RotateY( float angle );
   aeFloat4x4& RotateZ( float angle );
 };
 
 inline std::ostream& operator << ( std::ostream& os, const aeFloat4x4& mat )
 {
-  os << "[ " << mat.data[ 0 ] << ", " << mat.data[ 1 ] << ", " << mat.data[ 2 ] << ", " << mat.data[ 3 ]
-    << ", " << mat.data[ 4 ] << ", " << mat.data[ 5 ] << ", " << mat.data[ 6 ] << ", " << mat.data[ 7 ]
-    << ", " << mat.data[ 8 ] << ", " << mat.data[ 9 ] << ", " << mat.data[ 10 ] << ", " << mat.data[ 11 ]
-    << ", " << mat.data[ 12 ] << ", " << mat.data[ 13 ] << ", " << mat.data[ 14 ] << ", " << mat.data[ 15 ] << " ]";
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
   return os;
 }
 
@@ -801,6 +962,8 @@ struct aeRect
 
   bool Contains( aeFloat2 pos ) const;
   void Expand( aeFloat2 pos ); // @NOTE: Zero size rect is maintained by Expand()
+
+  bool GetIntersection( const aeRect& other, aeRect* intersectionOut ) const;
   
   float x;
   float y;
@@ -810,7 +973,7 @@ struct aeRect
 
 inline std::ostream& operator<<( std::ostream& os, aeRect r )
 {
-  return os << "<" << r.x << ", " << r.y << ", " << r.w << ", " << r.h << ">";
+  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
 
 //------------------------------------------------------------------------------
@@ -838,7 +1001,7 @@ struct aeRectInt
 
 inline std::ostream& operator<<( std::ostream& os, aeRectInt r )
 {
-  return os << "<" << r.x << ", " << r.y << ", " << r.w << ", " << r.h << ">";
+  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
 
 //------------------------------------------------------------------------------
@@ -850,11 +1013,27 @@ public:
   aePlane() = default;
   aePlane( aeFloat3 point, aeFloat3 normal );
 
-  bool IntersectRay( aeFloat3 pos, aeFloat3 dir, aeFloat3* out ) const;
+  bool IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const;
 
 private:
   aeFloat3 m_point;
   aeFloat3 m_normal;
+};
+
+//------------------------------------------------------------------------------
+// aeLineSegment class
+//------------------------------------------------------------------------------
+class aeLineSegment
+{
+public:
+  aeLineSegment() = default;
+  aeLineSegment( aeFloat3 p0, aeFloat3 p1 );
+
+  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr ) const; // @TODO: GetDistance()
+
+private:
+  aeFloat3 m_p0;
+  aeFloat3 m_p1;
 };
 
 //------------------------------------------------------------------------------
@@ -886,6 +1065,82 @@ inline std::ostream& operator<<( std::ostream& os, const aeCircle& c )
 {
   return os << "(" << c.m_point << " : " << c.m_radius << ")";
 }
+
+//------------------------------------------------------------------------------
+// aeSphere class
+//------------------------------------------------------------------------------
+class aeSphere
+{
+public:
+  aeSphere() = default;
+  aeSphere( aeFloat3 center, float radius ) : center( center ), radius( radius ) {}
+
+  bool Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut = nullptr, aeFloat3* pOut = nullptr ) const;
+  bool SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+    float* outNearestDistance, aeFloat3* outNearestIntersectionPoint, aeFloat3* outNearestPolygonIntersectionPoint, class aeDebugRender* debug ) const;
+
+  aeFloat3 center = aeFloat3::Zero;
+  float radius = 0.0f;
+};
+
+//------------------------------------------------------------------------------
+// aeAABB class
+//------------------------------------------------------------------------------
+class aeAABB
+{
+public:
+  aeAABB() = default;
+  aeAABB( const aeAABB& ) = default;
+  aeAABB( aeFloat3 p0, aeFloat3 p1 );
+  explicit aeAABB( const aeSphere& sphere );
+
+  void Expand( aeFloat3 p );
+  void Expand( aeAABB other );
+  void Expand( float boundary );
+
+  aeFloat3 GetMin() const { return m_min; }
+  aeFloat3 GetMax() const { return m_max; }
+  aeFloat3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
+  aeFloat3 GetHalfSize() const { return ( m_max - m_min ) * 0.5f; }
+  aeFloat4x4 GetTransform() const;
+
+  float GetMinDistance( aeFloat3 p ) const; // @TODO: GetDistanceFromSurface()
+  bool Intersect( aeAABB other ) const;
+  bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
+
+private:
+  aeFloat3 m_min;
+  aeFloat3 m_max;
+};
+
+inline std::ostream& operator<<( std::ostream& os, aeAABB aabb )
+{
+  return os << "[" << aabb.GetMin() << ", " << aabb.GetMax() << "]";
+}
+
+//------------------------------------------------------------------------------
+// aeOBB class
+//------------------------------------------------------------------------------
+class aeOBB
+{
+public:
+  aeOBB() = default;
+  aeOBB( const aeOBB& ) = default;
+  aeOBB( const aeFloat4x4& transform );
+
+  void SetTransform( const aeFloat4x4& transform );
+  const aeFloat4x4& GetTransform() const;
+
+  float GetMinDistance( aeFloat3 p ) const; // @TODO: GetDistanceFromSurface()
+  bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
+
+  aeAABB GetAABB() const;
+
+private:
+  aeFloat4x4 m_transform;
+  aeFloat4x4 m_invTransRot;
+  aeAABB m_scaledAABB;
+};
 
 //------------------------------------------------------------------------------
 // aeMath::RandomValue member functions
@@ -931,5 +1186,25 @@ inline aeMath::RandomValue< T >::operator T() const
 {
   return Get();
 }
+
+//------------------------------------------------------------------------------
+// aeHash class (fnv1a)
+// @NOTE: Empty strings and zero-length data buffers do not hash to zero
+//------------------------------------------------------------------------------
+class aeHash
+{
+public:
+  aeHash() = default;
+  explicit aeHash( uint32_t initialValue );
+
+  aeHash& HashString( const char* str );
+  aeHash& HashData( const uint8_t* data, const uint32_t length );
+
+  void Set( uint32_t hash );
+  uint32_t Get() const;
+
+private:
+  uint32_t m_hash = 0x811c9dc5;
+};
 
 #endif

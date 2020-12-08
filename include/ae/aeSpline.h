@@ -1,5 +1,7 @@
 //------------------------------------------------------------------------------
-// aeString.h
+// aeSpline.h
+// Utilities for allocating objects. Provides functionality to track current and
+// past allocations.
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,38 +23,68 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AEVFS_H
-#define AEVFS_H
+#ifndef AESPLINE_H
+#define AESPLINE_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aePlatform.h"
-#include "aeString.h"
+#include "aeArray.h"
+#include "aeMath.h"
 
 //------------------------------------------------------------------------------
-// aeVfs class
+// aeSpline class
 //------------------------------------------------------------------------------
-class aeVfs
+class aeSpline
 {
 public:
-  enum Root { Data, User };
+  aeSpline() = default;
+  aeSpline( aeFloat3* controlPoints, uint32_t count );
 
-  void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
+  void AppendControlPoint( aeFloat3 p );
+  void RemoveControlPoint( uint32_t index );
+  void SetLooping( bool enabled );
 
-  uint32_t GetSize( Root root, const char* fileName );
-  uint32_t Read( Root root, const char* fileName, void* buffer, uint32_t bufferSize );
-  uint32_t Write( Root root, const char* fileName, const void* buffer, uint32_t bufferSize );
+  aeFloat3 GetControlPoint( uint32_t index ) const;
+  uint32_t GetControlPointCount() const;
 
-  static uint32_t GetSize( const char* fileDir );
-  static uint32_t Read( const char* fileDir, void* buffer, uint32_t bufferSize );
-  static uint32_t Write( const char* fileDir, const void* buffer, uint32_t bufferSize );
+  aeFloat3 GetPoint( float distance ) const; // 0 <= distance <= length
+  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr );
+  float GetLength() const;
 
-  const char* GetRootDir( Root root );
+  aeAABB GetAABB() const { return m_aabb; }
 
 private:
-  aeStr128 m_dataDir;
-  aeStr128 m_userDir;
+  class Segment
+  {
+  public:
+    void Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3 );
+    aeFloat3 GetPoint01( float t ) const;
+    aeFloat3 GetPoint0() const;
+    aeFloat3 GetPoint1() const;
+    aeFloat3 GetPoint( float d ) const;
+    float GetMinDistance( aeFloat3 p, aeFloat3* pOut ) const;
+    float GetLength() const { return m_length; }
+    aeAABB GetAABB() const { return m_aabb; }
+
+  private:
+    aeFloat3 m_a;
+    aeFloat3 m_b;
+    aeFloat3 m_c;
+    aeFloat3 m_d;
+    float m_length;
+    uint32_t m_resolution;
+    aeAABB m_aabb;
+  };
+
+  void m_RecalculateSegments();
+  aeFloat3 m_GetControlPoint( int32_t index ) const;
+
+  bool m_loop = false;
+  aeArray< aeFloat3 > m_controlPoints;
+  aeArray< Segment > m_segments;
+  float m_length = 0.0f;
+  aeAABB m_aabb;
 };
 
 #endif

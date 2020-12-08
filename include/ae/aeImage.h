@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeMesh.h
+// aeImage.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,45 +21,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AEMESH_H
-#define AEMESH_H
+#ifndef AEIMAGE_H
+#define AEIMAGE_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
-#include "aeRender.h" // aeColor
+#include "aeRender.h"
 
 //------------------------------------------------------------------------------
-// aeMesh types
+// aeImage
 //------------------------------------------------------------------------------
-struct aeMeshVertex
+namespace ae
 {
-  aeFloat4 position;
-  aeFloat4 normal;
-  aeFloat2 tex[ 4 ];
-  aeColor color[ 4 ];
-};
+  class Image
+  {
+  public:
+    enum class Extension
+    {
+      PNG
+    };
 
-typedef uint16_t aeMeshIndex;
+    enum class Interpolation
+    {
+      Nearest,
+      Linear,
+      Cosine
+    };
 
-//------------------------------------------------------------------------------
-// aeMesh class
-//------------------------------------------------------------------------------
-class aeMesh
-{
-public:
-  bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension );
-  void Transform( aeFloat4x4 transform );
+    enum class Format
+    {
+      Auto,
+      R,
+      RG,
+      RGB,
+      RGBA
+    };
 
-  const aeMeshVertex* GetVertices() const;
-  const aeMeshIndex* GetIndices() const;
-  uint32_t GetVertexCount() const;
-  uint32_t GetIndexCount() const;
+    void LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto );
+    bool LoadFile( const void* file, uint32_t length, Extension extension, Format storage = Format::Auto );
 
-private:
-  aeArray< aeMeshVertex > m_vertices;
-  aeArray< aeMeshIndex > m_indices;
-};
+    uint32_t GetWidth() const { return m_width; }
+    uint32_t GetHeight() const { return m_height; }
+    uint32_t GetChannels() const { return m_channels; }
+
+    aeColor Get( aeInt2 pixel ) const;
+    aeColor Get( aeFloat2 pixel, Interpolation interpolation ) const;
+
+  private:
+    aeArray< uint8_t > m_data;
+    int32_t m_width = 0;
+    int32_t m_height = 0;
+    uint32_t m_channels = 0;
+  };
+}
 
 #endif

@@ -7,13 +7,16 @@ ExternalProject_Add(Catch2
 	PREFIX Catch2
 	SOURCE_DIR ${AE_CATCH_SRC}
 	GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+	GIT_TAG v2.12.4
 	CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_CATCH_INSTALL}
 )
 include_directories(${AE_CATCH_INSTALL}/include)
 
 # unit test executable
-add_executable(
-	unit_tests
+add_executable(unit_tests
+	MetaTest.h
+	MetaTest.cpp
+	MetaTest2.cpp
 	SignalTest.cpp
 	StringTest.cpp
 	test.cpp

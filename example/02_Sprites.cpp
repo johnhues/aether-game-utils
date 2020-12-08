@@ -43,9 +43,8 @@ int main()
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "sprites" );
-	render.InitializeOpenGL( &window, 400, 300 );
-	render.SetClearColor( aeColor::Red() );
-	input.Initialize( &window, &render );
+	render.InitializeOpenGL( &window );
+	input.Initialize( &window );
 	spriteRender.Initialize( 16 );
 	spriteRender.SetBlending( true );
   spriteRender.SetDepthTest( true );
@@ -58,30 +57,37 @@ int main()
 	aeTexture2D tex;
 	tex.Initialize( "circle.png", aeTextureFilter::Linear, aeTextureWrap::Repeat );
 
-	float scale = 5.0f;
-	aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / scale, render.GetAspectRatio() / scale, 1.0f ) );
-
 	while ( !input.GetState()->exit )
 	{
 		input.Pump();
-		render.StartFrame();
+		int scaleFactor = input.GetState()->space ? 4 : 1;
+		render.Activate();
+		render.Clear( aeColor::PicoDarkPurple() );
+		//render.StartFrame( window.GetWidth() / scaleFactor, window.GetHeight() / scaleFactor );
 		spriteRender.Clear();
 
 		aeFloat4x4 transform;
 
+		// @NOTE: Notice these are rendered out of order and the transparent edges of
+		//        the circles are handled correctly. Hold space to see this more clearly.
+
+		// Front
 		transform = aeFloat4x4::Translation( aeFloat3( 0.5f, 0.5f, -0.5f ) );
 		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue() );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::PicoBlue() );
 
+		// Back
 		transform = aeFloat4x4::Translation( aeFloat3( -0.5f, -0.5f, 0.5f ) );
 		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue() );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::PicoBlue() );
 
+		// Middle
 		transform = aeFloat4x4::Scaling(  aeFloat3( 1.0f, 1.0f, 0.5f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::White() );
+		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::PicoWhite() );
 
+		aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
 		spriteRender.Render( screenTransform );
-		render.EndFrame();
+		render.Present();
 		timeStep.Wait();
 	}
 

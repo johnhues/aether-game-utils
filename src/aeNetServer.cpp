@@ -148,6 +148,15 @@ void AetherServer_Delete( AetherServer* _as )
 #ifdef USE_WEBWOCKETS
   lws_context_destroy( as->priv.webContext );
 #endif
+
+  ENetPeer* peers = as->priv.host->peers;
+  int32_t peerCount = as->priv.host->peerCount;
+  for ( uint32_t i = 0; i < peerCount; i++ )
+  {
+    enet_peer_disconnect( &peers[ i ], 0 );
+  }
+  enet_host_flush( as->priv.host );
+
   enet_host_destroy( as->priv.host );
   delete as;
   enet_deinitialize();
@@ -438,7 +447,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
   return false;
 }
 
-void AetherServer_QueueSendInfo( AetherServer* _as, const ServerSendInfo* info )
+void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
 {
   AE_ASSERT( info->msgId != kInvalidAetherMsgId );
 
@@ -609,9 +618,7 @@ void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reli
   info.reliable = reliable;
   info.length = length;
   info.data = data;
-  info.player = nullptr;
-  info.group = nullptr;
-  AetherServer_QueueSendInfo( as, &info );
+  AetherServer_QueueSend( as, &info );
 }
 
 void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const void* data, uint32_t length )
@@ -623,8 +630,7 @@ void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, Aet
   info.length = length;
   info.data = data;
   info.player = player;
-  info.group = nullptr;
-  AetherServer_QueueSendInfo( as, &info );
+  AetherServer_QueueSend( as, &info );
 }
 
 void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const void* data, uint32_t length )
@@ -635,7 +641,6 @@ void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId m
   info.reliable = reliable;
   info.length = length;
   info.data = data;
-  info.player = nullptr;
   info.group = group;
-  AetherServer_QueueSendInfo( as, &info );
+  AetherServer_QueueSend( as, &info );
 }

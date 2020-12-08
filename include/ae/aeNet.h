@@ -55,6 +55,11 @@ struct AetherUuid
 
 std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
 
+inline void Serialize( aeBinaryStream* stream, AetherUuid* uuid )
+{
+	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
+}
+
 //------------------------------------------------------------------------------
 // aeNetData class
 //------------------------------------------------------------------------------
@@ -97,6 +102,9 @@ private:
   void m_SetClientData( const uint8_t* data, uint32_t length );
   void m_ReceiveMessages( const uint8_t* data, uint32_t length );
   void FlagForDeletion() { m_isPendingDelete = true; }
+  
+  void m_UpdateHash();
+  bool m_Changed() const { return m_hash != m_prevHash; }
 
   bool m_local = false;
   uint32_t m_type = 0;
@@ -107,6 +115,8 @@ private:
   aeArray< uint8_t > m_messageDataIn;
   uint32_t m_messageDataInOffset = 0;
 
+  uint32_t m_hash = 0;
+  uint32_t m_prevHash = 0;
   bool m_isPendingDelete = false;
 public:
   // Internal
@@ -146,6 +156,7 @@ public:
 public:
   void m_UpdateSendData();
 
+  bool m_first = true;
   class aeNetReplicaDB* m_replicaDB = nullptr;
   bool m_pendingClear = false;
   aeArray< uint8_t > m_sendData;
@@ -344,6 +355,7 @@ void AetherServer_SendAll( AetherServer* );
 AetherPlayer* AetherServer_GetPlayerByNetInstId( AetherServer*, NetInstId id );
 uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userData, AetherPlayer* (&playersOut)[ 32 ] );
 
+void AetherServer_QueueSend( AetherServer* as, const ServerSendInfo* info );
 void AetherServer_QueueBroadcast( AetherServer* as, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
 void AetherServer_QueueSendToPlayer( AetherServer* as, AetherPlayer* player, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );
 void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );

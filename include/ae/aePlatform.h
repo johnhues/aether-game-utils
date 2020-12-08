@@ -62,13 +62,12 @@
 #endif
 
 //------------------------------------------------------------------------------
-// Debug defines
+// Debug define
 //------------------------------------------------------------------------------
-#define _AE_DEBUG_ 0
-
-#if ( defined(_DEBUG) || defined(DEBUG) ) && !defined(NDEBUG)
-  #undef _AE_DEBUG_
+#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) )
   #define _AE_DEBUG_ 1
+#else
+  #define _AE_DEBUG_ 0
 #endif
 
 //------------------------------------------------------------------------------
@@ -85,6 +84,8 @@
 #if _AE_APPLE_
 #define GL_SILENCE_DEPRECATION
 #endif
+
+#define AE_NAMESPACE ae
 
 //------------------------------------------------------------------------------
 // Headers
@@ -105,17 +106,26 @@
 #include <ostream>
 #include <type_traits>
 #include <typeinfo>
+#include <utility>
 
 //------------------------------------------------------------------------------
 // Utils
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
   #define aeAssert() __debugbreak()
+#elif _AE_APPLE_
+  #define aeAssert() __builtin_trap()
 #elif _AE_EMSCRIPTEN_
   // @TODO: Handle asserts with emscripten builds
   #define aeAssert()
 #else
   #define aeAssert() asm( "int $3" )
+#endif
+
+#if _AE_WINDOWS_
+  #define aeCompilationWarning( _msg ) _Pragma( message _msg )
+#else
+  #define aeCompilationWarning( _msg ) _Pragma( "warning #_msg" )
 #endif
 
 #if _AE_LINUX_
@@ -152,6 +162,16 @@ inline void aeAlignedFree( void* p )
 #endif
 }
 
+inline void* aeRealloc( void* p, uint32_t size, uint32_t boundary )
+{
+#if _AE_WINDOWS_
+  return _aligned_realloc( p, size, boundary );
+#else
+  aeCompilationWarning( "Aligned realloc() not determined on this platform" )
+  return nullptr;
+#endif
+}
+
 template < typename T >
 const char* aeGetTypeName()
 {
@@ -175,6 +195,7 @@ const char* aeGetTypeName()
 }
 
 uint32_t aeGetPID();
+uint32_t aeGetMaxConcurrentThreads();
 
 #define AE_EXPORT extern "C"
 

@@ -52,15 +52,21 @@ void aeVfs::Initialize( const char* dataDir, const char* organizationName, const
   m_dataDir = dataDir;
   m_userDir = sdlUserDir;
 
+#if _AE_WINDOWS_
+  #define AE_PATH_CHAR '\\'
+#else
+  #define AE_PATH_CHAR '/'
+#endif
+
   // Allow data dir prefix to be empty
-  if ( m_dataDir.Length() != 0 && m_dataDir[ m_dataDir.Length() - 1 ] != '/' )
+  if ( m_dataDir.Length() && m_dataDir[ m_dataDir.Length() - 1 ] != AE_PATH_CHAR )
   {
-    m_dataDir.Append( "/" );
+    m_dataDir.Append( aeStr16( 1, AE_PATH_CHAR ) );
   }
   AE_ASSERT( m_userDir.Length() );
-  if ( m_userDir[ m_userDir.Length() - 1 ] != '/' )
+  if ( m_userDir[ m_userDir.Length() - 1 ] != AE_PATH_CHAR )
   {
-    m_userDir.Append( "/" );
+    m_userDir.Append( aeStr16( 1, AE_PATH_CHAR ) );
   }
 
   SDL_free( sdlUserDir );
@@ -68,32 +74,23 @@ void aeVfs::Initialize( const char* dataDir, const char* organizationName, const
 
 uint32_t aeVfs::GetSize( Root root, const char* fileName )
 {
-  char fullName[ 256 ];
-  AE_ASSERT( sizeof(m_dataDir) + sizeof(fileName) < sizeof(fullName) );
-  strcpy( fullName, GetRootDir( root ) );
-  strcat( fullName, fileName );
-
-  return GetSize( fullName );
+  aeStr256 fullName = GetRootDir( root );
+  fullName += fileName;
+  return GetSize( fullName.c_str() );
 }
 
 uint32_t aeVfs::Read( Root root, const char* fileName, void* buffer, uint32_t bufferSize )
 {
-  char fullName[ 256 ];
-  AE_ASSERT( sizeof(m_dataDir) + sizeof(fileName) < sizeof(fullName) );
-  strcpy( fullName, GetRootDir( root ) );
-  strcat( fullName, fileName );
-
-  return Read( fullName, buffer, bufferSize );
+  aeStr256 fullName = GetRootDir( root );
+  fullName += fileName;
+  return Read( fullName.c_str(), buffer, bufferSize );
 }
 
 uint32_t aeVfs::Write( Root root, const char* fileName, const void* buffer, uint32_t bufferSize )
 {
-  char fullName[ 256 ];
-  AE_ASSERT( sizeof(m_dataDir) + sizeof(fileName) < sizeof(fullName) );
-  strcpy( fullName, GetRootDir( root ) );
-  strcat( fullName, fileName );
-
-  return Write( fullName, buffer, bufferSize );
+  aeStr256 fullName = GetRootDir( root );
+  fullName += fileName;
+  return Write( fullName.c_str(), buffer, bufferSize );
 }
 
 uint32_t aeVfs::GetSize( const char* fileDir )

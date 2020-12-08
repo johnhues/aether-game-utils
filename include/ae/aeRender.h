@@ -57,6 +57,15 @@ struct aeColor
   aeColor( float r, float g, float b, float a );
   aeColor( aeColor c, float a );
 
+  static aeColor R( uint8_t r );
+  static aeColor RG( uint8_t r, uint8_t g );
+  static aeColor RGB( uint8_t r, uint8_t g, uint8_t b );
+  static aeColor RGBA( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
+  static aeColor R( float r );
+  static aeColor RG( float r, float g );
+  static aeColor RGB( float r, float g, float b );
+  static aeColor RGBA( float r, float g, float b, float a );
+  static aeColor RGBA( const float* v );
   static aeColor SRGB( float r, float g, float b );
   static aeColor SRGBA( float r, float g, float b, float a );
   static aeColor PS( uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255 );
@@ -71,6 +80,7 @@ struct aeColor
   aeFloat4 GetSRGBA() const;
 
   aeColor Lerp( const aeColor& end, float t ) const;
+  aeColor DtLerp( float snappiness, float dt, const aeColor& target ) const;
   aeColor ScaleRGB( float s ) const { return aeColor( r * s, g * s, b * s, a ); }
   aeColor ScaleA( float s ) const { return aeColor( r, g, b, a * s ); }
   aeColor SetA( float alpha ) const { return aeColor( r, g, b, alpha ); }
@@ -138,6 +148,9 @@ struct aeVertexDataType
     UInt8,
     UInt16,
     UInt32,
+    NormalizedUInt8,
+    NormalizedUInt16,
+    NormalizedUInt32,
     Float
   };
 };
@@ -158,6 +171,7 @@ struct aeVertexAttribute
   uint32_t componentCount;
   uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
   uint32_t offset;
+  bool normalized;
 };
 
 //------------------------------------------------------------------------------
@@ -169,6 +183,7 @@ public:
   struct Value
   {
     uint32_t sampler = 0;
+    uint32_t target = 0;
     int32_t size = 0;
     aeFloat4x4 value;
   };
@@ -192,7 +207,8 @@ private:
 class aeVertexData
 {
 public:
-  aeVertexData();
+  aeVertexData() = default;
+  ~aeVertexData();
 
   void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, aeVertexPrimitive::Type primitive, aeVertexUsage::Type vertexUsage, aeVertexUsage::Type indexUsage );
   void AddAttribute( const char *name, uint32_t componentCount, aeVertexDataType::Type type, uint32_t offset );
@@ -217,30 +233,35 @@ public:
   void Render( const class aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms );
   
 private:
+  aeVertexData( const aeVertexData& ) = delete;
+  aeVertexData( aeVertexData&& ) = delete;
+  void operator=( const aeVertexData& ) = delete;
+  void operator=( aeVertexData&& ) = delete;
+
   void m_SetVertices( const void* vertices, uint32_t count );
   void m_SetIndices( const void* indices, uint32_t count );
   const aeVertexAttribute* m_GetAttributeByName( const char* name ) const;
   
-  uint32_t m_array;
-  uint32_t m_vertices;
-  uint32_t m_indices;
-  uint32_t m_vertexCount;
-  uint32_t m_indexCount;
+  uint32_t m_array = 0;
+  uint32_t m_vertices = ~0;
+  uint32_t m_indices = ~0;
+  uint32_t m_vertexCount = 0;
+  uint32_t m_indexCount = 0;
   
-  uint32_t m_maxVertexCount;
-  uint32_t m_maxIndexCount;
+  uint32_t m_maxVertexCount = 0;
+  uint32_t m_maxIndexCount = 0;
   
-  aeVertexPrimitive::Type m_primitive;
-  aeVertexUsage::Type m_vertexUsage;
-  aeVertexUsage::Type m_indexUsage;
+  aeVertexPrimitive::Type m_primitive = (aeVertexPrimitive::Type)-1;
+  aeVertexUsage::Type m_vertexUsage = (aeVertexUsage::Type)-1;
+  aeVertexUsage::Type m_indexUsage = (aeVertexUsage::Type)-1;
   
   aeVertexAttribute m_attributes[ kMaxShaderAttributeCount ];
-  uint32_t m_attributeCount;
-  uint32_t m_vertexSize;
-  uint32_t m_indexSize;
+  uint32_t m_attributeCount = 0;
+  uint32_t m_vertexSize = 0;
+  uint32_t m_indexSize = 0;
   
-  void* m_vertexReadable;
-  void* m_indexReadable;
+  void* m_vertexReadable = nullptr;
+  void* m_indexReadable = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -330,7 +351,9 @@ public:
   void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
   void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
   void SetCulling( aeShaderCulling::Type culling ) { m_culling = culling; }
-  
+  void SetWireframe( bool enabled ) { m_wireframe = enabled; }
+  void SetBlendingPremul( bool enabled ) { m_blendingPremul = enabled; }
+	
 private:
   int m_LoadShader( const char* shaderStr, aeShaderType::Type type, const char* const* defines, int32_t defineCount );
   
@@ -339,9 +362,11 @@ private:
   uint32_t m_program;
 
   bool m_blending;
+  bool m_blendingPremul;
   bool m_depthTest;
   bool m_depthWrite;
   aeShaderCulling::Type m_culling;
+  bool m_wireframe;
   
   aeShaderAttribute m_attributes[ kMaxShaderAttributeCount ];
   uint32_t m_attributeCount;
@@ -376,50 +401,130 @@ struct aeTextureWrap
   };
 };
 
+struct aeTextureFormat
+{
+  enum Type
+  {
+	  Depth32F,
+	  
+	  R8, // unorm
+	  R16_UNORM, // for height fields
+	  R16F,
+	  R32F,
+	  
+	  RG8, // unorm
+	  RG16F,
+	  RG32F,
+	  
+	  RGB8, // unorm
+	  RGB8_SRGB,
+	  RGB16F,
+	  RGB32F,
+	  
+	  RGBA8, // unorm
+	  RGBA8_SRGB,
+	  RGBA16F,
+	  RGBA32F,
+	
+	// non-specific formats, prefer specific types above
+    R = RGBA8,
+	RG = RG8,
+    RGB = RGB8,
+    RGBA = RGBA8,
+	  
+	Depth = Depth32F,
+	  
+    // TODO: these formats are implemented for OSX only for now
+	SRGB = RGB8_SRGB,
+    SRGBA = RGBA8_SRGB,
+  };
+};
+
+struct aeTextureType
+{
+  enum Type
+  {
+    Uint8,
+	Uint16,
+    HalfFloat,
+    Float
+  };
+};
+
 class aeTexture
 {
 public:
-  aeTexture() : m_texture( 0 ) {}
-  uint32_t GetTexture() const { return m_texture; }
+  aeTexture() = default;
+  virtual ~aeTexture();
 
-protected:
-  uint32_t m_texture;
+  void Initialize( uint32_t target );
+  virtual void Destroy();
+
+  uint32_t GetTexture() const { return m_texture; }
+  uint32_t GetTarget() const { return m_target; }
+
+private:
+  aeTexture( const aeTexture& ) = delete;
+  aeTexture( aeTexture&& ) = delete;
+  void operator=( const aeTexture& ) = delete;
+  void operator=( aeTexture&& ) = delete;
+
+  uint32_t m_texture = 0;
+  uint32_t m_target = 0;
 };
 
 class aeTexture2D : public aeTexture
 {
 public:
-  aeTexture2D();
-  ~aeTexture2D();
-  // @TODO: Rename depth or change it to an alpha bool
-  void Initialize( const uint8_t* data, uint32_t width, uint32_t height, uint32_t depth, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
-  void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
-  void Destroy();
+  void Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false );
+  void Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps = false,
+	  bool isSRGB = false );
+  void Destroy() override;
 
   uint32_t GetWidth() const { return m_width; }
   uint32_t GetHeight() const { return m_height; }
 
 private:
-  uint32_t m_width;
-  uint32_t m_height;
-  bool m_hasAlpha;
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
+  bool m_hasAlpha = false;
 };
 
-class aeRenderTexture : public aeTexture
+class aeRenderTarget
 {
 public:
-  aeRenderTexture();
-  ~aeRenderTexture();
-  void Initialize( uint32_t width, uint32_t height, aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
+  ~aeRenderTarget();
+  void Initialize( uint32_t width, uint32_t height );
+  void AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
+  void AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type wrap );
   void Destroy();
 
   void Activate();
-  void Render( aeShader* shader, const aeUniformList& uniforms );
-  void Render2D( aeRect ndc, float z );
+  void Clear( aeColor color );
+  void Render( const aeShader* shader, const aeUniformList& uniforms );
+  void Render2D( uint32_t textureIndex, aeRect ndc, float z );
 
-  uint32_t GetWidth() const { return m_width; }
-  uint32_t GetHeight() const { return m_height; }
+  const aeTexture2D* GetTexture( uint32_t index ) const;
+  const aeTexture2D* GetDepth() const;
+  uint32_t GetWidth() const;
+  uint32_t GetHeight() const;
 
+  // @NOTE: Get ndc space rect of this target within another target (fill but maintain aspect ratio)
+  // GetNDCFillRectForTarget( aeRender::GetWindow()::GetWidth(),  aeRender::GetWindow()::Height() )
+  // GetNDCFillRectForTarget( aeRenderTarget()::GetWidth(),  aeRenderTarget()::Height() )
+  aeRect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
+
+  // @NOTE: Other target to local transform (pixels->pixels)
+  // Useful for transforming window/mouse pixel coordinates to local pixels
+  // GetTargetPixelsToLocalTransform( aeRender::GetWindow()::GetWidth(),  aeRender::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
+  aeFloat4x4 GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, aeRect ndc ) const;
+
+  // @NOTE: Mouse/window pixel coordinates to world space
+  // GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ... ), TODO )
+  aeFloat4x4 GetTargetPixelsToWorld( const aeFloat4x4& otherTargetToLocal, const aeFloat4x4& worldToNdc ) const;
+
+  // @NOTE: Creates a transform matrix from aeQuad vertex positions to ndc space
+  // aeRenderTarget uses aeQuad vertices internally
   static aeFloat4x4 GetQuadToNDCTransform( aeRect ndc, float z );
 
 private:
@@ -429,11 +534,13 @@ private:
     aeFloat2 uv;
   };
 
-  uint32_t m_fbo;
-  uint32_t m_depthTexture;
+  uint32_t m_fbo = 0;
 
-  uint32_t m_width;
-  uint32_t m_height;
+  aeArray< aeTexture2D* > m_targets;
+  aeTexture2D m_depth;
+
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
 
   aeVertexData m_quad;
   aeShader m_shader;
@@ -509,7 +616,7 @@ public:
   //        texture can be a single channel without transparency. Luminance
   //        of the red channel is used for transparency.
   //        'charSize' is the width and height of each character in the texture.
-  void Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t fontSize );
+  void Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t fontSize ); // @TODO: Text render should take a texture and the user should handle file loading
   void Terminate();
   void Render( const aeFloat4x4& uiToScreen );
 
@@ -549,6 +656,65 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// aeDebugRender class
+//------------------------------------------------------------------------------
+class aeDebugRender
+{
+public:
+  void Initialize();
+  void Destroy();
+  void Render( const aeFloat4x4& worldToScreen );
+  void Clear();
+
+  void AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color );
+  void AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance );
+
+  void AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color );
+  void AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeColor color, uint32_t pointCount );
+
+  void AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount );
+  void AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color );
+  void AddCube( aeFloat4x4 transform, aeColor color );
+
+private:
+  static const uint32_t kMaxDebugObjects = 128;
+
+  struct DebugVertex
+  {
+    aeFloat3 pos;
+    aeColor color;
+  };
+  aeArray< DebugVertex > m_verts;
+  aeVertexData m_vertexData;
+  aeShader m_shader;
+
+  enum class DebugType
+  {
+    Line,
+    Rect,
+    Circle,
+    Sphere,
+    AABB,
+    Cube,
+  };
+
+  struct DebugObject
+  {
+    DebugType type;
+    aeFloat3 pos;
+    aeFloat3 end;
+    aeQuat rotation;
+    aeFloat3 size;
+    float radius;
+    aeColor color;
+    uint32_t pointCount; // circle only
+    aeFloat4x4 transform;
+  };
+  uint32_t m_objCount;
+  DebugObject m_objs[ kMaxDebugObjects ];
+};
+
+//------------------------------------------------------------------------------
 // aeRender class
 //------------------------------------------------------------------------------
 class aeRender
@@ -557,36 +723,34 @@ public:
   aeRender();
   ~aeRender();
 
-  void InitializeOpenGL( class aeWindow* window, uint32_t width, uint32_t height );
+  void InitializeOpenGL( class aeWindow* window );
   void Terminate();
-  // @TODO: StartFrame and EndFrame aren't accurate. Rendering can first happen on render textures.
-  //        Maybe change to Activate() and Present()?
-  void StartFrame();
-  void EndFrame();
+
+  void Activate();
+  void Clear( aeColor color );
+  void Present();
 
   class aeWindow* GetWindow() { return m_window; }
-  aeRenderTexture* GetCanvas() { return &m_canvas; }
+  aeRenderTarget* GetCanvas() { return &m_canvas; }
 
-  void SetClearColor( aeColor color );
-  aeColor GetClearColor() const;
+  uint32_t GetWidth() const { return m_width; }
+  uint32_t GetHeight() const { return m_height; }
+  float GetAspectRatio() const;
 
-  void Resize( uint32_t width, uint32_t height );
-  uint32_t GetWidth() const { return m_targetWidth; }
-  uint32_t GetHeight() const { return m_targetHeight; }
-  float GetAspectRatio() const { return m_targetWidth / (float)m_targetHeight; }
-
-  aeFloat4x4 GetWindowToRenderTransform();
-  aeRect GetNDCRect() const;
+  // this is so imgui and the main render copy can enable srgb writes in (GL only)
+  void EnableSRGBWrites( bool enable );
+	
+  // have to inject a barrier to readback from active render target (GL only)
+  void AddTextureBarrier();
 
 private:
   class aeRenderInternal* m_renderInternal;
 
   class aeWindow* m_window;
-  uint32_t m_targetWidth;
-  uint32_t m_targetHeight;
+  uint32_t m_width;
+  uint32_t m_height;
 
-  aeRenderTexture m_canvas;
-  aeColor m_clearColor;
+  aeRenderTarget m_canvas;
 };
 
 #endif

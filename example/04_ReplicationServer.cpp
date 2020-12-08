@@ -57,12 +57,11 @@ int main()
   aeFixedTimeStep timeStep;
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Replication Server" );
-  render.InitializeOpenGL( &window, 400, 300 );
-  render.SetClearColor( aeColor::Black() );
-  input.Initialize( &window, &render );
+  render.InitializeOpenGL( &window );
+  input.Initialize( &window );
   spriteRender.Initialize( 32 );
   uint8_t texInfo[] = { 255, 255, 255 };
-  texture.Initialize( texInfo, 1, 1, 3, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
+  texture.Initialize( texInfo, 1, 1, aeTextureFormat::RGB8, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
   timeStep.SetTimeStep( 1.0f / 10.0f );
 
   // Server modules
@@ -148,9 +147,10 @@ int main()
     }
     AetherServer_SendAll( server );
 
-    render.StartFrame();
+    render.Activate();
+    render.Clear( aeColor::PicoBlack() );
     spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-    render.EndFrame();
+    render.Present();
 
     timeStep.Wait();
   }

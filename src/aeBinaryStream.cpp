@@ -58,7 +58,7 @@ aeBinaryStream::aeBinaryStream( aeArray< uint8_t >* array )
   if ( array )
   {
     m_extArray = array;
-    m_position = m_extArray->Length();
+    m_offset = m_extArray->Length();
     m_length = m_extArray->Size();
     m_isValid = true;
   }
@@ -236,7 +236,7 @@ void aeBinaryStream::SerializeArray( aeArray< uint8_t>& array )
       return;
     }
     
-    array.Append( PeakData(), length );
+    array.Append( PeekData(), length );
     Discard( length );
   }
   else if ( m_mode == Mode::WriteBuffer )
@@ -262,7 +262,7 @@ void aeBinaryStream::SerializeArray( const aeArray< uint8_t>& array )
   }
 }
 
-void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
+void aeBinaryStream::SerializeRaw( void* data, uint32_t length )
 {
   if ( !m_isValid )
   {
@@ -270,10 +270,10 @@ void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
   }
   else if ( m_mode == Mode::ReadBuffer )
   {
-    if ( m_position + length <= m_length )
+    if ( m_offset + length <= m_length )
     {
-      memcpy( data, m_data + m_position, length );
-      m_position += length;
+      memcpy( data, m_data + m_offset, length );
+      m_offset += length;
     }
     else
     {
@@ -284,10 +284,10 @@ void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
   {
     if ( m_data )
     {
-      if ( length <= m_length - m_position )
+      if ( length <= m_length - m_offset )
       {
-        memcpy( m_data + m_position, data, length );
-        m_position += length;
+        memcpy( m_data + m_offset, data, length );
+        m_offset += length;
       }
       else
       {
@@ -297,8 +297,8 @@ void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
     else
     {
       aeArray< uint8_t >& array = m_GetArray();
-      array.Append( data, length );
-      m_position = array.Length();
+      array.Append( (uint8_t*)data, length );
+      m_offset = array.Length();
       m_length = array.Size();
     }
   }
@@ -308,10 +308,10 @@ void aeBinaryStream::SerializeRaw( uint8_t* data, uint32_t length )
   }
 }
 
-void aeBinaryStream::SerializeRaw( const uint8_t* data, uint32_t length )
+void aeBinaryStream::SerializeRaw( const void* data, uint32_t length )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
-  SerializeRaw( const_cast< uint8_t* >( data ), length );
+  SerializeRaw( (void*)data, length );
 }
 
 void aeBinaryStream::SerializeRaw( aeArray< uint8_t>& array )
@@ -322,4 +322,20 @@ void aeBinaryStream::SerializeRaw( aeArray< uint8_t>& array )
 void aeBinaryStream::SerializeRaw( const aeArray< uint8_t>& array )
 {
   AE_FAIL_MSG( "Not implemented" );
+}
+
+void aeBinaryStream::Discard( uint32_t length )
+{
+  if ( !length )
+  {
+    return;
+  }
+  else if ( GetRemaining() < length )
+  {
+    Invalidate();
+  }
+  else
+  {
+    m_offset += length;
+  }
 }

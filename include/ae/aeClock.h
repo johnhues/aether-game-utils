@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeWindow.h
+// aeClock.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -21,48 +21,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AEWINDOW_H
-#define AEWINDOW_H
+#ifndef AECLOCK_H
+#define AECLOCK_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeMath.h"
+#include <chrono>
 
 //------------------------------------------------------------------------------
-// Window class
+// aeClock
 //------------------------------------------------------------------------------
-class aeWindow
+namespace aeClock
+{
+  double GetTime();
+};
+
+//------------------------------------------------------------------------------
+// aeFixedTimeStep
+//------------------------------------------------------------------------------
+class aeFixedTimeStep
 {
 public:
-  aeWindow();
-  // @TODO: Init should take window title, since SetTitle is practically always called after Init()
-  void Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor );
-  void Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool showCursor );
-  void Terminate();
+  aeFixedTimeStep();
 
-  void SetTitle( const char* title );
-  void SetFullScreen( bool fullScreen );
-  void SetPosition( aeInt2 pos );
-  void SetSize( uint32_t width, uint32_t height );
-
-  aeInt2 GetPosition() const { return m_pos; }
-  int32_t GetWidth() const { return m_width; }
-  int32_t GetHeight() const { return m_height; }
-  bool GetFullScreen() const { return m_fullScreen; }
+  void SetTimeStep( float timeStep ) { m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f; }
+  float GetTimeStep() const { return m_timeStepSec; }
+  uint32_t GetStepCount() const { return m_stepCount; }
+  
+  void Wait();
 
 private:
-  aeInt2 m_pos;
-  int32_t m_width;
-  int32_t m_height;
-  bool m_fullScreen;
+  uint32_t m_stepCount = 0;
+  float m_timeStepSec = 0.0f;
+  float m_timeStep = 0.0f;
+  int64_t m_frameExcess = 0;
+  float m_prevFrameTime = 0.0f;
+  std::chrono::steady_clock::time_point m_frameStart;
+};
 
+//------------------------------------------------------------------------------
+// aeTicker
+//------------------------------------------------------------------------------
+class aeTicker
+{
 public:
-  // Internal
-  void m_UpdatePos( aeInt2 pos ) { m_pos = pos; }
-  void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
+  aeTicker( double interval );
+  bool Tick( double currentTime );
 
-  void* window;
+private:
+  double m_interval;
+  double m_accumulate;
 };
 
 #endif

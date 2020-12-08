@@ -40,12 +40,22 @@
 #elif _AE_LINUX_
   #include <GL/gl.h>
   #include <GLES3/gl3.h>
+#elif _AE_IOS_
+  #include <OpenGLES/ES3/gl.h>
+  #include <OpenGLES/ES3/glext.h>
+  #define glClearDepth glClearDepthf
 #else
   #include <OpenGL/gl3.h>
+  #include <OpenGL/gl3ext.h> // for glTexStorage2D, glTextureBarrierNV
 #endif
 
-#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#if _AE_DEBUG_ && !_AE_APPLE_
+  #define AE_GL_DEBUG_MODE 1
+#else
+  #define AE_GL_DEBUG_MODE 0
+#endif
 
 #if _AE_EMSCRIPTEN_
   #define GL_SAMPLER_3D 0x0
@@ -56,6 +66,28 @@
   void glBindFragDataLocation( GLuint program, GLuint colorNumber, const char* name ) {}
   void glClearDepth( float depth ) { glClearDepthf( depth ); }
 #endif
+
+// TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2, only adding for OSX right now
+// TODO: this will break any code using the SRGB_TO_RGB macros in shaders on this platform,
+// But the colors and blends will be handled correctly.
+#if _AE_OSX_ && defined(GL_ARB_framebuffer_sRGB)
+  #define READ_FROM_SRGB 1
+  #define WRITE_TO_SRGB  1
+#else
+  #define READ_FROM_SRGB 0
+  #define WRITE_TO_SRGB  0
+#endif
+
+  const uint32_t kMaxFrameBufferAttachments = 16;
+
+// Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
+// enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
+// doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
+// http://www.reedbeta.com/blog/depth-precision-visualized/
+bool gReverseZ = false;
+
+// turn this on to run at GL4.1 instead of GL3.3
+bool gGL41 = false;
 
 //------------------------------------------------------------------------------
 // Helpers
@@ -70,6 +102,12 @@ GLenum aeVertexDataTypeToGL( aeVertexDataType::Type type )
       return GL_UNSIGNED_SHORT;
     case aeVertexDataType::UInt32:
       return GL_UNSIGNED_INT;
+    case aeVertexDataType::NormalizedUInt8:
+      return GL_UNSIGNED_BYTE;
+    case aeVertexDataType::NormalizedUInt16:
+      return GL_UNSIGNED_SHORT;
+    case aeVertexDataType::NormalizedUInt32:
+      return GL_UNSIGNED_INT;
     case aeVertexDataType::Float:
       return GL_FLOAT;
     default:
@@ -78,34 +116,137 @@ GLenum aeVertexDataTypeToGL( aeVertexDataType::Type type )
   }
 }
 
+#define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+
+void CheckFramebufferComplete( GLuint framebuffer )
+{
+  GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+  if ( fboStatus != GL_FRAMEBUFFER_COMPLETE )
+  {
+    const char* errStr = "unknown";
+    switch ( fboStatus )
+    {
+      case GL_FRAMEBUFFER_UNDEFINED:
+        errStr = "GL_FRAMEBUFFER_UNDEFINED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+        break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
+      case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+        break;
+#endif
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
+      case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+        break;
+#endif
+      case GL_FRAMEBUFFER_UNSUPPORTED:
+        errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
+        break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS
+      case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+        break;
+#endif
+      default:
+        break;
+    }
+    AE_FAIL_MSG( "GL FBO Error: (#) #", fboStatus, errStr );
+  }
+}
+
+#if AE_GL_DEBUG_MODE
+void aeOpenGLDebugCallback( GLenum source,
+  GLenum type,
+  GLuint id,
+  GLenum severity,
+  GLsizei length,
+  const GLchar* message,
+  const void* userParam )
+{
+  //std::cout << "---------------------opengl-callback-start------------" << std::endl;
+  //std::cout << "message: " << message << std::endl;
+  //std::cout << "type: ";
+  //switch ( type )
+  //{
+  //  case GL_DEBUG_TYPE_ERROR:
+  //    std::cout << "ERROR";
+  //    break;
+  //  case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+  //    std::cout << "DEPRECATED_BEHAVIOR";
+  //    break;
+  //  case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+  //    std::cout << "UNDEFINED_BEHAVIOR";
+  //    break;
+  //  case GL_DEBUG_TYPE_PORTABILITY:
+  //    std::cout << "PORTABILITY";
+  //    break;
+  //  case GL_DEBUG_TYPE_PERFORMANCE:
+  //    std::cout << "PERFORMANCE";
+  //    break;
+  //  case GL_DEBUG_TYPE_OTHER:
+  //    std::cout << "OTHER";
+  //    break;
+  //}
+  //std::cout << std::endl;
+
+  //std::cout << "id: " << id << std::endl;
+  //std::cout << "severity: ";
+  switch ( severity )
+  {
+    case GL_DEBUG_SEVERITY_LOW:
+      //std::cout << "LOW";
+      //AE_INFO( message );
+      break;
+    case GL_DEBUG_SEVERITY_MEDIUM:
+      //std::cout << "MEDIUM";
+      AE_WARN( message );
+      break;
+    case GL_DEBUG_SEVERITY_HIGH:
+      //std::cout << "HIGH";
+      AE_ERR( message );
+      break;
+  }
+  //std::cout << std::endl;
+  //std::cout << "---------------------opengl-callback-end--------------" << std::endl;
+
+  if ( severity == GL_DEBUG_SEVERITY_HIGH )
+  {
+    AE_FAIL();
+  }
+}
+#endif
+
 //------------------------------------------------------------------------------
 // aeVertexData member functions
 //------------------------------------------------------------------------------
-aeVertexData::aeVertexData()
+aeVertexData::~aeVertexData()
 {
-  memset( this, 0, sizeof(aeVertexData) );
-  m_primitive = (aeVertexPrimitive::Type)-1;
-  m_vertexUsage = (aeVertexUsage::Type)-1;
-  m_indexUsage = (aeVertexUsage::Type)-1;
-  m_vertices = ~0;
-  m_indices = ~0;
+  Destroy();
 }
 
 void aeVertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, aeVertexPrimitive::Type primitive, aeVertexUsage::Type vertexUsage, aeVertexUsage::Type indexUsage )
 {
+  Destroy();
+
   AE_ASSERT( m_vertexSize == 0 );
   AE_ASSERT( vertexSize );
   AE_ASSERT( m_indexSize == 0 );
   AE_ASSERT( indexSize == sizeof(uint8_t) || indexSize == sizeof(uint16_t) || indexSize == sizeof(uint32_t) );
 
-  memset( this, 0, sizeof(aeVertexData) );
   m_maxVertexCount = maxVertexCount;
   m_maxIndexCount = maxIndexCount;
   m_primitive = primitive;
   m_vertexUsage = vertexUsage;
   m_indexUsage = indexUsage;
-  m_vertices = ~0;
-  m_indices = ~0;
   m_vertexSize = vertexSize;
   m_indexSize = indexSize;
   
@@ -115,19 +256,47 @@ void aeVertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t
 
 void aeVertexData::Destroy()
 {
-  if ( m_vertexReadable ) { aeAlloc::Release( (uint8_t*)m_vertexReadable ); }
-  if ( m_indexReadable ) { aeAlloc::Release( (uint8_t*)m_indexReadable ); }
+  if ( m_vertexReadable )
+  {
+    aeAlloc::Release( (uint8_t*)m_vertexReadable );
+  }
+  if ( m_indexReadable )
+  {
+    aeAlloc::Release( (uint8_t*)m_indexReadable );
+  }
   
-  glDeleteVertexArrays( 1, &m_array );
-  if ( m_vertices != ~0 ) { glDeleteBuffers( 1, &m_vertices ); }
-  if ( m_indices != ~0 ) { glDeleteBuffers( 1, &m_indices ); }
+  if ( m_array )
+  {
+    glDeleteVertexArrays( 1, &m_array );
+  }
+  if ( m_vertices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_vertices );
+  }
+  if ( m_indices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_indices );
+  }
   
-  memset( this, 0, sizeof(aeVertexData) );
-  m_primitive = (aeVertexPrimitive::Type)-1;
-  m_vertexUsage = (aeVertexUsage::Type)-1;
-  m_indexUsage = (aeVertexUsage::Type)-1;
+  m_array = 0;
   m_vertices = ~0;
   m_indices = ~0;
+  m_vertexCount = 0;
+  m_indexCount = 0;
+
+  m_maxVertexCount = 0;
+  m_maxIndexCount = 0;
+
+  m_primitive = ( aeVertexPrimitive::Type ) - 1;
+  m_vertexUsage = ( aeVertexUsage::Type ) - 1;
+  m_indexUsage = ( aeVertexUsage::Type ) - 1;
+
+  m_attributeCount = 0;
+  m_vertexSize = 0;
+  m_indexSize = 0;
+
+  m_vertexReadable = nullptr;
+  m_indexReadable = nullptr;
 }
 
 void aeVertexData::AddAttribute( const char *name, uint32_t componentCount, aeVertexDataType::Type type, uint32_t offset )
@@ -144,6 +313,10 @@ void aeVertexData::AddAttribute( const char *name, uint32_t componentCount, aeVe
   attribute->componentCount = componentCount;
   attribute->type = aeVertexDataTypeToGL( type );
   attribute->offset = offset;
+  attribute->normalized =
+    type == aeVertexDataType::NormalizedUInt8 ||
+    type == aeVertexDataType::NormalizedUInt16 ||
+    type == aeVertexDataType::NormalizedUInt32;
 }
 
 void aeVertexData::m_SetVertices( const void* vertices, uint32_t count )
@@ -273,7 +446,7 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
 
   if ( count && _AE_DEBUG_ )
   {
-    uint32_t badIndex = 0;
+    int32_t badIndex = -1;
     
     if ( m_indexSize == 1 )
     {
@@ -283,6 +456,7 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
         if ( indicesCheck[ i ] >= m_maxVertexCount )
         {
           badIndex = indicesCheck[ i ];
+          break;
         }
       }
     }
@@ -294,6 +468,7 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
         if ( indicesCheck[ i ] >= m_maxVertexCount )
         {
           badIndex = indicesCheck[ i ];
+          break;
         }
       }
     }
@@ -305,11 +480,12 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
         if ( indicesCheck[ i ] >= m_maxVertexCount )
         {
           badIndex = indicesCheck[ i ];
+          break;
         }
       }
     }
 
-    if ( badIndex )
+    if ( badIndex >= 0 )
     {
       AE_FAIL_MSG( "Out of range index detected #", badIndex );
     }
@@ -353,6 +529,7 @@ void aeVertexData::Render( const aeShader* shader, const aeUniformList& uniforms
 
 void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms )
 {
+  AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
   AE_ASSERT( shader );
   
   if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
@@ -363,15 +540,15 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
   shader->Activate( uniforms );
 
   glBindVertexArray( m_array );
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 
   glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 
   if ( m_indexCount && m_primitive != aeVertexPrimitive::Point )
   {
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
   }
 
   for ( uint32_t i = 0; i < shader->GetAttributeCount(); i++ )
@@ -385,12 +562,12 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
     GLint location = shaderAttribute->location;
     AE_ASSERT( location != -1 );
     glEnableVertexAttribArray( location );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
 
     uint32_t componentCount = vertexAttribute->componentCount;
     uint64_t attribOffset = vertexAttribute->offset;
-    glVertexAttribPointer( location, componentCount, vertexAttribute->type, GL_FALSE, m_vertexSize, (void*)attribOffset );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    glVertexAttribPointer( location, componentCount, vertexAttribute->type, vertexAttribute->normalized, m_vertexSize, (void*)attribOffset );
+    AE_CHECK_GL_ERROR();
   }
 
   int64_t start = 0; // TODO: Add support to start drawing at non-zero index
@@ -426,13 +603,13 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
     if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
     
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
     GLenum type = 0;
     if ( m_indexSize == sizeof(uint8_t) ) { type = GL_UNSIGNED_BYTE; }
     else if ( m_indexSize == sizeof(uint16_t) ) { type = GL_UNSIGNED_SHORT; }
     else if ( m_indexSize == sizeof(uint32_t) ) { type = GL_UNSIGNED_INT; }
     glDrawElements( mode, count, type, (void*)start );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
   }
   else
   {
@@ -441,7 +618,7 @@ void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, cons
     if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
     
     glDrawArrays( mode, start, count );
-    AE_ASSERT( glGetError() == GL_NO_ERROR );
+    AE_CHECK_GL_ERROR();
   }
 }
 
@@ -468,9 +645,11 @@ aeShader::aeShader()
   m_program = 0;
   
   m_blending = false;
+  m_blendingPremul = false;
   m_depthTest = false;
   m_depthWrite = false;
   m_culling = aeShaderCulling::None;
+  m_wireframe = false;
 
   m_attributeCount = 0;
 }
@@ -482,6 +661,7 @@ aeShader::~aeShader()
 
 void aeShader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
 {
+  AE_CHECK_GL_ERROR();
   AE_ASSERT( !m_program );
 
   m_program = glCreateProgram();
@@ -489,17 +669,26 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   m_vertexShader = m_LoadShader( vertexStr, aeShaderType::Vertex, defines, defineCount );
   m_fragmentShader = m_LoadShader( fragStr, aeShaderType::Fragment, defines, defineCount );
   
+  if ( !m_vertexShader )
+  {
+	AE_LOG( "Failed to load vertex shader! #", vertexStr );
+  }
+  if ( !m_fragmentShader )
+  {
+    AE_LOG( "Failed to load fragment shader! #", fragStr );
+  }
+	
   if ( !m_vertexShader || !m_fragmentShader )
   {
-    AE_LOG( "Failed to load shader!" );
-    AE_FAIL();
+	AE_FAIL();
   }
-  
+	
   glAttachShader( m_program, m_vertexShader );
   glAttachShader( m_program, m_fragmentShader );
   
   glLinkProgram( m_program );
   
+  // immediate reflection of shader can be delayed by compiler and optimizer and can stll
   GLint status;
   glGetProgramiv( m_program, GL_LINK_STATUS, &status );
   if( status == GL_FALSE )
@@ -550,14 +739,14 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
   maxLen = 0;
   glGetProgramiv( m_program, GL_ACTIVE_UNIFORMS, &uniformCount );
   glGetProgramiv( m_program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxLen );
-  AE_ASSERT( maxLen <= aeStr32::kMaxLength ); // @TODO: Read from aeShaderUniform
+  AE_ASSERT( maxLen <= (GLint)aeStr32::MaxLength() ); // @TODO: Read from aeShaderUniform
 
   for( int32_t i = 0; i < uniformCount; i++ )
   {
     aeShaderUniform uniform;
 
     GLint size = 0;
-    char name[ aeStr32::kMaxLength ]; // @TODO: Read from aeShaderUniform
+    char name[ aeStr32::MaxLength() ]; // @TODO: Read from aeShaderUniform
     glGetActiveUniform( m_program, i, sizeof(name), nullptr, &size, (GLenum*)&uniform.type, (GLchar*)name );
     AE_ASSERT( size == 1 );
     
@@ -582,10 +771,14 @@ void aeShader::Initialize( const char* vertexStr, const char* fragStr, const cha
 
     m_uniforms.Set( name, uniform );
   }
+
+  AE_CHECK_GL_ERROR();
 }
 
 void aeShader::Destroy()
 {
+  m_attributeCount = 0;
+
   if( m_fragmentShader != 0 )
   {
     glDeleteShader( m_fragmentShader );
@@ -607,24 +800,40 @@ void aeShader::Destroy()
 
 void aeShader::Activate( const aeUniformList& uniforms ) const
 {
-  glUseProgram( m_program );
+  AE_CHECK_GL_ERROR();
 
-  // Set rendering params
-  if ( m_blending )
+  // This is really context state shadow, and that should be able to override
+  // so reverseZ for example can be set without the shader knowing about that.
+	
+  // Blending
+  if ( m_blending || m_blendingPremul )
   {
     glEnable( GL_BLEND );
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	  
+	// TODO: need other modes like Add, Min, Max - switch to enum then
+	if (m_blendingPremul)
+	{
+	  // Colors coming out of shader already have alpha multiplied in.
+	  glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+						   GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	}
+	else
+	{
+	  glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	}
   }
   else
   {
     glDisable( GL_BLEND );
   }
 
+  // Depth write
   glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
 
+  // Depth test
   if ( m_depthTest )
   {
-    glDepthFunc( GL_LEQUAL );
+    glDepthFunc( gReverseZ ? GL_GEQUAL : GL_LEQUAL );
     glEnable( GL_DEPTH_TEST );
   }
   else
@@ -632,17 +841,26 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     glDisable( GL_DEPTH_TEST );
   }
 
+  // Culling
   if ( m_culling == aeShaderCulling::None )
   {
     glDisable( GL_CULL_FACE );
   }
   else
   {
+	// TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
     glEnable( GL_CULL_FACE );
     glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
   }
 
+  // Wireframe
+  glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+
+  // Now setup the shader
+  glUseProgram( m_program );
+
   // Set shader uniforms
+  bool missingUniforms = false;
   uint32_t textureIndex = 0;
   for ( uint32_t i = 0; i < m_uniforms.Length(); i++ )
   {
@@ -651,7 +869,12 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     const aeUniformList::Value* uniformValue = uniforms.Get( uniformVarName );
     
     // Start validation
-    AE_ASSERT_MSG( uniformValue, "Shader uniform '#' value is not set", uniformVarName );
+    if ( !uniformValue )
+    {
+      AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
+      missingUniforms = true;
+      continue;
+    }
     uint32_t typeSize = 0;
     switch ( uniformVar->type )
     {
@@ -680,14 +903,14 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
         AE_FAIL_MSG( "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
         break;
     }
-    AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform type mismatch '#' type:# size:#", uniformVarName, uniformVar->type, uniformValue->size );
+    AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
     // End validation
 
     if ( uniformVar->type == GL_SAMPLER_2D )
     {
       AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
       glActiveTexture( GL_TEXTURE0 + textureIndex );
-      glBindTexture( GL_TEXTURE_2D, uniformValue->sampler );
+      glBindTexture( uniformValue->target, uniformValue->sampler );
       glUniform1i( uniformVar->location, textureIndex );
       textureIndex++;
     }
@@ -729,9 +952,11 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     {
       AE_ASSERT_MSG( false, "Invalid uniform type '#': #", uniformVarName, uniformVar->type );
     }
+
+    AE_CHECK_GL_ERROR();
   }
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_ASSERT_MSG( !missingUniforms, "Missing shader uniform parameters" );
 }
 
 const aeShaderAttribute* aeShader::GetAttributeByIndex( uint32_t index ) const
@@ -758,31 +983,29 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
 
   // Version
 #if _AE_IOS_
-  // shaderSource[ 0 ] = "#version 300 es\n";
+  shaderSource[ sourceCount++ ] = "#version 300 es\n";
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
 #elif _AE_EMSCRIPTEN_
   // No version specified
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
 #else
-  shaderSource[ sourceCount++ ] = "#version 330 core\n";
+  if (gGL41)
+  {
+	  shaderSource[ sourceCount++ ] = "#version 410 core\n";
+  }
+  else
+  {
+	  shaderSource[ sourceCount++ ] = "#version 330 core\n";
+  }
+	  
+  // No default precision specified
 #endif
 
-  // Utility
-  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return vec3( AE_SRGB_TO_RGB( _x.r ), AE_SRGB_TO_RGB( _x.g ), AE_SRGB_TO_RGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return vec3( AE_RGB_TO_SRGB( _x.r ), AE_RGB_TO_SRGB( _x.g ), AE_RGB_TO_SRGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( AE_SRGB_TO_RGB( _x.rgb ), _x.a ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( AE_RGB_TO_SRGB( _x.rgb ), _x.a ); }\n";
-
   // Input/output
-#if _AE_IOS_
-  // shaderSource[ 1 ] = "precision highp float;\n";
-  // shaderSource[ 2 ] = "precision mediump sampler3D;\n";
-#elif _AE_EMSCRIPTEN_
-  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+#if _AE_EMSCRIPTEN_
   shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  // shaderSource[ sourceCount++ ] = "#define AE_FLOAT_HIGHP highp float\n";
   if ( type == aeShaderType::Vertex )
   {
     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
@@ -804,6 +1027,16 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
     shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
   }
 #endif
+    
+  // TODO: don't use these macros anymore.  Fix srgb writes in engine on srgb/a textures.
+    // Utility
+  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
+  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
+  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return vec3( AE_SRGB_TO_RGB( _x.r ), AE_SRGB_TO_RGB( _x.g ), AE_SRGB_TO_RGB( _x.b ) ); }\n";
+  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return vec3( AE_RGB_TO_SRGB( _x.r ), AE_RGB_TO_SRGB( _x.g ), AE_RGB_TO_SRGB( _x.b ) ); }\n";
+  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( AE_SRGB_TO_RGB( _x.rgb ), _x.a ); }\n";
+  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( AE_RGB_TO_SRGB( _x.rgb ), _x.a ); }\n";
+    
   AE_ASSERT( sourceCount <= kPrependMax );
 
   for ( int32_t i = 0; i < defineCount; i++ )
@@ -832,76 +1065,260 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
     {
       unsigned char* log = new unsigned char[ logLength ];
       glGetShaderInfoLog(shader, logLength, NULL, (GLchar*)log);
-      AE_LOG( "Error compiling shader #", log );
+      const char* typeStr = ( type == aeShaderType::Vertex ? "vertex" : "fragment" );
+      AE_LOG( "Error compiling # shader #", typeStr, log );
       delete[] log;
     }
     
     return 0;
   }
   
+  AE_CHECK_GL_ERROR();
   return shader;
+}
+
+//------------------------------------------------------------------------------
+// aeTexture member functions
+//------------------------------------------------------------------------------
+aeTexture::~aeTexture()
+{
+  // @NOTE: Only aeTexture should call virtual Destroy() so it only runs once
+  Destroy();
+}
+
+void aeTexture::Initialize( uint32_t target )
+{
+  // @NOTE: To avoid undoing any initialization logic only aeTexture should
+  //        call Destroy() on initialize, and inherited Initialize()'s should
+  //        always call Base::Initialize() before any other logic.
+  Destroy();
+
+  m_target = target;
+
+  glGenTextures( 1, &m_texture );
+  AE_ASSERT( m_texture );
+}
+
+void aeTexture::Destroy()
+{
+  if ( m_texture )
+  {
+    glDeleteTextures( 1, &m_texture );
+  }
+
+  m_texture = 0;
+  m_target = 0;
 }
 
 //------------------------------------------------------------------------------
 // aeTexture2D member functions
 //------------------------------------------------------------------------------
-aeTexture2D::aeTexture2D()
+void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height, aeTextureFormat::Type format, aeTextureType::Type type, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps )
 {
-  m_width = 0;
-  m_height = 0;
-  m_hasAlpha = false;
-}
+  aeTexture::Initialize( GL_TEXTURE_2D );
 
-aeTexture2D::~aeTexture2D()
-{
-  Destroy();
-}
-
-void aeTexture2D::Initialize( const uint8_t* data, uint32_t width, uint32_t height, uint32_t depth, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
-{
   m_width = width;
   m_height = height;
 
-  glGenTextures( 1, &m_texture );
-  glBindTexture( GL_TEXTURE_2D, m_texture );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  
-  GLint internalFormat = 0;
-  GLenum format = 0;
-  GLint unpackAlignment;
-  switch ( depth )
+  glBindTexture( GetTarget(), GetTexture() );
+
+  if (autoGenerateMipmaps)
   {
-    case 1:
-      internalFormat = GL_RED;
-      format = GL_RED;
-      unpackAlignment = 1;
-      m_hasAlpha = false;
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+  else
+  {
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+	
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+
+  // this is the type of data passed in, conflating with internal format type
+  GLenum glType = 0;
+  switch ( type )
+  {
+    case aeTextureType::Uint8:
+      glType = GL_UNSIGNED_BYTE;
       break;
-    case 3:
-      internalFormat = GL_RGB;
-      format = GL_RGB;
-      unpackAlignment = 1;
-      m_hasAlpha = false;
+	  case aeTextureType::Uint16:
+	    glType = GL_UNSIGNED_SHORT;
+	    break;
+    case aeTextureType::HalfFloat:
+      glType = GL_HALF_FLOAT;
       break;
-    case 4:
-      internalFormat = GL_RGBA;
-      format = GL_RGBA;
-      unpackAlignment = 4;
-      m_hasAlpha = true;
+    case aeTextureType::Float:
+      glType = GL_FLOAT;
       break;
     default:
-      AE_ASSERT_MSG( false, "Invalid texture depth #", depth );
+      AE_FAIL_MSG( "Invalid texture type #", type );
       return;
   }
 
-  glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
-  glTexImage2D( GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data );
+  GLint glInternalFormat = 0;
+  GLenum glFormat = 0;
+  GLint unpackAlignment = 0;
+  switch ( format )
+  {
+		  // TODO: need D32F_S8 format
+    case aeTextureFormat::Depth32F:
+	    glInternalFormat = GL_DEPTH_COMPONENT32;
+      glFormat = GL_DEPTH_COMPONENT;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+
+    case aeTextureFormat::R8:
+  	case aeTextureFormat::R16_UNORM:
+  	case aeTextureFormat::R16F:
+  	case aeTextureFormat::R32F:	  
+  	  switch(format)
+  	  {
+  		  case aeTextureFormat::R8: glInternalFormat = GL_R8; break;
+  		  case aeTextureFormat::R16_UNORM:
+  			  glInternalFormat = GL_R16;
+  			  assert(glType == GL_UNSIGNED_SHORT);
+  			  break; // only on macOS
+  		  case aeTextureFormat::R16F: glInternalFormat = GL_R16F; break;
+  		  case aeTextureFormat::R32F: glInternalFormat = GL_R32F; break;
+  		  default: assert(false);
+  	  }
+			
+      glFormat = GL_RED;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+		  
+#if _AE_OSX_
+	  // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
+	  case aeTextureFormat::RG8:
+	  case aeTextureFormat::RG16F:
+	  case aeTextureFormat::RG32F:
+  		switch(format)
+  		{
+  			case aeTextureFormat::RG8: glInternalFormat = GL_RG8; break;
+  			case aeTextureFormat::RG16F: glInternalFormat = GL_RG16F; break;
+  			case aeTextureFormat::RG32F: glInternalFormat = GL_RG32F; break;
+  			default: assert(false);
+  		}
+  			  
+  		glFormat = GL_RG;
+  		unpackAlignment = 1;
+  		m_hasAlpha = false;
+  		break;
+#endif
+  	case aeTextureFormat::RGB8:
+  	case aeTextureFormat::RGB16F:
+    case aeTextureFormat::RGB32F:
+  	  switch(format)
+  	  {
+  	    case aeTextureFormat::RGB8: glInternalFormat = GL_RGB8; break;
+  	    case aeTextureFormat::RGB16F: glInternalFormat = GL_RGB16F; break;
+  	    case aeTextureFormat::RGB32F: glInternalFormat = GL_RGB32F; break;
+  		  default: assert(false);
+  	  }
+      glFormat = GL_RGB;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+
+    case aeTextureFormat::RGBA8:
+	  case aeTextureFormat::RGBA16F:
+	  case aeTextureFormat::RGBA32F:
+  	  switch(format)
+  	  {
+      	case aeTextureFormat::RGBA8: glInternalFormat = GL_RGBA8; break;
+      	case aeTextureFormat::RGBA16F: glInternalFormat = GL_RGBA16F; break;
+      	case aeTextureFormat::RGBA32F: glInternalFormat = GL_RGBA32F; break;
+      	default: assert(false);
+  	  }
+      glFormat = GL_RGBA;
+      unpackAlignment = 1;
+      m_hasAlpha = true;
+      break;
+		  
+      // TODO: fix these constants, but they differ on ES2/3 and GL
+      // WebGL1 they require loading an extension (if present) to get at the constants.
+#if READ_FROM_SRGB      
+    case aeTextureFormat::RGB8_SRGB:
+	  // ignore type
+      glInternalFormat = GL_SRGB8;
+      glFormat = GL_SRGB;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+    case aeTextureFormat::RGBA8_SRGB:
+	  // ignore type
+      glInternalFormat = GL_SRGB8_ALPHA8;
+      glFormat = GL_SRGB_ALPHA;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+#endif
+    default:
+      AE_FAIL_MSG( "Invalid texture format #", format );
+      return;
+  }
+
+  if ( data )
+  {
+    glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
+  }
+
+    // count the mip levels
+	int w = width;
+	int h = height;
+	
+	int numberOfMipmaps = 1;
+	if ( autoGenerateMipmaps )
+	{
+		while ( w > 1 || h > 1 )
+		{
+		  numberOfMipmaps++;
+		  w = (w+1) / 2;
+		  h = (h+1) / 2;
+		}
+	}
+	
+	// allocate mip levels
+	// texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
+#define USE_TEXSTORAGE 0
+#if USE_TEXSTORAGE
+	// TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
+	// It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
+	// for compressed textures.
+	glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
+#else
+	w = width;
+	h = height;
+	
+	for ( int i = 0; i < numberOfMipmaps; ++i )
+	{
+	  glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
+	  w = (w+1) / 2;
+	  h = (h+1) / 2;
+	}
+#endif
+	
+  if ( data != nullptr )
+  {
+	  // upload the first mipmap
+	  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
+
+	  // autogen only works for uncompressed textures
+	  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
+	  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+	  {
+		  glGenerateMipmap( GetTarget() );
+	  }
+  }
+	
+  AE_CHECK_GL_ERROR();
 }
 
-void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps, bool isSRGB )
 {
   uint32_t fileSize = aeVfs::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
@@ -912,28 +1329,49 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
   int32_t width = 0;
   int32_t height = 0;
   int32_t channels = 0;
-  stbi_set_flip_vertically_on_load( true );
-  uint8_t* image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  stbi_set_flip_vertically_on_load( 1 );
+#if _AE_IOS_
+  stbi_convert_iphone_png_to_rgb( 1 );
+#endif
+  bool is16BitImage = stbi_is_16_bit( file );
+
+  uint8_t* image;
+  if (is16BitImage)
+  {
+     image = (uint8_t*)stbi_load_16_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
+  else
+  {
+	  image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
   AE_ASSERT( image );
 
-  uint32_t depth = 0;
+  aeTextureFormat::Type format;
+  auto type = aeTextureType::Uint8;
   switch ( channels )
   {
     case STBI_grey:
-      depth = 1;
-      break;
+  		format = aeTextureFormat::R8;
+  		  
+  		// for now only support R16Unorm
+  		if (is16BitImage)
+  		{
+  			format = aeTextureFormat::R16_UNORM;
+  			type = aeTextureType::Uint16;
+  		}
+  	  break;
     case STBI_grey_alpha:
       AE_FAIL();
       break;
     case STBI_rgb:
-      depth = 3;
+      format = isSRGB ? aeTextureFormat::RGB8_SRGB : aeTextureFormat::RGB8;
       break;
     case STBI_rgb_alpha:
-      depth = 4;
+      format = isSRGB ? aeTextureFormat::RGBA8_SRGB : aeTextureFormat::RGBA8;
       break;
   }
   
-  Initialize( image, width, height, depth, filter, wrap );
+  Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
   
   stbi_image_free( image );
   free( fileBuffer );
@@ -941,34 +1379,26 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 
 void aeTexture2D::Destroy()
 {
-  glDeleteTextures( 1, &m_texture );
-
   m_width = 0;
   m_height = 0;
   m_hasAlpha = false;
+
+  aeTexture::Destroy();
 }
 
 //------------------------------------------------------------------------------
-// aeRenderTexture member functions
+// aeRenderTarget member functions
 //------------------------------------------------------------------------------
-aeRenderTexture::aeRenderTexture()
-{
-  m_fbo = 0;
-  m_depthTexture = 0;
-
-  m_width = 0;
-  m_height = 0;
-}
-
-aeRenderTexture::~aeRenderTexture()
+aeRenderTarget::~aeRenderTarget()
 {
   Destroy();
 }
 
-void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+void aeRenderTarget::Initialize( uint32_t width, uint32_t height )
 {
+  Destroy();
+
   AE_ASSERT( m_fbo == 0 );
-  AE_ASSERT( m_texture == 0 );
 
   AE_ASSERT( width != 0 );
   AE_ASSERT( height != 0 );
@@ -980,26 +1410,7 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   AE_ASSERT( m_fbo );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
 
-  glGenTextures( 1, &m_texture );
-  AE_ASSERT( m_texture );
-  glBindTexture( GL_TEXTURE_2D, m_texture );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA16F, m_width, m_height, 0, GL_RGBA, GL_HALF_FLOAT, nullptr );
-  glBindTexture( GL_TEXTURE_2D, 0 );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_texture, 0 );
-
-  glGenTextures( 1, &m_depthTexture );
-  glBindTexture( GL_TEXTURE_2D, m_depthTexture );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ( filter == aeTextureFilter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ( wrap == aeTextureWrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_width, m_height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0 );
-  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_depthTexture, 0 );
-
+  AE_CHECK_GL_ERROR();
   Vertex quadVerts[] =
   {
     { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
@@ -1013,6 +1424,7 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
   m_quad.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof( Vertex, uv ) );
   m_quad.SetVertices( quadVerts, aeQuadVertCount );
   m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  AE_CHECK_GL_ERROR();
 
   // @TODO: Figure out if there are any implicit SRGB conversions happening here. Improve interface and visibility to user if there are.
   const char* vertexStr = "\
@@ -1034,25 +1446,22 @@ void aeRenderTexture::Initialize( uint32_t width, uint32_t height, aeTextureFilt
     }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 }
 
-void aeRenderTexture::Destroy()
+void aeRenderTarget::Destroy()
 {
   m_shader.Destroy();
   m_quad.Destroy();
 
-  if ( m_texture )
+  for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
-    glDeleteTextures( 1, &m_texture );
-    m_texture = 0;
+    m_targets[ i ]->Destroy();
+    aeAlloc::Release( m_targets[ i ] );
   }
+  m_targets.Clear();
 
-  if ( m_depthTexture )
-  {
-    glDeleteTextures( 1, &m_depthTexture );
-    m_depthTexture = 0;
-  }
+  m_depth.Destroy();
 
   if ( m_fbo )
   {
@@ -1064,26 +1473,155 @@ void aeRenderTexture::Destroy()
   m_height = 0;
 }
 
-void aeRenderTexture::Activate()
+void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
 {
+  AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
+
+  aeTexture2D* tex = aeAlloc::Allocate< aeTexture2D >();
+  tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA16F, aeTextureType::HalfFloat, filter, wrap );
+
+  GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
+
+  m_targets.Append( tex );
+
+  AE_CHECK_GL_ERROR();
+}
+
+void aeRenderTarget::AddDepth( aeTextureFilter::Type filter, aeTextureWrap::Type wrap )
+{
+  AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
+
+  m_depth.Initialize( nullptr, m_width, m_height, aeTextureFormat::Depth32F, aeTextureType::Float, filter, wrap );
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
+
+  AE_CHECK_GL_ERROR();
+}
+
+void aeRenderTarget::Activate()
+{
+  CheckFramebufferComplete( m_fbo );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+  
+  GLenum buffers[] =
+  {
+    GL_COLOR_ATTACHMENT0,
+    GL_COLOR_ATTACHMENT1,
+    GL_COLOR_ATTACHMENT2,
+    GL_COLOR_ATTACHMENT3,
+    GL_COLOR_ATTACHMENT4,
+    GL_COLOR_ATTACHMENT5,
+    GL_COLOR_ATTACHMENT6,
+    GL_COLOR_ATTACHMENT7,
+    GL_COLOR_ATTACHMENT8,
+    GL_COLOR_ATTACHMENT9,
+    GL_COLOR_ATTACHMENT10,
+    GL_COLOR_ATTACHMENT11,
+    GL_COLOR_ATTACHMENT12,
+    GL_COLOR_ATTACHMENT13,
+    GL_COLOR_ATTACHMENT14,
+    GL_COLOR_ATTACHMENT15
+  };
+  AE_STATIC_ASSERT( countof( buffers ) == kMaxFrameBufferAttachments );
+  glDrawBuffers( m_targets.Length(), buffers );
+
   glViewport( 0, 0, GetWidth(), GetHeight() );
 }
 
-void aeRenderTexture::Render( aeShader* shader, const aeUniformList& uniforms )
+void aeRenderTarget::Clear( aeColor color )
 {
+  Activate();
+
+  AE_CHECK_GL_ERROR();
+
+  aeFloat3 clearColor = color.GetLinearRGB();
+  glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
+  glClearDepth( gReverseZ ? 0.0f : 1.0f );
+
+  glDepthMask( GL_TRUE );
+  glDisable( GL_DEPTH_TEST );
+  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+
+  AE_CHECK_GL_ERROR();
+}
+
+void aeRenderTarget::Render( const aeShader* shader, const aeUniformList& uniforms )
+{
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
   m_quad.Render( shader, uniforms );
 }
 
-void aeRenderTexture::Render2D( aeRect ndc, float z )
+void aeRenderTarget::Render2D( uint32_t textureIndex, aeRect ndc, float z )
 {
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+
   aeUniformList uniforms;
-  uniforms.Set( "u_localToNdc", aeRenderTexture::GetQuadToNDCTransform( ndc, z ) );
-  uniforms.Set( "u_tex", this );
+  uniforms.Set( "u_localToNdc", aeRenderTarget::GetQuadToNDCTransform( ndc, z ) );
+  uniforms.Set( "u_tex", GetTexture( textureIndex ) );
   m_quad.Render( &m_shader, uniforms );
 }
 
-aeFloat4x4 aeRenderTexture::GetQuadToNDCTransform( aeRect ndc, float z )
+const aeTexture2D* aeRenderTarget::GetTexture( uint32_t index ) const
+{
+  return m_targets[ index ];
+}
+
+const aeTexture2D* aeRenderTarget::GetDepth() const
+{
+  return m_depth.GetTexture() ? &m_depth : nullptr;
+}
+
+uint32_t aeRenderTarget::GetWidth() const
+{
+  return m_width;
+}
+
+uint32_t aeRenderTarget::GetHeight() const
+{
+  return m_height;
+}
+
+aeFloat4x4 aeRenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, aeRect ndc ) const
+{
+  aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
+  windowToNDC.Scale( aeFloat3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+
+  aeFloat4x4 ndcToQuad = aeRenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
+  ndcToQuad.Invert();
+
+  aeFloat4x4 quadToRender = aeFloat4x4::Scaling( aeFloat3( m_width, m_height, 1.0f ) );
+  quadToRender.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
+
+  return ( quadToRender * ndcToQuad * windowToNDC );
+}
+
+aeRect aeRenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
+{
+  float canvasAspect = m_width / (float)m_height;
+  float targetAspect = otherWidth / (float)otherHeight;
+  if ( canvasAspect >= targetAspect )
+  {
+    // Fit width
+    float height = targetAspect / canvasAspect;
+    return aeRect( -1.0f, -height, 2.0f, height * 2.0f );
+  }
+  else
+  {
+    // Fit height
+    float width = canvasAspect / targetAspect;
+    return aeRect( -width, -1.0f, width * 2.0f, 2.0f );
+  }
+}
+
+aeFloat4x4 aeRenderTarget::GetTargetPixelsToWorld( const aeFloat4x4& otherTargetToLocal, const aeFloat4x4& worldToNdc ) const
+{
+  aeFloat4x4 canvasToNdc = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) ) * aeFloat4x4::Scaling( aeFloat3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
+}
+
+aeFloat4x4 aeRenderTarget::GetQuadToNDCTransform( aeRect ndc, float z )
 {
   aeFloat4x4 localToNdc = aeFloat4x4::Translation( aeFloat3( ndc.x, ndc.y, z ) );
   localToNdc.Scale( aeFloat3( ndc.w, ndc.h, 1.0f ) );
@@ -1102,15 +1640,35 @@ aeOpenGLRender::aeOpenGLRender()
 
 void aeOpenGLRender::Initialize( aeRender* render )
 {
-  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
+#if _AE_IOS_
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+#else
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
+  if (gGL41)
+  {
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
+  }
+  else
+  {
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
+	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
+  }
+#endif
+	
+#if WRITE_TO_SRGB
+	SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
+#endif
+	
+#if AE_GL_DEBUG_MODE
+  SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
+#endif
   SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
   SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
-  SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 );
-  SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 16 );
 
   m_context = SDL_GL_CreateContext( (SDL_Window*)render->GetWindow()->window );
+  AE_ASSERT( m_context );
   SDL_GL_MakeCurrent( (SDL_Window*)render->GetWindow()->window, m_context );
 
   SDL_GL_SetSwapInterval( 1 );
@@ -1122,9 +1680,13 @@ void aeOpenGLRender::Initialize( aeRender* render )
   AE_ASSERT_MSG( err == GLEW_OK, "Could not initialize glew" );
 #endif
 
+#if AE_GL_DEBUG_MODE
+  glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
+#endif
+
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 }
 
 void aeOpenGLRender::Terminate( aeRender* render )
@@ -1134,37 +1696,65 @@ void aeOpenGLRender::Terminate( aeRender* render )
 
 void aeOpenGLRender::StartFrame( aeRender* render )
 {
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
-  
-  aeFloat3 clearColor = render->GetClearColor().GetSRGB(); // Unclear why glClearColor() expects srgb. Maybe because of framebuffer type.
-  glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
-  glClearDepth( 1.0f );
-  glDepthMask( GL_TRUE );
-  glDisable( GL_DEPTH_TEST );
-  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+	// TODO: this is supposed to be able to be set in init only, but it crashes there
+	// also the SDL setting isn't setting this either, so have to set this here.
+#if WRITE_TO_SRGB
+	// often these getters are a big stall to GL, since it has to cpu sync to commands
+	//if ( !glIsEnabled(GL_FRAMEBUFFER_SRGB) )
+	{
+		EnableSRGBWrites( render, true );
+	}
+#endif
+}
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+void aeOpenGLRender::EnableSRGBWrites( aeRender* render, bool enable )
+{
+// some articles say these only need to be set once, and only affect sRGB fbo
+// TODO: eliminate this interface if that's the case.  It wasn't fixing some
+// of the ImGUI rendering to be the same as before when it was wrapped.
+#if WRITE_TO_SRGB
+	if (enable)
+	{
+		glEnable( GL_FRAMEBUFFER_SRGB );
+	}
+	else
+	{
+		glDisable( GL_FRAMEBUFFER_SRGB );
+	}
+#endif
+}
+
+void aeOpenGLRender::AddTextureBarrier( aeRender* render )
+{
+	// only GL has texture barrier for reading from previously written textures
+	// There are less draconian ways in desktop ES, and nothing in WebGL.
+#if _AE_WINDOWS_ || _AE_APPLE_
+	glTextureBarrierNV();
+#endif
 }
 
 void aeOpenGLRender::EndFrame( aeRender* render )
 {
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 
-  glBindFramebuffer( GL_FRAMEBUFFER, m_defaultFbo );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
   glViewport( 0, 0, render->GetWindow()->GetWidth(), render->GetWindow()->GetHeight() );
 
   // Clear window target in case canvas doesn't fit exactly
   glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
   glClearDepth( 1.0f );
+
   glDepthMask( GL_TRUE );
+
   glDisable( GL_DEPTH_TEST );
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+  AE_CHECK_GL_ERROR();
 
-  render->GetCanvas()->Render2D( render->GetNDCRect(), 0.5f );
+  render->GetCanvas()->Render2D( 0, aeRect( aeFloat2( -1.0f ), aeFloat2( 1.0f ) ), 0.5f );
 
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
 #endif
 
-  AE_ASSERT( glGetError() == GL_NO_ERROR );
+  AE_CHECK_GL_ERROR();
 }
