@@ -98,10 +98,8 @@ public:
           return true;
         }
       }
-      else
-      {
-        return false;
-      }
+      
+      return false;
     }
     
     template < typename T >
@@ -114,7 +112,7 @@ public:
     template < typename T >
     static std::string GetNameFromValue( T value )
     {
-      const Enum* enumType = GetEnum< typeof(T) >();
+      const Enum* enumType = GetEnum< T >();
       AE_ASSERT( enumType );
       return enumType->m_enumValueToName.Get( (int32_t)value, "" );
     }
@@ -122,7 +120,7 @@ public:
     template < typename T >
     static T GetValueFromString( const char* str, T defaultValue )
     {
-      const Enum* enumType = GetEnum< typeof(T) >();
+      const Enum* enumType = GetEnum< T >();
       AE_ASSERT_MSG( enumType, "Value '#' has no Enum #", str, typeid(T).name() ); // TODO: Pretty print
       enumType->GetValueFromString( str, &defaultValue );
       return defaultValue;
@@ -692,7 +690,7 @@ public:
   //------------------------------------------------------------------------------
   // External meta functions
   //------------------------------------------------------------------------------
-  static uint32_t GetTypeCount() { return m_GetTypes().size(); }
+  static uint32_t GetTypeCount() { return (uint32_t)m_GetTypes().size(); }
   static const Type* GetTypeByIndex( uint32_t i )
   {
     return m_GetTypes()[ i ];
