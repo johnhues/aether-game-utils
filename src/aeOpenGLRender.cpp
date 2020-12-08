@@ -1583,6 +1583,44 @@ uint32_t aeRenderTarget::GetHeight() const
   return m_height;
 }
 
+aeFloat4x4 aeRenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, aeRect ndc ) const
+{
+  aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
+  windowToNDC.Scale( aeFloat3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+
+  aeFloat4x4 ndcToQuad = aeRenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
+  ndcToQuad.Invert();
+
+  aeFloat4x4 quadToRender = aeFloat4x4::Scaling( aeFloat3( m_width, m_height, 1.0f ) );
+  quadToRender.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
+
+  return ( quadToRender * ndcToQuad * windowToNDC );
+}
+
+aeRect aeRenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
+{
+  float canvasAspect = m_width / (float)m_height;
+  float targetAspect = otherWidth / (float)otherHeight;
+  if ( canvasAspect >= targetAspect )
+  {
+    // Fit width
+    float height = targetAspect / canvasAspect;
+    return aeRect( -1.0f, -height, 2.0f, height * 2.0f );
+  }
+  else
+  {
+    // Fit height
+    float width = canvasAspect / targetAspect;
+    return aeRect( -width, -1.0f, width * 2.0f, 2.0f );
+  }
+}
+
+aeFloat4x4 aeRenderTarget::GetTargetPixelsToWorld( const aeFloat4x4& otherTargetToLocal, const aeFloat4x4& worldToNdc ) const
+{
+  aeFloat4x4 canvasToNdc = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) ) * aeFloat4x4::Scaling( aeFloat3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
+}
+
 aeFloat4x4 aeRenderTarget::GetQuadToNDCTransform( aeRect ndc, float z )
 {
   aeFloat4x4 localToNdc = aeFloat4x4::Translation( aeFloat3( ndc.x, ndc.y, z ) );
@@ -1712,7 +1750,7 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
-  render->GetCanvas()->Render2D( 0, render->GetNDCRect(), 0.5f );
+  render->GetCanvas()->Render2D( 0, aeRect( aeFloat2( -1.0f ), aeFloat2( 1.0f ) ), 0.5f );
 
 #if !_AE_EMSCRIPTEN_
   SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
