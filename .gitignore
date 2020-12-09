@@ -37,6 +37,7 @@
 # CMake / CLion
 build
 linux
+em
 cmake-build-debug
 
 # System
