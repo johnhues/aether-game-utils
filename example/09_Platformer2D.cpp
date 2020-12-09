@@ -111,10 +111,10 @@ void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
   uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
   
   const InputState* inputState = input->GetState();
-  bool up = inputState->up || inputState->leftAnalog.y > 0.1f;
-  bool down = inputState->down || inputState->leftAnalog.y < -0.1f;
-  bool left = inputState->left || inputState->leftAnalog.x < -0.1f;
-  bool right = inputState->right || inputState->leftAnalog.x > 0.1f;
+  bool up = inputState->up || inputState->leftAnalog.y > 0.1f || inputState->dpad.y > 0;
+  bool down = inputState->down || inputState->leftAnalog.y < -0.1f || inputState->dpad.y < 0;
+  bool left = inputState->left || inputState->leftAnalog.x < -0.1f || inputState->dpad.x < 0;
+  bool right = inputState->right || inputState->leftAnalog.x > 0.1f || inputState->dpad.x > 0;
   bool jumpButton = ( inputState->space || inputState->up || inputState->a );
 
   m_canJumpTimer -= dt;

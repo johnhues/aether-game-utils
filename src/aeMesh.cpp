@@ -26,7 +26,7 @@
 #include "aeMesh.h"
 #if _AE_EMSCRIPTEN_
 
-bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension ) { return false; }
+bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization ) { return false; }
 void aeMesh::Transform( aeFloat4x4 transform ) {}
 const aeMeshVertex* aeMesh::GetVertices() const { return nullptr; }
 const aeMeshIndex* aeMesh::GetIndices() const { return nullptr; }

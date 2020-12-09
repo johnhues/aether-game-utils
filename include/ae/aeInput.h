@@ -219,6 +219,7 @@ public:
 
   aeFloat2 leftAnalog;
   aeFloat2 rightAnalog;
+  aeInt2 dpad;
 
   bool up;
   bool down;
@@ -296,6 +297,9 @@ private:
   bool m_firstPump;
 
   struct _SDL_Joystick* m_joystickHandle;
+#if !_AE_EMSCRIPTEN_
+  struct _SDL_GameController* m_controller;
+#endif
   uint32_t m_buttonCount;
   uint32_t m_hatCount;
   uint32_t m_axesCount;
