@@ -106,6 +106,55 @@ uint16_t kCubeIndices[] =
 };
 
 //------------------------------------------------------------------------------
+// Camera
+//------------------------------------------------------------------------------
+class Camera
+{
+public:
+	void Update( const aeInput* input );
+
+	aeFloat3 GetPosition() const { return m_pos; }
+	aeFloat3 GetForward() const { return m_forward; }
+
+private:
+	aeFloat3 m_pos = aeFloat3( 0.0f );
+	aeFloat3 m_forward = aeFloat3( 0.0f, 1.0f, 0.0f );
+
+	float m_yaw = 0.77f;
+	float m_pitch = 0.5f;
+	float m_dist = 2.0f;
+};
+
+void Camera::Update( const aeInput* input )
+{
+	aeFloat2 rotate = input->GetState()->leftAnalog * 0.1f;
+	if ( input->GetState()->mouseLeft )
+	{
+		rotate = aeFloat2( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos ) * -0.01f;
+	}
+
+	m_yaw += rotate.x;
+	m_pitch += rotate.y;
+	m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f );
+
+	if ( input->GetState()->scroll )
+	{
+		m_dist += input->GetState()->scroll * -0.25f;
+	}
+	else
+	{
+		m_dist += input->GetState()->rightAnalog.y * -0.1f;
+	}
+	m_dist = aeMath::Clip( m_dist, 1.5f, 5.0f );
+
+	m_pos = aeFloat3( aeMath::Cos( m_yaw ), aeMath::Sin( m_yaw ), 0.0f );
+	m_pos *= aeMath::Cos( m_pitch );
+	m_pos.z = aeMath::Sin( m_pitch );
+	m_forward = -m_pos;
+	m_pos *= m_dist;
+}
+
+//------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()

@@ -29,6 +29,33 @@
 #include "aeRender.h"
 #include "aeWindow.h"
 #include "SDL.h"
+#if !_AE_EMSCRIPTEN_
+  #include "SDL_gamecontroller.h"
+#endif
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const float kAnalogDeadzone = 0.2f;
+
+//------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+aeFloat2 ApplyAnalogDeadzone( aeFloat2 analog, float deadzone )
+{
+  float originalLength = analog.Length();
+  if ( originalLength <= kAnalogDeadzone )
+  {
+    return aeFloat2( 0.0f );
+  }
+  else
+  {
+    float renormalizedLength = aeMath::Delerp( deadzone, 1.0f, originalLength );
+    renormalizedLength = aeMath::Clip01( renormalizedLength );
+
+    return ( analog / originalLength ) * renormalizedLength;
+  }
+}
 
 //------------------------------------------------------------------------------
 // InputState member functions
@@ -36,6 +63,11 @@
 InputState::InputState()
 {
   gamepad = false;
+  gamepadBattery = aeBatteryLevel::None;
+
+  leftAnalog = aeFloat2( 0.0f );
+  rightAnalog = aeFloat2( 0.0f );
+  dpad = aeInt2( 0 );
 
   up = false;
   down = false;
@@ -185,22 +217,30 @@ bool InputState::Get( aeKey key ) const
 aeInput::aeInput()
 {
   m_window = nullptr;
+
   m_textMode = 0;
   m_text = "";
   m_mouseCaptured = false;
   m_firstPump = true;
+
+  m_joystickHandle = nullptr;
+#if !_AE_EMSCRIPTEN_
+  m_controller = nullptr;
+#endif
+  m_buttonCount = 0;
+  m_hatCount = 0;
+  m_axesCount = 0;
 }
 
 void aeInput::Initialize( aeWindow* window )
 {
-  if ( !window )
+#if !_AE_EMSCRIPTEN_
+  // This has to run for SDL_PumpEvents() to work
+  if ( !window && SDL_Init( SDL_INIT_EVENTS ) < 0 )
   {
-    // @HACK: This has to run for SDL_PumpEvents() to work
-    if ( SDL_Init( SDL_INIT_EVENTS ) < 0 )
-    {
-      AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
-    }
+    AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
   }
+#endif
 
   SDL_JoystickEventState( SDL_ENABLE );
 #if !_AE_IOS_
@@ -244,7 +284,19 @@ void aeInput::Initialize( aeWindow* window )
 }
 
 void aeInput::Terminate()
-{}
+{
+  if ( m_joystickHandle )
+  {
+    SDL_JoystickClose( m_joystickHandle );
+  }
+
+#if !_AE_EMSCRIPTEN_
+  if ( m_controller )
+  {
+    SDL_GameControllerClose( m_controller );
+  }
+#endif
+}
 
 void aeInput::Pump()
 {
@@ -377,7 +429,153 @@ void aeInput::Pump()
   }
 #endif
 
-  m_firstPump = false;
+  if ( !m_joystickHandle && SDL_NumJoysticks() )
+  {
+    uint32_t index = 0;
+
+#if !_AE_EMSCRIPTEN_
+    AE_ASSERT( !m_controller );
+    for ( uint32_t i = 0; i < SDL_NumJoysticks(); ++i )
+    {
+      if ( SDL_IsGameController( i ) )
+      {
+        index = i;
+        m_controller = SDL_GameControllerOpen( i );
+        break;
+      }
+    }
+
+    if ( m_controller )
+#endif
+    {
+      m_joystickHandle = SDL_JoystickOpen( index );
+      m_buttonCount = SDL_JoystickNumButtons( m_joystickHandle );
+      m_hatCount = SDL_JoystickNumHats( m_joystickHandle );
+      m_axesCount = SDL_JoystickNumAxes( m_joystickHandle );
+    }
+  }
+  // @TODO: Should check if specific controller is disconnected
+  else if ( m_joystickHandle && !SDL_NumJoysticks() )
+  {
+    SDL_JoystickClose( m_joystickHandle );
+    m_joystickHandle = nullptr;
+
+#if !_AE_EMSCRIPTEN_
+    AE_ASSERT( m_controller );
+    SDL_GameControllerClose( m_controller );
+    m_controller = nullptr;
+#endif
+
+    m_input.gamepadBattery = aeBatteryLevel::None;
+  }
+
+  m_input.gamepad = ( m_joystickHandle != nullptr );
+
+  if ( m_joystickHandle )
+  {
+#if _AE_EMSCRIPTEN_
+    bool* inputBtns[] =
+    {
+      // @NOTE: The order of these matter. SDL_JoystickGetButton() uses an index instead of named buttons.
+      &m_input.a,
+      &m_input.b,
+      &m_input.x,
+      &m_input.y,
+      &m_input.l,
+      &m_input.r,
+      &m_input.start,
+      &m_input.select
+    };
+    uint32_t btnCount = aeMath::Min( countof( inputBtns ), m_buttonCount );
+    for ( uint32_t i = 0; i < btnCount; i++ )
+    {
+      *( inputBtns[ i ] ) = SDL_JoystickGetButton( m_joystickHandle, i );
+    }
+#else
+    struct ControllerMapping
+    {
+      SDL_GameControllerButton btnCode;
+      bool* input;
+    };
+    ControllerMapping inputBtns[] =
+    {
+      { SDL_CONTROLLER_BUTTON_A, &m_input.a },
+      { SDL_CONTROLLER_BUTTON_B, &m_input.b },
+      { SDL_CONTROLLER_BUTTON_X, &m_input.x },
+      { SDL_CONTROLLER_BUTTON_Y, &m_input.y },
+      { SDL_CONTROLLER_BUTTON_LEFTSHOULDER, &m_input.l },
+      { SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, &m_input.r },
+      { SDL_CONTROLLER_BUTTON_START, &m_input.start },
+      { SDL_CONTROLLER_BUTTON_BACK, &m_input.select }
+    };
+    for ( uint32_t i = 0; i < countof( inputBtns ); i++ )
+    {
+      ControllerMapping& mapping = inputBtns[ i ];
+      *( mapping.input ) = SDL_GameControllerGetButton( m_controller, mapping.btnCode );
+    }
+#endif
+
+    // dpad
+    m_input.dpad = aeInt2( 0 );
+#if !_AE_EMSCRIPTEN_
+    if ( SDL_GameControllerGetButton( m_controller, SDL_CONTROLLER_BUTTON_DPAD_UP ) ) { m_input.dpad.y++; }
+    if ( SDL_GameControllerGetButton( m_controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN ) ) { m_input.dpad.y--; }
+    if ( SDL_GameControllerGetButton( m_controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT ) ) { m_input.dpad.x--; }
+    if ( SDL_GameControllerGetButton( m_controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT ) ) { m_input.dpad.x++; }
+#endif
+
+    if ( m_axesCount >= 2 )
+    {
+      aeFloat2 analog;
+      analog.x = SDL_JoystickGetAxis( m_joystickHandle, 0 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = SDL_JoystickGetAxis( m_joystickHandle, 1 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = -analog.y; // @NOTE: Analog sticks are negative up for some reason on XBox controllers
+      m_input.leftAnalog = ApplyAnalogDeadzone( analog, kAnalogDeadzone );
+    }
+
+    if ( m_axesCount == 6 ) // XBox type gamepad likely
+    {
+      aeFloat2 analog;
+      analog.x = SDL_JoystickGetAxis( m_joystickHandle, 3 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = SDL_JoystickGetAxis( m_joystickHandle, 4 ) / (float)aeMath::MaxValue< int16_t >();
+      analog.y = -analog.y; // @NOTE: Analog sticks are negative up for some reason on XBox controllers
+      m_input.rightAnalog = ApplyAnalogDeadzone( analog, kAnalogDeadzone );
+    }
+
+#if !_AE_EMSCRIPTEN_
+    switch ( SDL_JoystickCurrentPowerLevel( m_joystickHandle ) )
+    {
+      case SDL_JOYSTICK_POWER_EMPTY:
+        m_input.gamepadBattery = aeBatteryLevel::Empty;
+        break;
+      case SDL_JOYSTICK_POWER_LOW:
+        m_input.gamepadBattery = aeBatteryLevel::Low;
+        break;
+      case SDL_JOYSTICK_POWER_MEDIUM:
+        m_input.gamepadBattery = aeBatteryLevel::Medium;
+        break;
+      case SDL_JOYSTICK_POWER_FULL:
+      case SDL_JOYSTICK_POWER_MAX:
+        m_input.gamepadBattery = aeBatteryLevel::Full;
+        break;
+      case SDL_JOYSTICK_POWER_WIRED:
+        m_input.gamepadBattery = aeBatteryLevel::Wired;
+        break;
+      default:
+        m_input.gamepadBattery = aeBatteryLevel::None;
+        break;
+    }
+#endif
+  }
+
+  m_input.gamepad = ( m_joystickHandle != nullptr );
+
+  if ( m_firstPump )
+  {
+    // Don't 'move' cursor on first frame
+    m_prevInput.mousePixelPos = m_input.mousePixelPos;
+    m_firstPump = false;
+  }
 }
 
 void aeInput::SetTextMode( bool enabled )

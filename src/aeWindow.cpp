@@ -50,7 +50,7 @@ void aeWindow::Initialize( uint32_t width, uint32_t height, bool fullScreen, boo
   m_fullScreen = fullScreen;
 
   m_Initialize();
-  
+
   SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
   SDL_GetWindowPosition( (SDL_Window*)window, &m_pos.x, &m_pos.y );
 }
@@ -71,7 +71,7 @@ void aeWindow::Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool sho
 
 void aeWindow::m_Initialize()
 {
-  if ( SDL_Init( SDL_INIT_VIDEO ) < 0 )
+  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
   {
     AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
   }

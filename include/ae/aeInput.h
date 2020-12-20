@@ -32,7 +32,7 @@
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
-// InputType enum
+// Input types
 //------------------------------------------------------------------------------
 enum InputType
 {
@@ -63,6 +63,16 @@ enum InputType
   kInputType_Escape,
 
   kInputTypeCount
+};
+
+enum class aeBatteryLevel
+{
+  None,
+  Empty,
+  Low,
+  Medium,
+  Full,
+  Wired
 };
 
 //------------------------------------------------------------------------------
@@ -205,6 +215,11 @@ public:
   bool Get( aeKey key ) const;
 
   bool gamepad;
+  aeBatteryLevel gamepadBattery;
+
+  aeFloat2 leftAnalog;
+  aeFloat2 rightAnalog;
+  aeInt2 dpad;
 
   bool up;
   bool down;
@@ -280,6 +295,14 @@ private:
 
   bool m_mouseCaptured;
   bool m_firstPump;
+
+  struct _SDL_Joystick* m_joystickHandle;
+#if !_AE_EMSCRIPTEN_
+  struct _SDL_GameController* m_controller;
+#endif
+  uint32_t m_buttonCount;
+  uint32_t m_hatCount;
+  uint32_t m_axesCount;
 };
 
 #endif
