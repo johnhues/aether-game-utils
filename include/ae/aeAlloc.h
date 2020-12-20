@@ -110,12 +110,6 @@ namespace aeAlloc
   static const uint32_t kHeaderSize = 16;
   struct Header
   {
-    Header()
-    {
-      AE_STATIC_ASSERT( sizeof( *this ) <= kHeaderSize );
-      AE_STATIC_ASSERT( kHeaderSize % kDefaultAlignment == 0 );
-    }
-
     uint32_t check;
     uint32_t count;
     uint32_t size;
@@ -155,6 +149,9 @@ T* aeAlloc::AllocateArray( uint32_t count )
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
+
+  AE_STATIC_ASSERT( sizeof( Header ) <= kHeaderSize );
+  AE_STATIC_ASSERT( kHeaderSize % kDefaultAlignment == 0 );
 
   Header* header = (Header*)base;
   header->check = 0xABCD;
