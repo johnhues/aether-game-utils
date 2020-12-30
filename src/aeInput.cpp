@@ -435,7 +435,7 @@ void aeInput::Pump()
 
 #if !_AE_EMSCRIPTEN_
     AE_ASSERT( !m_controller );
-    for ( uint32_t i = 0; i < SDL_NumJoysticks(); ++i )
+    for ( int32_t i = 0; i < SDL_NumJoysticks(); ++i )
     {
       if ( SDL_IsGameController( i ) )
       {
