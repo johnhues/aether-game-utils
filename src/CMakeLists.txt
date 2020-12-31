@@ -50,6 +50,7 @@ set(AE_HEADER_FILES
 	../include/ae/aeCompactingAllocator.h
 	../include/ae/aeDict.h
 	../include/ae/aeEditorCamera.h
+	../include/ae/aeFileDialog.h
 	../include/ae/aeHotSpot.h
 	../include/ae/aeImage.h
 	../include/ae/aeImGui.h
@@ -94,6 +95,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeCompactingAllocator.cpp
 		aeDict.cpp
 		aeEditorCamera.cpp
+		aeFileDialog.cpp
 		aeHotSpot.cpp
 		aeImage.cpp
 		aeInput.cpp
