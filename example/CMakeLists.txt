@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
-include(${CMAKE_SOURCE_DIR}/cmake/safeguards.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/safeguards.cmake)
 include(ExternalProject)
 
 # imgui
