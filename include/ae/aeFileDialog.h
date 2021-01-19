@@ -37,6 +37,7 @@
 #include "aeArray.h"
 class aeWindow;
 namespace AE_NAMESPACE {
+#if !_AE_APPLE_ // No std::path support
 
 //------------------------------------------------------------------------------
 // FileFilter for OpenFileParams/SaveFileParams
@@ -80,6 +81,8 @@ struct SaveFileParams
   bool useLegacy = false;
 };
 std::string SaveFile( const SaveFileParams& params ); // See note at top of header
+
+#endif
 
 } // ae namespace end
 

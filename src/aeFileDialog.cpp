@@ -35,6 +35,7 @@
 #endif
 
 namespace AE_NAMESPACE {
+#if !_AE_APPLE_ // No std::path support
 
 // General Helpers
 void FixPathExtension( const char* extension, std::filesystem::path* pathOut )
@@ -259,6 +260,7 @@ std::string SaveFile( const SaveFileParams& params )
   return "";
 }
 
+#endif
 #endif
 
 } // ae namespace end
