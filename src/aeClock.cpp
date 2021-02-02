@@ -99,7 +99,9 @@ void aeFixedTimeStep::Wait()
     m_prevFrameTime = frameDuration.count();
     m_frameStart = std::chrono::steady_clock::now();
   }
-
+  
+  m_prevFrameTimeSec = m_prevFrameTime / 1000000.0f;
+  
   m_stepCount++;
 }
 
