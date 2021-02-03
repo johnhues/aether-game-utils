@@ -23,8 +23,10 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include <filesystem>
 #include "aeFileDialog.h"
+#if !_AE_APPLE_ && !_AE_LINUX_
+	#include <filesystem>
+#endif
 #include "aeWindow.h"
 #include "SDL.h"
 #include "SDL_syswm.h"
@@ -35,7 +37,7 @@
 #endif
 
 namespace AE_NAMESPACE {
-#if !_AE_APPLE_ // No std::path support
+#if !_AE_APPLE_ && !_AE_LINUX_ // No std::path support
 
 // General Helpers
 void FixPathExtension( const char* extension, std::filesystem::path* pathOut )
