@@ -196,6 +196,7 @@ const char* aeGetTypeName()
 
 uint32_t aeGetPID();
 uint32_t aeGetMaxConcurrentThreads();
+bool aeIsDebuggerAttached();
 
 #define AE_EXPORT extern "C"
 
