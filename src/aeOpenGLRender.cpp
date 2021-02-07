@@ -70,7 +70,7 @@
 // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2, only adding for OSX right now
 // TODO: this will break any code using the SRGB_TO_RGB macros in shaders on this platform,
 // But the colors and blends will be handled correctly.
-#if _AE_OSX_ && defined(GL_ARB_framebuffer_sRGB)
+#if defined(GL_ARB_framebuffer_sRGB)
   #define READ_FROM_SRGB 1
   #define WRITE_TO_SRGB  1
 #else
@@ -87,7 +87,7 @@
 bool gReverseZ = false;
 
 // turn this on to run at GL4.1 instead of GL3.3
-bool gGL41 = false;
+bool gGL41 = true;
 
 //------------------------------------------------------------------------------
 // Helpers
