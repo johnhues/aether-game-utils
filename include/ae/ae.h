@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// 01_Example.cpp
+// ae.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -21,43 +21,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
+#ifndef AE_AE_H
+#define AE_AE_H
+
+//------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "aeAlloc.h"
+#include "aeArray.h"
+#include "aeAudio.h"
+#include "aeBinaryStream.h"
+#include "aeClock.h"
+#include "aeCommand.h"
+#include "aeCommandLineArgs.h"
+#include "aeCompactingAllocator.h"
+#include "aeDict.h"
+#include "aeEditorCamera.h"
+#include "aeFileDialog.h"
+#include "aeHotSpot.h"
+#include "aeImage.h"
+#include "aeInitializer.h"
+#include "aeInput.h"
+#include "aeInventoryGrid.h"
+#include "aeList.h"
+#include "aeLog.h"
+#include "aeMap.h"
+#include "aeMath.h"
+#include "aeMesh.h"
+#include "aeMeta.h"
+#include "aeNet.h"
+#include "aeObjectPool.h"
+#include "aePlatform.h"
+#include "aeRef.h"
+#include "aeRender.h"
+#include "aeRingBuffer.h"
+#include "aeSignal.h"
+#include "aeSparseGrid.h"
+#include "aeSpline.h"
+#include "aeString.h"
+#include "aeTerrain.h"
+#include "aeTesting.h"
+#include "aeUuid.h"
+#include "aeVfs.h"
+#include "aeWindow.h"
 
-//------------------------------------------------------------------------------
-// Main
-//------------------------------------------------------------------------------
-int main()
-{
-	AE_LOG( "Initialize" );
-
-	aeWindow window;
-	aeRender render;
-	aeInput input;
-	
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "example" );
-	render.InitializeOpenGL( &window );
-	input.Initialize( &window );
-	
-	aeFixedTimeStep timeStep;
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-
-	while ( !input.GetState()->exit )
-	{
-		input.Pump();
-		render.Activate();
-		render.Clear( aeColor::PicoDarkPurple() );
-		render.Present();
-		timeStep.Wait();
-	}
-
-	AE_LOG( "Terminate" );
-
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
-
-	return 0;
-}
+#endif

@@ -23,19 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeBinaryStream.h"
-#include "aeClock.h"
-#include "aeEditorCamera.h"
-#include "aeInput.h"
-#include "aeLog.h"
-#include "aeMeta.h"
-#include "aeRender.h"
-#include "aeSpline.h"
-#include "aeTerrain.h"
-#include "aeWindow.h"
-#include "aeVfs.h"
-
-#include "aeImGui.h"
+#include "ae/ae.h"
+#include "ae/aeImGui.h"
 #include "ImGuizmo.h"
 
 const char* kFileName = "objects.dat";
@@ -348,7 +337,7 @@ int main()
   {
     input.Pump();
 
-    ui->NewFrame( &render, &input, timeStep.GetTimeStep() );
+    ui->NewFrame( &render, &input, timeStep.GetPrevFrameTime() );
 
     ImGuizmo::SetOrthographic( false );
     ImGuizmo::BeginFrame();
@@ -517,7 +506,7 @@ int main()
 
     // Camera input
     camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
-    camera.Update( &input, timeStep.GetTimeStep() );
+    camera.Update( &input, timeStep.GetPrevFrameTime() );
 
     if ( !headless )
     {

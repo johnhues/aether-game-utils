@@ -21,6 +21,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
+#ifndef AE_LOG_HPP
+#define AE_LOG_HPP
+
+//------------------------------------------------------------------------------
 // Log levels
 //------------------------------------------------------------------------------
 #define _AE_LOG_TRACE_ 0
@@ -83,3 +87,5 @@ void aeLogInternal( uint32_t severity, const char* filePath, uint32_t line, cons
   aeLogFormat( os, severity, filePath, line, assertInfo, format );
   aeLogInternal( os, format, args... );
 }
+
+#endif

@@ -23,12 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeClock.h"
-#include "aeHotSpot.h"
-#include "aeInput.h"
-#include "aeLog.h"
-#include "aeRender.h"
-#include "aeWindow.h"
+#include "ae/ae.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -246,8 +241,8 @@ int main()
     // Update
     //------------------------------------------------------------------------------
     input.Pump();
-    player.Update( &world, &input, timeStep.GetTimeStep() );
-    world.Update( timeStep.GetTimeStep() );
+    player.Update( &world, &input, timeStep.GetPrevFrameTime() );
+    world.Update( timeStep.GetPrevFrameTime() );
     
     //------------------------------------------------------------------------------
     // Render

@@ -40,6 +40,7 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # source files
 set(AE_HEADER_FILES
+	../include/ae/ae.h
 	../include/ae/aeAlloc.h
 	../include/ae/aeArray.h
 	../include/ae/aeAudio.h
