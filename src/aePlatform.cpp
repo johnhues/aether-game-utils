@@ -30,6 +30,7 @@
   #include "processthreadsapi.h"
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
+  #include <unistd.h>
 #else
   #include <unistd.h>
 #endif
