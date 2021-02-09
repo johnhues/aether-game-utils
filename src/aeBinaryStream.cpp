@@ -84,6 +84,15 @@ aeBinaryStream aeBinaryStream::Reader( const uint8_t* data, uint32_t length )
   return aeBinaryStream( Mode::ReadBuffer, const_cast< uint8_t* >( data ), length );
 }
 
+aeBinaryStream aeBinaryStream::Reader( const aeArray< uint8_t >& data )
+{
+  if ( !data.Length() )
+  {
+    return aeBinaryStream::Reader( nullptr, 0 );
+  }
+  return aeBinaryStream( Mode::ReadBuffer, &data[ 0 ], data.Length() );
+}
+
 void aeBinaryStream::SerializeUint8( uint8_t& v )
 {
   SerializeRaw( &v, sizeof(v) );

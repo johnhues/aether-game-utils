@@ -41,6 +41,7 @@ public:
   static aeBinaryStream Writer( aeArray< uint8_t >* array );
   static aeBinaryStream Writer();
   static aeBinaryStream Reader( const uint8_t* data, uint32_t length );
+  static aeBinaryStream Reader( const aeArray< uint8_t >& data );
 
   void SerializeUint8( uint8_t& v );
   void SerializeUint8( const uint8_t& v );
