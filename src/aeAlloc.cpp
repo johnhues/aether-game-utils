@@ -59,12 +59,13 @@ namespace
   uint32_t g_deallocations = 0;
   uint32_t g_allocatedBytes = 0;
   uint32_t g_deallocatedBytes = 0;
+
   // @TODO: Use static map or something to avoid using aeDict which uses strings internally.
   //        aeMap can't be used because it allocates memory, updating aeAllocInfo.
-  aeDict g_allocationCounts;
-  aeDict g_deallocationCounts;
-  aeDict g_allocationBytes;
-  aeDict g_deallocationBytes;
+  //aeDict g_allocationCounts;
+  //aeDict g_deallocationCounts;
+  //aeDict g_allocationBytes;
+  //aeDict g_deallocationBytes;
 }
 
 aeAllocInfo& GetAllocInfo()
@@ -95,42 +96,42 @@ uint32_t aeAllocInfo::GetDeallocationBytesTotal() const
 
 uint32_t aeAllocInfo::GetAllocationsLength() const
 {
-  return g_allocationCounts.Length();
+  return 0;// g_allocationCounts.Length();
 }
 
 const char* aeAllocInfo::GetAllocationName( uint32_t index ) const
 {
-  return g_allocationCounts.GetKey( index );
+  return 0;//g_allocationCounts.GetKey( index );
 }
 
 uint32_t aeAllocInfo::GetAllocationCount( uint32_t index ) const
 {
-  return atoi( g_allocationCounts.GetValue( index ) );
+  return 0;//atoi( g_allocationCounts.GetValue( index ) );
 }
 
 uint32_t aeAllocInfo::GetAllocationBytes( uint32_t index ) const
 {
-  return atoi( g_allocationBytes.GetValue( index ) );
+  return 0;//atoi( g_allocationBytes.GetValue( index ) );
 }
 
 uint32_t aeAllocInfo::GetDeallocationsLength() const
 {
-  return g_deallocationCounts.Length();
+  return 0;//g_deallocationCounts.Length();
 }
 
 const char* aeAllocInfo::GetDeallocationName( uint32_t index ) const
 {
-  return g_deallocationCounts.GetKey( index );
+  return 0;//g_deallocationCounts.GetKey( index );
 }
 
 uint32_t aeAllocInfo::GetDeallocationCount( uint32_t index ) const
 {
-  return atoi( g_deallocationCounts.GetValue( index ) );
+  return 0;//atoi( g_deallocationCounts.GetValue( index ) );
 }
 
 uint32_t aeAllocInfo::GetDeallocationBytes( uint32_t index ) const
 {
-  return atoi( g_deallocationBytes.GetValue( index ) );
+  return 0;//atoi( g_deallocationBytes.GetValue( index ) );
 }
 
 void aeAllocInfo::Alloc( const char* typeName, uint32_t bytes )
@@ -142,8 +143,8 @@ void aeAllocInfo::Alloc( const char* typeName, uint32_t bytes )
 
   g_allocations++;
   g_allocatedBytes += bytes;
-  g_allocationCounts.SetInt( buf, g_allocationCounts.GetInt( typeName, 0 ) + 1 );
-  g_allocationBytes.SetInt( buf, g_allocationBytes.GetInt( typeName, 0 ) + bytes );
+  //g_allocationCounts.SetInt( buf, g_allocationCounts.GetInt( typeName, 0 ) + 1 );
+  //g_allocationBytes.SetInt( buf, g_allocationBytes.GetInt( typeName, 0 ) + bytes );
 }
 
 void aeAllocInfo::Dealloc( const char* typeName, uint32_t bytes )
@@ -155,6 +156,6 @@ void aeAllocInfo::Dealloc( const char* typeName, uint32_t bytes )
 
   g_deallocations++;
   g_deallocatedBytes += bytes;
-  g_deallocationCounts.SetInt( buf, g_deallocationCounts.GetInt( typeName, 0 ) + 1 );
-  g_deallocationBytes.SetInt( buf, g_deallocationBytes.GetInt( typeName, 0 ) + bytes );
+  //g_deallocationCounts.SetInt( buf, g_deallocationCounts.GetInt( typeName, 0 ) + 1 );
+  //g_deallocationBytes.SetInt( buf, g_deallocationBytes.GetInt( typeName, 0 ) + bytes );
 }

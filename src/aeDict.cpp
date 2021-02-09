@@ -28,14 +28,9 @@
 //------------------------------------------------------------------------------
 // aeDict members
 //------------------------------------------------------------------------------
-aeDict::aeDict()
-{
-  m_entryCount = 0;
-}
-
 void aeDict::SetString( const char* key, const char* value )
 {
-  m_GetValue( key )->value = value;
+  m_entries.Set( key, value );
 }
 
 void aeDict::SetInt( const char* key, int32_t value )
@@ -87,49 +82,45 @@ void aeDict::SetInt2( const char* key, aeInt2 value )
 
 void aeDict::Clear()
 {
-  m_entryCount = 0;
+  m_entries.Clear();
 }
 
 const char* aeDict::GetString( const char* key, const char* defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
-    return kv->value.c_str();
+    return value->c_str();
   }
   return defaultValue;
 }
 
 int32_t aeDict::GetInt( const char* key, int32_t defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
-    return atoi( kv->value.c_str() );
+    return atoi( value->c_str() );
   }
   return defaultValue;
 }
 
 float aeDict::GetFloat( const char* key, float defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
-    return (float)atof( kv->value.c_str() );
+    return (float)atof( value->c_str() );
   }
   return defaultValue;
 }
 
 bool aeDict::GetBool( const char* key, bool defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
-    if ( kv->value == "true" )
+    if ( *value == "true" )
     {
       return true;
     }
-    else if ( kv->value == "false" )
+    else if ( *value == "false" )
     {
       return false;
     }
@@ -139,11 +130,10 @@ bool aeDict::GetBool( const char* key, bool defaultValue ) const
 
 aeFloat2 aeDict::GetFloat2( const char* key, aeFloat2 defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
     aeFloat2 result( 0.0f );
-    sscanf( kv->value.c_str(), "%f %f", &result.x, &result.y );
+    sscanf( value->c_str(), "%f %f", &result.x, &result.y );
     return result;
   }
   return defaultValue;
@@ -151,11 +141,10 @@ aeFloat2 aeDict::GetFloat2( const char* key, aeFloat2 defaultValue ) const
 
 aeFloat3 aeDict::GetFloat3( const char* key, aeFloat3 defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
     aeFloat3 result( 0.0f );
-    sscanf( kv->value.c_str(), "%f %f %f", &result.x, &result.y, &result.z );
+    sscanf( value->c_str(), "%f %f %f", &result.x, &result.y, &result.z );
     return result;
   }
   return defaultValue;
@@ -163,11 +152,10 @@ aeFloat3 aeDict::GetFloat3( const char* key, aeFloat3 defaultValue ) const
 
 aeFloat4 aeDict::GetFloat4( const char* key, aeFloat4 defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
     aeFloat4 result( 0.0f );
-    sscanf( kv->value.c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
+    sscanf( value->c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
     return result;
   }
   return defaultValue;
@@ -175,11 +163,10 @@ aeFloat4 aeDict::GetFloat4( const char* key, aeFloat4 defaultValue ) const
 
 aeInt2 aeDict::GetInt2( const char* key, aeInt2 defaultValue ) const
 {
-  const KeyValue* kv = m_GetValue( key );
-  if ( kv )
+  if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
     aeInt2 result( 0 );
-    sscanf( kv->value.c_str(), "%d %d", &result.x, &result.y );
+    sscanf( value->c_str(), "%d %d", &result.x, &result.y );
     return result;
   }
   return defaultValue;
@@ -198,50 +185,17 @@ aeColor aeDict::GetColor( const char* key, aeColor defaultValue ) const
 
 bool aeDict::Has( const char* key ) const
 {
-  return m_GetValue( key ) != nullptr;
+  return m_entries.TryGet( key ) != nullptr;
 }
 
 const char* aeDict::GetKey( uint32_t idx ) const
 {
-  AE_ASSERT( idx < m_entryCount );
-  return m_entries[ idx ].key.c_str();
+  return m_entries.GetKey( idx ).c_str();
 }
 
 const char* aeDict::GetValue( uint32_t idx ) const
 {
-  AE_ASSERT( idx < m_entryCount );
-  return m_entries[ idx ].value.c_str();
-}
-
-aeDict::KeyValue* aeDict::m_GetValue( const char* key )
-{
-  for ( uint32_t i = 0; i < m_entryCount; i++ )
-  {
-    if ( m_entries[ i ].key == key )
-    {
-      return &m_entries[ i ];
-    }
-  }
-
-  AE_ASSERT_MSG( key[ 0 ], "Invalid aeDict entry key" );
-  AE_ASSERT_MSG( m_entryCount < kAeDictMaxKeyValues, "Could not allocate aeDict entry" );
-  KeyValue* kv = &m_entries[ m_entryCount ];
-  kv->key = key;
-  m_entryCount++;
-  return kv;
-}
-
-const aeDict::KeyValue* aeDict::m_GetValue( const char* key ) const
-{
-  for ( uint32_t i = 0; i < m_entryCount; i++ )
-  {
-    if ( m_entries[ i ].key == key )
-    {
-      return &m_entries[ i ];
-    }
-  }
-
-  return nullptr;
+  return m_entries.GetValue( idx ).c_str();
 }
 
 std::ostream& operator<<( std::ostream& os, const aeDict& dict )

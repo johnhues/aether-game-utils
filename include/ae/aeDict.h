@@ -32,19 +32,11 @@
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
-// Constants
-//------------------------------------------------------------------------------
-// @TODO: Probably too many elements to always allocate statically, template or dynamically allocate
-const uint32_t kAeDictMaxKeyValues = 96;
-
-//------------------------------------------------------------------------------
 // aeDict class
 //------------------------------------------------------------------------------
 class aeDict
 {
 public:
-  aeDict();
-  
   void SetString( const char* key, const char* value );
   void SetInt( const char* key, int32_t value );
   void SetFloat( const char* key, float value );
@@ -68,20 +60,10 @@ public:
 
   const char* GetKey( uint32_t idx ) const;
   const char* GetValue( uint32_t idx ) const;
-  uint32_t Length() const { return m_entryCount; }
+  uint32_t Length() const { return m_entries.Length(); }
 
 private:
-  struct KeyValue
-  {
-    aeStr128 key;
-    aeStr128 value;
-  };
-
-  KeyValue* m_GetValue( const char* key );
-  const KeyValue* m_GetValue( const char* key ) const;
-
-  uint32_t m_entryCount;
-  KeyValue m_entries[ kAeDictMaxKeyValues ];
+  aeMap< aeStr128, aeStr128 > m_entries;
 };
 
 std::ostream& operator<<( std::ostream& os, const aeDict& dict );
