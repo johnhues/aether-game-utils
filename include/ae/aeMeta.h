@@ -1121,6 +1121,7 @@ template< typename T, typename C >
 const T* aeCast( const C* obj )
 {
   // Cast down to base
+  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
   return dynamic_cast< const T* >( obj );
 }
 
@@ -1128,31 +1129,8 @@ template< typename T, typename C >
 T* aeCast( C* obj )
 {
   // Cast down to base
+  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
   return dynamic_cast< T* >( obj );
-}
-
-template< typename T >
-T* aeCast( aeObject* obj )
-{
-  if ( !obj )
-  {
-    return nullptr;
-  }
-
-  const aeMeta::Type* objType = aeMeta::GetTypeFromObject( obj );
-  const aeMeta::Type* otherType = aeMeta::GetType< T >();
-  AE_ASSERT( objType );
-  AE_ASSERT( otherType );
-
-  if ( objType->IsType( otherType ) )
-  {
-    // Cast up to derived
-    return static_cast< T* >( obj );
-  }
-  else
-  {
-    return nullptr;
-  }
 }
 
 //------------------------------------------------------------------------------
