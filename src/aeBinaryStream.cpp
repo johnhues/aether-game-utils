@@ -214,17 +214,7 @@ void aeBinaryStream::SerializeBool( const bool& v )
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeArray( uint8_t* data, uint32_t length )
-{
-  AE_FAIL_MSG( "Not implemented" );
-}
-
-void aeBinaryStream::SerializeArray( const uint8_t* data, uint32_t length )
-{
-  AE_FAIL_MSG( "Not implemented" );
-}
-
-void aeBinaryStream::SerializeArray( aeArray< uint8_t>& array )
+void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array )
 {
   if ( !m_isValid )
   {
@@ -259,7 +249,7 @@ void aeBinaryStream::SerializeArray( aeArray< uint8_t>& array )
   }
 }
 
-void aeBinaryStream::SerializeArray( const aeArray< uint8_t>& array )
+void aeBinaryStream::SerializeArray( const aeArray< uint8_t >& array )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
   

@@ -285,11 +285,9 @@ void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
   AE_ASSERT( rStream->IsReader() );
 
   uint32_t netDataId = 0;
-  uint32_t type = 0;
   rStream->SerializeUint32( netDataId );
-  rStream->SerializeUint32( type );
 
-  aeNetData* netData = aeAlloc::Allocate< aeNetData >( type );
+  aeNetData* netData = aeAlloc::Allocate< aeNetData >();
   m_netDatas.Set( netData->GetId(), netData );
   m_remoteToLocalIdMap.Set( netDataId, netData->GetId() );
 
@@ -375,9 +373,9 @@ uint32_t aeNetReplicaServer::GetSendLength() const
 //------------------------------------------------------------------------------
 // aeNetReplicaDB member functions
 //------------------------------------------------------------------------------
-aeNetData* aeNetReplicaDB::CreateNetData( uint32_t type, const uint8_t* initData, uint32_t initDataLength )
+aeNetData* aeNetReplicaDB::CreateNetData( const uint8_t* initData, uint32_t initDataLength )
 {
-  aeNetData* netData = aeAlloc::Allocate< aeNetData >( type );
+  aeNetData* netData = aeAlloc::Allocate< aeNetData >();
   netData->m_SetLocal();
   netData->m_initData.Append( initData, initDataLength );
   m_netDatas.Set( netData->GetId(), netData );
@@ -394,7 +392,6 @@ aeNetData* aeNetReplicaDB::CreateNetData( uint32_t type, const uint8_t* initData
     aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
     wStream.SerializeRaw( aeNetReplicaServer::EventType::Create );
     wStream.SerializeUint32( netData->GetId().GetInternalId() );
-    wStream.SerializeUint32( type );
     wStream.SerializeArray( netData->m_initData );
   }
 
@@ -442,7 +439,6 @@ aeNetReplicaServer* aeNetReplicaDB::CreateServer()
   {
     const aeNetData* netData = m_netDatas.GetValue( i );
     wStream.SerializeUint32( netData->GetId().GetInternalId() );
-    wStream.SerializeUint32( netData->GetType() );
     wStream.SerializeArray( netData->m_initData );
   }
 

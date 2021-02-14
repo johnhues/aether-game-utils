@@ -86,8 +86,6 @@ public:
   void SerializeArray( char (&str)[ N ] );
   template< uint32_t N >
   void SerializeArray( const char (&str)[ N ] );
-  void SerializeArray( uint8_t* data, uint32_t length );
-  void SerializeArray( const uint8_t* data, uint32_t length );
   void SerializeArray( aeArray< uint8_t>& array );
   void SerializeArray( const aeArray< uint8_t>& array );
 
@@ -101,7 +99,7 @@ public:
   void SerializeRaw( const aeArray< uint8_t >& array );
 
   // Once the stream is invalid serialization calls will result in silent no-ops
-  void Invalidate() { AE_FAIL(); m_isValid = false; }
+  void Invalidate() { m_isValid = false; }
   bool IsValid() const { return m_isValid; }
   
   // Get mode
@@ -118,7 +116,7 @@ public:
   uint32_t GetRemaining() const { return m_length - m_offset; }
   void Discard( uint32_t length );
 
-// @TODO: The following should be private, while making it clear that the above static functions should
+// @TODO: The following should be private, while making it clear that the above static functions
 //        should be used instead of directly using a constructor.
 // private:
   enum class Mode
