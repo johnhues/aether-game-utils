@@ -907,10 +907,17 @@ inline std::ostream& operator << ( std::ostream& os, const aeFloat4x4& mat )
 class AE_ALIGN(16) aeQuat
 {
 public:
-  float i;
-  float j;
-  float k;
-  float r;
+  union
+  {
+    struct
+    {
+      float i;
+      float j;
+      float k;
+      float r;
+    };
+    float data[ 4 ];
+  };
   
   aeQuat() = default;
   aeQuat( const aeQuat& ) = default;
