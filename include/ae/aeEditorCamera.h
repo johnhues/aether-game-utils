@@ -35,46 +35,51 @@
 class aeEditorCamera
 {
 public:
-	aeEditorCamera();
-	void Update( const class aeInput* input, float dt );
-
-	void SetPosition( aeFloat3 pos ) { m_focusPos = pos - m_offset; }
-	void SetFocusDistance( float distance );
-	void Refocus( aeFloat3 pos );
-	void SetInputEnabled( bool enabled ); // True by default
-
-	aeFloat3 GetPosition() const { return m_focusPos + m_offset; }
-	aeFloat3 GetFocus() const { return m_focusPos; }
-	aeFloat3 GetForward() const { return m_forward; }
-	float GetDistance() const { return m_dist; }
-
-private:
-	enum class MoveMode
+	enum class Mode
 	{
 		None,
 		Rotate,
 		Pan,
 		Zoom,
 	};
+	
+	aeEditorCamera();
+	void Update( const class aeInput* input, float dt ); // @TODO: This should take input values, not the whole input system
 
-	void m_RecalculateOffset();
+	void Reset( aeFloat3 focus, aeFloat3 pos ); // Interupts refocus. Does not affect input mode.
+	void SetDistanceFromFocus( float distance ); // Updates position. Does not affect input mode or refocus.
+	void Refocus( aeFloat3 focus ); // Updates focus and position over time
+	void SetInputEnabled( bool enabled ); // True by default
 
+	Mode GetMode() const { return m_mode; }
+	aeFloat3 GetPosition() const { return m_focusPos + m_offset; }
+	aeFloat3 GetFocus() const { return m_focusPos; }
+	aeFloat3 GetForward() const { return m_forward; }
+	float GetDistanceFromFocus() const { return m_dist; }
+
+private:
+	// Called when focus, distance, yaw, or pitch is changed
+	void m_Precalculate();
+
+	// Mode
 	bool m_inputEnabled = true;
-
-	MoveMode m_mode = MoveMode::None;
-
-	aeFloat3 m_focusPos = aeFloat3( 0.0f );
-	aeFloat3 m_offset = aeFloat3( 0.0f );
+	Mode m_mode = Mode::None;
 	aeFloat3 m_refocusPos = aeFloat3( 0.0f );
 	bool m_refocus = false;
 
-	aeFloat3 m_forward = aeFloat3( 0.0f, 1.0f, 0.0f );
-	aeFloat3 m_right = aeFloat3( 1.0f, 0.0f, 0.0f );
-	aeFloat3 m_up = aeFloat3( 0.0f, 0.0f, 1.0f );
+	// Positioning
+	aeFloat3 m_focusPos = aeFloat3( 0.0f );
+	float m_dist = 5.0f;
 
+	// Rotation
 	float m_yaw = 0.77f;
 	float m_pitch = 0.5f;
-	float m_dist = 5.0f;
+
+	// Pre-calculated values for getters
+	aeFloat3 m_offset;
+	aeFloat3 m_forward;
+	aeFloat3 m_right;
+	aeFloat3 m_up;
 };
 
 #endif
