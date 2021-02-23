@@ -61,8 +61,23 @@ public:
   const char* GetKey( uint32_t idx ) const;
   const char* GetValue( uint32_t idx ) const;
   uint32_t Length() const { return m_entries.Length(); }
+  
+  // Supported automatic conversions which would otherwise be deleted below
+  void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
+  void SetInt( const char* key, uint32_t value ) { SetInt( key, (int32_t)value ); }
+  void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
 
 private:
+  // Prevent the above functions from being called accidentally through automatic conversions
+  template < typename T > void SetString( const char*, T ) = delete;
+  template < typename T > void SetInt( const char*, T ) = delete;
+  template < typename T > void SetFloat( const char*, T ) = delete;
+  template < typename T > void SetBool( const char*, T ) = delete;
+  template < typename T > void SetFloat2( const char*, T ) = delete;
+  template < typename T > void SetFloat3( const char*, T ) = delete;
+  template < typename T > void SetFloat4( const char*, T ) = delete;
+  template < typename T > void SetInt2( const char*, T ) = delete;
+  
   aeMap< aeStr128, aeStr128 > m_entries;
 };
 

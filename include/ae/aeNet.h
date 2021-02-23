@@ -60,6 +60,11 @@ inline void Serialize( aeBinaryStream* stream, AetherUuid* uuid )
 	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }
 
+inline void Serialize( aeBinaryStream* stream, const AetherUuid* uuid )
+{
+  stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
+}
+
 //------------------------------------------------------------------------------
 // aeNetData class
 //------------------------------------------------------------------------------
@@ -73,7 +78,6 @@ public:
   };
 
   // General
-  uint32_t GetType() const { return m_type; }
   bool IsAuthority() const { return m_local; }
 	
   // Server
@@ -107,7 +111,6 @@ private:
   bool m_Changed() const { return m_hash != m_prevHash; }
 
   bool m_local = false;
-  uint32_t m_type = 0;
   aeArray< uint8_t > m_initData;
   aeArray< uint8_t > m_data;
 
@@ -120,7 +123,6 @@ private:
   bool m_isPendingDelete = false;
 public:
   // Internal
-  aeNetData( uint32_t type ) { m_type = type; }
   AE_REFABLE( aeNetData );
 };
 
@@ -177,7 +179,7 @@ public:
 class aeNetReplicaDB
 {
 public:
-  aeNetData* CreateNetData( uint32_t type, const uint8_t* initData, uint32_t initDataLength );
+  aeNetData* CreateNetData( const uint8_t* initData, uint32_t initDataLength );
   void DestroyNetData( aeNetData* netData );
 
   aeNetReplicaServer* CreateServer();

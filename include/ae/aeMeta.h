@@ -53,8 +53,10 @@ static aeObject* PlacementNewInternal( aeObject* d ) { return new( d ) T(); }
 //------------------------------------------------------------------------------
 // External macros to force module linking
 //------------------------------------------------------------------------------
-#define META_FORCE_LINK_APP(x) { extern int force_link_##x; force_link_##x = 1; }
-#define META_FORCE_LINK_LIB( x ) int force_link_##x = 0;
+#define AE_META_CLASS_FORCE_LINK(x) \
+extern int force_link_##x; \
+struct Some_##x { Some_##x() { force_link_##x = 1; } }; \
+Some_##x some_##x;
 
 //------------------------------------------------------------------------------
 // Internal meta forward declarations
@@ -981,7 +983,7 @@ struct aeMeta::VarType< T* >
 // External meta class registerer
 //------------------------------------------------------------------------------
 #define AE_META_CLASS( x ) \
-META_FORCE_LINK_LIB( x ) \
+int force_link_##x = 0; \
 template <> const char* aeMeta::TypeName< x >::Get() { return #x; } \
 template <> void aeMeta::DefineType< x >( Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
 static aeMeta::TypeCreator< x > ae_type_creator_##x( #x );
