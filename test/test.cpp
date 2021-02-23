@@ -6,8 +6,8 @@
 //------------------------------------------------------------------------------
 #define CATCH_CONFIG_MAIN
 #include "catch2/catch.hpp"
-#include "aeArray.h"
-#include "aeTesting.h"
+#include "ae/aeArray.h"
+#include "ae/aeTesting.h"
 
 //------------------------------------------------------------------------------
 // ae::Array tests
@@ -51,7 +51,6 @@ TEST_CASE( "arrays elements can be removed by value", "[ae::Array]" )
     REQUIRE( array.Find( 9 ) == -1 );
     REQUIRE( array.Length() == 16 );
   }
-
 }
 
 TEST_CASE( "arrays can be sized and resized", "[ae::Array]" )
@@ -700,4 +699,39 @@ TEST_CASE( "remove all elements from array", "[ae::Array]" )
   REQUIRE( ae::LifetimeTester::moveCount == 0 );
   REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
   REQUIRE( ae::LifetimeTester::currentCount == 0 );
+}
+
+TEST_CASE( "arrays support range based loop", "[ae::Array]" )
+{
+  ae::Array< int > array;
+  const ae::Array< int >& constArray = array;
+  for ( uint32_t i = 0; i < 10; i++ )
+  {
+    array.Append( i );
+    array.Append( 0 );
+  }
+  REQUIRE( array.Length() == 20 );
+  int compare[] = { 0, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0, 8, 0, 9, 0 };
+
+  SECTION( "can iterate over non-const array" )
+  {
+    int i = 0;
+    for ( int& v : array )
+    {
+      REQUIRE( v == array[ i ] );
+      REQUIRE( v == compare[ i ] );
+      i++;
+    }
+  }
+  
+  SECTION( "can iterate over const array" )
+  {
+    int i = 0;
+    for ( const int& v : constArray )
+    {
+      REQUIRE( v == constArray[ i ] );
+      REQUIRE( v == compare[ i ] );
+      i++;
+    }
+  }
 }

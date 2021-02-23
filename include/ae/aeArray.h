@@ -67,6 +67,12 @@ public:
   uint32_t Length() const;
   uint32_t Size() const;
 
+  // Ranged-based loop
+  T* begin() { return &m_array[ 0 ]; }
+  T* end() { return &m_array[ m_length ]; }
+  const T* begin() const { return &m_array[ 0 ]; }
+  const T* end() const { return &m_array[ m_length ]; }
+
 private:
   uint32_t m_GetNextSize() const;
   

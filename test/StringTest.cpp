@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "catch2/catch.hpp"
-#include "aeString.h"
+#include "ae/aeString.h"
 
 #if _AE_WINDOWS_
   // @NOTE: Disable a few warnings caused by catch2 that should not affect correctness
