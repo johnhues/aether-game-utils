@@ -1,0 +1,40 @@
+#pragma ACME local ae
+#pragma ACME path .
+#pragma ACME path include/ae
+
+// {{includes}}
+
+#include "../include/ae/ae.h"
+
+//#include "aeCommonRender.h"
+// #include "ctpl_stl.h"
+// #include "stb_image.h"
+#include "aeAlloc.cpp"
+#include "aeAudio.cpp"
+#include "aeBinaryStream.cpp"
+#include "aeClock.cpp"
+#include "aeCommandLineArgs.cpp"
+#include "aeCommonRender.cpp"
+#include "aeCompactingAllocator.cpp"
+#include "aeDict.cpp"
+#include "aeEditorCamera.cpp"
+#include "aeFileDialog.cpp"
+#include "aeHotSpot.cpp"
+#include "aeImage.cpp"
+#include "aeInput.cpp"
+#include "aeLog.cpp"
+#include "aeMath.cpp"
+#include "aeMesh.cpp"
+#include "aeMeta.cpp"
+#include "aeNet.cpp"
+#include "aeNetClient.cpp"
+#include "aeNetServer.cpp"
+#include "aeOpenGLRender.cpp"
+#include "aePlatform.cpp"
+#include "aeSpline.cpp"
+#include "aeTerrain.cpp"
+#include "aeTerrainSDF.cpp"
+#include "aeTesting.cpp"
+#include "aeUuid.cpp"
+#include "aeVfs.cpp"
+#include "aeWindow.cpp"
