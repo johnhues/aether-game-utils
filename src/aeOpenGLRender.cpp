@@ -1245,14 +1245,14 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
     case aeTextureFormat::RGB8_SRGB:
 	  // ignore type
       glInternalFormat = GL_SRGB8;
-      glFormat = GL_SRGB;
+      glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case aeTextureFormat::RGBA8_SRGB:
 	  // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
-      glFormat = GL_SRGB_ALPHA;
+      glFormat = GL_RGBA;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;

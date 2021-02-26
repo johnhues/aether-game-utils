@@ -24,13 +24,15 @@ if(AE_BUILD_DEPS)
 	endif()
 	add_dependencies(${AE_LIBRARY_NAME}
 		zlib
-		assimp
 		Enet
 	)
 	if(NOT EMSCRIPTEN)
 		add_dependencies(${AE_LIBRARY_NAME} SDL2)
 	endif()
 endif()
+add_dependencies(${AE_LIBRARY_NAME}
+	assimp
+)
 
 # dependency linking
 # @TODO: Static libraries are always marked public so they can be linked directly
