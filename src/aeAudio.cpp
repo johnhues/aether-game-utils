@@ -25,6 +25,7 @@
 //------------------------------------------------------------------------------
 #include "aeAudio.h"
 #include "aeLog.h"
+#include "aeVfs.h"
 
 #if _AE_APPLE_
 #include <OpenAL/al.h>
@@ -54,7 +55,7 @@ void CheckALError()
   AE_FAIL();
 }
 
-void LoadWavFile( const char* filename, ALuint* buffer, float* length )
+void LoadWavFile( const char* fileName, ALuint* buffer, float* length )
 {
   struct ChunkHeader
   {
@@ -83,22 +84,30 @@ void LoadWavFile( const char* filename, ALuint* buffer, float* length )
   bool hasReadFormat = false;
   uint32_t dataSize = 0;
 
-  FILE* soundFile = fopen( filename, "rb" );
-  AE_ASSERT_MSG( soundFile, "Could not open wav file: #", filename );
+  uint32_t fileSize = aeVfs::GetSize( fileName );
+  AE_ASSERT_MSG( fileSize, "Could not open wav file: #", fileName );
+
+  uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
+  aeVfs::Read( fileName, fileBuffer, fileSize );
 
   ChunkHeader header;
-  fread( &header, sizeof( header ), 1, soundFile );
-  while ( !feof( soundFile ) )
+
+  uint32_t fileOffset = 0;
+  memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
+  fileOffset += sizeof(header);
+  while ( fileOffset < fileSize )
   {
     if ( memcmp( header.chunkId, "RIFF", 4 ) == 0 )
     {
       RiffChunk riff;
-      fread( &riff, sizeof( riff ), 1, soundFile );
+      memcpy( &riff, fileBuffer + fileOffset, sizeof(riff) );
+      fileOffset += sizeof(riff);
       AE_ASSERT( memcmp( riff.waveId, "WAVE", 4 ) == 0 );
     }
     else if ( memcmp( header.chunkId, "fmt ", 4 ) == 0 )
     {
-      fread( &wave_format, header.chunkSize, 1, soundFile );
+      memcpy( &wave_format, fileBuffer + fileOffset, header.chunkSize );
+      fileOffset += header.chunkSize;
       hasReadFormat = true;
     }
     else if ( memcmp( header.chunkId, "data", 4 ) == 0 )
@@ -107,7 +116,8 @@ void LoadWavFile( const char* filename, ALuint* buffer, float* length )
       AE_ASSERT_MSG( dataSize == 0, "Combining WAV data chunks is currently not supported" );
 
       uint8_t* data = new uint8_t[ header.chunkSize ];
-      fread( data, header.chunkSize, 1, soundFile );
+      memcpy( data, fileBuffer + fileOffset, header.chunkSize );
+      fileOffset += header.chunkSize;
 
       ALsizei size = header.chunkSize;
       ALsizei frequency = wave_format.sampleRate;
@@ -130,13 +140,14 @@ void LoadWavFile( const char* filename, ALuint* buffer, float* length )
     }
     else
     {
-      fseek( soundFile, header.chunkSize, SEEK_CUR );
+      fileOffset += header.chunkSize;
     }
 
-    fread( &header, sizeof( header ), 1, soundFile );
+    memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
+    fileOffset += sizeof(header);
   }
 
-  fclose( soundFile );
+  free( fileBuffer );
 
   CheckALError();
 
