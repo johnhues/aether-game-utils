@@ -117,6 +117,8 @@ struct aeColor
   static aeColor PicoIndigo();
   static aeColor PicoPink();
   static aeColor PicoPeach();
+  // Misc
+  static aeColor Magenta();
 
   float r;
   float g;
@@ -335,7 +337,7 @@ AE_IN_HIGHP vec4 v_color;
 
 void main()
 {
-  AE_COLOR = AE_RGBA_TO_SRGBA( AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color );
+  AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;
 }
 */
 class aeShader
@@ -405,37 +407,36 @@ struct aeTextureFormat
 {
   enum Type
   {
-	  Depth32F,
-	  
-	  R8, // unorm
-	  R16_UNORM, // for height fields
-	  R16F,
-	  R32F,
-	  
-	  RG8, // unorm
-	  RG16F,
-	  RG32F,
-	  
-	  RGB8, // unorm
-	  RGB8_SRGB,
-	  RGB16F,
-	  RGB32F,
-	  
-	  RGBA8, // unorm
-	  RGBA8_SRGB,
-	  RGBA16F,
-	  RGBA32F,
-	
-	// non-specific formats, prefer specific types above
+    Depth32F,
+
+    R8, // unorm
+    R16_UNORM, // for height fields
+    R16F,
+    R32F,
+
+    RG8, // unorm
+    RG16F,
+    RG32F,
+
+    RGB8, // unorm
+    RGB8_SRGB,
+    RGB16F,
+    RGB32F,
+
+    RGBA8, // unorm
+    RGBA8_SRGB,
+    RGBA16F,
+    RGBA32F,
+
+    // non-specific formats, prefer specific types above
     R = RGBA8,
-	RG = RG8,
+    RG = RG8,
     RGB = RGB8,
     RGBA = RGBA8,
-	  
-	Depth = Depth32F,
-	  
-    // TODO: these formats are implemented for OSX only for now
-	SRGB = RGB8_SRGB,
+
+    Depth = Depth32F,
+
+    SRGB = RGB8_SRGB,
     SRGBA = RGBA8_SRGB,
   };
 };
@@ -737,9 +738,6 @@ public:
   uint32_t GetHeight() const { return m_height; }
   float GetAspectRatio() const;
 
-  // this is so imgui and the main render copy can enable srgb writes in (GL only)
-  void EnableSRGBWrites( bool enable );
-	
   // have to inject a barrier to readback from active render target (GL only)
   void AddTextureBarrier();
 

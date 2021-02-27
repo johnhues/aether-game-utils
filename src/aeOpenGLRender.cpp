@@ -67,18 +67,7 @@
   void glClearDepth( float depth ) { glClearDepthf( depth ); }
 #endif
 
-// TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2, only adding for OSX right now
-// TODO: this will break any code using the SRGB_TO_RGB macros in shaders on this platform,
-// But the colors and blends will be handled correctly.
-#if defined(GL_ARB_framebuffer_sRGB)
-  #define READ_FROM_SRGB 1
-  #define WRITE_TO_SRGB  1
-#else
-  #define READ_FROM_SRGB 0
-  #define WRITE_TO_SRGB  0
-#endif
-
-  const uint32_t kMaxFrameBufferAttachments = 16;
+const uint32_t kMaxFrameBufferAttachments = 16;
 
 // Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
@@ -1027,16 +1016,7 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
     shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
   }
 #endif
-    
-  // TODO: don't use these macros anymore.  Fix srgb writes in engine on srgb/a textures.
-    // Utility
-  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return vec3( AE_SRGB_TO_RGB( _x.r ), AE_SRGB_TO_RGB( _x.g ), AE_SRGB_TO_RGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return vec3( AE_RGB_TO_SRGB( _x.r ), AE_RGB_TO_SRGB( _x.g ), AE_RGB_TO_SRGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( AE_SRGB_TO_RGB( _x.rgb ), _x.a ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( AE_RGB_TO_SRGB( _x.rgb ), _x.a ); }\n";
-    
+
   AE_ASSERT( sourceCount <= kPrependMax );
 
   for ( int32_t i = 0; i < defineCount; i++ )
@@ -1240,8 +1220,7 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
       break;
 		  
       // TODO: fix these constants, but they differ on ES2/3 and GL
-      // WebGL1 they require loading an extension (if present) to get at the constants.
-#if READ_FROM_SRGB      
+      // WebGL1 they require loading an extension (if present) to get at the constants.    
     case aeTextureFormat::RGB8_SRGB:
 	  // ignore type
       glInternalFormat = GL_SRGB8;
@@ -1256,7 +1235,6 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-#endif
     default:
       AE_FAIL_MSG( "Invalid texture format #", format );
       return;
@@ -1426,7 +1404,6 @@ void aeRenderTarget::Initialize( uint32_t width, uint32_t height )
   m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
   AE_CHECK_GL_ERROR();
 
-  // @TODO: Figure out if there are any implicit SRGB conversions happening here. Improve interface and visibility to user if there are.
   const char* vertexStr = "\
     AE_UNIFORM_HIGHP mat4 u_localToNdc;\
     AE_IN_HIGHP vec3 a_position;\
@@ -1640,6 +1617,9 @@ aeOpenGLRender::aeOpenGLRender()
 
 void aeOpenGLRender::Initialize( aeRender* render )
 {
+  // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
+  AE_STATIC_ASSERT( GL_ARB_framebuffer_sRGB );
+
 #if _AE_IOS_
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -1657,9 +1637,7 @@ void aeOpenGLRender::Initialize( aeRender* render )
   }
 #endif
 	
-#if WRITE_TO_SRGB
 	SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
-#endif
 	
 #if AE_GL_DEBUG_MODE
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
@@ -1696,32 +1674,7 @@ void aeOpenGLRender::Terminate( aeRender* render )
 
 void aeOpenGLRender::StartFrame( aeRender* render )
 {
-	// TODO: this is supposed to be able to be set in init only, but it crashes there
-	// also the SDL setting isn't setting this either, so have to set this here.
-#if WRITE_TO_SRGB
-	// often these getters are a big stall to GL, since it has to cpu sync to commands
-	//if ( !glIsEnabled(GL_FRAMEBUFFER_SRGB) )
-	{
-		EnableSRGBWrites( render, true );
-	}
-#endif
-}
-
-void aeOpenGLRender::EnableSRGBWrites( aeRender* render, bool enable )
-{
-// some articles say these only need to be set once, and only affect sRGB fbo
-// TODO: eliminate this interface if that's the case.  It wasn't fixing some
-// of the ImGUI rendering to be the same as before when it was wrapped.
-#if WRITE_TO_SRGB
-	if (enable)
-	{
-		glEnable( GL_FRAMEBUFFER_SRGB );
-	}
-	else
-	{
-		glDisable( GL_FRAMEBUFFER_SRGB );
-	}
-#endif
+	glEnable( GL_FRAMEBUFFER_SRGB );
 }
 
 void aeOpenGLRender::AddTextureBarrier( aeRender* render )
