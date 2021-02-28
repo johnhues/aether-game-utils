@@ -734,20 +734,18 @@ public:
   class aeWindow* GetWindow() { return m_window; }
   aeRenderTarget* GetCanvas() { return &m_canvas; }
 
-  uint32_t GetWidth() const { return m_width; }
-  uint32_t GetHeight() const { return m_height; }
+  uint32_t GetWidth() const { return m_canvas.GetWidth(); }
+  uint32_t GetHeight() const { return m_canvas.GetHeight(); }
   float GetAspectRatio() const;
 
   // have to inject a barrier to readback from active render target (GL only)
   void AddTextureBarrier();
 
 private:
+  void m_InitializeRender( uint32_t width, uint32_t height );
   class aeRenderInternal* m_renderInternal;
 
   class aeWindow* m_window;
-  uint32_t m_width;
-  uint32_t m_height;
-
   aeRenderTarget m_canvas;
 };
 

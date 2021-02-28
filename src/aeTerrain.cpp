@@ -36,7 +36,7 @@
 #endif
 
 #ifndef AE_TERRAIN_SIMD
-  #if _AE_LINUX_
+  #if _AE_LINUX_ || _AE_IOS_
     #define AE_TERRAIN_SIMD 0
   #else
     #define AE_TERRAIN_SIMD 1
@@ -59,7 +59,7 @@
 // SIMD headers
 //------------------------------------------------------------------------------
 #if AE_TERRAIN_SIMD
-  #if _AE_APPLE_
+  #if _AE_OSX_
     #include <x86intrin.h>
   #elif _AE_WINDOWS_
     #include <intrin.h>

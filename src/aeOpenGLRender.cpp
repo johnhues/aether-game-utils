@@ -49,6 +49,8 @@
   #include <OpenGL/gl3ext.h> // for glTexStorage2D, glTextureBarrierNV
 #endif
 
+// stbi should not load any files directly instead vfs should be used
+#define STBI_NO_STDIO
 #include <stb_image.h>
 
 #if _AE_DEBUG_ && !_AE_APPLE_
@@ -843,7 +845,11 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   }
 
   // Wireframe
+#if _AE_IOS_
+  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+#else
   glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+#endif
 
   // Now setup the shader
   glUseProgram( m_program );
@@ -1142,30 +1148,36 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   GLint unpackAlignment = 0;
   switch ( format )
   {
-		  // TODO: need D32F_S8 format
+    // TODO: need D32F_S8 format
     case aeTextureFormat::Depth32F:
-	    glInternalFormat = GL_DEPTH_COMPONENT32;
+      glInternalFormat = GL_DEPTH_COMPONENT32F;
       glFormat = GL_DEPTH_COMPONENT;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
 
     case aeTextureFormat::R8:
-  	case aeTextureFormat::R16_UNORM:
-  	case aeTextureFormat::R16F:
-  	case aeTextureFormat::R32F:	  
-  	  switch(format)
-  	  {
-  		  case aeTextureFormat::R8: glInternalFormat = GL_R8; break;
-  		  case aeTextureFormat::R16_UNORM:
-  			  glInternalFormat = GL_R16;
-  			  assert(glType == GL_UNSIGNED_SHORT);
-  			  break; // only on macOS
-  		  case aeTextureFormat::R16F: glInternalFormat = GL_R16F; break;
-  		  case aeTextureFormat::R32F: glInternalFormat = GL_R32F; break;
-  		  default: assert(false);
-  	  }
-			
+    case aeTextureFormat::R16_UNORM:
+    case aeTextureFormat::R16F:
+    case aeTextureFormat::R32F:
+      switch(format)
+      {
+        case aeTextureFormat::R8:
+          glInternalFormat = GL_R8;
+          break;
+        case aeTextureFormat::R16_UNORM:
+          glInternalFormat = GL_R16UI;
+          assert(glType == GL_UNSIGNED_SHORT);
+          break; // only on macOS
+        case aeTextureFormat::R16F:
+          glInternalFormat = GL_R16F;
+          break;
+        case aeTextureFormat::R32F:
+          glInternalFormat = GL_R32F;
+          break;
+        default: assert(false);
+      }
+
       glFormat = GL_RED;
       unpackAlignment = 1;
       m_hasAlpha = false;
@@ -1311,7 +1323,7 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 #if _AE_IOS_
   stbi_convert_iphone_png_to_rgb( 1 );
 #endif
-  bool is16BitImage = stbi_is_16_bit( file );
+  bool is16BitImage = stbi_is_16_bit_from_memory( fileBuffer, fileSize );
 
   uint8_t* image;
   if (is16BitImage)
@@ -1320,7 +1332,7 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
   }
   else
   {
-	  image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+    image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
   }
   AE_ASSERT( image );
 
@@ -1618,7 +1630,9 @@ aeOpenGLRender::aeOpenGLRender()
 void aeOpenGLRender::Initialize( aeRender* render )
 {
   // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
+#if !_AE_IOS_
   AE_STATIC_ASSERT( GL_ARB_framebuffer_sRGB );
+#endif
 
 #if _AE_IOS_
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
@@ -1674,14 +1688,17 @@ void aeOpenGLRender::Terminate( aeRender* render )
 
 void aeOpenGLRender::StartFrame( aeRender* render )
 {
+#if !_AE_IOS_
+  // This automatically enabled on opengl es3 and can't be turned off
 	glEnable( GL_FRAMEBUFFER_SRGB );
+#endif
 }
 
 void aeOpenGLRender::AddTextureBarrier( aeRender* render )
 {
 	// only GL has texture barrier for reading from previously written textures
 	// There are less draconian ways in desktop ES, and nothing in WebGL.
-#if _AE_WINDOWS_ || _AE_APPLE_
+#if _AE_WINDOWS_ || _AE_OSX_
 	glTextureBarrierNV();
 #endif
 }

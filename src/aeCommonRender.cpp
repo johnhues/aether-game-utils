@@ -1195,10 +1195,7 @@ void aeDebugRender::AddCube( aeFloat4x4 transform, aeColor color )
 aeRender::aeRender()
 {
   m_renderInternal = nullptr;
-
   m_window = nullptr;
-  m_width = 0;
-  m_height = 0;
 }
 
 aeRender::~aeRender()
@@ -1213,12 +1210,10 @@ void aeRender::InitializeOpenGL( class aeWindow* window )
 
   m_window = window;
 
-  // @TODO: Allow user to pass in a scaling factor / aspect ratio parameter
-  m_width = window->GetWidth();
-  m_height = window->GetHeight();
-
   m_renderInternal = aeAlloc::Allocate< aeOpenGLRender >();
   m_renderInternal->Initialize( this );
+  
+  m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
 }
 
 void aeRender::Terminate()
@@ -1235,14 +1230,9 @@ void aeRender::Activate()
 {
   AE_ASSERT( m_renderInternal );
 
-  m_width = m_window->GetWidth();
-  m_height = m_window->GetHeight();
-
-  if ( m_width != m_canvas.GetWidth() || m_height != m_canvas.GetHeight() )
+  if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
   {
-    m_canvas.Initialize( m_width, m_height );
-    m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
-    m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+    m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
   }
   m_canvas.Activate();
 
@@ -1263,17 +1253,25 @@ void aeRender::Present()
 
 float aeRender::GetAspectRatio() const
 {
-  if ( m_width + m_height == 0 )
+  if ( m_canvas.GetWidth() + m_canvas.GetHeight() == 0 )
   {
     return 0.0f;
   }
   else
   {
-    return m_width / (float)m_height;
+    return m_canvas.GetWidth() / (float)m_canvas.GetHeight();
   }
 }
 
 void aeRender::AddTextureBarrier()
 {
 	m_renderInternal->AddTextureBarrier( this );
+}
+
+void aeRender::m_InitializeRender( uint32_t width, uint32_t height )
+{
+  // @TODO: Allow user to pass in a scaling factor / aspect ratio parameter
+  m_canvas.Initialize( width, height );
+  m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+  m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
 }
