@@ -93,15 +93,15 @@ int main()
     // Create new replicated objects
     while ( aeRef< aeNetData > netData = replicationClient.PumpCreated() )
     {
-      if ( netData->GetType() == kReplicaType_Green )
+      // if ( netData->GetType() == kReplicaType_Green )
       {
         AE_LOG( "Create green" );
         greens.Append( Green() ).netData = netData;
       }
-      else
-      {
-        AE_FAIL();
-      }
+      // else
+      // {
+      //   AE_FAIL();
+      // }
     }
     
     // Game Update

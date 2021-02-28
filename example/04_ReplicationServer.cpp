@@ -73,7 +73,7 @@ int main()
     green->size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
     green->rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
     green->life = 5.0f + aeMath::Random( 0.7f, 1.3f );
-    green->netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
+    green->netData = replicaDB.CreateNetData( nullptr, 0 );
   };
   AddGreen();
 
