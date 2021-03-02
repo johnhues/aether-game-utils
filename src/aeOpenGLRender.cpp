@@ -49,6 +49,8 @@
   #include <OpenGL/gl3ext.h> // for glTexStorage2D, glTextureBarrierNV
 #endif
 
+// stbi should not load any files directly instead vfs should be used
+#define STBI_NO_STDIO
 #include <stb_image.h>
 
 #if _AE_DEBUG_ && !_AE_APPLE_
@@ -67,18 +69,7 @@
   void glClearDepth( float depth ) { glClearDepthf( depth ); }
 #endif
 
-// TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2, only adding for OSX right now
-// TODO: this will break any code using the SRGB_TO_RGB macros in shaders on this platform,
-// But the colors and blends will be handled correctly.
-#if defined(GL_ARB_framebuffer_sRGB)
-  #define READ_FROM_SRGB 1
-  #define WRITE_TO_SRGB  1
-#else
-  #define READ_FROM_SRGB 0
-  #define WRITE_TO_SRGB  0
-#endif
-
-  const uint32_t kMaxFrameBufferAttachments = 16;
+const uint32_t kMaxFrameBufferAttachments = 16;
 
 // Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
@@ -854,7 +845,11 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   }
 
   // Wireframe
+#if _AE_IOS_
+  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+#else
   glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+#endif
 
   // Now setup the shader
   glUseProgram( m_program );
@@ -1027,16 +1022,7 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
     shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
   }
 #endif
-    
-  // TODO: don't use these macros anymore.  Fix srgb writes in engine on srgb/a textures.
-    // Utility
-  shaderSource[ sourceCount++ ] = "float AE_SRGB_TO_RGB( float _x ) { return pow( _x, 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "float AE_RGB_TO_SRGB( float _x ) { return pow( _x, 1.0 / 2.2 ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_SRGB_TO_RGB( vec3 _x ) { return vec3( AE_SRGB_TO_RGB( _x.r ), AE_SRGB_TO_RGB( _x.g ), AE_SRGB_TO_RGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec3 AE_RGB_TO_SRGB( vec3 _x ) { return vec3( AE_RGB_TO_SRGB( _x.r ), AE_RGB_TO_SRGB( _x.g ), AE_RGB_TO_SRGB( _x.b ) ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_SRGBA_TO_RGBA( vec4 _x ) { return vec4( AE_SRGB_TO_RGB( _x.rgb ), _x.a ); }\n";
-  shaderSource[ sourceCount++ ] = "vec4 AE_RGBA_TO_SRGBA( vec4 _x ) { return vec4( AE_RGB_TO_SRGB( _x.rgb ), _x.a ); }\n";
-    
+
   AE_ASSERT( sourceCount <= kPrependMax );
 
   for ( int32_t i = 0; i < defineCount; i++ )
@@ -1162,30 +1148,36 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
   GLint unpackAlignment = 0;
   switch ( format )
   {
-		  // TODO: need D32F_S8 format
+    // TODO: need D32F_S8 format
     case aeTextureFormat::Depth32F:
-	    glInternalFormat = GL_DEPTH_COMPONENT32;
+      glInternalFormat = GL_DEPTH_COMPONENT32F;
       glFormat = GL_DEPTH_COMPONENT;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
 
     case aeTextureFormat::R8:
-  	case aeTextureFormat::R16_UNORM:
-  	case aeTextureFormat::R16F:
-  	case aeTextureFormat::R32F:	  
-  	  switch(format)
-  	  {
-  		  case aeTextureFormat::R8: glInternalFormat = GL_R8; break;
-  		  case aeTextureFormat::R16_UNORM:
-  			  glInternalFormat = GL_R16;
-  			  assert(glType == GL_UNSIGNED_SHORT);
-  			  break; // only on macOS
-  		  case aeTextureFormat::R16F: glInternalFormat = GL_R16F; break;
-  		  case aeTextureFormat::R32F: glInternalFormat = GL_R32F; break;
-  		  default: assert(false);
-  	  }
-			
+    case aeTextureFormat::R16_UNORM:
+    case aeTextureFormat::R16F:
+    case aeTextureFormat::R32F:
+      switch(format)
+      {
+        case aeTextureFormat::R8:
+          glInternalFormat = GL_R8;
+          break;
+        case aeTextureFormat::R16_UNORM:
+          glInternalFormat = GL_R16UI;
+          assert(glType == GL_UNSIGNED_SHORT);
+          break; // only on macOS
+        case aeTextureFormat::R16F:
+          glInternalFormat = GL_R16F;
+          break;
+        case aeTextureFormat::R32F:
+          glInternalFormat = GL_R32F;
+          break;
+        default: assert(false);
+      }
+
       glFormat = GL_RED;
       unpackAlignment = 1;
       m_hasAlpha = false;
@@ -1240,23 +1232,21 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
       break;
 		  
       // TODO: fix these constants, but they differ on ES2/3 and GL
-      // WebGL1 they require loading an extension (if present) to get at the constants.
-#if READ_FROM_SRGB      
+      // WebGL1 they require loading an extension (if present) to get at the constants.    
     case aeTextureFormat::RGB8_SRGB:
 	  // ignore type
       glInternalFormat = GL_SRGB8;
-      glFormat = GL_SRGB;
+      glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case aeTextureFormat::RGBA8_SRGB:
 	  // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
-      glFormat = GL_SRGB_ALPHA;
+      glFormat = GL_RGBA;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-#endif
     default:
       AE_FAIL_MSG( "Invalid texture format #", format );
       return;
@@ -1333,7 +1323,7 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
 #if _AE_IOS_
   stbi_convert_iphone_png_to_rgb( 1 );
 #endif
-  bool is16BitImage = stbi_is_16_bit( file );
+  bool is16BitImage = stbi_is_16_bit_from_memory( fileBuffer, fileSize );
 
   uint8_t* image;
   if (is16BitImage)
@@ -1342,7 +1332,7 @@ void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, ae
   }
   else
   {
-	  image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+    image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
   }
   AE_ASSERT( image );
 
@@ -1426,7 +1416,6 @@ void aeRenderTarget::Initialize( uint32_t width, uint32_t height )
   m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
   AE_CHECK_GL_ERROR();
 
-  // @TODO: Figure out if there are any implicit SRGB conversions happening here. Improve interface and visibility to user if there are.
   const char* vertexStr = "\
     AE_UNIFORM_HIGHP mat4 u_localToNdc;\
     AE_IN_HIGHP vec3 a_position;\
@@ -1640,6 +1629,11 @@ aeOpenGLRender::aeOpenGLRender()
 
 void aeOpenGLRender::Initialize( aeRender* render )
 {
+  // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
+#if !_AE_IOS_
+  AE_STATIC_ASSERT( GL_ARB_framebuffer_sRGB );
+#endif
+
 #if _AE_IOS_
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -1657,9 +1651,7 @@ void aeOpenGLRender::Initialize( aeRender* render )
   }
 #endif
 	
-#if WRITE_TO_SRGB
 	SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
-#endif
 	
 #if AE_GL_DEBUG_MODE
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
@@ -1696,31 +1688,9 @@ void aeOpenGLRender::Terminate( aeRender* render )
 
 void aeOpenGLRender::StartFrame( aeRender* render )
 {
-	// TODO: this is supposed to be able to be set in init only, but it crashes there
-	// also the SDL setting isn't setting this either, so have to set this here.
-#if WRITE_TO_SRGB
-	// often these getters are a big stall to GL, since it has to cpu sync to commands
-	//if ( !glIsEnabled(GL_FRAMEBUFFER_SRGB) )
-	{
-		EnableSRGBWrites( render, true );
-	}
-#endif
-}
-
-void aeOpenGLRender::EnableSRGBWrites( aeRender* render, bool enable )
-{
-// some articles say these only need to be set once, and only affect sRGB fbo
-// TODO: eliminate this interface if that's the case.  It wasn't fixing some
-// of the ImGUI rendering to be the same as before when it was wrapped.
-#if WRITE_TO_SRGB
-	if (enable)
-	{
-		glEnable( GL_FRAMEBUFFER_SRGB );
-	}
-	else
-	{
-		glDisable( GL_FRAMEBUFFER_SRGB );
-	}
+#if !_AE_IOS_
+  // This automatically enabled on opengl es3 and can't be turned off
+	glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
 }
 
@@ -1728,7 +1698,7 @@ void aeOpenGLRender::AddTextureBarrier( aeRender* render )
 {
 	// only GL has texture barrier for reading from previously written textures
 	// There are less draconian ways in desktop ES, and nothing in WebGL.
-#if _AE_WINDOWS_ || _AE_APPLE_
+#if _AE_WINDOWS_ || _AE_OSX_
 	glTextureBarrierNV();
 #endif
 }

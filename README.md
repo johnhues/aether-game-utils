@@ -104,7 +104,7 @@ sudo make install
 ## Mac Setup
 Installing dependencies:
 ```
-brew install sdl2 assimp enet ossp-uuid
+brew install sdl2 assimp enet ossp-uuid libpng
 ```
 Building:
 ```

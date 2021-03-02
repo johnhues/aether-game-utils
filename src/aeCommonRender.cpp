@@ -81,6 +81,8 @@ aeColor aeColor::PicoBlue() { static aeColor c = aeColor::PS( 41, 173, 255 ); re
 aeColor aeColor::PicoIndigo() { static aeColor c = aeColor::PS( 131, 118, 156 ); return c; }
 aeColor aeColor::PicoPink() { static aeColor c = aeColor::PS( 255, 119, 168 ); return c; }
 aeColor aeColor::PicoPeach() { static aeColor c = aeColor::PS( 255, 204, 170 ); return c; }
+// Misc
+aeColor aeColor::Magenta() { return aeColor( 1.0f, 0.0f, 1.0f ); }
 
 aeColor::aeColor( float rgb )
   : r( rgb ), g( rgb ), b( rgb ), a( 1.0f )
@@ -550,7 +552,7 @@ void aeSpriteRender::m_LoadShaderAll()
     AE_IN_HIGHP vec4 v_color;\
     void main()\
     {\
-      AE_COLOR = AE_RGBA_TO_SRGBA( AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color );\
+      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
     }";
   
   m_shaderAll = aeAlloc::Allocate< aeShader >();
@@ -583,9 +585,9 @@ void aeSpriteRender::m_LoadShaderOpaque()
     AE_IN_HIGHP vec4 v_color;\
     void main()\
     {\
-      vec4 color = AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color;\
+      vec4 color = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
       if ( color.a < 0.99 ) { discard; }\
-      AE_COLOR = AE_RGBA_TO_SRGBA( color );\
+      AE_COLOR = color;\
     }";
   
   m_shaderOpaque = aeAlloc::Allocate< aeShader >();
@@ -618,9 +620,9 @@ void aeSpriteRender::m_LoadShaderTransparent()
     AE_IN_HIGHP vec4 v_color;\
     void main()\
     {\
-      vec4 color = AE_SRGBA_TO_RGBA( AE_TEXTURE2D( u_tex, v_uv ) ) * v_color;\
+      vec4 color = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
       if ( color.a >= 0.99 ) { discard; }\
-      AE_COLOR = AE_RGBA_TO_SRGBA( color );\
+      AE_COLOR = color;\
     }";
   
   m_shaderTransparent = aeAlloc::Allocate< aeShader >();
@@ -665,9 +667,8 @@ void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filt
     AE_IN_HIGHP vec4 v_color;\
     void main()\
     {\
-      if ( AE_SRGB_TO_RGB( AE_TEXTURE2D( u_tex, v_uv ).r ) < 0.5 ) { discard; };\
+      if ( AE_TEXTURE2D( u_tex, v_uv ).r < 0.5 ) { discard; };\
       AE_COLOR = v_color;\
-      AE_COLOR = AE_RGBA_TO_SRGBA( AE_COLOR );\
     }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
@@ -1194,10 +1195,7 @@ void aeDebugRender::AddCube( aeFloat4x4 transform, aeColor color )
 aeRender::aeRender()
 {
   m_renderInternal = nullptr;
-
   m_window = nullptr;
-  m_width = 0;
-  m_height = 0;
 }
 
 aeRender::~aeRender()
@@ -1212,12 +1210,10 @@ void aeRender::InitializeOpenGL( class aeWindow* window )
 
   m_window = window;
 
-  // @TODO: Allow user to pass in a scaling factor / aspect ratio parameter
-  m_width = window->GetWidth();
-  m_height = window->GetHeight();
-
   m_renderInternal = aeAlloc::Allocate< aeOpenGLRender >();
   m_renderInternal->Initialize( this );
+  
+  m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
 }
 
 void aeRender::Terminate()
@@ -1234,14 +1230,9 @@ void aeRender::Activate()
 {
   AE_ASSERT( m_renderInternal );
 
-  m_width = m_window->GetWidth();
-  m_height = m_window->GetHeight();
-
-  if ( m_width != m_canvas.GetWidth() || m_height != m_canvas.GetHeight() )
+  if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
   {
-    m_canvas.Initialize( m_width, m_height );
-    m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
-    m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+    m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
   }
   m_canvas.Activate();
 
@@ -1262,22 +1253,25 @@ void aeRender::Present()
 
 float aeRender::GetAspectRatio() const
 {
-  if ( m_width + m_height == 0 )
+  if ( m_canvas.GetWidth() + m_canvas.GetHeight() == 0 )
   {
     return 0.0f;
   }
   else
   {
-    return m_width / (float)m_height;
+    return m_canvas.GetWidth() / (float)m_canvas.GetHeight();
   }
-}
-
-void aeRender::EnableSRGBWrites(bool enable)
-{
-	m_renderInternal->EnableSRGBWrites( this, enable );
 }
 
 void aeRender::AddTextureBarrier()
 {
 	m_renderInternal->AddTextureBarrier( this );
+}
+
+void aeRender::m_InitializeRender( uint32_t width, uint32_t height )
+{
+  // @TODO: Allow user to pass in a scaling factor / aspect ratio parameter
+  m_canvas.Initialize( width, height );
+  m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+  m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
 }

@@ -289,7 +289,7 @@ int main()
 
   input.Initialize( headless ? nullptr : &window );
   timeStep.SetTimeStep( 1.0f / 60.0f );
-  camera.SetFocusDistance( 100.0f );
+  camera.SetDistanceFromFocus( 100.0f );
   
   if ( !headless )
   {
