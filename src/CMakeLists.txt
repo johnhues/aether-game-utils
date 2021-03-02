@@ -30,7 +30,7 @@ if(AE_BUILD_DEPS)
 		add_dependencies(${AE_LIBRARY_NAME} SDL2)
 	endif()
 endif()
-add_dependencies(${AE_LIBRARY_NAME}
+target_link_libraries(${AE_LIBRARY_NAME}
 	assimp
 )
 
