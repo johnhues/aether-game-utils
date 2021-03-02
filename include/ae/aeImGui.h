@@ -57,8 +57,10 @@ extern bool gGL41;
 class aeImGui
 {
 public:
-	void Initialize()
+	void Initialize( aeRender* render, aeInput* input )
 	{
+    m_render = render;
+    m_input = input;
 		m_Initialize();
 	}
 
@@ -79,62 +81,48 @@ public:
 		ImGui::DestroyContext();
 	}
 
-	void NewFrame( aeRender* render, aeInput* input, float dt )
+	void NewFrame( float dt )
 	{
 		AE_ASSERT( m_init );
 
-		const InputState* inputState = input->GetState();
-		ImGuiIO& io = ImGui::GetIO();
-
-		io.AddInputCharactersUTF8( input->GetTextInput() );
-		input->SetTextMode( io.WantTextInput );
-
-		io.DeltaTime = dt;
-		
-		// @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
-		io.MouseDown[ 0 ] = inputState->mouseLeft;
-		io.MouseDown[ 1 ] = inputState->mouseRight;
-		io.MouseDown[ 2 ] = inputState->mouseMiddle;
-		io.MouseWheel += inputState->scroll;
-		io.MousePos = ImVec2( inputState->mousePixelPos.x, render->GetHeight() - inputState->mousePixelPos.y );
-		
-		AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
-		for ( uint32_t i = 0; i < kKeyCount; i++ )
-		{
-			io.KeysDown[ i ] = inputState->Get( (aeKey)i );
-		}
-		io.KeyShift = inputState->shift;
-		io.KeyCtrl = inputState->ctrl;
-		//io.KeyAlt = ( ( SDL_GetModState() & KMOD_ALT ) != 0 );
-//#ifdef _WIN32
-//		io.KeySuper = false;
-//#else
-//		io.KeySuper = ( ( SDL_GetModState() & KMOD_GUI ) != 0 );
-//#endif
-
-		ImGui::GetIO().DisplaySize = ImVec2( render->GetWidth(), render->GetHeight() );
+    ImGuiIO& io = ImGui::GetIO();
     
-    // Set font scale to scale all UI for high dpi displays
-    float dpiScale = render->GetWindow()->GetDpiScale();
-    const char* fontPath =
-#if _AE_APPLE_
-    "/System/Library/Fonts/Supplemental/Arial.ttf";
-#elif _AE_WIN_
-    "c:\\Windows\\Fonts\\Arial.ttf";
-#else
-    "";
-#endif
-    if ( aeVfs::GetSize( fontPath ) )
+    io.DeltaTime = dt;
+
+    if ( !m_headless )
     {
-      ImGui::GetIO().Fonts->AddFontFromFileTTF( fontPath, dpiScale * 14.0f, nullptr, ImGui::GetIO().Fonts->GetGlyphRangesDefault() );
+      const InputState* inputState = m_input->GetState();
+      io.AddInputCharactersUTF8( m_input->GetTextInput() );
+      m_input->SetTextMode( io.WantTextInput );
+      
+      // @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
+      io.MouseDown[ 0 ] = inputState->mouseLeft;
+      io.MouseDown[ 1 ] = inputState->mouseRight;
+      io.MouseDown[ 2 ] = inputState->mouseMiddle;
+      io.MouseWheel += inputState->scroll;
+      if ( !m_headless )
+      {
+        io.MousePos = ImVec2( inputState->mousePixelPos.x, m_render->GetHeight() - inputState->mousePixelPos.y );
+      }
+      
+      AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
+      for ( uint32_t i = 0; i < kKeyCount; i++ )
+      {
+        io.KeysDown[ i ] = inputState->Get( (aeKey)i );
+      }
+      io.KeyShift = inputState->shift;
+      io.KeyCtrl = inputState->ctrl;
+//      io.KeyAlt = ( ( SDL_GetModState() & KMOD_ALT ) != 0 );
+//#ifdef _WIN32
+//      io.KeySuper = false;
+//#else
+//      io.KeySuper = ( ( SDL_GetModState() & KMOD_GUI ) != 0 );
+//#endif
     }
-    else
+
+    if ( !m_headless )
     {
-      ImGui::GetIO().FontGlobalScale = dpiScale;
-    }
-		
-		if ( !m_headless )
-		{
+      ImGui::GetIO().DisplaySize = ImVec2( m_render->GetWidth(), m_render->GetHeight() );
 			ImGui_ImplOpenGL3_NewFrame();
 		}
 		ImGui::NewFrame();
@@ -328,6 +316,30 @@ private:
 		io.KeyMap[ ImGuiKey_X ] = (uint32_t)aeKey::X;
 		io.KeyMap[ ImGuiKey_Y ] = (uint32_t)aeKey::Y;
 		io.KeyMap[ ImGuiKey_Z ] = (uint32_t)aeKey::Z;
+    
+    if ( !m_headless )
+    {
+      // Set font scale to scale all UI for high dpi displays
+      float dpiScale = m_render->GetWindow()->GetDpiScale();
+      const char* fontPath =
+#if _AE_APPLE_
+      "/System/Library/Fonts/Supplemental/Arial.ttf";
+#elif _AE_WIN_
+      "c:\\Windows\\Fonts\\Arial.ttf";
+#else
+      "";
+#endif
+      if ( aeVfs::GetSize( fontPath ) )
+      {
+        ImGui::GetIO().Fonts->AddFontFromFileTTF( fontPath, dpiScale * 14.0f, nullptr, ImGui::GetIO().Fonts->GetGlyphRangesDefault() );
+      }
+      else
+      {
+        ImGui::GetIO().FontGlobalScale = dpiScale;
+      }
+      // Also scale styles, not necessary but it looks better. Note this is not idempotent!!
+      ImGui::GetStyle().ScaleAllSizes( dpiScale );
+    }
 
 		m_init = true;
 	}
@@ -352,6 +364,7 @@ private:
 	bool m_init = false;
 	bool m_headless = false;
 	aeRender* m_render = nullptr;
+  aeInput* m_input = nullptr;
 };
 
 //------------------------------------------------------------------------------
