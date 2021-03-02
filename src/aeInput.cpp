@@ -57,6 +57,15 @@ aeFloat2 ApplyAnalogDeadzone( aeFloat2 analog, float deadzone )
   }
 }
 
+float aeGetDpiScale( SDL_Window* window )
+{
+  int a = 1;
+  int b = 1;
+  SDL_GetWindowSize( window, &a, nullptr );
+  SDL_GL_GetDrawableSize( window, &b, nullptr );
+  return b / (float)a;
+}
+
 //------------------------------------------------------------------------------
 // InputState member functions
 //------------------------------------------------------------------------------
@@ -342,15 +351,19 @@ void aeInput::Pump()
         SetMouseCaptured( false );
       }
       else if ( event.type == SDL_MOUSEMOTION )
-      { 
+      {
+        float dpiMult = aeGetDpiScale( (SDL_Window*)m_window->window );
         if ( m_mouseCaptured )
         {
           m_prevInput.mousePixelPos = aeInt2( 0 );
           m_input.mousePixelPos = ignoreMouseMovement ? aeInt2( 0 ) : aeInt2( event.motion.xrel, -event.motion.yrel );
+          m_input.mousePixelPos = ( m_input.mousePixelPos * dpiMult ).FloorCopy();
         }
         else
         {
-          m_input.mousePixelPos = aeInt2( event.motion.x, m_window->GetHeight() - event.motion.y );
+          m_input.mousePixelPos = aeInt2( event.motion.x, event.motion.y );
+          m_input.mousePixelPos = ( m_input.mousePixelPos * dpiMult ).FloorCopy();
+          m_input.mousePixelPos.y = m_window->GetHeight() - m_input.mousePixelPos.y;
         }
       }
       else if ( event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP )
