@@ -197,6 +197,11 @@ aeInt2 aeFloat2::CeilCopy() const
   return aeInt2( aeMath::Ceil( x ), aeMath::Ceil( y ) );
 }
 
+aeInt2 aeFloat2::TruncateCopy() const
+{
+  return aeInt2( x, y );
+}
+
 aeFloat2 aeFloat2::RotateCopy( float rotation ) const
 {
   float sinTheta = std::sin( rotation );
@@ -550,6 +555,11 @@ aeInt3 aeFloat3::CeilCopy() const
     aeMath::Ceil( y ),
     aeMath::Ceil( z )
   );
+}
+
+aeInt3 aeFloat3::TruncateCopy() const
+{
+  return aeInt3( x, y, z );
 }
 
 float aeFloat3::GetAngleBetween(const aeFloat3& v) const

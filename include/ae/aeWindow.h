@@ -50,19 +50,22 @@ public:
   int32_t GetWidth() const { return m_width; }
   int32_t GetHeight() const { return m_height; }
   bool GetFullScreen() const { return m_fullScreen; }
+  float GetDpiScale() const { return m_dpiScale; }
 
 private:
   void m_Initialize();
+  void m_UpdateDpiScale();
     
   aeInt2 m_pos;
   int32_t m_width;
   int32_t m_height;
+  float m_dpiScale;
   bool m_fullScreen;
 
 public:
   // Internal
   void m_UpdatePos( aeInt2 pos ) { m_pos = pos; }
-  void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
+  void m_UpdateWidthHeight( int32_t width, int32_t height );
 
   void* window;
 };

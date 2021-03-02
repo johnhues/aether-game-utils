@@ -333,6 +333,7 @@ struct AE_ALIGN(16) aeFloat2
   explicit aeFloat2( float v ) : x( v ), y( v ) {}
   aeFloat2( float x, float y ) : x( x ), y( y ) {}
   explicit aeFloat2( const struct aeInt2& v );
+  
   static aeFloat2 FromAngle( float angle ) { return aeFloat2( aeMath::Cos( angle ), aeMath::Sin( angle ) );}
 
   bool operator ==( const aeFloat2& o ) const { return x == o.x && y == o.y; }
@@ -342,11 +343,14 @@ struct AE_ALIGN(16) aeFloat2
   void operator+= (const aeFloat2 &v);
   aeFloat2 operator- ( const aeFloat2 &v ) const;
   void operator-= ( const aeFloat2 &v );
+  
   float Dot( const aeFloat2 &v ) const;
   static float Dot( const aeFloat2& a, const aeFloat2& b );
+  
   float Length() const;
   float LengthSquared() const;
   float Atan2() const;
+  
   aeFloat2 operator* (const float s) const;
   void operator*=( const float s );
   aeFloat2 operator* (const aeFloat2 s) const;
@@ -355,14 +359,19 @@ struct AE_ALIGN(16) aeFloat2
   void operator/= (const float s);
   aeFloat2 operator/ ( const aeFloat2 s ) const;
   void operator/= ( const aeFloat2 s );
+  
   aeFloat2 Lerp(const aeFloat2& end, float t) const;
+  
   float Normalize();
   aeFloat2 NormalizeCopy() const;
   float SafeNormalize();
   aeFloat2 SafeNormalizeCopy() const;
+  
   aeInt2 NearestCopy() const;
   aeInt2 FloorCopy() const;
   aeInt2 CeilCopy() const;
+  aeInt2 TruncateCopy() const;
+  
   aeFloat2 RotateCopy( float rotation ) const;
   float GetAngle() const;
   static aeFloat2 Reflect( aeFloat2 v, aeFloat2 n );
@@ -402,7 +411,7 @@ struct aeInt2
   explicit aeInt2( int32_t _v ) : x( _v ), y( _v ) {}
   explicit aeInt2( const struct aeInt3& v );
   aeInt2( int32_t _x, int32_t _y ) : x( _x ), y( _y ) {}
-  // @NOTE: No automatic conversion from aeFloat2 because rounding type should be explicit!
+  // @NOTE: Use NearestCopy(), FloorCopy(), CeilCopy(), TruncateCopy() to convert from aeFloat2
   
   int32_t& operator[]( int32_t i ) { return data[ i ]; }
   const int32_t& operator[]( int32_t i ) const { return data[ i ]; }
@@ -527,6 +536,7 @@ public:
   aeInt3 NearestCopy() const;
   aeInt3 FloorCopy() const;
   aeInt3 CeilCopy() const;
+  aeInt3 TruncateCopy() const;
 
   float GetAngleBetween(const aeFloat3& v) const;
   void AddRotationXY(float rotation);
@@ -570,7 +580,7 @@ struct AE_ALIGN(16) aeInt3
   aeInt3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
   explicit aeInt3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
   explicit aeInt3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-  // @NOTE: No conversion from aeFloat3 because rounding type should be explicit!
+  // @NOTE: Use NearestCopy(), FloorCopy(), CeilCopy(), TruncateCopy() to convert from aeFloat3
   
   int32_t& operator[]( int32_t i ) { return data[ i ]; }
   const int32_t& operator[]( int32_t i ) const { return data[ i ]; }

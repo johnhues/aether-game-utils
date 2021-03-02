@@ -45,6 +45,8 @@
 #include "aeInput.h"
 #include "aeMeta.h"
 #include "aeRender.h"
+#include "aeWindow.h"
+#include "aeVfs.h"
 
 // this is out of aeRender for macOS/winOS
 extern bool gGL41;
@@ -111,6 +113,25 @@ public:
 //#endif
 
 		ImGui::GetIO().DisplaySize = ImVec2( render->GetWidth(), render->GetHeight() );
+    
+    // Set font scale to scale all UI for high dpi displays
+    float dpiScale = render->GetWindow()->GetDpiScale();
+    const char* fontPath =
+#if _AE_APPLE_
+    "/System/Library/Fonts/Supplemental/Arial.ttf";
+#elif _AE_WIN_
+    "c:\\Windows\\Fonts\\Arial.ttf";
+#else
+    "";
+#endif
+    if ( aeVfs::GetSize( fontPath ) )
+    {
+      ImGui::GetIO().Fonts->AddFontFromFileTTF( fontPath, dpiScale * 14.0f, nullptr, ImGui::GetIO().Fonts->GetGlyphRangesDefault() );
+    }
+    else
+    {
+      ImGui::GetIO().FontGlobalScale = dpiScale;
+    }
 		
 		if ( !m_headless )
 		{

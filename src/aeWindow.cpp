@@ -37,6 +37,7 @@ aeWindow::aeWindow()
   m_pos = aeInt2( 0 );
   m_width = 0;
   m_height = 0;
+  m_dpiScale = 1.0f; // Don't bother getting actual value until opengl context exists because SDL2 needs it
   m_fullScreen = false;
 }
 
@@ -150,5 +151,31 @@ void aeWindow::SetSize( uint32_t width, uint32_t height )
     SDL_SetWindowSize( (SDL_Window*)window, width, height );
     m_width = width;
     m_height = height;
+    m_UpdateDpiScale();
   }
+}
+
+void aeWindow::m_UpdateDpiScale()
+{
+  int a = 0;
+  int b = 0;
+  SDL_GetWindowSize( (SDL_Window*)window, &a, nullptr );
+  SDL_GL_GetDrawableSize( (SDL_Window*)window, &b, nullptr );
+  
+  if ( a * b )
+  {
+    m_dpiScale = b / (float)a;
+  }
+  else
+  {
+    m_dpiScale = 1.0f;
+  }
+}
+
+// This function is required so aeInput etc can set width and height when it detects changes
+void aeWindow::m_UpdateWidthHeight( int32_t width, int32_t height )
+{
+  m_width = width;
+  m_height = height;
+  m_UpdateDpiScale();
 }
