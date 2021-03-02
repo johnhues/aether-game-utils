@@ -321,7 +321,10 @@ void aeInput::Pump()
 
       if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
       {
-        m_window->m_UpdateWidthHeight( event.window.data1, event.window.data2 );
+        int width = event.window.data1;
+        int height = event.window.data2;
+        SDL_GL_GetDrawableSize( (SDL_Window*)m_window->window, &width, &height );
+        m_window->m_UpdateWidthHeight( width, height );
       }
       else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
       {

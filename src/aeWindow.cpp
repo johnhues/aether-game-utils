@@ -87,9 +87,9 @@ void aeWindow::m_Initialize()
     m_height = displayMode.h;
   }
 
-  window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
+  window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI );
 #else
-  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
+  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI;
   flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
   window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
 #endif

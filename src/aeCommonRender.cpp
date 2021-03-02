@@ -26,6 +26,7 @@
 #include "aeCommonRender.h"
 #include "aeRender.h"
 #include "aeWindow.h"
+#include "SDL_video.h"
 
 //------------------------------------------------------------------------------
 // aeRender constants
@@ -1212,6 +1213,12 @@ void aeRender::InitializeOpenGL( class aeWindow* window )
 
   m_renderInternal = aeAlloc::Allocate< aeOpenGLRender >();
   m_renderInternal->Initialize( this );
+  
+  int width = window->GetWidth();
+  int height = window->GetHeight();
+  // @NOTE: GetDrawableSize function returns the wrong value until opengl context has been created
+  SDL_GL_GetDrawableSize( (SDL_Window*)window->window, &width, &height );
+  m_window->m_UpdateWidthHeight( width, height );
   
   m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
 }
