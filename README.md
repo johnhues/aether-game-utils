@@ -31,6 +31,7 @@ Dependencies:
 
 ## Example
 A complete working example showing a window with a red background.
+
 `main.cpp`
 ```
 #include "aeClock.h"
@@ -69,6 +70,7 @@ int main()
 }
 ```
 This is a cmake file that will configure main.cpp to be compiled and linked with aether-game-utils. It's not necessary that your project uses cmake, but it might be easier for initial setup.
+
 `CMakeLists.txt`
 ```
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
