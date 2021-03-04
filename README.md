@@ -24,6 +24,9 @@ Dependencies:
 * [OSSP uuid](http://www.ossp.org/pkg/lib/uuid/)
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)
 
+## Games using aether game utils
+[Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)
+
 ## Example
 A complete working example showing a window with a red background.
 `main.cpp`
