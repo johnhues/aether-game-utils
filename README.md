@@ -94,12 +94,12 @@ target_link_libraries(
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libsdl2-dev libassimp-dev libenet-dev uuid-dev libopenal-dev
+sudo apt install libsdl2-dev libenet-dev uuid-dev libopenal-dev
 ```
 Building:
 ```
 mkdir ~/aether-game-utils && cd ~/aether-game-utils
-git clone https://github.com/johnhues/aether-game-utils.git .
+git clone --recurse-submodules https://github.com/johnhues/aether-game-utils.git .
 mkdir ./build && cd ./build
 cmake ..
 make
@@ -109,12 +109,12 @@ sudo make install
 ## Mac Setup
 Installing dependencies:
 ```
-brew install sdl2 assimp enet ossp-uuid libpng
+brew install sdl2 enet ossp-uuid libpng
 ```
 Building:
 ```
 mkdir ~/aether-game-utils && cd ~/aether-game-utils
-git clone https://github.com/johnhues/aether-game-utils.git .
+git clone --recurse-submodules https://github.com/johnhues/aether-game-utils.git .
 mkdir ./build && cd ./build
 cmake ..
 make
@@ -132,7 +132,7 @@ Python 3 is also required to run unit tests: https://www.python.org/downloads/
 
 These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments. You may need to individually copy and paste the following commands as cmake can cause strange behavior when multiple commands are strung together.
 ```
-git clone https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
+git clone --recurse-submodules https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
 mkdir C:\temp\aether-game-utils\build && cd C:\temp\aether-game-utils\build
 cmake -DCMAKE_INSTALL_PREFIX=C:\Library ..
 cmake --build . --config Release --target INSTALL
