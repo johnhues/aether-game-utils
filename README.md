@@ -130,7 +130,7 @@ SET PATH=%PATH%;C:\Program Files\CMake\bin;
 ```
 Python 3 is also required to run unit tests: https://www.python.org/downloads/
 
-These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments. You may need to individually copy and paste the following commands as cmake can cause strange behavior when multiple commands are strung together.
+These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments. You may need to individually copy and paste the following lines as cmake can cause strange behavior when multiple commands are strung together.
 ```
 git clone --recurse-submodules https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
 mkdir C:\temp\aether-game-utils\build && cd C:\temp\aether-game-utils\build
