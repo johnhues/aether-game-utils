@@ -27,6 +27,8 @@ Dependencies:
 ## Games using aether game utils
 [Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)
 
+<a href="https://johnhues.itch.io/bella-lunaux-tiara"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
+
 ## Example
 A complete working example showing a window with a red background.
 `main.cpp`
