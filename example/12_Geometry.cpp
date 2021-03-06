@@ -81,8 +81,8 @@ int main()
 		static aeFloat3 s_raySource( 0.0f );
 		static aeFloat3 s_rayDir( 0.0f );
 		static float s_rayLength = 8.0f;
-		if ( input.GetState()->Get( aeKey::Num1 ) ) s_rayLength += 0.016f;
-		if ( input.GetState()->Get( aeKey::Num2 ) ) s_rayLength -= 0.016f;
+		if ( input.GetState()->Get( aeKey::Num1 ) ) s_rayLength -= 0.016f;
+		if ( input.GetState()->Get( aeKey::Num2 ) ) s_rayLength += 0.016f;
 		s_rayLength = aeMath::Clip( s_rayLength, 0.0f, 8.0f );
 
 		if ( input.GetState()->Get( aeKey::G ) )
@@ -273,7 +273,11 @@ int main()
 				if ( sphere.IntersectTriangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], &nearestIntersectionPoint ) )
 				{
 					debug.AddSphere( raySource + ray, r, aeColor::Green(), 16 );
-					debug.AddSphere( nearestIntersectionPoint, 0.05f, aeColor::Green(), 8 );
+					debug.AddSphere( nearestIntersectionPoint, 0.05f, aeColor::Red(), 8 );
+					
+					aeFloat3 spherePoint = sphere.center + ( nearestIntersectionPoint - sphere.center ).SafeNormalizeCopy() * r;
+					debug.AddSphere( spherePoint, 0.05f, aeColor::Green(), 8 );
+					debug.AddLine( nearestIntersectionPoint, spherePoint, aeColor::Green() );
 				}
 				else
 				{
