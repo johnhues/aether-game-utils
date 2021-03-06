@@ -141,5 +141,5 @@ include(AddExecutable)
 # Geometry
 set(AE_CURRENT_BUNDLE_NAME "Geometry")
 set(AE_CURRENT_EXECUTABLE_NAME 12_Geometry)
-set(AE_CURRENT_SOURCE_FILES 12_Geometry.cpp)
+set(AE_CURRENT_SOURCE_FILES 12_Geometry.cpp font.png)
 include(AddExecutable)

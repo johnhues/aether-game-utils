@@ -417,6 +417,7 @@ struct aeInt2
   aeInt2 operator+( const aeInt2 &v ) const;
   aeInt2 operator-( const aeInt2 &v ) const;
 
+  // @TODO: aeInt * 2u causes ambiguous overloaded operator issue
   aeInt2 operator* ( const int32_t s ) const;
   void operator*= ( const int32_t s );
   aeInt2 operator* ( const aeInt2& v ) const;
@@ -536,6 +537,8 @@ public:
 
   static aeFloat3 ProjectPoint( const class aeFloat4x4& projection, aeFloat3 p );
 };
+
+inline aeFloat3 operator * ( float f, aeFloat3 v ) { return v * f; }
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat3 v )
 {
@@ -1085,6 +1088,7 @@ public:
   bool Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut = nullptr, aeFloat3* pOut = nullptr ) const;
   bool SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
     float* outNearestDistance, aeFloat3* outNearestIntersectionPoint, aeFloat3* outNearestPolygonIntersectionPoint, class aeDebugRender* debug ) const;
+  bool IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint );
 
   aeFloat3 center = aeFloat3::Zero;
   float radius = 0.0f;

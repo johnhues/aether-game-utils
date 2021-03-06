@@ -2557,6 +2557,59 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
 }
 */
 
+// 5.1 Closest-point Computations 139 and, in fact, be the orthogonal projection R, which can now be easily computed per the preceding. This information is now enough to produce a code solution.
+aeFloat3 ClosestPtPointTriangle(aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c)
+{
+    aeFloat3 ab = b - a;
+    aeFloat3 ac = c - a;
+    aeFloat3 bc = c - b;
+    // Compute parametric position s for projection P’ of P on AB, // P’ = A + s*AB, s = snom/(snom+sdenom)
+  float snom = (p - a).Dot( ab );
+  float sdenom = (p - b).Dot(a - b);
+    // Compute parametric position t for projection P’ of P on AC, // P’ = A + t*AC, s = tnom/(tnom+tdenom)
+  float tnom = (p - a).Dot( ac );
+  float tdenom = (p - c).Dot( a - c);
+    if (snom <= 0.0f && tnom <= 0.0f) return a; // Vertex region early out
+    // Compute parametric position u for projection P’ of P on BC, // P’ = B + u*BC, u = unom/(unom+udenom)
+    float unom = (p - b).Dot( bc ), udenom = (p - c).Dot(b - c);
+    if (sdenom <= 0.0f && unom <= 0.0f) return b; // Vertex region early out if (tdenom <= 0.0f && udenom <= 0.0f) return c; // Vertex region early out
+        // P is outside (or on) AB if the triple scalar product [N PA PB] <= 0
+  aeFloat3 n = (b - a) % (c - a);
+    float vc = n.Dot((a - p) % (b - p));
+    // If P outside AB and within feature region of AB, // return projection of P onto AB
+    if (vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f)
+            return a + snom / (snom + sdenom) * ab;
+        // P is outside (or on) BC if the triple scalar product [N PB PC] <= 0
+        float va = n.Dot((b - p) % (c - p));
+    // If P outside BC and within feature region of BC, // return projection of P onto BC
+    if (va <= 0.0f && unom >= 0.0f && udenom >= 0.0f)
+            return b + unom / (unom + udenom) * bc;
+        // P is outside (or on) CA if the triple scalar product [N PC PA] <= 0
+        float vb = n.Dot((c - p) %(a - p));
+    // If P outside CA and within feature region of CA, // return projection of P onto CA
+    if (vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f)
+        return a + tnom / (tnom + tdenom) * ac;
+    // P must project inside face region. Compute Q using barycentric coordinates
+    float u = va / (va + vb + vc);
+    float v = vb / (va + vb + vc);
+  float w=1.0f-u-v; //=vc/(va+vb+vc)
+  return u * a + v * b + w * c;
+}
+
+bool aeSphere::IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint )
+{
+  aeFloat3 closest = ClosestPtPointTriangle( center, t0, t1, t2 );
+  if ( ( closest - center ).LengthSquared() <= radius * radius )
+  {
+    if ( outNearestIntersectionPoint )
+    {
+      *outNearestIntersectionPoint = closest;
+    }
+    return true;
+  }
+  return false;
+}
+
 //------------------------------------------------------------------------------
 // aeAABB member functions
 //------------------------------------------------------------------------------

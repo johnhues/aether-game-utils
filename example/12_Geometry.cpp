@@ -104,12 +104,15 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = aeMath::Mod( currentTest, 3 );
+		currentTest = aeMath::Mod( currentTest, 4 );
 
+		aeStr256 infoText = "";
 		switch ( currentTest )
 		{
 			case 0: // Triangle ray
 			{
+				infoText.Append( "Triangle-Ray\n" );
+				
 				aeFloat3 triangle[] =
 				{
 					aeFloat3( -1.0f, -1.5f, -1.0f ) * 2.0f,
@@ -146,6 +149,8 @@ int main()
 			}
 			case 1: // Sphere ray
 			{
+				infoText.Append( "Sphere-Ray\n" );
+				
 				debug.AddSphere( aeFloat3( 0.0f ), 1.0f, aeColor::Blue(), 16 );
 
 				aeFloat3 e = raySource;
@@ -169,6 +174,8 @@ int main()
 			}
 			case 2: // Cylinder ray
 			{
+				infoText.Append( "Cylinder-Ray\n" );
+				
 				bool hit0 = false;
 				bool hit1 = false;
 
@@ -238,11 +245,47 @@ int main()
 
 				break;
 			}
+			case 3:
+			{
+				infoText.Append( "Sphere-Triangle (static)\n" );
+				
+				aeFloat3 triangle[] =
+				{
+					aeFloat3( -1.0f, -1.5f, -1.0f ) * 2.0f,
+					aeFloat3( 1.0f, -0.5f, -1.0f ) * 2.0f,
+					aeFloat3( 0.0f, 1.5f, 1.0f ) * 2.0f,
+				};
+				aeFloat3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
+				aeFloat3 normal = ( triangle[ 1 ] - triangle[ 0 ] ) % ( triangle[ 2 ] - triangle[ 0 ] );
+				normal.SafeNormalize();
+				debug.AddLine( triangle[ 0 ], triangle[ 1 ], aeColor::Red() );
+				debug.AddLine( triangle[ 1 ], triangle[ 2 ], aeColor::Red() );
+				debug.AddLine( triangle[ 2 ], triangle[ 0 ], aeColor::Red() );
+				debug.AddLine( triangleCenter, triangleCenter + normal, aeColor::Red() );
+				
+				static float r = 1.0f;
+				if ( input.GetState()->Get( aeKey::Num3 ) ) r -= 0.016f;
+				if ( input.GetState()->Get( aeKey::Num4 ) ) r += 0.016f;
+				r = aeMath::Clip( r, 0.01f, 8.0f );
+
+				aeFloat3 nearestIntersectionPoint;
+				aeSphere sphere( raySource + ray, r );
+				if ( sphere.IntersectTriangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], &nearestIntersectionPoint ) )
+				{
+					debug.AddSphere( raySource + ray, r, aeColor::Green(), 16 );
+					debug.AddSphere( nearestIntersectionPoint, 0.05f, aeColor::Green(), 8 );
+				}
+				else
+				{
+					debug.AddSphere( raySource + ray, r, aeColor::Red(), 16 );
+				}
+				break;
+			}
 			default:
 				break;
 		}
 
-		text.Add( aeFloat3( 50.0f, 50.0f, 0.0f ), aeFloat2( text.GetFontSize() * 2.0f ), "test", aeColor::Red(), 0, 0 );
+		text.Add( aeFloat3( 50.0f, 50.0f, 0.0f ), aeFloat2( text.GetFontSize() * 2.0f ), infoText.c_str(), aeColor::Red(), 0, 0 );
 		debug.AddLine( raySource, raySource + ray, aeColor::Red() );
 
 		debug.Render( worldToProj );
