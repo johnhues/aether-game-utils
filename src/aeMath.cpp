@@ -2610,7 +2610,7 @@ aeFloat3 ClosestPtPointTriangle(aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c)
   return u * a + v * b + w * c;
 }
 
-bool aeSphere::IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint )
+bool aeSphere::IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint ) const
 {
   aeFloat3 closest = ClosestPtPointTriangle( center, t0, t1, t2 );
   if ( ( closest - center ).LengthSquared() <= radius * radius )

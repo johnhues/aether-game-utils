@@ -1088,7 +1088,7 @@ public:
   bool Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut = nullptr, aeFloat3* pOut = nullptr ) const;
   bool SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
     float* outNearestDistance, aeFloat3* outNearestIntersectionPoint, aeFloat3* outNearestPolygonIntersectionPoint, class aeDebugRender* debug ) const;
-  bool IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint );
+  bool IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint ) const;
 
   aeFloat3 center = aeFloat3::Zero;
   float radius = 0.0f;
