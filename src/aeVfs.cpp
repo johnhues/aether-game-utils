@@ -136,18 +136,22 @@ uint32_t aeVfs::Read( const char* fileDir, void* buffer, uint32_t bufferSize )
   }
 #endif
 
-  uint32_t fileSize = 0;
+  uint32_t resultLen = 0;
   
   if ( FILE* file = fopen( fileDir, "rb" ) )
   {
     fseek( file, 0, SEEK_END );
-    fileSize = (uint32_t)ftell( file );
+    resultLen = (uint32_t)ftell( file );
     fseek( file, 0, SEEK_SET );
 
-    if ( fileSize <= bufferSize )
+    if ( resultLen <= bufferSize )
     {
-      size_t readLen = fread( buffer, sizeof(uint8_t), fileSize, file );
-      AE_ASSERT( readLen == fileSize );
+      size_t readLen = fread( buffer, sizeof(uint8_t), resultLen, file );
+      AE_ASSERT( readLen == resultLen );
+    }
+    else
+    {
+      resultLen = 0;
     }
 
     fclose( file );
@@ -159,7 +163,7 @@ uint32_t aeVfs::Read( const char* fileDir, void* buffer, uint32_t bufferSize )
   CFRelease( fileDirIn );
 #endif
 
-  return fileSize;
+  return resultLen;
 }
 
 uint32_t aeVfs::Write( const char* fileDir, const void* buffer, uint32_t bufferSize )
