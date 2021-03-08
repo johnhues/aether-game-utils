@@ -24,8 +24,14 @@ Dependencies:
 * [OSSP uuid](http://www.ossp.org/pkg/lib/uuid/)
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)
 
+## Games using aether game utils
+[Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)
+
+<a href="https://johnhues.itch.io/bella-lunaux-tiara"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
+
 ## Example
 A complete working example showing a window with a red background.
+
 `main.cpp`
 ```
 #include "aeClock.h"
@@ -64,6 +70,7 @@ int main()
 }
 ```
 This is a cmake file that will configure main.cpp to be compiled and linked with aether-game-utils. It's not necessary that your project uses cmake, but it might be easier for initial setup.
+
 `CMakeLists.txt`
 ```
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
@@ -89,12 +96,12 @@ target_link_libraries(
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libsdl2-dev libassimp-dev libenet-dev uuid-dev libopenal-dev
+sudo apt install libsdl2-dev libenet-dev uuid-dev libopenal-dev
 ```
 Building:
 ```
 mkdir ~/aether-game-utils && cd ~/aether-game-utils
-git clone https://github.com/johnhues/aether-game-utils.git .
+git clone --recurse-submodules https://github.com/johnhues/aether-game-utils.git .
 mkdir ./build && cd ./build
 cmake ..
 make
@@ -104,12 +111,12 @@ sudo make install
 ## Mac Setup
 Installing dependencies:
 ```
-brew install sdl2 assimp enet ossp-uuid libpng
+brew install sdl2 enet ossp-uuid libpng
 ```
 Building:
 ```
 mkdir ~/aether-game-utils && cd ~/aether-game-utils
-git clone https://github.com/johnhues/aether-game-utils.git .
+git clone --recurse-submodules https://github.com/johnhues/aether-game-utils.git .
 mkdir ./build && cd ./build
 cmake ..
 make
@@ -125,9 +132,9 @@ SET PATH=%PATH%;C:\Program Files\CMake\bin;
 ```
 Python 3 is also required to run unit tests: https://www.python.org/downloads/
 
-These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments. You may need to individually copy and paste the following commands as cmake can cause strange behavior when multiple commands are strung together.
+These commands are intended to be run with Windows Command Prompt and may not work with cygwin or other environments. You may need to individually copy and paste the following lines as cmake can cause strange behavior when multiple commands are strung together.
 ```
-git clone https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
+git clone --recurse-submodules https://github.com/johnhues/aether-game-utils.git C:\temp\aether-game-utils
 mkdir C:\temp\aether-game-utils\build && cd C:\temp\aether-game-utils\build
 cmake -DCMAKE_INSTALL_PREFIX=C:\Library ..
 cmake --build . --config Release --target INSTALL
