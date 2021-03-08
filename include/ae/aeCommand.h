@@ -211,7 +211,7 @@ inline bool ae_call_cmd( void* data, const char* cmd )
 {
   const char* nameEnd = strchr( cmd, ' ' );
   aeStr32 name = nameEnd ? aeStr32( nameEnd - cmd, cmd ) : aeStr32( cmd );
-  uint32_t count = gdn_cmd::GetDefs().size();
+  uint32_t count = (uint32_t)gdn_cmd::GetDefs().size();
   for ( uint32_t i = 0; i < count; i++ )
   {
     if ( name == gdn_cmd::GetDefs()[ i ].name )

@@ -282,14 +282,14 @@ struct SendInfo
 //------------------------------------------------------------------------------
 struct AetherPlayer
 {
-  AetherUuid uuid;
-  NetInstId netId;
-  void* userData;
-  bool alive;
+  AetherUuid uuid = AetherUuid::Zero();
+  NetInstId netId = 0;
+  void* userData = nullptr;
+  bool alive = false;
 
-  aeStr32 pendingLevel;
-  aeStr32 pendingLink;
-  bool hasPendingLevelChange;
+  aeStr32 pendingLevel = "";
+  aeStr32 pendingLink = "";
+  bool hasPendingLevelChange = false;
 };
 
 //------------------------------------------------------------------------------
