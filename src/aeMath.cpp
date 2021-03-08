@@ -479,6 +479,17 @@ aeFloat3& aeFloat3::ZeroAxis( aeFloat3 axis )
   return *this;
 }
 
+aeFloat3& aeFloat3::ZeroDirection( aeFloat3 direction )
+{
+  float d = Dot( direction );
+  if ( d > 0.0f )
+  {
+    direction.SafeNormalize();
+    *this -= direction * d;
+  }
+  return *this;
+}
+
 float aeFloat3::Normalize()
 {
   float length = Length();

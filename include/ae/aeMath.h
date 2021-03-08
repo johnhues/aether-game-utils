@@ -519,7 +519,8 @@ public:
   float GetDistanceSquared(const aeFloat3 &other) const;
   
   aeFloat3& Trim(const float s);
-  aeFloat3& ZeroAxis( aeFloat3 axis ); // Zero components along arbitrary axis (ie vec dot axis == 0)
+  aeFloat3& ZeroAxis( aeFloat3 axis ); // Zero component along arbitrary axis (ie vec dot axis == 0)
+  aeFloat3& ZeroDirection( aeFloat3 direction ); // Zero component along positive half of axis (ie vec dot dir > 0)
   float Normalize();
   aeFloat3 NormalizeCopy() const;
   float SafeNormalize();
