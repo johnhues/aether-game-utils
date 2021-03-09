@@ -175,4 +175,83 @@ uint32_t aeMesh::GetIndexCount() const
 {
   return m_indices.Length();
 }
+
+bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) const
+{
+  PushOutResult result;
+  aeSphere sphere( params.sphere.center, params.sphere.radius );
+  result.vel = params.vel;
+  uint32_t collisionCount = 0;
+  
+  const uint32_t triCount = GetIndexCount() / 3;
+  const aeMeshIndex* indices = GetIndices();
+  const aeMeshVertex* vertices = GetVertices();
+  
+  for ( uint32_t i = 0; i < triCount; i++ )
+  {
+    aeFloat3 a( vertices[ indices[ i * 3 ] ].position );
+    aeFloat3 b( vertices[ indices[ i * 3 + 1 ] ].position );
+    aeFloat3 c( vertices[ indices[ i * 3 + 2 ] ].position );
+    
+    aeFloat3 triNormal = ( ( b - a ) % ( c - a ) ).SafeNormalizeCopy();
+    aeFloat3 triCenter( ( a + b + c ) / 3.0f );
+    
+    aeFloat3 triToSphereDir = ( sphere.center - triCenter ).SafeNormalizeCopy();
+    if ( triNormal.Dot( triToSphereDir ) < 0.0f )
+    {
+      continue;
+    }
+    
+    aeFloat3 triHitPos;
+    if ( sphere.IntersectTriangle( a, b, c, &triHitPos ) )
+    {
+      triToSphereDir = ( sphere.center - triHitPos ).SafeNormalizeCopy();
+      if ( triNormal.Dot( triToSphereDir ) < 0.3f )
+      {
+        continue;
+      }
+      
+      aeFloat3 closestSpherePoint = ( triHitPos - sphere.center ).SafeNormalizeCopy();
+      closestSpherePoint *= sphere.radius;
+      closestSpherePoint += sphere.center;
+      
+      sphere.center += triHitPos - closestSpherePoint;
+      result.vel.ZeroDirection( -triNormal );
+      
+      if ( result.hitCount < countof( result.hitPos ) )
+      {
+        result.hitPos[ result.hitCount ] = triHitPos;
+        result.hitNorm[ result.hitCount ] = triNormal;
+        result.hitCount++;
+      }
+      
+      collisionCount++;
+      
+      if ( aeDebugRender* debug = params.debug )
+      {
+        debug->AddLine( a, b, params.debugColor );
+        debug->AddLine( b, c, params.debugColor );
+        debug->AddLine( c, a, params.debugColor );
+        
+        debug->AddLine( triHitPos, triHitPos + triNormal * 2.0f, params.debugColor );
+        debug->AddSphere( triHitPos, 0.05f, params.debugColor, 4 );
+      }
+    }
+  }
+  
+  if ( collisionCount )
+  {
+    if ( outResult )
+    {
+      result.position = sphere.center;
+      *outResult = result;
+    }
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
 #endif

@@ -49,13 +49,36 @@ typedef uint16_t aeMeshIndex;
 class aeMesh
 {
 public:
+  // Initialization
   bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
-  void Transform( aeFloat4x4 transform );
+  void Transform( aeFloat4x4 transform ); // Permanently pre-transform loaded verts
 
+  // Mesh data
   const aeMeshVertex* GetVertices() const;
   const aeMeshIndex* GetIndices() const;
   uint32_t GetVertexCount() const;
   uint32_t GetIndexCount() const;
+  
+  // Sphere collision
+  struct PushOutParams
+  {
+    //aeFloat4x4 transform; // @TODO: Support transforming
+    aeSphere sphere;
+    aeFloat3 vel = aeFloat3( 0.0f );
+    
+    class aeDebugRender* debug = nullptr; // Draw collision results
+    aeColor debugColor = aeColor::Red();
+  };
+  struct PushOutResult
+  {
+    aeFloat3 position = aeFloat3( 0.0f );
+    aeFloat3 vel = aeFloat3( 0.0f );
+    
+    uint32_t hitCount = 0;
+    aeFloat3 hitPos[ 8 ];
+    aeFloat3 hitNorm[ 8 ];
+  };
+  bool PushOut( const PushOutParams& params, PushOutResult* outResult ) const;
 
 private:
   aeArray< aeMeshVertex > m_vertices;
