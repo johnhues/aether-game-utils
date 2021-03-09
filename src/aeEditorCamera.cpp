@@ -155,7 +155,7 @@ void aeEditorCamera::Reset( aeFloat3 focus, aeFloat3 pos )
 	if ( m_dist > 0.01f ) // Don't rotate camera if focus is same as pos
 	{
 		m_yaw = diff.GetXY().GetAngle() + aeMath::PI;
-		m_pitch = -std::asinf( diff.z / m_dist );
+		m_pitch = -asinf( diff.z / m_dist );
 	}
 	
 	m_Precalculate();
