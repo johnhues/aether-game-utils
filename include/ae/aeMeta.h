@@ -525,12 +525,12 @@ public:
     }
 
     // Members
-    aeStr32 m_name;
+    aeStr32 m_name = "";
     Var::Type m_type;
-    aeStr32 m_typeName;
-    uint32_t m_offset;
-    uint32_t m_size;
-    const aeMeta::Type* m_refType;
+    aeStr32 m_typeName = "";
+    uint32_t m_offset = 0;
+    uint32_t m_size = 0;
+    const aeMeta::Type* m_refType = nullptr;
     mutable const class Enum* m_enum = nullptr;
   };
   
