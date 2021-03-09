@@ -179,8 +179,8 @@ uint32_t aeMesh::GetIndexCount() const
 bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) const
 {
   PushOutResult result;
-  aeSphere sphere( params.sphere.center, params.sphere.radius );
-  result.vel = params.vel;
+  aeSphere sphere = params.sphere;
+  result.velocity = params.velocity;
   uint32_t collisionCount = 0;
   
   const uint32_t triCount = GetIndexCount() / 3;
@@ -216,7 +216,7 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
       closestSpherePoint += sphere.center;
       
       sphere.center += triHitPos - closestSpherePoint;
-      result.vel.ZeroDirection( -triNormal );
+      result.velocity.ZeroDirection( -triNormal );
       
       if ( result.hitCount < countof( result.hitPos ) )
       {

@@ -1092,7 +1092,7 @@ public:
   bool IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint ) const;
 
   aeFloat3 center = aeFloat3::Zero;
-  float radius = 0.0f;
+  float radius = 0.5f;
 };
 
 //------------------------------------------------------------------------------

@@ -64,7 +64,7 @@ public:
   {
     //aeFloat4x4 transform; // @TODO: Support transforming
     aeSphere sphere;
-    aeFloat3 vel = aeFloat3( 0.0f );
+    aeFloat3 velocity = aeFloat3( 0.0f );
     
     class aeDebugRender* debug = nullptr; // Draw collision results
     aeColor debugColor = aeColor::Red();
@@ -72,7 +72,7 @@ public:
   struct PushOutResult
   {
     aeFloat3 position = aeFloat3( 0.0f );
-    aeFloat3 vel = aeFloat3( 0.0f );
+    aeFloat3 velocity = aeFloat3( 0.0f );
     
     uint32_t hitCount = 0;
     aeFloat3 hitPos[ 8 ];
