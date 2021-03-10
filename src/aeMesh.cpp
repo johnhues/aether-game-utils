@@ -79,6 +79,12 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
     uint32_t uvCount = aeMath::Min( mesh->GetNumUVChannels(), countof(aeMeshVertex::tex) );
     uint32_t colorCount = aeMath::Min( mesh->GetNumColorChannels(), countof(aeMeshVertex::color) );
     AE_DEBUG( "Submesh: vertCount # uvCount # colorCount #", vertCount, uvCount, colorCount );
+    
+    if ( vertCount )
+    {
+      aiVector3D p = mesh->mVertices[ 0 ];
+      m_aabb = aeAABB( aeFloat3( p.x, p.y, p.z ), aeFloat3( p.x, p.y, p.z ) );
+    }
 
     for ( uint32_t j = 0; j < vertCount; j++ )
     {
@@ -87,6 +93,7 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
       // Position
       aiVector3D p = mesh->mVertices[ j ];
       vertex.position = aeFloat4( p.x, p.y, p.z, 1.0f );
+      m_aabb.Expand( vertex.position.GetXYZ() );
 
       // Normal
       aiVector3D n = mesh->mNormals[ j ];
@@ -149,10 +156,17 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
 
 void aeMesh::Transform( aeFloat4x4 transform )
 {
+  if ( m_vertices.Length() )
+  {
+    aeFloat3 p( transform * m_vertices[ 0 ].position );
+    m_aabb = aeAABB( p, p );
+  }
+  
   // @TODO: Transform normals
   for ( uint32_t i = 0; i < m_vertices.Length(); i++ )
   {
     m_vertices[ i ].position = transform * m_vertices[ i ].position;
+    m_aabb.Expand( m_vertices[ i ].position.GetXYZ() );
   }
 }
 
@@ -189,9 +203,9 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
   
   for ( uint32_t i = 0; i < triCount; i++ )
   {
-    aeFloat3 a( vertices[ indices[ i * 3 ] ].position );
-    aeFloat3 b( vertices[ indices[ i * 3 + 1 ] ].position );
-    aeFloat3 c( vertices[ indices[ i * 3 + 2 ] ].position );
+    aeFloat3 a( params.transform * vertices[ indices[ i * 3 ] ].position );
+    aeFloat3 b( params.transform * vertices[ indices[ i * 3 + 1 ] ].position );
+    aeFloat3 c( params.transform * vertices[ indices[ i * 3 + 2 ] ].position );
     
     aeFloat3 triNormal = ( ( b - a ) % ( c - a ) ).SafeNormalizeCopy();
     aeFloat3 triCenter( ( a + b + c ) / 3.0f );

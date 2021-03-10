@@ -62,7 +62,7 @@ public:
   // Sphere collision
   struct PushOutParams
   {
-    //aeFloat4x4 transform; // @TODO: Support transforming
+    aeFloat4x4 transform = aeFloat4x4::Identity();
     aeSphere sphere;
     aeFloat3 velocity = aeFloat3( 0.0f );
     
@@ -83,6 +83,7 @@ public:
 private:
   aeArray< aeMeshVertex > m_vertices;
   aeArray< aeMeshIndex > m_indices;
+  aeAABB m_aabb;
 };
 
 #endif
