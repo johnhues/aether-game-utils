@@ -156,11 +156,13 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
 
 void aeMesh::Transform( aeFloat4x4 transform )
 {
-  if ( m_vertices.Length() )
+  if ( !m_vertices.Length() )
   {
-    aeFloat3 p( transform * m_vertices[ 0 ].position );
-    m_aabb = aeAABB( p, p );
+    return;
   }
+  
+  aeFloat3 p( transform * m_vertices[ 0 ].position );
+  m_aabb = aeAABB( p, p );
   
   // @TODO: Transform normals
   for ( uint32_t i = 0; i < m_vertices.Length(); i++ )
@@ -192,10 +194,22 @@ uint32_t aeMesh::GetIndexCount() const
 
 bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) const
 {
+  aeOBB obb( params.transform * m_aabb.GetTransform() );
+  if ( obb.GetMinDistance( params.sphere.center ) > params.sphere.radius )
+  {
+    return false; // Early out if sphere is to far from mesh
+  }
+  
+  if ( aeDebugRender* debug = params.debug )
+  {
+    debug->AddCube( obb.GetTransform(), params.debugColor );
+  }
+  
   PushOutResult result;
   aeSphere sphere = params.sphere;
   result.velocity = params.velocity;
   uint32_t collisionCount = 0;
+  bool identityTransform = ( params.transform == aeFloat4x4::Identity() );
   
   const uint32_t triCount = GetIndexCount() / 3;
   const aeMeshIndex* indices = GetIndices();
@@ -203,9 +217,19 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
   
   for ( uint32_t i = 0; i < triCount; i++ )
   {
-    aeFloat3 a( params.transform * vertices[ indices[ i * 3 ] ].position );
-    aeFloat3 b( params.transform * vertices[ indices[ i * 3 + 1 ] ].position );
-    aeFloat3 c( params.transform * vertices[ indices[ i * 3 + 2 ] ].position );
+    aeFloat3 a, b, c;
+    if ( identityTransform )
+    {
+      a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
+      b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
+      c = vertices[ indices[ i * 3 + 2 ] ].position.GetXYZ();
+    }
+    else
+    {
+      a = aeFloat3( params.transform * vertices[ indices[ i * 3 ] ].position );
+      b = aeFloat3( params.transform * vertices[ indices[ i * 3 + 1 ] ].position );
+      c = aeFloat3( params.transform * vertices[ indices[ i * 3 + 2 ] ].position );
+    }
     
     aeFloat3 triNormal = ( ( b - a ) % ( c - a ) ).SafeNormalizeCopy();
     aeFloat3 triCenter( ( a + b + c ) / 3.0f );
