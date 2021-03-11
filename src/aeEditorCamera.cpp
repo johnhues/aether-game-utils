@@ -102,8 +102,10 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	// Rotation
 	if ( m_mode == Mode::Rotate )
 	{
-		m_yaw -= mouseMovement.x * 0.01f;
-		m_pitch -= mouseMovement.y * 0.01f;
+    // Assume right handed coordinate system
+    // The focal point should move in the direction that the users hand is moving
+		m_yaw -= mouseMovement.x * 0.01f; // Positive horizontal input should result in clockwise rotation around the z axis
+		m_pitch += mouseMovement.y * 0.01f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
 		m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f );
 	}
 
@@ -152,10 +154,10 @@ void aeEditorCamera::Reset( aeFloat3 focus, aeFloat3 pos )
 	aeFloat3 diff = focus - pos;
 	m_dist = diff.Length();
 	
-	if ( m_dist > 0.01f ) // Don't rotate camera if focus is same as pos
+	if ( m_dist > 0.01f ) // Only update rotation if focus is different than position
 	{
-		m_yaw = diff.GetXY().GetAngle() + aeMath::PI;
-		m_pitch = -asinf( diff.z / m_dist );
+		m_yaw = diff.GetXY().GetAngle();
+		m_pitch = asinf( diff.z / m_dist );
 	}
 	
 	m_Precalculate();
@@ -183,12 +185,19 @@ void aeEditorCamera::SetInputEnabled( bool enabled )
 	m_inputEnabled = enabled;
 }
 
+void aeEditorCamera::SetRotation( aeFloat2 angle )
+{
+  m_yaw = angle.x;
+  m_pitch = angle.y;
+  m_Precalculate();
+}
+
 void aeEditorCamera::m_Precalculate()
 {
-	m_offset = aeFloat3( aeMath::Cos( m_yaw ), aeMath::Sin( m_yaw ), 0.0f );
-	m_offset *= aeMath::Cos( m_pitch );
-	m_offset.z = aeMath::Sin( m_pitch );
-	m_forward = -m_offset;
+  m_forward = aeFloat3( aeMath::Cos( m_yaw ), aeMath::Sin( m_yaw ), 0.0f );
+  m_forward *= aeMath::Cos( m_pitch );
+  m_forward.z = aeMath::Sin( m_pitch );
+  m_offset = -m_forward;
 	m_offset *= m_dist;
 	m_right = ( m_forward % aeFloat3::Up ).SafeNormalizeCopy();
 	m_up = ( m_right % m_forward ).SafeNormalizeCopy();

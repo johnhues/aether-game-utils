@@ -50,12 +50,14 @@ public:
 	void SetDistanceFromFocus( float distance ); // Updates position. Does not affect input mode or refocus.
 	void Refocus( aeFloat3 focus ); // Updates focus and position over time
 	void SetInputEnabled( bool enabled ); // True by default
+  void SetRotation( aeFloat2 angle );
 
 	Mode GetMode() const { return m_mode; }
 	aeFloat3 GetPosition() const { return m_focusPos + m_offset; }
 	aeFloat3 GetFocus() const { return m_focusPos; }
 	aeFloat3 GetForward() const { return m_forward; }
 	float GetDistanceFromFocus() const { return m_dist; }
+  aeFloat2 GetRotation() const { return aeFloat2( m_yaw, m_pitch ); }
 
 private:
 	// Called when focus, distance, yaw, or pitch is changed
