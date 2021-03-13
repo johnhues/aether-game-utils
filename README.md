@@ -96,7 +96,7 @@ target_link_libraries(
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libsdl2-dev libenet-dev uuid-dev libopenal-dev
+sudo apt install libsdl2-dev libenet-dev uuid-dev libopenal-dev libpng-dev
 ```
 Building:
 ```
