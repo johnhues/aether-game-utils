@@ -68,6 +68,8 @@ InputState::InputState()
   leftAnalog = aeFloat2( 0.0f );
   rightAnalog = aeFloat2( 0.0f );
   dpad = aeInt2( 0 );
+  leftTrigger = 0.0f;
+  rightTrigger = 0.0f;
 
   up = false;
   down = false;
@@ -540,6 +542,15 @@ void aeInput::Pump()
       analog.y = SDL_JoystickGetAxis( m_joystickHandle, 4 ) / (float)aeMath::MaxValue< int16_t >();
       analog.y = -analog.y; // @NOTE: Analog sticks are negative up for some reason on XBox controllers
       m_input.rightAnalog = ApplyAnalogDeadzone( analog, kAnalogDeadzone );
+
+      int32_t lt = SDL_JoystickGetAxis( m_joystickHandle, 2 );
+      int32_t rt = SDL_JoystickGetAxis( m_joystickHandle, 5 );
+      lt += aeMath::MaxValue< int16_t >();
+      rt += aeMath::MaxValue< int16_t >();
+      m_input.leftTrigger = lt / (float)aeMath::MaxValue< uint16_t >();
+      m_input.rightTrigger = rt / (float)aeMath::MaxValue< uint16_t >();
+      m_input.leftTrigger = aeMath::Clip01( m_input.leftTrigger );
+      m_input.rightTrigger = aeMath::Clip01( m_input.rightTrigger );
     }
 
 #if !_AE_EMSCRIPTEN_

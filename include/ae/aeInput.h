@@ -220,6 +220,8 @@ public:
   aeFloat2 leftAnalog;
   aeFloat2 rightAnalog;
   aeInt2 dpad;
+  float leftTrigger;
+  float rightTrigger;
 
   bool up;
   bool down;
