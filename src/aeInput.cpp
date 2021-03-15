@@ -68,8 +68,6 @@ InputState::InputState()
   leftAnalog = aeFloat2( 0.0f );
   rightAnalog = aeFloat2( 0.0f );
   dpad = aeInt2( 0 );
-  leftTrigger = 0.0f;
-  rightTrigger = 0.0f;
 
   up = false;
   down = false;
@@ -83,6 +81,9 @@ InputState::InputState()
   b = false;
   x = false;
   y = false;
+  
+  leftTrigger = 0.0f;
+  rightTrigger = 0.0f;
   l = false;
   r = false;
 
