@@ -545,8 +545,8 @@ void aeInput::Pump()
 
       int32_t lt = SDL_JoystickGetAxis( m_joystickHandle, 2 );
       int32_t rt = SDL_JoystickGetAxis( m_joystickHandle, 5 );
-      lt += aeMath::MaxValue< int16_t >();
-      rt += aeMath::MaxValue< int16_t >();
+      lt += aeMath::MaxValue< int16_t >() + 1;
+      rt += aeMath::MaxValue< int16_t >() + 1;
       m_input.leftTrigger = lt / (float)aeMath::MaxValue< uint16_t >();
       m_input.rightTrigger = rt / (float)aeMath::MaxValue< uint16_t >();
       m_input.leftTrigger = aeMath::Clip01( m_input.leftTrigger );
