@@ -77,14 +77,25 @@ public:
     uint32_t length;
   };
 
+  //------------------------------------------------------------------------------
   // General
+  //------------------------------------------------------------------------------
   bool IsAuthority() const { return m_local; }
 	
+  //------------------------------------------------------------------------------
   // Server
+  //------------------------------------------------------------------------------
+  // Call once after aeNetReplicaDB::CreateNetData(), will trigger Create event on clients
+  void SetInitData( const uint8_t* initData, uint32_t initDataLength );
+  // Call at least once to update data sent to client with aeNetReplicaDB::UpdateSendData()
+  // Only the most recent data is sent. Data is only sent when changed.
   void SetSyncData( const void* data, uint32_t length );
+  // Call as many times as necessary each tick, all messages will be sent with the next aeNetReplicaDB::UpdateSendData()
   void SendMessage( const void* data, uint32_t length );
 
+  //------------------------------------------------------------------------------
   // Client
+  //------------------------------------------------------------------------------
   const uint8_t* GetInitData() const;
   uint32_t InitDataLength() const;
 
@@ -94,8 +105,12 @@ public:
 
   bool PumpMessages( Msg* msgOut );
 
+  bool IsPendingInit() const;
   bool IsPendingDelete() const;
 
+  //------------------------------------------------------------------------------
+  // Internal
+  //------------------------------------------------------------------------------
 private:
   // @TODO: Expose internals in a safer way
   friend class aeNetReplicaClient;
@@ -120,9 +135,9 @@ private:
 
   uint32_t m_hash = 0;
   uint32_t m_prevHash = 0;
+  bool m_isPendingInit = true;
   bool m_isPendingDelete = false;
 public:
-  // Internal
   AE_REFABLE( aeNetData );
 };
 
@@ -137,6 +152,8 @@ public:
   aeRef< aeNetData > PumpCreated(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
   // 3) Handle new sync data with aeNetData::GetSyncData() and process incoming messages with aeNetData::PumpMessages()
   void DestroyPending(); // 4) Destroy all objects flagged for destruction (call once)
+  
+  aeId< aeNetData > GetLocalId( aeId< aeNetData > remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId.GetInternalId(), {} ); }
 
 private:
   void m_CreateNetData( aeBinaryStream* rStream );
@@ -179,7 +196,7 @@ public:
 class aeNetReplicaDB
 {
 public:
-  aeNetData* CreateNetData( const uint8_t* initData, uint32_t initDataLength );
+  aeNetData* CreateNetData();
   void DestroyNetData( aeNetData* netData );
 
   aeNetReplicaServer* CreateServer();
@@ -188,6 +205,7 @@ public:
   void UpdateSendData(); // Call each frame before aeNetReplicaServer::GetSendData()
 
 private:
+  aeArray< aeNetData* > m_pendingCreate;
   aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;
   aeArray< aeNetReplicaServer* > m_servers;
 public:

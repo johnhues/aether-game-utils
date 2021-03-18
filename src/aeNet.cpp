@@ -43,6 +43,13 @@ void aeNetData::SendMessage( const void* data, uint32_t length )
   m_messageDataOut.Append( (const uint8_t*)data, length );
 }
 
+void aeNetData::SetInitData( const uint8_t* initData, uint32_t initDataLength )
+{
+  m_initData.Clear();
+  m_initData.Append( initData, initDataLength );
+  m_isPendingInit = false;
+}
+
 const uint8_t* aeNetData::GetInitData() const
 {
   return m_initData.Length() ? &m_initData[ 0 ] : nullptr;
@@ -98,6 +105,11 @@ bool aeNetData::PumpMessages( Msg* msgOut )
   }
 
   return true;
+}
+
+bool aeNetData::IsPendingInit() const
+{
+  return m_isPendingInit;
 }
 
 bool aeNetData::IsPendingDelete() const
@@ -303,12 +315,6 @@ void aeNetReplicaServer::m_UpdateSendData()
 {
   AE_ASSERT( m_replicaDB );
 
-  if ( m_pendingClear )
-  {
-    m_sendData.Clear();
-    m_pendingClear = false;
-  }
-
   aeArray< aeNetData* > toSync;
   uint32_t netDataMessageCount = 0;
   for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
@@ -373,28 +379,11 @@ uint32_t aeNetReplicaServer::GetSendLength() const
 //------------------------------------------------------------------------------
 // aeNetReplicaDB member functions
 //------------------------------------------------------------------------------
-aeNetData* aeNetReplicaDB::CreateNetData( const uint8_t* initData, uint32_t initDataLength )
+aeNetData* aeNetReplicaDB::CreateNetData()
 {
   aeNetData* netData = aeAlloc::Allocate< aeNetData >();
   netData->m_SetLocal();
-  netData->m_initData.Append( initData, initDataLength );
-  m_netDatas.Set( netData->GetId(), netData );
-
-  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
-  {
-    aeNetReplicaServer* server = m_servers[ i ];
-    if ( server->m_pendingClear )
-    {
-      server->m_sendData.Clear();
-      server->m_pendingClear = false;
-    }
-
-    aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
-    wStream.SerializeRaw( aeNetReplicaServer::EventType::Create );
-    wStream.SerializeUint32( netData->GetId().GetInternalId() );
-    wStream.SerializeArray( netData->m_initData );
-  }
-
+  m_pendingCreate.Append( netData );
   return netData;
 }
 
@@ -402,6 +391,15 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
 {
   if ( !netData )
   {
+    return;
+  }
+  
+  int32_t pendingIdx = m_pendingCreate.Find( netData );
+  if ( pendingIdx >= 0 )
+  {
+    // Early out, no need to send Destroy message because Create has not be queued
+    m_pendingCreate.Remove( pendingIdx );
+    aeAlloc::Release( netData );
     return;
   }
 
@@ -462,6 +460,38 @@ void aeNetReplicaDB::DestroyServer( aeNetReplicaServer* server )
 
 void aeNetReplicaDB::UpdateSendData()
 {
+  // Clear old send data before writing new
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    aeNetReplicaServer* server = m_servers[ i ];
+    if ( server->m_pendingClear )
+    {
+      server->m_sendData.Clear();
+      server->m_pendingClear = false;
+    }
+  }
+  
+  // Send info about new objects (delayed until Update in case objects initData need to reference each other)
+  for ( aeNetData* netData : m_pendingCreate )
+  {
+    if ( netData->IsPendingInit() )
+    {
+      continue;
+    }
+    
+    for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+    {
+      aeNetReplicaServer* server = m_servers[ i ];
+      aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
+      wStream.SerializeRaw( aeNetReplicaServer::EventType::Create );
+      wStream.SerializeUint32( netData->GetId().GetInternalId() );
+      wStream.SerializeArray( netData->m_initData );
+      
+      m_netDatas.Set( netData->GetId(), netData );
+    }
+  }
+  m_pendingCreate.RemoveAllFn( []( const aeNetData* netData ){ return !netData->IsPendingInit(); } );
+  
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {
     m_netDatas.GetValue( i )->m_UpdateHash();
