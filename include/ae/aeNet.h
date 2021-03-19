@@ -153,12 +153,14 @@ public:
   // 3) Handle new sync data with aeNetData::GetSyncData() and process incoming messages with aeNetData::PumpMessages()
   void DestroyPending(); // 4) Destroy all objects flagged for destruction (call once)
   
-  aeId< aeNetData > GetLocalId( aeId< aeNetData > remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId.GetInternalId(), {} ); }
+  aeId< aeNetData > GetLocalId( uint32_t remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
+  uint32_t GetRemoteId( aeId< aeNetData > localId ) const { return m_localToRemoteIdMap.Get( localId, 0 ); }
 
 private:
   void m_CreateNetData( aeBinaryStream* rStream );
   aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;
   aeMap< uint32_t, aeId< aeNetData > > m_remoteToLocalIdMap;
+  aeMap< aeId< aeNetData >, uint32_t > m_localToRemoteIdMap;
   aeArray< aeRef< aeNetData > > m_created;
   aeArray< aeRef< aeNetData > > m_destroyed;
 };

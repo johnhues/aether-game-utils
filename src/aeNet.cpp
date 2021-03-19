@@ -186,6 +186,7 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         //        Currently if the net data is not found this Get() will assert.
         aeId< aeNetData > localId = m_remoteToLocalIdMap.Get( remoteId );
         m_remoteToLocalIdMap.Remove( remoteId );
+        m_localToRemoteIdMap.Remove( localId );
 
         aeNetData* netData = nullptr;
         if ( m_netDatas.TryGet( localId, &netData ) )
@@ -296,12 +297,13 @@ void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
 {
   AE_ASSERT( rStream->IsReader() );
 
-  uint32_t netDataId = 0;
-  rStream->SerializeUint32( netDataId );
+  uint32_t remoteId = 0;
+  rStream->SerializeUint32( remoteId );
 
   aeNetData* netData = aeAlloc::Allocate< aeNetData >();
   m_netDatas.Set( netData->GetId(), netData );
-  m_remoteToLocalIdMap.Set( netDataId, netData->GetId() );
+  m_remoteToLocalIdMap.Set( remoteId, netData->GetId() );
+  m_localToRemoteIdMap.Set( netData->GetId(), remoteId );
 
   rStream->SerializeArray( netData->m_initData );
 
