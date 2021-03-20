@@ -102,6 +102,8 @@ public:
   template < uint32_t N2 >
   inline void Append( const aeStr<N2>& str );
   inline void Append( const char* str );
+  inline void Append( char* str );
+  inline void Append( char c );
   void Trim( uint32_t len );
 
   template < typename... Args >
@@ -118,6 +120,8 @@ private:
   template < uint32_t N2 > friend bool operator <=( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend bool operator >=( const char*, const aeStr< N2 >& );
   template < uint32_t N2 > friend std::istream& operator>>( std::istream&, aeStr< N2 >& );
+  
+  template < typename T > void Append( T ) = delete; // @NOTE: Prevent accidentally appending unrelated types
 
   void m_Format( const char* format );
 
@@ -469,6 +473,19 @@ template < uint32_t N >
 inline void aeStr< N >::Append( const char* str )
 {
   *this += str;
+}
+
+template < uint32_t N >
+inline void aeStr< N >::Append( char* str )
+{
+  *this += str;
+}
+
+template < uint32_t N >
+inline void aeStr< N >::Append( char c )
+{
+  char s[] = { c, 0 };
+  *this += s;
 }
 
 template < uint32_t N >
