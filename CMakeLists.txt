@@ -15,7 +15,7 @@ include(ExternalProject)
 include(cmake/git_revision.cmake)
 
 # configure project to download dependencies instead of searching for them
-if((WIN32 AND NOT CYGWIN) OR EMSCRIPTEN)
+if((WIN32 AND NOT CYGWIN) OR EMSCRIPTEN OR (${CMAKE_APPLE_SILICON_PROCESSOR} STREQUAL "arm64"))
 	set(AE_BUILD_DEPS ON CACHE BOOL "Build dependencies instead of searching system directories")
 else()
 	set(AE_BUILD_DEPS OFF CACHE BOOL "Build dependencies instead of searching system directories")
@@ -121,27 +121,31 @@ else()
 		SOURCE_DIR ${AE_ZLIB_SRC}
 		GIT_REPOSITORY https://github.com/madler/zlib.git
 		GIT_TAG v1.2.11
-		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ZLIB_INSTALL}
+		# CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ZLIB_INSTALL}
+		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ZLIB_INSTALL} -DCMAKE_APPLE_SILICON_PROCESSOR=arm64
 	)
 	set(ZLIB_INCLUDE_DIRS ${AE_ZLIB_INSTALL}/include)
 	set(ZLIB_LIBRARY_DIRS ${AE_ZLIB_INSTALL}/lib)
-	set(ZLIB_LIBRARIES 
-		optimized ${ZLIB_LIBRARY_DIRS}/zlibstatic.lib
-		debug ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib
-	)
+	# set(ZLIB_LIBRARIES 
+	# 	optimized ${ZLIB_LIBRARY_DIRS}/zlibstatic.lib
+	# 	debug ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib
+	# )
 
 	if(NOT EMSCRIPTEN)
 		ExternalProject_Add(SDL2
 			PREFIX SDL2
 			SOURCE_DIR ${AE_SDL2_SRC}
 			URL https://www.libsdl.org/release/SDL2-2.0.10.tar.gz
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL} -DEXTRA_LIBS=vcruntime.dll
+			# CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL} -DEXTRA_LIBS=vcruntime.dll
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DCMAKE_APPLE_SILICON_PROCESSOR=arm64 -DZLIB_ROOT=${AE_ZLIB_INSTALL}
 		)
 		set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
 		set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
 		set(SDL2_LIBRARY 
-			optimized ${SDL2_LIBRARY_DIRS}/SDL2-static.lib
-			debug ${SDL2_LIBRARY_DIRS}/SDL2-staticd.lib
+			# optimized ${SDL2_LIBRARY_DIRS}/SDL2-static.lib
+			# debug ${SDL2_LIBRARY_DIRS}/SDL2-staticd.lib
+			optimized ${SDL2_LIBRARY_DIRS}/libSDL2.a
+			debug ${SDL2_LIBRARY_DIRS}/libSDL2d.a
 		)
 	endif()
 	
@@ -155,7 +159,7 @@ else()
 	)
 	set(ENET_INCLUDE_DIR ${AE_ENET_SRC}/include)
 	set(ENET_LIBRARY_DIRS ${AE_ENET_SRC})
-	set(ENET_LIBRARY ${ENET_LIBRARY_DIRS}/enet64.lib) # Use path so 'lib' is not prepended
+	# set(ENET_LIBRARY ${ENET_LIBRARY_DIRS}/enet64.lib) # Use path so 'lib' is not prepended
 endif()
 
 # dependency include directories
