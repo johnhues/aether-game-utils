@@ -224,13 +224,15 @@ public:
               return "";
           }
         case Var::UInt8:
-          return aeStr32::Format( "#", *reinterpret_cast< const uint8_t* >( varData ) ).c_str();
+          // Prevent char formatting
+          return aeStr32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str();
         case Var::UInt16:
           return aeStr32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
         case Var::UInt32:
           return aeStr32::Format( "#", *reinterpret_cast< const uint32_t* >( varData ) ).c_str();
         case Var::Int8:
-          return aeStr32::Format( "#", *reinterpret_cast< const int8_t* >( varData ) ).c_str();
+          // Prevent char formatting
+          return aeStr32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str();
         case Var::Int16:
           return aeStr32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
         case Var::Int32:
