@@ -1073,10 +1073,13 @@ void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
     aeUniformList uniforms;
     uniforms.Set( "u_worldToScreen", worldToScreen );
 
-    m_shader.SetDepthTest( false );
-    m_shader.SetDepthWrite( false );
-    uniforms.Set( "u_saturation", 0.1f );
-    m_vertexData.Render( &m_shader, uniforms );
+    if ( m_xray )
+    {
+      m_shader.SetDepthTest( false );
+      m_shader.SetDepthWrite( false );
+      uniforms.Set( "u_saturation", 0.1f );
+      m_vertexData.Render( &m_shader, uniforms );
+    }
 
     m_shader.SetDepthTest( true );
     m_shader.SetDepthWrite( true );
