@@ -70,7 +70,7 @@ private:
   
   uint32_t m_id;
 public:
-  uint32_t SetInternalId( uint32_t id ) { m_id = id; }
+  void SetInternalId( uint32_t id ) { m_id = id; }
   uint32_t GetInternalId() const { return m_id; }
 };
 
