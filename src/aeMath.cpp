@@ -1934,6 +1934,11 @@ aeFloat4x4 aeFloat4x4::GetTransposeCopy(void) const
   return temp.SetTranspose();
 }
 
+aeFloat4x4 aeFloat4x4::GetNormalMatrix() const
+{
+  return Inverse().GetTransposeCopy();
+}
+
 aeFloat4x4& aeFloat4x4::Translate( aeFloat3 t )
 {
   *this = *this * aeFloat4x4::Translation( t );
