@@ -28,7 +28,15 @@
 #if _AE_APPLE_
   #include <CoreFoundation/CoreFoundation.h>
 #endif
+#if _AE_WINDOWS_
+  #define WIN32_LEAN_AND_MEAN
+  #include <Windows.h>
+  #include <shellapi.h>
+#endif
 
+//------------------------------------------------------------------------------
+// Member functions
+//------------------------------------------------------------------------------
 void aeVfs::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
   AE_ASSERT_MSG( organizationName[ 0 ], "Organization name must not be empty" );
@@ -93,6 +101,29 @@ uint32_t aeVfs::Write( Root root, const char* fileName, const void* buffer, uint
   return Write( fullName.c_str(), buffer, bufferSize );
 }
 
+void aeVfs::ShowFolder( Root root, const char* fileDir )
+{
+  aeStr256 fullName = GetRootDir( root );
+  fullName += fileDir;
+  return ShowFolder( fullName.c_str() );
+}
+
+const char* aeVfs::GetRootDir( Root root )
+{
+  if ( root == aeVfs::Data )
+  {
+    return m_dataDir.c_str();
+  }
+  if ( root == aeVfs::User )
+  {
+    return m_userDir.c_str();
+  }
+  return nullptr;
+}
+
+//------------------------------------------------------------------------------
+// Static member functions
+//------------------------------------------------------------------------------
 uint32_t aeVfs::GetSize( const char* fileDir )
 {
 #if _AE_APPLE_
@@ -184,9 +215,10 @@ uint32_t aeVfs::Write( const char* fileDir, const void* buffer, uint32_t bufferS
   return bufferSize;
 }
 
-const char* aeVfs::GetRootDir( Root root )
+void aeVfs::ShowFolder( const char* fileDir )
 {
-  if ( root == aeVfs::Data ) { return m_dataDir.c_str(); }
-  if ( root == aeVfs::User ) { return m_userDir.c_str(); }
-  return nullptr;
+  // @TODO: OSX and Linux
+#if _AE_WINDOWS_
+  ShellExecuteA( NULL, "explore", fileDir, NULL, NULL, SW_SHOWDEFAULT );
+#endif
 }
