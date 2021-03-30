@@ -89,6 +89,38 @@ void aeWindow::m_Initialize()
 
   window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
 #else
+  aeRect windowRect( m_pos.x, m_pos.y, m_width, m_height );
+  bool overlapsAny = false;
+  uint32_t displayCount = SDL_GetNumVideoDisplays();
+  for ( uint32_t i = 0; i < displayCount; i++ )
+  {
+    SDL_Rect rect;
+    int result = SDL_GetDisplayBounds( i, &rect );
+    if ( result == 0 )
+    {
+      aeRect screenRect( rect.x, rect.y, rect.w, rect.h );
+      if ( windowRect.GetIntersection( screenRect, nullptr ) )
+      {
+        overlapsAny = true;
+        break;
+      }
+    }
+  }
+
+  if ( !overlapsAny && displayCount )
+  {
+    SDL_Rect rect;
+    if ( SDL_GetDisplayBounds( 0, &rect ) == 0 )
+    {
+      int32_t border = rect.h / 8;
+      m_pos.x = border;
+      m_pos.y = border;
+      m_width = rect.w - border * 2;
+      m_height = rect.h - border * 2;
+      m_fullScreen = false;
+    }
+  }
+
   uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
   flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
   window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
