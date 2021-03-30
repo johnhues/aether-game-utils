@@ -38,6 +38,7 @@ aeWindow::aeWindow()
   m_width = 0;
   m_height = 0;
   m_fullScreen = false;
+  m_maximized = false;
 }
 
 void aeWindow::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor )
@@ -183,4 +184,17 @@ void aeWindow::SetSize( uint32_t width, uint32_t height )
     m_width = width;
     m_height = height;
   }
+}
+
+void aeWindow::SetMaximized( bool maximized )
+{
+  if ( maximized )
+  {
+    SDL_MaximizeWindow( (SDL_Window*)window );
+  }
+  else
+  {
+    SDL_RestoreWindow( (SDL_Window*)window );
+  }
+  m_maximized = maximized;
 }

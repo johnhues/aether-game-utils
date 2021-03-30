@@ -325,10 +325,16 @@ void aeInput::Pump()
       if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED )
       {
         m_window->m_UpdateWidthHeight( event.window.data1, event.window.data2 );
+        m_window->m_UpdateMaximized( false );
       }
       else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MOVED )
       {
         m_window->m_UpdatePos( aeInt2( event.window.data1, event.window.data2 ) );
+        m_window->m_UpdateMaximized( false );
+      }
+      else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_MAXIMIZED )
+      {
+        m_window->m_UpdateMaximized( true );
       }
       else if ( m_window && event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED )
       {
