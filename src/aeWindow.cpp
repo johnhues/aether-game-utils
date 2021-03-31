@@ -127,6 +127,9 @@ void aeWindow::m_Initialize()
   window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
 #endif
   AE_ASSERT( window );
+  
+  SDL_SetWindowTitle( (SDL_Window*)window, "" );
+  m_windowTitle = "";
 }
 
 void aeWindow::Terminate()
@@ -136,9 +139,10 @@ void aeWindow::Terminate()
 
 void aeWindow::SetTitle( const char* title )
 {
-  if ( window )
+  if ( window && m_windowTitle != title )
   {
     SDL_SetWindowTitle( (SDL_Window*)window, title );
+    m_windowTitle = title;
   }
 }
 
