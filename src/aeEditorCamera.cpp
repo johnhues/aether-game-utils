@@ -102,15 +102,15 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	// Rotation
 	if ( m_mode == Mode::Rotate )
 	{
-    // Assume right handed coordinate system
-    // The focal point should move in the direction that the users hand is moving
-		m_yaw -= mouseMovement.x * 0.01f; // Positive horizontal input should result in clockwise rotation around the z axis
-		m_pitch += mouseMovement.y * 0.01f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
-		m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f );
+		// Assume right handed coordinate system
+		// The focal point should move in the direction that the users hand is moving
+		m_yaw -= mouseMovement.x * 0.005f; // Positive horizontal input should result in clockwise rotation around the z axis
+		m_pitch += mouseMovement.y * 0.005f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
+		m_pitch = aeMath::Clip( m_pitch, -aeMath::HALF_PI * 0.99f, aeMath::HALF_PI * 0.99f ); // Don't let camera flip
 	}
 
 	// Zoom
-	float zoomSpeed = 0.15f / aeMath::Clip( 1.0f - m_dist / 100.0f, 0.15f, 1.0f );
+	float zoomSpeed = m_dist / 75.0f;
 	if ( m_mode == Mode::Zoom )
 	{
 		m_dist += mouseMovement.y * 0.1f * zoomSpeed;
@@ -126,7 +126,7 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	if ( m_mode == Mode::Pan )
 	{
 		AE_ASSERT( !m_refocus );
-		float panSpeed = 0.035f / aeMath::Clip( 1.0f - m_dist / 100.0f, 0.035f, 1.0f );
+		float panSpeed = m_dist / 750.0f;
 		m_focusPos -= m_right * ( mouseMovement.x * panSpeed );
 		m_focusPos -= m_up * ( mouseMovement.y * panSpeed );
 	}
@@ -135,7 +135,7 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	if ( m_refocus )
 	{
 		AE_ASSERT( m_mode != Mode::Pan );
-		m_focusPos = aeMath::DtLerp( m_focusPos, 4.5f, dt, m_refocusPos );
+		m_focusPos = aeMath::DtLerp( m_focusPos, 4.0f, dt, m_refocusPos );
 		if ( ( m_refocusPos - m_focusPos ).Length() < 0.01f )
 		{
 			m_refocus = false;
