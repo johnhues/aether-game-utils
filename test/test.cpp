@@ -91,6 +91,19 @@ TEST_CASE( "arrays can be constructed with a specified length", "[ae::Array]" )
   REQUIRE( a.Size() == 8 );
 }
 
+TEST_CASE( "arrays can be constructed with an initializer list", "[ae::Array]" )
+{
+  ae::Array< int > a( { 2, 4, 8, 16, 32 } );
+
+  REQUIRE( a.Length() == 5 );
+  REQUIRE( a.Size() == 8 );
+  REQUIRE( a[ 0 ] == 2 );
+  REQUIRE( a[ 1 ] == 4 );
+  REQUIRE( a[ 2 ] == 8 );
+  REQUIRE( a[ 3 ] == 16 );
+  REQUIRE( a[ 4 ] == 32 );
+}
+
 TEST_CASE( "arrays elements can be inserted by index", "[ae::Array]" )
 {
   ae::Array< int > empty;
@@ -222,6 +235,32 @@ TEST_CASE( "arrays only construct/destruct objects on non-zero length arrays", "
   REQUIRE( ae::LifetimeTester::moveCount == 0 );
   REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
   REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+}
+
+// construct with initializer list
+TEST_CASE( "arrays copy/destruct objects from initializer list", "[ae::Array]" )
+{
+  ae::LifetimeTester::ClearStats();
+
+  ae::Array< ae::LifetimeTester > array( { ae::LifetimeTester(), ae::LifetimeTester(), ae::LifetimeTester() } ); // +1 ctor, +1 dtor, +3 copy
+  REQUIRE( array.Length() == 3 );
+  REQUIRE( array.Size() >= 3 );
+
+  //REQUIRE( ae::LifetimeTester::moveCount == 3 );
+  //REQUIRE( ae::LifetimeTester::copyCount == 0 );
+  //REQUIRE( ae::LifetimeTester::dtorCount == 3 );
+  //REQUIRE( ae::LifetimeTester::currentCount == 3 );
+
+  //SECTION( "clear array results in all objects being destroyed" )
+  //{
+  //  array.Clear(); // +3 dtor
+  //  REQUIRE( ae::LifetimeTester::dtorCount == 6 );
+  //  REQUIRE( ae::LifetimeTester::currentCount == 0 );
+  //}
+
+  //REQUIRE( ae::LifetimeTester::copyCount == 0 );
+  //REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+  //REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
 }
 
 TEST_CASE( "copy construct", "[ae::Array]" )

@@ -42,6 +42,7 @@ public:
   Array();
   Array( uint32_t size ); // Reserve size (with length of 0)
   Array( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'vals'
+  Array( std::initializer_list< T& > vals );
   Array( const Array< T >& other );
   ~Array();
   void operator =( const Array< T >& other );
@@ -133,6 +134,22 @@ Array< T >::Array( uint32_t length, const T& value )
   for ( uint32_t i = 0; i < length; i++ )
   {
     new ( &m_array[ i ] ) T ( value );
+  }
+}
+
+template < typename T >
+Array< T >::Array( std::initializer_list< T& > vals )
+{
+  m_length = 0;
+  m_size = 0;
+  m_array = nullptr;
+
+  Reserve( (uint32_t)vals.size() );
+
+  for ( T& val : vals )
+  {
+    new ( &m_array[ m_length ] ) T( std::move( val ) );
+    m_length++;
   }
 }
 
