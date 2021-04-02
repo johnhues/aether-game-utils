@@ -96,7 +96,7 @@ target_link_libraries(
 ## Linux Setup
 Installing dependencies:
 ```
-sudo apt install libsdl2-dev libenet-dev uuid-dev libopenal-dev libpng-dev
+sudo apt install libenet-dev uuid-dev libopenal-dev libpng-dev
 ```
 Building:
 ```
@@ -111,7 +111,7 @@ sudo make install
 ## Mac Setup
 Installing dependencies:
 ```
-brew install sdl2 enet ossp-uuid libpng
+brew install enet ossp-uuid libpng
 ```
 Building:
 ```

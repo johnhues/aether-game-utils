@@ -42,6 +42,11 @@ else()
 	find_package(OpenGL REQUIRED)
 endif()
 
+# build sdl2 to be statically linked
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+add_subdirectory(sdl)
+
 # always build assimp because parts of the library are not needed and should be disabled
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 set(BUILD_SHARED_LIBS OFF)
@@ -69,7 +74,6 @@ if (NOT AE_BUILD_DEPS)
 	endif()
 
 	find_package(PNG REQUIRED)
-	find_package(SDL2 REQUIRED)
 	find_package(Enet REQUIRED)
 	find_package(uuid REQUIRED)
 
@@ -81,12 +85,10 @@ else()
 	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
 	set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
 	set(AE_ZLIB_SRC ${AE_THIRDPARTY_DIR}/zlib)
-	set(AE_SDL2_SRC ${AE_THIRDPARTY_DIR}/SDL2)
 	set(AE_ENET_SRC ${AE_THIRDPARTY_DIR}/enet)
 
 	set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
 	set(AE_ZLIB_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/zlib)
-	set(AE_SDL2_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/SDL2)
 	set(AE_ENET_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/enet)
 
 	if(WIN32 AND NOT CYGWIN)
@@ -130,21 +132,6 @@ else()
 		debug ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib
 	)
 
-	if(NOT EMSCRIPTEN)
-		ExternalProject_Add(SDL2
-			PREFIX SDL2
-			SOURCE_DIR ${AE_SDL2_SRC}
-			URL https://www.libsdl.org/release/SDL2-2.0.10.tar.gz
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL} -DEXTRA_LIBS=vcruntime.dll
-		)
-		set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
-		set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
-		set(SDL2_LIBRARY 
-			optimized ${SDL2_LIBRARY_DIRS}/SDL2-static.lib
-			debug ${SDL2_LIBRARY_DIRS}/SDL2-staticd.lib
-		)
-	endif()
-	
 	ExternalProject_Add(Enet
 		PREFIX Enet
 		SOURCE_DIR ${AE_ENET_SRC}
@@ -202,9 +189,10 @@ list(APPEND AE_DEPS_LIBARARIES
 	${PNG_LIBRARIES}
 	${ENET_LIBRARY}
 	${UUID_LIBRARY}
+	assimp
 )
 if(NOT EMSCRIPTEN)
-	list(APPEND AE_DEPS_LIBARARIES ${SDL2_LIBRARY})
+	list(APPEND AE_DEPS_LIBARARIES SDL2main SDL2-static)
 endif()
 
 # use c++17
