@@ -214,7 +214,29 @@ void aeBinaryStream::SerializeBool( const bool& v )
   SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array )
+void aeBinaryStream::m_SerializeArrayLength( uint32_t& length, uint32_t maxLength )
+{
+  if ( maxLength <= aeMath::MaxValue< uint8_t >() )
+  {
+    uint8_t len = (uint8_t)length;
+    SerializeUint8( len );
+    length = len;
+  }
+  else if ( maxLength <= aeMath::MaxValue< uint16_t >() )
+  {
+    uint16_t len = (uint16_t)length;
+    SerializeUint16( len );
+    length = len;
+  }
+  else
+  {
+    uint32_t len = length;
+    SerializeUint32( len );
+    length = len;
+  }
+}
+
+void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array, uint32_t maxLength )
 {
   if ( !m_isValid )
   {
@@ -222,9 +244,8 @@ void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array )
   }
   else if ( m_mode == Mode::ReadBuffer )
   {
-    uint16_t length = 0;
-    SerializeUint16( length );
-    
+    uint32_t length = 0;
+    m_SerializeArrayLength( length, maxLength );
     if ( !m_isValid || length == 0 )
     {
       return;
@@ -240,8 +261,8 @@ void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array )
   }
   else if ( m_mode == Mode::WriteBuffer )
   {
-    uint16_t length = array.Length();
-    SerializeUint16( length );
+    uint32_t length = array.Length();
+    m_SerializeArrayLength( length, maxLength );
     if ( length )
     {
       SerializeRaw( &array[ 0 ], length );
@@ -249,12 +270,12 @@ void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array )
   }
 }
 
-void aeBinaryStream::SerializeArray( const aeArray< uint8_t >& array )
+void aeBinaryStream::SerializeArray( const aeArray< uint8_t >& array, uint32_t maxLength )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
   
-  uint16_t length = array.Length();
-  SerializeUint16( length );
+  uint32_t length = array.Length();
+  m_SerializeArrayLength( length, maxLength );
   if ( length )
   {
     SerializeRaw( &array[ 0 ], length );

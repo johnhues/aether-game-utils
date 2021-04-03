@@ -86,8 +86,8 @@ public:
   void SerializeArray( char (&str)[ N ] );
   template< uint32_t N >
   void SerializeArray( const char (&str)[ N ] );
-  void SerializeArray( aeArray< uint8_t>& array );
-  void SerializeArray( const aeArray< uint8_t>& array );
+  void SerializeArray( aeArray< uint8_t>& array, uint32_t maxLength = 65535 );
+  void SerializeArray( const aeArray< uint8_t>& array, uint32_t maxLength = 65535 );
 
   template< typename T >
   void SerializeRaw( T& v );
@@ -135,6 +135,7 @@ public:
   aeArray< uint8_t >& m_GetArray() { return m_extArray ? *m_extArray : m_array; }
   const aeArray< uint8_t >& m_GetArray() const { return m_extArray ? *m_extArray : m_array; }
 
+  void m_SerializeArrayLength( uint32_t& length, uint32_t maxLength );
   Mode m_mode = Mode::None;
   bool m_isValid = false;
   uint8_t* m_data = nullptr;
@@ -283,6 +284,7 @@ void aeBinaryStream::SerializeRaw( const T& v )
 template< uint32_t N >
 void aeBinaryStream::SerializeArray( char (&str)[ N ] )
 {
+  // @TODO: Cleanup and use m_SerializeArrayLength()
   uint16_t len = 0;
   if ( !m_isValid )
   {
