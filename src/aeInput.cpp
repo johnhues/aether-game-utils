@@ -604,5 +604,6 @@ void aeInput::SetTextMode( bool enabled )
 void aeInput::SetMouseCaptured( bool captured )
 {
   SDL_SetRelativeMouseMode( captured ? SDL_TRUE : SDL_FALSE );
+  SDL_ShowCursor( captured ? SDL_DISABLE : SDL_ENABLE );
   m_mouseCaptured = captured;
 }
