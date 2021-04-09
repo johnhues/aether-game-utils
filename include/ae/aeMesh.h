@@ -59,16 +59,54 @@ public:
   uint32_t GetVertexCount() const;
   uint32_t GetIndexCount() const;
   
-  // Sphere collision
+  //------------------------------------------------------------------------------
+  // aeMesh raycast
+  //------------------------------------------------------------------------------
+  struct RaycastParams
+  {
+    aeFloat4x4 transform = aeFloat4x4::Identity();
+    
+    aeFloat3 source = aeFloat3( 0.0f );
+    aeFloat3 direction = aeFloat3::Down;
+    float maxLength = 0.0f;
+    
+    uint32_t maxHits = 1;
+    bool hitCounterclockwise = true;
+    bool hitClockwise = false;
+    
+    class aeDebugRender* debug = nullptr; // Draw collision results
+    aeColor debugColor = aeColor::Red();
+  };
+
+  struct RaycastResult
+  {
+    struct Hit
+    {
+      aeFloat3 position = aeFloat3( 0.0f );
+      aeFloat3 normal = aeFloat3( 0.0f );
+      float t = 0.0f;
+    };
+    
+    uint32_t hitCount = 0;
+    Hit hits[ 8 ];
+  };
+
+  bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const;
+  
+  //------------------------------------------------------------------------------
+  // aeMesh sphere collision
+  //------------------------------------------------------------------------------
   struct PushOutParams
   {
     aeFloat4x4 transform = aeFloat4x4::Identity();
+    
     aeSphere sphere;
     aeFloat3 velocity = aeFloat3( 0.0f );
     
     class aeDebugRender* debug = nullptr; // Draw collision results
     aeColor debugColor = aeColor::Red();
   };
+
   struct PushOutResult
   {
     aeFloat3 position = aeFloat3( 0.0f );
@@ -78,6 +116,7 @@ public:
     aeFloat3 hitPos[ 8 ];
     aeFloat3 hitNorm[ 8 ];
   };
+
   bool PushOut( const PushOutParams& params, PushOutResult* outResult ) const;
 
 private:
