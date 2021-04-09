@@ -66,12 +66,12 @@ bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeF
   
   // Compute barycentric coordinate components and test if within bounds
   aeFloat3 e = qp % ap;
-  float v = ac.Dot(e) * ood;
+  float v = ac.Dot( e ) * ood;
   if ( v < 0.0f || v > 1.0f )
   {
     return false;
   }
-  float w = -ab.Dot(e) * ood;
+  float w = -ab.Dot( e ) * ood;
   if ( w < 0.0f || v + w > 1.0f )
   {
     return false;
@@ -263,7 +263,8 @@ uint32_t aeMesh::GetIndexCount() const
 
 bool aeMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
 {
-  if ( params.maxLength < 0.0f )
+  // Early out for parameters that will give no results
+  if ( params.maxLength < 0.0f || params.maxHits == 0 )
   {
     return false;
   }
