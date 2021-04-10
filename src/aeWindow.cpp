@@ -38,6 +38,7 @@ aeWindow::aeWindow()
   m_width = 0;
   m_height = 0;
   m_fullScreen = false;
+  m_maximized = false;
 }
 
 void aeWindow::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor )
@@ -71,7 +72,7 @@ void aeWindow::Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool sho
 
 void aeWindow::m_Initialize()
 {
-  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
+  if ( SDL_Init( SDL_INIT_VIDEO ) < 0 )
   {
     AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
   }
@@ -89,11 +90,63 @@ void aeWindow::m_Initialize()
 
   window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
 #else
+  aeRect windowRect( m_pos.x, m_pos.y, m_width, m_height );
+  bool overlapsAny = false;
+  uint32_t displayCount = SDL_GetNumVideoDisplays();
+  for ( uint32_t i = 0; i < displayCount; i++ )
+  {
+    SDL_Rect rect;
+    int result = SDL_GetDisplayBounds( i, &rect );
+    if ( result == 0 )
+    {
+      aeRect screenRect( rect.x, rect.y, rect.w, rect.h );
+      aeRect intersection;
+      if ( windowRect.GetIntersection( screenRect, &intersection ) )
+      {
+        // Check how much window overlaps. This prevent windows that are barely overlapping from appearing offscreen.
+        float intersectionArea = intersection.w * intersection.h;
+        float screenArea = screenRect.w * screenRect.h;
+        float windowArea = windowRect.w * windowRect.h;
+        float screenOverlap = intersectionArea / screenArea;
+        float windowOverlap = intersectionArea / windowArea;
+        if ( screenOverlap > 0.1f || windowOverlap > 0.1f )
+        {
+          overlapsAny = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if ( !overlapsAny && displayCount )
+  {
+    SDL_Rect screenRect;
+    if ( SDL_GetDisplayBounds( 0, &screenRect ) == 0 )
+    {
+      int32_t border = screenRect.w / 16;
+
+      m_width = screenRect.w - border * 2;
+      int32_t h0 = screenRect.h - border * 2;
+      int32_t h1 = m_width * ( 10.0f / 16.0f );
+      m_height = aeMath::Min( h0, h1 );
+
+      m_pos.x = border;
+      m_pos.y = ( screenRect.h - m_height ) / 2;
+      m_pos.x += screenRect.x;
+      m_pos.y += screenRect.y;
+
+      m_fullScreen = false;
+    }
+  }
+
   uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
   flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
   window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
 #endif
   AE_ASSERT( window );
+  
+  SDL_SetWindowTitle( (SDL_Window*)window, "" );
+  m_windowTitle = "";
 }
 
 void aeWindow::Terminate()
@@ -103,9 +156,10 @@ void aeWindow::Terminate()
 
 void aeWindow::SetTitle( const char* title )
 {
-  if ( window )
+  if ( window && m_windowTitle != title )
   {
     SDL_SetWindowTitle( (SDL_Window*)window, title );
+    m_windowTitle = title;
   }
 }
 
@@ -151,4 +205,17 @@ void aeWindow::SetSize( uint32_t width, uint32_t height )
     m_width = width;
     m_height = height;
   }
+}
+
+void aeWindow::SetMaximized( bool maximized )
+{
+  if ( maximized )
+  {
+    SDL_MaximizeWindow( (SDL_Window*)window );
+  }
+  else
+  {
+    SDL_RestoreWindow( (SDL_Window*)window );
+  }
+  m_maximized = maximized;
 }

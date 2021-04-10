@@ -676,6 +676,8 @@ public:
   void AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount );
   void AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color );
   void AddCube( aeFloat4x4 transform, aeColor color );
+  
+  void SetXRayEnabled( bool enabled ) { m_xray = enabled; } // Draw desaturated lines on failed depth test
 
 private:
   static const uint32_t kMaxDebugObjects = 128;
@@ -688,6 +690,7 @@ private:
   aeArray< DebugVertex > m_verts;
   aeVertexData m_vertexData;
   aeShader m_shader;
+  bool m_xray = true;
 
   enum class DebugType
   {

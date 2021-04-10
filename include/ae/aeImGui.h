@@ -80,6 +80,12 @@ public:
 	void NewFrame( aeRender* render, aeInput* input, float dt )
 	{
 		AE_ASSERT( m_init );
+    
+    if ( m_pendingRender )
+    {
+      ImGui::Render();
+      m_pendingRender = false;
+    }
 
 		const InputState* inputState = input->GetState();
 		ImGuiIO& io = ImGui::GetIO();
@@ -117,6 +123,8 @@ public:
 			ImGui_ImplOpenGL3_NewFrame();
 		}
 		ImGui::NewFrame();
+    
+    m_pendingRender = true;
 	}
 
 	void Render()
@@ -127,6 +135,7 @@ public:
 		{
 			ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
 		}
+    m_pendingRender = false;
 	}
 
 	template < uint32_t N >
@@ -307,6 +316,10 @@ private:
 		io.KeyMap[ ImGuiKey_X ] = (uint32_t)aeKey::X;
 		io.KeyMap[ ImGuiKey_Y ] = (uint32_t)aeKey::Y;
 		io.KeyMap[ ImGuiKey_Z ] = (uint32_t)aeKey::Z;
+    
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigWindowsResizeFromEdges = true;
+    io.IniFilename = nullptr; // @TODO: Save layout. Currently disabled because window show states are not saved in the imgui ini file
 
 		m_init = true;
 	}
@@ -331,6 +344,7 @@ private:
 	bool m_init = false;
 	bool m_headless = false;
 	aeRender* m_render = nullptr;
+  bool m_pendingRender = false;
 };
 
 //------------------------------------------------------------------------------

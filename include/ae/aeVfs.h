@@ -43,12 +43,13 @@ public:
   uint32_t GetSize( Root root, const char* fileName );
   uint32_t Read( Root root, const char* fileName, void* buffer, uint32_t bufferSize );
   uint32_t Write( Root root, const char* fileName, const void* buffer, uint32_t bufferSize );
+  void ShowFolder( Root root, const char* fileDir );
+  const char* GetRootDir( Root root );
 
   static uint32_t GetSize( const char* fileDir );
   static uint32_t Read( const char* fileDir, void* buffer, uint32_t bufferSize );
   static uint32_t Write( const char* fileDir, const void* buffer, uint32_t bufferSize );
-
-  const char* GetRootDir( Root root );
+  static void ShowFolder( const char* fileDir );
 
 private:
   aeStr256 m_dataDir;

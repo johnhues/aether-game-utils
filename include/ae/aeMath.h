@@ -859,6 +859,7 @@ public:
   bool Invert();           //TODO: Rename. See above
   aeFloat4x4& SetTranspose();
   aeFloat4x4 GetTransposeCopy() const;
+  aeFloat4x4 GetNormalMatrix() const;
   aeFloat4x4& SetOrientation( const class aeQuat& q );
   aeFloat3 TransformInverse(const aeFloat3& v) const;
   aeFloat3 TransformDirection(const aeFloat3& v) const;

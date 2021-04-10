@@ -476,22 +476,23 @@ void aeNetReplicaDB::UpdateSendData()
   // Send info about new objects (delayed until Update in case objects initData need to reference each other)
   for ( aeNetData* netData : m_pendingCreate )
   {
-    if ( netData->IsPendingInit() )
+    if ( !netData->IsPendingInit() )
     {
-      continue;
-    }
-    
-    for ( uint32_t i = 0; i < m_servers.Length(); i++ )
-    {
-      aeNetReplicaServer* server = m_servers[ i ];
-      aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
-      wStream.SerializeRaw( aeNetReplicaServer::EventType::Create );
-      wStream.SerializeUint32( netData->GetId().GetInternalId() );
-      wStream.SerializeArray( netData->m_initData );
-      
+      // Add net data to list, remove all initialized net datas from m_pendingCreate at once below
       m_netDatas.Set( netData->GetId(), netData );
+      
+      // Send create messages on existing server connections
+      for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+      {
+        aeNetReplicaServer* server = m_servers[ i ];
+        aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
+        wStream.SerializeRaw( aeNetReplicaServer::EventType::Create );
+        wStream.SerializeUint32( netData->GetId().GetInternalId() );
+        wStream.SerializeArray( netData->m_initData );
+      }
     }
   }
+  // Remove all pending net datas that were just initialized
   m_pendingCreate.RemoveAllFn( []( const aeNetData* netData ){ return !netData->IsPendingInit(); } );
   
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )

@@ -1,3 +1,6 @@
 [submodule "assimp"]
-	path = assimp
+	path = deps/assimp
 	url = https://github.com/assimp/assimp.git
+[submodule "sdl"]
+	path = deps/sdl
+	url = https://github.com/libsdl-org/SDL.git

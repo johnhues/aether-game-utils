@@ -28,6 +28,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeMath.h"
+#include "aeString.h"
 
 //------------------------------------------------------------------------------
 // Window class
@@ -45,11 +46,14 @@ public:
   void SetFullScreen( bool fullScreen );
   void SetPosition( aeInt2 pos );
   void SetSize( uint32_t width, uint32_t height );
+  void SetMaximized( bool maximized );
 
+  const char* GetTitle() const { return m_windowTitle.c_str(); }
   aeInt2 GetPosition() const { return m_pos; }
   int32_t GetWidth() const { return m_width; }
   int32_t GetHeight() const { return m_height; }
   bool GetFullScreen() const { return m_fullScreen; }
+  bool GetMaximized() const { return m_maximized; }
 
 private:
   void m_Initialize();
@@ -58,11 +62,14 @@ private:
   int32_t m_width;
   int32_t m_height;
   bool m_fullScreen;
+  bool m_maximized;
+  aeStr256 m_windowTitle;
 
 public:
   // Internal
   void m_UpdatePos( aeInt2 pos ) { m_pos = pos; }
   void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
+  void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
 
   void* window;
 };
