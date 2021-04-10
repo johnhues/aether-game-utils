@@ -16,18 +16,6 @@ target_include_directories(${AE_LIBRARY_NAME}
 		$<INSTALL_INTERFACE:include> # <install prefix>/include
 )
 
-# build dependencies
-if(AE_BUILD_DEPS)
-	if(WIN32 AND NOT CYGWIN)
-		add_dependencies(${AE_LIBRARY_NAME} glew)
-		add_dependencies(${AE_LIBRARY_NAME} openal)
-	endif()
-	add_dependencies(${AE_LIBRARY_NAME}
-		zlib
-		Enet
-	)
-endif()
-
 # dependency linking
 # @TODO: Static libraries are always marked public so they can be linked directly
 #        by the final executable. This means that any downloaded dependent libraries
@@ -118,11 +106,11 @@ target_sources(${AE_LIBRARY_NAME}
 )
 
 # ae lib installation
-message(STATUS "ae installation path: ${CMAKE_INSTALL_PREFIX}")
-install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME}Config
-	LIBRARY DESTINATION lib
-	ARCHIVE DESTINATION lib
-	INCLUDES DESTINATION include
-)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
-install(EXPORT ${AE_LIBRARY_NAME}Config DESTINATION lib/cmake/${AE_LIBRARY_NAME})
+# message(STATUS "ae installation path: ${CMAKE_INSTALL_PREFIX}")
+# install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME}Config
+# 	LIBRARY DESTINATION lib
+# 	ARCHIVE DESTINATION lib
+# 	INCLUDES DESTINATION include
+# )
+# install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+# install(EXPORT ${AE_LIBRARY_NAME}Config DESTINATION lib/cmake/${AE_LIBRARY_NAME})
