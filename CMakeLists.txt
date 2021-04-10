@@ -45,7 +45,7 @@ endif()
 # build sdl2 to be statically linked
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-add_subdirectory(sdl)
+add_subdirectory(deps/sdl)
 
 # always build assimp because parts of the library are not needed and should be disabled
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
@@ -57,7 +57,7 @@ set(ASSIMP_NO_EXPORT ON)
 set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT FALSE)
 set(ASSIMP_BUILD_OBJ_IMPORTER ON)
 set(ASSIMP_BUILD_FBX_IMPORTER ON)
-add_subdirectory(assimp)
+add_subdirectory(deps/assimp)
 set(ASSIMP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/assimp/include ${CMAKE_CURRENT_BINARY_DIR}/assimp/include)
 
 if (NOT AE_BUILD_DEPS)
