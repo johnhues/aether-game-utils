@@ -1,56 +1,23 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/safeguards.cmake)
-include(ExternalProject)
+Include(FetchContent)
 
 # imgui
-if (NOT TARGET imgui)
-	set(IMGUI_GIT_TAG 640bc056a97829bb38562954a9895f490a72a1bc)
-	ExternalProject_Add(imgui
-		PREFIX "${AE_THIRDPARTY_DIR}/imgui_${IMGUI_GIT_TAG}"
-		GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
-		GIT_TAG "${IMGUI_GIT_TAG}"
-		${AE_MULTI_CONFIG_BUILD_COMMAND}
-		INSTALL_COMMAND ""
-	)
-	ExternalProject_Get_Property(imgui SOURCE_DIR)
-	ExternalProject_Get_Property(imgui BINARY_DIR)
-	set(IMGUI_INCLUDE_DIRS
-		${SOURCE_DIR}
-		${SOURCE_DIR}/examples
-	)
-	if(GENERATOR_IS_MULTI_CONFIG)
-		set(IMGUI_LIBRARIES 
-			optimized "${BINARY_DIR}/RelWithDebInfo/${CMAKE_STATIC_LIBRARY_PREFIX}imgui${CMAKE_STATIC_LIBRARY_SUFFIX}"
-			debug "${BINARY_DIR}/Debug/${CMAKE_STATIC_LIBRARY_PREFIX}imgui${CMAKE_STATIC_LIBRARY_SUFFIX}"
-		)
-	else()
-		set(IMGUI_LIBRARIES "${BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}imgui${CMAKE_STATIC_LIBRARY_SUFFIX}")
-	endif()
-endif()
+FetchContent_Declare(
+	imgui
+	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
+	GIT_TAG 3fed909881dd8e054ed47a51342ef3eb0119bb49
+)
+FetchContent_MakeAvailable(imgui)
 
 # imguizmo
-if (NOT TARGET imguizmo)
-	set(IMGUIZMO_GIT_TAG d7a1c40e0e99f8c3c471cbe7060fbae1d11899ae)
-	ExternalProject_Add(imguizmo
-		PREFIX "${AE_THIRDPARTY_DIR}/imguizmo_${IMGUIZMO_GIT_TAG}"
-		GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
-		GIT_TAG "${IMGUIZMO_GIT_TAG}"
-		${AE_MULTI_CONFIG_BUILD_COMMAND}
-		INSTALL_COMMAND ""
-	)
-	ExternalProject_Get_Property(imguizmo SOURCE_DIR)
-	ExternalProject_Get_Property(imguizmo BINARY_DIR)
-	set(IMGUIZMO_INCLUDE_DIRS ${SOURCE_DIR})
-	if(GENERATOR_IS_MULTI_CONFIG)
-		set(IMGUIZMO_LIBRARIES 
-			optimized "${BINARY_DIR}/RelWithDebInfo/${CMAKE_STATIC_LIBRARY_PREFIX}imguizmo${CMAKE_STATIC_LIBRARY_SUFFIX}"
-			debug "${BINARY_DIR}/Debug/${CMAKE_STATIC_LIBRARY_PREFIX}imguizmo${CMAKE_STATIC_LIBRARY_SUFFIX}"
-		)
-	else()
-		set(IMGUIZMO_LIBRARIES "${BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}imguizmo${CMAKE_STATIC_LIBRARY_SUFFIX}")
-	endif()
-endif()
+FetchContent_Declare(
+	imguizmo
+	GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
+	GIT_TAG 009f215f824639d6cf607c9a1ab5dfc6c48db6b3
+)
+FetchContent_MakeAvailable(imguizmo)
 
 # Hello World
 set(AE_CURRENT_BUNDLE_NAME "Hello World")
