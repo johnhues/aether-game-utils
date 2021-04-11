@@ -241,8 +241,8 @@ int main()
     // Update
     //------------------------------------------------------------------------------
     input.Pump();
-    player.Update( &world, &input, timeStep.GetPrevFrameTime() );
-    world.Update( timeStep.GetPrevFrameTime() );
+    player.Update( &world, &input, timeStep.GetDT() );
+    world.Update( timeStep.GetDT() );
     
     //------------------------------------------------------------------------------
     // Render
