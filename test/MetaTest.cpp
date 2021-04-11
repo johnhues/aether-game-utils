@@ -258,6 +258,7 @@ bool RefTester::StringToId( const char* str, uint32_t* idOut )
   }
   return false;
 }
+
 void RefTesterManager::Destroy( RefTester* object )
 {
   m_objectMap.Remove( object->id );
@@ -272,18 +273,37 @@ RefTester* RefTesterManager::GetObjectById( uint32_t id )
 TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 {
   const aeMeta::Type* typeA = aeMeta::GetType< RefTesterA >();
-  const aeMeta::Var* varA = typeA->GetVarByName( "ref" );
+  REQUIRE( typeA );
+  const aeMeta::Var* typeA_notRef = typeA->GetVarByName( "notRef" );
+  const aeMeta::Var* typeA_varA = typeA->GetVarByName( "refA" );
+  const aeMeta::Var* typeA_varB = typeA->GetVarByName( "refB" );
+  REQUIRE( typeA_notRef );
+  REQUIRE( typeA_varA );
+  REQUIRE( typeA_varB );
   
   const aeMeta::Type* typeB = aeMeta::GetType< RefTesterB >();
-  const aeMeta::Var* varB = typeB->GetVarByName( "ref" );
+  REQUIRE( typeB );
+  const aeMeta::Var* typeB_varA = typeB->GetVarByName( "refA" );
+  REQUIRE( typeB_varA );
+  
+  REQUIRE( !typeA_notRef->GetRefType() );
+  REQUIRE( typeA_varA->GetRefType() == typeA );
+  REQUIRE( typeA_varB->GetRefType() == typeB );
+  REQUIRE( typeB_varA->GetRefType() == typeA );
   
   RefTesterManager manager;
-  auto refStrToValFn = [&]( const char* str, aeObject** objOut )
+  auto refStrToValFn = [&]( const aeMeta::Type* type, const char* str, aeObject** objOut )
   {
     uint32_t id = 0;
     if ( RefTester::StringToId( str, &id ) )
     {
-      *objOut = manager.GetObjectById( id );
+      RefTester* object = manager.GetObjectById( id );
+      const aeMeta::Type* objType = aeMeta::GetTypeFromObject( object );
+      if ( objType && !objType->IsType( type ) )
+      {
+        return false;
+      }
+      *objOut = object;
       return true;
     }
     return false;
@@ -306,46 +326,80 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( RefTester::GetIdString( testerB3 ) == "3" );
   
   // Validate initial reference values
-  REQUIRE( testerA1->ref == nullptr );
-  REQUIRE( testerA2->ref == nullptr );
-  REQUIRE( testerB3->ref == nullptr );
-  REQUIRE( varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "0" );
-  REQUIRE( varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
-  REQUIRE( varB->GetObjectValueAsString( testerB3, refValToStrFn ) == "0" );
+  REQUIRE( testerA1->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA1->refA == nullptr );
+  REQUIRE( testerA1->refB == nullptr );
+  REQUIRE( testerA2->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA2->refA == nullptr );
+  REQUIRE( testerA2->refB == nullptr );
+  REQUIRE( testerB3->refA == nullptr );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "0" );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
+  REQUIRE( typeB_varA->GetObjectValueAsString( testerB3, refValToStrFn ) == "0" );
   
-  // Set ref of type A to type A
-  REQUIRE( varA->SetObjectValueFromString( testerA1, "2", refStrToValFn ) );
-  REQUIRE( testerA1->ref == testerA2 );
-  REQUIRE( testerA2->ref == nullptr );
-  REQUIRE( testerB3->ref == nullptr );
+  // Set type A's ref to type A
+  REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "2", refStrToValFn ) );
+  REQUIRE( testerA1->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA1->refA == testerA2 );
+  REQUIRE( testerA1->refB == nullptr );
+  REQUIRE( testerA2->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA2->refA == nullptr );
+  REQUIRE( testerA2->refB == nullptr );
+  REQUIRE( testerB3->refA == nullptr );
   
-  // Set ref of type B to type A
-  REQUIRE( varB->SetObjectValueFromString( testerB3, "2", refStrToValFn ) );
-  REQUIRE( testerA1->ref == testerA2 );
-  REQUIRE( testerA2->ref == nullptr );
-  REQUIRE( testerB3->ref == testerA2 );
+  // Set type B's ref to type A
+  REQUIRE( typeB_varA->SetObjectValueFromString( testerB3, "2", refStrToValFn ) );
+  REQUIRE( testerA1->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA1->refA == testerA2 );
+  REQUIRE( testerA1->refB == nullptr );
+  REQUIRE( testerA2->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA2->refA == nullptr );
+  REQUIRE( testerA2->refB == nullptr );
+  REQUIRE( testerB3->refA == testerA2 );
   
-  REQUIRE( varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "2" );
-  REQUIRE( varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
-  REQUIRE( varB->GetObjectValueAsString( testerB3, refValToStrFn ) == "2" );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "2" );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
+  REQUIRE( typeB_varA->GetObjectValueAsString( testerB3, refValToStrFn ) == "2" );
   
-  // Setting ref to object of wrong type fails and does nothing
-  REQUIRE( !varB->SetObjectValueFromString( testerA1, "3", refStrToValFn ) );
-  REQUIRE( testerA1->ref == testerA2 );
-  REQUIRE( testerA2->ref == nullptr );
-  REQUIRE( testerB3->ref == testerA2 );
+  // Set type A's ref B to type B
+  REQUIRE( typeA_varB->SetObjectValueFromString( testerA2, "3", refStrToValFn ) );
+  REQUIRE( testerA1->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA1->refA == testerA2 );
+  REQUIRE( testerA1->refB == nullptr );
+  REQUIRE( testerA2->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA2->refA == nullptr );
+  REQUIRE( testerA2->refB == testerB3 );
+  REQUIRE( testerB3->refA == testerA2 );
+  
+  // Setting type A ref A to type B should do nothing
+  REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "3", refStrToValFn ) );
+  REQUIRE( testerA1->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA1->refA == testerA2 );
+  REQUIRE( testerA1->refB == nullptr );
+  REQUIRE( testerA2->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA2->refA == nullptr );
+  REQUIRE( testerA2->refB == testerB3 );
+  REQUIRE( testerB3->refA == testerA2 );
   
   // Setting ref from random string value does nothing
-  REQUIRE( !varB->SetObjectValueFromString( testerA1, "qwerty", refStrToValFn ) );
-  REQUIRE( testerA1->ref == testerA2 );
-  REQUIRE( testerA2->ref == nullptr );
-  REQUIRE( testerB3->ref == testerA2 );
+  REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "qwerty", refStrToValFn ) );
+  REQUIRE( testerA1->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA1->refA == testerA2 );
+  REQUIRE( testerA1->refB == nullptr );
+  REQUIRE( testerA2->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA2->refA == nullptr );
+  REQUIRE( testerA2->refB == testerB3 );
+  REQUIRE( testerB3->refA == testerA2 );
   
   // Setting ref to null value succeeds and clears ref
-  REQUIRE( varB->SetObjectValueFromString( testerA1, "0", refStrToValFn ) );
-  REQUIRE( testerA1->ref == nullptr );
-  REQUIRE( testerA2->ref == nullptr );
-  REQUIRE( testerB3->ref == testerA2 );
+  REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "0", refStrToValFn ) );
+  REQUIRE( testerA1->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA1->refA == nullptr );
+  REQUIRE( testerA1->refB == nullptr );
+  REQUIRE( testerA2->notRef == 0xfdfdfdfd );
+  REQUIRE( testerA2->refA == nullptr );
+  REQUIRE( testerA2->refB == testerB3 );
+  REQUIRE( testerB3->refA == testerA2 );
   
   manager.Destroy( testerA1 );
   manager.Destroy( testerA2 );

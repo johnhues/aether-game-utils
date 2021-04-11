@@ -66,7 +66,7 @@ const char* kTerrainFragShader = "\
     light = max( 0.0, light );\
     light = mix( 0.8, 4.0, light );\
     \
-    AE_COLOR = vec4( AE_RGB_TO_SRGB( color.rgb * vec3( light ) ), color.a );\
+    AE_COLOR = vec4( color.rgb * vec3( light ), color.a );\
   }";
 
 //------------------------------------------------------------------------------

@@ -47,9 +47,11 @@ public:
 
   void SetTimeStep( float timeStep ) { m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f; }
   float GetTimeStep() const { return m_timeStepSec; }
-  float GetPrevFrameTime() const { return m_prevFrameTimeSec; }
   uint32_t GetStepCount() const { return m_stepCount; }
-  
+
+  float GetDT() const { return m_prevFrameTimeSec; }
+  float SetDT( float sec ) { m_prevFrameTimeSec = sec; } // Useful for handling frames with high delta time, eg: timeStep.SetDT( timeStep.GetTimeStep() )
+
   void Wait();
 
 private:

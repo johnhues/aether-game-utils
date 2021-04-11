@@ -91,7 +91,9 @@ AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Blop );
 AE_META_CLASS( RefTester );
 
 AE_META_CLASS( RefTesterA );
-AE_META_VAR( RefTesterA, ref );
+AE_META_VAR( RefTesterA, notRef );
+AE_META_VAR( RefTesterA, refA );
+AE_META_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered after this, but it has to still work
 
 AE_META_CLASS( RefTesterB );
-AE_META_VAR( RefTesterB, ref );
+AE_META_VAR( RefTesterB, refA );

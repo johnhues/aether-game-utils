@@ -616,7 +616,7 @@ public:
   //        characters evenly spaced from top left to bottom right. The
   //        texture can be a single channel without transparency. Luminance
   //        of the red channel is used for transparency.
-  //        'charSize' is the width and height of each character in the texture.
+  //        'fontSize' is the width and height of each character in the texture.
   void Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t fontSize ); // @TODO: Text render should take a texture and the user should handle file loading
   void Terminate();
   void Render( const aeFloat4x4& uiToScreen );

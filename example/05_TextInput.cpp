@@ -62,7 +62,20 @@ int main()
 		// Format input text buffer
 		aeStr512 displayText( ">" );
 		displayText.Append( input.GetText() );
-		displayText.Append( "_" );
+		
+		static int s_blink = 0;
+		static int s_prevLen = 0;
+		if ( s_prevLen != displayText.Length() )
+		{
+			s_prevLen = displayText.Length();
+			s_blink = 0;
+		}
+		else if ( s_blink >= 60 )
+		{
+			s_blink -= 60;
+		}
+		displayText.Append( s_blink < 30 ? "_" : " " );
+		s_blink++;
 
 		// Render text in top left corner
 		int maxLineLength = render.GetWidth() / textRender.GetFontSize() - 2;
