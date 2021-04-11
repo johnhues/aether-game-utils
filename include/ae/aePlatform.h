@@ -109,6 +109,56 @@
 #include <utility>
 
 //------------------------------------------------------------------------------
+// SIMD headers
+//------------------------------------------------------------------------------
+#if _AE_APPLE_
+  #ifdef __aarch64__
+    #include <arm_neon.h>
+  #else
+    #include <x86intrin.h>
+  #endif
+#elif _AE_WINDOWS_
+  #include <intrin.h>
+#endif
+
+//------------------------------------------------------------------------------
+// aeGetTypeName
+//------------------------------------------------------------------------------
+template < typename T >
+const char* aeGetTypeName()
+{
+  const char* typeName = typeid( T ).name();
+#ifdef _MSC_VER
+  if ( strncmp( typeName, "class ", 6 ) == 0 )
+  {
+    typeName += 6;
+  }
+  else if ( strncmp( typeName, "struct ", 7 ) == 0 )
+  {
+    typeName += 7;
+  }
+#else
+  while ( *typeName && isdigit( typeName[ 0 ] ) )
+  {
+    typeName++;
+  }
+#endif
+  return typeName;
+}
+
+//------------------------------------------------------------------------------
+// Types
+//------------------------------------------------------------------------------
+#ifdef __aarch64__
+  #if _AE_OSX_
+    // @NOTE: Typeinfo appears to be missing for float16_t
+    template <> const char* aeGetTypeName< float16_t >();
+  #endif
+#else
+	typedef float float16_t;
+#endif
+
+//------------------------------------------------------------------------------
 // Utils
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
@@ -170,28 +220,6 @@ inline void* aeRealloc( void* p, uint32_t size, uint32_t boundary )
   aeCompilationWarning( "Aligned realloc() not determined on this platform" )
   return nullptr;
 #endif
-}
-
-template < typename T >
-const char* aeGetTypeName()
-{
-  const char* typeName = typeid( T ).name();
-#ifdef _MSC_VER
-  if ( strncmp( typeName, "class ", 6 ) == 0 )
-  {
-    typeName += 6;
-  }
-  else if ( strncmp( typeName, "struct ", 7 ) == 0 )
-  {
-    typeName += 7;
-  }
-#else
-  while ( *typeName && isdigit( typeName[ 0 ] ) )
-  {
-    typeName++;
-  }
-#endif
-  return typeName;
 }
 
 uint32_t aeGetPID();

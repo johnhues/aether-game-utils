@@ -86,11 +86,6 @@ inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
 // Constants
 //------------------------------------------------------------------------------
 typedef aeUnit< uint32_t > VertexCount;
-#ifdef __aarch64__
-    #include <arm_neon.h>
-#else
-    typedef float float16_t;
-#endif
 typedef uint8_t aeTerrainMaterialId;
 #define PACK( _ae_something ) _ae_something
 

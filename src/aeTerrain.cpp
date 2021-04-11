@@ -58,17 +58,8 @@
 //------------------------------------------------------------------------------
 // SIMD headers
 //------------------------------------------------------------------------------
-#if AE_TERRAIN_SIMD
-  #if _AE_APPLE_
-    #ifdef __aarch64__
-      #include <arm_neon.h>
-      #include "sse2neon.h"
-    #else
-      #include <x86intrin.h>
-    #endif
-  #elif _AE_WINDOWS_
-    #include <intrin.h>
-  #endif
+#if AE_TERRAIN_SIMD && __aarch64__ && _AE_APPLE_
+  #include "sse2neon.h"
 #endif
 
 //------------------------------------------------------------------------------
