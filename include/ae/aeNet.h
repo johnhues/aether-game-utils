@@ -279,6 +279,7 @@ const AetherMsgId kSysMsgPlayerDisconnect = 4 | kSysMsgMask;
 
 struct AetherAddress
 {
+  bool IsLocalhost() const;
   char host[ 32 ];
   uint16_t port;
 };

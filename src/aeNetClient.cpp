@@ -83,6 +83,15 @@ std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid )
   return os << str;
 }
 
+bool AetherAddress::IsLocalhost() const
+{
+    if ( strcmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 || strcmp(host, "::1") == 0 )
+    {
+        return true;
+    }
+    return false;
+}
+
 //------------------------------------------------------------------------------
 // AetherClient member functions
 //------------------------------------------------------------------------------
