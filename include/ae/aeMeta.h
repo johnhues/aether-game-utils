@@ -1017,7 +1017,7 @@ struct aeMeta::VarType< aeStr<N> >
 {
   static aeMeta::Var::Type GetType() { return aeMeta::Var::String; }
   static const char* GetName() { return "String"; }
-  static const char* GetRefType() { return ""; }
+  static const char* GetRefTypeName() { return ""; }
 };
 
 template < typename T >
