@@ -24,6 +24,75 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeMesh.h"
+
+// @TODO: Move to aeMath
+bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeFloat3 c, bool limitRay, bool ccw, bool cw, aeFloat3* pOut, aeFloat3* nOut, float* tOut )
+{
+  aeFloat3 ab = b - a;
+  aeFloat3 ac = c - a;
+  aeFloat3 n = ab % ac;
+  aeFloat3 qp = -dir;
+  
+  // Compute denominator d
+  float d = qp.Dot( n );
+  if ( !ccw && d > 0.0f )
+  {
+    return false;
+  }
+  if ( !cw && d < 0.0f )
+  {
+    return false;
+  }
+  // Parallel
+  if ( d * d < 0.001f )
+  {
+    return false;
+  }
+  float ood = 1.0f / d;
+  
+  // Compute intersection t value of pq with plane of triangle
+  aeFloat3 ap = p - a;
+  float t = ap.Dot( n ) * ood;
+  // Ray intersects if 0 <= t
+  if ( t < 0.0f )
+  {
+    return false;
+  }
+  // Segment intersects if 0 <= t <= 1
+  if ( limitRay && t > 1.0f )
+  {
+    return false;
+  }
+  
+  // Compute barycentric coordinate components and test if within bounds
+  aeFloat3 e = qp % ap;
+  float v = ac.Dot( e ) * ood;
+  if ( v < 0.0f || v > 1.0f )
+  {
+    return false;
+  }
+  float w = -ab.Dot( e ) * ood;
+  if ( w < 0.0f || v + w > 1.0f )
+  {
+    return false;
+  }
+  
+  // Result
+  if ( pOut )
+  {
+    *pOut = p + dir * t;
+  }
+  if ( nOut )
+  {
+    *nOut = n.SafeNormalizeCopy();
+  }
+  if ( tOut )
+  {
+    *tOut = t;
+  }
+  return true;
+}
+
 #if _AE_EMSCRIPTEN_
 
 bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization ) { return false; }
@@ -192,6 +261,108 @@ uint32_t aeMesh::GetIndexCount() const
   return m_indices.Length();
 }
 
+bool aeMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
+{
+  // Early out for parameters that will give no results
+  if ( params.maxLength < 0.0f || params.maxHits == 0 )
+  {
+    return false;
+  }
+  
+  // Obb in world space
+  {
+    aeOBB obb( params.transform * m_aabb.GetTransform() );
+    if ( !obb.IntersectRay( params.source, params.direction ) )
+    {
+      return false; // Early out if ray doesn't touch obb
+    }
+    
+    if ( aeDebugRender* debug = params.debug )
+    {
+      // Ray intersects obb
+      debug->AddCube( obb.GetTransform(), params.debugColor );
+    }
+  }
+  
+  bool limitRay = params.maxLength != 0.0f;
+  const aeFloat4x4 invTransform = params.transform.Inverse();
+  const aeFloat3 source( invTransform * aeFloat4( params.source, 1.0f ) );
+  const aeFloat3 ray( invTransform * aeFloat4( limitRay ? params.direction.SafeNormalizeCopy() * params.maxLength : params.direction, 0.0f ) );
+  const aeFloat3 normDir = ray.SafeNormalizeCopy();
+  const bool ccw = params.hitCounterclockwise;
+  const bool cw = params.hitClockwise;
+  
+  const uint32_t triCount = GetIndexCount() / 3;
+  const aeMeshIndex* indices = GetIndices();
+  const aeMeshVertex* vertices = GetVertices();
+
+  uint32_t hitCount  = 0;
+  RaycastResult::Hit hits[ countof(RaycastResult::hits) + 1 ];
+  const uint32_t maxHits = aeMath::Min( params.maxHits, countof(RaycastResult::hits) );
+  for ( uint32_t i = 0; i < triCount; i++ )
+  {
+    aeFloat3 a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
+    aeFloat3 b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
+    aeFloat3 c = vertices[ indices[ i * 3 + 2 ] ].position.GetXYZ();
+    
+    aeFloat3 p;
+    aeFloat3 n;
+    if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
+    {
+      RaycastResult::Hit* outHit = &hits[ hitCount ];
+      if ( hitCount <= maxHits ) // Allow one extra hit, then sort array and remove last
+      {
+        hitCount++;
+      }
+      
+      p = aeFloat3( params.transform * aeFloat4( p, 1.0f ) );
+      n = aeFloat3( params.transform * aeFloat4( n, 0.0f ) );
+      
+      outHit->position = p;
+      outHit->normal = n;
+      outHit->t = normDir.Dot( p - params.source ); // Calculate here because transform might not have uniform scale
+      
+      if ( hitCount > maxHits )
+      {
+        std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.t < b.t; } );
+        hitCount = maxHits;
+      }
+    }
+  }
+  
+  if ( aeDebugRender* debug = params.debug )
+  {
+    if ( hitCount && !limitRay )
+    {
+      debug->AddLine( params.source, hits[ hitCount - 1 ].position, params.debugColor );
+    }
+    else
+    {
+      debug->AddLine( params.source, params.source + ray, params.debugColor );
+    }
+    
+    for ( uint32_t i = 0; i < hitCount; i++ )
+    {
+      const RaycastResult::Hit* hit = &hits[ i ];
+      const aeFloat3 p = hit->position;
+      const aeFloat3 n = hit->normal;
+      float s = ( hitCount > 1 ) ? ( i / ( hitCount - 1.0f ) ) : 1.0f;
+      debug->AddCircle( p, n, aeMath::Lerp( 0.25f, 0.3f, s ), params.debugColor, 8 );
+      debug->AddLine( p, p + n, params.debugColor );
+    }
+  }
+  
+  if ( outResult )
+  {
+    outResult->hitCount = hitCount;
+    for ( uint32_t i = 0; i < hitCount; i++ )
+    {
+      outResult->hits[ i ] = hits[ i ];
+    }
+  }
+  return hitCount;
+}
+
 bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) const
 {
   aeOBB obb( params.transform * m_aabb.GetTransform() );
@@ -202,6 +373,7 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
   
   if ( aeDebugRender* debug = params.debug )
   {
+    // Sphere intersects obb
     debug->AddCube( obb.GetTransform(), params.debugColor );
   }
   

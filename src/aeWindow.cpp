@@ -72,7 +72,7 @@ void aeWindow::Initialize( aeInt2 pos, uint32_t width, uint32_t height, bool sho
 
 void aeWindow::m_Initialize()
 {
-  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
+  if ( SDL_Init( SDL_INIT_VIDEO ) < 0 )
   {
     AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
   }
@@ -100,24 +100,41 @@ void aeWindow::m_Initialize()
     if ( result == 0 )
     {
       aeRect screenRect( rect.x, rect.y, rect.w, rect.h );
-      if ( windowRect.GetIntersection( screenRect, nullptr ) )
+      aeRect intersection;
+      if ( windowRect.GetIntersection( screenRect, &intersection ) )
       {
-        overlapsAny = true;
-        break;
+        // Check how much window overlaps. This prevent windows that are barely overlapping from appearing offscreen.
+        float intersectionArea = intersection.w * intersection.h;
+        float screenArea = screenRect.w * screenRect.h;
+        float windowArea = windowRect.w * windowRect.h;
+        float screenOverlap = intersectionArea / screenArea;
+        float windowOverlap = intersectionArea / windowArea;
+        if ( screenOverlap > 0.1f || windowOverlap > 0.1f )
+        {
+          overlapsAny = true;
+          break;
+        }
       }
     }
   }
 
   if ( !overlapsAny && displayCount )
   {
-    SDL_Rect rect;
-    if ( SDL_GetDisplayBounds( 0, &rect ) == 0 )
+    SDL_Rect screenRect;
+    if ( SDL_GetDisplayBounds( 0, &screenRect ) == 0 )
     {
-      int32_t border = rect.h / 8;
+      int32_t border = screenRect.w / 16;
+
+      m_width = screenRect.w - border * 2;
+      int32_t h0 = screenRect.h - border * 2;
+      int32_t h1 = m_width * ( 10.0f / 16.0f );
+      m_height = aeMath::Min( h0, h1 );
+
       m_pos.x = border;
-      m_pos.y = border;
-      m_width = rect.w - border * 2;
-      m_height = rect.h - border * 2;
+      m_pos.y = ( screenRect.h - m_height ) / 2;
+      m_pos.x += screenRect.x;
+      m_pos.y += screenRect.y;
+
       m_fullScreen = false;
     }
   }

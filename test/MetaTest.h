@@ -135,14 +135,16 @@ public:
 class RefTesterA : public aeInheritor< RefTester, RefTesterA >
 {
 public:
-  RefTesterA* ref = nullptr;
+  int notRef = 0xfdfdfdfd;
+  class RefTesterA* refA = nullptr;
+  class RefTesterB* refB = nullptr;
 };
 
 // RefTesterB
 class RefTesterB : public aeInheritor< RefTester, RefTesterB >
 {
 public:
-  RefTesterA* ref = nullptr;
+  class RefTesterA* refA = nullptr;
 };
 
 // RefTesterManager

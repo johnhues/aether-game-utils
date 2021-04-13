@@ -62,6 +62,7 @@ Some_##x some_##x;
 // Internal meta forward declarations
 //------------------------------------------------------------------------------
 static aeMetaTypeId aeMetaGetObjectTypeId( const aeObject* obj );
+static aeMetaTypeId aeMetaGetTypeIdFromName( const char* name );
 
 //------------------------------------------------------------------------------
 // External meta types
@@ -268,14 +269,17 @@ public:
       return "";
     }
     
-    bool SetObjectValueFromString( aeObject* obj, const char* value, std::function< aeObject*( const aeMeta::Type*, const char* ) > getObjectPointerFromString = nullptr ) const
+    bool SetObjectValueFromString( aeObject* obj, const char* value, std::function< bool( const aeMeta::Type*, const char*, aeObject** ) > getObjectPointerFromString = nullptr ) const
     {
       if ( !obj )
       {
         return false;
       }
       
-      // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' aeMeta::Type
+      // Safety check to make sure 'this' Var belongs to 'obj' aeMeta::Type
+      const aeMeta::Type* objType = aeMeta::GetTypeFromObject( obj );
+      AE_ASSERT( objType );
+      AE_ASSERT_MSG( objType == m_owner, "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
       
       void* varData = (uint8_t*)obj + m_offset;
       
@@ -466,14 +470,18 @@ public:
         }
         case Var::Ref:
         {
-          AE_ASSERT( m_refType );
+          const aeMeta::Type* refType = GetRefType();
           AE_ASSERT_MSG( getObjectPointerFromString, "Must provide mapping function for reference types when calling SetObjectValueFromString" );
-          if ( class aeObject* obj = getObjectPointerFromString( m_refType, value ) )
+          
+          class aeObject* obj = nullptr;
+          if ( getObjectPointerFromString( refType, value, &obj ) )
           {
-            const aeMeta::Type* objType = aeMeta::GetTypeFromObject( obj );
-            AE_ASSERT( objType );
-            AE_ASSERT_MSG( objType->IsType( m_refType ), "SetObjectValueFromString for var '#::#' returned object with wrong type '#'", m_owner->GetName(), GetName(), objType->GetName() );
-            
+            if ( obj )
+            {
+              const aeMeta::Type* objType = aeMeta::GetTypeFromObject( obj );
+              AE_ASSERT( objType );
+              AE_ASSERT_MSG( objType->IsType( refType ), "SetObjectValueFromString for var '#::#' returned object with wrong type '#'", m_owner->GetName(), GetName(), objType->GetName() );
+            }
             class aeObject** varPtr = reinterpret_cast< class aeObject** >( varData );
             *varPtr = obj;
             return true;
@@ -488,7 +496,6 @@ public:
     bool SetObjectValue( aeObject* obj, const aeObject* value ) const
     {
       AE_ASSERT( m_type == Ref );
-      AE_ASSERT( m_refType );
       
       if ( !obj )
       {
@@ -505,9 +512,10 @@ public:
         return true;
       }
       
+      const aeMeta::Type* refType = GetRefType();
       const aeMeta::Type* valueType = aeMeta::GetTypeFromObject( value );
       AE_ASSERT( valueType );
-      AE_ASSERT_MSG( valueType->IsType( m_refType ), "Attempting to set ref type '#' with unrelated type '#'", m_refType->GetName(), valueType->GetName() );
+      AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
       
       uint8_t* target = (uint8_t*)obj + m_offset;
       const aeObject*& varData = *reinterpret_cast< const aeObject** >( target );
@@ -557,7 +565,13 @@ public:
     // Ref
     const aeMeta::Type* GetRefType() const
     {
-      return m_refType;
+      if ( m_refTypeId == kAeInvalidMetaTypeId )
+      {
+        return nullptr;
+      }
+      const aeMeta::Type* type = GetTypeById( m_refTypeId );
+      AE_ASSERT( type );
+      return type;
     }
 
     // Members
@@ -567,7 +581,7 @@ public:
     aeStr32 m_typeName = "";
     uint32_t m_offset = 0;
     uint32_t m_size = 0;
-    const aeMeta::Type* m_refType = nullptr;
+    aeMetaTypeId m_refTypeId = kAeInvalidMetaTypeId; // @TODO: Need to use an id here in case type has not been registered yet
     mutable const class Enum* m_enum = nullptr;
   };
   
@@ -663,7 +677,7 @@ public:
     {
       m_placementNew = &( PlacementNewInternal< T > );
       m_name = name;
-      m_id = aeHash().HashString( name ).Get();
+      m_id = aeMetaGetTypeIdFromName( name );
       m_size = sizeof( T );
       m_align = alignof( T );
       m_parent = T::GetBaseTypeName();
@@ -677,7 +691,7 @@ public:
     {
       m_placementNew = nullptr;
       m_name = name;
-      m_id = aeHash().HashString( name ).Get();
+      m_id = aeMetaGetTypeIdFromName( name );
       m_size = sizeof( T );
       m_align = 0;
       m_parent = T::GetBaseTypeName();
@@ -838,7 +852,7 @@ public:
       var.m_name = varName;
       var.m_type = aeMeta::VarType< V >::GetType();
       var.m_typeName = aeMeta::VarType< V >::GetName();
-      var.m_refType = aeMeta::VarType< V >::GetRefType();
+      var.m_refTypeId = aeMetaGetTypeIdFromName( aeMeta::VarType< V >::GetRefTypeName() );
 #if !_AE_WINDOWS_
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Winvalid-offsetof"
@@ -983,7 +997,7 @@ template <> \
 struct aeMeta::VarType< t > { \
 static aeMeta::Var::Type GetType() { return aeMeta::Var::e; } \
 static const char* GetName() { return #t; } \
-static const aeMeta::Type* GetRefType() { return nullptr; } \
+static const char* GetRefTypeName() { return ""; } \
 };
 
 DefineMetaVarType( uint8_t, UInt8 );
@@ -1003,7 +1017,7 @@ struct aeMeta::VarType< aeStr<N> >
 {
   static aeMeta::Var::Type GetType() { return aeMeta::Var::String; }
   static const char* GetName() { return "String"; }
-  static const aeMeta::Type* GetRefType() { return nullptr; }
+  static const char* GetRefTypeName() { return ""; }
 };
 
 template < typename T >
@@ -1015,7 +1029,7 @@ struct aeMeta::VarType< T* >
     return aeMeta::Var::Ref;
   }
   static const char* GetName() { return "Ref"; }
-  static const aeMeta::Type* GetRefType() { return aeMeta::GetType< T >(); }
+  static const char* GetRefTypeName() { return aeGetTypeName< T >(); }
 };
 
 //------------------------------------------------------------------------------
@@ -1050,7 +1064,7 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
   struct aeMeta::VarType< E > { \
     static aeMeta::Var::Type GetType() { return aeMeta::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const aeMeta::Type* GetRefType() { return nullptr; } \
+    static const char* GetRefTypeName() { return ""; } \
   }; \
   struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
   static std::ostream &operator << ( std::ostream &os, E e ) { \
@@ -1073,7 +1087,7 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
   struct aeMeta::VarType< E > { \
     static aeMeta::Var::Type GetType() { return aeMeta::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const aeMeta::Type* GetRefType() { return nullptr; } \
+    static const char* GetRefTypeName() { return ""; } \
     static const char* GetPrefix() { return ""; } \
   }; \
   aeMeta::EnumCreator2< E > ae_enum_creator_##E( #E ); \
@@ -1085,7 +1099,7 @@ static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
   struct aeMeta::VarType< E > { \
     static aeMeta::Var::Type GetType() { return aeMeta::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const aeMeta::Type* GetRefType() { return nullptr; } \
+    static const char* GetRefTypeName() { return ""; } \
     static const char* GetPrefix() { return #PREFIX; } \
   }; \
   aeMeta::EnumCreator2< E > ae_enum_creator_##E( #E ); \
@@ -1108,7 +1122,7 @@ aeMeta::EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
   struct aeMeta::VarType< E > { \
     static aeMeta::Var::Type GetType() { return aeMeta::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const aeMeta::Type* GetRefType() { return nullptr; } \
+    static const char* GetRefTypeName() { return ""; } \
     static const char* GetPrefix() { return ""; } \
   }; \
   namespace aeEnums::_##E { aeMeta::EnumCreator2< E > ae_enum_creator( #E ); } \
@@ -1179,7 +1193,12 @@ T* aeCast( C* obj )
 //------------------------------------------------------------------------------
 static aeMetaTypeId aeMetaGetObjectTypeId( const aeObject* obj )
 {
-  return obj->_metaTypeId;
+  return obj ? obj->_metaTypeId : kAeInvalidMetaTypeId;
+}
+
+static aeMetaTypeId aeMetaGetTypeIdFromName( const char* name )
+{
+  return name[ 0 ] ? aeHash().HashString( name ).Get() : kAeInvalidMetaTypeId;
 }
 
 #endif

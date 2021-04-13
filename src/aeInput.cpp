@@ -263,15 +263,15 @@ void aeInput::Initialize( aeWindow* window )
     m_keyMap.Set( SDL_SCANCODE_LEFT, &m_input.left );
     m_keyMap.Set( SDL_SCANCODE_RIGHT, &m_input.right );
 
-    m_keyMap.Set( SDL_SCANCODE_RETURN, &m_input.start );
-    m_keyMap.Set( SDL_SCANCODE_RSHIFT, &m_input.select );
+//    m_keyMap.Set( SDL_SCANCODE_RETURN, &m_input.start );
+//    m_keyMap.Set( SDL_SCANCODE_RSHIFT, &m_input.select );
 
-    m_keyMap.Set( SDL_SCANCODE_Z, &m_input.b );
-    m_keyMap.Set( SDL_SCANCODE_X, &m_input.a );
-    m_keyMap.Set( SDL_SCANCODE_A, &m_input.x );
-    m_keyMap.Set( SDL_SCANCODE_S, &m_input.y );
-    m_keyMap.Set( SDL_SCANCODE_Q, &m_input.l );
-    m_keyMap.Set( SDL_SCANCODE_W, &m_input.r );
+//    m_keyMap.Set( SDL_SCANCODE_Z, &m_input.b );
+//    m_keyMap.Set( SDL_SCANCODE_X, &m_input.a );
+//    m_keyMap.Set( SDL_SCANCODE_A, &m_input.x );
+//    m_keyMap.Set( SDL_SCANCODE_S, &m_input.y );
+//    m_keyMap.Set( SDL_SCANCODE_Q, &m_input.l );
+//    m_keyMap.Set( SDL_SCANCODE_W, &m_input.r );
 
     m_keyMap.Set( SDL_SCANCODE_SPACE, &m_input.space );
 #if _AE_OSX_
