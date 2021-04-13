@@ -100,17 +100,27 @@ endif()
 # 			${GLEW_LIBRARY_DIRS}/glew32s.lib
 # 		)
 
-# 		ExternalProject_Add(openal
-# 			PREFIX openal
-# 			SOURCE_DIR ${AE_OPENAL_SRC}
-# 			GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-# 			GIT_TAG openal-soft-1.20.1
-# 			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
-# 		)
-# 		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
-# 		set(OPENAL_LIBRARY_DIR ${AE_OPENAL_INSTALL}/lib)
-# 		set(OPENAL_LIBRARY ${OPENAL_LIBRARY_DIR}/OpenAL32.lib)
-# 	endif()
+		# openal
+		# @NOTE: It would be convenient to use MakeAvailable but cmake defines a project called 'common' which can easily cause conflicts
+		# FetchContent_Declare(
+		# 	openal
+		# 	GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+		# 	GIT_TAG openal-soft-1.20.1
+		# 	CMAKE_ARGS -DLIBTYPE=STATIC
+		# )
+		# FetchContent_MakeAvailable(openal)
+		set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
+		set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
+		ExternalProject_Add(openal
+			PREFIX openal
+			SOURCE_DIR ${AE_OPENAL_SRC}
+			GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+			GIT_TAG openal-soft-1.20.1
+			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
+		)
+		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
+		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
+	endif()
 
 # 	ExternalProject_Add(zlib
 # 		PREFIX zlib
@@ -136,6 +146,8 @@ set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 # 	${ENET_INCLUDE_DIR}
 # 	${UUID_INCLUDE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/deps/enet/include
+	${GLEW_INCLUDE_DIR}
+	${OPENAL_INCLUDE_DIR}
 )
 # if(NOT EMSCRIPTEN)
 # 	list(APPEND AE_DEPS_LIBRARY_INCLUDE_DIRS ${SDL2_INCLUDE_DIR})
@@ -155,7 +167,10 @@ set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 # dependency libraries
 set(AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
 if(APPLE)
-	list(APPEND AE_DEPS_LIBARARIES "-framework Cocoa")
+	list(APPEND AE_DEPS_LIBARARIES
+		"-framework Cocoa"
+		OpenAL
+	)
 elseif(WIN32 AND NOT CYGWIN)
 	list(APPEND AE_DEPS_LIBARARIES
 		version
@@ -163,12 +178,13 @@ elseif(WIN32 AND NOT CYGWIN)
 		Imm32
 		Setupapi
 		Ws2_32
+		${GLEW_LIBRARY}
+		${OPENAL_LIBRARY}
 	)
 endif()
 list(APPEND AE_DEPS_LIBARARIES
 	# ${GLEW_LIBRARIES}
 	${OpenGLES}
-	${OPENAL_LIBRARY}
 	# ${ZLIB_LIBRARIES}
 	# ${PNG_LIBRARIES}
 	# ${UUID_LIBRARY}
