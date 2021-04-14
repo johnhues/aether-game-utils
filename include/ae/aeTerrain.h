@@ -182,6 +182,7 @@ public:
 
   void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
+  virtual ae::Sdf::Shape* Clone() const = 0;
   virtual float GetValue( aeFloat3 p ) const = 0;
 
   enum class Type
@@ -218,6 +219,7 @@ class Box : public Shape
 {
 public:
   float GetValue( aeFloat3 p ) const override;
+  ae::Sdf::Shape* Clone() const override;
 
   float cornerRadius = 0.0f;
 };
@@ -229,6 +231,7 @@ class Cylinder : public Shape
 {
 public:
   float GetValue( aeFloat3 p ) const override;
+  ae::Sdf::Shape* Clone() const override;
 
   // Valid range is 0-1, are multiplied by obb size
   float top = 1.0f;
@@ -243,6 +246,7 @@ class Heightmap : public Shape
 public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
   float GetValue( aeFloat3 p ) const override;
+  ae::Sdf::Shape* Clone() const override;
 
 private:
   ae::Image* m_heightMap = nullptr;
@@ -265,11 +269,9 @@ public:
   void UpdatePending();
   bool HasPending() const;
   void RenderDebug( aeDebugRender* debug );
-
-  // @NOTE: This will be called from multiple threads simultaneously and so must be const
-  float GetValue( aeFloat3 pos ) const;
-  aeFloat3 GetDerivative( aeFloat3 pos ) const;
-  aeTerrainMaterialId GetMaterial( aeFloat3 pos ) const;
+  
+  uint32_t GetShapeCount() const { return m_shapes.Length(); }
+  ae::Sdf::Shape* GetShapeAtIndex( uint32_t index ) const { return m_shapes[ index ]; }
 
 private:
   friend class aeTerrain;
@@ -279,10 +281,6 @@ private:
   aeArray< ae::Sdf::Shape* > m_shapesPrev;
   aeArray< ae::Sdf::Shape* > m_pendingCreated;
   aeArray< ae::Sdf::Shape* > m_pendingDestroy;
-
-  // Internal use by aeTerrain
-  uint32_t GetShapeCount() const { return m_shapes.Length(); }
-  ae::Sdf::Shape* GetShapeAtIndex( uint32_t index ) const { return m_shapes[ index ]; }
 };
 
 template < typename T >
@@ -302,16 +300,13 @@ public:
   aeTerrainSDFCache();
   ~aeTerrainSDFCache();
 
-  void Generate( aeInt3 chunk, const aeTerrainSDF* sdf );
+  void Generate( aeInt3 chunk, const class aeTerrainJob* job );
   float GetValue( aeFloat3 pos ) const;
   float GetValue( aeInt3 pos ) const;
   aeFloat3 GetDerivative( aeFloat3 p ) const;
-  uint8_t GetMaterial( aeFloat3 pos ) const;
 
 private:
   float m_GetValue( aeInt3 pos ) const;
-
-  const aeTerrainSDF* m_sdf;
 
   const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to chunkPlus
   static const int32_t kOffset = 2;
@@ -345,6 +340,10 @@ public:
   const TerrainIndex* GetIndices() const { return m_indexCount ? &m_indices[ 0 ] : nullptr; }
   VertexCount GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
+  
+  float GetValue( aeFloat3 pos ) const;
+  aeFloat3 GetDerivative( aeFloat3 pos ) const;
+  aeTerrainMaterialId GetMaterial( aeFloat3 pos ) const;
 
 private:
   // Management
@@ -352,7 +351,7 @@ private:
   std::atomic_bool m_running;
 
   // Input
-  const aeTerrainSDF* m_sdf;
+  aeArray< ae::Sdf::Shape* > m_shapes;
   struct aeTerrainChunk* m_chunk;
 
   // Pre-computed sdf
@@ -365,7 +364,7 @@ private:
   aeArray< TerrainIndex > m_indices;
 
 public:
-  // Temp edges (pre-allocate edges for all future jobs)
+  // Temp edges (pre-allocated for all future jobs)
   struct TempEdges
   {
     int32_t x;
@@ -396,7 +395,7 @@ struct aeTerrainChunk
   static void GetPosFromWorld( aeInt3 pos, aeInt3* chunkPos, aeInt3* localPos );
 
   uint32_t GetIndex() const;
-  void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut );
+  void Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob* job, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut );
 
   aeAABB GetAABB() const;
   static aeAABB GetAABB( aeInt3 chunkPos );

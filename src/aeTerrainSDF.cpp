@@ -115,6 +115,13 @@ float ae::Sdf::Box::GetValue( aeFloat3 p ) const
   return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
 }
 
+ae::Sdf::Shape* ae::Sdf::Box::Clone() const
+{
+  ae::Sdf::Box* box = aeAlloc::Allocate< ae::Sdf::Box >();
+  *box = *this;
+  return box;
+}
+
 //------------------------------------------------------------------------------
 // Cylinder member functions
 //------------------------------------------------------------------------------
@@ -148,6 +155,13 @@ float ae::Sdf::Cylinder::GetValue( aeFloat3 p ) const
   return s*sqrt( aeMath::Min(ca.Dot(ca),cb.Dot(cb)) );
 }
 
+ae::Sdf::Shape* ae::Sdf::Cylinder::Clone() const
+{
+  ae::Sdf::Cylinder* cylinder = aeAlloc::Allocate< ae::Sdf::Cylinder >();
+  *cylinder = *this;
+  return cylinder;
+}
+
 //------------------------------------------------------------------------------
 // Heightmap member functions
 //------------------------------------------------------------------------------
@@ -170,10 +184,17 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
 
 }
 
+ae::Sdf::Shape* ae::Sdf::Heightmap::Clone() const
+{
+  ae::Sdf::Heightmap* heightmap = aeAlloc::Allocate< ae::Sdf::Heightmap >();
+  *heightmap = *this;
+  return heightmap;
+}
+
 //------------------------------------------------------------------------------
 // aeTerrainSDF member functions
 //------------------------------------------------------------------------------
-float aeTerrainSDF::GetValue( aeFloat3 pos ) const
+float aeTerrainJob::GetValue( aeFloat3 pos ) const
 {
   float f = 0.0f;
   if ( !m_shapes.Length() )
@@ -230,7 +251,7 @@ aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
   m_terrain( terrain )
 {}
 
-aeFloat3 aeTerrainSDF::GetDerivative( aeFloat3 p ) const
+aeFloat3 aeTerrainJob::GetDerivative( aeFloat3 p ) const
 {
   // https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
   const float h = 0.0001f;
@@ -246,14 +267,14 @@ aeFloat3 aeTerrainSDF::GetDerivative( aeFloat3 p ) const
   return n.SafeNormalizeCopy();
 }
 
-aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
+aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos ) const
 {
   aeTerrainMaterialId materialId = 0;
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
-    ae::Sdf::Shape* sdf = m_shapes[ i ];
-    ae::Sdf::Shape::Type type = sdf->type;
-    float value = sdf->GetValue( pos );
+    ae::Sdf::Shape* shape = m_shapes[ i ];
+    ae::Sdf::Shape::Type type = shape->type;
+    float value = shape->GetValue( pos );
 
     bool isAdditive = type == ae::Sdf::Shape::Type::Union
       || type == ae::Sdf::Shape::Type::SmoothUnion;
@@ -261,7 +282,7 @@ aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
     {
       if ( value <= 0.0f )
       {
-        materialId = sdf->materialId;
+        materialId = shape->materialId;
       }
     }
     else
@@ -272,7 +293,7 @@ aeTerrainMaterialId aeTerrainSDF::GetMaterial( aeFloat3 pos ) const
       // Expand shape slightly so subtraction paints surfaces
       if ( isPaint && value <= 0.25f )
       {
-        materialId = sdf->materialId;
+        materialId = shape->materialId;
       }
     }
   }
