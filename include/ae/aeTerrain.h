@@ -32,6 +32,7 @@
 #include "aeImage.h"
 #include "aeList.h"
 #include "aeMath.h"
+#include "aeMesh.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
 #include <map>
@@ -70,6 +71,9 @@ public:
   aeUnit< T > operator -- ( int ) { aeUnit< T > temp = *this; --*this; return temp; }
   aeUnit< T >& operator += ( const T& v ) { m_v += v; return *this; }
   aeUnit< T >& operator -= ( const T& v ) { m_v -= v; return *this; }
+  
+  T& Get() { return m_v; }
+  T Get() const { return m_v; }
 
 private:
   operator bool () const = delete;
@@ -183,6 +187,7 @@ public:
   void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
   virtual ae::Sdf::Shape* Clone() const = 0;
+  virtual aeHash Hash( aeHash hash ) const = 0;
   virtual float GetValue( aeFloat3 p ) const = 0;
 
   enum class Type
@@ -198,6 +203,7 @@ public:
   float smoothing = 0.0f; // Works with SmoothUnion and SmoothSubtraction types
 
 protected:
+  aeHash GetBaseHash( aeHash hash ) const;
   const aeFloat4x4& GetWorldToScaled() const { return m_worldToScaled; }
 
 private:
@@ -218,8 +224,9 @@ public:
 class Box : public Shape
 {
 public:
-  float GetValue( aeFloat3 p ) const override;
   ae::Sdf::Shape* Clone() const override;
+  aeHash Hash( aeHash hash ) const override;
+  float GetValue( aeFloat3 p ) const override;
 
   float cornerRadius = 0.0f;
 };
@@ -230,8 +237,9 @@ public:
 class Cylinder : public Shape
 {
 public:
-  float GetValue( aeFloat3 p ) const override;
   ae::Sdf::Shape* Clone() const override;
+  aeHash Hash( aeHash hash ) const override;
+  float GetValue( aeFloat3 p ) const override;
 
   // Valid range is 0-1, are multiplied by obb size
   float top = 1.0f;
@@ -245,8 +253,9 @@ class Heightmap : public Shape
 {
 public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
-  float GetValue( aeFloat3 p ) const override;
   ae::Sdf::Shape* Clone() const override;
+  aeHash Hash( aeHash hash ) const override;
+  float GetValue( aeFloat3 p ) const override;
 
 private:
   ae::Image* m_heightMap = nullptr;
@@ -336,8 +345,8 @@ public:
 
   const aeTerrainChunk* GetChunk() const { return m_chunk; }
   aeTerrainChunk* GetChunk() { return m_chunk; }
-  const TerrainVertex* GetVertices() const { return m_vertices.Length() ? &m_vertices[ 0 ] : nullptr; }
-  const TerrainIndex* GetIndices() const { return m_indexCount ? &m_indices[ 0 ] : nullptr; }
+  const TerrainVertex* GetVertices() const { return m_vertices.Begin(); }
+  const TerrainIndex* GetIndices() const { return m_indices.Begin(); }
   VertexCount GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
   
@@ -351,6 +360,7 @@ private:
   std::atomic_bool m_running;
 
   // Input
+  aeHash m_parameterHash;
   aeArray< ae::Sdf::Shape* > m_shapes;
   struct aeTerrainChunk* m_chunk;
 
@@ -396,16 +406,20 @@ struct aeTerrainChunk
 
   uint32_t GetIndex() const;
   void Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob* job, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut );
+  
+  void Serialize( class aeBinaryStream* stream );
 
   aeAABB GetAABB() const;
   static aeAABB GetAABB( aeInt3 chunkPos );
 
+  void m_SetVertexData( const TerrainVertex* verts, const TerrainIndex* indices, VertexCount vertexCount, uint32_t indexCount );
+  
   uint32_t m_check;
   aeInt3 m_pos;
   bool m_geoDirty;
   bool m_lightDirty;
   aeVertexData m_data;
-  TerrainVertex* m_vertices;
+  aeMesh m_mesh;
   aeListNode< aeTerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -450,17 +464,12 @@ public:
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
   RaycastResult Raycast( aeFloat3 start, aeFloat3 ray ) const;
-  // @NOTE: SweepSphere returns true on collision and writes out the following:
-  // distanceOut is distance traveled before collision
-  // normalOut is ground normal
-  // posOut is ground collision point
-  bool SweepSphere( aeSphere sphere, aeFloat3 ray, float* distanceOut = nullptr, aeFloat3* normalOut = nullptr, aeFloat3* posOut = nullptr ) const;
-  bool PushOutSphere( aeSphere sphere, aeFloat3* offsetOut = nullptr, class aeDebugRender* debug = nullptr ) const;
+  bool PushOutSphere( const aeMesh::PushOutParams& params, aeMesh::PushOutResult* outResult ) const;
   
   aeTerrainSDF sdf;
 
 private:
-  const TerrainVertex* m_GetVertex( int32_t x, int32_t y, int32_t z ) const;
+  bool m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* outVertex ) const;
   void UpdateChunkLighting( aeTerrainChunk* chunk );
   
   aeTerrainChunk* AllocChunk( aeInt3 pos );

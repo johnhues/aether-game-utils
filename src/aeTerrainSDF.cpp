@@ -104,9 +104,32 @@ void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
   }
 }
 
+aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
+{
+  hash = hash.HashBasicType( type );
+  hash = hash.HashBasicType( materialId );
+  hash = hash.HashBasicType( smoothing );
+  hash = hash.HashBasicType( m_localToWorld );
+  return hash;
+}
+
 //------------------------------------------------------------------------------
 // Box member functions
 //------------------------------------------------------------------------------
+ae::Sdf::Shape* ae::Sdf::Box::Clone() const
+{
+  ae::Sdf::Box* box = aeAlloc::Allocate< ae::Sdf::Box >();
+  *box = *this;
+  return box;
+}
+
+aeHash ae::Sdf::Box::Hash( aeHash hash ) const
+{
+  hash = GetBaseHash( hash );
+  hash = hash.HashBasicType( cornerRadius );
+  return hash;
+}
+
 float ae::Sdf::Box::GetValue( aeFloat3 p ) const
 {
   p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
@@ -115,16 +138,24 @@ float ae::Sdf::Box::GetValue( aeFloat3 p ) const
   return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
 }
 
-ae::Sdf::Shape* ae::Sdf::Box::Clone() const
-{
-  ae::Sdf::Box* box = aeAlloc::Allocate< ae::Sdf::Box >();
-  *box = *this;
-  return box;
-}
-
 //------------------------------------------------------------------------------
 // Cylinder member functions
 //------------------------------------------------------------------------------
+ae::Sdf::Shape* ae::Sdf::Cylinder::Clone() const
+{
+  ae::Sdf::Cylinder* cylinder = aeAlloc::Allocate< ae::Sdf::Cylinder >();
+  *cylinder = *this;
+  return cylinder;
+}
+
+aeHash ae::Sdf::Cylinder::Hash( aeHash hash ) const
+{
+  hash = GetBaseHash( hash );
+  hash = hash.HashBasicType( top );
+  hash = hash.HashBasicType( bottom );
+  return hash;
+}
+
 float ae::Sdf::Cylinder::GetValue( aeFloat3 p ) const
 {
   aeFloat3 halfSize = GetHalfSize();
@@ -155,16 +186,21 @@ float ae::Sdf::Cylinder::GetValue( aeFloat3 p ) const
   return s*sqrt( aeMath::Min(ca.Dot(ca),cb.Dot(cb)) );
 }
 
-ae::Sdf::Shape* ae::Sdf::Cylinder::Clone() const
-{
-  ae::Sdf::Cylinder* cylinder = aeAlloc::Allocate< ae::Sdf::Cylinder >();
-  *cylinder = *this;
-  return cylinder;
-}
-
 //------------------------------------------------------------------------------
 // Heightmap member functions
 //------------------------------------------------------------------------------
+ae::Sdf::Shape* ae::Sdf::Heightmap::Clone() const
+{
+  ae::Sdf::Heightmap* heightmap = aeAlloc::Allocate< ae::Sdf::Heightmap >();
+  *heightmap = *this;
+  return heightmap;
+}
+
+aeHash ae::Sdf::Heightmap::Hash( aeHash hash ) const
+{
+  return GetBaseHash( hash );
+}
+
 float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
 {
   AE_ASSERT_MSG( m_heightMap, "Heightmap image not set" );
@@ -182,13 +218,6 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
 
   return aeMath::Max( v0, v1 );
 
-}
-
-ae::Sdf::Shape* ae::Sdf::Heightmap::Clone() const
-{
-  ae::Sdf::Heightmap* heightmap = aeAlloc::Allocate< ae::Sdf::Heightmap >();
-  *heightmap = *this;
-  return heightmap;
 }
 
 //------------------------------------------------------------------------------

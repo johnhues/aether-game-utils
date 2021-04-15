@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeMesh.h"
+#include "aeBinaryStream.h"
 
 // @TODO: Move to aeMath
 bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeFloat3 c, bool limitRay, bool ccw, bool cw, aeFloat3* pOut, aeFloat3* nOut, float* tOut )
@@ -223,6 +224,104 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
   return true;
 }
 
+void aeMesh::Load( aeMeshParams params )
+{
+  Clear();
+  
+  if ( params.indexCount )
+  {
+    AE_ASSERT( params.indexCount % 3 == 0 );
+  }
+  else
+  {
+    AE_ASSERT( params.vertexCount % 3 == 0 );
+  }
+  
+  if ( params.vertexCount )
+  {
+    AE_ASSERT( params.positions );
+    m_aabb = aeAABB( params.positions[ 0 ], params.positions[ 0 ] );
+    
+    m_vertices.Reserve( params.vertexCount );
+    for ( uint32_t i = 0; i < params.vertexCount; i++ )
+    {
+      aeMeshVertex vert;
+      memset( &vert, 0, sizeof(vert) );
+      
+      vert.position = aeFloat4( *params.positions, 1.0f );
+      params.positions = (aeFloat3*)( (uint8_t*)params.positions + params.positionStride );
+      
+      if ( params.normals )
+      {
+        vert.normal = aeFloat4( *params.normals, 0.0f );
+        params.normals = (aeFloat3*)( (uint8_t*)params.normals + params.normalStride );
+      }
+      
+      m_aabb.Expand( vert.position.GetXYZ() );
+      m_vertices.Append( vert );
+    }
+  }
+  
+  m_indices.Append( params.indices16, params.indexCount );
+}
+
+const uint32_t kAeMeshVersion = 1;
+void aeMesh::Serialize( aeBinaryStream* stream )
+{
+  if ( stream->IsReader() )
+  {
+    Clear();
+  }
+  
+  uint32_t version = kAeMeshVersion;
+  stream->SerializeUint32( version );
+  if ( version != kAeMeshVersion )
+  {
+    stream->Invalidate();
+    return;
+  }
+  
+  stream->SerializeRaw( &m_aabb, sizeof(m_aabb) );
+  
+  const uint32_t vertexSize = sizeof(*m_vertices.Begin());
+  const uint32_t indexSize = sizeof(*m_indices.Begin());
+  
+  if ( stream->IsWriter() )
+  {
+    uint32_t vertexDataLen = m_vertices.Length() * vertexSize;
+    stream->SerializeUint32( vertexDataLen );
+    stream->SerializeRaw( m_vertices.Begin(), vertexDataLen );
+    
+    uint32_t indexDataLen = m_indices.Length() * indexSize;
+    stream->SerializeUint32( indexDataLen );
+    stream->SerializeRaw( m_indices.Begin(), indexDataLen );
+  }
+  else
+  {
+    AE_ASSERT( stream->IsReader() );
+    
+    uint32_t vertexDataLength = 0;
+    stream->SerializeUint32( vertexDataLength );
+    if ( vertexDataLength % vertexSize != 0 || stream->GetRemaining() < vertexDataLength )
+    {
+      stream->Invalidate();
+      return;
+    }
+    m_vertices.Append( (const aeMeshVertex*)stream->PeekData(), vertexDataLength / vertexSize );
+    stream->Discard( vertexDataLength );
+    
+    uint32_t indexDataLength = 0;
+    stream->SerializeUint32( indexDataLength );
+    if ( indexDataLength % indexSize != 0 || stream->GetRemaining() < indexDataLength )
+    {
+      stream->Invalidate();
+      return;
+    }
+    m_indices.Append( (const aeMeshIndex*)stream->PeekData(), indexDataLength / indexSize );
+    stream->Discard( indexDataLength );
+  }
+}
+
 void aeMesh::Transform( aeFloat4x4 transform )
 {
   if ( !m_vertices.Length() )
@@ -239,6 +338,13 @@ void aeMesh::Transform( aeFloat4x4 transform )
     m_vertices[ i ].position = transform * m_vertices[ i ].position;
     m_aabb.Expand( m_vertices[ i ].position.GetXYZ() );
   }
+}
+
+void aeMesh::Clear()
+{
+  m_vertices.Clear();
+  m_indices.Clear();
+  m_aabb = aeAABB();
 }
 
 const aeMeshVertex* aeMesh::GetVertices() const

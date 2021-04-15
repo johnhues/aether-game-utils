@@ -43,6 +43,18 @@ struct aeMeshVertex
 
 typedef uint16_t aeMeshIndex;
 
+struct aeMeshParams
+{
+  uint32_t vertexCount = 0;
+  const aeFloat3* positions = nullptr;
+  const aeFloat3* normals = nullptr;
+  uint32_t positionStride = sizeof(aeFloat3);
+  uint32_t normalStride = sizeof(aeFloat3);
+  
+  uint32_t indexCount = 0;
+  const uint16_t* indices16 = nullptr;
+};
+
 //------------------------------------------------------------------------------
 // aeMesh class
 //------------------------------------------------------------------------------
@@ -51,9 +63,15 @@ class aeMesh
 public:
   // Initialization
   bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
+  void Load( aeMeshParams params );
+  // @NOTE: Serializing aeMesh across library versions may not work. Stream will be invaldated on failure.
+  void Serialize( class aeBinaryStream* stream );
   void Transform( aeFloat4x4 transform ); // Permanently pre-transform loaded verts
+  void Clear();
 
   // Mesh data
+  const aeMeshVertex& GetVertex( uint32_t idx ) const { return m_vertices[ idx ]; }
+  aeMeshIndex GetIndex( uint32_t idx ) const { return m_indices[ idx ]; }
   const aeMeshVertex* GetVertices() const;
   const aeMeshIndex* GetIndices() const;
   uint32_t GetVertexCount() const;
