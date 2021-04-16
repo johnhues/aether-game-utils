@@ -231,8 +231,8 @@ public:
   uint32_t GetAttributeCount() const { return m_attributeCount; }
   aeVertexPrimitive::Type GetPrimitiveType() const { return m_primitive; }
 
-  void Render( const class aeShader* shader, const aeUniformList& uniforms );
-  void Render( const class aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms );
+  void Render( const class aeShader* shader, const aeUniformList& uniforms ) const;
+  void Render( const class aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms ) const;
   
 private:
   aeVertexData( const aeVertexData& ) = delete;
