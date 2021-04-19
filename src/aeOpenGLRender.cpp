@@ -513,12 +513,12 @@ const void* aeVertexData::GetIndices() const
   return m_indexReadable;
 }
 
-void aeVertexData::Render( const aeShader* shader, const aeUniformList& uniforms )
+void aeVertexData::Render( const aeShader* shader, const aeUniformList& uniforms ) const
 {
   Render( shader, 0, uniforms ); // Draw all
 }
 
-void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms )
+void aeVertexData::Render( const aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms ) const
 {
   AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
   AE_ASSERT( shader );
