@@ -37,11 +37,6 @@
 #include "aeRender.h"
 #include <map>
 
-namespace ctpl
-{
-  class thread_pool;
-}
-
 //------------------------------------------------------------------------------
 // aeUnit
 //------------------------------------------------------------------------------
@@ -87,24 +82,42 @@ inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
 }
 
 //------------------------------------------------------------------------------
-// Constants
+// Terrain types
 //------------------------------------------------------------------------------
-typedef aeUnit< uint32_t > VertexCount;
 #if _AE_IOS_
-    #include <arm_neon.h>
+	#include <arm_neon.h>
 #else
-    typedef float float16_t;
+	typedef float float16_t;
 #endif
 typedef uint8_t aeTerrainMaterialId;
-#define PACK( _ae_something ) _ae_something
 
-const uint32_t kChunkSize = 32; // 32*32*32 is less than max vertex index
+struct TerrainVertex
+{
+  aeFloat3 position;
+  aeFloat3 normal;
+  uint8_t materials[ 4 ];
+  uint8_t info[ 4 ];
+};
+
+typedef aeUnit< uint32_t > VertexCount;
+const VertexCount kChunkCountInterior = VertexCount( ~0 - 1 ); // Whole chunk is solid. Used for raycasting
+const VertexCount kChunkCountDirty = VertexCount( ~0 ); // Flags chunks that should be (re)generated
+const VertexCount kChunkCountEmpty = VertexCount( 0 );
+
+typedef uint16_t TerrainIndex;
+const TerrainIndex kInvalidTerrainIndex = ~0;
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const uint32_t kChunkSize = 64; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
-const uint32_t kMaxActiveChunks = 1024;
+const uint32_t kMaxActiveChunks = 128;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
-const VertexCount kMaxChunkVerts = VertexCount( kChunkSize * kChunkSize * kChunkSize );
-const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
+const VertexCount kMaxChunkVerts = VertexCount( aeMath::MaxValue< uint16_t >() );
+// https://math.stackexchange.com/questions/1879255/average-valence-of-vertex-in-tetrahedral-mesh
+const uint32_t kMaxChunkIndices = uint32_t( kMaxChunkVerts ) * 6; // Average vertex valence
 const uint32_t kMaxChunkAllocationsPerTick = 1;
 const float16_t kSkyBrightness = float16_t( 5.0f );
 const float kSdfBoundary = 2.0f;
@@ -123,21 +136,8 @@ struct Block
 };
 
 //------------------------------------------------------------------------------
-// TerrainVertex
+// Helpers
 //------------------------------------------------------------------------------
-PACK( struct TerrainVertex
-{
-  aeFloat3 position;
-  aeFloat3 normal;
-  uint8_t materials[ 4 ];
-  uint8_t info[ 4 ];
-});
-typedef uint16_t TerrainIndex;
-const TerrainIndex kInvalidTerrainIndex = ~0;
-const VertexCount kChunkCountInterior = VertexCount( ~0 - 1 ); // Whole chunk is solid. Used for raycasting
-const VertexCount kChunkCountDirty = VertexCount( ~0 ); // Flags chunks that should be (re)generated
-const VertexCount kChunkCountEmpty = VertexCount( 0 );
-
 struct RaycastResult
 {
   bool hit;
@@ -162,6 +162,11 @@ float aeSubtraction( float d1, float d2 );
 float aeIntersection( float d1, float d2 );
 float aeSmoothUnion( float d1, float d2, float k );
 float aeSmoothSubtraction( float d1, float d2, float k );
+
+namespace ctpl
+{
+  class thread_pool;
+}
 
 //------------------------------------------------------------------------------
 // ae::Sdf
