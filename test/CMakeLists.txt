@@ -13,13 +13,11 @@ ExternalProject_Add(Catch2
 include_directories(${AE_CATCH_INSTALL}/include)
 
 # unit test executable
+file(GLOB_RECURSE TEST_HEADERS CONFIGURE_DEPENDS "*.h")
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
 add_executable(unit_tests
-	MetaTest.h
-	MetaTest.cpp
-	MetaTest2.cpp
-	SignalTest.cpp
-	StringTest.cpp
-	test.cpp
+	${TEST_HEADERS}
+	${TEST_SOURCES}
 )
 
 # build dependencies
