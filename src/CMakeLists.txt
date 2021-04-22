@@ -4,7 +4,6 @@ include(GNUInstallDirs)
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
 set_target_properties(${AE_LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
-set_property(TARGET ${AE_LIBRARY_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
