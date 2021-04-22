@@ -138,6 +138,13 @@ public:
     m_pendingRender = false;
 	}
 
+	void Discard()
+	{
+		AE_ASSERT( m_init );
+		ImGui::Render();
+		m_pendingRender = false;
+	}
+
 	template < uint32_t N >
 	static bool InputText( const char* label, aeStr< N >* str, ImGuiInputTextFlags flags = 0 )
 	{
