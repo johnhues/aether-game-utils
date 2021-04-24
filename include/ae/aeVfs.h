@@ -31,29 +31,49 @@
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
+// aeVfsRoot
+//------------------------------------------------------------------------------
+enum class aeVfsRoot
+{
+  Data, // A given existing directory
+  User, // A directory for storing perferences and savedata
+  Cache // A directory for storing expensive to generate data (computed, downloaded, etc)
+};
+
+//------------------------------------------------------------------------------
 // aeVfs class
 //------------------------------------------------------------------------------
 class aeVfs
 {
 public:
-  enum Root { Data, User };
-
+  // Passing an empty string to dataDir is equivalent to using
+  // the applications working directory. Organization name should be your name
+  // or your companies name and should be consistent across apps. Application
+  // name should be the name of this application. Initialize() creates missing
+  // folders for aeVfsRoot::User and aeVfsRoot::Cache.
   void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
 
-  uint32_t GetSize( Root root, const char* fileName );
-  uint32_t Read( Root root, const char* fileName, void* buffer, uint32_t bufferSize );
-  uint32_t Write( Root root, const char* fileName, const void* buffer, uint32_t bufferSize );
-  void ShowFolder( Root root, const char* fileDir );
-  const char* GetRootDir( Root root );
+  // Member functions for use of aeVfsRoot directories
+  uint32_t GetSize( aeVfsRoot root, const char* fileName ) const;
+  uint32_t Read( aeVfsRoot root, const char* fileName, void* buffer, uint32_t bufferSize ) const;
+  uint32_t Write( aeVfsRoot root, const char* fileName, const void* buffer, uint32_t bufferSize ) const;
+  void ShowFolder( aeVfsRoot root, const char* fileDir ) const;
+  bool GetRootDir( aeVfsRoot root, aeStr256* outDir ) const; // @TODO: aePath
 
+  // Static member functions intended to be used when not creating a aeVfs instance
   static uint32_t GetSize( const char* fileDir );
   static uint32_t Read( const char* fileDir, void* buffer, uint32_t bufferSize );
   static uint32_t Write( const char* fileDir, const void* buffer, uint32_t bufferSize );
   static void ShowFolder( const char* fileDir );
 
 private:
+  void m_SetDataDir( const char* dataDir );
+  void m_SetUserDir( const char* organizationName, const char* applicationName );
+  void m_SetCacheDir( const char* organizationName, const char* applicationName );
+
   aeStr256 m_dataDir;
   aeStr256 m_userDir;
+  aeStr256 m_cacheDir;
 };
 
 #endif

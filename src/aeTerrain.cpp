@@ -327,6 +327,7 @@ uint32_t aeTerrainChunk::GetIndex() const
 aeTerrainJob::aeTerrainJob() :
   m_hasJob( false ),
   m_running( false ),
+  m_vfs( nullptr ),
   m_vertexCount( kChunkCountEmpty ),
   m_indexCount( 0 ),
   m_vertices( aeArray< TerrainVertex >( (uint32_t)kMaxChunkVerts, TerrainVertex() ) ),
@@ -342,10 +343,12 @@ aeTerrainJob::~aeTerrainJob()
   edgeInfo = nullptr;
 }
 
-void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, aeTerrainChunk* chunk )
+void aeTerrainJob::StartNew( const aeVfs* vfs, const aeTerrainSDF* sdf, aeTerrainChunk* chunk )
 {
   AE_ASSERT( chunk );
   AE_ASSERT_MSG( !m_chunk, "Previous job not finished" );
+
+  m_vfs = vfs;
 
   m_hasJob = true;
   m_running = true;
@@ -367,6 +370,8 @@ void aeTerrainJob::StartNew( const aeTerrainSDF* sdf, aeTerrainChunk* chunk )
 
 void aeTerrainJob::Do()
 {
+  AE_ASSERT( m_chunk );
+
   // Hash inside job instead to save a little time on the main thread
   m_parameterHash = aeHash();
   
@@ -381,13 +386,12 @@ void aeTerrainJob::Do()
   }
   
   // Check disk to see if job has been completed before
-  aeInt3 c = m_chunk->m_pos;
-  aeStr128 filePath = aeStr128::Format( "/Users/john/temp/terrain_test/#_#_#_#", c.x, c.y, c.z, m_parameterHash.Get() );
-  uint32_t fileSize = aeVfs::GetSize( filePath.c_str() );
+  aeStr128 filePath = aeStr128::Format( "terrain/#_#_#_#", chunkPos.x, chunkPos.y, chunkPos.z, m_parameterHash.Get() );
+  uint32_t fileSize = m_vfs ? m_vfs->GetSize( aeVfsRoot::Cache, filePath.c_str() ) : 0;
   if ( fileSize )
   {
     aeAlloc::Scratch< uint8_t > fileData( fileSize );
-    aeVfs::Read( filePath.c_str(), fileData.Data(), fileSize );
+    m_vfs->Read( aeVfsRoot::Cache, filePath.c_str(), fileData.Data(), fileSize );
     aeBinaryStream rStream = aeBinaryStream::Reader( fileData.Data(), fileSize );
     rStream.SerializeUint32( m_vertexCount.Get() );
     rStream.SerializeUint32( m_indexCount );
@@ -414,15 +418,21 @@ void aeTerrainJob::Do()
     // Load
     m_chunk->m_mesh.Load( meshParams );
     
-    // Write result
-    aeArray< uint8_t > data;
-    aeBinaryStream wStream = aeBinaryStream::Writer( &data );
-    wStream.SerializeUint32( m_vertexCount.Get() );
-    wStream.SerializeUint32( m_indexCount );
-    wStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
-    wStream.SerializeRaw( &m_indices[ 0 ], m_indexCount * sizeof(m_indices[ 0 ]) );
-    wStream.SerializeObject( *m_chunk );
-    aeVfs::Write( filePath.c_str(), wStream.GetData(), wStream.GetOffset() );
+    if ( m_vfs )
+    {
+      // Write result
+      aeArray< uint8_t > data;
+      aeBinaryStream wStream = aeBinaryStream::Writer( &data );
+      wStream.SerializeUint32( m_vertexCount.Get() );
+      wStream.SerializeUint32( m_indexCount );
+      wStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
+      wStream.SerializeRaw( &m_indices[ 0 ], m_indexCount * sizeof(m_indices[ 0 ]) );
+      wStream.SerializeObject( *m_chunk );
+      if ( !m_vfs->Write( aeVfsRoot::Cache, filePath.c_str(), wStream.GetData(), wStream.GetOffset() ) )
+      {
+        AE_WARN( "Failed writing terrain chunk '#'", filePath );
+      }
+    }
   }
   
   m_running = false;
@@ -1783,7 +1793,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
 
       aeTerrainJob* job = m_terrainJobs[ jobIndex ];
       AE_ASSERT( job );
-      job->StartNew( &sdf, chunk );
+      job->StartNew( m_vfs, &sdf, chunk );
       // @NOTE: replaceDirty_CHECK doesn't do anything, but is used to assert when the job
       // is done that another chunk is being replaced.
       if ( m_threadPool->size() )
@@ -1855,6 +1865,11 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
   {
     AE_LOG( "chunks active:# allocated:#", activeCount, m_chunkPool.Length() );
   }
+}
+
+void aeTerrain::SetVfs( aeVfs* vfs )
+{
+  m_vfs = vfs;
 }
 
 void aeTerrain::SetDebug( aeDebugRender* debug )

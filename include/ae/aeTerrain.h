@@ -340,7 +340,7 @@ class aeTerrainJob
 public:
   aeTerrainJob();
   ~aeTerrainJob();
-  void StartNew( const aeTerrainSDF* sdf, struct aeTerrainChunk* chunk );
+  void StartNew( const class aeVfs* vfs, const aeTerrainSDF* sdf, struct aeTerrainChunk* chunk );
   void Do();
   void Finish();
 
@@ -373,6 +373,7 @@ private:
   aeTerrainSDFCache m_sdfCache;
 
   // Output
+  const aeVfs* m_vfs;
   VertexCount m_vertexCount;
   uint32_t m_indexCount;
   aeArray< TerrainVertex > m_vertices;
@@ -448,6 +449,8 @@ public:
   void Terminate();
   void Update( aeFloat3 center, float radius );
   void Render( const class aeShader* shader, const aeUniformList& shaderParams );
+
+  void SetVfs( class aeVfs* vfs ); // Use aeVfs::Cache to save to cache terrain
   void SetDebug( class aeDebugRender* debug );
 
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
@@ -482,6 +485,7 @@ private:
   void m_SetVertexCount( uint32_t chunkIndex, VertexCount count );
   float GetChunkScore( aeInt3 pos ) const;
 
+  aeVfs* m_vfs = nullptr;
   aeDebugRender* m_debug = nullptr;
 
   bool m_render = false;

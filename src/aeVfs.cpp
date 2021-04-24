@@ -32,6 +32,13 @@
   #define WIN32_LEAN_AND_MEAN
   #include <Windows.h>
   #include <shellapi.h>
+  #include <Shlobj_core.h>
+#endif
+
+#if _AE_WINDOWS_
+#define AE_PATH_CHAR '\\'
+#else
+#define AE_PATH_CHAR '/'
 #endif
 
 //------------------------------------------------------------------------------
@@ -39,39 +46,51 @@
 //------------------------------------------------------------------------------
 void aeVfs::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
-  AE_ASSERT_MSG( organizationName[ 0 ], "Organization name must not be empty" );
-  AE_ASSERT_MSG( applicationName[ 0 ], "Application name must not be empty" );
+  AE_ASSERT_MSG( organizationName && organizationName[ 0 ], "Organization name must not be empty" );
+  AE_ASSERT_MSG( applicationName && applicationName[ 0 ], "Application name must not be empty" );
 
   const char* validateOrgName = organizationName;
   while ( *validateOrgName )
   {
-    AE_ASSERT_MSG( isalnum( *validateOrgName ) || ( *validateOrgName == '_' ), "Invalid VFS organization name '#'. Only alphanumeric characters and undersrcores are supported.", organizationName );
+    AE_ASSERT_MSG( isalnum( *validateOrgName ) || ( *validateOrgName == '_' ), "Invalid aeVFS organization name '#'. Only alphanumeric characters and undersrcores are supported.", organizationName );
     validateOrgName++;
   }
   const char* validateAppName = applicationName;
   while ( *validateAppName )
   {
-    AE_ASSERT_MSG( isalnum( *validateAppName ) || ( *validateAppName == '_' ), "Invalid VFS application name '#'. Only alphanumeric characters and undersrcores are supported.", applicationName );
+    AE_ASSERT_MSG( isalnum( *validateAppName ) || ( *validateAppName == '_' ), "Invalid aeVFS application name '#'. Only alphanumeric characters and undersrcores are supported.", applicationName );
     validateAppName++;
   }
 
-  char* sdlUserDir = SDL_GetPrefPath( organizationName, applicationName );
+  m_SetDataDir( dataDir ? dataDir : "" );
+  m_SetUserDir( organizationName, applicationName );
+  m_SetCacheDir( organizationName, applicationName );
+}
 
+void aeVfs::m_SetDataDir( const char* dataDir )
+{
   m_dataDir = dataDir;
-  m_userDir = sdlUserDir;
 
-#if _AE_WINDOWS_
-  #define AE_PATH_CHAR '\\'
-#else
-  #define AE_PATH_CHAR '/'
-#endif
-
-  // Allow data dir prefix to be empty
+  // Append slash if not empty and is currently missing
   if ( m_dataDir.Length() && m_dataDir[ m_dataDir.Length() - 1 ] != AE_PATH_CHAR )
   {
     m_dataDir.Append( aeStr16( 1, AE_PATH_CHAR ) );
   }
+}
+
+void aeVfs::m_SetUserDir( const char* organizationName, const char* applicationName )
+{
+  m_userDir = "";
+
+  char* sdlUserDir = SDL_GetPrefPath( organizationName, applicationName );
+  if ( !sdlUserDir )
+  {
+    return;
+  }
+
+  m_userDir = sdlUserDir;
   AE_ASSERT( m_userDir.Length() );
+
   if ( m_userDir[ m_userDir.Length() - 1 ] != AE_PATH_CHAR )
   {
     m_userDir.Append( aeStr16( 1, AE_PATH_CHAR ) );
@@ -80,45 +99,124 @@ void aeVfs::Initialize( const char* dataDir, const char* organizationName, const
   SDL_free( sdlUserDir );
 }
 
-uint32_t aeVfs::GetSize( Root root, const char* fileName )
+void aeVfs::m_SetCacheDir( const char* organizationName, const char* applicationName )
 {
-  aeStr256 fullName = GetRootDir( root );
-  fullName += fileName;
-  return GetSize( fullName.c_str() );
-}
+  m_cacheDir = "";
 
-uint32_t aeVfs::Read( Root root, const char* fileName, void* buffer, uint32_t bufferSize )
-{
-  aeStr256 fullName = GetRootDir( root );
-  fullName += fileName;
-  return Read( fullName.c_str(), buffer, bufferSize );
-}
-
-uint32_t aeVfs::Write( Root root, const char* fileName, const void* buffer, uint32_t bufferSize )
-{
-  aeStr256 fullName = GetRootDir( root );
-  fullName += fileName;
-  return Write( fullName.c_str(), buffer, bufferSize );
-}
-
-void aeVfs::ShowFolder( Root root, const char* fileDir )
-{
-  aeStr256 fullName = GetRootDir( root );
-  fullName += fileDir;
-  return ShowFolder( fullName.c_str() );
-}
-
-const char* aeVfs::GetRootDir( Root root )
-{
-  if ( root == aeVfs::Data )
+#if _AE_APPLE_
+  // Something like /User/someone/Library/Caches
+  AE_WARN( "aeVfs::Cache directory not implemented yet on this platform" );
+#elif _AE_LINUX_
+  // Something like /users/someone/.cache
+  AE_WARN( "aeVfs::Cache directory not implemented yet on this platform" );
+#elif _AE_WINDOWS_
+  // Something like C:\Users\someone\AppData\Local\Company\Game
+  PWSTR wpath = nullptr;
+  HRESULT pathResult = SHGetKnownFolderPath( FOLDERID_LocalAppData, 0, nullptr, &wpath );
+  if ( pathResult == S_OK )
   {
-    return m_dataDir.c_str();
+    char path[ m_cacheDir.MaxLength() + 1 ];
+    int32_t pathLen = wcstombs( path, wpath, m_cacheDir.MaxLength() );
+    if ( pathLen > 0 )
+    {
+      path[ pathLen ] = 0;
+
+      aeStr16 pathChar( 1, AE_PATH_CHAR );
+      m_cacheDir = path;
+      m_cacheDir += pathChar; // SHGetKnownFolderPath does not include trailing backslash
+      m_cacheDir += organizationName;
+      m_cacheDir += pathChar;
+      m_cacheDir += applicationName;
+      m_cacheDir += pathChar;
+
+      int createResult = SHCreateDirectoryExA( nullptr, m_cacheDir.c_str(), nullptr );
+      if ( createResult != ERROR_SUCCESS && createResult != ERROR_ALREADY_EXISTS )
+      {
+        m_cacheDir = "";
+      }
+    }
   }
-  if ( root == aeVfs::User )
+  CoTaskMemFree( wpath ); // Always free even on failure
+#endif
+}
+
+uint32_t aeVfs::GetSize( aeVfsRoot root, const char* fileName ) const
+{
+  aeStr256 fullName;
+  if ( GetRootDir( root, &fullName ) )
   {
-    return m_userDir.c_str();
+    fullName += fileName;
+    return GetSize( fullName.c_str() );
   }
-  return nullptr;
+  return 0;
+}
+
+uint32_t aeVfs::Read( aeVfsRoot root, const char* fileName, void* buffer, uint32_t bufferSize ) const
+{
+  aeStr256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += fileName;
+    return Read( fullName.c_str(), buffer, bufferSize );
+  }
+  return 0;
+}
+
+uint32_t aeVfs::Write( aeVfsRoot root, const char* fileName, const void* buffer, uint32_t bufferSize ) const
+{
+  aeStr256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += fileName;
+    return Write( fullName.c_str(), buffer, bufferSize );
+  }
+  return 0;
+}
+
+void aeVfs::ShowFolder( aeVfsRoot root, const char* fileDir ) const
+{
+  aeStr256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += fileDir;
+    ShowFolder( fullName.c_str() );
+  }
+}
+
+bool aeVfs::GetRootDir( aeVfsRoot root, aeStr256* outDir ) const
+{
+  switch ( root )
+  {
+    case aeVfsRoot::Data:
+      if ( outDir )
+      {
+        *outDir = m_dataDir;
+      }
+      return true;
+    case aeVfsRoot::User:
+      if ( m_userDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_userDir;
+        }
+        return true;
+      }
+      break;
+    case aeVfsRoot::Cache:
+      if ( m_cacheDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_cacheDir;
+        }
+        return true;
+      }
+      break;
+    default:
+      break;
+  }
+  return false;
 }
 
 //------------------------------------------------------------------------------
