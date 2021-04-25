@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeString.h
+// aeVfs.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -39,6 +39,14 @@
 #define AE_PATH_CHAR '\\'
 #else
 #define AE_PATH_CHAR '/'
+#endif
+
+//------------------------------------------------------------------------------
+// Objective-C helper function declarations for aeVfs.mm
+//------------------------------------------------------------------------------
+#if _AE_APPLE_
+  bool aeVfs_GetCacheDir( aeStr256* outDir );
+  bool aeVfs_CreateDir( const char* dir );
 #endif
 
 //------------------------------------------------------------------------------
@@ -101,11 +109,24 @@ void aeVfs::m_SetUserDir( const char* organizationName, const char* applicationN
 
 void aeVfs::m_SetCacheDir( const char* organizationName, const char* applicationName )
 {
+  aeStr16 pathChar( 1, AE_PATH_CHAR );
   m_cacheDir = "";
 
 #if _AE_APPLE_
   // Something like /User/someone/Library/Caches
-  AE_WARN( "aeVfs::Cache directory not implemented yet on this platform" );
+  if ( aeVfs_GetCacheDir( &m_cacheDir ) )
+  {
+    m_cacheDir += pathChar; // SHGetKnownFolderPath does not include trailing backslash
+    m_cacheDir += organizationName;
+    m_cacheDir += pathChar;
+    m_cacheDir += applicationName;
+    m_cacheDir += pathChar;
+    
+    if ( !aeVfs_CreateDir( m_cacheDir.c_str() ) )
+    {
+      m_cacheDir = "";
+    }
+  }
 #elif _AE_LINUX_
   // Something like /users/someone/.cache
   AE_WARN( "aeVfs::Cache directory not implemented yet on this platform" );
@@ -121,7 +142,6 @@ void aeVfs::m_SetCacheDir( const char* organizationName, const char* application
     {
       path[ pathLen ] = 0;
 
-      aeStr16 pathChar( 1, AE_PATH_CHAR );
       m_cacheDir = path;
       m_cacheDir += pathChar; // SHGetKnownFolderPath does not include trailing backslash
       m_cacheDir += organizationName;
