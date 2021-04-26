@@ -116,7 +116,7 @@ void aeVfs::m_SetCacheDir( const char* organizationName, const char* application
   // Something like /User/someone/Library/Caches
   if ( aeVfs_GetCacheDir( &m_cacheDir ) )
   {
-    m_cacheDir += pathChar; // SHGetKnownFolderPath does not include trailing backslash
+    m_cacheDir += pathChar;
     m_cacheDir += organizationName;
     m_cacheDir += pathChar;
     m_cacheDir += applicationName;
