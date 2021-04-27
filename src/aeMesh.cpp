@@ -570,4 +570,48 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
   }
 }
 
+//------------------------------------------------------------------------------
+// RaycastResult
+//------------------------------------------------------------------------------
+void aeMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& result )
+{
+  uint32_t accumHitCount = 0;
+  Hit accumHits[ countof(hits) * 2 ];
+  
+  for ( uint32_t i = 0; i < hitCount; i++ )
+  {
+    accumHits[ accumHitCount ] = hits[ i ];
+    accumHitCount++;
+  }
+  for ( uint32_t i = 0; i < result.hitCount; i++ )
+  {
+    accumHits[ accumHitCount ] = result.hits[ i ];
+    accumHitCount++;
+  }
+  std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.t < h1.t; } );
+  
+  hitCount = aeMath::Min( accumHitCount, countof(hits) );
+  for ( uint32_t i = 0; i < hitCount; i++ )
+  {
+    hits[ i ] = accumHits[ i ];
+  }
+}
+
+//------------------------------------------------------------------------------
+// PushOutResult
+//------------------------------------------------------------------------------
+void aeMesh::PushOutResult::Accumulate( const PushOutParams& params, const PushOutResult& result )
+{
+  position = result.position;
+  velocity = result.velocity;
+  
+  // @TODO: Should hits be sorted in any way? Currently excess hits are discarded in a random order
+  for ( uint32_t i = 0; i < result.hitCount && hitCount < countof(hitPos); i++ )
+  {
+    hitPos[ hitCount ] = result.hitPos[ i ];
+    hitNorm[ hitCount ] = result.hitNorm[ i ];
+    hitCount++;
+  }
+}
+
 #endif

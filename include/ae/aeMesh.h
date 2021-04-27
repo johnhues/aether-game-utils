@@ -107,6 +107,8 @@ public:
     
     uint32_t hitCount = 0;
     Hit hits[ 8 ];
+    
+    void Accumulate( const RaycastParams& params, const RaycastResult& result );
   };
 
   bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const;
@@ -133,6 +135,8 @@ public:
     uint32_t hitCount = 0;
     aeFloat3 hitPos[ 8 ];
     aeFloat3 hitNorm[ 8 ];
+    
+    void Accumulate( const PushOutParams& params, const PushOutResult& result );
   };
 
   bool PushOut( const PushOutParams& params, PushOutResult* outResult ) const;

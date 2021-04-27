@@ -469,9 +469,14 @@ public:
   VertexCount GetVertexCount( uint32_t chunkIndex ) const;
   VertexCount GetVertexCount( aeInt3 pos ) const;
 
+  // Simple voxel grid test
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
+  // Uses voxel grid and terrain normal so position result is slightly lumpy (non-continuous)
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
-  RaycastResult Raycast( aeFloat3 start, aeFloat3 ray ) const;
+  
+  // Triangle raycast against terrain
+  bool Raycast( const aeMesh::RaycastParams& params, aeMesh::RaycastResult* outResult ) const;
+  // Triangle-sphere push out
   bool PushOutSphere( const aeMesh::PushOutParams& params, aeMesh::PushOutResult* outResult ) const;
   
   aeTerrainSDF sdf;
