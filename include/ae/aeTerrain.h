@@ -110,10 +110,10 @@ const TerrainIndex kInvalidTerrainIndex = ~0;
 //------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
-const uint32_t kChunkSize = 64; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
+const uint32_t kChunkSize = 24; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
-const uint32_t kMaxActiveChunks = 128;
+const uint32_t kMaxActiveChunks = 1024 + 512;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
 const VertexCount kMaxChunkVerts = VertexCount( aeMath::MaxValue< uint16_t >() );
 // https://math.stackexchange.com/questions/1879255/average-valence-of-vertex-in-tetrahedral-mesh
