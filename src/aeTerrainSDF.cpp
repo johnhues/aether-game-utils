@@ -109,6 +109,7 @@ aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
   hash = hash.HashBasicType( type );
   hash = hash.HashBasicType( materialId );
   hash = hash.HashBasicType( smoothing );
+  hash = hash.HashBasicType( order );
   hash = hash.HashBasicType( m_localToWorld );
   return hash;
 }

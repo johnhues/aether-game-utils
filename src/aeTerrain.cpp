@@ -371,8 +371,14 @@ void aeTerrainJob::StartNew( const aeVfs* vfs, const aeTerrainSDF* sdf, aeTerrai
 void aeTerrainJob::Do()
 {
   AE_ASSERT( m_chunk );
+  
+  // Sort inside job to save a little time on the main thread but before hashing so hash is correct
+  std::stable_sort( m_shapes.Begin(), m_shapes.End(), []( const ae::Sdf::Shape* s0, const ae::Sdf::Shape* s1 )
+  {
+    return s0->order < s1->order;
+  } );
 
-  // Hash inside job instead to save a little time on the main thread
+  // Hash
   m_parameterHash = aeHash();
   
   aeInt3 chunkPos = m_chunk->m_pos;

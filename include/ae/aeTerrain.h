@@ -206,6 +206,7 @@ public:
   Type type = Type::Union;
   aeTerrainMaterialId materialId = 0;
   float smoothing = 0.0f; // Works with SmoothUnion and SmoothSubtraction types
+  int32_t order = 0; // Lower values processed first, ie. to subtract from a solid the subtraction order should be higher
 
 protected:
   aeHash GetBaseHash( aeHash hash ) const;
