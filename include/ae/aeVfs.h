@@ -54,17 +54,25 @@ public:
   void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
 
   // Member functions for use of aeVfsRoot directories
-  uint32_t GetSize( aeVfsRoot root, const char* fileName ) const;
-  uint32_t Read( aeVfsRoot root, const char* fileName, void* buffer, uint32_t bufferSize ) const;
-  uint32_t Write( aeVfsRoot root, const char* fileName, const void* buffer, uint32_t bufferSize ) const;
-  void ShowFolder( aeVfsRoot root, const char* fileDir ) const;
-  bool GetRootDir( aeVfsRoot root, aeStr256* outDir ) const; // @TODO: aePath
+  bool GetRootDir( aeVfsRoot root, aeStr256* outDir ) const;
+  uint32_t GetSize( aeVfsRoot root, const char* filePath ) const;
+  uint32_t Read( aeVfsRoot root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
+  uint32_t Write( aeVfsRoot root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
+  bool CreateFolder( aeVfsRoot root, const char* folderPath ) const;
+  void ShowFolder( aeVfsRoot root, const char* folderPath ) const;
 
   // Static member functions intended to be used when not creating a aeVfs instance
-  static uint32_t GetSize( const char* fileDir );
-  static uint32_t Read( const char* fileDir, void* buffer, uint32_t bufferSize );
-  static uint32_t Write( const char* fileDir, const void* buffer, uint32_t bufferSize );
-  static void ShowFolder( const char* fileDir );
+  static uint32_t GetSize( const char* filePath );
+  static uint32_t Read( const char* filePath, void* buffer, uint32_t bufferSize );
+  static uint32_t Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs );
+  static bool CreateFolder( const char* folderPath );
+  static void ShowFolder( const char* folderPath );
+  
+  // Static helpers
+  static aeStr256 GetAbsolutePath( const char* filePath );
+  static const char* GetFileNameFromPath( const char* filePath );
+  static const char* GetFileExtFromPath( const char* filePath );
+  static aeStr256 GetDirectoryFromPath( const char* filePath );
 
 private:
   void m_SetDataDir( const char* dataDir );
