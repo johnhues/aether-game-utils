@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// aeTesting.h
+// aetherEXT.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -21,45 +21,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AE_TESTING_H
-#define AE_TESTING_H
+#ifndef AE_AETHEREXT_H
+#define AE_AETHEREXT_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-
-namespace AE_NAMESPACE {
-
-//------------------------------------------------------------------------------
-// LifeTimeTester class
-//------------------------------------------------------------------------------
-class LifetimeTester
-{
-public:
-  LifetimeTester(); // default
-  LifetimeTester( const LifetimeTester& ); // copy
-  LifetimeTester( LifetimeTester&& ) noexcept; // move
-  LifetimeTester& operator=( const LifetimeTester& ); // copy assignment
-  LifetimeTester& operator=( LifetimeTester&& ) noexcept; // move assignment
-  ~LifetimeTester();
-  
-  static const uint32_t kConstructed;
-  static const uint32_t kMoved;
-  
-  uint32_t check;
-  
-  static void ClearStats();
-  
-  static int32_t ctorCount;
-  static int32_t copyCount;
-  static int32_t moveCount;
-  static int32_t copyAssignCount;
-  static int32_t moveAssignCount;
-  static int32_t dtorCount;
-  static int32_t currentCount;
-};
-
-} // ae namespace end
+#include "aeAlloc.h"
+#include "aeArray.h"
+#include "aeAudio.h"
+#include "aeBinaryStream.h"
+#include "aeClock.h"
+#include "aeCommand.h"
+#include "aeCommandLineArgs.h"
+#include "aeCompactingAllocator.h"
+#include "aeDict.h"
+#include "aeEditorCamera.h"
+#include "aeFileDialog.h"
+#include "aeHotSpot.h"
+#include "aeImage.h"
+#include "aeInitializer.h"
+#include "aeInput.h"
+#include "aeInventoryGrid.h"
+#include "aeList.h"
+#include "aeMap.h"
+#include "aeMath.h"
+#include "aeMesh.h"
+#include "aeMeta.h"
+#include "aeNet.h"
+#include "aeObjectPool.h"
+#include "aeRef.h"
+#include "aeRender.h"
+#include "aeRingBuffer.h"
+#include "aeSignal.h"
+#include "aeSparseGrid.h"
+#include "aeSpline.h"
+#include "aeString.h"
+#include "aeTerrain.h"
+#include "aeTesting.h"
+#include "aeUuid.h"
+#include "aeVfs.h"
+#include "aeWindow.h"
 
 #endif

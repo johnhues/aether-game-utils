@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeAudio.h"
-#include "aeLog.h"
+#include "aeMath.h"
 #include "aeVfs.h"
 
 #if _AE_APPLE_
@@ -183,6 +183,16 @@ void aeAudioData::Destroy()
   CheckALError();
 
   *this = aeAudioData();
+}
+
+//------------------------------------------------------------------------------
+// aeAudioChannel member functions
+//------------------------------------------------------------------------------
+aeAudio::aeAudioChannel::aeAudioChannel()
+{
+  source = 0;
+  priority = aeMath::MaxValue< int32_t >();
+  resource = nullptr;
 }
 
 //------------------------------------------------------------------------------

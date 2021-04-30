@@ -24,13 +24,12 @@
 // Headers
 //------------------------------------------------------------------------------
 #include <thread>
-#include "aePlatform.h"
+#include "aether.h"
 #if _AE_WINDOWS_
 #define WIN32_LEAN_AND_MEAN
 #include "Windows.h"
 #endif
 #include "aeClock.h"
-#include "aeLog.h" // for AE_ASSERT
 
 //------------------------------------------------------------------------------
 // aeClock functions

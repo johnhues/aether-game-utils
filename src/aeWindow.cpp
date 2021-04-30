@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeWindow.h"
-#include "aeLog.h"
 #include "aeString.h"
 #include "SDL.h"
 

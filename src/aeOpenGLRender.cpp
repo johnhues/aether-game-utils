@@ -26,8 +26,6 @@
 #include "aeRender.h"
 #include "aeAlloc.h"
 #include "aeCommonRender.h"
-#include "aeLog.h"
-#include "aePlatform.h"
 #include "aeVfs.h"
 #include "aeWindow.h"
 

@@ -30,7 +30,6 @@
 #include "aeBinaryStream.h"
 #include "aeMap.h"
 #include "aeMeta.h"
-#include "aePlatform.h"
 #include "aeRef.h"
 #include "aeString.h"
 

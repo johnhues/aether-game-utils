@@ -42,6 +42,7 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 # source files
 set(AE_HEADER_FILES
 	../include/ae/aether.h
+	../include/ae/aetherEXT.h
 	../include/ae/aeAlloc.h
 	../include/ae/aeArray.h
 	../include/ae/aeAudio.h
@@ -61,15 +62,12 @@ set(AE_HEADER_FILES
 	../include/ae/aeInput.h
 	../include/ae/aeInventoryGrid.h
 	../include/ae/aeList.h
-	../include/ae/aeLog.h
-	../include/ae/aeLog.hpp
 	../include/ae/aeMap.h
 	../include/ae/aeMath.h
 	../include/ae/aeMesh.h
 	../include/ae/aeMeta.h
 	../include/ae/aeNet.h
 	../include/ae/aeObjectPool.h
-	../include/ae/aePlatform.h
 	../include/ae/aeRef.h
 	../include/ae/aeRender.h
 	../include/ae/aeRingBuffer.h
@@ -88,6 +86,7 @@ set(AE_HEADER_FILES
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		${AE_HEADER_FILES}
+		aether.cpp
 		aeAlloc.cpp
 		aeAudio.cpp
 		aeBinaryStream.cpp
@@ -102,7 +101,6 @@ target_sources(${AE_LIBRARY_NAME}
 		aeHotSpot.cpp
 		aeImage.cpp
 		aeInput.cpp
-		aeLog.cpp
 		aeMath.cpp
 		aeMesh.cpp
 		aeMeta.cpp

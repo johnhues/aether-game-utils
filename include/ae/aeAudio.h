@@ -29,7 +29,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeArray.h"
-#include "aePlatform.h"
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
@@ -72,9 +71,10 @@ public:
 private:
   struct aeAudioChannel
   {
-    uint32_t source = 0;
-    int32_t priority = aeMath::MaxValue< int32_t >();
-    const aeAudioData* resource = nullptr;
+    aeAudioChannel();
+    uint32_t source;
+    int32_t priority;
+    const aeAudioData* resource;
   };
 
   aeArray< aeAudioChannel > m_musicChannels;

@@ -27,7 +27,6 @@
 #include <inttypes.h>
 #include <vector>
 #include "aeUuid.h"
-#include "aeLog.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include "EmSocket.h"

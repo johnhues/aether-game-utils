@@ -29,7 +29,6 @@
 //------------------------------------------------------------------------------
 #include "aeMath.h"
 #include "aeMap.h"
-#include "aePlatform.h"
 #include "aeString.h"
 #include <map>
 #include <vector>
