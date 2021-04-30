@@ -232,7 +232,17 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
     return f;
   }
 
-  int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf::Shape* sdf ){ return sdf->type != ae::Sdf::Shape::Type::Material; } );
+  int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf::Shape* sdf )
+  {
+    switch ( sdf->type )
+    {
+      case ae::Sdf::Shape::Type::Union:
+      case ae::Sdf::Shape::Type::SmoothUnion:
+        return true;
+      default:
+        return false;
+    }
+  } );
   if ( firstShapeIndex >= 0 )
   {
     f = m_shapes[ firstShapeIndex ]->GetValue( pos );
