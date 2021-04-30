@@ -434,7 +434,7 @@ void aeTerrainJob::Do()
       wStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
       wStream.SerializeRaw( &m_indices[ 0 ], m_indexCount * sizeof(m_indices[ 0 ]) );
       wStream.SerializeObject( *m_chunk );
-      if ( !m_vfs->Write( aeVfsRoot::Cache, filePath.c_str(), wStream.GetData(), wStream.GetOffset() ) )
+      if ( !m_vfs->Write( aeVfsRoot::Cache, filePath.c_str(), wStream.GetData(), wStream.GetOffset(), true ) )
       {
         AE_WARN( "Failed writing terrain chunk '#'", filePath );
       }
