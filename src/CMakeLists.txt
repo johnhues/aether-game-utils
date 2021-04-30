@@ -41,7 +41,7 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # source files
 set(AE_HEADER_FILES
-	../include/ae/ae.h
+	../include/ae/aether.h
 	../include/ae/aeAlloc.h
 	../include/ae/aeArray.h
 	../include/ae/aeAudio.h
@@ -121,6 +121,13 @@ target_sources(${AE_LIBRARY_NAME}
 		ctpl_stl.h
 		stb_image.h
 )
+
+if(APPLE)
+	target_sources(${AE_LIBRARY_NAME}
+		PRIVATE
+			aeVfs.mm
+	)
+endif()
 
 # ae lib installation
 message(STATUS "ae installation path: ${CMAKE_INSTALL_PREFIX}")

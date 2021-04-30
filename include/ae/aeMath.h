@@ -1212,6 +1212,7 @@ public:
 
   aeHash& HashString( const char* str );
   aeHash& HashData( const uint8_t* data, const uint32_t length );
+  template < typename T > aeHash& HashBasicType( const T& v ) { return HashData( (const uint8_t*)&v, sizeof(v) ); }
 
   void Set( uint32_t hash );
   uint32_t Get() const;

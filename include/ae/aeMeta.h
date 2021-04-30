@@ -55,8 +55,8 @@ static aeObject* PlacementNewInternal( aeObject* d ) { return new( d ) T(); }
 //------------------------------------------------------------------------------
 #define AE_META_CLASS_FORCE_LINK(x) \
 extern int force_link_##x; \
-struct Some_##x { Some_##x() { force_link_##x = 1; } }; \
-Some_##x some_##x;
+struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
+ForceLink_##x forceLink_##x;
 
 //------------------------------------------------------------------------------
 // Internal meta forward declarations
@@ -1198,6 +1198,7 @@ static aeMetaTypeId aeMetaGetObjectTypeId( const aeObject* obj )
 
 static aeMetaTypeId aeMetaGetTypeIdFromName( const char* name )
 {
+  // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
   return name[ 0 ] ? aeHash().HashString( name ).Get() : kAeInvalidMetaTypeId;
 }
 

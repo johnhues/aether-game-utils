@@ -32,14 +32,10 @@
 #include "aeImage.h"
 #include "aeList.h"
 #include "aeMath.h"
+#include "aeMesh.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
 #include <map>
-
-namespace ctpl
-{
-  class thread_pool;
-}
 
 //------------------------------------------------------------------------------
 // aeUnit
@@ -70,6 +66,9 @@ public:
   aeUnit< T > operator -- ( int ) { aeUnit< T > temp = *this; --*this; return temp; }
   aeUnit< T >& operator += ( const T& v ) { m_v += v; return *this; }
   aeUnit< T >& operator -= ( const T& v ) { m_v -= v; return *this; }
+  
+  T& Get() { return m_v; }
+  T Get() const { return m_v; }
 
 private:
   operator bool () const = delete;
@@ -83,24 +82,42 @@ inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
 }
 
 //------------------------------------------------------------------------------
-// Constants
+// Terrain types
 //------------------------------------------------------------------------------
-typedef aeUnit< uint32_t > VertexCount;
 #if _AE_IOS_
-    #include <arm_neon.h>
+	#include <arm_neon.h>
 #else
-    typedef float float16_t;
+	typedef float float16_t;
 #endif
 typedef uint8_t aeTerrainMaterialId;
-#define PACK( _ae_something ) _ae_something
 
-const uint32_t kChunkSize = 32; // 32*32*32 is less than max vertex index
+struct TerrainVertex
+{
+  aeFloat3 position;
+  aeFloat3 normal;
+  uint8_t materials[ 4 ];
+  uint8_t info[ 4 ];
+};
+
+typedef aeUnit< uint32_t > VertexCount;
+const VertexCount kChunkCountInterior = VertexCount( ~0 - 1 ); // Whole chunk is solid. Used for raycasting
+const VertexCount kChunkCountDirty = VertexCount( ~0 ); // Flags chunks that should be (re)generated
+const VertexCount kChunkCountEmpty = VertexCount( 0 );
+
+typedef uint16_t TerrainIndex;
+const TerrainIndex kInvalidTerrainIndex = ~0;
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const uint32_t kChunkSize = 24; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
-const uint32_t kMaxActiveChunks = 1024;
+const uint32_t kMaxActiveChunks = 1024 + 512;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
-const VertexCount kMaxChunkVerts = VertexCount( kChunkSize * kChunkSize * kChunkSize );
-const uint32_t kMaxChunkIndices = kChunkSize * kChunkSize * kChunkSize * 6;
+const VertexCount kMaxChunkVerts = VertexCount( aeMath::MaxValue< uint16_t >() );
+// https://math.stackexchange.com/questions/1879255/average-valence-of-vertex-in-tetrahedral-mesh
+const uint32_t kMaxChunkIndices = uint32_t( kMaxChunkVerts ) * 6; // Average vertex valence
 const uint32_t kMaxChunkAllocationsPerTick = 1;
 const float16_t kSkyBrightness = float16_t( 5.0f );
 const float kSdfBoundary = 2.0f;
@@ -119,21 +136,8 @@ struct Block
 };
 
 //------------------------------------------------------------------------------
-// TerrainVertex
+// Helpers
 //------------------------------------------------------------------------------
-PACK( struct TerrainVertex
-{
-  aeFloat3 position;
-  aeFloat3 normal;
-  uint8_t materials[ 4 ];
-  uint8_t info[ 4 ];
-});
-typedef uint16_t TerrainIndex;
-const TerrainIndex kInvalidTerrainIndex = ~0;
-const VertexCount kChunkCountInterior = VertexCount( ~0 - 1 ); // Whole chunk is solid. Used for raycasting
-const VertexCount kChunkCountDirty = VertexCount( ~0 ); // Flags chunks that should be (re)generated
-const VertexCount kChunkCountEmpty = VertexCount( 0 );
-
 struct RaycastResult
 {
   bool hit;
@@ -159,6 +163,11 @@ float aeIntersection( float d1, float d2 );
 float aeSmoothUnion( float d1, float d2, float k );
 float aeSmoothSubtraction( float d1, float d2, float k );
 
+namespace ctpl
+{
+  class thread_pool;
+}
+
 //------------------------------------------------------------------------------
 // ae::Sdf
 //------------------------------------------------------------------------------
@@ -182,6 +191,8 @@ public:
 
   void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
+  virtual ae::Sdf::Shape* Clone() const = 0;
+  virtual aeHash Hash( aeHash hash ) const = 0;
   virtual float GetValue( aeFloat3 p ) const = 0;
 
   enum class Type
@@ -195,8 +206,10 @@ public:
   Type type = Type::Union;
   aeTerrainMaterialId materialId = 0;
   float smoothing = 0.0f; // Works with SmoothUnion and SmoothSubtraction types
+  int32_t order = 0; // Lower values processed first, ie. to subtract from a solid the subtraction order should be higher
 
 protected:
+  aeHash GetBaseHash( aeHash hash ) const;
   const aeFloat4x4& GetWorldToScaled() const { return m_worldToScaled; }
 
 private:
@@ -217,6 +230,8 @@ public:
 class Box : public Shape
 {
 public:
+  ae::Sdf::Shape* Clone() const override;
+  aeHash Hash( aeHash hash ) const override;
   float GetValue( aeFloat3 p ) const override;
 
   float cornerRadius = 0.0f;
@@ -228,6 +243,8 @@ public:
 class Cylinder : public Shape
 {
 public:
+  ae::Sdf::Shape* Clone() const override;
+  aeHash Hash( aeHash hash ) const override;
   float GetValue( aeFloat3 p ) const override;
 
   // Valid range is 0-1, are multiplied by obb size
@@ -242,6 +259,8 @@ class Heightmap : public Shape
 {
 public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
+  ae::Sdf::Shape* Clone() const override;
+  aeHash Hash( aeHash hash ) const override;
   float GetValue( aeFloat3 p ) const override;
 
 private:
@@ -265,11 +284,9 @@ public:
   void UpdatePending();
   bool HasPending() const;
   void RenderDebug( aeDebugRender* debug );
-
-  // @NOTE: This will be called from multiple threads simultaneously and so must be const
-  float GetValue( aeFloat3 pos ) const;
-  aeFloat3 GetDerivative( aeFloat3 pos ) const;
-  aeTerrainMaterialId GetMaterial( aeFloat3 pos ) const;
+  
+  uint32_t GetShapeCount() const { return m_shapes.Length(); }
+  ae::Sdf::Shape* GetShapeAtIndex( uint32_t index ) const { return m_shapes[ index ]; }
 
 private:
   friend class aeTerrain;
@@ -279,10 +296,6 @@ private:
   aeArray< ae::Sdf::Shape* > m_shapesPrev;
   aeArray< ae::Sdf::Shape* > m_pendingCreated;
   aeArray< ae::Sdf::Shape* > m_pendingDestroy;
-
-  // Internal use by aeTerrain
-  uint32_t GetShapeCount() const { return m_shapes.Length(); }
-  ae::Sdf::Shape* GetShapeAtIndex( uint32_t index ) const { return m_shapes[ index ]; }
 };
 
 template < typename T >
@@ -302,16 +315,13 @@ public:
   aeTerrainSDFCache();
   ~aeTerrainSDFCache();
 
-  void Generate( aeInt3 chunk, const aeTerrainSDF* sdf );
+  void Generate( aeInt3 chunk, const class aeTerrainJob* job );
   float GetValue( aeFloat3 pos ) const;
   float GetValue( aeInt3 pos ) const;
   aeFloat3 GetDerivative( aeFloat3 p ) const;
-  uint8_t GetMaterial( aeFloat3 pos ) const;
 
 private:
   float m_GetValue( aeInt3 pos ) const;
-
-  const aeTerrainSDF* m_sdf;
 
   const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to chunkPlus
   static const int32_t kOffset = 2;
@@ -331,7 +341,7 @@ class aeTerrainJob
 public:
   aeTerrainJob();
   ~aeTerrainJob();
-  void StartNew( const aeTerrainSDF* sdf, struct aeTerrainChunk* chunk );
+  void StartNew( const class aeVfs* vfs, const aeTerrainSDF* sdf, struct aeTerrainChunk* chunk );
   void Do();
   void Finish();
 
@@ -341,10 +351,14 @@ public:
 
   const aeTerrainChunk* GetChunk() const { return m_chunk; }
   aeTerrainChunk* GetChunk() { return m_chunk; }
-  const TerrainVertex* GetVertices() const { return m_vertices.Length() ? &m_vertices[ 0 ] : nullptr; }
-  const TerrainIndex* GetIndices() const { return m_indexCount ? &m_indices[ 0 ] : nullptr; }
+  const TerrainVertex* GetVertices() const { return m_vertices.Begin(); }
+  const TerrainIndex* GetIndices() const { return m_indices.Begin(); }
   VertexCount GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
+  
+  float GetValue( aeFloat3 pos ) const;
+  aeFloat3 GetDerivative( aeFloat3 pos ) const;
+  aeTerrainMaterialId GetMaterial( aeFloat3 pos ) const;
 
 private:
   // Management
@@ -352,20 +366,22 @@ private:
   std::atomic_bool m_running;
 
   // Input
-  const aeTerrainSDF* m_sdf;
+  aeHash m_parameterHash;
+  aeArray< ae::Sdf::Shape* > m_shapes;
   struct aeTerrainChunk* m_chunk;
 
   // Pre-computed sdf
   aeTerrainSDFCache m_sdfCache;
 
   // Output
+  const aeVfs* m_vfs;
   VertexCount m_vertexCount;
   uint32_t m_indexCount;
   aeArray< TerrainVertex > m_vertices;
   aeArray< TerrainIndex > m_indices;
 
 public:
-  // Temp edges (pre-allocate edges for all future jobs)
+  // Temp edges (pre-allocated for all future jobs)
   struct TempEdges
   {
     int32_t x;
@@ -396,17 +412,21 @@ struct aeTerrainChunk
   static void GetPosFromWorld( aeInt3 pos, aeInt3* chunkPos, aeInt3* localPos );
 
   uint32_t GetIndex() const;
-  void Generate( const aeTerrainSDFCache* sdf, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut );
+  void Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob* job, aeTerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut );
+  
+  void Serialize( class aeBinaryStream* stream );
 
   aeAABB GetAABB() const;
   static aeAABB GetAABB( aeInt3 chunkPos );
 
+  void m_SetVertexData( const TerrainVertex* verts, const TerrainIndex* indices, VertexCount vertexCount, uint32_t indexCount );
+  
   uint32_t m_check;
   aeInt3 m_pos;
   bool m_geoDirty;
   bool m_lightDirty;
   aeVertexData m_data;
-  TerrainVertex* m_vertices;
+  aeMesh m_mesh;
   aeListNode< aeTerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -430,6 +450,8 @@ public:
   void Terminate();
   void Update( aeFloat3 center, float radius );
   void Render( const class aeShader* shader, const aeUniformList& shaderParams );
+
+  void SetVfs( class aeVfs* vfs ); // Use aeVfs::Cache to save to cache terrain
   void SetDebug( class aeDebugRender* debug );
 
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
@@ -448,20 +470,20 @@ public:
   VertexCount GetVertexCount( uint32_t chunkIndex ) const;
   VertexCount GetVertexCount( aeInt3 pos ) const;
 
+  // Simple voxel grid test
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
+  // Uses voxel grid and terrain normal so position result is slightly lumpy (non-continuous)
   RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
-  RaycastResult Raycast( aeFloat3 start, aeFloat3 ray ) const;
-  // @NOTE: SweepSphere returns true on collision and writes out the following:
-  // distanceOut is distance traveled before collision
-  // normalOut is ground normal
-  // posOut is ground collision point
-  bool SweepSphere( aeSphere sphere, aeFloat3 ray, float* distanceOut = nullptr, aeFloat3* normalOut = nullptr, aeFloat3* posOut = nullptr ) const;
-  bool PushOutSphere( aeSphere sphere, aeFloat3* offsetOut = nullptr, class aeDebugRender* debug = nullptr ) const;
+  
+  // Triangle raycast against terrain
+  bool Raycast( const aeMesh::RaycastParams& params, aeMesh::RaycastResult* outResult ) const;
+  // Triangle-sphere push out
+  bool PushOutSphere( const aeMesh::PushOutParams& params, aeMesh::PushOutResult* outResult ) const;
   
   aeTerrainSDF sdf;
 
 private:
-  const TerrainVertex* m_GetVertex( int32_t x, int32_t y, int32_t z ) const;
+  bool m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* outVertex ) const;
   void UpdateChunkLighting( aeTerrainChunk* chunk );
   
   aeTerrainChunk* AllocChunk( aeInt3 pos );
@@ -469,6 +491,7 @@ private:
   void m_SetVertexCount( uint32_t chunkIndex, VertexCount count );
   float GetChunkScore( aeInt3 pos ) const;
 
+  aeVfs* m_vfs = nullptr;
   aeDebugRender* m_debug = nullptr;
 
   bool m_render = false;
