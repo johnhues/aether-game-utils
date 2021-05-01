@@ -120,7 +120,7 @@ endif()
 		)
 		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
 		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
-	endif()
+	# endif()
 
 # 	ExternalProject_Add(zlib
 # 		PREFIX zlib
