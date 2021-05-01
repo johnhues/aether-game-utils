@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "ae/aetherEXT.h"
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
 
@@ -204,13 +204,13 @@ void WriteObjects( aeVfs* vfs, const aeArray< Object* >& objects )
     
     wStream.SerializeObject( *object );
   }
-  vfs->Write( aeVfs::User, kFileName, wStream.GetData(), wStream.GetOffset() );
+  vfs->Write( aeVfsRoot::User, kFileName, wStream.GetData(), wStream.GetOffset(), false );
 }
 
 bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, aeArray< Object* >& objects )
 {
-  aeAlloc::Scratch< uint8_t > scratch( vfs->GetSize( aeVfs::User, kFileName ) );
-  vfs->Read( aeVfs::User, kFileName, scratch.Data(), scratch.Length() );
+  aeAlloc::Scratch< uint8_t > scratch( vfs->GetSize( aeVfsRoot::User, kFileName ) );
+  vfs->Read( aeVfsRoot::User, kFileName, scratch.Data(), scratch.Length() );
   aeBinaryStream rStream = aeBinaryStream::Reader( scratch.Data(), scratch.Length() );
 
   uint32_t version = 0;
@@ -301,8 +301,8 @@ int main()
   }
 
   ae::Image heightmapImage;
-  aeAlloc::Scratch< uint8_t > fileBuffer( vfs.GetSize( aeVfs::Data, "terrain.png" ) );
-  vfs.Read( aeVfs::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
+  aeAlloc::Scratch< uint8_t > fileBuffer( vfs.GetSize( aeVfsRoot::Data, "terrain.png" ) );
+  vfs.Read( aeVfsRoot::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
   heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
   uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
@@ -337,7 +337,7 @@ int main()
   {
     input.Pump();
 
-    ui->NewFrame( &render, &input, timeStep.GetPrevFrameTime() );
+    ui->NewFrame( &render, &input, timeStep.GetDT() );
 
     ImGuizmo::SetOrthographic( false );
     ImGuizmo::BeginFrame();
@@ -506,7 +506,7 @@ int main()
 
     // Camera input
     camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
-    camera.Update( &input, timeStep.GetPrevFrameTime() );
+    camera.Update( &input, timeStep.GetDT() );
 
     if ( !headless )
     {
@@ -626,7 +626,18 @@ int main()
             aeFloat3 ray = object->rayDir * object->rayLength;
             if ( object->rayType == 0 || object->rayType == 1 )
             {
-              object->rayType ? terrain->RaycastFast( object->raySrc, ray, true ) : terrain->Raycast( object->raySrc, ray );
+              if ( object->rayType )
+              {
+                terrain->RaycastFast( object->raySrc, ray, true );
+              }
+              else
+              {
+                aeMesh::RaycastParams params;
+                params.source = object->raySrc;
+                params.direction = object->rayDir;
+                params.maxLength = object->rayLength;
+                terrain->Raycast( params, nullptr );
+              }
             }
             else
             {
