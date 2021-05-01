@@ -29,7 +29,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aePlatform.h"
+#include "aether.h"
 #include "imgui.h"
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h" // For advanced imgui features like docking
@@ -136,6 +136,13 @@ public:
 			ImGui_ImplOpenGL3_RenderDrawData( ImGui::GetDrawData() );
 		}
     m_pendingRender = false;
+	}
+
+	void Discard()
+	{
+		AE_ASSERT( m_init );
+		ImGui::Render();
+		m_pendingRender = false;
 	}
 
 	template < uint32_t N >

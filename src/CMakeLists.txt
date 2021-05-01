@@ -4,7 +4,6 @@ include(GNUInstallDirs)
 # library
 add_library(${AE_LIBRARY_NAME} STATIC "")
 set_target_properties(${AE_LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
-set_property(TARGET ${AE_LIBRARY_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
@@ -24,7 +23,8 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # source files
 set(AE_HEADER_FILES
-	../include/ae/ae.h
+	../include/ae/aether.h
+	../include/ae/aetherEXT.h
 	../include/ae/aeAlloc.h
 	../include/ae/aeArray.h
 	../include/ae/aeAudio.h
@@ -44,15 +44,12 @@ set(AE_HEADER_FILES
 	../include/ae/aeInput.h
 	../include/ae/aeInventoryGrid.h
 	../include/ae/aeList.h
-	../include/ae/aeLog.h
-	../include/ae/aeLog.hpp
 	../include/ae/aeMap.h
 	../include/ae/aeMath.h
 	../include/ae/aeMesh.h
 	../include/ae/aeMeta.h
 	../include/ae/aeNet.h
 	../include/ae/aeObjectPool.h
-	../include/ae/aePlatform.h
 	../include/ae/aeRef.h
 	../include/ae/aeRender.h
 	../include/ae/aeRingBuffer.h
@@ -71,6 +68,7 @@ set(AE_HEADER_FILES
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		${AE_HEADER_FILES}
+		aether.cpp
 		aeAlloc.cpp
 		aeAudio.cpp
 		aeBinaryStream.cpp
@@ -85,7 +83,6 @@ target_sources(${AE_LIBRARY_NAME}
 		aeHotSpot.cpp
 		aeImage.cpp
 		aeInput.cpp
-		aeLog.cpp
 		aeMath.cpp
 		aeMesh.cpp
 		aeMeta.cpp
@@ -104,6 +101,13 @@ target_sources(${AE_LIBRARY_NAME}
 		ctpl_stl.h
 		stb_image.h
 )
+
+if(APPLE)
+	target_sources(${AE_LIBRARY_NAME}
+		PRIVATE
+			aeVfs.mm
+	)
+endif()
 
 # ae lib installation
 # message(STATUS "ae installation path: ${CMAKE_INSTALL_PREFIX}")

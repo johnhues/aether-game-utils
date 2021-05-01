@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// aeTesting.h
+// aeVfs.mm
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -21,45 +21,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AE_TESTING_H
-#define AE_TESTING_H
-
-//------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aether.h"
-
-namespace AE_NAMESPACE {
+#import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
+#import "aeVfs.h"
 
 //------------------------------------------------------------------------------
-// LifeTimeTester class
+// aeVfs functions
 //------------------------------------------------------------------------------
-class LifetimeTester
+bool aeVfs_AppleGetCacheDir( aeStr256* outDir )
 {
-public:
-  LifetimeTester(); // default
-  LifetimeTester( const LifetimeTester& ); // copy
-  LifetimeTester( LifetimeTester&& ) noexcept; // move
-  LifetimeTester& operator=( const LifetimeTester& ); // copy assignment
-  LifetimeTester& operator=( LifetimeTester&& ) noexcept; // move assignment
-  ~LifetimeTester();
-  
-  static const uint32_t kConstructed;
-  static const uint32_t kMoved;
-  
-  uint32_t check;
-  
-  static void ClearStats();
-  
-  static int32_t ctorCount;
-  static int32_t copyCount;
-  static int32_t moveCount;
-  static int32_t copyAssignCount;
-  static int32_t moveAssignCount;
-  static int32_t dtorCount;
-  static int32_t currentCount;
-};
+  NSArray* paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
+  NSString* cachesPath = [paths lastObject];
+  if ( [cachesPath length] )
+  {
+    *outDir = [cachesPath UTF8String];
+    return true;
+  }
+  return false;
+}
 
-} // ae namespace end
+bool aeVfs_AppleCreateFolder( const char* dir )
+{
+  NSString* path = [NSString stringWithUTF8String:dir];
+  NSError* error = nil;
+  BOOL success = [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:&error];
+  return success && !error;
+}
 
-#endif
+void aeVfs_AppleOpenFolder( const char* _path )
+{
+  NSString* path = [NSString stringWithUTF8String:_path];
+  [[NSWorkspace sharedWorkspace] selectFile:path inFileViewerRootedAtPath:@""];
+}
+
+aeStr256 aeVfs_AppleGetAbsolutePath( const char* _path )
+{
+  NSString* path = [NSString stringWithUTF8String:_path];
+  NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
+  AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
+  NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
+  NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
+  return [absoluteUrl.path UTF8String];
+}

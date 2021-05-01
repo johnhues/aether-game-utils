@@ -223,16 +223,16 @@ public:
   const void* GetIndices() const;
   uint32_t GetVertexSize() const { return m_vertexSize; }
   uint32_t GetIndexSize() const { return m_indexSize; }
-  
   uint32_t GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
+  
   uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
   uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
   uint32_t GetAttributeCount() const { return m_attributeCount; }
   aeVertexPrimitive::Type GetPrimitiveType() const { return m_primitive; }
 
-  void Render( const class aeShader* shader, const aeUniformList& uniforms );
-  void Render( const class aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms );
+  void Render( const class aeShader* shader, const aeUniformList& uniforms ) const;
+  void Render( const class aeShader* shader, uint32_t primitiveCount, const aeUniformList& uniforms ) const;
   
 private:
   aeVertexData( const aeVertexData& ) = delete;

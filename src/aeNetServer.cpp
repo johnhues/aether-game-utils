@@ -27,7 +27,6 @@
 #include <vector>
 #include <algorithm>
 #include <enet/enet.h>
-#include "aeLog.h"
 // #include "HVN_WebConn.h"
 
 //------------------------------------------------------------------------------

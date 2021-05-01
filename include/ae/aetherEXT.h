@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// ae.h
+// aetherEXT.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 //
@@ -21,12 +21,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AE_AE_H
-#define AE_AE_H
+#ifndef AE_AETHEREXT_H
+#define AE_AETHEREXT_H
 
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
+#include "aether.h"
 #include "aeAlloc.h"
 #include "aeArray.h"
 #include "aeAudio.h"
@@ -44,14 +45,12 @@
 #include "aeInput.h"
 #include "aeInventoryGrid.h"
 #include "aeList.h"
-#include "aeLog.h"
 #include "aeMap.h"
 #include "aeMath.h"
 #include "aeMesh.h"
 #include "aeMeta.h"
 #include "aeNet.h"
 #include "aeObjectPool.h"
-#include "aePlatform.h"
 #include "aeRef.h"
 #include "aeRender.h"
 #include "aeRingBuffer.h"

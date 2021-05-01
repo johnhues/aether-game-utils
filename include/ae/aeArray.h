@@ -28,8 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeAlloc.h"
-#include "aeLog.h"
-#include "aePlatform.h"
 namespace AE_NAMESPACE {
 
 //------------------------------------------------------------------------------
@@ -41,7 +39,7 @@ class Array
 public:
   Array();
   Array( uint32_t size ); // Reserve size (with length of 0)
-  Array( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'vals'
+  Array( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
   Array( const Array< T >& other );
   ~Array();
   void operator =( const Array< T >& other );
@@ -61,24 +59,32 @@ public:
   void Reserve( uint32_t total );
   void Clear();
   
+  // @NOTE: Performs bounds checking in debug mode. Use 'begin()' to get raw array.
   const T& operator[]( int32_t index ) const;
   T& operator[]( int32_t index );
 
   uint32_t Length() const;
   uint32_t Size() const;
 
-  // Ranged-based loop
-  T* begin() { return &m_array[ 0 ]; }
-  T* end() { return &m_array[ m_length ]; }
-  const T* begin() const { return &m_array[ 0 ]; }
-  const T* end() const { return &m_array[ m_length ]; }
-
+  // @NOTE: These functions can return null when array length is zero
+  T* Begin() { return m_array; }
+  T* End() { return m_array + m_length; }
+  const T* Begin() const { return m_array; }
+  const T* End() const { return m_array + m_length; }
+  
 private:
   uint32_t m_GetNextSize() const;
   
   uint32_t m_length;
   uint32_t m_size;
   T* m_array;
+  
+public:
+  // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
+  T* begin() { return m_array; }
+  T* end() { return m_array + m_length; }
+  const T* begin() const { return m_array; }
+  const T* end() const { return m_array + m_length; }
 };
 
 //------------------------------------------------------------------------------

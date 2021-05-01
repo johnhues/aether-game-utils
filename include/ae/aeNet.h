@@ -30,7 +30,6 @@
 #include "aeBinaryStream.h"
 #include "aeMap.h"
 #include "aeMeta.h"
-#include "aePlatform.h"
 #include "aeRef.h"
 #include "aeString.h"
 
@@ -279,6 +278,7 @@ const AetherMsgId kSysMsgPlayerDisconnect = 4 | kSysMsgMask;
 
 struct AetherAddress
 {
+  bool IsLocalhost() const;
   char host[ 32 ];
   uint16_t port;
 };

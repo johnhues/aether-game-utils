@@ -24,8 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeInput.h"
-#include "aeLog.h"
-#include "aePlatform.h"
+#include "aether.h"
 #include "aeRender.h"
 #include "aeWindow.h"
 #include "SDL.h"

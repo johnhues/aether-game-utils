@@ -27,7 +27,6 @@
 #include <inttypes.h>
 #include <vector>
 #include "aeUuid.h"
-#include "aeLog.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include "EmSocket.h"
@@ -81,6 +80,15 @@ std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid )
   char str[ 64 ];
   uuid.ToString( str, countof(str) );
   return os << str;
+}
+
+bool AetherAddress::IsLocalhost() const
+{
+    if ( strcmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 || strcmp(host, "::1") == 0 )
+    {
+        return true;
+    }
+    return false;
 }
 
 //------------------------------------------------------------------------------

@@ -28,8 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeArray.h"
-#include "aeLog.h"
-#include "aePlatform.h"
 namespace AE_NAMESPACE {
 
 //------------------------------------------------------------------------------
@@ -127,6 +125,7 @@ V& Map< K, V >::Set( const K& key, const V& value )
   Entry* entry = ( index >= 0 ) ? &m_entries[ index ] : nullptr;
   if ( entry )
   {
+    entry->value = value;
     return entry->value;
   }
   else
