@@ -60,12 +60,10 @@ namespace
   uint32_t g_allocatedBytes = 0;
   uint32_t g_deallocatedBytes = 0;
 
-  // @TODO: Use static map or something to avoid using aeDict which uses strings internally.
-  //        aeMap can't be used because it allocates memory, updating aeAllocInfo.
-  //aeDict g_allocationCounts;
-  //aeDict g_deallocationCounts;
-  //aeDict g_allocationBytes;
-  //aeDict g_deallocationBytes;
+  aeDict g_allocationCounts;
+  aeDict g_deallocationCounts;
+  aeDict g_allocationBytes;
+  aeDict g_deallocationBytes;
 }
 
 aeAllocInfo& GetAllocInfo()
@@ -96,66 +94,79 @@ uint32_t aeAllocInfo::GetDeallocationBytesTotal() const
 
 uint32_t aeAllocInfo::GetAllocationsLength() const
 {
-  return 0;// g_allocationCounts.Length();
+  return g_allocationCounts.Length();
 }
 
 const char* aeAllocInfo::GetAllocationName( uint32_t index ) const
 {
-  return 0;//g_allocationCounts.GetKey( index );
+  return g_allocationCounts.GetKey( index );
 }
 
 uint32_t aeAllocInfo::GetAllocationCount( uint32_t index ) const
 {
-  return 0;//atoi( g_allocationCounts.GetValue( index ) );
+  return atoi( g_allocationCounts.GetValue( index ) );
 }
 
 uint32_t aeAllocInfo::GetAllocationBytes( uint32_t index ) const
 {
-  return 0;//atoi( g_allocationBytes.GetValue( index ) );
+  return atoi( g_allocationBytes.GetValue( index ) );
 }
 
 uint32_t aeAllocInfo::GetDeallocationsLength() const
 {
-  return 0;//g_deallocationCounts.Length();
+  return g_deallocationCounts.Length();
 }
 
 const char* aeAllocInfo::GetDeallocationName( uint32_t index ) const
 {
-  return 0;//g_deallocationCounts.GetKey( index );
+  return g_deallocationCounts.GetKey( index );
 }
 
 uint32_t aeAllocInfo::GetDeallocationCount( uint32_t index ) const
 {
-  return 0;//atoi( g_deallocationCounts.GetValue( index ) );
+  return atoi( g_deallocationCounts.GetValue( index ) );
 }
 
 uint32_t aeAllocInfo::GetDeallocationBytes( uint32_t index ) const
 {
-  return 0;//atoi( g_deallocationBytes.GetValue( index ) );
+  return atoi( g_deallocationBytes.GetValue( index ) );
 }
+
+int32_t s_allocInfoStack = -1;
+int32_t s_deallocInfoStack = -1;
 
 void aeAllocInfo::Alloc( const char* typeName, uint32_t bytes )
 {
-  char buf[ aeStr128::MaxLength() + 1 ];
-  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
-  memcpy( buf, typeName, length );
-  buf[ length ] = 0;
+  s_allocInfoStack++;
+  if ( s_allocInfoStack == 0 )
+  {
+    char buf[ aeStr128::MaxLength() + 1 ];
+    uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
+    memcpy( buf, typeName, length );
+    buf[ length ] = 0;
 
-  g_allocations++;
-  g_allocatedBytes += bytes;
-  //g_allocationCounts.SetInt( buf, g_allocationCounts.GetInt( typeName, 0 ) + 1 );
-  //g_allocationBytes.SetInt( buf, g_allocationBytes.GetInt( typeName, 0 ) + bytes );
+    g_allocations++;
+    g_allocatedBytes += bytes;
+    g_allocationCounts.SetInt( buf, g_allocationCounts.GetInt( typeName, 0 ) + 1 );
+    g_allocationBytes.SetInt( buf, g_allocationBytes.GetInt( typeName, 0 ) + bytes );
+  }
+  s_allocInfoStack--;
 }
 
 void aeAllocInfo::Dealloc( const char* typeName, uint32_t bytes )
 {
-  char buf[ aeStr128::MaxLength() + 1 ];
-  uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
-  memcpy( buf, typeName, length );
-  buf[ length ] = 0;
+  s_deallocInfoStack++;
+  if ( s_deallocInfoStack == 0 )
+  {
+    char buf[ aeStr128::MaxLength() + 1 ];
+    uint32_t length = aeMath::Min( (uint32_t)strlen( typeName ), aeStr128::MaxLength() );
+    memcpy( buf, typeName, length );
+    buf[ length ] = 0;
 
-  g_deallocations++;
-  g_deallocatedBytes += bytes;
-  //g_deallocationCounts.SetInt( buf, g_deallocationCounts.GetInt( typeName, 0 ) + 1 );
-  //g_deallocationBytes.SetInt( buf, g_deallocationBytes.GetInt( typeName, 0 ) + bytes );
+    g_deallocations++;
+    g_deallocatedBytes += bytes;
+    g_deallocationCounts.SetInt( buf, g_deallocationCounts.GetInt( typeName, 0 ) + 1 );
+    g_deallocationBytes.SetInt( buf, g_deallocationBytes.GetInt( typeName, 0 ) + bytes );
+  }
+  s_deallocInfoStack--;
 }
