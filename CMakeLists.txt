@@ -85,7 +85,7 @@ endif()
 # 	set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
 # 	set(AE_ZLIB_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/zlib)
 
-# 	if(WIN32 AND NOT CYGWIN)
+	if(WIN32 AND NOT CYGWIN)
 # 		ExternalProject_Add(glew
 # 			PREFIX glew
 # 			SOURCE_DIR ${AE_GLEW_SRC}
@@ -120,7 +120,7 @@ endif()
 		)
 		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
 		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
-	# endif()
+	endif()
 
 # 	ExternalProject_Add(zlib
 # 		PREFIX zlib
@@ -167,10 +167,7 @@ set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 # dependency libraries
 set(AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
 if(APPLE)
-	list(APPEND AE_DEPS_LIBARARIES
-		"-framework Cocoa"
-		OpenAL
-	)
+	list(APPEND AE_DEPS_LIBARARIES "-framework Cocoa")
 elseif(WIN32 AND NOT CYGWIN)
 	list(APPEND AE_DEPS_LIBARARIES
 		version

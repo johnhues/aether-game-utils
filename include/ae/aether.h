@@ -473,14 +473,6 @@ bool aeIsDebuggerAttached()
 }
 #endif
 
-#if _AE_OSX_
-template <>
-const char* aeGetTypeName< float16_t >()
-{
-  return "float16_t";
-}
-#endif
-
 //------------------------------------------------------------------------------
 // Log levels internal implementation
 //------------------------------------------------------------------------------

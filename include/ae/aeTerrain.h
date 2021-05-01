@@ -84,6 +84,7 @@ inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
 //------------------------------------------------------------------------------
 // Terrain types
 //------------------------------------------------------------------------------
+typedef float aeFloat16;
 typedef uint8_t aeTerrainMaterialId;
 
 struct TerrainVertex
@@ -114,7 +115,7 @@ const VertexCount kMaxChunkVerts = VertexCount( aeMath::MaxValue< uint16_t >() )
 // https://math.stackexchange.com/questions/1879255/average-valence-of-vertex-in-tetrahedral-mesh
 const uint32_t kMaxChunkIndices = uint32_t( kMaxChunkVerts ) * 6; // Average vertex valence
 const uint32_t kMaxChunkAllocationsPerTick = 1;
-const float16_t kSkyBrightness = float16_t( 5.0f );
+const aeFloat16 kSkyBrightness = aeFloat16( 5.0f );
 const float kSdfBoundary = 2.0f;
 
 struct Block
@@ -325,7 +326,7 @@ private:
   aeInt3 m_offseti; // Pre-computed chunk integer offset
   aeFloat3 m_offsetf; // Pre-computed chunk float offset
 
-  float16_t* m_values;
+  aeFloat16* m_values;
 };
 
 //------------------------------------------------------------------------------
@@ -425,7 +426,7 @@ struct aeTerrainChunk
   aeListNode< aeTerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
-  float16_t m_l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
+  aeFloat16 m_l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
   TerrainIndex m_i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
 
 private:
@@ -456,7 +457,7 @@ public:
   Block::Type GetVoxel( aeFloat3 position ) const;
   bool GetCollision( int32_t x, int32_t y, int32_t z ) const;
   bool GetCollision( aeFloat3 position ) const;
-  float16_t GetLight( int32_t x, int32_t y, int32_t z ) const;
+  aeFloat16 GetLight( int32_t x, int32_t y, int32_t z ) const;
 
   aeTerrainChunk* GetChunk( uint32_t chunkIndex );
   aeTerrainChunk* GetChunk( aeInt3 pos );
@@ -513,7 +514,7 @@ private:
   aeList< aeTerrainChunk > m_generatedList;
   
   bool m_blockCollision[ Block::COUNT ];
-  float16_t m_blockDensity[ Block::COUNT ];
+  aeFloat16 m_blockDensity[ Block::COUNT ];
   
   ctpl::thread_pool* m_threadPool = nullptr;
   aeArray< aeTerrainJob* > m_terrainJobs;
