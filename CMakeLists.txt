@@ -66,103 +66,33 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 elseif(APPLE)
 	find_package(OpenAL REQUIRED)
 else()
-	# build
+	# @NOTE: It would be convenient to use MakeAvailable but openal defines a project called 'common' which can easily cause conflicts
+	# FetchContent_Declare(
+	# 	openal
+	# 	GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+	# 	GIT_TAG openal-soft-1.20.1
+	# 	CMAKE_ARGS -DLIBTYPE=STATIC
+	# )
+	# FetchContent_MakeAvailable(openal)
+	set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
+	set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
+	ExternalProject_Add(openal
+		PREFIX openal
+		SOURCE_DIR ${AE_OPENAL_SRC}
+		GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+		GIT_TAG openal-soft-1.20.1
+		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
+	)
+	set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
+	set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
 endif()
-
-# if (NOT AE_BUILD_DEPS)
-# 	find_package(PNG REQUIRED)
-# 	find_package(uuid REQUIRED)
-
-# 	# @HACK: This should be found by the above, or the following variable names should be fixed
-# 	set(UUID_LIBRARY_DIRS /usr/local/Cellar/ossp-uuid/1.6.2_2/lib)
-
-# else()
-# 	message(STATUS "AE_THIRDPARTY_DIR: ${AE_THIRDPARTY_DIR}")
-# 	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
-# 	set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
-# 	set(AE_ZLIB_SRC ${AE_THIRDPARTY_DIR}/zlib)
-
-# 	set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
-# 	set(AE_ZLIB_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/zlib)
-
-	if(WIN32 AND NOT CYGWIN)
-# 		ExternalProject_Add(glew
-# 			PREFIX glew
-# 			SOURCE_DIR ${AE_GLEW_SRC}
-# 			URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0-win32.zip
-# 			CONFIGURE_COMMAND ""
-# 			BUILD_COMMAND ""
-# 			INSTALL_COMMAND ""
-# 		)
-# 		set(GLEW_INCLUDE_DIRS ${AE_GLEW_SRC}/include)
-# 		set(GLEW_LIBRARY_DIRS ${AE_GLEW_SRC}/lib/Release/x64)
-# 		set(GLEW_LIBRARIES
-# 			${GLEW_LIBRARY_DIRS}/glew32s.lib
-# 		)
-
-		# openal
-		# @NOTE: It would be convenient to use MakeAvailable but cmake defines a project called 'common' which can easily cause conflicts
-		# FetchContent_Declare(
-		# 	openal
-		# 	GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-		# 	GIT_TAG openal-soft-1.20.1
-		# 	CMAKE_ARGS -DLIBTYPE=STATIC
-		# )
-		# FetchContent_MakeAvailable(openal)
-		set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
-		set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
-		ExternalProject_Add(openal
-			PREFIX openal
-			SOURCE_DIR ${AE_OPENAL_SRC}
-			GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-			GIT_TAG openal-soft-1.20.1
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
-		)
-		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
-		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
-	endif()
-
-# 	ExternalProject_Add(zlib
-# 		PREFIX zlib
-# 		SOURCE_DIR ${AE_ZLIB_SRC}
-# 		GIT_REPOSITORY https://github.com/madler/zlib.git
-# 		GIT_TAG v1.2.11
-# 		# CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ZLIB_INSTALL}
-# 		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ZLIB_INSTALL} -DCMAKE_APPLE_SILICON_PROCESSOR=arm64
-# 	)
-# 	set(ZLIB_INCLUDE_DIRS ${AE_ZLIB_INSTALL}/include)
-# 	set(ZLIB_LIBRARY_DIRS ${AE_ZLIB_INSTALL}/lib)
-# 	# set(ZLIB_LIBRARIES 
-# 	# 	optimized ${ZLIB_LIBRARY_DIRS}/zlibstatic.lib
-# 	# 	debug ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib
-# 	# )
-# endif()
 
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
-# 	${GLEW_INCLUDE_DIRS}
-# 	${OPENAL_INCLUDE_DIR}
-# 	${PNG_INCLUDE_DIRS}
-# 	${ENET_INCLUDE_DIR}
-# 	${UUID_INCLUDE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/deps/enet/include
 	${GLEW_INCLUDE_DIR}
 	${OPENAL_INCLUDE_DIR}
 )
-# if(NOT EMSCRIPTEN)
-# 	list(APPEND AE_DEPS_LIBRARY_INCLUDE_DIRS ${SDL2_INCLUDE_DIR})
-# endif()
-
-# dependency library directories
-# set(AE_DEPS_LIBRARY_DIRS
-# 	${GLEW_LIBRARY_DIRS}
-# 	# ${OPENAL_LIBRARY_DIR}
-# 	${ZLIB_LIBRARY_DIRS}
-# 	${PNG_LIBRARY_DIRS}
-# 	${SDL2_LIBRARY_DIRS}
-# 	# ${ENET_LIBRARY_DIRS}
-# 	${UUID_LIBRARY_DIRS}
-# )
 
 # dependency libraries
 set(AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
@@ -180,11 +110,7 @@ elseif(WIN32 AND NOT CYGWIN)
 	)
 endif()
 list(APPEND AE_DEPS_LIBARARIES
-	# ${GLEW_LIBRARIES}
 	${OpenGLES}
-	# ${ZLIB_LIBRARIES}
-	# ${PNG_LIBRARIES}
-	# ${UUID_LIBRARY}
 	assimp
 	enet
 )

@@ -90,7 +90,6 @@ target_sources(${AE_LIBRARY_NAME}
 		aeNetClient.cpp
 		aeNetServer.cpp
 		aeOpenGLRender.cpp
-		aePlatform.cpp
 		aeSpline.cpp
 		aeTerrain.cpp
 		aeTerrainSDF.cpp
