@@ -84,11 +84,6 @@ inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
 //------------------------------------------------------------------------------
 // Terrain types
 //------------------------------------------------------------------------------
-#if _AE_IOS_
-	#include <arm_neon.h>
-#else
-	typedef float float16_t;
-#endif
 typedef uint8_t aeTerrainMaterialId;
 
 struct TerrainVertex

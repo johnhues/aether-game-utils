@@ -107,6 +107,19 @@
 #include <utility>
 
 //------------------------------------------------------------------------------
+// SIMD headers
+//------------------------------------------------------------------------------
+#if _AE_APPLE_
+  #ifdef __aarch64__
+    #include <arm_neon.h>
+  #else
+    #include <x86intrin.h>
+  #endif
+#elif _AE_WINDOWS_
+  #include <intrin.h>
+#endif
+
+//------------------------------------------------------------------------------
 // Platform Utils
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
@@ -308,6 +321,11 @@ const char* aeGetTypeName()
   return typeName;
 }
 
+#if defined(__aarch64__) && _AE_OSX_
+  // @NOTE: Typeinfo appears to be missing for float16_t
+  template <> const char* aeGetTypeName< float16_t >();
+#endif
+
 //------------------------------------------------------------------------------
 // Log levels internal implementation
 //------------------------------------------------------------------------------
@@ -452,6 +470,14 @@ bool aeIsDebuggerAttached()
 bool aeIsDebuggerAttached()
 {
   return false;
+}
+#endif
+
+#if _AE_OSX_
+template <>
+const char* aeGetTypeName< float16_t >()
+{
+  return "float16_t";
 }
 #endif
 
