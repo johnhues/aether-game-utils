@@ -38,7 +38,7 @@
 #endif
 
 #ifndef AE_TERRAIN_SIMD
-  #if _AE_LINUX_ || _AE_IOS_
+  #if _AE_LINUX_
     #define AE_TERRAIN_SIMD 0
   #else
     #define AE_TERRAIN_SIMD 1
@@ -56,12 +56,8 @@
 //------------------------------------------------------------------------------
 // SIMD headers
 //------------------------------------------------------------------------------
-#if AE_TERRAIN_SIMD
-  #if _AE_OSX_
-    #include <x86intrin.h>
-  #elif _AE_WINDOWS_
-    #include <intrin.h>
-  #endif
+#if AE_TERRAIN_SIMD && __aarch64__ && _AE_APPLE_
+  #include "sse2neon.h"
 #endif
 
 //------------------------------------------------------------------------------
@@ -150,7 +146,7 @@ const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 aeTerrainSDFCache::aeTerrainSDFCache()
 {
   m_chunk = aeInt3( 0 );
-  m_values = aeAlloc::AllocateArray< float16_t >( kDim * kDim * kDim );
+  m_values = aeAlloc::AllocateArray< aeFloat16 >( kDim * kDim * kDim );
 }
 
 aeTerrainSDFCache::~aeTerrainSDFCache()
@@ -1988,7 +1984,7 @@ bool aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* out
   return true;
 }
 
-float16_t aeTerrain::GetLight( int32_t x, int32_t y, int32_t z ) const
+aeFloat16 aeTerrain::GetLight( int32_t x, int32_t y, int32_t z ) const
 {
   const aeTerrainChunk* chunk = GetChunk( aeInt3( x, y, z ) );
   if ( chunk == nullptr )

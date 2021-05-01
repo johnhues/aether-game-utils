@@ -8,18 +8,9 @@ set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 # guard against in-source builds and bad build-type strings
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake)
 
-# import external projects module
-include(ExternalProject)
-
 # get git hash
 include(cmake/git_revision.cmake)
 
-# configure project to download dependencies instead of searching for them
-if((WIN32 AND NOT CYGWIN) OR EMSCRIPTEN)
-	set(AE_BUILD_DEPS ON CACHE BOOL "Build dependencies instead of searching system directories")
-else()
-	set(AE_BUILD_DEPS OFF CACHE BOOL "Build dependencies instead of searching system directories")
-endif()
 # codesigning configuration
 if(APPLE)
 	set(AE_CODESIGN_IDENTITY "" CACHE STRING "Codesigning identity to use for apple builds")
@@ -42,7 +33,12 @@ else()
 	find_package(OpenGL REQUIRED)
 endif()
 
-# always build assimp because parts of the library are not needed and should be disabled
+# build sdl2 to be statically linked
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+add_subdirectory(deps/sdl)
+
+# some parts of assimp are not needed and should be disabled
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 set(BUILD_SHARED_LIBS OFF)
 set(ASSIMP_BUILD_TESTS OFF)
@@ -52,133 +48,50 @@ set(ASSIMP_NO_EXPORT ON)
 set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT FALSE)
 set(ASSIMP_BUILD_OBJ_IMPORTER ON)
 set(ASSIMP_BUILD_FBX_IMPORTER ON)
-add_subdirectory(assimp)
-set(ASSIMP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/assimp/include ${CMAKE_CURRENT_BINARY_DIR}/assimp/include)
+add_subdirectory(deps/assimp)
+# set(ASSIMP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/assimp/include ${CMAKE_CURRENT_BINARY_DIR}/assimp/include)
 
-if (NOT AE_BUILD_DEPS)
-	if (IOS_TOOLCHAIN_HAS_RUN)
-		set(OPENAL_LIBRARY "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
-		if (EXISTS ${OPENAL_LIBRARY})
-			message(STATUS "Found OpenAL")
-		else()
-			message(SEND_ERROR "Could not find OpenAL")
-			set(OPENAL_LIBRARY "")
-		endif()
+# enet
+add_subdirectory(deps/enet)
+
+# OpenAL
+if (IOS_TOOLCHAIN_HAS_RUN)
+	set(OPENAL_LIBRARY "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
+	if (EXISTS ${OPENAL_LIBRARY})
+		message(STATUS "Found OpenAL")
 	else()
-		find_package(OpenAL REQUIRED)
+		message(SEND_ERROR "Could not find OpenAL")
+		set(OPENAL_LIBRARY "")
 	endif()
-
-	find_package(PNG REQUIRED)
-	find_package(SDL2 REQUIRED)
-	find_package(Enet REQUIRED)
-	find_package(uuid REQUIRED)
-
-	# @HACK: This should be found by the above, or the following variable names should be fixed
-	set(ENET_LIBRARY_DIRS /usr/local/Cellar/enet/1.3.14/lib)
-	set(UUID_LIBRARY_DIRS /usr/local/Cellar/ossp-uuid/1.6.2_2/lib)
+elseif(APPLE)
+	find_package(OpenAL REQUIRED)
 else()
-	message(STATUS "AE_THIRDPARTY_DIR: ${AE_THIRDPARTY_DIR}")
-	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
+	# @NOTE: It would be convenient to use MakeAvailable but openal defines a project called 'common' which can easily cause conflicts
+	# FetchContent_Declare(
+	# 	openal
+	# 	GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+	# 	GIT_TAG openal-soft-1.20.1
+	# 	CMAKE_ARGS -DLIBTYPE=STATIC
+	# )
+	# FetchContent_MakeAvailable(openal)
 	set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
-	set(AE_ZLIB_SRC ${AE_THIRDPARTY_DIR}/zlib)
-	set(AE_SDL2_SRC ${AE_THIRDPARTY_DIR}/SDL2)
-	set(AE_ENET_SRC ${AE_THIRDPARTY_DIR}/enet)
-
 	set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
-	set(AE_ZLIB_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/zlib)
-	set(AE_SDL2_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/SDL2)
-	set(AE_ENET_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/enet)
-
-	if(WIN32 AND NOT CYGWIN)
-		ExternalProject_Add(glew
-			PREFIX glew
-			SOURCE_DIR ${AE_GLEW_SRC}
-			URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0-win32.zip
-			CONFIGURE_COMMAND ""
-			BUILD_COMMAND ""
-			INSTALL_COMMAND ""
-		)
-		set(GLEW_INCLUDE_DIRS ${AE_GLEW_SRC}/include)
-		set(GLEW_LIBRARY_DIRS ${AE_GLEW_SRC}/lib/Release/x64)
-		set(GLEW_LIBRARIES
-			${GLEW_LIBRARY_DIRS}/glew32s.lib
-		)
-
-		ExternalProject_Add(openal
-			PREFIX openal
-			SOURCE_DIR ${AE_OPENAL_SRC}
-			GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-			GIT_TAG openal-soft-1.20.1
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
-		)
-		set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
-		set(OPENAL_LIBRARY_DIR ${AE_OPENAL_INSTALL}/lib)
-		set(OPENAL_LIBRARY ${OPENAL_LIBRARY_DIR}/OpenAL32.lib)
-	endif()
-
-	ExternalProject_Add(zlib
-		PREFIX zlib
-		SOURCE_DIR ${AE_ZLIB_SRC}
-		GIT_REPOSITORY https://github.com/madler/zlib.git
-		GIT_TAG v1.2.11
-		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_ZLIB_INSTALL}
+	ExternalProject_Add(openal
+		PREFIX openal
+		SOURCE_DIR ${AE_OPENAL_SRC}
+		GIT_REPOSITORY https://github.com/kcat/openal-soft.git
+		GIT_TAG openal-soft-1.20.1
+		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
 	)
-	set(ZLIB_INCLUDE_DIRS ${AE_ZLIB_INSTALL}/include)
-	set(ZLIB_LIBRARY_DIRS ${AE_ZLIB_INSTALL}/lib)
-	set(ZLIB_LIBRARIES 
-		optimized ${ZLIB_LIBRARY_DIRS}/zlibstatic.lib
-		debug ${ZLIB_LIBRARY_DIRS}/zlibstaticd.lib
-	)
-
-	if(NOT EMSCRIPTEN)
-		ExternalProject_Add(SDL2
-			PREFIX SDL2
-			SOURCE_DIR ${AE_SDL2_SRC}
-			URL https://www.libsdl.org/release/SDL2-2.0.10.tar.gz
-			CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_SDL2_INSTALL} -DZLIB_ROOT=${AE_ZLIB_INSTALL} -DEXTRA_LIBS=vcruntime.dll
-		)
-		set(SDL2_INCLUDE_DIR ${AE_SDL2_INSTALL}/include/SDL2)
-		set(SDL2_LIBRARY_DIRS ${AE_SDL2_INSTALL}/lib)
-		set(SDL2_LIBRARY 
-			optimized ${SDL2_LIBRARY_DIRS}/SDL2-static.lib
-			debug ${SDL2_LIBRARY_DIRS}/SDL2-staticd.lib
-		)
-	endif()
-	
-	ExternalProject_Add(Enet
-		PREFIX Enet
-		SOURCE_DIR ${AE_ENET_SRC}
-		URL http://enet.bespin.org/download/enet-1.3.14.tar.gz
-		CONFIGURE_COMMAND ""
-		BUILD_COMMAND ""
-		INSTALL_COMMAND ""
-	)
-	set(ENET_INCLUDE_DIR ${AE_ENET_SRC}/include)
-	set(ENET_LIBRARY_DIRS ${AE_ENET_SRC})
-	set(ENET_LIBRARY ${ENET_LIBRARY_DIRS}/enet64.lib) # Use path so 'lib' is not prepended
+	set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
+	set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
 endif()
 
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
-	${GLEW_INCLUDE_DIRS}
+	${CMAKE_CURRENT_SOURCE_DIR}/deps/enet/include
+	${GLEW_INCLUDE_DIR}
 	${OPENAL_INCLUDE_DIR}
-	${PNG_INCLUDE_DIRS}
-	${ENET_INCLUDE_DIR}
-	${UUID_INCLUDE_DIR}
-)
-if(NOT EMSCRIPTEN)
-	list(APPEND AE_DEPS_LIBRARY_INCLUDE_DIRS ${SDL2_INCLUDE_DIR})
-endif()
-
-# dependency library directories
-set(AE_DEPS_LIBRARY_DIRS
-	${GLEW_LIBRARY_DIRS}
-	${OPENAL_LIBRARY_DIR}
-	${ZLIB_LIBRARY_DIRS}
-	${PNG_LIBRARY_DIRS}
-	${SDL2_LIBRARY_DIRS}
-	${ENET_LIBRARY_DIRS}
-	${UUID_LIBRARY_DIRS}
 )
 
 # dependency libraries
@@ -192,19 +105,17 @@ elseif(WIN32 AND NOT CYGWIN)
 		Imm32
 		Setupapi
 		Ws2_32
+		${GLEW_LIBRARY}
+		${OPENAL_LIBRARY}
 	)
 endif()
 list(APPEND AE_DEPS_LIBARARIES
-	${GLEW_LIBRARIES}
 	${OpenGLES}
-	${OPENAL_LIBRARY}
-	${ZLIB_LIBRARIES}
-	${PNG_LIBRARIES}
-	${ENET_LIBRARY}
-	${UUID_LIBRARY}
+	assimp
+	enet
 )
 if(NOT EMSCRIPTEN)
-	list(APPEND AE_DEPS_LIBARARIES ${SDL2_LIBRARY})
+	list(APPEND AE_DEPS_LIBARARIES SDL2main SDL2-static)
 endif()
 
 # use c++17
@@ -214,8 +125,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_definitions(-D_UNICODE -DUNICODE)
 # disable standard library warnings on windows
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-# disable simd in sdl to prevent undeclared symbols error on ios
-add_definitions(-DSDL_DISABLE_IMMINTRIN_H)
 
 # library, tests, and examples
 add_subdirectory(src)
