@@ -343,6 +343,7 @@ void aeTerrainJob::StartNew( const aeVfs* vfs, const aeTerrainSDF* sdf, aeTerrai
 {
   AE_ASSERT( chunk );
   AE_ASSERT_MSG( !m_chunk, "Previous job not finished" );
+  AE_ASSERT_MSG( !m_shapes.Length(), "Previous job not finished" );
 
   m_vfs = vfs;
 
@@ -353,14 +354,38 @@ void aeTerrainJob::StartNew( const aeVfs* vfs, const aeTerrainSDF* sdf, aeTerrai
   m_indexCount = 0;
   m_chunk = chunk;
   
+  // 1) Add shapes to job that intersect current chunk
   aeAABB aabb = chunk->GetAABB();
   for ( uint32_t i = 0; i < sdf->GetShapeCount(); i++ )
   {
     ae::Sdf::Shape* shape = sdf->GetShapeAtIndex( i );
     if ( shape->GetAABB().Intersect( aabb ) )
     {
-      m_shapes.Append( shape->Clone() );
+      m_shapes.Append( shape );
     }
+  }
+  if ( !m_shapes.Length() )
+  {
+    // @TODO: Should skip this job altogether when the chunk will have no vertices
+    return;
+  }
+  
+  // 2) Put shapes in order
+  std::stable_sort( m_shapes.Begin(), m_shapes.End(), []( const ae::Sdf::Shape* s0, const ae::Sdf::Shape* s1 )
+  {
+    return s0->order < s1->order;
+  } );
+  
+  // 3) Remove non-solid shapes from the front of the list as they should have no affect
+  while ( !m_shapes[ 0 ]->IsSolid() )
+  {
+    m_shapes.Remove( 0 );
+  }
+  
+  // 4) Replace shapes with copies so they are not modified mid-job
+  for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
+  {
+    m_shapes[ i ] = m_shapes[ i ]->Clone();
   }
 }
 
@@ -368,12 +393,6 @@ void aeTerrainJob::Do()
 {
   AE_ASSERT( m_chunk );
   
-  // Sort inside job to save a little time on the main thread but before hashing so hash is correct
-  std::stable_sort( m_shapes.Begin(), m_shapes.End(), []( const ae::Sdf::Shape* s0, const ae::Sdf::Shape* s1 )
-  {
-    return s0->order < s1->order;
-  } );
-
   // Hash
   m_parameterHash = aeHash();
   

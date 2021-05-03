@@ -218,7 +218,6 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
   float v1 = ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f );
 
   return aeMath::Max( v0, v1 );
-
 }
 
 //------------------------------------------------------------------------------
@@ -226,55 +225,41 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
 //------------------------------------------------------------------------------
 float aeTerrainJob::GetValue( aeFloat3 pos ) const
 {
-  float f = 0.0f;
   if ( !m_shapes.Length() )
   {
-    return f;
+    return 0.0f;
   }
-
-  int32_t firstShapeIndex = m_shapes.FindFn( []( const ae::Sdf::Shape* sdf )
+  AE_ASSERT( m_shapes[ 0 ]->IsSolid() );
+  
+  float f = m_shapes[ 0 ]->GetValue( pos );
+  for ( uint32_t i = 1; i < m_shapes.Length(); i++ )
   {
-    switch ( sdf->type )
+    ae::Sdf::Shape* shape = m_shapes[ i ];
+    if ( shape->type == ae::Sdf::Shape::Type::Material )
     {
-      case ae::Sdf::Shape::Type::Union:
-      case ae::Sdf::Shape::Type::SmoothUnion:
-        return true;
-      default:
-        return false;
+      continue;
     }
-  } );
-  if ( firstShapeIndex >= 0 )
-  {
-    f = m_shapes[ firstShapeIndex ]->GetValue( pos );
-    for ( uint32_t i = firstShapeIndex + 1; i < m_shapes.Length(); i++ )
-    {
-      ae::Sdf::Shape* shape = m_shapes[ i ];
-      if ( shape->type == ae::Sdf::Shape::Type::Material )
-      {
-        continue;
-      }
 
-      float value = shape->GetValue( pos );
+    float value = shape->GetValue( pos );
 #if _AE_DEBUG_
-      AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
+    AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
 #endif
 
-      if ( shape->type == ae::Sdf::Shape::Type::Union )
-      {
-        f = aeUnion( value, f );
-      }
-      else if ( shape->type == ae::Sdf::Shape::Type::Subtraction )
-      {
-        f = aeSubtraction( value, f );
-      }
-      else if ( shape->type == ae::Sdf::Shape::Type::SmoothUnion )
-      {
-        f = aeSmoothUnion( value, f, shape->smoothing );
-      }
-      else if ( shape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
-      {
-        f = aeSmoothSubtraction( value, f, shape->smoothing );
-      }
+    if ( shape->type == ae::Sdf::Shape::Type::Union )
+    {
+      f = aeUnion( value, f );
+    }
+    else if ( shape->type == ae::Sdf::Shape::Type::Subtraction )
+    {
+      f = aeSubtraction( value, f );
+    }
+    else if ( shape->type == ae::Sdf::Shape::Type::SmoothUnion )
+    {
+      f = aeSmoothUnion( value, f, shape->smoothing );
+    }
+    else if ( shape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+    {
+      f = aeSmoothSubtraction( value, f, shape->smoothing );
     }
   }
 
@@ -313,12 +298,9 @@ aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos ) const
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
     ae::Sdf::Shape* shape = m_shapes[ i ];
-    ae::Sdf::Shape::Type type = shape->type;
     float value = shape->GetValue( pos );
 
-    bool isAdditive = type == ae::Sdf::Shape::Type::Union
-      || type == ae::Sdf::Shape::Type::SmoothUnion;
-    if ( isAdditive )
+    if ( shape->IsSolid() )
     {
       if ( value <= 0.0f )
       {
@@ -327,6 +309,7 @@ aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos ) const
     }
     else
     {
+      ae::Sdf::Shape::Type type = shape->type;
       bool isPaint = type == ae::Sdf::Shape::Type::Material
         || type == ae::Sdf::Shape::Type::Subtraction
         || type == ae::Sdf::Shape::Type::SmoothSubtraction;

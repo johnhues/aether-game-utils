@@ -184,6 +184,7 @@ public:
   void SetTransform( const aeFloat4x4& transform );
   const aeFloat4x4& GetTransform() const { return m_localToWorld; }
   aeFloat3 GetHalfSize() const { return m_halfSize; }
+  bool IsSolid() const { return type == Type::Union || type == Type::SmoothUnion; }
 
   void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
