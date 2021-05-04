@@ -378,6 +378,18 @@ void aeFloat3::operator*= (const float s)
   z *= s;
 }
 
+aeFloat3 aeFloat3::operator/ (const float s) const
+{
+  return aeFloat3(x/s, y/s, z/s);
+}
+
+void aeFloat3::operator/= (const float s)
+{
+  x /= s;
+  y /= s;
+  z /= s;
+}
+
 aeFloat3 aeFloat3::operator* ( const aeFloat3& v ) const
 {
   return aeFloat3( x * v.x, y * v.y, z * v.z );
@@ -396,16 +408,17 @@ aeFloat3 aeFloat3::Multiply( const aeFloat3& a, const aeFloat3& b )
   return aeFloat3( a.x * b.x, a.y * b.y, a.z * b.z );
 }
 
-aeFloat3 aeFloat3::operator/ (const float s) const
+aeFloat3 aeFloat3::operator/ ( const aeFloat3& v ) const
 {
-  return aeFloat3(x/s, y/s, z/s);
+  return aeFloat3( x / v.x, y / v.y, z / v.z );
 }
 
-void aeFloat3::operator/= (const float s)
+aeFloat3& aeFloat3::operator/= ( const aeFloat3& v )
 {
-  x /= s;
-  y /= s;
-  z /= s;
+  x /= v.x;
+  y /= v.y;
+  z /= v.z;
+  return *this;
 }
 
 float aeFloat3::Dot(const aeFloat3& v) const
