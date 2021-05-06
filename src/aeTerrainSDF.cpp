@@ -66,6 +66,16 @@ ae::Sdf::Shape::Shape() :
   m_aabbPrev( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) )
 {}
 
+float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
+{
+  float f = GetValue( p, 0 );
+  if ( noiseStrength )
+  {
+    f += noise->GetTrilinear( p / noiseScale ) * noiseStrength;
+  }
+  return f;
+}
+
 void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
 {
   if ( m_localToWorld == transform )
@@ -110,6 +120,10 @@ aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
   hash = hash.HashBasicType( materialId );
   hash = hash.HashBasicType( smoothing );
   hash = hash.HashBasicType( order );
+  
+  hash = hash.HashBasicType( noiseScale );
+  hash = hash.HashBasicType( noiseStrength );
+  
   hash = hash.HashBasicType( m_localToWorld );
   return hash;
 }
@@ -131,7 +145,7 @@ aeHash ae::Sdf::Box::Hash( aeHash hash ) const
   return hash;
 }
 
-float ae::Sdf::Box::GetValue( aeFloat3 p ) const
+float ae::Sdf::Box::GetValue( aeFloat3 p, int ) const
 {
   p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 
@@ -157,7 +171,7 @@ aeHash ae::Sdf::Cylinder::Hash( aeHash hash ) const
   return hash;
 }
 
-float ae::Sdf::Cylinder::GetValue( aeFloat3 p ) const
+float ae::Sdf::Cylinder::GetValue( aeFloat3 p, int ) const
 {
   aeFloat3 halfSize = GetHalfSize();
   p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
@@ -202,7 +216,7 @@ aeHash ae::Sdf::Heightmap::Hash( aeHash hash ) const
   return GetBaseHash( hash );
 }
 
-float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
+float ae::Sdf::Heightmap::GetValue( aeFloat3 p, int ) const
 {
   AE_ASSERT_MSG( m_heightMap, "Heightmap image not set" );
 
@@ -221,7 +235,7 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p ) const
 }
 
 //------------------------------------------------------------------------------
-// aeTerrainSDF member functions
+// aeTerrainJob member functions
 //------------------------------------------------------------------------------
 float aeTerrainJob::GetValue( aeFloat3 pos ) const
 {
@@ -274,7 +288,15 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
 //------------------------------------------------------------------------------
 aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
   m_terrain( terrain )
-{}
+{
+  aeRandom r;
+  for ( uint32_t z = 0; z < noise.GetDepth(); z++ )
+  for ( uint32_t y = 0; y < noise.GetHeight(); y++ )
+  for ( uint32_t x = 0; x < noise.GetWidth(); x++ )
+  {
+    noise.Set( aeInt3( x, y, z ), r.Get() - 1.0f );
+  }
+}
 
 aeFloat3 aeTerrainJob::GetDerivative( aeFloat3 p ) const
 {
@@ -292,32 +314,22 @@ aeFloat3 aeTerrainJob::GetDerivative( aeFloat3 p ) const
   return n.SafeNormalizeCopy();
 }
 
-aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos ) const
+aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos, aeFloat3 normal ) const
 {
+  // Use the normal to nudge the material sample position to avoid aliasing
   aeTerrainMaterialId materialId = 0;
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
     ae::Sdf::Shape* shape = m_shapes[ i ];
-    float value = shape->GetValue( pos );
-
-    if ( shape->IsSolid() )
+    // Nudge the sample position out of the surface for paint shapes
+    if ( !shape->IsSolid() && shape->GetValue( pos + normal * 0.1f  ) <= 0.0f )
     {
-      if ( value <= 0.0f )
-      {
-        materialId = shape->materialId;
-      }
+      materialId = shape->materialId;
     }
-    else
+    // Nudge the sample position into the surface for solid shapes
+    else if ( shape->GetValue( pos - normal * 0.1f ) <= 0.0f )
     {
-      ae::Sdf::Shape::Type type = shape->type;
-      bool isPaint = type == ae::Sdf::Shape::Type::Material
-        || type == ae::Sdf::Shape::Type::Subtraction
-        || type == ae::Sdf::Shape::Type::SmoothSubtraction;
-      // Expand shape slightly so subtraction paints surfaces
-      if ( isPaint && value <= 0.25f )
-      {
-        materialId = shape->materialId;
-      }
+      materialId = shape->materialId;
     }
   }
   return materialId;

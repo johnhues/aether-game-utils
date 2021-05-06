@@ -30,6 +30,35 @@
 #include "aether.h"
 
 //------------------------------------------------------------------------------
+// aeRandom
+//------------------------------------------------------------------------------
+class aeRandom
+{
+public:
+  void Seed()
+  {
+    m_seed = uint64_t( rand() ) << 31 | uint64_t( rand() );
+  }
+  
+  void Seed( uint32_t seed )
+  {
+    m_seed = seed;
+  }
+
+  float Get()
+  {
+    // splitmix https://arvid.io/2018/07/02/better-cxx-prng/
+    uint64_t z = ( m_seed += UINT64_C( 0x9E3779B97F4A7C15 ) );
+    z = ( z ^ ( z >> 30 ) ) * UINT64_C( 0xBF58476D1CE4E5B9 );
+    z = ( z ^ ( z >> 27 ) ) * UINT64_C( 0x94D049BB133111EB );
+    return uint32_t( ( z ^ ( z >> 31 ) ) >> 31 ) / (float)UINT32_MAX;
+  }
+
+private:
+  uint64_t m_seed = 1;
+};
+
+//------------------------------------------------------------------------------
 // aeMath functions
 //------------------------------------------------------------------------------
 namespace aeMath
@@ -501,11 +530,14 @@ public:
   
   aeFloat3 operator* (const float s) const;
   void operator*= (const float s);
+  aeFloat3 operator/ (const float s) const;
+  void operator/= (const float s);
+  
   aeFloat3 operator* ( const aeFloat3& v ) const;
   aeFloat3& operator*= ( const aeFloat3& v );
   static aeFloat3 Multiply( const aeFloat3& a, const aeFloat3& b );
-  aeFloat3 operator/ (const float s) const;
-  void operator/= (const float s);
+  aeFloat3 operator/ ( const aeFloat3& v ) const;
+  aeFloat3& operator/= ( const aeFloat3& v );
   
   float Dot(const aeFloat3& v) const;
   static float Dot( const aeFloat3& a, const aeFloat3& b );

@@ -954,7 +954,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob*
     vertex->info[ 3 ] = 0;
 
     // Material
-    uint8_t material = job->GetMaterial( position );
+    uint8_t material = job->GetMaterial( position, vertex->normal );
     vertex->materials[ 0 ] = ( material == 0 ) ? 255 : 0;
     vertex->materials[ 1 ] = ( material == 1 ) ? 255 : 0;
     vertex->materials[ 2 ] = ( material == 2 ) ? 255 : 0;

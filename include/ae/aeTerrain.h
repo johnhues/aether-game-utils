@@ -177,6 +177,8 @@ class Shape
 public:
   Shape();
   virtual ~Shape() {}
+  
+  float GetValue( aeFloat3 p ) const;
 
   aeAABB GetAABB() const { return m_aabb; }
   aeOBB GetOBB() const { return aeOBB( m_localToWorld ); }
@@ -190,7 +192,7 @@ public:
 
   virtual ae::Sdf::Shape* Clone() const = 0;
   virtual aeHash Hash( aeHash hash ) const = 0;
-  virtual float GetValue( aeFloat3 p ) const = 0;
+  virtual float GetValue( aeFloat3 p, int ) const = 0;
 
   enum class Type
   {
@@ -204,6 +206,10 @@ public:
   aeTerrainMaterialId materialId = 0;
   float smoothing = 0.0f; // Works with SmoothUnion and SmoothSubtraction types
   int32_t order = 0; // Lower values processed first, ie. to subtract from a solid the subtraction order should be higher
+  
+  aeStaticImage3D< float, 64, 64, 64, aeMath::Lerp >* noise = nullptr;
+  float noiseStrength = 0.0f;
+  aeFloat3 noiseScale = aeFloat3( 10.0f );
 
 protected:
   aeHash GetBaseHash( aeHash hash ) const;
@@ -229,7 +235,7 @@ class Box : public Shape
 public:
   ae::Sdf::Shape* Clone() const override;
   aeHash Hash( aeHash hash ) const override;
-  float GetValue( aeFloat3 p ) const override;
+  float GetValue( aeFloat3 p, int ) const override;
 
   float cornerRadius = 0.0f;
 };
@@ -242,7 +248,7 @@ class Cylinder : public Shape
 public:
   ae::Sdf::Shape* Clone() const override;
   aeHash Hash( aeHash hash ) const override;
-  float GetValue( aeFloat3 p ) const override;
+  float GetValue( aeFloat3 p, int ) const override;
 
   // Valid range is 0-1, are multiplied by obb size
   float top = 1.0f;
@@ -258,7 +264,7 @@ public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
   ae::Sdf::Shape* Clone() const override;
   aeHash Hash( aeHash hash ) const override;
-  float GetValue( aeFloat3 p ) const override;
+  float GetValue( aeFloat3 p, int ) const override;
 
 private:
   ae::Image* m_heightMap = nullptr;
@@ -284,6 +290,8 @@ public:
   
   uint32_t GetShapeCount() const { return m_shapes.Length(); }
   ae::Sdf::Shape* GetShapeAtIndex( uint32_t index ) const { return m_shapes[ index ]; }
+  
+  aeStaticImage3D< float, 64, 64, 64, aeMath::Lerp > noise;
 
 private:
   friend class aeTerrain;
@@ -299,6 +307,7 @@ template < typename T >
 T* aeTerrainSDF::CreateSdf()
 {
   ae::Sdf::Shape* sdf = aeAlloc::Allocate< T >();
+  sdf->noise = &noise;
   m_pendingCreated.Append( sdf );
   return static_cast< T* >( sdf );
 }
@@ -355,7 +364,7 @@ public:
   
   float GetValue( aeFloat3 pos ) const;
   aeFloat3 GetDerivative( aeFloat3 pos ) const;
-  aeTerrainMaterialId GetMaterial( aeFloat3 pos ) const;
+  aeTerrainMaterialId GetMaterial( aeFloat3 pos, aeFloat3 normal ) const;
 
 private:
   // Management
