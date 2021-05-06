@@ -32,6 +32,7 @@
 const float aeMath::PI = 3.14159265358979323846f;
 const float aeMath::TWO_PI = 2.0f * aeMath::PI;
 const float aeMath::HALF_PI = 0.5f * aeMath::PI;
+const float aeMath::QUARTER_PI = 0.25f * aeMath::PI;
 
 //------------------------------------------------------------------------------
 // aeFloat2 struct

@@ -37,6 +37,7 @@ namespace aeMath
   extern const float PI;
   extern const float TWO_PI;
   extern const float HALF_PI;
+  extern const float QUARTER_PI;
 
   template< typename T >
   T&& Min( T&& v )

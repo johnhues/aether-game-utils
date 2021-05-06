@@ -76,6 +76,7 @@ public:
   const aeMeshIndex* GetIndices() const;
   uint32_t GetVertexCount() const;
   uint32_t GetIndexCount() const;
+  aeAABB GetAABB() const { return m_aabb; }
   
   //------------------------------------------------------------------------------
   // aeMesh raycast
