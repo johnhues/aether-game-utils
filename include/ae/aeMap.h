@@ -49,6 +49,7 @@ public:
   bool TryGet( const K& key, V* valueOut ) const;
   
   bool Remove( const K& key );
+  bool Remove( const K& key, V* valueOut );
 
   void Reserve( uint32_t total );
   void Clear();
@@ -197,9 +198,19 @@ bool Map< K, V >::TryGet( const K& key, V* valueOut ) const
 template < typename K, typename V >
 bool Map< K, V >::Remove( const K& key )
 {
+  return Remove( key, nullptr );
+}
+
+template < typename K, typename V >
+bool Map< K, V >::Remove( const K& key, V* valueOut )
+{
   int32_t index = m_FindIndex( key );
   if ( index >= 0 )
   {
+    if ( valueOut )
+    {
+      *valueOut = m_entries[ index ].value;
+    }
     m_entries.Remove( index );
     return true;
   }
