@@ -35,15 +35,16 @@
 class aeRandom
 {
 public:
-  void Seed()
-  {
-    m_seed = uint64_t( rand() ) << 31 | uint64_t( rand() );
-  }
+  aeRandom( float min, float max ) :
+    m_min( min ),
+    m_max( max ),
+    m_seed( 1 )
+  {}
   
-  void Seed( uint32_t seed )
-  {
-    m_seed = seed;
-  }
+  void Seed() { m_seed = uint64_t( rand() ) << 31 | uint64_t( rand() ); }
+  void Seed( uint32_t seed ) { m_seed = seed; }
+  float GetMin() const { return m_min; }
+  float GetMax() const { return m_max; }
 
   float Get()
   {
@@ -51,11 +52,14 @@ public:
     uint64_t z = ( m_seed += UINT64_C( 0x9E3779B97F4A7C15 ) );
     z = ( z ^ ( z >> 30 ) ) * UINT64_C( 0xBF58476D1CE4E5B9 );
     z = ( z ^ ( z >> 27 ) ) * UINT64_C( 0x94D049BB133111EB );
-    return uint32_t( ( z ^ ( z >> 31 ) ) >> 31 ) / (float)UINT32_MAX;
+    float t = uint32_t( ( z ^ ( z >> 31 ) ) >> 31 ) / (float)UINT32_MAX;
+    return m_min + t * ( m_max - m_min );
   }
 
 private:
-  uint64_t m_seed = 1;
+  float m_min;
+  float m_max;
+  uint64_t m_seed;
 };
 
 //------------------------------------------------------------------------------
@@ -270,6 +274,15 @@ namespace aeMath
     }
     value = aeMath::DtLerp( value, snappiness, dt, target );
     return aeMath::Mod( value, aeMath::TWO_PI );
+  }
+
+  template< typename T >
+  T CosineInterpolate( T start, T end, float t )
+  {
+    float angle = ( t * PI ) + PI;
+    t = cosf(angle);
+    t = ( t + 1 ) / 2.0f;
+    return start + ( ( end - start ) * t );
   }
 
   inline int32_t Random( int32_t min, int32_t max )

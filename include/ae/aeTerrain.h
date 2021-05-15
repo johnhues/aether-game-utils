@@ -103,6 +103,11 @@ const VertexCount kChunkCountEmpty = VertexCount( 0 );
 typedef uint16_t TerrainIndex;
 const TerrainIndex kInvalidTerrainIndex = ~0;
 
+const uint32_t aeTerrainNoiseScale = 4;
+const uint32_t aeTerrainNoiseSize = 64;
+const uint32_t aeTerrainNoiseSmoothSize = aeTerrainNoiseSize * aeTerrainNoiseScale;
+typedef aeStaticImage3D< float, aeTerrainNoiseSmoothSize, aeTerrainNoiseSmoothSize, aeTerrainNoiseSmoothSize > aeTerrainNoise;
+
 //------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
@@ -207,19 +212,19 @@ public:
   float smoothing = 0.0f; // Works with SmoothUnion and SmoothSubtraction types
   int32_t order = 0; // Lower values processed first, ie. to subtract from a solid the subtraction order should be higher
   
-  aeStaticImage3D< float, 64, 64, 64, aeMath::Lerp >* noise = nullptr;
+  aeTerrainNoise* noise = nullptr;
   float noiseStrength = 0.0f;
-  aeFloat3 noiseScale = aeFloat3( 10.0f );
+  aeFloat3 noiseScale = aeFloat3( 1.0f );
 
 protected:
   aeHash GetBaseHash( aeHash hash ) const;
-  const aeFloat4x4& GetWorldToScaled() const { return m_worldToScaled; }
+  const aeFloat4x4& GetRemoveTRMatrix() const { return m_removeTR; }
 
 private:
   aeAABB m_aabb;
   aeFloat3 m_halfSize;
   aeFloat4x4 m_localToWorld;
-  aeFloat4x4 m_worldToScaled;
+  aeFloat4x4 m_removeTR;
 
 public:
   // Internal
@@ -291,7 +296,7 @@ public:
   uint32_t GetShapeCount() const { return m_shapes.Length(); }
   ae::Sdf::Shape* GetShapeAtIndex( uint32_t index ) const { return m_shapes[ index ]; }
   
-  aeStaticImage3D< float, 64, 64, 64, aeMath::Lerp > noise;
+  aeTerrainNoise noise;
 
 private:
   friend class aeTerrain;

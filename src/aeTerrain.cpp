@@ -926,7 +926,18 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob*
     
     // Position (after normals for AE_TERRAIN_TOUCH_UP_VERT)
     aeFloat3 position = GetIntersection( p, n, ec );
-    AE_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
+    {
+      AE_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
+      // @NOTE: Bias towards average of intersection points. This solves some intersecting triangles on sharp edges.
+      // Based notes here: https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
+      aeFloat3 averagePos( 0.0f );
+      for ( uint32_t i = 0; i < ec; i++ )
+      {
+        averagePos += p[ i ];
+      }
+      averagePos /= (float)ec;
+      position = ( position + averagePos ) * 0.5f;
+    }
 #if AE_TERRAIN_TOUCH_UP_VERT
     //{
     //  aeFloat3 iv0 = IntersectRayAABB( start, ray, result.posi );

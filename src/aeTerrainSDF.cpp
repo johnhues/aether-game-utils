@@ -62,16 +62,23 @@ ae::Sdf::Shape::Shape() :
   m_aabb( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) ),
   m_halfSize( 0.5f ),
   m_localToWorld( aeFloat4x4::Identity() ),
-  m_worldToScaled( aeFloat4x4::Identity() ),
+  m_removeTR( aeFloat4x4::Identity() ),
   m_aabbPrev( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) )
 {}
 
 float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
 {
+  p = ( GetRemoveTRMatrix() * aeFloat4( p, 1.0f ) ).GetXYZ();
   float f = GetValue( p, 0 );
   if ( noiseStrength )
   {
-    f += noise->GetTrilinear( p / noiseScale ) * noiseStrength;
+    // Prevent scaling to 0 which causes invalid normals
+    float n = noiseScale.x * noiseScale.y * noiseScale.z;
+    if ( n < -0.00001 || 0.00001 < n )
+    {
+      float v = noise->Get< aeMath::Lerp >( p * aeTerrainNoiseScale / ( GetHalfSize() * noiseScale ) );
+      f = aeSubtraction( v + ( 1.0f - noiseStrength ), f );
+    }
   }
   return f;
 }
@@ -90,7 +97,7 @@ void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
   // object scaling into consideration.
   aeFloat4x4 scaledToWorld = m_localToWorld;
   scaledToWorld.RemoveScaling();
-  m_worldToScaled = scaledToWorld.Inverse();
+  m_removeTR = scaledToWorld.Inverse();
 
   // Set scale of inherited Shape object
   m_halfSize = m_localToWorld.GetScale() * 0.5f;
@@ -147,8 +154,6 @@ aeHash ae::Sdf::Box::Hash( aeHash hash ) const
 
 float ae::Sdf::Box::GetValue( aeFloat3 p, int ) const
 {
-  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
-
   aeFloat3 q = aeMath::Abs( p ) - ( GetHalfSize() - aeFloat3( cornerRadius ) );
   return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
 }
@@ -174,7 +179,6 @@ aeHash ae::Sdf::Cylinder::Hash( aeHash hash ) const
 float ae::Sdf::Cylinder::GetValue( aeFloat3 p, int ) const
 {
   aeFloat3 halfSize = GetHalfSize();
-  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 	
   float scale;
   if ( halfSize.x > halfSize.y )
@@ -221,7 +225,6 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p, int ) const
   AE_ASSERT_MSG( m_heightMap, "Heightmap image not set" );
 
   aeFloat3 halfSize = GetHalfSize();
-  p = ( GetWorldToScaled() * aeFloat4( p, 1.0f ) ).GetXYZ();
 
   aeFloat2 p2 = ( p.GetXY() + halfSize.GetXY() ) / ( halfSize.GetXY() * 2.0f );
   p2 *= aeFloat2( m_heightMap->GetWidth(), m_heightMap->GetHeight() );
@@ -289,12 +292,20 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
 aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
   m_terrain( terrain )
 {
-  aeRandom r;
+  aeRandom r( -1.0f, 1.0f );
+  aeStaticImage3D< float, aeTerrainNoiseSize, aeTerrainNoiseSize, aeTerrainNoiseSize > temp;
+  for ( uint32_t z = 0; z < temp.GetDepth(); z++ )
+  for ( uint32_t y = 0; y < temp.GetHeight(); y++ )
+  for ( uint32_t x = 0; x < temp.GetWidth(); x++ )
+  {
+    temp.Set( aeInt3( x, y, z ), r.Get() );
+  }
+  
   for ( uint32_t z = 0; z < noise.GetDepth(); z++ )
   for ( uint32_t y = 0; y < noise.GetHeight(); y++ )
   for ( uint32_t x = 0; x < noise.GetWidth(); x++ )
   {
-    noise.Set( aeInt3( x, y, z ), r.Get() - 1.0f );
+    noise.Set( aeInt3( x, y, z ), temp.Get< aeMath::CosineInterpolate >( aeFloat3( x, y, z ) / (float)aeTerrainNoiseScale ) );
   }
 }
 

@@ -76,15 +76,14 @@ namespace ae
   };
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth, Pixel (*BlendFn)(Pixel, Pixel, float) >
+template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
 class aeStaticImage3D
 {
 public:
   void Set( aeInt3 p, Pixel v );
-  
   Pixel Get( aeInt3 p ) const;
-  Pixel GetNearest( aeFloat3 p ) const;
-  Pixel GetTrilinear( aeFloat3 p ) const;
+  template < Pixel (*BlendFn)(Pixel, Pixel, float) >
+  Pixel Get( aeFloat3 p ) const;
   
   uint32_t GetWidth() const { return Width; }
   uint32_t GetHeight() const { return Height; }
@@ -96,29 +95,24 @@ private:
 
 inline int32_t aeModulo( int32_t a, int32_t b )
 {
-  return (a % b + b) % b;
+  return ( a % b + b ) % b;
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth, Pixel (*BlendFn)(Pixel, Pixel, float) >
-inline void aeStaticImage3D< Pixel, Width, Height, Depth, BlendFn >::Set( aeInt3 p, Pixel v )
+template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+inline void aeStaticImage3D< Pixel, Width, Height, Depth >::Set( aeInt3 p, Pixel v )
 {
   m_data[ aeModulo( p.z, Depth ) ][ aeModulo( p.y, Height ) ][ aeModulo( p.x, Width ) ] = v;
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth, Pixel (*BlendFn)(Pixel, Pixel, float) >
-inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth, BlendFn >::Get( aeInt3 p ) const
+template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( aeInt3 p ) const
 {
   return m_data[ aeModulo( p.z, Depth ) ][ aeModulo( p.y, Height ) ][ aeModulo( p.x, Width ) ];
 }
 
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth, Pixel (*BlendFn)(Pixel, Pixel, float) >
-inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth, BlendFn >::GetNearest( aeFloat3 p ) const
-{
-  return Get( p.NearestCopy() );
-}
-
-template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth, Pixel (*BlendFn)(Pixel, Pixel, float) >
-inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth, BlendFn >::GetTrilinear( aeFloat3 pf ) const
+template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+template < Pixel (*BlendFn)(Pixel, Pixel, float) >
+inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( aeFloat3 pf ) const
 {
   aeInt3 pi = pf.FloorCopy();
   float xf = pf.x - pi.x;
