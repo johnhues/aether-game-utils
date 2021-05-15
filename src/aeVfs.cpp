@@ -35,12 +35,6 @@
   #include <Shlobj_core.h>
 #endif
 
-#if _AE_WINDOWS_
-#define AE_PATH_CHAR '\\'
-#else
-#define AE_PATH_CHAR '/'
-#endif
-
 //------------------------------------------------------------------------------
 // Objective-C helper function declarations for aeVfs.mm
 //------------------------------------------------------------------------------
@@ -82,9 +76,9 @@ void aeVfs::m_SetDataDir( const char* dataDir )
   m_dataDir = GetAbsolutePath( dataDir );
 
   // Append slash if not empty and is currently missing
-  if ( m_dataDir.Length() && m_dataDir[ m_dataDir.Length() - 1 ] != AE_PATH_CHAR )
+  if ( m_dataDir.Length() && m_dataDir[ m_dataDir.Length() - 1 ] != AE_PATH_SEPARATOR )
   {
-    m_dataDir.Append( aeStr16( 1, AE_PATH_CHAR ) );
+    m_dataDir.Append( aeStr16( 1, AE_PATH_SEPARATOR ) );
   }
 }
 
@@ -101,9 +95,9 @@ void aeVfs::m_SetUserDir( const char* organizationName, const char* applicationN
   m_userDir = sdlUserDir;
   AE_ASSERT( m_userDir.Length() );
 
-  if ( m_userDir[ m_userDir.Length() - 1 ] != AE_PATH_CHAR )
+  if ( m_userDir[ m_userDir.Length() - 1 ] != AE_PATH_SEPARATOR )
   {
-    m_userDir.Append( aeStr16( 1, AE_PATH_CHAR ) );
+    m_userDir.Append( aeStr16( 1, AE_PATH_SEPARATOR ) );
   }
 
   SDL_free( sdlUserDir );
@@ -111,7 +105,7 @@ void aeVfs::m_SetUserDir( const char* organizationName, const char* applicationN
 
 void aeVfs::m_SetCacheDir( const char* organizationName, const char* applicationName )
 {
-  const aeStr16 pathChar( 1, AE_PATH_CHAR );
+  const aeStr16 pathChar( 1, AE_PATH_SEPARATOR );
   m_cacheDir = "";
 
 #if _AE_APPLE_
@@ -426,4 +420,21 @@ aeStr256 aeVfs::GetDirectoryFromPath( const char* filePath )
 {
   const char* fileName = GetFileNameFromPath( filePath );
   return aeStr256( fileName - filePath, filePath );
+}
+
+void aeVfs::AppendToPath( aeStr256* path, const char* str )
+{
+  if ( !path )
+  {
+    return;
+  }
+  
+  // @TODO: Handle one or more path separators at end of path
+  if ( (*path)[ path->Length() - 1 ] != AE_PATH_SEPARATOR )
+  {
+    path->Append( aeStr16( 1, AE_PATH_SEPARATOR ) );
+  }
+  
+  // @TODO: Handle one or more path separators at front of str
+  *path += str;
 }

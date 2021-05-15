@@ -30,7 +30,7 @@
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
-// aeVfsRoot
+// Constants
 //------------------------------------------------------------------------------
 enum class aeVfsRoot
 {
@@ -38,6 +38,12 @@ enum class aeVfsRoot
   User, // A directory for storing perferences and savedata
   Cache // A directory for storing expensive to generate data (computed, downloaded, etc)
 };
+
+#if _AE_WINDOWS_
+  #define AE_PATH_SEPARATOR '\\'
+#else
+  #define AE_PATH_SEPARATOR '/'
+#endif
 
 //------------------------------------------------------------------------------
 // aeVfs class
@@ -72,6 +78,7 @@ public:
   static const char* GetFileNameFromPath( const char* filePath );
   static const char* GetFileExtFromPath( const char* filePath );
   static aeStr256 GetDirectoryFromPath( const char* filePath );
+  static void AppendToPath( aeStr256* path, const char* str );
 
 private:
   void m_SetDataDir( const char* dataDir );
