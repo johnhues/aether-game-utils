@@ -60,7 +60,7 @@ public:
   void Reserve( uint32_t total );
   void Clear();
   
-  // @NOTE: Performs bounds checking in debug mode. Use 'begin()' to get raw array.
+  // @NOTE: Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
   const T& operator[]( int32_t index ) const;
   T& operator[]( int32_t index );
 
