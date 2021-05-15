@@ -20,8 +20,7 @@ Dependencies:
 * [SDL2](https://www.libsdl.org/)
 * [Assimp](https://github.com/assimp/assimp)
 * [ENet](http://enet.bespin.org/)
-* [zlib](https://github.com/madler/zlib)
-* [OSSP uuid](http://www.ossp.org/pkg/lib/uuid/)
+* [OpenAL](https://github.com/kcat/openal-soft)
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)
 
 ## Games using aether game utils
