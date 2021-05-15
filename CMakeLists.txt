@@ -11,6 +11,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake)
 # get git hash
 include(cmake/git_revision.cmake)
 
+include(ExternalProject)
+
 # codesigning configuration
 if(APPLE)
 	set(AE_CODESIGN_IDENTITY "" CACHE STRING "Codesigning identity to use for apple builds")
