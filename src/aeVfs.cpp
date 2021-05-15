@@ -429,6 +429,8 @@ void aeVfs::AppendToPath( aeStr256* path, const char* str )
     return;
   }
   
+  // @TODO: Handle paths that already have a file name and extension
+  
   // @TODO: Handle one or more path separators at end of path
   if ( (*path)[ path->Length() - 1 ] != AE_PATH_SEPARATOR )
   {
