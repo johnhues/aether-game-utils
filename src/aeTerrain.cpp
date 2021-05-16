@@ -364,11 +364,6 @@ void aeTerrainJob::StartNew( const aeVfs* vfs, const aeTerrainSDF* sdf, aeTerrai
       m_shapes.Append( shape );
     }
   }
-  if ( !m_shapes.Length() )
-  {
-    // @TODO: Should skip this job altogether when the chunk will have no vertices
-    return;
-  }
   
   // 2) Put shapes in order
   std::stable_sort( m_shapes.Begin(), m_shapes.End(), []( const ae::Sdf::Shape* s0, const ae::Sdf::Shape* s1 )
@@ -377,7 +372,8 @@ void aeTerrainJob::StartNew( const aeVfs* vfs, const aeTerrainSDF* sdf, aeTerrai
   } );
   
   // 3) Remove non-solid shapes from the front of the list as they should have no affect
-  while ( !m_shapes[ 0 ]->IsSolid() )
+  // @TODO: Should skip this job altogether when the chunk will have no vertices
+  while ( m_shapes.Length() && !m_shapes[ 0 ]->IsSolid() )
   {
     m_shapes.Remove( 0 );
   }
