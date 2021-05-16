@@ -936,7 +936,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob*
         averagePos += p[ i ];
       }
       averagePos /= (float)ec;
-      position = ( position + averagePos ) * 0.5f;
+      position = aeMath::Lerp( position, averagePos, 0.75f );
     }
 #if AE_TERRAIN_TOUCH_UP_VERT
     //{

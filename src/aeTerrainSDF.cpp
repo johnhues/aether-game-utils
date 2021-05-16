@@ -28,28 +28,28 @@
 //------------------------------------------------------------------------------
 // Sdf helpers
 //------------------------------------------------------------------------------
-float aeUnion( float d1, float d2 )
+inline float aeUnion( float d1, float d2 )
 {
   return aeMath::Min( d1, d2 );
 }
 
-float aeSubtraction( float d1, float d2 )
+inline float aeSubtraction( float d1, float d2 )
 {
   return aeMath::Max( -d1, d2 );
 }
 
-float aeIntersection( float d1, float d2 )
+inline float aeIntersection( float d1, float d2 )
 {
   return aeMath::Max( d1, d2 );
 }
 
-float aeSmoothUnion( float d1, float d2, float k )
+inline float aeSmoothUnion( float d1, float d2, float k )
 {
   float h = aeMath::Clip01( 0.5f + 0.5f * ( d2 - d1 ) / k );
   return aeMath::Lerp( d2, d1, h ) - k * h * ( 1.0f - h );
 }
 
-float aeSmoothSubtraction( float d1, float d2, float k )
+inline float aeSmoothSubtraction( float d1, float d2, float k )
 {
   float h = aeMath::Clip01( 0.5f - 0.5f * ( d2 + d1 ) / k );
   return aeMath::Lerp( d2, -d1, h ) + k * h * ( 1.0f - h );
@@ -76,8 +76,8 @@ float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
     float n = noiseScale.x * noiseScale.y * noiseScale.z;
     if ( n < -0.00001 || 0.00001 < n )
     {
-      float v = noise->Get< aeMath::Lerp >( p * aeTerrainNoiseScale / ( GetHalfSize() * noiseScale ) );
-      f = aeSubtraction( v + ( 1.0f - noiseStrength ), f );
+      float v = noise->Get< aeMath::CosineInterpolate >( noiseOffset + p * aeTerrainNoiseScale / ( GetHalfSize() * noiseScale ) );
+      f = aeIntersection( -v - ( 1.0f - noiseStrength ), f ); // @TODO: All these subtractions are real wonk
     }
   }
   return f;
@@ -128,8 +128,9 @@ aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
   hash = hash.HashBasicType( smoothing );
   hash = hash.HashBasicType( order );
   
-  hash = hash.HashBasicType( noiseScale );
   hash = hash.HashBasicType( noiseStrength );
+  hash = hash.HashBasicType( noiseOffset );
+  hash = hash.HashBasicType( noiseScale );
   
   hash = hash.HashBasicType( m_localToWorld );
   return hash;

@@ -214,6 +214,7 @@ public:
   
   aeTerrainNoise* noise = nullptr;
   float noiseStrength = 0.0f;
+  aeFloat3 noiseOffset = aeFloat3( 0.0f );
   aeFloat3 noiseScale = aeFloat3( 1.0f );
 
 protected:
