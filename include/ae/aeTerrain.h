@@ -139,7 +139,7 @@ struct Block
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-struct RaycastResult
+struct aeTerrainRaycastResult
 {
   bool hit;
   Block::Type type;
@@ -279,6 +279,27 @@ private:
 } } // ae::Sdf
 
 //------------------------------------------------------------------------------
+// aeTerrainParams struct
+// @NOTE: This struct provides parameters which globally affects how aeTerrain
+//        generates vertex data.
+//------------------------------------------------------------------------------
+struct aeTerrainParams
+{
+  class aeVfs* vfs = nullptr;
+  class aeDebugRender* debug = nullptr;
+  float normalSampleOffset = 0.25f;
+  float smoothingAmount = 0.05f;
+  
+  aeHash GetHash( aeHash hash = aeHash() ) const
+  {
+    // @NOTE: Only hash parameters that affect final terrain output
+    hash = hash.HashBasicType( normalSampleOffset );
+    hash = hash.HashBasicType( smoothingAmount );
+    return hash;
+  }
+};
+
+//------------------------------------------------------------------------------
 // aeTerrainSDF class
 //------------------------------------------------------------------------------
 class aeTerrainSDF
@@ -335,25 +356,29 @@ public:
 private:
   float m_GetValue( aeInt3 pos ) const;
 
-  const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to chunkPlus
+  const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to 'chunkPlus'
   static const int32_t kOffset = 2;
   
   aeInt3 m_chunk;
   aeInt3 m_offseti; // Pre-computed chunk integer offset
   aeFloat3 m_offsetf; // Pre-computed chunk float offset
+  aeTerrainParams m_p;
 
+  // @TODO: Replace this with aeStaticImage3D
   aeFloat16* m_values;
 };
 
 //------------------------------------------------------------------------------
 // aeTerrainJob class
+// @NOTE: This class takes aeSdfShape's as input, and outputs renderable vertex
+//        data. It typically does work in another thread.
 //------------------------------------------------------------------------------
 class aeTerrainJob
 {
 public:
   aeTerrainJob();
   ~aeTerrainJob();
-  void StartNew( const class aeVfs* vfs, const aeTerrainSDF* sdf, struct aeTerrainChunk* chunk );
+  void StartNew( const aeTerrainParams& params, const aeTerrainSDF* sdf, struct aeTerrainChunk* chunk );
   void Do();
   void Finish();
 
@@ -381,18 +406,20 @@ private:
   aeHash m_parameterHash;
   aeArray< ae::Sdf::Shape* > m_shapes;
   struct aeTerrainChunk* m_chunk;
+  aeTerrainParams m_p;
 
   // Pre-computed sdf
   aeTerrainSDFCache m_sdfCache;
 
   // Output
-  const aeVfs* m_vfs;
   VertexCount m_vertexCount;
   uint32_t m_indexCount;
   aeArray< TerrainVertex > m_vertices;
   aeArray< TerrainIndex > m_indices;
 
 public:
+  const aeTerrainParams& GetTerrainParams() const { return m_p; }
+  
   // Temp edges (pre-allocated for all future jobs)
   struct TempEdges
   {
@@ -413,7 +440,10 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// Terrain Chunk class
+// aeTerrainChunk class
+// @NOTE: Stores vertex data of fully generated chunks. Also provides information
+//        for collision and if the section of terrain it represents has changed
+//        and should be regenerated.
 //------------------------------------------------------------------------------
 struct aeTerrainChunk
 {
@@ -463,8 +493,8 @@ public:
   void Update( aeFloat3 center, float radius );
   void Render( const class aeShader* shader, const aeUniformList& shaderParams );
 
-  void SetVfs( class aeVfs* vfs ); // Use aeVfs::Cache to save to cache terrain
-  void SetDebug( class aeDebugRender* debug );
+  void SetParams( const aeTerrainParams& params );
+  void GetParams( aeTerrainParams* outParams );
 
   void SetDebugTextCallback( std::function< void( aeFloat3, const char* ) > fn ) { m_debugTextFn = fn; }
   uint32_t GetMaxThreads() const { return m_terrainJobs.Length(); }
@@ -485,7 +515,7 @@ public:
   // Simple voxel grid test
   bool VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const;
   // Uses voxel grid and terrain normal so position result is slightly lumpy (non-continuous)
-  RaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
+  aeTerrainRaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
   
   // Triangle raycast against terrain
   bool Raycast( const aeMesh::RaycastParams& params, aeMesh::RaycastResult* outResult ) const;
@@ -503,17 +533,14 @@ private:
   void m_SetVertexCount( uint32_t chunkIndex, VertexCount count );
   float GetChunkScore( aeInt3 pos ) const;
 
-  aeVfs* m_vfs = nullptr;
-  aeDebugRender* m_debug = nullptr;
+  aeTerrainParams m_params;
 
   bool m_render = false;
   aeFloat3 m_center = aeFloat3( 0.0f );
   float m_radius = 0.0f;
   
-  //aeCompactingAllocator m_compactAlloc;
-  std::map< uint32_t, struct aeTerrainChunk* > m_chunks3;
+  std::map< uint32_t, struct aeTerrainChunk* > m_chunks;
   std::map< uint32_t, VertexCount > m_vertexCounts; // Kept even when chunks are freed so they are not regenerated again if they are empty
-  //aeMap<>
   aeObjectPool< aeTerrainChunk, kMaxLoadedChunks > m_chunkPool;
 
   // Keep these across frames instead of allocating temporary space for each generated chunk

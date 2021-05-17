@@ -1255,6 +1255,9 @@ class aeHash
 public:
   aeHash() = default;
   explicit aeHash( uint32_t initialValue );
+  
+  bool operator == ( aeHash o ) const { return m_hash == o.m_hash; }
+  bool operator != ( aeHash o ) const { return m_hash != o.m_hash; }
 
   aeHash& HashString( const char* str );
   aeHash& HashData( const uint8_t* data, const uint32_t length );

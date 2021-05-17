@@ -161,6 +161,7 @@ void aeTerrainSDFCache::Generate( aeInt3 chunk, const aeTerrainJob* job )
 
   m_offseti = aeInt3( kOffset ) - aeInt3( m_chunk * kChunkSize );
   m_offsetf = aeFloat3( (float)kOffset ) - aeFloat3( m_chunk * kChunkSize );
+  m_p = job->GetTerrainParams();
 
   aeInt3 offset = m_chunk * kChunkSize - aeInt3( kOffset );
   for ( int32_t z = 0; z < kDim; z++ )
@@ -214,28 +215,30 @@ aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
   for ( int32_t i = 0; i < 3; i++ )
   {
     aeFloat3 nt = p;
-    nt[ i ] += 0.2f;
+    nt[ i ] += m_p.normalSampleOffset;
     normal0[ i ] = GetValue( nt );
   }
+  AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
   // This should be really close to 0 because it's really
   // close to the surface but not close enough to ignore.
   normal0 -= aeFloat3( GetValue( p ) );
-  normal0.SafeNormalize();
   AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
+  normal0 /= normal0.Length();
   AE_ASSERT( normal0 == normal0 );
 
   aeFloat3 normal1;
   for ( int32_t i = 0; i < 3; i++ )
   {
     aeFloat3 nt = p;
-    nt[ i ] -= 0.2f;
+    nt[ i ] -= m_p.normalSampleOffset;
     normal1[ i ] = GetValue( nt );
   }
+  AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
   // This should be really close to 0 because it's really
   // close to the surface but not close enough to ignore.
   normal1 = aeFloat3( GetValue( p ) ) - normal1;
-  normal1.SafeNormalize();
   AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
+  normal1 /= normal1.Length();
   AE_ASSERT( normal1 == normal1 );
 
   return ( normal1 + normal0 ).SafeNormalizeCopy();
@@ -323,7 +326,6 @@ uint32_t aeTerrainChunk::GetIndex() const
 aeTerrainJob::aeTerrainJob() :
   m_hasJob( false ),
   m_running( false ),
-  m_vfs( nullptr ),
   m_vertexCount( kChunkCountEmpty ),
   m_indexCount( 0 ),
   m_vertices( aeArray< TerrainVertex >( (uint32_t)kMaxChunkVerts, TerrainVertex() ) ),
@@ -339,13 +341,13 @@ aeTerrainJob::~aeTerrainJob()
   edgeInfo = nullptr;
 }
 
-void aeTerrainJob::StartNew( const aeVfs* vfs, const aeTerrainSDF* sdf, aeTerrainChunk* chunk )
+void aeTerrainJob::StartNew( const aeTerrainParams& params, const aeTerrainSDF* sdf, aeTerrainChunk* chunk )
 {
   AE_ASSERT( chunk );
   AE_ASSERT_MSG( !m_chunk, "Previous job not finished" );
   AE_ASSERT_MSG( !m_shapes.Length(), "Previous job not finished" );
 
-  m_vfs = vfs;
+  m_p = params;
 
   m_hasJob = true;
   m_running = true;
@@ -392,6 +394,8 @@ void aeTerrainJob::Do()
   // Hash
   m_parameterHash = aeHash();
   
+  m_parameterHash = m_p.GetHash( m_parameterHash );
+  
   aeInt3 chunkPos = m_chunk->m_pos;
   m_parameterHash = m_parameterHash.HashBasicType( chunkPos.x );
   m_parameterHash = m_parameterHash.HashBasicType( chunkPos.y );
@@ -404,11 +408,11 @@ void aeTerrainJob::Do()
   
   // Check disk to see if job has been completed before
   aeStr128 filePath = aeStr128::Format( "terrain/#_#_#_#", chunkPos.x, chunkPos.y, chunkPos.z, m_parameterHash.Get() );
-  uint32_t fileSize = m_vfs ? m_vfs->GetSize( aeVfsRoot::Cache, filePath.c_str() ) : 0;
+  uint32_t fileSize = m_p.vfs ? m_p.vfs->GetSize( aeVfsRoot::Cache, filePath.c_str() ) : 0;
   if ( fileSize )
   {
     aeAlloc::Scratch< uint8_t > fileData( fileSize );
-    m_vfs->Read( aeVfsRoot::Cache, filePath.c_str(), fileData.Data(), fileSize );
+    m_p.vfs->Read( aeVfsRoot::Cache, filePath.c_str(), fileData.Data(), fileSize );
     aeBinaryStream rStream = aeBinaryStream::Reader( fileData.Data(), fileSize );
     rStream.SerializeUint32( m_vertexCount.Get() );
     rStream.SerializeUint32( m_indexCount );
@@ -435,7 +439,7 @@ void aeTerrainJob::Do()
     // Load
     m_chunk->m_mesh.Load( meshParams );
     
-    if ( m_vfs )
+    if ( m_p.vfs )
     {
       // Write result
       aeArray< uint8_t > data;
@@ -445,7 +449,7 @@ void aeTerrainJob::Do()
       wStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
       wStream.SerializeRaw( &m_indices[ 0 ], m_indexCount * sizeof(m_indices[ 0 ]) );
       wStream.SerializeObject( *m_chunk );
-      if ( !m_vfs->Write( aeVfsRoot::Cache, filePath.c_str(), wStream.GetData(), wStream.GetOffset(), true ) )
+      if ( !m_p.vfs->Write( aeVfsRoot::Cache, filePath.c_str(), wStream.GetData(), wStream.GetOffset(), true ) )
       {
         AE_WARN( "Failed writing terrain chunk '#'", filePath );
       }
@@ -1211,10 +1215,10 @@ void aeTerrain::FreeChunk( aeTerrainChunk* chunk )
   AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
 
   // Only clear chunk from world if set (may not be set in the case of a new chunk with zero verts)
-  auto iter = m_chunks3.find( chunk->GetIndex() );
-  if ( iter != m_chunks3.end() && iter->second == chunk )
+  auto iter = m_chunks.find( chunk->GetIndex() );
+  if ( iter != m_chunks.end() && iter->second == chunk )
   {
-    m_chunks3.erase( iter );
+    m_chunks.erase( iter );
   }
   
   chunk->m_mesh.Clear();
@@ -1373,8 +1377,8 @@ aeTerrainChunk* aeTerrain::GetChunk( aeInt3 pos )
 
 const aeTerrainChunk* aeTerrain::GetChunk( uint32_t chunkIndex ) const
 {
-  auto iter = m_chunks3.find( chunkIndex );
-  if ( iter == m_chunks3.end() )
+  auto iter = m_chunks.find( chunkIndex );
+  if ( iter == m_chunks.end() )
   {
     return nullptr;
   }
@@ -1420,7 +1424,6 @@ void aeTerrain::Initialize( uint32_t maxThreads, bool render )
 
   m_render = render;
 
-  //m_compactAlloc.Expand( 128 * ( 1 << 20 ) );
   //m_chunkPool.Initialize(); @TODO: Reset pool
   
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockCollision[ i ] = true; }
@@ -1695,14 +1698,14 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     // Set world grid chunk
     if ( newChunk )
     {
-      m_chunks3[ chunkIndex ] = newChunk;
+      m_chunks[ chunkIndex ] = newChunk;
       // Add new chunk to list of finished chunks
       m_generatedList.Append( newChunk->m_generatedList );
     }
     else
     {
       // Clear old chunk
-      m_chunks3.erase( chunkIndex );
+      m_chunks.erase( chunkIndex );
     }
 
     job->Finish();
@@ -1821,7 +1824,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
 
       aeTerrainJob* job = m_terrainJobs[ jobIndex ];
       AE_ASSERT( job );
-      job->StartNew( m_vfs, &sdf, chunk );
+      job->StartNew( m_params, &sdf, chunk );
       // @NOTE: replaceDirty_CHECK doesn't do anything, but is used to assert when the job
       // is done that another chunk is being replaced.
       if ( m_threadPool->size() )
@@ -1841,7 +1844,7 @@ void aeTerrain::Update( aeFloat3 center, float radius )
     }
   }
 
-  if ( m_debug )
+  if ( m_params.debug )
   {
     for ( uint32_t i = 0; i < m_terrainJobs.Length(); i++ )
     {
@@ -1849,12 +1852,12 @@ void aeTerrain::Update( aeFloat3 center, float radius )
       if ( job->HasJob() )
       {
         aeAABB chunkAABB = job->GetChunk()->GetAABB();
-        m_debug->AddLine( m_center, chunkAABB.GetCenter(), aeColor::Red() );
-        m_debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::PicoRed() );
+        m_params.debug->AddLine( m_center, chunkAABB.GetCenter(), aeColor::Red() );
+        m_params.debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::PicoRed() );
       }
     }
 
-    sdf.RenderDebug( m_debug );
+    sdf.RenderDebug( m_params.debug );
   }
 }
 
@@ -1895,14 +1898,26 @@ void aeTerrain::Render( const aeShader* shader, const aeUniformList& shaderParam
   }
 }
 
-void aeTerrain::SetVfs( aeVfs* vfs )
+void aeTerrain::SetParams( const aeTerrainParams& params )
 {
-  m_vfs = vfs;
+  bool dirty = m_params.GetHash() != params.GetHash();
+  m_params = params;
+  
+  if ( dirty )
+  {
+    for ( aeTerrainChunk* chunk = m_chunkPool.GetFirst(); chunk; chunk = m_chunkPool.GetNext( chunk ) )
+    {
+      chunk->m_geoDirty = true;
+    }
+  }
 }
 
-void aeTerrain::SetDebug( aeDebugRender* debug )
+void aeTerrain::GetParams( aeTerrainParams* outParams )
 {
-  m_debug = debug;
+  if ( outParams )
+  {
+    *outParams = m_params;
+  }
 }
 
 void aeTerrain::m_Dirty( aeAABB aabb )
@@ -2090,7 +2105,7 @@ namespace
 //------------------------------------------------------------------------------
 bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) const
 {
-  DebugRay debugRay( start, ray, m_debug );
+  DebugRay debugRay( start, ray, m_params.debug );
 
   int32_t x = aeMath::Floor( start.x );
   int32_t y = aeMath::Floor( start.y );
@@ -2188,10 +2203,10 @@ bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) c
   int32_t steps = 0;
   while ( !GetCollision( x, y, z ) || steps < minSteps )
   {
-    if ( m_debug )
+    if ( m_params.debug )
     {
       aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
-      m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Blue() );
+      m_params.debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Blue() );
     }
 
     steps++;
@@ -2240,21 +2255,21 @@ bool aeTerrain::VoxelRaycast( aeFloat3 start, aeFloat3 ray, int32_t minSteps ) c
     }
   }
 
-  if ( m_debug )
+  if ( m_params.debug )
   {
     aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
-    m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
+    m_params.debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
     debugRay.color = aeColor::Green();
   }
 
   return true;
 }
 
-RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const
+aeTerrainRaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const
 {
-  DebugRay debugRay( start, ray, m_debug );
+  DebugRay debugRay( start, ray, m_params.debug );
 
-  RaycastResult result;
+  aeTerrainRaycastResult result;
   result.hit = false;
   result.type = Block::Exterior;
   result.distance = std::numeric_limits<float>::infinity();
@@ -2419,16 +2434,16 @@ RaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSo
   result.normal = n;
 
   // Debug
-  if ( m_debug )
+  if ( m_params.debug )
   {
-    m_debug->AddCircle( result.posf, result.normal, 0.25f, aeColor::Green(), 16 );
-    m_debug->AddLine( result.posf, result.posf + result.normal, aeColor::Green() );
+    m_params.debug->AddCircle( result.posf, result.normal, 0.25f, aeColor::Green(), 16 );
+    m_params.debug->AddLine( result.posf, result.posf + result.normal, aeColor::Green() );
 
     aeFloat3 v = aeFloat3( x, y, z ) + aeFloat3( 0.5f );
-    m_debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
+    m_params.debug->AddCube( aeFloat4x4::Translation( v ), aeColor::Green() );
 
-    m_debug->AddSphere( p, 0.05f, aeColor::Green(), 8 );
-    m_debug->AddLine( p, p + n, aeColor::Green() );
+    m_params.debug->AddSphere( p, 0.05f, aeColor::Green(), 8 );
+    m_params.debug->AddLine( p, p + n, aeColor::Green() );
     if ( m_debugTextFn )
     {
       aeStr64 str = aeStr64::Format( "#: # (#)", index, vert.position, localPos );
@@ -2446,7 +2461,7 @@ bool aeTerrain::Raycast( const aeMesh::RaycastParams& _params, aeMesh::RaycastRe
   aeFloat3 start = _params.source;
   aeFloat3 dir = _params.direction.SafeNormalizeCopy();
   aeFloat3 ray = dir * _params.maxLength;
-  DebugRay debugRay( start, ray, m_debug );
+  DebugRay debugRay( start, ray, m_params.debug );
   
   if ( _params.maxLength < 0.001f )
   {
@@ -2456,7 +2471,7 @@ bool aeTerrain::Raycast( const aeMesh::RaycastParams& _params, aeMesh::RaycastRe
   aeMesh::RaycastParams params = _params;
   if ( !params.debug )
   {
-    params.debug = m_debug;
+    params.debug = m_params.debug;
   }
   
   start /= kChunkSize;

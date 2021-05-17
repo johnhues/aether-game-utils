@@ -249,7 +249,7 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
   }
   AE_ASSERT( m_shapes[ 0 ]->IsSolid() );
   
-  float f = m_shapes[ 0 ]->GetValue( pos );
+  float f = m_shapes[ 0 ]->GetValue( pos ) - m_p.smoothingAmount;
   for ( uint32_t i = 1; i < m_shapes.Length(); i++ )
   {
     ae::Sdf::Shape* shape = m_shapes[ i ];
@@ -258,7 +258,7 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
       continue;
     }
 
-    float value = shape->GetValue( pos );
+    float value = shape->GetValue( pos ) - m_p.smoothingAmount;
 #if _AE_DEBUG_
     AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
 #endif
@@ -284,7 +284,7 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
 #if _AE_DEBUG_
   AE_ASSERT_MSG( f == f, "Terrain SDF function returned NAN" );
 #endif
-  return f;
+  return f - m_p.smoothingAmount; // @NOTE: This value isn't used directly, it populates aeTerrainSDFCache
 }
 
 //------------------------------------------------------------------------------
@@ -334,12 +334,12 @@ aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos, aeFloat3 normal ) c
   {
     ae::Sdf::Shape* shape = m_shapes[ i ];
     // Nudge the sample position out of the surface for paint shapes
-    if ( !shape->IsSolid() && shape->GetValue( pos + normal * 0.1f  ) <= 0.0f )
+    if ( !shape->IsSolid() && shape->GetValue( pos + normal * 0.1f  ) - m_p.smoothingAmount <= 0.0f )
     {
       materialId = shape->materialId;
     }
     // Nudge the sample position into the surface for solid shapes
-    else if ( shape->GetValue( pos - normal * 0.1f ) <= 0.0f )
+    else if ( shape->GetValue( pos - normal * 0.1f ) - m_p.smoothingAmount <= 0.0f )
     {
       materialId = shape->materialId;
     }
