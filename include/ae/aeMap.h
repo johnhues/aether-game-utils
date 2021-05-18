@@ -277,7 +277,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V >& map )
   return os << "}";
 }
 
-} // ae namespace end
+} // AE_NAMESPACE end
 
 // @TODO: Remove
 #define aeMap ae::Map

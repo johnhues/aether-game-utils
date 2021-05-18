@@ -142,7 +142,8 @@
 #if _AE_LINUX_
   #define AE_ALIGN( _x ) __attribute__ ((aligned(_x)))
 //#elif _AE_WINDOWS_
-  //#define AE_ALIGN( _x ) __declspec(align(_x)) // Windows doesn't support aligned function parameters
+  // @TODO: Windows doesn't support aligned function parameters
+  //#define AE_ALIGN( _x ) __declspec(align(_x))
 #else
   #define AE_ALIGN( _x )
 #endif
@@ -158,32 +159,36 @@ template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 //------------------------------------------------------------------------------
 // System functions
 //------------------------------------------------------------------------------
-void* aeAlignedAlloc( uint32_t size, uint32_t boundary );
-void aeAlignedFree( void* p );
-void* aeRealloc( void* p, uint32_t size, uint32_t boundary );
-uint32_t aeGetPID();
-uint32_t aeGetMaxConcurrentThreads();
-bool aeIsDebuggerAttached();
+namespace AE_NAMESPACE {
+
+void* AlignedAlloc( uint32_t size, uint32_t boundary );
+void AlignedFree( void* p );
+void* Realloc( void* p, uint32_t size, uint32_t boundary );
+uint32_t GetPID();
+uint32_t GetMaxConcurrentThreads();
+bool IsDebuggerAttached();
 template < typename T > const char* aeGetTypeName();
+
+} // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
 // Logging functions
 //------------------------------------------------------------------------------
-#define AE_TRACE(...) aeLogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_DEBUG(...) aeLogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_LOG(...) aeLogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_INFO(...) aeLogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_WARN(...) aeLogInternal( _AE_LOG_WARN_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_ERR(...) aeLogInternal( _AE_LOG_ERROR_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_TRACE(...) ae::LogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_DEBUG(...) ae::LogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_LOG(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_INFO(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_WARN(...) ae::LogInternal( _AE_LOG_WARN_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_ERR(...) ae::LogInternal( _AE_LOG_ERROR_, __FILE__, __LINE__, "", __VA_ARGS__ )
 
 //------------------------------------------------------------------------------
 // Assertion functions
 //------------------------------------------------------------------------------
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
-#define AE_ASSERT( _x ) do { if ( !(_x) ) { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
-#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
-#define AE_FAIL() do { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert(); } while (0)
-#define AE_FAIL_MSG( ... ) do { aeLogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert(); } while (0)
+#define AE_ASSERT( _x ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
+#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
+#define AE_FAIL() do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert(); } while (0)
+#define AE_FAIL_MSG( ... ) do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert(); } while (0)
 
 //------------------------------------------------------------------------------
 // Static assertion functions
@@ -266,7 +271,9 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 //------------------------------------------------------------------------------
 // System internal implementation
 //------------------------------------------------------------------------------
-inline void* aeAlignedAlloc( uint32_t size, uint32_t boundary )
+namespace AE_NAMESPACE {
+
+inline void* AlignedAlloc( uint32_t size, uint32_t boundary )
 {
 #if _AE_WINDOWS_
   return _aligned_malloc( size, boundary );
@@ -278,7 +285,7 @@ inline void* aeAlignedAlloc( uint32_t size, uint32_t boundary )
 #endif
 }
 
-inline void aeAlignedFree( void* p )
+inline void AlignedFree( void* p )
 {
 #if _AE_WINDOWS_
   _aligned_free( p );
@@ -289,7 +296,7 @@ inline void aeAlignedFree( void* p )
 #endif
 }
 
-inline void* aeRealloc( void* p, uint32_t size, uint32_t boundary )
+inline void* Realloc( void* p, uint32_t size, uint32_t boundary )
 {
 #if _AE_WINDOWS_
   return _aligned_realloc( p, size, boundary );
@@ -300,7 +307,7 @@ inline void* aeRealloc( void* p, uint32_t size, uint32_t boundary )
 }
 
 template < typename T >
-const char* aeGetTypeName()
+const char* GetTypeName()
 {
   const char* typeName = typeid( T ).name();
 #ifdef _MSC_VER
@@ -323,7 +330,7 @@ const char* aeGetTypeName()
 
 #if defined(__aarch64__) && _AE_OSX_
   // @NOTE: Typeinfo appears to be missing for float16_t
-  template <> const char* aeGetTypeName< float16_t >();
+  template <> const char* GetTypeName< float16_t >();
 #endif
 
 //------------------------------------------------------------------------------
@@ -335,8 +342,7 @@ const char* aeGetTypeName()
 #define _AE_LOG_WARN_ 3
 #define _AE_LOG_ERROR_ 4
 #define _AE_LOG_FATAL_ 5
-
-extern const char* aeLogLevelNames[ 6 ];
+extern const char* LogLevelNames[ 6 ];
 
 //------------------------------------------------------------------------------
 // Log colors internal implementation
@@ -345,17 +351,17 @@ extern const char* aeLogLevelNames[ 6 ];
 #define _AE_LOG_COLORS_ false
 #else
 #define _AE_LOG_COLORS_ true
-extern const char* aeLogLevelColors[ 6 ];
+extern const char* LogLevelColors[ 6 ];
 #endif
 
 //------------------------------------------------------------------------------
 // Internal Logging functions internal implementation
 //------------------------------------------------------------------------------
-void aeLogInternal( std::stringstream& os, const char* message );
-void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
+void LogInternal( std::stringstream& os, const char* message );
+void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
 
 template < typename T, typename... Args >
-void aeLogInternal( std::stringstream& os, const char* format, T value, Args... args )
+void LogInternal( std::stringstream& os, const char* format, T value, Args... args )
 {
   if ( !*format )
   {
@@ -379,16 +385,18 @@ void aeLogInternal( std::stringstream& os, const char* format, T value, Args... 
     head++;
   }
 
-  aeLogInternal( os, head, args... );
+  LogInternal( os, head, args... );
 }
 
 template < typename... Args >
-void aeLogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
+void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
 {
   std::stringstream os;
-  aeLogFormat( os, severity, filePath, line, assertInfo, format );
-  aeLogInternal( os, format, args... );
+  LogFormat( os, severity, filePath, line, assertInfo, format );
+  LogInternal( os, format, args... );
 }
+
+} // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
 // The following should be compiled into a single module and linked with the
@@ -398,12 +406,12 @@ void aeLogInternal( uint32_t severity, const char* filePath, uint32_t line, cons
 // code.
 // Usage inside a cpp/mm file is:
 //
-// // ae.cpp/mm start
+// // ae.cpp/mm EXAMPLE START
 //
 // #define AE_MAIN
 // #include "aether.h"
 //
-// // ae.cpp/mm end
+// // ae.cpp/mm EXAMPLE END
 //------------------------------------------------------------------------------
 #ifdef AE_MAIN
 
@@ -425,7 +433,9 @@ void aeLogInternal( uint32_t severity, const char* filePath, uint32_t line, cons
 //------------------------------------------------------------------------------
 // System functions internal implementation
 //------------------------------------------------------------------------------
-uint32_t aeGetPID()
+namespace AE_NAMESPACE {
+
+uint32_t GetPID()
 {
 #if _AE_WINDOWS_
   return GetCurrentProcessId();
@@ -434,13 +444,13 @@ uint32_t aeGetPID()
 #endif
 }
 
-uint32_t aeGetMaxConcurrentThreads()
+uint32_t GetMaxConcurrentThreads()
 {
   return std::thread::hardware_concurrency();
 }
 
 #if _AE_APPLE_
-bool aeIsDebuggerAttached()
+bool IsDebuggerAttached()
 {
   struct kinfo_proc info;
   info.kp_proc.p_flag = 0;
@@ -462,12 +472,12 @@ bool aeIsDebuggerAttached()
   return ( ( info.kp_proc.p_flag & P_TRACED ) != 0 );
 }
 #elif _AE_WINDOWS_
-bool aeIsDebuggerAttached()
+bool IsDebuggerAttached()
 {
   return IsDebuggerPresent();
 }
 #else
-bool aeIsDebuggerAttached()
+bool IsDebuggerAttached()
 {
   return false;
 }
@@ -476,7 +486,7 @@ bool aeIsDebuggerAttached()
 //------------------------------------------------------------------------------
 // Log levels internal implementation
 //------------------------------------------------------------------------------
-const char* aeLogLevelNames[] =
+const char* LogLevelNames[] =
 {
   "TRACE",
   "DEBUG",
@@ -490,7 +500,7 @@ const char* aeLogLevelNames[] =
 // Log colors internal implementation
 //------------------------------------------------------------------------------
 #if _AE_LOG_COLORS_
-const char* aeLogLevelColors[] =
+const char* LogLevelColors[] =
 {
   "\x1b[94m",
   "\x1b[36m",
@@ -505,20 +515,20 @@ const char* aeLogLevelColors[] =
 // Logging functions internal implementation
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-void aeLogInternal( std::stringstream& os, const char* message )
+void LogInternal( std::stringstream& os, const char* message )
 {
   os << message << std::endl;
   printf( os.str().c_str() ); // std out
   OutputDebugStringA( os.str().c_str() ); // visual studio debug output
 }
 #else
-void aeLogInternal( std::stringstream& os, const char* message )
+void LogInternal( std::stringstream& os, const char* message )
 {
   std::cout << os.str() << message << std::endl;
 }
 #endif
 
-void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format )
+void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format )
 {
   char timeBuf[ 16 ];
   time_t t = time( nullptr );
@@ -541,13 +551,13 @@ void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath
 
 #if _AE_LOG_COLORS_
   os << "\x1b[90m" << timeBuf;
-  os << " [" << aeGetPID() << "] ";
-  os << aeLogLevelColors[ severity ] << aeLogLevelNames[ severity ];
+  os << " [" << ae::GetPID() << "] ";
+  os << LogLevelColors[ severity ] << LogLevelNames[ severity ];
   os << " \x1b[90m" << fileName << ":" << line;
 #else
   os << timeBuf;
-  os << " [" << aeGetPID() << "] ";
-  os << aeLogLevelNames[ severity ];
+  os << " [" << ae::GetPID() << "] ";
+  os << LogLevelNames[ severity ];
   os << " " << fileName << ":" << line;
 #endif
 
@@ -570,5 +580,7 @@ void aeLogFormat( std::stringstream& os, uint32_t severity, const char* filePath
   }
 }
 
-#endif
-#endif
+} // AE_NAMESPACE end
+
+#endif // AE_MAIN
+#endif // AE_AETHER_H

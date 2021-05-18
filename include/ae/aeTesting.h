@@ -60,6 +60,6 @@ public:
   static int32_t currentCount;
 };
 
-} // ae namespace end
+} // AE_NAMESPACE end
 
 #endif

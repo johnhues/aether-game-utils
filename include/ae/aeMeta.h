@@ -788,7 +788,7 @@ public:
   template < typename T >
   static const Type* GetType()
   {
-    const char* typeName = aeGetTypeName< T >();
+    const char* typeName = ae::GetTypeName< T >();
     auto it = m_GetTypeNameMap().find( typeName );
     if ( it != m_GetTypeNameMap().end() )
     {
@@ -1028,7 +1028,7 @@ struct aeMeta::VarType< T* >
     return aeMeta::Var::Ref;
   }
   static const char* GetName() { return "Ref"; }
-  static const char* GetRefTypeName() { return aeGetTypeName< T >(); }
+  static const char* GetRefTypeName() { return ae::GetTypeName< T >(); }
 };
 
 //------------------------------------------------------------------------------

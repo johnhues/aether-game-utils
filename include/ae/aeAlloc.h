@@ -142,7 +142,7 @@ T* aeAlloc::AllocateArray( uint32_t count )
   AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
 
   uint32_t size = kHeaderSize + sizeof( T ) * count;
-  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, kDefaultAlignment );
+  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
   AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
@@ -180,7 +180,7 @@ static T* aeAlloc::Allocate( Args ... args )
   AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
 
   uint32_t size = kHeaderSize + sizeof( T );
-  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, kDefaultAlignment );
+  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
   AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
@@ -210,7 +210,7 @@ uint8_t* aeAlloc::AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32
   AE_ASSERT( typeSize % typeAlignment == 0 ); // All elements in array should have correct alignment
 
   uint32_t size = kHeaderSize + typeSize * count;
-  uint8_t* base = (uint8_t*)aeAlignedAlloc( size, kDefaultAlignment );
+  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
   AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
@@ -255,7 +255,7 @@ void aeAlloc::Release( T* obj )
   AE_ASSERT( header->check == 0xABCD );
 
   uint32_t count = header->count;
-  AE_ASSERT_MSG( sizeof( T ) <= header->typeSize, "Released type T '#' does not match allocated type of size #", aeGetTypeName< T >(), header->typeSize );
+  AE_ASSERT_MSG( sizeof( T ) <= header->typeSize, "Released type T '#' does not match allocated type of size #", ae::GetTypeName< T >(), header->typeSize );
   for ( uint32_t i = 0; i < count; i++ )
   {
     T* o = (T*)( (uint8_t*)obj + header->typeSize * i );
@@ -267,7 +267,7 @@ void aeAlloc::Release( T* obj )
   GetAllocInfo().Dealloc( aeGetTypeName< T >(), header->size );
 #endif
 
-  aeAlignedFree( base );
+  ae::AlignedFree( base );
 #endif
 }
 

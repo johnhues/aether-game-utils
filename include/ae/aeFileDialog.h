@@ -84,6 +84,6 @@ std::string SaveFile( const SaveFileParams& params ); // See note at top of head
 
 #endif
 
-} // ae namespace end
+} // AE_NAMESPACE end
 
 #endif

@@ -99,7 +99,7 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
     next->size = size;
     next->next = nullptr;
     next->external = p;
-    next->dbgTypeId = aeHash().HashString( aeGetTypeName< T >() ).Get();
+    next->dbgTypeId = aeHash().HashString( ae::GetTypeName< T >() ).Get();
     next->check = 0xABABABAB;
     *p = (uint8_t*)next + sizeof( Header );
     next->prev = m_tail;
@@ -113,7 +113,7 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
     m_tail->next = nullptr;
     m_tail->prev = nullptr;
     m_tail->external = p;
-    m_tail->dbgTypeId = aeHash().HashString( aeGetTypeName< T >() ).Get();
+    m_tail->dbgTypeId = aeHash().HashString( ae::GetTypeName< T >() ).Get();
     m_tail->check = 0xABABABAB;
     *p = (uint8_t*)m_tail + sizeof( Header );
   }
@@ -167,7 +167,7 @@ void aeCompactingAllocator::Free( T** p )
   AE_ASSERT( (uint8_t*)*p < m_data + m_size );
 
   Header* header = m_GetHeader( (void*)*p );
-  uint32_t typeHash = aeHash().HashString( aeGetTypeName< T >() ).Get();
+  uint32_t typeHash = aeHash().HashString( ae::GetTypeName< T >() ).Get();
   AE_ASSERT_MSG( header->dbgTypeId == typeHash, "Type mismatch between allocation and free" );
   *(header->external) = nullptr;
   header->external = nullptr;

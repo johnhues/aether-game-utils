@@ -445,7 +445,7 @@ uint32_t Array< T >::m_GetNextSize() const
   }
 }
 
-} // ae namespace end
+} // AE_NAMESPACE end
 
 // @TODO: Remove
 #define aeArray ae::Array

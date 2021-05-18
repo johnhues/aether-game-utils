@@ -112,4 +112,4 @@ void LifetimeTester::ClearStats()
   currentCount = 0;
 }
 
-} // ae namespace end
+} // AE_NAMESPACE end
