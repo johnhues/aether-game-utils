@@ -294,7 +294,8 @@ aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
   m_terrain( terrain )
 {
   aeRandom r( -1.0f, 1.0f );
-  aeStaticImage3D< float, aeTerrainNoiseSize, aeTerrainNoiseSize, aeTerrainNoiseSize > temp;
+  aeAlloc::Scratch< aeStaticImage3D< float, aeTerrainNoiseSize, aeTerrainNoiseSize, aeTerrainNoiseSize > > tempScratch( 1 );
+  auto& temp = *tempScratch.Data();
   for ( uint32_t z = 0; z < temp.GetDepth(); z++ )
   for ( uint32_t y = 0; y < temp.GetHeight(); y++ )
   for ( uint32_t x = 0; x < temp.GetWidth(); x++ )
