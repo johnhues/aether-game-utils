@@ -35,6 +35,23 @@ else()
 	find_package(OpenGL REQUIRED)
 endif()
 
+if (MSVC)
+	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
+	ExternalProject_Add(glew
+		PREFIX glew
+		SOURCE_DIR ${AE_GLEW_SRC}
+		URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0-win32.zip
+		CONFIGURE_COMMAND ""
+		BUILD_COMMAND ""
+		INSTALL_COMMAND ""
+	)
+	set(GLEW_INCLUDE_DIRS ${AE_GLEW_SRC}/include)
+	set(GLEW_LIBRARY_DIRS ${AE_GLEW_SRC}/lib/Release/x64)
+	set(GLEW_LIBRARIES
+		${GLEW_LIBRARY_DIRS}/glew32s.lib
+	)
+endif()
+
 # build sdl2 to be statically linked
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -51,7 +68,6 @@ set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT FALSE)
 set(ASSIMP_BUILD_OBJ_IMPORTER ON)
 set(ASSIMP_BUILD_FBX_IMPORTER ON)
 add_subdirectory(deps/assimp)
-# set(ASSIMP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/assimp/include ${CMAKE_CURRENT_BINARY_DIR}/assimp/include)
 
 # enet
 add_subdirectory(deps/enet)
