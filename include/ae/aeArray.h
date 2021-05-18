@@ -42,8 +42,10 @@ public:
   Array( uint32_t size ); // Reserve size (with length of 0)
   Array( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
   Array( const Array< T >& other );
+  Array( Array< T >&& other ) noexcept;
   ~Array();
   void operator =( const Array< T >& other );
+  void operator =( Array< T >&& other ) noexcept;
   
   T& Append( const T& value );
   void Append( const T* values, uint32_t count );
@@ -161,6 +163,18 @@ Array< T >::Array( const Array< T >& other )
 }
 
 template < typename T >
+Array< T >::Array( Array< T >&& other ) noexcept
+{
+  m_length = other.m_length;
+  m_size = other.m_size;
+  m_array = other.m_array;
+  
+  other.m_length = 0;
+  other.m_size = 0;
+  other.m_array = nullptr;
+}
+
+template < typename T >
 Array< T >::~Array()
 {
   Clear();
@@ -190,6 +204,24 @@ void Array< T >::operator =( const Array< T >& other )
   {
     new ( &m_array[ i ] ) T ( other.m_array[ i ] );
   }
+}
+
+template < typename T >
+void Array< T >::operator =( Array< T >&& other ) noexcept
+{
+  if ( m_array )
+  {
+    Clear();
+    aeAlloc::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
+  }
+  
+  m_length = other.m_length;
+  m_size = other.m_size;
+  m_array = other.m_array;
+  
+  other.m_length = 0;
+  other.m_size = 0;
+  other.m_array = nullptr;
 }
 
 template < typename T >

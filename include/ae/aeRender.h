@@ -662,7 +662,7 @@ private:
 class aeDebugRender
 {
 public:
-  void Initialize();
+  void Initialize( uint32_t maxObjects );
   void Destroy();
   void Render( const aeFloat4x4& worldToScreen );
   void Clear();
@@ -680,8 +680,6 @@ public:
   void SetXRayEnabled( bool enabled ) { m_xray = enabled; } // Draw desaturated lines on failed depth test
 
 private:
-  static const uint32_t kMaxDebugObjects = 128;
-
   struct DebugVertex
   {
     aeFloat3 pos;
@@ -714,8 +712,7 @@ private:
     uint32_t pointCount; // circle only
     aeFloat4x4 transform;
   };
-  uint32_t m_objCount;
-  DebugObject m_objs[ kMaxDebugObjects ];
+  aeArray< DebugObject > m_objs;
 };
 
 //------------------------------------------------------------------------------
