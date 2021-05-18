@@ -7,6 +7,7 @@ set_target_properties(${AE_LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
 add_dependencies(${AE_LIBRARY_NAME}
 	glew
+	openal
 )
 
 target_include_directories(${AE_LIBRARY_NAME}
