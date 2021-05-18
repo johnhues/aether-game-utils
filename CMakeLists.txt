@@ -45,11 +45,8 @@ if (MSVC)
 		BUILD_COMMAND ""
 		INSTALL_COMMAND ""
 	)
-	set(GLEW_INCLUDE_DIRS ${AE_GLEW_SRC}/include)
-	set(GLEW_LIBRARY_DIRS ${AE_GLEW_SRC}/lib/Release/x64)
-	set(GLEW_LIBRARIES
-		${GLEW_LIBRARY_DIRS}/glew32s.lib
-	)
+	set(GLEW_INCLUDE_DIR ${AE_GLEW_SRC}/include)
+	set(GLEW_LIBRARY ${AE_GLEW_SRC}/lib/Release/x64/glew32s.lib)
 endif()
 
 # build sdl2 to be statically linked
