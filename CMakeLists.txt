@@ -49,6 +49,10 @@ if (MSVC)
 	set(GLEW_LIBRARY ${AE_GLEW_SRC}/lib/Release/x64/glew32s.lib)
 endif()
 
+if(UNIX AND NOT APPLE)
+	find_package(uuid REQUIRED)
+endif()
+
 # build sdl2 to be statically linked
 set(SDL_STATIC ON CACHE BOOL "" FORCE)
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -123,6 +127,8 @@ elseif(WIN32 AND NOT CYGWIN)
 		${GLEW_LIBRARY}
 		${OPENAL_LIBRARY}
 	)
+else()
+	list(APPEND AE_DEPS_LIBARARIES uuid)
 endif()
 list(APPEND AE_DEPS_LIBARARIES
 	${OpenGLES}
