@@ -183,6 +183,15 @@ aeFloat2 aeFloat2::SafeNormalizeCopy() const
   return aeFloat2( x / l, y / l );
 }
 
+void aeFloat2::Trim( float s )
+{
+  if ( LengthSquared() > s * s )
+  {
+    SafeNormalize();
+    (*this) *= s;
+  }
+}
+
 aeInt2 aeFloat2::NearestCopy() const
 {
   return aeInt2( x + 0.5f, y + 0.5f );

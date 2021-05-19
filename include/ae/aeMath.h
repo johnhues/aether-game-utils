@@ -380,16 +380,13 @@ struct AE_ALIGN(16) aeFloat2
 
   bool operator ==( const aeFloat2& o ) const { return x == o.x && y == o.y; }
   bool operator !=( const aeFloat2& o ) const { return !( *this == o ); }
+  
   aeFloat2 operator- () const;
   aeFloat2 operator+ ( const aeFloat2 &v ) const;
   void operator+= (const aeFloat2 &v);
   aeFloat2 operator- ( const aeFloat2 &v ) const;
   void operator-= ( const aeFloat2 &v );
-  float Dot( const aeFloat2 &v ) const;
-  static float Dot( const aeFloat2& a, const aeFloat2& b );
-  float Length() const;
-  float LengthSquared() const;
-  float Atan2() const;
+  
   aeFloat2 operator* (const float s) const;
   void operator*=( const float s );
   aeFloat2 operator* (const aeFloat2 s) const;
@@ -398,16 +395,26 @@ struct AE_ALIGN(16) aeFloat2
   void operator/= (const float s);
   aeFloat2 operator/ ( const aeFloat2 s ) const;
   void operator/= ( const aeFloat2 s );
-  aeFloat2 Lerp(const aeFloat2& end, float t) const;
+  
+  aeFloat2 Lerp( const aeFloat2& end, float t ) const;
+  
+  float Length() const;
+  float LengthSquared() const;
   float Normalize();
   aeFloat2 NormalizeCopy() const;
   float SafeNormalize();
   aeFloat2 SafeNormalizeCopy() const;
+  void Trim( float s );
+  
   aeInt2 NearestCopy() const;
   aeInt2 FloorCopy() const;
   aeInt2 CeilCopy() const;
+  
+  float Dot( const aeFloat2 &v ) const;
+  static float Dot( const aeFloat2& a, const aeFloat2& b );
   aeFloat2 RotateCopy( float rotation ) const;
   float GetAngle() const;
+  float Atan2() const;
   static aeFloat2 Reflect( aeFloat2 v, aeFloat2 n );
 };
 
