@@ -47,6 +47,7 @@ if (MSVC)
 	)
 	set(GLEW_INCLUDE_DIR ${AE_GLEW_SRC}/include)
 	set(GLEW_LIBRARY ${AE_GLEW_SRC}/lib/Release/x64/glew32s.lib)
+	list(APPEND AE_DEPS_TARGETS glew)
 endif()
 
 if(UNIX AND NOT APPLE)
@@ -104,6 +105,7 @@ else()
 	)
 	set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
 	set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
+	list(APPEND AE_DEPS_TARGETS openal)
 endif()
 
 # dependency include directories

@@ -5,10 +5,9 @@ include(GNUInstallDirs)
 add_library(${AE_LIBRARY_NAME} STATIC "")
 set_target_properties(${AE_LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
-add_dependencies(${AE_LIBRARY_NAME}
-	glew
-	openal
-)
+if (${AE_DEPS_TARGETS})
+	add_dependencies(${AE_LIBRARY_NAME} ${AE_DEPS_TARGETS})
+endif()
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
