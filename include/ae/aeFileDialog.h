@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeAlloc.h
+// aeFileDialog.h
 // Utilities for allocating objects. Provides functionality to track current and
 // past allocations.
 //------------------------------------------------------------------------------

@@ -327,14 +327,14 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
 
   m_maxCount = maxCount;
   m_count = 0;
-  m_sprites = aeAlloc::AllocateArray< Sprite >( m_maxCount );
+  m_sprites = ae::AllocateArray< Sprite >( m_maxCount );
 
   m_vertexData.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Static );
   m_vertexData.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof(Vertex, pos) );
   m_vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof(Vertex, color) );
   m_vertexData.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof(Vertex, uv) );
 
-  aeAlloc::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
+  ae::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
   uint16_t* indices = scratch.Data();
   for ( uint32_t i = 0; i < m_maxCount; i++ )
   {
@@ -352,25 +352,25 @@ void aeSpriteRender::Destroy()
 {
   if ( m_shaderAll )
   {
-    aeAlloc::Release( m_shaderAll );
+    ae::Release( m_shaderAll );
     m_shaderAll = nullptr;
   }
   
   if ( m_shaderOpaque )
   {
-    aeAlloc::Release( m_shaderOpaque );
+    ae::Release( m_shaderOpaque );
     m_shaderOpaque = nullptr;
   }
   
   if ( m_shaderTransparent )
   {
-    aeAlloc::Release( m_shaderTransparent );
+    ae::Release( m_shaderTransparent );
     m_shaderTransparent = nullptr;
   }
   
   m_vertexData.Destroy();
   
-  aeAlloc::Release( m_sprites );
+  ae::Release( m_sprites );
   m_sprites = nullptr;
 }
 
@@ -442,7 +442,7 @@ void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader
     }
     uint32_t textureId = texture->GetTexture();
 
-    aeAlloc::Scratch< Vertex > scratch( m_count * aeQuadVertCount );
+    ae::Scratch< Vertex > scratch( m_count * aeQuadVertCount );
     Vertex* vertices = scratch.Data();
     for ( uint32_t j = 0; j < m_count; j++ )
     {
@@ -555,7 +555,7 @@ void aeSpriteRender::m_LoadShaderAll()
       AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
     }";
   
-  m_shaderAll = aeAlloc::Allocate< aeShader >();
+  m_shaderAll = ae::Allocate< aeShader >();
   m_shaderAll->Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
@@ -590,7 +590,7 @@ void aeSpriteRender::m_LoadShaderOpaque()
       AE_COLOR = color;\
     }";
   
-  m_shaderOpaque = aeAlloc::Allocate< aeShader >();
+  m_shaderOpaque = ae::Allocate< aeShader >();
   m_shaderOpaque->Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
@@ -625,7 +625,7 @@ void aeSpriteRender::m_LoadShaderTransparent()
       AE_COLOR = color;\
     }";
   
-  m_shaderTransparent = aeAlloc::Allocate< aeShader >();
+  m_shaderTransparent = ae::Allocate< aeShader >();
   m_shaderTransparent->Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
@@ -686,8 +686,8 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
 {
   uint32_t vertCount = 0;
   uint32_t indexCount = 0;
-  aeAlloc::Scratch< Vertex > verts( m_vertexData.GetMaxVertexCount() );
-  aeAlloc::Scratch< uint16_t > indices( m_vertexData.GetMaxIndexCount() );
+  ae::Scratch< Vertex > verts( m_vertexData.GetMaxVertexCount() );
+  ae::Scratch< uint16_t > indices( m_vertexData.GetMaxIndexCount() );
 
   for ( uint32_t i = 0; i < m_rectCount; i++ )
   {
@@ -1213,7 +1213,7 @@ void aeRender::InitializeOpenGL( class aeWindow* window )
 
   m_window = window;
 
-  m_renderInternal = aeAlloc::Allocate< aeOpenGLRender >();
+  m_renderInternal = ae::Allocate< aeOpenGLRender >();
   m_renderInternal->Initialize( this );
   
   m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
@@ -1224,7 +1224,7 @@ void aeRender::Terminate()
   if ( m_renderInternal )
   {
     m_renderInternal->Terminate( this );
-    aeAlloc::Release( m_renderInternal );
+    ae::Release( m_renderInternal );
     m_renderInternal = nullptr;
   }
 }

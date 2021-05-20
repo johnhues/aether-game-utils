@@ -209,7 +209,7 @@ void WriteObjects( aeVfs* vfs, const aeArray< Object* >& objects )
 
 bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, aeArray< Object* >& objects )
 {
-  aeAlloc::Scratch< uint8_t > scratch( vfs->GetSize( aeVfsRoot::User, kFileName ) );
+  ae::Scratch< uint8_t > scratch( vfs->GetSize( aeVfsRoot::User, kFileName ) );
   vfs->Read( aeVfsRoot::User, kFileName, scratch.Data(), scratch.Length() );
   aeBinaryStream rStream = aeBinaryStream::Reader( scratch.Data(), scratch.Length() );
 
@@ -230,7 +230,7 @@ bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, aeA
   objects.Clear();
   for ( uint32_t i = 0; i < len; i++ )
   {
-    Object* object = aeAlloc::Allocate< Object >();
+    Object* object = ae::Allocate< Object >();
     
     aeStr16 type = "";
     rStream.SerializeString( type );
@@ -273,7 +273,7 @@ int main()
   class aeImGui* ui = nullptr;
 
   vfs.Initialize( "", "ae", "terrainedit" );
-  ui = aeAlloc::Allocate< aeImGui >();
+  ui = ae::Allocate< aeImGui >();
   if ( headless )
   {
     ui->InitializeHeadless();
@@ -283,7 +283,7 @@ int main()
     window.Initialize( 800, 600, false, true );
     window.SetTitle( "terrain edit" );
     render.InitializeOpenGL( &window );
-    debug.Initialize();
+    debug.Initialize( 64 );
     ui->Initialize();
   }
 
@@ -301,12 +301,12 @@ int main()
   }
 
   ae::Image heightmapImage;
-  aeAlloc::Scratch< uint8_t > fileBuffer( vfs.GetSize( aeVfsRoot::Data, "terrain.png" ) );
+  ae::Scratch< uint8_t > fileBuffer( vfs.GetSize( aeVfsRoot::Data, "terrain.png" ) );
   vfs.Read( aeVfsRoot::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
   heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
-  uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( aeGetMaxConcurrentThreads() * 0.75f ) );
-  aeTerrain* terrain = aeAlloc::Allocate< aeTerrain >();
+  uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
+  aeTerrain* terrain = ae::Allocate< aeTerrain >();
   terrain->Initialize( terrainThreads, !headless );
 
   aeFloat4x4 worldToText = aeFloat4x4::Identity();
@@ -327,7 +327,7 @@ int main()
   {
     ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
     box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) * aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
-    currentObject = objects.Append( aeAlloc::Allocate< Object >( "Box", box ) );
+    currentObject = objects.Append( ae::Allocate< Object >( "Box", box ) );
   }
 
   bool gizmoClickedPrev = false;
@@ -354,7 +354,7 @@ int main()
             aeFloat4x4::Translation( camera.GetFocus() ) *
             aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-          currentObject = objects.Append( aeAlloc::Allocate< Object >( "Box", box ) );
+          currentObject = objects.Append( ae::Allocate< Object >( "Box", box ) );
         }
 
         if ( ImGui::Button( "cylinder" ) )
@@ -364,7 +364,7 @@ int main()
             aeFloat4x4::Translation( camera.GetFocus() ) *
             aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-          currentObject = objects.Append( aeAlloc::Allocate< Object >( "Cylinder", cylinder ) );
+          currentObject = objects.Append( ae::Allocate< Object >( "Cylinder", cylinder ) );
         }
         
         if ( ImGui::Button( "height map" ) )
@@ -375,12 +375,12 @@ int main()
             aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
           heightMap->SetImage( &heightmapImage );
 
-          currentObject = objects.Append( aeAlloc::Allocate< Object >( "Height Map", heightMap ) );
+          currentObject = objects.Append( ae::Allocate< Object >( "Height Map", heightMap ) );
         }
 
         if ( ImGui::Button( "ray" ) )
         {
-          currentObject = objects.Append( aeAlloc::Allocate< Object >( "Ray", nullptr ) );
+          currentObject = objects.Append( ae::Allocate< Object >( "Ray", nullptr ) );
           currentObject->raySrc = camera.GetPosition();
           currentObject->rayDir = camera.GetForward();
           currentObject->rayLength = 100.0f;
@@ -396,7 +396,7 @@ int main()
         //  box->type = ae::Sdf::Shape::Type::Material;
         //  box->materialId = 1;
 
-        //  currentObject = objects.Append( aeAlloc::Allocate< Object >( "Material", box ) );
+        //  currentObject = objects.Append( ae::Allocate< Object >( "Material", box ) );
         //}
       }
       
@@ -501,7 +501,10 @@ int main()
       }
 
       // Wait for click release of gizmo before starting new terrain jobs
-      terrain->Update( camera.GetFocus(), 1250.0f );
+      aeTerrainParams params;
+      params.debug = s_showTerrainDebug ? &debug : nullptr;
+      terrain->SetParams( params );
+      terrain->Update( camera.GetFocus(), 512.0f );
     }
 
     // Camera input
@@ -585,8 +588,6 @@ int main()
         terrain->Render( &terrainShader, uniformList );
       }
 
-      terrain->SetDebug( s_showTerrainDebug ? &debug : nullptr );
-
       ImGuiIO& io = ImGui::GetIO();
       ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
 
@@ -612,7 +613,7 @@ int main()
       {
         objects.Remove( objects.Find( currentObject ) );
         terrain->sdf.DestroySdf( currentObject->shape );
-        aeAlloc::Release( currentObject );
+        ae::Release( currentObject );
         currentObject = nullptr;
       }
 
@@ -724,7 +725,7 @@ int main()
   AE_INFO( "Terminate" );
   ui->Terminate();
   terrain->Terminate();
-  aeAlloc::Release( terrain );
+  ae::Release( terrain );
   input.Terminate();
   if ( !headless )
   {

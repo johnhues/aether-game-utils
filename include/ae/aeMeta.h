@@ -154,7 +154,7 @@ public:
       if ( create )
       {
         AE_ASSERT( !enums.TryGet( enumName ) );
-        return enums.Set( enumName, aeAlloc::Allocate< Enum >( enumName, size, isSigned ) );
+        return enums.Set( enumName, ae::Allocate< Enum >( enumName, size, isSigned ) );
       }
       else
       {

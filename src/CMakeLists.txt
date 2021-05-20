@@ -29,7 +29,6 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 set(AE_HEADER_FILES
 	../include/ae/aether.h
 	../include/ae/aetherEXT.h
-	../include/ae/aeAlloc.h
 	../include/ae/aeArray.h
 	../include/ae/aeAudio.h
 	../include/ae/aeBinaryStream.h

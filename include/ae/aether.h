@@ -156,18 +156,50 @@ template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
 
+namespace AE_NAMESPACE {
+
 //------------------------------------------------------------------------------
 // System functions
 //------------------------------------------------------------------------------
-namespace AE_NAMESPACE {
-
-void* AlignedAlloc( uint32_t size, uint32_t boundary );
-void AlignedFree( void* p );
-void* Realloc( void* p, uint32_t size, uint32_t boundary );
 uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
 bool IsDebuggerAttached();
 template < typename T > const char* aeGetTypeName();
+
+//------------------------------------------------------------------------------
+// Allocation functions
+//------------------------------------------------------------------------------
+void* AlignedAlloc( uint32_t size, uint32_t boundary );
+void AlignedFree( void* p );
+void* Realloc( void* p, uint32_t size, uint32_t boundary );
+template < typename T > T* Allocate();
+template < typename T > T* AllocateArray( uint32_t count );
+template < typename T, typename ... Args > T* Allocate( Args ... args );
+uint8_t* AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count );
+template < typename T > void Release( T* obj );
+
+//------------------------------------------------------------------------------
+// ae::Scratch< T > class
+//------------------------------------------------------------------------------
+template < typename T >
+class Scratch
+{
+public:
+  Scratch( uint32_t count );
+  ~Scratch();
+  
+  T* Data();
+  uint32_t Length() const;
+
+  T& operator[] ( int32_t index );
+  const T& operator[] ( int32_t index ) const;
+  T& GetSafe( int32_t index );
+  const T& GetSafe( int32_t index ) const;
+
+private:
+  T* m_data;
+  uint32_t m_count;
+};
 
 } // AE_NAMESPACE end
 
@@ -396,6 +428,160 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
   LogInternal( os, format, args... );
 }
 
+//------------------------------------------------------------------------------
+// Allocation functions
+//------------------------------------------------------------------------------
+const uint32_t kDefaultAlignment = 16;
+const uint32_t kHeaderSize = 16;
+struct Header
+{
+  uint32_t check;
+  uint32_t count;
+  uint32_t size;
+  uint32_t typeSize;
+};
+
+template < typename T >
+T* Allocate()
+{
+  return AllocateArray< T >( 1 );
+}
+
+template < typename T >
+T* AllocateArray( uint32_t count )
+{
+  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
+  AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
+
+  uint32_t size = kHeaderSize + sizeof( T ) * count;
+  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+#if _AE_DEBUG_
+  memset( (void*)base, 0xCD, size );
+#endif
+
+  AE_STATIC_ASSERT( sizeof( Header ) <= kHeaderSize );
+  AE_STATIC_ASSERT( kHeaderSize % kDefaultAlignment == 0 );
+
+  Header* header = (Header*)base;
+  header->check = 0xABCD;
+  header->count = count;
+  header->size = size;
+  header->typeSize = sizeof( T );
+
+  T* result = (T*)( base + kHeaderSize );
+  for ( uint32_t i = 0; i < count; i++ )
+  {
+    new( &result[ i ] ) T();
+  }
+
+  return result;
+}
+
+template < typename T, typename ... Args >
+T* Allocate( Args ... args )
+{
+  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
+
+  uint32_t size = kHeaderSize + sizeof( T );
+  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+#if _AE_DEBUG_
+  memset( (void*)base, 0xCD, size );
+#endif
+
+  Header* header = (Header*)base;
+  header->check = 0xABCD;
+  header->count = 1;
+  header->size = size;
+  header->typeSize = sizeof( T );
+
+  return new( (T*)( base + kHeaderSize ) ) T( args ... );
+}
+
+template < typename T >
+void Release( T* obj )
+{
+  if ( !obj )
+  {
+    return;
+  }
+
+  AE_ASSERT( (intptr_t)obj % kDefaultAlignment == 0 );
+  uint8_t* base = (uint8_t*)obj - kHeaderSize;
+
+  Header* header = (Header*)( base );
+  AE_ASSERT( header->check == 0xABCD );
+
+  uint32_t count = header->count;
+  AE_ASSERT_MSG( sizeof( T ) <= header->typeSize, "Released type T '#' does not match allocated type of size #", ae::GetTypeName< T >(), header->typeSize );
+  for ( uint32_t i = 0; i < count; i++ )
+  {
+    T* o = (T*)( (uint8_t*)obj + header->typeSize * i );
+    o->~T();
+  }
+
+#if _AE_DEBUG_
+  memset( (void*)base, 0xDD, header->size );
+#endif
+
+  ae::AlignedFree( base );
+}
+
+//------------------------------------------------------------------------------
+// ae::Scratch< T > member functions
+//------------------------------------------------------------------------------
+template < typename T >
+Scratch< T >::Scratch( uint32_t count )
+{
+  m_count = count;
+  m_data = AllocateArray< T >( count );
+}
+
+template < typename T >
+Scratch< T >::~Scratch()
+{
+  Release( m_data );
+}
+
+template < typename T >
+T* Scratch< T >::Data()
+{
+  return m_data;
+}
+
+template < typename T >
+uint32_t Scratch< T >::Length() const
+{
+  return m_count;
+}
+
+template < typename T >
+T& Scratch< T >::operator[] ( int32_t index )
+{
+  return m_data[ index ];
+}
+
+template < typename T >
+const T& Scratch< T >::operator[] ( int32_t index ) const
+{
+  return m_data[ index ];
+}
+
+template < typename T >
+T& Scratch< T >::GetSafe( int32_t index )
+{
+  AE_ASSERT( index < (int32_t)m_count );
+  return m_data[ index ];
+}
+
+template < typename T >
+const T& Scratch< T >::GetSafe( int32_t index ) const
+{
+  AE_ASSERT( index < (int32_t)m_count );
+  return m_data[ index ];
+}
+
 } // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
@@ -578,6 +764,32 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
       os << " ";
     }
   }
+}
+
+uint8_t* AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count )
+{
+#if _AE_ALLOC_DISABLE
+  return AllocateArray< uint8_t >( count );
+#else
+  AE_ASSERT( typeAlignment );
+  AE_ASSERT( typeAlignment <= kDefaultAlignment );
+  AE_ASSERT( typeSize % typeAlignment == 0 ); // All elements in array should have correct alignment
+
+  uint32_t size = kHeaderSize + typeSize * count;
+  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+#if _AE_DEBUG_
+  memset( (void*)base, 0xCD, size );
+#endif
+
+  Header* header = (Header*)base;
+  header->check = 0xABCD;
+  header->count = count;
+  header->size = size;
+  header->typeSize = typeSize;
+
+  return base + kHeaderSize;
+#endif
 }
 
 } // AE_NAMESPACE end

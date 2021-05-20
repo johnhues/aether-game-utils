@@ -287,7 +287,7 @@ void aeNetReplicaClient::DestroyPending()
     AE_ASSERT( netData->IsPendingDelete() );
     AE_ASSERT( !netData->PumpMessages( nullptr ) );
     m_netDatas.Remove( netData->GetId() );
-    aeAlloc::Release( netData );
+    ae::Release( netData );
   }
 
   m_destroyed.Clear();
@@ -300,7 +300,7 @@ void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
   uint32_t remoteId = 0;
   rStream->SerializeUint32( remoteId );
 
-  aeNetData* netData = aeAlloc::Allocate< aeNetData >();
+  aeNetData* netData = ae::Allocate< aeNetData >();
   m_netDatas.Set( netData->GetId(), netData );
   m_remoteToLocalIdMap.Set( remoteId, netData->GetId() );
   m_localToRemoteIdMap.Set( netData->GetId(), remoteId );
@@ -383,7 +383,7 @@ uint32_t aeNetReplicaServer::GetSendLength() const
 //------------------------------------------------------------------------------
 aeNetData* aeNetReplicaDB::CreateNetData()
 {
-  aeNetData* netData = aeAlloc::Allocate< aeNetData >();
+  aeNetData* netData = ae::Allocate< aeNetData >();
   netData->m_SetLocal();
   m_pendingCreate.Append( netData );
   return netData;
@@ -401,7 +401,7 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
   {
     // Early out, no need to send Destroy message because Create has not be queued
     m_pendingCreate.Remove( pendingIdx );
-    aeAlloc::Release( netData );
+    ae::Release( netData );
     return;
   }
 
@@ -422,12 +422,12 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
     wStream.SerializeUint32( id.GetInternalId() );
   }
 
-  aeAlloc::Release( netData );
+  ae::Release( netData );
 }
 
 aeNetReplicaServer* aeNetReplicaDB::CreateServer()
 {
-  aeNetReplicaServer* server = m_servers.Append( aeAlloc::Allocate< aeNetReplicaServer >() );
+  aeNetReplicaServer* server = m_servers.Append( ae::Allocate< aeNetReplicaServer >() );
   AE_ASSERT( !server->m_pendingClear );
   server->m_replicaDB = this;
 
@@ -456,7 +456,7 @@ void aeNetReplicaDB::DestroyServer( aeNetReplicaServer* server )
   if ( index >= 0 )
   {
     m_servers.Remove( index );
-    aeAlloc::Release( server );
+    ae::Release( server );
   }
 }
 

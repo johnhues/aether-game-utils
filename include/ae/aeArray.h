@@ -27,7 +27,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeAlloc.h"
 #include "aeMath.h"
 namespace AE_NAMESPACE {
 
@@ -179,7 +178,7 @@ Array< T >::~Array()
 {
   Clear();
   
-  aeAlloc::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
+  ae::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
   m_size = 0;
   m_array = nullptr;
 }
@@ -212,7 +211,7 @@ void Array< T >::operator =( Array< T >&& other ) noexcept
   if ( m_array )
   {
     Clear();
-    aeAlloc::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
+    ae::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
   }
   
   m_length = other.m_length;
@@ -379,14 +378,14 @@ void Array< T >::Reserve( uint32_t size )
 #endif
   m_size = size;
 
-  T* arr = (T*)aeAlloc::AllocateArray< typename std::aligned_storage< sizeof(T), alignof(T) >::type >( m_size );
+  T* arr = (T*)ae::AllocateArray< typename std::aligned_storage< sizeof(T), alignof(T) >::type >( m_size );
   for ( uint32_t i = 0; i < m_length; i++ )
   {
     new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
     m_array[ i ].~T();
   }
 
-  aeAlloc::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
+  ae::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
   m_array = arr;
 }
 

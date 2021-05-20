@@ -129,7 +129,7 @@ AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid 
 
 AetherPlayer* AetherClient_AddPlayer( AetherClientInternal* ac, AetherUuid uuid )
 {
-  AetherPlayer* player = aeAlloc::Allocate< AetherPlayer >();
+  AetherPlayer* player = ae::Allocate< AetherPlayer >();
   player->uuid = uuid;
   player->netId = 0;
   player->userData = nullptr;
@@ -199,7 +199,7 @@ void AetherClient_Delete( AetherClient* _ac )
 
   for ( uint32_t i = 0; i < ac->pub.allPlayers.Length(); i++ )
   {
-    aeAlloc::Release( ac->pub.allPlayers[ i ] );
+    ae::Release( ac->pub.allPlayers[ i ] );
   }
   ac->pub.allPlayers.Clear();
 
@@ -387,7 +387,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
 
           for ( uint32_t i = ac->pub.allPlayers.Length() - 1; i > 1; i-- )
           {
-            aeAlloc::Release( ac->pub.allPlayers[ i ] );
+            ae::Release( ac->pub.allPlayers[ i ] );
             ac->pub.allPlayers.Remove( i );
           }
           

@@ -119,7 +119,7 @@ uint32_t HotSpotWorld::GetTile( aeInt2 pos ) const
 
 HotSpotObject* HotSpotWorld::CreateObject()
 {
-  HotSpotObject* obj = aeAlloc::Allocate< HotSpotObject >();
+  HotSpotObject* obj = ae::Allocate< HotSpotObject >();
   m_objects.Append( obj );
   return obj;
 }
