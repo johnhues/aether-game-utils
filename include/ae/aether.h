@@ -164,7 +164,7 @@ namespace AE_NAMESPACE {
 uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
 bool IsDebuggerAttached();
-template < typename T > const char* aeGetTypeName();
+template < typename T > const char* GetTypeName();
 
 //------------------------------------------------------------------------------
 // Allocation functions
