@@ -47,7 +47,7 @@ public:
 private:
   uint32_t m_first;
   uint32_t m_count;
-  aeArray< T > m_buffer;
+  ae::Array< T > m_buffer;
 };
 
 //------------------------------------------------------------------------------

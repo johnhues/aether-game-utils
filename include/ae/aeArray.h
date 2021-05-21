@@ -42,9 +42,9 @@ public:
   Array( uint32_t length, const T& val ); // Appends 'length' number of 'val's
 
   // Dynamic array (N == 0)
-  Array( ae::Tag pool );
-  Array( ae::Tag pool, uint32_t size ); // Reserve size (with length of 0)
-  Array( ae::Tag pool, uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
+  Array( ae::Tag tag );
+  Array( ae::Tag tag, uint32_t size ); // Reserve size (with length of 0)
+  Array( ae::Tag tag, uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
   void Reserve( uint32_t total );
   
   // Add elements
@@ -80,7 +80,7 @@ private:
   uint32_t m_size;
   T* m_array;
   typename std::aligned_storage< sizeof(T), alignof(T) >::type m_static[ N ];
-  ae::Tag m_pool;
+  ae::Tag m_tag;
 public:
   // @NOTE: Move operators fallback to regular operators if ae::Tags don't match
   Array( const Array< T, N >& other );
@@ -141,38 +141,38 @@ Array< T, N >::Array( uint32_t length, const T& value )
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag pool )
+Array< T, N >::Array( ae::Tag tag )
 {
   AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
   
   m_length = 0;
   m_size = 0;
   m_array = nullptr;
-  m_pool = pool;
+  m_tag = tag;
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag pool, uint32_t size )
+Array< T, N >::Array( ae::Tag tag, uint32_t size )
 {
   AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
   
   m_length = 0;
   m_size = 0;
   m_array = nullptr;
-  m_pool = pool;
+  m_tag = tag;
 
   Reserve( size );
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag pool, uint32_t length, const T& value )
+Array< T, N >::Array( ae::Tag tag, uint32_t length, const T& value )
 {
   AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
   
   m_length = 0;
   m_size = 0;
   m_array = nullptr;
-  m_pool = pool;
+  m_tag = tag;
 
   Reserve( length );
 
@@ -203,7 +203,7 @@ Array< T, N >::Array( const Array< T, N >& other )
 template < typename T, uint32_t N >
 Array< T, N >::Array( Array< T, N >&& other ) noexcept
 {
-  if ( N || m_pool != other.m_pool )
+  if ( N || m_tag != other.m_tag )
   {
     m_length = 0;
     m_size = 0;
@@ -260,7 +260,7 @@ void Array< T, N >::operator =( const Array< T, N >& other )
 template < typename T, uint32_t N >
 void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
 {
-  if ( N || m_pool != other.m_pool )
+  if ( N || m_tag != other.m_tag )
   {
     *this = other; // Regular assignment (without std::move)
   }
@@ -442,8 +442,8 @@ void Array< T, N >::Reserve( uint32_t size )
 #endif
   m_size = size;
   
-  AE_ASSERT( m_pool != ae::Tag() );
-  T* arr = (T*)ae::GetGlobalAllocator()->Allocate( m_size * sizeof(T), alignof(T), m_pool );
+  AE_ASSERT( m_tag != ae::Tag() );
+  T* arr = (T*)ae::GetGlobalAllocator()->Allocate( m_size * sizeof(T), alignof(T), m_tag );
   for ( uint32_t i = 0; i < m_length; i++ )
   {
     new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
@@ -510,7 +510,5 @@ uint32_t Array< T, N >::m_GetNextSize() const
 }
 
 } // AE_NAMESPACE end
-
-#define aeArray ae::Array
 
 #endif

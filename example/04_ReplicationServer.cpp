@@ -65,7 +65,7 @@ int main()
   aeMap< AetherUuid, aeNetReplicaServer* > replicaServers;
 
   // Game data
-  aeArray< Green > greens;
+  ae::Array< Green > greens;
   auto AddGreen = [ &greens, &replicaDB ]()
   {
     Green* green = &greens.Append( Green() );

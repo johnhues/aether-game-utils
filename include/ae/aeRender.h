@@ -537,7 +537,7 @@ private:
 
   uint32_t m_fbo = 0;
 
-  aeArray< aeTexture2D*, 4 > m_targets;
+  ae::Array< aeTexture2D*, 4 > m_targets;
   aeTexture2D m_depth;
 
   uint32_t m_width = 0;

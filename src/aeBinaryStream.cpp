@@ -53,7 +53,7 @@ aeBinaryStream::aeBinaryStream( Mode mode )
   m_isValid = true;
 }
 
-aeBinaryStream::aeBinaryStream( aeArray< uint8_t >* array )
+aeBinaryStream::aeBinaryStream( ae::Array< uint8_t >* array )
 {
   m_mode = Mode::WriteBuffer;
   if ( array )
@@ -70,7 +70,7 @@ aeBinaryStream aeBinaryStream::Writer( uint8_t* data, uint32_t length )
   return aeBinaryStream( Mode::WriteBuffer, data, length );
 }
 
-aeBinaryStream aeBinaryStream::Writer( aeArray< uint8_t >* array )
+aeBinaryStream aeBinaryStream::Writer( ae::Array< uint8_t >* array )
 {
   return aeBinaryStream( array );
 }
@@ -85,7 +85,7 @@ aeBinaryStream aeBinaryStream::Reader( const uint8_t* data, uint32_t length )
   return aeBinaryStream( Mode::ReadBuffer, const_cast< uint8_t* >( data ), length );
 }
 
-aeBinaryStream aeBinaryStream::Reader( const aeArray< uint8_t >& data )
+aeBinaryStream aeBinaryStream::Reader( const ae::Array< uint8_t >& data )
 {
   if ( !data.Length() )
   {
@@ -237,7 +237,7 @@ void aeBinaryStream::m_SerializeArrayLength( uint32_t& length, uint32_t maxLengt
   }
 }
 
-void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array, uint32_t maxLength )
+void aeBinaryStream::SerializeArray( ae::Array< uint8_t >& array, uint32_t maxLength )
 {
   if ( !m_isValid )
   {
@@ -271,7 +271,7 @@ void aeBinaryStream::SerializeArray( aeArray< uint8_t >& array, uint32_t maxLeng
   }
 }
 
-void aeBinaryStream::SerializeArray( const aeArray< uint8_t >& array, uint32_t maxLength )
+void aeBinaryStream::SerializeArray( const ae::Array< uint8_t >& array, uint32_t maxLength )
 {
   AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
   
@@ -317,7 +317,7 @@ void aeBinaryStream::SerializeRaw( void* data, uint32_t length )
     }
     else
     {
-      aeArray< uint8_t >& array = m_GetArray();
+      ae::Array< uint8_t >& array = m_GetArray();
       array.Append( (uint8_t*)data, length );
       m_offset = array.Length();
       m_length = array.Size();
@@ -335,12 +335,12 @@ void aeBinaryStream::SerializeRaw( const void* data, uint32_t length )
   SerializeRaw( (void*)data, length );
 }
 
-void aeBinaryStream::SerializeRaw( aeArray< uint8_t>& array )
+void aeBinaryStream::SerializeRaw( ae::Array< uint8_t>& array )
 {
   AE_FAIL_MSG( "Not implemented" );
 }
 
-void aeBinaryStream::SerializeRaw( const aeArray< uint8_t>& array )
+void aeBinaryStream::SerializeRaw( const ae::Array< uint8_t>& array )
 {
   AE_FAIL_MSG( "Not implemented" );
 }

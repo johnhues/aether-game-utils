@@ -186,7 +186,7 @@ void Object::Serialize( aeBinaryStream* stream )
   }
 }
 
-void WriteObjects( aeVfs* vfs, const aeArray< Object* >& objects )
+void WriteObjects( aeVfs* vfs, const ae::Array< Object* >& objects )
 {
   aeBinaryStream wStream = aeBinaryStream::Writer();
   wStream.SerializeUint32( kCurrentFileVersion );
@@ -208,7 +208,7 @@ void WriteObjects( aeVfs* vfs, const aeArray< Object* >& objects )
   vfs->Write( aeVfsRoot::User, kFileName, wStream.GetData(), wStream.GetOffset(), false );
 }
 
-bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, aeArray< Object* >& objects )
+bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, ae::Array< Object* >& objects )
 {
   ae::Scratch< uint8_t > scratch( vfs->GetSize( aeVfsRoot::User, kFileName ) );
   vfs->Read( aeVfsRoot::User, kFileName, scratch.Data(), scratch.Length() );

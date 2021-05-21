@@ -852,7 +852,7 @@ const uint32_t kDebugVertexCountPerObject = 32;
 //------------------------------------------------------------------------------
 void aeDebugRender::Initialize( uint32_t maxObjects )
 {
-  m_objs = aeArray< DebugObject >( AE_ALLOC_TAG_RENDER, maxObjects );
+  m_objs = ae::Array< DebugObject >( AE_ALLOC_TAG_RENDER, maxObjects );
 
   // @HACK: Should handle vert count in a safer way
   m_vertexData.Initialize( sizeof(DebugVertex), sizeof(uint16_t), m_objs.Size() * kDebugVertexCountPerObject, 0, aeVertexPrimitive::Line, aeVertexUsage::Dynamic, aeVertexUsage::Static );
