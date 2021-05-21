@@ -78,7 +78,7 @@ private:
   template < typename T > void SetFloat4( const char*, T ) = delete;
   template < typename T > void SetInt2( const char*, T ) = delete;
   
-  aeMap< aeStr128, aeStr128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: aeDict should be templated
+  ae::Map< aeStr128, aeStr128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: aeDict should be templated
 };
 
 std::ostream& operator<<( std::ostream& os, const aeDict& dict );

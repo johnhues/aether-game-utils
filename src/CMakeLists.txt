@@ -29,7 +29,6 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 set(AE_HEADER_FILES
 	../include/ae/aether.h
 	../include/ae/aetherEXT.h
-	../include/ae/aeArray.h
 	../include/ae/aeAudio.h
 	../include/ae/aeBinaryStream.h
 	../include/ae/aeClock.h
@@ -47,7 +46,6 @@ set(AE_HEADER_FILES
 	../include/ae/aeInput.h
 	../include/ae/aeInventoryGrid.h
 	../include/ae/aeList.h
-	../include/ae/aeMap.h
 	../include/ae/aeMath.h
 	../include/ae/aeMesh.h
 	../include/ae/aeMeta.h

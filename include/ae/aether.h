@@ -172,9 +172,9 @@ bool IsDebuggerAttached();
 template < typename T > const char* GetTypeName();
 
 //------------------------------------------------------------------------------
-// Allocator
+// Tags
 //------------------------------------------------------------------------------
-using Tag = std::string;
+using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_RENDER ae::Tag( "aeRender" )
 #define AE_ALLOC_TAG_AUDIO ae::Tag( "aeAudio" )
 #define AE_ALLOC_TAG_META ae::Tag( "aeMeta" )
@@ -184,7 +184,13 @@ using Tag = std::string;
 #define AE_ALLOC_TAG_MESH ae::Tag( "aeMesh" )
 #define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
 
-// @NOTE: Use your own custom allocator by inheriting from this class and calling ae::SetGlobalAllocator()
+//------------------------------------------------------------------------------
+// Allocator interface
+// @NOTE: By default aether-game-utils uses system allocations, which may be fine
+// for your use case. If not it's advised that you implement this class with
+// dlmalloc or similar and then call ae::SetGlobalAllocator() with your own
+// allocator when your program starts.
+//------------------------------------------------------------------------------
 class Allocator
 {
 public:
@@ -194,7 +200,12 @@ public:
   virtual void Free( void* data ) = 0;
 };
 
-// @NOTE: Call ae::SetGlobalAllocator() before making any allocations or else a default allocator will be used
+//------------------------------------------------------------------------------
+// Allocator functions
+// @NOTE: Call ae::SetGlobalAllocator() before making any allocations or else a
+// default allocator will be used. You must call ae::SetGlobalAllocator() before
+// any allocations are made.
+//------------------------------------------------------------------------------
 void SetGlobalAllocator( Allocator* alloc );
 Allocator* GetGlobalAllocator();
 
@@ -323,6 +334,121 @@ public:
 private:
   T m_min;
   T m_max;
+};
+
+//------------------------------------------------------------------------------
+// Array class
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N = 0 >
+class Array
+{
+public:
+  // Static array (N > 0)
+  Array();
+  Array( uint32_t length, const T& val ); // Appends 'length' number of 'val's
+  // Dynamic array (N == 0)
+  Array( ae::Tag tag );
+  Array( ae::Tag tag, uint32_t size ); // Reserve size (with length of 0)
+  Array( ae::Tag tag, uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
+  void Reserve( uint32_t total );
+  // Static and dynamic arrays
+  Array( const Array< T, N >& other ); // Move operators fallback to regular operators if ae::Tags don't match
+  Array( Array< T, N >&& other ) noexcept;
+  void operator =( const Array< T, N >& other );
+  void operator =( Array< T, N >&& other ) noexcept;
+  ~Array();
+  
+  // Add elements
+  T& Append( const T& value );
+  void Append( const T* values, uint32_t count );
+  T& Insert( uint32_t index, const T& value );
+
+  // Find elements
+  template < typename U > int32_t Find( const U& value ) const; // Returns -1 when not found
+  template < typename Fn > int32_t FindFn( Fn testFn ) const; // Returns -1 when not found
+
+  // Remove elements
+  template < typename U > uint32_t RemoveAll( const U& value );
+  template < typename Fn > uint32_t RemoveAllFn( Fn testFn );
+  void Remove( uint32_t index );
+  void Clear();
+
+  // Access elements
+  const T& operator[]( int32_t index ) const; // Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
+  T& operator[]( int32_t index );
+  T* Begin() { return m_array; } // These functions can return null when array length is zero
+  T* End() { return m_array + m_length; }
+  const T* Begin() const { return m_array; }
+  const T* End() const { return m_array + m_length; }
+
+  // Array info
+  uint32_t Length() const;
+  uint32_t Size() const;
+  
+private:
+  uint32_t m_GetNextSize() const;
+  uint32_t m_length;
+  uint32_t m_size;
+  T* m_array;
+  typename std::aligned_storage< sizeof(T), alignof(T) >::type m_static[ N ];
+  ae::Tag m_tag;
+public:
+  // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
+  T* begin() { return m_array; }
+  T* end() { return m_array + m_length; }
+  const T* begin() const { return m_array; }
+  const T* end() const { return m_array + m_length; }
+};
+
+//------------------------------------------------------------------------------
+// Map class
+//------------------------------------------------------------------------------
+template < typename K, typename V, uint32_t N = 0 >
+class Map
+{
+public:
+  Map(); // Static map only (N > 0)
+  Map( ae::Tag pool ); // Dynamic map only (N == 0)
+  
+  V& Set( const K& key, const V& value );
+  V& Get( const K& key );
+  const V& Get( const K& key ) const;
+  const V& Get( const K& key, const V& defaultValue ) const;
+  
+  V* TryGet( const K& key );
+  const V* TryGet( const K& key ) const;
+
+  bool TryGet( const K& key, V* valueOut );
+  bool TryGet( const K& key, V* valueOut ) const;
+  
+  bool Remove( const K& key );
+  bool Remove( const K& key, V* valueOut );
+
+  void Reserve( uint32_t total );
+  void Clear();
+
+  K& GetKey( uint32_t index );
+  V& GetValue( uint32_t index );
+  const K& GetKey( uint32_t index ) const;
+  const V& GetValue( uint32_t index ) const;
+  uint32_t Length() const;
+
+private:
+  template < typename K2, typename V2, uint32_t N2 >
+  friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
+
+  struct Entry
+  {
+    Entry() = default;
+    Entry( const K& k, const V& v );
+
+    K key;
+    V value;
+  };
+
+  int32_t m_FindIndex( const K& key ) const;
+
+  Array< Entry, N > m_entries;
 };
 
 } // AE_NAMESPACE end
@@ -1014,6 +1140,626 @@ template < typename T >
 inline aeMath::RandomValue< T >::operator T() const
 {
   return Get();
+}
+
+//------------------------------------------------------------------------------
+// Array functions
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N >
+inline std::ostream& operator<<( std::ostream& os, const Array< T, N >& array )
+{
+  os << "<";
+  for ( uint32_t i = 0; i < array.Length(); i++ )
+  {
+    os << array[ i ];
+    if ( i != array.Length() - 1 )
+    {
+      os << ", ";
+    }
+  }
+  return os << ">";
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array()
+{
+  AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+  
+  m_length = 0;
+  m_size = N;
+  m_array = (T*)m_static;
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( uint32_t length, const T& value )
+{
+  AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+  
+  m_length = length;
+  m_size = N;
+  m_array = (T*)m_static;
+  for ( uint32_t i = 0; i < length; i++ )
+  {
+    new ( &m_array[ i ] ) T ( value );
+  }
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( ae::Tag tag )
+{
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+  
+  m_length = 0;
+  m_size = 0;
+  m_array = nullptr;
+  m_tag = tag;
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( ae::Tag tag, uint32_t size )
+{
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+  
+  m_length = 0;
+  m_size = 0;
+  m_array = nullptr;
+  m_tag = tag;
+
+  Reserve( size );
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( ae::Tag tag, uint32_t length, const T& value )
+{
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+  
+  m_length = 0;
+  m_size = 0;
+  m_array = nullptr;
+  m_tag = tag;
+
+  Reserve( length );
+
+  m_length = length;
+  for ( uint32_t i = 0; i < length; i++ )
+  {
+    new ( &m_array[ i ] ) T ( value );
+  }
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( const Array< T, N >& other )
+{
+  m_length = 0;
+  m_size = 0;
+  m_array = nullptr;
+  
+  // Array must be initialized above before calling Reserve
+  Reserve( other.m_length );
+
+  m_length = other.m_length;
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    new ( &m_array[ i ] ) T ( other.m_array[ i ] );
+  }
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( Array< T, N >&& other ) noexcept
+{
+  if ( N || m_tag != other.m_tag )
+  {
+    m_length = 0;
+    m_size = 0;
+    m_array = nullptr;
+    *this = other; // Regular assignment (without std::move)
+  }
+  else
+  {
+    m_length = other.m_length;
+    m_size = other.m_size;
+    m_array = other.m_array;
+    
+    other.m_length = 0;
+    other.m_size = 0;
+    other.m_array = nullptr;
+  }
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::~Array()
+{
+  Clear();
+  
+  if ( N == 0 )
+  {
+    ae::GetGlobalAllocator()->Free( m_array );
+  }
+  m_size = 0;
+  m_array = nullptr;
+}
+
+template < typename T, uint32_t N >
+void Array< T, N >::operator =( const Array< T, N >& other )
+{
+  if ( m_array == other.m_array )
+  {
+    return;
+  }
+  
+  Clear();
+  
+  if ( m_size < other.m_length )
+  {
+    Reserve( other.m_length );
+  }
+
+  m_length = other.m_length;
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    new ( &m_array[ i ] ) T ( other.m_array[ i ] );
+  }
+}
+
+template < typename T, uint32_t N >
+void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
+{
+  if ( N || m_tag != other.m_tag )
+  {
+    *this = other; // Regular assignment (without std::move)
+  }
+  else
+  {
+    if ( m_array )
+    {
+      Clear();
+      ae::GetGlobalAllocator()->Free( m_array );
+    }
+    
+    m_length = other.m_length;
+    m_size = other.m_size;
+    m_array = other.m_array;
+    
+    other.m_length = 0;
+    other.m_size = 0;
+    other.m_array = nullptr;
+  }
+}
+
+template < typename T, uint32_t N >
+T& Array< T, N >::Append( const T& value )
+{
+  if ( m_length == m_size )
+  {
+    Reserve( m_GetNextSize() );
+  }
+
+  new ( &m_array[ m_length ] ) T ( value );
+  m_length++;
+
+  return m_array[ m_length - 1 ];
+}
+
+template < typename T, uint32_t N >
+void Array< T, N >::Append( const T* values, uint32_t count )
+{
+  Reserve( m_length + count );
+
+#if _AE_DEBUG_
+  AE_ASSERT( m_size >= m_length + count );
+#endif
+  for ( uint32_t i = 0; i < count; i++ )
+  {
+    new ( &m_array[ m_length ] ) T ( values[ i ] );
+    m_length++;
+  }
+}
+
+template < typename T, uint32_t N >
+T& Array< T, N >::Insert( uint32_t index, const T& value )
+{
+#if _AE_DEBUG_
+  AE_ASSERT( index <= m_length );
+#endif
+
+  if ( m_length == m_size )
+  {
+    Reserve( m_GetNextSize() );
+  }
+
+  if ( index == m_length )
+  {
+    new ( &m_array[ index ] ) T ( value );
+  }
+  else
+  {
+    new ( &m_array[ m_length ] ) T ( std::move( m_array[ m_length - 1 ] ) );
+    for ( int32_t i = m_length - 1; i > index; i-- )
+    {
+      m_array[ i ] = std::move( m_array[ i - 1 ] );
+    }
+    m_array[ index ] = value;
+  }
+  
+  m_length++;
+
+  return m_array[ index ];
+}
+
+template < typename T, uint32_t N >
+void Array< T, N >::Remove( uint32_t index )
+{
+#if _AE_DEBUG_
+  AE_ASSERT( index < m_length );
+#endif
+
+  m_length--;
+  for ( uint32_t i = index; i < m_length; i++ )
+  {
+    m_array[ i ] = std::move( m_array[ i + 1 ] );
+  }
+  m_array[ m_length ].~T();
+}
+
+template < typename T, uint32_t N >
+template < typename U >
+uint32_t Array< T, N >::RemoveAll( const U& value )
+{
+  uint32_t count = 0;
+  int32_t index = 0;
+  while ( ( index = Find( value ) ) >= 0 )
+  {
+    // @TODO: Update this to be single loop, so array is only compacted once
+    Remove( index );
+    count++;
+  }
+  return count;
+}
+
+template < typename T, uint32_t N >
+template < typename Fn >
+uint32_t Array< T, N >::RemoveAllFn( Fn testFn )
+{
+  uint32_t count = 0;
+  int32_t index = 0;
+  while ( ( index = FindFn( testFn ) ) >= 0 )
+  {
+    // @TODO: Update this to be single loop, so array is only compacted once
+    Remove( index );
+    count++;
+  }
+  return count;
+}
+
+template < typename T, uint32_t N >
+template < typename U >
+int32_t Array< T, N >::Find( const U& value ) const
+{
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    if ( m_array[ i ] == value )
+    {
+      return i;
+    }
+  }
+  return -1;
+}
+
+template < typename T, uint32_t N >
+template < typename Fn >
+int32_t Array< T, N >::FindFn( Fn testFn ) const
+{
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    if ( testFn( m_array[ i ] ) )
+    {
+      return i;
+    }
+  }
+  return -1;
+}
+
+template < typename T, uint32_t N >
+void Array< T, N >::Reserve( uint32_t size )
+{
+  if ( N > 0 )
+  {
+    AE_ASSERT( N >= size );
+    return;
+  }
+  else if ( size <= m_size )
+  {
+    return;
+  }
+  
+  // Next power of two
+  size--;
+  size |= size >> 1;
+  size |= size >> 2;
+  size |= size >> 4;
+  size |= size >> 8;
+  size |= size >> 16;
+  size++;
+  
+#if _AE_DEBUG_
+  AE_ASSERT( size );
+#endif
+  m_size = size;
+  
+  AE_ASSERT( m_tag != ae::Tag() );
+  T* arr = (T*)ae::GetGlobalAllocator()->Allocate( m_size * sizeof(T), alignof(T), m_tag );
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
+    m_array[ i ].~T();
+  }
+  
+  ae::GetGlobalAllocator()->Free( m_array );
+  m_array = arr;
+}
+
+template < typename T, uint32_t N >
+void Array< T, N >::Clear()
+{
+  for ( uint32_t i = 0; i < m_length; i++ )
+  {
+    m_array[ i ].~T();
+  }
+  m_length = 0;
+}
+
+template < typename T, uint32_t N >
+const T& Array< T, N >::operator[]( int32_t index ) const
+{
+#if _AE_DEBUG_
+  AE_ASSERT( index >= 0 );
+  AE_ASSERT( index < (int32_t)m_length );
+#endif
+  return m_array[ index ];
+}
+
+template < typename T, uint32_t N >
+T& Array< T, N >::operator[]( int32_t index )
+{
+#if _AE_DEBUG_
+  AE_ASSERT( index >= 0 );
+  AE_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
+#endif
+  return m_array[ index ];
+}
+
+template < typename T, uint32_t N >
+uint32_t Array< T, N >::Length() const
+{
+  return m_length;
+}
+
+template < typename T, uint32_t N >
+uint32_t Array< T, N >::Size() const
+{
+  return m_size;
+}
+
+template < typename T, uint32_t N >
+uint32_t Array< T, N >::m_GetNextSize() const
+{
+  if ( m_size == 0 )
+  {
+    return ae::Max( 1, 32 / sizeof(T) ); // @NOTE: Initially allocate 32 bytes (rounded down) of type
+  }
+  else
+  {
+    return m_size * 2;
+  }
+}
+
+//------------------------------------------------------------------------------
+// Map functions
+//------------------------------------------------------------------------------
+template < typename K >
+bool Map_IsEqual( const K& k0, const K& k1 );
+
+template <>
+inline bool Map_IsEqual( const char* const & k0, const char* const & k1 )
+{
+  return strcmp( k0, k1 ) == 0;
+}
+
+template < typename K >
+bool Map_IsEqual( const K& k0, const K& k1 )
+{
+  return k0 == k1;
+}
+
+template < typename K, typename V, uint32_t N >
+Map< K, V, N >::Map()
+{
+  AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static maps" );
+}
+
+template < typename K, typename V, uint32_t N >
+Map< K, V, N >::Map( ae::Tag pool ) :
+  m_entries( pool )
+{
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static maps" );
+}
+
+template < typename K, typename V, uint32_t N >
+Map< K, V, N >::Entry::Entry( const K& k, const V& v ) :
+  key( k ),
+  value( v )
+{}
+
+template < typename K, typename V, uint32_t N >
+int32_t Map< K, V, N >::m_FindIndex( const K& key ) const
+{
+  for ( uint32_t i = 0; i < m_entries.Length(); i++ )
+  {
+    if ( Map_IsEqual( m_entries[ i ].key, key ) )
+    {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+template < typename K, typename V, uint32_t N >
+V& Map< K, V, N >::Set( const K& key, const V& value )
+{
+  int32_t index = m_FindIndex( key );
+  Entry* entry = ( index >= 0 ) ? &m_entries[ index ] : nullptr;
+  if ( entry )
+  {
+    entry->value = value;
+    return entry->value;
+  }
+  else
+  {
+    return m_entries.Append( Entry( key, value ) ).value;
+  }
+}
+
+template < typename K, typename V, uint32_t N >
+V& Map< K, V, N >::Get( const K& key )
+{
+  return m_entries[ m_FindIndex( key ) ].value;
+}
+
+template < typename K, typename V, uint32_t N >
+const V& Map< K, V, N >::Get( const K& key ) const
+{
+  return m_entries[ m_FindIndex( key ) ].value;
+}
+
+template < typename K, typename V, uint32_t N >
+const V& Map< K, V, N >::Get( const K& key, const V& defaultValue ) const
+{
+  int32_t index = m_FindIndex( key );
+  return ( index >= 0 ) ? m_entries[ index ].value : defaultValue;
+}
+
+template < typename K, typename V, uint32_t N >
+V* Map< K, V, N >::TryGet( const K& key )
+{
+  return const_cast< V* >( const_cast< const Map< K, V, N >* >( this )->TryGet( key ) );
+}
+
+template < typename K, typename V, uint32_t N >
+const V* Map< K, V, N >::TryGet( const K& key ) const
+{
+  int32_t index = m_FindIndex( key );
+  if ( index >= 0 )
+  {
+    return &m_entries[ index ].value;
+  }
+  else
+  {
+    return nullptr;
+  }
+}
+
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::TryGet( const K& key, V* valueOut )
+{
+  return const_cast< const Map< K, V, N >* >( this )->TryGet( key, valueOut );
+}
+
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::TryGet( const K& key, V* valueOut ) const
+{
+  const V* val = TryGet( key );
+  if ( val )
+  {
+    if ( valueOut )
+    {
+      *valueOut = *val;
+    }
+    return true;
+  }
+  return false;
+}
+
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::Remove( const K& key )
+{
+  return Remove( key, nullptr );
+}
+
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::Remove( const K& key, V* valueOut )
+{
+  int32_t index = m_FindIndex( key );
+  if ( index >= 0 )
+  {
+    if ( valueOut )
+    {
+      *valueOut = m_entries[ index ].value;
+    }
+    m_entries.Remove( index );
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+template < typename K, typename V, uint32_t N >
+void Map< K, V, N >::Reserve( uint32_t total )
+{
+  m_entries.Reserve( total );
+}
+
+template < typename K, typename V, uint32_t N >
+void Map< K, V, N >::Clear()
+{
+  m_entries.Clear();
+}
+
+template < typename K, typename V, uint32_t N >
+K& Map< K, V, N >::GetKey( uint32_t index )
+{
+  return m_entries[ index ].key;
+}
+
+template < typename K, typename V, uint32_t N >
+V& Map< K, V, N >::GetValue( uint32_t index )
+{
+  return m_entries[ index ].value;
+}
+
+template < typename K, typename V, uint32_t N >
+const K& Map< K, V, N >::GetKey( uint32_t index ) const
+{
+  return m_entries[ index ].key;
+}
+
+template < typename K, typename V, uint32_t N >
+const V& Map< K, V, N >::GetValue( uint32_t index ) const
+{
+  return m_entries[ index ].value;
+}
+
+template < typename K, typename V, uint32_t N >
+uint32_t Map< K, V, N >::Length() const
+{
+  return m_entries.Length();
+}
+
+template < typename K, typename V, uint32_t N >
+std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
+{
+  os << "{";
+  for ( uint32_t i = 0; i < map.m_entries.Length(); i++ )
+  {
+    os << "(" << map.m_entries[ i ].key << ", " << map.m_entries[ i ].value << ")";
+    if ( i != map.m_entries.Length() - 1 )
+    {
+      os << ", ";
+    }
+  }
+  return os << "}";
 }
 
 } // AE_NAMESPACE end

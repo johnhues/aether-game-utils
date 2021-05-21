@@ -159,7 +159,7 @@ public:
 
 private:
   uint32_t m_nextId = 1;
-  aeMap< uint32_t, RefTester* > m_objectMap;
+  ae::Map< uint32_t, RefTester* > m_objectMap;
 };
 
 #endif

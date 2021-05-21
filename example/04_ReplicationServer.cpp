@@ -62,7 +62,7 @@ int main()
   // Server modules
   AetherServer* server = AetherServer_New( 3500, 0, 1 );
   aeNetReplicaDB replicaDB;
-  aeMap< AetherUuid, aeNetReplicaServer* > replicaServers;
+  ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers;
 
   // Game data
   ae::Array< Green > greens;

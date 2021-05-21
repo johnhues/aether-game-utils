@@ -550,7 +550,7 @@ private:
     aeInt3 pos;
     float score;
   };
-  //aeMap< aeInt3, ChunkSort > t_chunkMap;
+  //ae::Map< aeInt3, ChunkSort > t_chunkMap;
   std::map< uint32_t, ChunkSort > t_chunkMap_hack;
   ae::Array< ChunkSort > t_chunkSorts = AE_ALLOC_TAG_TERRAIN;
 

@@ -28,7 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "aeArray.h"
 #include "aeAudio.h"
 #include "aeBinaryStream.h"
 #include "aeClock.h"
@@ -44,7 +43,6 @@
 #include "aeInput.h"
 #include "aeInventoryGrid.h"
 #include "aeList.h"
-#include "aeMap.h"
 #include "aeMath.h"
 #include "aeMesh.h"
 #include "aeMeta.h"

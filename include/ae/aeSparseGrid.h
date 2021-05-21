@@ -28,7 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeInitializer.h"
-#include "aeMap.h"
 
 //------------------------------------------------------------------------------
 // aeSparseGridZone class
@@ -84,7 +83,7 @@ private:
   aeInt3 m_GetLocal( aeInt3 pos ) const;
 
   aeInitInfo< Z > m_initInfo;
-  aeMap< aeInt3, aeInitializer< Z >* > m_zones;
+  ae::Map< aeInt3, aeInitializer< Z >* > m_zones;
 };
 
 //------------------------------------------------------------------------------
