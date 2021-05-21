@@ -83,7 +83,12 @@
   #define GL_SILENCE_DEPRECATION
 #endif
 
+//------------------------------------------------------------------------------
+// ae Namespace
+//------------------------------------------------------------------------------
 #define AE_NAMESPACE ae
+// @TODO: Remove aeMath
+#define aeMath ae
 
 //------------------------------------------------------------------------------
 // System Headers
@@ -167,7 +172,7 @@ bool IsDebuggerAttached();
 template < typename T > const char* GetTypeName();
 
 //------------------------------------------------------------------------------
-// Allocators
+// Allocator
 //------------------------------------------------------------------------------
 using Tag = std::string;
 #define AE_ALLOC_TAG_RENDER ae::Tag( "aeRender" )
@@ -179,7 +184,7 @@ using Tag = std::string;
 #define AE_ALLOC_TAG_MESH ae::Tag( "aeMesh" )
 #define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
 
-// @NOTE: Create your own custom allocator by inheriting from this class
+// @NOTE: Use your own custom allocator by inheriting from this class and calling ae::SetGlobalAllocator()
 class Allocator
 {
 public:
@@ -195,7 +200,7 @@ Allocator* GetGlobalAllocator();
 //------------------------------------------------------------------------------
 // Allocation functions
 //------------------------------------------------------------------------------
-// @TODO: Remove and only use Allocators
+// @TODO: Remove and only use Allocator
 void* AlignedAlloc( uint32_t size, uint32_t boundary );
 void AlignedFree( void* p );
 void* Realloc( void* p, uint32_t size, uint32_t boundary );
@@ -227,6 +232,290 @@ private:
   T* m_data;
   uint32_t m_count;
 };
+
+//------------------------------------------------------------------------------
+// Math functions
+//------------------------------------------------------------------------------
+const float PI = 3.14159265358979323846f;
+const float TWO_PI = 2.0f * PI;
+const float HALF_PI = 0.5f * PI;
+const float QUARTER_PI = 0.25f * PI;
+
+template< typename T >
+T&& Min( T&& v )
+{
+  return std::forward< T >( v );
+}
+template< typename T0, typename T1, typename... Tn >
+auto Min( T0&& v0, T1&& v1, Tn&&... vn )
+{
+  return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
+}
+
+template< typename T >
+T&& Max( T&& v )
+{
+  return std::forward< T >( v );
+}
+template< typename T0, typename T1, typename... Tn >
+auto Max( T0&& v0, T1&& v1, Tn&&... vn )
+{
+  return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
+}
+
+template<typename T>
+inline T Abs(const T &x)
+{
+  if(x < static_cast<T>(0))
+  {
+    return x * static_cast<T>(-1);
+  }
+  return x;
+}
+
+template < typename T >
+inline T Clip( T x, T min, T max )
+{
+  return Min( Max( x, min ), max );
+}
+
+inline float Clip01( float x )
+{
+  return Clip( x, 0.0f, 1.0f );
+}
+
+inline float DegToRad( float degrees )
+{
+  return degrees * PI / 180.0f;
+}
+
+inline float RadToDeg( float radians )
+{
+  return radians * 180.0f / PI;
+}
+
+inline int32_t Ceil( float f )
+{
+  bool positive = f >= 0.0f;
+  if(positive)
+  {
+    int i = static_cast<int>(f);
+    if( f > static_cast<float>(i) ) return i + 1;
+    else return i;
+  }
+  else return static_cast<int>(f);
+}
+
+inline int32_t Floor( float f )
+{
+  bool negative = f < 0.0f;
+  if(negative)
+  {
+    int i = static_cast<int>(f);
+    if( f < static_cast<float>(i) ) return i - 1;
+    else return i;
+  }
+  else return static_cast<int>(f);
+}
+
+inline int32_t Round( float f )
+{
+  if( f >= 0.0f ) return (int32_t)( f + 0.5f );
+  else return (int32_t)( f - 0.5f );
+}
+
+inline uint32_t Mod( uint32_t i, uint32_t n )
+{
+  return i % n;
+}
+
+inline int Mod( int32_t i, int32_t n )
+{
+  if( i < 0 )
+  {
+    return ( ( i % n ) + n ) % n;
+  }
+  else
+  {
+    return i % n;
+  }
+}
+
+inline float Mod( float f, float n )
+{
+  return fmodf( fmodf( f, n ) + n, n );
+}
+
+inline float Pow( float x, float e )
+{
+  return powf( x, e );
+}
+
+inline float Cos( float x )
+{
+  return cosf( x );
+}
+
+inline float Sin( float x )
+{
+  return sinf( x );
+}
+
+inline float Atan2( float y, float x )
+{
+  return atan2( y, x );
+}
+
+template< typename T >
+constexpr T MaxValue()
+{
+  return std::numeric_limits< T >::max();
+}
+
+template< typename T >
+constexpr T MinValue()
+{
+  return std::numeric_limits< T >::min();
+}
+
+template<>
+constexpr float MaxValue< float >()
+{
+  return std::numeric_limits< float >::infinity();
+}
+
+template<>
+constexpr float MinValue< float >()
+{
+  return -1 * std::numeric_limits< float >::infinity();
+}
+
+template<>
+constexpr double MaxValue< double >()
+{
+  return std::numeric_limits< double >::infinity();
+}
+
+template<>
+constexpr double MinValue< double >()
+{
+  return -1 * std::numeric_limits< double >::infinity();
+}
+
+template< typename T >
+T Lerp( T start, T end, float t )
+{
+  return start + ( end - start ) * t;
+}
+
+inline float Delerp( float start, float end, float value )
+{
+  return ( value - start ) / ( end - start );
+}
+
+inline float Delerp01( float start, float end, float value )
+{
+  return Clip01( ( value - start ) / ( end - start ) );
+}
+
+template< typename T >
+T DtLerp( T value, float snappiness, float dt, T target )
+{
+  return ae::Lerp( target, value, exp2( -exp2( snappiness ) * dt ) );
+}
+
+inline float DtLerpAngle( float value, float snappiness, float dt, float target )
+{
+  target = ae::Mod( target, ae::TWO_PI );
+  float innerDist = ae::Abs( target - value );
+  float preDist = ae::Abs( ( target - ae::TWO_PI ) - value );
+  float postDist = ae::Abs( ( target + ae::TWO_PI ) - value );
+  if ( innerDist >= preDist || innerDist >= postDist )
+  {
+    if ( preDist < postDist )
+    {
+      target -= ae::TWO_PI;
+    }
+    else
+    {
+      target += ae::TWO_PI;
+    }
+  }
+  value = ae::DtLerp( value, snappiness, dt, target );
+  return ae::Mod( value, ae::TWO_PI );
+}
+
+template< typename T >
+T CosineInterpolate( T start, T end, float t )
+{
+  float angle = ( t * PI ) + PI;
+  t = cosf(angle);
+  t = ( t + 1 ) / 2.0f;
+  return start + ( ( end - start ) * t );
+}
+
+inline int32_t Random( int32_t min, int32_t max )
+{
+  if ( min >= max )
+  {
+    return min;
+  }
+  return min + ( rand() % ( max - min ) );
+}
+
+inline float Random( float min, float max )
+{
+  if ( min >= max )
+  {
+    return min;
+  }
+  return min + ( ( rand() / (float)RAND_MAX ) * ( max - min ) );
+}
+
+inline bool RandomBool()
+{
+  return Random( 0, 2 );
+}
+
+template < typename T >
+class RandomValue
+{
+public:
+  RandomValue() {}
+  RandomValue( T min, T max );
+  RandomValue( T value );
+  
+  void SetMin( T min );
+  void SetMax( T max );
+  
+  T GetMin() const;
+  T GetMax() const;
+  
+  T Get() const;
+  operator T() const;
+  
+private:
+  T m_min;
+  T m_max;
+};
+
+namespace Interpolation
+{
+  template< typename T >
+  T Linear( T start, T end, float t )
+  {
+    return start + ( ( end - start ) * t );
+  }
+
+  template< typename T >
+  T Cosine( T start, T end, float t )
+  {
+    float angle = ( t * ae::PI );// + ae::PI;
+    t = ( 1.0f - ae::Cos( angle ) ) / 2;
+    // @TODO: Needed for aeColor, support types without lerp
+    return start.Lerp( end, t ); //return start + ( ( end - start ) * t );
+  }
+}
 
 } // AE_NAMESPACE end
 
@@ -306,8 +595,6 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 #endif
 
 //------------------------------------------------------------------------------
-// Internal implementation beyond this point
-//------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -327,6 +614,16 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+//------------------------------------------------------------------------------
+//
+//
+//
+//
+// Internal implementation beyond this point
+//
+//
+//
+//
 //------------------------------------------------------------------------------
 // System internal implementation
 //------------------------------------------------------------------------------
@@ -607,6 +904,51 @@ const T& Scratch< T >::GetSafe( int32_t index ) const
 {
   AE_ASSERT( index < (int32_t)m_count );
   return m_data[ index ];
+}
+
+//------------------------------------------------------------------------------
+// RandomValue member functions
+//------------------------------------------------------------------------------
+template < typename T >
+inline aeMath::RandomValue< T >::RandomValue( T min, T max ) : m_min(min), m_max(max) {}
+
+template < typename T >
+inline aeMath::RandomValue< T >::RandomValue( T value ) : m_min(value), m_max(value) {}
+
+template < typename T >
+inline void aeMath::RandomValue< T >::SetMin( T min )
+{
+  m_min = min;
+}
+
+template < typename T >
+inline void aeMath::RandomValue< T >::SetMax( T max )
+{
+  m_max = max;
+}
+
+template < typename T >
+inline T aeMath::RandomValue< T >::GetMin() const
+{
+  return m_min;
+}
+
+template < typename T >
+inline T aeMath::RandomValue< T >::GetMax() const
+{
+  return m_max;
+}
+
+template < typename T >
+inline T aeMath::RandomValue< T >::Get() const
+{
+  return Random( m_min, m_max );
+}
+
+template < typename T >
+inline aeMath::RandomValue< T >::operator T() const
+{
+  return Get();
 }
 
 } // AE_NAMESPACE end
