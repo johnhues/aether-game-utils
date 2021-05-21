@@ -40,12 +40,17 @@ public:
   // Static array (N > 0)
   Array();
   Array( uint32_t length, const T& val ); // Appends 'length' number of 'val's
-
   // Dynamic array (N == 0)
   Array( ae::Tag tag );
   Array( ae::Tag tag, uint32_t size ); // Reserve size (with length of 0)
   Array( ae::Tag tag, uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
   void Reserve( uint32_t total );
+  // Static and dynamic arrays
+  Array( const Array< T, N >& other ); // Move operators fallback to regular operators if ae::Tags don't match
+  Array( Array< T, N >&& other ) noexcept;
+  void operator =( const Array< T, N >& other );
+  void operator =( Array< T, N >&& other ) noexcept;
+  ~Array();
   
   // Add elements
   T& Append( const T& value );
@@ -82,12 +87,6 @@ private:
   typename std::aligned_storage< sizeof(T), alignof(T) >::type m_static[ N ];
   ae::Tag m_tag;
 public:
-  // @NOTE: Move operators fallback to regular operators if ae::Tags don't match
-  Array( const Array< T, N >& other );
-  Array( Array< T, N >&& other ) noexcept;
-  ~Array();
-  void operator =( const Array< T, N >& other );
-  void operator =( Array< T, N >&& other ) noexcept;
   // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
   T* begin() { return m_array; }
   T* end() { return m_array + m_length; }
