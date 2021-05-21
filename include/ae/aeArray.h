@@ -33,55 +33,61 @@ namespace AE_NAMESPACE {
 //------------------------------------------------------------------------------
 // Array class
 //------------------------------------------------------------------------------
-template < typename T >
+template < typename T, uint32_t N = 0 >
 class Array
 {
 public:
+  // Static array (N > 0)
   Array();
-  Array( uint32_t size ); // Reserve size (with length of 0)
-  Array( uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
-  Array( const Array< T >& other );
-  Array( Array< T >&& other ) noexcept;
-  ~Array();
-  void operator =( const Array< T >& other );
-  void operator =( Array< T >&& other ) noexcept;
+  Array( uint32_t length, const T& val ); // Appends 'length' number of 'val's
+
+  // Dynamic array (N == 0)
+  Array( ae::Tag pool );
+  Array( ae::Tag pool, uint32_t size ); // Reserve size (with length of 0)
+  Array( ae::Tag pool, uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
+  void Reserve( uint32_t total );
   
+  // Add elements
   T& Append( const T& value );
   void Append( const T* values, uint32_t count );
-
   T& Insert( uint32_t index, const T& value );
 
+  // Find elements
   template < typename U > int32_t Find( const U& value ) const; // Returns -1 when not found
   template < typename Fn > int32_t FindFn( Fn testFn ) const; // Returns -1 when not found
-  void Remove( uint32_t index );
 
+  // Remove elements
   template < typename U > uint32_t RemoveAll( const U& value );
   template < typename Fn > uint32_t RemoveAllFn( Fn testFn );
-
-  void Reserve( uint32_t total );
+  void Remove( uint32_t index );
   void Clear();
-  
-  // @NOTE: Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
-  const T& operator[]( int32_t index ) const;
+
+  // Access elements
+  const T& operator[]( int32_t index ) const; // Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
   T& operator[]( int32_t index );
-
-  uint32_t Length() const;
-  uint32_t Size() const;
-
-  // @NOTE: These functions can return null when array length is zero
-  T* Begin() { return m_array; }
+  T* Begin() { return m_array; } // These functions can return null when array length is zero
   T* End() { return m_array + m_length; }
   const T* Begin() const { return m_array; }
   const T* End() const { return m_array + m_length; }
+
+  // Array info
+  uint32_t Length() const;
+  uint32_t Size() const;
   
 private:
   uint32_t m_GetNextSize() const;
-  
   uint32_t m_length;
   uint32_t m_size;
   T* m_array;
-  
+  typename std::aligned_storage< sizeof(T), alignof(T) >::type m_static[ N ];
+  ae::Tag m_pool;
 public:
+  // @NOTE: Move operators fallback to regular operators if ae::Tags don't match
+  Array( const Array< T, N >& other );
+  Array( Array< T, N >&& other ) noexcept;
+  ~Array();
+  void operator =( const Array< T, N >& other );
+  void operator =( Array< T, N >&& other ) noexcept;
   // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
   T* begin() { return m_array; }
   T* end() { return m_array + m_length; }
@@ -92,8 +98,8 @@ public:
 //------------------------------------------------------------------------------
 // Array ostream operator
 //------------------------------------------------------------------------------
-template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const Array< T >& array )
+template < typename T, uint32_t N >
+inline std::ostream& operator<<( std::ostream& os, const Array< T, N >& array )
 {
   os << "<";
   for ( uint32_t i = 0; i < array.Length(); i++ )
@@ -110,30 +116,63 @@ inline std::ostream& operator<<( std::ostream& os, const Array< T >& array )
 //------------------------------------------------------------------------------
 // Array member functions
 //------------------------------------------------------------------------------
-template < typename T >
-Array< T >::Array()
+template < typename T, uint32_t N >
+Array< T, N >::Array()
 {
+  AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+  
   m_length = 0;
-  m_size = 0;
-  m_array = nullptr;
+  m_size = N;
+  m_array = (T*)m_static;
 }
 
-template < typename T >
-Array< T >::Array( uint32_t size )
+template < typename T, uint32_t N >
+Array< T, N >::Array( uint32_t length, const T& value )
 {
+  AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+  
+  m_length = length;
+  m_size = N;
+  m_array = (T*)m_static;
+  for ( uint32_t i = 0; i < length; i++ )
+  {
+    new ( &m_array[ i ] ) T ( value );
+  }
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( ae::Tag pool )
+{
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+  
   m_length = 0;
   m_size = 0;
   m_array = nullptr;
+  m_pool = pool;
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::Array( ae::Tag pool, uint32_t size )
+{
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+  
+  m_length = 0;
+  m_size = 0;
+  m_array = nullptr;
+  m_pool = pool;
 
   Reserve( size );
 }
 
-template < typename T >
-Array< T >::Array( uint32_t length, const T& value )
+template < typename T, uint32_t N >
+Array< T, N >::Array( ae::Tag pool, uint32_t length, const T& value )
 {
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+  
   m_length = 0;
   m_size = 0;
   m_array = nullptr;
+  m_pool = pool;
 
   Reserve( length );
 
@@ -144,8 +183,8 @@ Array< T >::Array( uint32_t length, const T& value )
   }
 }
 
-template < typename T >
-Array< T >::Array( const Array< T >& other )
+template < typename T, uint32_t N >
+Array< T, N >::Array( const Array< T, N >& other )
 {
   m_length = 0;
   m_size = 0;
@@ -161,30 +200,43 @@ Array< T >::Array( const Array< T >& other )
   }
 }
 
-template < typename T >
-Array< T >::Array( Array< T >&& other ) noexcept
+template < typename T, uint32_t N >
+Array< T, N >::Array( Array< T, N >&& other ) noexcept
 {
-  m_length = other.m_length;
-  m_size = other.m_size;
-  m_array = other.m_array;
-  
-  other.m_length = 0;
-  other.m_size = 0;
-  other.m_array = nullptr;
+  if ( N || m_pool != other.m_pool )
+  {
+    m_length = 0;
+    m_size = 0;
+    m_array = nullptr;
+    *this = other; // Regular assignment (without std::move)
+  }
+  else
+  {
+    m_length = other.m_length;
+    m_size = other.m_size;
+    m_array = other.m_array;
+    
+    other.m_length = 0;
+    other.m_size = 0;
+    other.m_array = nullptr;
+  }
 }
 
-template < typename T >
-Array< T >::~Array()
+template < typename T, uint32_t N >
+Array< T, N >::~Array()
 {
   Clear();
   
-  ae::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
+  if ( N == 0 )
+  {
+    ae::GetGlobalAllocator()->Free( m_array );
+  }
   m_size = 0;
   m_array = nullptr;
 }
 
-template < typename T >
-void Array< T >::operator =( const Array< T >& other )
+template < typename T, uint32_t N >
+void Array< T, N >::operator =( const Array< T, N >& other )
 {
   if ( m_array == other.m_array )
   {
@@ -205,26 +257,33 @@ void Array< T >::operator =( const Array< T >& other )
   }
 }
 
-template < typename T >
-void Array< T >::operator =( Array< T >&& other ) noexcept
+template < typename T, uint32_t N >
+void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
 {
-  if ( m_array )
+  if ( N || m_pool != other.m_pool )
   {
-    Clear();
-    ae::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
+    *this = other; // Regular assignment (without std::move)
   }
-  
-  m_length = other.m_length;
-  m_size = other.m_size;
-  m_array = other.m_array;
-  
-  other.m_length = 0;
-  other.m_size = 0;
-  other.m_array = nullptr;
+  else
+  {
+    if ( m_array )
+    {
+      Clear();
+      ae::GetGlobalAllocator()->Free( m_array );
+    }
+    
+    m_length = other.m_length;
+    m_size = other.m_size;
+    m_array = other.m_array;
+    
+    other.m_length = 0;
+    other.m_size = 0;
+    other.m_array = nullptr;
+  }
 }
 
-template < typename T >
-T& Array< T >::Append( const T& value )
+template < typename T, uint32_t N >
+T& Array< T, N >::Append( const T& value )
 {
   if ( m_length == m_size )
   {
@@ -237,8 +296,8 @@ T& Array< T >::Append( const T& value )
   return m_array[ m_length - 1 ];
 }
 
-template < typename T >
-void Array< T >::Append( const T* values, uint32_t count )
+template < typename T, uint32_t N >
+void Array< T, N >::Append( const T* values, uint32_t count )
 {
   Reserve( m_length + count );
 
@@ -252,8 +311,8 @@ void Array< T >::Append( const T* values, uint32_t count )
   }
 }
 
-template < typename T >
-T& Array< T >::Insert( uint32_t index, const T& value )
+template < typename T, uint32_t N >
+T& Array< T, N >::Insert( uint32_t index, const T& value )
 {
 #if _AE_DEBUG_
   AE_ASSERT( index <= m_length );
@@ -283,8 +342,8 @@ T& Array< T >::Insert( uint32_t index, const T& value )
   return m_array[ index ];
 }
 
-template < typename T >
-void Array< T >::Remove( uint32_t index )
+template < typename T, uint32_t N >
+void Array< T, N >::Remove( uint32_t index )
 {
 #if _AE_DEBUG_
   AE_ASSERT( index < m_length );
@@ -298,9 +357,9 @@ void Array< T >::Remove( uint32_t index )
   m_array[ m_length ].~T();
 }
 
-template < typename T >
+template < typename T, uint32_t N >
 template < typename U >
-uint32_t Array< T >::RemoveAll( const U& value )
+uint32_t Array< T, N >::RemoveAll( const U& value )
 {
   uint32_t count = 0;
   int32_t index = 0;
@@ -313,9 +372,9 @@ uint32_t Array< T >::RemoveAll( const U& value )
   return count;
 }
 
-template < typename T >
+template < typename T, uint32_t N >
 template < typename Fn >
-uint32_t Array< T >::RemoveAllFn( Fn testFn )
+uint32_t Array< T, N >::RemoveAllFn( Fn testFn )
 {
   uint32_t count = 0;
   int32_t index = 0;
@@ -328,9 +387,9 @@ uint32_t Array< T >::RemoveAllFn( Fn testFn )
   return count;
 }
 
-template < typename T >
+template < typename T, uint32_t N >
 template < typename U >
-int32_t Array< T >::Find( const U& value ) const
+int32_t Array< T, N >::Find( const U& value ) const
 {
   for ( uint32_t i = 0; i < m_length; i++ )
   {
@@ -342,9 +401,9 @@ int32_t Array< T >::Find( const U& value ) const
   return -1;
 }
 
-template < typename T >
+template < typename T, uint32_t N >
 template < typename Fn >
-int32_t Array< T >::FindFn( Fn testFn ) const
+int32_t Array< T, N >::FindFn( Fn testFn ) const
 {
   for ( uint32_t i = 0; i < m_length; i++ )
   {
@@ -356,14 +415,19 @@ int32_t Array< T >::FindFn( Fn testFn ) const
   return -1;
 }
 
-template < typename T >
-void Array< T >::Reserve( uint32_t size )
+template < typename T, uint32_t N >
+void Array< T, N >::Reserve( uint32_t size )
 {
-  if ( size <= m_size )
+  if ( N > 0 )
+  {
+    AE_ASSERT( N >= size );
+    return;
+  }
+  else if ( size <= m_size )
   {
     return;
   }
-
+  
   // Next power of two
   size--;
   size |= size >> 1;
@@ -372,25 +436,26 @@ void Array< T >::Reserve( uint32_t size )
   size |= size >> 8;
   size |= size >> 16;
   size++;
-
+  
 #if _AE_DEBUG_
   AE_ASSERT( size );
 #endif
   m_size = size;
-
-  T* arr = (T*)ae::AllocateArray< typename std::aligned_storage< sizeof(T), alignof(T) >::type >( m_size );
+  
+  AE_ASSERT( m_pool != ae::Tag() );
+  T* arr = (T*)ae::GetGlobalAllocator()->Allocate( m_size * sizeof(T), alignof(T), m_pool );
   for ( uint32_t i = 0; i < m_length; i++ )
   {
     new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
     m_array[ i ].~T();
   }
-
-  ae::Release( (typename std::aligned_storage< sizeof(T), alignof(T) >::type*)m_array );
+  
+  ae::GetGlobalAllocator()->Free( m_array );
   m_array = arr;
 }
 
-template < typename T >
-void Array< T >::Clear()
+template < typename T, uint32_t N >
+void Array< T, N >::Clear()
 {
   for ( uint32_t i = 0; i < m_length; i++ )
   {
@@ -399,8 +464,8 @@ void Array< T >::Clear()
   m_length = 0;
 }
 
-template < typename T >
-const T& Array< T >::operator[]( int32_t index ) const
+template < typename T, uint32_t N >
+const T& Array< T, N >::operator[]( int32_t index ) const
 {
 #if _AE_DEBUG_
   AE_ASSERT( index >= 0 );
@@ -409,8 +474,8 @@ const T& Array< T >::operator[]( int32_t index ) const
   return m_array[ index ];
 }
 
-template < typename T >
-T& Array< T >::operator[]( int32_t index )
+template < typename T, uint32_t N >
+T& Array< T, N >::operator[]( int32_t index )
 {
 #if _AE_DEBUG_
   AE_ASSERT( index >= 0 );
@@ -419,20 +484,20 @@ T& Array< T >::operator[]( int32_t index )
   return m_array[ index ];
 }
 
-template < typename T >
-uint32_t Array< T >::Length() const
+template < typename T, uint32_t N >
+uint32_t Array< T, N >::Length() const
 {
   return m_length;
 }
 
-template < typename T >
-uint32_t Array< T >::Size() const
+template < typename T, uint32_t N >
+uint32_t Array< T, N >::Size() const
 {
   return m_size;
 }
 
-template < typename T >
-uint32_t Array< T >::m_GetNextSize() const
+template < typename T, uint32_t N >
+uint32_t Array< T, N >::m_GetNextSize() const
 {
   if ( m_size == 0 )
   {
@@ -446,7 +511,6 @@ uint32_t Array< T >::m_GetNextSize() const
 
 } // AE_NAMESPACE end
 
-// @TODO: Remove
 #define aeArray ae::Array
 
 #endif

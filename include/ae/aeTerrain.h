@@ -324,10 +324,10 @@ private:
   friend class aeTerrain;
 
   class aeTerrain* m_terrain;
-  aeArray< ae::Sdf::Shape* > m_shapes;
-  aeArray< ae::Sdf::Shape* > m_shapesPrev;
-  aeArray< ae::Sdf::Shape* > m_pendingCreated;
-  aeArray< ae::Sdf::Shape* > m_pendingDestroy;
+  ae::Array< ae::Sdf::Shape* > m_shapes = AE_ALLOC_TAG_TERRAIN;
+  ae::Array< ae::Sdf::Shape* > m_shapesPrev = AE_ALLOC_TAG_TERRAIN;
+  ae::Array< ae::Sdf::Shape* > m_pendingCreated = AE_ALLOC_TAG_TERRAIN;
+  ae::Array< ae::Sdf::Shape* > m_pendingDestroy = AE_ALLOC_TAG_TERRAIN;
 };
 
 template < typename T >
@@ -404,7 +404,7 @@ private:
 
   // Input
   aeHash m_parameterHash;
-  aeArray< ae::Sdf::Shape* > m_shapes;
+  ae::Array< ae::Sdf::Shape* > m_shapes = AE_ALLOC_TAG_TERRAIN;
   struct aeTerrainChunk* m_chunk;
   aeTerrainParams m_p;
 
@@ -414,8 +414,8 @@ private:
   // Output
   VertexCount m_vertexCount;
   uint32_t m_indexCount;
-  aeArray< TerrainVertex > m_vertices;
-  aeArray< TerrainIndex > m_indices;
+  ae::Array< TerrainVertex > m_vertices;
+  ae::Array< TerrainIndex > m_indices;
 
 public:
   const aeTerrainParams& GetTerrainParams() const { return m_p; }
@@ -552,7 +552,7 @@ private:
   };
   //aeMap< aeInt3, ChunkSort > t_chunkMap;
   std::map< uint32_t, ChunkSort > t_chunkMap_hack;
-  aeArray< ChunkSort > t_chunkSorts;
+  ae::Array< ChunkSort > t_chunkSorts = AE_ALLOC_TAG_TERRAIN;
 
   aeList< aeTerrainChunk > m_generatedList;
   
@@ -560,7 +560,7 @@ private:
   aeFloat16 m_blockDensity[ Block::COUNT ];
   
   ctpl::thread_pool* m_threadPool = nullptr;
-  aeArray< aeTerrainJob* > m_terrainJobs;
+  ae::Array< aeTerrainJob* > m_terrainJobs = AE_ALLOC_TAG_TERRAIN; // @TODO: Should be static
 
   std::function< void( aeFloat3, const char* ) > m_debugTextFn;
 

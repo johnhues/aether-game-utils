@@ -125,11 +125,11 @@ private:
   bool m_Changed() const { return m_hash != m_prevHash; }
 
   bool m_local = false;
-  aeArray< uint8_t > m_initData;
-  aeArray< uint8_t > m_data;
+  ae::Array< uint8_t > m_initData = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_data = AE_ALLOC_TAG_NET;
 
-  aeArray< uint8_t > m_messageDataOut;
-  aeArray< uint8_t > m_messageDataIn;
+  ae::Array< uint8_t > m_messageDataOut = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_messageDataIn = AE_ALLOC_TAG_NET;
   uint32_t m_messageDataInOffset = 0;
 
   uint32_t m_hash = 0;
@@ -157,11 +157,11 @@ public:
 
 private:
   void m_CreateNetData( aeBinaryStream* rStream );
-  aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;
-  aeMap< uint32_t, aeId< aeNetData > > m_remoteToLocalIdMap;
-  aeMap< aeId< aeNetData >, uint32_t > m_localToRemoteIdMap;
-  aeArray< aeRef< aeNetData > > m_created;
-  aeArray< aeRef< aeNetData > > m_destroyed;
+  ae::Map< aeId< aeNetData >, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< uint32_t, aeId< aeNetData > > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
+  ae::Map< aeId< aeNetData >, uint32_t > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
+  ae::Array< aeRef< aeNetData > > m_created = AE_ALLOC_TAG_NET;
+  ae::Array< aeRef< aeNetData > > m_destroyed = AE_ALLOC_TAG_NET;
 };
 
 //------------------------------------------------------------------------------
@@ -179,7 +179,7 @@ public:
   bool m_first = true;
   class aeNetReplicaDB* m_replicaDB = nullptr;
   bool m_pendingClear = false;
-  aeArray< uint8_t > m_sendData;
+  ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
   // Internal
   enum class EventType : uint8_t
   {
@@ -206,9 +206,9 @@ public:
   void UpdateSendData(); // Call each frame before aeNetReplicaServer::GetSendData()
 
 private:
-  aeArray< aeNetData* > m_pendingCreate;
-  aeMap< aeId< aeNetData >, aeNetData* > m_netDatas;
-  aeArray< aeNetReplicaServer* > m_servers;
+  ae::Array< aeNetData* > m_pendingCreate = AE_ALLOC_TAG_NET;
+  ae::Map< aeId< aeNetData >, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Array< aeNetReplicaServer* > m_servers = AE_ALLOC_TAG_NET;
 public:
   // Internal
   aeNetData* GetNetData( uint32_t index ) { return m_netDatas.GetValue( index ); }
@@ -286,7 +286,7 @@ struct AetherAddress
 struct ReceiveInfo
 {
   AetherMsgId msgId = kInvalidAetherMsgId;
-  aeArray< uint8_t > data;
+  ae::Array< uint8_t > data = AE_ALLOC_TAG_NET;
 };
 
 struct SendInfo
@@ -317,8 +317,9 @@ struct AetherPlayer
 //------------------------------------------------------------------------------
 struct AetherClient
 {
+  // @TODO: Shouldn't expose players directly, since they can disconnect and become invalid
   AetherPlayer* localPlayer;
-  aeArray< AetherPlayer* > allPlayers; // @TODO: Shouldn't expose players directly, since they can disconnect and become invalid
+  ae::Array< AetherPlayer* > allPlayers = AE_ALLOC_TAG_NET;
   
   AetherAddress serverAddress;
   bool isConnected;
@@ -343,7 +344,7 @@ void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable,
 struct ServerReceiveInfo
 {
   AetherMsgId msgId = kInvalidAetherMsgId;
-  aeArray< uint8_t > data;
+  ae::Array< uint8_t > data = AE_ALLOC_TAG_NET;
   AetherPlayer* player = nullptr;
 };
 

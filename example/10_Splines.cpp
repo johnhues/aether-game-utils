@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "ae/aetherEXT.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -35,7 +35,7 @@ int main()
   aeWindow window;
   aeRender render;
   aeInput input;
-  aeSpline spline;
+  aeSpline spline( ae::Tag( "example" ) );
   aeSpriteRender spriteRender;
   
   window.Initialize( 800, 600, false, true );

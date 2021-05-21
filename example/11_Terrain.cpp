@@ -30,6 +30,7 @@
 const char* kFileName = "objects.dat";
 const uint32_t kCurrentFileVersion = 3;
 const uint32_t kMinSupportedFileVersion = 1;
+const ae::Tag TAG_EXAMPLE = ae::Tag( "example" );
 
 //------------------------------------------------------------------------------
 // Terrain Shader
@@ -260,7 +261,7 @@ int main()
   AE_INFO( "Initialize" );
 
   bool headless = _AE_LINUX_;
-
+  
   aeVfs vfs;
   aeWindow window;
   aeRender render;
@@ -320,7 +321,7 @@ int main()
   bool wireframe = false;
   static bool s_showTerrainDebug = false;
 
-  aeArray< Object* > objects;
+  ae::Array< Object* > objects = TAG_EXAMPLE;
   Object* currentObject = nullptr;
 
   if ( !ReadObjects( &vfs, terrain, &heightmapImage, objects ) )

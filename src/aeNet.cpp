@@ -317,7 +317,7 @@ void aeNetReplicaServer::m_UpdateSendData()
 {
   AE_ASSERT( m_replicaDB );
 
-  aeArray< aeNetData* > toSync;
+  ae::Array< aeNetData* > toSync = AE_ALLOC_TAG_NET;
   uint32_t netDataMessageCount = 0;
   for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
   {

@@ -64,11 +64,11 @@ private:
 
   aeSparseGrid< aeSparseGridZone< uint32_t, 16, 16, 1 > > m_tiles;
 
-  aeMap< uint32_t, uint32_t > m_tileProperties;
-  aeMap< uint32_t, float > m_tileDensity;
+  ae::Map< uint32_t, uint32_t > m_tileProperties = AE_ALLOC_TAG_HOTSPOT;
+  ae::Map< uint32_t, float > m_tileDensity = AE_ALLOC_TAG_HOTSPOT;
   uint32_t m_collisionMask = 0;
 
-  aeArray< class HotSpotObject* > m_objects;
+  ae::Array< class HotSpotObject* > m_objects = AE_ALLOC_TAG_HOTSPOT;
 
 public:
   static aeInt2 _GetTilePos( aeFloat2 pos );

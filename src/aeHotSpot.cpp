@@ -258,7 +258,7 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
   }
 
   {
-    aeMap< aeInt2, int32_t > intersections;
+    ae::Map< aeInt2, int32_t, 5 > intersections;
     intersections.Set( HotSpotWorld::_GetTilePos( m_position ), 1 );
     intersections.Set( HotSpotWorld::_GetTilePos( m_position + aeFloat2( -0.5f ) ), 1 );
     intersections.Set( HotSpotWorld::_GetTilePos( m_position + aeFloat2( 0.5f ) ), 1 );

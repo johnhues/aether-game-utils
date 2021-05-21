@@ -328,8 +328,8 @@ aeTerrainJob::aeTerrainJob() :
   m_running( false ),
   m_vertexCount( kChunkCountEmpty ),
   m_indexCount( 0 ),
-  m_vertices( aeArray< TerrainVertex >( (uint32_t)kMaxChunkVerts, TerrainVertex() ) ),
-  m_indices( aeArray< TerrainIndex >( kMaxChunkIndices, TerrainIndex() ) ),
+  m_vertices( ae::Array< TerrainVertex >( AE_ALLOC_TAG_TERRAIN, (uint32_t)kMaxChunkVerts, TerrainVertex() ) ),
+  m_indices( ae::Array< TerrainIndex >( AE_ALLOC_TAG_TERRAIN, kMaxChunkIndices, TerrainIndex() ) ),
   m_chunk( nullptr )
 {
   edgeInfo = ae::AllocateArray< TempEdges >( kTempChunkSize3 );
@@ -442,7 +442,7 @@ void aeTerrainJob::Do()
     if ( m_p.vfs )
     {
       // Write result
-      aeArray< uint8_t > data;
+      ae::Array< uint8_t > data = AE_ALLOC_TAG_TERRAIN;
       aeBinaryStream wStream = aeBinaryStream::Writer( &data );
       wStream.SerializeUint32( m_vertexCount.Get() );
       wStream.SerializeUint32( m_indexCount );
@@ -490,14 +490,14 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob*
     uint16_t i1[ 3 ]; // normal split
     aeFloat3 n;
   };
-  aeArray< TempTri > tempTris;
+  ae::Array< TempTri > tempTris = AE_ALLOC_TAG_TERRAIN;
 
   struct TempVert
   {
     aeInt3 posi; // Vertex voxel (not necessarily Floor(vert.pos), see vertex positioning)
     TerrainVertex v;
 };
-  aeArray< TempVert > tempVerts;
+  ae::Array< TempVert > tempVerts = AE_ALLOC_TAG_TERRAIN;
 #else
   VertexCount vertexCount = VertexCount( 0 );
   uint32_t indexCount = 0;

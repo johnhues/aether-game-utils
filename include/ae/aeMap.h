@@ -33,10 +33,13 @@ namespace AE_NAMESPACE {
 //------------------------------------------------------------------------------
 // Map class
 //------------------------------------------------------------------------------
-template < typename K, typename V >
+template < typename K, typename V, uint32_t N = 0 >
 class Map
 {
 public:
+  Map(); // Static map only (N > 0)
+  Map( ae::Tag pool ); // Dynamic map only (N == 0)
+  
   V& Set( const K& key, const V& value );
   V& Get( const K& key );
   const V& Get( const K& key ) const;
@@ -61,8 +64,8 @@ public:
   uint32_t Length() const;
 
 private:
-  template < typename K2, typename V2 >
-  friend std::ostream& operator<<( std::ostream&, const Map< K2, V2 >& );
+  template < typename K2, typename V2, uint32_t N2 >
+  friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
 
   struct Entry
   {
@@ -75,7 +78,7 @@ private:
 
   int32_t m_FindIndex( const K& key ) const;
 
-  Array< Entry > m_entries;
+  Array< Entry, N > m_entries;
 };
 
 //------------------------------------------------------------------------------
@@ -99,14 +102,27 @@ bool Map_IsEqual( const K& k0, const K& k1 )
 //------------------------------------------------------------------------------
 // Map member functions
 //------------------------------------------------------------------------------
-template < typename K, typename V >
-Map< K, V >::Entry::Entry( const K& k, const V& v ) :
+template < typename K, typename V, uint32_t N >
+Map< K, V, N >::Map()
+{
+  AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static maps" );
+}
+
+template < typename K, typename V, uint32_t N >
+Map< K, V, N >::Map( ae::Tag pool ) :
+  m_entries( pool )
+{
+  AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static maps" );
+}
+
+template < typename K, typename V, uint32_t N >
+Map< K, V, N >::Entry::Entry( const K& k, const V& v ) :
   key( k ),
   value( v )
 {}
 
-template < typename K, typename V >
-int32_t Map< K, V >::m_FindIndex( const K& key ) const
+template < typename K, typename V, uint32_t N >
+int32_t Map< K, V, N >::m_FindIndex( const K& key ) const
 {
   for ( uint32_t i = 0; i < m_entries.Length(); i++ )
   {
@@ -119,8 +135,8 @@ int32_t Map< K, V >::m_FindIndex( const K& key ) const
   return -1;
 }
 
-template < typename K, typename V >
-V& Map< K, V >::Set( const K& key, const V& value )
+template < typename K, typename V, uint32_t N >
+V& Map< K, V, N >::Set( const K& key, const V& value )
 {
   int32_t index = m_FindIndex( key );
   Entry* entry = ( index >= 0 ) ? &m_entries[ index ] : nullptr;
@@ -135,33 +151,33 @@ V& Map< K, V >::Set( const K& key, const V& value )
   }
 }
 
-template < typename K, typename V >
-V& Map< K, V >::Get( const K& key )
+template < typename K, typename V, uint32_t N >
+V& Map< K, V, N >::Get( const K& key )
 {
   return m_entries[ m_FindIndex( key ) ].value;
 }
 
-template < typename K, typename V >
-const V& Map< K, V >::Get( const K& key ) const
+template < typename K, typename V, uint32_t N >
+const V& Map< K, V, N >::Get( const K& key ) const
 {
   return m_entries[ m_FindIndex( key ) ].value;
 }
 
-template < typename K, typename V >
-const V& Map< K, V >::Get( const K& key, const V& defaultValue ) const
+template < typename K, typename V, uint32_t N >
+const V& Map< K, V, N >::Get( const K& key, const V& defaultValue ) const
 {
   int32_t index = m_FindIndex( key );
   return ( index >= 0 ) ? m_entries[ index ].value : defaultValue;
 }
 
-template < typename K, typename V >
-V* Map< K, V >::TryGet( const K& key )
+template < typename K, typename V, uint32_t N >
+V* Map< K, V, N >::TryGet( const K& key )
 {
-  return const_cast< V* >( const_cast< const Map< K, V >* >( this )->TryGet( key ) );
+  return const_cast< V* >( const_cast< const Map< K, V, N >* >( this )->TryGet( key ) );
 }
 
-template < typename K, typename V >
-const V* Map< K, V >::TryGet( const K& key ) const
+template < typename K, typename V, uint32_t N >
+const V* Map< K, V, N >::TryGet( const K& key ) const
 {
   int32_t index = m_FindIndex( key );
   if ( index >= 0 )
@@ -174,14 +190,14 @@ const V* Map< K, V >::TryGet( const K& key ) const
   }
 }
 
-template < typename K, typename V >
-bool Map< K, V >::TryGet( const K& key, V* valueOut )
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::TryGet( const K& key, V* valueOut )
 {
-  return const_cast< const Map< K, V >* >( this )->TryGet( key, valueOut );
+  return const_cast< const Map< K, V, N >* >( this )->TryGet( key, valueOut );
 }
 
-template < typename K, typename V >
-bool Map< K, V >::TryGet( const K& key, V* valueOut ) const
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::TryGet( const K& key, V* valueOut ) const
 {
   const V* val = TryGet( key );
   if ( val )
@@ -195,14 +211,14 @@ bool Map< K, V >::TryGet( const K& key, V* valueOut ) const
   return false;
 }
 
-template < typename K, typename V >
-bool Map< K, V >::Remove( const K& key )
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::Remove( const K& key )
 {
   return Remove( key, nullptr );
 }
 
-template < typename K, typename V >
-bool Map< K, V >::Remove( const K& key, V* valueOut )
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 {
   int32_t index = m_FindIndex( key );
   if ( index >= 0 )
@@ -220,50 +236,50 @@ bool Map< K, V >::Remove( const K& key, V* valueOut )
   }
 }
 
-template < typename K, typename V >
-void Map< K, V >::Reserve( uint32_t total )
+template < typename K, typename V, uint32_t N >
+void Map< K, V, N >::Reserve( uint32_t total )
 {
   m_entries.Reserve( total );
 }
 
-template < typename K, typename V >
-void Map< K, V >::Clear()
+template < typename K, typename V, uint32_t N >
+void Map< K, V, N >::Clear()
 {
   m_entries.Clear();
 }
 
-template < typename K, typename V >
-K& Map< K, V >::GetKey( uint32_t index )
+template < typename K, typename V, uint32_t N >
+K& Map< K, V, N >::GetKey( uint32_t index )
 {
   return m_entries[ index ].key;
 }
 
-template < typename K, typename V >
-V& Map< K, V >::GetValue( uint32_t index )
+template < typename K, typename V, uint32_t N >
+V& Map< K, V, N >::GetValue( uint32_t index )
 {
   return m_entries[ index ].value;
 }
 
-template < typename K, typename V >
-const K& Map< K, V >::GetKey( uint32_t index ) const
+template < typename K, typename V, uint32_t N >
+const K& Map< K, V, N >::GetKey( uint32_t index ) const
 {
   return m_entries[ index ].key;
 }
 
-template < typename K, typename V >
-const V& Map< K, V >::GetValue( uint32_t index ) const
+template < typename K, typename V, uint32_t N >
+const V& Map< K, V, N >::GetValue( uint32_t index ) const
 {
   return m_entries[ index ].value;
 }
 
-template < typename K, typename V >
-uint32_t Map< K, V >::Length() const
+template < typename K, typename V, uint32_t N >
+uint32_t Map< K, V, N >::Length() const
 {
   return m_entries.Length();
 }
 
-template < typename K, typename V >
-std::ostream& operator<<( std::ostream& os, const Map< K, V >& map )
+template < typename K, typename V, uint32_t N >
+std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 {
   os << "{";
   for ( uint32_t i = 0; i < map.m_entries.Length(); i++ )

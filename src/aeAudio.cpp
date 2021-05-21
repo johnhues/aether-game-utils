@@ -207,8 +207,8 @@ void aeAudio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
   AE_ASSERT( ctx );
   CheckALError();
 	
-  aeArray< ALuint > sources( musicChannels + sfxChannels, 0 );
-  alGenSources( (ALuint)sources.Length(), &sources[ 0 ] );
+  ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels, 0 );
+  alGenSources( (ALuint)sources.Length(), sources.Begin() );
 
   m_musicChannels.Reserve( musicChannels );
   for ( uint32_t i = 0; i < musicChannels; i++ )

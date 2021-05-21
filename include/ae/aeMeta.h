@@ -132,8 +132,8 @@ public:
     aeStr32 m_name;
     uint32_t m_size;
     bool m_isSigned;
-    ae::Map< int32_t, std::string > m_enumValueToName;
-    ae::Map< std::string, int32_t > m_enumNameToValue;
+    ae::Map< int32_t, std::string > m_enumValueToName = AE_ALLOC_TAG_META;
+    ae::Map< std::string, int32_t > m_enumNameToValue = AE_ALLOC_TAG_META;
     
   public: // Internal
     Enum( const char* name, uint32_t size, bool isSigned ) :
@@ -150,7 +150,7 @@ public:
     
     static Enum* s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
     {
-      static ae::Map< std::string, Enum* > enums;
+      static ae::Map< std::string, Enum* > enums = AE_ALLOC_TAG_META;
       if ( create )
       {
         AE_ASSERT( !enums.TryGet( enumName ) );

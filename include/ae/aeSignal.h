@@ -124,7 +124,7 @@ public:
   uint32_t Length() const;
 
 private:
-  aeArray< aeSignalValue< V >* > m_signals;
+  ae::Array< aeSignalValue< V >* > m_signals = AE_ALLOC_TAG_FIXME;
 };
 
 //------------------------------------------------------------------------------

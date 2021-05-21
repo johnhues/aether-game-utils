@@ -143,8 +143,9 @@ public:
   bool PushOut( const PushOutParams& params, PushOutResult* outResult ) const;
 
 private:
-  aeArray< aeMeshVertex > m_vertices;
-  aeArray< aeMeshIndex > m_indices;
+  // @TODO: These should be provided by the user
+  ae::Array< aeMeshVertex > m_vertices = AE_ALLOC_TAG_MESH;
+  ae::Array< aeMeshIndex > m_indices = AE_ALLOC_TAG_MESH;
   aeAABB m_aabb;
 };
 

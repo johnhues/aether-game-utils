@@ -39,6 +39,7 @@ template < typename T >
 class aeInventoryGrid
 {
 public:
+  aeInventoryGrid( ae::Tag pool );
   ~aeInventoryGrid();
 
   void Set( T& value, aeRectInt rect );
@@ -59,12 +60,18 @@ private:
     Shape() : node( this ) {}
 
     aeListNode< Shape > node;
-    aeArray< aeInt2 > cells;
+    ae::Array< aeInt2 > cells;
     T value;
   };
-
+  
+  ae::Tag m_pool;
   aeList< Shape > m_shapeList;
 };
+
+template < typename T >
+aeInventoryGrid< T >::aeInventoryGrid( ae::Tag pool ) :
+  m_pool( pool )
+{}
 
 template < typename T >
 aeInventoryGrid< T >::~aeInventoryGrid()
@@ -78,7 +85,7 @@ aeInventoryGrid< T >::~aeInventoryGrid()
 template < typename T >
 void aeInventoryGrid< T >::Set( T& value, aeRectInt rect )
 {
-  aeArray< aeInt2 > cells( rect.w * rect.h );
+  ae::Array< aeInt2 > cells( m_pool, rect.w * rect.h );
   for ( uint32_t y = 0; y < rect.h; y++ )
   {
     for ( uint32_t x = 0; x < rect.w; x++ )

@@ -167,8 +167,35 @@ bool IsDebuggerAttached();
 template < typename T > const char* GetTypeName();
 
 //------------------------------------------------------------------------------
+// Allocators
+//------------------------------------------------------------------------------
+using Tag = std::string;
+#define AE_ALLOC_TAG_RENDER ae::Tag( "aeRender" )
+#define AE_ALLOC_TAG_AUDIO ae::Tag( "aeAudio" )
+#define AE_ALLOC_TAG_META ae::Tag( "aeMeta" )
+#define AE_ALLOC_TAG_TERRAIN ae::Tag( "aeTerrain" )
+#define AE_ALLOC_TAG_NET ae::Tag( "aeNet" )
+#define AE_ALLOC_TAG_HOTSPOT ae::Tag( "aeHotSpot" )
+#define AE_ALLOC_TAG_MESH ae::Tag( "aeMesh" )
+#define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
+
+// @NOTE: Create your own custom allocator by inheriting from this class
+class Allocator
+{
+public:
+  virtual ~Allocator() {}
+  virtual void* Allocate( uint32_t bytes, uint32_t alignment, Tag tag ) = 0;
+  virtual void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) = 0;
+  virtual void Free( void* data ) = 0;
+};
+
+void SetGlobalAllocator( Allocator* alloc );
+Allocator* GetGlobalAllocator();
+
+//------------------------------------------------------------------------------
 // Allocation functions
 //------------------------------------------------------------------------------
+// @TODO: Remove and only use Allocators
 void* AlignedAlloc( uint32_t size, uint32_t boundary );
 void AlignedFree( void* p );
 void* Realloc( void* p, uint32_t size, uint32_t boundary );
@@ -764,6 +791,50 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
       os << " ";
     }
   }
+}
+
+//------------------------------------------------------------------------------
+// DefaultAllocator class
+//------------------------------------------------------------------------------
+class DefaultAllocator final : public Allocator
+{
+public:
+  void* Allocate( uint32_t bytes, uint32_t alignment, Tag tag ) override
+  {
+    return ae::AlignedAlloc( bytes, alignment );
+  }
+
+  void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) override
+  {
+    return ae::Realloc( (uint8_t*)data, bytes, alignment );
+  }
+
+  void Free( void* data ) override
+  {
+    free( (uint8_t*)data );
+  //  ae::Release( (uint8_t*)data );
+  }
+};
+
+//------------------------------------------------------------------------------
+// Allocator functions
+//------------------------------------------------------------------------------
+static Allocator* g_allocator = nullptr;
+
+void SetGlobalAllocator( Allocator* alloc )
+{
+  AE_ASSERT_MSG( alloc, "No allocator provided to ae::SetGlobalAllocator()" );
+  AE_ASSERT_MSG( !g_allocator, "Call ae::SetGlobalAllocator() before making any allocations to use your own allocator" );
+  g_allocator = alloc;
+}
+
+Allocator* GetGlobalAllocator()
+{
+  if ( !g_allocator )
+  {
+    g_allocator = ae::Allocate< DefaultAllocator >();
+  }
+  return g_allocator;
 }
 
 uint8_t* AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count )
