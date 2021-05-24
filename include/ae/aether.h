@@ -390,8 +390,11 @@ private:
   uint32_t m_length;
   uint32_t m_size;
   T* m_array;
-  typename std::aligned_storage< sizeof(T), alignof(T) >::type m_static[ N ];
   ae::Tag m_tag;
+  template < uint32_t > struct Storage
+  { typename std::aligned_storage< sizeof( T ), alignof( T ) >::type data[ N ]; };
+  template <> struct Storage< 0 > {};
+  Storage< N > m_static;
 public:
   // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
   T* begin() { return m_array; }
@@ -1167,7 +1170,7 @@ Array< T, N >::Array()
   
   m_length = 0;
   m_size = N;
-  m_array = (T*)m_static;
+  m_array = (T*)m_static.data;
 }
 
 template < typename T, uint32_t N >
@@ -1177,7 +1180,7 @@ Array< T, N >::Array( uint32_t length, const T& value )
   
   m_length = length;
   m_size = N;
-  m_array = (T*)m_static;
+  m_array = (T*)m_static.data;
   for ( uint32_t i = 0; i < length; i++ )
   {
     new ( &m_array[ i ] ) T ( value );
@@ -1964,8 +1967,7 @@ public:
 
   void Free( void* data ) override
   {
-    free( (uint8_t*)data );
-  //  ae::Release( (uint8_t*)data );
+    ae::AlignedFree( (uint8_t*)data );
   }
 };
 

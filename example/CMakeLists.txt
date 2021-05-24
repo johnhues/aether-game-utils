@@ -7,7 +7,7 @@ Include(FetchContent)
 FetchContent_Declare(
 	imgui
 	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
-	GIT_TAG 3fed909881dd8e054ed47a51342ef3eb0119bb49
+	GIT_TAG dd6ec9e0c2ba8f5e4353e6e3b2a92feb7a0d28b1
 )
 FetchContent_MakeAvailable(imgui)
 
@@ -15,7 +15,7 @@ FetchContent_MakeAvailable(imgui)
 FetchContent_Declare(
 	imguizmo
 	GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
-	GIT_TAG 009f215f824639d6cf607c9a1ab5dfc6c48db6b3
+	GIT_TAG 6e1ea45af646c06bee0e70d93d8cc5d3f2ae45c2
 )
 FetchContent_MakeAvailable(imguizmo)
 
