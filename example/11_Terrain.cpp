@@ -414,9 +414,9 @@ int main()
             aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
             float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
             ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
-            changed |= ImGui::InputFloat3( "translation", matrixTranslation, 3 );
-            changed |= ImGui::InputFloat3( "rotation", matrixRotation, 3 );
-            changed |= ImGui::InputFloat3( "scale", matrixScale, 3 );
+            changed |= ImGui::InputFloat3( "translation", matrixTranslation );
+            changed |= ImGui::InputFloat3( "rotation", matrixRotation );
+            changed |= ImGui::InputFloat3( "scale", matrixScale );
             if ( changed )
             {
               ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
@@ -456,8 +456,8 @@ int main()
           }
           else
           {
-            ImGui::InputFloat3( "source", currentObject->raySrc.data, 3 );
-            if ( ImGui::InputFloat3( "direction", currentObject->rayDir.data, 3 ) )
+            ImGui::InputFloat3( "source", currentObject->raySrc.data );
+            if ( ImGui::InputFloat3( "direction", currentObject->rayDir.data ) )
             {
               currentObject->rayDir.SafeNormalize();
             }
