@@ -391,8 +391,8 @@ private:
   uint32_t m_size;
   T* m_array;
   ae::Tag m_tag;
-  template < uint32_t > struct Storage
-  { typename std::aligned_storage< sizeof( T ), alignof( T ) >::type data[ N ]; };
+  typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
+  template < uint32_t > struct Storage { AlignedStorageT data[ N ]; };
   template <> struct Storage< 0 > {};
   Storage< N > m_static;
 public:
