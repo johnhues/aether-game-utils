@@ -27,7 +27,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
+#include "aether.h"
 
 //------------------------------------------------------------------------------
 // aeRingBuffer class
@@ -47,7 +47,7 @@ public:
 private:
   uint32_t m_first;
   uint32_t m_count;
-  aeArray< T > m_buffer;
+  ae::Array< T, N > m_buffer;
 };
 
 //------------------------------------------------------------------------------
@@ -56,20 +56,20 @@ private:
 template < typename T, uint32_t N >
 aeRingBuffer< T, N >::aeRingBuffer() :
   m_first( 0 ),
-  m_count( 0 ),
-  m_buffer( N, T() ) // @TODO: Should not construct object until PushBack
+  m_count( 0 )
 {}
 
 template < typename T, uint32_t N >
 void aeRingBuffer< T, N >::Append( const T& val )
 {
-  m_buffer[ ( m_first + m_count ) % N ] = val;
   if ( m_count < N )
   {
+    m_buffer.Append( val );
     m_count++;
   }
   else
   {
+    m_buffer[ ( m_first + m_count ) % N ] = val;
     m_first++;
   }
 }

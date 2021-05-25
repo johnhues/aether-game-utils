@@ -27,7 +27,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
 #include "aeMeta.h"
 #include "aeRef.h"
 
@@ -124,7 +123,7 @@ public:
   uint32_t Length() const;
 
 private:
-  aeArray< aeSignalValue< V >* > m_signals;
+  ae::Array< aeSignalValue< V >* > m_signals = AE_ALLOC_TAG_FIXME;
 };
 
 //------------------------------------------------------------------------------
@@ -294,7 +293,7 @@ aeSignalList< V >::~aeSignalList()
 {
   for ( uint32_t i = 0; i < m_signals.Length(); i++ )
   {
-    aeAlloc::Release( m_signals[ i ] );
+    ae::Release( m_signals[ i ] );
   }
 }
 
@@ -319,7 +318,7 @@ void aeSignalList< V >::Add( T* obj, Fn fn )
     return;
   }
 
-  m_signals.Append( aeAlloc::Allocate< aeSignal< T, V > >( obj, fn ) );
+  m_signals.Append( ae::Allocate< aeSignal< T, V > >( obj, fn ) );
 }
 
 template < typename V >
@@ -344,7 +343,7 @@ void aeSignalList< V >::Add( aeRef< T > ref, Fn fn )
     return;
   }
 
-  m_signals.Append( aeAlloc::Allocate< aeSignal< T, V > >( ref, fn ) );
+  m_signals.Append( ae::Allocate< aeSignal< T, V > >( ref, fn ) );
 }
 
 template < typename V >
@@ -359,7 +358,7 @@ void aeSignalList< V >::Remove( void* obj )
   int32_t index = 0;
   while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
-    aeAlloc::Release( m_signals[ index ] );
+    ae::Release( m_signals[ index ] );
     m_signals.Remove( index ); // Remove signals for the given obj and any signals with null references
   }
 }
@@ -375,7 +374,7 @@ void aeSignalList< V >::Send()
   int32_t index = 0;
   while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
-    aeAlloc::Release( m_signals[ index ] );
+    ae::Release( m_signals[ index ] );
     m_signals.Remove( index ); // Remove null references before send
   }
 
@@ -398,7 +397,7 @@ void aeSignalList< V >::Send( const T& value )
   int32_t index = -1;
   while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
-    aeAlloc::Release( m_signals[ index ] );
+    ae::Release( m_signals[ index ] );
     m_signals.Remove( index ); // Remove null references before send
   }
 

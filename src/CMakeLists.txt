@@ -5,7 +5,7 @@ include(GNUInstallDirs)
 add_library(${AE_LIBRARY_NAME} STATIC "")
 set_target_properties(${AE_LIBRARY_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
-if (${AE_DEPS_TARGETS})
+if (AE_DEPS_TARGETS)
 	add_dependencies(${AE_LIBRARY_NAME} ${AE_DEPS_TARGETS})
 endif()
 
@@ -29,8 +29,6 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 set(AE_HEADER_FILES
 	../include/ae/aether.h
 	../include/ae/aetherEXT.h
-	../include/ae/aeAlloc.h
-	../include/ae/aeArray.h
 	../include/ae/aeAudio.h
 	../include/ae/aeBinaryStream.h
 	../include/ae/aeClock.h
@@ -48,7 +46,6 @@ set(AE_HEADER_FILES
 	../include/ae/aeInput.h
 	../include/ae/aeInventoryGrid.h
 	../include/ae/aeList.h
-	../include/ae/aeMap.h
 	../include/ae/aeMath.h
 	../include/ae/aeMesh.h
 	../include/ae/aeMeta.h
@@ -73,7 +70,6 @@ target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		${AE_HEADER_FILES}
 		aether.cpp
-		aeAlloc.cpp
 		aeAudio.cpp
 		aeBinaryStream.cpp
 		aeClock.cpp

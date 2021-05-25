@@ -28,7 +28,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
 #include "aeList.h"
 #include "aeMath.h"
 
@@ -39,6 +38,7 @@ template < typename T >
 class aeInventoryGrid
 {
 public:
+  aeInventoryGrid( ae::Tag pool );
   ~aeInventoryGrid();
 
   void Set( T& value, aeRectInt rect );
@@ -59,26 +59,32 @@ private:
     Shape() : node( this ) {}
 
     aeListNode< Shape > node;
-    aeArray< aeInt2 > cells;
+    ae::Array< aeInt2 > cells;
     T value;
   };
-
+  
+  ae::Tag m_pool;
   aeList< Shape > m_shapeList;
 };
+
+template < typename T >
+aeInventoryGrid< T >::aeInventoryGrid( ae::Tag pool ) :
+  m_pool( pool )
+{}
 
 template < typename T >
 aeInventoryGrid< T >::~aeInventoryGrid()
 {
   while ( m_shapeList.GetLast() )
   {
-    aeAlloc::Release( m_shapeList.GetLast() );
+    ae::Release( m_shapeList.GetLast() );
   }
 }
 
 template < typename T >
 void aeInventoryGrid< T >::Set( T& value, aeRectInt rect )
 {
-  aeArray< aeInt2 > cells( rect.w * rect.h );
+  ae::Array< aeInt2 > cells( m_pool, rect.w * rect.h );
   for ( uint32_t y = 0; y < rect.h; y++ )
   {
     for ( uint32_t x = 0; x < rect.w; x++ )
@@ -98,7 +104,7 @@ void aeInventoryGrid< T >::Set( T& value, aeInt2* cells, uint32_t cellCount )
     AE_ASSERT_MSG( !other, "Cell # already occupied by #", cells[ i ], other );
   }
 
-  Shape* shape = aeAlloc::Allocate< Shape >();
+  Shape* shape = ae::Allocate< Shape >();
   AE_ASSERT( shape );
 
   shape->value = value;
@@ -155,7 +161,7 @@ void aeInventoryGrid< T >::Remove( aeInt2 pos )
   Shape* shape = m_shapeList.FindFn( fn );
   if ( shape )
   {
-    aeAlloc::Release( shape );
+    ae::Release( shape );
   }
 }
 
@@ -170,7 +176,7 @@ void aeInventoryGrid< T >::Remove( const T& value )
   };
   Shape* shape = m_shapeList.FindFn( fn );
   AE_ASSERT( shape );
-  aeAlloc::Release( shape );
+  ae::Release( shape );
 }
 
 template < typename T >

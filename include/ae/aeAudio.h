@@ -28,7 +28,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
@@ -77,8 +76,8 @@ private:
     const aeAudioData* resource;
   };
 
-  aeArray< aeAudioChannel > m_musicChannels;
-  aeArray< aeAudioChannel > m_sfxChannels;
+  ae::Array< aeAudioChannel > m_musicChannels;
+  ae::Array< aeAudioChannel > m_sfxChannels;
 };
 
 #endif

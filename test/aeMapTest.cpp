@@ -5,14 +5,14 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "catch2/catch.hpp"
-#include "ae/aeMap.h"
+#include "ae/aether.h"
 
 //------------------------------------------------------------------------------
 // aeMap tests
 //------------------------------------------------------------------------------
 TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 {
-  aeMap< int, char > map;
+  ae::Map< int, char > map;
   for ( uint32_t i = 0; i < 10; i++ )
   {
     map.Set( i, 'a' + i );

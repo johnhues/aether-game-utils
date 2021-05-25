@@ -128,12 +128,12 @@ TEST_CASE( "signal send should result in the correct functions being called", "[
 
   SECTION( "destroying referenced object should result in removal on send" )
   {
-    Thing* thingP = aeAlloc::Allocate< Thing >();
+    Thing* thingP = ae::Allocate< Thing >();
     aeRef< Thing > thingRef( thingP );
     
     signal.Add( thingRef, &Thing::Fn );
 
-    aeAlloc::Release( thingP );
+    ae::Release( thingP );
     signal.Send();
 
     REQUIRE( signal.Length() == 0 );

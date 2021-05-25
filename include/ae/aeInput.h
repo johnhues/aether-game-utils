@@ -27,7 +27,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeMap.h"
 #include "aeMath.h"
 #include "aeString.h"
 
@@ -287,14 +286,15 @@ public:
 private:
   class aeWindow* m_window;
 
-  aeMap< uint32_t, bool* > m_keyMap;
+  ae::Map< uint32_t, bool*, 10 > m_keyMap;
   
   InputState m_input;
   InputState m_prevInput;
 
+  // @TODO: These should use non-fixed length strings
   bool m_textMode;
   aeStr512 m_text;
-  aeArray< char > m_textInput;
+  ae::Array< char, 512 > m_textInput;
 
   bool m_mouseCaptured;
   bool m_firstPump;

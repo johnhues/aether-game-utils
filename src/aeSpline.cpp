@@ -30,8 +30,14 @@
 //------------------------------------------------------------------------------
 // aeSpline member functions
 //------------------------------------------------------------------------------
-aeSpline::aeSpline( aeFloat3* controlPoints, uint32_t count ) :
-  m_controlPoints( count )
+aeSpline::aeSpline( ae::Tag tag ) :
+  m_controlPoints( tag ),
+  m_segments( tag )
+{}
+
+aeSpline::aeSpline( ae::Tag tag, aeFloat3* controlPoints, uint32_t count ) :
+  m_controlPoints( tag ),
+  m_segments( tag )
 {
   for ( uint32_t i = 0; i < count; i++ )
   {

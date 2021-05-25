@@ -146,12 +146,12 @@ const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 aeTerrainSDFCache::aeTerrainSDFCache()
 {
   m_chunk = aeInt3( 0 );
-  m_values = aeAlloc::AllocateArray< aeFloat16 >( kDim * kDim * kDim );
+  m_values = ae::AllocateArray< aeFloat16 >( kDim * kDim * kDim );
 }
 
 aeTerrainSDFCache::~aeTerrainSDFCache()
 {
-  aeAlloc::Release( m_values );
+  ae::Release( m_values );
   m_values = nullptr;
 }
 
@@ -328,16 +328,16 @@ aeTerrainJob::aeTerrainJob() :
   m_running( false ),
   m_vertexCount( kChunkCountEmpty ),
   m_indexCount( 0 ),
-  m_vertices( aeArray< TerrainVertex >( (uint32_t)kMaxChunkVerts, TerrainVertex() ) ),
-  m_indices( aeArray< TerrainIndex >( kMaxChunkIndices, TerrainIndex() ) ),
+  m_vertices( ae::Array< TerrainVertex >( AE_ALLOC_TAG_TERRAIN, (uint32_t)kMaxChunkVerts, TerrainVertex() ) ),
+  m_indices( ae::Array< TerrainIndex >( AE_ALLOC_TAG_TERRAIN, kMaxChunkIndices, TerrainIndex() ) ),
   m_chunk( nullptr )
 {
-  edgeInfo = aeAlloc::AllocateArray< TempEdges >( kTempChunkSize3 );
+  edgeInfo = ae::AllocateArray< TempEdges >( kTempChunkSize3 );
 }
 
 aeTerrainJob::~aeTerrainJob()
 {
-  aeAlloc::Release( edgeInfo );
+  ae::Release( edgeInfo );
   edgeInfo = nullptr;
 }
 
@@ -411,7 +411,7 @@ void aeTerrainJob::Do()
   uint32_t fileSize = m_p.vfs ? m_p.vfs->GetSize( aeVfsRoot::Cache, filePath.c_str() ) : 0;
   if ( fileSize )
   {
-    aeAlloc::Scratch< uint8_t > fileData( fileSize );
+    ae::Scratch< uint8_t > fileData( fileSize );
     m_p.vfs->Read( aeVfsRoot::Cache, filePath.c_str(), fileData.Data(), fileSize );
     aeBinaryStream rStream = aeBinaryStream::Reader( fileData.Data(), fileSize );
     rStream.SerializeUint32( m_vertexCount.Get() );
@@ -442,7 +442,7 @@ void aeTerrainJob::Do()
     if ( m_p.vfs )
     {
       // Write result
-      aeArray< uint8_t > data;
+      ae::Array< uint8_t > data = AE_ALLOC_TAG_TERRAIN;
       aeBinaryStream wStream = aeBinaryStream::Writer( &data );
       wStream.SerializeUint32( m_vertexCount.Get() );
       wStream.SerializeUint32( m_indexCount );
@@ -466,7 +466,7 @@ void aeTerrainJob::Finish()
   
   for ( ae::Sdf::Shape* shape : m_shapes )
   {
-    aeAlloc::Release( shape );
+    ae::Release( shape );
   }
   m_shapes.Clear();
 
@@ -490,14 +490,14 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob*
     uint16_t i1[ 3 ]; // normal split
     aeFloat3 n;
   };
-  aeArray< TempTri > tempTris;
+  ae::Array< TempTri > tempTris = AE_ALLOC_TAG_TERRAIN;
 
   struct TempVert
   {
     aeInt3 posi; // Vertex voxel (not necessarily Floor(vert.pos), see vertex positioning)
     TerrainVertex v;
 };
-  aeArray< TempVert > tempVerts;
+  ae::Array< TempVert > tempVerts = AE_ALLOC_TAG_TERRAIN;
 #else
   VertexCount vertexCount = VertexCount( 0 );
   uint32_t indexCount = 0;
@@ -1432,11 +1432,11 @@ void aeTerrain::Initialize( uint32_t maxThreads, bool render )
   
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockDensity[ i ] = 1.0f; }
 
-  m_threadPool = aeAlloc::Allocate< ctpl::thread_pool >( maxThreads );
+  m_threadPool = ae::Allocate< ctpl::thread_pool >( maxThreads );
   maxThreads = aeMath::Max( 1u, maxThreads );
   for ( uint32_t i = 0; i < maxThreads; i++ )
   {
-    m_terrainJobs.Append( aeAlloc::Allocate< aeTerrainJob >() );
+    m_terrainJobs.Append( ae::Allocate< aeTerrainJob >() );
   }
 }
 
@@ -1445,7 +1445,7 @@ void aeTerrain::Terminate()
   if ( m_threadPool )
   {
     m_threadPool->stop( true );
-    aeAlloc::Release( m_threadPool );
+    ae::Release( m_threadPool );
     m_threadPool = nullptr;
   }
 
@@ -1456,7 +1456,7 @@ void aeTerrain::Terminate()
     {
       job->Finish();
     }
-    aeAlloc::Release( job );
+    ae::Release( job );
   }
   m_terrainJobs.Clear();
 

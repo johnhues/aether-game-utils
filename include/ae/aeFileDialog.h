@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeAlloc.h
+// aeFileDialog.h
 // Utilities for allocating objects. Provides functionality to track current and
 // past allocations.
 //------------------------------------------------------------------------------
@@ -34,7 +34,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
+#include "aether.h"
 class aeWindow;
 namespace AE_NAMESPACE {
 #if !_AE_APPLE_ // No std::path support

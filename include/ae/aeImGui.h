@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeAlloc.h
+// aeImGui.h
 // Utilities for allocating objects. Provides functionality to track current and
 // past allocations.
 //------------------------------------------------------------------------------

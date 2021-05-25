@@ -27,7 +27,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
@@ -37,10 +36,10 @@ class aeBinaryStream
 {
 public:
   static aeBinaryStream Writer( uint8_t* data, uint32_t length );
-  static aeBinaryStream Writer( aeArray< uint8_t >* array );
+  static aeBinaryStream Writer( ae::Array< uint8_t >* array );
   static aeBinaryStream Writer();
   static aeBinaryStream Reader( const uint8_t* data, uint32_t length );
-  static aeBinaryStream Reader( const aeArray< uint8_t >& data );
+  static aeBinaryStream Reader( const ae::Array< uint8_t >& data );
 
   void SerializeUint8( uint8_t& v );
   void SerializeUint8( const uint8_t& v );
@@ -85,8 +84,8 @@ public:
   void SerializeArray( char (&str)[ N ] );
   template< uint32_t N >
   void SerializeArray( const char (&str)[ N ] );
-  void SerializeArray( aeArray< uint8_t>& array, uint32_t maxLength = 65535 );
-  void SerializeArray( const aeArray< uint8_t>& array, uint32_t maxLength = 65535 );
+  void SerializeArray( ae::Array< uint8_t>& array, uint32_t maxLength = 65535 );
+  void SerializeArray( const ae::Array< uint8_t>& array, uint32_t maxLength = 65535 );
 
   template< typename T >
   void SerializeRaw( T& v );
@@ -94,8 +93,8 @@ public:
   void SerializeRaw( const T& v );
   void SerializeRaw( void* data, uint32_t length );
   void SerializeRaw( const void* data, uint32_t length );
-  void SerializeRaw( aeArray< uint8_t >& array );
-  void SerializeRaw( const aeArray< uint8_t >& array );
+  void SerializeRaw( ae::Array< uint8_t >& array );
+  void SerializeRaw( const ae::Array< uint8_t >& array );
 
   // Once the stream is invalid serialization calls will result in silent no-ops
   void Invalidate() { m_isValid = false; }
@@ -129,10 +128,10 @@ public:
   aeBinaryStream( Mode mode, uint8_t* data, uint32_t length );
   aeBinaryStream( Mode mode, const uint8_t* data, uint32_t length );
   aeBinaryStream( Mode mode );
-  aeBinaryStream( aeArray< uint8_t >* array );
+  aeBinaryStream( ae::Array< uint8_t >* array );
 
-  aeArray< uint8_t >& m_GetArray() { return m_extArray ? *m_extArray : m_array; }
-  const aeArray< uint8_t >& m_GetArray() const { return m_extArray ? *m_extArray : m_array; }
+  ae::Array< uint8_t >& m_GetArray() { return m_extArray ? *m_extArray : m_array; }
+  const ae::Array< uint8_t >& m_GetArray() const { return m_extArray ? *m_extArray : m_array; }
 
   void m_SerializeArrayLength( uint32_t& length, uint32_t maxLength );
   Mode m_mode = Mode::None;
@@ -140,8 +139,8 @@ public:
   uint8_t* m_data = nullptr;
   uint32_t m_length = 0;
   uint32_t m_offset = 0;
-  aeArray< uint8_t >* m_extArray = nullptr;
-  aeArray< uint8_t > m_array;
+  ae::Array< uint8_t >* m_extArray = nullptr;
+  ae::Array< uint8_t > m_array = AE_ALLOC_TAG_NET;
 
 public:
   // Prevent the above functions from being called accidentally through automatic conversions
@@ -261,7 +260,7 @@ void aeBinaryStream::SerializeRaw( T& v )
     }
     else
     {
-      aeArray< uint8_t >& array = m_GetArray();
+      ae::Array< uint8_t >& array = m_GetArray();
       array.Append( (uint8_t*)&v, sizeof(T) );
       m_offset = array.Length();
       m_length = array.Size();
@@ -316,7 +315,7 @@ void aeBinaryStream::SerializeArray( char (&str)[ N ] )
     }
     else
     {
-      aeArray< uint8_t >& array = m_GetArray();
+      ae::Array< uint8_t >& array = m_GetArray();
       array.Append( (uint8_t*)&len, sizeof(len) );
       array.Append( (uint8_t*)&str, len );
       m_offset = array.Length();

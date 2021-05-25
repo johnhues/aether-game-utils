@@ -54,7 +54,7 @@ int main()
   aeNetReplicaClient replicationClient;
 
   // Game data
-  aeArray< Green > greens;
+  ae::Array< Green > greens;
 
   while ( !input.GetState()->exit )
   {

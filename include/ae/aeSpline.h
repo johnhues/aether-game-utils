@@ -29,7 +29,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeArray.h"
 #include "aeMath.h"
 
 //------------------------------------------------------------------------------
@@ -38,8 +37,8 @@
 class aeSpline
 {
 public:
-  aeSpline() = default;
-  aeSpline( aeFloat3* controlPoints, uint32_t count );
+  aeSpline( ae::Tag tag );
+  aeSpline( ae::Tag tag, aeFloat3* controlPoints, uint32_t count );
 
   void AppendControlPoint( aeFloat3 p );
   void RemoveControlPoint( uint32_t index );
@@ -81,8 +80,8 @@ private:
   aeFloat3 m_GetControlPoint( int32_t index ) const;
 
   bool m_loop = false;
-  aeArray< aeFloat3 > m_controlPoints;
-  aeArray< Segment > m_segments;
+  ae::Array< aeFloat3 > m_controlPoints;
+  ae::Array< Segment > m_segments;
   float m_length = 0.0f;
   aeAABB m_aabb;
 };

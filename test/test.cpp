@@ -6,7 +6,7 @@
 //------------------------------------------------------------------------------
 #define CATCH_CONFIG_MAIN
 #include "catch2/catch.hpp"
-#include "ae/aeArray.h"
+#include "ae/aether.h"
 #include "ae/aeTesting.h"
 
 //------------------------------------------------------------------------------

@@ -69,7 +69,7 @@ namespace ae
     aeColor Get( aeFloat2 pixel, Interpolation interpolation ) const;
 
   private:
-    aeArray< uint8_t > m_data;
+    ae::Array< uint8_t > m_data = AE_ALLOC_TAG_RENDER;
     int32_t m_width = 0;
     int32_t m_height = 0;
     uint32_t m_channels = 0;

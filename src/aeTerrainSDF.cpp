@@ -141,7 +141,7 @@ aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
 //------------------------------------------------------------------------------
 ae::Sdf::Shape* ae::Sdf::Box::Clone() const
 {
-  ae::Sdf::Box* box = aeAlloc::Allocate< ae::Sdf::Box >();
+  ae::Sdf::Box* box = ae::Allocate< ae::Sdf::Box >();
   *box = *this;
   return box;
 }
@@ -164,7 +164,7 @@ float ae::Sdf::Box::GetValue( aeFloat3 p, int ) const
 //------------------------------------------------------------------------------
 ae::Sdf::Shape* ae::Sdf::Cylinder::Clone() const
 {
-  ae::Sdf::Cylinder* cylinder = aeAlloc::Allocate< ae::Sdf::Cylinder >();
+  ae::Sdf::Cylinder* cylinder = ae::Allocate< ae::Sdf::Cylinder >();
   *cylinder = *this;
   return cylinder;
 }
@@ -211,7 +211,7 @@ float ae::Sdf::Cylinder::GetValue( aeFloat3 p, int ) const
 //------------------------------------------------------------------------------
 ae::Sdf::Shape* ae::Sdf::Heightmap::Clone() const
 {
-  ae::Sdf::Heightmap* heightmap = aeAlloc::Allocate< ae::Sdf::Heightmap >();
+  ae::Sdf::Heightmap* heightmap = ae::Allocate< ae::Sdf::Heightmap >();
   *heightmap = *this;
   return heightmap;
 }
@@ -294,7 +294,7 @@ aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
   m_terrain( terrain )
 {
   aeRandom r( -1.0f, 1.0f );
-  aeAlloc::Scratch< aeStaticImage3D< float, aeTerrainNoiseSize, aeTerrainNoiseSize, aeTerrainNoiseSize > > tempScratch( 1 );
+  ae::Scratch< aeStaticImage3D< float, aeTerrainNoiseSize, aeTerrainNoiseSize, aeTerrainNoiseSize > > tempScratch( 1 );
   auto& temp = *tempScratch.Data();
   for ( uint32_t z = 0; z < temp.GetDepth(); z++ )
   for ( uint32_t y = 0; y < temp.GetHeight(); y++ )
@@ -373,7 +373,7 @@ void aeTerrainSDF::UpdatePending()
     m_shapes.Remove( index );
 
     m_terrain->m_Dirty( shape->GetAABB() );
-    aeAlloc::Release( shape );
+    ae::Release( shape );
   }
   m_pendingDestroy.Clear();
 

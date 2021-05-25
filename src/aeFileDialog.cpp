@@ -78,14 +78,13 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 //------------------------------------------------------------------------------
 ae::Array< char > CreateFilterString( const Array< FileFilter >& filters )
 {
+  ae::Array< char > result( AE_ALLOC_TAG_FIXME );
   if ( !filters.Length() )
   {
-    return {};
+    return result;
   }
 
-  ae::Array< char > result;
-  ae::Array< char > tempFilterStr;
-
+  ae::Array< char > tempFilterStr( AE_ALLOC_TAG_FIXME );
   for ( uint32_t i = 0; i < filters.Length(); i++ )
   {
     const FileFilter& filter = filters[ i ];
@@ -108,7 +107,8 @@ ae::Array< char > CreateFilterString( const Array< FileFilter >& filters )
           if ( !std::isalnum( *extCheck ) )
           {
             AE_FAIL_MSG( "File extensions must only contain alphanumeric characters: #", ext );
-            return {};
+            result.Clear();
+            return result;
           }
         }
       }
@@ -186,10 +186,10 @@ Array< std::string > OpenFile( const OpenFileParams& params )
   // Open window
   if ( GetOpenFileNameA( &winParams ) )
   {
-    return Array< std::string >( 1, winParams.lpstrFile );
+    return Array< std::string >( AE_ALLOC_TAG_FIXME, 1, winParams.lpstrFile );
   }
 
-  return {};
+  return Array< std::string >( AE_ALLOC_TAG_FIXME );
 }
 
 //------------------------------------------------------------------------------

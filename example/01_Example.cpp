@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "ae/aetherEXT.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -33,7 +33,7 @@ int main()
 	AE_LOG( "Initialize" );
 
 	aeWindow window;
-	aeRender render;
+  aeRender render;
 	aeInput input;
 	
 	window.Initialize( 800, 600, false, true );

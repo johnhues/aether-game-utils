@@ -27,7 +27,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeMap.h"
 #include "aeMath.h"
 #include "aeString.h"
 
@@ -200,7 +199,7 @@ public:
   const Value* Get( const char* name ) const;
 
 private:
-  aeMap< aeStr32, Value > m_uniforms;
+  ae::Map< aeStr32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
 };
 
 //------------------------------------------------------------------------------
@@ -373,7 +372,7 @@ private:
   aeShaderAttribute m_attributes[ kMaxShaderAttributeCount ];
   uint32_t m_attributeCount;
 
-  aeMap< aeStr32, aeShaderUniform > m_uniforms;
+  ae::Map< aeStr32, aeShaderUniform > m_uniforms = AE_ALLOC_TAG_RENDER;
 
 public:
   // Internal
@@ -537,7 +536,7 @@ private:
 
   uint32_t m_fbo = 0;
 
-  aeArray< aeTexture2D* > m_targets;
+  ae::Array< aeTexture2D*, 4 > m_targets;
   aeTexture2D m_depth;
 
   uint32_t m_width = 0;
@@ -598,7 +597,7 @@ private:
   aeShader* m_shaderAll;
   aeShader* m_shaderOpaque;
   aeShader* m_shaderTransparent;
-  aeMap< const aeTexture2D*, uint32_t > m_textures;
+  ae::Map< const aeTexture2D*, uint32_t > m_textures = AE_ALLOC_TAG_RENDER;
   
   bool m_blending;
   bool m_depthTest;
@@ -685,7 +684,7 @@ private:
     aeFloat3 pos;
     aeColor color;
   };
-  aeArray< DebugVertex > m_verts;
+  ae::Array< DebugVertex > m_verts = AE_ALLOC_TAG_RENDER;
   aeVertexData m_vertexData;
   aeShader m_shader;
   bool m_xray = true;
@@ -712,7 +711,7 @@ private:
     uint32_t pointCount; // circle only
     aeFloat4x4 transform;
   };
-  aeArray< DebugObject > m_objs;
+  ae::Array< DebugObject > m_objs = AE_ALLOC_TAG_RENDER;
 };
 
 //------------------------------------------------------------------------------
