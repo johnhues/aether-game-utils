@@ -195,32 +195,60 @@ class Allocator
 {
 public:
   virtual ~Allocator() {}
-  virtual void* Allocate( uint32_t bytes, uint32_t alignment, Tag tag ) = 0;
+  virtual void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) = 0;
   virtual void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) = 0;
   virtual void Free( void* data ) = 0;
 };
-
-//------------------------------------------------------------------------------
-// Allocator functions
 // @NOTE: Call ae::SetGlobalAllocator() before making any allocations or else a
 // default allocator will be used. You must call ae::SetGlobalAllocator() before
 // any allocations are made.
-//------------------------------------------------------------------------------
 void SetGlobalAllocator( Allocator* alloc );
 Allocator* GetGlobalAllocator();
+//------------------------------------------------------------------------------
+// Allocation functions
+//------------------------------------------------------------------------------
+// C++ style allocations
+template < typename T > T* New( ae::Tag tag );
+template < typename T > T* NewArray( ae::Tag tag, uint32_t count );
+template < typename T, typename ... Args > T* New( ae::Tag tag, Args ... args );
+template < typename T > void Delete( T* obj );
+// C style allocations
+void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment );
+void* Reallocate( void* data, uint32_t bytes, uint32_t alignment );
+void Free( void* data );
 
 //------------------------------------------------------------------------------
 // Allocation functions
 //------------------------------------------------------------------------------
-// @TODO: Remove and only use Allocator
-void* AlignedAlloc( uint32_t size, uint32_t boundary );
-void AlignedFree( void* p );
-void* Realloc( void* p, uint32_t size, uint32_t boundary );
-template < typename T > T* Allocate();
-template < typename T > T* AllocateArray( uint32_t count );
-template < typename T, typename ... Args > T* Allocate( Args ... args );
-uint8_t* AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count );
-template < typename T > void Release( T* obj );
+// @TODO: Remove and only use above functions
+inline void* AlignedAlloc( uint32_t size, uint32_t boundary )
+{
+  return ae::Allocate( AE_ALLOC_TAG_FIXME, size, boundary );
+}
+inline void AlignedFree( void* p )
+{
+  Free( p );
+}
+inline void* Realloc( void* p, uint32_t size, uint32_t boundary )
+{
+  return Reallocate( p, size, boundary );
+}
+template < typename T > T* Allocate()
+{
+  return New< T >( AE_ALLOC_TAG_FIXME );
+}
+template < typename T > T* AllocateArray( uint32_t count )
+{
+  return NewArray< T >( AE_ALLOC_TAG_FIXME, count );
+}
+template < typename T, typename ... Args > T* Allocate( Args ... args )
+{
+  return New< T >( AE_ALLOC_TAG_FIXME, args ... );
+}
+template < typename T > void Release( T* obj )
+{
+  Delete( obj );
+}
 
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
@@ -566,39 +594,6 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 //------------------------------------------------------------------------------
 namespace AE_NAMESPACE {
 
-inline void* AlignedAlloc( uint32_t size, uint32_t boundary )
-{
-#if _AE_WINDOWS_
-  return _aligned_malloc( size, boundary );
-#elif _AE_LINUX_
-  return aligned_alloc( boundary, size );
-#else
-  // @HACK: macosx clang c++11 does not have aligned alloc
-  return malloc( size );
-#endif
-}
-
-inline void AlignedFree( void* p )
-{
-#if _AE_WINDOWS_
-  _aligned_free( p );
-#elif _AE_LINUX_
-  free( p );
-#else
-  free( p );
-#endif
-}
-
-inline void* Realloc( void* p, uint32_t size, uint32_t boundary )
-{
-#if _AE_WINDOWS_
-  return _aligned_realloc( p, size, boundary );
-#else
-  aeCompilationWarning( "Aligned realloc() not determined on this platform" )
-    return nullptr;
-#endif
-}
-
 template < typename T >
 const char* GetTypeName()
 {
@@ -690,7 +685,7 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 }
 
 //------------------------------------------------------------------------------
-// Allocation functions
+// C++ style allocation functions
 //------------------------------------------------------------------------------
 const uint32_t kDefaultAlignment = 16;
 const uint32_t kHeaderSize = 16;
@@ -703,19 +698,19 @@ struct Header
 };
 
 template < typename T >
-T* Allocate()
+T* New( ae::Tag tag )
 {
-  return AllocateArray< T >( 1 );
+  return NewArray< T >( tag, 1 );
 }
 
 template < typename T >
-T* AllocateArray( uint32_t count )
+T* NewArray( ae::Tag tag, uint32_t count )
 {
   AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
   AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
 
   uint32_t size = kHeaderSize + sizeof( T ) * count;
-  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
+  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, kDefaultAlignment );
   AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
@@ -740,12 +735,12 @@ T* AllocateArray( uint32_t count )
 }
 
 template < typename T, typename ... Args >
-T* Allocate( Args ... args )
+T* New( ae::Tag tag, Args ... args )
 {
   AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
 
   uint32_t size = kHeaderSize + sizeof( T );
-  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
+  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, kDefaultAlignment );
   AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
@@ -761,7 +756,7 @@ T* Allocate( Args ... args )
 }
 
 template < typename T >
-void Release( T* obj )
+void Delete( T* obj )
 {
   if ( !obj )
   {
@@ -786,7 +781,25 @@ void Release( T* obj )
   memset( (void*)base, 0xDD, header->size );
 #endif
 
-  ae::AlignedFree( base );
+  ae::Free( base );
+}
+
+//------------------------------------------------------------------------------
+// C style allocations
+//------------------------------------------------------------------------------
+inline void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment )
+{
+  return ae::GetGlobalAllocator()->Allocate( tag, bytes, alignment );
+}
+
+inline void* Reallocate( void* data, uint32_t bytes, uint32_t alignment )
+{
+  return ae::GetGlobalAllocator()->Reallocate( data, bytes, alignment );
+}
+
+inline void Free( void* data )
+{
+  ae::GetGlobalAllocator()->Free( data );
 }
 
 //------------------------------------------------------------------------------
@@ -1280,7 +1293,7 @@ Array< T, N >::~Array()
   
   if ( N == 0 )
   {
-    ae::GetGlobalAllocator()->Free( m_array );
+    ae::Free( m_array );
   }
   m_size = 0;
   m_array = nullptr;
@@ -1320,7 +1333,7 @@ void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
     if ( m_array )
     {
       Clear();
-      ae::GetGlobalAllocator()->Free( m_array );
+      ae::Free( m_array );
     }
     
     m_length = other.m_length;
@@ -1497,14 +1510,14 @@ void Array< T, N >::Reserve( uint32_t size )
 #endif
   m_size = size;
   
-  T* arr = (T*)ae::GetGlobalAllocator()->Allocate( m_size * sizeof(T), alignof(T), m_tag );
+  T* arr = (T*)ae::Allocate( m_tag, m_size * sizeof(T), alignof(T) );
   for ( uint32_t i = 0; i < m_length; i++ )
   {
     new ( &arr[ i ] ) T ( std::move( m_array[ i ] ) );
     m_array[ i ].~T();
   }
   
-  ae::GetGlobalAllocator()->Free( m_array );
+  ae::Free( m_array );
   m_array = arr;
 }
 
@@ -1962,19 +1975,37 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 class DefaultAllocator final : public Allocator
 {
 public:
-  void* Allocate( uint32_t bytes, uint32_t alignment, Tag tag ) override
+  void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override
   {
-    return ae::AlignedAlloc( bytes, alignment );
+#if _AE_WINDOWS_
+    return _aligned_malloc( bytes, alignment );
+#elif _AE_LINUX_
+    return aligned_alloc( alignment, bytes );
+#else
+    // @HACK: macosx clang c++11 does not have aligned alloc
+    return malloc( bytes );
+#endif
   }
 
   void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) override
   {
-    return ae::Realloc( (uint8_t*)data, bytes, alignment );
+#if _AE_WINDOWS_
+    return _aligned_realloc( data, bytes, alignment );
+#else
+    aeCompilationWarning( "Aligned realloc() not determined on this platform" )
+      return nullptr;
+#endif
   }
 
   void Free( void* data ) override
   {
-    ae::AlignedFree( (uint8_t*)data );
+#if _AE_WINDOWS_
+    _aligned_free( data );
+#elif _AE_LINUX_
+    free( data );
+#else
+    free( data );
+#endif
   }
 };
 
@@ -1994,35 +2025,11 @@ Allocator* GetGlobalAllocator()
 {
   if ( !g_allocator )
   {
-    g_allocator = ae::Allocate< DefaultAllocator >();
+    // @TODO: Allocating this statically here won't work for hotloading
+    static DefaultAllocator s_allocator;
+	  g_allocator = &s_allocator;
   }
   return g_allocator;
-}
-
-uint8_t* AllocateRaw( uint32_t typeSize, uint32_t typeAlignment, uint32_t count )
-{
-#if _AE_ALLOC_DISABLE
-  return AllocateArray< uint8_t >( count );
-#else
-  AE_ASSERT( typeAlignment );
-  AE_ASSERT( typeAlignment <= kDefaultAlignment );
-  AE_ASSERT( typeSize % typeAlignment == 0 ); // All elements in array should have correct alignment
-
-  uint32_t size = kHeaderSize + typeSize * count;
-  uint8_t* base = (uint8_t*)ae::AlignedAlloc( size, kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
-#if _AE_DEBUG_
-  memset( (void*)base, 0xCD, size );
-#endif
-
-  Header* header = (Header*)base;
-  header->check = 0xABCD;
-  header->count = count;
-  header->size = size;
-  header->typeSize = typeSize;
-
-  return base + kHeaderSize;
-#endif
 }
 
 } // AE_NAMESPACE end
