@@ -246,11 +246,11 @@ void aeVertexData::Destroy()
 {
   if ( m_vertexReadable )
   {
-    ae::Release( (uint8_t*)m_vertexReadable );
+    ae::Delete( (uint8_t*)m_vertexReadable );
   }
   if ( m_indexReadable )
   {
-    ae::Release( (uint8_t*)m_indexReadable );
+    ae::Delete( (uint8_t*)m_indexReadable );
   }
   
   if ( m_array )
@@ -413,13 +413,13 @@ void aeVertexData::SetVertices( const void *vertices, uint32_t count )
   {
     m_SetVertices( vertices, count );
     AE_ASSERT( !m_vertexReadable );
-    m_vertexReadable = ae::AllocateArray< uint8_t >( count * m_vertexSize );
+    m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_vertexSize );
     memcpy( m_vertexReadable, vertices, count * m_vertexSize );
   }
   else if ( m_vertexUsage == aeVertexUsage::Dynamic )
   {
     m_SetVertices( vertices, count );
-    if ( !m_vertexReadable ) { m_vertexReadable = ae::AllocateArray< uint8_t >( m_maxVertexCount * m_vertexSize ); }
+    if ( !m_vertexReadable ) { m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxVertexCount * m_vertexSize ); }
     memcpy( m_vertexReadable, vertices, count * m_vertexSize );
   }
   else
@@ -483,13 +483,13 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
   {
     m_SetIndices( indices, count );
     AE_ASSERT( !m_indexReadable );
-    m_indexReadable = ae::AllocateArray< uint8_t >( count * m_indexSize );
+    m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_indexSize );
     memcpy( m_indexReadable, indices, count * m_indexSize );
   }
   else if ( m_indexUsage == aeVertexUsage::Dynamic )
   {
     m_SetIndices( indices, count );
-    if ( !m_indexReadable ) { m_indexReadable = ae::AllocateArray< uint8_t >( m_maxIndexCount * m_indexSize ); }
+    if ( !m_indexReadable ) { m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxIndexCount * m_indexSize ); }
     memcpy( m_indexReadable, indices, count * m_indexSize );
   }
   else
@@ -1443,7 +1443,7 @@ void aeRenderTarget::Destroy()
   for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
     m_targets[ i ]->Destroy();
-    ae::Release( m_targets[ i ] );
+    ae::Delete( m_targets[ i ] );
   }
   m_targets.Clear();
 
@@ -1463,7 +1463,7 @@ void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Ty
 {
   AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
 
-  aeTexture2D* tex = ae::Allocate< aeTexture2D >();
+  aeTexture2D* tex = ae::New< aeTexture2D >( AE_ALLOC_TAG_RENDER );
   tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA16F, aeTextureType::HalfFloat, filter, wrap );
 
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();

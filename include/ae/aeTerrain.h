@@ -333,7 +333,7 @@ private:
 template < typename T >
 T* aeTerrainSDF::CreateSdf()
 {
-  ae::Sdf::Shape* sdf = ae::Allocate< T >();
+  ae::Sdf::Shape* sdf = ae::New< T >( TAG_EXAMPLE );
   sdf->noise = &noise;
   m_pendingCreated.Append( sdf );
   return static_cast< T* >( sdf );
@@ -560,7 +560,7 @@ private:
   aeFloat16 m_blockDensity[ Block::COUNT ];
   
   ctpl::thread_pool* m_threadPool = nullptr;
-  ae::Array< aeTerrainJob* > m_terrainJobs = AE_ALLOC_TAG_TERRAIN; // @TODO: Should be static
+  ae::Array< aeTerrainJob* > m_terrainJobs = AE_ALLOC_TAG_TERRAIN; // @TODO: Should be static, and shouldn't be a pointer
 
   std::function< void( aeFloat3, const char* ) > m_debugTextFn;
 

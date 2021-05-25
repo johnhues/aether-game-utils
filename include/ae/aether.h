@@ -182,6 +182,7 @@ using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_NET ae::Tag( "aeNet" )
 #define AE_ALLOC_TAG_HOTSPOT ae::Tag( "aeHotSpot" )
 #define AE_ALLOC_TAG_MESH ae::Tag( "aeMesh" )
+#define AE_ALLOC_TAG_SCRATCH ae::Tag( "aeScratch" )
 #define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
 
 //------------------------------------------------------------------------------
@@ -208,7 +209,6 @@ Allocator* GetGlobalAllocator();
 // Allocation functions
 //------------------------------------------------------------------------------
 // C++ style allocations
-template < typename T > T* New( ae::Tag tag );
 template < typename T > T* NewArray( ae::Tag tag, uint32_t count );
 template < typename T, typename ... Args > T* New( ae::Tag tag, Args ... args );
 template < typename T > void Delete( T* obj );
@@ -216,39 +216,6 @@ template < typename T > void Delete( T* obj );
 void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment );
 void* Reallocate( void* data, uint32_t bytes, uint32_t alignment );
 void Free( void* data );
-
-//------------------------------------------------------------------------------
-// Allocation functions
-//------------------------------------------------------------------------------
-// @TODO: Remove and only use above functions
-inline void* AlignedAlloc( uint32_t size, uint32_t boundary )
-{
-  return ae::Allocate( AE_ALLOC_TAG_FIXME, size, boundary );
-}
-inline void AlignedFree( void* p )
-{
-  Free( p );
-}
-inline void* Realloc( void* p, uint32_t size, uint32_t boundary )
-{
-  return Reallocate( p, size, boundary );
-}
-template < typename T > T* Allocate()
-{
-  return New< T >( AE_ALLOC_TAG_FIXME );
-}
-template < typename T > T* AllocateArray( uint32_t count )
-{
-  return NewArray< T >( AE_ALLOC_TAG_FIXME, count );
-}
-template < typename T, typename ... Args > T* Allocate( Args ... args )
-{
-  return New< T >( AE_ALLOC_TAG_FIXME, args ... );
-}
-template < typename T > void Release( T* obj )
-{
-  Delete( obj );
-}
 
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
@@ -698,12 +665,6 @@ struct Header
 };
 
 template < typename T >
-T* New( ae::Tag tag )
-{
-  return NewArray< T >( tag, 1 );
-}
-
-template < typename T >
 T* NewArray( ae::Tag tag, uint32_t count )
 {
   AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
@@ -809,13 +770,13 @@ template < typename T >
 Scratch< T >::Scratch( uint32_t count )
 {
   m_count = count;
-  m_data = AllocateArray< T >( count );
+  m_data = ae::NewArray< T >( AE_ALLOC_TAG_SCRATCH, count );
 }
 
 template < typename T >
 Scratch< T >::~Scratch()
 {
-  Release( m_data );
+  ae::Delete( m_data );
 }
 
 template < typename T >

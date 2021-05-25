@@ -117,7 +117,7 @@ void aeSparseGrid< Z >::Clear()
   uint32_t zoneCount = m_zones.Length();
   for ( uint32_t i = 0; i < zoneCount; i++ )
   {
-    ae::Release( m_zones.GetValue( i ) );
+    ae::Delete( m_zones.GetValue( i ) );
   }
   m_zones.Clear();
 }
@@ -130,7 +130,7 @@ void aeSparseGrid< Z >::Set( aeInt3 pos, const typename Z::GridType& value )
   if ( !m_zones.TryGet( slot, &zone ) )
   {
     const aeInt3 size = Z::GetSize();
-    zone = ae::Allocate< aeInitializer< Z > >( m_initInfo );
+    zone = ae::New< aeInitializer< Z > >( AE_ALLOC_TAG_FIXME, m_initInfo );
     zone->Get().SetZoneInfo( slot * size );
     m_zones.Set( slot, zone );
   }
