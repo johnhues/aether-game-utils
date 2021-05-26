@@ -333,7 +333,7 @@ private:
 template < typename T >
 T* aeTerrainSDF::CreateSdf()
 {
-  ae::Sdf::Shape* sdf = ae::New< T >( TAG_EXAMPLE );
+  ae::Sdf::Shape* sdf = ae::New< T >( AE_ALLOC_TAG_TERRAIN );
   sdf->noise = &noise;
   m_pendingCreated.Append( sdf );
   return static_cast< T* >( sdf );

@@ -1699,6 +1699,7 @@ void aeRender::Terminate()
   if ( m_context )
   {
     SDL_GL_DeleteContext( m_context );
+    m_context = 0;
   }
 }
 

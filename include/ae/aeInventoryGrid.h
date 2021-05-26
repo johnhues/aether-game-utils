@@ -77,7 +77,7 @@ aeInventoryGrid< T >::~aeInventoryGrid()
 {
   while ( m_shapeList.GetLast() )
   {
-    ae::Release( m_shapeList.GetLast() );
+    ae::Delete( m_shapeList.GetLast() );
   }
 }
 
@@ -104,7 +104,7 @@ void aeInventoryGrid< T >::Set( T& value, aeInt2* cells, uint32_t cellCount )
     AE_ASSERT_MSG( !other, "Cell # already occupied by #", cells[ i ], other );
   }
 
-  Shape* shape = ae::Allocate< Shape >();
+  Shape* shape = ae::New< Shape >( AE_ALLOC_TAG_FIXME );
   AE_ASSERT( shape );
 
   shape->value = value;
@@ -161,7 +161,7 @@ void aeInventoryGrid< T >::Remove( aeInt2 pos )
   Shape* shape = m_shapeList.FindFn( fn );
   if ( shape )
   {
-    ae::Release( shape );
+    ae::Delete( shape );
   }
 }
 
@@ -176,7 +176,7 @@ void aeInventoryGrid< T >::Remove( const T& value )
   };
   Shape* shape = m_shapeList.FindFn( fn );
   AE_ASSERT( shape );
-  ae::Release( shape );
+  ae::Delete( shape );
 }
 
 template < typename T >
