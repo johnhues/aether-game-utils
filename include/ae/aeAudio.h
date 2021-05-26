@@ -76,8 +76,8 @@ private:
     const aeAudioData* resource;
   };
 
-  ae::Array< aeAudioChannel > m_musicChannels;
-  ae::Array< aeAudioChannel > m_sfxChannels;
+  ae::Array< aeAudioChannel > m_musicChannels = AE_ALLOC_TAG_AUDIO;
+  ae::Array< aeAudioChannel > m_sfxChannels = AE_ALLOC_TAG_AUDIO;
 };
 
 #endif

@@ -231,7 +231,7 @@ bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, ae:
   objects.Clear();
   for ( uint32_t i = 0; i < len; i++ )
   {
-    Object* object = ae::Allocate< Object >();
+    Object* object = ae::New< Object >( TAG_EXAMPLE );
     
     aeStr16 type = "";
     rStream.SerializeString( type );
@@ -274,7 +274,7 @@ int main()
   class aeImGui* ui = nullptr;
 
   vfs.Initialize( "", "ae", "terrainedit" );
-  ui = ae::Allocate< aeImGui >();
+  ui = ae::New< aeImGui >( TAG_EXAMPLE );
   if ( headless )
   {
     ui->InitializeHeadless();
@@ -307,7 +307,7 @@ int main()
   heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
   uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
-  aeTerrain* terrain = ae::Allocate< aeTerrain >();
+  aeTerrain* terrain = ae::New< aeTerrain >( TAG_EXAMPLE );
   terrain->Initialize( terrainThreads, !headless );
 
   aeFloat4x4 worldToText = aeFloat4x4::Identity();
@@ -328,7 +328,7 @@ int main()
   {
     ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
     box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) * aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
-    currentObject = objects.Append( ae::Allocate< Object >( "Box", box ) );
+    currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
   }
 
   bool gizmoClickedPrev = false;
@@ -355,7 +355,7 @@ int main()
             aeFloat4x4::Translation( camera.GetFocus() ) *
             aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-          currentObject = objects.Append( ae::Allocate< Object >( "Box", box ) );
+          currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
         }
 
         if ( ImGui::Button( "cylinder" ) )
@@ -365,7 +365,7 @@ int main()
             aeFloat4x4::Translation( camera.GetFocus() ) *
             aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
 
-          currentObject = objects.Append( ae::Allocate< Object >( "Cylinder", cylinder ) );
+          currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Cylinder", cylinder ) );
         }
         
         if ( ImGui::Button( "height map" ) )
@@ -376,12 +376,12 @@ int main()
             aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
           heightMap->SetImage( &heightmapImage );
 
-          currentObject = objects.Append( ae::Allocate< Object >( "Height Map", heightMap ) );
+          currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Height Map", heightMap ) );
         }
 
         if ( ImGui::Button( "ray" ) )
         {
-          currentObject = objects.Append( ae::Allocate< Object >( "Ray", nullptr ) );
+          currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Ray", nullptr ) );
           currentObject->raySrc = camera.GetPosition();
           currentObject->rayDir = camera.GetForward();
           currentObject->rayLength = 100.0f;
@@ -614,7 +614,7 @@ int main()
       {
         objects.Remove( objects.Find( currentObject ) );
         terrain->sdf.DestroySdf( currentObject->shape );
-        ae::Release( currentObject );
+        ae::Delete( currentObject );
         currentObject = nullptr;
       }
 
@@ -726,7 +726,7 @@ int main()
   AE_INFO( "Terminate" );
   ui->Terminate();
   terrain->Terminate();
-  ae::Release( terrain );
+  ae::Delete( terrain );
   input.Terminate();
   if ( !headless )
   {

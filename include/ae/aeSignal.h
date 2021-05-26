@@ -293,7 +293,7 @@ aeSignalList< V >::~aeSignalList()
 {
   for ( uint32_t i = 0; i < m_signals.Length(); i++ )
   {
-    ae::Release( m_signals[ i ] );
+    ae::Delete( m_signals[ i ] );
   }
 }
 
@@ -318,7 +318,7 @@ void aeSignalList< V >::Add( T* obj, Fn fn )
     return;
   }
 
-  m_signals.Append( ae::Allocate< aeSignal< T, V > >( obj, fn ) );
+  m_signals.Append( ae::New< aeSignal< T, V > >( AE_ALLOC_TAG_FIXME, obj, fn ) );
 }
 
 template < typename V >
@@ -343,7 +343,7 @@ void aeSignalList< V >::Add( aeRef< T > ref, Fn fn )
     return;
   }
 
-  m_signals.Append( ae::Allocate< aeSignal< T, V > >( ref, fn ) );
+  m_signals.Append( ae::New< aeSignal< T, V > >( AE_ALLOC_TAG_FIXME, ref, fn ) );
 }
 
 template < typename V >
@@ -358,7 +358,7 @@ void aeSignalList< V >::Remove( void* obj )
   int32_t index = 0;
   while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
-    ae::Release( m_signals[ index ] );
+    ae::Delete( m_signals[ index ] );
     m_signals.Remove( index ); // Remove signals for the given obj and any signals with null references
   }
 }
@@ -374,7 +374,7 @@ void aeSignalList< V >::Send()
   int32_t index = 0;
   while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
-    ae::Release( m_signals[ index ] );
+    ae::Delete( m_signals[ index ] );
     m_signals.Remove( index ); // Remove null references before send
   }
 
@@ -397,7 +397,7 @@ void aeSignalList< V >::Send( const T& value )
   int32_t index = -1;
   while ( ( index = m_signals.FindFn( fn ) ) >= 0 )
   {
-    ae::Release( m_signals[ index ] );
+    ae::Delete( m_signals[ index ] );
     m_signals.Remove( index ); // Remove null references before send
   }
 

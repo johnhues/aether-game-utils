@@ -43,10 +43,10 @@ void aeNetData::SendMessage( const void* data, uint32_t length )
   m_messageDataOut.Append( (const uint8_t*)data, length );
 }
 
-void aeNetData::SetInitData( const uint8_t* initData, uint32_t initDataLength )
+void aeNetData::SetInitData( const void* initData, uint32_t initDataLength )
 {
   m_initData.Clear();
-  m_initData.Append( initData, initDataLength );
+  m_initData.Append( (uint8_t*)initData, initDataLength );
   m_isPendingInit = false;
 }
 
@@ -287,7 +287,7 @@ void aeNetReplicaClient::DestroyPending()
     AE_ASSERT( netData->IsPendingDelete() );
     AE_ASSERT( !netData->PumpMessages( nullptr ) );
     m_netDatas.Remove( netData->GetId() );
-    ae::Release( netData );
+    ae::Delete( netData );
   }
 
   m_destroyed.Clear();
@@ -300,7 +300,7 @@ void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
   uint32_t remoteId = 0;
   rStream->SerializeUint32( remoteId );
 
-  aeNetData* netData = ae::Allocate< aeNetData >();
+  aeNetData* netData = ae::New< aeNetData >( AE_ALLOC_TAG_NET );
   m_netDatas.Set( netData->GetId(), netData );
   m_remoteToLocalIdMap.Set( remoteId, netData->GetId() );
   m_localToRemoteIdMap.Set( netData->GetId(), remoteId );
@@ -383,7 +383,7 @@ uint32_t aeNetReplicaServer::GetSendLength() const
 //------------------------------------------------------------------------------
 aeNetData* aeNetReplicaDB::CreateNetData()
 {
-  aeNetData* netData = ae::Allocate< aeNetData >();
+  aeNetData* netData = ae::New< aeNetData >( AE_ALLOC_TAG_NET );
   netData->m_SetLocal();
   m_pendingCreate.Append( netData );
   return netData;
@@ -399,9 +399,9 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
   int32_t pendingIdx = m_pendingCreate.Find( netData );
   if ( pendingIdx >= 0 )
   {
-    // Early out, no need to send Destroy message because Create has not be queued
+    // Early out, no need to send Destroy message because Create has not been queued
     m_pendingCreate.Remove( pendingIdx );
-    ae::Release( netData );
+    ae::Delete( netData );
     return;
   }
 
@@ -422,12 +422,12 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
     wStream.SerializeUint32( id.GetInternalId() );
   }
 
-  ae::Release( netData );
+  ae::Delete( netData );
 }
 
 aeNetReplicaServer* aeNetReplicaDB::CreateServer()
 {
-  aeNetReplicaServer* server = m_servers.Append( ae::Allocate< aeNetReplicaServer >() );
+  aeNetReplicaServer* server = m_servers.Append( ae::New< aeNetReplicaServer >( AE_ALLOC_TAG_NET ) );
   AE_ASSERT( !server->m_pendingClear );
   server->m_replicaDB = this;
 
@@ -456,7 +456,7 @@ void aeNetReplicaDB::DestroyServer( aeNetReplicaServer* server )
   if ( index >= 0 )
   {
     m_servers.Remove( index );
-    ae::Release( server );
+    ae::Delete( server );
   }
 }
 

@@ -82,28 +82,40 @@ public:
 	
   //------------------------------------------------------------------------------
   // Server
+  // @NOTE: All server data will be sent with the next aeNetReplicaDB::UpdateSendData()
   //------------------------------------------------------------------------------
-  // Call once after aeNetReplicaDB::CreateNetData(), will trigger Create event on clients
-  void SetInitData( const uint8_t* initData, uint32_t initDataLength );
-  // Call at least once to update data sent to client with aeNetReplicaDB::UpdateSendData()
+  // True until SetInitData() is called
+  bool IsPendingInit() const;
+  // Call once after aeNetReplicaDB::CreateNetData(), will trigger Create event
+  // on clients
+  void SetInitData( const void* initData, uint32_t initDataLength );
+  // Call SetSyncData each frame to update that state of the clients NetData.
   // Only the most recent data is sent. Data is only sent when changed.
   void SetSyncData( const void* data, uint32_t length );
-  // Call as many times as necessary each tick, all messages will be sent with the next aeNetReplicaDB::UpdateSendData()
+  // Call as many times as necessary each tick
   void SendMessage( const void* data, uint32_t length );
 
   //------------------------------------------------------------------------------
   // Client
   //------------------------------------------------------------------------------
+  // Use GetInitData() after receiving a new NetData from aeNetReplicaClient::
+  // PumpCreated() to construct the object
   const uint8_t* GetInitData() const;
   uint32_t InitDataLength() const;
 
+  // Only the latest sync data is ever available, so there's no need to read this
+  // data as if it was a stream.
   const uint8_t* GetSyncData() const;
+  // Check for new data from server
   uint32_t SyncDataLength() const;
-  void ClearSyncData(); // Call to clear local received data. Check ( Length() > 0 ) for new data.
+  // Call to clear SyncDataLength() until new data is received
+  void ClearSyncData();
 
+  // Get messages sent from the server. Call repeatedly until false is returned
   bool PumpMessages( Msg* msgOut );
 
-  bool IsPendingInit() const;
+  // True once the NetData has been deleted by the server. Will be destroyed when
+  // aeNetReplicaClient::DestroyPending() is called.
   bool IsPendingDelete() const;
 
   //------------------------------------------------------------------------------
@@ -196,9 +208,11 @@ public:
 class aeNetReplicaDB
 {
 public:
+  // Create a server authoritative NetData which will be replicated to clients through NetReplicaServer/NetReplicaClient
   aeNetData* CreateNetData();
   void DestroyNetData( aeNetData* netData );
 
+  // Allocate one server per client connection
   aeNetReplicaServer* CreateServer();
   void DestroyServer( aeNetReplicaServer* server );
 

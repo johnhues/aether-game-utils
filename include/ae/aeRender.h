@@ -742,10 +742,13 @@ public:
 
 private:
   void m_InitializeRender( uint32_t width, uint32_t height );
-  class aeRenderInternal* m_renderInternal;
 
   class aeWindow* m_window;
   aeRenderTarget m_canvas;
+
+  // OpenGL
+  void* m_context;
+  int32_t m_defaultFbo;
 };
 
 #endif

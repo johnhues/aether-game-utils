@@ -246,11 +246,11 @@ void aeVertexData::Destroy()
 {
   if ( m_vertexReadable )
   {
-    ae::Release( (uint8_t*)m_vertexReadable );
+    ae::Delete( (uint8_t*)m_vertexReadable );
   }
   if ( m_indexReadable )
   {
-    ae::Release( (uint8_t*)m_indexReadable );
+    ae::Delete( (uint8_t*)m_indexReadable );
   }
   
   if ( m_array )
@@ -413,13 +413,13 @@ void aeVertexData::SetVertices( const void *vertices, uint32_t count )
   {
     m_SetVertices( vertices, count );
     AE_ASSERT( !m_vertexReadable );
-    m_vertexReadable = ae::AllocateArray< uint8_t >( count * m_vertexSize );
+    m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_vertexSize );
     memcpy( m_vertexReadable, vertices, count * m_vertexSize );
   }
   else if ( m_vertexUsage == aeVertexUsage::Dynamic )
   {
     m_SetVertices( vertices, count );
-    if ( !m_vertexReadable ) { m_vertexReadable = ae::AllocateArray< uint8_t >( m_maxVertexCount * m_vertexSize ); }
+    if ( !m_vertexReadable ) { m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxVertexCount * m_vertexSize ); }
     memcpy( m_vertexReadable, vertices, count * m_vertexSize );
   }
   else
@@ -483,13 +483,13 @@ void aeVertexData::SetIndices( const void* indices, uint32_t count )
   {
     m_SetIndices( indices, count );
     AE_ASSERT( !m_indexReadable );
-    m_indexReadable = ae::AllocateArray< uint8_t >( count * m_indexSize );
+    m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_indexSize );
     memcpy( m_indexReadable, indices, count * m_indexSize );
   }
   else if ( m_indexUsage == aeVertexUsage::Dynamic )
   {
     m_SetIndices( indices, count );
-    if ( !m_indexReadable ) { m_indexReadable = ae::AllocateArray< uint8_t >( m_maxIndexCount * m_indexSize ); }
+    if ( !m_indexReadable ) { m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxIndexCount * m_indexSize ); }
     memcpy( m_indexReadable, indices, count * m_indexSize );
   }
   else
@@ -1443,7 +1443,7 @@ void aeRenderTarget::Destroy()
   for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
     m_targets[ i ]->Destroy();
-    ae::Release( m_targets[ i ] );
+    ae::Delete( m_targets[ i ] );
   }
   m_targets.Clear();
 
@@ -1463,7 +1463,7 @@ void aeRenderTarget::AddTexture( aeTextureFilter::Type filter, aeTextureWrap::Ty
 {
   AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
 
-  aeTexture2D* tex = ae::Allocate< aeTexture2D >();
+  aeTexture2D* tex = ae::New< aeTexture2D >( AE_ALLOC_TAG_RENDER );
   tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA16F, aeTextureType::HalfFloat, filter, wrap );
 
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
@@ -1616,49 +1616,62 @@ aeFloat4x4 aeRenderTarget::GetQuadToNDCTransform( aeRect ndc, float z )
 }
 
 //------------------------------------------------------------------------------
-// aeOpenGLRender member functions
+// aeRender member functions
 //------------------------------------------------------------------------------
-aeOpenGLRender::aeOpenGLRender()
+aeRender::aeRender()
 {
+  m_window = nullptr;
+
+  // OpenGL
   m_context = nullptr;
   m_defaultFbo = 0;
 }
 
-void aeOpenGLRender::Initialize( aeRender* render )
+aeRender::~aeRender()
 {
+  Terminate();
+}
+
+void aeRender::InitializeOpenGL( class aeWindow* window )
+{
+  AE_ASSERT_MSG( window->window, "aeWindow must be initialized prior to aeRender initialization." );
+  AE_ASSERT_MSG( !m_context, "aeRender already initialized" );
+
+  m_window = window;
+
   // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
 #if !_AE_IOS_
   AE_STATIC_ASSERT( GL_ARB_framebuffer_sRGB );
 #endif
 
 #if _AE_IOS_
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES );
+  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
 #else
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-  if (gGL41)
+  if ( gGL41 )
   {
-	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
-	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
+    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
+    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
   }
   else
   {
-	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-	  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
+    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
+    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
   }
 #endif
-	
-	SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
-	
+
+  SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
+
 #if AE_GL_DEBUG_MODE
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
 #endif
   SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
   SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
 
-  m_context = SDL_GL_CreateContext( (SDL_Window*)render->GetWindow()->window );
+  m_context = SDL_GL_CreateContext( (SDL_Window*)m_window->window );
   AE_ASSERT( m_context );
-  SDL_GL_MakeCurrent( (SDL_Window*)render->GetWindow()->window, m_context );
+  SDL_GL_MakeCurrent( (SDL_Window*)m_window->window, m_context );
 
   SDL_GL_SetSwapInterval( 1 );
 
@@ -1676,36 +1689,49 @@ void aeOpenGLRender::Initialize( aeRender* render )
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
 
   AE_CHECK_GL_ERROR();
+
+  m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
+
 }
 
-void aeOpenGLRender::Terminate( aeRender* render )
+void aeRender::Terminate()
 {
-  SDL_GL_DeleteContext( m_context );
+  if ( m_context )
+  {
+    SDL_GL_DeleteContext( m_context );
+    m_context = 0;
+  }
 }
 
-void aeOpenGLRender::StartFrame( aeRender* render )
+void aeRender::Activate()
 {
+  AE_ASSERT( m_context );
+
+  if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
+  {
+    m_InitializeRender( m_window->GetWidth(), m_window->GetHeight() );
+  }
+  m_canvas.Activate();
+
 #if !_AE_IOS_
-  // This automatically enabled on opengl es3 and can't be turned off
-	glEnable( GL_FRAMEBUFFER_SRGB );
+  // This is automatically enabled on opengl es3 and can't be turned off
+  glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
 }
 
-void aeOpenGLRender::AddTextureBarrier( aeRender* render )
+void aeRender::Clear( aeColor color )
 {
-	// only GL has texture barrier for reading from previously written textures
-	// There are less draconian ways in desktop ES, and nothing in WebGL.
-#if _AE_WINDOWS_ || _AE_OSX_
-	glTextureBarrierNV();
-#endif
+  Activate();
+  m_canvas.Clear( color );
 }
 
-void aeOpenGLRender::EndFrame( aeRender* render )
+void aeRender::Present()
 {
+  AE_ASSERT( m_context );
   AE_CHECK_GL_ERROR();
 
   glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-  glViewport( 0, 0, render->GetWindow()->GetWidth(), render->GetWindow()->GetHeight() );
+  glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
 
   // Clear window target in case canvas doesn't fit exactly
   glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
@@ -1717,11 +1743,40 @@ void aeOpenGLRender::EndFrame( aeRender* render )
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
-  render->GetCanvas()->Render2D( 0, aeRect( aeFloat2( -1.0f ), aeFloat2( 1.0f ) ), 0.5f );
+  m_canvas.Render2D( 0, aeRect( aeFloat2( -1.0f ), aeFloat2( 1.0f ) ), 0.5f );
 
 #if !_AE_EMSCRIPTEN_
-  SDL_GL_SwapWindow( (SDL_Window*)render->GetWindow()->window );
+  SDL_GL_SwapWindow( (SDL_Window*)m_window->window );
 #endif
 
   AE_CHECK_GL_ERROR();
+}
+
+float aeRender::GetAspectRatio() const
+{
+  if ( m_canvas.GetWidth() + m_canvas.GetHeight() == 0 )
+  {
+    return 0.0f;
+  }
+  else
+  {
+    return m_canvas.GetWidth() / (float)m_canvas.GetHeight();
+  }
+}
+
+void aeRender::AddTextureBarrier()
+{
+  // only GL has texture barrier for reading from previously written textures
+  // There are less draconian ways in desktop ES, and nothing in WebGL.
+#if _AE_WINDOWS_ || _AE_OSX_
+  glTextureBarrierNV();
+#endif
+}
+
+void aeRender::m_InitializeRender( uint32_t width, uint32_t height )
+{
+  // @TODO: Allow user to pass in a scaling factor / aspect ratio parameter
+  m_canvas.Initialize( width, height );
+  m_canvas.AddTexture( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+  m_canvas.AddDepth( aeTextureFilter::Nearest, aeTextureWrap::Clamp );
 }

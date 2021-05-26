@@ -146,12 +146,12 @@ const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 aeTerrainSDFCache::aeTerrainSDFCache()
 {
   m_chunk = aeInt3( 0 );
-  m_values = ae::AllocateArray< aeFloat16 >( kDim * kDim * kDim );
+  m_values = ae::NewArray< aeFloat16 >( AE_ALLOC_TAG_TERRAIN, kDim * kDim * kDim );
 }
 
 aeTerrainSDFCache::~aeTerrainSDFCache()
 {
-  ae::Release( m_values );
+  ae::Delete( m_values );
   m_values = nullptr;
 }
 
@@ -332,12 +332,12 @@ aeTerrainJob::aeTerrainJob() :
   m_indices( ae::Array< TerrainIndex >( AE_ALLOC_TAG_TERRAIN, kMaxChunkIndices, TerrainIndex() ) ),
   m_chunk( nullptr )
 {
-  edgeInfo = ae::AllocateArray< TempEdges >( kTempChunkSize3 );
+  edgeInfo = ae::NewArray< TempEdges >( AE_ALLOC_TAG_TERRAIN, kTempChunkSize3 );
 }
 
 aeTerrainJob::~aeTerrainJob()
 {
-  ae::Release( edgeInfo );
+  ae::Delete( edgeInfo );
   edgeInfo = nullptr;
 }
 
@@ -466,7 +466,7 @@ void aeTerrainJob::Finish()
   
   for ( ae::Sdf::Shape* shape : m_shapes )
   {
-    ae::Release( shape );
+    ae::Delete( shape );
   }
   m_shapes.Clear();
 
@@ -1432,11 +1432,11 @@ void aeTerrain::Initialize( uint32_t maxThreads, bool render )
   
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockDensity[ i ] = 1.0f; }
 
-  m_threadPool = ae::Allocate< ctpl::thread_pool >( maxThreads );
+  m_threadPool = ae::New< ctpl::thread_pool >( AE_ALLOC_TAG_TERRAIN, maxThreads );
   maxThreads = aeMath::Max( 1u, maxThreads );
   for ( uint32_t i = 0; i < maxThreads; i++ )
   {
-    m_terrainJobs.Append( ae::Allocate< aeTerrainJob >() );
+    m_terrainJobs.Append( ae::New< aeTerrainJob >( AE_ALLOC_TAG_TERRAIN ) );
   }
 }
 
@@ -1445,7 +1445,7 @@ void aeTerrain::Terminate()
   if ( m_threadPool )
   {
     m_threadPool->stop( true );
-    ae::Release( m_threadPool );
+    ae::Delete( m_threadPool );
     m_threadPool = nullptr;
   }
 
@@ -1456,7 +1456,7 @@ void aeTerrain::Terminate()
     {
       job->Finish();
     }
-    ae::Release( job );
+    ae::Delete( job );
   }
   m_terrainJobs.Clear();
 

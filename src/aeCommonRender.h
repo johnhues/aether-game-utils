@@ -29,40 +29,4 @@
 //------------------------------------------------------------------------------
 #include "aeRender.h"
 
-//------------------------------------------------------------------------------
-// aeRenderInternal class
-//------------------------------------------------------------------------------
-class aeRenderInternal
-{
-public:
-  virtual ~aeRenderInternal() {}
-
-  virtual void Initialize( aeRender* render ) = 0;
-  virtual void Terminate( aeRender* render ) = 0;
-  virtual void StartFrame( aeRender* render ) = 0;
-  virtual void EndFrame( aeRender* render ) = 0;
-	
-  virtual void AddTextureBarrier( aeRender* render ) = 0;
-};
-
-//------------------------------------------------------------------------------
-// aeOpenGLRender class
-//------------------------------------------------------------------------------
-class aeOpenGLRender : public aeRenderInternal
-{
-public:
-  aeOpenGLRender();
-
-  void Initialize( aeRender* render ) override;
-  void Terminate( aeRender* render ) override;
-  void StartFrame( aeRender* render ) override;
-  void EndFrame( aeRender* render ) override;
-
-  void AddTextureBarrier(  aeRender* render ) override;
-
-private:
-  void* m_context;
-  int32_t m_defaultFbo;
-};
-
 #endif

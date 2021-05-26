@@ -36,7 +36,7 @@ aeCompactingAllocator::aeCompactingAllocator( uint32_t bytes )
   }
 
   m_size = bytes;
-  m_data = (uint8_t*)ae::AlignedAlloc( bytes, kAlignment );
+  m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FIXME, bytes, kAlignment );
 }
 
 void aeCompactingAllocator::Expand( uint32_t totalBytes )
@@ -49,7 +49,7 @@ void aeCompactingAllocator::Expand( uint32_t totalBytes )
   if ( !m_data )
   {
     m_size = totalBytes;
-    m_data = (uint8_t*)ae::AlignedAlloc( totalBytes, kAlignment );
+    m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FIXME, totalBytes, kAlignment );
     return;
   }
 
@@ -65,7 +65,7 @@ aeCompactingAllocator::~aeCompactingAllocator()
 
   if ( m_data )
   {
-    ae::AlignedFree( m_data );
+    ae::Free( m_data );
   }
 }
 
