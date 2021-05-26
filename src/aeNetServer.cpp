@@ -150,7 +150,7 @@ void AetherServer_Delete( AetherServer* _as )
 
   ENetPeer* peers = as->priv.host->peers;
   int32_t peerCount = (int32_t)as->priv.host->peerCount;
-  for ( uint32_t i = 0; i < peerCount; i++ )
+  for ( int32_t i = 0; i < peerCount; i++ )
   {
     enet_peer_disconnect( &peers[ i ], 0 );
   }
@@ -271,7 +271,7 @@ void AetherServer_Update( AetherServer* _as )
   auto iter = std::remove_if( as->priv.players.begin(), as->priv.players.end(), removePlayers );
   as->priv.players.erase( iter, as->priv.players.end() );
 
-  as->pub.playerCount = as->priv.players.size();
+  as->pub.playerCount = (int32_t)as->priv.players.size();
   as->pub.allPlayers = as->priv.players.data();
 }
 
@@ -327,7 +327,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
       {
         AetherClientHeader header = *(AetherClientHeader*)e.packet->data;
         uint8_t* data = e.packet->data + sizeof(header);
-        int32_t length = e.packet->dataLength - sizeof(header);
+        uint32_t length = (uint32_t)( e.packet->dataLength - sizeof(header) );
         
         bool success = false;
         if ( header.msgId & kSysMsgMask )
@@ -464,7 +464,7 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
   header.msgId = info->msgId;
   
   ENetPeer* peers = as->priv.host->peers;
-  int32_t peerCount = as->priv.host->peerCount;
+  int32_t peerCount = (int32_t)as->priv.host->peerCount;
 
 #ifdef USE_WEBWOCKETS
   WebConnection* connections[ kMaxConnections ];
@@ -582,7 +582,7 @@ void AetherServer_SendAll( AetherServer* _as )
 AetherPlayer* AetherServer_GetPlayerByNetInstId( AetherServer* _as, NetInstId id )
 {
   AetherServerInternal* as = (AetherServerInternal*)_as;
-  for ( uint32_t i = 0; i < as->pub.playerCount; i++ )
+  for ( int32_t i = 0; i < as->pub.playerCount; i++ )
   {
     if ( as->pub.allPlayers[ i ]->netId == id )
     {

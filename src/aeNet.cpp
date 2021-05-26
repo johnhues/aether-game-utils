@@ -43,10 +43,10 @@ void aeNetData::SendMessage( const void* data, uint32_t length )
   m_messageDataOut.Append( (const uint8_t*)data, length );
 }
 
-void aeNetData::SetInitData( const uint8_t* initData, uint32_t initDataLength )
+void aeNetData::SetInitData( const void* initData, uint32_t initDataLength )
 {
   m_initData.Clear();
-  m_initData.Append( initData, initDataLength );
+  m_initData.Append( (uint8_t*)initData, initDataLength );
   m_isPendingInit = false;
 }
 

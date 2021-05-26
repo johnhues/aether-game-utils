@@ -83,7 +83,7 @@ private:
   aeInt3 m_GetLocal( aeInt3 pos ) const;
 
   aeInitInfo< Z > m_initInfo;
-  ae::Map< aeInt3, aeInitializer< Z >* > m_zones;
+  ae::Map< aeInt3, aeInitializer< Z >* > m_zones = AE_ALLOC_TAG_FIXME;
 };
 
 //------------------------------------------------------------------------------

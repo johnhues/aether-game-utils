@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "ae/aetherEXT.h"
 #include "04_ReplicationCommon.h"
 
 //------------------------------------------------------------------------------
@@ -62,21 +62,12 @@ int main()
   // Server modules
   AetherServer* server = AetherServer_New( 3500, 0, 1 );
   aeNetReplicaDB replicaDB;
-  ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers;
+  ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers = TAG_EXAMPLE;
 
   // Game data
-  ae::Array< Green > greens;
-  auto AddGreen = [ &greens, &replicaDB ]()
-  {
-    Green* green = &greens.Append( Green() );
-    green->pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
-    green->size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
-    green->rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
-    green->life = 5.0f + aeMath::Random( 0.7f, 1.3f );
-    green->netData = replicaDB.CreateNetData( kReplicaType_Green, nullptr, 0 );
-  };
-  AddGreen();
-
+  ae::Array< Green > greens = TAG_EXAMPLE;
+  
+  // Net update
   while ( !input.GetState()->exit )
   {
     input.Pump();
@@ -114,6 +105,16 @@ int main()
     }
 
     // Game Update
+    while ( greens.Length() < 3 )
+    {
+      Green* green = &greens.Append( Green() );
+      green->pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
+      green->size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
+      green->rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
+      green->life = 5.0f + aeMath::Random( 0.7f, 1.3f );
+      green->netData = replicaDB.CreateNetData();
+      green->netData->SetInitData( &kReplicaType_Green, sizeof( kReplicaType_Green ) );
+    }
     for ( uint32_t i = 0; i < greens.Length(); i++ )
     {
       greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture, &input );
@@ -125,8 +126,6 @@ int main()
     {
       replicaDB.DestroyNetData( greens[ index ].netData );
       greens.Remove( index );
-      
-      AddGreen();
     }
     
     // Send replication data

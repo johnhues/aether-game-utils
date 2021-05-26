@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "ae/aetherEXT.h"
 
 //------------------------------------------------------------------------------
 // Shaders
@@ -95,6 +95,8 @@ int main()
 	vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
 	vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
 
+	float rotation = 0.0f;
+
 	AE_LOG( "Run" );
 	while ( !input.GetState()->exit )
 	{
@@ -102,8 +104,13 @@ int main()
 		render.Activate();
 		render.Clear( aeColor::PicoDarkPurple() );
 
+		rotation += timeStep.GetDT();
+
+		aeFloat4x4 transform = aeFloat4x4::Scaling( aeFloat3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
+		transform *= aeFloat4x4::RotationY( rotation );
+
 		aeUniformList uniformList;
-		uniformList.Set( "u_modelToNdc", aeFloat4x4::Scaling( aeFloat3( 1.0f / render.GetAspectRatio() , 1.0f, 1.0f ) ) );
+		uniformList.Set( "u_modelToNdc", transform );
 		vertexData.Render( &shader, uniformList );
 		
 		render.Present();

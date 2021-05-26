@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "ae/aetherEXT.h"
 #include "04_ReplicationCommon.h"
 
 //------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ int main()
   aeNetReplicaClient replicationClient;
 
   // Game data
-  ae::Array< Green > greens;
+  ae::Array< Green > greens = TAG_EXAMPLE;
 
   while ( !input.GetState()->exit )
   {
@@ -93,7 +93,11 @@ int main()
     // Create new replicated objects
     while ( aeRef< aeNetData > netData = replicationClient.PumpCreated() )
     {
-      if ( netData->GetType() == kReplicaType_Green )
+      uint32_t type = 0;
+      aeBinaryStream readStream = aeBinaryStream::Reader( netData->GetInitData(), netData->InitDataLength() );
+      readStream.SerializeUint32( type );
+      
+      if ( type == kReplicaType_Green )
       {
         AE_LOG( "Create green" );
         greens.Append( Green() ).netData = netData;
