@@ -68,9 +68,9 @@ public:
   void SerializeBool( const bool& v );
   
   template < uint32_t N >
-  void SerializeString( aeStr< N >& str );
+  void SerializeString( ae::Str< N >& str );
   template < uint32_t N >
-  void SerializeString( const aeStr< N >& str );
+  void SerializeString( const ae::Str< N >& str );
 
   template< typename T >
   void SerializeObject( T& v );
@@ -162,7 +162,7 @@ public:
 // aeBinaryStream member functions
 //------------------------------------------------------------------------------
 template < uint32_t N >
-void aeBinaryStream::SerializeString( aeStr< N >& str )
+void aeBinaryStream::SerializeString( ae::Str< N >& str )
 {
   if ( IsWriter() )
   {
@@ -179,20 +179,20 @@ void aeBinaryStream::SerializeString( aeStr< N >& str )
       return;
     }
 
-    if ( len > aeStr< N >::MaxLength() || GetRemaining() < len )
+    if ( len > ae::Str< N >::MaxLength() || GetRemaining() < len )
     {
       Invalidate();
     }
     else
     {
-      str = aeStr< N >( len, (const char*)PeekData() );
+      str = ae::Str< N >( len, (const char*)PeekData() );
       Discard( len );
     }
   }
 }
 
 template < uint32_t N >
-void aeBinaryStream::SerializeString( const aeStr< N >& str )
+void aeBinaryStream::SerializeString( const ae::Str< N >& str )
 {
   AE_ASSERT( m_mode == Mode::WriteBuffer );
   const uint16_t len = str.Length();

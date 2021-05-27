@@ -931,7 +931,7 @@ void aeTerrainChunk::Generate( const aeTerrainSDFCache* sdf, const aeTerrainJob*
       // @NOTE: Bias towards average of intersection points. This solves some intersecting triangles on sharp edges.
       // Based on notes here: https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
       aeFloat3 averagePos( 0.0f );
-      for ( uint32_t i = 0; i < ec; i++ )
+      for ( int32_t i = 0; i < ec; i++ )
       {
         averagePos += p[ i ];
       }
