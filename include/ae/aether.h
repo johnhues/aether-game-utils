@@ -87,8 +87,6 @@
 // ae Namespace
 //------------------------------------------------------------------------------
 #define AE_NAMESPACE ae
-// @TODO: Remove aeMath
-#define aeMath ae
 
 //------------------------------------------------------------------------------
 // System Headers
@@ -164,7 +162,7 @@ template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 namespace AE_NAMESPACE {
 
 //------------------------------------------------------------------------------
-// System functions
+// Platform functions
 //------------------------------------------------------------------------------
 uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
@@ -303,6 +301,143 @@ template< typename T > constexpr T MaxValue();
 template< typename T > constexpr T MinValue();
 
 //------------------------------------------------------------------------------
+// ae::Vec2 shared member functions
+// ae::Vec3 shared member functions
+// ae::Vec4 shared member functions
+//------------------------------------------------------------------------------
+template < typename T >
+struct FloatN
+{
+  FloatN() {}
+  FloatN( bool ) = delete;
+
+  bool operator==( const T& v ) const;
+  bool operator!=( const T& v ) const;
+  
+  float operator[]( uint32_t idx ) const;
+  float& operator[]( uint32_t idx );
+  
+  T operator+( const T& v ) const;
+  void operator+=( const T& v );
+  T operator-() const;
+  T operator-( const T& v ) const;
+  void operator-=( const T& v );
+  T operator*( float s ) const;
+  void operator*=( float s );
+  T operator/( float s ) const;
+  void operator/=( float s );
+  
+  static float Dot( const T& v0, const T& v1 );
+  float Dot( const T& v ) const;
+  float Length() const;
+  float LengthSquared() const;
+  
+  float Normalize();
+  float SafeNormalize( float epsilon = 0.000001f );
+  T NormalizeCopy() const;
+  T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
+  float Trim( float length );
+};
+
+//------------------------------------------------------------------------------
+// ae::Vec2 struct
+//------------------------------------------------------------------------------
+struct Vec2 : public FloatN< Vec2 >
+{
+  Vec2() {} // Empty default constructor for performance reasons
+  Vec2( const Vec2& ) = default;
+  explicit Vec2( float v );
+  Vec2( float x, float y );
+  explicit Vec2( const float* v2 );
+  static Vec2 FromAngle( float angle );
+  struct
+  {
+    float x;
+    float y;
+  };
+  float data[ 2 ];
+};
+
+//------------------------------------------------------------------------------
+// ae::Vec3 struct
+//------------------------------------------------------------------------------
+struct Vec3 : public FloatN< Vec3 >
+{
+  Vec3() {} // Empty default constructor for performance reasons
+  explicit Vec3( float v );
+  Vec3( float x, float y, float z );
+  explicit Vec3( const float* v3 );
+  Vec3( Vec2 xy, float z ); // @TODO: Support Y up
+  explicit Vec3( Vec2 xy );
+  explicit operator Vec2() const;
+  Vec2 GetXY() const;
+  Vec2 GetXZ() const;
+  // Int3 NearestCopy() const; // @TODO
+  // Int3 FloorCopy() const; // @TODO
+  // Int3 CeilCopy() const; // @TODO
+  
+  float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
+  void AddRotationXY( float rotation ); // @TODO: Support Y up
+  Vec3 RotateCopy( Vec3 axis, float angle ) const;
+  Vec3 Lerp( const Vec3& end, float t ) const;
+  Vec3 Slerp( const Vec3& end, float t, float epsilon = 0.0001f ) const;
+  
+  static Vec3 Cross( const Vec3& v0, const Vec3& v1 );
+  Vec3 Cross( const Vec3& v ) const;
+  void ZeroAxis( Vec3 axis ); // Zero component along arbitrary axis (ie vec dot axis == 0)
+  void ZeroDirection( Vec3 direction ); // Zero component along positive half of axis (ie vec dot dir > 0)
+
+  // static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p ); // @TODO
+  // static Vec3 ProjectVector( const class Matrix4& projection, Vec3 p ); // @TODO
+  
+  union
+  {
+    struct
+    {
+      float x;
+      float y;
+      float z;
+    };
+    float data[ 3 ];
+  };
+  float pad;
+};
+
+//------------------------------------------------------------------------------
+// ae::Vec4 struct
+//------------------------------------------------------------------------------
+struct Vec4 : public FloatN< Vec4 >
+{
+  Vec4() {} // Empty default constructor for performance reasons
+  Vec4( const Vec4& ) = default;
+  explicit Vec4( float f );
+  explicit Vec4( float* v );
+  explicit Vec4( float xyz, float w );
+  Vec4( float x, float y, float z, float w );
+  Vec4( Vec3 xyz, float w );
+  Vec4( Vec2 xy, float z, float w );
+  Vec4( Vec2 xy, Vec2 zw );
+  explicit operator Vec2() const;
+  explicit operator Vec3() const;
+  Vec4( const float* v3, float w );
+  explicit Vec4( const float* v4 );
+  Vec2 GetXY() const;
+  Vec2 GetZW() const;
+  Vec3 GetXYZ() const;
+  union
+  {
+    struct
+    {
+      float x;
+      float y;
+      float z;
+      float w;
+    };
+    float data[ 4 ];
+  };
+};
+
+//------------------------------------------------------------------------------
 // Random values
 //------------------------------------------------------------------------------
 inline int32_t Random( int32_t min, int32_t max );
@@ -327,12 +462,12 @@ public:
   operator T() const;
   
 private:
-  T m_min;
-  T m_max;
+  T m_min = T();
+  T m_max = T();
 };
 
 //------------------------------------------------------------------------------
-// Array class
+// ae::Array class
 //------------------------------------------------------------------------------
 template < typename T, uint32_t N = 0 >
 class Array
@@ -399,7 +534,7 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// Map class
+// ae::Map class
 //------------------------------------------------------------------------------
 template < typename K, typename V, uint32_t N = 0 >
 class Map
@@ -447,6 +582,93 @@ private:
   int32_t m_FindIndex( const K& key ) const;
 
   Array< Entry, N > m_entries;
+};
+
+//------------------------------------------------------------------------------
+// ae::Color struct
+//------------------------------------------------------------------------------
+struct Color
+{
+  Color() {} // Empty default constructor for performance reasons
+  Color( const Color& ) = default;
+  Color( float rgb );
+  Color( float r, float g, float b );
+  Color( float r, float g, float b, float a );
+  Color( Color c, float a );
+  static Color R( float r );
+  static Color RG( float r, float g );
+  static Color RGB( float r, float g, float b );
+  static Color RGBA( float r, float g, float b, float a );
+  static Color RGBA( const float* v );
+  static Color SRGB( float r, float g, float b );
+  static Color SRGBA( float r, float g, float b, float a );
+  static Color R8( uint8_t r );
+  static Color RG8( uint8_t r, uint8_t g );
+  static Color RGB8( uint8_t r, uint8_t g, uint8_t b );
+  static Color RGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
+  static Color SRGB8( uint8_t r, uint8_t g, uint8_t b );
+  static Color SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
+
+  Vec3 GetLinearRGB() const;
+  Vec4 GetLinearRGBA() const;
+  Vec3 GetSRGB() const;
+  Vec4 GetSRGBA() const;
+
+  Color Lerp( const Color& end, float t ) const;
+  Color DtLerp( float snappiness, float dt, const Color& target ) const;
+  Color ScaleRGB( float s ) const;
+  Color ScaleA( float s ) const;
+  Color SetA( float alpha ) const;
+
+  static float SRGBToRGB( float x );
+  static float RGBToSRGB( float x );
+
+  // Grayscale
+  static Color White();
+  static Color Gray();
+  static Color Black();
+  // Rainbow
+  static Color Red();
+  static Color Orange();
+  static Color Yellow();
+  static Color Green();
+  static Color Blue();
+  static Color Indigo();
+  static Color Violet();
+  // Pico
+  static Color PicoBlack();
+  static Color PicoDarkBlue();
+  static Color PicoDarkPurple();
+  static Color PicoDarkGreen();
+  static Color PicoBrown();
+  static Color PicoDarkGray();
+  static Color PicoLightGray();
+  static Color PicoWhite();
+  static Color PicoRed();
+  static Color PicoOrange();
+  static Color PicoYellow();
+  static Color PicoGreen();
+  static Color PicoBlue();
+  static Color PicoIndigo();
+  static Color PicoPink();
+  static Color PicoPeach();
+  // Misc
+  static Color Magenta();
+
+  float r;
+  float g;
+  float b;
+  float a;
+  
+private:
+  // Delete implicit conversions to try to catch color space issues
+  template < typename T > Color R( T r ) = delete;
+  template < typename T > Color RG( T r, T g ) = delete;
+  template < typename T > Color RGB( T r, T g, T b ) = delete;
+  template < typename T > Color RGBA( T r, T g, T b, T a ) = delete;
+  template < typename T > Color RGBA( const T* v ) = delete;
+  template < typename T > Color SRGB( T r, T g, T b ) = delete;
+  template < typename T > Color SRGBA( T r, T g, T b, T a ) = delete;
 };
 
 } // AE_NAMESPACE end
@@ -557,7 +779,7 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 //
 //
 //------------------------------------------------------------------------------
-// System internal implementation
+// Platform internal implementation
 //------------------------------------------------------------------------------
 namespace AE_NAMESPACE {
 
@@ -1046,7 +1268,7 @@ namespace Interpolation
   {
     float angle = ( t * ae::PI );// + ae::PI;
     t = ( 1.0f - ae::Cos( angle ) ) / 2;
-    // @TODO: Needed for aeColor, support types without lerp
+    // @TODO: Needed for Color, support types without lerp
     return start.Lerp( end, t ); //return start + ( ( end - start ) * t );
   }
 }
@@ -1078,46 +1300,339 @@ inline bool RandomBool()
 // RandomValue member functions
 //------------------------------------------------------------------------------
 template < typename T >
-inline aeMath::RandomValue< T >::RandomValue( T min, T max ) : m_min(min), m_max(max) {}
+inline ae::RandomValue< T >::RandomValue( T min, T max ) : m_min(min), m_max(max) {}
 
 template < typename T >
-inline aeMath::RandomValue< T >::RandomValue( T value ) : m_min(value), m_max(value) {}
+inline ae::RandomValue< T >::RandomValue( T value ) : m_min(value), m_max(value) {}
 
 template < typename T >
-inline void aeMath::RandomValue< T >::SetMin( T min )
+inline void ae::RandomValue< T >::SetMin( T min )
 {
   m_min = min;
 }
 
 template < typename T >
-inline void aeMath::RandomValue< T >::SetMax( T max )
+inline void ae::RandomValue< T >::SetMax( T max )
 {
   m_max = max;
 }
 
 template < typename T >
-inline T aeMath::RandomValue< T >::GetMin() const
+inline T ae::RandomValue< T >::GetMin() const
 {
   return m_min;
 }
 
 template < typename T >
-inline T aeMath::RandomValue< T >::GetMax() const
+inline T ae::RandomValue< T >::GetMax() const
 {
   return m_max;
 }
 
 template < typename T >
-inline T aeMath::RandomValue< T >::Get() const
+inline T ae::RandomValue< T >::Get() const
 {
   return Random( m_min, m_max );
 }
 
 template < typename T >
-inline aeMath::RandomValue< T >::operator T() const
+inline ae::RandomValue< T >::operator T() const
 {
   return Get();
 }
+
+//------------------------------------------------------------------------------
+// ae::Vec2 shared member functions
+// ae::Vec3 shared member functions
+// ae::Vec4 shared member functions
+//------------------------------------------------------------------------------
+template < typename T >
+bool FloatN< T >::operator==( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
+}
+
+template < typename T >
+bool FloatN< T >::operator!=( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
+}
+
+template < typename T >
+float FloatN< T >::operator[]( uint32_t idx ) const
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+float& FloatN< T >::operator[]( uint32_t idx )
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+T FloatN< T >::operator+( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] + v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void FloatN< T >::operator+=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    self.data[ i ] += v.data[ i ];
+  }
+}
+
+template < typename T >
+T FloatN< T >::operator-() const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = -self.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T FloatN< T >::operator-( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] - v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void FloatN< T >::operator-=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] -= v.data[ i ];
+  }
+}
+
+template < typename T >
+T FloatN< T >::operator*( float s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * s;
+  }
+  return result;
+}
+
+template < typename T >
+void FloatN< T >::operator*=( float s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= s;
+  }
+}
+
+template < typename T >
+T FloatN< T >::operator/( float s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / s;
+  }
+  return result;
+}
+
+template < typename T >
+void FloatN< T >::operator/=( float s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= s;
+  }
+}
+
+template < typename T >
+float FloatN< T >::Dot( const T& v0, const T& v1 )
+{
+  float result = 0.0f;
+  for ( uint32_t i = 0; i < countof(v0.data); i++ )
+  {
+    result += v0.data[ i ] * v1.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+float FloatN< T >::Dot( const T& v ) const
+{
+  return Dot( *(T*)this, v );
+}
+
+template < typename T >
+float FloatN< T >::Length() const
+{
+  return sqrt( LengthSquared() );
+}
+
+template < typename T >
+float FloatN< T >::LengthSquared() const
+{
+  return Dot( *(T*)this );
+}
+
+template < typename T >
+float FloatN< T >::Normalize()
+{
+  float length = Length();
+  *(T*)this /= length;
+  return length;
+}
+
+template < typename T >
+float FloatN< T >::SafeNormalize( float epsilon )
+{
+  auto&& self = *(T*)this;
+  float length = Length();
+  if ( length < epsilon )
+  {
+    self = T( 0.0f );
+    return 0.0f;
+  }
+  self /= length;
+  return length;
+}
+
+template < typename T >
+T FloatN< T >::NormalizeCopy() const
+{
+  T result = *(T*)this;
+  result.Normalize();
+  return result;
+}
+
+template < typename T >
+T FloatN< T >::SafeNormalizeCopy( float epsilon ) const
+{
+  T result = *(T*)this;
+  result.SafeNormalize( epsilon );
+  return result;
+}
+
+template < typename T >
+float FloatN< T >::Trim( float trimLength )
+{
+  float length = Length();
+  if ( trimLength < length )
+  {
+    *(T*)this *= ( trimLength / length );
+    return trimLength;
+  }
+  return length;
+}
+
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const FloatN< T >& v )
+{
+  constexpr uint32_t count = countof( T::data );
+  for ( uint32_t i = 0; i < count - 1; i++ )
+  {
+    os << v[ i ] << " ";
+  }
+  return os << v[ count - 1 ];
+}
+
+//------------------------------------------------------------------------------
+// ae::Vec2 member functions
+//------------------------------------------------------------------------------
+inline Vec2::Vec2( float v ) : x( v ), y( v ) {}
+inline Vec2::Vec2( float x, float y ) : x( x ), y( y ) {}
+inline Vec2::Vec2( const float* v2 ) : x( v2[ 0 ] ), y( v2[ 1 ] ) {}
+inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::Sin( angle ) ); }
+
+//------------------------------------------------------------------------------
+// ae::Vec3 member functions
+//------------------------------------------------------------------------------
+inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ), pad( 0.0f ) {}
+inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ), pad( 0.0f ) {}
+inline Vec3::Vec3( const float* v3 ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), pad( 0.0f ) {}
+inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
+inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
+inline Vec3::operator Vec2() const { return Vec2( x, y ); }
+inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
+inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
+inline Vec3 Vec3::Lerp( const Vec3& end, float t ) const
+{
+  t = ae::Clip01( t );
+  float minT = ( 1.0f - t );
+  return Vec3( x * minT + end.x * t, y * minT + end.y * t, z * minT + end.z * t );
+}
+inline Vec3 Vec3::Cross( const Vec3& v0, const Vec3& v1 )
+{
+  return Vec3( v0.y * v1.z - v0.z * v1.y, v0.z * v1.x - v0.x * v1.z, v0.x * v1.y - v0.y * v1.x );
+}
+inline Vec3 Vec3::Cross( const Vec3& v ) const { return Cross( *this, v ); }
+inline void Vec3::ZeroAxis( Vec3 axis )
+{
+  axis.SafeNormalize();
+  *this -= axis * Dot( axis );
+  return *this;
+}
+inline void Vec3::ZeroDirection( Vec3 direction )
+{
+  float d = Dot( direction );
+  if ( d > 0.0f )
+  {
+    direction.SafeNormalize();
+    *this -= direction * d;
+  }
+  return *this;
+}
+
+//------------------------------------------------------------------------------
+// ae::Vec4 member functions
+//------------------------------------------------------------------------------
+inline Vec4::Vec4( float f ) : x( f ), y( f ), z( f ), w( f ) {}
+inline Vec4::Vec4( float xyz, float w ) : x( xyz ), y( xyz ), z( xyz ), w( w ) {}
+inline Vec4::Vec4( float x, float y, float z, float w ) : x( x ), y( y ), z( z ), w( w ) {}
+inline Vec4::Vec4( Vec3 xyz, float w ) : x( xyz.x ), y( xyz.y ), z( xyz.z ), w( w ) {}
+inline Vec4::Vec4( Vec2 xy, float z, float w ) : x( xy.x ), y( xy.y ), z( z ), w( w ) {}
+inline Vec4::Vec4( Vec2 xy, Vec2 zw ) : x( xy.x ), y( xy.y ), z( zw.x ), w( zw.y ) {}
+inline Vec4::operator Vec2() const { return Vec2( x, y ); }
+inline Vec4::operator Vec3() const { return Vec3( x, y, z ); }
+inline Vec4::Vec4( const float* v3, float w ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), w( w ) {}
+inline Vec4::Vec4( const float* v4 ) : x( v4[ 0 ] ), y( v4[ 1 ] ), z( v4[ 2 ] ), w( v4[ 3 ] ) {}
+inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
+inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
+inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
 
 //------------------------------------------------------------------------------
 // Array functions
@@ -1746,6 +2261,101 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
   return os << "}";
 }
 
+//------------------------------------------------------------------------------
+// ae::Colors
+// It's expensive to do the srgb conversion everytime these are constructed so
+// do it once and then return a copy each time static Color functions are called.
+//------------------------------------------------------------------------------
+// Grayscale
+inline Color Color::White() { static Color c = Color::SRGB8( 255, 255, 255 ); return c; }
+inline Color Color::Gray() { static Color c = Color::SRGB8( 127, 127, 127 ); return c; }
+inline Color Color::Black() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+// Rainbow
+inline Color Color::Red() { static Color c = Color::SRGB8( 255, 0, 0 ); return c; }
+inline Color Color::Orange() { static Color c = Color::SRGB8( 255, 127, 0 ); return c; }
+inline Color Color::Yellow() { static Color c = Color::SRGB8( 255, 255, 0 ); return c; }
+inline Color Color::Green() { static Color c = Color::SRGB8( 0, 255, 0 ); return c; }
+inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return c; }
+inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
+inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
+// Pico
+inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }
+inline Color Color::PicoDarkPurple() { static Color c = Color::SRGB8( 126, 37, 83 ); return c; }
+inline Color Color::PicoDarkGreen() { static Color c = Color::SRGB8( 0, 135, 81 ); return c; }
+inline Color Color::PicoBrown() { static Color c = Color::SRGB8( 171, 82, 54 ); return c; }
+inline Color Color::PicoDarkGray() { static Color c = Color::SRGB8( 95, 87, 79 ); return c; }
+inline Color Color::PicoLightGray() { static Color c = Color::SRGB8( 194, 195, 199 ); return c; }
+inline Color Color::PicoWhite() { static Color c = Color::SRGB8( 255, 241, 232 ); return c; }
+inline Color Color::PicoRed() { static Color c = Color::SRGB8( 255, 0, 77 ); return c; }
+inline Color Color::PicoOrange() { static Color c = Color::SRGB8( 255, 163, 0 ); return c; }
+inline Color Color::PicoYellow() { static Color c = Color::SRGB8( 255, 236, 39 ); return c; }
+inline Color Color::PicoGreen() { static Color c = Color::SRGB8( 0, 228, 54 ); return c; }
+inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); return c; }
+inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
+inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
+inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
+// Misc
+inline Color Color::Magenta() { return Color( 1.0f, 0.0f, 1.0f ); }
+
+//------------------------------------------------------------------------------
+// ae::Color functions
+//------------------------------------------------------------------------------
+inline std::ostream& operator<<( std::ostream& os, Color c )
+{
+  return os << "<" << c.r << ", " << c.g << ", " << c.b << ", " << c.a << ">";
+}
+inline Color::Color( float rgb ) : r( rgb ), g( rgb ), b( rgb ), a( 1.0f ) {}
+inline Color::Color( float r, float g, float b ) : r( r ), g( g ), b( b ), a( 1.0f ) {}
+inline Color::Color( float r, float g, float b, float a )
+  : r( r ), g( g ), b( b ), a( a )
+{}
+inline Color::Color( Color c, float a ) : r( c.r ), g( c.g ), b( c.b ), a( a ) {}
+inline Color Color::R( float r ) { return Color( r, 0.0f, 0.0f, 1.0f ); }
+inline Color Color::RG( float r, float g ) { return Color( r, g, 0.0f, 1.0f ); }
+inline Color Color::RGB( float r, float g, float b ) { return Color( r, g, b, 1.0f ); }
+inline Color Color::RGBA( float r, float g, float b, float a ) { return Color( r, g, b, a ); }
+inline Color Color::RGBA( const float* v ) { return Color( v[ 0 ], v[ 1 ], v[ 2 ], v[ 3 ] ); }
+inline Color Color::SRGB( float r, float g, float b ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), 1.0f ); }
+inline Color Color::SRGBA( float r, float g, float b, float a ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), a ); }
+inline Color Color::R8( uint8_t r ) { return Color( r / 255.0f, 0.0f, 0.0f, 1.0f ); }
+inline Color Color::RG8( uint8_t r, uint8_t g ) { return Color( r / 255.0f, g / 255.0f, 0.0f, 1.0f ); }
+inline Color Color::RGB8( uint8_t r, uint8_t g, uint8_t b ) { return Color( r / 255.0f, g / 255.0f, b / 255.0f, 1.0f ); }
+inline Color Color::RGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
+{
+  return Color( r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f );
+}
+inline Color Color::SRGB8( uint8_t r, uint8_t g, uint8_t b )
+{
+  return Color( SRGBToRGB( r / 255.0f ), SRGBToRGB( g / 255.0f ), SRGBToRGB( b / 255.0f ), 1.0f );
+}
+inline Color Color::SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
+{
+  return Color( SRGBToRGB( r / 255.0f ), SRGBToRGB( g / 255.0f ), SRGBToRGB( b / 255.0f ), a / 255.0f );
+}
+inline Vec3 Color::GetLinearRGB() const { return Vec3( r, g, b ); }
+inline Vec4 Color::GetLinearRGBA() const { return Vec4( r, g, b, a ); }
+inline Vec3 Color::GetSRGB() const { return Vec3( RGBToSRGB( r ), RGBToSRGB( g ), RGBToSRGB( b ) ); }
+inline Vec4 Color::GetSRGBA() const { return Vec4( GetSRGB(), a ); }
+inline Color Color::Lerp( const Color& end, float t ) const
+{
+  return Color(
+    ae::Lerp( r, end.r, t ),
+    ae::Lerp( g, end.g, t ),
+    ae::Lerp( b, end.b, t ),
+    ae::Lerp( a, end.a, t )
+  );
+}
+inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) const
+{
+  return Lerp( target, exp2( -exp2( snappiness ) * dt ) );
+}
+inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
+inline Color Color::ScaleA( float s ) const { return Color( r, g, b, a * s ); }
+inline Color Color::SetA( float alpha ) const { return Color( r, g, b, alpha ); }
+inline float Color::SRGBToRGB( float x ) { return pow( x , 2.2 ); }
+inline float Color::RGBToSRGB( float x ) { return pow( x, 1.0 / 2.2 ); }
+
 } // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
@@ -1781,7 +2391,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 #include <thread>
 
 //------------------------------------------------------------------------------
-// System functions internal implementation
+// Platform functions internal implementation
 //------------------------------------------------------------------------------
 namespace AE_NAMESPACE {
 
@@ -1832,6 +2442,83 @@ bool IsDebuggerAttached()
   return false;
 }
 #endif
+
+//------------------------------------------------------------------------------
+// ae::Vec3 functions
+//------------------------------------------------------------------------------
+float Vec3::GetAngleBetween( const Vec3& v, float epsilon ) const
+{
+  const Vec3 crossProduct = Cross( v );
+  const float dotProduct = Dot( v );
+  if ( crossProduct.LengthSquared() < epsilon && dotProduct > 0.0f )
+  {
+    return 0.0f;
+  }
+  else if ( crossProduct.LengthSquared() < epsilon && dotProduct < 0.0f )
+  {
+    return ae::PI;
+  }
+  float angle = dotProduct;
+  angle /= Length() * v.Length();
+  angle = std::acos( angle );
+  angle = std::abs( angle );
+  return angle;
+}
+
+void Vec3::AddRotationXY( float rotation )
+{
+  float sinTheta = std::sin( rotation );
+  float cosTheta = std::cos( rotation );
+  float newX = x * cosTheta - y * sinTheta;
+  float newY = x * sinTheta + y * cosTheta;
+  x = newX;
+  y = newY;
+}
+
+Vec3 Vec3::RotateCopy( Vec3 axis, float angle ) const
+{
+  // http://stackoverflow.com/questions/6721544/circular-rotation-around-an-arbitrary-axis
+  axis.Normalize();
+  float cosA = cosf( angle );
+  float mCosA = 1.0f - cosA;
+  float sinA = sinf( angle );
+  Vec3 r0(
+    cosA + axis.x * axis.x * mCosA,
+    axis.x * axis.y * mCosA - axis.z * sinA,
+    axis.x * axis.z * mCosA + axis.y * sinA );
+  Vec3 r1(
+    axis.y * axis.x * mCosA + axis.z * sinA,
+    cosA + axis.y * axis.y * mCosA,
+    axis.y * axis.z * mCosA - axis.x * sinA );
+  Vec3 r2(
+    axis.z * axis.x * mCosA - axis.y * sinA,
+    axis.z * axis.y * mCosA + axis.x * sinA,
+    cosA + axis.z * axis.z * mCosA );
+  return Vec3( r0.Dot( *this ), r1.Dot( *this ), r2.Dot( *this ) );
+}
+
+Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
+{
+  if ( Length() < epsilon || end.Length() < epsilon )
+  {
+    return Vec3( 0.0f );
+  }
+  Vec3 v0 = NormalizeCopy();
+  Vec3 v1 = end.NormalizeCopy();
+  float d = ae::Clip( v0.Dot( v1 ), -1.0f, 1.0f );
+  if ( d > ( 1.0f - epsilon ) )
+  {
+    return v1;
+  }
+  if ( d < -( 1.0f - epsilon ) )
+  {
+    return v0;
+  }
+  float angle = std::acos( d ) * t;
+  Vec3 v2 = v1 - v0 * d;
+  v2.Normalize();
+  return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) );
+}
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation

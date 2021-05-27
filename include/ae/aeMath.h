@@ -28,6 +28,8 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+// @TODO: Remove aeMath
+#define aeMath ae
 
 //------------------------------------------------------------------------------
 // aeRandom
@@ -125,6 +127,10 @@ struct AE_ALIGN(16) aeFloat2
   float GetAngle() const;
   float Atan2() const;
   static aeFloat2 Reflect( aeFloat2 v, aeFloat2 n );
+  
+  // @TODO: Remove
+  aeFloat2( const ae::Vec2 v ) : x(v.x), y(v.y) {}
+  operator ae::Vec2() const { return ae::Vec2( x, y ); }
 };
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat2 v )
@@ -299,6 +305,10 @@ public:
   aeFloat3 Slerp(const aeFloat3& end, float t) const;
 
   static aeFloat3 ProjectPoint( const class aeFloat4x4& projection, aeFloat3 p );
+  
+  // @TODO: Remove
+  aeFloat3( const ae::Vec3 v ) : x(v.x), y(v.y), z(v.z) {}
+  operator ae::Vec3() const { return ae::Vec3( x, y, z ); }
 };
 
 inline aeFloat3 operator * ( float f, aeFloat3 v ) { return v * f; }
@@ -507,6 +517,10 @@ public:
   bool operator>(const aeFloat4& v) const;
   bool operator<=(const aeFloat4& v) const;
   bool operator>=(const aeFloat4& v) const;
+  
+  // @TODO: Remove
+  aeFloat4( const ae::Vec4 v ) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+  operator ae::Vec4() const { return ae::Vec4( x, y, z, w ); }
 };
 
 inline std::ostream& operator<<( std::ostream& os, aeFloat4 v )

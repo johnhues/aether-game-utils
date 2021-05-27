@@ -555,9 +555,9 @@ int main()
       textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
       worldToText = textToNdc.Inverse() * worldToProj;
 
-      aeColor top = aeColor::PS( 46, 65, 35 );
-      aeColor side = aeColor::PS( 84, 84, 74 );
-      aeColor path = aeColor::PS( 64, 64, 54 );
+      aeColor top = aeColor::SRGB8( 46, 65, 35 );
+      aeColor side = aeColor::SRGB8( 84, 84, 74 );
+      aeColor path = aeColor::SRGB8( 64, 64, 54 );
       aeUniformList uniformList;
       uniformList.Set( "u_worldToProj", worldToProj );
       if ( wireframe )

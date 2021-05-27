@@ -382,7 +382,7 @@ void aeBinaryStream::SerializeObjectConditional( T* obj )
 
       // Rewrite previously serialized value
       uint32_t writeLength = m_offset - prevOffset;
-      if ( writeLength > aeMath::MaxValue< uint16_t >() )
+      if ( writeLength > ae::MaxValue< uint16_t >() )
       {
         Invalidate(); // Object is too large to serialize
       }
