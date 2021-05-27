@@ -198,13 +198,17 @@ public:
   virtual void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) = 0;
   virtual void Free( void* data ) = 0;
 };
+//------------------------------------------------------------------------------
 // @NOTE: Call ae::SetGlobalAllocator() before making any allocations or else a
 // default allocator will be used. You must call ae::SetGlobalAllocator() before
 // any allocations are made.
+//------------------------------------------------------------------------------
 void SetGlobalAllocator( Allocator* alloc );
 Allocator* GetGlobalAllocator();
 //------------------------------------------------------------------------------
 // Allocation functions
+// @NOTE: All allocations are tagged, (@TODO) they can be inspected through the
+// current ae::Allocator with ae::GetGlobalAllocator()
 //------------------------------------------------------------------------------
 // C++ style allocations
 template < typename T > T* NewArray( ae::Tag tag, uint32_t count );
@@ -218,6 +222,9 @@ void Free( void* data );
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
 //------------------------------------------------------------------------------
+// @NOTE: This class is useful for scoped allocations. (@TODO) In the future it
+// should allocate from a stack. This should allow big allocations to happen
+// cheaply each frame without creating any fragmentation.
 template < typename T >
 class Scratch
 {
@@ -305,6 +312,9 @@ template< typename T > constexpr T MinValue();
 // ae::Vec3 shared member functions
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
+// @NOTE: Vec2 Vec3 and Vec4 share these functions. They act on the each component
+// of the vector, so in the case of Vec4 a dot product is implemented as
+// (a.x*b.x)+(a.y*b.y)+(a.z*b.z)+(a.w*b.w).
 template < typename T >
 struct VecT
 {
@@ -339,12 +349,14 @@ struct VecT
   float Trim( float length );
 };
 
+#pragma warning(disable:26495) // Vecs are left uninitialized for performance
+
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
 //------------------------------------------------------------------------------
 struct Vec2 : public VecT< Vec2 >
 {
-  Vec2() {} // Empty default constructor for performance reasons
+  Vec2() {} // Empty default constructor for performance of vertex arrays etc
   Vec2( const Vec2& ) = default;
   explicit Vec2( float v );
   Vec2( float x, float y );
@@ -363,7 +375,7 @@ struct Vec2 : public VecT< Vec2 >
 //------------------------------------------------------------------------------
 struct Vec3 : public VecT< Vec3 >
 {
-  Vec3() {} // Empty default constructor for performance reasons
+  Vec3() {} // Empty default constructor for performance of vertex arrays etc
   explicit Vec3( float v );
   Vec3( float x, float y, float z );
   explicit Vec3( const float* v3 );
@@ -408,7 +420,7 @@ struct Vec3 : public VecT< Vec3 >
 //------------------------------------------------------------------------------
 struct Vec4 : public VecT< Vec4 >
 {
-  Vec4() {} // Empty default constructor for performance reasons
+  Vec4() {} // Empty default constructor for performance of vertex arrays etc
   Vec4( const Vec4& ) = default;
   explicit Vec4( float f );
   explicit Vec4( float* v );
@@ -436,6 +448,95 @@ struct Vec4 : public VecT< Vec4 >
     float data[ 4 ];
   };
 };
+
+//------------------------------------------------------------------------------
+// ae::Color struct
+//------------------------------------------------------------------------------
+struct Color
+{
+  Color() {} // Empty default constructor for performance of vertex arrays etc
+  Color( const Color& ) = default;
+  Color( float rgb );
+  Color( float r, float g, float b );
+  Color( float r, float g, float b, float a );
+  Color( Color c, float a );
+  static Color R( float r );
+  static Color RG( float r, float g );
+  static Color RGB( float r, float g, float b );
+  static Color RGBA( float r, float g, float b, float a );
+  static Color RGBA( const float* v );
+  static Color SRGB( float r, float g, float b );
+  static Color SRGBA( float r, float g, float b, float a );
+  static Color R8( uint8_t r );
+  static Color RG8( uint8_t r, uint8_t g );
+  static Color RGB8( uint8_t r, uint8_t g, uint8_t b );
+  static Color RGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
+  static Color SRGB8( uint8_t r, uint8_t g, uint8_t b );
+  static Color SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
+
+  Vec3 GetLinearRGB() const;
+  Vec4 GetLinearRGBA() const;
+  Vec3 GetSRGB() const;
+  Vec4 GetSRGBA() const;
+
+  Color Lerp( const Color& end, float t ) const;
+  Color DtLerp( float snappiness, float dt, const Color& target ) const;
+  Color ScaleRGB( float s ) const;
+  Color ScaleA( float s ) const;
+  Color SetA( float alpha ) const;
+
+  static float SRGBToRGB( float x );
+  static float RGBToSRGB( float x );
+
+  // Grayscale
+  static Color White();
+  static Color Gray();
+  static Color Black();
+  // Rainbow
+  static Color Red();
+  static Color Orange();
+  static Color Yellow();
+  static Color Green();
+  static Color Blue();
+  static Color Indigo();
+  static Color Violet();
+  // Pico
+  static Color PicoBlack();
+  static Color PicoDarkBlue();
+  static Color PicoDarkPurple();
+  static Color PicoDarkGreen();
+  static Color PicoBrown();
+  static Color PicoDarkGray();
+  static Color PicoLightGray();
+  static Color PicoWhite();
+  static Color PicoRed();
+  static Color PicoOrange();
+  static Color PicoYellow();
+  static Color PicoGreen();
+  static Color PicoBlue();
+  static Color PicoIndigo();
+  static Color PicoPink();
+  static Color PicoPeach();
+  // Misc
+  static Color Magenta();
+
+  float r;
+  float g;
+  float b;
+  float a;
+
+private:
+  // Delete implicit conversions to try to catch color space issues
+  template < typename T > Color R( T r ) = delete;
+  template < typename T > Color RG( T r, T g ) = delete;
+  template < typename T > Color RGB( T r, T g, T b ) = delete;
+  template < typename T > Color RGBA( T r, T g, T b, T a ) = delete;
+  template < typename T > Color RGBA( const T* v ) = delete;
+  template < typename T > Color SRGB( T r, T g, T b ) = delete;
+  template < typename T > Color SRGBA( T r, T g, T b, T a ) = delete;
+};
+
+#pragma warning(default:26495) // Re-enable uninitialized variable warning
 
 //------------------------------------------------------------------------------
 // Random values
@@ -582,93 +683,6 @@ private:
   int32_t m_FindIndex( const K& key ) const;
 
   Array< Entry, N > m_entries;
-};
-
-//------------------------------------------------------------------------------
-// ae::Color struct
-//------------------------------------------------------------------------------
-struct Color
-{
-  Color() {} // Empty default constructor for performance reasons
-  Color( const Color& ) = default;
-  Color( float rgb );
-  Color( float r, float g, float b );
-  Color( float r, float g, float b, float a );
-  Color( Color c, float a );
-  static Color R( float r );
-  static Color RG( float r, float g );
-  static Color RGB( float r, float g, float b );
-  static Color RGBA( float r, float g, float b, float a );
-  static Color RGBA( const float* v );
-  static Color SRGB( float r, float g, float b );
-  static Color SRGBA( float r, float g, float b, float a );
-  static Color R8( uint8_t r );
-  static Color RG8( uint8_t r, uint8_t g );
-  static Color RGB8( uint8_t r, uint8_t g, uint8_t b );
-  static Color RGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
-  static Color SRGB8( uint8_t r, uint8_t g, uint8_t b );
-  static Color SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
-
-  Vec3 GetLinearRGB() const;
-  Vec4 GetLinearRGBA() const;
-  Vec3 GetSRGB() const;
-  Vec4 GetSRGBA() const;
-
-  Color Lerp( const Color& end, float t ) const;
-  Color DtLerp( float snappiness, float dt, const Color& target ) const;
-  Color ScaleRGB( float s ) const;
-  Color ScaleA( float s ) const;
-  Color SetA( float alpha ) const;
-
-  static float SRGBToRGB( float x );
-  static float RGBToSRGB( float x );
-
-  // Grayscale
-  static Color White();
-  static Color Gray();
-  static Color Black();
-  // Rainbow
-  static Color Red();
-  static Color Orange();
-  static Color Yellow();
-  static Color Green();
-  static Color Blue();
-  static Color Indigo();
-  static Color Violet();
-  // Pico
-  static Color PicoBlack();
-  static Color PicoDarkBlue();
-  static Color PicoDarkPurple();
-  static Color PicoDarkGreen();
-  static Color PicoBrown();
-  static Color PicoDarkGray();
-  static Color PicoLightGray();
-  static Color PicoWhite();
-  static Color PicoRed();
-  static Color PicoOrange();
-  static Color PicoYellow();
-  static Color PicoGreen();
-  static Color PicoBlue();
-  static Color PicoIndigo();
-  static Color PicoPink();
-  static Color PicoPeach();
-  // Misc
-  static Color Magenta();
-
-  float r;
-  float g;
-  float b;
-  float a;
-  
-private:
-  // Delete implicit conversions to try to catch color space issues
-  template < typename T > Color R( T r ) = delete;
-  template < typename T > Color RG( T r, T g ) = delete;
-  template < typename T > Color RGB( T r, T g, T b ) = delete;
-  template < typename T > Color RGBA( T r, T g, T b, T a ) = delete;
-  template < typename T > Color RGBA( const T* v ) = delete;
-  template < typename T > Color SRGB( T r, T g, T b ) = delete;
-  template < typename T > Color SRGBA( T r, T g, T b, T a ) = delete;
 };
 
 } // AE_NAMESPACE end
@@ -1637,6 +1651,8 @@ inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
   return os << v[ count - 1 ];
 }
 
+#pragma warning(disable:26495) // Hide incorrect Vec2 initialization warning due to union
+
 //------------------------------------------------------------------------------
 // ae::Vec2 member functions
 //------------------------------------------------------------------------------
@@ -1698,6 +1714,103 @@ inline Vec4::Vec4( const float* v4 ) : x( v4[ 0 ] ), y( v4[ 1 ] ), z( v4[ 2 ] ),
 inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
+
+//------------------------------------------------------------------------------
+// ae::Colors
+// It's expensive to do the srgb conversion everytime these are constructed so
+// do it once and then return a copy each time static Color functions are called.
+//------------------------------------------------------------------------------
+// Grayscale
+inline Color Color::White() { static Color c = Color::SRGB8( 255, 255, 255 ); return c; }
+inline Color Color::Gray() { static Color c = Color::SRGB8( 127, 127, 127 ); return c; }
+inline Color Color::Black() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+// Rainbow
+inline Color Color::Red() { static Color c = Color::SRGB8( 255, 0, 0 ); return c; }
+inline Color Color::Orange() { static Color c = Color::SRGB8( 255, 127, 0 ); return c; }
+inline Color Color::Yellow() { static Color c = Color::SRGB8( 255, 255, 0 ); return c; }
+inline Color Color::Green() { static Color c = Color::SRGB8( 0, 255, 0 ); return c; }
+inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return c; }
+inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
+inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
+// Pico
+inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
+inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }
+inline Color Color::PicoDarkPurple() { static Color c = Color::SRGB8( 126, 37, 83 ); return c; }
+inline Color Color::PicoDarkGreen() { static Color c = Color::SRGB8( 0, 135, 81 ); return c; }
+inline Color Color::PicoBrown() { static Color c = Color::SRGB8( 171, 82, 54 ); return c; }
+inline Color Color::PicoDarkGray() { static Color c = Color::SRGB8( 95, 87, 79 ); return c; }
+inline Color Color::PicoLightGray() { static Color c = Color::SRGB8( 194, 195, 199 ); return c; }
+inline Color Color::PicoWhite() { static Color c = Color::SRGB8( 255, 241, 232 ); return c; }
+inline Color Color::PicoRed() { static Color c = Color::SRGB8( 255, 0, 77 ); return c; }
+inline Color Color::PicoOrange() { static Color c = Color::SRGB8( 255, 163, 0 ); return c; }
+inline Color Color::PicoYellow() { static Color c = Color::SRGB8( 255, 236, 39 ); return c; }
+inline Color Color::PicoGreen() { static Color c = Color::SRGB8( 0, 228, 54 ); return c; }
+inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); return c; }
+inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
+inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
+inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
+// Misc
+inline Color Color::Magenta() { return Color( 1.0f, 0.0f, 1.0f ); }
+
+//------------------------------------------------------------------------------
+// ae::Color functions
+//------------------------------------------------------------------------------
+inline std::ostream& operator<<( std::ostream& os, Color c )
+{
+  return os << "<" << c.r << ", " << c.g << ", " << c.b << ", " << c.a << ">";
+}
+inline Color::Color( float rgb ) : r( rgb ), g( rgb ), b( rgb ), a( 1.0f ) {}
+inline Color::Color( float r, float g, float b ) : r( r ), g( g ), b( b ), a( 1.0f ) {}
+inline Color::Color( float r, float g, float b, float a )
+  : r( r ), g( g ), b( b ), a( a )
+{}
+inline Color::Color( Color c, float a ) : r( c.r ), g( c.g ), b( c.b ), a( a ) {}
+inline Color Color::R( float r ) { return Color( r, 0.0f, 0.0f, 1.0f ); }
+inline Color Color::RG( float r, float g ) { return Color( r, g, 0.0f, 1.0f ); }
+inline Color Color::RGB( float r, float g, float b ) { return Color( r, g, b, 1.0f ); }
+inline Color Color::RGBA( float r, float g, float b, float a ) { return Color( r, g, b, a ); }
+inline Color Color::RGBA( const float* v ) { return Color( v[ 0 ], v[ 1 ], v[ 2 ], v[ 3 ] ); }
+inline Color Color::SRGB( float r, float g, float b ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), 1.0f ); }
+inline Color Color::SRGBA( float r, float g, float b, float a ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), a ); }
+inline Color Color::R8( uint8_t r ) { return Color( r / 255.0f, 0.0f, 0.0f, 1.0f ); }
+inline Color Color::RG8( uint8_t r, uint8_t g ) { return Color( r / 255.0f, g / 255.0f, 0.0f, 1.0f ); }
+inline Color Color::RGB8( uint8_t r, uint8_t g, uint8_t b ) { return Color( r / 255.0f, g / 255.0f, b / 255.0f, 1.0f ); }
+inline Color Color::RGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
+{
+  return Color( r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f );
+}
+inline Color Color::SRGB8( uint8_t r, uint8_t g, uint8_t b )
+{
+  return Color( SRGBToRGB( r / 255.0f ), SRGBToRGB( g / 255.0f ), SRGBToRGB( b / 255.0f ), 1.0f );
+}
+inline Color Color::SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
+{
+  return Color( SRGBToRGB( r / 255.0f ), SRGBToRGB( g / 255.0f ), SRGBToRGB( b / 255.0f ), a / 255.0f );
+}
+inline Vec3 Color::GetLinearRGB() const { return Vec3( r, g, b ); }
+inline Vec4 Color::GetLinearRGBA() const { return Vec4( r, g, b, a ); }
+inline Vec3 Color::GetSRGB() const { return Vec3( RGBToSRGB( r ), RGBToSRGB( g ), RGBToSRGB( b ) ); }
+inline Vec4 Color::GetSRGBA() const { return Vec4( GetSRGB(), a ); }
+inline Color Color::Lerp( const Color& end, float t ) const
+{
+  return Color(
+    ae::Lerp( r, end.r, t ),
+    ae::Lerp( g, end.g, t ),
+    ae::Lerp( b, end.b, t ),
+    ae::Lerp( a, end.a, t )
+  );
+}
+inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) const
+{
+  return Lerp( target, exp2( -exp2( snappiness ) * dt ) );
+}
+inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
+inline Color Color::ScaleA( float s ) const { return Color( r, g, b, a * s ); }
+inline Color Color::SetA( float alpha ) const { return Color( r, g, b, alpha ); }
+inline float Color::SRGBToRGB( float x ) { return pow( x , 2.2 ); }
+inline float Color::RGBToSRGB( float x ) { return pow( x, 1.0 / 2.2 ); }
+
+#pragma warning(default:26495) // Re-enable uninitialized variable warning
 
 //------------------------------------------------------------------------------
 // Array functions
@@ -2325,101 +2438,6 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
   }
   return os << "}";
 }
-
-//------------------------------------------------------------------------------
-// ae::Colors
-// It's expensive to do the srgb conversion everytime these are constructed so
-// do it once and then return a copy each time static Color functions are called.
-//------------------------------------------------------------------------------
-// Grayscale
-inline Color Color::White() { static Color c = Color::SRGB8( 255, 255, 255 ); return c; }
-inline Color Color::Gray() { static Color c = Color::SRGB8( 127, 127, 127 ); return c; }
-inline Color Color::Black() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
-// Rainbow
-inline Color Color::Red() { static Color c = Color::SRGB8( 255, 0, 0 ); return c; }
-inline Color Color::Orange() { static Color c = Color::SRGB8( 255, 127, 0 ); return c; }
-inline Color Color::Yellow() { static Color c = Color::SRGB8( 255, 255, 0 ); return c; }
-inline Color Color::Green() { static Color c = Color::SRGB8( 0, 255, 0 ); return c; }
-inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return c; }
-inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
-inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
-// Pico
-inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
-inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }
-inline Color Color::PicoDarkPurple() { static Color c = Color::SRGB8( 126, 37, 83 ); return c; }
-inline Color Color::PicoDarkGreen() { static Color c = Color::SRGB8( 0, 135, 81 ); return c; }
-inline Color Color::PicoBrown() { static Color c = Color::SRGB8( 171, 82, 54 ); return c; }
-inline Color Color::PicoDarkGray() { static Color c = Color::SRGB8( 95, 87, 79 ); return c; }
-inline Color Color::PicoLightGray() { static Color c = Color::SRGB8( 194, 195, 199 ); return c; }
-inline Color Color::PicoWhite() { static Color c = Color::SRGB8( 255, 241, 232 ); return c; }
-inline Color Color::PicoRed() { static Color c = Color::SRGB8( 255, 0, 77 ); return c; }
-inline Color Color::PicoOrange() { static Color c = Color::SRGB8( 255, 163, 0 ); return c; }
-inline Color Color::PicoYellow() { static Color c = Color::SRGB8( 255, 236, 39 ); return c; }
-inline Color Color::PicoGreen() { static Color c = Color::SRGB8( 0, 228, 54 ); return c; }
-inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); return c; }
-inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
-inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
-inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
-// Misc
-inline Color Color::Magenta() { return Color( 1.0f, 0.0f, 1.0f ); }
-
-//------------------------------------------------------------------------------
-// ae::Color functions
-//------------------------------------------------------------------------------
-inline std::ostream& operator<<( std::ostream& os, Color c )
-{
-  return os << "<" << c.r << ", " << c.g << ", " << c.b << ", " << c.a << ">";
-}
-inline Color::Color( float rgb ) : r( rgb ), g( rgb ), b( rgb ), a( 1.0f ) {}
-inline Color::Color( float r, float g, float b ) : r( r ), g( g ), b( b ), a( 1.0f ) {}
-inline Color::Color( float r, float g, float b, float a )
-  : r( r ), g( g ), b( b ), a( a )
-{}
-inline Color::Color( Color c, float a ) : r( c.r ), g( c.g ), b( c.b ), a( a ) {}
-inline Color Color::R( float r ) { return Color( r, 0.0f, 0.0f, 1.0f ); }
-inline Color Color::RG( float r, float g ) { return Color( r, g, 0.0f, 1.0f ); }
-inline Color Color::RGB( float r, float g, float b ) { return Color( r, g, b, 1.0f ); }
-inline Color Color::RGBA( float r, float g, float b, float a ) { return Color( r, g, b, a ); }
-inline Color Color::RGBA( const float* v ) { return Color( v[ 0 ], v[ 1 ], v[ 2 ], v[ 3 ] ); }
-inline Color Color::SRGB( float r, float g, float b ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), 1.0f ); }
-inline Color Color::SRGBA( float r, float g, float b, float a ) { return Color( SRGBToRGB( r ), SRGBToRGB( g ), SRGBToRGB( b ), a ); }
-inline Color Color::R8( uint8_t r ) { return Color( r / 255.0f, 0.0f, 0.0f, 1.0f ); }
-inline Color Color::RG8( uint8_t r, uint8_t g ) { return Color( r / 255.0f, g / 255.0f, 0.0f, 1.0f ); }
-inline Color Color::RGB8( uint8_t r, uint8_t g, uint8_t b ) { return Color( r / 255.0f, g / 255.0f, b / 255.0f, 1.0f ); }
-inline Color Color::RGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
-{
-  return Color( r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f );
-}
-inline Color Color::SRGB8( uint8_t r, uint8_t g, uint8_t b )
-{
-  return Color( SRGBToRGB( r / 255.0f ), SRGBToRGB( g / 255.0f ), SRGBToRGB( b / 255.0f ), 1.0f );
-}
-inline Color Color::SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
-{
-  return Color( SRGBToRGB( r / 255.0f ), SRGBToRGB( g / 255.0f ), SRGBToRGB( b / 255.0f ), a / 255.0f );
-}
-inline Vec3 Color::GetLinearRGB() const { return Vec3( r, g, b ); }
-inline Vec4 Color::GetLinearRGBA() const { return Vec4( r, g, b, a ); }
-inline Vec3 Color::GetSRGB() const { return Vec3( RGBToSRGB( r ), RGBToSRGB( g ), RGBToSRGB( b ) ); }
-inline Vec4 Color::GetSRGBA() const { return Vec4( GetSRGB(), a ); }
-inline Color Color::Lerp( const Color& end, float t ) const
-{
-  return Color(
-    ae::Lerp( r, end.r, t ),
-    ae::Lerp( g, end.g, t ),
-    ae::Lerp( b, end.b, t ),
-    ae::Lerp( a, end.a, t )
-  );
-}
-inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) const
-{
-  return Lerp( target, exp2( -exp2( snappiness ) * dt ) );
-}
-inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
-inline Color Color::ScaleA( float s ) const { return Color( r, g, b, a * s ); }
-inline Color Color::SetA( float alpha ) const { return Color( r, g, b, alpha ); }
-inline float Color::SRGBToRGB( float x ) { return pow( x , 2.2 ); }
-inline float Color::RGBToSRGB( float x ) { return pow( x, 1.0 / 2.2 ); }
 
 } // AE_NAMESPACE end
 
