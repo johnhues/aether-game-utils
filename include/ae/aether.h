@@ -568,6 +568,79 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::Str class
+// @NOTE: A fixed length string class. The templated value is the total size of
+// the string in memory.
+//------------------------------------------------------------------------------
+template < uint32_t N >
+class Str
+{
+public:
+  Str();
+  template < uint32_t N2 > Str( const Str<N2>& str );
+  Str( const char* str );
+  Str( uint32_t length, const char* str );
+  Str( uint32_t length, char c );
+  template < typename... Args > Str( const char* format, Args... args );
+  template < typename... Args > static Str< N > Format( const char* format, Args... args );
+  explicit operator const char*() const;
+  
+  template < uint32_t N2 > void operator =( const Str<N2>& str );
+  template < uint32_t N2 > Str<N> operator +( const Str<N2>& str ) const;
+  template < uint32_t N2 > void operator +=( const Str<N2>& str );
+  template < uint32_t N2 > bool operator ==( const Str<N2>& str ) const;
+  template < uint32_t N2 > bool operator !=( const Str<N2>& str ) const;
+  template < uint32_t N2 > bool operator <( const Str<N2>& str ) const;
+  template < uint32_t N2 > bool operator >( const Str<N2>& str ) const;
+  template < uint32_t N2 > bool operator <=( const Str<N2>& str ) const;
+  template < uint32_t N2 > bool operator >=( const Str<N2>& str ) const;
+  Str<N> operator +( const char* str ) const;
+  void operator +=( const char* str );
+  bool operator ==( const char* str ) const;
+  bool operator !=( const char* str ) const;
+  bool operator <( const char* str ) const;
+  bool operator >( const char* str ) const;
+  bool operator <=( const char* str ) const;
+  bool operator >=( const char* str ) const;
+
+  char& operator[]( uint32_t i );
+  const char operator[]( uint32_t i ) const;
+  const char* c_str() const;
+
+  template < uint32_t N2 >
+  void Append( const Str<N2>& str );
+  void Append( const char* str );
+  void Trim( uint32_t len );
+
+  uint32_t Length() const;
+  uint32_t Size() const;
+  bool Empty() const;
+  static constexpr uint32_t MaxLength() { return N - 3u; } // Leave room for length var and null terminator
+
+private:
+  template < uint32_t N2 > friend class Str;
+  template < uint32_t N2 > friend bool operator ==( const char*, const Str< N2 >& );
+  template < uint32_t N2 > friend bool operator !=( const char*, const Str< N2 >& );
+  template < uint32_t N2 > friend bool operator <( const char*, const Str< N2 >& );
+  template < uint32_t N2 > friend bool operator >( const char*, const Str< N2 >& );
+  template < uint32_t N2 > friend bool operator <=( const char*, const Str< N2 >& );
+  template < uint32_t N2 > friend bool operator >=( const char*, const Str< N2 >& );
+  template < uint32_t N2 > friend std::istream& operator>>( std::istream&, Str< N2 >& );
+  void m_Format( const char* format );
+  template < typename T, typename... Args >
+  void m_Format( const char* format, T value, Args... args );
+  uint16_t m_length;
+  char m_str[ MaxLength() + 1u ];
+};
+// Predefined lengths
+using Str16 = Str< 16 >;
+using Str32 = Str< 32 >;
+using Str64 = Str< 64 >;
+using Str128 = Str< 128 >;
+using Str256 = Str< 256 >;
+using Str512 = Str< 512 >;
+
+//------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
 template < typename T, uint32_t N = 0 >
@@ -1811,6 +1884,394 @@ inline float Color::SRGBToRGB( float x ) { return pow( x , 2.2 ); }
 inline float Color::RGBToSRGB( float x ) { return pow( x, 1.0 / 2.2 ); }
 
 #pragma warning(default:26495) // Re-enable uninitialized variable warning
+
+//------------------------------------------------------------------------------
+// ae::Str functions
+//------------------------------------------------------------------------------
+template < uint32_t N >
+std::ostream& operator<<( std::ostream& out, const Str< N >& str )
+{
+  return out << str.c_str();
+}
+
+template < uint32_t N >
+std::istream& operator>>( std::istream& in, Str< N >& str )
+{
+  in.getline( str.m_str, Str< N >::MaxLength() );
+  str.m_length = in.gcount();
+  str.m_str[ str.m_length ] = 0;
+  return in;
+}
+
+template < uint32_t N >
+const Str< N >& ToString( const Str< N >& value )
+{
+  return value;
+}
+
+inline const char* ToString( const char* value )
+{
+  return value;
+}
+
+inline Str16 ToString( int32_t value )
+{
+  char str[ Str16::MaxLength() + 1u ];
+  uint32_t length = snprintf( str, sizeof( str ) - 1, "%d", value );
+  return Str16( length, str );
+}
+
+inline Str16 ToString( uint32_t value )
+{
+  char str[ Str16::MaxLength() + 1u ];
+  uint32_t length = snprintf( str, sizeof( str ) - 1, "%u", value );
+  return Str16( length, str );
+}
+
+inline Str16 ToString( float value )
+{
+  char str[ Str16::MaxLength() + 1u ];
+  uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
+  return Str16( length, str );
+}
+
+inline Str16 ToString( double value )
+{
+  char str[ Str16::MaxLength() + 1u ];
+  uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
+  return Str16( length, str );
+}
+
+template < typename T >
+Str64 ToString( const T& v )
+{
+  std::stringstream os;
+  os << v;
+  return os.str().c_str();
+}
+
+template < uint32_t N >
+Str< N >::Str()
+{
+  AE_STATIC_ASSERT_MSG( sizeof( *this ) == N, "Incorrect Str size" );
+  m_length = 0;
+  m_str[ 0 ] = 0;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+Str< N >::Str( const Str<N2>& str )
+{
+  AE_ASSERT( str.m_length <= (uint16_t)MaxLength() );
+  m_length = str.m_length;
+  memcpy( m_str, str.m_str, m_length + 1u );
+}
+
+template < uint32_t N >
+Str< N >::Str( const char* str )
+{
+  m_length = (uint16_t)strlen( str );
+  AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Length:# Max:#", m_length, MaxLength() );
+  memcpy( m_str, str, m_length + 1u );
+}
+
+template < uint32_t N >
+Str< N >::Str( uint32_t length, const char* str )
+{
+  AE_ASSERT( length <= (uint16_t)MaxLength() );
+  m_length = length;
+  memcpy( m_str, str, m_length );
+  m_str[ length ] = 0;
+}
+
+template < uint32_t N >
+Str< N >::Str( uint32_t length, char c )
+{
+  AE_ASSERT( length <= (uint16_t)MaxLength() );
+  m_length = length;
+  memset( m_str, c, m_length );
+  m_str[ length ] = 0;
+}
+
+template < uint32_t N >
+template < typename... Args >
+Str< N >::Str( const char* format, Args... args )
+{
+  m_length = 0;
+  m_str[ 0 ] = 0;
+  m_Format( format, args... );
+}
+
+template < uint32_t N >
+Str< N >::operator const char*() const
+{
+  return m_str;
+}
+
+template < uint32_t N >
+const char* Str< N >::c_str() const
+{
+  return m_str;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+void Str< N >::operator =( const Str<N2>& str )
+{
+  AE_ASSERT( str.m_length <= (uint16_t)MaxLength() );
+  m_length = str.m_length;
+  memcpy( m_str, str.m_str, str.m_length + 1u );
+}
+
+template < uint32_t N >
+Str<N> Str< N >::operator +( const char* str ) const
+{
+  Str<N> out( *this );
+  out += str;
+  return out;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+Str<N> Str< N >::operator +( const Str<N2>& str ) const
+{
+  Str<N> out( *this );
+  out += str;
+  return out;
+}
+
+template < uint32_t N >
+void Str< N >::operator +=( const char* str )
+{
+  uint32_t len = (uint32_t)strlen( str );
+  AE_ASSERT( m_length + len <= (uint16_t)MaxLength() );
+  memcpy( m_str + m_length, str, len + 1u );
+  m_length += len;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+void Str< N >::operator +=( const Str<N2>& str )
+{
+  AE_ASSERT( m_length + str.m_length <= (uint16_t)MaxLength() );
+  memcpy( m_str + m_length, str.c_str(), str.m_length + 1u );
+  m_length += str.m_length;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+bool Str< N >::operator ==( const Str<N2>& str ) const
+{
+  return strcmp( m_str, str.c_str() ) == 0;
+}
+
+template < uint32_t N >
+bool Str< N >::operator ==( const char* str ) const
+{
+  return strcmp( m_str, str ) == 0;
+}
+
+template < uint32_t N >
+bool operator ==( const char* str0, const Str<N>& str1 )
+{
+  return strcmp( str0, str1.m_str ) == 0;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+bool Str< N >::operator !=( const Str<N2>& str ) const
+{
+  return !operator==( str );
+}
+
+template < uint32_t N >
+bool Str< N >::operator !=( const char* str ) const
+{
+  return !operator==( str );
+}
+
+template < uint32_t N >
+bool operator !=( const char* str0, const Str<N>& str1 )
+{
+  return !operator==( str0, str1 );
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+bool Str< N >::operator <( const Str<N2>& str ) const
+{
+  return strcmp( m_str, str.c_str() ) < 0;
+}
+
+template < uint32_t N >
+bool Str< N >::operator <( const char* str ) const
+{
+  return strcmp( m_str, str ) < 0;
+}
+
+template < uint32_t N >
+bool operator <( const char* str0, const Str<N>& str1 )
+{
+  return strcmp( str0, str1.m_str ) < 0;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+bool Str< N >::operator >( const Str<N2>& str ) const
+{
+  return strcmp( m_str, str.c_str() ) > 0;
+}
+
+template < uint32_t N >
+bool Str< N >::operator >( const char* str ) const
+{
+  return strcmp( m_str, str ) > 0;
+}
+
+template < uint32_t N >
+bool operator >( const char* str0, const Str<N>& str1 )
+{
+  return strcmp( str0, str1.m_str ) > 0;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+bool Str< N >::operator <=( const Str<N2>& str ) const
+{
+  return strcmp( m_str, str.c_str() ) <= 0;
+}
+
+template < uint32_t N >
+bool Str< N >::operator <=( const char* str ) const
+{
+  return strcmp( m_str, str ) <= 0;
+}
+
+template < uint32_t N >
+bool operator <=( const char* str0, const Str<N>& str1 )
+{
+  return strcmp( str0, str1.m_str ) <= 0;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+bool Str< N >::operator >=( const Str<N2>& str ) const
+{
+  return strcmp( m_str, str.c_str() ) >= 0;
+}
+
+template < uint32_t N >
+bool Str< N >::operator >=( const char* str ) const
+{
+  return strcmp( m_str, str ) >= 0;
+}
+
+template < uint32_t N >
+bool operator >=( const char* str0, const Str<N>& str1 )
+{
+  return strcmp( str0, str1.m_str ) >= 0;
+}
+
+template < uint32_t N >
+char& Str< N >::operator[]( uint32_t i )
+{
+  AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
+}
+
+template < uint32_t N >
+const char Str< N >::operator[]( uint32_t i ) const
+{
+  AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
+}
+
+template < uint32_t N >
+uint32_t Str< N >::Length() const
+{
+  return m_length;
+}
+
+template < uint32_t N >
+uint32_t Str< N >::Size() const
+{
+  return MaxLength();
+}
+
+template < uint32_t N >
+bool Str< N >::Empty() const
+{
+  return m_length == 0;
+}
+
+template < uint32_t N >
+template < uint32_t N2 >
+void Str< N >::Append( const Str<N2>& str )
+{
+  *this += str;
+}
+
+template < uint32_t N >
+void Str< N >::Append( const char* str )
+{
+  *this += str;
+}
+
+template < uint32_t N >
+void Str< N >::Trim( uint32_t len )
+{
+  if ( len == m_length )
+  {
+    return;
+  }
+
+  AE_ASSERT( len < m_length );
+  m_length = len;
+  m_str[ m_length ] = 0;
+}
+
+template < uint32_t N >
+template < typename... Args >
+Str< N > Str< N >::Format( const char* format, Args... args )
+{
+  Str< N > result( "" );
+  result.m_Format( format, args... );
+  return result;
+}
+
+template < uint32_t N >
+void Str< N >::m_Format( const char* format )
+{
+  *this += format;
+}
+
+template < uint32_t N >
+template < typename T, typename... Args >
+void Str< N >::m_Format( const char* format, T value, Args... args )
+{
+  if ( !*format )
+  {
+    return;
+  }
+
+  const char* head = format;
+  while ( *head && *head != '#' )
+  {
+    head++;
+  }
+  if ( head > format )
+  {
+    *this += Str< N >( head - format, format );
+  }
+
+  if ( *head == '#' )
+  {
+    // @TODO: Replace with ToString()?
+    std::ostringstream stream;
+    stream << value;
+    *this += stream.str().c_str();
+    head++;
+  }
+  m_Format( head, args... );
+}
 
 //------------------------------------------------------------------------------
 // Array functions

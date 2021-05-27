@@ -1011,7 +1011,7 @@ DefineMetaVarType( float, Float );
 DefineMetaVarType( aeFloat4x4, Float4x4 );
 
 template < uint32_t N >
-struct aeMeta::VarType< aeStr<N> >
+struct aeMeta::VarType< ae::Str<N> >
 {
   static aeMeta::Var::Type GetType() { return aeMeta::Var::String; }
   static const char* GetName() { return "String"; }
