@@ -306,10 +306,10 @@ template< typename T > constexpr T MinValue();
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
 template < typename T >
-struct FloatN
+struct VecT
 {
-  FloatN() {}
-  FloatN( bool ) = delete;
+  VecT() {}
+  VecT( bool ) = delete;
 
   bool operator==( const T& v ) const;
   bool operator!=( const T& v ) const;
@@ -342,7 +342,7 @@ struct FloatN
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
 //------------------------------------------------------------------------------
-struct Vec2 : public FloatN< Vec2 >
+struct Vec2 : public VecT< Vec2 >
 {
   Vec2() {} // Empty default constructor for performance reasons
   Vec2( const Vec2& ) = default;
@@ -361,7 +361,7 @@ struct Vec2 : public FloatN< Vec2 >
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
-struct Vec3 : public FloatN< Vec3 >
+struct Vec3 : public VecT< Vec3 >
 {
   Vec3() {} // Empty default constructor for performance reasons
   explicit Vec3( float v );
@@ -406,7 +406,7 @@ struct Vec3 : public FloatN< Vec3 >
 //------------------------------------------------------------------------------
 // ae::Vec4 struct
 //------------------------------------------------------------------------------
-struct Vec4 : public FloatN< Vec4 >
+struct Vec4 : public VecT< Vec4 >
 {
   Vec4() {} // Empty default constructor for performance reasons
   Vec4( const Vec4& ) = default;
@@ -1347,21 +1347,21 @@ inline ae::RandomValue< T >::operator T() const
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
 template < typename T >
-bool FloatN< T >::operator==( const T& v ) const
+bool VecT< T >::operator==( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
 }
 
 template < typename T >
-bool FloatN< T >::operator!=( const T& v ) const
+bool VecT< T >::operator!=( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
 }
 
 template < typename T >
-float FloatN< T >::operator[]( uint32_t idx ) const
+float VecT< T >::operator[]( uint32_t idx ) const
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -1371,7 +1371,7 @@ float FloatN< T >::operator[]( uint32_t idx ) const
 }
 
 template < typename T >
-float& FloatN< T >::operator[]( uint32_t idx )
+float& VecT< T >::operator[]( uint32_t idx )
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -1381,7 +1381,7 @@ float& FloatN< T >::operator[]( uint32_t idx )
 }
 
 template < typename T >
-T FloatN< T >::operator+( const T& v ) const
+T VecT< T >::operator+( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1393,7 +1393,7 @@ T FloatN< T >::operator+( const T& v ) const
 }
 
 template < typename T >
-void FloatN< T >::operator+=( const T& v )
+void VecT< T >::operator+=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(T::data); i++ )
@@ -1403,7 +1403,7 @@ void FloatN< T >::operator+=( const T& v )
 }
 
 template < typename T >
-T FloatN< T >::operator-() const
+T VecT< T >::operator-() const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1415,7 +1415,7 @@ T FloatN< T >::operator-() const
 }
 
 template < typename T >
-T FloatN< T >::operator-( const T& v ) const
+T VecT< T >::operator-( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1427,7 +1427,7 @@ T FloatN< T >::operator-( const T& v ) const
 }
 
 template < typename T >
-void FloatN< T >::operator-=( const T& v )
+void VecT< T >::operator-=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1437,7 +1437,7 @@ void FloatN< T >::operator-=( const T& v )
 }
 
 template < typename T >
-T FloatN< T >::operator*( float s ) const
+T VecT< T >::operator*( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1449,7 +1449,7 @@ T FloatN< T >::operator*( float s ) const
 }
 
 template < typename T >
-void FloatN< T >::operator*=( float s )
+void VecT< T >::operator*=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1459,7 +1459,7 @@ void FloatN< T >::operator*=( float s )
 }
 
 template < typename T >
-T FloatN< T >::operator/( float s ) const
+T VecT< T >::operator/( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1471,7 +1471,7 @@ T FloatN< T >::operator/( float s ) const
 }
 
 template < typename T >
-void FloatN< T >::operator/=( float s )
+void VecT< T >::operator/=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1481,7 +1481,7 @@ void FloatN< T >::operator/=( float s )
 }
 
 template < typename T >
-float FloatN< T >::Dot( const T& v0, const T& v1 )
+float VecT< T >::Dot( const T& v0, const T& v1 )
 {
   float result = 0.0f;
   for ( uint32_t i = 0; i < countof(v0.data); i++ )
@@ -1492,25 +1492,25 @@ float FloatN< T >::Dot( const T& v0, const T& v1 )
 }
 
 template < typename T >
-float FloatN< T >::Dot( const T& v ) const
+float VecT< T >::Dot( const T& v ) const
 {
   return Dot( *(T*)this, v );
 }
 
 template < typename T >
-float FloatN< T >::Length() const
+float VecT< T >::Length() const
 {
   return sqrt( LengthSquared() );
 }
 
 template < typename T >
-float FloatN< T >::LengthSquared() const
+float VecT< T >::LengthSquared() const
 {
   return Dot( *(T*)this );
 }
 
 template < typename T >
-float FloatN< T >::Normalize()
+float VecT< T >::Normalize()
 {
   float length = Length();
   *(T*)this /= length;
@@ -1518,7 +1518,7 @@ float FloatN< T >::Normalize()
 }
 
 template < typename T >
-float FloatN< T >::SafeNormalize( float epsilon )
+float VecT< T >::SafeNormalize( float epsilon )
 {
   auto&& self = *(T*)this;
   float length = Length();
@@ -1532,7 +1532,7 @@ float FloatN< T >::SafeNormalize( float epsilon )
 }
 
 template < typename T >
-T FloatN< T >::NormalizeCopy() const
+T VecT< T >::NormalizeCopy() const
 {
   T result = *(T*)this;
   result.Normalize();
@@ -1540,7 +1540,7 @@ T FloatN< T >::NormalizeCopy() const
 }
 
 template < typename T >
-T FloatN< T >::SafeNormalizeCopy( float epsilon ) const
+T VecT< T >::SafeNormalizeCopy( float epsilon ) const
 {
   T result = *(T*)this;
   result.SafeNormalize( epsilon );
@@ -1548,7 +1548,7 @@ T FloatN< T >::SafeNormalizeCopy( float epsilon ) const
 }
 
 template < typename T >
-float FloatN< T >::Trim( float trimLength )
+float VecT< T >::Trim( float trimLength )
 {
   float length = Length();
   if ( trimLength < length )
@@ -1560,7 +1560,7 @@ float FloatN< T >::Trim( float trimLength )
 }
 
 template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const FloatN< T >& v )
+inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 {
   constexpr uint32_t count = countof( T::data );
   for ( uint32_t i = 0; i < count - 1; i++ )
