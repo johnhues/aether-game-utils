@@ -113,19 +113,19 @@ aeColor ae::Image::Get( aeInt2 pixel ) const
   {
     case 1:
     {
-      return aeColor::R( m_data[ index ] );
+      return aeColor::R8( m_data[ index ] );
     }
     case 2:
     {
-      return aeColor::RG( m_data[ index ], m_data[ index + 1 ] );
+      return aeColor::RG8( m_data[ index ], m_data[ index + 1 ] );
     }
     case 3:
     {
-      return aeColor::RGB( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ] );
+      return aeColor::RGB8( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ] );
     }
     case 4:
     {
-      return aeColor::RGBA( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ], m_data[ index + 3 ] );
+      return aeColor::RGBA8( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ], m_data[ index + 3 ] );
     }
   }
 

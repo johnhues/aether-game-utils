@@ -1671,7 +1671,6 @@ inline void Vec3::ZeroAxis( Vec3 axis )
 {
   axis.SafeNormalize();
   *this -= axis * Dot( axis );
-  return *this;
 }
 inline void Vec3::ZeroDirection( Vec3 direction )
 {
@@ -1681,7 +1680,6 @@ inline void Vec3::ZeroDirection( Vec3 direction )
     direction.SafeNormalize();
     *this -= direction * d;
   }
-  return *this;
 }
 
 //------------------------------------------------------------------------------
