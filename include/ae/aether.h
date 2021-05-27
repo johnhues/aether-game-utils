@@ -748,6 +748,73 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 # define strtok_r strtok_s
 #endif
 
+namespace AE_NAMESPACE {
+
+//------------------------------------------------------------------------------
+// Window class
+//------------------------------------------------------------------------------
+class Window
+{
+public:
+};
+
+//------------------------------------------------------------------------------
+// RenderTarget class
+//------------------------------------------------------------------------------
+class RenderTarget
+{
+public:
+  uint32_t GetWidth() const;
+  uint32_t GetHeight() const;
+};
+
+//------------------------------------------------------------------------------
+// GraphicsDevice class
+//------------------------------------------------------------------------------
+class GraphicsDevice
+{
+public:
+  GraphicsDevice();
+  ~GraphicsDevice();
+
+  void InitializeOpenGL( class Window* window );
+  void Terminate();
+
+  void Activate();
+  void Clear( Color color );
+  void Present();
+
+  class Window* GetWindow() { return m_window; }
+  RenderTarget* GetCanvas() { return &m_canvas; }
+
+  uint32_t GetWidth() const { return m_canvas.GetWidth(); }
+  uint32_t GetHeight() const { return m_canvas.GetHeight(); }
+  float GetAspectRatio() const;
+
+  // have to inject a barrier to readback from active render target (GL only)
+  void AddTextureBarrier();
+
+private:
+  void m_InitializeRender( uint32_t width, uint32_t height );
+
+  class Window* m_window;
+  RenderTarget m_canvas;
+
+  // OpenGL
+  void* m_context;
+  int32_t m_defaultFbo;
+};
+
+//------------------------------------------------------------------------------
+// Input class
+//------------------------------------------------------------------------------
+class Input
+{
+public:
+};
+
+} // AE_NAMESPACE end
+
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 //
