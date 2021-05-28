@@ -3370,6 +3370,7 @@ Allocator* GetGlobalAllocator()
 //------------------------------------------------------------------------------
 // Window member functions
 //------------------------------------------------------------------------------
+#if _AE_WINDOWS_
 // @TODO: Cleanup namespace
 LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
@@ -3409,6 +3410,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
   }
   return DefWindowProc( hWnd, msg, wParam, lParam );
 }
+#endif
 
 Window::Window()
 {
@@ -3532,6 +3534,7 @@ void Window::m_Initialize()
 //  SDL_SetWindowTitle( (SDL_Window*)window, "" );
 //  m_windowTitle = "";
 
+#if _AE_WINDOWS_
 #define WNDCLASSNAME L"wndclass"
   HINSTANCE hinstance = GetModuleHandle( NULL );
 
@@ -3601,6 +3604,7 @@ void Window::m_Initialize()
   {
     AE_FAIL_MSG( "Failed on first window update. Error: #", GetLastError() );
   }
+#endif
 }
 
 void Window::Terminate()
@@ -3679,6 +3683,7 @@ void Window::SetMaximized( bool maximized )
 //------------------------------------------------------------------------------
 void Input::Pump()
 {
+#if _AE_WINDOWS_
   MSG msg;
   // Get messages for current thread
   while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
@@ -3692,15 +3697,18 @@ void Input::Pump()
     TranslateMessage( &msg );
     DispatchMessage( &msg );
   }
+#endif
 }
 
 //------------------------------------------------------------------------------
 // OpenGL includes
 //------------------------------------------------------------------------------
-#pragma comment (lib, "opengl32.lib")
-#pragma comment (lib, "glu32.lib")
-#include <gl/GL.h>
-#include <gl/GLU.h>
+#if _AE_WINDOWS_
+	#pragma comment (lib, "opengl32.lib")
+	#pragma comment (lib, "glu32.lib")
+	#include <gl/GL.h>
+	#include <gl/GLU.h>
+#endif
 
 //------------------------------------------------------------------------------
 // ae::RenderTarget member functions
@@ -4026,6 +4034,7 @@ void GraphicsDevice::Initialize( class Window* window )
 //
 //  AE_CHECK_GL_ERROR();
 
+#if _AE_WINDOWS_
   // @TODO: Remove start
   glShadeModel( GL_SMOOTH );							// Enable Smooth Shading
   glClearColor( 0.0f, 0.0f, 0.0f, 0.5f );				// Black Background
@@ -4034,6 +4043,7 @@ void GraphicsDevice::Initialize( class Window* window )
   glDepthFunc( GL_LEQUAL );								// The Type Of Depth Testing To Do
   glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST ); // Really Nice Perspective Calculations
   // @TODO: Remove end
+#endif
 
   m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
 
@@ -4063,6 +4073,7 @@ void GraphicsDevice::Activate()
 //  glEnable( GL_FRAMEBUFFER_SRGB );
 //#endif
 
+#if _AE_WINDOWS_
   // @TODO: Remove start
   glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // Reset The Current Viewport
 
@@ -4092,6 +4103,7 @@ void GraphicsDevice::Activate()
   glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
   glEnd();											// Done Drawing The Quad
   // @TODO: Remove end
+#endif
 }
 
 void GraphicsDevice::Clear( Color color )
@@ -4126,11 +4138,13 @@ void GraphicsDevice::Present()
 //
 //  AE_CHECK_GL_ERROR();
 
+#if _AE_WINDOWS_
   AE_ASSERT( m_window );
   HWND hWnd = (HWND)m_window->window;
   AE_ASSERT( hWnd );
   HDC hdc = GetDC( hWnd );
   SwapBuffers( hdc ); // Swap Buffers
+#endif
 }
 
 float GraphicsDevice::GetAspectRatio() const
