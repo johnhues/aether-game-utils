@@ -182,6 +182,7 @@ using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_MESH ae::Tag( "aeMesh" )
 #define AE_ALLOC_TAG_SCRATCH ae::Tag( "aeScratch" )
 #define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
+#define AE_ALLOC_TAG_FILE ae::Tag( "aeFile" )
 
 //------------------------------------------------------------------------------
 // Allocator interface

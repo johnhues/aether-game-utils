@@ -78,13 +78,13 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 //------------------------------------------------------------------------------
 ae::Array< char > CreateFilterString( const Array< FileFilter >& filters )
 {
-  ae::Array< char > result( AE_ALLOC_TAG_FIXME );
+  ae::Array< char > result( AE_ALLOC_TAG_FILE );
   if ( !filters.Length() )
   {
     return result;
   }
 
-  ae::Array< char > tempFilterStr( AE_ALLOC_TAG_FIXME );
+  ae::Array< char > tempFilterStr( AE_ALLOC_TAG_FILE );
   for ( uint32_t i = 0; i < filters.Length(); i++ )
   {
     const FileFilter& filter = filters[ i ];
@@ -186,10 +186,10 @@ Array< std::string > OpenFile( const OpenFileParams& params )
   // Open window
   if ( GetOpenFileNameA( &winParams ) )
   {
-    return Array< std::string >( AE_ALLOC_TAG_FIXME, 1, winParams.lpstrFile );
+    return Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
   }
 
-  return Array< std::string >( AE_ALLOC_TAG_FIXME );
+  return Array< std::string >( AE_ALLOC_TAG_FILE );
 }
 
 //------------------------------------------------------------------------------
@@ -251,7 +251,7 @@ std::string SaveFile( const SaveFileParams& params )
 //------------------------------------------------------------------------------
 Array< std::string > OpenFile( const OpenFileParams& params )
 {
-  return {};
+  return { AE_ALLOC_TAG_FILE };
 }
 
 //------------------------------------------------------------------------------
