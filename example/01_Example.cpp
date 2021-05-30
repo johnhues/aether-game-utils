@@ -41,8 +41,8 @@ int main()
 	graphicsDevice.Initialize( &window );
 	//input.Initialize( &window );
 	
-	//aeFixedTimeStep timeStep;
-	//timeStep.SetTimeStep( 1.0f / 60.0f );
+	ae::TimeStep timeStep;
+	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	//while ( !input.GetState()->exit )
 	while ( !input.quit )
@@ -51,7 +51,7 @@ int main()
 		graphicsDevice.Activate();
 		graphicsDevice.Clear( ae::Color::PicoDarkPurple() );
 		graphicsDevice.Present();
-		//timeStep.Wait();
+		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );

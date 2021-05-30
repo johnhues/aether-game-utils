@@ -49,7 +49,7 @@ int main()
   aeInput input;
   aeSpriteRender spriteRender;
   aeTexture2D texture;
-  aeFixedTimeStep timeStep;
+  ae::TimeStep timeStep;
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Replication Server" );
   render.InitializeOpenGL( &window );

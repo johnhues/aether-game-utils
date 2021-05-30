@@ -110,7 +110,7 @@ int main()
 	aeWindow window;
 	aeRender render;
 	aeInput input;
-	aeFixedTimeStep timeStep;
+	ae::TimeStep timeStep;
 	aeShader shader;
 	aeVertexData vertexData;
 	aeEditorCamera camera;

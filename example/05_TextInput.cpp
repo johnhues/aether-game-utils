@@ -45,7 +45,7 @@ int main()
 	input.SetText( "Try typing. Copy and paste should also work." );
 	textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
 	
-	aeFixedTimeStep timeStep;
+	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	while ( !input.GetState()->exit )

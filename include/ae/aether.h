@@ -168,6 +168,7 @@ uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
 bool IsDebuggerAttached();
 template < typename T > const char* GetTypeName();
+double GetTime();
 
 //------------------------------------------------------------------------------
 // Tags
@@ -568,6 +569,33 @@ public:
 private:
   T m_min = T();
   T m_max = T();
+};
+
+//------------------------------------------------------------------------------
+// ae::TimeStep
+//------------------------------------------------------------------------------
+class TimeStep
+{
+public:
+  TimeStep();
+
+  void SetTimeStep( float timeStep );
+  float GetTimeStep() const;
+  uint32_t GetStepCount() const;
+
+  float GetDt() const;
+  float SetDt( float sec ); // Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+
+  void Wait();
+
+private:
+  uint32_t m_stepCount = 0;
+  float m_timeStepSec = 0.0f;
+  float m_timeStep = 0.0f;
+  int64_t m_frameExcess = 0;
+  float m_prevFrameTime = 0.0f;
+  float m_prevFrameTimeSec = 0.0f;
+  std::chrono::steady_clock::time_point m_frameStart;
 };
 
 //------------------------------------------------------------------------------
@@ -3130,6 +3158,25 @@ bool IsDebuggerAttached()
 }
 #endif
 
+double GetTime()
+{
+#if _AE_WINDOWS_
+  static LARGE_INTEGER counterFrequency = { 0 };
+  if ( !counterFrequency.QuadPart )
+  {
+    bool success = QueryPerformanceFrequency( &counterFrequency ) != 0;
+    AE_ASSERT( success );
+  }
+
+  LARGE_INTEGER performanceCount = { 0 };
+  bool success = QueryPerformanceCounter( &performanceCount ) != 0;
+  AE_ASSERT( success );
+  return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
+#else
+  return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::steady_clock::now().time_since_epoch() ).count() / 1000000.0;
+#endif
+}
+
 //------------------------------------------------------------------------------
 // ae::Vec3 functions
 //------------------------------------------------------------------------------
@@ -3365,6 +3412,84 @@ Allocator* GetGlobalAllocator()
 	  g_allocator = &s_allocator;
   }
   return g_allocator;
+}
+
+//------------------------------------------------------------------------------
+// ae::TimeStep member functions
+//------------------------------------------------------------------------------
+TimeStep::TimeStep()
+{
+  m_stepCount = 0;
+  m_timeStep = 0.0f;
+  m_frameExcess = 0;
+  m_prevFrameTime = 0.0f;
+
+  SetTimeStep( 1.0f / 60.0f );
+}
+
+void TimeStep::SetTimeStep( float timeStep )
+{
+  m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f;
+}
+
+float TimeStep::GetTimeStep() const
+{
+  return m_timeStepSec;
+}
+
+uint32_t TimeStep::GetStepCount() const
+{
+  return m_stepCount;
+}
+
+float TimeStep::GetDt() const
+{
+  return m_prevFrameTimeSec;
+}
+
+float TimeStep::SetDt( float sec )
+{
+  m_prevFrameTimeSec = sec; // Useful for handling frames with high delta time, eg: timeStep.SetDT( timeStep.GetTimeStep()
+}
+
+void TimeStep::Wait()
+{
+  if ( m_timeStep == 0.0f )
+  {
+    return;
+  }
+  
+  // @TODO: Maybe this should use the same time source as GetTime()
+  
+  if ( m_stepCount == 0 )
+  {
+    m_prevFrameTime = m_timeStep;
+    m_frameStart = std::chrono::steady_clock::now();
+  }
+  else
+  {
+    std::chrono::steady_clock::time_point execFinish = std::chrono::steady_clock::now();
+    std::chrono::microseconds execDuration = std::chrono::duration_cast< std::chrono::microseconds >( execFinish - m_frameStart );
+    
+    int64_t prevFrameExcess = m_prevFrameTime - m_timeStep;
+    m_frameExcess = ( m_frameExcess * 0.5f + prevFrameExcess * 0.5f ) + 0.5f;
+
+    int64_t wait = m_timeStep - execDuration.count();
+    wait -= ( m_frameExcess > 0 ) ? m_frameExcess : 0;
+    if ( 1000 < wait && wait < m_timeStep )
+    {
+      std::this_thread::sleep_for( std::chrono::microseconds( wait ) );
+    }
+    std::chrono::steady_clock::time_point frameFinish = std::chrono::steady_clock::now();
+    std::chrono::microseconds frameDuration = std::chrono::duration_cast< std::chrono::microseconds >( frameFinish - m_frameStart );
+
+    m_prevFrameTime = frameDuration.count();
+    m_frameStart = std::chrono::steady_clock::now();
+  }
+  
+  m_prevFrameTimeSec = m_prevFrameTime / 1000000.0f;
+  
+  m_stepCount++;
 }
 
 //------------------------------------------------------------------------------

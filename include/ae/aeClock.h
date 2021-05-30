@@ -25,46 +25,6 @@
 #define AECLOCK_H
 
 //------------------------------------------------------------------------------
-// Headers
-//------------------------------------------------------------------------------
-#include <chrono>
-
-//------------------------------------------------------------------------------
-// aeClock
-//------------------------------------------------------------------------------
-namespace aeClock
-{
-  double GetTime();
-};
-
-//------------------------------------------------------------------------------
-// aeFixedTimeStep
-//------------------------------------------------------------------------------
-class aeFixedTimeStep
-{
-public:
-  aeFixedTimeStep();
-
-  void SetTimeStep( float timeStep ) { m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f; }
-  float GetTimeStep() const { return m_timeStepSec; }
-  uint32_t GetStepCount() const { return m_stepCount; }
-
-  float GetDT() const { return m_prevFrameTimeSec; }
-  float SetDT( float sec ) { m_prevFrameTimeSec = sec; } // Useful for handling frames with high delta time, eg: timeStep.SetDT( timeStep.GetTimeStep() )
-
-  void Wait();
-
-private:
-  uint32_t m_stepCount = 0;
-  float m_timeStepSec = 0.0f;
-  float m_timeStep = 0.0f;
-  int64_t m_frameExcess = 0;
-  float m_prevFrameTime = 0.0f;
-  float m_prevFrameTimeSec = 0.0f;
-  std::chrono::steady_clock::time_point m_frameStart;
-};
-
-//------------------------------------------------------------------------------
 // aeTicker
 //------------------------------------------------------------------------------
 class aeTicker
