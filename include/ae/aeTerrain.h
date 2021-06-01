@@ -214,8 +214,8 @@ public:
   
   aeTerrainNoise* noise = nullptr;
   float noiseStrength = 0.0f;
-  aeFloat3 noiseOffset = aeFloat3( 0.0f );
-  aeFloat3 noiseScale = aeFloat3( 1.0f );
+  ae::Vec3 noiseOffset = ae::Vec3( 0.0f );
+  ae::Vec3 noiseScale = ae::Vec3( 1.0f );
 
 protected:
   aeHash GetBaseHash( aeHash hash ) const;
