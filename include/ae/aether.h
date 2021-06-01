@@ -329,15 +329,19 @@ struct VecT
   float operator[]( uint32_t idx ) const;
   float& operator[]( uint32_t idx );
   
-  T operator+( const T& v ) const;
-  void operator+=( const T& v );
   T operator-() const;
-  T operator-( const T& v ) const;
-  void operator-=( const T& v );
   T operator*( float s ) const;
-  void operator*=( float s );
   T operator/( float s ) const;
+  T operator+( const T& v ) const;
+  T operator-( const T& v ) const;
+  T operator*( const T& v ) const;
+  T operator/( const T& v ) const;
+  void operator*=( float s );
   void operator/=( float s );
+  void operator+=( const T& v );
+  void operator-=( const T& v );
+  void operator*=( const T& v );
+  void operator/=( const T& v );
   
   static float Dot( const T& v0, const T& v1 );
   float Dot( const T& v ) const;
@@ -1758,6 +1762,50 @@ void VecT< T >::operator-=( const T& v )
   for ( uint32_t i = 0; i < countof(self.data); i++ )
   {
     self.data[ i ] -= v.data[ i ];
+  }
+}
+
+template < typename T >
+T VecT< T >::operator*( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T VecT< T >::operator/( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void VecT< T >::operator*=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= v.data[ i ];
+  }
+}
+
+template < typename T >
+void VecT< T >::operator/=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= v.data[ i ];
   }
 }
 
