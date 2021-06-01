@@ -73,9 +73,9 @@ private:
   template < typename T > void SetInt( const char*, T ) = delete;
   template < typename T > void SetFloat( const char*, T ) = delete;
   template < typename T > void SetBool( const char*, T ) = delete;
-  template < typename T > void SetFloat2( const char*, T ) = delete;
-  template < typename T > void SetFloat3( const char*, T ) = delete;
-  template < typename T > void SetFloat4( const char*, T ) = delete;
+  template < typename T > void SetVec2( const char*, T ) = delete;
+  template < typename T > void SetVec3( const char*, T ) = delete;
+  template < typename T > void SetVec4( const char*, T ) = delete;
   template < typename T > void SetInt2( const char*, T ) = delete;
   
   ae::Map< aeStr128, aeStr128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: aeDict should be templated
