@@ -211,6 +211,8 @@ float aeTerrainSDFCache::GetValue( aeInt3 pos ) const
 
 aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
 {
+  aeFloat3 pv( GetValue( p ) );
+  
   aeFloat3 normal0;
   for ( int32_t i = 0; i < 3; i++ )
   {
@@ -221,7 +223,7 @@ aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
   AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
   // This should be really close to 0 because it's really
   // close to the surface but not close enough to ignore.
-  normal0 -= aeFloat3( GetValue( p ) );
+  normal0 -= pv;
   AE_ASSERT( normal0 != aeFloat3( 0.0f ) );
   normal0 /= normal0.Length();
   AE_ASSERT( normal0 == normal0 );
@@ -236,7 +238,7 @@ aeFloat3 aeTerrainSDFCache::GetDerivative( aeFloat3 p ) const
   AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
   // This should be really close to 0 because it's really
   // close to the surface but not close enough to ignore.
-  normal1 = aeFloat3( GetValue( p ) ) - normal1;
+  normal1 = pv - normal1;
   AE_ASSERT( normal1 != aeFloat3( 0.0f ) );
   normal1 /= normal1.Length();
   AE_ASSERT( normal1 == normal1 );

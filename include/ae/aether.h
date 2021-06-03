@@ -731,9 +731,14 @@ private:
   T* m_array;
   ae::Tag m_tag;
   typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
+#if _AE_LINUX_
+  struct Storage { AlignedStorageT data[ N ]; };
+  Storage m_storage;
+#else
   template < uint32_t > struct Storage { AlignedStorageT data[ N ]; };
   template <> struct Storage< 0 > {};
   Storage< N > m_storage;
+#endif
 public:
   // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
   T* begin() { return m_array; }

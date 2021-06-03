@@ -213,6 +213,9 @@ public:
   int32_t order = 0; // Lower values processed first, ie. to subtract from a solid the subtraction order should be higher
   
   aeTerrainNoise* noise = nullptr;
+  float topNoiseStrength = 0.0f;
+  ae::Vec3 topNoiseOffset = ae::Vec3( 0.0f );
+  ae::Vec3 topNoiseScale = ae::Vec3( 1.0f );
   float noiseStrength = 0.0f;
   ae::Vec3 noiseOffset = ae::Vec3( 0.0f );
   ae::Vec3 noiseScale = ae::Vec3( 1.0f );
