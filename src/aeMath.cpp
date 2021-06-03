@@ -2804,10 +2804,10 @@ float aeOBB::GetMinDistance( aeFloat3 p ) const
   return m_scaledAABB.GetMinDistance( p );
 }
 
-bool aeOBB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
+bool aeOBB::IntersectRay( aeFloat3 _p, aeFloat3 _d, aeFloat3* pOut, float* tOut ) const
 {
-  p = ( m_invTransRot * aeFloat4( p, 1.0f ) ).GetXYZ();
-  d = ( m_invTransRot * aeFloat4( d, 0.0f ) ).GetXYZ();
+  aeFloat3 p = ( m_invTransRot * aeFloat4( _p, 1.0f ) ).GetXYZ();
+  aeFloat3 d = ( m_invTransRot * aeFloat4( _d, 0.0f ) ).GetXYZ();
 
   float rayT = 0.0f;
   if ( m_scaledAABB.IntersectRay( p, d, nullptr, &rayT ) )
@@ -2818,7 +2818,7 @@ bool aeOBB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) 
     }
     if ( pOut )
     {
-      *pOut = p + d * rayT;
+      *pOut = _p + _d * rayT;
     }
     return true;
   }
@@ -2869,8 +2869,9 @@ aeHash& aeHash::HashString( const char* str )
   return *this;
 }
 
-aeHash& aeHash::HashData( const uint8_t* data, const uint32_t length )
+aeHash& aeHash::HashData( const void* _data, uint32_t length )
 {
+  const uint8_t* data = (const uint8_t*)_data;
   for ( uint32_t i = 0; i < length; i++ )
   {
     m_hash = m_hash ^ data[ i ];

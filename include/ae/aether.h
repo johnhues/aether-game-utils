@@ -318,10 +318,10 @@ template< typename T > constexpr T MinValue();
 // of the vector, so in the case of Vec4 a dot product is implemented as
 // (a.x*b.x)+(a.y*b.y)+(a.z*b.z)+(a.w*b.w).
 template < typename T >
-struct VecT
+struct _VecT
 {
-  VecT() {}
-  VecT( bool ) = delete;
+  _VecT() {}
+  _VecT( bool ) = delete;
 
   bool operator==( const T& v ) const;
   bool operator!=( const T& v ) const;
@@ -360,7 +360,7 @@ struct VecT
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
 //------------------------------------------------------------------------------
-struct Vec2 : public VecT< Vec2 >
+struct Vec2 : public _VecT< Vec2 >
 {
   Vec2() {} // Empty default constructor for performance of vertex arrays etc
   Vec2( const Vec2& ) = default;
@@ -381,7 +381,7 @@ using Int2 = Vec2;
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
-struct Vec3 : public VecT< Vec3 >
+struct Vec3 : public _VecT< Vec3 >
 {
   Vec3() {} // Empty default constructor for performance of vertex arrays etc
   explicit Vec3( float v );
@@ -426,7 +426,7 @@ struct Vec3 : public VecT< Vec3 >
 //------------------------------------------------------------------------------
 // ae::Vec4 struct
 //------------------------------------------------------------------------------
-struct Vec4 : public VecT< Vec4 >
+struct Vec4 : public _VecT< Vec4 >
 {
   Vec4() {} // Empty default constructor for performance of vertex arrays etc
   Vec4( const Vec4& ) = default;
@@ -588,7 +588,7 @@ public:
   uint32_t GetStepCount() const;
 
   float GetDt() const;
-  float SetDt( float sec ); // Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+  void SetDt( float sec ); // Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
 
   void Wait();
 
@@ -1209,9 +1209,9 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 //------------------------------------------------------------------------------
 // C++ style allocation functions
 //------------------------------------------------------------------------------
-const uint32_t kDefaultAlignment = 16;
-const uint32_t kHeaderSize = 16;
-struct Header
+const uint32_t _kDefaultAlignment = 16;
+const uint32_t _kHeaderSize = 16;
+struct _Header
 {
   uint32_t check;
   uint32_t count;
@@ -1222,26 +1222,26 @@ struct Header
 template < typename T >
 T* NewArray( ae::Tag tag, uint32_t count )
 {
-  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
+  AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
   AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
 
-  uint32_t size = kHeaderSize + sizeof( T ) * count;
-  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+  uint32_t size = _kHeaderSize + sizeof( T ) * count;
+  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
 
-  AE_STATIC_ASSERT( sizeof( Header ) <= kHeaderSize );
-  AE_STATIC_ASSERT( kHeaderSize % kDefaultAlignment == 0 );
+  AE_STATIC_ASSERT( sizeof( _Header ) <= _kHeaderSize );
+  AE_STATIC_ASSERT( _kHeaderSize % _kDefaultAlignment == 0 );
 
-  Header* header = (Header*)base;
+  _Header* header = (_Header*)base;
   header->check = 0xABCD;
   header->count = count;
   header->size = size;
   header->typeSize = sizeof( T );
 
-  T* result = (T*)( base + kHeaderSize );
+  T* result = (T*)( base + _kHeaderSize );
   for ( uint32_t i = 0; i < count; i++ )
   {
     new( &result[ i ] ) T();
@@ -1253,22 +1253,22 @@ T* NewArray( ae::Tag tag, uint32_t count )
 template < typename T, typename ... Args >
 T* New( ae::Tag tag, Args ... args )
 {
-  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
+  AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
 
-  uint32_t size = kHeaderSize + sizeof( T );
-  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+  uint32_t size = _kHeaderSize + sizeof( T );
+  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
 
-  Header* header = (Header*)base;
+  _Header* header = (_Header*)base;
   header->check = 0xABCD;
   header->count = 1;
   header->size = size;
   header->typeSize = sizeof( T );
 
-  return new( (T*)( base + kHeaderSize ) ) T( args ... );
+  return new( (T*)( base + _kHeaderSize ) ) T( args ... );
 }
 
 template < typename T >
@@ -1279,10 +1279,10 @@ void Delete( T* obj )
     return;
   }
 
-  AE_ASSERT( (intptr_t)obj % kDefaultAlignment == 0 );
-  uint8_t* base = (uint8_t*)obj - kHeaderSize;
+  AE_ASSERT( (intptr_t)obj % _kDefaultAlignment == 0 );
+  uint8_t* base = (uint8_t*)obj - _kHeaderSize;
 
-  Header* header = (Header*)( base );
+  _Header* header = (_Header*)( base );
   AE_ASSERT( header->check == 0xABCD );
 
   uint32_t count = header->count;
@@ -1680,21 +1680,21 @@ inline ae::RandomValue< T >::operator T() const
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
 template < typename T >
-bool VecT< T >::operator==( const T& v ) const
+bool _VecT< T >::operator==( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
 }
 
 template < typename T >
-bool VecT< T >::operator!=( const T& v ) const
+bool _VecT< T >::operator!=( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
 }
 
 template < typename T >
-float VecT< T >::operator[]( uint32_t idx ) const
+float _VecT< T >::operator[]( uint32_t idx ) const
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -1704,7 +1704,7 @@ float VecT< T >::operator[]( uint32_t idx ) const
 }
 
 template < typename T >
-float& VecT< T >::operator[]( uint32_t idx )
+float& _VecT< T >::operator[]( uint32_t idx )
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -1714,7 +1714,7 @@ float& VecT< T >::operator[]( uint32_t idx )
 }
 
 template < typename T >
-T VecT< T >::operator+( const T& v ) const
+T _VecT< T >::operator+( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1726,7 +1726,7 @@ T VecT< T >::operator+( const T& v ) const
 }
 
 template < typename T >
-void VecT< T >::operator+=( const T& v )
+void _VecT< T >::operator+=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(T::data); i++ )
@@ -1736,7 +1736,7 @@ void VecT< T >::operator+=( const T& v )
 }
 
 template < typename T >
-T VecT< T >::operator-() const
+T _VecT< T >::operator-() const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1748,7 +1748,7 @@ T VecT< T >::operator-() const
 }
 
 template < typename T >
-T VecT< T >::operator-( const T& v ) const
+T _VecT< T >::operator-( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1760,7 +1760,7 @@ T VecT< T >::operator-( const T& v ) const
 }
 
 template < typename T >
-void VecT< T >::operator-=( const T& v )
+void _VecT< T >::operator-=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1770,7 +1770,7 @@ void VecT< T >::operator-=( const T& v )
 }
 
 template < typename T >
-T VecT< T >::operator*( const T& v ) const
+T _VecT< T >::operator*( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1782,7 +1782,7 @@ T VecT< T >::operator*( const T& v ) const
 }
 
 template < typename T >
-T VecT< T >::operator/( const T& v ) const
+T _VecT< T >::operator/( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1794,7 +1794,7 @@ T VecT< T >::operator/( const T& v ) const
 }
 
 template < typename T >
-void VecT< T >::operator*=( const T& v )
+void _VecT< T >::operator*=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1804,7 +1804,7 @@ void VecT< T >::operator*=( const T& v )
 }
 
 template < typename T >
-void VecT< T >::operator/=( const T& v )
+void _VecT< T >::operator/=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1814,7 +1814,7 @@ void VecT< T >::operator/=( const T& v )
 }
 
 template < typename T >
-T VecT< T >::operator*( float s ) const
+T _VecT< T >::operator*( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1826,7 +1826,7 @@ T VecT< T >::operator*( float s ) const
 }
 
 template < typename T >
-void VecT< T >::operator*=( float s )
+void _VecT< T >::operator*=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1836,7 +1836,7 @@ void VecT< T >::operator*=( float s )
 }
 
 template < typename T >
-T VecT< T >::operator/( float s ) const
+T _VecT< T >::operator/( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1848,7 +1848,7 @@ T VecT< T >::operator/( float s ) const
 }
 
 template < typename T >
-void VecT< T >::operator/=( float s )
+void _VecT< T >::operator/=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1858,7 +1858,7 @@ void VecT< T >::operator/=( float s )
 }
 
 template < typename T >
-float VecT< T >::Dot( const T& v0, const T& v1 )
+float _VecT< T >::Dot( const T& v0, const T& v1 )
 {
   float result = 0.0f;
   for ( uint32_t i = 0; i < countof(v0.data); i++ )
@@ -1869,25 +1869,25 @@ float VecT< T >::Dot( const T& v0, const T& v1 )
 }
 
 template < typename T >
-float VecT< T >::Dot( const T& v ) const
+float _VecT< T >::Dot( const T& v ) const
 {
   return Dot( *(T*)this, v );
 }
 
 template < typename T >
-float VecT< T >::Length() const
+float _VecT< T >::Length() const
 {
   return sqrt( LengthSquared() );
 }
 
 template < typename T >
-float VecT< T >::LengthSquared() const
+float _VecT< T >::LengthSquared() const
 {
   return Dot( *(T*)this );
 }
 
 template < typename T >
-float VecT< T >::Normalize()
+float _VecT< T >::Normalize()
 {
   float length = Length();
   *(T*)this /= length;
@@ -1895,7 +1895,7 @@ float VecT< T >::Normalize()
 }
 
 template < typename T >
-float VecT< T >::SafeNormalize( float epsilon )
+float _VecT< T >::SafeNormalize( float epsilon )
 {
   auto&& self = *(T*)this;
   float length = Length();
@@ -1909,7 +1909,7 @@ float VecT< T >::SafeNormalize( float epsilon )
 }
 
 template < typename T >
-T VecT< T >::NormalizeCopy() const
+T _VecT< T >::NormalizeCopy() const
 {
   T result = *(T*)this;
   result.Normalize();
@@ -1917,7 +1917,7 @@ T VecT< T >::NormalizeCopy() const
 }
 
 template < typename T >
-T VecT< T >::SafeNormalizeCopy( float epsilon ) const
+T _VecT< T >::SafeNormalizeCopy( float epsilon ) const
 {
   T result = *(T*)this;
   result.SafeNormalize( epsilon );
@@ -1925,7 +1925,7 @@ T VecT< T >::SafeNormalizeCopy( float epsilon ) const
 }
 
 template < typename T >
-float VecT< T >::Trim( float trimLength )
+float _VecT< T >::Trim( float trimLength )
 {
   float length = Length();
   if ( trimLength < length )
@@ -1937,7 +1937,7 @@ float VecT< T >::Trim( float trimLength )
 }
 
 template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
+inline std::ostream& operator<<( std::ostream& os, const _VecT< T >& v )
 {
   constexpr uint32_t count = countof( T::data );
   for ( uint32_t i = 0; i < count - 1; i++ )
@@ -3398,9 +3398,9 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 }
 
 //------------------------------------------------------------------------------
-// DefaultAllocator class
+// _DefaultAllocator class
 //------------------------------------------------------------------------------
-class DefaultAllocator final : public Allocator
+class _DefaultAllocator final : public Allocator
 {
 public:
   void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override
@@ -3454,7 +3454,7 @@ Allocator* GetGlobalAllocator()
   if ( !g_allocator )
   {
     // @TODO: Allocating this statically here won't work for hotloading
-    static DefaultAllocator s_allocator;
+    static _DefaultAllocator s_allocator;
 	  g_allocator = &s_allocator;
   }
   return g_allocator;
@@ -3493,9 +3493,9 @@ float TimeStep::GetDt() const
   return m_prevFrameTimeSec;
 }
 
-float TimeStep::SetDt( float sec )
+void TimeStep::SetDt( float sec )
 {
-  m_prevFrameTimeSec = sec; // Useful for handling frames with high delta time, eg: timeStep.SetDT( timeStep.GetTimeStep()
+  m_prevFrameTimeSec = sec;
 }
 
 void TimeStep::Wait()
