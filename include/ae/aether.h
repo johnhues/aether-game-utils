@@ -774,10 +774,9 @@ public:
   void Reserve( uint32_t total );
   void Clear();
 
-  K& GetKey( uint32_t index );
-  V& GetValue( uint32_t index );
   const K& GetKey( uint32_t index ) const;
   const V& GetValue( uint32_t index ) const;
+  V& GetValue( uint32_t index );
   uint32_t Length() const;
 
 private:
@@ -3080,7 +3079,7 @@ void Map< K, V, N >::Clear()
 }
 
 template < typename K, typename V, uint32_t N >
-K& Map< K, V, N >::GetKey( uint32_t index )
+const K& Map< K, V, N >::GetKey( uint32_t index ) const
 {
   return m_entries[ index ].key;
 }
@@ -3089,12 +3088,6 @@ template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::GetValue( uint32_t index )
 {
   return m_entries[ index ].value;
-}
-
-template < typename K, typename V, uint32_t N >
-const K& Map< K, V, N >::GetKey( uint32_t index ) const
-{
-  return m_entries[ index ].key;
 }
 
 template < typename K, typename V, uint32_t N >
