@@ -428,7 +428,7 @@ void aeTerrainJob::Do()
     m_sdfCache.Generate( m_chunk->m_pos, this );
     m_chunk->Generate( &m_sdfCache, this, edgeInfo, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
     
-    aeMeshParams meshParams;
+    ae::Mesh::Params meshParams;
     // Vertices
     meshParams.vertexCount = (uint32_t)m_vertexCount;
     meshParams.positions = &m_vertices[ 0 ].position;
@@ -2020,7 +2020,7 @@ bool aeTerrain::m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* out
 
   if ( outVertex )
   {
-    aeMeshVertex vert = chunk->m_mesh.GetVertex( index );
+    ae::Mesh::Vertex vert = chunk->m_mesh.GetVertex( index );
     outVertex->position = vert.position.GetXYZ();
     outVertex->normal = vert.normal.GetXYZ();
   }
@@ -2426,7 +2426,7 @@ aeTerrainRaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, boo
   TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
   // TODO Can somehow skip surface and hit interior cell
   AE_ASSERT( index != kInvalidTerrainIndex );
-  aeMeshVertex vert = chunk->m_mesh.GetVertex( index );
+  ae::Mesh::Vertex vert = chunk->m_mesh.GetVertex( index );
   aeFloat3 p = vert.position.GetXYZ();
   aeFloat3 n = vert.normal.GetXYZ().SafeNormalizeCopy(); // @TODO: Use sdf gradient, since verts can have multiple
   aeFloat3 r = ray.SafeNormalizeCopy();
@@ -2458,7 +2458,7 @@ aeTerrainRaycastResult aeTerrain::RaycastFast( aeFloat3 start, aeFloat3 ray, boo
   return result;
 }
 
-bool aeTerrain::Raycast( const aeMesh::RaycastParams& _params, aeMesh::RaycastResult* outResult ) const
+bool aeTerrain::Raycast( const ae::Mesh::RaycastParams& _params, ae::Mesh::RaycastResult* outResult ) const
 {
   aeFloat3 start = _params.source;
   aeFloat3 dir = _params.direction.SafeNormalizeCopy();
@@ -2470,7 +2470,7 @@ bool aeTerrain::Raycast( const aeMesh::RaycastParams& _params, aeMesh::RaycastRe
     return false;
   }
   
-  aeMesh::RaycastParams params = _params;
+  ae::Mesh::RaycastParams params = _params;
   if ( !params.debug )
   {
     params.debug = m_params.debug;
@@ -2566,10 +2566,10 @@ bool aeTerrain::Raycast( const aeMesh::RaycastParams& _params, aeMesh::RaycastRe
     tmax.z = 1000000;
   }
 
-  aeMesh::RaycastResult resultsAccum;
+  ae::Mesh::RaycastResult resultsAccum;
   while ( true )
   {
-    aeMesh::RaycastResult r;
+    ae::Mesh::RaycastResult r;
     const aeTerrainChunk* chunk = GetChunk( aeInt3( x, y, z ) );
     if ( chunk && chunk->m_mesh.Raycast( params, &r ) )
     {
@@ -2627,42 +2627,26 @@ bool aeTerrain::Raycast( const aeMesh::RaycastParams& _params, aeMesh::RaycastRe
   return resultsAccum.hitCount != 0;
 }
 
-bool aeTerrain::PushOutSphere( const aeMesh::PushOutParams& _params, aeMesh::PushOutResult* outResult ) const
+ae::Mesh::PushOutInfo aeTerrain::PushOutSphere( const ae::Mesh::PushOutParams& _params, const ae::Mesh::PushOutInfo& info ) const
 {
-  aeMesh::PushOutParams params = _params;
+  ae::Mesh::PushOutParams params = _params;
   params.transform = aeFloat4x4::Identity();
   
   aeInt3 sphereMin, sphereMax;
-  aeAABB sphereAABB( params.sphere );
+  aeAABB sphereAABB( info.sphere );
   aeTerrainChunk::GetPosFromWorld( sphereAABB.GetMin().FloorCopy(), &sphereMin, nullptr );
   aeTerrainChunk::GetPosFromWorld( sphereAABB.GetMax().CeilCopy(), &sphereMax, nullptr );
   
-  aeMesh::PushOutResult resultsAccum;
+  ae::Mesh::PushOutInfo results = info;
   for ( int32_t z = sphereMin.z; z <= sphereMax.z; z++ )
   for ( int32_t y = sphereMin.y; y <= sphereMax.y; y++ )
   for ( int32_t x = sphereMin.x; x <= sphereMax.x; x++ )
   {
     if ( const aeTerrainChunk* chunk = GetChunk( aeInt3( x, y, z ) ) )
     {
-      aeMesh::PushOutResult r;
-      if ( chunk->m_mesh.PushOut( params, &r ) )
-      {
-        resultsAccum.Accumulate( params, r );
-        
-        // Adjust velocity and move sphere for next push out
-        params.sphere.center = r.position;
-        params.velocity = r.velocity;
-      }
+      results = chunk->m_mesh.PushOut( params, results );
     }
   }
   
-  if ( resultsAccum.hitCount )
-  {
-    if ( outResult )
-    {
-      *outResult = resultsAccum;
-    }
-    return true;
-  }
-  return false;
+  return results;
 }

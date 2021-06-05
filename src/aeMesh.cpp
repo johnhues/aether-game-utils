@@ -112,7 +112,7 @@ uint32_t aeMesh::GetIndexCount() const { return 0; }
 //------------------------------------------------------------------------------
 // aeMesh member functions
 //------------------------------------------------------------------------------
-bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization )
+bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization )
 {
   m_vertices.Clear();
   m_indices.Clear();
@@ -146,8 +146,8 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
     const struct aiMesh* mesh = scene->mMeshes[ i ];
 
     uint32_t vertCount = mesh->mNumVertices;
-    uint32_t uvCount = aeMath::Min( mesh->GetNumUVChannels(), countof(aeMeshVertex::tex) );
-    uint32_t colorCount = aeMath::Min( mesh->GetNumColorChannels(), countof(aeMeshVertex::color) );
+    uint32_t uvCount = aeMath::Min( mesh->GetNumUVChannels(), countof(Vertex::tex) );
+    uint32_t colorCount = aeMath::Min( mesh->GetNumColorChannels(), countof(Vertex::color) );
     AE_DEBUG( "Submesh: vertCount # uvCount # colorCount #", vertCount, uvCount, colorCount );
     
     if ( vertCount )
@@ -158,7 +158,7 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
 
     for ( uint32_t j = 0; j < vertCount; j++ )
     {
-      aeMeshVertex vertex;
+      Vertex vertex;
       
       // Position
       aiVector3D p = mesh->mVertices[ j ];
@@ -224,7 +224,7 @@ bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* ext
   return true;
 }
 
-void aeMesh::Load( aeMeshParams params )
+void ae::Mesh::Load( Params params )
 {
   Clear();
   
@@ -245,7 +245,7 @@ void aeMesh::Load( aeMeshParams params )
     m_vertices.Reserve( params.vertexCount );
     for ( uint32_t i = 0; i < params.vertexCount; i++ )
     {
-      aeMeshVertex vert;
+      Vertex vert;
       memset( &vert, 0, sizeof(vert) );
       
       vert.position = aeFloat4( *params.positions, 1.0f );
@@ -266,7 +266,7 @@ void aeMesh::Load( aeMeshParams params )
 }
 
 const uint32_t kAeMeshVersion = 1;
-void aeMesh::Serialize( aeBinaryStream* stream )
+void ae::Mesh::Serialize( aeBinaryStream* stream )
 {
   if ( stream->IsReader() )
   {
@@ -307,7 +307,7 @@ void aeMesh::Serialize( aeBinaryStream* stream )
       stream->Invalidate();
       return;
     }
-    m_vertices.Append( (const aeMeshVertex*)stream->PeekData(), vertexDataLength / vertexSize );
+    m_vertices.Append( (const Vertex*)stream->PeekData(), vertexDataLength / vertexSize );
     stream->Discard( vertexDataLength );
     
     uint32_t indexDataLength = 0;
@@ -317,12 +317,12 @@ void aeMesh::Serialize( aeBinaryStream* stream )
       stream->Invalidate();
       return;
     }
-    m_indices.Append( (const aeMeshIndex*)stream->PeekData(), indexDataLength / indexSize );
+    m_indices.Append( (const Index*)stream->PeekData(), indexDataLength / indexSize );
     stream->Discard( indexDataLength );
   }
 }
 
-void aeMesh::Transform( aeFloat4x4 transform )
+void ae::Mesh::Transform( aeFloat4x4 transform )
 {
   if ( !m_vertices.Length() )
   {
@@ -340,34 +340,34 @@ void aeMesh::Transform( aeFloat4x4 transform )
   }
 }
 
-void aeMesh::Clear()
+void ae::Mesh::Clear()
 {
   m_vertices.Clear();
   m_indices.Clear();
   m_aabb = aeAABB();
 }
 
-const aeMeshVertex* aeMesh::GetVertices() const
+const ae::Mesh::Vertex* ae::Mesh::GetVertices() const
 {
   return m_vertices.Length() ? &m_vertices[ 0 ] : nullptr;
 }
 
-const aeMeshIndex* aeMesh::GetIndices() const
+const ae::Mesh::Index* ae::Mesh::GetIndices() const
 {
   return m_indices.Length() ? &m_indices[ 0 ] : nullptr;
 }
 
-uint32_t aeMesh::GetVertexCount() const
+uint32_t ae::Mesh::GetVertexCount() const
 {
   return m_vertices.Length();
 }
 
-uint32_t aeMesh::GetIndexCount() const
+uint32_t ae::Mesh::GetIndexCount() const
 {
   return m_indices.Length();
 }
 
-bool aeMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
+bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
 {
   // Early out for parameters that will give no results
   if ( params.maxLength < 0.0f || params.maxHits == 0 )
@@ -399,8 +399,8 @@ bool aeMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) co
   const bool cw = params.hitClockwise;
   
   const uint32_t triCount = GetIndexCount() / 3;
-  const aeMeshIndex* indices = GetIndices();
-  const aeMeshVertex* vertices = GetVertices();
+  const Index* indices = GetIndices();
+  const Vertex* vertices = GetVertices();
 
   uint32_t hitCount  = 0;
   RaycastResult::Hit hits[ countof(RaycastResult::hits) + 1 ];
@@ -469,12 +469,12 @@ bool aeMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) co
   return hitCount;
 }
 
-bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) const
+ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const PushOutInfo& info ) const
 {
   aeOBB obb( params.transform * m_aabb.GetTransform() );
-  if ( obb.GetMinDistance( params.sphere.center ) > params.sphere.radius )
+  if ( obb.GetMinDistance( info.sphere.center ) > info.sphere.radius )
   {
-    return false; // Early out if sphere is to far from mesh
+    return info; // Early out if sphere is to far from mesh
   }
   
   if ( aeDebugRender* debug = params.debug )
@@ -483,20 +483,19 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
     debug->AddCube( obb.GetTransform(), params.debugColor );
   }
   
-  PushOutResult result;
-  aeSphere sphere = params.sphere;
-  result.velocity = params.velocity;
-  uint32_t collisionCount = 0;
-  bool identityTransform = ( params.transform == aeFloat4x4::Identity() );
+  PushOutInfo result;
+  result.sphere = info.sphere;
+  result.velocity = info.velocity;
+  bool hasIdentityTransform = ( params.transform == aeFloat4x4::Identity() );
   
   const uint32_t triCount = GetIndexCount() / 3;
-  const aeMeshIndex* indices = GetIndices();
-  const aeMeshVertex* vertices = GetVertices();
+  const Index* indices = GetIndices();
+  const Vertex* vertices = GetVertices();
   
   for ( uint32_t i = 0; i < triCount; i++ )
   {
     aeFloat3 a, b, c;
-    if ( identityTransform )
+    if ( hasIdentityTransform )
     {
       a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
       b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
@@ -512,36 +511,33 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
     aeFloat3 triNormal = ( ( b - a ) % ( c - a ) ).SafeNormalizeCopy();
     aeFloat3 triCenter( ( a + b + c ) / 3.0f );
     
-    aeFloat3 triToSphereDir = ( sphere.center - triCenter ).SafeNormalizeCopy();
+    aeFloat3 triToSphereDir = ( result.sphere.center - triCenter ).SafeNormalizeCopy();
     if ( triNormal.Dot( triToSphereDir ) < 0.0f )
     {
       continue;
     }
     
     aeFloat3 triHitPos;
-    if ( sphere.IntersectTriangle( a, b, c, &triHitPos ) )
+    if ( result.sphere.IntersectTriangle( a, b, c, &triHitPos ) )
     {
-      triToSphereDir = ( sphere.center - triHitPos ).SafeNormalizeCopy();
+      triToSphereDir = ( result.sphere.center - triHitPos ).SafeNormalizeCopy();
       if ( triNormal.Dot( triToSphereDir ) < 0.3f )
       {
         continue;
       }
       
-      aeFloat3 closestSpherePoint = ( triHitPos - sphere.center ).SafeNormalizeCopy();
-      closestSpherePoint *= sphere.radius;
-      closestSpherePoint += sphere.center;
+      aeFloat3 closestSpherePoint = ( triHitPos - result.sphere.center ).SafeNormalizeCopy();
+      closestSpherePoint *= result.sphere.radius;
+      closestSpherePoint += result.sphere.center;
       
-      sphere.center += triHitPos - closestSpherePoint;
+      result.sphere.center += triHitPos - closestSpherePoint;
       result.velocity.ZeroDirection( -triNormal );
       
-      if ( result.hitCount < countof( result.hitPos ) )
+      // @TODO: Sort. Shouldn't randomly discard hits.
+      if ( result.hits.Length() < result.hits.Size() )
       {
-        result.hitPos[ result.hitCount ] = triHitPos;
-        result.hitNorm[ result.hitCount ] = triNormal;
-        result.hitCount++;
+        result.hits.Append( { triHitPos, triNormal } );
       }
-      
-      collisionCount++;
       
       if ( aeDebugRender* debug = params.debug )
       {
@@ -555,25 +551,21 @@ bool aeMesh::PushOut( const PushOutParams& params, PushOutResult* outResult ) co
     }
   }
   
-  if ( collisionCount )
+  if ( result.hits.Length() )
   {
-    if ( outResult )
-    {
-      result.position = sphere.center;
-      *outResult = result;
-    }
-    return true;
+    PushOutInfo::Accumulate( params, info, &result );
+    return result;
   }
   else
   {
-    return false;
+    return info;
   }
 }
 
 //------------------------------------------------------------------------------
 // RaycastResult
 //------------------------------------------------------------------------------
-void aeMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& result )
+void ae::Mesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& result )
 {
   uint32_t accumHitCount = 0;
   Hit accumHits[ countof(hits) * 2 ];
@@ -598,19 +590,23 @@ void aeMesh::RaycastResult::Accumulate( const RaycastParams& params, const Rayca
 }
 
 //------------------------------------------------------------------------------
-// PushOutResult
+// PushOutInfo
 //------------------------------------------------------------------------------
-void aeMesh::PushOutResult::Accumulate( const PushOutParams& params, const PushOutResult& result )
+void ae::Mesh::PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next )
 {
-  position = result.position;
-  velocity = result.velocity;
-  
-  // @TODO: Should hits be sorted in any way? Currently excess hits are discarded in a random order
-  for ( uint32_t i = 0; i < result.hitCount && hitCount < countof(hitPos); i++ )
+  // @NOTE: Leave next::position/velocity unchanged since it's the latest
+  // @TODO: Params are currently not used, but they could be used for sorting later
+  auto&& nHits = next->hits;
+  for ( auto&& hit : prev.hits )
   {
-    hitPos[ hitCount ] = result.hitPos[ i ];
-    hitNorm[ hitCount ] = result.hitNorm[ i ];
-    hitCount++;
+    if ( nHits.Length() < nHits.Size() )
+    {
+      nHits.Append( hit );
+    }
+    else
+    {
+      break;
+    }
   }
 }
 

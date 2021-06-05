@@ -471,7 +471,7 @@ struct aeTerrainChunk
   bool m_geoDirty;
   bool m_lightDirty;
   aeVertexData m_data;
-  aeMesh m_mesh;
+  ae::Mesh m_mesh;
   aeListNode< aeTerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -521,9 +521,9 @@ public:
   aeTerrainRaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
   
   // Triangle raycast against terrain
-  bool Raycast( const aeMesh::RaycastParams& params, aeMesh::RaycastResult* outResult ) const;
+  bool Raycast( const ae::Mesh::RaycastParams& params, ae::Mesh::RaycastResult* outResult ) const;
   // Triangle-sphere push out
-  bool PushOutSphere( const aeMesh::PushOutParams& params, aeMesh::PushOutResult* outResult ) const;
+  ae::Mesh::PushOutInfo PushOutSphere( const ae::Mesh::PushOutParams& params, const ae::Mesh::PushOutInfo& info ) const;
   
   aeTerrainSDF sdf;
 
