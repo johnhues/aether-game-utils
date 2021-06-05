@@ -168,12 +168,13 @@ uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
 bool IsDebuggerAttached();
 template < typename T > const char* GetTypeName();
+double GetTime();
 
 //------------------------------------------------------------------------------
 // Tags
 //------------------------------------------------------------------------------
 using Tag = std::string; // @TODO: Fixed length string
-#define AE_ALLOC_TAG_RENDER ae::Tag( "aeRender" )
+#define AE_ALLOC_TAG_RENDER ae::Tag( "aeGraphics" )
 #define AE_ALLOC_TAG_AUDIO ae::Tag( "aeAudio" )
 #define AE_ALLOC_TAG_META ae::Tag( "aeMeta" )
 #define AE_ALLOC_TAG_TERRAIN ae::Tag( "aeTerrain" )
@@ -182,6 +183,7 @@ using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_MESH ae::Tag( "aeMesh" )
 #define AE_ALLOC_TAG_SCRATCH ae::Tag( "aeScratch" )
 #define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
+#define AE_ALLOC_TAG_FILE ae::Tag( "aeFile" )
 
 //------------------------------------------------------------------------------
 // Allocator interface
@@ -312,14 +314,14 @@ template< typename T > constexpr T MinValue();
 // ae::Vec3 shared member functions
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
-// @NOTE: Vec2 Vec3 and Vec4 share these functions. They act on the each component
+// @NOTE: Vec2 Vec3 and Vec4 share these functions. They act on each component
 // of the vector, so in the case of Vec4 a dot product is implemented as
 // (a.x*b.x)+(a.y*b.y)+(a.z*b.z)+(a.w*b.w).
 template < typename T >
-struct VecT
+struct _VecT
 {
-  VecT() {}
-  VecT( bool ) = delete;
+  _VecT() {}
+  _VecT( bool ) = delete;
 
   bool operator==( const T& v ) const;
   bool operator!=( const T& v ) const;
@@ -327,15 +329,19 @@ struct VecT
   float operator[]( uint32_t idx ) const;
   float& operator[]( uint32_t idx );
   
-  T operator+( const T& v ) const;
-  void operator+=( const T& v );
   T operator-() const;
-  T operator-( const T& v ) const;
-  void operator-=( const T& v );
   T operator*( float s ) const;
-  void operator*=( float s );
   T operator/( float s ) const;
+  T operator+( const T& v ) const;
+  T operator-( const T& v ) const;
+  T operator*( const T& v ) const;
+  T operator/( const T& v ) const;
+  void operator*=( float s );
   void operator/=( float s );
+  void operator+=( const T& v );
+  void operator-=( const T& v );
+  void operator*=( const T& v );
+  void operator/=( const T& v );
   
   static float Dot( const T& v0, const T& v1 );
   float Dot( const T& v ) const;
@@ -354,7 +360,7 @@ struct VecT
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
 //------------------------------------------------------------------------------
-struct Vec2 : public VecT< Vec2 >
+struct Vec2 : public _VecT< Vec2 >
 {
   Vec2() {} // Empty default constructor for performance of vertex arrays etc
   Vec2( const Vec2& ) = default;
@@ -369,11 +375,13 @@ struct Vec2 : public VecT< Vec2 >
   };
   float data[ 2 ];
 };
+// @HACK: For Window
+using Int2 = Vec2;
 
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
-struct Vec3 : public VecT< Vec3 >
+struct Vec3 : public _VecT< Vec3 >
 {
   Vec3() {} // Empty default constructor for performance of vertex arrays etc
   explicit Vec3( float v );
@@ -418,7 +426,7 @@ struct Vec3 : public VecT< Vec3 >
 //------------------------------------------------------------------------------
 // ae::Vec4 struct
 //------------------------------------------------------------------------------
-struct Vec4 : public VecT< Vec4 >
+struct Vec4 : public _VecT< Vec4 >
 {
   Vec4() {} // Empty default constructor for performance of vertex arrays etc
   Vec4( const Vec4& ) = default;
@@ -568,6 +576,33 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::TimeStep
+//------------------------------------------------------------------------------
+class TimeStep
+{
+public:
+  TimeStep();
+
+  void SetTimeStep( float timeStep );
+  float GetTimeStep() const;
+  uint32_t GetStepCount() const;
+
+  float GetDt() const;
+  void SetDt( float sec ); // Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+
+  void Wait();
+
+private:
+  uint32_t m_stepCount = 0;
+  float m_timeStepSec = 0.0f;
+  float m_timeStep = 0.0f;
+  int64_t m_frameExcess = 0;
+  float m_prevFrameTime = 0.0f;
+  float m_prevFrameTimeSec = 0.0f;
+  std::chrono::steady_clock::time_point m_frameStart;
+};
+
+//------------------------------------------------------------------------------
 // ae::Str class
 // @NOTE: A fixed length string class. The templated value is the total size of
 // the string in memory.
@@ -696,9 +731,14 @@ private:
   T* m_array;
   ae::Tag m_tag;
   typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
+#if _AE_LINUX_
+  struct Storage { AlignedStorageT data[ N ]; };
+  Storage m_storage;
+#else
   template < uint32_t > struct Storage { AlignedStorageT data[ N ]; };
   template <> struct Storage< 0 > {};
   Storage< N > m_storage;
+#endif
 public:
   // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
   T* begin() { return m_array; }
@@ -734,10 +774,9 @@ public:
   void Reserve( uint32_t total );
   void Clear();
 
-  K& GetKey( uint32_t index );
-  V& GetValue( uint32_t index );
   const K& GetKey( uint32_t index ) const;
   const V& GetValue( uint32_t index ) const;
+  V& GetValue( uint32_t index );
   uint32_t Length() const;
 
 private:
@@ -834,6 +873,213 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 #ifdef _MSC_VER
 # define strtok_r strtok_s
 #endif
+
+namespace AE_NAMESPACE {
+
+// @HACK:
+struct Rect
+{};
+struct Matrix4
+{};
+
+//------------------------------------------------------------------------------
+// ae::Window class
+//------------------------------------------------------------------------------
+class Window
+{
+public:
+  Window();
+  bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor );
+  bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor );
+  void Terminate();
+
+  void SetTitle( const char* title );
+  void SetFullScreen( bool fullScreen );
+  void SetPosition( Int2 pos );
+  void SetSize( uint32_t width, uint32_t height );
+  void SetMaximized( bool maximized );
+
+  const char* GetTitle() const { return m_windowTitle.c_str(); }
+  Int2 GetPosition() const { return m_pos; }
+  int32_t GetWidth() const { return m_width; }
+  int32_t GetHeight() const { return m_height; }
+  bool GetFullScreen() const { return m_fullScreen; }
+  bool GetMaximized() const { return m_maximized; }
+
+private:
+  void m_Initialize();
+    
+  Int2 m_pos;
+  int32_t m_width;
+  int32_t m_height;
+  bool m_fullScreen;
+  bool m_maximized;
+  Str256 m_windowTitle;
+
+public:
+  // Internal
+  void m_UpdatePos( Int2 pos ) { m_pos = pos; }
+  void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
+  void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
+
+  void* window;
+  class GraphicsDevice* graphicsDevice;
+};
+
+//------------------------------------------------------------------------------
+// ae::Input class
+//------------------------------------------------------------------------------
+class Input
+{
+public:
+  void Pump();
+  bool quit = false;
+};
+
+//------------------------------------------------------------------------------
+// Graphics Constants
+//------------------------------------------------------------------------------
+enum class TextureFilter
+{
+  Linear,
+  Nearest
+};
+enum class TextureWrap
+{
+  Repeat,
+  Clamp
+};
+
+//------------------------------------------------------------------------------
+// UniformList class
+//------------------------------------------------------------------------------
+class UniformList
+{
+public:
+};
+
+//------------------------------------------------------------------------------
+// Shader class
+//------------------------------------------------------------------------------
+class Shader
+{
+public:
+};
+
+//------------------------------------------------------------------------------
+// VertexData class
+//------------------------------------------------------------------------------
+class VertexData
+{
+public:
+};
+
+//------------------------------------------------------------------------------
+// Texture2D class
+//------------------------------------------------------------------------------
+class Texture2D
+{
+public:
+};
+
+//------------------------------------------------------------------------------
+// RenderTarget class
+//------------------------------------------------------------------------------
+class RenderTarget
+{
+public:
+  ~RenderTarget();
+  void Initialize( uint32_t width, uint32_t height );
+  void AddTexture( TextureFilter filter, TextureWrap wrap );
+  void AddDepth( TextureFilter filter, TextureWrap wrap );
+  void Destroy();
+
+  void Activate();
+  void Clear( Color color );
+  void Render( const Shader* shader, const UniformList& uniforms );
+  void Render2D( uint32_t textureIndex, Rect ndc, float z );
+
+  const Texture2D* GetTexture( uint32_t index ) const;
+  const Texture2D* GetDepth() const;
+  uint32_t GetWidth() const;
+  uint32_t GetHeight() const;
+
+  // @NOTE: Get ndc space rect of this target within another target (fill but maintain aspect ratio)
+  // GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
+  // GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
+  Rect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
+
+  // @NOTE: Other target to local transform (pixels->pixels)
+  // Useful for transforming window/mouse pixel coordinates to local pixels
+  // GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
+  Matrix4 GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const;
+
+  // @NOTE: Mouse/window pixel coordinates to world space
+  // GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ... ), TODO )
+  Matrix4 GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const;
+
+  // @NOTE: Creates a transform matrix from aeQuad vertex positions to ndc space
+  // GraphicsDeviceTarget uses aeQuad vertices internally
+  static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
+
+private:
+  struct Vertex
+  {
+    Vec3 pos;
+    Vec2 uv;
+  };
+
+  uint32_t m_fbo = 0;
+
+  Array< Texture2D*, 4 > m_targets;
+  Texture2D m_depth;
+
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
+
+  VertexData m_quad;
+  Shader m_shader;
+};
+
+//------------------------------------------------------------------------------
+// ae::GraphicsDevice class
+//------------------------------------------------------------------------------
+class GraphicsDevice
+{
+public:
+  GraphicsDevice();
+  ~GraphicsDevice();
+
+  void Initialize( class Window* window );
+  void Terminate();
+
+  void Activate();
+  void Clear( Color color );
+  void Present();
+
+  class Window* GetWindow() { return m_window; }
+  RenderTarget* GetCanvas() { return &m_canvas; }
+
+  uint32_t GetWidth() const { return m_canvas.GetWidth(); }
+  uint32_t GetHeight() const { return m_canvas.GetHeight(); }
+  float GetAspectRatio() const;
+
+  // have to inject a barrier to readback from active render target (GL only)
+  void AddTextureBarrier();
+
+//private:
+  friend class ae::Window;
+  void m_HandleResize( uint32_t width, uint32_t height );
+
+  Window* m_window;
+  RenderTarget m_canvas;
+
+  // OpenGL
+  void* m_context;
+  int32_t m_defaultFbo;
+};
+
+} // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
@@ -963,9 +1209,9 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 //------------------------------------------------------------------------------
 // C++ style allocation functions
 //------------------------------------------------------------------------------
-const uint32_t kDefaultAlignment = 16;
-const uint32_t kHeaderSize = 16;
-struct Header
+const uint32_t _kDefaultAlignment = 16;
+const uint32_t _kHeaderSize = 16;
+struct _Header
 {
   uint32_t check;
   uint32_t count;
@@ -976,26 +1222,26 @@ struct Header
 template < typename T >
 T* NewArray( ae::Tag tag, uint32_t count )
 {
-  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
+  AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
   AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
 
-  uint32_t size = kHeaderSize + sizeof( T ) * count;
-  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+  uint32_t size = _kHeaderSize + sizeof( T ) * count;
+  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
 
-  AE_STATIC_ASSERT( sizeof( Header ) <= kHeaderSize );
-  AE_STATIC_ASSERT( kHeaderSize % kDefaultAlignment == 0 );
+  AE_STATIC_ASSERT( sizeof( _Header ) <= _kHeaderSize );
+  AE_STATIC_ASSERT( _kHeaderSize % _kDefaultAlignment == 0 );
 
-  Header* header = (Header*)base;
+  _Header* header = (_Header*)base;
   header->check = 0xABCD;
   header->count = count;
   header->size = size;
   header->typeSize = sizeof( T );
 
-  T* result = (T*)( base + kHeaderSize );
+  T* result = (T*)( base + _kHeaderSize );
   for ( uint32_t i = 0; i < count; i++ )
   {
     new( &result[ i ] ) T();
@@ -1007,22 +1253,22 @@ T* NewArray( ae::Tag tag, uint32_t count )
 template < typename T, typename ... Args >
 T* New( ae::Tag tag, Args ... args )
 {
-  AE_STATIC_ASSERT( alignof( T ) <= kDefaultAlignment );
+  AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
 
-  uint32_t size = kHeaderSize + sizeof( T );
-  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % kDefaultAlignment == 0 );
+  uint32_t size = _kHeaderSize + sizeof( T );
+  uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
+  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
 
-  Header* header = (Header*)base;
+  _Header* header = (_Header*)base;
   header->check = 0xABCD;
   header->count = 1;
   header->size = size;
   header->typeSize = sizeof( T );
 
-  return new( (T*)( base + kHeaderSize ) ) T( args ... );
+  return new( (T*)( base + _kHeaderSize ) ) T( args ... );
 }
 
 template < typename T >
@@ -1033,10 +1279,10 @@ void Delete( T* obj )
     return;
   }
 
-  AE_ASSERT( (intptr_t)obj % kDefaultAlignment == 0 );
-  uint8_t* base = (uint8_t*)obj - kHeaderSize;
+  AE_ASSERT( (intptr_t)obj % _kDefaultAlignment == 0 );
+  uint8_t* base = (uint8_t*)obj - _kHeaderSize;
 
-  Header* header = (Header*)( base );
+  _Header* header = (_Header*)( base );
   AE_ASSERT( header->check == 0xABCD );
 
   uint32_t count = header->count;
@@ -1434,21 +1680,21 @@ inline ae::RandomValue< T >::operator T() const
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
 template < typename T >
-bool VecT< T >::operator==( const T& v ) const
+bool _VecT< T >::operator==( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
 }
 
 template < typename T >
-bool VecT< T >::operator!=( const T& v ) const
+bool _VecT< T >::operator!=( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
 }
 
 template < typename T >
-float VecT< T >::operator[]( uint32_t idx ) const
+float _VecT< T >::operator[]( uint32_t idx ) const
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -1458,7 +1704,7 @@ float VecT< T >::operator[]( uint32_t idx ) const
 }
 
 template < typename T >
-float& VecT< T >::operator[]( uint32_t idx )
+float& _VecT< T >::operator[]( uint32_t idx )
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -1468,7 +1714,7 @@ float& VecT< T >::operator[]( uint32_t idx )
 }
 
 template < typename T >
-T VecT< T >::operator+( const T& v ) const
+T _VecT< T >::operator+( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1480,7 +1726,7 @@ T VecT< T >::operator+( const T& v ) const
 }
 
 template < typename T >
-void VecT< T >::operator+=( const T& v )
+void _VecT< T >::operator+=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(T::data); i++ )
@@ -1490,7 +1736,7 @@ void VecT< T >::operator+=( const T& v )
 }
 
 template < typename T >
-T VecT< T >::operator-() const
+T _VecT< T >::operator-() const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1502,7 +1748,7 @@ T VecT< T >::operator-() const
 }
 
 template < typename T >
-T VecT< T >::operator-( const T& v ) const
+T _VecT< T >::operator-( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1514,7 +1760,7 @@ T VecT< T >::operator-( const T& v ) const
 }
 
 template < typename T >
-void VecT< T >::operator-=( const T& v )
+void _VecT< T >::operator-=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1524,7 +1770,51 @@ void VecT< T >::operator-=( const T& v )
 }
 
 template < typename T >
-T VecT< T >::operator*( float s ) const
+T _VecT< T >::operator*( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T _VecT< T >::operator/( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void _VecT< T >::operator*=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= v.data[ i ];
+  }
+}
+
+template < typename T >
+void _VecT< T >::operator/=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= v.data[ i ];
+  }
+}
+
+template < typename T >
+T _VecT< T >::operator*( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1536,7 +1826,7 @@ T VecT< T >::operator*( float s ) const
 }
 
 template < typename T >
-void VecT< T >::operator*=( float s )
+void _VecT< T >::operator*=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1546,7 +1836,7 @@ void VecT< T >::operator*=( float s )
 }
 
 template < typename T >
-T VecT< T >::operator/( float s ) const
+T _VecT< T >::operator/( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -1558,7 +1848,7 @@ T VecT< T >::operator/( float s ) const
 }
 
 template < typename T >
-void VecT< T >::operator/=( float s )
+void _VecT< T >::operator/=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -1568,7 +1858,7 @@ void VecT< T >::operator/=( float s )
 }
 
 template < typename T >
-float VecT< T >::Dot( const T& v0, const T& v1 )
+float _VecT< T >::Dot( const T& v0, const T& v1 )
 {
   float result = 0.0f;
   for ( uint32_t i = 0; i < countof(v0.data); i++ )
@@ -1579,25 +1869,25 @@ float VecT< T >::Dot( const T& v0, const T& v1 )
 }
 
 template < typename T >
-float VecT< T >::Dot( const T& v ) const
+float _VecT< T >::Dot( const T& v ) const
 {
   return Dot( *(T*)this, v );
 }
 
 template < typename T >
-float VecT< T >::Length() const
+float _VecT< T >::Length() const
 {
   return sqrt( LengthSquared() );
 }
 
 template < typename T >
-float VecT< T >::LengthSquared() const
+float _VecT< T >::LengthSquared() const
 {
   return Dot( *(T*)this );
 }
 
 template < typename T >
-float VecT< T >::Normalize()
+float _VecT< T >::Normalize()
 {
   float length = Length();
   *(T*)this /= length;
@@ -1605,7 +1895,7 @@ float VecT< T >::Normalize()
 }
 
 template < typename T >
-float VecT< T >::SafeNormalize( float epsilon )
+float _VecT< T >::SafeNormalize( float epsilon )
 {
   auto&& self = *(T*)this;
   float length = Length();
@@ -1619,7 +1909,7 @@ float VecT< T >::SafeNormalize( float epsilon )
 }
 
 template < typename T >
-T VecT< T >::NormalizeCopy() const
+T _VecT< T >::NormalizeCopy() const
 {
   T result = *(T*)this;
   result.Normalize();
@@ -1627,7 +1917,7 @@ T VecT< T >::NormalizeCopy() const
 }
 
 template < typename T >
-T VecT< T >::SafeNormalizeCopy( float epsilon ) const
+T _VecT< T >::SafeNormalizeCopy( float epsilon ) const
 {
   T result = *(T*)this;
   result.SafeNormalize( epsilon );
@@ -1635,7 +1925,7 @@ T VecT< T >::SafeNormalizeCopy( float epsilon ) const
 }
 
 template < typename T >
-float VecT< T >::Trim( float trimLength )
+float _VecT< T >::Trim( float trimLength )
 {
   float length = Length();
   if ( trimLength < length )
@@ -1647,7 +1937,7 @@ float VecT< T >::Trim( float trimLength )
 }
 
 template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
+inline std::ostream& operator<<( std::ostream& os, const _VecT< T >& v )
 {
   constexpr uint32_t count = countof( T::data );
   for ( uint32_t i = 0; i < count - 1; i++ )
@@ -2789,7 +3079,7 @@ void Map< K, V, N >::Clear()
 }
 
 template < typename K, typename V, uint32_t N >
-K& Map< K, V, N >::GetKey( uint32_t index )
+const K& Map< K, V, N >::GetKey( uint32_t index ) const
 {
   return m_entries[ index ].key;
 }
@@ -2798,12 +3088,6 @@ template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::GetValue( uint32_t index )
 {
   return m_entries[ index ].value;
-}
-
-template < typename K, typename V, uint32_t N >
-const K& Map< K, V, N >::GetKey( uint32_t index ) const
-{
-  return m_entries[ index ].key;
 }
 
 template < typename K, typename V, uint32_t N >
@@ -2919,6 +3203,25 @@ bool IsDebuggerAttached()
   return false;
 }
 #endif
+
+double GetTime()
+{
+#if _AE_WINDOWS_
+  static LARGE_INTEGER counterFrequency = { 0 };
+  if ( !counterFrequency.QuadPart )
+  {
+    bool success = QueryPerformanceFrequency( &counterFrequency ) != 0;
+    AE_ASSERT( success );
+  }
+
+  LARGE_INTEGER performanceCount = { 0 };
+  bool success = QueryPerformanceCounter( &performanceCount ) != 0;
+  AE_ASSERT( success );
+  return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
+#else
+  return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::steady_clock::now().time_since_epoch() ).count() / 1000000.0;
+#endif
+}
 
 //------------------------------------------------------------------------------
 // ae::Vec3 functions
@@ -3095,9 +3398,9 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 }
 
 //------------------------------------------------------------------------------
-// DefaultAllocator class
+// _DefaultAllocator class
 //------------------------------------------------------------------------------
-class DefaultAllocator final : public Allocator
+class _DefaultAllocator final : public Allocator
 {
 public:
   void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override
@@ -3151,10 +3454,897 @@ Allocator* GetGlobalAllocator()
   if ( !g_allocator )
   {
     // @TODO: Allocating this statically here won't work for hotloading
-    static DefaultAllocator s_allocator;
+    static _DefaultAllocator s_allocator;
 	  g_allocator = &s_allocator;
   }
   return g_allocator;
+}
+
+//------------------------------------------------------------------------------
+// ae::TimeStep member functions
+//------------------------------------------------------------------------------
+TimeStep::TimeStep()
+{
+  m_stepCount = 0;
+  m_timeStep = 0.0f;
+  m_frameExcess = 0;
+  m_prevFrameTime = 0.0f;
+
+  SetTimeStep( 1.0f / 60.0f );
+}
+
+void TimeStep::SetTimeStep( float timeStep )
+{
+  m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f;
+}
+
+float TimeStep::GetTimeStep() const
+{
+  return m_timeStepSec;
+}
+
+uint32_t TimeStep::GetStepCount() const
+{
+  return m_stepCount;
+}
+
+float TimeStep::GetDt() const
+{
+  return m_prevFrameTimeSec;
+}
+
+void TimeStep::SetDt( float sec )
+{
+  m_prevFrameTimeSec = sec;
+}
+
+void TimeStep::Wait()
+{
+  if ( m_timeStep == 0.0f )
+  {
+    return;
+  }
+  
+  // @TODO: Maybe this should use the same time source as GetTime()
+  
+  if ( m_stepCount == 0 )
+  {
+    m_prevFrameTime = m_timeStep;
+    m_frameStart = std::chrono::steady_clock::now();
+  }
+  else
+  {
+    std::chrono::steady_clock::time_point execFinish = std::chrono::steady_clock::now();
+    std::chrono::microseconds execDuration = std::chrono::duration_cast< std::chrono::microseconds >( execFinish - m_frameStart );
+    
+    int64_t prevFrameExcess = m_prevFrameTime - m_timeStep;
+    m_frameExcess = ( m_frameExcess * 0.5f + prevFrameExcess * 0.5f ) + 0.5f;
+
+    int64_t wait = m_timeStep - execDuration.count();
+    wait -= ( m_frameExcess > 0 ) ? m_frameExcess : 0;
+    if ( 1000 < wait && wait < m_timeStep )
+    {
+      std::this_thread::sleep_for( std::chrono::microseconds( wait ) );
+    }
+    std::chrono::steady_clock::time_point frameFinish = std::chrono::steady_clock::now();
+    std::chrono::microseconds frameDuration = std::chrono::duration_cast< std::chrono::microseconds >( frameFinish - m_frameStart );
+
+    m_prevFrameTime = frameDuration.count();
+    m_frameStart = std::chrono::steady_clock::now();
+  }
+  
+  m_prevFrameTimeSec = m_prevFrameTime / 1000000.0f;
+  
+  m_stepCount++;
+}
+
+//------------------------------------------------------------------------------
+// Window member functions
+//------------------------------------------------------------------------------
+#if _AE_WINDOWS_
+// @TODO: Cleanup namespace
+LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+  ae::Window* window = (ae::Window*)GetWindowLongPtr( hWnd, GWLP_USERDATA );
+  switch ( msg )
+  {
+    case WM_CREATE:
+    {
+      // Store ae window pointer in window state. Retrievable with GetWindowLongPtr()
+      // https://docs.microsoft.com/en-us/windows/win32/learnwin32/managing-application-state-?redirectedfrom=MSDN
+      // @TODO: Handle these error cases gracefully
+      CREATESTRUCT* createMsg = (CREATESTRUCT*)lParam;
+      AE_ASSERT( createMsg );
+      ae::Window* window = (ae::Window*)createMsg->lpCreateParams;
+      AE_ASSERT( window );
+      SetWindowLongPtr( hWnd, GWLP_USERDATA, (LONG_PTR)window );
+      AE_ASSERT( window == (ae::Window*)GetWindowLongPtr( hWnd, GWLP_USERDATA ) );
+      window->window = hWnd;
+      break;
+    }
+    case WM_SIZE:
+    {
+      if ( window->graphicsDevice )
+      {
+        uint32_t width = LOWORD( lParam );
+        uint32_t height = HIWORD( lParam );
+        window->m_UpdateWidthHeight( width, height );
+        window->graphicsDevice->m_HandleResize( width, height );
+      }
+      break;
+    }
+    case WM_CLOSE:
+    {
+      PostQuitMessage( 0 );
+      break;
+    }
+  }
+  return DefWindowProc( hWnd, msg, wParam, lParam );
+}
+#endif
+
+Window::Window()
+{
+  window = nullptr;
+  graphicsDevice = nullptr;
+  m_pos = Int2( 0.0f ); // @TODO: int
+  m_width = 0;
+  m_height = 0;
+  m_fullScreen = false;
+  m_maximized = false;
+}
+
+bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor )
+{
+  AE_ASSERT( !window );
+
+  //m_pos = Int2( fullScreen ? 0 : (int)SDL_WINDOWPOS_CENTERED );
+  m_width = width;
+  m_height = height;
+  m_fullScreen = fullScreen;
+
+  m_Initialize();
+
+  //SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
+  //SDL_GetWindowPosition( (SDL_Window*)window, &m_pos.x, &m_pos.y );
+
+  return false;
+}
+
+bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor )
+{
+  AE_ASSERT( !window );
+
+  m_pos = pos;
+  m_width = width;
+  m_height = height;
+  m_fullScreen = false;
+
+  m_Initialize();
+
+  //SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
+
+  return false;
+}
+
+void Window::m_Initialize()
+{
+//  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
+//  {
+//    AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
+//  }
+//
+//#if _AE_IOS_
+//  m_pos = Int2( 0 );
+//  m_fullScreen = true;
+//
+//  SDL_DisplayMode displayMode;
+//  if ( SDL_GetDesktopDisplayMode( 0, &displayMode ) == 0 )
+//  {
+//    m_width = displayMode.w;
+//    m_height = displayMode.h;
+//  }
+//
+//  window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
+//#else
+//  Rect windowRect( m_pos.x, m_pos.y, m_width, m_height );
+//  bool overlapsAny = false;
+//  uint32_t displayCount = SDL_GetNumVideoDisplays();
+//  for ( uint32_t i = 0; i < displayCount; i++ )
+//  {
+//    SDL_Rect rect;
+//    int result = SDL_GetDisplayBounds( i, &rect );
+//    if ( result == 0 )
+//    {
+//      Rect screenRect( rect.x, rect.y, rect.w, rect.h );
+//      Rect intersection;
+//      if ( windowRect.GetIntersection( screenRect, &intersection ) )
+//      {
+//        // Check how much window overlaps. This prevent windows that are barely overlapping from appearing offscreen.
+//        float intersectionArea = intersection.w * intersection.h;
+//        float screenArea = screenRect.w * screenRect.h;
+//        float windowArea = windowRect.w * windowRect.h;
+//        float screenOverlap = intersectionArea / screenArea;
+//        float windowOverlap = intersectionArea / windowArea;
+//        if ( screenOverlap > 0.1f || windowOverlap > 0.1f )
+//        {
+//          overlapsAny = true;
+//          break;
+//        }
+//      }
+//    }
+//  }
+//
+//  if ( !overlapsAny && displayCount )
+//  {
+//    SDL_Rect screenRect;
+//    if ( SDL_GetDisplayBounds( 0, &screenRect ) == 0 )
+//    {
+//      int32_t border = screenRect.w / 16;
+//
+//      m_width = screenRect.w - border * 2;
+//      int32_t h0 = screenRect.h - border * 2;
+//      int32_t h1 = m_width * ( 10.0f / 16.0f );
+//      m_height = aeMath::Min( h0, h1 );
+//
+//      m_pos.x = border;
+//      m_pos.y = ( screenRect.h - m_height ) / 2;
+//      m_pos.x += screenRect.x;
+//      m_pos.y += screenRect.y;
+//
+//      m_fullScreen = false;
+//    }
+//  }
+//
+//  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
+//  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
+//  window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
+//#endif
+//  AE_ASSERT( window );
+//
+//  SDL_SetWindowTitle( (SDL_Window*)window, "" );
+//  m_windowTitle = "";
+
+#if _AE_WINDOWS_
+#define WNDCLASSNAME L"wndclass"
+  HINSTANCE hinstance = GetModuleHandle( NULL );
+
+  WNDCLASSEX ex;
+  memset( &ex, 0, sizeof( ex ) );
+  ex.cbSize = sizeof( ex );
+  ex.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+  ex.lpfnWndProc = WinProc;
+  ex.hInstance = hinstance;
+  ex.hIcon = LoadIcon( NULL, IDI_APPLICATION );
+  ex.hCursor = LoadCursor( NULL, IDC_ARROW );
+  ex.hbrBackground = (HBRUSH)GetStockObject( BLACK_BRUSH );
+  ex.lpszClassName = WNDCLASSNAME;
+  if ( !RegisterClassEx( &ex ) ) // Create the window
+  {
+    AE_FAIL_MSG( "Failed to register window. Error: #", GetLastError() );
+  }
+
+  // WS_POPUP for full screen
+  uint32_t windowStyle = WS_OVERLAPPEDWINDOW;
+  windowStyle |= WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
+  HWND hwnd = CreateWindowEx( NULL, WNDCLASSNAME, L"Window", WS_OVERLAPPEDWINDOW, 0, 0, GetWidth(), GetHeight(), NULL, NULL, hinstance, this );
+  AE_ASSERT_MSG( hwnd, "Failed to create window. Error: #", GetLastError() );
+
+  HDC hdc = GetDC( hwnd );
+  AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+
+  // Choose the best pixel format for the curent environment
+  PIXELFORMATDESCRIPTOR pfd;
+  memset( &pfd, 0, sizeof( pfd ) );
+  pfd.nSize = sizeof( pfd );
+  pfd.nVersion = 1;
+  pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+  pfd.iPixelType = PFD_TYPE_RGBA;
+  pfd.cColorBits = 24;
+  pfd.cDepthBits = 32;
+  pfd.iLayerType = PFD_MAIN_PLANE;
+
+  int indexPixelFormat = ChoosePixelFormat( hdc, &pfd );
+  AE_ASSERT_MSG( indexPixelFormat, "Failed to choose pixel format. Error: #", GetLastError() );
+  if ( !DescribePixelFormat( hdc, indexPixelFormat, sizeof( pfd ), &pfd ) )
+  {
+    AE_FAIL_MSG( "Failed to read chosen pixel format. Error: #", GetLastError() );
+  }
+  AE_INFO( "Chosen Pixel format: #bit RGB #bit Depth",
+    (int)pfd.cColorBits,
+    (int)pfd.cDepthBits
+  );
+  if ( !SetPixelFormat( hdc, indexPixelFormat, &pfd ) )
+  {
+    AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
+  }
+
+  // Create OpenGL context
+  HGLRC hglrc = wglCreateContext( hdc );
+  AE_ASSERT_MSG( hglrc, "Failed to create the OpenGL Rendering Context" );
+  if ( !wglMakeCurrent( hdc, hglrc ) )
+  {
+    AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+  }
+
+  // Finish window setup
+  ShowWindow( hwnd, SW_SHOW );
+  SetForegroundWindow( hwnd ); // Slightly Higher Priority
+  SetFocus( hwnd ); // Sets Keyboard Focus To The Window
+  if ( !UpdateWindow( hwnd ) )
+  {
+    AE_FAIL_MSG( "Failed on first window update. Error: #", GetLastError() );
+  }
+#endif
+}
+
+void Window::Terminate()
+{
+  //SDL_DestroyWindow( (SDL_Window*)window );
+}
+
+void Window::SetTitle( const char* title )
+{
+  if ( window && m_windowTitle != title )
+  {
+    //SDL_SetWindowTitle( (SDL_Window*)window, title );
+    m_windowTitle = title;
+  }
+}
+
+void Window::SetFullScreen( bool fullScreen )
+{
+  //if ( window )
+  //{
+  //  uint32_t oldFlags = SDL_GetWindowFlags( (SDL_Window*)window );
+
+  //  uint32_t newFlags = oldFlags;
+  //  if ( fullScreen )
+  //  {
+  //    newFlags |= SDL_WINDOW_FULLSCREEN;
+  //  }
+  //  else
+  //  {
+  //    newFlags &= ~SDL_WINDOW_FULLSCREEN;
+  //  }
+
+  //  if ( newFlags != oldFlags )
+  //  {
+  //    SDL_SetWindowFullscreen( (SDL_Window*)window, newFlags );
+  //  }
+
+  //  m_fullScreen = fullScreen;
+  //}
+}
+
+void Window::SetPosition( Int2 pos )
+{
+  //if ( window )
+  //{
+  //  SDL_SetWindowPosition( (SDL_Window*)window, pos.x, pos.y );
+  //  m_pos = pos;
+  //}
+}
+
+void Window::SetSize( uint32_t width, uint32_t height )
+{
+  //if ( window )
+  //{
+  //  SDL_SetWindowSize( (SDL_Window*)window, width, height );
+  //  m_width = width;
+  //  m_height = height;
+  //}
+}
+
+void Window::SetMaximized( bool maximized )
+{
+  //if ( maximized )
+  //{
+  //  SDL_MaximizeWindow( (SDL_Window*)window );
+  //}
+  //else
+  //{
+  //  SDL_RestoreWindow( (SDL_Window*)window );
+  //}
+  //m_maximized = maximized;
+}
+
+//------------------------------------------------------------------------------
+// ae::Input member functions
+//------------------------------------------------------------------------------
+void Input::Pump()
+{
+#if _AE_WINDOWS_
+  MSG msg;
+  // Get messages for current thread
+  while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
+  {
+    switch ( msg.message )
+    {
+      case WM_QUIT:
+        quit = true;
+        break;
+    }
+    TranslateMessage( &msg );
+    DispatchMessage( &msg );
+  }
+#endif
+}
+
+//------------------------------------------------------------------------------
+// OpenGL includes
+//------------------------------------------------------------------------------
+#if _AE_WINDOWS_
+	#pragma comment (lib, "opengl32.lib")
+	#pragma comment (lib, "glu32.lib")
+	#include <gl/GL.h>
+	#include <gl/GLU.h>
+#endif
+
+//------------------------------------------------------------------------------
+// ae::RenderTarget member functions
+//------------------------------------------------------------------------------
+RenderTarget::~RenderTarget()
+{
+  Destroy();
+}
+
+void RenderTarget::Initialize( uint32_t width, uint32_t height )
+{
+  Destroy();
+
+  AE_ASSERT( m_fbo == 0 );
+
+  AE_ASSERT( width != 0 );
+  AE_ASSERT( height != 0 );
+
+  m_width = width;
+  m_height = height;
+
+  //glGenFramebuffers( 1, &m_fbo );
+  //AE_ASSERT( m_fbo );
+  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+
+  //AE_CHECK_GL_ERROR();
+  //Vertex quadVerts[] =
+  //{
+  //  { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
+  //  { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
+  //  { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
+  //  { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
+  //};
+  //AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
+  //m_quad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
+  //m_quad.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( Vertex, pos ) );
+  //m_quad.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof( Vertex, uv ) );
+  //m_quad.SetVertices( quadVerts, aeQuadVertCount );
+  //m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  //AE_CHECK_GL_ERROR();
+
+  //const char* vertexStr = "\
+  //  AE_UNIFORM_HIGHP mat4 u_localToNdc;\
+  //  AE_IN_HIGHP vec3 a_position;\
+  //  AE_IN_HIGHP vec2 a_uv;\
+  //  AE_OUT_HIGHP vec2 v_uv;\
+  //  void main()\
+  //  {\
+  //    v_uv = a_uv;\
+  //    gl_Position = u_localToNdc * vec4( a_position, 1.0 );\
+  //  }";
+  //const char* fragStr = "\
+  //  uniform sampler2D u_tex;\
+  //  AE_IN_HIGHP vec2 v_uv;\
+  //  void main()\
+  //  {\
+  //    AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
+  //  }";
+  //m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+
+  //AE_CHECK_GL_ERROR();
+}
+
+void RenderTarget::Destroy()
+{
+  //m_shader.Destroy();
+  //m_quad.Destroy();
+
+  //for ( uint32_t i = 0; i < m_targets.Length(); i++ )
+  //{
+  //  m_targets[ i ]->Destroy();
+  //  ae::Delete( m_targets[ i ] );
+  //}
+  //m_targets.Clear();
+
+  //m_depth.Destroy();
+
+  //if ( m_fbo )
+  //{
+  //  glDeleteFramebuffers( 1, &m_fbo );
+  //  m_fbo = 0;
+  //}
+
+  m_width = 0;
+  m_height = 0;
+}
+
+void RenderTarget::AddTexture( TextureFilter filter, TextureWrap wrap )
+{
+  //AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
+
+  //aeTexture2D* tex = ae::New< aeTexture2D >( AE_ALLOC_TAG_RENDER );
+  //tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA16F, aeTextureType::HalfFloat, filter, wrap );
+
+  //GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
+  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  //glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
+
+  //m_targets.Append( tex );
+
+  //AE_CHECK_GL_ERROR();
+}
+
+void RenderTarget::AddDepth( TextureFilter filter, TextureWrap wrap )
+{
+  //AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
+
+  //m_depth.Initialize( nullptr, m_width, m_height, aeTextureFormat::Depth32F, aeTextureType::Float, filter, wrap );
+  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  //glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
+
+  //AE_CHECK_GL_ERROR();
+}
+
+void RenderTarget::Activate()
+{
+  //CheckFramebufferComplete( m_fbo );
+  //glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+  //
+  //GLenum buffers[] =
+  //{
+  //  GL_COLOR_ATTACHMENT0,
+  //  GL_COLOR_ATTACHMENT1,
+  //  GL_COLOR_ATTACHMENT2,
+  //  GL_COLOR_ATTACHMENT3,
+  //  GL_COLOR_ATTACHMENT4,
+  //  GL_COLOR_ATTACHMENT5,
+  //  GL_COLOR_ATTACHMENT6,
+  //  GL_COLOR_ATTACHMENT7,
+  //  GL_COLOR_ATTACHMENT8,
+  //  GL_COLOR_ATTACHMENT9,
+  //  GL_COLOR_ATTACHMENT10,
+  //  GL_COLOR_ATTACHMENT11,
+  //  GL_COLOR_ATTACHMENT12,
+  //  GL_COLOR_ATTACHMENT13,
+  //  GL_COLOR_ATTACHMENT14,
+  //  GL_COLOR_ATTACHMENT15
+  //};
+  //AE_STATIC_ASSERT( countof( buffers ) == kMaxFrameBufferAttachments );
+  //glDrawBuffers( m_targets.Length(), buffers );
+
+  //glViewport( 0, 0, GetWidth(), GetHeight() );
+}
+
+void RenderTarget::Clear( Color color )
+{
+  Activate();
+
+  //AE_CHECK_GL_ERROR();
+
+  //Vec3 clearColor = color.GetLinearRGB();
+  //glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
+  //glClearDepth( gReverseZ ? 0.0f : 1.0f );
+
+  //glDepthMask( GL_TRUE );
+  //glDisable( GL_DEPTH_TEST );
+  //glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+
+  //AE_CHECK_GL_ERROR();
+}
+
+void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
+{
+  //glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+  //m_quad.Render( shader, uniforms );
+}
+
+void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
+{
+  //glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+
+  //aeUniformList uniforms;
+  //uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
+  //uniforms.Set( "u_tex", GetTexture( textureIndex ) );
+  //m_quad.Render( &m_shader, uniforms );
+}
+
+const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
+{
+  return m_targets[ index ];
+}
+
+const Texture2D* RenderTarget::GetDepth() const
+{
+  //return m_depth.GetTexture() ? &m_depth : nullptr;
+  return nullptr;
+}
+
+uint32_t RenderTarget::GetWidth() const
+{
+  return m_width;
+}
+
+uint32_t RenderTarget::GetHeight() const
+{
+  return m_height;
+}
+
+Matrix4 RenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const
+{
+  //Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
+  //windowToNDC.Scale( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+
+  //Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
+  //ndcToQuad.Invert();
+
+  //Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
+  //quadToRender.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
+
+  //return ( quadToRender * ndcToQuad * windowToNDC );
+  return {};
+}
+
+Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
+{
+  //float canvasAspect = m_width / (float)m_height;
+  //float targetAspect = otherWidth / (float)otherHeight;
+  //if ( canvasAspect >= targetAspect )
+  //{
+  //  // Fit width
+  //  float height = targetAspect / canvasAspect;
+  //  return Rect( -1.0f, -height, 2.0f, height * 2.0f );
+  //}
+  //else
+  //{
+  //  // Fit height
+  //  float width = canvasAspect / targetAspect;
+  //  return Rect( -width, -1.0f, width * 2.0f, 2.0f );
+  //}
+  return {};
+}
+
+Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const
+{
+  //Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  //return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
+  return {};
+}
+
+Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
+{
+  //Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
+  //localToNdc.Scale( Vec3( ndc.w, ndc.h, 1.0f ) );
+  //localToNdc.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
+  //return localToNdc;
+  return {};
+}
+
+//------------------------------------------------------------------------------
+// GraphicsDevice member functions
+//------------------------------------------------------------------------------
+GraphicsDevice::GraphicsDevice()
+{
+  m_window = nullptr;
+
+  // OpenGL
+  m_context = nullptr;
+  m_defaultFbo = 0;
+}
+
+GraphicsDevice::~GraphicsDevice()
+{
+  Terminate();
+}
+
+void GraphicsDevice::Initialize( class Window* window )
+{
+  AE_ASSERT( window );
+  //AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
+  AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
+
+  m_window = window;
+  window->graphicsDevice = this;
+
+//  // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
+//#if !_AE_IOS_
+//  AE_STATIC_ASSERT( GL_ARB_framebuffer_sRGB );
+//#endif
+//
+//#if _AE_IOS_
+//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES );
+//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
+//#else
+//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
+//  if ( gGL41 )
+//  {
+//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
+//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
+//  }
+//  else
+//  {
+//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
+//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
+//  }
+//#endif
+//
+//  SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
+//
+//#if AE_GL_DEBUG_MODE
+//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
+//#endif
+//  SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
+//  SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
+//
+//  m_context = SDL_GL_CreateContext( (SDL_Window*)m_window->window );
+//  AE_ASSERT( m_context );
+//  SDL_GL_MakeCurrent( (SDL_Window*)m_window->window, m_context );
+//
+//  SDL_GL_SetSwapInterval( 1 );
+//
+//#if _AE_WINDOWS_
+//  glewExperimental = GL_TRUE;
+//  GLenum err = glewInit();
+//  glGetError(); // Glew currently has an issue which causes a GL_INVALID_ENUM on init
+//  AE_ASSERT_MSG( err == GLEW_OK, "Could not initialize glew" );
+//#endif
+//
+//#if AE_GL_DEBUG_MODE
+//  glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
+//#endif
+//
+//  glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
+//
+//  AE_CHECK_GL_ERROR();
+
+#if _AE_WINDOWS_
+  // @TODO: Remove start
+  glShadeModel( GL_SMOOTH );							// Enable Smooth Shading
+  glClearColor( 0.0f, 0.0f, 0.0f, 0.5f );				// Black Background
+  glClearDepth( 1.0f );									// Depth Buffer Setup
+  glEnable( GL_DEPTH_TEST );							// Enables Depth Testing
+  glDepthFunc( GL_LEQUAL );								// The Type Of Depth Testing To Do
+  glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST ); // Really Nice Perspective Calculations
+  // @TODO: Remove end
+#endif
+
+  m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
+
+}
+
+void GraphicsDevice::Terminate()
+{
+  if ( m_context )
+  {
+    //SDL_GL_DeleteContext( m_context );
+    m_context = 0;
+  }
+}
+
+void GraphicsDevice::Activate()
+{
+  //AE_ASSERT( m_context );
+
+  if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
+  {
+    m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
+  }
+  m_canvas.Activate();
+
+//#if !_AE_IOS_
+//  // This is automatically enabled on opengl es3 and can't be turned off
+//  glEnable( GL_FRAMEBUFFER_SRGB );
+//#endif
+
+#if _AE_WINDOWS_
+  // @TODO: Remove start
+  glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // Reset The Current Viewport
+
+  glMatrixMode( GL_PROJECTION ); // Select The Projection Matrix
+  glLoadIdentity(); // Reset The Projection Matrix
+
+  // Calculate The Aspect Ratio Of The Window
+  float aspectRatio = m_canvas.GetWidth() / (float)m_canvas.GetHeight();
+  gluPerspective( 45.0f, aspectRatio, 0.1f, 100.0f );
+
+  glMatrixMode( GL_MODELVIEW ); // Select The Modelview Matrix
+  glLoadIdentity();
+
+  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );	// Clear Screen And Depth Buffer
+  glLoadIdentity();									// Reset The Current Modelview Matrix
+  glTranslatef( -1.5f, 0.0f, -6.0f );						// Move Left 1.5 Units And Into The Screen 6.0
+  glBegin( GL_TRIANGLES );								// Drawing Using Triangles
+  glVertex3f( 0.0f, 1.0f, 0.0f );					// Top
+  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
+  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
+  glEnd();											// Finished Drawing The Triangle
+  glTranslatef( 3.0f, 0.0f, 0.0f );						// Move Right 3 Units
+  glBegin( GL_QUADS );									// Draw A Quad
+  glVertex3f( -1.0f, 1.0f, 0.0f );					// Top Left
+  glVertex3f( 1.0f, 1.0f, 0.0f );					// Top Right
+  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
+  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
+  glEnd();											// Done Drawing The Quad
+  // @TODO: Remove end
+#endif
+}
+
+void GraphicsDevice::Clear( Color color )
+{
+  Activate();
+  m_canvas.Clear( color );
+}
+
+void GraphicsDevice::Present()
+{
+  //AE_ASSERT( m_context );
+  //AE_CHECK_GL_ERROR();
+
+  //glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
+  //glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
+
+  //// Clear window target in case canvas doesn't fit exactly
+  //glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
+  //glClearDepth( 1.0f );
+
+  //glDepthMask( GL_TRUE );
+
+  //glDisable( GL_DEPTH_TEST );
+  //glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+  //AE_CHECK_GL_ERROR();
+
+  //m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
+
+//#if !_AE_EMSCRIPTEN_
+//  SDL_GL_SwapWindow( (SDL_Window*)m_window->window );
+//#endif
+//
+//  AE_CHECK_GL_ERROR();
+
+#if _AE_WINDOWS_
+  AE_ASSERT( m_window );
+  HWND hWnd = (HWND)m_window->window;
+  AE_ASSERT( hWnd );
+  HDC hdc = GetDC( hWnd );
+  SwapBuffers( hdc ); // Swap Buffers
+#endif
+}
+
+float GraphicsDevice::GetAspectRatio() const
+{
+  if ( m_canvas.GetWidth() + m_canvas.GetHeight() == 0 )
+  {
+    return 0.0f;
+  }
+  else
+  {
+    return m_canvas.GetWidth() / (float)m_canvas.GetHeight();
+  }
+}
+
+void GraphicsDevice::AddTextureBarrier()
+{
+//  // only GL has texture barrier for reading from previously written textures
+//  // There are less draconian ways in desktop ES, and nothing in WebGL.
+//#if _AE_WINDOWS_ || _AE_OSX_
+//  glTextureBarrierNV();
+//#endif
+}
+
+void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
+{
+  // @TODO: Allow user to pass in a canvas scaling factor / aspect ratio parameter
+  m_canvas.Initialize( width, height );
+  m_canvas.AddTexture( TextureFilter::Nearest, TextureWrap::Clamp );
+  m_canvas.AddDepth( TextureFilter::Nearest, TextureWrap::Clamp );
 }
 
 } // AE_NAMESPACE end

@@ -47,7 +47,7 @@ int main()
 	spriteRender.SetDepthWrite( true );
   spriteRender.SetSorting( true );
 	
-	aeFixedTimeStep timeStep;
+	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	aeTexture2D tex;

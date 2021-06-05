@@ -43,7 +43,7 @@ int main()
 	input.Initialize( &window );
 	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
 	
-	aeFixedTimeStep timeStep;
+	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	while ( !input.GetState()->exit )

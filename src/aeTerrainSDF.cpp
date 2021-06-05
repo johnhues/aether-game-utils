@@ -70,14 +70,66 @@ float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
 {
   p = ( GetRemoveTRMatrix() * aeFloat4( p, 1.0f ) ).GetXYZ();
   float f = GetValue( p, 0 );
-  if ( noiseStrength )
+  if ( topNoiseStrength || noiseStrength )
   {
+    float n = topNoiseScale.x * topNoiseScale.y * topNoiseScale.z;
+    n *= noiseScale.x * noiseScale.y * noiseScale.z;
     // Prevent scaling to 0 which causes invalid normals
-    float n = noiseScale.x * noiseScale.y * noiseScale.z;
-    if ( n < -0.00001 || 0.00001 < n )
+    if ( n < -0.0001f || 0.0001f < n )
     {
-      float v = noise->Get< aeMath::CosineInterpolate >( noiseOffset + p * aeTerrainNoiseScale / ( GetHalfSize() * noiseScale ) );
-      f = aeIntersection( -v - ( 1.0f - noiseStrength ), f ); // @TODO: All these subtractions are real wonk
+      // Get base shape surface normal
+      aeFloat3 normal0;
+      for ( int32_t i = 0; i < 3; i++ )
+      {
+        aeFloat3 nt = p;
+        nt[ i ] += 0.025f;
+        normal0[ i ] = GetValue( nt, 0 );
+      }
+      normal0 -= aeFloat3( f );
+      aeFloat3 normal1;
+      for ( int32_t i = 0; i < 3; i++ )
+      {
+        aeFloat3 nt = p;
+        nt[ i ] -= 0.025f;
+        normal1[ i ] = GetValue( nt, 0 );
+      }
+      normal1 = aeFloat3( f ) - normal1;
+      ae::Vec3 normal = ( normal1 + normal0 ).SafeNormalizeCopy();
+      float vertical = ae::Max( 0.0f, normal.z );
+      
+      if ( vertical && topNoiseStrength )
+      {
+        float iqH = 1.0f;
+        float iqG = exp2(-iqH);
+        float iqf = 1.0f;
+        float iqa = 1.0f;
+        float iqt = 0.0f;
+        for ( uint32_t i = 0; i < 3; i++ )
+        {
+          ae::Vec3 iqx = topNoiseOffset + p * aeTerrainNoiseScale / ( GetHalfSize() * topNoiseScale );
+          iqt += iqa * noise->Get< aeMath::CosineInterpolate >( iqx * iqf );
+          iqf *= 2.0f;
+          iqa *= iqG;
+        }
+        f += iqt * topNoiseStrength * vertical;
+      }
+      
+      if ( noiseStrength )
+      {
+        float iqH = 1.0f;
+        float iqG = exp2(-iqH);
+        float iqf = 1.0f;
+        float iqa = 1.0f;
+        float iqt = 0.0f;
+        for ( uint32_t i = 0; i < 3; i++ )
+        {
+          ae::Vec3 iqx = noiseOffset + p * aeTerrainNoiseScale / ( GetHalfSize() * noiseScale );
+          iqt += iqa * noise->Get< aeMath::CosineInterpolate >( iqx * iqf );
+          iqf *= 2.0f;
+          iqa *= iqG;
+        }
+        f += iqt * noiseStrength * ( 1.0f - vertical );
+      }
     }
   }
   return f;
@@ -127,6 +179,10 @@ aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
   hash = hash.HashBasicType( materialId );
   hash = hash.HashBasicType( smoothing );
   hash = hash.HashBasicType( order );
+  
+  hash = hash.HashBasicType( topNoiseStrength );
+  hash = hash.HashBasicType( topNoiseOffset );
+  hash = hash.HashBasicType( topNoiseScale );
   
   hash = hash.HashBasicType( noiseStrength );
   hash = hash.HashBasicType( noiseOffset );

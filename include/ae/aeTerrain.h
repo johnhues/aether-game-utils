@@ -213,9 +213,12 @@ public:
   int32_t order = 0; // Lower values processed first, ie. to subtract from a solid the subtraction order should be higher
   
   aeTerrainNoise* noise = nullptr;
+  float topNoiseStrength = 0.0f;
+  ae::Vec3 topNoiseOffset = ae::Vec3( 0.0f );
+  ae::Vec3 topNoiseScale = ae::Vec3( 1.0f );
   float noiseStrength = 0.0f;
-  aeFloat3 noiseOffset = aeFloat3( 0.0f );
-  aeFloat3 noiseScale = aeFloat3( 1.0f );
+  ae::Vec3 noiseOffset = ae::Vec3( 0.0f );
+  ae::Vec3 noiseScale = ae::Vec3( 1.0f );
 
 protected:
   aeHash GetBaseHash( aeHash hash ) const;
@@ -468,7 +471,7 @@ struct aeTerrainChunk
   bool m_geoDirty;
   bool m_lightDirty;
   aeVertexData m_data;
-  aeMesh m_mesh;
+  ae::Mesh m_mesh;
   aeListNode< aeTerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -518,9 +521,9 @@ public:
   aeTerrainRaycastResult RaycastFast( aeFloat3 start, aeFloat3 ray, bool allowSourceCollision ) const;
   
   // Triangle raycast against terrain
-  bool Raycast( const aeMesh::RaycastParams& params, aeMesh::RaycastResult* outResult ) const;
+  bool Raycast( const ae::Mesh::RaycastParams& params, ae::Mesh::RaycastResult* outResult ) const;
   // Triangle-sphere push out
-  bool PushOutSphere( const aeMesh::PushOutParams& params, aeMesh::PushOutResult* outResult ) const;
+  ae::Mesh::PushOutInfo PushOutSphere( const ae::Mesh::PushOutParams& params, const ae::Mesh::PushOutInfo& info ) const;
   
   aeTerrainSDF sdf;
 

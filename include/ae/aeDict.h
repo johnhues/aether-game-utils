@@ -41,9 +41,9 @@ public:
   void SetInt( const char* key, int32_t value );
   void SetFloat( const char* key, float value );
   void SetBool( const char* key, bool value );
-  void SetFloat2( const char* key, aeFloat2 value );
-  void SetFloat3( const char* key, aeFloat3 value );
-  void SetFloat4( const char* key, aeFloat4 value );
+  void SetVec2( const char* key, ae::Vec2 value );
+  void SetVec3( const char* key, ae::Vec3 value );
+  void SetVec4( const char* key, ae::Vec4 value );
   void SetInt2( const char* key, aeInt2 value );
   void Clear();
 
@@ -51,9 +51,9 @@ public:
   int32_t GetInt( const char* key, int32_t defaultValue ) const;
   float GetFloat( const char* key, float defaultValue ) const;
   bool GetBool( const char* key, bool defaultValue ) const;
-  aeFloat2 GetFloat2( const char* key, aeFloat2 defaultValue ) const;
-  aeFloat3 GetFloat3( const char* key, aeFloat3 defaultValue ) const;
-  aeFloat4 GetFloat4( const char* key, aeFloat4 defaultValue ) const;
+  ae::Vec2 GetVec2( const char* key, ae::Vec2 defaultValue ) const;
+  ae::Vec3 GetVec3( const char* key, ae::Vec3 defaultValue ) const;
+  ae::Vec4 GetVec4( const char* key, ae::Vec4 defaultValue ) const;
   aeInt2 GetInt2( const char* key, aeInt2 defaultValue ) const;
   aeColor GetColor( const char* key, aeColor defaultValue ) const;
   bool Has( const char* key ) const;
@@ -73,9 +73,9 @@ private:
   template < typename T > void SetInt( const char*, T ) = delete;
   template < typename T > void SetFloat( const char*, T ) = delete;
   template < typename T > void SetBool( const char*, T ) = delete;
-  template < typename T > void SetFloat2( const char*, T ) = delete;
-  template < typename T > void SetFloat3( const char*, T ) = delete;
-  template < typename T > void SetFloat4( const char*, T ) = delete;
+  template < typename T > void SetVec2( const char*, T ) = delete;
+  template < typename T > void SetVec3( const char*, T ) = delete;
+  template < typename T > void SetVec4( const char*, T ) = delete;
   template < typename T > void SetInt2( const char*, T ) = delete;
   
   ae::Map< aeStr128, aeStr128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: aeDict should be templated

@@ -183,7 +183,7 @@ int main()
   spriteRender.SetDepthWrite( true );
   spriteRender.SetSorting( true );
 
-  aeFixedTimeStep timeStep;
+  ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / kFramesPerSecond );
 
   //------------------------------------------------------------------------------
@@ -241,8 +241,8 @@ int main()
     // Update
     //------------------------------------------------------------------------------
     input.Pump();
-    player.Update( &world, &input, timeStep.GetDT() );
-    world.Update( timeStep.GetDT() );
+    player.Update( &world, &input, timeStep.GetDt() );
+    world.Update( timeStep.GetDt() );
     
     //------------------------------------------------------------------------------
     // Render

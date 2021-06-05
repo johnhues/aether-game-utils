@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -32,31 +32,32 @@ int main()
 {
 	AE_LOG( "Initialize" );
 
-	aeWindow window;
-  aeRender render;
-	aeInput input;
+	ae::Window window;
+  ae::GraphicsDevice graphicsDevice;
+	ae::Input input;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "example" );
-	render.InitializeOpenGL( &window );
-	input.Initialize( &window );
+	graphicsDevice.Initialize( &window );
+	//input.Initialize( &window );
 	
-	aeFixedTimeStep timeStep;
+	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.GetState()->exit )
+	//while ( !input.GetState()->exit )
+	while ( !input.quit )
 	{
 		input.Pump();
-		render.Activate();
-		render.Clear( aeColor::PicoDarkPurple() );
-		render.Present();
+		graphicsDevice.Activate();
+		graphicsDevice.Clear( ae::Color::PicoDarkPurple() );
+		graphicsDevice.Present();
 		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );
 
-	input.Terminate();
-	render.Terminate();
+	//input.Terminate();
+	graphicsDevice.Terminate();
 	window.Terminate();
 
 	return 0;

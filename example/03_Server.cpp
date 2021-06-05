@@ -43,7 +43,7 @@ int main()
 	input.Initialize( &window );
 	server = AetherServer_New( 3500, 0, 1 );
 	
-	aeFixedTimeStep timeStep;
+	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	while ( !input.GetState()->exit )

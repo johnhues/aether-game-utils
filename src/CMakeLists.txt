@@ -63,6 +63,7 @@ set(AE_HEADER_FILES
 	../include/ae/aeUuid.h
 	../include/ae/aeVfs.h
 	../include/ae/aeWindow.h
+	../include/ae/EmSocket.h
 )
 
 # @NOTE: Include header files as private source so they are added to generated IDE projects
@@ -98,6 +99,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeVfs.cpp
 		aeWindow.cpp
 		ctpl_stl.h
+		EmSocket.cpp
 		stb_image.h
 )
 

@@ -58,7 +58,7 @@ struct FileFilter
 struct OpenFileParams
 {
   const char* windowTitle = "Open";
-  Array< FileFilter > filters; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
+  Array< FileFilter > filters = AE_ALLOC_TAG_FILE; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
 
   aeWindow* window = nullptr; // Recommended. Setting this will create a modal 'Open' dialog.
   const char* defaultPath = "";
@@ -73,7 +73,7 @@ Array< std::string > OpenFile( const OpenFileParams& params ); // See note at to
 struct SaveFileParams
 {
   const char* windowTitle = "Save As";
-  Array< FileFilter > filters; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
+  Array< FileFilter > filters = AE_ALLOC_TAG_FILE; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
 
   aeWindow* window = nullptr; // Recommended. Setting this will create a modal 'Save As' dialog.
   const char* defaultPath = "";

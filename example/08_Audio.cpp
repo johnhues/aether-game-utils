@@ -43,7 +43,7 @@ int main()
 	input.Initialize( &window );
 	audio.Initialize( 1, 3 );
 	
-	aeFixedTimeStep timeStep;
+	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	aeAudioData music, sfx;

@@ -52,21 +52,21 @@ void aeDict::SetBool( const char* key, bool value )
   SetString( key, value ? "true" : "false" );
 }
 
-void aeDict::SetFloat2( const char* key, aeFloat2 value )
+void aeDict::SetVec2( const char* key, ae::Vec2 value )
 {
   char buf[ 128 ];
   sprintf( buf, "%.2f %.2f", value.x, value.y );
   SetString( key, buf );
 }
 
-void aeDict::SetFloat3( const char* key, aeFloat3 value )
+void aeDict::SetVec3( const char* key, ae::Vec3 value )
 {
   char buf[ 128 ];
   sprintf( buf, "%.2f %.2f %.2f", value.x, value.y, value.z );
   SetString( key, buf );
 }
 
-void aeDict::SetFloat4( const char* key, aeFloat4 value )
+void aeDict::SetVec4( const char* key, ae::Vec4 value )
 {
   char buf[ 128 ];
   sprintf( buf, "%.2f %.2f %.2f %.2f", value.x, value.y, value.z, value.w );
@@ -128,33 +128,33 @@ bool aeDict::GetBool( const char* key, bool defaultValue ) const
   return defaultValue;
 }
 
-aeFloat2 aeDict::GetFloat2( const char* key, aeFloat2 defaultValue ) const
+ae::Vec2 aeDict::GetVec2( const char* key, ae::Vec2 defaultValue ) const
 {
   if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
-    aeFloat2 result( 0.0f );
+    ae::Vec2 result( 0.0f );
     sscanf( value->c_str(), "%f %f", &result.x, &result.y );
     return result;
   }
   return defaultValue;
 }
 
-aeFloat3 aeDict::GetFloat3( const char* key, aeFloat3 defaultValue ) const
+ae::Vec3 aeDict::GetVec3( const char* key, ae::Vec3 defaultValue ) const
 {
   if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
-    aeFloat3 result( 0.0f );
+    ae::Vec3 result( 0.0f );
     sscanf( value->c_str(), "%f %f %f", &result.x, &result.y, &result.z );
     return result;
   }
   return defaultValue;
 }
 
-aeFloat4 aeDict::GetFloat4( const char* key, aeFloat4 defaultValue ) const
+ae::Vec4 aeDict::GetVec4( const char* key, ae::Vec4 defaultValue ) const
 {
   if ( const aeStr128* value = m_entries.TryGet( key ) )
   {
-    aeFloat4 result( 0.0f );
+    ae::Vec4 result( 0.0f );
     sscanf( value->c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
     return result;
   }

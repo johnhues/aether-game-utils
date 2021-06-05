@@ -50,14 +50,16 @@ if (MSVC)
 	list(APPEND AE_DEPS_TARGETS glew)
 endif()
 
-if(UNIX AND NOT APPLE)
-	find_package(uuid REQUIRED)
-endif()
+if(NOT EMSCRIPTEN)
+	if(UNIX AND NOT APPLE)
+		find_package(uuid REQUIRED)
+	endif()
 
-# build sdl2 to be statically linked
-set(SDL_STATIC ON CACHE BOOL "" FORCE)
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-add_subdirectory(deps/sdl)
+	# build sdl2 to be statically linked
+	set(SDL_STATIC ON CACHE BOOL "" FORCE)
+	set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+	add_subdirectory(deps/sdl)
+endif()
 
 # some parts of assimp are not needed and should be disabled
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
@@ -85,7 +87,7 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 	endif()
 elseif(APPLE)
 	find_package(OpenAL REQUIRED)
-else()
+elseif(NOT EMSCRIPTEN)
 	# @NOTE: It would be convenient to use MakeAvailable but openal defines a project called 'common' which can easily cause conflicts
 	# FetchContent_Declare(
 	# 	openal

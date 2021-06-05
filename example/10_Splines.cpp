@@ -55,7 +55,7 @@ int main()
   spline.AppendControlPoint( aeFloat3( 0.4f, -2.0f, 0.0f ) );
   spline.SetLooping( true );
 
-  aeFixedTimeStep timeStep;
+  ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );
 
   aeTexture2D tex;
