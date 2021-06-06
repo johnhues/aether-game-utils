@@ -880,7 +880,9 @@ namespace AE_NAMESPACE {
 struct Rect
 {};
 struct Matrix4
-{};
+{
+  float data[ 16 ];
+};
 
 //------------------------------------------------------------------------------
 // ae::Window class
@@ -951,23 +953,105 @@ enum class TextureWrap
 };
 
 //------------------------------------------------------------------------------
-// UniformList class
+// ae::UniformList class
 //------------------------------------------------------------------------------
 class UniformList
 {
 public:
+  struct Value
+  {
+    uint32_t sampler = 0;
+    uint32_t target = 0;
+    int32_t size = 0;
+    Matrix4 value;
+  };
+
+  void Set( const char* name, float value );
+  void Set( const char* name, Vec2 value );
+  void Set( const char* name, Vec3 value );
+  void Set( const char* name, Vec4 value );
+  void Set( const char* name, const Matrix4& value );
+  void Set( const char* name, const class Texture* tex );
+
+  const Value* Get( const char* name ) const;
+
+private:
+  ae::Map< Str32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
 };
 
 //------------------------------------------------------------------------------
-// Shader class
+// ae::Shader class
 //------------------------------------------------------------------------------
+const uint32_t _kMaxShaderAttributeCount = 16;
+const uint32_t _kMaxShaderAttributeNameLength = 16;
+const uint32_t _kMaxShaderDefines = 4;
+
 class Shader
 {
 public:
+  Shader();
+  ~Shader();
+
+  enum class Type
+  {
+    Vertex,
+    Fragment
+  };
+
+  enum class Culling
+  {
+    None,
+    ClockwiseFront,
+    CounterclockwiseFront,
+  };
+
+  struct Attribute
+  {
+    char name[ _kMaxShaderAttributeNameLength ];
+    uint32_t type; // GL_FLOAT, GL_FLOAT_VEC4, GL_FLOAT_MAT4...
+    int32_t location;
+  };
+
+  struct Uniform
+  {
+    Str32 name;
+    uint32_t type;
+    int32_t location;
+  };
+  
+  void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
+  void Destroy();
+
+  void SetBlending( bool enabled ) { m_blending = enabled; }
+  void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
+  void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
+  void SetCulling( Culling culling ) { m_culling = culling; }
+  void SetWireframe( bool enabled ) { m_wireframe = enabled; }
+  void SetBlendingPremul( bool enabled ) { m_blendingPremul = enabled; }
+
+  // Internal
+private:
+  int m_LoadShader( const char* shaderStr, Type type, const char* const* defines, int32_t defineCount );
+  uint32_t m_fragmentShader;
+  uint32_t m_vertexShader;
+  uint32_t m_program;
+  bool m_blending;
+  bool m_blendingPremul;
+  bool m_depthTest;
+  bool m_depthWrite;
+  Culling m_culling;
+  bool m_wireframe;
+  Attribute m_attributes[ _kMaxShaderAttributeCount ];
+  uint32_t m_attributeCount;
+  ae::Map< Str32, Uniform > m_uniforms = AE_ALLOC_TAG_RENDER;
+public:
+  void Activate( const UniformList& uniforms ) const;
+  const Attribute* GetAttributeByIndex( uint32_t index ) const;
+  uint32_t GetAttributeCount() const { return m_attributeCount; }
 };
 
 //------------------------------------------------------------------------------
-// VertexData class
+// ae::VertexData class
 //------------------------------------------------------------------------------
 class VertexData
 {
@@ -975,7 +1059,32 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// Texture2D class
+// ae::Texture class
+//------------------------------------------------------------------------------
+class Texture
+{
+public:
+  Texture() = default;
+  virtual ~Texture();
+
+  void Initialize( uint32_t target );
+  virtual void Destroy();
+
+  uint32_t GetTexture() const { return m_texture; }
+  uint32_t GetTarget() const { return m_target; }
+
+private:
+  Texture( const Texture& ) = delete;
+  Texture( Texture&& ) = delete;
+  void operator=( const Texture& ) = delete;
+  void operator=( Texture&& ) = delete;
+
+  uint32_t m_texture = 0;
+  uint32_t m_target = 0;
+};
+
+//------------------------------------------------------------------------------
+// ae::Texture2D class
 //------------------------------------------------------------------------------
 class Texture2D
 {
@@ -983,7 +1092,7 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// RenderTarget class
+// ae::RenderTarget class
 //------------------------------------------------------------------------------
 class RenderTarget
 {
@@ -3140,7 +3249,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 // Platform includes, required for logging, windowing, file io
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-  #define WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN 1
   #include "Windows.h"
   #include "processthreadsapi.h" // For GetCurrentProcessId()
 #elif _AE_APPLE_
@@ -3871,15 +3980,799 @@ void Input::Pump()
 #endif
 }
 
+}  // AE_NAMESPACE end
+
 //------------------------------------------------------------------------------
 // OpenGL includes
 //------------------------------------------------------------------------------
+// @TODO: Are these being included in the ae namespace? Fix if so
 #if _AE_WINDOWS_
 	#pragma comment (lib, "opengl32.lib")
 	#pragma comment (lib, "glu32.lib")
 	#include <gl/GL.h>
 	#include <gl/GLU.h>
+  //#include <gl/glext.h>
 #endif
+
+// Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
+// enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
+// doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
+// http://www.reedbeta.com/blog/depth-precision-visualized/
+bool gReverseZ = false;
+
+// turn this on to run at GL4.1 instead of GL3.3
+bool gGL41 = true;
+
+// OpenGL function pointers
+typedef char GLchar;
+//#define GL_UNSIGNED_BYTE_3_3_2            0x8032
+//#define GL_UNSIGNED_SHORT_4_4_4_4         0x8033
+//#define GL_UNSIGNED_SHORT_5_5_5_1         0x8034
+//#define GL_UNSIGNED_INT_8_8_8_8           0x8035
+//#define GL_UNSIGNED_INT_10_10_10_2        0x8036
+//#define GL_TEXTURE_BINDING_3D             0x806A
+//#define GL_PACK_SKIP_IMAGES               0x806B
+//#define GL_PACK_IMAGE_HEIGHT              0x806C
+//#define GL_UNPACK_SKIP_IMAGES             0x806D
+//#define GL_UNPACK_IMAGE_HEIGHT            0x806E
+#define GL_TEXTURE_3D                     0x806F
+//#define GL_PROXY_TEXTURE_3D               0x8070
+//#define GL_TEXTURE_DEPTH                  0x8071
+//#define GL_TEXTURE_WRAP_R                 0x8072
+//#define GL_MAX_3D_TEXTURE_SIZE            0x8073
+//#define GL_UNSIGNED_BYTE_2_3_3_REV        0x8362
+//#define GL_UNSIGNED_SHORT_5_6_5           0x8363
+//#define GL_UNSIGNED_SHORT_5_6_5_REV       0x8364
+//#define GL_UNSIGNED_SHORT_4_4_4_4_REV     0x8365
+//#define GL_UNSIGNED_SHORT_1_5_5_5_REV     0x8366
+//#define GL_UNSIGNED_INT_8_8_8_8_REV       0x8367
+//#define GL_UNSIGNED_INT_2_10_10_10_REV    0x8368
+//#define GL_BGR                            0x80E0
+//#define GL_BGRA                           0x80E1
+//#define GL_MAX_ELEMENTS_VERTICES          0x80E8
+//#define GL_MAX_ELEMENTS_INDICES           0x80E9
+//#define GL_CLAMP_TO_EDGE                  0x812F
+//#define GL_TEXTURE_MIN_LOD                0x813A
+//#define GL_TEXTURE_MAX_LOD                0x813B
+//#define GL_TEXTURE_BASE_LEVEL             0x813C
+//#define GL_TEXTURE_MAX_LEVEL              0x813D
+//#define GL_SMOOTH_POINT_SIZE_RANGE        0x0B12
+//#define GL_SMOOTH_POINT_SIZE_GRANULARITY  0x0B13
+//#define GL_SMOOTH_LINE_WIDTH_RANGE        0x0B22
+//#define GL_SMOOTH_LINE_WIDTH_GRANULARITY  0x0B23
+//#define GL_ALIASED_LINE_WIDTH_RANGE       0x846E
+//#define GL_RESCALE_NORMAL                 0x803A
+//#define GL_LIGHT_MODEL_COLOR_CONTROL      0x81F8
+//#define GL_SINGLE_COLOR                   0x81F9
+//#define GL_SEPARATE_SPECULAR_COLOR        0x81FA
+//#define GL_ALIASED_POINT_SIZE_RANGE       0x846D
+#define GL_TEXTURE0                       0x84C0
+//#define GL_TEXTURE1                       0x84C1
+//#define GL_TEXTURE2                       0x84C2
+//#define GL_TEXTURE3                       0x84C3
+//#define GL_TEXTURE4                       0x84C4
+//#define GL_TEXTURE5                       0x84C5
+//#define GL_TEXTURE6                       0x84C6
+//#define GL_TEXTURE7                       0x84C7
+//#define GL_TEXTURE8                       0x84C8
+//#define GL_TEXTURE9                       0x84C9
+//#define GL_TEXTURE10                      0x84CA
+//#define GL_TEXTURE11                      0x84CB
+//#define GL_TEXTURE12                      0x84CC
+//#define GL_TEXTURE13                      0x84CD
+//#define GL_TEXTURE14                      0x84CE
+//#define GL_TEXTURE15                      0x84CF
+//#define GL_TEXTURE16                      0x84D0
+//#define GL_TEXTURE17                      0x84D1
+//#define GL_TEXTURE18                      0x84D2
+//#define GL_TEXTURE19                      0x84D3
+//#define GL_TEXTURE20                      0x84D4
+//#define GL_TEXTURE21                      0x84D5
+//#define GL_TEXTURE22                      0x84D6
+//#define GL_TEXTURE23                      0x84D7
+//#define GL_TEXTURE24                      0x84D8
+//#define GL_TEXTURE25                      0x84D9
+//#define GL_TEXTURE26                      0x84DA
+//#define GL_TEXTURE27                      0x84DB
+//#define GL_TEXTURE28                      0x84DC
+//#define GL_TEXTURE29                      0x84DD
+//#define GL_TEXTURE30                      0x84DE
+//#define GL_TEXTURE31                      0x84DF
+//#define GL_ACTIVE_TEXTURE                 0x84E0
+//#define GL_MULTISAMPLE                    0x809D
+//#define GL_SAMPLE_ALPHA_TO_COVERAGE       0x809E
+//#define GL_SAMPLE_ALPHA_TO_ONE            0x809F
+//#define GL_SAMPLE_COVERAGE                0x80A0
+//#define GL_SAMPLE_BUFFERS                 0x80A8
+//#define GL_SAMPLES                        0x80A9
+//#define GL_SAMPLE_COVERAGE_VALUE          0x80AA
+//#define GL_SAMPLE_COVERAGE_INVERT         0x80AB
+//#define GL_TEXTURE_CUBE_MAP               0x8513
+//#define GL_TEXTURE_BINDING_CUBE_MAP       0x8514
+//#define GL_TEXTURE_CUBE_MAP_POSITIVE_X    0x8515
+//#define GL_TEXTURE_CUBE_MAP_NEGATIVE_X    0x8516
+//#define GL_TEXTURE_CUBE_MAP_POSITIVE_Y    0x8517
+//#define GL_TEXTURE_CUBE_MAP_NEGATIVE_Y    0x8518
+//#define GL_TEXTURE_CUBE_MAP_POSITIVE_Z    0x8519
+//#define GL_TEXTURE_CUBE_MAP_NEGATIVE_Z    0x851A
+//#define GL_PROXY_TEXTURE_CUBE_MAP         0x851B
+//#define GL_MAX_CUBE_MAP_TEXTURE_SIZE      0x851C
+//#define GL_COMPRESSED_RGB                 0x84ED
+//#define GL_COMPRESSED_RGBA                0x84EE
+//#define GL_TEXTURE_COMPRESSION_HINT       0x84EF
+//#define GL_TEXTURE_COMPRESSED_IMAGE_SIZE  0x86A0
+//#define GL_TEXTURE_COMPRESSED             0x86A1
+//#define GL_NUM_COMPRESSED_TEXTURE_FORMATS 0x86A2
+//#define GL_COMPRESSED_TEXTURE_FORMATS     0x86A3
+//#define GL_CLAMP_TO_BORDER                0x812D
+//#define GL_CLIENT_ACTIVE_TEXTURE          0x84E1
+//#define GL_MAX_TEXTURE_UNITS              0x84E2
+//#define GL_TRANSPOSE_MODELVIEW_MATRIX     0x84E3
+//#define GL_TRANSPOSE_PROJECTION_MATRIX    0x84E4
+//#define GL_TRANSPOSE_TEXTURE_MATRIX       0x84E5
+//#define GL_TRANSPOSE_COLOR_MATRIX         0x84E6
+//#define GL_MULTISAMPLE_BIT                0x20000000
+//#define GL_NORMAL_MAP                     0x8511
+//#define GL_REFLECTION_MAP                 0x8512
+//#define GL_COMPRESSED_ALPHA               0x84E9
+//#define GL_COMPRESSED_LUMINANCE           0x84EA
+//#define GL_COMPRESSED_LUMINANCE_ALPHA     0x84EB
+//#define GL_COMPRESSED_INTENSITY           0x84EC
+//#define GL_COMBINE                        0x8570
+//#define GL_COMBINE_RGB                    0x8571
+//#define GL_COMBINE_ALPHA                  0x8572
+//#define GL_SOURCE0_RGB                    0x8580
+//#define GL_SOURCE1_RGB                    0x8581
+//#define GL_SOURCE2_RGB                    0x8582
+//#define GL_SOURCE0_ALPHA                  0x8588
+//#define GL_SOURCE1_ALPHA                  0x8589
+//#define GL_SOURCE2_ALPHA                  0x858A
+//#define GL_OPERAND0_RGB                   0x8590
+//#define GL_OPERAND1_RGB                   0x8591
+//#define GL_OPERAND2_RGB                   0x8592
+//#define GL_OPERAND0_ALPHA                 0x8598
+//#define GL_OPERAND1_ALPHA                 0x8599
+//#define GL_OPERAND2_ALPHA                 0x859A
+//#define GL_RGB_SCALE                      0x8573
+//#define GL_ADD_SIGNED                     0x8574
+//#define GL_INTERPOLATE                    0x8575
+//#define GL_SUBTRACT                       0x84E7
+//#define GL_CONSTANT                       0x8576
+//#define GL_PRIMARY_COLOR                  0x8577
+//#define GL_PREVIOUS                       0x8578
+//#define GL_DOT3_RGB                       0x86AE
+//#define GL_DOT3_RGBA                      0x86AF
+//#define GL_BLEND_EQUATION_RGB             0x8009
+//#define GL_VERTEX_ATTRIB_ARRAY_ENABLED    0x8622
+//#define GL_VERTEX_ATTRIB_ARRAY_SIZE       0x8623
+//#define GL_VERTEX_ATTRIB_ARRAY_STRIDE     0x8624
+//#define GL_VERTEX_ATTRIB_ARRAY_TYPE       0x8625
+//#define GL_CURRENT_VERTEX_ATTRIB          0x8626
+//#define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
+//#define GL_VERTEX_ATTRIB_ARRAY_POINTER    0x8645
+//#define GL_STENCIL_BACK_FUNC              0x8800
+//#define GL_STENCIL_BACK_FAIL              0x8801
+//#define GL_STENCIL_BACK_PASS_DEPTH_FAIL   0x8802
+//#define GL_STENCIL_BACK_PASS_DEPTH_PASS   0x8803
+//#define GL_MAX_DRAW_BUFFERS               0x8824
+//#define GL_DRAW_BUFFER0                   0x8825
+//#define GL_DRAW_BUFFER1                   0x8826
+//#define GL_DRAW_BUFFER2                   0x8827
+//#define GL_DRAW_BUFFER3                   0x8828
+//#define GL_DRAW_BUFFER4                   0x8829
+//#define GL_DRAW_BUFFER5                   0x882A
+//#define GL_DRAW_BUFFER6                   0x882B
+//#define GL_DRAW_BUFFER7                   0x882C
+//#define GL_DRAW_BUFFER8                   0x882D
+//#define GL_DRAW_BUFFER9                   0x882E
+//#define GL_DRAW_BUFFER10                  0x882F
+//#define GL_DRAW_BUFFER11                  0x8830
+//#define GL_DRAW_BUFFER12                  0x8831
+//#define GL_DRAW_BUFFER13                  0x8832
+//#define GL_DRAW_BUFFER14                  0x8833
+//#define GL_DRAW_BUFFER15                  0x8834
+//#define GL_BLEND_EQUATION_ALPHA           0x883D
+//#define GL_MAX_VERTEX_ATTRIBS             0x8869
+//#define GL_VERTEX_ATTRIB_ARRAY_NORMALIZED 0x886A
+//#define GL_MAX_TEXTURE_IMAGE_UNITS        0x8872
+#define GL_FRAGMENT_SHADER                0x8B30
+#define GL_VERTEX_SHADER                  0x8B31
+//#define GL_MAX_FRAGMENT_UNIFORM_COMPONENTS 0x8B49
+//#define GL_MAX_VERTEX_UNIFORM_COMPONENTS  0x8B4A
+//#define GL_MAX_VARYING_FLOATS             0x8B4B
+//#define GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS 0x8B4C
+//#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
+//#define GL_SHADER_TYPE                    0x8B4F
+#define GL_FLOAT_VEC2                     0x8B50
+#define GL_FLOAT_VEC3                     0x8B51
+#define GL_FLOAT_VEC4                     0x8B52
+//#define GL_INT_VEC2                       0x8B53
+//#define GL_INT_VEC3                       0x8B54
+//#define GL_INT_VEC4                       0x8B55
+//#define GL_BOOL                           0x8B56
+//#define GL_BOOL_VEC2                      0x8B57
+//#define GL_BOOL_VEC3                      0x8B58
+//#define GL_BOOL_VEC4                      0x8B59
+//#define GL_FLOAT_MAT2                     0x8B5A
+//#define GL_FLOAT_MAT3                     0x8B5B
+#define GL_FLOAT_MAT4                     0x8B5C
+//#define GL_SAMPLER_1D                     0x8B5D
+#define GL_SAMPLER_2D                     0x8B5E
+#define GL_SAMPLER_3D                     0x8B5F
+//#define GL_SAMPLER_CUBE                   0x8B60
+//#define GL_SAMPLER_1D_SHADOW              0x8B61
+//#define GL_SAMPLER_2D_SHADOW              0x8B62
+//#define GL_DELETE_STATUS                  0x8B80
+#define GL_COMPILE_STATUS                 0x8B81
+#define GL_LINK_STATUS                    0x8B82
+//#define GL_VALIDATE_STATUS                0x8B83
+#define GL_INFO_LOG_LENGTH                0x8B84
+//#define GL_ATTACHED_SHADERS               0x8B85
+#define GL_ACTIVE_UNIFORMS                0x8B86
+#define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
+//#define GL_SHADER_SOURCE_LENGTH           0x8B88
+#define GL_ACTIVE_ATTRIBUTES              0x8B89
+#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
+//#define GL_FRAGMENT_SHADER_DERIVATIVE_HINT 0x8B8B
+//#define GL_SHADING_LANGUAGE_VERSION       0x8B8C
+//#define GL_CURRENT_PROGRAM                0x8B8D
+//#define GL_POINT_SPRITE_COORD_ORIGIN      0x8CA0
+//#define GL_LOWER_LEFT                     0x8CA1
+//#define GL_UPPER_LEFT                     0x8CA2
+//#define GL_STENCIL_BACK_REF               0x8CA3
+//#define GL_STENCIL_BACK_VALUE_MASK        0x8CA4
+//#define GL_STENCIL_BACK_WRITEMASK         0x8CA5
+//#define GL_VERTEX_PROGRAM_TWO_SIDE        0x8643
+//#define GL_POINT_SPRITE                   0x8861
+//#define GL_COORD_REPLACE                  0x8862
+//#define GL_MAX_TEXTURE_COORDS             0x8871
+GLuint ( *glCreateProgram ) () = nullptr;
+void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
+void ( *glLinkProgram ) ( GLuint program ) = nullptr;
+void ( *glGetProgramiv ) ( GLuint program, GLenum pname, GLint *params ) = nullptr;
+void ( *glGetProgramInfoLog ) ( GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
+void ( *glGetActiveAttrib ) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name ) = nullptr;
+GLint (*glGetAttribLocation) ( GLuint program, const GLchar *name ) = nullptr;
+void (*glGetActiveUniform) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name );
+GLint (*glGetUniformLocation) ( GLuint program, const GLchar *name ) = nullptr;
+void (*glDeleteShader) ( GLuint shader ) = nullptr;
+void ( *glDeleteProgram) ( GLuint program ) = nullptr;
+void ( *glUseProgram) ( GLuint program ) = nullptr;
+void ( *glBlendFuncSeparate ) ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) = nullptr;
+GLuint( *glCreateShader) ( GLenum type ) = nullptr;
+void (*glShaderSource) ( GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length ) = nullptr;
+void (*glCompileShader)( GLuint shader ) = nullptr;
+void ( *glGetShaderiv)( GLuint shader, GLenum pname, GLint *params );
+void ( *glGetShaderInfoLog)( GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
+void ( *glActiveTexture) ( GLenum texture ) = nullptr;
+//void ( *glUniform1f ) ( GLint location, GLfloat v0 ) = nullptr;
+//void ( *glUniform2f ) ( GLint location, GLfloat v0, GLfloat v1 ) = nullptr;
+//void ( *glUniform3f ) ( GLint location, GLfloat v0, GLfloat v1, GLfloat v2 ) = nullptr;
+//void ( *glUniform4f ) ( GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat = nullptr v3 );
+void ( *glUniform1i ) ( GLint location, GLint v0 ) = nullptr;
+//void ( *glUniform2i ) ( GLint location, GLint v0, GLint v1 ) = nullptr;
+//void ( *glUniform3i ) ( GLint location, GLint v0, GLint v1, GLint v2 ) = nullptr;
+//void ( *glUniform4i ) ( GLint location, GLint v0, GLint v1, GLint v2, GLint v3 ) = nullptr;
+void ( *glUniform1fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+//void ( *glUniform1iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
+//void ( *glUniform2iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
+//void ( *glUniform3iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
+//void ( *glUniform4iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
+//void ( *glUniformMatrix2fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
+//void ( *glUniformMatrix3fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
+void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
+
+#define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+
+namespace AE_NAMESPACE {
+
+//------------------------------------------------------------------------------
+// ae::UniformList member functions
+//------------------------------------------------------------------------------
+void UniformList::Set( const char* name, float value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 1;
+  uniform.value.data[ 0 ] = value;
+}
+
+void UniformList::Set( const char* name, Vec2 value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 2;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+}
+
+void UniformList::Set( const char* name, Vec3 value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 3;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
+}
+
+void UniformList::Set( const char* name, Vec4 value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 4;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
+  uniform.value.data[ 3 ] = value.w;
+}
+
+void UniformList::Set( const char* name, const Matrix4& value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 16;
+  uniform.value = value;
+}
+
+void UniformList::Set( const char* name, const Texture* tex )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.sampler = tex->GetTexture();
+  uniform.target = tex->GetTarget();
+}
+
+const UniformList::Value* UniformList::Get( const char* name ) const
+{
+  return m_uniforms.TryGet( name );
+}
+
+//------------------------------------------------------------------------------
+// ae::Shader member functions
+//------------------------------------------------------------------------------
+Shader::Shader()
+{
+  m_fragmentShader = 0;
+  m_vertexShader = 0;
+  m_program = 0;
+
+  m_blending = false;
+  m_blendingPremul = false;
+  m_depthTest = false;
+  m_depthWrite = false;
+  m_culling = Culling::None;
+  m_wireframe = false;
+
+  m_attributeCount = 0;
+}
+
+Shader::~Shader()
+{
+  Destroy();
+}
+
+void Shader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
+{
+  AE_CHECK_GL_ERROR();
+  AE_ASSERT( !m_program );
+
+  m_program = glCreateProgram();
+
+  m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
+  m_fragmentShader = m_LoadShader( fragStr, Type::Fragment, defines, defineCount );
+
+  if ( !m_vertexShader )
+  {
+    AE_LOG( "Failed to load vertex shader! #", vertexStr );
+  }
+  if ( !m_fragmentShader )
+  {
+    AE_LOG( "Failed to load fragment shader! #", fragStr );
+  }
+
+  if ( !m_vertexShader || !m_fragmentShader )
+  {
+    AE_FAIL();
+  }
+
+  glAttachShader( m_program, m_vertexShader );
+  glAttachShader( m_program, m_fragmentShader );
+
+  glLinkProgram( m_program );
+
+  // immediate reflection of shader can be delayed by compiler and optimizer and can stll
+  GLint status;
+  glGetProgramiv( m_program, GL_LINK_STATUS, &status );
+  if ( status == GL_FALSE )
+  {
+    GLint logLength = 0;
+    glGetProgramiv( m_program, GL_INFO_LOG_LENGTH, &logLength );
+
+    char* log = nullptr;
+    if ( logLength > 0 )
+    {
+      log = new char[ logLength ];
+      glGetProgramInfoLog( m_program, logLength, NULL, (GLchar*)log );
+    }
+
+    if ( log )
+    {
+      AE_FAIL_MSG( log );
+      delete[] log;
+    }
+    else
+    {
+      AE_FAIL();
+    }
+    Destroy();
+  }
+
+  GLint attribCount = 0;
+  glGetProgramiv( m_program, GL_ACTIVE_ATTRIBUTES, &attribCount );
+  AE_ASSERT( 0 < attribCount && attribCount <= _kMaxShaderAttributeCount );
+  GLint maxLen = 0;
+  glGetProgramiv( m_program, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maxLen );
+  AE_ASSERT( 0 < maxLen && maxLen <= _kMaxShaderAttributeNameLength );
+  for ( int32_t i = 0; i < attribCount; i++ )
+  {
+    AE_ASSERT( m_attributeCount < countof( m_attributes ) );
+    Attribute* attribute = &m_attributes[ m_attributeCount ];
+    m_attributeCount++;
+
+    GLsizei length;
+    GLint size;
+    glGetActiveAttrib( m_program, i, _kMaxShaderAttributeNameLength, &length, &size, (GLenum*)&attribute->type, (GLchar*)attribute->name );
+
+    attribute->location = glGetAttribLocation( m_program, attribute->name );
+    AE_ASSERT( attribute->location != -1 );
+  }
+
+  GLint uniformCount = 0;
+  maxLen = 0;
+  glGetProgramiv( m_program, GL_ACTIVE_UNIFORMS, &uniformCount );
+  glGetProgramiv( m_program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxLen );
+  AE_ASSERT( maxLen <= (GLint)Str32::MaxLength() ); // @TODO: Read from Uniform
+
+  for ( int32_t i = 0; i < uniformCount; i++ )
+  {
+    Uniform uniform;
+
+    GLint size = 0;
+    char name[ Str32::MaxLength() ]; // @TODO: Read from Uniform
+    glGetActiveUniform( m_program, i, sizeof( name ), nullptr, &size, (GLenum*)&uniform.type, (GLchar*)name );
+    AE_ASSERT( size == 1 );
+
+    switch ( uniform.type )
+    {
+      case GL_SAMPLER_2D:
+      case GL_SAMPLER_3D:
+      case GL_FLOAT:
+      case GL_FLOAT_VEC2:
+      case GL_FLOAT_VEC3:
+      case GL_FLOAT_VEC4:
+      case GL_FLOAT_MAT4:
+        break;
+      default:
+        AE_FAIL_MSG( "Unsupported uniform '#' type #", name, uniform.type );
+        break;
+    }
+
+    uniform.name = name;
+    uniform.location = glGetUniformLocation( m_program, name );
+    AE_ASSERT( uniform.location != -1 );
+
+    m_uniforms.Set( name, uniform );
+  }
+
+  AE_CHECK_GL_ERROR();
+}
+
+void Shader::Destroy()
+{
+  m_attributeCount = 0;
+
+  if ( m_fragmentShader != 0 )
+  {
+    glDeleteShader( m_fragmentShader );
+    m_fragmentShader = 0;
+  }
+
+  if ( m_vertexShader != 0 )
+  {
+    glDeleteShader( m_vertexShader );
+    m_vertexShader = 0;
+  }
+
+  if ( m_program != 0 )
+  {
+    glDeleteProgram( m_program );
+    m_program = 0;
+  }
+}
+
+void Shader::Activate( const UniformList& uniforms ) const
+{
+  AE_CHECK_GL_ERROR();
+
+  // This is really context state shadow, and that should be able to override
+  // so reverseZ for example can be set without the shader knowing about that.
+
+  // Blending
+  if ( m_blending || m_blendingPremul )
+  {
+    glEnable( GL_BLEND );
+
+    // TODO: need other modes like Add, Min, Max - switch to enum then
+    if ( m_blendingPremul )
+    {
+      // Colors coming out of shader already have alpha multiplied in.
+      glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+                 GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    }
+    else
+    {
+      glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    }
+  }
+  else
+  {
+    glDisable( GL_BLEND );
+  }
+
+  // Depth write
+  glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
+
+  // Depth test
+  if ( m_depthTest )
+  {
+    glDepthFunc( gReverseZ ? GL_GEQUAL : GL_LEQUAL );
+    glEnable( GL_DEPTH_TEST );
+  }
+  else
+  {
+    glDisable( GL_DEPTH_TEST );
+  }
+
+  // Culling
+  if ( m_culling == Culling::None )
+  {
+    glDisable( GL_CULL_FACE );
+  }
+  else
+  {
+    // TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
+    glEnable( GL_CULL_FACE );
+    glFrontFace( ( m_culling == Culling::ClockwiseFront ) ? GL_CW : GL_CCW );
+  }
+
+  // Wireframe
+#if _AE_IOS_
+  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+#else
+  glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+#endif
+
+  // Now setup the shader
+  glUseProgram( m_program );
+
+  // Set shader uniforms
+  bool missingUniforms = false;
+  uint32_t textureIndex = 0;
+  for ( uint32_t i = 0; i < m_uniforms.Length(); i++ )
+  {
+    const char* uniformVarName = m_uniforms.GetKey( i ).c_str();
+    const Uniform* uniformVar = &m_uniforms.GetValue( i );
+    const UniformList::Value* uniformValue = uniforms.Get( uniformVarName );
+
+    // Start validation
+    if ( !uniformValue )
+    {
+      AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
+      missingUniforms = true;
+      continue;
+    }
+    uint32_t typeSize = 0;
+    switch ( uniformVar->type )
+    {
+      case GL_SAMPLER_2D:
+        typeSize = 0;
+        break;
+      case GL_SAMPLER_3D:
+        typeSize = 0;
+        break;
+      case GL_FLOAT:
+        typeSize = 1;
+        break;
+      case GL_FLOAT_VEC2:
+        typeSize = 2;
+        break;
+      case GL_FLOAT_VEC3:
+        typeSize = 3;
+        break;
+      case GL_FLOAT_VEC4:
+        typeSize = 4;
+        break;
+      case GL_FLOAT_MAT4:
+        typeSize = 16;
+        break;
+      default:
+        AE_FAIL_MSG( "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
+        break;
+    }
+    AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
+    // End validation
+
+    if ( uniformVar->type == GL_SAMPLER_2D )
+    {
+      AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
+      glActiveTexture( GL_TEXTURE0 + textureIndex );
+      glBindTexture( uniformValue->target, uniformValue->sampler );
+      glUniform1i( uniformVar->location, textureIndex );
+      textureIndex++;
+    }
+    else if ( uniformVar->type == GL_SAMPLER_3D )
+    {
+      AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
+      glActiveTexture( GL_TEXTURE0 + textureIndex );
+      glBindTexture( GL_TEXTURE_3D, uniformValue->sampler );
+      glUniform1i( uniformVar->location, textureIndex );
+      textureIndex++;
+    }
+    else if ( uniformVar->type == GL_FLOAT )
+    {
+      glUniform1fv( uniformVar->location, 1, uniformValue->value.data );
+    }
+    else if ( uniformVar->type == GL_FLOAT_VEC2 )
+    {
+      glUniform2fv( uniformVar->location, 1, uniformValue->value.data );
+    }
+    else if ( uniformVar->type == GL_FLOAT_VEC3 )
+    {
+      glUniform3fv( uniformVar->location, 1, uniformValue->value.data );
+    }
+    else if ( uniformVar->type == GL_FLOAT_VEC4 )
+    {
+      glUniform4fv( uniformVar->location, 1, uniformValue->value.data );
+    }
+    else if ( uniformVar->type == GL_FLOAT_MAT4 )
+    {
+#if _AE_EMSCRIPTEN_
+      // WebGL/Emscripten doesn't support glUniformMatrix4fv auto-transpose
+      aeFloat4x4 transposedTransform = uniformValue->value.GetTransposeCopy();
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, transposedTransform.data );
+#else
+      glUniformMatrix4fv( uniformVar->location, 1, GL_TRUE, uniformValue->value.data );
+#endif
+    }
+    else
+    {
+      AE_ASSERT_MSG( false, "Invalid uniform type '#': #", uniformVarName, uniformVar->type );
+    }
+
+    AE_CHECK_GL_ERROR();
+  }
+
+  AE_ASSERT_MSG( !missingUniforms, "Missing shader uniform parameters" );
+}
+
+const ae::Shader::Attribute* Shader::GetAttributeByIndex( uint32_t index ) const
+{
+  AE_ASSERT( index < m_attributeCount );
+  return &m_attributes[ index ];
+}
+
+int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* defines, int32_t defineCount )
+{
+  GLenum glType = -1;
+  if ( type == Type::Vertex )
+  {
+    glType = GL_VERTEX_SHADER;
+  }
+  if ( type == Type::Fragment )
+  {
+    glType = GL_FRAGMENT_SHADER;
+  }
+
+  const uint32_t kPrependMax = 16;
+  uint32_t sourceCount = 0;
+  const char* shaderSource[ kPrependMax + _kMaxShaderDefines * 2 + 1 ]; // x2 max defines to make room for newlines. Plus one for actual shader.
+
+  // Version
+#if _AE_IOS_
+  shaderSource[ sourceCount++ ] = "#version 300 es\n";
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+#elif _AE_EMSCRIPTEN_
+  // No version specified
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+#else
+  if ( gGL41 )
+  {
+    shaderSource[ sourceCount++ ] = "#version 410 core\n";
+  }
+  else
+  {
+    shaderSource[ sourceCount++ ] = "#version 330 core\n";
+  }
+
+  // No default precision specified
+#endif
+
+  // Input/output
+#if _AE_EMSCRIPTEN_
+  shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
+  shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
+  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+  if ( type == Type::Vertex )
+  {
+    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
+    shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
+  }
+  else if ( type == Type::Fragment )
+  {
+    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
+    shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+  }
+#else
+  shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture\n";
+  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM uniform\n";
+  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform\n";
+  shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP in\n";
+  shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP out\n";
+  if ( type == Type::Fragment )
+  {
+    shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
+  }
+#endif
+
+  AE_ASSERT( sourceCount <= kPrependMax );
+
+  for ( int32_t i = 0; i < defineCount; i++ )
+  {
+    shaderSource[ sourceCount ] = defines[ i ];
+    sourceCount++;
+    shaderSource[ sourceCount ] = "\n";
+    sourceCount++;
+  }
+
+  shaderSource[ sourceCount ] = shaderStr;
+  sourceCount++;
+
+  GLuint shader = glCreateShader( glType );
+  glShaderSource( shader, sourceCount, shaderSource, nullptr );
+  glCompileShader( shader );
+
+  GLint status;
+  glGetShaderiv( shader, GL_COMPILE_STATUS, &status );
+  if ( status == GL_FALSE )
+  {
+    GLint logLength;
+    glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &logLength );
+
+    if ( logLength > 0 )
+    {
+      unsigned char* log = new unsigned char[ logLength ];
+      glGetShaderInfoLog( shader, logLength, NULL, (GLchar*)log );
+      const char* typeStr = ( type == Type::Vertex ? "vertex" : "fragment" );
+      AE_LOG( "Error compiling # shader #", typeStr, log );
+      delete[] log;
+    }
+
+    return 0;
+  }
+
+  AE_CHECK_GL_ERROR();
+  return shader;
+}
 
 //------------------------------------------------------------------------------
 // ae::RenderTarget member functions
@@ -3921,26 +4814,26 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   //m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
   //AE_CHECK_GL_ERROR();
 
-  //const char* vertexStr = "\
-  //  AE_UNIFORM_HIGHP mat4 u_localToNdc;\
-  //  AE_IN_HIGHP vec3 a_position;\
-  //  AE_IN_HIGHP vec2 a_uv;\
-  //  AE_OUT_HIGHP vec2 v_uv;\
-  //  void main()\
-  //  {\
-  //    v_uv = a_uv;\
-  //    gl_Position = u_localToNdc * vec4( a_position, 1.0 );\
-  //  }";
-  //const char* fragStr = "\
-  //  uniform sampler2D u_tex;\
-  //  AE_IN_HIGHP vec2 v_uv;\
-  //  void main()\
-  //  {\
-  //    AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
-  //  }";
-  //m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_localToNdc;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec2 a_uv;\
+    AE_OUT_HIGHP vec2 v_uv;\
+    void main()\
+    {\
+      v_uv = a_uv;\
+      gl_Position = u_localToNdc * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    void main()\
+    {\
+      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
+    }";
+  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
 void RenderTarget::Destroy()
@@ -4145,8 +5038,14 @@ GraphicsDevice::~GraphicsDevice()
   Terminate();
 }
 
+#define LOAD_OPENGL_FN( _glfn )\
+_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
+AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
+
 void GraphicsDevice::Initialize( class Window* window )
 {
+  LOAD_OPENGL_FN( glCreateProgram );
+
   AE_ASSERT( window );
   //AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
   AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
