@@ -71,6 +71,7 @@ target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		${AE_HEADER_FILES}
 		aether.cpp
+		aether.mm
 		aeAudio.cpp
 		aeBinaryStream.cpp
 		aeClock.cpp

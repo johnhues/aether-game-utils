@@ -3255,6 +3255,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
   #include <unistd.h>
+  #import <Cocoa/Cocoa.h>
 #else
   #include <unistd.h>
 #endif
@@ -3884,6 +3885,51 @@ void Window::m_Initialize()
   {
     AE_FAIL_MSG( "Failed on first window update. Error: #", GetLastError() );
   }
+#elif _AE_OSX_
+  // Autorelease Pool
+  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+
+  // Create shared app instance
+  [NSApplication sharedApplication];
+
+  // Main window
+  NSUInteger windowStyle = NSTitledWindowMask | NSClosableWindowMask | NSResizableWindowMask;
+  NSRect windowRect = NSMakeRect(100, 100, 400, 400);
+//  NSWindow* window = [[NSWindow alloc] initWithContentRect:windowRect styleMask:windowStyle backing:NSBackingStoreBuffered defer:NO];
+
+  // Test content
+//  NSTextView* textView = [[NSTextView alloc] initWithFrame:windowRect];
+//  [window setContentView:textView];
+//  NSOpenGLView* openGLView = [[NSOpenGLView alloc] init:windowRect pizelFormat:];
+//  [window setContentView:openGLView];
+  
+  NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(100,100,400,300)
+    styleMask:NSTitledWindowMask|NSClosableWindowMask|NSMiniaturizableWindowMask|NSResizableWindowMask
+    backing:NSBackingStoreBuffered
+    defer:YES
+  ];
+  NSRect frame = [w contentRectForFrameRect:[w frame]];
+  // this is optional - request accelerated context
+  unsigned int attrs[] = { NSOpenGLPFAAccelerated, 0 };
+  NSOpenGLPixelFormat *pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:(NSOpenGLPixelFormatAttribute*)attrs];
+  NSOpenGLView  *view = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:pixelFormat];
+  [pixelFormat release];
+  // manage properties of the window as you please ...
+  [w setOpaque:YES];
+  [w setContentView:view];
+  [w makeFirstResponder:view];
+  [w setContentMinSize:NSMakeSize(150.0, 100.0)];
+  //[w makeKeyAndOrderFront: self];
+
+  // Window controller
+  NSWindowController* windowController = [[NSWindowController alloc] initWithWindow:w];
+
+  // @todo Create app delegate
+  // @todo Create menus (especially Quit!)
+
+  // Show window and run event loop
+  [w orderFrontRegardless];
+  [NSApp run];
 #endif
 }
 
@@ -3991,7 +4037,17 @@ void Input::Pump()
 	#pragma comment (lib, "glu32.lib")
 	#include <gl/GL.h>
 	#include <gl/GLU.h>
-  //#include <gl/glext.h>
+#elif _AE_EMSCRIPTEN_
+  #include <GLES2/gl2.h>
+#elif _AE_LINUX_
+  #include <GL/gl.h>
+  #include <GLES3/gl3.h>
+#elif _AE_IOS_
+  #include <OpenGLES/ES3/gl.h>
+  //#include <OpenGLES/ES3/glext.h>
+  //#define glClearDepth glClearDepthf
+#else
+  #include <OpenGL/gl.h>
 #endif
 
 // Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
@@ -4226,6 +4282,7 @@ typedef char GLchar;
 //#define GL_POINT_SPRITE                   0x8861
 //#define GL_COORD_REPLACE                  0x8862
 //#define GL_MAX_TEXTURE_COORDS             0x8871
+#if !_AE_APPLE_
 GLuint ( *glCreateProgram ) () = nullptr;
 void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
 void ( *glLinkProgram ) ( GLuint program ) = nullptr;
@@ -4245,25 +4302,13 @@ void (*glCompileShader)( GLuint shader ) = nullptr;
 void ( *glGetShaderiv)( GLuint shader, GLenum pname, GLint *params );
 void ( *glGetShaderInfoLog)( GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
 void ( *glActiveTexture) ( GLenum texture ) = nullptr;
-//void ( *glUniform1f ) ( GLint location, GLfloat v0 ) = nullptr;
-//void ( *glUniform2f ) ( GLint location, GLfloat v0, GLfloat v1 ) = nullptr;
-//void ( *glUniform3f ) ( GLint location, GLfloat v0, GLfloat v1, GLfloat v2 ) = nullptr;
-//void ( *glUniform4f ) ( GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat = nullptr v3 );
 void ( *glUniform1i ) ( GLint location, GLint v0 ) = nullptr;
-//void ( *glUniform2i ) ( GLint location, GLint v0, GLint v1 ) = nullptr;
-//void ( *glUniform3i ) ( GLint location, GLint v0, GLint v1, GLint v2 ) = nullptr;
-//void ( *glUniform4i ) ( GLint location, GLint v0, GLint v1, GLint v2, GLint v3 ) = nullptr;
 void ( *glUniform1fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
 void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
 void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
 void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
-//void ( *glUniform1iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
-//void ( *glUniform2iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
-//void ( *glUniform3iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
-//void ( *glUniform4iv ) ( GLint location, GLsizei count, const GLint *value ) = nullptr;
-//void ( *glUniformMatrix2fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
-//void ( *glUniformMatrix3fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
 void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
+#endif
 
 #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
 
@@ -5044,7 +5089,33 @@ AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
 
 void GraphicsDevice::Initialize( class Window* window )
 {
+#if !_AE_APPLE_
   LOAD_OPENGL_FN( glCreateProgram );
+  LOAD_OPENGL_FN( glAttachShader );
+  LOAD_OPENGL_FN( glLinkProgram );
+  LOAD_OPENGL_FN( glGetProgramiv );
+  LOAD_OPENGL_FN( glGetProgramInfoLog );
+  LOAD_OPENGL_FN( glGetActiveAttrib );
+  LOAD_OPENGL_FN( glGetAttribLocation );
+  LOAD_OPENGL_FN( glGetActiveUniform );
+  LOAD_OPENGL_FN( glGetUniformLocation );
+  LOAD_OPENGL_FN( glDeleteShader );
+  LOAD_OPENGL_FN( glDeleteProgram );
+  LOAD_OPENGL_FN( glUseProgram );
+  LOAD_OPENGL_FN( glBlendFuncSeparate );
+  LOAD_OPENGL_FN( glCreateShader );
+  LOAD_OPENGL_FN( glShaderSource );
+  LOAD_OPENGL_FN( glCompileShader );
+  LOAD_OPENGL_FN( glGetShaderiv );
+  LOAD_OPENGL_FN( glGetShaderInfoLog );
+  LOAD_OPENGL_FN( glActiveTexture );
+  LOAD_OPENGL_FN( glUniform1i );
+  LOAD_OPENGL_FN( glUniform1fv );
+  LOAD_OPENGL_FN( glUniform2fv );
+  LOAD_OPENGL_FN( glUniform3fv );
+  LOAD_OPENGL_FN( glUniform4fv );
+  LOAD_OPENGL_FN( glUniformMatrix4fv );
+#endif
 
   AE_ASSERT( window );
   //AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
