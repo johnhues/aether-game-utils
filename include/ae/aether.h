@@ -797,6 +797,31 @@ private:
   Array< Entry, N > m_entries;
 };
 
+//------------------------------------------------------------------------------
+// ae::Rect class
+//------------------------------------------------------------------------------
+struct Rect
+{
+  Rect() = default;
+  Rect( const Rect& ) = default;
+  Rect( float x, float y, float w, float h ) : x(x), y(y), w(w), h(h) {}
+  Rect( Vec2 p0, Vec2 p1 );
+  explicit operator Vec4() const { return Vec4( x, y, w, h ); }
+  
+  Vec2 GetMin() const { return Vec2( x, y ); }
+  Vec2 GetMax() const { return Vec2( x + w, y + h ); }
+  Vec2 GetSize() const { return Vec2( w, h ); }
+  bool Contains( Vec2 pos ) const;
+  void Expand( Vec2 pos ); // @NOTE: Zero size rect is maintained by Expand()
+  bool GetIntersection( const Rect& other, Rect* intersectionOut ) const;
+  
+  float x, y, w, h;
+};
+inline std::ostream& operator<<( std::ostream& os, Rect r )
+{
+  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
+}
+
 } // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
@@ -877,8 +902,6 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 namespace AE_NAMESPACE {
 
 // @HACK:
-struct Rect
-{};
 struct Matrix4
 {
   float data[ 16 ];
@@ -939,20 +962,6 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// Graphics Constants
-//------------------------------------------------------------------------------
-enum class TextureFilter
-{
-  Linear,
-  Nearest
-};
-enum class TextureWrap
-{
-  Repeat,
-  Clamp
-};
-
-//------------------------------------------------------------------------------
 // ae::UniformList class
 //------------------------------------------------------------------------------
 class UniformList
@@ -989,29 +998,23 @@ const uint32_t _kMaxShaderDefines = 4;
 class Shader
 {
 public:
-  Shader();
-  ~Shader();
-
   enum class Type
   {
     Vertex,
     Fragment
   };
-
   enum class Culling
   {
     None,
     ClockwiseFront,
     CounterclockwiseFront,
   };
-
   struct Attribute
   {
     char name[ _kMaxShaderAttributeNameLength ];
     uint32_t type; // GL_FLOAT, GL_FLOAT_VEC4, GL_FLOAT_MAT4...
     int32_t location;
   };
-
   struct Uniform
   {
     Str32 name;
@@ -1019,9 +1022,11 @@ public:
     int32_t location;
   };
   
+  // Interface
+  Shader();
+  ~Shader();
   void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
   void Destroy();
-
   void SetBlending( bool enabled ) { m_blending = enabled; }
   void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
   void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
@@ -1041,13 +1046,12 @@ private:
   bool m_depthWrite;
   Culling m_culling;
   bool m_wireframe;
-  Attribute m_attributes[ _kMaxShaderAttributeCount ];
-  uint32_t m_attributeCount;
+  ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
   ae::Map< Str32, Uniform > m_uniforms = AE_ALLOC_TAG_RENDER;
 public:
   void Activate( const UniformList& uniforms ) const;
   const Attribute* GetAttributeByIndex( uint32_t index ) const;
-  uint32_t GetAttributeCount() const { return m_attributeCount; }
+  uint32_t GetAttributeCount() const { return m_attributes.Length(); }
 };
 
 //------------------------------------------------------------------------------
@@ -1064,12 +1068,57 @@ public:
 class Texture
 {
 public:
+  // Constants
+  enum class Filter
+  {
+    Linear,
+    Nearest
+  };
+  enum class Wrap
+  {
+    Repeat,
+    Clamp
+  };
+  enum class Format
+  {
+    Depth32F,
+    R8, // unorm
+    R16_UNORM, // for height fields
+    R16F,
+    R32F,
+    RG8, // unorm
+    RG16F,
+    RG32F,
+    RGB8, // unorm
+    RGB8_SRGB,
+    RGB16F,
+    RGB32F,
+    RGBA8, // unorm
+    RGBA8_SRGB,
+    RGBA16F,
+    RGBA32F,
+    // non-specific formats, prefer specific types above
+    R = RGBA8,
+    RG = RG8,
+    RGB = RGB8,
+    RGBA = RGBA8,
+    Depth = Depth32F,
+    SRGB = RGB8_SRGB,
+    SRGBA = RGBA8_SRGB,
+  };
+  enum class Type
+  {
+    Uint8,
+    Uint16,
+    HalfFloat,
+    Float
+  };
+
+  // Interface
   Texture() = default;
   virtual ~Texture();
-
   void Initialize( uint32_t target );
   virtual void Destroy();
-
   uint32_t GetTexture() const { return m_texture; }
   uint32_t GetTarget() const { return m_target; }
 
@@ -1078,7 +1127,6 @@ private:
   Texture( Texture&& ) = delete;
   void operator=( const Texture& ) = delete;
   void operator=( Texture&& ) = delete;
-
   uint32_t m_texture = 0;
   uint32_t m_target = 0;
 };
@@ -1086,9 +1134,21 @@ private:
 //------------------------------------------------------------------------------
 // ae::Texture2D class
 //------------------------------------------------------------------------------
-class Texture2D
+class Texture2D : public Texture
 {
 public:
+  void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps = false );
+  void Initialize( const char* file, Filter filter, Wrap wrap, bool autoGenerateMipmaps = false,
+    bool isSRGB = false );
+  void Destroy() override;
+
+  uint32_t GetWidth() const { return m_width; }
+  uint32_t GetHeight() const { return m_height; }
+
+private:
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
+  bool m_hasAlpha = false;
 };
 
 //------------------------------------------------------------------------------
@@ -1099,8 +1159,8 @@ class RenderTarget
 public:
   ~RenderTarget();
   void Initialize( uint32_t width, uint32_t height );
-  void AddTexture( TextureFilter filter, TextureWrap wrap );
-  void AddDepth( TextureFilter filter, TextureWrap wrap );
+  void AddTexture( Texture::Filter filter, Texture::Wrap wrap );
+  void AddDepth( Texture::Filter filter, Texture::Wrap wrap );
   void Destroy();
 
   void Activate();
@@ -1137,15 +1197,11 @@ private:
     Vec3 pos;
     Vec2 uv;
   };
-
   uint32_t m_fbo = 0;
-
   Array< Texture2D*, 4 > m_targets;
   Texture2D m_depth;
-
   uint32_t m_width = 0;
   uint32_t m_height = 0;
-
   VertexData m_quad;
   Shader m_shader;
 };
@@ -3024,7 +3080,7 @@ uint32_t Array< T, N >::m_GetNextSize() const
 }
 
 //------------------------------------------------------------------------------
-// Map functions
+// ae::Map functions
 //------------------------------------------------------------------------------
 template < typename K >
 bool Map_IsEqual( const K& k0, const K& k1 );
@@ -3649,6 +3705,84 @@ void TimeStep::Wait()
 }
 
 //------------------------------------------------------------------------------
+// ae::Rect member functions
+//------------------------------------------------------------------------------
+Rect::Rect( Vec2 p0, Vec2 p1 )
+{
+  if ( p0.x < p1.x )
+  {
+    x = p0.x;
+    w = p1.x - p0.x;
+  }
+  else
+  {
+    x = p1.x;
+    w = p0.x - p1.x;
+  }
+
+  if ( p0.y < p1.y )
+  {
+    y = p0.y;
+    h = p1.y - p0.y;
+  }
+  else
+  {
+    y = p1.y;
+    h = p0.y - p1.y;
+  }
+}
+
+bool Rect::Contains( Vec2 pos ) const
+{
+  return !( pos.x < x || pos.x >= ( x + w ) || pos.y < y || pos.y >= ( y + h ) );
+}
+
+void Rect::Expand( Vec2 pos )
+{
+  if ( w == 0.0f )
+  {
+    x = pos.x;
+  }
+  else
+  {
+    float x1 = ae::Max( x + w, pos.x );
+    x = ae::Min( x, pos.x );
+    w = x1 - x;
+  }
+
+  if ( h == 0.0f )
+  {
+    y = pos.y;
+  }
+  else
+  {
+    float y1 = ae::Max( y + h, pos.y );
+    y = ae::Min( y, pos.y );
+    h = y1 - y;
+  }
+}
+
+bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
+{
+  float x0 = ae::Max( x, other.x );
+  float x1 = ae::Min( x + w, other.x + other.w );
+  float y0 = ae::Max( y, other.y );
+  float y1 = ae::Min( y + h, other.y + other.h );
+  if ( x0 < x1 && y0 < y1 )
+  {
+    if ( intersectionOut )
+    {
+      *intersectionOut = Rect( Vec2( x0, y0 ), Vec2( x1, y1 ) );
+    }
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
 // Window member functions
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
@@ -3869,14 +4003,6 @@ void Window::m_Initialize()
     AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
   }
 
-  // Create OpenGL context
-  HGLRC hglrc = wglCreateContext( hdc );
-  AE_ASSERT_MSG( hglrc, "Failed to create the OpenGL Rendering Context" );
-  if ( !wglMakeCurrent( hdc, hglrc ) )
-  {
-    AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
-  }
-
   // Finish window setup
   ShowWindow( hwnd, SW_SHOW );
   SetForegroundWindow( hwnd ); // Slightly Higher Priority
@@ -4061,6 +4187,97 @@ bool gGL41 = true;
 
 // OpenGL function pointers
 typedef char GLchar;
+
+// GL_VERSION_2_1
+//#define GL_PIXEL_PACK_BUFFER              0x88EB
+//#define GL_PIXEL_UNPACK_BUFFER            0x88EC
+//#define GL_PIXEL_PACK_BUFFER_BINDING      0x88ED
+//#define GL_PIXEL_UNPACK_BUFFER_BINDING    0x88EF
+//#define GL_FLOAT_MAT2x3                   0x8B65
+//#define GL_FLOAT_MAT2x4                   0x8B66
+//#define GL_FLOAT_MAT3x2                   0x8B67
+//#define GL_FLOAT_MAT3x4                   0x8B68
+//#define GL_FLOAT_MAT4x2                   0x8B69
+//#define GL_FLOAT_MAT4x3                   0x8B6A
+//#define GL_SRGB                           0x8C40
+#define GL_SRGB8                          0x8C41
+//#define GL_SRGB_ALPHA                     0x8C42
+#define GL_SRGB8_ALPHA8                   0x8C43
+//#define GL_COMPRESSED_SRGB                0x8C48
+//#define GL_COMPRESSED_SRGB_ALPHA          0x8C49
+//#define GL_CURRENT_RASTER_SECONDARY_COLOR 0x845F
+//#define GL_SLUMINANCE_ALPHA               0x8C44
+//#define GL_SLUMINANCE8_ALPHA8             0x8C45
+//#define GL_SLUMINANCE                     0x8C46
+//#define GL_SLUMINANCE8                    0x8C47
+//#define GL_COMPRESSED_SLUMINANCE          0x8C4A
+//#define GL_COMPRESSED_SLUMINANCE_ALPHA    0x8C4B
+// GL_VERSION_3_2
+//#define GL_CONTEXT_CORE_PROFILE_BIT       0x00000001
+//#define GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 0x00000002
+//#define GL_LINES_ADJACENCY                0x000A
+//#define GL_LINE_STRIP_ADJACENCY           0x000B
+//#define GL_TRIANGLES_ADJACENCY            0x000C
+//#define GL_TRIANGLE_STRIP_ADJACENCY       0x000D
+//#define GL_PROGRAM_POINT_SIZE             0x8642
+//#define GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS 0x8C29
+//#define GL_FRAMEBUFFER_ATTACHMENT_LAYERED 0x8DA7
+#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+//#define GL_GEOMETRY_SHADER                0x8DD9
+//#define GL_GEOMETRY_VERTICES_OUT          0x8916
+//#define GL_GEOMETRY_INPUT_TYPE            0x8917
+//#define GL_GEOMETRY_OUTPUT_TYPE           0x8918
+//#define GL_MAX_GEOMETRY_UNIFORM_COMPONENTS 0x8DDF
+//#define GL_MAX_GEOMETRY_OUTPUT_VERTICES   0x8DE0
+//#define GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS 0x8DE1
+//#define GL_MAX_VERTEX_OUTPUT_COMPONENTS   0x9122
+//#define GL_MAX_GEOMETRY_INPUT_COMPONENTS  0x9123
+//#define GL_MAX_GEOMETRY_OUTPUT_COMPONENTS 0x9124
+//#define GL_MAX_FRAGMENT_INPUT_COMPONENTS  0x9125
+//#define GL_CONTEXT_PROFILE_MASK           0x9126
+//#define GL_DEPTH_CLAMP                    0x864F
+//#define GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION 0x8E4C
+//#define GL_FIRST_VERTEX_CONVENTION        0x8E4D
+//#define GL_LAST_VERTEX_CONVENTION         0x8E4E
+//#define GL_PROVOKING_VERTEX               0x8E4F
+//#define GL_TEXTURE_CUBE_MAP_SEAMLESS      0x884F
+//#define GL_MAX_SERVER_WAIT_TIMEOUT        0x9111
+//#define GL_OBJECT_TYPE                    0x9112
+//#define GL_SYNC_CONDITION                 0x9113
+//#define GL_SYNC_STATUS                    0x9114
+//#define GL_SYNC_FLAGS                     0x9115
+//#define GL_SYNC_FENCE                     0x9116
+//#define GL_SYNC_GPU_COMMANDS_COMPLETE     0x9117
+//#define GL_UNSIGNALED                     0x9118
+//#define GL_SIGNALED                       0x9119
+//#define GL_ALREADY_SIGNALED               0x911A
+//#define GL_TIMEOUT_EXPIRED                0x911B
+//#define GL_CONDITION_SATISFIED            0x911C
+//#define GL_WAIT_FAILED                    0x911D
+//#define GL_TIMEOUT_IGNORED                0xFFFFFFFFFFFFFFFFull
+//#define GL_SYNC_FLUSH_COMMANDS_BIT        0x00000001
+//#define GL_SAMPLE_POSITION                0x8E50
+//#define GL_SAMPLE_MASK                    0x8E51
+//#define GL_SAMPLE_MASK_VALUE              0x8E52
+//#define GL_MAX_SAMPLE_MASK_WORDS          0x8E59
+//#define GL_TEXTURE_2D_MULTISAMPLE         0x9100
+//#define GL_PROXY_TEXTURE_2D_MULTISAMPLE   0x9101
+//#define GL_TEXTURE_2D_MULTISAMPLE_ARRAY   0x9102
+//#define GL_PROXY_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9103
+//#define GL_TEXTURE_BINDING_2D_MULTISAMPLE 0x9104
+//#define GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY 0x9105
+//#define GL_TEXTURE_SAMPLES                0x9106
+//#define GL_TEXTURE_FIXED_SAMPLE_LOCATIONS 0x9107
+//#define GL_SAMPLER_2D_MULTISAMPLE         0x9108
+//#define GL_INT_SAMPLER_2D_MULTISAMPLE     0x9109
+//#define GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE 0x910A
+//#define GL_SAMPLER_2D_MULTISAMPLE_ARRAY   0x910B
+//#define GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY 0x910C
+//#define GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY 0x910D
+//#define GL_MAX_COLOR_TEXTURE_SAMPLES      0x910E
+//#define GL_MAX_DEPTH_TEXTURE_SAMPLES      0x910F
+//#define GL_MAX_INTEGER_SAMPLES            0x9110
+
 //#define GL_UNSIGNED_BYTE_3_3_2            0x8032
 //#define GL_UNSIGNED_SHORT_4_4_4_4         0x8033
 //#define GL_UNSIGNED_SHORT_5_5_5_1         0x8034
@@ -4087,7 +4304,7 @@ typedef char GLchar;
 //#define GL_BGRA                           0x80E1
 //#define GL_MAX_ELEMENTS_VERTICES          0x80E8
 //#define GL_MAX_ELEMENTS_INDICES           0x80E9
-//#define GL_CLAMP_TO_EDGE                  0x812F
+#define GL_CLAMP_TO_EDGE                  0x812F
 //#define GL_TEXTURE_MIN_LOD                0x813A
 //#define GL_TEXTURE_MAX_LOD                0x813B
 //#define GL_TEXTURE_BASE_LEVEL             0x813C
@@ -4282,7 +4499,245 @@ typedef char GLchar;
 //#define GL_POINT_SPRITE                   0x8861
 //#define GL_COORD_REPLACE                  0x8862
 //#define GL_MAX_TEXTURE_COORDS             0x8871
+//#define GL_COMPARE_REF_TO_TEXTURE         0x884E
+//#define GL_CLIP_DISTANCE0                 0x3000
+//#define GL_CLIP_DISTANCE1                 0x3001
+//#define GL_CLIP_DISTANCE2                 0x3002
+//#define GL_CLIP_DISTANCE3                 0x3003
+//#define GL_CLIP_DISTANCE4                 0x3004
+//#define GL_CLIP_DISTANCE5                 0x3005
+//#define GL_CLIP_DISTANCE6                 0x3006
+//#define GL_CLIP_DISTANCE7                 0x3007
+//#define GL_MAX_CLIP_DISTANCES             0x0D32
+//#define GL_MAJOR_VERSION                  0x821B
+//#define GL_MINOR_VERSION                  0x821C
+//#define GL_NUM_EXTENSIONS                 0x821D
+//#define GL_CONTEXT_FLAGS                  0x821E
+//#define GL_COMPRESSED_RED                 0x8225
+//#define GL_COMPRESSED_RG                  0x8226
+//#define GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT 0x00000001
+#define GL_RGBA32F                        0x8814
+#define GL_RGB32F                         0x8815
+#define GL_RGBA16F                        0x881A
+#define GL_RGB16F                         0x881B
+//#define GL_VERTEX_ATTRIB_ARRAY_INTEGER    0x88FD
+//#define GL_MAX_ARRAY_TEXTURE_LAYERS       0x88FF
+//#define GL_MIN_PROGRAM_TEXEL_OFFSET       0x8904
+//#define GL_MAX_PROGRAM_TEXEL_OFFSET       0x8905
+//#define GL_CLAMP_READ_COLOR               0x891C
+//#define GL_FIXED_ONLY                     0x891D
+//#define GL_MAX_VARYING_COMPONENTS         0x8B4B
+//#define GL_TEXTURE_1D_ARRAY               0x8C18
+//#define GL_PROXY_TEXTURE_1D_ARRAY         0x8C19
+//#define GL_TEXTURE_2D_ARRAY               0x8C1A
+//#define GL_PROXY_TEXTURE_2D_ARRAY         0x8C1B
+//#define GL_TEXTURE_BINDING_1D_ARRAY       0x8C1C
+//#define GL_TEXTURE_BINDING_2D_ARRAY       0x8C1D
+//#define GL_R11F_G11F_B10F                 0x8C3A
+//#define GL_UNSIGNED_INT_10F_11F_11F_REV   0x8C3B
+//#define GL_RGB9_E5                        0x8C3D
+//#define GL_UNSIGNED_INT_5_9_9_9_REV       0x8C3E
+//#define GL_TEXTURE_SHARED_SIZE            0x8C3F
+//#define GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH 0x8C76
+//#define GL_TRANSFORM_FEEDBACK_BUFFER_MODE 0x8C7F
+//#define GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS 0x8C80
+//#define GL_TRANSFORM_FEEDBACK_VARYINGS    0x8C83
+//#define GL_TRANSFORM_FEEDBACK_BUFFER_START 0x8C84
+//#define GL_TRANSFORM_FEEDBACK_BUFFER_SIZE 0x8C85
+//#define GL_PRIMITIVES_GENERATED           0x8C87
+//#define GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN 0x8C88
+//#define GL_RASTERIZER_DISCARD             0x8C89
+//#define GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS 0x8C8A
+//#define GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS 0x8C8B
+//#define GL_INTERLEAVED_ATTRIBS            0x8C8C
+//#define GL_SEPARATE_ATTRIBS               0x8C8D
+//#define GL_TRANSFORM_FEEDBACK_BUFFER      0x8C8E
+//#define GL_TRANSFORM_FEEDBACK_BUFFER_BINDING 0x8C8F
+//#define GL_RGBA32UI                       0x8D70
+//#define GL_RGB32UI                        0x8D71
+//#define GL_RGBA16UI                       0x8D76
+//#define GL_RGB16UI                        0x8D77
+//#define GL_RGBA8UI                        0x8D7C
+//#define GL_RGB8UI                         0x8D7D
+//#define GL_RGBA32I                        0x8D82
+//#define GL_RGB32I                         0x8D83
+//#define GL_RGBA16I                        0x8D88
+//#define GL_RGB16I                         0x8D89
+//#define GL_RGBA8I                         0x8D8E
+//#define GL_RGB8I                          0x8D8F
+//#define GL_RED_INTEGER                    0x8D94
+//#define GL_GREEN_INTEGER                  0x8D95
+//#define GL_BLUE_INTEGER                   0x8D96
+//#define GL_RGB_INTEGER                    0x8D98
+//#define GL_RGBA_INTEGER                   0x8D99
+//#define GL_BGR_INTEGER                    0x8D9A
+//#define GL_BGRA_INTEGER                   0x8D9B
+//#define GL_SAMPLER_1D_ARRAY               0x8DC0
+//#define GL_SAMPLER_2D_ARRAY               0x8DC1
+//#define GL_SAMPLER_1D_ARRAY_SHADOW        0x8DC3
+//#define GL_SAMPLER_2D_ARRAY_SHADOW        0x8DC4
+//#define GL_SAMPLER_CUBE_SHADOW            0x8DC5
+//#define GL_UNSIGNED_INT_VEC2              0x8DC6
+//#define GL_UNSIGNED_INT_VEC3              0x8DC7
+//#define GL_UNSIGNED_INT_VEC4              0x8DC8
+//#define GL_INT_SAMPLER_1D                 0x8DC9
+//#define GL_INT_SAMPLER_2D                 0x8DCA
+//#define GL_INT_SAMPLER_3D                 0x8DCB
+//#define GL_INT_SAMPLER_CUBE               0x8DCC
+//#define GL_INT_SAMPLER_1D_ARRAY           0x8DCE
+//#define GL_INT_SAMPLER_2D_ARRAY           0x8DCF
+//#define GL_UNSIGNED_INT_SAMPLER_1D        0x8DD1
+//#define GL_UNSIGNED_INT_SAMPLER_2D        0x8DD2
+//#define GL_UNSIGNED_INT_SAMPLER_3D        0x8DD3
+//#define GL_UNSIGNED_INT_SAMPLER_CUBE      0x8DD4
+//#define GL_UNSIGNED_INT_SAMPLER_1D_ARRAY  0x8DD6
+//#define GL_UNSIGNED_INT_SAMPLER_2D_ARRAY  0x8DD7
+//#define GL_QUERY_WAIT                     0x8E13
+//#define GL_QUERY_NO_WAIT                  0x8E14
+//#define GL_QUERY_BY_REGION_WAIT           0x8E15
+//#define GL_QUERY_BY_REGION_NO_WAIT        0x8E16
+//#define GL_BUFFER_ACCESS_FLAGS            0x911F
+//#define GL_BUFFER_MAP_LENGTH              0x9120
+//#define GL_BUFFER_MAP_OFFSET              0x9121
+#define GL_DEPTH_COMPONENT32F             0x8CAC
+//#define GL_DEPTH32F_STENCIL8              0x8CAD
+//#define GL_FLOAT_32_UNSIGNED_INT_24_8_REV 0x8DAD
+//#define GL_INVALID_FRAMEBUFFER_OPERATION  0x0506
+//#define GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING 0x8210
+//#define GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE 0x8211
+//#define GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE 0x8212
+//#define GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE 0x8213
+//#define GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE 0x8214
+//#define GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE 0x8215
+//#define GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE 0x8216
+//#define GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE 0x8217
+//#define GL_FRAMEBUFFER_DEFAULT            0x8218
+#define GL_FRAMEBUFFER_UNDEFINED          0x8219
+//#define GL_DEPTH_STENCIL_ATTACHMENT       0x821A
+//#define GL_MAX_RENDERBUFFER_SIZE          0x84E8
+//#define GL_DEPTH_STENCIL                  0x84F9
+//#define GL_UNSIGNED_INT_24_8              0x84FA
+//#define GL_DEPTH24_STENCIL8               0x88F0
+//#define GL_TEXTURE_STENCIL_SIZE           0x88F1
+//#define GL_TEXTURE_RED_TYPE               0x8C10
+//#define GL_TEXTURE_GREEN_TYPE             0x8C11
+//#define GL_TEXTURE_BLUE_TYPE              0x8C12
+//#define GL_TEXTURE_ALPHA_TYPE             0x8C13
+//#define GL_TEXTURE_DEPTH_TYPE             0x8C16
+//#define GL_UNSIGNED_NORMALIZED            0x8C17
+#define GL_FRAMEBUFFER_BINDING            0x8CA6
+//#define GL_DRAW_FRAMEBUFFER_BINDING       0x8CA6
+//#define GL_RENDERBUFFER_BINDING           0x8CA7
+#define GL_READ_FRAMEBUFFER               0x8CA8
+#define GL_DRAW_FRAMEBUFFER               0x8CA9
+//#define GL_READ_FRAMEBUFFER_BINDING       0x8CAA
+//#define GL_RENDERBUFFER_SAMPLES           0x8CAB
+//#define GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE 0x8CD0
+//#define GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME 0x8CD1
+//#define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL 0x8CD2
+//#define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE 0x8CD3
+//#define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER 0x8CD4
+#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
+//#define GL_MAX_COLOR_ATTACHMENTS          0x8CDF
+#define GL_COLOR_ATTACHMENT0              0x8CE0
+//#define GL_COLOR_ATTACHMENT1              0x8CE1
+//#define GL_COLOR_ATTACHMENT2              0x8CE2
+//#define GL_COLOR_ATTACHMENT3              0x8CE3
+//#define GL_COLOR_ATTACHMENT4              0x8CE4
+//#define GL_COLOR_ATTACHMENT5              0x8CE5
+//#define GL_COLOR_ATTACHMENT6              0x8CE6
+//#define GL_COLOR_ATTACHMENT7              0x8CE7
+//#define GL_COLOR_ATTACHMENT8              0x8CE8
+//#define GL_COLOR_ATTACHMENT9              0x8CE9
+//#define GL_COLOR_ATTACHMENT10             0x8CEA
+//#define GL_COLOR_ATTACHMENT11             0x8CEB
+//#define GL_COLOR_ATTACHMENT12             0x8CEC
+//#define GL_COLOR_ATTACHMENT13             0x8CED
+//#define GL_COLOR_ATTACHMENT14             0x8CEE
+//#define GL_COLOR_ATTACHMENT15             0x8CEF
+//#define GL_COLOR_ATTACHMENT16             0x8CF0
+//#define GL_COLOR_ATTACHMENT17             0x8CF1
+//#define GL_COLOR_ATTACHMENT18             0x8CF2
+//#define GL_COLOR_ATTACHMENT19             0x8CF3
+//#define GL_COLOR_ATTACHMENT20             0x8CF4
+//#define GL_COLOR_ATTACHMENT21             0x8CF5
+//#define GL_COLOR_ATTACHMENT22             0x8CF6
+//#define GL_COLOR_ATTACHMENT23             0x8CF7
+//#define GL_COLOR_ATTACHMENT24             0x8CF8
+//#define GL_COLOR_ATTACHMENT25             0x8CF9
+//#define GL_COLOR_ATTACHMENT26             0x8CFA
+//#define GL_COLOR_ATTACHMENT27             0x8CFB
+//#define GL_COLOR_ATTACHMENT28             0x8CFC
+//#define GL_COLOR_ATTACHMENT29             0x8CFD
+//#define GL_COLOR_ATTACHMENT30             0x8CFE
+//#define GL_COLOR_ATTACHMENT31             0x8CFF
+#define GL_DEPTH_ATTACHMENT               0x8D00
+//#define GL_STENCIL_ATTACHMENT             0x8D20
+#define GL_FRAMEBUFFER                    0x8D40
+//#define GL_RENDERBUFFER                   0x8D41
+//#define GL_RENDERBUFFER_WIDTH             0x8D42
+//#define GL_RENDERBUFFER_HEIGHT            0x8D43
+//#define GL_RENDERBUFFER_INTERNAL_FORMAT   0x8D44
+//#define GL_STENCIL_INDEX1                 0x8D46
+//#define GL_STENCIL_INDEX4                 0x8D47
+//#define GL_STENCIL_INDEX8                 0x8D48
+//#define GL_STENCIL_INDEX16                0x8D49
+//#define GL_RENDERBUFFER_RED_SIZE          0x8D50
+//#define GL_RENDERBUFFER_GREEN_SIZE        0x8D51
+//#define GL_RENDERBUFFER_BLUE_SIZE         0x8D52
+//#define GL_RENDERBUFFER_ALPHA_SIZE        0x8D53
+//#define GL_RENDERBUFFER_DEPTH_SIZE        0x8D54
+//#define GL_RENDERBUFFER_STENCIL_SIZE      0x8D55
+#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+//#define GL_MAX_SAMPLES                    0x8D57
+//#define GL_INDEX                          0x8222
+//#define GL_TEXTURE_LUMINANCE_TYPE         0x8C14
+//#define GL_TEXTURE_INTENSITY_TYPE         0x8C15
+#define GL_FRAMEBUFFER_SRGB               0x8DB9
+#define GL_HALF_FLOAT                     0x140B
+//#define GL_MAP_READ_BIT                   0x0001
+//#define GL_MAP_WRITE_BIT                  0x0002
+//#define GL_MAP_INVALIDATE_RANGE_BIT       0x0004
+//#define GL_MAP_INVALIDATE_BUFFER_BIT      0x0008
+//#define GL_MAP_FLUSH_EXPLICIT_BIT         0x0010
+//#define GL_MAP_UNSYNCHRONIZED_BIT         0x0020
+//#define GL_COMPRESSED_RED_RGTC1           0x8DBB
+//#define GL_COMPRESSED_SIGNED_RED_RGTC1    0x8DBC
+//#define GL_COMPRESSED_RG_RGTC2            0x8DBD
+//#define GL_COMPRESSED_SIGNED_RG_RGTC2     0x8DBE
+//#define GL_RG                             0x8227
+//#define GL_RG_INTEGER                     0x8228
+#define GL_R8                             0x8229
+//#define GL_R16                            0x822A
+//#define GL_RG8                            0x822B
+//#define GL_RG16                           0x822C
+#define GL_R16F                           0x822D
+#define GL_R32F                           0x822E
+//#define GL_RG16F                          0x822F
+//#define GL_RG32F                          0x8230
+//#define GL_R8I                            0x8231
+//#define GL_R8UI                           0x8232
+//#define GL_R16I                           0x8233
+#define GL_R16UI                          0x8234
+//#define GL_R32I                           0x8235
+//#define GL_R32UI                          0x8236
+//#define GL_RG8I                           0x8237
+//#define GL_RG8UI                          0x8238
+//#define GL_RG16I                          0x8239
+//#define GL_RG16UI                         0x823A
+//#define GL_RG32I                          0x823B
+//#define GL_RG32UI                         0x823C
+//#define GL_VERTEX_ARRAY_BINDING           0x85B5
+//#define GL_CLAMP_VERTEX_COLOR             0x891A
+//#define GL_CLAMP_FRAGMENT_COLOR           0x891B
+//#define GL_ALPHA_INTEGER                  0x8D97
 #if !_AE_APPLE_
+// OpenGL Shader Functions
 GLuint ( *glCreateProgram ) () = nullptr;
 void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
 void ( *glLinkProgram ) ( GLuint program ) = nullptr;
@@ -4308,11 +4763,125 @@ void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) =
 void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
 void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
 void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
+// OpenGL Texture Functions
+void ( *glGenerateMipmap ) ( GLenum target ) = nullptr;
+void ( *glBindFramebuffer ) ( GLenum target, GLuint framebuffer ) = nullptr;
+void ( *glFramebufferTexture2D ) ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) = nullptr;
+void ( *glGenFramebuffers ) ( GLsizei n, GLuint *framebuffers ) = nullptr;
+void ( *glDeleteFramebuffers ) ( GLsizei n, const GLuint *framebuffers ) = nullptr;
+GLenum ( *glCheckFramebufferStatus ) ( GLenum target ) = nullptr;
+void ( *glDrawBuffers ) ( GLsizei n, const GLenum *bufs ) = nullptr;
 #endif
 
+// Helpers
 #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
 
 namespace AE_NAMESPACE {
+
+void CheckFramebufferComplete( GLuint framebuffer )
+{
+  GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+  if ( fboStatus != GL_FRAMEBUFFER_COMPLETE )
+  {
+    const char* errStr = "unknown";
+    switch ( fboStatus )
+    {
+      case GL_FRAMEBUFFER_UNDEFINED:
+        errStr = "GL_FRAMEBUFFER_UNDEFINED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+        break;
+      case GL_FRAMEBUFFER_UNSUPPORTED:
+        errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
+        break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS
+      case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+        break;
+#endif
+      default:
+        break;
+    }
+    AE_FAIL_MSG( "GL FBO Error: (#) #", fboStatus, errStr );
+  }
+}
+
+#if AE_GL_DEBUG_MODE
+void OpenGLDebugCallback( GLenum source,
+  GLenum type,
+  GLuint id,
+  GLenum severity,
+  GLsizei length,
+  const GLchar* message,
+  const void* userParam )
+{
+  //std::cout << "---------------------opengl-callback-start------------" << std::endl;
+  //std::cout << "message: " << message << std::endl;
+  //std::cout << "type: ";
+  //switch ( type )
+  //{
+  //  case GL_DEBUG_TYPE_ERROR:
+  //    std::cout << "ERROR";
+  //    break;
+  //  case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+  //    std::cout << "DEPRECATED_BEHAVIOR";
+  //    break;
+  //  case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+  //    std::cout << "UNDEFINED_BEHAVIOR";
+  //    break;
+  //  case GL_DEBUG_TYPE_PORTABILITY:
+  //    std::cout << "PORTABILITY";
+  //    break;
+  //  case GL_DEBUG_TYPE_PERFORMANCE:
+  //    std::cout << "PERFORMANCE";
+  //    break;
+  //  case GL_DEBUG_TYPE_OTHER:
+  //    std::cout << "OTHER";
+  //    break;
+  //}
+  //std::cout << std::endl;
+
+  //std::cout << "id: " << id << std::endl;
+  //std::cout << "severity: ";
+  switch ( severity )
+  {
+    case GL_DEBUG_SEVERITY_LOW:
+      //std::cout << "LOW";
+      //AE_INFO( message );
+      break;
+    case GL_DEBUG_SEVERITY_MEDIUM:
+      //std::cout << "MEDIUM";
+      AE_WARN( message );
+      break;
+    case GL_DEBUG_SEVERITY_HIGH:
+      //std::cout << "HIGH";
+      AE_ERR( message );
+      break;
+  }
+  //std::cout << std::endl;
+  //std::cout << "---------------------opengl-callback-end--------------" << std::endl;
+
+  if ( severity == GL_DEBUG_SEVERITY_HIGH )
+  {
+    AE_FAIL();
+  }
+}
+#endif
+
+const uint32_t _kMaxFrameBufferAttachments = 16;
 
 //------------------------------------------------------------------------------
 // ae::UniformList member functions
@@ -4397,8 +4966,6 @@ Shader::Shader()
   m_depthWrite = false;
   m_culling = Culling::None;
   m_wireframe = false;
-
-  m_attributeCount = 0;
 }
 
 Shader::~Shader()
@@ -4408,7 +4975,7 @@ Shader::~Shader()
 
 void Shader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
 {
-  AE_CHECK_GL_ERROR();
+  Destroy();
   AE_ASSERT( !m_program );
 
   m_program = glCreateProgram();
@@ -4470,9 +5037,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
   AE_ASSERT( 0 < maxLen && maxLen <= _kMaxShaderAttributeNameLength );
   for ( int32_t i = 0; i < attribCount; i++ )
   {
-    AE_ASSERT( m_attributeCount < countof( m_attributes ) );
-    Attribute* attribute = &m_attributes[ m_attributeCount ];
-    m_attributeCount++;
+    Attribute* attribute = &m_attributes.Append( Attribute() );
 
     GLsizei length;
     GLint size;
@@ -4524,7 +5089,9 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 
 void Shader::Destroy()
 {
-  m_attributeCount = 0;
+  AE_CHECK_GL_ERROR();
+
+  m_attributes.Clear();
 
   if ( m_fragmentShader != 0 )
   {
@@ -4543,6 +5110,8 @@ void Shader::Destroy()
     glDeleteProgram( m_program );
     m_program = 0;
   }
+
+  AE_CHECK_GL_ERROR();
 }
 
 void Shader::Activate( const UniformList& uniforms ) const
@@ -4712,7 +5281,6 @@ void Shader::Activate( const UniformList& uniforms ) const
 
 const ae::Shader::Attribute* Shader::GetAttributeByIndex( uint32_t index ) const
 {
-  AE_ASSERT( index < m_attributeCount );
   return &m_attributes[ index ];
 }
 
@@ -4820,6 +5388,321 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 }
 
 //------------------------------------------------------------------------------
+// ae::Texture member functions
+//------------------------------------------------------------------------------
+Texture::~Texture()
+{
+  // @NOTE: Only ae::Texture should call it's virtual Destroy() so it only runs once
+  Destroy();
+}
+
+void Texture::Initialize( uint32_t target )
+{
+  // @NOTE: To avoid undoing any initialization logic only ae::Texture should
+  //        call Destroy() on initialize, and inherited Initialize()'s should
+  //        always call Base::Initialize() before any other logic.
+  Destroy();
+
+  m_target = target;
+
+  glGenTextures( 1, &m_texture );
+  AE_ASSERT( m_texture );
+}
+
+void Texture::Destroy()
+{
+  if ( m_texture )
+  {
+    glDeleteTextures( 1, &m_texture );
+  }
+
+  m_texture = 0;
+  m_target = 0;
+}
+
+//------------------------------------------------------------------------------
+// ae::Texture2D member functions
+//------------------------------------------------------------------------------
+void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, Texture::Format format, Texture::Type type, Texture::Filter filter, Wrap wrap, bool autoGenerateMipmaps )
+{
+  Texture::Initialize( GL_TEXTURE_2D );
+
+  m_width = width;
+  m_height = height;
+
+  glBindTexture( GetTarget(), GetTexture() );
+
+  if (autoGenerateMipmaps)
+  {
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+  else
+  {
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+	
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+
+  // this is the type of data passed in, conflating with internal format type
+  GLenum glType = 0;
+  switch ( type )
+  {
+    case Type::Uint8:
+      glType = GL_UNSIGNED_BYTE;
+      break;
+	  case Type::Uint16:
+	    glType = GL_UNSIGNED_SHORT;
+	    break;
+    case Type::HalfFloat:
+      glType = GL_HALF_FLOAT;
+      break;
+    case Type::Float:
+      glType = GL_FLOAT;
+      break;
+    default:
+      AE_FAIL_MSG( "Invalid texture type #", (int)type );
+      return;
+  }
+
+  GLint glInternalFormat = 0;
+  GLenum glFormat = 0;
+  GLint unpackAlignment = 0;
+  switch ( format )
+  {
+    // TODO: need D32F_S8 format
+    case Format::Depth32F:
+      glInternalFormat = GL_DEPTH_COMPONENT32F;
+      glFormat = GL_DEPTH_COMPONENT;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+
+    case Format::R8:
+    case Format::R16_UNORM:
+    case Format::R16F:
+    case Format::R32F:
+      switch(format)
+      {
+        case Format::R8:
+          glInternalFormat = GL_R8;
+          break;
+        case Format::R16_UNORM:
+          glInternalFormat = GL_R16UI;
+          assert(glType == GL_UNSIGNED_SHORT);
+          break; // only on macOS
+        case Format::R16F:
+          glInternalFormat = GL_R16F;
+          break;
+        case Format::R32F:
+          glInternalFormat = GL_R32F;
+          break;
+        default: assert(false);
+      }
+
+      glFormat = GL_RED;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+		  
+#if _AE_OSX_
+	  // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
+	  case Format::RG8:
+	  case Format::RG16F:
+	  case Format::RG32F:
+  		switch(format)
+  		{
+  			case Format::RG8: glInternalFormat = GL_RG8; break;
+  			case Format::RG16F: glInternalFormat = GL_RG16F; break;
+  			case Format::RG32F: glInternalFormat = GL_RG32F; break;
+  			default: assert(false);
+  		}
+  			  
+  		glFormat = GL_RG;
+  		unpackAlignment = 1;
+  		m_hasAlpha = false;
+  		break;
+#endif
+  	case Format::RGB8:
+  	case Format::RGB16F:
+    case Format::RGB32F:
+  	  switch(format)
+  	  {
+  	    case Format::RGB8: glInternalFormat = GL_RGB8; break;
+  	    case Format::RGB16F: glInternalFormat = GL_RGB16F; break;
+  	    case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
+  		  default: assert(false);
+  	  }
+      glFormat = GL_RGB;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+
+    case Format::RGBA8:
+	  case Format::RGBA16F:
+	  case Format::RGBA32F:
+  	  switch(format)
+  	  {
+      	case Format::RGBA8: glInternalFormat = GL_RGBA8; break;
+      	case Format::RGBA16F: glInternalFormat = GL_RGBA16F; break;
+      	case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
+      	default: assert(false);
+  	  }
+      glFormat = GL_RGBA;
+      unpackAlignment = 1;
+      m_hasAlpha = true;
+      break;
+		  
+      // TODO: fix these constants, but they differ on ES2/3 and GL
+      // WebGL1 they require loading an extension (if present) to get at the constants.    
+    case Format::RGB8_SRGB:
+	  // ignore type
+      glInternalFormat = GL_SRGB8;
+      glFormat = GL_RGB;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+    case Format::RGBA8_SRGB:
+	  // ignore type
+      glInternalFormat = GL_SRGB8_ALPHA8;
+      glFormat = GL_RGBA;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+    default:
+      AE_FAIL_MSG( "Invalid texture format #", (int)format );
+      return;
+  }
+
+  if ( data )
+  {
+    glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
+  }
+
+    // count the mip levels
+	int w = width;
+	int h = height;
+	
+	int numberOfMipmaps = 1;
+	if ( autoGenerateMipmaps )
+	{
+		while ( w > 1 || h > 1 )
+		{
+		  numberOfMipmaps++;
+		  w = (w+1) / 2;
+		  h = (h+1) / 2;
+		}
+	}
+	
+	// allocate mip levels
+	// texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
+#define USE_TEXSTORAGE 0
+#if USE_TEXSTORAGE
+	// TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
+	// It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
+	// for compressed textures.
+	glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
+#else
+	w = width;
+	h = height;
+	
+	for ( int i = 0; i < numberOfMipmaps; ++i )
+	{
+	  glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
+	  w = (w+1) / 2;
+	  h = (h+1) / 2;
+	}
+#endif
+	
+  if ( data != nullptr )
+  {
+	  // upload the first mipmap
+	  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
+
+	  // autogen only works for uncompressed textures
+	  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
+	  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+	  {
+		  glGenerateMipmap( GetTarget() );
+	  }
+  }
+	
+  AE_CHECK_GL_ERROR();
+}
+
+void Texture2D::Initialize( const char* file, Filter filter, Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
+{
+#if STBI_INCLUDE_STB_IMAGE_H
+  uint32_t fileSize = aeVfs::GetSize( file );
+  AE_ASSERT_MSG( fileSize, "Could not load #", file );
+  
+  uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
+  aeVfs::Read( file, fileBuffer, fileSize );
+
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t channels = 0;
+  stbi_set_flip_vertically_on_load( 1 );
+#if _AE_IOS_
+  stbi_convert_iphone_png_to_rgb( 1 );
+#endif
+  bool is16BitImage = stbi_is_16_bit_from_memory( fileBuffer, fileSize );
+
+  uint8_t* image;
+  if (is16BitImage)
+  {
+     image = (uint8_t*)stbi_load_16_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
+  else
+  {
+    image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
+  AE_ASSERT( image );
+
+  Format format;
+  auto type = aeTextureType::Uint8;
+  switch ( channels )
+  {
+    case STBI_grey:
+  		format = Format::R8;
+  		  
+  		// for now only support R16Unorm
+  		if (is16BitImage)
+  		{
+  			format = Format::R16_UNORM;
+  			type = aeTextureType::Uint16;
+  		}
+  	  break;
+    case STBI_grey_alpha:
+      AE_FAIL();
+      break;
+    case STBI_rgb:
+      format = isSRGB ? Format::RGB8_SRGB : Format::RGB8;
+      break;
+    case STBI_rgb_alpha:
+      format = isSRGB ? Format::RGBA8_SRGB : Format::RGBA8;
+      break;
+  }
+  
+  Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
+  
+  stbi_image_free( image );
+  free( fileBuffer );
+#endif
+}
+
+void Texture2D::Destroy()
+{
+  m_width = 0;
+  m_height = 0;
+  m_hasAlpha = false;
+
+  Texture::Destroy();
+}
+
+//------------------------------------------------------------------------------
 // ae::RenderTarget member functions
 //------------------------------------------------------------------------------
 RenderTarget::~RenderTarget()
@@ -4839,11 +5722,11 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   m_width = width;
   m_height = height;
 
-  //glGenFramebuffers( 1, &m_fbo );
-  //AE_ASSERT( m_fbo );
-  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glGenFramebuffers( 1, &m_fbo );
+  AE_ASSERT( m_fbo );
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  AE_CHECK_GL_ERROR();
 
-  //AE_CHECK_GL_ERROR();
   //Vertex quadVerts[] =
   //{
   //  { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
@@ -4883,111 +5766,96 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 
 void RenderTarget::Destroy()
 {
-  //m_shader.Destroy();
-  //m_quad.Destroy();
+  m_shader.Destroy();
+  //m_quad.Destroy(); // @TODO
 
-  //for ( uint32_t i = 0; i < m_targets.Length(); i++ )
-  //{
-  //  m_targets[ i ]->Destroy();
-  //  ae::Delete( m_targets[ i ] );
-  //}
-  //m_targets.Clear();
+  for ( uint32_t i = 0; i < m_targets.Length(); i++ )
+  {
+    m_targets[ i ]->Destroy();
+    ae::Delete( m_targets[ i ] );
+  }
+  m_targets.Clear();
 
-  //m_depth.Destroy();
+  m_depth.Destroy();
 
-  //if ( m_fbo )
-  //{
-  //  glDeleteFramebuffers( 1, &m_fbo );
-  //  m_fbo = 0;
-  //}
+  if ( m_fbo )
+  {
+    glDeleteFramebuffers( 1, &m_fbo );
+    m_fbo = 0;
+  }
 
   m_width = 0;
   m_height = 0;
 }
 
-void RenderTarget::AddTexture( TextureFilter filter, TextureWrap wrap )
+void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 {
-  //AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
+  AE_ASSERT( m_targets.Length() < _kMaxFrameBufferAttachments );
 
-  //aeTexture2D* tex = ae::New< aeTexture2D >( AE_ALLOC_TAG_RENDER );
-  //tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA16F, aeTextureType::HalfFloat, filter, wrap );
+  Texture2D* tex = ae::New< Texture2D >( AE_ALLOC_TAG_RENDER );
+  tex->Initialize( nullptr, m_width, m_height, Texture::Format::RGBA16F, Texture::Type::HalfFloat, filter, wrap );
 
-  //GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
-  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
-  //glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
+  GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
 
-  //m_targets.Append( tex );
+  m_targets.Append( tex );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
-void RenderTarget::AddDepth( TextureFilter filter, TextureWrap wrap )
+void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 {
-  //AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
+  AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 
-  //m_depth.Initialize( nullptr, m_width, m_height, aeTextureFormat::Depth32F, aeTextureType::Float, filter, wrap );
-  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
-  //glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
+  m_depth.Initialize( nullptr, m_width, m_height, Texture::Format::Depth32F, Texture::Type::Float, filter, wrap );
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
 void RenderTarget::Activate()
 {
-  //CheckFramebufferComplete( m_fbo );
-  //glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
-  //
-  //GLenum buffers[] =
-  //{
-  //  GL_COLOR_ATTACHMENT0,
-  //  GL_COLOR_ATTACHMENT1,
-  //  GL_COLOR_ATTACHMENT2,
-  //  GL_COLOR_ATTACHMENT3,
-  //  GL_COLOR_ATTACHMENT4,
-  //  GL_COLOR_ATTACHMENT5,
-  //  GL_COLOR_ATTACHMENT6,
-  //  GL_COLOR_ATTACHMENT7,
-  //  GL_COLOR_ATTACHMENT8,
-  //  GL_COLOR_ATTACHMENT9,
-  //  GL_COLOR_ATTACHMENT10,
-  //  GL_COLOR_ATTACHMENT11,
-  //  GL_COLOR_ATTACHMENT12,
-  //  GL_COLOR_ATTACHMENT13,
-  //  GL_COLOR_ATTACHMENT14,
-  //  GL_COLOR_ATTACHMENT15
-  //};
-  //AE_STATIC_ASSERT( countof( buffers ) == kMaxFrameBufferAttachments );
-  //glDrawBuffers( m_targets.Length(), buffers );
+  CheckFramebufferComplete( m_fbo );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+  
+  GLenum buffers[ _kMaxFrameBufferAttachments ];
+  for ( uint32_t i = 0 ; i < countof(buffers); i++ )
+  {
+    buffers[ i ] = GL_COLOR_ATTACHMENT0 + i;
+  }
+  glDrawBuffers( m_targets.Length(), buffers );
 
-  //glViewport( 0, 0, GetWidth(), GetHeight() );
+  glViewport( 0, 0, GetWidth(), GetHeight() );
 }
 
 void RenderTarget::Clear( Color color )
 {
   Activate();
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 
-  //Vec3 clearColor = color.GetLinearRGB();
-  //glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
-  //glClearDepth( gReverseZ ? 0.0f : 1.0f );
+  Vec3 clearColor = color.GetLinearRGB();
+  glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
+  glClearDepth( gReverseZ ? 0.0f : 1.0f );
 
-  //glDepthMask( GL_TRUE );
-  //glDisable( GL_DEPTH_TEST );
-  //glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+  glDepthMask( GL_TRUE );
+  glDisable( GL_DEPTH_TEST );
+  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
 void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
-  //glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
   //m_quad.Render( shader, uniforms );
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
-  //glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 
   //aeUniformList uniforms;
   //uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
@@ -5002,8 +5870,7 @@ const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
 
 const Texture2D* RenderTarget::GetDepth() const
 {
-  //return m_depth.GetTexture() ? &m_depth : nullptr;
-  return nullptr;
+  return m_depth.GetTexture() ? &m_depth : nullptr;
 }
 
 uint32_t RenderTarget::GetWidth() const
@@ -5089,7 +5956,32 @@ AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
 
 void GraphicsDevice::Initialize( class Window* window )
 {
+  AE_ASSERT( window );
+  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
+  AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
+
+  m_window = window;
+  window->graphicsDevice = this;
+
+#if _AE_WINDOWS_
+  // Create OpenGL context
+  HWND hWnd = (HWND)m_window->window;
+  AE_ASSERT_MSG( hWnd, "ae::Window must be initialized" );
+  HDC hdc = GetDC( hWnd );
+  AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+  HGLRC hglrc = wglCreateContext( hdc );
+  AE_ASSERT_MSG( hglrc, "Failed to create the OpenGL Rendering Context" );
+  if ( !wglMakeCurrent( hdc, hglrc ) )
+  {
+    AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+  }
+  m_context = hglrc;
+#endif
+
+  AE_CHECK_GL_ERROR();
+
 #if !_AE_APPLE_
+  // Shader functions
   LOAD_OPENGL_FN( glCreateProgram );
   LOAD_OPENGL_FN( glAttachShader );
   LOAD_OPENGL_FN( glLinkProgram );
@@ -5115,14 +6007,17 @@ void GraphicsDevice::Initialize( class Window* window )
   LOAD_OPENGL_FN( glUniform3fv );
   LOAD_OPENGL_FN( glUniform4fv );
   LOAD_OPENGL_FN( glUniformMatrix4fv );
+  // Texture functions
+  LOAD_OPENGL_FN( glGenerateMipmap );
+  LOAD_OPENGL_FN( glBindFramebuffer );
+  LOAD_OPENGL_FN( glFramebufferTexture2D );
+  LOAD_OPENGL_FN( glGenFramebuffers );
+  LOAD_OPENGL_FN( glDeleteFramebuffers );
+  LOAD_OPENGL_FN( glCheckFramebufferStatus );
+  LOAD_OPENGL_FN( glDrawBuffers );
 #endif
 
-  AE_ASSERT( window );
-  //AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
-  AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
-
-  m_window = window;
-  window->graphicsDevice = this;
+  AE_CHECK_GL_ERROR();
 
 //  // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
 //#if !_AE_IOS_
@@ -5166,25 +6061,25 @@ void GraphicsDevice::Initialize( class Window* window )
 //  glGetError(); // Glew currently has an issue which causes a GL_INVALID_ENUM on init
 //  AE_ASSERT_MSG( err == GLEW_OK, "Could not initialize glew" );
 //#endif
-//
-//#if AE_GL_DEBUG_MODE
-//  glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
-//#endif
-//
-//  glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
-//
-//  AE_CHECK_GL_ERROR();
 
-#if _AE_WINDOWS_
-  // @TODO: Remove start
-  glShadeModel( GL_SMOOTH );							// Enable Smooth Shading
-  glClearColor( 0.0f, 0.0f, 0.0f, 0.5f );				// Black Background
-  glClearDepth( 1.0f );									// Depth Buffer Setup
-  glEnable( GL_DEPTH_TEST );							// Enables Depth Testing
-  glDepthFunc( GL_LEQUAL );								// The Type Of Depth Testing To Do
-  glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST ); // Really Nice Perspective Calculations
-  // @TODO: Remove end
+#if AE_GL_DEBUG_MODE
+  glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
 #endif
+
+  glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
+
+  AE_CHECK_GL_ERROR();
+
+//#if _AE_WINDOWS_
+//  // @TODO: Remove start
+//  glShadeModel( GL_SMOOTH );							// Enable Smooth Shading
+//  glClearColor( 0.0f, 0.0f, 0.0f, 0.5f );				// Black Background
+//  glClearDepth( 1.0f );									// Depth Buffer Setup
+//  glEnable( GL_DEPTH_TEST );							// Enables Depth Testing
+//  glDepthFunc( GL_LEQUAL );								// The Type Of Depth Testing To Do
+//  glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST ); // Really Nice Perspective Calculations
+//  // @TODO: Remove end
+//#endif
 
   m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
 
@@ -5201,7 +6096,7 @@ void GraphicsDevice::Terminate()
 
 void GraphicsDevice::Activate()
 {
-  //AE_ASSERT( m_context );
+  AE_ASSERT( m_context );
 
   if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
   {
@@ -5209,42 +6104,42 @@ void GraphicsDevice::Activate()
   }
   m_canvas.Activate();
 
-//#if !_AE_IOS_
-//  // This is automatically enabled on opengl es3 and can't be turned off
-//  glEnable( GL_FRAMEBUFFER_SRGB );
-//#endif
-
-#if _AE_WINDOWS_
-  // @TODO: Remove start
-  glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // Reset The Current Viewport
-
-  glMatrixMode( GL_PROJECTION ); // Select The Projection Matrix
-  glLoadIdentity(); // Reset The Projection Matrix
-
-  // Calculate The Aspect Ratio Of The Window
-  float aspectRatio = m_canvas.GetWidth() / (float)m_canvas.GetHeight();
-  gluPerspective( 45.0f, aspectRatio, 0.1f, 100.0f );
-
-  glMatrixMode( GL_MODELVIEW ); // Select The Modelview Matrix
-  glLoadIdentity();
-
-  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );	// Clear Screen And Depth Buffer
-  glLoadIdentity();									// Reset The Current Modelview Matrix
-  glTranslatef( -1.5f, 0.0f, -6.0f );						// Move Left 1.5 Units And Into The Screen 6.0
-  glBegin( GL_TRIANGLES );								// Drawing Using Triangles
-  glVertex3f( 0.0f, 1.0f, 0.0f );					// Top
-  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
-  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
-  glEnd();											// Finished Drawing The Triangle
-  glTranslatef( 3.0f, 0.0f, 0.0f );						// Move Right 3 Units
-  glBegin( GL_QUADS );									// Draw A Quad
-  glVertex3f( -1.0f, 1.0f, 0.0f );					// Top Left
-  glVertex3f( 1.0f, 1.0f, 0.0f );					// Top Right
-  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
-  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
-  glEnd();											// Done Drawing The Quad
-  // @TODO: Remove end
+#if !_AE_IOS_
+  // This is automatically enabled on opengl es3 and can't be turned off
+  glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
+
+//#if _AE_WINDOWS_
+//  // @TODO: Remove start
+//  glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // Reset The Current Viewport
+//
+//  glMatrixMode( GL_PROJECTION ); // Select The Projection Matrix
+//  glLoadIdentity(); // Reset The Projection Matrix
+//
+//  // Calculate The Aspect Ratio Of The Window
+//  float aspectRatio = m_canvas.GetWidth() / (float)m_canvas.GetHeight();
+//  gluPerspective( 45.0f, aspectRatio, 0.1f, 100.0f );
+//
+//  glMatrixMode( GL_MODELVIEW ); // Select The Modelview Matrix
+//  glLoadIdentity();
+//
+//  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );	// Clear Screen And Depth Buffer
+//  glLoadIdentity();									// Reset The Current Modelview Matrix
+//  glTranslatef( -1.5f, 0.0f, -6.0f );						// Move Left 1.5 Units And Into The Screen 6.0
+//  glBegin( GL_TRIANGLES );								// Drawing Using Triangles
+//  glVertex3f( 0.0f, 1.0f, 0.0f );					// Top
+//  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
+//  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
+//  glEnd();											// Finished Drawing The Triangle
+//  glTranslatef( 3.0f, 0.0f, 0.0f );						// Move Right 3 Units
+//  glBegin( GL_QUADS );									// Draw A Quad
+//  glVertex3f( -1.0f, 1.0f, 0.0f );					// Top Left
+//  glVertex3f( 1.0f, 1.0f, 0.0f );					// Top Right
+//  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
+//  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
+//  glEnd();											// Done Drawing The Quad
+//  // @TODO: Remove end
+//#endif
 }
 
 void GraphicsDevice::Clear( Color color )
@@ -5255,29 +6150,25 @@ void GraphicsDevice::Clear( Color color )
 
 void GraphicsDevice::Present()
 {
-  //AE_ASSERT( m_context );
-  //AE_CHECK_GL_ERROR();
+  AE_ASSERT( m_context );
+  AE_CHECK_GL_ERROR();
 
-  //glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-  //glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
+  glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
 
-  //// Clear window target in case canvas doesn't fit exactly
-  //glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
-  //glClearDepth( 1.0f );
+  // Clear window target in case canvas doesn't fit exactly
+  glClearColor( 1.0f, 0.0f, 0.0f, 1.0f );
+  glClearDepth( 1.0f );
 
-  //glDepthMask( GL_TRUE );
+  glDepthMask( GL_TRUE );
 
-  //glDisable( GL_DEPTH_TEST );
-  //glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-  //AE_CHECK_GL_ERROR();
+  glDisable( GL_DEPTH_TEST );
+  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+  AE_CHECK_GL_ERROR();
 
-  //m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
+  m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
 
-//#if !_AE_EMSCRIPTEN_
-//  SDL_GL_SwapWindow( (SDL_Window*)m_window->window );
-//#endif
-//
-//  AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
   AE_ASSERT( m_window );
@@ -5313,8 +6204,8 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 {
   // @TODO: Allow user to pass in a canvas scaling factor / aspect ratio parameter
   m_canvas.Initialize( width, height );
-  m_canvas.AddTexture( TextureFilter::Nearest, TextureWrap::Clamp );
-  m_canvas.AddDepth( TextureFilter::Nearest, TextureWrap::Clamp );
+  m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );
+  m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
 }
 
 } // AE_NAMESPACE end
