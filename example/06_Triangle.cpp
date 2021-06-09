@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
 
 //------------------------------------------------------------------------------
 // Shaders
@@ -51,15 +51,15 @@ const char* kFragShader = "\
 //------------------------------------------------------------------------------
 struct Vertex
 {
-	aeFloat4 pos;
-	aeFloat4 color;
+	ae::Vec4 pos;
+	ae::Vec4 color;
 };
 
 Vertex kTriangleVerts[] =
 {
-	{ aeFloat4( -0.5f, -0.4f, 0.0f, 1.0f ), aeColor::PicoRed().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, -0.4f, 0.0f, 1.0f ), aeColor::PicoGreen().GetLinearRGBA() },
-	{ aeFloat4( 0.0f, 0.4f, 0.0f, 1.0f ), aeColor::PicoBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.4f, 0.0f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
+	{ ae::Vec4( 0.0f, 0.4f, 0.0f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
 };
 
 uint16_t kTriangleIndices[] =
@@ -74,42 +74,43 @@ int main()
 {
 	AE_LOG( "Initialize" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
+	ae::Window window;
+	ae::GraphicsDevice render;
+	ae::Input input;
 	ae::TimeStep timeStep;
-	aeShader shader;
-	aeVertexData vertexData;
+	ae::Shader shader;
+	ae::VertexData vertexData;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "triangle" );
-	render.InitializeOpenGL( &window );
-	input.Initialize( &window );
+	render.Initialize( &window );
+	//input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 
-	vertexData.Initialize( sizeof( *kTriangleVerts ), sizeof( *kTriangleIndices ), countof( kTriangleVerts ), countof( kTriangleIndices ), aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
-	vertexData.AddAttribute( "a_position", 4, aeVertexDataType::Float, offsetof( Vertex, pos ) );
-	vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof( Vertex, color ) );
+	vertexData.Initialize( sizeof( *kTriangleVerts ), sizeof( *kTriangleIndices ), countof( kTriangleVerts ), countof( kTriangleIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+	vertexData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
+	vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
 	vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
 	vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
 
 	float rotation = 0.0f;
 
 	AE_LOG( "Run" );
-	while ( !input.GetState()->exit )
+	while ( !input.quit )
+	//while ( !input.GetState()->exit )
 	{
 		input.Pump();
 		render.Activate();
-		render.Clear( aeColor::PicoDarkPurple() );
+		render.Clear( ae::Color::PicoDarkPurple() );
 
 		rotation += timeStep.GetDt();
 
-		aeFloat4x4 transform = aeFloat4x4::Scaling( aeFloat3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
-		transform *= aeFloat4x4::RotationY( rotation );
+		ae::Matrix4 transform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
+		transform *= ae::Matrix4::RotationY( rotation );
 
-		aeUniformList uniformList;
+		ae::UniformList uniformList;
 		uniformList.Set( "u_modelToNdc", transform );
 		vertexData.Render( &shader, uniformList );
 		
@@ -118,7 +119,7 @@ int main()
 	}
 
 	AE_LOG( "Terminate" );
-	input.Terminate();
+	//input.Terminate();
 	render.Terminate();
 	window.Terminate();
 

@@ -457,6 +457,157 @@ struct Vec4 : public _VecT< Vec4 >
   };
 };
 
+
+//------------------------------------------------------------------------------
+// ae::Matrix4 struct
+//------------------------------------------------------------------------------
+class Matrix4
+{
+public:
+  float data[ 16 ];
+
+  Matrix4() = default;
+  Matrix4( const Matrix4& ) = default;
+
+  Matrix4(float v0,  float v1,  float v2,  float v3,
+    float v4,  float v5,  float v6,  float v7,
+    float v8,  float v9,  float v10, float v11,
+    float v12, float v13, float v14, float v15)
+  {
+    data[0]  = v0;  data[1]  = v1;  data[2]  = v2;  data[3]  = v3;
+    data[4]  = v4;  data[5]  = v5;  data[6]  = v6;  data[7]  = v7;
+    data[8]  = v8;  data[9]  = v9;  data[10] = v10; data[11] = v11;
+    data[12] = v12; data[13] = v13; data[14] = v14; data[15] = v15;
+  }
+
+  static Matrix4 Identity()
+  {
+    Matrix4 r;
+    r.data[0]  = 1; r.data[1]  = 0; r.data[2]  = 0; r.data[3]  = 0;
+    r.data[4]  = 0; r.data[5]  = 1; r.data[6]  = 0; r.data[7]  = 0;
+    r.data[8]  = 0; r.data[9]  = 0; r.data[10] = 1; r.data[11] = 0;
+    r.data[12] = 0; r.data[13] = 0; r.data[14] = 0; r.data[15] = 1;
+    return r;
+  }
+
+  // Constructor helpers
+  static Matrix4 Translation( const Vec3& p );
+  static Matrix4 Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 );
+  static Matrix4 RotationX( float angle );
+  static Matrix4 RotationY( float angle );
+  static Matrix4 RotationZ( float angle );
+  static Matrix4 Scaling( const Vec3& s );
+
+  static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up ); // @TODO: Verify handedness
+  static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
+
+  // Operators
+  bool operator== ( const Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
+  bool operator!= ( const Matrix4& o ) const { return !operator== ( o ); }
+  Vec4 operator*(const Vec4& v) const;
+  Matrix4 operator*(const Matrix4& m) const;
+  void operator*=(const Matrix4& m);
+  bool SetInverse(const Matrix4& m);
+
+  Matrix4 Inverse() const; //TODO: Rename this! Caused a bunch of problems debugging graphics...
+  bool Invert();           //TODO: Rename. See above
+  Matrix4& SetTranspose();
+  Matrix4 GetTransposeCopy() const;
+  Matrix4 GetNormalMatrix() const;
+  Matrix4& SetOrientation( const class Quaternion& q );
+  Vec3 TransformInverse(const Vec3& v) const;
+  Vec3 TransformDirection(const Vec3& v) const;
+  Vec3 TransformInverseDirection(const Vec3& v) const;
+  void SetDiagonal(float a, float b, float c);
+  Vec3 GetAxisVector(int col) const;
+  Vec3 GetPosition() const;
+  Quaternion GetRotation() const;
+  void SetPosition( const Vec3& p );
+  void SetAxisVector(unsigned col, const Vec3 &v);
+  Vec4 GetRowVector(int row) const;
+  void SetRowVector(unsigned row, const Vec3 &v);
+  void SetRowVector(unsigned row, const Vec4 &v);
+  Matrix4& SetIdentity();
+  Matrix4& SetTranslate(float X, float Y, float Z);
+  Matrix4& SetTranslate(const Vec3 &translation);
+  Matrix4& SetTranslation(float X, float Y, float Z);
+  Matrix4& SetTranslation(const Vec3 &translation);
+  Vec3 GetTranslation() const;
+  Vec3 GetScale() const;
+  Matrix4& SetScale(float X, float Y, float Z);
+  Matrix4& SetScale(const Vec3 &scale);
+  Matrix4& SetScaleKeepTranslate(float X, float Y, float Z);
+  Matrix4& SetScaleKeepTranslate(const Vec3 &scale);
+  Matrix4& SetRotateX(float angle);
+  Matrix4& SetRotateY(float angle);
+  Matrix4& SetRotateZ(float angle);
+  Matrix4& RemoveScaling();
+
+  // Transformation helpers
+  Matrix4& Translate( Vec3 t );
+  Matrix4& Scale( Vec3 s );
+  Matrix4& RotateX( float angle );
+  Matrix4& RotateY( float angle );
+  Matrix4& RotateZ( float angle );
+};
+
+inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
+{
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
+  return os;
+}
+
+//------------------------------------------------------------------------------
+// ae::Quaternion class
+//------------------------------------------------------------------------------
+class Quaternion
+{
+public:
+  union
+  {
+    struct
+    {
+      float i;
+      float j;
+      float k;
+      float r;
+    };
+    float data[ 4 ];
+  };
+  
+  Quaternion() = default;
+  Quaternion( const Quaternion& ) = default;
+
+  Quaternion( const float i, const float j, const float k, const float r ) : i(i), j(j), k(k), r(r) {}
+  explicit Quaternion( Vec3 v ) : i(v.x), j(v.y), k(v.z), r(0.0f) {}
+  Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp = true );
+  Quaternion( Vec3 axis, float angle );
+  static Quaternion Identity() { return Quaternion( 0.0f, 0.0f, 0.0f, 1.0f ); }
+
+  void Normalize();
+  bool operator==( const Quaternion& q ) const;
+  bool operator!=( const Quaternion& q ) const;
+  Quaternion& operator*= ( const Quaternion& q );
+  Quaternion operator* ( const Quaternion& q ) const;
+  float Dot( const Quaternion& q ) const;
+  Quaternion const operator* ( float s ) const;
+  void AddScaledVector( const Vec3& v, float s );
+  void RotateByVector( const Vec3& v );
+  void SetDirectionXY( const Vec3& v );
+  Vec3 GetDirectionXY() const;
+  void ZeroXY();
+  void GetAxisAngle( Vec3* axis, float* angle ) const;
+  void AddRotationXY( float rotation);
+  Quaternion Nlerp( Quaternion end, float t ) const;
+  Matrix4 GetTransformMatrix() const;
+  Quaternion  GetInverse() const;
+  Quaternion& SetInverse();
+  Vec3 Rotate( Vec3 v ) const;
+};
+
 //------------------------------------------------------------------------------
 // ae::Color struct
 //------------------------------------------------------------------------------
@@ -756,24 +907,24 @@ class Map
 public:
   Map(); // Static map only (N > 0)
   Map( ae::Tag pool ); // Dynamic map only (N == 0)
+  void Reserve( uint32_t total );
   
+  // Access elements by key
   V& Set( const K& key, const V& value );
   V& Get( const K& key );
   const V& Get( const K& key ) const;
   const V& Get( const K& key, const V& defaultValue ) const;
-  
   V* TryGet( const K& key );
   const V* TryGet( const K& key ) const;
-
   bool TryGet( const K& key, V* valueOut );
   bool TryGet( const K& key, V* valueOut ) const;
   
+  // Remove elements
   bool Remove( const K& key );
   bool Remove( const K& key, V* valueOut );
-
-  void Reserve( uint32_t total );
   void Clear();
 
+  // Access elements by index
   const K& GetKey( uint32_t index ) const;
   const V& GetValue( uint32_t index ) const;
   V& GetValue( uint32_t index );
@@ -782,18 +933,14 @@ public:
 private:
   template < typename K2, typename V2, uint32_t N2 >
   friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
-
   struct Entry
   {
     Entry() = default;
     Entry( const K& k, const V& v );
-
     K key;
     V value;
   };
-
   int32_t m_FindIndex( const K& key ) const;
-
   Array< Entry, N > m_entries;
 };
 
@@ -901,12 +1048,6 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 
 namespace AE_NAMESPACE {
 
-// @HACK:
-struct Matrix4
-{
-  float data[ 16 ];
-};
-
 //------------------------------------------------------------------------------
 // ae::Window class
 //------------------------------------------------------------------------------
@@ -933,20 +1074,17 @@ public:
 
 private:
   void m_Initialize();
-    
   Int2 m_pos;
   int32_t m_width;
   int32_t m_height;
   bool m_fullScreen;
   bool m_maximized;
   Str256 m_windowTitle;
-
 public:
   // Internal
   void m_UpdatePos( Int2 pos ) { m_pos = pos; }
   void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
   void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
-
   void* window;
   class GraphicsDevice* graphicsDevice;
 };
@@ -998,6 +1136,7 @@ const uint32_t _kMaxShaderDefines = 4;
 class Shader
 {
 public:
+  // Constants
   enum class Type
   {
     Vertex,
@@ -1060,6 +1199,84 @@ public:
 class VertexData
 {
 public:
+  // Constants
+  enum class Usage
+  {
+    Dynamic,
+    Static
+  };
+  enum class Type
+  {
+    UInt8,
+    UInt16,
+    UInt32,
+    NormalizedUInt8,
+    NormalizedUInt16,
+    NormalizedUInt32,
+    Float
+  };
+  enum class Primitive
+  {
+    Point,
+    Line,
+    Triangle
+  };
+
+  // Interface
+  VertexData() = default;
+  ~VertexData();
+  void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage );
+  void AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset );
+  void Destroy();
+
+  void SetVertices( const void* vertices, uint32_t count );
+  void SetIndices( const void* indices, uint32_t count );
+  const void* GetVertices() const;
+  const void* GetIndices() const;
+  uint32_t GetVertexSize() const { return m_vertexSize; }
+  uint32_t GetIndexSize() const { return m_indexSize; }
+  uint32_t GetVertexCount() const { return m_vertexCount; }
+  uint32_t GetIndexCount() const { return m_indexCount; }
+  uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
+  uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
+  uint32_t GetAttributeCount() const { return m_attributeCount; }
+  VertexData::Primitive GetPrimitiveType() const { return m_primitive; }
+
+  void Render( const Shader* shader, const UniformList& uniforms ) const;
+  void Render( const Shader* shader, uint32_t primitiveCount, const UniformList& uniforms ) const;
+  
+private:
+  struct Attribute
+  {
+    char name[ _kMaxShaderAttributeNameLength ];
+    uint32_t componentCount;
+    uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
+    uint32_t offset;
+    bool normalized;
+  };
+  VertexData( const VertexData& ) = delete;
+  VertexData( VertexData&& ) = delete;
+  void operator=( const VertexData& ) = delete;
+  void operator=( VertexData&& ) = delete;
+  void m_SetVertices( const void* vertices, uint32_t count );
+  void m_SetIndices( const void* indices, uint32_t count );
+  const Attribute* m_GetAttributeByName( const char* name ) const;
+  uint32_t m_array = 0;
+  uint32_t m_vertices = ~0;
+  uint32_t m_indices = ~0;
+  uint32_t m_vertexCount = 0;
+  uint32_t m_indexCount = 0;
+  uint32_t m_maxVertexCount = 0;
+  uint32_t m_maxIndexCount = 0;
+  VertexData::Primitive m_primitive = (VertexData::Primitive)-1;
+  VertexData::Usage m_vertexUsage = (VertexData::Usage)-1;
+  VertexData::Usage m_indexUsage = (VertexData::Usage)-1;
+  Attribute m_attributes[ _kMaxShaderAttributeCount ];
+  uint32_t m_attributeCount = 0;
+  uint32_t m_vertexSize = 0;
+  uint32_t m_indexSize = 0;
+  void* m_vertexReadable = nullptr;
+  void* m_indexReadable = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -1212,36 +1429,28 @@ private:
 class GraphicsDevice
 {
 public:
-  GraphicsDevice();
   ~GraphicsDevice();
-
   void Initialize( class Window* window );
   void Terminate();
 
   void Activate();
   void Clear( Color color );
   void Present();
+  void AddTextureBarrier(); // Must call to readback from active render target (GL only)
 
   class Window* GetWindow() { return m_window; }
   RenderTarget* GetCanvas() { return &m_canvas; }
-
   uint32_t GetWidth() const { return m_canvas.GetWidth(); }
   uint32_t GetHeight() const { return m_canvas.GetHeight(); }
   float GetAspectRatio() const;
 
-  // have to inject a barrier to readback from active render target (GL only)
-  void AddTextureBarrier();
-
 //private:
   friend class ae::Window;
   void m_HandleResize( uint32_t width, uint32_t height );
-
-  Window* m_window;
+  Window* m_window = nullptr;
   RenderTarget m_canvas;
-
-  // OpenGL
-  void* m_context;
-  int32_t m_defaultFbo;
+  void* m_context = nullptr;
+  int32_t m_defaultFbo = 0;
 };
 
 } // AE_NAMESPACE end
@@ -3467,6 +3676,1004 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 }
 
 //------------------------------------------------------------------------------
+// ae::Matrix4 member functions
+//------------------------------------------------------------------------------
+Matrix4 Matrix4::Translation( const Vec3& p )
+{
+  Matrix4 r = Matrix4::Identity();
+  r.SetTranslate( p );
+  return r;
+}
+
+Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
+{
+  // Remove rotation
+  forward0.Normalize();
+  up0.Normalize();
+
+  Vec3 right0 = forward0.Cross( up0 );
+  right0.Normalize();
+  up0 = right0.Cross( forward0 );
+
+  Matrix4 removeRotation;
+  memset( &removeRotation, 0, sizeof( removeRotation ) );
+  removeRotation.SetRowVector( 0, right0 ); // right -> ( 1, 0, 0 )
+  removeRotation.SetRowVector( 1, forward0 ); // forward -> ( 0, 1, 0 )
+  removeRotation.SetRowVector( 2, up0 ); // up -> ( 0, 0, 1 )
+  removeRotation.data[ 15 ] = 1;
+
+  // Rotate
+  forward1.Normalize();
+  up1.Normalize();
+
+  Vec3 right1 = forward1.Cross( up1 );
+  right1.Normalize();
+  up1 = right1.Cross( forward1 );
+
+  Matrix4 newRotation;
+  memset( &newRotation, 0, sizeof( newRotation ) );
+  // Set axis vector to invert (transpose)
+  newRotation.SetAxisVector( 0, right1 ); // ( 1, 0, 0 ) -> right
+  newRotation.SetAxisVector( 1, forward1 ); // ( 0, 1, 0 ) -> forward
+  newRotation.SetAxisVector( 2, up1 ); // ( 0, 0, 1 ) -> up
+  newRotation.data[ 15 ] = 1;
+
+  return newRotation * removeRotation;
+}
+
+Matrix4 Matrix4::RotationX( float angle )
+{
+  Matrix4 result; return result.SetRotateX( angle );
+}
+
+Matrix4 Matrix4::RotationY( float angle )
+{
+  Matrix4 result; return result.SetRotateY( angle );
+}
+
+Matrix4 Matrix4::RotationZ( float angle )
+{
+  Matrix4 result; return result.SetRotateZ( angle );
+}
+
+Matrix4 Matrix4::Scaling( const Vec3& s )
+{
+  Matrix4 r = Matrix4::Identity();
+  r.SetScale( s );
+  return r;
+}
+
+Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
+{
+  //xaxis.x  xaxis.y  xaxis.z  dot(xaxis, -eye)
+  //yaxis.x  yaxis.y  yaxis.z  dot(yaxis, -eye)
+  //zaxis.x  zaxis.y  zaxis.z  dot(zaxis, -eye)
+  //0        0        0        1
+
+  position = -position;
+  forward.Normalize();
+  up.Normalize();
+
+  Vec3 right = forward.Cross( up );
+  right.Normalize();
+  up = right.Cross( forward );
+
+  Matrix4 result;
+  memset( &result, 0, sizeof( result ) );
+  result.SetRowVector( 0, right );
+  result.SetRowVector( 1, up );
+  result.SetRowVector( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
+  result.SetAxisVector( 3, Vec3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
+  result.data[ 15 ] = 1;
+  return result;
+}
+
+// this hack comes in from the renderer
+extern bool gReverseZ;
+
+// fix the projection matrix, when false fov scales up/down with nearPlane
+// if this breaks stuff, then can set to false
+bool gFixProjection = true;
+
+Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
+{
+  // a  0  0  0
+  // 0  b  0  0
+  // 0  0  A  B
+  // 0  0 -1  0
+
+  // this is assuming a symmetric frustum, in this case nearPlane cancels out
+  
+  float halfAngleTangent = tanf( fov * 0.5f);
+  float r = aspectRatio * halfAngleTangent; // scaled by view aspect ratio
+  float t = halfAngleTangent; // tan of half angle fit vertically
+	  
+  if ( gFixProjection )
+  {
+	  r *= nearPlane;
+	  t *= nearPlane;
+  }
+  float a = nearPlane / r;
+  float b = nearPlane / t;
+ 	
+  float A;
+  float B;
+  if (gReverseZ)
+  {
+	  A = 0;
+	  B = nearPlane;
+  }
+  else
+  {
+	  A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
+	  B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
+  }
+  
+  Matrix4 result;
+  memset( &result, 0, sizeof( result ) );
+  result.data[ 0 ] = a;
+  result.data[ 5 ] = b;
+  result.data[ 10 ] = A;
+  result.data[ 11 ] = B;
+  result.data[ 14 ] = -1;
+  return result;
+}
+
+Vec4 Matrix4::operator*(const Vec4& v) const
+{
+  return Vec4(
+    v.x*data[0]  + v.y*data[1]  + v.z*data[2]  + v.w*data[3],
+    v.x*data[4]  + v.y*data[5]  + v.z*data[6]  + v.w*data[7],
+    v.x*data[8]  + v.y*data[9]  + v.z*data[10] + v.w*data[11],
+    v.x*data[12] + v.y*data[13] + v.z*data[14] + v.w*data[15]);
+}
+
+Matrix4 Matrix4::operator*(const Matrix4& m) const
+{
+  return Matrix4(
+    (data[0]*m.data[0])  + (data[1]*m.data[4])  + (data[2]*m.data[8])  + (data[3]*m.data[12]),
+    (data[0]*m.data[1])  + (data[1]*m.data[5])  + (data[2]*m.data[9])  + (data[3]*m.data[13]),
+    (data[0]*m.data[2])  + (data[1]*m.data[6])  + (data[2]*m.data[10])  + (data[3]*m.data[14]),
+    (data[0]*m.data[3])  + (data[1]*m.data[7])  + (data[2]*m.data[11])  + (data[3]*m.data[15]),
+
+    (data[4]*m.data[0])  + (data[5]*m.data[4])  + (data[6]*m.data[8])  + (data[7]*m.data[12]),
+    (data[4]*m.data[1])  + (data[5]*m.data[5])  + (data[6]*m.data[9])  + (data[7]*m.data[13]),
+    (data[4]*m.data[2])  + (data[5]*m.data[6])  + (data[6]*m.data[10])  + (data[7]*m.data[14]),
+    (data[4]*m.data[3])  + (data[5]*m.data[7])  + (data[6]*m.data[11])  + (data[7]*m.data[15]),
+
+    (data[8]*m.data[0])  + (data[9]*m.data[4])  + (data[10]*m.data[8]) + (data[11]*m.data[12]),
+    (data[8]*m.data[1])  + (data[9]*m.data[5])  + (data[10]*m.data[9]) + (data[11]*m.data[13]),
+    (data[8]*m.data[2])  + (data[9]*m.data[6])  + (data[10]*m.data[10]) + (data[11]*m.data[14]),
+    (data[8]*m.data[3])  + (data[9]*m.data[7])  + (data[10]*m.data[11]) + (data[11]*m.data[15]),
+
+    (data[12]*m.data[0]) + (data[13]*m.data[4]) + (data[14]*m.data[8]) + (data[15]*m.data[12]),
+    (data[12]*m.data[1]) + (data[13]*m.data[5]) + (data[14]*m.data[9]) + (data[15]*m.data[13]),
+    (data[12]*m.data[2]) + (data[13]*m.data[6]) + (data[14]*m.data[10]) + (data[15]*m.data[14]),
+    (data[12]*m.data[3]) + (data[13]*m.data[7]) + (data[14]*m.data[11]) + (data[15]*m.data[15]));
+}
+
+void Matrix4::operator*=(const Matrix4& m)
+{
+  float t1;
+  float t2;
+  float t3;
+  float t4;
+
+  t1 = (data[0]*m.data[0]) + (data[1]*m.data[4]) + (data[2]*m.data[8])  + (data[3]*m.data[12]);
+  t2 = (data[0]*m.data[1]) + (data[1]*m.data[5]) + (data[2]*m.data[9])  + (data[3]*m.data[13]);
+  t3 = (data[0]*m.data[2]) + (data[1]*m.data[6]) + (data[2]*m.data[10]) + (data[3]*m.data[14]);
+  t4 = (data[0]*m.data[3]) + (data[1]*m.data[7]) + (data[2]*m.data[11]) + (data[3]*m.data[15]);
+  data[0] = t1;
+  data[1] = t2;
+  data[2] = t3;
+  data[3] = t4;
+
+  t1 = (data[4]*m.data[0]) + (data[5]*m.data[4]) + (data[6]*m.data[8])  + (data[7]*m.data[12]);
+  t2 = (data[4]*m.data[1]) + (data[5]*m.data[5]) + (data[6]*m.data[9])  + (data[7]*m.data[13]);
+  t3 = (data[4]*m.data[2]) + (data[5]*m.data[6]) + (data[6]*m.data[10]) + (data[7]*m.data[14]);
+  t4 = (data[4]*m.data[3]) + (data[5]*m.data[7]) + (data[6]*m.data[11]) + (data[7]*m.data[15]);
+  data[4] = t1;
+  data[5] = t2;
+  data[6] = t3;
+  data[7] = t4;
+
+  t1 = (data[8]*m.data[0]) + (data[9]*m.data[4]) + (data[10]*m.data[8])  + (data[11]*m.data[12]);
+  t2 = (data[8]*m.data[1]) + (data[9]*m.data[5]) + (data[10]*m.data[9])  + (data[11]*m.data[13]);
+  t3 = (data[8]*m.data[2]) + (data[9]*m.data[6]) + (data[10]*m.data[10]) + (data[11]*m.data[14]);
+  t4 = (data[8]*m.data[3]) + (data[9]*m.data[7]) + (data[10]*m.data[11]) + (data[11]*m.data[15]);
+  data[8]  = t1;
+  data[9]  = t2;
+  data[10] = t3;
+  data[11] = t4;
+
+  t1 = (data[12]*m.data[0]) + (data[13]*m.data[4]) + (data[14]*m.data[8])  + (data[15]*m.data[12]);
+  t2 = (data[12]*m.data[1]) + (data[13]*m.data[5]) + (data[14]*m.data[9])  + (data[15]*m.data[13]);
+  t3 = (data[12]*m.data[2]) + (data[13]*m.data[6]) + (data[14]*m.data[10]) + (data[15]*m.data[14]);
+  t4 = (data[12]*m.data[3]) + (data[13]*m.data[7]) + (data[14]*m.data[11]) + (data[15]*m.data[15]);
+  data[12] = t1;
+  data[13] = t2;
+  data[14] = t3;
+  data[15] = t4;
+}
+
+bool Matrix4::SetInverse(const Matrix4& m)
+{
+  float inv[16], det;
+  int i;
+
+  inv[0] = m.data[5]  * m.data[10] * m.data[15] - 
+    m.data[5]  * m.data[11] * m.data[14] - 
+    m.data[9]  * m.data[6]  * m.data[15] + 
+    m.data[9]  * m.data[7]  * m.data[14] +
+    m.data[13] * m.data[6]  * m.data[11] - 
+    m.data[13] * m.data[7]  * m.data[10];
+
+  inv[4] = -m.data[4]  * m.data[10] * m.data[15] + 
+    m.data[4]  * m.data[11] * m.data[14] + 
+    m.data[8]  * m.data[6]  * m.data[15] - 
+    m.data[8]  * m.data[7]  * m.data[14] - 
+    m.data[12] * m.data[6]  * m.data[11] + 
+    m.data[12] * m.data[7]  * m.data[10];
+
+  inv[8] = m.data[4]  * m.data[9] * m.data[15] - 
+    m.data[4]  * m.data[11] * m.data[13] - 
+    m.data[8]  * m.data[5] * m.data[15] + 
+    m.data[8]  * m.data[7] * m.data[13] + 
+    m.data[12] * m.data[5] * m.data[11] - 
+    m.data[12] * m.data[7] * m.data[9];
+
+  inv[12] = -m.data[4]  * m.data[9] * m.data[14] + 
+    m.data[4]  * m.data[10] * m.data[13] +
+    m.data[8]  * m.data[5] * m.data[14] - 
+    m.data[8]  * m.data[6] * m.data[13] - 
+    m.data[12] * m.data[5] * m.data[10] + 
+    m.data[12] * m.data[6] * m.data[9];
+
+  inv[1] = -m.data[1]  * m.data[10] * m.data[15] + 
+    m.data[1]  * m.data[11] * m.data[14] + 
+    m.data[9]  * m.data[2] * m.data[15] - 
+    m.data[9]  * m.data[3] * m.data[14] - 
+    m.data[13] * m.data[2] * m.data[11] + 
+    m.data[13] * m.data[3] * m.data[10];
+
+  inv[5] = m.data[0]  * m.data[10] * m.data[15] - 
+    m.data[0]  * m.data[11] * m.data[14] - 
+    m.data[8]  * m.data[2] * m.data[15] + 
+    m.data[8]  * m.data[3] * m.data[14] + 
+    m.data[12] * m.data[2] * m.data[11] - 
+    m.data[12] * m.data[3] * m.data[10];
+
+  inv[9] = -m.data[0]  * m.data[9] * m.data[15] + 
+    m.data[0]  * m.data[11] * m.data[13] + 
+    m.data[8]  * m.data[1] * m.data[15] - 
+    m.data[8]  * m.data[3] * m.data[13] - 
+    m.data[12] * m.data[1] * m.data[11] + 
+    m.data[12] * m.data[3] * m.data[9];
+
+  inv[13] = m.data[0]  * m.data[9] * m.data[14] - 
+    m.data[0]  * m.data[10] * m.data[13] - 
+    m.data[8]  * m.data[1] * m.data[14] + 
+    m.data[8]  * m.data[2] * m.data[13] + 
+    m.data[12] * m.data[1] * m.data[10] - 
+    m.data[12] * m.data[2] * m.data[9];
+
+  inv[2] = m.data[1]  * m.data[6] * m.data[15] - 
+    m.data[1]  * m.data[7] * m.data[14] - 
+    m.data[5]  * m.data[2] * m.data[15] + 
+    m.data[5]  * m.data[3] * m.data[14] + 
+    m.data[13] * m.data[2] * m.data[7] - 
+    m.data[13] * m.data[3] * m.data[6];
+
+  inv[6] = -m.data[0]  * m.data[6] * m.data[15] + 
+    m.data[0]  * m.data[7] * m.data[14] + 
+    m.data[4]  * m.data[2] * m.data[15] - 
+    m.data[4]  * m.data[3] * m.data[14] - 
+    m.data[12] * m.data[2] * m.data[7] + 
+    m.data[12] * m.data[3] * m.data[6];
+
+  inv[10] = m.data[0]  * m.data[5] * m.data[15] - 
+    m.data[0]  * m.data[7] * m.data[13] - 
+    m.data[4]  * m.data[1] * m.data[15] + 
+    m.data[4]  * m.data[3] * m.data[13] + 
+    m.data[12] * m.data[1] * m.data[7] - 
+    m.data[12] * m.data[3] * m.data[5];
+
+  inv[14] = -m.data[0]  * m.data[5] * m.data[14] + 
+    m.data[0]  * m.data[6] * m.data[13] + 
+    m.data[4]  * m.data[1] * m.data[14] - 
+    m.data[4]  * m.data[2] * m.data[13] - 
+    m.data[12] * m.data[1] * m.data[6] + 
+    m.data[12] * m.data[2] * m.data[5];
+
+  inv[3] = -m.data[1] * m.data[6] * m.data[11] + 
+    m.data[1] * m.data[7] * m.data[10] + 
+    m.data[5] * m.data[2] * m.data[11] - 
+    m.data[5] * m.data[3] * m.data[10] - 
+    m.data[9] * m.data[2] * m.data[7] + 
+    m.data[9] * m.data[3] * m.data[6];
+
+  inv[7] = m.data[0] * m.data[6] * m.data[11] - 
+    m.data[0] * m.data[7] * m.data[10] - 
+    m.data[4] * m.data[2] * m.data[11] + 
+    m.data[4] * m.data[3] * m.data[10] + 
+    m.data[8] * m.data[2] * m.data[7] - 
+    m.data[8] * m.data[3] * m.data[6];
+
+  inv[11] = -m.data[0] * m.data[5] * m.data[11] + 
+    m.data[0] * m.data[7] * m.data[9] + 
+    m.data[4] * m.data[1] * m.data[11] - 
+    m.data[4] * m.data[3] * m.data[9] - 
+    m.data[8] * m.data[1] * m.data[7] + 
+    m.data[8] * m.data[3] * m.data[5];
+
+  inv[15] = m.data[0] * m.data[5] * m.data[10] - 
+    m.data[0] * m.data[6] * m.data[9] - 
+    m.data[4] * m.data[1] * m.data[10] + 
+    m.data[4] * m.data[2] * m.data[9] + 
+    m.data[8] * m.data[1] * m.data[6] - 
+    m.data[8] * m.data[2] * m.data[5];
+
+  det = m.data[0] * inv[0] + m.data[1] * inv[4] + m.data[2] * inv[8] + m.data[3] * inv[12];
+
+  if (det == 0)
+    return false;
+
+  det = 1.0f / det;
+
+  for (i = 0; i < 16; i++)
+    data[i] = inv[i] * det;
+
+  return true;
+}
+
+Matrix4 Matrix4::Inverse() const
+{
+  Matrix4 inverse = Matrix4::Identity();
+  inverse.SetInverse(*this);
+  return inverse;
+}
+
+bool Matrix4::Invert()
+{
+  return SetInverse(*this);
+}
+
+Matrix4& Matrix4::SetOrientation( const Quaternion& q2 )
+{
+  Quaternion q = q2.GetInverse();
+
+  data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
+  data[1] = 2*q.i*q.j + 2*q.k*q.r;
+  data[2] = 2*q.i*q.k - 2*q.j*q.r;
+
+  data[4] = 2*q.i*q.j - 2*q.k*q.r;
+  data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
+  data[6] = 2*q.j*q.k + 2*q.i*q.r;
+
+  data[8] = 2*q.i*q.k + 2*q.j*q.r;
+  data[9] = 2*q.j*q.k - 2*q.i*q.r;
+  data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+
+  return *this;
+}
+
+Vec3 Matrix4::TransformInverse(const Vec3& v) const
+{
+  Vec3 copy = v;
+
+  copy.x -= data[3];
+  copy.y -= data[7];
+  copy.z -= data[11];
+
+  return Vec3(
+    copy.x*data[0] + copy.y*data[4] + copy.z*data[8],
+    copy.x*data[1] + copy.y*data[5] + copy.z*data[9],
+    copy.x*data[2] + copy.y*data[6] + copy.z*data[10]);
+}
+
+Vec3 Matrix4::TransformDirection(const Vec3& v) const
+{
+  return Vec3(
+    v.x*data[0] + v.y*data[1] + v.z*data[2],
+    v.x*data[4] + v.y*data[5] + v.z*data[6],
+    v.x*data[8] + v.y*data[9] + v.z*data[10]);
+}
+
+Vec3 Matrix4::TransformInverseDirection(const Vec3& v) const
+{
+  return Vec3(
+    v.x*data[0] + v.y*data[4] + v.z*data[8],
+    v.x*data[1] + v.y*data[5] + v.z*data[9],
+    v.x*data[2] + v.y*data[6] + v.z*data[10]);
+}
+
+void Matrix4::SetDiagonal(float d1, float d2, float d3)
+{
+  data[0]  = d1;
+  data[5]  = d2;
+  data[10] = d3;
+}
+
+Vec3 Matrix4::GetAxisVector(int col) const
+{
+  return Vec3(data[col], data[col+4], data[col+8]);
+}
+
+Vec3 Matrix4::GetPosition() const
+{
+  return Vec3( data[ 3 ], data[ 7 ], data[ 11 ] );
+}
+
+Quaternion Matrix4::GetRotation() const
+{
+  // http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/
+
+  Matrix4 t = *this;
+  t.RemoveScaling();
+
+  #define m00 t.data[ 0 ]
+  #define m01 t.data[ 1 ]
+  #define m02 t.data[ 2 ]
+  #define m10 t.data[ 4 ]
+  #define m11 t.data[ 5 ]
+  #define m12 t.data[ 6 ]
+  #define m20 t.data[ 8 ]
+  #define m21 t.data[ 9 ]
+  #define m22 t.data[ 10 ]
+
+  float trace = m00 + m11 + m22;
+  if ( trace > 0.0f )
+  { 
+    float s = sqrt( trace + 1.0f ) * 2.0f;
+    return Quaternion(
+      ( m21 - m12 ) / s,
+      ( m02 - m20 ) / s,
+      ( m10 - m01 ) / s,
+      0.25f * s
+    );
+  }
+  else if ( ( m00 > m11 ) && ( m00 > m22 ) )
+  { 
+    float s = sqrt( 1.0f + m00 - m11 - m22 ) * 2.0f;
+    return Quaternion(
+      0.25f * s,
+      ( m01 + m10 ) / s,
+      ( m02 + m20 ) / s,
+      ( m21 - m12 ) / s
+    );
+  }
+  else if ( m11 > m22 )
+  { 
+    float s = sqrt( 1.0f + m11 - m00 - m22 ) * 2.0f;
+    return Quaternion(
+      ( m01 + m10 ) / s,
+      0.25f * s,
+      ( m12 + m21 ) / s,
+      ( m02 - m20 ) / s
+    );
+  }
+  else
+  { 
+    float s = sqrt( 1.0f + m22 - m00 - m11 ) * 2.0f;
+    return Quaternion(
+      ( m02 + m20 ) / s,
+      ( m12 + m21 ) / s,
+      0.25f * s,
+      ( m10 - m01 ) / s
+    );
+  }
+
+  #undef m00
+  #undef m01
+  #undef m02
+  #undef m10
+  #undef m11
+  #undef m12
+  #undef m20
+  #undef m21
+  #undef m22
+}
+
+void Matrix4::SetPosition( const Vec3& p )
+{
+  data[ 3 ] = p.x;
+  data[ 7 ] = p.y;
+  data[ 11 ] = p.z;
+}
+
+void Matrix4::SetAxisVector(unsigned col, const Vec3 &v)
+{
+  data[col] = v.x;
+  data[col+4] = v.y;
+  data[col+8] = v.z;
+}
+
+Vec4 Matrix4::GetRowVector(int row) const
+{
+  return Vec4(data[row*4], data[row*4+1], data[row*4+2], data[row*4+3]);
+}
+
+void Matrix4::SetRowVector(unsigned row, const Vec3 &v)
+{
+  data[row*4]   = v.x;
+  data[row*4+1] = v.y;
+  data[row*4+2] = v.z;
+}
+
+void Matrix4::SetRowVector(unsigned row, const Vec4 &v)
+{
+  data[row*4]   = v.x;
+  data[row*4+1] = v.y;
+  data[row*4+2] = v.z;
+  data[row*4+3] = v.w;
+}
+
+Matrix4& Matrix4::SetIdentity(void){
+  data[0]  = 1.0f; data[1] = 0.0f;  data[2] = 0.0f;  data[3] = 0.0f;
+  data[4]  = 0.0f; data[5] = 1.0f;  data[6] = 0.0f;  data[7] = 0.0f;
+  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = 1.0f; data[11] = 0.0f;
+  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::SetTranslate(float X, float Y, float Z){
+  data[0]  = 1.0f; data[1] = 0.0f;  data[2] = 0.0f;  data[3] = X;
+  data[4]  = 0.0f; data[5] = 1.0f;  data[6] = 0.0f;  data[7] = Y;
+  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = 1.0f; data[11] = Z;
+  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::SetTranslate(const Vec3 &translation){
+  return SetTranslate(translation.x, translation.y, translation.z);
+}
+
+Matrix4& Matrix4::SetTranslation( float x, float y, float z )
+{
+  data[ 3 ] = x;
+  data[ 7 ] = y;
+  data[ 11 ] = z;
+  data[ 15 ] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::SetTranslation( const Vec3& translation )
+{
+  data[ 3 ] = translation.x;
+  data[ 7 ] = translation.y;
+  data[ 11 ] = translation.z;
+  data[ 15 ] = 1.0f;
+  return *this;
+}
+
+Vec3 Matrix4::GetTranslation() const
+{
+  return Vec3( data[ 3 ], data[ 7 ], data[ 11 ] );
+}
+
+Vec3 Matrix4::GetScale() const
+{
+  return Vec3(
+    Vec3( data[ 0 ], data[ 4 ], data[ 8 ] ).Length(),
+    Vec3( data[ 1 ], data[ 5 ], data[ 9 ] ).Length(),
+    Vec3( data[ 2 ], data[ 6 ], data[ 10 ] ).Length()
+  );
+}
+
+Matrix4& Matrix4::SetScale(float X, float Y, float Z){
+  data[0]  = X;    data[1] = 0.0f;  data[2] = 0.0f;  data[3] = 0.0f;
+  data[4]  = 0.0f; data[5] = Y;     data[6] = 0.0f;  data[7] = 0.0f;
+  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = Z;    data[11] = 0.0f;
+  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::SetScaleKeepTranslate(float X, float Y, float Z){
+  data[0]  = X;    data[1] = 0.0f;  data[2] = 0.0f;
+  data[4]  = 0.0f; data[5] = Y;     data[6] = 0.0f;
+  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = Z;
+  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::SetScale(const Vec3 &scale){
+  return SetScale(scale.x, scale.y, scale.z);
+}
+
+Matrix4& Matrix4::SetScaleKeepTranslate(const Vec3 &scale){
+  return SetScaleKeepTranslate(scale.x, scale.y, scale.z);
+}
+
+Matrix4& Matrix4::SetRotateX(float angle){
+  data[0]  = 1.0f; data[1] = 0.0f;             data[2] = 0.0f;              data[3] = 0.0f;
+  data[4]  = 0.0f; data[5] = cosf(angle); data[6] = -sinf(angle); data[7] = 0.0f;
+  data[8]  = 0.0f; data[9] = sinf(angle); data[10] = cosf(angle); data[11] = 0.0f;
+  data[12] = 0.0f; data[13] = 0.0f;            data[14] = 0.0f;             data[15] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::SetRotateY(float angle){
+  data[0]  = cosf(angle);  data[1] = 0.0f;  data[2] = sinf(angle);  data[3] = 0.0f;
+  data[4]  = 0.0f;              data[5] = 1.0f;  data[6] = 0.0f;              data[7] = 0.0f;
+  data[8]  = -sinf(angle); data[9] = 0.0f;  data[10] = cosf(angle); data[11] = 0.0f;
+  data[12] = 0.0f;              data[13] = 0.0f; data[14] = 0.0f;             data[15] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::SetRotateZ(float angle){
+  data[0]  = cosf(angle);  data[1] = -sinf(angle); data[2] = 0.0f;  data[3] = 0.0f;
+  data[4]  = sinf(angle);  data[5] = cosf(angle);  data[6] = 0.0f;  data[7] = 0.0f;
+  data[8]  = 0.0f;              data[9] = 0.0f;              data[10] = 1.0f; data[11] = 0.0f;
+  data[12] = 0.0f;              data[13] = 0.0f;             data[14] = 0.0f; data[15] = 1.0f;
+  return *this;
+}
+
+Matrix4& Matrix4::RemoveScaling(void)
+{
+  Vec3 col[4] = {GetAxisVector(0), GetAxisVector(1), GetAxisVector(2), GetAxisVector(3)};
+  col[0].Normalize();
+  col[1].Normalize();
+  col[2].Normalize();
+
+  for(unsigned i = 0; i < 4; ++i)
+  {
+    SetAxisVector(i, col[i]);
+  }
+
+  return *this;
+}
+
+Matrix4& Matrix4::SetTranspose( void )
+{
+  for(int i = 0; i < 4; ++i)
+  {
+    for(int j = i + 1; j < 4; ++j)
+    {
+      float temp = data[i * 4 + j];
+      data[i * 4 + j] = data[j * 4 + i];
+      data[j * 4 + i] = temp;
+    }
+  }
+
+  return *this;
+}
+
+Matrix4 Matrix4::GetTransposeCopy(void) const
+{
+  Matrix4 temp(*this);
+  return temp.SetTranspose();
+}
+
+Matrix4 Matrix4::GetNormalMatrix() const
+{
+  return Inverse().GetTransposeCopy();
+}
+
+Matrix4& Matrix4::Translate( Vec3 t )
+{
+  *this = *this * Matrix4::Translation( t );
+  return *this;
+}
+
+Matrix4& Matrix4::Scale( Vec3 s )
+{
+  *this = *this * Matrix4::Scaling( s );
+  return *this;
+}
+
+Matrix4& Matrix4::RotateX( float angle )
+{
+  *this = *this * Matrix4::RotationX( angle );
+  return *this;
+}
+
+Matrix4& Matrix4::RotateY( float angle )
+{
+  *this = *this * Matrix4::RotationY( angle );
+  return *this;
+}
+
+Matrix4& Matrix4::RotateZ( float angle )
+{
+  *this = *this * Matrix4::RotationZ( angle );
+  return *this;
+}
+
+//------------------------------------------------------------------------------
+// ae::Quaternion member functions
+//------------------------------------------------------------------------------
+Quaternion::Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp )
+{
+  forward.Normalize();
+  up.Normalize();
+
+  Vec3 right = forward.Cross( up );
+  right.Normalize();
+  if ( prioritizeUp )
+  {
+    up = right.Cross( forward );
+  }
+  else
+  {
+    forward = up.Cross( right );
+  }
+
+#define m0 right
+#define m1 forward
+#define m2 up
+#define m00 m0.x
+#define m01 m1.x
+#define m02 m2.x
+#define m10 m0.y
+#define m11 m1.y
+#define m12 m2.y
+#define m20 m0.z
+#define m21 m1.z
+#define m22 m2.z
+
+  //http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/index.htm
+  float trace = m00 + m11 + m22;
+  if ( trace > 0.0f )
+  {
+    float S = sqrtf( trace + 1.0f ) * 2;
+    r = 0.25f * S;
+    i = ( m21 - m12 ) / S;
+    j = ( m02 - m20 ) / S;
+    k = ( m10 - m01 ) / S;
+  }
+  else if ( ( m00 > m11 ) & ( m00 > m22 ) )
+  {
+    float S = sqrtf( 1.0f + m00 - m11 - m22 ) * 2;
+    r = ( m21 - m12 ) / S;
+    i = 0.25f * S;
+    j = ( m01 + m10 ) / S;
+    k = ( m02 + m20 ) / S;
+  }
+  else if ( m11 > m22 )
+  {
+    float S = sqrtf( 1.0f + m11 - m00 - m22 ) * 2;
+    r = ( m02 - m20 ) / S;
+    i = ( m01 + m10 ) / S;
+    j = 0.25f * S;
+    k = ( m12 + m21 ) / S;
+  }
+  else
+  {
+    float S = sqrtf( 1.0f + m22 - m00 - m11 ) * 2;
+    r = ( m10 - m01 ) / S;
+    i = ( m02 + m20 ) / S;
+    j = ( m12 + m21 ) / S;
+    k = 0.25f * S;
+  }
+
+#undef m0
+#undef m1
+#undef m2
+#undef m00
+#undef m01
+#undef m02
+#undef m10
+#undef m11
+#undef m12
+#undef m20
+#undef m21
+#undef m22
+}
+
+Quaternion::Quaternion( Vec3 axis, float angle )
+{
+  axis.Normalize();
+  float sinAngleDiv2 = sinf( angle / 2.0f );
+  i = axis.x * sinAngleDiv2;
+  j = axis.y * sinAngleDiv2;
+  k = axis.z * sinAngleDiv2;
+  r = cosf( angle / 2.0f );
+}
+
+void Quaternion::Normalize()
+{
+  float invMagnitude = r * r + i * i + j * j + k * k;
+
+  if ( invMagnitude == 0.0f )
+  {
+    r = 1;
+    return;
+  }
+
+  invMagnitude = 1.0f / std::sqrt( invMagnitude );
+  r *= invMagnitude;
+  i *= invMagnitude;
+  j *= invMagnitude;
+  k *= invMagnitude;
+}
+
+bool Quaternion::operator==( const Quaternion& q ) const
+{
+  return ( i == q.i ) && ( j == q.j ) && ( k == q.k ) && ( r == q.r );
+}
+
+bool Quaternion::operator!=( const Quaternion& q ) const
+{
+  return !operator==( q );
+}
+
+Quaternion& Quaternion::operator*= ( const Quaternion& q )
+{
+  //http://www.mathworks.com/help/aeroblks/quaternionmultiplication.html
+  Quaternion copy = *this;
+  r = copy.r * q.r - copy.i * q.i - copy.j * q.j - copy.k * q.k;
+  i = copy.r * q.i + copy.i * q.r + copy.j * q.k - copy.k * q.j;
+  j = copy.r * q.j + copy.j * q.r + copy.k * q.i - copy.i * q.k;
+  k = copy.r * q.k + copy.k * q.r + copy.i * q.j - copy.j * q.i;
+  return *this;
+}
+
+Quaternion Quaternion::operator* ( const Quaternion& q ) const
+{
+  return Quaternion( *this ) *= q;
+}
+
+Quaternion const Quaternion::operator*( float s ) const
+{
+  return Quaternion( s * i, s * j, s * k, s * r );
+}
+
+void Quaternion::AddScaledVector( const Vec3& v, float t )
+{
+  Quaternion q( v.x * t, v.y * t, v.z * t, 0.0f );
+  q *= *this;
+
+  r += q.r * 0.5f;
+  i += q.i * 0.5f;
+  j += q.j * 0.5f;
+  k += q.k * 0.5f;
+}
+
+void Quaternion::RotateByVector( const Vec3& v )
+{
+  Quaternion q = Quaternion::Identity();
+
+  float s = v.Length();
+  //ASSERT_MSG(s > 0.001f, "Can't rotate by a zero vector!");
+  q.r = cosf( s * 0.5f );
+
+  Vec3 n = v.NormalizeCopy() * sinf( s * 0.5f );
+  q.i = n.x;
+  q.j = n.y;
+  q.k = n.z;
+
+  ( *this ) *= q;
+
+}
+
+void Quaternion::SetDirectionXY( const Vec3& v )
+{
+  float theta = std::atan( v.y / v.x );
+  if ( v.x < 0 && v.y >= 0 )
+    theta += ae::PI;
+  else if ( v.x < 0 && v.y < 0 )
+    theta -= ae::PI;
+
+  r = std::cos( theta / 2.0f );
+  i = 0.0f;
+  j = 0.0f;
+  k = std::sin( theta / 2.0f );
+}
+
+Vec3 Quaternion::GetDirectionXY() const
+{
+  float theta;
+  if ( k >= 0.0f )
+    theta = 2.0f * std::acos( r );
+  else
+    theta = -2.0f * std::acos( r );
+
+  return Vec3( std::cos( theta ), std::sin( theta ), 0.0f );
+}
+
+void Quaternion::ZeroXY()
+{
+  i = 0.0f;
+  j = 0.0f;
+}
+
+void Quaternion::GetAxisAngle( Vec3* axis, float* angle ) const
+{
+  *angle = 2 * acos( r );
+  axis->x = i / sqrt( 1 - r * r );
+  axis->y = j / sqrt( 1 - r * r );
+  axis->z = k / sqrt( 1 - r * r );
+}
+
+void Quaternion::AddRotationXY( float rotation )
+{
+  float sinThetaOver2 = std::sin( rotation / 2.0f );
+  float cosThetaOver2 = std::cos( rotation / 2.0f );
+
+  // create a quaternion representing the amount to rotate
+  Quaternion change( 0.0f, 0.0f, sinThetaOver2, cosThetaOver2 );
+  change.Normalize();
+
+  // apply the change in rotation
+  ( *this ) *= change;
+}
+
+Quaternion Quaternion::Nlerp( Quaternion d, float t ) const
+{
+  float epsilon = this->Dot( d );
+  Quaternion end = d;
+
+  if ( epsilon < 0.0f )
+  {
+    epsilon = -epsilon;
+
+    end = Quaternion( -d.i, -d.j, -d.k, -d.r );
+  }
+
+  Quaternion result = ( *this ) * ( 1.0f - t );
+  end = end * t;
+
+  result.i += end.i;
+  result.j += end.j;
+  result.k += end.k;
+  result.r += end.r;
+  result.Normalize();
+
+  return result;
+}
+
+Matrix4 Quaternion::GetTransformMatrix( void ) const
+{
+  Quaternion n = *this;
+  n.Normalize();
+
+  Matrix4 matrix = Matrix4::Identity();
+
+  matrix.data[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
+  matrix.data[ 1 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
+  matrix.data[ 2 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
+
+  matrix.data[ 4 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
+  matrix.data[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
+  matrix.data[ 6 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
+
+  matrix.data[ 8 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
+  matrix.data[ 9 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
+  matrix.data[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
+
+  return matrix;
+}
+
+Quaternion Quaternion::GetInverse( void ) const
+{
+  return Quaternion( *this ).SetInverse();
+}
+
+Quaternion& Quaternion::SetInverse( void )
+{
+  //http://www.mathworks.com/help/aeroblks/quaternioninverse.html
+  float d = r * r + i * i + j * j + k * k;
+  r /= d;
+  i /= -d;
+  j /= -d;
+  k /= -d;
+
+  return *this;
+}
+
+Vec3 Quaternion::Rotate( Vec3 v ) const
+{
+  //http://www.mathworks.com/help/aeroblks/quaternionrotation.html
+  Quaternion q = ( *this ) * Quaternion( v ) * this->GetInverse();
+  return Vec3( q.i, q.j, q.k );
+}
+
+float Quaternion::Dot( const Quaternion& q ) const
+{
+  return ( q.r * r ) + ( q.i * i ) + ( q.j * j ) + ( q.k * k );
+}
+
+//------------------------------------------------------------------------------
 // Log levels internal implementation
 //------------------------------------------------------------------------------
 const char* LogLevelNames[] =
@@ -4176,7 +5383,9 @@ void Input::Pump()
   #include <OpenGL/gl.h>
 #endif
 
-// Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
+namespace AE_NAMESPACE
+{
+// Caller enables this externally.  The renderer, Shader, math aren't tied to one another
 // enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
 // http://www.reedbeta.com/blog/depth-precision-visualized/
@@ -4184,558 +5393,71 @@ bool gReverseZ = false;
 
 // turn this on to run at GL4.1 instead of GL3.3
 bool gGL41 = true;
+}  // AE_NAMESPACE end
 
 // OpenGL function pointers
 typedef char GLchar;
+typedef intptr_t GLsizeiptr;
+typedef intptr_t GLintptr;
 
-// GL_VERSION_2_1
-//#define GL_PIXEL_PACK_BUFFER              0x88EB
-//#define GL_PIXEL_UNPACK_BUFFER            0x88EC
-//#define GL_PIXEL_PACK_BUFFER_BINDING      0x88ED
-//#define GL_PIXEL_UNPACK_BUFFER_BINDING    0x88EF
-//#define GL_FLOAT_MAT2x3                   0x8B65
-//#define GL_FLOAT_MAT2x4                   0x8B66
-//#define GL_FLOAT_MAT3x2                   0x8B67
-//#define GL_FLOAT_MAT3x4                   0x8B68
-//#define GL_FLOAT_MAT4x2                   0x8B69
-//#define GL_FLOAT_MAT4x3                   0x8B6A
-//#define GL_SRGB                           0x8C40
-#define GL_SRGB8                          0x8C41
-//#define GL_SRGB_ALPHA                     0x8C42
-#define GL_SRGB8_ALPHA8                   0x8C43
-//#define GL_COMPRESSED_SRGB                0x8C48
-//#define GL_COMPRESSED_SRGB_ALPHA          0x8C49
-//#define GL_CURRENT_RASTER_SECONDARY_COLOR 0x845F
-//#define GL_SLUMINANCE_ALPHA               0x8C44
-//#define GL_SLUMINANCE8_ALPHA8             0x8C45
-//#define GL_SLUMINANCE                     0x8C46
-//#define GL_SLUMINANCE8                    0x8C47
-//#define GL_COMPRESSED_SLUMINANCE          0x8C4A
-//#define GL_COMPRESSED_SLUMINANCE_ALPHA    0x8C4B
-// GL_VERSION_3_2
-//#define GL_CONTEXT_CORE_PROFILE_BIT       0x00000001
-//#define GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 0x00000002
-//#define GL_LINES_ADJACENCY                0x000A
-//#define GL_LINE_STRIP_ADJACENCY           0x000B
-//#define GL_TRIANGLES_ADJACENCY            0x000C
-//#define GL_TRIANGLE_STRIP_ADJACENCY       0x000D
-//#define GL_PROGRAM_POINT_SIZE             0x8642
-//#define GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS 0x8C29
-//#define GL_FRAMEBUFFER_ATTACHMENT_LAYERED 0x8DA7
-#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
-//#define GL_GEOMETRY_SHADER                0x8DD9
-//#define GL_GEOMETRY_VERTICES_OUT          0x8916
-//#define GL_GEOMETRY_INPUT_TYPE            0x8917
-//#define GL_GEOMETRY_OUTPUT_TYPE           0x8918
-//#define GL_MAX_GEOMETRY_UNIFORM_COMPONENTS 0x8DDF
-//#define GL_MAX_GEOMETRY_OUTPUT_VERTICES   0x8DE0
-//#define GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS 0x8DE1
-//#define GL_MAX_VERTEX_OUTPUT_COMPONENTS   0x9122
-//#define GL_MAX_GEOMETRY_INPUT_COMPONENTS  0x9123
-//#define GL_MAX_GEOMETRY_OUTPUT_COMPONENTS 0x9124
-//#define GL_MAX_FRAGMENT_INPUT_COMPONENTS  0x9125
-//#define GL_CONTEXT_PROFILE_MASK           0x9126
-//#define GL_DEPTH_CLAMP                    0x864F
-//#define GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION 0x8E4C
-//#define GL_FIRST_VERTEX_CONVENTION        0x8E4D
-//#define GL_LAST_VERTEX_CONVENTION         0x8E4E
-//#define GL_PROVOKING_VERTEX               0x8E4F
-//#define GL_TEXTURE_CUBE_MAP_SEAMLESS      0x884F
-//#define GL_MAX_SERVER_WAIT_TIMEOUT        0x9111
-//#define GL_OBJECT_TYPE                    0x9112
-//#define GL_SYNC_CONDITION                 0x9113
-//#define GL_SYNC_STATUS                    0x9114
-//#define GL_SYNC_FLAGS                     0x9115
-//#define GL_SYNC_FENCE                     0x9116
-//#define GL_SYNC_GPU_COMMANDS_COMPLETE     0x9117
-//#define GL_UNSIGNALED                     0x9118
-//#define GL_SIGNALED                       0x9119
-//#define GL_ALREADY_SIGNALED               0x911A
-//#define GL_TIMEOUT_EXPIRED                0x911B
-//#define GL_CONDITION_SATISFIED            0x911C
-//#define GL_WAIT_FAILED                    0x911D
-//#define GL_TIMEOUT_IGNORED                0xFFFFFFFFFFFFFFFFull
-//#define GL_SYNC_FLUSH_COMMANDS_BIT        0x00000001
-//#define GL_SAMPLE_POSITION                0x8E50
-//#define GL_SAMPLE_MASK                    0x8E51
-//#define GL_SAMPLE_MASK_VALUE              0x8E52
-//#define GL_MAX_SAMPLE_MASK_WORDS          0x8E59
-//#define GL_TEXTURE_2D_MULTISAMPLE         0x9100
-//#define GL_PROXY_TEXTURE_2D_MULTISAMPLE   0x9101
-//#define GL_TEXTURE_2D_MULTISAMPLE_ARRAY   0x9102
-//#define GL_PROXY_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9103
-//#define GL_TEXTURE_BINDING_2D_MULTISAMPLE 0x9104
-//#define GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY 0x9105
-//#define GL_TEXTURE_SAMPLES                0x9106
-//#define GL_TEXTURE_FIXED_SAMPLE_LOCATIONS 0x9107
-//#define GL_SAMPLER_2D_MULTISAMPLE         0x9108
-//#define GL_INT_SAMPLER_2D_MULTISAMPLE     0x9109
-//#define GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE 0x910A
-//#define GL_SAMPLER_2D_MULTISAMPLE_ARRAY   0x910B
-//#define GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY 0x910C
-//#define GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY 0x910D
-//#define GL_MAX_COLOR_TEXTURE_SAMPLES      0x910E
-//#define GL_MAX_DEPTH_TEXTURE_SAMPLES      0x910F
-//#define GL_MAX_INTEGER_SAMPLES            0x9110
-
-//#define GL_UNSIGNED_BYTE_3_3_2            0x8032
-//#define GL_UNSIGNED_SHORT_4_4_4_4         0x8033
-//#define GL_UNSIGNED_SHORT_5_5_5_1         0x8034
-//#define GL_UNSIGNED_INT_8_8_8_8           0x8035
-//#define GL_UNSIGNED_INT_10_10_10_2        0x8036
-//#define GL_TEXTURE_BINDING_3D             0x806A
-//#define GL_PACK_SKIP_IMAGES               0x806B
-//#define GL_PACK_IMAGE_HEIGHT              0x806C
-//#define GL_UNPACK_SKIP_IMAGES             0x806D
-//#define GL_UNPACK_IMAGE_HEIGHT            0x806E
+// GL_VERSION_1_2
 #define GL_TEXTURE_3D                     0x806F
-//#define GL_PROXY_TEXTURE_3D               0x8070
-//#define GL_TEXTURE_DEPTH                  0x8071
-//#define GL_TEXTURE_WRAP_R                 0x8072
-//#define GL_MAX_3D_TEXTURE_SIZE            0x8073
-//#define GL_UNSIGNED_BYTE_2_3_3_REV        0x8362
-//#define GL_UNSIGNED_SHORT_5_6_5           0x8363
-//#define GL_UNSIGNED_SHORT_5_6_5_REV       0x8364
-//#define GL_UNSIGNED_SHORT_4_4_4_4_REV     0x8365
-//#define GL_UNSIGNED_SHORT_1_5_5_5_REV     0x8366
-//#define GL_UNSIGNED_INT_8_8_8_8_REV       0x8367
-//#define GL_UNSIGNED_INT_2_10_10_10_REV    0x8368
-//#define GL_BGR                            0x80E0
-//#define GL_BGRA                           0x80E1
-//#define GL_MAX_ELEMENTS_VERTICES          0x80E8
-//#define GL_MAX_ELEMENTS_INDICES           0x80E9
 #define GL_CLAMP_TO_EDGE                  0x812F
-//#define GL_TEXTURE_MIN_LOD                0x813A
-//#define GL_TEXTURE_MAX_LOD                0x813B
-//#define GL_TEXTURE_BASE_LEVEL             0x813C
-//#define GL_TEXTURE_MAX_LEVEL              0x813D
-//#define GL_SMOOTH_POINT_SIZE_RANGE        0x0B12
-//#define GL_SMOOTH_POINT_SIZE_GRANULARITY  0x0B13
-//#define GL_SMOOTH_LINE_WIDTH_RANGE        0x0B22
-//#define GL_SMOOTH_LINE_WIDTH_GRANULARITY  0x0B23
-//#define GL_ALIASED_LINE_WIDTH_RANGE       0x846E
-//#define GL_RESCALE_NORMAL                 0x803A
-//#define GL_LIGHT_MODEL_COLOR_CONTROL      0x81F8
-//#define GL_SINGLE_COLOR                   0x81F9
-//#define GL_SEPARATE_SPECULAR_COLOR        0x81FA
-//#define GL_ALIASED_POINT_SIZE_RANGE       0x846D
+// GL_VERSION_1_3
 #define GL_TEXTURE0                       0x84C0
-//#define GL_TEXTURE1                       0x84C1
-//#define GL_TEXTURE2                       0x84C2
-//#define GL_TEXTURE3                       0x84C3
-//#define GL_TEXTURE4                       0x84C4
-//#define GL_TEXTURE5                       0x84C5
-//#define GL_TEXTURE6                       0x84C6
-//#define GL_TEXTURE7                       0x84C7
-//#define GL_TEXTURE8                       0x84C8
-//#define GL_TEXTURE9                       0x84C9
-//#define GL_TEXTURE10                      0x84CA
-//#define GL_TEXTURE11                      0x84CB
-//#define GL_TEXTURE12                      0x84CC
-//#define GL_TEXTURE13                      0x84CD
-//#define GL_TEXTURE14                      0x84CE
-//#define GL_TEXTURE15                      0x84CF
-//#define GL_TEXTURE16                      0x84D0
-//#define GL_TEXTURE17                      0x84D1
-//#define GL_TEXTURE18                      0x84D2
-//#define GL_TEXTURE19                      0x84D3
-//#define GL_TEXTURE20                      0x84D4
-//#define GL_TEXTURE21                      0x84D5
-//#define GL_TEXTURE22                      0x84D6
-//#define GL_TEXTURE23                      0x84D7
-//#define GL_TEXTURE24                      0x84D8
-//#define GL_TEXTURE25                      0x84D9
-//#define GL_TEXTURE26                      0x84DA
-//#define GL_TEXTURE27                      0x84DB
-//#define GL_TEXTURE28                      0x84DC
-//#define GL_TEXTURE29                      0x84DD
-//#define GL_TEXTURE30                      0x84DE
-//#define GL_TEXTURE31                      0x84DF
-//#define GL_ACTIVE_TEXTURE                 0x84E0
-//#define GL_MULTISAMPLE                    0x809D
-//#define GL_SAMPLE_ALPHA_TO_COVERAGE       0x809E
-//#define GL_SAMPLE_ALPHA_TO_ONE            0x809F
-//#define GL_SAMPLE_COVERAGE                0x80A0
-//#define GL_SAMPLE_BUFFERS                 0x80A8
-//#define GL_SAMPLES                        0x80A9
-//#define GL_SAMPLE_COVERAGE_VALUE          0x80AA
-//#define GL_SAMPLE_COVERAGE_INVERT         0x80AB
-//#define GL_TEXTURE_CUBE_MAP               0x8513
-//#define GL_TEXTURE_BINDING_CUBE_MAP       0x8514
-//#define GL_TEXTURE_CUBE_MAP_POSITIVE_X    0x8515
-//#define GL_TEXTURE_CUBE_MAP_NEGATIVE_X    0x8516
-//#define GL_TEXTURE_CUBE_MAP_POSITIVE_Y    0x8517
-//#define GL_TEXTURE_CUBE_MAP_NEGATIVE_Y    0x8518
-//#define GL_TEXTURE_CUBE_MAP_POSITIVE_Z    0x8519
-//#define GL_TEXTURE_CUBE_MAP_NEGATIVE_Z    0x851A
-//#define GL_PROXY_TEXTURE_CUBE_MAP         0x851B
-//#define GL_MAX_CUBE_MAP_TEXTURE_SIZE      0x851C
-//#define GL_COMPRESSED_RGB                 0x84ED
-//#define GL_COMPRESSED_RGBA                0x84EE
-//#define GL_TEXTURE_COMPRESSION_HINT       0x84EF
-//#define GL_TEXTURE_COMPRESSED_IMAGE_SIZE  0x86A0
-//#define GL_TEXTURE_COMPRESSED             0x86A1
-//#define GL_NUM_COMPRESSED_TEXTURE_FORMATS 0x86A2
-//#define GL_COMPRESSED_TEXTURE_FORMATS     0x86A3
-//#define GL_CLAMP_TO_BORDER                0x812D
-//#define GL_CLIENT_ACTIVE_TEXTURE          0x84E1
-//#define GL_MAX_TEXTURE_UNITS              0x84E2
-//#define GL_TRANSPOSE_MODELVIEW_MATRIX     0x84E3
-//#define GL_TRANSPOSE_PROJECTION_MATRIX    0x84E4
-//#define GL_TRANSPOSE_TEXTURE_MATRIX       0x84E5
-//#define GL_TRANSPOSE_COLOR_MATRIX         0x84E6
-//#define GL_MULTISAMPLE_BIT                0x20000000
-//#define GL_NORMAL_MAP                     0x8511
-//#define GL_REFLECTION_MAP                 0x8512
-//#define GL_COMPRESSED_ALPHA               0x84E9
-//#define GL_COMPRESSED_LUMINANCE           0x84EA
-//#define GL_COMPRESSED_LUMINANCE_ALPHA     0x84EB
-//#define GL_COMPRESSED_INTENSITY           0x84EC
-//#define GL_COMBINE                        0x8570
-//#define GL_COMBINE_RGB                    0x8571
-//#define GL_COMBINE_ALPHA                  0x8572
-//#define GL_SOURCE0_RGB                    0x8580
-//#define GL_SOURCE1_RGB                    0x8581
-//#define GL_SOURCE2_RGB                    0x8582
-//#define GL_SOURCE0_ALPHA                  0x8588
-//#define GL_SOURCE1_ALPHA                  0x8589
-//#define GL_SOURCE2_ALPHA                  0x858A
-//#define GL_OPERAND0_RGB                   0x8590
-//#define GL_OPERAND1_RGB                   0x8591
-//#define GL_OPERAND2_RGB                   0x8592
-//#define GL_OPERAND0_ALPHA                 0x8598
-//#define GL_OPERAND1_ALPHA                 0x8599
-//#define GL_OPERAND2_ALPHA                 0x859A
-//#define GL_RGB_SCALE                      0x8573
-//#define GL_ADD_SIGNED                     0x8574
-//#define GL_INTERPOLATE                    0x8575
-//#define GL_SUBTRACT                       0x84E7
-//#define GL_CONSTANT                       0x8576
-//#define GL_PRIMARY_COLOR                  0x8577
-//#define GL_PREVIOUS                       0x8578
-//#define GL_DOT3_RGB                       0x86AE
-//#define GL_DOT3_RGBA                      0x86AF
-//#define GL_BLEND_EQUATION_RGB             0x8009
-//#define GL_VERTEX_ATTRIB_ARRAY_ENABLED    0x8622
-//#define GL_VERTEX_ATTRIB_ARRAY_SIZE       0x8623
-//#define GL_VERTEX_ATTRIB_ARRAY_STRIDE     0x8624
-//#define GL_VERTEX_ATTRIB_ARRAY_TYPE       0x8625
-//#define GL_CURRENT_VERTEX_ATTRIB          0x8626
-//#define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
-//#define GL_VERTEX_ATTRIB_ARRAY_POINTER    0x8645
-//#define GL_STENCIL_BACK_FUNC              0x8800
-//#define GL_STENCIL_BACK_FAIL              0x8801
-//#define GL_STENCIL_BACK_PASS_DEPTH_FAIL   0x8802
-//#define GL_STENCIL_BACK_PASS_DEPTH_PASS   0x8803
-//#define GL_MAX_DRAW_BUFFERS               0x8824
-//#define GL_DRAW_BUFFER0                   0x8825
-//#define GL_DRAW_BUFFER1                   0x8826
-//#define GL_DRAW_BUFFER2                   0x8827
-//#define GL_DRAW_BUFFER3                   0x8828
-//#define GL_DRAW_BUFFER4                   0x8829
-//#define GL_DRAW_BUFFER5                   0x882A
-//#define GL_DRAW_BUFFER6                   0x882B
-//#define GL_DRAW_BUFFER7                   0x882C
-//#define GL_DRAW_BUFFER8                   0x882D
-//#define GL_DRAW_BUFFER9                   0x882E
-//#define GL_DRAW_BUFFER10                  0x882F
-//#define GL_DRAW_BUFFER11                  0x8830
-//#define GL_DRAW_BUFFER12                  0x8831
-//#define GL_DRAW_BUFFER13                  0x8832
-//#define GL_DRAW_BUFFER14                  0x8833
-//#define GL_DRAW_BUFFER15                  0x8834
-//#define GL_BLEND_EQUATION_ALPHA           0x883D
-//#define GL_MAX_VERTEX_ATTRIBS             0x8869
-//#define GL_VERTEX_ATTRIB_ARRAY_NORMALIZED 0x886A
-//#define GL_MAX_TEXTURE_IMAGE_UNITS        0x8872
+// GL_VERSION_1_5
+#define GL_ARRAY_BUFFER                   0x8892
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#define GL_STATIC_DRAW                    0x88E4
+#define GL_DYNAMIC_DRAW                   0x88E8
+// GL_VERSION_2_0
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
-//#define GL_MAX_FRAGMENT_UNIFORM_COMPONENTS 0x8B49
-//#define GL_MAX_VERTEX_UNIFORM_COMPONENTS  0x8B4A
-//#define GL_MAX_VARYING_FLOATS             0x8B4B
-//#define GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS 0x8B4C
-//#define GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 0x8B4D
-//#define GL_SHADER_TYPE                    0x8B4F
 #define GL_FLOAT_VEC2                     0x8B50
 #define GL_FLOAT_VEC3                     0x8B51
 #define GL_FLOAT_VEC4                     0x8B52
-//#define GL_INT_VEC2                       0x8B53
-//#define GL_INT_VEC3                       0x8B54
-//#define GL_INT_VEC4                       0x8B55
-//#define GL_BOOL                           0x8B56
-//#define GL_BOOL_VEC2                      0x8B57
-//#define GL_BOOL_VEC3                      0x8B58
-//#define GL_BOOL_VEC4                      0x8B59
-//#define GL_FLOAT_MAT2                     0x8B5A
-//#define GL_FLOAT_MAT3                     0x8B5B
 #define GL_FLOAT_MAT4                     0x8B5C
-//#define GL_SAMPLER_1D                     0x8B5D
 #define GL_SAMPLER_2D                     0x8B5E
 #define GL_SAMPLER_3D                     0x8B5F
-//#define GL_SAMPLER_CUBE                   0x8B60
-//#define GL_SAMPLER_1D_SHADOW              0x8B61
-//#define GL_SAMPLER_2D_SHADOW              0x8B62
-//#define GL_DELETE_STATUS                  0x8B80
 #define GL_COMPILE_STATUS                 0x8B81
 #define GL_LINK_STATUS                    0x8B82
-//#define GL_VALIDATE_STATUS                0x8B83
 #define GL_INFO_LOG_LENGTH                0x8B84
-//#define GL_ATTACHED_SHADERS               0x8B85
 #define GL_ACTIVE_UNIFORMS                0x8B86
 #define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
-//#define GL_SHADER_SOURCE_LENGTH           0x8B88
 #define GL_ACTIVE_ATTRIBUTES              0x8B89
 #define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
-//#define GL_FRAGMENT_SHADER_DERIVATIVE_HINT 0x8B8B
-//#define GL_SHADING_LANGUAGE_VERSION       0x8B8C
-//#define GL_CURRENT_PROGRAM                0x8B8D
-//#define GL_POINT_SPRITE_COORD_ORIGIN      0x8CA0
-//#define GL_LOWER_LEFT                     0x8CA1
-//#define GL_UPPER_LEFT                     0x8CA2
-//#define GL_STENCIL_BACK_REF               0x8CA3
-//#define GL_STENCIL_BACK_VALUE_MASK        0x8CA4
-//#define GL_STENCIL_BACK_WRITEMASK         0x8CA5
-//#define GL_VERTEX_PROGRAM_TWO_SIDE        0x8643
-//#define GL_POINT_SPRITE                   0x8861
-//#define GL_COORD_REPLACE                  0x8862
-//#define GL_MAX_TEXTURE_COORDS             0x8871
-//#define GL_COMPARE_REF_TO_TEXTURE         0x884E
-//#define GL_CLIP_DISTANCE0                 0x3000
-//#define GL_CLIP_DISTANCE1                 0x3001
-//#define GL_CLIP_DISTANCE2                 0x3002
-//#define GL_CLIP_DISTANCE3                 0x3003
-//#define GL_CLIP_DISTANCE4                 0x3004
-//#define GL_CLIP_DISTANCE5                 0x3005
-//#define GL_CLIP_DISTANCE6                 0x3006
-//#define GL_CLIP_DISTANCE7                 0x3007
-//#define GL_MAX_CLIP_DISTANCES             0x0D32
-//#define GL_MAJOR_VERSION                  0x821B
-//#define GL_MINOR_VERSION                  0x821C
-//#define GL_NUM_EXTENSIONS                 0x821D
-//#define GL_CONTEXT_FLAGS                  0x821E
-//#define GL_COMPRESSED_RED                 0x8225
-//#define GL_COMPRESSED_RG                  0x8226
-//#define GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT 0x00000001
+// GL_VERSION_2_1
+#define GL_SRGB8                          0x8C41
+#define GL_SRGB8_ALPHA8                   0x8C43
+// GL_VERSION_3_0
 #define GL_RGBA32F                        0x8814
 #define GL_RGB32F                         0x8815
 #define GL_RGBA16F                        0x881A
 #define GL_RGB16F                         0x881B
-//#define GL_VERTEX_ATTRIB_ARRAY_INTEGER    0x88FD
-//#define GL_MAX_ARRAY_TEXTURE_LAYERS       0x88FF
-//#define GL_MIN_PROGRAM_TEXEL_OFFSET       0x8904
-//#define GL_MAX_PROGRAM_TEXEL_OFFSET       0x8905
-//#define GL_CLAMP_READ_COLOR               0x891C
-//#define GL_FIXED_ONLY                     0x891D
-//#define GL_MAX_VARYING_COMPONENTS         0x8B4B
-//#define GL_TEXTURE_1D_ARRAY               0x8C18
-//#define GL_PROXY_TEXTURE_1D_ARRAY         0x8C19
-//#define GL_TEXTURE_2D_ARRAY               0x8C1A
-//#define GL_PROXY_TEXTURE_2D_ARRAY         0x8C1B
-//#define GL_TEXTURE_BINDING_1D_ARRAY       0x8C1C
-//#define GL_TEXTURE_BINDING_2D_ARRAY       0x8C1D
-//#define GL_R11F_G11F_B10F                 0x8C3A
-//#define GL_UNSIGNED_INT_10F_11F_11F_REV   0x8C3B
-//#define GL_RGB9_E5                        0x8C3D
-//#define GL_UNSIGNED_INT_5_9_9_9_REV       0x8C3E
-//#define GL_TEXTURE_SHARED_SIZE            0x8C3F
-//#define GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH 0x8C76
-//#define GL_TRANSFORM_FEEDBACK_BUFFER_MODE 0x8C7F
-//#define GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS 0x8C80
-//#define GL_TRANSFORM_FEEDBACK_VARYINGS    0x8C83
-//#define GL_TRANSFORM_FEEDBACK_BUFFER_START 0x8C84
-//#define GL_TRANSFORM_FEEDBACK_BUFFER_SIZE 0x8C85
-//#define GL_PRIMITIVES_GENERATED           0x8C87
-//#define GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN 0x8C88
-//#define GL_RASTERIZER_DISCARD             0x8C89
-//#define GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS 0x8C8A
-//#define GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS 0x8C8B
-//#define GL_INTERLEAVED_ATTRIBS            0x8C8C
-//#define GL_SEPARATE_ATTRIBS               0x8C8D
-//#define GL_TRANSFORM_FEEDBACK_BUFFER      0x8C8E
-//#define GL_TRANSFORM_FEEDBACK_BUFFER_BINDING 0x8C8F
-//#define GL_RGBA32UI                       0x8D70
-//#define GL_RGB32UI                        0x8D71
-//#define GL_RGBA16UI                       0x8D76
-//#define GL_RGB16UI                        0x8D77
-//#define GL_RGBA8UI                        0x8D7C
-//#define GL_RGB8UI                         0x8D7D
-//#define GL_RGBA32I                        0x8D82
-//#define GL_RGB32I                         0x8D83
-//#define GL_RGBA16I                        0x8D88
-//#define GL_RGB16I                         0x8D89
-//#define GL_RGBA8I                         0x8D8E
-//#define GL_RGB8I                          0x8D8F
-//#define GL_RED_INTEGER                    0x8D94
-//#define GL_GREEN_INTEGER                  0x8D95
-//#define GL_BLUE_INTEGER                   0x8D96
-//#define GL_RGB_INTEGER                    0x8D98
-//#define GL_RGBA_INTEGER                   0x8D99
-//#define GL_BGR_INTEGER                    0x8D9A
-//#define GL_BGRA_INTEGER                   0x8D9B
-//#define GL_SAMPLER_1D_ARRAY               0x8DC0
-//#define GL_SAMPLER_2D_ARRAY               0x8DC1
-//#define GL_SAMPLER_1D_ARRAY_SHADOW        0x8DC3
-//#define GL_SAMPLER_2D_ARRAY_SHADOW        0x8DC4
-//#define GL_SAMPLER_CUBE_SHADOW            0x8DC5
-//#define GL_UNSIGNED_INT_VEC2              0x8DC6
-//#define GL_UNSIGNED_INT_VEC3              0x8DC7
-//#define GL_UNSIGNED_INT_VEC4              0x8DC8
-//#define GL_INT_SAMPLER_1D                 0x8DC9
-//#define GL_INT_SAMPLER_2D                 0x8DCA
-//#define GL_INT_SAMPLER_3D                 0x8DCB
-//#define GL_INT_SAMPLER_CUBE               0x8DCC
-//#define GL_INT_SAMPLER_1D_ARRAY           0x8DCE
-//#define GL_INT_SAMPLER_2D_ARRAY           0x8DCF
-//#define GL_UNSIGNED_INT_SAMPLER_1D        0x8DD1
-//#define GL_UNSIGNED_INT_SAMPLER_2D        0x8DD2
-//#define GL_UNSIGNED_INT_SAMPLER_3D        0x8DD3
-//#define GL_UNSIGNED_INT_SAMPLER_CUBE      0x8DD4
-//#define GL_UNSIGNED_INT_SAMPLER_1D_ARRAY  0x8DD6
-//#define GL_UNSIGNED_INT_SAMPLER_2D_ARRAY  0x8DD7
-//#define GL_QUERY_WAIT                     0x8E13
-//#define GL_QUERY_NO_WAIT                  0x8E14
-//#define GL_QUERY_BY_REGION_WAIT           0x8E15
-//#define GL_QUERY_BY_REGION_NO_WAIT        0x8E16
-//#define GL_BUFFER_ACCESS_FLAGS            0x911F
-//#define GL_BUFFER_MAP_LENGTH              0x9120
-//#define GL_BUFFER_MAP_OFFSET              0x9121
 #define GL_DEPTH_COMPONENT32F             0x8CAC
-//#define GL_DEPTH32F_STENCIL8              0x8CAD
-//#define GL_FLOAT_32_UNSIGNED_INT_24_8_REV 0x8DAD
-//#define GL_INVALID_FRAMEBUFFER_OPERATION  0x0506
-//#define GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING 0x8210
-//#define GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE 0x8211
-//#define GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE 0x8212
-//#define GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE 0x8213
-//#define GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE 0x8214
-//#define GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE 0x8215
-//#define GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE 0x8216
-//#define GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE 0x8217
-//#define GL_FRAMEBUFFER_DEFAULT            0x8218
 #define GL_FRAMEBUFFER_UNDEFINED          0x8219
-//#define GL_DEPTH_STENCIL_ATTACHMENT       0x821A
-//#define GL_MAX_RENDERBUFFER_SIZE          0x84E8
-//#define GL_DEPTH_STENCIL                  0x84F9
-//#define GL_UNSIGNED_INT_24_8              0x84FA
-//#define GL_DEPTH24_STENCIL8               0x88F0
-//#define GL_TEXTURE_STENCIL_SIZE           0x88F1
-//#define GL_TEXTURE_RED_TYPE               0x8C10
-//#define GL_TEXTURE_GREEN_TYPE             0x8C11
-//#define GL_TEXTURE_BLUE_TYPE              0x8C12
-//#define GL_TEXTURE_ALPHA_TYPE             0x8C13
-//#define GL_TEXTURE_DEPTH_TYPE             0x8C16
-//#define GL_UNSIGNED_NORMALIZED            0x8C17
 #define GL_FRAMEBUFFER_BINDING            0x8CA6
-//#define GL_DRAW_FRAMEBUFFER_BINDING       0x8CA6
-//#define GL_RENDERBUFFER_BINDING           0x8CA7
 #define GL_READ_FRAMEBUFFER               0x8CA8
 #define GL_DRAW_FRAMEBUFFER               0x8CA9
-//#define GL_READ_FRAMEBUFFER_BINDING       0x8CAA
-//#define GL_RENDERBUFFER_SAMPLES           0x8CAB
-//#define GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE 0x8CD0
-//#define GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME 0x8CD1
-//#define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL 0x8CD2
-//#define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE 0x8CD3
-//#define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER 0x8CD4
 #define GL_FRAMEBUFFER_COMPLETE           0x8CD5
 #define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
 #define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
 #define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
 #define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
 #define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
-//#define GL_MAX_COLOR_ATTACHMENTS          0x8CDF
 #define GL_COLOR_ATTACHMENT0              0x8CE0
-//#define GL_COLOR_ATTACHMENT1              0x8CE1
-//#define GL_COLOR_ATTACHMENT2              0x8CE2
-//#define GL_COLOR_ATTACHMENT3              0x8CE3
-//#define GL_COLOR_ATTACHMENT4              0x8CE4
-//#define GL_COLOR_ATTACHMENT5              0x8CE5
-//#define GL_COLOR_ATTACHMENT6              0x8CE6
-//#define GL_COLOR_ATTACHMENT7              0x8CE7
-//#define GL_COLOR_ATTACHMENT8              0x8CE8
-//#define GL_COLOR_ATTACHMENT9              0x8CE9
-//#define GL_COLOR_ATTACHMENT10             0x8CEA
-//#define GL_COLOR_ATTACHMENT11             0x8CEB
-//#define GL_COLOR_ATTACHMENT12             0x8CEC
-//#define GL_COLOR_ATTACHMENT13             0x8CED
-//#define GL_COLOR_ATTACHMENT14             0x8CEE
-//#define GL_COLOR_ATTACHMENT15             0x8CEF
-//#define GL_COLOR_ATTACHMENT16             0x8CF0
-//#define GL_COLOR_ATTACHMENT17             0x8CF1
-//#define GL_COLOR_ATTACHMENT18             0x8CF2
-//#define GL_COLOR_ATTACHMENT19             0x8CF3
-//#define GL_COLOR_ATTACHMENT20             0x8CF4
-//#define GL_COLOR_ATTACHMENT21             0x8CF5
-//#define GL_COLOR_ATTACHMENT22             0x8CF6
-//#define GL_COLOR_ATTACHMENT23             0x8CF7
-//#define GL_COLOR_ATTACHMENT24             0x8CF8
-//#define GL_COLOR_ATTACHMENT25             0x8CF9
-//#define GL_COLOR_ATTACHMENT26             0x8CFA
-//#define GL_COLOR_ATTACHMENT27             0x8CFB
-//#define GL_COLOR_ATTACHMENT28             0x8CFC
-//#define GL_COLOR_ATTACHMENT29             0x8CFD
-//#define GL_COLOR_ATTACHMENT30             0x8CFE
-//#define GL_COLOR_ATTACHMENT31             0x8CFF
 #define GL_DEPTH_ATTACHMENT               0x8D00
-//#define GL_STENCIL_ATTACHMENT             0x8D20
 #define GL_FRAMEBUFFER                    0x8D40
-//#define GL_RENDERBUFFER                   0x8D41
-//#define GL_RENDERBUFFER_WIDTH             0x8D42
-//#define GL_RENDERBUFFER_HEIGHT            0x8D43
-//#define GL_RENDERBUFFER_INTERNAL_FORMAT   0x8D44
-//#define GL_STENCIL_INDEX1                 0x8D46
-//#define GL_STENCIL_INDEX4                 0x8D47
-//#define GL_STENCIL_INDEX8                 0x8D48
-//#define GL_STENCIL_INDEX16                0x8D49
-//#define GL_RENDERBUFFER_RED_SIZE          0x8D50
-//#define GL_RENDERBUFFER_GREEN_SIZE        0x8D51
-//#define GL_RENDERBUFFER_BLUE_SIZE         0x8D52
-//#define GL_RENDERBUFFER_ALPHA_SIZE        0x8D53
-//#define GL_RENDERBUFFER_DEPTH_SIZE        0x8D54
-//#define GL_RENDERBUFFER_STENCIL_SIZE      0x8D55
 #define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
-//#define GL_MAX_SAMPLES                    0x8D57
-//#define GL_INDEX                          0x8222
-//#define GL_TEXTURE_LUMINANCE_TYPE         0x8C14
-//#define GL_TEXTURE_INTENSITY_TYPE         0x8C15
 #define GL_FRAMEBUFFER_SRGB               0x8DB9
 #define GL_HALF_FLOAT                     0x140B
-//#define GL_MAP_READ_BIT                   0x0001
-//#define GL_MAP_WRITE_BIT                  0x0002
-//#define GL_MAP_INVALIDATE_RANGE_BIT       0x0004
-//#define GL_MAP_INVALIDATE_BUFFER_BIT      0x0008
-//#define GL_MAP_FLUSH_EXPLICIT_BIT         0x0010
-//#define GL_MAP_UNSYNCHRONIZED_BIT         0x0020
-//#define GL_COMPRESSED_RED_RGTC1           0x8DBB
-//#define GL_COMPRESSED_SIGNED_RED_RGTC1    0x8DBC
-//#define GL_COMPRESSED_RG_RGTC2            0x8DBD
-//#define GL_COMPRESSED_SIGNED_RG_RGTC2     0x8DBE
-//#define GL_RG                             0x8227
-//#define GL_RG_INTEGER                     0x8228
 #define GL_R8                             0x8229
-//#define GL_R16                            0x822A
-//#define GL_RG8                            0x822B
-//#define GL_RG16                           0x822C
 #define GL_R16F                           0x822D
 #define GL_R32F                           0x822E
-//#define GL_RG16F                          0x822F
-//#define GL_RG32F                          0x8230
-//#define GL_R8I                            0x8231
-//#define GL_R8UI                           0x8232
-//#define GL_R16I                           0x8233
 #define GL_R16UI                          0x8234
-//#define GL_R32I                           0x8235
-//#define GL_R32UI                          0x8236
-//#define GL_RG8I                           0x8237
-//#define GL_RG8UI                          0x8238
-//#define GL_RG16I                          0x8239
-//#define GL_RG16UI                         0x823A
-//#define GL_RG32I                          0x823B
-//#define GL_RG32UI                         0x823C
-//#define GL_VERTEX_ARRAY_BINDING           0x85B5
-//#define GL_CLAMP_VERTEX_COLOR             0x891A
-//#define GL_CLAMP_FRAGMENT_COLOR           0x891B
-//#define GL_ALPHA_INTEGER                  0x8D97
+// GL_VERSION_3_2
+#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+
 #if !_AE_APPLE_
 // OpenGL Shader Functions
 GLuint ( *glCreateProgram ) () = nullptr;
@@ -4771,6 +5493,18 @@ void ( *glGenFramebuffers ) ( GLsizei n, GLuint *framebuffers ) = nullptr;
 void ( *glDeleteFramebuffers ) ( GLsizei n, const GLuint *framebuffers ) = nullptr;
 GLenum ( *glCheckFramebufferStatus ) ( GLenum target ) = nullptr;
 void ( *glDrawBuffers ) ( GLsizei n, const GLenum *bufs ) = nullptr;
+void ( *glTextureBarrierNV ) () = nullptr;
+// OpenGL Vertex Functions
+void ( *glGenVertexArrays ) (GLsizei n, GLuint *arrays ) = nullptr;
+void ( *glBindVertexArray ) ( GLuint array ) = nullptr;
+void ( *glDeleteVertexArrays ) ( GLsizei n, const GLuint *arrays ) = nullptr;
+void ( *glDeleteBuffers ) ( GLsizei n, const GLuint *buffers ) = nullptr;
+void ( *glBindBuffer ) ( GLenum target, GLuint buffer ) = nullptr;
+void ( *glGenBuffers ) ( GLsizei n, GLuint *buffers ) = nullptr;
+void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenum usage ) = nullptr;
+void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
+void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
+void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
 #endif
 
 // Helpers
@@ -4880,6 +5614,56 @@ void OpenGLDebugCallback( GLenum source,
   }
 }
 #endif
+
+GLenum VertexDataTypeToGL( VertexData::Type type )
+{
+  switch ( type )
+  {
+    case VertexData::Type::UInt8:
+      return GL_UNSIGNED_BYTE;
+    case VertexData::Type::UInt16:
+      return GL_UNSIGNED_SHORT;
+    case VertexData::Type::UInt32:
+      return GL_UNSIGNED_INT;
+    case VertexData::Type::NormalizedUInt8:
+      return GL_UNSIGNED_BYTE;
+    case VertexData::Type::NormalizedUInt16:
+      return GL_UNSIGNED_SHORT;
+    case VertexData::Type::NormalizedUInt32:
+      return GL_UNSIGNED_INT;
+    case VertexData::Type::Float:
+      return GL_FLOAT;
+    default:
+      AE_FAIL();
+      return 0;
+  }
+}
+
+typedef uint32_t aeQuadIndex;
+const uint32_t aeQuadVertCount = 4;
+const uint32_t aeQuadIndexCount = 6;
+extern const Vec3 aeQuadVertPos[ aeQuadVertCount ];
+extern const Vec2 aeQuadVertUvs[ aeQuadVertCount ];
+extern const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ];
+
+const Vec3 aeQuadVertPos[ aeQuadVertCount ] = {
+  Vec3( -0.5f, -0.5f, 0.0f ),
+  Vec3( 0.5f, -0.5f, 0.0f ),
+  Vec3( 0.5f, 0.5f, 0.0f ),
+  Vec3( -0.5f, 0.5f, 0.0f )
+};
+
+const Vec2 aeQuadVertUvs[ aeQuadVertCount ] = {
+  Vec2( 0.0f, 0.0f ),
+  Vec2( 1.0f, 0.0f ),
+  Vec2( 1.0f, 1.0f ),
+  Vec2( 0.0f, 1.0f )
+};
+
+const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ] = {
+  3, 0, 1,
+  3, 1, 2
+};
 
 const uint32_t _kMaxFrameBufferAttachments = 16;
 
@@ -5262,7 +6046,7 @@ void Shader::Activate( const UniformList& uniforms ) const
     {
 #if _AE_EMSCRIPTEN_
       // WebGL/Emscripten doesn't support glUniformMatrix4fv auto-transpose
-      aeFloat4x4 transposedTransform = uniformValue->value.GetTransposeCopy();
+      Matrix4 transposedTransform = uniformValue->value.GetTransposeCopy();
       glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, transposedTransform.data );
 #else
       glUniformMatrix4fv( uniformVar->location, 1, GL_TRUE, uniformValue->value.data );
@@ -5385,6 +6169,416 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
   AE_CHECK_GL_ERROR();
   return shader;
+}
+
+//------------------------------------------------------------------------------
+// ae::VertexData member functions
+//------------------------------------------------------------------------------
+VertexData::~VertexData()
+{
+  Destroy();
+}
+
+void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage )
+{
+  Destroy();
+
+  AE_ASSERT( m_vertexSize == 0 );
+  AE_ASSERT( vertexSize );
+  AE_ASSERT( m_indexSize == 0 );
+  AE_ASSERT( indexSize == sizeof(uint8_t) || indexSize == sizeof(uint16_t) || indexSize == sizeof(uint32_t) );
+
+  m_maxVertexCount = maxVertexCount;
+  m_maxIndexCount = maxIndexCount;
+  m_primitive = primitive;
+  m_vertexUsage = vertexUsage;
+  m_indexUsage = indexUsage;
+  m_vertexSize = vertexSize;
+  m_indexSize = indexSize;
+  
+  glGenVertexArrays( 1, &m_array );
+  glBindVertexArray( m_array );
+}
+
+void VertexData::Destroy()
+{
+  if ( m_vertexReadable )
+  {
+    ae::Delete( (uint8_t*)m_vertexReadable );
+  }
+  if ( m_indexReadable )
+  {
+    ae::Delete( (uint8_t*)m_indexReadable );
+  }
+  
+  if ( m_array )
+  {
+    glDeleteVertexArrays( 1, &m_array );
+  }
+  if ( m_vertices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_vertices );
+  }
+  if ( m_indices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_indices );
+  }
+  
+  m_array = 0;
+  m_vertices = ~0;
+  m_indices = ~0;
+  m_vertexCount = 0;
+  m_indexCount = 0;
+
+  m_maxVertexCount = 0;
+  m_maxIndexCount = 0;
+
+  m_primitive = (VertexData::Primitive)-1;
+  m_vertexUsage = (VertexData::Usage)-1;
+  m_indexUsage = (VertexData::Usage)-1;
+
+  m_attributeCount = 0;
+  m_vertexSize = 0;
+  m_indexSize = 0;
+
+  m_vertexReadable = nullptr;
+  m_indexReadable = nullptr;
+}
+
+void VertexData::AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset )
+{
+  AE_ASSERT( m_vertices == ~0 && m_indices == ~0 );
+  
+  AE_ASSERT( m_attributeCount < countof(m_attributes) );
+  Attribute* attribute = &m_attributes[ m_attributeCount ];
+  m_attributeCount++;
+  
+  size_t length = strlen( name );
+  AE_ASSERT( length < _kMaxShaderAttributeNameLength );
+  strcpy( attribute->name, name );
+  attribute->componentCount = componentCount;
+  attribute->type = VertexDataTypeToGL( type );
+  attribute->offset = offset;
+  attribute->normalized =
+    type == VertexData::Type::NormalizedUInt8 ||
+    type == VertexData::Type::NormalizedUInt16 ||
+    type == VertexData::Type::NormalizedUInt32;
+}
+
+void VertexData::m_SetVertices( const void* vertices, uint32_t count )
+{
+  AE_ASSERT( m_vertexSize );
+  AE_ASSERT_MSG( count <= m_maxVertexCount, "# #", count, m_maxVertexCount );
+
+  if ( m_indices != ~0 )
+  {
+    AE_ASSERT( m_indexSize != 0 );
+  }
+  if ( m_indexSize )
+  {
+    AE_ASSERT_MSG( count <= (uint64_t)1 << ( m_indexSize * 8 ), "Vertex count (#) too high for index of size #", count, m_indexSize );
+  }
+  
+  if( m_vertexUsage == Usage::Static )
+  {
+    AE_ASSERT( count );
+    AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
+    AE_ASSERT( m_vertices == ~0 );
+
+    m_vertexCount = count;
+
+    glGenBuffers( 1, &m_vertices );
+    glBindVertexArray( m_array );
+    glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+    glBufferData( GL_ARRAY_BUFFER, count * m_vertexSize, vertices, GL_STATIC_DRAW );
+    return;
+  }
+  
+  if( m_vertexUsage == Usage::Dynamic )
+  {
+    m_vertexCount = count;
+
+    if ( !m_vertexCount )
+    {
+      return;
+    }
+    
+    if( m_vertices == ~0 )
+    {
+      glGenBuffers( 1, &m_vertices );
+      glBindVertexArray( m_array );
+      glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+      glBufferData( GL_ARRAY_BUFFER, m_vertexSize * m_maxVertexCount, nullptr, GL_DYNAMIC_DRAW );
+    }
+    
+    glBindVertexArray( m_array );
+    glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+    glBufferSubData( GL_ARRAY_BUFFER, 0, count * m_vertexSize, vertices );
+    return;
+  }
+  
+  AE_FAIL();
+}
+
+void VertexData::m_SetIndices( const void* indices, uint32_t count )
+{
+  AE_ASSERT( m_indexSize );
+  AE_ASSERT( count % 3 == 0 );
+  AE_ASSERT( count <= m_maxIndexCount );
+  
+  if( m_indexUsage == Usage::Static )
+  {
+    AE_ASSERT( count );
+    AE_ASSERT( !m_indexCount );
+    AE_ASSERT( m_indices == ~0 );
+
+    m_indexCount = count;
+
+    glGenBuffers( 1, &m_indices );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, m_indexCount * m_indexSize, indices, GL_STATIC_DRAW );
+    return;
+  }
+  
+  if( m_indexUsage == Usage::Dynamic )
+  {
+    m_indexCount = count;
+
+    if ( !m_indexCount )
+    {
+      return;
+    }
+    
+    if( m_indices == ~0 )
+    {
+      glGenBuffers( 1, &m_indices );
+      glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+      glBufferData( GL_ELEMENT_ARRAY_BUFFER, m_indexSize * m_maxIndexCount, nullptr, GL_DYNAMIC_DRAW );
+    }
+    
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, 0, m_indexCount * m_indexSize, indices );
+    return;
+  }
+  
+  AE_FAIL();
+}
+
+void VertexData::SetVertices( const void *vertices, uint32_t count )
+{
+  AE_ASSERT( m_vertexSize );
+  if ( m_vertexUsage == Usage::Static )
+  {
+    m_SetVertices( vertices, count );
+    AE_ASSERT( !m_vertexReadable );
+    m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_vertexSize );
+    memcpy( m_vertexReadable, vertices, count * m_vertexSize );
+  }
+  else if ( m_vertexUsage == Usage::Dynamic )
+  {
+    m_SetVertices( vertices, count );
+    if ( !m_vertexReadable ) { m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxVertexCount * m_vertexSize ); }
+    memcpy( m_vertexReadable, vertices, count * m_vertexSize );
+  }
+  else
+  {
+    AE_FAIL_MSG( "Invalid vertex usage" );
+  }
+}
+
+void VertexData::SetIndices( const void* indices, uint32_t count )
+{
+  AE_ASSERT( m_indexSize );
+
+  if ( count && _AE_DEBUG_ )
+  {
+    int32_t badIndex = -1;
+    
+    if ( m_indexSize == 1 )
+    {
+      uint8_t* indicesCheck = (uint8_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        if ( indicesCheck[ i ] >= m_maxVertexCount )
+        {
+          badIndex = indicesCheck[ i ];
+          break;
+        }
+      }
+    }
+    else if ( m_indexSize == 2 )
+    {
+      uint16_t* indicesCheck = (uint16_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        if ( indicesCheck[ i ] >= m_maxVertexCount )
+        {
+          badIndex = indicesCheck[ i ];
+          break;
+        }
+      }
+    }
+    else if ( m_indexSize == 4 )
+    {
+      uint32_t* indicesCheck = (uint32_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        if ( indicesCheck[ i ] >= m_maxVertexCount )
+        {
+          badIndex = indicesCheck[ i ];
+          break;
+        }
+      }
+    }
+
+    if ( badIndex >= 0 )
+    {
+      AE_FAIL_MSG( "Out of range index detected #", badIndex );
+    }
+  }
+
+  if ( m_indexUsage == Usage::Static )
+  {
+    m_SetIndices( indices, count );
+    AE_ASSERT( !m_indexReadable );
+    m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_indexSize );
+    memcpy( m_indexReadable, indices, count * m_indexSize );
+  }
+  else if ( m_indexUsage == Usage::Dynamic )
+  {
+    m_SetIndices( indices, count );
+    if ( !m_indexReadable ) { m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxIndexCount * m_indexSize ); }
+    memcpy( m_indexReadable, indices, count * m_indexSize );
+  }
+  else
+  {
+    AE_FAIL_MSG( "Invalid index usage" );
+  }
+}
+
+const void* VertexData::GetVertices() const
+{
+  AE_ASSERT( m_vertexReadable != nullptr );
+  return m_vertexReadable;
+}
+
+const void* VertexData::GetIndices() const
+{
+  AE_ASSERT( m_indexReadable != nullptr );
+  return m_indexReadable;
+}
+
+void VertexData::Render( const Shader* shader, const UniformList& uniforms ) const
+{
+  Render( shader, 0, uniforms ); // Draw all
+}
+
+void VertexData::Render( const Shader* shader, uint32_t primitiveCount, const UniformList& uniforms ) const
+{
+  AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
+  AE_ASSERT( shader );
+  
+  if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
+  {
+    return;
+  }
+
+  shader->Activate( uniforms );
+
+  glBindVertexArray( m_array );
+  AE_CHECK_GL_ERROR();
+
+  glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+  AE_CHECK_GL_ERROR();
+
+  if ( m_indexCount && m_primitive != Primitive::Point )
+  {
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    AE_CHECK_GL_ERROR();
+  }
+
+  for ( uint32_t i = 0; i < shader->GetAttributeCount(); i++ )
+  {
+    const Shader::Attribute* shaderAttribute = shader->GetAttributeByIndex( i );
+    const Attribute* vertexAttribute = m_GetAttributeByName( shaderAttribute->name );
+
+    AE_ASSERT_MSG( vertexAttribute, "No vertex attribute named '#'", shaderAttribute->name );
+    // @TODO: Verify attribute type and size match
+
+    GLint location = shaderAttribute->location;
+    AE_ASSERT( location != -1 );
+    glEnableVertexAttribArray( location );
+    AE_CHECK_GL_ERROR();
+
+    uint32_t componentCount = vertexAttribute->componentCount;
+    uint64_t attribOffset = vertexAttribute->offset;
+    glVertexAttribPointer( location, componentCount, vertexAttribute->type, vertexAttribute->normalized, m_vertexSize, (void*)attribOffset );
+    AE_CHECK_GL_ERROR();
+  }
+
+  int64_t start = 0; // TODO: Add support to start drawing at non-zero index
+  int32_t count = 0;
+
+  // Draw
+  GLenum mode;
+  if( m_primitive == Primitive::Triangle )
+  {
+    count = primitiveCount ? primitiveCount * 3 : m_indexCount;
+    mode = GL_TRIANGLES;
+  }
+  else if( m_primitive == Primitive::Line )
+  {
+    count = primitiveCount ? primitiveCount * 2 : m_indexCount;
+    mode = GL_LINES;
+  }
+  else if( m_primitive == Primitive::Point )
+  {
+    count = primitiveCount ? primitiveCount : m_indexCount;
+    mode = GL_POINTS;
+  }
+  else
+  {
+    AE_FAIL();
+    return;
+  }
+  
+  if ( m_indexCount && mode != GL_POINTS )
+  {
+    if ( count == 0 ) { count = m_indexCount; }
+    AE_ASSERT( start + count <= m_indexCount );
+    if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
+    
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    AE_CHECK_GL_ERROR();
+    GLenum type = 0;
+    if ( m_indexSize == sizeof(uint8_t) ) { type = GL_UNSIGNED_BYTE; }
+    else if ( m_indexSize == sizeof(uint16_t) ) { type = GL_UNSIGNED_SHORT; }
+    else if ( m_indexSize == sizeof(uint32_t) ) { type = GL_UNSIGNED_INT; }
+    glDrawElements( mode, count, type, (void*)start );
+    AE_CHECK_GL_ERROR();
+  }
+  else
+  {
+    if ( count == 0 ) { count = m_vertexCount; }
+    AE_ASSERT( start + count <= m_vertexCount );
+    if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
+    
+    glDrawArrays( mode, start, count );
+    AE_CHECK_GL_ERROR();
+  }
+}
+
+const VertexData::Attribute* VertexData::m_GetAttributeByName( const char* name ) const
+{
+  for ( uint32_t i = 0; i < m_attributeCount; i++ )
+  {
+    if ( strcmp( m_attributes[ i ].name, name ) == 0 )
+    {
+      return &m_attributes[ i ];
+    }
+  }
+
+  return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -5727,20 +6921,20 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   AE_CHECK_GL_ERROR();
 
-  //Vertex quadVerts[] =
-  //{
-  //  { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
-  //  { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
-  //  { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
-  //  { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
-  //};
-  //AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
-  //m_quad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
-  //m_quad.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( Vertex, pos ) );
-  //m_quad.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof( Vertex, uv ) );
-  //m_quad.SetVertices( quadVerts, aeQuadVertCount );
-  //m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
-  //AE_CHECK_GL_ERROR();
+  Vertex quadVerts[] =
+  {
+    { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
+    { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
+    { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
+    { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
+  };
+  AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
+  m_quad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, VertexData::Primitive::Triangle, VertexData::Usage::Static, VertexData::Usage::Static );
+  m_quad.AddAttribute( "a_position", 3, VertexData::Type::Float, offsetof( Vertex, pos ) );
+  m_quad.AddAttribute( "a_uv", 2, VertexData::Type::Float, offsetof( Vertex, uv ) );
+  m_quad.SetVertices( quadVerts, aeQuadVertCount );
+  m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  AE_CHECK_GL_ERROR();
 
   const char* vertexStr = "\
     AE_UNIFORM_HIGHP mat4 u_localToNdc;\
@@ -5767,7 +6961,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 void RenderTarget::Destroy()
 {
   m_shader.Destroy();
-  //m_quad.Destroy(); // @TODO
+  m_quad.Destroy();
 
   for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
@@ -5850,17 +7044,17 @@ void RenderTarget::Clear( Color color )
 void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
   glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
-  //m_quad.Render( shader, uniforms );
+  m_quad.Render( shader, uniforms );
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
   glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 
-  //aeUniformList uniforms;
-  //uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
-  //uniforms.Set( "u_tex", GetTexture( textureIndex ) );
-  //m_quad.Render( &m_shader, uniforms );
+  UniformList uniforms;
+  uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
+  uniforms.Set( "u_tex", GetTexture( textureIndex ) );
+  m_quad.Render( &m_shader, uniforms );
 }
 
 const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
@@ -5885,66 +7079,53 @@ uint32_t RenderTarget::GetHeight() const
 
 Matrix4 RenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const
 {
-  //Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
-  //windowToNDC.Scale( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+  Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
+  windowToNDC.Scale( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
 
-  //Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
-  //ndcToQuad.Invert();
+  Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
+  ndcToQuad.Invert();
 
-  //Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
-  //quadToRender.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
+  Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
+  quadToRender.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
 
-  //return ( quadToRender * ndcToQuad * windowToNDC );
-  return {};
+  return ( quadToRender * ndcToQuad * windowToNDC );
 }
 
 Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
 {
-  //float canvasAspect = m_width / (float)m_height;
-  //float targetAspect = otherWidth / (float)otherHeight;
-  //if ( canvasAspect >= targetAspect )
-  //{
-  //  // Fit width
-  //  float height = targetAspect / canvasAspect;
-  //  return Rect( -1.0f, -height, 2.0f, height * 2.0f );
-  //}
-  //else
-  //{
-  //  // Fit height
-  //  float width = canvasAspect / targetAspect;
-  //  return Rect( -width, -1.0f, width * 2.0f, 2.0f );
-  //}
-  return {};
+  float canvasAspect = m_width / (float)m_height;
+  float targetAspect = otherWidth / (float)otherHeight;
+  if ( canvasAspect >= targetAspect )
+  {
+    // Fit width
+    float height = targetAspect / canvasAspect;
+    return Rect( -1.0f, -height, 2.0f, height * 2.0f );
+  }
+  else
+  {
+    // Fit height
+    float width = canvasAspect / targetAspect;
+    return Rect( -width, -1.0f, width * 2.0f, 2.0f );
+  }
 }
 
 Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const
 {
-  //Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
-  //return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
-  return {};
+  Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
 }
 
 Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 {
-  //Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
-  //localToNdc.Scale( Vec3( ndc.w, ndc.h, 1.0f ) );
-  //localToNdc.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
-  //return localToNdc;
-  return {};
+  Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
+  localToNdc.Scale( Vec3( ndc.w, ndc.h, 1.0f ) );
+  localToNdc.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
+  return localToNdc;
 }
 
 //------------------------------------------------------------------------------
 // GraphicsDevice member functions
 //------------------------------------------------------------------------------
-GraphicsDevice::GraphicsDevice()
-{
-  m_window = nullptr;
-
-  // OpenGL
-  m_context = nullptr;
-  m_defaultFbo = 0;
-}
-
 GraphicsDevice::~GraphicsDevice()
 {
   Terminate();
@@ -6015,71 +7196,28 @@ void GraphicsDevice::Initialize( class Window* window )
   LOAD_OPENGL_FN( glDeleteFramebuffers );
   LOAD_OPENGL_FN( glCheckFramebufferStatus );
   LOAD_OPENGL_FN( glDrawBuffers );
+  LOAD_OPENGL_FN( glTextureBarrierNV );
+  // Vertex functions
+  LOAD_OPENGL_FN( glGenVertexArrays );
+  LOAD_OPENGL_FN( glBindVertexArray );
+  LOAD_OPENGL_FN( glDeleteVertexArrays );
+  LOAD_OPENGL_FN( glDeleteBuffers );
+  LOAD_OPENGL_FN( glBindBuffer );
+  LOAD_OPENGL_FN( glGenBuffers );
+  LOAD_OPENGL_FN( glBufferData );
+  LOAD_OPENGL_FN( glBufferSubData );
+  LOAD_OPENGL_FN( glEnableVertexAttribArray );
+  LOAD_OPENGL_FN( glVertexAttribPointer );
 #endif
 
   AE_CHECK_GL_ERROR();
-
-//  // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
-//#if !_AE_IOS_
-//  AE_STATIC_ASSERT( GL_ARB_framebuffer_sRGB );
-//#endif
-//
-//#if _AE_IOS_
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES );
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-//#else
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-//  if ( gGL41 )
-//  {
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
-//  }
-//  else
-//  {
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
-//  }
-//#endif
-//
-//  SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
-//
-//#if AE_GL_DEBUG_MODE
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
-//#endif
-//  SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
-//  SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
-//
-//  m_context = SDL_GL_CreateContext( (SDL_Window*)m_window->window );
-//  AE_ASSERT( m_context );
-//  SDL_GL_MakeCurrent( (SDL_Window*)m_window->window, m_context );
-//
-//  SDL_GL_SetSwapInterval( 1 );
-//
-//#if _AE_WINDOWS_
-//  glewExperimental = GL_TRUE;
-//  GLenum err = glewInit();
-//  glGetError(); // Glew currently has an issue which causes a GL_INVALID_ENUM on init
-//  AE_ASSERT_MSG( err == GLEW_OK, "Could not initialize glew" );
-//#endif
 
 #if AE_GL_DEBUG_MODE
   glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
 #endif
 
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
-
   AE_CHECK_GL_ERROR();
-
-//#if _AE_WINDOWS_
-//  // @TODO: Remove start
-//  glShadeModel( GL_SMOOTH );							// Enable Smooth Shading
-//  glClearColor( 0.0f, 0.0f, 0.0f, 0.5f );				// Black Background
-//  glClearDepth( 1.0f );									// Depth Buffer Setup
-//  glEnable( GL_DEPTH_TEST );							// Enables Depth Testing
-//  glDepthFunc( GL_LEQUAL );								// The Type Of Depth Testing To Do
-//  glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST ); // Really Nice Perspective Calculations
-//  // @TODO: Remove end
-//#endif
 
   m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
 
@@ -6108,38 +7246,6 @@ void GraphicsDevice::Activate()
   // This is automatically enabled on opengl es3 and can't be turned off
   glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
-
-//#if _AE_WINDOWS_
-//  // @TODO: Remove start
-//  glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // Reset The Current Viewport
-//
-//  glMatrixMode( GL_PROJECTION ); // Select The Projection Matrix
-//  glLoadIdentity(); // Reset The Projection Matrix
-//
-//  // Calculate The Aspect Ratio Of The Window
-//  float aspectRatio = m_canvas.GetWidth() / (float)m_canvas.GetHeight();
-//  gluPerspective( 45.0f, aspectRatio, 0.1f, 100.0f );
-//
-//  glMatrixMode( GL_MODELVIEW ); // Select The Modelview Matrix
-//  glLoadIdentity();
-//
-//  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );	// Clear Screen And Depth Buffer
-//  glLoadIdentity();									// Reset The Current Modelview Matrix
-//  glTranslatef( -1.5f, 0.0f, -6.0f );						// Move Left 1.5 Units And Into The Screen 6.0
-//  glBegin( GL_TRIANGLES );								// Drawing Using Triangles
-//  glVertex3f( 0.0f, 1.0f, 0.0f );					// Top
-//  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
-//  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
-//  glEnd();											// Finished Drawing The Triangle
-//  glTranslatef( 3.0f, 0.0f, 0.0f );						// Move Right 3 Units
-//  glBegin( GL_QUADS );									// Draw A Quad
-//  glVertex3f( -1.0f, 1.0f, 0.0f );					// Top Left
-//  glVertex3f( 1.0f, 1.0f, 0.0f );					// Top Right
-//  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
-//  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
-//  glEnd();											// Done Drawing The Quad
-//  // @TODO: Remove end
-//#endif
 }
 
 void GraphicsDevice::Clear( Color color )
@@ -6193,11 +7299,11 @@ float GraphicsDevice::GetAspectRatio() const
 
 void GraphicsDevice::AddTextureBarrier()
 {
-//  // only GL has texture barrier for reading from previously written textures
-//  // There are less draconian ways in desktop ES, and nothing in WebGL.
-//#if _AE_WINDOWS_ || _AE_OSX_
-//  glTextureBarrierNV();
-//#endif
+  // only GL has texture barrier for reading from previously written textures
+  // There are less draconian ways in desktop ES, and nothing in WebGL.
+#if _AE_WINDOWS_ || _AE_OSX_
+  glTextureBarrierNV();
+#endif
 }
 
 void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
