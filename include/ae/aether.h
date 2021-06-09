@@ -464,99 +464,57 @@ struct Vec4 : public _VecT< Vec4 >
 class Matrix4
 {
 public:
-  float data[ 16 ];
+  float d[ 16 ];
 
   Matrix4() = default;
   Matrix4( const Matrix4& ) = default;
 
-  Matrix4(float v0,  float v1,  float v2,  float v3,
-    float v4,  float v5,  float v6,  float v7,
-    float v8,  float v9,  float v10, float v11,
-    float v12, float v13, float v14, float v15)
-  {
-    data[0]  = v0;  data[1]  = v1;  data[2]  = v2;  data[3]  = v3;
-    data[4]  = v4;  data[5]  = v5;  data[6]  = v6;  data[7]  = v7;
-    data[8]  = v8;  data[9]  = v9;  data[10] = v10; data[11] = v11;
-    data[12] = v12; data[13] = v13; data[14] = v14; data[15] = v15;
-  }
-
-  static Matrix4 Identity()
-  {
-    Matrix4 r;
-    r.data[0]  = 1; r.data[1]  = 0; r.data[2]  = 0; r.data[3]  = 0;
-    r.data[4]  = 0; r.data[5]  = 1; r.data[6]  = 0; r.data[7]  = 0;
-    r.data[8]  = 0; r.data[9]  = 0; r.data[10] = 1; r.data[11] = 0;
-    r.data[12] = 0; r.data[13] = 0; r.data[14] = 0; r.data[15] = 1;
-    return r;
-  }
-
   // Constructor helpers
+  static Matrix4 Identity();
   static Matrix4 Translation( const Vec3& p );
   static Matrix4 Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 );
   static Matrix4 RotationX( float angle );
   static Matrix4 RotationY( float angle );
   static Matrix4 RotationZ( float angle );
   static Matrix4 Scaling( const Vec3& s );
-
-  static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up ); // @TODO: Verify handedness
+  static Matrix4 Scaling( float sx, float sy, float sz );
+  static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
   static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
-  // Operators
-  bool operator== ( const Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
-  bool operator!= ( const Matrix4& o ) const { return !operator== ( o ); }
-  Vec4 operator*(const Vec4& v) const;
-  Matrix4 operator*(const Matrix4& m) const;
-  void operator*=(const Matrix4& m);
-  bool SetInverse(const Matrix4& m);
+  bool operator==( const Matrix4& o ) const { return memcmp( o.d, d, sizeof(d) ) == 0; }
+  bool operator!=( const Matrix4& o ) const { return !operator== ( o ); }
+  Vec4 operator*( const Vec4& v ) const;
+  Matrix4 operator*( const Matrix4& m ) const;
+  void operator*=( const Matrix4& m );
 
-  Matrix4 Inverse() const; //TODO: Rename this! Caused a bunch of problems debugging graphics...
-  bool Invert();           //TODO: Rename. See above
-  Matrix4& SetTranspose();
-  Matrix4 GetTransposeCopy() const;
-  Matrix4 GetNormalMatrix() const;
-  Matrix4& SetOrientation( const class Quaternion& q );
-  Vec3 TransformInverse(const Vec3& v) const;
-  Vec3 TransformDirection(const Vec3& v) const;
-  Vec3 TransformInverseDirection(const Vec3& v) const;
-  void SetDiagonal(float a, float b, float c);
-  Vec3 GetAxisVector(int col) const;
-  Vec3 GetPosition() const;
-  Quaternion GetRotation() const;
-  void SetPosition( const Vec3& p );
-  void SetAxisVector(unsigned col, const Vec3 &v);
-  Vec4 GetRowVector(int row) const;
-  void SetRowVector(unsigned row, const Vec3 &v);
-  void SetRowVector(unsigned row, const Vec4 &v);
-  Matrix4& SetIdentity();
-  Matrix4& SetTranslate(float X, float Y, float Z);
-  Matrix4& SetTranslate(const Vec3 &translation);
-  Matrix4& SetTranslation(float X, float Y, float Z);
-  Matrix4& SetTranslation(const Vec3 &translation);
+  void SetTranslation( float x, float y, float z );
+  void SetTranslation( const Vec3& t );
+  void SetScale( const Vec3& s );
+  void SetRotation( const class Quaternion& r );
   Vec3 GetTranslation() const;
   Vec3 GetScale() const;
-  Matrix4& SetScale(float X, float Y, float Z);
-  Matrix4& SetScale(const Vec3 &scale);
-  Matrix4& SetScaleKeepTranslate(float X, float Y, float Z);
-  Matrix4& SetScaleKeepTranslate(const Vec3 &scale);
-  Matrix4& SetRotateX(float angle);
-  Matrix4& SetRotateY(float angle);
-  Matrix4& SetRotateZ(float angle);
-  Matrix4& RemoveScaling();
+  class Quaternion GetRotation() const;
 
-  // Transformation helpers
-  Matrix4& Translate( Vec3 t );
-  Matrix4& Scale( Vec3 s );
-  Matrix4& RotateX( float angle );
-  Matrix4& RotateY( float angle );
-  Matrix4& RotateZ( float angle );
+  void SetTranspose();
+  void SetInverse();
+  Matrix4 GetTranspose() const;
+  Matrix4 GetInverse() const;
+  Matrix4 GetNormalMatrix() const;
+
+  void SetAxis( uint32_t column, const Vec3& v );
+  void SetRow( uint32_t row, const Vec3& v );
+  void SetRow( uint32_t row, const Vec4& v );
+  Vec3 GetAxis( uint32_t column ) const;
+  Vec4 GetRow( uint32_t row ) const;
+  
 };
 
 inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
 {
-  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
-    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
-    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
-    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
+  os << mat.d[ 0 ] << " " << mat.d[ 1 ] << " " << mat.d[ 2 ] << " " << mat.d[ 3 ]
+    << " " << mat.d[ 4 ] << " " << mat.d[ 5 ] << " " << mat.d[ 6 ] << " " << mat.d[ 7 ]
+    << " " << mat.d[ 8 ] << " " << mat.d[ 9 ] << " " << mat.d[ 10 ] << " " << mat.d[ 11 ]
+    << " " << mat.d[ 12 ] << " " << mat.d[ 13 ] << " " << mat.d[ 14 ] << " " << mat.d[ 15 ];
   return os;
 }
 
@@ -3678,10 +3636,23 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 //------------------------------------------------------------------------------
 // ae::Matrix4 member functions
 //------------------------------------------------------------------------------
-Matrix4 Matrix4::Translation( const Vec3& p )
+Matrix4 Matrix4::Identity()
 {
-  Matrix4 r = Matrix4::Identity();
-  r.SetTranslate( p );
+  Matrix4 r;
+  r.d[ 0 ] = 1; r.d[ 1 ] = 0; r.d[ 2 ] = 0; r.d[ 3 ] = 0;
+  r.d[ 4 ] = 0; r.d[ 5 ] = 1; r.d[ 6 ] = 0; r.d[ 7 ] = 0;
+  r.d[ 8 ] = 0; r.d[ 9 ] = 0; r.d[ 10 ] = 1; r.d[ 11 ] = 0;
+  r.d[ 12 ] = 0; r.d[ 13 ] = 0; r.d[ 14 ] = 0; r.d[ 15 ] = 1;
+  return r;
+}
+
+Matrix4 Matrix4::Translation( const Vec3& t )
+{
+  Matrix4 r;
+  r.d[ 0 ] = 1.0f; r.d[ 1 ] = 0.0f;  r.d[ 2 ] = 0.0f;  r.d[ 3 ] = t.x;
+  r.d[ 4 ] = 0.0f; r.d[ 5 ] = 1.0f;  r.d[ 6 ] = 0.0f;  r.d[ 7 ] = t.y;
+  r.d[ 8 ] = 0.0f; r.d[ 9 ] = 0.0f;  r.d[ 10 ] = 1.0f; r.d[ 11 ] = t.z;
+  r.d[ 12 ] = 0.0f; r.d[ 13 ] = 0.0f; r.d[ 14 ] = 0.0f; r.d[ 15 ] = 1.0f;
   return r;
 }
 
@@ -3697,10 +3668,10 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 
   Matrix4 removeRotation;
   memset( &removeRotation, 0, sizeof( removeRotation ) );
-  removeRotation.SetRowVector( 0, right0 ); // right -> ( 1, 0, 0 )
-  removeRotation.SetRowVector( 1, forward0 ); // forward -> ( 0, 1, 0 )
-  removeRotation.SetRowVector( 2, up0 ); // up -> ( 0, 0, 1 )
-  removeRotation.data[ 15 ] = 1;
+  removeRotation.SetRow( 0, right0 ); // right -> ( 1, 0, 0 )
+  removeRotation.SetRow( 1, forward0 ); // forward -> ( 0, 1, 0 )
+  removeRotation.SetRow( 2, up0 ); // up -> ( 0, 0, 1 )
+  removeRotation.d[ 15 ] = 1;
 
   // Rotate
   forward1.Normalize();
@@ -3713,33 +3684,56 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
   Matrix4 newRotation;
   memset( &newRotation, 0, sizeof( newRotation ) );
   // Set axis vector to invert (transpose)
-  newRotation.SetAxisVector( 0, right1 ); // ( 1, 0, 0 ) -> right
-  newRotation.SetAxisVector( 1, forward1 ); // ( 0, 1, 0 ) -> forward
-  newRotation.SetAxisVector( 2, up1 ); // ( 0, 0, 1 ) -> up
-  newRotation.data[ 15 ] = 1;
+  newRotation.SetAxis( 0, right1 ); // ( 1, 0, 0 ) -> right
+  newRotation.SetAxis( 1, forward1 ); // ( 0, 1, 0 ) -> forward
+  newRotation.SetAxis( 2, up1 ); // ( 0, 0, 1 ) -> up
+  newRotation.d[ 15 ] = 1;
 
   return newRotation * removeRotation;
 }
 
 Matrix4 Matrix4::RotationX( float angle )
 {
-  Matrix4 result; return result.SetRotateX( angle );
+  Matrix4 r;
+  r.d[0] = 1.0f;  r.d[1] = 0.0f;          r.d[2] = 0.0f;           r.d[3] = 0.0f;
+  r.d[4] = 0.0f;  r.d[5] = cosf( angle ); r.d[6] = -sinf( angle ); r.d[7] = 0.0f;
+  r.d[8] = 0.0f;  r.d[9] = sinf( angle ); r.d[10] = cosf( angle ); r.d[11] = 0.0f;
+  r.d[12] = 0.0f; r.d[13] = 0.0f;         r.d[14] = 0.0f;          r.d[15] = 1.0f;
+  return r;
 }
 
 Matrix4 Matrix4::RotationY( float angle )
 {
-  Matrix4 result; return result.SetRotateY( angle );
+  Matrix4 r;
+  r.d[0] = cosf( angle );  r.d[1] = 0.0f;  r.d[2] = sinf( angle );  r.d[3] = 0.0f;
+  r.d[4] = 0.0f;           r.d[5] = 1.0f;  r.d[6] = 0.0f;           r.d[7] = 0.0f;
+  r.d[8] = -sinf( angle ); r.d[9] = 0.0f;  r.d[10] = cosf( angle ); r.d[11] = 0.0f;
+  r.d[12] = 0.0f;          r.d[13] = 0.0f; r.d[14] = 0.0f;          r.d[15] = 1.0f;
+  return r;
 }
 
 Matrix4 Matrix4::RotationZ( float angle )
 {
-  Matrix4 result; return result.SetRotateZ( angle );
+  Matrix4 r;
+  r.d[0] = cosf( angle );  r.d[1] = -sinf( angle ); r.d[2] = 0.0f;  r.d[3] = 0.0f;
+  r.d[4] = sinf( angle );  r.d[5] = cosf( angle );  r.d[6] = 0.0f;  r.d[7] = 0.0f;
+  r.d[8] = 0.0f;           r.d[9] = 0.0f;           r.d[10] = 1.0f; r.d[11] = 0.0f;
+  r.d[12] = 0.0f;          r.d[13] = 0.0f;          r.d[14] = 0.0f; r.d[15] = 1.0f;
+  return r;
 }
 
 Matrix4 Matrix4::Scaling( const Vec3& s )
 {
-  Matrix4 r = Matrix4::Identity();
-  r.SetScale( s );
+  return Scaling( s.x, s.y, s.z );
+}
+
+Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
+{
+  Matrix4 r;
+  r.d[0] = sx;    r.d[1] = 0.0f;  r.d[2] = 0.0f;  r.d[3] = 0.0f;
+  r.d[4] = 0.0f;  r.d[5] = sy;    r.d[6] = 0.0f;  r.d[7] = 0.0f;
+  r.d[8] = 0.0f;  r.d[9] = 0.0f;  r.d[10] = sz;   r.d[11] = 0.0f;
+  r.d[12] = 0.0f; r.d[13] = 0.0f; r.d[14] = 0.0f; r.d[15] = 1.0f;
   return r;
 }
 
@@ -3760,11 +3754,11 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
 
   Matrix4 result;
   memset( &result, 0, sizeof( result ) );
-  result.SetRowVector( 0, right );
-  result.SetRowVector( 1, up );
-  result.SetRowVector( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
-  result.SetAxisVector( 3, Vec3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
-  result.data[ 15 ] = 1;
+  result.SetRow( 0, right );
+  result.SetRow( 1, up );
+  result.SetRow( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
+  result.SetAxis( 3, Vec3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
+  result.d[ 15 ] = 1;
   return result;
 }
 
@@ -3811,297 +3805,229 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
   
   Matrix4 result;
   memset( &result, 0, sizeof( result ) );
-  result.data[ 0 ] = a;
-  result.data[ 5 ] = b;
-  result.data[ 10 ] = A;
-  result.data[ 11 ] = B;
-  result.data[ 14 ] = -1;
+  result.d[ 0 ] = a;
+  result.d[ 5 ] = b;
+  result.d[ 10 ] = A;
+  result.d[ 11 ] = B;
+  result.d[ 14 ] = -1;
   return result;
 }
 
 Vec4 Matrix4::operator*(const Vec4& v) const
 {
   return Vec4(
-    v.x*data[0]  + v.y*data[1]  + v.z*data[2]  + v.w*data[3],
-    v.x*data[4]  + v.y*data[5]  + v.z*data[6]  + v.w*data[7],
-    v.x*data[8]  + v.y*data[9]  + v.z*data[10] + v.w*data[11],
-    v.x*data[12] + v.y*data[13] + v.z*data[14] + v.w*data[15]);
+    v.x*d[0]  + v.y*d[1]  + v.z*d[2]  + v.w*d[3],
+    v.x*d[4]  + v.y*d[5]  + v.z*d[6]  + v.w*d[7],
+    v.x*d[8]  + v.y*d[9]  + v.z*d[10] + v.w*d[11],
+    v.x*d[12] + v.y*d[13] + v.z*d[14] + v.w*d[15]);
 }
 
 Matrix4 Matrix4::operator*(const Matrix4& m) const
 {
-  return Matrix4(
-    (data[0]*m.data[0])  + (data[1]*m.data[4])  + (data[2]*m.data[8])  + (data[3]*m.data[12]),
-    (data[0]*m.data[1])  + (data[1]*m.data[5])  + (data[2]*m.data[9])  + (data[3]*m.data[13]),
-    (data[0]*m.data[2])  + (data[1]*m.data[6])  + (data[2]*m.data[10])  + (data[3]*m.data[14]),
-    (data[0]*m.data[3])  + (data[1]*m.data[7])  + (data[2]*m.data[11])  + (data[3]*m.data[15]),
-
-    (data[4]*m.data[0])  + (data[5]*m.data[4])  + (data[6]*m.data[8])  + (data[7]*m.data[12]),
-    (data[4]*m.data[1])  + (data[5]*m.data[5])  + (data[6]*m.data[9])  + (data[7]*m.data[13]),
-    (data[4]*m.data[2])  + (data[5]*m.data[6])  + (data[6]*m.data[10])  + (data[7]*m.data[14]),
-    (data[4]*m.data[3])  + (data[5]*m.data[7])  + (data[6]*m.data[11])  + (data[7]*m.data[15]),
-
-    (data[8]*m.data[0])  + (data[9]*m.data[4])  + (data[10]*m.data[8]) + (data[11]*m.data[12]),
-    (data[8]*m.data[1])  + (data[9]*m.data[5])  + (data[10]*m.data[9]) + (data[11]*m.data[13]),
-    (data[8]*m.data[2])  + (data[9]*m.data[6])  + (data[10]*m.data[10]) + (data[11]*m.data[14]),
-    (data[8]*m.data[3])  + (data[9]*m.data[7])  + (data[10]*m.data[11]) + (data[11]*m.data[15]),
-
-    (data[12]*m.data[0]) + (data[13]*m.data[4]) + (data[14]*m.data[8]) + (data[15]*m.data[12]),
-    (data[12]*m.data[1]) + (data[13]*m.data[5]) + (data[14]*m.data[9]) + (data[15]*m.data[13]),
-    (data[12]*m.data[2]) + (data[13]*m.data[6]) + (data[14]*m.data[10]) + (data[15]*m.data[14]),
-    (data[12]*m.data[3]) + (data[13]*m.data[7]) + (data[14]*m.data[11]) + (data[15]*m.data[15]));
+  Matrix4 r;
+  r.d[0]=(d[0]*m.d[0])+(d[1]*m.d[4])+(d[2]*m.d[8])+(d[3]*m.d[12]);
+  r.d[1]=(d[0]*m.d[1])+(d[1]*m.d[5])+(d[2]*m.d[9])+(d[3]*m.d[13]);
+  r.d[2]=(d[0]*m.d[2])+(d[1]*m.d[6])+(d[2]*m.d[10])+(d[3]*m.d[14]);
+  r.d[3]=(d[0]*m.d[3])+(d[1]*m.d[7])+(d[2]*m.d[11])+(d[3]*m.d[15]);
+  r.d[4]=(d[4]*m.d[0])+(d[5]*m.d[4])+(d[6]*m.d[8])+(d[7]*m.d[12]);
+  r.d[5]=(d[4]*m.d[1])+(d[5]*m.d[5])+(d[6]*m.d[9])+(d[7]*m.d[13]);
+  r.d[6]=(d[4]*m.d[2])+(d[5]*m.d[6])+(d[6]*m.d[10])+(d[7]*m.d[14]);
+  r.d[7]=(d[4]*m.d[3])+(d[5]*m.d[7])+(d[6]*m.d[11])+(d[7]*m.d[15]);
+  r.d[8]=(d[8]*m.d[0])+(d[9]*m.d[4])+(d[10]*m.d[8])+(d[11]*m.d[12]);
+  r.d[9]=(d[8]*m.d[1])+(d[9]*m.d[5])+(d[10]*m.d[9])+(d[11]*m.d[13]);
+  r.d[10]=(d[8]*m.d[2])+(d[9]*m.d[6])+(d[10]*m.d[10])+(d[11]*m.d[14]);
+  r.d[11]=(d[8]*m.d[3])+(d[9]*m.d[7])+(d[10]*m.d[11])+(d[11]*m.d[15]);
+  r.d[12]=(d[12]*m.d[0])+(d[13]*m.d[4])+(d[14]*m.d[8])+(d[15]*m.d[12]);
+  r.d[13]=(d[12]*m.d[1])+(d[13]*m.d[5])+(d[14]*m.d[9])+(d[15]*m.d[13]);
+  r.d[14]=(d[12]*m.d[2])+(d[13]*m.d[6])+(d[14]*m.d[10])+(d[15]*m.d[14]);
+  r.d[15]=(d[12]*m.d[3])+(d[13]*m.d[7])+(d[14]*m.d[11])+(d[15]*m.d[15]);
+  return r;
 }
 
 void Matrix4::operator*=(const Matrix4& m)
 {
-  float t1;
-  float t2;
-  float t3;
-  float t4;
-
-  t1 = (data[0]*m.data[0]) + (data[1]*m.data[4]) + (data[2]*m.data[8])  + (data[3]*m.data[12]);
-  t2 = (data[0]*m.data[1]) + (data[1]*m.data[5]) + (data[2]*m.data[9])  + (data[3]*m.data[13]);
-  t3 = (data[0]*m.data[2]) + (data[1]*m.data[6]) + (data[2]*m.data[10]) + (data[3]*m.data[14]);
-  t4 = (data[0]*m.data[3]) + (data[1]*m.data[7]) + (data[2]*m.data[11]) + (data[3]*m.data[15]);
-  data[0] = t1;
-  data[1] = t2;
-  data[2] = t3;
-  data[3] = t4;
-
-  t1 = (data[4]*m.data[0]) + (data[5]*m.data[4]) + (data[6]*m.data[8])  + (data[7]*m.data[12]);
-  t2 = (data[4]*m.data[1]) + (data[5]*m.data[5]) + (data[6]*m.data[9])  + (data[7]*m.data[13]);
-  t3 = (data[4]*m.data[2]) + (data[5]*m.data[6]) + (data[6]*m.data[10]) + (data[7]*m.data[14]);
-  t4 = (data[4]*m.data[3]) + (data[5]*m.data[7]) + (data[6]*m.data[11]) + (data[7]*m.data[15]);
-  data[4] = t1;
-  data[5] = t2;
-  data[6] = t3;
-  data[7] = t4;
-
-  t1 = (data[8]*m.data[0]) + (data[9]*m.data[4]) + (data[10]*m.data[8])  + (data[11]*m.data[12]);
-  t2 = (data[8]*m.data[1]) + (data[9]*m.data[5]) + (data[10]*m.data[9])  + (data[11]*m.data[13]);
-  t3 = (data[8]*m.data[2]) + (data[9]*m.data[6]) + (data[10]*m.data[10]) + (data[11]*m.data[14]);
-  t4 = (data[8]*m.data[3]) + (data[9]*m.data[7]) + (data[10]*m.data[11]) + (data[11]*m.data[15]);
-  data[8]  = t1;
-  data[9]  = t2;
-  data[10] = t3;
-  data[11] = t4;
-
-  t1 = (data[12]*m.data[0]) + (data[13]*m.data[4]) + (data[14]*m.data[8])  + (data[15]*m.data[12]);
-  t2 = (data[12]*m.data[1]) + (data[13]*m.data[5]) + (data[14]*m.data[9])  + (data[15]*m.data[13]);
-  t3 = (data[12]*m.data[2]) + (data[13]*m.data[6]) + (data[14]*m.data[10]) + (data[15]*m.data[14]);
-  t4 = (data[12]*m.data[3]) + (data[13]*m.data[7]) + (data[14]*m.data[11]) + (data[15]*m.data[15]);
-  data[12] = t1;
-  data[13] = t2;
-  data[14] = t3;
-  data[15] = t4;
+  float t1, t2, t3, t4;
+  t1 = (d[0]*m.d[0]) + (d[1]*m.d[4]) + (d[2]*m.d[8])  + (d[3]*m.d[12]);
+  t2 = (d[0]*m.d[1]) + (d[1]*m.d[5]) + (d[2]*m.d[9])  + (d[3]*m.d[13]);
+  t3 = (d[0]*m.d[2]) + (d[1]*m.d[6]) + (d[2]*m.d[10]) + (d[3]*m.d[14]);
+  t4 = (d[0]*m.d[3]) + (d[1]*m.d[7]) + (d[2]*m.d[11]) + (d[3]*m.d[15]);
+  d[0] = t1;
+  d[1] = t2;
+  d[2] = t3;
+  d[3] = t4;
+  t1 = (d[4]*m.d[0]) + (d[5]*m.d[4]) + (d[6]*m.d[8])  + (d[7]*m.d[12]);
+  t2 = (d[4]*m.d[1]) + (d[5]*m.d[5]) + (d[6]*m.d[9])  + (d[7]*m.d[13]);
+  t3 = (d[4]*m.d[2]) + (d[5]*m.d[6]) + (d[6]*m.d[10]) + (d[7]*m.d[14]);
+  t4 = (d[4]*m.d[3]) + (d[5]*m.d[7]) + (d[6]*m.d[11]) + (d[7]*m.d[15]);
+  d[4] = t1;
+  d[5] = t2;
+  d[6] = t3;
+  d[7] = t4;
+  t1 = (d[8]*m.d[0]) + (d[9]*m.d[4]) + (d[10]*m.d[8])  + (d[11]*m.d[12]);
+  t2 = (d[8]*m.d[1]) + (d[9]*m.d[5]) + (d[10]*m.d[9])  + (d[11]*m.d[13]);
+  t3 = (d[8]*m.d[2]) + (d[9]*m.d[6]) + (d[10]*m.d[10]) + (d[11]*m.d[14]);
+  t4 = (d[8]*m.d[3]) + (d[9]*m.d[7]) + (d[10]*m.d[11]) + (d[11]*m.d[15]);
+  d[8]  = t1;
+  d[9]  = t2;
+  d[10] = t3;
+  d[11] = t4;
+  t1 = (d[12]*m.d[0]) + (d[13]*m.d[4]) + (d[14]*m.d[8])  + (d[15]*m.d[12]);
+  t2 = (d[12]*m.d[1]) + (d[13]*m.d[5]) + (d[14]*m.d[9])  + (d[15]*m.d[13]);
+  t3 = (d[12]*m.d[2]) + (d[13]*m.d[6]) + (d[14]*m.d[10]) + (d[15]*m.d[14]);
+  t4 = (d[12]*m.d[3]) + (d[13]*m.d[7]) + (d[14]*m.d[11]) + (d[15]*m.d[15]);
+  d[12] = t1;
+  d[13] = t2;
+  d[14] = t3;
+  d[15] = t4;
 }
 
-bool Matrix4::SetInverse(const Matrix4& m)
+void Matrix4::SetInverse()
 {
-  float inv[16], det;
-  int i;
+  *this = GetInverse();
+}
 
-  inv[0] = m.data[5]  * m.data[10] * m.data[15] - 
-    m.data[5]  * m.data[11] * m.data[14] - 
-    m.data[9]  * m.data[6]  * m.data[15] + 
-    m.data[9]  * m.data[7]  * m.data[14] +
-    m.data[13] * m.data[6]  * m.data[11] - 
-    m.data[13] * m.data[7]  * m.data[10];
+Matrix4 Matrix4::GetInverse() const
+{
+  Matrix4 r;
 
-  inv[4] = -m.data[4]  * m.data[10] * m.data[15] + 
-    m.data[4]  * m.data[11] * m.data[14] + 
-    m.data[8]  * m.data[6]  * m.data[15] - 
-    m.data[8]  * m.data[7]  * m.data[14] - 
-    m.data[12] * m.data[6]  * m.data[11] + 
-    m.data[12] * m.data[7]  * m.data[10];
+  r.d[0] = d[5]  * d[10] * d[15] - 
+    d[5]  * d[11] * d[14] - 
+    d[9]  * d[6]  * d[15] + 
+    d[9]  * d[7]  * d[14] +
+    d[13] * d[6]  * d[11] - 
+    d[13] * d[7]  * d[10];
 
-  inv[8] = m.data[4]  * m.data[9] * m.data[15] - 
-    m.data[4]  * m.data[11] * m.data[13] - 
-    m.data[8]  * m.data[5] * m.data[15] + 
-    m.data[8]  * m.data[7] * m.data[13] + 
-    m.data[12] * m.data[5] * m.data[11] - 
-    m.data[12] * m.data[7] * m.data[9];
+  r.d[4] = -d[4]  * d[10] * d[15] + 
+    d[4]  * d[11] * d[14] + 
+    d[8]  * d[6]  * d[15] - 
+    d[8]  * d[7]  * d[14] - 
+    d[12] * d[6]  * d[11] + 
+    d[12] * d[7]  * d[10];
 
-  inv[12] = -m.data[4]  * m.data[9] * m.data[14] + 
-    m.data[4]  * m.data[10] * m.data[13] +
-    m.data[8]  * m.data[5] * m.data[14] - 
-    m.data[8]  * m.data[6] * m.data[13] - 
-    m.data[12] * m.data[5] * m.data[10] + 
-    m.data[12] * m.data[6] * m.data[9];
+  r.d[8] = d[4]  * d[9] * d[15] - 
+    d[4]  * d[11] * d[13] - 
+    d[8]  * d[5] * d[15] + 
+    d[8]  * d[7] * d[13] + 
+    d[12] * d[5] * d[11] - 
+    d[12] * d[7] * d[9];
 
-  inv[1] = -m.data[1]  * m.data[10] * m.data[15] + 
-    m.data[1]  * m.data[11] * m.data[14] + 
-    m.data[9]  * m.data[2] * m.data[15] - 
-    m.data[9]  * m.data[3] * m.data[14] - 
-    m.data[13] * m.data[2] * m.data[11] + 
-    m.data[13] * m.data[3] * m.data[10];
+  r.d[12] = -d[4]  * d[9] * d[14] + 
+    d[4]  * d[10] * d[13] +
+    d[8]  * d[5] * d[14] - 
+    d[8]  * d[6] * d[13] - 
+    d[12] * d[5] * d[10] + 
+    d[12] * d[6] * d[9];
 
-  inv[5] = m.data[0]  * m.data[10] * m.data[15] - 
-    m.data[0]  * m.data[11] * m.data[14] - 
-    m.data[8]  * m.data[2] * m.data[15] + 
-    m.data[8]  * m.data[3] * m.data[14] + 
-    m.data[12] * m.data[2] * m.data[11] - 
-    m.data[12] * m.data[3] * m.data[10];
+  r.d[1] = -d[1]  * d[10] * d[15] + 
+    d[1]  * d[11] * d[14] + 
+    d[9]  * d[2] * d[15] - 
+    d[9]  * d[3] * d[14] - 
+    d[13] * d[2] * d[11] + 
+    d[13] * d[3] * d[10];
 
-  inv[9] = -m.data[0]  * m.data[9] * m.data[15] + 
-    m.data[0]  * m.data[11] * m.data[13] + 
-    m.data[8]  * m.data[1] * m.data[15] - 
-    m.data[8]  * m.data[3] * m.data[13] - 
-    m.data[12] * m.data[1] * m.data[11] + 
-    m.data[12] * m.data[3] * m.data[9];
+  r.d[5] = d[0]  * d[10] * d[15] - 
+    d[0]  * d[11] * d[14] - 
+    d[8]  * d[2] * d[15] + 
+    d[8]  * d[3] * d[14] + 
+    d[12] * d[2] * d[11] - 
+    d[12] * d[3] * d[10];
 
-  inv[13] = m.data[0]  * m.data[9] * m.data[14] - 
-    m.data[0]  * m.data[10] * m.data[13] - 
-    m.data[8]  * m.data[1] * m.data[14] + 
-    m.data[8]  * m.data[2] * m.data[13] + 
-    m.data[12] * m.data[1] * m.data[10] - 
-    m.data[12] * m.data[2] * m.data[9];
+  r.d[9] = -d[0]  * d[9] * d[15] + 
+    d[0]  * d[11] * d[13] + 
+    d[8]  * d[1] * d[15] - 
+    d[8]  * d[3] * d[13] - 
+    d[12] * d[1] * d[11] + 
+    d[12] * d[3] * d[9];
 
-  inv[2] = m.data[1]  * m.data[6] * m.data[15] - 
-    m.data[1]  * m.data[7] * m.data[14] - 
-    m.data[5]  * m.data[2] * m.data[15] + 
-    m.data[5]  * m.data[3] * m.data[14] + 
-    m.data[13] * m.data[2] * m.data[7] - 
-    m.data[13] * m.data[3] * m.data[6];
+  r.d[13] = d[0]  * d[9] * d[14] - 
+    d[0]  * d[10] * d[13] - 
+    d[8]  * d[1] * d[14] + 
+    d[8]  * d[2] * d[13] + 
+    d[12] * d[1] * d[10] - 
+    d[12] * d[2] * d[9];
 
-  inv[6] = -m.data[0]  * m.data[6] * m.data[15] + 
-    m.data[0]  * m.data[7] * m.data[14] + 
-    m.data[4]  * m.data[2] * m.data[15] - 
-    m.data[4]  * m.data[3] * m.data[14] - 
-    m.data[12] * m.data[2] * m.data[7] + 
-    m.data[12] * m.data[3] * m.data[6];
+  r.d[2] = d[1]  * d[6] * d[15] - 
+    d[1]  * d[7] * d[14] - 
+    d[5]  * d[2] * d[15] + 
+    d[5]  * d[3] * d[14] + 
+    d[13] * d[2] * d[7] - 
+    d[13] * d[3] * d[6];
 
-  inv[10] = m.data[0]  * m.data[5] * m.data[15] - 
-    m.data[0]  * m.data[7] * m.data[13] - 
-    m.data[4]  * m.data[1] * m.data[15] + 
-    m.data[4]  * m.data[3] * m.data[13] + 
-    m.data[12] * m.data[1] * m.data[7] - 
-    m.data[12] * m.data[3] * m.data[5];
+  r.d[6] = -d[0]  * d[6] * d[15] + 
+    d[0]  * d[7] * d[14] + 
+    d[4]  * d[2] * d[15] - 
+    d[4]  * d[3] * d[14] - 
+    d[12] * d[2] * d[7] + 
+    d[12] * d[3] * d[6];
 
-  inv[14] = -m.data[0]  * m.data[5] * m.data[14] + 
-    m.data[0]  * m.data[6] * m.data[13] + 
-    m.data[4]  * m.data[1] * m.data[14] - 
-    m.data[4]  * m.data[2] * m.data[13] - 
-    m.data[12] * m.data[1] * m.data[6] + 
-    m.data[12] * m.data[2] * m.data[5];
+  r.d[10] = d[0]  * d[5] * d[15] - 
+    d[0]  * d[7] * d[13] - 
+    d[4]  * d[1] * d[15] + 
+    d[4]  * d[3] * d[13] + 
+    d[12] * d[1] * d[7] - 
+    d[12] * d[3] * d[5];
 
-  inv[3] = -m.data[1] * m.data[6] * m.data[11] + 
-    m.data[1] * m.data[7] * m.data[10] + 
-    m.data[5] * m.data[2] * m.data[11] - 
-    m.data[5] * m.data[3] * m.data[10] - 
-    m.data[9] * m.data[2] * m.data[7] + 
-    m.data[9] * m.data[3] * m.data[6];
+  r.d[14] = -d[0]  * d[5] * d[14] + 
+    d[0]  * d[6] * d[13] + 
+    d[4]  * d[1] * d[14] - 
+    d[4]  * d[2] * d[13] - 
+    d[12] * d[1] * d[6] + 
+    d[12] * d[2] * d[5];
 
-  inv[7] = m.data[0] * m.data[6] * m.data[11] - 
-    m.data[0] * m.data[7] * m.data[10] - 
-    m.data[4] * m.data[2] * m.data[11] + 
-    m.data[4] * m.data[3] * m.data[10] + 
-    m.data[8] * m.data[2] * m.data[7] - 
-    m.data[8] * m.data[3] * m.data[6];
+  r.d[3] = -d[1] * d[6] * d[11] + 
+    d[1] * d[7] * d[10] + 
+    d[5] * d[2] * d[11] - 
+    d[5] * d[3] * d[10] - 
+    d[9] * d[2] * d[7] + 
+    d[9] * d[3] * d[6];
 
-  inv[11] = -m.data[0] * m.data[5] * m.data[11] + 
-    m.data[0] * m.data[7] * m.data[9] + 
-    m.data[4] * m.data[1] * m.data[11] - 
-    m.data[4] * m.data[3] * m.data[9] - 
-    m.data[8] * m.data[1] * m.data[7] + 
-    m.data[8] * m.data[3] * m.data[5];
+  r.d[7] = d[0] * d[6] * d[11] - 
+    d[0] * d[7] * d[10] - 
+    d[4] * d[2] * d[11] + 
+    d[4] * d[3] * d[10] + 
+    d[8] * d[2] * d[7] - 
+    d[8] * d[3] * d[6];
 
-  inv[15] = m.data[0] * m.data[5] * m.data[10] - 
-    m.data[0] * m.data[6] * m.data[9] - 
-    m.data[4] * m.data[1] * m.data[10] + 
-    m.data[4] * m.data[2] * m.data[9] + 
-    m.data[8] * m.data[1] * m.data[6] - 
-    m.data[8] * m.data[2] * m.data[5];
+  r.d[11] = -d[0] * d[5] * d[11] + 
+    d[0] * d[7] * d[9] + 
+    d[4] * d[1] * d[11] - 
+    d[4] * d[3] * d[9] - 
+    d[8] * d[1] * d[7] + 
+    d[8] * d[3] * d[5];
 
-  det = m.data[0] * inv[0] + m.data[1] * inv[4] + m.data[2] * inv[8] + m.data[3] * inv[12];
+  r.d[15] = d[0] * d[5] * d[10] - 
+    d[0] * d[6] * d[9] - 
+    d[4] * d[1] * d[10] + 
+    d[4] * d[2] * d[9] + 
+    d[8] * d[1] * d[6] - 
+    d[8] * d[2] * d[5];
 
-  if (det == 0)
-    return false;
-
+  float det = d[0] * r.d[0] + d[1] * r.d[4] + d[2] * r.d[8] + d[3] * r.d[12];
   det = 1.0f / det;
-
-  for (i = 0; i < 16; i++)
-    data[i] = inv[i] * det;
-
-  return true;
+  for ( uint32_t i = 0; i < 16; i++ )
+  {
+    r.d[ i ] *= det;
+  }
+  return r;
 }
 
-Matrix4 Matrix4::Inverse() const
-{
-  Matrix4 inverse = Matrix4::Identity();
-  inverse.SetInverse(*this);
-  return inverse;
-}
-
-bool Matrix4::Invert()
-{
-  return SetInverse(*this);
-}
-
-Matrix4& Matrix4::SetOrientation( const Quaternion& q2 )
+void Matrix4::SetRotation( const Quaternion& q2 )
 {
   Quaternion q = q2.GetInverse();
-
-  data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-  data[1] = 2*q.i*q.j + 2*q.k*q.r;
-  data[2] = 2*q.i*q.k - 2*q.j*q.r;
-
-  data[4] = 2*q.i*q.j - 2*q.k*q.r;
-  data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-  data[6] = 2*q.j*q.k + 2*q.i*q.r;
-
-  data[8] = 2*q.i*q.k + 2*q.j*q.r;
-  data[9] = 2*q.j*q.k - 2*q.i*q.r;
-  data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
-
-  return *this;
+  d[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
+  d[1] = 2*q.i*q.j + 2*q.k*q.r;
+  d[2] = 2*q.i*q.k - 2*q.j*q.r;
+  d[4] = 2*q.i*q.j - 2*q.k*q.r;
+  d[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
+  d[6] = 2*q.j*q.k + 2*q.i*q.r;
+  d[8] = 2*q.i*q.k + 2*q.j*q.r;
+  d[9] = 2*q.j*q.k - 2*q.i*q.r;
+  d[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
 }
 
-Vec3 Matrix4::TransformInverse(const Vec3& v) const
+Vec3 Matrix4::GetAxis( uint32_t col ) const
 {
-  Vec3 copy = v;
-
-  copy.x -= data[3];
-  copy.y -= data[7];
-  copy.z -= data[11];
-
-  return Vec3(
-    copy.x*data[0] + copy.y*data[4] + copy.z*data[8],
-    copy.x*data[1] + copy.y*data[5] + copy.z*data[9],
-    copy.x*data[2] + copy.y*data[6] + copy.z*data[10]);
-}
-
-Vec3 Matrix4::TransformDirection(const Vec3& v) const
-{
-  return Vec3(
-    v.x*data[0] + v.y*data[1] + v.z*data[2],
-    v.x*data[4] + v.y*data[5] + v.z*data[6],
-    v.x*data[8] + v.y*data[9] + v.z*data[10]);
-}
-
-Vec3 Matrix4::TransformInverseDirection(const Vec3& v) const
-{
-  return Vec3(
-    v.x*data[0] + v.y*data[4] + v.z*data[8],
-    v.x*data[1] + v.y*data[5] + v.z*data[9],
-    v.x*data[2] + v.y*data[6] + v.z*data[10]);
-}
-
-void Matrix4::SetDiagonal(float d1, float d2, float d3)
-{
-  data[0]  = d1;
-  data[5]  = d2;
-  data[10] = d3;
-}
-
-Vec3 Matrix4::GetAxisVector(int col) const
-{
-  return Vec3(data[col], data[col+4], data[col+8]);
-}
-
-Vec3 Matrix4::GetPosition() const
-{
-  return Vec3( data[ 3 ], data[ 7 ], data[ 11 ] );
+  return Vec3(d[col], d[col+4], d[col+8]);
 }
 
 Quaternion Matrix4::GetRotation() const
@@ -4109,17 +4035,17 @@ Quaternion Matrix4::GetRotation() const
   // http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/
 
   Matrix4 t = *this;
-  t.RemoveScaling();
+  t.SetScale( Vec3( 1.0f ) );
 
-  #define m00 t.data[ 0 ]
-  #define m01 t.data[ 1 ]
-  #define m02 t.data[ 2 ]
-  #define m10 t.data[ 4 ]
-  #define m11 t.data[ 5 ]
-  #define m12 t.data[ 6 ]
-  #define m20 t.data[ 8 ]
-  #define m21 t.data[ 9 ]
-  #define m22 t.data[ 10 ]
+  #define m00 t.d[ 0 ]
+  #define m01 t.d[ 1 ]
+  #define m02 t.d[ 2 ]
+  #define m10 t.d[ 4 ]
+  #define m11 t.d[ 5 ]
+  #define m12 t.d[ 6 ]
+  #define m20 t.d[ 8 ]
+  #define m21 t.d[ 9 ]
+  #define m22 t.d[ 10 ]
 
   float trace = m00 + m11 + m22;
   if ( trace > 0.0f )
@@ -4174,209 +4100,90 @@ Quaternion Matrix4::GetRotation() const
   #undef m22
 }
 
-void Matrix4::SetPosition( const Vec3& p )
+void Matrix4::SetAxis( uint32_t col, const Vec3& v )
 {
-  data[ 3 ] = p.x;
-  data[ 7 ] = p.y;
-  data[ 11 ] = p.z;
+  d[col] = v.x;
+  d[col+4] = v.y;
+  d[col+8] = v.z;
 }
 
-void Matrix4::SetAxisVector(unsigned col, const Vec3 &v)
+Vec4 Matrix4::GetRow( uint32_t row ) const
 {
-  data[col] = v.x;
-  data[col+4] = v.y;
-  data[col+8] = v.z;
+  return Vec4(d[row*4], d[row*4+1], d[row*4+2], d[row*4+3]);
 }
 
-Vec4 Matrix4::GetRowVector(int row) const
+void Matrix4::SetRow( uint32_t row, const Vec3 &v )
 {
-  return Vec4(data[row*4], data[row*4+1], data[row*4+2], data[row*4+3]);
+  d[row*4]   = v.x;
+  d[row*4+1] = v.y;
+  d[row*4+2] = v.z;
 }
 
-void Matrix4::SetRowVector(unsigned row, const Vec3 &v)
+void Matrix4::SetRow( uint32_t row, const Vec4 &v)
 {
-  data[row*4]   = v.x;
-  data[row*4+1] = v.y;
-  data[row*4+2] = v.z;
+  d[row*4]   = v.x;
+  d[row*4+1] = v.y;
+  d[row*4+2] = v.z;
+  d[row*4+3] = v.w;
 }
 
-void Matrix4::SetRowVector(unsigned row, const Vec4 &v)
+void Matrix4::SetTranslation( float x, float y, float z )
 {
-  data[row*4]   = v.x;
-  data[row*4+1] = v.y;
-  data[row*4+2] = v.z;
-  data[row*4+3] = v.w;
+  d[ 3 ] = x;
+  d[ 7 ] = y;
+  d[ 11 ] = z;
 }
 
-Matrix4& Matrix4::SetIdentity(void){
-  data[0]  = 1.0f; data[1] = 0.0f;  data[2] = 0.0f;  data[3] = 0.0f;
-  data[4]  = 0.0f; data[5] = 1.0f;  data[6] = 0.0f;  data[7] = 0.0f;
-  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = 1.0f; data[11] = 0.0f;
-  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::SetTranslate(float X, float Y, float Z){
-  data[0]  = 1.0f; data[1] = 0.0f;  data[2] = 0.0f;  data[3] = X;
-  data[4]  = 0.0f; data[5] = 1.0f;  data[6] = 0.0f;  data[7] = Y;
-  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = 1.0f; data[11] = Z;
-  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::SetTranslate(const Vec3 &translation){
-  return SetTranslate(translation.x, translation.y, translation.z);
-}
-
-Matrix4& Matrix4::SetTranslation( float x, float y, float z )
+void Matrix4::SetTranslation( const Vec3& translation )
 {
-  data[ 3 ] = x;
-  data[ 7 ] = y;
-  data[ 11 ] = z;
-  data[ 15 ] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::SetTranslation( const Vec3& translation )
-{
-  data[ 3 ] = translation.x;
-  data[ 7 ] = translation.y;
-  data[ 11 ] = translation.z;
-  data[ 15 ] = 1.0f;
-  return *this;
+  d[ 3 ] = translation.x;
+  d[ 7 ] = translation.y;
+  d[ 11 ] = translation.z;
 }
 
 Vec3 Matrix4::GetTranslation() const
 {
-  return Vec3( data[ 3 ], data[ 7 ], data[ 11 ] );
+  return Vec3( d[ 3 ], d[ 7 ], d[ 11 ] );
 }
 
 Vec3 Matrix4::GetScale() const
 {
   return Vec3(
-    Vec3( data[ 0 ], data[ 4 ], data[ 8 ] ).Length(),
-    Vec3( data[ 1 ], data[ 5 ], data[ 9 ] ).Length(),
-    Vec3( data[ 2 ], data[ 6 ], data[ 10 ] ).Length()
+    Vec3( d[ 0 ], d[ 4 ], d[ 8 ] ).Length(),
+    Vec3( d[ 1 ], d[ 5 ], d[ 9 ] ).Length(),
+    Vec3( d[ 2 ], d[ 6 ], d[ 10 ] ).Length()
   );
 }
 
-Matrix4& Matrix4::SetScale(float X, float Y, float Z){
-  data[0]  = X;    data[1] = 0.0f;  data[2] = 0.0f;  data[3] = 0.0f;
-  data[4]  = 0.0f; data[5] = Y;     data[6] = 0.0f;  data[7] = 0.0f;
-  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = Z;    data[11] = 0.0f;
-  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::SetScaleKeepTranslate(float X, float Y, float Z){
-  data[0]  = X;    data[1] = 0.0f;  data[2] = 0.0f;
-  data[4]  = 0.0f; data[5] = Y;     data[6] = 0.0f;
-  data[8]  = 0.0f; data[9] = 0.0f;  data[10] = Z;
-  data[12] = 0.0f; data[13] = 0.0f; data[14] = 0.0f; data[15] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::SetScale(const Vec3 &scale){
-  return SetScale(scale.x, scale.y, scale.z);
-}
-
-Matrix4& Matrix4::SetScaleKeepTranslate(const Vec3 &scale){
-  return SetScaleKeepTranslate(scale.x, scale.y, scale.z);
-}
-
-Matrix4& Matrix4::SetRotateX(float angle){
-  data[0]  = 1.0f; data[1] = 0.0f;             data[2] = 0.0f;              data[3] = 0.0f;
-  data[4]  = 0.0f; data[5] = cosf(angle); data[6] = -sinf(angle); data[7] = 0.0f;
-  data[8]  = 0.0f; data[9] = sinf(angle); data[10] = cosf(angle); data[11] = 0.0f;
-  data[12] = 0.0f; data[13] = 0.0f;            data[14] = 0.0f;             data[15] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::SetRotateY(float angle){
-  data[0]  = cosf(angle);  data[1] = 0.0f;  data[2] = sinf(angle);  data[3] = 0.0f;
-  data[4]  = 0.0f;              data[5] = 1.0f;  data[6] = 0.0f;              data[7] = 0.0f;
-  data[8]  = -sinf(angle); data[9] = 0.0f;  data[10] = cosf(angle); data[11] = 0.0f;
-  data[12] = 0.0f;              data[13] = 0.0f; data[14] = 0.0f;             data[15] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::SetRotateZ(float angle){
-  data[0]  = cosf(angle);  data[1] = -sinf(angle); data[2] = 0.0f;  data[3] = 0.0f;
-  data[4]  = sinf(angle);  data[5] = cosf(angle);  data[6] = 0.0f;  data[7] = 0.0f;
-  data[8]  = 0.0f;              data[9] = 0.0f;              data[10] = 1.0f; data[11] = 0.0f;
-  data[12] = 0.0f;              data[13] = 0.0f;             data[14] = 0.0f; data[15] = 1.0f;
-  return *this;
-}
-
-Matrix4& Matrix4::RemoveScaling(void)
+void Matrix4::SetScale( const Vec3& s )
 {
-  Vec3 col[4] = {GetAxisVector(0), GetAxisVector(1), GetAxisVector(2), GetAxisVector(3)};
-  col[0].Normalize();
-  col[1].Normalize();
-  col[2].Normalize();
-
-  for(unsigned i = 0; i < 4; ++i)
+  for( uint32_t i = 0; i < 3; i++ )
   {
-    SetAxisVector(i, col[i]);
+    SetAxis( i, GetAxis( i ).NormalizeCopy() * s[ i ] );
   }
-
-  return *this;
 }
 
-Matrix4& Matrix4::SetTranspose( void )
+void Matrix4::SetTranspose( void )
 {
-  for(int i = 0; i < 4; ++i)
+  for( uint32_t i = 0; i < 4; i++ )
   {
-    for(int j = i + 1; j < 4; ++j)
+    for( uint32_t j = i + 1; j < 4; j++ )
     {
-      float temp = data[i * 4 + j];
-      data[i * 4 + j] = data[j * 4 + i];
-      data[j * 4 + i] = temp;
+      std::swap( d[ i * 4 + j ], d[ j * 4 + i ] );
     }
   }
-
-  return *this;
 }
 
-Matrix4 Matrix4::GetTransposeCopy(void) const
+Matrix4 Matrix4::GetTranspose() const
 {
-  Matrix4 temp(*this);
-  return temp.SetTranspose();
+  Matrix4 r = *this;
+  r.SetTranspose();
+  return r;
 }
 
 Matrix4 Matrix4::GetNormalMatrix() const
 {
-  return Inverse().GetTransposeCopy();
-}
-
-Matrix4& Matrix4::Translate( Vec3 t )
-{
-  *this = *this * Matrix4::Translation( t );
-  return *this;
-}
-
-Matrix4& Matrix4::Scale( Vec3 s )
-{
-  *this = *this * Matrix4::Scaling( s );
-  return *this;
-}
-
-Matrix4& Matrix4::RotateX( float angle )
-{
-  *this = *this * Matrix4::RotationX( angle );
-  return *this;
-}
-
-Matrix4& Matrix4::RotateY( float angle )
-{
-  *this = *this * Matrix4::RotationY( angle );
-  return *this;
-}
-
-Matrix4& Matrix4::RotateZ( float angle )
-{
-  *this = *this * Matrix4::RotationZ( angle );
-  return *this;
+  return GetInverse().GetTranspose();
 }
 
 //------------------------------------------------------------------------------
@@ -4629,17 +4436,17 @@ Matrix4 Quaternion::GetTransformMatrix( void ) const
 
   Matrix4 matrix = Matrix4::Identity();
 
-  matrix.data[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
-  matrix.data[ 1 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
-  matrix.data[ 2 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
+  matrix.d[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
+  matrix.d[ 1 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
+  matrix.d[ 2 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
 
-  matrix.data[ 4 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
-  matrix.data[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
-  matrix.data[ 6 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
+  matrix.d[ 4 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
+  matrix.d[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
+  matrix.d[ 6 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
 
-  matrix.data[ 8 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
-  matrix.data[ 9 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
-  matrix.data[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
+  matrix.d[ 8 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
+  matrix.d[ 9 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
+  matrix.d[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
 
   return matrix;
 }
@@ -5676,7 +5483,7 @@ void UniformList::Set( const char* name, float value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 1;
-  uniform.value.data[ 0 ] = value;
+  uniform.value.d[ 0 ] = value;
 }
 
 void UniformList::Set( const char* name, Vec2 value )
@@ -5685,8 +5492,8 @@ void UniformList::Set( const char* name, Vec2 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 2;
-  uniform.value.data[ 0 ] = value.x;
-  uniform.value.data[ 1 ] = value.y;
+  uniform.value.d[ 0 ] = value.x;
+  uniform.value.d[ 1 ] = value.y;
 }
 
 void UniformList::Set( const char* name, Vec3 value )
@@ -5695,9 +5502,9 @@ void UniformList::Set( const char* name, Vec3 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 3;
-  uniform.value.data[ 0 ] = value.x;
-  uniform.value.data[ 1 ] = value.y;
-  uniform.value.data[ 2 ] = value.z;
+  uniform.value.d[ 0 ] = value.x;
+  uniform.value.d[ 1 ] = value.y;
+  uniform.value.d[ 2 ] = value.z;
 }
 
 void UniformList::Set( const char* name, Vec4 value )
@@ -5706,10 +5513,10 @@ void UniformList::Set( const char* name, Vec4 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 4;
-  uniform.value.data[ 0 ] = value.x;
-  uniform.value.data[ 1 ] = value.y;
-  uniform.value.data[ 2 ] = value.z;
-  uniform.value.data[ 3 ] = value.w;
+  uniform.value.d[ 0 ] = value.x;
+  uniform.value.d[ 1 ] = value.y;
+  uniform.value.d[ 2 ] = value.z;
+  uniform.value.d[ 3 ] = value.w;
 }
 
 void UniformList::Set( const char* name, const Matrix4& value )
@@ -6028,28 +5835,28 @@ void Shader::Activate( const UniformList& uniforms ) const
     }
     else if ( uniformVar->type == GL_FLOAT )
     {
-      glUniform1fv( uniformVar->location, 1, uniformValue->value.data );
+      glUniform1fv( uniformVar->location, 1, uniformValue->value.d );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC2 )
     {
-      glUniform2fv( uniformVar->location, 1, uniformValue->value.data );
+      glUniform2fv( uniformVar->location, 1, uniformValue->value.d );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC3 )
     {
-      glUniform3fv( uniformVar->location, 1, uniformValue->value.data );
+      glUniform3fv( uniformVar->location, 1, uniformValue->value.d );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC4 )
     {
-      glUniform4fv( uniformVar->location, 1, uniformValue->value.data );
+      glUniform4fv( uniformVar->location, 1, uniformValue->value.d );
     }
     else if ( uniformVar->type == GL_FLOAT_MAT4 )
     {
 #if _AE_EMSCRIPTEN_
       // WebGL/Emscripten doesn't support glUniformMatrix4fv auto-transpose
-      Matrix4 transposedTransform = uniformValue->value.GetTransposeCopy();
-      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, transposedTransform.data );
+      Matrix4 transposedTransform = uniformValue->value.GetTranspose();
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, transposedTransform.d );
 #else
-      glUniformMatrix4fv( uniformVar->location, 1, GL_TRUE, uniformValue->value.data );
+      glUniformMatrix4fv( uniformVar->location, 1, GL_TRUE, uniformValue->value.d );
 #endif
     }
     else
@@ -7080,13 +6887,13 @@ uint32_t RenderTarget::GetHeight() const
 Matrix4 RenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const
 {
   Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
-  windowToNDC.Scale( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+  windowToNDC *= Matrix4::Scaling( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
 
   Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
-  ndcToQuad.Invert();
+  ndcToQuad.SetInverse();
 
   Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
-  quadToRender.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
+  quadToRender *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
 
   return ( quadToRender * ndcToQuad * windowToNDC );
 }
@@ -7112,14 +6919,14 @@ Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherH
 Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const
 {
   Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
-  return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
+  return ( worldToNdc.GetInverse() * canvasToNdc * otherTargetToLocal );
 }
 
 Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 {
   Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
-  localToNdc.Scale( Vec3( ndc.w, ndc.h, 1.0f ) );
-  localToNdc.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
+  localToNdc *= Matrix4::Scaling( Vec3( ndc.w, ndc.h, 1.0f ) );
+  localToNdc *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
   return localToNdc;
 }
 
