@@ -1199,7 +1199,7 @@ public:
   uint32_t GetIndexCount() const { return m_indexCount; }
   uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
   uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
-  uint32_t GetAttributeCount() const { return m_attributeCount; }
+  uint32_t GetAttributeCount() const { return m_attributes.Length(); }
   VertexData::Primitive GetPrimitiveType() const { return m_primitive; }
 
   void Render( const Shader* shader, const UniformList& uniforms ) const;
@@ -1231,8 +1231,7 @@ private:
   VertexData::Primitive m_primitive = (VertexData::Primitive)-1;
   VertexData::Usage m_vertexUsage = (VertexData::Usage)-1;
   VertexData::Usage m_indexUsage = (VertexData::Usage)-1;
-  Attribute m_attributes[ _kMaxShaderAttributeCount ];
-  uint32_t m_attributeCount = 0;
+  ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
   uint32_t m_vertexSize = 0;
   uint32_t m_indexSize = 0;
   void* m_vertexReadable = nullptr;
@@ -6173,7 +6172,6 @@ void VertexData::Destroy()
   m_vertexUsage = (VertexData::Usage)-1;
   m_indexUsage = (VertexData::Usage)-1;
 
-  m_attributeCount = 0;
   m_vertexSize = 0;
   m_indexSize = 0;
 
@@ -6185,9 +6183,7 @@ void VertexData::AddAttribute( const char *name, uint32_t componentCount, Vertex
 {
   AE_ASSERT( m_vertices == ~0 && m_indices == ~0 );
   
-  AE_ASSERT( m_attributeCount < countof(m_attributes) );
-  Attribute* attribute = &m_attributes[ m_attributeCount ];
-  m_attributeCount++;
+  Attribute* attribute = &m_attributes.Append( Attribute() );
   
   size_t length = strlen( name );
   AE_ASSERT( length < _kMaxShaderAttributeNameLength );
@@ -6506,7 +6502,7 @@ void VertexData::Render( const Shader* shader, uint32_t primitiveCount, const Un
 
 const VertexData::Attribute* VertexData::m_GetAttributeByName( const char* name ) const
 {
-  for ( uint32_t i = 0; i < m_attributeCount; i++ )
+  for ( uint32_t i = 0; i < m_attributes.Length(); i++ )
   {
     if ( strcmp( m_attributes[ i ].name, name ) == 0 )
     {
