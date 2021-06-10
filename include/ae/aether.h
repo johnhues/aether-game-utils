@@ -457,6 +457,115 @@ struct Vec4 : public _VecT< Vec4 >
   };
 };
 
+
+//------------------------------------------------------------------------------
+// ae::Matrix4 struct
+//------------------------------------------------------------------------------
+class Matrix4
+{
+public:
+  float d[ 16 ];
+
+  Matrix4() = default;
+  Matrix4( const Matrix4& ) = default;
+
+  // Constructor helpers
+  static Matrix4 Identity();
+  static Matrix4 Translation( const Vec3& p );
+  static Matrix4 Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 );
+  static Matrix4 RotationX( float angle );
+  static Matrix4 RotationY( float angle );
+  static Matrix4 RotationZ( float angle );
+  static Matrix4 Scaling( const Vec3& s );
+  static Matrix4 Scaling( float sx, float sy, float sz );
+  static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
+  static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
+
+  bool operator==( const Matrix4& o ) const { return memcmp( o.d, d, sizeof(d) ) == 0; }
+  bool operator!=( const Matrix4& o ) const { return !operator== ( o ); }
+  Vec4 operator*( const Vec4& v ) const;
+  Matrix4 operator*( const Matrix4& m ) const;
+  void operator*=( const Matrix4& m );
+
+  void SetTranslation( float x, float y, float z );
+  void SetTranslation( const Vec3& t );
+  void SetScale( const Vec3& s );
+  void SetRotation( const class Quaternion& r );
+  Vec3 GetTranslation() const;
+  Vec3 GetScale() const;
+  class Quaternion GetRotation() const;
+
+  void SetTranspose();
+  void SetInverse();
+  Matrix4 GetTranspose() const;
+  Matrix4 GetInverse() const;
+  Matrix4 GetNormalMatrix() const;
+
+  void SetAxis( uint32_t column, const Vec3& v );
+  void SetRow( uint32_t row, const Vec3& v );
+  void SetRow( uint32_t row, const Vec4& v );
+  Vec3 GetAxis( uint32_t column ) const;
+  Vec4 GetRow( uint32_t row ) const;
+  
+};
+
+inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
+{
+  os << mat.d[ 0 ] << " " << mat.d[ 1 ] << " " << mat.d[ 2 ] << " " << mat.d[ 3 ]
+    << " " << mat.d[ 4 ] << " " << mat.d[ 5 ] << " " << mat.d[ 6 ] << " " << mat.d[ 7 ]
+    << " " << mat.d[ 8 ] << " " << mat.d[ 9 ] << " " << mat.d[ 10 ] << " " << mat.d[ 11 ]
+    << " " << mat.d[ 12 ] << " " << mat.d[ 13 ] << " " << mat.d[ 14 ] << " " << mat.d[ 15 ];
+  return os;
+}
+
+//------------------------------------------------------------------------------
+// ae::Quaternion class
+//------------------------------------------------------------------------------
+class Quaternion
+{
+public:
+  union
+  {
+    struct
+    {
+      float i;
+      float j;
+      float k;
+      float r;
+    };
+    float data[ 4 ];
+  };
+  
+  Quaternion() = default;
+  Quaternion( const Quaternion& ) = default;
+
+  Quaternion( const float i, const float j, const float k, const float r ) : i(i), j(j), k(k), r(r) {}
+  explicit Quaternion( Vec3 v ) : i(v.x), j(v.y), k(v.z), r(0.0f) {}
+  Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp = true );
+  Quaternion( Vec3 axis, float angle );
+  static Quaternion Identity() { return Quaternion( 0.0f, 0.0f, 0.0f, 1.0f ); }
+
+  void Normalize();
+  bool operator==( const Quaternion& q ) const;
+  bool operator!=( const Quaternion& q ) const;
+  Quaternion& operator*= ( const Quaternion& q );
+  Quaternion operator* ( const Quaternion& q ) const;
+  float Dot( const Quaternion& q ) const;
+  Quaternion const operator* ( float s ) const;
+  void AddScaledVector( const Vec3& v, float s );
+  void RotateByVector( const Vec3& v );
+  void SetDirectionXY( const Vec3& v );
+  Vec3 GetDirectionXY() const;
+  void ZeroXY();
+  void GetAxisAngle( Vec3* axis, float* angle ) const;
+  void AddRotationXY( float rotation);
+  Quaternion Nlerp( Quaternion end, float t ) const;
+  Matrix4 GetTransformMatrix() const;
+  Quaternion  GetInverse() const;
+  Quaternion& SetInverse();
+  Vec3 Rotate( Vec3 v ) const;
+};
+
 //------------------------------------------------------------------------------
 // ae::Color struct
 //------------------------------------------------------------------------------
@@ -756,24 +865,24 @@ class Map
 public:
   Map(); // Static map only (N > 0)
   Map( ae::Tag pool ); // Dynamic map only (N == 0)
+  void Reserve( uint32_t total );
   
+  // Access elements by key
   V& Set( const K& key, const V& value );
   V& Get( const K& key );
   const V& Get( const K& key ) const;
   const V& Get( const K& key, const V& defaultValue ) const;
-  
   V* TryGet( const K& key );
   const V* TryGet( const K& key ) const;
-
   bool TryGet( const K& key, V* valueOut );
   bool TryGet( const K& key, V* valueOut ) const;
   
+  // Remove elements
   bool Remove( const K& key );
   bool Remove( const K& key, V* valueOut );
-
-  void Reserve( uint32_t total );
   void Clear();
 
+  // Access elements by index
   const K& GetKey( uint32_t index ) const;
   const V& GetValue( uint32_t index ) const;
   V& GetValue( uint32_t index );
@@ -782,20 +891,41 @@ public:
 private:
   template < typename K2, typename V2, uint32_t N2 >
   friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
-
   struct Entry
   {
     Entry() = default;
     Entry( const K& k, const V& v );
-
     K key;
     V value;
   };
-
   int32_t m_FindIndex( const K& key ) const;
-
   Array< Entry, N > m_entries;
 };
+
+//------------------------------------------------------------------------------
+// ae::Rect class
+//------------------------------------------------------------------------------
+struct Rect
+{
+  Rect() = default;
+  Rect( const Rect& ) = default;
+  Rect( float x, float y, float w, float h ) : x(x), y(y), w(w), h(h) {}
+  Rect( Vec2 p0, Vec2 p1 );
+  explicit operator Vec4() const { return Vec4( x, y, w, h ); }
+  
+  Vec2 GetMin() const { return Vec2( x, y ); }
+  Vec2 GetMax() const { return Vec2( x + w, y + h ); }
+  Vec2 GetSize() const { return Vec2( w, h ); }
+  bool Contains( Vec2 pos ) const;
+  void Expand( Vec2 pos ); // @NOTE: Zero size rect is maintained by Expand()
+  bool GetIntersection( const Rect& other, Rect* intersectionOut ) const;
+  
+  float x, y, w, h;
+};
+inline std::ostream& operator<<( std::ostream& os, Rect r )
+{
+  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
+}
 
 } // AE_NAMESPACE end
 
@@ -876,12 +1006,6 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 
 namespace AE_NAMESPACE {
 
-// @HACK:
-struct Rect
-{};
-struct Matrix4
-{};
-
 //------------------------------------------------------------------------------
 // ae::Window class
 //------------------------------------------------------------------------------
@@ -908,22 +1032,20 @@ public:
 
 private:
   void m_Initialize();
-    
   Int2 m_pos;
   int32_t m_width;
   int32_t m_height;
   bool m_fullScreen;
   bool m_maximized;
   Str256 m_windowTitle;
-
 public:
   // Internal
   void m_UpdatePos( Int2 pos ) { m_pos = pos; }
   void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
   void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
-
   void* window;
   class GraphicsDevice* graphicsDevice;
+  class Input* input;
 };
 
 //------------------------------------------------------------------------------
@@ -932,66 +1054,289 @@ public:
 class Input
 {
 public:
+  void Initialize( Window* window );
   void Pump();
   bool quit = false;
 };
 
 //------------------------------------------------------------------------------
-// Graphics Constants
-//------------------------------------------------------------------------------
-enum class TextureFilter
-{
-  Linear,
-  Nearest
-};
-enum class TextureWrap
-{
-  Repeat,
-  Clamp
-};
-
-//------------------------------------------------------------------------------
-// UniformList class
+// ae::UniformList class
 //------------------------------------------------------------------------------
 class UniformList
 {
 public:
+  struct Value
+  {
+    uint32_t sampler = 0;
+    uint32_t target = 0;
+    int32_t size = 0;
+    Matrix4 value;
+  };
+
+  void Set( const char* name, float value );
+  void Set( const char* name, Vec2 value );
+  void Set( const char* name, Vec3 value );
+  void Set( const char* name, Vec4 value );
+  void Set( const char* name, const Matrix4& value );
+  void Set( const char* name, const class Texture* tex );
+
+  const Value* Get( const char* name ) const;
+
+private:
+  ae::Map< Str32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
 };
 
 //------------------------------------------------------------------------------
-// Shader class
+// ae::Shader class
 //------------------------------------------------------------------------------
+const uint32_t _kMaxShaderAttributeCount = 16;
+const uint32_t _kMaxShaderAttributeNameLength = 16;
+const uint32_t _kMaxShaderDefines = 4;
+
 class Shader
 {
 public:
+  // Constants
+  enum class Type
+  {
+    Vertex,
+    Fragment
+  };
+  enum class Culling
+  {
+    None,
+    ClockwiseFront,
+    CounterclockwiseFront,
+  };
+  struct Attribute
+  {
+    char name[ _kMaxShaderAttributeNameLength ];
+    uint32_t type; // GL_FLOAT, GL_FLOAT_VEC4, GL_FLOAT_MAT4...
+    int32_t location;
+  };
+  struct Uniform
+  {
+    Str32 name;
+    uint32_t type;
+    int32_t location;
+  };
+  
+  // Interface
+  Shader();
+  ~Shader();
+  void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
+  void Destroy();
+  void SetBlending( bool enabled ) { m_blending = enabled; }
+  void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
+  void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
+  void SetCulling( Culling culling ) { m_culling = culling; }
+  void SetWireframe( bool enabled ) { m_wireframe = enabled; }
+  void SetBlendingPremul( bool enabled ) { m_blendingPremul = enabled; }
+
+  // Internal
+private:
+  int m_LoadShader( const char* shaderStr, Type type, const char* const* defines, int32_t defineCount );
+  uint32_t m_fragmentShader;
+  uint32_t m_vertexShader;
+  uint32_t m_program;
+  bool m_blending;
+  bool m_blendingPremul;
+  bool m_depthTest;
+  bool m_depthWrite;
+  Culling m_culling;
+  bool m_wireframe;
+  ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
+  ae::Map< Str32, Uniform > m_uniforms = AE_ALLOC_TAG_RENDER;
+public:
+  void Activate( const UniformList& uniforms ) const;
+  const Attribute* GetAttributeByIndex( uint32_t index ) const;
+  uint32_t GetAttributeCount() const { return m_attributes.Length(); }
 };
 
 //------------------------------------------------------------------------------
-// VertexData class
+// ae::VertexData class
 //------------------------------------------------------------------------------
 class VertexData
 {
 public:
+  // Constants
+  enum class Usage
+  {
+    Dynamic,
+    Static
+  };
+  enum class Type
+  {
+    UInt8,
+    UInt16,
+    UInt32,
+    NormalizedUInt8,
+    NormalizedUInt16,
+    NormalizedUInt32,
+    Float
+  };
+  enum class Primitive
+  {
+    Point,
+    Line,
+    Triangle
+  };
+
+  // Interface
+  VertexData() = default;
+  ~VertexData();
+  void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage );
+  void AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset );
+  void Destroy();
+
+  void SetVertices( const void* vertices, uint32_t count );
+  void SetIndices( const void* indices, uint32_t count );
+  const void* GetVertices() const;
+  const void* GetIndices() const;
+  uint32_t GetVertexSize() const { return m_vertexSize; }
+  uint32_t GetIndexSize() const { return m_indexSize; }
+  uint32_t GetVertexCount() const { return m_vertexCount; }
+  uint32_t GetIndexCount() const { return m_indexCount; }
+  uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
+  uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
+  uint32_t GetAttributeCount() const { return m_attributes.Length(); }
+  VertexData::Primitive GetPrimitiveType() const { return m_primitive; }
+
+  void Render( const Shader* shader, const UniformList& uniforms ) const;
+  void Render( const Shader* shader, uint32_t primitiveCount, const UniformList& uniforms ) const;
+  
+private:
+  struct Attribute
+  {
+    char name[ _kMaxShaderAttributeNameLength ];
+    uint32_t componentCount;
+    uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
+    uint32_t offset;
+    bool normalized;
+  };
+  VertexData( const VertexData& ) = delete;
+  VertexData( VertexData&& ) = delete;
+  void operator=( const VertexData& ) = delete;
+  void operator=( VertexData&& ) = delete;
+  void m_SetVertices( const void* vertices, uint32_t count );
+  void m_SetIndices( const void* indices, uint32_t count );
+  const Attribute* m_GetAttributeByName( const char* name ) const;
+  uint32_t m_array = 0;
+  uint32_t m_vertices = ~0;
+  uint32_t m_indices = ~0;
+  uint32_t m_vertexCount = 0;
+  uint32_t m_indexCount = 0;
+  uint32_t m_maxVertexCount = 0;
+  uint32_t m_maxIndexCount = 0;
+  VertexData::Primitive m_primitive = (VertexData::Primitive)-1;
+  VertexData::Usage m_vertexUsage = (VertexData::Usage)-1;
+  VertexData::Usage m_indexUsage = (VertexData::Usage)-1;
+  ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
+  uint32_t m_vertexSize = 0;
+  uint32_t m_indexSize = 0;
+  void* m_vertexReadable = nullptr;
+  void* m_indexReadable = nullptr;
 };
 
 //------------------------------------------------------------------------------
-// Texture2D class
+// ae::Texture class
 //------------------------------------------------------------------------------
-class Texture2D
+class Texture
 {
 public:
+  // Constants
+  enum class Filter
+  {
+    Linear,
+    Nearest
+  };
+  enum class Wrap
+  {
+    Repeat,
+    Clamp
+  };
+  enum class Format
+  {
+    Depth32F,
+    R8, // unorm
+    R16_UNORM, // for height fields
+    R16F,
+    R32F,
+    RG8, // unorm
+    RG16F,
+    RG32F,
+    RGB8, // unorm
+    RGB8_SRGB,
+    RGB16F,
+    RGB32F,
+    RGBA8, // unorm
+    RGBA8_SRGB,
+    RGBA16F,
+    RGBA32F,
+    // non-specific formats, prefer specific types above
+    R = RGBA8,
+    RG = RG8,
+    RGB = RGB8,
+    RGBA = RGBA8,
+    Depth = Depth32F,
+    SRGB = RGB8_SRGB,
+    SRGBA = RGBA8_SRGB,
+  };
+  enum class Type
+  {
+    Uint8,
+    Uint16,
+    HalfFloat,
+    Float
+  };
+
+  // Interface
+  Texture() = default;
+  virtual ~Texture();
+  void Initialize( uint32_t target );
+  virtual void Destroy();
+  uint32_t GetTexture() const { return m_texture; }
+  uint32_t GetTarget() const { return m_target; }
+
+private:
+  Texture( const Texture& ) = delete;
+  Texture( Texture&& ) = delete;
+  void operator=( const Texture& ) = delete;
+  void operator=( Texture&& ) = delete;
+  uint32_t m_texture = 0;
+  uint32_t m_target = 0;
 };
 
 //------------------------------------------------------------------------------
-// RenderTarget class
+// ae::Texture2D class
+//------------------------------------------------------------------------------
+class Texture2D : public Texture
+{
+public:
+  void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps = false );
+  void Initialize( const char* file, Filter filter, Wrap wrap, bool autoGenerateMipmaps = false,
+    bool isSRGB = false );
+  void Destroy() override;
+
+  uint32_t GetWidth() const { return m_width; }
+  uint32_t GetHeight() const { return m_height; }
+
+private:
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
+  bool m_hasAlpha = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::RenderTarget class
 //------------------------------------------------------------------------------
 class RenderTarget
 {
 public:
   ~RenderTarget();
   void Initialize( uint32_t width, uint32_t height );
-  void AddTexture( TextureFilter filter, TextureWrap wrap );
-  void AddDepth( TextureFilter filter, TextureWrap wrap );
+  void AddTexture( Texture::Filter filter, Texture::Wrap wrap );
+  void AddDepth( Texture::Filter filter, Texture::Wrap wrap );
   void Destroy();
 
   void Activate();
@@ -1028,15 +1373,11 @@ private:
     Vec3 pos;
     Vec2 uv;
   };
-
   uint32_t m_fbo = 0;
-
   Array< Texture2D*, 4 > m_targets;
   Texture2D m_depth;
-
   uint32_t m_width = 0;
   uint32_t m_height = 0;
-
   VertexData m_quad;
   Shader m_shader;
 };
@@ -1047,36 +1388,28 @@ private:
 class GraphicsDevice
 {
 public:
-  GraphicsDevice();
   ~GraphicsDevice();
-
   void Initialize( class Window* window );
   void Terminate();
 
   void Activate();
   void Clear( Color color );
   void Present();
+  void AddTextureBarrier(); // Must call to readback from active render target (GL only)
 
   class Window* GetWindow() { return m_window; }
   RenderTarget* GetCanvas() { return &m_canvas; }
-
   uint32_t GetWidth() const { return m_canvas.GetWidth(); }
   uint32_t GetHeight() const { return m_canvas.GetHeight(); }
   float GetAspectRatio() const;
 
-  // have to inject a barrier to readback from active render target (GL only)
-  void AddTextureBarrier();
-
 //private:
   friend class ae::Window;
   void m_HandleResize( uint32_t width, uint32_t height );
-
-  Window* m_window;
+  Window* m_window = nullptr;
   RenderTarget m_canvas;
-
-  // OpenGL
-  void* m_context;
-  int32_t m_defaultFbo;
+  void* m_context = nullptr;
+  int32_t m_defaultFbo = 0;
 };
 
 } // AE_NAMESPACE end
@@ -1601,7 +1934,7 @@ namespace Interpolation
   {
     float angle = ( t * ae::PI );// + ae::PI;
     t = ( 1.0f - ae::Cos( angle ) ) / 2;
-    // @TODO: Needed for Color, support types without lerp
+    // @TODO: Needed for ae::Color, support types without lerp
     return start.Lerp( end, t ); //return start + ( ( end - start ) * t );
   }
 }
@@ -2915,7 +3248,7 @@ uint32_t Array< T, N >::m_GetNextSize() const
 }
 
 //------------------------------------------------------------------------------
-// Map functions
+// ae::Map functions
 //------------------------------------------------------------------------------
 template < typename K >
 bool Map_IsEqual( const K& k0, const K& k1 );
@@ -3135,17 +3468,21 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 // // ae.cpp/mm EXAMPLE END
 //------------------------------------------------------------------------------
 #ifdef AE_MAIN
+#if _AE_APPLE_ && !defined(__OBJC__)
+#error "AE_MAIN must be defined in an Objective-C file on Apple platforms"
+#endif
 
 //------------------------------------------------------------------------------
 // Platform includes, required for logging, windowing, file io
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-  #define WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN 1
   #include "Windows.h"
   #include "processthreadsapi.h" // For GetCurrentProcessId()
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
   #include <unistd.h>
+  #import <Cocoa/Cocoa.h>
 #else
   #include <unistd.h>
 #endif
@@ -3298,6 +3635,853 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
   Vec3 v2 = v1 - v0 * d;
   v2.Normalize();
   return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) );
+}
+
+//------------------------------------------------------------------------------
+// ae::Matrix4 member functions
+//------------------------------------------------------------------------------
+Matrix4 Matrix4::Identity()
+{
+  Matrix4 r;
+  r.d[ 0 ] = 1; r.d[ 1 ] = 0; r.d[ 2 ] = 0; r.d[ 3 ] = 0;
+  r.d[ 4 ] = 0; r.d[ 5 ] = 1; r.d[ 6 ] = 0; r.d[ 7 ] = 0;
+  r.d[ 8 ] = 0; r.d[ 9 ] = 0; r.d[ 10 ] = 1; r.d[ 11 ] = 0;
+  r.d[ 12 ] = 0; r.d[ 13 ] = 0; r.d[ 14 ] = 0; r.d[ 15 ] = 1;
+  return r;
+}
+
+Matrix4 Matrix4::Translation( const Vec3& t )
+{
+  Matrix4 r;
+  r.d[ 0 ] = 1.0f; r.d[ 1 ] = 0.0f;  r.d[ 2 ] = 0.0f;  r.d[ 3 ] = t.x;
+  r.d[ 4 ] = 0.0f; r.d[ 5 ] = 1.0f;  r.d[ 6 ] = 0.0f;  r.d[ 7 ] = t.y;
+  r.d[ 8 ] = 0.0f; r.d[ 9 ] = 0.0f;  r.d[ 10 ] = 1.0f; r.d[ 11 ] = t.z;
+  r.d[ 12 ] = 0.0f; r.d[ 13 ] = 0.0f; r.d[ 14 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  return r;
+}
+
+Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
+{
+  // Remove rotation
+  forward0.Normalize();
+  up0.Normalize();
+
+  Vec3 right0 = forward0.Cross( up0 );
+  right0.Normalize();
+  up0 = right0.Cross( forward0 );
+
+  Matrix4 removeRotation;
+  memset( &removeRotation, 0, sizeof( removeRotation ) );
+  removeRotation.SetRow( 0, right0 ); // right -> ( 1, 0, 0 )
+  removeRotation.SetRow( 1, forward0 ); // forward -> ( 0, 1, 0 )
+  removeRotation.SetRow( 2, up0 ); // up -> ( 0, 0, 1 )
+  removeRotation.d[ 15 ] = 1;
+
+  // Rotate
+  forward1.Normalize();
+  up1.Normalize();
+
+  Vec3 right1 = forward1.Cross( up1 );
+  right1.Normalize();
+  up1 = right1.Cross( forward1 );
+
+  Matrix4 newRotation;
+  memset( &newRotation, 0, sizeof( newRotation ) );
+  // Set axis vector to invert (transpose)
+  newRotation.SetAxis( 0, right1 ); // ( 1, 0, 0 ) -> right
+  newRotation.SetAxis( 1, forward1 ); // ( 0, 1, 0 ) -> forward
+  newRotation.SetAxis( 2, up1 ); // ( 0, 0, 1 ) -> up
+  newRotation.d[ 15 ] = 1;
+
+  return newRotation * removeRotation;
+}
+
+Matrix4 Matrix4::RotationX( float angle )
+{
+  Matrix4 r;
+  r.d[0] = 1.0f;  r.d[1] = 0.0f;          r.d[2] = 0.0f;           r.d[3] = 0.0f;
+  r.d[4] = 0.0f;  r.d[5] = cosf( angle ); r.d[6] = -sinf( angle ); r.d[7] = 0.0f;
+  r.d[8] = 0.0f;  r.d[9] = sinf( angle ); r.d[10] = cosf( angle ); r.d[11] = 0.0f;
+  r.d[12] = 0.0f; r.d[13] = 0.0f;         r.d[14] = 0.0f;          r.d[15] = 1.0f;
+  return r;
+}
+
+Matrix4 Matrix4::RotationY( float angle )
+{
+  Matrix4 r;
+  r.d[0] = cosf( angle );  r.d[1] = 0.0f;  r.d[2] = sinf( angle );  r.d[3] = 0.0f;
+  r.d[4] = 0.0f;           r.d[5] = 1.0f;  r.d[6] = 0.0f;           r.d[7] = 0.0f;
+  r.d[8] = -sinf( angle ); r.d[9] = 0.0f;  r.d[10] = cosf( angle ); r.d[11] = 0.0f;
+  r.d[12] = 0.0f;          r.d[13] = 0.0f; r.d[14] = 0.0f;          r.d[15] = 1.0f;
+  return r;
+}
+
+Matrix4 Matrix4::RotationZ( float angle )
+{
+  Matrix4 r;
+  r.d[0] = cosf( angle );  r.d[1] = -sinf( angle ); r.d[2] = 0.0f;  r.d[3] = 0.0f;
+  r.d[4] = sinf( angle );  r.d[5] = cosf( angle );  r.d[6] = 0.0f;  r.d[7] = 0.0f;
+  r.d[8] = 0.0f;           r.d[9] = 0.0f;           r.d[10] = 1.0f; r.d[11] = 0.0f;
+  r.d[12] = 0.0f;          r.d[13] = 0.0f;          r.d[14] = 0.0f; r.d[15] = 1.0f;
+  return r;
+}
+
+Matrix4 Matrix4::Scaling( const Vec3& s )
+{
+  return Scaling( s.x, s.y, s.z );
+}
+
+Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
+{
+  Matrix4 r;
+  r.d[0] = sx;    r.d[1] = 0.0f;  r.d[2] = 0.0f;  r.d[3] = 0.0f;
+  r.d[4] = 0.0f;  r.d[5] = sy;    r.d[6] = 0.0f;  r.d[7] = 0.0f;
+  r.d[8] = 0.0f;  r.d[9] = 0.0f;  r.d[10] = sz;   r.d[11] = 0.0f;
+  r.d[12] = 0.0f; r.d[13] = 0.0f; r.d[14] = 0.0f; r.d[15] = 1.0f;
+  return r;
+}
+
+Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
+{
+  //xaxis.x  xaxis.y  xaxis.z  dot(xaxis, -eye)
+  //yaxis.x  yaxis.y  yaxis.z  dot(yaxis, -eye)
+  //zaxis.x  zaxis.y  zaxis.z  dot(zaxis, -eye)
+  //0        0        0        1
+
+  position = -position;
+  forward.Normalize();
+  up.Normalize();
+
+  Vec3 right = forward.Cross( up );
+  right.Normalize();
+  up = right.Cross( forward );
+
+  Matrix4 result;
+  memset( &result, 0, sizeof( result ) );
+  result.SetRow( 0, right );
+  result.SetRow( 1, up );
+  result.SetRow( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
+  result.SetAxis( 3, Vec3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
+  result.d[ 15 ] = 1;
+  return result;
+}
+
+// this hack comes in from the renderer
+extern bool gReverseZ;
+
+// fix the projection matrix, when false fov scales up/down with nearPlane
+// if this breaks stuff, then can set to false
+bool gFixProjection = true;
+
+Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
+{
+  // a  0  0  0
+  // 0  b  0  0
+  // 0  0  A  B
+  // 0  0 -1  0
+
+  // this is assuming a symmetric frustum, in this case nearPlane cancels out
+  
+  float halfAngleTangent = tanf( fov * 0.5f);
+  float r = aspectRatio * halfAngleTangent; // scaled by view aspect ratio
+  float t = halfAngleTangent; // tan of half angle fit vertically
+	  
+  if ( gFixProjection )
+  {
+	  r *= nearPlane;
+	  t *= nearPlane;
+  }
+  float a = nearPlane / r;
+  float b = nearPlane / t;
+ 	
+  float A;
+  float B;
+  if (gReverseZ)
+  {
+	  A = 0;
+	  B = nearPlane;
+  }
+  else
+  {
+	  A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
+	  B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
+  }
+  
+  Matrix4 result;
+  memset( &result, 0, sizeof( result ) );
+  result.d[ 0 ] = a;
+  result.d[ 5 ] = b;
+  result.d[ 10 ] = A;
+  result.d[ 11 ] = B;
+  result.d[ 14 ] = -1;
+  return result;
+}
+
+Vec4 Matrix4::operator*(const Vec4& v) const
+{
+  return Vec4(
+    v.x*d[0]  + v.y*d[1]  + v.z*d[2]  + v.w*d[3],
+    v.x*d[4]  + v.y*d[5]  + v.z*d[6]  + v.w*d[7],
+    v.x*d[8]  + v.y*d[9]  + v.z*d[10] + v.w*d[11],
+    v.x*d[12] + v.y*d[13] + v.z*d[14] + v.w*d[15]);
+}
+
+Matrix4 Matrix4::operator*(const Matrix4& m) const
+{
+  Matrix4 r;
+  r.d[0]=(d[0]*m.d[0])+(d[1]*m.d[4])+(d[2]*m.d[8])+(d[3]*m.d[12]);
+  r.d[1]=(d[0]*m.d[1])+(d[1]*m.d[5])+(d[2]*m.d[9])+(d[3]*m.d[13]);
+  r.d[2]=(d[0]*m.d[2])+(d[1]*m.d[6])+(d[2]*m.d[10])+(d[3]*m.d[14]);
+  r.d[3]=(d[0]*m.d[3])+(d[1]*m.d[7])+(d[2]*m.d[11])+(d[3]*m.d[15]);
+  r.d[4]=(d[4]*m.d[0])+(d[5]*m.d[4])+(d[6]*m.d[8])+(d[7]*m.d[12]);
+  r.d[5]=(d[4]*m.d[1])+(d[5]*m.d[5])+(d[6]*m.d[9])+(d[7]*m.d[13]);
+  r.d[6]=(d[4]*m.d[2])+(d[5]*m.d[6])+(d[6]*m.d[10])+(d[7]*m.d[14]);
+  r.d[7]=(d[4]*m.d[3])+(d[5]*m.d[7])+(d[6]*m.d[11])+(d[7]*m.d[15]);
+  r.d[8]=(d[8]*m.d[0])+(d[9]*m.d[4])+(d[10]*m.d[8])+(d[11]*m.d[12]);
+  r.d[9]=(d[8]*m.d[1])+(d[9]*m.d[5])+(d[10]*m.d[9])+(d[11]*m.d[13]);
+  r.d[10]=(d[8]*m.d[2])+(d[9]*m.d[6])+(d[10]*m.d[10])+(d[11]*m.d[14]);
+  r.d[11]=(d[8]*m.d[3])+(d[9]*m.d[7])+(d[10]*m.d[11])+(d[11]*m.d[15]);
+  r.d[12]=(d[12]*m.d[0])+(d[13]*m.d[4])+(d[14]*m.d[8])+(d[15]*m.d[12]);
+  r.d[13]=(d[12]*m.d[1])+(d[13]*m.d[5])+(d[14]*m.d[9])+(d[15]*m.d[13]);
+  r.d[14]=(d[12]*m.d[2])+(d[13]*m.d[6])+(d[14]*m.d[10])+(d[15]*m.d[14]);
+  r.d[15]=(d[12]*m.d[3])+(d[13]*m.d[7])+(d[14]*m.d[11])+(d[15]*m.d[15]);
+  return r;
+}
+
+void Matrix4::operator*=(const Matrix4& m)
+{
+  float t1, t2, t3, t4;
+  t1 = (d[0]*m.d[0]) + (d[1]*m.d[4]) + (d[2]*m.d[8])  + (d[3]*m.d[12]);
+  t2 = (d[0]*m.d[1]) + (d[1]*m.d[5]) + (d[2]*m.d[9])  + (d[3]*m.d[13]);
+  t3 = (d[0]*m.d[2]) + (d[1]*m.d[6]) + (d[2]*m.d[10]) + (d[3]*m.d[14]);
+  t4 = (d[0]*m.d[3]) + (d[1]*m.d[7]) + (d[2]*m.d[11]) + (d[3]*m.d[15]);
+  d[0] = t1;
+  d[1] = t2;
+  d[2] = t3;
+  d[3] = t4;
+  t1 = (d[4]*m.d[0]) + (d[5]*m.d[4]) + (d[6]*m.d[8])  + (d[7]*m.d[12]);
+  t2 = (d[4]*m.d[1]) + (d[5]*m.d[5]) + (d[6]*m.d[9])  + (d[7]*m.d[13]);
+  t3 = (d[4]*m.d[2]) + (d[5]*m.d[6]) + (d[6]*m.d[10]) + (d[7]*m.d[14]);
+  t4 = (d[4]*m.d[3]) + (d[5]*m.d[7]) + (d[6]*m.d[11]) + (d[7]*m.d[15]);
+  d[4] = t1;
+  d[5] = t2;
+  d[6] = t3;
+  d[7] = t4;
+  t1 = (d[8]*m.d[0]) + (d[9]*m.d[4]) + (d[10]*m.d[8])  + (d[11]*m.d[12]);
+  t2 = (d[8]*m.d[1]) + (d[9]*m.d[5]) + (d[10]*m.d[9])  + (d[11]*m.d[13]);
+  t3 = (d[8]*m.d[2]) + (d[9]*m.d[6]) + (d[10]*m.d[10]) + (d[11]*m.d[14]);
+  t4 = (d[8]*m.d[3]) + (d[9]*m.d[7]) + (d[10]*m.d[11]) + (d[11]*m.d[15]);
+  d[8]  = t1;
+  d[9]  = t2;
+  d[10] = t3;
+  d[11] = t4;
+  t1 = (d[12]*m.d[0]) + (d[13]*m.d[4]) + (d[14]*m.d[8])  + (d[15]*m.d[12]);
+  t2 = (d[12]*m.d[1]) + (d[13]*m.d[5]) + (d[14]*m.d[9])  + (d[15]*m.d[13]);
+  t3 = (d[12]*m.d[2]) + (d[13]*m.d[6]) + (d[14]*m.d[10]) + (d[15]*m.d[14]);
+  t4 = (d[12]*m.d[3]) + (d[13]*m.d[7]) + (d[14]*m.d[11]) + (d[15]*m.d[15]);
+  d[12] = t1;
+  d[13] = t2;
+  d[14] = t3;
+  d[15] = t4;
+}
+
+void Matrix4::SetInverse()
+{
+  *this = GetInverse();
+}
+
+Matrix4 Matrix4::GetInverse() const
+{
+  Matrix4 r;
+
+  r.d[0] = d[5]  * d[10] * d[15] - 
+    d[5]  * d[11] * d[14] - 
+    d[9]  * d[6]  * d[15] + 
+    d[9]  * d[7]  * d[14] +
+    d[13] * d[6]  * d[11] - 
+    d[13] * d[7]  * d[10];
+
+  r.d[4] = -d[4]  * d[10] * d[15] + 
+    d[4]  * d[11] * d[14] + 
+    d[8]  * d[6]  * d[15] - 
+    d[8]  * d[7]  * d[14] - 
+    d[12] * d[6]  * d[11] + 
+    d[12] * d[7]  * d[10];
+
+  r.d[8] = d[4]  * d[9] * d[15] - 
+    d[4]  * d[11] * d[13] - 
+    d[8]  * d[5] * d[15] + 
+    d[8]  * d[7] * d[13] + 
+    d[12] * d[5] * d[11] - 
+    d[12] * d[7] * d[9];
+
+  r.d[12] = -d[4]  * d[9] * d[14] + 
+    d[4]  * d[10] * d[13] +
+    d[8]  * d[5] * d[14] - 
+    d[8]  * d[6] * d[13] - 
+    d[12] * d[5] * d[10] + 
+    d[12] * d[6] * d[9];
+
+  r.d[1] = -d[1]  * d[10] * d[15] + 
+    d[1]  * d[11] * d[14] + 
+    d[9]  * d[2] * d[15] - 
+    d[9]  * d[3] * d[14] - 
+    d[13] * d[2] * d[11] + 
+    d[13] * d[3] * d[10];
+
+  r.d[5] = d[0]  * d[10] * d[15] - 
+    d[0]  * d[11] * d[14] - 
+    d[8]  * d[2] * d[15] + 
+    d[8]  * d[3] * d[14] + 
+    d[12] * d[2] * d[11] - 
+    d[12] * d[3] * d[10];
+
+  r.d[9] = -d[0]  * d[9] * d[15] + 
+    d[0]  * d[11] * d[13] + 
+    d[8]  * d[1] * d[15] - 
+    d[8]  * d[3] * d[13] - 
+    d[12] * d[1] * d[11] + 
+    d[12] * d[3] * d[9];
+
+  r.d[13] = d[0]  * d[9] * d[14] - 
+    d[0]  * d[10] * d[13] - 
+    d[8]  * d[1] * d[14] + 
+    d[8]  * d[2] * d[13] + 
+    d[12] * d[1] * d[10] - 
+    d[12] * d[2] * d[9];
+
+  r.d[2] = d[1]  * d[6] * d[15] - 
+    d[1]  * d[7] * d[14] - 
+    d[5]  * d[2] * d[15] + 
+    d[5]  * d[3] * d[14] + 
+    d[13] * d[2] * d[7] - 
+    d[13] * d[3] * d[6];
+
+  r.d[6] = -d[0]  * d[6] * d[15] + 
+    d[0]  * d[7] * d[14] + 
+    d[4]  * d[2] * d[15] - 
+    d[4]  * d[3] * d[14] - 
+    d[12] * d[2] * d[7] + 
+    d[12] * d[3] * d[6];
+
+  r.d[10] = d[0]  * d[5] * d[15] - 
+    d[0]  * d[7] * d[13] - 
+    d[4]  * d[1] * d[15] + 
+    d[4]  * d[3] * d[13] + 
+    d[12] * d[1] * d[7] - 
+    d[12] * d[3] * d[5];
+
+  r.d[14] = -d[0]  * d[5] * d[14] + 
+    d[0]  * d[6] * d[13] + 
+    d[4]  * d[1] * d[14] - 
+    d[4]  * d[2] * d[13] - 
+    d[12] * d[1] * d[6] + 
+    d[12] * d[2] * d[5];
+
+  r.d[3] = -d[1] * d[6] * d[11] + 
+    d[1] * d[7] * d[10] + 
+    d[5] * d[2] * d[11] - 
+    d[5] * d[3] * d[10] - 
+    d[9] * d[2] * d[7] + 
+    d[9] * d[3] * d[6];
+
+  r.d[7] = d[0] * d[6] * d[11] - 
+    d[0] * d[7] * d[10] - 
+    d[4] * d[2] * d[11] + 
+    d[4] * d[3] * d[10] + 
+    d[8] * d[2] * d[7] - 
+    d[8] * d[3] * d[6];
+
+  r.d[11] = -d[0] * d[5] * d[11] + 
+    d[0] * d[7] * d[9] + 
+    d[4] * d[1] * d[11] - 
+    d[4] * d[3] * d[9] - 
+    d[8] * d[1] * d[7] + 
+    d[8] * d[3] * d[5];
+
+  r.d[15] = d[0] * d[5] * d[10] - 
+    d[0] * d[6] * d[9] - 
+    d[4] * d[1] * d[10] + 
+    d[4] * d[2] * d[9] + 
+    d[8] * d[1] * d[6] - 
+    d[8] * d[2] * d[5];
+
+  float det = d[0] * r.d[0] + d[1] * r.d[4] + d[2] * r.d[8] + d[3] * r.d[12];
+  det = 1.0f / det;
+  for ( uint32_t i = 0; i < 16; i++ )
+  {
+    r.d[ i ] *= det;
+  }
+  return r;
+}
+
+void Matrix4::SetRotation( const Quaternion& q2 )
+{
+  Quaternion q = q2.GetInverse();
+  d[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
+  d[1] = 2*q.i*q.j + 2*q.k*q.r;
+  d[2] = 2*q.i*q.k - 2*q.j*q.r;
+  d[4] = 2*q.i*q.j - 2*q.k*q.r;
+  d[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
+  d[6] = 2*q.j*q.k + 2*q.i*q.r;
+  d[8] = 2*q.i*q.k + 2*q.j*q.r;
+  d[9] = 2*q.j*q.k - 2*q.i*q.r;
+  d[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+}
+
+Vec3 Matrix4::GetAxis( uint32_t col ) const
+{
+  return Vec3(d[col], d[col+4], d[col+8]);
+}
+
+Quaternion Matrix4::GetRotation() const
+{
+  // http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/
+
+  Matrix4 t = *this;
+  t.SetScale( Vec3( 1.0f ) );
+
+  #define m00 t.d[ 0 ]
+  #define m01 t.d[ 1 ]
+  #define m02 t.d[ 2 ]
+  #define m10 t.d[ 4 ]
+  #define m11 t.d[ 5 ]
+  #define m12 t.d[ 6 ]
+  #define m20 t.d[ 8 ]
+  #define m21 t.d[ 9 ]
+  #define m22 t.d[ 10 ]
+
+  float trace = m00 + m11 + m22;
+  if ( trace > 0.0f )
+  { 
+    float s = sqrt( trace + 1.0f ) * 2.0f;
+    return Quaternion(
+      ( m21 - m12 ) / s,
+      ( m02 - m20 ) / s,
+      ( m10 - m01 ) / s,
+      0.25f * s
+    );
+  }
+  else if ( ( m00 > m11 ) && ( m00 > m22 ) )
+  { 
+    float s = sqrt( 1.0f + m00 - m11 - m22 ) * 2.0f;
+    return Quaternion(
+      0.25f * s,
+      ( m01 + m10 ) / s,
+      ( m02 + m20 ) / s,
+      ( m21 - m12 ) / s
+    );
+  }
+  else if ( m11 > m22 )
+  { 
+    float s = sqrt( 1.0f + m11 - m00 - m22 ) * 2.0f;
+    return Quaternion(
+      ( m01 + m10 ) / s,
+      0.25f * s,
+      ( m12 + m21 ) / s,
+      ( m02 - m20 ) / s
+    );
+  }
+  else
+  { 
+    float s = sqrt( 1.0f + m22 - m00 - m11 ) * 2.0f;
+    return Quaternion(
+      ( m02 + m20 ) / s,
+      ( m12 + m21 ) / s,
+      0.25f * s,
+      ( m10 - m01 ) / s
+    );
+  }
+
+  #undef m00
+  #undef m01
+  #undef m02
+  #undef m10
+  #undef m11
+  #undef m12
+  #undef m20
+  #undef m21
+  #undef m22
+}
+
+void Matrix4::SetAxis( uint32_t col, const Vec3& v )
+{
+  d[col] = v.x;
+  d[col+4] = v.y;
+  d[col+8] = v.z;
+}
+
+Vec4 Matrix4::GetRow( uint32_t row ) const
+{
+  return Vec4(d[row*4], d[row*4+1], d[row*4+2], d[row*4+3]);
+}
+
+void Matrix4::SetRow( uint32_t row, const Vec3 &v )
+{
+  d[row*4]   = v.x;
+  d[row*4+1] = v.y;
+  d[row*4+2] = v.z;
+}
+
+void Matrix4::SetRow( uint32_t row, const Vec4 &v)
+{
+  d[row*4]   = v.x;
+  d[row*4+1] = v.y;
+  d[row*4+2] = v.z;
+  d[row*4+3] = v.w;
+}
+
+void Matrix4::SetTranslation( float x, float y, float z )
+{
+  d[ 3 ] = x;
+  d[ 7 ] = y;
+  d[ 11 ] = z;
+}
+
+void Matrix4::SetTranslation( const Vec3& translation )
+{
+  d[ 3 ] = translation.x;
+  d[ 7 ] = translation.y;
+  d[ 11 ] = translation.z;
+}
+
+Vec3 Matrix4::GetTranslation() const
+{
+  return Vec3( d[ 3 ], d[ 7 ], d[ 11 ] );
+}
+
+Vec3 Matrix4::GetScale() const
+{
+  return Vec3(
+    Vec3( d[ 0 ], d[ 4 ], d[ 8 ] ).Length(),
+    Vec3( d[ 1 ], d[ 5 ], d[ 9 ] ).Length(),
+    Vec3( d[ 2 ], d[ 6 ], d[ 10 ] ).Length()
+  );
+}
+
+void Matrix4::SetScale( const Vec3& s )
+{
+  for( uint32_t i = 0; i < 3; i++ )
+  {
+    SetAxis( i, GetAxis( i ).NormalizeCopy() * s[ i ] );
+  }
+}
+
+void Matrix4::SetTranspose( void )
+{
+  for( uint32_t i = 0; i < 4; i++ )
+  {
+    for( uint32_t j = i + 1; j < 4; j++ )
+    {
+      std::swap( d[ i * 4 + j ], d[ j * 4 + i ] );
+    }
+  }
+}
+
+Matrix4 Matrix4::GetTranspose() const
+{
+  Matrix4 r = *this;
+  r.SetTranspose();
+  return r;
+}
+
+Matrix4 Matrix4::GetNormalMatrix() const
+{
+  return GetInverse().GetTranspose();
+}
+
+//------------------------------------------------------------------------------
+// ae::Quaternion member functions
+//------------------------------------------------------------------------------
+Quaternion::Quaternion( Vec3 forward, Vec3 up, bool prioritizeUp )
+{
+  forward.Normalize();
+  up.Normalize();
+
+  Vec3 right = forward.Cross( up );
+  right.Normalize();
+  if ( prioritizeUp )
+  {
+    up = right.Cross( forward );
+  }
+  else
+  {
+    forward = up.Cross( right );
+  }
+
+#define m0 right
+#define m1 forward
+#define m2 up
+#define m00 m0.x
+#define m01 m1.x
+#define m02 m2.x
+#define m10 m0.y
+#define m11 m1.y
+#define m12 m2.y
+#define m20 m0.z
+#define m21 m1.z
+#define m22 m2.z
+
+  //http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/index.htm
+  float trace = m00 + m11 + m22;
+  if ( trace > 0.0f )
+  {
+    float S = sqrtf( trace + 1.0f ) * 2;
+    r = 0.25f * S;
+    i = ( m21 - m12 ) / S;
+    j = ( m02 - m20 ) / S;
+    k = ( m10 - m01 ) / S;
+  }
+  else if ( ( m00 > m11 ) & ( m00 > m22 ) )
+  {
+    float S = sqrtf( 1.0f + m00 - m11 - m22 ) * 2;
+    r = ( m21 - m12 ) / S;
+    i = 0.25f * S;
+    j = ( m01 + m10 ) / S;
+    k = ( m02 + m20 ) / S;
+  }
+  else if ( m11 > m22 )
+  {
+    float S = sqrtf( 1.0f + m11 - m00 - m22 ) * 2;
+    r = ( m02 - m20 ) / S;
+    i = ( m01 + m10 ) / S;
+    j = 0.25f * S;
+    k = ( m12 + m21 ) / S;
+  }
+  else
+  {
+    float S = sqrtf( 1.0f + m22 - m00 - m11 ) * 2;
+    r = ( m10 - m01 ) / S;
+    i = ( m02 + m20 ) / S;
+    j = ( m12 + m21 ) / S;
+    k = 0.25f * S;
+  }
+
+#undef m0
+#undef m1
+#undef m2
+#undef m00
+#undef m01
+#undef m02
+#undef m10
+#undef m11
+#undef m12
+#undef m20
+#undef m21
+#undef m22
+}
+
+Quaternion::Quaternion( Vec3 axis, float angle )
+{
+  axis.Normalize();
+  float sinAngleDiv2 = sinf( angle / 2.0f );
+  i = axis.x * sinAngleDiv2;
+  j = axis.y * sinAngleDiv2;
+  k = axis.z * sinAngleDiv2;
+  r = cosf( angle / 2.0f );
+}
+
+void Quaternion::Normalize()
+{
+  float invMagnitude = r * r + i * i + j * j + k * k;
+
+  if ( invMagnitude == 0.0f )
+  {
+    r = 1;
+    return;
+  }
+
+  invMagnitude = 1.0f / std::sqrt( invMagnitude );
+  r *= invMagnitude;
+  i *= invMagnitude;
+  j *= invMagnitude;
+  k *= invMagnitude;
+}
+
+bool Quaternion::operator==( const Quaternion& q ) const
+{
+  return ( i == q.i ) && ( j == q.j ) && ( k == q.k ) && ( r == q.r );
+}
+
+bool Quaternion::operator!=( const Quaternion& q ) const
+{
+  return !operator==( q );
+}
+
+Quaternion& Quaternion::operator*= ( const Quaternion& q )
+{
+  //http://www.mathworks.com/help/aeroblks/quaternionmultiplication.html
+  Quaternion copy = *this;
+  r = copy.r * q.r - copy.i * q.i - copy.j * q.j - copy.k * q.k;
+  i = copy.r * q.i + copy.i * q.r + copy.j * q.k - copy.k * q.j;
+  j = copy.r * q.j + copy.j * q.r + copy.k * q.i - copy.i * q.k;
+  k = copy.r * q.k + copy.k * q.r + copy.i * q.j - copy.j * q.i;
+  return *this;
+}
+
+Quaternion Quaternion::operator* ( const Quaternion& q ) const
+{
+  return Quaternion( *this ) *= q;
+}
+
+Quaternion const Quaternion::operator*( float s ) const
+{
+  return Quaternion( s * i, s * j, s * k, s * r );
+}
+
+void Quaternion::AddScaledVector( const Vec3& v, float t )
+{
+  Quaternion q( v.x * t, v.y * t, v.z * t, 0.0f );
+  q *= *this;
+
+  r += q.r * 0.5f;
+  i += q.i * 0.5f;
+  j += q.j * 0.5f;
+  k += q.k * 0.5f;
+}
+
+void Quaternion::RotateByVector( const Vec3& v )
+{
+  Quaternion q = Quaternion::Identity();
+
+  float s = v.Length();
+  //ASSERT_MSG(s > 0.001f, "Can't rotate by a zero vector!");
+  q.r = cosf( s * 0.5f );
+
+  Vec3 n = v.NormalizeCopy() * sinf( s * 0.5f );
+  q.i = n.x;
+  q.j = n.y;
+  q.k = n.z;
+
+  ( *this ) *= q;
+
+}
+
+void Quaternion::SetDirectionXY( const Vec3& v )
+{
+  float theta = std::atan( v.y / v.x );
+  if ( v.x < 0 && v.y >= 0 )
+    theta += ae::PI;
+  else if ( v.x < 0 && v.y < 0 )
+    theta -= ae::PI;
+
+  r = std::cos( theta / 2.0f );
+  i = 0.0f;
+  j = 0.0f;
+  k = std::sin( theta / 2.0f );
+}
+
+Vec3 Quaternion::GetDirectionXY() const
+{
+  float theta;
+  if ( k >= 0.0f )
+    theta = 2.0f * std::acos( r );
+  else
+    theta = -2.0f * std::acos( r );
+
+  return Vec3( std::cos( theta ), std::sin( theta ), 0.0f );
+}
+
+void Quaternion::ZeroXY()
+{
+  i = 0.0f;
+  j = 0.0f;
+}
+
+void Quaternion::GetAxisAngle( Vec3* axis, float* angle ) const
+{
+  *angle = 2 * acos( r );
+  axis->x = i / sqrt( 1 - r * r );
+  axis->y = j / sqrt( 1 - r * r );
+  axis->z = k / sqrt( 1 - r * r );
+}
+
+void Quaternion::AddRotationXY( float rotation )
+{
+  float sinThetaOver2 = std::sin( rotation / 2.0f );
+  float cosThetaOver2 = std::cos( rotation / 2.0f );
+
+  // create a quaternion representing the amount to rotate
+  Quaternion change( 0.0f, 0.0f, sinThetaOver2, cosThetaOver2 );
+  change.Normalize();
+
+  // apply the change in rotation
+  ( *this ) *= change;
+}
+
+Quaternion Quaternion::Nlerp( Quaternion d, float t ) const
+{
+  float epsilon = this->Dot( d );
+  Quaternion end = d;
+
+  if ( epsilon < 0.0f )
+  {
+    epsilon = -epsilon;
+
+    end = Quaternion( -d.i, -d.j, -d.k, -d.r );
+  }
+
+  Quaternion result = ( *this ) * ( 1.0f - t );
+  end = end * t;
+
+  result.i += end.i;
+  result.j += end.j;
+  result.k += end.k;
+  result.r += end.r;
+  result.Normalize();
+
+  return result;
+}
+
+Matrix4 Quaternion::GetTransformMatrix( void ) const
+{
+  Quaternion n = *this;
+  n.Normalize();
+
+  Matrix4 matrix = Matrix4::Identity();
+
+  matrix.d[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
+  matrix.d[ 1 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
+  matrix.d[ 2 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
+
+  matrix.d[ 4 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
+  matrix.d[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
+  matrix.d[ 6 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
+
+  matrix.d[ 8 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
+  matrix.d[ 9 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
+  matrix.d[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
+
+  return matrix;
+}
+
+Quaternion Quaternion::GetInverse( void ) const
+{
+  return Quaternion( *this ).SetInverse();
+}
+
+Quaternion& Quaternion::SetInverse( void )
+{
+  //http://www.mathworks.com/help/aeroblks/quaternioninverse.html
+  float d = r * r + i * i + j * j + k * k;
+  r /= d;
+  i /= -d;
+  j /= -d;
+  k /= -d;
+
+  return *this;
+}
+
+Vec3 Quaternion::Rotate( Vec3 v ) const
+{
+  //http://www.mathworks.com/help/aeroblks/quaternionrotation.html
+  Quaternion q = ( *this ) * Quaternion( v ) * this->GetInverse();
+  return Vec3( q.i, q.j, q.k );
+}
+
+float Quaternion::Dot( const Quaternion& q ) const
+{
+  return ( q.r * r ) + ( q.i * i ) + ( q.j * j ) + ( q.k * k );
 }
 
 //------------------------------------------------------------------------------
@@ -3539,7 +4723,85 @@ void TimeStep::Wait()
 }
 
 //------------------------------------------------------------------------------
-// Window member functions
+// ae::Rect member functions
+//------------------------------------------------------------------------------
+Rect::Rect( Vec2 p0, Vec2 p1 )
+{
+  if ( p0.x < p1.x )
+  {
+    x = p0.x;
+    w = p1.x - p0.x;
+  }
+  else
+  {
+    x = p1.x;
+    w = p0.x - p1.x;
+  }
+
+  if ( p0.y < p1.y )
+  {
+    y = p0.y;
+    h = p1.y - p0.y;
+  }
+  else
+  {
+    y = p1.y;
+    h = p0.y - p1.y;
+  }
+}
+
+bool Rect::Contains( Vec2 pos ) const
+{
+  return !( pos.x < x || pos.x >= ( x + w ) || pos.y < y || pos.y >= ( y + h ) );
+}
+
+void Rect::Expand( Vec2 pos )
+{
+  if ( w == 0.0f )
+  {
+    x = pos.x;
+  }
+  else
+  {
+    float x1 = ae::Max( x + w, pos.x );
+    x = ae::Min( x, pos.x );
+    w = x1 - x;
+  }
+
+  if ( h == 0.0f )
+  {
+    y = pos.y;
+  }
+  else
+  {
+    float y1 = ae::Max( y + h, pos.y );
+    y = ae::Min( y, pos.y );
+    h = y1 - y;
+  }
+}
+
+bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
+{
+  float x0 = ae::Max( x, other.x );
+  float x1 = ae::Min( x + w, other.x + other.w );
+  float y0 = ae::Max( y, other.y );
+  float y1 = ae::Min( y + h, other.y + other.h );
+  if ( x0 < x1 && y0 < y1 )
+  {
+    if ( intersectionOut )
+    {
+      *intersectionOut = Rect( Vec2( x0, y0 ), Vec2( x1, y1 ) );
+    }
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::Window member functions
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
 // @TODO: Cleanup namespace
@@ -3569,7 +4831,6 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
         uint32_t width = LOWORD( lParam );
         uint32_t height = HIWORD( lParam );
         window->m_UpdateWidthHeight( width, height );
-        window->graphicsDevice->m_HandleResize( width, height );
       }
       break;
     }
@@ -3583,10 +4844,50 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 #endif
 
+#if _AE_OSX_
+} // AE_NAMESPACE end
+
+@interface aeApplicationDelegate : NSObject< NSApplicationDelegate >
+@property ae::Window* aewindow;
+@end
+@implementation aeApplicationDelegate
+- (void)applicationDidFinishLaunching:(NSNotification *)notification
+{
+  [NSApp stop:nil]; // Prevents app run from blocking
+}
+@end
+
+@interface aeWindowDelegate : NSObject< NSWindowDelegate >
+@property ae::Window* aewindow;
+@end
+@implementation aeWindowDelegate
+- (BOOL)windowShouldClose:(NSWindow *)sender
+{
+  return true; // @TODO: Allow user to prevent window from closing
+}
+- (void)windowWillClose:(NSNotification *)notification
+{
+    AE_ASSERT( _aewindow );
+    AE_ASSERT( _aewindow->input );
+    _aewindow->input->quit = true;
+}
+- (NSSize)windowWillResize:(NSWindow*)sender toSize:(NSSize)frameSize
+{
+  AE_ASSERT( _aewindow );
+  AE_ASSERT( _aewindow->graphicsDevice );
+  _aewindow->m_UpdateWidthHeight( frameSize.width * sender.backingScaleFactor, frameSize.height * sender.backingScaleFactor );
+  return frameSize;
+}
+@end
+
+namespace AE_NAMESPACE {
+#endif
+
 Window::Window()
 {
   window = nullptr;
   graphicsDevice = nullptr;
+  input = nullptr;
   m_pos = Int2( 0.0f ); // @TODO: int
   m_width = 0;
   m_height = 0;
@@ -3759,14 +5060,6 @@ void Window::m_Initialize()
     AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
   }
 
-  // Create OpenGL context
-  HGLRC hglrc = wglCreateContext( hdc );
-  AE_ASSERT_MSG( hglrc, "Failed to create the OpenGL Rendering Context" );
-  if ( !wglMakeCurrent( hdc, hglrc ) )
-  {
-    AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
-  }
-
   // Finish window setup
   ShowWindow( hwnd, SW_SHOW );
   SetForegroundWindow( hwnd ); // Slightly Higher Priority
@@ -3774,6 +5067,59 @@ void Window::m_Initialize()
   if ( !UpdateWindow( hwnd ) )
   {
     AE_FAIL_MSG( "Failed on first window update. Error: #", GetLastError() );
+  }
+#elif _AE_OSX_
+  // Autorelease Pool
+  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+  
+  // Application
+  [NSApplication sharedApplication];
+  aeApplicationDelegate* applicationDelegate = [[aeApplicationDelegate alloc] init];
+  applicationDelegate.aewindow = this;
+  [NSApp setDelegate:applicationDelegate];
+
+  // Main window
+  aeWindowDelegate* windowDelegate = [[aeWindowDelegate alloc] init];
+  windowDelegate.aewindow = this;
+  NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 400, 300)
+    styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
+    backing:NSBackingStoreBuffered
+    defer:YES
+  ];
+  nsWindow.delegate = windowDelegate;
+  this->window = nsWindow;
+  
+  NSOpenGLPixelFormatAttribute nsPixelAttribs[] =
+  {
+    NSOpenGLPFAAccelerated,
+    NSOpenGLPFAClosestPolicy,
+    NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
+    //NSOpenGLPFADoubleBuffer,
+    //NSOpenGLPFASampleBuffers, 1,
+    //NSOpenGLPFASamples, samples,
+    0
+  };
+  NSRect frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
+  NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
+  AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
+  
+  NSOpenGLView* nsView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
+  AE_ASSERT_MSG( nsView, "Could not create view with specified pixel format" );
+  [nsView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
+  [nsView.openGLContext makeCurrentContext];
+  
+  [nsPixelFormat release];
+  [nsWindow setContentView:nsView];
+  [nsWindow makeFirstResponder:nsView];
+  [nsWindow setOpaque:YES];
+  [nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
+  [nsWindow makeKeyAndOrderFront:nil]; // nil sender
+  // @TODO: Create menus (especially Quit!)
+  [nsWindow orderFrontRegardless];
+  
+  if (![[NSRunningApplication currentApplication] isFinishedLaunching]) // Make sure run is only called once
+  {
+    [NSApp run];
   }
 #endif
 }
@@ -3852,6 +5198,11 @@ void Window::SetMaximized( bool maximized )
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
+void Input::Initialize( Window* window )
+{
+  window->input = this;
+}
+
 void Input::Pump()
 {
 #if _AE_WINDOWS_
@@ -3868,18 +5219,1614 @@ void Input::Pump()
     TranslateMessage( &msg );
     DispatchMessage( &msg );
   }
+#elif _AE_OSX_
+  @autoreleasepool
+  {
+    while ( 1 )
+    {
+      NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+        untilDate:[NSDate distantPast]
+        inMode:NSDefaultRunLoopMode
+        dequeue:YES];
+      if (event == nil)
+      {
+        break;
+      }
+      
+      switch ( event.type )
+      {
+          // Mouse
+        case NSEventTypeMouseEntered:
+          //AE_INFO( "mouse enter" );
+          break;
+        case NSEventTypeMouseExited:
+          //AE_INFO( "mouse exit" );
+          break;
+        case NSEventTypeMouseMoved:
+        case NSEventTypeLeftMouseDragged:
+        case NSEventTypeRightMouseDragged:
+          //AE_INFO( "mouse moved" );
+          break;
+        case NSEventTypeLeftMouseDown:
+          AE_INFO( "mouse left down" );
+          break;
+        case NSEventTypeLeftMouseUp:
+          AE_INFO( "mouse left up" );
+          break;
+        case NSEventTypeRightMouseDown:
+          AE_INFO( "mouse right down" );
+          break;
+        case NSEventTypeRightMouseUp:
+          AE_INFO( "mouse right up" );
+          break;
+        case NSEventTypeScrollWheel:
+          AE_INFO( "mouse scroll" );
+          break;
+          // Keyboard
+        case NSEventTypeKeyDown:
+          AE_INFO( "mouse down" );
+          break;
+        case NSEventTypeKeyUp:
+          AE_INFO( "mouse up" );
+          break;
+        default:
+          break;
+      }
+      [NSApp sendEvent:event];
+    }
+  }
 #endif
 }
+
+}  // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
 // OpenGL includes
 //------------------------------------------------------------------------------
+// @TODO: Are these being included in the ae namespace? Fix if so
 #if _AE_WINDOWS_
 	#pragma comment (lib, "opengl32.lib")
 	#pragma comment (lib, "glu32.lib")
 	#include <gl/GL.h>
 	#include <gl/GLU.h>
+#elif _AE_EMSCRIPTEN_
+  #include <GLES2/gl2.h>
+#elif _AE_LINUX_
+  #include <GL/gl.h>
+  #include <GLES3/gl3.h>
+#elif _AE_IOS_
+  #include <OpenGLES/ES3/gl.h>
+#else
+  #include <OpenGL/gl.h>
+  #include <OpenGL/glext.h>
+  #include <OpenGL/gl3.h>
+  #include <OpenGL/gl3ext.h>
 #endif
+
+namespace AE_NAMESPACE
+{
+// Caller enables this externally.  The renderer, Shader, math aren't tied to one another
+// enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
+// doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
+// http://www.reedbeta.com/blog/depth-precision-visualized/
+bool gReverseZ = false;
+
+// turn this on to run at GL4.1 instead of GL3.3
+bool gGL41 = true;
+}  // AE_NAMESPACE end
+
+#if !_AE_APPLE_
+// OpenGL function pointers
+typedef char GLchar;
+typedef intptr_t GLsizeiptr;
+typedef intptr_t GLintptr;
+
+// GL_VERSION_1_2
+#define GL_TEXTURE_3D                     0x806F
+#define GL_CLAMP_TO_EDGE                  0x812F
+// GL_VERSION_1_3
+#define GL_TEXTURE0                       0x84C0
+// GL_VERSION_1_5
+#define GL_ARRAY_BUFFER                   0x8892
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#define GL_STATIC_DRAW                    0x88E4
+#define GL_DYNAMIC_DRAW                   0x88E8
+// GL_VERSION_2_0
+#define GL_FRAGMENT_SHADER                0x8B30
+#define GL_VERTEX_SHADER                  0x8B31
+#define GL_FLOAT_VEC2                     0x8B50
+#define GL_FLOAT_VEC3                     0x8B51
+#define GL_FLOAT_VEC4                     0x8B52
+#define GL_FLOAT_MAT4                     0x8B5C
+#define GL_SAMPLER_2D                     0x8B5E
+#define GL_SAMPLER_3D                     0x8B5F
+#define GL_COMPILE_STATUS                 0x8B81
+#define GL_LINK_STATUS                    0x8B82
+#define GL_INFO_LOG_LENGTH                0x8B84
+#define GL_ACTIVE_UNIFORMS                0x8B86
+#define GL_ACTIVE_UNIFORM_MAX_LENGTH      0x8B87
+#define GL_ACTIVE_ATTRIBUTES              0x8B89
+#define GL_ACTIVE_ATTRIBUTE_MAX_LENGTH    0x8B8A
+// GL_VERSION_2_1
+#define GL_SRGB8                          0x8C41
+#define GL_SRGB8_ALPHA8                   0x8C43
+// GL_VERSION_3_0
+#define GL_RGBA32F                        0x8814
+#define GL_RGB32F                         0x8815
+#define GL_RGBA16F                        0x881A
+#define GL_RGB16F                         0x881B
+#define GL_DEPTH_COMPONENT32F             0x8CAC
+#define GL_FRAMEBUFFER_UNDEFINED          0x8219
+#define GL_FRAMEBUFFER_BINDING            0x8CA6
+#define GL_READ_FRAMEBUFFER               0x8CA8
+#define GL_DRAW_FRAMEBUFFER               0x8CA9
+#define GL_FRAMEBUFFER_COMPLETE           0x8CD5
+#define GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT 0x8CD6
+#define GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT 0x8CD7
+#define GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER 0x8CDB
+#define GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER 0x8CDC
+#define GL_FRAMEBUFFER_UNSUPPORTED        0x8CDD
+#define GL_COLOR_ATTACHMENT0              0x8CE0
+#define GL_DEPTH_ATTACHMENT               0x8D00
+#define GL_FRAMEBUFFER                    0x8D40
+#define GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE 0x8D56
+#define GL_FRAMEBUFFER_SRGB               0x8DB9
+#define GL_HALF_FLOAT                     0x140B
+#define GL_R8                             0x8229
+#define GL_R16F                           0x822D
+#define GL_R32F                           0x822E
+#define GL_R16UI                          0x8234
+// GL_VERSION_3_2
+#define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
+// GL_VERSION_4_3
+typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,const void *userParam);
+#define GL_DEBUG_SEVERITY_HIGH            0x9146
+#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#define GL_DEBUG_SEVERITY_LOW             0x9148
+// OpenGL Shader Functions
+GLuint ( *glCreateProgram ) () = nullptr;
+void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
+void ( *glLinkProgram ) ( GLuint program ) = nullptr;
+void ( *glGetProgramiv ) ( GLuint program, GLenum pname, GLint *params ) = nullptr;
+void ( *glGetProgramInfoLog ) ( GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
+void ( *glGetActiveAttrib ) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name ) = nullptr;
+GLint (*glGetAttribLocation) ( GLuint program, const GLchar *name ) = nullptr;
+void (*glGetActiveUniform) ( GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name );
+GLint (*glGetUniformLocation) ( GLuint program, const GLchar *name ) = nullptr;
+void (*glDeleteShader) ( GLuint shader ) = nullptr;
+void ( *glDeleteProgram) ( GLuint program ) = nullptr;
+void ( *glUseProgram) ( GLuint program ) = nullptr;
+void ( *glBlendFuncSeparate ) ( GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha ) = nullptr;
+GLuint( *glCreateShader) ( GLenum type ) = nullptr;
+void (*glShaderSource) ( GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length ) = nullptr;
+void (*glCompileShader)( GLuint shader ) = nullptr;
+void ( *glGetShaderiv)( GLuint shader, GLenum pname, GLint *params );
+void ( *glGetShaderInfoLog)( GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog ) = nullptr;
+void ( *glActiveTexture) ( GLenum texture ) = nullptr;
+void ( *glUniform1i ) ( GLint location, GLint v0 ) = nullptr;
+void ( *glUniform1fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+void ( *glUniform2fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+void ( *glUniform3fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+void ( *glUniform4fv ) ( GLint location, GLsizei count, const GLfloat *value ) = nullptr;
+void ( *glUniformMatrix4fv ) ( GLint location, GLsizei count, GLboolean transpose,  const GLfloat *value ) = nullptr;
+// OpenGL Texture Functions
+void ( *glGenerateMipmap ) ( GLenum target ) = nullptr;
+void ( *glBindFramebuffer ) ( GLenum target, GLuint framebuffer ) = nullptr;
+void ( *glFramebufferTexture2D ) ( GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level ) = nullptr;
+void ( *glGenFramebuffers ) ( GLsizei n, GLuint *framebuffers ) = nullptr;
+void ( *glDeleteFramebuffers ) ( GLsizei n, const GLuint *framebuffers ) = nullptr;
+GLenum ( *glCheckFramebufferStatus ) ( GLenum target ) = nullptr;
+void ( *glDrawBuffers ) ( GLsizei n, const GLenum *bufs ) = nullptr;
+void ( *glTextureBarrierNV ) () = nullptr;
+// OpenGL Vertex Functions
+void ( *glGenVertexArrays ) (GLsizei n, GLuint *arrays ) = nullptr;
+void ( *glBindVertexArray ) ( GLuint array ) = nullptr;
+void ( *glDeleteVertexArrays ) ( GLsizei n, const GLuint *arrays ) = nullptr;
+void ( *glDeleteBuffers ) ( GLsizei n, const GLuint *buffers ) = nullptr;
+void ( *glBindBuffer ) ( GLenum target, GLuint buffer ) = nullptr;
+void ( *glGenBuffers ) ( GLsizei n, GLuint *buffers ) = nullptr;
+void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenum usage ) = nullptr;
+void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
+void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
+void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
+void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam ) = nullptr;
+#endif
+
+// Helpers
+#define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+
+namespace AE_NAMESPACE {
+
+void CheckFramebufferComplete( GLuint framebuffer )
+{
+  GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+  if ( fboStatus != GL_FRAMEBUFFER_COMPLETE )
+  {
+    const char* errStr = "unknown";
+    switch ( fboStatus )
+    {
+      case GL_FRAMEBUFFER_UNDEFINED:
+        errStr = "GL_FRAMEBUFFER_UNDEFINED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+        break;
+      case GL_FRAMEBUFFER_UNSUPPORTED:
+        errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
+        break;
+      case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
+        break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS
+      case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+        errStr = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+        break;
+#endif
+      default:
+        break;
+    }
+    AE_FAIL_MSG( "GL FBO Error: (#) #", fboStatus, errStr );
+  }
+}
+
+#if _AE_DEBUG_ && !_AE_APPLE_
+  // Apple platforms only support OpenGL 4.1 and lower
+  #define AE_GL_DEBUG_MODE 1
+#endif
+
+#if AE_GL_DEBUG_MODE
+void OpenGLDebugCallback( GLenum source,
+  GLenum type,
+  GLuint id,
+  GLenum severity,
+  GLsizei length,
+  const GLchar* message,
+  const void* userParam )
+{
+  //std::cout << "---------------------opengl-callback-start------------" << std::endl;
+  //std::cout << "message: " << message << std::endl;
+  //std::cout << "type: ";
+  //switch ( type )
+  //{
+  //  case GL_DEBUG_TYPE_ERROR:
+  //    std::cout << "ERROR";
+  //    break;
+  //  case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+  //    std::cout << "DEPRECATED_BEHAVIOR";
+  //    break;
+  //  case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+  //    std::cout << "UNDEFINED_BEHAVIOR";
+  //    break;
+  //  case GL_DEBUG_TYPE_PORTABILITY:
+  //    std::cout << "PORTABILITY";
+  //    break;
+  //  case GL_DEBUG_TYPE_PERFORMANCE:
+  //    std::cout << "PERFORMANCE";
+  //    break;
+  //  case GL_DEBUG_TYPE_OTHER:
+  //    std::cout << "OTHER";
+  //    break;
+  //}
+  //std::cout << std::endl;
+
+  //std::cout << "id: " << id << std::endl;
+  //std::cout << "severity: ";
+  switch ( severity )
+  {
+    case GL_DEBUG_SEVERITY_LOW:
+      //std::cout << "LOW";
+      //AE_INFO( message );
+      break;
+    case GL_DEBUG_SEVERITY_MEDIUM:
+      //std::cout << "MEDIUM";
+      AE_WARN( message );
+      break;
+    case GL_DEBUG_SEVERITY_HIGH:
+      //std::cout << "HIGH";
+      AE_ERR( message );
+      break;
+  }
+  //std::cout << std::endl;
+  //std::cout << "---------------------opengl-callback-end--------------" << std::endl;
+
+  if ( severity == GL_DEBUG_SEVERITY_HIGH )
+  {
+    AE_FAIL();
+  }
+}
+#endif
+
+GLenum VertexDataTypeToGL( VertexData::Type type )
+{
+  switch ( type )
+  {
+    case VertexData::Type::UInt8:
+      return GL_UNSIGNED_BYTE;
+    case VertexData::Type::UInt16:
+      return GL_UNSIGNED_SHORT;
+    case VertexData::Type::UInt32:
+      return GL_UNSIGNED_INT;
+    case VertexData::Type::NormalizedUInt8:
+      return GL_UNSIGNED_BYTE;
+    case VertexData::Type::NormalizedUInt16:
+      return GL_UNSIGNED_SHORT;
+    case VertexData::Type::NormalizedUInt32:
+      return GL_UNSIGNED_INT;
+    case VertexData::Type::Float:
+      return GL_FLOAT;
+    default:
+      AE_FAIL();
+      return 0;
+  }
+}
+
+typedef uint32_t aeQuadIndex;
+const uint32_t aeQuadVertCount = 4;
+const uint32_t aeQuadIndexCount = 6;
+extern const Vec3 aeQuadVertPos[ aeQuadVertCount ];
+extern const Vec2 aeQuadVertUvs[ aeQuadVertCount ];
+extern const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ];
+
+const Vec3 aeQuadVertPos[ aeQuadVertCount ] = {
+  Vec3( -0.5f, -0.5f, 0.0f ),
+  Vec3( 0.5f, -0.5f, 0.0f ),
+  Vec3( 0.5f, 0.5f, 0.0f ),
+  Vec3( -0.5f, 0.5f, 0.0f )
+};
+
+const Vec2 aeQuadVertUvs[ aeQuadVertCount ] = {
+  Vec2( 0.0f, 0.0f ),
+  Vec2( 1.0f, 0.0f ),
+  Vec2( 1.0f, 1.0f ),
+  Vec2( 0.0f, 1.0f )
+};
+
+const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ] = {
+  3, 0, 1,
+  3, 1, 2
+};
+
+const uint32_t _kMaxFrameBufferAttachments = 16;
+
+//------------------------------------------------------------------------------
+// ae::UniformList member functions
+//------------------------------------------------------------------------------
+void UniformList::Set( const char* name, float value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 1;
+  uniform.value.d[ 0 ] = value;
+}
+
+void UniformList::Set( const char* name, Vec2 value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 2;
+  uniform.value.d[ 0 ] = value.x;
+  uniform.value.d[ 1 ] = value.y;
+}
+
+void UniformList::Set( const char* name, Vec3 value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 3;
+  uniform.value.d[ 0 ] = value.x;
+  uniform.value.d[ 1 ] = value.y;
+  uniform.value.d[ 2 ] = value.z;
+}
+
+void UniformList::Set( const char* name, Vec4 value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 4;
+  uniform.value.d[ 0 ] = value.x;
+  uniform.value.d[ 1 ] = value.y;
+  uniform.value.d[ 2 ] = value.z;
+  uniform.value.d[ 3 ] = value.w;
+}
+
+void UniformList::Set( const char* name, const Matrix4& value )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.size = 16;
+  uniform.value = value;
+}
+
+void UniformList::Set( const char* name, const Texture* tex )
+{
+  AE_ASSERT( name );
+  AE_ASSERT( name[ 0 ] );
+  Value& uniform = m_uniforms.Set( name, Value() );
+  uniform.sampler = tex->GetTexture();
+  uniform.target = tex->GetTarget();
+}
+
+const UniformList::Value* UniformList::Get( const char* name ) const
+{
+  return m_uniforms.TryGet( name );
+}
+
+//------------------------------------------------------------------------------
+// ae::Shader member functions
+//------------------------------------------------------------------------------
+Shader::Shader()
+{
+  m_fragmentShader = 0;
+  m_vertexShader = 0;
+  m_program = 0;
+
+  m_blending = false;
+  m_blendingPremul = false;
+  m_depthTest = false;
+  m_depthWrite = false;
+  m_culling = Culling::None;
+  m_wireframe = false;
+}
+
+Shader::~Shader()
+{
+  Destroy();
+}
+
+void Shader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
+{
+  Destroy();
+  AE_ASSERT( !m_program );
+  
+  m_program = glCreateProgram();
+
+  m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
+  m_fragmentShader = m_LoadShader( fragStr, Type::Fragment, defines, defineCount );
+
+  if ( !m_vertexShader )
+  {
+    AE_LOG( "Failed to load vertex shader! #", vertexStr );
+  }
+  if ( !m_fragmentShader )
+  {
+    AE_LOG( "Failed to load fragment shader! #", fragStr );
+  }
+
+  if ( !m_vertexShader || !m_fragmentShader )
+  {
+    AE_FAIL();
+  }
+
+  glAttachShader( m_program, m_vertexShader );
+  glAttachShader( m_program, m_fragmentShader );
+
+  glLinkProgram( m_program );
+
+  // immediate reflection of shader can be delayed by compiler and optimizer and can stll
+  GLint status;
+  glGetProgramiv( m_program, GL_LINK_STATUS, &status );
+  if ( status == GL_FALSE )
+  {
+    GLint logLength = 0;
+    glGetProgramiv( m_program, GL_INFO_LOG_LENGTH, &logLength );
+
+    char* log = nullptr;
+    if ( logLength > 0 )
+    {
+      log = new char[ logLength ];
+      glGetProgramInfoLog( m_program, logLength, NULL, (GLchar*)log );
+    }
+
+    if ( log )
+    {
+      AE_FAIL_MSG( log );
+      delete[] log;
+    }
+    else
+    {
+      AE_FAIL();
+    }
+    Destroy();
+  }
+
+  GLint attribCount = 0;
+  glGetProgramiv( m_program, GL_ACTIVE_ATTRIBUTES, &attribCount );
+  AE_ASSERT( 0 < attribCount && attribCount <= _kMaxShaderAttributeCount );
+  GLint maxLen = 0;
+  glGetProgramiv( m_program, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maxLen );
+  AE_ASSERT( 0 < maxLen && maxLen <= _kMaxShaderAttributeNameLength );
+  for ( int32_t i = 0; i < attribCount; i++ )
+  {
+    Attribute* attribute = &m_attributes.Append( Attribute() );
+
+    GLsizei length;
+    GLint size;
+    glGetActiveAttrib( m_program, i, _kMaxShaderAttributeNameLength, &length, &size, (GLenum*)&attribute->type, (GLchar*)attribute->name );
+
+    attribute->location = glGetAttribLocation( m_program, attribute->name );
+    AE_ASSERT( attribute->location != -1 );
+  }
+
+  GLint uniformCount = 0;
+  maxLen = 0;
+  glGetProgramiv( m_program, GL_ACTIVE_UNIFORMS, &uniformCount );
+  glGetProgramiv( m_program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxLen );
+  AE_ASSERT( maxLen <= (GLint)Str32::MaxLength() ); // @TODO: Read from Uniform
+
+  for ( int32_t i = 0; i < uniformCount; i++ )
+  {
+    Uniform uniform;
+
+    GLint size = 0;
+    char name[ Str32::MaxLength() ]; // @TODO: Read from Uniform
+    glGetActiveUniform( m_program, i, sizeof( name ), nullptr, &size, (GLenum*)&uniform.type, (GLchar*)name );
+    AE_ASSERT( size == 1 );
+
+    switch ( uniform.type )
+    {
+      case GL_SAMPLER_2D:
+      case GL_SAMPLER_3D:
+      case GL_FLOAT:
+      case GL_FLOAT_VEC2:
+      case GL_FLOAT_VEC3:
+      case GL_FLOAT_VEC4:
+      case GL_FLOAT_MAT4:
+        break;
+      default:
+        AE_FAIL_MSG( "Unsupported uniform '#' type #", name, uniform.type );
+        break;
+    }
+
+    uniform.name = name;
+    uniform.location = glGetUniformLocation( m_program, name );
+    AE_ASSERT( uniform.location != -1 );
+
+    m_uniforms.Set( name, uniform );
+  }
+
+  AE_CHECK_GL_ERROR();
+}
+
+void Shader::Destroy()
+{
+  AE_CHECK_GL_ERROR();
+
+  m_attributes.Clear();
+
+  if ( m_fragmentShader != 0 )
+  {
+    glDeleteShader( m_fragmentShader );
+    m_fragmentShader = 0;
+  }
+
+  if ( m_vertexShader != 0 )
+  {
+    glDeleteShader( m_vertexShader );
+    m_vertexShader = 0;
+  }
+
+  if ( m_program != 0 )
+  {
+    glDeleteProgram( m_program );
+    m_program = 0;
+  }
+
+  AE_CHECK_GL_ERROR();
+}
+
+void Shader::Activate( const UniformList& uniforms ) const
+{
+  AE_CHECK_GL_ERROR();
+
+  // This is really context state shadow, and that should be able to override
+  // so reverseZ for example can be set without the shader knowing about that.
+
+  // Blending
+  if ( m_blending || m_blendingPremul )
+  {
+    glEnable( GL_BLEND );
+
+    // TODO: need other modes like Add, Min, Max - switch to enum then
+    if ( m_blendingPremul )
+    {
+      // Colors coming out of shader already have alpha multiplied in.
+      glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+                 GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    }
+    else
+    {
+      glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    }
+  }
+  else
+  {
+    glDisable( GL_BLEND );
+  }
+
+  // Depth write
+  glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
+
+  // Depth test
+  if ( m_depthTest )
+  {
+    glDepthFunc( gReverseZ ? GL_GEQUAL : GL_LEQUAL );
+    glEnable( GL_DEPTH_TEST );
+  }
+  else
+  {
+    glDisable( GL_DEPTH_TEST );
+  }
+
+  // Culling
+  if ( m_culling == Culling::None )
+  {
+    glDisable( GL_CULL_FACE );
+  }
+  else
+  {
+    // TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
+    glEnable( GL_CULL_FACE );
+    glFrontFace( ( m_culling == Culling::ClockwiseFront ) ? GL_CW : GL_CCW );
+  }
+
+  // Wireframe
+#if _AE_IOS_
+  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+#else
+  glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+#endif
+
+  // Now setup the shader
+  glUseProgram( m_program );
+
+  // Set shader uniforms
+  bool missingUniforms = false;
+  uint32_t textureIndex = 0;
+  for ( uint32_t i = 0; i < m_uniforms.Length(); i++ )
+  {
+    const char* uniformVarName = m_uniforms.GetKey( i ).c_str();
+    const Uniform* uniformVar = &m_uniforms.GetValue( i );
+    const UniformList::Value* uniformValue = uniforms.Get( uniformVarName );
+
+    // Start validation
+    if ( !uniformValue )
+    {
+      AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
+      missingUniforms = true;
+      continue;
+    }
+    uint32_t typeSize = 0;
+    switch ( uniformVar->type )
+    {
+      case GL_SAMPLER_2D:
+        typeSize = 0;
+        break;
+      case GL_SAMPLER_3D:
+        typeSize = 0;
+        break;
+      case GL_FLOAT:
+        typeSize = 1;
+        break;
+      case GL_FLOAT_VEC2:
+        typeSize = 2;
+        break;
+      case GL_FLOAT_VEC3:
+        typeSize = 3;
+        break;
+      case GL_FLOAT_VEC4:
+        typeSize = 4;
+        break;
+      case GL_FLOAT_MAT4:
+        typeSize = 16;
+        break;
+      default:
+        AE_FAIL_MSG( "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
+        break;
+    }
+    AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
+    // End validation
+
+    if ( uniformVar->type == GL_SAMPLER_2D )
+    {
+      AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
+      glActiveTexture( GL_TEXTURE0 + textureIndex );
+      glBindTexture( uniformValue->target, uniformValue->sampler );
+      glUniform1i( uniformVar->location, textureIndex );
+      textureIndex++;
+    }
+    else if ( uniformVar->type == GL_SAMPLER_3D )
+    {
+      AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
+      glActiveTexture( GL_TEXTURE0 + textureIndex );
+      glBindTexture( GL_TEXTURE_3D, uniformValue->sampler );
+      glUniform1i( uniformVar->location, textureIndex );
+      textureIndex++;
+    }
+    else if ( uniformVar->type == GL_FLOAT )
+    {
+      glUniform1fv( uniformVar->location, 1, uniformValue->value.d );
+    }
+    else if ( uniformVar->type == GL_FLOAT_VEC2 )
+    {
+      glUniform2fv( uniformVar->location, 1, uniformValue->value.d );
+    }
+    else if ( uniformVar->type == GL_FLOAT_VEC3 )
+    {
+      glUniform3fv( uniformVar->location, 1, uniformValue->value.d );
+    }
+    else if ( uniformVar->type == GL_FLOAT_VEC4 )
+    {
+      glUniform4fv( uniformVar->location, 1, uniformValue->value.d );
+    }
+    else if ( uniformVar->type == GL_FLOAT_MAT4 )
+    {
+#if _AE_EMSCRIPTEN_
+      // WebGL/Emscripten doesn't support glUniformMatrix4fv auto-transpose
+      Matrix4 transposedTransform = uniformValue->value.GetTranspose();
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, transposedTransform.d );
+#else
+      glUniformMatrix4fv( uniformVar->location, 1, GL_TRUE, uniformValue->value.d );
+#endif
+    }
+    else
+    {
+      AE_ASSERT_MSG( false, "Invalid uniform type '#': #", uniformVarName, uniformVar->type );
+    }
+
+    AE_CHECK_GL_ERROR();
+  }
+
+  AE_ASSERT_MSG( !missingUniforms, "Missing shader uniform parameters" );
+}
+
+const ae::Shader::Attribute* Shader::GetAttributeByIndex( uint32_t index ) const
+{
+  return &m_attributes[ index ];
+}
+
+int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* defines, int32_t defineCount )
+{
+  GLenum glType = -1;
+  if ( type == Type::Vertex )
+  {
+    glType = GL_VERTEX_SHADER;
+  }
+  if ( type == Type::Fragment )
+  {
+    glType = GL_FRAGMENT_SHADER;
+  }
+
+  const uint32_t kPrependMax = 16;
+  uint32_t sourceCount = 0;
+  const char* shaderSource[ kPrependMax + _kMaxShaderDefines * 2 + 1 ]; // x2 max defines to make room for newlines. Plus one for actual shader.
+
+  // Version
+#if _AE_IOS_
+  shaderSource[ sourceCount++ ] = "#version 300 es\n";
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+#elif _AE_EMSCRIPTEN_
+  // No version specified
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+#else
+  if ( gGL41 )
+  {
+    shaderSource[ sourceCount++ ] = "#version 410 core\n";
+  }
+  else
+  {
+    shaderSource[ sourceCount++ ] = "#version 330 core\n";
+  }
+
+  // No default precision specified
+#endif
+
+  // Input/output
+#if _AE_EMSCRIPTEN_
+  shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
+  shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
+  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+  if ( type == Type::Vertex )
+  {
+    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
+    shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
+  }
+  else if ( type == Type::Fragment )
+  {
+    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
+    shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+  }
+#else
+  shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture\n";
+  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM uniform\n";
+  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform\n";
+  shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP in\n";
+  shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP out\n";
+  if ( type == Type::Fragment )
+  {
+    shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
+  }
+#endif
+
+  AE_ASSERT( sourceCount <= kPrependMax );
+
+  for ( int32_t i = 0; i < defineCount; i++ )
+  {
+    shaderSource[ sourceCount ] = defines[ i ];
+    sourceCount++;
+    shaderSource[ sourceCount ] = "\n";
+    sourceCount++;
+  }
+
+  shaderSource[ sourceCount ] = shaderStr;
+  sourceCount++;
+
+  GLuint shader = glCreateShader( glType );
+  glShaderSource( shader, sourceCount, shaderSource, nullptr );
+  glCompileShader( shader );
+
+  GLint status;
+  glGetShaderiv( shader, GL_COMPILE_STATUS, &status );
+  if ( status == GL_FALSE )
+  {
+    GLint logLength;
+    glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &logLength );
+
+    const char* typeStr = ( type == Type::Vertex ? "vertex" : "fragment" );
+    if ( logLength > 0 )
+    {
+      unsigned char* log = new unsigned char[ logLength ];
+      glGetShaderInfoLog( shader, logLength, NULL, (GLchar*)log );
+      AE_LOG( "Error compiling # shader #", typeStr, log );
+      delete[] log;
+    }
+    else
+    {
+      AE_LOG( "Error compiling # shader: unknown issue", typeStr );
+    }
+
+    AE_CHECK_GL_ERROR();
+    return 0;
+  }
+
+  AE_CHECK_GL_ERROR();
+  return shader;
+}
+
+//------------------------------------------------------------------------------
+// ae::VertexData member functions
+//------------------------------------------------------------------------------
+VertexData::~VertexData()
+{
+  Destroy();
+}
+
+void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage )
+{
+  Destroy();
+
+  AE_ASSERT( m_vertexSize == 0 );
+  AE_ASSERT( vertexSize );
+  AE_ASSERT( m_indexSize == 0 );
+  AE_ASSERT( indexSize == sizeof(uint8_t) || indexSize == sizeof(uint16_t) || indexSize == sizeof(uint32_t) );
+
+  m_maxVertexCount = maxVertexCount;
+  m_maxIndexCount = maxIndexCount;
+  m_primitive = primitive;
+  m_vertexUsage = vertexUsage;
+  m_indexUsage = indexUsage;
+  m_vertexSize = vertexSize;
+  m_indexSize = indexSize;
+  
+  glGenVertexArrays( 1, &m_array );
+  glBindVertexArray( m_array );
+}
+
+void VertexData::Destroy()
+{
+  if ( m_vertexReadable )
+  {
+    ae::Delete( (uint8_t*)m_vertexReadable );
+  }
+  if ( m_indexReadable )
+  {
+    ae::Delete( (uint8_t*)m_indexReadable );
+  }
+  
+  if ( m_array )
+  {
+    glDeleteVertexArrays( 1, &m_array );
+  }
+  if ( m_vertices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_vertices );
+  }
+  if ( m_indices != ~0 )
+  {
+    glDeleteBuffers( 1, &m_indices );
+  }
+  
+  m_array = 0;
+  m_vertices = ~0;
+  m_indices = ~0;
+  m_vertexCount = 0;
+  m_indexCount = 0;
+
+  m_maxVertexCount = 0;
+  m_maxIndexCount = 0;
+
+  m_primitive = (VertexData::Primitive)-1;
+  m_vertexUsage = (VertexData::Usage)-1;
+  m_indexUsage = (VertexData::Usage)-1;
+
+  m_vertexSize = 0;
+  m_indexSize = 0;
+
+  m_vertexReadable = nullptr;
+  m_indexReadable = nullptr;
+}
+
+void VertexData::AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset )
+{
+  AE_ASSERT( m_vertices == ~0 && m_indices == ~0 );
+  
+  Attribute* attribute = &m_attributes.Append( Attribute() );
+  
+  size_t length = strlen( name );
+  AE_ASSERT( length < _kMaxShaderAttributeNameLength );
+  strcpy( attribute->name, name );
+  attribute->componentCount = componentCount;
+  attribute->type = VertexDataTypeToGL( type );
+  attribute->offset = offset;
+  attribute->normalized =
+    type == VertexData::Type::NormalizedUInt8 ||
+    type == VertexData::Type::NormalizedUInt16 ||
+    type == VertexData::Type::NormalizedUInt32;
+}
+
+void VertexData::m_SetVertices( const void* vertices, uint32_t count )
+{
+  AE_ASSERT( m_vertexSize );
+  AE_ASSERT_MSG( count <= m_maxVertexCount, "# #", count, m_maxVertexCount );
+
+  if ( m_indices != ~0 )
+  {
+    AE_ASSERT( m_indexSize != 0 );
+  }
+  if ( m_indexSize )
+  {
+    AE_ASSERT_MSG( count <= (uint64_t)1 << ( m_indexSize * 8 ), "Vertex count (#) too high for index of size #", count, m_indexSize );
+  }
+  
+  if( m_vertexUsage == Usage::Static )
+  {
+    AE_ASSERT( count );
+    AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
+    AE_ASSERT( m_vertices == ~0 );
+
+    m_vertexCount = count;
+
+    glGenBuffers( 1, &m_vertices );
+    glBindVertexArray( m_array );
+    glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+    glBufferData( GL_ARRAY_BUFFER, count * m_vertexSize, vertices, GL_STATIC_DRAW );
+    return;
+  }
+  
+  if( m_vertexUsage == Usage::Dynamic )
+  {
+    m_vertexCount = count;
+
+    if ( !m_vertexCount )
+    {
+      return;
+    }
+    
+    if( m_vertices == ~0 )
+    {
+      glGenBuffers( 1, &m_vertices );
+      glBindVertexArray( m_array );
+      glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+      glBufferData( GL_ARRAY_BUFFER, m_vertexSize * m_maxVertexCount, nullptr, GL_DYNAMIC_DRAW );
+    }
+    
+    glBindVertexArray( m_array );
+    glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+    glBufferSubData( GL_ARRAY_BUFFER, 0, count * m_vertexSize, vertices );
+    return;
+  }
+  
+  AE_FAIL();
+}
+
+void VertexData::m_SetIndices( const void* indices, uint32_t count )
+{
+  AE_ASSERT( m_indexSize );
+  AE_ASSERT( count % 3 == 0 );
+  AE_ASSERT( count <= m_maxIndexCount );
+  
+  if( m_indexUsage == Usage::Static )
+  {
+    AE_ASSERT( count );
+    AE_ASSERT( !m_indexCount );
+    AE_ASSERT( m_indices == ~0 );
+
+    m_indexCount = count;
+
+    glGenBuffers( 1, &m_indices );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, m_indexCount * m_indexSize, indices, GL_STATIC_DRAW );
+    return;
+  }
+  
+  if( m_indexUsage == Usage::Dynamic )
+  {
+    m_indexCount = count;
+
+    if ( !m_indexCount )
+    {
+      return;
+    }
+    
+    if( m_indices == ~0 )
+    {
+      glGenBuffers( 1, &m_indices );
+      glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+      glBufferData( GL_ELEMENT_ARRAY_BUFFER, m_indexSize * m_maxIndexCount, nullptr, GL_DYNAMIC_DRAW );
+    }
+    
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, 0, m_indexCount * m_indexSize, indices );
+    return;
+  }
+  
+  AE_FAIL();
+}
+
+void VertexData::SetVertices( const void *vertices, uint32_t count )
+{
+  AE_ASSERT( m_vertexSize );
+  if ( m_vertexUsage == Usage::Static )
+  {
+    m_SetVertices( vertices, count );
+    AE_ASSERT( !m_vertexReadable );
+    m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_vertexSize );
+    memcpy( m_vertexReadable, vertices, count * m_vertexSize );
+  }
+  else if ( m_vertexUsage == Usage::Dynamic )
+  {
+    m_SetVertices( vertices, count );
+    if ( !m_vertexReadable ) { m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxVertexCount * m_vertexSize ); }
+    memcpy( m_vertexReadable, vertices, count * m_vertexSize );
+  }
+  else
+  {
+    AE_FAIL_MSG( "Invalid vertex usage" );
+  }
+}
+
+void VertexData::SetIndices( const void* indices, uint32_t count )
+{
+  AE_ASSERT( m_indexSize );
+
+  if ( count && _AE_DEBUG_ )
+  {
+    int32_t badIndex = -1;
+    
+    if ( m_indexSize == 1 )
+    {
+      uint8_t* indicesCheck = (uint8_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        if ( indicesCheck[ i ] >= m_maxVertexCount )
+        {
+          badIndex = indicesCheck[ i ];
+          break;
+        }
+      }
+    }
+    else if ( m_indexSize == 2 )
+    {
+      uint16_t* indicesCheck = (uint16_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        if ( indicesCheck[ i ] >= m_maxVertexCount )
+        {
+          badIndex = indicesCheck[ i ];
+          break;
+        }
+      }
+    }
+    else if ( m_indexSize == 4 )
+    {
+      uint32_t* indicesCheck = (uint32_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        if ( indicesCheck[ i ] >= m_maxVertexCount )
+        {
+          badIndex = indicesCheck[ i ];
+          break;
+        }
+      }
+    }
+
+    if ( badIndex >= 0 )
+    {
+      AE_FAIL_MSG( "Out of range index detected #", badIndex );
+    }
+  }
+
+  if ( m_indexUsage == Usage::Static )
+  {
+    m_SetIndices( indices, count );
+    AE_ASSERT( !m_indexReadable );
+    m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_indexSize );
+    memcpy( m_indexReadable, indices, count * m_indexSize );
+  }
+  else if ( m_indexUsage == Usage::Dynamic )
+  {
+    m_SetIndices( indices, count );
+    if ( !m_indexReadable ) { m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxIndexCount * m_indexSize ); }
+    memcpy( m_indexReadable, indices, count * m_indexSize );
+  }
+  else
+  {
+    AE_FAIL_MSG( "Invalid index usage" );
+  }
+}
+
+const void* VertexData::GetVertices() const
+{
+  AE_ASSERT( m_vertexReadable != nullptr );
+  return m_vertexReadable;
+}
+
+const void* VertexData::GetIndices() const
+{
+  AE_ASSERT( m_indexReadable != nullptr );
+  return m_indexReadable;
+}
+
+void VertexData::Render( const Shader* shader, const UniformList& uniforms ) const
+{
+  Render( shader, 0, uniforms ); // Draw all
+}
+
+void VertexData::Render( const Shader* shader, uint32_t primitiveCount, const UniformList& uniforms ) const
+{
+  AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
+  AE_ASSERT( shader );
+  
+  if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
+  {
+    return;
+  }
+
+  shader->Activate( uniforms );
+
+  glBindVertexArray( m_array );
+  AE_CHECK_GL_ERROR();
+
+  glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+  AE_CHECK_GL_ERROR();
+
+  if ( m_indexCount && m_primitive != Primitive::Point )
+  {
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    AE_CHECK_GL_ERROR();
+  }
+
+  for ( uint32_t i = 0; i < shader->GetAttributeCount(); i++ )
+  {
+    const Shader::Attribute* shaderAttribute = shader->GetAttributeByIndex( i );
+    const Attribute* vertexAttribute = m_GetAttributeByName( shaderAttribute->name );
+
+    AE_ASSERT_MSG( vertexAttribute, "No vertex attribute named '#'", shaderAttribute->name );
+    // @TODO: Verify attribute type and size match
+
+    GLint location = shaderAttribute->location;
+    AE_ASSERT( location != -1 );
+    glEnableVertexAttribArray( location );
+    AE_CHECK_GL_ERROR();
+
+    uint32_t componentCount = vertexAttribute->componentCount;
+    uint64_t attribOffset = vertexAttribute->offset;
+    glVertexAttribPointer( location, componentCount, vertexAttribute->type, vertexAttribute->normalized, m_vertexSize, (void*)attribOffset );
+    AE_CHECK_GL_ERROR();
+  }
+
+  int64_t start = 0; // TODO: Add support to start drawing at non-zero index
+  int32_t count = 0;
+
+  // Draw
+  GLenum mode;
+  if( m_primitive == Primitive::Triangle )
+  {
+    count = primitiveCount ? primitiveCount * 3 : m_indexCount;
+    mode = GL_TRIANGLES;
+  }
+  else if( m_primitive == Primitive::Line )
+  {
+    count = primitiveCount ? primitiveCount * 2 : m_indexCount;
+    mode = GL_LINES;
+  }
+  else if( m_primitive == Primitive::Point )
+  {
+    count = primitiveCount ? primitiveCount : m_indexCount;
+    mode = GL_POINTS;
+  }
+  else
+  {
+    AE_FAIL();
+    return;
+  }
+  
+  if ( m_indexCount && mode != GL_POINTS )
+  {
+    if ( count == 0 ) { count = m_indexCount; }
+    AE_ASSERT( start + count <= m_indexCount );
+    if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
+    
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
+    AE_CHECK_GL_ERROR();
+    GLenum type = 0;
+    if ( m_indexSize == sizeof(uint8_t) ) { type = GL_UNSIGNED_BYTE; }
+    else if ( m_indexSize == sizeof(uint16_t) ) { type = GL_UNSIGNED_SHORT; }
+    else if ( m_indexSize == sizeof(uint32_t) ) { type = GL_UNSIGNED_INT; }
+    glDrawElements( mode, count, type, (void*)start );
+    AE_CHECK_GL_ERROR();
+  }
+  else
+  {
+    if ( count == 0 ) { count = m_vertexCount; }
+    AE_ASSERT( start + count <= m_vertexCount );
+    if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
+    
+    glDrawArrays( mode, start, count );
+    AE_CHECK_GL_ERROR();
+  }
+}
+
+const VertexData::Attribute* VertexData::m_GetAttributeByName( const char* name ) const
+{
+  for ( uint32_t i = 0; i < m_attributes.Length(); i++ )
+  {
+    if ( strcmp( m_attributes[ i ].name, name ) == 0 )
+    {
+      return &m_attributes[ i ];
+    }
+  }
+
+  return nullptr;
+}
+
+//------------------------------------------------------------------------------
+// ae::Texture member functions
+//------------------------------------------------------------------------------
+Texture::~Texture()
+{
+  // @NOTE: Only ae::Texture should call it's virtual Destroy() so it only runs once
+  Destroy();
+}
+
+void Texture::Initialize( uint32_t target )
+{
+  // @NOTE: To avoid undoing any initialization logic only ae::Texture should
+  //        call Destroy() on initialize, and inherited Initialize()'s should
+  //        always call Base::Initialize() before any other logic.
+  Destroy();
+
+  m_target = target;
+
+  glGenTextures( 1, &m_texture );
+  AE_ASSERT( m_texture );
+}
+
+void Texture::Destroy()
+{
+  if ( m_texture )
+  {
+    glDeleteTextures( 1, &m_texture );
+  }
+
+  m_texture = 0;
+  m_target = 0;
+}
+
+//------------------------------------------------------------------------------
+// ae::Texture2D member functions
+//------------------------------------------------------------------------------
+void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, Texture::Format format, Texture::Type type, Texture::Filter filter, Wrap wrap, bool autoGenerateMipmaps )
+{
+  Texture::Initialize( GL_TEXTURE_2D );
+
+  m_width = width;
+  m_height = height;
+
+  glBindTexture( GetTarget(), GetTexture() );
+
+  if (autoGenerateMipmaps)
+  {
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+  else
+  {
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+  }
+	
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+
+  // this is the type of data passed in, conflating with internal format type
+  GLenum glType = 0;
+  switch ( type )
+  {
+    case Type::Uint8:
+      glType = GL_UNSIGNED_BYTE;
+      break;
+	  case Type::Uint16:
+	    glType = GL_UNSIGNED_SHORT;
+	    break;
+    case Type::HalfFloat:
+      glType = GL_HALF_FLOAT;
+      break;
+    case Type::Float:
+      glType = GL_FLOAT;
+      break;
+    default:
+      AE_FAIL_MSG( "Invalid texture type #", (int)type );
+      return;
+  }
+
+  GLint glInternalFormat = 0;
+  GLenum glFormat = 0;
+  GLint unpackAlignment = 0;
+  switch ( format )
+  {
+    // TODO: need D32F_S8 format
+    case Format::Depth32F:
+      glInternalFormat = GL_DEPTH_COMPONENT32F;
+      glFormat = GL_DEPTH_COMPONENT;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+
+    case Format::R8:
+    case Format::R16_UNORM:
+    case Format::R16F:
+    case Format::R32F:
+      switch(format)
+      {
+        case Format::R8:
+          glInternalFormat = GL_R8;
+          break;
+        case Format::R16_UNORM:
+          glInternalFormat = GL_R16UI;
+          assert(glType == GL_UNSIGNED_SHORT);
+          break; // only on macOS
+        case Format::R16F:
+          glInternalFormat = GL_R16F;
+          break;
+        case Format::R32F:
+          glInternalFormat = GL_R32F;
+          break;
+        default: assert(false);
+      }
+
+      glFormat = GL_RED;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+		  
+#if _AE_OSX_
+	  // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
+	  case Format::RG8:
+	  case Format::RG16F:
+	  case Format::RG32F:
+  		switch(format)
+  		{
+  			case Format::RG8: glInternalFormat = GL_RG8; break;
+  			case Format::RG16F: glInternalFormat = GL_RG16F; break;
+  			case Format::RG32F: glInternalFormat = GL_RG32F; break;
+  			default: assert(false);
+  		}
+  			  
+  		glFormat = GL_RG;
+  		unpackAlignment = 1;
+  		m_hasAlpha = false;
+  		break;
+#endif
+  	case Format::RGB8:
+  	case Format::RGB16F:
+    case Format::RGB32F:
+  	  switch(format)
+  	  {
+  	    case Format::RGB8: glInternalFormat = GL_RGB8; break;
+  	    case Format::RGB16F: glInternalFormat = GL_RGB16F; break;
+  	    case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
+  		  default: assert(false);
+  	  }
+      glFormat = GL_RGB;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+
+    case Format::RGBA8:
+	  case Format::RGBA16F:
+	  case Format::RGBA32F:
+  	  switch(format)
+  	  {
+      	case Format::RGBA8: glInternalFormat = GL_RGBA8; break;
+      	case Format::RGBA16F: glInternalFormat = GL_RGBA16F; break;
+      	case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
+      	default: assert(false);
+  	  }
+      glFormat = GL_RGBA;
+      unpackAlignment = 1;
+      m_hasAlpha = true;
+      break;
+		  
+      // TODO: fix these constants, but they differ on ES2/3 and GL
+      // WebGL1 they require loading an extension (if present) to get at the constants.    
+    case Format::RGB8_SRGB:
+	  // ignore type
+      glInternalFormat = GL_SRGB8;
+      glFormat = GL_RGB;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+    case Format::RGBA8_SRGB:
+	  // ignore type
+      glInternalFormat = GL_SRGB8_ALPHA8;
+      glFormat = GL_RGBA;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
+    default:
+      AE_FAIL_MSG( "Invalid texture format #", (int)format );
+      return;
+  }
+
+  if ( data )
+  {
+    glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
+  }
+
+    // count the mip levels
+	int w = width;
+	int h = height;
+	
+	int numberOfMipmaps = 1;
+	if ( autoGenerateMipmaps )
+	{
+		while ( w > 1 || h > 1 )
+		{
+		  numberOfMipmaps++;
+		  w = (w+1) / 2;
+		  h = (h+1) / 2;
+		}
+	}
+	
+	// allocate mip levels
+	// texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
+#define USE_TEXSTORAGE 0
+#if USE_TEXSTORAGE
+	// TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
+	// It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
+	// for compressed textures.
+	glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
+#else
+	w = width;
+	h = height;
+	
+	for ( int i = 0; i < numberOfMipmaps; ++i )
+	{
+	  glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
+	  w = (w+1) / 2;
+	  h = (h+1) / 2;
+	}
+#endif
+	
+  if ( data != nullptr )
+  {
+	  // upload the first mipmap
+	  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
+
+	  // autogen only works for uncompressed textures
+	  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
+	  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+	  {
+		  glGenerateMipmap( GetTarget() );
+	  }
+  }
+	
+  AE_CHECK_GL_ERROR();
+}
+
+void Texture2D::Initialize( const char* file, Filter filter, Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
+{
+#if STBI_INCLUDE_STB_IMAGE_H
+  uint32_t fileSize = aeVfs::GetSize( file );
+  AE_ASSERT_MSG( fileSize, "Could not load #", file );
+  
+  uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
+  aeVfs::Read( file, fileBuffer, fileSize );
+
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t channels = 0;
+  stbi_set_flip_vertically_on_load( 1 );
+#if _AE_IOS_
+  stbi_convert_iphone_png_to_rgb( 1 );
+#endif
+  bool is16BitImage = stbi_is_16_bit_from_memory( fileBuffer, fileSize );
+
+  uint8_t* image;
+  if (is16BitImage)
+  {
+     image = (uint8_t*)stbi_load_16_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
+  else
+  {
+    image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+  }
+  AE_ASSERT( image );
+
+  Format format;
+  auto type = aeTextureType::Uint8;
+  switch ( channels )
+  {
+    case STBI_grey:
+  		format = Format::R8;
+  		  
+  		// for now only support R16Unorm
+  		if (is16BitImage)
+  		{
+  			format = Format::R16_UNORM;
+  			type = aeTextureType::Uint16;
+  		}
+  	  break;
+    case STBI_grey_alpha:
+      AE_FAIL();
+      break;
+    case STBI_rgb:
+      format = isSRGB ? Format::RGB8_SRGB : Format::RGB8;
+      break;
+    case STBI_rgb_alpha:
+      format = isSRGB ? Format::RGBA8_SRGB : Format::RGBA8;
+      break;
+  }
+  
+  Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
+  
+  stbi_image_free( image );
+  free( fileBuffer );
+#endif
+}
+
+void Texture2D::Destroy()
+{
+  m_width = 0;
+  m_height = 0;
+  m_hasAlpha = false;
+
+  Texture::Destroy();
+}
 
 //------------------------------------------------------------------------------
 // ae::RenderTarget member functions
@@ -3901,160 +6848,146 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   m_width = width;
   m_height = height;
 
-  //glGenFramebuffers( 1, &m_fbo );
-  //AE_ASSERT( m_fbo );
-  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glGenFramebuffers( 1, &m_fbo );
+  AE_CHECK_GL_ERROR();
+  AE_ASSERT( m_fbo );
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  AE_CHECK_GL_ERROR();
 
-  //AE_CHECK_GL_ERROR();
-  //Vertex quadVerts[] =
-  //{
-  //  { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
-  //  { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
-  //  { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
-  //  { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
-  //};
-  //AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
-  //m_quad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
-  //m_quad.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( Vertex, pos ) );
-  //m_quad.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof( Vertex, uv ) );
-  //m_quad.SetVertices( quadVerts, aeQuadVertCount );
-  //m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
-  //AE_CHECK_GL_ERROR();
+  Vertex quadVerts[] =
+  {
+    { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
+    { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
+    { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
+    { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
+  };
+  AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
+  m_quad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, VertexData::Primitive::Triangle, VertexData::Usage::Static, VertexData::Usage::Static );
+  m_quad.AddAttribute( "a_position", 3, VertexData::Type::Float, offsetof( Vertex, pos ) );
+  m_quad.AddAttribute( "a_uv", 2, VertexData::Type::Float, offsetof( Vertex, uv ) );
+  m_quad.SetVertices( quadVerts, aeQuadVertCount );
+  m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  AE_CHECK_GL_ERROR();
 
-  //const char* vertexStr = "\
-  //  AE_UNIFORM_HIGHP mat4 u_localToNdc;\
-  //  AE_IN_HIGHP vec3 a_position;\
-  //  AE_IN_HIGHP vec2 a_uv;\
-  //  AE_OUT_HIGHP vec2 v_uv;\
-  //  void main()\
-  //  {\
-  //    v_uv = a_uv;\
-  //    gl_Position = u_localToNdc * vec4( a_position, 1.0 );\
-  //  }";
-  //const char* fragStr = "\
-  //  uniform sampler2D u_tex;\
-  //  AE_IN_HIGHP vec2 v_uv;\
-  //  void main()\
-  //  {\
-  //    AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
-  //  }";
-  //m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_localToNdc;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec2 a_uv;\
+    AE_OUT_HIGHP vec2 v_uv;\
+    void main()\
+    {\
+      v_uv = a_uv;\
+      gl_Position = u_localToNdc * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    void main()\
+    {\
+      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
+    }";
+  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
 void RenderTarget::Destroy()
 {
-  //m_shader.Destroy();
-  //m_quad.Destroy();
+  m_shader.Destroy();
+  m_quad.Destroy();
 
-  //for ( uint32_t i = 0; i < m_targets.Length(); i++ )
-  //{
-  //  m_targets[ i ]->Destroy();
-  //  ae::Delete( m_targets[ i ] );
-  //}
-  //m_targets.Clear();
+  for ( uint32_t i = 0; i < m_targets.Length(); i++ )
+  {
+    m_targets[ i ]->Destroy();
+    ae::Delete( m_targets[ i ] );
+  }
+  m_targets.Clear();
 
-  //m_depth.Destroy();
+  m_depth.Destroy();
 
-  //if ( m_fbo )
-  //{
-  //  glDeleteFramebuffers( 1, &m_fbo );
-  //  m_fbo = 0;
-  //}
+  if ( m_fbo )
+  {
+    glDeleteFramebuffers( 1, &m_fbo );
+    m_fbo = 0;
+  }
 
   m_width = 0;
   m_height = 0;
 }
 
-void RenderTarget::AddTexture( TextureFilter filter, TextureWrap wrap )
+void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 {
-  //AE_ASSERT( m_targets.Length() < kMaxFrameBufferAttachments );
+  AE_ASSERT( m_targets.Length() < _kMaxFrameBufferAttachments );
 
-  //aeTexture2D* tex = ae::New< aeTexture2D >( AE_ALLOC_TAG_RENDER );
-  //tex->Initialize( nullptr, m_width, m_height, aeTextureFormat::RGBA16F, aeTextureType::HalfFloat, filter, wrap );
+  Texture2D* tex = ae::New< Texture2D >( AE_ALLOC_TAG_RENDER );
+  tex->Initialize( nullptr, m_width, m_height, Texture::Format::RGBA16F, Texture::Type::HalfFloat, filter, wrap );
 
-  //GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
-  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
-  //glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
+  GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
 
-  //m_targets.Append( tex );
+  m_targets.Append( tex );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
-void RenderTarget::AddDepth( TextureFilter filter, TextureWrap wrap )
+void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 {
-  //AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
+  AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
 
-  //m_depth.Initialize( nullptr, m_width, m_height, aeTextureFormat::Depth32F, aeTextureType::Float, filter, wrap );
-  //glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
-  //glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
+  m_depth.Initialize( nullptr, m_width, m_height, Texture::Format::Depth32F, Texture::Type::Float, filter, wrap );
+  glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+  glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
 void RenderTarget::Activate()
 {
-  //CheckFramebufferComplete( m_fbo );
-  //glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
-  //
-  //GLenum buffers[] =
-  //{
-  //  GL_COLOR_ATTACHMENT0,
-  //  GL_COLOR_ATTACHMENT1,
-  //  GL_COLOR_ATTACHMENT2,
-  //  GL_COLOR_ATTACHMENT3,
-  //  GL_COLOR_ATTACHMENT4,
-  //  GL_COLOR_ATTACHMENT5,
-  //  GL_COLOR_ATTACHMENT6,
-  //  GL_COLOR_ATTACHMENT7,
-  //  GL_COLOR_ATTACHMENT8,
-  //  GL_COLOR_ATTACHMENT9,
-  //  GL_COLOR_ATTACHMENT10,
-  //  GL_COLOR_ATTACHMENT11,
-  //  GL_COLOR_ATTACHMENT12,
-  //  GL_COLOR_ATTACHMENT13,
-  //  GL_COLOR_ATTACHMENT14,
-  //  GL_COLOR_ATTACHMENT15
-  //};
-  //AE_STATIC_ASSERT( countof( buffers ) == kMaxFrameBufferAttachments );
-  //glDrawBuffers( m_targets.Length(), buffers );
+  CheckFramebufferComplete( m_fbo );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+  
+  GLenum buffers[ _kMaxFrameBufferAttachments ];
+  for ( uint32_t i = 0 ; i < countof(buffers); i++ )
+  {
+    buffers[ i ] = GL_COLOR_ATTACHMENT0 + i;
+  }
+  glDrawBuffers( m_targets.Length(), buffers );
 
-  //glViewport( 0, 0, GetWidth(), GetHeight() );
+  glViewport( 0, 0, GetWidth(), GetHeight() );
 }
 
 void RenderTarget::Clear( Color color )
 {
   Activate();
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 
-  //Vec3 clearColor = color.GetLinearRGB();
-  //glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
-  //glClearDepth( gReverseZ ? 0.0f : 1.0f );
+  Vec3 clearColor = color.GetLinearRGB();
+  glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
+  glClearDepth( gReverseZ ? 0.0f : 1.0f );
 
-  //glDepthMask( GL_TRUE );
-  //glDisable( GL_DEPTH_TEST );
-  //glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+  glDepthMask( GL_TRUE );
+  glDisable( GL_DEPTH_TEST );
+  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
-  //AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 }
 
 void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
-  //glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
-  //m_quad.Render( shader, uniforms );
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+  m_quad.Render( shader, uniforms );
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
-  //glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+  glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 
-  //aeUniformList uniforms;
-  //uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
-  //uniforms.Set( "u_tex", GetTexture( textureIndex ) );
-  //m_quad.Render( &m_shader, uniforms );
+  UniformList uniforms;
+  uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
+  uniforms.Set( "u_tex", GetTexture( textureIndex ) );
+  m_quad.Render( &m_shader, uniforms );
 }
 
 const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
@@ -4064,8 +6997,7 @@ const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
 
 const Texture2D* RenderTarget::GetDepth() const
 {
-  //return m_depth.GetTexture() ? &m_depth : nullptr;
-  return nullptr;
+  return m_depth.GetTexture() ? &m_depth : nullptr;
 }
 
 uint32_t RenderTarget::GetWidth() const
@@ -4080,141 +7012,150 @@ uint32_t RenderTarget::GetHeight() const
 
 Matrix4 RenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const
 {
-  //Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
-  //windowToNDC.Scale( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+  Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
+  windowToNDC *= Matrix4::Scaling( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
 
-  //Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
-  //ndcToQuad.Invert();
+  Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
+  ndcToQuad.SetInverse();
 
-  //Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
-  //quadToRender.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
+  Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
+  quadToRender *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
 
-  //return ( quadToRender * ndcToQuad * windowToNDC );
-  return {};
+  return ( quadToRender * ndcToQuad * windowToNDC );
 }
 
 Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
 {
-  //float canvasAspect = m_width / (float)m_height;
-  //float targetAspect = otherWidth / (float)otherHeight;
-  //if ( canvasAspect >= targetAspect )
-  //{
-  //  // Fit width
-  //  float height = targetAspect / canvasAspect;
-  //  return Rect( -1.0f, -height, 2.0f, height * 2.0f );
-  //}
-  //else
-  //{
-  //  // Fit height
-  //  float width = canvasAspect / targetAspect;
-  //  return Rect( -width, -1.0f, width * 2.0f, 2.0f );
-  //}
-  return {};
+  float canvasAspect = m_width / (float)m_height;
+  float targetAspect = otherWidth / (float)otherHeight;
+  if ( canvasAspect >= targetAspect )
+  {
+    // Fit width
+    float height = targetAspect / canvasAspect;
+    return Rect( -1.0f, -height, 2.0f, height * 2.0f );
+  }
+  else
+  {
+    // Fit height
+    float width = canvasAspect / targetAspect;
+    return Rect( -width, -1.0f, width * 2.0f, 2.0f );
+  }
 }
 
 Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const
 {
-  //Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
-  //return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
-  return {};
+  Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  return ( worldToNdc.GetInverse() * canvasToNdc * otherTargetToLocal );
 }
 
 Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 {
-  //Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
-  //localToNdc.Scale( Vec3( ndc.w, ndc.h, 1.0f ) );
-  //localToNdc.Translate( Vec3( 0.5f, 0.5f, 0.0f ) );
-  //return localToNdc;
-  return {};
+  Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
+  localToNdc *= Matrix4::Scaling( Vec3( ndc.w, ndc.h, 1.0f ) );
+  localToNdc *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
+  return localToNdc;
 }
 
 //------------------------------------------------------------------------------
 // GraphicsDevice member functions
 //------------------------------------------------------------------------------
-GraphicsDevice::GraphicsDevice()
-{
-  m_window = nullptr;
-
-  // OpenGL
-  m_context = nullptr;
-  m_defaultFbo = 0;
-}
-
 GraphicsDevice::~GraphicsDevice()
 {
   Terminate();
 }
 
+#if _AE_WINDOWS_
+#define LOAD_OPENGL_FN( _glfn )\
+_glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
+AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
+#endif
+
 void GraphicsDevice::Initialize( class Window* window )
 {
   AE_ASSERT( window );
-  //AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
+  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
   AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
   m_window = window;
   window->graphicsDevice = this;
 
-//  // TODO: needed on ES2/GL/WebGL1, but not on ES3/WebGL2
-//#if !_AE_IOS_
-//  AE_STATIC_ASSERT( GL_ARB_framebuffer_sRGB );
-//#endif
-//
-//#if _AE_IOS_
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES );
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-//#else
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-//  if ( gGL41 )
-//  {
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
-//  }
-//  else
-//  {
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-//    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
-//  }
-//#endif
-//
-//  SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );
-//
-//#if AE_GL_DEBUG_MODE
-//  SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
-//#endif
-//  SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
-//  SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
-//
-//  m_context = SDL_GL_CreateContext( (SDL_Window*)m_window->window );
-//  AE_ASSERT( m_context );
-//  SDL_GL_MakeCurrent( (SDL_Window*)m_window->window, m_context );
-//
-//  SDL_GL_SetSwapInterval( 1 );
-//
-//#if _AE_WINDOWS_
-//  glewExperimental = GL_TRUE;
-//  GLenum err = glewInit();
-//  glGetError(); // Glew currently has an issue which causes a GL_INVALID_ENUM on init
-//  AE_ASSERT_MSG( err == GLEW_OK, "Could not initialize glew" );
-//#endif
-//
-//#if AE_GL_DEBUG_MODE
-//  glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
-//#endif
-//
-//  glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
-//
-//  AE_CHECK_GL_ERROR();
-
 #if _AE_WINDOWS_
-  // @TODO: Remove start
-  glShadeModel( GL_SMOOTH );							// Enable Smooth Shading
-  glClearColor( 0.0f, 0.0f, 0.0f, 0.5f );				// Black Background
-  glClearDepth( 1.0f );									// Depth Buffer Setup
-  glEnable( GL_DEPTH_TEST );							// Enables Depth Testing
-  glDepthFunc( GL_LEQUAL );								// The Type Of Depth Testing To Do
-  glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST ); // Really Nice Perspective Calculations
-  // @TODO: Remove end
+  // Create OpenGL context
+  HWND hWnd = (HWND)m_window->window;
+  AE_ASSERT_MSG( hWnd, "ae::Window must be initialized" );
+  HDC hdc = GetDC( hWnd );
+  AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
+  HGLRC hglrc = wglCreateContext( hdc );
+  AE_ASSERT_MSG( hglrc, "Failed to create the OpenGL Rendering Context" );
+  if ( !wglMakeCurrent( hdc, hglrc ) )
+  {
+    AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
+  }
+  m_context = hglrc;
+#elif _AE_APPLE_
+  m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
 #endif
+  
+  AE_CHECK_GL_ERROR();
+
+#if !_AE_APPLE_
+  // Shader functions
+  LOAD_OPENGL_FN( glCreateProgram );
+  LOAD_OPENGL_FN( glAttachShader );
+  LOAD_OPENGL_FN( glLinkProgram );
+  LOAD_OPENGL_FN( glGetProgramiv );
+  LOAD_OPENGL_FN( glGetProgramInfoLog );
+  LOAD_OPENGL_FN( glGetActiveAttrib );
+  LOAD_OPENGL_FN( glGetAttribLocation );
+  LOAD_OPENGL_FN( glGetActiveUniform );
+  LOAD_OPENGL_FN( glGetUniformLocation );
+  LOAD_OPENGL_FN( glDeleteShader );
+  LOAD_OPENGL_FN( glDeleteProgram );
+  LOAD_OPENGL_FN( glUseProgram );
+  LOAD_OPENGL_FN( glBlendFuncSeparate );
+  LOAD_OPENGL_FN( glCreateShader );
+  LOAD_OPENGL_FN( glShaderSource );
+  LOAD_OPENGL_FN( glCompileShader );
+  LOAD_OPENGL_FN( glGetShaderiv );
+  LOAD_OPENGL_FN( glGetShaderInfoLog );
+  LOAD_OPENGL_FN( glActiveTexture );
+  LOAD_OPENGL_FN( glUniform1i );
+  LOAD_OPENGL_FN( glUniform1fv );
+  LOAD_OPENGL_FN( glUniform2fv );
+  LOAD_OPENGL_FN( glUniform3fv );
+  LOAD_OPENGL_FN( glUniform4fv );
+  LOAD_OPENGL_FN( glUniformMatrix4fv );
+  // Texture functions
+  LOAD_OPENGL_FN( glGenerateMipmap );
+  LOAD_OPENGL_FN( glBindFramebuffer );
+  LOAD_OPENGL_FN( glFramebufferTexture2D );
+  LOAD_OPENGL_FN( glGenFramebuffers );
+  LOAD_OPENGL_FN( glDeleteFramebuffers );
+  LOAD_OPENGL_FN( glCheckFramebufferStatus );
+  LOAD_OPENGL_FN( glDrawBuffers );
+  LOAD_OPENGL_FN( glTextureBarrierNV );
+  // Vertex functions
+  LOAD_OPENGL_FN( glGenVertexArrays );
+  LOAD_OPENGL_FN( glBindVertexArray );
+  LOAD_OPENGL_FN( glDeleteVertexArrays );
+  LOAD_OPENGL_FN( glDeleteBuffers );
+  LOAD_OPENGL_FN( glBindBuffer );
+  LOAD_OPENGL_FN( glGenBuffers );
+  LOAD_OPENGL_FN( glBufferData );
+  LOAD_OPENGL_FN( glBufferSubData );
+  LOAD_OPENGL_FN( glEnableVertexAttribArray );
+  LOAD_OPENGL_FN( glVertexAttribPointer );
+  // Debug functions
+  LOAD_OPENGL_FN( glDebugMessageCallback );
+  AE_CHECK_GL_ERROR();
+#endif
+
+#if AE_GL_DEBUG_MODE
+  glDebugMessageCallback( ae::OpenGLDebugCallback, nullptr );
+#endif
+
+  glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
+  AE_CHECK_GL_ERROR();
 
   m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
 
@@ -4231,7 +7172,7 @@ void GraphicsDevice::Terminate()
 
 void GraphicsDevice::Activate()
 {
-  //AE_ASSERT( m_context );
+  AE_ASSERT( m_context );
 
   if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
   {
@@ -4239,41 +7180,9 @@ void GraphicsDevice::Activate()
   }
   m_canvas.Activate();
 
-//#if !_AE_IOS_
-//  // This is automatically enabled on opengl es3 and can't be turned off
-//  glEnable( GL_FRAMEBUFFER_SRGB );
-//#endif
-
-#if _AE_WINDOWS_
-  // @TODO: Remove start
-  glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // Reset The Current Viewport
-
-  glMatrixMode( GL_PROJECTION ); // Select The Projection Matrix
-  glLoadIdentity(); // Reset The Projection Matrix
-
-  // Calculate The Aspect Ratio Of The Window
-  float aspectRatio = m_canvas.GetWidth() / (float)m_canvas.GetHeight();
-  gluPerspective( 45.0f, aspectRatio, 0.1f, 100.0f );
-
-  glMatrixMode( GL_MODELVIEW ); // Select The Modelview Matrix
-  glLoadIdentity();
-
-  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );	// Clear Screen And Depth Buffer
-  glLoadIdentity();									// Reset The Current Modelview Matrix
-  glTranslatef( -1.5f, 0.0f, -6.0f );						// Move Left 1.5 Units And Into The Screen 6.0
-  glBegin( GL_TRIANGLES );								// Drawing Using Triangles
-  glVertex3f( 0.0f, 1.0f, 0.0f );					// Top
-  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
-  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
-  glEnd();											// Finished Drawing The Triangle
-  glTranslatef( 3.0f, 0.0f, 0.0f );						// Move Right 3 Units
-  glBegin( GL_QUADS );									// Draw A Quad
-  glVertex3f( -1.0f, 1.0f, 0.0f );					// Top Left
-  glVertex3f( 1.0f, 1.0f, 0.0f );					// Top Right
-  glVertex3f( 1.0f, -1.0f, 0.0f );					// Bottom Right
-  glVertex3f( -1.0f, -1.0f, 0.0f );					// Bottom Left
-  glEnd();											// Done Drawing The Quad
-  // @TODO: Remove end
+#if !_AE_IOS_
+  // This is automatically enabled on opengl es3 and can't be turned off
+  glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
 }
 
@@ -4285,29 +7194,27 @@ void GraphicsDevice::Clear( Color color )
 
 void GraphicsDevice::Present()
 {
-  //AE_ASSERT( m_context );
-  //AE_CHECK_GL_ERROR();
+  AE_ASSERT( m_context );
+  AE_CHECK_GL_ERROR();
 
-  //glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-  //glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
+  glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
+  glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
 
-  //// Clear window target in case canvas doesn't fit exactly
-  //glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
-  //glClearDepth( 1.0f );
+  // Clear window target in case canvas doesn't fit exactly
+  glClearColor( 1.0f, 0.0f, 0.0f, 1.0f );
+  glClearDepth( 1.0f );
 
-  //glDepthMask( GL_TRUE );
+  glDepthMask( GL_TRUE );
 
-  //glDisable( GL_DEPTH_TEST );
-  //glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-  //AE_CHECK_GL_ERROR();
+  glDisable( GL_DEPTH_TEST );
+  glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+  AE_CHECK_GL_ERROR();
 
-  //m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
+  m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
+  
+  glFlush(); // @TODO: Needed on osx with single buffering. Use double buffering or leave this to be safe?
 
-//#if !_AE_EMSCRIPTEN_
-//  SDL_GL_SwapWindow( (SDL_Window*)m_window->window );
-//#endif
-//
-//  AE_CHECK_GL_ERROR();
+  AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
   AE_ASSERT( m_window );
@@ -4332,19 +7239,19 @@ float GraphicsDevice::GetAspectRatio() const
 
 void GraphicsDevice::AddTextureBarrier()
 {
-//  // only GL has texture barrier for reading from previously written textures
-//  // There are less draconian ways in desktop ES, and nothing in WebGL.
-//#if _AE_WINDOWS_ || _AE_OSX_
-//  glTextureBarrierNV();
-//#endif
+  // only GL has texture barrier for reading from previously written textures
+  // There are less draconian ways in desktop ES, and nothing in WebGL.
+#if _AE_WINDOWS_ || _AE_OSX_
+  glTextureBarrierNV();
+#endif
 }
 
 void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 {
   // @TODO: Allow user to pass in a canvas scaling factor / aspect ratio parameter
   m_canvas.Initialize( width, height );
-  m_canvas.AddTexture( TextureFilter::Nearest, TextureWrap::Clamp );
-  m_canvas.AddDepth( TextureFilter::Nearest, TextureWrap::Clamp );
+  m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );
+  m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
 }
 
 } // AE_NAMESPACE end

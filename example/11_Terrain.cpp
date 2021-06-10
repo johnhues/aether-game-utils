@@ -634,7 +634,7 @@ int main()
               }
               else
               {
-                aeMesh::RaycastParams params;
+                ae::Mesh::RaycastParams params;
                 params.source = object->raySrc;
                 params.direction = object->rayDir;
                 params.maxLength = object->rayLength;

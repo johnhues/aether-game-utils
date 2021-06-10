@@ -72,10 +72,10 @@ const uint32_t kMaxFrameBufferAttachments = 16;
 // enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
 // doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
 // http://www.reedbeta.com/blog/depth-precision-visualized/
-bool gReverseZ = false;
+extern bool gReverseZ;
 
 // turn this on to run at GL4.1 instead of GL3.3
-bool gGL41 = true;
+extern bool gGL41;
 
 //------------------------------------------------------------------------------
 // Helpers
