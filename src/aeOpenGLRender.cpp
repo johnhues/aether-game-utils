@@ -68,15 +68,6 @@
 
 const uint32_t kMaxFrameBufferAttachments = 16;
 
-// Caller enables this externally.  The renderer, AEShader, math aren't tied to one another
-// enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
-// doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
-// http://www.reedbeta.com/blog/depth-precision-visualized/
-extern bool gReverseZ;
-
-// turn this on to run at GL4.1 instead of GL3.3
-extern bool gGL41;
-
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
@@ -790,9 +781,6 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
 {
   AE_CHECK_GL_ERROR();
 
-  // This is really context state shadow, and that should be able to override
-  // so reverseZ for example can be set without the shader knowing about that.
-	
   // Blending
   if ( m_blending || m_blendingPremul )
   {
@@ -821,7 +809,9 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   // Depth test
   if ( m_depthTest )
   {
-    glDepthFunc( gReverseZ ? GL_GEQUAL : GL_LEQUAL );
+    // This is really context state shadow, and that should be able to override
+    // so reverseZ for example can be set without the shader knowing about that.
+    glDepthFunc( ae::ReverseZ ? GL_GEQUAL : GL_LEQUAL );
     glEnable( GL_DEPTH_TEST );
   }
   else
@@ -974,22 +964,24 @@ int aeShader::m_LoadShader( const char* shaderStr, aeShaderType::Type type, cons
   const char* shaderSource[ kPrependMax + kMaxShaderDefines * 2 + 1 ]; // x2 max defines to make room for newlines. Plus one for actual shader.
 
   // Version
+  ae::Str32 glVersionStr = "#version ";
 #if _AE_IOS_
-  shaderSource[ sourceCount++ ] = "#version 300 es\n";
-  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+  glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
 #elif _AE_EMSCRIPTEN_
   // No version specified
+#else
+  glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
+#endif
+  glVersionStr += "\n";
+  if ( glVersionStr.Length() )
+  {
+    shaderSource[ sourceCount++ ] = glVersionStr.c_str();
+  }
+
+  // Precision
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
   shaderSource[ sourceCount++ ] = "precision highp float;\n";
 #else
-  if (gGL41)
-  {
-	  shaderSource[ sourceCount++ ] = "#version 410 core\n";
-  }
-  else
-  {
-	  shaderSource[ sourceCount++ ] = "#version 330 core\n";
-  }
-	  
   // No default precision specified
 #endif
 
@@ -1524,7 +1516,7 @@ void aeRenderTarget::Clear( aeColor color )
 
   aeFloat3 clearColor = color.GetLinearRGB();
   glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
-  glClearDepth( gReverseZ ? 0.0f : 1.0f );
+  glClearDepth( ae::ReverseZ ? 0.0f : 1.0f );
 
   glDepthMask( GL_TRUE );
   glDisable( GL_DEPTH_TEST );
@@ -1649,16 +1641,8 @@ void aeRender::InitializeOpenGL( class aeWindow* window )
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
 #else
   SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE );
-  if ( gGL41 )
-  {
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 4 );
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 1 );
-  }
-  else
-  {
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, 3 );
-    SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, 3 );
-  }
+  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MAJOR_VERSION, ae::GLMajorVersion );
+  SDL_GL_SetAttribute( SDL_GL_CONTEXT_MINOR_VERSION, ae::GLMinorVersion );
 #endif
 
   SDL_GL_SetAttribute( SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1 );

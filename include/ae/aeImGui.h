@@ -46,9 +46,6 @@
 #include "aeMeta.h"
 #include "aeRender.h"
 
-// this is out of aeRender for macOS/winOS
-extern bool gGL41;
-
 //------------------------------------------------------------------------------
 // Imgui helpers
 //------------------------------------------------------------------------------
@@ -297,7 +294,9 @@ private:
 		}
 		else
 		{
-			ImGui_ImplOpenGL3_Init( gGL41 ? "#version 410 core" : "#version 330 core" );
+			ae::Str32 version = "#version ";
+			version += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
+			ImGui_ImplOpenGL3_Init( version.c_str() );
 		}
 
 		ImGuiIO& io = ImGui::GetIO();

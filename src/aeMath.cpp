@@ -1373,9 +1373,6 @@ aeFloat4x4 aeFloat4x4::WorldToView( aeFloat3 position, aeFloat3 forward, aeFloat
   return result;
 }
 
-// this hack comes in from the renderer
-extern bool gReverseZ;
-
 // fix the projection matrix, when false fov scales up/down with nearPlane
 // if this breaks stuff, then can set to false
 bool gFixProjection = true;
@@ -1403,7 +1400,7 @@ aeFloat4x4 aeFloat4x4::ViewToProjection( float fov, float aspectRatio, float nea
  	
   float A;
   float B;
-  if (gReverseZ)
+  if ( ae::ReverseZ )
   {
 	  A = 0;
 	  B = nearPlane;

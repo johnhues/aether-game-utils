@@ -1060,6 +1060,17 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// @TODO: Graphics globals. Should be parameters to modules that need them.
+//------------------------------------------------------------------------------
+extern uint32_t GLMajorVersion;
+extern uint32_t GLMinorVersion;
+// Caller enables this externally.  The renderer, Shader, math aren't tied to one another
+// enough to pass this locally.  glClipControl is also not accessible in ES or GL 4.1, so
+// doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
+// http://www.reedbeta.com/blog/depth-precision-visualized/
+extern bool ReverseZ;
+
+//------------------------------------------------------------------------------
 // ae::UniformList class
 //------------------------------------------------------------------------------
 class UniformList
@@ -3766,9 +3777,6 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
   return result;
 }
 
-// this hack comes in from the renderer
-extern bool gReverseZ;
-
 // fix the projection matrix, when false fov scales up/down with nearPlane
 // if this breaks stuff, then can set to false
 bool gFixProjection = true;
@@ -3796,7 +3804,7 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
  	
   float A;
   float B;
-  if (gReverseZ)
+  if ( ReverseZ )
   {
 	  A = 0;
 	  B = nearPlane;
@@ -5093,7 +5101,7 @@ void Window::m_Initialize()
   {
     NSOpenGLPFAAccelerated,
     NSOpenGLPFAClosestPolicy,
-    NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
+    NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core, // @TODO: Use ae GL version
     //NSOpenGLPFADoubleBuffer,
     //NSOpenGLPFASampleBuffers, 1,
     //NSOpenGLPFASamples, samples,
@@ -5305,14 +5313,14 @@ void Input::Pump()
 
 namespace AE_NAMESPACE
 {
-// Caller enables this externally.  The renderer, Shader, math aren't tied to one another
-// enough to pass this locally.  glClipControl is also no accessible in ES or GL 4.1, so
-// doing this just to write the shaders for reverseZ.  In GL, this won't improve precision.
-// http://www.reedbeta.com/blog/depth-precision-visualized/
-bool gReverseZ = false;
-
-// turn this on to run at GL4.1 instead of GL3.3
-bool gGL41 = true;
+#if _AE_IOS_
+  uint32_t GLMajorVersion = 3;
+  uint32_t GLMinorVersion = 0;
+#else
+  uint32_t GLMajorVersion = 4;
+  uint32_t GLMinorVersion = 1;
+#endif
+bool ReverseZ = false;
 }  // AE_NAMESPACE end
 
 #if !_AE_APPLE_
@@ -5832,9 +5840,6 @@ void Shader::Activate( const UniformList& uniforms ) const
 {
   AE_CHECK_GL_ERROR();
 
-  // This is really context state shadow, and that should be able to override
-  // so reverseZ for example can be set without the shader knowing about that.
-
   // Blending
   if ( m_blending || m_blendingPremul )
   {
@@ -5863,7 +5868,9 @@ void Shader::Activate( const UniformList& uniforms ) const
   // Depth test
   if ( m_depthTest )
   {
-    glDepthFunc( gReverseZ ? GL_GEQUAL : GL_LEQUAL );
+    // This is really context state shadow, and that should be able to override
+    // so reverseZ for example can be set without the shader knowing about that.
+    glDepthFunc( ReverseZ ? GL_GEQUAL : GL_LEQUAL );
     glEnable( GL_DEPTH_TEST );
   }
   else
@@ -6015,22 +6022,24 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
   const char* shaderSource[ kPrependMax + _kMaxShaderDefines * 2 + 1 ]; // x2 max defines to make room for newlines. Plus one for actual shader.
 
   // Version
+  ae::Str32 glVersionStr = "#version ";
 #if _AE_IOS_
-  shaderSource[ sourceCount++ ] = "#version 300 es\n";
-  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+  glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
 #elif _AE_EMSCRIPTEN_
   // No version specified
-  shaderSource[ sourceCount++ ] = "precision highp float;\n";
 #else
-  if ( gGL41 )
+  glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
+#endif
+  glVersionStr += "\n";
+  if ( glVersionStr.Length() )
   {
-    shaderSource[ sourceCount++ ] = "#version 410 core\n";
-  }
-  else
-  {
-    shaderSource[ sourceCount++ ] = "#version 330 core\n";
+    shaderSource[ sourceCount++ ] = glVersionStr.c_str();
   }
 
+  // Precision
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
+  shaderSource[ sourceCount++ ] = "precision highp float;\n";
+#else
   // No default precision specified
 #endif
 
@@ -6965,7 +6974,7 @@ void RenderTarget::Clear( Color color )
 
   Vec3 clearColor = color.GetLinearRGB();
   glClearColor( clearColor.x, clearColor.y, clearColor.z, 1.0f );
-  glClearDepth( gReverseZ ? 0.0f : 1.0f );
+  glClearDepth( ReverseZ ? 0.0f : 1.0f );
 
   glDepthMask( GL_TRUE );
   glDisable( GL_DEPTH_TEST );
