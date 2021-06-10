@@ -1045,6 +1045,7 @@ public:
   void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
   void* window;
   class GraphicsDevice* graphicsDevice;
+  class Input* input;
 };
 
 //------------------------------------------------------------------------------
@@ -1053,6 +1054,7 @@ public:
 class Input
 {
 public:
+  void Initialize( Window* window );
   void Pump();
   bool quit = false;
 };
@@ -1933,7 +1935,7 @@ namespace Interpolation
   {
     float angle = ( t * ae::PI );// + ae::PI;
     t = ( 1.0f - ae::Cos( angle ) ) / 2;
-    // @TODO: Needed for Color, support types without lerp
+    // @TODO: Needed for ae::Color, support types without lerp
     return start.Lerp( end, t ); //return start + ( ( end - start ) * t );
   }
 }
@@ -3467,6 +3469,9 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 // // ae.cpp/mm EXAMPLE END
 //------------------------------------------------------------------------------
 #ifdef AE_MAIN
+#if _AE_APPLE_ && !defined(__OBJC__)
+#error "AE_MAIN must be defined in an Objective-C file on Apple platforms"
+#endif
 
 //------------------------------------------------------------------------------
 // Platform includes, required for logging, windowing, file io
@@ -4797,7 +4802,7 @@ bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
 }
 
 //------------------------------------------------------------------------------
-// Window member functions
+// ae::Window member functions
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
 // @TODO: Cleanup namespace
@@ -4827,7 +4832,6 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
         uint32_t width = LOWORD( lParam );
         uint32_t height = HIWORD( lParam );
         window->m_UpdateWidthHeight( width, height );
-        window->graphicsDevice->m_HandleResize( width, height );
       }
       break;
     }
@@ -4841,10 +4845,50 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 #endif
 
+#if _AE_OSX_
+} // AE_NAMESPACE end
+
+@interface aeApplicationDelegate : NSObject< NSApplicationDelegate >
+@property ae::Window* aewindow;
+@end
+@implementation aeApplicationDelegate
+- (void)applicationDidFinishLaunching:(NSNotification *)notification
+{
+  [NSApp stop:nil]; // Prevents app run from blocking
+}
+@end
+
+@interface aeWindowDelegate : NSObject< NSWindowDelegate >
+@property ae::Window* aewindow;
+@end
+@implementation aeWindowDelegate
+- (BOOL)windowShouldClose:(NSWindow *)sender
+{
+  return true; // @TODO: Allow user to prevent window from closing
+}
+- (void)windowWillClose:(NSNotification *)notification
+{
+    AE_ASSERT( _aewindow );
+    AE_ASSERT( _aewindow->input );
+    _aewindow->input->quit = true;
+}
+- (NSSize)windowWillResize:(NSWindow*)sender toSize:(NSSize)frameSize
+{
+  AE_ASSERT( _aewindow );
+  AE_ASSERT( _aewindow->graphicsDevice );
+  _aewindow->m_UpdateWidthHeight( frameSize.width * sender.backingScaleFactor, frameSize.height * sender.backingScaleFactor );
+  return frameSize;
+}
+@end
+
+namespace AE_NAMESPACE {
+#endif
+
 Window::Window()
 {
   window = nullptr;
   graphicsDevice = nullptr;
+  input = nullptr;
   m_pos = Int2( 0.0f ); // @TODO: int
   m_width = 0;
   m_height = 0;
@@ -5028,48 +5072,56 @@ void Window::m_Initialize()
 #elif _AE_OSX_
   // Autorelease Pool
   NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
-
-  // Create shared app instance
+  
+  // Application
   [NSApplication sharedApplication];
+  aeApplicationDelegate* applicationDelegate = [[aeApplicationDelegate alloc] init];
+  applicationDelegate.aewindow = this;
+  [NSApp setDelegate:applicationDelegate];
 
   // Main window
-  NSUInteger windowStyle = NSTitledWindowMask | NSClosableWindowMask | NSResizableWindowMask;
-  NSRect windowRect = NSMakeRect(100, 100, 400, 400);
-//  NSWindow* window = [[NSWindow alloc] initWithContentRect:windowRect styleMask:windowStyle backing:NSBackingStoreBuffered defer:NO];
-
-  // Test content
-//  NSTextView* textView = [[NSTextView alloc] initWithFrame:windowRect];
-//  [window setContentView:textView];
-//  NSOpenGLView* openGLView = [[NSOpenGLView alloc] init:windowRect pizelFormat:];
-//  [window setContentView:openGLView];
-  
-  NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(100,100,400,300)
-    styleMask:NSTitledWindowMask|NSClosableWindowMask|NSMiniaturizableWindowMask|NSResizableWindowMask
+  aeWindowDelegate* windowDelegate = [[aeWindowDelegate alloc] init];
+  windowDelegate.aewindow = this;
+  NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 400, 300)
+    styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
     backing:NSBackingStoreBuffered
     defer:YES
   ];
-  NSRect frame = [w contentRectForFrameRect:[w frame]];
-  // this is optional - request accelerated context
-  unsigned int attrs[] = { NSOpenGLPFAAccelerated, 0 };
-  NSOpenGLPixelFormat *pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:(NSOpenGLPixelFormatAttribute*)attrs];
-  NSOpenGLView  *view = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:pixelFormat];
-  [pixelFormat release];
-  // manage properties of the window as you please ...
-  [w setOpaque:YES];
-  [w setContentView:view];
-  [w makeFirstResponder:view];
-  [w setContentMinSize:NSMakeSize(150.0, 100.0)];
-  //[w makeKeyAndOrderFront: self];
-
-  // Window controller
-  NSWindowController* windowController = [[NSWindowController alloc] initWithWindow:w];
-
-  // @todo Create app delegate
-  // @todo Create menus (especially Quit!)
-
-  // Show window and run event loop
-  [w orderFrontRegardless];
-  [NSApp run];
+  nsWindow.delegate = windowDelegate;
+  this->window = nsWindow;
+  
+  NSOpenGLPixelFormatAttribute nsPixelAttribs[] =
+  {
+    NSOpenGLPFAAccelerated,
+    NSOpenGLPFAClosestPolicy,
+    NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core,
+    //NSOpenGLPFADoubleBuffer,
+    //NSOpenGLPFASampleBuffers, 1,
+    //NSOpenGLPFASamples, samples,
+    0
+  };
+  NSRect frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
+  NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
+  AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
+  
+  NSOpenGLView* nsView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
+  AE_ASSERT_MSG( nsView, "Could not create view with specified pixel format" );
+  [nsView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
+  [nsView.openGLContext makeCurrentContext];
+  
+  [nsPixelFormat release];
+  [nsWindow setContentView:nsView];
+  [nsWindow makeFirstResponder:nsView];
+  [nsWindow setOpaque:YES];
+  [nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
+  [nsWindow makeKeyAndOrderFront:nil]; // nil sender
+  // @TODO: Create menus (especially Quit!)
+  [nsWindow orderFrontRegardless];
+  
+  if (![[NSRunningApplication currentApplication] isFinishedLaunching]) // Make sure run is only called once
+  {
+    [NSApp run];
+  }
 #endif
 }
 
@@ -5147,6 +5199,11 @@ void Window::SetMaximized( bool maximized )
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
+void Input::Initialize( Window* window )
+{
+  window->input = this;
+}
+
 void Input::Pump()
 {
 #if _AE_WINDOWS_
@@ -5162,6 +5219,62 @@ void Input::Pump()
     }
     TranslateMessage( &msg );
     DispatchMessage( &msg );
+  }
+#elif _AE_OSX_
+  @autoreleasepool
+  {
+    while ( 1 )
+    {
+      NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+        untilDate:[NSDate distantPast]
+        inMode:NSDefaultRunLoopMode
+        dequeue:YES];
+      if (event == nil)
+      {
+        break;
+      }
+      
+      switch ( event.type )
+      {
+          // Mouse
+        case NSEventTypeMouseEntered:
+          //AE_INFO( "mouse enter" );
+          break;
+        case NSEventTypeMouseExited:
+          //AE_INFO( "mouse exit" );
+          break;
+        case NSEventTypeMouseMoved:
+        case NSEventTypeLeftMouseDragged:
+        case NSEventTypeRightMouseDragged:
+          //AE_INFO( "mouse moved" );
+          break;
+        case NSEventTypeLeftMouseDown:
+          AE_INFO( "mouse left down" );
+          break;
+        case NSEventTypeLeftMouseUp:
+          AE_INFO( "mouse left up" );
+          break;
+        case NSEventTypeRightMouseDown:
+          AE_INFO( "mouse right down" );
+          break;
+        case NSEventTypeRightMouseUp:
+          AE_INFO( "mouse right up" );
+          break;
+        case NSEventTypeScrollWheel:
+          AE_INFO( "mouse scroll" );
+          break;
+          // Keyboard
+        case NSEventTypeKeyDown:
+          AE_INFO( "mouse down" );
+          break;
+        case NSEventTypeKeyUp:
+          AE_INFO( "mouse up" );
+          break;
+        default:
+          break;
+      }
+      [NSApp sendEvent:event];
+    }
   }
 #endif
 }
@@ -5184,10 +5297,11 @@ void Input::Pump()
   #include <GLES3/gl3.h>
 #elif _AE_IOS_
   #include <OpenGLES/ES3/gl.h>
-  //#include <OpenGLES/ES3/glext.h>
-  //#define glClearDepth glClearDepthf
 #else
   #include <OpenGL/gl.h>
+  #include <OpenGL/glext.h>
+  #include <OpenGL/gl3.h>
+  #include <OpenGL/gl3ext.h>
 #endif
 
 namespace AE_NAMESPACE
@@ -5202,6 +5316,7 @@ bool gReverseZ = false;
 bool gGL41 = true;
 }  // AE_NAMESPACE end
 
+#if !_AE_APPLE_
 // OpenGL function pointers
 typedef char GLchar;
 typedef intptr_t GLsizeiptr;
@@ -5264,8 +5379,11 @@ typedef intptr_t GLintptr;
 #define GL_R16UI                          0x8234
 // GL_VERSION_3_2
 #define GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS 0x8DA8
-
-#if !_AE_APPLE_
+// GL_VERSION_4_3
+typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severity,GLsizei length,const GLchar *message,const void *userParam);
+#define GL_DEBUG_SEVERITY_HIGH            0x9146
+#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#define GL_DEBUG_SEVERITY_LOW             0x9148
 // OpenGL Shader Functions
 GLuint ( *glCreateProgram ) () = nullptr;
 void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
@@ -5312,6 +5430,7 @@ void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenu
 void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
 void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
 void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
+void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam ) = nullptr;
 #endif
 
 // Helpers
@@ -5359,6 +5478,11 @@ void CheckFramebufferComplete( GLuint framebuffer )
     AE_FAIL_MSG( "GL FBO Error: (#) #", fboStatus, errStr );
   }
 }
+
+#if _AE_DEBUG_ && !_AE_APPLE_
+  // Apple platforms only support OpenGL 4.1 and lower
+  #define AE_GL_DEBUG_MODE 1
+#endif
 
 #if AE_GL_DEBUG_MODE
 void OpenGLDebugCallback( GLenum source,
@@ -5568,7 +5692,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 {
   Destroy();
   AE_ASSERT( !m_program );
-
+  
   m_program = glCreateProgram();
 
   m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
@@ -5962,15 +6086,20 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
     GLint logLength;
     glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &logLength );
 
+    const char* typeStr = ( type == Type::Vertex ? "vertex" : "fragment" );
     if ( logLength > 0 )
     {
       unsigned char* log = new unsigned char[ logLength ];
       glGetShaderInfoLog( shader, logLength, NULL, (GLchar*)log );
-      const char* typeStr = ( type == Type::Vertex ? "vertex" : "fragment" );
       AE_LOG( "Error compiling # shader #", typeStr, log );
       delete[] log;
     }
+    else
+    {
+      AE_LOG( "Error compiling # shader: unknown issue", typeStr );
+    }
 
+    AE_CHECK_GL_ERROR();
     return 0;
   }
 
@@ -6724,6 +6853,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   m_height = height;
 
   glGenFramebuffers( 1, &m_fbo );
+  AE_CHECK_GL_ERROR();
   AE_ASSERT( m_fbo );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   AE_CHECK_GL_ERROR();
@@ -6938,9 +7068,11 @@ GraphicsDevice::~GraphicsDevice()
   Terminate();
 }
 
+#if _AE_WINDOWS_
 #define LOAD_OPENGL_FN( _glfn )\
 _glfn = (decltype(_glfn))wglGetProcAddress( #_glfn );\
 AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
+#endif
 
 void GraphicsDevice::Initialize( class Window* window )
 {
@@ -6964,8 +7096,10 @@ void GraphicsDevice::Initialize( class Window* window )
     AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
   }
   m_context = hglrc;
+#elif _AE_APPLE_
+  m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
 #endif
-
+  
   AE_CHECK_GL_ERROR();
 
 #if !_AE_APPLE_
@@ -7015,12 +7149,13 @@ void GraphicsDevice::Initialize( class Window* window )
   LOAD_OPENGL_FN( glBufferSubData );
   LOAD_OPENGL_FN( glEnableVertexAttribArray );
   LOAD_OPENGL_FN( glVertexAttribPointer );
+  // Debug functions
+  LOAD_OPENGL_FN( glDebugMessageCallback );
+  AE_CHECK_GL_ERROR();
 #endif
 
-  AE_CHECK_GL_ERROR();
-
 #if AE_GL_DEBUG_MODE
-  glDebugMessageCallback( aeOpenGLDebugCallback, nullptr );
+  glDebugMessageCallback( ae::OpenGLDebugCallback, nullptr );
 #endif
 
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
@@ -7080,6 +7215,8 @@ void GraphicsDevice::Present()
   AE_CHECK_GL_ERROR();
 
   m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
+  
+  glFlush(); // @TODO: Needed on osx with single buffering. Use double buffering or leave this to be safe?
 
   AE_CHECK_GL_ERROR();
 

@@ -23,7 +23,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#define AE_MAIN
 #include "ae/aether.h"
 
 //------------------------------------------------------------------------------
@@ -40,7 +39,7 @@ int main()
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "example" );
 	graphicsDevice.Initialize( &window );
-	//input.Initialize( &window );
+	input.Initialize( &window );
 	
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );

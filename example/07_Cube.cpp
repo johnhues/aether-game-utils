@@ -23,7 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
+//#include "ae/aetherEXT.h"
 
 //------------------------------------------------------------------------------
 // Shaders
@@ -74,20 +75,20 @@ const char* kFragShader = "\
 //------------------------------------------------------------------------------
 struct Vertex
 {
-	aeFloat4 pos;
-	aeFloat4 color;
+	ae::Vec4 pos;
+	ae::Vec4 color;
 };
 
 Vertex kCubeVerts[] =
 {
-	{ aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ), aeColor::PicoRed().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ), aeColor::PicoOrange().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ), aeColor::PicoYellow().GetLinearRGBA() },
-	{ aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ), aeColor::PicoPeach().GetLinearRGBA() },
-	{ aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ), aeColor::PicoGreen().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ), aeColor::PicoPeach().GetLinearRGBA() },
-	{ aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ), aeColor::PicoPink().GetLinearRGBA() },
-	{ aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ), aeColor::PicoBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoOrange().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoYellow().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoPink().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
 };
 
 uint16_t kCubeIndices[] =
@@ -107,47 +108,49 @@ int main()
 {
 	AE_INFO( "Initialize" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
+	ae::Window window;
+	ae::GraphicsDevice render;
+	ae::Input input;
 	ae::TimeStep timeStep;
-	aeShader shader;
-	aeVertexData vertexData;
-	aeEditorCamera camera;
+	ae::Shader shader;
+	ae::VertexData vertexData;
+//	aeEditorCamera camera;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "cube" );
-	render.InitializeOpenGL( &window );
+	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );
 	shader.SetDepthWrite( true );
-	shader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+	shader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
 
-	vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
-	vertexData.AddAttribute( "a_position", 4, aeVertexDataType::Float, offsetof( Vertex, pos ) );
-	vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof( Vertex, color ) );
+	vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+	vertexData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
+	vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
 	vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
 	vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
 
 	AE_INFO( "Run" );
-	while ( !input.GetState()->exit )
+//	while ( !input.GetState()->exit )
+  while ( !input.quit )
 	{
 		input.Pump();
 
-		if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
-		{
-			camera.Refocus( aeFloat3( 0.0f ) );
-		}
-		camera.Update( &input, timeStep.GetTimeStep() );
+//		if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+//		{
+//			camera.Refocus( ae::Vec3( 0.0f ) );
+//		}
+//		camera.Update( &input, timeStep.GetTimeStep() );
 
 		render.Activate();
-		render.Clear( aeColor::PicoDarkPurple() );
-		aeUniformList uniformList;
-		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
+		render.Clear( ae::Color::PicoDarkPurple() );
+		ae::UniformList uniformList;
+		//ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( ae::Vec3( 0.0f, 5.0f, 5.0f ), -ae::Vec3( 0.0f, 5.0f, 5.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
 		vertexData.Render( &shader, uniformList );
 		render.Present();
@@ -156,7 +159,7 @@ int main()
 	}
 
 	AE_INFO( "Terminate" );
-	input.Terminate();
+	//input.Terminate();
 	render.Terminate();
 	window.Terminate();
 
