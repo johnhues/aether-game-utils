@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeTerrainSDF.cpp
+// aeTerrainSdf.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -25,31 +25,33 @@
 //------------------------------------------------------------------------------
 #include "aeTerrain.h"
 
+namespace AE_NAMESPACE {
+
 //------------------------------------------------------------------------------
 // Sdf helpers
 //------------------------------------------------------------------------------
-inline float aeUnion( float d1, float d2 )
+inline float SdfUnion( float d1, float d2 )
 {
   return aeMath::Min( d1, d2 );
 }
 
-inline float aeSubtraction( float d1, float d2 )
+inline float SdfSubtraction( float d1, float d2 )
 {
   return aeMath::Max( -d1, d2 );
 }
 
-inline float aeIntersection( float d1, float d2 )
+inline float SdfIntersection( float d1, float d2 )
 {
   return aeMath::Max( d1, d2 );
 }
 
-inline float aeSmoothUnion( float d1, float d2, float k )
+inline float SdfSmoothUnion( float d1, float d2, float k )
 {
   float h = aeMath::Clip01( 0.5f + 0.5f * ( d2 - d1 ) / k );
   return aeMath::Lerp( d2, d1, h ) - k * h * ( 1.0f - h );
 }
 
-inline float aeSmoothSubtraction( float d1, float d2, float k )
+inline float SdfSmoothSubtraction( float d1, float d2, float k )
 {
   float h = aeMath::Clip01( 0.5f - 0.5f * ( d2 + d1 ) / k );
   return aeMath::Lerp( d2, -d1, h ) + k * h * ( 1.0f - h );
@@ -58,7 +60,7 @@ inline float aeSmoothSubtraction( float d1, float d2, float k )
 //------------------------------------------------------------------------------
 // Sdf member functions
 //------------------------------------------------------------------------------
-ae::Sdf::Shape::Shape() :
+Sdf::Sdf() :
   m_aabb( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) ),
   m_halfSize( 0.5f ),
   m_localToWorld( aeFloat4x4::Identity() ),
@@ -66,7 +68,7 @@ ae::Sdf::Shape::Shape() :
   m_aabbPrev( aeAABB( aeFloat3( 0.0f ), aeFloat3( 0.0f ) ) )
 {}
 
-float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
+float Sdf::GetValue( aeFloat3 p ) const
 {
   p = ( GetRemoveTRMatrix() * aeFloat4( p, 1.0f ) ).GetXYZ();
   float f = GetValue( p, 0 );
@@ -106,7 +108,7 @@ float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
         float iqt = 0.0f;
         for ( uint32_t i = 0; i < 3; i++ )
         {
-          ae::Vec3 iqx = topNoiseOffset + p * aeTerrainNoiseScale / ( GetHalfSize() * topNoiseScale );
+          ae::Vec3 iqx = topNoiseOffset + p * TerrainNoiseScale / ( GetHalfSize() * topNoiseScale );
           iqt += iqa * noise->Get< aeMath::CosineInterpolate >( iqx * iqf );
           iqf *= 2.0f;
           iqa *= iqG;
@@ -123,7 +125,7 @@ float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
         float iqt = 0.0f;
         for ( uint32_t i = 0; i < 3; i++ )
         {
-          ae::Vec3 iqx = noiseOffset + p * aeTerrainNoiseScale / ( GetHalfSize() * noiseScale );
+          ae::Vec3 iqx = noiseOffset + p * TerrainNoiseScale / ( GetHalfSize() * noiseScale );
           iqt += iqa * noise->Get< aeMath::CosineInterpolate >( iqx * iqf );
           iqf *= 2.0f;
           iqa *= iqG;
@@ -135,7 +137,7 @@ float ae::Sdf::Shape::GetValue( aeFloat3 p ) const
   return f;
 }
 
-void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
+void Sdf::SetTransform( const aeFloat4x4& transform )
 {
   if ( m_localToWorld == transform )
   {
@@ -173,7 +175,7 @@ void ae::Sdf::Shape::SetTransform( const aeFloat4x4& transform )
   }
 }
 
-aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
+aeHash Sdf::GetBaseHash( aeHash hash ) const
 {
   hash = hash.HashBasicType( type );
   hash = hash.HashBasicType( materialId );
@@ -193,39 +195,39 @@ aeHash ae::Sdf::Shape::GetBaseHash( aeHash hash ) const
 }
 
 //------------------------------------------------------------------------------
-// Box member functions
+// SdfBox member functions
 //------------------------------------------------------------------------------
-ae::Sdf::Shape* ae::Sdf::Box::Clone() const
+Sdf* SdfBox::Clone() const
 {
-  ae::Sdf::Box* box = ae::New< ae::Sdf::Box >( AE_ALLOC_TAG_TERRAIN );
+  SdfBox* box = ae::New< SdfBox >( AE_ALLOC_TAG_TERRAIN );
   *box = *this;
   return box;
 }
 
-aeHash ae::Sdf::Box::Hash( aeHash hash ) const
+aeHash SdfBox::Hash( aeHash hash ) const
 {
   hash = GetBaseHash( hash );
   hash = hash.HashBasicType( cornerRadius );
   return hash;
 }
 
-float ae::Sdf::Box::GetValue( aeFloat3 p, int ) const
+float SdfBox::GetValue( aeFloat3 p, int ) const
 {
   aeFloat3 q = aeMath::Abs( p ) - ( GetHalfSize() - aeFloat3( cornerRadius ) );
   return ( aeMath::Max( q, aeFloat3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
 }
 
 //------------------------------------------------------------------------------
-// Cylinder member functions
+// SdfCylinder member functions
 //------------------------------------------------------------------------------
-ae::Sdf::Shape* ae::Sdf::Cylinder::Clone() const
+Sdf* SdfCylinder::Clone() const
 {
-  ae::Sdf::Cylinder* cylinder = ae::New< ae::Sdf::Cylinder >( AE_ALLOC_TAG_TERRAIN );
+  SdfCylinder* cylinder = ae::New< SdfCylinder >( AE_ALLOC_TAG_TERRAIN );
   *cylinder = *this;
   return cylinder;
 }
 
-aeHash ae::Sdf::Cylinder::Hash( aeHash hash ) const
+aeHash SdfCylinder::Hash( aeHash hash ) const
 {
   hash = GetBaseHash( hash );
   hash = hash.HashBasicType( top );
@@ -233,7 +235,7 @@ aeHash ae::Sdf::Cylinder::Hash( aeHash hash ) const
   return hash;
 }
 
-float ae::Sdf::Cylinder::GetValue( aeFloat3 p, int ) const
+float SdfCylinder::GetValue( aeFloat3 p, int ) const
 {
   aeFloat3 halfSize = GetHalfSize();
 	
@@ -263,21 +265,21 @@ float ae::Sdf::Cylinder::GetValue( aeFloat3 p, int ) const
 }
 
 //------------------------------------------------------------------------------
-// Heightmap member functions
+// SdfHeightmap member functions
 //------------------------------------------------------------------------------
-ae::Sdf::Shape* ae::Sdf::Heightmap::Clone() const
+Sdf* SdfHeightmap::Clone() const
 {
-  ae::Sdf::Heightmap* heightmap = ae::New< ae::Sdf::Heightmap >( AE_ALLOC_TAG_TERRAIN );
+  SdfHeightmap* heightmap = ae::New< ae::SdfHeightmap >( AE_ALLOC_TAG_TERRAIN );
   *heightmap = *this;
   return heightmap;
 }
 
-aeHash ae::Sdf::Heightmap::Hash( aeHash hash ) const
+aeHash SdfHeightmap::Hash( aeHash hash ) const
 {
   return GetBaseHash( hash );
 }
 
-float ae::Sdf::Heightmap::GetValue( aeFloat3 p, int ) const
+float SdfHeightmap::GetValue( aeFloat3 p, int ) const
 {
   AE_ASSERT_MSG( m_heightMap, "Heightmap image not set" );
 
@@ -295,9 +297,9 @@ float ae::Sdf::Heightmap::GetValue( aeFloat3 p, int ) const
 }
 
 //------------------------------------------------------------------------------
-// aeTerrainJob member functions
+// TerrainJob member functions
 //------------------------------------------------------------------------------
-float aeTerrainJob::GetValue( aeFloat3 pos ) const
+float TerrainJob::GetValue( aeFloat3 pos ) const
 {
   if ( !m_shapes.Length() )
   {
@@ -308,8 +310,8 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
   float f = m_shapes[ 0 ]->GetValue( pos ) - m_p.smoothingAmount;
   for ( uint32_t i = 1; i < m_shapes.Length(); i++ )
   {
-    ae::Sdf::Shape* shape = m_shapes[ i ];
-    if ( shape->type == ae::Sdf::Shape::Type::Material )
+    Sdf* shape = m_shapes[ i ];
+    if ( shape->type == Sdf::Type::Material )
     {
       continue;
     }
@@ -319,38 +321,38 @@ float aeTerrainJob::GetValue( aeFloat3 pos ) const
     AE_ASSERT_MSG( value == value, "SDF function returned NAN" );
 #endif
 
-    if ( shape->type == ae::Sdf::Shape::Type::Union )
+    if ( shape->type == Sdf::Type::Union )
     {
-      f = aeUnion( value, f );
+      f = SdfUnion( value, f );
     }
-    else if ( shape->type == ae::Sdf::Shape::Type::Subtraction )
+    else if ( shape->type == Sdf::Type::Subtraction )
     {
-      f = aeSubtraction( value, f );
+      f = SdfSubtraction( value, f );
     }
-    else if ( shape->type == ae::Sdf::Shape::Type::SmoothUnion )
+    else if ( shape->type == Sdf::Type::SmoothUnion )
     {
-      f = aeSmoothUnion( value, f, shape->smoothing );
+      f = SdfSmoothUnion( value, f, shape->smoothing );
     }
-    else if ( shape->type == ae::Sdf::Shape::Type::SmoothSubtraction )
+    else if ( shape->type == Sdf::Type::SmoothSubtraction )
     {
-      f = aeSmoothSubtraction( value, f, shape->smoothing );
+      f = SdfSmoothSubtraction( value, f, shape->smoothing );
     }
   }
 
 #if _AE_DEBUG_
   AE_ASSERT_MSG( f == f, "Terrain SDF function returned NAN" );
 #endif
-  return f - m_p.smoothingAmount; // @NOTE: This value isn't used directly, it populates aeTerrainSDFCache
+  return f - m_p.smoothingAmount; // @NOTE: This value isn't used directly, it populates TerrainSdfCache
 }
 
 //------------------------------------------------------------------------------
-// aeTerrainSDF member functions
+// TerrainSdf member functions
 //------------------------------------------------------------------------------
-aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
+TerrainSdf::TerrainSdf( Terrain* terrain ) :
   m_terrain( terrain )
 {
   aeRandom r( -1.0f, 1.0f );
-  ae::Scratch< aeStaticImage3D< float, aeTerrainNoiseSize, aeTerrainNoiseSize, aeTerrainNoiseSize > > tempScratch( 1 );
+  ae::Scratch< aeStaticImage3D< float, TerrainNoiseSize, TerrainNoiseSize, TerrainNoiseSize > > tempScratch( 1 );
   auto& temp = *tempScratch.Data();
   for ( uint32_t z = 0; z < temp.GetDepth(); z++ )
   for ( uint32_t y = 0; y < temp.GetHeight(); y++ )
@@ -363,11 +365,11 @@ aeTerrainSDF::aeTerrainSDF( aeTerrain* terrain ) :
   for ( uint32_t y = 0; y < noise.GetHeight(); y++ )
   for ( uint32_t x = 0; x < noise.GetWidth(); x++ )
   {
-    noise.Set( aeInt3( x, y, z ), temp.Get< aeMath::CosineInterpolate >( aeFloat3( x, y, z ) / (float)aeTerrainNoiseScale ) );
+    noise.Set( aeInt3( x, y, z ), temp.Get< aeMath::CosineInterpolate >( aeFloat3( x, y, z ) / (float)TerrainNoiseScale ) );
   }
 }
 
-aeFloat3 aeTerrainJob::GetDerivative( aeFloat3 p ) const
+aeFloat3 TerrainJob::GetDerivative( aeFloat3 p ) const
 {
   // https://iquilezles.org/www/articles/normalsSDF/normalsSDF.htm
   const float h = 0.0001f;
@@ -383,13 +385,13 @@ aeFloat3 aeTerrainJob::GetDerivative( aeFloat3 p ) const
   return n.SafeNormalizeCopy();
 }
 
-aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos, aeFloat3 normal ) const
+TerrainMaterialId TerrainJob::GetMaterial( aeFloat3 pos, aeFloat3 normal ) const
 {
   // Use the normal to nudge the material sample position to avoid aliasing
-  aeTerrainMaterialId materialId = 0;
+  TerrainMaterialId materialId = 0;
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
-    ae::Sdf::Shape* shape = m_shapes[ i ];
+    Sdf* shape = m_shapes[ i ];
     // Nudge the sample position out of the surface for paint shapes
     if ( !shape->IsSolid() && shape->GetValue( pos + normal * 0.1f  ) - m_p.smoothingAmount <= 0.0f )
     {
@@ -404,7 +406,7 @@ aeTerrainMaterialId aeTerrainJob::GetMaterial( aeFloat3 pos, aeFloat3 normal ) c
   return materialId;
 }
 
-void aeTerrainSDF::DestroySdf( ae::Sdf::Shape* sdf )
+void TerrainSdf::DestroySdf( Sdf* sdf )
 {
   if ( !sdf )
   {
@@ -414,7 +416,7 @@ void aeTerrainSDF::DestroySdf( ae::Sdf::Shape* sdf )
   m_pendingDestroy.Append( sdf );
 }
 
-void aeTerrainSDF::UpdatePending()
+void TerrainSdf::UpdatePending()
 {
   // @NOTE: UpdatePending() is called when no terrain jobs are running,
   // so it's safe to modify the terrain shapes array
@@ -422,7 +424,7 @@ void aeTerrainSDF::UpdatePending()
   // Old
   for ( uint32_t i = 0; i < m_pendingDestroy.Length(); i++ )
   {
-    ae::Sdf::Shape* shape = m_pendingDestroy[ i ];
+    Sdf* shape = m_pendingDestroy[ i ];
     
     int32_t index = m_shapes.Find( shape );
     AE_ASSERT( index >= 0 );
@@ -436,7 +438,7 @@ void aeTerrainSDF::UpdatePending()
   // New
   for ( uint32_t i = 0; i < m_pendingCreated.Length(); i++ )
   {
-    ae::Sdf::Shape* shape = m_pendingCreated[ i ];
+    Sdf* shape = m_pendingCreated[ i ];
     m_shapes.Append( shape );
     m_terrain->m_Dirty( shape->GetAABB() );
 
@@ -446,12 +448,12 @@ void aeTerrainSDF::UpdatePending()
   m_pendingCreated.Clear();
 }
 
-bool aeTerrainSDF::HasPending() const
+bool TerrainSdf::HasPending() const
 {
   return m_pendingCreated.Length() || m_pendingDestroy.Length();
 }
 
-void aeTerrainSDF::RenderDebug( aeDebugRender* debug )
+void TerrainSdf::RenderDebug( aeDebugRender* debug )
 {
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
@@ -471,3 +473,5 @@ void aeTerrainSDF::RenderDebug( aeDebugRender* debug )
     debug->AddAABB( center, halfSize, aeColor::Blue() );
   }
 }
+
+} // AE_NAMESPACE
