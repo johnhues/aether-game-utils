@@ -257,6 +257,12 @@ void ae::Mesh::Load( Params params )
         params.normals = (aeFloat3*)( (uint8_t*)params.normals + params.normalStride );
       }
       
+      if ( params.userData )
+      {
+        memcpy( vert.userData, params.userData, sizeof(*params.userData) );
+        params.userData = (UserData*)( (uint8_t*)params.userData + params.userDataStride );
+      }
+      
       m_aabb.Expand( vert.position.GetXYZ() );
       m_vertices.Append( vert );
     }

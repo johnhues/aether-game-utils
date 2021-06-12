@@ -39,18 +39,31 @@ namespace ae {
 class Mesh
 {
 public:
-  // Initialization
+  typedef uint16_t Index;
+  typedef uint8_t UserData[ 4 ];
+  struct Vertex
+  {
+    aeFloat4 position;
+    aeFloat4 normal;
+    aeFloat2 tex[ 4 ];
+    aeColor color[ 4 ];
+    UserData userData;
+  };
   struct Params
   {
     uint32_t vertexCount = 0;
     const aeFloat3* positions = nullptr;
     const aeFloat3* normals = nullptr;
+    const UserData* userData = nullptr;
     uint32_t positionStride = sizeof( aeFloat3 );
     uint32_t normalStride = sizeof( aeFloat3 );
+    uint32_t userDataStride = sizeof( UserData );
 
     uint32_t indexCount = 0;
     const uint16_t* indices16 = nullptr;
   };
+  
+  // Initialization
   bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
   void Load( Params params );
   void Serialize( aeBinaryStream* stream ); // @NOTE: Serializing ae::Mesh across library versions may not work. Stream will be invaldated on failure.
@@ -58,14 +71,6 @@ public:
   void Clear();
 
   // Geo
-  typedef uint16_t Index;
-  struct Vertex
-  {
-    aeFloat4 position;
-    aeFloat4 normal;
-    aeFloat2 tex[ 4 ];
-    aeColor color[ 4 ];
-  };
   const Vertex& GetVertex( uint32_t idx ) const { return m_vertices[ idx ]; }
   Index GetIndex( uint32_t idx ) const { return m_indices[ idx ]; }
   const Vertex* GetVertices() const;
