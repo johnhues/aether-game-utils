@@ -2878,6 +2878,14 @@ aeHash& aeHash::HashData( const void* _data, uint32_t length )
   return *this;
 }
 
+aeHash& aeHash::HashFloat( float f )
+{
+  uint32_t ui;
+  memcpy( &ui, &f, sizeof( float ) );
+  ui &= 0xfffff000;
+  return HashBasicType( ui );
+}
+
 void aeHash::Set( uint32_t hash )
 {
   m_hash = hash;

@@ -30,8 +30,9 @@
 //------------------------------------------------------------------------------
 // aeVfs functions
 //------------------------------------------------------------------------------
-bool aeVfs_AppleGetCacheDir( aeStr256* outDir )
+bool aeVfs_GetCacheDir( aeStr256* outDir )
 {
+  // Something like /User/someone/Library/Caches
   NSArray* paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
   NSString* cachesPath = [paths lastObject];
   if ( [cachesPath length] )

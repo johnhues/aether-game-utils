@@ -39,10 +39,46 @@
 // Objective-C helper function declarations for aeVfs.mm
 //------------------------------------------------------------------------------
 #if _AE_APPLE_
-  bool aeVfs_AppleGetCacheDir( aeStr256* outDir );
   bool aeVfs_AppleCreateFolder( const char* dir );
   void aeVfs_AppleOpenFolder( const char* filePath );
   aeStr256 aeVfs_AppleGetAbsolutePath( const char* filePath );
+#endif
+
+//------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+bool aeVfs_GetCacheDir( aeStr256* outDir );
+
+#if _AE_LINUX_
+bool aeVfs_GetCacheDir( aeStr256* outDir )
+{
+  // Something like /users/someone/.cache
+  AE_WARN( "aeVfs::Cache directory not implemented yet on this platform" );
+  return false;
+}
+#elif _AE_WINDOWS_
+bool aeVfs_GetCacheDir( aeStr256* outDir )
+{
+  // Something like C:\Users\someone\AppData\Local\Company\Game
+  bool result = false;
+  PWSTR wpath = nullptr;
+  // SHGetKnownFolderPath does not include trailing backslash
+  HRESULT pathResult = SHGetKnownFolderPath( FOLDERID_LocalAppData, 0, nullptr, &wpath );
+  if ( pathResult == S_OK )
+  {
+    char path[ outDir->MaxLength() + 1 ];
+    int32_t pathLen = wcstombs( path, wpath, outDir->MaxLength() );
+    if ( pathLen > 0 )
+    {
+      path[ pathLen ] = 0;
+      
+      *outDir = path;
+      result = true;
+    }
+  }
+  CoTaskMemFree( wpath ); // Always free even on failure
+  return result;
+}
 #endif
 
 //------------------------------------------------------------------------------
@@ -69,6 +105,8 @@ void aeVfs::Initialize( const char* dataDir, const char* organizationName, const
   m_SetDataDir( dataDir ? dataDir : "" );
   m_SetUserDir( organizationName, applicationName );
   m_SetCacheDir( organizationName, applicationName );
+  m_SetUserSharedDir( organizationName );
+  m_SetCacheSharedDir( organizationName );
 }
 
 void aeVfs::m_SetDataDir( const char* dataDir )
@@ -107,39 +145,11 @@ void aeVfs::m_SetCacheDir( const char* organizationName, const char* application
 {
   const aeStr16 pathChar( 1, AE_PATH_SEPARATOR );
   m_cacheDir = "";
-
-#if _AE_APPLE_
-  // Something like /User/someone/Library/Caches
-  if ( aeVfs_AppleGetCacheDir( &m_cacheDir ) )
-  {
-    m_cacheDir += pathChar;
-  }
-#elif _AE_LINUX_
-  // Something like /users/someone/.cache
-  AE_WARN( "aeVfs::Cache directory not implemented yet on this platform" );
-#elif _AE_WINDOWS_
-  // Something like C:\Users\someone\AppData\Local\Company\Game
-  {
-    PWSTR wpath = nullptr;
-    HRESULT pathResult = SHGetKnownFolderPath( FOLDERID_LocalAppData, 0, nullptr, &wpath );
-    if ( pathResult == S_OK )
-    {
-      char path[ m_cacheDir.MaxLength() + 1 ];
-      int32_t pathLen = wcstombs( path, wpath, m_cacheDir.MaxLength() );
-      if ( pathLen > 0 )
-      {
-        path[ pathLen ] = 0;
-        
-        m_cacheDir = path;
-        m_cacheDir += pathChar; // SHGetKnownFolderPath does not include trailing backslash
-      }
-    }
-    CoTaskMemFree( wpath ); // Always free even on failure
-  }
-#endif
   
-  if ( m_cacheDir.Length() )
+  if ( aeVfs_GetCacheDir( &m_cacheDir ) )
   {
+    AE_ASSERT( m_cacheDir.Length() );
+    m_cacheDir += pathChar;
     m_cacheDir += organizationName;
     m_cacheDir += pathChar;
     m_cacheDir += applicationName;
@@ -147,6 +157,47 @@ void aeVfs::m_SetCacheDir( const char* organizationName, const char* application
     if ( !CreateFolder( m_cacheDir.c_str() ) )
     {
       m_cacheDir = "";
+    }
+  }
+}
+
+void aeVfs::m_SetUserSharedDir( const char* organizationName )
+{
+  m_userSharedDir = "";
+
+  char* sdlUserDir = SDL_GetPrefPath( organizationName, "shared" );
+  if ( !sdlUserDir )
+  {
+    return;
+  }
+
+  m_userSharedDir = sdlUserDir;
+  AE_ASSERT( m_userSharedDir.Length() );
+
+  if ( m_userSharedDir[ m_userSharedDir.Length() - 1 ] != AE_PATH_SEPARATOR )
+  {
+    m_userSharedDir.Append( aeStr16( 1, AE_PATH_SEPARATOR ) );
+  }
+
+  SDL_free( sdlUserDir );
+}
+
+void aeVfs::m_SetCacheSharedDir( const char* organizationName )
+{
+  const aeStr16 pathChar( 1, AE_PATH_SEPARATOR );
+  m_cacheSharedDir = "";
+  
+  if ( aeVfs_GetCacheDir( &m_cacheSharedDir ) )
+  {
+    AE_ASSERT( m_cacheSharedDir.Length() );
+    m_cacheSharedDir += pathChar;
+    m_cacheSharedDir += organizationName;
+    m_cacheSharedDir += pathChar;
+    m_cacheSharedDir += "shared";
+    m_cacheSharedDir += pathChar;
+    if ( !CreateFolder( m_cacheSharedDir.c_str() ) )
+    {
+      m_cacheSharedDir = "";
     }
   }
 }
@@ -231,6 +282,26 @@ bool aeVfs::GetRootDir( aeVfsRoot root, aeStr256* outDir ) const
         if ( outDir )
         {
           *outDir = m_cacheDir;
+        }
+        return true;
+      }
+      break;
+    case aeVfsRoot::UserShared:
+      if ( m_userSharedDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_userSharedDir;
+        }
+        return true;
+      }
+      break;
+    case aeVfsRoot::CacheShared:
+      if ( m_cacheSharedDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_cacheSharedDir;
         }
         return true;
       }

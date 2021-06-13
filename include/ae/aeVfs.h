@@ -35,8 +35,10 @@
 enum class aeVfsRoot
 {
   Data, // A given existing directory
-  User, // A directory for storing perferences and savedata
-  Cache // A directory for storing expensive to generate data (computed, downloaded, etc)
+  User, // A directory for storing preferences and savedata
+  Cache, // A directory for storing expensive to generate data (computed, downloaded, etc)
+  UserShared, // Same as above but shared accross the 'organization name'
+  CacheShared // Same as above but shared accross the 'organization name'
 };
 
 #if _AE_WINDOWS_
@@ -84,10 +86,14 @@ private:
   void m_SetDataDir( const char* dataDir );
   void m_SetUserDir( const char* organizationName, const char* applicationName );
   void m_SetCacheDir( const char* organizationName, const char* applicationName );
+  void m_SetUserSharedDir( const char* organizationName );
+  void m_SetCacheSharedDir( const char* organizationName );
 
   aeStr256 m_dataDir;
   aeStr256 m_userDir;
   aeStr256 m_cacheDir;
+  aeStr256 m_userSharedDir;
+  aeStr256 m_cacheSharedDir;
 };
 
 #endif

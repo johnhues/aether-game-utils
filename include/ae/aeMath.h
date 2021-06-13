@@ -947,6 +947,8 @@ public:
   aeHash& HashString( const char* str );
   aeHash& HashData( const void* data, uint32_t length );
   template < typename T > aeHash& HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
+  aeHash& HashFloat( float f );
+  template < uint32_t N > aeHash& HashFloatArray( const float (&f)[ N ] );
 
   void Set( uint32_t hash );
   uint32_t Get() const;
@@ -954,5 +956,15 @@ public:
 private:
   uint32_t m_hash = 0x811c9dc5;
 };
+
+template < uint32_t N >
+aeHash& aeHash::HashFloatArray( const float (&f)[ N ] )
+{
+  for ( uint32_t i = 0; i < N; i++ )
+  {
+    HashFloat( f[ i ] );
+  }
+  return *this;
+}
 
 #endif

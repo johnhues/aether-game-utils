@@ -103,6 +103,10 @@ public:
 
   const T* GetFirst() const
   {
+    if ( !m_length )
+    {
+      return nullptr;
+    }
     const Entry* entry = &m_pool[ 0 ];
     const T* p = (const T*)entry->object;
     return entry->allocated ? p : GetNext( p );
