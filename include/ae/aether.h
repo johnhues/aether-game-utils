@@ -2841,7 +2841,7 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 }
 
 //------------------------------------------------------------------------------
-// Array functions
+// ae::Array functions
 //------------------------------------------------------------------------------
 template < typename T, uint32_t N >
 inline std::ostream& operator<<( std::ostream& os, const Array< T, N >& array )

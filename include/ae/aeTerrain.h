@@ -537,7 +537,7 @@ private:
   
   std::map< uint32_t, struct TerrainChunk* > m_chunks;
   std::map< uint32_t, VertexCount > m_vertexCounts; // Kept even when chunks are freed so they are not regenerated again if they are empty
-  aeObjectPool< TerrainChunk, kMaxLoadedChunks > m_chunkPool;
+  ae::ObjectPool< TerrainChunk, kMaxLoadedChunks > m_chunkPool;
 
   // Keep these across frames instead of allocating temporary space for each generated chunk
   struct ChunkSort
