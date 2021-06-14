@@ -48,6 +48,7 @@ public:
   const T* GetNext( const T* p ) const;
   T* GetFirst();
   T* GetNext( T* p );
+  bool Has( const T* p ) const;
 
   bool HasFree() const;
   uint32_t Length() const;
@@ -253,6 +254,16 @@ T* ObjectPool< T, N >::GetNext( T* p )
 }
 
 template < typename T, uint32_t N >
+bool ObjectPool< T, N >::Has( const T* p ) const
+{
+  if ( !p )
+  {
+    return false;
+  }
+  return m_GetEntry( p );
+}
+
+template < typename T, uint32_t N >
 bool ObjectPool< T, N >::HasFree() const
 {
   return m_open != nullptr;
@@ -382,11 +393,19 @@ const T* PagedObjectPool< T, N >::GetNext( const T* p ) const
   const Page* page = m_pages.GetFirst();
   while ( page )
   {
+    AE_ASSERT( page->pool.Length() );
     if ( const T* obj = page->pool.GetNext( p ) )
     {
       return obj;
     }
+    
+    bool inPrev = page->pool.Has( p );
     page = page->node.GetNext();
+    if ( inPrev && page )
+    {
+      // Given object is last element of previous page
+      return page->pool.GetFirst();
+    }
   }
   
   return nullptr;
