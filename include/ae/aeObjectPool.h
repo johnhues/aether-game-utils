@@ -300,13 +300,7 @@ PagedObjectPool< T, N >::PagedObjectPool( Tag tag ) :
 template < typename T, uint32_t N >
 PagedObjectPool< T, N >::~PagedObjectPool()
 {
-  Page* page = m_pages.GetLast();
-  while ( page )
-  {
-    Page* prev = page->node.GetPrev();
-    ae::Delete( page );
-    page = prev;
-  }
+  FreeAll();
 }
 
 template < typename T, uint32_t N >
@@ -349,6 +343,19 @@ bool PagedObjectPool< T, N >::Free( T* p )
     page = page->node.GetNext();
   }
   return false;
+}
+
+template < typename T, uint32_t N >
+void PagedObjectPool< T, N >::FreeAll()
+{
+  Page* page = m_pages.GetLast();
+  while ( page )
+  {
+    Page* prev = page->node.GetPrev();
+    ae::Delete( page );
+    page = prev;
+  }
+  m_length = 0;
 }
 
 template < typename T, uint32_t N >
