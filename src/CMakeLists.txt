@@ -71,7 +71,6 @@ target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		${AE_HEADER_FILES}
 		aether.cpp
-		aether.mm
 		aeAudio.cpp
 		aeBinaryStream.cpp
 		aeClock.cpp
@@ -107,6 +106,7 @@ target_sources(${AE_LIBRARY_NAME}
 if(APPLE)
 	target_sources(${AE_LIBRARY_NAME}
 		PRIVATE
+			aether.mm
 			aeVfs.mm
 	)
 endif()

@@ -5323,7 +5323,7 @@ namespace AE_NAMESPACE
 bool ReverseZ = false;
 }  // AE_NAMESPACE end
 
-#if !_AE_APPLE_
+#if _AE_WINDOWS_
 // OpenGL function pointers
 typedef char GLchar;
 typedef intptr_t GLsizeiptr;
@@ -7107,7 +7107,7 @@ void GraphicsDevice::Initialize( class Window* window )
   
   AE_CHECK_GL_ERROR();
 
-#if !_AE_APPLE_
+#if _AE_WINDOWS_
   // Shader functions
   LOAD_OPENGL_FN( glCreateProgram );
   LOAD_OPENGL_FN( glAttachShader );
