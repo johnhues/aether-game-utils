@@ -450,10 +450,11 @@ bool aeVfs::CreateFolder( const char* folderPath )
     default:
       return false;
   }
-#endif
+#elif _AE_LINUX_
   // @TODO: Recursive https://stackoverflow.com/questions/2336242/recursive-mkdir-system-call-on-unix
   int result = mkdir( folderPath, 0777 ) == 0;
   return ( result == 0 ) || errno == EEXIST;
+#endif
 }
 
 void aeVfs::ShowFolder( const char* folderPath )
