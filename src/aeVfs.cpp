@@ -34,6 +34,11 @@
   #include <shellapi.h>
   #include <Shlobj_core.h>
 #endif
+#if _AE_LINUX_
+  #include <unistd.h>
+  #include <pwd.h>
+  #include <sys/stat.h>
+#endif
 
 //------------------------------------------------------------------------------
 // Objective-C helper function declarations for aeVfs.mm
@@ -53,7 +58,28 @@ bool aeVfs_GetCacheDir( aeStr256* outDir );
 bool aeVfs_GetCacheDir( aeStr256* outDir )
 {
   // Something like /users/someone/.cache
-  AE_WARN( "aeVfs::Cache directory not implemented yet on this platform" );
+  const char* cacheFolderName = ".cache";
+  const char* homeDir = getenv( "HOME" );
+  if ( homeDir && homeDir[ 0 ] )
+  {
+    *outDir = homeDir;
+    aeVfs::AppendToPath( outDir, cacheFolderName );
+    return true;
+  }
+  else
+  {
+    const passwd* pw = getpwuid( getuid() );
+    if ( pw )
+    {
+      const char* homeDir = pw->pw_dir;
+      if ( homeDir && homeDir[ 0 ] )
+      {
+        *outDir = homeDir;
+        aeVfs::AppendToPath( outDir, cacheFolderName );
+        return true;
+      }
+    }
+  }
   return false;
 }
 #elif _AE_WINDOWS_
@@ -425,8 +451,9 @@ bool aeVfs::CreateFolder( const char* folderPath )
       return false;
   }
 #endif
-  // @TODO: Linux
-  return false;
+  // @TODO: Recursive https://stackoverflow.com/questions/2336242/recursive-mkdir-system-call-on-unix
+  int result = mkdir( folderPath, 0777 ) == 0;
+  return ( result == 0 ) || errno == EEXIST;
 }
 
 void aeVfs::ShowFolder( const char* folderPath )
@@ -503,9 +530,13 @@ void aeVfs::AppendToPath( aeStr256* path, const char* str )
   // @TODO: Handle paths that already have a file name and extension
   
   // @TODO: Handle one or more path separators at end of path
-  if ( (*path)[ path->Length() - 1 ] != AE_PATH_SEPARATOR )
+  if ( uint32_t pathLen = path->Length() )
   {
-    path->Append( aeStr16( 1, AE_PATH_SEPARATOR ) );
+    char lastChar = path->operator[]( pathLen - 1 );
+    if ( lastChar != '/' && lastChar != '\\' )
+    {
+      path->Append( aeStr16( 1, AE_PATH_SEPARATOR ) );
+    }
   }
   
   // @TODO: Handle one or more path separators at front of str
