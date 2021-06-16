@@ -427,7 +427,7 @@ void TerrainJob::Do()
     m_sdfCache.Generate( m_chunk->m_pos, this );
     m_chunk->Generate( &m_sdfCache, this, edgeInfo, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
     
-    ae::Mesh::Params meshParams;
+    ae::Mesh::LoadParams meshParams;
     // Vertices
     meshParams.vertexCount = (uint32_t)m_vertexCount;
     meshParams.positions = &m_vertices[ 0 ].position;
@@ -1109,7 +1109,13 @@ void TerrainChunk::Serialize( aeBinaryStream* stream )
     return;
   }
   
-  stream->SerializeObject( m_mesh );
+  ae::Mesh::SerializationParams params;
+  params.position = true;
+  params.normal = true;
+  params.uvSets = 0;
+  params.colorSets = 0;
+  params.userDataCount = 0;
+  m_mesh.Serialize( params, stream );
   
   stream->SerializeRaw( m_t, sizeof(m_t) );
   stream->SerializeRaw( m_l, sizeof(m_l) );

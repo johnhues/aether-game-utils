@@ -87,6 +87,8 @@ public:
   void SerializeArray( ae::Array< uint8_t>& array, uint32_t maxLength = 65535 );
   void SerializeArray( const ae::Array< uint8_t>& array, uint32_t maxLength = 65535 );
 
+  // @NOTE: Be careful when using SerializeRaw() functions, different platforms
+  // will have different struct packing and alignment schemes.
   template< typename T >
   void SerializeRaw( T& v );
   template< typename T >

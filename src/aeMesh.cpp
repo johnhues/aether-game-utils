@@ -26,6 +26,50 @@
 #include "aeMesh.h"
 #include "aeBinaryStream.h"
 
+//------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+void ae::Mesh::Vertex::Serialize( const SerializationParams& params, aeBinaryStream* stream )
+{
+  bool reader = stream->IsReader();
+  if ( params.position )
+  {
+    stream->SerializeFloat( position.x );
+    stream->SerializeFloat( position.y );
+    stream->SerializeFloat( position.z );
+    if ( reader )
+    {
+      position.w = 1.0f;
+    }
+  }
+  if ( params.normal )
+  {
+    stream->SerializeFloat( normal.x );
+    stream->SerializeFloat( normal.y );
+    stream->SerializeFloat( normal.z );
+    if ( reader )
+    {
+      normal.w = 0.0f;
+    }
+  }
+  for ( uint32_t i = 0; i < params.uvSets; i++ )
+  {
+    stream->SerializeFloat( tex[ i ].x );
+    stream->SerializeFloat( tex[ i ].y );
+  }
+  for ( uint32_t i = 0; i < params.colorSets; i++ )
+  {
+    stream->SerializeFloat( color[ i ].r );
+    stream->SerializeFloat( color[ i ].g );
+    stream->SerializeFloat( color[ i ].b );
+    stream->SerializeFloat( color[ i ].a );
+  }
+  for ( uint32_t i = 0; i < params.userDataCount; i++ )
+  {
+    stream->SerializeUint8( userData[ i ] );
+  }
+}
+
 // @TODO: Move to aeMath
 bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeFloat3 c, bool limitRay, bool ccw, bool cw, aeFloat3* pOut, aeFloat3* nOut, float* tOut )
 {
@@ -94,6 +138,9 @@ bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeF
   return true;
 }
 
+//------------------------------------------------------------------------------
+// aeMesh member functions
+//------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
 
 bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization ) { return false; }
@@ -109,9 +156,6 @@ uint32_t aeMesh::GetIndexCount() const { return 0; }
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-//------------------------------------------------------------------------------
-// aeMesh member functions
-//------------------------------------------------------------------------------
 bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization )
 {
   m_vertices.Clear();
@@ -224,7 +268,7 @@ bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* e
   return true;
 }
 
-void ae::Mesh::Load( Params params )
+void ae::Mesh::Load( LoadParams params )
 {
   Clear();
   
@@ -259,8 +303,8 @@ void ae::Mesh::Load( Params params )
       
       if ( params.userData )
       {
-        memcpy( vert.userData, params.userData, sizeof(*params.userData) );
-        params.userData = (UserData*)( (uint8_t*)params.userData + params.userDataStride );
+        memcpy( vert.userData, params.userData, sizeof(Vertex::userData) );
+        params.userData = params.userData + params.userDataStride;
       }
       
       m_aabb.Expand( vert.position.GetXYZ() );
@@ -271,8 +315,8 @@ void ae::Mesh::Load( Params params )
   m_indices.Append( params.indices16, params.indexCount );
 }
 
-const uint32_t kAeMeshVersion = 1;
-void ae::Mesh::Serialize( aeBinaryStream* stream )
+const uint32_t kAeMeshVersion = 2;
+void ae::Mesh::Serialize( const SerializationParams& params, aeBinaryStream* stream )
 {
   if ( stream->IsReader() )
   {
@@ -289,14 +333,16 @@ void ae::Mesh::Serialize( aeBinaryStream* stream )
   
   stream->SerializeRaw( &m_aabb, sizeof(m_aabb) );
   
-  const uint32_t vertexSize = sizeof(*m_vertices.Begin());
   const uint32_t indexSize = sizeof(*m_indices.Begin());
   
   if ( stream->IsWriter() )
   {
-    uint32_t vertexDataLen = m_vertices.Length() * vertexSize;
-    stream->SerializeUint32( vertexDataLen );
-    stream->SerializeRaw( m_vertices.Begin(), vertexDataLen );
+    uint32_t vertexCount = m_vertices.Length();
+    stream->SerializeUint32( vertexCount );
+    for ( uint32_t i = 0; i < vertexCount; i++ )
+    {
+      m_vertices[ i ].Serialize( params, stream );
+    }
     
     uint32_t indexDataLen = m_indices.Length() * indexSize;
     stream->SerializeUint32( indexDataLen );
@@ -306,15 +352,15 @@ void ae::Mesh::Serialize( aeBinaryStream* stream )
   {
     AE_ASSERT( stream->IsReader() );
     
-    uint32_t vertexDataLength = 0;
-    stream->SerializeUint32( vertexDataLength );
-    if ( vertexDataLength % vertexSize != 0 || stream->GetRemaining() < vertexDataLength )
+    uint32_t vertexCount = 0;
+    stream->SerializeUint32( vertexCount );
+    m_vertices.Reserve( vertexCount );
+    for ( uint32_t i = 0; i < vertexCount; i++ )
     {
-      stream->Invalidate();
-      return;
+      Vertex v;
+      v.Serialize( params, stream );
+      m_vertices.Append( v );
     }
-    m_vertices.Append( (const Vertex*)stream->PeekData(), vertexDataLength / vertexSize );
-    stream->Discard( vertexDataLength );
     
     uint32_t indexDataLength = 0;
     stream->SerializeUint32( indexDataLength );

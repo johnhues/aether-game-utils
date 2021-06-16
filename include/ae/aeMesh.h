@@ -40,24 +40,33 @@ class Mesh
 {
 public:
   typedef uint16_t Index;
-  typedef uint8_t UserData[ 4 ];
+  struct SerializationParams
+  {
+    bool position = true;
+    bool normal = true;
+    uint32_t uvSets = 2;
+    uint32_t colorSets = 4;
+    uint32_t userDataCount = 4;
+  };
   struct Vertex
   {
+    void Serialize( const SerializationParams& params, class aeBinaryStream* stream );
+    
     aeFloat4 position;
     aeFloat4 normal;
     aeFloat2 tex[ 4 ];
     aeColor color[ 4 ];
-    UserData userData;
+    uint8_t userData[ 4 ];
   };
-  struct Params
+  struct LoadParams
   {
     uint32_t vertexCount = 0;
     const aeFloat3* positions = nullptr;
     const aeFloat3* normals = nullptr;
-    const UserData* userData = nullptr;
-    uint32_t positionStride = sizeof( aeFloat3 );
-    uint32_t normalStride = sizeof( aeFloat3 );
-    uint32_t userDataStride = sizeof( UserData );
+    const uint8_t* userData = nullptr;
+    uint32_t positionStride = sizeof(Vertex::position);
+    uint32_t normalStride = sizeof(Vertex::normal);
+    uint32_t userDataStride = sizeof(Vertex::userData);
 
     uint32_t indexCount = 0;
     const uint16_t* indices16 = nullptr;
@@ -65,8 +74,8 @@ public:
   
   // Initialization
   bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
-  void Load( Params params );
-  void Serialize( aeBinaryStream* stream ); // @NOTE: Serializing ae::Mesh across library versions may not work. Stream will be invaldated on failure.
+  void Load( LoadParams params );
+  void Serialize( const SerializationParams& params, aeBinaryStream* stream ); // @NOTE: Serializing ae::Mesh across library versions may not work. Stream will be invaldated on failure.
   void Transform( aeFloat4x4 transform ); // Permanently pre-transform loaded verts
   void Clear();
 
