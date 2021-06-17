@@ -95,7 +95,11 @@ GLenum aeVertexDataTypeToGL( aeVertexDataType::Type type )
   }
 }
 
-#define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+#if _AE_DEBUG_
+  #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+#else
+  #define AE_CHECK_GL_ERROR() do {} while ( 0 )
+#endif
 
 void CheckFramebufferComplete( GLuint framebuffer )
 {
@@ -617,6 +621,9 @@ const aeVertexAttribute* aeVertexData::m_GetAttributeByName( const char* name ) 
 //------------------------------------------------------------------------------
 // aeShader member functions
 //------------------------------------------------------------------------------
+uint32_t aeShader::s_activeHash = 0;
+uint32_t aeShader::s_uniformHash = 0;
+
 aeShader::aeShader()
 {
   m_fragmentShader = 0;
@@ -779,68 +786,86 @@ void aeShader::Destroy()
 
 void aeShader::Activate( const aeUniformList& uniforms ) const
 {
-  AE_CHECK_GL_ERROR();
-
-  // Blending
-  if ( m_blending || m_blendingPremul )
+  aeHash hash;
+  hash.HashBasicType( this );
+  hash.HashBasicType( m_blending );
+  hash.HashBasicType( m_blendingPremul );
+  hash.HashBasicType( m_depthWrite );
+  hash.HashBasicType( m_depthTest );
+  hash.HashBasicType( m_culling );
+  hash.HashBasicType( m_wireframe );
+  if ( s_activeHash != hash.Get() )
   {
-    glEnable( GL_BLEND );
-	  
-	// TODO: need other modes like Add, Min, Max - switch to enum then
-	if (m_blendingPremul)
-	{
-	  // Colors coming out of shader already have alpha multiplied in.
-	  glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
-						   GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-	}
-	else
-	{
-	  glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-	}
+    s_activeHash = hash.Get();
+    
+    AE_CHECK_GL_ERROR();
+
+    // Blending
+    if ( m_blending || m_blendingPremul )
+    {
+      glEnable( GL_BLEND );
+      
+    // TODO: need other modes like Add, Min, Max - switch to enum then
+    if (m_blendingPremul)
+    {
+      // Colors coming out of shader already have alpha multiplied in.
+      glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    }
+    else
+    {
+      glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    }
+    }
+    else
+    {
+      glDisable( GL_BLEND );
+    }
+
+    // Depth write
+    glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
+
+    // Depth test
+    if ( m_depthTest )
+    {
+      // This is really context state shadow, and that should be able to override
+      // so reverseZ for example can be set without the shader knowing about that.
+      glDepthFunc( ae::ReverseZ ? GL_GEQUAL : GL_LEQUAL );
+      glEnable( GL_DEPTH_TEST );
+    }
+    else
+    {
+      glDisable( GL_DEPTH_TEST );
+    }
+
+    // Culling
+    if ( m_culling == aeShaderCulling::None )
+    {
+      glDisable( GL_CULL_FACE );
+    }
+    else
+    {
+    // TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
+      glEnable( GL_CULL_FACE );
+      glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
+    }
+
+    // Wireframe
+  #if _AE_IOS_
+    AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+  #else
+    glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+  #endif
+
+    // Now setup the shader
+    glUseProgram( m_program );
   }
-  else
+  
+  if ( s_uniformHash == uniforms.GetHash() )
   {
-    glDisable( GL_BLEND );
+    return;
   }
-
-  // Depth write
-  glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
-
-  // Depth test
-  if ( m_depthTest )
-  {
-    // This is really context state shadow, and that should be able to override
-    // so reverseZ for example can be set without the shader knowing about that.
-    glDepthFunc( ae::ReverseZ ? GL_GEQUAL : GL_LEQUAL );
-    glEnable( GL_DEPTH_TEST );
-  }
-  else
-  {
-    glDisable( GL_DEPTH_TEST );
-  }
-
-  // Culling
-  if ( m_culling == aeShaderCulling::None )
-  {
-    glDisable( GL_CULL_FACE );
-  }
-  else
-  {
-	// TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
-    glEnable( GL_CULL_FACE );
-    glFrontFace( ( m_culling == aeShaderCulling::ClockwiseFront ) ? GL_CW : GL_CCW );
-  }
-
-  // Wireframe
-#if _AE_IOS_
-  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
-#else
-  glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
-#endif
-
-  // Now setup the shader
-  glUseProgram( m_program );
-
+  s_uniformHash = uniforms.GetHash();
+  
   // Set shader uniforms
   bool missingUniforms = false;
   uint32_t textureIndex = 0;

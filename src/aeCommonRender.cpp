@@ -59,6 +59,10 @@ void aeUniformList::Set( const char* name, float value )
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 1;
   uniform.value.data[ 0 ] = value;
+  m_hash = aeHash( m_hash )
+    .HashString( name )
+    .HashFloat( value )
+    .Get();
 }
 
 void aeUniformList::Set( const char* name, aeFloat2 value )
@@ -69,6 +73,10 @@ void aeUniformList::Set( const char* name, aeFloat2 value )
   uniform.size = 2;
   uniform.value.data[ 0 ] = value.x;
   uniform.value.data[ 1 ] = value.y;
+  m_hash = aeHash( m_hash )
+    .HashString( name )
+    .HashFloatArray( value.data )
+    .Get();
 }
 
 void aeUniformList::Set( const char* name, aeFloat3 value )
@@ -80,6 +88,10 @@ void aeUniformList::Set( const char* name, aeFloat3 value )
   uniform.value.data[ 0 ] = value.x;
   uniform.value.data[ 1 ] = value.y;
   uniform.value.data[ 2 ] = value.z;
+  m_hash = aeHash( m_hash )
+    .HashString( name )
+    .HashFloatArray( value.data )
+    .Get();
 }
 
 void aeUniformList::Set( const char* name, aeFloat4 value )
@@ -92,6 +104,10 @@ void aeUniformList::Set( const char* name, aeFloat4 value )
   uniform.value.data[ 1 ] = value.y;
   uniform.value.data[ 2 ] = value.z;
   uniform.value.data[ 3 ] = value.w;
+  m_hash = aeHash( m_hash )
+    .HashString( name )
+    .HashFloatArray( value.data )
+    .Get();
 }
 
 void aeUniformList::Set( const char* name, const aeFloat4x4& value )
@@ -101,6 +117,10 @@ void aeUniformList::Set( const char* name, const aeFloat4x4& value )
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 16;
   uniform.value = value;
+  m_hash = aeHash( m_hash )
+    .HashString( name )
+    .HashFloatArray( value.data )
+    .Get();
 }
 
 void aeUniformList::Set( const char* name, const aeTexture* tex )
@@ -110,6 +130,11 @@ void aeUniformList::Set( const char* name, const aeTexture* tex )
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.sampler = tex->GetTexture();
   uniform.target = tex->GetTarget();
+  m_hash = aeHash( m_hash )
+    .HashString( name )
+    .HashBasicType( tex->GetTexture() )
+    .HashBasicType( tex->GetTarget() )
+    .Get();
 }
 
 const aeUniformList::Value* aeUniformList::Get( const char* name ) const

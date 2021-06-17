@@ -114,9 +114,11 @@ public:
   void Set( const char* name, const class aeTexture* tex );
 
   const Value* Get( const char* name ) const;
+  uint32_t GetHash() const { return m_hash; }
 
 private:
   ae::Map< aeStr32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
+  uint32_t m_hash = aeHash().Get();
 };
 
 //------------------------------------------------------------------------------
@@ -290,6 +292,9 @@ private:
   uint32_t m_attributeCount;
 
   ae::Map< aeStr32, aeShaderUniform > m_uniforms = AE_ALLOC_TAG_RENDER;
+  
+  static uint32_t s_activeHash;
+  static uint32_t s_uniformHash;
 
 public:
   // Internal

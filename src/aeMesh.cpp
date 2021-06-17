@@ -563,7 +563,7 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
     aeFloat3 triNormal = ( ( b - a ) % ( c - a ) ).SafeNormalizeCopy();
     aeFloat3 triCenter( ( a + b + c ) / 3.0f );
     
-    aeFloat3 triToSphereDir = ( result.sphere.center - triCenter ).SafeNormalizeCopy();
+    aeFloat3 triToSphereDir = ( result.sphere.center - triCenter );
     if ( triNormal.Dot( triToSphereDir ) < 0.0f )
     {
       continue;
@@ -572,8 +572,8 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
     aeFloat3 triHitPos;
     if ( result.sphere.IntersectTriangle( a, b, c, &triHitPos ) )
     {
-      triToSphereDir = ( result.sphere.center - triHitPos ).SafeNormalizeCopy();
-      if ( triNormal.Dot( triToSphereDir ) < 0.3f )
+      triToSphereDir = ( result.sphere.center - triHitPos );
+      if ( triNormal.Dot( triToSphereDir ) < 0.0f )
       {
         continue;
       }
