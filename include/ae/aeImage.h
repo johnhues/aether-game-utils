@@ -80,6 +80,7 @@ template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
 class aeStaticImage3D
 {
 public:
+  aeStaticImage3D();
   void Set( aeInt3 p, Pixel v );
   Pixel Get( aeInt3 p ) const;
   template < Pixel (*BlendFn)(Pixel, Pixel, float) >
@@ -96,6 +97,17 @@ private:
 inline int32_t aeModulo( int32_t a, int32_t b )
 {
   return ( a % b + b ) % b;
+}
+
+template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
+inline aeStaticImage3D< Pixel, Width, Height, Depth >::aeStaticImage3D()
+{
+  for ( int32_t z = 0; z < Depth; z++ )
+  for ( int32_t y = 0; y < Height; y++ )
+  for ( int32_t x = 0; x < Width; x++ )
+  {
+    m_data[ z ][ y ][ x ] = Pixel();
+  }
 }
 
 template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
