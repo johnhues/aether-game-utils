@@ -3493,7 +3493,8 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
   #include <unistd.h>
-  #import <Cocoa/Cocoa.h>
+  @import Cocoa;
+  @import OpenGL;
 #else
   #include <unistd.h>
 #endif
