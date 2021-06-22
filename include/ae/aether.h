@@ -3654,20 +3654,20 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 Matrix4 Matrix4::Identity()
 {
   Matrix4 r;
-  r.d[ 0 ] = 1; r.d[ 1 ] = 0; r.d[ 2 ] = 0; r.d[ 3 ] = 0;
-  r.d[ 4 ] = 0; r.d[ 5 ] = 1; r.d[ 6 ] = 0; r.d[ 7 ] = 0;
-  r.d[ 8 ] = 0; r.d[ 9 ] = 0; r.d[ 10 ] = 1; r.d[ 11 ] = 0;
-  r.d[ 12 ] = 0; r.d[ 13 ] = 0; r.d[ 14 ] = 0; r.d[ 15 ] = 1;
+  r.d[ 0 ] = 1; r.d[ 4 ] = 0; r.d[ 8 ] = 0;  r.d[ 12 ] = 0;
+  r.d[ 1 ] = 0; r.d[ 5 ] = 1; r.d[ 9 ] = 0;  r.d[ 13 ] = 0;
+  r.d[ 2 ] = 0; r.d[ 6 ] = 0; r.d[ 10 ] = 1; r.d[ 14 ] = 0;
+  r.d[ 3 ] = 0; r.d[ 7 ] = 0; r.d[ 11 ] = 0; r.d[ 15 ] = 1;
   return r;
 }
 
 Matrix4 Matrix4::Translation( const Vec3& t )
 {
   Matrix4 r;
-  r.d[ 0 ] = 1.0f; r.d[ 1 ] = 0.0f;  r.d[ 2 ] = 0.0f;  r.d[ 3 ] = t.x;
-  r.d[ 4 ] = 0.0f; r.d[ 5 ] = 1.0f;  r.d[ 6 ] = 0.0f;  r.d[ 7 ] = t.y;
-  r.d[ 8 ] = 0.0f; r.d[ 9 ] = 0.0f;  r.d[ 10 ] = 1.0f; r.d[ 11 ] = t.z;
-  r.d[ 12 ] = 0.0f; r.d[ 13 ] = 0.0f; r.d[ 14 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = t.x;
+  r.d[ 1 ] = 0.0f; r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;  r.d[ 13 ] = t.y;
+  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = 1.0f; r.d[ 14 ] = t.z;
+  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
   return r;
 }
 
@@ -3710,30 +3710,30 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 Matrix4 Matrix4::RotationX( float angle )
 {
   Matrix4 r;
-  r.d[0] = 1.0f;  r.d[1] = 0.0f;          r.d[2] = 0.0f;           r.d[3] = 0.0f;
-  r.d[4] = 0.0f;  r.d[5] = cosf( angle ); r.d[6] = -sinf( angle ); r.d[7] = 0.0f;
-  r.d[8] = 0.0f;  r.d[9] = sinf( angle ); r.d[10] = cosf( angle ); r.d[11] = 0.0f;
-  r.d[12] = 0.0f; r.d[13] = 0.0f;         r.d[14] = 0.0f;          r.d[15] = 1.0f;
+  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f;          r.d[ 8 ] = 0.0f;           r.d[ 12 ] = 0.0f;
+  r.d[ 1 ] = 0.0f; r.d[ 5 ] = cosf( angle ); r.d[ 9 ] = -sinf( angle ); r.d[ 13 ] = 0.0f;
+  r.d[ 2 ] = 0.0f; r.d[ 6 ] = sinf( angle ); r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
+  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f;          r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationY( float angle )
 {
   Matrix4 r;
-  r.d[0] = cosf( angle );  r.d[1] = 0.0f;  r.d[2] = sinf( angle );  r.d[3] = 0.0f;
-  r.d[4] = 0.0f;           r.d[5] = 1.0f;  r.d[6] = 0.0f;           r.d[7] = 0.0f;
-  r.d[8] = -sinf( angle ); r.d[9] = 0.0f;  r.d[10] = cosf( angle ); r.d[11] = 0.0f;
-  r.d[12] = 0.0f;          r.d[13] = 0.0f; r.d[14] = 0.0f;          r.d[15] = 1.0f;
+  r.d[ 0 ] = cosf( angle );  r.d[ 4 ] = 0.0f; r.d[ 8 ] = sinf( angle );  r.d[ 12 ] = 0.0f;
+  r.d[ 1 ] = 0.0f;           r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;           r.d[ 13 ] = 0.0f;
+  r.d[ 2 ] = -sinf( angle ); r.d[ 6 ] = 0.0f; r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
+  r.d[ 3 ] = 0.0f;           r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationZ( float angle )
 {
   Matrix4 r;
-  r.d[0] = cosf( angle );  r.d[1] = -sinf( angle ); r.d[2] = 0.0f;  r.d[3] = 0.0f;
-  r.d[4] = sinf( angle );  r.d[5] = cosf( angle );  r.d[6] = 0.0f;  r.d[7] = 0.0f;
-  r.d[8] = 0.0f;           r.d[9] = 0.0f;           r.d[10] = 1.0f; r.d[11] = 0.0f;
-  r.d[12] = 0.0f;          r.d[13] = 0.0f;          r.d[14] = 0.0f; r.d[15] = 1.0f;
+  r.d[ 0 ] = cosf( angle ); r.d[ 4 ] = -sinf( angle ); r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
+  r.d[ 1 ] = sinf( angle ); r.d[ 5 ] = cosf( angle );  r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
+  r.d[ 2 ] = 0.0f;          r.d[ 6 ] = 0.0f;           r.d[ 10 ] = 1.0f; r.d[ 14 ] = 0.0f;
+  r.d[ 3 ] = 0.0f;          r.d[ 7 ] = 0.0f;           r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
   return r;
 }
 
@@ -3745,10 +3745,10 @@ Matrix4 Matrix4::Scaling( const Vec3& s )
 Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
 {
   Matrix4 r;
-  r.d[0] = sx;    r.d[1] = 0.0f;  r.d[2] = 0.0f;  r.d[3] = 0.0f;
-  r.d[4] = 0.0f;  r.d[5] = sy;    r.d[6] = 0.0f;  r.d[7] = 0.0f;
-  r.d[8] = 0.0f;  r.d[9] = 0.0f;  r.d[10] = sz;   r.d[11] = 0.0f;
-  r.d[12] = 0.0f; r.d[13] = 0.0f; r.d[14] = 0.0f; r.d[15] = 1.0f;
+  r.d[ 0 ] = sx;   r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
+  r.d[ 1 ] = 0.0f; r.d[ 5 ] = sy;   r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
+  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = sz;   r.d[ 14 ] = 0.0f;
+  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
   return r;
 }
 
@@ -3777,10 +3777,6 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
   return result;
 }
 
-// fix the projection matrix, when false fov scales up/down with nearPlane
-// if this breaks stuff, then can set to false
-bool gFixProjection = true;
-
 Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane )
 {
   // a  0  0  0
@@ -3791,14 +3787,10 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
   // this is assuming a symmetric frustum, in this case nearPlane cancels out
   
   float halfAngleTangent = tanf( fov * 0.5f);
-  float r = aspectRatio * halfAngleTangent; // scaled by view aspect ratio
-  float t = halfAngleTangent; // tan of half angle fit vertically
-	  
-  if ( gFixProjection )
-  {
-	  r *= nearPlane;
-	  t *= nearPlane;
-  }
+  // Multiply by near plane so fov is consistent regardless of near plane distance
+  float r = aspectRatio * halfAngleTangent * nearPlane; // scaled by view aspect ratio
+  float t = halfAngleTangent * nearPlane; // tan of half angle fit vertically
+
   float a = nearPlane / r;
   float b = nearPlane / t;
  	
@@ -3820,18 +3812,18 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
   result.d[ 0 ] = a;
   result.d[ 5 ] = b;
   result.d[ 10 ] = A;
-  result.d[ 11 ] = B;
-  result.d[ 14 ] = -1;
+  result.d[ 14 ] = B;
+  result.d[ 11 ] = -1;
   return result;
 }
 
 Vec4 Matrix4::operator*(const Vec4& v) const
 {
   return Vec4(
-    v.x*d[0]  + v.y*d[1]  + v.z*d[2]  + v.w*d[3],
-    v.x*d[4]  + v.y*d[5]  + v.z*d[6]  + v.w*d[7],
-    v.x*d[8]  + v.y*d[9]  + v.z*d[10] + v.w*d[11],
-    v.x*d[12] + v.y*d[13] + v.z*d[14] + v.w*d[15]);
+    v.x*d[0]  + v.y*d[4]  + v.z*d[8]  + v.w*d[12],
+    v.x*d[1]  + v.y*d[5]  + v.z*d[9]  + v.w*d[13],
+    v.x*d[2]  + v.y*d[6]  + v.z*d[10] + v.w*d[14],
+    v.x*d[3] + v.y*d[7] + v.z*d[11] + v.w*d[15]);
 }
 
 Matrix4 Matrix4::operator*(const Matrix4& m) const
@@ -4027,19 +4019,14 @@ void Matrix4::SetRotation( const Quaternion& q2 )
 {
   Quaternion q = q2.GetInverse();
   d[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-  d[1] = 2*q.i*q.j + 2*q.k*q.r;
-  d[2] = 2*q.i*q.k - 2*q.j*q.r;
-  d[4] = 2*q.i*q.j - 2*q.k*q.r;
+  d[4] = 2*q.i*q.j + 2*q.k*q.r;
+  d[8] = 2*q.i*q.k - 2*q.j*q.r;
+  d[1] = 2*q.i*q.j - 2*q.k*q.r;
   d[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-  d[6] = 2*q.j*q.k + 2*q.i*q.r;
-  d[8] = 2*q.i*q.k + 2*q.j*q.r;
-  d[9] = 2*q.j*q.k - 2*q.i*q.r;
+  d[9] = 2*q.j*q.k + 2*q.i*q.r;
+  d[2] = 2*q.i*q.k + 2*q.j*q.r;
+  d[6] = 2*q.j*q.k - 2*q.i*q.r;
   d[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
-}
-
-Vec3 Matrix4::GetAxis( uint32_t col ) const
-{
-  return Vec3(d[col], d[col+4], d[col+8]);
 }
 
 Quaternion Matrix4::GetRotation() const
@@ -4050,13 +4037,13 @@ Quaternion Matrix4::GetRotation() const
   t.SetScale( Vec3( 1.0f ) );
 
   #define m00 t.d[ 0 ]
-  #define m01 t.d[ 1 ]
-  #define m02 t.d[ 2 ]
-  #define m10 t.d[ 4 ]
+  #define m01 t.d[ 4 ]
+  #define m02 t.d[ 8 ]
+  #define m10 t.d[ 1 ]
   #define m11 t.d[ 5 ]
-  #define m12 t.d[ 6 ]
-  #define m20 t.d[ 8 ]
-  #define m21 t.d[ 9 ]
+  #define m12 t.d[ 9 ]
+  #define m20 t.d[ 2 ]
+  #define m21 t.d[ 6 ]
   #define m22 t.d[ 10 ]
 
   float trace = m00 + m11 + m22;
@@ -4112,58 +4099,63 @@ Quaternion Matrix4::GetRotation() const
   #undef m22
 }
 
+Vec3 Matrix4::GetAxis( uint32_t col ) const
+{
+    return Vec3( d[ col * 4 ], d[ col * 4 + 1 ], d[ col * 4 + 2 ] );
+}
+
 void Matrix4::SetAxis( uint32_t col, const Vec3& v )
 {
-  d[col] = v.x;
-  d[col+4] = v.y;
-  d[col+8] = v.z;
+  d[ col * 4 ] = v.x;
+  d[ col * 4 + 1 ] = v.y;
+  d[ col * 4 + 2 ] = v.z;
 }
 
 Vec4 Matrix4::GetRow( uint32_t row ) const
 {
-  return Vec4(d[row*4], d[row*4+1], d[row*4+2], d[row*4+3]);
+  return Vec4( d[ row ], d[ row + 4 ], d[ row + 8 ], d[ row + 12 ] );
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec3 &v )
 {
-  d[row*4]   = v.x;
-  d[row*4+1] = v.y;
-  d[row*4+2] = v.z;
+  d[ row ] = v.x;
+  d[ row + 4 ] = v.y;
+  d[ row + 8 ] = v.z;
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec4 &v)
 {
-  d[row*4]   = v.x;
-  d[row*4+1] = v.y;
-  d[row*4+2] = v.z;
-  d[row*4+3] = v.w;
+  d[ row ] = v.x;
+  d[ row + 4 ] = v.y;
+  d[ row + 8 ] = v.z;
+  d[ row + 12 ] = v.w;
 }
 
 void Matrix4::SetTranslation( float x, float y, float z )
 {
-  d[ 3 ] = x;
-  d[ 7 ] = y;
-  d[ 11 ] = z;
+  d[ 12 ] = x;
+  d[ 13 ] = y;
+  d[ 14 ] = z;
 }
 
 void Matrix4::SetTranslation( const Vec3& translation )
 {
-  d[ 3 ] = translation.x;
-  d[ 7 ] = translation.y;
-  d[ 11 ] = translation.z;
+  d[ 12 ] = translation.x;
+  d[ 13 ] = translation.y;
+  d[ 14 ] = translation.z;
 }
 
 Vec3 Matrix4::GetTranslation() const
 {
-  return Vec3( d[ 3 ], d[ 7 ], d[ 11 ] );
+  return Vec3( d[ 12 ], d[ 13 ], d[ 14 ] );
 }
 
 Vec3 Matrix4::GetScale() const
 {
   return Vec3(
-    Vec3( d[ 0 ], d[ 4 ], d[ 8 ] ).Length(),
-    Vec3( d[ 1 ], d[ 5 ], d[ 9 ] ).Length(),
-    Vec3( d[ 2 ], d[ 6 ], d[ 10 ] ).Length()
+    Vec3( d[ 0 ], d[ 1 ], d[ 2 ] ).Length(),
+    Vec3( d[ 4 ], d[ 5 ], d[ 6 ] ).Length(),
+    Vec3( d[ 8 ], d[ 9 ], d[ 10 ] ).Length()
   );
 }
 
@@ -4449,15 +4441,15 @@ Matrix4 Quaternion::GetTransformMatrix( void ) const
   Matrix4 matrix = Matrix4::Identity();
 
   matrix.d[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
-  matrix.d[ 1 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
-  matrix.d[ 2 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
+  matrix.d[ 4 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
+  matrix.d[ 8 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
 
-  matrix.d[ 4 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
+  matrix.d[ 1 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
   matrix.d[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
-  matrix.d[ 6 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
+  matrix.d[ 9 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
 
-  matrix.d[ 8 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
-  matrix.d[ 9 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
+  matrix.d[ 2 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
+  matrix.d[ 6 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
   matrix.d[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
 
   return matrix;
@@ -5981,13 +5973,7 @@ void Shader::Activate( const UniformList& uniforms ) const
     }
     else if ( uniformVar->type == GL_FLOAT_MAT4 )
     {
-#if _AE_EMSCRIPTEN_
-      // WebGL/Emscripten doesn't support glUniformMatrix4fv auto-transpose
-      Matrix4 transposedTransform = uniformValue->value.GetTranspose();
-      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, transposedTransform.d );
-#else
-      glUniformMatrix4fv( uniformVar->location, 1, GL_TRUE, uniformValue->value.d );
-#endif
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.d );
     }
     else
     {
@@ -7021,16 +7007,16 @@ uint32_t RenderTarget::GetHeight() const
 
 Matrix4 RenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const
 {
-  Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
-  windowToNDC *= Matrix4::Scaling( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+  Matrix4 windowToNDC = Matrix4::Scaling( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+  windowToNDC *= Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
 
   Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
   ndcToQuad.SetInverse();
 
-  Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
-  quadToRender *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
+  Matrix4 quadToRender = Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
+  quadToRender *= Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
 
-  return ( quadToRender * ndcToQuad * windowToNDC );
+  return ( windowToNDC * ndcToQuad * quadToRender );
 }
 
 Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
@@ -7053,15 +7039,15 @@ Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherH
 
 Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const
 {
-  Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
-  return ( worldToNdc.GetInverse() * canvasToNdc * otherTargetToLocal );
+  Matrix4 canvasToNdc = Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) ) * Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
+  return ( otherTargetToLocal * canvasToNdc * worldToNdc.GetInverse() );
 }
 
 Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 {
-  Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
+  Matrix4 localToNdc = Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
   localToNdc *= Matrix4::Scaling( Vec3( ndc.w, ndc.h, 1.0f ) );
-  localToNdc *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
+  localToNdc *= Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
   return localToNdc;
 }
 

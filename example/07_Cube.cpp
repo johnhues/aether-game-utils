@@ -151,7 +151,7 @@ int main()
 		//ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( ae::Vec3( 0.0f, 5.0f, 5.0f ), -ae::Vec3( 0.0f, 5.0f, 5.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
-		uniformList.Set( "u_worldToProj", viewToProj * worldToView );
+		uniformList.Set( "u_worldToProj", worldToView * viewToProj );
 		vertexData.Render( &shader, uniformList );
 		render.Present();
 

@@ -107,8 +107,8 @@ int main()
 
 		rotation += timeStep.GetDt();
 
-		ae::Matrix4 transform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
-		transform *= ae::Matrix4::RotationY( rotation );
+		ae::Matrix4 transform = ae::Matrix4::RotationY( rotation );
+		transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
 
 		ae::UniformList uniformList;
 		uniformList.Set( "u_modelToNdc", transform );
