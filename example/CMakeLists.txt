@@ -7,7 +7,7 @@ Include(FetchContent)
 FetchContent_Declare(
 	imgui
 	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
-	GIT_TAG dd6ec9e0c2ba8f5e4353e6e3b2a92feb7a0d28b1
+	GIT_TAG e25fc1e2a1ebdd38db1003c2ae2f7e281d285df5
 )
 FetchContent_MakeAvailable(imgui)
 
