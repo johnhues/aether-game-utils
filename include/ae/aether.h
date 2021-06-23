@@ -1060,6 +1060,63 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::FileSystem class
+//------------------------------------------------------------------------------
+class FileSystem
+{
+public:
+  enum class Root
+  {
+    Data, // A given existing directory
+    User, // A directory for storing preferences and savedata
+    Cache, // A directory for storing expensive to generate data (computed, downloaded, etc)
+    UserShared, // Same as above but shared accross the 'organization name'
+    CacheShared // Same as above but shared accross the 'organization name'
+  };
+  
+  // Passing an empty string to dataDir is equivalent to using
+  // the applications working directory. Organization name should be your name
+  // or your companies name and should be consistent across apps. Application
+  // name should be the name of this application. Initialize() creates missing
+  // folders for Root::User and Root::Cache.
+  void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
+
+  // Member functions for use of Root directories
+  bool GetRootDir( Root root, Str256* outDir ) const;
+  uint32_t GetSize( Root root, const char* filePath ) const;
+  uint32_t Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
+  uint32_t Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
+  bool CreateFolder( Root root, const char* folderPath ) const;
+  void ShowFolder( Root root, const char* folderPath ) const;
+
+  // Static member functions intended to be used when not creating a  instance
+  static uint32_t GetSize( const char* filePath );
+  static uint32_t Read( const char* filePath, void* buffer, uint32_t bufferSize );
+  static uint32_t Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs );
+  static bool CreateFolder( const char* folderPath );
+  static void ShowFolder( const char* folderPath );
+  
+  // Static helpers
+  static Str256 GetAbsolutePath( const char* filePath );
+  static const char* GetFileNameFromPath( const char* filePath );
+  static const char* GetFileExtFromPath( const char* filePath );
+  static Str256 GetDirectoryFromPath( const char* filePath );
+  static void AppendToPath( Str256* path, const char* str );
+
+private:
+  void m_SetDataDir( const char* dataDir );
+  void m_SetUserDir( const char* organizationName, const char* applicationName );
+  void m_SetCacheDir( const char* organizationName, const char* applicationName );
+  void m_SetUserSharedDir( const char* organizationName );
+  void m_SetCacheSharedDir( const char* organizationName );
+  Str256 m_dataDir;
+  Str256 m_userDir;
+  Str256 m_cacheDir;
+  Str256 m_userSharedDir;
+  Str256 m_cacheSharedDir;
+};
+
+//------------------------------------------------------------------------------
 // @TODO: Graphics globals. Should be parameters to modules that need them.
 //------------------------------------------------------------------------------
 extern uint32_t GLMajorVersion;
@@ -3488,15 +3545,21 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
   #define WIN32_LEAN_AND_MEAN 1
-  #include "Windows.h"
+  #include <Windows.h>
+  #include <shellapi.h>
+  #include <Shlobj_core.h>
   #include "processthreadsapi.h" // For GetCurrentProcessId()
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
   #include <unistd.h>
+  @import AppKit;
   @import Cocoa;
+  @import CoreFoundation;
   @import OpenGL;
-#else
+#elif _AE_LINUX_
   #include <unistd.h>
+  #include <pwd.h>
+  #include <sys/stat.h>
 #endif
 #include <thread>
 
@@ -5279,6 +5342,521 @@ void Input::Pump()
 #endif
 }
 
+//------------------------------------------------------------------------------
+// ae::FileSystem member functions
+//------------------------------------------------------------------------------
+#if _AE_WINDOWS_
+  #define AE_PATH_SEPARATOR '\\'
+#else
+  #define AE_PATH_SEPARATOR '/'
+#endif
+
+#if _AE_APPLE_
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+  // Something like /User/someone/Library/Caches
+  NSArray* paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
+  NSString* cachesPath = [paths lastObject];
+  if ( [cachesPath length] )
+  {
+    *outDir = [cachesPath UTF8String];
+    return true;
+  }
+  return false;
+}
+#elif _AE_LINUX_
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+  // Something like /users/someone/.cache
+  const char* cacheFolderName = ".cache";
+  const char* homeDir = getenv( "HOME" );
+  if ( homeDir && homeDir[ 0 ] )
+  {
+    *outDir = homeDir;
+    FileSystem::AppendToPath( outDir, cacheFolderName );
+    return true;
+  }
+  else
+  {
+    const passwd* pw = getpwuid( getuid() );
+    if ( pw )
+    {
+      const char* homeDir = pw->pw_dir;
+      if ( homeDir && homeDir[ 0 ] )
+      {
+        *outDir = homeDir;
+        FileSystem::AppendToPath( outDir, cacheFolderName );
+        return true;
+      }
+    }
+  }
+  return false;
+}
+#elif _AE_WINDOWS_
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+  // Something like C:\Users\someone\AppData\Local\Company\Game
+  bool result = false;
+  PWSTR wpath = nullptr;
+  // SHGetKnownFolderPath does not include trailing backslash
+  HRESULT pathResult = SHGetKnownFolderPath( FOLDERID_LocalAppData, 0, nullptr, &wpath );
+  if ( pathResult == S_OK )
+  {
+    char path[ outDir->MaxLength() + 1 ];
+    int32_t pathLen = wcstombs( path, wpath, outDir->MaxLength() );
+    if ( pathLen > 0 )
+    {
+      path[ pathLen ] = 0;
+      
+      *outDir = path;
+      result = true;
+    }
+  }
+  CoTaskMemFree( wpath ); // Always free even on failure
+  return result;
+}
+#endif
+
+void FileSystem::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
+{
+  AE_ASSERT_MSG( organizationName && organizationName[ 0 ], "Organization name must not be empty" );
+  AE_ASSERT_MSG( applicationName && applicationName[ 0 ], "Application name must not be empty" );
+
+  const char* validateOrgName = organizationName;
+  while ( *validateOrgName )
+  {
+    AE_ASSERT_MSG( isalnum( *validateOrgName ) || ( *validateOrgName == '_' ), "Invalid organization name '#'. Only alphanumeric characters and undersrcores are supported.", organizationName );
+    validateOrgName++;
+  }
+  const char* validateAppName = applicationName;
+  while ( *validateAppName )
+  {
+    AE_ASSERT_MSG( isalnum( *validateAppName ) || ( *validateAppName == '_' ), "Invalid application name '#'. Only alphanumeric characters and undersrcores are supported.", applicationName );
+    validateAppName++;
+  }
+
+  m_SetDataDir( dataDir ? dataDir : "" );
+  m_SetUserDir( organizationName, applicationName );
+  m_SetCacheDir( organizationName, applicationName );
+  m_SetUserSharedDir( organizationName );
+  m_SetCacheSharedDir( organizationName );
+}
+
+void FileSystem::m_SetDataDir( const char* dataDir )
+{
+  m_dataDir = GetAbsolutePath( dataDir );
+
+  // Append slash if not empty and is currently missing
+  if ( m_dataDir.Length() && m_dataDir[ m_dataDir.Length() - 1 ] != AE_PATH_SEPARATOR )
+  {
+    m_dataDir.Append( Str16( 1, AE_PATH_SEPARATOR ) );
+  }
+}
+
+void FileSystem::m_SetUserDir( const char* organizationName, const char* applicationName )
+{
+  m_userDir = "";
+
+  char* sdlUserDir = nullptr;//SDL_GetPrefPath( organizationName, applicationName );
+  if ( !sdlUserDir )
+  {
+    return;
+  }
+
+  m_userDir = sdlUserDir;
+  AE_ASSERT( m_userDir.Length() );
+
+  if ( m_userDir[ m_userDir.Length() - 1 ] != AE_PATH_SEPARATOR )
+  {
+    m_userDir.Append( Str16( 1, AE_PATH_SEPARATOR ) );
+  }
+
+//  SDL_free( sdlUserDir );
+}
+
+void FileSystem::m_SetCacheDir( const char* organizationName, const char* applicationName )
+{
+  const Str16 pathChar( 1, AE_PATH_SEPARATOR );
+  m_cacheDir = "";
+  
+  if ( FileSystem_GetCacheDir( &m_cacheDir ) )
+  {
+    AE_ASSERT( m_cacheDir.Length() );
+    m_cacheDir += pathChar;
+    m_cacheDir += organizationName;
+    m_cacheDir += pathChar;
+    m_cacheDir += applicationName;
+    m_cacheDir += pathChar;
+    if ( !CreateFolder( m_cacheDir.c_str() ) )
+    {
+      m_cacheDir = "";
+    }
+  }
+}
+
+void FileSystem::m_SetUserSharedDir( const char* organizationName )
+{
+  m_userSharedDir = "";
+
+  char* sdlUserDir = nullptr;//SDL_GetPrefPath( organizationName, "shared" );
+  if ( !sdlUserDir )
+  {
+    return;
+  }
+
+  m_userSharedDir = sdlUserDir;
+  AE_ASSERT( m_userSharedDir.Length() );
+
+  if ( m_userSharedDir[ m_userSharedDir.Length() - 1 ] != AE_PATH_SEPARATOR )
+  {
+    m_userSharedDir.Append( Str16( 1, AE_PATH_SEPARATOR ) );
+  }
+
+//  SDL_free( sdlUserDir );
+}
+
+void FileSystem::m_SetCacheSharedDir( const char* organizationName )
+{
+  const Str16 pathChar( 1, AE_PATH_SEPARATOR );
+  m_cacheSharedDir = "";
+  
+  if ( FileSystem_GetCacheDir( &m_cacheSharedDir ) )
+  {
+    AE_ASSERT( m_cacheSharedDir.Length() );
+    m_cacheSharedDir += pathChar;
+    m_cacheSharedDir += organizationName;
+    m_cacheSharedDir += pathChar;
+    m_cacheSharedDir += "shared";
+    m_cacheSharedDir += pathChar;
+    if ( !CreateFolder( m_cacheSharedDir.c_str() ) )
+    {
+      m_cacheSharedDir = "";
+    }
+  }
+}
+
+uint32_t FileSystem::GetSize( Root root, const char* filePath ) const
+{
+  Str256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += filePath;
+    return GetSize( fullName.c_str() );
+  }
+  return 0;
+}
+
+uint32_t FileSystem::Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const
+{
+  Str256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += filePath;
+    return Read( fullName.c_str(), buffer, bufferSize );
+  }
+  return 0;
+}
+
+uint32_t FileSystem::Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const
+{
+  Str256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += filePath;
+    return Write( fullName.c_str(), buffer, bufferSize, createIntermediateDirs );
+  }
+  return 0;
+}
+
+bool FileSystem::CreateFolder( Root root, const char* folderPath ) const
+{
+  Str256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += folderPath;
+    return CreateFolder( fullName.c_str() );
+  }
+  return false;
+}
+
+void FileSystem::ShowFolder( Root root, const char* folderPath ) const
+{
+  Str256 fullName;
+  if ( GetRootDir( root, &fullName ) )
+  {
+    fullName += folderPath;
+    ShowFolder( fullName.c_str() );
+  }
+}
+
+bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
+{
+  switch ( root )
+  {
+    case Root::Data:
+      if ( outDir )
+      {
+        *outDir = m_dataDir;
+      }
+      return true;
+    case Root::User:
+      if ( m_userDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_userDir;
+        }
+        return true;
+      }
+      break;
+    case Root::Cache:
+      if ( m_cacheDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_cacheDir;
+        }
+        return true;
+      }
+      break;
+    case Root::UserShared:
+      if ( m_userSharedDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_userSharedDir;
+        }
+        return true;
+      }
+      break;
+    case Root::CacheShared:
+      if ( m_cacheSharedDir.Length() )
+      {
+        if ( outDir )
+        {
+          *outDir = m_cacheSharedDir;
+        }
+        return true;
+      }
+      break;
+    default:
+      break;
+  }
+  return false;
+}
+
+uint32_t FileSystem::GetSize( const char* filePath )
+{
+#if _AE_APPLE_
+  CFStringRef filePathIn = CFStringCreateWithCString( kCFAllocatorDefault, filePath, kCFStringEncodingUTF8 );
+  CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), filePathIn, nullptr, nullptr );
+  CFStringRef bundlePath = nullptr;
+  if ( appUrl )
+  {
+    bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+    filePath = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+  }
+#endif
+  
+  uint32_t fileSize = 0;
+  if ( FILE* file = fopen( filePath, "rb" ) )
+  {
+    fseek( file, 0, SEEK_END );
+    fileSize = (uint32_t)ftell( file );
+    fclose( file );
+  }
+  
+#if _AE_APPLE_
+  if ( bundlePath ) { CFRelease( bundlePath ); }
+  if ( appUrl ) { CFRelease( appUrl ); }
+  CFRelease( filePathIn );
+#endif
+  
+  return fileSize;
+}
+
+uint32_t FileSystem::Read( const char* filePath, void* buffer, uint32_t bufferSize )
+{
+#if _AE_APPLE_
+  CFStringRef filePathIn = CFStringCreateWithCString( kCFAllocatorDefault, filePath, kCFStringEncodingUTF8 );
+  CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), filePathIn, nullptr, nullptr );
+  CFStringRef bundlePath = nullptr;
+  if ( appUrl )
+  {
+    CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+    filePath = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+  }
+#endif
+
+  uint32_t resultLen = 0;
+  
+  if ( FILE* file = fopen( filePath, "rb" ) )
+  {
+    fseek( file, 0, SEEK_END );
+    resultLen = (uint32_t)ftell( file );
+    fseek( file, 0, SEEK_SET );
+
+    if ( resultLen <= bufferSize )
+    {
+      size_t readLen = fread( buffer, sizeof(uint8_t), resultLen, file );
+      AE_ASSERT( readLen == resultLen );
+    }
+    else
+    {
+      resultLen = 0;
+    }
+
+    fclose( file );
+  }
+  
+#if _AE_APPLE_
+  if ( bundlePath ) { CFRelease( bundlePath ); }
+  if ( appUrl ) { CFRelease( appUrl ); }
+  CFRelease( filePathIn );
+#endif
+
+  return resultLen;
+}
+
+uint32_t FileSystem::Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs )
+{
+  if ( createIntermediateDirs )
+  {
+    auto dir = GetDirectoryFromPath( filePath );
+    if ( dir.Length() && !FileSystem::CreateFolder( dir.c_str() ) )
+    {
+      return 0;
+    }
+  }
+  
+  FILE* file = fopen( filePath, "wb" );
+  if ( !file )
+  {
+    return 0;
+  }
+
+  fwrite( buffer, sizeof(uint8_t), bufferSize, file );
+  fclose( file );
+
+  return bufferSize;
+}
+
+bool FileSystem::CreateFolder( const char* folderPath )
+{
+#if _AE_APPLE_
+  NSString* path = [NSString stringWithUTF8String:folderPath];
+  NSError* error = nil;
+  BOOL success = [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:&error];
+  return success && !error;
+#elif _AE_WINDOWS_
+  switch ( SHCreateDirectoryExA( nullptr, folderPath, nullptr ) )
+  {
+    case ERROR_SUCCESS:
+    case ERROR_ALREADY_EXISTS:
+      return true;
+    default:
+      return false;
+  }
+#elif _AE_LINUX_
+  // @TODO: Recursive https://stackoverflow.com/questions/2336242/recursive-mkdir-system-call-on-unix
+  int result = mkdir( folderPath, 0777 ) == 0;
+  return ( result == 0 ) || errno == EEXIST;
+#endif
+}
+
+void FileSystem::ShowFolder( const char* folderPath )
+{
+#if _AE_WINDOWS_
+  ShellExecuteA( NULL, "explore", folderPath, NULL, NULL, SW_SHOWDEFAULT );
+#elif _AE_OSX_
+  NSString* path = [NSString stringWithUTF8String:folderPath];
+  [[NSWorkspace sharedWorkspace] selectFile:path inFileViewerRootedAtPath:@""];
+#endif
+  // @TODO: Linux
+}
+
+Str256 FileSystem::GetAbsolutePath( const char* filePath )
+{
+#if _AE_APPLE_
+  NSString* path = [NSString stringWithUTF8String:filePath];
+  NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
+  AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
+  NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
+  NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
+  return [absoluteUrl.path UTF8String];
+#endif
+  // @TODO: Windows and Linux
+  return filePath;
+}
+
+const char* FileSystem::GetFileNameFromPath( const char* filePath )
+{
+  const char* s0 = strrchr( filePath, '/' );
+  const char* s1 = strrchr( filePath, '\\' );
+  
+  if ( s1 && s0 )
+  {
+    return ( ( s1 > s0 ) ? s1 : s0 ) + 1;
+  }
+  else if ( s0 )
+  {
+    return s0 + 1;
+  }
+  else if ( s1 )
+  {
+    return s1 + 1;
+  }
+  else
+  {
+    return filePath;
+  }
+}
+
+const char* FileSystem::GetFileExtFromPath( const char* filePath )
+{
+  const char* fileName = GetFileNameFromPath( filePath );
+  const char* s = strchr( fileName, '.' );
+  if ( s )
+  {
+    return s + 1;
+  }
+  else
+  {
+    // @NOTE: Return end of given string in case pointer arithmetic is being done by user
+    uint32_t len = strlen( fileName );
+    return fileName + len;
+  }
+}
+
+Str256 FileSystem::GetDirectoryFromPath( const char* filePath )
+{
+  const char* fileName = GetFileNameFromPath( filePath );
+  return Str256( fileName - filePath, filePath );
+}
+
+void FileSystem::AppendToPath( Str256* path, const char* str )
+{
+  if ( !path )
+  {
+    return;
+  }
+  
+  // @TODO: Handle paths that already have a file name and extension
+  
+  // @TODO: Handle one or more path separators at end of path
+  if ( uint32_t pathLen = path->Length() )
+  {
+    char lastChar = path->operator[]( pathLen - 1 );
+    if ( lastChar != '/' && lastChar != '\\' )
+    {
+      path->Append( Str16( 1, AE_PATH_SEPARATOR ) );
+    }
+  }
+  
+  // @TODO: Handle one or more path separators at front of str
+  *path += str;
+}
+
 }  // AE_NAMESPACE end
 
 //------------------------------------------------------------------------------
@@ -6757,11 +7335,11 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
 void Texture2D::Initialize( const char* file, Filter filter, Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
 {
 #if STBI_INCLUDE_STB_IMAGE_H
-  uint32_t fileSize = aeVfs::GetSize( file );
+  uint32_t fileSize = ::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
   
   uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
-  aeVfs::Read( file, fileBuffer, fileSize );
+  ::Read( file, fileBuffer, fileSize );
 
   int32_t width = 0;
   int32_t height = 0;

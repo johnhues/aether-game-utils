@@ -1324,11 +1324,11 @@ void aeTexture2D::Initialize( const void* data, uint32_t width, uint32_t height,
 
 void aeTexture2D::Initialize( const char* file, aeTextureFilter::Type filter, aeTextureWrap::Type wrap, bool autoGenerateMipmaps, bool isSRGB )
 {
-  uint32_t fileSize = aeVfs::GetSize( file );
+  uint32_t fileSize = ae::FileSystem::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
   
   uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
-  aeVfs::Read( file, fileBuffer, fileSize );
+  ae::FileSystem::Read( file, fileBuffer, fileSize );
 
   int32_t width = 0;
   int32_t height = 0;

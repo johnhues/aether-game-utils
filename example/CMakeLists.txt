@@ -4,6 +4,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/safeguards.cmake)
 Include(FetchContent)
 
 # imgui
+add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
 FetchContent_Declare(
 	imgui
 	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"

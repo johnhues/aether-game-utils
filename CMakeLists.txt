@@ -150,6 +150,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_definitions(-D_UNICODE -DUNICODE)
 # disable standard library warnings on windows
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+add_compile_options(-fmodules -fcxx-modules)
 
 # library, tests, and examples
 add_subdirectory(src)

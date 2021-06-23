@@ -409,11 +409,11 @@ void TerrainJob::Do()
   
   // Check disk to see if job has been completed before
   aeStr128 filePath = aeStr128::Format( "terrain/#_#_#_#", chunkPos.x, chunkPos.y, chunkPos.z, m_parameterHash.Get() );
-  uint32_t fileSize = m_p.vfs ? m_p.vfs->GetSize( aeVfsRoot::Cache, filePath.c_str() ) : 0;
+  uint32_t fileSize = m_p.vfs ? m_p.vfs->GetSize( ae::FileSystem::Root::Cache, filePath.c_str() ) : 0;
   if ( fileSize )
   {
     ae::Scratch< uint8_t > fileData( fileSize );
-    m_p.vfs->Read( aeVfsRoot::Cache, filePath.c_str(), fileData.Data(), fileSize );
+    m_p.vfs->Read( ae::FileSystem::Root::Cache, filePath.c_str(), fileData.Data(), fileSize );
     aeBinaryStream rStream = aeBinaryStream::Reader( fileData.Data(), fileSize );
     rStream.SerializeUint32( m_vertexCount.Get() );
     rStream.SerializeUint32( m_indexCount );
@@ -450,7 +450,7 @@ void TerrainJob::Do()
       wStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
       wStream.SerializeRaw( &m_indices[ 0 ], m_indexCount * sizeof(m_indices[ 0 ]) );
       wStream.SerializeObject( *m_chunk );
-      if ( !m_p.vfs->Write( aeVfsRoot::Cache, filePath.c_str(), wStream.GetData(), wStream.GetOffset(), true ) )
+      if ( !m_p.vfs->Write( ae::FileSystem::Root::Cache, filePath.c_str(), wStream.GetData(), wStream.GetOffset(), true ) )
       {
         AE_WARN( "Failed writing terrain chunk '#'", filePath );
       }

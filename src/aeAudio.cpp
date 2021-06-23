@@ -84,11 +84,11 @@ void LoadWavFile( const char* fileName, ALuint* buffer, float* length )
   bool hasReadFormat = false;
   uint32_t dataSize = 0;
 
-  uint32_t fileSize = aeVfs::GetSize( fileName );
+  uint32_t fileSize = ae::FileSystem::GetSize( fileName );
   AE_ASSERT_MSG( fileSize, "Could not open wav file: #", fileName );
 
   uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
-  aeVfs::Read( fileName, fileBuffer, fileSize );
+  ae::FileSystem::Read( fileName, fileBuffer, fileSize );
 
   ChunkHeader header;
 

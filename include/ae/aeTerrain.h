@@ -87,7 +87,6 @@ namespace ctpl
 }
 
 typedef float aeFloat16;
-class aeVfs;
 class aeDebugRender;
 
 //------------------------------------------------------------------------------
@@ -281,7 +280,7 @@ private:
 //------------------------------------------------------------------------------
 struct TerrainParams
 {
-  aeVfs* vfs = nullptr;
+  ae::FileSystem* vfs = nullptr;
   aeDebugRender* debug = nullptr;
   float normalSampleOffset = 0.25f;
   float smoothingAmount = 0.05f;

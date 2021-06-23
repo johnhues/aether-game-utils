@@ -205,13 +205,13 @@ void WriteObjects( aeVfs* vfs, const ae::Array< Object* >& objects )
     
     wStream.SerializeObject( *object );
   }
-  vfs->Write( aeVfsRoot::User, kFileName, wStream.GetData(), wStream.GetOffset(), false );
+  vfs->Write( ae::FileSystem::Root::User, kFileName, wStream.GetData(), wStream.GetOffset(), false );
 }
 
 bool ReadObjects( aeVfs* vfs, aeTerrain* terrain, ae::Image* heightmapImage, ae::Array< Object* >& objects )
 {
-  ae::Scratch< uint8_t > scratch( vfs->GetSize( aeVfsRoot::User, kFileName ) );
-  vfs->Read( aeVfsRoot::User, kFileName, scratch.Data(), scratch.Length() );
+  ae::Scratch< uint8_t > scratch( vfs->GetSize( ae::FileSystem::Root::User, kFileName ) );
+  vfs->Read( ae::FileSystem::Root::User, kFileName, scratch.Data(), scratch.Length() );
   aeBinaryStream rStream = aeBinaryStream::Reader( scratch.Data(), scratch.Length() );
 
   uint32_t version = 0;
@@ -302,8 +302,8 @@ int main()
   }
 
   ae::Image heightmapImage;
-  ae::Scratch< uint8_t > fileBuffer( vfs.GetSize( aeVfsRoot::Data, "terrain.png" ) );
-  vfs.Read( aeVfsRoot::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
+  ae::Scratch< uint8_t > fileBuffer( vfs.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
+  vfs.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
   heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
   uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
