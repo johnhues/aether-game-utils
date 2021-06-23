@@ -69,21 +69,6 @@
 #endif
 
 //------------------------------------------------------------------------------
-// Warnings
-//------------------------------------------------------------------------------
-#if _AE_WINDOWS_
-  #ifndef _CRT_SECURE_NO_WARNINGS
-    #define _CRT_SECURE_NO_WARNINGS
-  #endif
-  #pragma warning( disable : 4244 )
-  #pragma warning( disable : 4800 )
-#endif
-
-#if _AE_APPLE_
-  #define GL_SILENCE_DEPRECATION
-#endif
-
-//------------------------------------------------------------------------------
 // ae Namespace
 //------------------------------------------------------------------------------
 #define AE_NAMESPACE ae
@@ -1056,6 +1041,12 @@ class Input
 public:
   void Initialize( Window* window );
   void Pump();
+  
+  bool up = false;
+  bool down = false;
+  bool left = false;
+  bool right = false;
+  bool space = false;
   bool quit = false;
 };
 
@@ -1956,6 +1947,10 @@ inline float Delerp01( float start, float end, float value )
 template< typename T >
 T DtLerp( T value, float snappiness, float dt, T target )
 {
+  if ( snappiness == 0.0f )
+  {
+    return value;
+  }
   return ae::Lerp( target, value, exp2( -exp2( snappiness ) * dt ) );
 }
 
@@ -3541,6 +3536,20 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 #endif
 
 //------------------------------------------------------------------------------
+// Warnings
+//------------------------------------------------------------------------------
+#if _AE_WINDOWS_
+  #ifndef _CRT_SECURE_NO_WARNINGS
+    #define _CRT_SECURE_NO_WARNINGS
+  #endif
+  #pragma warning( disable : 4244 )
+  #pragma warning( disable : 4800 )
+#elif _AE_APPLE_
+  #pragma clang diagnostic push
+  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+//------------------------------------------------------------------------------
 // Platform includes, required for logging, windowing, file io
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
@@ -3553,6 +3562,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
   #include <sys/sysctl.h>
   #include <unistd.h>
   @import AppKit;
+  @import Carbon;
   @import Cocoa;
   @import CoreFoundation;
   @import OpenGL;
@@ -5328,10 +5338,10 @@ void Input::Pump()
           break;
           // Keyboard
         case NSEventTypeKeyDown:
-          AE_INFO( "mouse down" );
+          //AE_INFO( "key down" );
           break;
         case NSEventTypeKeyUp:
-          AE_INFO( "mouse up" );
+          //AE_INFO( "key up" );
           break;
         default:
           break;
@@ -5339,6 +5349,16 @@ void Input::Pump()
       [NSApp sendEvent:event];
     }
   }
+  
+  KeyMap _keyStates;
+  GetKeys(_keyStates);
+  uint32_t* keyStates = (uint32_t*)_keyStates;
+  
+  up = keyStates[ kVK_UpArrow / 32 ] & ( 1 << ( kVK_UpArrow % 32 ) );
+  down = keyStates[ kVK_DownArrow / 32 ] & ( 1 << ( kVK_DownArrow % 32 ) );
+  left = keyStates[ kVK_LeftArrow / 32 ] & ( 1 << ( kVK_LeftArrow % 32 ) );
+  right = keyStates[ kVK_RightArrow / 32 ] & ( 1 << ( kVK_RightArrow % 32 ) );
+  space = keyStates[ kVK_Space / 32 ] & ( 1 << ( kVK_Space % 32 ) );
 #endif
 }
 
@@ -7829,6 +7849,14 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 }
 
 } // AE_NAMESPACE end
+
+//------------------------------------------------------------------------------
+// Warnings
+//------------------------------------------------------------------------------
+#if _AE_APPLE_
+  // Pop deprecated OpenGL function warning disable
+  #pragma clang diagnostic pop
+#endif
 
 #endif // AE_MAIN
 #endif // AE_AETHER_H
