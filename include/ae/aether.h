@@ -1034,6 +1034,129 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::Key enum
+//------------------------------------------------------------------------------
+enum class Key
+{
+  Unknown = 0,
+
+  A = 4,
+  B = 5,
+  C = 6,
+  D = 7,
+  E = 8,
+  F = 9,
+  G = 10,
+  H = 11,
+  I = 12,
+  J = 13,
+  K = 14,
+  L = 15,
+  M = 16,
+  N = 17,
+  O = 18,
+  P = 19,
+  Q = 20,
+  R = 21,
+  S = 22,
+  T = 23,
+  U = 24,
+  V = 25,
+  W = 26,
+  X = 27,
+  Y = 28,
+  Z = 29,
+
+  Num1 = 30,
+  Num2 = 31,
+  Num3 = 32,
+  Num4 = 33,
+  Num5 = 34,
+  Num6 = 35,
+  Num7 = 36,
+  Num8 = 37,
+  Num9 = 38,
+  Num0 = 39,
+
+  Enter = 40,
+  Escape = 41,
+  Backspace = 42,
+  Tab = 43,
+  Space = 44,
+
+  Minus = 45,
+  Equals = 46,
+  LeftBracket = 47,
+  RightBracket = 48,
+  Backslash = 49,
+
+  Semicolon = 51,
+  Apostrophe = 52,
+  Tilde = 53,
+  Comma = 54,
+  Period = 55,
+  Slash = 56,
+  CapsLock = 57,
+
+  F1 = 58,
+  F2 = 59,
+  F3 = 60,
+  F4 = 61,
+  F5 = 62,
+  F6 = 63,
+  F7 = 64,
+  F8 = 65,
+  F9 = 66,
+  F10 = 67,
+  F11 = 68,
+  F12 = 69,
+
+  PrintScreen = 70,
+  ScrollLock = 71,
+  Pause = 72,
+
+  Insert = 73,
+  Home = 74,
+  PageUp = 75,
+  Delete = 76,
+  End = 77,
+  PageDown = 78,
+
+  Right = 79,
+  Left = 80,
+  Down = 81,
+  Up = 82,
+
+  NumLock = 84,
+  NumPadDivide = 84,
+  NumPadMultiply = 85,
+  NumPadMinus = 86,
+  NumPadPlus = 87,
+  NumPadEnter = 88,
+  NumPad1 = 89,
+  NumPad2 = 90,
+  NumPad3 = 91,
+  NumPad4 = 92,
+  NumPad5 = 93,
+  NumPad6 = 94,
+  NumPad7 = 95,
+  NumPad8 = 96,
+  NumPad9 = 97,
+  NumPad0 = 98,
+  NumPadPeriod = 99,
+  NumPadEquals = 103,
+
+  LeftControl = 224,
+  LeftShift = 225,
+  LeftAlt = 226,
+  LeftSuper = 227,
+  RightControl = 228,
+  RightShift = 229,
+  RightAlt = 230,
+  RightSuper = 231
+};
+
+//------------------------------------------------------------------------------
 // ae::Input class
 //------------------------------------------------------------------------------
 class Input
@@ -1042,12 +1165,13 @@ public:
   void Initialize( Window* window );
   void Pump();
   
-  bool up = false;
-  bool down = false;
-  bool left = false;
-  bool right = false;
-  bool space = false;
+  bool Get( ae::Key key ) const;
+  bool GetPrev( ae::Key key ) const;
   bool quit = false;
+  
+private:
+  bool m_keys[ 256 ];
+  bool m_keysPrev[ 256 ];
 };
 
 //------------------------------------------------------------------------------
@@ -5275,6 +5399,8 @@ void Window::SetMaximized( bool maximized )
 void Input::Initialize( Window* window )
 {
   window->input = this;
+  memset( m_keys, 0, sizeof(m_keys) );
+  memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 }
 
 void Input::Pump()
@@ -5350,16 +5476,138 @@ void Input::Pump()
     }
   }
   
+  memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+  
   KeyMap _keyStates;
   GetKeys(_keyStates);
   uint32_t* keyStates = (uint32_t*)_keyStates;
   
-  up = keyStates[ kVK_UpArrow / 32 ] & ( 1 << ( kVK_UpArrow % 32 ) );
-  down = keyStates[ kVK_DownArrow / 32 ] & ( 1 << ( kVK_DownArrow % 32 ) );
-  left = keyStates[ kVK_LeftArrow / 32 ] & ( 1 << ( kVK_LeftArrow % 32 ) );
-  right = keyStates[ kVK_RightArrow / 32 ] & ( 1 << ( kVK_RightArrow % 32 ) );
-  space = keyStates[ kVK_Space / 32 ] & ( 1 << ( kVK_Space % 32 ) );
+#define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk / 32 ] & ( 1 << ( _vk % 32 ) )
+  AE_UPDATE_KEY( A, kVK_ANSI_A );
+  AE_UPDATE_KEY( S, kVK_ANSI_S );
+  AE_UPDATE_KEY( D, kVK_ANSI_D );
+  AE_UPDATE_KEY( F, kVK_ANSI_F );
+  AE_UPDATE_KEY( H, kVK_ANSI_H );
+  AE_UPDATE_KEY( G, kVK_ANSI_G );
+  AE_UPDATE_KEY( Z, kVK_ANSI_Z );
+  AE_UPDATE_KEY( X, kVK_ANSI_X );
+  AE_UPDATE_KEY( C, kVK_ANSI_C );
+  AE_UPDATE_KEY( V, kVK_ANSI_V );
+  AE_UPDATE_KEY( B, kVK_ANSI_B );
+  AE_UPDATE_KEY( Q, kVK_ANSI_Q );
+  AE_UPDATE_KEY( W, kVK_ANSI_W );
+  AE_UPDATE_KEY( E, kVK_ANSI_E );
+  AE_UPDATE_KEY( R, kVK_ANSI_R );
+  AE_UPDATE_KEY( Y, kVK_ANSI_Y );
+  AE_UPDATE_KEY( T, kVK_ANSI_T );
+  AE_UPDATE_KEY( Num1, kVK_ANSI_1 );
+  AE_UPDATE_KEY( Num2, kVK_ANSI_2 );
+  AE_UPDATE_KEY( Num3, kVK_ANSI_3 );
+  AE_UPDATE_KEY( Num4, kVK_ANSI_4 );
+  AE_UPDATE_KEY( Num6, kVK_ANSI_6 );
+  AE_UPDATE_KEY( Num5, kVK_ANSI_5 );
+  AE_UPDATE_KEY( Equals, kVK_ANSI_Equal );
+  AE_UPDATE_KEY( Num9, kVK_ANSI_9 );
+  AE_UPDATE_KEY( Num7, kVK_ANSI_7 );
+  AE_UPDATE_KEY( Minus, kVK_ANSI_Minus );
+  AE_UPDATE_KEY( Num8, kVK_ANSI_8 );
+  AE_UPDATE_KEY( Num0, kVK_ANSI_0 );
+  AE_UPDATE_KEY( RightBracket, kVK_ANSI_RightBracket );
+  AE_UPDATE_KEY( O, kVK_ANSI_O );
+  AE_UPDATE_KEY( U, kVK_ANSI_U );
+  AE_UPDATE_KEY( LeftBracket, kVK_ANSI_LeftBracket );
+  AE_UPDATE_KEY( I, kVK_ANSI_I );
+  AE_UPDATE_KEY( P, kVK_ANSI_P );
+  AE_UPDATE_KEY( L, kVK_ANSI_L );
+  AE_UPDATE_KEY( J, kVK_ANSI_J );
+  AE_UPDATE_KEY( Apostrophe, kVK_ANSI_Quote );
+  AE_UPDATE_KEY( K, kVK_ANSI_K );
+  AE_UPDATE_KEY( Semicolon, kVK_ANSI_Semicolon );
+  AE_UPDATE_KEY( Backslash, kVK_ANSI_Backslash );
+  AE_UPDATE_KEY( Comma, kVK_ANSI_Comma );
+  AE_UPDATE_KEY( Slash, kVK_ANSI_Slash );
+  AE_UPDATE_KEY( N, kVK_ANSI_N );
+  AE_UPDATE_KEY( M, kVK_ANSI_M );
+  AE_UPDATE_KEY( Period, kVK_ANSI_Period );
+  AE_UPDATE_KEY( Tilde, kVK_ANSI_Grave );
+  AE_UPDATE_KEY( NumPadPeriod, kVK_ANSI_KeypadDecimal );
+  AE_UPDATE_KEY( NumPadMultiply, kVK_ANSI_KeypadMultiply );
+  AE_UPDATE_KEY( NumPadPlus, kVK_ANSI_KeypadPlus );
+  //AE_UPDATE_KEY( NumPadClear, kVK_ANSI_KeypadClear );
+  AE_UPDATE_KEY( NumPadDivide, kVK_ANSI_KeypadDivide );
+  AE_UPDATE_KEY( NumPadEnter, kVK_ANSI_KeypadEnter );
+  AE_UPDATE_KEY( NumPadMinus, kVK_ANSI_KeypadMinus );
+  AE_UPDATE_KEY( NumPadEquals, kVK_ANSI_KeypadEquals );
+  AE_UPDATE_KEY( NumPad0, kVK_ANSI_Keypad0 );
+  AE_UPDATE_KEY( NumPad1, kVK_ANSI_Keypad1 );
+  AE_UPDATE_KEY( NumPad2, kVK_ANSI_Keypad2 );
+  AE_UPDATE_KEY( NumPad3, kVK_ANSI_Keypad3 );
+  AE_UPDATE_KEY( NumPad4, kVK_ANSI_Keypad4 );
+  AE_UPDATE_KEY( NumPad5, kVK_ANSI_Keypad5 );
+  AE_UPDATE_KEY( NumPad6, kVK_ANSI_Keypad6 );
+  AE_UPDATE_KEY( NumPad7, kVK_ANSI_Keypad7 );
+  AE_UPDATE_KEY( NumPad8, kVK_ANSI_Keypad8 );
+  AE_UPDATE_KEY( NumPad9, kVK_ANSI_Keypad9 );
+  AE_UPDATE_KEY( Enter, kVK_Return );
+  AE_UPDATE_KEY( Tab, kVK_Tab );
+  AE_UPDATE_KEY( Space, kVK_Space );
+  AE_UPDATE_KEY( Backspace, kVK_Delete );
+  AE_UPDATE_KEY( Escape, kVK_Escape );
+  AE_UPDATE_KEY( LeftSuper, kVK_Command );
+  AE_UPDATE_KEY( LeftShift, kVK_Shift );
+  AE_UPDATE_KEY( CapsLock, kVK_CapsLock );
+  AE_UPDATE_KEY( LeftAlt, kVK_Option );
+  AE_UPDATE_KEY( LeftControl, kVK_Control );
+  AE_UPDATE_KEY( RightSuper, kVK_RightCommand );
+  AE_UPDATE_KEY( RightShift, kVK_RightShift );
+  AE_UPDATE_KEY( RightAlt, kVK_RightOption );
+  AE_UPDATE_KEY( RightControl, kVK_RightControl );
+  //AE_UPDATE_KEY( Function, kVK_Function );
+  //AE_UPDATE_KEY( F17, kVK_F17 );
+  //AE_UPDATE_KEY( VolumeUp, kVK_VolumeUp );
+  //AE_UPDATE_KEY( VolumeDown, kVK_VolumeDown );
+  //AE_UPDATE_KEY( Mute, kVK_Mute );
+  //AE_UPDATE_KEY( F18, kVK_F18 );
+  //AE_UPDATE_KEY( F19, kVK_F19 );
+  //AE_UPDATE_KEY( F20, kVK_F20 );
+  AE_UPDATE_KEY( F5, kVK_F5 );
+  AE_UPDATE_KEY( F6, kVK_F6 );
+  AE_UPDATE_KEY( F7, kVK_F7 );
+  AE_UPDATE_KEY( F3, kVK_F3 );
+  AE_UPDATE_KEY( F8, kVK_F8 );
+  AE_UPDATE_KEY( F9, kVK_F9 );
+  AE_UPDATE_KEY( F11, kVK_F11 );
+  //AE_UPDATE_KEY( F13, kVK_F13 );
+  //AE_UPDATE_KEY( F16, kVK_F16 );
+  //AE_UPDATE_KEY( F14, kVK_F14 );
+  AE_UPDATE_KEY( F10, kVK_F10 );
+  AE_UPDATE_KEY( F12, kVK_F12 );
+  //AE_UPDATE_KEY( F15, kVK_F15 );
+  //AE_UPDATE_KEY( Help, kVK_Help );
+  AE_UPDATE_KEY( Home, kVK_Home );
+  AE_UPDATE_KEY( PageUp, kVK_PageUp );
+  AE_UPDATE_KEY( Delete, kVK_ForwardDelete );
+  AE_UPDATE_KEY( F4, kVK_F4 );
+  AE_UPDATE_KEY( End, kVK_End );
+  AE_UPDATE_KEY( F2, kVK_F2 );
+  AE_UPDATE_KEY( PageDown, kVK_PageDown );
+  AE_UPDATE_KEY( F1, kVK_F1 );
+  AE_UPDATE_KEY( Left, kVK_LeftArrow );
+  AE_UPDATE_KEY( Right, kVK_RightArrow );
+  AE_UPDATE_KEY( Down, kVK_DownArrow );
+  AE_UPDATE_KEY( Up, kVK_UpArrow );
+#undef AE_UPDATE_KEY
 #endif
+}
+
+bool Input::Get( ae::Key key ) const
+{
+  return m_keys[ static_cast< int >( key ) ];
+}
+
+bool Input::GetPrev( ae::Key key ) const
+{
+  return m_keysPrev[ static_cast< int >( key ) ];
 }
 
 //------------------------------------------------------------------------------
@@ -5445,13 +5693,13 @@ void FileSystem::Initialize( const char* dataDir, const char* organizationName, 
   const char* validateOrgName = organizationName;
   while ( *validateOrgName )
   {
-    AE_ASSERT_MSG( isalnum( *validateOrgName ) || ( *validateOrgName == '_' ), "Invalid organization name '#'. Only alphanumeric characters and undersrcores are supported.", organizationName );
+    AE_ASSERT_MSG( isalnum( *validateOrgName ) || ( *validateOrgName == '_' )  || ( *validateOrgName == '-' ), "Invalid organization name '#'. Only alphanumeric characters and undersrcores are supported.", organizationName );
     validateOrgName++;
   }
   const char* validateAppName = applicationName;
   while ( *validateAppName )
   {
-    AE_ASSERT_MSG( isalnum( *validateAppName ) || ( *validateAppName == '_' ), "Invalid application name '#'. Only alphanumeric characters and undersrcores are supported.", applicationName );
+    AE_ASSERT_MSG( isalnum( *validateAppName ) || ( *validateAppName == '_' ) || ( *validateAppName == '-' ), "Invalid application name '#'. Only alphanumeric characters and undersrcores are supported.", applicationName );
     validateAppName++;
   }
 
@@ -5614,11 +5862,15 @@ bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
   switch ( root )
   {
     case Root::Data:
-      if ( outDir )
+      if ( m_dataDir.Length() )
       {
-        *outDir = m_dataDir;
+        if ( outDir )
+        {
+          *outDir = m_dataDir;
+        }
+        return true;
       }
-      return true;
+      break;
     case Root::User:
       if ( m_userDir.Length() )
       {
@@ -5800,10 +6052,17 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 #if _AE_APPLE_
   NSString* path = [NSString stringWithUTF8String:filePath];
   NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-  AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
-  NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
-  NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
-  return [absoluteUrl.path UTF8String];
+  if ( ![currentPath isEqualToString:@"/"] )
+  {
+    AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
+    NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
+    NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
+    return [absoluteUrl.path UTF8String];
+  }
+  else
+  {
+    return "";
+  }
 #endif
   // @TODO: Windows and Linux
   return filePath;
