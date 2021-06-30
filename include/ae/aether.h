@@ -3638,6 +3638,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 }
 
 } // AE_NAMESPACE end
+#endif // AE_AETHER_H
 
 //------------------------------------------------------------------------------
 // The following should be compiled into a single module and linked with the
@@ -5405,6 +5406,8 @@ void Input::Initialize( Window* window )
 
 void Input::Pump()
 {
+  memcpy( m_keysPrev, m_keys, sizeof( m_keys ) );
+
 #if _AE_WINDOWS_
   MSG msg;
   // Get messages for current thread
@@ -5418,6 +5421,194 @@ void Input::Pump()
     }
     TranslateMessage( &msg );
     DispatchMessage( &msg );
+  }
+  uint8_t keyStates[ 256 ];
+  if ( GetKeyboardState( keyStates ) )
+  {
+    // @TODO: ae::Key::NumPadEnter is currently not handled
+    #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
+    AE_UPDATE_KEY( Backspace, VK_BACK );
+    AE_UPDATE_KEY( Tab, VK_TAB );
+    // AE_UPDATE_KEY( ?, VK_CLEAR );
+    AE_UPDATE_KEY( Enter, VK_RETURN );
+    // AE_UPDATE_KEY( ?, VK_SHIFT );
+    // AE_UPDATE_KEY( ?, VK_CONTROL );
+    // AE_UPDATE_KEY( ?, VK_MENU );
+    AE_UPDATE_KEY( Pause, VK_PAUSE );
+    AE_UPDATE_KEY( CapsLock, VK_CAPITAL );
+    // AE_UPDATE_KEY( ?, VK_KANA );
+    // AE_UPDATE_KEY( ?, VK_IME_ON );
+    // AE_UPDATE_KEY( ?, VK_JUNJA );
+    // AE_UPDATE_KEY( ?, VK_FINAL );
+    // AE_UPDATE_KEY( ?, VK_KANJI );
+    // AE_UPDATE_KEY( ?, VK_IME_OFF );
+    AE_UPDATE_KEY( Escape, VK_ESCAPE );
+    // AE_UPDATE_KEY( ?, VK_CONVERT );
+    // AE_UPDATE_KEY( ?, VK_NONCONVERT );
+    // AE_UPDATE_KEY( ?, VK_ACCEPT );
+    // AE_UPDATE_KEY( ?, VK_MODECHANGE );
+    AE_UPDATE_KEY( Space, VK_SPACE );
+    AE_UPDATE_KEY( PageUp, VK_PRIOR );
+    AE_UPDATE_KEY( PageDown, VK_NEXT );
+    AE_UPDATE_KEY( End, VK_END );
+    AE_UPDATE_KEY( Home, VK_HOME );
+    AE_UPDATE_KEY( Left, VK_LEFT );
+    AE_UPDATE_KEY( Up, VK_UP );
+    AE_UPDATE_KEY( Right, VK_RIGHT );
+    AE_UPDATE_KEY( Down, VK_DOWN );
+    // AE_UPDATE_KEY( ?, VK_SELECT );
+    //AE_UPDATE_KEY( ?, VK_PRINT );
+    // AE_UPDATE_KEY( ?, VK_EXECUTE );
+    AE_UPDATE_KEY( PrintScreen, VK_SNAPSHOT );
+    AE_UPDATE_KEY( Insert, VK_INSERT );
+    AE_UPDATE_KEY( Delete, VK_DELETE );
+    // AE_UPDATE_KEY( ?, VK_HELP );
+    for ( uint32_t i = 0; i <= ('9' - '1'); i++ )
+    {
+      AE_UPDATE_KEY( Num1 + i, '1' + i );
+    }
+    AE_UPDATE_KEY( Num0, '0' );
+    for ( uint32_t i = 0; i <= ('Z' - 'A'); i++ )
+    {
+      AE_UPDATE_KEY( A + i, 'A' + i );
+    }
+    AE_UPDATE_KEY( LeftSuper, VK_LWIN );
+    AE_UPDATE_KEY( RightSuper, VK_RWIN );
+    // AE_UPDATE_KEY( ?, VK_APPS );
+    // AE_UPDATE_KEY( ?, VK_SLEEP );
+    for ( uint32_t i = 0; i <= (VK_NUMPAD9 - VK_NUMPAD1); i++ )
+    {
+      AE_UPDATE_KEY( NumPad1 + i, VK_NUMPAD1 + i );
+    }
+    AE_UPDATE_KEY( NumPad0, VK_NUMPAD0 );
+    AE_UPDATE_KEY( NumPadMultiply, VK_MULTIPLY );
+    AE_UPDATE_KEY( NumPadPlus, VK_ADD );
+    // AE_UPDATE_KEY( ?, VK_SEPARATOR );
+    AE_UPDATE_KEY( NumPadMinus, VK_SUBTRACT );
+    AE_UPDATE_KEY( NumPadPeriod, VK_DECIMAL );
+    AE_UPDATE_KEY( NumPadDivide, VK_DIVIDE );
+    for ( uint32_t i = 0; i <= (VK_F12 - VK_F1); i++ )
+    {
+      AE_UPDATE_KEY( F1 + i, VK_F1 + i );
+    }
+    // AE_UPDATE_KEY( ?, VK_F13 );
+    // AE_UPDATE_KEY( ?, VK_F14 );
+    // AE_UPDATE_KEY( ?, VK_F15 );
+    // AE_UPDATE_KEY( ?, VK_F16 );
+    // AE_UPDATE_KEY( ?, VK_F17 );
+    // AE_UPDATE_KEY( ?, VK_F18 );
+    // AE_UPDATE_KEY( ?, VK_F19 );
+    // AE_UPDATE_KEY( ?, VK_F20 );
+    // AE_UPDATE_KEY( ?, VK_F21 );
+    // AE_UPDATE_KEY( ?, VK_F22 );
+    // AE_UPDATE_KEY( ?, VK_F23 );
+    // AE_UPDATE_KEY( ?, VK_F24 );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_VIEW );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_MENU );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_UP );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_DOWN );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_LEFT );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_RIGHT );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_ACCEPT );
+    // AE_UPDATE_KEY( ?, VK_NAVIGATION_CANCEL );
+    AE_UPDATE_KEY( NumLock, VK_NUMLOCK );
+    AE_UPDATE_KEY( ScrollLock, VK_SCROLL );
+    AE_UPDATE_KEY( NumPadEquals, VK_OEM_NEC_EQUAL ); // '=' key on numpad
+    // AE_UPDATE_KEY( ?, VK_OEM_FJ_JISHO ); // 'Dictionary' key
+    // AE_UPDATE_KEY( ?, VK_OEM_FJ_MASSHOU ); // 'Unregister word' key
+    // AE_UPDATE_KEY( ?, VK_OEM_FJ_TOUROKU ); // 'Register word' key
+    // AE_UPDATE_KEY( ?, VK_OEM_FJ_LOYA ); // 'Left OYAYUBI' key
+    // AE_UPDATE_KEY( ?, VK_OEM_FJ_ROYA ); // 'Right OYAYUBI' key
+    AE_UPDATE_KEY( LeftShift, VK_LSHIFT );
+    AE_UPDATE_KEY( RightShift, VK_RSHIFT );
+    AE_UPDATE_KEY( LeftControl, VK_LCONTROL );
+    AE_UPDATE_KEY( RightControl, VK_RCONTROL );
+    AE_UPDATE_KEY( LeftAlt, VK_LMENU );
+    AE_UPDATE_KEY( RightAlt, VK_RMENU );
+    // AE_UPDATE_KEY( ?, VK_BROWSER_BACK );
+    // AE_UPDATE_KEY( ?, VK_BROWSER_FORWARD );
+    // AE_UPDATE_KEY( ?, VK_BROWSER_REFRESH );
+    // AE_UPDATE_KEY( ?, VK_BROWSER_STOP );
+    // AE_UPDATE_KEY( ?, VK_BROWSER_SEARCH );
+    // AE_UPDATE_KEY( ?, VK_BROWSER_FAVORITES );
+    // AE_UPDATE_KEY( ?, VK_BROWSER_HOME );
+    // AE_UPDATE_KEY( ?, VK_VOLUME_MUTE );
+    // AE_UPDATE_KEY( ?, VK_VOLUME_DOWN );
+    // AE_UPDATE_KEY( ?, VK_VOLUME_UP );
+    // AE_UPDATE_KEY( ?, VK_MEDIA_NEXT_TRACK );
+    // AE_UPDATE_KEY( ?, VK_MEDIA_PREV_TRACK );
+    // AE_UPDATE_KEY( ?, VK_MEDIA_STOP );
+    // AE_UPDATE_KEY( ?, VK_MEDIA_PLAY_PAUSE );
+    // AE_UPDATE_KEY( ?, VK_LAUNCH_MAIL );
+    // AE_UPDATE_KEY( ?, VK_LAUNCH_MEDIA_SELECT );
+    // AE_UPDATE_KEY( ?, VK_LAUNCH_APP1 );
+    // AE_UPDATE_KEY( ?, VK_LAUNCH_APP2 );
+    AE_UPDATE_KEY( Semicolon, VK_OEM_1 ); // ';:' for US
+    AE_UPDATE_KEY( Equals, VK_OEM_PLUS ); // '+' any country
+    AE_UPDATE_KEY( Comma, VK_OEM_COMMA ); // ',' any country
+    AE_UPDATE_KEY( Minus, VK_OEM_MINUS ); // '-' any country
+    AE_UPDATE_KEY( Period, VK_OEM_PERIOD ); // '.' any country
+    AE_UPDATE_KEY( Slash, VK_OEM_2 ); // '/?' for US
+    AE_UPDATE_KEY( Tilde, VK_OEM_3 ); // '`~' for US
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_A );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_B );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_X );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_Y );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_SHOULDER );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_SHOULDER );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_TRIGGER );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_TRIGGER );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_UP );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_DOWN );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_LEFT );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_RIGHT );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_MENU );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_VIEW );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_UP );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_DOWN );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_LEFT );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_UP );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT );
+    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT );
+    AE_UPDATE_KEY( LeftBracket, VK_OEM_4 ); //  '[{' for US
+    AE_UPDATE_KEY( Backslash, VK_OEM_5 ); //  '\|' for US
+    AE_UPDATE_KEY( RightBracket, VK_OEM_6 ); //  ']}' for US
+    AE_UPDATE_KEY( Apostrophe, VK_OEM_7 ); //  ''"' for US
+    // AE_UPDATE_KEY( ?, VK_OEM_8 );
+    // AE_UPDATE_KEY( ?, VK_OEM_AX ); //  'AX' key on Japanese AX kbd
+    // AE_UPDATE_KEY( ?, VK_OEM_10 ); //  "<>" or "\|" on RT 102-key kbd.
+    // AE_UPDATE_KEY( ?, VK_ICO_HELP ); //  Help key on ICO
+    // AE_UPDATE_KEY( ?, VK_ICO_00 ); //  00 key on ICO
+    // AE_UPDATE_KEY( ?, VK_PROCESSKEY );
+    // AE_UPDATE_KEY( ?, VK_ICO_CLEAR );
+    // AE_UPDATE_KEY( ?, VK_PACKET );
+    // AE_UPDATE_KEY( ?, VK_OEM_RESET );
+    // AE_UPDATE_KEY( ?, VK_OEM_JUMP );
+    // AE_UPDATE_KEY( ?, VK_OEM_PA1 );
+    // AE_UPDATE_KEY( ?, VK_OEM_PA2 );
+    // AE_UPDATE_KEY( ?, VK_OEM_PA3 );
+    // AE_UPDATE_KEY( ?, VK_OEM_WSCTRL );
+    // AE_UPDATE_KEY( ?, VK_OEM_CUSEL );
+    // AE_UPDATE_KEY( ?, VK_OEM_ATTN );
+    // AE_UPDATE_KEY( ?, VK_OEM_FINISH );
+    // AE_UPDATE_KEY( ?, VK_OEM_COPY );
+    // AE_UPDATE_KEY( ?, VK_OEM_AUTO );
+    // AE_UPDATE_KEY( ?, VK_OEM_ENLW );
+    // AE_UPDATE_KEY( ?, VK_OEM_BACKTAB );
+    // AE_UPDATE_KEY( ?, VK_ATTN );
+    // AE_UPDATE_KEY( ?, VK_CRSEL );
+    // AE_UPDATE_KEY( ?, VK_EXSEL );
+    // AE_UPDATE_KEY( ?, VK_EREOF );
+    // AE_UPDATE_KEY( ?, VK_PLAY );
+    // AE_UPDATE_KEY( ?, VK_ZOOM );
+    // AE_UPDATE_KEY( ?, VK_NONAME );
+    // AE_UPDATE_KEY( ?, VK_PA1 );
+    // AE_UPDATE_KEY( ?, VK_OEM_CLEAR );
+    #undef AE_UPDATE_KEY
   }
 #elif _AE_OSX_
   @autoreleasepool
@@ -5475,8 +5666,6 @@ void Input::Pump()
       [NSApp sendEvent:event];
     }
   }
-  
-  memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
   
   KeyMap _keyStates;
   GetKeys(_keyStates);
@@ -8118,4 +8307,3 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 #endif
 
 #endif // AE_MAIN
-#endif // AE_AETHER_H
