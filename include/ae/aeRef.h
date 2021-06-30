@@ -48,15 +48,24 @@ public:
 
   aeId() { m_id = 0; }
 
+  explicit operator bool() const { return m_id != 0; }
+  bool operator == ( aeId other ) const { return m_id == other.m_id; }
+  bool operator != ( aeId other ) const { return !operator == ( other ); }
+
+#if _AE_WINDOWS_
+  // @TODO: Remove this
+  template< typename U >
+  aeId( const aeId< U >& other )
+  {
+      m_id = other.m_id;
+  }
+#else
+  // @TODO: The following has stopped working with MSVC
   template< typename U, typename std::enable_if< std::is_base_of< T, U >{}, int>::type = 0 > // Allow automatic downcast to U
   aeId( const aeId< U >& other ) { m_id = other.m_id; }
 
   template< typename U, typename std::enable_if< std::is_base_of< U, T >{}, int>::type = 0 > // Allow explicit upcast to U
   explicit aeId( const aeId< U >& other ) { m_id = other.m_id; }
-
-  explicit operator bool() const { return m_id != 0; }
-  bool operator == ( aeId other ) const { return m_id == other.m_id; }
-  bool operator != ( aeId other ) const { return !operator == ( other ); }
 
 private:
   template < typename T2 >
@@ -64,6 +73,7 @@ private:
 
   template < typename T2 >
   friend std::ostream& operator<<( std::ostream& os, const aeId< T2 >& id );
+#endif
 
   explicit aeId( uint32_t id ) { m_id = id; }
   
