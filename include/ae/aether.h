@@ -5898,6 +5898,7 @@ bool Input::GetPrev( ae::Key key ) const
 //------------------------------------------------------------------------------
 // ae::FileSystem member functions
 //------------------------------------------------------------------------------
+// @TODO: Remove separator define when cleaning up path functions
 #if _AE_WINDOWS_
   #define AE_PATH_SEPARATOR '\\'
 #else
@@ -6000,9 +6001,10 @@ void FileSystem::m_SetDataDir( const char* dataDir )
   m_dataDir = GetAbsolutePath( dataDir );
 
   // Append slash if not empty and is currently missing
-  if ( m_dataDir.Length() && m_dataDir[ m_dataDir.Length() - 1 ] != AE_PATH_SEPARATOR )
+  if ( m_dataDir.Length() )
   {
-    m_dataDir.Append( Str16( 1, AE_PATH_SEPARATOR ) );
+    char sepatator[ 2 ] = { AE_PATH_SEPARATOR, 0 };
+    AppendToPath( &m_dataDir, sepatator );
   }
 }
 
@@ -6348,8 +6350,18 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
   {
     return "";
   }
+#elif _AE_WINDOWS_
+  char result[ ae::Str256::MaxLength() ];
+  if ( _fullpath( result, filePath, countof(result) ) )
+  {
+    return result;
+  }
+  else
+  {
+    return "";
+  }
 #endif
-  // @TODO: Windows and Linux
+  // @TODO: Linux
   return filePath;
 }
 
@@ -6414,6 +6426,12 @@ void FileSystem::AppendToPath( Str256* path, const char* str )
     if ( lastChar != '/' && lastChar != '\\' )
     {
       path->Append( Str16( 1, AE_PATH_SEPARATOR ) );
+
+      if ( ( str[ 0 ] == '/' || str[ 0 ] == '\\' ) && !str[ 1 ] )
+      {
+        // @HACK: Append single separator when given separator only string
+        return;
+      }
     }
   }
   
