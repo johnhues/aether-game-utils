@@ -353,12 +353,15 @@ struct Vec2 : public _VecT< Vec2 >
   Vec2( float x, float y );
   explicit Vec2( const float* v2 );
   static Vec2 FromAngle( float angle );
-  struct
+  union
   {
-    float x;
-    float y;
+    struct
+    {
+      float x;
+      float y;
+    };
+    float data[ 2 ];
   };
-  float data[ 2 ];
 };
 // @HACK: For Window
 using Int2 = Vec2;
@@ -919,7 +922,6 @@ inline std::ostream& operator<<( std::ostream& os, Rect r )
 //------------------------------------------------------------------------------
 #define AE_TRACE(...) ae::LogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_DEBUG(...) ae::LogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_LOG(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_INFO(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_WARN(...) ae::LogInternal( _AE_LOG_WARN_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_ERR(...) ae::LogInternal( _AE_LOG_ERROR_, __FILE__, __LINE__, "", __VA_ARGS__ )
@@ -1594,6 +1596,97 @@ public:
   void* m_context = nullptr;
   int32_t m_defaultFbo = 0;
 };
+
+//------------------------------------------------------------------------------
+// ae::DebugLines class
+//------------------------------------------------------------------------------
+class DebugLines
+{
+public:
+  void Initialize( uint32_t maxObjects );
+  void Terminate();
+  void Render( const Matrix4& worldToNdc ); // Also calls Clear() so AddLine() etc should be called every frame
+  void SetXRayEnabled( bool enabled ) { m_xray = enabled; } // Draw desaturated lines on failed depth test
+
+  bool AddLine( Vec3 p0, Vec3 p1, Color color );
+  bool AddDistanceCheck( Vec3 p0, Vec3 p1, float distance );
+  bool AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color );
+  bool AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount );
+  bool AddAABB( Vec3 pos, Vec3 halfSize, Color color );
+  bool AddOBB( Matrix4 transform, Color color );
+  bool AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount );
+  void Clear();
+
+private:
+  struct DebugVertex
+  {
+    Vec3 pos;
+    Color color;
+  };
+  Array< DebugVertex > m_verts = AE_ALLOC_TAG_RENDER;
+  VertexData m_vertexData;
+  Shader m_shader;
+  bool m_xray = true;
+  enum class DebugType
+  {
+    Line,
+    Rect,
+    Circle,
+    Sphere,
+    AABB,
+    Cube,
+  };
+  // @TODO: Should just store verts, Init() should take a max vert count
+  struct DebugObject
+  {
+    DebugType type;
+    Vec3 pos;
+    Vec3 end;
+    Quaternion rotation;
+    Vec3 size;
+    float radius;
+    Color color;
+    uint32_t pointCount; // circle only
+    Matrix4 transform;
+  };
+  Array< DebugObject > m_objs = AE_ALLOC_TAG_RENDER;
+};
+
+//------------------------------------------------------------------------------
+// ae::Hash class (fnv1a)
+// @NOTE: Empty strings and zero-length data buffers do not hash to zero
+//------------------------------------------------------------------------------
+class Hash
+{
+public:
+  Hash() = default;
+  explicit Hash( uint32_t initialValue );
+  
+  bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
+  bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
+
+  Hash& HashString( const char* str );
+  Hash& HashData( const void* data, uint32_t length );
+  template < typename T > Hash& HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
+  Hash& HashFloat( float f );
+  template < uint32_t N > Hash& HashFloatArray( const float (&f)[ N ] );
+
+  void Set( uint32_t hash );
+  uint32_t Get() const;
+
+private:
+  uint32_t m_hash = 0x811c9dc5;
+};
+
+template < uint32_t N >
+Hash& Hash::HashFloatArray( const float (&f)[ N ] )
+{
+  for ( uint32_t i = 0; i < N; i++ )
+  {
+    HashFloat( f[ i ] );
+  }
+  return *this;
+}
 
 } // AE_NAMESPACE end
 
@@ -5462,12 +5555,10 @@ void Input::Pump()
         case NSEventTypeScrollWheel:
           AE_INFO( "mouse scroll" );
           break;
-          // Keyboard
         case NSEventTypeKeyDown:
-          //AE_INFO( "key down" );
-          break;
         case NSEventTypeKeyUp:
-          //AE_INFO( "key up" );
+          // Don't propagate keyboard events or OSX will make the clicking error sound
+          continue;
           break;
         default:
           break;
@@ -6557,11 +6648,11 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 
   if ( !m_vertexShader )
   {
-    AE_LOG( "Failed to load vertex shader! #", vertexStr );
+    AE_ERR( "Failed to load vertex shader! #", vertexStr );
   }
   if ( !m_fragmentShader )
   {
-    AE_LOG( "Failed to load fragment shader! #", fragStr );
+    AE_ERR( "Failed to load fragment shader! #", fragStr );
   }
 
   if ( !m_vertexShader || !m_fragmentShader )
@@ -6943,12 +7034,12 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
     {
       unsigned char* log = new unsigned char[ logLength ];
       glGetShaderInfoLog( shader, logLength, NULL, (GLchar*)log );
-      AE_LOG( "Error compiling # shader #", typeStr, log );
+      AE_ERR( "Error compiling # shader #", typeStr, log );
       delete[] log;
     }
     else
     {
-      AE_LOG( "Error compiling # shader: unknown issue", typeStr );
+      AE_ERR( "Error compiling # shader: unknown issue", typeStr );
     }
 
     AE_CHECK_GL_ERROR();
@@ -8105,6 +8196,417 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
   m_canvas.Initialize( width, height );
   m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );
   m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
+}
+
+//------------------------------------------------------------------------------
+// ae::DebugLines member functions
+//------------------------------------------------------------------------------
+const uint32_t kDebugVertexCountPerObject = 32;
+
+void DebugLines::Initialize( uint32_t maxObjects )
+{
+  m_objs = ae::Array< DebugObject >( AE_ALLOC_TAG_RENDER, maxObjects );
+
+  // @HACK: Should handle vert count in a safer way
+  m_vertexData.Initialize( sizeof(DebugVertex), sizeof(uint16_t), m_objs.Size() * kDebugVertexCountPerObject, 0, VertexData::Primitive::Line, VertexData::Usage::Dynamic, VertexData::Usage::Static );
+  m_vertexData.AddAttribute( "a_position", 3, VertexData::Type::Float, offsetof(DebugVertex, pos) );
+  m_vertexData.AddAttribute( "a_color", 4, VertexData::Type::Float, offsetof(DebugVertex, color) );
+
+  // Load shader
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_worldToNdc;\
+    AE_UNIFORM float u_saturation;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec4 a_color;\
+    AE_OUT_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5;\
+      v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);\
+      gl_Position = u_worldToNdc * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      AE_COLOR = v_color;\
+    }";
+  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  m_shader.SetBlending( true );
+  m_shader.SetDepthTest( true );
+}
+
+void DebugLines::Terminate()
+{
+  m_shader.Destroy();
+  m_vertexData.Destroy();
+}
+
+void DebugLines::Render( const Matrix4& worldToNdc )
+{
+  if ( !m_objs.Length() )
+  {
+    return;
+  }
+
+  const uint16_t kQuadIndices[] = {
+    3, 1, 0,
+    3, 1, 2
+  };
+
+  m_verts.Clear();
+  m_verts.Reserve( m_objs.Size() * kDebugVertexCountPerObject );
+
+  for ( uint32_t i = 0; i < m_objs.Length(); i++ )
+  {
+    DebugObject obj = m_objs[ i ];
+    if ( obj.type == DebugType::Rect )
+    {
+      Vec3 halfSize = obj.size * 0.5f;
+
+      DebugVertex verts[ 4 ];
+      
+      verts[ 0 ].pos = obj.pos + obj.rotation.Rotate( Vec3( -halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Left
+      verts[ 1 ].pos = obj.pos + obj.rotation.Rotate( Vec3( halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Right
+      verts[ 2 ].pos = obj.pos + obj.rotation.Rotate( Vec3( halfSize.x, 0.0f, halfSize.y ) ); // Top Right
+      verts[ 3 ].pos = obj.pos + obj.rotation.Rotate( Vec3( -halfSize.x, 0.0f, halfSize.y ) ); // Top Left
+
+      verts[ 0 ].color = obj.color;
+      verts[ 1 ].color = obj.color;
+      verts[ 2 ].color = obj.color;
+      verts[ 3 ].color = obj.color;
+
+      m_verts.Append( verts[ 0 ] );
+      m_verts.Append( verts[ 1 ] );
+      m_verts.Append( verts[ 1 ] );
+      m_verts.Append( verts[ 2 ] );
+      m_verts.Append( verts[ 2 ] );
+      m_verts.Append( verts[ 3 ] );
+      m_verts.Append( verts[ 3 ] );
+      m_verts.Append( verts[ 0 ] );
+    }
+    else if ( obj.type == DebugType::Circle )
+    {
+      float angleInc = ae::PI * 2.0f / obj.pointCount;
+      for ( uint32_t i = 0; i < obj.pointCount; i++ )
+      {
+        float angle0 = angleInc * i;
+        float angle1 = angleInc * ( i + 1 );
+
+        DebugVertex verts[ 2 ];
+
+        verts[ 0 ].pos = Vec3( cosf( angle0 ) * obj.radius, 0.0f, sinf( angle0 ) * obj.radius );
+        verts[ 1 ].pos = Vec3( cosf( angle1 ) * obj.radius, 0.0f, sinf( angle1 ) * obj.radius );
+        verts[ 0 ].pos = obj.rotation.Rotate( verts[ 0 ].pos );
+        verts[ 1 ].pos = obj.rotation.Rotate( verts[ 1 ].pos );
+        verts[ 0 ].pos += obj.pos;
+        verts[ 1 ].pos += obj.pos;
+
+        verts[ 0 ].color = obj.color;
+        verts[ 1 ].color = obj.color;
+
+        m_verts.Append( verts, countof( verts ) );
+      }
+    }
+    else if ( obj.type == DebugType::Line )
+    {
+      DebugVertex verts[ 2 ];
+      verts[ 0 ].pos = obj.pos;
+      verts[ 0 ].color = obj.color;
+      verts[ 1 ].pos = obj.end;
+      verts[ 1 ].color = obj.color;
+
+      m_verts.Append( verts, countof( verts ) );
+    }
+    else if ( obj.type == DebugType::AABB )
+    {
+      Vec3 s = obj.size;
+      Vec3 c[] =
+      {
+        obj.pos + Vec3( -s.x, s.y, s.z ),
+        obj.pos + s,
+        obj.pos + Vec3( s.x, -s.y, s.z ),
+        obj.pos + Vec3( -s.x, -s.y, s.z ),
+        obj.pos + Vec3( -s.x, s.y, -s.z ),
+        obj.pos + Vec3( s.x, s.y, -s.z ),
+        obj.pos + Vec3( s.x, -s.y, -s.z ),
+        obj.pos + Vec3( -s.x, -s.y, -s.z )
+      };
+      AE_STATIC_ASSERT( countof( c ) == 8 );
+
+      DebugVertex verts[] =
+      {
+        // Top
+        { c[ 0 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 0 ], obj.color },
+        // Sides
+        { c[ 0 ], obj.color },
+        { c[ 4 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 7 ], obj.color },
+        //Bottom
+        { c[ 4 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 4 ], obj.color },
+      };
+      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
+      
+      m_verts.Append( verts, countof( verts ) );
+    }
+    else if ( obj.type == DebugType::Cube )
+    {
+      Vec3 c[] =
+      {
+        ( obj.transform * Vec4( -0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * Vec4( 0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * Vec4( 0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * Vec4( -0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * Vec4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * Vec4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * Vec4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+        ( obj.transform * Vec4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ()
+      };
+      AE_STATIC_ASSERT( countof( c ) == 8 );
+
+      DebugVertex verts[] =
+      {
+        // Top
+        { c[ 0 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 0 ], obj.color },
+        // Sides
+        { c[ 0 ], obj.color },
+        { c[ 4 ], obj.color },
+        { c[ 1 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 2 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 3 ], obj.color },
+        { c[ 7 ], obj.color },
+        //Bottom
+        { c[ 4 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 5 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 6 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 7 ], obj.color },
+        { c[ 4 ], obj.color },
+      };
+      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
+
+      m_verts.Append( verts, countof( verts ) );
+    }
+  }
+
+  if ( m_verts.Length() )
+  {
+    m_vertexData.SetVertices( &m_verts[ 0 ], ae::Min( m_verts.Length(), m_vertexData.GetMaxVertexCount() ) );
+
+    UniformList uniforms;
+    uniforms.Set( "u_worldToNdc", worldToNdc );
+
+    if ( m_xray )
+    {
+      m_shader.SetDepthTest( false );
+      m_shader.SetDepthWrite( false );
+      uniforms.Set( "u_saturation", 0.1f );
+      m_vertexData.Render( &m_shader, uniforms );
+    }
+
+    m_shader.SetDepthTest( true );
+    m_shader.SetDepthWrite( true );
+    uniforms.Set( "u_saturation", 1.0f );
+    m_vertexData.Render( &m_shader, uniforms );
+  }
+
+  m_objs.Clear();
+}
+
+void DebugLines::Clear()
+{
+  m_objs.Clear();
+}
+
+bool DebugLines::AddLine( Vec3 p0, Vec3 p1, Color color )
+{
+  if ( m_objs.Length() < m_objs.Size() )
+  {
+    DebugObject* obj = &m_objs.Append( DebugObject() );
+    obj->type = DebugType::Line;
+    obj->pos = p0;
+    obj->end = p1;
+    obj->color = color;
+    return true;
+  }
+  return false;
+}
+
+bool DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance )
+{
+  if ( m_objs.Length() < m_objs.Size() )
+  {
+    DebugObject* obj = &m_objs.Append( DebugObject() );
+    obj->type = DebugType::Line;
+    obj->pos = p0;
+    obj->end = p1;
+    obj->color = ( ( p1 - p0 ).Length() <= distance ) ? Color::Green() : Color::Red();
+    return true;
+  }
+  return false;
+}
+
+bool DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color )
+{
+  if ( m_objs.Length() < m_objs.Size()
+    && up.LengthSquared() > 0.001f
+    && normal.LengthSquared() > 0.001f )
+  {
+    up.SafeNormalize();
+    normal.SafeNormalize();
+    if ( normal.Dot( up ) < 0.999f )
+    {
+      DebugObject* obj = &m_objs.Append( DebugObject() );
+      obj->type = DebugType::Rect;
+      obj->pos = pos;
+      obj->rotation = Quaternion( normal, up );
+      obj->size = Vec3( size );
+      obj->color = color;
+      obj->pointCount = 0;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount )
+{
+  if ( m_objs.Length() < m_objs.Size() && normal.LengthSquared() > 0.001f )
+  {
+    normal.SafeNormalize();
+    float dot = normal.Dot( Vec3(0,0,1) );
+    
+    DebugObject* obj = &m_objs.Append( DebugObject() );
+    obj->type = DebugType::Circle;
+    obj->pos = pos;
+    obj->rotation = Quaternion( normal, ( dot < 0.99f && dot > -0.99f ) ? Vec3(0,0,1) : Vec3(1,0,0) );
+    obj->radius = radius;
+    obj->color = color;
+    obj->pointCount = pointCount;
+    return true;
+  }
+  return false;
+}
+
+bool DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
+{
+  if ( m_objs.Length() < m_objs.Size() )
+  {
+    DebugObject* obj = &m_objs.Append( DebugObject() );
+    obj->type = DebugType::AABB;
+    obj->pos = pos;
+    obj->rotation = Quaternion::Identity();
+    obj->size = halfSize;
+    obj->color = color;
+    obj->pointCount = 0;
+    return true;
+  }
+  return false;
+}
+
+bool DebugLines::AddOBB( Matrix4 transform, Color color )
+{
+  if ( m_objs.Length() < m_objs.Size() )
+  {
+    DebugObject* obj = &m_objs.Append( DebugObject() );
+    obj->type = DebugType::Cube;
+    obj->transform = transform;
+    obj->color = color;
+    return true;
+  }
+  return false;
+}
+
+bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount )
+{
+  if ( m_objs.Length() + 3 <= m_objs.Size() )
+  if ( AddCircle( pos, Vec3(1,0,0), radius, color, pointCount ) )
+  if ( AddCircle( pos, Vec3(0,1,0), radius, color, pointCount ) )
+  if ( AddCircle( pos, Vec3(0,0,1), radius, color, pointCount ) )
+  {
+    return true;
+  }
+  return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::Hash member functions
+//------------------------------------------------------------------------------
+Hash::Hash( uint32_t initialValue )
+{
+  m_hash = initialValue;
+}
+
+Hash& Hash::HashString( const char* str )
+{
+  while ( *str )
+  {
+    m_hash = m_hash ^ str[ 0 ];
+    m_hash *= 0x1000193;
+    str++;
+  }
+
+  return *this;
+}
+
+Hash& Hash::HashData( const void* _data, uint32_t length )
+{
+  const uint8_t* data = (const uint8_t*)_data;
+  for ( uint32_t i = 0; i < length; i++ )
+  {
+    m_hash = m_hash ^ data[ i ];
+    m_hash *= 0x1000193;
+  }
+
+  return *this;
+}
+
+Hash& Hash::HashFloat( float f )
+{
+  uint32_t ui;
+  memcpy( &ui, &f, sizeof( float ) );
+  ui &= 0xfffff000;
+  return HashBasicType( ui );
+}
+
+void Hash::Set( uint32_t hash )
+{
+  m_hash = hash;
+}
+
+uint32_t Hash::Get() const
+{
+  return m_hash;
 }
 
 } // AE_NAMESPACE end
