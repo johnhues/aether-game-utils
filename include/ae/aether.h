@@ -3779,11 +3779,16 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
   #include <unistd.h>
-  @import AppKit;
-  @import Carbon;
-  @import Cocoa;
-  @import CoreFoundation;
-  @import OpenGL;
+  #if AE_USE_MODULES
+    @import AppKit;
+    @import Carbon;
+    @import Cocoa;
+    @import CoreFoundation;
+    @import OpenGL;
+  #else
+    #include <Cocoa/Cocoa.h>
+    #include <Carbon/Carbon.h>
+  #endif
 #elif _AE_LINUX_
   #include <unistd.h>
   #include <pwd.h>
