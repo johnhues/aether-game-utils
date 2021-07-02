@@ -122,3 +122,10 @@ set(AE_CURRENT_EXECUTABLE_NAME 12_Geometry)
 set(AE_CURRENT_SOURCE_FILES 12_Geometry.cpp)
 set(AE_RESOURCES font.png)
 include(AddExecutable)
+
+# FileDialogs
+set(AE_CURRENT_BUNDLE_NAME "FileDialogs")
+set(AE_CURRENT_EXECUTABLE_NAME 13_FileDialogs)
+set(AE_CURRENT_SOURCE_FILES 13_FileDialogs.cpp)
+set(AE_RESOURCES "")
+include(AddExecutable)

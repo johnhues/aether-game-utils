@@ -40,19 +40,6 @@ namespace AE_NAMESPACE {
 #if !_AE_APPLE_ // No std::path support
 
 //------------------------------------------------------------------------------
-// FileFilter for OpenFileParams/SaveFileParams
-//------------------------------------------------------------------------------
-struct FileFilter
-{
-  FileFilter() = default;
-  FileFilter( const char* desc, const char* ext ) : description( desc ) { extensions[ 0 ] = ext; }
-  FileFilter( const char* desc, const char** ext, uint32_t extensionCount );
-  const char* description = ""; // "JPEG"
-  // Only alphanumeric extension strings are supported (with the exception of "*")
-  const char* extensions[ 8 ] = { 0 }; // { "JPG", "JPEG", "JPE" }
-};
-
-//------------------------------------------------------------------------------
 // OpenFile
 //------------------------------------------------------------------------------
 struct OpenFileParams
