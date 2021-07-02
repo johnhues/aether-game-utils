@@ -6680,7 +6680,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 //------------------------------------------------------------------------------
 // OpenDialog not implemented
 //------------------------------------------------------------------------------
-Array< std::string > FileSystem::OpenDialog( const OpenFileParams& params )
+Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params )
 {
   return { AE_ALLOC_TAG_FILE };
 }
@@ -6688,7 +6688,7 @@ Array< std::string > FileSystem::OpenDialog( const OpenFileParams& params )
 //------------------------------------------------------------------------------
 // SaveDialog not implemented
 //------------------------------------------------------------------------------
-std::string FileSystem::SaveDialog( const SaveFileParams& params )
+std::string FileSystem::SaveDialog( const FileDialogParams& params )
 {
   return "";
 }

@@ -27,6 +27,12 @@
 
 int main()
 {
+#if _AE_APPLE_
+  const ae::Key modifierKey = ae::Key::LeftSuper;
+#else
+  const ae::Key modifierKey = ae::Key::LeftControl;
+#endif
+  
   ae::Window window;
   ae::Input input;
   ae::GraphicsDevice device;
@@ -72,7 +78,7 @@ int main()
       fs.ShowFolder( ae::FileSystem::Root::Cache, "" );
     }
 
-    if ( input.Get( ae::Key::LeftControl ) && !input.GetPrev( ae::Key::O ) && input.Get( ae::Key::O ) )
+    if ( input.Get( modifierKey ) && !input.GetPrev( ae::Key::O ) && input.Get( ae::Key::O ) )
     {
       ae::FileDialogParams params;
       params.filters.Append( ae::FileFilter( "All Files", "*" ) );
@@ -95,7 +101,7 @@ int main()
       }
     }
 
-    if ( input.Get( ae::Key::LeftControl ) && !input.GetPrev( ae::Key::S ) && input.Get( ae::Key::S ) )
+    if ( input.Get( modifierKey ) && !input.GetPrev( ae::Key::S ) && input.Get( ae::Key::S ) )
     {
       ae::FileDialogParams params;
       params.window = &window;
@@ -114,7 +120,3 @@ int main()
   }
   return 0;
 }
-
-#define AE_MAIN
-#include "ae/aether.h"
-#include "ae/aether.h"
