@@ -81,8 +81,9 @@ int main()
     if ( input.Get( modifierKey ) && !input.GetPrev( ae::Key::O ) && input.Get( ae::Key::O ) )
     {
       ae::FileDialogParams params;
-      params.filters.Append( ae::FileFilter( "All Files", "*" ) );
+      //params.filters.Append( ae::FileFilter( "All Files", "*" ) );
       params.filters.Append( ae::FileFilter( "Text Files", "txt" ) );
+      params.filters.Append( ae::FileFilter( "JSON Files", "json" ) );
       params.window = &window;
       params.windowTitle = "Open Some File To Do Things With";
       params.allowMultiselect = true;

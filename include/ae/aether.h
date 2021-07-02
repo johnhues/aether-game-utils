@@ -819,7 +819,9 @@ public:
 
   // Array info
   uint32_t Length() const;
-  uint32_t Size() const;
+  // uint32_t Size() - constexpr version when using a static ae::Array
+  template < bool=(N==0) > uint32_t Size() const { return m_size; }
+  template <> constexpr uint32_t Size< false >() const { return N; }
   
 private:
   uint32_t m_GetNextSize() const;
@@ -1197,7 +1199,7 @@ struct FileDialogParams
 {
   // Save and Open
   const char* windowTitle = "";
-  Array< FileFilter > filters = AE_ALLOC_TAG_FILE; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
+  ae::Array< FileFilter, 8 > filters; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
   Window* window = nullptr; // Recommended. Setting this will create a modal dialog.
   const char* defaultPath = "";
   // Open file only
@@ -3540,12 +3542,6 @@ template < typename T, uint32_t N >
 uint32_t Array< T, N >::Length() const
 {
   return m_length;
-}
-
-template < typename T, uint32_t N >
-uint32_t Array< T, N >::Size() const
-{
-  return m_size;
 }
 
 template < typename T, uint32_t N >
@@ -6585,7 +6581,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 {
   ae::Array< char > filterStr = CreateFilterString( params.filters );
 
-  char fileNameBuf[ 20148 ]; // Not just MAX_PATH
+  char fileNameBuf[ 2048 ]; // Not just MAX_PATH
   fileNameBuf[ 0 ] = 0;
 
   // Set parameters for Windows function call
@@ -6672,6 +6668,102 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
     return result.string();
   }
 
+  return "";
+}
+
+#elif _AE_APPLE_
+
+//------------------------------------------------------------------------------
+// OpenDialog not implemented
+//------------------------------------------------------------------------------
+ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params )
+{
+  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+  NSWindow* window = (NSWindow*)( params.window ? params.window->window : nullptr );
+  NSOpenPanel* dialog = [NSOpenPanel openPanel];
+  dialog.canChooseFiles = YES;
+  dialog.canChooseDirectories = NO;
+  dialog.allowsMultipleSelection = params.allowMultiselect;
+  if ( params.windowTitle && params.windowTitle[ 0 ] )
+  {
+    dialog.message = [NSString stringWithUTF8String:params.windowTitle];
+  }
+  if ( params.defaultPath && params.defaultPath[ 0 ] )
+  {
+    ae::Str256 dir = "file://";
+    dir += params.defaultPath;
+    dialog.directoryURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:dir.c_str()]];
+  }
+  
+  bool allowAny = false;
+  NSMutableArray* filters = [NSMutableArray arrayWithCapacity:params.filters.Length()];
+  for ( const FileFilter& filter : params.filters )
+  {
+    for ( const char* ext : filter.extensions )
+    {
+      if ( ext )
+      {
+        if ( strcmp( ext, "*" ) == 0 )
+        {
+          allowAny = true;
+        }
+        [filters addObject:[NSString stringWithUTF8String:ext]];
+      }
+    }
+  }
+  if ( !allowAny )
+  {
+    [dialog setAllowedFileTypes:filters];
+  }
+  
+  __block bool finished = false;
+  __block bool success = false;
+  ae::Array< std::string > result = AE_ALLOC_TAG_FILE;
+  // Show
+  if ( window )
+  {
+    AE_ASSERT_MSG( params.window->input, "Must initialize ae::Input with ae::Window before creating a file dialog" );
+    [dialog beginSheetModalForWindow:window completionHandler:^(NSModalResponse returnCode)
+    {
+      success = ( returnCode == NSFileHandlingPanelOKButton );
+      finished = true;
+    }];
+    // Block here until panel returns
+    while ( !finished )
+    {
+      params.window->input->Pump();
+      sleep( 0 );
+    }
+  }
+  else
+  {
+    success = ( [dialog runModal] == NSModalResponseOK );
+  }
+  // Result
+  if ( success )
+  {
+    if ( dialog.URLs.count )
+    {
+      for (NSURL* url in dialog.URLs)
+      {
+        result.Append( url.fileSystemRepresentation );
+      }
+    }
+    else if ( dialog.URL )
+    {
+      result.Append( dialog.URL.fileSystemRepresentation );
+    }
+  }
+  
+  [pool release];
+  return result;
+}
+
+//------------------------------------------------------------------------------
+// SaveDialog not implemented
+//------------------------------------------------------------------------------
+std::string FileSystem::SaveDialog( const FileDialogParams& params )
+{
   return "";
 }
 
