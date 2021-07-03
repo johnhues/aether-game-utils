@@ -210,7 +210,7 @@ void WriteObjects( ae::FileSystem* vfs, const ae::Array< Object* >& objects )
 
 bool ReadObjects( ae::FileSystem* vfs, ae::Terrain* terrain, ae::Image* heightmapImage, ae::Array< Object* >& objects )
 {
-  ae::Scratch< uint8_t > scratch( vfs->GetSize( ae::FileSystem::Root::User, kFileName ) );
+  ae::Scratch< uint8_t > scratch( AE_ALLOC_TAG_TERRAIN, vfs->GetSize( ae::FileSystem::Root::User, kFileName ) );
   vfs->Read( ae::FileSystem::Root::User, kFileName, scratch.Data(), scratch.Length() );
   aeBinaryStream rStream = aeBinaryStream::Reader( scratch.Data(), scratch.Length() );
 
@@ -302,7 +302,7 @@ int main()
   }
 
   ae::Image heightmapImage;
-  ae::Scratch< uint8_t > fileBuffer( vfs.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
+  ae::Scratch< uint8_t > fileBuffer( AE_ALLOC_TAG_TERRAIN, vfs.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
   vfs.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
   heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 

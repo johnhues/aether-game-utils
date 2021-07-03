@@ -166,7 +166,6 @@ using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_NET ae::Tag( "aeNet" )
 #define AE_ALLOC_TAG_HOTSPOT ae::Tag( "aeHotSpot" )
 #define AE_ALLOC_TAG_MESH ae::Tag( "aeMesh" )
-#define AE_ALLOC_TAG_SCRATCH ae::Tag( "aeScratch" )
 #define AE_ALLOC_TAG_FIXME ae::Tag( "aeFixMe" )
 #define AE_ALLOC_TAG_FILE ae::Tag( "aeFile" )
 
@@ -216,7 +215,7 @@ template < typename T >
 class Scratch
 {
 public:
-  Scratch( uint32_t count );
+  Scratch( ae::Tag tag, uint32_t count );
   ~Scratch();
   
   T* Data();
@@ -1965,10 +1964,10 @@ inline void Free( void* data )
 // ae::Scratch< T > member functions
 //------------------------------------------------------------------------------
 template < typename T >
-Scratch< T >::Scratch( uint32_t count )
+Scratch< T >::Scratch( ae::Tag tag, uint32_t count )
 {
   m_count = count;
-  m_data = ae::NewArray< T >( AE_ALLOC_TAG_SCRATCH, count );
+  m_data = ae::NewArray< T >( tag, count );
 }
 
 template < typename T >

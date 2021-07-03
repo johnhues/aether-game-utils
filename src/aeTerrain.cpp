@@ -412,7 +412,7 @@ void TerrainJob::Do()
   uint32_t fileSize = m_p.vfs ? m_p.vfs->GetSize( ae::FileSystem::Root::Cache, filePath.c_str() ) : 0;
   if ( fileSize )
   {
-    ae::Scratch< uint8_t > fileData( fileSize );
+    ae::Scratch< uint8_t > fileData( AE_ALLOC_TAG_TERRAIN, fileSize );
     m_p.vfs->Read( ae::FileSystem::Root::Cache, filePath.c_str(), fileData.Data(), fileSize );
     aeBinaryStream rStream = aeBinaryStream::Reader( fileData.Data(), fileSize );
     rStream.SerializeUint32( m_vertexCount.Get() );

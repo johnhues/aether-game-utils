@@ -174,7 +174,7 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof(Vertex, color) );
   m_vertexData.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof(Vertex, uv) );
 
-  ae::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
+  ae::Scratch< uint16_t > scratch( AE_ALLOC_TAG_RENDER, m_maxCount * aeQuadIndexCount );
   uint16_t* indices = scratch.Data();
   for ( uint32_t i = 0; i < m_maxCount; i++ )
   {
@@ -282,7 +282,7 @@ void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader
     }
     uint32_t textureId = texture->GetTexture();
 
-    ae::Scratch< Vertex > scratch( m_count * aeQuadVertCount );
+    ae::Scratch< Vertex > scratch( AE_ALLOC_TAG_RENDER, m_count * aeQuadVertCount );
     Vertex* vertices = scratch.Data();
     for ( uint32_t j = 0; j < m_count; j++ )
     {
@@ -526,8 +526,8 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
 {
   uint32_t vertCount = 0;
   uint32_t indexCount = 0;
-  ae::Scratch< Vertex > verts( m_vertexData.GetMaxVertexCount() );
-  ae::Scratch< uint16_t > indices( m_vertexData.GetMaxIndexCount() );
+  ae::Scratch< Vertex > verts( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxVertexCount() );
+  ae::Scratch< uint16_t > indices( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxIndexCount() );
 
   for ( uint32_t i = 0; i < m_rectCount; i++ )
   {

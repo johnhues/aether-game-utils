@@ -87,7 +87,7 @@ void LoadWavFile( const char* fileName, ALuint* buffer, float* length )
   uint32_t fileSize = ae::FileSystem::GetSize( fileName );
   AE_ASSERT_MSG( fileSize, "Could not open wav file: #", fileName );
 
-  ae::Scratch< uint8_t > fileScratch( fileSize );
+  ae::Scratch< uint8_t > fileScratch( AE_ALLOC_TAG_AUDIO, fileSize );
   uint8_t* fileBuffer = fileScratch.Data();
   ae::FileSystem::Read( fileName, fileBuffer, fileSize );
 
