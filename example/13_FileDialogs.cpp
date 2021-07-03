@@ -44,6 +44,7 @@ int main()
   while ( !input.quit )
   {
     input.Pump();
+    device.Activate();
     if ( input.Get( ae::Key::Space ) )
     {
       device.Clear( ae::Color::Red() );
