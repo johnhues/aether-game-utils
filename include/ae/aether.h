@@ -5953,6 +5953,10 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 #endif
 
 #if _AE_APPLE_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+  return false;
+}
 bool FileSystem_GetCacheDir( Str256* outDir )
 {
   // Something like /User/someone/Library/Caches
@@ -5966,6 +5970,10 @@ bool FileSystem_GetCacheDir( Str256* outDir )
   return false;
 }
 #elif _AE_LINUX_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+  return false;
+}
 bool FileSystem_GetCacheDir( Str256* outDir )
 {
   // Something like /users/someone/.cache
@@ -5994,13 +6002,12 @@ bool FileSystem_GetCacheDir( Str256* outDir )
   return false;
 }
 #elif _AE_WINDOWS_
-bool FileSystem_GetCacheDir( Str256* outDir )
+bool FileSystem_GetDir( KNOWNFOLDERID folderId, Str256* outDir )
 {
-  // Something like C:\Users\someone\AppData\Local\Company\Game
   bool result = false;
   PWSTR wpath = nullptr;
   // SHGetKnownFolderPath does not include trailing backslash
-  HRESULT pathResult = SHGetKnownFolderPath( FOLDERID_LocalAppData, 0, nullptr, &wpath );
+  HRESULT pathResult = SHGetKnownFolderPath( folderId, 0, nullptr, &wpath );
   if ( pathResult == S_OK )
   {
     char path[ outDir->MaxLength() + 1 ];
@@ -6015,6 +6022,16 @@ bool FileSystem_GetCacheDir( Str256* outDir )
   }
   CoTaskMemFree( wpath ); // Always free even on failure
   return result;
+}
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+  // Something like C:\Users\someone\AppData\Local\Company\Game
+  return FileSystem_GetDir( FOLDERID_RoamingAppData, outDir );
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+  // Something like C:\Users\someone\AppData\Local\Company\Game
+  return FileSystem_GetDir( FOLDERID_LocalAppData, outDir );
 }
 #endif
 
@@ -6046,7 +6063,6 @@ void FileSystem::Initialize( const char* dataDir, const char* organizationName, 
 void FileSystem::m_SetDataDir( const char* dataDir )
 {
   m_dataDir = GetAbsolutePath( dataDir );
-
   // Append slash if not empty and is currently missing
   if ( m_dataDir.Length() )
   {
@@ -6057,30 +6073,27 @@ void FileSystem::m_SetDataDir( const char* dataDir )
 
 void FileSystem::m_SetUserDir( const char* organizationName, const char* applicationName )
 {
+  const Str16 pathChar( 1, AE_PATH_SEPARATOR );
   m_userDir = "";
-
-  char* sdlUserDir = nullptr;//SDL_GetPrefPath( organizationName, applicationName );
-  if ( !sdlUserDir )
+  if ( FileSystem_GetUserDir( &m_userDir ) )
   {
-    return;
+    AE_ASSERT( m_userDir.Length() );
+    m_userDir += pathChar;
+    m_userDir += organizationName;
+    m_userDir += pathChar;
+    m_userDir += applicationName;
+    m_userDir += pathChar;
+    if ( !CreateFolder( m_userDir.c_str() ) )
+    {
+      m_userDir = "";
+    }
   }
-
-  m_userDir = sdlUserDir;
-  AE_ASSERT( m_userDir.Length() );
-
-  if ( m_userDir[ m_userDir.Length() - 1 ] != AE_PATH_SEPARATOR )
-  {
-    m_userDir.Append( Str16( 1, AE_PATH_SEPARATOR ) );
-  }
-
-//  SDL_free( sdlUserDir );
 }
 
 void FileSystem::m_SetCacheDir( const char* organizationName, const char* applicationName )
 {
   const Str16 pathChar( 1, AE_PATH_SEPARATOR );
   m_cacheDir = "";
-  
   if ( FileSystem_GetCacheDir( &m_cacheDir ) )
   {
     AE_ASSERT( m_cacheDir.Length() );
@@ -6098,30 +6111,27 @@ void FileSystem::m_SetCacheDir( const char* organizationName, const char* applic
 
 void FileSystem::m_SetUserSharedDir( const char* organizationName )
 {
+  const Str16 pathChar( 1, AE_PATH_SEPARATOR );
   m_userSharedDir = "";
-
-  char* sdlUserDir = nullptr;//SDL_GetPrefPath( organizationName, "shared" );
-  if ( !sdlUserDir )
+  if ( FileSystem_GetUserDir( &m_userSharedDir ) )
   {
-    return;
+    AE_ASSERT( m_userSharedDir.Length() );
+    m_userSharedDir += pathChar;
+    m_userSharedDir += organizationName;
+    m_userSharedDir += pathChar;
+    m_userSharedDir += "shared";
+    m_userSharedDir += pathChar;
+    if ( !CreateFolder( m_userSharedDir.c_str() ) )
+    {
+      m_userSharedDir = "";
+    }
   }
-
-  m_userSharedDir = sdlUserDir;
-  AE_ASSERT( m_userSharedDir.Length() );
-
-  if ( m_userSharedDir[ m_userSharedDir.Length() - 1 ] != AE_PATH_SEPARATOR )
-  {
-    m_userSharedDir.Append( Str16( 1, AE_PATH_SEPARATOR ) );
-  }
-
-//  SDL_free( sdlUserDir );
 }
 
 void FileSystem::m_SetCacheSharedDir( const char* organizationName )
 {
   const Str16 pathChar( 1, AE_PATH_SEPARATOR );
   m_cacheSharedDir = "";
-  
   if ( FileSystem_GetCacheDir( &m_cacheSharedDir ) )
   {
     AE_ASSERT( m_cacheSharedDir.Length() );
@@ -6506,7 +6516,7 @@ void FixPathExtension( const char* extension, std::filesystem::path* pathOut )
   }
 }
 
-ae::Array< char > CreateFilterString( const Array< FileFilter >& filters )
+ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 {
   ae::Array< char > result( AE_ALLOC_TAG_FILE );
   if ( !filters.Length() )
