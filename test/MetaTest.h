@@ -152,14 +152,14 @@ class RefTesterManager
 {
 public:
   template < typename T >
-  T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::Allocate< T >() ); o->id = m_nextId; m_nextId++; return o; }
+  T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::New< T >( AE_ALLOC_TAG_FIXME ) ); o->id = m_nextId; m_nextId++; return o; }
   void Destroy( RefTester* object );
   
   RefTester* GetObjectById( uint32_t id );
 
 private:
   uint32_t m_nextId = 1;
-  ae::Map< uint32_t, RefTester* > m_objectMap;
+  ae::Map< uint32_t, RefTester* > m_objectMap = AE_ALLOC_TAG_FIXME;
 };
 
 #endif

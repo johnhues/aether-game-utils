@@ -12,7 +12,7 @@
 //------------------------------------------------------------------------------
 TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 {
-  ae::Map< int, char > map;
+  ae::Map< int, char, 10 > map;
   for ( uint32_t i = 0; i < 10; i++ )
   {
     map.Set( i, 'a' + i );

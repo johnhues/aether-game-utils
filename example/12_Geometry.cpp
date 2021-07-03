@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/ae.h"
+#include "ae/aetherEXT.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -45,7 +45,7 @@ int main()
 	render.InitializeOpenGL( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	debug.Initialize();
+	debug.Initialize( 512 );
 	text.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
 
 	AE_INFO( "Run" );

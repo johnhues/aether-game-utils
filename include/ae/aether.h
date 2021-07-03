@@ -818,10 +818,8 @@ public:
   const T* End() const { return m_array + m_length; }
 
   // Array info
-  uint32_t Length() const;
-  // uint32_t Size() - constexpr version when using a static ae::Array
-  template < bool=(N==0) > uint32_t Size() const { return m_size; }
-  template <> constexpr uint32_t Size< false >() const { return N; }
+  uint32_t Length() const { return m_length; }
+  uint32_t Size() const { return m_size; }
   
 private:
   uint32_t m_GetNextSize() const;
@@ -3536,12 +3534,6 @@ T& Array< T, N >::operator[]( int32_t index )
   AE_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
 #endif
   return m_array[ index ];
-}
-
-template < typename T, uint32_t N >
-uint32_t Array< T, N >::Length() const
-{
-  return m_length;
 }
 
 template < typename T, uint32_t N >

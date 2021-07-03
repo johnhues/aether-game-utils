@@ -106,7 +106,11 @@ elseif(NOT EMSCRIPTEN)
 		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
 	)
 	set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
-	set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
+	if (MSVC)
+		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
+	else()
+		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/${CMAKE_SHARED_MODULE_PREFIX}openal${CMAKE_SHARED_LIBRARY_SUFFIX})
+	endif()
 	list(APPEND AE_DEPS_TARGETS openal)
 endif()
 
@@ -118,10 +122,15 @@ set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 )
 
 # dependency libraries
-set(AE_DEPS_LIBARARIES ${OPENGL_LIBRARIES})
+set(AE_DEPS_LIBARARIES
+	${OPENGL_LIBRARIES}
+	${OpenGLES}
+	assimp
+	enet
+)
 if(APPLE)
 	list(APPEND AE_DEPS_LIBARARIES "-framework Cocoa")
-elseif(WIN32 AND NOT CYGWIN)
+elseif(MSVC)
 	list(APPEND AE_DEPS_LIBARARIES
 		version
 		Winmm
@@ -131,14 +140,12 @@ elseif(WIN32 AND NOT CYGWIN)
 		${GLEW_LIBRARY}
 		${OPENAL_LIBRARY}
 	)
-else()
-	list(APPEND AE_DEPS_LIBARARIES uuid)
+elseif(UNIX)
+	list(APPEND AE_DEPS_LIBARARIES
+		${OPENAL_LIBRARY}
+		uuid
+	)
 endif()
-list(APPEND AE_DEPS_LIBARARIES
-	${OpenGLES}
-	assimp
-	enet
-)
 if(NOT EMSCRIPTEN)
 	list(APPEND AE_DEPS_LIBARARIES SDL2main SDL2-static)
 endif()
@@ -150,7 +157,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_definitions(-D_UNICODE -DUNICODE)
 # disable standard library warnings on windows
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-add_compile_options(-fmodules -fcxx-modules)
 
 # library, tests, and examples
 add_subdirectory(src)
