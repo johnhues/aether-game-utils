@@ -87,7 +87,8 @@ void LoadWavFile( const char* fileName, ALuint* buffer, float* length )
   uint32_t fileSize = ae::FileSystem::GetSize( fileName );
   AE_ASSERT_MSG( fileSize, "Could not open wav file: #", fileName );
 
-  uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
+  ae::Scratch< uint8_t > fileScratch( fileSize );
+  uint8_t* fileBuffer = fileScratch.Data();
   ae::FileSystem::Read( fileName, fileBuffer, fileSize );
 
   ChunkHeader header;
@@ -146,8 +147,6 @@ void LoadWavFile( const char* fileName, ALuint* buffer, float* length )
     memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
     fileOffset += sizeof(header);
   }
-
-  free( fileBuffer );
 
   CheckALError();
 
@@ -402,7 +401,7 @@ void aeAudio::Log()
       soundName = soundName ? soundName + 1 : channel->resource->name.c_str();
       const char* soundNameEnd = strrchr( channel->resource->name.c_str(), '.' );
       soundNameEnd = soundNameEnd ? soundNameEnd : soundName + strlen( soundName );
-      uint32_t soundNameLen = soundNameEnd - soundName;
+      uint32_t soundNameLen = (uint32_t)(soundNameEnd - soundName);
 
       char buffer[ 512 ];
       sprintf( buffer, "channel:%u name:%.*s offset:%.2fs length:%.2fs", i, soundNameLen, soundName, playOffset, playLength );

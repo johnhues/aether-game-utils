@@ -2752,8 +2752,8 @@ inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) co
 inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
 inline Color Color::ScaleA( float s ) const { return Color( r, g, b, a * s ); }
 inline Color Color::SetA( float alpha ) const { return Color( r, g, b, alpha ); }
-inline float Color::SRGBToRGB( float x ) { return pow( x , 2.2 ); }
-inline float Color::RGBToSRGB( float x ) { return pow( x, 1.0 / 2.2 ); }
+inline float Color::SRGBToRGB( float x ) { return powf( x , 2.2f ); }
+inline float Color::RGBToSRGB( float x ) { return powf( x, 1.0f / 2.2f ); }
 
 #pragma warning(default:26495) // Re-enable uninitialized variable warning
 
@@ -3549,7 +3549,7 @@ uint32_t Array< T, N >::m_GetNextSize() const
 {
   if ( m_size == 0 )
   {
-    return ae::Max( 1, 32 / sizeof(T) ); // @NOTE: Initially allocate 32 bytes (rounded down) of type
+    return ae::Max( 1u, 32u / (uint32_t)sizeof(T) ); // @NOTE: Initially allocate 32 bytes (rounded down) of type
   }
   else
   {
@@ -6015,7 +6015,7 @@ bool FileSystem_GetDir( KNOWNFOLDERID folderId, Str256* outDir )
     if ( pathLen > 0 )
     {
       path[ pathLen ] = 0;
-      
+
       *outDir = path;
       result = true;
     }

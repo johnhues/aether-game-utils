@@ -434,18 +434,18 @@ namespace aeMath
   inline aeFloat3 Ceil( aeFloat3 v )
   {
     return aeFloat3(
-      Ceil( v.x ),
-      Ceil( v.y ),
-      Ceil( v.z )
+      (float)Ceil( v.x ),
+      (float)Ceil( v.y ),
+      (float)Ceil( v.z )
     );
   }
 
   inline aeFloat3 Floor( aeFloat3 v )
   {
     return aeFloat3(
-      Floor( v.x ),
-      Floor( v.y ),
-      Floor( v.z )
+      (float)Floor( v.x ),
+      (float)Floor( v.y ),
+      (float)Floor( v.z )
     );
   }
 }
@@ -533,20 +533,20 @@ namespace aeMath
   inline aeFloat4 Ceil( aeFloat4 v )
   {
     return aeFloat4(
-      Ceil( v.x ),
-      Ceil( v.y ),
-      Ceil( v.z ),
-      Ceil( v.w )
+      (float)Ceil( v.x ),
+      (float)Ceil( v.y ),
+      (float)Ceil( v.z ),
+      (float)Ceil( v.w )
     );
   }
 
   inline aeFloat4 Floor( aeFloat4 v )
   {
     return aeFloat4(
-      Floor( v.x ),
-      Floor( v.y ),
-      Floor( v.z ),
-      Floor( v.w )
+      (float)Floor( v.x ),
+      (float)Floor( v.y ),
+      (float)Floor( v.z ),
+      (float)Floor( v.w )
     );
   }
 }
