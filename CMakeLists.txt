@@ -129,7 +129,10 @@ set(AE_DEPS_LIBARARIES
 	enet
 )
 if(APPLE)
-	list(APPEND AE_DEPS_LIBARARIES "-framework Cocoa")
+	list(APPEND AE_DEPS_LIBARARIES
+		${OPENAL_LIBRARY}
+		"-framework Cocoa"
+	)
 elseif(MSVC)
 	list(APPEND AE_DEPS_LIBARARIES
 		version
