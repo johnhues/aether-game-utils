@@ -8356,8 +8356,12 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 
   AE_ASSERT( m_fbo == 0 );
 
-  AE_ASSERT( width != 0 );
-  AE_ASSERT( height != 0 );
+  if ( width * height == 0 )
+  {
+    m_width = 0;
+    m_height = 0;
+    return;
+  }
 
   m_width = width;
   m_height = height;
@@ -8432,6 +8436,10 @@ void RenderTarget::Destroy()
 void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 {
   AE_ASSERT( m_targets.Length() < _kMaxFrameBufferAttachments );
+  if ( m_width * m_height == 0 )
+  {
+    return;
+  }
 
   Texture2D* tex = ae::New< Texture2D >( AE_ALLOC_TAG_RENDER );
   tex->Initialize( nullptr, m_width, m_height, Texture::Format::RGBA16F, Texture::Type::HalfFloat, filter, wrap );
@@ -8448,6 +8456,10 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 {
   AE_ASSERT_MSG( m_depth.GetTexture() == 0, "Render target already has a depth texture" );
+  if ( m_width * m_height == 0 )
+  {
+    return;
+  }
 
   m_depth.Initialize( nullptr, m_width, m_height, Texture::Format::Depth32F, Texture::Type::Float, filter, wrap );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
@@ -8692,8 +8704,13 @@ void GraphicsDevice::Activate()
   {
     m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
   }
-  m_canvas.Activate();
 
+  if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
+  {
+    return;
+  }
+
+  m_canvas.Activate();
 #if !_AE_IOS_
   // This is automatically enabled on opengl es3 and can't be turned off
   glEnable( GL_FRAMEBUFFER_SRGB );
@@ -8702,12 +8719,21 @@ void GraphicsDevice::Activate()
 
 void GraphicsDevice::Clear( Color color )
 {
+  if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
+  {
+    return;
+  }
   Activate();
   m_canvas.Clear( color );
 }
 
 void GraphicsDevice::Present()
 {
+  if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
+  {
+    return;
+  }
+
   AE_ASSERT( m_context );
   AE_CHECK_GL_ERROR();
 
@@ -8741,7 +8767,7 @@ void GraphicsDevice::Present()
 
 float GraphicsDevice::GetAspectRatio() const
 {
-  if ( m_canvas.GetWidth() + m_canvas.GetHeight() == 0 )
+  if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
   {
     return 0.0f;
   }
