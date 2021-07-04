@@ -661,7 +661,7 @@ void aeNetReplicaDB::UpdateSendData()
 
 //   game->SetCheckPoint( pos ); // hack
   
-//   aeDict dict;
+//   ae::Dict dict;
 //   dict.SetV2i( "position", pos );
 //   Player* playerObj = game->gameObjectManager->Create< Player >( dict, true );
 //   playerObj->uuid = player->uuid;
@@ -1105,7 +1105,7 @@ void aeNetReplicaDB::UpdateSendData()
 //         HVN_ASSERT_MSG( metaType, "No type %d", createMsg.type );
 //         HVN_LOG( "Net obj create t:%s x:%d y:%d", metaType->GetName(), createMsg.x, createMsg.y );
 
-//         aeDict dict;
+//         ae::Dict dict;
 //         dict.SetV2i( "position", v2i_From_i( createMsg.x, createMsg.y ) );
 //         GameObject* go = game->gameObjectManager->Create( metaType, dict );
 //         BinaryStream rStream( BinaryStream::ReadBuffer, createMsg.data, createMsg.length );

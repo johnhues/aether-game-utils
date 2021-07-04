@@ -31,56 +31,6 @@
 #include "aeRender.h" // @TODO: Create aeColor.h
 #include "aeString.h"
 
-//------------------------------------------------------------------------------
-// aeDict class
-//------------------------------------------------------------------------------
-class aeDict
-{
-public:
-  void SetString( const char* key, const char* value );
-  void SetInt( const char* key, int32_t value );
-  void SetFloat( const char* key, float value );
-  void SetBool( const char* key, bool value );
-  void SetVec2( const char* key, ae::Vec2 value );
-  void SetVec3( const char* key, ae::Vec3 value );
-  void SetVec4( const char* key, ae::Vec4 value );
-  void SetInt2( const char* key, aeInt2 value );
-  void Clear();
-
-  const char* GetString( const char* key, const char* defaultValue ) const;
-  int32_t GetInt( const char* key, int32_t defaultValue ) const;
-  float GetFloat( const char* key, float defaultValue ) const;
-  bool GetBool( const char* key, bool defaultValue ) const;
-  ae::Vec2 GetVec2( const char* key, ae::Vec2 defaultValue ) const;
-  ae::Vec3 GetVec3( const char* key, ae::Vec3 defaultValue ) const;
-  ae::Vec4 GetVec4( const char* key, ae::Vec4 defaultValue ) const;
-  aeInt2 GetInt2( const char* key, aeInt2 defaultValue ) const;
-  aeColor GetColor( const char* key, aeColor defaultValue ) const;
-  bool Has( const char* key ) const;
-
-  const char* GetKey( uint32_t idx ) const;
-  const char* GetValue( uint32_t idx ) const;
-  uint32_t Length() const { return m_entries.Length(); }
-  
-  // Supported automatic conversions which would otherwise be deleted below
-  void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
-  void SetInt( const char* key, uint32_t value ) { SetInt( key, (int32_t)value ); }
-  void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
-
-private:
-  // Prevent the above functions from being called accidentally through automatic conversions
-  template < typename T > void SetString( const char*, T ) = delete;
-  template < typename T > void SetInt( const char*, T ) = delete;
-  template < typename T > void SetFloat( const char*, T ) = delete;
-  template < typename T > void SetBool( const char*, T ) = delete;
-  template < typename T > void SetVec2( const char*, T ) = delete;
-  template < typename T > void SetVec3( const char*, T ) = delete;
-  template < typename T > void SetVec4( const char*, T ) = delete;
-  template < typename T > void SetInt2( const char*, T ) = delete;
-  
-  ae::Map< aeStr128, aeStr128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: aeDict should be templated
-};
-
-std::ostream& operator<<( std::ostream& os, const aeDict& dict );
+using aeDict = ae::Dict;
 
 #endif

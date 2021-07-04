@@ -27,7 +27,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeDict.h"
+#include "aether.h"
 #include "aeString.h"
 
 //------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ public:
   aeCommandLineArgs();
   void Parse( int32_t argc, char* argv[] );
 
-  aeDict Get() const;
+  ae::Dict Get() const;
   uint32_t Count() const { return m_count; }
   const char* GetName( uint32_t index ) const;
   const char* GetValue( uint32_t index ) const;

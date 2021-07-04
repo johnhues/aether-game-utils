@@ -102,9 +102,9 @@ void aeCommandLineArgs::Parse( int32_t argc, char* argv[] )
   }
 }
 
-aeDict aeCommandLineArgs::Get() const
+ae::Dict aeCommandLineArgs::Get() const
 {
-  aeDict args;
+  ae::Dict args;
   for ( uint32_t i = 0; i < m_count; i++ )
   {
     args.SetString( GetName( i ), GetValue( i ) );

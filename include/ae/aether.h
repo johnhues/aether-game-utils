@@ -890,6 +890,60 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::Dict class
+//------------------------------------------------------------------------------
+class Dict
+{
+public:
+  Dict();
+  Dict( ae::Tag tag );
+  void SetString( const char* key, const char* value );
+  void SetInt( const char* key, int32_t value );
+  void SetFloat( const char* key, float value );
+  void SetBool( const char* key, bool value );
+  void SetVec2( const char* key, ae::Vec2 value );
+  void SetVec3( const char* key, ae::Vec3 value );
+  void SetVec4( const char* key, ae::Vec4 value );
+  void SetInt2( const char* key, ae::Int2 value );
+  void Clear();
+
+  const char* GetString( const char* key, const char* defaultValue ) const;
+  int32_t GetInt( const char* key, int32_t defaultValue ) const;
+  float GetFloat( const char* key, float defaultValue ) const;
+  bool GetBool( const char* key, bool defaultValue ) const;
+  ae::Vec2 GetVec2( const char* key, ae::Vec2 defaultValue ) const;
+  ae::Vec3 GetVec3( const char* key, ae::Vec3 defaultValue ) const;
+  ae::Vec4 GetVec4( const char* key, ae::Vec4 defaultValue ) const;
+  ae::Int2 GetInt2( const char* key, ae::Int2 defaultValue ) const;
+  ae::Color GetColor( const char* key, ae::Color defaultValue ) const;
+  bool Has( const char* key ) const;
+
+  const char* GetKey( uint32_t idx ) const;
+  const char* GetValue( uint32_t idx ) const;
+  uint32_t Length() const { return m_entries.Length(); }
+  
+  // Supported automatic conversions which would otherwise be deleted below
+  void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
+  void SetInt( const char* key, uint32_t value ) { SetInt( key, (int32_t)value ); }
+  void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
+
+private:
+  // Prevent the above functions from being called accidentally through automatic conversions
+  template < typename T > void SetString( const char*, T ) = delete;
+  template < typename T > void SetInt( const char*, T ) = delete;
+  template < typename T > void SetFloat( const char*, T ) = delete;
+  template < typename T > void SetBool( const char*, T ) = delete;
+  template < typename T > void SetVec2( const char*, T ) = delete;
+  template < typename T > void SetVec3( const char*, T ) = delete;
+  template < typename T > void SetVec4( const char*, T ) = delete;
+  template < typename T > void SetInt2( const char*, T ) = delete;
+  
+  ae::Map< ae::Str128, ae::Str128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: Should support static allocation
+};
+
+inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
+
+//------------------------------------------------------------------------------
 // ae::Rect class
 //------------------------------------------------------------------------------
 struct Rect
@@ -5010,6 +5064,193 @@ void TimeStep::Wait()
   m_prevFrameTimeSec = m_prevFrameTime / 1000000.0f;
   
   m_stepCount++;
+}
+
+//------------------------------------------------------------------------------
+// ae::Dict members
+//------------------------------------------------------------------------------
+void Dict::SetString( const char* key, const char* value )
+{
+  m_entries.Set( key, value );
+}
+
+void Dict::SetInt( const char* key, int32_t value )
+{
+  char buf[ 128 ];
+  sprintf( buf, "%d", value );
+  SetString( key, buf );
+}
+
+void Dict::SetFloat( const char* key, float value )
+{
+  char buf[ 128 ];
+  sprintf( buf, "%f", value );
+  SetString( key, buf );
+}
+
+void Dict::SetBool( const char* key, bool value )
+{
+  SetString( key, value ? "true" : "false" );
+}
+
+void Dict::SetVec2( const char* key, ae::Vec2 value )
+{
+  char buf[ 128 ];
+  sprintf( buf, "%.2f %.2f", value.x, value.y );
+  SetString( key, buf );
+}
+
+void Dict::SetVec3( const char* key, ae::Vec3 value )
+{
+  char buf[ 128 ];
+  sprintf( buf, "%.2f %.2f %.2f", value.x, value.y, value.z );
+  SetString( key, buf );
+}
+
+void Dict::SetVec4( const char* key, ae::Vec4 value )
+{
+  char buf[ 128 ];
+  sprintf( buf, "%.2f %.2f %.2f %.2f", value.x, value.y, value.z, value.w );
+  SetString( key, buf );
+}
+
+void Dict::SetInt2( const char* key, ae::Int2 value )
+{
+  char buf[ 128 ];
+  sprintf( buf, "%d %d", value.x, value.y );
+  SetString( key, buf );
+}
+
+void Dict::Clear()
+{
+  m_entries.Clear();
+}
+
+const char* Dict::GetString( const char* key, const char* defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    return value->c_str();
+  }
+  return defaultValue;
+}
+
+int32_t Dict::GetInt( const char* key, int32_t defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    return atoi( value->c_str() );
+  }
+  return defaultValue;
+}
+
+float Dict::GetFloat( const char* key, float defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    return (float)atof( value->c_str() );
+  }
+  return defaultValue;
+}
+
+bool Dict::GetBool( const char* key, bool defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    if ( *value == "true" )
+    {
+      return true;
+    }
+    else if ( *value == "false" )
+    {
+      return false;
+    }
+  }
+  return defaultValue;
+}
+
+ae::Vec2 Dict::GetVec2( const char* key, ae::Vec2 defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    ae::Vec2 result( 0.0f );
+    sscanf( value->c_str(), "%f %f", &result.x, &result.y );
+    return result;
+  }
+  return defaultValue;
+}
+
+ae::Vec3 Dict::GetVec3( const char* key, ae::Vec3 defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    ae::Vec3 result( 0.0f );
+    sscanf( value->c_str(), "%f %f %f", &result.x, &result.y, &result.z );
+    return result;
+  }
+  return defaultValue;
+}
+
+ae::Vec4 Dict::GetVec4( const char* key, ae::Vec4 defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    ae::Vec4 result( 0.0f );
+    sscanf( value->c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
+    return result;
+  }
+  return defaultValue;
+}
+
+ae::Int2 Dict::GetInt2( const char* key, ae::Int2 defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    ae::Int2 result( 0.0f );
+    sscanf( value->c_str(), "%d %d", &result.x, &result.y );
+    return result;
+  }
+  return defaultValue;
+}
+
+ae::Color Dict::GetColor( const char* key, ae::Color defaultValue ) const
+{
+  // uint8_t c[ 4 ];
+  // const KeyValue* kv = m_GetValue( key );
+  // if ( kv && kv->value.Length() == 9 && sscanf( kv->value.c_str(), "#%2hhx%2hhx%2hhx%2hhx", &c[ 0 ], &c[ 1 ], &c[ 2 ], &c[ 3 ] ) == 4 )
+  // {
+  //   return (Color)((c[ 0 ] << 24) | (c[ 1 ] << 16) | (c[ 2 ] << 8) | c[ 3 ]);
+  // }
+  return defaultValue;
+}
+
+bool Dict::Has( const char* key ) const
+{
+  return m_entries.TryGet( key ) != nullptr;
+}
+
+const char* Dict::GetKey( uint32_t idx ) const
+{
+  return m_entries.GetKey( idx ).c_str();
+}
+
+const char* Dict::GetValue( uint32_t idx ) const
+{
+  return m_entries.GetValue( idx ).c_str();
+}
+
+std::ostream& operator<<( std::ostream& os, const Dict& dict )
+{
+  os << "[";
+  for ( uint32_t i = 0; i < dict.Length(); i++ )
+  {
+    if ( i )
+    {
+      os << ",";
+    }
+    os << "<'" << dict.GetKey( i ) << "','" << dict.GetValue( i ) << "'>";
+  }
+  return os << "]";
 }
 
 //------------------------------------------------------------------------------
