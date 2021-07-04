@@ -175,7 +175,7 @@ void Sdf::SetTransform( const aeFloat4x4& transform )
   }
 }
 
-aeHash Sdf::GetBaseHash( aeHash hash ) const
+ae::Hash Sdf::GetBaseHash( ae::Hash hash ) const
 {
   hash = hash.HashBasicType( type );
   hash = hash.HashBasicType( materialId );
@@ -204,7 +204,7 @@ Sdf* SdfBox::Clone() const
   return box;
 }
 
-aeHash SdfBox::Hash( aeHash hash ) const
+ae::Hash SdfBox::Hash( ae::Hash hash ) const
 {
   hash = GetBaseHash( hash );
   hash = hash.HashBasicType( cornerRadius );
@@ -227,7 +227,7 @@ Sdf* SdfCylinder::Clone() const
   return cylinder;
 }
 
-aeHash SdfCylinder::Hash( aeHash hash ) const
+ae::Hash SdfCylinder::Hash( ae::Hash hash ) const
 {
   hash = GetBaseHash( hash );
   hash = hash.HashBasicType( top );
@@ -274,7 +274,7 @@ Sdf* SdfHeightmap::Clone() const
   return heightmap;
 }
 
-aeHash SdfHeightmap::Hash( aeHash hash ) const
+ae::Hash SdfHeightmap::Hash( ae::Hash hash ) const
 {
   return GetBaseHash( hash );
 }

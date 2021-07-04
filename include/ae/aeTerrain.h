@@ -190,7 +190,7 @@ public:
   void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
   virtual Sdf* Clone() const = 0;
-  virtual aeHash Hash( aeHash hash ) const = 0;
+  virtual ae::Hash Hash( ae::Hash hash ) const = 0;
   virtual float GetValue( aeFloat3 p, int ) const = 0;
 
   enum class Type
@@ -215,7 +215,7 @@ public:
   ae::Vec3 noiseScale = ae::Vec3( 1.0f );
 
 protected:
-  aeHash GetBaseHash( aeHash hash ) const;
+  ae::Hash GetBaseHash( ae::Hash hash ) const;
   const aeFloat4x4& GetRemoveTRMatrix() const { return m_removeTR; }
 
 private:
@@ -237,7 +237,7 @@ class SdfBox : public Sdf
 {
 public:
   Sdf* Clone() const override;
-  aeHash Hash( aeHash hash ) const override;
+  ae::Hash Hash( ae::Hash hash ) const override;
   float GetValue( aeFloat3 p, int ) const override;
 
   float cornerRadius = 0.0f;
@@ -250,7 +250,7 @@ class SdfCylinder : public Sdf
 {
 public:
   Sdf* Clone() const override;
-  aeHash Hash( aeHash hash ) const override;
+  ae::Hash Hash( ae::Hash hash ) const override;
   float GetValue( aeFloat3 p, int ) const override;
 
   // Valid range is 0-1, are multiplied by obb size
@@ -266,7 +266,7 @@ class SdfHeightmap : public Sdf
 public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
   Sdf* Clone() const override;
-  aeHash Hash( aeHash hash ) const override;
+  ae::Hash Hash( ae::Hash hash ) const override;
   float GetValue( aeFloat3 p, int ) const override;
 
 private:
@@ -285,7 +285,7 @@ struct TerrainParams
   float normalSampleOffset = 0.25f;
   float smoothingAmount = 0.05f;
   
-  aeHash GetHash( aeHash hash = aeHash() ) const
+  ae::Hash GetHash( ae::Hash hash = ae::Hash() ) const
   {
     // @NOTE: Only hash parameters that affect final terrain output
     hash = hash.HashBasicType( normalSampleOffset );
@@ -398,7 +398,7 @@ private:
   std::atomic_bool m_running;
 
   // Input
-  aeHash m_parameterHash;
+  ae::Hash m_parameterHash;
   ae::Array< Sdf* > m_shapes = AE_ALLOC_TAG_TERRAIN;
   struct TerrainChunk* m_chunk;
   TerrainParams m_p;

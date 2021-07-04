@@ -931,40 +931,4 @@ private:
   aeAABB m_scaledAABB;
 };
 
-//------------------------------------------------------------------------------
-// aeHash class (fnv1a)
-// @NOTE: Empty strings and zero-length data buffers do not hash to zero
-//------------------------------------------------------------------------------
-class aeHash
-{
-public:
-  aeHash() = default;
-  explicit aeHash( uint32_t initialValue );
-  
-  bool operator == ( aeHash o ) const { return m_hash == o.m_hash; }
-  bool operator != ( aeHash o ) const { return m_hash != o.m_hash; }
-
-  aeHash& HashString( const char* str );
-  aeHash& HashData( const void* data, uint32_t length );
-  template < typename T > aeHash& HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
-  aeHash& HashFloat( float f );
-  template < uint32_t N > aeHash& HashFloatArray( const float (&f)[ N ] );
-
-  void Set( uint32_t hash );
-  uint32_t Get() const;
-
-private:
-  uint32_t m_hash = 0x811c9dc5;
-};
-
-template < uint32_t N >
-aeHash& aeHash::HashFloatArray( const float (&f)[ N ] )
-{
-  for ( uint32_t i = 0; i < N; i++ )
-  {
-    HashFloat( f[ i ] );
-  }
-  return *this;
-}
-
 #endif

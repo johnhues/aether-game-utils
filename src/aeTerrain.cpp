@@ -393,7 +393,7 @@ void TerrainJob::Do()
   AE_ASSERT( m_chunk );
   
   // Hash
-  m_parameterHash = aeHash();
+  m_parameterHash = ae::Hash();
   
   m_parameterHash = m_p.GetHash( m_parameterHash );
   

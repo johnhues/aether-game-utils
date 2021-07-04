@@ -118,7 +118,7 @@ public:
 
 private:
   ae::Map< aeStr32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
-  uint32_t m_hash = aeHash().Get();
+  uint32_t m_hash = ae::Hash().Get();
 };
 
 //------------------------------------------------------------------------------

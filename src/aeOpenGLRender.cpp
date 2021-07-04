@@ -786,7 +786,7 @@ void aeShader::Destroy()
 
 void aeShader::Activate( const aeUniformList& uniforms ) const
 {
-  aeHash hash;
+  ae::Hash hash;
   hash.HashBasicType( this );
   hash.HashBasicType( m_blending );
   hash.HashBasicType( m_blendingPremul );

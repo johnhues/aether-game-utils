@@ -1197,7 +1197,7 @@ static aeMetaTypeId aeMetaGetObjectTypeId( const aeObject* obj )
 static aeMetaTypeId aeMetaGetTypeIdFromName( const char* name )
 {
   // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-  return name[ 0 ] ? aeHash().HashString( name ).Get() : kAeInvalidMetaTypeId;
+  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : kAeInvalidMetaTypeId;
 }
 
 #endif
