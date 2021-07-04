@@ -4151,60 +4151,28 @@ Vec4 Matrix4::operator*(const Vec4& v) const
 Matrix4 Matrix4::operator*(const Matrix4& m) const
 {
   Matrix4 r;
-  r.d[0]=(d[0]*m.d[0])+(d[1]*m.d[4])+(d[2]*m.d[8])+(d[3]*m.d[12]);
-  r.d[1]=(d[0]*m.d[1])+(d[1]*m.d[5])+(d[2]*m.d[9])+(d[3]*m.d[13]);
-  r.d[2]=(d[0]*m.d[2])+(d[1]*m.d[6])+(d[2]*m.d[10])+(d[3]*m.d[14]);
-  r.d[3]=(d[0]*m.d[3])+(d[1]*m.d[7])+(d[2]*m.d[11])+(d[3]*m.d[15]);
-  r.d[4]=(d[4]*m.d[0])+(d[5]*m.d[4])+(d[6]*m.d[8])+(d[7]*m.d[12]);
-  r.d[5]=(d[4]*m.d[1])+(d[5]*m.d[5])+(d[6]*m.d[9])+(d[7]*m.d[13]);
-  r.d[6]=(d[4]*m.d[2])+(d[5]*m.d[6])+(d[6]*m.d[10])+(d[7]*m.d[14]);
-  r.d[7]=(d[4]*m.d[3])+(d[5]*m.d[7])+(d[6]*m.d[11])+(d[7]*m.d[15]);
-  r.d[8]=(d[8]*m.d[0])+(d[9]*m.d[4])+(d[10]*m.d[8])+(d[11]*m.d[12]);
-  r.d[9]=(d[8]*m.d[1])+(d[9]*m.d[5])+(d[10]*m.d[9])+(d[11]*m.d[13]);
-  r.d[10]=(d[8]*m.d[2])+(d[9]*m.d[6])+(d[10]*m.d[10])+(d[11]*m.d[14]);
-  r.d[11]=(d[8]*m.d[3])+(d[9]*m.d[7])+(d[10]*m.d[11])+(d[11]*m.d[15]);
-  r.d[12]=(d[12]*m.d[0])+(d[13]*m.d[4])+(d[14]*m.d[8])+(d[15]*m.d[12]);
-  r.d[13]=(d[12]*m.d[1])+(d[13]*m.d[5])+(d[14]*m.d[9])+(d[15]*m.d[13]);
-  r.d[14]=(d[12]*m.d[2])+(d[13]*m.d[6])+(d[14]*m.d[10])+(d[15]*m.d[14]);
-  r.d[15]=(d[12]*m.d[3])+(d[13]*m.d[7])+(d[14]*m.d[11])+(d[15]*m.d[15]);
+  r.d[0]=(m.d[0]*d[0])+(m.d[1]*d[4])+(m.d[2]*d[8])+(m.d[3]*d[12]);
+  r.d[1]=(m.d[0]*d[1])+(m.d[1]*d[5])+(m.d[2]*d[9])+(m.d[3]*d[13]);
+  r.d[2]=(m.d[0]*d[2])+(m.d[1]*d[6])+(m.d[2]*d[10])+(m.d[3]*d[14]);
+  r.d[3]=(m.d[0]*d[3])+(m.d[1]*d[7])+(m.d[2]*d[11])+(m.d[3]*d[15]);
+  r.d[4]=(m.d[4]*d[0])+(m.d[5]*d[4])+(m.d[6]*d[8])+(m.d[7]*d[12]);
+  r.d[5]=(m.d[4]*d[1])+(m.d[5]*d[5])+(m.d[6]*d[9])+(m.d[7]*d[13]);
+  r.d[6]=(m.d[4]*d[2])+(m.d[5]*d[6])+(m.d[6]*d[10])+(m.d[7]*d[14]);
+  r.d[7]=(m.d[4]*d[3])+(m.d[5]*d[7])+(m.d[6]*d[11])+(m.d[7]*d[15]);
+  r.d[8]=(m.d[8]*d[0])+(m.d[9]*d[4])+(m.d[10]*d[8])+(m.d[11]*d[12]);
+  r.d[9]=(m.d[8]*d[1])+(m.d[9]*d[5])+(m.d[10]*d[9])+(m.d[11]*d[13]);
+  r.d[10]=(m.d[8]*d[2])+(m.d[9]*d[6])+(m.d[10]*d[10])+(m.d[11]*d[14]);
+  r.d[11]=(m.d[8]*d[3])+(m.d[9]*d[7])+(m.d[10]*d[11])+(m.d[11]*d[15]);
+  r.d[12]=(m.d[12]*d[0])+(m.d[13]*d[4])+(m.d[14]*d[8])+(m.d[15]*d[12]);
+  r.d[13]=(m.d[12]*d[1])+(m.d[13]*d[5])+(m.d[14]*d[9])+(m.d[15]*d[13]);
+  r.d[14]=(m.d[12]*d[2])+(m.d[13]*d[6])+(m.d[14]*d[10])+(m.d[15]*d[14]);
+  r.d[15]=(m.d[12]*d[3])+(m.d[13]*d[7])+(m.d[14]*d[11])+(m.d[15]*d[15]);
   return r;
 }
 
 void Matrix4::operator*=(const Matrix4& m)
 {
-  float t1, t2, t3, t4;
-  t1 = (d[0]*m.d[0]) + (d[1]*m.d[4]) + (d[2]*m.d[8])  + (d[3]*m.d[12]);
-  t2 = (d[0]*m.d[1]) + (d[1]*m.d[5]) + (d[2]*m.d[9])  + (d[3]*m.d[13]);
-  t3 = (d[0]*m.d[2]) + (d[1]*m.d[6]) + (d[2]*m.d[10]) + (d[3]*m.d[14]);
-  t4 = (d[0]*m.d[3]) + (d[1]*m.d[7]) + (d[2]*m.d[11]) + (d[3]*m.d[15]);
-  d[0] = t1;
-  d[1] = t2;
-  d[2] = t3;
-  d[3] = t4;
-  t1 = (d[4]*m.d[0]) + (d[5]*m.d[4]) + (d[6]*m.d[8])  + (d[7]*m.d[12]);
-  t2 = (d[4]*m.d[1]) + (d[5]*m.d[5]) + (d[6]*m.d[9])  + (d[7]*m.d[13]);
-  t3 = (d[4]*m.d[2]) + (d[5]*m.d[6]) + (d[6]*m.d[10]) + (d[7]*m.d[14]);
-  t4 = (d[4]*m.d[3]) + (d[5]*m.d[7]) + (d[6]*m.d[11]) + (d[7]*m.d[15]);
-  d[4] = t1;
-  d[5] = t2;
-  d[6] = t3;
-  d[7] = t4;
-  t1 = (d[8]*m.d[0]) + (d[9]*m.d[4]) + (d[10]*m.d[8])  + (d[11]*m.d[12]);
-  t2 = (d[8]*m.d[1]) + (d[9]*m.d[5]) + (d[10]*m.d[9])  + (d[11]*m.d[13]);
-  t3 = (d[8]*m.d[2]) + (d[9]*m.d[6]) + (d[10]*m.d[10]) + (d[11]*m.d[14]);
-  t4 = (d[8]*m.d[3]) + (d[9]*m.d[7]) + (d[10]*m.d[11]) + (d[11]*m.d[15]);
-  d[8]  = t1;
-  d[9]  = t2;
-  d[10] = t3;
-  d[11] = t4;
-  t1 = (d[12]*m.d[0]) + (d[13]*m.d[4]) + (d[14]*m.d[8])  + (d[15]*m.d[12]);
-  t2 = (d[12]*m.d[1]) + (d[13]*m.d[5]) + (d[14]*m.d[9])  + (d[15]*m.d[13]);
-  t3 = (d[12]*m.d[2]) + (d[13]*m.d[6]) + (d[14]*m.d[10]) + (d[15]*m.d[14]);
-  t4 = (d[12]*m.d[3]) + (d[13]*m.d[7]) + (d[14]*m.d[11]) + (d[15]*m.d[15]);
-  d[12] = t1;
-  d[13] = t2;
-  d[14] = t3;
-  d[15] = t4;
+  *this = (*this) * m;
 }
 
 void Matrix4::SetInverse()
@@ -8529,16 +8497,16 @@ uint32_t RenderTarget::GetHeight() const
 
 Matrix4 RenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const
 {
-  Matrix4 windowToNDC = Matrix4::Scaling( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
-  windowToNDC *= Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
+  Matrix4 windowToNDC = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
+  windowToNDC *= Matrix4::Scaling( Vec3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
 
   Matrix4 ndcToQuad = RenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
   ndcToQuad.SetInverse();
 
-  Matrix4 quadToRender = Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
-  quadToRender *= Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
+  Matrix4 quadToRender = Matrix4::Scaling( Vec3( m_width, m_height, 1.0f ) );
+  quadToRender *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
 
-  return ( windowToNDC * ndcToQuad * quadToRender );
+  return ( quadToRender * ndcToQuad * windowToNDC );
 }
 
 Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const
@@ -8561,15 +8529,15 @@ Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherH
 
 Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const
 {
-  Matrix4 canvasToNdc = Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) ) * Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) );
-  return ( otherTargetToLocal * canvasToNdc * worldToNdc.GetInverse() );
+  Matrix4 canvasToNdc = Matrix4::Translation( Vec3( -1.0f, -1.0f, 0.0f ) ) * Matrix4::Scaling( Vec3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
+  return ( worldToNdc.GetInverse() * canvasToNdc * otherTargetToLocal );
 }
 
 Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 {
-  Matrix4 localToNdc = Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
+  Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
   localToNdc *= Matrix4::Scaling( Vec3( ndc.w, ndc.h, 1.0f ) );
-  localToNdc *= Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
+  localToNdc *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
   return localToNdc;
 }
 
