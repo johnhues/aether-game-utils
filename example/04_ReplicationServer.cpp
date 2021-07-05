@@ -26,6 +26,77 @@
 #include "ae/aetherEXT.h"
 #include "04_ReplicationCommon.h"
 
+void Game::Initialize()
+{
+  window.Initialize( 800, 600, false, true );
+  window.SetTitle( "Replication Server" );
+  render.Initialize( &window );
+  input.Initialize( &window );
+  timeStep.SetTimeStep( 1.0f / 10.0f );
+  const char* vertexStr = R"(
+    AE_UNIFORM_HIGHP mat4 u_worldToNdc;
+    AE_IN_HIGHP vec4 a_position;
+    AE_IN_HIGHP vec4 a_color;
+    AE_OUT_HIGHP vec4 v_color;
+    void main()
+    {
+      v_color = a_color;
+      gl_Position = u_worldToNdc * a_position;
+    })";
+  const char* fragStr = R"(
+    AE_IN_HIGHP vec4 v_color;
+    void main()
+    {
+      AE_COLOR = v_color;
+    })";
+  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  m_spriteData.Initialize( sizeof(Vertex), sizeof(Index), 4, 6, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
+  m_spriteData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof(Vertex, position) );
+  m_spriteData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof(Vertex, color) );
+}
+
+void Game::Terminate()
+{
+  //input.Terminate();
+  render.Terminate();
+  window.Terminate();
+}
+
+void Game::Render( const ae::Matrix4& worldToNdc )
+{
+  render.Activate();
+  render.Clear( aeColor::PicoBlack() );
+  
+  Vertex vertex[] = {
+    { m_sprites[ 0 ].transform * ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
+    { m_sprites[ 0 ].transform * ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
+    { m_sprites[ 0 ].transform * ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
+    { m_sprites[ 0 ].transform * ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color }
+  };
+  Index indices[] = {
+    3, 0, 1,
+    3, 1, 2
+  };
+  m_spriteData.SetVertices( vertex, countof(vertex) );
+  m_spriteData.SetIndices( indices, countof(indices) );
+  
+  ae::UniformList uniforms;
+  uniforms.Set( "u_worldToNdc", worldToNdc );
+  m_spriteData.Render( &m_shader, uniforms );
+  
+  render.Present();
+  timeStep.Wait();
+}
+
+void Game::SetSprite( uint32_t index, const ae::Matrix4& transform, ae::Color color )
+{
+  if ( index < countof(m_sprites) )
+  {
+    m_sprites[ index ].transform = transform;
+    m_sprites[ index ].color = color;
+  }
+}
+
 //------------------------------------------------------------------------------
 // ClientInfo class
 //------------------------------------------------------------------------------
@@ -43,21 +114,9 @@ int main()
 {
   AE_LOG( "Initialize" );
 
-  // System modules
-  aeWindow window;
-  aeRender render;
-  aeInput input;
-  aeSpriteRender spriteRender;
-  aeTexture2D texture;
-  ae::TimeStep timeStep;
-  window.Initialize( 800, 600, false, true );
-  window.SetTitle( "Replication Server" );
-  render.InitializeOpenGL( &window );
-  input.Initialize( &window );
-  spriteRender.Initialize( 32 );
-  uint8_t texInfo[] = { 255, 255, 255 };
-  texture.Initialize( texInfo, 1, 1, aeTextureFormat::RGB8, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
-  timeStep.SetTimeStep( 1.0f / 10.0f );
+  Game game;
+  game.Initialize();
+  game.SetSprite( 0, ae::Matrix4::Identity(), ae::Color::Green() );
 
   // Server modules
   AetherServer* server = AetherServer_New( 3500, 0, 1 );
@@ -68,9 +127,9 @@ int main()
   ae::Array< Green > greens = TAG_EXAMPLE;
   
   // Net update
-  while ( !input.GetState()->exit )
+  while ( !game.input.quit )
   {
-    input.Pump();
+    game.input.Pump();
     AetherServer_Update( server );
     
     ServerReceiveInfo receiveInfo;
@@ -117,7 +176,7 @@ int main()
     }
     for ( uint32_t i = 0; i < greens.Length(); i++ )
     {
-      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture, &input );
+      greens[ i ].Update( &game );
     }
 
     // Destroy dead objects
@@ -141,12 +200,7 @@ int main()
     }
     AetherServer_SendAll( server );
 
-    render.Activate();
-    render.Clear( aeColor::PicoBlack() );
-    spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-    render.Present();
-
-    timeStep.Wait();
+    game.Render( ae::Matrix4::Scaling( aeFloat3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
   }
 
   AE_LOG( "Terminate" );
@@ -154,11 +208,7 @@ int main()
   AetherServer_Delete( server );
   server = nullptr;
   
-  texture.Destroy();
-  spriteRender.Destroy();
-  input.Terminate();
-  render.Terminate();
-  window.Terminate();
+  game.Terminate();
 
   return 0;
 }

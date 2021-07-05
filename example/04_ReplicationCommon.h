@@ -27,7 +27,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
+#include "ae/aeNet.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -49,7 +50,38 @@ struct ChangeColorRPC
     stream->SerializeFloat( color.b );
     stream->SerializeFloat( color.a );
   }
-  aeColor color;
+  ae::Color color;
+};
+
+using Index = uint16_t;
+struct Vertex
+{
+  ae::Vec4 position;
+  ae::Color color;
+};
+
+class Game
+{
+public:
+  void Initialize();
+  void Terminate();
+  void Render( const ae::Matrix4& worldToNdc );
+  void SetSprite( uint32_t index, const ae::Matrix4& transform, ae::Color color );
+  
+  ae::Window window;
+  ae::GraphicsDevice render;
+  ae::Input input;
+  ae::TimeStep timeStep;
+  
+private:
+  struct Sprite
+  {
+    ae::Matrix4 transform;
+    ae::Color color;
+  };
+  Sprite m_sprites[ 8 ];
+  ae::Shader m_shader;
+  ae::VertexData m_spriteData;
 };
 
 //------------------------------------------------------------------------------
@@ -60,16 +92,17 @@ class Green
 public:
   Green()
   {
-    pos = aeFloat3( 0.0f );
-    size = aeFloat3( 1.0f );
+    pos = ae::Vec3( 0.0f );
+    size = ae::Vec3( 1.0f );
     rotation = 0.0f;
-    life = aeMath::MaxValue< float >();
+    life = ae::MaxValue< float >();
 
-    m_color = aeColor::Green();
+    m_color = ae::Color::Green();
   }
 
-  void Update( float dt, aeSpriteRender* spriteRender, const aeTexture2D* texture, aeInput* input )
+  void Update( Game* game )
   {
+    float dt = game->timeStep.GetDt();
     if ( !netData->IsAuthority() )
     {
       // Client - read net data
@@ -82,20 +115,20 @@ public:
         AE_LOG( "Received Message: #", (const char*)msg.data );
       }
 
-      if ( input->GetState()->space && !input->GetPrevState()->space )
+      if ( game->input.Get( ae::Key::Space ) && !game->input.GetPrev( ae::Key::Space ) )
       {
-        aeColor colors[] =
+        ae::Color colors[] =
         {
-          aeColor::White(),
-          aeColor::White(),
-          aeColor::Red(),
-          aeColor::Blue(),
-          aeColor::Orange(),
-          aeColor::Gray()
+          ae::Color::White(),
+          ae::Color::White(),
+          ae::Color::Red(),
+          ae::Color::Blue(),
+          ae::Color::Orange(),
+          ae::Color::Gray()
         };
 
         ChangeColorRPC rpc;
-        rpc.color = colors[ aeMath::Random( 0, countof(colors) ) ];
+        rpc.color = colors[ ae::Random( 0, countof(colors) ) ];
 
         aeBinaryStream wStream = aeBinaryStream::Writer();
         wStream.SerializeObject( rpc );
@@ -104,7 +137,7 @@ public:
     }
 
     // Update pos and rotation
-    aeFloat4x4 modelToWorld = aeFloat4x4::Translation( pos );
+    ae::Matrix4 modelToWorld = ae::Matrix4::Translation( pos );
     life -= dt;
 
     if ( netData->IsAuthority() )
@@ -130,7 +163,7 @@ public:
       }
     }
 
-    spriteRender->AddSprite( texture, modelToWorld, aeFloat2( 0.0f ), aeFloat2( 1.0f ), m_color );
+//    spriteRender->AddSprite( texture, modelToWorld, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), m_color );
   }
 
   void Serialize( aeBinaryStream* stream )
@@ -142,15 +175,15 @@ public:
     stream->SerializeFloat( life );
   }
 
-  aeFloat3 pos;
-  aeFloat3 size;
+  ae::Vec3 pos;
+  ae::Vec3 size;
   float rotation;
   float life;
 
-  aeRef< aeNetData > netData;
+  aeNetData* netData;
 
 private:
-  aeColor m_color;
+  ae::Color m_color;
 };
 
 #endif
