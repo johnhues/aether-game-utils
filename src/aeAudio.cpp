@@ -28,11 +28,13 @@
 #include "aeVfs.h"
 
 #if _AE_APPLE_
-#include <OpenAL/al.h>
-#include <OpenAL/alc.h>
+  #include <OpenAL/al.h>
+  #include <OpenAL/alc.h>
+  #pragma clang diagnostic push
+  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #else
-#include <AL/al.h>
-#include <AL/alc.h>
+  #include <AL/al.h>
+  #include <AL/alc.h>
 #endif
 
 //------------------------------------------------------------------------------
@@ -411,3 +413,7 @@ void aeAudio::Log()
 
   CheckALError();
 }
+
+#if _AE_APPLE_
+  #pragma clang diagnostic pop
+#endif
