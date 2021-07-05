@@ -28,9 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeBinaryStream.h"
-#include "aeMeta.h"
-#include "aeRef.h"
-#include "aeString.h"
 
 //------------------------------------------------------------------------------
 // AetherUuid class
@@ -63,6 +60,37 @@ inline void Serialize( aeBinaryStream* stream, const AetherUuid* uuid )
   stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }
 
+//namespace ae
+//{
+  //using NetId = uint32_t;
+//}
+struct NetId
+{
+  NetId() = default;
+  NetId( const NetId& ) = default;
+  explicit NetId( uint32_t id ) : m_id( id ) {}
+  bool operator==( const NetId& o ) const { return o.m_id == m_id; }
+  bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
+  explicit operator bool () const { return m_id != 0; }
+  void Serialize( aeBinaryStream* s ) { s->SerializeUint32( m_id ); }
+  void Serialize( aeBinaryStream* s ) const { s->SerializeUint32( m_id ); }
+private:
+  uint32_t m_id = 0;
+};
+struct RemoteId
+{
+  RemoteId() = default;
+  RemoteId( const RemoteId& ) = default;
+  explicit RemoteId( uint32_t id ) : m_id( id ) {}
+  bool operator==( const RemoteId& o ) const { return o.m_id == m_id; }
+  bool operator!=( const RemoteId& o ) const { return o.m_id != m_id; }
+  explicit operator bool () const { return m_id != 0; }
+  void Serialize( aeBinaryStream* s ) { s->SerializeUint32( m_id ); }
+  void Serialize( aeBinaryStream* s ) const { s->SerializeUint32( m_id ); }
+private:
+  uint32_t m_id = 0;
+};
+
 //------------------------------------------------------------------------------
 // aeNetData class
 //------------------------------------------------------------------------------
@@ -74,6 +102,8 @@ public:
     const uint8_t* data;
     uint32_t length;
   };
+
+  NetId _netId;
 
   //------------------------------------------------------------------------------
   // General
@@ -147,8 +177,6 @@ private:
   uint32_t m_prevHash = 0;
   bool m_isPendingInit = true;
   bool m_isPendingDelete = false;
-public:
-  AE_REFABLE( aeNetData );
 };
 
 //------------------------------------------------------------------------------
@@ -159,20 +187,20 @@ class aeNetReplicaClient
 public:
   // The following sequence should be performed each frame
   void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
-  aeRef< aeNetData > PumpCreated(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
+  aeNetData* PumpCreated(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
   // 3) Handle new sync data with aeNetData::GetSyncData() and process incoming messages with aeNetData::PumpMessages()
-  void DestroyPending(); // 4) Destroy all objects flagged for destruction (call once)
+  NetId PumpDestroyed(); // 4) Get destroyed object ids (call this repeatedly until no new NetIds are returned)
   
-  aeId< aeNetData > GetLocalId( uint32_t remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
-  uint32_t GetRemoteId( aeId< aeNetData > localId ) const { return m_localToRemoteIdMap.Get( localId, 0 ); }
+  NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
+  RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
 
 private:
   void m_CreateNetData( aeBinaryStream* rStream );
-  ae::Map< aeId< aeNetData >, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
-  ae::Map< uint32_t, aeId< aeNetData > > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
-  ae::Map< aeId< aeNetData >, uint32_t > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
-  ae::Array< aeRef< aeNetData > > m_created = AE_ALLOC_TAG_NET;
-  ae::Array< aeRef< aeNetData > > m_destroyed = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
+  ae::Array< aeNetData* > m_created = AE_ALLOC_TAG_NET;
+  ae::Array< aeNetData* > m_destroyed = AE_ALLOC_TAG_NET;
 };
 
 //------------------------------------------------------------------------------
@@ -220,7 +248,7 @@ public:
 
 private:
   ae::Array< aeNetData* > m_pendingCreate = AE_ALLOC_TAG_NET;
-  ae::Map< aeId< aeNetData >, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
   ae::Array< aeNetReplicaServer* > m_servers = AE_ALLOC_TAG_NET;
 public:
   // Internal

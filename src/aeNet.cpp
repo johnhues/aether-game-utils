@@ -179,12 +179,12 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
       }
       case aeNetReplicaServer::EventType::Destroy:
       {
-        uint32_t remoteId = 0;
-        rStream.SerializeUint32( remoteId );
+        RemoteId remoteId;
+        rStream.SerializeObject( remoteId );
 
         // @TODO: What happens if the client is somehow out of sync here?
         //        Currently if the net data is not found this Get() will assert.
-        aeId< aeNetData > localId = m_remoteToLocalIdMap.Get( remoteId );
+        NetId localId = m_remoteToLocalIdMap.Get( remoteId );
         m_remoteToLocalIdMap.Remove( remoteId );
         m_localToRemoteIdMap.Remove( localId );
 
@@ -203,12 +203,12 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         rStream.SerializeUint32( netDataCount );
         for ( uint32_t i = 0; i < netDataCount; i++ )
         {
-          uint32_t remoteId = 0;
+          RemoteId remoteId;
           uint32_t dataLen = 0;
-          rStream.SerializeUint32( remoteId );
+          rStream.SerializeObject( remoteId );
           rStream.SerializeUint32( dataLen );
 
-          aeId< aeNetData > localId;
+          NetId localId;
           aeNetData* netData = nullptr;
           if ( dataLen
             && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
@@ -234,12 +234,12 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         rStream.SerializeUint32( netDataCount );
         for ( uint32_t i = 0; i < netDataCount; i++ )
         {
-          uint32_t remoteId = 0;
+          RemoteId remoteId;
           uint32_t dataLen = 0;
-          rStream.SerializeUint32( remoteId );
+          rStream.SerializeObject( remoteId );
           rStream.SerializeUint32( dataLen );
 
-          aeId< aeNetData > localId;
+          NetId localId;
           aeNetData* netData = nullptr;
           if ( dataLen
             && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
@@ -263,47 +263,48 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
   }
 }
 
-aeRef< aeNetData > aeNetReplicaClient::PumpCreated()
+aeNetData* aeNetReplicaClient::PumpCreated()
 {
   if ( !m_created.Length() )
   {
-    return aeRef< aeNetData >();
+    return nullptr;
   }
 
-  aeRef< aeNetData > created = m_created[ 0 ];
+  aeNetData* created = m_created[ 0 ];
   AE_ASSERT( created );
   m_created.Remove( 0 );
   return created;
 }
 
-void aeNetReplicaClient::DestroyPending()
+NetId aeNetReplicaClient::PumpDestroyed()
 {
   AE_ASSERT_MSG( m_created.Length() == 0, "PumpCreated() must be called until it returns a null reference." );
 
-  for ( uint32_t i = 0; i < m_destroyed.Length(); i++ )
+  if ( m_destroyed.Length() )
   {
-    aeNetData* netData = m_destroyed[ i ];
+    aeNetData* netData = m_destroyed[ 0 ];
     AE_ASSERT( netData );
     AE_ASSERT( netData->IsPendingDelete() );
     AE_ASSERT( !netData->PumpMessages( nullptr ) );
-    m_netDatas.Remove( netData->GetId() );
+    m_netDatas.Remove( netData->_netId );
     ae::Delete( netData );
+    m_destroyed.Remove( 0 );
   }
 
-  m_destroyed.Clear();
+  return {};
 }
 
 void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
 {
   AE_ASSERT( rStream->IsReader() );
 
-  uint32_t remoteId = 0;
-  rStream->SerializeUint32( remoteId );
+  RemoteId remoteId;
+  rStream->SerializeObject( remoteId );
 
   aeNetData* netData = ae::New< aeNetData >( AE_ALLOC_TAG_NET );
-  m_netDatas.Set( netData->GetId(), netData );
-  m_remoteToLocalIdMap.Set( remoteId, netData->GetId() );
-  m_localToRemoteIdMap.Set( netData->GetId(), remoteId );
+  m_netDatas.Set( netData->_netId, netData );
+  m_remoteToLocalIdMap.Set( remoteId, netData->_netId );
+  m_localToRemoteIdMap.Set( netData->_netId, remoteId );
 
   rStream->SerializeArray( netData->m_initData );
 
@@ -342,7 +343,7 @@ void aeNetReplicaServer::m_UpdateSendData()
     for ( uint32_t i = 0; i < toSync.Length(); i++ )
     {
       aeNetData* netData = toSync[ i ];
-      wStream.SerializeUint32( netData->GetId().GetInternalId() );
+      wStream.SerializeObject( netData->_netId );
       wStream.SerializeUint32( netData->SyncDataLength() );
       wStream.SerializeRaw( netData->GetSyncData(), netData->SyncDataLength() );
     }
@@ -357,7 +358,7 @@ void aeNetReplicaServer::m_UpdateSendData()
       aeNetData* netData = m_replicaDB->GetNetData( i );
       if ( netData->m_messageDataOut.Length() )
       {
-        wStream.SerializeUint32( netData->GetId().GetInternalId() );
+        wStream.SerializeObject( netData->_netId );
         wStream.SerializeUint32( netData->m_messageDataOut.Length() );
         wStream.SerializeRaw( &netData->m_messageDataOut[ 0 ], netData->m_messageDataOut.Length() );
       }
@@ -405,7 +406,7 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
     return;
   }
 
-  aeId< aeNetData > id = netData->GetId();
+  NetId id = netData->_netId;
   AE_ASSERT_MSG( m_netDatas.Remove( id ), "aeNetData was not found." );
 
   for ( uint32_t i = 0; i < m_servers.Length(); i++ )
@@ -419,7 +420,7 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
 
     aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
     wStream.SerializeRaw( aeNetReplicaServer::EventType::Destroy );
-    wStream.SerializeUint32( id.GetInternalId() );
+    wStream.SerializeObject( id );
   }
 
   ae::Delete( netData );
@@ -438,7 +439,7 @@ aeNetReplicaServer* aeNetReplicaDB::CreateServer()
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {
     const aeNetData* netData = m_netDatas.GetValue( i );
-    wStream.SerializeUint32( netData->GetId().GetInternalId() );
+    wStream.SerializeObject( netData->_netId );
     wStream.SerializeArray( netData->m_initData );
   }
 
@@ -479,7 +480,7 @@ void aeNetReplicaDB::UpdateSendData()
     if ( !netData->IsPendingInit() )
     {
       // Add net data to list, remove all initialized net datas from m_pendingCreate at once below
-      m_netDatas.Set( netData->GetId(), netData );
+      m_netDatas.Set( netData->_netId, netData );
       
       // Send create messages on existing server connections
       for ( uint32_t i = 0; i < m_servers.Length(); i++ )
@@ -487,7 +488,7 @@ void aeNetReplicaDB::UpdateSendData()
         aeNetReplicaServer* server = m_servers[ i ];
         aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
         wStream.SerializeRaw( aeNetReplicaServer::EventType::Create );
-        wStream.SerializeUint32( netData->GetId().GetInternalId() );
+        wStream.SerializeObject( netData->_netId );
         wStream.SerializeArray( netData->m_initData );
       }
     }
