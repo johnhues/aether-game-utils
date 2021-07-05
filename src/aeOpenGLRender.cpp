@@ -41,6 +41,10 @@
   #include <OpenGLES/ES3/gl.h>
   #include <OpenGLES/ES3/glext.h>
   #define glClearDepth glClearDepthf
+#elif _AE_APPLE_
+  #define GL_SILENCE_DEPRECATION
+  #include <OpenGL/gl3.h>
+  #include <OpenGL/gl3ext.h> // for glTexStorage2D, glTextureBarrierNV
 #else
   #include <OpenGL/gl3.h>
   #include <OpenGL/gl3ext.h> // for glTexStorage2D, glTextureBarrierNV

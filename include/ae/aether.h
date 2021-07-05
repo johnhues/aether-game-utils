@@ -3856,6 +3856,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
   #include "processthreadsapi.h" // For GetCurrentProcessId()
   #include <filesystem> // @HACK: Shouldn't need this just for Windows
 #elif _AE_APPLE_
+  #define GL_SILENCE_DEPRECATION
   #include <sys/sysctl.h>
   #include <unistd.h>
   #ifdef AE_USE_MODULES
