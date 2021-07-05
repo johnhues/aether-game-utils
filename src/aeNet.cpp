@@ -112,9 +112,9 @@ bool aeNetData::IsPendingInit() const
   return m_isPendingInit;
 }
 
-bool aeNetData::IsPendingDelete() const
+bool aeNetData::IsPendingDestroy() const
 {
-  return m_isPendingDelete;
+  return m_isPendingDestroy;
 }
 
 void aeNetData::m_SetClientData( const uint8_t* data, uint32_t length )
@@ -146,8 +146,7 @@ void aeNetData::m_UpdateHash()
 void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
 {
   // @TODO: This assert holds except on init
-  //AE_ASSERT_MSG( m_created.Length() == 0, "After calling ReceiveData(), PumpCreated() must be called until it returns a null reference." );
-  //AE_ASSERT_MSG( m_destroyed.Length() == 0, "After calling ReceiveData() and PumpCreated(), DestroyPending() must be called once." );
+  //AE_ASSERT_MSG( m_created.Length() == 0, "After calling ReceiveData(), PumpCreate() must be called until it returns a null reference." );
 
   aeBinaryStream rStream = aeBinaryStream::Reader( data, length );
   while ( rStream.GetOffset() < rStream.GetLength() )
@@ -192,8 +191,7 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         if ( m_netDatas.TryGet( localId, &netData ) )
         {
           AE_ASSERT( netData );
-          netData->FlagForDeletion();
-          m_destroyed.Append( netData );
+          netData->m_FlagForDestruction();
         }
         break;
       }
@@ -263,7 +261,7 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
   }
 }
 
-aeNetData* aeNetReplicaClient::PumpCreated()
+aeNetData* aeNetReplicaClient::PumpCreate()
 {
   if ( !m_created.Length() )
   {
@@ -276,22 +274,17 @@ aeNetData* aeNetReplicaClient::PumpCreated()
   return created;
 }
 
-NetId aeNetReplicaClient::PumpDestroyed()
+void aeNetReplicaClient::Destroy( aeNetData* pendingDestroy )
 {
-  AE_ASSERT_MSG( m_created.Length() == 0, "PumpCreated() must be called until it returns a null reference." );
-
-  if ( m_destroyed.Length() )
+  if ( !pendingDestroy )
   {
-    aeNetData* netData = m_destroyed[ 0 ];
-    AE_ASSERT( netData );
-    AE_ASSERT( netData->IsPendingDelete() );
-    AE_ASSERT( !netData->PumpMessages( nullptr ) );
-    m_netDatas.Remove( netData->_netId );
-    ae::Delete( netData );
-    m_destroyed.Remove( 0 );
+    return;
   }
-
-  return {};
+  // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
+  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "aeNetData was not pending Destroy()" );
+  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "aeNetData had pending messages when it was Destroy()ed" );
+  m_netDatas.Remove( pendingDestroy->_netId );
+  ae::Delete( pendingDestroy );
 }
 
 void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
