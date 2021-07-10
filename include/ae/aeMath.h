@@ -799,9 +799,11 @@ class aePlane
 {
 public:
   aePlane() = default;
+  aePlane( aeFloat4 pointNormal );
   aePlane( aeFloat3 point, aeFloat3 normal );
 
   bool IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const;
+  float GetSignedDistance( aeFloat3 pos ) const;
 
 private:
   aeFloat3 m_point;
@@ -929,6 +931,20 @@ private:
   aeFloat4x4 m_transform;
   aeFloat4x4 m_invTransRot;
   aeAABB m_scaledAABB;
+};
+
+//------------------------------------------------------------------------------
+// aeFrustum class
+//------------------------------------------------------------------------------
+class aeFrustum
+{
+public:
+  aeFrustum( aeFloat4x4 worldToProjection );
+  bool Intersects( const aeSphere& sphere ) const;
+  bool Intersects( aeFloat3 point ) const;
+  
+private:
+  aePlane m_faces[ 6 ];
 };
 
 #endif

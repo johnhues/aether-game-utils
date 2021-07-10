@@ -2115,6 +2115,11 @@ void aeRectInt::Expand( aeInt2 pos )
 //------------------------------------------------------------------------------
 // aePlane member functions
 //------------------------------------------------------------------------------
+aePlane::aePlane( aeFloat4 pointNormal ) :
+  m_point( pointNormal.GetXYZ() * -pointNormal.w ),
+  m_normal( pointNormal )
+{}
+
 aePlane::aePlane( aeFloat3 point, aeFloat3 normal )
 {
   m_point = point;
@@ -2145,6 +2150,11 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* o
     *out = pos - dir * c;
   }
   return true;
+}
+
+float aePlane::GetSignedDistance( aeFloat3 pos ) const
+{
+  return m_normal.Dot( pos - m_point );
 }
 
 //------------------------------------------------------------------------------
@@ -2693,13 +2703,13 @@ aeFloat4x4 aeAABB::GetTransform() const
 
 float aeAABB::GetMinDistance( aeFloat3 p ) const
 {
-  aeFloat3 c = ( m_min + m_max ) * 0.5f;
-  aeFloat3 hs = ( m_max - m_min ) * 0.5f;
+  aeFloat3 center = GetCenter();
+  aeFloat3 halfSize = GetHalfSize();
 
-  aeFloat3 d = p - c;
-  d.x = aeMath::Max( aeMath::Abs( d.x ) - hs.x, 0.0f );
-  d.y = aeMath::Max( aeMath::Abs( d.y ) - hs.y, 0.0f );
-  d.z = aeMath::Max( aeMath::Abs( d.z ) - hs.z, 0.0f );
+  aeFloat3 d = p - center;
+  d.x = aeMath::Max( aeMath::Abs( d.x ) - halfSize.x, 0.0f );
+  d.y = aeMath::Max( aeMath::Abs( d.y ) - halfSize.y, 0.0f );
+  d.z = aeMath::Max( aeMath::Abs( d.z ) - halfSize.z, 0.0f );
 
   return d.Length();
 }
@@ -2844,4 +2854,47 @@ aeAABB aeOBB::GetAABB() const
   }
 
   return result;
+}
+
+//------------------------------------------------------------------------------
+// aeFrustum member functions
+//------------------------------------------------------------------------------
+aeFrustum::aeFrustum( aeFloat4x4 worldToProjection )
+{
+  aeFloat4 row0 = worldToProjection.GetRowVector( 0 );
+  aeFloat4 row1 = worldToProjection.GetRowVector( 1 );
+  aeFloat4 row2 = worldToProjection.GetRowVector( 2 );
+  aeFloat4 row3 = worldToProjection.GetRowVector( 3 );
+
+  m_faces[ 0 ] = -row0 - row3; // Near
+  m_faces[ 1 ] = row0 - row3; // Far
+  m_faces[ 2 ] = -row1 - row3; // Left
+  m_faces[ 3 ] = row1 - row3; // Right
+  m_faces[ 4 ] = -row2 - row3; // Top
+  m_faces[ 5 ] = row2 - row3; // Bottom
+}
+
+bool aeFrustum::Intersects( aeFloat3 point ) const
+{
+  for ( uint32_t i = 0; i < countof(m_faces); i++ )
+  {
+    if ( m_faces[ i ].GetSignedDistance( point ) > 0.0f )
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool aeFrustum::Intersects( const aeSphere& sphere ) const
+{
+  for( int i = 0; i < countof(m_faces); i++ )
+  {
+    float distance = m_faces[ i ].GetSignedDistance( sphere.center );
+    if( distance > 0.0f && distance - sphere.radius > 0.0f ) 
+    {
+      return false;
+    }
+  }
+  return true;
 }
