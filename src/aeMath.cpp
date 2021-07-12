@@ -2889,19 +2889,32 @@ aeFrustum::aeFrustum( aeFloat4x4 worldToProjection )
   aeFloat4 row2 = worldToProjection.GetRowVector( 2 );
   aeFloat4 row3 = worldToProjection.GetRowVector( 3 );
 
-  m_faces[ 0 ] = -row0 - row3; // Near
-  m_faces[ 1 ] = row0 - row3; // Far
-  m_faces[ 2 ] = -row1 - row3; // Left
-  m_faces[ 3 ] = row1 - row3; // Right
-  m_faces[ 4 ] = -row2 - row3; // Top
-  m_faces[ 5 ] = row2 - row3; // Bottom
+  aeFloat4 near = -row0 - row3;
+  aeFloat4 far = row0 - row3;
+  aeFloat4 left = -row1 - row3;
+  aeFloat4 right = row1 - row3;
+  aeFloat4 top = -row2 - row3;
+  aeFloat4 bottom = row2 - row3;
+  near.w = -near.w;
+  far.w = -far.w;
+  left.w = -left.w;
+  right.w = -right.w;
+  top.w = -top.w;
+  bottom.w = -bottom.w;
+  
+  m_planes[ (int)aeFrustumPlane::Near ] = near;
+  m_planes[ (int)aeFrustumPlane::Far ] = far;
+  m_planes[ (int)aeFrustumPlane::Left ] = left;
+  m_planes[ (int)aeFrustumPlane::Right ] = right;
+  m_planes[ (int)aeFrustumPlane::Top ] = top;
+  m_planes[ (int)aeFrustumPlane::Bottom ] = bottom;
 }
 
 bool aeFrustum::Intersects( aeFloat3 point ) const
 {
-  for ( uint32_t i = 0; i < countof(m_faces); i++ )
+  for ( uint32_t i = 0; i < countof(m_planes); i++ )
   {
-    if ( m_faces[ i ].GetSignedDistance( point ) > 0.0f )
+    if ( m_planes[ i ].GetSignedDistance( point ) > 0.0f )
     {
       return false;
     }
@@ -2911,13 +2924,18 @@ bool aeFrustum::Intersects( aeFloat3 point ) const
 
 bool aeFrustum::Intersects( const aeSphere& sphere ) const
 {
-  for( int i = 0; i < countof(m_faces); i++ )
+  for( int i = 0; i < countof(m_planes); i++ )
   {
-    float distance = m_faces[ i ].GetSignedDistance( sphere.center );
+    float distance = m_planes[ i ].GetSignedDistance( sphere.center );
     if( distance > 0.0f && distance - sphere.radius > 0.0f ) 
     {
       return false;
     }
   }
   return true;
+}
+
+aePlane aeFrustum::GetPlane( aeFrustumPlane plane ) const
+{
+  return m_planes[ (int)plane ];
 }

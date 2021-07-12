@@ -939,15 +939,25 @@ private:
 //------------------------------------------------------------------------------
 // aeFrustum class
 //------------------------------------------------------------------------------
+enum class aeFrustumPlane
+{
+  Near,
+  Far,
+  Left,
+  Right,
+  Top,
+  Bottom
+};
 class aeFrustum
 {
 public:
   aeFrustum( aeFloat4x4 worldToProjection );
   bool Intersects( const aeSphere& sphere ) const;
   bool Intersects( aeFloat3 point ) const;
+  aePlane GetPlane( aeFrustumPlane plane ) const;
   
 private:
-  aePlane m_faces[ 6 ];
+  aePlane m_planes[ 6 ];
 };
 
 #endif
