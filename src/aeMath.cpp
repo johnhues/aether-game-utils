@@ -2116,29 +2116,41 @@ void aeRectInt::Expand( aeInt2 pos )
 // aePlane member functions
 //------------------------------------------------------------------------------
 aePlane::aePlane( aeFloat4 pointNormal ) :
-  m_point( pointNormal.GetXYZ() * -pointNormal.w ),
-  m_normal( pointNormal )
+  m_plane( pointNormal / pointNormal.GetXYZ().Length() ) // Normalize
 {}
 
 aePlane::aePlane( aeFloat3 point, aeFloat3 normal )
 {
-  m_point = point;
-  m_normal = normal.SafeNormalizeCopy();
+  m_plane = aeFloat4( normal.NormalizeCopy(), 0.0f );
+  m_plane.w = GetSignedDistance( point );
+}
+
+aeFloat3 aePlane::GetNormal() const
+{
+  return m_plane.GetXYZ();
+}
+
+aeFloat3 aePlane::GetClosestPointToOrigin() const
+{
+  return m_plane.GetXYZ() * m_plane.w;
 }
 
 bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const
 {
   dir.SafeNormalize();
+  
+  aeFloat3 n = m_plane.GetXYZ();
+  aeFloat3 p = n * m_plane.w;
 
-  float a = dir.Dot( m_normal );
+  float a = dir.Dot( n );
   if ( a > -0.01f )
   {
     // Ray is pointing away from or parallel to plane
     return false;
   }
 
-  aeFloat3 diff = pos - m_point;
-  float b = diff.Dot( m_normal );
+  aeFloat3 diff = pos - p;
+  float b = diff.Dot( n );
   float c = b / a;
 
   if ( tOut )
@@ -2152,9 +2164,20 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* o
   return true;
 }
 
+aeFloat3 aePlane::GetClosestPoint( aeFloat3 pos, float* distanceOut ) const
+{
+  aeFloat3 n = m_plane.GetXYZ();
+  float t = pos.Dot( n ) - m_plane.w;
+  if ( distanceOut )
+  {
+    *distanceOut = t;
+  }
+  return pos - n * t;
+}
+
 float aePlane::GetSignedDistance( aeFloat3 pos ) const
 {
-  return m_normal.Dot( pos - m_point );
+   return pos.Dot( m_plane.GetXYZ() ) - m_plane.w;
 }
 
 //------------------------------------------------------------------------------

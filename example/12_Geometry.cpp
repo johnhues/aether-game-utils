@@ -63,7 +63,7 @@ int main()
 		render.Clear( aeColor::PicoDarkPurple() );
 		
 		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.6f, render.GetAspectRatio(), 0.25f, 50.0f );
+		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( ae::QUARTER_PI, render.GetAspectRatio(), 0.25f, 50.0f );
 		aeFloat4x4 worldToProj = viewToProj * worldToView;
 
 		// UI units in pixels, origin in bottom left
@@ -104,7 +104,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = aeMath::Mod( currentTest, 4 );
+		currentTest = aeMath::Mod( currentTest, 5 );
 
 		aeStr256 infoText = "";
 		switch ( currentTest )
@@ -285,12 +285,102 @@ int main()
 				}
 				break;
 			}
+			case 4:
+			{
+				infoText.Append( "Plane Ray\n" );
+        infoText.Append( "Rotate Normal XY: 1-2\n" );
+        infoText.Append( "Rotate Normal Z: 3-4\n" );
+        infoText.Append( "Plane Distance from Origin: 5-6\n" );
+        infoText.Append( "Cast Ray from Camera: G\n" );
+        
+        static float a0 = 0.0f;
+        static float a1 = ae::QUARTER_PI;
+        static float d = 1.0f;
+        static aeFloat3 rayP( 3.0f, 0.0f, 0.0f );
+        static aeFloat3 rayD( -1.0f, 0.0f, 0.0f );
+        
+        if ( input.GetState()->Get( aeKey::Num1 ) ) a0 -= 0.016f;
+        if ( input.GetState()->Get( aeKey::Num2 ) ) a0 += 0.016f;
+        if ( input.GetState()->Get( aeKey::Num3 ) ) a1 -= 0.016f;
+        if ( input.GetState()->Get( aeKey::Num4 ) ) a1 += 0.016f;
+        if ( input.GetState()->Get( aeKey::Num5 ) ) d -= 0.016f;
+        if ( input.GetState()->Get( aeKey::Num6 ) ) d += 0.016f;
+        if ( input.GetState()->Get( aeKey::G ) )
+        {
+          rayP = camera.GetPosition();
+          rayD = camera.GetForward();
+        }
+				
+        aeFloat2 xy( ae::Cos( a0 ), ae::Sin( a0 ) );
+				aePlane plane( aeFloat4( xy * ae::Cos( a1 ), ae::Sin( a1 ), d ) );
+        
+        aeFloat3 p = plane.GetClosestPointToOrigin();
+        aeFloat3 pn = plane.GetClosestPointToOrigin() + plane.GetNormal();
+				
+        // Reference lines
+        if ( d > 0.0f )
+        {
+          debug.AddLine( aeFloat3( 0.0f ), p, aeColor::Gray() );
+        }
+        else if ( d < -1.0f )
+        {
+          debug.AddLine( aeFloat3( 0.0f ), pn, aeColor::Gray() );
+        }
+        aeAABB aabb( aeFloat3( 0.0f ), p );
+        debug.AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), aeColor::Gray() );
+        
+        // Axis lines
+        debug.AddLine( aeFloat3( 0.0f ), aeFloat3( 1.0f, 0.0f, 0.0f ), aeColor::Red() );
+        debug.AddLine( aeFloat3( 0.0f ), aeFloat3( 0.0f, 1.0f, 0.0f ), aeColor::Green() );
+        debug.AddLine( aeFloat3( 0.0f ), aeFloat3( 0.0f, 0.0f, 1.0f ), aeColor::Blue() );
+        
+        // Plane
+        debug.AddCircle( p, plane.GetNormal(), 0.25f, aeColor::PicoPink(), 16 );
+        debug.AddLine( p, pn, aeColor::PicoPink() );
+        
+        // Ray
+        aeFloat3 rayHit( 0.0f );
+        debug.AddSphere( rayP, 0.05f, ae::Color::PicoPeach(), 8 );
+        if ( plane.IntersectRay( rayP, rayD, nullptr, &rayHit ) )
+        {
+          debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
+          debug.AddLine( rayP, rayHit, ae::Color::PicoPeach() );
+          debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), aeColor::PicoPink(), 32 );
+        }
+        else
+        {
+          debug.AddLine( rayP, rayP + rayD, ae::Color::PicoPeach() );
+        }
+        aeFloat3 closest = plane.GetClosestPoint( rayP );
+        debug.AddCircle( p, plane.GetNormal(), ( p - closest ).Length(), aeColor::PicoPink(), 32 );
+        debug.AddLine( p, closest, ae::Color::PicoPink() );
+        
+        float sd = plane.GetSignedDistance( rayP );
+        ae::Color sdColor = sd > 0.0f ? ae::Color::PicoRed() : ae::Color::PicoGreen();
+        debug.AddSphere( closest, 0.05f, sdColor, 8 );
+        debug.AddLine( closest, closest + plane.GetNormal() * sd, sdColor );
+				
+				break;
+			}
 			default:
 				break;
 		}
 
-		text.Add( aeFloat3( 50.0f, 50.0f, 0.0f ), aeFloat2( text.GetFontSize() * 2.0f ), infoText.c_str(), aeColor::Red(), 0, 0 );
-		debug.AddLine( raySource, raySource + ray, aeColor::Red() );
+    int newlineCount = 0;
+    const char* infoStr = infoText.c_str();
+    while ( *infoStr )
+    {
+      if ( *infoStr == '\n' )
+      {
+        newlineCount++;
+      }
+      infoStr++;
+    }
+		text.Add( aeFloat3( 50.0f, 50.0f + newlineCount * text.GetFontSize(), 0.0f ), aeFloat2( text.GetFontSize() * 2.0f ), infoText.c_str(), aeColor::Red(), 0, 0 );
+    if ( currentTest != 4 )
+    {
+      debug.AddLine( raySource, raySource + ray, aeColor::Red() );
+    }
 
 		debug.Render( worldToProj );
 		text.Render( textToNdc );

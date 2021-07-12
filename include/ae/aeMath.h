@@ -799,15 +799,18 @@ class aePlane
 {
 public:
   aePlane() = default;
-  aePlane( aeFloat4 pointNormal );
   aePlane( aeFloat3 point, aeFloat3 normal );
+  aePlane( aeFloat4 pointNormal );
+  
+  aeFloat3 GetNormal() const;
+  aeFloat3 GetClosestPointToOrigin() const;
 
   bool IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const;
+  aeFloat3 GetClosestPoint( aeFloat3 pos, float* distanceOut = nullptr ) const;
   float GetSignedDistance( aeFloat3 pos ) const;
 
 private:
-  aeFloat3 m_point;
-  aeFloat3 m_normal;
+  aeFloat4 m_plane;
 };
 
 //------------------------------------------------------------------------------
