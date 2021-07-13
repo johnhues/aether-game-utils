@@ -157,7 +157,9 @@ public:
       }
       else
       {
-        return enums.Get( enumName );
+        Enum* metaEnum = enums.Get( enumName, nullptr );
+        AE_ASSERT_MSG( metaEnum, "Could not find meta registered Enum named '#'", enumName );
+        return metaEnum;
       }
     }
   };
