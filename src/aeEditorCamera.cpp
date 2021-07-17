@@ -34,6 +34,12 @@ aeEditorCamera::aeEditorCamera()
 	m_Precalculate();
 }
 
+void aeEditorCamera::SetDistanceLimits( float min, float max )
+{
+  m_min = min;
+  m_max = max;
+}
+
 void aeEditorCamera::Update( const aeInput* input, float dt )
 {
 	if ( !m_inputEnabled )
@@ -117,7 +123,7 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 		m_dist -= mouseMovement.x * 0.1f * zoomSpeed;
 	}
 	m_dist -= input ? input->GetState()->scroll * 2.5f * zoomSpeed : 0.0f;
-	m_dist = aeMath::Clip( m_dist, 1.0f, 1000.0f );
+  m_dist = aeMath::Clip( m_dist, m_min, m_max );
 
 	// Recalculate camera offset from focus and local axis'
 	m_Precalculate();

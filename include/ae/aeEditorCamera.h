@@ -44,6 +44,7 @@ public:
 	};
 	
 	aeEditorCamera();
+  void SetDistanceLimits( float min, float max );
 	void Update( const class aeInput* input, float dt ); // @TODO: This should take input values, not the whole input system
 
 	void Reset( aeFloat3 focus, aeFloat3 pos ); // Interupts refocus. Does not affect input mode.
@@ -62,6 +63,9 @@ public:
 private:
 	// Called when focus, distance, yaw, or pitch is changed
 	void m_Precalculate();
+  
+  float m_min = 1.0f;
+  float m_max = ae::MaxValue< float >();
 
 	// Mode
 	bool m_inputEnabled = true;

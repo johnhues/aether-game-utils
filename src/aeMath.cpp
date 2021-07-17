@@ -2115,25 +2115,42 @@ void aeRectInt::Expand( aeInt2 pos )
 //------------------------------------------------------------------------------
 // aePlane member functions
 //------------------------------------------------------------------------------
+aePlane::aePlane( aeFloat4 pointNormal ) :
+  m_plane( pointNormal / pointNormal.GetXYZ().Length() ) // Normalize
+{}
+
 aePlane::aePlane( aeFloat3 point, aeFloat3 normal )
 {
-  m_point = point;
-  m_normal = normal.SafeNormalizeCopy();
+  m_plane = aeFloat4( normal.NormalizeCopy(), 0.0f );
+  m_plane.w = GetSignedDistance( point );
+}
+
+aeFloat3 aePlane::GetNormal() const
+{
+  return m_plane.GetXYZ();
+}
+
+aeFloat3 aePlane::GetClosestPointToOrigin() const
+{
+  return m_plane.GetXYZ() * m_plane.w;
 }
 
 bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const
 {
   dir.SafeNormalize();
+  
+  aeFloat3 n = m_plane.GetXYZ();
+  aeFloat3 p = n * m_plane.w;
 
-  float a = dir.Dot( m_normal );
+  float a = dir.Dot( n );
   if ( a > -0.01f )
   {
     // Ray is pointing away from or parallel to plane
     return false;
   }
 
-  aeFloat3 diff = pos - m_point;
-  float b = diff.Dot( m_normal );
+  aeFloat3 diff = pos - p;
+  float b = diff.Dot( n );
   float c = b / a;
 
   if ( tOut )
@@ -2145,6 +2162,22 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* o
     *out = pos - dir * c;
   }
   return true;
+}
+
+aeFloat3 aePlane::GetClosestPoint( aeFloat3 pos, float* distanceOut ) const
+{
+  aeFloat3 n = m_plane.GetXYZ();
+  float t = pos.Dot( n ) - m_plane.w;
+  if ( distanceOut )
+  {
+    *distanceOut = t;
+  }
+  return pos - n * t;
+}
+
+float aePlane::GetSignedDistance( aeFloat3 pos ) const
+{
+   return pos.Dot( m_plane.GetXYZ() ) - m_plane.w;
 }
 
 //------------------------------------------------------------------------------
@@ -2693,13 +2726,13 @@ aeFloat4x4 aeAABB::GetTransform() const
 
 float aeAABB::GetMinDistance( aeFloat3 p ) const
 {
-  aeFloat3 c = ( m_min + m_max ) * 0.5f;
-  aeFloat3 hs = ( m_max - m_min ) * 0.5f;
+  aeFloat3 center = GetCenter();
+  aeFloat3 halfSize = GetHalfSize();
 
-  aeFloat3 d = p - c;
-  d.x = aeMath::Max( aeMath::Abs( d.x ) - hs.x, 0.0f );
-  d.y = aeMath::Max( aeMath::Abs( d.y ) - hs.y, 0.0f );
-  d.z = aeMath::Max( aeMath::Abs( d.z ) - hs.z, 0.0f );
+  aeFloat3 d = p - center;
+  d.x = aeMath::Max( aeMath::Abs( d.x ) - halfSize.x, 0.0f );
+  d.y = aeMath::Max( aeMath::Abs( d.y ) - halfSize.y, 0.0f );
+  d.z = aeMath::Max( aeMath::Abs( d.z ) - halfSize.z, 0.0f );
 
   return d.Length();
 }
@@ -2844,4 +2877,65 @@ aeAABB aeOBB::GetAABB() const
   }
 
   return result;
+}
+
+//------------------------------------------------------------------------------
+// aeFrustum member functions
+//------------------------------------------------------------------------------
+aeFrustum::aeFrustum( aeFloat4x4 worldToProjection )
+{
+  aeFloat4 row0 = worldToProjection.GetRowVector( 0 );
+  aeFloat4 row1 = worldToProjection.GetRowVector( 1 );
+  aeFloat4 row2 = worldToProjection.GetRowVector( 2 );
+  aeFloat4 row3 = worldToProjection.GetRowVector( 3 );
+
+  aeFloat4 near = -row0 - row3;
+  aeFloat4 far = row0 - row3;
+  aeFloat4 left = -row1 - row3;
+  aeFloat4 right = row1 - row3;
+  aeFloat4 top = -row2 - row3;
+  aeFloat4 bottom = row2 - row3;
+  near.w = -near.w;
+  far.w = -far.w;
+  left.w = -left.w;
+  right.w = -right.w;
+  top.w = -top.w;
+  bottom.w = -bottom.w;
+  
+  m_planes[ (int)aeFrustumPlane::Near ] = near;
+  m_planes[ (int)aeFrustumPlane::Far ] = far;
+  m_planes[ (int)aeFrustumPlane::Left ] = left;
+  m_planes[ (int)aeFrustumPlane::Right ] = right;
+  m_planes[ (int)aeFrustumPlane::Top ] = top;
+  m_planes[ (int)aeFrustumPlane::Bottom ] = bottom;
+}
+
+bool aeFrustum::Intersects( aeFloat3 point ) const
+{
+  for ( uint32_t i = 0; i < countof(m_planes); i++ )
+  {
+    if ( m_planes[ i ].GetSignedDistance( point ) > 0.0f )
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool aeFrustum::Intersects( const aeSphere& sphere ) const
+{
+  for( int i = 0; i < countof(m_planes); i++ )
+  {
+    float distance = m_planes[ i ].GetSignedDistance( sphere.center );
+    if( distance > 0.0f && distance - sphere.radius > 0.0f ) 
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+aePlane aeFrustum::GetPlane( aeFrustumPlane plane ) const
+{
+  return m_planes[ (int)plane ];
 }
