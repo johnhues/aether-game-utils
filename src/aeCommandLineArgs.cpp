@@ -104,7 +104,7 @@ void aeCommandLineArgs::Parse( int32_t argc, char* argv[] )
 
 ae::Dict aeCommandLineArgs::Get() const
 {
-  ae::Dict args;
+  ae::Dict args = AE_ALLOC_TAG_FIXME;
   for ( uint32_t i = 0; i < m_count; i++ )
   {
     args.SetString( GetName( i ), GetValue( i ) );

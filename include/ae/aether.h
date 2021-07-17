@@ -895,7 +895,6 @@ private:
 class Dict
 {
 public:
-  Dict();
   Dict( ae::Tag tag );
   void SetString( const char* key, const char* value );
   void SetInt( const char* key, int32_t value );
@@ -928,6 +927,7 @@ public:
   void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
 
 private:
+  Dict() = delete;
   // Prevent the above functions from being called accidentally through automatic conversions
   template < typename T > void SetString( const char*, T ) = delete;
   template < typename T > void SetInt( const char*, T ) = delete;
@@ -938,7 +938,7 @@ private:
   template < typename T > void SetVec4( const char*, T ) = delete;
   template < typename T > void SetInt2( const char*, T ) = delete;
   
-  ae::Map< ae::Str128, ae::Str128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: Should support static allocation
+  ae::Map< ae::Str128, ae::Str128 > m_entries; // @TODO: Should support static allocation
 };
 
 inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
@@ -5070,6 +5070,10 @@ void TimeStep::Wait()
 //------------------------------------------------------------------------------
 // ae::Dict members
 //------------------------------------------------------------------------------
+Dict::Dict( ae::Tag tag ) :
+  m_entries( tag )
+{}
+
 void Dict::SetString( const char* key, const char* value )
 {
   m_entries.Set( key, value );
