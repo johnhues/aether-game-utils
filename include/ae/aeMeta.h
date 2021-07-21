@@ -605,15 +605,9 @@ public:
     uint32_t GetPropertyCount() const { return m_props.Length(); }
     const char* GetPropertyName( uint32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
     uint32_t GetPropertyValueCount( uint32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
-    uint32_t GetPropertyValueCount( const char* propName ) const { return m_props.Get( propName ).Length(); }
-    const char* GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const
-    {
-      return m_props.GetValue( propIndex )[ valueIndex ].c_str();
-    }
-    const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const
-    {
-      return m_props.Get( propName )[ valueIndex ].c_str();
-    }
+    uint32_t GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
+    const char* GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
+    const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
     
     // Vars
     uint32_t GetVarCount() const { return m_varCount; }
