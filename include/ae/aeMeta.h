@@ -598,29 +598,24 @@ public:
   class Type
   {
   public:
-    Type() { memset( this, 0, sizeof( *this ) ); }
-    
-    template < typename T = aeObject >
-    T* New( void* obj ) const
-    {
-      AE_ASSERT( obj );
-      AE_ASSERT_MSG( !m_isAbstract, "Placement new not available for abstract type: #", m_name.c_str() );
-      AE_ASSERT_MSG( m_isDefaultConstructible, "Placement new not available for type without default constructor: #", m_name.c_str() );
-      AE_ASSERT( m_placementNew );
-      AE_ASSERT( IsType< T >() );
-      AE_ASSERT( (uint64_t)obj % GetAlignment() == 0 );
-      
-      return (T*)m_placementNew( (T*)obj );
-    }
-
     aeMetaTypeId GetId() const { return m_id; }
     
-    bool HasProp( const char* prop ) const
+    // Properties
+    bool HasProperty( const char* prop ) const { return m_props.TryGet( prop ) != nullptr; }
+    uint32_t GetPropertyCount() const { return m_props.Length(); }
+    const char* GetPropertyName( uint32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
+    uint32_t GetPropertyValueCount( uint32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
+    uint32_t GetPropertyValueCount( const char* propName ) const { return m_props.Get( propName ).Length(); }
+    const char* GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const
     {
-      auto* result = std::find( m_props, m_props + m_propCount, prop );
-      return result < ( m_props + m_propCount );
+      return m_props.GetValue( propIndex )[ valueIndex ].c_str();
+    }
+    const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const
+    {
+      return m_props.Get( propName )[ valueIndex ].c_str();
     }
     
+    // Vars
     uint32_t GetVarCount() const { return m_varCount; }
     const Var* GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
     const Var* GetVarByName( const char* name ) const
@@ -636,6 +631,18 @@ public:
       return nullptr;
     }
 
+    // C++ type info
+    template < typename T = aeObject >
+    T* New( void* obj ) const
+    {
+      AE_ASSERT( obj );
+      AE_ASSERT_MSG( !m_isAbstract, "Placement new not available for abstract type: #", m_name.c_str() );
+      AE_ASSERT_MSG( m_isDefaultConstructible, "Placement new not available for type without default constructor: #", m_name.c_str() );
+      AE_ASSERT( m_placementNew );
+      AE_ASSERT( IsType< T >() );
+      AE_ASSERT( (uint64_t)obj % GetAlignment() == 0 );
+      return (T*)m_placementNew( (T*)obj );
+    }
     uint32_t GetSize() const { return m_size; }
     uint32_t GetAlignment() const { return m_align; }
     const char* GetName() const { return m_name.c_str(); }
@@ -644,9 +651,9 @@ public:
     bool IsPolymorphic() const { return m_isPolymorphic; }
     bool IsDefaultConstructible() const { return m_isDefaultConstructible; }
 
+    // Inheritance info
     const char* GetBaseTypeName() const { return m_parent.c_str(); }
     const Type* GetBaseType() const { return GetTypeByName( m_parent.c_str() ); }
-
     bool IsType( const Type* otherType ) const
     {
       AE_ASSERT( otherType );
@@ -659,7 +666,6 @@ public:
       }
       return false;
     }
-
     template < typename T >
     bool IsType() const
     {
@@ -700,14 +706,17 @@ public:
       m_isDefaultConstructible = std::is_default_constructible< T >::value;
     }
     
-    void AddProp( const char* prop )
+    void AddProp( const char* prop, const char* value )
     {
-      AE_ASSERT( m_propCount < kMaxMetaProps );
-      m_props[ m_propCount++ ] = prop;
-      std::sort( &m_props[ 0 ], &m_props[ m_propCount ], []( const auto& a, const auto& b )
+      auto* props = m_props.TryGet( prop );
+      if ( !props )
       {
-        return a < b;
-      });
+        props = &m_props.Set( prop, AE_ALLOC_TAG_META );
+      }
+      if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties with no value specified
+      {
+        props->Append( value );
+      }
     }
 
     void AddVar( const Var& var )
@@ -725,19 +734,18 @@ public:
     //------------------------------------------------------------------------------
   private:
     friend class aeMeta;
-    aeObject* ( *m_placementNew )( aeObject* );
+    aeObject* ( *m_placementNew )( aeObject* ) = nullptr;
     aeStr32 m_name;
-    aeMetaTypeId m_id;
-    uint32_t m_size;
-    uint32_t m_align;
-    aeStr32 m_props[ kMaxMetaProps ];
-    uint32_t m_propCount;
+    aeMetaTypeId m_id = kAeInvalidMetaTypeId;
+    uint32_t m_size = 0;
+    uint32_t m_align = 0;
+    ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
     Var m_vars[ kMaxMetaVars ];
-    uint32_t m_varCount;
+    uint32_t m_varCount = 0;
     aeStr32 m_parent;
-    bool m_isAbstract;
-    bool m_isPolymorphic;
-    bool m_isDefaultConstructible;
+    bool m_isAbstract = false;
+    bool m_isPolymorphic = false;
+    bool m_isDefaultConstructible = false;
   };
 
   //------------------------------------------------------------------------------
@@ -870,10 +878,10 @@ public:
   template< typename C >
   struct PropCreator
   {
-    PropCreator( const char* typeName, const char* propName )
+    PropCreator( const char* typeName, const char* propName, const char* propValue )
     {
       aeMeta::Type* type = m_GetTypeNameMap().find( typeName )->second;
-      type->AddProp( propName );
+      type->AddProp( propName, propValue );
     }
   };
   
@@ -1050,7 +1058,10 @@ static aeMeta::VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_META_PROPERTY( c, p ) \
-static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
+static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p, "" );
+
+#define AE_META_PROPERTY_VALUE( c, p, v ) \
+static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer

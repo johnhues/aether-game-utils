@@ -3522,6 +3522,9 @@ void Array< T, N >::Reserve( uint32_t size )
 {
   if ( N > 0 )
   {
+#if _AE_DEBUG_
+    AE_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
+#endif
     AE_ASSERT( N >= size );
     return;
   }
