@@ -3888,6 +3888,8 @@ uint32_t GetPID()
 {
 #if _AE_WINDOWS_
   return GetCurrentProcessId();
+#elif _AE_EMSCRIPTEN_
+  return 0;
 #else
   return getpid();
 #endif
@@ -6241,6 +6243,15 @@ bool FileSystem_GetCacheDir( Str256* outDir )
   // Something like C:\Users\someone\AppData\Local\Company\Game
   return FileSystem_GetDir( FOLDERID_LocalAppData, outDir );
 }
+#elif _AE_EMSCRIPTEN_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+  return false;
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+  return false;
+}
 #endif
 
 void FileSystem::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
@@ -6586,6 +6597,7 @@ bool FileSystem::CreateFolder( const char* folderPath )
   int result = mkdir( folderPath, 0777 ) == 0;
   return ( result == 0 ) || errno == EEXIST;
 #endif
+  return false;
 }
 
 void FileSystem::ShowFolder( const char* folderPath )
@@ -7017,7 +7029,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 	#include <gl/GL.h>
 	#include <gl/GLU.h>
 #elif _AE_EMSCRIPTEN_
-  #include <GLES2/gl2.h>
+  #include <GLES3/gl3.h>
 #elif _AE_LINUX_
   #include <GL/gl.h>
   #include <GLES3/gl3.h>
@@ -7159,6 +7171,10 @@ void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboole
 void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam ) = nullptr;
 #endif
 
+#if _AE_EMSCRIPTEN_
+#define glClearDepth glClearDepthf
+#endif
+
 // Helpers
 #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
 
@@ -7181,12 +7197,16 @@ void CheckFramebufferComplete( GLuint framebuffer )
       case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
         break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
         break;
+#endif
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
         break;
+#endif
       case GL_FRAMEBUFFER_UNSUPPORTED:
         errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
         break;
@@ -7610,8 +7630,8 @@ void Shader::Activate( const UniformList& uniforms ) const
   }
 
   // Wireframe
-#if _AE_IOS_
-  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
+  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
   glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
 #endif
@@ -8919,7 +8939,7 @@ void GraphicsDevice::Activate()
   }
 
   m_canvas.Activate();
-#if !_AE_IOS_
+#if !_AE_IOS_ && !_AE_EMSCRIPTEN_
   // This is automatically enabled on opengl es3 and can't be turned off
   glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
