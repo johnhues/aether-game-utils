@@ -107,8 +107,6 @@ void fill_image(float x0, float y0, float scale, float r, float g, float b, floa
   fill_textured_rectangle(x0, y0, x0 + t->w * scale, y0 + t->h * scale, r, g, b, a, t->texture);
 }
 
-float timeAccum = 0.0f;
-
 class Game
 {
 public:
@@ -171,6 +169,10 @@ public:
     ae::Vec2 min = charPos - ae::Vec2( 16.0f );
     ae::Vec2 max = charPos + ae::Vec2( 16.0f );
     fill_solid_rectangle( min.x, min.y, max.x, max.y, 1.f, 0.5f, 0.5f, 1.f );
+
+    gfx.Activate();
+    gfx.Clear( ae::Color::PicoDarkPurple() );
+    gfx.Present();
 
     Validate();
   }

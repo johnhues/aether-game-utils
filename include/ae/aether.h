@@ -1528,6 +1528,7 @@ public:
   };
   enum class Format
   {
+    Depth16,
     Depth32F,
     R8, // unorm
     R16_UNORM, // for height fields
@@ -7813,21 +7814,21 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 #endif
 
   // Input/output
-#if _AE_EMSCRIPTEN_
-  shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
-  shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
-  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  if ( type == Type::Vertex )
-  {
-    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
-    shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
-  }
-  else if ( type == Type::Fragment )
-  {
-    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
-    shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  }
-#else
+// #if _AE_EMSCRIPTEN_
+//   shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
+//   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
+//   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//   if ( type == Type::Vertex )
+//   {
+//     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
+//     shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
+//   }
+//   else if ( type == Type::Fragment )
+//   {
+//     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
+//     shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//   }
+// #else
   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM uniform\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform\n";
@@ -7837,7 +7838,7 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
   {
     shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
   }
-#endif
+// #endif
 
   AE_ASSERT( sourceCount <= kPrependMax );
 
@@ -8377,13 +8378,18 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   switch ( format )
   {
     // TODO: need D32F_S8 format
+    case Format::Depth16:
+      glInternalFormat = GL_DEPTH_COMPONENT16;
+      glFormat = GL_DEPTH_COMPONENT;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
     case Format::Depth32F:
       glInternalFormat = GL_DEPTH_COMPONENT32F;
       glFormat = GL_DEPTH_COMPONENT;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-
     case Format::R8:
     case Format::R16_UNORM:
     case Format::R16F:
@@ -8725,7 +8731,14 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
     return;
   }
 
-  m_depth.Initialize( nullptr, m_width, m_height, Texture::Format::Depth32F, Texture::Type::Float, filter, wrap );
+#if _AE_EMSRIPTEN_
+  Texture::Format format = Texture::Format::Depth32F;
+  Texture::Type type = Texture::Type::Float;
+#else
+  Texture::Format format = Texture::Format::Depth16;
+  Texture::Type type = Texture::Type::Uint16;
+#endif
+  m_depth.Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 

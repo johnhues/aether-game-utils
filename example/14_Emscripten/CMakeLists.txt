@@ -82,7 +82,7 @@ endif()
 
 file(GLOB_RECURSE sources *.cpp *.c *.h)
 add_executable(14_Emscripten ${sources})
-target_include_directories(14_Emscripten PUBLIC "${CMAKE_BINARY_DIR}/include")
+target_include_directories(14_Emscripten PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../include")
 
 file(GLOB_RECURSE assets *.png)
 foreach(asset ${assets})
