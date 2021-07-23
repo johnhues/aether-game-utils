@@ -115,8 +115,7 @@
 #elif _AE_APPLE_
   #define aeAssert() __builtin_trap()
 #elif _AE_EMSCRIPTEN_
-  // @TODO: Handle asserts with emscripten builds
-  #define aeAssert()
+  #define aeAssert() throw
 #else
   #define aeAssert() asm( "int $3" )
 #endif
@@ -1225,7 +1224,7 @@ public:
   bool GetPrev( ae::Key key ) const;
   bool quit = false;
   
-private:
+// private:
   bool m_keys[ 256 ];
   bool m_keysPrev[ 256 ];
 };
@@ -1680,7 +1679,11 @@ public:
   void m_HandleResize( uint32_t width, uint32_t height );
   Window* m_window = nullptr;
   RenderTarget m_canvas;
+#if _AE_EMSCRIPTEN_
+  EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+#else
   void* m_context = nullptr;
+#endif
   int32_t m_defaultFbo = 0;
 };
 
@@ -1905,7 +1908,12 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 //------------------------------------------------------------------------------
 // C++ style allocation functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+// @NOTE: Max alignment is 8 bytes, sizeof(long double) https://github.com/emscripten-core/emscripten/issues/10072
+const uint32_t _kDefaultAlignment = 8;
+#else
 const uint32_t _kDefaultAlignment = 16;
+#endif
 const uint32_t _kHeaderSize = 16;
 struct _Header
 {
@@ -1923,7 +1931,7 @@ T* NewArray( ae::Tag tag, uint32_t count )
 
   uint32_t size = _kHeaderSize + sizeof( T ) * count;
   uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
+  AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -1953,7 +1961,7 @@ T* New( ae::Tag tag, Args ... args )
 
   uint32_t size = _kHeaderSize + sizeof( T );
   uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
+  AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -4941,11 +4949,11 @@ public:
   {
 #if _AE_WINDOWS_
     return _aligned_malloc( bytes, alignment );
-#elif _AE_LINUX_
-    return aligned_alloc( alignment, bytes );
-#else
+#elif _AE_OSX_
     // @HACK: macosx clang c++11 does not have aligned alloc
     return malloc( bytes );
+#else
+    return aligned_alloc( alignment, bytes );
 #endif
   }
 
@@ -4955,7 +4963,7 @@ public:
     return _aligned_realloc( data, bytes, alignment );
 #else
     aeCompilationWarning( "Aligned realloc() not determined on this platform" )
-      return nullptr;
+    return nullptr;
 #endif
   }
 
@@ -4963,8 +4971,6 @@ public:
   {
 #if _AE_WINDOWS_
     _aligned_free( data );
-#elif _AE_LINUX_
-    free( data );
 #else
     free( data );
 #endif
@@ -5662,6 +5668,10 @@ void Window::m_Initialize()
   {
     [NSApp run];
   }
+#elif _AE_EMSCRIPTEN_
+  double dpr = emscripten_get_device_pixel_ratio();
+  emscripten_set_element_css_size("canvas", m_width / dpr, m_height / dpr);
+  emscripten_set_canvas_element_size("canvas", m_width, m_height);
 #endif
 }
 
@@ -5739,11 +5749,39 @@ void Window::SetMaximized( bool maximized )
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+EM_BOOL ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
+{
+  if ( !keyEvent->repeat )
+  {
+    AE_ASSERT( userData );
+    Input* input = (Input*)userData;
+    // Use 'code' instead of 'key' so value is not affected by modifiers/layout
+    // const char* type = EMSCRIPTEN_EVENT_KEYUP == eventType ? "up" : "down";
+    // AE_LOG( "# #", keyEvent->code, type );
+    bool pressed = EMSCRIPTEN_EVENT_KEYUP != eventType;
+    if ( strcmp( keyEvent->code, "ArrowRight" ) == 0 ) { input->m_keys[ (int)Key::Right ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowLeft" ) == 0 ) { input->m_keys[ (int)Key::Left ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowUp" ) == 0 ) { input->m_keys[ (int)Key::Up ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowDown" ) == 0 ) { input->m_keys[ (int)Key::Down ] = pressed; }
+  }
+  return true;
+}
+#endif
+
 void Input::Initialize( Window* window )
 {
-  window->input = this;
+  if ( window )
+  {
+    window->input = this;
+  }
   memset( m_keys, 0, sizeof(m_keys) );
   memset( m_keysPrev, 0, sizeof(m_keysPrev) );
+
+#if _AE_EMSCRIPTEN_
+  emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
+  emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
+#endif
 }
 
 void Input::Pump()
@@ -7044,7 +7082,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 
 namespace AE_NAMESPACE
 {
-#if _AE_IOS_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
   uint32_t GLMajorVersion = 3;
   uint32_t GLMinorVersion = 0;
 #else
@@ -7756,10 +7794,8 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
   // Version
   ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
   glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
-#elif _AE_EMSCRIPTEN_
-  // No version specified
 #else
   glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
 #endif
@@ -8826,12 +8862,15 @@ AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
 
 void GraphicsDevice::Initialize( class Window* window )
 {
-  AE_ASSERT( window );
-  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
   AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
+  AE_ASSERT( window );
   m_window = window;
   window->graphicsDevice = this;
+
+#if !_AE_EMSCRIPTEN_
+  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
+#endif
 
 #if _AE_WINDOWS_
   // Create OpenGL context
@@ -8848,6 +8887,16 @@ void GraphicsDevice::Initialize( class Window* window )
   m_context = hglrc;
 #elif _AE_APPLE_
   m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
+#elif _AE_EMSCRIPTEN_
+  EmscriptenWebGLContextAttributes attrs;
+  emscripten_webgl_init_context_attributes(&attrs);
+  attrs.alpha = 0;
+  attrs.majorVersion = ae::GLMajorVersion;
+  attrs.minorVersion = ae::GLMinorVersion;
+  m_context = emscripten_webgl_create_context("canvas", &attrs);
+  AE_ASSERT( m_context );
+  emscripten_webgl_make_context_current( m_context );
+  return;
 #endif
   
   AE_CHECK_GL_ERROR();
