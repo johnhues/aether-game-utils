@@ -1209,7 +1209,9 @@ enum class Key
   RightControl = 228,
   RightShift = 229,
   RightAlt = 230,
-  RightSuper = 231
+  RightSuper = 231,
+  LeftMeta = 254, // Command on Apple, Control on others
+  RightMeta = 255, // Command on Apple, Control on others
 };
 
 //------------------------------------------------------------------------------
@@ -1817,6 +1819,7 @@ const char* GetTypeName()
 {
   const char* typeName = typeid( T ).name();
 #ifdef _MSC_VER
+  // @TODO: Support pointers to types
   if ( strncmp( typeName, "class ", 6 ) == 0 )
   {
     typeName += 6;
@@ -1826,6 +1829,11 @@ const char* GetTypeName()
     typeName += 7;
   }
 #else
+  if ( typeName[ 0 ] == 'P' && isdigit( typeName[ 1 ] ) )
+  {
+    // Try to get actual type name when given a pointer to type
+    typeName++;
+  }
   while ( *typeName && isdigit( typeName[ 0 ] ) )
   {
     typeName++;
@@ -6124,6 +6132,15 @@ void Input::Pump()
   AE_UPDATE_KEY( Down, kVK_DownArrow );
   AE_UPDATE_KEY( Up, kVK_UpArrow );
 #undef AE_UPDATE_KEY
+#endif
+  
+  // Update meta key
+#if _AE_APPLE_
+  m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ];
+  m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ];
+#else
+  m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
+  m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
 #endif
 }
 

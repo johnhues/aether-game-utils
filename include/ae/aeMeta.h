@@ -40,7 +40,6 @@ typedef uint32_t aeMetaTypeId;
 const aeMetaTypeId kAeInvalidMetaTypeId = 0;
 const uint32_t kMaxMetaTypes = 64;
 const uint32_t kMaxMetaProps = 8;
-const uint32_t kMaxMetaVars = 16;
 
 //------------------------------------------------------------------------------
 // Internal function wrappers
@@ -610,19 +609,12 @@ public:
     const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
     
     // Vars
-    uint32_t GetVarCount() const { return m_varCount; }
+    uint32_t GetVarCount() const { return m_vars.Length(); }
     const Var* GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
     const Var* GetVarByName( const char* name ) const
     {
-      auto* result = std::find_if( m_vars, m_vars + m_varCount, [name]( const auto& v )
-      {
-        return v.m_name == name;
-      });
-      if ( result < ( m_vars + m_varCount ) )
-      {
-        return result;
-      }
-      return nullptr;
+      int32_t i = m_vars.FindFn( [name]( auto&& v ) { return v.m_name == name; } );
+      return ( i >= 0 ) ? &m_vars[ i ] : nullptr;
     }
 
     // C++ type info
@@ -715,9 +707,8 @@ public:
 
     void AddVar( const Var& var )
     {
-      AE_ASSERT( m_varCount < kMaxMetaVars );
-      m_vars[ m_varCount++ ] = var;
-      std::sort( &m_vars[ 0 ], &m_vars[ m_varCount ], []( const auto& a, const auto& b )
+      m_vars.Append( var );
+      std::sort( m_vars.Begin(), m_vars.End(), []( const auto& a, const auto& b )
       {
         return a.GetOffset() < b.GetOffset();
       });
@@ -734,8 +725,7 @@ public:
     uint32_t m_size = 0;
     uint32_t m_align = 0;
     ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
-    Var m_vars[ kMaxMetaVars ];
-    uint32_t m_varCount = 0;
+    ae::Array< Var > m_vars = AE_ALLOC_TAG_META;
     aeStr32 m_parent;
     bool m_isAbstract = false;
     bool m_isPolymorphic = false;
