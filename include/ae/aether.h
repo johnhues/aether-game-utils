@@ -1065,8 +1065,8 @@ public:
 
   const char* GetTitle() const { return m_windowTitle.c_str(); }
   Int2 GetPosition() const { return m_pos; }
-  int32_t GetWidth() const { return m_width; }
-  int32_t GetHeight() const { return m_height; }
+  int32_t GetWidth() const;
+  int32_t GetHeight() const;
   bool GetFullScreen() const { return m_fullScreen; }
   bool GetMaximized() const { return m_maximized; }
 
@@ -5478,82 +5478,6 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 
 void Window::m_Initialize()
 {
-//  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
-//  {
-//    AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
-//  }
-//
-//#if _AE_IOS_
-//  m_pos = Int2( 0 );
-//  m_fullScreen = true;
-//
-//  SDL_DisplayMode displayMode;
-//  if ( SDL_GetDesktopDisplayMode( 0, &displayMode ) == 0 )
-//  {
-//    m_width = displayMode.w;
-//    m_height = displayMode.h;
-//  }
-//
-//  window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
-//#else
-//  Rect windowRect( m_pos.x, m_pos.y, m_width, m_height );
-//  bool overlapsAny = false;
-//  uint32_t displayCount = SDL_GetNumVideoDisplays();
-//  for ( uint32_t i = 0; i < displayCount; i++ )
-//  {
-//    SDL_Rect rect;
-//    int result = SDL_GetDisplayBounds( i, &rect );
-//    if ( result == 0 )
-//    {
-//      Rect screenRect( rect.x, rect.y, rect.w, rect.h );
-//      Rect intersection;
-//      if ( windowRect.GetIntersection( screenRect, &intersection ) )
-//      {
-//        // Check how much window overlaps. This prevent windows that are barely overlapping from appearing offscreen.
-//        float intersectionArea = intersection.w * intersection.h;
-//        float screenArea = screenRect.w * screenRect.h;
-//        float windowArea = windowRect.w * windowRect.h;
-//        float screenOverlap = intersectionArea / screenArea;
-//        float windowOverlap = intersectionArea / windowArea;
-//        if ( screenOverlap > 0.1f || windowOverlap > 0.1f )
-//        {
-//          overlapsAny = true;
-//          break;
-//        }
-//      }
-//    }
-//  }
-//
-//  if ( !overlapsAny && displayCount )
-//  {
-//    SDL_Rect screenRect;
-//    if ( SDL_GetDisplayBounds( 0, &screenRect ) == 0 )
-//    {
-//      int32_t border = screenRect.w / 16;
-//
-//      m_width = screenRect.w - border * 2;
-//      int32_t h0 = screenRect.h - border * 2;
-//      int32_t h1 = m_width * ( 10.0f / 16.0f );
-//      m_height = aeMath::Min( h0, h1 );
-//
-//      m_pos.x = border;
-//      m_pos.y = ( screenRect.h - m_height ) / 2;
-//      m_pos.x += screenRect.x;
-//      m_pos.y += screenRect.y;
-//
-//      m_fullScreen = false;
-//    }
-//  }
-//
-//  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
-//  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
-//  window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
-//#endif
-//  AE_ASSERT( window );
-//
-//  SDL_SetWindowTitle( (SDL_Window*)window, "" );
-//  m_windowTitle = "";
-
 #if _AE_WINDOWS_
 #define WNDCLASSNAME L"wndclass"
   HINSTANCE hinstance = GetModuleHandle( NULL );
@@ -5670,9 +5594,19 @@ void Window::m_Initialize()
     [NSApp run];
   }
 #elif _AE_EMSCRIPTEN_
-  double dpr = emscripten_get_device_pixel_ratio();
-  emscripten_set_element_css_size("canvas", m_width / dpr, m_height / dpr);
-  emscripten_set_canvas_element_size("canvas", m_width, m_height);
+  m_width = 0;
+  m_height = 0;
+  // double dpr = emscripten_get_device_pixel_ratio();
+  // emscripten_set_element_css_size("canvas", GetWidth() / dpr, GetHeight() / dpr);
+  emscripten_set_canvas_element_size( "canvas", GetWidth(), GetHeight() );
+  EM_ASM({
+    var canvas = document.getElementsByTagName('canvas')[0];
+    canvas.style.position = "absolute";
+    canvas.style.top = "0px";
+    canvas.style.left = "0px";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+  });
 #endif
 }
 
@@ -5680,6 +5614,28 @@ void Window::Terminate()
 {
   //SDL_DestroyWindow( (SDL_Window*)window );
 }
+
+#if _AE_EMSCRIPTEN_
+int32_t Window::GetWidth() const
+{
+  return EM_ASM_INT({ return window.innerWidth; });
+}
+
+int32_t Window::GetHeight() const
+{
+  return EM_ASM_INT({ return window.innerHeight; });
+}
+#else
+int32_t Window::GetWidth() const
+{
+  return m_width;
+}
+
+int32_t Window::GetHeight() const
+{
+  return m_height;
+}
+#endif
 
 void Window::SetTitle( const char* title )
 {
@@ -7951,6 +7907,8 @@ void VertexData::Destroy()
   m_vertexUsage = (VertexData::Usage)-1;
   m_indexUsage = (VertexData::Usage)-1;
 
+  m_attributes.Clear();
+
   m_vertexSize = 0;
   m_indexSize = 0;
 
@@ -8711,8 +8669,15 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
     return;
   }
 
+#if _AE_EMSCRIPTEN_
+  Texture::Format format = Texture::Format::RGBA8;
+  Texture::Type type = Texture::Type::Uint8;
+#else
+  Texture::Format format = Texture::Format::RGBA16F;
+  Texture::Type type = Texture::Type::HalfFloat;
+#endif
   Texture2D* tex = ae::New< Texture2D >( AE_ALLOC_TAG_RENDER );
-  tex->Initialize( nullptr, m_width, m_height, Texture::Format::RGBA16F, Texture::Type::HalfFloat, filter, wrap );
+  tex->Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
 
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
@@ -8731,12 +8696,12 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
     return;
   }
 
-#if _AE_EMSRIPTEN_
-  Texture::Format format = Texture::Format::Depth32F;
-  Texture::Type type = Texture::Type::Float;
-#else
+#if _AE_EMSCRIPTEN_
   Texture::Format format = Texture::Format::Depth16;
   Texture::Type type = Texture::Type::Uint16;
+#else
+  Texture::Format format = Texture::Format::Depth32F;
+  Texture::Type type = Texture::Type::Float;
 #endif
   m_depth.Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
@@ -8902,14 +8867,13 @@ void GraphicsDevice::Initialize( class Window* window )
   m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
 #elif _AE_EMSCRIPTEN_
   EmscriptenWebGLContextAttributes attrs;
-  emscripten_webgl_init_context_attributes(&attrs);
+  emscripten_webgl_init_context_attributes( &attrs );
   attrs.alpha = 0;
   attrs.majorVersion = ae::GLMajorVersion;
   attrs.minorVersion = ae::GLMinorVersion;
-  m_context = emscripten_webgl_create_context("canvas", &attrs);
+  m_context = emscripten_webgl_create_context( "canvas", &attrs );
   AE_ASSERT( m_context );
   emscripten_webgl_make_context_current( m_context );
-  return;
 #endif
   
   AE_CHECK_GL_ERROR();
@@ -8990,9 +8954,12 @@ void GraphicsDevice::Activate()
 {
   AE_ASSERT( m_context );
 
-  if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
+  int32_t windowWidth = m_window->GetWidth();
+  int32_t windowHeight = m_window->GetHeight();
+  if ( windowWidth != m_canvas.GetWidth() || windowHeight != m_canvas.GetHeight() )
   {
-    m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
+    emscripten_set_canvas_element_size( "canvas", windowWidth, windowHeight );
+    // m_HandleResize( windowWidth, windowHeight );
   }
 
   if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
@@ -9078,6 +9045,9 @@ void GraphicsDevice::AddTextureBarrier()
 
 void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 {
+  // @TODO: Also resize actual canvas element with emscripten?
+  // emscripten_set_canvas_element_size( "canvas", m_window->GetWidth(), m_window->GetHeight() );
+  // emscripten_set_canvas_size( m_window->GetWidth(), m_window->GetHeight() );
   // @TODO: Allow user to pass in a canvas scaling factor / aspect ratio parameter
   m_canvas.Initialize( width, height );
   m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );

@@ -72,6 +72,7 @@ if (EMSCRIPTEN)
 
 	# Optimization flag to optimize aggressively for size. (other options -Os, -O3, -O2, -O1, -O0)
 	# append_linker_flags("-Oz")
+	append_linker_flags("-g")
 
 	# Reduce code size: We do not need libc errno field support in our build output.
 	append_linker_flags("-s SUPPORT_ERRNO=0")
