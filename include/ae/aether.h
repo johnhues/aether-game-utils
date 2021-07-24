@@ -8958,8 +8958,11 @@ void GraphicsDevice::Activate()
   int32_t windowHeight = m_window->GetHeight();
   if ( windowWidth != m_canvas.GetWidth() || windowHeight != m_canvas.GetHeight() )
   {
+#if _AE_EMSCRIPTEN_
     emscripten_set_canvas_element_size( "canvas", windowWidth, windowHeight );
-    // m_HandleResize( windowWidth, windowHeight );
+#else
+     m_HandleResize( windowWidth, windowHeight );
+#endif
   }
 
   if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
