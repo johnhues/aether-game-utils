@@ -1249,37 +1249,39 @@ struct FileFilter
 //------------------------------------------------------------------------------
 struct FileDialogParams
 {
-  // Save and Open
-  const char* windowTitle = "";
-  ae::Array< FileFilter, 8 > filters; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
-  Window* window = nullptr; // Recommended. Setting this will create a modal dialog.
-  const char* defaultPath = "";
-  // Open file only
+  const char* windowTitle = ""; //!< Title of the dialog window
+  ae::Array< FileFilter, 8 > filters; //!< Leave empty for { ae::FileFilter( "All Files", "*" ) }
+  Window* window = nullptr; //!< Recommended. Setting this will create a modal dialog.
+  const char* defaultPath = ""; //!< The path that the dialog will default to.
+  //! Only used with OpenDialog. If true, the dialog will allow multiple files to be selected.
+  //! The files names will be returned in an ae::Array. If false the ae::Array will have 1 or
+  //! 0 elements.
   bool allowMultiselect = false;
-  // Save file only
-  bool confirmOverwrite = true;
+  bool confirmOverwrite = true; //!< If true, the dialog will ask if the file should be overwritten.
 };
 
 //------------------------------------------------------------------------------
 // ae::FileSystem class
+//! \brief Used to read and write files or create save and open dialogs.
 //------------------------------------------------------------------------------
 class FileSystem
 {
 public:
+  //! Represents directories that the FileSystem class can load/save from.
   enum class Root
   {
-    Data, // A given existing directory
-    User, // A directory for storing preferences and savedata
-    Cache, // A directory for storing expensive to generate data (computed, downloaded, etc)
-    UserShared, // Same as above but shared accross the 'organization name'
-    CacheShared // Same as above but shared accross the 'organization name'
+    Data, //!< A given existing directory
+    User, //!< A directory for storing preferences and savedata
+    Cache, //!< A directory for storing expensive to generate data (computed, downloaded, etc)
+    UserShared, //!< Same as above but shared accross the 'organization name'
+    CacheShared //!< Same as above but shared accross the 'organization name'
   };
   
-  // Passing an empty string to dataDir is equivalent to using
-  // the applications working directory. Organization name should be your name
-  // or your companies name and should be consistent across apps. Application
-  // name should be the name of this application. Initialize() creates missing
-  // folders for Root::User and Root::Cache.
+  //! Passing an empty string to dataDir is equivalent to using
+  //! the applications working directory. Organization name should be your name
+  //! or your companies name and should be consistent across apps. Application
+  //! name should be the name of this application. Initialize() creates missing
+  //! folders for Root::User and Root::Cache.
   void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
 
   // Member functions for use of Root directories
