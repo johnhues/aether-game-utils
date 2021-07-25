@@ -8630,8 +8630,15 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
     AE_IN_HIGHP vec2 v_uv;\
     void main()\
     {\
-      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
-    }";
+      vec4 color = AE_TEXTURE2D( u_tex, v_uv );"
+#if _AE_EMSCRIPTEN_
+      // It seems like WebGL requires a manual conversion to sRGB, since there is no way to specify a framebuffer format
+      "AE_COLOR.rgb = pow( color.rgb, vec3( 1.0/2.2 ) );"
+      "AE_COLOR.a = color.a;"
+#else
+      "AE_COLOR = color;"
+#endif      
+    "}";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
   AE_CHECK_GL_ERROR();
