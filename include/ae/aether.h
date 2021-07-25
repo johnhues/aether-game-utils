@@ -148,11 +148,11 @@ namespace AE_NAMESPACE {
 //------------------------------------------------------------------------------
 // Platform functions
 //------------------------------------------------------------------------------
-uint32_t GetPID();
-uint32_t GetMaxConcurrentThreads();
-bool IsDebuggerAttached();
-template < typename T > const char* GetTypeName();
-double GetTime();
+uint32_t GetPID(); //!< Returns the process ID on Windows, OSX, and Linux. Returns 0 with Emscripten builds.
+uint32_t GetMaxConcurrentThreads(); //!< Returns the number of virtual cores available.
+bool IsDebuggerAttached(); //!< Returns true if attached to Visual Studio or Xcode.
+template < typename T > const char* GetTypeName(); //!< Returns the name of the given class or basic type.
+double GetTime(); //!< Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 
 //------------------------------------------------------------------------------
 // Tags
