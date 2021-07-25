@@ -115,8 +115,7 @@
 #elif _AE_APPLE_
   #define aeAssert() __builtin_trap()
 #elif _AE_EMSCRIPTEN_
-  // @TODO: Handle asserts with emscripten builds
-  #define aeAssert()
+  #define aeAssert() throw
 #else
   #define aeAssert() asm( "int $3" )
 #endif
@@ -1066,8 +1065,8 @@ public:
 
   const char* GetTitle() const { return m_windowTitle.c_str(); }
   Int2 GetPosition() const { return m_pos; }
-  int32_t GetWidth() const { return m_width; }
-  int32_t GetHeight() const { return m_height; }
+  int32_t GetWidth() const;
+  int32_t GetHeight() const;
   bool GetFullScreen() const { return m_fullScreen; }
   bool GetMaximized() const { return m_maximized; }
 
@@ -1227,7 +1226,7 @@ public:
   bool GetPrev( ae::Key key ) const;
   bool quit = false;
   
-private:
+// private:
   bool m_keys[ 256 ];
   bool m_keysPrev[ 256 ];
 };
@@ -1531,6 +1530,7 @@ public:
   };
   enum class Format
   {
+    Depth16,
     Depth32F,
     R8, // unorm
     R16_UNORM, // for height fields
@@ -1682,7 +1682,11 @@ public:
   void m_HandleResize( uint32_t width, uint32_t height );
   Window* m_window = nullptr;
   RenderTarget m_canvas;
+#if _AE_EMSCRIPTEN_
+  EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+#else
   void* m_context = nullptr;
+#endif
   int32_t m_defaultFbo = 0;
 };
 
@@ -1913,7 +1917,12 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 //------------------------------------------------------------------------------
 // C++ style allocation functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+// @NOTE: Max alignment is 8 bytes, sizeof(long double) https://github.com/emscripten-core/emscripten/issues/10072
+const uint32_t _kDefaultAlignment = 8;
+#else
 const uint32_t _kDefaultAlignment = 16;
+#endif
 const uint32_t _kHeaderSize = 16;
 struct _Header
 {
@@ -1931,7 +1940,7 @@ T* NewArray( ae::Tag tag, uint32_t count )
 
   uint32_t size = _kHeaderSize + sizeof( T ) * count;
   uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
+  AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -1961,7 +1970,7 @@ T* New( ae::Tag tag, Args ... args )
 
   uint32_t size = _kHeaderSize + sizeof( T );
   uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
+  AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -3896,6 +3905,8 @@ uint32_t GetPID()
 {
 #if _AE_WINDOWS_
   return GetCurrentProcessId();
+#elif _AE_EMSCRIPTEN_
+  return 0;
 #else
   return getpid();
 #endif
@@ -4947,11 +4958,11 @@ public:
   {
 #if _AE_WINDOWS_
     return _aligned_malloc( bytes, alignment );
-#elif _AE_LINUX_
-    return aligned_alloc( alignment, bytes );
-#else
+#elif _AE_OSX_
     // @HACK: macosx clang c++11 does not have aligned alloc
     return malloc( bytes );
+#else
+    return aligned_alloc( alignment, bytes );
 #endif
   }
 
@@ -4961,7 +4972,7 @@ public:
     return _aligned_realloc( data, bytes, alignment );
 #else
     aeCompilationWarning( "Aligned realloc() not determined on this platform" )
-      return nullptr;
+    return nullptr;
 #endif
   }
 
@@ -4969,8 +4980,6 @@ public:
   {
 #if _AE_WINDOWS_
     _aligned_free( data );
-#elif _AE_LINUX_
-    free( data );
 #else
     free( data );
 #endif
@@ -5477,82 +5486,6 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 
 void Window::m_Initialize()
 {
-//  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
-//  {
-//    AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
-//  }
-//
-//#if _AE_IOS_
-//  m_pos = Int2( 0 );
-//  m_fullScreen = true;
-//
-//  SDL_DisplayMode displayMode;
-//  if ( SDL_GetDesktopDisplayMode( 0, &displayMode ) == 0 )
-//  {
-//    m_width = displayMode.w;
-//    m_height = displayMode.h;
-//  }
-//
-//  window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
-//#else
-//  Rect windowRect( m_pos.x, m_pos.y, m_width, m_height );
-//  bool overlapsAny = false;
-//  uint32_t displayCount = SDL_GetNumVideoDisplays();
-//  for ( uint32_t i = 0; i < displayCount; i++ )
-//  {
-//    SDL_Rect rect;
-//    int result = SDL_GetDisplayBounds( i, &rect );
-//    if ( result == 0 )
-//    {
-//      Rect screenRect( rect.x, rect.y, rect.w, rect.h );
-//      Rect intersection;
-//      if ( windowRect.GetIntersection( screenRect, &intersection ) )
-//      {
-//        // Check how much window overlaps. This prevent windows that are barely overlapping from appearing offscreen.
-//        float intersectionArea = intersection.w * intersection.h;
-//        float screenArea = screenRect.w * screenRect.h;
-//        float windowArea = windowRect.w * windowRect.h;
-//        float screenOverlap = intersectionArea / screenArea;
-//        float windowOverlap = intersectionArea / windowArea;
-//        if ( screenOverlap > 0.1f || windowOverlap > 0.1f )
-//        {
-//          overlapsAny = true;
-//          break;
-//        }
-//      }
-//    }
-//  }
-//
-//  if ( !overlapsAny && displayCount )
-//  {
-//    SDL_Rect screenRect;
-//    if ( SDL_GetDisplayBounds( 0, &screenRect ) == 0 )
-//    {
-//      int32_t border = screenRect.w / 16;
-//
-//      m_width = screenRect.w - border * 2;
-//      int32_t h0 = screenRect.h - border * 2;
-//      int32_t h1 = m_width * ( 10.0f / 16.0f );
-//      m_height = aeMath::Min( h0, h1 );
-//
-//      m_pos.x = border;
-//      m_pos.y = ( screenRect.h - m_height ) / 2;
-//      m_pos.x += screenRect.x;
-//      m_pos.y += screenRect.y;
-//
-//      m_fullScreen = false;
-//    }
-//  }
-//
-//  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
-//  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
-//  window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
-//#endif
-//  AE_ASSERT( window );
-//
-//  SDL_SetWindowTitle( (SDL_Window*)window, "" );
-//  m_windowTitle = "";
-
 #if _AE_WINDOWS_
 #define WNDCLASSNAME L"wndclass"
   HINSTANCE hinstance = GetModuleHandle( NULL );
@@ -5668,6 +5601,20 @@ void Window::m_Initialize()
   {
     [NSApp run];
   }
+#elif _AE_EMSCRIPTEN_
+  m_width = 0;
+  m_height = 0;
+  // double dpr = emscripten_get_device_pixel_ratio();
+  // emscripten_set_element_css_size("canvas", GetWidth() / dpr, GetHeight() / dpr);
+  emscripten_set_canvas_element_size( "canvas", GetWidth(), GetHeight() );
+  EM_ASM({
+    var canvas = document.getElementsByTagName('canvas')[0];
+    canvas.style.position = "absolute";
+    canvas.style.top = "0px";
+    canvas.style.left = "0px";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+  });
 #endif
 }
 
@@ -5675,6 +5622,28 @@ void Window::Terminate()
 {
   //SDL_DestroyWindow( (SDL_Window*)window );
 }
+
+#if _AE_EMSCRIPTEN_
+int32_t Window::GetWidth() const
+{
+  return EM_ASM_INT({ return window.innerWidth; });
+}
+
+int32_t Window::GetHeight() const
+{
+  return EM_ASM_INT({ return window.innerHeight; });
+}
+#else
+int32_t Window::GetWidth() const
+{
+  return m_width;
+}
+
+int32_t Window::GetHeight() const
+{
+  return m_height;
+}
+#endif
 
 void Window::SetTitle( const char* title )
 {
@@ -5745,11 +5714,39 @@ void Window::SetMaximized( bool maximized )
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+EM_BOOL ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
+{
+  if ( !keyEvent->repeat )
+  {
+    AE_ASSERT( userData );
+    Input* input = (Input*)userData;
+    // Use 'code' instead of 'key' so value is not affected by modifiers/layout
+    // const char* type = EMSCRIPTEN_EVENT_KEYUP == eventType ? "up" : "down";
+    // AE_LOG( "# #", keyEvent->code, type );
+    bool pressed = EMSCRIPTEN_EVENT_KEYUP != eventType;
+    if ( strcmp( keyEvent->code, "ArrowRight" ) == 0 ) { input->m_keys[ (int)Key::Right ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowLeft" ) == 0 ) { input->m_keys[ (int)Key::Left ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowUp" ) == 0 ) { input->m_keys[ (int)Key::Up ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowDown" ) == 0 ) { input->m_keys[ (int)Key::Down ] = pressed; }
+  }
+  return true;
+}
+#endif
+
 void Input::Initialize( Window* window )
 {
-  window->input = this;
+  if ( window )
+  {
+    window->input = this;
+  }
   memset( m_keys, 0, sizeof(m_keys) );
   memset( m_keysPrev, 0, sizeof(m_keysPrev) );
+
+#if _AE_EMSCRIPTEN_
+  emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
+  emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
+#endif
 }
 
 void Input::Pump()
@@ -6258,6 +6255,15 @@ bool FileSystem_GetCacheDir( Str256* outDir )
   // Something like C:\Users\someone\AppData\Local\Company\Game
   return FileSystem_GetDir( FOLDERID_LocalAppData, outDir );
 }
+#elif _AE_EMSCRIPTEN_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+  return false;
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+  return false;
+}
 #endif
 
 void FileSystem::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
@@ -6603,6 +6609,7 @@ bool FileSystem::CreateFolder( const char* folderPath )
   int result = mkdir( folderPath, 0777 ) == 0;
   return ( result == 0 ) || errno == EEXIST;
 #endif
+  return false;
 }
 
 void FileSystem::ShowFolder( const char* folderPath )
@@ -7034,7 +7041,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 	#include <gl/GL.h>
 	#include <gl/GLU.h>
 #elif _AE_EMSCRIPTEN_
-  #include <GLES2/gl2.h>
+  #include <GLES3/gl3.h>
 #elif _AE_LINUX_
   #include <GL/gl.h>
   #include <GLES3/gl3.h>
@@ -7049,7 +7056,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 
 namespace AE_NAMESPACE
 {
-#if _AE_IOS_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
   uint32_t GLMajorVersion = 3;
   uint32_t GLMinorVersion = 0;
 #else
@@ -7176,6 +7183,10 @@ void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboole
 void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam ) = nullptr;
 #endif
 
+#if _AE_EMSCRIPTEN_
+#define glClearDepth glClearDepthf
+#endif
+
 // Helpers
 #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
 
@@ -7198,12 +7209,16 @@ void CheckFramebufferComplete( GLuint framebuffer )
       case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
         break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
         break;
+#endif
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
         break;
+#endif
       case GL_FRAMEBUFFER_UNSUPPORTED:
         errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
         break;
@@ -7627,8 +7642,8 @@ void Shader::Activate( const UniformList& uniforms ) const
   }
 
   // Wireframe
-#if _AE_IOS_
-  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
+  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
   glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
 #endif
@@ -7753,10 +7768,8 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
   // Version
   ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
   glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
-#elif _AE_EMSCRIPTEN_
-  // No version specified
 #else
   glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
 #endif
@@ -7774,21 +7787,21 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 #endif
 
   // Input/output
-#if _AE_EMSCRIPTEN_
-  shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
-  shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
-  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  if ( type == Type::Vertex )
-  {
-    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
-    shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
-  }
-  else if ( type == Type::Fragment )
-  {
-    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
-    shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  }
-#else
+// #if _AE_EMSCRIPTEN_
+//   shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
+//   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
+//   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//   if ( type == Type::Vertex )
+//   {
+//     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
+//     shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
+//   }
+//   else if ( type == Type::Fragment )
+//   {
+//     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
+//     shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//   }
+// #else
   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM uniform\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform\n";
@@ -7798,7 +7811,7 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
   {
     shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
   }
-#endif
+// #endif
 
   AE_ASSERT( sourceCount <= kPrependMax );
 
@@ -7910,6 +7923,8 @@ void VertexData::Destroy()
   m_primitive = (VertexData::Primitive)-1;
   m_vertexUsage = (VertexData::Usage)-1;
   m_indexUsage = (VertexData::Usage)-1;
+
+  m_attributes.Clear();
 
   m_vertexSize = 0;
   m_indexSize = 0;
@@ -8338,13 +8353,18 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   switch ( format )
   {
     // TODO: need D32F_S8 format
+    case Format::Depth16:
+      glInternalFormat = GL_DEPTH_COMPONENT16;
+      glFormat = GL_DEPTH_COMPONENT;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
     case Format::Depth32F:
       glInternalFormat = GL_DEPTH_COMPONENT32F;
       glFormat = GL_DEPTH_COMPONENT;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-
     case Format::R8:
     case Format::R16_UNORM:
     case Format::R16F:
@@ -8627,8 +8647,15 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
     AE_IN_HIGHP vec2 v_uv;\
     void main()\
     {\
-      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
-    }";
+      vec4 color = AE_TEXTURE2D( u_tex, v_uv );"
+#if _AE_EMSCRIPTEN_
+      // It seems like WebGL requires a manual conversion to sRGB, since there is no way to specify a framebuffer format
+      "AE_COLOR.rgb = pow( color.rgb, vec3( 1.0/2.2 ) );"
+      "AE_COLOR.a = color.a;"
+#else
+      "AE_COLOR = color;"
+#endif      
+    "}";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
   AE_CHECK_GL_ERROR();
@@ -8666,8 +8693,15 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
     return;
   }
 
+#if _AE_EMSCRIPTEN_
+  Texture::Format format = Texture::Format::RGBA8;
+  Texture::Type type = Texture::Type::Uint8;
+#else
+  Texture::Format format = Texture::Format::RGBA16F;
+  Texture::Type type = Texture::Type::HalfFloat;
+#endif
   Texture2D* tex = ae::New< Texture2D >( AE_ALLOC_TAG_RENDER );
-  tex->Initialize( nullptr, m_width, m_height, Texture::Format::RGBA16F, Texture::Type::HalfFloat, filter, wrap );
+  tex->Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
 
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
@@ -8686,7 +8720,14 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
     return;
   }
 
-  m_depth.Initialize( nullptr, m_width, m_height, Texture::Format::Depth32F, Texture::Type::Float, filter, wrap );
+#if _AE_EMSCRIPTEN_
+  Texture::Format format = Texture::Format::Depth16;
+  Texture::Type type = Texture::Type::Uint16;
+#else
+  Texture::Format format = Texture::Format::Depth32F;
+  Texture::Type type = Texture::Type::Float;
+#endif
+  m_depth.Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 
@@ -8823,12 +8864,15 @@ AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
 
 void GraphicsDevice::Initialize( class Window* window )
 {
-  AE_ASSERT( window );
-  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
   AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
+  AE_ASSERT( window );
   m_window = window;
   window->graphicsDevice = this;
+
+#if !_AE_EMSCRIPTEN_
+  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
+#endif
 
 #if _AE_WINDOWS_
   // Create OpenGL context
@@ -8845,6 +8889,15 @@ void GraphicsDevice::Initialize( class Window* window )
   m_context = hglrc;
 #elif _AE_APPLE_
   m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
+#elif _AE_EMSCRIPTEN_
+  EmscriptenWebGLContextAttributes attrs;
+  emscripten_webgl_init_context_attributes( &attrs );
+  attrs.alpha = 0;
+  attrs.majorVersion = ae::GLMajorVersion;
+  attrs.minorVersion = ae::GLMinorVersion;
+  m_context = emscripten_webgl_create_context( "canvas", &attrs );
+  AE_ASSERT( m_context );
+  emscripten_webgl_make_context_current( m_context );
 #endif
   
   AE_CHECK_GL_ERROR();
@@ -8925,9 +8978,15 @@ void GraphicsDevice::Activate()
 {
   AE_ASSERT( m_context );
 
-  if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
+  int32_t windowWidth = m_window->GetWidth();
+  int32_t windowHeight = m_window->GetHeight();
+  if ( windowWidth != m_canvas.GetWidth() || windowHeight != m_canvas.GetHeight() )
   {
-    m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
+#if _AE_EMSCRIPTEN_
+    emscripten_set_canvas_element_size( "canvas", windowWidth, windowHeight );
+#else
+     m_HandleResize( windowWidth, windowHeight );
+#endif
   }
 
   if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
@@ -8936,7 +8995,7 @@ void GraphicsDevice::Activate()
   }
 
   m_canvas.Activate();
-#if !_AE_IOS_
+#if !_AE_IOS_ && !_AE_EMSCRIPTEN_
   // This is automatically enabled on opengl es3 and can't be turned off
   glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
@@ -9013,6 +9072,9 @@ void GraphicsDevice::AddTextureBarrier()
 
 void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 {
+  // @TODO: Also resize actual canvas element with emscripten?
+  // emscripten_set_canvas_element_size( "canvas", m_window->GetWidth(), m_window->GetHeight() );
+  // emscripten_set_canvas_size( m_window->GetWidth(), m_window->GetHeight() );
   // @TODO: Allow user to pass in a canvas scaling factor / aspect ratio parameter
   m_canvas.Initialize( width, height );
   m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );

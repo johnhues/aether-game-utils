@@ -129,3 +129,5 @@ set(AE_CURRENT_EXECUTABLE_NAME 13_FileDialogs)
 set(AE_CURRENT_SOURCE_FILES 13_FileDialogs.cpp)
 set(AE_RESOURCES "")
 include(AddExecutable)
+
+add_subdirectory(14_Emscripten)
