@@ -38,7 +38,7 @@ include(AddExecutable)
 set(AE_CURRENT_BUNDLE_NAME "Sprites")
 set(AE_CURRENT_EXECUTABLE_NAME 02_sprites)
 set(AE_CURRENT_SOURCE_FILES 02_Sprites.cpp)
-set(AE_RESOURCES circle.png)
+set(AE_RESOURCES data/circle.png)
 include(AddExecutable)
 
 # Client / Server
@@ -71,7 +71,7 @@ include(AddExecutable)
 set(AE_CURRENT_BUNDLE_NAME "Text Input")
 set(AE_CURRENT_EXECUTABLE_NAME 05_text_input)
 set(AE_CURRENT_SOURCE_FILES 05_TextInput.cpp)
-set(AE_RESOURCES font.png)
+set(AE_RESOURCES data/font.png)
 include(AddExecutable)
 
 # Triangle
@@ -92,7 +92,7 @@ include(AddExecutable)
 set(AE_CURRENT_BUNDLE_NAME "Audio")
 set(AE_CURRENT_EXECUTABLE_NAME 08_audio)
 set(AE_CURRENT_SOURCE_FILES 08_Audio.cpp)
-set(AE_RESOURCES music.wav sound.wav)
+set(AE_RESOURCES data/music.wav data/sound.wav)
 include(AddExecutable)
 
 # Platformer2D
@@ -106,21 +106,21 @@ include(AddExecutable)
 set(AE_CURRENT_BUNDLE_NAME "Splines")
 set(AE_CURRENT_EXECUTABLE_NAME 10_splines)
 set(AE_CURRENT_SOURCE_FILES 10_Splines.cpp)
-set(AE_RESOURCES circle.png)
+set(AE_RESOURCES data/circle.png)
 include(AddExecutable)
 
 # Terrain
 set(AE_CURRENT_BUNDLE_NAME "Terrain")
 set(AE_CURRENT_EXECUTABLE_NAME 11_terrain)
 set(AE_CURRENT_SOURCE_FILES 11_Terrain.cpp)
-set(AE_RESOURCES terrain.png font.png)
+set(AE_RESOURCES data/terrain.png data/font.png)
 include(AddExecutable)
 
 # Geometry
 set(AE_CURRENT_BUNDLE_NAME "Geometry")
 set(AE_CURRENT_EXECUTABLE_NAME 12_Geometry)
 set(AE_CURRENT_SOURCE_FILES 12_Geometry.cpp)
-set(AE_RESOURCES font.png)
+set(AE_RESOURCES data/font.png)
 include(AddExecutable)
 
 # FileDialogs

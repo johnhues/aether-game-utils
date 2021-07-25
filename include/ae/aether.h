@@ -6626,19 +6626,18 @@ void FileSystem::ShowFolder( const char* folderPath )
 Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
-  NSString* path = [NSString stringWithUTF8String:filePath];
   NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-  if ( ![currentPath isEqualToString:@"/"] )
+  if ( [currentPath isEqualToString:@"/"] )
   {
-    AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
-    NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
-    NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
-    return [absoluteUrl.path UTF8String];
-  }
-  else
-  {
+    // Current path is root. This is Xcode's new default as of 7/21
+    // @TODO: When inside an App fallback to the resource directory instead
     return "";
   }
+  NSString* path = [NSString stringWithUTF8String:filePath];
+  AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
+  NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
+  NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
+  return [absoluteUrl.path UTF8String];
 #elif _AE_WINDOWS_
   char result[ ae::Str256::MaxLength() ];
   if ( _fullpath( result, filePath, countof(result) ) )
