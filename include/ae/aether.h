@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aether.h
+//! @file aether.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 //
@@ -67,11 +67,6 @@
 #else
   #define _AE_DEBUG_ 0
 #endif
-
-//------------------------------------------------------------------------------
-// ae Namespace
-//------------------------------------------------------------------------------
-#define AE_NAMESPACE ae
 
 //------------------------------------------------------------------------------
 // System Headers
@@ -143,16 +138,18 @@ template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
-// Platform functions
+//! \defgroup Platform
+//! @{
 //------------------------------------------------------------------------------
 uint32_t GetPID(); //!< Returns the process ID on Windows, OSX, and Linux. Returns 0 with Emscripten builds.
 uint32_t GetMaxConcurrentThreads(); //!< Returns the number of virtual cores available.
 bool IsDebuggerAttached(); //!< Returns true if attached to Visual Studio or Xcode.
 template < typename T > const char* GetTypeName(); //!< Returns the name of the given class or basic type.
 double GetTime(); //!< Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
+//! @}
 
 //------------------------------------------------------------------------------
 // Tags
@@ -169,40 +166,56 @@ using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_FILE ae::Tag( "aeFile" )
 
 //------------------------------------------------------------------------------
-// Allocator interface
-// @NOTE: By default aether-game-utils uses system allocations, which may be fine
-// for your use case. If not it's advised that you implement this class with
-// dlmalloc or similar and then call ae::SetGlobalAllocator() with your own
-// allocator when your program starts.
+//! \defgroup Allocation
+//! By default aether-game-utils uses system allocations (malloc / free), which may
+//! be fine for your use case. If not, it's advised that you implement your own
+//! Allocator with dlmalloc or similar and then call ae::SetGlobalAllocator()
+//! with your allocator at program start. All allocations are tagged, (@TODO)
+//! they can be inspected through the current ae::Allocator with ae::GetGlobalAllocator().
+//! @{
 //------------------------------------------------------------------------------
 class Allocator
 {
 public:
   virtual ~Allocator() {}
+  //! Should return 'bytes' with minimum alignment of 'alignment'. Optionally, a
+  //! tag should be used to select a pool of memory, or for diagnostics/debugging.
   virtual void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) = 0;
+  //! Should attempt to expand or contract allocations made with Allocate() to
+  //! match size 'bytes'. On failure this function should return nullptr.
   virtual void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) = 0;
+  //! Free memory allocated with ae::Allocator::Allocate() or ae::Allocator::Reallocate().
   virtual void Free( void* data ) = 0;
 };
-//------------------------------------------------------------------------------
-// @NOTE: Call ae::SetGlobalAllocator() before making any allocations or else a
-// default allocator will be used. You must call ae::SetGlobalAllocator() before
-// any allocations are made.
-//------------------------------------------------------------------------------
+//! The given ae::Allocator is used for all memory allocations. You must call
+//! ae::SetGlobalAllocator() before any allocations are made or else a default
+//! allocator which uses malloc / free will be used. The set value can be retrieved
+//! with ae::GetGlobalAllocator().
 void SetGlobalAllocator( Allocator* alloc );
+//! Get the custom allocator set with ae::SetGlobalAllocator(). If no custom
+//! allocator is set before the first allocation is made, this will return a
+//! default ae::Allocator which uses malloc / free. If ae::SetGlobalAllocator() has
+//! never been called and no allocations have been made, this will return nullptr.
 Allocator* GetGlobalAllocator();
-//------------------------------------------------------------------------------
-// Allocation functions
-// @NOTE: All allocations are tagged, (@TODO) they can be inspected through the
-// current ae::Allocator with ae::GetGlobalAllocator()
-//------------------------------------------------------------------------------
-// C++ style allocations
+//! Allocate and constructs an array of 'count' elements of type T. an ae::Tag
+//! must be specifed and should represent the allocation type. Type T must have a
+//! default constructor. All arrays allocated with this function should be freed with
+//! ae::Delete(). Uses ae::GetGlobalAllocator() and ae::Allocator::Allocate() internally.
 template < typename T > T* NewArray( ae::Tag tag, uint32_t count );
+//! Allocates and constructs a single element of type T. an ae::Tag must be specified
+//! and should represent the allocation type. All 'args' are passed to the constructor
+//! of T. All allocations should be freed with ae::Delete(). Uses ae::GetGlobalAllocator()
+//! and ae::Allocator::Allocate() internally.
 template < typename T, typename ... Args > T* New( ae::Tag tag, Args ... args );
+//! Should be called to destruct and free all allocations made with ae::New()
+//! and ae::NewArray(). Uses ae::GetGlobalAllocator() and ae::Allocator::Free()
+//! internally.
 template < typename T > void Delete( T* obj );
 // C style allocations
 void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment );
 void* Reallocate( void* data, uint32_t bytes, uint32_t alignment );
 void Free( void* data );
+//! @}
 
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
@@ -231,7 +244,8 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// Math defines
+//! \defgroup Math
+//! @{
 //------------------------------------------------------------------------------
 const float PI = 3.14159265358979323846f;
 const float TWO_PI = 2.0f * PI;
@@ -551,6 +565,7 @@ public:
   Quaternion& SetInverse();
   Vec3 Rotate( Vec3 v ) const;
 };
+//! @} End Math group
 
 //------------------------------------------------------------------------------
 // ae::Color struct
@@ -967,7 +982,7 @@ inline std::ostream& operator<<( std::ostream& os, Rect r )
   return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
 
-} // AE_NAMESPACE end
+} // ae end
 
 //------------------------------------------------------------------------------
 // Logging functions
@@ -1044,7 +1059,7 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 # define strtok_r strtok_s
 #endif
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
 // ae::Window class
@@ -1783,7 +1798,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
   return *this;
 }
 
-} // AE_NAMESPACE end
+} // ae end
 
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
@@ -1818,7 +1833,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // Platform internal implementation
 //------------------------------------------------------------------------------
-namespace AE_NAMESPACE {
+namespace ae {
 
 template < typename T >
 const char* GetTypeName()
@@ -3827,7 +3842,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
   return os << "}";
 }
 
-} // AE_NAMESPACE end
+} // ae end
 #endif // AE_AETHER_H
 
 //------------------------------------------------------------------------------
@@ -3901,7 +3916,7 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 //------------------------------------------------------------------------------
 // Platform functions internal implementation
 //------------------------------------------------------------------------------
-namespace AE_NAMESPACE {
+namespace ae {
 
 uint32_t GetPID()
 {
@@ -5403,7 +5418,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 #endif
 
 #if _AE_OSX_
-} // AE_NAMESPACE end
+} // ae end
 
 @interface aeApplicationDelegate : NSObject< NSApplicationDelegate >
 @property ae::Window* aewindow;
@@ -5438,7 +5453,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 @end
 
-namespace AE_NAMESPACE {
+namespace ae {
 #endif
 
 Window::Window()
@@ -7030,7 +7045,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 
 #endif
 
-}  // AE_NAMESPACE end
+}  // ae end
 
 //------------------------------------------------------------------------------
 // OpenGL includes
@@ -7055,7 +7070,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
   #include <OpenGL/gl3ext.h>
 #endif
 
-namespace AE_NAMESPACE
+namespace ae
 {
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
   uint32_t GLMajorVersion = 3;
@@ -7065,7 +7080,7 @@ namespace AE_NAMESPACE
   uint32_t GLMinorVersion = 1;
 #endif
 bool ReverseZ = false;
-}  // AE_NAMESPACE end
+}  // ae end
 
 #if _AE_WINDOWS_
 // OpenGL function pointers
@@ -7191,7 +7206,7 @@ void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam )
 // Helpers
 #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 void CheckFramebufferComplete( GLuint framebuffer )
 {
@@ -9493,7 +9508,7 @@ uint32_t Hash::Get() const
   return m_hash;
 }
 
-} // AE_NAMESPACE end
+} // ae end
 
 //------------------------------------------------------------------------------
 // Warnings

@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['quaternion_32',['Quaternion',['../class_a_e___n_a_m_e_s_p_a_c_e_1_1_quaternion.html',1,'AE_NAMESPACE']]]
+  ['new_46',['New',['../group___allocation.html#ga2e2d7eb9a9db2cb2bbc2e4f438cf0c17',1,'ae']]],
+  ['newarray_47',['NewArray',['../group___allocation.html#gad6000f13b14be2eeac7a9eb910877440',1,'ae']]]
 ];

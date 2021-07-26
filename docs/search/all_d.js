@@ -1,7 +1,9 @@
 var searchData=
 [
-  ['uniform_45',['Uniform',['../struct_a_e___n_a_m_e_s_p_a_c_e_1_1_shader_1_1_uniform.html',1,'AE_NAMESPACE::Shader']]],
-  ['uniformlist_46',['UniformList',['../class_a_e___n_a_m_e_s_p_a_c_e_1_1_uniform_list.html',1,'AE_NAMESPACE']]],
-  ['user_47',['User',['../class_a_e___n_a_m_e_s_p_a_c_e_1_1_file_system.html#a65a9ab6f808dbe0a1963d4356f736f33a8f9bfe9d1345237cb3b2b205864da075',1,'AE_NAMESPACE::FileSystem']]],
-  ['usershared_48',['UserShared',['../class_a_e___n_a_m_e_s_p_a_c_e_1_1_file_system.html#a65a9ab6f808dbe0a1963d4356f736f33ab6aad7994758fdbc165cc2927b831b93',1,'AE_NAMESPACE::FileSystem']]]
+  ['scratch_55',['Scratch',['../classae_1_1_scratch.html',1,'ae']]],
+  ['setglobalallocator_56',['SetGlobalAllocator',['../group___allocation.html#gab3cfe88cd853bbae077508261275e696',1,'ae']]],
+  ['shader_57',['Shader',['../classae_1_1_shader.html',1,'ae']]],
+  ['str_58',['Str',['../classae_1_1_str.html',1,'ae']]],
+  ['str_3c_20256_20_3e_59',['Str&lt; 256 &gt;',['../classae_1_1_str.html',1,'ae']]],
+  ['str_3c_2032_20_3e_60',['Str&lt; 32 &gt;',['../classae_1_1_str.html',1,'ae']]]
 ];
