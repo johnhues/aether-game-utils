@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['reallocate_134',['Reallocate',['../classae_1_1_allocator.html#a4b356c4ce27794b577bb94cf8a3e1faa',1,'ae::Allocator']]]
+  ['initialize_150',['Initialize',['../classae_1_1_file_system.html#afb988c3ceb1347f4abd0b8cf81efd3be',1,'ae::FileSystem']]],
+  ['isdebuggerattached_151',['IsDebuggerAttached',['../group___platform.html#ga0501b5ce9a279c5ccfdcaf42ac1c79b5',1,'ae']]]
 ];

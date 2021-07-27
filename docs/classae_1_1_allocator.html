@@ -9,10 +9,16 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 </head>
 <body>
 <div id="top"><!-- do not remove this div, it is closed by doxygen! -->
@@ -45,6 +51,23 @@ $(function() {
 });
 /* @license-end */</script>
 <div id="main-nav"></div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:cf05388f2679ee054f2beb29a391d25f4e673ac3&amp;dn=gpl-2.0.txt GPL-v2 */
+$(document).ready(function(){initNavTree('classae_1_1_allocator.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -59,11 +82,6 @@ $(function() {
 </iframe>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><b>ae</b></li><li class="navelem"><a class="el" href="classae_1_1_allocator.html">Allocator</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#pub-methods">Public Member Functions</a> &#124;
@@ -76,12 +94,14 @@ $(function() {
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a4d89f4311161fcdb94a7cc41f581f1b8"><td class="memItemLeft" align="right" valign="top">virtual void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classae_1_1_allocator.html#a4d89f4311161fcdb94a7cc41f581f1b8">Allocate</a> (ae::Tag tag, uint32_t bytes, uint32_t alignment)=0</td></tr>
+<tr class="memdesc:a4d89f4311161fcdb94a7cc41f581f1b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Should return 'bytes' with minimum alignment of 'alignment'.  <a href="classae_1_1_allocator.html#a4d89f4311161fcdb94a7cc41f581f1b8">More...</a><br /></td></tr>
 <tr class="separator:a4d89f4311161fcdb94a7cc41f581f1b8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4b356c4ce27794b577bb94cf8a3e1faa"><td class="memItemLeft" align="right" valign="top">virtual void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classae_1_1_allocator.html#a4b356c4ce27794b577bb94cf8a3e1faa">Reallocate</a> (void *data, uint32_t bytes, uint32_t alignment)=0</td></tr>
+<tr class="memdesc:a4b356c4ce27794b577bb94cf8a3e1faa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Should attempt to expand or contract allocations made with <a class="el" href="classae_1_1_allocator.html#a4d89f4311161fcdb94a7cc41f581f1b8" title="Should return &#39;bytes&#39; with minimum alignment of &#39;alignment&#39;.">Allocate()</a> to match size 'bytes'.  <a href="classae_1_1_allocator.html#a4b356c4ce27794b577bb94cf8a3e1faa">More...</a><br /></td></tr>
 <tr class="separator:a4b356c4ce27794b577bb94cf8a3e1faa"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a3c167e398d7ca93973419c40a5ee3bed"><td class="memItemLeft" align="right" valign="top"><a id="a3c167e398d7ca93973419c40a5ee3bed"></a>
 virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classae_1_1_allocator.html#a3c167e398d7ca93973419c40a5ee3bed">Free</a> (void *data)=0</td></tr>
-<tr class="memdesc:a3c167e398d7ca93973419c40a5ee3bed"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free memory allocated with <a class="el" href="classae_1_1_allocator.html#a4d89f4311161fcdb94a7cc41f581f1b8">ae::Allocator::Allocate()</a> or <a class="el" href="classae_1_1_allocator.html#a4b356c4ce27794b577bb94cf8a3e1faa">ae::Allocator::Reallocate()</a>. <br /></td></tr>
+<tr class="memdesc:a3c167e398d7ca93973419c40a5ee3bed"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free memory allocated with <a class="el" href="classae_1_1_allocator.html#a4d89f4311161fcdb94a7cc41f581f1b8" title="Should return &#39;bytes&#39; with minimum alignment of &#39;alignment&#39;.">ae::Allocator::Allocate()</a> or <a class="el" href="classae_1_1_allocator.html#a4b356c4ce27794b577bb94cf8a3e1faa" title="Should attempt to expand or contract allocations made with Allocate() to match size &#39;bytes&#39;.">ae::Allocator::Reallocate()</a>. <br /></td></tr>
 <tr class="separator:a3c167e398d7ca93973419c40a5ee3bed"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <h2 class="groupheader">Member Function Documentation</h2>
@@ -124,7 +144,7 @@ virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" hr
   </tr>
 </table>
 </div><div class="memdoc">
-<p>Should return 'bytes' with minimum alignment of 'alignment'. Optionally, a tag should be used to select a pool of memory, or for diagnostics/debugging. </p>
+<p>Optionally, a tag should be used to select a pool of memory, or for diagnostics/debugging. </p>
 
 </div>
 </div>
@@ -167,7 +187,7 @@ virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" hr
   </tr>
 </table>
 </div><div class="memdoc">
-<p>Should attempt to expand or contract allocations made with <a class="el" href="classae_1_1_allocator.html#a4d89f4311161fcdb94a7cc41f581f1b8">Allocate()</a> to match size 'bytes'. On failure this function should return nullptr. </p>
+<p>On failure this function should return nullptr. </p>
 
 </div>
 </div>
@@ -175,9 +195,13 @@ virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" hr
 <li>include/ae/<a class="el" href="aether_8h_source.html">aether.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.1
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><b>ae</b></li><li class="navelem"><a class="el" href="classae_1_1_allocator.html">Allocator</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.1 </li>
+  </ul>
+</div>
 </body>
 </html>

@@ -1,4 +1,0 @@
-var searchData=
-[
-  ['quaternion_913',['Quaternion',['../classae_1_1_quaternion.html#aeeaae8d6a8fc05d3d400f46dea90de6d',1,'ae::Quaternion::Quaternion()=default'],['../classae_1_1_quaternion.html#a37879b7905ad597769bc999cae6c4fbe',1,'ae::Quaternion::Quaternion(const Quaternion &amp;)=default'],['../classae_1_1_quaternion.html#a1550ffc34ce5394570769635728d9472',1,'ae::Quaternion::Quaternion(const float i, const float j, const float k, const float r)'],['../classae_1_1_quaternion.html#abbb09a79d04d711c1619b672bcff3aa7',1,'ae::Quaternion::Quaternion(Vec3 v)'],['../classae_1_1_quaternion.html#a28ea24bef5445fb5892a25484f8154cd',1,'ae::Quaternion::Quaternion(Vec3 forward, Vec3 up, bool prioritizeUp=true)'],['../classae_1_1_quaternion.html#ae222ef98347f33eaae4947a3c621df4c',1,'ae::Quaternion::Quaternion(Vec3 axis, float angle)']]]
-];

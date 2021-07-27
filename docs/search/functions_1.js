@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['delete_123',['Delete',['../group___allocation.html#ga0f2fa464d37ebeea843e6d3fb4efb650',1,'ae']]]
+  ['begin_135',['Begin',['../classae_1_1_array.html#a982833e1816d4915d4c143175a0cb859',1,'ae::Array']]]
 ];

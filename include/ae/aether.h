@@ -167,9 +167,10 @@ using Tag = std::string; // @TODO: Fixed length string
 
 //------------------------------------------------------------------------------
 //! \defgroup Allocation
+//! Allocation utilities.
 //! By default aether-game-utils uses system allocations (malloc / free), which may
 //! be fine for your use case. If not, it's advised that you implement your own
-//! Allocator with dlmalloc or similar and then call ae::SetGlobalAllocator()
+//! ae::Allocator with dlmalloc or similar and then call ae::SetGlobalAllocator()
 //! with your allocator at program start. All allocations are tagged, (@TODO)
 //! they can be inspected through the current ae::Allocator with ae::GetGlobalAllocator().
 //! @{
@@ -219,10 +220,10 @@ void Free( void* data );
 
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
+//! This class is useful for scoped allocations. (@TODO) In the future it
+//! should allocate from a stack. This should allow big allocations to happen
+//! cheaply each frame without creating any fragmentation.
 //------------------------------------------------------------------------------
-// @NOTE: This class is useful for scoped allocations. (@TODO) In the future it
-// should allocate from a stack. This should allow big allocations to happen
-// cheaply each frame without creating any fragmentation.
 template < typename T >
 class Scratch
 {
@@ -572,7 +573,7 @@ public:
 //------------------------------------------------------------------------------
 struct Color
 {
-  Color() {} // Empty default constructor for performance of vertex arrays etc
+  Color() {} //!< Empty default constructor for performance of vertex arrays etc
   Color( const Color& ) = default;
   Color( float rgb );
   Color( float r, float g, float b );
@@ -698,7 +699,7 @@ public:
   uint32_t GetStepCount() const;
 
   float GetDt() const;
-  void SetDt( float sec ); // Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+  void SetDt( float sec ); //!< Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
 
   void Wait();
 
@@ -714,8 +715,8 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::Str class
-// @NOTE: A fixed length string class. The templated value is the total size of
-// the string in memory.
+//! A fixed length string class. The templated value is the total size of
+//! the string in memory.
 //------------------------------------------------------------------------------
 template < uint32_t N >
 class Str
@@ -794,15 +795,15 @@ class Array
 public:
   // Static array (N > 0)
   Array();
-  Array( uint32_t length, const T& val ); // Appends 'length' number of 'val's
+  Array( uint32_t length, const T& val ); //!< Appends 'length' number of 'val's
   // Dynamic array (N == 0)
   Array( ae::Tag tag );
-  Array( ae::Tag tag, uint32_t size ); // Reserve size (with length of 0)
-  Array( ae::Tag tag, uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
+  Array( ae::Tag tag, uint32_t size ); //!< Reserve size (with length of 0)
+  Array( ae::Tag tag, uint32_t length, const T& val ); //!< Reserves 'length' and appends 'length' number of 'val's
   void Reserve( uint32_t total );
   // Static and dynamic arrays
   Array( const Array< T, N >& other );
-  Array( Array< T, N >&& other ) noexcept; // Move operators fallback to regular operators if ae::Tags don't match
+  Array( Array< T, N >&& other ) noexcept; //!< Move operators fallback to regular operators if ae::Tags don't match
   void operator =( const Array< T, N >& other );
   void operator =( Array< T, N >&& other ) noexcept;
   ~Array();
@@ -813,8 +814,8 @@ public:
   T& Insert( uint32_t index, const T& value );
 
   // Find elements
-  template < typename U > int32_t Find( const U& value ) const; // Returns -1 when not found
-  template < typename Fn > int32_t FindFn( Fn testFn ) const; // Returns -1 when not found
+  template < typename U > int32_t Find( const U& value ) const; //!< Returns -1 when not found
+  template < typename Fn > int32_t FindFn( Fn testFn ) const; //!< Returns -1 when not found
 
   // Remove elements
   template < typename U > uint32_t RemoveAll( const U& value );
@@ -823,9 +824,9 @@ public:
   void Clear();
 
   // Access elements
-  const T& operator[]( int32_t index ) const; // Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
+  const T& operator[]( int32_t index ) const; //!< Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
   T& operator[]( int32_t index );
-  T* Begin() { return m_array; } // These functions can return null when array length is zero
+  T* Begin() { return m_array; } //!< These functions can return null when array length is zero
   T* End() { return m_array + m_length; }
   const T* Begin() const { return m_array; }
   const T* End() const { return m_array + m_length; }
@@ -864,8 +865,8 @@ template < typename K, typename V, uint32_t N = 0 >
 class Map
 {
 public:
-  Map(); // Static map only (N > 0)
-  Map( ae::Tag pool ); // Dynamic map only (N == 0)
+  Map(); //!< Static map only (N > 0)
+  Map( ae::Tag pool ); //!< Dynamic map only (N == 0)
   void Reserve( uint32_t total );
   
   // Access elements by key
@@ -1640,22 +1641,22 @@ public:
   uint32_t GetWidth() const;
   uint32_t GetHeight() const;
 
-  // @NOTE: Get ndc space rect of this target within another target (fill but maintain aspect ratio)
-  // GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
-  // GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
+  //! Get ndc space rect of this target within another target (fill but maintain aspect ratio)
+  //! GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
+  //! GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
   Rect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
 
-  // @NOTE: Other target to local transform (pixels->pixels)
-  // Useful for transforming window/mouse pixel coordinates to local pixels
-  // GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
+  //! Other target to local transform (pixels->pixels)
+  //! Useful for transforming window/mouse pixel coordinates to local pixels
+  //! GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
   Matrix4 GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const;
 
-  // @NOTE: Mouse/window pixel coordinates to world space
-  // GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ... ), TODO )
+  //! Mouse/window pixel coordinates to world space
+  //! GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ... ), TODO )
   Matrix4 GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const;
 
-  // @NOTE: Creates a transform matrix from aeQuad vertex positions to ndc space
-  // GraphicsDeviceTarget uses aeQuad vertices internally
+  //! Creates a transform matrix from aeQuad vertex positions to ndc space
+  //! GraphicsDeviceTarget uses aeQuad vertices internally
   static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
 
 private:
@@ -1686,7 +1687,7 @@ public:
   void Activate();
   void Clear( Color color );
   void Present();
-  void AddTextureBarrier(); // Must call to readback from active render target (GL only)
+  void AddTextureBarrier(); //!< Must call to readback from active render target (GL only)
 
   class Window* GetWindow() { return m_window; }
   RenderTarget* GetCanvas() { return &m_canvas; }
@@ -1715,8 +1716,8 @@ class DebugLines
 public:
   void Initialize( uint32_t maxObjects );
   void Terminate();
-  void Render( const Matrix4& worldToNdc ); // Also calls Clear() so AddLine() etc should be called every frame
-  void SetXRayEnabled( bool enabled ) { m_xray = enabled; } // Draw desaturated lines on failed depth test
+  void Render( const Matrix4& worldToNdc ); //!< Also calls Clear() so AddLine() etc should be called every frame
+  void SetXRayEnabled( bool enabled ) { m_xray = enabled; } //!< Draw desaturated lines on failed depth test
 
   bool AddLine( Vec3 p0, Vec3 p1, Color color );
   bool AddDistanceCheck( Vec3 p0, Vec3 p1, float distance );
@@ -1764,7 +1765,8 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::Hash class (fnv1a)
-// @NOTE: Empty strings and zero-length data buffers do not hash to zero
+//! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
+//! hash to zero.
 //------------------------------------------------------------------------------
 class Hash
 {

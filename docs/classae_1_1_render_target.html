@@ -9,10 +9,16 @@
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
+<link href="navtree.css" rel="stylesheet" type="text/css"/>
+<script type="text/javascript" src="resize.js"></script>
+<script type="text/javascript" src="navtreedata.js"></script>
+<script type="text/javascript" src="navtree.js"></script>
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
+<link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
+<link href="doxygen-awesome-sidebar-only.css" rel="stylesheet" type="text/css"/>
 </head>
 <body>
 <div id="top"><!-- do not remove this div, it is closed by doxygen! -->
@@ -45,6 +51,23 @@ $(function() {
 });
 /* @license-end */</script>
 <div id="main-nav"></div>
+</div><!-- top -->
+<div id="side-nav" class="ui-resizable side-nav-resizable">
+  <div id="nav-tree">
+    <div id="nav-tree-contents">
+      <div id="nav-sync" class="sync"></div>
+    </div>
+  </div>
+  <div id="splitbar" style="-moz-user-select:none;" 
+       class="ui-resizable-handle">
+  </div>
+</div>
+<script type="text/javascript">
+/* @license magnet:?xt=urn:btih:cf05388f2679ee054f2beb29a391d25f4e673ac3&amp;dn=gpl-2.0.txt GPL-v2 */
+$(document).ready(function(){initNavTree('classae_1_1_render_target.html',''); initResizable(); });
+/* @license-end */
+</script>
+<div id="doc-content">
 <!-- window showing the filter options -->
 <div id="MSearchSelectWindow"
      onmouseover="return searchBox.OnSearchSelectShow()"
@@ -59,11 +82,6 @@ $(function() {
 </iframe>
 </div>
 
-<div id="nav-path" class="navpath">
-  <ul>
-<li class="navelem"><b>ae</b></li><li class="navelem"><a class="el" href="classae_1_1_render_target.html">RenderTarget</a></li>  </ul>
-</div>
-</div><!-- top -->
 <div class="header">
   <div class="summary">
 <a href="#nested-classes">Classes</a> &#124;
@@ -114,28 +132,99 @@ uint32_t&#160;</td><td class="memItemRight" valign="bottom"><b>GetWidth</b> () c
 uint32_t&#160;</td><td class="memItemRight" valign="bottom"><b>GetHeight</b> () const</td></tr>
 <tr class="separator:a1ef84d673959b848a81f0608c243380b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aee221b5a66f7dc35d1393ecfe68ca7d2"><td class="memItemLeft" align="right" valign="top"><a id="aee221b5a66f7dc35d1393ecfe68ca7d2"></a>
-<a class="el" href="structae_1_1_rect.html">Rect</a>&#160;</td><td class="memItemRight" valign="bottom"><b>GetNDCFillRectForTarget</b> (uint32_t otherWidth, uint32_t otherHeight) const</td></tr>
+<a class="el" href="structae_1_1_rect.html">Rect</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classae_1_1_render_target.html#aee221b5a66f7dc35d1393ecfe68ca7d2">GetNDCFillRectForTarget</a> (uint32_t otherWidth, uint32_t otherHeight) const</td></tr>
+<tr class="memdesc:aee221b5a66f7dc35d1393ecfe68ca7d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get ndc space rect of this target within another target (fill but maintain aspect ratio) GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(), GraphicsDevice::GetWindow()::Height() ) GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(), GraphicsDeviceTarget()::Height() ) <br /></td></tr>
 <tr class="separator:aee221b5a66f7dc35d1393ecfe68ca7d2"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:aaaa86766e83c95ecab4b88a33906efa4"><td class="memItemLeft" align="right" valign="top"><a id="aaaa86766e83c95ecab4b88a33906efa4"></a>
-<a class="el" href="classae_1_1_matrix4.html">Matrix4</a>&#160;</td><td class="memItemRight" valign="bottom"><b>GetTargetPixelsToLocalTransform</b> (uint32_t otherPixelWidth, uint32_t otherPixelHeight, <a class="el" href="structae_1_1_rect.html">Rect</a> ndc) const</td></tr>
+<tr class="memitem:aaaa86766e83c95ecab4b88a33906efa4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classae_1_1_matrix4.html">Matrix4</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classae_1_1_render_target.html#aaaa86766e83c95ecab4b88a33906efa4">GetTargetPixelsToLocalTransform</a> (uint32_t otherPixelWidth, uint32_t otherPixelHeight, <a class="el" href="structae_1_1_rect.html">Rect</a> ndc) const</td></tr>
+<tr class="memdesc:aaaa86766e83c95ecab4b88a33906efa4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Other target to local transform (pixels-&gt;pixels) Useful for transforming window/mouse pixel coordinates to local pixels GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(), GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ...  <a href="classae_1_1_render_target.html#aaaa86766e83c95ecab4b88a33906efa4">More...</a><br /></td></tr>
 <tr class="separator:aaaa86766e83c95ecab4b88a33906efa4"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a6271f35f93d13ff62eb2e9fac7c4e7d7"><td class="memItemLeft" align="right" valign="top"><a id="a6271f35f93d13ff62eb2e9fac7c4e7d7"></a>
-<a class="el" href="classae_1_1_matrix4.html">Matrix4</a>&#160;</td><td class="memItemRight" valign="bottom"><b>GetTargetPixelsToWorld</b> (const <a class="el" href="classae_1_1_matrix4.html">Matrix4</a> &amp;otherTargetToLocal, const <a class="el" href="classae_1_1_matrix4.html">Matrix4</a> &amp;worldToNdc) const</td></tr>
+<tr class="memitem:a6271f35f93d13ff62eb2e9fac7c4e7d7"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classae_1_1_matrix4.html">Matrix4</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classae_1_1_render_target.html#a6271f35f93d13ff62eb2e9fac7c4e7d7">GetTargetPixelsToWorld</a> (const <a class="el" href="classae_1_1_matrix4.html">Matrix4</a> &amp;otherTargetToLocal, const <a class="el" href="classae_1_1_matrix4.html">Matrix4</a> &amp;worldToNdc) const</td></tr>
+<tr class="memdesc:a6271f35f93d13ff62eb2e9fac7c4e7d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mouse/window pixel coordinates to world space GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ...  <a href="classae_1_1_render_target.html#a6271f35f93d13ff62eb2e9fac7c4e7d7">More...</a><br /></td></tr>
 <tr class="separator:a6271f35f93d13ff62eb2e9fac7c4e7d7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
 <tr class="memitem:a8e0c102638cf9017c8a3e55ca521c5ec"><td class="memItemLeft" align="right" valign="top"><a id="a8e0c102638cf9017c8a3e55ca521c5ec"></a>
-static <a class="el" href="classae_1_1_matrix4.html">Matrix4</a>&#160;</td><td class="memItemRight" valign="bottom"><b>GetQuadToNDCTransform</b> (<a class="el" href="structae_1_1_rect.html">Rect</a> ndc, float z)</td></tr>
+static <a class="el" href="classae_1_1_matrix4.html">Matrix4</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classae_1_1_render_target.html#a8e0c102638cf9017c8a3e55ca521c5ec">GetQuadToNDCTransform</a> (<a class="el" href="structae_1_1_rect.html">Rect</a> ndc, float z)</td></tr>
+<tr class="memdesc:a8e0c102638cf9017c8a3e55ca521c5ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates a transform matrix from aeQuad vertex positions to ndc space GraphicsDeviceTarget uses aeQuad vertices internally. <br /></td></tr>
 <tr class="separator:a8e0c102638cf9017c8a3e55ca521c5ec"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
+<h2 class="groupheader">Member Function Documentation</h2>
+<a id="aaaa86766e83c95ecab4b88a33906efa4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaaa86766e83c95ecab4b88a33906efa4">&#9670;&nbsp;</a></span>GetTargetPixelsToLocalTransform()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classae_1_1_matrix4.html">Matrix4</a> ae::RenderTarget::GetTargetPixelsToLocalTransform </td>
+          <td>(</td>
+          <td class="paramtype">uint32_t&#160;</td>
+          <td class="paramname"><em>otherPixelWidth</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">uint32_t&#160;</td>
+          <td class="paramname"><em>otherPixelHeight</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="structae_1_1_rect.html">Rect</a>&#160;</td>
+          <td class="paramname"><em>ndc</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td> const</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>) ) </p>
+
+</div>
+</div>
+<a id="a6271f35f93d13ff62eb2e9fac7c4e7d7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6271f35f93d13ff62eb2e9fac7c4e7d7">&#9670;&nbsp;</a></span>GetTargetPixelsToWorld()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classae_1_1_matrix4.html">Matrix4</a> ae::RenderTarget::GetTargetPixelsToWorld </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="classae_1_1_matrix4.html">Matrix4</a> &amp;&#160;</td>
+          <td class="paramname"><em>otherTargetToLocal</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const <a class="el" href="classae_1_1_matrix4.html">Matrix4</a> &amp;&#160;</td>
+          <td class="paramname"><em>worldToNdc</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td> const</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>), TODO ) </p>
+
+</div>
+</div>
 <hr/>The documentation for this class was generated from the following file:<ul>
 <li>include/ae/<a class="el" href="aether_8h_source.html">aether.h</a></li>
 </ul>
 </div><!-- contents -->
+</div><!-- doc-content -->
 <!-- start footer part -->
-<hr class="footer"/><address class="footer"><small>
-Generated by&#160;<a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.1
-</small></address>
+<div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
+  <ul>
+    <li class="navelem"><b>ae</b></li><li class="navelem"><a class="el" href="classae_1_1_render_target.html">RenderTarget</a></li>
+    <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.1 </li>
+  </ul>
+</div>
 </body>
 </html>
