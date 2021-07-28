@@ -36,7 +36,7 @@
   #include <commdlg.h>
 #endif
 
-namespace AE_NAMESPACE {
+namespace ae {
 #if !_AE_APPLE_ && !_AE_LINUX_ // No std::path support
 
 // General Helpers
@@ -265,4 +265,4 @@ std::string SaveFile( const SaveFileParams& params )
 #endif
 #endif
 
-} // AE_NAMESPACE end
+} // ae end

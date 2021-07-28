@@ -1273,7 +1273,6 @@ struct FileDialogParams
   //! The files names will be returned in an ae::Array. If false the ae::Array will have 1 or
   //! 0 elements.
   bool allowMultiselect = false;
-  bool confirmOverwrite = true; //!< If true, the dialog will ask if the file should be overwritten.
 };
 
 //------------------------------------------------------------------------------
@@ -6196,6 +6195,14 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 #if _AE_APPLE_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
+  // Something like /Users/someone/Library/Application Support
+  NSArray* paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+  NSString* prefsPath = [paths lastObject];
+  if ( [prefsPath length] )
+  {
+    *outDir = [prefsPath UTF8String];
+    return true;
+  }
   return false;
 }
 bool FileSystem_GetCacheDir( Str256* outDir )
@@ -6213,7 +6220,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 #elif _AE_LINUX_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
-  return false;
+	return false;
 }
 bool FileSystem_GetCacheDir( Str256* outDir )
 {
@@ -7024,7 +7031,72 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 //------------------------------------------------------------------------------
 std::string FileSystem::SaveDialog( const FileDialogParams& params )
 {
-  return "";
+  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+  NSWindow* window = (NSWindow*)( params.window ? params.window->window : nullptr );
+  NSSavePanel* dialog = [NSSavePanel savePanel];
+  if ( params.windowTitle && params.windowTitle[ 0 ] )
+  {
+    dialog.message = [NSString stringWithUTF8String:params.windowTitle];
+  }
+  if ( params.defaultPath && params.defaultPath[ 0 ] )
+  {
+    ae::Str256 dir = "file://";
+    dir += params.defaultPath;
+    dialog.directoryURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:dir.c_str()]];
+  }
+  
+  bool allowAny = false;
+  NSMutableArray* filters = [NSMutableArray arrayWithCapacity:params.filters.Length()];
+  for ( const FileFilter& filter : params.filters )
+  {
+    for ( const char* ext : filter.extensions )
+    {
+      if ( ext )
+      {
+        if ( strcmp( ext, "*" ) == 0 )
+        {
+          allowAny = true;
+        }
+        [filters addObject:[NSString stringWithUTF8String:ext]];
+      }
+    }
+  }
+  if ( !allowAny )
+  {
+    [dialog setAllowedFileTypes:filters];
+  }
+  
+  __block bool finished = false;
+  __block bool success = false;
+  std::string result;
+  // Show
+  if ( window )
+  {
+    AE_ASSERT_MSG( params.window->input, "Must initialize ae::Input with ae::Window before creating a file dialog" );
+    [dialog beginSheetModalForWindow:window completionHandler:^(NSModalResponse returnCode)
+    {
+      success = ( returnCode == NSFileHandlingPanelOKButton );
+      finished = true;
+    }];
+    // Block here until panel returns
+    while ( !finished )
+    {
+      params.window->input->Pump();
+      sleep( 0 );
+    }
+  }
+  else
+  {
+    success = ( [dialog runModal] == NSModalResponseOK );
+  }
+  // Result
+  if ( success && dialog.URL )
+  {
+    result = dialog.URL.fileSystemRepresentation;
+  }
+  
+  [pool release];
+  return result;
 }
 
 #else
@@ -7052,7 +7124,6 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 //------------------------------------------------------------------------------
 // OpenGL includes
 //------------------------------------------------------------------------------
-// @TODO: Are these being included in the ae namespace? Fix if so
 #if _AE_WINDOWS_
 	#pragma comment (lib, "opengl32.lib")
 	#pragma comment (lib, "glu32.lib")

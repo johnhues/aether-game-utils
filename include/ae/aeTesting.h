@@ -29,7 +29,7 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
 // LifeTimeTester class
@@ -60,6 +60,6 @@ public:
   static int32_t currentCount;
 };
 
-} // AE_NAMESPACE end
+} // ae end
 
 #endif

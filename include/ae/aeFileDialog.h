@@ -36,7 +36,7 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 class aeWindow;
-namespace AE_NAMESPACE {
+namespace ae {
 #if !_AE_APPLE_ // No std::path support
 
 //------------------------------------------------------------------------------
@@ -71,6 +71,6 @@ std::string SaveFile( const SaveFileParams& params ); // See note at top of head
 
 #endif
 
-} // AE_NAMESPACE end
+} // ae end
 
 #endif

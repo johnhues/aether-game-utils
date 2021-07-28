@@ -25,7 +25,7 @@
 //------------------------------------------------------------------------------
 #include "aeTerrain.h"
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
 // Sdf helpers
@@ -474,4 +474,4 @@ void TerrainSdf::RenderDebug( aeDebugRender* debug )
   }
 }
 
-} // AE_NAMESPACE
+} // ae

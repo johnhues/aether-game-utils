@@ -101,7 +101,6 @@ int main()
     {
       ae::FileDialogParams params;
       params.window = &window;
-      params.confirmOverwrite = true;
       params.filters.Append( ae::FileFilter( "Text Files", "txt" ) );
       std::string result = fs.SaveDialog( params );
       if ( !result.empty() )
