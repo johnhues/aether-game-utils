@@ -7166,6 +7166,8 @@ typedef intptr_t GLintptr;
 #define GL_CLAMP_TO_EDGE                  0x812F
 // GL_VERSION_1_3
 #define GL_TEXTURE0                       0x84C0
+// GL_VERSION_1_4
+#define GL_DEPTH_COMPONENT16              0x81A5
 // GL_VERSION_1_5
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
