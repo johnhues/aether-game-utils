@@ -23,8 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "catch2/catch.hpp"
 #include "ae/aether.h"
+#include "catch2/catch.hpp"
 
 TEST_CASE( "enum registration 2", "[aeRef]" )
 {

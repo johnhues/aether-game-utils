@@ -287,7 +287,6 @@ namespace aeMeta
     // Internal meta type state
     //------------------------------------------------------------------------------
   private:
-    friend class aeMeta;
     aeObject* ( *m_placementNew )( aeObject* ) = nullptr;
     ae::Str32 m_name;
     aeMetaTypeId m_id = kAeInvalidMetaTypeId;
@@ -381,7 +380,7 @@ namespace aeMeta
   {
     EnumCreator( const char* typeName, std::string strMap )
     {
-      class aeMeta::Enum* enumType = aeMeta::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+      aeMeta::Enum* enumType = aeMeta::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
       
       strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
       strMap.erase( std::remove( strMap.begin(), strMap.end(), '(' ), strMap.end() );
@@ -442,7 +441,7 @@ namespace aeMeta
     EnumCreator2( const char* valueName, T value )
     {
       const char* prefix = aeMeta::VarType< T >::GetPrefix();
-      uint32_t prefixLen = strlen( prefix );
+      uint32_t prefixLen = (uint32_t)strlen( prefix );
       AE_ASSERT( prefixLen < strlen( valueName ) );
       AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
       
