@@ -27,10 +27,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeMath.h"
-#include "aeString.h"
+#include "ae/aether.h"
 #include <map>
-#include <vector>
 
 //------------------------------------------------------------------------------
 // Meta constants
@@ -127,7 +125,7 @@ public:
     }
   
   private:
-    aeStr32 m_name;
+    ae::Str32 m_name;
     uint32_t m_size;
     bool m_isSigned;
     ae::Map< int32_t, std::string > m_enumValueToName = AE_ALLOC_TAG_META;
@@ -179,7 +177,7 @@ public:
       Float,
       // V2f,
       // V2i,
-      Float4x4,
+      Matrix4,
       Enum,
       Ref
     };
@@ -190,7 +188,7 @@ public:
     uint32_t GetOffset() const { return m_offset; }
     uint32_t GetSize() const { return m_size; }
     
-    // @TODO: Replace return type with an dynamic aeStr
+    // @TODO: Replace return type with an dynamic ae::Str
     std::string GetObjectValueAsString( const aeObject* obj, std::function< std::string( const aeObject* ) > getStringFromObjectPointer = nullptr ) const
     {
       if ( !obj )
@@ -208,41 +206,41 @@ public:
           switch ( m_size )
           {
             case 16:
-              return reinterpret_cast< const aeStr16* >( varData )->c_str();
+              return reinterpret_cast< const ae::Str16* >( varData )->c_str();
             case 32:
-              return reinterpret_cast< const aeStr32* >( varData )->c_str();
+              return reinterpret_cast< const ae::Str32* >( varData )->c_str();
             case 64:
-              return reinterpret_cast< const aeStr64* >( varData )->c_str();
+              return reinterpret_cast< const ae::Str64* >( varData )->c_str();
             case 128:
-              return reinterpret_cast< const aeStr128* >( varData )->c_str();
+              return reinterpret_cast< const ae::Str128* >( varData )->c_str();
             case 256:
-              return reinterpret_cast< const aeStr256* >( varData )->c_str();
+              return reinterpret_cast< const ae::Str256* >( varData )->c_str();
             case 512:
-              return reinterpret_cast< const aeStr512* >( varData )->c_str();
+              return reinterpret_cast< const ae::Str512* >( varData )->c_str();
             default:
               AE_FAIL_MSG( "Invalid string size '#'", m_size );
               return "";
           }
         case Var::UInt8:
           // Prevent char formatting
-          return aeStr32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str();
         case Var::UInt16:
-          return aeStr32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
         case Var::UInt32:
-          return aeStr32::Format( "#", *reinterpret_cast< const uint32_t* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", *reinterpret_cast< const uint32_t* >( varData ) ).c_str();
         case Var::Int8:
           // Prevent char formatting
-          return aeStr32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str();
         case Var::Int16:
-          return aeStr32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
         case Var::Int32:
-          return aeStr32::Format( "#", *reinterpret_cast< const int32_t* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", *reinterpret_cast< const int32_t* >( varData ) ).c_str();
         case Var::Bool:
-          return aeStr32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
         case Var::Float:
-          return aeStr32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
-        case Var::Float4x4:
-          return aeStr256::Format( "#", *reinterpret_cast< const aeFloat4x4* >( varData ) ).c_str();
+          return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
+        case Var::Matrix4:
+          return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
         case Var::Enum:
         {
           const class Enum* enumType = GetEnum();
@@ -290,35 +288,35 @@ public:
           {
             case 16:
             {
-              *(aeStr16*)varData = value;
+              *(ae::Str16*)varData = value;
               return true;
             }
             case 32:
             {
-              *(aeStr32*)varData = value;
+              *(ae::Str32*)varData = value;
               return true;
             }
             case 64:
             {
-              aeStr64* str = (aeStr64*)varData;
+              ae::Str64* str = (ae::Str64*)varData;
               *str = value;
               return true;
             }
             case 128:
             {
-              aeStr128* str = (aeStr128*)varData;
+              ae::Str128* str = (ae::Str128*)varData;
               *str = value;
               return true;
             }
             case 256:
             {
-              aeStr256* str = (aeStr256*)varData;
+              ae::Str256* str = (ae::Str256*)varData;
               *str = value;
               return true;
             }
             case 512:
             {
-              aeStr512* str = (aeStr512*)varData;
+              ae::Str512* str = (ae::Str512*)varData;
               *str = value;
               return true;
             }
@@ -410,16 +408,16 @@ public:
           //   sscanf( value, "%d %d", &(v->X), &(v->Y) );
           //   return true;
           // }
-        case Var::Float4x4:
+        case Var::Matrix4:
         {
-          AE_ASSERT( m_size == sizeof(aeFloat4x4) );
-          aeFloat4x4* v = (aeFloat4x4*)varData;
-          // @TODO: Should match GetObjectValueAsString() which uses aeStr::Format
+          AE_ASSERT( m_size == sizeof(ae::Matrix4) );
+          ae::Matrix4* v = (ae::Matrix4*)varData;
+          // @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
           sscanf( value, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
-                 v->data, v->data + 1, v->data + 2, v->data + 3,
-                 v->data + 4, v->data + 5, v->data + 6, v->data + 7,
-                 v->data + 8, v->data + 9, v->data + 10, v->data + 11,
-                 v->data + 12, v->data + 13, v->data + 14, v->data + 15 );
+                 v->d, v->d + 1, v->d + 2, v->d + 3,
+                 v->d + 4, v->d + 5, v->d + 6, v->d + 7,
+                 v->d + 8, v->d + 9, v->d + 10, v->d + 11,
+                 v->d + 12, v->d + 13, v->d + 14, v->d + 15 );
           return true;
         }
         case Var::Enum:
@@ -575,9 +573,9 @@ public:
 
     // Members
     const aeMeta::Type* m_owner = nullptr;
-    aeStr32 m_name = "";
+    ae::Str32 m_name = "";
     Var::Type m_type;
-    aeStr32 m_typeName = "";
+    ae::Str32 m_typeName = "";
     uint32_t m_offset = 0;
     uint32_t m_size = 0;
     aeMetaTypeId m_refTypeId = kAeInvalidMetaTypeId; // @TODO: Need to use an id here in case type has not been registered yet
@@ -720,13 +718,13 @@ public:
   private:
     friend class aeMeta;
     aeObject* ( *m_placementNew )( aeObject* ) = nullptr;
-    aeStr32 m_name;
+    ae::Str32 m_name;
     aeMetaTypeId m_id = kAeInvalidMetaTypeId;
     uint32_t m_size = 0;
     uint32_t m_align = 0;
     ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
     ae::Array< Var > m_vars = AE_ALLOC_TAG_META;
-    aeStr32 m_parent;
+    ae::Str32 m_parent;
     bool m_isAbstract = false;
     bool m_isPolymorphic = false;
     bool m_isDefaultConstructible = false;
@@ -962,9 +960,9 @@ private:
   //   return s_nextTypeId;
   // }
 
-  static std::map< aeStr32, Type* >& m_GetTypeNameMap()
+  static std::map< ae::Str32, Type* >& m_GetTypeNameMap()
   {
-    static std::map< aeStr32, Type* > s_map;
+    static std::map< ae::Str32, Type* > s_map;
     return s_map;
   }
 
@@ -1002,7 +1000,7 @@ DefineMetaVarType( bool, Bool );
 DefineMetaVarType( float, Float );
 // DefineMetaVarType( v2f, V2f );
 // DefineMetaVarType( v2i, V2i );
-DefineMetaVarType( aeFloat4x4, Float4x4 );
+DefineMetaVarType( ae::Matrix4, Matrix4 );
 
 template < uint32_t N >
 struct aeMeta::VarType< ae::Str<N> >
@@ -1042,10 +1040,7 @@ static aeMeta::VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_META_PROPERTY( c, p ) \
-static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p, "" );
-
-#define AE_META_PROPERTY_VALUE( c, p, v ) \
-static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
+static aeMeta::PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -1140,7 +1135,7 @@ public:
   aeMetaTypeId GetTypeId() const { return _metaTypeId; }
 
   aeMetaTypeId _metaTypeId;
-  aeStr32 _typeName;
+  ae::Str32 _typeName;
 };
 
 //------------------------------------------------------------------------------

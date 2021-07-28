@@ -33,7 +33,7 @@ TEST_CASE( "enum registration", "[aeMeta]" )
 {
   const aeMeta::Enum* playerStateEnum = aeMeta::GetEnum( "PlayerState" );
   
-  REQUIRE( playerStateEnum->GetName() == aeStr32( "PlayerState" ) );
+  REQUIRE( playerStateEnum->GetName() == ae::Str32( "PlayerState" ) );
   
   REQUIRE( playerStateEnum->TypeSize() == 2 );
   REQUIRE( playerStateEnum->TypeIsSigned() == false );

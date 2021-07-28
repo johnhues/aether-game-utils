@@ -1878,7 +1878,13 @@ const char* GetTypeName()
 #define _AE_LOG_WARN_ 3
 #define _AE_LOG_ERROR_ 4
 #define _AE_LOG_FATAL_ 5
-extern const char* LogLevelNames[ 6 ];
+void LogInternal( std::stringstream& os, const char* message );
+void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
+template < typename T, typename... Args >
+void LogInternal( std::stringstream& os, const char* format, T value, Args... args );
+template < typename... Args >
+void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
+// extern const char* LogLevelNames[ 6 ];
 
 //------------------------------------------------------------------------------
 // Log colors internal implementation
