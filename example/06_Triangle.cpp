@@ -81,7 +81,7 @@ int main()
 	ae::Shader shader;
 	ae::VertexData vertexData;
 	
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "triangle" );
 	render.Initialize( &window );
 	input.Initialize( &window );

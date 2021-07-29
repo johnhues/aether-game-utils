@@ -1064,27 +1064,34 @@ namespace ae {
 
 //------------------------------------------------------------------------------
 // ae::Window class
+//! Window size is specified in virtual DPI units. Actual window content width and height are subject to the
+//! displays scale factor. Passing a width and height of 1280x720 on a display with a scale factor of 2 will result
+//! in a virtual window size of 1280x720 and a backbuffer size of 2560x1440. The windows scale factor can be
+//! checked with ae::Window::GetScaleFactor().
 //------------------------------------------------------------------------------
 class Window
 {
 public:
   Window();
+  //! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
   bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor );
+  //! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
   bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor );
   void Terminate();
 
   void SetTitle( const char* title );
   void SetFullScreen( bool fullScreen );
   void SetPosition( Int2 pos );
-  void SetSize( uint32_t width, uint32_t height );
+  void SetSize( uint32_t width, uint32_t height ); //!< Window size is specified in virtual DPI units, content size is subject to the displays scale factor
   void SetMaximized( bool maximized );
 
   const char* GetTitle() const { return m_windowTitle.c_str(); }
   Int2 GetPosition() const { return m_pos; }
-  int32_t GetWidth() const;
-  int32_t GetHeight() const;
+  int32_t GetWidth() const; //!< Virtual window width (unscaled by display scale factor)
+  int32_t GetHeight() const; //!< Virtual window height (unscaled by display scale factor)
   bool GetFullScreen() const { return m_fullScreen; }
   bool GetMaximized() const { return m_maximized; }
+  float GetScaleFactor() const { return m_scaleFactor; } //!<  Window content scale factor
 
 private:
   void m_Initialize();
@@ -1093,11 +1100,12 @@ private:
   int32_t m_height;
   bool m_fullScreen;
   bool m_maximized;
+  float m_scaleFactor;
   Str256 m_windowTitle;
 public:
   // Internal
   void m_UpdatePos( Int2 pos ) { m_pos = pos; }
-  void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
+  void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
   void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
   void* window;
   class GraphicsDevice* graphicsDevice;
@@ -5410,7 +5418,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
       {
         uint32_t width = LOWORD( lParam );
         uint32_t height = HIWORD( lParam );
-        window->m_UpdateWidthHeight( width, height );
+        window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
       }
       break;
     }
@@ -5455,7 +5463,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
   AE_ASSERT( _aewindow );
   AE_ASSERT( _aewindow->graphicsDevice );
-  _aewindow->m_UpdateWidthHeight( frameSize.width * sender.backingScaleFactor, frameSize.height * sender.backingScaleFactor );
+  _aewindow->m_UpdateSize( frameSize.width, frameSize.height, sender.backingScaleFactor );
   return frameSize;
 }
 @end
@@ -5473,6 +5481,7 @@ Window::Window()
   m_height = 0;
   m_fullScreen = false;
   m_maximized = false;
+  m_scaleFactor = 0.0f;
 }
 
 bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor )
@@ -5506,6 +5515,13 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
   //SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
 
   return false;
+}
+
+void Window::m_UpdateSize( int32_t width, int32_t height, float scaleFactor )
+{
+  m_width = width;
+  m_height = height;
+  m_scaleFactor = scaleFactor;
 }
 
 void Window::m_Initialize()
@@ -5572,6 +5588,9 @@ void Window::m_Initialize()
   {
     AE_FAIL_MSG( "Failed on first window update. Error: #", GetLastError() );
   }
+  
+  // @TODO: Get real scale factor
+  m_scaleFactor = 1.0f;
 #elif _AE_OSX_
   // Autorelease Pool
   NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
@@ -5585,7 +5604,7 @@ void Window::m_Initialize()
   // Main window
   aeWindowDelegate* windowDelegate = [[aeWindowDelegate alloc] init];
   windowDelegate.aewindow = this;
-  NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 400, 300)
+  NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, m_width, m_height )
     styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
     backing:NSBackingStoreBuffered
     defer:YES
@@ -5620,6 +5639,7 @@ void Window::m_Initialize()
   [nsWindow makeKeyAndOrderFront:nil]; // nil sender
   // @TODO: Create menus (especially Quit!)
   [nsWindow orderFrontRegardless];
+  m_scaleFactor = nsWindow.backingScaleFactor;
   
   if (![[NSRunningApplication currentApplication] isFinishedLaunching]) // Make sure run is only called once
   {
@@ -5639,6 +5659,7 @@ void Window::m_Initialize()
     canvas.style.width = "100%";
     canvas.style.height = "100%";
   });
+  m_scaleFactor = 1.0f;
 #endif
 }
 
@@ -9058,8 +9079,10 @@ void GraphicsDevice::Initialize( class Window* window )
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
   AE_CHECK_GL_ERROR();
 
-  m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
-
+  float scaleFactor = m_window->GetScaleFactor();
+  int32_t contentWidth = m_window->GetWidth() * scaleFactor;
+  int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+  m_HandleResize( contentWidth, contentHeight );
 }
 
 void GraphicsDevice::Terminate()
@@ -9075,14 +9098,15 @@ void GraphicsDevice::Activate()
 {
   AE_ASSERT( m_context );
 
-  int32_t windowWidth = m_window->GetWidth();
-  int32_t windowHeight = m_window->GetHeight();
-  if ( windowWidth != m_canvas.GetWidth() || windowHeight != m_canvas.GetHeight() )
+  float scaleFactor = m_window->GetScaleFactor();
+  int32_t contentWidth = m_window->GetWidth() * scaleFactor;
+  int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+  if ( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
   {
 #if _AE_EMSCRIPTEN_
-    emscripten_set_canvas_element_size( "canvas", windowWidth, windowHeight );
+    emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
 #else
-     m_HandleResize( windowWidth, windowHeight );
+     m_HandleResize( contentWidth, contentHeight );
 #endif
   }
 
@@ -9119,7 +9143,7 @@ void GraphicsDevice::Present()
   AE_CHECK_GL_ERROR();
 
   glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-  glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
+  glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
 
   // Clear window target in case canvas doesn't fit exactly
   glClearColor( 1.0f, 0.0f, 0.0f, 1.0f );
@@ -9172,7 +9196,7 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
   // @TODO: Also resize actual canvas element with emscripten?
   // emscripten_set_canvas_element_size( "canvas", m_window->GetWidth(), m_window->GetHeight() );
   // emscripten_set_canvas_size( m_window->GetWidth(), m_window->GetHeight() );
-  // @TODO: Allow user to pass in a canvas scaling factor / aspect ratio parameter
+  // @TODO: Allow user to pass in a canvas scale factor / aspect ratio parameter
   m_canvas.Initialize( width, height );
   m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );
   m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
