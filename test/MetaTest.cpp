@@ -27,11 +27,24 @@
 #include "catch2/catch.hpp"
 
 //------------------------------------------------------------------------------
+// Types
+//------------------------------------------------------------------------------
+TEST_CASE( "Can get base type by name", "[aeMeta]" )
+{
+  REQUIRE( ae::GetTypeByName( "ae::Object" ) );
+}
+
+TEST_CASE( "Can get base type with templates", "[aeMeta]" )
+{
+  REQUIRE( ae::GetType< ae::Object >() );
+}
+
+//------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
 TEST_CASE( "enum registration", "[aeMeta]" )
 {
-  const aeMeta::Enum* playerStateEnum = aeMeta::GetEnum( "PlayerState" );
+  const ae::Enum* playerStateEnum = ae::GetEnum( "PlayerState" );
   
   REQUIRE( playerStateEnum->GetName() == ae::Str32( "PlayerState" ) );
   
@@ -52,24 +65,24 @@ TEST_CASE( "enum registration", "[aeMeta]" )
 
 TEST_CASE( "static enum helpers", "[aeMeta]" )
 {
-  REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Idle ) == "Idle" );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "Idle", (PlayerState)666 ) == PlayerState::Idle );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "0", (PlayerState)666 ) == PlayerState::Idle );
+  REQUIRE( ae::Enum::GetNameFromValue( PlayerState::Idle ) == "Idle" );
+  REQUIRE( ae::Enum::GetValueFromString( "Idle", (PlayerState)666 ) == PlayerState::Idle );
+  REQUIRE( ae::Enum::GetValueFromString( "0", (PlayerState)666 ) == PlayerState::Idle );
 
-  REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Run ) == "Run" );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "Run", (PlayerState)666 ) == PlayerState::Run );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "1", (PlayerState)666 ) == PlayerState::Run );
+  REQUIRE( ae::Enum::GetNameFromValue( PlayerState::Run ) == "Run" );
+  REQUIRE( ae::Enum::GetValueFromString( "Run", (PlayerState)666 ) == PlayerState::Run );
+  REQUIRE( ae::Enum::GetValueFromString( "1", (PlayerState)666 ) == PlayerState::Run );
 
-  REQUIRE( aeMeta::Enum::GetNameFromValue( PlayerState::Jump ) == "Jump" );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "Jump", (PlayerState)666 ) == PlayerState::Jump );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "2", (PlayerState)666 ) == PlayerState::Jump );
+  REQUIRE( ae::Enum::GetNameFromValue( PlayerState::Jump ) == "Jump" );
+  REQUIRE( ae::Enum::GetValueFromString( "Jump", (PlayerState)666 ) == PlayerState::Jump );
+  REQUIRE( ae::Enum::GetValueFromString( "2", (PlayerState)666 ) == PlayerState::Jump );
 }
 
 TEST_CASE( "static enum helpers using missing values", "[aeMeta]" )
 {
-  REQUIRE( aeMeta::Enum::GetNameFromValue( (PlayerState)666 ) == "" );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "3", PlayerState::Jump ) == PlayerState::Jump );
-  REQUIRE( aeMeta::Enum::GetValueFromString( "", PlayerState::Jump ) == PlayerState::Jump );
+  REQUIRE( ae::Enum::GetNameFromValue( (PlayerState)666 ) == "" );
+  REQUIRE( ae::Enum::GetValueFromString( "3", PlayerState::Jump ) == PlayerState::Jump );
+  REQUIRE( ae::Enum::GetValueFromString( "", PlayerState::Jump ) == PlayerState::Jump );
 }
 
 //------------------------------------------------------------------------------
@@ -78,8 +91,8 @@ TEST_CASE( "static enum helpers using missing values", "[aeMeta]" )
 TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" )
 {
   SomeClass c;
-  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
-  const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Type* type = ae::GetTypeFromObject( &c );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
   
   c.enumTest = TestEnumClass::Five;
   REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Five" );
@@ -100,8 +113,8 @@ TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" 
 TEST_CASE( "can't read invalid enum values from object using meta definition", "[aeMeta]" )
 {
   SomeClass c;
-  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
-  const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Type* type = ae::GetTypeFromObject( &c );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
   
   c.enumTest = (TestEnumClass)6;
   REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "" );
@@ -110,8 +123,8 @@ TEST_CASE( "can't read invalid enum values from object using meta definition", "
 TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 {
   SomeClass c;
-  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
-  const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Type* type = ae::GetTypeFromObject( &c );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
   
   REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Five" ) );
   REQUIRE( c.enumTest == TestEnumClass::Five );
@@ -147,8 +160,8 @@ TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 TEST_CASE( "can't set invalid enum values on object using meta definition", "[aeMeta]" )
 {
   SomeClass c;
-  const aeMeta::Type* type = aeMeta::GetTypeFromObject( &c );
-  const aeMeta::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Type* type = ae::GetTypeFromObject( &c );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
   
   c.enumTest = TestEnumClass::Four;
   REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "Six" ) );
@@ -164,8 +177,8 @@ TEST_CASE( "can't set invalid enum values on object using meta definition", "[ae
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 {
-  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldEnum >();
-  REQUIRE( enumType == aeMeta::GetEnum( "SomeOldEnum" ) );
+  const ae::Enum* enumType = ae::GetEnum< SomeOldEnum >();
+  REQUIRE( enumType == ae::GetEnum( "SomeOldEnum" ) );
   REQUIRE( enumType->Length() == 3 );
   REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
   REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -180,8 +193,8 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing c-style enum where each value has a prefix", "[aeMeta]" )
 {
-  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldPrefixEnum >();
-  REQUIRE( enumType == aeMeta::GetEnum( "SomeOldPrefixEnum" ) );
+  const ae::Enum* enumType = ae::GetEnum< SomeOldPrefixEnum >();
+  REQUIRE( enumType == ae::GetEnum( "SomeOldPrefixEnum" ) );
   REQUIRE( enumType->Length() == 3 );
   REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
   REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -196,8 +209,8 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing c-style enum where each value has a manually specified name", "[aeMeta]" )
 {
-  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeOldRenamedEnum >();
-  REQUIRE( enumType == aeMeta::GetEnum( "SomeOldRenamedEnum" ) );
+  const ae::Enum* enumType = ae::GetEnum< SomeOldRenamedEnum >();
+  REQUIRE( enumType == ae::GetEnum( "SomeOldRenamedEnum" ) );
   REQUIRE( enumType->Length() == 3 );
   REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
   REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -212,8 +225,8 @@ TEST_CASE( "can register an already existing c-style enum where each value has a
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 {
-  const aeMeta::Enum* enumType = aeMeta::GetEnum< SomeNewEnum >();
-  REQUIRE( enumType == aeMeta::GetEnum( "SomeNewEnum" ) );
+  const ae::Enum* enumType = ae::GetEnum< SomeNewEnum >();
+  REQUIRE( enumType == ae::GetEnum( "SomeNewEnum" ) );
   REQUIRE( enumType->Length() == 3 );
   REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
   REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -228,8 +241,8 @@ TEST_CASE( "can register an already existing enum class", "[aeMeta]" )
 //------------------------------------------------------------------------------
 TEST_CASE( "can register an already existing enum class in a nested namespace", "[aeMeta]" )
 {
-  const aeMeta::Enum* enumType = aeMeta::GetEnum< A::B::SomeNewEnum >();
-  REQUIRE( enumType == aeMeta::GetEnum( "A::B::SomeNewEnum" ) );
+  const ae::Enum* enumType = ae::GetEnum< A::B::SomeNewEnum >();
+  REQUIRE( enumType == ae::GetEnum( "A::B::SomeNewEnum" ) );
   REQUIRE( enumType->Length() == 3 );
   REQUIRE( enumType->GetNameByIndex( 0 ) == "Bleep" );
   REQUIRE( enumType->GetNameByIndex( 1 ) == "Bloop" );
@@ -272,18 +285,18 @@ RefTester* RefTesterManager::GetObjectById( uint32_t id )
 
 TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 {
-  const aeMeta::Type* typeA = aeMeta::GetType< RefTesterA >();
+  const ae::Type* typeA = ae::GetType< RefTesterA >();
   REQUIRE( typeA );
-  const aeMeta::Var* typeA_notRef = typeA->GetVarByName( "notRef" );
-  const aeMeta::Var* typeA_varA = typeA->GetVarByName( "refA" );
-  const aeMeta::Var* typeA_varB = typeA->GetVarByName( "refB" );
+  const ae::Var* typeA_notRef = typeA->GetVarByName( "notRef" );
+  const ae::Var* typeA_varA = typeA->GetVarByName( "refA" );
+  const ae::Var* typeA_varB = typeA->GetVarByName( "refB" );
   REQUIRE( typeA_notRef );
   REQUIRE( typeA_varA );
   REQUIRE( typeA_varB );
   
-  const aeMeta::Type* typeB = aeMeta::GetType< RefTesterB >();
+  const ae::Type* typeB = ae::GetType< RefTesterB >();
   REQUIRE( typeB );
-  const aeMeta::Var* typeB_varA = typeB->GetVarByName( "refA" );
+  const ae::Var* typeB_varA = typeB->GetVarByName( "refA" );
   REQUIRE( typeB_varA );
   
   REQUIRE( !typeA_notRef->GetRefType() );
@@ -292,13 +305,13 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( typeB_varA->GetRefType() == typeA );
   
   RefTesterManager manager;
-  auto refStrToValFn = [&]( const aeMeta::Type* type, const char* str, aeObject** objOut )
+  auto refStrToValFn = [&]( const ae::Type* type, const char* str, ae::Object** objOut )
   {
     uint32_t id = 0;
     if ( RefTester::StringToId( str, &id ) )
     {
       RefTester* object = manager.GetObjectById( id );
-      const aeMeta::Type* objType = aeMeta::GetTypeFromObject( object );
+      const ae::Type* objType = ae::GetTypeFromObject( object );
       if ( objType && !objType->IsType( type ) )
       {
         return false;
@@ -308,7 +321,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
     }
     return false;
   };
-  auto refValToStrFn = []( const aeObject* o )
+  auto refValToStrFn = []( const ae::Object* o )
   {
     return RefTester::GetIdString( aeCast< RefTester >( o ) );
   };

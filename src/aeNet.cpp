@@ -594,7 +594,7 @@ void aeNetReplicaDB::UpdateSendData()
 //     if ( info.game == go->game && info.netId == go->netInstId )
 //     {
 //       HVN_ASSERT( info.gameId == go->ID );
-//       HVN_ASSERT( aeMetaGetObjectTypeId( go ) == info.type );
+//       HVN_ASSERT( GetObjectTypeId( go ) == info.type );
 //       net->netInsts[ i ] = net->netInsts[ netInstCount - 1 ];
 //       net->netInstCount--;
 //       if ( go->game->IsServer() )

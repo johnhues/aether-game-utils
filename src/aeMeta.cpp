@@ -28,50 +28,55 @@
 //------------------------------------------------------------------------------
 // Meta register base object
 //------------------------------------------------------------------------------
-AE_META_CLASS( aeObject );
+// @TODO: Support registering classes in namespaces
+//AE_META_CLASS( ae::Object );
+int force_link_aeObject = 0;
+template <> const char* ae::_TypeName< ae::Object >::Get() { return "ae::Object"; }
+template <> void ae::_DefineType< ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ae::Object >( "ae::Object", index ); }
+static ae::_TypeCreator< ae::Object > ae_type_creator_aeObject( "ae::Object" );
 
-uint32_t aeMeta::GetTypeCount()
+uint32_t ae::GetTypeCount()
 {
-  return (uint32_t)m_GetTypes().size();
+  return (uint32_t)_GetTypes().size();
 }
 
-const aeMeta::Type* aeMeta::GetTypeByIndex( uint32_t i )
+const ae::Type* ae::GetTypeByIndex( uint32_t i )
 {
-  return m_GetTypes()[ i ];
+  return _GetTypes()[ i ];
 }
 
-const aeMeta::Type* aeMeta::GetTypeById( aeMetaTypeId id )
+const ae::Type* ae::GetTypeById( ae::TypeId id )
 {
-  return m_GetTypeIdMap()[ id ];
+  return _GetTypeIdMap()[ id ];
 }
 
-const aeMeta::Type* aeMeta::GetTypeByName( const char* typeName )
+const ae::Type* ae::GetTypeByName( const char* typeName )
 {
-  auto it = m_GetTypeNameMap().find( typeName );
-  if ( it != m_GetTypeNameMap().end() ) { return it->second; }
+  auto it = _GetTypeNameMap().find( typeName );
+  if ( it != _GetTypeNameMap().end() ) { return it->second; }
   else { return nullptr; }
 }
 
-const aeMeta::Type* aeMeta::GetTypeFromObject( const aeObject& obj )
+const ae::Type* ae::GetTypeFromObject( const ae::Object& obj )
 {
   return GetTypeFromObject( &obj );
 }
 
-const aeMeta::Enum* aeMeta::GetEnum( const char* enumName )
+const ae::Enum* ae::GetEnum( const char* enumName )
 {
   return Enum::s_Get( enumName, false, 0 , false );
 }
 
-const aeMeta::Type* aeMeta::GetTypeFromObject( const aeObject* obj )
+const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 {
   if ( !obj )
   {
     return nullptr;
   }
   
-  aeMetaTypeId id = aeMetaGetObjectTypeId( obj );
-  auto it = m_GetTypeIdMap().find( id );
-  if ( it != m_GetTypeIdMap().end() )
+  ae::TypeId id = GetObjectTypeId( obj );
+  auto it = _GetTypeIdMap().find( id );
+  if ( it != _GetTypeIdMap().end() )
   {
     return it->second;
   }
@@ -82,15 +87,15 @@ const aeMeta::Type* aeMeta::GetTypeFromObject( const aeObject* obj )
   }
 }
 
-bool aeMeta::Var::SetObjectValueFromString( aeObject* obj, const char* value, std::function< bool( const aeMeta::Type*, const char*, aeObject** ) > getObjectPointerFromString ) const
+bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std::function< bool( const ae::Type*, const char*, ae::Object** ) > getObjectPointerFromString ) const
 {
   if ( !obj )
   {
     return false;
   }
   
-  // Safety check to make sure 'this' Var belongs to 'obj' aeMeta::Type
-  const aeMeta::Type* objType = aeMeta::GetTypeFromObject( obj );
+  // Safety check to make sure 'this' Var belongs to 'obj' ae::Type
+  const ae::Type* objType = ae::GetTypeFromObject( obj );
   AE_ASSERT( objType );
   AE_ASSERT_MSG( objType == m_owner, "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
   
@@ -210,20 +215,6 @@ bool aeMeta::Var::SetObjectValueFromString( aeObject* obj, const char* value, st
       sscanf( value, "%f", f );
       return true;
     }
-      // case Var::V2f:
-      // {
-      //   AE_ASSERT( var->m_size == sizeof(v2f) );
-      //   v2f* v = (v2f*)varData;
-      //   sscanf( value, "%f %f", &(v->X), &(v->Y) );
-      //   return true;
-      // }
-      // case Var::V2i:
-      // {
-      //   AE_ASSERT( var->m_size == sizeof(v2i) );
-      //   v2i* v = (v2i*)varData;
-      //   sscanf( value, "%d %d", &(v->X), &(v->Y) );
-      //   return true;
-      // }
     case Var::Matrix4:
     {
       AE_ASSERT( m_size == sizeof(ae::Matrix4) );
@@ -283,19 +274,19 @@ bool aeMeta::Var::SetObjectValueFromString( aeObject* obj, const char* value, st
     }
     case Var::Ref:
     {
-      const aeMeta::Type* refType = GetRefType();
+      const ae::Type* refType = GetRefType();
       AE_ASSERT_MSG( getObjectPointerFromString, "Must provide mapping function for reference types when calling SetObjectValueFromString" );
       
-      class aeObject* obj = nullptr;
+      class ae::Object* obj = nullptr;
       if ( getObjectPointerFromString( refType, value, &obj ) )
       {
         if ( obj )
         {
-          const aeMeta::Type* objType = aeMeta::GetTypeFromObject( obj );
+          const ae::Type* objType = ae::GetTypeFromObject( obj );
           AE_ASSERT( objType );
           AE_ASSERT_MSG( objType->IsType( refType ), "SetObjectValueFromString for var '#::#' returned object with wrong type '#'", m_owner->GetName(), GetName(), objType->GetName() );
         }
-        class aeObject** varPtr = reinterpret_cast< class aeObject** >( varData );
+        class ae::Object** varPtr = reinterpret_cast< class ae::Object** >( varData );
         *varPtr = obj;
         return true;
       }
@@ -306,7 +297,7 @@ bool aeMeta::Var::SetObjectValueFromString( aeObject* obj, const char* value, st
   return false;
 }
 
-bool aeMeta::Var::SetObjectValue( aeObject* obj, const aeObject* value ) const
+bool ae::Var::SetObjectValue( ae::Object* obj, const ae::Object* value ) const
 {
   AE_ASSERT( m_type == Ref );
   
@@ -315,7 +306,7 @@ bool aeMeta::Var::SetObjectValue( aeObject* obj, const aeObject* value ) const
     return false;
   }
   
-  const aeMeta::Type* objType = aeMeta::GetTypeFromObject( obj );
+  const ae::Type* objType = ae::GetTypeFromObject( obj );
   AE_ASSERT( objType );
   AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
   
@@ -325,27 +316,36 @@ bool aeMeta::Var::SetObjectValue( aeObject* obj, const aeObject* value ) const
     return true;
   }
   
-  const aeMeta::Type* refType = GetRefType();
-  const aeMeta::Type* valueType = aeMeta::GetTypeFromObject( value );
+  const ae::Type* refType = GetRefType();
+  const ae::Type* valueType = ae::GetTypeFromObject( value );
   AE_ASSERT( valueType );
   AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
   
   uint8_t* target = (uint8_t*)obj + m_offset;
-  const aeObject*& varData = *reinterpret_cast< const aeObject** >( target );
+  const ae::Object*& varData = *reinterpret_cast< const ae::Object** >( target );
   varData = value;
   
   return true;
 }
 
-const aeMeta::Type* aeMeta::Type::GetBaseType() const
+const ae::Var* ae::Type::GetVarByName( const char* name ) const
+{
+  int32_t i = m_vars.FindFn( [name]( auto&& v )
+  {
+    return v.m_name == name;
+  } );
+  return ( i >= 0 ) ? &m_vars[ i ] : nullptr;
+}
+
+const ae::Type* ae::Type::GetBaseType() const
 {
   return GetTypeByName( m_parent.c_str() );
 }
 
-bool aeMeta::Type::IsType( const Type* otherType ) const
+bool ae::Type::IsType( const Type* otherType ) const
 {
   AE_ASSERT( otherType );
-  for ( const aeMeta::Type* baseType = this; baseType; baseType = baseType->GetBaseType() )
+  for ( const ae::Type* baseType = this; baseType; baseType = baseType->GetBaseType() )
   {
     if ( baseType == otherType )
     {
@@ -355,7 +355,7 @@ bool aeMeta::Type::IsType( const Type* otherType ) const
   return false;
 }
 
-const class aeMeta::Enum* aeMeta::Var::GetEnum() const
+const class ae::Enum* ae::Var::GetEnum() const
 {
   if ( !m_enum )
   {
@@ -363,71 +363,71 @@ const class aeMeta::Enum* aeMeta::Var::GetEnum() const
     {
       return nullptr;
     }
-    m_enum = aeMeta::GetEnum( m_typeName.c_str() );
+    m_enum = ae::GetEnum( m_typeName.c_str() );
   }
   return m_enum;
 }
 
-const aeMeta::Type* aeMeta::Var::GetRefType() const
+const ae::Type* ae::Var::GetRefType() const
 {
   if ( m_refTypeId == kAeInvalidMetaTypeId )
   {
     return nullptr;
   }
-  const aeMeta::Type* type = GetTypeById( m_refTypeId );
+  const ae::Type* type = GetTypeById( m_refTypeId );
   AE_ASSERT( type );
   return type;
 }
 
 //------------------------------------------------------------------------------
-// Internal aeObject functions
+// Internal ae::Object functions
 //------------------------------------------------------------------------------
-aeMeta::aeMetaTypeId aeMeta::aeMetaGetObjectTypeId( const aeObject* obj )
+ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 {
-  return obj ? obj->_metaTypeId : aeMeta::kAeInvalidMetaTypeId;
+  return obj ? obj->_metaTypeId : ae::kAeInvalidMetaTypeId;
 }
 
-aeMeta::aeMetaTypeId aeMeta::aeMetaGetTypeIdFromName( const char* name )
+ae::TypeId ae::GetTypeIdFromName( const char* name )
 {
   // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : aeMeta::kAeInvalidMetaTypeId;
+  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kAeInvalidMetaTypeId;
 }
 
-std::map< ae::Str32, aeMeta::Type* >& aeMeta::m_GetTypeNameMap()
+std::map< ae::Str32, ae::Type* >& ae::_GetTypeNameMap()
 {
   static std::map< ae::Str32, Type* > s_map;
   return s_map;
 }
 
-std::map< aeMeta::aeMetaTypeId, aeMeta::Type* >& aeMeta::m_GetTypeIdMap()
+std::map< ae::TypeId, ae::Type* >& ae::_GetTypeIdMap()
 {
-  static std::map< aeMetaTypeId, Type* > s_map;
+  static std::map< ae::TypeId, Type* > s_map;
   return s_map;
 }
 
-std::vector< aeMeta::Type* >& aeMeta::m_GetTypes()
+std::vector< ae::Type* >& ae::_GetTypes()
 {
-  static std::vector< aeMeta::Type* > s_vec;
+  static std::vector< ae::Type* > s_vec;
   return s_vec;
 }
 
-int32_t aeMeta::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
-std::string aeMeta::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
-uint32_t aeMeta::Enum::Length() const { return m_enumValueToName.Length(); }
+int32_t ae::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
+std::string ae::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
+uint32_t ae::Enum::Length() const { return m_enumValueToName.Length(); }
 
-aeMeta::Enum::Enum( const char* name, uint32_t size, bool isSigned ) :
+ae::Enum::Enum( const char* name, uint32_t size, bool isSigned ) :
   m_name( name ),
   m_size( size ),
   m_isSigned( isSigned )
 {}
 
-void aeMeta::Enum::m_AddValue( const char* name, int32_t value )
+void ae::Enum::m_AddValue( const char* name, int32_t value )
 {
   m_enumValueToName.Set( value, name );
   m_enumNameToValue.Set( name, value );
 }
 
-aeMeta::Enum* aeMeta::Enum::s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
+ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
 {
   static ae::Map< std::string, Enum* > enums = AE_ALLOC_TAG_META;
   if ( create )
@@ -444,14 +444,14 @@ aeMeta::Enum* aeMeta::Enum::s_Get( const char* enumName, bool create, uint32_t s
 }
 
 // @TODO: Replace return type with a dynamic ae::Str
-std::string aeMeta::Var::GetObjectValueAsString( const aeObject* obj, std::function< std::string( const aeObject* ) > getStringFromObjectPointer ) const
+std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, std::function< std::string( const ae::Object* ) > getStringFromObjectPointer ) const
 {
   if ( !obj )
   {
     return "";
   }
   
-  // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' aeMeta::Type
+  // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
   
   const void* varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
   
@@ -513,10 +513,32 @@ std::string aeMeta::Var::GetObjectValueAsString( const aeObject* obj, std::funct
     case Var::Ref:
     {
       AE_ASSERT_MSG( getStringFromObjectPointer, "Must provide mapping function for reference types when calling GetObjectValueAsString" );
-      const aeObject* obj = *reinterpret_cast< const aeObject* const * >( varData );
+      const ae::Object* obj = *reinterpret_cast< const ae::Object* const * >( varData );
       return getStringFromObjectPointer( obj ).c_str();
     }
   }
   
   return "";
+}
+
+void ae::Type::m_AddProp( const char* prop, const char* value )
+{
+  auto* props = m_props.TryGet( prop );
+  if ( !props )
+  {
+    props = &m_props.Set( prop, AE_ALLOC_TAG_META );
+  }
+  if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties with no value specified
+  {
+    props->Append( value );
+  }
+}
+
+void ae::Type::m_AddVar( const Var& var )
+{
+  m_vars.Append( var );
+  std::sort( m_vars.Begin(), m_vars.End(), []( const auto& a, const auto& b )
+  {
+    return a.GetOffset() < b.GetOffset();
+  } );
 }
