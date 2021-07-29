@@ -63,7 +63,6 @@ namespace ae
     static const char* GetBaseTypeName() { return ""; }
     static const ae::Type* GetBaseType() { return nullptr; }
     ae::TypeId GetTypeId() const { return _metaTypeId; }
-
     ae::TypeId _metaTypeId = kAeInvalidMetaTypeId;
     ae::Str32 _typeName;
   };
@@ -80,14 +79,6 @@ namespace ae
     static const char* GetBaseTypeName();
     static const ae::Type* GetBaseType();
   };
-  
-  //------------------------------------------------------------------------------
-  // Internal meta state
-  //------------------------------------------------------------------------------
-  std::map< ae::Str32, class Type* >& _GetTypeNameMap();
-  std::map< ae::TypeId, class Type* >& _GetTypeIdMap();
-  std::vector< class Type* >& _GetTypes();
-  template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
 
 //------------------------------------------------------------------------------
 // External meta functions
@@ -159,11 +150,11 @@ namespace ae
     };
 
     // Info
-    const char* GetName() const { return m_name.c_str(); }
-    Var::Type GetType() const { return m_type; }
-    const char* GetTypeName() const { return m_typeName.c_str(); }
-    uint32_t GetOffset() const { return m_offset; }
-    uint32_t GetSize() const { return m_size; }
+    const char* GetName() const;
+    Var::Type GetType() const;
+    const char* GetTypeName() const;
+    uint32_t GetOffset() const;
+    uint32_t GetSize() const;
     
     // Value
     std::string GetObjectValueAsString( const ae::Object* obj, std::function< std::string( const ae::Object* ) > getStringFromObjectPointer = nullptr ) const;
@@ -194,73 +185,47 @@ namespace ae
   class Type
   {
   public:
-    ae::TypeId GetId() const { return m_id; }
+    ae::TypeId GetId() const;
     
     // Properties
-    bool HasProperty( const char* prop ) const { return m_props.TryGet( prop ) != nullptr; }
-    uint32_t GetPropertyCount() const { return m_props.Length(); }
-    const char* GetPropertyName( uint32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
-    uint32_t GetPropertyValueCount( uint32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
-    uint32_t GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-    const char* GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
-    const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
+    bool HasProperty( const char* prop ) const;
+    uint32_t GetPropertyCount() const;
+    const char* GetPropertyName( uint32_t propIndex ) const;
+    uint32_t GetPropertyValueCount( uint32_t propIndex ) const;
+    uint32_t GetPropertyValueCount( const char* propName ) const;
+    const char* GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const;
+    const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
     
     // Vars
-    uint32_t GetVarCount() const { return m_vars.Length(); }
-    const Var* GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
-    const Var* GetVarByName( const char* name ) const;
+    uint32_t GetVarCount() const;
+    const ae::Var* GetVarByIndex( uint32_t i ) const;
+    const ae::Var* GetVarByName( const char* name ) const;
 
     // C++ type info
     template < typename T = ae::Object > T* New( void* obj ) const;
-    uint32_t GetSize() const { return m_size; }
-    uint32_t GetAlignment() const { return m_align; }
-    const char* GetName() const { return m_name.c_str(); }
-    bool HasNew() const { return m_placementNew; }
-    bool IsAbstract() const { return m_isAbstract; }
-    bool IsPolymorphic() const { return m_isPolymorphic; }
-    bool IsDefaultConstructible() const { return m_isDefaultConstructible; }
+    uint32_t GetSize() const;
+    uint32_t GetAlignment() const;
+    const char* GetName() const;
+    bool HasNew() const;
+    bool IsAbstract() const;
+    bool IsPolymorphic() const;
+    bool IsDefaultConstructible() const;
 
     // Inheritance info
-    const char* GetBaseTypeName() const { return m_parent.c_str(); }
+    const char* GetBaseTypeName() const;
     const Type* GetBaseType() const;
     bool IsType( const Type* otherType ) const;
     template < typename T > bool IsType() const;
     
     //------------------------------------------------------------------------------
-    // Internal meta type initialization functions
+    // Internal
     //------------------------------------------------------------------------------
     template < typename T >
     typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
-    Init( const char* name, uint32_t index )
-    {
-      m_placementNew = &( _PlacementNew< T > );
-      m_name = name;
-      m_id = GetTypeIdFromName( name );
-      m_size = sizeof( T );
-      m_align = alignof( T );
-      m_parent = T::GetBaseTypeName();
-      m_isAbstract = false;
-      m_isPolymorphic = std::is_polymorphic< T >::value;
-      m_isDefaultConstructible = true;
-    }
+    Init( const char* name, uint32_t index );
     template < typename T >
     typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
-    Init( const char* name, uint32_t index )
-    {
-      m_placementNew = nullptr;
-      m_name = name;
-      m_id = GetTypeIdFromName( name );
-      m_size = sizeof( T );
-      m_align = 0;
-      m_parent = T::GetBaseTypeName();
-      m_isAbstract = std::is_abstract< T >::value;
-      m_isPolymorphic = std::is_polymorphic< T >::value;
-      m_isDefaultConstructible = std::is_default_constructible< T >::value;
-    }
-    
-    //------------------------------------------------------------------------------
-    // Internal
-    //------------------------------------------------------------------------------
+    Init( const char* name, uint32_t index );
     void m_AddProp( const char* prop, const char* value );
     void m_AddVar( const Var& var );
   private:
@@ -276,11 +241,6 @@ namespace ae
     bool m_isPolymorphic = false;
     bool m_isDefaultConstructible = false;
   };
-  
-  
-
-
- 
 
 
 
@@ -301,10 +261,23 @@ namespace ae
 
 
 
+  //------------------------------------------------------------------------------
+  // Internal meta state
+  //------------------------------------------------------------------------------
+  std::map< ae::Str32, class Type* >& _GetTypeNameMap();
+  std::map< ae::TypeId, class Type* >& _GetTypeIdMap();
+  std::vector< class Type* >& _GetTypes();
+  template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
 
+  //------------------------------------------------------------------------------
+  // External meta initialization helpers
+  //------------------------------------------------------------------------------
+  template < typename T >
+  struct _TypeName
+  {
+    static const char* Get();
+  };
 
-
-  
   template < typename T >
   struct _VarType
   {
@@ -332,15 +305,6 @@ namespace ae
   {
     return ae::GetType( ae::_TypeName< Parent >::Get() );
   }
-
-  //------------------------------------------------------------------------------
-  // External meta initialization helpers
-  //------------------------------------------------------------------------------
-  template < typename T >
-  struct _TypeName
-  {
-    static const char* Get();
-  };
 
   //------------------------------------------------------------------------------
   // Internal meta initialization functions
@@ -728,6 +692,35 @@ T* ae::Type::New( void* obj ) const
   AE_ASSERT( IsType< T >() );
   AE_ASSERT( (uint64_t)obj % GetAlignment() == 0 );
   return (T*)m_placementNew( (T*)obj );
+}
+
+template < typename T >
+typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
+ae::Type::Init( const char* name, uint32_t index )
+{
+  m_placementNew = &( _PlacementNew< T > );
+  m_name = name;
+  m_id = GetTypeIdFromName( name );
+  m_size = sizeof( T );
+  m_align = alignof( T );
+  m_parent = T::GetBaseTypeName();
+  m_isAbstract = false;
+  m_isPolymorphic = std::is_polymorphic< T >::value;
+  m_isDefaultConstructible = true;
+}
+template < typename T >
+typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
+ae::Type::Init( const char* name, uint32_t index )
+{
+  m_placementNew = nullptr;
+  m_name = name;
+  m_id = GetTypeIdFromName( name );
+  m_size = sizeof( T );
+  m_align = 0;
+  m_parent = T::GetBaseTypeName();
+  m_isAbstract = std::is_abstract< T >::value;
+  m_isPolymorphic = std::is_polymorphic< T >::value;
+  m_isDefaultConstructible = std::is_default_constructible< T >::value;
 }
 
 template < typename T >

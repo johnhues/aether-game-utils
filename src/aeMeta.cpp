@@ -87,6 +87,12 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
   }
 }
 
+const char* ae::Var::GetName() const { return m_name.c_str(); }
+ae::Var::Type ae::Var::GetType() const { return m_type; }
+const char* ae::Var::GetTypeName() const { return m_typeName.c_str(); }
+uint32_t ae::Var::GetOffset() const { return m_offset; }
+uint32_t ae::Var::GetSize() const { return m_size; }
+
 bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std::function< bool( const ae::Type*, const char*, ae::Object** ) > getObjectPointerFromString ) const
 {
   if ( !obj )
@@ -520,6 +526,25 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, std::functio
   
   return "";
 }
+
+ae::TypeId ae::Type::GetId() const { return m_id; }
+bool ae::Type::HasProperty( const char* prop ) const { return m_props.TryGet( prop ) != nullptr; }
+uint32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
+const char* ae::Type::GetPropertyName( uint32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
+uint32_t ae::Type::GetPropertyValueCount( uint32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
+uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
+const char* ae::Type::GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
+const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
+uint32_t ae::Type::GetVarCount() const { return m_vars.Length(); }
+const ae::Var* ae::Type::GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
+uint32_t ae::Type::GetSize() const { return m_size; }
+uint32_t ae::Type::GetAlignment() const { return m_align; }
+const char* ae::Type::GetName() const { return m_name.c_str(); }
+bool ae::Type::HasNew() const { return m_placementNew; }
+bool ae::Type::IsAbstract() const { return m_isAbstract; }
+bool ae::Type::IsPolymorphic() const { return m_isPolymorphic; }
+bool ae::Type::IsDefaultConstructible() const { return m_isDefaultConstructible; }
+const char* ae::Type::GetBaseTypeName() const { return m_parent.c_str(); }
 
 void ae::Type::m_AddProp( const char* prop, const char* value )
 {
