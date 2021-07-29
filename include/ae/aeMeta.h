@@ -34,10 +34,111 @@
 //------------------------------------------------------------------------------
 // External macros to force module linking
 //------------------------------------------------------------------------------
-#define AE_META_CLASS_FORCE_LINK(x) \
-extern int force_link_##x; \
-struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
-ForceLink_##x forceLink_##x;
+#define AE_META_CLASS_FORCE_LINK( x ) \
+  extern int force_link_##x; \
+  struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
+  ForceLink_##x forceLink_##x;
+
+//------------------------------------------------------------------------------
+// External meta class registerer
+//------------------------------------------------------------------------------
+#define AE_META_CLASS( x ) \
+  int force_link_##x = 0; \
+  template <> const char* ae::_TypeName< x >::Get() { return #x; } \
+  template <> void ae::_DefineType< x >( ae::Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
+  static ae::_TypeCreator< x > ae_type_creator_##x( #x );
+
+//------------------------------------------------------------------------------
+// External meta var registerer
+//------------------------------------------------------------------------------
+#define AE_META_VAR( c, v ) \
+  static ae::_VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
+//------------------------------------------------------------------------------
+// External meta property registerer
+//------------------------------------------------------------------------------
+#define AE_META_PROPERTY( c, p ) \
+  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
+
+//------------------------------------------------------------------------------
+// External enum definer and registerer
+//------------------------------------------------------------------------------
+// Define a new enum (must register with AE_ENUM_REGISTER)
+#define AE_ENUM( E, T, ... ) \
+  enum class E : T { \
+    __VA_ARGS__ \
+  }; \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+  }; \
+  struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
+  static std::ostream &operator << ( std::ostream &os, E e ) { \
+    os << ae::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
+    return os; \
+  }
+
+// Register an enum defined with AE_ENUM
+#define AE_ENUM_REGISTER( E ) \
+  AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
+  AE_ENUM_##E ae_enum_creator_##E; \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+
+//------------------------------------------------------------------------------
+// External c-style enum registerer
+//------------------------------------------------------------------------------
+// Register an already defined c-style enum type
+#define AE_META_ENUM( E ) \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetPrefix() { return ""; } \
+  }; \
+  ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+
+// Register an already defined c-style enum type where each value has a prefix
+#define AE_META_ENUM_PREFIX( E, PREFIX ) \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetPrefix() { return #PREFIX; } \
+  }; \
+  ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+
+// Register c-style enum value
+#define AE_META_ENUM_VALUE( E, V ) \
+  ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #V, V );
+
+// Register c-style enum value with a manually specified name
+#define AE_META_ENUM_VALUE_NAME( E, V, N ) \
+ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
+
+//------------------------------------------------------------------------------
+// External enum class registerer
+//------------------------------------------------------------------------------
+// Register an already defined enum class type
+#define AE_META_ENUM_CLASS( E ) \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetPrefix() { return ""; } \
+  }; \
+  namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+  // @NOTE: Nested namespace declaration requires C++17
+
+// Register enum class value
+#define AE_META_ENUM_CLASS_VALUE( E, V ) \
+  namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
 
 //------------------------------------------------------------------------------
 // External meta types
@@ -115,6 +216,9 @@ namespace ae
     template < typename T > static std::string GetNameFromValue( T value );
     template < typename T > static T GetValueFromString( const char* str, T defaultValue );
   
+    //------------------------------------------------------------------------------
+    // Internal
+    //------------------------------------------------------------------------------
   private:
     ae::Str32 m_name;
     uint32_t m_size;
@@ -242,7 +346,22 @@ namespace ae
     bool m_isDefaultConstructible = false;
   };
 
+  //------------------------------------------------------------------------------
+  // ae::Cast
+  //------------------------------------------------------------------------------
+  template< typename T, typename C >
+  const T* Cast( const C* obj )
+  {
+    static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
+    return dynamic_cast< const T* >( obj );
+  }
 
+  template< typename T, typename C >
+  T* Cast( C* obj )
+  {
+    static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
+    return dynamic_cast< T* >( obj );
+  }
 
 
 
@@ -486,126 +605,6 @@ struct ae::_VarType< T* >
   static const char* GetName() { return "Ref"; }
   static const char* GetRefTypeName() { return ae::GetTypeName< T >(); }
 };
-
-//------------------------------------------------------------------------------
-// External meta class registerer
-//------------------------------------------------------------------------------
-#define AE_META_CLASS( x ) \
-int force_link_##x = 0; \
-template <> const char* ae::_TypeName< x >::Get() { return #x; } \
-template <> void ae::_DefineType< x >( ae::Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
-static ae::_TypeCreator< x > ae_type_creator_##x( #x );
-
-//------------------------------------------------------------------------------
-// External meta var registerer
-//------------------------------------------------------------------------------
-#define AE_META_VAR( c, v ) \
-static ae::_VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
-//------------------------------------------------------------------------------
-// External meta property registerer
-//------------------------------------------------------------------------------
-#define AE_META_PROPERTY( c, p ) \
-static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
-
-//------------------------------------------------------------------------------
-// External enum definer and registerer
-//------------------------------------------------------------------------------
-// Define a new enum (must register with AE_ENUM_REGISTER)
-#define AE_ENUM( E, T, ... ) \
-  enum class E : T { \
-    __VA_ARGS__ \
-  }; \
-  template <> \
-  struct ae::_VarType< E > { \
-    static ae::Var::Type GetType() { return ae::Var::Enum; } \
-    static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
-  }; \
-  struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
-  static std::ostream &operator << ( std::ostream &os, E e ) { \
-    os << ae::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
-    return os; \
-  }
-
-// Register an enum defined with AE_ENUM
-#define AE_ENUM_REGISTER( E ) \
-  AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
-  AE_ENUM_##E ae_enum_creator_##E; \
-  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
-
-//------------------------------------------------------------------------------
-// External c-style enum registerer
-//------------------------------------------------------------------------------
-// Register an already defined c-style enum type
-#define AE_META_ENUM( E ) \
-  template <> \
-  struct ae::_VarType< E > { \
-    static ae::Var::Type GetType() { return ae::Var::Enum; } \
-    static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
-    static const char* GetPrefix() { return ""; } \
-  }; \
-  ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
-  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
-
-// Register an already defined c-style enum type where each value has a prefix
-#define AE_META_ENUM_PREFIX( E, PREFIX ) \
-  template <> \
-  struct ae::_VarType< E > { \
-    static ae::Var::Type GetType() { return ae::Var::Enum; } \
-    static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
-    static const char* GetPrefix() { return #PREFIX; } \
-  }; \
-  ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
-  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
-
-// Register c-style enum value
-#define AE_META_ENUM_VALUE( E, V ) \
-  ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #V, V );
-
-// Register c-style enum value with a manually specified name
-#define AE_META_ENUM_VALUE_NAME( E, V, N ) \
-ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
-
-//------------------------------------------------------------------------------
-// External enum class registerer
-//------------------------------------------------------------------------------
-// Register an already defined enum class type
-#define AE_META_ENUM_CLASS( E ) \
-  template <> \
-  struct ae::_VarType< E > { \
-    static ae::Var::Type GetType() { return ae::Var::Enum; } \
-    static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
-    static const char* GetPrefix() { return ""; } \
-  }; \
-  namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
-  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
-  // @NOTE: Nested namespace declaration requires C++17
-
-// Register enum class value
-#define AE_META_ENUM_CLASS_VALUE( E, V ) \
-  namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
-
-//------------------------------------------------------------------------------
-// aeCast
-//------------------------------------------------------------------------------
-template< typename T, typename C >
-const T* aeCast( const C* obj )
-{
-  // Cast down to base
-  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
-  return dynamic_cast< const T* >( obj );
-}
-
-template< typename T, typename C >
-T* aeCast( C* obj )
-{
-  // Cast down to base
-  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
-  return dynamic_cast< T* >( obj );
-}
 
 template < typename T >
 bool ae::Type::IsType() const

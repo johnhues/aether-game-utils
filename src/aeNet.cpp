@@ -867,7 +867,7 @@ void aeNetReplicaDB::UpdateSendData()
 //         const aeMeta::Type* metaType = aeMeta::GetType( msg.typeId );
 //         if ( metaType && metaType->GetBaseType() == aeMeta::GetType< Rpc >() )
 //         {
-//           Rpc* rpc = aeCast< Rpc >( metaType->New() );
+//           Rpc* rpc = ae::Cast< Rpc >( metaType->New() );
 //           rpc->game = game;
 //           rpc->aetherPlayer = recvInfo.player;
 

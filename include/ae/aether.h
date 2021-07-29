@@ -1842,6 +1842,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // Platform internal implementation
 //------------------------------------------------------------------------------
+#include <cxxabi.h>
 namespace ae {
 
 template < typename T >
@@ -1859,14 +1860,14 @@ const char* GetTypeName()
     typeName += 7;
   }
 #else
-  if ( typeName[ 0 ] == 'P' && isdigit( typeName[ 1 ] ) )
+  // @NOTE: Demangle calls realloc on given buffer
+  int status = 1;
+  static size_t s_length = 32;
+  static char* s_buffer = (char*)malloc( s_length );
+  s_buffer = abi::__cxa_demangle( typeName, s_buffer, &s_length, &status );
+  if ( status == 0 )
   {
-    // Try to get actual type name when given a pointer to type
-    typeName++;
-  }
-  while ( *typeName && isdigit( typeName[ 0 ] ) )
-  {
-    typeName++;
+    return s_buffer;
   }
 #endif
   return typeName;

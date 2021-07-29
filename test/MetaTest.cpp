@@ -323,7 +323,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   };
   auto refValToStrFn = []( const ae::Object* o )
   {
-    return RefTester::GetIdString( aeCast< RefTester >( o ) );
+    return RefTester::GetIdString( ae::Cast< RefTester >( o ) );
   };
   
   RefTesterA* testerA1 = manager.Create< RefTesterA >();
