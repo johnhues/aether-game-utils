@@ -1842,7 +1842,9 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // Platform internal implementation
 //------------------------------------------------------------------------------
+#ifndef _MSC_VER
 #include <cxxabi.h>
+#endif
 namespace ae {
 
 template < typename T >

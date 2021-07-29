@@ -349,19 +349,8 @@ namespace ae
   //------------------------------------------------------------------------------
   // ae::Cast
   //------------------------------------------------------------------------------
-  template< typename T, typename C >
-  const T* Cast( const C* obj )
-  {
-    static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
-    return dynamic_cast< const T* >( obj );
-  }
-
-  template< typename T, typename C >
-  T* Cast( C* obj )
-  {
-    static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
-    return dynamic_cast< T* >( obj );
-  }
+  template< typename T, typename C > const T* Cast( const C* obj );
+  template< typename T, typename C > T* Cast( C* obj );
 
 
 
@@ -744,6 +733,20 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value ) const
   *varData = value;
 
   return true;
+}
+
+template< typename T, typename C >
+const T* ae::Cast( const C* obj )
+{
+  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
+  return dynamic_cast<const T*>( obj );
+}
+
+template< typename T, typename C >
+T* ae::Cast( C* obj )
+{
+  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
+  return dynamic_cast<T*>( obj );
 }
 
 #endif
