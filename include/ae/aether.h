@@ -1809,10 +1809,13 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
   return *this;
 }
 
+//! \defgroup Meta
+//! @{
+
 //------------------------------------------------------------------------------
 // External macros to force module linking
 //------------------------------------------------------------------------------
-#define AE_META_CLASS_FORCE_LINK( x ) \
+#define AE_FORCELINK_CLASS( x ) \
   extern int force_link_##x; \
   struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
   ForceLink_##x forceLink_##x;
@@ -1820,7 +1823,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // External meta class registerer
 //------------------------------------------------------------------------------
-#define AE_META_CLASS( x ) \
+#define AE_REGISTER_CLASS( x ) \
   int force_link_##x = 0; \
   template <> const char* ae::_TypeName< x >::Get() { return #x; } \
   template <> void ae::_DefineType< x >( ae::Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
@@ -1829,19 +1832,19 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // External meta var registerer
 //------------------------------------------------------------------------------
-#define AE_META_VAR( c, v ) \
+#define AE_REGISTER_CLASS_VAR( c, v ) \
   static ae::_VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
 //------------------------------------------------------------------------------
 // External meta property registerer
 //------------------------------------------------------------------------------
-#define AE_META_PROPERTY( c, p ) \
+#define AE_REGISTER_CLASS_PROPERTY( c, p ) \
   static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
-// Define a new enum (must register with AE_ENUM_REGISTER)
-#define AE_ENUM( E, T, ... ) \
+//! Define a new enum (must register with AE_ENUM_REGISTER)
+#define AE_DEFINE_ENUM_CLASS( E, T, ... ) \
   enum class E : T { \
     __VA_ARGS__ \
   }; \
@@ -1857,8 +1860,8 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
     return os; \
   }
 
-// Register an enum defined with AE_ENUM
-#define AE_ENUM_REGISTER( E ) \
+//! Register an enum defined with AE_ENUM
+#define AE_REGISTER_ENUM_CLASS( E ) \
   AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
   AE_ENUM_##E ae_enum_creator_##E; \
   template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
@@ -1866,8 +1869,8 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // External c-style enum registerer
 //------------------------------------------------------------------------------
-// Register an already defined c-style enum type
-#define AE_META_ENUM( E ) \
+//! Register an already defined c-style enum type
+#define AE_REGISTER_ENUM( E ) \
   template <> \
   struct ae::_VarType< E > { \
     static ae::Var::Type GetType() { return ae::Var::Enum; } \
@@ -1878,8 +1881,8 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
   ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
   template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
 
-// Register an already defined c-style enum type where each value has a prefix
-#define AE_META_ENUM_PREFIX( E, PREFIX ) \
+//! Register an already defined c-style enum type where each value has a prefix
+#define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) \
   template <> \
   struct ae::_VarType< E > { \
     static ae::Var::Type GetType() { return ae::Var::Enum; } \
@@ -1890,19 +1893,19 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
   ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
   template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
 
-// Register c-style enum value
-#define AE_META_ENUM_VALUE( E, V ) \
+//! Register c-style enum value
+#define AE_REGISTER_ENUM_VALUE( E, V ) \
   ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #V, V );
 
-// Register c-style enum value with a manually specified name
-#define AE_META_ENUM_VALUE_NAME( E, V, N ) \
+//! Register c-style enum value with a manually specified name
+#define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) \
 ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 
 //------------------------------------------------------------------------------
 // External enum class registerer
 //------------------------------------------------------------------------------
-// Register an already defined enum class type
-#define AE_META_ENUM_CLASS( E ) \
+//! Register an already defined enum class type
+#define AE_REGISTER_ENUM_CLASS2( E ) \
   template <> \
   struct ae::_VarType< E > { \
     static ae::Var::Type GetType() { return ae::Var::Enum; } \
@@ -1914,8 +1917,8 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
   template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
   // @NOTE: Nested namespace declaration requires C++17
 
-// Register enum class value
-#define AE_META_ENUM_CLASS_VALUE( E, V ) \
+//! Register enum class value
+#define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
   namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
 
 //------------------------------------------------------------------------------
@@ -1929,13 +1932,15 @@ class Type;
 
 //------------------------------------------------------------------------------
 // External base meta object
+//! Base class for all meta registered objects. Inherit from this using
+//! ae::Inheritor and register your classes with AE_META_CLASS.
 //------------------------------------------------------------------------------
 class Object
 {
 public:
   virtual ~Object() {}
-  static const char* GetBaseTypeName() { return ""; }
-  static const ae::Type* GetBaseType() { return nullptr; }
+  static const char* GetParentTypeName() { return ""; }
+  static const ae::Type* GetParentType() { return nullptr; }
   ae::TypeId GetTypeId() const { return _metaTypeId; }
   ae::TypeId _metaTypeId = kAeInvalidMetaTypeId;
   ae::Str32 _typeName;
@@ -1944,29 +1949,28 @@ public:
 //------------------------------------------------------------------------------
 // External inheritor meta object
 //------------------------------------------------------------------------------
-template < typename Parent, typename Child >
+template < typename Parent, typename This >
 class Inheritor : public Parent
 {
 public:
-  typedef Parent aeBaseType;
   Inheritor();
-  static const char* GetBaseTypeName();
-  static const ae::Type* GetBaseType();
+  static const char* GetParentTypeName();
+  static const ae::Type* GetParentType();
 };
 
 //------------------------------------------------------------------------------
 // External meta functions
 //------------------------------------------------------------------------------
-uint32_t GetTypeCount();
-const Type* GetTypeByIndex( uint32_t i );
-const Type* GetTypeById( ae::TypeId id );
-const Type* GetTypeByName( const char* typeName );
-const Type* GetTypeFromObject( const ae::Object& obj );
-const Type* GetTypeFromObject( const ae::Object* obj );
-template < typename T > const Type* GetType();
-const class Enum* GetEnum( const char* enumName );
-ae::TypeId GetObjectTypeId( const ae::Object* obj );
-ae::TypeId GetTypeIdFromName( const char* name );
+uint32_t GetTypeCount(); //!< Get the number of registered ae::Type's
+const Type* GetTypeByIndex( uint32_t i ); //!< Get a registered ae::Type by index
+const Type* GetTypeById( ae::TypeId id ); //!< Get a registered ae::Type by id. Same as ae::Type::GetId()
+const Type* GetTypeByName( const char* typeName ); //!< Get a registered ae::Type from a type name
+const Type* GetTypeFromObject( const ae::Object& obj ); //!< Get a registered ae::Type from an ae::Object
+const Type* GetTypeFromObject( const ae::Object* obj ); //!< Get a registered ae::Type from a pointer to an ae::Object
+template < typename T > const Type* GetType(); //!< Get a registered ae::Type directly from a type
+const class Enum* GetEnum( const char* enumName ); //!< Get a registered ae::Enum by name
+ae::TypeId GetObjectTypeId( const ae::Object* obj ); //!< Get a registered ae::TypeId from an ae::Object
+ae::TypeId GetTypeIdFromName( const char* name ); //!< Get a registered ae::TypeId from a type name
   
 //------------------------------------------------------------------------------
 // Enum class
@@ -2089,8 +2093,8 @@ public:
   bool IsDefaultConstructible() const;
 
   // Inheritance info
-  const char* GetBaseTypeName() const;
-  const Type* GetBaseType() const;
+  const char* GetParentTypeName() const;
+  const Type* GetParentType() const;
   bool IsType( const Type* otherType ) const;
   template < typename T > bool IsType() const;
     
@@ -2124,6 +2128,8 @@ private:
 //------------------------------------------------------------------------------
 template< typename T, typename C > const T* Cast( const C* obj );
 template< typename T, typename C > T* Cast( C* obj );
+
+//! @}
 
 } // ae end
 
@@ -4202,23 +4208,23 @@ struct _VarType
   static const char* GetName();
 };
 
-template < typename Parent, typename Child >
-Inheritor< Parent, Child >::Inheritor()
+template < typename Parent, typename This >
+Inheritor< Parent, This >::Inheritor()
 {
-  const ae::Type* t = ae::GetTypeByName( ae::_TypeName< Child >::Get() );
+  const ae::Type* t = ae::GetTypeByName( ae::_TypeName< This >::Get() );
   AE_ASSERT_MSG( t, "No inheritor type" );
   ae::Object::_metaTypeId = t->GetId();
-  ae::Object::_typeName = ae::_TypeName< Child >::Get();
+  ae::Object::_typeName = ae::_TypeName< This >::Get();
 }
 
-template < typename Parent, typename Child >
-const char* Inheritor< Parent, Child >::GetBaseTypeName()
+template < typename Parent, typename This >
+const char* Inheritor< Parent, This >::GetParentTypeName()
 {
   return ae::_TypeName< Parent >::Get();
 }
 
-template < typename Parent, typename Child >
-const ae::Type* Inheritor< Parent, Child >::GetBaseType()
+template < typename Parent, typename This >
+const ae::Type* Inheritor< Parent, This >::GetParentType()
 {
   return ae::GetType( ae::_TypeName< Parent >::Get() );
 }
@@ -4501,7 +4507,7 @@ ae::Type::Init( const char* name, uint32_t index )
   m_id = GetTypeIdFromName( name );
   m_size = sizeof( T );
   m_align = alignof( T );
-  m_parent = T::GetBaseTypeName();
+  m_parent = T::GetParentTypeName();
   m_isAbstract = false;
   m_isPolymorphic = std::is_polymorphic< T >::value;
   m_isDefaultConstructible = true;
@@ -4515,7 +4521,7 @@ ae::Type::Init( const char* name, uint32_t index )
   m_id = GetTypeIdFromName( name );
   m_size = sizeof( T );
   m_align = 0;
-  m_parent = T::GetBaseTypeName();
+  m_parent = T::GetParentTypeName();
   m_isAbstract = std::is_abstract< T >::value;
   m_isPolymorphic = std::is_polymorphic< T >::value;
   m_isDefaultConstructible = std::is_default_constructible< T >::value;
@@ -10634,7 +10640,7 @@ const ae::Var* ae::Type::GetVarByName( const char* name ) const
   return ( i >= 0 ) ? &m_vars[ i ] : nullptr;
 }
 
-const ae::Type* ae::Type::GetBaseType() const
+const ae::Type* ae::Type::GetParentType() const
 {
   return GetTypeByName( m_parent.c_str() );
 }
@@ -10642,7 +10648,7 @@ const ae::Type* ae::Type::GetBaseType() const
 bool ae::Type::IsType( const Type* otherType ) const
 {
   AE_ASSERT( otherType );
-  for ( const ae::Type* baseType = this; baseType; baseType = baseType->GetBaseType() )
+  for ( const ae::Type* baseType = this; baseType; baseType = baseType->GetParentType() )
   {
     if ( baseType == otherType )
     {
@@ -10835,7 +10841,7 @@ bool ae::Type::HasNew() const { return m_placementNew; }
 bool ae::Type::IsAbstract() const { return m_isAbstract; }
 bool ae::Type::IsPolymorphic() const { return m_isPolymorphic; }
 bool ae::Type::IsDefaultConstructible() const { return m_isDefaultConstructible; }
-const char* ae::Type::GetBaseTypeName() const { return m_parent.c_str(); }
+const char* ae::Type::GetParentTypeName() const { return m_parent.c_str(); }
 
 void ae::Type::m_AddProp( const char* prop, const char* value )
 {

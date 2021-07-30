@@ -32,7 +32,7 @@
 //------------------------------------------------------------------------------
 // TestEnumClass
 //------------------------------------------------------------------------------
-AE_ENUM( TestEnumClass, int32_t,
+AE_DEFINE_ENUM_CLASS( TestEnumClass, int32_t,
   NegativeOne = -1,
   Zero,
   One,
@@ -45,7 +45,7 @@ AE_ENUM( TestEnumClass, int32_t,
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
-AE_ENUM( PlayerState, uint16_t,
+AE_DEFINE_ENUM_CLASS( PlayerState, uint16_t,
   Idle,
   Run,
   Jump
