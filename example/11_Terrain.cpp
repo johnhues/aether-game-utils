@@ -197,9 +197,9 @@ void WriteObjects( ae::FileSystem* vfs, const ae::Array< Object* >& objects )
     Object* object = objects[ i ];
     
     aeStr16 type = "";
-    if ( aeCast< ae::SdfBox >( object->shape ) ) { type = "box"; }
-    else if ( aeCast< ae::SdfCylinder >( object->shape ) ) { type = "cylinder"; }
-    else if ( aeCast< ae::SdfHeightmap >( object->shape ) ) { type = "heightmap"; }
+    if ( ae::Cast< ae::SdfBox >( object->shape ) ) { type = "box"; }
+    else if ( ae::Cast< ae::SdfCylinder >( object->shape ) ) { type = "cylinder"; }
+    else if ( ae::Cast< ae::SdfHeightmap >( object->shape ) ) { type = "heightmap"; }
     else { type = "ray"; }
     wStream.SerializeString( type );
     
@@ -437,13 +437,13 @@ int main()
             const char* materialNames[] = { "grass", "sand" };
             changed |= ImGui::Combo( "material", (int32_t*)&currentShape->materialId, materialNames, countof( materialNames ) );
 
-            if ( auto box = aeCast< ae::SdfBox >( currentShape ) )
+            if ( auto box = ae::Cast< ae::SdfBox >( currentShape ) )
             {
               aeFloat3 halfSize = box->GetHalfSize();
               float minLength = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
               changed |= ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, minLength );
             }
-            else if ( auto cylinder = aeCast< ae::SdfCylinder >( currentShape ) )
+            else if ( auto cylinder = ae::Cast< ae::SdfCylinder >( currentShape ) )
             {
               changed |= ImGui::SliderFloat( "top", &cylinder->top, 0.0f, 1.0f );
               changed |= ImGui::SliderFloat( "bottom", &cylinder->bottom, 0.0f, 1.0f );

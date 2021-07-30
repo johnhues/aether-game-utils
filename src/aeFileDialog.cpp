@@ -40,36 +40,7 @@ namespace ae {
 #if !_AE_APPLE_ && !_AE_LINUX_ // No std::path support
 
 // General Helpers
-void FixPathExtension( const char* extension, std::filesystem::path* pathOut )
-{
-  // Set if path has no extension
-  if ( !pathOut->has_extension() )
-  {
-    pathOut->replace_extension( extension );
-    return;
-  }
-
-  // Set if extension chars are just periods
-  std::string pathExt = pathOut->extension().string();
-  if ( pathExt[ pathExt.length() - 1 ] == '.' )
-  {
-    pathOut->concat( std::string( "." ) + extension );
-    return;
-  }
-}
-
-//------------------------------------------------------------------------------
-// FileFilter member functions
-//------------------------------------------------------------------------------
-FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCount )
-{
-  extensionCount = aeMath::Min( extensionCount, countof( extensions ) );
-  description = desc;
-  for ( uint32_t i = 0; i < extensionCount; i++ )
-  {
-    extensions[ i ] = ext[ i ];
-  }
-}
+void FixPathExtension( const char* extension, std::filesystem::path* pathOut );
 
 #if _AE_WINDOWS_
 
