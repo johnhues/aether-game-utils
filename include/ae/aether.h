@@ -1240,6 +1240,20 @@ enum class Key
 };
 
 //------------------------------------------------------------------------------
+// ae::MouseState class
+//------------------------------------------------------------------------------
+class MouseState
+{
+public:
+  bool leftButton = false;
+  bool middleButton = false;
+  bool rightButton = false;
+  ae::Vec2 position = ae::Vec2( 0.0f );
+  ae::Vec2 scroll = ae::Vec2( 0.0f );
+  bool usingTouch = false;
+};
+
+//------------------------------------------------------------------------------
 // ae::Input class
 //------------------------------------------------------------------------------
 class Input
@@ -1250,9 +1264,15 @@ public:
   
   bool Get( ae::Key key ) const;
   bool GetPrev( ae::Key key ) const;
-  bool quit = false;
   
+  MouseState mouseState;
+  MouseState mouseStatePrev;
+  
+  bool quit = false;
+
 // private:
+  void m_SetMousePos( ae::Int2 pos );
+  ae::Window* m_window = nullptr;
   bool m_keys[ 256 ];
   bool m_keysPrev[ 256 ];
 };
@@ -6169,9 +6189,24 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 - (NSSize)windowWillResize:(NSWindow*)sender toSize:(NSSize)frameSize
 {
   AE_ASSERT( _aewindow );
-  AE_ASSERT( _aewindow->graphicsDevice );
+  NSWindow* window = (NSWindow*)_aewindow->window;
+  AE_ASSERT( window );
+  NSPoint mouseScreenPos = [NSEvent mouseLocation];
+  NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
+  _aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
   _aewindow->m_UpdateSize( frameSize.width, frameSize.height, sender.backingScaleFactor );
+  _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
   return frameSize;
+}
+- (void)windowDidMove:(NSNotification *)notification
+{
+  AE_ASSERT( _aewindow );
+  NSWindow* window = (NSWindow*)_aewindow->window;
+  AE_ASSERT( window );
+  NSPoint mouseScreenPos = [NSEvent mouseLocation];
+  NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
+  _aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
+  _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
 }
 @end
 
@@ -6488,6 +6523,7 @@ EM_BOOL ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent
 
 void Input::Initialize( Window* window )
 {
+  m_window = window;
   if ( window )
   {
     window->input = this;
@@ -6504,6 +6540,9 @@ void Input::Initialize( Window* window )
 void Input::Pump()
 {
   memcpy( m_keysPrev, m_keys, sizeof( m_keys ) );
+  mouseStatePrev = mouseState;
+  mouseState.scroll.x = 0.0f;
+  mouseState.scroll.y = 0.0f;
 
 #if _AE_WINDOWS_
   MSG msg;
@@ -6724,31 +6763,44 @@ void Input::Pump()
       switch ( event.type )
       {
           // Mouse
-        case NSEventTypeMouseEntered:
-          //AE_INFO( "mouse enter" );
-          break;
-        case NSEventTypeMouseExited:
-          //AE_INFO( "mouse exit" );
-          break;
-        case NSEventTypeMouseMoved:
+        case NSEventTypeMouseMoved: // @NOTE: Move events are not sent if any mouse button is clicked
         case NSEventTypeLeftMouseDragged:
         case NSEventTypeRightMouseDragged:
-          //AE_INFO( "mouse moved" );
+        case NSEventTypeOtherMouseDragged:
+        {
+          NSPoint p = [NSEvent mouseLocation];
+          m_SetMousePos( ae::Int2( p.x, p.y ) );
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
+        }
         case NSEventTypeLeftMouseDown:
-          AE_INFO( "mouse left down" );
+          mouseState.leftButton = true;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeLeftMouseUp:
-          AE_INFO( "mouse left up" );
+          mouseState.leftButton = false;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeRightMouseDown:
-          AE_INFO( "mouse right down" );
+          mouseState.rightButton = true;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeRightMouseUp:
-          AE_INFO( "mouse right up" );
+          mouseState.rightButton = false;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          break;
+        case NSEventTypeOtherMouseDown:
+          mouseState.middleButton = true;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          break;
+        case NSEventTypeOtherMouseUp:
+          mouseState.middleButton = false;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeScrollWheel:
-          AE_INFO( "mouse scroll" );
+          mouseState.scroll.x += event.deltaX;
+          mouseState.scroll.y += event.deltaY;
+          // Scroll is never NSEventSubtypeTouch
           break;
         case NSEventTypeKeyDown:
         case NSEventTypeKeyUp:
@@ -6901,6 +6953,13 @@ bool Input::Get( ae::Key key ) const
 bool Input::GetPrev( ae::Key key ) const
 {
   return m_keysPrev[ static_cast< int >( key ) ];
+}
+
+void Input::m_SetMousePos( ae::Int2 pos )
+{
+  AE_ASSERT( m_window );
+  pos -= m_window->GetPosition();
+  mouseState.position = pos;
 }
 
 //------------------------------------------------------------------------------
