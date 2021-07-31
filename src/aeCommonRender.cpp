@@ -316,13 +316,13 @@ void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader
       count++;
     }
     // @TODO: Should set all vertices first then render multiple times
-    m_vertexData.SetVertices( vertices, scratch.Length() );
+    m_vertexData.SetVertices( vertices, count * 4 );
 
     aeUniformList uniforms;
     uniforms.Set( "u_worldToScreen", worldToScreen );
     uniforms.Set( "u_tex", texture );
 
-    m_vertexData.Render( shader, m_count * 2, uniforms );
+    m_vertexData.Render( shader, count * 2, uniforms );
   }
 }
 
