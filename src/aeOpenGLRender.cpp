@@ -798,7 +798,8 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   hash.HashBasicType( m_depthTest );
   hash.HashBasicType( m_culling );
   hash.HashBasicType( m_wireframe );
-  if ( s_activeHash != hash.Get() )
+  bool shaderDirty = s_activeHash != hash.Get();
+  if ( shaderDirty )
   {
     s_activeHash = hash.Get();
     
@@ -864,7 +865,8 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     glUseProgram( m_program );
   }
   
-  if ( s_uniformHash == uniforms.GetHash() )
+  // Always update uniforms after a shader change
+  if ( !shaderDirty && s_uniformHash == uniforms.GetHash() )
   {
     return;
   }
