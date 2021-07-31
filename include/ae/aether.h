@@ -467,7 +467,7 @@ struct Vec4 : public _VecT< Vec4 >
 class Matrix4
 {
 public:
-  float d[ 16 ];
+  float data[ 16 ];
 
   Matrix4() = default;
   Matrix4( const Matrix4& ) = default;
@@ -484,7 +484,7 @@ public:
   static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
   static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
-  bool operator==( const Matrix4& o ) const { return memcmp( o.d, d, sizeof(d) ) == 0; }
+  bool operator==( const Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
   bool operator!=( const Matrix4& o ) const { return !operator== ( o ); }
   Vec4 operator*( const Vec4& v ) const;
   Matrix4 operator*( const Matrix4& m ) const;
@@ -514,10 +514,10 @@ public:
 
 inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
 {
-  os << mat.d[ 0 ] << " " << mat.d[ 1 ] << " " << mat.d[ 2 ] << " " << mat.d[ 3 ]
-    << " " << mat.d[ 4 ] << " " << mat.d[ 5 ] << " " << mat.d[ 6 ] << " " << mat.d[ 7 ]
-    << " " << mat.d[ 8 ] << " " << mat.d[ 9 ] << " " << mat.d[ 10 ] << " " << mat.d[ 11 ]
-    << " " << mat.d[ 12 ] << " " << mat.d[ 13 ] << " " << mat.d[ 14 ] << " " << mat.d[ 15 ];
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
   return os;
 }
 
@@ -4816,20 +4816,20 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 Matrix4 Matrix4::Identity()
 {
   Matrix4 r;
-  r.d[ 0 ] = 1; r.d[ 4 ] = 0; r.d[ 8 ] = 0;  r.d[ 12 ] = 0;
-  r.d[ 1 ] = 0; r.d[ 5 ] = 1; r.d[ 9 ] = 0;  r.d[ 13 ] = 0;
-  r.d[ 2 ] = 0; r.d[ 6 ] = 0; r.d[ 10 ] = 1; r.d[ 14 ] = 0;
-  r.d[ 3 ] = 0; r.d[ 7 ] = 0; r.d[ 11 ] = 0; r.d[ 15 ] = 1;
+  r.data[ 0 ] = 1; r.data[ 4 ] = 0; r.data[ 8 ] = 0;  r.data[ 12 ] = 0;
+  r.data[ 1 ] = 0; r.data[ 5 ] = 1; r.data[ 9 ] = 0;  r.data[ 13 ] = 0;
+  r.data[ 2 ] = 0; r.data[ 6 ] = 0; r.data[ 10 ] = 1; r.data[ 14 ] = 0;
+  r.data[ 3 ] = 0; r.data[ 7 ] = 0; r.data[ 11 ] = 0; r.data[ 15 ] = 1;
   return r;
 }
 
 Matrix4 Matrix4::Translation( const Vec3& t )
 {
   Matrix4 r;
-  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = t.x;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;  r.d[ 13 ] = t.y;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = 1.0f; r.d[ 14 ] = t.z;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = t.x;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;  r.data[ 13 ] = t.y;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = 1.0f; r.data[ 14 ] = t.z;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4848,7 +4848,7 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
   removeRotation.SetRow( 0, right0 ); // right -> ( 1, 0, 0 )
   removeRotation.SetRow( 1, forward0 ); // forward -> ( 0, 1, 0 )
   removeRotation.SetRow( 2, up0 ); // up -> ( 0, 0, 1 )
-  removeRotation.d[ 15 ] = 1;
+  removeRotation.data[ 15 ] = 1;
 
   // Rotate
   forward1.Normalize();
@@ -4864,7 +4864,7 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
   newRotation.SetAxis( 0, right1 ); // ( 1, 0, 0 ) -> right
   newRotation.SetAxis( 1, forward1 ); // ( 0, 1, 0 ) -> forward
   newRotation.SetAxis( 2, up1 ); // ( 0, 0, 1 ) -> up
-  newRotation.d[ 15 ] = 1;
+  newRotation.data[ 15 ] = 1;
 
   return newRotation * removeRotation;
 }
@@ -4872,30 +4872,30 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 Matrix4 Matrix4::RotationX( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f;          r.d[ 8 ] = 0.0f;           r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = cosf( angle ); r.d[ 9 ] = -sinf( angle ); r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = sinf( angle ); r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f;          r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f;          r.data[ 8 ] = 0.0f;           r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = cosf( angle ); r.data[ 9 ] = -sinf( angle ); r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = sinf( angle ); r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f;          r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationY( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = cosf( angle );  r.d[ 4 ] = 0.0f; r.d[ 8 ] = sinf( angle );  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f;           r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;           r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = -sinf( angle ); r.d[ 6 ] = 0.0f; r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f;           r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = cosf( angle );  r.data[ 4 ] = 0.0f; r.data[ 8 ] = sinf( angle );  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f;           r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;           r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = -sinf( angle ); r.data[ 6 ] = 0.0f; r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f;           r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationZ( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = cosf( angle ); r.d[ 4 ] = -sinf( angle ); r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = sinf( angle ); r.d[ 5 ] = cosf( angle );  r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f;          r.d[ 6 ] = 0.0f;           r.d[ 10 ] = 1.0f; r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f;          r.d[ 7 ] = 0.0f;           r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = cosf( angle ); r.data[ 4 ] = -sinf( angle ); r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = sinf( angle ); r.data[ 5 ] = cosf( angle );  r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f;          r.data[ 6 ] = 0.0f;           r.data[ 10 ] = 1.0f; r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f;          r.data[ 7 ] = 0.0f;           r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4907,10 +4907,10 @@ Matrix4 Matrix4::Scaling( const Vec3& s )
 Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
 {
   Matrix4 r;
-  r.d[ 0 ] = sx;   r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = sy;   r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = sz;   r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = sx;   r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = sy;   r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = sz;   r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4935,7 +4935,7 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
   result.SetRow( 1, up );
   result.SetRow( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
   result.SetAxis( 3, Vec3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
-  result.d[ 15 ] = 1;
+  result.data[ 15 ] = 1;
   return result;
 }
 
@@ -4971,42 +4971,42 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
   
   Matrix4 result;
   memset( &result, 0, sizeof( result ) );
-  result.d[ 0 ] = a;
-  result.d[ 5 ] = b;
-  result.d[ 10 ] = A;
-  result.d[ 14 ] = B;
-  result.d[ 11 ] = -1;
+  result.data[ 0 ] = a;
+  result.data[ 5 ] = b;
+  result.data[ 10 ] = A;
+  result.data[ 14 ] = B;
+  result.data[ 11 ] = -1;
   return result;
 }
 
 Vec4 Matrix4::operator*(const Vec4& v) const
 {
   return Vec4(
-    v.x*d[0]  + v.y*d[4]  + v.z*d[8]  + v.w*d[12],
-    v.x*d[1]  + v.y*d[5]  + v.z*d[9]  + v.w*d[13],
-    v.x*d[2]  + v.y*d[6]  + v.z*d[10] + v.w*d[14],
-    v.x*d[3] + v.y*d[7] + v.z*d[11] + v.w*d[15]);
+    v.x*data[0]  + v.y*data[4]  + v.z*data[8]  + v.w*data[12],
+    v.x*data[1]  + v.y*data[5]  + v.z*data[9]  + v.w*data[13],
+    v.x*data[2]  + v.y*data[6]  + v.z*data[10] + v.w*data[14],
+    v.x*data[3] + v.y*data[7] + v.z*data[11] + v.w*data[15]);
 }
 
 Matrix4 Matrix4::operator*(const Matrix4& m) const
 {
   Matrix4 r;
-  r.d[0]=(m.d[0]*d[0])+(m.d[1]*d[4])+(m.d[2]*d[8])+(m.d[3]*d[12]);
-  r.d[1]=(m.d[0]*d[1])+(m.d[1]*d[5])+(m.d[2]*d[9])+(m.d[3]*d[13]);
-  r.d[2]=(m.d[0]*d[2])+(m.d[1]*d[6])+(m.d[2]*d[10])+(m.d[3]*d[14]);
-  r.d[3]=(m.d[0]*d[3])+(m.d[1]*d[7])+(m.d[2]*d[11])+(m.d[3]*d[15]);
-  r.d[4]=(m.d[4]*d[0])+(m.d[5]*d[4])+(m.d[6]*d[8])+(m.d[7]*d[12]);
-  r.d[5]=(m.d[4]*d[1])+(m.d[5]*d[5])+(m.d[6]*d[9])+(m.d[7]*d[13]);
-  r.d[6]=(m.d[4]*d[2])+(m.d[5]*d[6])+(m.d[6]*d[10])+(m.d[7]*d[14]);
-  r.d[7]=(m.d[4]*d[3])+(m.d[5]*d[7])+(m.d[6]*d[11])+(m.d[7]*d[15]);
-  r.d[8]=(m.d[8]*d[0])+(m.d[9]*d[4])+(m.d[10]*d[8])+(m.d[11]*d[12]);
-  r.d[9]=(m.d[8]*d[1])+(m.d[9]*d[5])+(m.d[10]*d[9])+(m.d[11]*d[13]);
-  r.d[10]=(m.d[8]*d[2])+(m.d[9]*d[6])+(m.d[10]*d[10])+(m.d[11]*d[14]);
-  r.d[11]=(m.d[8]*d[3])+(m.d[9]*d[7])+(m.d[10]*d[11])+(m.d[11]*d[15]);
-  r.d[12]=(m.d[12]*d[0])+(m.d[13]*d[4])+(m.d[14]*d[8])+(m.d[15]*d[12]);
-  r.d[13]=(m.d[12]*d[1])+(m.d[13]*d[5])+(m.d[14]*d[9])+(m.d[15]*d[13]);
-  r.d[14]=(m.d[12]*d[2])+(m.d[13]*d[6])+(m.d[14]*d[10])+(m.d[15]*d[14]);
-  r.d[15]=(m.d[12]*d[3])+(m.d[13]*d[7])+(m.d[14]*d[11])+(m.d[15]*d[15]);
+  r.data[0]=(m.data[0]*data[0])+(m.data[1]*data[4])+(m.data[2]*data[8])+(m.data[3]*data[12]);
+  r.data[1]=(m.data[0]*data[1])+(m.data[1]*data[5])+(m.data[2]*data[9])+(m.data[3]*data[13]);
+  r.data[2]=(m.data[0]*data[2])+(m.data[1]*data[6])+(m.data[2]*data[10])+(m.data[3]*data[14]);
+  r.data[3]=(m.data[0]*data[3])+(m.data[1]*data[7])+(m.data[2]*data[11])+(m.data[3]*data[15]);
+  r.data[4]=(m.data[4]*data[0])+(m.data[5]*data[4])+(m.data[6]*data[8])+(m.data[7]*data[12]);
+  r.data[5]=(m.data[4]*data[1])+(m.data[5]*data[5])+(m.data[6]*data[9])+(m.data[7]*data[13]);
+  r.data[6]=(m.data[4]*data[2])+(m.data[5]*data[6])+(m.data[6]*data[10])+(m.data[7]*data[14]);
+  r.data[7]=(m.data[4]*data[3])+(m.data[5]*data[7])+(m.data[6]*data[11])+(m.data[7]*data[15]);
+  r.data[8]=(m.data[8]*data[0])+(m.data[9]*data[4])+(m.data[10]*data[8])+(m.data[11]*data[12]);
+  r.data[9]=(m.data[8]*data[1])+(m.data[9]*data[5])+(m.data[10]*data[9])+(m.data[11]*data[13]);
+  r.data[10]=(m.data[8]*data[2])+(m.data[9]*data[6])+(m.data[10]*data[10])+(m.data[11]*data[14]);
+  r.data[11]=(m.data[8]*data[3])+(m.data[9]*data[7])+(m.data[10]*data[11])+(m.data[11]*data[15]);
+  r.data[12]=(m.data[12]*data[0])+(m.data[13]*data[4])+(m.data[14]*data[8])+(m.data[15]*data[12]);
+  r.data[13]=(m.data[12]*data[1])+(m.data[13]*data[5])+(m.data[14]*data[9])+(m.data[15]*data[13]);
+  r.data[14]=(m.data[12]*data[2])+(m.data[13]*data[6])+(m.data[14]*data[10])+(m.data[15]*data[14]);
+  r.data[15]=(m.data[12]*data[3])+(m.data[13]*data[7])+(m.data[14]*data[11])+(m.data[15]*data[15]);
   return r;
 }
 
@@ -5024,123 +5024,123 @@ Matrix4 Matrix4::GetInverse() const
 {
   Matrix4 r;
 
-  r.d[0] = d[5]  * d[10] * d[15] - 
-    d[5]  * d[11] * d[14] - 
-    d[9]  * d[6]  * d[15] + 
-    d[9]  * d[7]  * d[14] +
-    d[13] * d[6]  * d[11] - 
-    d[13] * d[7]  * d[10];
+  r.data[0] = data[5]  * data[10] * data[15] -
+    data[5]  * data[11] * data[14] -
+    data[9]  * data[6]  * data[15] +
+    data[9]  * data[7]  * data[14] +
+    data[13] * data[6]  * data[11] -
+    data[13] * data[7]  * data[10];
 
-  r.d[4] = -d[4]  * d[10] * d[15] + 
-    d[4]  * d[11] * d[14] + 
-    d[8]  * d[6]  * d[15] - 
-    d[8]  * d[7]  * d[14] - 
-    d[12] * d[6]  * d[11] + 
-    d[12] * d[7]  * d[10];
+  r.data[4] = -data[4]  * data[10] * data[15] +
+    data[4]  * data[11] * data[14] +
+    data[8]  * data[6]  * data[15] -
+    data[8]  * data[7]  * data[14] -
+    data[12] * data[6]  * data[11] +
+    data[12] * data[7]  * data[10];
 
-  r.d[8] = d[4]  * d[9] * d[15] - 
-    d[4]  * d[11] * d[13] - 
-    d[8]  * d[5] * d[15] + 
-    d[8]  * d[7] * d[13] + 
-    d[12] * d[5] * d[11] - 
-    d[12] * d[7] * d[9];
+  r.data[8] = data[4]  * data[9] * data[15] -
+    data[4]  * data[11] * data[13] -
+    data[8]  * data[5] * data[15] +
+    data[8]  * data[7] * data[13] +
+    data[12] * data[5] * data[11] -
+    data[12] * data[7] * data[9];
 
-  r.d[12] = -d[4]  * d[9] * d[14] + 
-    d[4]  * d[10] * d[13] +
-    d[8]  * d[5] * d[14] - 
-    d[8]  * d[6] * d[13] - 
-    d[12] * d[5] * d[10] + 
-    d[12] * d[6] * d[9];
+  r.data[12] = -data[4]  * data[9] * data[14] +
+    data[4]  * data[10] * data[13] +
+    data[8]  * data[5] * data[14] -
+    data[8]  * data[6] * data[13] -
+    data[12] * data[5] * data[10] +
+    data[12] * data[6] * data[9];
 
-  r.d[1] = -d[1]  * d[10] * d[15] + 
-    d[1]  * d[11] * d[14] + 
-    d[9]  * d[2] * d[15] - 
-    d[9]  * d[3] * d[14] - 
-    d[13] * d[2] * d[11] + 
-    d[13] * d[3] * d[10];
+  r.data[1] = -data[1]  * data[10] * data[15] +
+    data[1]  * data[11] * data[14] +
+    data[9]  * data[2] * data[15] -
+    data[9]  * data[3] * data[14] -
+    data[13] * data[2] * data[11] +
+    data[13] * data[3] * data[10];
 
-  r.d[5] = d[0]  * d[10] * d[15] - 
-    d[0]  * d[11] * d[14] - 
-    d[8]  * d[2] * d[15] + 
-    d[8]  * d[3] * d[14] + 
-    d[12] * d[2] * d[11] - 
-    d[12] * d[3] * d[10];
+  r.data[5] = data[0]  * data[10] * data[15] -
+    data[0]  * data[11] * data[14] -
+    data[8]  * data[2] * data[15] +
+    data[8]  * data[3] * data[14] +
+    data[12] * data[2] * data[11] -
+    data[12] * data[3] * data[10];
 
-  r.d[9] = -d[0]  * d[9] * d[15] + 
-    d[0]  * d[11] * d[13] + 
-    d[8]  * d[1] * d[15] - 
-    d[8]  * d[3] * d[13] - 
-    d[12] * d[1] * d[11] + 
-    d[12] * d[3] * d[9];
+  r.data[9] = -data[0]  * data[9] * data[15] +
+    data[0]  * data[11] * data[13] +
+    data[8]  * data[1] * data[15] -
+    data[8]  * data[3] * data[13] -
+    data[12] * data[1] * data[11] +
+    data[12] * data[3] * data[9];
 
-  r.d[13] = d[0]  * d[9] * d[14] - 
-    d[0]  * d[10] * d[13] - 
-    d[8]  * d[1] * d[14] + 
-    d[8]  * d[2] * d[13] + 
-    d[12] * d[1] * d[10] - 
-    d[12] * d[2] * d[9];
+  r.data[13] = data[0]  * data[9] * data[14] -
+    data[0]  * data[10] * data[13] -
+    data[8]  * data[1] * data[14] +
+    data[8]  * data[2] * data[13] +
+    data[12] * data[1] * data[10] -
+    data[12] * data[2] * data[9];
 
-  r.d[2] = d[1]  * d[6] * d[15] - 
-    d[1]  * d[7] * d[14] - 
-    d[5]  * d[2] * d[15] + 
-    d[5]  * d[3] * d[14] + 
-    d[13] * d[2] * d[7] - 
-    d[13] * d[3] * d[6];
+  r.data[2] = data[1]  * data[6] * data[15] -
+    data[1]  * data[7] * data[14] -
+    data[5]  * data[2] * data[15] +
+    data[5]  * data[3] * data[14] +
+    data[13] * data[2] * data[7] -
+    data[13] * data[3] * data[6];
 
-  r.d[6] = -d[0]  * d[6] * d[15] + 
-    d[0]  * d[7] * d[14] + 
-    d[4]  * d[2] * d[15] - 
-    d[4]  * d[3] * d[14] - 
-    d[12] * d[2] * d[7] + 
-    d[12] * d[3] * d[6];
+  r.data[6] = -data[0]  * data[6] * data[15] +
+    data[0]  * data[7] * data[14] +
+    data[4]  * data[2] * data[15] -
+    data[4]  * data[3] * data[14] -
+    data[12] * data[2] * data[7] +
+    data[12] * data[3] * data[6];
 
-  r.d[10] = d[0]  * d[5] * d[15] - 
-    d[0]  * d[7] * d[13] - 
-    d[4]  * d[1] * d[15] + 
-    d[4]  * d[3] * d[13] + 
-    d[12] * d[1] * d[7] - 
-    d[12] * d[3] * d[5];
+  r.data[10] = data[0]  * data[5] * data[15] -
+    data[0]  * data[7] * data[13] -
+    data[4]  * data[1] * data[15] +
+    data[4]  * data[3] * data[13] +
+    data[12] * data[1] * data[7] -
+    data[12] * data[3] * data[5];
 
-  r.d[14] = -d[0]  * d[5] * d[14] + 
-    d[0]  * d[6] * d[13] + 
-    d[4]  * d[1] * d[14] - 
-    d[4]  * d[2] * d[13] - 
-    d[12] * d[1] * d[6] + 
-    d[12] * d[2] * d[5];
+  r.data[14] = -data[0]  * data[5] * data[14] +
+    data[0]  * data[6] * data[13] +
+    data[4]  * data[1] * data[14] -
+    data[4]  * data[2] * data[13] -
+    data[12] * data[1] * data[6] +
+    data[12] * data[2] * data[5];
 
-  r.d[3] = -d[1] * d[6] * d[11] + 
-    d[1] * d[7] * d[10] + 
-    d[5] * d[2] * d[11] - 
-    d[5] * d[3] * d[10] - 
-    d[9] * d[2] * d[7] + 
-    d[9] * d[3] * d[6];
+  r.data[3] = -data[1] * data[6] * data[11] +
+    data[1] * data[7] * data[10] +
+    data[5] * data[2] * data[11] -
+    data[5] * data[3] * data[10] -
+    data[9] * data[2] * data[7] +
+    data[9] * data[3] * data[6];
 
-  r.d[7] = d[0] * d[6] * d[11] - 
-    d[0] * d[7] * d[10] - 
-    d[4] * d[2] * d[11] + 
-    d[4] * d[3] * d[10] + 
-    d[8] * d[2] * d[7] - 
-    d[8] * d[3] * d[6];
+  r.data[7] = data[0] * data[6] * data[11] -
+    data[0] * data[7] * data[10] -
+    data[4] * data[2] * data[11] +
+    data[4] * data[3] * data[10] +
+    data[8] * data[2] * data[7] -
+    data[8] * data[3] * data[6];
 
-  r.d[11] = -d[0] * d[5] * d[11] + 
-    d[0] * d[7] * d[9] + 
-    d[4] * d[1] * d[11] - 
-    d[4] * d[3] * d[9] - 
-    d[8] * d[1] * d[7] + 
-    d[8] * d[3] * d[5];
+  r.data[11] = -data[0] * data[5] * data[11] +
+    data[0] * data[7] * data[9] +
+    data[4] * data[1] * data[11] -
+    data[4] * data[3] * data[9] -
+    data[8] * data[1] * data[7] +
+    data[8] * data[3] * data[5];
 
-  r.d[15] = d[0] * d[5] * d[10] - 
-    d[0] * d[6] * d[9] - 
-    d[4] * d[1] * d[10] + 
-    d[4] * d[2] * d[9] + 
-    d[8] * d[1] * d[6] - 
-    d[8] * d[2] * d[5];
+  r.data[15] = data[0] * data[5] * data[10] -
+    data[0] * data[6] * data[9] -
+    data[4] * data[1] * data[10] +
+    data[4] * data[2] * data[9] +
+    data[8] * data[1] * data[6] -
+    data[8] * data[2] * data[5];
 
-  float det = d[0] * r.d[0] + d[1] * r.d[4] + d[2] * r.d[8] + d[3] * r.d[12];
+  float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
   det = 1.0f / det;
   for ( uint32_t i = 0; i < 16; i++ )
   {
-    r.d[ i ] *= det;
+    r.data[ i ] *= det;
   }
   return r;
 }
@@ -5148,15 +5148,15 @@ Matrix4 Matrix4::GetInverse() const
 void Matrix4::SetRotation( const Quaternion& q2 )
 {
   Quaternion q = q2.GetInverse();
-  d[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-  d[4] = 2*q.i*q.j + 2*q.k*q.r;
-  d[8] = 2*q.i*q.k - 2*q.j*q.r;
-  d[1] = 2*q.i*q.j - 2*q.k*q.r;
-  d[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-  d[9] = 2*q.j*q.k + 2*q.i*q.r;
-  d[2] = 2*q.i*q.k + 2*q.j*q.r;
-  d[6] = 2*q.j*q.k - 2*q.i*q.r;
-  d[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+  data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
+  data[4] = 2*q.i*q.j + 2*q.k*q.r;
+  data[8] = 2*q.i*q.k - 2*q.j*q.r;
+  data[1] = 2*q.i*q.j - 2*q.k*q.r;
+  data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
+  data[9] = 2*q.j*q.k + 2*q.i*q.r;
+  data[2] = 2*q.i*q.k + 2*q.j*q.r;
+  data[6] = 2*q.j*q.k - 2*q.i*q.r;
+  data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
 }
 
 Quaternion Matrix4::GetRotation() const
@@ -5166,15 +5166,15 @@ Quaternion Matrix4::GetRotation() const
   Matrix4 t = *this;
   t.SetScale( Vec3( 1.0f ) );
 
-  #define m00 t.d[ 0 ]
-  #define m01 t.d[ 4 ]
-  #define m02 t.d[ 8 ]
-  #define m10 t.d[ 1 ]
-  #define m11 t.d[ 5 ]
-  #define m12 t.d[ 9 ]
-  #define m20 t.d[ 2 ]
-  #define m21 t.d[ 6 ]
-  #define m22 t.d[ 10 ]
+  #define m00 t.data[ 0 ]
+  #define m01 t.data[ 4 ]
+  #define m02 t.data[ 8 ]
+  #define m10 t.data[ 1 ]
+  #define m11 t.data[ 5 ]
+  #define m12 t.data[ 9 ]
+  #define m20 t.data[ 2 ]
+  #define m21 t.data[ 6 ]
+  #define m22 t.data[ 10 ]
 
   float trace = m00 + m11 + m22;
   if ( trace > 0.0f )
@@ -5231,61 +5231,61 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetAxis( uint32_t col ) const
 {
-    return Vec3( d[ col * 4 ], d[ col * 4 + 1 ], d[ col * 4 + 2 ] );
+    return Vec3( data[ col * 4 ], data[ col * 4 + 1 ], data[ col * 4 + 2 ] );
 }
 
 void Matrix4::SetAxis( uint32_t col, const Vec3& v )
 {
-  d[ col * 4 ] = v.x;
-  d[ col * 4 + 1 ] = v.y;
-  d[ col * 4 + 2 ] = v.z;
+  data[ col * 4 ] = v.x;
+  data[ col * 4 + 1 ] = v.y;
+  data[ col * 4 + 2 ] = v.z;
 }
 
 Vec4 Matrix4::GetRow( uint32_t row ) const
 {
-  return Vec4( d[ row ], d[ row + 4 ], d[ row + 8 ], d[ row + 12 ] );
+  return Vec4( data[ row ], data[ row + 4 ], data[ row + 8 ], data[ row + 12 ] );
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec3 &v )
 {
-  d[ row ] = v.x;
-  d[ row + 4 ] = v.y;
-  d[ row + 8 ] = v.z;
+  data[ row ] = v.x;
+  data[ row + 4 ] = v.y;
+  data[ row + 8 ] = v.z;
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec4 &v)
 {
-  d[ row ] = v.x;
-  d[ row + 4 ] = v.y;
-  d[ row + 8 ] = v.z;
-  d[ row + 12 ] = v.w;
+  data[ row ] = v.x;
+  data[ row + 4 ] = v.y;
+  data[ row + 8 ] = v.z;
+  data[ row + 12 ] = v.w;
 }
 
 void Matrix4::SetTranslation( float x, float y, float z )
 {
-  d[ 12 ] = x;
-  d[ 13 ] = y;
-  d[ 14 ] = z;
+  data[ 12 ] = x;
+  data[ 13 ] = y;
+  data[ 14 ] = z;
 }
 
 void Matrix4::SetTranslation( const Vec3& translation )
 {
-  d[ 12 ] = translation.x;
-  d[ 13 ] = translation.y;
-  d[ 14 ] = translation.z;
+  data[ 12 ] = translation.x;
+  data[ 13 ] = translation.y;
+  data[ 14 ] = translation.z;
 }
 
 Vec3 Matrix4::GetTranslation() const
 {
-  return Vec3( d[ 12 ], d[ 13 ], d[ 14 ] );
+  return Vec3( data[ 12 ], data[ 13 ], data[ 14 ] );
 }
 
 Vec3 Matrix4::GetScale() const
 {
   return Vec3(
-    Vec3( d[ 0 ], d[ 1 ], d[ 2 ] ).Length(),
-    Vec3( d[ 4 ], d[ 5 ], d[ 6 ] ).Length(),
-    Vec3( d[ 8 ], d[ 9 ], d[ 10 ] ).Length()
+    Vec3( data[ 0 ], data[ 1 ], data[ 2 ] ).Length(),
+    Vec3( data[ 4 ], data[ 5 ], data[ 6 ] ).Length(),
+    Vec3( data[ 8 ], data[ 9 ], data[ 10 ] ).Length()
   );
 }
 
@@ -5303,7 +5303,7 @@ void Matrix4::SetTranspose( void )
   {
     for( uint32_t j = i + 1; j < 4; j++ )
     {
-      std::swap( d[ i * 4 + j ], d[ j * 4 + i ] );
+      std::swap( data[ i * 4 + j ], data[ j * 4 + i ] );
     }
   }
 }
@@ -5570,17 +5570,17 @@ Matrix4 Quaternion::GetTransformMatrix( void ) const
 
   Matrix4 matrix = Matrix4::Identity();
 
-  matrix.d[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
-  matrix.d[ 4 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
-  matrix.d[ 8 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
+  matrix.data[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
+  matrix.data[ 4 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
+  matrix.data[ 8 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
 
-  matrix.d[ 1 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
-  matrix.d[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
-  matrix.d[ 9 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
+  matrix.data[ 1 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
+  matrix.data[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
+  matrix.data[ 9 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
 
-  matrix.d[ 2 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
-  matrix.d[ 6 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
-  matrix.d[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
+  matrix.data[ 2 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
+  matrix.data[ 6 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
+  matrix.data[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
 
   return matrix;
 }
@@ -8253,7 +8253,7 @@ void UniformList::Set( const char* name, float value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 1;
-  uniform.value.d[ 0 ] = value;
+  uniform.value.data[ 0 ] = value;
 }
 
 void UniformList::Set( const char* name, Vec2 value )
@@ -8262,8 +8262,8 @@ void UniformList::Set( const char* name, Vec2 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 2;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
 }
 
 void UniformList::Set( const char* name, Vec3 value )
@@ -8272,9 +8272,9 @@ void UniformList::Set( const char* name, Vec3 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 3;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
-  uniform.value.d[ 2 ] = value.z;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
 }
 
 void UniformList::Set( const char* name, Vec4 value )
@@ -8283,10 +8283,10 @@ void UniformList::Set( const char* name, Vec4 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 4;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
-  uniform.value.d[ 2 ] = value.z;
-  uniform.value.d[ 3 ] = value.w;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
+  uniform.value.data[ 3 ] = value.w;
 }
 
 void UniformList::Set( const char* name, const Matrix4& value )
@@ -8604,23 +8604,23 @@ void Shader::Activate( const UniformList& uniforms ) const
     }
     else if ( uniformVar->type == GL_FLOAT )
     {
-      glUniform1fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform1fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC2 )
     {
-      glUniform2fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform2fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC3 )
     {
-      glUniform3fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform3fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC4 )
     {
-      glUniform4fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform4fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_MAT4 )
     {
-      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.d );
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.data );
     }
     else
     {
@@ -10587,10 +10587,10 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std:
       ae::Matrix4* v = (ae::Matrix4*)varData;
       // @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
       sscanf( value, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
-             v->d, v->d + 1, v->d + 2, v->d + 3,
-             v->d + 4, v->d + 5, v->d + 6, v->d + 7,
-             v->d + 8, v->d + 9, v->d + 10, v->d + 11,
-             v->d + 12, v->d + 13, v->d + 14, v->d + 15 );
+             v->data, v->data + 1, v->data + 2, v->data + 3,
+             v->data + 4, v->data + 5, v->data + 6, v->data + 7,
+             v->data + 8, v->data + 9, v->data + 10, v->data + 11,
+             v->data + 12, v->data + 13, v->data + 14, v->data + 15 );
       return true;
     }
     case Var::Enum:
@@ -10750,13 +10750,13 @@ const ae::Type* ae::Var::GetRefType() const
 //------------------------------------------------------------------------------
 ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 {
-  return obj ? obj->_metaTypeId : ae::ae::kInvalidTypeId;
+  return obj ? obj->_metaTypeId : ae::kInvalidTypeId;
 }
 
 ae::TypeId ae::GetTypeIdFromName( const char* name )
 {
   // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::ae::kInvalidTypeId;
+  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
 std::map< ae::Str32, ae::Type* >& ae::_GetTypeNameMap()
