@@ -81,7 +81,7 @@ int main()
 	ae::Shader shader;
 	ae::VertexData vertexData;
 	
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "triangle" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -99,7 +99,6 @@ int main()
 
 	AE_LOG( "Run" );
 	while ( !input.quit )
-	//while ( !input.GetState()->exit )
 	{
 		input.Pump();
 		render.Activate();
@@ -107,8 +106,8 @@ int main()
 
 		rotation += timeStep.GetDt();
 
-		ae::Matrix4 transform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
-		transform *= ae::Matrix4::RotationY( rotation );
+		ae::Matrix4 transform = ae::Matrix4::RotationY( rotation );
+		transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
 
 		ae::UniformList uniformList;
 		uniformList.Set( "u_modelToNdc", transform );

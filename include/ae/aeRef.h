@@ -240,7 +240,7 @@ const T& aeRef< T >::operator *() const
   AE_ASSERT( m_id );
   auto obj = m_Get< T >( 0 );
   AE_ASSERT( obj );
-  return *aeCast< T >( obj );
+  return *ae::Cast< T >( obj );
 }
 
 template < typename T >
@@ -249,7 +249,7 @@ T& aeRef< T >::operator *()
   AE_ASSERT( m_id );
   auto obj = m_Get< T >( 0 );
   AE_ASSERT( obj );
-  return *aeCast< T >( obj );
+  return *ae::Cast< T >( obj );
 }
 
 template < typename T >
@@ -262,14 +262,14 @@ template < typename T >
 template < typename U, bool >
 const U* aeRef< T >::m_Get( int ) const
 {
-  return m_id ? aeCast< T >( T::GetById( m_id ) ) : nullptr;
+  return m_id ? ae::Cast< T >( T::GetById( m_id ) ) : nullptr;
 }
 
 template < typename T >
 template < typename U, bool >
 U* aeRef< T >::m_Get( int )
 {
-  return m_id ? aeCast< T >( T::GetById( m_id ) ) : nullptr;
+  return m_id ? ae::Cast< T >( T::GetById( m_id ) ) : nullptr;
 }
 
 template < typename T >

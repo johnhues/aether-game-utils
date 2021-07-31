@@ -27,12 +27,6 @@
 
 int main()
 {
-#if _AE_APPLE_
-  const ae::Key modifierKey = ae::Key::LeftSuper;
-#else
-  const ae::Key modifierKey = ae::Key::LeftControl;
-#endif
-  
   ae::Window window;
   ae::Input input;
   ae::GraphicsDevice device;
@@ -40,7 +34,7 @@ int main()
   window.Initialize( 800, 600, false, true );
   input.Initialize( &window );
   device.Initialize( &window );
-  fs.Initialize( "", "ae", "filesystem" );
+  fs.Initialize( "data", "ae", "filesystem" );
   while ( !input.quit )
   {
     input.Pump();
@@ -79,7 +73,7 @@ int main()
       fs.ShowFolder( ae::FileSystem::Root::Cache, "" );
     }
 
-    if ( input.Get( modifierKey ) && !input.GetPrev( ae::Key::O ) && input.Get( ae::Key::O ) )
+    if ( input.Get( ae::Key::LeftMeta ) && !input.GetPrev( ae::Key::O ) && input.Get( ae::Key::O ) )
     {
       ae::FileDialogParams params;
       //params.filters.Append( ae::FileFilter( "All Files", "*" ) );
@@ -103,11 +97,10 @@ int main()
       }
     }
 
-    if ( input.Get( modifierKey ) && !input.GetPrev( ae::Key::S ) && input.Get( ae::Key::S ) )
+    if ( input.Get( ae::Key::LeftMeta ) && !input.GetPrev( ae::Key::S ) && input.Get( ae::Key::S ) )
     {
       ae::FileDialogParams params;
       params.window = &window;
-      params.confirmOverwrite = true;
       params.filters.Append( ae::FileFilter( "Text Files", "txt" ) );
       std::string result = fs.SaveDialog( params );
       if ( !result.empty() )

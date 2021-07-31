@@ -63,7 +63,7 @@
 //------------------------------------------------------------------------------
 // Constants / helpers
 //------------------------------------------------------------------------------
-namespace AE_NAMESPACE {
+namespace ae {
 
 aeFloat3 GetIntersection( const aeFloat3* p, const aeFloat3* n, uint32_t ic )
 {
@@ -2656,4 +2656,4 @@ ae::Mesh::PushOutInfo Terrain::PushOutSphere( const ae::Mesh::PushOutParams& _pa
   return results;
 }
 
-} // AE_NAMESPACE
+} // ae

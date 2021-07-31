@@ -34,66 +34,66 @@
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
-AE_ENUM_REGISTER( PlayerState );
+AE_REGISTER_ENUM_CLASS( PlayerState );
 
 //------------------------------------------------------------------------------
 // SomeClass + TestEnumClass
 //------------------------------------------------------------------------------
-AE_META_CLASS( SomeClass );
-AE_META_VAR( SomeClass, intMember );
-AE_META_VAR( SomeClass, enumTest );
+AE_REGISTER_CLASS( SomeClass );
+AE_REGISTER_CLASS_VAR( SomeClass, intMember );
+AE_REGISTER_CLASS_VAR( SomeClass, enumTest );
 
-AE_ENUM_REGISTER( TestEnumClass );
+AE_REGISTER_ENUM_CLASS( TestEnumClass );
 
 //------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM( SomeOldEnum );
-AE_META_ENUM_VALUE( SomeOldEnum, Bleep );
-AE_META_ENUM_VALUE( SomeOldEnum, Bloop );
-AE_META_ENUM_VALUE( SomeOldEnum, Blop );
+AE_REGISTER_ENUM( SomeOldEnum );
+AE_REGISTER_ENUM_VALUE( SomeOldEnum, Bleep );
+AE_REGISTER_ENUM_VALUE( SomeOldEnum, Bloop );
+AE_REGISTER_ENUM_VALUE( SomeOldEnum, Blop );
 
 //------------------------------------------------------------------------------
 // SomeOldPrefixEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM_PREFIX( SomeOldPrefixEnum, kSomeOldPrefixEnum_ );
-AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bleep );
-AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bloop );
-AE_META_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Blop );
+AE_REGISTER_ENUM_PREFIX( SomeOldPrefixEnum, kSomeOldPrefixEnum_ );
+AE_REGISTER_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bleep );
+AE_REGISTER_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Bloop );
+AE_REGISTER_ENUM_VALUE( SomeOldPrefixEnum, kSomeOldPrefixEnum_Blop );
 
 //------------------------------------------------------------------------------
 // SomeOldRenamedEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM( SomeOldRenamedEnum );
-AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLEEP, Bleep );
-AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOOP, Bloop );
-AE_META_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOP, Blop );
+AE_REGISTER_ENUM( SomeOldRenamedEnum );
+AE_REGISTER_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLEEP, Bleep );
+AE_REGISTER_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOOP, Bloop );
+AE_REGISTER_ENUM_VALUE_NAME( SomeOldRenamedEnum, BLOP, Blop );
 
 //------------------------------------------------------------------------------
 // SomeNewEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM_CLASS( SomeNewEnum );
-AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bleep );
-AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Bloop );
-AE_META_ENUM_CLASS_VALUE( SomeNewEnum, Blop );
+AE_REGISTER_ENUM_CLASS2( SomeNewEnum );
+AE_REGISTER_ENUM_CLASS2_VALUE( SomeNewEnum, Bleep );
+AE_REGISTER_ENUM_CLASS2_VALUE( SomeNewEnum, Bloop );
+AE_REGISTER_ENUM_CLASS2_VALUE( SomeNewEnum, Blop );
 
 //------------------------------------------------------------------------------
 // A::B::SomeNewEnum
 //------------------------------------------------------------------------------
-AE_META_ENUM_CLASS( A::B::SomeNewEnum );
-AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bleep );
-AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Bloop );
-AE_META_ENUM_CLASS_VALUE( A::B::SomeNewEnum, Blop );
+AE_REGISTER_ENUM_CLASS2( A::B::SomeNewEnum );
+AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Bleep );
+AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Bloop );
+AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Blop );
 
 //------------------------------------------------------------------------------
 // Reference testing
 //------------------------------------------------------------------------------
-AE_META_CLASS( RefTester );
+AE_REGISTER_CLASS( RefTester );
 
-AE_META_CLASS( RefTesterA );
-AE_META_VAR( RefTesterA, notRef );
-AE_META_VAR( RefTesterA, refA );
-AE_META_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered after this, but it has to still work
+AE_REGISTER_CLASS( RefTesterA );
+AE_REGISTER_CLASS_VAR( RefTesterA, notRef );
+AE_REGISTER_CLASS_VAR( RefTesterA, refA );
+AE_REGISTER_CLASS_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered after this, but it has to still work
 
-AE_META_CLASS( RefTesterB );
-AE_META_VAR( RefTesterB, refA );
+AE_REGISTER_CLASS( RefTesterB );
+AE_REGISTER_CLASS_VAR( RefTesterB, refA );

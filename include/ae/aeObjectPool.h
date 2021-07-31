@@ -29,7 +29,7 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
 // ae::ObjectPool class
@@ -429,6 +429,6 @@ uint32_t PagedObjectPool< T, N >::Length() const
   return m_length;
 }
 
-} // AE_NAMESPACE
+} // ae
 
 #endif

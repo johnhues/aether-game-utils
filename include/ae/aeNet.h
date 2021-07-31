@@ -263,7 +263,7 @@ public:
 //   GameObjId gameId;
 //   struct Game* game;
 //   NetInstId netId;
-//   aeMetaTypeId type;
+//   TypeId type;
 //   bool levelObject;
 // };
 

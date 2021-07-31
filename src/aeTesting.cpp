@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeTesting.h"
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
 // LifetimeTester static members
@@ -112,4 +112,4 @@ void LifetimeTester::ClearStats()
   currentCount = 0;
 }
 
-} // AE_NAMESPACE end
+} // ae end

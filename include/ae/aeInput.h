@@ -197,7 +197,9 @@ enum class aeKey
   RightControl = 228,
   RightShift = 229,
   RightAlt = 230,
-  RightSuper = 231
+  RightSuper = 231,
+  LeftMeta = 254, // Command on Apple, Control on others
+  RightMeta = 255, // Command on Apple, Control on others
 };
 
 const uint32_t kKeyCount = 256;

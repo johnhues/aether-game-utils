@@ -435,6 +435,15 @@ void aeInput::Pump()
   {
     m_input.m_keys[ i ] = ( keys[ i ] != 0 );
   }
+  
+  // Update meta key
+#if _AE_APPLE_
+  m_input.m_keys[ (int)aeKey::LeftMeta ] = m_input.m_keys[ (int)aeKey::LeftSuper ];
+  m_input.m_keys[ (int)aeKey::RightMeta ] = m_input.m_keys[ (int)aeKey::RightSuper ];
+#else
+  m_input.m_keys[ (int)aeKey::LeftMeta ] = m_input.m_keys[ (int)aeKey::LeftControl ];
+  m_input.m_keys[ (int)aeKey::RightMeta ] = m_input.m_keys[ (int)aeKey::RightControl ];
+#endif
 #endif
 
   if ( !m_joystickHandle && SDL_NumJoysticks() )
@@ -586,7 +595,7 @@ void aeInput::Pump()
   }
 
   m_input.gamepad = ( m_joystickHandle != nullptr );
-
+  
   if ( m_firstPump )
   {
     // Don't 'move' cursor on first frame

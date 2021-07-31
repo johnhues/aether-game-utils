@@ -17,10 +17,7 @@ target_link_libraries(unit_tests PRIVATE
 	Catch2::Catch2
 )
 
-# run unit test
-add_custom_command(
-	TARGET unit_tests
-	COMMENT "Run tests"
-	POST_BUILD 
-	COMMAND unit_tests
-)
+# run tests
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../deps/Catch2/contrib)
+include(Catch)
+catch_discover_tests(unit_tests)

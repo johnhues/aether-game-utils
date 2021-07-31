@@ -4,10 +4,11 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#define CATCH_CONFIG_MAIN
-#include "catch2/catch.hpp"
 #include "ae/aether.h"
 #include "ae/aeTesting.h"
+
+#define CATCH_CONFIG_MAIN
+#include "catch2/catch.hpp"
 
 //------------------------------------------------------------------------------
 // ae::Array tests

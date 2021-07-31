@@ -32,7 +32,7 @@
 //------------------------------------------------------------------------------
 // TestEnumClass
 //------------------------------------------------------------------------------
-AE_ENUM( TestEnumClass, int32_t,
+AE_DEFINE_ENUM_CLASS( TestEnumClass, int32_t,
   NegativeOne = -1,
   Zero,
   One,
@@ -45,7 +45,7 @@ AE_ENUM( TestEnumClass, int32_t,
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
-AE_ENUM( PlayerState, uint16_t,
+AE_DEFINE_ENUM_CLASS( PlayerState, uint16_t,
   Idle,
   Run,
   Jump
@@ -54,7 +54,7 @@ AE_ENUM( PlayerState, uint16_t,
 //------------------------------------------------------------------------------
 // SomeClass
 //------------------------------------------------------------------------------
-class SomeClass : public aeInheritor< aeObject, SomeClass >
+class SomeClass : public ae::Inheritor< ae::Object, SomeClass >
 {
 public:
   int32_t intMember;
@@ -121,7 +121,7 @@ namespace A
 // Reference testing
 //------------------------------------------------------------------------------
 // RefTester
-class RefTester : public aeInheritor< aeObject, RefTester >
+class RefTester : public ae::Inheritor< ae::Object, RefTester >
 {
 public:
   
@@ -132,7 +132,7 @@ public:
 };
 
 // RefTesterA
-class RefTesterA : public aeInheritor< RefTester, RefTesterA >
+class RefTesterA : public ae::Inheritor< RefTester, RefTesterA >
 {
 public:
   int notRef = 0xfdfdfdfd;
@@ -141,7 +141,7 @@ public:
 };
 
 // RefTesterB
-class RefTesterB : public aeInheritor< RefTester, RefTesterB >
+class RefTesterB : public ae::Inheritor< RefTester, RefTesterB >
 {
 public:
   class RefTesterA* refA = nullptr;

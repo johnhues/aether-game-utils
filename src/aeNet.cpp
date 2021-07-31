@@ -588,7 +588,7 @@ void aeNetReplicaDB::UpdateSendData()
 //     if ( info.game == go->game && info.netId == go->netInstId )
 //     {
 //       HVN_ASSERT( info.gameId == go->ID );
-//       HVN_ASSERT( aeMetaGetObjectTypeId( go ) == info.type );
+//       HVN_ASSERT( GetObjectTypeId( go ) == info.type );
 //       net->netInsts[ i ] = net->netInsts[ netInstCount - 1 ];
 //       net->netInstCount--;
 //       if ( go->game->IsServer() )
@@ -861,7 +861,7 @@ void aeNetReplicaDB::UpdateSendData()
 //         const aeMeta::Type* metaType = aeMeta::GetType( msg.typeId );
 //         if ( metaType && metaType->GetBaseType() == aeMeta::GetType< Rpc >() )
 //         {
-//           Rpc* rpc = aeCast< Rpc >( metaType->New() );
+//           Rpc* rpc = ae::Cast< Rpc >( metaType->New() );
 //           rpc->game = game;
 //           rpc->aetherPlayer = recvInfo.player;
 

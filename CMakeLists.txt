@@ -32,6 +32,7 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 		set(OpenGLES "")
 	endif()
 else()
+	set(OpenGL_GL_PREFERENCE GLVND) # See https://cmake.org/cmake/help/latest/policy/CMP0072.html
 	find_package(OpenGL REQUIRED)
 endif()
 

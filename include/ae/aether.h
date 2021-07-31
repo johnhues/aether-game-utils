@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aether.h
+//! @file aether.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 //
@@ -69,11 +69,6 @@
 #endif
 
 //------------------------------------------------------------------------------
-// ae Namespace
-//------------------------------------------------------------------------------
-#define AE_NAMESPACE ae
-
-//------------------------------------------------------------------------------
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
@@ -93,6 +88,8 @@
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
+#include <map> // @TODO: Remove. For meta system.
+#include <vector> // @TODO: Remove. For meta system.
 
 //------------------------------------------------------------------------------
 // SIMD headers
@@ -115,8 +112,7 @@
 #elif _AE_APPLE_
   #define aeAssert() __builtin_trap()
 #elif _AE_EMSCRIPTEN_
-  // @TODO: Handle asserts with emscripten builds
-  #define aeAssert()
+  #define aeAssert() throw
 #else
   #define aeAssert() asm( "int $3" )
 #endif
@@ -144,16 +140,18 @@ template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
-// Platform functions
+//! \defgroup Platform
+//! @{
 //------------------------------------------------------------------------------
-uint32_t GetPID();
-uint32_t GetMaxConcurrentThreads();
-bool IsDebuggerAttached();
-template < typename T > const char* GetTypeName();
-double GetTime();
+uint32_t GetPID(); //!< Returns the process ID on Windows, OSX, and Linux. Returns 0 with Emscripten builds.
+uint32_t GetMaxConcurrentThreads(); //!< Returns the number of virtual cores available.
+bool IsDebuggerAttached(); //!< Returns true if attached to Visual Studio or Xcode.
+template < typename T > const char* GetTypeName(); //!< Returns the name of the given class or basic type.
+double GetTime(); //!< Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
+//! @}
 
 //------------------------------------------------------------------------------
 // Tags
@@ -170,47 +168,64 @@ using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_FILE ae::Tag( "aeFile" )
 
 //------------------------------------------------------------------------------
-// Allocator interface
-// @NOTE: By default aether-game-utils uses system allocations, which may be fine
-// for your use case. If not it's advised that you implement this class with
-// dlmalloc or similar and then call ae::SetGlobalAllocator() with your own
-// allocator when your program starts.
+//! \defgroup Allocation
+//! Allocation utilities.
+//! By default aether-game-utils uses system allocations (malloc / free), which may
+//! be fine for your use case. If not, it's advised that you implement your own
+//! ae::Allocator with dlmalloc or similar and then call ae::SetGlobalAllocator()
+//! with your allocator at program start. All allocations are tagged, (@TODO)
+//! they can be inspected through the current ae::Allocator with ae::GetGlobalAllocator().
+//! @{
 //------------------------------------------------------------------------------
 class Allocator
 {
 public:
   virtual ~Allocator() {}
+  //! Should return 'bytes' with minimum alignment of 'alignment'. Optionally, a
+  //! tag should be used to select a pool of memory, or for diagnostics/debugging.
   virtual void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) = 0;
+  //! Should attempt to expand or contract allocations made with Allocate() to
+  //! match size 'bytes'. On failure this function should return nullptr.
   virtual void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) = 0;
+  //! Free memory allocated with ae::Allocator::Allocate() or ae::Allocator::Reallocate().
   virtual void Free( void* data ) = 0;
 };
-//------------------------------------------------------------------------------
-// @NOTE: Call ae::SetGlobalAllocator() before making any allocations or else a
-// default allocator will be used. You must call ae::SetGlobalAllocator() before
-// any allocations are made.
-//------------------------------------------------------------------------------
+//! The given ae::Allocator is used for all memory allocations. You must call
+//! ae::SetGlobalAllocator() before any allocations are made or else a default
+//! allocator which uses malloc / free will be used. The set value can be retrieved
+//! with ae::GetGlobalAllocator().
 void SetGlobalAllocator( Allocator* alloc );
+//! Get the custom allocator set with ae::SetGlobalAllocator(). If no custom
+//! allocator is set before the first allocation is made, this will return a
+//! default ae::Allocator which uses malloc / free. If ae::SetGlobalAllocator() has
+//! never been called and no allocations have been made, this will return nullptr.
 Allocator* GetGlobalAllocator();
-//------------------------------------------------------------------------------
-// Allocation functions
-// @NOTE: All allocations are tagged, (@TODO) they can be inspected through the
-// current ae::Allocator with ae::GetGlobalAllocator()
-//------------------------------------------------------------------------------
-// C++ style allocations
+//! Allocate and constructs an array of 'count' elements of type T. an ae::Tag
+//! must be specifed and should represent the allocation type. Type T must have a
+//! default constructor. All arrays allocated with this function should be freed with
+//! ae::Delete(). Uses ae::GetGlobalAllocator() and ae::Allocator::Allocate() internally.
 template < typename T > T* NewArray( ae::Tag tag, uint32_t count );
+//! Allocates and constructs a single element of type T. an ae::Tag must be specified
+//! and should represent the allocation type. All 'args' are passed to the constructor
+//! of T. All allocations should be freed with ae::Delete(). Uses ae::GetGlobalAllocator()
+//! and ae::Allocator::Allocate() internally.
 template < typename T, typename ... Args > T* New( ae::Tag tag, Args ... args );
+//! Should be called to destruct and free all allocations made with ae::New()
+//! and ae::NewArray(). Uses ae::GetGlobalAllocator() and ae::Allocator::Free()
+//! internally.
 template < typename T > void Delete( T* obj );
 // C style allocations
 void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment );
 void* Reallocate( void* data, uint32_t bytes, uint32_t alignment );
 void Free( void* data );
+//! @}
 
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
+//! This class is useful for scoped allocations. (@TODO) In the future it
+//! should allocate from a stack. This should allow big allocations to happen
+//! cheaply each frame without creating any fragmentation.
 //------------------------------------------------------------------------------
-// @NOTE: This class is useful for scoped allocations. (@TODO) In the future it
-// should allocate from a stack. This should allow big allocations to happen
-// cheaply each frame without creating any fragmentation.
 template < typename T >
 class Scratch
 {
@@ -232,7 +247,8 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// Math defines
+//! \defgroup Math
+//! @{
 //------------------------------------------------------------------------------
 const float PI = 3.14159265358979323846f;
 const float TWO_PI = 2.0f * PI;
@@ -552,13 +568,14 @@ public:
   Quaternion& SetInverse();
   Vec3 Rotate( Vec3 v ) const;
 };
+//! @} End Math group
 
 //------------------------------------------------------------------------------
 // ae::Color struct
 //------------------------------------------------------------------------------
 struct Color
 {
-  Color() {} // Empty default constructor for performance of vertex arrays etc
+  Color() {} //!< Empty default constructor for performance of vertex arrays etc
   Color( const Color& ) = default;
   Color( float rgb );
   Color( float r, float g, float b );
@@ -684,7 +701,7 @@ public:
   uint32_t GetStepCount() const;
 
   float GetDt() const;
-  void SetDt( float sec ); // Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+  void SetDt( float sec ); //!< Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
 
   void Wait();
 
@@ -700,8 +717,8 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::Str class
-// @NOTE: A fixed length string class. The templated value is the total size of
-// the string in memory.
+//! A fixed length string class. The templated value is the total size of
+//! the string in memory.
 //------------------------------------------------------------------------------
 template < uint32_t N >
 class Str
@@ -780,15 +797,15 @@ class Array
 public:
   // Static array (N > 0)
   Array();
-  Array( uint32_t length, const T& val ); // Appends 'length' number of 'val's
+  Array( uint32_t length, const T& val ); //!< Appends 'length' number of 'val's
   // Dynamic array (N == 0)
   Array( ae::Tag tag );
-  Array( ae::Tag tag, uint32_t size ); // Reserve size (with length of 0)
-  Array( ae::Tag tag, uint32_t length, const T& val ); // Reserves 'length' and appends 'length' number of 'val's
+  Array( ae::Tag tag, uint32_t size ); //!< Reserve size (with length of 0)
+  Array( ae::Tag tag, uint32_t length, const T& val ); //!< Reserves 'length' and appends 'length' number of 'val's
   void Reserve( uint32_t total );
   // Static and dynamic arrays
   Array( const Array< T, N >& other );
-  Array( Array< T, N >&& other ) noexcept; // Move operators fallback to regular operators if ae::Tags don't match
+  Array( Array< T, N >&& other ) noexcept; //!< Move operators fallback to regular operators if ae::Tags don't match
   void operator =( const Array< T, N >& other );
   void operator =( Array< T, N >&& other ) noexcept;
   ~Array();
@@ -799,8 +816,8 @@ public:
   T& Insert( uint32_t index, const T& value );
 
   // Find elements
-  template < typename U > int32_t Find( const U& value ) const; // Returns -1 when not found
-  template < typename Fn > int32_t FindFn( Fn testFn ) const; // Returns -1 when not found
+  template < typename U > int32_t Find( const U& value ) const; //!< Returns -1 when not found
+  template < typename Fn > int32_t FindFn( Fn testFn ) const; //!< Returns -1 when not found
 
   // Remove elements
   template < typename U > uint32_t RemoveAll( const U& value );
@@ -809,9 +826,9 @@ public:
   void Clear();
 
   // Access elements
-  const T& operator[]( int32_t index ) const; // Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
+  const T& operator[]( int32_t index ) const; //!< Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
   T& operator[]( int32_t index );
-  T* Begin() { return m_array; } // These functions can return null when array length is zero
+  T* Begin() { return m_array; } //!< These functions can return null when array length is zero
   T* End() { return m_array + m_length; }
   const T* Begin() const { return m_array; }
   const T* End() const { return m_array + m_length; }
@@ -850,8 +867,8 @@ template < typename K, typename V, uint32_t N = 0 >
 class Map
 {
 public:
-  Map(); // Static map only (N > 0)
-  Map( ae::Tag pool ); // Dynamic map only (N == 0)
+  Map(); //!< Static map only (N > 0)
+  Map( ae::Tag pool ); //!< Dynamic map only (N == 0)
   void Reserve( uint32_t total );
   
   // Access elements by key
@@ -895,7 +912,6 @@ private:
 class Dict
 {
 public:
-  Dict();
   Dict( ae::Tag tag );
   void SetString( const char* key, const char* value );
   void SetInt( const char* key, int32_t value );
@@ -928,6 +944,7 @@ public:
   void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
 
 private:
+  Dict() = delete;
   // Prevent the above functions from being called accidentally through automatic conversions
   template < typename T > void SetString( const char*, T ) = delete;
   template < typename T > void SetInt( const char*, T ) = delete;
@@ -938,7 +955,7 @@ private:
   template < typename T > void SetVec4( const char*, T ) = delete;
   template < typename T > void SetInt2( const char*, T ) = delete;
   
-  ae::Map< ae::Str128, ae::Str128 > m_entries = AE_ALLOC_TAG_FIXME; // @TODO: Should support static allocation
+  ae::Map< ae::Str128, ae::Str128 > m_entries; // @TODO: Should support static allocation
 };
 
 inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
@@ -968,7 +985,7 @@ inline std::ostream& operator<<( std::ostream& os, Rect r )
   return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
 
-} // AE_NAMESPACE end
+} // ae end
 
 //------------------------------------------------------------------------------
 // Logging functions
@@ -1045,31 +1062,38 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 # define strtok_r strtok_s
 #endif
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 //------------------------------------------------------------------------------
 // ae::Window class
+//! Window size is specified in virtual DPI units. Actual window content width and height are subject to the
+//! displays scale factor. Passing a width and height of 1280x720 on a display with a scale factor of 2 will result
+//! in a virtual window size of 1280x720 and a backbuffer size of 2560x1440. The windows scale factor can be
+//! checked with ae::Window::GetScaleFactor().
 //------------------------------------------------------------------------------
 class Window
 {
 public:
   Window();
+  //! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
   bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor );
+  //! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
   bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor );
   void Terminate();
 
   void SetTitle( const char* title );
   void SetFullScreen( bool fullScreen );
   void SetPosition( Int2 pos );
-  void SetSize( uint32_t width, uint32_t height );
+  void SetSize( uint32_t width, uint32_t height ); //!< Window size is specified in virtual DPI units, content size is subject to the displays scale factor
   void SetMaximized( bool maximized );
 
   const char* GetTitle() const { return m_windowTitle.c_str(); }
   Int2 GetPosition() const { return m_pos; }
-  int32_t GetWidth() const { return m_width; }
-  int32_t GetHeight() const { return m_height; }
+  int32_t GetWidth() const; //!< Virtual window width (unscaled by display scale factor)
+  int32_t GetHeight() const; //!< Virtual window height (unscaled by display scale factor)
   bool GetFullScreen() const { return m_fullScreen; }
   bool GetMaximized() const { return m_maximized; }
+  float GetScaleFactor() const { return m_scaleFactor; } //!<  Window content scale factor
 
 private:
   void m_Initialize();
@@ -1078,11 +1102,12 @@ private:
   int32_t m_height;
   bool m_fullScreen;
   bool m_maximized;
+  float m_scaleFactor;
   Str256 m_windowTitle;
 public:
   // Internal
   void m_UpdatePos( Int2 pos ) { m_pos = pos; }
-  void m_UpdateWidthHeight( int32_t width, int32_t height ) { m_width = width; m_height = height; }
+  void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
   void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
   void* window;
   class GraphicsDevice* graphicsDevice;
@@ -1209,7 +1234,23 @@ enum class Key
   RightControl = 228,
   RightShift = 229,
   RightAlt = 230,
-  RightSuper = 231
+  RightSuper = 231,
+  LeftMeta = 254, // Command on Apple, Control on others
+  RightMeta = 255, // Command on Apple, Control on others
+};
+
+//------------------------------------------------------------------------------
+// ae::MouseState class
+//------------------------------------------------------------------------------
+class MouseState
+{
+public:
+  bool leftButton = false;
+  bool middleButton = false;
+  bool rightButton = false;
+  ae::Vec2 position = ae::Vec2( 0.0f );
+  ae::Vec2 scroll = ae::Vec2( 0.0f );
+  bool usingTouch = false;
 };
 
 //------------------------------------------------------------------------------
@@ -1223,9 +1264,15 @@ public:
   
   bool Get( ae::Key key ) const;
   bool GetPrev( ae::Key key ) const;
-  bool quit = false;
   
-private:
+  MouseState mouseState;
+  MouseState mouseStatePrev;
+  
+  bool quit = false;
+
+// private:
+  void m_SetMousePos( ae::Int2 pos );
+  ae::Window* m_window = nullptr;
   bool m_keys[ 256 ];
   bool m_keysPrev[ 256 ];
 };
@@ -1248,37 +1295,38 @@ struct FileFilter
 //------------------------------------------------------------------------------
 struct FileDialogParams
 {
-  // Save and Open
-  const char* windowTitle = "";
-  ae::Array< FileFilter, 8 > filters; // Leave empty for { ae::FileFilter( "All Files", "*" ) }
-  Window* window = nullptr; // Recommended. Setting this will create a modal dialog.
-  const char* defaultPath = "";
-  // Open file only
+  const char* windowTitle = ""; //!< Title of the dialog window
+  ae::Array< FileFilter, 8 > filters; //!< Leave empty for { ae::FileFilter( "All Files", "*" ) }
+  Window* window = nullptr; //!< Recommended. Setting this will create a modal dialog.
+  const char* defaultPath = ""; //!< The path that the dialog will default to.
+  //! Only used with OpenDialog. If true, the dialog will allow multiple files to be selected.
+  //! The files names will be returned in an ae::Array. If false the ae::Array will have 1 or
+  //! 0 elements.
   bool allowMultiselect = false;
-  // Save file only
-  bool confirmOverwrite = true;
 };
 
 //------------------------------------------------------------------------------
 // ae::FileSystem class
+//! \brief Used to read and write files or create save and open dialogs.
 //------------------------------------------------------------------------------
 class FileSystem
 {
 public:
+  //! Represents directories that the FileSystem class can load/save from.
   enum class Root
   {
-    Data, // A given existing directory
-    User, // A directory for storing preferences and savedata
-    Cache, // A directory for storing expensive to generate data (computed, downloaded, etc)
-    UserShared, // Same as above but shared accross the 'organization name'
-    CacheShared // Same as above but shared accross the 'organization name'
+    Data, //!< A given existing directory
+    User, //!< A directory for storing preferences and savedata
+    Cache, //!< A directory for storing expensive to generate data (computed, downloaded, etc)
+    UserShared, //!< Same as above but shared accross the 'organization name'
+    CacheShared //!< Same as above but shared accross the 'organization name'
   };
   
-  // Passing an empty string to dataDir is equivalent to using
-  // the applications working directory. Organization name should be your name
-  // or your companies name and should be consistent across apps. Application
-  // name should be the name of this application. Initialize() creates missing
-  // folders for Root::User and Root::Cache.
+  //! Passing an empty string to dataDir is equivalent to using
+  //! the applications working directory. Organization name should be your name
+  //! or your companies name and should be consistent across apps. Application
+  //! name should be the name of this application. Initialize() creates missing
+  //! folders for Root::User and Root::Cache.
   void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
 
   // Member functions for use of Root directories
@@ -1529,6 +1577,7 @@ public:
   };
   enum class Format
   {
+    Depth16,
     Depth32F,
     R8, // unorm
     R16_UNORM, // for height fields
@@ -1621,22 +1670,22 @@ public:
   uint32_t GetWidth() const;
   uint32_t GetHeight() const;
 
-  // @NOTE: Get ndc space rect of this target within another target (fill but maintain aspect ratio)
-  // GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
-  // GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
+  //! Get ndc space rect of this target within another target (fill but maintain aspect ratio)
+  //! GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
+  //! GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
   Rect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
 
-  // @NOTE: Other target to local transform (pixels->pixels)
-  // Useful for transforming window/mouse pixel coordinates to local pixels
-  // GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
+  //! Other target to local transform (pixels->pixels)
+  //! Useful for transforming window/mouse pixel coordinates to local pixels
+  //! GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
   Matrix4 GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const;
 
-  // @NOTE: Mouse/window pixel coordinates to world space
-  // GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ... ), TODO )
+  //! Mouse/window pixel coordinates to world space
+  //! GetTargetPixelsToWorld( GetTargetPixelsToLocalTransform( ... ), TODO )
   Matrix4 GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal, const Matrix4& worldToNdc ) const;
 
-  // @NOTE: Creates a transform matrix from aeQuad vertex positions to ndc space
-  // GraphicsDeviceTarget uses aeQuad vertices internally
+  //! Creates a transform matrix from aeQuad vertex positions to ndc space
+  //! GraphicsDeviceTarget uses aeQuad vertices internally
   static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
 
 private:
@@ -1667,7 +1716,7 @@ public:
   void Activate();
   void Clear( Color color );
   void Present();
-  void AddTextureBarrier(); // Must call to readback from active render target (GL only)
+  void AddTextureBarrier(); //!< Must call to readback from active render target (GL only)
 
   class Window* GetWindow() { return m_window; }
   RenderTarget* GetCanvas() { return &m_canvas; }
@@ -1680,7 +1729,11 @@ public:
   void m_HandleResize( uint32_t width, uint32_t height );
   Window* m_window = nullptr;
   RenderTarget m_canvas;
+#if _AE_EMSCRIPTEN_
+  EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+#else
   void* m_context = nullptr;
+#endif
   int32_t m_defaultFbo = 0;
 };
 
@@ -1692,8 +1745,8 @@ class DebugLines
 public:
   void Initialize( uint32_t maxObjects );
   void Terminate();
-  void Render( const Matrix4& worldToNdc ); // Also calls Clear() so AddLine() etc should be called every frame
-  void SetXRayEnabled( bool enabled ) { m_xray = enabled; } // Draw desaturated lines on failed depth test
+  void Render( const Matrix4& worldToNdc ); //!< Also calls Clear() so AddLine() etc should be called every frame
+  void SetXRayEnabled( bool enabled ) { m_xray = enabled; } //!< Draw desaturated lines on failed depth test
 
   bool AddLine( Vec3 p0, Vec3 p1, Color color );
   bool AddDistanceCheck( Vec3 p0, Vec3 p1, float distance );
@@ -1741,7 +1794,8 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::Hash class (fnv1a)
-// @NOTE: Empty strings and zero-length data buffers do not hash to zero
+//! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
+//! hash to zero.
 //------------------------------------------------------------------------------
 class Hash
 {
@@ -1775,7 +1829,329 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
   return *this;
 }
 
-} // AE_NAMESPACE end
+//! \defgroup Meta
+//! @{
+
+//------------------------------------------------------------------------------
+// External macros to force module linking
+//------------------------------------------------------------------------------
+#define AE_FORCELINK_CLASS( x ) \
+  extern int force_link_##x; \
+  struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
+  ForceLink_##x forceLink_##x;
+
+//------------------------------------------------------------------------------
+// External meta class registerer
+//------------------------------------------------------------------------------
+#define AE_REGISTER_CLASS( x ) \
+  int force_link_##x = 0; \
+  template <> const char* ae::_TypeName< x >::Get() { return #x; } \
+  template <> void ae::_DefineType< x >( ae::Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
+  static ae::_TypeCreator< x > ae_type_creator_##x( #x );
+
+//------------------------------------------------------------------------------
+// External meta var registerer
+//------------------------------------------------------------------------------
+#define AE_REGISTER_CLASS_VAR( c, v ) \
+  static ae::_VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
+//------------------------------------------------------------------------------
+// External meta property registerer
+//------------------------------------------------------------------------------
+#define AE_REGISTER_CLASS_PROPERTY( c, p ) \
+  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
+
+//------------------------------------------------------------------------------
+// External enum definer and registerer
+//------------------------------------------------------------------------------
+//! Define a new enum (must register with AE_ENUM_REGISTER)
+#define AE_DEFINE_ENUM_CLASS( E, T, ... ) \
+  enum class E : T { \
+    __VA_ARGS__ \
+  }; \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+  }; \
+  struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
+  static std::ostream &operator << ( std::ostream &os, E e ) { \
+    os << ae::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
+    return os; \
+  }
+
+//! Register an enum defined with AE_ENUM
+#define AE_REGISTER_ENUM_CLASS( E ) \
+  AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
+  AE_ENUM_##E ae_enum_creator_##E; \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+
+//------------------------------------------------------------------------------
+// External c-style enum registerer
+//------------------------------------------------------------------------------
+//! Register an already defined c-style enum type
+#define AE_REGISTER_ENUM( E ) \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetPrefix() { return ""; } \
+  }; \
+  ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+
+//! Register an already defined c-style enum type where each value has a prefix
+#define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetPrefix() { return #PREFIX; } \
+  }; \
+  ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+
+//! Register c-style enum value
+#define AE_REGISTER_ENUM_VALUE( E, V ) \
+  ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #V, V );
+
+//! Register c-style enum value with a manually specified name
+#define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) \
+ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
+
+//------------------------------------------------------------------------------
+// External enum class registerer
+//------------------------------------------------------------------------------
+//! Register an already defined enum class type
+#define AE_REGISTER_ENUM_CLASS2( E ) \
+  template <> \
+  struct ae::_VarType< E > { \
+    static ae::Var::Type GetType() { return ae::Var::Enum; } \
+    static const char* GetName() { return #E; } \
+    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetPrefix() { return ""; } \
+  }; \
+  namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
+  template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+  // @NOTE: Nested namespace declaration requires C++17
+
+//! Register enum class value
+#define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
+  namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
+
+//------------------------------------------------------------------------------
+// Meta constants
+//------------------------------------------------------------------------------
+using TypeId = uint32_t;
+const ae::TypeId kAeInvalidMetaTypeId = 0;
+const uint32_t kMaxMetaTypes = 64;
+const uint32_t kMaxMetaProps = 8;
+class Type;
+
+//------------------------------------------------------------------------------
+// External base meta object
+//! Base class for all meta registered objects. Inherit from this using
+//! ae::Inheritor and register your classes with AE_META_CLASS.
+//------------------------------------------------------------------------------
+class Object
+{
+public:
+  virtual ~Object() {}
+  static const char* GetParentTypeName() { return ""; }
+  static const ae::Type* GetParentType() { return nullptr; }
+  ae::TypeId GetTypeId() const { return _metaTypeId; }
+  ae::TypeId _metaTypeId = kAeInvalidMetaTypeId;
+  ae::Str32 _typeName;
+};
+
+//------------------------------------------------------------------------------
+// External inheritor meta object
+//------------------------------------------------------------------------------
+template < typename Parent, typename This >
+class Inheritor : public Parent
+{
+public:
+  Inheritor();
+  static const char* GetParentTypeName();
+  static const ae::Type* GetParentType();
+};
+
+//------------------------------------------------------------------------------
+// External meta functions
+//------------------------------------------------------------------------------
+uint32_t GetTypeCount(); //!< Get the number of registered ae::Type's
+const Type* GetTypeByIndex( uint32_t i ); //!< Get a registered ae::Type by index
+const Type* GetTypeById( ae::TypeId id ); //!< Get a registered ae::Type by id. Same as ae::Type::GetId()
+const Type* GetTypeByName( const char* typeName ); //!< Get a registered ae::Type from a type name
+const Type* GetTypeFromObject( const ae::Object& obj ); //!< Get a registered ae::Type from an ae::Object
+const Type* GetTypeFromObject( const ae::Object* obj ); //!< Get a registered ae::Type from a pointer to an ae::Object
+template < typename T > const Type* GetType(); //!< Get a registered ae::Type directly from a type
+const class Enum* GetEnum( const char* enumName ); //!< Get a registered ae::Enum by name
+ae::TypeId GetObjectTypeId( const ae::Object* obj ); //!< Get a registered ae::TypeId from an ae::Object
+ae::TypeId GetTypeIdFromName( const char* name ); //!< Get a registered ae::TypeId from a type name
+  
+//------------------------------------------------------------------------------
+// Enum class
+//------------------------------------------------------------------------------
+class Enum
+{
+public:
+  const char* GetName() const { return m_name.c_str(); }
+  uint32_t TypeSize() const { return m_size; }
+  bool TypeIsSigned() const { return m_isSigned; }
+    
+  template < typename T > std::string GetNameByValue( T value ) const;
+  template < typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
+  template < typename T > bool HasValue( T value ) const;
+    
+  int32_t GetValueByIndex( int32_t index ) const;
+  std::string GetNameByIndex( int32_t index ) const;
+  uint32_t Length() const;
+    
+  template < typename T > static std::string GetNameFromValue( T value );
+  template < typename T > static T GetValueFromString( const char* str, T defaultValue );
+  
+  //------------------------------------------------------------------------------
+  // Internal
+  //------------------------------------------------------------------------------
+private:
+  ae::Str32 m_name;
+  uint32_t m_size;
+  bool m_isSigned;
+  ae::Map< int32_t, std::string > m_enumValueToName = AE_ALLOC_TAG_META;
+  ae::Map< std::string, int32_t > m_enumNameToValue = AE_ALLOC_TAG_META;
+public: // Internal
+  Enum( const char* name, uint32_t size, bool isSigned );
+  void m_AddValue( const char* name, int32_t value );
+  static Enum* s_Get( const char* enumName, bool create, uint32_t size, bool isSigned );
+};
+  
+//------------------------------------------------------------------------------
+// Var class
+//------------------------------------------------------------------------------
+class Var
+{
+public:
+  enum Type
+  {
+    String,
+    UInt8,
+    UInt16,
+    UInt32,
+    Int8,
+    Int16,
+    Int32,
+    Bool,
+    Float,
+    Matrix4,
+    Enum,
+    Ref
+  };
+
+  // Info
+  const char* GetName() const;
+  Var::Type GetType() const;
+  const char* GetTypeName() const;
+  uint32_t GetOffset() const;
+  uint32_t GetSize() const;
+    
+  // Value
+  std::string GetObjectValueAsString( const ae::Object* obj, std::function< std::string( const ae::Object* ) > getStringFromObjectPointer = nullptr ) const;
+  bool SetObjectValueFromString( ae::Object* obj, const char* value, std::function< bool( const ae::Type*, const char*, ae::Object** ) > getObjectPointerFromString = nullptr ) const;
+  bool SetObjectValue( ae::Object* obj, const ae::Object* value ) const;
+  template < typename T > bool SetObjectValue( ae::Object* obj, const T& value ) const;
+    
+  // Types
+  const class Enum* GetEnum() const;
+  const ae::Type* GetRefType() const;
+
+  //------------------------------------------------------------------------------
+  // Internal
+  //------------------------------------------------------------------------------
+  const ae::Type* m_owner = nullptr;
+  ae::Str32 m_name = "";
+  Var::Type m_type;
+  ae::Str32 m_typeName = "";
+  uint32_t m_offset = 0;
+  uint32_t m_size = 0;
+  ae::TypeId m_refTypeId = kAeInvalidMetaTypeId; // @TODO: Need to use an id here in case type has not been registered yet
+  mutable const class Enum* m_enum = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// External MetaType class
+//------------------------------------------------------------------------------
+class Type
+{
+public:
+  ae::TypeId GetId() const;
+    
+  // Properties
+  bool HasProperty( const char* prop ) const;
+  uint32_t GetPropertyCount() const;
+  const char* GetPropertyName( uint32_t propIndex ) const;
+  uint32_t GetPropertyValueCount( uint32_t propIndex ) const;
+  uint32_t GetPropertyValueCount( const char* propName ) const;
+  const char* GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const;
+  const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
+    
+  // Vars
+  uint32_t GetVarCount() const;
+  const ae::Var* GetVarByIndex( uint32_t i ) const;
+  const ae::Var* GetVarByName( const char* name ) const;
+
+  // C++ type info
+  template < typename T = ae::Object > T* New( void* obj ) const;
+  uint32_t GetSize() const;
+  uint32_t GetAlignment() const;
+  const char* GetName() const;
+  bool HasNew() const;
+  bool IsAbstract() const;
+  bool IsPolymorphic() const;
+  bool IsDefaultConstructible() const;
+
+  // Inheritance info
+  const char* GetParentTypeName() const;
+  const Type* GetParentType() const;
+  bool IsType( const Type* otherType ) const;
+  template < typename T > bool IsType() const;
+    
+  //------------------------------------------------------------------------------
+  // Internal
+  //------------------------------------------------------------------------------
+  template < typename T >
+  typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
+  Init( const char* name, uint32_t index );
+  template < typename T >
+  typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
+  Init( const char* name, uint32_t index );
+  void m_AddProp( const char* prop, const char* value );
+  void m_AddVar( const Var& var );
+private:
+  ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
+  ae::Str32 m_name;
+  ae::TypeId m_id = kAeInvalidMetaTypeId;
+  uint32_t m_size = 0;
+  uint32_t m_align = 0;
+  ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
+  ae::Array< Var > m_vars = AE_ALLOC_TAG_META;
+  ae::Str32 m_parent;
+  bool m_isAbstract = false;
+  bool m_isPolymorphic = false;
+  bool m_isDefaultConstructible = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::Cast
+//------------------------------------------------------------------------------
+template< typename T, typename C > const T* Cast( const C* obj );
+template< typename T, typename C > T* Cast( C* obj );
+
+//! @}
+
+} // ae end
 
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
@@ -1810,13 +2186,17 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // Platform internal implementation
 //------------------------------------------------------------------------------
-namespace AE_NAMESPACE {
+#ifndef _MSC_VER
+#include <cxxabi.h>
+#endif
+namespace ae {
 
 template < typename T >
 const char* GetTypeName()
 {
   const char* typeName = typeid( T ).name();
 #ifdef _MSC_VER
+  // @TODO: Support pointers to types
   if ( strncmp( typeName, "class ", 6 ) == 0 )
   {
     typeName += 6;
@@ -1826,9 +2206,14 @@ const char* GetTypeName()
     typeName += 7;
   }
 #else
-  while ( *typeName && isdigit( typeName[ 0 ] ) )
+  // @NOTE: Demangle calls realloc on given buffer
+  int status = 1;
+  static size_t s_length = 32;
+  static char* s_buffer = (char*)malloc( s_length );
+  s_buffer = abi::__cxa_demangle( typeName, s_buffer, &s_length, &status );
+  if ( status == 0 )
   {
-    typeName++;
+    return s_buffer;
   }
 #endif
   return typeName;
@@ -1848,7 +2233,13 @@ const char* GetTypeName()
 #define _AE_LOG_WARN_ 3
 #define _AE_LOG_ERROR_ 4
 #define _AE_LOG_FATAL_ 5
-extern const char* LogLevelNames[ 6 ];
+void LogInternal( std::stringstream& os, const char* message );
+void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
+template < typename T, typename... Args >
+void LogInternal( std::stringstream& os, const char* format, T value, Args... args );
+template < typename... Args >
+void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
+// extern const char* LogLevelNames[ 6 ];
 
 //------------------------------------------------------------------------------
 // Log colors internal implementation
@@ -1905,7 +2296,12 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 //------------------------------------------------------------------------------
 // C++ style allocation functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+// @NOTE: Max alignment is 8 bytes, sizeof(long double) https://github.com/emscripten-core/emscripten/issues/10072
+const uint32_t _kDefaultAlignment = 8;
+#else
 const uint32_t _kDefaultAlignment = 16;
+#endif
 const uint32_t _kHeaderSize = 16;
 struct _Header
 {
@@ -1923,7 +2319,7 @@ T* NewArray( ae::Tag tag, uint32_t count )
 
   uint32_t size = _kHeaderSize + sizeof( T ) * count;
   uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
+  AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -1953,7 +2349,7 @@ T* New( ae::Tag tag, Args ... args )
 
   uint32_t size = _kHeaderSize + sizeof( T );
   uint8_t* base = (uint8_t*)ae::Allocate( tag, size, _kDefaultAlignment );
-  AE_ASSERT( (intptr_t)base % _kDefaultAlignment == 0 );
+  AE_ASSERT_MSG( (intptr_t)base % _kDefaultAlignment == 0, "Alignment off by # bytes", (intptr_t)base % _kDefaultAlignment );
 #if _AE_DEBUG_
   memset( (void*)base, 0xCD, size );
 #endif
@@ -3522,6 +3918,9 @@ void Array< T, N >::Reserve( uint32_t size )
 {
   if ( N > 0 )
   {
+#if _AE_DEBUG_
+    AE_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
+#endif
     AE_ASSERT( N >= size );
     return;
   }
@@ -3805,7 +4204,387 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
   return os << "}";
 }
 
-} // AE_NAMESPACE end
+//------------------------------------------------------------------------------
+// Internal meta state
+//------------------------------------------------------------------------------
+std::map< ae::Str32, class Type* >& _GetTypeNameMap();
+std::map< ae::TypeId, class Type* >& _GetTypeIdMap();
+std::vector< class Type* >& _GetTypes();
+template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
+
+//------------------------------------------------------------------------------
+// External meta initialization helpers
+//------------------------------------------------------------------------------
+template < typename T >
+struct _TypeName
+{
+  static const char* Get();
+};
+
+template < typename T >
+struct _VarType
+{
+  static Var::Type GetType();
+  static const char* GetName();
+};
+
+template < typename Parent, typename This >
+Inheritor< Parent, This >::Inheritor()
+{
+  const ae::Type* t = ae::GetTypeByName( ae::_TypeName< This >::Get() );
+  AE_ASSERT_MSG( t, "No inheritor type" );
+  ae::Object::_metaTypeId = t->GetId();
+  ae::Object::_typeName = ae::_TypeName< This >::Get();
+}
+
+template < typename Parent, typename This >
+const char* Inheritor< Parent, This >::GetParentTypeName()
+{
+  return ae::_TypeName< Parent >::Get();
+}
+
+template < typename Parent, typename This >
+const ae::Type* Inheritor< Parent, This >::GetParentType()
+{
+  return ae::GetType( ae::_TypeName< Parent >::Get() );
+}
+
+//------------------------------------------------------------------------------
+// Internal meta initialization functions
+//------------------------------------------------------------------------------
+template< typename T >
+void _DefineType( Type* type, uint32_t index );
+
+template < typename T >
+struct _TypeCreator
+{
+  _TypeCreator( const char *typeName )
+  {
+    static Type type;
+    // ae::TypeId id = m_GetNextTypeId();
+    _DefineType< T >( &type, 0 );
+    _GetTypeNameMap()[ typeName ] = &type;
+    _GetTypeIdMap()[ type.GetId() ] = &type; // @TODO: Should check for hash collision
+    _GetTypes().push_back( &type );
+  }
+};
+
+template< typename C, typename V, uint32_t Offset >
+struct _VarCreator
+{
+  _VarCreator( const char* typeName, const char* varName )
+  {
+    ae::Type* type = _GetTypeNameMap().find( typeName )->second;
+    AE_ASSERT( type );
+      
+    Var var;
+    var.m_owner = type;
+    var.m_name = varName;
+    var.m_type = ae::_VarType< V >::GetType();
+    var.m_typeName = ae::_VarType< V >::GetName();
+    var.m_refTypeId = GetTypeIdFromName( ae::_VarType< V >::GetRefTypeName() );
+#if !_AE_WINDOWS_
+  #pragma clang diagnostic push
+  #pragma clang diagnostic ignored "-Winvalid-offsetof"
+#endif
+    var.m_offset = Offset; // @TODO: Verify var is not member of base class
+#if !_AE_WINDOWS_
+  #pragma clang diagnostic pop
+#endif
+    var.m_size = sizeof(V);
+
+    type->m_AddVar( var );
+  }
+};
+  
+template< typename C >
+struct _PropCreator
+{
+  _PropCreator( const char* typeName, const char* propName, const char* propValue )
+  {
+    ae::Type* type = _GetTypeNameMap().find( typeName )->second;
+    type->m_AddProp( propName, propValue );
+  }
+};
+  
+// @NOTE: Internal. Non-specialized GetEnum() has no implementation so templated GetEnum() calls (defined
+// with AE_ENUM, AE_META_ENUM, and AE_META_ENUM_PREFIX) will call the specialized function.
+template < typename T >
+const Enum* GetEnum();
+  
+template < typename E, typename T = typename std::underlying_type< E >::type >
+struct _EnumCreator
+{
+  _EnumCreator( const char* typeName, std::string strMap )
+  {
+    ae::Enum* enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+      
+    strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
+    strMap.erase( std::remove( strMap.begin(), strMap.end(), '(' ), strMap.end() );
+    std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
+
+    T currentValue = 0;
+    for ( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
+    {
+      std::string enumName;
+      if ( iter->find( '=' ) == std::string::npos )
+      {
+        enumName = *iter;
+      }
+      else
+      {
+        std::vector<std::string> enumNameValue( m_SplitString( *iter, '=' ) );
+        enumName = enumNameValue[ 0 ];
+        if ( std::is_unsigned< T >::value )
+        {
+          currentValue = static_cast< T >( std::stoull( enumNameValue[ 1 ], 0, 0 ) );
+        }
+        else
+        {
+          currentValue = static_cast< T >( std::stoll( enumNameValue[ 1 ], 0, 0 ) );
+        }
+      }
+        
+      enumType->m_AddValue( enumName.c_str(), currentValue );
+      currentValue++;
+    }
+  }
+    
+private:
+  static std::vector< std::string > m_SplitString( std::string str, char separator )
+  {
+    std::vector< std::string > result;
+
+    std::string item;
+    std::stringstream stringStream( str );
+    while ( std::getline( stringStream, item, separator ) )
+    {
+      result.push_back( item );
+    }
+
+    return result;
+  }
+};
+  
+template < typename T >
+class _EnumCreator2
+{
+public:
+  _EnumCreator2( const char* typeName )
+  {
+    ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+  }
+    
+  _EnumCreator2( const char* valueName, T value )
+  {
+    const char* prefix = ae::_VarType< T >::GetPrefix();
+    uint32_t prefixLen = (uint32_t)strlen( prefix );
+    AE_ASSERT( prefixLen < strlen( valueName ) );
+    AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
+      
+    ae::Enum* enumType = const_cast< ae::Enum* >( ae::GetEnum< T >() );
+    AE_ASSERT_MSG( enumType, "Could not register enum value '#'. No registered Enum.", valueName );
+    enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
+  }
+};
+
+} // ae end
+
+//------------------------------------------------------------------------------
+// Internal meta var registration
+//------------------------------------------------------------------------------
+#define _ae_DefineMetaVarType( t, e ) \
+template <> \
+struct ae::_VarType< t > { \
+static ae::Var::Type GetType() { return ae::Var::e; } \
+static const char* GetName() { return #t; } \
+static const char* GetRefTypeName() { return ""; } \
+};
+
+_ae_DefineMetaVarType( uint8_t, UInt8 );
+_ae_DefineMetaVarType( uint16_t, UInt16 );
+_ae_DefineMetaVarType( uint32_t, UInt32 );
+_ae_DefineMetaVarType( int8_t, Int8 );
+_ae_DefineMetaVarType( int16_t, Int16 );
+_ae_DefineMetaVarType( int32_t, Int32 );
+_ae_DefineMetaVarType( bool, Bool );
+_ae_DefineMetaVarType( float, Float );
+_ae_DefineMetaVarType( ae::Matrix4, Matrix4 );
+
+template < uint32_t N >
+struct ae::_VarType< ae::Str<N> >
+{
+  static ae::Var::Type GetType() { return ae::Var::String; }
+  static const char* GetName() { return "String"; }
+  static const char* GetRefTypeName() { return ""; }
+};
+
+template < typename T >
+struct ae::_VarType< T* >
+{
+  static ae::Var::Type GetType()
+  {
+    static_assert( std::is_base_of< ae::Object, T >::value, "AE_META_VAR refs must have base type ae::Object" );
+    return ae::Var::Ref;
+  }
+  static const char* GetName() { return "Ref"; }
+  static const char* GetRefTypeName() { return ae::GetTypeName< T >(); }
+};
+
+template < typename T >
+bool ae::Type::IsType() const
+{
+  const Type* type = GetType< T >();
+  AE_ASSERT( type );
+  return IsType( type );
+}
+
+template < typename T >
+const ae::Type* ae::GetType()
+{
+  const char* typeName = ae::GetTypeName< T >();
+  auto it = _GetTypeNameMap().find( typeName );
+  if ( it != _GetTypeNameMap().end() )
+  {
+    return it->second;
+  }
+  else
+  {
+    AE_ASSERT_MSG( false, "No meta info for type name: #", typeName );
+    return nullptr;
+  }
+}
+
+template < typename T >
+std::string ae::Enum::GetNameFromValue( T value )
+{
+  const Enum* enumType = GetEnum< T >();
+  AE_ASSERT( enumType );
+  return enumType->m_enumValueToName.Get( (int32_t)value, "" );
+}
+
+template < typename T >
+T ae::Enum::GetValueFromString( const char* str, T defaultValue )
+{
+  const Enum* enumType = GetEnum< T >();
+  AE_ASSERT_MSG( enumType, "Value '#' has no Enum #", str, typeid(T).name() ); // TODO: Pretty print
+  enumType->GetValueFromString( str, &defaultValue );
+  return defaultValue;
+}
+
+template < typename T >
+std::string ae::Enum::GetNameByValue( T value ) const
+{
+  return m_enumValueToName.Get( (int32_t)value, "" );
+}
+
+template < typename T >
+bool ae::Enum::GetValueFromString( const char* str, T* valueOut ) const
+{
+  int32_t value = 0;
+  if ( m_enumNameToValue.TryGet( str, &value ) ) // Set object var with named enum value
+  {
+    *valueOut = (T)value;
+    return true;
+  }
+  else if ( isdigit( str[ 0 ] ) || str[ 0 ] == '-' ) // Set object var with a numerical enum value
+  {
+    value = atoi( str );
+    if ( HasValue( value ) )
+    {
+      *valueOut = (T)value;
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+template < typename T >
+bool ae::Enum::HasValue( T value ) const
+{
+  return m_enumValueToName.TryGet( value );
+}
+
+template < typename T >
+T* ae::Type::New( void* obj ) const
+{
+  AE_ASSERT( obj );
+  AE_ASSERT_MSG( !m_isAbstract, "Placement new not available for abstract type: #", m_name.c_str() );
+  AE_ASSERT_MSG( m_isDefaultConstructible, "Placement new not available for type without default constructor: #", m_name.c_str() );
+  AE_ASSERT( m_placementNew );
+  AE_ASSERT( IsType< T >() );
+  AE_ASSERT( (uint64_t)obj % GetAlignment() == 0 );
+  return (T*)m_placementNew( (T*)obj );
+}
+
+template < typename T >
+typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
+ae::Type::Init( const char* name, uint32_t index )
+{
+  m_placementNew = &( _PlacementNew< T > );
+  m_name = name;
+  m_id = GetTypeIdFromName( name );
+  m_size = sizeof( T );
+  m_align = alignof( T );
+  m_parent = T::GetParentTypeName();
+  m_isAbstract = false;
+  m_isPolymorphic = std::is_polymorphic< T >::value;
+  m_isDefaultConstructible = true;
+}
+template < typename T >
+typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
+ae::Type::Init( const char* name, uint32_t index )
+{
+  m_placementNew = nullptr;
+  m_name = name;
+  m_id = GetTypeIdFromName( name );
+  m_size = sizeof( T );
+  m_align = 0;
+  m_parent = T::GetParentTypeName();
+  m_isAbstract = std::is_abstract< T >::value;
+  m_isPolymorphic = std::is_polymorphic< T >::value;
+  m_isDefaultConstructible = std::is_default_constructible< T >::value;
+}
+
+template < typename T >
+bool ae::Var::SetObjectValue( ae::Object* obj, const T& value ) const
+{
+  AE_ASSERT( m_type != Ref );
+
+  if ( !obj )
+  {
+    return false;
+  }
+
+  const ae::Type* objType = ae::GetTypeFromObject( obj );
+  AE_ASSERT( objType );
+  AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
+
+  Var::Type typeCheck = ae::_VarType< T >::GetType();
+  AE_ASSERT( typeCheck == m_type );
+  AE_ASSERT( m_size == sizeof( T ) );
+
+  T* varData = reinterpret_cast<T*>( (uint8_t*)obj + m_offset );
+  *varData = value;
+
+  return true;
+}
+
+template< typename T, typename C >
+const T* ae::Cast( const C* obj )
+{
+  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
+  return dynamic_cast<const T*>( obj );
+}
+
+template< typename T, typename C >
+T* ae::Cast( C* obj )
+{
+  static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
+  return dynamic_cast<T*>( obj );
+}
+
 #endif // AE_AETHER_H
 
 //------------------------------------------------------------------------------
@@ -3879,12 +4658,14 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 //------------------------------------------------------------------------------
 // Platform functions internal implementation
 //------------------------------------------------------------------------------
-namespace AE_NAMESPACE {
+namespace ae {
 
 uint32_t GetPID()
 {
 #if _AE_WINDOWS_
   return GetCurrentProcessId();
+#elif _AE_EMSCRIPTEN_
+  return 0;
 #else
   return getpid();
 #endif
@@ -4936,11 +5717,11 @@ public:
   {
 #if _AE_WINDOWS_
     return _aligned_malloc( bytes, alignment );
-#elif _AE_LINUX_
-    return aligned_alloc( alignment, bytes );
-#else
+#elif _AE_OSX_
     // @HACK: macosx clang c++11 does not have aligned alloc
     return malloc( bytes );
+#else
+    return aligned_alloc( alignment, bytes );
 #endif
   }
 
@@ -4950,7 +5731,7 @@ public:
     return _aligned_realloc( data, bytes, alignment );
 #else
     aeCompilationWarning( "Aligned realloc() not determined on this platform" )
-      return nullptr;
+    return nullptr;
 #endif
   }
 
@@ -4958,8 +5739,6 @@ public:
   {
 #if _AE_WINDOWS_
     _aligned_free( data );
-#elif _AE_LINUX_
-    free( data );
 #else
     free( data );
 #endif
@@ -5070,6 +5849,10 @@ void TimeStep::Wait()
 //------------------------------------------------------------------------------
 // ae::Dict members
 //------------------------------------------------------------------------------
+Dict::Dict( ae::Tag tag ) :
+  m_entries( tag )
+{}
+
 void Dict::SetString( const char* key, const char* value )
 {
   m_entries.Set( key, value );
@@ -5362,7 +6145,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
       {
         uint32_t width = LOWORD( lParam );
         uint32_t height = HIWORD( lParam );
-        window->m_UpdateWidthHeight( width, height );
+        window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
       }
       break;
     }
@@ -5377,7 +6160,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 #endif
 
 #if _AE_OSX_
-} // AE_NAMESPACE end
+} // ae end
 
 @interface aeApplicationDelegate : NSObject< NSApplicationDelegate >
 @property ae::Window* aewindow;
@@ -5406,13 +6189,28 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 - (NSSize)windowWillResize:(NSWindow*)sender toSize:(NSSize)frameSize
 {
   AE_ASSERT( _aewindow );
-  AE_ASSERT( _aewindow->graphicsDevice );
-  _aewindow->m_UpdateWidthHeight( frameSize.width * sender.backingScaleFactor, frameSize.height * sender.backingScaleFactor );
+  NSWindow* window = (NSWindow*)_aewindow->window;
+  AE_ASSERT( window );
+  NSPoint mouseScreenPos = [NSEvent mouseLocation];
+  NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
+  _aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
+  _aewindow->m_UpdateSize( frameSize.width, frameSize.height, sender.backingScaleFactor );
+  _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
   return frameSize;
+}
+- (void)windowDidMove:(NSNotification *)notification
+{
+  AE_ASSERT( _aewindow );
+  NSWindow* window = (NSWindow*)_aewindow->window;
+  AE_ASSERT( window );
+  NSPoint mouseScreenPos = [NSEvent mouseLocation];
+  NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
+  _aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
+  _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
 }
 @end
 
-namespace AE_NAMESPACE {
+namespace ae {
 #endif
 
 Window::Window()
@@ -5425,6 +6223,7 @@ Window::Window()
   m_height = 0;
   m_fullScreen = false;
   m_maximized = false;
+  m_scaleFactor = 0.0f;
 }
 
 bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor )
@@ -5460,84 +6259,15 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
   return false;
 }
 
+void Window::m_UpdateSize( int32_t width, int32_t height, float scaleFactor )
+{
+  m_width = width;
+  m_height = height;
+  m_scaleFactor = scaleFactor;
+}
+
 void Window::m_Initialize()
 {
-//  if ( SDL_Init( SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER ) < 0 )
-//  {
-//    AE_FAIL_MSG( "SDL could not initialize: #", SDL_GetError() );
-//  }
-//
-//#if _AE_IOS_
-//  m_pos = Int2( 0 );
-//  m_fullScreen = true;
-//
-//  SDL_DisplayMode displayMode;
-//  if ( SDL_GetDesktopDisplayMode( 0, &displayMode ) == 0 )
-//  {
-//    m_width = displayMode.w;
-//    m_height = displayMode.h;
-//  }
-//
-//  window = SDL_CreateWindow( "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, m_width, m_height, SDL_WINDOW_SHOWN );
-//#else
-//  Rect windowRect( m_pos.x, m_pos.y, m_width, m_height );
-//  bool overlapsAny = false;
-//  uint32_t displayCount = SDL_GetNumVideoDisplays();
-//  for ( uint32_t i = 0; i < displayCount; i++ )
-//  {
-//    SDL_Rect rect;
-//    int result = SDL_GetDisplayBounds( i, &rect );
-//    if ( result == 0 )
-//    {
-//      Rect screenRect( rect.x, rect.y, rect.w, rect.h );
-//      Rect intersection;
-//      if ( windowRect.GetIntersection( screenRect, &intersection ) )
-//      {
-//        // Check how much window overlaps. This prevent windows that are barely overlapping from appearing offscreen.
-//        float intersectionArea = intersection.w * intersection.h;
-//        float screenArea = screenRect.w * screenRect.h;
-//        float windowArea = windowRect.w * windowRect.h;
-//        float screenOverlap = intersectionArea / screenArea;
-//        float windowOverlap = intersectionArea / windowArea;
-//        if ( screenOverlap > 0.1f || windowOverlap > 0.1f )
-//        {
-//          overlapsAny = true;
-//          break;
-//        }
-//      }
-//    }
-//  }
-//
-//  if ( !overlapsAny && displayCount )
-//  {
-//    SDL_Rect screenRect;
-//    if ( SDL_GetDisplayBounds( 0, &screenRect ) == 0 )
-//    {
-//      int32_t border = screenRect.w / 16;
-//
-//      m_width = screenRect.w - border * 2;
-//      int32_t h0 = screenRect.h - border * 2;
-//      int32_t h1 = m_width * ( 10.0f / 16.0f );
-//      m_height = aeMath::Min( h0, h1 );
-//
-//      m_pos.x = border;
-//      m_pos.y = ( screenRect.h - m_height ) / 2;
-//      m_pos.x += screenRect.x;
-//      m_pos.y += screenRect.y;
-//
-//      m_fullScreen = false;
-//    }
-//  }
-//
-//  uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
-//  flags |= m_fullScreen ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_RESIZABLE;
-//  window = SDL_CreateWindow( "", m_pos.x, m_pos.y, m_width, m_height, flags );
-//#endif
-//  AE_ASSERT( window );
-//
-//  SDL_SetWindowTitle( (SDL_Window*)window, "" );
-//  m_windowTitle = "";
-
 #if _AE_WINDOWS_
 #define WNDCLASSNAME L"wndclass"
   HINSTANCE hinstance = GetModuleHandle( NULL );
@@ -5600,6 +6330,9 @@ void Window::m_Initialize()
   {
     AE_FAIL_MSG( "Failed on first window update. Error: #", GetLastError() );
   }
+  
+  // @TODO: Get real scale factor
+  m_scaleFactor = 1.0f;
 #elif _AE_OSX_
   // Autorelease Pool
   NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
@@ -5613,7 +6346,7 @@ void Window::m_Initialize()
   // Main window
   aeWindowDelegate* windowDelegate = [[aeWindowDelegate alloc] init];
   windowDelegate.aewindow = this;
-  NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 400, 300)
+  NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, m_width, m_height )
     styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
     backing:NSBackingStoreBuffered
     defer:YES
@@ -5648,11 +6381,27 @@ void Window::m_Initialize()
   [nsWindow makeKeyAndOrderFront:nil]; // nil sender
   // @TODO: Create menus (especially Quit!)
   [nsWindow orderFrontRegardless];
+  m_scaleFactor = nsWindow.backingScaleFactor;
   
   if (![[NSRunningApplication currentApplication] isFinishedLaunching]) // Make sure run is only called once
   {
     [NSApp run];
   }
+#elif _AE_EMSCRIPTEN_
+  m_width = 0;
+  m_height = 0;
+  // double dpr = emscripten_get_device_pixel_ratio();
+  // emscripten_set_element_css_size("canvas", GetWidth() / dpr, GetHeight() / dpr);
+  emscripten_set_canvas_element_size( "canvas", GetWidth(), GetHeight() );
+  EM_ASM({
+    var canvas = document.getElementsByTagName('canvas')[0];
+    canvas.style.position = "absolute";
+    canvas.style.top = "0px";
+    canvas.style.left = "0px";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+  });
+  m_scaleFactor = 1.0f;
 #endif
 }
 
@@ -5660,6 +6409,28 @@ void Window::Terminate()
 {
   //SDL_DestroyWindow( (SDL_Window*)window );
 }
+
+#if _AE_EMSCRIPTEN_
+int32_t Window::GetWidth() const
+{
+  return EM_ASM_INT({ return window.innerWidth; });
+}
+
+int32_t Window::GetHeight() const
+{
+  return EM_ASM_INT({ return window.innerHeight; });
+}
+#else
+int32_t Window::GetWidth() const
+{
+  return m_width;
+}
+
+int32_t Window::GetHeight() const
+{
+  return m_height;
+}
+#endif
 
 void Window::SetTitle( const char* title )
 {
@@ -5730,16 +6501,48 @@ void Window::SetMaximized( bool maximized )
 //------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+EM_BOOL ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
+{
+  if ( !keyEvent->repeat )
+  {
+    AE_ASSERT( userData );
+    Input* input = (Input*)userData;
+    // Use 'code' instead of 'key' so value is not affected by modifiers/layout
+    // const char* type = EMSCRIPTEN_EVENT_KEYUP == eventType ? "up" : "down";
+    // AE_LOG( "# #", keyEvent->code, type );
+    bool pressed = EMSCRIPTEN_EVENT_KEYUP != eventType;
+    if ( strcmp( keyEvent->code, "ArrowRight" ) == 0 ) { input->m_keys[ (int)Key::Right ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowLeft" ) == 0 ) { input->m_keys[ (int)Key::Left ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowUp" ) == 0 ) { input->m_keys[ (int)Key::Up ] = pressed; }
+    if ( strcmp( keyEvent->code, "ArrowDown" ) == 0 ) { input->m_keys[ (int)Key::Down ] = pressed; }
+  }
+  return true;
+}
+#endif
+
 void Input::Initialize( Window* window )
 {
-  window->input = this;
+  m_window = window;
+  if ( window )
+  {
+    window->input = this;
+  }
   memset( m_keys, 0, sizeof(m_keys) );
   memset( m_keysPrev, 0, sizeof(m_keysPrev) );
+
+#if _AE_EMSCRIPTEN_
+  emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
+  emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
+#endif
 }
 
 void Input::Pump()
 {
   memcpy( m_keysPrev, m_keys, sizeof( m_keys ) );
+  mouseStatePrev = mouseState;
+  mouseState.scroll.x = 0.0f;
+  mouseState.scroll.y = 0.0f;
 
 #if _AE_WINDOWS_
   MSG msg;
@@ -5960,31 +6763,44 @@ void Input::Pump()
       switch ( event.type )
       {
           // Mouse
-        case NSEventTypeMouseEntered:
-          //AE_INFO( "mouse enter" );
-          break;
-        case NSEventTypeMouseExited:
-          //AE_INFO( "mouse exit" );
-          break;
-        case NSEventTypeMouseMoved:
+        case NSEventTypeMouseMoved: // @NOTE: Move events are not sent if any mouse button is clicked
         case NSEventTypeLeftMouseDragged:
         case NSEventTypeRightMouseDragged:
-          //AE_INFO( "mouse moved" );
+        case NSEventTypeOtherMouseDragged:
+        {
+          NSPoint p = [NSEvent mouseLocation];
+          m_SetMousePos( ae::Int2( p.x, p.y ) );
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
+        }
         case NSEventTypeLeftMouseDown:
-          AE_INFO( "mouse left down" );
+          mouseState.leftButton = true;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeLeftMouseUp:
-          AE_INFO( "mouse left up" );
+          mouseState.leftButton = false;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeRightMouseDown:
-          AE_INFO( "mouse right down" );
+          mouseState.rightButton = true;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeRightMouseUp:
-          AE_INFO( "mouse right up" );
+          mouseState.rightButton = false;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          break;
+        case NSEventTypeOtherMouseDown:
+          mouseState.middleButton = true;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          break;
+        case NSEventTypeOtherMouseUp:
+          mouseState.middleButton = false;
+          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeScrollWheel:
-          AE_INFO( "mouse scroll" );
+          mouseState.scroll.x += event.deltaX;
+          mouseState.scroll.y += event.deltaY;
+          // Scroll is never NSEventSubtypeTouch
           break;
         case NSEventTypeKeyDown:
         case NSEventTypeKeyUp:
@@ -6118,6 +6934,15 @@ void Input::Pump()
   AE_UPDATE_KEY( Up, kVK_UpArrow );
 #undef AE_UPDATE_KEY
 #endif
+  
+  // Update meta key
+#if _AE_APPLE_
+  m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ];
+  m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ];
+#else
+  m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
+  m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
+#endif
 }
 
 bool Input::Get( ae::Key key ) const
@@ -6128,6 +6953,13 @@ bool Input::Get( ae::Key key ) const
 bool Input::GetPrev( ae::Key key ) const
 {
   return m_keysPrev[ static_cast< int >( key ) ];
+}
+
+void Input::m_SetMousePos( ae::Int2 pos )
+{
+  AE_ASSERT( m_window );
+  pos -= m_window->GetPosition();
+  mouseState.position = pos;
 }
 
 //------------------------------------------------------------------------------
@@ -6156,6 +6988,14 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 #if _AE_APPLE_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
+  // Something like /Users/someone/Library/Application Support
+  NSArray* paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+  NSString* prefsPath = [paths lastObject];
+  if ( [prefsPath length] )
+  {
+    *outDir = [prefsPath UTF8String];
+    return true;
+  }
   return false;
 }
 bool FileSystem_GetCacheDir( Str256* outDir )
@@ -6173,7 +7013,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 #elif _AE_LINUX_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
-  return false;
+	return false;
 }
 bool FileSystem_GetCacheDir( Str256* outDir )
 {
@@ -6233,6 +7073,15 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 {
   // Something like C:\Users\someone\AppData\Local\Company\Game
   return FileSystem_GetDir( FOLDERID_LocalAppData, outDir );
+}
+#elif _AE_EMSCRIPTEN_
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+  return false;
+}
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+  return false;
 }
 #endif
 
@@ -6579,6 +7428,7 @@ bool FileSystem::CreateFolder( const char* folderPath )
   int result = mkdir( folderPath, 0777 ) == 0;
   return ( result == 0 ) || errno == EEXIST;
 #endif
+  return false;
 }
 
 void FileSystem::ShowFolder( const char* folderPath )
@@ -6595,19 +7445,18 @@ void FileSystem::ShowFolder( const char* folderPath )
 Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
-  NSString* path = [NSString stringWithUTF8String:filePath];
   NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-  if ( ![currentPath isEqualToString:@"/"] )
+  if ( [currentPath isEqualToString:@"/"] )
   {
-    AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
-    NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
-    NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
-    return [absoluteUrl.path UTF8String];
-  }
-  else
-  {
+    // Current path is root. This is Xcode's new default as of 7/21
+    // @TODO: When inside an App fallback to the resource directory instead
     return "";
   }
+  NSString* path = [NSString stringWithUTF8String:filePath];
+  AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
+  NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
+  NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
+  return [absoluteUrl.path UTF8String];
 #elif _AE_WINDOWS_
   char result[ ae::Str256::MaxLength() ];
   if ( _fullpath( result, filePath, countof(result) ) )
@@ -6975,7 +7824,72 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 //------------------------------------------------------------------------------
 std::string FileSystem::SaveDialog( const FileDialogParams& params )
 {
-  return "";
+  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+  NSWindow* window = (NSWindow*)( params.window ? params.window->window : nullptr );
+  NSSavePanel* dialog = [NSSavePanel savePanel];
+  if ( params.windowTitle && params.windowTitle[ 0 ] )
+  {
+    dialog.message = [NSString stringWithUTF8String:params.windowTitle];
+  }
+  if ( params.defaultPath && params.defaultPath[ 0 ] )
+  {
+    ae::Str256 dir = "file://";
+    dir += params.defaultPath;
+    dialog.directoryURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:dir.c_str()]];
+  }
+  
+  bool allowAny = false;
+  NSMutableArray* filters = [NSMutableArray arrayWithCapacity:params.filters.Length()];
+  for ( const FileFilter& filter : params.filters )
+  {
+    for ( const char* ext : filter.extensions )
+    {
+      if ( ext )
+      {
+        if ( strcmp( ext, "*" ) == 0 )
+        {
+          allowAny = true;
+        }
+        [filters addObject:[NSString stringWithUTF8String:ext]];
+      }
+    }
+  }
+  if ( !allowAny )
+  {
+    [dialog setAllowedFileTypes:filters];
+  }
+  
+  __block bool finished = false;
+  __block bool success = false;
+  std::string result;
+  // Show
+  if ( window )
+  {
+    AE_ASSERT_MSG( params.window->input, "Must initialize ae::Input with ae::Window before creating a file dialog" );
+    [dialog beginSheetModalForWindow:window completionHandler:^(NSModalResponse returnCode)
+    {
+      success = ( returnCode == NSFileHandlingPanelOKButton );
+      finished = true;
+    }];
+    // Block here until panel returns
+    while ( !finished )
+    {
+      params.window->input->Pump();
+      sleep( 0 );
+    }
+  }
+  else
+  {
+    success = ( [dialog runModal] == NSModalResponseOK );
+  }
+  // Result
+  if ( success && dialog.URL )
+  {
+    result = dialog.URL.fileSystemRepresentation;
+  }
+  
+  [pool release];
+  return result;
 }
 
 #else
@@ -6998,19 +7912,18 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 
 #endif
 
-}  // AE_NAMESPACE end
+}  // ae end
 
 //------------------------------------------------------------------------------
 // OpenGL includes
 //------------------------------------------------------------------------------
-// @TODO: Are these being included in the ae namespace? Fix if so
 #if _AE_WINDOWS_
 	#pragma comment (lib, "opengl32.lib")
 	#pragma comment (lib, "glu32.lib")
 	#include <gl/GL.h>
 	#include <gl/GLU.h>
 #elif _AE_EMSCRIPTEN_
-  #include <GLES2/gl2.h>
+  #include <GLES3/gl3.h>
 #elif _AE_LINUX_
   #include <GL/gl.h>
   #include <GLES3/gl3.h>
@@ -7023,9 +7936,9 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
   #include <OpenGL/gl3ext.h>
 #endif
 
-namespace AE_NAMESPACE
+namespace ae
 {
-#if _AE_IOS_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
   uint32_t GLMajorVersion = 3;
   uint32_t GLMinorVersion = 0;
 #else
@@ -7033,7 +7946,7 @@ namespace AE_NAMESPACE
   uint32_t GLMinorVersion = 1;
 #endif
 bool ReverseZ = false;
-}  // AE_NAMESPACE end
+}  // ae end
 
 #if _AE_WINDOWS_
 // OpenGL function pointers
@@ -7046,6 +7959,8 @@ typedef intptr_t GLintptr;
 #define GL_CLAMP_TO_EDGE                  0x812F
 // GL_VERSION_1_3
 #define GL_TEXTURE0                       0x84C0
+// GL_VERSION_1_4
+#define GL_DEPTH_COMPONENT16              0x81A5
 // GL_VERSION_1_5
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
@@ -7152,10 +8067,14 @@ void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboole
 void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam ) = nullptr;
 #endif
 
+#if _AE_EMSCRIPTEN_
+#define glClearDepth glClearDepthf
+#endif
+
 // Helpers
 #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
 
-namespace AE_NAMESPACE {
+namespace ae {
 
 void CheckFramebufferComplete( GLuint framebuffer )
 {
@@ -7174,12 +8093,16 @@ void CheckFramebufferComplete( GLuint framebuffer )
       case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
         break;
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
         break;
+#endif
+#ifdef GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
       case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
         errStr = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
         break;
+#endif
       case GL_FRAMEBUFFER_UNSUPPORTED:
         errStr = "GL_FRAMEBUFFER_UNSUPPORTED";
         break;
@@ -7603,8 +8526,8 @@ void Shader::Activate( const UniformList& uniforms ) const
   }
 
   // Wireframe
-#if _AE_IOS_
-  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on iOS" );
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
+  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
   glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
 #endif
@@ -7729,10 +8652,8 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 
   // Version
   ae::Str32 glVersionStr = "#version ";
-#if _AE_IOS_
+#if _AE_IOS_ || _AE_EMSCRIPTEN_
   glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );
-#elif _AE_EMSCRIPTEN_
-  // No version specified
 #else
   glVersionStr += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
 #endif
@@ -7750,21 +8671,21 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 #endif
 
   // Input/output
-#if _AE_EMSCRIPTEN_
-  shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
-  shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
-  shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  if ( type == Type::Vertex )
-  {
-    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
-    shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
-  }
-  else if ( type == Type::Fragment )
-  {
-    shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
-    shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
-  }
-#else
+// #if _AE_EMSCRIPTEN_
+//   shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
+//   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
+//   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//   if ( type == Type::Vertex )
+//   {
+//     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
+//     shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
+//   }
+//   else if ( type == Type::Fragment )
+//   {
+//     shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
+//     shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//   }
+// #else
   shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM uniform\n";
   shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform\n";
@@ -7774,7 +8695,7 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
   {
     shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
   }
-#endif
+// #endif
 
   AE_ASSERT( sourceCount <= kPrependMax );
 
@@ -7886,6 +8807,8 @@ void VertexData::Destroy()
   m_primitive = (VertexData::Primitive)-1;
   m_vertexUsage = (VertexData::Usage)-1;
   m_indexUsage = (VertexData::Usage)-1;
+
+  m_attributes.Clear();
 
   m_vertexSize = 0;
   m_indexSize = 0;
@@ -8314,13 +9237,18 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   switch ( format )
   {
     // TODO: need D32F_S8 format
+    case Format::Depth16:
+      glInternalFormat = GL_DEPTH_COMPONENT16;
+      glFormat = GL_DEPTH_COMPONENT;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
     case Format::Depth32F:
       glInternalFormat = GL_DEPTH_COMPONENT32F;
       glFormat = GL_DEPTH_COMPONENT;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-
     case Format::R8:
     case Format::R16_UNORM:
     case Format::R16F:
@@ -8603,8 +9531,15 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
     AE_IN_HIGHP vec2 v_uv;\
     void main()\
     {\
-      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );\
-    }";
+      vec4 color = AE_TEXTURE2D( u_tex, v_uv );"
+#if _AE_EMSCRIPTEN_
+      // It seems like WebGL requires a manual conversion to sRGB, since there is no way to specify a framebuffer format
+      "AE_COLOR.rgb = pow( color.rgb, vec3( 1.0/2.2 ) );"
+      "AE_COLOR.a = color.a;"
+#else
+      "AE_COLOR = color;"
+#endif      
+    "}";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
   AE_CHECK_GL_ERROR();
@@ -8642,8 +9577,15 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
     return;
   }
 
+#if _AE_EMSCRIPTEN_
+  Texture::Format format = Texture::Format::RGBA8;
+  Texture::Type type = Texture::Type::Uint8;
+#else
+  Texture::Format format = Texture::Format::RGBA16F;
+  Texture::Type type = Texture::Type::HalfFloat;
+#endif
   Texture2D* tex = ae::New< Texture2D >( AE_ALLOC_TAG_RENDER );
-  tex->Initialize( nullptr, m_width, m_height, Texture::Format::RGBA16F, Texture::Type::HalfFloat, filter, wrap );
+  tex->Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
 
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
@@ -8662,7 +9604,14 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
     return;
   }
 
-  m_depth.Initialize( nullptr, m_width, m_height, Texture::Format::Depth32F, Texture::Type::Float, filter, wrap );
+#if _AE_EMSCRIPTEN_
+  Texture::Format format = Texture::Format::Depth16;
+  Texture::Type type = Texture::Type::Uint16;
+#else
+  Texture::Format format = Texture::Format::Depth32F;
+  Texture::Type type = Texture::Type::Float;
+#endif
+  m_depth.Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 
@@ -8799,12 +9748,15 @@ AE_ASSERT_MSG( _glfn, "Failed to load OpenGL function '" #_glfn "'" );
 
 void GraphicsDevice::Initialize( class Window* window )
 {
-  AE_ASSERT( window );
-  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
   AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
+  AE_ASSERT( window );
   m_window = window;
   window->graphicsDevice = this;
+
+#if !_AE_EMSCRIPTEN_
+  AE_ASSERT_MSG( window->window, "Window must be initialized prior to GraphicsDevice initialization." );
+#endif
 
 #if _AE_WINDOWS_
   // Create OpenGL context
@@ -8821,6 +9773,15 @@ void GraphicsDevice::Initialize( class Window* window )
   m_context = hglrc;
 #elif _AE_APPLE_
   m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
+#elif _AE_EMSCRIPTEN_
+  EmscriptenWebGLContextAttributes attrs;
+  emscripten_webgl_init_context_attributes( &attrs );
+  attrs.alpha = 0;
+  attrs.majorVersion = ae::GLMajorVersion;
+  attrs.minorVersion = ae::GLMinorVersion;
+  m_context = emscripten_webgl_create_context( "canvas", &attrs );
+  AE_ASSERT( m_context );
+  emscripten_webgl_make_context_current( m_context );
 #endif
   
   AE_CHECK_GL_ERROR();
@@ -8884,8 +9845,10 @@ void GraphicsDevice::Initialize( class Window* window )
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
   AE_CHECK_GL_ERROR();
 
-  m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
-
+  float scaleFactor = m_window->GetScaleFactor();
+  int32_t contentWidth = m_window->GetWidth() * scaleFactor;
+  int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+  m_HandleResize( contentWidth, contentHeight );
 }
 
 void GraphicsDevice::Terminate()
@@ -8901,9 +9864,16 @@ void GraphicsDevice::Activate()
 {
   AE_ASSERT( m_context );
 
-  if ( m_window->GetWidth() != m_canvas.GetWidth() || m_window->GetHeight() != m_canvas.GetHeight() )
+  float scaleFactor = m_window->GetScaleFactor();
+  int32_t contentWidth = m_window->GetWidth() * scaleFactor;
+  int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+  if ( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
   {
-    m_HandleResize( m_window->GetWidth(), m_window->GetHeight() );
+#if _AE_EMSCRIPTEN_
+    emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
+#else
+     m_HandleResize( contentWidth, contentHeight );
+#endif
   }
 
   if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
@@ -8912,7 +9882,7 @@ void GraphicsDevice::Activate()
   }
 
   m_canvas.Activate();
-#if !_AE_IOS_
+#if !_AE_IOS_ && !_AE_EMSCRIPTEN_
   // This is automatically enabled on opengl es3 and can't be turned off
   glEnable( GL_FRAMEBUFFER_SRGB );
 #endif
@@ -8939,7 +9909,7 @@ void GraphicsDevice::Present()
   AE_CHECK_GL_ERROR();
 
   glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-  glViewport( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
+  glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
 
   // Clear window target in case canvas doesn't fit exactly
   glClearColor( 1.0f, 0.0f, 0.0f, 1.0f );
@@ -8989,7 +9959,10 @@ void GraphicsDevice::AddTextureBarrier()
 
 void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 {
-  // @TODO: Allow user to pass in a canvas scaling factor / aspect ratio parameter
+  // @TODO: Also resize actual canvas element with emscripten?
+  // emscripten_set_canvas_element_size( "canvas", m_window->GetWidth(), m_window->GetHeight() );
+  // emscripten_set_canvas_size( m_window->GetWidth(), m_window->GetHeight() );
+  // @TODO: Allow user to pass in a canvas scale factor / aspect ratio parameter
   m_canvas.Initialize( width, height );
   m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );
   m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
@@ -9406,7 +10379,550 @@ uint32_t Hash::Get() const
   return m_hash;
 }
 
-} // AE_NAMESPACE end
+} // ae end
+
+//------------------------------------------------------------------------------
+// Meta register base object
+//------------------------------------------------------------------------------
+// @TODO: Support registering classes in namespaces
+//AE_META_CLASS( ae::Object );
+int force_link_aeObject = 0;
+template <> const char* ae::_TypeName< ae::Object >::Get() { return "ae::Object"; }
+template <> void ae::_DefineType< ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ae::Object >( "ae::Object", index ); }
+static ae::_TypeCreator< ae::Object > ae_type_creator_aeObject( "ae::Object" );
+
+uint32_t ae::GetTypeCount()
+{
+  return (uint32_t)_GetTypes().size();
+}
+
+const ae::Type* ae::GetTypeByIndex( uint32_t i )
+{
+  return _GetTypes()[ i ];
+}
+
+const ae::Type* ae::GetTypeById( ae::TypeId id )
+{
+  return _GetTypeIdMap()[ id ];
+}
+
+const ae::Type* ae::GetTypeByName( const char* typeName )
+{
+  auto it = _GetTypeNameMap().find( typeName );
+  if ( it != _GetTypeNameMap().end() ) { return it->second; }
+  else { return nullptr; }
+}
+
+const ae::Type* ae::GetTypeFromObject( const ae::Object& obj )
+{
+  return GetTypeFromObject( &obj );
+}
+
+const ae::Enum* ae::GetEnum( const char* enumName )
+{
+  return Enum::s_Get( enumName, false, 0 , false );
+}
+
+const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
+{
+  if ( !obj )
+  {
+    return nullptr;
+  }
+  
+  ae::TypeId id = GetObjectTypeId( obj );
+  auto it = _GetTypeIdMap().find( id );
+  if ( it != _GetTypeIdMap().end() )
+  {
+    return it->second;
+  }
+  else
+  {
+    AE_ASSERT_MSG( false, "No meta info for object '#' type id: #", obj, (uint32_t)id );
+    return nullptr;
+  }
+}
+
+const char* ae::Var::GetName() const { return m_name.c_str(); }
+ae::Var::Type ae::Var::GetType() const { return m_type; }
+const char* ae::Var::GetTypeName() const { return m_typeName.c_str(); }
+uint32_t ae::Var::GetOffset() const { return m_offset; }
+uint32_t ae::Var::GetSize() const { return m_size; }
+
+bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std::function< bool( const ae::Type*, const char*, ae::Object** ) > getObjectPointerFromString ) const
+{
+  if ( !obj )
+  {
+    return false;
+  }
+  
+  // Safety check to make sure 'this' Var belongs to 'obj' ae::Type
+  const ae::Type* objType = ae::GetTypeFromObject( obj );
+  AE_ASSERT( objType );
+  AE_ASSERT_MSG( objType == m_owner, "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
+  
+  void* varData = (uint8_t*)obj + m_offset;
+  
+  switch ( m_type )
+  {
+    case Var::String:
+    {
+      switch ( m_size )
+      {
+        case 16:
+        {
+          *(ae::Str16*)varData = value;
+          return true;
+        }
+        case 32:
+        {
+          *(ae::Str32*)varData = value;
+          return true;
+        }
+        case 64:
+        {
+          ae::Str64* str = (ae::Str64*)varData;
+          *str = value;
+          return true;
+        }
+        case 128:
+        {
+          ae::Str128* str = (ae::Str128*)varData;
+          *str = value;
+          return true;
+        }
+        case 256:
+        {
+          ae::Str256* str = (ae::Str256*)varData;
+          *str = value;
+          return true;
+        }
+        case 512:
+        {
+          ae::Str512* str = (ae::Str512*)varData;
+          *str = value;
+          return true;
+        }
+        default:
+        {
+          AE_ASSERT_MSG( false, "Invalid string size '#'", m_size );
+          return false;
+        }
+      }
+    }
+    case Var::UInt8:
+    {
+      AE_ASSERT(m_size == sizeof(uint8_t) );
+      uint8_t* u8 = (uint8_t*)varData;
+      sscanf( value, "%hhu", u8 );
+      return true;
+    }
+    case Var::UInt16:
+    {
+      AE_ASSERT(m_size == sizeof(uint16_t) );
+      uint16_t* u16 = (uint16_t*)varData;
+      sscanf( value, "%hu", u16 );
+      return true;
+    }
+    case Var::UInt32:
+    {
+      AE_ASSERT(m_size == sizeof(uint32_t) );
+      uint32_t* u32 = (uint32_t*)varData;
+      sscanf( value, "%u", u32 );
+      return true;
+    }
+    case Var::Int8:
+    {
+      AE_ASSERT(m_size == sizeof(int8_t) );
+      int8_t* i8 = (int8_t*)varData;
+      sscanf( value, "%hhd", i8 );
+      return true;
+    }
+    case Var::Int16:
+    {
+      AE_ASSERT(m_size == sizeof(int16_t) );
+      int16_t* i16 = (int16_t*)varData;
+      sscanf( value, "%hd", i16 );
+      return true;
+    }
+    case Var::Int32:
+    {
+      AE_ASSERT(m_size == sizeof(int32_t) );
+      int32_t* i32 = (int32_t*)varData;
+      sscanf( value, "%d", i32 );
+      return true;
+    }
+    case Var::Bool:
+    {
+      // @TODO: Clean this up. Should check for both `true` and `false`, and return false if neither match
+      const char* trueStr = "true";
+      bool b = value[ 0 ];
+      if ( b )
+      {
+        for ( uint32_t i = 0; ( value[ i ] && trueStr[ i ] ); i++ )
+        {
+          if ( trueStr[ i ] != tolower( value[ i ] ) )
+          {
+            b = false;
+          }
+        }
+      }
+      *(bool*)varData = b;
+      return true;
+    }
+    case Var::Float:
+    {
+      AE_ASSERT( m_size == sizeof(float) );
+      float* f = (float*)varData;
+      sscanf( value, "%f", f );
+      return true;
+    }
+    case Var::Matrix4:
+    {
+      AE_ASSERT( m_size == sizeof(ae::Matrix4) );
+      ae::Matrix4* v = (ae::Matrix4*)varData;
+      // @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+      sscanf( value, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
+             v->d, v->d + 1, v->d + 2, v->d + 3,
+             v->d + 4, v->d + 5, v->d + 6, v->d + 7,
+             v->d + 8, v->d + 9, v->d + 10, v->d + 11,
+             v->d + 12, v->d + 13, v->d + 14, v->d + 15 );
+      return true;
+    }
+    case Var::Enum:
+    {
+      if ( !value[ 0 ] )
+      {
+        return false;
+      }
+      
+      const class Enum* enumType = GetEnum();
+      
+      if ( enumType->TypeIsSigned() )
+      {
+        switch ( enumType->TypeSize() )
+        {
+        case 1:
+          return enumType->GetValueFromString( value, reinterpret_cast< int8_t* >( varData ) );
+        case 2:
+          return enumType->GetValueFromString( value, reinterpret_cast< int16_t* >( varData ) );
+        case 4:
+          return enumType->GetValueFromString( value, reinterpret_cast< int32_t* >( varData ) );
+        case 8:
+          return enumType->GetValueFromString( value, reinterpret_cast< int64_t* >( varData ) );
+        default:
+          AE_FAIL();
+          return false;
+        }
+      }
+      else
+      {
+        switch ( enumType->TypeSize() )
+        {
+        case 1:
+          return enumType->GetValueFromString( value, reinterpret_cast< uint8_t* >( varData ) );
+        case 2:
+          return enumType->GetValueFromString( value, reinterpret_cast< uint16_t* >( varData ) );
+        case 4:
+          return enumType->GetValueFromString( value, reinterpret_cast< uint32_t* >( varData ) );
+        case 8:
+          return enumType->GetValueFromString( value, reinterpret_cast< uint64_t* >( varData ) );
+        default:
+          AE_FAIL();
+          return false;
+        }
+      }
+      return false;
+    }
+    case Var::Ref:
+    {
+      const ae::Type* refType = GetRefType();
+      AE_ASSERT_MSG( getObjectPointerFromString, "Must provide mapping function for reference types when calling SetObjectValueFromString" );
+      
+      class ae::Object* obj = nullptr;
+      if ( getObjectPointerFromString( refType, value, &obj ) )
+      {
+        if ( obj )
+        {
+          const ae::Type* objType = ae::GetTypeFromObject( obj );
+          AE_ASSERT( objType );
+          AE_ASSERT_MSG( objType->IsType( refType ), "SetObjectValueFromString for var '#::#' returned object with wrong type '#'", m_owner->GetName(), GetName(), objType->GetName() );
+        }
+        class ae::Object** varPtr = reinterpret_cast< class ae::Object** >( varData );
+        *varPtr = obj;
+        return true;
+      }
+      return false;
+    }
+  }
+  
+  return false;
+}
+
+bool ae::Var::SetObjectValue( ae::Object* obj, const ae::Object* value ) const
+{
+  AE_ASSERT( m_type == Ref );
+  
+  if ( !obj )
+  {
+    return false;
+  }
+  
+  const ae::Type* objType = ae::GetTypeFromObject( obj );
+  AE_ASSERT( objType );
+  AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
+  
+  if ( !value )
+  {
+    memset( (uint8_t*)obj + m_offset, 0, m_size );
+    return true;
+  }
+  
+  const ae::Type* refType = GetRefType();
+  const ae::Type* valueType = ae::GetTypeFromObject( value );
+  AE_ASSERT( valueType );
+  AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
+  
+  uint8_t* target = (uint8_t*)obj + m_offset;
+  const ae::Object*& varData = *reinterpret_cast< const ae::Object** >( target );
+  varData = value;
+  
+  return true;
+}
+
+const ae::Var* ae::Type::GetVarByName( const char* name ) const
+{
+  int32_t i = m_vars.FindFn( [name]( auto&& v )
+  {
+    return v.m_name == name;
+  } );
+  return ( i >= 0 ) ? &m_vars[ i ] : nullptr;
+}
+
+const ae::Type* ae::Type::GetParentType() const
+{
+  return GetTypeByName( m_parent.c_str() );
+}
+
+bool ae::Type::IsType( const Type* otherType ) const
+{
+  AE_ASSERT( otherType );
+  for ( const ae::Type* baseType = this; baseType; baseType = baseType->GetParentType() )
+  {
+    if ( baseType == otherType )
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+const class ae::Enum* ae::Var::GetEnum() const
+{
+  if ( !m_enum )
+  {
+    if ( m_type != Var::Enum )
+    {
+      return nullptr;
+    }
+    m_enum = ae::GetEnum( m_typeName.c_str() );
+  }
+  return m_enum;
+}
+
+const ae::Type* ae::Var::GetRefType() const
+{
+  if ( m_refTypeId == kAeInvalidMetaTypeId )
+  {
+    return nullptr;
+  }
+  const ae::Type* type = GetTypeById( m_refTypeId );
+  AE_ASSERT( type );
+  return type;
+}
+
+//------------------------------------------------------------------------------
+// Internal ae::Object functions
+//------------------------------------------------------------------------------
+ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
+{
+  return obj ? obj->_metaTypeId : ae::kAeInvalidMetaTypeId;
+}
+
+ae::TypeId ae::GetTypeIdFromName( const char* name )
+{
+  // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
+  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kAeInvalidMetaTypeId;
+}
+
+std::map< ae::Str32, ae::Type* >& ae::_GetTypeNameMap()
+{
+  static std::map< ae::Str32, Type* > s_map;
+  return s_map;
+}
+
+std::map< ae::TypeId, ae::Type* >& ae::_GetTypeIdMap()
+{
+  static std::map< ae::TypeId, Type* > s_map;
+  return s_map;
+}
+
+std::vector< ae::Type* >& ae::_GetTypes()
+{
+  static std::vector< ae::Type* > s_vec;
+  return s_vec;
+}
+
+int32_t ae::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
+std::string ae::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
+uint32_t ae::Enum::Length() const { return m_enumValueToName.Length(); }
+
+ae::Enum::Enum( const char* name, uint32_t size, bool isSigned ) :
+  m_name( name ),
+  m_size( size ),
+  m_isSigned( isSigned )
+{}
+
+void ae::Enum::m_AddValue( const char* name, int32_t value )
+{
+  m_enumValueToName.Set( value, name );
+  m_enumNameToValue.Set( name, value );
+}
+
+ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
+{
+  static ae::Map< std::string, Enum* > enums = AE_ALLOC_TAG_META;
+  if ( create )
+  {
+    AE_ASSERT( !enums.TryGet( enumName ) );
+    return enums.Set( enumName, ae::New< Enum >( AE_ALLOC_TAG_META, enumName, size, isSigned ) );
+  }
+  else
+  {
+    Enum* metaEnum = enums.Get( enumName, nullptr );
+    AE_ASSERT_MSG( metaEnum, "Could not find meta registered Enum named '#'", enumName );
+    return metaEnum;
+  }
+}
+
+// @TODO: Replace return type with a dynamic ae::Str
+std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, std::function< std::string( const ae::Object* ) > getStringFromObjectPointer ) const
+{
+  if ( !obj )
+  {
+    return "";
+  }
+  
+  // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
+  
+  const void* varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
+  
+  switch ( m_type )
+  {
+    case Var::String:
+      switch ( m_size )
+      {
+        case 16:
+          return reinterpret_cast< const ae::Str16* >( varData )->c_str();
+        case 32:
+          return reinterpret_cast< const ae::Str32* >( varData )->c_str();
+        case 64:
+          return reinterpret_cast< const ae::Str64* >( varData )->c_str();
+        case 128:
+          return reinterpret_cast< const ae::Str128* >( varData )->c_str();
+        case 256:
+          return reinterpret_cast< const ae::Str256* >( varData )->c_str();
+        case 512:
+          return reinterpret_cast< const ae::Str512* >( varData )->c_str();
+        default:
+          AE_FAIL_MSG( "Invalid string size '#'", m_size );
+          return "";
+      }
+    case Var::UInt8:
+      // Prevent char formatting
+      return ae::Str32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str();
+    case Var::UInt16:
+      return ae::Str32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
+    case Var::UInt32:
+      return ae::Str32::Format( "#", *reinterpret_cast< const uint32_t* >( varData ) ).c_str();
+    case Var::Int8:
+      // Prevent char formatting
+      return ae::Str32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str();
+    case Var::Int16:
+      return ae::Str32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
+    case Var::Int32:
+      return ae::Str32::Format( "#", *reinterpret_cast< const int32_t* >( varData ) ).c_str();
+    case Var::Bool:
+      return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
+    case Var::Float:
+      return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
+    case Var::Matrix4:
+      return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
+    case Var::Enum:
+    {
+      const class Enum* enumType = GetEnum();
+      int32_t value = 0;
+      switch ( enumType->TypeSize() )
+      {
+        case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
+        case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
+        case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
+        case 8: value = *reinterpret_cast< const int64_t* >( varData ); break;
+        default: AE_FAIL();
+      }
+      return enumType->GetNameByValue( value );
+    }
+    case Var::Ref:
+    {
+      AE_ASSERT_MSG( getStringFromObjectPointer, "Must provide mapping function for reference types when calling GetObjectValueAsString" );
+      const ae::Object* obj = *reinterpret_cast< const ae::Object* const * >( varData );
+      return getStringFromObjectPointer( obj ).c_str();
+    }
+  }
+  
+  return "";
+}
+
+ae::TypeId ae::Type::GetId() const { return m_id; }
+bool ae::Type::HasProperty( const char* prop ) const { return m_props.TryGet( prop ) != nullptr; }
+uint32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
+const char* ae::Type::GetPropertyName( uint32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
+uint32_t ae::Type::GetPropertyValueCount( uint32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
+uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
+const char* ae::Type::GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
+const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
+uint32_t ae::Type::GetVarCount() const { return m_vars.Length(); }
+const ae::Var* ae::Type::GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
+uint32_t ae::Type::GetSize() const { return m_size; }
+uint32_t ae::Type::GetAlignment() const { return m_align; }
+const char* ae::Type::GetName() const { return m_name.c_str(); }
+bool ae::Type::HasNew() const { return m_placementNew; }
+bool ae::Type::IsAbstract() const { return m_isAbstract; }
+bool ae::Type::IsPolymorphic() const { return m_isPolymorphic; }
+bool ae::Type::IsDefaultConstructible() const { return m_isDefaultConstructible; }
+const char* ae::Type::GetParentTypeName() const { return m_parent.c_str(); }
+
+void ae::Type::m_AddProp( const char* prop, const char* value )
+{
+  auto* props = m_props.TryGet( prop );
+  if ( !props )
+  {
+    props = &m_props.Set( prop, AE_ALLOC_TAG_META );
+  }
+  if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties with no value specified
+  {
+    props->Append( value );
+  }
+}
+
+void ae::Type::m_AddVar( const Var& var )
+{
+  m_vars.Append( var );
+  std::sort( m_vars.Begin(), m_vars.End(), []( const auto& a, const auto& b )
+  {
+    return a.GetOffset() < b.GetOffset();
+  } );
+}
 
 //------------------------------------------------------------------------------
 // Warnings
