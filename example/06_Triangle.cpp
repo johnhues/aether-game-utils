@@ -95,8 +95,11 @@ int main()
 	vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
 	vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
 
+	ae::Vec3 pos( 0.0f );
+	float scale = 1.0f;
 	float rotation = 0.0f;
 
+	bool capture = false;
 	AE_LOG( "Run" );
 	while ( !input.quit )
 	{
@@ -105,9 +108,26 @@ int main()
 		render.Clear( ae::Color::PicoDarkPurple() );
 
 		rotation += timeStep.GetDt();
-
-		ae::Matrix4 transform = ae::Matrix4::RotationY( rotation );
-		transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f / render.GetAspectRatio(), 1.0f, 1.0f ) );
+		
+		if ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
+		{
+			capture = !capture;
+			input.SetCaptureMouse( capture );
+		}
+		
+		if ( input.mouseState.usingTouch )
+		{
+			pos.x += input.mouseState.scroll.x * 0.01f;
+			pos.y += input.mouseState.scroll.y * -0.01f;
+		}
+		else
+		{
+			scale += input.mouseState.scroll.y * 0.01f;
+		}
+		
+		ae::Matrix4 transform = ae::Matrix4::Translation( pos );
+		transform *= ae::Matrix4::RotationY( rotation );
+		transform *= ae::Matrix4::Scaling( ae::Vec3( scale / render.GetAspectRatio(), scale, scale ) );
 
 		ae::UniformList uniformList;
 		uniformList.Set( "u_modelToNdc", transform );

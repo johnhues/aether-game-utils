@@ -1265,6 +1265,7 @@ public:
   bool Get( ae::Key key ) const;
   bool GetPrev( ae::Key key ) const;
   
+  void SetCaptureMouse( bool enable );
   MouseState mouseState;
   MouseState mouseStatePrev;
   
@@ -1273,6 +1274,7 @@ public:
 // private:
   void m_SetMousePos( ae::Int2 pos );
   ae::Window* m_window = nullptr;
+  bool m_captureMouse = false;
   bool m_keys[ 256 ];
   bool m_keysPrev[ 256 ];
 };
@@ -6812,6 +6814,20 @@ void Input::Pump()
       }
       [NSApp sendEvent:event];
     }
+    
+    if ( m_captureMouse && m_window )
+    {
+      NSWindow* nsWindow = (NSWindow*)m_window->window;
+      ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
+      NSPoint screenCenter = [nsWindow convertPointToScreen:NSMakePoint( localCenter.x, localCenter.y )];
+      // @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
+      screenCenter.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - screenCenter.y;
+      
+      AE_INFO( "# #", ae::Round( mouseState.position.x - localCenter.x ), ae::Round( mouseState.position.y - localCenter.y ) );
+      
+      CGWarpMouseCursorPosition( CGPointMake( screenCenter.x, screenCenter.y ) );
+      CGAssociateMouseAndMouseCursorPosition( true );
+    }
   }
   
   KeyMap _keyStates;
@@ -6943,6 +6959,19 @@ void Input::Pump()
   m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
   m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
 #endif
+}
+
+void Input::SetCaptureMouse( bool enable )
+{
+  if ( m_captureMouse && !enable )
+  {
+    CGDisplayShowCursor( kCGDirectMainDisplay );
+  }
+  else if ( !m_captureMouse && enable )
+  {
+    CGDisplayHideCursor( kCGDirectMainDisplay );
+  }
+  m_captureMouse = enable;
 }
 
 bool Input::Get( ae::Key key ) const
