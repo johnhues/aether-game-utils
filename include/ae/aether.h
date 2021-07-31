@@ -1835,7 +1835,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // External macros to force module linking
 //------------------------------------------------------------------------------
-#define AE_FORCELINK_CLASS( x ) \
+#define AE_FORCE_LINK_CLASS( x ) \
   extern int force_link_##x; \
   struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
   ForceLink_##x forceLink_##x;
@@ -1858,7 +1858,10 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) \
-  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
+  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p, "" );
+
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
+static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -1945,7 +1948,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 // Meta constants
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
-const ae::TypeId kAeInvalidMetaTypeId = 0;
+const ae::TypeId kInvalidTypeId = 0;
 const uint32_t kMaxMetaTypes = 64;
 const uint32_t kMaxMetaProps = 8;
 class Type;
@@ -1953,7 +1956,7 @@ class Type;
 //------------------------------------------------------------------------------
 // External base meta object
 //! Base class for all meta registered objects. Inherit from this using
-//! ae::Inheritor and register your classes with AE_META_CLASS.
+//! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
 //------------------------------------------------------------------------------
 class Object
 {
@@ -1962,7 +1965,7 @@ public:
   static const char* GetParentTypeName() { return ""; }
   static const ae::Type* GetParentType() { return nullptr; }
   ae::TypeId GetTypeId() const { return _metaTypeId; }
-  ae::TypeId _metaTypeId = kAeInvalidMetaTypeId;
+  ae::TypeId _metaTypeId = ae::kInvalidTypeId;
   ae::Str32 _typeName;
 };
 
@@ -1974,6 +1977,7 @@ class Inheritor : public Parent
 {
 public:
   Inheritor();
+  typedef Parent aeBaseType;
   static const char* GetParentTypeName();
   static const ae::Type* GetParentType();
 };
@@ -2076,7 +2080,7 @@ public:
   ae::Str32 m_typeName = "";
   uint32_t m_offset = 0;
   uint32_t m_size = 0;
-  ae::TypeId m_refTypeId = kAeInvalidMetaTypeId; // @TODO: Need to use an id here in case type has not been registered yet
+  ae::TypeId m_refTypeId = ae::kInvalidTypeId; // @TODO: Need to use an id here in case type has not been registered yet
   mutable const class Enum* m_enum = nullptr;
 };
 
@@ -2132,7 +2136,7 @@ public:
 private:
   ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
   ae::Str32 m_name;
-  ae::TypeId m_id = kAeInvalidMetaTypeId;
+  ae::TypeId m_id = ae::kInvalidTypeId;
   uint32_t m_size = 0;
   uint32_t m_align = 0;
   ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
@@ -4424,7 +4428,7 @@ struct ae::_VarType< T* >
 {
   static ae::Var::Type GetType()
   {
-    static_assert( std::is_base_of< ae::Object, T >::value, "AE_META_VAR refs must have base type ae::Object" );
+    static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR refs must have base type ae::Object" );
     return ae::Var::Ref;
   }
   static const char* GetName() { return "Ref"; }
@@ -10385,7 +10389,7 @@ uint32_t Hash::Get() const
 // Meta register base object
 //------------------------------------------------------------------------------
 // @TODO: Support registering classes in namespaces
-//AE_META_CLASS( ae::Object );
+//AE_REGISTER_CLASS( ae::Object );
 int force_link_aeObject = 0;
 template <> const char* ae::_TypeName< ae::Object >::Get() { return "ae::Object"; }
 template <> void ae::_DefineType< ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ae::Object >( "ae::Object", index ); }
@@ -10732,7 +10736,7 @@ const class ae::Enum* ae::Var::GetEnum() const
 
 const ae::Type* ae::Var::GetRefType() const
 {
-  if ( m_refTypeId == kAeInvalidMetaTypeId )
+  if ( m_refTypeId == ae::kInvalidTypeId )
   {
     return nullptr;
   }
@@ -10746,13 +10750,13 @@ const ae::Type* ae::Var::GetRefType() const
 //------------------------------------------------------------------------------
 ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 {
-  return obj ? obj->_metaTypeId : ae::kAeInvalidMetaTypeId;
+  return obj ? obj->_metaTypeId : ae::ae::kInvalidTypeId;
 }
 
 ae::TypeId ae::GetTypeIdFromName( const char* name )
 {
   // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kAeInvalidMetaTypeId;
+  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::ae::kInvalidTypeId;
 }
 
 std::map< ae::Str32, ae::Type* >& ae::_GetTypeNameMap()
