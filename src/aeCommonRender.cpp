@@ -282,6 +282,7 @@ void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader
     }
     uint32_t textureId = texture->GetTexture();
 
+    uint32_t count = 0;
     ae::Scratch< Vertex > scratch( AE_ALLOC_TAG_RENDER, m_count * aeQuadVertCount );
     Vertex* vertices = scratch.Data();
     for ( uint32_t j = 0; j < m_count; j++ )
@@ -292,29 +293,36 @@ void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader
         continue;
       }
     
-      vertices[ j * aeQuadVertCount + 0 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 0 ], 1.0f ) );
-      vertices[ j * aeQuadVertCount + 1 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 1 ], 1.0f ) );
-      vertices[ j * aeQuadVertCount + 2 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 2 ], 1.0f ) );
-      vertices[ j * aeQuadVertCount + 3 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 3 ], 1.0f ) );
+      uint32_t idx0 = count * aeQuadVertCount + 0;
+      uint32_t idx1 = count * aeQuadVertCount + 1;
+      uint32_t idx2 = count * aeQuadVertCount + 2;
+      uint32_t idx3 = count * aeQuadVertCount + 3;
+      
+      vertices[ idx0 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 0 ], 1.0f ) );
+      vertices[ idx1 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 1 ], 1.0f ) );
+      vertices[ idx2 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 2 ], 1.0f ) );
+      vertices[ idx3 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 3 ], 1.0f ) );
 
-      vertices[ j * aeQuadVertCount + 0 ].uv = aeFloat2( sprite->uvMin.x, sprite->uvMin.y );
-      vertices[ j * aeQuadVertCount + 1 ].uv = aeFloat2( sprite->uvMax.x, sprite->uvMin.y );
-      vertices[ j * aeQuadVertCount + 2 ].uv = aeFloat2( sprite->uvMax.x, sprite->uvMax.y );
-      vertices[ j * aeQuadVertCount + 3 ].uv = aeFloat2( sprite->uvMin.x, sprite->uvMax.y );
+      vertices[ idx0 ].uv = aeFloat2( sprite->uvMin.x, sprite->uvMin.y );
+      vertices[ idx1 ].uv = aeFloat2( sprite->uvMax.x, sprite->uvMin.y );
+      vertices[ idx2 ].uv = aeFloat2( sprite->uvMax.x, sprite->uvMax.y );
+      vertices[ idx3 ].uv = aeFloat2( sprite->uvMin.x, sprite->uvMax.y );
 
-      vertices[ j * aeQuadVertCount + 0 ].color = sprite->color.GetLinearRGBA();
-      vertices[ j * aeQuadVertCount + 1 ].color = sprite->color.GetLinearRGBA();
-      vertices[ j * aeQuadVertCount + 2 ].color = sprite->color.GetLinearRGBA();
-      vertices[ j * aeQuadVertCount + 3 ].color = sprite->color.GetLinearRGBA();
+      vertices[ idx0 ].color = sprite->color.GetLinearRGBA();
+      vertices[ idx1 ].color = sprite->color.GetLinearRGBA();
+      vertices[ idx2 ].color = sprite->color.GetLinearRGBA();
+      vertices[ idx3 ].color = sprite->color.GetLinearRGBA();
+      
+      count++;
     }
     // @TODO: Should set all vertices first then render multiple times
-    m_vertexData.SetVertices( vertices, scratch.Length() );
+    m_vertexData.SetVertices( vertices, count * 4 );
 
     aeUniformList uniforms;
     uniforms.Set( "u_worldToScreen", worldToScreen );
     uniforms.Set( "u_tex", texture );
 
-    m_vertexData.Render( shader, m_count * 2, uniforms );
+    m_vertexData.Render( shader, count * 2, uniforms );
   }
 }
 
