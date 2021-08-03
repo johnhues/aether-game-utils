@@ -128,7 +128,7 @@ public:
   void Render( aeFloat4x4 worldToProj )
   {
     aeUniformList uniforms;
-    uniforms.Set( "u_screenToWorld", worldToProj.Inverse() );
+    uniforms.Set( "u_screenToWorld", worldToProj.GetInverse() );
     m_bgVertexData.Render( &m_gridShader, uniforms );
   }
 
@@ -411,7 +411,7 @@ int main()
           {
             bool changed = false;
 
-            aeFloat4x4 temp = currentShape->GetTransform().GetTransposeCopy();
+            aeFloat4x4 temp = currentShape->GetTransform().GetTranspose();
             float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
             ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
             changed |= ImGui::InputFloat3( "translation", matrixTranslation );
@@ -553,7 +553,7 @@ int main()
       // UI units in pixels, origin in bottom left
       aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
       textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
-      worldToText = textToNdc.Inverse() * worldToProj;
+      worldToText = textToNdc.GetInverse() * worldToProj;
 
       aeColor top = aeColor::SRGB8( 46, 65, 35 );
       aeColor side = aeColor::SRGB8( 84, 84, 74 );
@@ -664,8 +664,8 @@ int main()
 
           gizmoTransform.SetTranspose();
           ImGuizmo::Manipulate(
-            worldToView.GetTransposeCopy().data,
-            viewToProj.GetTransposeCopy().data,
+            worldToView.GetTranspose().data,
+            viewToProj.GetTranspose().data,
             s_operation,
             ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
             gizmoTransform.data
@@ -692,8 +692,8 @@ int main()
 
           gizmoTransform.SetTranspose();
           ImGuizmo::Manipulate(
-            worldToView.GetTransposeCopy().data,
-            viewToProj.GetTransposeCopy().data,
+            worldToView.GetTranspose().data,
+            viewToProj.GetTranspose().data,
             s_operation,
             ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
             gizmoTransform.data

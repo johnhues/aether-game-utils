@@ -150,8 +150,8 @@ void Sdf::SetTransform( const aeFloat4x4& transform )
   // are handled by the base Shape. Sdf functions only need to take
   // object scaling into consideration.
   aeFloat4x4 scaledToWorld = m_localToWorld;
-  scaledToWorld.RemoveScaling();
-  m_removeTR = scaledToWorld.Inverse();
+  scaledToWorld = scaledToWorld.GetScaleRemoved();
+  m_removeTR = scaledToWorld.GetInverse();
 
   // Set scale of inherited Shape object
   m_halfSize = m_localToWorld.GetScale() * 0.5f;

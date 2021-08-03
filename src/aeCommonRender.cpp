@@ -223,7 +223,7 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
   
   if ( m_sorting )
   {
-    aeFloat3 cameraView = worldToScreen.GetRowVector( 2 ).GetXYZ();
+    aeFloat3 cameraView = worldToScreen.GetRow( 2 ).GetXYZ();
     for ( uint32_t i = 0; i < m_count; i++ )
     {
       m_sprites[ i ].sort = cameraView.Dot( m_sprites[ i ].transform.GetTranslation() );
@@ -993,12 +993,12 @@ void aeDebugRender::AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeCo
   if ( m_objs.Length() < m_objs.Size() && normal.LengthSquared() > 0.001f )
   {
     normal.SafeNormalize();
-    float dot = normal.Dot( aeFloat3::Up );
+    float dot = normal.Dot( aeFloat3Up );
     
     DebugObject* obj = &m_objs.Append( DebugObject() );
     obj->type = DebugType::Circle;
     obj->pos = pos;
-    obj->rotation = aeQuat( normal, ( dot < 0.99f && dot > -0.99f ) ? aeFloat3::Up : aeFloat3::Right );
+    obj->rotation = aeQuat( normal, ( dot < 0.99f && dot > -0.99f ) ? aeFloat3Up : aeFloat3Right );
     obj->radius = radius;
     obj->color = color;
     obj->pointCount = pointCount;
@@ -1009,9 +1009,9 @@ void aeDebugRender::AddSphere( aeFloat3 pos, float radius, aeColor color, uint32
 {
   if ( m_objs.Length() + 3 <= m_objs.Size() )
   {
-    AddCircle( pos, aeFloat3::Up, radius, color, pointCount );
-    AddCircle( pos, aeFloat3::Right, radius, color, pointCount );
-    AddCircle( pos, aeFloat3::Forward, radius, color, pointCount );
+    AddCircle( pos, aeFloat3Up, radius, color, pointCount );
+    AddCircle( pos, aeFloat3Right, radius, color, pointCount );
+    AddCircle( pos, aeFloat3Forward, radius, color, pointCount );
   }
 }
 

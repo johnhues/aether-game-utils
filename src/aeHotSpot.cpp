@@ -306,16 +306,17 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
   }
 }
 
-bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, aeInt2 dir )
+bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, aeInt2 _dir )
 {
-  AE_ASSERT( dir.x + dir.y == -1 || dir.x + dir.y == 1 );
+  AE_ASSERT( _dir.x + _dir.y == -1 || _dir.x + _dir.y == 1 );
 
   // @HACK: Shouldn't assume side-on platformer with gravity pointing -y
-  float hotSpotOffset = dir.y ? 0.4f : 0.3f;
+  float hotSpotOffset = _dir.y ? 0.4f : 0.3f;
 
-  aeFloat2 collisionPos;
-  aeFloat2 b0 = m_position + ( dir * 0.5f ) + ( aeInt2( -dir.y, dir.x ) * hotSpotOffset );
-  aeFloat2 b1 = m_position + ( dir * 0.5f ) + ( aeInt2( dir.y, -dir.x ) * hotSpotOffset );
+  const ae::Vec2 dir( _dir );
+  ae::Vec2 collisionPos;
+  ae::Vec2 b0 = m_position + ( ae::Vec2( dir ) * 0.5f ) + ( ae::Vec2( -dir.y, dir.x ) * hotSpotOffset );
+  ae::Vec2 b1 = m_position + ( ae::Vec2( dir ) * 0.5f ) + ( ae::Vec2( dir.y, -dir.x ) * hotSpotOffset );
 
   if ( dir.x )
   {
@@ -349,7 +350,7 @@ bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, aeInt2 dir )
 
     CollisionInfo info;
     info.position = tilePos;
-    info.normal = -dir;
+    info.normal = -_dir;
     info.tile = world->GetTile( tilePos );
     info.properties = world->GetTileProperties( info.tile );
     AE_ASSERT( info.properties & world->GetCollisionMask() );

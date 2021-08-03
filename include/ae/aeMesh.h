@@ -93,7 +93,7 @@ public:
   {
     aeFloat4x4 transform = aeFloat4x4::Identity();
     aeFloat3 source = aeFloat3( 0.0f );
-    aeFloat3 direction = aeFloat3::Down;
+    aeFloat3 direction = aeFloat3Down;
     float maxLength = 0.0f;
     uint32_t maxHits = 1;
     bool hitCounterclockwise = true;

@@ -367,7 +367,14 @@ struct Vec2 : public VecT< Vec2 >
   explicit Vec2( float v );
   Vec2( float x, float y );
   explicit Vec2( const float* v2 );
+  explicit Vec2( struct Int2 i2 );
   static Vec2 FromAngle( float angle );
+  struct Int2 NearestCopy() const;
+  struct Int2 FloorCopy() const;
+  struct Int2 CeilCopy() const;
+  Vec2 RotateCopy( float rotation ) const;
+  float GetAngle() const;
+  Vec2 Reflect( Vec2 v, Vec2 n ) const;
   union
   {
     struct
@@ -388,14 +395,15 @@ struct Vec3 : public VecT< Vec3 >
   explicit Vec3( float v );
   Vec3( float x, float y, float z );
   explicit Vec3( const float* v3 );
+  explicit Vec3( struct Int3 i3 );
   Vec3( Vec2 xy, float z ); // @TODO: Support Y up
   explicit Vec3( Vec2 xy );
   explicit operator Vec2() const;
   Vec2 GetXY() const;
   Vec2 GetXZ() const;
-  // Int3 NearestCopy() const; // @TODO
-  // Int3 FloorCopy() const; // @TODO
-  // Int3 CeilCopy() const; // @TODO
+  struct Int3 NearestCopy() const;
+  struct Int3 FloorCopy() const;
+  struct Int3 CeilCopy() const;
   
   float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
   void AddRotationXY( float rotation ); // @TODO: Support Y up
@@ -407,9 +415,10 @@ struct Vec3 : public VecT< Vec3 >
   Vec3 Cross( const Vec3& v ) const;
   void ZeroAxis( Vec3 axis ); // Zero component along arbitrary axis (ie vec dot axis == 0)
   void ZeroDirection( Vec3 direction ); // Zero component along positive half of axis (ie vec dot dir > 0)
+  Vec3 ZeroAxisCopy( Vec3 axis ) const; // Zero component along arbitrary axis (ie vec dot axis == 0)
+  Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
-  // static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p ); // @TODO
-  // static Vec3 ProjectVector( const class Matrix4& projection, Vec3 p ); // @TODO
+  static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
   
   union
   {
@@ -501,13 +510,13 @@ public:
   Matrix4 GetTranspose() const;
   Matrix4 GetInverse() const;
   Matrix4 GetNormalMatrix() const;
+  Matrix4 GetScaleRemoved() const;
 
   void SetAxis( uint32_t column, const Vec3& v );
   void SetRow( uint32_t row, const Vec3& v );
   void SetRow( uint32_t row, const Vec4& v );
   Vec3 GetAxis( uint32_t column ) const;
   Vec4 GetRow( uint32_t row ) const;
-  
 };
 
 inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
@@ -582,21 +591,21 @@ struct IntT
   int32_t operator[]( uint32_t idx ) const;
   int32_t& operator[]( uint32_t idx );
   T operator-() const;
-  T operator*( int32_t s ) const;
-  T operator/( int32_t s ) const;
   T operator+( const T& v ) const;
   T operator-( const T& v ) const;
   T operator*( const T& v ) const;
   T operator/( const T& v ) const;
-  void operator*=( int32_t s );
-  void operator/=( int32_t s );
   void operator+=( const T& v );
   void operator-=( const T& v );
   void operator*=( const T& v );
   void operator/=( const T& v );
-  void operator*= ( float s ) = delete;
-  void operator/= ( float s ) = delete;
+  T operator*( int32_t s ) const;
+  T operator/( int32_t s ) const;
+  void operator*=( int32_t s );
+  void operator/=( int32_t s );
 };
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
 
 //------------------------------------------------------------------------------
 // ae::Int2 class
@@ -619,10 +628,6 @@ struct Int2 : public IntT< Int2 >
   explicit Int2( const struct Int3& v );
   Int2( int32_t _x, int32_t _y );
   // @NOTE: No automatic conversion from aeFloat2 because rounding type should be explicit!
-  
-  Vec2 operator* ( float s ) const;
-  Vec2 operator/ ( float s ) const;
-  
 };
 
 //------------------------------------------------------------------------------
@@ -653,9 +658,6 @@ struct Int3 : public IntT< Int3 >
   explicit Int3( const int32_t*& v );
   // @NOTE: No conversion from aeFloat3 because rounding type should be explicit!
   Int2 GetXY() const;
-  
-  Vec3 operator* ( float s ) const;
-  Vec3 operator/ ( float s ) const;
 };
 
 //! @} End Math group
@@ -2572,6 +2574,15 @@ auto Min( T0&& v0, T1&& v1, Tn&&... vn )
   return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
 }
 
+inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
+{
+  return ae::Vec3(
+    Min( v0.x, v1.x ),
+    Min( v0.y, v1.y ),
+    Min( v0.z, v1.z )
+  );
+}
+
 template< typename T >
 T&& Max( T&& v )
 {
@@ -2581,6 +2592,15 @@ template< typename T0, typename T1, typename... Tn >
 auto Max( T0&& v0, T1&& v1, Tn&&... vn )
 {
   return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
+}
+
+inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
+{
+  return ae::Vec3(
+    Max( v0.x, v1.x ),
+    Max( v0.y, v1.y ),
+    Max( v0.z, v1.z )
+  );
 }
 
 template<typename T>
@@ -3127,6 +3147,12 @@ float VecT< T >::Trim( float trimLength )
 }
 
 template < typename T >
+T operator*( float f, const VecT< T >& v )
+{
+  return v * f;
+}
+
+template < typename T >
 inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 {
   constexpr uint32_t count = countof( T::data );
@@ -3145,7 +3171,29 @@ inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 inline Vec2::Vec2( float v ) : x( v ), y( v ) {}
 inline Vec2::Vec2( float x, float y ) : x( x ), y( y ) {}
 inline Vec2::Vec2( const float* v2 ) : x( v2[ 0 ] ), y( v2[ 1 ] ) {}
+inline Vec2::Vec2( struct Int2 i2 ) : x( i2.x ), y( i2.y ) {}
 inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::Sin( angle ) ); }
+inline Int2 Vec2::NearestCopy() const { return Int2( x + 0.5f, y + 0.5f ); }
+inline Int2 Vec2::FloorCopy() const { return Int2( floorf( x ), floorf( y ) ); }
+inline Int2 Vec2::CeilCopy() const { return Int2( ceilf( x ), ceilf( y ) ); }
+inline Vec2 Vec2::RotateCopy( float rotation ) const
+{
+  float sinTheta = std::sin( rotation );
+  float cosTheta = std::cos( rotation );
+  return Vec2( x * cosTheta - y * sinTheta, x * sinTheta + y * cosTheta );
+}
+inline float Vec2::GetAngle() const
+{
+  if ( LengthSquared() < 0.0001f )
+  {
+    return 0.0f;
+  }
+  return ae::Atan2( y, x );
+}
+inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n ) const
+{
+  return n * ( 2.0f * v.Dot( n ) / n.LengthSquared() ) - v;
+}
 
 //------------------------------------------------------------------------------
 // ae::Vec3 member functions
@@ -3153,11 +3201,15 @@ inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::
 inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ), pad( 0.0f ) {}
 inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( const float* v3 ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), pad( 0.0f ) {}
+inline Vec3::Vec3( struct Int3 i3 ) : x( i3.x ), y( i3.y ), z( i3.z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
+inline Int3 Vec3::NearestCopy() const { return Int3( x + 0.5f, y + 0.5f, z + 0.5f ); }
+inline Int3 Vec3::FloorCopy() const { return Int3( floorf( x ), floorf( y ), floorf( z ) ); }
+inline Int3 Vec3::CeilCopy() const { return Int3( ceilf( x ), ceilf( y ), ceilf( z ) ); }
 inline Vec3 Vec3::Lerp( const Vec3& end, float t ) const
 {
   t = ae::Clip01( t );
@@ -3183,6 +3235,23 @@ inline void Vec3::ZeroDirection( Vec3 direction )
     *this -= direction * d;
   }
 }
+inline Vec3 Vec3::ZeroAxisCopy( Vec3 axis ) const
+{
+  Vec3 r = *this;
+  r.ZeroAxis( axis );
+  return r;
+}
+inline Vec3 Vec3::ZeroDirectionCopy( Vec3 direction ) const
+{
+  Vec3 r = *this;
+  r.ZeroDirection( direction );
+  return r;
+}
+inline Vec3 Vec3::ProjectPoint( const Matrix4& projection, Vec3 p )
+{
+  Vec4 projected = projection * Vec4( p, 1.0f );
+  return projected.GetXYZ() / projected.w;
+}
 
 //------------------------------------------------------------------------------
 // ae::Vec4 member functions
@@ -3200,6 +3269,218 @@ inline Vec4::Vec4( const float* v4 ) : x( v4[ 0 ] ), y( v4[ 1 ] ), z( v4[ 2 ] ),
 inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
+
+//------------------------------------------------------------------------------
+// ae::Int2 shared member functions
+// ae::Int3 shared member functions
+//------------------------------------------------------------------------------
+template < typename T >
+bool IntT< T >::operator==( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
+}
+
+template < typename T >
+bool IntT< T >::operator!=( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
+}
+
+template < typename T >
+int32_t IntT< T >::operator[]( uint32_t idx ) const
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+int32_t& IntT< T >::operator[]( uint32_t idx )
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+T IntT< T >::operator+( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] + v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator+=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    self.data[ i ] += v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator-() const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = -self.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T IntT< T >::operator-( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] - v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator-=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] -= v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator*( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T IntT< T >::operator/( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator*=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= v.data[ i ];
+  }
+}
+
+template < typename T >
+void IntT< T >::operator/=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator*( int32_t s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * s;
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator*=( int32_t s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= s;
+  }
+}
+
+template < typename T >
+T IntT< T >::operator/( int32_t s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / s;
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator/=( int32_t s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= s;
+  }
+}
+
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v )
+{
+  constexpr uint32_t count = countof( T::data );
+  for ( uint32_t i = 0; i < count - 1; i++ )
+  {
+    os << v[ i ] << " ";
+  }
+  return os << v[ count - 1 ];
+}
+
+//------------------------------------------------------------------------------
+// ae::Int2 member functions
+//------------------------------------------------------------------------------
+inline Int2::Int2( int32_t _v ) : x( _v ), y( _v ) {}
+inline Int2::Int2( const struct Int3& v ) : x( v.x ), y( v.y ) {}
+inline Int2::Int2( int32_t _x, int32_t _y ) : x( _x ), y( _y ) {}
+
+//------------------------------------------------------------------------------
+// ae::Int3 member functions
+//------------------------------------------------------------------------------
+inline Int3::Int3( int32_t _v ) : x( _v ), y( _v ), z( _v ), pad( 0 ) {}
+inline Int3::Int3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ), pad( 0 ) {}
+inline Int3::Int3( Int2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ), pad( 0 ) {}
+inline Int3::Int3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int2 Int3::GetXY() const { return Int2( x, y ); }
 
 //------------------------------------------------------------------------------
 // ae::Colors
@@ -5410,6 +5691,15 @@ Matrix4 Matrix4::GetNormalMatrix() const
   return GetInverse().GetTranspose();
 }
 
+Matrix4 Matrix4::GetScaleRemoved() const
+{
+  Matrix4 r = *this;
+  r.SetAxis( 0, r.GetAxis( 0 ).NormalizeCopy() );
+  r.SetAxis( 1, r.GetAxis( 1 ).NormalizeCopy() );
+  r.SetAxis( 2, r.GetAxis( 2 ).NormalizeCopy() );
+  return *this;
+}
+
 //------------------------------------------------------------------------------
 // ae::Quaternion member functions
 //------------------------------------------------------------------------------
@@ -5703,222 +5993,6 @@ float Quaternion::Dot( const Quaternion& q ) const
 {
   return ( q.r * r ) + ( q.i * i ) + ( q.j * j ) + ( q.k * k );
 }
-
-//------------------------------------------------------------------------------
-// ae::Int2 shared member functions
-// ae::Int3 shared member functions
-//------------------------------------------------------------------------------
-template < typename T >
-bool IntT< T >::operator==( const T& v ) const
-{
-  auto&& self = *(T*)this;
-  return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
-}
-
-template < typename T >
-bool IntT< T >::operator!=( const T& v ) const
-{
-  auto&& self = *(T*)this;
-  return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
-}
-
-template < typename T >
-int32_t IntT< T >::operator[]( uint32_t idx ) const
-{
-  auto&& self = *(T*)this;
-#if _AE_DEBUG_
-  AE_ASSERT( idx < countof(self.data) );
-#endif
-  return self.data[ idx ];
-}
-
-template < typename T >
-int32_t& IntT< T >::operator[]( uint32_t idx )
-{
-  auto&& self = *(T*)this;
-#if _AE_DEBUG_
-  AE_ASSERT( idx < countof(self.data) );
-#endif
-  return self.data[ idx ];
-}
-
-template < typename T >
-T IntT< T >::operator+( const T& v ) const
-{
-  auto&& self = *(T*)this;
-  T result;
-  for ( uint32_t i = 0; i < countof(T::data); i++ )
-  {
-    result.data[ i ] = self.data[ i ] + v.data[ i ];
-  }
-  return result;
-}
-
-template < typename T >
-void IntT< T >::operator+=( const T& v )
-{
-  auto&& self = *(T*)this;
-  for ( uint32_t i = 0; i < countof(T::data); i++ )
-  {
-    self.data[ i ] += v.data[ i ];
-  }
-}
-
-template < typename T >
-T IntT< T >::operator-() const
-{
-  auto&& self = *(T*)this;
-  T result;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    result.data[ i ] = -self.data[ i ];
-  }
-  return result;
-}
-
-template < typename T >
-T IntT< T >::operator-( const T& v ) const
-{
-  auto&& self = *(T*)this;
-  T result;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    result.data[ i ] = self.data[ i ] - v.data[ i ];
-  }
-  return result;
-}
-
-template < typename T >
-void IntT< T >::operator-=( const T& v )
-{
-  auto&& self = *(T*)this;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    self.data[ i ] -= v.data[ i ];
-  }
-}
-
-template < typename T >
-T IntT< T >::operator*( const T& v ) const
-{
-  auto&& self = *(T*)this;
-  T result;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    result.data[ i ] = self.data[ i ] * v.data[ i ];
-  }
-  return result;
-}
-
-template < typename T >
-T IntT< T >::operator/( const T& v ) const
-{
-  auto&& self = *(T*)this;
-  T result;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    result.data[ i ] = self.data[ i ] / v.data[ i ];
-  }
-  return result;
-}
-
-template < typename T >
-void IntT< T >::operator*=( const T& v )
-{
-  auto&& self = *(T*)this;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    self.data[ i ] *= v.data[ i ];
-  }
-}
-
-template < typename T >
-void IntT< T >::operator/=( const T& v )
-{
-  auto&& self = *(T*)this;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    self.data[ i ] /= v.data[ i ];
-  }
-}
-
-template < typename T >
-T IntT< T >::operator*( int32_t s ) const
-{
-  auto&& self = *(T*)this;
-  T result;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    result.data[ i ] = self.data[ i ] * s;
-  }
-  return result;
-}
-
-template < typename T >
-void IntT< T >::operator*=( int32_t s )
-{
-  auto&& self = *(T*)this;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    self.data[ i ] *= s;
-  }
-}
-
-template < typename T >
-T IntT< T >::operator/( int32_t s ) const
-{
-  auto&& self = *(T*)this;
-  T result;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    result.data[ i ] = self.data[ i ] / s;
-  }
-  return result;
-}
-
-template < typename T >
-void IntT< T >::operator/=( int32_t s )
-{
-  auto&& self = *(T*)this;
-  for ( uint32_t i = 0; i < countof(self.data); i++ )
-  {
-    self.data[ i ] /= s;
-  }
-}
-
-template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v )
-{
-  constexpr uint32_t count = countof( T::data );
-  for ( uint32_t i = 0; i < count - 1; i++ )
-  {
-    os << v[ i ] << " ";
-  }
-  return os << v[ count - 1 ];
-}
-
-//------------------------------------------------------------------------------
-// ae::Int2 member functions
-//------------------------------------------------------------------------------
-inline Int2::Int2( int32_t _v ) : x( _v ), y( _v ) {}
-inline Int2::Int2( const struct Int3& v ) : x( v.x ), y( v.y ) {}
-inline Int2::Int2( int32_t _x, int32_t _y ) : x( _x ), y( _y ) {}
-inline Vec2 Int2::operator* ( float s ) const { return Vec2( x * s, y * s ); }
-inline Vec2 Int2::operator/ ( float s ) const { return Vec2( x / s, y / s ); }
-
-//------------------------------------------------------------------------------
-// ae::Int3 member functions
-//------------------------------------------------------------------------------
-inline Int3::Int3( int32_t _v ) : x( _v ), y( _v ), z( _v ), pad( 0 ) {}
-inline Int3::Int3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ), pad( 0 ) {}
-inline Int3::Int3( Int2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ), pad( 0 ) {}
-inline Int3::Int3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-inline Int3::Int3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-inline Int3::Int3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-inline Int3::Int3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
-inline Int2 Int3::GetXY() const { return Int2( x, y ); }
-inline Vec3 Int3::operator* ( float s ) const { return Vec3( x * s, y * s, z * s ); }
-inline Vec3 Int3::operator/ ( float s ) const { return Vec3( x / s, y / s, z / s ); }
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation
