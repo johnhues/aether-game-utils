@@ -205,6 +205,6 @@ void aeEditorCamera::m_Precalculate()
   m_forward.z = aeMath::Sin( m_pitch );
   m_offset = -m_forward;
 	m_offset *= m_dist;
-	m_right = ( m_forward % aeFloat3::Up ).SafeNormalizeCopy();
-	m_up = ( m_right % m_forward ).SafeNormalizeCopy();
+	m_right = m_forward.Cross( aeFloat3Up ).SafeNormalizeCopy();
+	m_up = m_right.Cross( m_forward ).SafeNormalizeCopy();
 }

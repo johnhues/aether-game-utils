@@ -70,7 +70,7 @@ int main()
 		aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
 		textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
 
-		aeFloat4x4 worldToUI = textToNdc.Inverse() * worldToProj;
+		aeFloat4x4 worldToUI = textToNdc.GetInverse() * worldToProj;
 
 		auto DrawText = [&]( aeFloat3 worldPos, const char* str, aeColor color )
 		{
@@ -120,7 +120,7 @@ int main()
 					aeFloat3( 0.0f, 1.5f, 1.0f ) * 2.0f,
 				};
 				aeFloat3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
-				aeFloat3 normal = ( triangle[ 1 ] - triangle[ 0 ] ) % ( triangle[ 2 ] - triangle[ 0 ] );
+				aeFloat3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
 				normal.SafeNormalize();
 				debug.AddLine( triangle[ 0 ], triangle[ 1 ], aeColor::Red() );
 				debug.AddLine( triangle[ 1 ], triangle[ 2 ], aeColor::Red() );
@@ -256,7 +256,7 @@ int main()
 					aeFloat3( 0.0f, 1.5f, 1.0f ) * 2.0f,
 				};
 				aeFloat3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
-				aeFloat3 normal = ( triangle[ 1 ] - triangle[ 0 ] ) % ( triangle[ 2 ] - triangle[ 0 ] );
+				aeFloat3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
 				normal.SafeNormalize();
 				debug.AddLine( triangle[ 0 ], triangle[ 1 ], aeColor::Red() );
 				debug.AddLine( triangle[ 1 ], triangle[ 2 ], aeColor::Red() );

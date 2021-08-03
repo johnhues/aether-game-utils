@@ -158,7 +158,7 @@ void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
 void Player::Render( aeSpriteRender* spriteRender, aeTexture2D* tex )
 {
   aeFloat4x4 transform = aeFloat4x4::Translation( aeFloat3( GetPosition(), -0.5f ) );
-  transform.Scale( aeFloat3( 1.0f, 1.0f, 1.0f ) );
+  transform *= aeFloat4x4::Scaling( aeFloat3( 1.0f, 1.0f, 1.0f ) );
   spriteRender->AddSprite( tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), CanJump() ? aeColor::PicoRed() : aeColor::PicoBlue() );
 }
 
@@ -265,14 +265,14 @@ int main()
           default: color = aeColor::PicoOrange(); break;
         }
         aeFloat4x4 transform = aeFloat4x4::Translation( aeFloat3( x, y, 0.0f ) );
-        transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
+        transform *= aeFloat4x4::Scaling( aeFloat3( 1.0f, 1.0f, 0.0f ) );
         spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), color );
       }
     }
 
     aeFloat2 camera = player.GetPosition();
     aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 10.0f, render.GetAspectRatio() / 10.0f, 1.0f ) );
-    screenTransform.Translate( aeFloat3( -camera.x, -camera.y, 0.0f ) );
+    screenTransform *= aeFloat4x4::Translation( aeFloat3( -camera.x, -camera.y, 0.0f ) );
     spriteRender.Render( screenTransform );
 
     render.Present();

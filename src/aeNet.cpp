@@ -510,7 +510,7 @@ void aeNetReplicaDB::UpdateSendData()
 //------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
-//AE_META_CLASS( aeRpc );
+//AE_REGISTER_CLASS( aeRpc );
 
 // //------------------------------------------------------------------------------
 // // Internal Net Struct
@@ -858,8 +858,8 @@ void aeNetReplicaDB::UpdateSendData()
 //         HVN_ASSERT( recvInfo.length <= sizeof(msg) );
 //         memcpy( &msg, recvInfo.data, recvInfo.length );
 
-//         const aeMeta::Type* metaType = aeMeta::GetType( msg.typeId );
-//         if ( metaType && metaType->GetBaseType() == aeMeta::GetType< Rpc >() )
+//         const ae::Type* metaType = aeMeta::GetType( msg.typeId );
+//         if ( metaType && metaType->GetParentType() == aeMeta::GetType< Rpc >() )
 //         {
 //           Rpc* rpc = ae::Cast< Rpc >( metaType->New() );
 //           rpc->game = game;
@@ -1095,7 +1095,7 @@ void aeNetReplicaDB::UpdateSendData()
 //         HVN_ASSERT( recvInfo.length == sizeof(MsgRpcCreate) );
 //         memcpy( &createMsg, recvInfo.data, recvInfo.length );
         
-//         const aeMeta::Type* metaType = aeMeta::GetType( createMsg.type );
+//         const ae::Type* metaType = aeMeta::GetType( createMsg.type );
 //         HVN_ASSERT_MSG( metaType, "No type %d", createMsg.type );
 //         HVN_LOG( "Net obj create t:%s x:%d y:%d", metaType->GetName(), createMsg.x, createMsg.y );
 
@@ -1412,7 +1412,7 @@ void aeNetReplicaDB::UpdateSendData()
 // {
 //   MsgRpc msg;
 
-//   const aeMeta::Type* metaType = aeMeta::GetType( rpc );
+//   const ae::Type* metaType = aeMeta::GetType( rpc );
 //   HVN_ASSERT( metaType );
 //   msg.typeId = metaType->GetId();
 

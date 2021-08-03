@@ -798,7 +798,8 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
   hash.HashBasicType( m_depthTest );
   hash.HashBasicType( m_culling );
   hash.HashBasicType( m_wireframe );
-  if ( s_activeHash != hash.Get() )
+  bool shaderDirty = s_activeHash != hash.Get();
+  if ( shaderDirty )
   {
     s_activeHash = hash.Get();
     
@@ -864,7 +865,8 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
     glUseProgram( m_program );
   }
   
-  if ( s_uniformHash == uniforms.GetHash() )
+  // Always update uniforms after a shader change
+  if ( !shaderDirty && s_uniformHash == uniforms.GetHash() )
   {
     return;
   }
@@ -956,7 +958,7 @@ void aeShader::Activate( const aeUniformList& uniforms ) const
       aeFloat4x4 transposedTransform = uniformValue->value.GetTransposeCopy();
       glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, transposedTransform.data );
 #else
-      glUniformMatrix4fv( uniformVar->location, 1, GL_TRUE, uniformValue->value.data );
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.data );
 #endif
     }
     else
@@ -1593,13 +1595,13 @@ uint32_t aeRenderTarget::GetHeight() const
 aeFloat4x4 aeRenderTarget::GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, aeRect ndc ) const
 {
   aeFloat4x4 windowToNDC = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) );
-  windowToNDC.Scale( aeFloat3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
+  windowToNDC *= aeFloat4x4::Scaling( aeFloat3( 2.0f / otherPixelWidth, 2.0f / otherPixelHeight, 1.0f ) );
 
   aeFloat4x4 ndcToQuad = aeRenderTarget::GetQuadToNDCTransform( ndc, 0.0f );
-  ndcToQuad.Invert();
+  ndcToQuad.SetInverse();
 
   aeFloat4x4 quadToRender = aeFloat4x4::Scaling( aeFloat3( m_width, m_height, 1.0f ) );
-  quadToRender.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
+  quadToRender *= aeFloat4x4::Translation( aeFloat3( 0.5f, 0.5f, 0.0f ) );
 
   return ( quadToRender * ndcToQuad * windowToNDC );
 }
@@ -1625,14 +1627,14 @@ aeRect aeRenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t ot
 aeFloat4x4 aeRenderTarget::GetTargetPixelsToWorld( const aeFloat4x4& otherTargetToLocal, const aeFloat4x4& worldToNdc ) const
 {
   aeFloat4x4 canvasToNdc = aeFloat4x4::Translation( aeFloat3( -1.0f, -1.0f, 0.0f ) ) * aeFloat4x4::Scaling( aeFloat3( 2.0f / GetWidth(), 2.0f / GetHeight(), 1.0f ) );
-  return ( worldToNdc.Inverse() * canvasToNdc * otherTargetToLocal );
+  return ( worldToNdc.GetInverse() * canvasToNdc * otherTargetToLocal );
 }
 
 aeFloat4x4 aeRenderTarget::GetQuadToNDCTransform( aeRect ndc, float z )
 {
   aeFloat4x4 localToNdc = aeFloat4x4::Translation( aeFloat3( ndc.x, ndc.y, z ) );
-  localToNdc.Scale( aeFloat3( ndc.w, ndc.h, 1.0f ) );
-  localToNdc.Translate( aeFloat3( 0.5f, 0.5f, 0.0f ) );
+  localToNdc *= ae::Matrix4::Scaling( aeFloat3( ndc.w, ndc.h, 1.0f ) );
+  localToNdc *= ae::Matrix4::Translation( aeFloat3( 0.5f, 0.5f, 0.0f ) );
   return localToNdc;
 }
 

@@ -318,10 +318,10 @@ template< typename T > constexpr T MinValue();
 // of the vector, so in the case of Vec4 a dot product is implemented as
 // (a.x*b.x)+(a.y*b.y)+(a.z*b.z)+(a.w*b.w).
 template < typename T >
-struct _VecT
+struct VecT
 {
-  _VecT() {}
-  _VecT( bool ) = delete;
+  VecT() {}
+  VecT( bool ) = delete;
 
   bool operator==( const T& v ) const;
   bool operator!=( const T& v ) const;
@@ -360,14 +360,21 @@ struct _VecT
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
 //------------------------------------------------------------------------------
-struct Vec2 : public _VecT< Vec2 >
+struct Vec2 : public VecT< Vec2 >
 {
   Vec2() {} // Empty default constructor for performance of vertex arrays etc
   Vec2( const Vec2& ) = default;
   explicit Vec2( float v );
   Vec2( float x, float y );
   explicit Vec2( const float* v2 );
+  explicit Vec2( struct Int2 i2 );
   static Vec2 FromAngle( float angle );
+  struct Int2 NearestCopy() const;
+  struct Int2 FloorCopy() const;
+  struct Int2 CeilCopy() const;
+  Vec2 RotateCopy( float rotation ) const;
+  float GetAngle() const;
+  Vec2 Reflect( Vec2 v, Vec2 n ) const;
   union
   {
     struct
@@ -378,26 +385,25 @@ struct Vec2 : public _VecT< Vec2 >
     float data[ 2 ];
   };
 };
-// @HACK: For Window
-using Int2 = Vec2;
 
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
-struct Vec3 : public _VecT< Vec3 >
+struct Vec3 : public VecT< Vec3 >
 {
   Vec3() {} // Empty default constructor for performance of vertex arrays etc
   explicit Vec3( float v );
   Vec3( float x, float y, float z );
   explicit Vec3( const float* v3 );
+  explicit Vec3( struct Int3 i3 );
   Vec3( Vec2 xy, float z ); // @TODO: Support Y up
   explicit Vec3( Vec2 xy );
   explicit operator Vec2() const;
   Vec2 GetXY() const;
   Vec2 GetXZ() const;
-  // Int3 NearestCopy() const; // @TODO
-  // Int3 FloorCopy() const; // @TODO
-  // Int3 CeilCopy() const; // @TODO
+  struct Int3 NearestCopy() const;
+  struct Int3 FloorCopy() const;
+  struct Int3 CeilCopy() const;
   
   float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
   void AddRotationXY( float rotation ); // @TODO: Support Y up
@@ -409,9 +415,10 @@ struct Vec3 : public _VecT< Vec3 >
   Vec3 Cross( const Vec3& v ) const;
   void ZeroAxis( Vec3 axis ); // Zero component along arbitrary axis (ie vec dot axis == 0)
   void ZeroDirection( Vec3 direction ); // Zero component along positive half of axis (ie vec dot dir > 0)
+  Vec3 ZeroAxisCopy( Vec3 axis ) const; // Zero component along arbitrary axis (ie vec dot axis == 0)
+  Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
-  // static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p ); // @TODO
-  // static Vec3 ProjectVector( const class Matrix4& projection, Vec3 p ); // @TODO
+  static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
   
   union
   {
@@ -429,7 +436,7 @@ struct Vec3 : public _VecT< Vec3 >
 //------------------------------------------------------------------------------
 // ae::Vec4 struct
 //------------------------------------------------------------------------------
-struct Vec4 : public _VecT< Vec4 >
+struct Vec4 : public VecT< Vec4 >
 {
   Vec4() {} // Empty default constructor for performance of vertex arrays etc
   Vec4( const Vec4& ) = default;
@@ -467,7 +474,7 @@ struct Vec4 : public _VecT< Vec4 >
 class Matrix4
 {
 public:
-  float d[ 16 ];
+  float data[ 16 ];
 
   Matrix4() = default;
   Matrix4( const Matrix4& ) = default;
@@ -484,7 +491,7 @@ public:
   static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
   static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
-  bool operator==( const Matrix4& o ) const { return memcmp( o.d, d, sizeof(d) ) == 0; }
+  bool operator==( const Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
   bool operator!=( const Matrix4& o ) const { return !operator== ( o ); }
   Vec4 operator*( const Vec4& v ) const;
   Matrix4 operator*( const Matrix4& m ) const;
@@ -503,21 +510,21 @@ public:
   Matrix4 GetTranspose() const;
   Matrix4 GetInverse() const;
   Matrix4 GetNormalMatrix() const;
+  Matrix4 GetScaleRemoved() const;
 
   void SetAxis( uint32_t column, const Vec3& v );
   void SetRow( uint32_t row, const Vec3& v );
   void SetRow( uint32_t row, const Vec4& v );
   Vec3 GetAxis( uint32_t column ) const;
   Vec4 GetRow( uint32_t row ) const;
-  
 };
 
 inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
 {
-  os << mat.d[ 0 ] << " " << mat.d[ 1 ] << " " << mat.d[ 2 ] << " " << mat.d[ 3 ]
-    << " " << mat.d[ 4 ] << " " << mat.d[ 5 ] << " " << mat.d[ 6 ] << " " << mat.d[ 7 ]
-    << " " << mat.d[ 8 ] << " " << mat.d[ 9 ] << " " << mat.d[ 10 ] << " " << mat.d[ 11 ]
-    << " " << mat.d[ 12 ] << " " << mat.d[ 13 ] << " " << mat.d[ 14 ] << " " << mat.d[ 15 ];
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
   return os;
 }
 
@@ -568,6 +575,91 @@ public:
   Quaternion& SetInverse();
   Vec3 Rotate( Vec3 v ) const;
 };
+
+//------------------------------------------------------------------------------
+// ae::Int2 shared member functions
+// ae::Int3 shared member functions
+//------------------------------------------------------------------------------
+// @NOTE: Int2 and Int3 share these functions
+template < typename T >
+struct IntT
+{
+  IntT() {}
+  IntT( bool ) = delete;
+  bool operator==( const T& v ) const;
+  bool operator!=( const T& v ) const;
+  int32_t operator[]( uint32_t idx ) const;
+  int32_t& operator[]( uint32_t idx );
+  T operator-() const;
+  T operator+( const T& v ) const;
+  T operator-( const T& v ) const;
+  T operator*( const T& v ) const;
+  T operator/( const T& v ) const;
+  void operator+=( const T& v );
+  void operator-=( const T& v );
+  void operator*=( const T& v );
+  void operator/=( const T& v );
+  T operator*( int32_t s ) const;
+  T operator/( int32_t s ) const;
+  void operator*=( int32_t s );
+  void operator/=( int32_t s );
+};
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
+
+//------------------------------------------------------------------------------
+// ae::Int2 class
+//------------------------------------------------------------------------------
+struct Int2 : public IntT< Int2 >
+{
+  union
+  {
+    struct
+    {
+      int32_t x;
+      int32_t y;
+    };
+    int32_t data[ 2 ];
+  };
+
+  Int2() = default;
+  Int2( const Int2& ) = default;
+  explicit Int2( int32_t _v );
+  explicit Int2( const struct Int3& v );
+  Int2( int32_t _x, int32_t _y );
+  // @NOTE: No automatic conversion from aeFloat2 because rounding type should be explicit!
+};
+
+//------------------------------------------------------------------------------
+// ae::Int3 class
+//------------------------------------------------------------------------------
+struct Int3 : public IntT< Int3 >
+{
+  union
+  {
+    struct
+    {
+      int32_t x;
+      int32_t y;
+      int32_t z;
+    };
+    int32_t data[ 3 ];
+  };
+  int32_t pad;
+
+  Int3() = default;
+  Int3( const Int3& ) = default;
+  explicit Int3( int32_t _v );
+  Int3( int32_t _x, int32_t _y, int32_t _z );
+  Int3( Int2 xy, int32_t _z );
+  Int3( const int32_t( &v )[ 3 ] );
+  Int3( const int32_t( &v )[ 4 ] );
+  explicit Int3( int32_t*& v );
+  explicit Int3( const int32_t*& v );
+  // @NOTE: No conversion from aeFloat3 because rounding type should be explicit!
+  Int2 GetXY() const;
+};
+
 //! @} End Math group
 
 //------------------------------------------------------------------------------
@@ -1248,7 +1340,7 @@ public:
   bool leftButton = false;
   bool middleButton = false;
   bool rightButton = false;
-  ae::Vec2 position = ae::Vec2( 0.0f );
+  ae::Int2 position = ae::Int2( 0 );
   ae::Vec2 scroll = ae::Vec2( 0.0f );
   bool usingTouch = false;
 };
@@ -1835,7 +1927,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // External macros to force module linking
 //------------------------------------------------------------------------------
-#define AE_FORCELINK_CLASS( x ) \
+#define AE_FORCE_LINK_CLASS( x ) \
   extern int force_link_##x; \
   struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
   ForceLink_##x forceLink_##x;
@@ -1858,7 +1950,10 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) \
-  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
+  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p, "" );
+
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
+static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -1945,7 +2040,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 // Meta constants
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
-const ae::TypeId kAeInvalidMetaTypeId = 0;
+const ae::TypeId kInvalidTypeId = 0;
 const uint32_t kMaxMetaTypes = 64;
 const uint32_t kMaxMetaProps = 8;
 class Type;
@@ -1953,7 +2048,7 @@ class Type;
 //------------------------------------------------------------------------------
 // External base meta object
 //! Base class for all meta registered objects. Inherit from this using
-//! ae::Inheritor and register your classes with AE_META_CLASS.
+//! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
 //------------------------------------------------------------------------------
 class Object
 {
@@ -1962,7 +2057,7 @@ public:
   static const char* GetParentTypeName() { return ""; }
   static const ae::Type* GetParentType() { return nullptr; }
   ae::TypeId GetTypeId() const { return _metaTypeId; }
-  ae::TypeId _metaTypeId = kAeInvalidMetaTypeId;
+  ae::TypeId _metaTypeId = ae::kInvalidTypeId;
   ae::Str32 _typeName;
 };
 
@@ -1974,6 +2069,7 @@ class Inheritor : public Parent
 {
 public:
   Inheritor();
+  typedef Parent aeBaseType;
   static const char* GetParentTypeName();
   static const ae::Type* GetParentType();
 };
@@ -2076,7 +2172,7 @@ public:
   ae::Str32 m_typeName = "";
   uint32_t m_offset = 0;
   uint32_t m_size = 0;
-  ae::TypeId m_refTypeId = kAeInvalidMetaTypeId; // @TODO: Need to use an id here in case type has not been registered yet
+  ae::TypeId m_refTypeId = ae::kInvalidTypeId; // @TODO: Need to use an id here in case type has not been registered yet
   mutable const class Enum* m_enum = nullptr;
 };
 
@@ -2132,7 +2228,7 @@ public:
 private:
   ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
   ae::Str32 m_name;
-  ae::TypeId m_id = kAeInvalidMetaTypeId;
+  ae::TypeId m_id = ae::kInvalidTypeId;
   uint32_t m_size = 0;
   uint32_t m_align = 0;
   ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
@@ -2478,6 +2574,15 @@ auto Min( T0&& v0, T1&& v1, Tn&&... vn )
   return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
 }
 
+inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
+{
+  return ae::Vec3(
+    Min( v0.x, v1.x ),
+    Min( v0.y, v1.y ),
+    Min( v0.z, v1.z )
+  );
+}
+
 template< typename T >
 T&& Max( T&& v )
 {
@@ -2487,6 +2592,15 @@ template< typename T0, typename T1, typename... Tn >
 auto Max( T0&& v0, T1&& v1, Tn&&... vn )
 {
   return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
+}
+
+inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
+{
+  return ae::Vec3(
+    Max( v0.x, v1.x ),
+    Max( v0.y, v1.y ),
+    Max( v0.z, v1.z )
+  );
 }
 
 template<typename T>
@@ -2776,21 +2890,21 @@ inline ae::RandomValue< T >::operator T() const
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
 template < typename T >
-bool _VecT< T >::operator==( const T& v ) const
+bool VecT< T >::operator==( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
 }
 
 template < typename T >
-bool _VecT< T >::operator!=( const T& v ) const
+bool VecT< T >::operator!=( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
 }
 
 template < typename T >
-float _VecT< T >::operator[]( uint32_t idx ) const
+float VecT< T >::operator[]( uint32_t idx ) const
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -2800,7 +2914,7 @@ float _VecT< T >::operator[]( uint32_t idx ) const
 }
 
 template < typename T >
-float& _VecT< T >::operator[]( uint32_t idx )
+float& VecT< T >::operator[]( uint32_t idx )
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -2810,7 +2924,7 @@ float& _VecT< T >::operator[]( uint32_t idx )
 }
 
 template < typename T >
-T _VecT< T >::operator+( const T& v ) const
+T VecT< T >::operator+( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2822,7 +2936,7 @@ T _VecT< T >::operator+( const T& v ) const
 }
 
 template < typename T >
-void _VecT< T >::operator+=( const T& v )
+void VecT< T >::operator+=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(T::data); i++ )
@@ -2832,7 +2946,7 @@ void _VecT< T >::operator+=( const T& v )
 }
 
 template < typename T >
-T _VecT< T >::operator-() const
+T VecT< T >::operator-() const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2844,7 +2958,7 @@ T _VecT< T >::operator-() const
 }
 
 template < typename T >
-T _VecT< T >::operator-( const T& v ) const
+T VecT< T >::operator-( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2856,7 +2970,7 @@ T _VecT< T >::operator-( const T& v ) const
 }
 
 template < typename T >
-void _VecT< T >::operator-=( const T& v )
+void VecT< T >::operator-=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2866,7 +2980,7 @@ void _VecT< T >::operator-=( const T& v )
 }
 
 template < typename T >
-T _VecT< T >::operator*( const T& v ) const
+T VecT< T >::operator*( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2878,7 +2992,7 @@ T _VecT< T >::operator*( const T& v ) const
 }
 
 template < typename T >
-T _VecT< T >::operator/( const T& v ) const
+T VecT< T >::operator/( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2890,7 +3004,7 @@ T _VecT< T >::operator/( const T& v ) const
 }
 
 template < typename T >
-void _VecT< T >::operator*=( const T& v )
+void VecT< T >::operator*=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2900,7 +3014,7 @@ void _VecT< T >::operator*=( const T& v )
 }
 
 template < typename T >
-void _VecT< T >::operator/=( const T& v )
+void VecT< T >::operator/=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2910,7 +3024,7 @@ void _VecT< T >::operator/=( const T& v )
 }
 
 template < typename T >
-T _VecT< T >::operator*( float s ) const
+T VecT< T >::operator*( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2922,7 +3036,7 @@ T _VecT< T >::operator*( float s ) const
 }
 
 template < typename T >
-void _VecT< T >::operator*=( float s )
+void VecT< T >::operator*=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2932,7 +3046,7 @@ void _VecT< T >::operator*=( float s )
 }
 
 template < typename T >
-T _VecT< T >::operator/( float s ) const
+T VecT< T >::operator/( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2944,7 +3058,7 @@ T _VecT< T >::operator/( float s ) const
 }
 
 template < typename T >
-void _VecT< T >::operator/=( float s )
+void VecT< T >::operator/=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2954,7 +3068,7 @@ void _VecT< T >::operator/=( float s )
 }
 
 template < typename T >
-float _VecT< T >::Dot( const T& v0, const T& v1 )
+float VecT< T >::Dot( const T& v0, const T& v1 )
 {
   float result = 0.0f;
   for ( uint32_t i = 0; i < countof(v0.data); i++ )
@@ -2965,25 +3079,25 @@ float _VecT< T >::Dot( const T& v0, const T& v1 )
 }
 
 template < typename T >
-float _VecT< T >::Dot( const T& v ) const
+float VecT< T >::Dot( const T& v ) const
 {
   return Dot( *(T*)this, v );
 }
 
 template < typename T >
-float _VecT< T >::Length() const
+float VecT< T >::Length() const
 {
   return sqrt( LengthSquared() );
 }
 
 template < typename T >
-float _VecT< T >::LengthSquared() const
+float VecT< T >::LengthSquared() const
 {
   return Dot( *(T*)this );
 }
 
 template < typename T >
-float _VecT< T >::Normalize()
+float VecT< T >::Normalize()
 {
   float length = Length();
   *(T*)this /= length;
@@ -2991,7 +3105,7 @@ float _VecT< T >::Normalize()
 }
 
 template < typename T >
-float _VecT< T >::SafeNormalize( float epsilon )
+float VecT< T >::SafeNormalize( float epsilon )
 {
   auto&& self = *(T*)this;
   float length = Length();
@@ -3005,7 +3119,7 @@ float _VecT< T >::SafeNormalize( float epsilon )
 }
 
 template < typename T >
-T _VecT< T >::NormalizeCopy() const
+T VecT< T >::NormalizeCopy() const
 {
   T result = *(T*)this;
   result.Normalize();
@@ -3013,7 +3127,7 @@ T _VecT< T >::NormalizeCopy() const
 }
 
 template < typename T >
-T _VecT< T >::SafeNormalizeCopy( float epsilon ) const
+T VecT< T >::SafeNormalizeCopy( float epsilon ) const
 {
   T result = *(T*)this;
   result.SafeNormalize( epsilon );
@@ -3021,7 +3135,7 @@ T _VecT< T >::SafeNormalizeCopy( float epsilon ) const
 }
 
 template < typename T >
-float _VecT< T >::Trim( float trimLength )
+float VecT< T >::Trim( float trimLength )
 {
   float length = Length();
   if ( trimLength < length )
@@ -3033,7 +3147,13 @@ float _VecT< T >::Trim( float trimLength )
 }
 
 template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const _VecT< T >& v )
+T operator*( float f, const VecT< T >& v )
+{
+  return v * f;
+}
+
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 {
   constexpr uint32_t count = countof( T::data );
   for ( uint32_t i = 0; i < count - 1; i++ )
@@ -3051,7 +3171,29 @@ inline std::ostream& operator<<( std::ostream& os, const _VecT< T >& v )
 inline Vec2::Vec2( float v ) : x( v ), y( v ) {}
 inline Vec2::Vec2( float x, float y ) : x( x ), y( y ) {}
 inline Vec2::Vec2( const float* v2 ) : x( v2[ 0 ] ), y( v2[ 1 ] ) {}
+inline Vec2::Vec2( struct Int2 i2 ) : x( i2.x ), y( i2.y ) {}
 inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::Sin( angle ) ); }
+inline Int2 Vec2::NearestCopy() const { return Int2( x + 0.5f, y + 0.5f ); }
+inline Int2 Vec2::FloorCopy() const { return Int2( floorf( x ), floorf( y ) ); }
+inline Int2 Vec2::CeilCopy() const { return Int2( ceilf( x ), ceilf( y ) ); }
+inline Vec2 Vec2::RotateCopy( float rotation ) const
+{
+  float sinTheta = std::sin( rotation );
+  float cosTheta = std::cos( rotation );
+  return Vec2( x * cosTheta - y * sinTheta, x * sinTheta + y * cosTheta );
+}
+inline float Vec2::GetAngle() const
+{
+  if ( LengthSquared() < 0.0001f )
+  {
+    return 0.0f;
+  }
+  return ae::Atan2( y, x );
+}
+inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n ) const
+{
+  return n * ( 2.0f * v.Dot( n ) / n.LengthSquared() ) - v;
+}
 
 //------------------------------------------------------------------------------
 // ae::Vec3 member functions
@@ -3059,11 +3201,15 @@ inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::
 inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ), pad( 0.0f ) {}
 inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( const float* v3 ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), pad( 0.0f ) {}
+inline Vec3::Vec3( struct Int3 i3 ) : x( i3.x ), y( i3.y ), z( i3.z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
+inline Int3 Vec3::NearestCopy() const { return Int3( x + 0.5f, y + 0.5f, z + 0.5f ); }
+inline Int3 Vec3::FloorCopy() const { return Int3( floorf( x ), floorf( y ), floorf( z ) ); }
+inline Int3 Vec3::CeilCopy() const { return Int3( ceilf( x ), ceilf( y ), ceilf( z ) ); }
 inline Vec3 Vec3::Lerp( const Vec3& end, float t ) const
 {
   t = ae::Clip01( t );
@@ -3089,6 +3235,23 @@ inline void Vec3::ZeroDirection( Vec3 direction )
     *this -= direction * d;
   }
 }
+inline Vec3 Vec3::ZeroAxisCopy( Vec3 axis ) const
+{
+  Vec3 r = *this;
+  r.ZeroAxis( axis );
+  return r;
+}
+inline Vec3 Vec3::ZeroDirectionCopy( Vec3 direction ) const
+{
+  Vec3 r = *this;
+  r.ZeroDirection( direction );
+  return r;
+}
+inline Vec3 Vec3::ProjectPoint( const Matrix4& projection, Vec3 p )
+{
+  Vec4 projected = projection * Vec4( p, 1.0f );
+  return projected.GetXYZ() / projected.w;
+}
 
 //------------------------------------------------------------------------------
 // ae::Vec4 member functions
@@ -3106,6 +3269,218 @@ inline Vec4::Vec4( const float* v4 ) : x( v4[ 0 ] ), y( v4[ 1 ] ), z( v4[ 2 ] ),
 inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
+
+//------------------------------------------------------------------------------
+// ae::Int2 shared member functions
+// ae::Int3 shared member functions
+//------------------------------------------------------------------------------
+template < typename T >
+bool IntT< T >::operator==( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
+}
+
+template < typename T >
+bool IntT< T >::operator!=( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
+}
+
+template < typename T >
+int32_t IntT< T >::operator[]( uint32_t idx ) const
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+int32_t& IntT< T >::operator[]( uint32_t idx )
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+T IntT< T >::operator+( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] + v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator+=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    self.data[ i ] += v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator-() const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = -self.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T IntT< T >::operator-( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] - v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator-=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] -= v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator*( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T IntT< T >::operator/( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator*=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= v.data[ i ];
+  }
+}
+
+template < typename T >
+void IntT< T >::operator/=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator*( int32_t s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * s;
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator*=( int32_t s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= s;
+  }
+}
+
+template < typename T >
+T IntT< T >::operator/( int32_t s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / s;
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator/=( int32_t s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= s;
+  }
+}
+
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v )
+{
+  constexpr uint32_t count = countof( T::data );
+  for ( uint32_t i = 0; i < count - 1; i++ )
+  {
+    os << v[ i ] << " ";
+  }
+  return os << v[ count - 1 ];
+}
+
+//------------------------------------------------------------------------------
+// ae::Int2 member functions
+//------------------------------------------------------------------------------
+inline Int2::Int2( int32_t _v ) : x( _v ), y( _v ) {}
+inline Int2::Int2( const struct Int3& v ) : x( v.x ), y( v.y ) {}
+inline Int2::Int2( int32_t _x, int32_t _y ) : x( _x ), y( _y ) {}
+
+//------------------------------------------------------------------------------
+// ae::Int3 member functions
+//------------------------------------------------------------------------------
+inline Int3::Int3( int32_t _v ) : x( _v ), y( _v ), z( _v ), pad( 0 ) {}
+inline Int3::Int3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ), pad( 0 ) {}
+inline Int3::Int3( Int2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ), pad( 0 ) {}
+inline Int3::Int3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int2 Int3::GetXY() const { return Int2( x, y ); }
 
 //------------------------------------------------------------------------------
 // ae::Colors
@@ -4424,7 +4799,7 @@ struct ae::_VarType< T* >
 {
   static ae::Var::Type GetType()
   {
-    static_assert( std::is_base_of< ae::Object, T >::value, "AE_META_VAR refs must have base type ae::Object" );
+    static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR refs must have base type ae::Object" );
     return ae::Var::Ref;
   }
   static const char* GetName() { return "Ref"; }
@@ -4812,20 +5187,20 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 Matrix4 Matrix4::Identity()
 {
   Matrix4 r;
-  r.d[ 0 ] = 1; r.d[ 4 ] = 0; r.d[ 8 ] = 0;  r.d[ 12 ] = 0;
-  r.d[ 1 ] = 0; r.d[ 5 ] = 1; r.d[ 9 ] = 0;  r.d[ 13 ] = 0;
-  r.d[ 2 ] = 0; r.d[ 6 ] = 0; r.d[ 10 ] = 1; r.d[ 14 ] = 0;
-  r.d[ 3 ] = 0; r.d[ 7 ] = 0; r.d[ 11 ] = 0; r.d[ 15 ] = 1;
+  r.data[ 0 ] = 1; r.data[ 4 ] = 0; r.data[ 8 ] = 0;  r.data[ 12 ] = 0;
+  r.data[ 1 ] = 0; r.data[ 5 ] = 1; r.data[ 9 ] = 0;  r.data[ 13 ] = 0;
+  r.data[ 2 ] = 0; r.data[ 6 ] = 0; r.data[ 10 ] = 1; r.data[ 14 ] = 0;
+  r.data[ 3 ] = 0; r.data[ 7 ] = 0; r.data[ 11 ] = 0; r.data[ 15 ] = 1;
   return r;
 }
 
 Matrix4 Matrix4::Translation( const Vec3& t )
 {
   Matrix4 r;
-  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = t.x;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;  r.d[ 13 ] = t.y;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = 1.0f; r.d[ 14 ] = t.z;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = t.x;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;  r.data[ 13 ] = t.y;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = 1.0f; r.data[ 14 ] = t.z;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4844,7 +5219,7 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
   removeRotation.SetRow( 0, right0 ); // right -> ( 1, 0, 0 )
   removeRotation.SetRow( 1, forward0 ); // forward -> ( 0, 1, 0 )
   removeRotation.SetRow( 2, up0 ); // up -> ( 0, 0, 1 )
-  removeRotation.d[ 15 ] = 1;
+  removeRotation.data[ 15 ] = 1;
 
   // Rotate
   forward1.Normalize();
@@ -4860,7 +5235,7 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
   newRotation.SetAxis( 0, right1 ); // ( 1, 0, 0 ) -> right
   newRotation.SetAxis( 1, forward1 ); // ( 0, 1, 0 ) -> forward
   newRotation.SetAxis( 2, up1 ); // ( 0, 0, 1 ) -> up
-  newRotation.d[ 15 ] = 1;
+  newRotation.data[ 15 ] = 1;
 
   return newRotation * removeRotation;
 }
@@ -4868,30 +5243,30 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 Matrix4 Matrix4::RotationX( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f;          r.d[ 8 ] = 0.0f;           r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = cosf( angle ); r.d[ 9 ] = -sinf( angle ); r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = sinf( angle ); r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f;          r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f;          r.data[ 8 ] = 0.0f;           r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = cosf( angle ); r.data[ 9 ] = -sinf( angle ); r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = sinf( angle ); r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f;          r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationY( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = cosf( angle );  r.d[ 4 ] = 0.0f; r.d[ 8 ] = sinf( angle );  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f;           r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;           r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = -sinf( angle ); r.d[ 6 ] = 0.0f; r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f;           r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = cosf( angle );  r.data[ 4 ] = 0.0f; r.data[ 8 ] = sinf( angle );  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f;           r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;           r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = -sinf( angle ); r.data[ 6 ] = 0.0f; r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f;           r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationZ( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = cosf( angle ); r.d[ 4 ] = -sinf( angle ); r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = sinf( angle ); r.d[ 5 ] = cosf( angle );  r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f;          r.d[ 6 ] = 0.0f;           r.d[ 10 ] = 1.0f; r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f;          r.d[ 7 ] = 0.0f;           r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = cosf( angle ); r.data[ 4 ] = -sinf( angle ); r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = sinf( angle ); r.data[ 5 ] = cosf( angle );  r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f;          r.data[ 6 ] = 0.0f;           r.data[ 10 ] = 1.0f; r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f;          r.data[ 7 ] = 0.0f;           r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4903,10 +5278,10 @@ Matrix4 Matrix4::Scaling( const Vec3& s )
 Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
 {
   Matrix4 r;
-  r.d[ 0 ] = sx;   r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = sy;   r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = sz;   r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = sx;   r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = sy;   r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = sz;   r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4931,7 +5306,7 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
   result.SetRow( 1, up );
   result.SetRow( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
   result.SetAxis( 3, Vec3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
-  result.d[ 15 ] = 1;
+  result.data[ 15 ] = 1;
   return result;
 }
 
@@ -4967,42 +5342,42 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
   
   Matrix4 result;
   memset( &result, 0, sizeof( result ) );
-  result.d[ 0 ] = a;
-  result.d[ 5 ] = b;
-  result.d[ 10 ] = A;
-  result.d[ 14 ] = B;
-  result.d[ 11 ] = -1;
+  result.data[ 0 ] = a;
+  result.data[ 5 ] = b;
+  result.data[ 10 ] = A;
+  result.data[ 14 ] = B;
+  result.data[ 11 ] = -1;
   return result;
 }
 
 Vec4 Matrix4::operator*(const Vec4& v) const
 {
   return Vec4(
-    v.x*d[0]  + v.y*d[4]  + v.z*d[8]  + v.w*d[12],
-    v.x*d[1]  + v.y*d[5]  + v.z*d[9]  + v.w*d[13],
-    v.x*d[2]  + v.y*d[6]  + v.z*d[10] + v.w*d[14],
-    v.x*d[3] + v.y*d[7] + v.z*d[11] + v.w*d[15]);
+    v.x*data[0]  + v.y*data[4]  + v.z*data[8]  + v.w*data[12],
+    v.x*data[1]  + v.y*data[5]  + v.z*data[9]  + v.w*data[13],
+    v.x*data[2]  + v.y*data[6]  + v.z*data[10] + v.w*data[14],
+    v.x*data[3] + v.y*data[7] + v.z*data[11] + v.w*data[15]);
 }
 
 Matrix4 Matrix4::operator*(const Matrix4& m) const
 {
   Matrix4 r;
-  r.d[0]=(m.d[0]*d[0])+(m.d[1]*d[4])+(m.d[2]*d[8])+(m.d[3]*d[12]);
-  r.d[1]=(m.d[0]*d[1])+(m.d[1]*d[5])+(m.d[2]*d[9])+(m.d[3]*d[13]);
-  r.d[2]=(m.d[0]*d[2])+(m.d[1]*d[6])+(m.d[2]*d[10])+(m.d[3]*d[14]);
-  r.d[3]=(m.d[0]*d[3])+(m.d[1]*d[7])+(m.d[2]*d[11])+(m.d[3]*d[15]);
-  r.d[4]=(m.d[4]*d[0])+(m.d[5]*d[4])+(m.d[6]*d[8])+(m.d[7]*d[12]);
-  r.d[5]=(m.d[4]*d[1])+(m.d[5]*d[5])+(m.d[6]*d[9])+(m.d[7]*d[13]);
-  r.d[6]=(m.d[4]*d[2])+(m.d[5]*d[6])+(m.d[6]*d[10])+(m.d[7]*d[14]);
-  r.d[7]=(m.d[4]*d[3])+(m.d[5]*d[7])+(m.d[6]*d[11])+(m.d[7]*d[15]);
-  r.d[8]=(m.d[8]*d[0])+(m.d[9]*d[4])+(m.d[10]*d[8])+(m.d[11]*d[12]);
-  r.d[9]=(m.d[8]*d[1])+(m.d[9]*d[5])+(m.d[10]*d[9])+(m.d[11]*d[13]);
-  r.d[10]=(m.d[8]*d[2])+(m.d[9]*d[6])+(m.d[10]*d[10])+(m.d[11]*d[14]);
-  r.d[11]=(m.d[8]*d[3])+(m.d[9]*d[7])+(m.d[10]*d[11])+(m.d[11]*d[15]);
-  r.d[12]=(m.d[12]*d[0])+(m.d[13]*d[4])+(m.d[14]*d[8])+(m.d[15]*d[12]);
-  r.d[13]=(m.d[12]*d[1])+(m.d[13]*d[5])+(m.d[14]*d[9])+(m.d[15]*d[13]);
-  r.d[14]=(m.d[12]*d[2])+(m.d[13]*d[6])+(m.d[14]*d[10])+(m.d[15]*d[14]);
-  r.d[15]=(m.d[12]*d[3])+(m.d[13]*d[7])+(m.d[14]*d[11])+(m.d[15]*d[15]);
+  r.data[0]=(m.data[0]*data[0])+(m.data[1]*data[4])+(m.data[2]*data[8])+(m.data[3]*data[12]);
+  r.data[1]=(m.data[0]*data[1])+(m.data[1]*data[5])+(m.data[2]*data[9])+(m.data[3]*data[13]);
+  r.data[2]=(m.data[0]*data[2])+(m.data[1]*data[6])+(m.data[2]*data[10])+(m.data[3]*data[14]);
+  r.data[3]=(m.data[0]*data[3])+(m.data[1]*data[7])+(m.data[2]*data[11])+(m.data[3]*data[15]);
+  r.data[4]=(m.data[4]*data[0])+(m.data[5]*data[4])+(m.data[6]*data[8])+(m.data[7]*data[12]);
+  r.data[5]=(m.data[4]*data[1])+(m.data[5]*data[5])+(m.data[6]*data[9])+(m.data[7]*data[13]);
+  r.data[6]=(m.data[4]*data[2])+(m.data[5]*data[6])+(m.data[6]*data[10])+(m.data[7]*data[14]);
+  r.data[7]=(m.data[4]*data[3])+(m.data[5]*data[7])+(m.data[6]*data[11])+(m.data[7]*data[15]);
+  r.data[8]=(m.data[8]*data[0])+(m.data[9]*data[4])+(m.data[10]*data[8])+(m.data[11]*data[12]);
+  r.data[9]=(m.data[8]*data[1])+(m.data[9]*data[5])+(m.data[10]*data[9])+(m.data[11]*data[13]);
+  r.data[10]=(m.data[8]*data[2])+(m.data[9]*data[6])+(m.data[10]*data[10])+(m.data[11]*data[14]);
+  r.data[11]=(m.data[8]*data[3])+(m.data[9]*data[7])+(m.data[10]*data[11])+(m.data[11]*data[15]);
+  r.data[12]=(m.data[12]*data[0])+(m.data[13]*data[4])+(m.data[14]*data[8])+(m.data[15]*data[12]);
+  r.data[13]=(m.data[12]*data[1])+(m.data[13]*data[5])+(m.data[14]*data[9])+(m.data[15]*data[13]);
+  r.data[14]=(m.data[12]*data[2])+(m.data[13]*data[6])+(m.data[14]*data[10])+(m.data[15]*data[14]);
+  r.data[15]=(m.data[12]*data[3])+(m.data[13]*data[7])+(m.data[14]*data[11])+(m.data[15]*data[15]);
   return r;
 }
 
@@ -5020,123 +5395,123 @@ Matrix4 Matrix4::GetInverse() const
 {
   Matrix4 r;
 
-  r.d[0] = d[5]  * d[10] * d[15] - 
-    d[5]  * d[11] * d[14] - 
-    d[9]  * d[6]  * d[15] + 
-    d[9]  * d[7]  * d[14] +
-    d[13] * d[6]  * d[11] - 
-    d[13] * d[7]  * d[10];
+  r.data[0] = data[5]  * data[10] * data[15] -
+    data[5]  * data[11] * data[14] -
+    data[9]  * data[6]  * data[15] +
+    data[9]  * data[7]  * data[14] +
+    data[13] * data[6]  * data[11] -
+    data[13] * data[7]  * data[10];
 
-  r.d[4] = -d[4]  * d[10] * d[15] + 
-    d[4]  * d[11] * d[14] + 
-    d[8]  * d[6]  * d[15] - 
-    d[8]  * d[7]  * d[14] - 
-    d[12] * d[6]  * d[11] + 
-    d[12] * d[7]  * d[10];
+  r.data[4] = -data[4]  * data[10] * data[15] +
+    data[4]  * data[11] * data[14] +
+    data[8]  * data[6]  * data[15] -
+    data[8]  * data[7]  * data[14] -
+    data[12] * data[6]  * data[11] +
+    data[12] * data[7]  * data[10];
 
-  r.d[8] = d[4]  * d[9] * d[15] - 
-    d[4]  * d[11] * d[13] - 
-    d[8]  * d[5] * d[15] + 
-    d[8]  * d[7] * d[13] + 
-    d[12] * d[5] * d[11] - 
-    d[12] * d[7] * d[9];
+  r.data[8] = data[4]  * data[9] * data[15] -
+    data[4]  * data[11] * data[13] -
+    data[8]  * data[5] * data[15] +
+    data[8]  * data[7] * data[13] +
+    data[12] * data[5] * data[11] -
+    data[12] * data[7] * data[9];
 
-  r.d[12] = -d[4]  * d[9] * d[14] + 
-    d[4]  * d[10] * d[13] +
-    d[8]  * d[5] * d[14] - 
-    d[8]  * d[6] * d[13] - 
-    d[12] * d[5] * d[10] + 
-    d[12] * d[6] * d[9];
+  r.data[12] = -data[4]  * data[9] * data[14] +
+    data[4]  * data[10] * data[13] +
+    data[8]  * data[5] * data[14] -
+    data[8]  * data[6] * data[13] -
+    data[12] * data[5] * data[10] +
+    data[12] * data[6] * data[9];
 
-  r.d[1] = -d[1]  * d[10] * d[15] + 
-    d[1]  * d[11] * d[14] + 
-    d[9]  * d[2] * d[15] - 
-    d[9]  * d[3] * d[14] - 
-    d[13] * d[2] * d[11] + 
-    d[13] * d[3] * d[10];
+  r.data[1] = -data[1]  * data[10] * data[15] +
+    data[1]  * data[11] * data[14] +
+    data[9]  * data[2] * data[15] -
+    data[9]  * data[3] * data[14] -
+    data[13] * data[2] * data[11] +
+    data[13] * data[3] * data[10];
 
-  r.d[5] = d[0]  * d[10] * d[15] - 
-    d[0]  * d[11] * d[14] - 
-    d[8]  * d[2] * d[15] + 
-    d[8]  * d[3] * d[14] + 
-    d[12] * d[2] * d[11] - 
-    d[12] * d[3] * d[10];
+  r.data[5] = data[0]  * data[10] * data[15] -
+    data[0]  * data[11] * data[14] -
+    data[8]  * data[2] * data[15] +
+    data[8]  * data[3] * data[14] +
+    data[12] * data[2] * data[11] -
+    data[12] * data[3] * data[10];
 
-  r.d[9] = -d[0]  * d[9] * d[15] + 
-    d[0]  * d[11] * d[13] + 
-    d[8]  * d[1] * d[15] - 
-    d[8]  * d[3] * d[13] - 
-    d[12] * d[1] * d[11] + 
-    d[12] * d[3] * d[9];
+  r.data[9] = -data[0]  * data[9] * data[15] +
+    data[0]  * data[11] * data[13] +
+    data[8]  * data[1] * data[15] -
+    data[8]  * data[3] * data[13] -
+    data[12] * data[1] * data[11] +
+    data[12] * data[3] * data[9];
 
-  r.d[13] = d[0]  * d[9] * d[14] - 
-    d[0]  * d[10] * d[13] - 
-    d[8]  * d[1] * d[14] + 
-    d[8]  * d[2] * d[13] + 
-    d[12] * d[1] * d[10] - 
-    d[12] * d[2] * d[9];
+  r.data[13] = data[0]  * data[9] * data[14] -
+    data[0]  * data[10] * data[13] -
+    data[8]  * data[1] * data[14] +
+    data[8]  * data[2] * data[13] +
+    data[12] * data[1] * data[10] -
+    data[12] * data[2] * data[9];
 
-  r.d[2] = d[1]  * d[6] * d[15] - 
-    d[1]  * d[7] * d[14] - 
-    d[5]  * d[2] * d[15] + 
-    d[5]  * d[3] * d[14] + 
-    d[13] * d[2] * d[7] - 
-    d[13] * d[3] * d[6];
+  r.data[2] = data[1]  * data[6] * data[15] -
+    data[1]  * data[7] * data[14] -
+    data[5]  * data[2] * data[15] +
+    data[5]  * data[3] * data[14] +
+    data[13] * data[2] * data[7] -
+    data[13] * data[3] * data[6];
 
-  r.d[6] = -d[0]  * d[6] * d[15] + 
-    d[0]  * d[7] * d[14] + 
-    d[4]  * d[2] * d[15] - 
-    d[4]  * d[3] * d[14] - 
-    d[12] * d[2] * d[7] + 
-    d[12] * d[3] * d[6];
+  r.data[6] = -data[0]  * data[6] * data[15] +
+    data[0]  * data[7] * data[14] +
+    data[4]  * data[2] * data[15] -
+    data[4]  * data[3] * data[14] -
+    data[12] * data[2] * data[7] +
+    data[12] * data[3] * data[6];
 
-  r.d[10] = d[0]  * d[5] * d[15] - 
-    d[0]  * d[7] * d[13] - 
-    d[4]  * d[1] * d[15] + 
-    d[4]  * d[3] * d[13] + 
-    d[12] * d[1] * d[7] - 
-    d[12] * d[3] * d[5];
+  r.data[10] = data[0]  * data[5] * data[15] -
+    data[0]  * data[7] * data[13] -
+    data[4]  * data[1] * data[15] +
+    data[4]  * data[3] * data[13] +
+    data[12] * data[1] * data[7] -
+    data[12] * data[3] * data[5];
 
-  r.d[14] = -d[0]  * d[5] * d[14] + 
-    d[0]  * d[6] * d[13] + 
-    d[4]  * d[1] * d[14] - 
-    d[4]  * d[2] * d[13] - 
-    d[12] * d[1] * d[6] + 
-    d[12] * d[2] * d[5];
+  r.data[14] = -data[0]  * data[5] * data[14] +
+    data[0]  * data[6] * data[13] +
+    data[4]  * data[1] * data[14] -
+    data[4]  * data[2] * data[13] -
+    data[12] * data[1] * data[6] +
+    data[12] * data[2] * data[5];
 
-  r.d[3] = -d[1] * d[6] * d[11] + 
-    d[1] * d[7] * d[10] + 
-    d[5] * d[2] * d[11] - 
-    d[5] * d[3] * d[10] - 
-    d[9] * d[2] * d[7] + 
-    d[9] * d[3] * d[6];
+  r.data[3] = -data[1] * data[6] * data[11] +
+    data[1] * data[7] * data[10] +
+    data[5] * data[2] * data[11] -
+    data[5] * data[3] * data[10] -
+    data[9] * data[2] * data[7] +
+    data[9] * data[3] * data[6];
 
-  r.d[7] = d[0] * d[6] * d[11] - 
-    d[0] * d[7] * d[10] - 
-    d[4] * d[2] * d[11] + 
-    d[4] * d[3] * d[10] + 
-    d[8] * d[2] * d[7] - 
-    d[8] * d[3] * d[6];
+  r.data[7] = data[0] * data[6] * data[11] -
+    data[0] * data[7] * data[10] -
+    data[4] * data[2] * data[11] +
+    data[4] * data[3] * data[10] +
+    data[8] * data[2] * data[7] -
+    data[8] * data[3] * data[6];
 
-  r.d[11] = -d[0] * d[5] * d[11] + 
-    d[0] * d[7] * d[9] + 
-    d[4] * d[1] * d[11] - 
-    d[4] * d[3] * d[9] - 
-    d[8] * d[1] * d[7] + 
-    d[8] * d[3] * d[5];
+  r.data[11] = -data[0] * data[5] * data[11] +
+    data[0] * data[7] * data[9] +
+    data[4] * data[1] * data[11] -
+    data[4] * data[3] * data[9] -
+    data[8] * data[1] * data[7] +
+    data[8] * data[3] * data[5];
 
-  r.d[15] = d[0] * d[5] * d[10] - 
-    d[0] * d[6] * d[9] - 
-    d[4] * d[1] * d[10] + 
-    d[4] * d[2] * d[9] + 
-    d[8] * d[1] * d[6] - 
-    d[8] * d[2] * d[5];
+  r.data[15] = data[0] * data[5] * data[10] -
+    data[0] * data[6] * data[9] -
+    data[4] * data[1] * data[10] +
+    data[4] * data[2] * data[9] +
+    data[8] * data[1] * data[6] -
+    data[8] * data[2] * data[5];
 
-  float det = d[0] * r.d[0] + d[1] * r.d[4] + d[2] * r.d[8] + d[3] * r.d[12];
+  float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
   det = 1.0f / det;
   for ( uint32_t i = 0; i < 16; i++ )
   {
-    r.d[ i ] *= det;
+    r.data[ i ] *= det;
   }
   return r;
 }
@@ -5144,15 +5519,15 @@ Matrix4 Matrix4::GetInverse() const
 void Matrix4::SetRotation( const Quaternion& q2 )
 {
   Quaternion q = q2.GetInverse();
-  d[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-  d[4] = 2*q.i*q.j + 2*q.k*q.r;
-  d[8] = 2*q.i*q.k - 2*q.j*q.r;
-  d[1] = 2*q.i*q.j - 2*q.k*q.r;
-  d[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-  d[9] = 2*q.j*q.k + 2*q.i*q.r;
-  d[2] = 2*q.i*q.k + 2*q.j*q.r;
-  d[6] = 2*q.j*q.k - 2*q.i*q.r;
-  d[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+  data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
+  data[4] = 2*q.i*q.j + 2*q.k*q.r;
+  data[8] = 2*q.i*q.k - 2*q.j*q.r;
+  data[1] = 2*q.i*q.j - 2*q.k*q.r;
+  data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
+  data[9] = 2*q.j*q.k + 2*q.i*q.r;
+  data[2] = 2*q.i*q.k + 2*q.j*q.r;
+  data[6] = 2*q.j*q.k - 2*q.i*q.r;
+  data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
 }
 
 Quaternion Matrix4::GetRotation() const
@@ -5162,15 +5537,15 @@ Quaternion Matrix4::GetRotation() const
   Matrix4 t = *this;
   t.SetScale( Vec3( 1.0f ) );
 
-  #define m00 t.d[ 0 ]
-  #define m01 t.d[ 4 ]
-  #define m02 t.d[ 8 ]
-  #define m10 t.d[ 1 ]
-  #define m11 t.d[ 5 ]
-  #define m12 t.d[ 9 ]
-  #define m20 t.d[ 2 ]
-  #define m21 t.d[ 6 ]
-  #define m22 t.d[ 10 ]
+  #define m00 t.data[ 0 ]
+  #define m01 t.data[ 4 ]
+  #define m02 t.data[ 8 ]
+  #define m10 t.data[ 1 ]
+  #define m11 t.data[ 5 ]
+  #define m12 t.data[ 9 ]
+  #define m20 t.data[ 2 ]
+  #define m21 t.data[ 6 ]
+  #define m22 t.data[ 10 ]
 
   float trace = m00 + m11 + m22;
   if ( trace > 0.0f )
@@ -5227,61 +5602,61 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetAxis( uint32_t col ) const
 {
-    return Vec3( d[ col * 4 ], d[ col * 4 + 1 ], d[ col * 4 + 2 ] );
+    return Vec3( data[ col * 4 ], data[ col * 4 + 1 ], data[ col * 4 + 2 ] );
 }
 
 void Matrix4::SetAxis( uint32_t col, const Vec3& v )
 {
-  d[ col * 4 ] = v.x;
-  d[ col * 4 + 1 ] = v.y;
-  d[ col * 4 + 2 ] = v.z;
+  data[ col * 4 ] = v.x;
+  data[ col * 4 + 1 ] = v.y;
+  data[ col * 4 + 2 ] = v.z;
 }
 
 Vec4 Matrix4::GetRow( uint32_t row ) const
 {
-  return Vec4( d[ row ], d[ row + 4 ], d[ row + 8 ], d[ row + 12 ] );
+  return Vec4( data[ row ], data[ row + 4 ], data[ row + 8 ], data[ row + 12 ] );
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec3 &v )
 {
-  d[ row ] = v.x;
-  d[ row + 4 ] = v.y;
-  d[ row + 8 ] = v.z;
+  data[ row ] = v.x;
+  data[ row + 4 ] = v.y;
+  data[ row + 8 ] = v.z;
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec4 &v)
 {
-  d[ row ] = v.x;
-  d[ row + 4 ] = v.y;
-  d[ row + 8 ] = v.z;
-  d[ row + 12 ] = v.w;
+  data[ row ] = v.x;
+  data[ row + 4 ] = v.y;
+  data[ row + 8 ] = v.z;
+  data[ row + 12 ] = v.w;
 }
 
 void Matrix4::SetTranslation( float x, float y, float z )
 {
-  d[ 12 ] = x;
-  d[ 13 ] = y;
-  d[ 14 ] = z;
+  data[ 12 ] = x;
+  data[ 13 ] = y;
+  data[ 14 ] = z;
 }
 
 void Matrix4::SetTranslation( const Vec3& translation )
 {
-  d[ 12 ] = translation.x;
-  d[ 13 ] = translation.y;
-  d[ 14 ] = translation.z;
+  data[ 12 ] = translation.x;
+  data[ 13 ] = translation.y;
+  data[ 14 ] = translation.z;
 }
 
 Vec3 Matrix4::GetTranslation() const
 {
-  return Vec3( d[ 12 ], d[ 13 ], d[ 14 ] );
+  return Vec3( data[ 12 ], data[ 13 ], data[ 14 ] );
 }
 
 Vec3 Matrix4::GetScale() const
 {
   return Vec3(
-    Vec3( d[ 0 ], d[ 1 ], d[ 2 ] ).Length(),
-    Vec3( d[ 4 ], d[ 5 ], d[ 6 ] ).Length(),
-    Vec3( d[ 8 ], d[ 9 ], d[ 10 ] ).Length()
+    Vec3( data[ 0 ], data[ 1 ], data[ 2 ] ).Length(),
+    Vec3( data[ 4 ], data[ 5 ], data[ 6 ] ).Length(),
+    Vec3( data[ 8 ], data[ 9 ], data[ 10 ] ).Length()
   );
 }
 
@@ -5299,7 +5674,7 @@ void Matrix4::SetTranspose( void )
   {
     for( uint32_t j = i + 1; j < 4; j++ )
     {
-      std::swap( d[ i * 4 + j ], d[ j * 4 + i ] );
+      std::swap( data[ i * 4 + j ], data[ j * 4 + i ] );
     }
   }
 }
@@ -5314,6 +5689,15 @@ Matrix4 Matrix4::GetTranspose() const
 Matrix4 Matrix4::GetNormalMatrix() const
 {
   return GetInverse().GetTranspose();
+}
+
+Matrix4 Matrix4::GetScaleRemoved() const
+{
+  Matrix4 r = *this;
+  r.SetAxis( 0, r.GetAxis( 0 ).NormalizeCopy() );
+  r.SetAxis( 1, r.GetAxis( 1 ).NormalizeCopy() );
+  r.SetAxis( 2, r.GetAxis( 2 ).NormalizeCopy() );
+  return *this;
 }
 
 //------------------------------------------------------------------------------
@@ -5566,17 +5950,17 @@ Matrix4 Quaternion::GetTransformMatrix( void ) const
 
   Matrix4 matrix = Matrix4::Identity();
 
-  matrix.d[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
-  matrix.d[ 4 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
-  matrix.d[ 8 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
+  matrix.data[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
+  matrix.data[ 4 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
+  matrix.data[ 8 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
 
-  matrix.d[ 1 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
-  matrix.d[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
-  matrix.d[ 9 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
+  matrix.data[ 1 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
+  matrix.data[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
+  matrix.data[ 9 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
 
-  matrix.d[ 2 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
-  matrix.d[ 6 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
-  matrix.d[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
+  matrix.data[ 2 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
+  matrix.data[ 6 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
+  matrix.data[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
 
   return matrix;
 }
@@ -6218,7 +6602,7 @@ Window::Window()
   window = nullptr;
   graphicsDevice = nullptr;
   input = nullptr;
-  m_pos = Int2( 0.0f ); // @TODO: int
+  m_pos = Int2( 0 );
   m_width = 0;
   m_height = 0;
   m_fullScreen = false;
@@ -8249,7 +8633,7 @@ void UniformList::Set( const char* name, float value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 1;
-  uniform.value.d[ 0 ] = value;
+  uniform.value.data[ 0 ] = value;
 }
 
 void UniformList::Set( const char* name, Vec2 value )
@@ -8258,8 +8642,8 @@ void UniformList::Set( const char* name, Vec2 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 2;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
 }
 
 void UniformList::Set( const char* name, Vec3 value )
@@ -8268,9 +8652,9 @@ void UniformList::Set( const char* name, Vec3 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 3;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
-  uniform.value.d[ 2 ] = value.z;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
 }
 
 void UniformList::Set( const char* name, Vec4 value )
@@ -8279,10 +8663,10 @@ void UniformList::Set( const char* name, Vec4 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 4;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
-  uniform.value.d[ 2 ] = value.z;
-  uniform.value.d[ 3 ] = value.w;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
+  uniform.value.data[ 3 ] = value.w;
 }
 
 void UniformList::Set( const char* name, const Matrix4& value )
@@ -8600,23 +8984,23 @@ void Shader::Activate( const UniformList& uniforms ) const
     }
     else if ( uniformVar->type == GL_FLOAT )
     {
-      glUniform1fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform1fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC2 )
     {
-      glUniform2fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform2fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC3 )
     {
-      glUniform3fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform3fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC4 )
     {
-      glUniform4fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform4fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_MAT4 )
     {
-      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.d );
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.data );
     }
     else
     {
@@ -10385,7 +10769,7 @@ uint32_t Hash::Get() const
 // Meta register base object
 //------------------------------------------------------------------------------
 // @TODO: Support registering classes in namespaces
-//AE_META_CLASS( ae::Object );
+//AE_REGISTER_CLASS( ae::Object );
 int force_link_aeObject = 0;
 template <> const char* ae::_TypeName< ae::Object >::Get() { return "ae::Object"; }
 template <> void ae::_DefineType< ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ae::Object >( "ae::Object", index ); }
@@ -10583,10 +10967,10 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std:
       ae::Matrix4* v = (ae::Matrix4*)varData;
       // @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
       sscanf( value, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
-             v->d, v->d + 1, v->d + 2, v->d + 3,
-             v->d + 4, v->d + 5, v->d + 6, v->d + 7,
-             v->d + 8, v->d + 9, v->d + 10, v->d + 11,
-             v->d + 12, v->d + 13, v->d + 14, v->d + 15 );
+             v->data, v->data + 1, v->data + 2, v->data + 3,
+             v->data + 4, v->data + 5, v->data + 6, v->data + 7,
+             v->data + 8, v->data + 9, v->data + 10, v->data + 11,
+             v->data + 12, v->data + 13, v->data + 14, v->data + 15 );
       return true;
     }
     case Var::Enum:
@@ -10732,7 +11116,7 @@ const class ae::Enum* ae::Var::GetEnum() const
 
 const ae::Type* ae::Var::GetRefType() const
 {
-  if ( m_refTypeId == kAeInvalidMetaTypeId )
+  if ( m_refTypeId == ae::kInvalidTypeId )
   {
     return nullptr;
   }
@@ -10746,13 +11130,13 @@ const ae::Type* ae::Var::GetRefType() const
 //------------------------------------------------------------------------------
 ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 {
-  return obj ? obj->_metaTypeId : ae::kAeInvalidMetaTypeId;
+  return obj ? obj->_metaTypeId : ae::kInvalidTypeId;
 }
 
 ae::TypeId ae::GetTypeIdFromName( const char* name )
 {
   // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kAeInvalidMetaTypeId;
+  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
 std::map< ae::Str32, ae::Type* >& ae::_GetTypeNameMap()

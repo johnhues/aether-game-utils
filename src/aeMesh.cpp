@@ -75,7 +75,7 @@ bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeF
 {
   aeFloat3 ab = b - a;
   aeFloat3 ac = c - a;
-  aeFloat3 n = ab % ac;
+  aeFloat3 n = ab.Cross( ac );
   aeFloat3 qp = -dir;
   
   // Compute denominator d
@@ -110,7 +110,7 @@ bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeF
   }
   
   // Compute barycentric coordinate components and test if within bounds
-  aeFloat3 e = qp % ap;
+  aeFloat3 e = qp.Cross( ap );
   float v = ac.Dot( e ) * ood;
   if ( v < 0.0f || v > 1.0f )
   {
@@ -443,7 +443,7 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
   }
   
   bool limitRay = params.maxLength != 0.0f;
-  const aeFloat4x4 invTransform = params.transform.Inverse();
+  const aeFloat4x4 invTransform = params.transform.GetInverse();
   const aeFloat3 source( invTransform * aeFloat4( params.source, 1.0f ) );
   const aeFloat3 ray( invTransform * aeFloat4( limitRay ? params.direction.SafeNormalizeCopy() * params.maxLength : params.direction, 0.0f ) );
   const aeFloat3 normDir = ray.SafeNormalizeCopy();
@@ -560,7 +560,7 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
       c = aeFloat3( params.transform * vertices[ indices[ i * 3 + 2 ] ].position );
     }
     
-    aeFloat3 triNormal = ( ( b - a ) % ( c - a ) ).SafeNormalizeCopy();
+    aeFloat3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
     aeFloat3 triCenter( ( a + b + c ) / 3.0f );
     
     aeFloat3 triToSphereDir = ( result.sphere.center - triCenter );
