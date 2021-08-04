@@ -241,6 +241,7 @@ public:
   void UpdateSendData();
 
 private:
+  uint32_t m_lastNetId = 0;
   ae::Array< aeNetData* > m_pendingCreate = AE_ALLOC_TAG_NET;
   ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
   ae::Array< aeNetReplicaServer* > m_servers = AE_ALLOC_TAG_NET;

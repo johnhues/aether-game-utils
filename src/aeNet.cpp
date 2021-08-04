@@ -379,6 +379,7 @@ aeNetData* aeNetReplicaDB::CreateNetData()
 {
   aeNetData* netData = ae::New< aeNetData >( AE_ALLOC_TAG_NET );
   netData->m_SetLocal();
+  netData->_netId = NetId( ++m_lastNetId );
   m_pendingCreate.Append( netData );
   return netData;
 }
@@ -400,7 +401,8 @@ void aeNetReplicaDB::DestroyNetData( aeNetData* netData )
   }
 
   NetId id = netData->_netId;
-  AE_ASSERT_MSG( m_netDatas.Remove( id ), "aeNetData was not found." );
+  bool removed = m_netDatas.Remove( id );
+  AE_ASSERT_MSG( removed, "aeNetData was not found." );
 
   for ( uint32_t i = 0; i < m_servers.Length(); i++ )
   {

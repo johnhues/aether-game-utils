@@ -50,9 +50,20 @@ void Game::Initialize()
       AE_COLOR = v_color;
     })";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  m_spriteData.Initialize( sizeof(Vertex), sizeof(Index), 4, 6, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
+  
+  uint32_t vertexCount = 4 * countof( m_sprites );
+  uint32_t maxIndexCount = 6 * countof( m_sprites );
+  m_spriteData.Initialize( sizeof(Vertex), sizeof(Index), 4, 6, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Static );
   m_spriteData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof(Vertex, position) );
   m_spriteData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof(Vertex, color) );
+  
+  Index indices[] = {
+    3, 0, 1,
+    3, 1, 2
+  };
+  m_spriteData.SetIndices( indices, countof(indices) );
+  
+  m_spriteCount = 0;
 }
 
 void Game::Terminate()
@@ -67,34 +78,35 @@ void Game::Render( const ae::Matrix4& worldToNdc )
   render.Activate();
   render.Clear( aeColor::PicoBlack() );
   
+  // HACK
+  m_spriteCount = ae::Min( 1, m_spriteCount );
+  
   Vertex vertex[] = {
     { m_sprites[ 0 ].transform * ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
     { m_sprites[ 0 ].transform * ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
     { m_sprites[ 0 ].transform * ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
     { m_sprites[ 0 ].transform * ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color }
   };
-  Index indices[] = {
-    3, 0, 1,
-    3, 1, 2
-  };
-  m_spriteData.SetVertices( vertex, countof(vertex) );
-  m_spriteData.SetIndices( indices, countof(indices) );
+  m_spriteData.SetVertices( vertex, m_spriteCount * countof(vertex) );
   
   ae::UniformList uniforms;
   uniforms.Set( "u_worldToNdc", worldToNdc );
-  m_spriteData.Render( &m_shader, uniforms );
+  m_spriteData.Render( &m_shader, m_spriteCount * 2, uniforms );
   
   render.Present();
   timeStep.Wait();
+  
+  m_spriteCount = 0;
 }
 
-void Game::SetSprite( uint32_t index, const ae::Matrix4& transform, ae::Color color )
+void Game::AddSprite( const ae::Matrix4& transform, ae::Color color )
 {
-  if ( index < countof(m_sprites) )
+  if ( m_spriteCount < countof(m_sprites) )
   {
-    m_sprites[ index ].transform = transform;
-    m_sprites[ index ].color = color;
+    m_sprites[ m_spriteCount ].transform = transform;
+    m_sprites[ m_spriteCount ].color = color;
   }
+  m_spriteCount++;
 }
 
 //------------------------------------------------------------------------------
@@ -116,7 +128,6 @@ int main()
 
   Game game;
   game.Initialize();
-  game.SetSprite( 0, ae::Matrix4::Identity(), ae::Color::Green() );
 
   // Server modules
   AetherServer* server = AetherServer_New( 3500, 0, 1 );
@@ -124,7 +135,7 @@ int main()
   ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers = TAG_EXAMPLE;
 
   // Game data
-  ae::Array< Green > greens = TAG_EXAMPLE;
+  ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
   
   // Net update
   while ( !game.input.quit )
@@ -164,27 +175,27 @@ int main()
     }
 
     // Game Update
-    while ( greens.Length() < 3 )
+    while ( gameObjects.Length() < 3 )
     {
-      Green* green = &greens.Append( Green() );
-      green->pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
-      green->size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
-      green->rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
-      green->life = 5.0f + aeMath::Random( 0.7f, 1.3f );
-      green->netData = replicaDB.CreateNetData();
-      green->netData->SetInitData( &kReplicaType_Green, sizeof( kReplicaType_Green ) );
+      GameObject* obj = &gameObjects.Append( GameObject() );
+      obj->pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
+      obj->size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
+      obj->rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
+      obj->life = 5.0f + aeMath::Random( 0.7f, 1.3f );
+      obj->netData = replicaDB.CreateNetData();
+      obj->netData->SetInitData( &kReplicaType_Green, sizeof( kReplicaType_Green ) );
     }
-    for ( uint32_t i = 0; i < greens.Length(); i++ )
+    for ( uint32_t i = 0; i < gameObjects.Length(); i++ )
     {
-      greens[ i ].Update( &game );
+      gameObjects[ i ].Update( &game );
     }
 
     // Destroy dead objects
-    auto findDeadFn = []( const Green& object ){ return object.life <= 0.0f; };
-    for ( int32_t index = greens.FindFn( findDeadFn ); index >= 0; index = greens.FindFn( findDeadFn ) )
+    auto findDeadFn = []( const GameObject& object ){ return object.life <= 0.0f; };
+    for ( int32_t index = gameObjects.FindFn( findDeadFn ); index >= 0; index = gameObjects.FindFn( findDeadFn ) )
     {
-      replicaDB.DestroyNetData( greens[ index ].netData );
-      greens.Remove( index );
+      replicaDB.DestroyNetData( gameObjects[ index ].netData );
+      gameObjects.Remove( index );
     }
     
     // Send replication data

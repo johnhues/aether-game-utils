@@ -28,7 +28,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
-#include "ae/aeNet.h"
+#include "ae/aetherEXT.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -66,7 +66,7 @@ public:
   void Initialize();
   void Terminate();
   void Render( const ae::Matrix4& worldToNdc );
-  void SetSprite( uint32_t index, const ae::Matrix4& transform, ae::Color color );
+  void AddSprite( const ae::Matrix4& transform, ae::Color color );
   
   ae::Window window;
   ae::GraphicsDevice render;
@@ -82,15 +82,16 @@ private:
   Sprite m_sprites[ 8 ];
   ae::Shader m_shader;
   ae::VertexData m_spriteData;
+  uint32_t m_spriteCount;
 };
 
 //------------------------------------------------------------------------------
-// Green class
+// GameObject class
 //------------------------------------------------------------------------------
-class Green
+class GameObject
 {
 public:
-  Green()
+  GameObject()
   {
     pos = ae::Vec3( 0.0f );
     size = ae::Vec3( 1.0f );
@@ -163,7 +164,7 @@ public:
       }
     }
 
-//    spriteRender->AddSprite( texture, modelToWorld, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), m_color );
+    game->AddSprite( ae::Matrix4::Translation( pos ), ae::Color::Green() );
   }
 
   void Serialize( aeBinaryStream* stream )

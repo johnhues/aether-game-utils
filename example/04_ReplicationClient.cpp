@@ -33,20 +33,22 @@ int main()
   AE_LOG( "Initialize" );
 
   // System modules
-  ae::Window window;
-  ae::GraphicsDevice render;
-  ae::Input input;
-  aeSpriteRender spriteRender;
-  ae::Texture2D texture;
-  ae::TimeStep timeStep;
-  window.Initialize( 800, 600, false, true );
-  window.SetTitle( "Replication Client" );
-  render.Initialize( &window );
-  input.Initialize( &window );
-  spriteRender.Initialize( 32 );
-  uint8_t texInfo[] = { 255, 255, 255 };
-  texture.Initialize( texInfo, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat );
-  timeStep.SetTimeStep( 1.0f / 10.0f );
+//  ae::Window window;
+//  ae::GraphicsDevice render;
+//  ae::Input input;
+//  aeSpriteRender spriteRender;
+//  ae::Texture2D texture;
+//  ae::TimeStep timeStep;
+//  window.Initialize( 800, 600, false, true );
+//  window.SetTitle( "Replication Client" );
+//  render.Initialize( &window );
+//  input.Initialize( &window );
+//  spriteRender.Initialize( 32 );
+//  uint8_t texInfo[] = { 255, 255, 255 };
+//  texture.Initialize( texInfo, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat );
+//  timeStep.SetTimeStep( 1.0f / 10.0f );
+  Game game;
+  game.Initialize();
 
   // Client modules
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
@@ -55,9 +57,9 @@ int main()
   // Game data
   ae::Array< Green > greens = TAG_EXAMPLE;
 
-  while ( !input.quit )
+  while ( !game.input.quit )
   {
-    input.Pump();
+    game.input.Pump();
     
     // Update connection to server
     if ( !client->IsConnected() && !client->IsConnecting() )
@@ -111,7 +113,7 @@ int main()
     for ( uint32_t i = 0; i < greens.Length(); i++ )
     {
       Green* green = &greens[ i ];
-      green->Update( timeStep.GetTimeStep(), &spriteRender, &texture, &input );
+      green->Update( &game );
       if ( green->netData->IsPendingDestroy() )
       {
         replicationClient.Destroy( green->netData );
@@ -120,17 +122,11 @@ int main()
     }
     // Remove objects that no longer have replication data
     greens.RemoveAllFn( []( Green& green ) { return !green.netData; } );
-    
 
     // Send messages generated during game update
     AetherClient_SendAll( client );
 
-    render.Activate();
-    render.Clear( ae::Color::PicoDarkPurple() );
-    spriteRender.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-    render.Present();
-
-    timeStep.Wait();
+    game.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
   }
 
   AE_LOG( "Terminate" );
@@ -138,11 +134,7 @@ int main()
   AetherClient_Delete( client );
   client = nullptr;
   
-  texture.Destroy();
-  spriteRender.Destroy();
-  //input.Terminate();
-  render.Terminate();
-  window.Terminate();
+  game.Terminate();
 
   return 0;
 }
