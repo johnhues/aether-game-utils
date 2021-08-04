@@ -53,36 +53,18 @@ struct ChangeColorRPC
   ae::Color color;
 };
 
-using Index = uint16_t;
-struct Vertex
-{
-  ae::Vec4 position;
-  ae::Color color;
-};
-
 class Game
 {
 public:
   void Initialize();
   void Terminate();
   void Render( const ae::Matrix4& worldToNdc );
-  void AddSprite( const ae::Matrix4& transform, ae::Color color );
   
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
   ae::TimeStep timeStep;
-  
-private:
-  struct Sprite
-  {
-    ae::Matrix4 transform;
-    ae::Color color;
-  };
-  Sprite m_sprites[ 8 ];
-  ae::Shader m_shader;
-  ae::VertexData m_spriteData;
-  uint32_t m_spriteCount;
+  ae::DebugLines debugLines;
 };
 
 //------------------------------------------------------------------------------
@@ -164,7 +146,8 @@ public:
       }
     }
 
-    game->AddSprite( ae::Matrix4::Translation( pos ), ae::Color::Green() );
+    uint32_t points = ( 2.0f * ae::PI * size.x ) / 0.25f + 0.5f;
+    game->debugLines.AddCircle( pos, ae::Vec3( 0, 0, 1 ), size.x, ae::Color::Red(), points );
   }
 
   void Serialize( aeBinaryStream* stream )

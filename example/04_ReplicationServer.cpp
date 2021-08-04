@@ -33,41 +33,12 @@ void Game::Initialize()
   render.Initialize( &window );
   input.Initialize( &window );
   timeStep.SetTimeStep( 1.0f / 10.0f );
-  const char* vertexStr = R"(
-    AE_UNIFORM_HIGHP mat4 u_worldToNdc;
-    AE_IN_HIGHP vec4 a_position;
-    AE_IN_HIGHP vec4 a_color;
-    AE_OUT_HIGHP vec4 v_color;
-    void main()
-    {
-      v_color = a_color;
-      gl_Position = u_worldToNdc * a_position;
-    })";
-  const char* fragStr = R"(
-    AE_IN_HIGHP vec4 v_color;
-    void main()
-    {
-      AE_COLOR = v_color;
-    })";
-  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  
-  uint32_t vertexCount = 4 * countof( m_sprites );
-  uint32_t maxIndexCount = 6 * countof( m_sprites );
-  m_spriteData.Initialize( sizeof(Vertex), sizeof(Index), 4, 6, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Static );
-  m_spriteData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof(Vertex, position) );
-  m_spriteData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof(Vertex, color) );
-  
-  Index indices[] = {
-    3, 0, 1,
-    3, 1, 2
-  };
-  m_spriteData.SetIndices( indices, countof(indices) );
-  
-  m_spriteCount = 0;
+  debugLines.Initialize( 32 );
 }
 
 void Game::Terminate()
 {
+  debugLines.Terminate();
   //input.Terminate();
   render.Terminate();
   window.Terminate();
@@ -78,35 +49,10 @@ void Game::Render( const ae::Matrix4& worldToNdc )
   render.Activate();
   render.Clear( aeColor::PicoBlack() );
   
-  // HACK
-  m_spriteCount = ae::Min( 1, m_spriteCount );
-  
-  Vertex vertex[] = {
-    { m_sprites[ 0 ].transform * ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
-    { m_sprites[ 0 ].transform * ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
-    { m_sprites[ 0 ].transform * ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color },
-    { m_sprites[ 0 ].transform * ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), m_sprites[ 0 ].color }
-  };
-  m_spriteData.SetVertices( vertex, m_spriteCount * countof(vertex) );
-  
-  ae::UniformList uniforms;
-  uniforms.Set( "u_worldToNdc", worldToNdc );
-  m_spriteData.Render( &m_shader, m_spriteCount * 2, uniforms );
+  debugLines.Render( worldToNdc );
   
   render.Present();
   timeStep.Wait();
-  
-  m_spriteCount = 0;
-}
-
-void Game::AddSprite( const ae::Matrix4& transform, ae::Color color )
-{
-  if ( m_spriteCount < countof(m_sprites) )
-  {
-    m_sprites[ m_spriteCount ].transform = transform;
-    m_sprites[ m_spriteCount ].color = color;
-  }
-  m_spriteCount++;
 }
 
 //------------------------------------------------------------------------------
@@ -126,23 +72,22 @@ int main()
 {
   AE_LOG( "Initialize" );
 
+  // Game
   Game game;
   game.Initialize();
-
   // Server modules
   AetherServer* server = AetherServer_New( 3500, 0, 1 );
   aeNetReplicaDB replicaDB;
   ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers = TAG_EXAMPLE;
-
   // Game data
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
   
   // Net update
   while ( !game.input.quit )
   {
+    // Poll input and net modules
     game.input.Pump();
     AetherServer_Update( server );
-    
     ServerReceiveInfo receiveInfo;
     while ( AetherServer_Receive( server, &receiveInfo ) )
     {
@@ -174,7 +119,7 @@ int main()
       }
     }
 
-    // Game Update
+    // Create game objects
     while ( gameObjects.Length() < 3 )
     {
       GameObject* obj = &gameObjects.Append( GameObject() );
@@ -185,11 +130,11 @@ int main()
       obj->netData = replicaDB.CreateNetData();
       obj->netData->SetInitData( &kReplicaType_Green, sizeof( kReplicaType_Green ) );
     }
+    // Game Update
     for ( uint32_t i = 0; i < gameObjects.Length(); i++ )
     {
       gameObjects[ i ].Update( &game );
     }
-
     // Destroy dead objects
     auto findDeadFn = []( const GameObject& object ){ return object.life <= 0.0f; };
     for ( int32_t index = gameObjects.FindFn( findDeadFn ); index >= 0; index = gameObjects.FindFn( findDeadFn ) )
@@ -211,14 +156,12 @@ int main()
     }
     AetherServer_SendAll( server );
 
+    // Render
     game.Render( ae::Matrix4::Scaling( aeFloat3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
   }
 
   AE_LOG( "Terminate" );
-
   AetherServer_Delete( server );
-  server = nullptr;
-  
   game.Terminate();
 
   return 0;
