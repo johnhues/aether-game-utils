@@ -34,37 +34,52 @@
 // Constants
 //------------------------------------------------------------------------------
 const ae::Tag TAG_EXAMPLE = "example";
+const AetherMsgId kReplicaInfoMsg = 1;
 
-const uint32_t kReplicaInfoMsg = 1;
-
-const uint32_t kReplicaType_Red = 0;
-const uint32_t kReplicaType_Green = 1;
-const uint32_t kReplicaType_Blue = 2;
-
-struct ChangeColorRPC
-{
-  void Serialize( aeBinaryStream* stream )
-  {
-    stream->SerializeFloat( color.r );
-    stream->SerializeFloat( color.g );
-    stream->SerializeFloat( color.b );
-    stream->SerializeFloat( color.a );
-  }
-  ae::Color color;
-};
-
+//------------------------------------------------------------------------------
+// Game class
+//------------------------------------------------------------------------------
 class Game
 {
 public:
-  void Initialize();
-  void Terminate();
-  void Render( const ae::Matrix4& worldToNdc );
+  void Game::Initialize()
+  {
+    window.Initialize( 800, 600, false, true );
+    window.SetTitle( "Replication Server" );
+    render.Initialize( &window );
+    input.Initialize( &window );
+    timeStep.SetTimeStep( 1.0f / 10.0f );
+    debugLines.Initialize( 32 );
+    //text.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
+  }
+
+  void Game::Terminate()
+  {
+    //text.Terminate();
+    debugLines.Terminate();
+    //input.Terminate();
+    render.Terminate();
+    window.Terminate();
+  }
+
+  void Game::Render( const ae::Matrix4& worldToNdc )
+  {
+    render.Activate();
+    render.Clear( aeColor::PicoBlack() );
+    
+    //text.Render( ae::Matrix4::Scaling( ae::Vec3( 0.1f ) ) );
+    debugLines.Render( worldToNdc );
+    
+    render.Present();
+    timeStep.Wait();
+  }
   
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
   ae::TimeStep timeStep;
   ae::DebugLines debugLines;
+  //aeTextRender text;
 };
 
 //------------------------------------------------------------------------------
@@ -73,100 +88,56 @@ public:
 class GameObject
 {
 public:
-  GameObject()
+  GameObject( ae::Color color )
   {
-    pos = ae::Vec3( 0.0f );
-    size = ae::Vec3( 1.0f );
-    rotation = 0.0f;
-    life = ae::MaxValue< float >();
-
-    m_color = ae::Color::Green();
+    netData = nullptr;
+    alive = true;
+    playerId = AetherUuid::Zero();
+    m_pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
+    m_radius = aeMath::Random( 0.5f, 2.0f );
+    m_color = color;
   }
 
   void Update( Game* game )
   {
-    float dt = game->timeStep.GetDt();
+    // Client - read net data
     if ( !netData->IsAuthority() )
     {
-      // Client - read net data
       aeBinaryStream rStream = aeBinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
       Serialize( &rStream );
-
-      aeNetData::Msg msg;
-      while ( netData->PumpMessages( &msg ) )
-      {
-        AE_LOG( "Received Message: #", (const char*)msg.data );
-      }
-
-      if ( game->input.Get( ae::Key::Space ) && !game->input.GetPrev( ae::Key::Space ) )
-      {
-        ae::Color colors[] =
-        {
-          ae::Color::White(),
-          ae::Color::White(),
-          ae::Color::Red(),
-          ae::Color::Blue(),
-          ae::Color::Orange(),
-          ae::Color::Gray()
-        };
-
-        ChangeColorRPC rpc;
-        rpc.color = colors[ ae::Random( 0, countof(colors) ) ];
-
-        aeBinaryStream wStream = aeBinaryStream::Writer();
-        wStream.SerializeObject( rpc );
-        netData->SendMessage( wStream.GetData(), wStream.GetOffset() );
-      }
     }
 
-    // Update pos and rotation
-    ae::Matrix4 modelToWorld = ae::Matrix4::Translation( pos );
-    life -= dt;
-
+    // Server - write net data
     if ( netData->IsAuthority() )
     {
-      // Server - write net data
       aeBinaryStream wStream = aeBinaryStream::Writer();
       Serialize( &wStream );
       netData->SetSyncData( wStream.GetData(), wStream.GetOffset() );
-
-      const char* someMessage = "message 1";
-      netData->SendMessage( someMessage, (uint32_t)strlen( someMessage ) + 1 );
-      someMessage = "message number 2";
-      netData->SendMessage( someMessage, (uint32_t)strlen( someMessage ) + 1 );
-
-      aeNetData::Msg msg;
-      while ( netData->PumpMessages( &msg ) )
-      {
-        ChangeColorRPC rpc;
-        aeBinaryStream rStream = aeBinaryStream::Reader( msg.data, msg.length );
-        rStream.SerializeObject( rpc );
-
-        m_color = rpc.color;
-      }
     }
 
-    uint32_t points = ( 2.0f * ae::PI * size.x ) / 0.25f + 0.5f;
-    game->debugLines.AddCircle( pos, ae::Vec3( 0, 0, 1 ), size.x, ae::Color::Red(), points );
+    // Draw
+    uint32_t points = ( 2.0f * ae::PI * m_radius ) / 0.25f + 0.5f;
+    game->debugLines.AddCircle( m_pos, ae::Vec3( 0, 0, 1 ), m_radius, m_color, points );
   }
 
   void Serialize( aeBinaryStream* stream )
   {
-    stream->SerializeFloat( pos.x );
-    stream->SerializeFloat( pos.y );
-    stream->SerializeFloat( pos.z );
-    stream->SerializeFloat( rotation );
-    stream->SerializeFloat( life );
+    stream->SerializeFloat( m_pos.x );
+    stream->SerializeFloat( m_pos.y );
+    stream->SerializeFloat( m_pos.z );
+    stream->SerializeFloat( m_radius );
+    stream->SerializeFloat( m_color.r );
+    stream->SerializeFloat( m_color.g );
+    stream->SerializeFloat( m_color.b );
   }
 
-  ae::Vec3 pos;
-  ae::Vec3 size;
-  float rotation;
-  float life;
-
   aeNetData* netData;
+  bool alive;
+  AetherUuid playerId;
 
 private:
+  ae::Vec3 m_pos;
+  float m_radius;
   ae::Color m_color;
 };
 

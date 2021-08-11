@@ -30,44 +30,28 @@
 //------------------------------------------------------------------------------
 int main()
 {
+  // Init
   AE_LOG( "Initialize" );
-
-  // System modules
-//  ae::Window window;
-//  ae::GraphicsDevice render;
-//  ae::Input input;
-//  aeSpriteRender spriteRender;
-//  ae::Texture2D texture;
-//  ae::TimeStep timeStep;
-//  window.Initialize( 800, 600, false, true );
-//  window.SetTitle( "Replication Client" );
-//  render.Initialize( &window );
-//  input.Initialize( &window );
-//  spriteRender.Initialize( 32 );
-//  uint8_t texInfo[] = { 255, 255, 255 };
-//  texture.Initialize( texInfo, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat );
-//  timeStep.SetTimeStep( 1.0f / 10.0f );
   Game game;
   game.Initialize();
-
-  // Client modules
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
   aeNetReplicaClient replicationClient;
+  ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
-  // Game data
-  ae::Array< Green > greens = TAG_EXAMPLE;
-
+  // Update
   while ( !game.input.quit )
   {
     game.input.Pump();
     
+    //------------------------------------------------------------------------------
+    // Net update
+    //------------------------------------------------------------------------------
     // Update connection to server
     if ( !client->IsConnected() && !client->IsConnecting() )
     {
       AE_LOG( "Connecting to server" );
       AetherClient_Connect( client );
     }
-
     // Handle messages from server
     ReceiveInfo receiveInfo;
     while ( AetherClient_Receive( client, &receiveInfo ) )
@@ -81,59 +65,56 @@ int main()
           AE_LOG( "Disconnected from server" );
           break;
         case kReplicaInfoMsg:
-          if ( receiveInfo.data.Length() )
-          {
-            replicationClient.ReceiveData( &receiveInfo.data[ 0 ], receiveInfo.data.Length() );
-          }
+          replicationClient.ReceiveData( receiveInfo.data.Begin(), receiveInfo.data.End() - receiveInfo.data.Begin() );
           break;
         default:
           break;
       }
     }
-    
     // Create new replicated objects
     while ( aeNetData* netData = replicationClient.PumpCreate() )
     {
-      uint32_t type = 0;
-      aeBinaryStream readStream = aeBinaryStream::Reader( netData->GetInitData(), netData->InitDataLength() );
-      readStream.SerializeUint32( type );
-      
-      if ( type == kReplicaType_Green )
-      {
-        AE_LOG( "Create green" );
-        greens.Append( Green() ).netData = netData;
-      }
-      else
-      {
-        AE_FAIL();
-      }
+      aeBinaryStream readStream = aeBinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
+      GameObject* obj = &gameObjects.Append( GameObject( ae::Color::White() ) );
+      obj->netData = netData;
+      obj->Serialize( &readStream );
     }
     
+    //------------------------------------------------------------------------------
     // Game Update
-    for ( uint32_t i = 0; i < greens.Length(); i++ )
+    //------------------------------------------------------------------------------
+    for ( GameObject& obj : gameObjects )
     {
-      Green* green = &greens[ i ];
-      green->Update( &game );
-      if ( green->netData->IsPendingDestroy() )
+      obj.Update( &game );
+    }
+
+    //------------------------------------------------------------------------------
+    // Delete networked objects
+    //------------------------------------------------------------------------------
+    for ( GameObject& obj : gameObjects )
+    {
+      if ( obj.netData->IsPendingDestroy() )
       {
-        replicationClient.Destroy( green->netData );
-        green->netData = nullptr;
+        replicationClient.Destroy( obj.netData );
+        obj.netData = nullptr;
       }
     }
     // Remove objects that no longer have replication data
-    greens.RemoveAllFn( []( Green& green ) { return !green.netData; } );
-
+    gameObjects.RemoveAllFn( []( const GameObject& o ) { return !o.netData; } );
     // Send messages generated during game update
     AetherClient_SendAll( client );
 
+    //------------------------------------------------------------------------------
+    // Render
+    //------------------------------------------------------------------------------
+    //const char* connectionStatus = client->IsConnected() ? "Connected" : "Connecting...";
+    //game.text.Add( aeFloat3( 0.0f ), aeFloat2( 1.0f ), connectionStatus, ae::Color::White(), 0, 0 );
     game.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
   }
 
   AE_LOG( "Terminate" );
-
   AetherClient_Delete( client );
   client = nullptr;
-  
   game.Terminate();
 
   return 0;
