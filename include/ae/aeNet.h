@@ -113,7 +113,9 @@ public:
   // True until SetInitData() is called
   bool IsPendingInit() const;
   // Call once after aeNetReplicaDB::CreateNetData(), will trigger Create event
-  // on clients
+  // on clients. You can pass 'nullptr' and '0' as params, but you still must call
+  // before the object will be created remotely. Clients can call aeNetData::GetInitData()
+  // to get the data set here.
   void SetInitData( const void* initData, uint32_t initDataLength );
   // Call SetSyncData each frame to update that state of the clients NetData.
   // Only the most recent data is sent. Data is only sent when changed.
@@ -124,9 +126,12 @@ public:
   //------------------------------------------------------------------------------
   // Client
   //------------------------------------------------------------------------------
-  // Use GetInitData() after receiving a new NetData from aeNetReplicaClient::
-  // PumpCreate() to construct the object
+  // Use GetInitData() after receiving a new NetData from aeNetReplicaClient::PumpCreate()
+  // to construct the object. Retrieves the data set by aeNetData::SetInitData() on
+  // the server.
   const uint8_t* GetInitData() const;
+  // Retrieves the length of the data set by aeNetData::SetInitData() on the server.
+  // Use in conjunction with aeNetData::GetInitData().
   uint32_t InitDataLength() const;
 
   // Only the latest sync data is ever available, so there's no need to read this
@@ -188,12 +193,13 @@ public:
   RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
 
 private:
-  void m_CreateNetData( aeBinaryStream* rStream );
+  void m_CreateNetData( aeBinaryStream* rStream, bool allowResolve );
+  void m_StartNetDataDestruction( aeNetData* netData );
+  uint32_t m_serverSignature = 0;
   ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
   ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
   ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
   ae::Array< aeNetData* > m_created = AE_ALLOC_TAG_NET;
-  ae::Array< aeNetData* > m_destroyed = AE_ALLOC_TAG_NET;
 };
 
 //------------------------------------------------------------------------------
@@ -229,6 +235,7 @@ public:
 class aeNetReplicaDB
 {
 public:
+  aeNetReplicaDB();
   // Create a server authoritative NetData which will be replicated to clients through NetReplicaServer/NetReplicaClient
   aeNetData* CreateNetData();
   void DestroyNetData( aeNetData* netData );
@@ -241,6 +248,7 @@ public:
   void UpdateSendData();
 
 private:
+  uint32_t m_signature = 0;
   uint32_t m_lastNetId = 0;
   ae::Array< aeNetData* > m_pendingCreate = AE_ALLOC_TAG_NET;
   ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;

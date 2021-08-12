@@ -42,10 +42,10 @@ const AetherMsgId kReplicaInfoMsg = 1;
 class Game
 {
 public:
-  void Game::Initialize()
+  void Game::Initialize( const char* windowTitle )
   {
     window.Initialize( 800, 600, false, true );
-    window.SetTitle( "Replication Server" );
+    window.SetTitle( windowTitle );
     render.Initialize( &window );
     input.Initialize( &window );
     timeStep.SetTimeStep( 1.0f / 10.0f );

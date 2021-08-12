@@ -145,8 +145,10 @@ void aeNetData::m_UpdateHash()
 //------------------------------------------------------------------------------
 void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
 {
-  // @TODO: This assert holds except on init
-  //AE_ASSERT_MSG( m_created.Length() == 0, "After calling ReceiveData(), PumpCreate() must be called until it returns a null reference." );
+  if ( m_serverSignature )
+  {
+    AE_ASSERT_MSG( m_created.Length() == 0, "After calling ReceiveData(), PumpCreate() must be called until it returns a null reference." );
+  }
 
   aeBinaryStream rStream = aeBinaryStream::Reader( data, length );
   while ( rStream.GetOffset() < rStream.GetLength() )
@@ -161,38 +163,42 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
     {
       case aeNetReplicaServer::EventType::Connect:
       {
-        // @TODO: Reconcile or destroy all current net datas first
+        uint32_t signature = 0;
+        rStream.SerializeUint32( signature );
+        AE_ASSERT( signature );
+        bool allowResolve = ( m_serverSignature == signature );
+        if ( m_serverSignature && !allowResolve )
+        {
+          m_created.Clear(); // Clear pending list (pointers to NetDatas in m_netDatas)
+          for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+          {
+            m_StartNetDataDestruction( m_netDatas.GetValue( i ) );
+          }
+          AE_ASSERT( !m_remoteToLocalIdMap.Length() );
+          AE_ASSERT( !m_localToRemoteIdMap.Length() );
+        }
+        m_serverSignature = signature;
 
         uint32_t length = 0;
         rStream.SerializeUint32( length );
         for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
         {
-          m_CreateNetData( &rStream );
+          m_CreateNetData( &rStream, allowResolve );
         }
         break;
       }
       case aeNetReplicaServer::EventType::Create:
       {
-        m_CreateNetData( &rStream );
+        m_CreateNetData( &rStream, false );
         break;
       }
       case aeNetReplicaServer::EventType::Destroy:
       {
         RemoteId remoteId;
         rStream.SerializeObject( remoteId );
-
-        // @TODO: What happens if the client is somehow out of sync here?
-        //        Currently if the net data is not found this Get() will assert.
         NetId localId = m_remoteToLocalIdMap.Get( remoteId );
-        m_remoteToLocalIdMap.Remove( remoteId );
-        m_localToRemoteIdMap.Remove( localId );
-
-        aeNetData* netData = nullptr;
-        if ( m_netDatas.TryGet( localId, &netData ) )
-        {
-          AE_ASSERT( netData );
-          netData->m_FlagForDestruction();
-        }
+        aeNetData* netData = m_netDatas.Get( localId );
+        m_StartNetDataDestruction( netData );
         break;
       }
       case aeNetReplicaServer::EventType::Update:
@@ -283,11 +289,12 @@ void aeNetReplicaClient::Destroy( aeNetData* pendingDestroy )
   // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
   AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "aeNetData was not pending Destroy()" );
   AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "aeNetData had pending messages when it was Destroy()ed" );
-  m_netDatas.Remove( pendingDestroy->_netId );
+  bool removed = m_netDatas.Remove( pendingDestroy->_netId );
+  AE_ASSERT( removed, "NetData can't be deleted. It was registered." );
   ae::Delete( pendingDestroy );
 }
 
-void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
+void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream, bool allowResolve )
 {
   AE_ASSERT( rStream->IsReader() );
 
@@ -302,6 +309,16 @@ void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream )
   rStream->SerializeArray( netData->m_initData );
 
   m_created.Append( netData );
+}
+
+void aeNetReplicaClient::m_StartNetDataDestruction( aeNetData* netData )
+{
+  AE_ASSERT( netData );
+  NetId localId = netData->_netId;
+  RemoteId remoteId = m_localToRemoteIdMap.Get( localId );
+  m_remoteToLocalIdMap.Remove( remoteId );
+  m_localToRemoteIdMap.Remove( localId );
+  netData->m_FlagForDestruction();
 }
 
 //------------------------------------------------------------------------------
@@ -375,6 +392,15 @@ uint32_t aeNetReplicaServer::GetSendLength() const
 //------------------------------------------------------------------------------
 // aeNetReplicaDB member functions
 //------------------------------------------------------------------------------
+#include <random>
+aeNetReplicaDB::aeNetReplicaDB()
+{
+  std::random_device random_device;
+  std::mt19937 random_engine( random_device() );
+  std::uniform_int_distribution< uint32_t > dist( 1, ae::MaxValue< uint32_t >() );
+  m_signature = dist( random_engine );
+}
+
 aeNetData* aeNetReplicaDB::CreateNetData()
 {
   aeNetData* netData = ae::New< aeNetData >( AE_ALLOC_TAG_NET );
@@ -430,6 +456,7 @@ aeNetReplicaServer* aeNetReplicaDB::CreateServer()
   // Send initial net datas
   aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
   wStream.SerializeRaw( aeNetReplicaServer::EventType::Connect );
+  wStream.SerializeUint32( m_signature );
   wStream.SerializeUint32( m_netDatas.Length() );
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {

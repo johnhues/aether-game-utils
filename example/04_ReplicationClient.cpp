@@ -33,7 +33,7 @@ int main()
   // Init
   AE_LOG( "Initialize" );
   Game game;
-  game.Initialize();
+  game.Initialize( "Replication Client" );
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
   aeNetReplicaClient replicationClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
