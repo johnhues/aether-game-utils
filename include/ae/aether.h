@@ -6820,7 +6820,9 @@ void Window::SetTitle( const char* title )
 {
   if ( window && m_windowTitle != title )
   {
-    //SDL_SetWindowTitle( (SDL_Window*)window, title );
+#if _AE_WINDOWS_
+    SetWindowTextA( (HWND)window, title );
+#endif
     m_windowTitle = title;
   }
 }
