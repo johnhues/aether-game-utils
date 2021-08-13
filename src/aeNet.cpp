@@ -145,11 +145,6 @@ void aeNetData::m_UpdateHash()
 //------------------------------------------------------------------------------
 void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
 {
-  if ( m_serverSignature )
-  {
-    AE_ASSERT_MSG( m_created.Length() == 0, "After calling ReceiveData(), PumpCreate() must be called until it returns a null reference." );
-  }
-
   aeBinaryStream rStream = aeBinaryStream::Reader( data, length );
   while ( rStream.GetOffset() < rStream.GetLength() )
   {
@@ -166,25 +161,44 @@ void aeNetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         uint32_t signature = 0;
         rStream.SerializeUint32( signature );
         AE_ASSERT( signature );
-        bool allowResolve = ( m_serverSignature == signature );
-        if ( m_serverSignature && !allowResolve )
-        {
-          m_created.Clear(); // Clear pending list (pointers to NetDatas in m_netDatas)
-          for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
-          {
-            m_StartNetDataDestruction( m_netDatas.GetValue( i ) );
-          }
-          AE_ASSERT( !m_remoteToLocalIdMap.Length() );
-          AE_ASSERT( !m_localToRemoteIdMap.Length() );
-        }
-        m_serverSignature = signature;
 
+        ae::Map< aeNetData*, int > toDestroy = AE_ALLOC_TAG_NET;
+        bool allowResolve = ( m_serverSignature == signature );
+        if ( m_serverSignature )
+        {
+          if ( allowResolve )
+          {
+            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            {
+              toDestroy.Set( m_netDatas.GetValue( i ), 0 );
+            }
+          }
+          else
+          {
+            m_created.Clear(); // Don't call delete, are pointers to m_netDatas
+            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            {
+              m_StartNetDataDestruction( m_netDatas.GetValue( i ) );
+            }
+            AE_ASSERT( !m_remoteToLocalIdMap.Length() );
+            AE_ASSERT( !m_localToRemoteIdMap.Length() );
+          }
+        }
+        
         uint32_t length = 0;
         rStream.SerializeUint32( length );
         for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
         {
-          m_CreateNetData( &rStream, allowResolve );
+          aeNetData* created = m_CreateNetData( &rStream, allowResolve );
+          toDestroy.Remove( created );
         }
+        for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
+        {
+          aeNetData* netData = toDestroy.GetKey( i );
+          m_StartNetDataDestruction( netData );
+        }
+
+        m_serverSignature = signature;
         break;
       }
       case aeNetReplicaServer::EventType::Create:
@@ -294,30 +308,53 @@ void aeNetReplicaClient::Destroy( aeNetData* pendingDestroy )
   ae::Delete( pendingDestroy );
 }
 
-void aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream, bool allowResolve )
+aeNetData* aeNetReplicaClient::m_CreateNetData( aeBinaryStream* rStream, bool allowResolve )
 {
   AE_ASSERT( rStream->IsReader() );
 
   RemoteId remoteId;
   rStream->SerializeObject( remoteId );
 
-  aeNetData* netData = ae::New< aeNetData >( AE_ALLOC_TAG_NET );
-  m_netDatas.Set( netData->_netId, netData );
-  m_remoteToLocalIdMap.Set( remoteId, netData->_netId );
-  m_localToRemoteIdMap.Set( netData->_netId, remoteId );
+  aeNetData* netData = nullptr;
+  if ( allowResolve )
+  {
+    NetId localId = m_remoteToLocalIdMap.Get( remoteId, {} );
+    if ( localId )
+    {
+      netData = m_netDatas.Get( localId );
+    }
+  }
 
+  if ( !netData )
+  {
+    NetId localId( ++m_lastNetId );
+    netData = ae::New< aeNetData >( AE_ALLOC_TAG_NET );
+    netData->_netId = localId;
+
+    m_netDatas.Set( localId, netData );
+    m_remoteToLocalIdMap.Set( remoteId, localId );
+    m_localToRemoteIdMap.Set( localId, remoteId );
+    m_created.Append( netData );
+  }
+  
   rStream->SerializeArray( netData->m_initData );
 
-  m_created.Append( netData );
+  return netData;
 }
 
 void aeNetReplicaClient::m_StartNetDataDestruction( aeNetData* netData )
 {
   AE_ASSERT( netData );
-  NetId localId = netData->_netId;
-  RemoteId remoteId = m_localToRemoteIdMap.Get( localId );
-  m_remoteToLocalIdMap.Remove( remoteId );
-  m_localToRemoteIdMap.Remove( localId );
+  if ( netData->IsPendingDestroy() )
+  {
+    return;
+  }
+  
+  RemoteId remoteId;
+  bool found = m_localToRemoteIdMap.Remove( netData->_netId, &remoteId );
+  AE_ASSERT( found );
+  found = m_remoteToLocalIdMap.Remove( remoteId );
+  AE_ASSERT( found );
   netData->m_FlagForDestruction();
 }
 

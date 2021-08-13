@@ -42,12 +42,12 @@ int main()
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
   // Load level objects
-  //while ( gameObjects.Length() < 3 )
-  //{
-  //  GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Gray() ) );
-  //  obj->netData = replicaDB.CreateNetData();
-  //  obj->netData->SetInitData( nullptr, 0 );
-  //}
+  while ( gameObjects.Length() < 3 )
+  {
+    GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Gray() ) );
+    obj->netData = replicaDB.CreateNetData();
+    obj->netData->SetInitData( nullptr, 0 );
+  }
   
   // Update
   while ( !game.input.quit )

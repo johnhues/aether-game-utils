@@ -193,9 +193,10 @@ public:
   RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
 
 private:
-  void m_CreateNetData( aeBinaryStream* rStream, bool allowResolve );
+  aeNetData* m_CreateNetData( aeBinaryStream* rStream, bool allowResolve );
   void m_StartNetDataDestruction( aeNetData* netData );
   uint32_t m_serverSignature = 0;
+  uint32_t m_lastNetId = 0;
   ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
   ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
   ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
