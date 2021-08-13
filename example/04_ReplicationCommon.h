@@ -103,14 +103,14 @@ public:
     // Client - read net data
     if ( !netData->IsAuthority() )
     {
-      aeBinaryStream rStream = aeBinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
+      ae::BinaryStream rStream = ae::BinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
       Serialize( &rStream );
     }
 
     // Server - write net data
     if ( netData->IsAuthority() )
     {
-      aeBinaryStream wStream = aeBinaryStream::Writer();
+      ae::BinaryStream wStream = ae::BinaryStream::Writer();
       Serialize( &wStream );
       netData->SetSyncData( wStream.GetData(), wStream.GetOffset() );
     }
@@ -120,7 +120,7 @@ public:
     game->debugLines.AddCircle( m_pos, ae::Vec3( 0, 0, 1 ), m_radius, m_color, points );
   }
 
-  void Serialize( aeBinaryStream* stream )
+  void Serialize( ae::BinaryStream* stream )
   {
     stream->SerializeFloat( m_pos.x );
     stream->SerializeFloat( m_pos.y );

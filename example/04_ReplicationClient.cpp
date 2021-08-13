@@ -72,9 +72,9 @@ int main()
       }
     }
     // Create new replicated objects
-    while ( NetReplica* netData = replicationClient.PumpCreate() )
+    while ( ae::NetReplica* netData = replicationClient.PumpCreate() )
     {
-      aeBinaryStream readStream = aeBinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
+      ae::BinaryStream readStream = ae::BinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
       GameObject* obj = &gameObjects.Append( GameObject( ae::Color::White() ) );
       obj->netData = netData;
       obj->Serialize( &readStream );

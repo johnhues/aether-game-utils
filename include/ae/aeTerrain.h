@@ -451,7 +451,7 @@ struct TerrainChunk
   uint32_t GetIndex() const;
   void Generate( const TerrainSdfCache* sdf, const TerrainJob* job, TerrainJob::TempEdges* edgeBuffer, TerrainVertex* verticesOut, TerrainIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut );
   
-  void Serialize( class aeBinaryStream* stream );
+  void Serialize( ae::BinaryStream* stream );
 
   aeAABB GetAABB() const;
   static aeAABB GetAABB( aeInt3 chunkPos );
