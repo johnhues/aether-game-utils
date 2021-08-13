@@ -2816,8 +2816,16 @@ namespace Interpolation
   }
 }
 
+static bool _HACK_randInit = false;
+
 inline int32_t Random( int32_t min, int32_t max )
 {
+  if ( !_HACK_randInit )
+  {
+    srand( time( 0 ) );
+    _HACK_randInit = true;
+  }
+
   if ( min >= max )
   {
     return min;
@@ -2827,6 +2835,12 @@ inline int32_t Random( int32_t min, int32_t max )
 
 inline float Random( float min, float max )
 {
+  if ( !_HACK_randInit )
+  {
+    srand( time( 0 ) );
+    _HACK_randInit = true;
+  }
+
   if ( min >= max )
   {
     return min;

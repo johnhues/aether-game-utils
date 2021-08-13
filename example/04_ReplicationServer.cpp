@@ -27,52 +27,34 @@
 #include "04_ReplicationCommon.h"
 
 //------------------------------------------------------------------------------
-// ClientInfo class
-//------------------------------------------------------------------------------
-class ClientInfo
-{
-public:
-  AetherUuid uuid;
-  aeNetReplicaServer* replicaServer = nullptr;
-};
-
-//------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
 {
   AE_LOG( "Initialize" );
 
-  // System modules
-  aeWindow window;
-  aeRender render;
-  aeInput input;
-  aeSpriteRender spriteRender;
-  aeTexture2D texture;
-  ae::TimeStep timeStep;
-  window.Initialize( 800, 600, false, true );
-  window.SetTitle( "Replication Server" );
-  render.InitializeOpenGL( &window );
-  input.Initialize( &window );
-  spriteRender.Initialize( 32 );
-  uint8_t texInfo[] = { 255, 255, 255 };
-  texture.Initialize( texInfo, 1, 1, aeTextureFormat::RGB8, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
-  timeStep.SetTimeStep( 1.0f / 10.0f );
-
-  // Server modules
-  AetherServer* server = AetherServer_New( 3500, 0, 1 );
-  aeNetReplicaDB replicaDB;
+  // Init
+  Game game;
+  game.Initialize( "Replication Server" );
+  AetherServer* server = AetherServer_New( 3500, 0, 16 );
+  aeNetReplicaDB replicaDB;  
   ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers = TAG_EXAMPLE;
+  ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
-  // Game data
-  ae::Array< Green > greens = TAG_EXAMPLE;
-  
-  // Net update
-  while ( !input.GetState()->exit )
+  // Load level objects
+  while ( gameObjects.Length() < 3 )
   {
-    input.Pump();
+    GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Gray() ) );
+    obj->netData = replicaDB.CreateNetData();
+    obj->netData->SetInitData( nullptr, 0 );
+  }
+  
+  // Update
+  while ( !game.input.quit )
+  {
+    // Poll input and net modules
+    game.input.Pump();
     AetherServer_Update( server );
-    
     ServerReceiveInfo receiveInfo;
     while ( AetherServer_Receive( server, &receiveInfo ) )
     {
@@ -82,50 +64,52 @@ int main()
         {
           AE_LOG( "Player # connected", receiveInfo.player->uuid );
           replicaServers.Set( receiveInfo.player->uuid, replicaDB.CreateServer() );
+
+          GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Green() ) );
+          obj->playerId = receiveInfo.player->uuid;
+          obj->netData = replicaDB.CreateNetData();
+          obj->netData->SetInitData( nullptr, 0 );
           break;
         }
         case kSysMsgPlayerDisconnect:
         {
-          AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
+          AetherUuid playerId = receiveInfo.player->uuid;
+          AE_LOG( "Player # disconnected", playerId );
 
-          aeNetReplicaServer* replicaServer = nullptr;
-          if ( replicaServers.TryGet( receiveInfo.player->uuid, &replicaServer ) )
+          // Kill player gameobject
+          int32_t playerIndex = gameObjects.FindFn( [=]( const GameObject& o ){ return o.playerId == playerId; } );
+          if ( playerIndex >= 0 )
           {
-            replicaServers.Remove( receiveInfo.player->uuid );
+            gameObjects[ playerIndex ].alive = false;
+          }
+
+          // Remove player from replica db
+          aeNetReplicaServer* replicaServer = nullptr;
+          if ( replicaServers.TryGet( playerId, &replicaServer ) )
+          {
+            replicaServers.Remove( playerId );
             replicaDB.DestroyServer( replicaServer );
           }
 
           break;
         }
         default:
-        {
           break;
-        }
       }
     }
 
+    
     // Game Update
-    while ( greens.Length() < 3 )
+    for ( uint32_t i = 0; i < gameObjects.Length(); i++ )
     {
-      Green* green = &greens.Append( Green() );
-      green->pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
-      green->size = aeFloat3( aeMath::Random( 0.5f, 2.0f ), aeMath::Random( 0.5f, 2.0f ), 1.0f );
-      green->rotation = aeMath::Random( 0.0f, aeMath::TWO_PI );
-      green->life = 5.0f + aeMath::Random( 0.7f, 1.3f );
-      green->netData = replicaDB.CreateNetData();
-      green->netData->SetInitData( &kReplicaType_Green, sizeof( kReplicaType_Green ) );
+      gameObjects[ i ].Update( &game );
     }
-    for ( uint32_t i = 0; i < greens.Length(); i++ )
-    {
-      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture, &input );
-    }
-
     // Destroy dead objects
-    auto findDeadFn = []( const Green& object ){ return object.life <= 0.0f; };
-    for ( int32_t index = greens.FindFn( findDeadFn ); index >= 0; index = greens.FindFn( findDeadFn ) )
+    auto findDeadFn = []( const GameObject& object ){ return !object.alive; };
+    for ( int32_t index = gameObjects.FindFn( findDeadFn ); index >= 0; index = gameObjects.FindFn( findDeadFn ) )
     {
-      replicaDB.DestroyNetData( greens[ index ].netData );
-      greens.Remove( index );
+      replicaDB.DestroyNetData( gameObjects[ index ].netData );
+      gameObjects.Remove( index );
     }
     
     // Send replication data
@@ -141,24 +125,13 @@ int main()
     }
     AetherServer_SendAll( server );
 
-    render.Activate();
-    render.Clear( aeColor::PicoBlack() );
-    spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-    render.Present();
-
-    timeStep.Wait();
+    // Render
+    game.Render( ae::Matrix4::Scaling( aeFloat3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
   }
 
   AE_LOG( "Terminate" );
-
   AetherServer_Delete( server );
-  server = nullptr;
-  
-  texture.Destroy();
-  spriteRender.Destroy();
-  input.Terminate();
-  render.Terminate();
-  window.Terminate();
+  game.Terminate();
 
   return 0;
 }

@@ -28,9 +28,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeBinaryStream.h"
-#include "aeMeta.h"
-#include "aeRef.h"
-#include "aeString.h"
 
 //------------------------------------------------------------------------------
 // AetherUuid class
@@ -63,6 +60,33 @@ inline void Serialize( aeBinaryStream* stream, const AetherUuid* uuid )
   stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }
 
+struct NetId
+{
+  NetId() = default;
+  NetId( const NetId& ) = default;
+  explicit NetId( uint32_t id ) : m_id( id ) {}
+  bool operator==( const NetId& o ) const { return o.m_id == m_id; }
+  bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
+  explicit operator bool () const { return m_id != 0; }
+  void Serialize( aeBinaryStream* s ) { s->SerializeUint32( m_id ); }
+  void Serialize( aeBinaryStream* s ) const { s->SerializeUint32( m_id ); }
+private:
+  uint32_t m_id = 0;
+};
+struct RemoteId
+{
+  RemoteId() = default;
+  RemoteId( const RemoteId& ) = default;
+  explicit RemoteId( uint32_t id ) : m_id( id ) {}
+  bool operator==( const RemoteId& o ) const { return o.m_id == m_id; }
+  bool operator!=( const RemoteId& o ) const { return o.m_id != m_id; }
+  explicit operator bool () const { return m_id != 0; }
+  void Serialize( aeBinaryStream* s ) { s->SerializeUint32( m_id ); }
+  void Serialize( aeBinaryStream* s ) const { s->SerializeUint32( m_id ); }
+private:
+  uint32_t m_id = 0;
+};
+
 //------------------------------------------------------------------------------
 // aeNetData class
 //------------------------------------------------------------------------------
@@ -74,6 +98,8 @@ public:
     const uint8_t* data;
     uint32_t length;
   };
+
+  NetId _netId;
 
   //------------------------------------------------------------------------------
   // General
@@ -87,7 +113,9 @@ public:
   // True until SetInitData() is called
   bool IsPendingInit() const;
   // Call once after aeNetReplicaDB::CreateNetData(), will trigger Create event
-  // on clients
+  // on clients. You can pass 'nullptr' and '0' as params, but you still must call
+  // before the object will be created remotely. Clients can call aeNetData::GetInitData()
+  // to get the data set here.
   void SetInitData( const void* initData, uint32_t initDataLength );
   // Call SetSyncData each frame to update that state of the clients NetData.
   // Only the most recent data is sent. Data is only sent when changed.
@@ -98,9 +126,12 @@ public:
   //------------------------------------------------------------------------------
   // Client
   //------------------------------------------------------------------------------
-  // Use GetInitData() after receiving a new NetData from aeNetReplicaClient::
-  // PumpCreated() to construct the object
+  // Use GetInitData() after receiving a new NetData from aeNetReplicaClient::PumpCreate()
+  // to construct the object. Retrieves the data set by aeNetData::SetInitData() on
+  // the server.
   const uint8_t* GetInitData() const;
+  // Retrieves the length of the data set by aeNetData::SetInitData() on the server.
+  // Use in conjunction with aeNetData::GetInitData().
   uint32_t InitDataLength() const;
 
   // Only the latest sync data is ever available, so there's no need to read this
@@ -108,15 +139,15 @@ public:
   const uint8_t* GetSyncData() const;
   // Check for new data from server
   uint32_t SyncDataLength() const;
-  // Call to clear SyncDataLength() until new data is received
+  // (Optional) Call to clear SyncDataLength() until new data is received
   void ClearSyncData();
 
   // Get messages sent from the server. Call repeatedly until false is returned
   bool PumpMessages( Msg* msgOut );
 
-  // True once the NetData has been deleted by the server. Will be destroyed when
-  // aeNetReplicaClient::DestroyPending() is called.
-  bool IsPendingDelete() const;
+  // True once the NetData has been deleted on the server.
+  // Call aeNetReplicaClient::Destroy() when you're done with it.
+  bool IsPendingDestroy() const;
 
   //------------------------------------------------------------------------------
   // Internal
@@ -130,25 +161,20 @@ private:
   void m_SetLocal() { m_local = true; }
   void m_SetClientData( const uint8_t* data, uint32_t length );
   void m_ReceiveMessages( const uint8_t* data, uint32_t length );
-  void FlagForDeletion() { m_isPendingDelete = true; }
-  
+  void m_FlagForDestruction() { m_isPendingDestroy = true; }
   void m_UpdateHash();
   bool m_Changed() const { return m_hash != m_prevHash; }
 
   bool m_local = false;
   ae::Array< uint8_t > m_initData = AE_ALLOC_TAG_NET;
   ae::Array< uint8_t > m_data = AE_ALLOC_TAG_NET;
-
   ae::Array< uint8_t > m_messageDataOut = AE_ALLOC_TAG_NET;
   ae::Array< uint8_t > m_messageDataIn = AE_ALLOC_TAG_NET;
   uint32_t m_messageDataInOffset = 0;
-
   uint32_t m_hash = 0;
   uint32_t m_prevHash = 0;
   bool m_isPendingInit = true;
-  bool m_isPendingDelete = false;
-public:
-  AE_REFABLE( aeNetData );
+  bool m_isPendingDestroy = false;
 };
 
 //------------------------------------------------------------------------------
@@ -159,20 +185,22 @@ class aeNetReplicaClient
 public:
   // The following sequence should be performed each frame
   void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
-  aeRef< aeNetData > PumpCreated(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
+  aeNetData* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
   // 3) Handle new sync data with aeNetData::GetSyncData() and process incoming messages with aeNetData::PumpMessages()
-  void DestroyPending(); // 4) Destroy all objects flagged for destruction (call once)
+  void Destroy( aeNetData* pendingDestroy ); // 4) Call this on aeNetDatas once aeNetData::IsPendingDestroy() returns true
   
-  aeId< aeNetData > GetLocalId( uint32_t remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
-  uint32_t GetRemoteId( aeId< aeNetData > localId ) const { return m_localToRemoteIdMap.Get( localId, 0 ); }
+  NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
+  RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
 
 private:
-  void m_CreateNetData( aeBinaryStream* rStream );
-  ae::Map< aeId< aeNetData >, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
-  ae::Map< uint32_t, aeId< aeNetData > > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
-  ae::Map< aeId< aeNetData >, uint32_t > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
-  ae::Array< aeRef< aeNetData > > m_created = AE_ALLOC_TAG_NET;
-  ae::Array< aeRef< aeNetData > > m_destroyed = AE_ALLOC_TAG_NET;
+  aeNetData* m_CreateNetData( aeBinaryStream* rStream, bool allowResolve );
+  void m_StartNetDataDestruction( aeNetData* netData );
+  uint32_t m_serverSignature = 0;
+  uint32_t m_lastNetId = 0;
+  ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
+  ae::Array< aeNetData* > m_created = AE_ALLOC_TAG_NET;
 };
 
 //------------------------------------------------------------------------------
@@ -208,6 +236,7 @@ public:
 class aeNetReplicaDB
 {
 public:
+  aeNetReplicaDB();
   // Create a server authoritative NetData which will be replicated to clients through NetReplicaServer/NetReplicaClient
   aeNetData* CreateNetData();
   void DestroyNetData( aeNetData* netData );
@@ -216,11 +245,14 @@ public:
   aeNetReplicaServer* CreateServer();
   void DestroyServer( aeNetReplicaServer* server );
 
-  void UpdateSendData(); // Call each frame before aeNetReplicaServer::GetSendData()
+  // Call each frame before aeNetReplicaServer::GetSendData()
+  void UpdateSendData();
 
 private:
+  uint32_t m_signature = 0;
+  uint32_t m_lastNetId = 0;
   ae::Array< aeNetData* > m_pendingCreate = AE_ALLOC_TAG_NET;
-  ae::Map< aeId< aeNetData >, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, aeNetData* > m_netDatas = AE_ALLOC_TAG_NET;
   ae::Array< aeNetReplicaServer* > m_servers = AE_ALLOC_TAG_NET;
 public:
   // Internal
@@ -320,8 +352,8 @@ struct AetherPlayer
   void* userData = nullptr;
   bool alive = false;
 
-  aeStr32 pendingLevel = "";
-  aeStr32 pendingLink = "";
+  ae::Str32 pendingLevel = "";
+  ae::Str32 pendingLink = "";
   bool hasPendingLevelChange = false;
 };
 
