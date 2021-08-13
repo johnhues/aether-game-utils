@@ -24,12 +24,11 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeMesh.h"
-#include "aeBinaryStream.h"
 
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-void ae::Mesh::Vertex::Serialize( const SerializationParams& params, aeBinaryStream* stream )
+void ae::Mesh::Vertex::Serialize( const SerializationParams& params, ae::BinaryStream* stream )
 {
   bool reader = stream->IsReader();
   if ( params.position )
@@ -316,7 +315,7 @@ void ae::Mesh::Load( LoadParams params )
 }
 
 const uint32_t kAeMeshVersion = 2;
-void ae::Mesh::Serialize( const SerializationParams& params, aeBinaryStream* stream )
+void ae::Mesh::Serialize( const SerializationParams& params, ae::BinaryStream* stream )
 {
   if ( stream->IsReader() )
   {

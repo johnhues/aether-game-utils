@@ -37,15 +37,15 @@ int main()
   Game game;
   game.Initialize( "Replication Server" );
   AetherServer* server = AetherServer_New( 3500, 0, 16 );
-  aeNetReplicaDB replicaDB;  
-  ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers = TAG_EXAMPLE;
+  ae::NetReplicaServer replicaServer;
+  ae::Map< AetherUuid, ae::NetReplicaConnection* > replicaConnections = TAG_EXAMPLE;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
   // Load level objects
   while ( gameObjects.Length() < 3 )
   {
     GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Gray() ) );
-    obj->netData = replicaDB.CreateNetData();
+    obj->netData = replicaServer.CreateNetData();
     obj->netData->SetInitData( nullptr, 0 );
   }
   
@@ -63,11 +63,11 @@ int main()
         case kSysMsgPlayerConnect:
         {
           AE_LOG( "Player # connected", receiveInfo.player->uuid );
-          replicaServers.Set( receiveInfo.player->uuid, replicaDB.CreateServer() );
+          replicaConnections.Set( receiveInfo.player->uuid, replicaServer.CreateConnection() );
 
           GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Green() ) );
           obj->playerId = receiveInfo.player->uuid;
-          obj->netData = replicaDB.CreateNetData();
+          obj->netData = replicaServer.CreateNetData();
           obj->netData->SetInitData( nullptr, 0 );
           break;
         }
@@ -84,11 +84,11 @@ int main()
           }
 
           // Remove player from replica db
-          aeNetReplicaServer* replicaServer = nullptr;
-          if ( replicaServers.TryGet( playerId, &replicaServer ) )
+          ae::NetReplicaConnection* conn = nullptr;
+          if ( replicaConnections.TryGet( playerId, &conn ) )
           {
-            replicaServers.Remove( playerId );
-            replicaDB.DestroyServer( replicaServer );
+            replicaConnections.Remove( playerId );
+            replicaServer.DestroyConnection( conn );
           }
 
           break;
@@ -108,17 +108,17 @@ int main()
     auto findDeadFn = []( const GameObject& object ){ return !object.alive; };
     for ( int32_t index = gameObjects.FindFn( findDeadFn ); index >= 0; index = gameObjects.FindFn( findDeadFn ) )
     {
-      replicaDB.DestroyNetData( gameObjects[ index ].netData );
+      replicaServer.DestroyNetData( gameObjects[ index ].netData );
       gameObjects.Remove( index );
     }
     
     // Send replication data
-    replicaDB.UpdateSendData();
+    replicaServer.UpdateSendData();
     for ( int32_t i = 0; i < server->playerCount; i++ )
     {
       AetherPlayer* player = server->allPlayers[ i ];
-      aeNetReplicaServer* replicaServer = nullptr;
-      if ( replicaServers.TryGet( player->uuid, &replicaServer ) )
+      ae::NetReplicaConnection* replicaServer = nullptr;
+      if ( replicaConnections.TryGet( player->uuid, &replicaServer ) )
       {
         AetherServer_QueueSendToPlayer( server, player, kReplicaInfoMsg, true, replicaServer->GetSendData(), replicaServer->GetSendLength() );
       }

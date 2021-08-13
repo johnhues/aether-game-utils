@@ -1885,6 +1885,325 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::BinaryStream class
+//------------------------------------------------------------------------------
+class BinaryStream
+{
+public:
+  static BinaryStream Writer( uint8_t* data, uint32_t length );
+  static BinaryStream Writer( Array< uint8_t >* array );
+  static BinaryStream Writer();
+  static BinaryStream Reader( const uint8_t* data, uint32_t length );
+  static BinaryStream Reader( const Array< uint8_t >& data );
+
+  void SerializeUint8( uint8_t& v );
+  void SerializeUint8( const uint8_t& v );
+  void SerializeUint16( uint16_t& v );
+  void SerializeUint16( const uint16_t& v );
+  void SerializeUint32( uint32_t& v );
+  void SerializeUint32( const uint32_t& v );
+  void SerializeUint64( uint64_t& v );
+  void SerializeUint64( const uint64_t& v );
+
+  void SerializeInt8( int8_t& v );
+  void SerializeInt8( const int8_t& v );
+  void SerializeInt16( int16_t& v );
+  void SerializeInt16( const int16_t& v );
+  void SerializeInt32( int32_t& v );
+  void SerializeInt32( const int32_t& v );
+  void SerializeInt64( int64_t& v );
+  void SerializeInt64( const int64_t& v );
+
+  void SerializeFloat( float& v );
+  void SerializeFloat( const float& v );
+  void SerializeDouble( double& v );
+  void SerializeDouble( const double& v );
+
+  void SerializeBool( bool& v );
+  void SerializeBool( const bool& v );
+  
+  template < uint32_t N >
+  void SerializeString( Str< N >& str );
+  template < uint32_t N >
+  void SerializeString( const Str< N >& str );
+
+  template< typename T >
+  void SerializeObject( T& v );
+  template< typename T >
+  void SerializeObject( const T& v );
+  // Use SerializeObjectConditional() when an object may not be available for serialization when writing or reading. This function correctly updates read/write offsets when skipping serialization. Sends slightly more data than SerializeObject().
+  template < typename T >
+  void SerializeObjectConditional( T* obj );
+
+  template< uint32_t N >
+  void SerializeArray( char (&str)[ N ] );
+  template< uint32_t N >
+  void SerializeArray( const char (&str)[ N ] );
+  void SerializeArray( Array< uint8_t>& array, uint32_t maxLength = 65535 );
+  void SerializeArray( const Array< uint8_t>& array, uint32_t maxLength = 65535 );
+
+  // @NOTE: Be careful when using SerializeRaw() functions, different platforms
+  // will have different struct packing and alignment schemes.
+  template< typename T >
+  void SerializeRaw( T& v );
+  template< typename T >
+  void SerializeRaw( const T& v );
+  void SerializeRaw( void* data, uint32_t length );
+  void SerializeRaw( const void* data, uint32_t length );
+  void SerializeRaw( Array< uint8_t >& array );
+  void SerializeRaw( const Array< uint8_t >& array );
+
+  // Once the stream is invalid serialization calls will result in silent no-ops
+  void Invalidate() { m_isValid = false; }
+  bool IsValid() const { return m_isValid; }
+  
+  // Get mode
+  bool IsWriter() const { return m_mode == Mode::WriteBuffer; }
+  bool IsReader() const { return m_mode == Mode::ReadBuffer; }
+
+  // Get data buffer
+  const uint8_t* GetData() const { return ( m_data || m_GetArray().Length() == 0 ) ? m_data : &m_GetArray()[ 0 ]; }
+  uint32_t GetOffset() const { return m_offset; }
+  uint32_t GetLength() const { return m_length; }
+
+  // Get data past the current read head
+  const uint8_t* PeekData() const { return GetData() + m_offset; }
+  uint32_t GetRemaining() const { return m_length - m_offset; }
+  void Discard( uint32_t length );
+
+  // Internal
+  enum class Mode
+  {
+    None,
+    ReadBuffer,
+    WriteBuffer,
+  };
+private:
+  Array< uint8_t >& m_GetArray() { return m_extArray ? *m_extArray : m_array; }
+  const Array< uint8_t >& m_GetArray() const { return m_extArray ? *m_extArray : m_array; }
+  void m_SerializeArrayLength( uint32_t& length, uint32_t maxLength );
+  enum class Mode m_mode = Mode::None;
+  bool m_isValid = false;
+  uint8_t* m_data = nullptr;
+  uint32_t m_length = 0;
+  uint32_t m_offset = 0;
+  Array< uint8_t >* m_extArray = nullptr;
+  Array< uint8_t > m_array = AE_ALLOC_TAG_NET;
+
+public:
+  BinaryStream() = default;
+  BinaryStream( Mode mode, uint8_t * data, uint32_t length );
+  BinaryStream( Mode mode, const uint8_t * data, uint32_t length );
+  BinaryStream( Mode mode );
+  BinaryStream( Array< uint8_t >*array );
+
+  // Prevent Serialize functions from being called accidentally through automatic conversions
+  template < typename T > void SerializeUint8( T ) = delete;
+  template < typename T > void SerializeUint16( T ) = delete;
+  template < typename T > void SerializeUint32( T ) = delete;
+  template < typename T > void SerializeUint64( T ) = delete;
+  template < typename T > void SerializeInt8( T ) = delete;
+  template < typename T > void SerializeInt16( T ) = delete;
+  template < typename T > void SerializeInt32( T ) = delete;
+  template < typename T > void SerializeInt64( T ) = delete;
+  template < typename T > void SerializeFloat( T ) = delete;
+  template < typename T > void SerializeDouble( T ) = delete;
+  template < typename T > void SerializeBool( T ) = delete;
+  template < typename T > void SerializeString( T ) = delete;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetId struct
+//------------------------------------------------------------------------------
+struct NetId
+{
+  NetId() = default;
+  NetId( const NetId& ) = default;
+  explicit NetId( uint32_t id ) : m_id( id ) {}
+  bool operator==( const NetId& o ) const { return o.m_id == m_id; }
+  bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
+  explicit operator bool () const { return m_id != 0; }
+  void Serialize( BinaryStream* s ) { s->SerializeUint32( m_id ); }
+  void Serialize( BinaryStream* s ) const { s->SerializeUint32( m_id ); }
+private:
+  uint32_t m_id = 0;
+};
+using RemoteId = NetId;
+
+//------------------------------------------------------------------------------
+// ae::NetReplica class
+//------------------------------------------------------------------------------
+class NetReplica
+{
+public:
+  struct Msg
+  {
+    const uint8_t* data;
+    uint32_t length;
+  };
+
+  NetId _netId;
+
+  //------------------------------------------------------------------------------
+  // General
+  //------------------------------------------------------------------------------
+  bool IsAuthority() const { return m_local; }
+	
+  //------------------------------------------------------------------------------
+  // Server
+  // @NOTE: All server data will be sent with the next NetReplicaServer::UpdateSendData()
+  //------------------------------------------------------------------------------
+  // True until SetInitData() is called
+  bool IsPendingInit() const;
+  // Call once after NetReplicaServer::CreateNetData(), will trigger Create event
+  // on clients. You can pass 'nullptr' and '0' as params, but you still must call
+  // before the object will be created remotely. Clients can call NetReplica::GetInitData()
+  // to get the data set here.
+  void SetInitData( const void* initData, uint32_t initDataLength );
+  // Call SetSyncData each frame to update that state of the clients NetData.
+  // Only the most recent data is sent. Data is only sent when changed.
+  void SetSyncData( const void* data, uint32_t length );
+  // Call as many times as necessary each tick
+  void SendMessage( const void* data, uint32_t length );
+
+  //------------------------------------------------------------------------------
+  // Client
+  //------------------------------------------------------------------------------
+  // Use GetInitData() after receiving a new NetData from NetReplicaClient::PumpCreate()
+  // to construct the object. Retrieves the data set by NetReplica::SetInitData() on
+  // the server.
+  const uint8_t* GetInitData() const;
+  // Retrieves the length of the data set by NetReplica::SetInitData() on the server.
+  // Use in conjunction with NetReplica::GetInitData().
+  uint32_t InitDataLength() const;
+
+  // Only the latest sync data is ever available, so there's no need to read this
+  // data as if it was a stream.
+  const uint8_t* GetSyncData() const;
+  // Check for new data from server
+  uint32_t SyncDataLength() const;
+  // (Optional) Call to clear SyncDataLength() until new data is received
+  void ClearSyncData();
+
+  // Get messages sent from the server. Call repeatedly until false is returned
+  bool PumpMessages( Msg* msgOut );
+
+  // True once the NetData has been deleted on the server.
+  // Call NetReplicaClient::Destroy() when you're done with it.
+  bool IsPendingDestroy() const;
+
+  //------------------------------------------------------------------------------
+  // Internal
+  //------------------------------------------------------------------------------
+private:
+  // @TODO: Expose internals in a safer way
+  friend class NetReplicaClient;
+  friend class NetReplicaConnection;
+  friend class NetReplicaServer;
+
+  void m_SetLocal() { m_local = true; }
+  void m_SetClientData( const uint8_t* data, uint32_t length );
+  void m_ReceiveMessages( const uint8_t* data, uint32_t length );
+  void m_FlagForDestruction() { m_isPendingDestroy = true; }
+  void m_UpdateHash();
+  bool m_Changed() const { return m_hash != m_prevHash; }
+
+  bool m_local = false;
+  ae::Array< uint8_t > m_initData = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_data = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_messageDataOut = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_messageDataIn = AE_ALLOC_TAG_NET;
+  uint32_t m_messageDataInOffset = 0;
+  uint32_t m_hash = 0;
+  uint32_t m_prevHash = 0;
+  bool m_isPendingInit = true;
+  bool m_isPendingDestroy = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaClient class
+//------------------------------------------------------------------------------
+class NetReplicaClient
+{
+public:
+  // The following sequence should be performed each frame
+  void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
+  NetReplica* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
+  // 3) Handle new sync data with NetReplica::GetSyncData() and process incoming messages with NetReplica::PumpMessages()
+  void Destroy( NetReplica* pendingDestroy ); // 4) Call this on aeNetDatas once NetReplica::IsPendingDestroy() returns true
+  
+  NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
+  RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
+
+private:
+  NetReplica* m_CreateNetData( BinaryStream* rStream, bool allowResolve );
+  void m_StartNetDataDestruction( NetReplica* netData );
+  uint32_t m_serverSignature = 0;
+  uint32_t m_lastNetId = 0;
+  ae::Map< NetId, NetReplica* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
+  ae::Array< NetReplica* > m_created = AE_ALLOC_TAG_NET;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaConnection class
+//------------------------------------------------------------------------------
+class NetReplicaConnection
+{
+public:
+  const uint8_t* GetSendData() const; // Call NetReplicaServer::UpdateSendData() first
+  uint32_t GetSendLength() const; // Call NetReplicaServer::UpdateSendData() first
+
+public:
+  void m_UpdateSendData();
+
+  bool m_first = true;
+  class NetReplicaServer* m_replicaDB = nullptr;
+  bool m_pendingClear = false;
+  ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
+  // Internal
+  enum class EventType : uint8_t
+  {
+    Connect,
+    Create,
+    Destroy,
+    Update,
+    Messages
+  };
+};
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaServer class
+//------------------------------------------------------------------------------
+class NetReplicaServer
+{
+public:
+  NetReplicaServer();
+  // Create a server authoritative NetData which will be replicated to clients through NetReplicaConnection/NetReplicaClient
+  NetReplica* CreateNetData();
+  void DestroyNetData( NetReplica* netData );
+
+  // Allocate one ae::NetReplicaConnection per client
+  NetReplicaConnection* CreateConnection();
+  void DestroyConnection( NetReplicaConnection* connection );
+
+  // Call each frame before NetReplicaConnection::GetSendData()
+  void UpdateSendData();
+
+private:
+  uint32_t m_signature = 0;
+  uint32_t m_lastNetId = 0;
+  ae::Array< NetReplica* > m_pendingCreate = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, NetReplica* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Array< NetReplicaConnection* > m_servers = AE_ALLOC_TAG_NET;
+public:
+  // Internal
+  NetReplica* GetNetData( uint32_t index ) { return m_netDatas.GetValue( index ); }
+  uint32_t GetNetDataCount() const { return m_netDatas.Length(); }
+};
+
+//------------------------------------------------------------------------------
 // ae::Hash class (fnv1a)
 //! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
 //! hash to zero.
@@ -2822,7 +3141,7 @@ inline int32_t Random( int32_t min, int32_t max )
 {
   if ( !_HACK_randInit )
   {
-    srand( time( 0 ) );
+    srand( (uint32_t)time( 0 ) );
     _HACK_randInit = true;
   }
 
@@ -2837,7 +3156,7 @@ inline float Random( float min, float max )
 {
   if ( !_HACK_randInit )
   {
-    srand( time( 0 ) );
+    srand( (uint32_t)time( 0 ) );
     _HACK_randInit = true;
   }
 
@@ -3185,11 +3504,11 @@ inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 inline Vec2::Vec2( float v ) : x( v ), y( v ) {}
 inline Vec2::Vec2( float x, float y ) : x( x ), y( y ) {}
 inline Vec2::Vec2( const float* v2 ) : x( v2[ 0 ] ), y( v2[ 1 ] ) {}
-inline Vec2::Vec2( struct Int2 i2 ) : x( i2.x ), y( i2.y ) {}
+inline Vec2::Vec2( struct Int2 i2 ) : x( (float)i2.x ), y( (float)i2.y ) {}
 inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::Sin( angle ) ); }
-inline Int2 Vec2::NearestCopy() const { return Int2( x + 0.5f, y + 0.5f ); }
-inline Int2 Vec2::FloorCopy() const { return Int2( floorf( x ), floorf( y ) ); }
-inline Int2 Vec2::CeilCopy() const { return Int2( ceilf( x ), ceilf( y ) ); }
+inline Int2 Vec2::NearestCopy() const { return Int2( (int32_t)(x + 0.5f), (int32_t)(y + 0.5f) ); }
+inline Int2 Vec2::FloorCopy() const { return Int2( (int32_t)floorf( x ), (int32_t)floorf( y ) ); }
+inline Int2 Vec2::CeilCopy() const { return Int2( (int32_t)ceilf( x ), (int32_t)ceilf( y ) ); }
 inline Vec2 Vec2::RotateCopy( float rotation ) const
 {
   float sinTheta = std::sin( rotation );
@@ -3215,15 +3534,15 @@ inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n ) const
 inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ), pad( 0.0f ) {}
 inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( const float* v3 ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), pad( 0.0f ) {}
-inline Vec3::Vec3( struct Int3 i3 ) : x( i3.x ), y( i3.y ), z( i3.z ), pad( 0.0f ) {}
+inline Vec3::Vec3( struct Int3 i3 ) : x( (float)i3.x ), y( (float)i3.y ), z( (float)i3.z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
-inline Int3 Vec3::NearestCopy() const { return Int3( x + 0.5f, y + 0.5f, z + 0.5f ); }
-inline Int3 Vec3::FloorCopy() const { return Int3( floorf( x ), floorf( y ), floorf( z ) ); }
-inline Int3 Vec3::CeilCopy() const { return Int3( ceilf( x ), ceilf( y ), ceilf( z ) ); }
+inline Int3 Vec3::NearestCopy() const { return Int3( (int32_t)(x + 0.5f), (int32_t)(y + 0.5f), (int32_t)(z + 0.5f) ); }
+inline Int3 Vec3::FloorCopy() const { return Int3( (int32_t)floorf( x ), (int32_t)floorf( y ), (int32_t)floorf( z ) ); }
+inline Int3 Vec3::CeilCopy() const { return Int3( (int32_t)ceilf( x ), (int32_t)ceilf( y ), (int32_t)ceilf( z ) ); }
 inline Vec3 Vec3::Lerp( const Vec3& end, float t ) const
 {
   t = ae::Clip01( t );
@@ -4594,6 +4913,263 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 }
 
 //------------------------------------------------------------------------------
+// ae::BinaryStream member functions
+//------------------------------------------------------------------------------
+template < uint32_t N >
+void BinaryStream::SerializeString( Str< N >& str )
+{
+  if ( IsWriter() )
+  {
+    const uint16_t len = str.Length();
+    SerializeUint16( len );
+    SerializeRaw( str.c_str(), len );
+  }
+  else if ( IsReader() )
+  {
+    uint16_t len = 0;
+    SerializeUint16( len );
+    if ( !IsValid() )
+    {
+      return;
+    }
+
+    if ( len > Str< N >::MaxLength() || GetRemaining() < len )
+    {
+      Invalidate();
+    }
+    else
+    {
+      str = Str< N >( len, (const char*)PeekData() );
+      Discard( len );
+    }
+  }
+}
+
+template < uint32_t N >
+void BinaryStream::SerializeString( const Str< N >& str )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  const uint16_t len = str.Length();
+  SerializeUint16( len );
+  SerializeRaw( str.c_str(), len );
+}
+
+template <typename C> static constexpr std::true_type _ae_serialize_test( decltype( std::declval<C&&>().Serialize( nullptr ) )* ) noexcept;
+template <typename C> static constexpr std::false_type _ae_serialize_test( ... ) noexcept;
+template <typename C> constexpr decltype( _ae_serialize_test<C>( nullptr ) ) _ae_has_Serialize{};
+
+template< typename T >
+typename std::enable_if<_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternal( BinaryStream* stream, T& v )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+typename std::enable_if<_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternalConst( BinaryStream* stream, const T& v )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+typename std::enable_if<!_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternal( BinaryStream* stream, T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
+typename std::enable_if<!_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternalConst( BinaryStream* stream, const T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
+void BinaryStream::SerializeObject( T& v )
+{
+  BinaryStream_SerializeObjectInternal( this, v );
+}
+
+template< typename T >
+void BinaryStream::SerializeObject( const T& v )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
+  BinaryStream_SerializeObjectInternalConst( this, v );
+}
+
+template< typename T >
+void BinaryStream::SerializeRaw( T& v )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    AE_ASSERT( m_offset + sizeof(T) <= m_length );
+    memcpy( &v, m_data + m_offset, sizeof(T) );
+    m_offset += sizeof(T);
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    if ( m_data )
+    {
+      AE_ASSERT( sizeof(T) <= m_length - m_offset );
+      memcpy( m_data + m_offset, &v, sizeof(T) );
+      m_offset += sizeof(T);
+    }
+    else
+    {
+      Array< uint8_t >& array = m_GetArray();
+      array.Append( (uint8_t*)&v, sizeof(T) );
+      m_offset = array.Length();
+      m_length = array.Size();
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+template< typename T >
+void BinaryStream::SerializeRaw( const T& v )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
+  SerializeRaw( *const_cast< T* >( &v ) );
+}
+
+template< uint32_t N >
+void BinaryStream::SerializeArray( char (&str)[ N ] )
+{
+  // @TODO: Cleanup and use m_SerializeArrayLength()
+  uint16_t len = 0;
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    AE_ASSERT( m_offset + sizeof(len) <= m_length ); // @TODO: Remove this and invalidate stream instead
+    memcpy( &len, m_data + m_offset, sizeof(len) );
+    m_offset += sizeof(len);
+
+    AE_ASSERT( m_offset + len + 1 <= m_length ); // @TODO: Remove this and invalidate stream instead
+    memcpy( str, m_data + m_offset, len );
+    str[ len ] = 0;
+    m_offset += len;
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    len = strlen( str );
+
+    if ( m_data )
+    {
+      AE_ASSERT( sizeof(len) <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
+      memcpy( m_data + m_offset, &len, sizeof(len) );
+      m_offset += sizeof(len);
+
+      AE_ASSERT( len <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
+      memcpy( m_data + m_offset, str, len );
+      m_offset += len;
+    }
+    else
+    {
+      Array< uint8_t >& array = m_GetArray();
+      array.Append( (uint8_t*)&len, sizeof(len) );
+      array.Append( (uint8_t*)&str, len );
+      m_offset = array.Length();
+      m_length = array.Size();
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+template< uint32_t N >
+void BinaryStream::SerializeArray( const char (&str)[ N ] )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
+  SerializeArray( const_cast< char[ N ] >( str ) );
+}
+
+template < typename T >
+void BinaryStream::SerializeObjectConditional( T* obj )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    uint16_t length = 0;
+    SerializeRaw( &length, sizeof( length ) );
+
+    if ( length )
+    {
+      if ( obj )
+      {
+        // Read object
+        uint32_t prevOffset = m_offset;
+        SerializeObject( *obj );
+
+        // Object should always read everything it wrote
+        if ( prevOffset + length != m_offset )
+        {
+          Invalidate();
+        }
+      }
+      else
+      {
+        Discard( length );
+      }
+    }
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    if ( obj )
+    {
+      // Reserve length
+      uint32_t lengthOffset = m_offset;
+      uint16_t lengthFake = 0xCDCD;
+      SerializeRaw( &lengthFake, sizeof( lengthFake ) ); // Raw to avoid compression
+
+      // Write object
+      uint32_t prevOffset = m_offset;
+      SerializeObject( *obj );
+
+      // Rewrite previously serialized value
+      uint32_t writeLength = m_offset - prevOffset;
+      if ( writeLength > MaxValue< uint16_t >() )
+      {
+        Invalidate(); // Object is too large to serialize
+      }
+      else if ( IsValid() ) // Can become invalid while writing by running out of memory
+      {
+        // @NOTE: Use length offset from above (and not a pointer into the data buffer) because the data buffer may not yet bet allocated or may be reallocated while serializing
+        AE_ASSERT( GetData() );
+        uint16_t* length = (uint16_t*)( GetData() + lengthOffset );
+        AE_ASSERT( *length == 0xCDCD );
+        *length = writeLength;
+      }
+    }
+    else
+    {
+      uint16_t length = 0;
+      SerializeRaw( &length, sizeof( length ) ); // Raw to avoid compression
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+//------------------------------------------------------------------------------
 // Internal meta state
 //------------------------------------------------------------------------------
 std::map< ae::Str32, class Type* >& _GetTypeNameMap();
@@ -5043,6 +5619,7 @@ T* ae::Cast( C* obj )
   #include <sys/stat.h>
 #endif
 #include <thread>
+#include <random>
 
 //------------------------------------------------------------------------------
 // Platform functions internal implementation
@@ -7452,7 +8029,7 @@ bool FileSystem_GetDir( KNOWNFOLDERID folderId, Str256* outDir )
   if ( pathResult == S_OK )
   {
     char path[ outDir->MaxLength() + 1 ];
-    int32_t pathLen = wcstombs( path, wpath, outDir->MaxLength() );
+    int32_t pathLen = (int32_t)wcstombs( path, wpath, outDir->MaxLength() );
     if ( pathLen > 0 )
     {
       path[ pathLen ] = 0;
@@ -7906,7 +8483,7 @@ const char* FileSystem::GetFileExtFromPath( const char* filePath )
   else
   {
     // @NOTE: Return end of given string in case pointer arithmetic is being done by user
-    uint32_t len = strlen( fileName );
+    uint32_t len = (uint32_t)strlen( fileName );
     return fileName + len;
   }
 }
@@ -8066,7 +8643,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
   // Open window
   if ( GetOpenFileNameA( &winParams ) )
   {
-    uint32_t offset = strlen( winParams.lpstrFile ) + 1; // Double null terminated
+    uint32_t offset = (uint32_t)strlen( winParams.lpstrFile ) + 1; // Double null terminated
     if ( winParams.lpstrFile[ offset ] == 0 )
     {
       return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
@@ -8083,7 +8660,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
         r += AE_PATH_SEPARATOR;
         r += head;
 
-        offset = strlen( head ) + 1; // Double null terminated
+        offset = (uint32_t)strlen( head ) + 1; // Double null terminated
         head += offset; // Null separated
       }
       return result;
@@ -10727,6 +11304,892 @@ bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointC
     return true;
   }
   return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::BinaryStream member functions
+//------------------------------------------------------------------------------
+BinaryStream::BinaryStream( Mode mode, uint8_t* data, uint32_t length )
+{
+  m_mode = mode;
+  m_data = data;
+  m_length = length;
+  m_isValid = m_data && m_length;
+}
+
+BinaryStream::BinaryStream( Mode mode, const uint8_t* data, uint32_t length )
+{
+  AE_ASSERT_MSG( mode == Mode::ReadBuffer, "Only read mode can be used with a constant data buffer." );
+  m_mode = mode;
+  m_data = const_cast< uint8_t* >( data );
+  m_length = length;
+  m_isValid = m_data && m_length;
+}
+
+BinaryStream::BinaryStream( Mode mode )
+{
+  AE_ASSERT_MSG( mode == Mode::WriteBuffer, "Only write mode can be used when a data buffer is not provided." );
+  m_mode = mode;
+  m_isValid = true;
+}
+
+BinaryStream::BinaryStream( Array< uint8_t >* array )
+{
+  m_mode = Mode::WriteBuffer;
+  if ( array )
+  {
+    m_extArray = array;
+    m_offset = m_extArray->Length();
+    m_length = m_extArray->Size();
+    m_isValid = true;
+  }
+}
+
+BinaryStream BinaryStream::Writer( uint8_t* data, uint32_t length )
+{
+  return BinaryStream( Mode::WriteBuffer, data, length );
+}
+
+BinaryStream BinaryStream::Writer( Array< uint8_t >* array )
+{
+  return BinaryStream( array );
+}
+
+BinaryStream BinaryStream::Writer()
+{
+  return BinaryStream( Mode::WriteBuffer );
+}
+
+BinaryStream BinaryStream::Reader( const uint8_t* data, uint32_t length )
+{
+  return BinaryStream( Mode::ReadBuffer, const_cast< uint8_t* >( data ), length );
+}
+
+BinaryStream BinaryStream::Reader( const Array< uint8_t >& data )
+{
+  if ( !data.Length() )
+  {
+    return BinaryStream::Reader( nullptr, 0 );
+  }
+  return BinaryStream( Mode::ReadBuffer, &data[ 0 ], data.Length() );
+}
+
+void BinaryStream::SerializeUint8( uint8_t& v )
+{
+  SerializeRaw( &v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint8( const uint8_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( &v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint16( uint16_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint16( const uint16_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint32( uint32_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint32( const uint32_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint64( uint64_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint64( const uint64_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt8( int8_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt8( const int8_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt16( int16_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt16( const int16_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt32( int32_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt32( const int32_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt64( int64_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt64( const int64_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeFloat( float& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeFloat( const float& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeDouble( double& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeDouble( const double& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeBool( bool& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeBool( const bool& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::m_SerializeArrayLength( uint32_t& length, uint32_t maxLength )
+{
+  if ( maxLength <= ae::MaxValue< uint8_t >() )
+  {
+    uint8_t len = (uint8_t)length;
+    SerializeUint8( len );
+    length = len;
+  }
+  else if ( maxLength <= ae::MaxValue< uint16_t >() )
+  {
+    uint16_t len = (uint16_t)length;
+    SerializeUint16( len );
+    length = len;
+  }
+  else
+  {
+    uint32_t len = length;
+    SerializeUint32( len );
+    length = len;
+  }
+}
+
+void BinaryStream::SerializeArray( Array< uint8_t >& array, uint32_t maxLength )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    uint32_t length = 0;
+    m_SerializeArrayLength( length, maxLength );
+    if ( !m_isValid || length == 0 )
+    {
+      return;
+    }
+    else if ( GetRemaining() < length )
+    {
+      Invalidate();
+      return;
+    }
+    
+    array.Append( PeekData(), length );
+    Discard( length );
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    uint32_t length = array.Length();
+    m_SerializeArrayLength( length, maxLength );
+    if ( length )
+    {
+      SerializeRaw( &array[ 0 ], length );
+    }
+  }
+}
+
+void BinaryStream::SerializeArray( const Array< uint8_t >& array, uint32_t maxLength )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
+  
+  uint32_t length = array.Length();
+  m_SerializeArrayLength( length, maxLength );
+  if ( length )
+  {
+    SerializeRaw( &array[ 0 ], length );
+  }
+}
+
+void BinaryStream::SerializeRaw( void* data, uint32_t length )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    if ( m_offset + length <= m_length )
+    {
+      memcpy( data, m_data + m_offset, length );
+      m_offset += length;
+    }
+    else
+    {
+      Invalidate();
+    }
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    if ( m_data )
+    {
+      if ( length <= m_length - m_offset )
+      {
+        memcpy( m_data + m_offset, data, length );
+        m_offset += length;
+      }
+      else
+      {
+        Invalidate();
+      }
+    }
+    else
+    {
+      Array< uint8_t >& array = m_GetArray();
+      array.Append( (uint8_t*)data, length );
+      m_offset = array.Length();
+      m_length = array.Size();
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+void BinaryStream::SerializeRaw( const void* data, uint32_t length )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
+  SerializeRaw( (void*)data, length );
+}
+
+void BinaryStream::SerializeRaw( Array< uint8_t>& array )
+{
+  AE_FAIL_MSG( "Not implemented" );
+}
+
+void BinaryStream::SerializeRaw( const Array< uint8_t>& array )
+{
+  AE_FAIL_MSG( "Not implemented" );
+}
+
+void BinaryStream::Discard( uint32_t length )
+{
+  if ( !length )
+  {
+    return;
+  }
+  else if ( GetRemaining() < length )
+  {
+    Invalidate();
+  }
+  else
+  {
+    m_offset += length;
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplica member functions
+//------------------------------------------------------------------------------
+void NetReplica::SetSyncData( const void* data, uint32_t length )
+{
+  AE_ASSERT_MSG( IsAuthority(), "Cannot set net data from client. The NetReplicaConnection has exclusive ownership." );
+  m_data.Clear();
+  m_data.Append( (const uint8_t*)data, length );
+}
+
+// @HACK: Should rearrange file so windows.h is included with as little logic as possible after it
+#ifdef SendMessage
+#undef SendMessage
+#endif
+void NetReplica::SendMessage( const void* data, uint32_t length )
+{
+  uint16_t lengthU16 = length;
+  m_messageDataOut.Reserve( m_messageDataOut.Length() + sizeof( lengthU16 ) + length );
+  m_messageDataOut.Append( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
+  m_messageDataOut.Append( (const uint8_t*)data, length );
+}
+
+void NetReplica::SetInitData( const void* initData, uint32_t initDataLength )
+{
+  m_initData.Clear();
+  m_initData.Append( (uint8_t*)initData, initDataLength );
+  m_isPendingInit = false;
+}
+
+const uint8_t* NetReplica::GetInitData() const
+{
+  return m_initData.Length() ? &m_initData[ 0 ] : nullptr;
+}
+
+uint32_t NetReplica::InitDataLength() const
+{
+  return m_initData.Length();
+}
+
+const uint8_t* NetReplica::GetSyncData() const
+{
+  return m_data.Length() ? &m_data[ 0 ] : nullptr;
+}
+
+uint32_t NetReplica::SyncDataLength() const
+{
+  return m_data.Length();
+}
+
+void NetReplica::ClearSyncData()
+{
+  m_data.Clear();
+}
+
+bool NetReplica::PumpMessages( Msg* msgOut )
+{
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
+  {
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
+    return false;
+  }
+  else if ( !msgOut )
+  {
+    // Early out
+    return true;
+  }
+
+  // Write out incoming message data
+  msgOut->length = *(uint16_t*)&m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += sizeof( uint16_t );
+
+  msgOut->data = &m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += msgOut->length;
+
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
+  {
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
+
+    // Clear messages once they've all been read
+    m_messageDataInOffset = 0;
+    m_messageDataIn.Clear();
+  }
+
+  return true;
+}
+
+bool NetReplica::IsPendingInit() const
+{
+  return m_isPendingInit;
+}
+
+bool NetReplica::IsPendingDestroy() const
+{
+  return m_isPendingDestroy;
+}
+
+void NetReplica::m_SetClientData( const uint8_t* data, uint32_t length )
+{
+  m_data.Clear();
+  m_data.Append( data, length );
+}
+
+void NetReplica::m_ReceiveMessages( const uint8_t* data, uint32_t length )
+{
+  m_messageDataIn.Append( data, length );
+}
+
+void NetReplica::m_UpdateHash()
+{
+  if ( m_data.Length() )
+  {
+    m_hash = ae::Hash().HashData( &m_data[ 0 ], m_data.Length() ).Get();
+  }
+  else
+  {
+    m_hash = 0;
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaClient member functions
+//------------------------------------------------------------------------------
+void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
+{
+  BinaryStream rStream = BinaryStream::Reader( data, length );
+  while ( rStream.GetOffset() < rStream.GetLength() )
+  {
+    NetReplicaConnection::EventType type;
+    rStream.SerializeRaw( type );
+    if ( !rStream.IsValid() )
+    {
+      break;
+    }
+    switch ( type )
+    {
+      case NetReplicaConnection::EventType::Connect:
+      {
+        uint32_t signature = 0;
+        rStream.SerializeUint32( signature );
+        AE_ASSERT( signature );
+
+        ae::Map< NetReplica*, int > toDestroy = AE_ALLOC_TAG_NET;
+        bool allowResolve = ( m_serverSignature == signature );
+        if ( m_serverSignature )
+        {
+          if ( allowResolve )
+          {
+            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            {
+              toDestroy.Set( m_netDatas.GetValue( i ), 0 );
+            }
+          }
+          else
+          {
+            m_created.Clear(); // Don't call delete, are pointers to m_netDatas
+            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            {
+              m_StartNetDataDestruction( m_netDatas.GetValue( i ) );
+            }
+            AE_ASSERT( !m_remoteToLocalIdMap.Length() );
+            AE_ASSERT( !m_localToRemoteIdMap.Length() );
+          }
+        }
+        
+        uint32_t length = 0;
+        rStream.SerializeUint32( length );
+        for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
+        {
+          NetReplica* created = m_CreateNetData( &rStream, allowResolve );
+          toDestroy.Remove( created );
+        }
+        for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
+        {
+          NetReplica* netData = toDestroy.GetKey( i );
+          m_StartNetDataDestruction( netData );
+        }
+
+        m_serverSignature = signature;
+        break;
+      }
+      case NetReplicaConnection::EventType::Create:
+      {
+        m_CreateNetData( &rStream, false );
+        break;
+      }
+      case NetReplicaConnection::EventType::Destroy:
+      {
+        RemoteId remoteId;
+        rStream.SerializeObject( remoteId );
+        NetId localId = m_remoteToLocalIdMap.Get( remoteId );
+        NetReplica* netData = m_netDatas.Get( localId );
+        m_StartNetDataDestruction( netData );
+        break;
+      }
+      case NetReplicaConnection::EventType::Update:
+      {
+        uint32_t netDataCount = 0;
+        rStream.SerializeUint32( netDataCount );
+        for ( uint32_t i = 0; i < netDataCount; i++ )
+        {
+          RemoteId remoteId;
+          uint32_t dataLen = 0;
+          rStream.SerializeObject( remoteId );
+          rStream.SerializeUint32( dataLen );
+
+          NetId localId;
+          NetReplica* netData = nullptr;
+          if ( dataLen
+            && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
+            && m_netDatas.TryGet( localId, &netData ) )
+          {
+            if ( rStream.GetRemaining() >= dataLen )
+            {
+              netData->m_SetClientData( rStream.PeekData(), dataLen );
+            }
+            else
+            {
+              rStream.Invalidate();
+            }
+          }
+
+          rStream.Discard( dataLen );
+        }
+        break;
+      }
+      case NetReplicaConnection::EventType::Messages:
+      {
+        uint32_t netDataCount = 0;
+        rStream.SerializeUint32( netDataCount );
+        for ( uint32_t i = 0; i < netDataCount; i++ )
+        {
+          RemoteId remoteId;
+          uint32_t dataLen = 0;
+          rStream.SerializeObject( remoteId );
+          rStream.SerializeUint32( dataLen );
+
+          NetId localId;
+          NetReplica* netData = nullptr;
+          if ( dataLen
+            && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
+            && m_netDatas.TryGet( localId, &netData ) )
+          {
+            if ( rStream.GetRemaining() >= dataLen )
+            {
+              netData->m_ReceiveMessages( rStream.PeekData(), dataLen );
+            }
+            else
+            {
+              rStream.Invalidate();
+            }
+          }
+
+          rStream.Discard( dataLen );
+        }
+        break;
+      }
+    }
+  }
+}
+
+NetReplica* NetReplicaClient::PumpCreate()
+{
+  if ( !m_created.Length() )
+  {
+    return nullptr;
+  }
+
+  NetReplica* created = m_created[ 0 ];
+  AE_ASSERT( created );
+  m_created.Remove( 0 );
+  return created;
+}
+
+void NetReplicaClient::Destroy( NetReplica* pendingDestroy )
+{
+  if ( !pendingDestroy )
+  {
+    return;
+  }
+  // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
+  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "NetReplica was not pending Destroy()" );
+  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "NetReplica had pending messages when it was Destroy()ed" );
+  bool removed = m_netDatas.Remove( pendingDestroy->_netId );
+  AE_ASSERT( removed, "NetData can't be deleted. It was registered." );
+  ae::Delete( pendingDestroy );
+}
+
+NetReplica* NetReplicaClient::m_CreateNetData( BinaryStream* rStream, bool allowResolve )
+{
+  AE_ASSERT( rStream->IsReader() );
+
+  RemoteId remoteId;
+  rStream->SerializeObject( remoteId );
+
+  NetReplica* netData = nullptr;
+  if ( allowResolve )
+  {
+    NetId localId = m_remoteToLocalIdMap.Get( remoteId, {} );
+    if ( localId )
+    {
+      netData = m_netDatas.Get( localId );
+    }
+  }
+
+  if ( !netData )
+  {
+    NetId localId( ++m_lastNetId );
+    netData = ae::New< NetReplica >( AE_ALLOC_TAG_NET );
+    netData->_netId = localId;
+
+    m_netDatas.Set( localId, netData );
+    m_remoteToLocalIdMap.Set( remoteId, localId );
+    m_localToRemoteIdMap.Set( localId, remoteId );
+    m_created.Append( netData );
+  }
+  
+  rStream->SerializeArray( netData->m_initData );
+
+  return netData;
+}
+
+void NetReplicaClient::m_StartNetDataDestruction( NetReplica* netData )
+{
+  AE_ASSERT( netData );
+  if ( netData->IsPendingDestroy() )
+  {
+    return;
+  }
+  
+  RemoteId remoteId;
+  bool found = m_localToRemoteIdMap.Remove( netData->_netId, &remoteId );
+  AE_ASSERT( found );
+  found = m_remoteToLocalIdMap.Remove( remoteId );
+  AE_ASSERT( found );
+  netData->m_FlagForDestruction();
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaConnection member functions
+//------------------------------------------------------------------------------
+void NetReplicaConnection::m_UpdateSendData()
+{
+  AE_ASSERT( m_replicaDB );
+
+  ae::Array< NetReplica* > toSync = AE_ALLOC_TAG_NET;
+  uint32_t netDataMessageCount = 0;
+  for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
+  {
+    NetReplica* netData = m_replicaDB->GetNetData( i );
+    if ( m_first || netData->m_Changed() )
+    {
+      toSync.Append( netData );
+    }
+
+    if ( netData->m_messageDataOut.Length() )
+    {
+      netDataMessageCount++;
+    }
+  }
+
+  BinaryStream wStream = BinaryStream::Writer( &m_sendData );
+
+  if ( toSync.Length() )
+  {
+    wStream.SerializeRaw( NetReplicaConnection::EventType::Update );
+    wStream.SerializeUint32( toSync.Length() );
+    for ( uint32_t i = 0; i < toSync.Length(); i++ )
+    {
+      NetReplica* netData = toSync[ i ];
+      wStream.SerializeObject( netData->_netId );
+      wStream.SerializeUint32( netData->SyncDataLength() );
+      wStream.SerializeRaw( netData->GetSyncData(), netData->SyncDataLength() );
+    }
+  }
+
+  if ( netDataMessageCount )
+  {
+    wStream.SerializeRaw( NetReplicaConnection::EventType::Messages );
+    wStream.SerializeUint32( netDataMessageCount );
+    for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
+    {
+      NetReplica* netData = m_replicaDB->GetNetData( i );
+      if ( netData->m_messageDataOut.Length() )
+      {
+        wStream.SerializeObject( netData->_netId );
+        wStream.SerializeUint32( netData->m_messageDataOut.Length() );
+        wStream.SerializeRaw( &netData->m_messageDataOut[ 0 ], netData->m_messageDataOut.Length() );
+      }
+    }
+  }
+
+  m_pendingClear = true;
+  m_first = false;
+}
+
+const uint8_t* NetReplicaConnection::GetSendData() const
+{
+  return m_sendData.Length() ? &m_sendData[ 0 ] : nullptr;
+}
+
+uint32_t NetReplicaConnection::GetSendLength() const
+{
+  return m_sendData.Length();
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaServer member functions
+//------------------------------------------------------------------------------
+NetReplicaServer::NetReplicaServer()
+{
+  std::random_device random_device;
+  std::mt19937 random_engine( random_device() );
+  std::uniform_int_distribution< uint32_t > dist( 1, ae::MaxValue< uint32_t >() );
+  m_signature = dist( random_engine );
+}
+
+NetReplica* NetReplicaServer::CreateNetData()
+{
+  NetReplica* netData = ae::New< NetReplica >( AE_ALLOC_TAG_NET );
+  netData->m_SetLocal();
+  netData->_netId = NetId( ++m_lastNetId );
+  m_pendingCreate.Append( netData );
+  return netData;
+}
+
+void NetReplicaServer::DestroyNetData( NetReplica* netData )
+{
+  if ( !netData )
+  {
+    return;
+  }
+  
+  int32_t pendingIdx = m_pendingCreate.Find( netData );
+  if ( pendingIdx >= 0 )
+  {
+    // Early out, no need to send Destroy message because Create has not been queued
+    m_pendingCreate.Remove( pendingIdx );
+    ae::Delete( netData );
+    return;
+  }
+
+  NetId id = netData->_netId;
+  bool removed = m_netDatas.Remove( id );
+  AE_ASSERT_MSG( removed, "NetReplica was not found." );
+
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    NetReplicaConnection* server = m_servers[ i ];
+    if ( server->m_pendingClear )
+    {
+      server->m_sendData.Clear();
+      server->m_pendingClear = false;
+    }
+
+    BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+    wStream.SerializeRaw( NetReplicaConnection::EventType::Destroy );
+    wStream.SerializeObject( id );
+  }
+
+  ae::Delete( netData );
+}
+
+NetReplicaConnection* NetReplicaServer::CreateConnection()
+{
+  NetReplicaConnection* server = m_servers.Append( ae::New< NetReplicaConnection >( AE_ALLOC_TAG_NET ) );
+  AE_ASSERT( !server->m_pendingClear );
+  server->m_replicaDB = this;
+
+  // Send initial net datas
+  BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+  wStream.SerializeRaw( NetReplicaConnection::EventType::Connect );
+  wStream.SerializeUint32( m_signature );
+  wStream.SerializeUint32( m_netDatas.Length() );
+  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  {
+    const NetReplica* netData = m_netDatas.GetValue( i );
+    wStream.SerializeObject( netData->_netId );
+    wStream.SerializeArray( netData->m_initData );
+  }
+
+  return server;
+}
+
+void NetReplicaServer::DestroyConnection( NetReplicaConnection* server )
+{
+  if ( !server )
+  {
+    return;
+  }
+
+  int32_t index = m_servers.Find( server );
+  if ( index >= 0 )
+  {
+    m_servers.Remove( index );
+    ae::Delete( server );
+  }
+}
+
+void NetReplicaServer::UpdateSendData()
+{
+  // Clear old send data before writing new
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    NetReplicaConnection* server = m_servers[ i ];
+    if ( server->m_pendingClear )
+    {
+      server->m_sendData.Clear();
+      server->m_pendingClear = false;
+    }
+  }
+  
+  // Send info about new objects (delayed until Update in case objects initData need to reference each other)
+  for ( NetReplica* netData : m_pendingCreate )
+  {
+    if ( !netData->IsPendingInit() )
+    {
+      // Add net data to list, remove all initialized net datas from m_pendingCreate at once below
+      m_netDatas.Set( netData->_netId, netData );
+      
+      // Send create messages on existing server connections
+      for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+      {
+        NetReplicaConnection* server = m_servers[ i ];
+        BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+        wStream.SerializeRaw( NetReplicaConnection::EventType::Create );
+        wStream.SerializeObject( netData->_netId );
+        wStream.SerializeArray( netData->m_initData );
+      }
+    }
+  }
+  // Remove all pending net datas that were just initialized
+  m_pendingCreate.RemoveAllFn( []( const NetReplica* netData ){ return !netData->IsPendingInit(); } );
+  
+  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  {
+    m_netDatas.GetValue( i )->m_UpdateHash();
+  }
+
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    m_servers[ i ]->m_UpdateSendData();
+  }
+
+  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  {
+    NetReplica* netData = m_netDatas.GetValue( i );
+    netData->m_prevHash = netData->m_hash;
+    netData->m_messageDataOut.Clear();
+  }
 }
 
 //------------------------------------------------------------------------------

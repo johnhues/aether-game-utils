@@ -29,8 +29,6 @@
 //------------------------------------------------------------------------------
 #include "aeRender.h"
 
-class aeBinaryStream;
-
 namespace ae {
 
 //------------------------------------------------------------------------------
@@ -50,7 +48,7 @@ public:
   };
   struct Vertex
   {
-    void Serialize( const SerializationParams& params, class aeBinaryStream* stream );
+    void Serialize( const SerializationParams& params, class ae::BinaryStream* stream );
     
     aeFloat4 position;
     aeFloat4 normal;
@@ -75,7 +73,7 @@ public:
   // Initialization
   bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
   void Load( LoadParams params );
-  void Serialize( const SerializationParams& params, aeBinaryStream* stream ); // @NOTE: Serializing ae::Mesh across library versions may not work. Stream will be invaldated on failure.
+  void Serialize( const SerializationParams& params, ae::BinaryStream* stream ); // @NOTE: Serializing ae::Mesh across library versions may not work. Stream will be invaldated on failure.
   void Transform( aeFloat4x4 transform ); // Permanently pre-transform loaded verts
   void Clear();
 

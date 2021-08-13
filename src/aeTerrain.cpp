@@ -414,7 +414,7 @@ void TerrainJob::Do()
   {
     ae::Scratch< uint8_t > fileData( AE_ALLOC_TAG_TERRAIN, fileSize );
     m_p.vfs->Read( ae::FileSystem::Root::Cache, filePath.c_str(), fileData.Data(), fileSize );
-    aeBinaryStream rStream = aeBinaryStream::Reader( fileData.Data(), fileSize );
+    ae::BinaryStream rStream = ae::BinaryStream::Reader( fileData.Data(), fileSize );
     rStream.SerializeUint32( m_vertexCount.Get() );
     rStream.SerializeUint32( m_indexCount );
     rStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
@@ -444,7 +444,7 @@ void TerrainJob::Do()
     {
       // Write result
       ae::Array< uint8_t > data = AE_ALLOC_TAG_TERRAIN;
-      aeBinaryStream wStream = aeBinaryStream::Writer( &data );
+      ae::BinaryStream wStream = ae::BinaryStream::Writer( &data );
       wStream.SerializeUint32( m_vertexCount.Get() );
       wStream.SerializeUint32( m_indexCount );
       wStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
