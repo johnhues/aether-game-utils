@@ -1885,6 +1885,197 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::NetId struct
+//------------------------------------------------------------------------------
+struct NetId
+{
+  NetId() = default;
+  NetId( const NetId& ) = default;
+  explicit NetId( uint32_t id ) : m_id( id ) {}
+  bool operator==( const NetId& o ) const { return o.m_id == m_id; }
+  bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
+  explicit operator bool () const { return m_id != 0; }
+  void Serialize( aeBinaryStream* s ) { s->SerializeUint32( m_id ); }
+  void Serialize( aeBinaryStream* s ) const { s->SerializeUint32( m_id ); }
+private:
+  uint32_t m_id = 0;
+};
+using RemoteId = NetId;
+
+//------------------------------------------------------------------------------
+// ae::NetReplica class
+//------------------------------------------------------------------------------
+class NetReplica
+{
+public:
+  struct Msg
+  {
+    const uint8_t* data;
+    uint32_t length;
+  };
+
+  NetId _netId;
+
+  //------------------------------------------------------------------------------
+  // General
+  //------------------------------------------------------------------------------
+  bool IsAuthority() const { return m_local; }
+	
+  //------------------------------------------------------------------------------
+  // Server
+  // @NOTE: All server data will be sent with the next NetReplicaServer::UpdateSendData()
+  //------------------------------------------------------------------------------
+  // True until SetInitData() is called
+  bool IsPendingInit() const;
+  // Call once after NetReplicaServer::CreateNetData(), will trigger Create event
+  // on clients. You can pass 'nullptr' and '0' as params, but you still must call
+  // before the object will be created remotely. Clients can call NetReplica::GetInitData()
+  // to get the data set here.
+  void SetInitData( const void* initData, uint32_t initDataLength );
+  // Call SetSyncData each frame to update that state of the clients NetData.
+  // Only the most recent data is sent. Data is only sent when changed.
+  void SetSyncData( const void* data, uint32_t length );
+  // Call as many times as necessary each tick
+  void SendMessage( const void* data, uint32_t length );
+
+  //------------------------------------------------------------------------------
+  // Client
+  //------------------------------------------------------------------------------
+  // Use GetInitData() after receiving a new NetData from NetReplicaClient::PumpCreate()
+  // to construct the object. Retrieves the data set by NetReplica::SetInitData() on
+  // the server.
+  const uint8_t* GetInitData() const;
+  // Retrieves the length of the data set by NetReplica::SetInitData() on the server.
+  // Use in conjunction with NetReplica::GetInitData().
+  uint32_t InitDataLength() const;
+
+  // Only the latest sync data is ever available, so there's no need to read this
+  // data as if it was a stream.
+  const uint8_t* GetSyncData() const;
+  // Check for new data from server
+  uint32_t SyncDataLength() const;
+  // (Optional) Call to clear SyncDataLength() until new data is received
+  void ClearSyncData();
+
+  // Get messages sent from the server. Call repeatedly until false is returned
+  bool PumpMessages( Msg* msgOut );
+
+  // True once the NetData has been deleted on the server.
+  // Call NetReplicaClient::Destroy() when you're done with it.
+  bool IsPendingDestroy() const;
+
+  //------------------------------------------------------------------------------
+  // Internal
+  //------------------------------------------------------------------------------
+private:
+  // @TODO: Expose internals in a safer way
+  friend class NetReplicaClient;
+  friend class NetReplicaConnection;
+  friend class NetReplicaServer;
+
+  void m_SetLocal() { m_local = true; }
+  void m_SetClientData( const uint8_t* data, uint32_t length );
+  void m_ReceiveMessages( const uint8_t* data, uint32_t length );
+  void m_FlagForDestruction() { m_isPendingDestroy = true; }
+  void m_UpdateHash();
+  bool m_Changed() const { return m_hash != m_prevHash; }
+
+  bool m_local = false;
+  ae::Array< uint8_t > m_initData = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_data = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_messageDataOut = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_messageDataIn = AE_ALLOC_TAG_NET;
+  uint32_t m_messageDataInOffset = 0;
+  uint32_t m_hash = 0;
+  uint32_t m_prevHash = 0;
+  bool m_isPendingInit = true;
+  bool m_isPendingDestroy = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaClient class
+//------------------------------------------------------------------------------
+class NetReplicaClient
+{
+public:
+  // The following sequence should be performed each frame
+  void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
+  NetReplica* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
+  // 3) Handle new sync data with NetReplica::GetSyncData() and process incoming messages with NetReplica::PumpMessages()
+  void Destroy( NetReplica* pendingDestroy ); // 4) Call this on aeNetDatas once NetReplica::IsPendingDestroy() returns true
+  
+  NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
+  RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
+
+private:
+  NetReplica* m_CreateNetData( aeBinaryStream* rStream, bool allowResolve );
+  void m_StartNetDataDestruction( NetReplica* netData );
+  uint32_t m_serverSignature = 0;
+  uint32_t m_lastNetId = 0;
+  ae::Map< NetId, NetReplica* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
+  ae::Array< NetReplica* > m_created = AE_ALLOC_TAG_NET;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaConnection class
+//------------------------------------------------------------------------------
+class NetReplicaConnection
+{
+public:
+  const uint8_t* GetSendData() const; // Call NetReplicaServer::UpdateSendData() first
+  uint32_t GetSendLength() const; // Call NetReplicaServer::UpdateSendData() first
+
+public:
+  void m_UpdateSendData();
+
+  bool m_first = true;
+  class NetReplicaServer* m_replicaDB = nullptr;
+  bool m_pendingClear = false;
+  ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
+  // Internal
+  enum class EventType : uint8_t
+  {
+    Connect,
+    Create,
+    Destroy,
+    Update,
+    Messages
+  };
+};
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaServer class
+//------------------------------------------------------------------------------
+class NetReplicaServer
+{
+public:
+  NetReplicaServer();
+  // Create a server authoritative NetData which will be replicated to clients through NetReplicaConnection/NetReplicaClient
+  NetReplica* CreateNetData();
+  void DestroyNetData( NetReplica* netData );
+
+  // Allocate one server per client connection
+  NetReplicaConnection* CreateServer();
+  void DestroyServer( NetReplicaConnection* server );
+
+  // Call each frame before NetReplicaConnection::GetSendData()
+  void UpdateSendData();
+
+private:
+  uint32_t m_signature = 0;
+  uint32_t m_lastNetId = 0;
+  ae::Array< NetReplica* > m_pendingCreate = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, NetReplica* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Array< NetReplicaConnection* > m_servers = AE_ALLOC_TAG_NET;
+public:
+  // Internal
+  NetReplica* GetNetData( uint32_t index ) { return m_netDatas.GetValue( index ); }
+  uint32_t GetNetDataCount() const { return m_netDatas.Length(); }
+};
+
+//------------------------------------------------------------------------------
 // ae::Hash class (fnv1a)
 //! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
 //! hash to zero.
@@ -10727,6 +10918,554 @@ bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointC
     return true;
   }
   return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplica member functions
+//------------------------------------------------------------------------------
+void NetReplica::SetSyncData( const void* data, uint32_t length )
+{
+  AE_ASSERT_MSG( IsAuthority(), "Cannot set net data from client. The NetReplicaConnection has exclusive ownership." );
+  m_data.Clear();
+  m_data.Append( (const uint8_t*)data, length );
+}
+
+void NetReplica::SendMessage( const void* data, uint32_t length )
+{
+  uint16_t lengthU16 = length;
+  m_messageDataOut.Reserve( m_messageDataOut.Length() + sizeof( lengthU16 ) + length );
+  m_messageDataOut.Append( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
+  m_messageDataOut.Append( (const uint8_t*)data, length );
+}
+
+void NetReplica::SetInitData( const void* initData, uint32_t initDataLength )
+{
+  m_initData.Clear();
+  m_initData.Append( (uint8_t*)initData, initDataLength );
+  m_isPendingInit = false;
+}
+
+const uint8_t* NetReplica::GetInitData() const
+{
+  return m_initData.Length() ? &m_initData[ 0 ] : nullptr;
+}
+
+uint32_t NetReplica::InitDataLength() const
+{
+  return m_initData.Length();
+}
+
+const uint8_t* NetReplica::GetSyncData() const
+{
+  return m_data.Length() ? &m_data[ 0 ] : nullptr;
+}
+
+uint32_t NetReplica::SyncDataLength() const
+{
+  return m_data.Length();
+}
+
+void NetReplica::ClearSyncData()
+{
+  m_data.Clear();
+}
+
+bool NetReplica::PumpMessages( Msg* msgOut )
+{
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
+  {
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
+    return false;
+  }
+  else if ( !msgOut )
+  {
+    // Early out
+    return true;
+  }
+
+  // Write out incoming message data
+  msgOut->length = *(uint16_t*)&m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += sizeof( uint16_t );
+
+  msgOut->data = &m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += msgOut->length;
+
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
+  {
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
+
+    // Clear messages once they've all been read
+    m_messageDataInOffset = 0;
+    m_messageDataIn.Clear();
+  }
+
+  return true;
+}
+
+bool NetReplica::IsPendingInit() const
+{
+  return m_isPendingInit;
+}
+
+bool NetReplica::IsPendingDestroy() const
+{
+  return m_isPendingDestroy;
+}
+
+void NetReplica::m_SetClientData( const uint8_t* data, uint32_t length )
+{
+  m_data.Clear();
+  m_data.Append( data, length );
+}
+
+void NetReplica::m_ReceiveMessages( const uint8_t* data, uint32_t length )
+{
+  m_messageDataIn.Append( data, length );
+}
+
+void NetReplica::m_UpdateHash()
+{
+  if ( m_data.Length() )
+  {
+    m_hash = ae::Hash().HashData( &m_data[ 0 ], m_data.Length() ).Get();
+  }
+  else
+  {
+    m_hash = 0;
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaClient member functions
+//------------------------------------------------------------------------------
+void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
+{
+  aeBinaryStream rStream = aeBinaryStream::Reader( data, length );
+  while ( rStream.GetOffset() < rStream.GetLength() )
+  {
+    NetReplicaConnection::EventType type;
+    rStream.SerializeRaw( type );
+    if ( !rStream.IsValid() )
+    {
+      break;
+    }
+    switch ( type )
+    {
+      case NetReplicaConnection::EventType::Connect:
+      {
+        uint32_t signature = 0;
+        rStream.SerializeUint32( signature );
+        AE_ASSERT( signature );
+
+        ae::Map< NetReplica*, int > toDestroy = AE_ALLOC_TAG_NET;
+        bool allowResolve = ( m_serverSignature == signature );
+        if ( m_serverSignature )
+        {
+          if ( allowResolve )
+          {
+            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            {
+              toDestroy.Set( m_netDatas.GetValue( i ), 0 );
+            }
+          }
+          else
+          {
+            m_created.Clear(); // Don't call delete, are pointers to m_netDatas
+            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            {
+              m_StartNetDataDestruction( m_netDatas.GetValue( i ) );
+            }
+            AE_ASSERT( !m_remoteToLocalIdMap.Length() );
+            AE_ASSERT( !m_localToRemoteIdMap.Length() );
+          }
+        }
+        
+        uint32_t length = 0;
+        rStream.SerializeUint32( length );
+        for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
+        {
+          NetReplica* created = m_CreateNetData( &rStream, allowResolve );
+          toDestroy.Remove( created );
+        }
+        for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
+        {
+          NetReplica* netData = toDestroy.GetKey( i );
+          m_StartNetDataDestruction( netData );
+        }
+
+        m_serverSignature = signature;
+        break;
+      }
+      case NetReplicaConnection::EventType::Create:
+      {
+        m_CreateNetData( &rStream, false );
+        break;
+      }
+      case NetReplicaConnection::EventType::Destroy:
+      {
+        RemoteId remoteId;
+        rStream.SerializeObject( remoteId );
+        NetId localId = m_remoteToLocalIdMap.Get( remoteId );
+        NetReplica* netData = m_netDatas.Get( localId );
+        m_StartNetDataDestruction( netData );
+        break;
+      }
+      case NetReplicaConnection::EventType::Update:
+      {
+        uint32_t netDataCount = 0;
+        rStream.SerializeUint32( netDataCount );
+        for ( uint32_t i = 0; i < netDataCount; i++ )
+        {
+          RemoteId remoteId;
+          uint32_t dataLen = 0;
+          rStream.SerializeObject( remoteId );
+          rStream.SerializeUint32( dataLen );
+
+          NetId localId;
+          NetReplica* netData = nullptr;
+          if ( dataLen
+            && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
+            && m_netDatas.TryGet( localId, &netData ) )
+          {
+            if ( rStream.GetRemaining() >= dataLen )
+            {
+              netData->m_SetClientData( rStream.PeekData(), dataLen );
+            }
+            else
+            {
+              rStream.Invalidate();
+            }
+          }
+
+          rStream.Discard( dataLen );
+        }
+        break;
+      }
+      case NetReplicaConnection::EventType::Messages:
+      {
+        uint32_t netDataCount = 0;
+        rStream.SerializeUint32( netDataCount );
+        for ( uint32_t i = 0; i < netDataCount; i++ )
+        {
+          RemoteId remoteId;
+          uint32_t dataLen = 0;
+          rStream.SerializeObject( remoteId );
+          rStream.SerializeUint32( dataLen );
+
+          NetId localId;
+          NetReplica* netData = nullptr;
+          if ( dataLen
+            && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
+            && m_netDatas.TryGet( localId, &netData ) )
+          {
+            if ( rStream.GetRemaining() >= dataLen )
+            {
+              netData->m_ReceiveMessages( rStream.PeekData(), dataLen );
+            }
+            else
+            {
+              rStream.Invalidate();
+            }
+          }
+
+          rStream.Discard( dataLen );
+        }
+        break;
+      }
+    }
+  }
+}
+
+NetReplica* NetReplicaClient::PumpCreate()
+{
+  if ( !m_created.Length() )
+  {
+    return nullptr;
+  }
+
+  NetReplica* created = m_created[ 0 ];
+  AE_ASSERT( created );
+  m_created.Remove( 0 );
+  return created;
+}
+
+void NetReplicaClient::Destroy( NetReplica* pendingDestroy )
+{
+  if ( !pendingDestroy )
+  {
+    return;
+  }
+  // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
+  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "NetReplica was not pending Destroy()" );
+  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "NetReplica had pending messages when it was Destroy()ed" );
+  bool removed = m_netDatas.Remove( pendingDestroy->_netId );
+  AE_ASSERT( removed, "NetData can't be deleted. It was registered." );
+  ae::Delete( pendingDestroy );
+}
+
+NetReplica* NetReplicaClient::m_CreateNetData( aeBinaryStream* rStream, bool allowResolve )
+{
+  AE_ASSERT( rStream->IsReader() );
+
+  RemoteId remoteId;
+  rStream->SerializeObject( remoteId );
+
+  NetReplica* netData = nullptr;
+  if ( allowResolve )
+  {
+    NetId localId = m_remoteToLocalIdMap.Get( remoteId, {} );
+    if ( localId )
+    {
+      netData = m_netDatas.Get( localId );
+    }
+  }
+
+  if ( !netData )
+  {
+    NetId localId( ++m_lastNetId );
+    netData = ae::New< NetReplica >( AE_ALLOC_TAG_NET );
+    netData->_netId = localId;
+
+    m_netDatas.Set( localId, netData );
+    m_remoteToLocalIdMap.Set( remoteId, localId );
+    m_localToRemoteIdMap.Set( localId, remoteId );
+    m_created.Append( netData );
+  }
+  
+  rStream->SerializeArray( netData->m_initData );
+
+  return netData;
+}
+
+void NetReplicaClient::m_StartNetDataDestruction( NetReplica* netData )
+{
+  AE_ASSERT( netData );
+  if ( netData->IsPendingDestroy() )
+  {
+    return;
+  }
+  
+  RemoteId remoteId;
+  bool found = m_localToRemoteIdMap.Remove( netData->_netId, &remoteId );
+  AE_ASSERT( found );
+  found = m_remoteToLocalIdMap.Remove( remoteId );
+  AE_ASSERT( found );
+  netData->m_FlagForDestruction();
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaConnection member functions
+//------------------------------------------------------------------------------
+void NetReplicaConnection::m_UpdateSendData()
+{
+  AE_ASSERT( m_replicaDB );
+
+  ae::Array< NetReplica* > toSync = AE_ALLOC_TAG_NET;
+  uint32_t netDataMessageCount = 0;
+  for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
+  {
+    NetReplica* netData = m_replicaDB->GetNetData( i );
+    if ( m_first || netData->m_Changed() )
+    {
+      toSync.Append( netData );
+    }
+
+    if ( netData->m_messageDataOut.Length() )
+    {
+      netDataMessageCount++;
+    }
+  }
+
+  aeBinaryStream wStream = aeBinaryStream::Writer( &m_sendData );
+
+  if ( toSync.Length() )
+  {
+    wStream.SerializeRaw( NetReplicaConnection::EventType::Update );
+    wStream.SerializeUint32( toSync.Length() );
+    for ( uint32_t i = 0; i < toSync.Length(); i++ )
+    {
+      NetReplica* netData = toSync[ i ];
+      wStream.SerializeObject( netData->_netId );
+      wStream.SerializeUint32( netData->SyncDataLength() );
+      wStream.SerializeRaw( netData->GetSyncData(), netData->SyncDataLength() );
+    }
+  }
+
+  if ( netDataMessageCount )
+  {
+    wStream.SerializeRaw( NetReplicaConnection::EventType::Messages );
+    wStream.SerializeUint32( netDataMessageCount );
+    for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
+    {
+      NetReplica* netData = m_replicaDB->GetNetData( i );
+      if ( netData->m_messageDataOut.Length() )
+      {
+        wStream.SerializeObject( netData->_netId );
+        wStream.SerializeUint32( netData->m_messageDataOut.Length() );
+        wStream.SerializeRaw( &netData->m_messageDataOut[ 0 ], netData->m_messageDataOut.Length() );
+      }
+    }
+  }
+
+  m_pendingClear = true;
+  m_first = false;
+}
+
+const uint8_t* NetReplicaConnection::GetSendData() const
+{
+  return m_sendData.Length() ? &m_sendData[ 0 ] : nullptr;
+}
+
+uint32_t NetReplicaConnection::GetSendLength() const
+{
+  return m_sendData.Length();
+}
+
+//------------------------------------------------------------------------------
+// ae::NetReplicaServer member functions
+//------------------------------------------------------------------------------
+#include <random>
+NetReplicaServer::NetReplicaServer()
+{
+  std::random_device random_device;
+  std::mt19937 random_engine( random_device() );
+  std::uniform_int_distribution< uint32_t > dist( 1, ae::MaxValue< uint32_t >() );
+  m_signature = dist( random_engine );
+}
+
+NetReplica* NetReplicaServer::CreateNetData()
+{
+  NetReplica* netData = ae::New< NetReplica >( AE_ALLOC_TAG_NET );
+  netData->m_SetLocal();
+  netData->_netId = NetId( ++m_lastNetId );
+  m_pendingCreate.Append( netData );
+  return netData;
+}
+
+void NetReplicaServer::DestroyNetData( NetReplica* netData )
+{
+  if ( !netData )
+  {
+    return;
+  }
+  
+  int32_t pendingIdx = m_pendingCreate.Find( netData );
+  if ( pendingIdx >= 0 )
+  {
+    // Early out, no need to send Destroy message because Create has not been queued
+    m_pendingCreate.Remove( pendingIdx );
+    ae::Delete( netData );
+    return;
+  }
+
+  NetId id = netData->_netId;
+  bool removed = m_netDatas.Remove( id );
+  AE_ASSERT_MSG( removed, "NetReplica was not found." );
+
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    NetReplicaConnection* server = m_servers[ i ];
+    if ( server->m_pendingClear )
+    {
+      server->m_sendData.Clear();
+      server->m_pendingClear = false;
+    }
+
+    aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
+    wStream.SerializeRaw( NetReplicaConnection::EventType::Destroy );
+    wStream.SerializeObject( id );
+  }
+
+  ae::Delete( netData );
+}
+
+NetReplicaConnection* NetReplicaServer::CreateServer()
+{
+  NetReplicaConnection* server = m_servers.Append( ae::New< NetReplicaConnection >( AE_ALLOC_TAG_NET ) );
+  AE_ASSERT( !server->m_pendingClear );
+  server->m_replicaDB = this;
+
+  // Send initial net datas
+  aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
+  wStream.SerializeRaw( NetReplicaConnection::EventType::Connect );
+  wStream.SerializeUint32( m_signature );
+  wStream.SerializeUint32( m_netDatas.Length() );
+  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  {
+    const NetReplica* netData = m_netDatas.GetValue( i );
+    wStream.SerializeObject( netData->_netId );
+    wStream.SerializeArray( netData->m_initData );
+  }
+
+  return server;
+}
+
+void NetReplicaServer::DestroyServer( NetReplicaConnection* server )
+{
+  if ( !server )
+  {
+    return;
+  }
+
+  int32_t index = m_servers.Find( server );
+  if ( index >= 0 )
+  {
+    m_servers.Remove( index );
+    ae::Delete( server );
+  }
+}
+
+void NetReplicaServer::UpdateSendData()
+{
+  // Clear old send data before writing new
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    NetReplicaConnection* server = m_servers[ i ];
+    if ( server->m_pendingClear )
+    {
+      server->m_sendData.Clear();
+      server->m_pendingClear = false;
+    }
+  }
+  
+  // Send info about new objects (delayed until Update in case objects initData need to reference each other)
+  for ( NetReplica* netData : m_pendingCreate )
+  {
+    if ( !netData->IsPendingInit() )
+    {
+      // Add net data to list, remove all initialized net datas from m_pendingCreate at once below
+      m_netDatas.Set( netData->_netId, netData );
+      
+      // Send create messages on existing server connections
+      for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+      {
+        NetReplicaConnection* server = m_servers[ i ];
+        aeBinaryStream wStream = aeBinaryStream::Writer( &server->m_sendData );
+        wStream.SerializeRaw( NetReplicaConnection::EventType::Create );
+        wStream.SerializeObject( netData->_netId );
+        wStream.SerializeArray( netData->m_initData );
+      }
+    }
+  }
+  // Remove all pending net datas that were just initialized
+  m_pendingCreate.RemoveAllFn( []( const NetReplica* netData ){ return !netData->IsPendingInit(); } );
+  
+  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  {
+    m_netDatas.GetValue( i )->m_UpdateHash();
+  }
+
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    m_servers[ i ]->m_UpdateSendData();
+  }
+
+  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  {
+    NetReplica* netData = m_netDatas.GetValue( i );
+    netData->m_prevHash = netData->m_hash;
+    netData->m_messageDataOut.Clear();
+  }
 }
 
 //------------------------------------------------------------------------------

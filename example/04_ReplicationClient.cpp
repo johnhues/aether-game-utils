@@ -35,7 +35,7 @@ int main()
   Game game;
   game.Initialize( "Replication Client" );
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
-  aeNetReplicaClient replicationClient;
+  ae::NetReplicaClient replicationClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
   // Update
@@ -72,7 +72,7 @@ int main()
       }
     }
     // Create new replicated objects
-    while ( aeNetData* netData = replicationClient.PumpCreate() )
+    while ( NetReplica* netData = replicationClient.PumpCreate() )
     {
       aeBinaryStream readStream = aeBinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
       GameObject* obj = &gameObjects.Append( GameObject( ae::Color::White() ) );

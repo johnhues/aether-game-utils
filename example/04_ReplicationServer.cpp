@@ -37,8 +37,8 @@ int main()
   Game game;
   game.Initialize( "Replication Server" );
   AetherServer* server = AetherServer_New( 3500, 0, 16 );
-  aeNetReplicaDB replicaDB;  
-  ae::Map< AetherUuid, aeNetReplicaServer* > replicaServers = TAG_EXAMPLE;
+  ae::NetReplicaServer replicaDB;
+  ae::Map< AetherUuid, ae::NetReplicaConnection* > replicaServers = TAG_EXAMPLE;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
   // Load level objects
@@ -84,7 +84,7 @@ int main()
           }
 
           // Remove player from replica db
-          aeNetReplicaServer* replicaServer = nullptr;
+          ae::NetReplicaConnection* replicaServer = nullptr;
           if ( replicaServers.TryGet( playerId, &replicaServer ) )
           {
             replicaServers.Remove( playerId );
@@ -117,7 +117,7 @@ int main()
     for ( int32_t i = 0; i < server->playerCount; i++ )
     {
       AetherPlayer* player = server->allPlayers[ i ];
-      aeNetReplicaServer* replicaServer = nullptr;
+      ae::NetReplicaConnection* replicaServer = nullptr;
       if ( replicaServers.TryGet( player->uuid, &replicaServer ) )
       {
         AetherServer_QueueSendToPlayer( server, player, kReplicaInfoMsg, true, replicaServer->GetSendData(), replicaServer->GetSendLength() );

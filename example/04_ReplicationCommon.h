@@ -131,7 +131,7 @@ public:
     stream->SerializeFloat( m_color.b );
   }
 
-  aeNetData* netData;
+  ae::NetReplica* netData;
   bool alive;
   AetherUuid playerId;
 
