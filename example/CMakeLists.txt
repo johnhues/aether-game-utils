@@ -54,16 +54,16 @@ set(AE_CURRENT_SOURCE_FILES 03_Server.cpp)
 set(AE_RESOURCES "")
 include(AddExecutable)
 
-# Network Replication
-set(AE_CURRENT_BUNDLE_NAME "Replication Client")
-set(AE_CURRENT_EXECUTABLE_NAME 04_replication_client)
-set(AE_CURRENT_SOURCE_FILES 04_ReplicationClient.cpp 04_ReplicationCommon.h)
+# Network Objects
+set(AE_CURRENT_BUNDLE_NAME "NetObject Client")
+set(AE_CURRENT_EXECUTABLE_NAME 04_net_object_client)
+set(AE_CURRENT_SOURCE_FILES 04_NetObjectClient.cpp 04_NetObjectCommon.h)
 set(AE_RESOURCES "")
 include(AddExecutable)
 
-set(AE_CURRENT_BUNDLE_NAME "Replication Server")
-set(AE_CURRENT_EXECUTABLE_NAME 04_replication_server)
-set(AE_CURRENT_SOURCE_FILES 04_ReplicationServer.cpp 04_ReplicationCommon.h)
+set(AE_CURRENT_BUNDLE_NAME "NetObject Server")
+set(AE_CURRENT_EXECUTABLE_NAME 04_net_object_server)
+set(AE_CURRENT_SOURCE_FILES 04_NetObjectServer.cpp 04_NetObjectCommon.h)
 set(AE_RESOURCES "")
 include(AddExecutable)
 

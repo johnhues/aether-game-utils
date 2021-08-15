@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// 04_ReplicationServer.cpp
+// 04_NetObjectServer.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aetherEXT.h"
-#include "04_ReplicationCommon.h"
+#include "04_NetObjectCommon.h"
 
 //------------------------------------------------------------------------------
 // Main
