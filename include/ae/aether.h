@@ -2140,6 +2140,7 @@ private:
   void m_StartNetDataDestruction( NetReplica* netData );
   uint32_t m_serverSignature = 0;
   uint32_t m_lastNetId = 0;
+  bool m_delayCreationForDestroy = false;
   ae::Map< NetId, NetReplica* > m_netDatas = AE_ALLOC_TAG_NET;
   ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
   ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
@@ -11795,6 +11796,7 @@ void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
           }
           else
           {
+            m_delayCreationForDestroy = true; // This prevents new server objects and old server objects overlapping for a frame
             m_created.Clear(); // Don't call delete, are pointers to m_netDatas
             for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
             {
@@ -11908,6 +11910,18 @@ NetReplica* NetReplicaClient::PumpCreate()
     return nullptr;
   }
 
+  if ( m_delayCreationForDestroy )
+  {
+    for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+    {
+      if ( m_netDatas.GetValue( i )->IsPendingDestroy() )
+      {
+        return nullptr;
+      }
+    }
+    m_delayCreationForDestroy = false;
+  }
+  
   NetReplica* created = m_created[ 0 ];
   AE_ASSERT( created );
   m_created.Remove( 0 );
