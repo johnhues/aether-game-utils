@@ -502,6 +502,7 @@ public:
   void SetScale( const Vec3& s );
   void SetRotation( const class Quaternion& r );
   Vec3 GetTranslation() const;
+  Vec3 GetPosition() const { return GetTranslation(); } // HACK Remove
   Vec3 GetScale() const;
   class Quaternion GetRotation() const;
 
@@ -1982,7 +1983,7 @@ private:
   Array< uint8_t >& m_GetArray() { return m_extArray ? *m_extArray : m_array; }
   const Array< uint8_t >& m_GetArray() const { return m_extArray ? *m_extArray : m_array; }
   void m_SerializeArrayLength( uint32_t& length, uint32_t maxLength );
-  enum class Mode m_mode = Mode::None;
+  Mode m_mode = Mode::None;
   bool m_isValid = false;
   uint8_t* m_data = nullptr;
   uint32_t m_length = 0;
@@ -2031,9 +2032,9 @@ private:
 using RemoteId = NetId;
 
 //------------------------------------------------------------------------------
-// ae::NetReplica class
+// ae::NetObject class
 //------------------------------------------------------------------------------
-class NetReplica
+class NetObject
 {
 public:
   struct Msg
@@ -2042,22 +2043,21 @@ public:
     uint32_t length;
   };
 
-  NetId _netId;
-
   //------------------------------------------------------------------------------
   // General
   //------------------------------------------------------------------------------
+  NetId GetId() const { return m_id; }
   bool IsAuthority() const { return m_local; }
-	
+  
   //------------------------------------------------------------------------------
   // Server
-  // @NOTE: All server data will be sent with the next NetReplicaServer::UpdateSendData()
+  // @NOTE: All server data will be sent with the next NetObjectServer::UpdateSendData()
   //------------------------------------------------------------------------------
   // True until SetInitData() is called
   bool IsPendingInit() const;
-  // Call once after NetReplicaServer::CreateNetData(), will trigger Create event
+  // Call once after NetObjectServer::CreateNetData(), will trigger Create event
   // on clients. You can pass 'nullptr' and '0' as params, but you still must call
-  // before the object will be created remotely. Clients can call NetReplica::GetInitData()
+  // before the object will be created remotely. Clients can call NetObject::GetInitData()
   // to get the data set here.
   void SetInitData( const void* initData, uint32_t initDataLength );
   // Call SetSyncData each frame to update that state of the clients NetData.
@@ -2069,12 +2069,12 @@ public:
   //------------------------------------------------------------------------------
   // Client
   //------------------------------------------------------------------------------
-  // Use GetInitData() after receiving a new NetData from NetReplicaClient::PumpCreate()
-  // to construct the object. Retrieves the data set by NetReplica::SetInitData() on
+  // Use GetInitData() after receiving a new NetData from NetObjectClient::PumpCreate()
+  // to construct the object. Retrieves the data set by NetObject::SetInitData() on
   // the server.
   const uint8_t* GetInitData() const;
-  // Retrieves the length of the data set by NetReplica::SetInitData() on the server.
-  // Use in conjunction with NetReplica::GetInitData().
+  // Retrieves the length of the data set by NetObject::SetInitData() on the server.
+  // Use in conjunction with NetObject::GetInitData().
   uint32_t InitDataLength() const;
 
   // Only the latest sync data is ever available, so there's no need to read this
@@ -2089,17 +2089,16 @@ public:
   bool PumpMessages( Msg* msgOut );
 
   // True once the NetData has been deleted on the server.
-  // Call NetReplicaClient::Destroy() when you're done with it.
+  // Call NetObjectClient::Destroy() when you're done with it.
   bool IsPendingDestroy() const;
 
   //------------------------------------------------------------------------------
   // Internal
   //------------------------------------------------------------------------------
 private:
-  // @TODO: Expose internals in a safer way
-  friend class NetReplicaClient;
-  friend class NetReplicaConnection;
-  friend class NetReplicaServer;
+  friend class NetObjectClient;
+  friend class NetObjectConnection;
+  friend class NetObjectServer;
 
   void m_SetLocal() { m_local = true; }
   void m_SetClientData( const uint8_t* data, uint32_t length );
@@ -2108,6 +2107,7 @@ private:
   void m_UpdateHash();
   bool m_Changed() const { return m_hash != m_prevHash; }
 
+  NetId m_id;
   bool m_local = false;
   ae::Array< uint8_t > m_initData = AE_ALLOC_TAG_NET;
   ae::Array< uint8_t > m_data = AE_ALLOC_TAG_NET;
@@ -2121,46 +2121,46 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::NetReplicaClient class
+// ae::NetObjectClient class
 //------------------------------------------------------------------------------
-class NetReplicaClient
+class NetObjectClient
 {
 public:
   // The following sequence should be performed each frame
   void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
-  NetReplica* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
-  // 3) Handle new sync data with NetReplica::GetSyncData() and process incoming messages with NetReplica::PumpMessages()
-  void Destroy( NetReplica* pendingDestroy ); // 4) Call this on aeNetDatas once NetReplica::IsPendingDestroy() returns true
+  NetObject* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
+  // 3) Handle new sync data with NetObject::GetSyncData() and process incoming messages with NetObject::PumpMessages()
+  void Destroy( NetObject* pendingDestroy ); // 4) Call this on ae::NetObjects once NetObject::IsPendingDestroy() returns true
   
   NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
   RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
 
 private:
-  NetReplica* m_CreateNetData( BinaryStream* rStream, bool allowResolve );
-  void m_StartNetDataDestruction( NetReplica* netData );
+  NetObject* m_CreateNetData( BinaryStream* rStream, bool allowResolve );
+  void m_StartNetDataDestruction( NetObject* netData );
   uint32_t m_serverSignature = 0;
   uint32_t m_lastNetId = 0;
   bool m_delayCreationForDestroy = false;
-  ae::Map< NetId, NetReplica* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, NetObject* > m_netDatas = AE_ALLOC_TAG_NET;
   ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
   ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
-  ae::Array< NetReplica* > m_created = AE_ALLOC_TAG_NET;
+  ae::Array< NetObject* > m_created = AE_ALLOC_TAG_NET;
 };
 
 //------------------------------------------------------------------------------
-// ae::NetReplicaConnection class
+// ae::NetObjectConnection class
 //------------------------------------------------------------------------------
-class NetReplicaConnection
+class NetObjectConnection
 {
 public:
-  const uint8_t* GetSendData() const; // Call NetReplicaServer::UpdateSendData() first
-  uint32_t GetSendLength() const; // Call NetReplicaServer::UpdateSendData() first
+  const uint8_t* GetSendData() const; // Call NetObjectServer::UpdateSendData() first
+  uint32_t GetSendLength() const; // Call NetObjectServer::UpdateSendData() first
 
 public:
   void m_UpdateSendData();
 
   bool m_first = true;
-  class NetReplicaServer* m_replicaDB = nullptr;
+  class NetObjectServer* m_replicaDB = nullptr;
   bool m_pendingClear = false;
   ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
   // Internal
@@ -2175,32 +2175,32 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::NetReplicaServer class
+// ae::NetObjectServer class
 //------------------------------------------------------------------------------
-class NetReplicaServer
+class NetObjectServer
 {
 public:
-  NetReplicaServer();
-  // Create a server authoritative NetData which will be replicated to clients through NetReplicaConnection/NetReplicaClient
-  NetReplica* CreateNetData();
-  void DestroyNetData( NetReplica* netData );
+  NetObjectServer();
+  // Create a server authoritative NetData which will be replicated to clients through NetObjectConnection/NetObjectClient
+  NetObject* CreateNetData();
+  void DestroyNetData( NetObject* netData );
 
-  // Allocate one ae::NetReplicaConnection per client
-  NetReplicaConnection* CreateConnection();
-  void DestroyConnection( NetReplicaConnection* connection );
+  // Allocate one ae::NetObjectConnection per client
+  NetObjectConnection* CreateConnection();
+  void DestroyConnection( NetObjectConnection* connection );
 
-  // Call each frame before NetReplicaConnection::GetSendData()
+  // Call each frame before NetObjectConnection::GetSendData()
   void UpdateSendData();
 
 private:
   uint32_t m_signature = 0;
   uint32_t m_lastNetId = 0;
-  ae::Array< NetReplica* > m_pendingCreate = AE_ALLOC_TAG_NET;
-  ae::Map< NetId, NetReplica* > m_netDatas = AE_ALLOC_TAG_NET;
-  ae::Array< NetReplicaConnection* > m_servers = AE_ALLOC_TAG_NET;
+  ae::Array< NetObject* > m_pendingCreate = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, NetObject* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Array< NetObjectConnection* > m_servers = AE_ALLOC_TAG_NET;
 public:
   // Internal
-  NetReplica* GetNetData( uint32_t index ) { return m_netDatas.GetValue( index ); }
+  NetObject* GetNetData( uint32_t index ) { return m_netDatas.GetValue( index ); }
   uint32_t GetNetDataCount() const { return m_netDatas.Length(); }
 };
 
@@ -5918,18 +5918,18 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
 
   float a = nearPlane / r;
   float b = nearPlane / t;
- 	
+   
   float A;
   float B;
   if ( ReverseZ )
   {
-	  A = 0;
-	  B = nearPlane;
+    A = 0;
+    B = nearPlane;
   }
   else
   {
-	  A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
-	  B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
+    A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
+    B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
   }
   
   Matrix4 result;
@@ -6739,7 +6739,7 @@ Allocator* GetGlobalAllocator()
   {
     // @TODO: Allocating this statically here won't work for hotloading
     static _DefaultAllocator s_allocator;
-	  g_allocator = &s_allocator;
+    g_allocator = &s_allocator;
   }
   return g_allocator;
 }
@@ -7991,7 +7991,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 #elif _AE_LINUX_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
-	return false;
+  return false;
 }
 bool FileSystem_GetCacheDir( Str256* outDir )
 {
@@ -8896,10 +8896,10 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 // OpenGL includes
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-	#pragma comment (lib, "opengl32.lib")
-	#pragma comment (lib, "glu32.lib")
-	#include <gl/GL.h>
-	#include <gl/GLU.h>
+  #pragma comment (lib, "opengl32.lib")
+  #pragma comment (lib, "glu32.lib")
+  #include <gl/GL.h>
+  #include <gl/GLU.h>
 #elif _AE_EMSCRIPTEN_
   #include <GLES3/gl3.h>
 #elif _AE_LINUX_
@@ -10176,15 +10176,15 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
 
   if (autoGenerateMipmaps)
   {
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   }
   else
   {
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   }
-	
+  
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
@@ -10195,9 +10195,9 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
     case Type::Uint8:
       glType = GL_UNSIGNED_BYTE;
       break;
-	  case Type::Uint16:
-	    glType = GL_UNSIGNED_SHORT;
-	    break;
+    case Type::Uint16:
+      glType = GL_UNSIGNED_SHORT;
+      break;
     case Type::HalfFloat:
       glType = GL_HALF_FLOAT;
       break;
@@ -10253,66 +10253,66 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-		  
+      
 #if _AE_OSX_
-	  // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
-	  case Format::RG8:
-	  case Format::RG16F:
-	  case Format::RG32F:
-  		switch(format)
-  		{
-  			case Format::RG8: glInternalFormat = GL_RG8; break;
-  			case Format::RG16F: glInternalFormat = GL_RG16F; break;
-  			case Format::RG32F: glInternalFormat = GL_RG32F; break;
-  			default: assert(false);
-  		}
-  			  
-  		glFormat = GL_RG;
-  		unpackAlignment = 1;
-  		m_hasAlpha = false;
-  		break;
+    // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
+    case Format::RG8:
+    case Format::RG16F:
+    case Format::RG32F:
+      switch(format)
+      {
+        case Format::RG8: glInternalFormat = GL_RG8; break;
+        case Format::RG16F: glInternalFormat = GL_RG16F; break;
+        case Format::RG32F: glInternalFormat = GL_RG32F; break;
+        default: assert(false);
+      }
+          
+      glFormat = GL_RG;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
 #endif
-  	case Format::RGB8:
-  	case Format::RGB16F:
+    case Format::RGB8:
+    case Format::RGB16F:
     case Format::RGB32F:
-  	  switch(format)
-  	  {
-  	    case Format::RGB8: glInternalFormat = GL_RGB8; break;
-  	    case Format::RGB16F: glInternalFormat = GL_RGB16F; break;
-  	    case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
-  		  default: assert(false);
-  	  }
+      switch(format)
+      {
+        case Format::RGB8: glInternalFormat = GL_RGB8; break;
+        case Format::RGB16F: glInternalFormat = GL_RGB16F; break;
+        case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
+        default: assert(false);
+      }
       glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
 
     case Format::RGBA8:
-	  case Format::RGBA16F:
-	  case Format::RGBA32F:
-  	  switch(format)
-  	  {
-      	case Format::RGBA8: glInternalFormat = GL_RGBA8; break;
-      	case Format::RGBA16F: glInternalFormat = GL_RGBA16F; break;
-      	case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
-      	default: assert(false);
-  	  }
+    case Format::RGBA16F:
+    case Format::RGBA32F:
+      switch(format)
+      {
+        case Format::RGBA8: glInternalFormat = GL_RGBA8; break;
+        case Format::RGBA16F: glInternalFormat = GL_RGBA16F; break;
+        case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
+        default: assert(false);
+      }
       glFormat = GL_RGBA;
       unpackAlignment = 1;
       m_hasAlpha = true;
       break;
-		  
+      
       // TODO: fix these constants, but they differ on ES2/3 and GL
       // WebGL1 they require loading an extension (if present) to get at the constants.    
     case Format::RGB8_SRGB:
-	  // ignore type
+    // ignore type
       glInternalFormat = GL_SRGB8;
       glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case Format::RGBA8_SRGB:
-	  // ignore type
+    // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
       glFormat = GL_RGBA;
       unpackAlignment = 1;
@@ -10329,53 +10329,53 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   }
 
     // count the mip levels
-	int w = width;
-	int h = height;
-	
-	int numberOfMipmaps = 1;
-	if ( autoGenerateMipmaps )
-	{
-		while ( w > 1 || h > 1 )
-		{
-		  numberOfMipmaps++;
-		  w = (w+1) / 2;
-		  h = (h+1) / 2;
-		}
-	}
-	
-	// allocate mip levels
-	// texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
+  int w = width;
+  int h = height;
+  
+  int numberOfMipmaps = 1;
+  if ( autoGenerateMipmaps )
+  {
+    while ( w > 1 || h > 1 )
+    {
+      numberOfMipmaps++;
+      w = (w+1) / 2;
+      h = (h+1) / 2;
+    }
+  }
+  
+  // allocate mip levels
+  // texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
 #define USE_TEXSTORAGE 0
 #if USE_TEXSTORAGE
-	// TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
-	// It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
-	// for compressed textures.
-	glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
+  // TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
+  // It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
+  // for compressed textures.
+  glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
 #else
-	w = width;
-	h = height;
-	
-	for ( int i = 0; i < numberOfMipmaps; ++i )
-	{
-	  glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
-	  w = (w+1) / 2;
-	  h = (h+1) / 2;
-	}
+  w = width;
+  h = height;
+  
+  for ( int i = 0; i < numberOfMipmaps; ++i )
+  {
+    glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
+    w = (w+1) / 2;
+    h = (h+1) / 2;
+  }
 #endif
-	
+  
   if ( data != nullptr )
   {
-	  // upload the first mipmap
-	  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
+    // upload the first mipmap
+    glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
 
-	  // autogen only works for uncompressed textures
-	  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
-	  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
-	  {
-		  glGenerateMipmap( GetTarget() );
-	  }
+    // autogen only works for uncompressed textures
+    // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
+    if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+    {
+      glGenerateMipmap( GetTarget() );
+    }
   }
-	
+  
   AE_CHECK_GL_ERROR();
 }
 
@@ -10413,15 +10413,15 @@ void Texture2D::Initialize( const char* file, Filter filter, Wrap wrap, bool aut
   switch ( channels )
   {
     case STBI_grey:
-  		format = Format::R8;
-  		  
-  		// for now only support R16Unorm
-  		if (is16BitImage)
-  		{
-  			format = Format::R16_UNORM;
-  			type = aeTextureType::Uint16;
-  		}
-  	  break;
+      format = Format::R8;
+        
+      // for now only support R16Unorm
+      if (is16BitImage)
+      {
+        format = Format::R16_UNORM;
+        type = aeTextureType::Uint16;
+      }
+      break;
     case STBI_grey_alpha:
       AE_FAIL();
       break;
@@ -11643,11 +11643,11 @@ void BinaryStream::Discard( uint32_t length )
 }
 
 //------------------------------------------------------------------------------
-// ae::NetReplica member functions
+// ae::NetObject member functions
 //------------------------------------------------------------------------------
-void NetReplica::SetSyncData( const void* data, uint32_t length )
+void NetObject::SetSyncData( const void* data, uint32_t length )
 {
-  AE_ASSERT_MSG( IsAuthority(), "Cannot set net data from client. The NetReplicaConnection has exclusive ownership." );
+  AE_ASSERT_MSG( IsAuthority(), "Cannot set net data from client. The NetObjectConnection has exclusive ownership." );
   m_data.Clear();
   m_data.Append( (const uint8_t*)data, length );
 }
@@ -11656,7 +11656,7 @@ void NetReplica::SetSyncData( const void* data, uint32_t length )
 #ifdef SendMessage
 #undef SendMessage
 #endif
-void NetReplica::SendMessage( const void* data, uint32_t length )
+void NetObject::SendMessage( const void* data, uint32_t length )
 {
   uint16_t lengthU16 = length;
   m_messageDataOut.Reserve( m_messageDataOut.Length() + sizeof( lengthU16 ) + length );
@@ -11664,39 +11664,39 @@ void NetReplica::SendMessage( const void* data, uint32_t length )
   m_messageDataOut.Append( (const uint8_t*)data, length );
 }
 
-void NetReplica::SetInitData( const void* initData, uint32_t initDataLength )
+void NetObject::SetInitData( const void* initData, uint32_t initDataLength )
 {
   m_initData.Clear();
   m_initData.Append( (uint8_t*)initData, initDataLength );
   m_isPendingInit = false;
 }
 
-const uint8_t* NetReplica::GetInitData() const
+const uint8_t* NetObject::GetInitData() const
 {
   return m_initData.Length() ? &m_initData[ 0 ] : nullptr;
 }
 
-uint32_t NetReplica::InitDataLength() const
+uint32_t NetObject::InitDataLength() const
 {
   return m_initData.Length();
 }
 
-const uint8_t* NetReplica::GetSyncData() const
+const uint8_t* NetObject::GetSyncData() const
 {
   return m_data.Length() ? &m_data[ 0 ] : nullptr;
 }
 
-uint32_t NetReplica::SyncDataLength() const
+uint32_t NetObject::SyncDataLength() const
 {
   return m_data.Length();
 }
 
-void NetReplica::ClearSyncData()
+void NetObject::ClearSyncData()
 {
   m_data.Clear();
 }
 
-bool NetReplica::PumpMessages( Msg* msgOut )
+bool NetObject::PumpMessages( Msg* msgOut )
 {
   if ( m_messageDataInOffset >= m_messageDataIn.Length() )
   {
@@ -11728,28 +11728,28 @@ bool NetReplica::PumpMessages( Msg* msgOut )
   return true;
 }
 
-bool NetReplica::IsPendingInit() const
+bool NetObject::IsPendingInit() const
 {
   return m_isPendingInit;
 }
 
-bool NetReplica::IsPendingDestroy() const
+bool NetObject::IsPendingDestroy() const
 {
   return m_isPendingDestroy;
 }
 
-void NetReplica::m_SetClientData( const uint8_t* data, uint32_t length )
+void NetObject::m_SetClientData( const uint8_t* data, uint32_t length )
 {
   m_data.Clear();
   m_data.Append( data, length );
 }
 
-void NetReplica::m_ReceiveMessages( const uint8_t* data, uint32_t length )
+void NetObject::m_ReceiveMessages( const uint8_t* data, uint32_t length )
 {
   m_messageDataIn.Append( data, length );
 }
 
-void NetReplica::m_UpdateHash()
+void NetObject::m_UpdateHash()
 {
   if ( m_data.Length() )
   {
@@ -11762,14 +11762,14 @@ void NetReplica::m_UpdateHash()
 }
 
 //------------------------------------------------------------------------------
-// ae::NetReplicaClient member functions
+// ae::NetObjectClient member functions
 //------------------------------------------------------------------------------
-void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
+void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 {
   BinaryStream rStream = BinaryStream::Reader( data, length );
   while ( rStream.GetOffset() < rStream.GetLength() )
   {
-    NetReplicaConnection::EventType type;
+    NetObjectConnection::EventType type;
     rStream.SerializeRaw( type );
     if ( !rStream.IsValid() )
     {
@@ -11777,13 +11777,13 @@ void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
     }
     switch ( type )
     {
-      case NetReplicaConnection::EventType::Connect:
+      case NetObjectConnection::EventType::Connect:
       {
         uint32_t signature = 0;
         rStream.SerializeUint32( signature );
         AE_ASSERT( signature );
 
-        ae::Map< NetReplica*, int > toDestroy = AE_ALLOC_TAG_NET;
+        ae::Map< NetObject*, int > toDestroy = AE_ALLOC_TAG_NET;
         bool allowResolve = ( m_serverSignature == signature );
         if ( m_serverSignature )
         {
@@ -11811,33 +11811,33 @@ void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         rStream.SerializeUint32( length );
         for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
         {
-          NetReplica* created = m_CreateNetData( &rStream, allowResolve );
+          NetObject* created = m_CreateNetData( &rStream, allowResolve );
           toDestroy.Remove( created );
         }
         for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
         {
-          NetReplica* netData = toDestroy.GetKey( i );
+          NetObject* netData = toDestroy.GetKey( i );
           m_StartNetDataDestruction( netData );
         }
 
         m_serverSignature = signature;
         break;
       }
-      case NetReplicaConnection::EventType::Create:
+      case NetObjectConnection::EventType::Create:
       {
         m_CreateNetData( &rStream, false );
         break;
       }
-      case NetReplicaConnection::EventType::Destroy:
+      case NetObjectConnection::EventType::Destroy:
       {
         RemoteId remoteId;
         rStream.SerializeObject( remoteId );
         NetId localId = m_remoteToLocalIdMap.Get( remoteId );
-        NetReplica* netData = m_netDatas.Get( localId );
+        NetObject* netData = m_netDatas.Get( localId );
         m_StartNetDataDestruction( netData );
         break;
       }
-      case NetReplicaConnection::EventType::Update:
+      case NetObjectConnection::EventType::Update:
       {
         uint32_t netDataCount = 0;
         rStream.SerializeUint32( netDataCount );
@@ -11849,7 +11849,7 @@ void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
           rStream.SerializeUint32( dataLen );
 
           NetId localId;
-          NetReplica* netData = nullptr;
+          NetObject* netData = nullptr;
           if ( dataLen
             && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
             && m_netDatas.TryGet( localId, &netData ) )
@@ -11868,7 +11868,7 @@ void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
         }
         break;
       }
-      case NetReplicaConnection::EventType::Messages:
+      case NetObjectConnection::EventType::Messages:
       {
         uint32_t netDataCount = 0;
         rStream.SerializeUint32( netDataCount );
@@ -11880,7 +11880,7 @@ void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
           rStream.SerializeUint32( dataLen );
 
           NetId localId;
-          NetReplica* netData = nullptr;
+          NetObject* netData = nullptr;
           if ( dataLen
             && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
             && m_netDatas.TryGet( localId, &netData ) )
@@ -11903,7 +11903,7 @@ void NetReplicaClient::ReceiveData( const uint8_t* data, uint32_t length )
   }
 }
 
-NetReplica* NetReplicaClient::PumpCreate()
+NetObject* NetObjectClient::PumpCreate()
 {
   if ( !m_created.Length() )
   {
@@ -11922,34 +11922,34 @@ NetReplica* NetReplicaClient::PumpCreate()
     m_delayCreationForDestroy = false;
   }
   
-  NetReplica* created = m_created[ 0 ];
+  NetObject* created = m_created[ 0 ];
   AE_ASSERT( created );
   m_created.Remove( 0 );
   return created;
 }
 
-void NetReplicaClient::Destroy( NetReplica* pendingDestroy )
+void NetObjectClient::Destroy( NetObject* pendingDestroy )
 {
   if ( !pendingDestroy )
   {
     return;
   }
   // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
-  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "NetReplica was not pending Destroy()" );
-  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "NetReplica had pending messages when it was Destroy()ed" );
-  bool removed = m_netDatas.Remove( pendingDestroy->_netId );
+  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "NetObject was not pending Destroy()" );
+  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "NetObject had pending messages when it was Destroy()ed" );
+  bool removed = m_netDatas.Remove( pendingDestroy->GetId() );
   AE_ASSERT( removed, "NetData can't be deleted. It was registered." );
   ae::Delete( pendingDestroy );
 }
 
-NetReplica* NetReplicaClient::m_CreateNetData( BinaryStream* rStream, bool allowResolve )
+NetObject* NetObjectClient::m_CreateNetData( BinaryStream* rStream, bool allowResolve )
 {
   AE_ASSERT( rStream->IsReader() );
 
   RemoteId remoteId;
   rStream->SerializeObject( remoteId );
 
-  NetReplica* netData = nullptr;
+  NetObject* netData = nullptr;
   if ( allowResolve )
   {
     NetId localId = m_remoteToLocalIdMap.Get( remoteId, {} );
@@ -11962,8 +11962,8 @@ NetReplica* NetReplicaClient::m_CreateNetData( BinaryStream* rStream, bool allow
   if ( !netData )
   {
     NetId localId( ++m_lastNetId );
-    netData = ae::New< NetReplica >( AE_ALLOC_TAG_NET );
-    netData->_netId = localId;
+    netData = ae::New< NetObject >( AE_ALLOC_TAG_NET );
+    netData->m_id = localId;
 
     m_netDatas.Set( localId, netData );
     m_remoteToLocalIdMap.Set( remoteId, localId );
@@ -11976,7 +11976,7 @@ NetReplica* NetReplicaClient::m_CreateNetData( BinaryStream* rStream, bool allow
   return netData;
 }
 
-void NetReplicaClient::m_StartNetDataDestruction( NetReplica* netData )
+void NetObjectClient::m_StartNetDataDestruction( NetObject* netData )
 {
   AE_ASSERT( netData );
   if ( netData->IsPendingDestroy() )
@@ -11985,7 +11985,7 @@ void NetReplicaClient::m_StartNetDataDestruction( NetReplica* netData )
   }
   
   RemoteId remoteId;
-  bool found = m_localToRemoteIdMap.Remove( netData->_netId, &remoteId );
+  bool found = m_localToRemoteIdMap.Remove( netData->GetId(), &remoteId );
   AE_ASSERT( found );
   found = m_remoteToLocalIdMap.Remove( remoteId );
   AE_ASSERT( found );
@@ -11993,17 +11993,17 @@ void NetReplicaClient::m_StartNetDataDestruction( NetReplica* netData )
 }
 
 //------------------------------------------------------------------------------
-// ae::NetReplicaConnection member functions
+// ae::NetObjectConnection member functions
 //------------------------------------------------------------------------------
-void NetReplicaConnection::m_UpdateSendData()
+void NetObjectConnection::m_UpdateSendData()
 {
   AE_ASSERT( m_replicaDB );
 
-  ae::Array< NetReplica* > toSync = AE_ALLOC_TAG_NET;
+  ae::Array< NetObject* > toSync = AE_ALLOC_TAG_NET;
   uint32_t netDataMessageCount = 0;
   for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
   {
-    NetReplica* netData = m_replicaDB->GetNetData( i );
+    NetObject* netData = m_replicaDB->GetNetData( i );
     if ( m_first || netData->m_Changed() )
     {
       toSync.Append( netData );
@@ -12019,12 +12019,12 @@ void NetReplicaConnection::m_UpdateSendData()
 
   if ( toSync.Length() )
   {
-    wStream.SerializeRaw( NetReplicaConnection::EventType::Update );
+    wStream.SerializeRaw( NetObjectConnection::EventType::Update );
     wStream.SerializeUint32( toSync.Length() );
     for ( uint32_t i = 0; i < toSync.Length(); i++ )
     {
-      NetReplica* netData = toSync[ i ];
-      wStream.SerializeObject( netData->_netId );
+      NetObject* netData = toSync[ i ];
+      wStream.SerializeObject( netData->GetId() );
       wStream.SerializeUint32( netData->SyncDataLength() );
       wStream.SerializeRaw( netData->GetSyncData(), netData->SyncDataLength() );
     }
@@ -12032,14 +12032,14 @@ void NetReplicaConnection::m_UpdateSendData()
 
   if ( netDataMessageCount )
   {
-    wStream.SerializeRaw( NetReplicaConnection::EventType::Messages );
+    wStream.SerializeRaw( NetObjectConnection::EventType::Messages );
     wStream.SerializeUint32( netDataMessageCount );
     for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
     {
-      NetReplica* netData = m_replicaDB->GetNetData( i );
+      NetObject* netData = m_replicaDB->GetNetData( i );
       if ( netData->m_messageDataOut.Length() )
       {
-        wStream.SerializeObject( netData->_netId );
+        wStream.SerializeObject( netData->GetId() );
         wStream.SerializeUint32( netData->m_messageDataOut.Length() );
         wStream.SerializeRaw( &netData->m_messageDataOut[ 0 ], netData->m_messageDataOut.Length() );
       }
@@ -12050,20 +12050,20 @@ void NetReplicaConnection::m_UpdateSendData()
   m_first = false;
 }
 
-const uint8_t* NetReplicaConnection::GetSendData() const
+const uint8_t* NetObjectConnection::GetSendData() const
 {
   return m_sendData.Length() ? &m_sendData[ 0 ] : nullptr;
 }
 
-uint32_t NetReplicaConnection::GetSendLength() const
+uint32_t NetObjectConnection::GetSendLength() const
 {
   return m_sendData.Length();
 }
 
 //------------------------------------------------------------------------------
-// ae::NetReplicaServer member functions
+// ae::NetObjectServer member functions
 //------------------------------------------------------------------------------
-NetReplicaServer::NetReplicaServer()
+NetObjectServer::NetObjectServer()
 {
   std::random_device random_device;
   std::mt19937 random_engine( random_device() );
@@ -12071,16 +12071,16 @@ NetReplicaServer::NetReplicaServer()
   m_signature = dist( random_engine );
 }
 
-NetReplica* NetReplicaServer::CreateNetData()
+NetObject* NetObjectServer::CreateNetData()
 {
-  NetReplica* netData = ae::New< NetReplica >( AE_ALLOC_TAG_NET );
+  NetObject* netData = ae::New< NetObject >( AE_ALLOC_TAG_NET );
   netData->m_SetLocal();
-  netData->_netId = NetId( ++m_lastNetId );
+  netData->m_id = NetId( ++m_lastNetId );
   m_pendingCreate.Append( netData );
   return netData;
 }
 
-void NetReplicaServer::DestroyNetData( NetReplica* netData )
+void NetObjectServer::DestroyNetData( NetObject* netData )
 {
   if ( !netData )
   {
@@ -12096,13 +12096,13 @@ void NetReplicaServer::DestroyNetData( NetReplica* netData )
     return;
   }
 
-  NetId id = netData->_netId;
+  NetId id = netData->GetId();
   bool removed = m_netDatas.Remove( id );
-  AE_ASSERT_MSG( removed, "NetReplica was not found." );
+  AE_ASSERT_MSG( removed, "NetObject was not found." );
 
   for ( uint32_t i = 0; i < m_servers.Length(); i++ )
   {
-    NetReplicaConnection* server = m_servers[ i ];
+    NetObjectConnection* server = m_servers[ i ];
     if ( server->m_pendingClear )
     {
       server->m_sendData.Clear();
@@ -12110,35 +12110,35 @@ void NetReplicaServer::DestroyNetData( NetReplica* netData )
     }
 
     BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
-    wStream.SerializeRaw( NetReplicaConnection::EventType::Destroy );
+    wStream.SerializeRaw( NetObjectConnection::EventType::Destroy );
     wStream.SerializeObject( id );
   }
 
   ae::Delete( netData );
 }
 
-NetReplicaConnection* NetReplicaServer::CreateConnection()
+NetObjectConnection* NetObjectServer::CreateConnection()
 {
-  NetReplicaConnection* server = m_servers.Append( ae::New< NetReplicaConnection >( AE_ALLOC_TAG_NET ) );
+  NetObjectConnection* server = m_servers.Append( ae::New< NetObjectConnection >( AE_ALLOC_TAG_NET ) );
   AE_ASSERT( !server->m_pendingClear );
   server->m_replicaDB = this;
 
   // Send initial net datas
   BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
-  wStream.SerializeRaw( NetReplicaConnection::EventType::Connect );
+  wStream.SerializeRaw( NetObjectConnection::EventType::Connect );
   wStream.SerializeUint32( m_signature );
   wStream.SerializeUint32( m_netDatas.Length() );
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {
-    const NetReplica* netData = m_netDatas.GetValue( i );
-    wStream.SerializeObject( netData->_netId );
+    const NetObject* netData = m_netDatas.GetValue( i );
+    wStream.SerializeObject( netData->GetId() );
     wStream.SerializeArray( netData->m_initData );
   }
 
   return server;
 }
 
-void NetReplicaServer::DestroyConnection( NetReplicaConnection* server )
+void NetObjectServer::DestroyConnection( NetObjectConnection* server )
 {
   if ( !server )
   {
@@ -12153,12 +12153,12 @@ void NetReplicaServer::DestroyConnection( NetReplicaConnection* server )
   }
 }
 
-void NetReplicaServer::UpdateSendData()
+void NetObjectServer::UpdateSendData()
 {
   // Clear old send data before writing new
   for ( uint32_t i = 0; i < m_servers.Length(); i++ )
   {
-    NetReplicaConnection* server = m_servers[ i ];
+    NetObjectConnection* server = m_servers[ i ];
     if ( server->m_pendingClear )
     {
       server->m_sendData.Clear();
@@ -12167,26 +12167,26 @@ void NetReplicaServer::UpdateSendData()
   }
   
   // Send info about new objects (delayed until Update in case objects initData need to reference each other)
-  for ( NetReplica* netData : m_pendingCreate )
+  for ( NetObject* netData : m_pendingCreate )
   {
     if ( !netData->IsPendingInit() )
     {
       // Add net data to list, remove all initialized net datas from m_pendingCreate at once below
-      m_netDatas.Set( netData->_netId, netData );
+      m_netDatas.Set( netData->GetId(), netData );
       
       // Send create messages on existing server connections
       for ( uint32_t i = 0; i < m_servers.Length(); i++ )
       {
-        NetReplicaConnection* server = m_servers[ i ];
+        NetObjectConnection* server = m_servers[ i ];
         BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
-        wStream.SerializeRaw( NetReplicaConnection::EventType::Create );
-        wStream.SerializeObject( netData->_netId );
+        wStream.SerializeRaw( NetObjectConnection::EventType::Create );
+        wStream.SerializeObject( netData->GetId() );
         wStream.SerializeArray( netData->m_initData );
       }
     }
   }
   // Remove all pending net datas that were just initialized
-  m_pendingCreate.RemoveAllFn( []( const NetReplica* netData ){ return !netData->IsPendingInit(); } );
+  m_pendingCreate.RemoveAllFn( []( const NetObject* netData ){ return !netData->IsPendingInit(); } );
   
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {
@@ -12200,7 +12200,7 @@ void NetReplicaServer::UpdateSendData()
 
   for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
   {
-    NetReplica* netData = m_netDatas.GetValue( i );
+    NetObject* netData = m_netDatas.GetValue( i );
     netData->m_prevHash = netData->m_hash;
     netData->m_messageDataOut.Clear();
   }
