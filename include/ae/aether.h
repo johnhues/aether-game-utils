@@ -2024,6 +2024,7 @@ struct NetId
   bool operator==( const NetId& o ) const { return o.m_id == m_id; }
   bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
   explicit operator bool () const { return m_id != 0; }
+  uint32_t GetInternalId() const { return m_id; }
   void Serialize( BinaryStream* s ) { s->SerializeUint32( m_id ); }
   void Serialize( BinaryStream* s ) const { s->SerializeUint32( m_id ); }
 private:
@@ -11935,10 +11936,10 @@ void NetObjectClient::Destroy( NetObject* pendingDestroy )
     return;
   }
   // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
-  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "NetObject was not pending Destroy()" );
-  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "NetObject had pending messages when it was Destroy()ed" );
+  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "ae::NetObject was not pending Destroy()" );
+  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "ae::NetObject had pending messages when it was Destroy()ed" );
   bool removed = m_netObjects.Remove( pendingDestroy->GetId() );
-  AE_ASSERT( removed, "NetObject can't be deleted. It was registered." );
+  AE_ASSERT_MSG( removed, "ae::NetObject can't be destroyed. It's' not managed by this ae::NetObjectClient." );
   ae::Delete( pendingDestroy );
 }
 
