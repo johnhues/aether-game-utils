@@ -33,9 +33,9 @@ int main()
   // Init
   AE_LOG( "Initialize" );
   Game game;
-  game.Initialize( "Replication Client" );
+  game.Initialize( "NetObject Client" );
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
-  ae::NetReplicaClient replicationClient;
+  ae::NetObjectClient netObjectClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
   // Update
@@ -64,19 +64,19 @@ int main()
         case kSysMsgServerDisconnect:
           AE_LOG( "Disconnected from server" );
           break;
-        case kReplicaInfoMsg:
-          replicationClient.ReceiveData( receiveInfo.data.Begin(), receiveInfo.data.End() - receiveInfo.data.Begin() );
+        case kObjectInfoMsg:
+          netObjectClient.ReceiveData( receiveInfo.data.Begin(), receiveInfo.data.End() - receiveInfo.data.Begin() );
           break;
         default:
           break;
       }
     }
     // Create new replicated objects
-    while ( ae::NetReplica* netData = replicationClient.PumpCreate() )
+    while ( ae::NetObject* netObject = netObjectClient.PumpCreate() )
     {
-      ae::BinaryStream readStream = ae::BinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
+      ae::BinaryStream readStream = ae::BinaryStream::Reader( netObject->GetSyncData(), netObject->SyncDataLength() );
       GameObject* obj = &gameObjects.Append( GameObject( ae::Color::White() ) );
-      obj->netData = netData;
+      obj->netObject = netObject;
       obj->Serialize( &readStream );
     }
     
@@ -93,14 +93,14 @@ int main()
     //------------------------------------------------------------------------------
     for ( GameObject& obj : gameObjects )
     {
-      if ( obj.netData->IsPendingDestroy() )
+      if ( obj.netObject->IsPendingDestroy() )
       {
-        replicationClient.Destroy( obj.netData );
-        obj.netData = nullptr;
+        netObjectClient.Destroy( obj.netObject );
+        obj.netObject = nullptr;
       }
     }
     // Remove objects that no longer have replication data
-    gameObjects.RemoveAllFn( []( const GameObject& o ) { return !o.netData; } );
+    gameObjects.RemoveAllFn( []( const GameObject& o ) { return !o.netObject; } );
     // Send messages generated during game update
     AetherClient_SendAll( client );
 

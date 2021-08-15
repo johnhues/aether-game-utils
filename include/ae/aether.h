@@ -2055,12 +2055,12 @@ public:
   //------------------------------------------------------------------------------
   // True until SetInitData() is called
   bool IsPendingInit() const;
-  // Call once after NetObjectServer::CreateNetData(), will trigger Create event
+  // Call once after NetObjectServer::CreateNetObject(), will trigger Create event
   // on clients. You can pass 'nullptr' and '0' as params, but you still must call
   // before the object will be created remotely. Clients can call NetObject::GetInitData()
   // to get the data set here.
   void SetInitData( const void* initData, uint32_t initDataLength );
-  // Call SetSyncData each frame to update that state of the clients NetData.
+  // Call SetSyncData each frame to update that state of the clients NetObject.
   // Only the most recent data is sent. Data is only sent when changed.
   void SetSyncData( const void* data, uint32_t length );
   // Call as many times as necessary each tick
@@ -2069,7 +2069,7 @@ public:
   //------------------------------------------------------------------------------
   // Client
   //------------------------------------------------------------------------------
-  // Use GetInitData() after receiving a new NetData from NetObjectClient::PumpCreate()
+  // Use GetInitData() after receiving a new NetObject from NetObjectClient::PumpCreate()
   // to construct the object. Retrieves the data set by NetObject::SetInitData() on
   // the server.
   const uint8_t* GetInitData() const;
@@ -2088,7 +2088,7 @@ public:
   // Get messages sent from the server. Call repeatedly until false is returned
   bool PumpMessages( Msg* msgOut );
 
-  // True once the NetData has been deleted on the server.
+  // True once the NetObject has been deleted on the server.
   // Call NetObjectClient::Destroy() when you're done with it.
   bool IsPendingDestroy() const;
 
@@ -2128,7 +2128,7 @@ class NetObjectClient
 public:
   // The following sequence should be performed each frame
   void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
-  NetObject* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetDatas are returned)
+  NetObject* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetObjects are returned)
   // 3) Handle new sync data with NetObject::GetSyncData() and process incoming messages with NetObject::PumpMessages()
   void Destroy( NetObject* pendingDestroy ); // 4) Call this on ae::NetObjects once NetObject::IsPendingDestroy() returns true
   
@@ -2136,12 +2136,12 @@ public:
   RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
 
 private:
-  NetObject* m_CreateNetData( BinaryStream* rStream, bool allowResolve );
-  void m_StartNetDataDestruction( NetObject* netData );
+  NetObject* m_CreateNetObject( BinaryStream* rStream, bool allowResolve );
+  void m_StartNetObjectDestruction( NetObject* netObject );
   uint32_t m_serverSignature = 0;
   uint32_t m_lastNetId = 0;
   bool m_delayCreationForDestroy = false;
-  ae::Map< NetId, NetObject* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, NetObject* > m_netObjects = AE_ALLOC_TAG_NET;
   ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
   ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
   ae::Array< NetObject* > m_created = AE_ALLOC_TAG_NET;
@@ -2181,9 +2181,9 @@ class NetObjectServer
 {
 public:
   NetObjectServer();
-  // Create a server authoritative NetData which will be replicated to clients through NetObjectConnection/NetObjectClient
-  NetObject* CreateNetData();
-  void DestroyNetData( NetObject* netData );
+  // Create a server authoritative NetObject which will be replicated to clients through NetObjectConnection/NetObjectClient
+  NetObject* CreateNetObject();
+  void DestroyNetObject( NetObject* netObject );
 
   // Allocate one ae::NetObjectConnection per client
   NetObjectConnection* CreateConnection();
@@ -2196,12 +2196,12 @@ private:
   uint32_t m_signature = 0;
   uint32_t m_lastNetId = 0;
   ae::Array< NetObject* > m_pendingCreate = AE_ALLOC_TAG_NET;
-  ae::Map< NetId, NetObject* > m_netDatas = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, NetObject* > m_netObjects = AE_ALLOC_TAG_NET;
   ae::Array< NetObjectConnection* > m_servers = AE_ALLOC_TAG_NET;
 public:
   // Internal
-  NetObject* GetNetData( uint32_t index ) { return m_netDatas.GetValue( index ); }
-  uint32_t GetNetDataCount() const { return m_netDatas.Length(); }
+  NetObject* GetNetObject( uint32_t index ) { return m_netObjects.GetValue( index ); }
+  uint32_t GetNetObjectCount() const { return m_netObjects.Length(); }
 };
 
 //------------------------------------------------------------------------------
@@ -11789,18 +11789,18 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
         {
           if ( allowResolve )
           {
-            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
             {
-              toDestroy.Set( m_netDatas.GetValue( i ), 0 );
+              toDestroy.Set( m_netObjects.GetValue( i ), 0 );
             }
           }
           else
           {
             m_delayCreationForDestroy = true; // This prevents new server objects and old server objects overlapping for a frame
-            m_created.Clear(); // Don't call delete, are pointers to m_netDatas
-            for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+            m_created.Clear(); // Don't call delete, are pointers to m_netObjects
+            for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
             {
-              m_StartNetDataDestruction( m_netDatas.GetValue( i ) );
+              m_StartNetObjectDestruction( m_netObjects.GetValue( i ) );
             }
             AE_ASSERT( !m_remoteToLocalIdMap.Length() );
             AE_ASSERT( !m_localToRemoteIdMap.Length() );
@@ -11811,13 +11811,13 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
         rStream.SerializeUint32( length );
         for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
         {
-          NetObject* created = m_CreateNetData( &rStream, allowResolve );
+          NetObject* created = m_CreateNetObject( &rStream, allowResolve );
           toDestroy.Remove( created );
         }
         for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
         {
-          NetObject* netData = toDestroy.GetKey( i );
-          m_StartNetDataDestruction( netData );
+          NetObject* netObject = toDestroy.GetKey( i );
+          m_StartNetObjectDestruction( netObject );
         }
 
         m_serverSignature = signature;
@@ -11825,7 +11825,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
       }
       case NetObjectConnection::EventType::Create:
       {
-        m_CreateNetData( &rStream, false );
+        m_CreateNetObject( &rStream, false );
         break;
       }
       case NetObjectConnection::EventType::Destroy:
@@ -11833,15 +11833,15 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
         RemoteId remoteId;
         rStream.SerializeObject( remoteId );
         NetId localId = m_remoteToLocalIdMap.Get( remoteId );
-        NetObject* netData = m_netDatas.Get( localId );
-        m_StartNetDataDestruction( netData );
+        NetObject* netObject = m_netObjects.Get( localId );
+        m_StartNetObjectDestruction( netObject );
         break;
       }
       case NetObjectConnection::EventType::Update:
       {
-        uint32_t netDataCount = 0;
-        rStream.SerializeUint32( netDataCount );
-        for ( uint32_t i = 0; i < netDataCount; i++ )
+        uint32_t netObjectCount = 0;
+        rStream.SerializeUint32( netObjectCount );
+        for ( uint32_t i = 0; i < netObjectCount; i++ )
         {
           RemoteId remoteId;
           uint32_t dataLen = 0;
@@ -11849,14 +11849,14 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
           rStream.SerializeUint32( dataLen );
 
           NetId localId;
-          NetObject* netData = nullptr;
+          NetObject* netObject = nullptr;
           if ( dataLen
             && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
-            && m_netDatas.TryGet( localId, &netData ) )
+            && m_netObjects.TryGet( localId, &netObject ) )
           {
             if ( rStream.GetRemaining() >= dataLen )
             {
-              netData->m_SetClientData( rStream.PeekData(), dataLen );
+              netObject->m_SetClientData( rStream.PeekData(), dataLen );
             }
             else
             {
@@ -11870,9 +11870,9 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
       }
       case NetObjectConnection::EventType::Messages:
       {
-        uint32_t netDataCount = 0;
-        rStream.SerializeUint32( netDataCount );
-        for ( uint32_t i = 0; i < netDataCount; i++ )
+        uint32_t netObjectCount = 0;
+        rStream.SerializeUint32( netObjectCount );
+        for ( uint32_t i = 0; i < netObjectCount; i++ )
         {
           RemoteId remoteId;
           uint32_t dataLen = 0;
@@ -11880,14 +11880,14 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
           rStream.SerializeUint32( dataLen );
 
           NetId localId;
-          NetObject* netData = nullptr;
+          NetObject* netObject = nullptr;
           if ( dataLen
             && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
-            && m_netDatas.TryGet( localId, &netData ) )
+            && m_netObjects.TryGet( localId, &netObject ) )
           {
             if ( rStream.GetRemaining() >= dataLen )
             {
-              netData->m_ReceiveMessages( rStream.PeekData(), dataLen );
+              netObject->m_ReceiveMessages( rStream.PeekData(), dataLen );
             }
             else
             {
@@ -11912,9 +11912,9 @@ NetObject* NetObjectClient::PumpCreate()
 
   if ( m_delayCreationForDestroy )
   {
-    for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+    for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
     {
-      if ( m_netDatas.GetValue( i )->IsPendingDestroy() )
+      if ( m_netObjects.GetValue( i )->IsPendingDestroy() )
       {
         return nullptr;
       }
@@ -11937,59 +11937,59 @@ void NetObjectClient::Destroy( NetObject* pendingDestroy )
   // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
   AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "NetObject was not pending Destroy()" );
   AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "NetObject had pending messages when it was Destroy()ed" );
-  bool removed = m_netDatas.Remove( pendingDestroy->GetId() );
-  AE_ASSERT( removed, "NetData can't be deleted. It was registered." );
+  bool removed = m_netObjects.Remove( pendingDestroy->GetId() );
+  AE_ASSERT( removed, "NetObject can't be deleted. It was registered." );
   ae::Delete( pendingDestroy );
 }
 
-NetObject* NetObjectClient::m_CreateNetData( BinaryStream* rStream, bool allowResolve )
+NetObject* NetObjectClient::m_CreateNetObject( BinaryStream* rStream, bool allowResolve )
 {
   AE_ASSERT( rStream->IsReader() );
 
   RemoteId remoteId;
   rStream->SerializeObject( remoteId );
 
-  NetObject* netData = nullptr;
+  NetObject* netObject = nullptr;
   if ( allowResolve )
   {
     NetId localId = m_remoteToLocalIdMap.Get( remoteId, {} );
     if ( localId )
     {
-      netData = m_netDatas.Get( localId );
+      netObject = m_netObjects.Get( localId );
     }
   }
 
-  if ( !netData )
+  if ( !netObject )
   {
     NetId localId( ++m_lastNetId );
-    netData = ae::New< NetObject >( AE_ALLOC_TAG_NET );
-    netData->m_id = localId;
+    netObject = ae::New< NetObject >( AE_ALLOC_TAG_NET );
+    netObject->m_id = localId;
 
-    m_netDatas.Set( localId, netData );
+    m_netObjects.Set( localId, netObject );
     m_remoteToLocalIdMap.Set( remoteId, localId );
     m_localToRemoteIdMap.Set( localId, remoteId );
-    m_created.Append( netData );
+    m_created.Append( netObject );
   }
   
-  rStream->SerializeArray( netData->m_initData );
+  rStream->SerializeArray( netObject->m_initData );
 
-  return netData;
+  return netObject;
 }
 
-void NetObjectClient::m_StartNetDataDestruction( NetObject* netData )
+void NetObjectClient::m_StartNetObjectDestruction( NetObject* netObject )
 {
-  AE_ASSERT( netData );
-  if ( netData->IsPendingDestroy() )
+  AE_ASSERT( netObject );
+  if ( netObject->IsPendingDestroy() )
   {
     return;
   }
   
   RemoteId remoteId;
-  bool found = m_localToRemoteIdMap.Remove( netData->GetId(), &remoteId );
+  bool found = m_localToRemoteIdMap.Remove( netObject->GetId(), &remoteId );
   AE_ASSERT( found );
   found = m_remoteToLocalIdMap.Remove( remoteId );
   AE_ASSERT( found );
-  netData->m_FlagForDestruction();
+  netObject->m_FlagForDestruction();
 }
 
 //------------------------------------------------------------------------------
@@ -12000,18 +12000,18 @@ void NetObjectConnection::m_UpdateSendData()
   AE_ASSERT( m_replicaDB );
 
   ae::Array< NetObject* > toSync = AE_ALLOC_TAG_NET;
-  uint32_t netDataMessageCount = 0;
-  for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
+  uint32_t netObjectMessageCount = 0;
+  for ( uint32_t i = 0; i < m_replicaDB->GetNetObjectCount(); i++ )
   {
-    NetObject* netData = m_replicaDB->GetNetData( i );
-    if ( m_first || netData->m_Changed() )
+    NetObject* netObject = m_replicaDB->GetNetObject( i );
+    if ( m_first || netObject->m_Changed() )
     {
-      toSync.Append( netData );
+      toSync.Append( netObject );
     }
 
-    if ( netData->m_messageDataOut.Length() )
+    if ( netObject->m_messageDataOut.Length() )
     {
-      netDataMessageCount++;
+      netObjectMessageCount++;
     }
   }
 
@@ -12023,25 +12023,25 @@ void NetObjectConnection::m_UpdateSendData()
     wStream.SerializeUint32( toSync.Length() );
     for ( uint32_t i = 0; i < toSync.Length(); i++ )
     {
-      NetObject* netData = toSync[ i ];
-      wStream.SerializeObject( netData->GetId() );
-      wStream.SerializeUint32( netData->SyncDataLength() );
-      wStream.SerializeRaw( netData->GetSyncData(), netData->SyncDataLength() );
+      NetObject* netObject = toSync[ i ];
+      wStream.SerializeObject( netObject->GetId() );
+      wStream.SerializeUint32( netObject->SyncDataLength() );
+      wStream.SerializeRaw( netObject->GetSyncData(), netObject->SyncDataLength() );
     }
   }
 
-  if ( netDataMessageCount )
+  if ( netObjectMessageCount )
   {
     wStream.SerializeRaw( NetObjectConnection::EventType::Messages );
-    wStream.SerializeUint32( netDataMessageCount );
-    for ( uint32_t i = 0; i < m_replicaDB->GetNetDataCount(); i++ )
+    wStream.SerializeUint32( netObjectMessageCount );
+    for ( uint32_t i = 0; i < m_replicaDB->GetNetObjectCount(); i++ )
     {
-      NetObject* netData = m_replicaDB->GetNetData( i );
-      if ( netData->m_messageDataOut.Length() )
+      NetObject* netObject = m_replicaDB->GetNetObject( i );
+      if ( netObject->m_messageDataOut.Length() )
       {
-        wStream.SerializeObject( netData->GetId() );
-        wStream.SerializeUint32( netData->m_messageDataOut.Length() );
-        wStream.SerializeRaw( &netData->m_messageDataOut[ 0 ], netData->m_messageDataOut.Length() );
+        wStream.SerializeObject( netObject->GetId() );
+        wStream.SerializeUint32( netObject->m_messageDataOut.Length() );
+        wStream.SerializeRaw( &netObject->m_messageDataOut[ 0 ], netObject->m_messageDataOut.Length() );
       }
     }
   }
@@ -12071,33 +12071,33 @@ NetObjectServer::NetObjectServer()
   m_signature = dist( random_engine );
 }
 
-NetObject* NetObjectServer::CreateNetData()
+NetObject* NetObjectServer::CreateNetObject()
 {
-  NetObject* netData = ae::New< NetObject >( AE_ALLOC_TAG_NET );
-  netData->m_SetLocal();
-  netData->m_id = NetId( ++m_lastNetId );
-  m_pendingCreate.Append( netData );
-  return netData;
+  NetObject* netObject = ae::New< NetObject >( AE_ALLOC_TAG_NET );
+  netObject->m_SetLocal();
+  netObject->m_id = NetId( ++m_lastNetId );
+  m_pendingCreate.Append( netObject );
+  return netObject;
 }
 
-void NetObjectServer::DestroyNetData( NetObject* netData )
+void NetObjectServer::DestroyNetObject( NetObject* netObject )
 {
-  if ( !netData )
+  if ( !netObject )
   {
     return;
   }
   
-  int32_t pendingIdx = m_pendingCreate.Find( netData );
+  int32_t pendingIdx = m_pendingCreate.Find( netObject );
   if ( pendingIdx >= 0 )
   {
     // Early out, no need to send Destroy message because Create has not been queued
     m_pendingCreate.Remove( pendingIdx );
-    ae::Delete( netData );
+    ae::Delete( netObject );
     return;
   }
 
-  NetId id = netData->GetId();
-  bool removed = m_netDatas.Remove( id );
+  NetId id = netObject->GetId();
+  bool removed = m_netObjects.Remove( id );
   AE_ASSERT_MSG( removed, "NetObject was not found." );
 
   for ( uint32_t i = 0; i < m_servers.Length(); i++ )
@@ -12114,7 +12114,7 @@ void NetObjectServer::DestroyNetData( NetObject* netData )
     wStream.SerializeObject( id );
   }
 
-  ae::Delete( netData );
+  ae::Delete( netObject );
 }
 
 NetObjectConnection* NetObjectServer::CreateConnection()
@@ -12127,12 +12127,12 @@ NetObjectConnection* NetObjectServer::CreateConnection()
   BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
   wStream.SerializeRaw( NetObjectConnection::EventType::Connect );
   wStream.SerializeUint32( m_signature );
-  wStream.SerializeUint32( m_netDatas.Length() );
-  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  wStream.SerializeUint32( m_netObjects.Length() );
+  for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
   {
-    const NetObject* netData = m_netDatas.GetValue( i );
-    wStream.SerializeObject( netData->GetId() );
-    wStream.SerializeArray( netData->m_initData );
+    const NetObject* netObject = m_netObjects.GetValue( i );
+    wStream.SerializeObject( netObject->GetId() );
+    wStream.SerializeArray( netObject->m_initData );
   }
 
   return server;
@@ -12167,12 +12167,12 @@ void NetObjectServer::UpdateSendData()
   }
   
   // Send info about new objects (delayed until Update in case objects initData need to reference each other)
-  for ( NetObject* netData : m_pendingCreate )
+  for ( NetObject* netObject : m_pendingCreate )
   {
-    if ( !netData->IsPendingInit() )
+    if ( !netObject->IsPendingInit() )
     {
       // Add net data to list, remove all initialized net datas from m_pendingCreate at once below
-      m_netDatas.Set( netData->GetId(), netData );
+      m_netObjects.Set( netObject->GetId(), netObject );
       
       // Send create messages on existing server connections
       for ( uint32_t i = 0; i < m_servers.Length(); i++ )
@@ -12180,17 +12180,17 @@ void NetObjectServer::UpdateSendData()
         NetObjectConnection* server = m_servers[ i ];
         BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
         wStream.SerializeRaw( NetObjectConnection::EventType::Create );
-        wStream.SerializeObject( netData->GetId() );
-        wStream.SerializeArray( netData->m_initData );
+        wStream.SerializeObject( netObject->GetId() );
+        wStream.SerializeArray( netObject->m_initData );
       }
     }
   }
   // Remove all pending net datas that were just initialized
-  m_pendingCreate.RemoveAllFn( []( const NetObject* netData ){ return !netData->IsPendingInit(); } );
+  m_pendingCreate.RemoveAllFn( []( const NetObject* netObject ){ return !netObject->IsPendingInit(); } );
   
-  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
   {
-    m_netDatas.GetValue( i )->m_UpdateHash();
+    m_netObjects.GetValue( i )->m_UpdateHash();
   }
 
   for ( uint32_t i = 0; i < m_servers.Length(); i++ )
@@ -12198,11 +12198,11 @@ void NetObjectServer::UpdateSendData()
     m_servers[ i ]->m_UpdateSendData();
   }
 
-  for ( uint32_t i = 0; i < m_netDatas.Length(); i++ )
+  for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
   {
-    NetObject* netData = m_netDatas.GetValue( i );
-    netData->m_prevHash = netData->m_hash;
-    netData->m_messageDataOut.Clear();
+    NetObject* netObject = m_netObjects.GetValue( i );
+    netObject->m_prevHash = netObject->m_hash;
+    netObject->m_messageDataOut.Clear();
   }
 }
 

@@ -34,7 +34,7 @@
 // Constants
 //------------------------------------------------------------------------------
 const ae::Tag TAG_EXAMPLE = "example";
-const AetherMsgId kReplicaInfoMsg = 1;
+const AetherMsgId kObjectInfoMsg = 1;
 
 //------------------------------------------------------------------------------
 // Game class
@@ -90,7 +90,7 @@ class GameObject
 public:
   GameObject( ae::Color color )
   {
-    netData = nullptr;
+    netObject = nullptr;
     alive = true;
     playerId = AetherUuid::Zero();
     m_pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
@@ -101,18 +101,18 @@ public:
   void Update( Game* game )
   {
     // Client - read net data
-    if ( !netData->IsAuthority() )
+    if ( !netObject->IsAuthority() )
     {
-      ae::BinaryStream rStream = ae::BinaryStream::Reader( netData->GetSyncData(), netData->SyncDataLength() );
+      ae::BinaryStream rStream = ae::BinaryStream::Reader( netObject->GetSyncData(), netObject->SyncDataLength() );
       Serialize( &rStream );
     }
 
     // Server - write net data
-    if ( netData->IsAuthority() )
+    if ( netObject->IsAuthority() )
     {
       ae::BinaryStream wStream = ae::BinaryStream::Writer();
       Serialize( &wStream );
-      netData->SetSyncData( wStream.GetData(), wStream.GetOffset() );
+      netObject->SetSyncData( wStream.GetData(), wStream.GetOffset() );
     }
 
     // Draw
@@ -131,7 +131,7 @@ public:
     stream->SerializeFloat( m_color.b );
   }
 
-  ae::NetReplica* netData;
+  ae::NetObject* netObject;
   bool alive;
   AetherUuid playerId;
 
