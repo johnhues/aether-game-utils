@@ -1372,9 +1372,8 @@ enum class Key
 //------------------------------------------------------------------------------
 // ae::MouseState class
 //------------------------------------------------------------------------------
-class MouseState
+struct MouseState
 {
-public:
   bool leftButton = false;
   bool middleButton = false;
   bool rightButton = false;
@@ -1384,6 +1383,42 @@ public:
   bool usingTouch = false;
 };
 
+struct GamepadState
+{
+  ae::Vec2 leftAnalog = Vec2( 0.0f );
+  ae::Vec2 rightAnalog = Vec2( 0.0f );
+  ae::Int2 dpad = ae::Int2( 0 );
+  
+  bool up = false;
+  bool down = false;
+  bool left = false;
+  bool right = false;
+
+  bool start = false;
+  bool select = false;
+
+  bool a = false;
+  bool b = false;
+  bool x = false;
+  bool y = false;
+  
+  float leftTrigger = 0.0f;
+  float rightTrigger = 0.0f;
+  bool l = false;
+  bool r = false;
+  
+  enum class BatteryLevel
+  {
+    None,
+    Empty,
+    Low,
+    Medium,
+    Full,
+    Wired
+  };
+  BatteryLevel batteryLevel = BatteryLevel::None;
+};
+
 //------------------------------------------------------------------------------
 // ae::Input class
 //------------------------------------------------------------------------------
@@ -1391,15 +1426,18 @@ class Input
 {
 public:
   void Initialize( Window* window );
+  void Terminate();
   void Pump();
+  
+  void SetCaptureMouse( bool enable );
+  bool GetMouseCaptured() const { return m_captureMouse; }
   
   bool Get( ae::Key key ) const;
   bool GetPrev( ae::Key key ) const;
-  
-  void SetCaptureMouse( bool enable );
-  MouseState mouseState;
-  MouseState mouseStatePrev;
-  
+  MouseState mouse;
+  MouseState mousePrev;
+  GamepadState gamepad;
+  GamepadState gamepadPrev;
   bool quit = false;
 
 // private:
@@ -7588,12 +7626,15 @@ void Input::Initialize( Window* window )
 #endif
 }
 
+void Input::Terminate()
+{}
+
 void Input::Pump()
 {
   memcpy( m_keysPrev, m_keys, sizeof( m_keys ) );
-  mouseStatePrev = mouseState;
-  mouseState.movement = ae::Int2( 0 );
-  mouseState.scroll = ae::Vec2( 0.0f );
+  mousePrev = mouse;
+  mouse.movement = ae::Int2( 0 );
+  mouse.scroll = ae::Vec2( 0.0f );
 
 #if _AE_WINDOWS_
   MSG msg;
@@ -7821,36 +7862,36 @@ void Input::Pump()
         {
           NSPoint p = [NSEvent mouseLocation];
           m_SetMousePos( ae::Int2( p.x, p.y ) );
-          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         }
         case NSEventTypeLeftMouseDown:
-          mouseState.leftButton = true;
-          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          mouse.leftButton = true;
+          mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeLeftMouseUp:
-          mouseState.leftButton = false;
-          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          mouse.leftButton = false;
+          mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeRightMouseDown:
-          mouseState.rightButton = true;
-          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          mouse.rightButton = true;
+          mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeRightMouseUp:
-          mouseState.rightButton = false;
-          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          mouse.rightButton = false;
+          mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeOtherMouseDown:
-          mouseState.middleButton = true;
-          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          mouse.middleButton = true;
+          mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeOtherMouseUp:
-          mouseState.middleButton = false;
-          mouseState.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+          mouse.middleButton = false;
+          mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
           break;
         case NSEventTypeScrollWheel:
-          mouseState.scroll.x += event.deltaX;
-          mouseState.scroll.y += event.deltaY;
+          mouse.scroll.x += event.deltaX;
+          mouse.scroll.y += event.deltaY;
           // Scroll is never NSEventSubtypeTouch
           break;
         case NSEventTypeKeyDown:
@@ -7876,9 +7917,9 @@ void Input::Pump()
       
       if ( m_positionSet )
       {
-        mouseState.movement = mouseState.position - posWindow;
+        mouse.movement = mouse.position - posWindow;
       }
-      mouseState.position = posWindow;
+      mouse.position = posWindow;
       m_positionSet = true;
     }
   }
@@ -8044,9 +8085,9 @@ void Input::m_SetMousePos( ae::Int2 pos )
   pos -= m_window->GetPosition();
   if ( m_positionSet )
   {
-    mouseState.movement = pos - mouseState.position;
+    mouse.movement = pos - mouse.position;
   }
-  mouseState.position = pos;
+  mouse.position = pos;
   m_positionSet = true;
 }
 
