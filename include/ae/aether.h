@@ -123,7 +123,7 @@
   #define aeCompilationWarning( _msg ) _Pragma( "warning #_msg" )
 #endif
 
-#if _AE_LINUX_
+#if _AE_LINUX_ || _AE_APPLE_
   #define AE_ALIGN( _x ) __attribute__ ((aligned(_x)))
 //#elif _AE_WINDOWS_
   // @TODO: Windows doesn't support aligned function parameters
@@ -318,7 +318,7 @@ template< typename T > constexpr T MinValue();
 // of the vector, so in the case of Vec4 a dot product is implemented as
 // (a.x*b.x)+(a.y*b.y)+(a.z*b.z)+(a.w*b.w).
 template < typename T >
-struct VecT
+struct AE_ALIGN( 16 ) VecT
 {
   VecT() {}
   VecT( bool ) = delete;
@@ -2279,7 +2279,7 @@ static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
 //------------------------------------------------------------------------------
 // External enum definer and registerer
 //------------------------------------------------------------------------------
-//! Define a new enum (must register with AE_ENUM_REGISTER)
+//! Define a new enum (must register with AE_REGISTER_ENUM_CLASS)
 #define AE_DEFINE_ENUM_CLASS( E, T, ... ) \
   enum class E : T { \
     __VA_ARGS__ \
@@ -2296,7 +2296,7 @@ static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
     return os; \
   }
 
-//! Register an enum defined with AE_ENUM
+//! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E ) \
   AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
   AE_ENUM_##E ae_enum_creator_##E; \
@@ -2611,7 +2611,7 @@ namespace ae {
 template < typename T >
 const char* GetTypeName()
 {
-  const char* typeName = typeid( T ).name();
+  const char* typeName = typeid( typename std::decay< T >::type ).name();
 #ifdef _MSC_VER
   // @TODO: Support pointers to types
   if ( strncmp( typeName, "class ", 6 ) == 0 )
@@ -2630,6 +2630,12 @@ const char* GetTypeName()
   s_buffer = abi::__cxa_demangle( typeName, s_buffer, &s_length, &status );
   if ( status == 0 )
   {
+    int32_t len = strlen( s_buffer );
+    while ( s_buffer[ len - 1 ] == '*' )
+    {
+      s_buffer[ len - 1 ] = 0;
+      len--;
+    }
     return s_buffer;
   }
 #endif
@@ -5275,7 +5281,7 @@ struct _PropCreator
 };
   
 // @NOTE: Internal. Non-specialized GetEnum() has no implementation so templated GetEnum() calls (defined
-// with AE_ENUM, AE_META_ENUM, and AE_META_ENUM_PREFIX) will call the specialized function.
+// with AE_DEFINE_ENUM_CLASS, AE_META_ENUM, and AE_META_ENUM_PREFIX) will call the specialized function.
 template < typename T >
 const Enum* GetEnum();
   
@@ -6290,7 +6296,7 @@ Matrix4 Matrix4::GetScaleRemoved() const
   r.SetAxis( 0, r.GetAxis( 0 ).NormalizeCopy() );
   r.SetAxis( 1, r.GetAxis( 1 ).NormalizeCopy() );
   r.SetAxis( 2, r.GetAxis( 2 ).NormalizeCopy() );
-  return *this;
+  return r;
 }
 
 //------------------------------------------------------------------------------
@@ -11833,9 +11839,15 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
       {
         RemoteId remoteId;
         rStream.SerializeObject( remoteId );
-        NetId localId = m_remoteToLocalIdMap.Get( remoteId );
-        NetObject* netObject = m_netObjects.Get( localId );
-        m_StartNetObjectDestruction( netObject );
+        
+        NetId localId;
+        NetObject* netObject = nullptr;
+        // Try to find object, may have been deleted locally
+        if ( m_remoteToLocalIdMap.TryGet( remoteId, &localId )
+            && m_netObjects.TryGet( localId, &netObject ) )
+        {
+          m_StartNetObjectDestruction( netObject );
+        }
         break;
       }
       case NetObjectConnection::EventType::Update:
@@ -11935,11 +11947,13 @@ void NetObjectClient::Destroy( NetObject* pendingDestroy )
   {
     return;
   }
-  // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
-  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "ae::NetObject was not pending Destroy()" );
-  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "ae::NetObject had pending messages when it was Destroy()ed" );
   bool removed = m_netObjects.Remove( pendingDestroy->GetId() );
   AE_ASSERT_MSG( removed, "ae::NetObject can't be destroyed. It's' not managed by this ae::NetObjectClient." );
+  
+  if ( pendingDestroy->IsPendingDestroy() )
+  {
+    m_StartNetObjectDestruction( pendingDestroy );
+  }
   ae::Delete( pendingDestroy );
 }
 
