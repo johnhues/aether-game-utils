@@ -9201,7 +9201,11 @@ void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam )
 #endif
 
 // Helpers
-#define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+#if _AE_DEBUG_
+  #define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
+#else
+  #define AE_CHECK_GL_ERROR() do {} while ( 0 )
+#endif
 
 namespace ae {
 
