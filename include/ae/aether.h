@@ -1342,6 +1342,7 @@ public:
   bool middleButton = false;
   bool rightButton = false;
   ae::Int2 position = ae::Int2( 0 );
+  ae::Int2 movement = ae::Int2( 0 );
   ae::Vec2 scroll = ae::Vec2( 0.0f );
   bool usingTouch = false;
 };
@@ -1368,6 +1369,7 @@ public:
   void m_SetMousePos( ae::Int2 pos );
   ae::Window* m_window = nullptr;
   bool m_captureMouse = false;
+  bool m_positionSet = false;
   bool m_keys[ 256 ];
   bool m_keysPrev[ 256 ];
 };
@@ -2708,6 +2710,7 @@ template < typename... Args >
 void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
 {
   std::stringstream os;
+  os << std::boolalpha;
   LogFormat( os, severity, filePath, line, assertInfo, format );
   LogInternal( os, format, args... );
 }
@@ -7165,26 +7168,29 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
     AE_ASSERT( _aewindow->input );
     _aewindow->input->quit = true;
 }
-- (NSSize)windowWillResize:(NSWindow*)sender toSize:(NSSize)frameSize
+- (void)windowDidResize:(NSWindow*)sender
 {
   AE_ASSERT( _aewindow );
   NSWindow* window = (NSWindow*)_aewindow->window;
   AE_ASSERT( window );
-  NSPoint mouseScreenPos = [NSEvent mouseLocation];
+  
   NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
   _aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
-  _aewindow->m_UpdateSize( frameSize.width, frameSize.height, sender.backingScaleFactor );
+  _aewindow->m_UpdateSize( contentScreenRect.size.width, contentScreenRect.size.height, [window backingScaleFactor] );
+  
+  NSPoint mouseScreenPos = [NSEvent mouseLocation];
   _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
-  return frameSize;
 }
 - (void)windowDidMove:(NSNotification *)notification
 {
   AE_ASSERT( _aewindow );
   NSWindow* window = (NSWindow*)_aewindow->window;
   AE_ASSERT( window );
-  NSPoint mouseScreenPos = [NSEvent mouseLocation];
+  
   NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
   _aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
+  
+  NSPoint mouseScreenPos = [NSEvent mouseLocation];
   _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
 }
 @end
@@ -7360,6 +7366,12 @@ void Window::m_Initialize()
   [nsWindow makeKeyAndOrderFront:nil]; // nil sender
   // @TODO: Create menus (especially Quit!)
   [nsWindow orderFrontRegardless];
+  
+  
+  NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];
+  m_pos = ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y );
+  m_width = contentScreenRect.size.width;
+  m_height = contentScreenRect.size.height;
   m_scaleFactor = nsWindow.backingScaleFactor;
   
   if (![[NSRunningApplication currentApplication] isFinishedLaunching]) // Make sure run is only called once
@@ -7522,8 +7534,8 @@ void Input::Pump()
 {
   memcpy( m_keysPrev, m_keys, sizeof( m_keys ) );
   mouseStatePrev = mouseState;
-  mouseState.scroll.x = 0.0f;
-  mouseState.scroll.y = 0.0f;
+  mouseState.movement = ae::Int2( 0 );
+  mouseState.scroll = ae::Vec2( 0.0f );
 
 #if _AE_WINDOWS_
   MSG msg;
@@ -7797,15 +7809,19 @@ void Input::Pump()
     if ( m_captureMouse && m_window )
     {
       NSWindow* nsWindow = (NSWindow*)m_window->window;
-      ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-      NSPoint screenCenter = [nsWindow convertPointToScreen:NSMakePoint( localCenter.x, localCenter.y )];
+      ae::Int2 posWindow( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
+      NSPoint posScreen = [nsWindow convertPointToScreen:NSMakePoint( posWindow.x, posWindow.y )];
       // @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
-      screenCenter.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - screenCenter.y;
-      
-      AE_INFO( "# #", ae::Round( mouseState.position.x - localCenter.x ), ae::Round( mouseState.position.y - localCenter.y ) );
-      
-      CGWarpMouseCursorPosition( CGPointMake( screenCenter.x, screenCenter.y ) );
+      posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
+      CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
       CGAssociateMouseAndMouseCursorPosition( true );
+      
+      if ( m_positionSet )
+      {
+        mouseState.movement = mouseState.position - posWindow;
+      }
+      mouseState.position = posWindow;
+      m_positionSet = true;
     }
   }
   
@@ -7949,6 +7965,7 @@ void Input::SetCaptureMouse( bool enable )
   else if ( !m_captureMouse && enable )
   {
     CGDisplayHideCursor( kCGDirectMainDisplay );
+    m_positionSet = false;
   }
   m_captureMouse = enable;
 }
@@ -7967,7 +7984,12 @@ void Input::m_SetMousePos( ae::Int2 pos )
 {
   AE_ASSERT( m_window );
   pos -= m_window->GetPosition();
+  if ( m_positionSet )
+  {
+    mouseState.movement = pos - mouseState.position;
+  }
   mouseState.position = pos;
+  m_positionSet = true;
 }
 
 //------------------------------------------------------------------------------
