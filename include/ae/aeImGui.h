@@ -357,7 +357,7 @@ private:
 //------------------------------------------------------------------------------
 // Var helpers
 //------------------------------------------------------------------------------
-static aeStr32 aeImGui_Enum( const aeMeta::Enum* enumType, const char* varName, const char* currentValue )
+static aeStr32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, const char* currentValue )
 {
   aeStr32 result = currentValue;
   if ( ImGui::BeginCombo( varName, currentValue ) )
@@ -378,7 +378,7 @@ static aeStr32 aeImGui_Enum( const aeMeta::Enum* enumType, const char* varName, 
 template < typename T >
 bool aeImGui_Enum( const char* varName, T* valueOut )
 {
-  const aeMeta::Enum* enumType = aeMeta::GetEnum< T >();
+  const ae::Enum* enumType = ae::GetEnum< T >();
   auto currentValue = enumType->GetNameByValue( *valueOut );
   auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str() );
   

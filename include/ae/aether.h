@@ -318,10 +318,10 @@ template< typename T > constexpr T MinValue();
 // of the vector, so in the case of Vec4 a dot product is implemented as
 // (a.x*b.x)+(a.y*b.y)+(a.z*b.z)+(a.w*b.w).
 template < typename T >
-struct _VecT
+struct VecT
 {
-  _VecT() {}
-  _VecT( bool ) = delete;
+  VecT() {}
+  VecT( bool ) = delete;
 
   bool operator==( const T& v ) const;
   bool operator!=( const T& v ) const;
@@ -360,14 +360,21 @@ struct _VecT
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
 //------------------------------------------------------------------------------
-struct Vec2 : public _VecT< Vec2 >
+struct Vec2 : public VecT< Vec2 >
 {
   Vec2() {} // Empty default constructor for performance of vertex arrays etc
   Vec2( const Vec2& ) = default;
   explicit Vec2( float v );
   Vec2( float x, float y );
   explicit Vec2( const float* v2 );
+  explicit Vec2( struct Int2 i2 );
   static Vec2 FromAngle( float angle );
+  struct Int2 NearestCopy() const;
+  struct Int2 FloorCopy() const;
+  struct Int2 CeilCopy() const;
+  Vec2 RotateCopy( float rotation ) const;
+  float GetAngle() const;
+  Vec2 Reflect( Vec2 v, Vec2 n ) const;
   union
   {
     struct
@@ -378,26 +385,25 @@ struct Vec2 : public _VecT< Vec2 >
     float data[ 2 ];
   };
 };
-// @HACK: For Window
-using Int2 = Vec2;
 
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
-struct Vec3 : public _VecT< Vec3 >
+struct Vec3 : public VecT< Vec3 >
 {
   Vec3() {} // Empty default constructor for performance of vertex arrays etc
   explicit Vec3( float v );
   Vec3( float x, float y, float z );
   explicit Vec3( const float* v3 );
+  explicit Vec3( struct Int3 i3 );
   Vec3( Vec2 xy, float z ); // @TODO: Support Y up
   explicit Vec3( Vec2 xy );
   explicit operator Vec2() const;
   Vec2 GetXY() const;
   Vec2 GetXZ() const;
-  // Int3 NearestCopy() const; // @TODO
-  // Int3 FloorCopy() const; // @TODO
-  // Int3 CeilCopy() const; // @TODO
+  struct Int3 NearestCopy() const;
+  struct Int3 FloorCopy() const;
+  struct Int3 CeilCopy() const;
   
   float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
   void AddRotationXY( float rotation ); // @TODO: Support Y up
@@ -409,9 +415,10 @@ struct Vec3 : public _VecT< Vec3 >
   Vec3 Cross( const Vec3& v ) const;
   void ZeroAxis( Vec3 axis ); // Zero component along arbitrary axis (ie vec dot axis == 0)
   void ZeroDirection( Vec3 direction ); // Zero component along positive half of axis (ie vec dot dir > 0)
+  Vec3 ZeroAxisCopy( Vec3 axis ) const; // Zero component along arbitrary axis (ie vec dot axis == 0)
+  Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
-  // static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p ); // @TODO
-  // static Vec3 ProjectVector( const class Matrix4& projection, Vec3 p ); // @TODO
+  static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
   
   union
   {
@@ -429,7 +436,7 @@ struct Vec3 : public _VecT< Vec3 >
 //------------------------------------------------------------------------------
 // ae::Vec4 struct
 //------------------------------------------------------------------------------
-struct Vec4 : public _VecT< Vec4 >
+struct Vec4 : public VecT< Vec4 >
 {
   Vec4() {} // Empty default constructor for performance of vertex arrays etc
   Vec4( const Vec4& ) = default;
@@ -467,7 +474,7 @@ struct Vec4 : public _VecT< Vec4 >
 class Matrix4
 {
 public:
-  float d[ 16 ];
+  float data[ 16 ];
 
   Matrix4() = default;
   Matrix4( const Matrix4& ) = default;
@@ -484,7 +491,7 @@ public:
   static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
   static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
-  bool operator==( const Matrix4& o ) const { return memcmp( o.d, d, sizeof(d) ) == 0; }
+  bool operator==( const Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
   bool operator!=( const Matrix4& o ) const { return !operator== ( o ); }
   Vec4 operator*( const Vec4& v ) const;
   Matrix4 operator*( const Matrix4& m ) const;
@@ -495,6 +502,7 @@ public:
   void SetScale( const Vec3& s );
   void SetRotation( const class Quaternion& r );
   Vec3 GetTranslation() const;
+  Vec3 GetPosition() const { return GetTranslation(); } // HACK Remove
   Vec3 GetScale() const;
   class Quaternion GetRotation() const;
 
@@ -503,21 +511,21 @@ public:
   Matrix4 GetTranspose() const;
   Matrix4 GetInverse() const;
   Matrix4 GetNormalMatrix() const;
+  Matrix4 GetScaleRemoved() const;
 
   void SetAxis( uint32_t column, const Vec3& v );
   void SetRow( uint32_t row, const Vec3& v );
   void SetRow( uint32_t row, const Vec4& v );
   Vec3 GetAxis( uint32_t column ) const;
   Vec4 GetRow( uint32_t row ) const;
-  
 };
 
 inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
 {
-  os << mat.d[ 0 ] << " " << mat.d[ 1 ] << " " << mat.d[ 2 ] << " " << mat.d[ 3 ]
-    << " " << mat.d[ 4 ] << " " << mat.d[ 5 ] << " " << mat.d[ 6 ] << " " << mat.d[ 7 ]
-    << " " << mat.d[ 8 ] << " " << mat.d[ 9 ] << " " << mat.d[ 10 ] << " " << mat.d[ 11 ]
-    << " " << mat.d[ 12 ] << " " << mat.d[ 13 ] << " " << mat.d[ 14 ] << " " << mat.d[ 15 ];
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
   return os;
 }
 
@@ -568,6 +576,91 @@ public:
   Quaternion& SetInverse();
   Vec3 Rotate( Vec3 v ) const;
 };
+
+//------------------------------------------------------------------------------
+// ae::Int2 shared member functions
+// ae::Int3 shared member functions
+//------------------------------------------------------------------------------
+// @NOTE: Int2 and Int3 share these functions
+template < typename T >
+struct IntT
+{
+  IntT() {}
+  IntT( bool ) = delete;
+  bool operator==( const T& v ) const;
+  bool operator!=( const T& v ) const;
+  int32_t operator[]( uint32_t idx ) const;
+  int32_t& operator[]( uint32_t idx );
+  T operator-() const;
+  T operator+( const T& v ) const;
+  T operator-( const T& v ) const;
+  T operator*( const T& v ) const;
+  T operator/( const T& v ) const;
+  void operator+=( const T& v );
+  void operator-=( const T& v );
+  void operator*=( const T& v );
+  void operator/=( const T& v );
+  T operator*( int32_t s ) const;
+  T operator/( int32_t s ) const;
+  void operator*=( int32_t s );
+  void operator/=( int32_t s );
+};
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
+
+//------------------------------------------------------------------------------
+// ae::Int2 class
+//------------------------------------------------------------------------------
+struct Int2 : public IntT< Int2 >
+{
+  union
+  {
+    struct
+    {
+      int32_t x;
+      int32_t y;
+    };
+    int32_t data[ 2 ];
+  };
+
+  Int2() = default;
+  Int2( const Int2& ) = default;
+  explicit Int2( int32_t _v );
+  explicit Int2( const struct Int3& v );
+  Int2( int32_t _x, int32_t _y );
+  // @NOTE: No automatic conversion from aeFloat2 because rounding type should be explicit!
+};
+
+//------------------------------------------------------------------------------
+// ae::Int3 class
+//------------------------------------------------------------------------------
+struct Int3 : public IntT< Int3 >
+{
+  union
+  {
+    struct
+    {
+      int32_t x;
+      int32_t y;
+      int32_t z;
+    };
+    int32_t data[ 3 ];
+  };
+  int32_t pad;
+
+  Int3() = default;
+  Int3( const Int3& ) = default;
+  explicit Int3( int32_t _v );
+  Int3( int32_t _x, int32_t _y, int32_t _z );
+  Int3( Int2 xy, int32_t _z );
+  Int3( const int32_t( &v )[ 3 ] );
+  Int3( const int32_t( &v )[ 4 ] );
+  explicit Int3( int32_t*& v );
+  explicit Int3( const int32_t*& v );
+  // @NOTE: No conversion from aeFloat3 because rounding type should be explicit!
+  Int2 GetXY() const;
+};
+
 //! @} End Math group
 
 //------------------------------------------------------------------------------
@@ -1248,7 +1341,7 @@ public:
   bool leftButton = false;
   bool middleButton = false;
   bool rightButton = false;
-  ae::Vec2 position = ae::Vec2( 0.0f );
+  ae::Int2 position = ae::Int2( 0 );
   ae::Vec2 scroll = ae::Vec2( 0.0f );
   bool usingTouch = false;
 };
@@ -1795,6 +1888,326 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::BinaryStream class
+//------------------------------------------------------------------------------
+class BinaryStream
+{
+public:
+  static BinaryStream Writer( uint8_t* data, uint32_t length );
+  static BinaryStream Writer( Array< uint8_t >* array );
+  static BinaryStream Writer();
+  static BinaryStream Reader( const uint8_t* data, uint32_t length );
+  static BinaryStream Reader( const Array< uint8_t >& data );
+
+  void SerializeUint8( uint8_t& v );
+  void SerializeUint8( const uint8_t& v );
+  void SerializeUint16( uint16_t& v );
+  void SerializeUint16( const uint16_t& v );
+  void SerializeUint32( uint32_t& v );
+  void SerializeUint32( const uint32_t& v );
+  void SerializeUint64( uint64_t& v );
+  void SerializeUint64( const uint64_t& v );
+
+  void SerializeInt8( int8_t& v );
+  void SerializeInt8( const int8_t& v );
+  void SerializeInt16( int16_t& v );
+  void SerializeInt16( const int16_t& v );
+  void SerializeInt32( int32_t& v );
+  void SerializeInt32( const int32_t& v );
+  void SerializeInt64( int64_t& v );
+  void SerializeInt64( const int64_t& v );
+
+  void SerializeFloat( float& v );
+  void SerializeFloat( const float& v );
+  void SerializeDouble( double& v );
+  void SerializeDouble( const double& v );
+
+  void SerializeBool( bool& v );
+  void SerializeBool( const bool& v );
+  
+  template < uint32_t N >
+  void SerializeString( Str< N >& str );
+  template < uint32_t N >
+  void SerializeString( const Str< N >& str );
+
+  template< typename T >
+  void SerializeObject( T& v );
+  template< typename T >
+  void SerializeObject( const T& v );
+  // Use SerializeObjectConditional() when an object may not be available for serialization when writing or reading. This function correctly updates read/write offsets when skipping serialization. Sends slightly more data than SerializeObject().
+  template < typename T >
+  void SerializeObjectConditional( T* obj );
+
+  template< uint32_t N >
+  void SerializeArray( char (&str)[ N ] );
+  template< uint32_t N >
+  void SerializeArray( const char (&str)[ N ] );
+  void SerializeArray( Array< uint8_t>& array, uint32_t maxLength = 65535 );
+  void SerializeArray( const Array< uint8_t>& array, uint32_t maxLength = 65535 );
+
+  // @NOTE: Be careful when using SerializeRaw() functions, different platforms
+  // will have different struct packing and alignment schemes.
+  template< typename T >
+  void SerializeRaw( T& v );
+  template< typename T >
+  void SerializeRaw( const T& v );
+  void SerializeRaw( void* data, uint32_t length );
+  void SerializeRaw( const void* data, uint32_t length );
+  void SerializeRaw( Array< uint8_t >& array );
+  void SerializeRaw( const Array< uint8_t >& array );
+
+  // Once the stream is invalid serialization calls will result in silent no-ops
+  void Invalidate() { m_isValid = false; }
+  bool IsValid() const { return m_isValid; }
+  
+  // Get mode
+  bool IsWriter() const { return m_mode == Mode::WriteBuffer; }
+  bool IsReader() const { return m_mode == Mode::ReadBuffer; }
+
+  // Get data buffer
+  const uint8_t* GetData() const { return ( m_data || m_GetArray().Length() == 0 ) ? m_data : &m_GetArray()[ 0 ]; }
+  uint32_t GetOffset() const { return m_offset; }
+  uint32_t GetLength() const { return m_length; }
+
+  // Get data past the current read head
+  const uint8_t* PeekData() const { return GetData() + m_offset; }
+  uint32_t GetRemaining() const { return m_length - m_offset; }
+  void Discard( uint32_t length );
+
+  // Internal
+  enum class Mode
+  {
+    None,
+    ReadBuffer,
+    WriteBuffer,
+  };
+private:
+  Array< uint8_t >& m_GetArray() { return m_extArray ? *m_extArray : m_array; }
+  const Array< uint8_t >& m_GetArray() const { return m_extArray ? *m_extArray : m_array; }
+  void m_SerializeArrayLength( uint32_t& length, uint32_t maxLength );
+  Mode m_mode = Mode::None;
+  bool m_isValid = false;
+  uint8_t* m_data = nullptr;
+  uint32_t m_length = 0;
+  uint32_t m_offset = 0;
+  Array< uint8_t >* m_extArray = nullptr;
+  Array< uint8_t > m_array = AE_ALLOC_TAG_NET;
+
+public:
+  BinaryStream() = default;
+  BinaryStream( Mode mode, uint8_t * data, uint32_t length );
+  BinaryStream( Mode mode, const uint8_t * data, uint32_t length );
+  BinaryStream( Mode mode );
+  BinaryStream( Array< uint8_t >*array );
+
+  // Prevent Serialize functions from being called accidentally through automatic conversions
+  template < typename T > void SerializeUint8( T ) = delete;
+  template < typename T > void SerializeUint16( T ) = delete;
+  template < typename T > void SerializeUint32( T ) = delete;
+  template < typename T > void SerializeUint64( T ) = delete;
+  template < typename T > void SerializeInt8( T ) = delete;
+  template < typename T > void SerializeInt16( T ) = delete;
+  template < typename T > void SerializeInt32( T ) = delete;
+  template < typename T > void SerializeInt64( T ) = delete;
+  template < typename T > void SerializeFloat( T ) = delete;
+  template < typename T > void SerializeDouble( T ) = delete;
+  template < typename T > void SerializeBool( T ) = delete;
+  template < typename T > void SerializeString( T ) = delete;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetId struct
+//------------------------------------------------------------------------------
+struct NetId
+{
+  NetId() = default;
+  NetId( const NetId& ) = default;
+  explicit NetId( uint32_t id ) : m_id( id ) {}
+  bool operator==( const NetId& o ) const { return o.m_id == m_id; }
+  bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
+  explicit operator bool () const { return m_id != 0; }
+  uint32_t GetInternalId() const { return m_id; }
+  void Serialize( BinaryStream* s ) { s->SerializeUint32( m_id ); }
+  void Serialize( BinaryStream* s ) const { s->SerializeUint32( m_id ); }
+private:
+  uint32_t m_id = 0;
+};
+using RemoteId = NetId;
+
+//------------------------------------------------------------------------------
+// ae::NetObject class
+//------------------------------------------------------------------------------
+class NetObject
+{
+public:
+  struct Msg
+  {
+    const uint8_t* data;
+    uint32_t length;
+  };
+
+  //------------------------------------------------------------------------------
+  // General
+  //------------------------------------------------------------------------------
+  NetId GetId() const { return m_id; }
+  bool IsAuthority() const { return m_local; }
+  
+  //------------------------------------------------------------------------------
+  // Server
+  // @NOTE: All server data will be sent with the next NetObjectServer::UpdateSendData()
+  //------------------------------------------------------------------------------
+  // True until SetInitData() is called
+  bool IsPendingInit() const;
+  // Call once after NetObjectServer::CreateNetObject(), will trigger Create event
+  // on clients. You can pass 'nullptr' and '0' as params, but you still must call
+  // before the object will be created remotely. Clients can call NetObject::GetInitData()
+  // to get the data set here.
+  void SetInitData( const void* initData, uint32_t initDataLength );
+  // Call SetSyncData each frame to update that state of the clients NetObject.
+  // Only the most recent data is sent. Data is only sent when changed.
+  void SetSyncData( const void* data, uint32_t length );
+  // Call as many times as necessary each tick
+  void SendMessage( const void* data, uint32_t length );
+
+  //------------------------------------------------------------------------------
+  // Client
+  //------------------------------------------------------------------------------
+  // Use GetInitData() after receiving a new NetObject from NetObjectClient::PumpCreate()
+  // to construct the object. Retrieves the data set by NetObject::SetInitData() on
+  // the server.
+  const uint8_t* GetInitData() const;
+  // Retrieves the length of the data set by NetObject::SetInitData() on the server.
+  // Use in conjunction with NetObject::GetInitData().
+  uint32_t InitDataLength() const;
+
+  // Only the latest sync data is ever available, so there's no need to read this
+  // data as if it was a stream.
+  const uint8_t* GetSyncData() const;
+  // Check for new data from server
+  uint32_t SyncDataLength() const;
+  // (Optional) Call to clear SyncDataLength() until new data is received
+  void ClearSyncData();
+
+  // Get messages sent from the server. Call repeatedly until false is returned
+  bool PumpMessages( Msg* msgOut );
+
+  // True once the NetObject has been deleted on the server.
+  // Call NetObjectClient::Destroy() when you're done with it.
+  bool IsPendingDestroy() const;
+
+  //------------------------------------------------------------------------------
+  // Internal
+  //------------------------------------------------------------------------------
+private:
+  friend class NetObjectClient;
+  friend class NetObjectConnection;
+  friend class NetObjectServer;
+
+  void m_SetLocal() { m_local = true; }
+  void m_SetClientData( const uint8_t* data, uint32_t length );
+  void m_ReceiveMessages( const uint8_t* data, uint32_t length );
+  void m_FlagForDestruction() { m_isPendingDestroy = true; }
+  void m_UpdateHash();
+  bool m_Changed() const { return m_hash != m_prevHash; }
+
+  NetId m_id;
+  bool m_local = false;
+  ae::Array< uint8_t > m_initData = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_data = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_messageDataOut = AE_ALLOC_TAG_NET;
+  ae::Array< uint8_t > m_messageDataIn = AE_ALLOC_TAG_NET;
+  uint32_t m_messageDataInOffset = 0;
+  uint32_t m_hash = 0;
+  uint32_t m_prevHash = 0;
+  bool m_isPendingInit = true;
+  bool m_isPendingDestroy = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetObjectClient class
+//------------------------------------------------------------------------------
+class NetObjectClient
+{
+public:
+  // The following sequence should be performed each frame
+  void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
+  NetObject* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetObjects are returned)
+  // 3) Handle new sync data with NetObject::GetSyncData() and process incoming messages with NetObject::PumpMessages()
+  void Destroy( NetObject* pendingDestroy ); // 4) Call this on ae::NetObjects once NetObject::IsPendingDestroy() returns true
+  
+  NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
+  RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
+
+private:
+  NetObject* m_CreateNetObject( BinaryStream* rStream, bool allowResolve );
+  void m_StartNetObjectDestruction( NetObject* netObject );
+  uint32_t m_serverSignature = 0;
+  uint32_t m_lastNetId = 0;
+  bool m_delayCreationForDestroy = false;
+  ae::Map< NetId, NetObject* > m_netObjects = AE_ALLOC_TAG_NET;
+  ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
+  ae::Array< NetObject* > m_created = AE_ALLOC_TAG_NET;
+};
+
+//------------------------------------------------------------------------------
+// ae::NetObjectConnection class
+//------------------------------------------------------------------------------
+class NetObjectConnection
+{
+public:
+  const uint8_t* GetSendData() const; // Call NetObjectServer::UpdateSendData() first
+  uint32_t GetSendLength() const; // Call NetObjectServer::UpdateSendData() first
+
+public:
+  void m_UpdateSendData();
+
+  bool m_first = true;
+  class NetObjectServer* m_replicaDB = nullptr;
+  bool m_pendingClear = false;
+  ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
+  // Internal
+  enum class EventType : uint8_t
+  {
+    Connect,
+    Create,
+    Destroy,
+    Update,
+    Messages
+  };
+};
+
+//------------------------------------------------------------------------------
+// ae::NetObjectServer class
+//------------------------------------------------------------------------------
+class NetObjectServer
+{
+public:
+  NetObjectServer();
+  // Create a server authoritative NetObject which will be replicated to clients through NetObjectConnection/NetObjectClient
+  NetObject* CreateNetObject();
+  void DestroyNetObject( NetObject* netObject );
+
+  // Allocate one ae::NetObjectConnection per client
+  NetObjectConnection* CreateConnection();
+  void DestroyConnection( NetObjectConnection* connection );
+
+  // Call each frame before NetObjectConnection::GetSendData()
+  void UpdateSendData();
+
+private:
+  uint32_t m_signature = 0;
+  uint32_t m_lastNetId = 0;
+  ae::Array< NetObject* > m_pendingCreate = AE_ALLOC_TAG_NET;
+  ae::Map< NetId, NetObject* > m_netObjects = AE_ALLOC_TAG_NET;
+  ae::Array< NetObjectConnection* > m_servers = AE_ALLOC_TAG_NET;
+public:
+  // Internal
+  NetObject* GetNetObject( uint32_t index ) { return m_netObjects.GetValue( index ); }
+  uint32_t GetNetObjectCount() const { return m_netObjects.Length(); }
+};
+
+//------------------------------------------------------------------------------
 // ae::Hash class (fnv1a)
 //! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
 //! hash to zero.
@@ -1837,7 +2250,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // External macros to force module linking
 //------------------------------------------------------------------------------
-#define AE_FORCELINK_CLASS( x ) \
+#define AE_FORCE_LINK_CLASS( x ) \
   extern int force_link_##x; \
   struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
   ForceLink_##x forceLink_##x;
@@ -1860,7 +2273,10 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) \
-  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p );
+  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p, "" );
+
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
+static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -1947,7 +2363,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 // Meta constants
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
-const ae::TypeId kAeInvalidMetaTypeId = 0;
+const ae::TypeId kInvalidTypeId = 0;
 const uint32_t kMaxMetaTypes = 64;
 const uint32_t kMaxMetaProps = 8;
 class Type;
@@ -1955,7 +2371,7 @@ class Type;
 //------------------------------------------------------------------------------
 // External base meta object
 //! Base class for all meta registered objects. Inherit from this using
-//! ae::Inheritor and register your classes with AE_META_CLASS.
+//! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
 //------------------------------------------------------------------------------
 class Object
 {
@@ -1964,7 +2380,7 @@ public:
   static const char* GetParentTypeName() { return ""; }
   static const ae::Type* GetParentType() { return nullptr; }
   ae::TypeId GetTypeId() const { return _metaTypeId; }
-  ae::TypeId _metaTypeId = kAeInvalidMetaTypeId;
+  ae::TypeId _metaTypeId = ae::kInvalidTypeId;
   ae::Str32 _typeName;
 };
 
@@ -1976,6 +2392,7 @@ class Inheritor : public Parent
 {
 public:
   Inheritor();
+  typedef Parent aeBaseType;
   static const char* GetParentTypeName();
   static const ae::Type* GetParentType();
 };
@@ -2078,7 +2495,7 @@ public:
   ae::Str32 m_typeName = "";
   uint32_t m_offset = 0;
   uint32_t m_size = 0;
-  ae::TypeId m_refTypeId = kAeInvalidMetaTypeId; // @TODO: Need to use an id here in case type has not been registered yet
+  ae::TypeId m_refTypeId = ae::kInvalidTypeId; // @TODO: Need to use an id here in case type has not been registered yet
   mutable const class Enum* m_enum = nullptr;
 };
 
@@ -2134,7 +2551,7 @@ public:
 private:
   ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
   ae::Str32 m_name;
-  ae::TypeId m_id = kAeInvalidMetaTypeId;
+  ae::TypeId m_id = ae::kInvalidTypeId;
   uint32_t m_size = 0;
   uint32_t m_align = 0;
   ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
@@ -2480,6 +2897,15 @@ auto Min( T0&& v0, T1&& v1, Tn&&... vn )
   return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
 }
 
+inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
+{
+  return ae::Vec3(
+    Min( v0.x, v1.x ),
+    Min( v0.y, v1.y ),
+    Min( v0.z, v1.z )
+  );
+}
+
 template< typename T >
 T&& Max( T&& v )
 {
@@ -2489,6 +2915,15 @@ template< typename T0, typename T1, typename... Tn >
 auto Max( T0&& v0, T1&& v1, Tn&&... vn )
 {
   return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
+}
+
+inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
+{
+  return ae::Vec3(
+    Max( v0.x, v1.x ),
+    Max( v0.y, v1.y ),
+    Max( v0.z, v1.z )
+  );
 }
 
 template<typename T>
@@ -2704,8 +3139,16 @@ namespace Interpolation
   }
 }
 
+static bool _HACK_randInit = false;
+
 inline int32_t Random( int32_t min, int32_t max )
 {
+  if ( !_HACK_randInit )
+  {
+    srand( (uint32_t)time( 0 ) );
+    _HACK_randInit = true;
+  }
+
   if ( min >= max )
   {
     return min;
@@ -2715,6 +3158,12 @@ inline int32_t Random( int32_t min, int32_t max )
 
 inline float Random( float min, float max )
 {
+  if ( !_HACK_randInit )
+  {
+    srand( (uint32_t)time( 0 ) );
+    _HACK_randInit = true;
+  }
+
   if ( min >= max )
   {
     return min;
@@ -2778,21 +3227,21 @@ inline ae::RandomValue< T >::operator T() const
 // ae::Vec4 shared member functions
 //------------------------------------------------------------------------------
 template < typename T >
-bool _VecT< T >::operator==( const T& v ) const
+bool VecT< T >::operator==( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
 }
 
 template < typename T >
-bool _VecT< T >::operator!=( const T& v ) const
+bool VecT< T >::operator!=( const T& v ) const
 {
   auto&& self = *(T*)this;
   return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
 }
 
 template < typename T >
-float _VecT< T >::operator[]( uint32_t idx ) const
+float VecT< T >::operator[]( uint32_t idx ) const
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -2802,7 +3251,7 @@ float _VecT< T >::operator[]( uint32_t idx ) const
 }
 
 template < typename T >
-float& _VecT< T >::operator[]( uint32_t idx )
+float& VecT< T >::operator[]( uint32_t idx )
 {
   auto&& self = *(T*)this;
 #if _AE_DEBUG_
@@ -2812,7 +3261,7 @@ float& _VecT< T >::operator[]( uint32_t idx )
 }
 
 template < typename T >
-T _VecT< T >::operator+( const T& v ) const
+T VecT< T >::operator+( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2824,7 +3273,7 @@ T _VecT< T >::operator+( const T& v ) const
 }
 
 template < typename T >
-void _VecT< T >::operator+=( const T& v )
+void VecT< T >::operator+=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(T::data); i++ )
@@ -2834,7 +3283,7 @@ void _VecT< T >::operator+=( const T& v )
 }
 
 template < typename T >
-T _VecT< T >::operator-() const
+T VecT< T >::operator-() const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2846,7 +3295,7 @@ T _VecT< T >::operator-() const
 }
 
 template < typename T >
-T _VecT< T >::operator-( const T& v ) const
+T VecT< T >::operator-( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2858,7 +3307,7 @@ T _VecT< T >::operator-( const T& v ) const
 }
 
 template < typename T >
-void _VecT< T >::operator-=( const T& v )
+void VecT< T >::operator-=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2868,7 +3317,7 @@ void _VecT< T >::operator-=( const T& v )
 }
 
 template < typename T >
-T _VecT< T >::operator*( const T& v ) const
+T VecT< T >::operator*( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2880,7 +3329,7 @@ T _VecT< T >::operator*( const T& v ) const
 }
 
 template < typename T >
-T _VecT< T >::operator/( const T& v ) const
+T VecT< T >::operator/( const T& v ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2892,7 +3341,7 @@ T _VecT< T >::operator/( const T& v ) const
 }
 
 template < typename T >
-void _VecT< T >::operator*=( const T& v )
+void VecT< T >::operator*=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2902,7 +3351,7 @@ void _VecT< T >::operator*=( const T& v )
 }
 
 template < typename T >
-void _VecT< T >::operator/=( const T& v )
+void VecT< T >::operator/=( const T& v )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2912,7 +3361,7 @@ void _VecT< T >::operator/=( const T& v )
 }
 
 template < typename T >
-T _VecT< T >::operator*( float s ) const
+T VecT< T >::operator*( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2924,7 +3373,7 @@ T _VecT< T >::operator*( float s ) const
 }
 
 template < typename T >
-void _VecT< T >::operator*=( float s )
+void VecT< T >::operator*=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2934,7 +3383,7 @@ void _VecT< T >::operator*=( float s )
 }
 
 template < typename T >
-T _VecT< T >::operator/( float s ) const
+T VecT< T >::operator/( float s ) const
 {
   auto&& self = *(T*)this;
   T result;
@@ -2946,7 +3395,7 @@ T _VecT< T >::operator/( float s ) const
 }
 
 template < typename T >
-void _VecT< T >::operator/=( float s )
+void VecT< T >::operator/=( float s )
 {
   auto&& self = *(T*)this;
   for ( uint32_t i = 0; i < countof(self.data); i++ )
@@ -2956,7 +3405,7 @@ void _VecT< T >::operator/=( float s )
 }
 
 template < typename T >
-float _VecT< T >::Dot( const T& v0, const T& v1 )
+float VecT< T >::Dot( const T& v0, const T& v1 )
 {
   float result = 0.0f;
   for ( uint32_t i = 0; i < countof(v0.data); i++ )
@@ -2967,25 +3416,25 @@ float _VecT< T >::Dot( const T& v0, const T& v1 )
 }
 
 template < typename T >
-float _VecT< T >::Dot( const T& v ) const
+float VecT< T >::Dot( const T& v ) const
 {
   return Dot( *(T*)this, v );
 }
 
 template < typename T >
-float _VecT< T >::Length() const
+float VecT< T >::Length() const
 {
   return sqrt( LengthSquared() );
 }
 
 template < typename T >
-float _VecT< T >::LengthSquared() const
+float VecT< T >::LengthSquared() const
 {
   return Dot( *(T*)this );
 }
 
 template < typename T >
-float _VecT< T >::Normalize()
+float VecT< T >::Normalize()
 {
   float length = Length();
   *(T*)this /= length;
@@ -2993,7 +3442,7 @@ float _VecT< T >::Normalize()
 }
 
 template < typename T >
-float _VecT< T >::SafeNormalize( float epsilon )
+float VecT< T >::SafeNormalize( float epsilon )
 {
   auto&& self = *(T*)this;
   float length = Length();
@@ -3007,7 +3456,7 @@ float _VecT< T >::SafeNormalize( float epsilon )
 }
 
 template < typename T >
-T _VecT< T >::NormalizeCopy() const
+T VecT< T >::NormalizeCopy() const
 {
   T result = *(T*)this;
   result.Normalize();
@@ -3015,7 +3464,7 @@ T _VecT< T >::NormalizeCopy() const
 }
 
 template < typename T >
-T _VecT< T >::SafeNormalizeCopy( float epsilon ) const
+T VecT< T >::SafeNormalizeCopy( float epsilon ) const
 {
   T result = *(T*)this;
   result.SafeNormalize( epsilon );
@@ -3023,7 +3472,7 @@ T _VecT< T >::SafeNormalizeCopy( float epsilon ) const
 }
 
 template < typename T >
-float _VecT< T >::Trim( float trimLength )
+float VecT< T >::Trim( float trimLength )
 {
   float length = Length();
   if ( trimLength < length )
@@ -3035,7 +3484,13 @@ float _VecT< T >::Trim( float trimLength )
 }
 
 template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const _VecT< T >& v )
+T operator*( float f, const VecT< T >& v )
+{
+  return v * f;
+}
+
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 {
   constexpr uint32_t count = countof( T::data );
   for ( uint32_t i = 0; i < count - 1; i++ )
@@ -3053,7 +3508,29 @@ inline std::ostream& operator<<( std::ostream& os, const _VecT< T >& v )
 inline Vec2::Vec2( float v ) : x( v ), y( v ) {}
 inline Vec2::Vec2( float x, float y ) : x( x ), y( y ) {}
 inline Vec2::Vec2( const float* v2 ) : x( v2[ 0 ] ), y( v2[ 1 ] ) {}
+inline Vec2::Vec2( struct Int2 i2 ) : x( (float)i2.x ), y( (float)i2.y ) {}
 inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::Sin( angle ) ); }
+inline Int2 Vec2::NearestCopy() const { return Int2( (int32_t)(x + 0.5f), (int32_t)(y + 0.5f) ); }
+inline Int2 Vec2::FloorCopy() const { return Int2( (int32_t)floorf( x ), (int32_t)floorf( y ) ); }
+inline Int2 Vec2::CeilCopy() const { return Int2( (int32_t)ceilf( x ), (int32_t)ceilf( y ) ); }
+inline Vec2 Vec2::RotateCopy( float rotation ) const
+{
+  float sinTheta = std::sin( rotation );
+  float cosTheta = std::cos( rotation );
+  return Vec2( x * cosTheta - y * sinTheta, x * sinTheta + y * cosTheta );
+}
+inline float Vec2::GetAngle() const
+{
+  if ( LengthSquared() < 0.0001f )
+  {
+    return 0.0f;
+  }
+  return ae::Atan2( y, x );
+}
+inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n ) const
+{
+  return n * ( 2.0f * v.Dot( n ) / n.LengthSquared() ) - v;
+}
 
 //------------------------------------------------------------------------------
 // ae::Vec3 member functions
@@ -3061,11 +3538,15 @@ inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::
 inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ), pad( 0.0f ) {}
 inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( const float* v3 ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), pad( 0.0f ) {}
+inline Vec3::Vec3( struct Int3 i3 ) : x( (float)i3.x ), y( (float)i3.y ), z( (float)i3.z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
+inline Int3 Vec3::NearestCopy() const { return Int3( (int32_t)(x + 0.5f), (int32_t)(y + 0.5f), (int32_t)(z + 0.5f) ); }
+inline Int3 Vec3::FloorCopy() const { return Int3( (int32_t)floorf( x ), (int32_t)floorf( y ), (int32_t)floorf( z ) ); }
+inline Int3 Vec3::CeilCopy() const { return Int3( (int32_t)ceilf( x ), (int32_t)ceilf( y ), (int32_t)ceilf( z ) ); }
 inline Vec3 Vec3::Lerp( const Vec3& end, float t ) const
 {
   t = ae::Clip01( t );
@@ -3091,6 +3572,23 @@ inline void Vec3::ZeroDirection( Vec3 direction )
     *this -= direction * d;
   }
 }
+inline Vec3 Vec3::ZeroAxisCopy( Vec3 axis ) const
+{
+  Vec3 r = *this;
+  r.ZeroAxis( axis );
+  return r;
+}
+inline Vec3 Vec3::ZeroDirectionCopy( Vec3 direction ) const
+{
+  Vec3 r = *this;
+  r.ZeroDirection( direction );
+  return r;
+}
+inline Vec3 Vec3::ProjectPoint( const Matrix4& projection, Vec3 p )
+{
+  Vec4 projected = projection * Vec4( p, 1.0f );
+  return projected.GetXYZ() / projected.w;
+}
 
 //------------------------------------------------------------------------------
 // ae::Vec4 member functions
@@ -3108,6 +3606,218 @@ inline Vec4::Vec4( const float* v4 ) : x( v4[ 0 ] ), y( v4[ 1 ] ), z( v4[ 2 ] ),
 inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
+
+//------------------------------------------------------------------------------
+// ae::Int2 shared member functions
+// ae::Int3 shared member functions
+//------------------------------------------------------------------------------
+template < typename T >
+bool IntT< T >::operator==( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
+}
+
+template < typename T >
+bool IntT< T >::operator!=( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
+}
+
+template < typename T >
+int32_t IntT< T >::operator[]( uint32_t idx ) const
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+int32_t& IntT< T >::operator[]( uint32_t idx )
+{
+  auto&& self = *(T*)this;
+#if _AE_DEBUG_
+  AE_ASSERT( idx < countof(self.data) );
+#endif
+  return self.data[ idx ];
+}
+
+template < typename T >
+T IntT< T >::operator+( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] + v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator+=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    self.data[ i ] += v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator-() const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = -self.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T IntT< T >::operator-( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] - v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator-=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] -= v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator*( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+T IntT< T >::operator/( const T& v ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / v.data[ i ];
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator*=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= v.data[ i ];
+  }
+}
+
+template < typename T >
+void IntT< T >::operator/=( const T& v )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= v.data[ i ];
+  }
+}
+
+template < typename T >
+T IntT< T >::operator*( int32_t s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] * s;
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator*=( int32_t s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] *= s;
+  }
+}
+
+template < typename T >
+T IntT< T >::operator/( int32_t s ) const
+{
+  auto&& self = *(T*)this;
+  T result;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    result.data[ i ] = self.data[ i ] / s;
+  }
+  return result;
+}
+
+template < typename T >
+void IntT< T >::operator/=( int32_t s )
+{
+  auto&& self = *(T*)this;
+  for ( uint32_t i = 0; i < countof(self.data); i++ )
+  {
+    self.data[ i ] /= s;
+  }
+}
+
+template < typename T >
+inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v )
+{
+  constexpr uint32_t count = countof( T::data );
+  for ( uint32_t i = 0; i < count - 1; i++ )
+  {
+    os << v[ i ] << " ";
+  }
+  return os << v[ count - 1 ];
+}
+
+//------------------------------------------------------------------------------
+// ae::Int2 member functions
+//------------------------------------------------------------------------------
+inline Int2::Int2( int32_t _v ) : x( _v ), y( _v ) {}
+inline Int2::Int2( const struct Int3& v ) : x( v.x ), y( v.y ) {}
+inline Int2::Int2( int32_t _x, int32_t _y ) : x( _x ), y( _y ) {}
+
+//------------------------------------------------------------------------------
+// ae::Int3 member functions
+//------------------------------------------------------------------------------
+inline Int3::Int3( int32_t _v ) : x( _v ), y( _v ), z( _v ), pad( 0 ) {}
+inline Int3::Int3( int32_t _x, int32_t _y, int32_t _z ) : x( _x ), y( _y ), z( _z ), pad( 0 ) {}
+inline Int3::Int3( Int2 xy, int32_t _z ) : x( xy.x ), y( xy.y ), z( _z ), pad( 0 ) {}
+inline Int3::Int3( const int32_t( &v )[ 3 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int3::Int3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
+inline Int2 Int3::GetXY() const { return Int2( x, y ); }
 
 //------------------------------------------------------------------------------
 // ae::Colors
@@ -4207,6 +4917,263 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 }
 
 //------------------------------------------------------------------------------
+// ae::BinaryStream member functions
+//------------------------------------------------------------------------------
+template < uint32_t N >
+void BinaryStream::SerializeString( Str< N >& str )
+{
+  if ( IsWriter() )
+  {
+    const uint16_t len = str.Length();
+    SerializeUint16( len );
+    SerializeRaw( str.c_str(), len );
+  }
+  else if ( IsReader() )
+  {
+    uint16_t len = 0;
+    SerializeUint16( len );
+    if ( !IsValid() )
+    {
+      return;
+    }
+
+    if ( len > Str< N >::MaxLength() || GetRemaining() < len )
+    {
+      Invalidate();
+    }
+    else
+    {
+      str = Str< N >( len, (const char*)PeekData() );
+      Discard( len );
+    }
+  }
+}
+
+template < uint32_t N >
+void BinaryStream::SerializeString( const Str< N >& str )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  const uint16_t len = str.Length();
+  SerializeUint16( len );
+  SerializeRaw( str.c_str(), len );
+}
+
+template <typename C> static constexpr std::true_type _ae_serialize_test( decltype( std::declval<C&&>().Serialize( nullptr ) )* ) noexcept;
+template <typename C> static constexpr std::false_type _ae_serialize_test( ... ) noexcept;
+template <typename C> constexpr decltype( _ae_serialize_test<C>( nullptr ) ) _ae_has_Serialize{};
+
+template< typename T >
+typename std::enable_if<_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternal( BinaryStream* stream, T& v )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+typename std::enable_if<_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternalConst( BinaryStream* stream, const T& v )
+{
+  v.Serialize( stream );
+}
+
+template< typename T >
+typename std::enable_if<!_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternal( BinaryStream* stream, T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
+typename std::enable_if<!_ae_has_Serialize<T>>::type
+BinaryStream_SerializeObjectInternalConst( BinaryStream* stream, const T& v, ... )
+{
+  Serialize( stream, &v );
+}
+
+template< typename T >
+void BinaryStream::SerializeObject( T& v )
+{
+  BinaryStream_SerializeObjectInternal( this, v );
+}
+
+template< typename T >
+void BinaryStream::SerializeObject( const T& v )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
+  BinaryStream_SerializeObjectInternalConst( this, v );
+}
+
+template< typename T >
+void BinaryStream::SerializeRaw( T& v )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    AE_ASSERT( m_offset + sizeof(T) <= m_length );
+    memcpy( &v, m_data + m_offset, sizeof(T) );
+    m_offset += sizeof(T);
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    if ( m_data )
+    {
+      AE_ASSERT( sizeof(T) <= m_length - m_offset );
+      memcpy( m_data + m_offset, &v, sizeof(T) );
+      m_offset += sizeof(T);
+    }
+    else
+    {
+      Array< uint8_t >& array = m_GetArray();
+      array.Append( (uint8_t*)&v, sizeof(T) );
+      m_offset = array.Length();
+      m_length = array.Size();
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+template< typename T >
+void BinaryStream::SerializeRaw( const T& v )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
+  SerializeRaw( *const_cast< T* >( &v ) );
+}
+
+template< uint32_t N >
+void BinaryStream::SerializeArray( char (&str)[ N ] )
+{
+  // @TODO: Cleanup and use m_SerializeArrayLength()
+  uint16_t len = 0;
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    AE_ASSERT( m_offset + sizeof(len) <= m_length ); // @TODO: Remove this and invalidate stream instead
+    memcpy( &len, m_data + m_offset, sizeof(len) );
+    m_offset += sizeof(len);
+
+    AE_ASSERT( m_offset + len + 1 <= m_length ); // @TODO: Remove this and invalidate stream instead
+    memcpy( str, m_data + m_offset, len );
+    str[ len ] = 0;
+    m_offset += len;
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    len = strlen( str );
+
+    if ( m_data )
+    {
+      AE_ASSERT( sizeof(len) <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
+      memcpy( m_data + m_offset, &len, sizeof(len) );
+      m_offset += sizeof(len);
+
+      AE_ASSERT( len <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
+      memcpy( m_data + m_offset, str, len );
+      m_offset += len;
+    }
+    else
+    {
+      Array< uint8_t >& array = m_GetArray();
+      array.Append( (uint8_t*)&len, sizeof(len) );
+      array.Append( (uint8_t*)&str, len );
+      m_offset = array.Length();
+      m_length = array.Size();
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+template< uint32_t N >
+void BinaryStream::SerializeArray( const char (&str)[ N ] )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
+  SerializeArray( const_cast< char[ N ] >( str ) );
+}
+
+template < typename T >
+void BinaryStream::SerializeObjectConditional( T* obj )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    uint16_t length = 0;
+    SerializeRaw( &length, sizeof( length ) );
+
+    if ( length )
+    {
+      if ( obj )
+      {
+        // Read object
+        uint32_t prevOffset = m_offset;
+        SerializeObject( *obj );
+
+        // Object should always read everything it wrote
+        if ( prevOffset + length != m_offset )
+        {
+          Invalidate();
+        }
+      }
+      else
+      {
+        Discard( length );
+      }
+    }
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    if ( obj )
+    {
+      // Reserve length
+      uint32_t lengthOffset = m_offset;
+      uint16_t lengthFake = 0xCDCD;
+      SerializeRaw( &lengthFake, sizeof( lengthFake ) ); // Raw to avoid compression
+
+      // Write object
+      uint32_t prevOffset = m_offset;
+      SerializeObject( *obj );
+
+      // Rewrite previously serialized value
+      uint32_t writeLength = m_offset - prevOffset;
+      if ( writeLength > MaxValue< uint16_t >() )
+      {
+        Invalidate(); // Object is too large to serialize
+      }
+      else if ( IsValid() ) // Can become invalid while writing by running out of memory
+      {
+        // @NOTE: Use length offset from above (and not a pointer into the data buffer) because the data buffer may not yet bet allocated or may be reallocated while serializing
+        AE_ASSERT( GetData() );
+        uint16_t* length = (uint16_t*)( GetData() + lengthOffset );
+        AE_ASSERT( *length == 0xCDCD );
+        *length = writeLength;
+      }
+    }
+    else
+    {
+      uint16_t length = 0;
+      SerializeRaw( &length, sizeof( length ) ); // Raw to avoid compression
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+//------------------------------------------------------------------------------
 // Internal meta state
 //------------------------------------------------------------------------------
 std::map< ae::Str32, class Type* >& _GetTypeNameMap();
@@ -4426,7 +5393,7 @@ struct ae::_VarType< T* >
 {
   static ae::Var::Type GetType()
   {
-    static_assert( std::is_base_of< ae::Object, T >::value, "AE_META_VAR refs must have base type ae::Object" );
+    static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR refs must have base type ae::Object" );
     return ae::Var::Ref;
   }
   static const char* GetName() { return "Ref"; }
@@ -4656,6 +5623,7 @@ T* ae::Cast( C* obj )
   #include <sys/stat.h>
 #endif
 #include <thread>
+#include <random>
 
 //------------------------------------------------------------------------------
 // Platform functions internal implementation
@@ -4814,20 +5782,20 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 Matrix4 Matrix4::Identity()
 {
   Matrix4 r;
-  r.d[ 0 ] = 1; r.d[ 4 ] = 0; r.d[ 8 ] = 0;  r.d[ 12 ] = 0;
-  r.d[ 1 ] = 0; r.d[ 5 ] = 1; r.d[ 9 ] = 0;  r.d[ 13 ] = 0;
-  r.d[ 2 ] = 0; r.d[ 6 ] = 0; r.d[ 10 ] = 1; r.d[ 14 ] = 0;
-  r.d[ 3 ] = 0; r.d[ 7 ] = 0; r.d[ 11 ] = 0; r.d[ 15 ] = 1;
+  r.data[ 0 ] = 1; r.data[ 4 ] = 0; r.data[ 8 ] = 0;  r.data[ 12 ] = 0;
+  r.data[ 1 ] = 0; r.data[ 5 ] = 1; r.data[ 9 ] = 0;  r.data[ 13 ] = 0;
+  r.data[ 2 ] = 0; r.data[ 6 ] = 0; r.data[ 10 ] = 1; r.data[ 14 ] = 0;
+  r.data[ 3 ] = 0; r.data[ 7 ] = 0; r.data[ 11 ] = 0; r.data[ 15 ] = 1;
   return r;
 }
 
 Matrix4 Matrix4::Translation( const Vec3& t )
 {
   Matrix4 r;
-  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = t.x;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;  r.d[ 13 ] = t.y;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = 1.0f; r.d[ 14 ] = t.z;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = t.x;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;  r.data[ 13 ] = t.y;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = 1.0f; r.data[ 14 ] = t.z;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4846,7 +5814,7 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
   removeRotation.SetRow( 0, right0 ); // right -> ( 1, 0, 0 )
   removeRotation.SetRow( 1, forward0 ); // forward -> ( 0, 1, 0 )
   removeRotation.SetRow( 2, up0 ); // up -> ( 0, 0, 1 )
-  removeRotation.d[ 15 ] = 1;
+  removeRotation.data[ 15 ] = 1;
 
   // Rotate
   forward1.Normalize();
@@ -4862,7 +5830,7 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
   newRotation.SetAxis( 0, right1 ); // ( 1, 0, 0 ) -> right
   newRotation.SetAxis( 1, forward1 ); // ( 0, 1, 0 ) -> forward
   newRotation.SetAxis( 2, up1 ); // ( 0, 0, 1 ) -> up
-  newRotation.d[ 15 ] = 1;
+  newRotation.data[ 15 ] = 1;
 
   return newRotation * removeRotation;
 }
@@ -4870,30 +5838,30 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 Matrix4 Matrix4::RotationX( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = 1.0f; r.d[ 4 ] = 0.0f;          r.d[ 8 ] = 0.0f;           r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = cosf( angle ); r.d[ 9 ] = -sinf( angle ); r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = sinf( angle ); r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f;          r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f;          r.data[ 8 ] = 0.0f;           r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = cosf( angle ); r.data[ 9 ] = -sinf( angle ); r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = sinf( angle ); r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f;          r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationY( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = cosf( angle );  r.d[ 4 ] = 0.0f; r.d[ 8 ] = sinf( angle );  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f;           r.d[ 5 ] = 1.0f; r.d[ 9 ] = 0.0f;           r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = -sinf( angle ); r.d[ 6 ] = 0.0f; r.d[ 10 ] = cosf( angle ); r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f;           r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f;          r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = cosf( angle );  r.data[ 4 ] = 0.0f; r.data[ 8 ] = sinf( angle );  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f;           r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;           r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = -sinf( angle ); r.data[ 6 ] = 0.0f; r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f;           r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
   return r;
 }
 
 Matrix4 Matrix4::RotationZ( float angle )
 {
   Matrix4 r;
-  r.d[ 0 ] = cosf( angle ); r.d[ 4 ] = -sinf( angle ); r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = sinf( angle ); r.d[ 5 ] = cosf( angle );  r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f;          r.d[ 6 ] = 0.0f;           r.d[ 10 ] = 1.0f; r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f;          r.d[ 7 ] = 0.0f;           r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = cosf( angle ); r.data[ 4 ] = -sinf( angle ); r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = sinf( angle ); r.data[ 5 ] = cosf( angle );  r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f;          r.data[ 6 ] = 0.0f;           r.data[ 10 ] = 1.0f; r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f;          r.data[ 7 ] = 0.0f;           r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4905,10 +5873,10 @@ Matrix4 Matrix4::Scaling( const Vec3& s )
 Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
 {
   Matrix4 r;
-  r.d[ 0 ] = sx;   r.d[ 4 ] = 0.0f; r.d[ 8 ] = 0.0f;  r.d[ 12 ] = 0.0f;
-  r.d[ 1 ] = 0.0f; r.d[ 5 ] = sy;   r.d[ 9 ] = 0.0f;  r.d[ 13 ] = 0.0f;
-  r.d[ 2 ] = 0.0f; r.d[ 6 ] = 0.0f; r.d[ 10 ] = sz;   r.d[ 14 ] = 0.0f;
-  r.d[ 3 ] = 0.0f; r.d[ 7 ] = 0.0f; r.d[ 11 ] = 0.0f; r.d[ 15 ] = 1.0f;
+  r.data[ 0 ] = sx;   r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = sy;   r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = sz;   r.data[ 14 ] = 0.0f;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -4933,7 +5901,7 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
   result.SetRow( 1, up );
   result.SetRow( 2, -forward ); // @TODO: Seems a little sketch to flip handedness here
   result.SetAxis( 3, Vec3( position.Dot( right ), position.Dot( up ), position.Dot( -forward ) ) );
-  result.d[ 15 ] = 1;
+  result.data[ 15 ] = 1;
   return result;
 }
 
@@ -4953,58 +5921,58 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
 
   float a = nearPlane / r;
   float b = nearPlane / t;
- 	
+   
   float A;
   float B;
   if ( ReverseZ )
   {
-	  A = 0;
-	  B = nearPlane;
+    A = 0;
+    B = nearPlane;
   }
   else
   {
-	  A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
-	  B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
+    A = -( farPlane + nearPlane ) / ( farPlane - nearPlane );
+    B = ( -2.0f * farPlane * nearPlane ) / ( farPlane - nearPlane );
   }
   
   Matrix4 result;
   memset( &result, 0, sizeof( result ) );
-  result.d[ 0 ] = a;
-  result.d[ 5 ] = b;
-  result.d[ 10 ] = A;
-  result.d[ 14 ] = B;
-  result.d[ 11 ] = -1;
+  result.data[ 0 ] = a;
+  result.data[ 5 ] = b;
+  result.data[ 10 ] = A;
+  result.data[ 14 ] = B;
+  result.data[ 11 ] = -1;
   return result;
 }
 
 Vec4 Matrix4::operator*(const Vec4& v) const
 {
   return Vec4(
-    v.x*d[0]  + v.y*d[4]  + v.z*d[8]  + v.w*d[12],
-    v.x*d[1]  + v.y*d[5]  + v.z*d[9]  + v.w*d[13],
-    v.x*d[2]  + v.y*d[6]  + v.z*d[10] + v.w*d[14],
-    v.x*d[3] + v.y*d[7] + v.z*d[11] + v.w*d[15]);
+    v.x*data[0]  + v.y*data[4]  + v.z*data[8]  + v.w*data[12],
+    v.x*data[1]  + v.y*data[5]  + v.z*data[9]  + v.w*data[13],
+    v.x*data[2]  + v.y*data[6]  + v.z*data[10] + v.w*data[14],
+    v.x*data[3] + v.y*data[7] + v.z*data[11] + v.w*data[15]);
 }
 
 Matrix4 Matrix4::operator*(const Matrix4& m) const
 {
   Matrix4 r;
-  r.d[0]=(m.d[0]*d[0])+(m.d[1]*d[4])+(m.d[2]*d[8])+(m.d[3]*d[12]);
-  r.d[1]=(m.d[0]*d[1])+(m.d[1]*d[5])+(m.d[2]*d[9])+(m.d[3]*d[13]);
-  r.d[2]=(m.d[0]*d[2])+(m.d[1]*d[6])+(m.d[2]*d[10])+(m.d[3]*d[14]);
-  r.d[3]=(m.d[0]*d[3])+(m.d[1]*d[7])+(m.d[2]*d[11])+(m.d[3]*d[15]);
-  r.d[4]=(m.d[4]*d[0])+(m.d[5]*d[4])+(m.d[6]*d[8])+(m.d[7]*d[12]);
-  r.d[5]=(m.d[4]*d[1])+(m.d[5]*d[5])+(m.d[6]*d[9])+(m.d[7]*d[13]);
-  r.d[6]=(m.d[4]*d[2])+(m.d[5]*d[6])+(m.d[6]*d[10])+(m.d[7]*d[14]);
-  r.d[7]=(m.d[4]*d[3])+(m.d[5]*d[7])+(m.d[6]*d[11])+(m.d[7]*d[15]);
-  r.d[8]=(m.d[8]*d[0])+(m.d[9]*d[4])+(m.d[10]*d[8])+(m.d[11]*d[12]);
-  r.d[9]=(m.d[8]*d[1])+(m.d[9]*d[5])+(m.d[10]*d[9])+(m.d[11]*d[13]);
-  r.d[10]=(m.d[8]*d[2])+(m.d[9]*d[6])+(m.d[10]*d[10])+(m.d[11]*d[14]);
-  r.d[11]=(m.d[8]*d[3])+(m.d[9]*d[7])+(m.d[10]*d[11])+(m.d[11]*d[15]);
-  r.d[12]=(m.d[12]*d[0])+(m.d[13]*d[4])+(m.d[14]*d[8])+(m.d[15]*d[12]);
-  r.d[13]=(m.d[12]*d[1])+(m.d[13]*d[5])+(m.d[14]*d[9])+(m.d[15]*d[13]);
-  r.d[14]=(m.d[12]*d[2])+(m.d[13]*d[6])+(m.d[14]*d[10])+(m.d[15]*d[14]);
-  r.d[15]=(m.d[12]*d[3])+(m.d[13]*d[7])+(m.d[14]*d[11])+(m.d[15]*d[15]);
+  r.data[0]=(m.data[0]*data[0])+(m.data[1]*data[4])+(m.data[2]*data[8])+(m.data[3]*data[12]);
+  r.data[1]=(m.data[0]*data[1])+(m.data[1]*data[5])+(m.data[2]*data[9])+(m.data[3]*data[13]);
+  r.data[2]=(m.data[0]*data[2])+(m.data[1]*data[6])+(m.data[2]*data[10])+(m.data[3]*data[14]);
+  r.data[3]=(m.data[0]*data[3])+(m.data[1]*data[7])+(m.data[2]*data[11])+(m.data[3]*data[15]);
+  r.data[4]=(m.data[4]*data[0])+(m.data[5]*data[4])+(m.data[6]*data[8])+(m.data[7]*data[12]);
+  r.data[5]=(m.data[4]*data[1])+(m.data[5]*data[5])+(m.data[6]*data[9])+(m.data[7]*data[13]);
+  r.data[6]=(m.data[4]*data[2])+(m.data[5]*data[6])+(m.data[6]*data[10])+(m.data[7]*data[14]);
+  r.data[7]=(m.data[4]*data[3])+(m.data[5]*data[7])+(m.data[6]*data[11])+(m.data[7]*data[15]);
+  r.data[8]=(m.data[8]*data[0])+(m.data[9]*data[4])+(m.data[10]*data[8])+(m.data[11]*data[12]);
+  r.data[9]=(m.data[8]*data[1])+(m.data[9]*data[5])+(m.data[10]*data[9])+(m.data[11]*data[13]);
+  r.data[10]=(m.data[8]*data[2])+(m.data[9]*data[6])+(m.data[10]*data[10])+(m.data[11]*data[14]);
+  r.data[11]=(m.data[8]*data[3])+(m.data[9]*data[7])+(m.data[10]*data[11])+(m.data[11]*data[15]);
+  r.data[12]=(m.data[12]*data[0])+(m.data[13]*data[4])+(m.data[14]*data[8])+(m.data[15]*data[12]);
+  r.data[13]=(m.data[12]*data[1])+(m.data[13]*data[5])+(m.data[14]*data[9])+(m.data[15]*data[13]);
+  r.data[14]=(m.data[12]*data[2])+(m.data[13]*data[6])+(m.data[14]*data[10])+(m.data[15]*data[14]);
+  r.data[15]=(m.data[12]*data[3])+(m.data[13]*data[7])+(m.data[14]*data[11])+(m.data[15]*data[15]);
   return r;
 }
 
@@ -5022,123 +5990,123 @@ Matrix4 Matrix4::GetInverse() const
 {
   Matrix4 r;
 
-  r.d[0] = d[5]  * d[10] * d[15] - 
-    d[5]  * d[11] * d[14] - 
-    d[9]  * d[6]  * d[15] + 
-    d[9]  * d[7]  * d[14] +
-    d[13] * d[6]  * d[11] - 
-    d[13] * d[7]  * d[10];
+  r.data[0] = data[5]  * data[10] * data[15] -
+    data[5]  * data[11] * data[14] -
+    data[9]  * data[6]  * data[15] +
+    data[9]  * data[7]  * data[14] +
+    data[13] * data[6]  * data[11] -
+    data[13] * data[7]  * data[10];
 
-  r.d[4] = -d[4]  * d[10] * d[15] + 
-    d[4]  * d[11] * d[14] + 
-    d[8]  * d[6]  * d[15] - 
-    d[8]  * d[7]  * d[14] - 
-    d[12] * d[6]  * d[11] + 
-    d[12] * d[7]  * d[10];
+  r.data[4] = -data[4]  * data[10] * data[15] +
+    data[4]  * data[11] * data[14] +
+    data[8]  * data[6]  * data[15] -
+    data[8]  * data[7]  * data[14] -
+    data[12] * data[6]  * data[11] +
+    data[12] * data[7]  * data[10];
 
-  r.d[8] = d[4]  * d[9] * d[15] - 
-    d[4]  * d[11] * d[13] - 
-    d[8]  * d[5] * d[15] + 
-    d[8]  * d[7] * d[13] + 
-    d[12] * d[5] * d[11] - 
-    d[12] * d[7] * d[9];
+  r.data[8] = data[4]  * data[9] * data[15] -
+    data[4]  * data[11] * data[13] -
+    data[8]  * data[5] * data[15] +
+    data[8]  * data[7] * data[13] +
+    data[12] * data[5] * data[11] -
+    data[12] * data[7] * data[9];
 
-  r.d[12] = -d[4]  * d[9] * d[14] + 
-    d[4]  * d[10] * d[13] +
-    d[8]  * d[5] * d[14] - 
-    d[8]  * d[6] * d[13] - 
-    d[12] * d[5] * d[10] + 
-    d[12] * d[6] * d[9];
+  r.data[12] = -data[4]  * data[9] * data[14] +
+    data[4]  * data[10] * data[13] +
+    data[8]  * data[5] * data[14] -
+    data[8]  * data[6] * data[13] -
+    data[12] * data[5] * data[10] +
+    data[12] * data[6] * data[9];
 
-  r.d[1] = -d[1]  * d[10] * d[15] + 
-    d[1]  * d[11] * d[14] + 
-    d[9]  * d[2] * d[15] - 
-    d[9]  * d[3] * d[14] - 
-    d[13] * d[2] * d[11] + 
-    d[13] * d[3] * d[10];
+  r.data[1] = -data[1]  * data[10] * data[15] +
+    data[1]  * data[11] * data[14] +
+    data[9]  * data[2] * data[15] -
+    data[9]  * data[3] * data[14] -
+    data[13] * data[2] * data[11] +
+    data[13] * data[3] * data[10];
 
-  r.d[5] = d[0]  * d[10] * d[15] - 
-    d[0]  * d[11] * d[14] - 
-    d[8]  * d[2] * d[15] + 
-    d[8]  * d[3] * d[14] + 
-    d[12] * d[2] * d[11] - 
-    d[12] * d[3] * d[10];
+  r.data[5] = data[0]  * data[10] * data[15] -
+    data[0]  * data[11] * data[14] -
+    data[8]  * data[2] * data[15] +
+    data[8]  * data[3] * data[14] +
+    data[12] * data[2] * data[11] -
+    data[12] * data[3] * data[10];
 
-  r.d[9] = -d[0]  * d[9] * d[15] + 
-    d[0]  * d[11] * d[13] + 
-    d[8]  * d[1] * d[15] - 
-    d[8]  * d[3] * d[13] - 
-    d[12] * d[1] * d[11] + 
-    d[12] * d[3] * d[9];
+  r.data[9] = -data[0]  * data[9] * data[15] +
+    data[0]  * data[11] * data[13] +
+    data[8]  * data[1] * data[15] -
+    data[8]  * data[3] * data[13] -
+    data[12] * data[1] * data[11] +
+    data[12] * data[3] * data[9];
 
-  r.d[13] = d[0]  * d[9] * d[14] - 
-    d[0]  * d[10] * d[13] - 
-    d[8]  * d[1] * d[14] + 
-    d[8]  * d[2] * d[13] + 
-    d[12] * d[1] * d[10] - 
-    d[12] * d[2] * d[9];
+  r.data[13] = data[0]  * data[9] * data[14] -
+    data[0]  * data[10] * data[13] -
+    data[8]  * data[1] * data[14] +
+    data[8]  * data[2] * data[13] +
+    data[12] * data[1] * data[10] -
+    data[12] * data[2] * data[9];
 
-  r.d[2] = d[1]  * d[6] * d[15] - 
-    d[1]  * d[7] * d[14] - 
-    d[5]  * d[2] * d[15] + 
-    d[5]  * d[3] * d[14] + 
-    d[13] * d[2] * d[7] - 
-    d[13] * d[3] * d[6];
+  r.data[2] = data[1]  * data[6] * data[15] -
+    data[1]  * data[7] * data[14] -
+    data[5]  * data[2] * data[15] +
+    data[5]  * data[3] * data[14] +
+    data[13] * data[2] * data[7] -
+    data[13] * data[3] * data[6];
 
-  r.d[6] = -d[0]  * d[6] * d[15] + 
-    d[0]  * d[7] * d[14] + 
-    d[4]  * d[2] * d[15] - 
-    d[4]  * d[3] * d[14] - 
-    d[12] * d[2] * d[7] + 
-    d[12] * d[3] * d[6];
+  r.data[6] = -data[0]  * data[6] * data[15] +
+    data[0]  * data[7] * data[14] +
+    data[4]  * data[2] * data[15] -
+    data[4]  * data[3] * data[14] -
+    data[12] * data[2] * data[7] +
+    data[12] * data[3] * data[6];
 
-  r.d[10] = d[0]  * d[5] * d[15] - 
-    d[0]  * d[7] * d[13] - 
-    d[4]  * d[1] * d[15] + 
-    d[4]  * d[3] * d[13] + 
-    d[12] * d[1] * d[7] - 
-    d[12] * d[3] * d[5];
+  r.data[10] = data[0]  * data[5] * data[15] -
+    data[0]  * data[7] * data[13] -
+    data[4]  * data[1] * data[15] +
+    data[4]  * data[3] * data[13] +
+    data[12] * data[1] * data[7] -
+    data[12] * data[3] * data[5];
 
-  r.d[14] = -d[0]  * d[5] * d[14] + 
-    d[0]  * d[6] * d[13] + 
-    d[4]  * d[1] * d[14] - 
-    d[4]  * d[2] * d[13] - 
-    d[12] * d[1] * d[6] + 
-    d[12] * d[2] * d[5];
+  r.data[14] = -data[0]  * data[5] * data[14] +
+    data[0]  * data[6] * data[13] +
+    data[4]  * data[1] * data[14] -
+    data[4]  * data[2] * data[13] -
+    data[12] * data[1] * data[6] +
+    data[12] * data[2] * data[5];
 
-  r.d[3] = -d[1] * d[6] * d[11] + 
-    d[1] * d[7] * d[10] + 
-    d[5] * d[2] * d[11] - 
-    d[5] * d[3] * d[10] - 
-    d[9] * d[2] * d[7] + 
-    d[9] * d[3] * d[6];
+  r.data[3] = -data[1] * data[6] * data[11] +
+    data[1] * data[7] * data[10] +
+    data[5] * data[2] * data[11] -
+    data[5] * data[3] * data[10] -
+    data[9] * data[2] * data[7] +
+    data[9] * data[3] * data[6];
 
-  r.d[7] = d[0] * d[6] * d[11] - 
-    d[0] * d[7] * d[10] - 
-    d[4] * d[2] * d[11] + 
-    d[4] * d[3] * d[10] + 
-    d[8] * d[2] * d[7] - 
-    d[8] * d[3] * d[6];
+  r.data[7] = data[0] * data[6] * data[11] -
+    data[0] * data[7] * data[10] -
+    data[4] * data[2] * data[11] +
+    data[4] * data[3] * data[10] +
+    data[8] * data[2] * data[7] -
+    data[8] * data[3] * data[6];
 
-  r.d[11] = -d[0] * d[5] * d[11] + 
-    d[0] * d[7] * d[9] + 
-    d[4] * d[1] * d[11] - 
-    d[4] * d[3] * d[9] - 
-    d[8] * d[1] * d[7] + 
-    d[8] * d[3] * d[5];
+  r.data[11] = -data[0] * data[5] * data[11] +
+    data[0] * data[7] * data[9] +
+    data[4] * data[1] * data[11] -
+    data[4] * data[3] * data[9] -
+    data[8] * data[1] * data[7] +
+    data[8] * data[3] * data[5];
 
-  r.d[15] = d[0] * d[5] * d[10] - 
-    d[0] * d[6] * d[9] - 
-    d[4] * d[1] * d[10] + 
-    d[4] * d[2] * d[9] + 
-    d[8] * d[1] * d[6] - 
-    d[8] * d[2] * d[5];
+  r.data[15] = data[0] * data[5] * data[10] -
+    data[0] * data[6] * data[9] -
+    data[4] * data[1] * data[10] +
+    data[4] * data[2] * data[9] +
+    data[8] * data[1] * data[6] -
+    data[8] * data[2] * data[5];
 
-  float det = d[0] * r.d[0] + d[1] * r.d[4] + d[2] * r.d[8] + d[3] * r.d[12];
+  float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
   det = 1.0f / det;
   for ( uint32_t i = 0; i < 16; i++ )
   {
-    r.d[ i ] *= det;
+    r.data[ i ] *= det;
   }
   return r;
 }
@@ -5146,15 +6114,15 @@ Matrix4 Matrix4::GetInverse() const
 void Matrix4::SetRotation( const Quaternion& q2 )
 {
   Quaternion q = q2.GetInverse();
-  d[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-  d[4] = 2*q.i*q.j + 2*q.k*q.r;
-  d[8] = 2*q.i*q.k - 2*q.j*q.r;
-  d[1] = 2*q.i*q.j - 2*q.k*q.r;
-  d[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-  d[9] = 2*q.j*q.k + 2*q.i*q.r;
-  d[2] = 2*q.i*q.k + 2*q.j*q.r;
-  d[6] = 2*q.j*q.k - 2*q.i*q.r;
-  d[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+  data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
+  data[4] = 2*q.i*q.j + 2*q.k*q.r;
+  data[8] = 2*q.i*q.k - 2*q.j*q.r;
+  data[1] = 2*q.i*q.j - 2*q.k*q.r;
+  data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
+  data[9] = 2*q.j*q.k + 2*q.i*q.r;
+  data[2] = 2*q.i*q.k + 2*q.j*q.r;
+  data[6] = 2*q.j*q.k - 2*q.i*q.r;
+  data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
 }
 
 Quaternion Matrix4::GetRotation() const
@@ -5164,15 +6132,15 @@ Quaternion Matrix4::GetRotation() const
   Matrix4 t = *this;
   t.SetScale( Vec3( 1.0f ) );
 
-  #define m00 t.d[ 0 ]
-  #define m01 t.d[ 4 ]
-  #define m02 t.d[ 8 ]
-  #define m10 t.d[ 1 ]
-  #define m11 t.d[ 5 ]
-  #define m12 t.d[ 9 ]
-  #define m20 t.d[ 2 ]
-  #define m21 t.d[ 6 ]
-  #define m22 t.d[ 10 ]
+  #define m00 t.data[ 0 ]
+  #define m01 t.data[ 4 ]
+  #define m02 t.data[ 8 ]
+  #define m10 t.data[ 1 ]
+  #define m11 t.data[ 5 ]
+  #define m12 t.data[ 9 ]
+  #define m20 t.data[ 2 ]
+  #define m21 t.data[ 6 ]
+  #define m22 t.data[ 10 ]
 
   float trace = m00 + m11 + m22;
   if ( trace > 0.0f )
@@ -5229,61 +6197,61 @@ Quaternion Matrix4::GetRotation() const
 
 Vec3 Matrix4::GetAxis( uint32_t col ) const
 {
-    return Vec3( d[ col * 4 ], d[ col * 4 + 1 ], d[ col * 4 + 2 ] );
+    return Vec3( data[ col * 4 ], data[ col * 4 + 1 ], data[ col * 4 + 2 ] );
 }
 
 void Matrix4::SetAxis( uint32_t col, const Vec3& v )
 {
-  d[ col * 4 ] = v.x;
-  d[ col * 4 + 1 ] = v.y;
-  d[ col * 4 + 2 ] = v.z;
+  data[ col * 4 ] = v.x;
+  data[ col * 4 + 1 ] = v.y;
+  data[ col * 4 + 2 ] = v.z;
 }
 
 Vec4 Matrix4::GetRow( uint32_t row ) const
 {
-  return Vec4( d[ row ], d[ row + 4 ], d[ row + 8 ], d[ row + 12 ] );
+  return Vec4( data[ row ], data[ row + 4 ], data[ row + 8 ], data[ row + 12 ] );
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec3 &v )
 {
-  d[ row ] = v.x;
-  d[ row + 4 ] = v.y;
-  d[ row + 8 ] = v.z;
+  data[ row ] = v.x;
+  data[ row + 4 ] = v.y;
+  data[ row + 8 ] = v.z;
 }
 
 void Matrix4::SetRow( uint32_t row, const Vec4 &v)
 {
-  d[ row ] = v.x;
-  d[ row + 4 ] = v.y;
-  d[ row + 8 ] = v.z;
-  d[ row + 12 ] = v.w;
+  data[ row ] = v.x;
+  data[ row + 4 ] = v.y;
+  data[ row + 8 ] = v.z;
+  data[ row + 12 ] = v.w;
 }
 
 void Matrix4::SetTranslation( float x, float y, float z )
 {
-  d[ 12 ] = x;
-  d[ 13 ] = y;
-  d[ 14 ] = z;
+  data[ 12 ] = x;
+  data[ 13 ] = y;
+  data[ 14 ] = z;
 }
 
 void Matrix4::SetTranslation( const Vec3& translation )
 {
-  d[ 12 ] = translation.x;
-  d[ 13 ] = translation.y;
-  d[ 14 ] = translation.z;
+  data[ 12 ] = translation.x;
+  data[ 13 ] = translation.y;
+  data[ 14 ] = translation.z;
 }
 
 Vec3 Matrix4::GetTranslation() const
 {
-  return Vec3( d[ 12 ], d[ 13 ], d[ 14 ] );
+  return Vec3( data[ 12 ], data[ 13 ], data[ 14 ] );
 }
 
 Vec3 Matrix4::GetScale() const
 {
   return Vec3(
-    Vec3( d[ 0 ], d[ 1 ], d[ 2 ] ).Length(),
-    Vec3( d[ 4 ], d[ 5 ], d[ 6 ] ).Length(),
-    Vec3( d[ 8 ], d[ 9 ], d[ 10 ] ).Length()
+    Vec3( data[ 0 ], data[ 1 ], data[ 2 ] ).Length(),
+    Vec3( data[ 4 ], data[ 5 ], data[ 6 ] ).Length(),
+    Vec3( data[ 8 ], data[ 9 ], data[ 10 ] ).Length()
   );
 }
 
@@ -5301,7 +6269,7 @@ void Matrix4::SetTranspose( void )
   {
     for( uint32_t j = i + 1; j < 4; j++ )
     {
-      std::swap( d[ i * 4 + j ], d[ j * 4 + i ] );
+      std::swap( data[ i * 4 + j ], data[ j * 4 + i ] );
     }
   }
 }
@@ -5316,6 +6284,15 @@ Matrix4 Matrix4::GetTranspose() const
 Matrix4 Matrix4::GetNormalMatrix() const
 {
   return GetInverse().GetTranspose();
+}
+
+Matrix4 Matrix4::GetScaleRemoved() const
+{
+  Matrix4 r = *this;
+  r.SetAxis( 0, r.GetAxis( 0 ).NormalizeCopy() );
+  r.SetAxis( 1, r.GetAxis( 1 ).NormalizeCopy() );
+  r.SetAxis( 2, r.GetAxis( 2 ).NormalizeCopy() );
+  return *this;
 }
 
 //------------------------------------------------------------------------------
@@ -5568,17 +6545,17 @@ Matrix4 Quaternion::GetTransformMatrix( void ) const
 
   Matrix4 matrix = Matrix4::Identity();
 
-  matrix.d[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
-  matrix.d[ 4 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
-  matrix.d[ 8 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
+  matrix.data[ 0 ] = 1.0f - 2.0f * n.j * n.j - 2.0f * n.k * n.k;
+  matrix.data[ 4 ] = 2.0f * n.i * n.j - 2.0f * n.r * n.k;
+  matrix.data[ 8 ] = 2.0f * n.i * n.k + 2.0f * n.r * n.j;
 
-  matrix.d[ 1 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
-  matrix.d[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
-  matrix.d[ 9 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
+  matrix.data[ 1 ] = 2.0f * n.i * n.j + 2.0f * n.r * n.k;
+  matrix.data[ 5 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.k * n.k;
+  matrix.data[ 9 ] = 2.0f * n.j * n.k - 2.0f * n.r * n.i;
 
-  matrix.d[ 2 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
-  matrix.d[ 6 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
-  matrix.d[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
+  matrix.data[ 2 ] = 2.0f * n.i * n.k - 2.0f * n.r * n.j;
+  matrix.data[ 6 ] = 2.0f * n.j * n.k + 2.0f * n.r * n.i;
+  matrix.data[ 10 ] = 1.0f - 2.0f * n.i * n.i - 2.0f * n.j * n.j;
 
   return matrix;
 }
@@ -5765,7 +6742,7 @@ Allocator* GetGlobalAllocator()
   {
     // @TODO: Allocating this statically here won't work for hotloading
     static _DefaultAllocator s_allocator;
-	  g_allocator = &s_allocator;
+    g_allocator = &s_allocator;
   }
   return g_allocator;
 }
@@ -6220,7 +7197,7 @@ Window::Window()
   window = nullptr;
   graphicsDevice = nullptr;
   input = nullptr;
-  m_pos = Int2( 0.0f ); // @TODO: int
+  m_pos = Int2( 0 );
   m_width = 0;
   m_height = 0;
   m_fullScreen = false;
@@ -6438,7 +7415,9 @@ void Window::SetTitle( const char* title )
 {
   if ( window && m_windowTitle != title )
   {
-    //SDL_SetWindowTitle( (SDL_Window*)window, title );
+#if _AE_WINDOWS_
+    SetWindowTextA( (HWND)window, title );
+#endif
     m_windowTitle = title;
   }
 }
@@ -7042,7 +8021,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 #elif _AE_LINUX_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
-	return false;
+  return false;
 }
 bool FileSystem_GetCacheDir( Str256* outDir )
 {
@@ -7081,7 +8060,7 @@ bool FileSystem_GetDir( KNOWNFOLDERID folderId, Str256* outDir )
   if ( pathResult == S_OK )
   {
     char path[ outDir->MaxLength() + 1 ];
-    int32_t pathLen = wcstombs( path, wpath, outDir->MaxLength() );
+    int32_t pathLen = (int32_t)wcstombs( path, wpath, outDir->MaxLength() );
     if ( pathLen > 0 )
     {
       path[ pathLen ] = 0;
@@ -7535,7 +8514,7 @@ const char* FileSystem::GetFileExtFromPath( const char* filePath )
   else
   {
     // @NOTE: Return end of given string in case pointer arithmetic is being done by user
-    uint32_t len = strlen( fileName );
+    uint32_t len = (uint32_t)strlen( fileName );
     return fileName + len;
   }
 }
@@ -7695,7 +8674,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
   // Open window
   if ( GetOpenFileNameA( &winParams ) )
   {
-    uint32_t offset = strlen( winParams.lpstrFile ) + 1; // Double null terminated
+    uint32_t offset = (uint32_t)strlen( winParams.lpstrFile ) + 1; // Double null terminated
     if ( winParams.lpstrFile[ offset ] == 0 )
     {
       return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
@@ -7712,7 +8691,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
         r += AE_PATH_SEPARATOR;
         r += head;
 
-        offset = strlen( head ) + 1; // Double null terminated
+        offset = (uint32_t)strlen( head ) + 1; // Double null terminated
         head += offset; // Null separated
       }
       return result;
@@ -7947,10 +8926,10 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 // OpenGL includes
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-	#pragma comment (lib, "opengl32.lib")
-	#pragma comment (lib, "glu32.lib")
-	#include <gl/GL.h>
-	#include <gl/GLU.h>
+  #pragma comment (lib, "opengl32.lib")
+  #pragma comment (lib, "glu32.lib")
+  #include <gl/GL.h>
+  #include <gl/GLU.h>
 #elif _AE_EMSCRIPTEN_
   #include <GLES3/gl3.h>
 #elif _AE_LINUX_
@@ -8278,7 +9257,7 @@ void UniformList::Set( const char* name, float value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 1;
-  uniform.value.d[ 0 ] = value;
+  uniform.value.data[ 0 ] = value;
 }
 
 void UniformList::Set( const char* name, Vec2 value )
@@ -8287,8 +9266,8 @@ void UniformList::Set( const char* name, Vec2 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 2;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
 }
 
 void UniformList::Set( const char* name, Vec3 value )
@@ -8297,9 +9276,9 @@ void UniformList::Set( const char* name, Vec3 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 3;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
-  uniform.value.d[ 2 ] = value.z;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
 }
 
 void UniformList::Set( const char* name, Vec4 value )
@@ -8308,10 +9287,10 @@ void UniformList::Set( const char* name, Vec4 value )
   AE_ASSERT( name[ 0 ] );
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 4;
-  uniform.value.d[ 0 ] = value.x;
-  uniform.value.d[ 1 ] = value.y;
-  uniform.value.d[ 2 ] = value.z;
-  uniform.value.d[ 3 ] = value.w;
+  uniform.value.data[ 0 ] = value.x;
+  uniform.value.data[ 1 ] = value.y;
+  uniform.value.data[ 2 ] = value.z;
+  uniform.value.data[ 3 ] = value.w;
 }
 
 void UniformList::Set( const char* name, const Matrix4& value )
@@ -8629,23 +9608,23 @@ void Shader::Activate( const UniformList& uniforms ) const
     }
     else if ( uniformVar->type == GL_FLOAT )
     {
-      glUniform1fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform1fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC2 )
     {
-      glUniform2fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform2fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC3 )
     {
-      glUniform3fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform3fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_VEC4 )
     {
-      glUniform4fv( uniformVar->location, 1, uniformValue->value.d );
+      glUniform4fv( uniformVar->location, 1, uniformValue->value.data );
     }
     else if ( uniformVar->type == GL_FLOAT_MAT4 )
     {
-      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.d );
+      glUniformMatrix4fv( uniformVar->location, 1, GL_FALSE, uniformValue->value.data );
     }
     else
     {
@@ -9227,15 +10206,15 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
 
   if (autoGenerateMipmaps)
   {
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   }
   else
   {
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-	  glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   }
-	
+  
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
   glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
@@ -9246,9 +10225,9 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
     case Type::Uint8:
       glType = GL_UNSIGNED_BYTE;
       break;
-	  case Type::Uint16:
-	    glType = GL_UNSIGNED_SHORT;
-	    break;
+    case Type::Uint16:
+      glType = GL_UNSIGNED_SHORT;
+      break;
     case Type::HalfFloat:
       glType = GL_HALF_FLOAT;
       break;
@@ -9304,66 +10283,66 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
-		  
+      
 #if _AE_OSX_
-	  // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
-	  case Format::RG8:
-	  case Format::RG16F:
-	  case Format::RG32F:
-  		switch(format)
-  		{
-  			case Format::RG8: glInternalFormat = GL_RG8; break;
-  			case Format::RG16F: glInternalFormat = GL_RG16F; break;
-  			case Format::RG32F: glInternalFormat = GL_RG32F; break;
-  			default: assert(false);
-  		}
-  			  
-  		glFormat = GL_RG;
-  		unpackAlignment = 1;
-  		m_hasAlpha = false;
-  		break;
+    // RedGreen, TODO: extend to other ES but WebGL1 left those constants out IIRC
+    case Format::RG8:
+    case Format::RG16F:
+    case Format::RG32F:
+      switch(format)
+      {
+        case Format::RG8: glInternalFormat = GL_RG8; break;
+        case Format::RG16F: glInternalFormat = GL_RG16F; break;
+        case Format::RG32F: glInternalFormat = GL_RG32F; break;
+        default: assert(false);
+      }
+          
+      glFormat = GL_RG;
+      unpackAlignment = 1;
+      m_hasAlpha = false;
+      break;
 #endif
-  	case Format::RGB8:
-  	case Format::RGB16F:
+    case Format::RGB8:
+    case Format::RGB16F:
     case Format::RGB32F:
-  	  switch(format)
-  	  {
-  	    case Format::RGB8: glInternalFormat = GL_RGB8; break;
-  	    case Format::RGB16F: glInternalFormat = GL_RGB16F; break;
-  	    case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
-  		  default: assert(false);
-  	  }
+      switch(format)
+      {
+        case Format::RGB8: glInternalFormat = GL_RGB8; break;
+        case Format::RGB16F: glInternalFormat = GL_RGB16F; break;
+        case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
+        default: assert(false);
+      }
       glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
 
     case Format::RGBA8:
-	  case Format::RGBA16F:
-	  case Format::RGBA32F:
-  	  switch(format)
-  	  {
-      	case Format::RGBA8: glInternalFormat = GL_RGBA8; break;
-      	case Format::RGBA16F: glInternalFormat = GL_RGBA16F; break;
-      	case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
-      	default: assert(false);
-  	  }
+    case Format::RGBA16F:
+    case Format::RGBA32F:
+      switch(format)
+      {
+        case Format::RGBA8: glInternalFormat = GL_RGBA8; break;
+        case Format::RGBA16F: glInternalFormat = GL_RGBA16F; break;
+        case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
+        default: assert(false);
+      }
       glFormat = GL_RGBA;
       unpackAlignment = 1;
       m_hasAlpha = true;
       break;
-		  
+      
       // TODO: fix these constants, but they differ on ES2/3 and GL
       // WebGL1 they require loading an extension (if present) to get at the constants.    
     case Format::RGB8_SRGB:
-	  // ignore type
+    // ignore type
       glInternalFormat = GL_SRGB8;
       glFormat = GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case Format::RGBA8_SRGB:
-	  // ignore type
+    // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
       glFormat = GL_RGBA;
       unpackAlignment = 1;
@@ -9380,53 +10359,53 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   }
 
     // count the mip levels
-	int w = width;
-	int h = height;
-	
-	int numberOfMipmaps = 1;
-	if ( autoGenerateMipmaps )
-	{
-		while ( w > 1 || h > 1 )
-		{
-		  numberOfMipmaps++;
-		  w = (w+1) / 2;
-		  h = (h+1) / 2;
-		}
-	}
-	
-	// allocate mip levels
-	// texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
+  int w = width;
+  int h = height;
+  
+  int numberOfMipmaps = 1;
+  if ( autoGenerateMipmaps )
+  {
+    while ( w > 1 || h > 1 )
+    {
+      numberOfMipmaps++;
+      w = (w+1) / 2;
+      h = (h+1) / 2;
+    }
+  }
+  
+  // allocate mip levels
+  // texStorage is GL4.2, so not on macOS.  ES emulates the call internaly.
 #define USE_TEXSTORAGE 0
 #if USE_TEXSTORAGE
-	// TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
-	// It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
-	// for compressed textures.
-	glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
+  // TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
+  // It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
+  // for compressed textures.
+  glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
 #else
-	w = width;
-	h = height;
-	
-	for ( int i = 0; i < numberOfMipmaps; ++i )
-	{
-	  glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
-	  w = (w+1) / 2;
-	  h = (h+1) / 2;
-	}
+  w = width;
+  h = height;
+  
+  for ( int i = 0; i < numberOfMipmaps; ++i )
+  {
+    glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
+    w = (w+1) / 2;
+    h = (h+1) / 2;
+  }
 #endif
-	
+  
   if ( data != nullptr )
   {
-	  // upload the first mipmap
-	  glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
+    // upload the first mipmap
+    glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
 
-	  // autogen only works for uncompressed textures
-	  // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
-	  if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
-	  {
-		  glGenerateMipmap( GetTarget() );
-	  }
+    // autogen only works for uncompressed textures
+    // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
+    if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+    {
+      glGenerateMipmap( GetTarget() );
+    }
   }
-	
+  
   AE_CHECK_GL_ERROR();
 }
 
@@ -9464,15 +10443,15 @@ void Texture2D::Initialize( const char* file, Filter filter, Wrap wrap, bool aut
   switch ( channels )
   {
     case STBI_grey:
-  		format = Format::R8;
-  		  
-  		// for now only support R16Unorm
-  		if (is16BitImage)
-  		{
-  			format = Format::R16_UNORM;
-  			type = aeTextureType::Uint16;
-  		}
-  	  break;
+      format = Format::R8;
+        
+      // for now only support R16Unorm
+      if (is16BitImage)
+      {
+        format = Format::R16_UNORM;
+        type = aeTextureType::Uint16;
+      }
+      break;
     case STBI_grey_alpha:
       AE_FAIL();
       break;
@@ -10359,6 +11338,905 @@ bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointC
 }
 
 //------------------------------------------------------------------------------
+// ae::BinaryStream member functions
+//------------------------------------------------------------------------------
+BinaryStream::BinaryStream( Mode mode, uint8_t* data, uint32_t length )
+{
+  m_mode = mode;
+  m_data = data;
+  m_length = length;
+  m_isValid = m_data && m_length;
+}
+
+BinaryStream::BinaryStream( Mode mode, const uint8_t* data, uint32_t length )
+{
+  AE_ASSERT_MSG( mode == Mode::ReadBuffer, "Only read mode can be used with a constant data buffer." );
+  m_mode = mode;
+  m_data = const_cast< uint8_t* >( data );
+  m_length = length;
+  m_isValid = m_data && m_length;
+}
+
+BinaryStream::BinaryStream( Mode mode )
+{
+  AE_ASSERT_MSG( mode == Mode::WriteBuffer, "Only write mode can be used when a data buffer is not provided." );
+  m_mode = mode;
+  m_isValid = true;
+}
+
+BinaryStream::BinaryStream( Array< uint8_t >* array )
+{
+  m_mode = Mode::WriteBuffer;
+  if ( array )
+  {
+    m_extArray = array;
+    m_offset = m_extArray->Length();
+    m_length = m_extArray->Size();
+    m_isValid = true;
+  }
+}
+
+BinaryStream BinaryStream::Writer( uint8_t* data, uint32_t length )
+{
+  return BinaryStream( Mode::WriteBuffer, data, length );
+}
+
+BinaryStream BinaryStream::Writer( Array< uint8_t >* array )
+{
+  return BinaryStream( array );
+}
+
+BinaryStream BinaryStream::Writer()
+{
+  return BinaryStream( Mode::WriteBuffer );
+}
+
+BinaryStream BinaryStream::Reader( const uint8_t* data, uint32_t length )
+{
+  return BinaryStream( Mode::ReadBuffer, const_cast< uint8_t* >( data ), length );
+}
+
+BinaryStream BinaryStream::Reader( const Array< uint8_t >& data )
+{
+  if ( !data.Length() )
+  {
+    return BinaryStream::Reader( nullptr, 0 );
+  }
+  return BinaryStream( Mode::ReadBuffer, &data[ 0 ], data.Length() );
+}
+
+void BinaryStream::SerializeUint8( uint8_t& v )
+{
+  SerializeRaw( &v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint8( const uint8_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( &v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint16( uint16_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint16( const uint16_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint32( uint32_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint32( const uint32_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint64( uint64_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeUint64( const uint64_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt8( int8_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt8( const int8_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt16( int16_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt16( const int16_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt32( int32_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt32( const int32_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt64( int64_t& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeInt64( const int64_t& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeFloat( float& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeFloat( const float& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeDouble( double& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeDouble( const double& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeBool( bool& v )
+{
+  SerializeRaw( (uint8_t*)&v, sizeof( v ) );
+}
+
+void BinaryStream::SerializeBool( const bool& v )
+{
+  AE_ASSERT( m_mode == Mode::WriteBuffer );
+  SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::m_SerializeArrayLength( uint32_t& length, uint32_t maxLength )
+{
+  if ( maxLength <= ae::MaxValue< uint8_t >() )
+  {
+    uint8_t len = (uint8_t)length;
+    SerializeUint8( len );
+    length = len;
+  }
+  else if ( maxLength <= ae::MaxValue< uint16_t >() )
+  {
+    uint16_t len = (uint16_t)length;
+    SerializeUint16( len );
+    length = len;
+  }
+  else
+  {
+    uint32_t len = length;
+    SerializeUint32( len );
+    length = len;
+  }
+}
+
+void BinaryStream::SerializeArray( Array< uint8_t >& array, uint32_t maxLength )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    uint32_t length = 0;
+    m_SerializeArrayLength( length, maxLength );
+    if ( !m_isValid || length == 0 )
+    {
+      return;
+    }
+    else if ( GetRemaining() < length )
+    {
+      Invalidate();
+      return;
+    }
+    
+    array.Append( PeekData(), length );
+    Discard( length );
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    uint32_t length = array.Length();
+    m_SerializeArrayLength( length, maxLength );
+    if ( length )
+    {
+      SerializeRaw( &array[ 0 ], length );
+    }
+  }
+}
+
+void BinaryStream::SerializeArray( const Array< uint8_t >& array, uint32_t maxLength )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
+  
+  uint32_t length = array.Length();
+  m_SerializeArrayLength( length, maxLength );
+  if ( length )
+  {
+    SerializeRaw( &array[ 0 ], length );
+  }
+}
+
+void BinaryStream::SerializeRaw( void* data, uint32_t length )
+{
+  if ( !m_isValid )
+  {
+    return;
+  }
+  else if ( m_mode == Mode::ReadBuffer )
+  {
+    if ( m_offset + length <= m_length )
+    {
+      memcpy( data, m_data + m_offset, length );
+      m_offset += length;
+    }
+    else
+    {
+      Invalidate();
+    }
+  }
+  else if ( m_mode == Mode::WriteBuffer )
+  {
+    if ( m_data )
+    {
+      if ( length <= m_length - m_offset )
+      {
+        memcpy( m_data + m_offset, data, length );
+        m_offset += length;
+      }
+      else
+      {
+        Invalidate();
+      }
+    }
+    else
+    {
+      Array< uint8_t >& array = m_GetArray();
+      array.Append( (uint8_t*)data, length );
+      m_offset = array.Length();
+      m_length = array.Size();
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
+  }
+}
+
+void BinaryStream::SerializeRaw( const void* data, uint32_t length )
+{
+  AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
+  SerializeRaw( (void*)data, length );
+}
+
+void BinaryStream::SerializeRaw( Array< uint8_t>& array )
+{
+  AE_FAIL_MSG( "Not implemented" );
+}
+
+void BinaryStream::SerializeRaw( const Array< uint8_t>& array )
+{
+  AE_FAIL_MSG( "Not implemented" );
+}
+
+void BinaryStream::Discard( uint32_t length )
+{
+  if ( !length )
+  {
+    return;
+  }
+  else if ( GetRemaining() < length )
+  {
+    Invalidate();
+  }
+  else
+  {
+    m_offset += length;
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::NetObject member functions
+//------------------------------------------------------------------------------
+void NetObject::SetSyncData( const void* data, uint32_t length )
+{
+  AE_ASSERT_MSG( IsAuthority(), "Cannot set net data from client. The NetObjectConnection has exclusive ownership." );
+  m_data.Clear();
+  m_data.Append( (const uint8_t*)data, length );
+}
+
+// @HACK: Should rearrange file so windows.h is included with as little logic as possible after it
+#ifdef SendMessage
+#undef SendMessage
+#endif
+void NetObject::SendMessage( const void* data, uint32_t length )
+{
+  uint16_t lengthU16 = length;
+  m_messageDataOut.Reserve( m_messageDataOut.Length() + sizeof( lengthU16 ) + length );
+  m_messageDataOut.Append( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
+  m_messageDataOut.Append( (const uint8_t*)data, length );
+}
+
+void NetObject::SetInitData( const void* initData, uint32_t initDataLength )
+{
+  m_initData.Clear();
+  m_initData.Append( (uint8_t*)initData, initDataLength );
+  m_isPendingInit = false;
+}
+
+const uint8_t* NetObject::GetInitData() const
+{
+  return m_initData.Length() ? &m_initData[ 0 ] : nullptr;
+}
+
+uint32_t NetObject::InitDataLength() const
+{
+  return m_initData.Length();
+}
+
+const uint8_t* NetObject::GetSyncData() const
+{
+  return m_data.Length() ? &m_data[ 0 ] : nullptr;
+}
+
+uint32_t NetObject::SyncDataLength() const
+{
+  return m_data.Length();
+}
+
+void NetObject::ClearSyncData()
+{
+  m_data.Clear();
+}
+
+bool NetObject::PumpMessages( Msg* msgOut )
+{
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
+  {
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
+    return false;
+  }
+  else if ( !msgOut )
+  {
+    // Early out
+    return true;
+  }
+
+  // Write out incoming message data
+  msgOut->length = *(uint16_t*)&m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += sizeof( uint16_t );
+
+  msgOut->data = &m_messageDataIn[ m_messageDataInOffset ];
+  m_messageDataInOffset += msgOut->length;
+
+  if ( m_messageDataInOffset >= m_messageDataIn.Length() )
+  {
+    AE_ASSERT( m_messageDataInOffset == m_messageDataIn.Length() );
+
+    // Clear messages once they've all been read
+    m_messageDataInOffset = 0;
+    m_messageDataIn.Clear();
+  }
+
+  return true;
+}
+
+bool NetObject::IsPendingInit() const
+{
+  return m_isPendingInit;
+}
+
+bool NetObject::IsPendingDestroy() const
+{
+  return m_isPendingDestroy;
+}
+
+void NetObject::m_SetClientData( const uint8_t* data, uint32_t length )
+{
+  m_data.Clear();
+  m_data.Append( data, length );
+}
+
+void NetObject::m_ReceiveMessages( const uint8_t* data, uint32_t length )
+{
+  m_messageDataIn.Append( data, length );
+}
+
+void NetObject::m_UpdateHash()
+{
+  if ( m_data.Length() )
+  {
+    m_hash = ae::Hash().HashData( &m_data[ 0 ], m_data.Length() ).Get();
+  }
+  else
+  {
+    m_hash = 0;
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::NetObjectClient member functions
+//------------------------------------------------------------------------------
+void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
+{
+  BinaryStream rStream = BinaryStream::Reader( data, length );
+  while ( rStream.GetOffset() < rStream.GetLength() )
+  {
+    NetObjectConnection::EventType type;
+    rStream.SerializeRaw( type );
+    if ( !rStream.IsValid() )
+    {
+      break;
+    }
+    switch ( type )
+    {
+      case NetObjectConnection::EventType::Connect:
+      {
+        uint32_t signature = 0;
+        rStream.SerializeUint32( signature );
+        AE_ASSERT( signature );
+
+        ae::Map< NetObject*, int > toDestroy = AE_ALLOC_TAG_NET;
+        bool allowResolve = ( m_serverSignature == signature );
+        if ( m_serverSignature )
+        {
+          if ( allowResolve )
+          {
+            for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
+            {
+              toDestroy.Set( m_netObjects.GetValue( i ), 0 );
+            }
+          }
+          else
+          {
+            m_delayCreationForDestroy = true; // This prevents new server objects and old server objects overlapping for a frame
+            m_created.Clear(); // Don't call delete, are pointers to m_netObjects
+            for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
+            {
+              m_StartNetObjectDestruction( m_netObjects.GetValue( i ) );
+            }
+            AE_ASSERT( !m_remoteToLocalIdMap.Length() );
+            AE_ASSERT( !m_localToRemoteIdMap.Length() );
+          }
+        }
+        
+        uint32_t length = 0;
+        rStream.SerializeUint32( length );
+        for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
+        {
+          NetObject* created = m_CreateNetObject( &rStream, allowResolve );
+          toDestroy.Remove( created );
+        }
+        for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
+        {
+          NetObject* netObject = toDestroy.GetKey( i );
+          m_StartNetObjectDestruction( netObject );
+        }
+
+        m_serverSignature = signature;
+        break;
+      }
+      case NetObjectConnection::EventType::Create:
+      {
+        m_CreateNetObject( &rStream, false );
+        break;
+      }
+      case NetObjectConnection::EventType::Destroy:
+      {
+        RemoteId remoteId;
+        rStream.SerializeObject( remoteId );
+        NetId localId = m_remoteToLocalIdMap.Get( remoteId );
+        NetObject* netObject = m_netObjects.Get( localId );
+        m_StartNetObjectDestruction( netObject );
+        break;
+      }
+      case NetObjectConnection::EventType::Update:
+      {
+        uint32_t netObjectCount = 0;
+        rStream.SerializeUint32( netObjectCount );
+        for ( uint32_t i = 0; i < netObjectCount; i++ )
+        {
+          RemoteId remoteId;
+          uint32_t dataLen = 0;
+          rStream.SerializeObject( remoteId );
+          rStream.SerializeUint32( dataLen );
+
+          NetId localId;
+          NetObject* netObject = nullptr;
+          if ( dataLen
+            && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
+            && m_netObjects.TryGet( localId, &netObject ) )
+          {
+            if ( rStream.GetRemaining() >= dataLen )
+            {
+              netObject->m_SetClientData( rStream.PeekData(), dataLen );
+            }
+            else
+            {
+              rStream.Invalidate();
+            }
+          }
+
+          rStream.Discard( dataLen );
+        }
+        break;
+      }
+      case NetObjectConnection::EventType::Messages:
+      {
+        uint32_t netObjectCount = 0;
+        rStream.SerializeUint32( netObjectCount );
+        for ( uint32_t i = 0; i < netObjectCount; i++ )
+        {
+          RemoteId remoteId;
+          uint32_t dataLen = 0;
+          rStream.SerializeObject( remoteId );
+          rStream.SerializeUint32( dataLen );
+
+          NetId localId;
+          NetObject* netObject = nullptr;
+          if ( dataLen
+            && m_remoteToLocalIdMap.TryGet( remoteId, &localId )
+            && m_netObjects.TryGet( localId, &netObject ) )
+          {
+            if ( rStream.GetRemaining() >= dataLen )
+            {
+              netObject->m_ReceiveMessages( rStream.PeekData(), dataLen );
+            }
+            else
+            {
+              rStream.Invalidate();
+            }
+          }
+
+          rStream.Discard( dataLen );
+        }
+        break;
+      }
+    }
+  }
+}
+
+NetObject* NetObjectClient::PumpCreate()
+{
+  if ( !m_created.Length() )
+  {
+    return nullptr;
+  }
+
+  if ( m_delayCreationForDestroy )
+  {
+    for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
+    {
+      if ( m_netObjects.GetValue( i )->IsPendingDestroy() )
+      {
+        return nullptr;
+      }
+    }
+    m_delayCreationForDestroy = false;
+  }
+  
+  NetObject* created = m_created[ 0 ];
+  AE_ASSERT( created );
+  m_created.Remove( 0 );
+  return created;
+}
+
+void NetObjectClient::Destroy( NetObject* pendingDestroy )
+{
+  if ( !pendingDestroy )
+  {
+    return;
+  }
+  // @TODO: Maybe this should be supported in the case the client is shutting down with an active server connection?
+  AE_ASSERT_MSG( pendingDestroy->IsPendingDestroy(), "ae::NetObject was not pending Destroy()" );
+  AE_ASSERT_MSG( !pendingDestroy->PumpMessages( nullptr ), "ae::NetObject had pending messages when it was Destroy()ed" );
+  bool removed = m_netObjects.Remove( pendingDestroy->GetId() );
+  AE_ASSERT_MSG( removed, "ae::NetObject can't be destroyed. It's' not managed by this ae::NetObjectClient." );
+  ae::Delete( pendingDestroy );
+}
+
+NetObject* NetObjectClient::m_CreateNetObject( BinaryStream* rStream, bool allowResolve )
+{
+  AE_ASSERT( rStream->IsReader() );
+
+  RemoteId remoteId;
+  rStream->SerializeObject( remoteId );
+
+  NetObject* netObject = nullptr;
+  if ( allowResolve )
+  {
+    NetId localId = m_remoteToLocalIdMap.Get( remoteId, {} );
+    if ( localId )
+    {
+      netObject = m_netObjects.Get( localId );
+    }
+  }
+
+  if ( !netObject )
+  {
+    NetId localId( ++m_lastNetId );
+    netObject = ae::New< NetObject >( AE_ALLOC_TAG_NET );
+    netObject->m_id = localId;
+
+    m_netObjects.Set( localId, netObject );
+    m_remoteToLocalIdMap.Set( remoteId, localId );
+    m_localToRemoteIdMap.Set( localId, remoteId );
+    m_created.Append( netObject );
+  }
+  
+  rStream->SerializeArray( netObject->m_initData );
+
+  return netObject;
+}
+
+void NetObjectClient::m_StartNetObjectDestruction( NetObject* netObject )
+{
+  AE_ASSERT( netObject );
+  if ( netObject->IsPendingDestroy() )
+  {
+    return;
+  }
+  
+  RemoteId remoteId;
+  bool found = m_localToRemoteIdMap.Remove( netObject->GetId(), &remoteId );
+  AE_ASSERT( found );
+  found = m_remoteToLocalIdMap.Remove( remoteId );
+  AE_ASSERT( found );
+  netObject->m_FlagForDestruction();
+}
+
+//------------------------------------------------------------------------------
+// ae::NetObjectConnection member functions
+//------------------------------------------------------------------------------
+void NetObjectConnection::m_UpdateSendData()
+{
+  AE_ASSERT( m_replicaDB );
+
+  ae::Array< NetObject* > toSync = AE_ALLOC_TAG_NET;
+  uint32_t netObjectMessageCount = 0;
+  for ( uint32_t i = 0; i < m_replicaDB->GetNetObjectCount(); i++ )
+  {
+    NetObject* netObject = m_replicaDB->GetNetObject( i );
+    if ( m_first || netObject->m_Changed() )
+    {
+      toSync.Append( netObject );
+    }
+
+    if ( netObject->m_messageDataOut.Length() )
+    {
+      netObjectMessageCount++;
+    }
+  }
+
+  BinaryStream wStream = BinaryStream::Writer( &m_sendData );
+
+  if ( toSync.Length() )
+  {
+    wStream.SerializeRaw( NetObjectConnection::EventType::Update );
+    wStream.SerializeUint32( toSync.Length() );
+    for ( uint32_t i = 0; i < toSync.Length(); i++ )
+    {
+      NetObject* netObject = toSync[ i ];
+      wStream.SerializeObject( netObject->GetId() );
+      wStream.SerializeUint32( netObject->SyncDataLength() );
+      wStream.SerializeRaw( netObject->GetSyncData(), netObject->SyncDataLength() );
+    }
+  }
+
+  if ( netObjectMessageCount )
+  {
+    wStream.SerializeRaw( NetObjectConnection::EventType::Messages );
+    wStream.SerializeUint32( netObjectMessageCount );
+    for ( uint32_t i = 0; i < m_replicaDB->GetNetObjectCount(); i++ )
+    {
+      NetObject* netObject = m_replicaDB->GetNetObject( i );
+      if ( netObject->m_messageDataOut.Length() )
+      {
+        wStream.SerializeObject( netObject->GetId() );
+        wStream.SerializeUint32( netObject->m_messageDataOut.Length() );
+        wStream.SerializeRaw( &netObject->m_messageDataOut[ 0 ], netObject->m_messageDataOut.Length() );
+      }
+    }
+  }
+
+  m_pendingClear = true;
+  m_first = false;
+}
+
+const uint8_t* NetObjectConnection::GetSendData() const
+{
+  return m_sendData.Length() ? &m_sendData[ 0 ] : nullptr;
+}
+
+uint32_t NetObjectConnection::GetSendLength() const
+{
+  return m_sendData.Length();
+}
+
+//------------------------------------------------------------------------------
+// ae::NetObjectServer member functions
+//------------------------------------------------------------------------------
+NetObjectServer::NetObjectServer()
+{
+  std::random_device random_device;
+  std::mt19937 random_engine( random_device() );
+  std::uniform_int_distribution< uint32_t > dist( 1, ae::MaxValue< uint32_t >() );
+  m_signature = dist( random_engine );
+}
+
+NetObject* NetObjectServer::CreateNetObject()
+{
+  NetObject* netObject = ae::New< NetObject >( AE_ALLOC_TAG_NET );
+  netObject->m_SetLocal();
+  netObject->m_id = NetId( ++m_lastNetId );
+  m_pendingCreate.Append( netObject );
+  return netObject;
+}
+
+void NetObjectServer::DestroyNetObject( NetObject* netObject )
+{
+  if ( !netObject )
+  {
+    return;
+  }
+  
+  int32_t pendingIdx = m_pendingCreate.Find( netObject );
+  if ( pendingIdx >= 0 )
+  {
+    // Early out, no need to send Destroy message because Create has not been queued
+    m_pendingCreate.Remove( pendingIdx );
+    ae::Delete( netObject );
+    return;
+  }
+
+  NetId id = netObject->GetId();
+  bool removed = m_netObjects.Remove( id );
+  AE_ASSERT_MSG( removed, "NetObject was not found." );
+
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    NetObjectConnection* server = m_servers[ i ];
+    if ( server->m_pendingClear )
+    {
+      server->m_sendData.Clear();
+      server->m_pendingClear = false;
+    }
+
+    BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+    wStream.SerializeRaw( NetObjectConnection::EventType::Destroy );
+    wStream.SerializeObject( id );
+  }
+
+  ae::Delete( netObject );
+}
+
+NetObjectConnection* NetObjectServer::CreateConnection()
+{
+  NetObjectConnection* server = m_servers.Append( ae::New< NetObjectConnection >( AE_ALLOC_TAG_NET ) );
+  AE_ASSERT( !server->m_pendingClear );
+  server->m_replicaDB = this;
+
+  // Send initial net datas
+  BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+  wStream.SerializeRaw( NetObjectConnection::EventType::Connect );
+  wStream.SerializeUint32( m_signature );
+  wStream.SerializeUint32( m_netObjects.Length() );
+  for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
+  {
+    const NetObject* netObject = m_netObjects.GetValue( i );
+    wStream.SerializeObject( netObject->GetId() );
+    wStream.SerializeArray( netObject->m_initData );
+  }
+
+  return server;
+}
+
+void NetObjectServer::DestroyConnection( NetObjectConnection* server )
+{
+  if ( !server )
+  {
+    return;
+  }
+
+  int32_t index = m_servers.Find( server );
+  if ( index >= 0 )
+  {
+    m_servers.Remove( index );
+    ae::Delete( server );
+  }
+}
+
+void NetObjectServer::UpdateSendData()
+{
+  // Clear old send data before writing new
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    NetObjectConnection* server = m_servers[ i ];
+    if ( server->m_pendingClear )
+    {
+      server->m_sendData.Clear();
+      server->m_pendingClear = false;
+    }
+  }
+  
+  // Send info about new objects (delayed until Update in case objects initData need to reference each other)
+  for ( NetObject* netObject : m_pendingCreate )
+  {
+    if ( !netObject->IsPendingInit() )
+    {
+      // Add net data to list, remove all initialized net datas from m_pendingCreate at once below
+      m_netObjects.Set( netObject->GetId(), netObject );
+      
+      // Send create messages on existing server connections
+      for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+      {
+        NetObjectConnection* server = m_servers[ i ];
+        BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+        wStream.SerializeRaw( NetObjectConnection::EventType::Create );
+        wStream.SerializeObject( netObject->GetId() );
+        wStream.SerializeArray( netObject->m_initData );
+      }
+    }
+  }
+  // Remove all pending net datas that were just initialized
+  m_pendingCreate.RemoveAllFn( []( const NetObject* netObject ){ return !netObject->IsPendingInit(); } );
+  
+  for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
+  {
+    m_netObjects.GetValue( i )->m_UpdateHash();
+  }
+
+  for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+  {
+    m_servers[ i ]->m_UpdateSendData();
+  }
+
+  for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
+  {
+    NetObject* netObject = m_netObjects.GetValue( i );
+    netObject->m_prevHash = netObject->m_hash;
+    netObject->m_messageDataOut.Clear();
+  }
+}
+
+//------------------------------------------------------------------------------
 // ae::Hash member functions
 //------------------------------------------------------------------------------
 Hash::Hash( uint32_t initialValue )
@@ -10414,7 +12292,7 @@ uint32_t Hash::Get() const
 // Meta register base object
 //------------------------------------------------------------------------------
 // @TODO: Support registering classes in namespaces
-//AE_META_CLASS( ae::Object );
+//AE_REGISTER_CLASS( ae::Object );
 int force_link_aeObject = 0;
 template <> const char* ae::_TypeName< ae::Object >::Get() { return "ae::Object"; }
 template <> void ae::_DefineType< ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ae::Object >( "ae::Object", index ); }
@@ -10612,10 +12490,10 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std:
       ae::Matrix4* v = (ae::Matrix4*)varData;
       // @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
       sscanf( value, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
-             v->d, v->d + 1, v->d + 2, v->d + 3,
-             v->d + 4, v->d + 5, v->d + 6, v->d + 7,
-             v->d + 8, v->d + 9, v->d + 10, v->d + 11,
-             v->d + 12, v->d + 13, v->d + 14, v->d + 15 );
+             v->data, v->data + 1, v->data + 2, v->data + 3,
+             v->data + 4, v->data + 5, v->data + 6, v->data + 7,
+             v->data + 8, v->data + 9, v->data + 10, v->data + 11,
+             v->data + 12, v->data + 13, v->data + 14, v->data + 15 );
       return true;
     }
     case Var::Enum:
@@ -10761,7 +12639,7 @@ const class ae::Enum* ae::Var::GetEnum() const
 
 const ae::Type* ae::Var::GetRefType() const
 {
-  if ( m_refTypeId == kAeInvalidMetaTypeId )
+  if ( m_refTypeId == ae::kInvalidTypeId )
   {
     return nullptr;
   }
@@ -10775,13 +12653,13 @@ const ae::Type* ae::Var::GetRefType() const
 //------------------------------------------------------------------------------
 ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 {
-  return obj ? obj->_metaTypeId : ae::kAeInvalidMetaTypeId;
+  return obj ? obj->_metaTypeId : ae::kInvalidTypeId;
 }
 
 ae::TypeId ae::GetTypeIdFromName( const char* name )
 {
   // @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kAeInvalidMetaTypeId;
+  return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
 std::map< ae::Str32, ae::Type* >& ae::_GetTypeNameMap()

@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// 04_ReplicationClient.cpp
+// 04_NetObjectClient.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -23,50 +23,35 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
-#include "04_ReplicationCommon.h"
+#include "04_NetObjectCommon.h"
 
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
 {
+  // Init
   AE_LOG( "Initialize" );
-
-  // System modules
-  aeWindow window;
-  aeRender render;
-  aeInput input;
-  aeSpriteRender spriteRender;
-  aeTexture2D texture;
-  ae::TimeStep timeStep;
-  window.Initialize( 800, 600, false, true );
-  window.SetTitle( "Replication Client" );
-  render.InitializeOpenGL( &window );
-  input.Initialize( &window );
-  spriteRender.Initialize( 32 );
-  uint8_t texInfo[] = { 255, 255, 255 };
-  texture.Initialize( texInfo, 1, 1, aeTextureFormat::RGB8, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Repeat );
-  timeStep.SetTimeStep( 1.0f / 10.0f );
-
-  // Client modules
+  Game game;
+  game.Initialize( "NetObject Client" );
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
-  aeNetReplicaClient replicationClient;
+  ae::NetObjectClient netObjectClient;
+  ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
 
-  // Game data
-  ae::Array< Green > greens = TAG_EXAMPLE;
-
-  while ( !input.GetState()->exit )
+  // Update
+  while ( !game.input.quit )
   {
-    input.Pump();
+    game.input.Pump();
     
+    //------------------------------------------------------------------------------
+    // Net update
+    //------------------------------------------------------------------------------
     // Update connection to server
     if ( !client->IsConnected() && !client->IsConnecting() )
     {
       AE_LOG( "Connecting to server" );
       AetherClient_Connect( client );
     }
-
     // Handle messages from server
     ReceiveInfo receiveInfo;
     while ( AetherClient_Receive( client, &receiveInfo ) )
@@ -79,66 +64,58 @@ int main()
         case kSysMsgServerDisconnect:
           AE_LOG( "Disconnected from server" );
           break;
-        case kReplicaInfoMsg:
-          if ( receiveInfo.data.Length() )
-          {
-            replicationClient.ReceiveData( &receiveInfo.data[ 0 ], receiveInfo.data.Length() );
-          }
+        case kObjectInfoMsg:
+          netObjectClient.ReceiveData( receiveInfo.data.Begin(), receiveInfo.data.End() - receiveInfo.data.Begin() );
           break;
         default:
           break;
       }
     }
-    
     // Create new replicated objects
-    while ( aeRef< aeNetData > netData = replicationClient.PumpCreated() )
+    while ( ae::NetObject* netObject = netObjectClient.PumpCreate() )
     {
-      uint32_t type = 0;
-      aeBinaryStream readStream = aeBinaryStream::Reader( netData->GetInitData(), netData->InitDataLength() );
-      readStream.SerializeUint32( type );
-      
-      if ( type == kReplicaType_Green )
-      {
-        AE_LOG( "Create green" );
-        greens.Append( Green() ).netData = netData;
-      }
-      else
-      {
-        AE_FAIL();
-      }
+      ae::BinaryStream readStream = ae::BinaryStream::Reader( netObject->GetSyncData(), netObject->SyncDataLength() );
+      GameObject* obj = &gameObjects.Append( GameObject( ae::Color::White() ) );
+      obj->netObject = netObject;
+      obj->Serialize( &readStream );
     }
     
+    //------------------------------------------------------------------------------
     // Game Update
-    for ( uint32_t i = 0; i < greens.Length(); i++ )
+    //------------------------------------------------------------------------------
+    for ( GameObject& obj : gameObjects )
     {
-      greens[ i ].Update( timeStep.GetTimeStep(), &spriteRender, &texture, &input );
+      obj.Update( &game );
     }
-    
-    // Remove objects that no longer have replication data
-    replicationClient.DestroyPending();
-    greens.RemoveAllFn( []( Green& green ) { return !green.netData; } );
 
+    //------------------------------------------------------------------------------
+    // Delete networked objects
+    //------------------------------------------------------------------------------
+    for ( GameObject& obj : gameObjects )
+    {
+      if ( obj.netObject->IsPendingDestroy() )
+      {
+        netObjectClient.Destroy( obj.netObject );
+        obj.netObject = nullptr;
+      }
+    }
+    // Remove objects that no longer have replication data
+    gameObjects.RemoveAllFn( []( const GameObject& o ) { return !o.netObject; } );
     // Send messages generated during game update
     AetherClient_SendAll( client );
 
-    render.Activate();
-    render.Clear( aeColor::PicoDarkPurple() );
-    spriteRender.Render( aeFloat4x4::Scaling( aeFloat3( 1.0f / ( 10.0f * render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
-    render.Present();
-
-    timeStep.Wait();
+    //------------------------------------------------------------------------------
+    // Render
+    //------------------------------------------------------------------------------
+    //const char* connectionStatus = client->IsConnected() ? "Connected" : "Connecting...";
+    //game.text.Add( aeFloat3( 0.0f ), aeFloat2( 1.0f ), connectionStatus, ae::Color::White(), 0, 0 );
+    game.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
   }
 
   AE_LOG( "Terminate" );
-
   AetherClient_Delete( client );
   client = nullptr;
-  
-  texture.Destroy();
-  spriteRender.Destroy();
-  input.Terminate();
-  render.Terminate();
-  window.Terminate();
+  game.Terminate();
 
   return 0;
 }
