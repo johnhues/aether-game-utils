@@ -1078,6 +1078,43 @@ inline std::ostream& operator<<( std::ostream& os, Rect r )
   return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
 
+//------------------------------------------------------------------------------
+// ae::Hash class (fnv1a)
+//! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
+//! hash to zero.
+//------------------------------------------------------------------------------
+class Hash
+{
+public:
+  Hash() = default;
+  explicit Hash( uint32_t initialValue );
+  
+  bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
+  bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
+
+  Hash& HashString( const char* str );
+  Hash& HashData( const void* data, uint32_t length );
+  template < typename T > Hash& HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
+  Hash& HashFloat( float f );
+  template < uint32_t N > Hash& HashFloatArray( const float (&f)[ N ] );
+
+  void Set( uint32_t hash );
+  uint32_t Get() const;
+
+private:
+  uint32_t m_hash = 0x811c9dc5;
+};
+
+template < uint32_t N >
+Hash& Hash::HashFloatArray( const float (&f)[ N ] )
+{
+  for ( uint32_t i = 0; i < N; i++ )
+  {
+    HashFloat( f[ i ] );
+  }
+  return *this;
+}
+
 } // ae end
 
 //------------------------------------------------------------------------------
@@ -1498,9 +1535,11 @@ public:
   void Set( const char* name, const class Texture* tex );
 
   const Value* Get( const char* name ) const;
+  ae::Hash GetHash() const { return m_hash; }
 
 private:
   ae::Map< Str32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
+  ae::Hash m_hash;
 };
 
 //------------------------------------------------------------------------------
@@ -2208,43 +2247,6 @@ public:
   NetObject* GetNetObject( uint32_t index ) { return m_netObjects.GetValue( index ); }
   uint32_t GetNetObjectCount() const { return m_netObjects.Length(); }
 };
-
-//------------------------------------------------------------------------------
-// ae::Hash class (fnv1a)
-//! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
-//! hash to zero.
-//------------------------------------------------------------------------------
-class Hash
-{
-public:
-  Hash() = default;
-  explicit Hash( uint32_t initialValue );
-  
-  bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
-  bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
-
-  Hash& HashString( const char* str );
-  Hash& HashData( const void* data, uint32_t length );
-  template < typename T > Hash& HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
-  Hash& HashFloat( float f );
-  template < uint32_t N > Hash& HashFloatArray( const float (&f)[ N ] );
-
-  void Set( uint32_t hash );
-  uint32_t Get() const;
-
-private:
-  uint32_t m_hash = 0x811c9dc5;
-};
-
-template < uint32_t N >
-Hash& Hash::HashFloatArray( const float (&f)[ N ] )
-{
-  for ( uint32_t i = 0; i < N; i++ )
-  {
-    HashFloat( f[ i ] );
-  }
-  return *this;
-}
 
 //! \defgroup Meta
 //! @{
@@ -7104,6 +7106,56 @@ bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
 }
 
 //------------------------------------------------------------------------------
+// ae::Hash member functions
+//------------------------------------------------------------------------------
+Hash::Hash( uint32_t initialValue )
+{
+  m_hash = initialValue;
+}
+
+Hash& Hash::HashString( const char* str )
+{
+  while ( *str )
+  {
+    m_hash = m_hash ^ str[ 0 ];
+    m_hash *= 0x1000193;
+    str++;
+  }
+
+  return *this;
+}
+
+Hash& Hash::HashData( const void* _data, uint32_t length )
+{
+  const uint8_t* data = (const uint8_t*)_data;
+  for ( uint32_t i = 0; i < length; i++ )
+  {
+    m_hash = m_hash ^ data[ i ];
+    m_hash *= 0x1000193;
+  }
+
+  return *this;
+}
+
+Hash& Hash::HashFloat( float f )
+{
+  uint32_t ui;
+  memcpy( &ui, &f, sizeof( float ) );
+  ui &= 0xfffff000;
+  return HashBasicType( ui );
+}
+
+void Hash::Set( uint32_t hash )
+{
+  m_hash = hash;
+}
+
+uint32_t Hash::Get() const
+{
+  return m_hash;
+}
+
+//------------------------------------------------------------------------------
 // ae::Window member functions
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
@@ -9286,6 +9338,8 @@ void UniformList::Set( const char* name, float value )
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 1;
   uniform.value.data[ 0 ] = value;
+  m_hash.HashString( name );
+  m_hash.HashFloat( value );
 }
 
 void UniformList::Set( const char* name, Vec2 value )
@@ -9296,6 +9350,8 @@ void UniformList::Set( const char* name, Vec2 value )
   uniform.size = 2;
   uniform.value.data[ 0 ] = value.x;
   uniform.value.data[ 1 ] = value.y;
+  m_hash.HashString( name );
+  m_hash.HashFloatArray( value.data );
 }
 
 void UniformList::Set( const char* name, Vec3 value )
@@ -9307,6 +9363,8 @@ void UniformList::Set( const char* name, Vec3 value )
   uniform.value.data[ 0 ] = value.x;
   uniform.value.data[ 1 ] = value.y;
   uniform.value.data[ 2 ] = value.z;
+  m_hash.HashString( name );
+  m_hash.HashFloatArray( value.data );
 }
 
 void UniformList::Set( const char* name, Vec4 value )
@@ -9319,6 +9377,8 @@ void UniformList::Set( const char* name, Vec4 value )
   uniform.value.data[ 1 ] = value.y;
   uniform.value.data[ 2 ] = value.z;
   uniform.value.data[ 3 ] = value.w;
+  m_hash.HashString( name );
+  m_hash.HashFloatArray( value.data );
 }
 
 void UniformList::Set( const char* name, const Matrix4& value )
@@ -9328,6 +9388,8 @@ void UniformList::Set( const char* name, const Matrix4& value )
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.size = 16;
   uniform.value = value;
+  m_hash.HashString( name );
+  m_hash.HashFloatArray( value.data );
 }
 
 void UniformList::Set( const char* name, const Texture* tex )
@@ -9337,6 +9399,9 @@ void UniformList::Set( const char* name, const Texture* tex )
   Value& uniform = m_uniforms.Set( name, Value() );
   uniform.sampler = tex->GetTexture();
   uniform.target = tex->GetTarget();
+  m_hash.HashString( name );
+  m_hash.HashBasicType( tex->GetTexture() );
+  m_hash.HashBasicType( tex->GetTarget() );
 }
 
 const UniformList::Value* UniformList::Get( const char* name ) const
@@ -9347,6 +9412,9 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // ae::Shader member functions
 //------------------------------------------------------------------------------
+ae::Hash s_shaderHash;
+ae::Hash s_uniformHash;
+
 Shader::Shader()
 {
   m_fragmentShader = 0;
@@ -9509,11 +9577,24 @@ void Shader::Destroy()
 
 void Shader::Activate( const UniformList& uniforms ) const
 {
-  AE_CHECK_GL_ERROR();
-
-  // Blending
-  if ( m_blending || m_blendingPremul )
+  ae::Hash shaderHash;
+  shaderHash.HashBasicType( this );
+  shaderHash.HashBasicType( m_blending );
+  shaderHash.HashBasicType( m_blendingPremul );
+  shaderHash.HashBasicType( m_depthWrite );
+  shaderHash.HashBasicType( m_depthTest );
+  shaderHash.HashBasicType( m_culling );
+  shaderHash.HashBasicType( m_wireframe );
+  bool shaderDirty = ( s_shaderHash != shaderHash );
+  if ( shaderDirty )
   {
+    s_shaderHash = shaderHash;
+    
+    AE_CHECK_GL_ERROR();
+
+    // Blending
+    if ( m_blending || m_blendingPremul )
+    {
     glEnable( GL_BLEND );
 
     // TODO: need other modes like Add, Min, Max - switch to enum then
@@ -9527,50 +9608,58 @@ void Shader::Activate( const UniformList& uniforms ) const
     {
       glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
     }
-  }
-  else
-  {
-    glDisable( GL_BLEND );
-  }
+    }
+    else
+    {
+      glDisable( GL_BLEND );
+    }
 
-  // Depth write
-  glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
+    // Depth write
+    glDepthMask( m_depthWrite ? GL_TRUE : GL_FALSE );
 
-  // Depth test
-  if ( m_depthTest )
-  {
-    // This is really context state shadow, and that should be able to override
-    // so reverseZ for example can be set without the shader knowing about that.
-    glDepthFunc( ReverseZ ? GL_GEQUAL : GL_LEQUAL );
-    glEnable( GL_DEPTH_TEST );
-  }
-  else
-  {
-    glDisable( GL_DEPTH_TEST );
-  }
+    // Depth test
+    if ( m_depthTest )
+    {
+      // This is really context state shadow, and that should be able to override
+      // so reverseZ for example can be set without the shader knowing about that.
+      glDepthFunc( ReverseZ ? GL_GEQUAL : GL_LEQUAL );
+      glEnable( GL_DEPTH_TEST );
+    }
+    else
+    {
+      glDisable( GL_DEPTH_TEST );
+    }
 
-  // Culling
-  if ( m_culling == Culling::None )
-  {
-    glDisable( GL_CULL_FACE );
-  }
-  else
-  {
-    // TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
-    glEnable( GL_CULL_FACE );
-    glFrontFace( ( m_culling == Culling::ClockwiseFront ) ? GL_CW : GL_CCW );
-  }
+    // Culling
+    if ( m_culling == Culling::None )
+    {
+      glDisable( GL_CULL_FACE );
+    }
+    else
+    {
+      // TODO: det(modelToWorld) < 0, then CCW/CW flips from inversion in transform.
+      glEnable( GL_CULL_FACE );
+      glFrontFace( ( m_culling == Culling::ClockwiseFront ) ? GL_CW : GL_CCW );
+    }
 
-  // Wireframe
+    // Wireframe
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
-  AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
+    AE_ASSERT_MSG( !m_wireframe, "Wireframe mode not supported on this platform" );
 #else
-  glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
+    glPolygonMode( GL_FRONT_AND_BACK, m_wireframe ? GL_LINE : GL_FILL );
 #endif
 
-  // Now setup the shader
-  glUseProgram( m_program );
-
+    // Now setup the shader
+    glUseProgram( m_program );
+  }
+  
+  // Always update uniforms after a shader change
+  if ( !shaderDirty && s_uniformHash == uniforms.GetHash() )
+  {
+    return;
+  }
+  s_uniformHash = uniforms.GetHash();
+  
   // Set shader uniforms
   bool missingUniforms = false;
   uint32_t textureIndex = 0;
@@ -12270,56 +12359,6 @@ void NetObjectServer::UpdateSendData()
     netObject->m_prevHash = netObject->m_hash;
     netObject->m_messageDataOut.Clear();
   }
-}
-
-//------------------------------------------------------------------------------
-// ae::Hash member functions
-//------------------------------------------------------------------------------
-Hash::Hash( uint32_t initialValue )
-{
-  m_hash = initialValue;
-}
-
-Hash& Hash::HashString( const char* str )
-{
-  while ( *str )
-  {
-    m_hash = m_hash ^ str[ 0 ];
-    m_hash *= 0x1000193;
-    str++;
-  }
-
-  return *this;
-}
-
-Hash& Hash::HashData( const void* _data, uint32_t length )
-{
-  const uint8_t* data = (const uint8_t*)_data;
-  for ( uint32_t i = 0; i < length; i++ )
-  {
-    m_hash = m_hash ^ data[ i ];
-    m_hash *= 0x1000193;
-  }
-
-  return *this;
-}
-
-Hash& Hash::HashFloat( float f )
-{
-  uint32_t ui;
-  memcpy( &ui, &f, sizeof( float ) );
-  ui &= 0xfffff000;
-  return HashBasicType( ui );
-}
-
-void Hash::Set( uint32_t hash )
-{
-  m_hash = hash;
-}
-
-uint32_t Hash::Get() const
-{
-  return m_hash;
 }
 
 } // ae end

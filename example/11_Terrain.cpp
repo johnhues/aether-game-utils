@@ -411,7 +411,7 @@ int main()
           {
             bool changed = false;
 
-            aeFloat4x4 temp = currentShape->GetTransform().GetTranspose();
+            aeFloat4x4 temp = currentShape->GetTransform();
             float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
             ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
             changed |= ImGui::InputFloat3( "translation", matrixTranslation );
@@ -420,7 +420,6 @@ int main()
             if ( changed )
             {
               ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
-              temp.SetTranspose();
               currentShape->SetTransform( temp );
             }
 
@@ -662,15 +661,13 @@ int main()
         {
           aeFloat4x4 gizmoTransform = currentShape->GetTransform();
 
-          gizmoTransform.SetTranspose();
           ImGuizmo::Manipulate(
-            worldToView.GetTranspose().data,
-            viewToProj.GetTranspose().data,
+            worldToView.data,
+            viewToProj.data,
             s_operation,
             ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
             gizmoTransform.data
           );
-          gizmoTransform.SetTranspose();
 
           debug.AddCube( gizmoTransform, aeColor::Green() );
         
@@ -690,15 +687,13 @@ int main()
         {
           aeFloat4x4 gizmoTransform = aeFloat4x4::Translation( currentObject->raySrc );
 
-          gizmoTransform.SetTranspose();
           ImGuizmo::Manipulate(
-            worldToView.GetTranspose().data,
-            viewToProj.GetTranspose().data,
+            worldToView.data,
+            viewToProj.data,
             s_operation,
             ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
             gizmoTransform.data
           );
-          gizmoTransform.SetTranspose();
 
           if ( gizmoClicked )
           {
