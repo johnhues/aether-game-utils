@@ -59,8 +59,8 @@ void HotSpotWorld::Update( float dt )
   {
     // @NOTE: Reset user forces for next frame after all simulation steps
     HotSpotObject* object = m_objects[ i ];
-    object->m_forces = aeFloat2( 0.0f );
-    object->m_gravity = aeFloat2( 0.0f );
+    object->m_forces = ae::Vec2( 0.0f );
+    object->m_gravity = ae::Vec2( 0.0f );
   }
 }
 
@@ -101,19 +101,19 @@ void HotSpotWorld::LoadTiles( const uint32_t* tiles, uint32_t width, uint32_t he
     for ( uint32_t x = 0; x < width; x++ )
     {
       uint32_t y1 = flipVertical ? height - 1 - y : y;
-      m_tiles.Set( aeInt3( x, y1, 0 ), tiles[ y * width + x ] );
+      m_tiles.Set( ae::Int3( x, y1, 0 ), tiles[ y * width + x ] );
     }
   }
 }
 
-void HotSpotWorld::SetTile( aeInt2 pos, uint32_t type )
+void HotSpotWorld::SetTile( ae::Int2 pos, uint32_t type )
 {
-  m_tiles.Set( aeInt3( pos, 0 ), type );
+  m_tiles.Set( ae::Int3( pos, 0 ), type );
 }
 
-uint32_t HotSpotWorld::GetTile( aeInt2 pos ) const
+uint32_t HotSpotWorld::GetTile( ae::Int2 pos ) const
 {
-  const uint32_t* type = m_tiles.TryGet( aeInt3( pos, 0 ) );
+  const uint32_t* type = m_tiles.TryGet( ae::Int3( pos, 0 ) );
   return type ? *type : 0;
 }
 
@@ -134,9 +134,9 @@ uint32_t HotSpotWorld::GetObjectCount() const
   return m_objects.Length();
 }
 
-aeInt2 HotSpotWorld::_GetTilePos( aeFloat2 pos )
+ae::Int2 HotSpotWorld::_GetTilePos( ae::Vec2 pos )
 {
-  return aeInt2( aeMath::Round( pos.x ), aeMath::Round( pos.y ) );
+  return ae::Int2( aeMath::Round( pos.x ), aeMath::Round( pos.y ) );
 }
 
 //------------------------------------------------------------------------------
@@ -163,38 +163,38 @@ float HotSpotObject::GetMass() const
   return m_mass;
 }
 
-void HotSpotObject::Warp( aeFloat2 meters )
+void HotSpotObject::Warp( ae::Vec2 meters )
 {
   m_position = meters;
 }
 
-void HotSpotObject::SetVelocity( aeFloat2 metersPerSecond )
+void HotSpotObject::SetVelocity( ae::Vec2 metersPerSecond )
 {
   m_velocity = metersPerSecond;
 }
 
-void HotSpotObject::AddForce( aeFloat2 newtons )
+void HotSpotObject::AddForce( ae::Vec2 newtons )
 {
   m_forces += newtons;
 }
 
-void HotSpotObject::AddImpulse( aeFloat2 newtons )
+void HotSpotObject::AddImpulse( ae::Vec2 newtons )
 {
   m_velocity += newtons / m_mass; // @TODO: Do these units match up?
 }
 
-void HotSpotObject::AddGravity( aeFloat2 acceleration )
+void HotSpotObject::AddGravity( ae::Vec2 acceleration )
 {
   m_gravity += acceleration;
   m_forces += acceleration * m_mass;
 }
 
-aeFloat2 HotSpotObject::GetPosition() const
+ae::Vec2 HotSpotObject::GetPosition() const
 {
   return m_position;
 }
 
-aeFloat2 HotSpotObject::GetVelocity() const
+ae::Vec2 HotSpotObject::GetVelocity() const
 {
   return m_velocity;
 }
@@ -208,15 +208,15 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
 {
   // @NOTE: Apply derived forces (drag etc) to a temporary value to
   //        allow multiple simulation steps per frame.
-  aeFloat2 forces = m_forces;
+  ae::Vec2 forces = m_forces;
 
   // @HACK: Shouldn't assume side-on platformer with gravity pointing -y
   {
-    aeInt2 tilePos;
+    ae::Int2 tilePos;
     uint32_t tileType;
     uint32_t tileProperties;
 
-    tilePos = HotSpotWorld::_GetTilePos( aeFloat2( m_position.x, m_position.y - 0.5f - kGroundDistanceEpsilon ) );
+    tilePos = HotSpotWorld::_GetTilePos( ae::Vec2( m_position.x, m_position.y - 0.5f - kGroundDistanceEpsilon ) );
     tileType = world->GetTile( tilePos );
     tileProperties = world->GetTileProperties( tileType );
     if ( tileProperties & world->GetCollisionMask() )
@@ -246,28 +246,28 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
   }
 
   // Drag: Fd = Surface Coeffiecient * Area * Density * V^2 * 0.5
-  aeInt2 tilePos = HotSpotWorld::_GetTilePos( m_position );
+  ae::Int2 tilePos = HotSpotWorld::_GetTilePos( m_position );
   uint32_t tileType = world->GetTile( tilePos );
   float density = world->GetTileFluidDensity( tileType );
   if ( density > 0.0f )
   {
     // Assume surface coefficient and area of 1.0
     float speed2 = m_velocity.LengthSquared();
-    aeFloat2 velDir = m_velocity.SafeNormalizeCopy();
+    ae::Vec2 velDir = m_velocity.SafeNormalizeCopy();
     forces -= velDir * ( speed2 * density * 0.5f );
   }
 
   {
-    ae::Map< aeInt2, int32_t, 5 > intersections;
+    ae::Map< ae::Int2, int32_t, 5 > intersections;
     intersections.Set( HotSpotWorld::_GetTilePos( m_position ), 1 );
-    intersections.Set( HotSpotWorld::_GetTilePos( m_position + aeFloat2( -0.5f ) ), 1 );
-    intersections.Set( HotSpotWorld::_GetTilePos( m_position + aeFloat2( 0.5f ) ), 1 );
-    intersections.Set( HotSpotWorld::_GetTilePos( m_position + aeFloat2( -0.5f, 0.5f ) ), 1 );
-    intersections.Set( HotSpotWorld::_GetTilePos( m_position + aeFloat2( 0.5f, -0.5f ) ), 1 );
+    intersections.Set( HotSpotWorld::_GetTilePos( m_position + ae::Vec2( -0.5f ) ), 1 );
+    intersections.Set( HotSpotWorld::_GetTilePos( m_position + ae::Vec2( 0.5f ) ), 1 );
+    intersections.Set( HotSpotWorld::_GetTilePos( m_position + ae::Vec2( -0.5f, 0.5f ) ), 1 );
+    intersections.Set( HotSpotWorld::_GetTilePos( m_position + ae::Vec2( 0.5f, -0.5f ) ), 1 );
     aeRect objRect( m_position.x - 0.5f, m_position.y - 0.5f, 1.0f, 1.0f );
     for ( uint32_t i = 0; i < intersections.Length(); i++ )
     {
-      aeInt2 tilePos = intersections.GetKey( i );
+      ae::Int2 tilePos = intersections.GetKey( i );
       uint32_t tileType = world->GetTile( tilePos );
       float density = world->GetTileFluidDensity( tileType );
       if ( density > 0.0f )
@@ -285,7 +285,7 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
   }
 
   // F = ma
-  aeFloat2 acceleration = forces / m_mass;
+  ae::Vec2 acceleration = forces / m_mass;
   m_velocity += acceleration * dt;
   m_position += m_velocity * dt;
 
@@ -295,18 +295,18 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
     m_airTimer += dt;
   }
 
-  if ( !m_CheckCollision( world, aeInt2( 0, -1 ) ) )
+  if ( !m_CheckCollision( world, ae::Int2( 0, -1 ) ) )
   {
-    m_CheckCollision( world, aeInt2( 0, 1 ) );
+    m_CheckCollision( world, ae::Int2( 0, 1 ) );
   }
 
-  if ( !m_CheckCollision( world, aeInt2( -1, 0 ) ) )
+  if ( !m_CheckCollision( world, ae::Int2( -1, 0 ) ) )
   {
-    m_CheckCollision( world, aeInt2( 1, 0 ) );
+    m_CheckCollision( world, ae::Int2( 1, 0 ) );
   }
 }
 
-bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, aeInt2 _dir )
+bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, ae::Int2 _dir )
 {
   AE_ASSERT( _dir.x + _dir.y == -1 || _dir.x + _dir.y == 1 );
 
@@ -328,7 +328,7 @@ bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, aeInt2 _dir )
 
   if ( m_TestSide( world, b0, b1, &collisionPos ) )
   {
-    aeInt2 tilePos = HotSpotWorld::_GetTilePos( collisionPos );
+    ae::Int2 tilePos = HotSpotWorld::_GetTilePos( collisionPos );
 
     if ( dir.y > 0 )
     {
@@ -362,9 +362,9 @@ bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, aeInt2 _dir )
   return false;
 }
 
-bool HotSpotObject::m_TestSide( const HotSpotWorld* world, aeFloat2 p0, aeFloat2 p1, aeFloat2* pOut )
+bool HotSpotObject::m_TestSide( const HotSpotWorld* world, ae::Vec2 p0, ae::Vec2 p1, ae::Vec2* pOut )
 {
-  aeInt2 tilePos = HotSpotWorld::_GetTilePos( p0 );
+  ae::Int2 tilePos = HotSpotWorld::_GetTilePos( p0 );
   uint32_t tileType = world->GetTile( tilePos );
   uint32_t tileProperties = world->GetTileProperties( tileType );
   bool c0 = ( tileProperties & world->GetCollisionMask() );

@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aetherEXT.h"
+#include "Common.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -32,75 +33,77 @@ int main()
 {
 	AE_INFO( "Initialize" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
+	ae::Window window;
+	ae::GraphicsDevice render;
+	ae::Input input;
 	ae::TimeStep timeStep;
-	aeDebugRender debug;
+	ae::DebugLines debug;
+  ae::Texture2D fontTexture;
 	aeTextRender text;
 	aeEditorCamera camera;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "geometry" );
-	render.InitializeOpenGL( &window );
+	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	debug.Initialize( 512 );
-	text.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
+  LoadPng( &fontTexture, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+	text.Initialize( &fontTexture, 8 );
 
 	AE_INFO( "Run" );
-	while ( !input.GetState()->exit )
+	while ( !input.quit )
 	{
 		input.Pump();
 
-		if ( !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+		if ( input.Get( ae::Key::F ) && !input.GetPrev( ae::Key::F ) )
 		{
-			camera.Refocus( aeFloat3( 0.0f ) );
+			camera.Refocus( ae::Vec3( 0.0f ) );
 		}
 		camera.Update( &input, timeStep.GetTimeStep() );
 
 		render.Activate();
 		render.Clear( aeColor::PicoDarkPurple() );
 		
-		aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-		aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( ae::QUARTER_PI, render.GetAspectRatio(), 0.25f, 50.0f );
-		aeFloat4x4 worldToProj = viewToProj * worldToView;
+		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( ae::QUARTER_PI, render.GetAspectRatio(), 0.25f, 50.0f );
+		ae::Matrix4 worldToProj = viewToProj * worldToView;
 
 		// UI units in pixels, origin in bottom left
-		aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
-		textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
+		ae::Matrix4 textToNdc = ae::Matrix4::Scaling( ae::Vec3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
+		textToNdc *= ae::Matrix4::Translation( ae::Vec3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
 
-		aeFloat4x4 worldToUI = textToNdc.GetInverse() * worldToProj;
+		ae::Matrix4 worldToUI = textToNdc.GetInverse() * worldToProj;
 
-		auto DrawText = [&]( aeFloat3 worldPos, const char* str, aeColor color )
+		auto DrawText = [&]( ae::Vec3 worldPos, const char* str, aeColor color )
 		{
-			text.Add( aeFloat3( aeFloat3::ProjectPoint( worldToUI, worldPos ).GetXY() ), aeFloat2( text.GetFontSize() * 2.0f ), str, color, 0, 0 );
+			text.Add( ae::Vec3( ae::Vec3::ProjectPoint( worldToUI, worldPos ).GetXY() ), ae::Vec2( text.GetFontSize() * 2.0f ), str, color, 0, 0 );
 		};
 
 		// Edit ray direction
-		static aeFloat3 s_raySource( 0.0f );
-		static aeFloat3 s_rayDir( 0.0f );
+		static ae::Vec3 s_raySource( 0.0f );
+		static ae::Vec3 s_rayDir( 0.0f );
 		static float s_rayLength = 8.0f;
-		if ( input.GetState()->Get( aeKey::Num1 ) ) s_rayLength -= 0.016f;
-		if ( input.GetState()->Get( aeKey::Num2 ) ) s_rayLength += 0.016f;
+		if ( input.Get( ae::Key::Num1 ) ) s_rayLength -= 0.016f;
+		if ( input.Get( ae::Key::Num2 ) ) s_rayLength += 0.016f;
 		s_rayLength = aeMath::Clip( s_rayLength, 0.0f, 8.0f );
 
-		if ( input.GetState()->Get( aeKey::G ) )
+		if ( input.Get( ae::Key::G ) )
 		{
 			s_raySource = camera.GetPosition();
 			s_rayDir = camera.GetForward();
 			s_rayLength = 8.0f;
 		}
-		aeFloat3 ray = s_rayDir * s_rayLength;
-		aeFloat3 raySource = s_raySource;
+		ae::Vec3 ray = s_rayDir * s_rayLength;
+		ae::Vec3 raySource = s_raySource;
 
 		// Actual geometry calculations / rendering
 		static int32_t currentTest = 0;
-		if ( input.GetState()->left && !input.GetPrevState()->left )
+		if ( input.Get( ae::Key::Left ) && !input.GetPrev( ae::Key::Left ) )
 		{
 			currentTest--;
 		}
-		if ( input.GetState()->right && !input.GetPrevState()->right )
+		if ( input.Get( ae::Key::Right ) && !input.GetPrev( ae::Key::Right ) )
 		{
 			currentTest++;
 		}
@@ -113,14 +116,14 @@ int main()
 			{
 				infoText.Append( "Triangle-Ray\n" );
 				
-				aeFloat3 triangle[] =
+				ae::Vec3 triangle[] =
 				{
-					aeFloat3( -1.0f, -1.5f, -1.0f ) * 2.0f,
-					aeFloat3( 1.0f, -0.5f, -1.0f ) * 2.0f,
-					aeFloat3( 0.0f, 1.5f, 1.0f ) * 2.0f,
+					ae::Vec3( -1.0f, -1.5f, -1.0f ) * 2.0f,
+					ae::Vec3( 1.0f, -0.5f, -1.0f ) * 2.0f,
+					ae::Vec3( 0.0f, 1.5f, 1.0f ) * 2.0f,
 				};
-				aeFloat3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
-				aeFloat3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
+				ae::Vec3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
+				ae::Vec3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
 				normal.SafeNormalize();
 				debug.AddLine( triangle[ 0 ], triangle[ 1 ], aeColor::Red() );
 				debug.AddLine( triangle[ 1 ], triangle[ 2 ], aeColor::Red() );
@@ -128,13 +131,13 @@ int main()
 				debug.AddLine( triangleCenter, triangleCenter + normal, aeColor::Red() );
 
 				static float r = 1.0f;
-				if ( input.GetState()->Get( aeKey::Num3 ) ) r -= 0.016f;
-				if ( input.GetState()->Get( aeKey::Num4 ) ) r += 0.016f;
+				if ( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
+				if ( input.Get( ae::Key::Num4 ) ) r += 0.016f;
 				r = aeMath::Clip( r, 0.01f, 8.0f );
 
 				float dist = 0.0f;
-				aeFloat3 nearestIntersectionPoint;
-				aeFloat3 nearestPolygonIntersectionPoint;
+				ae::Vec3 nearestIntersectionPoint;
+				ae::Vec3 nearestPolygonIntersectionPoint;
 				aeSphere sphere( triangleCenter - ray, r );
 				debug.AddLine( sphere.center, sphere.center + ray, aeColor::Red() );
 				debug.AddSphere( sphere.center, sphere.radius, aeColor::Green(), 16 );
@@ -151,10 +154,10 @@ int main()
 			{
 				infoText.Append( "Sphere-Ray\n" );
 				
-				debug.AddSphere( aeFloat3( 0.0f ), 1.0f, aeColor::Blue(), 16 );
+				debug.AddSphere( ae::Vec3( 0.0f ), 1.0f, aeColor::Blue(), 16 );
 
-				aeFloat3 e = raySource;
-				aeFloat3 d = ray.SafeNormalizeCopy();
+				ae::Vec3 e = raySource;
+				ae::Vec3 d = ray.SafeNormalizeCopy();
 
 				float b = 2.0f * e.Dot( d );
 				float c = e.LengthSquared() - 1.0f;
@@ -179,13 +182,13 @@ int main()
 				bool hit0 = false;
 				bool hit1 = false;
 
-				aeFloat3 p0( 0.0f, 0.0f, 2.0f );
-				aeFloat3 p1( 0.0f, 0.0f, -2.0f );
+				ae::Vec3 p0( 0.0f, 0.0f, 2.0f );
+				ae::Vec3 p1( 0.0f, 0.0f, -2.0f );
 
-				aeFloat3 e = raySource;
-				aeFloat3 d = ray;
-				aeFloat2 exy = raySource.GetXY();
-				aeFloat2 dxy = ray.GetXY();
+				ae::Vec3 e = raySource;
+				ae::Vec3 d = ray;
+				ae::Vec2 exy = raySource.GetXY();
+				ae::Vec2 dxy = ray.GetXY();
 				
 				float a = dxy.LengthSquared();
 				if ( a > 0.0f )
@@ -200,15 +203,15 @@ int main()
 						float t0 = ( -b + discriminant ) / ( 2.0f * a );
 						float t1 = ( -b - discriminant ) / ( 2.0f * a );
 
-						aeFloat3 r0 = e + d * t0;
-						aeFloat3 r1 = e + d * t1;
+						ae::Vec3 r0 = e + d * t0;
+						ae::Vec3 r1 = e + d * t1;
 						debug.AddSphere( r0, 0.05f, aeColor::Red(), 8 );
 						debug.AddSphere( r1, 0.05f, aeColor::Red(), 8 );
 						DrawText( r0, "t0", aeColor::Red() );
 						DrawText( r1, "t1", aeColor::Red() );
 
-						aeFloat3 z0( 0.0f, 0.0f, r0.z );
-						aeFloat3 z1( 0.0f, 0.0f, r1.z );
+						ae::Vec3 z0( 0.0f, 0.0f, r0.z );
+						ae::Vec3 z1( 0.0f, 0.0f, r1.z );
 						debug.AddSphere( z0, 0.05f, aeColor::Blue(), 8 );
 						debug.AddSphere( z1, 0.05f, aeColor::Blue(), 8 );
 						DrawText( z0, "z0", aeColor::Blue() );
@@ -218,7 +221,7 @@ int main()
 						if ( ( p0.z - z0.z ) * ( p0.z - z1.z ) < 0.0f )
 						{
 							float t2 = ( p0.z - e.z ) / d.z;
-							aeFloat3 c0 = e + d * t2;
+							ae::Vec3 c0 = e + d * t2;
 							debug.AddSphere( c0, 0.05f, aeColor::Green(), 8 );
 							DrawText( c0, "c0", aeColor::Green() );
 							hit0 = true;
@@ -227,7 +230,7 @@ int main()
 						if ( ( p1.z - z0.z ) * ( p1.z - z1.z ) < 0.0f )
 						{
 							float t2 = ( p1.z - e.z ) / d.z;
-							aeFloat3 c1 = e + d * t2;
+							ae::Vec3 c1 = e + d * t2;
 							debug.AddSphere( c1, 0.05f, aeColor::Green(), 8 );
 							DrawText( c1, "c1", aeColor::Green() );
 							hit1 = true;
@@ -239,8 +242,8 @@ int main()
 				debug.AddCircle( p1, p1 - p0, 1.0f, hit1 ? aeColor::Green() : aeColor::Blue(), 16 );
 				for ( uint32_t i = 0; i < 8; i++ )
 				{
-					aeFloat2 offset = aeFloat2::FromAngle( aeMath::TWO_PI * i / 8.0f );
-					debug.AddLine( p0 + aeFloat3( offset ), p1 + aeFloat3( offset ), aeColor::Blue() );
+					ae::Vec2 offset = ae::Vec2::FromAngle( aeMath::TWO_PI * i / 8.0f );
+					debug.AddLine( p0 + ae::Vec3( offset ), p1 + ae::Vec3( offset ), aeColor::Blue() );
 				}
 
 				break;
@@ -249,14 +252,14 @@ int main()
 			{
 				infoText.Append( "Sphere-Triangle (static)\n" );
 				
-				aeFloat3 triangle[] =
+				ae::Vec3 triangle[] =
 				{
-					aeFloat3( -1.0f, -1.5f, -1.0f ) * 2.0f,
-					aeFloat3( 1.0f, -0.5f, -1.0f ) * 2.0f,
-					aeFloat3( 0.0f, 1.5f, 1.0f ) * 2.0f,
+					ae::Vec3( -1.0f, -1.5f, -1.0f ) * 2.0f,
+					ae::Vec3( 1.0f, -0.5f, -1.0f ) * 2.0f,
+					ae::Vec3( 0.0f, 1.5f, 1.0f ) * 2.0f,
 				};
-				aeFloat3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
-				aeFloat3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
+				ae::Vec3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
+				ae::Vec3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
 				normal.SafeNormalize();
 				debug.AddLine( triangle[ 0 ], triangle[ 1 ], aeColor::Red() );
 				debug.AddLine( triangle[ 1 ], triangle[ 2 ], aeColor::Red() );
@@ -264,18 +267,18 @@ int main()
 				debug.AddLine( triangleCenter, triangleCenter + normal, aeColor::Red() );
 				
 				static float r = 1.0f;
-				if ( input.GetState()->Get( aeKey::Num3 ) ) r -= 0.016f;
-				if ( input.GetState()->Get( aeKey::Num4 ) ) r += 0.016f;
+				if ( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
+				if ( input.Get( ae::Key::Num4 ) ) r += 0.016f;
 				r = aeMath::Clip( r, 0.01f, 8.0f );
 
-				aeFloat3 nearestIntersectionPoint;
+				ae::Vec3 nearestIntersectionPoint;
 				aeSphere sphere( raySource + ray, r );
 				if ( sphere.IntersectTriangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], &nearestIntersectionPoint ) )
 				{
 					debug.AddSphere( raySource + ray, r, aeColor::Green(), 16 );
 					debug.AddSphere( nearestIntersectionPoint, 0.05f, aeColor::Red(), 8 );
 					
-					aeFloat3 spherePoint = sphere.center + ( nearestIntersectionPoint - sphere.center ).SafeNormalizeCopy() * r;
+					ae::Vec3 spherePoint = sphere.center + ( nearestIntersectionPoint - sphere.center ).SafeNormalizeCopy() * r;
 					debug.AddSphere( spherePoint, 0.05f, aeColor::Green(), 8 );
 					debug.AddLine( nearestIntersectionPoint, spherePoint, aeColor::Green() );
 				}
@@ -296,50 +299,50 @@ int main()
         static float a0 = 0.0f;
         static float a1 = ae::QUARTER_PI;
         static float d = 1.0f;
-        static aeFloat3 rayP( 3.0f, 0.0f, 0.0f );
-        static aeFloat3 rayD( -1.0f, 0.0f, 0.0f );
+        static ae::Vec3 rayP( 3.0f, 0.0f, 0.0f );
+        static ae::Vec3 rayD( -1.0f, 0.0f, 0.0f );
         
-        if ( input.GetState()->Get( aeKey::Num1 ) ) a0 -= 0.016f;
-        if ( input.GetState()->Get( aeKey::Num2 ) ) a0 += 0.016f;
-        if ( input.GetState()->Get( aeKey::Num3 ) ) a1 -= 0.016f;
-        if ( input.GetState()->Get( aeKey::Num4 ) ) a1 += 0.016f;
-        if ( input.GetState()->Get( aeKey::Num5 ) ) d -= 0.016f;
-        if ( input.GetState()->Get( aeKey::Num6 ) ) d += 0.016f;
-        if ( input.GetState()->Get( aeKey::G ) )
+        if ( input.Get( ae::Key::Num1 ) ) a0 -= 0.016f;
+        if ( input.Get( ae::Key::Num2 ) ) a0 += 0.016f;
+        if ( input.Get( ae::Key::Num3 ) ) a1 -= 0.016f;
+        if ( input.Get( ae::Key::Num4 ) ) a1 += 0.016f;
+        if ( input.Get( ae::Key::Num5 ) ) d -= 0.016f;
+        if ( input.Get( ae::Key::Num6 ) ) d += 0.016f;
+        if ( input.Get( ae::Key::G ) )
         {
           rayP = camera.GetPosition();
           rayD = camera.GetForward();
         }
 				
-        aeFloat2 xy( ae::Cos( a0 ), ae::Sin( a0 ) );
-				aePlane plane( aeFloat4( xy * ae::Cos( a1 ), ae::Sin( a1 ), d ) );
+        ae::Vec2 xy( ae::Cos( a0 ), ae::Sin( a0 ) );
+				aePlane plane( ae::Vec4( xy * ae::Cos( a1 ), ae::Sin( a1 ), d ) );
         
-        aeFloat3 p = plane.GetClosestPointToOrigin();
-        aeFloat3 pn = plane.GetClosestPointToOrigin() + plane.GetNormal();
+        ae::Vec3 p = plane.GetClosestPointToOrigin();
+        ae::Vec3 pn = plane.GetClosestPointToOrigin() + plane.GetNormal();
 				
         // Reference lines
         if ( d > 0.0f )
         {
-          debug.AddLine( aeFloat3( 0.0f ), p, aeColor::Gray() );
+          debug.AddLine( ae::Vec3( 0.0f ), p, aeColor::Gray() );
         }
         else if ( d < -1.0f )
         {
-          debug.AddLine( aeFloat3( 0.0f ), pn, aeColor::Gray() );
+          debug.AddLine( ae::Vec3( 0.0f ), pn, aeColor::Gray() );
         }
-        aeAABB aabb( aeFloat3( 0.0f ), p );
+        aeAABB aabb( ae::Vec3( 0.0f ), p );
         debug.AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), aeColor::Gray() );
         
         // Axis lines
-        debug.AddLine( aeFloat3( 0.0f ), aeFloat3( 1.0f, 0.0f, 0.0f ), aeColor::Red() );
-        debug.AddLine( aeFloat3( 0.0f ), aeFloat3( 0.0f, 1.0f, 0.0f ), aeColor::Green() );
-        debug.AddLine( aeFloat3( 0.0f ), aeFloat3( 0.0f, 0.0f, 1.0f ), aeColor::Blue() );
+        debug.AddLine( ae::Vec3( 0.0f ), ae::Vec3( 1.0f, 0.0f, 0.0f ), aeColor::Red() );
+        debug.AddLine( ae::Vec3( 0.0f ), ae::Vec3( 0.0f, 1.0f, 0.0f ), aeColor::Green() );
+        debug.AddLine( ae::Vec3( 0.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ), aeColor::Blue() );
         
         // Plane
         debug.AddCircle( p, plane.GetNormal(), 0.25f, aeColor::PicoPink(), 16 );
         debug.AddLine( p, pn, aeColor::PicoPink() );
         
         // Ray
-        aeFloat3 rayHit( 0.0f );
+        ae::Vec3 rayHit( 0.0f );
         debug.AddSphere( rayP, 0.05f, ae::Color::PicoPeach(), 8 );
         if ( plane.IntersectRay( rayP, rayD, nullptr, &rayHit ) )
         {
@@ -351,7 +354,7 @@ int main()
         {
           debug.AddLine( rayP, rayP + rayD, ae::Color::PicoPeach() );
         }
-        aeFloat3 closest = plane.GetClosestPoint( rayP );
+        ae::Vec3 closest = plane.GetClosestPoint( rayP );
         debug.AddCircle( p, plane.GetNormal(), ( p - closest ).Length(), aeColor::PicoPink(), 32 );
         debug.AddLine( p, closest, ae::Color::PicoPink() );
         
@@ -376,7 +379,7 @@ int main()
       }
       infoStr++;
     }
-		text.Add( aeFloat3( 50.0f, 50.0f + newlineCount * text.GetFontSize(), 0.0f ), aeFloat2( text.GetFontSize() * 2.0f ), infoText.c_str(), aeColor::Red(), 0, 0 );
+		text.Add( ae::Vec3( 50.0f, 50.0f + newlineCount * text.GetFontSize(), 0.0f ), ae::Vec2( text.GetFontSize() * 2.0f ), infoText.c_str(), aeColor::Red(), 0, 0 );
     if ( currentTest != 4 )
     {
       debug.AddLine( raySource, raySource + ray, aeColor::Red() );

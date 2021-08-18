@@ -70,12 +70,12 @@ void ae::Mesh::Vertex::Serialize( const SerializationParams& params, ae::BinaryS
 }
 
 // @TODO: Move to aeMath
-bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeFloat3 c, bool limitRay, bool ccw, bool cw, aeFloat3* pOut, aeFloat3* nOut, float* tOut )
+bool IntersectRayTriangle( ae::Vec3 p, ae::Vec3 dir, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c, bool limitRay, bool ccw, bool cw, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut )
 {
-  aeFloat3 ab = b - a;
-  aeFloat3 ac = c - a;
-  aeFloat3 n = ab.Cross( ac );
-  aeFloat3 qp = -dir;
+  ae::Vec3 ab = b - a;
+  ae::Vec3 ac = c - a;
+  ae::Vec3 n = ab.Cross( ac );
+  ae::Vec3 qp = -dir;
   
   // Compute denominator d
   float d = qp.Dot( n );
@@ -95,7 +95,7 @@ bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeF
   float ood = 1.0f / d;
   
   // Compute intersection t value of pq with plane of triangle
-  aeFloat3 ap = p - a;
+  ae::Vec3 ap = p - a;
   float t = ap.Dot( n ) * ood;
   // Ray intersects if 0 <= t
   if ( t < 0.0f )
@@ -109,7 +109,7 @@ bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeF
   }
   
   // Compute barycentric coordinate components and test if within bounds
-  aeFloat3 e = qp.Cross( ap );
+  ae::Vec3 e = qp.Cross( ap );
   float v = ac.Dot( e ) * ood;
   if ( v < 0.0f || v > 1.0f )
   {
@@ -143,7 +143,7 @@ bool IntersectRayTriangle( aeFloat3 p, aeFloat3 dir, aeFloat3 a, aeFloat3 b, aeF
 #if _AE_EMSCRIPTEN_
 
 bool aeMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization ) { return false; }
-void aeMesh::Transform( aeFloat4x4 transform ) {}
+void aeMesh::Transform( ae::Matrix4 transform ) {}
 const aeMeshVertex* aeMesh::GetVertices() const { return nullptr; }
 const aeMeshIndex* aeMesh::GetIndices() const { return nullptr; }
 uint32_t aeMesh::GetVertexCount() const { return 0; }
@@ -196,7 +196,7 @@ bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* e
     if ( vertCount )
     {
       aiVector3D p = mesh->mVertices[ 0 ];
-      m_aabb = aeAABB( aeFloat3( p.x, p.y, p.z ), aeFloat3( p.x, p.y, p.z ) );
+      m_aabb = aeAABB( ae::Vec3( p.x, p.y, p.z ), ae::Vec3( p.x, p.y, p.z ) );
     }
 
     for ( uint32_t j = 0; j < vertCount; j++ )
@@ -205,12 +205,12 @@ bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* e
       
       // Position
       aiVector3D p = mesh->mVertices[ j ];
-      vertex.position = aeFloat4( p.x, p.y, p.z, 1.0f );
+      vertex.position = ae::Vec4( p.x, p.y, p.z, 1.0f );
       m_aabb.Expand( vertex.position.GetXYZ() );
 
       // Normal
       aiVector3D n = mesh->mNormals[ j ];
-      vertex.normal = aeFloat4( n.x, n.y, n.z, 0.0f );
+      vertex.normal = ae::Vec4( n.x, n.y, n.z, 0.0f );
 
       // UVs
       memset( vertex.tex, 0, sizeof(vertex.tex) );
@@ -220,7 +220,7 @@ bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* e
         // @NOTE: An aiMesh may contain 0 to AI_MAX_NUMBER_OF_TEXTURECOORDS per vertex.
         //        NULL if not present. The array is mNumVertices in size.
         aiVector3D t = mesh->mTextureCoords[ k ][ j ];
-        vertex.tex[ k ] = aeFloat2( t.x, t.y );
+        vertex.tex[ k ] = ae::Vec2( t.x, t.y );
       }
 
       // Color
@@ -291,13 +291,13 @@ void ae::Mesh::Load( LoadParams params )
       Vertex vert;
       memset( &vert, 0, sizeof(vert) );
       
-      vert.position = aeFloat4( *params.positions, 1.0f );
-      params.positions = (aeFloat3*)( (uint8_t*)params.positions + params.positionStride );
+      vert.position = ae::Vec4( *params.positions, 1.0f );
+      params.positions = (ae::Vec3*)( (uint8_t*)params.positions + params.positionStride );
       
       if ( params.normals )
       {
-        vert.normal = aeFloat4( *params.normals, 0.0f );
-        params.normals = (aeFloat3*)( (uint8_t*)params.normals + params.normalStride );
+        vert.normal = ae::Vec4( *params.normals, 0.0f );
+        params.normals = (ae::Vec3*)( (uint8_t*)params.normals + params.normalStride );
       }
       
       if ( params.userData )
@@ -373,14 +373,14 @@ void ae::Mesh::Serialize( const SerializationParams& params, ae::BinaryStream* s
   }
 }
 
-void ae::Mesh::Transform( aeFloat4x4 transform )
+void ae::Mesh::Transform( ae::Matrix4 transform )
 {
   if ( !m_vertices.Length() )
   {
     return;
   }
   
-  aeFloat3 p( transform * m_vertices[ 0 ].position );
+  ae::Vec3 p( transform * m_vertices[ 0 ].position );
   m_aabb = aeAABB( p, p );
   
   // @TODO: Transform normals
@@ -434,18 +434,18 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
       return false; // Early out if ray doesn't touch obb
     }
     
-    if ( aeDebugRender* debug = params.debug )
+    if ( ae::DebugLines* debug = params.debug )
     {
       // Ray intersects obb
-      debug->AddCube( obb.GetTransform(), params.debugColor );
+      debug->AddOBB( obb.GetTransform(), params.debugColor );
     }
   }
   
   bool limitRay = params.maxLength != 0.0f;
-  const aeFloat4x4 invTransform = params.transform.GetInverse();
-  const aeFloat3 source( invTransform * aeFloat4( params.source, 1.0f ) );
-  const aeFloat3 ray( invTransform * aeFloat4( limitRay ? params.direction.SafeNormalizeCopy() * params.maxLength : params.direction, 0.0f ) );
-  const aeFloat3 normDir = ray.SafeNormalizeCopy();
+  const ae::Matrix4 invTransform = params.transform.GetInverse();
+  const ae::Vec3 source( invTransform * ae::Vec4( params.source, 1.0f ) );
+  const ae::Vec3 ray( invTransform * ae::Vec4( limitRay ? params.direction.SafeNormalizeCopy() * params.maxLength : params.direction, 0.0f ) );
+  const ae::Vec3 normDir = ray.SafeNormalizeCopy();
   const bool ccw = params.hitCounterclockwise;
   const bool cw = params.hitClockwise;
   
@@ -458,12 +458,12 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
   const uint32_t maxHits = aeMath::Min( params.maxHits, countof(RaycastResult::hits) );
   for ( uint32_t i = 0; i < triCount; i++ )
   {
-    aeFloat3 a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
-    aeFloat3 b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
-    aeFloat3 c = vertices[ indices[ i * 3 + 2 ] ].position.GetXYZ();
+    ae::Vec3 a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
+    ae::Vec3 b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
+    ae::Vec3 c = vertices[ indices[ i * 3 + 2 ] ].position.GetXYZ();
     
-    aeFloat3 p;
-    aeFloat3 n;
+    ae::Vec3 p;
+    ae::Vec3 n;
     if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
     {
       RaycastResult::Hit* outHit = &hits[ hitCount ];
@@ -472,8 +472,8 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
         hitCount++;
       }
       
-      p = aeFloat3( params.transform * aeFloat4( p, 1.0f ) );
-      n = aeFloat3( params.transform * aeFloat4( n, 0.0f ) );
+      p = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) );
+      n = ae::Vec3( params.transform * ae::Vec4( n, 0.0f ) );
       
       outHit->position = p;
       outHit->normal = n;
@@ -487,7 +487,7 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
     }
   }
   
-  if ( aeDebugRender* debug = params.debug )
+  if ( ae::DebugLines* debug = params.debug )
   {
     if ( hitCount && !limitRay )
     {
@@ -501,8 +501,8 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
     for ( uint32_t i = 0; i < hitCount; i++ )
     {
       const RaycastResult::Hit* hit = &hits[ i ];
-      const aeFloat3 p = hit->position;
-      const aeFloat3 n = hit->normal;
+      const ae::Vec3 p = hit->position;
+      const ae::Vec3 n = hit->normal;
       float s = ( hitCount > 1 ) ? ( i / ( hitCount - 1.0f ) ) : 1.0f;
       debug->AddCircle( p, n, aeMath::Lerp( 0.25f, 0.3f, s ), params.debugColor, 8 );
       debug->AddLine( p, p + n, params.debugColor );
@@ -528,16 +528,16 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
     return info; // Early out if sphere is to far from mesh
   }
   
-  if ( aeDebugRender* debug = params.debug )
+  if ( ae::DebugLines* debug = params.debug )
   {
     // Sphere intersects obb
-    debug->AddCube( obb.GetTransform(), params.debugColor );
+    debug->AddOBB( obb.GetTransform(), params.debugColor );
   }
   
   PushOutInfo result;
   result.sphere = info.sphere;
   result.velocity = info.velocity;
-  bool hasIdentityTransform = ( params.transform == aeFloat4x4::Identity() );
+  bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
   
   const uint32_t triCount = GetIndexCount() / 3;
   const Index* indices = GetIndices();
@@ -545,7 +545,7 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
   
   for ( uint32_t i = 0; i < triCount; i++ )
   {
-    aeFloat3 a, b, c;
+    ae::Vec3 a, b, c;
     if ( hasIdentityTransform )
     {
       a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
@@ -554,21 +554,21 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
     }
     else
     {
-      a = aeFloat3( params.transform * vertices[ indices[ i * 3 ] ].position );
-      b = aeFloat3( params.transform * vertices[ indices[ i * 3 + 1 ] ].position );
-      c = aeFloat3( params.transform * vertices[ indices[ i * 3 + 2 ] ].position );
+      a = ae::Vec3( params.transform * vertices[ indices[ i * 3 ] ].position );
+      b = ae::Vec3( params.transform * vertices[ indices[ i * 3 + 1 ] ].position );
+      c = ae::Vec3( params.transform * vertices[ indices[ i * 3 + 2 ] ].position );
     }
     
-    aeFloat3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
-    aeFloat3 triCenter( ( a + b + c ) / 3.0f );
+    ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
+    ae::Vec3 triCenter( ( a + b + c ) / 3.0f );
     
-    aeFloat3 triToSphereDir = ( result.sphere.center - triCenter );
+    ae::Vec3 triToSphereDir = ( result.sphere.center - triCenter );
     if ( triNormal.Dot( triToSphereDir ) < 0.0f )
     {
       continue;
     }
     
-    aeFloat3 triHitPos;
+    ae::Vec3 triHitPos;
     if ( result.sphere.IntersectTriangle( a, b, c, &triHitPos ) )
     {
       triToSphereDir = ( result.sphere.center - triHitPos );
@@ -577,7 +577,7 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
         continue;
       }
       
-      aeFloat3 closestSpherePoint = ( triHitPos - result.sphere.center ).SafeNormalizeCopy();
+      ae::Vec3 closestSpherePoint = ( triHitPos - result.sphere.center ).SafeNormalizeCopy();
       closestSpherePoint *= result.sphere.radius;
       closestSpherePoint += result.sphere.center;
       
@@ -590,7 +590,7 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
         result.hits.Append( { triHitPos, triNormal } );
       }
       
-      if ( aeDebugRender* debug = params.debug )
+      if ( ae::DebugLines* debug = params.debug )
       {
         debug->AddLine( a, b, params.debugColor );
         debug->AddLine( b, c, params.debugColor );

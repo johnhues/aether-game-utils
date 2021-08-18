@@ -107,8 +107,6 @@ int main()
     //------------------------------------------------------------------------------
     // Render
     //------------------------------------------------------------------------------
-    //const char* connectionStatus = client->IsConnected() ? "Connected" : "Connecting...";
-    //game.text.Add( aeFloat3( 0.0f ), aeFloat2( 1.0f ), connectionStatus, ae::Color::White(), 0, 0 );
     game.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );
   }
 

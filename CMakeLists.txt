@@ -55,11 +55,6 @@ if(NOT EMSCRIPTEN)
 	if(UNIX AND NOT APPLE)
 		find_package(uuid REQUIRED)
 	endif()
-
-	# build sdl2 to be statically linked
-	set(SDL_STATIC ON CACHE BOOL "" FORCE)
-	set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-	add_subdirectory(deps/sdl)
 endif()
 
 # some parts of assimp are not needed and should be disabled
@@ -132,7 +127,6 @@ set(AE_DEPS_LIBARARIES
 if(APPLE)
 	list(APPEND AE_DEPS_LIBARARIES
 		${OPENAL_LIBRARY}
-		"-framework Cocoa"
 	)
 elseif(MSVC)
 	list(APPEND AE_DEPS_LIBARARIES
@@ -150,9 +144,6 @@ elseif(UNIX)
 		uuid
 	)
 endif()
-if(NOT EMSCRIPTEN)
-	list(APPEND AE_DEPS_LIBARARIES SDL2main SDL2-static)
-endif()
 
 # use c++17
 set(CMAKE_CXX_STANDARD 17)
@@ -161,6 +152,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_definitions(-D_UNICODE -DUNICODE)
 # disable standard library warnings on windows
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+if(APPLE)
+	add_definitions(-DAE_USE_MODULES)
+	add_compile_options(-fmodules)
+	add_compile_options(-fcxx-modules)
+endif()
 
 # library, tests, and examples
 add_subdirectory(src)

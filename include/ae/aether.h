@@ -628,7 +628,7 @@ struct Int2 : public IntT< Int2 >
   explicit Int2( int32_t _v );
   explicit Int2( const struct Int3& v );
   Int2( int32_t _x, int32_t _y );
-  // @NOTE: No automatic conversion from aeFloat2 because rounding type should be explicit!
+  // @NOTE: No automatic conversion from ae::Vec2 because rounding type should be explicit!
 };
 
 //------------------------------------------------------------------------------
@@ -657,7 +657,7 @@ struct Int3 : public IntT< Int3 >
   Int3( const int32_t( &v )[ 4 ] );
   explicit Int3( int32_t*& v );
   explicit Int3( const int32_t*& v );
-  // @NOTE: No conversion from aeFloat3 because rounding type should be explicit!
+  // @NOTE: No conversion from ae::Vec3 because rounding type should be explicit!
   Int2 GetXY() const;
 };
 
@@ -1247,7 +1247,7 @@ public:
 //------------------------------------------------------------------------------
 // ae::Key enum
 //------------------------------------------------------------------------------
-enum class Key
+enum class Key : uint8_t
 {
   Unknown = 0,
 
@@ -1582,6 +1582,41 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::Shader class
+// @NOTE: Some special built in functions and defines are automatically included
+//        for portability reasons (e.g. for OpenGL ES). There are also some
+//        convenient helper functions to convert between linear and srgb color
+//        spaces. It's not necessary to use any of these helpers and basic valid
+//        GLSL can be provided instead.
+// Example vertex shader:
+/*
+AE_UNIFORM_HIGHP mat4 u_worldToScreen;
+
+AE_IN_HIGHP vec3 a_position;
+AE_IN_HIGHP vec2 a_uv;
+AE_IN_HIGHP vec4 a_color;
+
+AE_OUT_HIGHP vec2 v_uv;
+AE_OUT_HIGHP vec4 v_color;
+
+void main()
+{
+  v_uv = a_uv;
+  v_color = a_color;
+  gl_Position = u_worldToScreen * vec4( a_position, 1.0 );
+}
+*/
+// Example fragment shader:
+/*
+AE_UNIFORM sampler2D u_tex;
+
+AE_IN_HIGHP vec2 v_uv;
+AE_IN_HIGHP vec4 v_color;
+
+void main()
+{
+  AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;
+}
+*/
 //------------------------------------------------------------------------------
 const uint32_t _kMaxShaderAttributeCount = 16;
 const uint32_t _kMaxShaderAttributeNameLength = 16;
@@ -1808,9 +1843,7 @@ private:
 class Texture2D : public Texture
 {
 public:
-  void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps = false );
-  void Initialize( const char* file, Filter filter, Wrap wrap, bool autoGenerateMipmaps = false,
-    bool isSRGB = false );
+  void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps );
   void Destroy() override;
 
   uint32_t GetWidth() const { return m_width; }
@@ -10571,67 +10604,6 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   AE_CHECK_GL_ERROR();
 }
 
-void Texture2D::Initialize( const char* file, Filter filter, Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
-{
-#if STBI_INCLUDE_STB_IMAGE_H
-  uint32_t fileSize = ::GetSize( file );
-  AE_ASSERT_MSG( fileSize, "Could not load #", file );
-  
-  uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
-  ::Read( file, fileBuffer, fileSize );
-
-  int32_t width = 0;
-  int32_t height = 0;
-  int32_t channels = 0;
-  stbi_set_flip_vertically_on_load( 1 );
-#if _AE_IOS_
-  stbi_convert_iphone_png_to_rgb( 1 );
-#endif
-  bool is16BitImage = stbi_is_16_bit_from_memory( fileBuffer, fileSize );
-
-  uint8_t* image;
-  if (is16BitImage)
-  {
-     image = (uint8_t*)stbi_load_16_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
-  }
-  else
-  {
-    image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
-  }
-  AE_ASSERT( image );
-
-  Format format;
-  auto type = aeTextureType::Uint8;
-  switch ( channels )
-  {
-    case STBI_grey:
-      format = Format::R8;
-        
-      // for now only support R16Unorm
-      if (is16BitImage)
-      {
-        format = Format::R16_UNORM;
-        type = aeTextureType::Uint16;
-      }
-      break;
-    case STBI_grey_alpha:
-      AE_FAIL();
-      break;
-    case STBI_rgb:
-      format = isSRGB ? Format::RGB8_SRGB : Format::RGB8;
-      break;
-    case STBI_rgb_alpha:
-      format = isSRGB ? Format::RGBA8_SRGB : Format::RGBA8;
-      break;
-  }
-  
-  Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
-  
-  stbi_image_free( image );
-  free( fileBuffer );
-#endif
-}
-
 void Texture2D::Destroy()
 {
   m_width = 0;
@@ -10755,7 +10727,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
   Texture::Type type = Texture::Type::HalfFloat;
 #endif
   Texture2D* tex = ae::New< Texture2D >( AE_ALLOC_TAG_RENDER );
-  tex->Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
+  tex->Initialize( nullptr, m_width, m_height, format, type, filter, wrap, false );
 
   GLenum attachement = GL_COLOR_ATTACHMENT0 + m_targets.Length();
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
@@ -10781,7 +10753,7 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
   Texture::Format format = Texture::Format::Depth32F;
   Texture::Type type = Texture::Type::Float;
 #endif
-  m_depth.Initialize( nullptr, m_width, m_height, format, type, filter, wrap );
+  m_depth.Initialize( nullptr, m_width, m_height, format, type, filter, wrap, false );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_depth.GetTarget(), m_depth.GetTexture(), 0 );
 

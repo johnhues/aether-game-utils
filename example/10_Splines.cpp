@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aetherEXT.h"
+#include "Common.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -32,15 +33,15 @@ int main()
 {
   AE_LOG( "Initialize" );
 
-  aeWindow window;
-  aeRender render;
-  aeInput input;
+  ae::Window window;
+  ae::GraphicsDevice render;
+  ae::Input input;
   aeSpline spline( ae::Tag( "example" ) );
   aeSpriteRender spriteRender;
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "splines" );
-  render.InitializeOpenGL( &window );
+  render.Initialize( &window );
   input.Initialize( &window );
   spriteRender.Initialize( 64 );
   spriteRender.SetBlending( true );
@@ -48,43 +49,43 @@ int main()
   spriteRender.SetDepthWrite( true );
   spriteRender.SetSorting( true );
   
-  spline.AppendControlPoint( aeFloat3( -0.4f, -2.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( -2.0f, 2.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( 0.0f, 1.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( 2.0f, 2.0f, 0.0f ) );
-  spline.AppendControlPoint( aeFloat3( 0.4f, -2.0f, 0.0f ) );
+  spline.AppendControlPoint( ae::Vec3( -0.4f, -2.0f, 0.0f ) );
+  spline.AppendControlPoint( ae::Vec3( -2.0f, 2.0f, 0.0f ) );
+  spline.AppendControlPoint( ae::Vec3( 0.0f, 1.0f, 0.0f ) );
+  spline.AppendControlPoint( ae::Vec3( 2.0f, 2.0f, 0.0f ) );
+  spline.AppendControlPoint( ae::Vec3( 0.4f, -2.0f, 0.0f ) );
   spline.SetLooping( true );
 
   ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );
 
-  aeTexture2D tex;
-  tex.Initialize( "circle.png", aeTextureFilter::Linear, aeTextureWrap::Repeat );
+  ae::Texture2D tex;
+  LoadPng( &tex, "circle.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
 
   float t = 0.0f;
 
-  while ( !input.GetState()->exit )
+  while ( !input.quit )
   {
     input.Pump();
     render.Activate();
     render.Clear( aeColor::Black() );
     spriteRender.Clear();
 
-    aeFloat4x4 transform;
+    ae::Matrix4 transform;
 
     for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
     {
-      transform = aeFloat4x4::Translation( spline.GetControlPoint( i ) - aeFloat3( 0.0f, 0.0f, 0.1f ) );
-      transform.Scale( aeFloat3( 0.2f ) );
-      spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Red() );
+      transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
+      transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
+      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::Red() );
     }
 
     float splineLen = spline.GetLength();
     for ( float d = 0.0f; d < splineLen; d += 0.25f )
     {
-      transform = aeFloat4x4::Translation( spline.GetPoint( d ) );
-      transform.Scale( aeFloat3( 0.1f ) );
-      spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Blue() );
+      transform = ae::Matrix4::Translation( spline.GetPoint( d ) );
+      transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
+      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::Blue() );
     }
 
     t += timeStep.GetTimeStep();
@@ -92,11 +93,11 @@ int main()
     {
       t -= splineLen;
     }
-    transform = aeFloat4x4::Translation( spline.GetPoint( t ) - aeFloat3( 0.0f, 0.0f, 0.2f ) );
-    transform.Scale( aeFloat3( 0.3f ) );
-    spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::Green() );
+    transform = ae::Matrix4::Translation( spline.GetPoint( t ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
+    transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::Green() );
 
-    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
+    ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
     spriteRender.Render( screenTransform );
     render.Present();
     timeStep.Wait();

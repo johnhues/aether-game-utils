@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 02_Sprites.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -24,74 +24,74 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aetherEXT.h"
+#include "Common.h"
 
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
 {
-	AE_LOG( "Initialize" );
+  AE_LOG( "Initialize" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
+  ae::Window window;
+  ae::GraphicsDevice render;
+  ae::Input input;
   aeSpriteRender spriteRender;
-	
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "sprites" );
-	render.InitializeOpenGL( &window );
-	input.Initialize( &window );
-	spriteRender.Initialize( 16 );
-	spriteRender.SetBlending( true );
+  
+  window.Initialize( 800, 600, false, true );
+  window.SetTitle( "sprites" );
+  render.Initialize( &window );
+  input.Initialize( &window );
+  spriteRender.Initialize( 16 );
+  spriteRender.SetBlending( true );
   spriteRender.SetDepthTest( true );
-	spriteRender.SetDepthWrite( true );
+  spriteRender.SetDepthWrite( true );
   spriteRender.SetSorting( true );
-	
-	ae::TimeStep timeStep;
-	timeStep.SetTimeStep( 1.0f / 60.0f );
+  
+  ae::TimeStep timeStep;
+  timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	aeTexture2D tex;
-	tex.Initialize( "circle.png", aeTextureFilter::Linear, aeTextureWrap::Repeat );
+  ae::Texture2D tex;
+  LoadPng( &tex, "circle.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
 
-	while ( !input.GetState()->exit )
-	{
-		input.Pump();
-		int scaleFactor = input.GetState()->space ? 4 : 1;
-		render.Activate();
-		render.Clear( aeColor::PicoDarkPurple() );
-		//render.StartFrame( window.GetWidth() / scaleFactor, window.GetHeight() / scaleFactor );
-		spriteRender.Clear();
+  while ( !input.quit )
+  {
+    input.Pump();
+    int scaleFactor = input.Get( ae::Key::Space ) ? 4 : 1;
+    render.Activate();
+    render.Clear( aeColor::PicoDarkPurple() );
+    spriteRender.Clear();
 
-		aeFloat4x4 transform;
+    ae::Matrix4 transform;
 
-		// @NOTE: Notice these are rendered out of order and the transparent edges of
-		//        the circles are handled correctly. Hold space to see this more clearly.
+    // @NOTE: Notice these are rendered out of order and the transparent edges of
+    //        the circles are handled correctly. Hold space to see this more clearly.
 
-		// Front
-		transform = aeFloat4x4::Translation( aeFloat3( 0.5f, 0.5f, -0.5f ) );
-		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::PicoBlue() );
+    // Front
+    transform = ae::Matrix4::Translation( ae::Vec3( 0.5f, 0.5f, -0.5f ) );
+    transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::PicoBlue() );
 
-		// Back
-		transform = aeFloat4x4::Translation( aeFloat3( -0.5f, -0.5f, 0.5f ) );
-		transform.Scale( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::PicoBlue() );
+    // Back
+    transform = ae::Matrix4::Translation( ae::Vec3( -0.5f, -0.5f, 0.5f ) );
+    transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::PicoBlue() );
 
-		// Middle
-		transform = aeFloat4x4::Scaling(  aeFloat3( 1.0f, 1.0f, 0.5f ) );
-		spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), aeColor::PicoWhite() );
+    // Middle
+    transform = ae::Matrix4::Scaling(  ae::Vec3( 1.0f, 1.0f, 0.5f ) );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::PicoWhite() );
 
-		aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
-		spriteRender.Render( screenTransform );
-		render.Present();
-		timeStep.Wait();
-	}
+    ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
+    spriteRender.Render( screenTransform );
+    render.Present();
+    timeStep.Wait();
+  }
 
-	AE_LOG( "Terminate" );
+  AE_LOG( "Terminate" );
 
-	input.Terminate();
-	render.Terminate();
-	window.Terminate();
+  input.Terminate();
+  render.Terminate();
+  window.Terminate();
 
-	return 0;
+  return 0;
 }

@@ -32,14 +32,14 @@ int main()
 {
 	AE_LOG( "Initialize" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
+	ae::Window window;
+	ae::GraphicsDevice render;
+	ae::Input input;
 	aeAudio audio;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "audio" );
-	render.InitializeOpenGL( &window );
+	render.Initialize( &window );
 	input.Initialize( &window );
 	audio.Initialize( 1, 3 );
 	
@@ -54,7 +54,7 @@ int main()
 	float musicTime = 0.0f;
 	float hitFade = 0.0f;
 
-	while ( !input.GetState()->exit )
+	while ( !input.quit )
 	{
 		input.Pump();
 
@@ -68,8 +68,8 @@ int main()
 			hitFade = aeMath::Max( 0.0f, hitFade - timeStep.GetTimeStep() / 0.2f );
 		}
 		
-		if ( ( !input.GetState()->mouseRight && input.GetPrevState()->mouseRight )
-			|| ( !input.GetState()->space && input.GetPrevState()->space ) )
+		if ( ( !input.mouse.rightButton && input.mousePrev.rightButton )
+			|| ( !input.Get( ae::Key::Space ) && input.GetPrev( ae::Key::Space ) ) )
 		{
 			if ( musicPlaying )
 			{
@@ -84,7 +84,7 @@ int main()
 			}
 		}
 
-		if ( !input.GetState()->mouseLeft && input.GetPrevState()->mouseLeft )
+		if ( !input.mouse.leftButton && input.mousePrev.leftButton )
 		{
 			audio.PlaySfx( &sfx, 1.0f, 0 );
 			hitFade = 1.0f;

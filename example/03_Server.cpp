@@ -32,21 +32,21 @@ int main()
 {
 	AE_LOG( "Initialize" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
+	ae::Window window;
+	ae::GraphicsDevice render;
+	ae::Input input;
 	AetherServer* server;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "server" );
-	render.InitializeOpenGL( &window );
+	render.Initialize( &window );
 	input.Initialize( &window );
 	server = AetherServer_New( 3500, 0, 1 );
 	
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.GetState()->exit )
+	while ( !input.quit )
 	{
 		input.Pump();
 		AetherServer_Update( server );

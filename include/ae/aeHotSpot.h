@@ -50,8 +50,8 @@ public:
 
   // 2) Map - Populate map tiles
   void LoadTiles( const uint32_t* tiles, uint32_t width, uint32_t height, bool flipVertical );
-  void SetTile( aeInt2 pos, uint32_t type );
-  uint32_t GetTile( aeInt2 pos ) const;
+  void SetTile( ae::Int2 pos, uint32_t type );
+  uint32_t GetTile( ae::Int2 pos ) const;
 
   // 3) Objects - Create objects for simulation
   class HotSpotObject* CreateObject();
@@ -71,7 +71,7 @@ private:
   ae::Array< class HotSpotObject* > m_objects = AE_ALLOC_TAG_HOTSPOT;
 
 public:
-  static aeInt2 _GetTilePos( aeFloat2 pos );
+  static ae::Int2 _GetTilePos( ae::Vec2 pos );
 };
 
 //------------------------------------------------------------------------------
@@ -86,21 +86,21 @@ public:
 
   float GetMass() const;
 
-  void Warp( aeFloat2 meters ); // Position in meters
-  void SetVelocity( aeFloat2 metersPerSecond ); // Distance traveled per second
+  void Warp( ae::Vec2 meters ); // Position in meters
+  void SetVelocity( ae::Vec2 metersPerSecond ); // Distance traveled per second
   // 1 Newton: Force required to accelerate an object with a mass of 1 kg 1 m/s^2
-  void AddForce( aeFloat2 newtons ); // Apply a regular force to the object (scaled by frame time)
-  void AddImpulse( aeFloat2 newtons ); // Apply a force and change velocity directly (without respect to frame time)
-  void AddGravity( aeFloat2 acceleration ); // Gravitational acceleration, call each frame
+  void AddForce( ae::Vec2 newtons ); // Apply a regular force to the object (scaled by frame time)
+  void AddImpulse( ae::Vec2 newtons ); // Apply a force and change velocity directly (without respect to frame time)
+  void AddGravity( ae::Vec2 acceleration ); // Gravitational acceleration, call each frame
 
-  aeFloat2 GetPosition() const;
-  aeFloat2 GetVelocity() const;
+  ae::Vec2 GetPosition() const;
+  ae::Vec2 GetVelocity() const;
   bool IsOnGround() const;
 
   struct CollisionInfo
   {
-    aeInt2 position;
-    aeInt2 normal;
+    ae::Int2 position;
+    ae::Int2 normal;
     uint32_t tile;
     uint32_t properties;
   };
@@ -109,13 +109,13 @@ public:
 private:
   friend HotSpotWorld;
   void Update( HotSpotWorld* world, float dt );
-  bool m_CheckCollision( const HotSpotWorld* world, aeInt2 dir );
-  bool m_TestSide( const HotSpotWorld* world, aeFloat2 p0, aeFloat2 p1, aeFloat2* pOut );
+  bool m_CheckCollision( const HotSpotWorld* world, ae::Int2 dir );
+  bool m_TestSide( const HotSpotWorld* world, ae::Vec2 p0, ae::Vec2 p1, ae::Vec2* pOut );
 
-  aeFloat2 m_position = aeFloat2( 0.0f );
-  aeFloat2 m_velocity = aeFloat2( 0.0f );
-  aeFloat2 m_forces = aeFloat2( 0.0f );
-  aeFloat2 m_gravity = aeFloat2( 0.0f );
+  ae::Vec2 m_position = ae::Vec2( 0.0f );
+  ae::Vec2 m_velocity = ae::Vec2( 0.0f );
+  ae::Vec2 m_forces = ae::Vec2( 0.0f );
+  ae::Vec2 m_gravity = ae::Vec2( 0.0f );
   float m_mass = 1.0f;
   float m_groundRestitution = 0.0f;
   float m_wallRestitution = 0.3f;

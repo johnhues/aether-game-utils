@@ -65,8 +65,8 @@ namespace ae
     uint32_t GetHeight() const { return m_height; }
     uint32_t GetChannels() const { return m_channels; }
 
-    aeColor Get( aeInt2 pixel ) const;
-    aeColor Get( aeFloat2 pixel, Interpolation interpolation ) const;
+    aeColor Get( ae::Int2 pixel ) const;
+    aeColor Get( ae::Vec2 pixel, Interpolation interpolation ) const;
 
   private:
     ae::Array< uint8_t > m_data = AE_ALLOC_TAG_RENDER;
@@ -81,10 +81,10 @@ class aeStaticImage3D
 {
 public:
   aeStaticImage3D();
-  void Set( aeInt3 p, Pixel v );
-  Pixel Get( aeInt3 p ) const;
+  void Set( ae::Int3 p, Pixel v );
+  Pixel Get( ae::Int3 p ) const;
   template < Pixel (*BlendFn)(Pixel, Pixel, float) >
-  Pixel Get( aeFloat3 p ) const;
+  Pixel Get( ae::Vec3 p ) const;
   
   uint32_t GetWidth() const { return Width; }
   uint32_t GetHeight() const { return Height; }
@@ -111,38 +111,38 @@ inline aeStaticImage3D< Pixel, Width, Height, Depth >::aeStaticImage3D()
 }
 
 template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
-inline void aeStaticImage3D< Pixel, Width, Height, Depth >::Set( aeInt3 p, Pixel v )
+inline void aeStaticImage3D< Pixel, Width, Height, Depth >::Set( ae::Int3 p, Pixel v )
 {
   m_data[ aeModulo( p.z, Depth ) ][ aeModulo( p.y, Height ) ][ aeModulo( p.x, Width ) ] = v;
 }
 
 template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
-inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( aeInt3 p ) const
+inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( ae::Int3 p ) const
 {
   return m_data[ aeModulo( p.z, Depth ) ][ aeModulo( p.y, Height ) ][ aeModulo( p.x, Width ) ];
 }
 
 template < typename Pixel, uint32_t Width, uint32_t Height, uint32_t Depth >
 template < Pixel (*BlendFn)(Pixel, Pixel, float) >
-inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( aeFloat3 pf ) const
+inline Pixel aeStaticImage3D< Pixel, Width, Height, Depth >::Get( ae::Vec3 pf ) const
 {
-  aeInt3 pi = pf.FloorCopy();
+  ae::Int3 pi = pf.FloorCopy();
   float xf = pf.x - pi.x;
   
-  Pixel c011 = Get( aeInt3( pi.x, pi.y, pi.z ) );
-  Pixel c111 = Get( aeInt3( pi.x + 1, pi.y, pi.z ) );
-  Pixel c001 = Get( aeInt3( pi.x, pi.y + 1, pi.z ) );
-  Pixel c101 = Get( aeInt3( pi.x + 1, pi.y + 1, pi.z ) );
+  Pixel c011 = Get( ae::Int3( pi.x, pi.y, pi.z ) );
+  Pixel c111 = Get( ae::Int3( pi.x + 1, pi.y, pi.z ) );
+  Pixel c001 = Get( ae::Int3( pi.x, pi.y + 1, pi.z ) );
+  Pixel c101 = Get( ae::Int3( pi.x + 1, pi.y + 1, pi.z ) );
   
   Pixel c01 = BlendFn( c001, c101, xf );
   Pixel c11 = BlendFn( c011, c111, xf );
   
   Pixel c1 = BlendFn( c11, c01, pf.y - pi.y );
   
-  Pixel c010 = Get( aeInt3( pi.x, pi.y, pi.z + 1 ) );
-  Pixel c110 = Get( aeInt3( pi.x + 1, pi.y, pi.z + 1 ) );
-  Pixel c000 = Get( aeInt3( pi.x, pi.y + 1, pi.z + 1 ) );
-  Pixel c100 = Get( aeInt3( pi.x + 1, pi.y + 1, pi.z + 1 ) );
+  Pixel c010 = Get( ae::Int3( pi.x, pi.y, pi.z + 1 ) );
+  Pixel c110 = Get( ae::Int3( pi.x + 1, pi.y, pi.z + 1 ) );
+  Pixel c000 = Get( ae::Int3( pi.x, pi.y + 1, pi.z + 1 ) );
+  Pixel c100 = Get( ae::Int3( pi.x + 1, pi.y + 1, pi.z + 1 ) );
   
   Pixel c00 = BlendFn( c000, c100, xf );
   Pixel c10 = BlendFn( c010, c110, xf );

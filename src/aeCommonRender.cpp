@@ -30,118 +30,25 @@
 //------------------------------------------------------------------------------
 // aeRender constants
 //------------------------------------------------------------------------------
-const aeFloat3 aeQuadVertPos[ aeQuadVertCount ] = {
-  aeFloat3( -0.5f, -0.5f, 0.0f ),
-  aeFloat3( 0.5f, -0.5f, 0.0f ),
-  aeFloat3( 0.5f, 0.5f, 0.0f ),
-  aeFloat3( -0.5f, 0.5f, 0.0f )
+const ae::Vec3 aeQuadVertPos[ aeQuadVertCount ] = {
+  ae::Vec3( -0.5f, -0.5f, 0.0f ),
+  ae::Vec3( 0.5f, -0.5f, 0.0f ),
+  ae::Vec3( 0.5f, 0.5f, 0.0f ),
+  ae::Vec3( -0.5f, 0.5f, 0.0f )
 };
 
-const aeFloat2 aeQuadVertUvs[ aeQuadVertCount ] = {
-  aeFloat2( 0.0f, 0.0f ),
-  aeFloat2( 1.0f, 0.0f ),
-  aeFloat2( 1.0f, 1.0f ),
-  aeFloat2( 0.0f, 1.0f )
+const ae::Vec2 aeQuadVertUvs[ aeQuadVertCount ] = {
+  ae::Vec2( 0.0f, 0.0f ),
+  ae::Vec2( 1.0f, 0.0f ),
+  ae::Vec2( 1.0f, 1.0f ),
+  ae::Vec2( 0.0f, 1.0f )
 };
 
 const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ] = {
   3, 0, 1,
   3, 1, 2
 };
-
-//------------------------------------------------------------------------------
-// aeUniformList class
-//------------------------------------------------------------------------------
-void aeUniformList::Set( const char* name, float value )
-{
-  AE_ASSERT( name );
-  AE_ASSERT( name[ 0 ] );
-  Value& uniform = m_uniforms.Set( name, Value() );
-  uniform.size = 1;
-  uniform.value.data[ 0 ] = value;
-  m_hash = ae::Hash( m_hash )
-    .HashString( name )
-    .HashFloat( value )
-    .Get();
-}
-
-void aeUniformList::Set( const char* name, aeFloat2 value )
-{
-  AE_ASSERT( name );
-  AE_ASSERT( name[ 0 ] );
-  Value& uniform = m_uniforms.Set( name, Value() );
-  uniform.size = 2;
-  uniform.value.data[ 0 ] = value.x;
-  uniform.value.data[ 1 ] = value.y;
-  m_hash = ae::Hash( m_hash )
-    .HashString( name )
-    .HashFloatArray( value.data )
-    .Get();
-}
-
-void aeUniformList::Set( const char* name, aeFloat3 value )
-{
-  AE_ASSERT( name );
-  AE_ASSERT( name[ 0 ] );
-  Value& uniform = m_uniforms.Set( name, Value() );
-  uniform.size = 3;
-  uniform.value.data[ 0 ] = value.x;
-  uniform.value.data[ 1 ] = value.y;
-  uniform.value.data[ 2 ] = value.z;
-  m_hash = ae::Hash( m_hash )
-    .HashString( name )
-    .HashFloatArray( value.data )
-    .Get();
-}
-
-void aeUniformList::Set( const char* name, aeFloat4 value )
-{
-  AE_ASSERT( name );
-  AE_ASSERT( name[ 0 ] );
-  Value& uniform = m_uniforms.Set( name, Value() );
-  uniform.size = 4;
-  uniform.value.data[ 0 ] = value.x;
-  uniform.value.data[ 1 ] = value.y;
-  uniform.value.data[ 2 ] = value.z;
-  uniform.value.data[ 3 ] = value.w;
-  m_hash = ae::Hash( m_hash )
-    .HashString( name )
-    .HashFloatArray( value.data )
-    .Get();
-}
-
-void aeUniformList::Set( const char* name, const aeFloat4x4& value )
-{
-  AE_ASSERT( name );
-  AE_ASSERT( name[ 0 ] );
-  Value& uniform = m_uniforms.Set( name, Value() );
-  uniform.size = 16;
-  uniform.value = value;
-  m_hash = ae::Hash( m_hash )
-    .HashString( name )
-    .HashFloatArray( value.data )
-    .Get();
-}
-
-void aeUniformList::Set( const char* name, const aeTexture* tex )
-{
-  AE_ASSERT( name );
-  AE_ASSERT( name[ 0 ] );
-  Value& uniform = m_uniforms.Set( name, Value() );
-  uniform.sampler = tex->GetTexture();
-  uniform.target = tex->GetTarget();
-  m_hash = ae::Hash( m_hash )
-    .HashString( name )
-    .HashBasicType( tex->GetTexture() )
-    .HashBasicType( tex->GetTarget() )
-    .Get();
-}
-
-const aeUniformList::Value* aeUniformList::Get( const char* name ) const
-{
-  return m_uniforms.TryGet( name );
-}
-
+ 
 //------------------------------------------------------------------------------
 // aeSpriteRender member functions
 //------------------------------------------------------------------------------
@@ -169,10 +76,10 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_count = 0;
   m_sprites = ae::NewArray< Sprite >( AE_ALLOC_TAG_RENDER, m_maxCount );
 
-  m_vertexData.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Static );
-  m_vertexData.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof(Vertex, pos) );
-  m_vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof(Vertex, color) );
-  m_vertexData.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof(Vertex, uv) );
+  m_vertexData.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Static );
+  m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof(Vertex, pos) );
+  m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof(Vertex, color) );
+  m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof(Vertex, uv) );
 
   ae::Scratch< uint16_t > scratch( AE_ALLOC_TAG_RENDER, m_maxCount * aeQuadIndexCount );
   uint16_t* indices = scratch.Data();
@@ -214,7 +121,7 @@ void aeSpriteRender::Destroy()
   m_sprites = nullptr;
 }
 
-void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
+void aeSpriteRender::Render( const ae::Matrix4& worldToScreen )
 {
   if ( m_count == 0 )
   {
@@ -223,7 +130,7 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
   
   if ( m_sorting )
   {
-    aeFloat3 cameraView = worldToScreen.GetRow( 2 ).GetXYZ();
+    ae::Vec3 cameraView = worldToScreen.GetRow( 2 ).GetXYZ();
     for ( uint32_t i = 0; i < m_count; i++ )
     {
       m_sprites[ i ].sort = cameraView.Dot( m_sprites[ i ].transform.GetTranslation() );
@@ -271,11 +178,11 @@ void aeSpriteRender::Render( const aeFloat4x4& worldToScreen )
   Clear();
 }
 
-void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader )
+void aeSpriteRender::m_Render( const ae::Matrix4& worldToScreen, ae::Shader* shader )
 {
   for ( uint32_t i = 0; i < m_textures.Length(); i++ )
   {
-    const aeTexture2D* texture = m_textures.GetKey( i );
+    const ae::Texture2D* texture = m_textures.GetKey( i );
     if ( !texture )
     {
       continue;
@@ -298,15 +205,15 @@ void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader
       uint32_t idx2 = count * aeQuadVertCount + 2;
       uint32_t idx3 = count * aeQuadVertCount + 3;
       
-      vertices[ idx0 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 0 ], 1.0f ) );
-      vertices[ idx1 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 1 ], 1.0f ) );
-      vertices[ idx2 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 2 ], 1.0f ) );
-      vertices[ idx3 ].pos = aeFloat3( sprite->transform * aeFloat4( aeQuadVertPos[ 3 ], 1.0f ) );
+      vertices[ idx0 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 0 ], 1.0f ) );
+      vertices[ idx1 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 1 ], 1.0f ) );
+      vertices[ idx2 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 2 ], 1.0f ) );
+      vertices[ idx3 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 3 ], 1.0f ) );
 
-      vertices[ idx0 ].uv = aeFloat2( sprite->uvMin.x, sprite->uvMin.y );
-      vertices[ idx1 ].uv = aeFloat2( sprite->uvMax.x, sprite->uvMin.y );
-      vertices[ idx2 ].uv = aeFloat2( sprite->uvMax.x, sprite->uvMax.y );
-      vertices[ idx3 ].uv = aeFloat2( sprite->uvMin.x, sprite->uvMax.y );
+      vertices[ idx0 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMin.y );
+      vertices[ idx1 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMin.y );
+      vertices[ idx2 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMax.y );
+      vertices[ idx3 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMax.y );
 
       vertices[ idx0 ].color = sprite->color.GetLinearRGBA();
       vertices[ idx1 ].color = sprite->color.GetLinearRGBA();
@@ -318,7 +225,7 @@ void aeSpriteRender::m_Render( const aeFloat4x4& worldToScreen, aeShader* shader
     // @TODO: Should set all vertices first then render multiple times
     m_vertexData.SetVertices( vertices, count * 4 );
 
-    aeUniformList uniforms;
+    ae::UniformList uniforms;
     uniforms.Set( "u_worldToScreen", worldToScreen );
     uniforms.Set( "u_tex", texture );
 
@@ -344,7 +251,7 @@ void aeSpriteRender::SetSorting( bool enabled )
   m_sorting = enabled;
 }
 
-void aeSpriteRender::AddSprite( const aeTexture2D* texture, aeFloat4x4 transform, aeFloat2 uvMin, aeFloat2 uvMax, aeColor color )
+void aeSpriteRender::AddSprite( const ae::Texture2D* texture, ae::Matrix4 transform, ae::Vec2 uvMin, ae::Vec2 uvMax, aeColor color )
 {
   AE_ASSERT_MSG( m_maxCount, "aeSpriteRender is not initialized" );
 
@@ -403,7 +310,7 @@ void aeSpriteRender::m_LoadShaderAll()
       AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
     }";
   
-  m_shaderAll = ae::New< aeShader >( AE_ALLOC_TAG_RENDER );
+  m_shaderAll = ae::New< ae::Shader >( AE_ALLOC_TAG_RENDER );
   m_shaderAll->Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
@@ -438,7 +345,7 @@ void aeSpriteRender::m_LoadShaderOpaque()
       AE_COLOR = color;\
     }";
   
-  m_shaderOpaque = ae::New< aeShader >( AE_ALLOC_TAG_RENDER );
+  m_shaderOpaque = ae::New< ae::Shader >( AE_ALLOC_TAG_RENDER );
   m_shaderOpaque->Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
@@ -473,7 +380,7 @@ void aeSpriteRender::m_LoadShaderTransparent()
       AE_COLOR = color;\
     }";
   
-  m_shaderTransparent = ae::New< aeShader >( AE_ALLOC_TAG_RENDER );
+  m_shaderTransparent = ae::New< ae::Shader >( AE_ALLOC_TAG_RENDER );
   m_shaderTransparent->Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
@@ -485,15 +392,16 @@ const uint32_t kCharsPerString = 64;
 //------------------------------------------------------------------------------
 // aeTextRender member functions
 //------------------------------------------------------------------------------
-void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filterType, uint32_t fontSize )
+void aeTextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
 {
+  m_texture = texture;
   m_fontSize = fontSize;
   m_rectCount = 0;
 
-  m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * aeQuadVertCount, kMaxTextRects * kCharsPerString * aeQuadIndexCount, aeVertexPrimitive::Triangle, aeVertexUsage::Dynamic, aeVertexUsage::Dynamic );
-  m_vertexData.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof( Vertex, pos ) );
-  m_vertexData.AddAttribute( "a_uv", 2, aeVertexDataType::Float, offsetof( Vertex, uv ) );
-  m_vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof( Vertex, color ) );
+  m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * aeQuadVertCount, kMaxTextRects * kCharsPerString * aeQuadIndexCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
+  m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
+  m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( Vertex, uv ) );
+  m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
 
   // Load shader
   const char* vertexStr = "\
@@ -519,18 +427,15 @@ void aeTextRender::Initialize( const char* imagePath, aeTextureFilter::Type filt
       AE_COLOR = v_color;\
     }";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-
-  m_texture.Initialize( imagePath, filterType, aeTextureWrap::Clamp );
 }
 
 void aeTextRender::Terminate()
 {
-  m_texture.Destroy();
   m_shader.Destroy();
   m_vertexData.Destroy();
 }
 
-void aeTextRender::Render( const aeFloat4x4& uiToScreen )
+void aeTextRender::Render( const ae::Matrix4& uiToScreen )
 {
   uint32_t vertCount = 0;
   uint32_t indexCount = 0;
@@ -540,7 +445,7 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
   for ( uint32_t i = 0; i < m_rectCount; i++ )
   {
     const TextRect& rect = m_rects[ i ];
-    aeFloat3 pos = rect.pos;
+    ae::Vec3 pos = rect.pos;
     pos.y -= rect.size.y;
 
     const char* start = rect.text.c_str();
@@ -550,8 +455,8 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
       if ( !isspace( str[ 0 ] ) )
       {
         int32_t index = str[ 0 ];
-        uint32_t columns = m_texture.GetWidth() / m_fontSize;
-        aeFloat2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
+        uint32_t columns = m_texture->GetWidth() / m_fontSize;
+        ae::Vec2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
 
         for ( uint32_t j = 0; j < aeQuadIndexCount; j++ )
         {
@@ -566,17 +471,17 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Bottom Right
-        verts[ vertCount ].pos = pos + aeFloat3( rect.size.x, 0.0f, 0.0f );
+        verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, 0.0f, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Top Right
-        verts[ vertCount ].pos = pos + aeFloat3( rect.size.x, rect.size.y, 0.0f );
+        verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
         // Top Left
-        verts[ vertCount ].pos = pos + aeFloat3( 0.0f, rect.size.y, 0.0f );
+        verts[ vertCount ].pos = pos + ae::Vec3( 0.0f, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color;
         vertCount++;
@@ -598,15 +503,15 @@ void aeTextRender::Render( const aeFloat4x4& uiToScreen )
   m_vertexData.SetVertices( verts.Data(), vertCount );
   m_vertexData.SetIndices( indices.Data(), indexCount );
 
-  aeUniformList uniforms;
+  ae::UniformList uniforms;
   uniforms.Set( "u_uiToScreen", uiToScreen );
-  uniforms.Set( "u_tex", &m_texture );
+  uniforms.Set( "u_tex", m_texture );
   m_vertexData.Render( &m_shader, uniforms );
 
   m_rectCount = 0;
 }
 
-void aeTextRender::Add( aeFloat3 pos, aeFloat2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit )
+void aeTextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit )
 {
   if ( m_rectCount >= kMaxTextRects )
   {
@@ -627,7 +532,7 @@ uint32_t aeTextRender::GetLineCount( const char* str, uint32_t lineLength, uint3
   return m_ParseText( str, lineLength, charLimit, nullptr );
 }
 
-uint32_t aeTextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, aeStr512* outText ) const
+uint32_t aeTextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const
 {
   if ( outText )
   {
@@ -688,354 +593,4 @@ uint32_t aeTextRender::m_ParseText( const char* str, uint32_t lineLength, uint32
   }
 
   return lineCount;
-}
-
-//------------------------------------------------------------------------------
-// aeDebugRender constants
-//------------------------------------------------------------------------------
-const uint32_t kDebugVertexCountPerObject = 32;
-
-//------------------------------------------------------------------------------
-// aeDebugRender member functions
-//------------------------------------------------------------------------------
-void aeDebugRender::Initialize( uint32_t maxObjects )
-{
-  m_objs = ae::Array< DebugObject >( AE_ALLOC_TAG_RENDER, maxObjects );
-
-  // @HACK: Should handle vert count in a safer way
-  m_vertexData.Initialize( sizeof(DebugVertex), sizeof(uint16_t), m_objs.Size() * kDebugVertexCountPerObject, 0, aeVertexPrimitive::Line, aeVertexUsage::Dynamic, aeVertexUsage::Static );
-  m_vertexData.AddAttribute( "a_position", 3, aeVertexDataType::Float, offsetof(DebugVertex, pos) );
-  m_vertexData.AddAttribute( "a_color", 4, aeVertexDataType::Float, offsetof(DebugVertex, color) );
-
-  // Load shader
-  const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
-    AE_UNIFORM float u_saturation;\
-    AE_IN_HIGHP vec3 a_position;\
-    AE_IN_HIGHP vec4 a_color;\
-    AE_OUT_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5;\
-      v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);\
-      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
-    }";
-  const char* fragStr = "\
-    AE_IN_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      AE_COLOR = v_color;\
-    }";
-  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  m_shader.SetBlending( true );
-  m_shader.SetDepthTest( true );
-}
-
-void aeDebugRender::Destroy()
-{
-  m_shader.Destroy();
-  m_vertexData.Destroy();
-}
-
-void aeDebugRender::Render( const aeFloat4x4& worldToScreen )
-{
-  if ( !m_objs.Length() )
-  {
-    return;
-  }
-
-  const uint16_t kQuadIndices[] = {
-    3, 1, 0,
-    3, 1, 2
-  };
-
-  m_verts.Clear();
-  m_verts.Reserve( m_objs.Size() * kDebugVertexCountPerObject );
-
-  for ( uint32_t i = 0; i < m_objs.Length(); i++ )
-  {
-    DebugObject obj = m_objs[ i ];
-    if ( obj.type == DebugType::Rect )
-    {
-      aeFloat3 halfSize = obj.size * 0.5f;
-
-      DebugVertex verts[ 4 ];
-      
-      verts[ 0 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( -halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Left
-      verts[ 1 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Right
-      verts[ 2 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( halfSize.x, 0.0f, halfSize.y ) ); // Top Right
-      verts[ 3 ].pos = obj.pos + obj.rotation.Rotate( aeFloat3( -halfSize.x, 0.0f, halfSize.y ) ); // Top Left
-
-      verts[ 0 ].color = obj.color;
-      verts[ 1 ].color = obj.color;
-      verts[ 2 ].color = obj.color;
-      verts[ 3 ].color = obj.color;
-
-      m_verts.Append( verts[ 0 ] );
-      m_verts.Append( verts[ 1 ] );
-      m_verts.Append( verts[ 1 ] );
-      m_verts.Append( verts[ 2 ] );
-      m_verts.Append( verts[ 2 ] );
-      m_verts.Append( verts[ 3 ] );
-      m_verts.Append( verts[ 3 ] );
-      m_verts.Append( verts[ 0 ] );
-    }
-    else if ( obj.type == DebugType::Circle )
-    {
-      float angleInc = aeMath::PI * 2.0f / obj.pointCount;
-      for ( uint32_t i = 0; i < obj.pointCount; i++ )
-      {
-        float angle0 = angleInc * i;
-        float angle1 = angleInc * ( i + 1 );
-
-        DebugVertex verts[ 2 ];
-
-        verts[ 0 ].pos = aeFloat3( cosf( angle0 ) * obj.radius, 0.0f, sinf( angle0 ) * obj.radius );
-        verts[ 1 ].pos = aeFloat3( cosf( angle1 ) * obj.radius, 0.0f, sinf( angle1 ) * obj.radius );
-        verts[ 0 ].pos = obj.rotation.Rotate( verts[ 0 ].pos );
-        verts[ 1 ].pos = obj.rotation.Rotate( verts[ 1 ].pos );
-        verts[ 0 ].pos += obj.pos;
-        verts[ 1 ].pos += obj.pos;
-
-        verts[ 0 ].color = obj.color;
-        verts[ 1 ].color = obj.color;
-
-        m_verts.Append( verts, countof( verts ) );
-      }
-    }
-    else if ( obj.type == DebugType::Line )
-    {
-      DebugVertex verts[ 2 ];
-      verts[ 0 ].pos = obj.pos;
-      verts[ 0 ].color = obj.color;
-      verts[ 1 ].pos = obj.end;
-      verts[ 1 ].color = obj.color;
-
-      m_verts.Append( verts, countof( verts ) );
-    }
-    else if ( obj.type == DebugType::AABB )
-    {
-      aeFloat3 s = obj.size;
-      aeFloat3 c[] =
-      {
-        obj.pos + aeFloat3( -s.x, s.y, s.z ),
-        obj.pos + s,
-        obj.pos + aeFloat3( s.x, -s.y, s.z ),
-        obj.pos + aeFloat3( -s.x, -s.y, s.z ),
-        obj.pos + aeFloat3( -s.x, s.y, -s.z ),
-        obj.pos + aeFloat3( s.x, s.y, -s.z ),
-        obj.pos + aeFloat3( s.x, -s.y, -s.z ),
-        obj.pos + aeFloat3( -s.x, -s.y, -s.z )
-      };
-      AE_STATIC_ASSERT( countof( c ) == 8 );
-
-      DebugVertex verts[] =
-      {
-        // Top
-        { c[ 0 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 0 ], obj.color },
-        // Sides
-        { c[ 0 ], obj.color },
-        { c[ 4 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 7 ], obj.color },
-        //Bottom
-        { c[ 4 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 4 ], obj.color },
-      };
-      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
-      
-      m_verts.Append( verts, countof( verts ) );
-    }
-    else if ( obj.type == DebugType::Cube )
-    {
-      aeFloat3 c[] =
-      {
-        ( obj.transform * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ()
-      };
-      AE_STATIC_ASSERT( countof( c ) == 8 );
-
-      DebugVertex verts[] =
-      {
-        // Top
-        { c[ 0 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 0 ], obj.color },
-        // Sides
-        { c[ 0 ], obj.color },
-        { c[ 4 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 7 ], obj.color },
-        //Bottom
-        { c[ 4 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 4 ], obj.color },
-      };
-      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
-
-      m_verts.Append( verts, countof( verts ) );
-    }
-  }
-
-  if ( m_verts.Length() )
-  {
-    m_vertexData.SetVertices( &m_verts[ 0 ], aeMath::Min( m_verts.Length(), m_vertexData.GetMaxVertexCount() ) );
-
-    aeUniformList uniforms;
-    uniforms.Set( "u_worldToScreen", worldToScreen );
-
-    if ( m_xray )
-    {
-      m_shader.SetDepthTest( false );
-      m_shader.SetDepthWrite( false );
-      uniforms.Set( "u_saturation", 0.1f );
-      m_vertexData.Render( &m_shader, uniforms );
-    }
-
-    m_shader.SetDepthTest( true );
-    m_shader.SetDepthWrite( true );
-    uniforms.Set( "u_saturation", 1.0f );
-    m_vertexData.Render( &m_shader, uniforms );
-  }
-
-  m_objs.Clear();
-}
-
-void aeDebugRender::Clear()
-{
-  m_objs.Clear();
-}
-
-void aeDebugRender::AddLine( aeFloat3 p0, aeFloat3 p1, aeColor color )
-{
-  if ( m_objs.Length() < m_objs.Size() )
-  {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Line;
-    obj->pos = p0;
-    obj->end = p1;
-    obj->color = color;
-  }
-}
-
-void aeDebugRender::AddDistanceCheck( aeFloat3 p0, aeFloat3 p1, float distance )
-{
-  if ( m_objs.Length() < m_objs.Size() )
-  {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Line;
-    obj->pos = p0;
-    obj->end = p1;
-    obj->color = ( ( p1 - p0 ).Length() <= distance ) ? aeColor::Green() : aeColor::Red();
-  }
-}
-
-void aeDebugRender::AddRect( aeFloat3 pos, aeFloat3 up, aeFloat3 normal, aeFloat2 size, aeColor color )
-{
-  if ( m_objs.Length() < m_objs.Size()
-    && up.LengthSquared() > 0.001f
-    && normal.LengthSquared() > 0.001f )
-  {
-    up.SafeNormalize();
-    normal.SafeNormalize();
-    if ( normal.Dot( up ) < 0.999f )
-    {
-      DebugObject* obj = &m_objs.Append( DebugObject() );
-      obj->type = DebugType::Rect;
-      obj->pos = pos;
-      obj->rotation = aeQuat( normal, up );
-      obj->size = aeFloat3( size );
-      obj->color = color;
-      obj->pointCount = 0;
-    }
-  }
-}
-
-void aeDebugRender::AddCircle( aeFloat3 pos, aeFloat3 normal, float radius, aeColor color, uint32_t pointCount )
-{
-  if ( m_objs.Length() < m_objs.Size() && normal.LengthSquared() > 0.001f )
-  {
-    normal.SafeNormalize();
-    float dot = normal.Dot( aeFloat3Up );
-    
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Circle;
-    obj->pos = pos;
-    obj->rotation = aeQuat( normal, ( dot < 0.99f && dot > -0.99f ) ? aeFloat3Up : aeFloat3Right );
-    obj->radius = radius;
-    obj->color = color;
-    obj->pointCount = pointCount;
-  }
-}
-
-void aeDebugRender::AddSphere( aeFloat3 pos, float radius, aeColor color, uint32_t pointCount )
-{
-  if ( m_objs.Length() + 3 <= m_objs.Size() )
-  {
-    AddCircle( pos, aeFloat3Up, radius, color, pointCount );
-    AddCircle( pos, aeFloat3Right, radius, color, pointCount );
-    AddCircle( pos, aeFloat3Forward, radius, color, pointCount );
-  }
-}
-
-void aeDebugRender::AddAABB( aeFloat3 pos, aeFloat3 halfSize, aeColor color )
-{
-  if ( m_objs.Length() < m_objs.Size() )
-  {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::AABB;
-    obj->pos = pos;
-    obj->rotation = aeQuat::Identity();
-    obj->size = halfSize;
-    obj->color = color;
-    obj->pointCount = 0;
-  }
-}
-
-void aeDebugRender::AddCube( aeFloat4x4 transform, aeColor color )
-{
-  if ( m_objs.Length() < m_objs.Size() )
-  {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Cube;
-    obj->transform = transform;
-    obj->color = color;
-  }
 }

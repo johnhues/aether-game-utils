@@ -26,6 +26,7 @@
 #include "ae/aetherEXT.h"
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
+#include "Common.h"
 
 const char* kFileName = "objects.dat";
 const uint32_t kCurrentFileVersion = 3;
@@ -103,38 +104,38 @@ public:
   {
     struct BGVertex
     {
-      aeFloat4 pos;
+      ae::Vec4 pos;
     };
     
     BGVertex bgVertices[ aeQuadVertCount ];
     uint8_t bgIndices[ aeQuadIndexCount ];
     for ( uint32_t i = 0; i < aeQuadVertCount; i++ )
     {
-      bgVertices[ i ].pos = aeFloat4( aeQuadVertPos[ i ] * 2.0f, 1.0f );
+      bgVertices[ i ].pos = ae::Vec4( aeQuadVertPos[ i ] * 2.0f, 1.0f );
     }
     for ( uint32_t i = 0; i < aeQuadIndexCount; i++ )
     {
       bgIndices[ i ] = aeQuadIndices[ i ];
     }
 
-    m_bgVertexData.Initialize( sizeof( BGVertex ), sizeof( uint8_t ), countof( bgVertices ), countof( bgIndices ), aeVertexPrimitive::Triangle, aeVertexUsage::Static, aeVertexUsage::Static );
-    m_bgVertexData.AddAttribute( "a_position", 4, aeVertexDataType::Float, offsetof( BGVertex, pos ) );
+    m_bgVertexData.Initialize( sizeof( BGVertex ), sizeof( uint8_t ), countof( bgVertices ), countof( bgIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+    m_bgVertexData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( BGVertex, pos ) );
     m_bgVertexData.SetVertices( bgVertices, countof( bgVertices ) );
     m_bgVertexData.SetIndices( bgIndices, countof( bgIndices ) );
 
     m_gridShader.Initialize( kGridVertexStr, kGridFragStr, nullptr, 0 );
   }
 
-  void Render( aeFloat4x4 worldToProj )
+  void Render( ae::Matrix4 worldToProj )
   {
-    aeUniformList uniforms;
+    ae::UniformList uniforms;
     uniforms.Set( "u_screenToWorld", worldToProj.GetInverse() );
     m_bgVertexData.Render( &m_gridShader, uniforms );
   }
 
 private:
-  aeShader m_gridShader;
-  aeVertexData m_bgVertexData;
+  ae::Shader m_gridShader;
+  ae::VertexData m_bgVertexData;
 };
 
 //------------------------------------------------------------------------------
@@ -150,8 +151,8 @@ struct Object
   // Shape
   ae::Sdf* shape = nullptr;
   // Ray
-  aeFloat3 raySrc = aeFloat3( 0.0f );
-  aeFloat3 rayDir = aeFloat3( 0.0f );
+  ae::Vec3 raySrc = ae::Vec3( 0.0f );
+  ae::Vec3 rayDir = ae::Vec3( 0.0f );
   float rayLength = 0.0f;
   uint32_t rayType = 0;
 };
@@ -168,7 +169,7 @@ void Object::Serialize( aeBinaryStream* stream )
     }
     else
     {
-      aeFloat4x4 transform;
+      ae::Matrix4 transform;
       stream->SerializeRaw( transform );
       shape->SetTransform( transform );
     }
@@ -263,13 +264,14 @@ int main()
   bool headless = _AE_LINUX_;
   
   ae::FileSystem vfs;
-  aeWindow window;
-  aeRender render;
-  aeInput input;
-  aeDebugRender debug;
+  ae::Window window;
+  ae::GraphicsDevice render;
+  ae::Input input;
+  ae::DebugLines debug;
   ae::TimeStep timeStep;
-  aeShader terrainShader;
+  ae::Shader terrainShader;
   aeEditorCamera camera;
+  ae::Texture2D fontTexture;
   aeTextRender textRender;
   class aeImGui* ui = nullptr;
 
@@ -283,7 +285,7 @@ int main()
   {
     window.Initialize( 800, 600, false, true );
     window.SetTitle( "terrain edit" );
-    render.InitializeOpenGL( &window );
+    render.Initialize( &window );
     debug.Initialize( 64 );
     ui->Initialize();
   }
@@ -298,7 +300,8 @@ int main()
     terrainShader.SetDepthTest( true );
     terrainShader.SetDepthWrite( true );
 
-    textRender.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
+    LoadPng( &fontTexture, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+    textRender.Initialize( &fontTexture, 8 );
   }
 
   ae::Image heightmapImage;
@@ -310,11 +313,11 @@ int main()
   ae::Terrain* terrain = ae::New< ae::Terrain >( TAG_EXAMPLE );
   terrain->Initialize( terrainThreads, !headless );
 
-  aeFloat4x4 worldToText = aeFloat4x4::Identity();
-  auto drawWorldText = [&]( aeFloat3 p, const char* str )
+  ae::Matrix4 worldToText = ae::Matrix4::Identity();
+  auto drawWorldText = [&]( ae::Vec3 p, const char* str )
   {
-    p = aeFloat3::ProjectPoint( worldToText, p );
-    aeFloat2 fontSize( (float)textRender.GetFontSize() );
+    p = ae::Vec3::ProjectPoint( worldToText, p );
+    ae::Vec2 fontSize( (float)textRender.GetFontSize() );
     textRender.Add( p, fontSize, str, aeColor::White(), 0, 0 );
   };
 
@@ -327,14 +330,14 @@ int main()
   if ( !ReadObjects( &vfs, terrain, &heightmapImage, objects ) )
   {
     ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
-    box->SetTransform( aeFloat4x4::Translation( camera.GetFocus() ) * aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+    box->SetTransform( ae::Matrix4::Translation( camera.GetFocus() ) * ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
     currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
   }
 
   bool gizmoClickedPrev = false;
 
   AE_INFO( "Run" );
-  while ( !input.GetState()->exit )
+  while ( !input.quit )
   {
     input.Pump();
 
@@ -352,8 +355,8 @@ int main()
         {
           ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
           box->SetTransform(
-            aeFloat4x4::Translation( camera.GetFocus() ) *
-            aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+            ae::Matrix4::Translation( camera.GetFocus() ) *
+            ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
 
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
         }
@@ -362,8 +365,8 @@ int main()
         {
           ae::SdfCylinder* cylinder = terrain->sdf.CreateSdf< ae::SdfCylinder >();
           cylinder->SetTransform(
-            aeFloat4x4::Translation( camera.GetFocus() ) *
-            aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+            ae::Matrix4::Translation( camera.GetFocus() ) *
+            ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
 
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Cylinder", cylinder ) );
         }
@@ -372,8 +375,8 @@ int main()
         {
           ae::SdfHeightmap* heightMap = terrain->sdf.CreateSdf< ae::SdfHeightmap >();
           heightMap->SetTransform(
-            aeFloat4x4::Translation( camera.GetFocus() ) *
-            aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+            ae::Matrix4::Translation( camera.GetFocus() ) *
+            ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
           heightMap->SetImage( &heightmapImage );
 
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Height Map", heightMap ) );
@@ -392,8 +395,8 @@ int main()
         //{
         //  ae::Sdf::Box* box = terrain->sdf.CreateSdf< ae::Sdf::Box >();
         //  box->SetTransform(
-        //    aeFloat4x4::Translation( camera.GetFocus() ) *
-        //    aeFloat4x4::Scaling( aeFloat3( 10.0f ) ) );
+        //    ae::Matrix4::Translation( camera.GetFocus() ) *
+        //    ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
         //  box->type = ae::Sdf::Shape::Type::Material;
         //  box->materialId = 1;
 
@@ -411,7 +414,7 @@ int main()
           {
             bool changed = false;
 
-            aeFloat4x4 temp = currentShape->GetTransform();
+            ae::Matrix4 temp = currentShape->GetTransform();
             float matrixTranslation[ 3 ], matrixRotation[ 3 ], matrixScale[ 3 ];
             ImGuizmo::DecomposeMatrixToComponents( temp.data, matrixTranslation, matrixRotation, matrixScale );
             changed |= ImGui::InputFloat3( "translation", matrixTranslation );
@@ -428,7 +431,7 @@ int main()
 
             if ( currentShape->type == ae::Sdf::Type::SmoothUnion || currentShape->type == ae::Sdf::Type::SmoothSubtraction )
             {
-              aeFloat3 halfSize = currentShape->GetHalfSize();
+              ae::Vec3 halfSize = currentShape->GetHalfSize();
               float maxLength = aeMath::Max( halfSize.x, halfSize.y, halfSize.z );
               changed |= ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, maxLength );
             }
@@ -438,7 +441,7 @@ int main()
 
             if ( auto box = ae::Cast< ae::SdfBox >( currentShape ) )
             {
-              aeFloat3 halfSize = box->GetHalfSize();
+              ae::Vec3 halfSize = box->GetHalfSize();
               float minLength = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
               changed |= ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, minLength );
             }
@@ -514,7 +517,7 @@ int main()
     if ( !headless )
     {
       // Camera focus
-      if ( currentObject && !input.GetPrevState()->Get( aeKey::F ) && input.GetState()->Get( aeKey::F ) )
+      if ( currentObject && !input.GetPrev( ae::Key::F ) && input.Get( ae::Key::F ) )
       {
         if ( currentObject->shape )
         {
@@ -527,17 +530,17 @@ int main()
       }
 
       // Render mode
-      if ( !input.GetPrevState()->Get( aeKey::Num1 ) && input.GetState()->Get( aeKey::Num1 ) )
+      if ( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )
       {
         wireframe = true;
         s_showTerrainDebug = true;
       }
-      else if ( !input.GetPrevState()->Get( aeKey::Num2 ) && input.GetState()->Get( aeKey::Num2 ) )
+      else if ( !input.GetPrev( ae::Key::Num2 ) && input.Get( ae::Key::Num2 ) )
       {
         wireframe = false;
         s_showTerrainDebug = true;
       }
-      else if ( input.GetState()->Get( aeKey::Num3 ) && !input.GetPrevState()->Get( aeKey::Num3 ) )
+      else if ( input.Get( ae::Key::Num3 ) && !input.GetPrev( ae::Key::Num3 ) )
       {
         wireframe = false;
         s_showTerrainDebug = false;
@@ -546,18 +549,18 @@ int main()
       render.Activate();
       render.Clear( aeColor::PicoDarkPurple() );
 
-      aeFloat4x4 worldToView = aeFloat4x4::WorldToView( camera.GetPosition(), camera.GetForward(), aeFloat3( 0.0f, 0.0f, 1.0f ) );
-      aeFloat4x4 viewToProj = aeFloat4x4::ViewToProjection( 0.525f, render.GetAspectRatio(), 0.5f, 1000.0f );
-      aeFloat4x4 worldToProj = viewToProj * worldToView;
+      ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
+      ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.525f, render.GetAspectRatio(), 0.5f, 1000.0f );
+      ae::Matrix4 worldToProj = viewToProj * worldToView;
       // UI units in pixels, origin in bottom left
-      aeFloat4x4 textToNdc = aeFloat4x4::Scaling( aeFloat3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
-      textToNdc *= aeFloat4x4::Translation( aeFloat3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
+      ae::Matrix4 textToNdc = ae::Matrix4::Scaling( ae::Vec3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
+      textToNdc *= ae::Matrix4::Translation( ae::Vec3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
       worldToText = textToNdc.GetInverse() * worldToProj;
 
       aeColor top = aeColor::SRGB8( 46, 65, 35 );
       aeColor side = aeColor::SRGB8( 84, 84, 74 );
       aeColor path = aeColor::SRGB8( 64, 64, 54 );
-      aeUniformList uniformList;
+      ae::UniformList uniformList;
       uniformList.Set( "u_worldToProj", worldToProj );
       if ( wireframe )
       {
@@ -565,7 +568,7 @@ int main()
         uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
         terrainShader.SetBlending( false );
-        terrainShader.SetCulling( aeShaderCulling::None );
+        terrainShader.SetCulling( ae::Shader::Culling::None );
         terrainShader.SetWireframe( true );
         terrain->Render( &terrainShader, uniformList );
 
@@ -573,7 +576,7 @@ int main()
         uniformList.Set( "u_sideColor", side.SetA( 0.5f ).GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.SetA( 0.5f ).GetLinearRGBA() );
         terrainShader.SetBlending( true );
-        terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+        terrainShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
         terrainShader.SetWireframe( false );
         terrain->Render( &terrainShader, uniformList );
       }
@@ -583,7 +586,7 @@ int main()
         uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
         terrainShader.SetBlending( false );
-        terrainShader.SetCulling( aeShaderCulling::CounterclockwiseFront );
+        terrainShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
         terrainShader.SetWireframe( false );
         terrain->Render( &terrainShader, uniformList );
       }
@@ -591,25 +594,25 @@ int main()
       ImGuiIO& io = ImGui::GetIO();
       ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
 
-      aeKey delKey = _AE_OSX_ ? aeKey::Backspace : aeKey::Delete;
+      ae::Key delKey = _AE_OSX_ ? ae::Key::Backspace : ae::Key::Delete;
       static ImGuizmo::OPERATION s_operation = ImGuizmo::TRANSLATE;
-      if ( input.GetState()->Get( aeKey::Q ) && !input.GetPrevState()->Get( aeKey::Q ) )
+      if ( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
       {
         currentObject = nullptr;
       }
-      else if ( input.GetState()->Get( aeKey::W ) && !input.GetPrevState()->Get( aeKey::W ) )
+      else if ( input.Get( ae::Key::W ) && !input.GetPrev( ae::Key::W ) )
       {
         s_operation = ImGuizmo::TRANSLATE;
       }
-      else if ( input.GetState()->Get( aeKey::E ) && !input.GetPrevState()->Get( aeKey::E ) )
+      else if ( input.Get( ae::Key::E ) && !input.GetPrev( ae::Key::E ) )
       {
         s_operation = ImGuizmo::ROTATE;
       }
-      else if ( input.GetState()->Get( aeKey::R ) && !input.GetPrevState()->Get( aeKey::R ) )
+      else if ( input.Get( ae::Key::R ) && !input.GetPrev( ae::Key::R ) )
       {
         s_operation = ImGuizmo::SCALE;
       }
-      else if ( currentObject && input.GetState()->Get( delKey ) && !input.GetPrevState()->Get( delKey ) )
+      else if ( currentObject && input.Get( delKey ) && !input.GetPrev( delKey ) )
       {
         objects.Remove( objects.Find( currentObject ) );
         terrain->sdf.DestroySdf( currentObject->shape );
@@ -624,7 +627,7 @@ int main()
         {
           if ( s_showTerrainDebug )
           {
-            aeFloat3 ray = object->rayDir * object->rayLength;
+            ae::Vec3 ray = object->rayDir * object->rayLength;
             if ( object->rayType == 0 || object->rayType == 1 )
             {
               if ( object->rayType )
@@ -647,7 +650,7 @@ int main()
           }
           else
           {
-            aeFloat3 endPos = object->raySrc + object->rayDir * object->rayLength;
+            ae::Vec3 endPos = object->raySrc + object->rayDir * object->rayLength;
             debug.AddLine( object->raySrc, endPos, aeColor::PicoDarkGray() );
           }
         }
@@ -659,7 +662,7 @@ int main()
 
         if ( ae::Sdf* currentShape = currentObject->shape )
         {
-          aeFloat4x4 gizmoTransform = currentShape->GetTransform();
+          ae::Matrix4 gizmoTransform = currentShape->GetTransform();
 
           ImGuizmo::Manipulate(
             worldToView.data,
@@ -669,7 +672,7 @@ int main()
             gizmoTransform.data
           );
 
-          debug.AddCube( gizmoTransform, aeColor::Green() );
+          debug.AddOBB( gizmoTransform, aeColor::Green() );
         
           if ( gizmoClicked )
           {
@@ -685,7 +688,7 @@ int main()
         }
         else
         {
-          aeFloat4x4 gizmoTransform = aeFloat4x4::Translation( currentObject->raySrc );
+          ae::Matrix4 gizmoTransform = ae::Matrix4::Translation( currentObject->raySrc );
 
           ImGuizmo::Manipulate(
             worldToView.data,

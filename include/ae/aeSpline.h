@@ -38,17 +38,17 @@ class aeSpline
 {
 public:
   aeSpline( ae::Tag tag );
-  aeSpline( ae::Tag tag, aeFloat3* controlPoints, uint32_t count );
+  aeSpline( ae::Tag tag, ae::Vec3* controlPoints, uint32_t count );
 
-  void AppendControlPoint( aeFloat3 p );
+  void AppendControlPoint( ae::Vec3 p );
   void RemoveControlPoint( uint32_t index );
   void SetLooping( bool enabled );
 
-  aeFloat3 GetControlPoint( uint32_t index ) const;
+  ae::Vec3 GetControlPoint( uint32_t index ) const;
   uint32_t GetControlPointCount() const;
 
-  aeFloat3 GetPoint( float distance ) const; // 0 <= distance <= length
-  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr );
+  ae::Vec3 GetPoint( float distance ) const; // 0 <= distance <= length
+  float GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr );
   float GetLength() const;
 
   aeAABB GetAABB() const { return m_aabb; }
@@ -57,30 +57,30 @@ private:
   class Segment
   {
   public:
-    void Init( aeFloat3 p0, aeFloat3 p1, aeFloat3 p2, aeFloat3 p3 );
-    aeFloat3 GetPoint01( float t ) const;
-    aeFloat3 GetPoint0() const;
-    aeFloat3 GetPoint1() const;
-    aeFloat3 GetPoint( float d ) const;
-    float GetMinDistance( aeFloat3 p, aeFloat3* pOut ) const;
+    void Init( ae::Vec3 p0, ae::Vec3 p1, ae::Vec3 p2, ae::Vec3 p3 );
+    ae::Vec3 GetPoint01( float t ) const;
+    ae::Vec3 GetPoint0() const;
+    ae::Vec3 GetPoint1() const;
+    ae::Vec3 GetPoint( float d ) const;
+    float GetMinDistance( ae::Vec3 p, ae::Vec3* pOut ) const;
     float GetLength() const { return m_length; }
     aeAABB GetAABB() const { return m_aabb; }
 
   private:
-    aeFloat3 m_a;
-    aeFloat3 m_b;
-    aeFloat3 m_c;
-    aeFloat3 m_d;
+    ae::Vec3 m_a;
+    ae::Vec3 m_b;
+    ae::Vec3 m_c;
+    ae::Vec3 m_d;
     float m_length;
     uint32_t m_resolution;
     aeAABB m_aabb;
   };
 
   void m_RecalculateSegments();
-  aeFloat3 m_GetControlPoint( int32_t index ) const;
+  ae::Vec3 m_GetControlPoint( int32_t index ) const;
 
   bool m_loop = false;
-  ae::Array< aeFloat3 > m_controlPoints;
+  ae::Array< ae::Vec3 > m_controlPoints;
   ae::Array< Segment > m_segments;
   float m_length = 0.0f;
   aeAABB m_aabb;

@@ -75,7 +75,7 @@ public:
 		ImGui::DestroyContext();
 	}
 
-	void NewFrame( aeRender* render, aeInput* input, float dt )
+	void NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
 	{
 		AE_ASSERT( m_init );
     
@@ -85,28 +85,28 @@ public:
       m_pendingRender = false;
     }
 
-		const InputState* inputState = input->GetState();
 		ImGuiIO& io = ImGui::GetIO();
 
-		io.AddInputCharactersUTF8( input->GetTextInput() );
-		input->SetTextMode( io.WantTextInput );
+    // @TODO: !!!
+//		io.AddInputCharactersUTF8( input->GetTextInput() );
+//		input->SetTextMode( io.WantTextInput );
 
 		io.DeltaTime = dt;
 		
 		// @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
-		io.MouseDown[ 0 ] = inputState->mouseLeft;
-		io.MouseDown[ 1 ] = inputState->mouseRight;
-		io.MouseDown[ 2 ] = inputState->mouseMiddle;
-		io.MouseWheel += inputState->scroll;
-		io.MousePos = ImVec2( inputState->mousePixelPos.x, render->GetHeight() - inputState->mousePixelPos.y );
+		io.MouseDown[ 0 ] = input->mouse.leftButton;
+		io.MouseDown[ 1 ] = input->mouse.rightButton;
+		io.MouseDown[ 2 ] = input->mouse.middleButton;
+		io.MouseWheel += input->mouse.scroll.y;
+		io.MousePos = ImVec2( input->mouse.position.x, render->GetHeight() - input->mouse.position.y );
 		
-		AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
-		for ( uint32_t i = 0; i < kKeyCount; i++ )
-		{
-			io.KeysDown[ i ] = inputState->Get( (aeKey)i );
-		}
-		io.KeyShift = inputState->shift;
-		io.KeyCtrl = inputState->ctrl;
+//		AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
+//		for ( uint32_t i = 0; i < kKeyCount; i++ )
+//		{
+//			io.KeysDown[ i ] = inputState->Get( (aeKey)i );
+//		}
+		io.KeyShift = input->Get( ae::Key::LeftShift ) || input->Get( ae::Key::RightShift );
+		io.KeyCtrl = input->Get( ae::Key::LeftControl ) || input->Get( ae::Key::RightControl );
 		//io.KeyAlt = ( ( SDL_GetModState() & KMOD_ALT ) != 0 );
 //#ifdef _WIN32
 //		io.KeySuper = false;
@@ -301,28 +301,28 @@ private:
 		}
 
 		ImGuiIO& io = ImGui::GetIO();
-		io.KeyMap[ ImGuiKey_Tab ] = (uint32_t)aeKey::Tab;
-		io.KeyMap[ ImGuiKey_LeftArrow ] = (uint32_t)aeKey::Left;
-		io.KeyMap[ ImGuiKey_RightArrow ] = (uint32_t)aeKey::Right;
-		io.KeyMap[ ImGuiKey_UpArrow ] = (uint32_t)aeKey::Up;
-		io.KeyMap[ ImGuiKey_DownArrow ] = (uint32_t)aeKey::Down;
-		io.KeyMap[ ImGuiKey_PageUp ] = (uint32_t)aeKey::PageUp;
-		io.KeyMap[ ImGuiKey_PageDown ] = (uint32_t)aeKey::PageDown;
-		io.KeyMap[ ImGuiKey_Home ] = (uint32_t)aeKey::Home;
-		io.KeyMap[ ImGuiKey_End ] = (uint32_t)aeKey::End;
-		io.KeyMap[ ImGuiKey_Insert ] = (uint32_t)aeKey::Insert;
-		io.KeyMap[ ImGuiKey_Delete ] = (uint32_t)aeKey::Delete;
-		io.KeyMap[ ImGuiKey_Backspace ] = (uint32_t)aeKey::Backspace;
-		io.KeyMap[ ImGuiKey_Space ] = (uint32_t)aeKey::Space;
-		io.KeyMap[ ImGuiKey_Enter ] = (uint32_t)aeKey::Enter;
-		io.KeyMap[ ImGuiKey_Escape ] = (uint32_t)aeKey::Escape;
-		io.KeyMap[ ImGuiKey_KeyPadEnter ] = (uint32_t)aeKey::NumPadEnter;
-		io.KeyMap[ ImGuiKey_A ] = (uint32_t)aeKey::A;
-		io.KeyMap[ ImGuiKey_C ] = (uint32_t)aeKey::C;
-		io.KeyMap[ ImGuiKey_V ] = (uint32_t)aeKey::V;
-		io.KeyMap[ ImGuiKey_X ] = (uint32_t)aeKey::X;
-		io.KeyMap[ ImGuiKey_Y ] = (uint32_t)aeKey::Y;
-		io.KeyMap[ ImGuiKey_Z ] = (uint32_t)aeKey::Z;
+		io.KeyMap[ ImGuiKey_Tab ] = (uint32_t)ae::Key::Tab;
+		io.KeyMap[ ImGuiKey_LeftArrow ] = (uint32_t)ae::Key::Left;
+		io.KeyMap[ ImGuiKey_RightArrow ] = (uint32_t)ae::Key::Right;
+		io.KeyMap[ ImGuiKey_UpArrow ] = (uint32_t)ae::Key::Up;
+		io.KeyMap[ ImGuiKey_DownArrow ] = (uint32_t)ae::Key::Down;
+		io.KeyMap[ ImGuiKey_PageUp ] = (uint32_t)ae::Key::PageUp;
+		io.KeyMap[ ImGuiKey_PageDown ] = (uint32_t)ae::Key::PageDown;
+		io.KeyMap[ ImGuiKey_Home ] = (uint32_t)ae::Key::Home;
+		io.KeyMap[ ImGuiKey_End ] = (uint32_t)ae::Key::End;
+		io.KeyMap[ ImGuiKey_Insert ] = (uint32_t)ae::Key::Insert;
+		io.KeyMap[ ImGuiKey_Delete ] = (uint32_t)ae::Key::Delete;
+		io.KeyMap[ ImGuiKey_Backspace ] = (uint32_t)ae::Key::Backspace;
+		io.KeyMap[ ImGuiKey_Space ] = (uint32_t)ae::Key::Space;
+		io.KeyMap[ ImGuiKey_Enter ] = (uint32_t)ae::Key::Enter;
+		io.KeyMap[ ImGuiKey_Escape ] = (uint32_t)ae::Key::Escape;
+		io.KeyMap[ ImGuiKey_KeyPadEnter ] = (uint32_t)ae::Key::NumPadEnter;
+		io.KeyMap[ ImGuiKey_A ] = (uint32_t)ae::Key::A;
+		io.KeyMap[ ImGuiKey_C ] = (uint32_t)ae::Key::C;
+		io.KeyMap[ ImGuiKey_V ] = (uint32_t)ae::Key::V;
+		io.KeyMap[ ImGuiKey_X ] = (uint32_t)ae::Key::X;
+		io.KeyMap[ ImGuiKey_Y ] = (uint32_t)ae::Key::Y;
+		io.KeyMap[ ImGuiKey_Z ] = (uint32_t)ae::Key::Z;
     
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigWindowsResizeFromEdges = true;
@@ -350,7 +350,7 @@ private:
 
 	bool m_init = false;
 	bool m_headless = false;
-	aeRender* m_render = nullptr;
+	ae::GraphicsDevice* m_render = nullptr;
   bool m_pendingRender = false;
 };
 

@@ -28,6 +28,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeRender.h"
+#include "aeMath.h"
 
 namespace ae {
 
@@ -50,17 +51,17 @@ public:
   {
     void Serialize( const SerializationParams& params, class ae::BinaryStream* stream );
     
-    aeFloat4 position;
-    aeFloat4 normal;
-    aeFloat2 tex[ 4 ];
+    ae::Vec4 position;
+    ae::Vec4 normal;
+    ae::Vec2 tex[ 4 ];
     aeColor color[ 4 ];
     uint8_t userData[ 4 ];
   };
   struct LoadParams
   {
     uint32_t vertexCount = 0;
-    const aeFloat3* positions = nullptr;
-    const aeFloat3* normals = nullptr;
+    const ae::Vec3* positions = nullptr;
+    const ae::Vec3* normals = nullptr;
     const uint8_t* userData = nullptr;
     uint32_t positionStride = sizeof(Vertex::position);
     uint32_t normalStride = sizeof(Vertex::normal);
@@ -74,7 +75,7 @@ public:
   bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
   void Load( LoadParams params );
   void Serialize( const SerializationParams& params, ae::BinaryStream* stream ); // @NOTE: Serializing ae::Mesh across library versions may not work. Stream will be invaldated on failure.
-  void Transform( aeFloat4x4 transform ); // Permanently pre-transform loaded verts
+  void Transform( ae::Matrix4 transform ); // Permanently pre-transform loaded verts
   void Clear();
 
   // Geo
@@ -89,14 +90,14 @@ public:
   // Raycast
   struct RaycastParams
   {
-    aeFloat4x4 transform = aeFloat4x4::Identity();
-    aeFloat3 source = aeFloat3( 0.0f );
-    aeFloat3 direction = aeFloat3Down;
+    ae::Matrix4 transform = ae::Matrix4::Identity();
+    ae::Vec3 source = ae::Vec3( 0.0f );
+    ae::Vec3 direction = aeFloat3Down;
     float maxLength = 0.0f;
     uint32_t maxHits = 1;
     bool hitCounterclockwise = true;
     bool hitClockwise = false;
-    class aeDebugRender* debug = nullptr; // Draw collision results
+    ae::DebugLines* debug = nullptr; // Draw collision results
     aeColor debugColor = aeColor::Red();
   };
   struct RaycastResult
@@ -104,8 +105,8 @@ public:
     uint32_t hitCount = 0;
     struct Hit
     {
-      aeFloat3 position = aeFloat3( 0.0f );
-      aeFloat3 normal = aeFloat3( 0.0f );
+      ae::Vec3 position = ae::Vec3( 0.0f );
+      ae::Vec3 normal = ae::Vec3( 0.0f );
       float t = 0.0f;
     } hits[ 8 ];
     
@@ -116,18 +117,18 @@ public:
   // Sphere collision
   struct PushOutParams
   {
-    aeFloat4x4 transform = aeFloat4x4::Identity();
-    class aeDebugRender* debug = nullptr; // Draw collision results
+    ae::Matrix4 transform = ae::Matrix4::Identity();
+    ae::DebugLines* debug = nullptr; // Draw collision results
     aeColor debugColor = aeColor::Red();
   };
   struct PushOutInfo
   {
     aeSphere sphere;
-    aeFloat3 velocity = aeFloat3( 0.0f );
+    ae::Vec3 velocity = ae::Vec3( 0.0f );
     struct Hit
     {
-      aeFloat3 position;
-      aeFloat3 normal;
+      ae::Vec3 position;
+      ae::Vec3 normal;
     };
     ae::Array< Hit, 8 > hits;
 

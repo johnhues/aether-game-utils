@@ -42,13 +42,13 @@ public:
   ~aeInventoryGrid();
 
   void Set( T& value, aeRectInt rect );
-  void Set( T& value, aeInt2* cells, uint32_t cellCount );
+  void Set( T& value, ae::Int2* cells, uint32_t cellCount );
 
-  T* TryGet( aeInt2 pos );
-  bool TryGet( aeInt2 pos, T* valueOut );
-  const T* TryGet( aeInt2 pos ) const;
+  T* TryGet( ae::Int2 pos );
+  bool TryGet( ae::Int2 pos, T* valueOut );
+  const T* TryGet( ae::Int2 pos ) const;
 
-  void Remove( aeInt2 pos );
+  void Remove( ae::Int2 pos );
   void Remove( const T& value );
 
   uint32_t Length() const;
@@ -59,7 +59,7 @@ private:
     Shape() : node( this ) {}
 
     aeListNode< Shape > node;
-    ae::Array< aeInt2 > cells;
+    ae::Array< ae::Int2 > cells;
     T value;
   };
   
@@ -84,19 +84,19 @@ aeInventoryGrid< T >::~aeInventoryGrid()
 template < typename T >
 void aeInventoryGrid< T >::Set( T& value, aeRectInt rect )
 {
-  ae::Array< aeInt2 > cells( m_pool, rect.w * rect.h );
+  ae::Array< ae::Int2 > cells( m_pool, rect.w * rect.h );
   for ( uint32_t y = 0; y < rect.h; y++ )
   {
     for ( uint32_t x = 0; x < rect.w; x++ )
     {
-      cells.Append( aeInt2( rect.x + x, rect.y + y ) );
+      cells.Append( ae::Int2( rect.x + x, rect.y + y ) );
     }
   }
   Set( value, &( cells[ 0 ] ), cells.Length() );
 }
 
 template < typename T >
-void aeInventoryGrid< T >::Set( T& value, aeInt2* cells, uint32_t cellCount )
+void aeInventoryGrid< T >::Set( T& value, ae::Int2* cells, uint32_t cellCount )
 {
   for ( uint32_t i = 0; i < cellCount; i++ )
   {
@@ -113,13 +113,13 @@ void aeInventoryGrid< T >::Set( T& value, aeInt2* cells, uint32_t cellCount )
 }
 
 template < typename T >
-T* aeInventoryGrid< T >::TryGet( aeInt2 pos )
+T* aeInventoryGrid< T >::TryGet( ae::Int2 pos )
 {
   return const_cast<T*>( const_cast<const aeInventoryGrid< T >*>( this )->TryGet( pos ) );
 }
 
 template < typename T >
-bool aeInventoryGrid< T >::TryGet( aeInt2 pos, T* valueOut )
+bool aeInventoryGrid< T >::TryGet( ae::Int2 pos, T* valueOut )
 {
   const T* result = TryGet( pos );
   if ( result )
@@ -131,7 +131,7 @@ bool aeInventoryGrid< T >::TryGet( aeInt2 pos, T* valueOut )
 }
 
 template < typename T >
-const T* aeInventoryGrid< T >::TryGet( aeInt2 pos ) const
+const T* aeInventoryGrid< T >::TryGet( ae::Int2 pos ) const
 {
   const Shape* shape = m_shapeList.GetFirst();
   while ( shape )
@@ -147,7 +147,7 @@ const T* aeInventoryGrid< T >::TryGet( aeInt2 pos ) const
 }
 
 template < typename T >
-void aeInventoryGrid< T >::Remove( aeInt2 pos )
+void aeInventoryGrid< T >::Remove( ae::Int2 pos )
 {
   if ( m_shapeList.Length() == 0 )
   {

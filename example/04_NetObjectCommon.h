@@ -42,7 +42,7 @@ const AetherMsgId kObjectInfoMsg = 1;
 class Game
 {
 public:
-  void Game::Initialize( const char* windowTitle )
+  void Initialize( const char* windowTitle )
   {
     window.Initialize( 800, 600, false, true );
     window.SetTitle( windowTitle );
@@ -50,24 +50,21 @@ public:
     input.Initialize( &window );
     timeStep.SetTimeStep( 1.0f / 10.0f );
     debugLines.Initialize( 32 );
-    //text.Initialize( "font.png", aeTextureFilter::Nearest, 8 );
   }
 
-  void Game::Terminate()
+  void Terminate()
   {
-    //text.Terminate();
     debugLines.Terminate();
     //input.Terminate();
     render.Terminate();
     window.Terminate();
   }
 
-  void Game::Render( const ae::Matrix4& worldToNdc )
+  void Render( const ae::Matrix4& worldToNdc )
   {
     render.Activate();
     render.Clear( aeColor::PicoBlack() );
     
-    //text.Render( ae::Matrix4::Scaling( ae::Vec3( 0.1f ) ) );
     debugLines.Render( worldToNdc );
     
     render.Present();
@@ -79,7 +76,6 @@ public:
   ae::Input input;
   ae::TimeStep timeStep;
   ae::DebugLines debugLines;
-  //aeTextRender text;
 };
 
 //------------------------------------------------------------------------------
@@ -93,7 +89,7 @@ public:
     netObject = nullptr;
     alive = true;
     playerId = AetherUuid::Zero();
-    m_pos = aeFloat3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
+    m_pos = ae::Vec3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
     m_radius = aeMath::Random( 0.5f, 2.0f );
     m_color = color;
   }

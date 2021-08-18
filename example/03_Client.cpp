@@ -32,21 +32,21 @@ int main()
 {
 	AE_LOG( "Initialize" );
 
-	aeWindow window;
-	aeRender render;
-	aeInput input;
+	ae::Window window;
+	ae::GraphicsDevice render;
+	ae::Input input;
 	AetherClient* client;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "client" );
-	render.InitializeOpenGL( &window );
+	render.Initialize( &window );
 	input.Initialize( &window );
 	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
 	
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.GetState()->exit )
+	while ( !input.quit )
 	{
 		input.Pump();
 		if ( !client->IsConnected() && !client->IsConnecting() )
@@ -77,7 +77,7 @@ int main()
 			}
 		}
 
-		if ( input.GetState()->space && !input.GetPrevState()->space )
+		if ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
 		{
 			char msg[] = "ping";
 			AE_LOG( "Send (#) '#'", client->localPlayer->uuid, msg );

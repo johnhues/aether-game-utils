@@ -109,7 +109,7 @@ int main()
 
     rotation += timeStep.GetDt();
     
-    if ( input.mouseState.leftButton && !input.mouseStatePrev.leftButton )
+    if ( input.mouse.leftButton && !input.mousePrev.leftButton )
     {
       capture = true;
     }
@@ -121,18 +121,18 @@ int main()
     
     if ( capture )
     {
-      pos.x += input.mouseState.movement.x * 0.001f;
-      pos.y += input.mouseState.movement.y * 0.001f;
+      pos.x += input.mouse.movement.x * 0.001f;
+      pos.y += input.mouse.movement.y * 0.001f;
     }
     
-    if ( input.mouseState.usingTouch && !capture )
+    if ( input.mouse.usingTouch && !capture )
     {
-      pos.x += input.mouseState.scroll.x * 0.01f;
-      pos.y += input.mouseState.scroll.y * -0.01f;
+      pos.x += input.mouse.scroll.x * 0.01f;
+      pos.y += input.mouse.scroll.y * -0.01f;
     }
     else
     {
-      scale += input.mouseState.scroll.y * 0.01f;
+      scale += input.mouse.scroll.y * 0.01f;
       scale = ae::Clip( scale, 0.1f, 2.0f );
     }
     

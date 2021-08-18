@@ -101,7 +101,7 @@ bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension
   return true;
 }
 
-aeColor ae::Image::Get( aeInt2 pixel ) const
+aeColor ae::Image::Get( ae::Int2 pixel ) const
 {
   if ( pixel.x < 0 || pixel.y < 0 || pixel.x >= m_width || pixel.y >= m_height )
   {
@@ -132,9 +132,9 @@ aeColor ae::Image::Get( aeInt2 pixel ) const
   return aeColor::Black();
 }
 
-aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
+aeColor ae::Image::Get( ae::Vec2 pixel, Interpolation interpolation ) const
 {
-  aeInt2 pi = pixel.FloorCopy();
+  ae::Int2 pi = pixel.FloorCopy();
 
   switch ( interpolation )
   {
@@ -148,9 +148,9 @@ aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
       float y = pixel.y - pi.y;
 
       aeColor c00 = Get( pi );
-      aeColor c10 = Get( pi + aeInt2( 1, 0 ) );
-      aeColor c01 = Get( pi + aeInt2( 0, 1 ) );
-      aeColor c11 = Get( pi + aeInt2( 1, 1 ) );
+      aeColor c10 = Get( pi + ae::Int2( 1, 0 ) );
+      aeColor c01 = Get( pi + ae::Int2( 0, 1 ) );
+      aeColor c11 = Get( pi + ae::Int2( 1, 1 ) );
 
       aeColor c0 = c00.Lerp( c10, x );
       aeColor c1 = c01.Lerp( c11, x );
@@ -163,14 +163,14 @@ aeColor ae::Image::Get( aeFloat2 pixel, Interpolation interpolation ) const
       float y = pixel.y - pi.y;
 
       aeColor c00 = Get( pi );
-      aeColor c10 = Get( pi + aeInt2( 1, 0 ) );
-      aeColor c01 = Get( pi + aeInt2( 0, 1 ) );
-      aeColor c11 = Get( pi + aeInt2( 1, 1 ) );
+      aeColor c10 = Get( pi + ae::Int2( 1, 0 ) );
+      aeColor c01 = Get( pi + ae::Int2( 0, 1 ) );
+      aeColor c11 = Get( pi + ae::Int2( 1, 1 ) );
 
-      aeColor c0 = aeMath::Interpolation::Cosine( c00, c10, x );
-      aeColor c1 = aeMath::Interpolation::Cosine( c01, c11, x );
+      aeColor c0 = ae::Interpolation::Cosine( c00, c10, x );
+      aeColor c1 = ae::Interpolation::Cosine( c01, c11, x );
 
-      return aeMath::Interpolation::Cosine( c0, c1, y );
+      return ae::Interpolation::Cosine( c0, c1, y );
     }
   }
 

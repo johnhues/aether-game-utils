@@ -29,7 +29,7 @@
 //------------------------------------------------------------------------------
 // aeRect member functions
 //------------------------------------------------------------------------------
-aeRect::aeRect( aeFloat2 p0, aeFloat2 p1 )
+aeRect::aeRect( ae::Vec2 p0, ae::Vec2 p1 )
 {
   if ( p0.x < p1.x )
   {
@@ -59,12 +59,12 @@ aeRect aeRect::Zero()
   return aeRect( 0.0f, 0.0f, 0.0f, 0.0f );
 }
 
-bool aeRect::Contains( aeFloat2 pos ) const
+bool aeRect::Contains( ae::Vec2 pos ) const
 {
   return !( pos.x < x || pos.x >= ( x + w ) || pos.y < y || pos.y >= ( y + h ) );
 }
 
-void aeRect::Expand( aeFloat2 pos )
+void aeRect::Expand( ae::Vec2 pos )
 {
   if ( w == 0.0f )
   {
@@ -99,7 +99,7 @@ bool aeRect::GetIntersection( const aeRect& other, aeRect* intersectionOut ) con
   {
     if ( intersectionOut )
     {
-      *intersectionOut = aeRect( aeFloat2( x0, y0 ), aeFloat2( x1, y1 ) );
+      *intersectionOut = aeRect( ae::Vec2( x0, y0 ), ae::Vec2( x1, y1 ) );
     }
     return true;
   }
@@ -117,7 +117,7 @@ aeRectInt aeRectInt::Zero()
   return aeRectInt( 0, 0, 0, 0 );
 }
 
-bool aeRectInt::Contains( aeInt2 pos ) const
+bool aeRectInt::Contains( ae::Int2 pos ) const
 {
   return !( pos.x < x || pos.x >= ( x + w ) || pos.y < y || pos.y >= ( y + h ) );
 }
@@ -128,7 +128,7 @@ bool aeRectInt::Intersects( aeRectInt o ) const
     || o.y + o.h <= y || y + h <= o.y ); // No vertical intersection
 }
 
-void aeRectInt::Expand( aeInt2 pos )
+void aeRectInt::Expand( ae::Int2 pos )
 {
   if ( w == 0 )
   {
@@ -160,32 +160,32 @@ void aeRectInt::Expand( aeInt2 pos )
 //------------------------------------------------------------------------------
 // aePlane member functions
 //------------------------------------------------------------------------------
-aePlane::aePlane( aeFloat4 pointNormal ) :
+aePlane::aePlane( ae::Vec4 pointNormal ) :
   m_plane( pointNormal / pointNormal.GetXYZ().Length() ) // Normalize
 {}
 
-aePlane::aePlane( aeFloat3 point, aeFloat3 normal )
+aePlane::aePlane( ae::Vec3 point, ae::Vec3 normal )
 {
-  m_plane = aeFloat4( normal.NormalizeCopy(), 0.0f );
+  m_plane = ae::Vec4( normal.NormalizeCopy(), 0.0f );
   m_plane.w = GetSignedDistance( point );
 }
 
-aeFloat3 aePlane::GetNormal() const
+ae::Vec3 aePlane::GetNormal() const
 {
   return m_plane.GetXYZ();
 }
 
-aeFloat3 aePlane::GetClosestPointToOrigin() const
+ae::Vec3 aePlane::GetClosestPointToOrigin() const
 {
   return m_plane.GetXYZ() * m_plane.w;
 }
 
-bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const
+bool aePlane::IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* out ) const
 {
   dir.SafeNormalize();
   
-  aeFloat3 n = m_plane.GetXYZ();
-  aeFloat3 p = n * m_plane.w;
+  ae::Vec3 n = m_plane.GetXYZ();
+  ae::Vec3 p = n * m_plane.w;
 
   float a = dir.Dot( n );
   if ( a > -0.01f )
@@ -194,7 +194,7 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* o
     return false;
   }
 
-  aeFloat3 diff = pos - p;
+  ae::Vec3 diff = pos - p;
   float b = diff.Dot( n );
   float c = b / a;
 
@@ -209,9 +209,9 @@ bool aePlane::IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* o
   return true;
 }
 
-aeFloat3 aePlane::GetClosestPoint( aeFloat3 pos, float* distanceOut ) const
+ae::Vec3 aePlane::GetClosestPoint( ae::Vec3 pos, float* distanceOut ) const
 {
-  aeFloat3 n = m_plane.GetXYZ();
+  ae::Vec3 n = m_plane.GetXYZ();
   float t = pos.Dot( n ) - m_plane.w;
   if ( distanceOut )
   {
@@ -220,7 +220,7 @@ aeFloat3 aePlane::GetClosestPoint( aeFloat3 pos, float* distanceOut ) const
   return pos - n * t;
 }
 
-float aePlane::GetSignedDistance( aeFloat3 pos ) const
+float aePlane::GetSignedDistance( ae::Vec3 pos ) const
 {
    return pos.Dot( m_plane.GetXYZ() ) - m_plane.w;
 }
@@ -228,13 +228,13 @@ float aePlane::GetSignedDistance( aeFloat3 pos ) const
 //------------------------------------------------------------------------------
 // aeLineSegment member functions
 //------------------------------------------------------------------------------
-aeLineSegment::aeLineSegment( aeFloat3 p0, aeFloat3 p1 )
+aeLineSegment::aeLineSegment( ae::Vec3 p0, ae::Vec3 p1 )
 {
   m_p0 = p0;
   m_p1 = p1;
 }
 
-float aeLineSegment::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut ) const
+float aeLineSegment::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut ) const
 {
   float lenSq = ( m_p1 - m_p0 ).LengthSquared();
   if ( lenSq <= 0.001f )
@@ -247,7 +247,7 @@ float aeLineSegment::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut ) const
   }
 
   float t = aeMath::Clip01( ( p - m_p0 ).Dot( m_p1 - m_p0 ) / lenSq );
-  aeFloat3 linePos = aeMath::Lerp( m_p0, m_p1, t );
+  ae::Vec3 linePos = aeMath::Lerp( m_p0, m_p1, t );
 
   if ( nearestOut )
   {
@@ -259,7 +259,7 @@ float aeLineSegment::GetMinDistance( aeFloat3 p, aeFloat3* nearestOut ) const
 //------------------------------------------------------------------------------
 // aeCircle member functions
 //------------------------------------------------------------------------------
-aeCircle::aeCircle( aeFloat2 point, float radius )
+aeCircle::aeCircle( ae::Vec2 point, float radius )
 {
   m_point = point;
   m_radius = radius;
@@ -270,9 +270,9 @@ float aeCircle::GetArea( float radius )
   return aeMath::PI * radius * radius;
 }
 
-bool aeCircle::Intersect( const aeCircle& other, aeFloat2* out ) const
+bool aeCircle::Intersect( const aeCircle& other, ae::Vec2* out ) const
 {
-  aeFloat2 diff = other.m_point - m_point;
+  ae::Vec2 diff = other.m_point - m_point;
   float dist = diff.Length();
   if ( dist > m_radius + other.m_radius )
   {
@@ -289,11 +289,11 @@ bool aeCircle::Intersect( const aeCircle& other, aeFloat2* out ) const
 //------------------------------------------------------------------------------
 // aeSphere member functions
 //------------------------------------------------------------------------------
-bool aeSphere::Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut, aeFloat3* pOut ) const
+bool aeSphere::Raycast( ae::Vec3 origin, ae::Vec3 direction, float* tOut, ae::Vec3* pOut ) const
 {
   direction.SafeNormalize();
 
-  aeFloat3 m = origin - center;
+  ae::Vec3 m = origin - center;
   float b = m.Dot( direction );
   float c = m.Dot( m ) - radius * radius;
   // Exit if r�s origin outside s (c > 0) and r pointing away from s (b > 0)
@@ -331,7 +331,7 @@ bool aeSphere::Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut, aeFloa
 }
 
 // Test if point P lies inside the counterclockwise 3D triangle ABC
-bool PointInTriangle( aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c )
+bool PointInTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c )
 {
   // Translate point and triangle so that point lies at origin
   a -= p;
@@ -357,10 +357,10 @@ bool PointInTriangle( aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c )
 }
 
 #include "aeRender.h"
-bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Vec3 normal,
   float* outNearestDistance,
-  aeFloat3* outNearestIntersectionPoint,
-  aeFloat3* outNearestPolygonIntersectionPoint, aeDebugRender* debug ) const
+  ae::Vec3* outNearestIntersectionPoint,
+  ae::Vec3* outNearestPolygonIntersectionPoint, ae::DebugLines* debug ) const
 {
   direction.SafeNormalize(); // @TODO: Make sure following logic is isn't limited by direction length
 
@@ -368,8 +368,8 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   aePlane triPlane( points[ 0 ], normal );
 
   // Determine the distance from the plane to the source
-  aeFloat3 planeIntersectionPoint( 0.0f );
-  aeFloat3 planeIntersectionPoint2( 0.0f );
+  ae::Vec3 planeIntersectionPoint( 0.0f );
+  ae::Vec3 planeIntersectionPoint2( 0.0f );
   //float pDist = intersect( pOrigin, normal, source, -normal );
   float pDist = aeMath::MaxValue< float >();
   if ( triPlane.IntersectRay( center, -normal, &pDist, &planeIntersectionPoint ) )
@@ -398,7 +398,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   }
   else
   {
-    aeFloat3 sphereIntersectionPoint = center - normal * radius;
+    ae::Vec3 sphereIntersectionPoint = center - normal * radius;
     if ( !triPlane.IntersectRay( sphereIntersectionPoint, direction, nullptr, &planeIntersectionPoint ) )
     {
       return false;
@@ -409,7 +409,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
 
   // Unless otherwise noted, our polygonIntersectionPoint is the
   // same point as planeIntersectionPoint
-  aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
+  ae::Vec3 polygonIntersectionPoint = planeIntersectionPoint;
   // So� are they the same?
   // @TODO: Check edges
   //if ( planeIntersectionPoint is not within the current polygon )
@@ -417,8 +417,8 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   {
     // polygonIntersectionPoint = nearest point on polygon's perimeter to planeIntersectionPoint;
 
-    aeFloat3 p0, p1;
-    aeFloat3 c0, c1, c2;
+    ae::Vec3 p0, p1;
+    ae::Vec3 c0, c1, c2;
     float d0 = aeLineSegment( points[ 0 ], points[ 1 ] ).GetMinDistance( planeIntersectionPoint, &c0 );
     float d1 = aeLineSegment( points[ 1 ], points[ 2 ] ).GetMinDistance( planeIntersectionPoint, &c1 );
     float d2 = aeLineSegment( points[ 2 ], points[ 0 ] ).GetMinDistance( planeIntersectionPoint, &c2 );
@@ -444,23 +444,23 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
     //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
     //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
 
-    aeFloat3 flatDir = direction.ZeroAxisCopy( normal );
+    ae::Vec3 flatDir = direction.ZeroAxisCopy( normal );
     debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
 
     float minDist = aeMath::MaxValue< float >();
-    aeFloat3 theRealThingTM;
-    aeFloat3 edgeNormalMinTemp;
-    //aeFloat3 flatDir = direction.ZeroAxisCopy( normal );
+    ae::Vec3 theRealThingTM;
+    ae::Vec3 edgeNormalMinTemp;
+    //ae::Vec3 flatDir = direction.ZeroAxisCopy( normal );
     for ( uint32_t i = 0; i < 3; i++ )
     {
       p0 = points[ i ];
       p1 = points[ ( i + 1 ) % 3 ];
 
-      aeFloat3 edgeNormal = normal.Cross( p0 - p1 ).SafeNormalizeCopy();
+      ae::Vec3 edgeNormal = normal.Cross( p0 - p1 ).SafeNormalizeCopy();
       aePlane edgePlane( p0, edgeNormal ); //  + edgeNormal * radius
 
       float distance = 0.0f;
-      aeFloat3 testPoint = planeIntersectionPoint2;
+      ae::Vec3 testPoint = planeIntersectionPoint2;
       edgePlane.IntersectRay( planeIntersectionPoint2, flatDir, &distance, &testPoint );
       if ( minDist > distance )
       {
@@ -477,11 +477,11 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
     polygonIntersectionPoint = theRealThingTM;
 
     float circleRad = radius; // Incorrect! This circle is the 'slice of sphere' at the point of contact with the edge
-    aeFloat3 circlePos = theRealThingTM + edgeNormalMinTemp * circleRad;
+    ae::Vec3 circlePos = theRealThingTM + edgeNormalMinTemp * circleRad;
     debug->AddCircle( circlePos, normal, circleRad, aeColor::Blue(), 16 );
   }
   // Invert the velocity vector
-  //aeFloat3 negativeVelocityVector = -velocityVector;
+  //ae::Vec3 negativeVelocityVector = -velocityVector;
   // Using the polygonIntersectionPoint, we need to reverse-intersect
   // with the sphere (note: the 1.0 below is the unit-sphere�s
   // radius)
@@ -512,10 +512,10 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
 }
 
 /*
-bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
+bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Vec3 normal,
   float* outNearestDistance,
-  aeFloat3* outNearestIntersectionPoint,
-  aeFloat3* outNearestPolygonIntersectionPoint, aeDebugRender* debug ) const
+  ae::Vec3* outNearestIntersectionPoint,
+  ae::Vec3* outNearestPolygonIntersectionPoint, ae::DebugLines* debug ) const
 {
   direction.SafeNormalize(); // @TODO: Make sure following logic is isn't limited by direction length
 
@@ -523,8 +523,8 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   aePlane triPlane( points[ 0 ], normal );
 
   // Determine the distance from the plane to the source
-  aeFloat3 planeIntersectionPoint( 0.0f );
-  aeFloat3 planeIntersectionPoint2( 0.0f );
+  ae::Vec3 planeIntersectionPoint( 0.0f );
+  ae::Vec3 planeIntersectionPoint2( 0.0f );
   //float pDist = intersect( pOrigin, normal, source, -normal );
   float pDist = aeMath::MaxValue< float >();
   if ( triPlane.IntersectRay( center, -normal, &pDist, &planeIntersectionPoint ) )
@@ -553,7 +553,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   }
   else
   {
-    aeFloat3 sphereIntersectionPoint = center - normal * radius;
+    ae::Vec3 sphereIntersectionPoint = center - normal * radius;
     if ( !triPlane.IntersectRay( sphereIntersectionPoint, direction, nullptr, &planeIntersectionPoint ) )
     {
       return false;
@@ -564,7 +564,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
 
   // Unless otherwise noted, our polygonIntersectionPoint is the
   // same point as planeIntersectionPoint
-  aeFloat3 polygonIntersectionPoint = planeIntersectionPoint;
+  ae::Vec3 polygonIntersectionPoint = planeIntersectionPoint;
   // So� are they the same?
   // @TODO: Check edges
   //if ( planeIntersectionPoint is not within the current polygon )
@@ -572,8 +572,8 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
   {
     // polygonIntersectionPoint = nearest point on polygon's perimeter to planeIntersectionPoint;
 
-    aeFloat3 p0, p1;
-    aeFloat3 c0, c1, c2;
+    ae::Vec3 p0, p1;
+    ae::Vec3 c0, c1, c2;
     float d0 = aeLineSegment( points[ 0 ], points[ 1 ] ).GetMinDistance( planeIntersectionPoint, &c0 );
     float d1 = aeLineSegment( points[ 1 ], points[ 2 ] ).GetMinDistance( planeIntersectionPoint, &c1 );
     float d2 = aeLineSegment( points[ 2 ], points[ 0 ] ).GetMinDistance( planeIntersectionPoint, &c2 );
@@ -599,23 +599,23 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
     //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
     //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
 
-    aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    ae::Vec3 flatDir = ae::Vec3( direction ).ZeroAxis( normal );
     debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
 
     float minDist = aeMath::MaxValue< float >();
-    aeFloat3 theRealThingTM;
-    aeFloat3 edgeNormalMinTemp;
-    //aeFloat3 flatDir = aeFloat3( direction ).ZeroAxis( normal );
+    ae::Vec3 theRealThingTM;
+    ae::Vec3 edgeNormalMinTemp;
+    //ae::Vec3 flatDir = ae::Vec3( direction ).ZeroAxis( normal );
     for ( uint32_t i = 0; i < 3; i++ )
     {
       p0 = points[ i ];
       p1 = points[ ( i + 1 ) % 3 ];
 
-      aeFloat3 edgeNormal = ( normal % ( p0 - p1 ) ).SafeNormalizeCopy();
+      ae::Vec3 edgeNormal = ( normal % ( p0 - p1 ) ).SafeNormalizeCopy();
       aePlane edgePlane( p0, edgeNormal ); //  + edgeNormal * radius
 
       float distance = 0.0f;
-      aeFloat3 testPoint = planeIntersectionPoint2;
+      ae::Vec3 testPoint = planeIntersectionPoint2;
       edgePlane.IntersectRay( planeIntersectionPoint2, flatDir, &distance, &testPoint );
       if ( minDist > distance )
       {
@@ -632,7 +632,7 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
     ////polygonIntersectionPoint = theRealThingTM;
   }
   // Invert the velocity vector
-  //aeFloat3 negativeVelocityVector = -velocityVector;
+  //ae::Vec3 negativeVelocityVector = -velocityVector;
   // Using the polygonIntersectionPoint, we need to reverse-intersect
   // with the sphere (note: the 1.0 below is the unit-sphere�s
   // radius)
@@ -664,11 +664,11 @@ bool aeSphere::SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloa
 */
 
 // 5.1 Closest-point Computations 139 and, in fact, be the orthogonal projection R, which can now be easily computed per the preceding. This information is now enough to produce a code solution.
-aeFloat3 ClosestPtPointTriangle(aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c)
+ae::Vec3 ClosestPtPointTriangle(ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c)
 {
-  aeFloat3 ab = b - a;
-  aeFloat3 ac = c - a;
-  aeFloat3 bc = c - b;
+  ae::Vec3 ab = b - a;
+  ae::Vec3 ac = c - a;
+  ae::Vec3 bc = c - b;
   
   // Compute parametric position s for projection P’ of P on AB,
   // P’ = A + s*AB, s = snom/(snom+sdenom)
@@ -688,7 +688,7 @@ aeFloat3 ClosestPtPointTriangle(aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c)
   if (tdenom <= 0.0f && udenom <= 0.0f) return c; // Vertex region early out
   
   // P is outside (or on) AB if the triple scalar product [N PA PB] <= 0
-  aeFloat3 n = (b - a).Cross(c - a);
+  ae::Vec3 n = (b - a).Cross(c - a);
   float vc = n.Dot((a - p).Cross(b - p));
   // If P outside AB and within feature region of AB,
   // return projection of P onto AB
@@ -716,9 +716,9 @@ aeFloat3 ClosestPtPointTriangle(aeFloat3 p, aeFloat3 a, aeFloat3 b, aeFloat3 c)
   return u * a + v * b + w * c;
 }
 
-bool aeSphere::IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint ) const
+bool aeSphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const
 {
-  aeFloat3 closest = ClosestPtPointTriangle( center, t0, t1, t2 );
+  ae::Vec3 closest = ClosestPtPointTriangle( center, t0, t1, t2 );
   if ( ( closest - center ).LengthSquared() <= radius * radius )
   {
     if ( outNearestIntersectionPoint )
@@ -733,7 +733,7 @@ bool aeSphere::IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat
 //------------------------------------------------------------------------------
 // aeAABB member functions
 //------------------------------------------------------------------------------
-aeAABB::aeAABB( aeFloat3 p0, aeFloat3 p1 )
+aeAABB::aeAABB( ae::Vec3 p0, ae::Vec3 p1 )
 {
   m_min = aeMath::Min( p0, p1 );
   m_max = aeMath::Max( p0, p1 );
@@ -741,12 +741,12 @@ aeAABB::aeAABB( aeFloat3 p0, aeFloat3 p1 )
 
 aeAABB::aeAABB( const aeSphere& sphere )
 {
-  aeFloat3 r( sphere.radius );
+  ae::Vec3 r( sphere.radius );
   m_min = sphere.center - r;
   m_max = sphere.center + r;
 }
 
-void aeAABB::Expand( aeFloat3 p )
+void aeAABB::Expand( ae::Vec3 p )
 {
   m_min = aeMath::Min( p, m_min );
   m_max = aeMath::Max( p, m_max );
@@ -760,21 +760,21 @@ void aeAABB::Expand( aeAABB other )
 
 void aeAABB::Expand( float boundary )
 {
-  m_min -= aeFloat3( boundary );
-  m_max += aeFloat3( boundary );
+  m_min -= ae::Vec3( boundary );
+  m_max += ae::Vec3( boundary );
 }
 
-aeFloat4x4 aeAABB::GetTransform() const
+ae::Matrix4 aeAABB::GetTransform() const
 {
-  return aeFloat4x4::Translation( GetCenter() ) * aeFloat4x4::Scaling( m_max - m_min );
+  return ae::Matrix4::Translation( GetCenter() ) * ae::Matrix4::Scaling( m_max - m_min );
 }
 
-float aeAABB::GetMinDistance( aeFloat3 p ) const
+float aeAABB::GetMinDistance( ae::Vec3 p ) const
 {
-  aeFloat3 center = GetCenter();
-  aeFloat3 halfSize = GetHalfSize();
+  ae::Vec3 center = GetCenter();
+  ae::Vec3 halfSize = GetHalfSize();
 
-  aeFloat3 d = p - center;
+  ae::Vec3 d = p - center;
   d.x = aeMath::Max( aeMath::Abs( d.x ) - halfSize.x, 0.0f );
   d.y = aeMath::Max( aeMath::Abs( d.y ) - halfSize.y, 0.0f );
   d.z = aeMath::Max( aeMath::Abs( d.z ) - halfSize.z, 0.0f );
@@ -798,7 +798,7 @@ bool aeAABB::Intersect( aeAABB other ) const
 
 // Intersect ray R(t) = p + t*d against AABB a. When intersecting,
 // return intersection distance tmin and point q of intersection
-bool aeAABB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut ) const
+bool aeAABB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) const
 {
   float tmin = 0.0f; // set to -FLT_MAX to get first hit on line
   float tmax = aeMath::MaxValue< float >(); // set to max distance ray can travel (for segment)
@@ -851,16 +851,16 @@ bool aeAABB::IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut, float* tOut )
 //------------------------------------------------------------------------------
 // aeOBB member functions
 //------------------------------------------------------------------------------
-aeOBB::aeOBB( const aeFloat4x4& transform )
+aeOBB::aeOBB( const ae::Matrix4& transform )
 {
   SetTransform( transform );
 }
 
-void aeOBB::SetTransform( const aeFloat4x4& transform )
+void aeOBB::SetTransform( const ae::Matrix4& transform )
 {
   m_transform = transform;
   
-  aeFloat3 scale = transform.GetScale();
+  ae::Vec3 scale = transform.GetScale();
   m_scaledAABB = aeAABB( scale * -0.5f, scale * 0.5f );
   
   m_invTransRot = transform;
@@ -868,21 +868,21 @@ void aeOBB::SetTransform( const aeFloat4x4& transform )
   m_invTransRot.SetInverse();
 }
 
-const aeFloat4x4& aeOBB::GetTransform() const
+const ae::Matrix4& aeOBB::GetTransform() const
 {
   return m_transform;
 }
 
-float aeOBB::GetMinDistance( aeFloat3 p ) const
+float aeOBB::GetMinDistance( ae::Vec3 p ) const
 {
-  p = ( m_invTransRot * aeFloat4( p, 1.0f ) ).GetXYZ();
+  p = ( m_invTransRot * ae::Vec4( p, 1.0f ) ).GetXYZ();
   return m_scaledAABB.GetMinDistance( p );
 }
 
-bool aeOBB::IntersectRay( aeFloat3 _p, aeFloat3 _d, aeFloat3* pOut, float* tOut ) const
+bool aeOBB::IntersectRay( ae::Vec3 _p, ae::Vec3 _d, ae::Vec3* pOut, float* tOut ) const
 {
-  aeFloat3 p = ( m_invTransRot * aeFloat4( _p, 1.0f ) ).GetXYZ();
-  aeFloat3 d = ( m_invTransRot * aeFloat4( _d, 0.0f ) ).GetXYZ();
+  ae::Vec3 p = ( m_invTransRot * ae::Vec4( _p, 1.0f ) ).GetXYZ();
+  ae::Vec3 d = ( m_invTransRot * ae::Vec4( _d, 0.0f ) ).GetXYZ();
 
   float rayT = 0.0f;
   if ( m_scaledAABB.IntersectRay( p, d, nullptr, &rayT ) )
@@ -903,16 +903,16 @@ bool aeOBB::IntersectRay( aeFloat3 _p, aeFloat3 _d, aeFloat3* pOut, float* tOut 
 
 aeAABB aeOBB::GetAABB() const
 {
-  aeFloat4 corners[] =
+  ae::Vec4 corners[] =
   {
-    m_transform * aeFloat4( -0.5f, -0.5f, -0.5f, 1.0f ),
-    m_transform * aeFloat4( 0.5f, -0.5f, -0.5f, 1.0f ),
-    m_transform * aeFloat4( 0.5f, 0.5f, -0.5f, 1.0f ),
-    m_transform * aeFloat4( -0.5f, 0.5f, -0.5f, 1.0f ),
-    m_transform * aeFloat4( -0.5f, -0.5f, 0.5f, 1.0f ),
-    m_transform * aeFloat4( 0.5f, -0.5f, 0.5f, 1.0f ),
-    m_transform * aeFloat4( 0.5f, 0.5f, 0.5f, 1.0f ),
-    m_transform * aeFloat4( -0.5f, 0.5f, 0.5f, 1.0f ),
+    m_transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
+    m_transform * ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ),
+    m_transform * ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ),
+    m_transform * ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ),
+    m_transform * ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ),
+    m_transform * ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ),
+    m_transform * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
+    m_transform * ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
   };
   
   aeAABB result( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
@@ -927,19 +927,19 @@ aeAABB aeOBB::GetAABB() const
 //------------------------------------------------------------------------------
 // aeFrustum member functions
 //------------------------------------------------------------------------------
-aeFrustum::aeFrustum( aeFloat4x4 worldToProjection )
+aeFrustum::aeFrustum( ae::Matrix4 worldToProjection )
 {
-  aeFloat4 row0 = worldToProjection.GetRow( 0 );
-  aeFloat4 row1 = worldToProjection.GetRow( 1 );
-  aeFloat4 row2 = worldToProjection.GetRow( 2 );
-  aeFloat4 row3 = worldToProjection.GetRow( 3 );
+  ae::Vec4 row0 = worldToProjection.GetRow( 0 );
+  ae::Vec4 row1 = worldToProjection.GetRow( 1 );
+  ae::Vec4 row2 = worldToProjection.GetRow( 2 );
+  ae::Vec4 row3 = worldToProjection.GetRow( 3 );
 
-  aeFloat4 near = -row0 - row3;
-  aeFloat4 far = row0 - row3;
-  aeFloat4 left = -row1 - row3;
-  aeFloat4 right = row1 - row3;
-  aeFloat4 top = -row2 - row3;
-  aeFloat4 bottom = row2 - row3;
+  ae::Vec4 near = -row0 - row3;
+  ae::Vec4 far = row0 - row3;
+  ae::Vec4 left = -row1 - row3;
+  ae::Vec4 right = row1 - row3;
+  ae::Vec4 top = -row2 - row3;
+  ae::Vec4 bottom = row2 - row3;
   near.w = -near.w;
   far.w = -far.w;
   left.w = -left.w;
@@ -955,7 +955,7 @@ aeFrustum::aeFrustum( aeFloat4x4 worldToProjection )
   m_planes[ (int)aeFrustumPlane::Bottom ] = bottom;
 }
 
-bool aeFrustum::Intersects( aeFloat3 point ) const
+bool aeFrustum::Intersects( ae::Vec3 point ) const
 {
   for ( uint32_t i = 0; i < countof(m_planes); i++ )
   {

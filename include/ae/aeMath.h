@@ -75,73 +75,73 @@ using aeFloat4 = ae::Vec4;
 using aeFloat4x4 = ae::Matrix4;
 using aeQuat = ae::Quaternion;
 
-const static aeFloat3 aeFloat3Zero = aeFloat3( 0.0f );
-const static aeFloat3 aeFloat3Up = aeFloat3( 0, 0, 1 );
-const static aeFloat3 aeFloat3Down = aeFloat3( 0, 0, -1 );
-const static aeFloat3 aeFloat3Left = aeFloat3( -1, 0, 0 );
-const static aeFloat3 aeFloat3Right = aeFloat3( 1, 0, 0 );
-const static aeFloat3 aeFloat3Forward = aeFloat3( 0, 1, 0 );
-const static aeFloat3 aeFloat3Backward = aeFloat3( 0, -1, 0 );
+const static ae::Vec3 aeFloat3Zero = ae::Vec3( 0.0f );
+const static ae::Vec3 aeFloat3Up = ae::Vec3( 0, 0, 1 );
+const static ae::Vec3 aeFloat3Down = ae::Vec3( 0, 0, -1 );
+const static ae::Vec3 aeFloat3Left = ae::Vec3( -1, 0, 0 );
+const static ae::Vec3 aeFloat3Right = ae::Vec3( 1, 0, 0 );
+const static ae::Vec3 aeFloat3Forward = ae::Vec3( 0, 1, 0 );
+const static ae::Vec3 aeFloat3Backward = ae::Vec3( 0, -1, 0 );
 
 namespace aeMath
 {
-  inline aeFloat3 Abs( aeFloat3 v )
+  inline ae::Vec3 Abs( ae::Vec3 v )
   {
-    return aeFloat3(
+    return ae::Vec3(
       Abs( v.x ),
       Abs( v.y ),
       Abs( v.z )
     );
   }
 
-  inline aeInt3 Min( aeInt3 v0, aeInt3 v1 )
+  inline ae::Int3 Min( ae::Int3 v0, ae::Int3 v1 )
   {
-    return aeInt3(
+    return ae::Int3(
       Min( v0.x, v1.x ),
       Min( v0.y, v1.y ),
       Min( v0.z, v1.z )
     );
   }
 
-  inline aeInt3 Max( aeInt3 v0, aeInt3 v1 )
+  inline ae::Int3 Max( ae::Int3 v0, ae::Int3 v1 )
   {
-    return aeInt3(
+    return ae::Int3(
       Max( v0.x, v1.x ),
       Max( v0.y, v1.y ),
       Max( v0.z, v1.z )
     );
   }
 
-  inline aeInt3 Abs( aeInt3 v )
+  inline ae::Int3 Abs( ae::Int3 v )
   {
-    return aeInt3(
+    return ae::Int3(
       Abs( v.x ),
       Abs( v.y ),
       Abs( v.z )
     );
   }
 
-  inline aeFloat3 Ceil( aeFloat3 v )
+  inline ae::Vec3 Ceil( ae::Vec3 v )
   {
-    return aeFloat3(
+    return ae::Vec3(
       (float)Ceil( v.x ),
       (float)Ceil( v.y ),
       (float)Ceil( v.z )
     );
   }
 
-  inline aeFloat3 Floor( aeFloat3 v )
+  inline ae::Vec3 Floor( ae::Vec3 v )
   {
-    return aeFloat3(
+    return ae::Vec3(
       (float)Floor( v.x ),
       (float)Floor( v.y ),
       (float)Floor( v.z )
     );
   }
 
-  inline aeFloat4 Ceil( aeFloat4 v )
+  inline ae::Vec4 Ceil( ae::Vec4 v )
   {
-    return aeFloat4(
+    return ae::Vec4(
       (float)Ceil( v.x ),
       (float)Ceil( v.y ),
       (float)Ceil( v.z ),
@@ -149,9 +149,9 @@ namespace aeMath
     );
   }
 
-  inline aeFloat4 Floor( aeFloat4 v )
+  inline ae::Vec4 Floor( ae::Vec4 v )
   {
-    return aeFloat4(
+    return ae::Vec4(
       (float)Floor( v.x ),
       (float)Floor( v.y ),
       (float)Floor( v.z ),
@@ -169,17 +169,17 @@ struct aeRect
   aeRect( const aeRect& ) = default;
 
   aeRect( float x, float y, float w, float h ) : x(x), y(y), w(w), h(h) {}
-  aeRect( aeFloat2 p0, aeFloat2 p1 );
+  aeRect( ae::Vec2 p0, ae::Vec2 p1 );
   static aeRect Zero();
 
-  explicit operator aeFloat4() const { return aeFloat4( x, y, w, h ); }
+  explicit operator ae::Vec4() const { return ae::Vec4( x, y, w, h ); }
   
-  aeFloat2 GetMin() const { return aeFloat2( x, y ); }
-  aeFloat2 GetMax() const { return aeFloat2( x + w, y + h ); }
-  aeFloat2 GetSize() const { return aeFloat2( w, h ); }
+  ae::Vec2 GetMin() const { return ae::Vec2( x, y ); }
+  ae::Vec2 GetMax() const { return ae::Vec2( x + w, y + h ); }
+  ae::Vec2 GetSize() const { return ae::Vec2( w, h ); }
 
-  bool Contains( aeFloat2 pos ) const;
-  void Expand( aeFloat2 pos ); // @NOTE: Zero size rect is maintained by Expand()
+  bool Contains( ae::Vec2 pos ) const;
+  void Expand( ae::Vec2 pos ); // @NOTE: Zero size rect is maintained by Expand()
 
   bool GetIntersection( const aeRect& other, aeRect* intersectionOut ) const;
   
@@ -205,11 +205,11 @@ struct aeRectInt
   aeRectInt( int32_t x, int32_t y, int32_t w, int32_t h ) : x(x), y(y), w(w), h(h) {}
 
   static aeRectInt Zero();
-  aeInt2 GetPos() const { return aeInt2( x, y ); }
-  aeInt2 GetSize() const { return aeInt2( w, h ); }
-  bool Contains( aeInt2 pos ) const;
+  ae::Int2 GetPos() const { return ae::Int2( x, y ); }
+  ae::Int2 GetSize() const { return ae::Int2( w, h ); }
+  bool Contains( ae::Int2 pos ) const;
   bool Intersects( aeRectInt other ) const;
-  void Expand( aeInt2 pos ); // @NOTE: Zero size rect is expanded to 1x1 grid square by Expand()
+  void Expand( ae::Int2 pos ); // @NOTE: Zero size rect is expanded to 1x1 grid square by Expand()
   
   int32_t x;
   int32_t y;
@@ -229,18 +229,18 @@ class aePlane
 {
 public:
   aePlane() = default;
-  aePlane( aeFloat3 point, aeFloat3 normal );
-  aePlane( aeFloat4 pointNormal );
+  aePlane( ae::Vec3 point, ae::Vec3 normal );
+  aePlane( ae::Vec4 pointNormal );
   
-  aeFloat3 GetNormal() const;
-  aeFloat3 GetClosestPointToOrigin() const;
+  ae::Vec3 GetNormal() const;
+  ae::Vec3 GetClosestPointToOrigin() const;
 
-  bool IntersectRay( aeFloat3 pos, aeFloat3 dir, float* tOut, aeFloat3* out ) const;
-  aeFloat3 GetClosestPoint( aeFloat3 pos, float* distanceOut = nullptr ) const;
-  float GetSignedDistance( aeFloat3 pos ) const;
+  bool IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* out ) const;
+  ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
+  float GetSignedDistance( ae::Vec3 pos ) const;
 
 private:
-  aeFloat4 m_plane;
+  ae::Vec4 m_plane;
 };
 
 //------------------------------------------------------------------------------
@@ -250,13 +250,13 @@ class aeLineSegment
 {
 public:
   aeLineSegment() = default;
-  aeLineSegment( aeFloat3 p0, aeFloat3 p1 );
+  aeLineSegment( ae::Vec3 p0, ae::Vec3 p1 );
 
-  float GetMinDistance( aeFloat3 p, aeFloat3* nearestOut = nullptr ) const; // @TODO: GetDistance()
+  float GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr ) const; // @TODO: GetDistance()
 
 private:
-  aeFloat3 m_p0;
-  aeFloat3 m_p1;
+  ae::Vec3 m_p0;
+  ae::Vec3 m_p1;
 };
 
 //------------------------------------------------------------------------------
@@ -266,21 +266,21 @@ class aeCircle
 {
 public:
   aeCircle() = default;
-  aeCircle( aeFloat2 point, float radius );
+  aeCircle( ae::Vec2 point, float radius );
 
   static float GetArea( float radius );
 
-  aeFloat2 GetCenter() const { return m_point; }
+  ae::Vec2 GetCenter() const { return m_point; }
   float GetRadius() const { return m_radius; }
-  void SetCenter( aeFloat2 point ) { m_point = point; }
+  void SetCenter( ae::Vec2 point ) { m_point = point; }
   void SetRadius( float radius ) { m_radius = radius; }
 
-  bool Intersect( const aeCircle& other, aeFloat2* out ) const;
+  bool Intersect( const aeCircle& other, ae::Vec2* out ) const;
 
 private:
   friend std::ostream& operator<<( std::ostream& os, const aeCircle& c );
 
-  aeFloat2 m_point;
+  ae::Vec2 m_point;
   float m_radius;
 };
 
@@ -296,14 +296,14 @@ class aeSphere
 {
 public:
   aeSphere() = default;
-  aeSphere( aeFloat3 center, float radius ) : center( center ), radius( radius ) {}
+  aeSphere( ae::Vec3 center, float radius ) : center( center ), radius( radius ) {}
 
-  bool Raycast( aeFloat3 origin, aeFloat3 direction, float* tOut = nullptr, aeFloat3* pOut = nullptr ) const;
-  bool SweepTriangle( aeFloat3 direction, const aeFloat3* points, aeFloat3 normal,
-    float* outNearestDistance, aeFloat3* outNearestIntersectionPoint, aeFloat3* outNearestPolygonIntersectionPoint, class aeDebugRender* debug ) const;
-  bool IntersectTriangle( aeFloat3 t0, aeFloat3 t1, aeFloat3 t2, aeFloat3* outNearestIntersectionPoint ) const;
+  bool Raycast( ae::Vec3 origin, ae::Vec3 direction, float* tOut = nullptr, ae::Vec3* pOut = nullptr ) const;
+  bool SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Vec3 normal,
+    float* outNearestDistance, ae::Vec3* outNearestIntersectionPoint, ae::Vec3* outNearestPolygonIntersectionPoint, ae::DebugLines* debug ) const;
+  bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
 
-  aeFloat3 center = aeFloat3( 0.0f );
+  ae::Vec3 center = ae::Vec3( 0.0f );
   float radius = 0.5f;
 };
 
@@ -315,26 +315,26 @@ class aeAABB
 public:
   aeAABB() = default;
   aeAABB( const aeAABB& ) = default;
-  aeAABB( aeFloat3 p0, aeFloat3 p1 );
+  aeAABB( ae::Vec3 p0, ae::Vec3 p1 );
   explicit aeAABB( const aeSphere& sphere );
 
-  void Expand( aeFloat3 p );
+  void Expand( ae::Vec3 p );
   void Expand( aeAABB other );
   void Expand( float boundary );
 
-  aeFloat3 GetMin() const { return m_min; }
-  aeFloat3 GetMax() const { return m_max; }
-  aeFloat3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
-  aeFloat3 GetHalfSize() const { return ( m_max - m_min ) * 0.5f; }
-  aeFloat4x4 GetTransform() const;
+  ae::Vec3 GetMin() const { return m_min; }
+  ae::Vec3 GetMax() const { return m_max; }
+  ae::Vec3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
+  ae::Vec3 GetHalfSize() const { return ( m_max - m_min ) * 0.5f; }
+  ae::Matrix4 GetTransform() const;
 
-  float GetMinDistance( aeFloat3 p ) const; // @TODO: GetDistanceFromSurface()
+  float GetMinDistance( ae::Vec3 p ) const; // @TODO: GetDistanceFromSurface()
   bool Intersect( aeAABB other ) const;
-  bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
+  bool IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
 
 private:
-  aeFloat3 m_min;
-  aeFloat3 m_max;
+  ae::Vec3 m_min;
+  ae::Vec3 m_max;
 };
 
 inline std::ostream& operator<<( std::ostream& os, aeAABB aabb )
@@ -350,19 +350,19 @@ class aeOBB
 public:
   aeOBB() = default;
   aeOBB( const aeOBB& ) = default;
-  aeOBB( const aeFloat4x4& transform );
+  aeOBB( const ae::Matrix4& transform );
 
-  void SetTransform( const aeFloat4x4& transform );
-  const aeFloat4x4& GetTransform() const;
+  void SetTransform( const ae::Matrix4& transform );
+  const ae::Matrix4& GetTransform() const;
 
-  float GetMinDistance( aeFloat3 p ) const; // @TODO: GetDistanceFromSurface()
-  bool IntersectRay( aeFloat3 p, aeFloat3 d, aeFloat3* pOut = nullptr, float* tOut = nullptr ) const;
+  float GetMinDistance( ae::Vec3 p ) const; // @TODO: GetDistanceFromSurface()
+  bool IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
 
   aeAABB GetAABB() const;
 
 private:
-  aeFloat4x4 m_transform;
-  aeFloat4x4 m_invTransRot;
+  ae::Matrix4 m_transform;
+  ae::Matrix4 m_invTransRot;
   aeAABB m_scaledAABB;
 };
 
@@ -381,9 +381,9 @@ enum class aeFrustumPlane
 class aeFrustum
 {
 public:
-  aeFrustum( aeFloat4x4 worldToProjection );
+  aeFrustum( ae::Matrix4 worldToProjection );
   bool Intersects( const aeSphere& sphere ) const;
-  bool Intersects( aeFloat3 point ) const;
+  bool Intersects( ae::Vec3 point ) const;
   aePlane GetPlane( aeFrustumPlane plane ) const;
   
 private:

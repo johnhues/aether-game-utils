@@ -40,7 +40,7 @@ void aeEditorCamera::SetDistanceLimits( float min, float max )
   m_max = max;
 }
 
-void aeEditorCamera::Update( const aeInput* input, float dt )
+void aeEditorCamera::Update( const ae::Input* input, float dt )
 {
 	if ( !m_inputEnabled )
 	{
@@ -48,30 +48,30 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	}
 
 	// Input
-	aeFloat2 mouseMovement( 0.0f );
+	ae::Vec2 mouseMovement( 0.0f );
 	bool mousePan = false;
 	bool mouseZoom = false;
 	bool mouseRotate = false;
 	if ( input )
 	{
-		aeKey panKey = aeKey::LeftAlt;
-		mouseMovement = aeFloat2( input->GetState()->mousePixelPos - input->GetPrevState()->mousePixelPos );
-		mousePan = input->GetPrevState()->mouseMiddle && input->GetState()->mouseMiddle;
+		ae::Key panKey = ae::Key::LeftAlt;
+		mouseMovement = ae::Vec2( input->mouse.position - input->mousePrev.position );
+		mousePan = input->mousePrev.middleButton && input->mouse.middleButton;
 		if ( !mousePan
-			&& input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft
-			&& input->GetState()->Get( panKey ) )
+			&& input->mousePrev.leftButton && input->mouse.leftButton
+			&& input->Get( panKey ) )
 		{
 			mousePan = true;
 		}
-		mouseZoom = input->GetPrevState()->mouseRight && input->GetState()->mouseRight;
+		mouseZoom = input->mousePrev.rightButton && input->mouse.rightButton;
 
 		if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
 		{
 			mouseRotate = true;
 		}
-		else if ( !input->GetState()->Get( panKey ) )
+		else if ( !input->Get( panKey ) )
 		{
-			mouseRotate = input->GetPrevState()->mouseLeft && input->GetState()->mouseLeft;
+			mouseRotate = input->mousePrev.leftButton && input->mouse.leftButton;
 		}
 	}
 
@@ -122,7 +122,7 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 		m_dist += mouseMovement.y * 0.1f * zoomSpeed;
 		m_dist -= mouseMovement.x * 0.1f * zoomSpeed;
 	}
-	m_dist -= input ? input->GetState()->scroll * 2.5f * zoomSpeed : 0.0f;
+	m_dist -= input ? input->mouse.scroll.y * 2.5f * zoomSpeed : 0.0f;
   m_dist = aeMath::Clip( m_dist, m_min, m_max );
 
 	// Recalculate camera offset from focus and local axis'
@@ -150,14 +150,14 @@ void aeEditorCamera::Update( const aeInput* input, float dt )
 	}
 }
 
-void aeEditorCamera::Reset( aeFloat3 focus, aeFloat3 pos )
+void aeEditorCamera::Reset( ae::Vec3 focus, ae::Vec3 pos )
 {
 	m_refocus = false;
 	m_refocusPos = focus;
 	
 	m_focusPos = focus;
 	
-	aeFloat3 diff = focus - pos;
+	ae::Vec3 diff = focus - pos;
 	m_dist = diff.Length();
 	
 	if ( m_dist > 0.01f ) // Only update rotation if focus is different than position
@@ -175,7 +175,7 @@ void aeEditorCamera::SetDistanceFromFocus( float distance )
 	m_Precalculate();
 }
 
-void aeEditorCamera::Refocus( aeFloat3 focus )
+void aeEditorCamera::Refocus( ae::Vec3 focus )
 {
 	m_refocus = true;
 	m_refocusPos = focus;
@@ -191,7 +191,7 @@ void aeEditorCamera::SetInputEnabled( bool enabled )
 	m_inputEnabled = enabled;
 }
 
-void aeEditorCamera::SetRotation( aeFloat2 angle )
+void aeEditorCamera::SetRotation( ae::Vec2 angle )
 {
   m_yaw = angle.x;
   m_pitch = angle.y;
@@ -200,7 +200,7 @@ void aeEditorCamera::SetRotation( aeFloat2 angle )
 
 void aeEditorCamera::m_Precalculate()
 {
-  m_forward = aeFloat3( aeMath::Cos( m_yaw ), aeMath::Sin( m_yaw ), 0.0f );
+  m_forward = ae::Vec3( aeMath::Cos( m_yaw ), aeMath::Sin( m_yaw ), 0.0f );
   m_forward *= aeMath::Cos( m_pitch );
   m_forward.z = aeMath::Sin( m_pitch );
   m_offset = -m_forward;

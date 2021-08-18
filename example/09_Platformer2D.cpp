@@ -65,12 +65,12 @@ const float kSwimDown = 10.0f;
 class Player
 {
 public:
-  Player( HotSpotWorld* world, aeFloat2 startPos );
+  Player( HotSpotWorld* world, ae::Vec2 startPos );
   void OnCollision( const HotSpotObject::CollisionInfo* info );
-  void Update( HotSpotWorld* world, aeInput* input, float dt );
+  void Update( HotSpotWorld* world, ae::Input* input, float dt );
 
-  void Render( aeSpriteRender* spriteRender, aeTexture2D* tex );
-  aeFloat2 GetPosition() const { return m_body->GetPosition(); }
+  void Render( aeSpriteRender* spriteRender, ae::Texture2D* tex );
+  ae::Vec2 GetPosition() const { return m_body->GetPosition(); }
   bool CanJump() const { return m_canJumpTimer > 0.0f; }
 
 private:
@@ -82,7 +82,7 @@ private:
 //------------------------------------------------------------------------------
 // Player member functions
 //------------------------------------------------------------------------------
-Player::Player( HotSpotWorld* world, aeFloat2 startPos )
+Player::Player( HotSpotWorld* world, ae::Vec2 startPos )
 {
   m_body = world->CreateObject();
   m_body->SetMass( kPlayerMass );
@@ -101,27 +101,26 @@ void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
   }
 }
 
-void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
+void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 {
   uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
   
-  const InputState* inputState = input->GetState();
-  bool up = inputState->up || inputState->leftAnalog.y > 0.1f || inputState->dpad.y > 0;
-  bool down = inputState->down || inputState->leftAnalog.y < -0.1f || inputState->dpad.y < 0;
-  bool left = inputState->left || inputState->leftAnalog.x < -0.1f || inputState->dpad.x < 0;
-  bool right = inputState->right || inputState->leftAnalog.x > 0.1f || inputState->dpad.x > 0;
-  bool jumpButton = ( inputState->space || inputState->up || inputState->a );
+  bool up = input->Get( ae::Key::Up ) || input->gamepad.leftAnalog.y > 0.1f || input->gamepad.dpad.y > 0;
+  bool down = input->Get( ae::Key::Down ) || input->gamepad.leftAnalog.y < -0.1f || input->gamepad.dpad.y < 0;
+  bool left = input->Get( ae::Key::Left ) || input->gamepad.leftAnalog.x < -0.1f || input->gamepad.dpad.x < 0;
+  bool right = input->Get( ae::Key::Right ) || input->gamepad.leftAnalog.x > 0.1f || input->gamepad.dpad.x > 0;
+  bool jumpButton = ( up || input->Get( ae::Key::Space ) || input->Get( ae::Key::A ) );
 
   m_canJumpTimer -= dt;
 
   // Water
   if ( tile == kTile_Water )
   {
-    if ( up || jumpButton ) { m_body->AddForce( aeFloat2( 0.0f, kPlayerMass * kSwimUp ) ); }
-    if ( down ) { m_body->AddForce( aeFloat2( 0.0f, -kPlayerMass * kSwimDown ) ); }
+    if ( up || jumpButton ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
+    if ( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kSwimDown ) ); }
 
-    if ( left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
-    if ( right ) { m_body->AddForce( aeFloat2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
+    if ( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
+    if ( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
 
     // Always reset jump so a jump is possible immediately after leaving water
     m_canJumpTimer = kJumpMaxAirTime;
@@ -129,37 +128,37 @@ void Player::Update( HotSpotWorld* world, aeInput* input, float dt )
   }
   else // Air / ground
   {
-    if ( left ) { m_body->AddForce( aeFloat2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
-    if ( right ) { m_body->AddForce( aeFloat2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+    if ( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+    if ( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
 
     if ( CanJump() && jumpButton )
     {
       // Cancel previous downward velocity for last kJumpMaxAirTime seconds
       // to get full jump height
-      aeFloat2 vel = m_body->GetVelocity();
+      ae::Vec2 vel = m_body->GetVelocity();
       vel.y = 0.0f;
       m_body->SetVelocity( vel );
 
       m_canJumpTimer = 0.0f;
       m_jumpHoldTimer = kJumpHoldTimeMax;
-      m_body->AddImpulse( aeFloat2( 0.0f, kPlayerMass * kJumpInitial ) );
+      m_body->AddImpulse( ae::Vec2( 0.0f, kPlayerMass * kJumpInitial ) );
     }
 
     if ( m_jumpHoldTimer > 0.0f && jumpButton )
     {
       m_jumpHoldTimer -= dt;
-      m_body->AddForce( aeFloat2( 0.0f, kPlayerMass * kJumpHold ) );
+      m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kJumpHold ) );
     }
   }
 
-  m_body->AddGravity( aeFloat2( 0.0f, -kGravity ) );
+  m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );
 }
 
-void Player::Render( aeSpriteRender* spriteRender, aeTexture2D* tex )
+void Player::Render( aeSpriteRender* spriteRender, ae::Texture2D* tex )
 {
-  aeFloat4x4 transform = aeFloat4x4::Translation( aeFloat3( GetPosition(), -0.5f ) );
-  transform *= aeFloat4x4::Scaling( aeFloat3( 1.0f, 1.0f, 1.0f ) );
-  spriteRender->AddSprite( tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), CanJump() ? aeColor::PicoRed() : aeColor::PicoBlue() );
+  ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
+  transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 1.0f ) );
+  spriteRender->AddSprite( tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), CanJump() ? aeColor::PicoRed() : aeColor::PicoBlue() );
 }
 
 //------------------------------------------------------------------------------
@@ -169,13 +168,14 @@ int main()
 {
   AE_LOG( "Initialize" );
 
-  aeWindow window;
-  aeRender render;
-  aeInput input;
+  ae::Window window;
+  ae::GraphicsDevice render;
+  ae::Input input;
   aeSpriteRender spriteRender;
   
   window.Initialize( 800, 600, false, true );
-  window.SetTitle( "Platformer 2D" );  render.InitializeOpenGL( &window );
+  window.SetTitle( "Platformer 2D" );
+  render.Initialize( &window );
   input.Initialize( &window );
   spriteRender.Initialize( 512 );
   spriteRender.SetBlending( true );
@@ -226,16 +226,16 @@ int main()
   //------------------------------------------------------------------------------
   // Textures
   //------------------------------------------------------------------------------
-  aeTexture2D tex;
+  ae::Texture2D tex;
   uint8_t texData[] = { 255, 255, 255 };
-  tex.Initialize( texData, 1, 1, aeTextureFormat::RGB8, aeTextureType::Uint8, aeTextureFilter::Nearest, aeTextureWrap::Clamp );
+  tex.Initialize( texData, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Clamp, false );
 
   //------------------------------------------------------------------------------
   // Game loop
   //------------------------------------------------------------------------------
-  Player player( &world, aeFloat2( 2.0f, 2.0f ) );
+  Player player( &world, ae::Vec2( 2.0f, 2.0f ) );
 
-  while ( !input.GetState()->exit )
+  while ( !input.quit )
   {
     //------------------------------------------------------------------------------
     // Update
@@ -258,21 +258,21 @@ int main()
       for ( uint32_t x = 0; x < kMapWidth; x++ )
       {
         aeColor color;
-        switch ( world.GetTile( aeInt2( x, y ) ) )
+        switch ( world.GetTile( ae::Int2( x, y ) ) )
         {
           case kTile_Air: color = aeColor::PicoPeach(); break;
           case kTile_Water: color = aeColor::PicoPink(); break;
           default: color = aeColor::PicoOrange(); break;
         }
-        aeFloat4x4 transform = aeFloat4x4::Translation( aeFloat3( x, y, 0.0f ) );
-        transform *= aeFloat4x4::Scaling( aeFloat3( 1.0f, 1.0f, 0.0f ) );
-        spriteRender.AddSprite( &tex, transform, aeFloat2( 0.0f ), aeFloat2( 1.0f ), color );
+        ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
+        transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
+        spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), color );
       }
     }
 
-    aeFloat2 camera = player.GetPosition();
-    aeFloat4x4 screenTransform = aeFloat4x4::Scaling( aeFloat3( 1.0f / 10.0f, render.GetAspectRatio() / 10.0f, 1.0f ) );
-    screenTransform *= aeFloat4x4::Translation( aeFloat3( -camera.x, -camera.y, 0.0f ) );
+    ae::Vec2 camera = player.GetPosition();
+    ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 10.0f, render.GetAspectRatio() / 10.0f, 1.0f ) );
+    screenTransform *= ae::Matrix4::Translation( ae::Vec3( -camera.x, -camera.y, 0.0f ) );
     spriteRender.Render( screenTransform );
 
     render.Present();
