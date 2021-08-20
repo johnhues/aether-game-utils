@@ -91,8 +91,8 @@ public:
     input->SetTextMode( io.WantTextInput );
 
     float displayScale = render->GetWindow()->GetScaleFactor();
-    io.DisplaySize = ImVec2( render->GetWidth(), render->GetHeight() );
-    // io.DisplayFramebufferScale = ImVec2( displayScale, displayScale );
+    io.DisplaySize = ImVec2( render->GetWidth() / displayScale, render->GetHeight() / displayScale );
+    io.DisplayFramebufferScale = ImVec2( displayScale, displayScale );
     io.DeltaTime = dt;
     
     // @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
@@ -101,9 +101,7 @@ public:
     io.MouseDown[ 2 ] = input->mouse.middleButton;
     io.MouseWheel += input->mouse.scroll.y;
     ae::Vec2 mousePos( input->mouse.position.x, render->GetWindow()->GetHeight() - input->mouse.position.y );
-    mousePos *= render->GetWindow()->GetScaleFactor();
     io.MousePos = ImVec2( mousePos.x, mousePos.y );
-    AE_INFO( "mouse pos: # #", io.MousePos.x, io.MousePos.y );
     
 		// AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
     for ( uint32_t i = 0; i < 256; i++ )
