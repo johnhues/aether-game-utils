@@ -20,24 +20,27 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imguizmo)
 
+# Example common
+set(EXAMPLE_SOURCES Common.h stb_image.h)
+
 # Hello World
 set(AE_CURRENT_BUNDLE_NAME "Hello World")
 set(AE_CURRENT_EXECUTABLE_NAME 00_hello_world)
-set(AE_CURRENT_SOURCE_FILES 00_HelloWorld.cpp)
+set(AE_CURRENT_SOURCE_FILES 00_HelloWorld.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 
 # Window
 set(AE_CURRENT_BUNDLE_NAME "Example")
 set(AE_CURRENT_EXECUTABLE_NAME 01_example)
-set(AE_CURRENT_SOURCE_FILES 01_Example.cpp)
+set(AE_CURRENT_SOURCE_FILES 01_Example.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 
 # Sprites
 set(AE_CURRENT_BUNDLE_NAME "Sprites")
 set(AE_CURRENT_EXECUTABLE_NAME 02_sprites)
-set(AE_CURRENT_SOURCE_FILES 02_Sprites.cpp)
+set(AE_CURRENT_SOURCE_FILES 02_Sprites.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES data/circle.png)
 include(AddExecutable)
 
@@ -57,76 +60,76 @@ include(AddExecutable)
 # Network Objects
 set(AE_CURRENT_BUNDLE_NAME "NetObject Client")
 set(AE_CURRENT_EXECUTABLE_NAME 04_net_object_client)
-set(AE_CURRENT_SOURCE_FILES 04_NetObjectClient.cpp 04_NetObjectCommon.h)
+set(AE_CURRENT_SOURCE_FILES 04_NetObjectClient.cpp 04_NetObjectCommon.h ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 
 set(AE_CURRENT_BUNDLE_NAME "NetObject Server")
 set(AE_CURRENT_EXECUTABLE_NAME 04_net_object_server)
-set(AE_CURRENT_SOURCE_FILES 04_NetObjectServer.cpp 04_NetObjectCommon.h)
+set(AE_CURRENT_SOURCE_FILES 04_NetObjectServer.cpp 04_NetObjectCommon.h ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 
 # Input
 set(AE_CURRENT_BUNDLE_NAME "Text Input")
 set(AE_CURRENT_EXECUTABLE_NAME 05_text_input)
-set(AE_CURRENT_SOURCE_FILES 05_TextInput.cpp)
+set(AE_CURRENT_SOURCE_FILES 05_TextInput.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES data/font.png)
 include(AddExecutable)
 
 # Triangle
 set(AE_CURRENT_BUNDLE_NAME "Triangle")
 set(AE_CURRENT_EXECUTABLE_NAME 06_triangle)
-set(AE_CURRENT_SOURCE_FILES 06_Triangle.cpp)
+set(AE_CURRENT_SOURCE_FILES 06_Triangle.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 
 # Cube
 set(AE_CURRENT_BUNDLE_NAME "Cube")
 set(AE_CURRENT_EXECUTABLE_NAME 07_cube)
-set(AE_CURRENT_SOURCE_FILES 07_Cube.cpp)
+set(AE_CURRENT_SOURCE_FILES 07_Cube.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 
 # Audio
 set(AE_CURRENT_BUNDLE_NAME "Audio")
 set(AE_CURRENT_EXECUTABLE_NAME 08_audio)
-set(AE_CURRENT_SOURCE_FILES 08_Audio.cpp)
+set(AE_CURRENT_SOURCE_FILES 08_Audio.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES data/music.wav data/sound.wav)
 include(AddExecutable)
 
 # Platformer2D
 set(AE_CURRENT_BUNDLE_NAME "Platformer2D")
 set(AE_CURRENT_EXECUTABLE_NAME 09_platformer2d)
-set(AE_CURRENT_SOURCE_FILES 09_Platformer2D.cpp)
+set(AE_CURRENT_SOURCE_FILES 09_Platformer2D.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 
 # Splines
 set(AE_CURRENT_BUNDLE_NAME "Splines")
 set(AE_CURRENT_EXECUTABLE_NAME 10_splines)
-set(AE_CURRENT_SOURCE_FILES 10_Splines.cpp)
+set(AE_CURRENT_SOURCE_FILES 10_Splines.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES data/circle.png)
 include(AddExecutable)
 
 # Terrain
 set(AE_CURRENT_BUNDLE_NAME "Terrain")
 set(AE_CURRENT_EXECUTABLE_NAME 11_terrain)
-set(AE_CURRENT_SOURCE_FILES 11_Terrain.cpp)
+set(AE_CURRENT_SOURCE_FILES 11_Terrain.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES data/terrain.png data/font.png)
 include(AddExecutable)
 
 # Geometry
 set(AE_CURRENT_BUNDLE_NAME "Geometry")
 set(AE_CURRENT_EXECUTABLE_NAME 12_Geometry)
-set(AE_CURRENT_SOURCE_FILES 12_Geometry.cpp)
+set(AE_CURRENT_SOURCE_FILES 12_Geometry.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES data/font.png)
 include(AddExecutable)
 
 # FileDialogs
 set(AE_CURRENT_BUNDLE_NAME "FileDialogs")
 set(AE_CURRENT_EXECUTABLE_NAME 13_FileDialogs)
-set(AE_CURRENT_SOURCE_FILES 13_FileDialogs.cpp)
+set(AE_CURRENT_SOURCE_FILES 13_FileDialogs.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES "")
 include(AddExecutable)
 

@@ -1432,6 +1432,12 @@ public:
   void SetCaptureMouse( bool enable );
   bool GetMouseCaptured() const { return m_captureMouse; }
   
+  void SetTextMode( bool enabled );
+  bool GetTextMode() const { return m_textMode; }
+  void SetText( const char* text ) { m_text = text; }
+  const char* GetText() const { return m_text.c_str(); }
+  const char* GetTextInput() const { return m_textInput.c_str(); }
+  
   bool Get( ae::Key key ) const;
   bool GetPrev( ae::Key key ) const;
   MouseState mouse;
@@ -1447,6 +1453,10 @@ public:
   bool m_positionSet = false;
   bool m_keys[ 256 ];
   bool m_keysPrev[ 256 ];
+  bool m_textMode = false;
+  void* m_textInputHandler = nullptr;
+  std::string m_text;
+  std::string m_textInput;
 };
 
 //------------------------------------------------------------------------------
@@ -7227,7 +7237,7 @@ uint32_t Hash::Get() const
 }
 
 //------------------------------------------------------------------------------
-// ae::Window member functions
+// ae::Window MSVC/Windows event callback
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
 // @TODO: Cleanup namespace
@@ -7270,9 +7280,11 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 #endif
 
+//------------------------------------------------------------------------------
+// ae::Window Objective-C aeApplicationDelegate class
+//------------------------------------------------------------------------------
 #if _AE_OSX_
 } // ae end
-
 @interface aeApplicationDelegate : NSObject< NSApplicationDelegate >
 @property ae::Window* aewindow;
 @end
@@ -7283,6 +7295,9 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 @end
 
+//------------------------------------------------------------------------------
+// ae::Window Objective-C aeWindowDelegate class
+//------------------------------------------------------------------------------
 @interface aeWindowDelegate : NSObject< NSWindowDelegate >
 @property ae::Window* aewindow;
 @end
@@ -7323,10 +7338,12 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
   _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
 }
 @end
-
 namespace ae {
 #endif
 
+//------------------------------------------------------------------------------
+// ae::Window member functions
+//------------------------------------------------------------------------------
 Window::Window()
 {
   window = nullptr;
@@ -7482,20 +7499,19 @@ void Window::m_Initialize()
   NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
   AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
   
-  NSOpenGLView* nsView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
-  AE_ASSERT_MSG( nsView, "Could not create view with specified pixel format" );
-  [nsView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
-  [nsView.openGLContext makeCurrentContext];
+  NSOpenGLView* glView = [[NSOpenGLView alloc] initWithFrame:frame pixelFormat:nsPixelFormat];
+  AE_ASSERT_MSG( glView, "Could not create view with specified pixel format" );
+  [glView setWantsBestResolutionOpenGLSurface:true]; // @TODO: Retina. Does this do anything?
+  [glView.openGLContext makeCurrentContext];
   
   [nsPixelFormat release];
-  [nsWindow setContentView:nsView];
-  [nsWindow makeFirstResponder:nsView];
+  [nsWindow setContentView:glView];
+  [nsWindow makeFirstResponder:glView];
   [nsWindow setOpaque:YES];
   [nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
   [nsWindow makeKeyAndOrderFront:nil]; // nil sender
   // @TODO: Create menus (especially Quit!)
   [nsWindow orderFrontRegardless];
-  
   
   NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];
   m_pos = ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y );
@@ -7621,6 +7637,134 @@ void Window::SetMaximized( bool maximized )
 }
 
 //------------------------------------------------------------------------------
+// ae::Input Objective-C aeTextInputDelegate and aeKeyInput classes
+//------------------------------------------------------------------------------
+#if _AE_OSX_
+} // ae end
+@interface aeTextInputDelegate : NSView< NSTextInputClient >
+@property ae::Input* aeinput;
+@end
+
+@interface aeKeyInput : NSObject< NSStandardKeyBindingResponding >
+@property(nonatomic, readonly) BOOL hasText;
+@property (retain) aeTextInputDelegate* input;
+@end
+
+//------------------------------------------------------------------------------
+// ae::Input Objective-C aeKeyInput member functions
+//------------------------------------------------------------------------------
+@implementation aeKeyInput
+- (void)deleteBackward:(id)sender
+{
+  if ( !_input.aeinput->m_text.empty() )
+  {
+    _input.aeinput->m_text.pop_back();
+  }
+}
+- (void)insertNewline:(id)sender
+{
+  _input.aeinput->m_text.append( 1, '\n' );
+}
+@end
+
+//------------------------------------------------------------------------------
+// ae::Input Objective-C aeTextInputDelegate member functions
+//------------------------------------------------------------------------------
+@implementation aeTextInputDelegate {
+  aeKeyInput* _asdfaeKeyInput;
+}
+- (instancetype)initWithFrame:(NSRect)frameRect
+{
+  self = [super initWithFrame:frameRect];
+  if ( self != nil )
+  {
+    _asdfaeKeyInput = [[aeKeyInput alloc] init];
+    _asdfaeKeyInput.input = self;
+  }
+  return self;
+}
+// Handling Marked Text
+- (BOOL)hasMarkedText
+{
+  AE_INFO( "hasMarkedText" );
+  // Returns a Boolean value indicating whether the receiver has marked text.
+  return false;
+}
+- (NSRange)markedRange
+{
+  // Returns the range of the marked text.
+  AE_INFO( "markedRange" );
+  return NSMakeRange(0, 0);
+}
+- (NSRange)selectedRange
+{
+  // Returns the range of selected text.
+  AE_INFO( "selectedRange" );
+  return NSMakeRange(0, 0);
+}
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
+{
+  // Replaces a specified range in the receiver’s text storage with the given string and sets the selection.
+  AE_INFO( "setMarkedText" );
+}
+- (void)unmarkText
+{
+  // Unmarks the marked text.
+  AE_INFO( "unmarkText" );
+}
+- (NSArray<NSAttributedStringKey>*)validAttributesForMarkedText
+{
+  // Returns an array of attribute names recognized by the receiver.
+  AE_INFO( "validAttributesForMarkedText" );
+  return [NSArray array];
+}
+// Storing Text
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+  // Returns an attributed string derived from the given range in the receiver's text storage.
+  AE_INFO( "attributedSubstringForProposedRange" );
+  return nil;
+}
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange
+{
+  AE_ASSERT( _aeinput );
+  // Inserts the given string into the receiver, replacing the specified content.
+  const char* str = [string isKindOfClass: [NSAttributedString class]] ? [[string string] UTF8String] : [string UTF8String];
+  _aeinput->m_text += str;
+  _aeinput->m_textInput += str;
+}
+// Getting Character Coordinates
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+{
+  // Returns the index of the character whose bounding rectangle includes the given point.
+  AE_INFO( "characterIndexForPoint" );
+  return 0;
+}
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(NSRangePointer)actualRange
+{
+  // Returns the first logical boundary rectangle for characters in the given range.
+  AE_INFO( "firstRectForCharacterRange" );
+  return NSMakeRect(0, 0, 0, 0);
+}
+  // Binding Keystrokes
+- (void)doCommandBySelector:(SEL)selector
+{
+  AE_INFO( "doCommandBySelector" );
+  // Invokes the action specified by the given selector.
+  if ([_asdfaeKeyInput respondsToSelector:selector])
+  {
+    [_asdfaeKeyInput performSelector:selector];
+  }
+  else
+  {
+    AE_INFO( "selector '#' not handled", [NSStringFromSelector(selector) UTF8String] );
+  }
+}
+@end
+namespace ae {
+#endif
+
+//------------------------------------------------------------------------------
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
@@ -7657,6 +7801,15 @@ void Input::Initialize( Window* window )
   emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
   emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
 #endif
+  
+#if _AE_OSX_
+  aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
+  textInput.aeinput = this;
+  m_textInputHandler = textInput;
+  NSWindow* nsWindow = (NSWindow*)m_window->window;
+  NSView* nsWindowContent = [nsWindow contentView];
+  [nsWindowContent addSubview:textInput];
+#endif
 }
 
 void Input::Terminate()
@@ -7668,7 +7821,9 @@ void Input::Pump()
   mousePrev = mouse;
   mouse.movement = ae::Int2( 0 );
   mouse.scroll = ae::Vec2( 0.0f );
+  m_textInput = ""; // Clear last frames text input
 
+  // Handle system events
 #if _AE_WINDOWS_
   MSG msg;
   // Get messages for current thread
@@ -7682,194 +7837,6 @@ void Input::Pump()
     }
     TranslateMessage( &msg );
     DispatchMessage( &msg );
-  }
-  uint8_t keyStates[ 256 ];
-  if ( GetKeyboardState( keyStates ) )
-  {
-    // @TODO: ae::Key::NumPadEnter is currently not handled
-    #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
-    AE_UPDATE_KEY( Backspace, VK_BACK );
-    AE_UPDATE_KEY( Tab, VK_TAB );
-    // AE_UPDATE_KEY( ?, VK_CLEAR );
-    AE_UPDATE_KEY( Enter, VK_RETURN );
-    // AE_UPDATE_KEY( ?, VK_SHIFT );
-    // AE_UPDATE_KEY( ?, VK_CONTROL );
-    // AE_UPDATE_KEY( ?, VK_MENU );
-    AE_UPDATE_KEY( Pause, VK_PAUSE );
-    AE_UPDATE_KEY( CapsLock, VK_CAPITAL );
-    // AE_UPDATE_KEY( ?, VK_KANA );
-    // AE_UPDATE_KEY( ?, VK_IME_ON );
-    // AE_UPDATE_KEY( ?, VK_JUNJA );
-    // AE_UPDATE_KEY( ?, VK_FINAL );
-    // AE_UPDATE_KEY( ?, VK_KANJI );
-    // AE_UPDATE_KEY( ?, VK_IME_OFF );
-    AE_UPDATE_KEY( Escape, VK_ESCAPE );
-    // AE_UPDATE_KEY( ?, VK_CONVERT );
-    // AE_UPDATE_KEY( ?, VK_NONCONVERT );
-    // AE_UPDATE_KEY( ?, VK_ACCEPT );
-    // AE_UPDATE_KEY( ?, VK_MODECHANGE );
-    AE_UPDATE_KEY( Space, VK_SPACE );
-    AE_UPDATE_KEY( PageUp, VK_PRIOR );
-    AE_UPDATE_KEY( PageDown, VK_NEXT );
-    AE_UPDATE_KEY( End, VK_END );
-    AE_UPDATE_KEY( Home, VK_HOME );
-    AE_UPDATE_KEY( Left, VK_LEFT );
-    AE_UPDATE_KEY( Up, VK_UP );
-    AE_UPDATE_KEY( Right, VK_RIGHT );
-    AE_UPDATE_KEY( Down, VK_DOWN );
-    // AE_UPDATE_KEY( ?, VK_SELECT );
-    //AE_UPDATE_KEY( ?, VK_PRINT );
-    // AE_UPDATE_KEY( ?, VK_EXECUTE );
-    AE_UPDATE_KEY( PrintScreen, VK_SNAPSHOT );
-    AE_UPDATE_KEY( Insert, VK_INSERT );
-    AE_UPDATE_KEY( Delete, VK_DELETE );
-    // AE_UPDATE_KEY( ?, VK_HELP );
-    for ( uint32_t i = 0; i <= ('9' - '1'); i++ )
-    {
-      AE_UPDATE_KEY( Num1 + i, '1' + i );
-    }
-    AE_UPDATE_KEY( Num0, '0' );
-    for ( uint32_t i = 0; i <= ('Z' - 'A'); i++ )
-    {
-      AE_UPDATE_KEY( A + i, 'A' + i );
-    }
-    AE_UPDATE_KEY( LeftSuper, VK_LWIN );
-    AE_UPDATE_KEY( RightSuper, VK_RWIN );
-    // AE_UPDATE_KEY( ?, VK_APPS );
-    // AE_UPDATE_KEY( ?, VK_SLEEP );
-    for ( uint32_t i = 0; i <= (VK_NUMPAD9 - VK_NUMPAD1); i++ )
-    {
-      AE_UPDATE_KEY( NumPad1 + i, VK_NUMPAD1 + i );
-    }
-    AE_UPDATE_KEY( NumPad0, VK_NUMPAD0 );
-    AE_UPDATE_KEY( NumPadMultiply, VK_MULTIPLY );
-    AE_UPDATE_KEY( NumPadPlus, VK_ADD );
-    // AE_UPDATE_KEY( ?, VK_SEPARATOR );
-    AE_UPDATE_KEY( NumPadMinus, VK_SUBTRACT );
-    AE_UPDATE_KEY( NumPadPeriod, VK_DECIMAL );
-    AE_UPDATE_KEY( NumPadDivide, VK_DIVIDE );
-    for ( uint32_t i = 0; i <= (VK_F12 - VK_F1); i++ )
-    {
-      AE_UPDATE_KEY( F1 + i, VK_F1 + i );
-    }
-    // AE_UPDATE_KEY( ?, VK_F13 );
-    // AE_UPDATE_KEY( ?, VK_F14 );
-    // AE_UPDATE_KEY( ?, VK_F15 );
-    // AE_UPDATE_KEY( ?, VK_F16 );
-    // AE_UPDATE_KEY( ?, VK_F17 );
-    // AE_UPDATE_KEY( ?, VK_F18 );
-    // AE_UPDATE_KEY( ?, VK_F19 );
-    // AE_UPDATE_KEY( ?, VK_F20 );
-    // AE_UPDATE_KEY( ?, VK_F21 );
-    // AE_UPDATE_KEY( ?, VK_F22 );
-    // AE_UPDATE_KEY( ?, VK_F23 );
-    // AE_UPDATE_KEY( ?, VK_F24 );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_VIEW );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_MENU );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_UP );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_DOWN );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_LEFT );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_RIGHT );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_ACCEPT );
-    // AE_UPDATE_KEY( ?, VK_NAVIGATION_CANCEL );
-    AE_UPDATE_KEY( NumLock, VK_NUMLOCK );
-    AE_UPDATE_KEY( ScrollLock, VK_SCROLL );
-    AE_UPDATE_KEY( NumPadEquals, VK_OEM_NEC_EQUAL ); // '=' key on numpad
-    // AE_UPDATE_KEY( ?, VK_OEM_FJ_JISHO ); // 'Dictionary' key
-    // AE_UPDATE_KEY( ?, VK_OEM_FJ_MASSHOU ); // 'Unregister word' key
-    // AE_UPDATE_KEY( ?, VK_OEM_FJ_TOUROKU ); // 'Register word' key
-    // AE_UPDATE_KEY( ?, VK_OEM_FJ_LOYA ); // 'Left OYAYUBI' key
-    // AE_UPDATE_KEY( ?, VK_OEM_FJ_ROYA ); // 'Right OYAYUBI' key
-    AE_UPDATE_KEY( LeftShift, VK_LSHIFT );
-    AE_UPDATE_KEY( RightShift, VK_RSHIFT );
-    AE_UPDATE_KEY( LeftControl, VK_LCONTROL );
-    AE_UPDATE_KEY( RightControl, VK_RCONTROL );
-    AE_UPDATE_KEY( LeftAlt, VK_LMENU );
-    AE_UPDATE_KEY( RightAlt, VK_RMENU );
-    // AE_UPDATE_KEY( ?, VK_BROWSER_BACK );
-    // AE_UPDATE_KEY( ?, VK_BROWSER_FORWARD );
-    // AE_UPDATE_KEY( ?, VK_BROWSER_REFRESH );
-    // AE_UPDATE_KEY( ?, VK_BROWSER_STOP );
-    // AE_UPDATE_KEY( ?, VK_BROWSER_SEARCH );
-    // AE_UPDATE_KEY( ?, VK_BROWSER_FAVORITES );
-    // AE_UPDATE_KEY( ?, VK_BROWSER_HOME );
-    // AE_UPDATE_KEY( ?, VK_VOLUME_MUTE );
-    // AE_UPDATE_KEY( ?, VK_VOLUME_DOWN );
-    // AE_UPDATE_KEY( ?, VK_VOLUME_UP );
-    // AE_UPDATE_KEY( ?, VK_MEDIA_NEXT_TRACK );
-    // AE_UPDATE_KEY( ?, VK_MEDIA_PREV_TRACK );
-    // AE_UPDATE_KEY( ?, VK_MEDIA_STOP );
-    // AE_UPDATE_KEY( ?, VK_MEDIA_PLAY_PAUSE );
-    // AE_UPDATE_KEY( ?, VK_LAUNCH_MAIL );
-    // AE_UPDATE_KEY( ?, VK_LAUNCH_MEDIA_SELECT );
-    // AE_UPDATE_KEY( ?, VK_LAUNCH_APP1 );
-    // AE_UPDATE_KEY( ?, VK_LAUNCH_APP2 );
-    AE_UPDATE_KEY( Semicolon, VK_OEM_1 ); // ';:' for US
-    AE_UPDATE_KEY( Equals, VK_OEM_PLUS ); // '+' any country
-    AE_UPDATE_KEY( Comma, VK_OEM_COMMA ); // ',' any country
-    AE_UPDATE_KEY( Minus, VK_OEM_MINUS ); // '-' any country
-    AE_UPDATE_KEY( Period, VK_OEM_PERIOD ); // '.' any country
-    AE_UPDATE_KEY( Slash, VK_OEM_2 ); // '/?' for US
-    AE_UPDATE_KEY( Tilde, VK_OEM_3 ); // '`~' for US
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_A );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_B );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_X );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_Y );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_SHOULDER );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_SHOULDER );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_TRIGGER );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_TRIGGER );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_UP );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_DOWN );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_LEFT );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_RIGHT );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_MENU );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_VIEW );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_UP );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_DOWN );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_LEFT );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_UP );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT );
-    // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT );
-    AE_UPDATE_KEY( LeftBracket, VK_OEM_4 ); //  '[{' for US
-    AE_UPDATE_KEY( Backslash, VK_OEM_5 ); //  '\|' for US
-    AE_UPDATE_KEY( RightBracket, VK_OEM_6 ); //  ']}' for US
-    AE_UPDATE_KEY( Apostrophe, VK_OEM_7 ); //  ''"' for US
-    // AE_UPDATE_KEY( ?, VK_OEM_8 );
-    // AE_UPDATE_KEY( ?, VK_OEM_AX ); //  'AX' key on Japanese AX kbd
-    // AE_UPDATE_KEY( ?, VK_OEM_10 ); //  "<>" or "\|" on RT 102-key kbd.
-    // AE_UPDATE_KEY( ?, VK_ICO_HELP ); //  Help key on ICO
-    // AE_UPDATE_KEY( ?, VK_ICO_00 ); //  00 key on ICO
-    // AE_UPDATE_KEY( ?, VK_PROCESSKEY );
-    // AE_UPDATE_KEY( ?, VK_ICO_CLEAR );
-    // AE_UPDATE_KEY( ?, VK_PACKET );
-    // AE_UPDATE_KEY( ?, VK_OEM_RESET );
-    // AE_UPDATE_KEY( ?, VK_OEM_JUMP );
-    // AE_UPDATE_KEY( ?, VK_OEM_PA1 );
-    // AE_UPDATE_KEY( ?, VK_OEM_PA2 );
-    // AE_UPDATE_KEY( ?, VK_OEM_PA3 );
-    // AE_UPDATE_KEY( ?, VK_OEM_WSCTRL );
-    // AE_UPDATE_KEY( ?, VK_OEM_CUSEL );
-    // AE_UPDATE_KEY( ?, VK_OEM_ATTN );
-    // AE_UPDATE_KEY( ?, VK_OEM_FINISH );
-    // AE_UPDATE_KEY( ?, VK_OEM_COPY );
-    // AE_UPDATE_KEY( ?, VK_OEM_AUTO );
-    // AE_UPDATE_KEY( ?, VK_OEM_ENLW );
-    // AE_UPDATE_KEY( ?, VK_OEM_BACKTAB );
-    // AE_UPDATE_KEY( ?, VK_ATTN );
-    // AE_UPDATE_KEY( ?, VK_CRSEL );
-    // AE_UPDATE_KEY( ?, VK_EXSEL );
-    // AE_UPDATE_KEY( ?, VK_EREOF );
-    // AE_UPDATE_KEY( ?, VK_PLAY );
-    // AE_UPDATE_KEY( ?, VK_ZOOM );
-    // AE_UPDATE_KEY( ?, VK_NONAME );
-    // AE_UPDATE_KEY( ?, VK_PA1 );
-    // AE_UPDATE_KEY( ?, VK_OEM_CLEAR );
-    #undef AE_UPDATE_KEY
   }
 #elif _AE_OSX_
   @autoreleasepool
@@ -7928,10 +7895,13 @@ void Input::Pump()
           // Scroll is never NSEventSubtypeTouch
           break;
         case NSEventTypeKeyDown:
+          if ( m_textMode )
+          {
+            [(aeTextInputDelegate*)m_textInputHandler interpretKeyEvents:[NSArray arrayWithObject:event]];
+          }
+          continue; // Don't propagate keyboard events or OSX will make the clicking error sound
         case NSEventTypeKeyUp:
-          // Don't propagate keyboard events or OSX will make the clicking error sound
-          continue;
-          break;
+          continue; // Don't propagate keyboard events or OSX will make the clicking error sound
         default:
           break;
       }
@@ -7956,136 +7926,333 @@ void Input::Pump()
       m_positionSet = true;
     }
   }
+#endif
   
-  KeyMap _keyStates;
-  GetKeys(_keyStates);
-  uint32_t* keyStates = (uint32_t*)_keyStates;
-  
+  if ( m_textMode )
+  {
+    memset( m_keys, 0, sizeof(m_keys) );
+  }
+  else
+  {
+#if _AE_WINDOWS_
+#define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
+    uint8_t keyStates[ 256 ];
+    if ( GetKeyboardState( keyStates ) )
+    {
+      // @TODO: ae::Key::NumPadEnter is currently not handled
+      AE_UPDATE_KEY( Backspace, VK_BACK );
+      AE_UPDATE_KEY( Tab, VK_TAB );
+      // AE_UPDATE_KEY( ?, VK_CLEAR );
+      AE_UPDATE_KEY( Enter, VK_RETURN );
+      // AE_UPDATE_KEY( ?, VK_SHIFT );
+      // AE_UPDATE_KEY( ?, VK_CONTROL );
+      // AE_UPDATE_KEY( ?, VK_MENU );
+      AE_UPDATE_KEY( Pause, VK_PAUSE );
+      AE_UPDATE_KEY( CapsLock, VK_CAPITAL );
+      // AE_UPDATE_KEY( ?, VK_KANA );
+      // AE_UPDATE_KEY( ?, VK_IME_ON );
+      // AE_UPDATE_KEY( ?, VK_JUNJA );
+      // AE_UPDATE_KEY( ?, VK_FINAL );
+      // AE_UPDATE_KEY( ?, VK_KANJI );
+      // AE_UPDATE_KEY( ?, VK_IME_OFF );
+      AE_UPDATE_KEY( Escape, VK_ESCAPE );
+      // AE_UPDATE_KEY( ?, VK_CONVERT );
+      // AE_UPDATE_KEY( ?, VK_NONCONVERT );
+      // AE_UPDATE_KEY( ?, VK_ACCEPT );
+      // AE_UPDATE_KEY( ?, VK_MODECHANGE );
+      AE_UPDATE_KEY( Space, VK_SPACE );
+      AE_UPDATE_KEY( PageUp, VK_PRIOR );
+      AE_UPDATE_KEY( PageDown, VK_NEXT );
+      AE_UPDATE_KEY( End, VK_END );
+      AE_UPDATE_KEY( Home, VK_HOME );
+      AE_UPDATE_KEY( Left, VK_LEFT );
+      AE_UPDATE_KEY( Up, VK_UP );
+      AE_UPDATE_KEY( Right, VK_RIGHT );
+      AE_UPDATE_KEY( Down, VK_DOWN );
+      // AE_UPDATE_KEY( ?, VK_SELECT );
+      //AE_UPDATE_KEY( ?, VK_PRINT );
+      // AE_UPDATE_KEY( ?, VK_EXECUTE );
+      AE_UPDATE_KEY( PrintScreen, VK_SNAPSHOT );
+      AE_UPDATE_KEY( Insert, VK_INSERT );
+      AE_UPDATE_KEY( Delete, VK_DELETE );
+      // AE_UPDATE_KEY( ?, VK_HELP );
+      for ( uint32_t i = 0; i <= ('9' - '1'); i++ )
+      {
+        AE_UPDATE_KEY( Num1 + i, '1' + i );
+      }
+      AE_UPDATE_KEY( Num0, '0' );
+      for ( uint32_t i = 0; i <= ('Z' - 'A'); i++ )
+      {
+        AE_UPDATE_KEY( A + i, 'A' + i );
+      }
+      AE_UPDATE_KEY( LeftSuper, VK_LWIN );
+      AE_UPDATE_KEY( RightSuper, VK_RWIN );
+      // AE_UPDATE_KEY( ?, VK_APPS );
+      // AE_UPDATE_KEY( ?, VK_SLEEP );
+      for ( uint32_t i = 0; i <= (VK_NUMPAD9 - VK_NUMPAD1); i++ )
+      {
+        AE_UPDATE_KEY( NumPad1 + i, VK_NUMPAD1 + i );
+      }
+      AE_UPDATE_KEY( NumPad0, VK_NUMPAD0 );
+      AE_UPDATE_KEY( NumPadMultiply, VK_MULTIPLY );
+      AE_UPDATE_KEY( NumPadPlus, VK_ADD );
+      // AE_UPDATE_KEY( ?, VK_SEPARATOR );
+      AE_UPDATE_KEY( NumPadMinus, VK_SUBTRACT );
+      AE_UPDATE_KEY( NumPadPeriod, VK_DECIMAL );
+      AE_UPDATE_KEY( NumPadDivide, VK_DIVIDE );
+      for ( uint32_t i = 0; i <= (VK_F12 - VK_F1); i++ )
+      {
+        AE_UPDATE_KEY( F1 + i, VK_F1 + i );
+      }
+      // AE_UPDATE_KEY( ?, VK_F13 );
+      // AE_UPDATE_KEY( ?, VK_F14 );
+      // AE_UPDATE_KEY( ?, VK_F15 );
+      // AE_UPDATE_KEY( ?, VK_F16 );
+      // AE_UPDATE_KEY( ?, VK_F17 );
+      // AE_UPDATE_KEY( ?, VK_F18 );
+      // AE_UPDATE_KEY( ?, VK_F19 );
+      // AE_UPDATE_KEY( ?, VK_F20 );
+      // AE_UPDATE_KEY( ?, VK_F21 );
+      // AE_UPDATE_KEY( ?, VK_F22 );
+      // AE_UPDATE_KEY( ?, VK_F23 );
+      // AE_UPDATE_KEY( ?, VK_F24 );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_VIEW );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_MENU );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_UP );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_DOWN );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_LEFT );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_RIGHT );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_ACCEPT );
+      // AE_UPDATE_KEY( ?, VK_NAVIGATION_CANCEL );
+      AE_UPDATE_KEY( NumLock, VK_NUMLOCK );
+      AE_UPDATE_KEY( ScrollLock, VK_SCROLL );
+      AE_UPDATE_KEY( NumPadEquals, VK_OEM_NEC_EQUAL ); // '=' key on numpad
+      // AE_UPDATE_KEY( ?, VK_OEM_FJ_JISHO ); // 'Dictionary' key
+      // AE_UPDATE_KEY( ?, VK_OEM_FJ_MASSHOU ); // 'Unregister word' key
+      // AE_UPDATE_KEY( ?, VK_OEM_FJ_TOUROKU ); // 'Register word' key
+      // AE_UPDATE_KEY( ?, VK_OEM_FJ_LOYA ); // 'Left OYAYUBI' key
+      // AE_UPDATE_KEY( ?, VK_OEM_FJ_ROYA ); // 'Right OYAYUBI' key
+      AE_UPDATE_KEY( LeftShift, VK_LSHIFT );
+      AE_UPDATE_KEY( RightShift, VK_RSHIFT );
+      AE_UPDATE_KEY( LeftControl, VK_LCONTROL );
+      AE_UPDATE_KEY( RightControl, VK_RCONTROL );
+      AE_UPDATE_KEY( LeftAlt, VK_LMENU );
+      AE_UPDATE_KEY( RightAlt, VK_RMENU );
+      // AE_UPDATE_KEY( ?, VK_BROWSER_BACK );
+      // AE_UPDATE_KEY( ?, VK_BROWSER_FORWARD );
+      // AE_UPDATE_KEY( ?, VK_BROWSER_REFRESH );
+      // AE_UPDATE_KEY( ?, VK_BROWSER_STOP );
+      // AE_UPDATE_KEY( ?, VK_BROWSER_SEARCH );
+      // AE_UPDATE_KEY( ?, VK_BROWSER_FAVORITES );
+      // AE_UPDATE_KEY( ?, VK_BROWSER_HOME );
+      // AE_UPDATE_KEY( ?, VK_VOLUME_MUTE );
+      // AE_UPDATE_KEY( ?, VK_VOLUME_DOWN );
+      // AE_UPDATE_KEY( ?, VK_VOLUME_UP );
+      // AE_UPDATE_KEY( ?, VK_MEDIA_NEXT_TRACK );
+      // AE_UPDATE_KEY( ?, VK_MEDIA_PREV_TRACK );
+      // AE_UPDATE_KEY( ?, VK_MEDIA_STOP );
+      // AE_UPDATE_KEY( ?, VK_MEDIA_PLAY_PAUSE );
+      // AE_UPDATE_KEY( ?, VK_LAUNCH_MAIL );
+      // AE_UPDATE_KEY( ?, VK_LAUNCH_MEDIA_SELECT );
+      // AE_UPDATE_KEY( ?, VK_LAUNCH_APP1 );
+      // AE_UPDATE_KEY( ?, VK_LAUNCH_APP2 );
+      AE_UPDATE_KEY( Semicolon, VK_OEM_1 ); // ';:' for US
+      AE_UPDATE_KEY( Equals, VK_OEM_PLUS ); // '+' any country
+      AE_UPDATE_KEY( Comma, VK_OEM_COMMA ); // ',' any country
+      AE_UPDATE_KEY( Minus, VK_OEM_MINUS ); // '-' any country
+      AE_UPDATE_KEY( Period, VK_OEM_PERIOD ); // '.' any country
+      AE_UPDATE_KEY( Slash, VK_OEM_2 ); // '/?' for US
+      AE_UPDATE_KEY( Tilde, VK_OEM_3 ); // '`~' for US
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_A );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_B );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_X );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_Y );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_SHOULDER );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_SHOULDER );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_TRIGGER );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_TRIGGER );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_UP );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_DOWN );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_LEFT );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_DPAD_RIGHT );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_MENU );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_VIEW );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_UP );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_DOWN );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_LEFT_THUMBSTICK_LEFT );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_UP );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT );
+      // AE_UPDATE_KEY( ?, VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT );
+      AE_UPDATE_KEY( LeftBracket, VK_OEM_4 ); //  '[{' for US
+      AE_UPDATE_KEY( Backslash, VK_OEM_5 ); //  '\|' for US
+      AE_UPDATE_KEY( RightBracket, VK_OEM_6 ); //  ']}' for US
+      AE_UPDATE_KEY( Apostrophe, VK_OEM_7 ); //  ''"' for US
+      // AE_UPDATE_KEY( ?, VK_OEM_8 );
+      // AE_UPDATE_KEY( ?, VK_OEM_AX ); //  'AX' key on Japanese AX kbd
+      // AE_UPDATE_KEY( ?, VK_OEM_10 ); //  "<>" or "\|" on RT 102-key kbd.
+      // AE_UPDATE_KEY( ?, VK_ICO_HELP ); //  Help key on ICO
+      // AE_UPDATE_KEY( ?, VK_ICO_00 ); //  00 key on ICO
+      // AE_UPDATE_KEY( ?, VK_PROCESSKEY );
+      // AE_UPDATE_KEY( ?, VK_ICO_CLEAR );
+      // AE_UPDATE_KEY( ?, VK_PACKET );
+      // AE_UPDATE_KEY( ?, VK_OEM_RESET );
+      // AE_UPDATE_KEY( ?, VK_OEM_JUMP );
+      // AE_UPDATE_KEY( ?, VK_OEM_PA1 );
+      // AE_UPDATE_KEY( ?, VK_OEM_PA2 );
+      // AE_UPDATE_KEY( ?, VK_OEM_PA3 );
+      // AE_UPDATE_KEY( ?, VK_OEM_WSCTRL );
+      // AE_UPDATE_KEY( ?, VK_OEM_CUSEL );
+      // AE_UPDATE_KEY( ?, VK_OEM_ATTN );
+      // AE_UPDATE_KEY( ?, VK_OEM_FINISH );
+      // AE_UPDATE_KEY( ?, VK_OEM_COPY );
+      // AE_UPDATE_KEY( ?, VK_OEM_AUTO );
+      // AE_UPDATE_KEY( ?, VK_OEM_ENLW );
+      // AE_UPDATE_KEY( ?, VK_OEM_BACKTAB );
+      // AE_UPDATE_KEY( ?, VK_ATTN );
+      // AE_UPDATE_KEY( ?, VK_CRSEL );
+      // AE_UPDATE_KEY( ?, VK_EXSEL );
+      // AE_UPDATE_KEY( ?, VK_EREOF );
+      // AE_UPDATE_KEY( ?, VK_PLAY );
+      // AE_UPDATE_KEY( ?, VK_ZOOM );
+      // AE_UPDATE_KEY( ?, VK_NONAME );
+      // AE_UPDATE_KEY( ?, VK_PA1 );
+      // AE_UPDATE_KEY( ?, VK_OEM_CLEAR );
+    }
+#undef AE_UPDATE_KEY
+#elif _AE_OSX_
 #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk / 32 ] & ( 1 << ( _vk % 32 ) )
-  AE_UPDATE_KEY( A, kVK_ANSI_A );
-  AE_UPDATE_KEY( S, kVK_ANSI_S );
-  AE_UPDATE_KEY( D, kVK_ANSI_D );
-  AE_UPDATE_KEY( F, kVK_ANSI_F );
-  AE_UPDATE_KEY( H, kVK_ANSI_H );
-  AE_UPDATE_KEY( G, kVK_ANSI_G );
-  AE_UPDATE_KEY( Z, kVK_ANSI_Z );
-  AE_UPDATE_KEY( X, kVK_ANSI_X );
-  AE_UPDATE_KEY( C, kVK_ANSI_C );
-  AE_UPDATE_KEY( V, kVK_ANSI_V );
-  AE_UPDATE_KEY( B, kVK_ANSI_B );
-  AE_UPDATE_KEY( Q, kVK_ANSI_Q );
-  AE_UPDATE_KEY( W, kVK_ANSI_W );
-  AE_UPDATE_KEY( E, kVK_ANSI_E );
-  AE_UPDATE_KEY( R, kVK_ANSI_R );
-  AE_UPDATE_KEY( Y, kVK_ANSI_Y );
-  AE_UPDATE_KEY( T, kVK_ANSI_T );
-  AE_UPDATE_KEY( Num1, kVK_ANSI_1 );
-  AE_UPDATE_KEY( Num2, kVK_ANSI_2 );
-  AE_UPDATE_KEY( Num3, kVK_ANSI_3 );
-  AE_UPDATE_KEY( Num4, kVK_ANSI_4 );
-  AE_UPDATE_KEY( Num6, kVK_ANSI_6 );
-  AE_UPDATE_KEY( Num5, kVK_ANSI_5 );
-  AE_UPDATE_KEY( Equals, kVK_ANSI_Equal );
-  AE_UPDATE_KEY( Num9, kVK_ANSI_9 );
-  AE_UPDATE_KEY( Num7, kVK_ANSI_7 );
-  AE_UPDATE_KEY( Minus, kVK_ANSI_Minus );
-  AE_UPDATE_KEY( Num8, kVK_ANSI_8 );
-  AE_UPDATE_KEY( Num0, kVK_ANSI_0 );
-  AE_UPDATE_KEY( RightBracket, kVK_ANSI_RightBracket );
-  AE_UPDATE_KEY( O, kVK_ANSI_O );
-  AE_UPDATE_KEY( U, kVK_ANSI_U );
-  AE_UPDATE_KEY( LeftBracket, kVK_ANSI_LeftBracket );
-  AE_UPDATE_KEY( I, kVK_ANSI_I );
-  AE_UPDATE_KEY( P, kVK_ANSI_P );
-  AE_UPDATE_KEY( L, kVK_ANSI_L );
-  AE_UPDATE_KEY( J, kVK_ANSI_J );
-  AE_UPDATE_KEY( Apostrophe, kVK_ANSI_Quote );
-  AE_UPDATE_KEY( K, kVK_ANSI_K );
-  AE_UPDATE_KEY( Semicolon, kVK_ANSI_Semicolon );
-  AE_UPDATE_KEY( Backslash, kVK_ANSI_Backslash );
-  AE_UPDATE_KEY( Comma, kVK_ANSI_Comma );
-  AE_UPDATE_KEY( Slash, kVK_ANSI_Slash );
-  AE_UPDATE_KEY( N, kVK_ANSI_N );
-  AE_UPDATE_KEY( M, kVK_ANSI_M );
-  AE_UPDATE_KEY( Period, kVK_ANSI_Period );
-  AE_UPDATE_KEY( Tilde, kVK_ANSI_Grave );
-  AE_UPDATE_KEY( NumPadPeriod, kVK_ANSI_KeypadDecimal );
-  AE_UPDATE_KEY( NumPadMultiply, kVK_ANSI_KeypadMultiply );
-  AE_UPDATE_KEY( NumPadPlus, kVK_ANSI_KeypadPlus );
-  //AE_UPDATE_KEY( NumPadClear, kVK_ANSI_KeypadClear );
-  AE_UPDATE_KEY( NumPadDivide, kVK_ANSI_KeypadDivide );
-  AE_UPDATE_KEY( NumPadEnter, kVK_ANSI_KeypadEnter );
-  AE_UPDATE_KEY( NumPadMinus, kVK_ANSI_KeypadMinus );
-  AE_UPDATE_KEY( NumPadEquals, kVK_ANSI_KeypadEquals );
-  AE_UPDATE_KEY( NumPad0, kVK_ANSI_Keypad0 );
-  AE_UPDATE_KEY( NumPad1, kVK_ANSI_Keypad1 );
-  AE_UPDATE_KEY( NumPad2, kVK_ANSI_Keypad2 );
-  AE_UPDATE_KEY( NumPad3, kVK_ANSI_Keypad3 );
-  AE_UPDATE_KEY( NumPad4, kVK_ANSI_Keypad4 );
-  AE_UPDATE_KEY( NumPad5, kVK_ANSI_Keypad5 );
-  AE_UPDATE_KEY( NumPad6, kVK_ANSI_Keypad6 );
-  AE_UPDATE_KEY( NumPad7, kVK_ANSI_Keypad7 );
-  AE_UPDATE_KEY( NumPad8, kVK_ANSI_Keypad8 );
-  AE_UPDATE_KEY( NumPad9, kVK_ANSI_Keypad9 );
-  AE_UPDATE_KEY( Enter, kVK_Return );
-  AE_UPDATE_KEY( Tab, kVK_Tab );
-  AE_UPDATE_KEY( Space, kVK_Space );
-  AE_UPDATE_KEY( Backspace, kVK_Delete );
-  AE_UPDATE_KEY( Escape, kVK_Escape );
-  AE_UPDATE_KEY( LeftSuper, kVK_Command );
-  AE_UPDATE_KEY( LeftShift, kVK_Shift );
-  AE_UPDATE_KEY( CapsLock, kVK_CapsLock );
-  AE_UPDATE_KEY( LeftAlt, kVK_Option );
-  AE_UPDATE_KEY( LeftControl, kVK_Control );
-  AE_UPDATE_KEY( RightSuper, kVK_RightCommand );
-  AE_UPDATE_KEY( RightShift, kVK_RightShift );
-  AE_UPDATE_KEY( RightAlt, kVK_RightOption );
-  AE_UPDATE_KEY( RightControl, kVK_RightControl );
-  //AE_UPDATE_KEY( Function, kVK_Function );
-  //AE_UPDATE_KEY( F17, kVK_F17 );
-  //AE_UPDATE_KEY( VolumeUp, kVK_VolumeUp );
-  //AE_UPDATE_KEY( VolumeDown, kVK_VolumeDown );
-  //AE_UPDATE_KEY( Mute, kVK_Mute );
-  //AE_UPDATE_KEY( F18, kVK_F18 );
-  //AE_UPDATE_KEY( F19, kVK_F19 );
-  //AE_UPDATE_KEY( F20, kVK_F20 );
-  AE_UPDATE_KEY( F5, kVK_F5 );
-  AE_UPDATE_KEY( F6, kVK_F6 );
-  AE_UPDATE_KEY( F7, kVK_F7 );
-  AE_UPDATE_KEY( F3, kVK_F3 );
-  AE_UPDATE_KEY( F8, kVK_F8 );
-  AE_UPDATE_KEY( F9, kVK_F9 );
-  AE_UPDATE_KEY( F11, kVK_F11 );
-  //AE_UPDATE_KEY( F13, kVK_F13 );
-  //AE_UPDATE_KEY( F16, kVK_F16 );
-  //AE_UPDATE_KEY( F14, kVK_F14 );
-  AE_UPDATE_KEY( F10, kVK_F10 );
-  AE_UPDATE_KEY( F12, kVK_F12 );
-  //AE_UPDATE_KEY( F15, kVK_F15 );
-  //AE_UPDATE_KEY( Help, kVK_Help );
-  AE_UPDATE_KEY( Home, kVK_Home );
-  AE_UPDATE_KEY( PageUp, kVK_PageUp );
-  AE_UPDATE_KEY( Delete, kVK_ForwardDelete );
-  AE_UPDATE_KEY( F4, kVK_F4 );
-  AE_UPDATE_KEY( End, kVK_End );
-  AE_UPDATE_KEY( F2, kVK_F2 );
-  AE_UPDATE_KEY( PageDown, kVK_PageDown );
-  AE_UPDATE_KEY( F1, kVK_F1 );
-  AE_UPDATE_KEY( Left, kVK_LeftArrow );
-  AE_UPDATE_KEY( Right, kVK_RightArrow );
-  AE_UPDATE_KEY( Down, kVK_DownArrow );
-  AE_UPDATE_KEY( Up, kVK_UpArrow );
+    KeyMap _keyStates;
+    GetKeys(_keyStates);
+    uint32_t* keyStates = (uint32_t*)_keyStates;
+    AE_UPDATE_KEY( A, kVK_ANSI_A );
+    AE_UPDATE_KEY( S, kVK_ANSI_S );
+    AE_UPDATE_KEY( D, kVK_ANSI_D );
+    AE_UPDATE_KEY( F, kVK_ANSI_F );
+    AE_UPDATE_KEY( H, kVK_ANSI_H );
+    AE_UPDATE_KEY( G, kVK_ANSI_G );
+    AE_UPDATE_KEY( Z, kVK_ANSI_Z );
+    AE_UPDATE_KEY( X, kVK_ANSI_X );
+    AE_UPDATE_KEY( C, kVK_ANSI_C );
+    AE_UPDATE_KEY( V, kVK_ANSI_V );
+    AE_UPDATE_KEY( B, kVK_ANSI_B );
+    AE_UPDATE_KEY( Q, kVK_ANSI_Q );
+    AE_UPDATE_KEY( W, kVK_ANSI_W );
+    AE_UPDATE_KEY( E, kVK_ANSI_E );
+    AE_UPDATE_KEY( R, kVK_ANSI_R );
+    AE_UPDATE_KEY( Y, kVK_ANSI_Y );
+    AE_UPDATE_KEY( T, kVK_ANSI_T );
+    AE_UPDATE_KEY( Num1, kVK_ANSI_1 );
+    AE_UPDATE_KEY( Num2, kVK_ANSI_2 );
+    AE_UPDATE_KEY( Num3, kVK_ANSI_3 );
+    AE_UPDATE_KEY( Num4, kVK_ANSI_4 );
+    AE_UPDATE_KEY( Num6, kVK_ANSI_6 );
+    AE_UPDATE_KEY( Num5, kVK_ANSI_5 );
+    AE_UPDATE_KEY( Equals, kVK_ANSI_Equal );
+    AE_UPDATE_KEY( Num9, kVK_ANSI_9 );
+    AE_UPDATE_KEY( Num7, kVK_ANSI_7 );
+    AE_UPDATE_KEY( Minus, kVK_ANSI_Minus );
+    AE_UPDATE_KEY( Num8, kVK_ANSI_8 );
+    AE_UPDATE_KEY( Num0, kVK_ANSI_0 );
+    AE_UPDATE_KEY( RightBracket, kVK_ANSI_RightBracket );
+    AE_UPDATE_KEY( O, kVK_ANSI_O );
+    AE_UPDATE_KEY( U, kVK_ANSI_U );
+    AE_UPDATE_KEY( LeftBracket, kVK_ANSI_LeftBracket );
+    AE_UPDATE_KEY( I, kVK_ANSI_I );
+    AE_UPDATE_KEY( P, kVK_ANSI_P );
+    AE_UPDATE_KEY( L, kVK_ANSI_L );
+    AE_UPDATE_KEY( J, kVK_ANSI_J );
+    AE_UPDATE_KEY( Apostrophe, kVK_ANSI_Quote );
+    AE_UPDATE_KEY( K, kVK_ANSI_K );
+    AE_UPDATE_KEY( Semicolon, kVK_ANSI_Semicolon );
+    AE_UPDATE_KEY( Backslash, kVK_ANSI_Backslash );
+    AE_UPDATE_KEY( Comma, kVK_ANSI_Comma );
+    AE_UPDATE_KEY( Slash, kVK_ANSI_Slash );
+    AE_UPDATE_KEY( N, kVK_ANSI_N );
+    AE_UPDATE_KEY( M, kVK_ANSI_M );
+    AE_UPDATE_KEY( Period, kVK_ANSI_Period );
+    AE_UPDATE_KEY( Tilde, kVK_ANSI_Grave );
+    AE_UPDATE_KEY( NumPadPeriod, kVK_ANSI_KeypadDecimal );
+    AE_UPDATE_KEY( NumPadMultiply, kVK_ANSI_KeypadMultiply );
+    AE_UPDATE_KEY( NumPadPlus, kVK_ANSI_KeypadPlus );
+    //AE_UPDATE_KEY( NumPadClear, kVK_ANSI_KeypadClear );
+    AE_UPDATE_KEY( NumPadDivide, kVK_ANSI_KeypadDivide );
+    AE_UPDATE_KEY( NumPadEnter, kVK_ANSI_KeypadEnter );
+    AE_UPDATE_KEY( NumPadMinus, kVK_ANSI_KeypadMinus );
+    AE_UPDATE_KEY( NumPadEquals, kVK_ANSI_KeypadEquals );
+    AE_UPDATE_KEY( NumPad0, kVK_ANSI_Keypad0 );
+    AE_UPDATE_KEY( NumPad1, kVK_ANSI_Keypad1 );
+    AE_UPDATE_KEY( NumPad2, kVK_ANSI_Keypad2 );
+    AE_UPDATE_KEY( NumPad3, kVK_ANSI_Keypad3 );
+    AE_UPDATE_KEY( NumPad4, kVK_ANSI_Keypad4 );
+    AE_UPDATE_KEY( NumPad5, kVK_ANSI_Keypad5 );
+    AE_UPDATE_KEY( NumPad6, kVK_ANSI_Keypad6 );
+    AE_UPDATE_KEY( NumPad7, kVK_ANSI_Keypad7 );
+    AE_UPDATE_KEY( NumPad8, kVK_ANSI_Keypad8 );
+    AE_UPDATE_KEY( NumPad9, kVK_ANSI_Keypad9 );
+    AE_UPDATE_KEY( Enter, kVK_Return );
+    AE_UPDATE_KEY( Tab, kVK_Tab );
+    AE_UPDATE_KEY( Space, kVK_Space );
+    AE_UPDATE_KEY( Backspace, kVK_Delete );
+    AE_UPDATE_KEY( Escape, kVK_Escape );
+    AE_UPDATE_KEY( LeftSuper, kVK_Command );
+    AE_UPDATE_KEY( LeftShift, kVK_Shift );
+    AE_UPDATE_KEY( CapsLock, kVK_CapsLock );
+    AE_UPDATE_KEY( LeftAlt, kVK_Option );
+    AE_UPDATE_KEY( LeftControl, kVK_Control );
+    AE_UPDATE_KEY( RightSuper, kVK_RightCommand );
+    AE_UPDATE_KEY( RightShift, kVK_RightShift );
+    AE_UPDATE_KEY( RightAlt, kVK_RightOption );
+    AE_UPDATE_KEY( RightControl, kVK_RightControl );
+    //AE_UPDATE_KEY( Function, kVK_Function );
+    //AE_UPDATE_KEY( F17, kVK_F17 );
+    //AE_UPDATE_KEY( VolumeUp, kVK_VolumeUp );
+    //AE_UPDATE_KEY( VolumeDown, kVK_VolumeDown );
+    //AE_UPDATE_KEY( Mute, kVK_Mute );
+    //AE_UPDATE_KEY( F18, kVK_F18 );
+    //AE_UPDATE_KEY( F19, kVK_F19 );
+    //AE_UPDATE_KEY( F20, kVK_F20 );
+    AE_UPDATE_KEY( F5, kVK_F5 );
+    AE_UPDATE_KEY( F6, kVK_F6 );
+    AE_UPDATE_KEY( F7, kVK_F7 );
+    AE_UPDATE_KEY( F3, kVK_F3 );
+    AE_UPDATE_KEY( F8, kVK_F8 );
+    AE_UPDATE_KEY( F9, kVK_F9 );
+    AE_UPDATE_KEY( F11, kVK_F11 );
+    //AE_UPDATE_KEY( F13, kVK_F13 );
+    //AE_UPDATE_KEY( F16, kVK_F16 );
+    //AE_UPDATE_KEY( F14, kVK_F14 );
+    AE_UPDATE_KEY( F10, kVK_F10 );
+    AE_UPDATE_KEY( F12, kVK_F12 );
+    //AE_UPDATE_KEY( F15, kVK_F15 );
+    //AE_UPDATE_KEY( Help, kVK_Help );
+    AE_UPDATE_KEY( Home, kVK_Home );
+    AE_UPDATE_KEY( PageUp, kVK_PageUp );
+    AE_UPDATE_KEY( Delete, kVK_ForwardDelete );
+    AE_UPDATE_KEY( F4, kVK_F4 );
+    AE_UPDATE_KEY( End, kVK_End );
+    AE_UPDATE_KEY( F2, kVK_F2 );
+    AE_UPDATE_KEY( PageDown, kVK_PageDown );
+    AE_UPDATE_KEY( F1, kVK_F1 );
+    AE_UPDATE_KEY( Left, kVK_LeftArrow );
+    AE_UPDATE_KEY( Right, kVK_RightArrow );
+    AE_UPDATE_KEY( Down, kVK_DownArrow );
+    AE_UPDATE_KEY( Up, kVK_UpArrow );
 #undef AE_UPDATE_KEY
 #endif
-  
-  // Update meta key
+
+    // Update meta key
 #if _AE_APPLE_
-  m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ];
-  m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ];
+    m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ];
+    m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ];
 #else
-  m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
-  m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
+    m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
+    m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
 #endif
+  }
 }
 
 void Input::SetCaptureMouse( bool enable )
@@ -8100,6 +8267,26 @@ void Input::SetCaptureMouse( bool enable )
     m_positionSet = false;
   }
   m_captureMouse = enable;
+}
+
+void Input::SetTextMode( bool enabled )
+{
+  if ( m_textMode != enabled )
+  {
+    m_textMode = enabled;
+    
+    NSWindow* nsWindow = (NSWindow*)m_window->window;
+    if ( m_textMode )
+    {
+      aeTextInputDelegate* textInput = (aeTextInputDelegate*)m_textInputHandler;
+      [nsWindow makeFirstResponder:textInput];
+    }
+    else
+    {
+      NSOpenGLView* glView = [nsWindow contentView];
+      [nsWindow makeFirstResponder:glView];
+    }
+  }
 }
 
 bool Input::Get( ae::Key key ) const

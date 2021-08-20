@@ -24,10 +24,8 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeImage.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
 
-void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage )
+void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage )
 {
   AE_STATIC_ASSERT( (uint32_t)Format::R == 1 );
   AE_STATIC_ASSERT( (uint32_t)Format::RG == 2 );
@@ -70,35 +68,6 @@ void ae::Image::LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, F
       m_data.Append( p, m_channels );
     }
   }
-}
-
-bool ae::Image::LoadFile( const void* file, uint32_t length, Extension extension, Format storage )
-{
-  if ( !file || !length )
-  {
-    return false;
-  }
-
-  AE_ASSERT( extension == Extension::PNG );
-
-  int32_t width = 0;
-  int32_t height = 0;
-  int32_t channels = 0;
-  stbi_set_flip_vertically_on_load( 1 );
-#if _AE_IOS_
-  stbi_convert_iphone_png_to_rgb( 1 );
-#endif
-  uint8_t* image = stbi_load_from_memory( (const uint8_t*)file, length, &width, &height, &channels, STBI_default );
-  if ( !image )
-  {
-    return false;
-  }
-
-  Format format = (Format)channels; // @NOTE: See static assert above
-  LoadRaw( image, width, height, format, storage );
-  stbi_image_free( image );
-
-  return true;
 }
 
 aeColor ae::Image::Get( ae::Int2 pixel ) const

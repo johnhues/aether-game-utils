@@ -58,8 +58,7 @@ namespace ae
       RGBA
     };
 
-    void LoadRaw( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto );
-    bool LoadFile( const void* file, uint32_t length, Extension extension, Format storage = Format::Auto );
+    void Load( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage = Format::Auto );
 
     uint32_t GetWidth() const { return m_width; }
     uint32_t GetHeight() const { return m_height; }

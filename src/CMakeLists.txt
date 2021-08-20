@@ -100,7 +100,6 @@ target_sources(${AE_LIBRARY_NAME}
 		aeWindow.cpp
 		ctpl_stl.h
 		EmSocket.cpp
-		stb_image.h
 )
 
 if(APPLE)

@@ -42,15 +42,18 @@ int main()
   window.SetTitle( "example" );
   render.Initialize( &window );
   input.Initialize( &window );
-//  input.SetTextMode( true );
-//  input.SetText( "Try typing. Copy and paste should also work." );
+  input.SetTextMode( true );
   
   ae::Texture2D tex;
-  LoadPng( &tex, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+  LoadPng( &tex, "font.png", ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false, true );
   textRender.Initialize( &tex, 8 );
   
   ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );
+  
+  float textZoom = 4.0f;
+  const char* defaultText = "Try typing.\nCopy and paste should also work.\nYou can zoom by scrolling.\nPress 'ESC' to reset.";
+  input.SetText( defaultText );
 
   while ( !input.quit )
   {
@@ -58,14 +61,22 @@ int main()
     render.Activate();
     render.Clear( aeColor::Green().ScaleRGB( 0.01f ) );
     //render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
+    
+    if ( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
+    {
+      textZoom = 4.0f;
+      input.SetText( defaultText );
+    }
+    textZoom += input.mouse.scroll.y * 0.01f;
 
     // UI units in pixels, origin in bottom left
     ae::Matrix4 textToNdc = ae::Matrix4::Scaling( ae::Vec3( 2.0f / render.GetWidth(), 2.0f / render.GetHeight(), 1.0f ) );
-    textToNdc *= ae::Matrix4::Translation( ae::Vec3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
+    textToNdc *= ae::Matrix4::Translation( ae::Vec3( render.GetWidth() / -2.0f, render.GetHeight() / 2.0f, 0.0f ) );
+    textToNdc *= ae::Matrix4::Scaling( ae::Vec3( textZoom, textZoom, 1.0f ) );
 
     // Format input text buffer
     aeStr512 displayText( ">" );
-//    displayText.Append( input.GetText() );
+    displayText.Append( input.GetText() );
     
     static int s_blink = 0;
     static int s_prevLen = 0;
@@ -83,7 +94,7 @@ int main()
 
     // Render text in top left corner
     int maxLineLength = render.GetWidth() / textRender.GetFontSize() - 2;
-    ae::Vec3 textPos( textRender.GetFontSize(), render.GetHeight() - textRender.GetFontSize(), 0.0f );
+    ae::Vec3 textPos( textRender.GetFontSize() / 2.0f, textRender.GetFontSize() / -2.0f, 0.0f );
     textRender.Add( textPos, ae::Vec2( (float)textRender.GetFontSize() ), displayText.c_str(), aeColor::Green(), maxLineLength, 0 );
     textRender.Render( textToNdc );
 
