@@ -39,14 +39,7 @@ int main()
   {
     input.Pump();
     device.Activate();
-    if ( input.Get( ae::Key::Space ) )
-    {
-      device.Clear( ae::Color::Red() );
-    }
-    else
-    {
-      device.Clear( ae::Color::Blue() );
-    }
+    device.Clear( ae::Color::Blue() );
     device.Present();
 
     if ( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )

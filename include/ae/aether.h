@@ -11295,6 +11295,10 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
   m_canvas.Initialize( width, height );
   m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );
   m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
+  
+  // Force refresh uniforms for new canvas
+  s_shaderHash = ae::Hash();
+  s_uniformHash = ae::Hash();
 }
 
 //------------------------------------------------------------------------------
