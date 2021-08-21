@@ -110,12 +110,8 @@ public:
     }
     io.KeyShift = input->Get( ae::Key::LeftShift ) || input->Get( ae::Key::RightShift );
     io.KeyCtrl = input->Get( ae::Key::LeftControl ) || input->Get( ae::Key::RightControl );
-    //io.KeyAlt = ( ( SDL_GetModState() & KMOD_ALT ) != 0 );
-// #ifdef _WIN32
-//     io.KeySuper = false;
-// #else
-//     io.KeySuper = ( ( SDL_GetModState() & KMOD_GUI ) != 0 );
-// #endif
+    io.KeyAlt = input->Get( ae::Key::LeftAlt ) || input->Get( ae::Key::RightAlt );
+    io.KeySuper = input->Get( ae::Key::LeftSuper ) || input->Get( ae::Key::RightSuper );
     
     if ( !m_headless )
     {
@@ -318,12 +314,6 @@ private:
     io.KeyMap[ ImGuiKey_Enter ] = (uint32_t)ae::Key::Enter;
     io.KeyMap[ ImGuiKey_Escape ] = (uint32_t)ae::Key::Escape;
     io.KeyMap[ ImGuiKey_KeyPadEnter ] = (uint32_t)ae::Key::NumPadEnter;
-    io.KeyMap[ ImGuiKey_A ] = (uint32_t)ae::Key::A;
-    io.KeyMap[ ImGuiKey_C ] = (uint32_t)ae::Key::C;
-    io.KeyMap[ ImGuiKey_V ] = (uint32_t)ae::Key::V;
-    io.KeyMap[ ImGuiKey_X ] = (uint32_t)ae::Key::X;
-    io.KeyMap[ ImGuiKey_Y ] = (uint32_t)ae::Key::Y;
-    io.KeyMap[ ImGuiKey_Z ] = (uint32_t)ae::Key::Z;
     
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigWindowsResizeFromEdges = true;

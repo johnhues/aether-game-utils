@@ -304,10 +304,10 @@ int main()
     textRender.Initialize( &fontTexture, 8 );
   }
 
-  ae::Image heightmapImage;
-  ae::Scratch< uint8_t > fileBuffer( AE_ALLOC_TAG_TERRAIN, vfs.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
-  vfs.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
-  heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
+//  ae::Image heightmapImage;
+//  ae::Scratch< uint8_t > fileBuffer( AE_ALLOC_TAG_TERRAIN, vfs.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
+//  vfs.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
+//  heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
   uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
   ae::Terrain* terrain = ae::New< ae::Terrain >( TAG_EXAMPLE );
@@ -326,15 +326,16 @@ int main()
 
   ae::Array< Object* > objects = TAG_EXAMPLE;
   Object* currentObject = nullptr;
-
-  if ( !ReadObjects( &vfs, terrain, &heightmapImage, objects ) )
-  {
-    ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
-    box->SetTransform( ae::Matrix4::Translation( camera.GetFocus() ) * ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
-    currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
-  }
+//
+//  if ( !ReadObjects( &vfs, terrain, &heightmapImage, objects ) )
+//  {
+//    ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
+//    box->SetTransform( ae::Matrix4::Translation( camera.GetFocus() ) * ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
+//    currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
+//  }
 
   bool gizmoClickedPrev = false;
+  ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 
   AE_INFO( "Run" );
   while ( !input.quit )
@@ -343,6 +344,8 @@ int main()
 
     ui->NewFrame( &render, &input, timeStep.GetDt() );
 
+    ImGuiIO& io = ImGui::GetIO();
+    
     ImGuizmo::SetOrthographic( false );
     ImGuizmo::BeginFrame();
 
@@ -371,16 +374,16 @@ int main()
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Cylinder", cylinder ) );
         }
         
-        if ( ImGui::Button( "height map" ) )
-        {
-          ae::SdfHeightmap* heightMap = terrain->sdf.CreateSdf< ae::SdfHeightmap >();
-          heightMap->SetTransform(
-            ae::Matrix4::Translation( camera.GetFocus() ) *
-            ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
-          heightMap->SetImage( &heightmapImage );
-
-          currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Height Map", heightMap ) );
-        }
+//        if ( ImGui::Button( "height map" ) )
+//        {
+//          ae::SdfHeightmap* heightMap = terrain->sdf.CreateSdf< ae::SdfHeightmap >();
+//          heightMap->SetTransform(
+//            ae::Matrix4::Translation( camera.GetFocus() ) *
+//            ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
+//          heightMap->SetImage( &heightmapImage );
+//
+//          currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Height Map", heightMap ) );
+//        }
 
         if ( ImGui::Button( "ray" ) )
         {
@@ -516,36 +519,6 @@ int main()
 
     if ( !headless )
     {
-      // Camera focus
-      if ( currentObject && !input.GetPrev( ae::Key::F ) && input.Get( ae::Key::F ) )
-      {
-        if ( currentObject->shape )
-        {
-          camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
-        }
-        else
-        {
-          camera.Refocus( currentObject->raySrc );
-        }
-      }
-
-      // Render mode
-      if ( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )
-      {
-        wireframe = true;
-        s_showTerrainDebug = true;
-      }
-      else if ( !input.GetPrev( ae::Key::Num2 ) && input.Get( ae::Key::Num2 ) )
-      {
-        wireframe = false;
-        s_showTerrainDebug = true;
-      }
-      else if ( input.Get( ae::Key::Num3 ) && !input.GetPrev( ae::Key::Num3 ) )
-      {
-        wireframe = false;
-        s_showTerrainDebug = false;
-      }
-
       render.Activate();
       render.Clear( aeColor::PicoDarkPurple() );
 
@@ -591,33 +564,65 @@ int main()
         terrain->Render( &terrainShader, uniformList );
       }
 
-      ImGuiIO& io = ImGui::GetIO();
       ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
 
-      ae::Key delKey = _AE_OSX_ ? ae::Key::Backspace : ae::Key::Delete;
-      static ImGuizmo::OPERATION s_operation = ImGuizmo::TRANSLATE;
-      if ( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
+      bool allowKeyboardInput = !headless && io.WantTextInput;
+      if ( !allowKeyboardInput )
       {
-        currentObject = nullptr;
-      }
-      else if ( input.Get( ae::Key::W ) && !input.GetPrev( ae::Key::W ) )
-      {
-        s_operation = ImGuizmo::TRANSLATE;
-      }
-      else if ( input.Get( ae::Key::E ) && !input.GetPrev( ae::Key::E ) )
-      {
-        s_operation = ImGuizmo::ROTATE;
-      }
-      else if ( input.Get( ae::Key::R ) && !input.GetPrev( ae::Key::R ) )
-      {
-        s_operation = ImGuizmo::SCALE;
-      }
-      else if ( currentObject && input.Get( delKey ) && !input.GetPrev( delKey ) )
-      {
-        objects.Remove( objects.Find( currentObject ) );
-        terrain->sdf.DestroySdf( currentObject->shape );
-        ae::Delete( currentObject );
-        currentObject = nullptr;
+        ae::Key delKey = _AE_OSX_ ? ae::Key::Backspace : ae::Key::Delete;
+        if ( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
+        {
+          currentObject = nullptr;
+        }
+        else if ( input.Get( ae::Key::W ) && !input.GetPrev( ae::Key::W ) )
+        {
+          gizmoOperation = ImGuizmo::TRANSLATE;
+        }
+        else if ( input.Get( ae::Key::E ) && !input.GetPrev( ae::Key::E ) )
+        {
+          gizmoOperation = ImGuizmo::ROTATE;
+        }
+        else if ( input.Get( ae::Key::R ) && !input.GetPrev( ae::Key::R ) )
+        {
+          gizmoOperation = ImGuizmo::SCALE;
+        }
+        else if ( currentObject && input.Get( delKey ) && !input.GetPrev( delKey ) )
+        {
+          objects.Remove( objects.Find( currentObject ) );
+          terrain->sdf.DestroySdf( currentObject->shape );
+          ae::Delete( currentObject );
+          currentObject = nullptr;
+        }
+        
+        // Camera focus
+        if ( currentObject && !input.GetPrev( ae::Key::F ) && input.Get( ae::Key::F ) )
+        {
+          if ( currentObject->shape )
+          {
+            camera.Refocus( currentObject->shape->GetAABB().GetCenter() );
+          }
+          else
+          {
+            camera.Refocus( currentObject->raySrc );
+          }
+        }
+        
+        // Render mode
+        if ( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )
+        {
+          wireframe = true;
+          s_showTerrainDebug = true;
+        }
+        else if ( !input.GetPrev( ae::Key::Num2 ) && input.Get( ae::Key::Num2 ) )
+        {
+          wireframe = false;
+          s_showTerrainDebug = true;
+        }
+        else if ( input.Get( ae::Key::Num3 ) && !input.GetPrev( ae::Key::Num3 ) )
+        {
+          wireframe = false;
+          s_showTerrainDebug = false;
+        }
       }
 
       for ( uint32_t i = 0; i < objects.Length(); i++ )
@@ -667,8 +672,8 @@ int main()
           ImGuizmo::Manipulate(
             worldToView.data,
             viewToProj.data,
-            s_operation,
-            ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+            gizmoOperation,
+            ( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
             gizmoTransform.data
           );
 
@@ -693,8 +698,8 @@ int main()
           ImGuizmo::Manipulate(
             worldToView.data,
             viewToProj.data,
-            s_operation,
-            ( s_operation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+            gizmoOperation,
+            ( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
             gizmoTransform.data
           );
 
