@@ -1218,11 +1218,12 @@ public:
   void SetMaximized( bool maximized );
 
   const char* GetTitle() const { return m_windowTitle.c_str(); }
+  bool GetFullScreen() const { return m_fullScreen; }
+  bool GetMaximized() const { return m_maximized; }
+  bool GetFocused() const { return m_focused; } //!< True if the user is currently working with this window
   Int2 GetPosition() const { return m_pos; }
   int32_t GetWidth() const; //!< Virtual window width (unscaled by display scale factor)
   int32_t GetHeight() const; //!< Virtual window height (unscaled by display scale factor)
-  bool GetFullScreen() const { return m_fullScreen; }
-  bool GetMaximized() const { return m_maximized; }
   float GetScaleFactor() const { return m_scaleFactor; } //!<  Window content scale factor
 
 private:
@@ -1232,6 +1233,7 @@ private:
   int32_t m_height;
   bool m_fullScreen;
   bool m_maximized;
+  bool m_focused;
   float m_scaleFactor;
   Str256 m_windowTitle;
 public:
@@ -1239,6 +1241,7 @@ public:
   void m_UpdatePos( Int2 pos ) { m_pos = pos; }
   void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
   void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
+  void m_UpdateFocused( bool focused ) { m_focused = focused; }
   void* window;
   class GraphicsDevice* graphicsDevice;
   class Input* input;
@@ -7337,6 +7340,16 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
   NSPoint mouseScreenPos = [NSEvent mouseLocation];
   _aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
 }
+- (void)windowDidBecomeKey:(NSNotification *)notification
+{
+  AE_ASSERT( _aewindow );
+  _aewindow->m_UpdateFocused( true );
+}
+- (void)windowDidResignKey:(NSNotification *)notification
+{
+  AE_ASSERT( _aewindow );
+  _aewindow->m_UpdateFocused( false );
+}
 @end
 namespace ae {
 #endif
@@ -7354,6 +7367,7 @@ Window::Window()
   m_height = 0;
   m_fullScreen = false;
   m_maximized = false;
+  m_focused = false;
   m_scaleFactor = 0.0f;
 }
 
