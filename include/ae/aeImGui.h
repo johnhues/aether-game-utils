@@ -348,9 +348,9 @@ private:
 //------------------------------------------------------------------------------
 // Var helpers
 //------------------------------------------------------------------------------
-static aeStr32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, const char* currentValue )
+static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, const char* currentValue )
 {
-  aeStr32 result = currentValue;
+  ae::Str32 result = currentValue;
   if ( ImGui::BeginCombo( varName, currentValue ) )
   {
     for ( uint32_t i = 0; i < enumType->Length(); i++ )

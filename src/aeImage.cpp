@@ -70,11 +70,11 @@ void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Form
   }
 }
 
-aeColor ae::Image::Get( ae::Int2 pixel ) const
+ae::Color ae::Image::Get( ae::Int2 pixel ) const
 {
   if ( pixel.x < 0 || pixel.y < 0 || pixel.x >= m_width || pixel.y >= m_height )
   {
-    return aeColor::Black();
+    return ae::Color::Black();
   }
 
   uint32_t index = ( pixel.y * m_width + pixel.x ) * m_channels;
@@ -82,26 +82,26 @@ aeColor ae::Image::Get( ae::Int2 pixel ) const
   {
     case 1:
     {
-      return aeColor::R8( m_data[ index ] );
+      return ae::Color::R8( m_data[ index ] );
     }
     case 2:
     {
-      return aeColor::RG8( m_data[ index ], m_data[ index + 1 ] );
+      return ae::Color::RG8( m_data[ index ], m_data[ index + 1 ] );
     }
     case 3:
     {
-      return aeColor::RGB8( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ] );
+      return ae::Color::RGB8( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ] );
     }
     case 4:
     {
-      return aeColor::RGBA8( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ], m_data[ index + 3 ] );
+      return ae::Color::RGBA8( m_data[ index ], m_data[ index + 1 ], m_data[ index + 2 ], m_data[ index + 3 ] );
     }
   }
 
-  return aeColor::Black();
+  return ae::Color::Black();
 }
 
-aeColor ae::Image::Get( ae::Vec2 pixel, Interpolation interpolation ) const
+ae::Color ae::Image::Get( ae::Vec2 pixel, Interpolation interpolation ) const
 {
   ae::Int2 pi = pixel.FloorCopy();
 
@@ -116,13 +116,13 @@ aeColor ae::Image::Get( ae::Vec2 pixel, Interpolation interpolation ) const
       float x = pixel.x - pi.x;
       float y = pixel.y - pi.y;
 
-      aeColor c00 = Get( pi );
-      aeColor c10 = Get( pi + ae::Int2( 1, 0 ) );
-      aeColor c01 = Get( pi + ae::Int2( 0, 1 ) );
-      aeColor c11 = Get( pi + ae::Int2( 1, 1 ) );
+      ae::Color c00 = Get( pi );
+      ae::Color c10 = Get( pi + ae::Int2( 1, 0 ) );
+      ae::Color c01 = Get( pi + ae::Int2( 0, 1 ) );
+      ae::Color c11 = Get( pi + ae::Int2( 1, 1 ) );
 
-      aeColor c0 = c00.Lerp( c10, x );
-      aeColor c1 = c01.Lerp( c11, x );
+      ae::Color c0 = c00.Lerp( c10, x );
+      ae::Color c1 = c01.Lerp( c11, x );
 
       return c0.Lerp( c1, y );
     }
@@ -131,17 +131,17 @@ aeColor ae::Image::Get( ae::Vec2 pixel, Interpolation interpolation ) const
       float x = pixel.x - pi.x;
       float y = pixel.y - pi.y;
 
-      aeColor c00 = Get( pi );
-      aeColor c10 = Get( pi + ae::Int2( 1, 0 ) );
-      aeColor c01 = Get( pi + ae::Int2( 0, 1 ) );
-      aeColor c11 = Get( pi + ae::Int2( 1, 1 ) );
+      ae::Color c00 = Get( pi );
+      ae::Color c10 = Get( pi + ae::Int2( 1, 0 ) );
+      ae::Color c01 = Get( pi + ae::Int2( 0, 1 ) );
+      ae::Color c11 = Get( pi + ae::Int2( 1, 1 ) );
 
-      aeColor c0 = ae::Interpolation::Cosine( c00, c10, x );
-      aeColor c1 = ae::Interpolation::Cosine( c01, c11, x );
+      ae::Color c0 = ae::Interpolation::Cosine( c00, c10, x );
+      ae::Color c1 = ae::Interpolation::Cosine( c01, c11, x );
 
       return ae::Interpolation::Cosine( c0, c1, y );
     }
   }
 
-  return aeColor::Black();
+  return ae::Color::Black();
 }

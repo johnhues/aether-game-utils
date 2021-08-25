@@ -54,7 +54,7 @@ public:
     ae::Vec4 position;
     ae::Vec4 normal;
     ae::Vec2 tex[ 4 ];
-    aeColor color[ 4 ];
+    ae::Color color[ 4 ];
     uint8_t userData[ 4 ];
   };
   struct LoadParams
@@ -92,13 +92,13 @@ public:
   {
     ae::Matrix4 transform = ae::Matrix4::Identity();
     ae::Vec3 source = ae::Vec3( 0.0f );
-    ae::Vec3 direction = aeFloat3Down;
+    ae::Vec3 direction = ae::Vec3( 0.0f, 0.0f, -1.0f );
     float maxLength = 0.0f;
     uint32_t maxHits = 1;
     bool hitCounterclockwise = true;
     bool hitClockwise = false;
     ae::DebugLines* debug = nullptr; // Draw collision results
-    aeColor debugColor = aeColor::Red();
+    ae::Color debugColor = ae::Color::Red();
   };
   struct RaycastResult
   {
@@ -119,7 +119,7 @@ public:
   {
     ae::Matrix4 transform = ae::Matrix4::Identity();
     ae::DebugLines* debug = nullptr; // Draw collision results
-    aeColor debugColor = aeColor::Red();
+    ae::Color debugColor = ae::Color::Red();
   };
   struct PushOutInfo
   {

@@ -461,7 +461,7 @@ void TerrainSdf::RenderDebug( ae::DebugLines* debug )
     aabb.Expand( kSdfBoundary );
     ae::Vec3 center = ( aabb.GetMin() + aabb.GetMax() ) * 0.5f;
     ae::Vec3 halfSize = aabb.GetMax() - center;
-    debug->AddAABB( center, halfSize, aeColor::Red() );
+    debug->AddAABB( center, halfSize, ae::Color::Red() );
   }
 
   for ( uint32_t i = 0; i < m_pendingCreated.Length(); i++ )
@@ -470,7 +470,7 @@ void TerrainSdf::RenderDebug( ae::DebugLines* debug )
     aabb.Expand( kSdfBoundary );
     ae::Vec3 center = ( aabb.GetMin() + aabb.GetMax() ) * 0.5f;
     ae::Vec3 halfSize = aabb.GetMax() - center;
-    debug->AddAABB( center, halfSize, aeColor::Blue() );
+    debug->AddAABB( center, halfSize, ae::Color::Blue() );
   }
 }
 

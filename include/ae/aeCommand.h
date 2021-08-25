@@ -210,7 +210,7 @@ gdn_reg_meta_cmd_##_x inst_gdn_reg_meta_cmd_##_x;
 inline bool ae_call_cmd( void* data, const char* cmd )
 {
   const char* nameEnd = strchr( cmd, ' ' );
-  aeStr32 name = nameEnd ? aeStr32( nameEnd - cmd, cmd ) : aeStr32( cmd );
+  ae::Str32 name = nameEnd ? ae::Str32( nameEnd - cmd, cmd ) : ae::Str32( cmd );
   uint32_t count = (uint32_t)gdn_cmd::GetDefs().size();
   for ( uint32_t i = 0; i < count; i++ )
   {

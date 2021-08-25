@@ -1144,7 +1144,7 @@ aeAABB TerrainChunk::GetAABB( ae::Int3 chunkPos )
 
 void TerrainChunk::m_SetVertexData( const TerrainVertex* verts, const TerrainIndex* indices, VertexCount vertexCount, uint32_t indexCount )
 {
-  // (Re)Initialize aeVertexData here only when needed
+  // (Re)Initialize ae::VertexData here only when needed
   if ( m_data.GetIndexCount() == 0 // Not initialized
     || VertexCount( m_data.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
     || m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
@@ -1859,8 +1859,8 @@ void Terrain::Update( ae::Vec3 center, float radius )
       if ( job->HasJob() )
       {
         aeAABB chunkAABB = job->GetChunk()->GetAABB();
-        m_params.debug->AddLine( m_center, chunkAABB.GetCenter(), aeColor::Red() );
-        m_params.debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), aeColor::PicoRed() );
+        m_params.debug->AddLine( m_center, chunkAABB.GetCenter(), ae::Color::Red() );
+        m_params.debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), ae::Color::PicoRed() );
       }
     }
 
@@ -2070,7 +2070,7 @@ namespace
 
     ae::Vec3 start, ray;
     ae::DebugLines* debug;
-    aeColor color = aeColor::Red();
+    ae::Color color = ae::Color::Red();
   };
 
   ae::Vec3 IntersectRayAABB( ae::Vec3 p, ae::Vec3 d, ae::Int3 v )
@@ -2213,7 +2213,7 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
     if ( m_params.debug )
     {
       ae::Vec3 v = ae::Vec3( x, y, z ) + ae::Vec3( 0.5f );
-      m_params.debug->AddOBB( ae::Matrix4::Translation( v ), aeColor::Blue() );
+      m_params.debug->AddOBB( ae::Matrix4::Translation( v ), ae::Color::Blue() );
     }
 
     steps++;
@@ -2265,8 +2265,8 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
   if ( m_params.debug )
   {
     ae::Vec3 v = ae::Vec3( x, y, z ) + ae::Vec3( 0.5f );
-    m_params.debug->AddOBB( ae::Matrix4::Translation( v ), aeColor::Green() );
-    debugRay.color = aeColor::Green();
+    m_params.debug->AddOBB( ae::Matrix4::Translation( v ), ae::Color::Green() );
+    debugRay.color = ae::Color::Green();
   }
 
   return true;
@@ -2443,21 +2443,21 @@ TerrainRaycastResult Terrain::RaycastFast( ae::Vec3 start, ae::Vec3 ray, bool al
   // Debug
   if ( m_params.debug )
   {
-    m_params.debug->AddCircle( result.posf, result.normal, 0.25f, aeColor::Green(), 16 );
-    m_params.debug->AddLine( result.posf, result.posf + result.normal, aeColor::Green() );
+    m_params.debug->AddCircle( result.posf, result.normal, 0.25f, ae::Color::Green(), 16 );
+    m_params.debug->AddLine( result.posf, result.posf + result.normal, ae::Color::Green() );
 
     ae::Vec3 v = ae::Vec3( x, y, z ) + ae::Vec3( 0.5f );
-    m_params.debug->AddOBB( ae::Matrix4::Translation( v ), aeColor::Green() );
+    m_params.debug->AddOBB( ae::Matrix4::Translation( v ), ae::Color::Green() );
 
-    m_params.debug->AddSphere( p, 0.05f, aeColor::Green(), 8 );
-    m_params.debug->AddLine( p, p + n, aeColor::Green() );
+    m_params.debug->AddSphere( p, 0.05f, ae::Color::Green(), 8 );
+    m_params.debug->AddLine( p, p + n, ae::Color::Green() );
     if ( m_debugTextFn )
     {
       ae::Str64 str = ae::Str64::Format( "#: # (#)", index, vert.position, localPos );
       m_debugTextFn( p, str.c_str() );
     }
 
-    debugRay.color = aeColor::Green();
+    debugRay.color = ae::Color::Green();
   }
   
   return result;

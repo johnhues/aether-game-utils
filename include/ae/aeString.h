@@ -30,11 +30,4 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 
-using aeStr16 = ae::Str16;
-using aeStr32 = ae::Str32;
-using aeStr64 = ae::Str64;
-using aeStr128 = ae::Str128;
-using aeStr256 = ae::Str256;
-using aeStr512 = ae::Str512;
-
 #endif

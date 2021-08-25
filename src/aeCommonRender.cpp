@@ -251,7 +251,7 @@ void aeSpriteRender::SetSorting( bool enabled )
   m_sorting = enabled;
 }
 
-void aeSpriteRender::AddSprite( const ae::Texture2D* texture, ae::Matrix4 transform, ae::Vec2 uvMin, ae::Vec2 uvMax, aeColor color )
+void aeSpriteRender::AddSprite( const ae::Texture2D* texture, ae::Matrix4 transform, ae::Vec2 uvMin, ae::Vec2 uvMax, ae::Color color )
 {
   AE_ASSERT_MSG( m_maxCount, "aeSpriteRender is not initialized" );
 
@@ -511,7 +511,7 @@ void aeTextRender::Render( const ae::Matrix4& uiToScreen )
   m_rectCount = 0;
 }
 
-void aeTextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit )
+void aeTextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit )
 {
   if ( m_rectCount >= kMaxTextRects )
   {

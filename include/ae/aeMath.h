@@ -64,25 +64,6 @@ private:
   uint64_t m_seed;
 };
 
-//------------------------------------------------------------------------------
-// defs
-//------------------------------------------------------------------------------
-using aeFloat2 = ae::Vec2;
-using aeFloat3 = ae::Vec3;
-using aeInt2 = ae::Int2;
-using aeInt3 = ae::Int3;
-using aeFloat4 = ae::Vec4;
-using aeFloat4x4 = ae::Matrix4;
-using aeQuat = ae::Quaternion;
-
-const static ae::Vec3 aeFloat3Zero = ae::Vec3( 0.0f );
-const static ae::Vec3 aeFloat3Up = ae::Vec3( 0, 0, 1 );
-const static ae::Vec3 aeFloat3Down = ae::Vec3( 0, 0, -1 );
-const static ae::Vec3 aeFloat3Left = ae::Vec3( -1, 0, 0 );
-const static ae::Vec3 aeFloat3Right = ae::Vec3( 1, 0, 0 );
-const static ae::Vec3 aeFloat3Forward = ae::Vec3( 0, 1, 0 );
-const static ae::Vec3 aeFloat3Backward = ae::Vec3( 0, -1, 0 );
-
 namespace aeMath
 {
   inline ae::Vec3 Abs( ae::Vec3 v )

@@ -376,8 +376,8 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
   {
     // @TODO: Should be able to remove this
     pDist = ( planeIntersectionPoint - center ).Length();
-    debug->AddLine( center, center - normal, aeColor::Red() );
-    debug->AddSphere( planeIntersectionPoint, 0.05f, aeColor::Red(), 8 );
+    debug->AddLine( center, center - normal, ae::Color::Red() );
+    debug->AddSphere( planeIntersectionPoint, 0.05f, ae::Color::Red(), 8 );
 
     planeIntersectionPoint2 = planeIntersectionPoint;
   }
@@ -404,7 +404,7 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
       return false;
     }
 
-    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, aeColor::PicoOrange() );
+    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, ae::Color::PicoOrange() );
   }
 
   // Unless otherwise noted, our polygonIntersectionPoint is the
@@ -441,11 +441,11 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
       p1 = points[ 0 ];
     }
 
-    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
-    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
+    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, ae::Color::Green() );
+    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, ae::Color::Gray(), 16 );
 
     ae::Vec3 flatDir = direction.ZeroAxisCopy( normal );
-    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, ae::Color::Blue() );
 
     float minDist = aeMath::MaxValue< float >();
     ae::Vec3 theRealThingTM;
@@ -470,15 +470,15 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
       }
     }
 
-    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
-    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, aeColor::Blue() );
-    debug->AddSphere( theRealThingTM, 0.05f, aeColor::Blue(), 16 );
+    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, ae::Color::Blue() );
+    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, ae::Color::Blue() );
+    debug->AddSphere( theRealThingTM, 0.05f, ae::Color::Blue(), 16 );
 
     polygonIntersectionPoint = theRealThingTM;
 
     float circleRad = radius; // Incorrect! This circle is the 'slice of sphere' at the point of contact with the edge
     ae::Vec3 circlePos = theRealThingTM + edgeNormalMinTemp * circleRad;
-    debug->AddCircle( circlePos, normal, circleRad, aeColor::Blue(), 16 );
+    debug->AddCircle( circlePos, normal, circleRad, ae::Color::Blue(), 16 );
   }
   // Invert the velocity vector
   //ae::Vec3 negativeVelocityVector = -velocityVector;
@@ -489,7 +489,7 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
   // Was there an intersection with the sphere?
   //if ( t >= 0.0 ) // && t <= distanceToTravel ) // No limit?
   float t = 0.0f;
-  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, aeColor::Green() );
+  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, ae::Color::Green() );
   if ( Raycast( polygonIntersectionPoint, -direction, &t ) )
   {
     if ( outNearestDistance )
@@ -531,8 +531,8 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
   {
     // @TODO: Should be able to remove this
     pDist = ( planeIntersectionPoint - center ).Length();
-    debug->AddLine( center, center - normal, aeColor::Red() );
-    debug->AddSphere( planeIntersectionPoint, 0.05f, aeColor::Red(), 8 );
+    debug->AddLine( center, center - normal, ae::Color::Red() );
+    debug->AddSphere( planeIntersectionPoint, 0.05f, ae::Color::Red(), 8 );
 
     planeIntersectionPoint2 = planeIntersectionPoint;
   }
@@ -559,7 +559,7 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
       return false;
     }
 
-    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, aeColor::PicoOrange() );
+    //debug->AddLine( sphereIntersectionPoint, planeIntersectionPoint, ae::Color::PicoOrange() );
   }
 
   // Unless otherwise noted, our polygonIntersectionPoint is the
@@ -596,11 +596,11 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
       p1 = points[ 0 ];
     }
 
-    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, aeColor::Green() );
-    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, aeColor::Gray(), 16 );
+    //debug->AddLine( planeIntersectionPoint, polygonIntersectionPoint, ae::Color::Green() );
+    //debug->AddSphere( planeIntersectionPoint + normal * radius, radius, ae::Color::Gray(), 16 );
 
     ae::Vec3 flatDir = ae::Vec3( direction ).ZeroAxis( normal );
-    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
+    debug->AddLine( planeIntersectionPoint, planeIntersectionPoint2 + flatDir * 4.0f, ae::Color::Blue() );
 
     float minDist = aeMath::MaxValue< float >();
     ae::Vec3 theRealThingTM;
@@ -625,9 +625,9 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
       }
     }
 
-    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, aeColor::Blue() );
-    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, aeColor::Blue() );
-    debug->AddSphere( theRealThingTM, 0.05f, aeColor::Blue(), 16 );
+    debug->AddLine( planeIntersectionPoint2, planeIntersectionPoint2 + flatDir * 4.0f, ae::Color::Blue() );
+    debug->AddLine( theRealThingTM, theRealThingTM + edgeNormalMinTemp, ae::Color::Blue() );
+    debug->AddSphere( theRealThingTM, 0.05f, ae::Color::Blue(), 16 );
 
     ////polygonIntersectionPoint = theRealThingTM;
   }
@@ -640,7 +640,7 @@ bool aeSphere::SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Ve
   // Was there an intersection with the sphere?
   //if ( t >= 0.0 ) // && t <= distanceToTravel ) // No limit?
   float t = 0.0f;
-  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, aeColor::Green() );
+  debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, ae::Color::Green() );
   if ( Raycast( polygonIntersectionPoint, -direction, &t ) )
   {
     if ( outNearestDistance )

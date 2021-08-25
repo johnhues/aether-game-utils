@@ -64,8 +64,8 @@ namespace ae
     uint32_t GetHeight() const { return m_height; }
     uint32_t GetChannels() const { return m_channels; }
 
-    aeColor Get( ae::Int2 pixel ) const;
-    aeColor Get( ae::Vec2 pixel, Interpolation interpolation ) const;
+    ae::Color Get( ae::Int2 pixel ) const;
+    ae::Color Get( ae::Vec2 pixel, Interpolation interpolation ) const;
 
   private:
     ae::Array< uint8_t > m_data = AE_ALLOC_TAG_RENDER;

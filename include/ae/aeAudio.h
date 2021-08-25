@@ -40,7 +40,7 @@ public:
   void Initialize( const char* filePath );
   void Destroy();
 
-  aeStr64 name;
+  ae::Str64 name;
   uint32_t buffer;
   float length;
 };

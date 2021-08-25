@@ -52,8 +52,8 @@ public:
   bool Has( const char* name ) const;
 
 private:
-  aeStr32 m_names[ kMaxCommandLineArgs ];
-  aeStr128 m_values[ kMaxCommandLineArgs ];
+  ae::Str32 m_names[ kMaxCommandLineArgs ];
+  ae::Str128 m_values[ kMaxCommandLineArgs ];
   uint32_t m_count;
 };
 

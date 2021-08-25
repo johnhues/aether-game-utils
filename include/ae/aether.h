@@ -1432,7 +1432,7 @@ public:
   void Terminate();
   void Pump();
   
-  void SetCaptureMouse( bool enable );
+  void SetMouseCaptured( bool enable );
   bool GetMouseCaptured() const { return m_captureMouse; }
   
   void SetTextMode( bool enabled );
@@ -7523,9 +7523,7 @@ void Window::m_Initialize()
   [nsWindow makeFirstResponder:glView];
   [nsWindow setOpaque:YES];
   [nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
-  [nsWindow makeKeyAndOrderFront:nil]; // nil sender
   // @TODO: Create menus (especially Quit!)
-  [nsWindow orderFrontRegardless];
   
   NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];
   m_pos = ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y );
@@ -7808,6 +7806,10 @@ void Input::Initialize( Window* window )
   NSWindow* nsWindow = (NSWindow*)m_window->window;
   NSView* nsWindowContent = [nsWindow contentView];
   [nsWindowContent addSubview:textInput];
+  
+  // Do this here so input is ready to handle events
+  [nsWindow makeKeyAndOrderFront:nil]; // nil sender
+  [nsWindow orderFrontRegardless];
 #endif
 }
 
@@ -8258,7 +8260,7 @@ void Input::Pump()
 #endif
 }
 
-void Input::SetCaptureMouse( bool enable )
+void Input::SetMouseCaptured( bool enable )
 {
   if ( m_captureMouse && !enable )
   {

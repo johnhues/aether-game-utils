@@ -229,7 +229,7 @@ bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* e
       {
         AE_ASSERT( mesh->mColors[ k ] );
         aiColor4D c = mesh->mColors[ k ][ j ];
-        vertex.color[ k ] = aeColor( c.r, c.g, c.b, c.a );
+        vertex.color[ k ] = ae::Color( c.r, c.g, c.b, c.a );
       }
 
       m_vertices.Append( vertex );

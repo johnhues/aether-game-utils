@@ -39,9 +39,6 @@ extern const ae::Vec3 aeQuadVertPos[ aeQuadVertCount ];
 extern const ae::Vec2 aeQuadVertUvs[ aeQuadVertCount ];
 extern const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ];
 
-// @TODO: Remove
-#define aeColor ae::Color
-
 //------------------------------------------------------------------------------
 // aeSpriteRender class
 //------------------------------------------------------------------------------
@@ -60,7 +57,7 @@ public:
   void SetSorting( bool enabled );
 
   // @NOTE: Each sprite is also transformed by the Render( worldToScreen ) above
-  void AddSprite( const ae::Texture2D* texture, ae::Matrix4 transform, ae::Vec2 uvMin, ae::Vec2 uvMax, aeColor color );
+  void AddSprite( const ae::Texture2D* texture, ae::Matrix4 transform, ae::Vec2 uvMin, ae::Vec2 uvMax, ae::Color color );
   void Clear();
 
 private:
@@ -81,7 +78,7 @@ private:
     ae::Matrix4 transform;
     ae::Vec2 uvMin;
     ae::Vec2 uvMax;
-    aeColor color;
+    ae::Color color;
     uint32_t textureId;
     float sort;
   };
@@ -118,7 +115,7 @@ public:
 
   uint32_t GetFontSize() const { return m_fontSize; }
 
-  void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, aeColor color, uint32_t lineLength, uint32_t charLimit );
+  void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit );
   uint32_t GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const;
 
 private:
@@ -130,7 +127,7 @@ private:
   {
     ae::Vec3 pos;
     ae::Vec2 uv;
-    aeColor color;
+    ae::Color color;
   };
 
   struct TextRect
@@ -138,7 +135,7 @@ private:
     ae::Str512 text;
     ae::Vec3 pos;
     ae::Vec2 size;
-    aeColor color;
+    ae::Color color;
   };
 
   uint32_t m_fontSize;

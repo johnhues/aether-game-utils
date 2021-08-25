@@ -47,7 +47,7 @@ public:
   void SetDistanceLimits( float min, float max );
 	void Update( const ae::Input* input, float dt ); // @TODO: This should take input values, not the whole input system
 
-	void Reset( ae::Vec3 focus, ae::Vec3 pos ); // Interupts refocus. Does not affect input mode.
+	void Reset( ae::Vec3 up, ae::Vec3 focus, ae::Vec3 pos ); // Interupts refocus. Does not affect input mode.
 	void SetDistanceFromFocus( float distance ); // Updates position. Does not affect input mode or refocus.
 	void Refocus( ae::Vec3 focus ); // Updates focus and position over time
 	void SetInputEnabled( bool enabled ); // True by default
@@ -66,6 +66,7 @@ private:
   
   float m_min = 1.0f;
   float m_max = ae::MaxValue< float >();
+  ae::Vec3 m_worldUp = ae::Vec3( 0.0f, 0.0f, 1.0f );
 
 	// Mode
 	bool m_inputEnabled = true;

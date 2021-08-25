@@ -55,7 +55,7 @@ void aeEditorCamera::Update( const ae::Input* input, float dt )
 	if ( input )
 	{
 		ae::Key panKey = ae::Key::LeftAlt;
-		mouseMovement = ae::Vec2( input->mouse.position - input->mousePrev.position );
+		mouseMovement = ae::Vec2( input->mouse.movement );
 		mousePan = input->mousePrev.middleButton && input->mouse.middleButton;
 		if ( !mousePan
 			&& input->mousePrev.leftButton && input->mouse.leftButton
@@ -150,7 +150,7 @@ void aeEditorCamera::Update( const ae::Input* input, float dt )
 	}
 }
 
-void aeEditorCamera::Reset( ae::Vec3 focus, ae::Vec3 pos )
+void aeEditorCamera::Reset( ae::Vec3 up, ae::Vec3 focus, ae::Vec3 pos )
 {
 	m_refocus = false;
 	m_refocusPos = focus;
@@ -205,6 +205,6 @@ void aeEditorCamera::m_Precalculate()
   m_forward.z = aeMath::Sin( m_pitch );
   m_offset = -m_forward;
 	m_offset *= m_dist;
-	m_right = m_forward.Cross( aeFloat3Up ).SafeNormalizeCopy();
+	m_right = m_forward.Cross( m_worldUp ).SafeNormalizeCopy();
 	m_up = m_right.Cross( m_forward ).SafeNormalizeCopy();
 }

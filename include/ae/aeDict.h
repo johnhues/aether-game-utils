@@ -27,10 +27,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeMath.h"
-#include "aeRender.h" // @TODO: Create aeColor.h
-#include "aeString.h"
-
-using aeDict = ae::Dict;
+#include "aether.h"
 
 #endif
