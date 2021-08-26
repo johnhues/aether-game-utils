@@ -59,7 +59,7 @@ int main()
     input.Pump();
     int scaleFactor = input.Get( ae::Key::Space ) ? 4 : 1;
     render.Activate();
-    render.Clear( aeColor::PicoDarkPurple() );
+    render.Clear( ae::Color::PicoDarkPurple() );
     spriteRender.Clear();
 
     ae::Matrix4 transform;
@@ -70,16 +70,16 @@ int main()
     // Front
     transform = ae::Matrix4::Translation( ae::Vec3( 0.5f, 0.5f, -0.5f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::PicoBlue() );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::PicoBlue() );
 
     // Back
     transform = ae::Matrix4::Translation( ae::Vec3( -0.5f, -0.5f, 0.5f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::PicoBlue() );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::PicoBlue() );
 
     // Middle
     transform = ae::Matrix4::Scaling(  ae::Vec3( 1.0f, 1.0f, 0.5f ) );
-    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::PicoWhite() );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::PicoWhite() );
 
     ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
     spriteRender.Render( screenTransform );

@@ -960,30 +960,30 @@ template < typename K, typename V, uint32_t N = 0 >
 class Map
 {
 public:
-  Map(); //!< Static map only (N > 0)
-  Map( ae::Tag pool ); //!< Dynamic map only (N == 0)
-  void Reserve( uint32_t total );
+  Map(); //!< Constructor for a map with static allocated storage (N > 0)
+  Map( ae::Tag pool ); //!< Constructor for a map with dynamically allocated storage (N == 0)
+  void Reserve( uint32_t count ); //!< Expands the map storage if necessary so a @count number of key/value pairs can be added without any allocations. Asserts if using static storage and @count is less than N.
   
   // Access elements by key
-  V& Set( const K& key, const V& value );
-  V& Get( const K& key );
-  const V& Get( const K& key ) const;
-  const V& Get( const K& key, const V& defaultValue ) const;
-  V* TryGet( const K& key );
-  const V* TryGet( const K& key ) const;
-  bool TryGet( const K& key, V* valueOut );
-  bool TryGet( const K& key, V* valueOut ) const;
+  V& Set( const K& key, const V& value ); //!< Add or replace a key/value pair in the map. Can be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the value across non-const operations.
+  V& Get( const K& key ); //!< Returns a modifiable reference to the value set with @key. Asserts when key/value pair is missing.
+  const V& Get( const K& key ) const; //!< Returns the value set with @key. Asserts when key/value pair is missing.
+  const V& Get( const K& key, const V& defaultValue ) const; //!< Returns the value set with @key.Returns @defaultValue otherwise when the key/value pair is missing.
+  V* TryGet( const K& key ); //!< Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
+  const V* TryGet( const K& key ) const; //!< Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
+  bool TryGet( const K& key, V* valueOut ); //!< Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
+  bool TryGet( const K& key, V* valueOut ) const; //!< Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
   
   // Remove elements
-  bool Remove( const K& key );
-  bool Remove( const K& key, V* valueOut );
-  void Clear();
+  bool Remove( const K& key ); //!< Find and remove a key/value pair from the map. Returns true.
+  bool Remove( const K& key, V* valueOut ); //!< Find and remove a key/value pair from the map. Returns true on success and a copy of the value is set to @valueOut.
+  void Clear(); //!< Remove all key/value pairs from the map. ae::Map::Length() will return 0 after calling this.
 
   // Access elements by index
-  const K& GetKey( uint32_t index ) const;
-  const V& GetValue( uint32_t index ) const;
-  V& GetValue( uint32_t index );
-  uint32_t Length() const;
+  const K& GetKey( uint32_t index ) const; //!< Returns the nth key in the map
+  const V& GetValue( uint32_t index ) const; //!< Returns the nth value in the map
+  V& GetValue( uint32_t index ); //!< Returns a modifiable reference to the nth value in the map
+  uint32_t Length() const; //!< Returns the number of key/value pairs in the map
 
 private:
   template < typename K2, typename V2, uint32_t N2 >
@@ -1074,6 +1074,28 @@ struct Rect
   float x, y, w, h;
 };
 inline std::ostream& operator<<( std::ostream& os, Rect r )
+{
+  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
+}
+
+//------------------------------------------------------------------------------
+// ae::RectInt class
+//------------------------------------------------------------------------------
+struct RectInt
+{
+  RectInt() = default;
+  RectInt( const RectInt& ) = default;
+  RectInt( int32_t x, int32_t y, int32_t w, int32_t h ) : x(x), y(y), w(w), h(h) {}
+
+  ae::Int2 GetPos() const { return ae::Int2( x, y ); }
+  ae::Int2 GetSize() const { return ae::Int2( w, h ); }
+  bool Contains( ae::Int2 pos ) const;
+  bool Intersects( RectInt other ) const;
+  void Expand( ae::Int2 pos ); //!< Zero size rect is expanded to 1x1 grid square by Expand()
+  
+  int32_t x, y, w, h;
+};
+inline std::ostream& operator<<( std::ostream& os, RectInt r )
 {
   return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
@@ -4961,9 +4983,9 @@ bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 }
 
 template < typename K, typename V, uint32_t N >
-void Map< K, V, N >::Reserve( uint32_t total )
+void Map< K, V, N >::Reserve( uint32_t count )
 {
-  m_entries.Reserve( total );
+  m_entries.Reserve( count );
 }
 
 template < typename K, typename V, uint32_t N >
@@ -7186,6 +7208,49 @@ bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
   else
   {
     return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::RectInt member functions
+//------------------------------------------------------------------------------
+bool RectInt::Contains( ae::Int2 pos ) const
+{
+  return !( pos.x < x || pos.x >= ( x + w ) || pos.y < y || pos.y >= ( y + h ) );
+}
+
+bool RectInt::Intersects( RectInt o ) const
+{
+  return !( o.x + o.w <= x || x + w <= o.x // No horizontal intersection
+    || o.y + o.h <= y || y + h <= o.y ); // No vertical intersection
+}
+
+void RectInt::Expand( ae::Int2 pos )
+{
+  if ( w == 0 )
+  {
+    x = pos.x;
+    w = 1;
+  }
+  else
+  {
+    // @NOTE: One past input value to expand width by one column
+    int x1 = ae::Max( x + w, pos.x + 1 );
+    x = ae::Min( x, pos.x );
+    w = x1 - x;
+  }
+
+  if ( h == 0 )
+  {
+    y = pos.y;
+    h = 1;
+  }
+  else
+  {
+    // @NOTE: One past input value to expand width by one row
+    int y1 = ae::Max( y + h, pos.y + 1 );
+    y = ae::Min( y, pos.y );
+    h = y1 - y;
   }
 }
 
@@ -9823,6 +9888,7 @@ void Shader::Destroy()
   AE_CHECK_GL_ERROR();
 
   m_attributes.Clear();
+  m_uniforms.Clear();
 
   if ( m_fragmentShader != 0 )
   {

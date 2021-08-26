@@ -16,8 +16,6 @@ Modules and utilities include:
 * Terrain
 
 Dependencies:
-* [GLEW](http://glew.sourceforge.net/) (Windows only)
-* [SDL2](https://www.libsdl.org/)
 * [Assimp](https://github.com/assimp/assimp)
 * [ENet](http://enet.bespin.org/)
 * [OpenAL](https://github.com/kcat/openal-soft)

@@ -41,7 +41,7 @@ public:
   aeInventoryGrid( ae::Tag pool );
   ~aeInventoryGrid();
 
-  void Set( T& value, aeRectInt rect );
+  void Set( T& value, ae::RectInt rect );
   void Set( T& value, ae::Int2* cells, uint32_t cellCount );
 
   T* TryGet( ae::Int2 pos );
@@ -82,7 +82,7 @@ aeInventoryGrid< T >::~aeInventoryGrid()
 }
 
 template < typename T >
-void aeInventoryGrid< T >::Set( T& value, aeRectInt rect )
+void aeInventoryGrid< T >::Set( T& value, ae::RectInt rect )
 {
   ae::Array< ae::Int2 > cells( m_pool, rect.w * rect.h );
   for ( uint32_t y = 0; y < rect.h; y++ )

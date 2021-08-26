@@ -158,7 +158,7 @@ void Player::Render( aeSpriteRender* spriteRender, ae::Texture2D* tex )
 {
   ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
   transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 1.0f ) );
-  spriteRender->AddSprite( tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), CanJump() ? aeColor::PicoRed() : aeColor::PicoBlue() );
+  spriteRender->AddSprite( tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
 }
 
 //------------------------------------------------------------------------------
@@ -248,7 +248,7 @@ int main()
     // Render
     //------------------------------------------------------------------------------
     render.Activate();
-    render.Clear( aeColor::PicoDarkBlue() );
+    render.Clear( ae::Color::PicoDarkBlue() );
     spriteRender.Clear();
 
     player.Render( &spriteRender, &tex );
@@ -257,12 +257,12 @@ int main()
     {
       for ( uint32_t x = 0; x < kMapWidth; x++ )
       {
-        aeColor color;
+        ae::Color color;
         switch ( world.GetTile( ae::Int2( x, y ) ) )
         {
-          case kTile_Air: color = aeColor::PicoPeach(); break;
-          case kTile_Water: color = aeColor::PicoPink(); break;
-          default: color = aeColor::PicoOrange(); break;
+          case kTile_Air: color = ae::Color::PicoPeach(); break;
+          case kTile_Water: color = ae::Color::PicoPink(); break;
+          default: color = ae::Color::PicoOrange(); break;
         }
         ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
         transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );

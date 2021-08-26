@@ -59,7 +59,7 @@ int main()
   {
     input.Pump();
     render.Activate();
-    render.Clear( aeColor::Green().ScaleRGB( 0.01f ) );
+    render.Clear( ae::Color::Green().ScaleRGB( 0.01f ) );
     //render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
     
     if ( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
@@ -75,7 +75,7 @@ int main()
     textToNdc *= ae::Matrix4::Scaling( ae::Vec3( textZoom, textZoom, 1.0f ) );
 
     // Format input text buffer
-    aeStr512 displayText( ">" );
+    ae::Str512 displayText( ">" );
     displayText.Append( input.GetText() );
     
     static int s_blink = 0;
@@ -95,7 +95,7 @@ int main()
     // Render text in top left corner
     int maxLineLength = render.GetWidth() / textRender.GetFontSize() - 2;
     ae::Vec3 textPos( textRender.GetFontSize() / 2.0f, textRender.GetFontSize() / -2.0f, 0.0f );
-    textRender.Add( textPos, ae::Vec2( (float)textRender.GetFontSize() ), displayText.c_str(), aeColor::Green(), maxLineLength, 0 );
+    textRender.Add( textPos, ae::Vec2( (float)textRender.GetFontSize() ), displayText.c_str(), ae::Color::Green(), maxLineLength, 0 );
     textRender.Render( textToNdc );
 
     render.Present();

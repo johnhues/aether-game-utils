@@ -142,68 +142,6 @@ namespace aeMath
 }
 
 //------------------------------------------------------------------------------
-// aeRect class
-//------------------------------------------------------------------------------
-struct aeRect
-{
-  aeRect() = default;
-  aeRect( const aeRect& ) = default;
-
-  aeRect( float x, float y, float w, float h ) : x(x), y(y), w(w), h(h) {}
-  aeRect( ae::Vec2 p0, ae::Vec2 p1 );
-  static aeRect Zero();
-
-  explicit operator ae::Vec4() const { return ae::Vec4( x, y, w, h ); }
-  
-  ae::Vec2 GetMin() const { return ae::Vec2( x, y ); }
-  ae::Vec2 GetMax() const { return ae::Vec2( x + w, y + h ); }
-  ae::Vec2 GetSize() const { return ae::Vec2( w, h ); }
-
-  bool Contains( ae::Vec2 pos ) const;
-  void Expand( ae::Vec2 pos ); // @NOTE: Zero size rect is maintained by Expand()
-
-  bool GetIntersection( const aeRect& other, aeRect* intersectionOut ) const;
-  
-  float x;
-  float y;
-  float w;
-  float h;
-};
-
-inline std::ostream& operator<<( std::ostream& os, aeRect r )
-{
-  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
-}
-
-//------------------------------------------------------------------------------
-// aeRectInt class
-//------------------------------------------------------------------------------
-struct aeRectInt
-{
-  aeRectInt() = default;
-  aeRectInt( const aeRectInt& ) = default;
-
-  aeRectInt( int32_t x, int32_t y, int32_t w, int32_t h ) : x(x), y(y), w(w), h(h) {}
-
-  static aeRectInt Zero();
-  ae::Int2 GetPos() const { return ae::Int2( x, y ); }
-  ae::Int2 GetSize() const { return ae::Int2( w, h ); }
-  bool Contains( ae::Int2 pos ) const;
-  bool Intersects( aeRectInt other ) const;
-  void Expand( ae::Int2 pos ); // @NOTE: Zero size rect is expanded to 1x1 grid square by Expand()
-  
-  int32_t x;
-  int32_t y;
-  int32_t w;
-  int32_t h;
-};
-
-inline std::ostream& operator<<( std::ostream& os, aeRectInt r )
-{
-  return os << r.x << " " << r.y << " " << r.w << " " << r.h;
-}
-
-//------------------------------------------------------------------------------
 // aePlane class
 //------------------------------------------------------------------------------
 class aePlane

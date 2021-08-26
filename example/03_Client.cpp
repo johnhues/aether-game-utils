@@ -87,7 +87,7 @@ int main()
 		AetherClient_SendAll( client );
 
 		render.Activate();
-		render.Clear( aeColor::PicoDarkPurple() );
+		render.Clear( ae::Color::PicoDarkPurple() );
 		render.Present();
 
 		timeStep.Wait();

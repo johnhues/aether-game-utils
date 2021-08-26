@@ -147,7 +147,7 @@ struct Object
   Object( const char* n, ae::Sdf* s ) : name( n ), shape( s ) {}
   void Serialize( aeBinaryStream* stream );
   
-  aeStr16 name = "";
+  ae::Str16 name = "";
   // Shape
   ae::Sdf* shape = nullptr;
   // Ray
@@ -197,7 +197,7 @@ void WriteObjects( ae::FileSystem* vfs, const ae::Array< Object* >& objects )
   {
     Object* object = objects[ i ];
     
-    aeStr16 type = "";
+    ae::Str16 type = "";
     if ( ae::Cast< ae::SdfBox >( object->shape ) ) { type = "box"; }
     else if ( ae::Cast< ae::SdfCylinder >( object->shape ) ) { type = "cylinder"; }
     else if ( ae::Cast< ae::SdfHeightmap >( object->shape ) ) { type = "heightmap"; }
@@ -234,7 +234,7 @@ bool ReadObjects( ae::FileSystem* vfs, ae::Terrain* terrain, ae::Image* heightma
   {
     Object* object = ae::New< Object >( TAG_EXAMPLE );
     
-    aeStr16 type = "";
+    ae::Str16 type = "";
     rStream.SerializeString( type );
     if ( type == "box" ) { object->shape = terrain->sdf.CreateSdf< ae::SdfBox >(); }
     else if ( type == "cylinder" ) { object->shape = terrain->sdf.CreateSdf< ae::SdfCylinder >(); }
@@ -318,7 +318,7 @@ int main()
   {
     p = ae::Vec3::ProjectPoint( worldToText, p );
     ae::Vec2 fontSize( (float)textRender.GetFontSize() );
-    textRender.Add( p, fontSize, str, aeColor::White(), 0, 0 );
+    textRender.Add( p, fontSize, str, ae::Color::White(), 0, 0 );
   };
 
   bool wireframe = false;
@@ -484,7 +484,7 @@ int main()
         for ( uint32_t i = 0; i < objects.Length(); i++ )
         {
           Object* object = objects[ i ];
-          aeStr32 displayName( "(#) #", i, object->name );
+          ae::Str32 displayName( "(#) #", i, object->name );
           if ( ImGui::Selectable( displayName.c_str(), object == currentObject ) )
           {
             currentObject = object;
@@ -520,7 +520,7 @@ int main()
     if ( !headless )
     {
       render.Activate();
-      render.Clear( aeColor::PicoDarkPurple() );
+      render.Clear( ae::Color::PicoDarkPurple() );
 
       ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
       ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.525f, render.GetAspectRatio(), 0.5f, 1000.0f );
@@ -530,9 +530,9 @@ int main()
       textToNdc *= ae::Matrix4::Translation( ae::Vec3( render.GetWidth() / -2.0f, render.GetHeight() / -2.0f, 0.0f ) );
       worldToText = textToNdc.GetInverse() * worldToProj;
 
-      aeColor top = aeColor::SRGB8( 46, 65, 35 );
-      aeColor side = aeColor::SRGB8( 84, 84, 74 );
-      aeColor path = aeColor::SRGB8( 64, 64, 54 );
+      ae::Color top = ae::Color::SRGB8( 46, 65, 35 );
+      ae::Color side = ae::Color::SRGB8( 84, 84, 74 );
+      ae::Color path = ae::Color::SRGB8( 64, 64, 54 );
       ae::UniformList uniformList;
       uniformList.Set( "u_worldToProj", worldToProj );
       if ( wireframe )
@@ -656,7 +656,7 @@ int main()
           else
           {
             ae::Vec3 endPos = object->raySrc + object->rayDir * object->rayLength;
-            debug.AddLine( object->raySrc, endPos, aeColor::PicoDarkGray() );
+            debug.AddLine( object->raySrc, endPos, ae::Color::PicoDarkGray() );
           }
         }
       }
@@ -677,7 +677,7 @@ int main()
             gizmoTransform.data
           );
 
-          debug.AddOBB( gizmoTransform, aeColor::Green() );
+          debug.AddOBB( gizmoTransform, ae::Color::Green() );
         
           if ( gizmoClicked )
           {

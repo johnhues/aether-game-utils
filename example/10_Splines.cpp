@@ -68,7 +68,7 @@ int main()
   {
     input.Pump();
     render.Activate();
-    render.Clear( aeColor::Black() );
+    render.Clear( ae::Color::Black() );
     spriteRender.Clear();
 
     ae::Matrix4 transform;
@@ -77,7 +77,7 @@ int main()
     {
       transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::Red() );
+      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::Red() );
     }
 
     float splineLen = spline.GetLength();
@@ -85,7 +85,7 @@ int main()
     {
       transform = ae::Matrix4::Translation( spline.GetPoint( d ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
-      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::Blue() );
+      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::Blue() );
     }
 
     t += timeStep.GetTimeStep();
@@ -95,7 +95,7 @@ int main()
     }
     transform = ae::Matrix4::Translation( spline.GetPoint( t ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
-    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), aeColor::Green() );
+    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::Green() );
 
     ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
     spriteRender.Render( screenTransform );

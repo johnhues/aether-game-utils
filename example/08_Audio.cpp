@@ -90,15 +90,15 @@ int main()
 			hitFade = 1.0f;
 		}
 
-		aeColor color = aeColor::PicoDarkGray();
+		ae::Color color = ae::Color::PicoDarkGray();
 		if ( musicPlaying )
 		{
-			aeColor beatColors[] =
+			ae::Color beatColors[] =
 			{
-				aeColor::PicoBlue(),
-				aeColor::PicoRed(),
-				aeColor::PicoOrange(),
-				aeColor::PicoDarkPurple()
+				ae::Color::PicoBlue(),
+				ae::Color::PicoRed(),
+				ae::Color::PicoOrange(),
+				ae::Color::PicoDarkPurple()
 			};
 
 			uint32_t beat = musicTime / 0.75f;
@@ -108,7 +108,7 @@ int main()
 		float hitOpacity = aeMath::Min( 1.0f, hitFade / 0.8f );
 		hitOpacity *= hitOpacity;
 		render.Activate();
-		render.Clear( color.Lerp( aeColor::PicoWhite(), hitOpacity * 0.8f ) );
+		render.Clear( color.Lerp( ae::Color::PicoWhite(), hitOpacity * 0.8f ) );
 		render.Present();
 		
 		timeStep.Wait();

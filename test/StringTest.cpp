@@ -48,11 +48,11 @@ TEST_CASE( "string construction should set length correctly", "[aeString]" )
 
 TEST_CASE( "strings of the same length can be compared alphabetically", "[aeString]" )
 {
-  aeStr32 str0 = "abc";
-  aeStr32 str1 = "xyz";
+  ae::Str32 str0 = "abc";
+  ae::Str32 str1 = "xyz";
   const char* str2 = "abc";
-  aeStr32 str3 = "xyz";
-  aeStr32 str4 = "abc";
+  ae::Str32 str3 = "xyz";
+  ae::Str32 str4 = "abc";
   const char* str5 = "xyz";
 
   SECTION( "equivalency comparison" )
@@ -123,12 +123,12 @@ TEST_CASE( "strings of the same length can be compared alphabetically", "[aeStri
 
 TEST_CASE( "strings of different lengths can be compared alphabetically", "[aeString]" )
 {
-  aeStr32 str0 = "abcd";
-  aeStr32 str1 = "xyz";
-  aeStr32 str2 = "abcd";
+  ae::Str32 str0 = "abcd";
+  ae::Str32 str1 = "xyz";
+  ae::Str32 str2 = "abcd";
   const char* str3 = "xyz";
   const char* str4 = "abcd";
-  aeStr32 str5 = "xyz";
+  ae::Str32 str5 = "xyz";
 
   SECTION( "equivalency comparison" )
   {
