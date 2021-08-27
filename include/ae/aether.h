@@ -2035,6 +2035,52 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::AudioData class
+//------------------------------------------------------------------------------
+class AudioData
+{
+public:
+  AudioData();
+  void Initialize( const char* filePath );
+  void Destroy();
+
+  ae::Str64 name;
+  uint32_t buffer;
+  float length;
+};
+
+//------------------------------------------------------------------------------
+// ae::Audio class
+//------------------------------------------------------------------------------
+class Audio
+{
+public:
+  void Initialize( uint32_t musicChannels, uint32_t sfxChannels );
+  void Terminate();
+
+  void SetVolume( float volume );
+  void PlayMusic( const AudioData* audioFile, float volume, uint32_t channel );
+  void PlaySfx( const AudioData* audioFile, float volume, int32_t priority ); //!< Lower priority values interrupt sfx with higher values
+  void StopMusic( uint32_t channel );
+  void StopAllSfx();
+
+  uint32_t GetMusicChannelCount() const;
+  uint32_t GetSfxChannelCount() const;
+  void Log();
+
+private:
+  struct Channel
+  {
+    Channel();
+    uint32_t source;
+    int32_t priority;
+    const AudioData* resource;
+  };
+  ae::Array< Channel > m_musicChannels = AE_ALLOC_TAG_AUDIO;
+  ae::Array< Channel > m_sfxChannels = AE_ALLOC_TAG_AUDIO;
+};
+
+//------------------------------------------------------------------------------
 // ae::BinaryStream class
 //------------------------------------------------------------------------------
 class BinaryStream
@@ -5705,6 +5751,7 @@ T* ae::Cast( C* obj )
   #pragma warning( disable : 4244 )
   #pragma warning( disable : 4800 )
 #elif _AE_APPLE_
+  #define GL_SILENCE_DEPRECATION
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
@@ -5721,7 +5768,6 @@ T* ae::Cast( C* obj )
   #include "processthreadsapi.h" // For GetCurrentProcessId()
   #include <filesystem> // @HACK: Shouldn't need this just for Windows
 #elif _AE_APPLE_
-  #define GL_SILENCE_DEPRECATION
   #include <sys/sysctl.h>
   #include <unistd.h>
   #ifdef AE_USE_MODULES
@@ -5730,9 +5776,12 @@ T* ae::Cast( C* obj )
     @import Cocoa;
     @import CoreFoundation;
     @import OpenGL;
+    @import OpenAL;
   #else
     #include <Cocoa/Cocoa.h>
     #include <Carbon/Carbon.h>
+    #include <OpenAL/al.h>
+    #include <OpenAL/alc.h>
   #endif
 #elif _AE_LINUX_
   #include <unistd.h>
@@ -6261,7 +6310,7 @@ Quaternion Matrix4::GetRotation() const
 
   float trace = m00 + m11 + m22;
   if ( trace > 0.0f )
-  { 
+  {
     float s = sqrt( trace + 1.0f ) * 2.0f;
     return Quaternion(
       ( m21 - m12 ) / s,
@@ -6271,7 +6320,7 @@ Quaternion Matrix4::GetRotation() const
     );
   }
   else if ( ( m00 > m11 ) && ( m00 > m22 ) )
-  { 
+  {
     float s = sqrt( 1.0f + m00 - m11 - m22 ) * 2.0f;
     return Quaternion(
       0.25f * s,
@@ -6281,7 +6330,7 @@ Quaternion Matrix4::GetRotation() const
     );
   }
   else if ( m11 > m22 )
-  { 
+  {
     float s = sqrt( 1.0f + m11 - m00 - m22 ) * 2.0f;
     return Quaternion(
       ( m01 + m10 ) / s,
@@ -6291,7 +6340,7 @@ Quaternion Matrix4::GetRotation() const
     );
   }
   else
-  { 
+  {
     float s = sqrt( 1.0f + m22 - m00 - m11 ) * 2.0f;
     return Quaternion(
       ( m02 + m20 ) / s,
@@ -10786,7 +10835,7 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
       break;
       
       // TODO: fix these constants, but they differ on ES2/3 and GL
-      // WebGL1 they require loading an extension (if present) to get at the constants.    
+      // WebGL1 they require loading an extension (if present) to get at the constants.
     case Format::RGB8_SRGB:
     // ignore type
       glInternalFormat = GL_SRGB8;
@@ -10938,7 +10987,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
       "AE_COLOR.a = color.a;"
 #else
       "AE_COLOR = color;"
-#endif      
+#endif
     "}";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 
@@ -11731,6 +11780,383 @@ bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointC
     return true;
   }
   return false;
+}
+
+//------------------------------------------------------------------------------
+// Helpers
+//------------------------------------------------------------------------------
+void _CheckALError()
+{
+  const char* errStr = "UNKNOWN_ERROR";
+  switch ( alGetError() )
+  {
+  case AL_NO_ERROR: return;
+  case AL_INVALID_NAME: errStr = "AL_INVALID_NAME"; break;
+  case AL_INVALID_ENUM: errStr = "AL_INVALID_ENUM"; break;
+  case AL_INVALID_VALUE: errStr = "AL_INVALID_VALUE"; break;
+  case AL_INVALID_OPERATION: errStr = "AL_INVALID_OPERATION"; break;
+  case AL_OUT_OF_MEMORY: errStr = "AL_OUT_OF_MEMORY"; break;
+  default: break;
+  }
+  AE_LOG( "OpenAL Error: #", errStr );
+  AE_FAIL();
+}
+
+void _LoadWavFile( const char* fileName, ALuint* buffer, float* length )
+{
+  struct ChunkHeader
+  {
+    char chunkId[ 4 ];
+    uint32_t chunkSize;
+  };
+
+  struct FormatChunk
+  {
+    uint16_t formatCode;
+    uint16_t numChannels;
+    uint32_t sampleRate;
+    uint32_t byteRate;
+    uint16_t blockAlign;
+    uint16_t bitsPerSample;
+    uint16_t dwChannelMask;
+    uint8_t subformat[ 16 ];
+  };
+
+  struct RiffChunk
+  {
+    char waveId[ 4 ];
+  };
+
+  FormatChunk wave_format;
+  bool hasReadFormat = false;
+  uint32_t dataSize = 0;
+
+  uint32_t fileSize = ae::FileSystem::GetSize( fileName );
+  AE_ASSERT_MSG( fileSize, "Could not open wav file: #", fileName );
+
+  ae::Scratch< uint8_t > fileScratch( AE_ALLOC_TAG_AUDIO, fileSize );
+  uint8_t* fileBuffer = fileScratch.Data();
+  ae::FileSystem::Read( fileName, fileBuffer, fileSize );
+
+  ChunkHeader header;
+
+  uint32_t fileOffset = 0;
+  memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
+  fileOffset += sizeof(header);
+  while ( fileOffset < fileSize )
+  {
+    if ( memcmp( header.chunkId, "RIFF", 4 ) == 0 )
+    {
+      RiffChunk riff;
+      memcpy( &riff, fileBuffer + fileOffset, sizeof(riff) );
+      fileOffset += sizeof(riff);
+      AE_ASSERT( memcmp( riff.waveId, "WAVE", 4 ) == 0 );
+    }
+    else if ( memcmp( header.chunkId, "fmt ", 4 ) == 0 )
+    {
+      memcpy( &wave_format, fileBuffer + fileOffset, header.chunkSize );
+      fileOffset += header.chunkSize;
+      hasReadFormat = true;
+    }
+    else if ( memcmp( header.chunkId, "data", 4 ) == 0 )
+    {
+      AE_ASSERT( hasReadFormat );
+      AE_ASSERT_MSG( dataSize == 0, "Combining WAV data chunks is currently not supported" );
+
+      uint8_t* data = new uint8_t[ header.chunkSize ];
+      memcpy( data, fileBuffer + fileOffset, header.chunkSize );
+      fileOffset += header.chunkSize;
+
+      ALsizei size = header.chunkSize;
+      ALsizei frequency = wave_format.sampleRate;
+      dataSize = size;
+
+      ALenum format;
+      if ( wave_format.numChannels == 1 )
+      {
+        if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_MONO8; }
+        else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_MONO16; }
+      }
+      else if ( wave_format.numChannels == 2 )
+      {
+        if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_STEREO8; }
+        else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_STEREO16; }
+      }
+      alGenBuffers( 1, buffer );
+      alBufferData( *buffer, format, (void*)data, size, frequency );
+      delete[] data;
+    }
+    else
+    {
+      fileOffset += header.chunkSize;
+    }
+
+    memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
+    fileOffset += sizeof(header);
+  }
+
+  _CheckALError();
+
+  AE_ASSERT( hasReadFormat );
+  AE_ASSERT( dataSize );
+
+  *length = dataSize / ( wave_format.sampleRate * wave_format.numChannels * wave_format.bitsPerSample / 8.0f );
+}
+
+//------------------------------------------------------------------------------
+// ae::AudioData member functions
+//------------------------------------------------------------------------------
+AudioData::AudioData()
+{
+  name = "";
+  buffer = 0;
+  length = 0.0f;
+}
+
+void AudioData::Initialize( const char* filePath )
+{
+  AE_ASSERT( !buffer );
+  this->name = filePath; // @TODO: Should just be file name or file hash
+  _LoadWavFile( filePath, &this->buffer, &this->length );
+  AE_ASSERT( buffer );
+}
+
+void AudioData::Destroy()
+{
+  AE_ASSERT( buffer );
+
+  alDeleteBuffers( 1, &this->buffer );
+  _CheckALError();
+
+  *this = AudioData();
+}
+
+//------------------------------------------------------------------------------
+// ae::Audio::Channel member functions
+//------------------------------------------------------------------------------
+Audio::Channel::Channel()
+{
+  source = 0;
+  priority = ae::MaxValue< int32_t >();
+  resource = nullptr;
+}
+
+//------------------------------------------------------------------------------
+// ae::Audio member functions
+//------------------------------------------------------------------------------
+void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
+{
+  ALCdevice* device = alcOpenDevice( nullptr );
+  AE_ASSERT( device );
+  ALCcontext* ctx = alcCreateContext( device, nullptr );
+  alcMakeContextCurrent( ctx );
+  AE_ASSERT( ctx );
+  _CheckALError();
+  
+  ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels, 0 );
+  alGenSources( (ALuint)sources.Length(), sources.Begin() );
+
+  m_musicChannels.Reserve( musicChannels );
+  for ( uint32_t i = 0; i < musicChannels; i++ )
+  {
+    Channel* channel = &m_musicChannels.Append( Channel() );
+    channel->source = sources[ i ];
+    alGenSources( (ALuint)1, &channel->source );
+    alSourcef( channel->source, AL_PITCH, 1 );
+    alSourcef( channel->source, AL_GAIN, 1.0f );
+    alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
+    alSourcei( channel->source, AL_LOOPING, AL_TRUE );
+  }
+
+  m_sfxChannels.Reserve( sfxChannels );
+  for ( uint32_t i = 0; i < sfxChannels; i++ )
+  {
+    Channel* channel = &m_sfxChannels.Append( Channel() );
+    channel->source = sources[ musicChannels + i ];
+    alSourcef( channel->source, AL_PITCH, 1 );
+    alSourcef( channel->source, AL_GAIN, 1.0f );
+    alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
+    alSourcei( channel->source, AL_LOOPING, AL_FALSE );
+  }
+
+  ALfloat listenerOri[] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
+  alListener3f( AL_POSITION, 0, 0, 1.0f );
+  alListenerfv( AL_ORIENTATION, listenerOri );
+  alListenerf( AL_GAIN, 1.0f );
+
+  _CheckALError();
+}
+
+void Audio::Terminate()
+{
+  for ( uint32_t i = 0; i < m_musicChannels.Length(); i++ )
+  {
+    Channel* channel = &m_musicChannels[ i ];
+    alDeleteSources( 1, &channel->source );
+    channel->source = -1;
+  }
+
+  for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
+  {
+    Channel* channel = &m_sfxChannels[ i ];
+    alDeleteSources( 1, &channel->source );
+    channel->source = -1;
+  }
+
+  ALCcontext* ctx = alcGetCurrentContext();
+  ALCdevice* device = alcGetContextsDevice( ctx );
+  alcMakeContextCurrent( nullptr );
+  alcDestroyContext( ctx );
+  alcCloseDevice( device );
+}
+
+void Audio::SetVolume( float volume )
+{
+  volume = ae::Clip01( volume );
+  alListenerf( AL_GAIN, volume );
+}
+
+void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channel )
+{
+  AE_ASSERT( audioFile );
+  if ( channel >= m_musicChannels.Length() )
+  {
+    return;
+  }
+
+  Channel* musicChannel = &m_musicChannels[ channel ];
+
+  ALint state;
+  alGetSourcei( musicChannel->source, AL_SOURCE_STATE, &state );
+  if ( ( audioFile == musicChannel->resource ) && state == AL_PLAYING )
+  {
+    return;
+  }
+
+  if ( state == AL_PLAYING )
+  {
+    alSourceStop( musicChannel->source );
+  }
+
+  alSourcei( musicChannel->source, AL_BUFFER, audioFile->buffer );
+  alSourcef( musicChannel->source, AL_GAIN, volume );
+  alSourcePlay( musicChannel->source );
+  _CheckALError();
+}
+
+void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority )
+{
+  ALint state;
+  AE_ASSERT( audioFile );
+
+  Channel* leastPriorityChannel = nullptr;
+  Channel* unusedChannel = nullptr;
+  for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
+  {
+    Channel* sfxChannel = &m_sfxChannels[ i ];
+    if ( !leastPriorityChannel || sfxChannel->priority >= leastPriorityChannel->priority )
+    {
+      leastPriorityChannel = sfxChannel;
+    }
+
+    if ( !unusedChannel )
+    {
+      alGetSourcei( sfxChannel->source, AL_SOURCE_STATE, &state );
+      if ( state != AL_PLAYING )
+      {
+        unusedChannel = sfxChannel;
+      }
+    }
+  }
+  AE_ASSERT( leastPriorityChannel );
+
+  Channel* currentChannel = nullptr;
+  if ( unusedChannel )
+  {
+    currentChannel = unusedChannel;
+  }
+  else if ( !leastPriorityChannel || leastPriorityChannel->priority < priority )
+  {
+    return;
+  }
+  else
+  {
+    currentChannel = leastPriorityChannel;
+  }
+  AE_ASSERT( currentChannel );
+
+  alSourceStop( currentChannel->source );
+  alGetSourcei( currentChannel->source, AL_SOURCE_STATE, &state );
+  AE_ASSERT( state != AL_PLAYING );
+
+  currentChannel->resource = audioFile;
+
+  alSourcei( currentChannel->source, AL_BUFFER, audioFile->buffer );
+  alSourcef( currentChannel->source, AL_GAIN, volume );
+  alSourcePlay( currentChannel->source );
+  _CheckALError();
+  currentChannel->priority = priority;
+
+  alGetSourcei( currentChannel->source, AL_SOURCE_STATE, &state );
+}
+
+void Audio::StopMusic( uint32_t channel )
+{
+  if ( channel < m_musicChannels.Length() )
+  {
+    alSourceStop( m_musicChannels[ channel ].source );
+  }
+}
+
+void Audio::StopAllSfx()
+{
+  for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
+  {
+    alSourceStop( m_sfxChannels[ i ].source );
+  }
+}
+
+uint32_t Audio::GetMusicChannelCount() const
+{
+  return m_musicChannels.Length();
+}
+
+uint32_t Audio::GetSfxChannelCount() const
+{
+  return m_sfxChannels.Length();
+}
+
+// @TODO: Should return a string with current state of audio channels
+void Audio::Log()
+{
+  for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
+  {
+    ALint state = 0;
+    const Channel* channel = &m_sfxChannels[ i ];
+    alGetSourcei( channel->source, AL_SOURCE_STATE, &state );
+
+    if ( state == AL_PLAYING )
+    {
+      AE_ASSERT( channel->resource );
+
+      float playOffset = 0.0f;
+      alGetSourcef( channel->source, AL_SEC_OFFSET, &playOffset );
+
+      float playLength = channel->resource->length;
+
+      const char* soundName = strrchr( channel->resource->name.c_str(), '/' );
+      soundName = soundName ? soundName + 1 : channel->resource->name.c_str();
+      const char* soundNameEnd = strrchr( channel->resource->name.c_str(), '.' );
+      soundNameEnd = soundNameEnd ? soundNameEnd : soundName + strlen( soundName );
+      uint32_t soundNameLen = (uint32_t)(soundNameEnd - soundName);
+
+      char buffer[ 512 ];
+      sprintf( buffer, "channel:%u name:%.*s offset:%.2fs length:%.2fs", i, soundNameLen, soundName, playOffset, playLength );
+      AE_LOG( buffer );
+    }
+  }
+
+  _CheckALError();
 }
 
 //------------------------------------------------------------------------------

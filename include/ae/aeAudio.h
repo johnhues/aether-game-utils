@@ -28,56 +28,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeString.h"
-
-//------------------------------------------------------------------------------
-// aeAudioData class
-//------------------------------------------------------------------------------
-class aeAudioData
-{
-public:
-  aeAudioData();
-  void Initialize( const char* filePath );
-  void Destroy();
-
-  ae::Str64 name;
-  uint32_t buffer;
-  float length;
-};
-
-//------------------------------------------------------------------------------
-// aeAudio class
-//------------------------------------------------------------------------------
-class aeAudio
-{
-public:
-  void Initialize( uint32_t musicChannels, uint32_t sfxChannels );
-  void Terminate();
-
-  void SetVolume( float volume );
-
-  void PlayMusic( const aeAudioData* audioFile, float volume, uint32_t channel );
-  void PlaySfx( const aeAudioData* audioFile, float volume, int32_t priority ); // @NOTE: Lower priority values interrupt sfx with higher values
-
-  void StopMusic( uint32_t channel );
-  void StopAllSfx();
-
-  uint32_t GetMusicChannelCount() const;
-  uint32_t GetSfxChannelCount() const;
-
-  void Log();
-
-private:
-  struct aeAudioChannel
-  {
-    aeAudioChannel();
-    uint32_t source;
-    int32_t priority;
-    const aeAudioData* resource;
-  };
-
-  ae::Array< aeAudioChannel > m_musicChannels = AE_ALLOC_TAG_AUDIO;
-  ae::Array< aeAudioChannel > m_sfxChannels = AE_ALLOC_TAG_AUDIO;
-};
+#include "aether.h"
 
 #endif

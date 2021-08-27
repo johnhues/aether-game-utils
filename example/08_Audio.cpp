@@ -35,7 +35,7 @@ int main()
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	aeAudio audio;
+	ae::Audio audio;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "audio" );
@@ -46,7 +46,7 @@ int main()
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	aeAudioData music, sfx;
+	ae::AudioData music, sfx;
 	music.Initialize( "music.wav" );
 	sfx.Initialize( "sound.wav" );
 
