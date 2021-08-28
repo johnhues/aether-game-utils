@@ -1689,7 +1689,7 @@ public:
   Shader();
   ~Shader();
   void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
-  void Destroy();
+  void Terminate();
   void SetBlending( bool enabled ) { m_blending = enabled; }
   void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
   void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
@@ -1724,37 +1724,39 @@ class VertexData
 {
 public:
   // Constants
-  enum class Usage
-  {
-    Dynamic,
-    Static
-  };
-  enum class Type
-  {
-    UInt8,
-    UInt16,
-    UInt32,
-    NormalizedUInt8,
-    NormalizedUInt16,
-    NormalizedUInt32,
-    Float
-  };
-  enum class Primitive
-  {
-    Point,
-    Line,
-    Triangle
-  };
-
-  // Interface
+  enum class Usage { Dynamic, Static };
+  enum class Type { UInt8, UInt16, UInt32, NormalizedUInt8, NormalizedUInt16, NormalizedUInt32, Float };
+  enum class Primitive { Point, Line, Triangle };
+  
+  // Initialization
   VertexData() = default;
   ~VertexData();
   void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage );
   void AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset );
-  void Destroy();
-
+  void Terminate();
+  
+  //! Sets current vertex data. Equivalent to calling Clear() then Append(). After calling this function you must call Upload() once before calling Render().
   void SetVertices( const void* vertices, uint32_t count );
+  //! Sets current index data. Equivalent to calling Clear() then Append(). After calling this function you must call Upload() once before calling Render().
   void SetIndices( const void* indices, uint32_t count );
+  //! Add vertices to end of existing array. After calling this function you must call Upload() once before calling Render().
+  void AppendVertices( const void* vertices, uint32_t count );
+  //! Add indices to end of existing array. Given indices are each offset based on @indexOffset. It could be useful to use GetVertexCount() as a parameter to @indexOffset
+  //! before appending new vertices. After calling this function you must call Upload() once before calling Render().
+  void AppendIndices( const void* indices, uint32_t count, uint32_t indexOffset );
+  //! Sets dynamic vertex count to 0. Has no effect if vertices are using VertexData::Usage::Static.
+  void ClearVertices();
+  //! Sets dynamic index count to 0. Has no effect if indices are using VertexData::Usage::Static.
+  void ClearIndices();
+  
+  //! Prepares buffers for rendering. Call after Setting/Appending vertices and indices, but before Render(). This will result in a no-op if no changes have been made.
+  void Upload();
+  //! Renders all vertex data
+  void Render( const Shader* shader, const UniformList& uniforms ) const;
+  //! Renders vertex data range
+  void Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const;
+  
+  // Get info
   const void* GetVertices() const;
   const void* GetIndices() const;
   uint32_t GetVertexSize() const { return m_vertexSize; }
@@ -1765,10 +1767,8 @@ public:
   uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
   uint32_t GetAttributeCount() const { return m_attributes.Length(); }
   VertexData::Primitive GetPrimitiveType() const { return m_primitive; }
-
-  void Render( const Shader* shader, const UniformList& uniforms ) const;
-  void Render( const Shader* shader, uint32_t primitiveCount, const UniformList& uniforms ) const;
   
+  // Implementation
 private:
   struct Attribute
   {
@@ -1785,21 +1785,26 @@ private:
   void m_SetVertices( const void* vertices, uint32_t count );
   void m_SetIndices( const void* indices, uint32_t count );
   const Attribute* m_GetAttributeByName( const char* name ) const;
-  uint32_t m_array = 0;
-  uint32_t m_vertices = ~0;
-  uint32_t m_indices = ~0;
-  uint32_t m_vertexCount = 0;
-  uint32_t m_indexCount = 0;
-  uint32_t m_maxVertexCount = 0;
-  uint32_t m_maxIndexCount = 0;
+  // Params
+  uint32_t m_vertexSize = 0;
+  uint32_t m_indexSize = 0;
   VertexData::Primitive m_primitive = (VertexData::Primitive)-1;
   VertexData::Usage m_vertexUsage = (VertexData::Usage)-1;
   VertexData::Usage m_indexUsage = (VertexData::Usage)-1;
   ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
-  uint32_t m_vertexSize = 0;
-  uint32_t m_indexSize = 0;
+  uint32_t m_maxVertexCount = 0;
+  uint32_t m_maxIndexCount = 0;
+  // Dynamic state
+  uint32_t m_vertexCount = 0;
+  uint32_t m_indexCount = 0;
   void* m_vertexReadable = nullptr;
   void* m_indexReadable = nullptr;
+  bool m_vertexDirty = false;
+  bool m_indexDirty = false;
+  // System resources
+  uint32_t m_array = 0;
+  uint32_t m_vertices = ~0;
+  uint32_t m_indices = ~0;
 };
 
 //------------------------------------------------------------------------------
@@ -1859,7 +1864,7 @@ public:
   Texture() = default;
   virtual ~Texture();
   void Initialize( uint32_t target );
-  virtual void Destroy();
+  virtual void Terminate();
   uint32_t GetTexture() const { return m_texture; }
   uint32_t GetTarget() const { return m_target; }
 
@@ -1879,7 +1884,7 @@ class Texture2D : public Texture
 {
 public:
   void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps );
-  void Destroy() override;
+  void Terminate() override;
 
   uint32_t GetWidth() const { return m_width; }
   uint32_t GetHeight() const { return m_height; }
@@ -1900,7 +1905,7 @@ public:
   void Initialize( uint32_t width, uint32_t height );
   void AddTexture( Texture::Filter filter, Texture::Wrap wrap );
   void AddDepth( Texture::Filter filter, Texture::Wrap wrap );
-  void Destroy();
+  void Terminate();
 
   void Activate();
   void Clear( Color color );
@@ -2042,7 +2047,7 @@ class AudioData
 public:
   AudioData();
   void Initialize( const char* filePath );
-  void Destroy();
+  void Terminate();
 
   ae::Str64 name;
   uint32_t buffer;
@@ -9815,12 +9820,12 @@ Shader::Shader()
 
 Shader::~Shader()
 {
-  Destroy();
+  Terminate();
 }
 
 void Shader::Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount )
 {
-  Destroy();
+  Terminate();
   AE_ASSERT( !m_program );
   
   m_program = glCreateProgram();
@@ -9871,7 +9876,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
     {
       AE_FAIL();
     }
-    Destroy();
+    Terminate();
   }
 
   GLint attribCount = 0;
@@ -9932,7 +9937,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
   AE_CHECK_GL_ERROR();
 }
 
-void Shader::Destroy()
+void Shader::Terminate()
 {
   AE_CHECK_GL_ERROR();
 
@@ -10257,12 +10262,12 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 //------------------------------------------------------------------------------
 VertexData::~VertexData()
 {
-  Destroy();
+  Terminate();
 }
 
 void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage )
 {
-  Destroy();
+  Terminate();
 
   AE_ASSERT( m_vertexSize == 0 );
   AE_ASSERT( vertexSize );
@@ -10281,7 +10286,7 @@ void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t m
   glBindVertexArray( m_array );
 }
 
-void VertexData::Destroy()
+void VertexData::Terminate()
 {
   if ( m_vertexReadable )
   {
@@ -10305,26 +10310,27 @@ void VertexData::Destroy()
     glDeleteBuffers( 1, &m_indices );
   }
   
-  m_array = 0;
-  m_vertices = ~0;
-  m_indices = ~0;
-  m_vertexCount = 0;
-  m_indexCount = 0;
-
-  m_maxVertexCount = 0;
-  m_maxIndexCount = 0;
-
+  m_attributes.Clear();
+  
+  // Params
+  m_vertexSize = 0;
+  m_indexSize = 0;
   m_primitive = (VertexData::Primitive)-1;
   m_vertexUsage = (VertexData::Usage)-1;
   m_indexUsage = (VertexData::Usage)-1;
-
-  m_attributes.Clear();
-
-  m_vertexSize = 0;
-  m_indexSize = 0;
-
+  m_maxVertexCount = 0;
+  m_maxIndexCount = 0;
+  // Dynamic state
+  m_vertexCount = 0;
+  m_indexCount = 0;
   m_vertexReadable = nullptr;
   m_indexReadable = nullptr;
+  m_vertexDirty = false;
+  m_indexDirty = false;
+  // System resources
+  m_array = 0;
+  m_vertices = ~0;
+  m_indices = ~0;
 }
 
 void VertexData::AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset )
@@ -10359,13 +10365,12 @@ void VertexData::m_SetVertices( const void* vertices, uint32_t count )
     AE_ASSERT_MSG( count <= (uint64_t)1 << ( m_indexSize * 8 ), "Vertex count (#) too high for index of size #", count, m_indexSize );
   }
   
+  m_vertexDirty = false;
+  
   if( m_vertexUsage == Usage::Static )
   {
     AE_ASSERT( count );
-    AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
     AE_ASSERT( m_vertices == ~0 );
-
-    m_vertexCount = count;
 
     glGenBuffers( 1, &m_vertices );
     glBindVertexArray( m_array );
@@ -10376,8 +10381,6 @@ void VertexData::m_SetVertices( const void* vertices, uint32_t count )
   
   if( m_vertexUsage == Usage::Dynamic )
   {
-    m_vertexCount = count;
-
     if ( !m_vertexCount )
     {
       return;
@@ -10406,13 +10409,12 @@ void VertexData::m_SetIndices( const void* indices, uint32_t count )
   AE_ASSERT( count % 3 == 0 );
   AE_ASSERT( count <= m_maxIndexCount );
   
+  m_indexDirty = false;
+  
   if( m_indexUsage == Usage::Static )
   {
     AE_ASSERT( count );
-    AE_ASSERT( !m_indexCount );
     AE_ASSERT( m_indices == ~0 );
-
-    m_indexCount = count;
 
     glGenBuffers( 1, &m_indices );
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
@@ -10422,8 +10424,6 @@ void VertexData::m_SetIndices( const void* indices, uint32_t count )
   
   if( m_indexUsage == Usage::Dynamic )
   {
-    m_indexCount = count;
-
     if ( !m_indexCount )
     {
       return;
@@ -10444,32 +10444,44 @@ void VertexData::m_SetIndices( const void* indices, uint32_t count )
   AE_FAIL();
 }
 
-void VertexData::SetVertices( const void *vertices, uint32_t count )
+void VertexData::SetVertices( const void* vertices, uint32_t count )
 {
+  // State validation
   AE_ASSERT( m_vertexSize );
-  if ( m_vertexUsage == Usage::Static )
+  if ( !m_vertexCount && !count )
   {
-    m_SetVertices( vertices, count );
-    AE_ASSERT( !m_vertexReadable );
-    m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_vertexSize );
+    return;
+  }
+  
+  // Set vertices
+  if ( count )
+  {
+    if ( m_vertexUsage == VertexData::Usage::Static )
+    {
+      AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
+    }
+    
+    if ( !m_vertexReadable )
+    {
+      // @TODO: Realloc or use array
+      m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxVertexCount * m_vertexSize );
+    }
     memcpy( m_vertexReadable, vertices, count * m_vertexSize );
   }
-  else if ( m_vertexUsage == Usage::Dynamic )
-  {
-    m_SetVertices( vertices, count );
-    if ( !m_vertexReadable ) { m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxVertexCount * m_vertexSize ); }
-    memcpy( m_vertexReadable, vertices, count * m_vertexSize );
-  }
-  else
-  {
-    AE_FAIL_MSG( "Invalid vertex usage" );
-  }
+  m_vertexCount = count;
+  m_vertexDirty = true;
 }
 
 void VertexData::SetIndices( const void* indices, uint32_t count )
 {
+  // State validation
   AE_ASSERT( m_indexSize );
+  if ( !m_indexCount && !count )
+  {
+    return;
+  }
 
+  // Validate indices
   if ( count && _AE_DEBUG_ )
   {
     int32_t badIndex = -1;
@@ -10516,23 +10528,134 @@ void VertexData::SetIndices( const void* indices, uint32_t count )
       AE_FAIL_MSG( "Out of range index detected #", badIndex );
     }
   }
+  
+  // Set indices
+  if ( count )
+  {
+    if ( m_indexUsage == VertexData::Usage::Static )
+    {
+      AE_ASSERT_MSG( !m_indexCount, "Cannot re-set indices, buffer was created as static!" );
+    }
+    
+    if ( !m_indexReadable )
+    {
+      // @TODO: Realloc or use array
+      m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxIndexCount * m_indexSize );
+    }
+    memcpy( m_indexReadable, indices, count * m_indexSize );
+  }
+  m_indexCount = count;
+  m_indexDirty = true;
+}
 
-  if ( m_indexUsage == Usage::Static )
+void VertexData::AppendVertices( const void* vertices, uint32_t count )
+{
+  // State validation
+  AE_ASSERT( m_vertexSize );
+  if ( m_vertexUsage == VertexData::Usage::Static )
   {
-    m_SetIndices( indices, count );
-    AE_ASSERT( !m_indexReadable );
-    m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, count * m_indexSize );
-    memcpy( m_indexReadable, indices, count * m_indexSize );
+    AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
   }
-  else if ( m_indexUsage == Usage::Dynamic )
+  AE_ASSERT_MSG( m_vertexCount + count <= m_maxVertexCount, "Vertex limit exceeded #/#", m_vertexCount + count, m_maxVertexCount );
+  
+  if ( !count )
   {
-    m_SetIndices( indices, count );
-    if ( !m_indexReadable ) { m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxIndexCount * m_indexSize ); }
-    memcpy( m_indexReadable, indices, count * m_indexSize );
+    return;
   }
-  else
+
+  if ( !m_vertexReadable )
   {
-    AE_FAIL_MSG( "Invalid index usage" );
+    // @TODO: Realloc or use array
+    m_vertexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxVertexCount * m_vertexSize );
+  }
+  
+  // Append vertices
+  memcpy( (uint8_t*)m_vertexReadable + ( m_vertexCount * m_vertexSize ), vertices, count * m_vertexSize );
+
+  m_vertexCount += count;
+  m_vertexDirty = true;
+}
+
+void VertexData::AppendIndices( const void* indices, uint32_t count, uint32_t _indexOffset )
+{
+  // State validation
+  AE_ASSERT( m_indexSize );
+  if ( m_indexUsage == VertexData::Usage::Static )
+  {
+    AE_ASSERT_MSG( !m_indexCount, "Cannot re-set indices, buffer was created as static!" );
+  }
+  AE_ASSERT_MSG( m_indexCount + count <= m_maxIndexCount, "Index limit exceeded #/#", m_indexCount + count, m_maxIndexCount );
+  
+  if ( !count )
+  {
+    return;
+  }
+
+  if ( !m_indexReadable )
+  {
+    // @TODO: Realloc or use array
+    m_indexReadable = ae::NewArray< uint8_t >( AE_ALLOC_TAG_RENDER, m_maxIndexCount * m_indexSize );
+  }
+  
+  // Append indices
+  switch ( m_indexSize )
+  {
+    case 1:
+    {
+      uint8_t indexOffset = _indexOffset;
+      uint8_t* target = (uint8_t*)m_indexReadable + m_indexCount;
+      uint8_t* source = (uint8_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        target[ i ] = indexOffset + source[ i ];
+      }
+      break;
+    }
+    case 2:
+    {
+      uint16_t indexOffset = _indexOffset;
+      uint16_t* target = (uint16_t*)m_indexReadable + m_indexCount;
+      uint16_t* source = (uint16_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        target[ i ] = indexOffset + source[ i ];
+      }
+      break;
+    }
+    case 4:
+    {
+      uint32_t indexOffset = _indexOffset;
+      uint32_t* target = (uint32_t*)m_indexReadable + m_indexCount;
+      uint32_t* source = (uint32_t*)indices;
+      for ( uint32_t i = 0; i < count; i++ )
+      {
+        target[ i ] = indexOffset + source[ i ];
+      }
+      break;
+    }
+    default:
+      AE_FAIL();
+  }
+  
+  m_indexCount += count;
+  m_indexDirty = true;
+}
+
+void VertexData::ClearVertices()
+{
+  if ( m_vertexCount && m_vertexUsage == VertexData::Usage::Dynamic ) // @TODO: Should this be an assert?
+  {
+    m_vertexCount = 0;
+    m_vertexDirty = true;
+  }
+}
+
+void VertexData::ClearIndices()
+{
+  if ( m_indexCount && m_indexUsage == VertexData::Usage::Dynamic ) // @TODO: Should this be an assert?
+  {
+    m_indexCount = 0;
+    m_indexDirty = true;
   }
 }
 
@@ -10548,15 +10671,28 @@ const void* VertexData::GetIndices() const
   return m_indexReadable;
 }
 
-void VertexData::Render( const Shader* shader, const UniformList& uniforms ) const
+void VertexData::Upload()
 {
-  Render( shader, 0, uniforms ); // Draw all
+  if ( m_vertexDirty )
+  {
+    m_SetVertices( m_vertexReadable, m_vertexCount );
+  }
+  if ( m_indexDirty )
+  {
+    m_SetIndices( m_indexReadable, m_indexCount );
+  }
 }
 
-void VertexData::Render( const Shader* shader, uint32_t primitiveCount, const UniformList& uniforms ) const
+void VertexData::Render( const Shader* shader, const UniformList& uniforms ) const
 {
-  AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
+  Render( shader, uniforms, 0, 0 ); // Draw all
+}
+
+void VertexData::Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const
+{
   AE_ASSERT( shader );
+  AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
+  AE_ASSERT_MSG( !m_vertexDirty && !m_indexDirty, "Must call Upload() after modifying vertices or indices before calling Render()" );
   
   if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
   {
@@ -10596,40 +10732,23 @@ void VertexData::Render( const Shader* shader, uint32_t primitiveCount, const Un
     AE_CHECK_GL_ERROR();
   }
 
-  int64_t start = 0; // TODO: Add support to start drawing at non-zero index
-  int32_t count = 0;
-
-  // Draw
-  GLenum mode;
-  if( m_primitive == Primitive::Triangle )
-  {
-    count = primitiveCount ? primitiveCount * 3 : m_indexCount;
-    mode = GL_TRIANGLES;
-  }
-  else if( m_primitive == Primitive::Line )
-  {
-    count = primitiveCount ? primitiveCount * 2 : m_indexCount;
-    mode = GL_LINES;
-  }
-  else if( m_primitive == Primitive::Point )
-  {
-    count = primitiveCount ? primitiveCount : m_indexCount;
-    mode = GL_POINTS;
-  }
-  else
-  {
-    AE_FAIL();
-    return;
-  }
+  GLenum mode = 0;
+  uint32_t primitiveSize = 0;
+  const char* primitiveTypeName = "";
+  if ( m_primitive == Primitive::Triangle ) { mode = GL_TRIANGLES; primitiveSize = 3; primitiveTypeName = "Triangle"; }
+  else if ( m_primitive == Primitive::Line ) { mode = GL_LINES; primitiveSize = 2; primitiveTypeName = "Line"; }
+  else if ( m_primitive == Primitive::Point ) { mode = GL_POINTS; primitiveSize = 1; primitiveTypeName = "Point"; }
+  else { AE_FAIL(); return; }
   
   if ( m_indexCount && mode != GL_POINTS )
   {
-    if ( count == 0 ) { count = m_indexCount; }
-    AE_ASSERT( start + count <= m_indexCount );
-    if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
+    AE_ASSERT( primitiveStart + primitiveCount <= m_indexCount / primitiveSize );
+    int64_t start = primitiveStart * primitiveSize * m_indexSize; // Byte offset into index buffer
+    int32_t count = primitiveCount ? primitiveCount * primitiveSize : m_indexCount; // Number of indices to render
     
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
     AE_CHECK_GL_ERROR();
+    
     GLenum type = 0;
     if ( m_indexSize == sizeof(uint8_t) ) { type = GL_UNSIGNED_BYTE; }
     else if ( m_indexSize == sizeof(uint16_t) ) { type = GL_UNSIGNED_SHORT; }
@@ -10639,10 +10758,10 @@ void VertexData::Render( const Shader* shader, uint32_t primitiveCount, const Un
   }
   else
   {
-    if ( count == 0 ) { count = m_vertexCount; }
-    AE_ASSERT( start + count <= m_vertexCount );
-    if ( mode == GL_TRIANGLES ) { AE_ASSERT( count % 3 == 0 && start % 3 == 0 ); }
-    
+    AE_ASSERT( ( primitiveStart + primitiveCount ) * primitiveSize <= m_vertexCount );
+    GLint start = primitiveStart * primitiveSize;
+    GLsizei count = primitiveCount ? primitiveCount * primitiveSize : m_vertexCount;
+    AE_ASSERT_MSG( count % primitiveSize == 0, "Vertex count must be a multiple of # when rendering #s without indices", primitiveSize, primitiveTypeName );
     glDrawArrays( mode, start, count );
     AE_CHECK_GL_ERROR();
   }
@@ -10667,7 +10786,7 @@ const VertexData::Attribute* VertexData::m_GetAttributeByName( const char* name 
 Texture::~Texture()
 {
   // @NOTE: Only ae::Texture should call it's virtual Destroy() so it only runs once
-  Destroy();
+  Terminate();
 }
 
 void Texture::Initialize( uint32_t target )
@@ -10675,7 +10794,7 @@ void Texture::Initialize( uint32_t target )
   // @NOTE: To avoid undoing any initialization logic only ae::Texture should
   //        call Destroy() on initialize, and inherited Initialize()'s should
   //        always call Base::Initialize() before any other logic.
-  Destroy();
+  Terminate();
 
   m_target = target;
 
@@ -10683,7 +10802,7 @@ void Texture::Initialize( uint32_t target )
   AE_ASSERT( m_texture );
 }
 
-void Texture::Destroy()
+void Texture::Terminate()
 {
   if ( m_texture )
   {
@@ -10911,13 +11030,13 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   AE_CHECK_GL_ERROR();
 }
 
-void Texture2D::Destroy()
+void Texture2D::Terminate()
 {
   m_width = 0;
   m_height = 0;
   m_hasAlpha = false;
 
-  Texture::Destroy();
+  Texture::Terminate();
 }
 
 //------------------------------------------------------------------------------
@@ -10925,12 +11044,12 @@ void Texture2D::Destroy()
 //------------------------------------------------------------------------------
 RenderTarget::~RenderTarget()
 {
-  Destroy();
+  Terminate();
 }
 
 void RenderTarget::Initialize( uint32_t width, uint32_t height )
 {
-  Destroy();
+  Terminate();
 
   AE_ASSERT( m_fbo == 0 );
 
@@ -10963,6 +11082,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   m_quad.AddAttribute( "a_uv", 2, VertexData::Type::Float, offsetof( Vertex, uv ) );
   m_quad.SetVertices( quadVerts, aeQuadVertCount );
   m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  m_quad.Upload();
   AE_CHECK_GL_ERROR();
 
   const char* vertexStr = "\
@@ -10994,19 +11114,19 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   AE_CHECK_GL_ERROR();
 }
 
-void RenderTarget::Destroy()
+void RenderTarget::Terminate()
 {
-  m_shader.Destroy();
-  m_quad.Destroy();
+  m_shader.Terminate();
+  m_quad.Terminate();
 
   for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
-    m_targets[ i ]->Destroy();
+    m_targets[ i ]->Terminate();
     ae::Delete( m_targets[ i ] );
   }
   m_targets.Clear();
 
-  m_depth.Destroy();
+  m_depth.Terminate();
 
   if ( m_fbo )
   {
@@ -11461,8 +11581,8 @@ void DebugLines::Initialize( uint32_t maxObjects )
 
 void DebugLines::Terminate()
 {
-  m_shader.Destroy();
-  m_vertexData.Destroy();
+  m_shader.Terminate();
+  m_vertexData.Terminate();
 }
 
 void DebugLines::Render( const Matrix4& worldToNdc )
@@ -11645,6 +11765,7 @@ void DebugLines::Render( const Matrix4& worldToNdc )
   if ( m_verts.Length() )
   {
     m_vertexData.SetVertices( &m_verts[ 0 ], ae::Min( m_verts.Length(), m_vertexData.GetMaxVertexCount() ) );
+    m_vertexData.Upload();
 
     UniformList uniforms;
     uniforms.Set( "u_worldToNdc", worldToNdc );
@@ -11921,7 +12042,7 @@ void AudioData::Initialize( const char* filePath )
   AE_ASSERT( buffer );
 }
 
-void AudioData::Destroy()
+void AudioData::Terminate()
 {
   AE_ASSERT( buffer );
 

@@ -94,6 +94,7 @@ int main()
   vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
   vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
   vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
+  vertexData.Upload();
 
   ae::Vec3 pos( 0.0f );
   float scale = 1.0f;
@@ -117,7 +118,7 @@ int main()
     {
       capture = false;
     }
-    input.SetCaptureMouse( capture );
+    input.SetMouseCaptured( capture );
     
     if ( capture )
     {
@@ -143,7 +144,7 @@ int main()
     ae::UniformList uniformList;
     uniformList.Set( "u_modelToNdc", transform );
     vertexData.Render( &shader, uniformList );
-    
+
     render.Present();
     timeStep.Wait();
   }

@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
-//#include "ae/aetherEXT.h"
 
 //------------------------------------------------------------------------------
 // Shaders
@@ -47,29 +46,6 @@ const char* kFragShader = "\
 	{\
 		AE_COLOR = v_color;\
 	}";
-//const char* kVertShader = "\
-//	AE_UNIFORM mat4 u_worldToProj;\
-//	AE_IN_HIGHP vec4 a_position;\
-//	AE_IN_HIGHP vec4 a_color;\
-//	AE_OUT_HIGHP vec4 v_color;\
-//	AE_OUT_HIGHP vec4 v_pos;\
-//	void main()\
-//	{\
-//		v_color = a_color;\
-//		v_pos = u_worldToProj * a_position;\
-//		gl_Position = v_pos;\
-//	}";
-//
-//const char* kFragShader = "\
-//	AE_IN_HIGHP vec4 v_color;\
-//	AE_IN_HIGHP vec4 v_pos;\
-//	layout(location = 0) out vec4 diffuseColor;\
-//	layout(location = 1) out vec4 depth;\
-//	void main()\
-//	{\
-//		diffuseColor = v_color;\
-//		depth = vec4( vec3( v_pos.z / v_pos.w ), 1.0 );\
-//	}";
 
 //------------------------------------------------------------------------------
 // Cube
@@ -133,6 +109,7 @@ int main()
 	vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
 	vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
 	vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
+  vertexData.Upload();
 	
 	float r0 = 0.0f;
 	float r1 = 0.0f;

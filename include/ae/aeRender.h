@@ -48,15 +48,14 @@ public:
   aeSpriteRender();
   void Initialize( uint32_t maxCount );
   void Destroy();
-  // @TODO: change name to ndc space or remove and just use AddSprite transform
-  void Render( const ae::Matrix4& worldToScreen );
+  void Render( const ae::Matrix4& localToProjection );
 
   void SetBlending( bool enabled );
   void SetDepthTest( bool enabled );
   void SetDepthWrite( bool enabled );
   void SetSorting( bool enabled );
 
-  // @NOTE: Each sprite is also transformed by the Render( worldToScreen ) above
+  // @NOTE: Each sprite is also transformed by the Render( localToProjection ) transform above
   void AddSprite( const ae::Texture2D* texture, ae::Matrix4 transform, ae::Vec2 uvMin, ae::Vec2 uvMax, ae::Color color );
   void Clear();
 

@@ -115,13 +115,13 @@ void aeSpriteRender::Destroy()
     m_shaderTransparent = nullptr;
   }
   
-  m_vertexData.Destroy();
+  m_vertexData.Terminate();
   
   ae::Delete( m_sprites );
   m_sprites = nullptr;
 }
 
-void aeSpriteRender::Render( const ae::Matrix4& worldToScreen )
+void aeSpriteRender::Render( const ae::Matrix4& localToProjection )
 {
   if ( m_count == 0 )
   {
@@ -130,7 +130,7 @@ void aeSpriteRender::Render( const ae::Matrix4& worldToScreen )
   
   if ( m_sorting )
   {
-    ae::Vec3 cameraView = worldToScreen.GetRow( 2 ).GetXYZ();
+    ae::Vec3 cameraView = localToProjection.GetRow( 2 ).GetXYZ();
     for ( uint32_t i = 0; i < m_count; i++ )
     {
       m_sprites[ i ].sort = cameraView.Dot( m_sprites[ i ].transform.GetTranslation() );
@@ -159,8 +159,8 @@ void aeSpriteRender::Render( const ae::Matrix4& worldToScreen )
     m_shaderOpaque->SetDepthTest( m_depthTest );
     m_shaderTransparent->SetDepthTest( m_depthTest );
     
-    m_Render( worldToScreen, m_shaderOpaque );
-    m_Render( worldToScreen, m_shaderTransparent );
+    m_Render( localToProjection, m_shaderOpaque );
+    m_Render( localToProjection, m_shaderTransparent );
   }
   else
   {
@@ -172,13 +172,13 @@ void aeSpriteRender::Render( const ae::Matrix4& worldToScreen )
     m_shaderAll->SetDepthTest( m_depthTest );
     m_shaderAll->SetBlending( m_blending );
     
-    m_Render( worldToScreen, m_shaderAll );
+    m_Render( localToProjection, m_shaderAll );
   }
   
   Clear();
 }
 
-void aeSpriteRender::m_Render( const ae::Matrix4& worldToScreen, ae::Shader* shader )
+void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader* shader )
 {
   for ( uint32_t i = 0; i < m_textures.Length(); i++ )
   {
@@ -226,10 +226,11 @@ void aeSpriteRender::m_Render( const ae::Matrix4& worldToScreen, ae::Shader* sha
     m_vertexData.SetVertices( vertices, count * 4 );
 
     ae::UniformList uniforms;
-    uniforms.Set( "u_worldToScreen", worldToScreen );
+    uniforms.Set( "u_localToProjection", localToProjection );
     uniforms.Set( "u_tex", texture );
 
-    m_vertexData.Render( shader, count * 2, uniforms );
+    m_vertexData.Upload();
+    m_vertexData.Render( shader, uniforms, 0, count * 2 );
   }
 }
 
@@ -289,7 +290,7 @@ void aeSpriteRender::m_LoadShaderAll()
   }
   
   const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_UNIFORM_HIGHP mat4 u_localToProjection;\
     AE_IN_HIGHP vec3 a_position;\
     AE_IN_HIGHP vec2 a_uv;\
     AE_IN_HIGHP vec4 a_color;\
@@ -299,7 +300,7 @@ void aeSpriteRender::m_LoadShaderAll()
     {\
       v_uv = a_uv;\
       v_color = a_color;\
-      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+      gl_Position = u_localToProjection * vec4( a_position, 1.0 );\
     }";
   const char* fragStr = "\
     uniform sampler2D u_tex;\
@@ -322,7 +323,7 @@ void aeSpriteRender::m_LoadShaderOpaque()
   }
   
   const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_UNIFORM_HIGHP mat4 u_localToProjection;\
     AE_IN_HIGHP vec3 a_position;\
     AE_IN_HIGHP vec2 a_uv;\
     AE_IN_HIGHP vec4 a_color;\
@@ -332,7 +333,7 @@ void aeSpriteRender::m_LoadShaderOpaque()
     {\
       v_uv = a_uv;\
       v_color = a_color;\
-      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+      gl_Position = u_localToProjection * vec4( a_position, 1.0 );\
     }";
   const char* fragStr = "\
     uniform sampler2D u_tex;\
@@ -357,7 +358,7 @@ void aeSpriteRender::m_LoadShaderTransparent()
   }
   
   const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_worldToScreen;\
+    AE_UNIFORM_HIGHP mat4 u_localToProjection;\
     AE_IN_HIGHP vec3 a_position;\
     AE_IN_HIGHP vec2 a_uv;\
     AE_IN_HIGHP vec4 a_color;\
@@ -367,7 +368,7 @@ void aeSpriteRender::m_LoadShaderTransparent()
     {\
       v_uv = a_uv;\
       v_color = a_color;\
-      gl_Position = u_worldToScreen * vec4( a_position, 1.0 );\
+      gl_Position = u_localToProjection * vec4( a_position, 1.0 );\
     }";
   const char* fragStr = "\
     uniform sampler2D u_tex;\
@@ -431,8 +432,8 @@ void aeTextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
 
 void aeTextRender::Terminate()
 {
-  m_shader.Destroy();
-  m_vertexData.Destroy();
+  m_shader.Terminate();
+  m_vertexData.Terminate();
 }
 
 void aeTextRender::Render( const ae::Matrix4& uiToScreen )
@@ -502,6 +503,7 @@ void aeTextRender::Render( const ae::Matrix4& uiToScreen )
 
   m_vertexData.SetVertices( verts.Data(), vertCount );
   m_vertexData.SetIndices( indices.Data(), indexCount );
+  m_vertexData.Upload();
 
   ae::UniformList uniforms;
   uniforms.Set( "u_uiToScreen", uiToScreen );

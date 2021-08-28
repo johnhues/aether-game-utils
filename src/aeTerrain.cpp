@@ -1159,6 +1159,7 @@ void TerrainChunk::m_SetVertexData( const TerrainVertex* verts, const TerrainInd
   // Set vertices
   m_data.SetVertices( verts, (uint32_t)vertexCount );
   m_data.SetIndices( indices, indexCount );
+  m_data.Upload();
 }
 
 //------------------------------------------------------------------------------
