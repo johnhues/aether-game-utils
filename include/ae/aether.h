@@ -10273,6 +10273,7 @@ void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t m
   AE_ASSERT( vertexSize );
   AE_ASSERT( m_indexSize == 0 );
   AE_ASSERT( indexSize == sizeof(uint8_t) || indexSize == sizeof(uint16_t) || indexSize == sizeof(uint32_t) );
+  AE_ASSERT_MSG( maxVertexCount, "VertexData can't be initialized without storage" );
 
   m_maxVertexCount = maxVertexCount;
   m_maxIndexCount = maxIndexCount;
@@ -10643,7 +10644,7 @@ void VertexData::AppendIndices( const void* indices, uint32_t count, uint32_t _i
 
 void VertexData::ClearVertices()
 {
-  if ( m_vertexCount && m_vertexUsage == VertexData::Usage::Dynamic ) // @TODO: Should this be an assert?
+  if ( m_vertexCount && m_vertexUsage == VertexData::Usage::Dynamic )
   {
     m_vertexCount = 0;
     m_vertexDirty = true;
@@ -10652,7 +10653,7 @@ void VertexData::ClearVertices()
 
 void VertexData::ClearIndices()
 {
-  if ( m_indexCount && m_indexUsage == VertexData::Usage::Dynamic ) // @TODO: Should this be an assert?
+  if ( m_indexCount && m_indexUsage == VertexData::Usage::Dynamic )
   {
     m_indexCount = 0;
     m_indexDirty = true;
