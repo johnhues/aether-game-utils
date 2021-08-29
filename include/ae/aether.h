@@ -21,6 +21,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
+// Usage:
+// Use this module by defining AE_MAIN once in your project above an
+// included 'aether.h'. It's required that AE_MAIN is defined in an Objective-C
+// '.mm' file on Apple platforms.
+//
+// Linking:
+// Optionally you can define AE_USE_MODULES so linking system dependencies such
+// as OpenGL will be handled for you.
+//
+// Recommentations:
+// For bigger projects it's worth defining AE_MAIN in it's own module to limit the
+// number of dependencies brought into your own code. For instance 'Windows.h'
+// is included with AE_MAIN and this can easily cause naming conflicts with
+// gameplay/engine code. The following could be compiled into a single module
+// and linked with the application.
+// Usage inside a cpp/mm file is:
+// // ae.cpp/ae.mm EXAMPLE START FILE
+//
+// #define AE_MAIN
+// #define AE_USE_MODULES // C++ Modules are optional
+// #include "aether.h"
+//
+// // ae.cpp/ae.mm EXAMPLE END OF FILE
+//------------------------------------------------------------------------------
 #ifndef AE_AETHER_H
 #define AE_AETHER_H
 
@@ -5725,20 +5749,7 @@ T* ae::Cast( C* obj )
 #endif // AE_AETHER_H
 
 //------------------------------------------------------------------------------
-// The following should be compiled into a single module and linked with the
-// application. It's worth putting this in it's own module to limit the
-// number of dependencies brought into your own code. For instance 'Windows.h'
-// is included and this can easily cause naming conflicts with gameplay/engine
-// code.
-// Usage inside a cpp/mm file is:
-//
-// // ae.cpp/ae.mm EXAMPLE START
-//
-// #define AE_MAIN
-// #define AE_USE_MODULES // C++ Modules are optional
-// #include "aether.h"
-//
-// // ae.cpp/ae.mm EXAMPLE END
+// Implementation
 //------------------------------------------------------------------------------
 #if defined(AE_MAIN) && !defined(AE_MAIN_ALREADY)
 #define AE_MAIN_ALREADY
