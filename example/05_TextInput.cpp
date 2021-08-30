@@ -36,7 +36,7 @@ int main()
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
-  aeTextRender textRender;
+  ae::TextRender textRender;
   
   window.Initialize( 1280, 720, false, true );
   window.SetTitle( "example" );
