@@ -8432,6 +8432,7 @@ void Input::Pump()
 
 void Input::SetMouseCaptured( bool enable )
 {
+#if _AE_APPLE_
   if ( m_captureMouse && !enable )
   {
     CGDisplayShowCursor( kCGDirectMainDisplay );
@@ -8442,10 +8443,12 @@ void Input::SetMouseCaptured( bool enable )
     m_positionSet = false;
   }
   m_captureMouse = enable;
+#endif
 }
 
 void Input::SetTextMode( bool enabled )
 {
+#if _AE_APPLE_
   if ( m_textMode != enabled )
   {
     m_textMode = enabled;
@@ -8462,6 +8465,7 @@ void Input::SetTextMode( bool enabled )
       [nsWindow makeFirstResponder:glView];
     }
   }
+#endif
 }
 
 bool Input::Get( ae::Key key ) const

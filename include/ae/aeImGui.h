@@ -90,7 +90,14 @@ public:
     io.AddInputCharactersUTF8( input->GetTextInput() );
     input->SetTextMode( io.WantTextInput );
 
-    float displayScale = render->GetWindow()->GetScaleFactor();
+    float displayScale = 1.0f;
+    float windowHeight = render->GetHeight();
+    if ( ae::Window* window = render->GetWindow() )
+    {
+      displayScale = window->GetScaleFactor();
+      windowHeight = window->GetHeight();
+    }
+
     io.DisplaySize = ImVec2( render->GetWidth() / displayScale, render->GetHeight() / displayScale );
     io.DisplayFramebufferScale = ImVec2( displayScale, displayScale );
     io.DeltaTime = dt;
@@ -100,7 +107,7 @@ public:
     io.MouseDown[ 1 ] = input->mouse.rightButton;
     io.MouseDown[ 2 ] = input->mouse.middleButton;
     io.MouseWheel += input->mouse.scroll.y;
-    ae::Vec2 mousePos( input->mouse.position.x, render->GetWindow()->GetHeight() - input->mouse.position.y );
+    ae::Vec2 mousePos( input->mouse.position.x, windowHeight - input->mouse.position.y );
     io.MousePos = ImVec2( mousePos.x, mousePos.y );
     
 		// AE_STATIC_ASSERT( kKeyCount <= countof( io.KeysDown ) );
