@@ -1478,7 +1478,7 @@ public:
   void Terminate();
   void Pump();
   
-  void SetMouseCaptured( bool enable );
+  void SetMouseCaptured( bool enable ); //!< Locks cursor to center of window. Use mouse.movement to get input information. Automatically hides the cursor.
   bool GetMouseCaptured() const { return m_captureMouse; }
   
   void SetTextMode( bool enabled );
@@ -2086,7 +2086,7 @@ private:
   {
     ae::Vec3 pos;
     ae::Vec2 uv;
-    ae::Color color;
+    ae::Vec4 color;
   };
   struct TextRect
   {
@@ -12040,22 +12040,22 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
         // Bottom Left
         verts[ vertCount ].pos = pos;
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Bottom Right
         verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, 0.0f, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Top Right
         verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Top Left
         verts[ vertCount ].pos = pos + ae::Vec3( 0.0f, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
       }
 
