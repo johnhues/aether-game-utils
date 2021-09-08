@@ -105,6 +105,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <functional>
@@ -1095,7 +1096,10 @@ struct Rect
   void Expand( Vec2 pos ); // @NOTE: Zero size rect is maintained by Expand()
   bool GetIntersection( const Rect& other, Rect* intersectionOut ) const;
   
-  float x, y, w, h;
+  float x = 0.0f;
+  float y = 0.0f;
+  float w = 0.0f;
+  float h = 0.0f;
 };
 inline std::ostream& operator<<( std::ostream& os, Rect r )
 {
@@ -1117,7 +1121,10 @@ struct RectInt
   bool Intersects( RectInt other ) const;
   void Expand( ae::Int2 pos ); //!< Zero size rect is expanded to 1x1 grid square by Expand()
   
-  int32_t x, y, w, h;
+  int32_t x = 0;
+  int32_t y = 0;
+  int32_t w = 0;
+  int32_t h = 0;
 };
 inline std::ostream& operator<<( std::ostream& os, RectInt r )
 {
@@ -2941,7 +2948,7 @@ template < typename... Args >
 void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
 {
   std::stringstream os;
-  os << std::boolalpha;
+  os << std::setprecision( 2 );
   LogFormat( os, severity, filePath, line, assertInfo, format );
   LogInternal( os, format, args... );
 }
@@ -4531,6 +4538,7 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
   {
     // @TODO: Replace with ToString()?
     std::ostringstream stream;
+    stream << std::setprecision( 2 );
     stream << value;
     *this += stream.str().c_str();
     head++;
