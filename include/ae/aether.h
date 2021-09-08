@@ -1478,8 +1478,10 @@ public:
   void Terminate();
   void Pump();
   
-  void SetMouseCaptured( bool enable ); //!< Captures mouse if window is focused. Use with Input::mouse::movement. Mouse capture is automatically released when the window loses focus. This can be checked with Input::GetMouseCaptured().
-  bool GetMouseCaptured() const { return m_captureMouse; } //!< Returns true if the mouse is currently captured. Always returns false when the window does not have focus.
+  //! Locks cursor to center of window if it is focused. Use mouse.movement to get input information. Mouse capture is automatically released when the window loses focus. This can be checked with Input::GetMouseCaptured(). Automatically hides the cursor.
+  void SetMouseCaptured( bool enable );
+  //! Returns true if the mouse is currently captured. Always returns false when the window does not have focus.
+  bool GetMouseCaptured() const { return m_captureMouse; }
   
   void SetTextMode( bool enabled );
   bool GetTextMode() const { return m_textMode; }
@@ -2086,7 +2088,7 @@ private:
   {
     ae::Vec3 pos;
     ae::Vec2 uv;
-    ae::Color color;
+    ae::Vec4 color;
   };
   struct TextRect
   {
@@ -12057,22 +12059,22 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
         // Bottom Left
         verts[ vertCount ].pos = pos;
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Bottom Right
         verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, 0.0f, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Top Right
         verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Top Left
         verts[ vertCount ].pos = pos + ae::Vec3( 0.0f, rect.size.y, 0.0f );
         verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
       }
 
