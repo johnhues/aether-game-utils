@@ -100,7 +100,6 @@ int main()
   float scale = 1.0f;
   float rotation = 0.0f;
 
-  bool capture = false;
   AE_LOG( "Run" );
   while ( !input.quit )
   {
@@ -112,21 +111,19 @@ int main()
     
     if ( input.mouse.leftButton && !input.mousePrev.leftButton )
     {
-      capture = true;
+      input.SetMouseCaptured( true );
     }
     if ( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
     {
-      capture = false;
+      input.SetMouseCaptured( false );
     }
-    input.SetMouseCaptured( capture );
     
-    if ( capture )
+    if ( input.GetMouseCaptured() )
     {
       pos.x += input.mouse.movement.x * 0.001f;
       pos.y += input.mouse.movement.y * 0.001f;
     }
-    
-    if ( input.mouse.usingTouch && !capture )
+    else if ( input.mouse.usingTouch )
     {
       pos.x += input.mouse.scroll.x * 0.01f;
       pos.y += input.mouse.scroll.y * -0.01f;

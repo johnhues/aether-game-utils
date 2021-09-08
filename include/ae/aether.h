@@ -1287,7 +1287,7 @@ public:
   void m_UpdatePos( Int2 pos ) { m_pos = pos; }
   void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
   void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
-  void m_UpdateFocused( bool focused ) { m_focused = focused; }
+  void m_UpdateFocused( bool focused );
   void* window;
   class GraphicsDevice* graphicsDevice;
   class Input* input;
@@ -1478,8 +1478,8 @@ public:
   void Terminate();
   void Pump();
   
-  void SetMouseCaptured( bool enable );
-  bool GetMouseCaptured() const { return m_captureMouse; }
+  void SetMouseCaptured( bool enable ); //!< Captures mouse if window is focused. Use with Input::mouse::movement. Mouse capture is automatically released when the window loses focus. This can be checked with Input::GetMouseCaptured().
+  bool GetMouseCaptured() const { return m_captureMouse; } //!< Returns true if the mouse is currently captured. Always returns false when the window does not have focus.
   
   void SetTextMode( bool enabled );
   bool GetTextMode() const { return m_textMode; }
@@ -7581,6 +7581,15 @@ void Window::m_UpdateSize( int32_t width, int32_t height, float scaleFactor )
   m_scaleFactor = scaleFactor;
 }
 
+void Window::m_UpdateFocused( bool focused )
+{
+  m_focused = focused;
+  if ( !m_focused && input )
+  {
+    input->SetMouseCaptured( false );
+  }
+}
+
 void Window::m_Initialize()
 {
 #if _AE_WINDOWS_
@@ -7667,6 +7676,7 @@ void Window::m_Initialize()
     defer:YES
   ];
   nsWindow.delegate = windowDelegate;
+  [nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
   this->window = nsWindow;
   
   NSOpenGLPixelFormatAttribute nsPixelAttribs[] =
@@ -8432,18 +8442,25 @@ void Input::Pump()
 
 void Input::SetMouseCaptured( bool enable )
 {
-#if _AE_APPLE_
-  if ( m_captureMouse && !enable )
+  if ( enable && m_window && !m_window->GetFocused() )
   {
-    CGDisplayShowCursor( kCGDirectMainDisplay );
+    AE_ASSERT( !m_captureMouse );
+    return;
   }
-  else if ( !m_captureMouse && enable )
+  
+#if _AE_APPLE_
+  if ( enable && !m_captureMouse )
   {
     CGDisplayHideCursor( kCGDirectMainDisplay );
     m_positionSet = false;
   }
-  m_captureMouse = enable;
+  else if ( !enable && m_captureMouse )
+  {
+    CGDisplayShowCursor( kCGDirectMainDisplay );
+  }
 #endif
+  
+  m_captureMouse = enable;
 }
 
 void Input::SetTextMode( bool enabled )
