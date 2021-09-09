@@ -39,7 +39,7 @@ int main()
 	ae::TimeStep timeStep;
 	ae::DebugLines debug;
   ae::Texture2D fontTexture;
-	aeTextRender text;
+	ae::TextRender text;
 	aeEditorCamera camera;
 
 	window.Initialize( 800, 600, false, true );

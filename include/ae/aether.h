@@ -7711,6 +7711,7 @@ void Window::m_Initialize()
     NSOpenGLPFAColorSize, 24, // @TODO: Allow 64bit size for wide color support (implicitly disables srgb)
     NSOpenGLPFADepthSize, 24,
     NSOpenGLPFAAlphaSize, 8,
+    NSOpenGLPFADoubleBuffer, YES,
     0
   };
   NSRect frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
@@ -11207,6 +11208,7 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 #endif
     "}";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  m_shader.SetBlending( true );
 
   AE_CHECK_GL_ERROR();
 }
@@ -11510,7 +11512,7 @@ void GraphicsDevice::Initialize( class Window* window )
 
   glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
   AE_CHECK_GL_ERROR();
-
+  
   float scaleFactor = m_window->GetScaleFactor();
   int32_t contentWidth = m_window->GetWidth() * scaleFactor;
   int32_t contentHeight = m_window->GetHeight() * scaleFactor;
@@ -11589,16 +11591,17 @@ void GraphicsDevice::Present()
 
   m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
   
-  glFlush(); // @TODO: Needed on osx with single buffering. Use double buffering or leave this to be safe?
-
   AE_CHECK_GL_ERROR();
 
-#if _AE_WINDOWS_
+  // Swap Buffers
+#if _AE_APPLE_
+  [(NSOpenGLContext*)m_context flushBuffer];
+#elif _AE_WINDOWS_
   AE_ASSERT( m_window );
   HWND hWnd = (HWND)m_window->window;
   AE_ASSERT( hWnd );
   HDC hdc = GetDC( hWnd );
-  SwapBuffers( hdc ); // Swap Buffers
+  SwapBuffers( hdc );
 #endif
 }
 
