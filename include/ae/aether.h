@@ -7689,14 +7689,28 @@ void Window::m_Initialize()
   [nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
   this->window = nsWindow;
   
+  NSOpenGLPixelFormatAttribute openglProfile;
+  if ( ae::GLMajorVersion >= 4 )
+  {
+    openglProfile = NSOpenGLProfileVersion4_1Core;
+  }
+  else if ( ae::GLMajorVersion >= 3 )
+  {
+    openglProfile = NSOpenGLProfileVersion3_2Core;
+  }
+  else
+  {
+    openglProfile = NSOpenGLProfileVersionLegacy;
+  }
   NSOpenGLPixelFormatAttribute nsPixelAttribs[] =
   {
     NSOpenGLPFAAccelerated,
     NSOpenGLPFAClosestPolicy,
-    NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion4_1Core, // @TODO: Use ae GL version
-    //NSOpenGLPFADoubleBuffer,
-    //NSOpenGLPFASampleBuffers, 1,
-    //NSOpenGLPFASamples, samples,
+    NSOpenGLPFAOpenGLProfile, openglProfile,
+    NSOpenGLPFABackingStore, YES,
+    NSOpenGLPFAColorSize, 24, // @TODO: Allow 64bit size for wide color support (implicitly disables srgb)
+    NSOpenGLPFADepthSize, 24,
+    NSOpenGLPFAAlphaSize, 8,
     0
   };
   NSRect frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
