@@ -156,6 +156,7 @@ if(APPLE)
 	add_definitions(-DAE_USE_MODULES)
 	add_compile_options(-fmodules)
 	add_compile_options(-fcxx-modules)
+	set(CMAKE_OSX_ARCHITECTURES arm64 x86_64)
 endif()
 
 # library, tests, and examples

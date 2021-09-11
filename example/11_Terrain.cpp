@@ -272,7 +272,7 @@ int main()
   ae::Shader terrainShader;
   aeEditorCamera camera;
   ae::Texture2D fontTexture;
-  aeTextRender textRender;
+  ae::TextRender textRender;
   class aeImGui* ui = nullptr;
 
   vfs.Initialize( "", "ae", "terrainedit" );

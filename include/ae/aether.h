@@ -1912,6 +1912,9 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::Texture2D class
+//! \brief A 2D texture primitive used as a parameter to ae::Shader/ae::UniformList. Use an sRGB format
+//! if you are providing sRGB data. As long as you use the correct format you can assume shader texture reads
+//! will return linear values.
 //------------------------------------------------------------------------------
 class Texture2D : public Texture
 {
@@ -1969,22 +1972,21 @@ public:
   static Matrix4 GetQuadToNDCTransform( Rect ndc, float z );
 
 private:
-  struct Vertex
-  {
-    Vec3 pos;
-    Vec2 uv;
-  };
   uint32_t m_fbo = 0;
   Array< Texture2D*, 4 > m_targets;
   Texture2D m_depth;
   uint32_t m_width = 0;
   uint32_t m_height = 0;
-  VertexData m_quad;
-  Shader m_shader;
 };
 
 //------------------------------------------------------------------------------
 // ae::GraphicsDevice class
+//! \brief Handles the final presentation of rendered graphics to the screen/window. The final phase of your rendering
+//! should be to use Activate() and Clear(), then render your scene (with ae::VertexData::Render(), ae::RenderTarget::Render(), etc)
+//! to the contained target, and then finally call Present(). The width and height of this target is automatically controlled by the
+//! window size (multiplied by the scale factor for maximum resolution). This target is linear and so colors transferred
+//! to it should also be linear. There is no need to to use sRGB at any point in your pipeline unless you have an explicit
+//! need for it yourself.
 //------------------------------------------------------------------------------
 class GraphicsDevice
 {
@@ -2015,6 +2017,12 @@ public:
   void* m_context = nullptr;
 #endif
   int32_t m_defaultFbo = 0;
+  
+  static GraphicsDevice* s_graphicsDevice;
+  VertexData m_renderQuad;
+  Shader m_renderShaderRGB;
+  Shader m_renderShaderSRGB;
+  bool m_rgbToSrgb = false;
 };
 
 //------------------------------------------------------------------------------
@@ -11166,58 +11174,10 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
   AE_ASSERT( m_fbo );
   glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
   AE_CHECK_GL_ERROR();
-
-  Vertex quadVerts[] =
-  {
-    { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
-    { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
-    { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
-    { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
-  };
-  AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
-  m_quad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, VertexData::Primitive::Triangle, VertexData::Usage::Static, VertexData::Usage::Static );
-  m_quad.AddAttribute( "a_position", 3, VertexData::Type::Float, offsetof( Vertex, pos ) );
-  m_quad.AddAttribute( "a_uv", 2, VertexData::Type::Float, offsetof( Vertex, uv ) );
-  m_quad.SetVertices( quadVerts, aeQuadVertCount );
-  m_quad.SetIndices( aeQuadIndices, aeQuadIndexCount );
-  m_quad.Upload();
-  AE_CHECK_GL_ERROR();
-
-  const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_localToNdc;\
-    AE_IN_HIGHP vec3 a_position;\
-    AE_IN_HIGHP vec2 a_uv;\
-    AE_OUT_HIGHP vec2 v_uv;\
-    void main()\
-    {\
-      v_uv = a_uv;\
-      gl_Position = u_localToNdc * vec4( a_position, 1.0 );\
-    }";
-  const char* fragStr = "\
-    uniform sampler2D u_tex;\
-    AE_IN_HIGHP vec2 v_uv;\
-    void main()\
-    {\
-      vec4 color = AE_TEXTURE2D( u_tex, v_uv );"
-#if _AE_EMSCRIPTEN_
-      // It seems like WebGL requires a manual conversion to sRGB, since there is no way to specify a framebuffer format
-      "AE_COLOR.rgb = pow( color.rgb, vec3( 1.0/2.2 ) );"
-      "AE_COLOR.a = color.a;"
-#else
-      "AE_COLOR = color;"
-#endif
-    "}";
-  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
-  m_shader.SetBlending( true );
-
-  AE_CHECK_GL_ERROR();
 }
 
 void RenderTarget::Terminate()
 {
-  m_shader.Terminate();
-  m_quad.Terminate();
-
   for ( uint32_t i = 0; i < m_targets.Length(); i++ )
   {
     m_targets[ i ]->Terminate();
@@ -11260,7 +11220,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
   glFramebufferTexture2D( GL_FRAMEBUFFER, attachement, tex->GetTarget(), tex->GetTexture(), 0 );
 
   m_targets.Append( tex );
-
+  
   AE_CHECK_GL_ERROR();
 }
 
@@ -11320,18 +11280,23 @@ void RenderTarget::Clear( Color color )
 
 void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
+  AE_ASSERT( GraphicsDevice::s_graphicsDevice );
   glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
-  m_quad.Render( shader, uniforms );
+  GraphicsDevice::s_graphicsDevice->m_renderQuad.Render( shader, uniforms );
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
+  AE_ASSERT( GraphicsDevice::s_graphicsDevice );
   glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 
   UniformList uniforms;
   uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
   uniforms.Set( "u_tex", GetTexture( textureIndex ) );
-  m_quad.Render( &m_shader, uniforms );
+  Shader* shader = GraphicsDevice::s_graphicsDevice->m_rgbToSrgb
+    ? &GraphicsDevice::s_graphicsDevice->m_renderShaderSRGB
+    : &GraphicsDevice::s_graphicsDevice->m_renderShaderRGB;
+  GraphicsDevice::s_graphicsDevice->m_renderQuad.Render( shader, uniforms );
 }
 
 const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
@@ -11403,6 +11368,8 @@ Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 //------------------------------------------------------------------------------
 // GraphicsDevice member functions
 //------------------------------------------------------------------------------
+GraphicsDevice* GraphicsDevice::s_graphicsDevice = nullptr;
+
 GraphicsDevice::~GraphicsDevice()
 {
   Terminate();
@@ -11517,10 +11484,78 @@ void GraphicsDevice::Initialize( class Window* window )
   int32_t contentWidth = m_window->GetWidth() * scaleFactor;
   int32_t contentHeight = m_window->GetHeight() * scaleFactor;
   m_HandleResize( contentWidth, contentHeight );
+  
+  // Initialize shared RenderTarget resources
+  struct Vertex
+  {
+    Vec3 pos;
+    Vec2 uv;
+  };
+  Vertex quadVerts[] =
+  {
+    { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
+    { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
+    { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
+    { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
+  };
+  AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
+  m_renderQuad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, VertexData::Primitive::Triangle, VertexData::Usage::Static, VertexData::Usage::Static );
+  m_renderQuad.AddAttribute( "a_position", 3, VertexData::Type::Float, offsetof( Vertex, pos ) );
+  m_renderQuad.AddAttribute( "a_uv", 2, VertexData::Type::Float, offsetof( Vertex, uv ) );
+  m_renderQuad.SetVertices( quadVerts, aeQuadVertCount );
+  m_renderQuad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  m_renderQuad.Upload();
+  AE_CHECK_GL_ERROR();
+
+  // @NOTE: GL_FRAMEBUFFER_SRGB is not completely reliable on every platform (web, wide color
+  // display targets, etc), mostly because of limited control over the backbuffer format.
+  // On web its not possible to specify the backbuffer format, but browsers typically expect SRGB anyway.
+  // On OpenGLES GL_FRAMEBUFFER_SRGB is always enabled.
+  // Because of all of this it's easiest to convert to SRGB manually on non-OpenGLES platforms.
+  const char* vertexStr = R"(
+    AE_UNIFORM_HIGHP mat4 u_localToNdc;
+    AE_IN_HIGHP vec3 a_position;
+    AE_IN_HIGHP vec2 a_uv;
+    AE_OUT_HIGHP vec2 v_uv;
+    void main()
+    {
+      v_uv = a_uv;
+      gl_Position = u_localToNdc * vec4( a_position, 1.0 );
+    })";
+  const char* fragStr = R"(
+    uniform sampler2D u_tex;
+    AE_IN_HIGHP vec2 v_uv;
+    void main()
+    {
+      vec4 color = AE_TEXTURE2D( u_tex, v_uv );
+      #ifdef AE_SRGB_TARGET
+        bvec3 cutoff = lessThan(color.rgb, vec3(0.0031308));
+        vec3 higher = vec3(1.055) * pow(color.rgb, vec3(1.0/2.4)) - vec3(0.055);
+        vec3 lower = color.rgb * vec3(12.92);
+        AE_COLOR.rgb = mix(higher, lower, cutoff);
+        // Always full opacity when converting to srgb. Blending does not work without GL_FRAMEBUFFER_SRGB.
+        AE_COLOR.a = 1.0;
+      #else
+        AE_COLOR = color;
+      #endif
+    })";
+  const char* srgbDefine = "#define AE_SRGB_TARGET";
+  m_renderShaderRGB.Initialize( vertexStr, fragStr, nullptr, 0 );
+  m_renderShaderRGB.SetBlending( true );  // This is required on some implementations of OpenGL for GL_FRAMEBUFFER_SRGB to work
+  m_renderShaderSRGB.Initialize( vertexStr, fragStr, &srgbDefine, 1 ); // Do not blend when manually converting to srgb without GL_FRAMEBUFFER_SRGB
+  AE_CHECK_GL_ERROR();
+  
+  s_graphicsDevice = this;
 }
 
 void GraphicsDevice::Terminate()
 {
+  s_graphicsDevice = nullptr;
+  
+  m_renderShaderSRGB.Terminate();
+  m_renderShaderRGB.Terminate();
+  m_renderQuad.Terminate();
+  
   if ( m_context )
   {
     //SDL_GL_DeleteContext( m_context );
@@ -11550,10 +11585,6 @@ void GraphicsDevice::Activate()
   }
 
   m_canvas.Activate();
-#if !_AE_IOS_ && !_AE_EMSCRIPTEN_
-  // This is automatically enabled on opengl es3 and can't be turned off
-  glEnable( GL_FRAMEBUFFER_SRGB );
-#endif
 }
 
 void GraphicsDevice::Clear( Color color )
@@ -11589,7 +11620,16 @@ void GraphicsDevice::Present()
   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
   AE_CHECK_GL_ERROR();
 
+  // @NOTE: Conversion to srgb is only needed for the backbuffer. The rest of the pipeline should be implemented as linear.
+#if _AE_IOS_
+  // SRGB conversion is automatic on ios/OpenGLES because GL_FRAMEBUFFER_SRGB is always on
+  m_rgbToSrgb = false;
+#else
+  // Currently all platforms expect the backbuffer contents to be in sRGB space
+  m_rgbToSrgb = true;
+#endif
   m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
+  m_rgbToSrgb = false;
   
   AE_CHECK_GL_ERROR();
 
