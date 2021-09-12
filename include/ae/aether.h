@@ -1911,6 +1911,22 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::TextureParams class
+//------------------------------------------------------------------------------
+struct TextureParams
+{
+  const void* data = nullptr;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  Texture::Format format = Texture::Format::RGBA8;
+  Texture::Type type = Texture::Type::Uint8;
+  Texture::Filter filter = Texture::Filter::Linear;
+  Texture::Wrap wrap = Texture::Wrap::Repeat;
+  bool autoGenerateMipmaps = true;
+  bool bgraInput = false;
+};
+
+//------------------------------------------------------------------------------
 // ae::Texture2D class
 //! \brief A 2D texture primitive used as a parameter to ae::Shader/ae::UniformList. Use an sRGB format
 //! if you are providing sRGB data. As long as you use the correct format you can assume shader texture reads
@@ -1919,6 +1935,7 @@ private:
 class Texture2D : public Texture
 {
 public:
+  void Initialize( const TextureParams& params );
   void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps );
   void Terminate() override;
 
@@ -2026,6 +2043,46 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::TextRender class
+//------------------------------------------------------------------------------
+class TextRender
+{
+public:
+  //! @texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
+  //! texture can be a single channel without transparency. Luminance of the red channel is used for transparency.
+  //! @fontSize is the width and height of each character in the texture.
+  void Initialize( const ae::Texture2D* texture, uint32_t fontSize );
+  void Terminate();
+  void Render( const ae::Matrix4& uiToScreen );
+  void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit );
+  uint32_t GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const;
+  uint32_t GetFontSize() const { return m_fontSize; }
+
+private:
+  static const uint32_t kMaxTextRects = 32;
+  uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const;
+  struct Vertex
+  {
+    ae::Vec3 pos;
+    ae::Vec2 uv;
+    ae::Vec4 color;
+  };
+  struct TextRect
+  {
+    ae::Str512 text;
+    ae::Vec3 pos;
+    ae::Vec2 size;
+    ae::Color color;
+  };
+  uint32_t m_fontSize;
+  ae::VertexData m_vertexData;
+  ae::Shader m_shader;
+  const ae::Texture2D* m_texture = nullptr;
+  uint32_t m_rectCount;
+  TextRect m_rects[ kMaxTextRects ];
+};
+
+//------------------------------------------------------------------------------
 // ae::DebugLines class
 //------------------------------------------------------------------------------
 class DebugLines
@@ -2081,43 +2138,54 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::TextRender class
+// ae::DebugCamera class
 //------------------------------------------------------------------------------
-class TextRender
+class DebugCamera
 {
 public:
-  //! @texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
-  //! texture can be a single channel without transparency. Luminance of the red channel is used for transparency.
-  //! @fontSize is the width and height of each character in the texture.
-  void Initialize( const ae::Texture2D* texture, uint32_t fontSize );
-  void Terminate();
-  void Render( const ae::Matrix4& uiToScreen );
-  void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit );
-  uint32_t GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const;
-  uint32_t GetFontSize() const { return m_fontSize; }
+  enum class Mode { None, Rotate, Pan, Zoom };
+  
+  DebugCamera();
+  void SetDistanceLimits( float min, float max );
+  void Update( const ae::Input* input, float dt ); // @TODO: This should take input values, not the whole input system
+
+  void Reset( ae::Vec3 up, ae::Vec3 focus, ae::Vec3 pos ); // Interupts refocus. Does not affect input mode.
+  void SetDistanceFromFocus( float distance ); // Updates position. Does not affect input mode or refocus.
+  void Refocus( ae::Vec3 focus ); // Updates focus and position over time
+  void SetInputEnabled( bool enabled ); // True by default
+  void SetRotation( ae::Vec2 angle );
+
+  Mode GetMode() const { return m_mode; }
+  ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
+  ae::Vec3 GetFocus() const { return m_focusPos; }
+  ae::Vec3 GetForward() const { return m_forward; }
+  ae::Vec3 GetLocalUp() const { return m_up; }
+  ae::Vec3 GetWorldUp() const { return m_worldUp; }
+  float GetDistanceFromFocus() const { return m_dist; }
+  ae::Vec2 GetRotation() const { return ae::Vec2( m_yaw, m_pitch ); }
 
 private:
-  static const uint32_t kMaxTextRects = 32;
-  uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const;
-  struct Vertex
-  {
-    ae::Vec3 pos;
-    ae::Vec2 uv;
-    ae::Vec4 color;
-  };
-  struct TextRect
-  {
-    ae::Str512 text;
-    ae::Vec3 pos;
-    ae::Vec2 size;
-    ae::Color color;
-  };
-  uint32_t m_fontSize;
-  ae::VertexData m_vertexData;
-  ae::Shader m_shader;
-  const ae::Texture2D* m_texture = nullptr;
-  uint32_t m_rectCount;
-  TextRect m_rects[ kMaxTextRects ];
+  void m_Precalculate();
+  // Params
+  float m_min;
+  float m_max;
+  ae::Vec3 m_worldUp;
+  // Mode
+  bool m_inputEnabled;
+  Mode m_mode;
+  ae::Vec3 m_refocusPos;
+  bool m_refocus;
+  // Positioning
+  ae::Vec3 m_focusPos;
+  float m_dist;
+  // Rotation
+  float m_yaw;
+  float m_pitch;
+  // Pre-calculated values for getters
+  ae::Vec3 m_offset;
+  ae::Vec3 m_forward;
+  ae::Vec3 m_right;
+  ae::Vec3 m_up;
 };
 
 //------------------------------------------------------------------------------
@@ -10922,32 +10990,46 @@ void Texture::Terminate()
 //------------------------------------------------------------------------------
 // ae::Texture2D member functions
 //------------------------------------------------------------------------------
-void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, Texture::Format format, Texture::Type type, Texture::Filter filter, Wrap wrap, bool autoGenerateMipmaps )
+void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps )
+{
+  TextureParams params;
+  params.data = data;
+  params.width = width;
+  params.height = height;
+  params.format = format;
+  params.type = type;
+  params.filter = filter;
+  params.wrap = wrap;
+  params.autoGenerateMipmaps = autoGenerateMipmaps;
+  Initialize( params );
+}
+
+void Texture2D::Initialize( const TextureParams& params )
 {
   Texture::Initialize( GL_TEXTURE_2D );
 
-  m_width = width;
-  m_height = height;
+  m_width = params.width;
+  m_height = params.height;
 
   glBindTexture( GetTarget(), GetTexture() );
 
-  if (autoGenerateMipmaps)
+  if ( params.autoGenerateMipmaps )
   {
-    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
-    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   }
   else
   {
-    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
-    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
+    glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
   }
   
-  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
-  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( params.wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
+  glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( params.wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
   // this is the type of data passed in, conflating with internal format type
   GLenum glType = 0;
-  switch ( type )
+  switch ( params.type )
   {
     case Type::Uint8:
       glType = GL_UNSIGNED_BYTE;
@@ -10962,14 +11044,14 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
       glType = GL_FLOAT;
       break;
     default:
-      AE_FAIL_MSG( "Invalid texture type #", (int)type );
+      AE_FAIL_MSG( "Invalid texture type #", (int)params.type );
       return;
   }
 
   GLint glInternalFormat = 0;
   GLenum glFormat = 0;
   GLint unpackAlignment = 0;
-  switch ( format )
+  switch ( params.format )
   {
     // TODO: need D32F_S8 format
     case Format::Depth16:
@@ -10988,7 +11070,7 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
     case Format::R16_UNORM:
     case Format::R16F:
     case Format::R32F:
-      switch(format)
+      switch( params.format )
       {
         case Format::R8:
           glInternalFormat = GL_R8;
@@ -11016,7 +11098,7 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
     case Format::RG8:
     case Format::RG16F:
     case Format::RG32F:
-      switch(format)
+      switch( params.format )
       {
         case Format::RG8: glInternalFormat = GL_RG8; break;
         case Format::RG16F: glInternalFormat = GL_RG16F; break;
@@ -11024,7 +11106,7 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
         default: assert(false);
       }
           
-      glFormat = GL_RG;
+      glFormat = GL_RG; // @TODO: Handle bgra flag
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
@@ -11032,14 +11114,14 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
     case Format::RGB8:
     case Format::RGB16F:
     case Format::RGB32F:
-      switch(format)
+      switch( params.format )
       {
         case Format::RGB8: glInternalFormat = GL_RGB8; break;
         case Format::RGB16F: glInternalFormat = GL_RGB16F; break;
         case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
         default: assert(false);
       }
-      glFormat = GL_RGB;
+      glFormat = params.bgraInput ? GL_RGB : GL_BGR;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
@@ -11047,14 +11129,14 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
     case Format::RGBA8:
     case Format::RGBA16F:
     case Format::RGBA32F:
-      switch(format)
+      switch( params.format )
       {
         case Format::RGBA8: glInternalFormat = GL_RGBA8; break;
         case Format::RGBA16F: glInternalFormat = GL_RGBA16F; break;
         case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
         default: assert(false);
       }
-      glFormat = GL_RGBA;
+      glFormat = params.bgraInput ?  GL_RGBA : GL_BGRA;
       unpackAlignment = 1;
       m_hasAlpha = true;
       break;
@@ -11064,33 +11146,33 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
     case Format::RGB8_SRGB:
     // ignore type
       glInternalFormat = GL_SRGB8;
-      glFormat = GL_RGB;
+      glFormat = params.bgraInput ? GL_RGB : GL_BGR;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case Format::RGBA8_SRGB:
     // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
-      glFormat = GL_RGBA;
+      glFormat = params.bgraInput ?  GL_RGBA : GL_BGRA;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     default:
-      AE_FAIL_MSG( "Invalid texture format #", (int)format );
+      AE_FAIL_MSG( "Invalid texture format #", (int)params.format );
       return;
   }
 
-  if ( data )
+  if ( params.data )
   {
     glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
   }
 
     // count the mip levels
-  int w = width;
-  int h = height;
+  int w = params.width;
+  int h = params.height;
   
   int numberOfMipmaps = 1;
-  if ( autoGenerateMipmaps )
+  if ( params.autoGenerateMipmaps )
   {
     while ( w > 1 || h > 1 )
     {
@@ -11107,10 +11189,10 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   // TODO: enable glTexStorage on all platforms, this is in gl3ext.h for GL
   // It allocates a full mip chain all at once, and can handle formats glTexImage2D cannot
   // for compressed textures.
-  glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, width, height );
+  glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, params.width, params.height );
 #else
-  w = width;
-  h = height;
+  w = params.width;
+  h = params.height;
   
   for ( int i = 0; i < numberOfMipmaps; ++i )
   {
@@ -11120,14 +11202,14 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, T
   }
 #endif
   
-  if ( data != nullptr )
+  if ( params.data != nullptr )
   {
     // upload the first mipmap
-    glTexSubImage2D( GetTarget(), 0, 0,0, width, height, glFormat, glType, data );
+    glTexSubImage2D( GetTarget(), 0, 0,0, params.width, params.height, glFormat, glType, params.data );
 
     // autogen only works for uncompressed textures
     // Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
-    if ( numberOfMipmaps > 1 && autoGenerateMipmaps )
+    if ( numberOfMipmaps > 1 && params.autoGenerateMipmaps )
     {
       glGenerateMipmap( GetTarget() );
     }
@@ -11682,6 +11764,215 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 }
 
 //------------------------------------------------------------------------------
+// ae::TextRender member functions
+//------------------------------------------------------------------------------
+const uint32_t kTextCharsPerString = 64;
+
+void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
+{
+  m_texture = texture;
+  m_fontSize = fontSize;
+  m_rectCount = 0;
+
+  m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * aeQuadVertCount, kMaxTextRects * kTextCharsPerString * aeQuadIndexCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
+  m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
+  m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( Vertex, uv ) );
+  m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
+
+  // Load shader
+  const char* vertexStr = "\
+    AE_UNIFORM_HIGHP mat4 u_uiToScreen;\
+    AE_IN_HIGHP vec3 a_position;\
+    AE_IN_HIGHP vec2 a_uv;\
+    AE_IN_HIGHP vec4 a_color;\
+    AE_OUT_HIGHP vec2 v_uv;\
+    AE_OUT_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      v_uv = a_uv;\
+      v_color = a_color;\
+      gl_Position = u_uiToScreen * vec4( a_position, 1.0 );\
+    }";
+  const char* fragStr = "\
+    uniform sampler2D u_tex;\
+    AE_IN_HIGHP vec2 v_uv;\
+    AE_IN_HIGHP vec4 v_color;\
+    void main()\
+    {\
+      if ( AE_TEXTURE2D( u_tex, v_uv ).r < 0.5 ) { discard; };\
+      AE_COLOR = v_color;\
+    }";
+  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+}
+
+void TextRender::Terminate()
+{
+  m_shader.Terminate();
+  m_vertexData.Terminate();
+}
+
+void TextRender::Render( const ae::Matrix4& uiToScreen )
+{
+  uint32_t vertCount = 0;
+  uint32_t indexCount = 0;
+  ae::Scratch< Vertex > verts( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxVertexCount() );
+  ae::Scratch< uint16_t > indices( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxIndexCount() );
+
+  for ( uint32_t i = 0; i < m_rectCount; i++ )
+  {
+    const TextRect& rect = m_rects[ i ];
+    ae::Vec3 pos = rect.pos;
+    pos.y -= rect.size.y;
+
+    const char* start = rect.text.c_str();
+    const char* str = start;
+    while ( str[ 0 ] )
+    {
+      if ( !isspace( str[ 0 ] ) )
+      {
+        int32_t index = str[ 0 ];
+        uint32_t columns = m_texture->GetWidth() / m_fontSize;
+        ae::Vec2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
+
+        for ( uint32_t j = 0; j < aeQuadIndexCount; j++ )
+        {
+          indices.GetSafe( indexCount ) = aeQuadIndices[ j ] + vertCount;
+          indexCount++;
+        }
+
+        AE_ASSERT( vertCount + aeQuadVertCount <= verts.Length() );
+        // Bottom Left
+        verts[ vertCount ].pos = pos;
+        verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
+        vertCount++;
+        // Bottom Right
+        verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, 0.0f, 0.0f );
+        verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
+        vertCount++;
+        // Top Right
+        verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, rect.size.y, 0.0f );
+        verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
+        vertCount++;
+        // Top Left
+        verts[ vertCount ].pos = pos + ae::Vec3( 0.0f, rect.size.y, 0.0f );
+        verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
+        verts[ vertCount ].color = rect.color.GetLinearRGBA();
+        vertCount++;
+      }
+
+      if ( str[ 0 ] == '\n' || str[ 0 ] == '\r' )
+      {
+        pos.x = rect.pos.x;
+        pos.y -= rect.size.y;
+      }
+      else
+      {
+        pos.x += rect.size.x;
+      }
+      str++;
+    }
+  }
+
+  m_vertexData.SetVertices( verts.Data(), vertCount );
+  m_vertexData.SetIndices( indices.Data(), indexCount );
+  m_vertexData.Upload();
+
+  ae::UniformList uniforms;
+  uniforms.Set( "u_uiToScreen", uiToScreen );
+  uniforms.Set( "u_tex", m_texture );
+  m_vertexData.Render( &m_shader, uniforms );
+
+  m_rectCount = 0;
+}
+
+void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit )
+{
+  if ( m_rectCount >= kMaxTextRects )
+  {
+    return;
+  }
+
+  TextRect* rect = &m_rects[ m_rectCount ];
+  m_rectCount++;
+
+  rect->pos = pos;
+  rect->size = size;
+  m_ParseText( str, lineLength, charLimit, &rect->text );
+  rect->color = color;
+}
+
+uint32_t TextRender::GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const
+{
+  return m_ParseText( str, lineLength, charLimit, nullptr );
+}
+
+uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const
+{
+  if ( outText )
+  {
+    *outText = "";
+  }
+
+  uint32_t lineCount = 1;
+  const char* start = str;
+  uint32_t lineChars = 0;
+  while ( str[ 0 ] )
+  {
+    // Truncate displayed string based on param
+    if ( charLimit && (uint32_t)( str - start ) >= charLimit )
+    {
+      break;
+    }
+
+    bool isNewlineChar = ( str[ 0 ] == '\n' || str[ 0 ] == '\r' );
+
+    if ( lineLength && !isNewlineChar && isspace( str[ 0 ] ) )
+    {
+      // Prevent words from being split across lines
+      uint32_t wordRemainder = 1;
+      while ( str[ wordRemainder ] && !isspace( str[ wordRemainder ] ) )
+      {
+        wordRemainder++;
+      }
+
+      if ( lineChars + wordRemainder > lineLength )
+      {
+        if ( outText )
+        {
+          outText->Append( "\n" );
+        }
+        lineCount++;
+        lineChars = 0;
+      }
+    }
+
+    // Skip non-newline whitespace at the beginning of a line
+    if ( lineChars || isNewlineChar || !isspace( str[ 0 ] ) )
+    {
+      if ( outText )
+      {
+        // @TODO: aeStr should support appending chars
+        char hack[] = { str[ 0 ], 0 };
+        outText->Append( hack );
+      }
+
+      lineChars = isNewlineChar ? 0 : lineChars + 1;
+    }
+    if ( isNewlineChar )
+    {
+      lineCount++;
+    }
+
+    str++;
+  }
+
+  return lineCount;
+}
+
+//------------------------------------------------------------------------------
 // ae::DebugLines member functions
 //------------------------------------------------------------------------------
 const uint32_t kDebugVertexCountPerObject = 32;
@@ -12044,214 +12335,197 @@ bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointC
 }
 
 //------------------------------------------------------------------------------
-// ae::TextRender member functions
+// ae::DebugCamera member functions
 //------------------------------------------------------------------------------
-const uint32_t kTextCharsPerString = 64;
-
-void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
+DebugCamera::DebugCamera()
 {
-  m_texture = texture;
-  m_fontSize = fontSize;
-  m_rectCount = 0;
-
-  m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * aeQuadVertCount, kMaxTextRects * kTextCharsPerString * aeQuadIndexCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
-  m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
-  m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( Vertex, uv ) );
-  m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
-
-  // Load shader
-  const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_uiToScreen;\
-    AE_IN_HIGHP vec3 a_position;\
-    AE_IN_HIGHP vec2 a_uv;\
-    AE_IN_HIGHP vec4 a_color;\
-    AE_OUT_HIGHP vec2 v_uv;\
-    AE_OUT_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      v_uv = a_uv;\
-      v_color = a_color;\
-      gl_Position = u_uiToScreen * vec4( a_position, 1.0 );\
-    }";
-  const char* fragStr = "\
-    uniform sampler2D u_tex;\
-    AE_IN_HIGHP vec2 v_uv;\
-    AE_IN_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      if ( AE_TEXTURE2D( u_tex, v_uv ).r < 0.5 ) { discard; };\
-      AE_COLOR = v_color;\
-    }";
-  m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+  m_min = 1.0f;
+  m_max = ae::MaxValue< float >();
+  m_worldUp = ae::Vec3( 0.0f, 0.0f, 1.0f );
+  m_inputEnabled = true;
+  m_mode = Mode::None;
+  m_refocusPos = ae::Vec3( 0.0f );
+  m_refocus = false;
+  m_focusPos = ae::Vec3( 0.0f );
+  m_dist = 5.0f;
+  m_yaw = 0.77f;
+  m_pitch = 0.5f;
+  m_Precalculate();
 }
 
-void TextRender::Terminate()
+void DebugCamera::SetDistanceLimits( float min, float max )
 {
-  m_shader.Terminate();
-  m_vertexData.Terminate();
+  m_min = min;
+  m_max = max;
 }
 
-void TextRender::Render( const ae::Matrix4& uiToScreen )
+void DebugCamera::Update( const ae::Input* input, float dt )
 {
-  uint32_t vertCount = 0;
-  uint32_t indexCount = 0;
-  ae::Scratch< Vertex > verts( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxVertexCount() );
-  ae::Scratch< uint16_t > indices( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxIndexCount() );
-
-  for ( uint32_t i = 0; i < m_rectCount; i++ )
+  if ( !m_inputEnabled )
   {
-    const TextRect& rect = m_rects[ i ];
-    ae::Vec3 pos = rect.pos;
-    pos.y -= rect.size.y;
+    input = nullptr;
+  }
 
-    const char* start = rect.text.c_str();
-    const char* str = start;
-    while ( str[ 0 ] )
+  // Input
+  ae::Vec2 mouseMovement( 0.0f );
+  bool mousePan = false;
+  bool mouseZoom = false;
+  bool mouseRotate = false;
+  if ( input )
+  {
+    ae::Key panKey = ae::Key::LeftAlt;
+    mouseMovement = ae::Vec2( input->mouse.movement );
+    mousePan = input->mousePrev.middleButton && input->mouse.middleButton;
+    if ( !mousePan
+      && input->mousePrev.leftButton && input->mouse.leftButton
+      && input->Get( panKey ) )
     {
-      if ( !isspace( str[ 0 ] ) )
-      {
-        int32_t index = str[ 0 ];
-        uint32_t columns = m_texture->GetWidth() / m_fontSize;
-        ae::Vec2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
+      mousePan = true;
+    }
+    mouseZoom = input->mousePrev.rightButton && input->mouse.rightButton;
 
-        for ( uint32_t j = 0; j < aeQuadIndexCount; j++ )
-        {
-          indices.GetSafe( indexCount ) = aeQuadIndices[ j ] + vertCount;
-          indexCount++;
-        }
-
-        AE_ASSERT( vertCount + aeQuadVertCount <= verts.Length() );
-        // Bottom Left
-        verts[ vertCount ].pos = pos;
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color.GetLinearRGBA();
-        vertCount++;
-        // Bottom Right
-        verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, 0.0f, 0.0f );
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color.GetLinearRGBA();
-        vertCount++;
-        // Top Right
-        verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, rect.size.y, 0.0f );
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color.GetLinearRGBA();
-        vertCount++;
-        // Top Left
-        verts[ vertCount ].pos = pos + ae::Vec3( 0.0f, rect.size.y, 0.0f );
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
-        verts[ vertCount ].color = rect.color.GetLinearRGBA();
-        vertCount++;
-      }
-
-      if ( str[ 0 ] == '\n' || str[ 0 ] == '\r' )
-      {
-        pos.x = rect.pos.x;
-        pos.y -= rect.size.y;
-      }
-      else
-      {
-        pos.x += rect.size.x;
-      }
-      str++;
+    if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
+    {
+      mouseRotate = true;
+    }
+    else if ( !input->Get( panKey ) )
+    {
+      mouseRotate = input->mousePrev.leftButton && input->mouse.leftButton;
     }
   }
 
-  m_vertexData.SetVertices( verts.Data(), vertCount );
-  m_vertexData.SetIndices( indices.Data(), indexCount );
-  m_vertexData.Upload();
-
-  ae::UniformList uniforms;
-  uniforms.Set( "u_uiToScreen", uiToScreen );
-  uniforms.Set( "u_tex", m_texture );
-  m_vertexData.Render( &m_shader, uniforms );
-
-  m_rectCount = 0;
-}
-
-void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit )
-{
-  if ( m_rectCount >= kMaxTextRects )
+  if ( m_mode == Mode::Rotate && !mouseRotate )
   {
-    return;
+    m_mode = Mode::None;
+  }
+  else if ( m_mode == Mode::Pan && !mousePan )
+  {
+    m_mode = Mode::None;
+  }
+  else if ( m_mode == Mode::Zoom && !mouseZoom )
+  {
+    m_mode = Mode::None;
   }
 
-  TextRect* rect = &m_rects[ m_rectCount ];
-  m_rectCount++;
-
-  rect->pos = pos;
-  rect->size = size;
-  m_ParseText( str, lineLength, charLimit, &rect->text );
-  rect->color = color;
-}
-
-uint32_t TextRender::GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const
-{
-  return m_ParseText( str, lineLength, charLimit, nullptr );
-}
-
-uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const
-{
-  if ( outText )
+  if ( m_mode == Mode::None )
   {
-    *outText = "";
+    if ( mouseRotate )
+    {
+      m_mode = Mode::Rotate;
+    }
+    else if ( mousePan )
+    {
+      m_mode = Mode::Pan;
+      m_refocus = false;
+    }
+    else if ( mouseZoom )
+    {
+      m_mode = Mode::Zoom;
+    }
   }
 
-  uint32_t lineCount = 1;
-  const char* start = str;
-  uint32_t lineChars = 0;
-  while ( str[ 0 ] )
+  // Rotation
+  if ( m_mode == Mode::Rotate )
   {
-    // Truncate displayed string based on param
-    if ( charLimit && (uint32_t)( str - start ) >= charLimit )
-    {
-      break;
-    }
-
-    bool isNewlineChar = ( str[ 0 ] == '\n' || str[ 0 ] == '\r' );
-
-    if ( lineLength && !isNewlineChar && isspace( str[ 0 ] ) )
-    {
-      // Prevent words from being split across lines
-      uint32_t wordRemainder = 1;
-      while ( str[ wordRemainder ] && !isspace( str[ wordRemainder ] ) )
-      {
-        wordRemainder++;
-      }
-
-      if ( lineChars + wordRemainder > lineLength )
-      {
-        if ( outText )
-        {
-          outText->Append( "\n" );
-        }
-        lineCount++;
-        lineChars = 0;
-      }
-    }
-
-    // Skip non-newline whitespace at the beginning of a line
-    if ( lineChars || isNewlineChar || !isspace( str[ 0 ] ) )
-    {
-      if ( outText )
-      {
-        // @TODO: aeStr should support appending chars
-        char hack[] = { str[ 0 ], 0 };
-        outText->Append( hack );
-      }
-
-      lineChars = isNewlineChar ? 0 : lineChars + 1;
-    }
-    if ( isNewlineChar )
-    {
-      lineCount++;
-    }
-
-    str++;
+    // Assume right handed coordinate system
+    // The focal point should move in the direction that the users hand is moving
+    m_yaw -= mouseMovement.x * 0.005f; // Positive horizontal input should result in clockwise rotation around the z axis
+    m_pitch += mouseMovement.y * 0.005f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
+    m_pitch = ae::Clip( m_pitch, -ae::HALF_PI * 0.99f, ae::HALF_PI * 0.99f ); // Don't let camera flip
   }
 
-  return lineCount;
+  // Zoom
+  float zoomSpeed = m_dist / 75.0f;
+  if ( m_mode == Mode::Zoom )
+  {
+    m_dist += mouseMovement.y * 0.1f * zoomSpeed;
+    m_dist -= mouseMovement.x * 0.1f * zoomSpeed;
+  }
+  m_dist -= input ? input->mouse.scroll.y * 2.5f * zoomSpeed : 0.0f;
+  m_dist = ae::Clip( m_dist, m_min, m_max );
+
+  // Recalculate camera offset from focus and local axis'
+  m_Precalculate();
+
+  // Translation
+  if ( m_mode == Mode::Pan )
+  {
+    AE_ASSERT( !m_refocus );
+    float panSpeed = m_dist / 750.0f;
+    m_focusPos -= m_right * ( mouseMovement.x * panSpeed );
+    m_focusPos -= m_up * ( mouseMovement.y * panSpeed );
+  }
+
+  // Refocus
+  if ( m_refocus )
+  {
+    AE_ASSERT( m_mode != Mode::Pan );
+    m_focusPos = ae::DtLerp( m_focusPos, 4.0f, dt, m_refocusPos );
+    if ( ( m_refocusPos - m_focusPos ).Length() < 0.01f )
+    {
+      m_refocus = false;
+      m_focusPos = m_refocusPos;
+    }
+  }
 }
 
+void DebugCamera::Reset( ae::Vec3 up, ae::Vec3 focus, ae::Vec3 pos )
+{
+  m_refocus = false;
+  m_refocusPos = focus;
+  
+  m_focusPos = focus;
+  
+  ae::Vec3 diff = focus - pos;
+  m_dist = diff.Length();
+  
+  if ( m_dist > 0.01f ) // Only update rotation if focus is different than position
+  {
+    m_yaw = diff.GetXY().GetAngle();
+    m_pitch = asinf( diff.z / m_dist );
+  }
+  
+  m_Precalculate();
+}
+
+void DebugCamera::SetDistanceFromFocus( float distance )
+{
+  m_dist = distance;
+  m_Precalculate();
+}
+
+void DebugCamera::Refocus( ae::Vec3 focus )
+{
+  m_refocus = true;
+  m_refocusPos = focus;
+  if ( m_mode == Mode::Pan )
+  {
+    m_mode = Mode::None;
+  }
+}
+
+void DebugCamera::SetInputEnabled( bool enabled )
+{
+  m_inputEnabled = enabled;
+}
+
+void DebugCamera::SetRotation( ae::Vec2 angle )
+{
+  m_yaw = angle.x;
+  m_pitch = angle.y;
+  m_Precalculate();
+}
+
+void DebugCamera::m_Precalculate()
+{
+  m_forward = ae::Vec3( ae::Cos( m_yaw ), ae::Sin( m_yaw ), 0.0f );
+  m_forward *= ae::Cos( m_pitch );
+  m_forward.z = ae::Sin( m_pitch );
+  m_offset = -m_forward;
+  m_offset *= m_dist;
+  m_right = m_forward.Cross( m_worldUp ).SafeNormalizeCopy();
+  m_up = m_right.Cross( m_forward ).SafeNormalizeCopy();
+}
 
 //------------------------------------------------------------------------------
 // Helpers
