@@ -155,7 +155,14 @@ uint32_t aeMesh::GetIndexCount() const { return 0; }
 //  return true;
 //}
 
-void ae::CollisionMesh::Load( LoadParams params )
+ae::CollisionMesh::CollisionMesh( ae::Tag tag ) :
+  m_vertices( tag ),
+  m_indices( tag )
+{
+  Clear();
+}
+
+void ae::CollisionMesh::Load( Params params )
 {
   Clear();
   
@@ -186,12 +193,6 @@ void ae::CollisionMesh::Load( LoadParams params )
       {
         vert.normal = ae::Vec4( *params.normals, 0.0f );
         params.normals = (ae::Vec3*)( (uint8_t*)params.normals + params.normalStride );
-      }
-      
-      if ( params.userData )
-      {
-        memcpy( vert.userData, params.userData, sizeof(Vertex::userData) );
-        params.userData = params.userData + params.userDataStride;
       }
       
       m_aabb.Expand( vert.position.GetXYZ() );
@@ -225,26 +226,6 @@ void ae::CollisionMesh::Clear()
   m_vertices.Clear();
   m_indices.Clear();
   m_aabb = ae::AABB();
-}
-
-const ae::CollisionMesh::Vertex* ae::CollisionMesh::GetVertices() const
-{
-  return m_vertices.Length() ? &m_vertices[ 0 ] : nullptr;
-}
-
-const ae::CollisionMesh::Index* ae::CollisionMesh::GetIndices() const
-{
-  return m_indices.Length() ? &m_indices[ 0 ] : nullptr;
-}
-
-uint32_t ae::CollisionMesh::GetVertexCount() const
-{
-  return m_vertices.Length();
-}
-
-uint32_t ae::CollisionMesh::GetIndexCount() const
-{
-  return m_indices.Length();
 }
 
 bool ae::CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
@@ -287,9 +268,9 @@ bool ae::CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* out
   const bool ccw = params.hitCounterclockwise;
   const bool cw = params.hitClockwise;
   
-  const uint32_t triCount = GetIndexCount() / 3;
-  const Index* indices = GetIndices();
-  const Vertex* vertices = GetVertices();
+  const uint32_t triCount = m_indices.Length() / 3;
+  const Index* indices = m_indices.Begin();
+  const Vertex* vertices = &m_vertices[ 0 ];
 
   uint32_t hitCount  = 0;
   RaycastResult::Hit hits[ countof(RaycastResult::hits) + 1 ];
@@ -386,9 +367,9 @@ ae::CollisionMesh::PushOutInfo ae::CollisionMesh::PushOut( const PushOutParams& 
   result.velocity = info.velocity;
   bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
   
-  const uint32_t triCount = GetIndexCount() / 3;
-  const Index* indices = GetIndices();
-  const Vertex* vertices = GetVertices();
+  const uint32_t triCount = m_indices.Length() / 3;
+  const Index* indices = m_indices.Begin();
+  const Vertex* vertices = &m_vertices[ 0 ];
   
   for ( uint32_t i = 0; i < triCount; i++ )
   {

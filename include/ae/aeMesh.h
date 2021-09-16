@@ -38,42 +38,19 @@ namespace ae {
 class CollisionMesh
 {
 public:
-  typedef uint16_t Index;
-  struct Vertex
-  {
-    ae::Vec4 position;
-    ae::Vec4 normal;
-    uint8_t userData[ 4 ];
-  };
-  struct LoadParams
+  // Initialization params
+  struct Params
   {
     uint32_t vertexCount = 0;
     const ae::Vec3* positions = nullptr;
     const ae::Vec3* normals = nullptr;
-    const uint8_t* userData = nullptr;
-    uint32_t positionStride = sizeof(Vertex::position);
-    uint32_t normalStride = sizeof(Vertex::normal);
-    uint32_t userDataStride = sizeof(Vertex::userData);
+    uint32_t positionStride = sizeof(ae::Vec3);
+    uint32_t normalStride = sizeof(ae::Vec3);
 
     uint32_t indexCount = 0;
     const uint16_t* indices16 = nullptr;
   };
-  
-  // Initialization
-  void Load( LoadParams params );
-  void Transform( ae::Matrix4 transform ); // Pre-transform loaded verts
-  void Clear();
-
-  // Geo
-  const Vertex& GetVertex( uint32_t idx ) const { return m_vertices[ idx ]; }
-  Index GetIndex( uint32_t idx ) const { return m_indices[ idx ]; }
-  const Vertex* GetVertices() const;
-  const Index* GetIndices() const;
-  uint32_t GetVertexCount() const;
-  uint32_t GetIndexCount() const;
-  ae::AABB GetAABB() const { return m_aabb; }
-  
-  // Raycast
+  // RaycastParams
   struct RaycastParams
   {
     ae::Matrix4 transform = ae::Matrix4::Identity();
@@ -86,6 +63,7 @@ public:
     ae::DebugLines* debug = nullptr; // Draw collision results
     ae::Color debugColor = ae::Color::Red();
   };
+  // RaycastResult
   struct RaycastResult
   {
     uint32_t hitCount = 0;
@@ -98,15 +76,14 @@ public:
     
     void Accumulate( const RaycastParams& params, const RaycastResult& result );
   };
-  bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const;
-  
-  // Sphere collision
+  // Sphere collision PushOutParams
   struct PushOutParams
   {
     ae::Matrix4 transform = ae::Matrix4::Identity();
     ae::DebugLines* debug = nullptr; // Draw collision results
     ae::Color debugColor = ae::Color::Red();
   };
+  // Sphere collision PushOutInfo
   struct PushOutInfo
   {
     ae::Sphere sphere;
@@ -120,12 +97,20 @@ public:
 
     static void Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next );
   };
+  
+  CollisionMesh( ae::Tag tag );
+  void Load( Params params ); // @TODO: Should allow multiple Load()s without clearing
+  void Transform( ae::Matrix4 transform ); // Pre-transform loaded verts
+  void Clear();
+  bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const;
   PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& info ) const;
+  ae::AABB GetAABB() const { return m_aabb; }
 
 private:
-  // @TODO: Tags should be provided by the user
-  ae::Array< Vertex > m_vertices = AE_ALLOC_TAG_MESH;
-  ae::Array< Index > m_indices = AE_ALLOC_TAG_MESH;
+  typedef uint16_t Index;
+  struct Vertex { ae::Vec4 position; ae::Vec4 normal; };
+  ae::Array< Vertex > m_vertices;
+  ae::Array< Index > m_indices;
   ae::AABB m_aabb;
 };
 
