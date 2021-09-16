@@ -280,6 +280,8 @@ const float TWO_PI = 2.0f * PI;
 const float HALF_PI = 0.5f * PI;
 const float QUARTER_PI = 0.25f * PI;
 
+enum class Axis { X, Y, Z };
+
 //------------------------------------------------------------------------------
 // Standard math operations
 //------------------------------------------------------------------------------
@@ -685,6 +687,83 @@ struct Int3 : public IntT< Int3 >
   // @NOTE: No conversion from ae::Vec3 because rounding type should be explicit!
   Int2 GetXY() const;
 };
+
+//------------------------------------------------------------------------------
+// ae::Sphere class
+//------------------------------------------------------------------------------
+class Sphere
+{
+public:
+  Sphere() = default;
+  Sphere( ae::Vec3 center, float radius ) : center( center ), radius( radius ) {}
+
+  bool Raycast( ae::Vec3 origin, ae::Vec3 direction, float* tOut = nullptr, ae::Vec3* pOut = nullptr ) const;
+  bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
+
+  ae::Vec3 center = ae::Vec3( 0.0f );
+  float radius = 0.5f;
+};
+
+//------------------------------------------------------------------------------
+// ae::AABB class
+//------------------------------------------------------------------------------
+class AABB
+{
+public:
+  AABB() = default;
+  AABB( const AABB& ) = default;
+  AABB( Vec3 p0, Vec3 p1 );
+  explicit AABB( const Sphere& sphere );
+
+  void Expand( Vec3 p );
+  void Expand( AABB other );
+  void Expand( float boundary );
+
+  Vec3 GetMin() const { return m_min; }
+  Vec3 GetMax() const { return m_max; }
+  Vec3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
+  Vec3 GetHalfSize() const { return ( m_max - m_min ) * 0.5f; }
+  Matrix4 GetTransform() const;
+
+  float GetSignedDistanceFromSurface( Vec3 p ) const;
+  bool Intersect( AABB other ) const;
+  bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, float* tOut = nullptr ) const;
+
+private:
+  Vec3 m_min;
+  Vec3 m_max;
+};
+std::ostream& operator<<( std::ostream& os, AABB aabb );
+
+//------------------------------------------------------------------------------
+// ae::OBB class
+//------------------------------------------------------------------------------
+class OBB
+{
+public:
+  OBB() = default;
+  OBB( const OBB& ) = default;
+  OBB( const Matrix4& transform );
+
+  void SetTransform( const Matrix4& transform );
+  const Matrix4& GetTransform() const;
+
+  float GetSignedDistanceFromSurface( Vec3 p ) const;
+  bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, float* tOut = nullptr ) const;
+
+  AABB GetAABB() const;
+
+private:
+  Matrix4 m_transform;
+  Matrix4 m_invTransRot;
+  AABB m_scaledAABB;
+};
+
+//------------------------------------------------------------------------------
+// Geometry helpers
+//------------------------------------------------------------------------------
+bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitRay, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut );
+Vec3 ClosestPtPointTriangle( Vec3 p, Vec3 a, Vec3 b, Vec3 c );
 
 //! @} End Math group
 
@@ -1433,8 +1512,8 @@ struct MouseState
   bool leftButton = false;
   bool middleButton = false;
   bool rightButton = false;
-  ae::Int2 position = ae::Int2( 0 );
-  ae::Int2 movement = ae::Int2( 0 );
+  ae::Int2 position = ae::Int2( 0 ); //!< Window space coordinates (ie. not affected by window scale factor)
+  ae::Int2 movement = ae::Int2( 0 ); //!< Window space coordinates (ie. not affected by window scale factor)
   ae::Vec2 scroll = ae::Vec2( 0.0f );
   bool usingTouch = false;
 };
@@ -2149,18 +2228,18 @@ public:
   void SetDistanceLimits( float min, float max );
   void Update( const ae::Input* input, float dt ); // @TODO: This should take input values, not the whole input system
 
-  void Reset( ae::Vec3 up, ae::Vec3 focus, ae::Vec3 pos ); // Interupts refocus. Does not affect input mode.
-  void SetDistanceFromFocus( float distance ); // Updates position. Does not affect input mode or refocus.
-  void Refocus( ae::Vec3 focus ); // Updates focus and position over time
-  void SetInputEnabled( bool enabled ); // True by default
+  void Reset( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos ); //!< Interupts refocus. Does not affect input mode.
+  void SetDistanceFromFocus( float distance ); //!< Updates position. Does not affect input mode or refocus.
+  void Refocus( ae::Vec3 focus ); //!< Updates focus and position over time
+  void SetInputEnabled( bool enabled ); //!< True by default
   void SetRotation( ae::Vec2 angle );
 
-  Mode GetMode() const { return m_mode; }
+  Mode GetMode() const { return m_mode; } //!< Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
   ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
   ae::Vec3 GetFocus() const { return m_focusPos; }
   ae::Vec3 GetForward() const { return m_forward; }
   ae::Vec3 GetLocalUp() const { return m_up; }
-  ae::Vec3 GetWorldUp() const { return m_worldUp; }
+  ae::Vec3 GetWorldUp() const { return ( m_worldUp == Axis::Z ) ? ae::Vec3(0,0,1) : ae::Vec3(0,1,0); }
   float GetDistanceFromFocus() const { return m_dist; }
   ae::Vec2 GetRotation() const { return ae::Vec2( m_yaw, m_pitch ); }
 
@@ -2169,12 +2248,14 @@ private:
   // Params
   float m_min;
   float m_max;
-  ae::Vec3 m_worldUp;
+  Axis m_worldUp;
   // Mode
   bool m_inputEnabled;
   Mode m_mode;
   ae::Vec3 m_refocusPos;
   bool m_refocus;
+  ae::Vec2 m_moveAccum;
+  bool m_forceCapture;
   // Positioning
   ae::Vec3 m_focusPos;
   float m_dist;
@@ -6895,6 +6976,385 @@ Vec3 Quaternion::Rotate( Vec3 v ) const
 float Quaternion::Dot( const Quaternion& q ) const
 {
   return ( q.r * r ) + ( q.i * i ) + ( q.j * j ) + ( q.k * k );
+}
+
+//------------------------------------------------------------------------------
+// ae::Sphere member functions
+//------------------------------------------------------------------------------
+bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) const
+{
+  direction.SafeNormalize();
+
+  Vec3 m = origin - center;
+  float b = m.Dot( direction );
+  float c = m.Dot( m ) - radius * radius;
+  // Exit if r�s origin outside s (c > 0) and r pointing away from s (b > 0)
+  if ( c > 0.0f && b > 0.0f )
+  {
+	return false;
+  }
+
+  // A negative discriminant corresponds to ray missing sphere
+  float discr = b * b - c;
+  if ( discr < 0.0f )
+  {
+	return false;
+  }
+
+  // Ray now found to intersect sphere, compute smallest t value of intersection
+  float t = -b - sqrtf( discr );
+  // If t is negative, ray started inside sphere so clamp t to zero
+  if ( t < 0.0f )
+  {
+	t = 0.0f;
+  }
+
+  if ( tOut )
+  {
+	*tOut = t;
+  }
+
+  if ( pOut )
+  {
+	*pOut = origin + direction * t;
+  }
+
+  return true;
+}
+
+bool Sphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const
+{
+  ae::Vec3 closest = ClosestPtPointTriangle( center, t0, t1, t2 );
+  if ( ( closest - center ).LengthSquared() <= radius * radius )
+  {
+	if ( outNearestIntersectionPoint )
+	{
+	  *outNearestIntersectionPoint = closest;
+	}
+	return true;
+  }
+  return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::AABB member functions
+//------------------------------------------------------------------------------
+AABB::AABB( ae::Vec3 p0, ae::Vec3 p1 )
+{
+  m_min = ae::Min( p0, p1 );
+  m_max = ae::Max( p0, p1 );
+}
+
+AABB::AABB( const Sphere& sphere )
+{
+  ae::Vec3 r( sphere.radius );
+  m_min = sphere.center - r;
+  m_max = sphere.center + r;
+}
+
+void AABB::Expand( ae::Vec3 p )
+{
+  m_min = ae::Min( p, m_min );
+  m_max = ae::Max( p, m_max );
+}
+
+void AABB::Expand( AABB other )
+{
+  m_min = ae::Min( other.m_min, m_min );
+  m_max = ae::Max( other.m_max, m_max );
+}
+
+void AABB::Expand( float boundary )
+{
+  m_min -= ae::Vec3( boundary );
+  m_max += ae::Vec3( boundary );
+}
+
+ae::Matrix4 AABB::GetTransform() const
+{
+  return ae::Matrix4::Translation( GetCenter() ) * ae::Matrix4::Scaling( m_max - m_min );
+}
+
+float AABB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
+{
+  ae::Vec3 center = GetCenter();
+  ae::Vec3 halfSize = GetHalfSize();
+
+  ae::Vec3 d = p - center;
+  d.x = ae::Max( ae::Abs( d.x ) - halfSize.x, 0.0f );
+  d.y = ae::Max( ae::Abs( d.y ) - halfSize.y, 0.0f );
+  d.z = ae::Max( ae::Abs( d.z ) - halfSize.z, 0.0f );
+
+  return d.Length();
+}
+
+bool AABB::Intersect( AABB other ) const
+{
+  if ( m_max.x >= other.m_min.x && m_max.y >= other.m_min.y && m_max.z >= other.m_min.z )
+  {
+	return true;
+  }
+  else if ( other.m_max.x >= m_min.x && other.m_max.y >= m_min.y && other.m_max.z >= m_min.z )
+  {
+	return true;
+  }
+
+  return false;
+}
+
+// Intersect ray R(t) = p + t*d against AABB a. When intersecting,
+// return intersection distance tmin and point q of intersection
+bool AABB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) const
+{
+  float tmin = 0.0f; // set to -FLT_MAX to get first hit on line
+  float tmax = ae::MaxValue< float >(); // set to max distance ray can travel (for segment)
+  for ( int32_t i = 0; i < 3; i++ ) // For all three slabs
+  {
+	if ( ae::Abs( d[ i ] ) < 0.001f )
+	{
+	  // Ray is parallel to slab. No hit if origin not within slab
+	  if ( p[ i ] < m_min[ i ] || p[ i ] > m_max[ i ] )
+	  {
+		return false;
+	  }
+	}
+	else
+	{
+	  // Compute intersection t value of ray with near and far plane of slab
+	  float ood = 1.0f / d[ i ];
+	  float t1 = ( m_min[ i ] - p[ i ] ) * ood;
+	  float t2 = ( m_max[ i ] - p[ i ] ) * ood;
+	  // Make t1 be intersection with near plane, t2 with far plane
+	  if ( t1 > t2 )
+	  {
+		std::swap( t1, t2 );
+	  }
+
+	  // Compute the intersection of slab intersection intervals
+	  tmin = ae::Max( tmin, t1 );
+	  tmax = ae::Min( tmax, t2 );
+
+	  // Exit with no collision as soon as slab intersection becomes empty
+	  if ( tmin > tmax )
+	  {
+		return false;
+	  }
+	}
+  }
+
+  // Ray intersects all 3 slabs. Return point (q) and intersection t value (tmin)
+  if ( tOut )
+  {
+	*tOut = tmin;
+  }
+  if ( pOut )
+  {
+	*pOut = p + d * tmin;
+  }
+  return true;
+}
+
+std::ostream& operator<<( std::ostream& os, AABB aabb )
+{
+  return os << "[" << aabb.GetMin() << ", " << aabb.GetMax() << "]";
+}
+
+//------------------------------------------------------------------------------
+// ae::OBB member functions
+//------------------------------------------------------------------------------
+OBB::OBB( const ae::Matrix4& transform )
+{
+  SetTransform( transform );
+}
+
+void OBB::SetTransform( const ae::Matrix4& transform )
+{
+  m_transform = transform;
+  
+  ae::Vec3 scale = transform.GetScale();
+  m_scaledAABB = AABB( scale * -0.5f, scale * 0.5f );
+  
+  m_invTransRot = transform;
+  m_invTransRot = m_invTransRot.GetScaleRemoved();
+  m_invTransRot.SetInverse();
+}
+
+const ae::Matrix4& OBB::GetTransform() const
+{
+  return m_transform;
+}
+
+float OBB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
+{
+  p = ( m_invTransRot * ae::Vec4( p, 1.0f ) ).GetXYZ();
+  return m_scaledAABB.GetSignedDistanceFromSurface( p );
+}
+
+bool OBB::IntersectRay( ae::Vec3 _p, ae::Vec3 _d, ae::Vec3* pOut, float* tOut ) const
+{
+  ae::Vec3 p = ( m_invTransRot * ae::Vec4( _p, 1.0f ) ).GetXYZ();
+  ae::Vec3 d = ( m_invTransRot * ae::Vec4( _d, 0.0f ) ).GetXYZ();
+
+  float rayT = 0.0f;
+  if ( m_scaledAABB.IntersectRay( p, d, nullptr, &rayT ) )
+  {
+	if ( tOut )
+	{
+	  *tOut = rayT;
+	}
+	if ( pOut )
+	{
+	  *pOut = _p + _d * rayT;
+	}
+	return true;
+  }
+
+  return false;
+}
+
+AABB OBB::GetAABB() const
+{
+  ae::Vec4 corners[] =
+  {
+	m_transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
+	m_transform * ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ),
+	m_transform * ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ),
+	m_transform * ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ),
+	m_transform * ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ),
+	m_transform * ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ),
+	m_transform * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
+	m_transform * ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
+  };
+  
+  AABB result( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
+  for ( uint32_t i = 2; i < countof( corners ); i++ )
+  {
+	result.Expand( corners[ i ].GetXYZ() );
+  }
+
+  return result;
+}
+
+//------------------------------------------------------------------------------
+// Geometry helpers
+//------------------------------------------------------------------------------
+bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitRay, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut )
+{
+  ae::Vec3 ab = b - a;
+  ae::Vec3 ac = c - a;
+  ae::Vec3 n = ab.Cross( ac );
+  ae::Vec3 qp = -dir;
+  
+  // Compute denominator d
+  float d = qp.Dot( n );
+  if ( !ccw && d > 0.0f )
+  {
+	return false;
+  }
+  if ( !cw && d < 0.0f )
+  {
+	return false;
+  }
+  // Parallel
+  if ( d * d < 0.001f )
+  {
+	return false;
+  }
+  float ood = 1.0f / d;
+  
+  // Compute intersection t value of pq with plane of triangle
+  ae::Vec3 ap = p - a;
+  float t = ap.Dot( n ) * ood;
+  // Ray intersects if 0 <= t
+  if ( t < 0.0f )
+  {
+	return false;
+  }
+  // Segment intersects if 0 <= t <= 1
+  if ( limitRay && t > 1.0f )
+  {
+	return false;
+  }
+  
+  // Compute barycentric coordinate components and test if within bounds
+  ae::Vec3 e = qp.Cross( ap );
+  float v = ac.Dot( e ) * ood;
+  if ( v < 0.0f || v > 1.0f )
+  {
+	return false;
+  }
+  float w = -ab.Dot( e ) * ood;
+  if ( w < 0.0f || v + w > 1.0f )
+  {
+	return false;
+  }
+  
+  // Result
+  if ( pOut )
+  {
+	*pOut = p + dir * t;
+  }
+  if ( nOut )
+  {
+	*nOut = n.SafeNormalizeCopy();
+  }
+  if ( tOut )
+  {
+	*tOut = t;
+  }
+  return true;
+}
+
+ae::Vec3 ClosestPtPointTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c )
+{
+  ae::Vec3 ab = b - a;
+  ae::Vec3 ac = c - a;
+  ae::Vec3 bc = c - b;
+  
+  // Compute parametric position s for projection P’ of P on AB,
+  // P’ = A + s*AB, s = snom/(snom+sdenom)
+  float snom = (p - a).Dot( ab );
+  float sdenom = (p - b).Dot(a - b);
+  
+  // Compute parametric position t for projection P’ of P on AC,
+  // P’ = A + t*AC, s = tnom/(tnom+tdenom)
+  float tnom = (p - a).Dot( ac );
+  float tdenom = (p - c).Dot( a - c);
+  if (snom <= 0.0f && tnom <= 0.0f) return a; // Vertex region early out
+  
+  // Compute parametric position u for projection P’ of P on BC,
+  // P’ = B + u*BC, u = unom/(unom+udenom)
+  float unom = (p - b).Dot( bc ), udenom = (p - c).Dot(b - c);
+  if (sdenom <= 0.0f && unom <= 0.0f) return b; // Vertex region early out
+  if (tdenom <= 0.0f && udenom <= 0.0f) return c; // Vertex region early out
+  
+  // P is outside (or on) AB if the triple scalar product [N PA PB] <= 0
+  ae::Vec3 n = (b - a).Cross(c - a);
+  float vc = n.Dot((a - p).Cross(b - p));
+  // If P outside AB and within feature region of AB,
+  // return projection of P onto AB
+  if (vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f)
+	  return a + snom / (snom + sdenom) * ab;
+  
+  // P is outside (or on) BC if the triple scalar product [N PB PC] <= 0
+  float va = n.Dot((b - p).Cross(c - p));
+  // If P outside BC and within feature region of BC,
+  // return projection of P onto BC
+  if (va <= 0.0f && unom >= 0.0f && udenom >= 0.0f)
+	return b + unom / (unom + udenom) * bc;
+  
+  // P is outside (or on) CA if the triple scalar product [N PC PA] <= 0
+  float vb = n.Dot((c - p).Cross(a - p));
+  // If P outside CA and within feature region of CA,
+  // return projection of P onto CA
+  if (vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f)
+	  return a + tnom / (tnom + tdenom) * ac;
+
+  // P must project inside face region. Compute Q using barycentric coordinates
+  float u = va / (va + vb + vc);
+  float v = vb / (va + vb + vc);
+  float w=1.0f-u-v; //=vc/(va+vb+vc)
+  return u * a + v * b + w * c;
 }
 
 //------------------------------------------------------------------------------
@@ -12341,11 +12801,13 @@ DebugCamera::DebugCamera()
 {
   m_min = 1.0f;
   m_max = ae::MaxValue< float >();
-  m_worldUp = ae::Vec3( 0.0f, 0.0f, 1.0f );
+  m_worldUp = Axis::Z;
   m_inputEnabled = true;
   m_mode = Mode::None;
   m_refocusPos = ae::Vec3( 0.0f );
   m_refocus = false;
+  m_moveAccum = ae::Vec2( 0.0f );
+  m_forceCapture = false;
   m_focusPos = ae::Vec3( 0.0f );
   m_dist = 5.0f;
   m_yaw = 0.77f;
@@ -12371,18 +12833,25 @@ void DebugCamera::Update( const ae::Input* input, float dt )
   bool mousePan = false;
   bool mouseZoom = false;
   bool mouseRotate = false;
-  if ( input )
+  if ( m_forceCapture )
+  {
+    // This delays releasing the mouse for one frame so checks to (leftMousePrev && !leftMouse) fail, ie. mouse click up
+    m_mode = Mode::None;
+    m_forceCapture = false;
+  }
+  else if ( input )
   {
     ae::Key panKey = ae::Key::LeftAlt;
     mouseMovement = ae::Vec2( input->mouse.movement );
-    mousePan = input->mousePrev.middleButton && input->mouse.middleButton;
+    m_moveAccum += mouseMovement;
+    mousePan = input->mouse.middleButton;
     if ( !mousePan
-      && input->mousePrev.leftButton && input->mouse.leftButton
+      && input->mouse.leftButton
       && input->Get( panKey ) )
     {
       mousePan = true;
     }
-    mouseZoom = input->mousePrev.rightButton && input->mouse.rightButton;
+    mouseZoom = input->mouse.rightButton;
 
     if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
     {
@@ -12390,37 +12859,45 @@ void DebugCamera::Update( const ae::Input* input, float dt )
     }
     else if ( !input->Get( panKey ) )
     {
-      mouseRotate = input->mousePrev.leftButton && input->mouse.leftButton;
+      mouseRotate = input->mouse.leftButton;
     }
   }
 
-  if ( m_mode == Mode::Rotate && !mouseRotate )
+  // Return to default mode
+  if ( ( m_mode == Mode::Rotate && !mouseRotate )
+      || ( m_mode == Mode::Pan && !mousePan )
+      || ( m_mode == Mode::Zoom && !mouseZoom ) )
   {
-    m_mode = Mode::None;
-  }
-  else if ( m_mode == Mode::Pan && !mousePan )
-  {
-    m_mode = Mode::None;
-  }
-  else if ( m_mode == Mode::Zoom && !mouseZoom )
-  {
-    m_mode = Mode::None;
+    if ( m_moveAccum.Length() >= 5.0f ) // In pixels
+    {
+      // Delay resetting mode
+      m_forceCapture = true;
+    }
+    else
+    {
+      AE_INFO( "m_moveAccum.Length() #", m_moveAccum.Length() );
+      m_mode = Mode::None;
+    }
   }
 
+  // Enter mode
   if ( m_mode == Mode::None )
   {
     if ( mouseRotate )
     {
       m_mode = Mode::Rotate;
+      m_moveAccum = ae::Vec2( 0.0f );
     }
     else if ( mousePan )
     {
       m_mode = Mode::Pan;
       m_refocus = false;
+      m_moveAccum = ae::Vec2( 0.0f );
     }
     else if ( mouseZoom )
     {
       m_mode = Mode::Zoom;
+      m_moveAccum = ae::Vec2( 0.0f );
     }
   }
 
@@ -12469,11 +12946,12 @@ void DebugCamera::Update( const ae::Input* input, float dt )
   }
 }
 
-void DebugCamera::Reset( ae::Vec3 up, ae::Vec3 focus, ae::Vec3 pos )
+void DebugCamera::Reset( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
 {
   m_refocus = false;
   m_refocusPos = focus;
   
+  m_worldUp = worldUp;
   m_focusPos = focus;
   
   ae::Vec3 diff = focus - pos;
@@ -12518,12 +12996,22 @@ void DebugCamera::SetRotation( ae::Vec2 angle )
 
 void DebugCamera::m_Precalculate()
 {
-  m_forward = ae::Vec3( ae::Cos( m_yaw ), ae::Sin( m_yaw ), 0.0f );
+  ae::Vec3 worldUp = GetWorldUp();
+
+  if ( m_worldUp == Axis::Y )
+  {
+    m_forward = ae::Vec3( ae::Cos( m_yaw ), 0.0f, -ae::Sin( m_yaw ) );
+  }
+  else if ( m_worldUp == Axis::Z )
+  {
+    m_forward = ae::Vec3( ae::Cos( m_yaw ), ae::Sin( m_yaw ), 0.0f );
+  }
   m_forward *= ae::Cos( m_pitch );
-  m_forward.z = ae::Sin( m_pitch );
+  m_forward += worldUp * ae::Sin( m_pitch );
+
   m_offset = -m_forward;
   m_offset *= m_dist;
-  m_right = m_forward.Cross( m_worldUp ).SafeNormalizeCopy();
+  m_right = m_forward.Cross( worldUp ).SafeNormalizeCopy();
   m_up = m_right.Cross( m_forward ).SafeNormalizeCopy();
 }
 

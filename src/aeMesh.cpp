@@ -23,119 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeMesh.h"
-
-//------------------------------------------------------------------------------
-// Helpers
-//------------------------------------------------------------------------------
-void ae::Mesh::Vertex::Serialize( const SerializationParams& params, ae::BinaryStream* stream )
-{
-  bool reader = stream->IsReader();
-  if ( params.position )
-  {
-    stream->SerializeFloat( position.x );
-    stream->SerializeFloat( position.y );
-    stream->SerializeFloat( position.z );
-    if ( reader )
-    {
-      position.w = 1.0f;
-    }
-  }
-  if ( params.normal )
-  {
-    stream->SerializeFloat( normal.x );
-    stream->SerializeFloat( normal.y );
-    stream->SerializeFloat( normal.z );
-    if ( reader )
-    {
-      normal.w = 0.0f;
-    }
-  }
-  for ( uint32_t i = 0; i < params.uvSets; i++ )
-  {
-    stream->SerializeFloat( tex[ i ].x );
-    stream->SerializeFloat( tex[ i ].y );
-  }
-  for ( uint32_t i = 0; i < params.colorSets; i++ )
-  {
-    stream->SerializeFloat( color[ i ].r );
-    stream->SerializeFloat( color[ i ].g );
-    stream->SerializeFloat( color[ i ].b );
-    stream->SerializeFloat( color[ i ].a );
-  }
-  for ( uint32_t i = 0; i < params.userDataCount; i++ )
-  {
-    stream->SerializeUint8( userData[ i ] );
-  }
-}
-
-// @TODO: Move to aeMath
-bool IntersectRayTriangle( ae::Vec3 p, ae::Vec3 dir, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c, bool limitRay, bool ccw, bool cw, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut )
-{
-  ae::Vec3 ab = b - a;
-  ae::Vec3 ac = c - a;
-  ae::Vec3 n = ab.Cross( ac );
-  ae::Vec3 qp = -dir;
-  
-  // Compute denominator d
-  float d = qp.Dot( n );
-  if ( !ccw && d > 0.0f )
-  {
-    return false;
-  }
-  if ( !cw && d < 0.0f )
-  {
-    return false;
-  }
-  // Parallel
-  if ( d * d < 0.001f )
-  {
-    return false;
-  }
-  float ood = 1.0f / d;
-  
-  // Compute intersection t value of pq with plane of triangle
-  ae::Vec3 ap = p - a;
-  float t = ap.Dot( n ) * ood;
-  // Ray intersects if 0 <= t
-  if ( t < 0.0f )
-  {
-    return false;
-  }
-  // Segment intersects if 0 <= t <= 1
-  if ( limitRay && t > 1.0f )
-  {
-    return false;
-  }
-  
-  // Compute barycentric coordinate components and test if within bounds
-  ae::Vec3 e = qp.Cross( ap );
-  float v = ac.Dot( e ) * ood;
-  if ( v < 0.0f || v > 1.0f )
-  {
-    return false;
-  }
-  float w = -ab.Dot( e ) * ood;
-  if ( w < 0.0f || v + w > 1.0f )
-  {
-    return false;
-  }
-  
-  // Result
-  if ( pOut )
-  {
-    *pOut = p + dir * t;
-  }
-  if ( nOut )
-  {
-    *nOut = n.SafeNormalizeCopy();
-  }
-  if ( tOut )
-  {
-    *tOut = t;
-  }
-  return true;
-}
+//#include "aeMesh.h"
 
 //------------------------------------------------------------------------------
 // aeMesh member functions
@@ -151,123 +39,123 @@ uint32_t aeMesh::GetIndexCount() const { return 0; }
 
 #else // !_AE_EMSCRIPTEN_
 
-#include <assimp/cimport.h>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
+//#include <assimp/cimport.h>
+//#include <assimp/scene.h>
+//#include <assimp/postprocess.h>
+//
+//bool ae::CollisionMesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization )
+//{
+//  m_vertices.Clear();
+//  m_indices.Clear();
+//
+//#if _AE_DEBUG_
+//  aiLogStream stream = aiGetPredefinedLogStream( aiDefaultLogStream_STDOUT, nullptr );
+//  aiAttachLogStream( &stream );
+//#endif
+//
+//  uint32_t importFlags = 0;
+//
+//  // Assimp doesn't process normals, tangents, bitangents correctly, so if skipMeshOptimization is true
+//  // then don't run any Assimp processing for tangent or normal generation.  Just use the original mesh.
+//  // Otherwise thin features have normals flipped and creases handling isn't correct either.
+//  if ( !skipMeshOptimization )
+//  {
+//    importFlags |= aiProcessPreset_TargetRealtime_MaxQuality;
+//    importFlags |= aiProcess_JoinIdenticalVertices;
+//  }
+//  importFlags |= aiProcess_PreTransformVertices;
+//
+//  const struct aiScene* scene = aiImportFileFromMemory( (const char*)data, length, importFlags, extension );
+//  if ( !scene )
+//  {
+//    return false;
+//  }
+//
+//  uint32_t meshCount = scene->mNumMeshes;
+//  for ( uint32_t i = 0; i < meshCount; i++ )
+//  {
+//    const struct aiMesh* mesh = scene->mMeshes[ i ];
+//
+//    uint32_t vertCount = mesh->mNumVertices;
+//    uint32_t uvCount = aeMath::Min( mesh->GetNumUVChannels(), countof(Vertex::tex) );
+//    uint32_t colorCount = aeMath::Min( mesh->GetNumColorChannels(), countof(Vertex::color) );
+//    AE_DEBUG( "Submesh: vertCount # uvCount # colorCount #", vertCount, uvCount, colorCount );
+//
+//    if ( vertCount )
+//    {
+//      aiVector3D p = mesh->mVertices[ 0 ];
+//      m_aabb = aeAABB( ae::Vec3( p.x, p.y, p.z ), ae::Vec3( p.x, p.y, p.z ) );
+//    }
+//
+//    for ( uint32_t j = 0; j < vertCount; j++ )
+//    {
+//      Vertex vertex;
+//
+//      // Position
+//      aiVector3D p = mesh->mVertices[ j ];
+//      vertex.position = ae::Vec4( p.x, p.y, p.z, 1.0f );
+//      m_aabb.Expand( vertex.position.GetXYZ() );
+//
+//      // Normal
+//      aiVector3D n = mesh->mNormals[ j ];
+//      vertex.normal = ae::Vec4( n.x, n.y, n.z, 0.0f );
+//
+//      // UVs
+//      memset( vertex.tex, 0, sizeof(vertex.tex) );
+//      for ( uint32_t k = 0; k < uvCount; k++ )
+//      {
+//        AE_ASSERT( mesh->mTextureCoords[ k ] );
+//        // @NOTE: An aiMesh may contain 0 to AI_MAX_NUMBER_OF_TEXTURECOORDS per vertex.
+//        //        NULL if not present. The array is mNumVertices in size.
+//        aiVector3D t = mesh->mTextureCoords[ k ][ j ];
+//        vertex.tex[ k ] = ae::Vec2( t.x, t.y );
+//      }
+//
+//      // Color
+//      memset( vertex.color, 0, sizeof(vertex.color) );
+//      for ( uint32_t k = 0; k < colorCount; k++ )
+//      {
+//        AE_ASSERT( mesh->mColors[ k ] );
+//        aiColor4D c = mesh->mColors[ k ][ j ];
+//        vertex.color[ k ] = ae::Color( c.r, c.g, c.b, c.a );
+//      }
+//
+//      m_vertices.Append( vertex );
+//    }
+//  }
+//
+//  uint32_t currentVertexCount = 0;
+//  for ( uint32_t i = 0; i < meshCount; i++ )
+//  {
+//    const struct aiMesh* mesh = scene->mMeshes[ i ];
+//    uint32_t faceCount = mesh->mNumFaces;
+//
+//    for ( uint32_t j = 0; j < faceCount; j++ )
+//    {
+//      uint32_t faceIndexCount = mesh->mFaces[ j ].mNumIndices;
+//      if ( faceIndexCount == 3 )
+//      {
+//        for ( uint32_t k = 0; k < 3; k++ )
+//        {
+//          uint32_t index = currentVertexCount + mesh->mFaces[ j ].mIndices[ k ];
+//          AE_ASSERT( index < std::numeric_limits< uint16_t >::max() );
+//          m_indices.Append( (uint16_t)index );
+//        }
+//      }
+//    }
+//
+//    currentVertexCount += mesh->mNumVertices;
+//  }
+//
+//  aiReleaseImport( scene );
+//#if _AE_DEBUG_
+//  aiDetachAllLogStreams();
+//#endif
+//
+//  return true;
+//}
 
-bool ae::Mesh::LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization )
-{
-  m_vertices.Clear();
-  m_indices.Clear();
-
-#if _AE_DEBUG_
-  aiLogStream stream = aiGetPredefinedLogStream( aiDefaultLogStream_STDOUT, nullptr );
-  aiAttachLogStream( &stream );
-#endif
-
-  uint32_t importFlags = 0;
-	
-  // Assimp doesn't process normals, tangents, bitangents correctly, so if skipMeshOptimization is true
-  // then don't run any Assimp processing for tangent or normal generation.  Just use the original mesh.
-  // Otherwise thin features have normals flipped and creases handling isn't correct either.
-  if ( !skipMeshOptimization )
-  {
-    importFlags |= aiProcessPreset_TargetRealtime_MaxQuality;
-    importFlags |= aiProcess_JoinIdenticalVertices;
-  }
-  importFlags |= aiProcess_PreTransformVertices;
-  
-  const struct aiScene* scene = aiImportFileFromMemory( (const char*)data, length, importFlags, extension );
-  if ( !scene )
-  {
-    return false;
-  }
-  
-  uint32_t meshCount = scene->mNumMeshes;
-  for ( uint32_t i = 0; i < meshCount; i++ )
-  {
-    const struct aiMesh* mesh = scene->mMeshes[ i ];
-
-    uint32_t vertCount = mesh->mNumVertices;
-    uint32_t uvCount = aeMath::Min( mesh->GetNumUVChannels(), countof(Vertex::tex) );
-    uint32_t colorCount = aeMath::Min( mesh->GetNumColorChannels(), countof(Vertex::color) );
-    AE_DEBUG( "Submesh: vertCount # uvCount # colorCount #", vertCount, uvCount, colorCount );
-    
-    if ( vertCount )
-    {
-      aiVector3D p = mesh->mVertices[ 0 ];
-      m_aabb = aeAABB( ae::Vec3( p.x, p.y, p.z ), ae::Vec3( p.x, p.y, p.z ) );
-    }
-
-    for ( uint32_t j = 0; j < vertCount; j++ )
-    {
-      Vertex vertex;
-      
-      // Position
-      aiVector3D p = mesh->mVertices[ j ];
-      vertex.position = ae::Vec4( p.x, p.y, p.z, 1.0f );
-      m_aabb.Expand( vertex.position.GetXYZ() );
-
-      // Normal
-      aiVector3D n = mesh->mNormals[ j ];
-      vertex.normal = ae::Vec4( n.x, n.y, n.z, 0.0f );
-
-      // UVs
-      memset( vertex.tex, 0, sizeof(vertex.tex) );
-      for ( uint32_t k = 0; k < uvCount; k++ )
-      {
-        AE_ASSERT( mesh->mTextureCoords[ k ] );
-        // @NOTE: An aiMesh may contain 0 to AI_MAX_NUMBER_OF_TEXTURECOORDS per vertex.
-        //        NULL if not present. The array is mNumVertices in size.
-        aiVector3D t = mesh->mTextureCoords[ k ][ j ];
-        vertex.tex[ k ] = ae::Vec2( t.x, t.y );
-      }
-
-      // Color
-      memset( vertex.color, 0, sizeof(vertex.color) );
-      for ( uint32_t k = 0; k < colorCount; k++ )
-      {
-        AE_ASSERT( mesh->mColors[ k ] );
-        aiColor4D c = mesh->mColors[ k ][ j ];
-        vertex.color[ k ] = ae::Color( c.r, c.g, c.b, c.a );
-      }
-
-      m_vertices.Append( vertex );
-    }
-  }
-  
-  uint32_t currentVertexCount = 0;
-  for ( uint32_t i = 0; i < meshCount; i++ )
-  {
-    const struct aiMesh* mesh = scene->mMeshes[ i ];
-    uint32_t faceCount = mesh->mNumFaces;
-    
-    for ( uint32_t j = 0; j < faceCount; j++ )
-    {
-      uint32_t faceIndexCount = mesh->mFaces[ j ].mNumIndices;
-      if ( faceIndexCount == 3 )
-      {
-        for ( uint32_t k = 0; k < 3; k++ )
-        {
-          uint32_t index = currentVertexCount + mesh->mFaces[ j ].mIndices[ k ];
-          AE_ASSERT( index < std::numeric_limits< uint16_t >::max() );
-          m_indices.Append( (uint16_t)index );
-        }
-      }
-    }
-    
-    currentVertexCount += mesh->mNumVertices;
-  }
-  
-  aiReleaseImport( scene );
-#if _AE_DEBUG_
-  aiDetachAllLogStreams();
-#endif
-
-  return true;
-}
-
-void ae::Mesh::Load( LoadParams params )
+void ae::CollisionMesh::Load( LoadParams params )
 {
   Clear();
   
@@ -283,7 +171,7 @@ void ae::Mesh::Load( LoadParams params )
   if ( params.vertexCount )
   {
     AE_ASSERT( params.positions );
-    m_aabb = aeAABB( params.positions[ 0 ], params.positions[ 0 ] );
+    m_aabb = ae::AABB( params.positions[ 0 ], params.positions[ 0 ] );
     
     m_vertices.Reserve( params.vertexCount );
     for ( uint32_t i = 0; i < params.vertexCount; i++ )
@@ -314,66 +202,7 @@ void ae::Mesh::Load( LoadParams params )
   m_indices.Append( params.indices16, params.indexCount );
 }
 
-const uint32_t kAeMeshVersion = 2;
-void ae::Mesh::Serialize( const SerializationParams& params, ae::BinaryStream* stream )
-{
-  if ( stream->IsReader() )
-  {
-    Clear();
-  }
-  
-  uint32_t version = kAeMeshVersion;
-  stream->SerializeUint32( version );
-  if ( version != kAeMeshVersion )
-  {
-    stream->Invalidate();
-    return;
-  }
-  
-  stream->SerializeRaw( &m_aabb, sizeof(m_aabb) );
-  
-  const uint32_t indexSize = sizeof(*m_indices.Begin());
-  
-  if ( stream->IsWriter() )
-  {
-    uint32_t vertexCount = m_vertices.Length();
-    stream->SerializeUint32( vertexCount );
-    for ( uint32_t i = 0; i < vertexCount; i++ )
-    {
-      m_vertices[ i ].Serialize( params, stream );
-    }
-    
-    uint32_t indexDataLen = m_indices.Length() * indexSize;
-    stream->SerializeUint32( indexDataLen );
-    stream->SerializeRaw( m_indices.Begin(), indexDataLen );
-  }
-  else
-  {
-    AE_ASSERT( stream->IsReader() );
-    
-    uint32_t vertexCount = 0;
-    stream->SerializeUint32( vertexCount );
-    m_vertices.Reserve( vertexCount );
-    for ( uint32_t i = 0; i < vertexCount; i++ )
-    {
-      Vertex v;
-      v.Serialize( params, stream );
-      m_vertices.Append( v );
-    }
-    
-    uint32_t indexDataLength = 0;
-    stream->SerializeUint32( indexDataLength );
-    if ( indexDataLength % indexSize != 0 || stream->GetRemaining() < indexDataLength )
-    {
-      stream->Invalidate();
-      return;
-    }
-    m_indices.Append( (const Index*)stream->PeekData(), indexDataLength / indexSize );
-    stream->Discard( indexDataLength );
-  }
-}
-
-void ae::Mesh::Transform( ae::Matrix4 transform )
+void ae::CollisionMesh::Transform( ae::Matrix4 transform )
 {
   if ( !m_vertices.Length() )
   {
@@ -381,7 +210,7 @@ void ae::Mesh::Transform( ae::Matrix4 transform )
   }
   
   ae::Vec3 p( transform * m_vertices[ 0 ].position );
-  m_aabb = aeAABB( p, p );
+  m_aabb = ae::AABB( p, p );
   
   // @TODO: Transform normals
   for ( uint32_t i = 0; i < m_vertices.Length(); i++ )
@@ -391,34 +220,34 @@ void ae::Mesh::Transform( ae::Matrix4 transform )
   }
 }
 
-void ae::Mesh::Clear()
+void ae::CollisionMesh::Clear()
 {
   m_vertices.Clear();
   m_indices.Clear();
-  m_aabb = aeAABB();
+  m_aabb = ae::AABB();
 }
 
-const ae::Mesh::Vertex* ae::Mesh::GetVertices() const
+const ae::CollisionMesh::Vertex* ae::CollisionMesh::GetVertices() const
 {
   return m_vertices.Length() ? &m_vertices[ 0 ] : nullptr;
 }
 
-const ae::Mesh::Index* ae::Mesh::GetIndices() const
+const ae::CollisionMesh::Index* ae::CollisionMesh::GetIndices() const
 {
   return m_indices.Length() ? &m_indices[ 0 ] : nullptr;
 }
 
-uint32_t ae::Mesh::GetVertexCount() const
+uint32_t ae::CollisionMesh::GetVertexCount() const
 {
   return m_vertices.Length();
 }
 
-uint32_t ae::Mesh::GetIndexCount() const
+uint32_t ae::CollisionMesh::GetIndexCount() const
 {
   return m_indices.Length();
 }
 
-bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
+bool ae::CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
 {
   // Early out for parameters that will give no results
   if ( params.maxLength < 0.0f || params.maxHits == 0 )
@@ -426,11 +255,21 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
     return false;
   }
   
+  bool limitRay = params.maxLength != 0.0f;
+  ae::Vec3 normParamsDir = params.direction.SafeNormalizeCopy();
+
   // Obb in world space
   {
-    aeOBB obb( params.transform * m_aabb.GetTransform() );
-    if ( !obb.IntersectRay( params.source, params.direction ) )
+    float obbDistance = ae::MaxValue< float >();
+    ae::OBB obb( params.transform * m_aabb.GetTransform() );
+    if ( !obb.IntersectRay( params.source, normParamsDir, nullptr, &obbDistance )
+      || ( limitRay && obbDistance > params.maxLength ) )
     {
+      if ( ae::DebugLines* debug = params.debug )
+      {
+        ae::Vec3 rayEnd = params.source + normParamsDir * ( limitRay ? params.maxLength : 1000.0f );
+        debug->AddLine( params.source, rayEnd, params.debugColor );
+      }
       return false; // Early out if ray doesn't touch obb
     }
     
@@ -441,10 +280,9 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
     }
   }
   
-  bool limitRay = params.maxLength != 0.0f;
   const ae::Matrix4 invTransform = params.transform.GetInverse();
   const ae::Vec3 source( invTransform * ae::Vec4( params.source, 1.0f ) );
-  const ae::Vec3 ray( invTransform * ae::Vec4( limitRay ? params.direction.SafeNormalizeCopy() * params.maxLength : params.direction, 0.0f ) );
+  const ae::Vec3 ray( invTransform * ae::Vec4( normParamsDir * ( limitRay ? params.maxLength : 1.0f ), 0.0f ) );
   const ae::Vec3 normDir = ray.SafeNormalizeCopy();
   const bool ccw = params.hitCounterclockwise;
   const bool cw = params.hitClockwise;
@@ -489,14 +327,23 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
   
   if ( ae::DebugLines* debug = params.debug )
   {
-    if ( hitCount && !limitRay )
+    ae::Vec3 rayEnd;
+    if ( !limitRay )
     {
-      debug->AddLine( params.source, hits[ hitCount - 1 ].position, params.debugColor );
+      if ( hitCount )
+      {
+        rayEnd = hits[ hitCount - 1 ].position;
+      }
+      else
+      {
+        rayEnd = params.source + normParamsDir * 1000.0f;
+      }
     }
     else
     {
-      debug->AddLine( params.source, params.source + ray, params.debugColor );
+      rayEnd = params.source + normParamsDir * params.maxLength;
     }
+    debug->AddLine( params.source, rayEnd, params.debugColor );
     
     for ( uint32_t i = 0; i < hitCount; i++ )
     {
@@ -520,10 +367,10 @@ bool ae::Mesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) 
   return hitCount;
 }
 
-ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const PushOutInfo& info ) const
+ae::CollisionMesh::PushOutInfo ae::CollisionMesh::PushOut( const PushOutParams& params, const PushOutInfo& info ) const
 {
-  aeOBB obb( params.transform * m_aabb.GetTransform() );
-  if ( obb.GetMinDistance( info.sphere.center ) > info.sphere.radius )
+  ae::OBB obb( params.transform * m_aabb.GetTransform() );
+  if ( obb.GetSignedDistanceFromSurface( info.sphere.center ) > info.sphere.radius )
   {
     return info; // Early out if sphere is to far from mesh
   }
@@ -616,7 +463,7 @@ ae::Mesh::PushOutInfo ae::Mesh::PushOut( const PushOutParams& params, const Push
 //------------------------------------------------------------------------------
 // RaycastResult
 //------------------------------------------------------------------------------
-void ae::Mesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& result )
+void ae::CollisionMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& result )
 {
   uint32_t accumHitCount = 0;
   Hit accumHits[ countof(hits) * 2 ];
@@ -643,7 +490,7 @@ void ae::Mesh::RaycastResult::Accumulate( const RaycastParams& params, const Ray
 //------------------------------------------------------------------------------
 // PushOutInfo
 //------------------------------------------------------------------------------
-void ae::Mesh::PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next )
+void ae::CollisionMesh::PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next )
 {
   // @NOTE: Leave next::position/velocity unchanged since it's the latest
   // @TODO: Params are currently not used, but they could be used for sorting later

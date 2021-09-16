@@ -33,28 +33,16 @@
 namespace ae {
 
 //------------------------------------------------------------------------------
-// ae::Mesh class
+// ae::CollisionMesh class
 //------------------------------------------------------------------------------
-class Mesh
+class CollisionMesh
 {
 public:
   typedef uint16_t Index;
-  struct SerializationParams
-  {
-    bool position = true;
-    bool normal = true;
-    uint32_t uvSets = 2;
-    uint32_t colorSets = 4;
-    uint32_t userDataCount = 4;
-  };
   struct Vertex
   {
-    void Serialize( const SerializationParams& params, class ae::BinaryStream* stream );
-    
     ae::Vec4 position;
     ae::Vec4 normal;
-    ae::Vec2 tex[ 4 ];
-    ae::Color color[ 4 ];
     uint8_t userData[ 4 ];
   };
   struct LoadParams
@@ -72,10 +60,8 @@ public:
   };
   
   // Initialization
-  bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
   void Load( LoadParams params );
-  void Serialize( const SerializationParams& params, ae::BinaryStream* stream ); // @NOTE: Serializing ae::Mesh across library versions may not work. Stream will be invaldated on failure.
-  void Transform( ae::Matrix4 transform ); // Permanently pre-transform loaded verts
+  void Transform( ae::Matrix4 transform ); // Pre-transform loaded verts
   void Clear();
 
   // Geo
@@ -85,7 +71,7 @@ public:
   const Index* GetIndices() const;
   uint32_t GetVertexCount() const;
   uint32_t GetIndexCount() const;
-  aeAABB GetAABB() const { return m_aabb; }
+  ae::AABB GetAABB() const { return m_aabb; }
   
   // Raycast
   struct RaycastParams
@@ -123,7 +109,7 @@ public:
   };
   struct PushOutInfo
   {
-    aeSphere sphere;
+    ae::Sphere sphere;
     ae::Vec3 velocity = ae::Vec3( 0.0f );
     struct Hit
     {
@@ -140,9 +126,15 @@ private:
   // @TODO: Tags should be provided by the user
   ae::Array< Vertex > m_vertices = AE_ALLOC_TAG_MESH;
   ae::Array< Index > m_indices = AE_ALLOC_TAG_MESH;
-  aeAABB m_aabb;
+  ae::AABB m_aabb;
 };
 
+bool LoadFileData( const uint8_t* data, uint32_t length, const char* extension, bool skipMeshOptimization = false );
+
 }
+
+#ifdef AE_MAIN
+#include "../../src/aeMesh.cpp"
+#endif
 
 #endif
