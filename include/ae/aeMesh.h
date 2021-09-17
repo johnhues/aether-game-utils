@@ -41,12 +41,10 @@ public:
   // Initialization params
   struct Params
   {
+    ae::Matrix4 transform = ae::Matrix4::Identity(); //!< Transform given position values while storing them
     uint32_t vertexCount = 0;
     const ae::Vec3* positions = nullptr;
-    const ae::Vec3* normals = nullptr;
-    uint32_t positionStride = sizeof(ae::Vec3);
-    uint32_t normalStride = sizeof(ae::Vec3);
-
+    uint32_t positionStride = 0;
     uint32_t indexCount = 0;
     const uint16_t* indices16 = nullptr;
   };
@@ -54,6 +52,7 @@ public:
   struct RaycastParams
   {
     ae::Matrix4 transform = ae::Matrix4::Identity();
+    const void* userData = nullptr;
     ae::Vec3 source = ae::Vec3( 0.0f );
     ae::Vec3 direction = ae::Vec3( 0.0f, 0.0f, -1.0f );
     float maxLength = 0.0f;
@@ -71,10 +70,11 @@ public:
     {
       ae::Vec3 position = ae::Vec3( 0.0f );
       ae::Vec3 normal = ae::Vec3( 0.0f );
-      float t = 0.0f;
+      float distance = 0.0f;
+      const void* userData = nullptr;
     } hits[ 8 ];
     
-    void Accumulate( const RaycastParams& params, const RaycastResult& result );
+    static void Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next );
   };
   // Sphere collision PushOutParams
   struct PushOutParams
@@ -99,11 +99,11 @@ public:
   };
   
   CollisionMesh( ae::Tag tag );
-  void Load( Params params ); // @TODO: Should allow multiple Load()s without clearing
-  void Transform( ae::Matrix4 transform ); // Pre-transform loaded verts
+  void Load( Params params );
   void Clear();
   bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const;
-  PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& info ) const;
+  RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
+  PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
   ae::AABB GetAABB() const { return m_aabb; }
 
 private:

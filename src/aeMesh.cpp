@@ -164,8 +164,10 @@ ae::CollisionMesh::CollisionMesh( ae::Tag tag ) :
 
 void ae::CollisionMesh::Load( Params params )
 {
-  Clear();
+  AE_ASSERT_MSG( !m_vertices.Length(), "TODO! Should allow multiple Load()s without clearing" );
   
+  AE_ASSERT( params.positions );
+  AE_ASSERT_MSG( params.positionStride > sizeof(float) * 3, "Must specify the number of bytes between each position" );
   if ( params.indexCount )
   {
     AE_ASSERT( params.indexCount % 3 == 0 );
@@ -174,51 +176,34 @@ void ae::CollisionMesh::Load( Params params )
   {
     AE_ASSERT( params.vertexCount % 3 == 0 );
   }
-  
-  if ( params.vertexCount )
+
+  bool identityTransform = ( params.transform == ae::Matrix4::Identity() );
+
+  ae::Vec3 p0 = params.positions[ 0 ];
+  if ( !identityTransform )
   {
-    AE_ASSERT( params.positions );
-    m_aabb = ae::AABB( params.positions[ 0 ], params.positions[ 0 ] );
+    p0 = ( params.transform * ae::Vec4( p0, 1.0f ) ).GetXYZ();
+  }
+  m_aabb = ae::AABB( p0, p0 );
+
+  m_vertices.Reserve( params.vertexCount );
+  for ( uint32_t i = 0; i < params.vertexCount; i++ )
+  {
+    Vertex vert;
+    memset( &vert, 0, sizeof(vert) );
     
-    m_vertices.Reserve( params.vertexCount );
-    for ( uint32_t i = 0; i < params.vertexCount; i++ )
+    vert.position = ae::Vec4( *params.positions, 1.0f );
+    if ( !identityTransform )
     {
-      Vertex vert;
-      memset( &vert, 0, sizeof(vert) );
-      
-      vert.position = ae::Vec4( *params.positions, 1.0f );
-      params.positions = (ae::Vec3*)( (uint8_t*)params.positions + params.positionStride );
-      
-      if ( params.normals )
-      {
-        vert.normal = ae::Vec4( *params.normals, 0.0f );
-        params.normals = (ae::Vec3*)( (uint8_t*)params.normals + params.normalStride );
-      }
-      
-      m_aabb.Expand( vert.position.GetXYZ() );
-      m_vertices.Append( vert );
+      vert.position = params.transform * vert.position;
     }
+    params.positions = (ae::Vec3*)( (uint8_t*)params.positions + params.positionStride );
+    
+    m_aabb.Expand( vert.position.GetXYZ() );
+    m_vertices.Append( vert );
   }
   
   m_indices.Append( params.indices16, params.indexCount );
-}
-
-void ae::CollisionMesh::Transform( ae::Matrix4 transform )
-{
-  if ( !m_vertices.Length() )
-  {
-    return;
-  }
-  
-  ae::Vec3 p( transform * m_vertices[ 0 ].position );
-  m_aabb = ae::AABB( p, p );
-  
-  // @TODO: Transform normals
-  for ( uint32_t i = 0; i < m_vertices.Length(); i++ )
-  {
-    m_vertices[ i ].position = transform * m_vertices[ i ].position;
-    m_aabb.Expand( m_vertices[ i ].position.GetXYZ() );
-  }
 }
 
 void ae::CollisionMesh::Clear()
@@ -277,30 +262,24 @@ bool ae::CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* out
   const uint32_t maxHits = aeMath::Min( params.maxHits, countof(RaycastResult::hits) );
   for ( uint32_t i = 0; i < triCount; i++ )
   {
+    ae::Vec3 p, n;
     ae::Vec3 a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
     ae::Vec3 b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
     ae::Vec3 c = vertices[ indices[ i * 3 + 2 ] ].position.GetXYZ();
-    
-    ae::Vec3 p;
-    ae::Vec3 n;
     if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
     {
-      RaycastResult::Hit* outHit = &hits[ hitCount ];
-      if ( hitCount <= maxHits ) // Allow one extra hit, then sort array and remove last
-      {
-        hitCount++;
-      }
+      RaycastResult::Hit& outHit = hits[ hitCount ];
+      hitCount++;
+      AE_ASSERT( hitCount <= maxHits + 1 ); // Allow one extra hit, then sort and remove last hit below
       
-      p = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) );
-      n = ae::Vec3( params.transform * ae::Vec4( n, 0.0f ) );
-      
-      outHit->position = p;
-      outHit->normal = n;
-      outHit->t = normDir.Dot( p - params.source ); // Calculate here because transform might not have uniform scale
+      outHit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) );
+      outHit.normal = ae::Vec3( params.transform * ae::Vec4( n, 0.0f ) );
+      outHit.distance = ( outHit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
+      outHit.userData = params.userData;
       
       if ( hitCount > maxHits )
       {
-        std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.t < b.t; } );
+        std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
         hitCount = maxHits;
       }
     }
@@ -339,21 +318,40 @@ bool ae::CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* out
   
   if ( outResult )
   {
+    std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
     outResult->hitCount = hitCount;
     for ( uint32_t i = 0; i < hitCount; i++ )
     {
+      hits[ i ].normal.SafeNormalize();
       outResult->hits[ i ] = hits[ i ];
     }
   }
   return hitCount;
 }
 
-ae::CollisionMesh::PushOutInfo ae::CollisionMesh::PushOut( const PushOutParams& params, const PushOutInfo& info ) const
+ae::CollisionMesh::RaycastResult ae::CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
 {
-  ae::OBB obb( params.transform * m_aabb.GetTransform() );
-  if ( obb.GetSignedDistanceFromSurface( info.sphere.center ) > info.sphere.radius )
+  // @TODO: For params requesting a single hit set max length of ray to prevResult hit distance for obb early out
+  RaycastResult nextResult;
+  if ( Raycast( params, &nextResult ) )
   {
-    return info; // Early out if sphere is to far from mesh
+    ae::CollisionMesh::RaycastResult::Accumulate( params, prevResult, &nextResult );
+    return nextResult;
+  }
+  return prevResult;
+}
+
+ae::CollisionMesh::PushOutInfo ae::CollisionMesh::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
+{
+  if ( ae::DebugLines* debug = params.debug )
+  {
+    debug->AddSphere( prevInfo.sphere.center, prevInfo.sphere.radius, params.debugColor, 8 );
+  }
+
+  ae::OBB obb( params.transform * m_aabb.GetTransform() );
+  if ( obb.GetSignedDistanceFromSurface( prevInfo.sphere.center ) > prevInfo.sphere.radius )
+  {
+    return prevInfo; // Early out if sphere is to far from mesh
   }
   
   if ( ae::DebugLines* debug = params.debug )
@@ -363,8 +361,8 @@ ae::CollisionMesh::PushOutInfo ae::CollisionMesh::PushOut( const PushOutParams& 
   }
   
   PushOutInfo result;
-  result.sphere = info.sphere;
-  result.velocity = info.velocity;
+  result.sphere = prevInfo.sphere;
+  result.velocity = prevInfo.velocity;
   bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
   
   const uint32_t triCount = m_indices.Length() / 3;
@@ -432,39 +430,39 @@ ae::CollisionMesh::PushOutInfo ae::CollisionMesh::PushOut( const PushOutParams& 
   
   if ( result.hits.Length() )
   {
-    PushOutInfo::Accumulate( params, info, &result );
+    PushOutInfo::Accumulate( params, prevInfo, &result );
     return result;
   }
   else
   {
-    return info;
+    return prevInfo;
   }
 }
 
 //------------------------------------------------------------------------------
 // RaycastResult
 //------------------------------------------------------------------------------
-void ae::CollisionMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& result )
+void ae::CollisionMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
 {
   uint32_t accumHitCount = 0;
-  Hit accumHits[ countof(hits) * 2 ];
+  Hit accumHits[ countof(next->hits) * 2 ];
   
-  for ( uint32_t i = 0; i < hitCount; i++ )
+  for ( uint32_t i = 0; i < next->hitCount; i++ )
   {
-    accumHits[ accumHitCount ] = hits[ i ];
+    accumHits[ accumHitCount ] = next->hits[ i ];
     accumHitCount++;
   }
-  for ( uint32_t i = 0; i < result.hitCount; i++ )
+  for ( uint32_t i = 0; i < prev.hitCount; i++ )
   {
-    accumHits[ accumHitCount ] = result.hits[ i ];
+    accumHits[ accumHitCount ] = prev.hits[ i ];
     accumHitCount++;
   }
-  std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.t < h1.t; } );
+  std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.distance < h1.distance; } );
   
-  hitCount = aeMath::Min( accumHitCount, countof(hits) );
-  for ( uint32_t i = 0; i < hitCount; i++ )
+  next->hitCount = aeMath::Min( accumHitCount, params.maxHits, countof(next->hits) );
+  for ( uint32_t i = 0; i < next->hitCount; i++ )
   {
-    hits[ i ] = accumHits[ i ];
+    next->hits[ i ] = accumHits[ i ];
   }
 }
 
