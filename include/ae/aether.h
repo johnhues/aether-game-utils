@@ -1838,6 +1838,7 @@ public:
   // Constants
   enum class Usage { Dynamic, Static };
   enum class Type { UInt8, UInt16, UInt32, NormalizedUInt8, NormalizedUInt16, NormalizedUInt32, Float };
+  //! Don't forget to set gl_PointSize in your vertex shader when using ae::VertexData::Primitive::Point.
   enum class Primitive { Point, Line, Triangle };
   
   // Initialization
@@ -1847,25 +1848,28 @@ public:
   void AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset );
   void Terminate();
   
-  //! Sets current vertex data. Equivalent to calling Clear() then Append(). After calling this function you must call Upload() once before calling Render().
+  //! Sets current vertex data. Equivalent to calling Clear() then Append().
   void SetVertices( const void* vertices, uint32_t count );
-  //! Sets current index data. Equivalent to calling Clear() then Append(). After calling this function you must call Upload() once before calling Render().
+  //! Sets current index data. Equivalent to calling Clear() then Append().
   void SetIndices( const void* indices, uint32_t count );
-  //! Add vertices to end of existing array. After calling this function you must call Upload() once before calling Render().
+  //! Add vertices to end of existing array.
   void AppendVertices( const void* vertices, uint32_t count );
-  //! Add indices to end of existing array. Given indices are each offset based on @indexOffset. It could be useful to use GetVertexCount() as a parameter to @indexOffset
-  //! before appending new vertices. After calling this function you must call Upload() once before calling Render().
+  //! Add indices to end of existing array. Given indices are each offset based
+  //! on @indexOffset. It could be useful to use GetVertexCount() as a parameter
+  //! to @indexOffset before appending new vertices.
   void AppendIndices( const void* indices, uint32_t count, uint32_t indexOffset );
   //! Sets dynamic vertex count to 0. Has no effect if vertices are using VertexData::Usage::Static.
   void ClearVertices();
   //! Sets dynamic index count to 0. Has no effect if indices are using VertexData::Usage::Static.
   void ClearIndices();
   
-  //! Prepares buffers for rendering. Call after Setting/Appending vertices and indices, but before Render(). This will result in a no-op if no changes have been made.
+  //! Preemptively prepares buffers for rendering. Call after Setting/Appending vertices and
+  //! indices, but before Render() to avoid waiting for upload when rendering. This will result
+  //! in a no-op if no changes have been made.
   void Upload();
-  //! Renders all vertex data
+  //! Renders all vertex data. Automatically calls Upload() first.
   void Render( const Shader* shader, const UniformList& uniforms ) const;
-  //! Renders vertex data range
+  //! Renders vertex data range. Automatically calls Upload() first.
   void Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const;
   
   // Get info
@@ -11410,8 +11414,8 @@ void VertexData::Render( const Shader* shader, const UniformList& uniforms, uint
 {
   AE_ASSERT( shader );
   AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
-  AE_ASSERT_MSG( !m_vertexDirty && !m_indexDirty, "Must call Upload() after modifying vertices or indices before calling Render()" );
   
+  const_cast< VertexData* >( this )->Upload(); // Make sure latest vertex data has been sent to GPU
   if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
   {
     return;
@@ -11476,6 +11480,10 @@ void VertexData::Render( const Shader* shader, const UniformList& uniforms, uint
   }
   else
   {
+    if ( mode == GL_POINTS )
+    {
+      glEnable( GL_VERTEX_PROGRAM_POINT_SIZE );
+    }
     AE_ASSERT( ( primitiveStart + primitiveCount ) * primitiveSize <= m_vertexCount );
     GLint start = primitiveStart * primitiveSize;
     GLsizei count = primitiveCount ? primitiveCount * primitiveSize : m_vertexCount;
