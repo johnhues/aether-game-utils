@@ -208,82 +208,8 @@ inline std::ostream& operator<<( std::ostream& os, const aeCircle& c )
   return os << "(" << c.m_point << " : " << c.m_radius << ")";
 }
 
-//------------------------------------------------------------------------------
-// aeSphere class
-//------------------------------------------------------------------------------
-class aeSphere
-{
-public:
-  aeSphere() = default;
-  aeSphere( ae::Vec3 center, float radius ) : center( center ), radius( radius ) {}
-
-  bool Raycast( ae::Vec3 origin, ae::Vec3 direction, float* tOut = nullptr, ae::Vec3* pOut = nullptr ) const;
-  bool SweepTriangle( ae::Vec3 direction, const ae::Vec3* points, ae::Vec3 normal,
-    float* outNearestDistance, ae::Vec3* outNearestIntersectionPoint, ae::Vec3* outNearestPolygonIntersectionPoint, ae::DebugLines* debug ) const;
-  bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
-
-  ae::Vec3 center = ae::Vec3( 0.0f );
-  float radius = 0.5f;
-};
-
-//------------------------------------------------------------------------------
-// aeAABB class
-//------------------------------------------------------------------------------
-class aeAABB
-{
-public:
-  aeAABB() = default;
-  aeAABB( const aeAABB& ) = default;
-  aeAABB( ae::Vec3 p0, ae::Vec3 p1 );
-  explicit aeAABB( const aeSphere& sphere );
-
-  void Expand( ae::Vec3 p );
-  void Expand( aeAABB other );
-  void Expand( float boundary );
-
-  ae::Vec3 GetMin() const { return m_min; }
-  ae::Vec3 GetMax() const { return m_max; }
-  ae::Vec3 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
-  ae::Vec3 GetHalfSize() const { return ( m_max - m_min ) * 0.5f; }
-  ae::Matrix4 GetTransform() const;
-
-  float GetMinDistance( ae::Vec3 p ) const; // @TODO: GetDistanceFromSurface()
-  bool Intersect( aeAABB other ) const;
-  bool IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
-
-private:
-  ae::Vec3 m_min;
-  ae::Vec3 m_max;
-};
-
-inline std::ostream& operator<<( std::ostream& os, aeAABB aabb )
-{
-  return os << "[" << aabb.GetMin() << ", " << aabb.GetMax() << "]";
-}
-
-//------------------------------------------------------------------------------
-// aeOBB class
-//------------------------------------------------------------------------------
-class aeOBB
-{
-public:
-  aeOBB() = default;
-  aeOBB( const aeOBB& ) = default;
-  aeOBB( const ae::Matrix4& transform );
-
-  void SetTransform( const ae::Matrix4& transform );
-  const ae::Matrix4& GetTransform() const;
-
-  float GetMinDistance( ae::Vec3 p ) const; // @TODO: GetDistanceFromSurface()
-  bool IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
-
-  aeAABB GetAABB() const;
-
-private:
-  ae::Matrix4 m_transform;
-  ae::Matrix4 m_invTransRot;
-  aeAABB m_scaledAABB;
-};
+bool Sphere_SweepTriangle( const ae::Sphere& sphere, ae::Vec3 direction, const ae::Vec3* points, ae::Vec3 normal,
+  float* outNearestDistance, ae::Vec3* outNearestIntersectionPoint, ae::Vec3* outNearestPolygonIntersectionPoint, ae::DebugLines* debug );
 
 //------------------------------------------------------------------------------
 // aeFrustum class
@@ -301,7 +227,7 @@ class aeFrustum
 {
 public:
   aeFrustum( ae::Matrix4 worldToProjection );
-  bool Intersects( const aeSphere& sphere ) const;
+  bool Intersects( const ae::Sphere& sphere ) const;
   bool Intersects( ae::Vec3 point ) const;
   aePlane GetPlane( aeFrustumPlane plane ) const;
   

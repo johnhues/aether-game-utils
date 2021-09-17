@@ -119,7 +119,7 @@ float aeSpline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut )
   {
     const Segment& segment = m_segments[ i ];
 
-    if ( segment.GetAABB().GetMinDistance( p ) > closestDistance )
+    if ( segment.GetAABB().GetSignedDistanceFromSurface( p ) > closestDistance )
     {
       // @NOTE: Don't check segments that are further away than the already closest point
       continue;
