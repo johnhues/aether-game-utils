@@ -432,7 +432,7 @@ struct Vec3 : public VecT< Vec3 >
   struct Int3 FloorCopy() const;
   struct Int3 CeilCopy() const;
   
-  float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
+  float GetAngleBetween( const Vec3& v ) const;
   void AddRotationXY( float rotation ); // @TODO: Support Y up
   Vec3 RotateCopy( Vec3 axis, float angle ) const;
   Vec3 Lerp( const Vec3& end, float t ) const;
@@ -508,11 +508,13 @@ public:
 
   // Constructor helpers
   static Matrix4 Identity();
+  static Matrix4 Translation( float tx, float ty, float tz );
   static Matrix4 Translation( const Vec3& p );
   static Matrix4 Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 );
   static Matrix4 RotationX( float angle );
   static Matrix4 RotationY( float angle );
   static Matrix4 RotationZ( float angle );
+  static Matrix4 Scaling( float s );
   static Matrix4 Scaling( const Vec3& s );
   static Matrix4 Scaling( float sx, float sy, float sz );
   static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
@@ -1999,6 +2001,7 @@ private:
 struct TextureParams
 {
   const void* data = nullptr;
+  bool bgrData = false;
   uint32_t width = 0;
   uint32_t height = 0;
   Texture::Format format = Texture::Format::RGBA8;
@@ -2006,7 +2009,6 @@ struct TextureParams
   Texture::Filter filter = Texture::Filter::Linear;
   Texture::Wrap wrap = Texture::Wrap::Repeat;
   bool autoGenerateMipmaps = true;
-  bool bgraInput = false;
 };
 
 //------------------------------------------------------------------------------
@@ -3594,8 +3596,7 @@ inline float DtLerpAngle( float value, float snappiness, float dt, float target 
       target += ae::TWO_PI;
     }
   }
-  value = ae::DtLerp( value, snappiness, dt, target );
-  return ae::Mod( value, ae::TWO_PI );
+  return ae::DtLerp( value, snappiness, dt, target );
 }
 
 template< typename T >
@@ -6179,23 +6180,10 @@ double GetTime()
 //------------------------------------------------------------------------------
 // ae::Vec3 functions
 //------------------------------------------------------------------------------
-float Vec3::GetAngleBetween( const Vec3& v, float epsilon ) const
+float Vec3::GetAngleBetween( const Vec3& v ) const
 {
-  const Vec3 crossProduct = Cross( v );
-  const float dotProduct = Dot( v );
-  if ( crossProduct.LengthSquared() < epsilon && dotProduct > 0.0f )
-  {
-    return 0.0f;
-  }
-  else if ( crossProduct.LengthSquared() < epsilon && dotProduct < 0.0f )
-  {
-    return ae::PI;
-  }
-  float angle = dotProduct;
-  angle /= Length() * v.Length();
-  angle = std::acos( angle );
-  angle = std::abs( angle );
-  return angle;
+  float result = acosf( Dot( v ) / ( Length() * v.Length() ) );
+  return ( result <= ae::PI ) ? result : ( result - ae::PI );
 }
 
 void Vec3::AddRotationXY( float rotation )
@@ -6263,6 +6251,16 @@ Matrix4 Matrix4::Identity()
   r.data[ 1 ] = 0; r.data[ 5 ] = 1; r.data[ 9 ] = 0;  r.data[ 13 ] = 0;
   r.data[ 2 ] = 0; r.data[ 6 ] = 0; r.data[ 10 ] = 1; r.data[ 14 ] = 0;
   r.data[ 3 ] = 0; r.data[ 7 ] = 0; r.data[ 11 ] = 0; r.data[ 15 ] = 1;
+  return r;
+}
+
+Matrix4 Matrix4::Translation( float tx, float ty, float tz )
+{
+  Matrix4 r;
+  r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = tx;
+  r.data[ 1 ] = 0.0f; r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;  r.data[ 13 ] = ty;
+  r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = 1.0f; r.data[ 14 ] = tz;
+  r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
 }
 
@@ -6340,6 +6338,11 @@ Matrix4 Matrix4::RotationZ( float angle )
   r.data[ 2 ] = 0.0f;          r.data[ 6 ] = 0.0f;           r.data[ 10 ] = 1.0f; r.data[ 14 ] = 0.0f;
   r.data[ 3 ] = 0.0f;          r.data[ 7 ] = 0.0f;           r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
   return r;
+}
+
+Matrix4 Matrix4::Scaling( float s )
+{
+  return Scaling( s, s, s );
 }
 
 Matrix4 Matrix4::Scaling( const Vec3& s )
@@ -11673,7 +11676,7 @@ void Texture2D::Initialize( const TextureParams& params )
         case Format::RGB32F: glInternalFormat = GL_RGB32F; break;
         default: assert(false);
       }
-      glFormat = params.bgraInput ? GL_RGB : GL_BGR;
+      glFormat = params.bgrData ? GL_BGR : GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
@@ -11688,7 +11691,7 @@ void Texture2D::Initialize( const TextureParams& params )
         case Format::RGBA32F: glInternalFormat = GL_RGBA32F; break;
         default: assert(false);
       }
-      glFormat = params.bgraInput ?  GL_RGBA : GL_BGRA;
+      glFormat = params.bgrData ?  GL_BGRA : GL_RGBA;
       unpackAlignment = 1;
       m_hasAlpha = true;
       break;
@@ -11698,14 +11701,14 @@ void Texture2D::Initialize( const TextureParams& params )
     case Format::RGB8_SRGB:
     // ignore type
       glInternalFormat = GL_SRGB8;
-      glFormat = params.bgraInput ? GL_RGB : GL_BGR;
+      glFormat = params.bgrData ? GL_BGR : GL_RGB;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
     case Format::RGBA8_SRGB:
     // ignore type
       glInternalFormat = GL_SRGB8_ALPHA8;
-      glFormat = params.bgraInput ?  GL_RGBA : GL_BGRA;
+      glFormat = params.bgrData ? GL_BGRA : GL_RGBA;
       unpackAlignment = 1;
       m_hasAlpha = false;
       break;
@@ -12322,6 +12325,7 @@ const uint32_t kTextCharsPerString = 64;
 
 void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
 {
+  AE_ASSERT( texture->GetTexture() );
   m_texture = texture;
   m_fontSize = fontSize;
   m_rectCount = 0;
@@ -13176,7 +13180,7 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
     return false;
   }
   
-  bool limitRay = params.maxLength != 0.0f;
+  bool limitRay = ( params.maxLength > 0.0f ) && ( params.maxLength < INFINITY );
   ae::Vec3 normParamsDir = params.direction.SafeNormalizeCopy();
 
   // Obb in world space
