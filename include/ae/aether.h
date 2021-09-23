@@ -3572,7 +3572,7 @@ inline float Delerp01( float start, float end, float value )
 template< typename T >
 T DtLerp( T value, float snappiness, float dt, T target )
 {
-  if ( snappiness == 0.0f )
+  if ( snappiness == 0.0f || dt == 0.0f )
   {
     return value;
   }
@@ -13055,8 +13055,18 @@ void DebugCamera::Reset( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
   
   if ( m_dist > 0.01f ) // Only update rotation if focus is different than position
   {
-    m_yaw = diff.GetXY().GetAngle();
-    m_pitch = asinf( diff.z / m_dist );
+    if ( m_worldUp == Axis::Y )
+    {
+      ae::Vec2 xz = diff.GetXZ();
+      xz.y = -xz.y; // -Z forward for right handed Y-Up
+      m_yaw = xz.GetAngle();
+      m_pitch = asinf( diff.y / m_dist );
+    }
+    else if ( m_worldUp == Axis::Z )
+    {
+      m_yaw = diff.GetXY().GetAngle();
+      m_pitch = asinf( diff.z / m_dist );
+    }
   }
   
   m_Precalculate();
