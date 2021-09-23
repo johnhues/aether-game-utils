@@ -436,6 +436,7 @@ struct Vec3 : public VecT< Vec3 >
   void AddRotationXY( float rotation ); // @TODO: Support Y up
   Vec3 RotateCopy( Vec3 axis, float angle ) const;
   Vec3 Lerp( const Vec3& end, float t ) const;
+  Vec3 DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
   Vec3 Slerp( const Vec3& end, float t, float epsilon = 0.0001f ) const;
   
   static Vec3 Cross( const Vec3& v0, const Vec3& v1 );
@@ -3195,7 +3196,7 @@ template < typename... Args >
 void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
 {
   std::stringstream os;
-  os << std::setprecision( 2 );
+  os << std::setprecision( 4 );
   LogFormat( os, severity, filePath, line, assertInfo, format );
   LogInternal( os, format, args... );
 }
@@ -4784,7 +4785,7 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
   {
     // @TODO: Replace with ToString()?
     std::ostringstream stream;
-    stream << std::setprecision( 2 );
+    stream << std::setprecision( 4 );
     stream << value;
     *this += stream.str().c_str();
     head++;
@@ -6239,6 +6240,11 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
   Vec3 v2 = v1 - v0 * d;
   v2.Normalize();
   return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) );
+}
+
+Vec3 Vec3::DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon ) const
+{
+	return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
 }
 
 //------------------------------------------------------------------------------
