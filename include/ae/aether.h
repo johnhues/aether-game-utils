@@ -1076,7 +1076,7 @@ public:
   V& Set( const K& key, const V& value ); //!< Add or replace a key/value pair in the map. Can be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the value across non-const operations.
   V& Get( const K& key ); //!< Returns a modifiable reference to the value set with @key. Asserts when key/value pair is missing.
   const V& Get( const K& key ) const; //!< Returns the value set with @key. Asserts when key/value pair is missing.
-  const V& Get( const K& key, const V& defaultValue ) const; //!< Returns the value set with @key.Returns @defaultValue otherwise when the key/value pair is missing.
+  const V& Get( const K& key, const V& defaultValue ) const; //!< Returns the value set with @key. Returns @defaultValue otherwise when the key/value pair is missing.
   V* TryGet( const K& key ); //!< Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
   const V* TryGet( const K& key ) const; //!< Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
   bool TryGet( const K& key, V* valueOut ); //!< Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
@@ -1091,6 +1091,7 @@ public:
   const K& GetKey( uint32_t index ) const; //!< Returns the nth key in the map
   const V& GetValue( uint32_t index ) const; //!< Returns the nth value in the map
   V& GetValue( uint32_t index ); //!< Returns a modifiable reference to the nth value in the map
+  int32_t GetIndex( const K& key ) const; //!< Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
   uint32_t Length() const; //!< Returns the number of key/value pairs in the map
 
 private:
@@ -1103,7 +1104,6 @@ private:
     K key;
     V value;
   };
-  int32_t m_FindIndex( const K& key ) const;
   Array< Entry, N > m_entries;
 };
 
@@ -5242,23 +5242,9 @@ Map< K, V, N >::Entry::Entry( const K& k, const V& v ) :
 {}
 
 template < typename K, typename V, uint32_t N >
-int32_t Map< K, V, N >::m_FindIndex( const K& key ) const
-{
-  for ( uint32_t i = 0; i < m_entries.Length(); i++ )
-  {
-    if ( Map_IsEqual( m_entries[ i ].key, key ) )
-    {
-      return i;
-    }
-  }
-
-  return -1;
-}
-
-template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::Set( const K& key, const V& value )
 {
-  int32_t index = m_FindIndex( key );
+  int32_t index = GetIndex( key );
   Entry* entry = ( index >= 0 ) ? &m_entries[ index ] : nullptr;
   if ( entry )
   {
@@ -5274,19 +5260,19 @@ V& Map< K, V, N >::Set( const K& key, const V& value )
 template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::Get( const K& key )
 {
-  return m_entries[ m_FindIndex( key ) ].value;
+  return m_entries[ GetIndex( key ) ].value;
 }
 
 template < typename K, typename V, uint32_t N >
 const V& Map< K, V, N >::Get( const K& key ) const
 {
-  return m_entries[ m_FindIndex( key ) ].value;
+  return m_entries[ GetIndex( key ) ].value;
 }
 
 template < typename K, typename V, uint32_t N >
 const V& Map< K, V, N >::Get( const K& key, const V& defaultValue ) const
 {
-  int32_t index = m_FindIndex( key );
+  int32_t index = GetIndex( key );
   return ( index >= 0 ) ? m_entries[ index ].value : defaultValue;
 }
 
@@ -5299,7 +5285,7 @@ V* Map< K, V, N >::TryGet( const K& key )
 template < typename K, typename V, uint32_t N >
 const V* Map< K, V, N >::TryGet( const K& key ) const
 {
-  int32_t index = m_FindIndex( key );
+  int32_t index = GetIndex( key );
   if ( index >= 0 )
   {
     return &m_entries[ index ].value;
@@ -5340,7 +5326,7 @@ bool Map< K, V, N >::Remove( const K& key )
 template < typename K, typename V, uint32_t N >
 bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 {
-  int32_t index = m_FindIndex( key );
+  int32_t index = GetIndex( key );
   if ( index >= 0 )
   {
     if ( valueOut )
@@ -5378,6 +5364,19 @@ template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::GetValue( uint32_t index )
 {
   return m_entries[ index ].value;
+}
+
+template < typename K, typename V, uint32_t N >
+int32_t Map< K, V, N >::GetIndex( const K& key ) const
+{
+  for ( uint32_t i = 0; i < m_entries.Length(); i++ )
+  {
+    if ( Map_IsEqual( m_entries[ i ].key, key ) )
+    {
+      return i;
+    }
+  }
+  return -1;
 }
 
 template < typename K, typename V, uint32_t N >
