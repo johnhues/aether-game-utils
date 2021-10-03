@@ -777,9 +777,9 @@ struct Color
 {
   Color() {} //!< Empty default constructor for performance of vertex arrays etc
   Color( const Color& ) = default;
-  Color( float rgb );
-  Color( float r, float g, float b );
-  Color( float r, float g, float b, float a );
+  Color( float rgb ); // @TODO: Delete. Color space should be explicit
+  Color( float r, float g, float b ); // @TODO: Delete. Color space should be explicit
+  Color( float r, float g, float b, float a ); // @TODO: Delete. Color space should be explicit
   Color( Color c, float a );
   static Color R( float r );
   static Color RG( float r, float g );
@@ -821,6 +821,9 @@ struct Color
   static Color Blue();
   static Color Indigo();
   static Color Violet();
+  // Misc
+  static Color Cyan();
+  static Color Magenta();
   // Pico
   static Color PicoBlack();
   static Color PicoDarkBlue();
@@ -838,8 +841,6 @@ struct Color
   static Color PicoIndigo();
   static Color PicoPink();
   static Color PicoPeach();
-  // Misc
-  static Color Magenta();
 
   float r;
   float g;
@@ -4324,6 +4325,9 @@ inline Color Color::Green() { static Color c = Color::SRGB8( 0, 255, 0 ); return
 inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return c; }
 inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
 inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
+// Other
+inline Color Color::Cyan() { return Color( 0.0f, 1.0f, 1.0f ); }
+inline Color Color::Magenta() { return Color( 1.0f, 0.0f, 1.0f ); }
 // Pico
 inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
 inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }
@@ -4341,8 +4345,6 @@ inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); 
 inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
 inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
 inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
-// Misc
-inline Color Color::Magenta() { return Color( 1.0f, 0.0f, 1.0f ); }
 
 //------------------------------------------------------------------------------
 // ae::Color functions
