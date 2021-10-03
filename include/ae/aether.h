@@ -2242,7 +2242,7 @@ public:
   void SetInputEnabled( bool enabled ); //!< True by default
   void SetRotation( ae::Vec2 angle );
 
-  Mode GetMode() const { return m_mode; } //!< Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
+  Mode GetMode() const; //!< Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
   ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
   ae::Vec3 GetFocus() const { return m_focusPos; }
   ae::Vec3 GetForward() const { return m_forward; }
@@ -2250,6 +2250,7 @@ public:
   ae::Vec3 GetWorldUp() const { return ( m_worldUp == Axis::Z ) ? ae::Vec3(0,0,1) : ae::Vec3(0,1,0); }
   float GetDistanceFromFocus() const { return m_dist; }
   ae::Vec2 GetRotation() const { return ae::Vec2( m_yaw, m_pitch ); }
+  bool GetRefocusTarget( ae::Vec3* targetOut ) const;
 
 private:
   void m_Precalculate();
@@ -2263,7 +2264,7 @@ private:
   ae::Vec3 m_refocusPos;
   bool m_refocus;
   ae::Vec2 m_moveAccum;
-  bool m_forceCapture;
+  uint32_t m_forceCapture;
   // Positioning
   ae::Vec3 m_focusPos;
   float m_dist;
@@ -12910,7 +12911,7 @@ DebugCamera::DebugCamera()
   m_refocusPos = ae::Vec3( 0.0f );
   m_refocus = false;
   m_moveAccum = ae::Vec2( 0.0f );
-  m_forceCapture = false;
+  m_forceCapture = 0;
   m_focusPos = ae::Vec3( 0.0f );
   m_dist = 5.0f;
   m_yaw = 0.77f;
@@ -12938,9 +12939,12 @@ void DebugCamera::Update( const ae::Input* input, float dt )
   bool mouseRotate = false;
   if ( m_forceCapture )
   {
-    // This delays releasing the mouse for one frame so checks to (leftMousePrev && !leftMouse) fail, ie. mouse click up
-    m_mode = Mode::None;
-    m_forceCapture = false;
+    // This delays releasing the mouse for a full frame so checks to (leftMousePrev && !leftMouse) fail, ie. mouse click up
+    m_forceCapture--;
+    if ( !m_forceCapture )
+    {
+      m_mode = Mode::None;
+    }
   }
   else if ( input )
   {
@@ -12967,19 +12971,21 @@ void DebugCamera::Update( const ae::Input* input, float dt )
   }
 
   // Return to default mode
-  if ( ( m_mode == Mode::Rotate && !mouseRotate )
-      || ( m_mode == Mode::Pan && !mousePan )
-      || ( m_mode == Mode::Zoom && !mouseZoom ) )
+  if ( !m_forceCapture )
   {
-    if ( m_moveAccum.Length() >= 5.0f ) // In pixels
-    {
-      // Delay resetting mode
-      m_forceCapture = true;
-    }
-    else
-    {
-      AE_INFO( "m_moveAccum.Length() #", m_moveAccum.Length() );
-      m_mode = Mode::None;
+    if ( ( m_mode == Mode::Rotate && !mouseRotate )
+        || ( m_mode == Mode::Pan && !mousePan )
+        || ( m_mode == Mode::Zoom && !mouseZoom ) )
+  {
+      if ( m_moveAccum.Length() >= 5.0f ) // In pixels
+      {
+        // Delay resetting mode
+        m_forceCapture = 2;
+      }
+      else
+      {
+        m_mode = Mode::None;
+      }
     }
   }
 
@@ -13031,7 +13037,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
   if ( m_mode == Mode::Pan )
   {
     AE_ASSERT( !m_refocus );
-    float panSpeed = m_dist / 750.0f;
+    float panSpeed = m_dist / 1000.0f;
     m_focusPos -= m_right * ( mouseMovement.x * panSpeed );
     m_focusPos -= m_up * ( mouseMovement.y * panSpeed );
   }
@@ -13105,6 +13111,21 @@ void DebugCamera::SetRotation( ae::Vec2 angle )
   m_yaw = angle.x;
   m_pitch = angle.y;
   m_Precalculate();
+}
+
+DebugCamera::Mode DebugCamera::GetMode() const
+{
+  return m_moveAccum.Length() >= 5.0f ? m_mode : Mode::None;
+}
+
+bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
+{
+	if ( !m_refocus )
+	{
+		return false;
+	}
+	*targetOut = m_refocusPos;
+	return true;
 }
 
 void DebugCamera::m_Precalculate()
