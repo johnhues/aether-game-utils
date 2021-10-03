@@ -7353,7 +7353,7 @@ bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitR
 	return false;
   }
   // Parallel
-  if ( d * d < 0.001f )
+  if ( d * d <= 0.0f )
   {
 	return false;
   }
