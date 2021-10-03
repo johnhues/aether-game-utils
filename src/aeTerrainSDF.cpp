@@ -61,11 +61,11 @@ inline float SdfSmoothSubtraction( float d1, float d2, float k )
 // Sdf member functions
 //------------------------------------------------------------------------------
 Sdf::Sdf() :
-  m_aabb( aeAABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ) ),
+  m_aabb( ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ) ),
   m_halfSize( 0.5f ),
   m_localToWorld( ae::Matrix4::Identity() ),
   m_removeTR( ae::Matrix4::Identity() ),
-  m_aabbPrev( aeAABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ) )
+  m_aabbPrev( ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ) )
 {}
 
 float Sdf::GetValue( ae::Vec3 p ) const
@@ -168,7 +168,7 @@ void Sdf::SetTransform( const ae::Matrix4& transform )
     m_localToWorld * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
     m_localToWorld * ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
   };
-  m_aabb = aeAABB( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
+  m_aabb = ae::AABB( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
   for ( uint32_t i = 2; i < countof( corners ); i++ )
   {
     m_aabb.Expand( corners[ i ].GetXYZ() );
@@ -457,7 +457,7 @@ void TerrainSdf::RenderDebug( ae::DebugLines* debug )
 {
   for ( uint32_t i = 0; i < m_shapes.Length(); i++ )
   {
-    aeAABB aabb = m_shapes[ i ]->GetAABB();
+    ae::AABB aabb = m_shapes[ i ]->GetAABB();
     aabb.Expand( kSdfBoundary );
     ae::Vec3 center = ( aabb.GetMin() + aabb.GetMax() ) * 0.5f;
     ae::Vec3 halfSize = aabb.GetMax() - center;
@@ -466,7 +466,7 @@ void TerrainSdf::RenderDebug( ae::DebugLines* debug )
 
   for ( uint32_t i = 0; i < m_pendingCreated.Length(); i++ )
   {
-    aeAABB aabb = m_pendingCreated[ i ]->GetAABB();
+    ae::AABB aabb = m_pendingCreated[ i ]->GetAABB();
     aabb.Expand( kSdfBoundary );
     ae::Vec3 center = ( aabb.GetMin() + aabb.GetMax() ) * 0.5f;
     ae::Vec3 halfSize = aabb.GetMax() - center;

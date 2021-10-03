@@ -51,7 +51,7 @@ public:
   float GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr );
   float GetLength() const;
 
-  aeAABB GetAABB() const { return m_aabb; }
+  ae::AABB GetAABB() const { return m_aabb; }
 
 private:
   class Segment
@@ -64,7 +64,7 @@ private:
     ae::Vec3 GetPoint( float d ) const;
     float GetMinDistance( ae::Vec3 p, ae::Vec3* pOut ) const;
     float GetLength() const { return m_length; }
-    aeAABB GetAABB() const { return m_aabb; }
+    ae::AABB GetAABB() const { return m_aabb; }
 
   private:
     ae::Vec3 m_a;
@@ -73,7 +73,7 @@ private:
     ae::Vec3 m_d;
     float m_length;
     uint32_t m_resolution;
-    aeAABB m_aabb;
+    ae::AABB m_aabb;
   };
 
   void m_RecalculateSegments();
@@ -83,7 +83,7 @@ private:
   ae::Array< ae::Vec3 > m_controlPoints;
   ae::Array< Segment > m_segments;
   float m_length = 0.0f;
-  aeAABB m_aabb;
+  ae::AABB m_aabb;
 };
 
 #endif

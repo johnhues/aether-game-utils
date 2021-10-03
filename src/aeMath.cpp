@@ -185,7 +185,7 @@ bool PointInTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c )
 bool Sphere_SweepTriangle( const ae::Sphere& sphere, ae::Vec3 direction, const ae::Vec3* points, ae::Vec3 normal,
   float* outNearestDistance,
   ae::Vec3* outNearestIntersectionPoint,
-  ae::Vec3* outNearestPolygonIntersectionPoint, ae::DebugLines* debug ) const
+  ae::Vec3* outNearestPolygonIntersectionPoint, ae::DebugLines* debug )
 {
   direction.SafeNormalize(); // @TODO: Make sure following logic is isn't limited by direction length
 
@@ -197,11 +197,11 @@ bool Sphere_SweepTriangle( const ae::Sphere& sphere, ae::Vec3 direction, const a
   ae::Vec3 planeIntersectionPoint2( 0.0f );
   //float pDist = intersect( pOrigin, normal, source, -normal );
   float pDist = aeMath::MaxValue< float >();
-  if ( triPlane.IntersectRay( center, -normal, &pDist, &planeIntersectionPoint ) )
+  if ( triPlane.IntersectRay( sphere.center, -normal, &pDist, &planeIntersectionPoint ) )
   {
     // @TODO: Should be able to remove this
-    pDist = ( planeIntersectionPoint - center ).Length();
-    debug->AddLine( center, center - normal, ae::Color::Red() );
+    pDist = ( planeIntersectionPoint - sphere.center ).Length();
+    debug->AddLine( sphere.center, sphere.center - normal, ae::Color::Red() );
     debug->AddSphere( planeIntersectionPoint, 0.05f, ae::Color::Red(), 8 );
 
     planeIntersectionPoint2 = planeIntersectionPoint;
@@ -215,15 +215,15 @@ bool Sphere_SweepTriangle( const ae::Sphere& sphere, ae::Vec3 direction, const a
   }
 
   // Is the plane embedded (i.e. within the distance of radius of the sphere)?
-  if ( pDist <= radius )
+  if ( pDist <= sphere.radius )
   {
     // Calculate the plane intersection point
     // @TODO: Is this already calculated above?
-    planeIntersectionPoint = center - normal * pDist;
+    planeIntersectionPoint = sphere.center - normal * pDist;
   }
   else
   {
-    ae::Vec3 sphereIntersectionPoint = center - normal * radius;
+    ae::Vec3 sphereIntersectionPoint = sphere.center - normal * sphere.radius;
     if ( !triPlane.IntersectRay( sphereIntersectionPoint, direction, nullptr, &planeIntersectionPoint ) )
     {
       return false;
@@ -301,7 +301,7 @@ bool Sphere_SweepTriangle( const ae::Sphere& sphere, ae::Vec3 direction, const a
 
     polygonIntersectionPoint = theRealThingTM;
 
-    float circleRad = radius; // Incorrect! This circle is the 'slice of sphere' at the point of contact with the edge
+    float circleRad = sphere.radius; // Incorrect! This circle is the 'slice of sphere' at the point of contact with the edge
     ae::Vec3 circlePos = theRealThingTM + edgeNormalMinTemp * circleRad;
     debug->AddCircle( circlePos, normal, circleRad, ae::Color::Blue(), 16 );
   }
@@ -315,7 +315,7 @@ bool Sphere_SweepTriangle( const ae::Sphere& sphere, ae::Vec3 direction, const a
   //if ( t >= 0.0 ) // && t <= distanceToTravel ) // No limit?
   float t = 0.0f;
   debug->AddLine( polygonIntersectionPoint, polygonIntersectionPoint - direction * 4.0f, ae::Color::Green() );
-  if ( Raycast( polygonIntersectionPoint, -direction, &t ) )
+  if ( sphere.Raycast( polygonIntersectionPoint, -direction, &t ) )
   {
     if ( outNearestDistance )
     {
@@ -531,7 +531,7 @@ bool aeFrustum::Intersects( ae::Vec3 point ) const
   return true;
 }
 
-bool aeFrustum::Intersects( const aeSphere& sphere ) const
+bool aeFrustum::Intersects( const ae::Sphere& sphere ) const
 {
   for( int i = 0; i < countof(m_planes); i++ )
   {

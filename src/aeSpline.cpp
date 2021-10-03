@@ -162,7 +162,7 @@ void aeSpline::m_RecalculateSegments()
     segmentCount--;
   }
 
-  m_aabb = aeAABB( ae::Vec3( aeMath::MaxValue< float >() ), ae::Vec3( aeMath::MinValue< float >() ) );
+  m_aabb = ae::AABB( ae::Vec3( aeMath::MaxValue< float >() ), ae::Vec3( aeMath::MinValue< float >() ) );
 
   for ( int32_t i = 0; i < segmentCount; i++ )
   {
@@ -227,7 +227,7 @@ void aeSpline::Segment::Init( ae::Vec3 p0, ae::Vec3 p1, ae::Vec3 p2, ae::Vec3 p3
   uint32_t nextResolution = m_resolution;
   do
   {
-    m_aabb = aeAABB( GetPoint0(), GetPoint0() );
+    m_aabb = ae::AABB( GetPoint0(), GetPoint0() );
 
     m_length = nextLength;
     m_resolution = nextResolution;

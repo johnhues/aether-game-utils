@@ -637,11 +637,11 @@ int main()
             {
               if ( object->rayType )
               {
-                terrain->RaycastFast( object->raySrc, ray, true );
+//                terrain->RaycastFast( object->raySrc, ray, true );
               }
               else
               {
-                ae::Mesh::RaycastParams params;
+                ae::CollisionMesh::RaycastParams params;
                 params.source = object->raySrc;
                 params.direction = object->rayDir;
                 params.maxLength = object->rayLength;

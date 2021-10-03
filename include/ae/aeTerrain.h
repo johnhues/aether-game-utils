@@ -178,8 +178,8 @@ public:
   
   float GetValue( ae::Vec3 p ) const;
 
-  aeAABB GetAABB() const { return m_aabb; }
-  aeOBB GetOBB() const { return aeOBB( m_localToWorld ); }
+  ae::AABB GetAABB() const { return m_aabb; }
+  ae::OBB GetOBB() const { return ae::OBB( m_localToWorld ); }
   
   void SetTransform( const ae::Matrix4& transform );
   const ae::Matrix4& GetTransform() const { return m_localToWorld; }
@@ -218,7 +218,7 @@ protected:
   const ae::Matrix4& GetRemoveTRMatrix() const { return m_removeTR; }
 
 private:
-  aeAABB m_aabb;
+  ae::AABB m_aabb;
   ae::Vec3 m_halfSize;
   ae::Matrix4 m_localToWorld;
   ae::Matrix4 m_removeTR;
@@ -226,7 +226,7 @@ private:
 public:
   // Internal
   bool m_dirty = false;
-  aeAABB m_aabbPrev;
+  ae::AABB m_aabbPrev;
 };
 
 //------------------------------------------------------------------------------
@@ -452,8 +452,8 @@ struct TerrainChunk
   
   void Serialize( ae::BinaryStream* stream );
 
-  aeAABB GetAABB() const;
-  static aeAABB GetAABB( ae::Int3 chunkPos );
+  ae::AABB GetAABB() const;
+  static ae::AABB GetAABB( ae::Int3 chunkPos );
 
   void m_SetVertexData( const TerrainVertex* verts, const TerrainIndex* indices, VertexCount vertexCount, uint32_t indexCount );
   
@@ -462,7 +462,7 @@ struct TerrainChunk
   bool m_geoDirty;
   bool m_lightDirty;
   ae::VertexData m_data;
-  ae::Mesh m_mesh;
+  ae::CollisionMesh m_mesh = AE_ALLOC_TAG_TERRAIN;
   aeListNode< TerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -509,17 +509,17 @@ public:
   // Simple voxel grid test
   bool VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) const;
   // Uses voxel grid and terrain normal so position result is slightly lumpy (non-continuous)
-  TerrainRaycastResult RaycastFast( ae::Vec3 start, ae::Vec3 ray, bool allowSourceCollision ) const;
+  //TerrainRaycastResult RaycastFast( ae::Vec3 start, ae::Vec3 ray, bool allowSourceCollision ) const;
   
   // Triangle raycast against terrain
-  bool Raycast( const ae::Mesh::RaycastParams& params, ae::Mesh::RaycastResult* outResult ) const;
+  bool Raycast( const ae::CollisionMesh::RaycastParams& params, ae::CollisionMesh::RaycastResult* outResult ) const;
   // Triangle-sphere push out
-  ae::Mesh::PushOutInfo PushOutSphere( const ae::Mesh::PushOutParams& params, const ae::Mesh::PushOutInfo& info ) const;
+  ae::CollisionMesh::PushOutInfo PushOutSphere( const ae::CollisionMesh::PushOutParams& params, const ae::CollisionMesh::PushOutInfo& info ) const;
   
   TerrainSdf sdf;
 
 private:
-  bool m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* outVertex ) const;
+  //bool m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* outVertex ) const;
   void UpdateChunkLighting( TerrainChunk* chunk );
   
   TerrainChunk* AllocChunk( ae::Int3 pos );
@@ -560,7 +560,7 @@ private:
 
 public:
   // Internal
-  void m_Dirty( aeAABB aabb );
+  void m_Dirty( ae::AABB aabb );
 };
 
 } // ae

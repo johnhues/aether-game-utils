@@ -358,7 +358,7 @@ void TerrainJob::StartNew( const TerrainParams& params, const TerrainSdf* sdf, T
   m_chunk = chunk;
   
   // 1) Add shapes to job that intersect current chunk
-  aeAABB aabb = chunk->GetAABB();
+  ae::AABB aabb = chunk->GetAABB();
   for ( uint32_t i = 0; i < sdf->GetShapeCount(); i++ )
   {
     ae::Sdf* shape = sdf->GetShapeAtIndex( i );
@@ -427,13 +427,11 @@ void TerrainJob::Do()
     m_sdfCache.Generate( m_chunk->m_pos, this );
     m_chunk->Generate( &m_sdfCache, this, edgeInfo, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
     
-    ae::Mesh::LoadParams meshParams;
+    ae::CollisionMesh::Params meshParams;
     // Vertices
     meshParams.vertexCount = (uint32_t)m_vertexCount;
     meshParams.positions = &m_vertices[ 0 ].position;
     meshParams.positionStride = sizeof(m_vertices[ 0 ]);
-    meshParams.normals = &m_vertices[ 0 ].normal;
-    meshParams.normalStride = sizeof(m_vertices[ 0 ]);
     // Indices
     meshParams.indexCount = m_indexCount;
     meshParams.indices16 = &m_indices[ 0 ];
@@ -1109,13 +1107,14 @@ void TerrainChunk::Serialize( aeBinaryStream* stream )
     return;
   }
   
-  ae::Mesh::SerializationParams params;
-  params.position = true;
-  params.normal = true;
-  params.uvSets = 0;
-  params.colorSets = 0;
-  params.userDataCount = 0;
-  m_mesh.Serialize( params, stream );
+  AE_FAIL();
+//  ae::CollisionMesh::SerializationParams params;
+//  params.position = true;
+//  params.normal = true;
+//  params.uvSets = 0;
+//  params.colorSets = 0;
+//  params.userDataCount = 0;
+//  m_mesh.Serialize( params, stream );
   
   stream->SerializeRaw( m_t, sizeof(m_t) );
   stream->SerializeRaw( m_l, sizeof(m_l) );
@@ -1130,16 +1129,16 @@ void TerrainChunk::Serialize( aeBinaryStream* stream )
   // in a separate thread. Render data must be set from main thread.
 }
 
-aeAABB TerrainChunk::GetAABB() const
+ae::AABB TerrainChunk::GetAABB() const
 {
   return GetAABB( m_pos );
 }
 
-aeAABB TerrainChunk::GetAABB( ae::Int3 chunkPos )
+ae::AABB TerrainChunk::GetAABB( ae::Int3 chunkPos )
 {
   ae::Vec3 min( chunkPos * kChunkSize );
   ae::Vec3 max = min + ae::Vec3( (float)kChunkSize );
-  return aeAABB( min, max );
+  return ae::AABB( min, max );
 }
 
 void TerrainChunk::m_SetVertexData( const TerrainVertex* verts, const TerrainIndex* indices, VertexCount vertexCount, uint32_t indexCount )
@@ -1212,7 +1211,7 @@ TerrainChunk* Terrain::AllocChunk( ae::Int3 pos )
   chunk->m_pos = pos;
   chunk->m_lightDirty = true;
   
-  AE_ASSERT( chunk->m_mesh.GetVertexCount() == 0 );
+  //AE_ASSERT( chunk->m_mesh.GetVertexCount() == 0 );
   
   return chunk;
 }
@@ -1545,7 +1544,7 @@ void Terrain::Update( ae::Vec3 center, float radius )
         if ( c )
         {
           AE_ASSERT( vc <= kMaxChunkVerts );
-          AE_ASSERT( c->m_mesh.GetVertexCount() );
+          //AE_ASSERT( c->m_mesh.GetVertexCount() );
         }
 
         //ChunkSort& chunkSort = t_chunkMap.Set( chunkPos, ChunkSort() );
@@ -1746,7 +1745,7 @@ void Terrain::Update( ae::Vec3 center, float radius )
       AE_ASSERT_MSG( indexPosChunk == chunk, "# #", indexPosChunk, chunk );
       AE_ASSERT_MSG( voxelCounts != kChunkCountDirty, "Chunk already existed, but had an invalid value" );
       AE_ASSERT( voxelCounts <= kMaxChunkVerts );
-      AE_ASSERT( chunk->m_mesh.GetVertexCount() );
+      //AE_ASSERT( chunk->m_mesh.GetVertexCount() );
       if ( m_render )
       {
         AE_ASSERT( chunk->m_data.GetVertexCount() );
@@ -1859,7 +1858,7 @@ void Terrain::Update( ae::Vec3 center, float radius )
       const TerrainJob* job = m_terrainJobs[ i ];
       if ( job->HasJob() )
       {
-        aeAABB chunkAABB = job->GetChunk()->GetAABB();
+        ae::AABB chunkAABB = job->GetChunk()->GetAABB();
         m_params.debug->AddLine( m_center, chunkAABB.GetCenter(), ae::Color::Red() );
         m_params.debug->AddAABB( chunkAABB.GetCenter(), chunkAABB.GetHalfSize(), ae::Color::PicoRed() );
       }
@@ -1928,7 +1927,7 @@ void Terrain::GetParams( TerrainParams* outParams )
   }
 }
 
-void Terrain::m_Dirty( aeAABB aabb )
+void Terrain::m_Dirty( ae::AABB aabb )
 {
   // @NOTE: Add a buffer region so voxels on the edge of the aabb are refreshed
   aabb.Expand( kSdfBoundary );
@@ -2000,38 +1999,38 @@ Block::Type Terrain::GetVoxel( int32_t x, int32_t y, int32_t z ) const
   return chunk->m_t[ localPos.x ][ localPos.y ][ localPos.z ];
 }
 
-bool Terrain::m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* outVertex ) const
-{
-  ae::Int3 chunkPos, localPos;
-  TerrainChunk::GetPosFromWorld( ae::Int3( x, y, z ), &chunkPos, &localPos );
-
-  uint32_t ci = TerrainChunk::GetIndex( chunkPos );
-
-  VertexCount vc = GetVertexCount( ci );
-  if ( vc == kChunkCountEmpty ) { return false; }
-  if ( vc == kChunkCountDirty ) { return false; }
-  if ( vc == kChunkCountInterior ) { return false; }
-
-  const TerrainChunk* chunk = GetChunk( ci );
-  if ( !chunk )
-  {
-    return false;
-  }
-
-  TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
-  if ( index == kInvalidTerrainIndex )
-  {
-    return false;
-  }
-
-  if ( outVertex )
-  {
-    ae::Mesh::Vertex vert = chunk->m_mesh.GetVertex( index );
-    outVertex->position = vert.position.GetXYZ();
-    outVertex->normal = vert.normal.GetXYZ();
-  }
-  return true;
-}
+//bool Terrain::m_GetVertex( int32_t x, int32_t y, int32_t z, TerrainVertex* outVertex ) const
+//{
+//  ae::Int3 chunkPos, localPos;
+//  TerrainChunk::GetPosFromWorld( ae::Int3( x, y, z ), &chunkPos, &localPos );
+//
+//  uint32_t ci = TerrainChunk::GetIndex( chunkPos );
+//
+//  VertexCount vc = GetVertexCount( ci );
+//  if ( vc == kChunkCountEmpty ) { return false; }
+//  if ( vc == kChunkCountDirty ) { return false; }
+//  if ( vc == kChunkCountInterior ) { return false; }
+//
+//  const TerrainChunk* chunk = GetChunk( ci );
+//  if ( !chunk )
+//  {
+//    return false;
+//  }
+//
+//  TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
+//  if ( index == kInvalidTerrainIndex )
+//  {
+//    return false;
+//  }
+//
+//  if ( outVertex )
+//  {
+//    ae::CollisionMesh::Vertex vert = chunk->m_mesh.GetVertex( index );
+//    outVertex->position = vert.position.GetXYZ();
+//    outVertex->normal = vert.normal.GetXYZ();
+//  }
+//  return true;
+//}
 
 aeFloat16 Terrain::GetLight( int32_t x, int32_t y, int32_t z ) const
 {
@@ -2273,198 +2272,198 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
   return true;
 }
 
-TerrainRaycastResult Terrain::RaycastFast( ae::Vec3 start, ae::Vec3 ray, bool allowSourceCollision ) const
-{
-  DebugRay debugRay( start, ray, m_params.debug );
+//TerrainRaycastResult Terrain::RaycastFast( ae::Vec3 start, ae::Vec3 ray, bool allowSourceCollision ) const
+//{
+//  DebugRay debugRay( start, ray, m_params.debug );
+//
+//  TerrainRaycastResult result;
+//  result.hit = false;
+//  result.type = Block::Exterior;
+//  result.distance = std::numeric_limits<float>::infinity();
+//  result.posi = ae::Int3( 0 );
+//  result.posf = ae::Vec3( std::numeric_limits<float>::infinity() );
+//  result.normal = ae::Vec3( std::numeric_limits<float>::infinity() );
+//  result.touchedUnloaded = false;
+//  
+//  int32_t x = aeMath::Floor( start.x );
+//  int32_t y = aeMath::Floor( start.y );
+//  int32_t z = aeMath::Floor( start.z );
+//  
+//  if ( ray.LengthSquared() < 0.001f )
+//  {
+//    return result;
+//  }
+//  ae::Vec3 dir = ray.SafeNormalizeCopy();
+//  
+//  ae::Vec3 curpos = start;
+//  ae::Vec3 cb, tmax, tdelta;
+//  int32_t stepX, outX;
+//  int32_t stepY, outY;
+//  int32_t stepZ, outZ;
+//  if ( dir.x > 0 )
+//  {
+//    stepX = 1;
+//    outX = ceil( start.x + ray.x );
+//    //outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
+//    cb.x = x + 1;
+//  }
+//  else 
+//  {
+//    stepX = -1;
+//    outX = (int32_t)( start.x + ray.x ) - 1;
+//    //outX = aeMath::Max( -1, outX );
+//    cb.x = x;
+//  }
+//  if ( dir.y > 0.0f )
+//  {
+//    stepY = 1;
+//    outY = ceil( start.y + ray.y );
+//    //outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
+//    cb.y = y + 1;
+//  }
+//  else 
+//  {
+//    stepY = -1;
+//    outY = (int32_t)( start.y + ray.y ) - 1;
+//    //outY = aeMath::Max( -1, outY );
+//    cb.y = y;
+//  }
+//  if ( dir.z > 0.0f )
+//  {
+//    stepZ = 1;
+//    outZ = ceil( start.z + ray.z );
+//    //outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
+//    cb.z = z + 1;
+//  }
+//  else 
+//  {
+//    stepZ = -1;
+//    outZ = (int32_t)( start.z + ray.z ) - 1;
+//    //outZ = aeMath::Max( -1, outZ );
+//    cb.z = z;
+//  }
+//  float rxr, ryr, rzr;
+//  if ( dir.x != 0 )
+//  {
+//    rxr = 1.0f / dir.x;
+//    tmax.x = (cb.x - curpos.x) * rxr; 
+//    tdelta.x = stepX * rxr;
+//  }
+//  else tmax.x = 1000000;
+//  if ( dir.y != 0 )
+//  {
+//    ryr = 1.0f / dir.y;
+//    tmax.y = (cb.y - curpos.y) * ryr; 
+//    tdelta.y = stepY * ryr;
+//  }
+//  else tmax.y = 1000000;
+//  if ( dir.z != 0 )
+//  {
+//    rzr = 1.0f / dir.z;
+//    tmax.z = (cb.z - curpos.z) * rzr; 
+//    tdelta.z = stepZ * rzr;
+//  }
+//  else tmax.z = 1000000;
+//  
+//  while ( ( result.type = GetVoxel( x, y, z ) ) != Block::Surface || !allowSourceCollision )
+//  {
+//    if( result.type == Block::Unloaded )
+//    {
+//      result.touchedUnloaded = true;
+//    }
+//      
+//    allowSourceCollision = true;
+//    
+//    if (tmax.x < tmax.y)
+//    {
+//      if (tmax.x < tmax.z)
+//      {
+//        x = x + stepX;
+//        if ( x == outX )
+//        {
+//          return result;
+//        }
+//        tmax.x += tdelta.x;
+//      }
+//      else
+//      {
+//        z = z + stepZ;
+//        if ( z == outZ )
+//        {
+//          return result;
+//        }
+//        tmax.z += tdelta.z;
+//      }
+//    }
+//    else
+//    {
+//      if (tmax.y < tmax.z)
+//      {
+//        y = y + stepY;
+//        if ( y == outY )
+//        {
+//          return result;
+//        }
+//        tmax.y += tdelta.y;
+//      }
+//      else
+//      {
+//        z = z + stepZ;
+//        if ( z == outZ )
+//        {
+//          return result;
+//        }
+//        tmax.z += tdelta.z;
+//      }
+//    }
+//  }
+//  
+//  AE_ASSERT( result.type != Block::Exterior && result.type != Block::Unloaded );
+//  
+//  result.hit = true;
+//  result.posi = ae::Int3( x, y, z );
+//  
+//  ae::Int3 chunkPos, localPos;
+//  TerrainChunk::GetPosFromWorld( result.posi, &chunkPos, &localPos );
+//  const TerrainChunk* chunk = GetChunk( chunkPos );
+//  AE_ASSERT( chunk );
+//
+//  TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
+//  // TODO Can somehow skip surface and hit interior cell
+//  AE_ASSERT( index != kInvalidTerrainIndex );
+//  ae::CollisionMesh::Vertex vert = chunk->m_mesh.GetVertex( index );
+//  ae::Vec3 p = vert.position.GetXYZ();
+//  ae::Vec3 n = vert.normal.GetXYZ().SafeNormalizeCopy(); // @TODO: Use sdf gradient, since verts can have multiple
+//  ae::Vec3 r = ray.SafeNormalizeCopy();
+//  float t = n.Dot( p - start ) / n.Dot( r );
+//  result.distance = t;
+//  result.posf = start + r * t;
+//  result.normal = n;
+//
+//  // Debug
+//  if ( m_params.debug )
+//  {
+//    m_params.debug->AddCircle( result.posf, result.normal, 0.25f, ae::Color::Green(), 16 );
+//    m_params.debug->AddLine( result.posf, result.posf + result.normal, ae::Color::Green() );
+//
+//    ae::Vec3 v = ae::Vec3( x, y, z ) + ae::Vec3( 0.5f );
+//    m_params.debug->AddOBB( ae::Matrix4::Translation( v ), ae::Color::Green() );
+//
+//    m_params.debug->AddSphere( p, 0.05f, ae::Color::Green(), 8 );
+//    m_params.debug->AddLine( p, p + n, ae::Color::Green() );
+//    if ( m_debugTextFn )
+//    {
+//      ae::Str64 str = ae::Str64::Format( "#: # (#)", index, vert.position, localPos );
+//      m_debugTextFn( p, str.c_str() );
+//    }
+//
+//    debugRay.color = ae::Color::Green();
+//  }
+//  
+//  return result;
+//}
 
-  TerrainRaycastResult result;
-  result.hit = false;
-  result.type = Block::Exterior;
-  result.distance = std::numeric_limits<float>::infinity();
-  result.posi = ae::Int3( 0 );
-  result.posf = ae::Vec3( std::numeric_limits<float>::infinity() );
-  result.normal = ae::Vec3( std::numeric_limits<float>::infinity() );
-  result.touchedUnloaded = false;
-  
-  int32_t x = aeMath::Floor( start.x );
-  int32_t y = aeMath::Floor( start.y );
-  int32_t z = aeMath::Floor( start.z );
-  
-  if ( ray.LengthSquared() < 0.001f )
-  {
-    return result;
-  }
-  ae::Vec3 dir = ray.SafeNormalizeCopy();
-  
-  ae::Vec3 curpos = start;
-  ae::Vec3 cb, tmax, tdelta;
-  int32_t stepX, outX;
-  int32_t stepY, outY;
-  int32_t stepZ, outZ;
-  if ( dir.x > 0 )
-  {
-    stepX = 1;
-    outX = ceil( start.x + ray.x );
-    //outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
-    cb.x = x + 1;
-  }
-  else 
-  {
-    stepX = -1;
-    outX = (int32_t)( start.x + ray.x ) - 1;
-    //outX = aeMath::Max( -1, outX );
-    cb.x = x;
-  }
-  if ( dir.y > 0.0f )
-  {
-    stepY = 1;
-    outY = ceil( start.y + ray.y );
-    //outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
-    cb.y = y + 1;
-  }
-  else 
-  {
-    stepY = -1;
-    outY = (int32_t)( start.y + ray.y ) - 1;
-    //outY = aeMath::Max( -1, outY );
-    cb.y = y;
-  }
-  if ( dir.z > 0.0f )
-  {
-    stepZ = 1;
-    outZ = ceil( start.z + ray.z );
-    //outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
-    cb.z = z + 1;
-  }
-  else 
-  {
-    stepZ = -1;
-    outZ = (int32_t)( start.z + ray.z ) - 1;
-    //outZ = aeMath::Max( -1, outZ );
-    cb.z = z;
-  }
-  float rxr, ryr, rzr;
-  if ( dir.x != 0 )
-  {
-    rxr = 1.0f / dir.x;
-    tmax.x = (cb.x - curpos.x) * rxr; 
-    tdelta.x = stepX * rxr;
-  }
-  else tmax.x = 1000000;
-  if ( dir.y != 0 )
-  {
-    ryr = 1.0f / dir.y;
-    tmax.y = (cb.y - curpos.y) * ryr; 
-    tdelta.y = stepY * ryr;
-  }
-  else tmax.y = 1000000;
-  if ( dir.z != 0 )
-  {
-    rzr = 1.0f / dir.z;
-    tmax.z = (cb.z - curpos.z) * rzr; 
-    tdelta.z = stepZ * rzr;
-  }
-  else tmax.z = 1000000;
-  
-  while ( ( result.type = GetVoxel( x, y, z ) ) != Block::Surface || !allowSourceCollision )
-  {
-    if( result.type == Block::Unloaded )
-    {
-      result.touchedUnloaded = true;
-    }
-      
-    allowSourceCollision = true;
-    
-    if (tmax.x < tmax.y)
-    {
-      if (tmax.x < tmax.z)
-      {
-        x = x + stepX;
-        if ( x == outX )
-        {
-          return result;
-        }
-        tmax.x += tdelta.x;
-      }
-      else
-      {
-        z = z + stepZ;
-        if ( z == outZ )
-        {
-          return result;
-        }
-        tmax.z += tdelta.z;
-      }
-    }
-    else
-    {
-      if (tmax.y < tmax.z)
-      {
-        y = y + stepY;
-        if ( y == outY )
-        {
-          return result;
-        }
-        tmax.y += tdelta.y;
-      }
-      else
-      {
-        z = z + stepZ;
-        if ( z == outZ )
-        {
-          return result;
-        }
-        tmax.z += tdelta.z;
-      }
-    }
-  }
-  
-  AE_ASSERT( result.type != Block::Exterior && result.type != Block::Unloaded );
-  
-  result.hit = true;
-  result.posi = ae::Int3( x, y, z );
-  
-  ae::Int3 chunkPos, localPos;
-  TerrainChunk::GetPosFromWorld( result.posi, &chunkPos, &localPos );
-  const TerrainChunk* chunk = GetChunk( chunkPos );
-  AE_ASSERT( chunk );
-
-  TerrainIndex index = chunk->m_i[ localPos.x ][ localPos.y ][ localPos.z ];
-  // TODO Can somehow skip surface and hit interior cell
-  AE_ASSERT( index != kInvalidTerrainIndex );
-  ae::Mesh::Vertex vert = chunk->m_mesh.GetVertex( index );
-  ae::Vec3 p = vert.position.GetXYZ();
-  ae::Vec3 n = vert.normal.GetXYZ().SafeNormalizeCopy(); // @TODO: Use sdf gradient, since verts can have multiple
-  ae::Vec3 r = ray.SafeNormalizeCopy();
-  float t = n.Dot( p - start ) / n.Dot( r );
-  result.distance = t;
-  result.posf = start + r * t;
-  result.normal = n;
-
-  // Debug
-  if ( m_params.debug )
-  {
-    m_params.debug->AddCircle( result.posf, result.normal, 0.25f, ae::Color::Green(), 16 );
-    m_params.debug->AddLine( result.posf, result.posf + result.normal, ae::Color::Green() );
-
-    ae::Vec3 v = ae::Vec3( x, y, z ) + ae::Vec3( 0.5f );
-    m_params.debug->AddOBB( ae::Matrix4::Translation( v ), ae::Color::Green() );
-
-    m_params.debug->AddSphere( p, 0.05f, ae::Color::Green(), 8 );
-    m_params.debug->AddLine( p, p + n, ae::Color::Green() );
-    if ( m_debugTextFn )
-    {
-      ae::Str64 str = ae::Str64::Format( "#: # (#)", index, vert.position, localPos );
-      m_debugTextFn( p, str.c_str() );
-    }
-
-    debugRay.color = ae::Color::Green();
-  }
-  
-  return result;
-}
-
-bool Terrain::Raycast( const ae::Mesh::RaycastParams& _params, ae::Mesh::RaycastResult* outResult ) const
+bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::CollisionMesh::RaycastResult* outResult ) const
 {
   ae::Vec3 start = _params.source;
   ae::Vec3 dir = _params.direction.SafeNormalizeCopy();
@@ -2476,7 +2475,7 @@ bool Terrain::Raycast( const ae::Mesh::RaycastParams& _params, ae::Mesh::Raycast
     return false;
   }
   
-  ae::Mesh::RaycastParams params = _params;
+  ae::CollisionMesh::RaycastParams params = _params;
   if ( !params.debug )
   {
     params.debug = m_params.debug;
@@ -2572,14 +2571,14 @@ bool Terrain::Raycast( const ae::Mesh::RaycastParams& _params, ae::Mesh::Raycast
     tmax.z = 1000000;
   }
 
-  ae::Mesh::RaycastResult resultsAccum;
+  ae::CollisionMesh::RaycastResult resultsAccum;
   while ( true )
   {
-    ae::Mesh::RaycastResult r;
+    ae::CollisionMesh::RaycastResult r;
     const TerrainChunk* chunk = GetChunk( ae::Int3( x, y, z ) );
     if ( chunk && chunk->m_mesh.Raycast( params, &r ) )
     {
-      resultsAccum.Accumulate( params, r );
+      ae::CollisionMesh::RaycastResult::Accumulate( params, r, &resultsAccum );
     }
     
     if ( tmax.x < tmax.y )
@@ -2633,17 +2632,17 @@ bool Terrain::Raycast( const ae::Mesh::RaycastParams& _params, ae::Mesh::Raycast
   return resultsAccum.hitCount != 0;
 }
 
-ae::Mesh::PushOutInfo Terrain::PushOutSphere( const ae::Mesh::PushOutParams& _params, const ae::Mesh::PushOutInfo& info ) const
+ae::CollisionMesh::PushOutInfo Terrain::PushOutSphere( const ae::CollisionMesh::PushOutParams& _params, const ae::CollisionMesh::PushOutInfo& info ) const
 {
-  ae::Mesh::PushOutParams params = _params;
+  ae::CollisionMesh::PushOutParams params = _params;
   params.transform = ae::Matrix4::Identity();
   
   ae::Int3 sphereMin, sphereMax;
-  aeAABB sphereAABB( info.sphere );
+  ae::AABB sphereAABB( info.sphere );
   TerrainChunk::GetPosFromWorld( sphereAABB.GetMin().FloorCopy(), &sphereMin, nullptr );
   TerrainChunk::GetPosFromWorld( sphereAABB.GetMax().CeilCopy(), &sphereMax, nullptr );
   
-  ae::Mesh::PushOutInfo results = info;
+  ae::CollisionMesh::PushOutInfo results = info;
   for ( int32_t z = sphereMin.z; z <= sphereMax.z; z++ )
   for ( int32_t y = sphereMin.y; y <= sphereMax.y; y++ )
   for ( int32_t x = sphereMin.x; x <= sphereMax.x; x++ )
