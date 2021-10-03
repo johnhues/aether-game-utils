@@ -8426,6 +8426,8 @@ void Window::SetTitle( const char* title )
   {
 #if _AE_WINDOWS_
     SetWindowTextA( (HWND)window, title );
+#elif _AE_OSX_
+    ((NSWindow*)window).title = [NSString stringWithUTF8String:title];
 #endif
     m_windowTitle = title;
   }
