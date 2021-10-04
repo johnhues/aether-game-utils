@@ -2952,6 +2952,15 @@ public:
     Enum,
     Ref
   };
+  
+  class Serializer
+  {
+  public:
+    virtual ~Serializer() {}
+    virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
+    virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0; //!< Return false when mapping should fail so SetObjectValueFromString() will not overwrite existing value.
+  };
+  static void SetSerializer( const ae::Var::Serializer* serializer );
 
   // Info
   const char* GetName() const;
@@ -2959,13 +2968,12 @@ public:
   const char* GetTypeName() const;
   uint32_t GetOffset() const;
   uint32_t GetSize() const;
-    
+  
   // Value
-  std::string GetObjectValueAsString( const ae::Object* obj, std::function< std::string( const ae::Object* ) > getStringFromObjectPointer = nullptr ) const;
-  bool SetObjectValueFromString( ae::Object* obj, const char* value, std::function< bool( const ae::Type*, const char*, ae::Object** ) > getObjectPointerFromString = nullptr ) const;
-  bool SetObjectValue( ae::Object* obj, const ae::Object* value ) const;
-  template < typename T > bool SetObjectValue( ae::Object* obj, const T& value ) const;
-    
+  std::string GetObjectValueAsString( const ae::Object* obj ) const;
+  bool SetObjectValueFromString( ae::Object* obj, const char* value ) const;
+  template < typename T >bool SetObjectValue( ae::Object* obj, const T& value ) const;
+  
   // Types
   const class Enum* GetEnum() const;
   const ae::Type* GetRefType() const;
@@ -2973,6 +2981,7 @@ public:
   //------------------------------------------------------------------------------
   // Internal
   //------------------------------------------------------------------------------
+  static const Serializer* s_serializer;
   const ae::Type* m_owner = nullptr;
   ae::Str32 m_name = "";
   Var::Type m_type;
@@ -6010,8 +6019,6 @@ ae::Type::Init( const char* name, uint32_t index )
 template < typename T >
 bool ae::Var::SetObjectValue( ae::Object* obj, const T& value ) const
 {
-  AE_ASSERT( m_type != Ref );
-
   if ( !obj )
   {
     return false;
@@ -6024,6 +6031,20 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value ) const
   Var::Type typeCheck = ae::_VarType< T >::GetType();
   AE_ASSERT( typeCheck == m_type );
   AE_ASSERT( m_size == sizeof( T ) );
+
+  if ( m_type == Ref )
+  {
+    if ( !value )
+    {
+      memset( (uint8_t*)obj + m_offset, 0, m_size );
+      return true;
+    }
+
+    const ae::Type* refType = GetRefType();
+    const ae::Type* valueType = ae::GetTypeFromObject( value );
+    AE_ASSERT( valueType );
+    AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
+  }
 
   T* varData = reinterpret_cast<T*>( (uint8_t*)obj + m_offset );
   *varData = value;
@@ -14834,13 +14855,20 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
   }
 }
 
+const ae::Var::Serializer* ae::Var::s_serializer = nullptr;
+
+void ae::Var::SetSerializer( const ae::Var::Serializer* serializer )
+{
+  s_serializer = serializer;
+}
+
 const char* ae::Var::GetName() const { return m_name.c_str(); }
 ae::Var::Type ae::Var::GetType() const { return m_type; }
 const char* ae::Var::GetTypeName() const { return m_typeName.c_str(); }
 uint32_t ae::Var::GetOffset() const { return m_offset; }
 uint32_t ae::Var::GetSize() const { return m_size; }
 
-bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std::function< bool( const ae::Type*, const char*, ae::Object** ) > getObjectPointerFromString ) const
+bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value ) const
 {
   if ( !obj )
   {
@@ -15028,16 +15056,20 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std:
     case Var::Ref:
     {
       const ae::Type* refType = GetRefType();
-      AE_ASSERT_MSG( getObjectPointerFromString, "Must provide mapping function for reference types when calling SetObjectValueFromString" );
+      AE_ASSERT_MSG( s_serializer, "Must provide mapping function with ae::Var::SetSerializer() for reference types when calling SetObjectValueFromString" );
       
       class ae::Object* obj = nullptr;
-      if ( getObjectPointerFromString( refType, value, &obj ) )
+      if ( s_serializer->StringToObjectPointer( value, &obj ) )
       {
         if ( obj )
         {
+          // If user function returns success on conversion but the type is wrong then write null to var
           const ae::Type* objType = ae::GetTypeFromObject( obj );
           AE_ASSERT( objType );
-          AE_ASSERT_MSG( objType->IsType( refType ), "SetObjectValueFromString for var '#::#' returned object with wrong type '#'", m_owner->GetName(), GetName(), objType->GetName() );
+          if ( !objType->IsType( refType ) )
+          {
+            obj = nullptr;
+          }
         }
         class ae::Object** varPtr = reinterpret_cast< class ae::Object** >( varData );
         *varPtr = obj;
@@ -15048,37 +15080,6 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, std:
   }
   
   return false;
-}
-
-bool ae::Var::SetObjectValue( ae::Object* obj, const ae::Object* value ) const
-{
-  AE_ASSERT( m_type == Ref );
-  
-  if ( !obj )
-  {
-    return false;
-  }
-  
-  const ae::Type* objType = ae::GetTypeFromObject( obj );
-  AE_ASSERT( objType );
-  AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
-  
-  if ( !value )
-  {
-    memset( (uint8_t*)obj + m_offset, 0, m_size );
-    return true;
-  }
-  
-  const ae::Type* refType = GetRefType();
-  const ae::Type* valueType = ae::GetTypeFromObject( value );
-  AE_ASSERT( valueType );
-  AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
-  
-  uint8_t* target = (uint8_t*)obj + m_offset;
-  const ae::Object*& varData = *reinterpret_cast< const ae::Object** >( target );
-  varData = value;
-  
-  return true;
 }
 
 const ae::Var* ae::Type::GetVarByName( const char* name ) const
@@ -15197,7 +15198,7 @@ ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, boo
 }
 
 // @TODO: Replace return type with a dynamic ae::Str
-std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, std::function< std::string( const ae::Object* ) > getStringFromObjectPointer ) const
+std::string ae::Var::GetObjectValueAsString( const ae::Object* obj ) const
 {
   if ( !obj )
   {
@@ -15265,9 +15266,9 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, std::functio
     }
     case Var::Ref:
     {
-      AE_ASSERT_MSG( getStringFromObjectPointer, "Must provide mapping function for reference types when calling GetObjectValueAsString" );
+      AE_ASSERT_MSG( s_serializer, "Must provide mapping function with ae::Var::SetSerializer() for reference types when calling GetObjectValueAsString" );
       const ae::Object* obj = *reinterpret_cast< const ae::Object* const * >( varData );
-      return getStringFromObjectPointer( obj ).c_str();
+      return s_serializer->ObjectPointerToString( obj ).c_str();
     }
   }
   
