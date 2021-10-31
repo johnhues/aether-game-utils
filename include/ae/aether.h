@@ -6103,6 +6103,7 @@ T* ae::Cast( C* obj )
   #include <commdlg.h>
   #include "processthreadsapi.h" // For GetCurrentProcessId()
   #include <filesystem> // @HACK: Shouldn't need this just for Windows
+  #define AE_USE_OPENAL 0
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
   #include <unistd.h>
@@ -6119,10 +6120,12 @@ T* ae::Cast( C* obj )
     #include <OpenAL/al.h>
     #include <OpenAL/alc.h>
   #endif
+  #define AE_USE_OPENAL 1
 #elif _AE_LINUX_
   #include <unistd.h>
   #include <pwd.h>
   #include <sys/stat.h>
+  #define AE_USE_OPENAL 0
 #endif
 #include <thread>
 #include <random>
@@ -13512,6 +13515,7 @@ void CollisionMesh::PushOutInfo::Accumulate( const PushOutParams& params, const 
 //------------------------------------------------------------------------------
 void _CheckALError()
 {
+#if AE_USE_OPENAL
   const char* errStr = "UNKNOWN_ERROR";
   switch ( alGetError() )
   {
@@ -13525,10 +13529,12 @@ void _CheckALError()
   }
   AE_LOG( "OpenAL Error: #", errStr );
   AE_FAIL();
+#endif
 }
 
-void _LoadWavFile( const char* fileName, ALuint* buffer, float* length )
+void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 {
+#if AE_USE_OPENAL
   struct ChunkHeader
   {
     char chunkId[ 4 ];
@@ -13626,6 +13632,7 @@ void _LoadWavFile( const char* fileName, ALuint* buffer, float* length )
   AE_ASSERT( dataSize );
 
   *length = dataSize / ( wave_format.sampleRate * wave_format.numChannels * wave_format.bitsPerSample / 8.0f );
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -13648,11 +13655,12 @@ void AudioData::Initialize( const char* filePath )
 
 void AudioData::Terminate()
 {
+#if AE_USE_OPENAL
   AE_ASSERT( buffer );
 
   alDeleteBuffers( 1, &this->buffer );
   _CheckALError();
-
+#endif
   *this = AudioData();
 }
 
@@ -13671,6 +13679,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
 {
+#if AE_USE_OPENAL
   ALCdevice* device = alcOpenDevice( nullptr );
   AE_ASSERT( device );
   ALCcontext* ctx = alcCreateContext( device, nullptr );
@@ -13710,10 +13719,12 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
   alListenerf( AL_GAIN, 1.0f );
 
   _CheckALError();
+#endif
 }
 
 void Audio::Terminate()
 {
+#if AE_USE_OPENAL
   for ( uint32_t i = 0; i < m_musicChannels.Length(); i++ )
   {
     Channel* channel = &m_musicChannels[ i ];
@@ -13733,16 +13744,20 @@ void Audio::Terminate()
   alcMakeContextCurrent( nullptr );
   alcDestroyContext( ctx );
   alcCloseDevice( device );
+#endif
 }
 
 void Audio::SetVolume( float volume )
 {
+#if AE_USE_OPENAL
   volume = ae::Clip01( volume );
   alListenerf( AL_GAIN, volume );
+#endif
 }
 
 void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channel )
 {
+#if AE_USE_OPENAL
   AE_ASSERT( audioFile );
   if ( channel >= m_musicChannels.Length() )
   {
@@ -13767,10 +13782,12 @@ void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channe
   alSourcef( musicChannel->source, AL_GAIN, volume );
   alSourcePlay( musicChannel->source );
   _CheckALError();
+#endif
 }
 
 void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority )
 {
+#if AE_USE_OPENAL
   ALint state;
   AE_ASSERT( audioFile );
 
@@ -13823,22 +13840,27 @@ void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority 
   currentChannel->priority = priority;
 
   alGetSourcei( currentChannel->source, AL_SOURCE_STATE, &state );
+#endif
 }
 
 void Audio::StopMusic( uint32_t channel )
 {
+#if AE_USE_OPENAL
   if ( channel < m_musicChannels.Length() )
   {
     alSourceStop( m_musicChannels[ channel ].source );
   }
+#endif
 }
 
 void Audio::StopAllSfx()
 {
+#if AE_USE_OPENAL
   for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
   {
     alSourceStop( m_sfxChannels[ i ].source );
   }
+#endif
 }
 
 uint32_t Audio::GetMusicChannelCount() const
@@ -13854,6 +13876,7 @@ uint32_t Audio::GetSfxChannelCount() const
 // @TODO: Should return a string with current state of audio channels
 void Audio::Log()
 {
+#if AE_USE_OPENAL
   for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
   {
     ALint state = 0;
@@ -13882,6 +13905,7 @@ void Audio::Log()
   }
 
   _CheckALError();
+#endif
 }
 
 //------------------------------------------------------------------------------
