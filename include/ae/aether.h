@@ -10187,6 +10187,8 @@ typedef intptr_t GLintptr;
 
 // GL_VERSION_1_2
 #define GL_TEXTURE_3D                     0x806F
+#define GL_BGR                            0x80E0
+#define GL_BGRA                           0x80E1
 #define GL_CLAMP_TO_EDGE                  0x812F
 // GL_VERSION_1_3
 #define GL_TEXTURE0                       0x84C0
@@ -10198,6 +10200,7 @@ typedef intptr_t GLintptr;
 #define GL_STATIC_DRAW                    0x88E4
 #define GL_DYNAMIC_DRAW                   0x88E8
 // GL_VERSION_2_0
+#define GL_VERTEX_PROGRAM_POINT_SIZE      0x8642
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_FLOAT_VEC2                     0x8B50
