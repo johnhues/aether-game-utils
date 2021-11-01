@@ -908,12 +908,10 @@ public:
 
 private:
   uint32_t m_stepCount = 0;
-  float m_timeStepSec = 0.0f;
-  float m_timeStep = 0.0f;
-  int64_t m_frameExcess = 0;
-  float m_prevFrameTime = 0.0f;
-  float m_prevFrameTimeSec = 0.0f;
-  std::chrono::steady_clock::time_point m_frameStart;
+  double m_timeStep = 0.0;
+  double m_frameExcess = 0.0;
+  double m_prevFrameTime = 0.0;
+  double m_frameStart = 0.0;
 };
 
 //------------------------------------------------------------------------------
@@ -6200,7 +6198,7 @@ double GetTime()
   AE_ASSERT( success );
   return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
 #else
-  return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::steady_clock::now().time_since_epoch() ).count() / 1000000.0;
+  return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::high_resolution_clock::now().time_since_epoch() ).count() / 1000000.0;
 #endif
 }
 
@@ -7644,21 +7642,21 @@ Allocator* GetGlobalAllocator()
 TimeStep::TimeStep()
 {
   m_stepCount = 0;
-  m_timeStep = 0.0f;
-  m_frameExcess = 0;
-  m_prevFrameTime = 0.0f;
+  m_timeStep = 0.0;
+  m_frameExcess = 0.0;
+  m_prevFrameTime = 0.0;
 
-  SetTimeStep( 1.0f / 60.0f );
+  SetTimeStep( 1.0 / 60.0 );
 }
 
 void TimeStep::SetTimeStep( float timeStep )
 {
-  m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f;
+  m_timeStep = timeStep;
 }
 
 float TimeStep::GetTimeStep() const
 {
-  return m_timeStepSec;
+  return m_timeStep;
 }
 
 uint32_t TimeStep::GetStepCount() const
@@ -7668,50 +7666,44 @@ uint32_t TimeStep::GetStepCount() const
 
 float TimeStep::GetDt() const
 {
-  return m_prevFrameTimeSec;
+  return m_prevFrameTime;
 }
 
 void TimeStep::SetDt( float sec )
 {
-  m_prevFrameTimeSec = sec;
+  m_prevFrameTime = sec;
 }
 
 void TimeStep::Wait()
 {
-  if ( m_timeStep == 0.0f )
+  if ( m_timeStep == 0.0 )
   {
     return;
   }
   
-  // @TODO: Maybe this should use the same time source as GetTime()
-  
   if ( m_stepCount == 0 )
   {
     m_prevFrameTime = m_timeStep;
-    m_frameStart = std::chrono::steady_clock::now();
+    m_frameStart = ae::GetTime();
   }
   else
   {
-    std::chrono::steady_clock::time_point execFinish = std::chrono::steady_clock::now();
-    std::chrono::microseconds execDuration = std::chrono::duration_cast< std::chrono::microseconds >( execFinish - m_frameStart );
-    
-    int64_t prevFrameExcess = m_prevFrameTime - m_timeStep;
-    m_frameExcess = ( m_frameExcess * 0.5f + prevFrameExcess * 0.5f ) + 0.5f;
+    double execDuration = ae::GetTime() - m_frameStart;
+    AE_ASSERT( execDuration > 0.0 ); // @TODO: Should this support an exec duration of zero?
+    double prevFrameExcess = m_prevFrameTime - m_timeStep;
+    m_frameExcess = ( m_frameExcess + prevFrameExcess ) * 0.5;
 
-    int64_t wait = m_timeStep - execDuration.count();
-    wait -= ( m_frameExcess > 0 ) ? m_frameExcess : 0;
-    if ( 1000 < wait && wait < m_timeStep )
+    double wait = m_timeStep - execDuration;
+    wait -= ae::Max( 0.0, m_frameExcess );
+    if ( /*0.01 < wait &&*/ wait < m_timeStep ) // @TODO: Should this have a minimum sleep time?
     {
-      std::this_thread::sleep_for( std::chrono::microseconds( wait ) );
+      std::this_thread::sleep_for( std::chrono::duration< double >( wait ) );
     }
-    std::chrono::steady_clock::time_point frameFinish = std::chrono::steady_clock::now();
-    std::chrono::microseconds frameDuration = std::chrono::duration_cast< std::chrono::microseconds >( frameFinish - m_frameStart );
 
-    m_prevFrameTime = frameDuration.count();
-    m_frameStart = std::chrono::steady_clock::now();
+    double frameFinish = ae::GetTime();
+    m_prevFrameTime = frameFinish - m_frameStart;
+    m_frameStart = frameFinish;
   }
-  
-  m_prevFrameTimeSec = m_prevFrameTime / 1000000.0f;
   
   m_stepCount++;
 }
