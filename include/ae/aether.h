@@ -908,12 +908,10 @@ public:
 
 private:
   uint32_t m_stepCount = 0;
-  float m_timeStepSec = 0.0f;
-  float m_timeStep = 0.0f;
-  int64_t m_frameExcess = 0;
-  float m_prevFrameTime = 0.0f;
-  float m_prevFrameTimeSec = 0.0f;
-  std::chrono::steady_clock::time_point m_frameStart;
+  double m_timeStep = 0.0;
+  double m_sleepOverhead = 0.0;
+  double m_prevFrameTime = 0.0;
+  double m_frameStart = 0.0;
 };
 
 //------------------------------------------------------------------------------
@@ -2098,6 +2096,9 @@ public:
   ~GraphicsDevice();
   void Initialize( class Window* window );
   void Terminate();
+
+  void SetVsyncEnbled( bool enabled );
+  bool GetVsyncEnabled() const;
 
   void Activate();
   void Clear( Color color );
@@ -6103,6 +6104,7 @@ T* ae::Cast( C* obj )
   #include <commdlg.h>
   #include "processthreadsapi.h" // For GetCurrentProcessId()
   #include <filesystem> // @HACK: Shouldn't need this just for Windows
+  #include <timeapi.h>
   #define AE_USE_OPENAL 0
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
@@ -6200,7 +6202,7 @@ double GetTime()
   AE_ASSERT( success );
   return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
 #else
-  return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::steady_clock::now().time_since_epoch() ).count() / 1000000.0;
+  return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::high_resolution_clock::now().time_since_epoch() ).count() / 1000000.0;
 #endif
 }
 
@@ -7644,21 +7646,21 @@ Allocator* GetGlobalAllocator()
 TimeStep::TimeStep()
 {
   m_stepCount = 0;
-  m_timeStep = 0.0f;
-  m_frameExcess = 0;
-  m_prevFrameTime = 0.0f;
+  m_timeStep = 0.0;
+  m_sleepOverhead = 0.0;
+  m_prevFrameTime = 0.0;
 
   SetTimeStep( 1.0f / 60.0f );
 }
 
 void TimeStep::SetTimeStep( float timeStep )
 {
-  m_timeStepSec = timeStep; m_timeStep = timeStep * 1000000.0f;
+  m_timeStep = timeStep;
 }
 
 float TimeStep::GetTimeStep() const
 {
-  return m_timeStepSec;
+  return m_timeStep;
 }
 
 uint32_t TimeStep::GetStepCount() const
@@ -7668,50 +7670,64 @@ uint32_t TimeStep::GetStepCount() const
 
 float TimeStep::GetDt() const
 {
-  return m_prevFrameTimeSec;
+  return m_prevFrameTime;
 }
 
 void TimeStep::SetDt( float sec )
 {
-  m_prevFrameTimeSec = sec;
+  m_prevFrameTime = sec;
 }
 
 void TimeStep::Wait()
 {
-  if ( m_timeStep == 0.0f )
-  {
-    return;
-  }
-  
-  // @TODO: Maybe this should use the same time source as GetTime()
+  const bool zeroTimeStep = ( m_timeStep == 0.0 );
   
   if ( m_stepCount == 0 )
   {
-    m_prevFrameTime = m_timeStep;
-    m_frameStart = std::chrono::steady_clock::now();
+    m_prevFrameTime = zeroTimeStep ? ( 1.0 / 60.0 ) : m_timeStep; // Never return a dt of 0 to avoid divide by 0 in client code
+    m_frameStart = ae::GetTime();
+  }
+  else if ( zeroTimeStep )
+  {
+    double currentTime = ae::GetTime();
+    m_sleepOverhead = 0.0;
+    m_prevFrameTime = currentTime - m_frameStart;
+    m_frameStart = currentTime;
   }
   else
   {
-    std::chrono::steady_clock::time_point execFinish = std::chrono::steady_clock::now();
-    std::chrono::microseconds execDuration = std::chrono::duration_cast< std::chrono::microseconds >( execFinish - m_frameStart );
-    
-    int64_t prevFrameExcess = m_prevFrameTime - m_timeStep;
-    m_frameExcess = ( m_frameExcess * 0.5f + prevFrameExcess * 0.5f ) + 0.5f;
+    double sleepStart = ae::GetTime();
+    double execDuration = sleepStart - m_frameStart;
+    AE_ASSERT( execDuration > 0.0 ); // @TODO: Handle negative/zero frame duration
+    double sleepDuration = m_timeStep - ( execDuration + m_sleepOverhead );
 
-    int64_t wait = m_timeStep - execDuration.count();
-    wait -= ( m_frameExcess > 0 ) ? m_frameExcess : 0;
-    if ( 1000 < wait && wait < m_timeStep )
+    if ( sleepDuration > 0.0 )
     {
-      std::this_thread::sleep_for( std::chrono::microseconds( wait ) );
-    }
-    std::chrono::steady_clock::time_point frameFinish = std::chrono::steady_clock::now();
-    std::chrono::microseconds frameDuration = std::chrono::duration_cast< std::chrono::microseconds >( frameFinish - m_frameStart );
+#if _AE_WINDOWS_
+      // See https://stackoverflow.com/questions/64633336/new-thread-sleep-behaviour-under-windows-10-october-update-20h2
+      // Increase default system timer resolution
+      MMRESULT result = timeBeginPeriod( 1 );
+      AE_ASSERT( result == TIMERR_NOERROR );
+#endif
+      std::this_thread::sleep_for( std::chrono::duration< double >( sleepDuration ) );
+#if _AE_WINDOWS_
+      result = timeEndPeriod( 1 );
+      AE_ASSERT( result == TIMERR_NOERROR );
+#endif
 
-    m_prevFrameTime = frameDuration.count();
-    m_frameStart = std::chrono::steady_clock::now();
+      double sleepEnd = ae::GetTime();
+      m_prevFrameTime = sleepEnd - m_frameStart;
+      m_frameStart = sleepEnd;
+
+      double sleepOverhead = ( sleepEnd - sleepStart ) - sleepDuration;
+      m_sleepOverhead = ae::Lerp( m_sleepOverhead, sleepOverhead, 0.05 );
+    }
+    else
+    {
+      m_prevFrameTime = execDuration;
+      m_frameStart = sleepStart;
+    }
   }
-  
-  m_prevFrameTimeSec = m_prevFrameTime / 1000000.0f;
   
   m_stepCount++;
 }
@@ -10252,6 +10268,9 @@ typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severit
 #define GL_DEBUG_SEVERITY_HIGH            0x9146
 #define GL_DEBUG_SEVERITY_MEDIUM          0x9147
 #define GL_DEBUG_SEVERITY_LOW             0x9148
+// WGL extensions
+bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
+int ( *wglGetSwapIntervalEXT ) () = nullptr;
 // OpenGL Shader Functions
 GLuint ( *glCreateProgram ) () = nullptr;
 void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
@@ -12096,6 +12115,8 @@ void GraphicsDevice::Initialize( class Window* window )
   AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
+  LOAD_OPENGL_FN( wglSwapIntervalEXT );
+  LOAD_OPENGL_FN( wglGetSwapIntervalEXT );
   // Shader functions
   LOAD_OPENGL_FN( glCreateProgram );
   LOAD_OPENGL_FN( glAttachShader );
@@ -12220,6 +12241,20 @@ void GraphicsDevice::Initialize( class Window* window )
   AE_CHECK_GL_ERROR();
   
   s_graphicsDevice = this;
+}
+
+void GraphicsDevice::SetVsyncEnbled( bool enabled )
+{
+#if _AE_WINDOWS_
+  wglSwapIntervalEXT( enabled ? 1 : 0 );
+#endif
+}
+
+bool GraphicsDevice::GetVsyncEnabled() const
+{
+#if _AE_WINDOWS_
+  return wglGetSwapIntervalEXT() != 0;
+#endif
 }
 
 void GraphicsDevice::Terminate()
