@@ -909,7 +909,7 @@ public:
 private:
   uint32_t m_stepCount = 0;
   double m_timeStep = 0.0;
-  double m_frameExcess = 0.0;
+  double m_sleepOverhead = 0.0;
   double m_prevFrameTime = 0.0;
   double m_frameStart = 0.0;
 };
@@ -2096,6 +2096,9 @@ public:
   ~GraphicsDevice();
   void Initialize( class Window* window );
   void Terminate();
+
+  void SetVsyncEnbled( bool enabled );
+  bool GetVsyncEnabled() const;
 
   void Activate();
   void Clear( Color color );
@@ -6101,6 +6104,7 @@ T* ae::Cast( C* obj )
   #include <commdlg.h>
   #include "processthreadsapi.h" // For GetCurrentProcessId()
   #include <filesystem> // @HACK: Shouldn't need this just for Windows
+  #include <timeapi.h>
   #define AE_USE_OPENAL 0
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
@@ -7643,10 +7647,10 @@ TimeStep::TimeStep()
 {
   m_stepCount = 0;
   m_timeStep = 0.0;
-  m_frameExcess = 0.0;
+  m_sleepOverhead = 0.0;
   m_prevFrameTime = 0.0;
 
-  SetTimeStep( 1.0 / 60.0 );
+  SetTimeStep( 1.0f / 60.0f );
 }
 
 void TimeStep::SetTimeStep( float timeStep )
@@ -7676,33 +7680,53 @@ void TimeStep::SetDt( float sec )
 
 void TimeStep::Wait()
 {
-  if ( m_timeStep == 0.0 )
-  {
-    return;
-  }
+  const bool zeroTimeStep = ( m_timeStep == 0.0 );
   
   if ( m_stepCount == 0 )
   {
-    m_prevFrameTime = m_timeStep;
+    m_prevFrameTime = zeroTimeStep ? ( 1.0 / 60.0 ) : m_timeStep; // Never return a dt of 0 to avoid divide by 0 in client code
     m_frameStart = ae::GetTime();
+  }
+  else if ( zeroTimeStep )
+  {
+    double currentTime = ae::GetTime();
+    m_sleepOverhead = 0.0;
+    m_prevFrameTime = currentTime - m_frameStart;
+    m_frameStart = currentTime;
   }
   else
   {
-    double execDuration = ae::GetTime() - m_frameStart;
-    AE_ASSERT( execDuration > 0.0 ); // @TODO: Should this support an exec duration of zero?
-    double prevFrameExcess = m_prevFrameTime - m_timeStep;
-    m_frameExcess = ( m_frameExcess + prevFrameExcess ) * 0.5;
+    double sleepStart = ae::GetTime();
+    double execDuration = sleepStart - m_frameStart;
+    AE_ASSERT( execDuration > 0.0 ); // @TODO: Handle negative/zero frame duration
+    double sleepDuration = m_timeStep - ( execDuration + m_sleepOverhead );
 
-    double wait = m_timeStep - execDuration;
-    wait -= ae::Max( 0.0, m_frameExcess );
-    if ( /*0.01 < wait &&*/ wait < m_timeStep ) // @TODO: Should this have a minimum sleep time?
+    if ( sleepDuration > 0.0 )
     {
-      std::this_thread::sleep_for( std::chrono::duration< double >( wait ) );
-    }
+#if _AE_WINDOWS_
+      // See https://stackoverflow.com/questions/64633336/new-thread-sleep-behaviour-under-windows-10-october-update-20h2
+      // Increase default system timer resolution
+      MMRESULT result = timeBeginPeriod( 1 );
+      AE_ASSERT( result == TIMERR_NOERROR );
+#endif
+      std::this_thread::sleep_for( std::chrono::duration< double >( sleepDuration ) );
+#if _AE_WINDOWS_
+      result = timeEndPeriod( 1 );
+      AE_ASSERT( result == TIMERR_NOERROR );
+#endif
 
-    double frameFinish = ae::GetTime();
-    m_prevFrameTime = frameFinish - m_frameStart;
-    m_frameStart = frameFinish;
+      double sleepEnd = ae::GetTime();
+      m_prevFrameTime = sleepEnd - m_frameStart;
+      m_frameStart = sleepEnd;
+
+      double sleepOverhead = ( sleepEnd - sleepStart ) - sleepDuration;
+      m_sleepOverhead = ae::Lerp( m_sleepOverhead, sleepOverhead, 0.05 );
+    }
+    else
+    {
+      m_prevFrameTime = execDuration;
+      m_frameStart = sleepStart;
+    }
   }
   
   m_stepCount++;
@@ -10244,6 +10268,9 @@ typedef void ( *GLDEBUGPROC )(GLenum source,GLenum type,GLuint id,GLenum severit
 #define GL_DEBUG_SEVERITY_HIGH            0x9146
 #define GL_DEBUG_SEVERITY_MEDIUM          0x9147
 #define GL_DEBUG_SEVERITY_LOW             0x9148
+// WGL extensions
+bool ( *wglSwapIntervalEXT ) ( int interval ) = nullptr;
+int ( *wglGetSwapIntervalEXT ) () = nullptr;
 // OpenGL Shader Functions
 GLuint ( *glCreateProgram ) () = nullptr;
 void ( *glAttachShader ) ( GLuint program, GLuint shader ) = nullptr;
@@ -12088,6 +12115,8 @@ void GraphicsDevice::Initialize( class Window* window )
   AE_CHECK_GL_ERROR();
 
 #if _AE_WINDOWS_
+  LOAD_OPENGL_FN( wglSwapIntervalEXT );
+  LOAD_OPENGL_FN( wglGetSwapIntervalEXT );
   // Shader functions
   LOAD_OPENGL_FN( glCreateProgram );
   LOAD_OPENGL_FN( glAttachShader );
@@ -12212,6 +12241,20 @@ void GraphicsDevice::Initialize( class Window* window )
   AE_CHECK_GL_ERROR();
   
   s_graphicsDevice = this;
+}
+
+void GraphicsDevice::SetVsyncEnbled( bool enabled )
+{
+#if _AE_WINDOWS_
+  wglSwapIntervalEXT( enabled ? 1 : 0 );
+#endif
+}
+
+bool GraphicsDevice::GetVsyncEnabled() const
+{
+#if _AE_WINDOWS_
+  return wglGetSwapIntervalEXT() != 0;
+#endif
 }
 
 void GraphicsDevice::Terminate()
