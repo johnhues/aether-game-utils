@@ -2775,7 +2775,8 @@ static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
   struct ae::_VarType< E > { \
     static ae::Var::Type GetType() { return ae::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetSubTypeName() { return ""; } \
+    static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
   }; \
   struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
   static std::ostream &operator << ( std::ostream &os, E e ) { \
@@ -2798,7 +2799,8 @@ static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
   struct ae::_VarType< E > { \
     static ae::Var::Type GetType() { return ae::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetSubTypeName() { return ""; } \
+    static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
     static const char* GetPrefix() { return ""; } \
   }; \
   ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
@@ -2810,7 +2812,8 @@ static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
   struct ae::_VarType< E > { \
     static ae::Var::Type GetType() { return ae::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetSubTypeName() { return ""; } \
+    static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
     static const char* GetPrefix() { return #PREFIX; } \
   }; \
   ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
@@ -2833,7 +2836,8 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
   struct ae::_VarType< E > { \
     static ae::Var::Type GetType() { return ae::Var::Enum; } \
     static const char* GetName() { return #E; } \
-    static const char* GetRefTypeName() { return ""; } \
+    static const char* GetSubTypeName() { return ""; } \
+    static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
     static const char* GetPrefix() { return ""; } \
   }; \
   namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
@@ -2971,13 +2975,20 @@ public:
   uint32_t GetSize() const;
   
   // Value
-  std::string GetObjectValueAsString( const ae::Object* obj ) const;
-  bool SetObjectValueFromString( ae::Object* obj, const char* value ) const;
-  template < typename T >bool SetObjectValue( ae::Object* obj, const T& value ) const;
+  std::string GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
+  bool SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx = -1 ) const;
+  template < typename T > bool SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx = -1 ) const;
+  template < typename T > bool GetObjectValue( ae::Object* obj, T* value, int32_t arrayIdx = -1 ) const;
   
   // Types
   const class Enum* GetEnum() const;
-  const ae::Type* GetRefType() const;
+  const ae::Type* GetSubType() const; //!< For Ref and Array types
+  bool IsArray() const;
+  
+  // Array
+  bool IsArrayResizable() const;
+  uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const; //!< Returns new length
+  uint32_t GetArrayLength( const ae::Object* obj ) const;
 
   //------------------------------------------------------------------------------
   // Internal
@@ -2989,8 +3000,20 @@ public:
   ae::Str32 m_typeName = "";
   uint32_t m_offset = 0;
   uint32_t m_size = 0;
-  ae::TypeId m_refTypeId = ae::kInvalidTypeId; // @TODO: Need to use an id here in case type has not been registered yet
+  ae::TypeId m_subTypeId = ae::kInvalidTypeId; // @TODO: Need to use an id here in case type has not been registered yet
   mutable const class Enum* m_enum = nullptr;
+  class ArrayAdapter
+  {
+  public:
+    virtual ~ArrayAdapter() {}
+    virtual void* GetElement( void* a, uint32_t idx ) const = 0;
+    virtual const void* GetElement( const void* a, uint32_t idx ) const = 0;
+    virtual uint32_t Resize( void* a, uint32_t size ) const = 0;
+    virtual uint32_t GetLength( const void* a ) const = 0; //!< Current array length
+    virtual uint32_t GetMaxLength() const = 0; //!< Return uint max for no hard limit
+    virtual uint32_t IsResizable() const = 0;
+  };
+  const ArrayAdapter* m_arrayAdapter = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -3209,6 +3232,7 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 {
   std::stringstream os;
   os << std::setprecision( 4 );
+  os << std::boolalpha;
   LogFormat( os, severity, filePath, line, assertInfo, format );
   LogInternal( os, format, args... );
 }
@@ -4799,6 +4823,7 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
     // @TODO: Replace with ToString()?
     std::ostringstream stream;
     stream << std::setprecision( 4 );
+    stream << std::boolalpha;
     stream << value;
     *this += stream.str().c_str();
     head++;
@@ -5746,13 +5771,14 @@ struct _VarCreator
   {
     ae::Type* type = _GetTypeNameMap().find( typeName )->second;
     AE_ASSERT( type );
-      
+    
     Var var;
     var.m_owner = type;
     var.m_name = varName;
     var.m_type = ae::_VarType< V >::GetType();
     var.m_typeName = ae::_VarType< V >::GetName();
-    var.m_refTypeId = GetTypeIdFromName( ae::_VarType< V >::GetRefTypeName() );
+    var.m_subTypeId = GetTypeIdFromName( ae::_VarType< V >::GetSubTypeName() );
+    var.m_arrayAdapter = ae::_VarType< V >::GetArrayAdapter();
 #if !_AE_WINDOWS_
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Winvalid-offsetof"
@@ -5868,7 +5894,8 @@ template <> \
 struct ae::_VarType< t > { \
 static ae::Var::Type GetType() { return ae::Var::e; } \
 static const char* GetName() { return #t; } \
-static const char* GetRefTypeName() { return ""; } \
+static const char* GetSubTypeName() { return ""; } \
+static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
 };
 
 _ae_DefineMetaVarType( uint8_t, UInt8 );
@@ -5886,7 +5913,8 @@ struct ae::_VarType< ae::Str<N> >
 {
   static ae::Var::Type GetType() { return ae::Var::String; }
   static const char* GetName() { return "String"; }
-  static const char* GetRefTypeName() { return ""; }
+  static const char* GetSubTypeName() { return ""; }
+  static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; }
 };
 
 template < typename T >
@@ -5898,7 +5926,79 @@ struct ae::_VarType< T* >
     return ae::Var::Ref;
   }
   static const char* GetName() { return "Ref"; }
-  static const char* GetRefTypeName() { return ae::GetTypeName< T >(); }
+  static const char* GetSubTypeName() { return ae::GetTypeName< T >(); }
+  static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
+};
+
+template < typename T, uint32_t N >
+class ArrayAdapterDynamic : public ae::Var::ArrayAdapter
+{
+public:
+  void* GetElement( void* a, uint32_t idx ) const override { return &((Arr*)a)->operator[]( idx ); }
+  const void* GetElement( const void* a, uint32_t idx ) const override { return &((Arr*)a)->operator[]( idx ); }
+  uint32_t Resize( void* _a, uint32_t length ) const override
+  {
+    Arr& a = *(Arr*)_a;
+    if ( a.Length() < length )
+    {
+      a.Reserve( length );
+      for ( uint32_t i = a.Length(); i < length; i++ )
+      {
+        a.Append( {} );
+      }
+    }
+    else if ( length < a.Length() )
+    {
+      while ( a.Length() > length )
+      {
+        a.Remove( a.Length() - 1 );
+      }
+    }
+    return a.Length();
+  }
+  uint32_t GetLength( const void* a ) const override { return ((Arr*)a)->Length(); }
+  uint32_t GetMaxLength() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
+  uint32_t IsResizable() const override { return ( N == 0 ); }
+
+  typedef ae::Array< T, N > Arr;
+};
+
+template < typename T, uint32_t N >
+struct ae::_VarType< ae::Array< T, N > >
+{
+  static ae::Var::Type GetType() { return ae::_VarType< T >::GetType(); }
+  static const char* GetName() { return ae::_VarType< T >::GetName(); }
+  static const char* GetSubTypeName() { return ae::GetTypeName< T >(); }
+  static const ae::Var::ArrayAdapter* GetArrayAdapter()
+  {
+    static ArrayAdapterDynamic< T, N > s_adapter;
+    return &s_adapter;
+  }
+};
+
+template < typename T, uint32_t N >
+class ArrayAdapterStatic : public ae::Var::ArrayAdapter
+{
+public:
+  void* GetElement( void* a, uint32_t idx ) const override { return &((T*)a)[ idx ]; }
+  const void* GetElement( const void* a, uint32_t idx ) const override { return &((T*)a)[ idx ]; }
+  uint32_t Resize( void* a, uint32_t length ) const override { return N; }
+  uint32_t GetLength( const void* a ) const override { return N; }
+  uint32_t GetMaxLength() const override { return N; }
+  uint32_t IsResizable() const override { return false; }
+};
+
+template < typename T, uint32_t N >
+struct ae::_VarType< T[ N ] >
+{
+  static ae::Var::Type GetType() { return ae::_VarType< T >::GetType(); }
+  static const char* GetName() { return ae::_VarType< T >::GetName(); }
+  static const char* GetSubTypeName() { return ae::GetTypeName< T >(); }
+  static const ae::Var::ArrayAdapter* GetArrayAdapter()
+  {
+    static ArrayAdapterStatic< T, N > s_adapter;
+    return &s_adapter;
+  }
 };
 
 template < typename T >
@@ -6018,7 +6118,7 @@ ae::Type::Init( const char* name, uint32_t index )
 }
 
 template < typename T >
-bool ae::Var::SetObjectValue( ae::Object* obj, const T& value ) const
+bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
 {
   if ( !obj )
   {
@@ -6028,28 +6128,81 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value ) const
   const ae::Type* objType = ae::GetTypeFromObject( obj );
   AE_ASSERT( objType );
   AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
-
+  
   Var::Type typeCheck = ae::_VarType< T >::GetType();
   AE_ASSERT( typeCheck == m_type );
-  AE_ASSERT( m_size == sizeof( T ) );
+  AE_ASSERT( m_arrayAdapter || m_size == sizeof( T ) );
 
   if ( m_type == Ref )
   {
-    if ( !value )
-    {
-      memset( (uint8_t*)obj + m_offset, 0, m_size );
-      return true;
-    }
-
-    const ae::Type* refType = GetRefType();
-    const ae::Type* valueType = ae::GetTypeFromObject( value );
+    auto obj = *(const ae::Object**)&value;
+    const ae::Type* refType = GetSubType();
+    const ae::Type* valueType = ae::GetTypeFromObject( obj );
     AE_ASSERT( valueType );
     AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
   }
+  
+  T* varData = nullptr;
+  if ( m_arrayAdapter )
+  {
+    void* arr = (uint8_t*)obj + m_offset;
+    if ( arrayIdx >= 0 && arrayIdx < m_arrayAdapter->GetLength( arr ) )
+    {
+      varData = (T*)m_arrayAdapter->GetElement( arr, arrayIdx );
+    }
+    else
+    {
+      return false;
+    }
+  }
+  // @NOTE: This check isn't really necessary but it could catch mistakes. 'arrayIdx' shouldn't be specified for refs.
+  else if ( arrayIdx < 0 )
+  {
+    varData = reinterpret_cast< T* >( (uint8_t*)obj + m_offset );
+  }
+  else
+  {
+    return false;
+  }
+  AE_ASSERT( varData );
 
-  T* varData = reinterpret_cast<T*>( (uint8_t*)obj + m_offset );
   *varData = value;
+  return true;
+}
 
+template < typename T >
+bool ae::Var::GetObjectValue( ae::Object* obj, T* value, int32_t arrayIdx ) const
+{
+  if ( !obj )
+  {
+    return false;
+  }
+  // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
+  
+  const void* varData = nullptr;
+  if ( m_arrayAdapter )
+  {
+    void* arr = (uint8_t*)obj + m_offset;
+    if ( arrayIdx >= 0 && m_arrayAdapter->GetLength( arr ) )
+    {
+      varData = m_arrayAdapter->GetElement( arr, arrayIdx );
+    }
+    else
+    {
+      return false;
+    }
+  }
+  else if ( arrayIdx < 0 )
+  {
+    varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
+  }
+  else
+  {
+    return false;
+  }
+  AE_ASSERT( varData );
+  
+  *value = *(const T*)varData;
   return true;
 }
 
@@ -13040,7 +13193,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
     if ( ( m_mode == Mode::Rotate && !mouseRotate )
         || ( m_mode == Mode::Pan && !mousePan )
         || ( m_mode == Mode::Zoom && !mouseZoom ) )
-  {
+    {
       if ( m_moveAccum.Length() >= 5.0f ) // In pixels
       {
         // Delay resetting mode
@@ -14930,7 +15083,7 @@ const char* ae::Var::GetTypeName() const { return m_typeName.c_str(); }
 uint32_t ae::Var::GetOffset() const { return m_offset; }
 uint32_t ae::Var::GetSize() const { return m_size; }
 
-bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value ) const
+bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx ) const
 {
   if ( !obj )
   {
@@ -14942,7 +15095,28 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value ) con
   AE_ASSERT( objType );
   AE_ASSERT_MSG( objType == m_owner, "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
   
-  void* varData = (uint8_t*)obj + m_offset;
+  void* varData = nullptr;
+  if ( m_arrayAdapter )
+  {
+    void* arr = (uint8_t*)obj + m_offset;
+    if ( arrayIdx >= 0 && arrayIdx < m_arrayAdapter->GetLength( arr ) )
+    {
+      varData = m_arrayAdapter->GetElement( arr, arrayIdx );
+    }
+    else
+    {
+      return false;
+    }
+  }
+  else if ( arrayIdx < 0 )
+  {
+    varData = (uint8_t*)obj + m_offset;
+  }
+  else
+  {
+    return false;
+  }
+  AE_ASSERT( varData );
   
   switch ( m_type )
   {
@@ -15117,7 +15291,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value ) con
     }
     case Var::Ref:
     {
-      const ae::Type* refType = GetRefType();
+      const ae::Type* refType = GetSubType();
       AE_ASSERT_MSG( s_serializer, "Must provide mapping function with ae::Var::SetSerializer() for reference types when calling SetObjectValueFromString" );
       
       class ae::Object* obj = nullptr;
@@ -15184,15 +15358,53 @@ const class ae::Enum* ae::Var::GetEnum() const
   return m_enum;
 }
 
-const ae::Type* ae::Var::GetRefType() const
+const ae::Type* ae::Var::GetSubType() const
 {
-  if ( m_refTypeId == ae::kInvalidTypeId )
+  if ( m_subTypeId == ae::kInvalidTypeId )
   {
     return nullptr;
   }
-  const ae::Type* type = GetTypeById( m_refTypeId );
+  const ae::Type* type = GetTypeById( m_subTypeId );
   AE_ASSERT( type );
   return type;
+}
+
+bool ae::Var::IsArray() const
+{
+  return m_arrayAdapter != nullptr;
+}
+
+bool ae::Var::IsArrayResizable() const
+{
+  return IsArray() && ( m_arrayAdapter->IsResizable() );
+}
+
+uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
+{
+  AE_ASSERT( length != ae::MaxValue< uint32_t >() );
+  // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
+  AE_ASSERT( IsArray() );
+  
+  if ( !obj )
+  {
+    return 0;
+  }
+  
+  void* arr = (uint8_t*)obj + m_offset;
+  return m_arrayAdapter->Resize( arr, length );
+}
+
+uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
+{
+  AE_ASSERT( IsArray() );
+  // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
+  if ( !obj )
+  {
+    return 0;
+  }
+  
+  void* arr = (uint8_t*)obj + m_offset;
+  return m_arrayAdapter->GetLength( arr );
 }
 
 //------------------------------------------------------------------------------
@@ -15260,16 +15472,36 @@ ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, boo
 }
 
 // @TODO: Replace return type with a dynamic ae::Str
-std::string ae::Var::GetObjectValueAsString( const ae::Object* obj ) const
+std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx ) const
 {
   if ( !obj )
   {
     return "";
   }
-  
   // @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
   
-  const void* varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
+  const void* varData = nullptr;
+  if ( m_arrayAdapter )
+  {
+    void* arr = (uint8_t*)obj + m_offset;
+    if ( arrayIdx >= 0 && arrayIdx < m_arrayAdapter->GetLength( arr ) )
+    {
+      varData = m_arrayAdapter->GetElement( arr, arrayIdx );
+    }
+    else
+    {
+      return "";
+    }
+  }
+  else if ( arrayIdx < 0 )
+  {
+    varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
+  }
+  else
+  {
+    return "";
+  }
+  AE_ASSERT( varData );
   
   switch ( m_type )
   {
