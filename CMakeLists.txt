@@ -57,18 +57,6 @@ if(NOT EMSCRIPTEN)
 	endif()
 endif()
 
-# some parts of assimp are not needed and should be disabled
-set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-set(BUILD_SHARED_LIBS OFF)
-set(ASSIMP_BUILD_TESTS OFF)
-set(ASSIMP_BUILD_SAMPLES OFF) # doesn't work with ios builds
-set(ASSIMP_BUILD_ASSIMP_TOOLS OFF) # doesn't work with ios builds
-set(ASSIMP_NO_EXPORT ON)
-set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT FALSE)
-set(ASSIMP_BUILD_OBJ_IMPORTER ON)
-set(ASSIMP_BUILD_FBX_IMPORTER ON)
-add_subdirectory(deps/assimp)
-
 # enet
 add_subdirectory(deps/enet)
 
@@ -121,7 +109,6 @@ set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 set(AE_DEPS_LIBARARIES
 	${OPENGL_LIBRARIES}
 	${OpenGLES}
-	assimp
 	enet
 )
 if(APPLE)

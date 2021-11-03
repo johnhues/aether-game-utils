@@ -27,7 +27,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeBinaryStream.h"
+#include "aether.h"
 
 //------------------------------------------------------------------------------
 // AetherUuid class
@@ -50,12 +50,12 @@ struct AetherUuid
 
 std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
 
-inline void Serialize( aeBinaryStream* stream, AetherUuid* uuid )
+inline void Serialize( ae::BinaryStream* stream, AetherUuid* uuid )
 {
 	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }
 
-inline void Serialize( aeBinaryStream* stream, const AetherUuid* uuid )
+inline void Serialize( ae::BinaryStream* stream, const AetherUuid* uuid )
 {
   stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }

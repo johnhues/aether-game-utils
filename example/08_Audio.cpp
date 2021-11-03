@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -65,7 +65,7 @@ int main()
 
 		if ( hitFade > 0.0f )
 		{
-			hitFade = aeMath::Max( 0.0f, hitFade - timeStep.GetTimeStep() / 0.2f );
+			hitFade = ae::Max( 0.0f, hitFade - timeStep.GetTimeStep() / 0.2f );
 		}
 		
 		if ( ( !input.mouse.rightButton && input.mousePrev.rightButton )
@@ -105,7 +105,7 @@ int main()
 			color = beatColors[ beat % countof( beatColors ) ];
 		}
 
-		float hitOpacity = aeMath::Min( 1.0f, hitFade / 0.8f );
+		float hitOpacity = ae::Min( 1.0f, hitFade / 0.8f );
 		hitOpacity *= hitOpacity;
 		render.Activate();
 		render.Clear( color.Lerp( ae::Color::PicoWhite(), hitOpacity * 0.8f ) );

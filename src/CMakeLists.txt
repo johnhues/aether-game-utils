@@ -27,28 +27,14 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # source files
 set(AE_HEADER_FILES
-	../include/ae/aether.h
-	../include/ae/aetherEXT.h
-	../include/ae/aeAudio.h
-	../include/ae/aeBinaryStream.h
-	../include/ae/aeClock.h
-	../include/ae/aeCommand.h
 	../include/ae/aeCompactingAllocator.h
-	../include/ae/aeCommandLineArgs.h
-	../include/ae/aeCompactingAllocator.h
-	../include/ae/aeDict.h
-	../include/ae/aeEditorCamera.h
-	../include/ae/aeFileDialog.h
 	../include/ae/aeHotSpot.h
 	../include/ae/aeImage.h
 	../include/ae/aeImGui.h
 	../include/ae/aeInitializer.h
-	../include/ae/aeInput.h
 	../include/ae/aeInventoryGrid.h
 	../include/ae/aeList.h
 	../include/ae/aeMath.h
-	../include/ae/aeMesh.h
-	../include/ae/aeMeta.h
 	../include/ae/aeNet.h
 	../include/ae/aeObjectPool.h
 	../include/ae/aeRef.h
@@ -57,12 +43,10 @@ set(AE_HEADER_FILES
 	../include/ae/aeSignal.h
 	../include/ae/aeSparseGrid.h
 	../include/ae/aeSpline.h
-	../include/ae/aeString.h
 	../include/ae/aeTerrain.h
 	../include/ae/aeTesting.h
+	../include/ae/aether.h
 	../include/ae/aeUuid.h
-	../include/ae/aeVfs.h
-	../include/ae/aeWindow.h
 	../include/ae/EmSocket.h
 )
 
@@ -70,44 +54,25 @@ set(AE_HEADER_FILES
 target_sources(${AE_LIBRARY_NAME}
 	PRIVATE
 		${AE_HEADER_FILES}
-		aether.cpp
-		aeAudio.cpp
-		aeBinaryStream.cpp
-		aeClock.cpp
-		aeCommandLineArgs.cpp
 		aeCommonRender.cpp
-		aeCommonRender.h
 		aeCompactingAllocator.cpp
-		aeDict.cpp
-		aeEditorCamera.cpp
-		aeFileDialog.cpp
 		aeHotSpot.cpp
 		aeImage.cpp
-		aeInput.cpp
 		aeMath.cpp
-		aeMesh.cpp
-		aeMeta.cpp
-		aeNet.cpp
 		aeNetClient.cpp
 		aeNetServer.cpp
-		aeOpenGLRender.cpp
 		aeSpline.cpp
 		aeTerrain.cpp
 		aeTerrainSDF.cpp
 		aeTesting.cpp
+		aether.cpp
 		aeUuid.cpp
-		aeVfs.cpp
-		aeWindow.cpp
 		ctpl_stl.h
 		EmSocket.cpp
 )
 
 if(APPLE)
-	target_sources(${AE_LIBRARY_NAME}
-		PRIVATE
-			aether.mm
-			aeVfs.mm
-	)
+	target_sources(${AE_LIBRARY_NAME} PRIVATE aether.mm)
 endif()
 
 # ae lib installation

@@ -43,8 +43,6 @@
 #endif
 #include "imgui_impl_opengl3.h"
 
-#include "aeInput.h"
-#include "aeMeta.h"
 #include "aeRender.h"
 
 //------------------------------------------------------------------------------

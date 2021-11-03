@@ -16,7 +16,6 @@ Modules and utilities include:
 * Terrain
 
 Dependencies:
-* [Assimp](https://github.com/assimp/assimp)
 * [ENet](http://enet.bespin.org/)
 * [OpenAL](https://github.com/kcat/openal-soft)
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)

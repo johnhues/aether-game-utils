@@ -23,7 +23,9 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
+#include "ae/aeHotSpot.h"
+#include "Common.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -69,7 +71,7 @@ public:
   void OnCollision( const HotSpotObject::CollisionInfo* info );
   void Update( HotSpotWorld* world, ae::Input* input, float dt );
 
-  void Render( aeSpriteRender* spriteRender, ae::Texture2D* tex );
+  void Render( SpriteRenderer* spriteRender, ae::Texture2D* tex );
   ae::Vec2 GetPosition() const { return m_body->GetPosition(); }
   bool CanJump() const { return m_canJumpTimer > 0.0f; }
 
@@ -154,11 +156,11 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
   m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );
 }
 
-void Player::Render( aeSpriteRender* spriteRender, ae::Texture2D* tex )
+void Player::Render( SpriteRenderer* spriteRender, ae::Texture2D* tex )
 {
   ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
   transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 1.0f ) );
-  spriteRender->AddSprite( tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
+  spriteRender->AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
 }
 
 //------------------------------------------------------------------------------
@@ -171,17 +173,13 @@ int main()
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
-  aeSpriteRender spriteRender;
+  SpriteRenderer spriteRender;
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "Platformer 2D" );
   render.Initialize( &window );
   input.Initialize( &window );
   spriteRender.Initialize( 512 );
-  spriteRender.SetBlending( true );
-  spriteRender.SetDepthTest( true );
-  spriteRender.SetDepthWrite( true );
-  spriteRender.SetSorting( true );
 
   ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / kFramesPerSecond );
@@ -251,8 +249,6 @@ int main()
     render.Clear( ae::Color::PicoDarkBlue() );
     spriteRender.Clear();
 
-    player.Render( &spriteRender, &tex );
-
     for ( uint32_t y = 0; y < kMapHeight; y++ )
     {
       for ( uint32_t x = 0; x < kMapWidth; x++ )
@@ -266,14 +262,16 @@ int main()
         }
         ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
         transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-        spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), color );
+        spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), color );
       }
     }
+    
+    player.Render( &spriteRender, &tex );
 
     ae::Vec2 camera = player.GetPosition();
     ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 10.0f, render.GetAspectRatio() / 10.0f, 1.0f ) );
     screenTransform *= ae::Matrix4::Translation( ae::Vec3( -camera.x, -camera.y, 0.0f ) );
-    spriteRender.Render( screenTransform );
+    spriteRender.Render( screenTransform, &tex );
 
     render.Present();
     timeStep.Wait();

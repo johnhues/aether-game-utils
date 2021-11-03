@@ -147,7 +147,7 @@ int main()
   }
 
   AE_LOG( "Terminate" );
-  //input.Terminate();
+  input.Terminate();
   render.Terminate();
   window.Terminate();
 

@@ -24,10 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeTerrain.h"
-#include "aeBinaryStream.h"
-#include "aeClock.h"
 #include "aeCompactingAllocator.h"
-#include "aeVfs.h"
 #include <ctpl_stl.h>
 
 //------------------------------------------------------------------------------
@@ -1097,7 +1094,7 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
 }
 
 const uint32_t kChunkFormatVersion = 1;
-void TerrainChunk::Serialize( aeBinaryStream* stream )
+void TerrainChunk::Serialize( ae::BinaryStream* stream )
 {
   uint32_t version = kChunkFormatVersion;
   stream->SerializeUint32( version );

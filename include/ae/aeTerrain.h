@@ -32,7 +32,6 @@
 #include "aeImage.h"
 #include "aeList.h"
 #include "aeMath.h"
-#include "aeMesh.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
 #include <map>

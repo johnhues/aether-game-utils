@@ -23,8 +23,9 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
 #include "ae/aeImGui.h"
+#include "ae/aeTerrain.h"
 #include "ImGuizmo.h"
 #include "Common.h"
 
@@ -145,7 +146,7 @@ struct Object
 {
   Object() = default;
   Object( const char* n, ae::Sdf* s ) : name( n ), shape( s ) {}
-  void Serialize( aeBinaryStream* stream );
+  void Serialize( ae::BinaryStream* stream );
   
   ae::Str16 name = "";
   // Shape
@@ -157,7 +158,7 @@ struct Object
   uint32_t rayType = 0;
 };
 
-void Object::Serialize( aeBinaryStream* stream )
+void Object::Serialize( ae::BinaryStream* stream )
 {
   stream->SerializeString( name );
   
@@ -189,7 +190,7 @@ void Object::Serialize( aeBinaryStream* stream )
 
 void WriteObjects( ae::FileSystem* vfs, const ae::Array< Object* >& objects )
 {
-  aeBinaryStream wStream = aeBinaryStream::Writer();
+  ae::BinaryStream wStream = ae::BinaryStream::Writer();
   wStream.SerializeUint32( kCurrentFileVersion );
 
   wStream.SerializeUint32( objects.Length() );
@@ -213,7 +214,7 @@ bool ReadObjects( ae::FileSystem* vfs, ae::Terrain* terrain, ae::Image* heightma
 {
   ae::Scratch< uint8_t > scratch( AE_ALLOC_TAG_TERRAIN, vfs->GetSize( ae::FileSystem::Root::User, kFileName ) );
   vfs->Read( ae::FileSystem::Root::User, kFileName, scratch.Data(), scratch.Length() );
-  aeBinaryStream rStream = aeBinaryStream::Reader( scratch.Data(), scratch.Length() );
+  ae::BinaryStream rStream = ae::BinaryStream::Reader( scratch.Data(), scratch.Length() );
 
   uint32_t version = 0;
   rStream.SerializeUint32( version );
@@ -270,7 +271,7 @@ int main()
   ae::DebugLines debug;
   ae::TimeStep timeStep;
   ae::Shader terrainShader;
-  aeEditorCamera camera;
+  ae::DebugCamera camera;
   ae::Texture2D fontTexture;
   ae::TextRender textRender;
   class aeImGui* ui = nullptr;

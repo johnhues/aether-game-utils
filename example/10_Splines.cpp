@@ -23,7 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
+#include "ae/aeSpline.h"
 #include "Common.h"
 
 //------------------------------------------------------------------------------
@@ -37,17 +38,13 @@ int main()
   ae::GraphicsDevice render;
   ae::Input input;
   aeSpline spline( ae::Tag( "example" ) );
-  aeSpriteRender spriteRender;
+  SpriteRenderer spriteRender;
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "splines" );
   render.Initialize( &window );
   input.Initialize( &window );
   spriteRender.Initialize( 64 );
-  spriteRender.SetBlending( true );
-  spriteRender.SetDepthTest( true );
-  spriteRender.SetDepthWrite( true );
-  spriteRender.SetSorting( true );
   
   spline.AppendControlPoint( ae::Vec3( -0.4f, -2.0f, 0.0f ) );
   spline.AppendControlPoint( ae::Vec3( -2.0f, 2.0f, 0.0f ) );
@@ -73,19 +70,19 @@ int main()
 
     ae::Matrix4 transform;
 
-    for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
-    {
-      transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
-      transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::Red() );
-    }
-
     float splineLen = spline.GetLength();
     for ( float d = 0.0f; d < splineLen; d += 0.25f )
     {
       transform = ae::Matrix4::Translation( spline.GetPoint( d ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
-      spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::Blue() );
+      spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::Blue() );
+    }
+    
+    for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
+    {
+      transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
+      transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
+      spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::Red() );
     }
 
     t += timeStep.GetTimeStep();
@@ -95,10 +92,10 @@ int main()
     }
     transform = ae::Matrix4::Translation( spline.GetPoint( t ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
-    spriteRender.AddSprite( &tex, transform, ae::Vec2( 0.0f ), ae::Vec2( 1.0f ), ae::Color::Green() );
+    spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::Green() );
 
     ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
-    spriteRender.Render( screenTransform );
+    spriteRender.Render( screenTransform, &tex );
     render.Present();
     timeStep.Wait();
   }

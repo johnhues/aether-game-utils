@@ -10622,28 +10622,25 @@ GLenum VertexDataTypeToGL( VertexData::Type type )
   }
 }
 
-typedef uint32_t aeQuadIndex;
-const uint32_t aeQuadVertCount = 4;
-const uint32_t aeQuadIndexCount = 6;
-extern const Vec3 aeQuadVertPos[ aeQuadVertCount ];
-extern const Vec2 aeQuadVertUvs[ aeQuadVertCount ];
-extern const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ];
-
-const Vec3 aeQuadVertPos[ aeQuadVertCount ] = {
+typedef uint32_t _kQuadIndex;
+const uint32_t _kQuadVertCount = 4;
+const uint32_t _kQuadIndexCount = 6;
+extern const Vec3 _kQuadVertPos[ _kQuadVertCount ];
+extern const Vec2 _kQuadVertUvs[ _kQuadVertCount ];
+extern const _kQuadIndex _kQuadIndices[ _kQuadIndexCount ];
+const Vec3 _kQuadVertPos[ _kQuadVertCount ] = {
   Vec3( -0.5f, -0.5f, 0.0f ),
   Vec3( 0.5f, -0.5f, 0.0f ),
   Vec3( 0.5f, 0.5f, 0.0f ),
   Vec3( -0.5f, 0.5f, 0.0f )
 };
-
-const Vec2 aeQuadVertUvs[ aeQuadVertCount ] = {
+const Vec2 _kQuadVertUvs[ _kQuadVertCount ] = {
   Vec2( 0.0f, 0.0f ),
   Vec2( 1.0f, 0.0f ),
   Vec2( 1.0f, 1.0f ),
   Vec2( 0.0f, 1.0f )
 };
-
-const aeQuadIndex aeQuadIndices[ aeQuadIndexCount ] = {
+const _kQuadIndex _kQuadIndices[ _kQuadIndexCount ] = {
   3, 0, 1,
   3, 1, 2
 };
@@ -12341,17 +12338,17 @@ void GraphicsDevice::Initialize( class Window* window )
   };
   Vertex quadVerts[] =
   {
-    { aeQuadVertPos[ 0 ], aeQuadVertUvs[ 0 ] },
-    { aeQuadVertPos[ 1 ], aeQuadVertUvs[ 1 ] },
-    { aeQuadVertPos[ 2 ], aeQuadVertUvs[ 2 ] },
-    { aeQuadVertPos[ 3 ], aeQuadVertUvs[ 3 ] }
+    { _kQuadVertPos[ 0 ], _kQuadVertUvs[ 0 ] },
+    { _kQuadVertPos[ 1 ], _kQuadVertUvs[ 1 ] },
+    { _kQuadVertPos[ 2 ], _kQuadVertUvs[ 2 ] },
+    { _kQuadVertPos[ 3 ], _kQuadVertUvs[ 3 ] }
   };
-  AE_STATIC_ASSERT( countof( quadVerts ) == aeQuadVertCount );
-  m_renderQuad.Initialize( sizeof( Vertex ), sizeof( aeQuadIndex ), aeQuadVertCount, aeQuadIndexCount, VertexData::Primitive::Triangle, VertexData::Usage::Static, VertexData::Usage::Static );
+  AE_STATIC_ASSERT( countof( quadVerts ) == _kQuadVertCount );
+  m_renderQuad.Initialize( sizeof( Vertex ), sizeof( _kQuadIndex ), _kQuadVertCount, _kQuadIndexCount, VertexData::Primitive::Triangle, VertexData::Usage::Static, VertexData::Usage::Static );
   m_renderQuad.AddAttribute( "a_position", 3, VertexData::Type::Float, offsetof( Vertex, pos ) );
   m_renderQuad.AddAttribute( "a_uv", 2, VertexData::Type::Float, offsetof( Vertex, uv ) );
-  m_renderQuad.SetVertices( quadVerts, aeQuadVertCount );
-  m_renderQuad.SetIndices( aeQuadIndices, aeQuadIndexCount );
+  m_renderQuad.SetVertices( quadVerts, _kQuadVertCount );
+  m_renderQuad.SetIndices( _kQuadIndices, _kQuadIndexCount );
   m_renderQuad.Upload();
   AE_CHECK_GL_ERROR();
 
@@ -12555,7 +12552,7 @@ void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
   m_fontSize = fontSize;
   m_rectCount = 0;
 
-  m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * aeQuadVertCount, kMaxTextRects * kTextCharsPerString * aeQuadIndexCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
+  m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * _kQuadVertCount, kMaxTextRects * kTextCharsPerString * _kQuadIndexCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
   m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
   m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( Vertex, uv ) );
   m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
@@ -12615,31 +12612,31 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
         uint32_t columns = m_texture->GetWidth() / m_fontSize;
         ae::Vec2 offset( index % columns, columns - index / columns - 1 ); // @HACK: Assume same number of columns and rows
 
-        for ( uint32_t j = 0; j < aeQuadIndexCount; j++ )
+        for ( uint32_t j = 0; j < _kQuadIndexCount; j++ )
         {
-          indices.GetSafe( indexCount ) = aeQuadIndices[ j ] + vertCount;
+          indices.GetSafe( indexCount ) = _kQuadIndices[ j ] + vertCount;
           indexCount++;
         }
 
-        AE_ASSERT( vertCount + aeQuadVertCount <= verts.Length() );
+        AE_ASSERT( vertCount + _kQuadVertCount <= verts.Length() );
         // Bottom Left
         verts[ vertCount ].pos = pos;
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 0 ] + offset ) / columns;
+        verts[ vertCount ].uv = ( _kQuadVertUvs[ 0 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Bottom Right
         verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, 0.0f, 0.0f );
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 1 ] + offset ) / columns;
+        verts[ vertCount ].uv = ( _kQuadVertUvs[ 1 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Top Right
         verts[ vertCount ].pos = pos + ae::Vec3( rect.size.x, rect.size.y, 0.0f );
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 2 ] + offset ) / columns;
+        verts[ vertCount ].uv = ( _kQuadVertUvs[ 2 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
         // Top Left
         verts[ vertCount ].pos = pos + ae::Vec3( 0.0f, rect.size.y, 0.0f );
-        verts[ vertCount ].uv = ( aeQuadVertUvs[ 3 ] + offset ) / columns;
+        verts[ vertCount ].uv = ( _kQuadVertUvs[ 3 ] + offset ) / columns;
         verts[ vertCount ].color = rect.color.GetLinearRGBA();
         vertCount++;
       }
