@@ -7553,25 +7553,19 @@ Frustum::Frustum( ae::Matrix4 worldToProjection )
   ae::Vec4 row2 = worldToProjection.GetRow( 2 );
   ae::Vec4 row3 = worldToProjection.GetRow( 3 );
 
-  ae::Vec4 near = -row0 - row3;
-  ae::Vec4 far = row0 - row3;
-  ae::Vec4 left = -row1 - row3;
-  ae::Vec4 right = row1 - row3;
-  ae::Vec4 top = -row2 - row3;
-  ae::Vec4 bottom = row2 - row3;
-  near.w = -near.w;
-  far.w = -far.w;
-  left.w = -left.w;
-  right.w = -right.w;
-  top.w = -top.w;
-  bottom.w = -bottom.w;
-  
-  m_planes[ (int)ae::Frustum::Plane::Near ] = near;
-  m_planes[ (int)ae::Frustum::Plane::Far ] = far;
-  m_planes[ (int)ae::Frustum::Plane::Left ] = left;
-  m_planes[ (int)ae::Frustum::Plane::Right ] = right;
-  m_planes[ (int)ae::Frustum::Plane::Top ] = top;
-  m_planes[ (int)ae::Frustum::Plane::Bottom ] = bottom;
+  ae::Vec4 planes[ countof( m_planes ) ];
+  planes[ (int)ae::Frustum::Plane::Near ] = -row0 - row3;
+  planes[ (int)ae::Frustum::Plane::Far ] = row0 - row3;
+  planes[ (int)ae::Frustum::Plane::Left ] = -row1 - row3;
+  planes[ (int)ae::Frustum::Plane::Right ] = row1 - row3;
+  planes[ (int)ae::Frustum::Plane::Top ] = -row2 - row3;
+  planes[ (int)ae::Frustum::Plane::Bottom ] = row2 - row3;
+
+  for ( uint32_t i = 0; i < countof( m_planes ); i++ )
+  {
+    planes[ i ].w = -planes[ i ].w;
+    m_planes[ i ] = planes[ i ];
+  }
 }
 
 bool Frustum::Intersects( ae::Vec3 point ) const
