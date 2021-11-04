@@ -31,7 +31,7 @@
 #include "aeCompactingAllocator.h"
 #include "aeImage.h"
 #include "aeList.h"
-#include "aeMath.h"
+#include "aether.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
 #include <map>
@@ -126,7 +126,7 @@ const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
 const uint32_t kMaxActiveChunks = 1024 + 512;
 const uint32_t kMaxLoadedChunks = kMaxActiveChunks * 2;
-const VertexCount kMaxChunkVerts = VertexCount( aeMath::MaxValue< uint16_t >() );
+const VertexCount kMaxChunkVerts = VertexCount( ae::MaxValue< uint16_t >() );
 // https://math.stackexchange.com/questions/1879255/average-valence-of-vertex-in-tetrahedral-mesh
 const uint32_t kMaxChunkIndices = uint32_t( kMaxChunkVerts ) * 6; // Average vertex valence
 const uint32_t kMaxChunkAllocationsPerTick = 1;

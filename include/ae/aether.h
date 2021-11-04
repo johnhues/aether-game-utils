@@ -225,7 +225,7 @@ void SetGlobalAllocator( Allocator* alloc );
 //! default ae::Allocator which uses malloc / free. If ae::SetGlobalAllocator() has
 //! never been called and no allocations have been made, this will return nullptr.
 Allocator* GetGlobalAllocator();
-//! Allocate and constructs an array of 'count' elements of type T. an ae::Tag
+//! Allocates and constructs an array of 'count' elements of type T. an ae::Tag
 //! must be specifed and should represent the allocation type. Type T must have a
 //! default constructor. All arrays allocated with this function should be freed with
 //! ae::Delete(). Uses ae::GetGlobalAllocator() and ae::Allocator::Allocate() internally.
@@ -298,13 +298,14 @@ inline int32_t Ceil( float f );
 inline int32_t Floor( float f );
 inline int32_t Round( float f );
 
+inline float Abs( float x );
+inline int32_t Abs( int32_t x );
+
 //------------------------------------------------------------------------------
 // Range functions
 //------------------------------------------------------------------------------
 template< typename T0, typename T1, typename... Tn > auto Min( T0&& v0, T1&& v1, Tn&&... vn );
 template< typename T0, typename T1, typename... Tn > auto Max( T0&& v0, T1&& v1, Tn&&... vn );
-template< typename T > inline T Abs( const T &x );
-
 template < typename T > inline T Clip( T x, T min, T max );
 inline float Clip01( float x );
 
@@ -708,6 +709,91 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::Plane class
+//------------------------------------------------------------------------------
+class Plane
+{
+public:
+  Plane() = default;
+  Plane( ae::Vec3 point, ae::Vec3 normal );
+  Plane( ae::Vec4 pointNormal );
+  
+  ae::Vec3 GetNormal() const;
+  ae::Vec3 GetClosestPointToOrigin() const;
+
+  bool IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* out ) const;
+  ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
+  float GetSignedDistance( ae::Vec3 pos ) const;
+
+private:
+  ae::Vec4 m_plane;
+};
+
+//------------------------------------------------------------------------------
+// ae::LineSegment class
+//------------------------------------------------------------------------------
+class LineSegment
+{
+public:
+  LineSegment() = default;
+  LineSegment( ae::Vec3 p0, ae::Vec3 p1 );
+
+  float GetDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr ) const;
+
+private:
+  ae::Vec3 m_p0;
+  ae::Vec3 m_p1;
+};
+
+//------------------------------------------------------------------------------
+// ae::Circle class
+//------------------------------------------------------------------------------
+class Circle
+{
+public:
+  Circle() = default;
+  Circle( ae::Vec2 point, float radius );
+
+  static float GetArea( float radius );
+
+  ae::Vec2 GetCenter() const { return m_point; }
+  float GetRadius() const { return m_radius; }
+  void SetCenter( ae::Vec2 point ) { m_point = point; }
+  void SetRadius( float radius ) { m_radius = radius; }
+
+  bool Intersect( const Circle& other, ae::Vec2* out ) const;
+
+private:
+  ae::Vec2 m_point;
+  float m_radius;
+};
+
+//------------------------------------------------------------------------------
+// ae::Frustum class
+//------------------------------------------------------------------------------
+class Frustum
+{
+public:
+  enum class Plane
+  {
+    Near,
+    Far,
+    Left,
+    Right,
+    Top,
+    Bottom
+  };
+  
+  Frustum( ae::Matrix4 worldToProjection );
+  bool Intersects( const ae::Sphere& sphere ) const;
+  bool Intersects( ae::Vec3 point ) const;
+  ae::Plane GetPlane( ae::Frustum::Plane plane ) const;
+  
+private:
+  ae::Plane m_planes[ 6 ];
+};
+
+//------------------------------------------------------------------------------
 // ae::AABB class
 //------------------------------------------------------------------------------
 class AABB
@@ -861,8 +947,10 @@ private:
 #pragma warning(default:26495) // Re-enable uninitialized variable warning
 
 //------------------------------------------------------------------------------
-// Random values
+// ae::Random functions
 //------------------------------------------------------------------------------
+void RandomSeed();
+inline uint32_t Random();
 inline int32_t Random( int32_t min, int32_t max );
 inline float Random( float min, float max );
 inline bool RandomBool();
@@ -3411,6 +3499,19 @@ const T& Scratch< T >::GetSafe( int32_t index ) const
 //------------------------------------------------------------------------------
 // Math function implementations
 //------------------------------------------------------------------------------
+inline float Abs( float x ) { return ( x < 0.0f ) ? -x : x; }
+inline int32_t Abs( int32_t x ) { return ( x < 0 ) ? -x : x; }
+template < typename T >
+inline T Abs( const VecT< T >& x )
+{
+  T result;
+  for ( uint32_t i = 0; i < countof(T::data); i++ )
+  {
+    result[ i ] = ae::Abs( x[ i ] );
+  }
+  return result;
+}
+
 template< typename T >
 T&& Min( T&& v )
 {
@@ -3449,16 +3550,6 @@ inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
     Max( v0.y, v1.y ),
     Max( v0.z, v1.z )
   );
-}
-
-template<typename T>
-inline T Abs(const T &x)
-{
-  if(x < static_cast<T>(0))
-  {
-    return x * static_cast<T>(-1);
-  }
-  return x;
 }
 
 template < typename T >
@@ -3663,36 +3754,36 @@ namespace Interpolation
   }
 }
 
-static bool _HACK_randInit = false;
+//------------------------------------------------------------------------------
+// ae::Random functions
+//------------------------------------------------------------------------------
+static uint64_t _randomSeed = 0;
+
+inline uint32_t Random()
+{
+  // splitmix https://arvid.io/2018/07/02/better-cxx-prng/
+  uint64_t z = ( _randomSeed += UINT64_C( 0x9E3779B97F4A7C15 ) );
+  z = ( z ^ ( z >> 30 ) ) * UINT64_C( 0xBF58476D1CE4E5B9 );
+  z = ( z ^ ( z >> 27 ) ) * UINT64_C( 0x94D049BB133111EB );
+  return uint32_t( ( z ^ ( z >> 31 ) ) >> 31 );
+}
 
 inline int32_t Random( int32_t min, int32_t max )
 {
-  if ( !_HACK_randInit )
-  {
-    srand( (uint32_t)time( 0 ) );
-    _HACK_randInit = true;
-  }
-
   if ( min >= max )
   {
     return min;
   }
-  return min + ( rand() % ( max - min ) );
+  return min + ( ae::Random() % ( max - min ) );
 }
 
 inline float Random( float min, float max )
 {
-  if ( !_HACK_randInit )
-  {
-    srand( (uint32_t)time( 0 ) );
-    _HACK_randInit = true;
-  }
-
   if ( min >= max )
   {
     return min;
   }
-  return min + ( ( rand() / (float)RAND_MAX ) * ( max - min ) );
+  return min + ( ( ae::Random() / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
 }
 
 inline bool RandomBool()
@@ -6360,6 +6451,15 @@ double GetTime()
 }
 
 //------------------------------------------------------------------------------
+// ae::Random functions
+//------------------------------------------------------------------------------
+void RandomSeed()
+{
+  std::random_device r;
+  _randomSeed = r();
+}
+
+//------------------------------------------------------------------------------
 // ae::Vec3 functions
 //------------------------------------------------------------------------------
 float Vec3::GetAngleBetween( const Vec3& v ) const
@@ -7312,6 +7412,196 @@ bool Sphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3*
 	return true;
   }
   return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::Plane member functions
+//------------------------------------------------------------------------------
+Plane::Plane( ae::Vec4 pointNormal ) :
+  m_plane( pointNormal / pointNormal.GetXYZ().Length() ) // Normalize
+{}
+
+Plane::Plane( ae::Vec3 point, ae::Vec3 normal )
+{
+  m_plane = ae::Vec4( normal.NormalizeCopy(), 0.0f );
+  m_plane.w = GetSignedDistance( point );
+}
+
+ae::Vec3 Plane::GetNormal() const
+{
+  return m_plane.GetXYZ();
+}
+
+ae::Vec3 Plane::GetClosestPointToOrigin() const
+{
+  return m_plane.GetXYZ() * m_plane.w;
+}
+
+bool Plane::IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* out ) const
+{
+  dir.SafeNormalize();
+  
+  ae::Vec3 n = m_plane.GetXYZ();
+  ae::Vec3 p = n * m_plane.w;
+
+  float a = dir.Dot( n );
+  if ( a > -0.01f )
+  {
+    // Ray is pointing away from or parallel to plane
+    return false;
+  }
+
+  ae::Vec3 diff = pos - p;
+  float b = diff.Dot( n );
+  float c = b / a;
+
+  if ( tOut )
+  {
+    *tOut = c;
+  }
+  if ( out )
+  {
+    *out = pos - dir * c;
+  }
+  return true;
+}
+
+ae::Vec3 Plane::GetClosestPoint( ae::Vec3 pos, float* distanceOut ) const
+{
+  ae::Vec3 n = m_plane.GetXYZ();
+  float t = pos.Dot( n ) - m_plane.w;
+  if ( distanceOut )
+  {
+    *distanceOut = t;
+  }
+  return pos - n * t;
+}
+
+float Plane::GetSignedDistance( ae::Vec3 pos ) const
+{
+   return pos.Dot( m_plane.GetXYZ() ) - m_plane.w;
+}
+
+//------------------------------------------------------------------------------
+// ae::LineSegment member functions
+//------------------------------------------------------------------------------
+LineSegment::LineSegment( ae::Vec3 p0, ae::Vec3 p1 )
+{
+  m_p0 = p0;
+  m_p1 = p1;
+}
+
+float LineSegment::GetDistance( ae::Vec3 p, ae::Vec3* nearestOut ) const
+{
+  float lenSq = ( m_p1 - m_p0 ).LengthSquared();
+  if ( lenSq <= 0.001f )
+  {
+    if ( nearestOut )
+    {
+      *nearestOut = m_p0;
+    }
+    return ( p - m_p0 ).Length();
+  }
+
+  float t = ae::Clip01( ( p - m_p0 ).Dot( m_p1 - m_p0 ) / lenSq );
+  ae::Vec3 linePos = ae::Lerp( m_p0, m_p1, t );
+
+  if ( nearestOut )
+  {
+    *nearestOut = linePos;
+  }
+  return ( p - linePos ).Length();
+}
+
+//------------------------------------------------------------------------------
+// ae::Circle member functions
+//------------------------------------------------------------------------------
+Circle::Circle( ae::Vec2 point, float radius )
+{
+  m_point = point;
+  m_radius = radius;
+}
+
+float Circle::GetArea( float radius )
+{
+  return ae::PI * radius * radius;
+}
+
+bool Circle::Intersect( const Circle& other, ae::Vec2* out ) const
+{
+  ae::Vec2 diff = other.m_point - m_point;
+  float dist = diff.Length();
+  if ( dist > m_radius + other.m_radius )
+  {
+    return false;
+  }
+
+  if ( out )
+  {
+    *out = m_point + diff.SafeNormalizeCopy() * ( ( m_radius + dist - other.m_radius ) * 0.5f );
+  }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// ae::Frustum member functions
+//------------------------------------------------------------------------------
+Frustum::Frustum( ae::Matrix4 worldToProjection )
+{
+  ae::Vec4 row0 = worldToProjection.GetRow( 0 );
+  ae::Vec4 row1 = worldToProjection.GetRow( 1 );
+  ae::Vec4 row2 = worldToProjection.GetRow( 2 );
+  ae::Vec4 row3 = worldToProjection.GetRow( 3 );
+
+  ae::Vec4 near = -row0 - row3;
+  ae::Vec4 far = row0 - row3;
+  ae::Vec4 left = -row1 - row3;
+  ae::Vec4 right = row1 - row3;
+  ae::Vec4 top = -row2 - row3;
+  ae::Vec4 bottom = row2 - row3;
+  near.w = -near.w;
+  far.w = -far.w;
+  left.w = -left.w;
+  right.w = -right.w;
+  top.w = -top.w;
+  bottom.w = -bottom.w;
+  
+  m_planes[ (int)ae::Frustum::Plane::Near ] = near;
+  m_planes[ (int)ae::Frustum::Plane::Far ] = far;
+  m_planes[ (int)ae::Frustum::Plane::Left ] = left;
+  m_planes[ (int)ae::Frustum::Plane::Right ] = right;
+  m_planes[ (int)ae::Frustum::Plane::Top ] = top;
+  m_planes[ (int)ae::Frustum::Plane::Bottom ] = bottom;
+}
+
+bool Frustum::Intersects( ae::Vec3 point ) const
+{
+  for ( uint32_t i = 0; i < countof(m_planes); i++ )
+  {
+    if ( m_planes[ i ].GetSignedDistance( point ) > 0.0f )
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool Frustum::Intersects( const ae::Sphere& sphere ) const
+{
+  for( int i = 0; i < countof(m_planes); i++ )
+  {
+    float distance = m_planes[ i ].GetSignedDistance( sphere.center );
+    if( distance > 0.0f && distance - sphere.radius > 0.0f )
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+Plane Frustum::GetPlane( ae::Frustum::Plane plane ) const
+{
+  return m_planes[ (int)plane ];
 }
 
 //------------------------------------------------------------------------------

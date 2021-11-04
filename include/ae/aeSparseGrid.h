@@ -94,9 +94,9 @@ ae::Int3 aeSparseGrid< Z >::m_GetSlot( ae::Int3 pos ) const
 {
   const ae::Int3 size = Z::GetSize();
   return ae::Int3(
-    aeMath::Floor( (float)pos.x / size.x ),
-    aeMath::Floor( (float)pos.y / size.y ),
-    aeMath::Floor( (float)pos.z / size.z )
+    ae::Floor( (float)pos.x / size.x ),
+    ae::Floor( (float)pos.y / size.y ),
+    ae::Floor( (float)pos.z / size.z )
   );
 }
 
@@ -105,9 +105,9 @@ ae::Int3 aeSparseGrid< Z >::m_GetLocal( ae::Int3 pos ) const
 {
   const ae::Int3 size = Z::GetSize();
   return ae::Int3(
-    aeMath::Mod( pos.x, size.x ),
-    aeMath::Mod( pos.y, size.y ),
-    aeMath::Mod( pos.z, size.z )
+    ae::Mod( pos.x, size.x ),
+    ae::Mod( pos.y, size.y ),
+    ae::Mod( pos.z, size.z )
   );
 }
 

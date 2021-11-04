@@ -32,29 +32,29 @@ namespace ae {
 //------------------------------------------------------------------------------
 inline float SdfUnion( float d1, float d2 )
 {
-  return aeMath::Min( d1, d2 );
+  return ae::Min( d1, d2 );
 }
 
 inline float SdfSubtraction( float d1, float d2 )
 {
-  return aeMath::Max( -d1, d2 );
+  return ae::Max( -d1, d2 );
 }
 
 inline float SdfIntersection( float d1, float d2 )
 {
-  return aeMath::Max( d1, d2 );
+  return ae::Max( d1, d2 );
 }
 
 inline float SdfSmoothUnion( float d1, float d2, float k )
 {
-  float h = aeMath::Clip01( 0.5f + 0.5f * ( d2 - d1 ) / k );
-  return aeMath::Lerp( d2, d1, h ) - k * h * ( 1.0f - h );
+  float h = ae::Clip01( 0.5f + 0.5f * ( d2 - d1 ) / k );
+  return ae::Lerp( d2, d1, h ) - k * h * ( 1.0f - h );
 }
 
 inline float SdfSmoothSubtraction( float d1, float d2, float k )
 {
-  float h = aeMath::Clip01( 0.5f - 0.5f * ( d2 + d1 ) / k );
-  return aeMath::Lerp( d2, -d1, h ) + k * h * ( 1.0f - h );
+  float h = ae::Clip01( 0.5f - 0.5f * ( d2 + d1 ) / k );
+  return ae::Lerp( d2, -d1, h ) + k * h * ( 1.0f - h );
 }
 
 //------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ float Sdf::GetValue( ae::Vec3 p ) const
         for ( uint32_t i = 0; i < 3; i++ )
         {
           ae::Vec3 iqx = topNoiseOffset + p * TerrainNoiseScale / ( GetHalfSize() * topNoiseScale );
-          iqt += iqa * noise->Get< aeMath::CosineInterpolate >( iqx * iqf );
+          iqt += iqa * noise->Get< ae::CosineInterpolate >( iqx * iqf );
           iqf *= 2.0f;
           iqa *= iqG;
         }
@@ -126,7 +126,7 @@ float Sdf::GetValue( ae::Vec3 p ) const
         for ( uint32_t i = 0; i < 3; i++ )
         {
           ae::Vec3 iqx = noiseOffset + p * TerrainNoiseScale / ( GetHalfSize() * noiseScale );
-          iqt += iqa * noise->Get< aeMath::CosineInterpolate >( iqx * iqf );
+          iqt += iqa * noise->Get< ae::CosineInterpolate >( iqx * iqf );
           iqf *= 2.0f;
           iqa *= iqG;
         }
@@ -213,8 +213,8 @@ ae::Hash SdfBox::Hash( ae::Hash hash ) const
 
 float SdfBox::GetValue( ae::Vec3 p, int ) const
 {
-  ae::Vec3 q = aeMath::Abs( p ) - ( GetHalfSize() - ae::Vec3( cornerRadius ) );
-  return ( aeMath::Max( q, ae::Vec3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
+  ae::Vec3 q = ae::Abs( p ) - ( GetHalfSize() - ae::Vec3( cornerRadius ) );
+  return ( ae::Max( q, ae::Vec3( 0.0f ) ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
 }
 
 //------------------------------------------------------------------------------
@@ -251,17 +251,17 @@ float SdfCylinder::GetValue( ae::Vec3 p, int ) const
     p.x *= halfSize.y / halfSize.x;
   }
 
-  float r1 = aeMath::Clip01( bottom ) * scale;
-  float r2 = aeMath::Clip01( top ) * scale;
+  float r1 = ae::Clip01( bottom ) * scale;
+  float r2 = ae::Clip01( top ) * scale;
   float h = halfSize.z;
 
   ae::Vec2 q( p.GetXY().Length(), p.z );
   ae::Vec2 k1(r2,h);
   ae::Vec2 k2(r2-r1,2.0*h);
-  ae::Vec2 ca(q.x-aeMath::Min(q.x,(q.y<0.0)?r1:r2), aeMath::Abs(q.y)-h);
-  ae::Vec2 cb = q - k1 + k2*aeMath::Clip01( (k1-q).Dot(k2)/k2.Dot(k2) );
+  ae::Vec2 ca(q.x-ae::Min(q.x,(q.y<0.0)?r1:r2), ae::Abs(q.y)-h);
+  ae::Vec2 cb = q - k1 + k2*ae::Clip01( (k1-q).Dot(k2)/k2.Dot(k2) );
   float s = (cb.x<0.0 && ca.y<0.0) ? -1.0 : 1.0;
-  return s*sqrt( aeMath::Min(ca.Dot(ca),cb.Dot(cb)) );
+  return s*sqrt( ae::Min(ca.Dot(ca),cb.Dot(cb)) );
 }
 
 //------------------------------------------------------------------------------
@@ -290,10 +290,10 @@ float SdfHeightmap::GetValue( ae::Vec3 p, int ) const
   float v0 = m_heightMap->Get( p2, ae::Image::Interpolation::Cosine ).r;
   v0 = p.z + halfSize.z - v0 * halfSize.z * 2.0f;
 
-  ae::Vec3 q = aeMath::Abs( p ) - halfSize;
-  float v1 = ( aeMath::Max( q, ae::Vec3( 0.0f ) ) ).Length() + aeMath::Min( aeMath::Max( q.x, aeMath::Max( q.y, q.z ) ), 0.0f );
+  ae::Vec3 q = ae::Abs( p ) - halfSize;
+  float v1 = ( ae::Max( q, ae::Vec3( 0.0f ) ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f );
 
-  return aeMath::Max( v0, v1 );
+  return ae::Max( v0, v1 );
 }
 
 //------------------------------------------------------------------------------
@@ -351,7 +351,7 @@ float TerrainJob::GetValue( ae::Vec3 pos ) const
 TerrainSdf::TerrainSdf( Terrain* terrain ) :
   m_terrain( terrain )
 {
-  aeRandom r( -1.0f, 1.0f );
+  ae::RandomValue r( -1.0f, 1.0f );
   ae::Scratch< aeStaticImage3D< float, TerrainNoiseSize, TerrainNoiseSize, TerrainNoiseSize > > tempScratch( AE_ALLOC_TAG_TERRAIN, 1 );
   auto& temp = *tempScratch.Data();
   for ( uint32_t z = 0; z < temp.GetDepth(); z++ )
@@ -365,7 +365,7 @@ TerrainSdf::TerrainSdf( Terrain* terrain ) :
   for ( uint32_t y = 0; y < noise.GetHeight(); y++ )
   for ( uint32_t x = 0; x < noise.GetWidth(); x++ )
   {
-    noise.Set( ae::Int3( x, y, z ), temp.Get< aeMath::CosineInterpolate >( ae::Vec3( x, y, z ) / (float)TerrainNoiseScale ) );
+    noise.Set( ae::Int3( x, y, z ), temp.Get< ae::CosineInterpolate >( ae::Vec3( x, y, z ) / (float)TerrainNoiseScale ) );
   }
 }
 

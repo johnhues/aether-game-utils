@@ -34,7 +34,6 @@ set(AE_HEADER_FILES
 	../include/ae/aeInitializer.h
 	../include/ae/aeInventoryGrid.h
 	../include/ae/aeList.h
-	../include/ae/aeMath.h
 	../include/ae/aeNet.h
 	../include/ae/aeObjectPool.h
 	../include/ae/aeRef.h
@@ -58,7 +57,6 @@ target_sources(${AE_LIBRARY_NAME}
 		aeCompactingAllocator.cpp
 		aeHotSpot.cpp
 		aeImage.cpp
-		aeMath.cpp
 		aeNetClient.cpp
 		aeNetServer.cpp
 		aeSpline.cpp

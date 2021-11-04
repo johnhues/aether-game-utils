@@ -191,13 +191,13 @@ float TerrainSdfCache::GetValue( ae::Vec3 pos ) const
     m_GetValue( posi + ae::Int3( 1, 1, 1 ) ),
   };
 
-  float x0 = aeMath::Lerp( values[ 0 ], values[ 1 ], pos.x );
-  float x1 = aeMath::Lerp( values[ 2 ], values[ 3 ], pos.x );
-  float x2 = aeMath::Lerp( values[ 4 ], values[ 5 ], pos.x );
-  float x3 = aeMath::Lerp( values[ 6 ], values[ 7 ], pos.x );
-  float y0 = aeMath::Lerp( x0, x1, pos.y );
-  float y1 = aeMath::Lerp( x2, x3, pos.y );
-  return aeMath::Lerp( y0, y1, pos.z );
+  float x0 = ae::Lerp( values[ 0 ], values[ 1 ], pos.x );
+  float x1 = ae::Lerp( values[ 2 ], values[ 3 ], pos.x );
+  float x2 = ae::Lerp( values[ 4 ], values[ 5 ], pos.x );
+  float x3 = ae::Lerp( values[ 6 ], values[ 7 ], pos.x );
+  float y0 = ae::Lerp( x0, x1, pos.y );
+  float y1 = ae::Lerp( x2, x3, pos.y );
+  return ae::Lerp( y0, y1, pos.z );
 }
 
 float TerrainSdfCache::GetValue( ae::Int3 pos ) const
@@ -277,11 +277,11 @@ uint32_t TerrainChunk::GetIndex( ae::Int3 pos )
   uint32_t y = ( pos.y >= 0 ) ? 2 * pos.y : -2 * pos.y - 1;
   uint32_t z = ( pos.z >= 0 ) ? 2 * pos.z : -2 * pos.z - 1;
 
-  uint32_t max = aeMath::Max( x, y, z );
+  uint32_t max = ae::Max( x, y, z );
   uint32_t hash = max * max * max + ( 2 * max * z ) + z;
   if ( max == z )
   {
-    uint32_t xy = aeMath::Max( x, y );
+    uint32_t xy = ae::Max( x, y );
     hash += xy * xy;
   }
 
@@ -625,7 +625,7 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
           ae::Vec3 cw = ch + edgeVoxelPos;
           
           float v = sdf->GetValue( cw );
-          if ( aeMath::Abs( v ) < 0.001f )
+          if ( ae::Abs( v ) < 0.001f )
           {
             break;
           }
@@ -785,9 +785,9 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
 #else
     TerrainVertex* vertex = &verticesOut[ i ];
 #endif
-    int32_t x = aeMath::Floor( vertex->position.x );
-    int32_t y = aeMath::Floor( vertex->position.y );
-    int32_t z = aeMath::Floor( vertex->position.z );
+    int32_t x = ae::Floor( vertex->position.x );
+    int32_t y = ae::Floor( vertex->position.y );
+    int32_t z = ae::Floor( vertex->position.z );
     AE_ASSERT( x >= 0 && y >= 0 && z >= 0 );
     AE_ASSERT( x <= kChunkSize && y <= kChunkSize && z <= kChunkSize );
     
@@ -932,7 +932,7 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
         averagePos += p[ i ];
       }
       averagePos /= (float)ec;
-      position = aeMath::Lerp( position, averagePos, 0.75f );
+      position = ae::Lerp( position, averagePos, 0.75f );
     }
 #if AE_TERRAIN_TOUCH_UP_VERT
     //{
@@ -1424,7 +1424,7 @@ void Terrain::Initialize( uint32_t maxThreads, bool render )
 {
   // @NOTE: This doesn't handle the case where enough verts are split
   // that the count surpasses TerrainIndex max.
-  AE_ASSERT( kMaxChunkVerts <= VertexCount( aeMath::MaxValue< TerrainIndex >() ) );
+  AE_ASSERT( kMaxChunkVerts <= VertexCount( ae::MaxValue< TerrainIndex >() ) );
 
   m_render = render;
 
@@ -1437,7 +1437,7 @@ void Terrain::Initialize( uint32_t maxThreads, bool render )
   for ( uint32_t i = 0; i < Block::COUNT; i++) { m_blockDensity[ i ] = 1.0f; }
 
   m_threadPool = ae::New< ctpl::thread_pool >( AE_ALLOC_TAG_TERRAIN, maxThreads );
-  maxThreads = aeMath::Max( 1u, maxThreads );
+  maxThreads = ae::Max( 1u, maxThreads );
   for ( uint32_t i = 0; i < maxThreads; i++ )
   {
     m_terrainJobs.Append( ae::New< TerrainJob >( AE_ALLOC_TAG_TERRAIN ) );
@@ -1964,9 +1964,9 @@ bool Terrain::GetCollision( int32_t x, int32_t y, int32_t z ) const
 bool Terrain::GetCollision( ae::Vec3 position ) const
 {
   Block::Type type = GetVoxel(
-    aeMath::Floor( position.x ),
-    aeMath::Floor( position.y ),
-    aeMath::Floor( position.z )
+    ae::Floor( position.x ),
+    ae::Floor( position.y ),
+    ae::Floor( position.z )
   );
   return m_blockCollision[ type ];
 }
@@ -1974,9 +1974,9 @@ bool Terrain::GetCollision( ae::Vec3 position ) const
 Block::Type Terrain::GetVoxel( ae::Vec3 position ) const
 {
   return GetVoxel(
-    aeMath::Floor( position.x ),
-    aeMath::Floor( position.y ),
-    aeMath::Floor( position.z )
+    ae::Floor( position.x ),
+    ae::Floor( position.y ),
+    ae::Floor( position.z )
   );
 }
 
@@ -2037,9 +2037,9 @@ aeFloat16 Terrain::GetLight( int32_t x, int32_t y, int32_t z ) const
     return kSkyBrightness;
   }
 
-  x = aeMath::Mod( x, (int32_t)kChunkSize );
-  y = aeMath::Mod( y, (int32_t)kChunkSize );
-  z = aeMath::Mod( z, (int32_t)kChunkSize );
+  x = ae::Mod( x, (int32_t)kChunkSize );
+  y = ae::Mod( y, (int32_t)kChunkSize );
+  z = ae::Mod( z, (int32_t)kChunkSize );
   return chunk->m_l[ x ][ y ][ z ];
 }
 
@@ -2111,9 +2111,9 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
 {
   DebugRay debugRay( start, ray, m_params.debug );
 
-  int32_t x = aeMath::Floor( start.x );
-  int32_t y = aeMath::Floor( start.y );
-  int32_t z = aeMath::Floor( start.z );
+  int32_t x = ae::Floor( start.x );
+  int32_t y = ae::Floor( start.y );
+  int32_t z = ae::Floor( start.z );
   
   if ( ray.LengthSquared() < 0.001f )
   {
@@ -2130,14 +2130,14 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
   {
     stepX = 1;
     outX = ceil( start.x + ray.x );
-    //outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
+    //outX = ae::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
     cb.x = x + 1;
   }
   else
   {
     stepX = -1;
     outX = (int32_t)( start.x + ray.x ) - 1;
-    outX = aeMath::Max( -1, outX );
+    outX = ae::Max( -1, outX );
     cb.x = x;
   }
 
@@ -2145,14 +2145,14 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
   {
     stepY = 1;
     outY = ceil( start.y + ray.y );
-    //outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
+    //outY = ae::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
     cb.y = y + 1;
   }
   else 
   {
     stepY = -1;
     outY = (int32_t)( start.y + ray.y ) - 1;
-    outY = aeMath::Max( -1, outY );
+    outY = ae::Max( -1, outY );
     cb.y = y;
   }
 
@@ -2160,14 +2160,14 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
   {
     stepZ = 1;
     outZ = ceil( start.z + ray.z );
-    //outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
+    //outZ = ae::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
     cb.z = z + 1;
   }
   else 
   {
     stepZ = -1;
     outZ = (int32_t)( start.z + ray.z ) - 1;
-    //outZ = aeMath::Max( -1, outZ );
+    //outZ = ae::Max( -1, outZ );
     cb.z = z;
   }
 
@@ -2282,9 +2282,9 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
 //  result.normal = ae::Vec3( std::numeric_limits<float>::infinity() );
 //  result.touchedUnloaded = false;
 //  
-//  int32_t x = aeMath::Floor( start.x );
-//  int32_t y = aeMath::Floor( start.y );
-//  int32_t z = aeMath::Floor( start.z );
+//  int32_t x = ae::Floor( start.x );
+//  int32_t y = ae::Floor( start.y );
+//  int32_t z = ae::Floor( start.z );
 //  
 //  if ( ray.LengthSquared() < 0.001f )
 //  {
@@ -2301,42 +2301,42 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
 //  {
 //    stepX = 1;
 //    outX = ceil( start.x + ray.x );
-//    //outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
+//    //outX = ae::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
 //    cb.x = x + 1;
 //  }
 //  else 
 //  {
 //    stepX = -1;
 //    outX = (int32_t)( start.x + ray.x ) - 1;
-//    //outX = aeMath::Max( -1, outX );
+//    //outX = ae::Max( -1, outX );
 //    cb.x = x;
 //  }
 //  if ( dir.y > 0.0f )
 //  {
 //    stepY = 1;
 //    outY = ceil( start.y + ray.y );
-//    //outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
+//    //outY = ae::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
 //    cb.y = y + 1;
 //  }
 //  else 
 //  {
 //    stepY = -1;
 //    outY = (int32_t)( start.y + ray.y ) - 1;
-//    //outY = aeMath::Max( -1, outY );
+//    //outY = ae::Max( -1, outY );
 //    cb.y = y;
 //  }
 //  if ( dir.z > 0.0f )
 //  {
 //    stepZ = 1;
 //    outZ = ceil( start.z + ray.z );
-//    //outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
+//    //outZ = ae::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
 //    cb.z = z + 1;
 //  }
 //  else 
 //  {
 //    stepZ = -1;
 //    outZ = (int32_t)( start.z + ray.z ) - 1;
-//    //outZ = aeMath::Max( -1, outZ );
+//    //outZ = ae::Max( -1, outZ );
 //    cb.z = z;
 //  }
 //  float rxr, ryr, rzr;
@@ -2481,9 +2481,9 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
   start /= kChunkSize;
   ray /= kChunkSize;
   
-  int32_t x = aeMath::Floor( start.x );
-  int32_t y = aeMath::Floor( start.y );
-  int32_t z = aeMath::Floor( start.z );
+  int32_t x = ae::Floor( start.x );
+  int32_t y = ae::Floor( start.y );
+  int32_t z = ae::Floor( start.z );
   
   ae::Vec3 curpos = start;
   ae::Vec3 cb, tmax, tdelta;
@@ -2494,14 +2494,14 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
   {
     stepX = 1;
     outX = ceil( start.x + ray.x );
-//    outX = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
+//    outX = ae::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outX ); // @TODO: Use terrain bounds
     cb.x = x + 1;
   }
   else
   {
     stepX = -1;
     outX = (int32_t)( start.x + ray.x ) - 1;
-    //outX = aeMath::Max( -1, outX ); // @TODO: Use terrain bounds
+    //outX = ae::Max( -1, outX ); // @TODO: Use terrain bounds
     cb.x = x;
   }
 
@@ -2509,14 +2509,14 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
   {
     stepY = 1;
     outY = ceil( start.y + ray.y );
-//    outY = aeMath::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
+//    outY = ae::Min( (int32_t)( kWorldChunksWidth * kChunkSize - 1 ), outY ); // @TODO: Use terrain bounds
     cb.y = y + 1;
   }
   else
   {
     stepY = -1;
     outY = (int32_t)( start.y + ray.y ) - 1;
-    //outY = aeMath::Max( -1, outY ); // @TODO: Use terrain bounds
+    //outY = ae::Max( -1, outY ); // @TODO: Use terrain bounds
     cb.y = y;
   }
 
@@ -2524,14 +2524,14 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
   {
     stepZ = 1;
     outZ = ceil( start.z + ray.z );
-//    outZ = aeMath::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
+//    outZ = ae::Min( (int32_t)( kWorldChunksHeight * kChunkSize - 1 ), outZ ); // @TODO: Use terrain bounds
     cb.z = z + 1;
   }
   else
   {
     stepZ = -1;
     outZ = (int32_t)( start.z + ray.z ) - 1;
-    //outZ = aeMath::Max( -1, outZ ); // @TODO: Use terrain bounds
+    //outZ = ae::Max( -1, outZ ); // @TODO: Use terrain bounds
     cb.z = z;
   }
 

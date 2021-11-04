@@ -136,7 +136,7 @@ uint32_t HotSpotWorld::GetObjectCount() const
 
 ae::Int2 HotSpotWorld::_GetTilePos( ae::Vec2 pos )
 {
-  return ae::Int2( aeMath::Round( pos.x ), aeMath::Round( pos.y ) );
+  return ae::Int2( ae::Round( pos.x ), ae::Round( pos.y ) );
 }
 
 //------------------------------------------------------------------------------
@@ -233,7 +233,7 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
     {
       float friction = -forces.y * kFrictionCoefficient;
       AE_ASSERT( friction >= 0.0f );
-      friction *= aeMath::Delerp01( 0.0f, 0.1f, aeMath::Abs( m_velocity.x ) );
+      friction *= ae::Delerp01( 0.0f, 0.1f, ae::Abs( m_velocity.x ) );
       if ( m_velocity.x > 0.0f )
       {
         forces.x -= friction;

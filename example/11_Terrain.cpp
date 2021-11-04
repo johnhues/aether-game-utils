@@ -310,7 +310,7 @@ int main()
 //  vfs.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
 //  heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
-  uint32_t terrainThreads = aeMath::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
+  uint32_t terrainThreads = ae::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
   ae::Terrain* terrain = ae::New< ae::Terrain >( TAG_EXAMPLE );
   terrain->Initialize( terrainThreads, !headless );
 
@@ -436,7 +436,7 @@ int main()
             if ( currentShape->type == ae::Sdf::Type::SmoothUnion || currentShape->type == ae::Sdf::Type::SmoothSubtraction )
             {
               ae::Vec3 halfSize = currentShape->GetHalfSize();
-              float maxLength = aeMath::Max( halfSize.x, halfSize.y, halfSize.z );
+              float maxLength = ae::Max( halfSize.x, halfSize.y, halfSize.z );
               changed |= ImGui::SliderFloat( "smoothing", &currentShape->smoothing, 0.0f, maxLength );
             }
 
@@ -446,7 +446,7 @@ int main()
             if ( auto box = ae::Cast< ae::SdfBox >( currentShape ) )
             {
               ae::Vec3 halfSize = box->GetHalfSize();
-              float minLength = aeMath::Min( halfSize.x, halfSize.y, halfSize.z );
+              float minLength = ae::Min( halfSize.x, halfSize.y, halfSize.z );
               changed |= ImGui::SliderFloat( "cornerRadius", &box->cornerRadius, 0.0f, minLength );
             }
             else if ( auto cylinder = ae::Cast< ae::SdfCylinder >( currentShape ) )

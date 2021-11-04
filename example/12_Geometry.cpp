@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
 #include "Common.h"
 
 //------------------------------------------------------------------------------
@@ -38,9 +38,9 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::DebugLines debug;
-  ae::Texture2D fontTexture;
+	ae::Texture2D fontTexture;
 	ae::TextRender text;
-	aeEditorCamera camera;
+	ae::DebugCamera camera;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "geometry" );
@@ -86,7 +86,7 @@ int main()
 		static float s_rayLength = 8.0f;
 		if ( input.Get( ae::Key::Num1 ) ) s_rayLength -= 0.016f;
 		if ( input.Get( ae::Key::Num2 ) ) s_rayLength += 0.016f;
-		s_rayLength = aeMath::Clip( s_rayLength, 0.0f, 8.0f );
+		s_rayLength = ae::Clip( s_rayLength, 0.0f, 8.0f );
 
 		if ( input.Get( ae::Key::G ) )
 		{
@@ -107,7 +107,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = aeMath::Mod( currentTest, 5 );
+		currentTest = ae::Mod( currentTest, 5 );
 
 		ae::Str256 infoText = "";
 		switch ( currentTest )
@@ -116,11 +116,14 @@ int main()
 			{
 				infoText.Append( "Triangle-Ray\n" );
 				
+				static float s_triangleScale = 1.0f;
+				if ( input.Get( ae::Key::Num1 ) ) s_triangleScale -= 0.016f;
+				if ( input.Get( ae::Key::Num2 ) ) s_triangleScale += 0.016f;
 				ae::Vec3 triangle[] =
 				{
-					ae::Vec3( -1.0f, -1.5f, -1.0f ) * 2.0f,
-					ae::Vec3( 1.0f, -0.5f, -1.0f ) * 2.0f,
-					ae::Vec3( 0.0f, 1.5f, 1.0f ) * 2.0f,
+					ae::Vec3( -1.0f, 0.0f, -1.0f ) * s_triangleScale,
+					ae::Vec3( 1.0f, 0.0f, -1.0f ) * s_triangleScale,
+					ae::Vec3( 0.0f, 0.0f, 1.0f ) * s_triangleScale,
 				};
 				ae::Vec3 triangleCenter = ( triangle[ 0 ] + triangle[ 1 ] + triangle[ 2 ] ) / 3.0f;
 				ae::Vec3 normal = ( triangle[ 1 ] - triangle[ 0 ] ).Cross( triangle[ 2 ] - triangle[ 0 ] );
@@ -133,20 +136,19 @@ int main()
 				static float r = 1.0f;
 				if ( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
 				if ( input.Get( ae::Key::Num4 ) ) r += 0.016f;
-				r = aeMath::Clip( r, 0.01f, 8.0f );
-
-				float dist = 0.0f;
-				ae::Vec3 nearestIntersectionPoint;
-				ae::Vec3 nearestPolygonIntersectionPoint;
-				aeSphere sphere( triangleCenter - ray, r );
-				debug.AddLine( sphere.center, sphere.center + ray, ae::Color::Red() );
-				debug.AddSphere( sphere.center, sphere.radius, ae::Color::Green(), 16 );
-				if ( sphere.SweepTriangle( ray, triangle, normal, &dist, &nearestIntersectionPoint, &nearestPolygonIntersectionPoint, &debug ) )
+				r = ae::Clip( r, 0.01f, 8.0f );
+				
+				bool limitRay = true;
+				bool ccw = true;
+				bool cw = false;
+				
+				ae::Vec3 p;
+				ae::Vec3 n;
+				float t;
+				if ( ae::IntersectRayTriangle( raySource, ray, triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], limitRay, ccw, cw, &p, &n, &t ) )
 				{
-					debug.AddSphere( sphere.center + ray.SafeNormalizeCopy() * dist, sphere.radius, ae::Color::Red(), 16 );
-
-					//debug.AddSphere( nearestIntersectionPoint, 0.05f, ae::Color::Green(), 8 );
-					//debug.AddSphere( nearestPolygonIntersectionPoint, 0.05f, ae::Color::Blue(), 8 );
+					debug.AddSphere( p, 0.1f, ae::Color::Green(), 8 );
+					debug.AddLine( p, p + n, ae::Color::Green() );
 				}
 				break;
 			}
@@ -242,7 +244,7 @@ int main()
 				debug.AddCircle( p1, p1 - p0, 1.0f, hit1 ? ae::Color::Green() : ae::Color::Blue(), 16 );
 				for ( uint32_t i = 0; i < 8; i++ )
 				{
-					ae::Vec2 offset = ae::Vec2::FromAngle( aeMath::TWO_PI * i / 8.0f );
+					ae::Vec2 offset = ae::Vec2::FromAngle( ae::TWO_PI * i / 8.0f );
 					debug.AddLine( p0 + ae::Vec3( offset ), p1 + ae::Vec3( offset ), ae::Color::Blue() );
 				}
 
@@ -269,10 +271,10 @@ int main()
 				static float r = 1.0f;
 				if ( input.Get( ae::Key::Num3 ) ) r -= 0.016f;
 				if ( input.Get( ae::Key::Num4 ) ) r += 0.016f;
-				r = aeMath::Clip( r, 0.01f, 8.0f );
+				r = ae::Clip( r, 0.01f, 8.0f );
 
 				ae::Vec3 nearestIntersectionPoint;
-				aeSphere sphere( raySource + ray, r );
+				ae::Sphere sphere( raySource + ray, r );
 				if ( sphere.IntersectTriangle( triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], &nearestIntersectionPoint ) )
 				{
 					debug.AddSphere( raySource + ray, r, ae::Color::Green(), 16 );
@@ -315,7 +317,7 @@ int main()
         }
 				
         ae::Vec2 xy( ae::Cos( a0 ), ae::Sin( a0 ) );
-				aePlane plane( ae::Vec4( xy * ae::Cos( a1 ), ae::Sin( a1 ), d ) );
+		ae::Plane plane( ae::Vec4( xy * ae::Cos( a1 ), ae::Sin( a1 ), d ) );
         
         ae::Vec3 p = plane.GetClosestPointToOrigin();
         ae::Vec3 pn = plane.GetClosestPointToOrigin() + plane.GetNormal();
@@ -329,7 +331,7 @@ int main()
         {
           debug.AddLine( ae::Vec3( 0.0f ), pn, ae::Color::Gray() );
         }
-        aeAABB aabb( ae::Vec3( 0.0f ), p );
+        ae::AABB aabb( ae::Vec3( 0.0f ), p );
         debug.AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), ae::Color::Gray() );
         
         // Axis lines
@@ -338,7 +340,6 @@ int main()
         debug.AddLine( ae::Vec3( 0.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Color::Blue() );
         
         // Plane
-        debug.AddCircle( p, plane.GetNormal(), 0.25f, ae::Color::PicoPink(), 16 );
         debug.AddLine( p, pn, ae::Color::PicoPink() );
         
         // Ray
@@ -359,7 +360,7 @@ int main()
         debug.AddLine( p, closest, ae::Color::PicoPink() );
         
         float sd = plane.GetSignedDistance( rayP );
-        ae::Color sdColor = sd > 0.0f ? ae::Color::PicoRed() : ae::Color::PicoGreen();
+        ae::Color sdColor = sd > 0.0f ? ae::Color::PicoGreen() : ae::Color::PicoRed();
         debug.AddSphere( closest, 0.05f, sdColor, 8 );
         debug.AddLine( closest, closest + plane.GetNormal() * sd, sdColor );
 				
