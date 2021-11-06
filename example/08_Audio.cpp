@@ -68,8 +68,8 @@ int main()
 			hitFade = ae::Max( 0.0f, hitFade - timeStep.GetTimeStep() / 0.2f );
 		}
 		
-		if ( ( !input.mouse.rightButton && input.mousePrev.rightButton )
-			|| ( !input.Get( ae::Key::Space ) && input.GetPrev( ae::Key::Space ) ) )
+		if ( ( input.mouse.rightButton && !input.mousePrev.rightButton )
+			|| ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) ) )
 		{
 			if ( musicPlaying )
 			{
@@ -84,7 +84,7 @@ int main()
 			}
 		}
 
-		if ( !input.mouse.leftButton && input.mousePrev.leftButton )
+		if ( input.mouse.leftButton && !input.mousePrev.leftButton )
 		{
 			audio.PlaySfx( &sfx, 1.0f, 0 );
 			hitFade = 1.0f;
