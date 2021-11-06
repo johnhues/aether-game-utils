@@ -6343,12 +6343,14 @@ T* ae::Cast( C* obj )
 #if _AE_WINDOWS_
   #define WIN32_LEAN_AND_MEAN 1
   #include <Windows.h>
+  #include <windowsx.h> // GET_X_LPARAM GET_Y_LPARAM 
   #include <shellapi.h>
   #include <Shlobj_core.h>
   #include <commdlg.h>
   #include "processthreadsapi.h" // For GetCurrentProcessId()
   #include <filesystem> // @HACK: Shouldn't need this just for Windows
-  #include <timeapi.h>
+  #include <timeapi.h> // For timeBeginPeriod() and timeEndPeriod()
+  #pragma comment (lib, "winmm.lib") // For timeBeginPeriod() and timeEndPeriod()
   #define AE_USE_OPENAL 0
 #elif _AE_APPLE_
   #include <sys/sysctl.h>
@@ -8070,9 +8072,8 @@ Allocator* GetGlobalAllocator()
 {
   if ( !g_allocator )
   {
-    // @TODO: Allocating this statically here won't work for hotloading
-    static _DefaultAllocator s_allocator;
-    g_allocator = &s_allocator;
+    // @TODO: This should delete itself on shutdown when all allocations have been released
+    g_allocator = new _DefaultAllocator();
   }
   return g_allocator;
 }
@@ -8557,12 +8558,21 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
     }
     case WM_SIZE:
     {
-      if ( window->graphicsDevice )
-      {
-        uint32_t width = LOWORD( lParam );
-        uint32_t height = HIWORD( lParam );
-        window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
-      }
+      uint32_t width = LOWORD( lParam );
+      uint32_t height = HIWORD( lParam );
+      window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
+      break;
+    }
+    case WM_SETFOCUS:
+    {
+      window->m_UpdateFocused( true );
+      // @TODO: SetCapture( (HWND)window->window ); so mouse movement is still captured outside of the window for editor dragging etc
+      break;
+    }
+    case WM_KILLFOCUS:
+    {
+      window->m_UpdateFocused( false );
+      // @TODO: ReleaseCapture() see above
       break;
     }
     case WM_CLOSE:
@@ -8735,8 +8745,16 @@ void Window::m_Initialize()
 
   // WS_POPUP for full screen
   uint32_t windowStyle = WS_OVERLAPPEDWINDOW;
-  windowStyle |= WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
-  HWND hwnd = CreateWindowEx( NULL, WNDCLASSNAME, L"Window", WS_OVERLAPPEDWINDOW, 0, 0, GetWidth(), GetHeight(), NULL, NULL, hinstance, this );
+  RECT windowRect;
+  windowRect.left = 0;
+  windowRect.top = 0;
+  windowRect.right = GetWidth();
+  windowRect.bottom = GetHeight();
+  if ( !AdjustWindowRect( &windowRect, windowStyle, false ) ) // Increase window size to contain requested client rect
+  {
+    AE_FAIL_MSG( "Failed to determine window size. Error: #", GetLastError() );
+  }
+  HWND hwnd = CreateWindowEx( 0, WNDCLASSNAME, L"Window", windowStyle, 0, 0, windowRect.right - windowRect.left, windowRect.bottom - windowRect.top, NULL, NULL, hinstance, this );
   AE_ASSERT_MSG( hwnd, "Failed to create window. Error: #", GetLastError() );
 
   HDC hdc = GetDC( hwnd );
@@ -8759,10 +8777,7 @@ void Window::m_Initialize()
   {
     AE_FAIL_MSG( "Failed to read chosen pixel format. Error: #", GetLastError() );
   }
-  AE_INFO( "Chosen Pixel format: #bit RGB #bit Depth",
-    (int)pfd.cColorBits,
-    (int)pfd.cDepthBits
-  );
+  //AE_INFO( "Chosen Pixel format: #bit RGB #bit Depth", (int)pfd.cColorBits, (int)pfd.cDepthBits );
   if ( !SetPixelFormat( hdc, indexPixelFormat, &pfd ) )
   {
     AE_FAIL_MSG( "Could not set window pixel format. Error: #", GetLastError() );
@@ -9154,6 +9169,41 @@ void Input::Pump()
       case WM_QUIT:
         quit = true;
         break;
+      case WM_MOUSEMOVE:
+        m_SetMousePos( ae::Int2( GET_X_LPARAM( msg.lParam ), m_window->GetHeight() - GET_Y_LPARAM( msg.lParam ) ) );
+        break;
+      case WM_LBUTTONDOWN:
+        mouse.leftButton = true;
+        break;
+      case WM_LBUTTONUP:
+        mouse.leftButton = false;
+        break;
+      case WM_MBUTTONDOWN:
+        mouse.middleButton = true;
+        break;
+      case WM_MBUTTONUP:
+        mouse.middleButton = false;
+        break;
+      case WM_RBUTTONDOWN:
+        mouse.rightButton = true;
+        break;
+      case WM_RBUTTONUP:
+        mouse.rightButton = false;
+        break;
+      case WM_MOUSEWHEEL:
+      {
+        uint32_t scrollLines = 1;
+        SystemParametersInfo( SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0 ); // Get system sensitivity setting
+        if ( scrollLines && scrollLines != WHEEL_PAGESCROLL )
+        {
+          mouse.scroll.y += ( (float)scrollLines * GET_WHEEL_DELTA_WPARAM( msg.wParam ) ) / WHEEL_DELTA;
+        }
+        break;
+      }
+      case WM_CAPTURECHANGED:
+        // @TODO: When does this happen?
+        SetMouseCaptured( false );
+        break;
     }
     TranslateMessage( &msg );
     DispatchMessage( &msg );
@@ -9238,26 +9288,31 @@ void Input::Pump()
       }
       [NSApp sendEvent:event];
     }
-    
-    if ( m_captureMouse && m_window )
-    {
-      NSWindow* nsWindow = (NSWindow*)m_window->window;
-      ae::Int2 posWindow( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-      NSPoint posScreen = [nsWindow convertPointToScreen:NSMakePoint( posWindow.x, posWindow.y )];
-      // @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
-      posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
-      CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
-      CGAssociateMouseAndMouseCursorPosition( true );
-      
-      if ( m_positionSet )
-      {
-        mouse.movement = mouse.position - posWindow;
-      }
-      mouse.position = posWindow;
-      m_positionSet = true;
-    }
   }
 #endif
+
+  if ( m_captureMouse && m_window )
+  {
+    ae::Int2 windowCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
+#if _AE_WINDOWS_
+    // @TODO: set mouse position to window center
+#elif _AE_OSX_
+    NSWindow* nsWindow = (NSWindow*)m_window->window;
+    NSPoint posScreen = [nsWindow convertPointToScreen : NSMakePoint( windowCenter.x, windowCenter.y )];
+    // @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
+    posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
+    CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
+    CGAssociateMouseAndMouseCursorPosition( true );
+#endif
+
+    // Ignore movement when first snapping cursor to center of window
+    if ( m_positionSet )
+    {
+      mouse.movement = mouse.position - windowCenter;
+    }
+    mouse.position = windowCenter;
+    m_positionSet = true;
+  }
 
 #if _AE_WINDOWS_
 #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
@@ -9587,18 +9642,24 @@ void Input::SetMouseCaptured( bool enable )
     return;
   }
   
-#if _AE_APPLE_
-  if ( enable && !m_captureMouse )
+  if ( enable && !m_captureMouse && m_window )
   {
+#if _AE_WINDOWS_
+    ShowCursor( false );
+#elif _AE_APPLE_
     CGDisplayHideCursor( kCGDirectMainDisplay );
+#endif
     m_positionSet = false;
   }
-  else if ( !enable && m_captureMouse )
+  else if ( !enable && m_captureMouse && m_window )
   {
+#if _AE_WINDOWS_
+    ShowCursor( true );
+#elif _AE_APPLE_
     CGDisplayShowCursor( kCGDirectMainDisplay );
-  }
 #endif
-  
+  }
+
   m_captureMouse = enable;
 }
 
@@ -14121,8 +14182,10 @@ void AudioData::Initialize( const char* filePath )
 {
   AE_ASSERT( !buffer );
   this->name = filePath; // @TODO: Should just be file name or file hash
+#if AE_USE_OPENAL
   _LoadWavFile( filePath, &this->buffer, &this->length );
   AE_ASSERT( buffer );
+#endif
 }
 
 void AudioData::Terminate()
