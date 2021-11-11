@@ -2370,6 +2370,38 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::OBJFile class
+//------------------------------------------------------------------------------
+class OBJFile
+{
+public:
+	// Types
+	struct Face
+	{
+		ae::Int3 positionIdx = ae::Int3( ae::MaxValue< int >() );
+		ae::Int3 textureIdx = ae::Int3( ae::MaxValue< int >() );
+		ae::Int3 normalIdx = ae::Int3( ae::MaxValue< int >() );
+	};
+	struct Vertex
+	{
+		ae::Vec4 position;
+		ae::Vec2 texture;
+		ae::Vec4 normal;
+		ae::Vec4 color;
+	};
+	
+	// Functions
+	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), positions( allocTag ), faces( allocTag ) {}
+	bool Load( const uint8_t* data, uint32_t length );
+	void GetVerts( ae::Array< Vertex >* vertices, ae::Array< uint16_t >* indices );
+	
+	// File Data
+	ae::Tag allocTag;
+	ae::Array< ae::Vec4 > positions;
+	ae::Array< Face > faces;
+};
+
+//------------------------------------------------------------------------------
 // ae::CollisionMesh class
 //------------------------------------------------------------------------------
 class CollisionMesh
@@ -13656,6 +13688,129 @@ void DebugCamera::m_Precalculate()
   m_offset *= m_dist;
   m_right = m_forward.Cross( worldUp ).SafeNormalizeCopy();
   m_up = m_right.Cross( m_forward ).SafeNormalizeCopy();
+}
+
+//------------------------------------------------------------------------------
+// ae::OBJFile member functions
+//------------------------------------------------------------------------------
+bool OBJFile::Load( const uint8_t* _data, uint32_t length )
+{
+	// @NOTE: strtof() is const safe but does not take a const string. Data is not modified.
+	char* current = (char*)_data;
+	
+	positions.Clear();
+	faces.Clear();
+	
+	enum class Mode
+	{
+		None,
+		Comment,
+		Vertex,
+		Face
+	};
+	for ( char c = *current; c; c = *current )
+	{
+		Mode mode = Mode::None;
+		switch ( c )
+		{
+			case '#':
+				mode = Mode::Comment;
+				break;
+			case 'v':
+				mode = Mode::Vertex;
+				break;
+			case 'f':
+				mode = Mode::Face;
+				break;
+			// Handle bad chars
+		}
+		current++;
+		
+		switch ( mode )
+		{
+			case Mode::Vertex:
+			{
+				ae::Vec4 p( 0.0f, 1.0f );
+				p.x = strtof( current, &current );
+				p.y = strtof( current, &current );
+				p.z = strtof( current, &current );
+				//p.w = strtof( current, &current ); // @TODO: Support w
+				positions.Append( p );
+				break;
+			}
+			case Mode::Face:
+			{
+				OBJFile::Face f;
+				for ( uint32_t i = 0; i < 3; i++ )
+				{
+					f.positionIdx[ i ] = strtoul( current, &current, 10 ) - 1;
+					if ( *current == '/' )
+					{
+						current++;
+						if ( *current != '/' )
+						{
+							f.textureIdx[ i ] = strtoul( current, &current, 10 ) - 1;
+						}
+					}
+					if ( *current == '/' )
+					{
+						current++;
+						f.normalIdx[ i ] = strtoul( current, &current, 10 ) - 1;
+					}
+				}
+				faces.Append( f );
+				break;
+			}
+			default:
+				// Ignore line
+				break;
+		}
+		
+		// Find first non white space char of next line
+		bool foundNewline = false;
+		for ( char c = *current; c; c = *(++current) )
+		{
+			if ( c == '\r' || c == '\n' )
+			{
+				foundNewline = true;
+			}
+			else if ( foundNewline && !isspace( c ) )
+			{
+				break;
+			}
+		}
+	}
+	
+	return true;
+}
+
+void OBJFile::GetVerts( ae::Array< Vertex >* vertices, ae::Array< uint16_t >* indices )
+{
+	vertices->Clear();
+	ae::Map< ae::Int3, int32_t > vertexMap = allocTag;
+	
+	for ( Face f : faces )
+	{
+		for ( uint32_t i = 0; i < 3; i++ )
+		{
+			ae::Int3 key( f.positionIdx[ i ], f.textureIdx[ i ], f.normalIdx[ i ] );
+			int32_t* existingIndex = vertexMap.TryGet( key );
+			if ( existingIndex )
+			{
+				indices->Append( *existingIndex );
+			}
+			else
+			{
+				Vertex vertex;
+				vertex.position = positions[ f.positionIdx[ i ] ];
+				vertex.texture = ae::Vec2( 0.0f );
+				vertex.normal = ae::Vec4( 1.0f, 0.0f );
+				vertex.color = ae::Vec4( 1.0f, 1.0f );
+				vertices->Append( vertex );
+			}
+		}
+		
+	}
 }
 
 //------------------------------------------------------------------------------

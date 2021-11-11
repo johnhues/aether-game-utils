@@ -209,4 +209,12 @@ set(AE_CURRENT_SOURCE_FILES 13_FileDialogs.cpp ${EXAMPLE_SOURCES})
 set(AE_RESOURCES data/Icon.icns)
 include(AddExecutable)
 
+# Emscripten
 add_subdirectory(14_Emscripten)
+
+# OBJViewer
+set(AE_CURRENT_BUNDLE_NAME "OBJViewer")
+set(AE_CURRENT_EXECUTABLE_NAME 15_OBJViewer)
+set(AE_CURRENT_SOURCE_FILES 15_OBJViewer.cpp ${EXAMPLE_SOURCES})
+set(AE_RESOURCES "data/bunny.obj")
+include(AddExecutable)
