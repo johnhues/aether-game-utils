@@ -426,12 +426,13 @@ void TerrainJob::Do()
     
     ae::CollisionMesh::Params meshParams;
     // Vertices
-    meshParams.vertexCount = (uint32_t)m_vertexCount;
-    meshParams.positions = &m_vertices[ 0 ].position;
+    meshParams.positions = (float*)&m_vertices[ 0 ].position;
+    meshParams.positionCount = (uint32_t)m_vertexCount;
     meshParams.positionStride = sizeof(m_vertices[ 0 ]);
     // Indices
+    meshParams.indices = &m_indices[ 0 ];
     meshParams.indexCount = m_indexCount;
-    meshParams.indices16 = &m_indices[ 0 ];
+    meshParams.indexSize = sizeof(m_indices[ 0 ]);
     // Load
     m_chunk->m_mesh.Load( meshParams );
     

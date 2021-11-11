@@ -949,19 +949,20 @@ private:
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
+extern uint64_t _randomSeed;
 void RandomSeed();
-inline uint32_t Random();
-inline int32_t Random( int32_t min, int32_t max );
-inline float Random( float min, float max );
-inline bool RandomBool();
+inline uint32_t Random( uint64_t& seed = _randomSeed );
+inline int32_t Random( int32_t min, int32_t max, uint64_t& seed = _randomSeed );
+inline float Random( float min, float max, uint64_t& seed = _randomSeed );
+inline bool RandomBool( uint64_t& seed = _randomSeed );
 
 template < typename T >
 class RandomValue
 {
 public:
-  RandomValue() {}
-  RandomValue( T min, T max );
-  RandomValue( T value );
+  RandomValue( uint64_t& seed = _randomSeed ) : m_seed( seed ) {}
+  RandomValue( T min, T max, uint64_t& seed = _randomSeed );
+  RandomValue( T value, uint64_t& seed = _randomSeed );
   
   void SetMin( T min );
   void SetMax( T max );
@@ -973,6 +974,7 @@ public:
   operator T() const;
   
 private:
+  uint64_t& m_seed;
   T m_min = T();
   T m_max = T();
 };
@@ -2373,15 +2375,17 @@ private:
 class CollisionMesh
 {
 public:
-  // Initialization params
+  //! Initialization params passed to ae::CollisionMesh::Load(). If ae::CollisionMesh::Load() is called mlutiple times indices will
+  //! be automatically offset internally.
   struct Params
   {
     ae::Matrix4 transform = ae::Matrix4::Identity(); //!< To transform given position values while storing them
-    uint32_t vertexCount = 0;
-    const ae::Vec3* positions = nullptr;
-    uint32_t positionStride = 0;
-    uint32_t indexCount = 0;
-    const uint16_t* indices16 = nullptr;
+    const float* positions = nullptr;
+    const void* indices = nullptr;
+    uint32_t positionCount = 0; //!< Number of X,Y,Z position values provided. Must be greater than 0.
+    uint32_t positionStride = 0; //!< Bytes between X,Y,Z position values.
+    uint32_t indexSize = 0; //!< Size in bytes of index type. Either 2 or 4.
+    uint32_t indexCount = 0; //!< Number of indices provided. Must be a multiple of 3, or 0 if no indices are provided.
   };
   
   // RaycastParams
@@ -2436,18 +2440,21 @@ public:
   };
   
   CollisionMesh( ae::Tag tag );
-  void Load( Params params );
+  void Load( const Params& params );
   void Clear();
   bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const;
   RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
   PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
   ae::AABB GetAABB() const { return m_aabb; }
+  
+  const ae::Vec3* GetVertices() const { return m_vertices.Begin(); }
+  const uint32_t* GetIndices() const { return m_indices.Begin(); }
+  uint32_t GetVertexCount() const { m_vertices.Length(); }
+  uint32_t GetIndexCount() const { m_indices.Length(); }
 
 private:
-  typedef uint16_t Index;
-  struct Vertex { ae::Vec4 position; ae::Vec4 normal; };
-  ae::Array< Vertex > m_vertices;
-  ae::Array< Index > m_indices;
+  ae::Array< ae::Vec3 > m_vertices;
+  ae::Array< uint32_t > m_indices;
   ae::AABB m_aabb;
 };
 
@@ -3036,9 +3043,11 @@ public:
     UInt8,
     UInt16,
     UInt32,
+    UInt64,
     Int8,
     Int16,
     Int32,
+    Int64,
     Bool,
     Float,
     Matrix4,
@@ -3757,48 +3766,46 @@ namespace Interpolation
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
-static uint64_t _randomSeed = 0;
-
-inline uint32_t Random()
+inline uint32_t Random( uint64_t& seed )
 {
   // splitmix https://arvid.io/2018/07/02/better-cxx-prng/
-  uint64_t z = ( _randomSeed += UINT64_C( 0x9E3779B97F4A7C15 ) );
+  uint64_t z = ( seed += UINT64_C( 0x9E3779B97F4A7C15 ) );
   z = ( z ^ ( z >> 30 ) ) * UINT64_C( 0xBF58476D1CE4E5B9 );
   z = ( z ^ ( z >> 27 ) ) * UINT64_C( 0x94D049BB133111EB );
   return uint32_t( ( z ^ ( z >> 31 ) ) >> 31 );
 }
 
-inline int32_t Random( int32_t min, int32_t max )
+inline int32_t Random( int32_t min, int32_t max, uint64_t& seed )
 {
   if ( min >= max )
   {
     return min;
   }
-  return min + ( ae::Random() % ( max - min ) );
+  return min + ( ae::Random( seed ) % ( max - min ) );
 }
 
-inline float Random( float min, float max )
+inline float Random( float min, float max, uint64_t& seed )
 {
   if ( min >= max )
   {
     return min;
   }
-  return min + ( ( ae::Random() / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
+  return min + ( ( ae::Random( seed ) / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
 }
 
-inline bool RandomBool()
+inline bool RandomBool( uint64_t& seed )
 {
-  return Random( 0, 2 );
+  return Random( 0, 2, seed );
 }
 
 //------------------------------------------------------------------------------
 // RandomValue member functions
 //------------------------------------------------------------------------------
 template < typename T >
-inline ae::RandomValue< T >::RandomValue( T min, T max ) : m_min(min), m_max(max) {}
+inline ae::RandomValue< T >::RandomValue( T min, T max, uint64_t& seed ) : m_seed( seed ), m_min(min), m_max(max) {}
 
 template < typename T >
-inline ae::RandomValue< T >::RandomValue( T value ) : m_min(value), m_max(value) {}
+inline ae::RandomValue< T >::RandomValue( T value, uint64_t& seed ) : m_seed( seed ), m_min(value), m_max(value) {}
 
 template < typename T >
 inline void ae::RandomValue< T >::SetMin( T min )
@@ -3827,7 +3834,7 @@ inline T ae::RandomValue< T >::GetMax() const
 template < typename T >
 inline T ae::RandomValue< T >::Get() const
 {
-  return Random( m_min, m_max );
+  return Random( m_min, m_max, m_seed );
 }
 
 template < typename T >
@@ -5992,9 +5999,11 @@ static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
 _ae_DefineMetaVarType( uint8_t, UInt8 );
 _ae_DefineMetaVarType( uint16_t, UInt16 );
 _ae_DefineMetaVarType( uint32_t, UInt32 );
+_ae_DefineMetaVarType( uint64_t, UInt64 );
 _ae_DefineMetaVarType( int8_t, Int8 );
 _ae_DefineMetaVarType( int16_t, Int16 );
 _ae_DefineMetaVarType( int32_t, Int32 );
+_ae_DefineMetaVarType( int64_t, Int64 );
 _ae_DefineMetaVarType( bool, Bool );
 _ae_DefineMetaVarType( float, Float );
 _ae_DefineMetaVarType( ae::Matrix4, Matrix4 );
@@ -6453,6 +6462,8 @@ double GetTime()
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
+uint64_t _randomSeed = 0;
+
 void RandomSeed()
 {
   std::random_device r;
@@ -13657,48 +13668,68 @@ CollisionMesh::CollisionMesh( ae::Tag tag ) :
   Clear();
 }
 
-void CollisionMesh::Load( Params params )
+void CollisionMesh::Load( const Params& params )
 {
-  AE_ASSERT_MSG( !m_vertices.Length(), "TODO! Should allow multiple Load()s without clearing" );
-  
+  AE_ASSERT_MSG( params.indexCount, "Currently only indexed meshes are supported." ); // @TODO: Remove
   AE_ASSERT( params.positions );
-  AE_ASSERT_MSG( params.positionStride > sizeof(float) * 3, "Must specify the number of bytes between each position" );
+  AE_ASSERT_MSG( params.positionStride >= sizeof(float) * 3, "Must specify the number of bytes between each position" );
   if ( params.indexCount )
   {
     AE_ASSERT( params.indexCount % 3 == 0 );
   }
   else
   {
-    AE_ASSERT( params.vertexCount % 3 == 0 );
+    AE_ASSERT( params.positionCount % 3 == 0 );
   }
-
+  AE_ASSERT( params.indexSize == 2 || params.indexSize == 4 );
+  
   bool identityTransform = ( params.transform == ae::Matrix4::Identity() );
 
-  ae::Vec3 p0 = params.positions[ 0 ];
-  if ( !identityTransform )
+  uint32_t initialVertexCount = m_vertices.Length();
+  if ( !initialVertexCount )
   {
-    p0 = ( params.transform * ae::Vec4( p0, 1.0f ) ).GetXYZ();
-  }
-  m_aabb = ae::AABB( p0, p0 );
-
-  m_vertices.Reserve( params.vertexCount );
-  for ( uint32_t i = 0; i < params.vertexCount; i++ )
-  {
-    Vertex vert;
-    memset( &vert, 0, sizeof(vert) );
-    
-    vert.position = ae::Vec4( *params.positions, 1.0f );
+    ae::Vec3 p0( params.positions );
     if ( !identityTransform )
     {
-      vert.position = params.transform * vert.position;
+      p0 = ( params.transform * ae::Vec4( p0, 1.0f ) ).GetXYZ();
     }
-    params.positions = (ae::Vec3*)( (uint8_t*)params.positions + params.positionStride );
+    m_aabb = ae::AABB( p0, p0 );
+  }
+
+  m_vertices.Reserve( initialVertexCount + params.positionCount );
+  for ( uint32_t i = 0; i < params.positionCount; i++ )
+  {
+    ae::Vec3 pos( (const float*)( (const uint8_t*)params.positions + params.positionStride * i ) );
+    if ( !identityTransform )
+    {
+      pos = ( params.transform * ae::Vec4( pos, 1.0f ) ).GetXYZ();
+    }
     
-    m_aabb.Expand( vert.position.GetXYZ() );
-    m_vertices.Append( vert );
+    m_aabb.Expand( pos );
+    m_vertices.Append( pos );
   }
   
-  m_indices.Append( params.indices16, params.indexCount );
+  m_indices.Reserve( m_indices.Length() + params.indexCount );
+  if ( params.indexSize == 4 )
+  {
+    const uint32_t* indices = (const uint32_t*)params.indices;
+    for ( uint32_t i = 0; i < params.indexCount; i++ )
+    {
+      m_indices.Append( indices[ i ] + initialVertexCount );
+    }
+  }
+  else if ( params.indexSize == 2 )
+  {
+    for ( uint32_t i = 0; i < params.indexCount; i++ )
+    {
+      const uint16_t* indices = (const uint16_t*)params.indices;
+      m_indices.Append( (uint32_t)indices[ i ] + initialVertexCount );
+    }
+  }
+  else
+  {
+    AE_FAIL_MSG( "Invalid index size" );
+  }
 }
 
 void CollisionMesh::Clear()
@@ -13749,8 +13780,8 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
   const bool cw = params.hitClockwise;
   
   const uint32_t triCount = m_indices.Length() / 3;
-  const Index* indices = m_indices.Begin();
-  const Vertex* vertices = &m_vertices[ 0 ];
+  const uint32_t* indices = m_indices.Begin();
+  const ae::Vec3* vertices = &m_vertices[ 0 ];
 
   uint32_t hitCount  = 0;
   RaycastResult::Hit hits[ countof(RaycastResult::hits) + 1 ];
@@ -13758,9 +13789,9 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
   for ( uint32_t i = 0; i < triCount; i++ )
   {
     ae::Vec3 p, n;
-    ae::Vec3 a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
-    ae::Vec3 b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
-    ae::Vec3 c = vertices[ indices[ i * 3 + 2 ] ].position.GetXYZ();
+    ae::Vec3 a = vertices[ indices[ i * 3 ] ];
+    ae::Vec3 b = vertices[ indices[ i * 3 + 1 ] ];
+    ae::Vec3 c = vertices[ indices[ i * 3 + 2 ] ];
     if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
     {
       RaycastResult::Hit& outHit = hits[ hitCount ];
@@ -13861,23 +13892,23 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
   bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
   
   const uint32_t triCount = m_indices.Length() / 3;
-  const Index* indices = m_indices.Begin();
-  const Vertex* vertices = &m_vertices[ 0 ];
+  const uint32_t* indices = m_indices.Begin();
+  const ae::Vec3* vertices = &m_vertices[ 0 ];
   
   for ( uint32_t i = 0; i < triCount; i++ )
   {
     ae::Vec3 a, b, c;
     if ( hasIdentityTransform )
     {
-      a = vertices[ indices[ i * 3 ] ].position.GetXYZ();
-      b = vertices[ indices[ i * 3 + 1 ] ].position.GetXYZ();
-      c = vertices[ indices[ i * 3 + 2 ] ].position.GetXYZ();
+      a = vertices[ indices[ i * 3 ] ];
+      b = vertices[ indices[ i * 3 + 1 ] ];
+      c = vertices[ indices[ i * 3 + 2 ] ];
     }
     else
     {
-      a = ae::Vec3( params.transform * vertices[ indices[ i * 3 ] ].position );
-      b = ae::Vec3( params.transform * vertices[ indices[ i * 3 + 1 ] ].position );
-      c = ae::Vec3( params.transform * vertices[ indices[ i * 3 + 2 ] ].position );
+      a = ae::Vec3( params.transform * ae::Vec4( vertices[ indices[ i * 3 ] ], 1.0f ) );
+      b = ae::Vec3( params.transform * ae::Vec4( vertices[ indices[ i * 3 + 1 ] ], 1.0f ) );
+      c = ae::Vec3( params.transform * ae::Vec4( vertices[ indices[ i * 3 + 2 ] ], 1.0f ) );
     }
     
     ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
@@ -15448,44 +15479,58 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
     }
     case Var::UInt8:
     {
-      AE_ASSERT(m_size == sizeof(uint8_t) );
+      AE_ASSERT( m_size == sizeof(uint8_t) );
       uint8_t* u8 = (uint8_t*)varData;
       sscanf( value, "%hhu", u8 );
       return true;
     }
     case Var::UInt16:
     {
-      AE_ASSERT(m_size == sizeof(uint16_t) );
+      AE_ASSERT( m_size == sizeof(uint16_t) );
       uint16_t* u16 = (uint16_t*)varData;
       sscanf( value, "%hu", u16 );
       return true;
     }
     case Var::UInt32:
     {
-      AE_ASSERT(m_size == sizeof(uint32_t) );
+      AE_ASSERT( m_size == sizeof(uint32_t) );
       uint32_t* u32 = (uint32_t*)varData;
       sscanf( value, "%u", u32 );
       return true;
     }
+    case Var::UInt64:
+    {
+      AE_ASSERT( m_size == sizeof(uint64_t) );
+      uint64_t* u64 = (uint64_t*)varData;
+      sscanf( value, "%llu", u64 );
+      return true;
+    }
     case Var::Int8:
     {
-      AE_ASSERT(m_size == sizeof(int8_t) );
+      AE_ASSERT( m_size == sizeof(int8_t) );
       int8_t* i8 = (int8_t*)varData;
       sscanf( value, "%hhd", i8 );
       return true;
     }
     case Var::Int16:
     {
-      AE_ASSERT(m_size == sizeof(int16_t) );
+      AE_ASSERT( m_size == sizeof(int16_t) );
       int16_t* i16 = (int16_t*)varData;
       sscanf( value, "%hd", i16 );
       return true;
     }
     case Var::Int32:
     {
-      AE_ASSERT(m_size == sizeof(int32_t) );
+      AE_ASSERT( m_size == sizeof(int32_t) );
       int32_t* i32 = (int32_t*)varData;
       sscanf( value, "%d", i32 );
+      return true;
+    }
+    case Var::Int64:
+    {
+      AE_ASSERT( m_size == sizeof(int64_t) );
+      int64_t* i64 = (int64_t*)varData;
+      sscanf( value, "%lld", i64 );
       return true;
     }
     case Var::Bool:
@@ -15812,6 +15857,8 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
       return ae::Str32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
     case Var::UInt32:
       return ae::Str32::Format( "#", *reinterpret_cast< const uint32_t* >( varData ) ).c_str();
+    case Var::UInt64:
+      return ae::Str32::Format( "#", *reinterpret_cast< const uint64_t* >( varData ) ).c_str();
     case Var::Int8:
       // Prevent char formatting
       return ae::Str32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str();
@@ -15819,6 +15866,8 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
       return ae::Str32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
     case Var::Int32:
       return ae::Str32::Format( "#", *reinterpret_cast< const int32_t* >( varData ) ).c_str();
+    case Var::Int64:
+      return ae::Str32::Format( "#", *reinterpret_cast< const int64_t* >( varData ) ).c_str();
     case Var::Bool:
       return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
     case Var::Float:
