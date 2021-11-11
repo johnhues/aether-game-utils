@@ -10621,7 +10621,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
   #include <GLES3/gl3.h>
 #elif _AE_LINUX_
   #include <GL/gl.h>
-  #include <GLES3/gl3.h>
+  #include <GL/glcorearb.h>
 #elif _AE_IOS_
   #include <OpenGLES/ES3/gl.h>
 #else
