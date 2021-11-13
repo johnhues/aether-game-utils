@@ -981,6 +981,11 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::TimeStep
+//! A utility for controlling frame time. Create once at the beginning of your program and set a desired frame
+//! length with ae::TimeStep::SetTimeStep() and call ae::TimeStep::Wait() each frame after drawing your scene.
+//! ae::TimeStep will attempt to keep a steady frame rate, but you should still use ae::TimeStep::GetDt() in case
+//! your frame takes too long. On some platforms the high resolution clock can go backwards,
+//! ae::TimeStep::GetDt() protects against that.
 //------------------------------------------------------------------------------
 class TimeStep
 {
@@ -1000,7 +1005,7 @@ private:
   uint32_t m_stepCount = 0;
   double m_timeStep = 0.0;
   double m_sleepOverhead = 0.0;
-  double m_prevFrameTime = 0.0;
+  double m_prevFrameLength = 0.0;
   double m_frameStart = 0.0;
 };
 
@@ -8118,7 +8123,7 @@ TimeStep::TimeStep()
   m_stepCount = 0;
   m_timeStep = 0.0;
   m_sleepOverhead = 0.0;
-  m_prevFrameTime = 0.0;
+  m_prevFrameLength = 0.0;
 
   SetTimeStep( 1.0f / 60.0f );
 }
@@ -8140,12 +8145,12 @@ uint32_t TimeStep::GetStepCount() const
 
 float TimeStep::GetDt() const
 {
-  return m_prevFrameTime;
+  return m_prevFrameLength;
 }
 
 void TimeStep::SetDt( float sec )
 {
-  m_prevFrameTime = sec;
+  m_prevFrameLength = sec;
 }
 
 void TimeStep::Wait()
@@ -8154,21 +8159,19 @@ void TimeStep::Wait()
   
   if ( m_stepCount == 0 )
   {
-    m_prevFrameTime = zeroTimeStep ? ( 1.0 / 60.0 ) : m_timeStep; // Never return a dt of 0 to avoid divide by 0 in client code
     m_frameStart = ae::GetTime();
   }
   else if ( zeroTimeStep )
   {
     double currentTime = ae::GetTime();
     m_sleepOverhead = 0.0;
-    m_prevFrameTime = currentTime - m_frameStart;
-    m_frameStart = currentTime;
+    m_prevFrameLength = currentTime - m_frameStart;
+    m_frameStart = ae::Max( m_frameStart, currentTime ); // Don't go backwards
   }
   else
   {
     double sleepStart = ae::GetTime();
-    double execDuration = sleepStart - m_frameStart;
-    AE_ASSERT( execDuration > 0.0 ); // @TODO: Handle negative/zero frame duration
+    double execDuration = ae::Max( 0.0, sleepStart - m_frameStart ); // Prevent negative dt
     double sleepDuration = m_timeStep - ( execDuration + m_sleepOverhead );
 
     if ( sleepDuration > 0.0 )
@@ -8186,16 +8189,16 @@ void TimeStep::Wait()
 #endif
 
       double sleepEnd = ae::GetTime();
-      m_prevFrameTime = sleepEnd - m_frameStart;
-      m_frameStart = sleepEnd;
+      m_prevFrameLength = sleepEnd - m_frameStart;
+      m_frameStart = ae::Max( m_frameStart, sleepEnd ); // Don't go backwards
 
       double sleepOverhead = ( sleepEnd - sleepStart ) - sleepDuration;
       m_sleepOverhead = ae::Lerp( m_sleepOverhead, sleepOverhead, 0.05 );
     }
     else
     {
-      m_prevFrameTime = execDuration;
-      m_frameStart = sleepStart;
+      m_prevFrameLength = execDuration;
+      m_frameStart = ae::Max( m_frameStart, sleepStart ); // Don't go backwards
     }
   }
   
