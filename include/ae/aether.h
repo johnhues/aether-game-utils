@@ -11235,19 +11235,18 @@ void Shader::Activate( const UniformList& uniforms ) const
     // Blending
     if ( m_blending || m_blendingPremul )
     {
-    glEnable( GL_BLEND );
+      glEnable( GL_BLEND );
 
-    // TODO: need other modes like Add, Min, Max - switch to enum then
-    if ( m_blendingPremul )
-    {
-      // Colors coming out of shader already have alpha multiplied in.
-      glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
-                 GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-    }
-    else
-    {
-      glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-    }
+      // TODO: need other modes like Add, Min, Max - switch to enum then
+      if ( m_blendingPremul )
+      {
+        // Colors coming out of shader already have alpha multiplied in.
+        glBlendFuncSeparate( GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+      }
+      else
+      {
+        glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+      }
     }
     else
     {
