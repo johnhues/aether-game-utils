@@ -25,5 +25,5 @@
 //------------------------------------------------------------------------------
 #ifndef __APPLE__
   #define AE_MAIN
-  #include "aether.h"
+  #include "ae/aether.h"
 #endif
