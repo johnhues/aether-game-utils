@@ -2375,30 +2375,20 @@ private:
 class OBJFile
 {
 public:
-	// Types
-	struct Face
-	{
-		ae::Int3 positionIdx = ae::Int3( ae::MaxValue< int >() );
-		ae::Int3 textureIdx = ae::Int3( ae::MaxValue< int >() );
-		ae::Int3 normalIdx = ae::Int3( ae::MaxValue< int >() );
-	};
-	struct Vertex
-	{
-		ae::Vec4 position;
-		ae::Vec2 texture;
-		ae::Vec4 normal;
-		ae::Vec4 color;
-	};
-	
-	// Functions
-	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), positions( allocTag ), faces( allocTag ) {}
-	bool Load( const uint8_t* data, uint32_t length );
-	void GetVerts( ae::Array< Vertex >* vertices, ae::Array< uint16_t >* indices );
-	
-	// File Data
-	ae::Tag allocTag;
-	ae::Array< ae::Vec4 > positions;
-	ae::Array< Face > faces;
+  struct Vertex
+  {
+    ae::Vec4 position;
+    ae::Vec2 texture;
+    ae::Vec4 normal;
+    ae::Vec4 color;
+  };
+  
+  OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
+  bool Load( const uint8_t* data, uint32_t length );
+  
+  ae::Tag allocTag;
+  ae::Array< Vertex > vertices;
+  ae::Array< uint32_t > indices;
 };
 
 //------------------------------------------------------------------------------
@@ -2481,8 +2471,8 @@ public:
   
   const ae::Vec3* GetVertices() const { return m_vertices.Begin(); }
   const uint32_t* GetIndices() const { return m_indices.Begin(); }
-  uint32_t GetVertexCount() const { m_vertices.Length(); }
-  uint32_t GetIndexCount() const { m_indices.Length(); }
+  uint32_t GetVertexCount() const { return m_vertices.Length(); }
+  uint32_t GetIndexCount() const { return m_indices.Length(); }
 
 private:
   ae::Array< ae::Vec3 > m_vertices;
@@ -6568,7 +6558,7 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 
 Vec3 Vec3::DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon ) const
 {
-	return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
+  return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
 }
 
 //------------------------------------------------------------------------------
@@ -7412,14 +7402,14 @@ bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) con
   // Exit if r�s origin outside s (c > 0) and r pointing away from s (b > 0)
   if ( c > 0.0f && b > 0.0f )
   {
-	return false;
+  return false;
   }
 
   // A negative discriminant corresponds to ray missing sphere
   float discr = b * b - c;
   if ( discr < 0.0f )
   {
-	return false;
+  return false;
   }
 
   // Ray now found to intersect sphere, compute smallest t value of intersection
@@ -7427,17 +7417,17 @@ bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) con
   // If t is negative, ray started inside sphere so clamp t to zero
   if ( t < 0.0f )
   {
-	t = 0.0f;
+  t = 0.0f;
   }
 
   if ( tOut )
   {
-	*tOut = t;
+  *tOut = t;
   }
 
   if ( pOut )
   {
-	*pOut = origin + direction * t;
+  *pOut = origin + direction * t;
   }
 
   return true;
@@ -7448,11 +7438,11 @@ bool Sphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3*
   ae::Vec3 closest = ClosestPtPointTriangle( center, t0, t1, t2 );
   if ( ( closest - center ).LengthSquared() <= radius * radius )
   {
-	if ( outNearestIntersectionPoint )
-	{
-	  *outNearestIntersectionPoint = closest;
-	}
-	return true;
+  if ( outNearestIntersectionPoint )
+  {
+    *outNearestIntersectionPoint = closest;
+  }
+  return true;
   }
   return false;
 }
@@ -7697,11 +7687,11 @@ bool AABB::Intersect( AABB other ) const
 {
   if ( m_max.x >= other.m_min.x && m_max.y >= other.m_min.y && m_max.z >= other.m_min.z )
   {
-	return true;
+  return true;
   }
   else if ( other.m_max.x >= m_min.x && other.m_max.y >= m_min.y && other.m_max.z >= m_min.z )
   {
-	return true;
+  return true;
   }
 
   return false;
@@ -7715,46 +7705,46 @@ bool AABB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) c
   float tmax = ae::MaxValue< float >(); // set to max distance ray can travel (for segment)
   for ( int32_t i = 0; i < 3; i++ ) // For all three slabs
   {
-	if ( ae::Abs( d[ i ] ) < 0.001f )
-	{
-	  // Ray is parallel to slab. No hit if origin not within slab
-	  if ( p[ i ] < m_min[ i ] || p[ i ] > m_max[ i ] )
-	  {
-		return false;
-	  }
-	}
-	else
-	{
-	  // Compute intersection t value of ray with near and far plane of slab
-	  float ood = 1.0f / d[ i ];
-	  float t1 = ( m_min[ i ] - p[ i ] ) * ood;
-	  float t2 = ( m_max[ i ] - p[ i ] ) * ood;
-	  // Make t1 be intersection with near plane, t2 with far plane
-	  if ( t1 > t2 )
-	  {
-		std::swap( t1, t2 );
-	  }
+  if ( ae::Abs( d[ i ] ) < 0.001f )
+  {
+    // Ray is parallel to slab. No hit if origin not within slab
+    if ( p[ i ] < m_min[ i ] || p[ i ] > m_max[ i ] )
+    {
+    return false;
+    }
+  }
+  else
+  {
+    // Compute intersection t value of ray with near and far plane of slab
+    float ood = 1.0f / d[ i ];
+    float t1 = ( m_min[ i ] - p[ i ] ) * ood;
+    float t2 = ( m_max[ i ] - p[ i ] ) * ood;
+    // Make t1 be intersection with near plane, t2 with far plane
+    if ( t1 > t2 )
+    {
+    std::swap( t1, t2 );
+    }
 
-	  // Compute the intersection of slab intersection intervals
-	  tmin = ae::Max( tmin, t1 );
-	  tmax = ae::Min( tmax, t2 );
+    // Compute the intersection of slab intersection intervals
+    tmin = ae::Max( tmin, t1 );
+    tmax = ae::Min( tmax, t2 );
 
-	  // Exit with no collision as soon as slab intersection becomes empty
-	  if ( tmin > tmax )
-	  {
-		return false;
-	  }
-	}
+    // Exit with no collision as soon as slab intersection becomes empty
+    if ( tmin > tmax )
+    {
+    return false;
+    }
+  }
   }
 
   // Ray intersects all 3 slabs. Return point (q) and intersection t value (tmin)
   if ( tOut )
   {
-	*tOut = tmin;
+  *tOut = tmin;
   }
   if ( pOut )
   {
-	*pOut = p + d * tmin;
+  *pOut = p + d * tmin;
   }
   return true;
 }
@@ -7803,15 +7793,15 @@ bool OBB::IntersectRay( ae::Vec3 _p, ae::Vec3 _d, ae::Vec3* pOut, float* tOut ) 
   float rayT = 0.0f;
   if ( m_scaledAABB.IntersectRay( p, d, nullptr, &rayT ) )
   {
-	if ( tOut )
-	{
-	  *tOut = rayT;
-	}
-	if ( pOut )
-	{
-	  *pOut = _p + _d * rayT;
-	}
-	return true;
+  if ( tOut )
+  {
+    *tOut = rayT;
+  }
+  if ( pOut )
+  {
+    *pOut = _p + _d * rayT;
+  }
+  return true;
   }
 
   return false;
@@ -7821,20 +7811,20 @@ AABB OBB::GetAABB() const
 {
   ae::Vec4 corners[] =
   {
-	m_transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
-	m_transform * ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ),
-	m_transform * ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ),
-	m_transform * ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ),
-	m_transform * ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ),
-	m_transform * ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ),
-	m_transform * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
-	m_transform * ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
+  m_transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
+  m_transform * ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ),
+  m_transform * ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ),
+  m_transform * ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ),
+  m_transform * ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ),
+  m_transform * ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ),
+  m_transform * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
+  m_transform * ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
   };
   
   AABB result( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
   for ( uint32_t i = 2; i < countof( corners ); i++ )
   {
-	result.Expand( corners[ i ].GetXYZ() );
+  result.Expand( corners[ i ].GetXYZ() );
   }
 
   return result;
@@ -7854,16 +7844,16 @@ bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitR
   float d = qp.Dot( n );
   if ( !ccw && d > 0.0f )
   {
-	return false;
+  return false;
   }
   if ( !cw && d < 0.0f )
   {
-	return false;
+  return false;
   }
   // Parallel
   if ( d * d <= 0.0f )
   {
-	return false;
+  return false;
   }
   float ood = 1.0f / d;
   
@@ -7873,12 +7863,12 @@ bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitR
   // Ray intersects if 0 <= t
   if ( t < 0.0f )
   {
-	return false;
+  return false;
   }
   // Segment intersects if 0 <= t <= 1
   if ( limitRay && t > 1.0f )
   {
-	return false;
+  return false;
   }
   
   // Compute barycentric coordinate components and test if within bounds
@@ -7886,26 +7876,26 @@ bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitR
   float v = ac.Dot( e ) * ood;
   if ( v < 0.0f || v > 1.0f )
   {
-	return false;
+  return false;
   }
   float w = -ab.Dot( e ) * ood;
   if ( w < 0.0f || v + w > 1.0f )
   {
-	return false;
+  return false;
   }
   
   // Result
   if ( pOut )
   {
-	*pOut = p + dir * t;
+  *pOut = p + dir * t;
   }
   if ( nOut )
   {
-	*nOut = n.SafeNormalizeCopy();
+  *nOut = n.SafeNormalizeCopy();
   }
   if ( tOut )
   {
-	*tOut = t;
+  *tOut = t;
   }
   return true;
 }
@@ -7939,21 +7929,21 @@ ae::Vec3 ClosestPtPointTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c 
   // If P outside AB and within feature region of AB,
   // return projection of P onto AB
   if (vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f)
-	  return a + snom / (snom + sdenom) * ab;
+    return a + snom / (snom + sdenom) * ab;
   
   // P is outside (or on) BC if the triple scalar product [N PB PC] <= 0
   float va = n.Dot((b - p).Cross(c - p));
   // If P outside BC and within feature region of BC,
   // return projection of P onto BC
   if (va <= 0.0f && unom >= 0.0f && udenom >= 0.0f)
-	return b + unom / (unom + udenom) * bc;
+  return b + unom / (unom + udenom) * bc;
   
   // P is outside (or on) CA if the triple scalar product [N PC PA] <= 0
   float vb = n.Dot((c - p).Cross(a - p));
   // If P outside CA and within feature region of CA,
   // return projection of P onto CA
   if (vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f)
-	  return a + tnom / (tnom + tdenom) * ac;
+    return a + tnom / (tnom + tdenom) * ac;
 
   // P must project inside face region. Compute Q using barycentric coordinates
   float u = va / (va + vb + vc);
@@ -10652,7 +10642,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 #elif _AE_EMSCRIPTEN_
   #include <GLES3/gl3.h>
 #elif _AE_LINUX_
-  #include <GL/gl.h>
+  #define GL_GLEXT_PROTOTYPES 1
   #include <GL/glcorearb.h>
 #elif _AE_IOS_
   #include <OpenGLES/ES3/gl.h>
@@ -11710,6 +11700,7 @@ void VertexData::SetVertices( const void* vertices, uint32_t count )
   {
     return;
   }
+  AE_ASSERT_MSG( count <= m_maxVertexCount, "Vertex limit exceeded #/#", count, m_maxVertexCount );
   
   // Set vertices
   if ( count )
@@ -11738,6 +11729,7 @@ void VertexData::SetIndices( const void* indices, uint32_t count )
   {
     return;
   }
+  AE_ASSERT_MSG( count <= m_maxIndexCount, "Index limit exceeded #/#", count, m_maxIndexCount );
 
   // Validate indices
   if ( count && _AE_DEBUG_ )
@@ -11919,13 +11911,11 @@ void VertexData::ClearIndices()
 
 const void* VertexData::GetVertices() const
 {
-  AE_ASSERT( m_vertexReadable != nullptr );
   return m_vertexReadable;
 }
 
 const void* VertexData::GetIndices() const
 {
-  AE_ASSERT( m_indexReadable != nullptr );
   return m_indexReadable;
 }
 
@@ -12732,6 +12722,7 @@ bool GraphicsDevice::GetVsyncEnabled() const
 #if _AE_WINDOWS_
   return wglGetSwapIntervalEXT() != 0;
 #endif
+  return false;
 }
 
 void GraphicsDevice::Terminate()
@@ -13661,12 +13652,12 @@ DebugCamera::Mode DebugCamera::GetMode() const
 
 bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
 {
-	if ( !m_refocus )
-	{
-		return false;
-	}
-	*targetOut = m_refocusPos;
-	return true;
+  if ( !m_refocus )
+  {
+    return false;
+  }
+  *targetOut = m_refocusPos;
+  return true;
 }
 
 void DebugCamera::m_Precalculate()
@@ -13695,122 +13686,198 @@ void DebugCamera::m_Precalculate()
 //------------------------------------------------------------------------------
 bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 {
-	// @NOTE: strtof() is const safe but does not take a const string. Data is not modified.
-	char* current = (char*)_data;
-	
-	positions.Clear();
-	faces.Clear();
-	
-	enum class Mode
-	{
-		None,
-		Comment,
-		Vertex,
-		Face
-	};
-	for ( char c = *current; c; c = *current )
-	{
-		Mode mode = Mode::None;
-		switch ( c )
-		{
-			case '#':
-				mode = Mode::Comment;
-				break;
-			case 'v':
-				mode = Mode::Vertex;
-				break;
-			case 'f':
-				mode = Mode::Face;
-				break;
-			// Handle bad chars
-		}
-		current++;
-		
-		switch ( mode )
-		{
-			case Mode::Vertex:
-			{
-				ae::Vec4 p( 0.0f, 1.0f );
-				p.x = strtof( current, &current );
-				p.y = strtof( current, &current );
-				p.z = strtof( current, &current );
-				//p.w = strtof( current, &current ); // @TODO: Support w
-				positions.Append( p );
-				break;
-			}
-			case Mode::Face:
-			{
-				OBJFile::Face f;
-				for ( uint32_t i = 0; i < 3; i++ )
-				{
-					f.positionIdx[ i ] = strtoul( current, &current, 10 ) - 1;
-					if ( *current == '/' )
-					{
-						current++;
-						if ( *current != '/' )
-						{
-							f.textureIdx[ i ] = strtoul( current, &current, 10 ) - 1;
-						}
-					}
-					if ( *current == '/' )
-					{
-						current++;
-						f.normalIdx[ i ] = strtoul( current, &current, 10 ) - 1;
-					}
-				}
-				faces.Append( f );
-				break;
-			}
-			default:
-				// Ignore line
-				break;
-		}
-		
-		// Find first non white space char of next line
-		bool foundNewline = false;
-		for ( char c = *current; c; c = *(++current) )
-		{
-			if ( c == '\r' || c == '\n' )
-			{
-				foundNewline = true;
-			}
-			else if ( foundNewline && !isspace( c ) )
-			{
-				break;
-			}
-		}
-	}
-	
-	return true;
-}
-
-void OBJFile::GetVerts( ae::Array< Vertex >* vertices, ae::Array< uint16_t >* indices )
-{
-	vertices->Clear();
-	ae::Map< ae::Int3, int32_t > vertexMap = allocTag;
-	
-	for ( Face f : faces )
-	{
-		for ( uint32_t i = 0; i < 3; i++ )
-		{
-			ae::Int3 key( f.positionIdx[ i ], f.textureIdx[ i ], f.normalIdx[ i ] );
-			int32_t* existingIndex = vertexMap.TryGet( key );
-			if ( existingIndex )
-			{
-				indices->Append( *existingIndex );
-			}
-			else
-			{
-				Vertex vertex;
-				vertex.position = positions[ f.positionIdx[ i ] ];
-				vertex.texture = ae::Vec2( 0.0f );
-				vertex.normal = ae::Vec4( 1.0f, 0.0f );
-				vertex.color = ae::Vec4( 1.0f, 1.0f );
-				vertices->Append( vertex );
-			}
-		}
-		
-	}
+  enum class Mode
+  {
+    None,
+    Comment,
+    Vertex,
+    Texture,
+    Normal,
+    Face
+  };
+  struct FaceIndex
+  {
+    int position = -1;
+    int texture = -1;
+    int normal = -1;
+  };
+  ae::Array< ae::Vec4 > positions = allocTag;
+  ae::Array< ae::Vec2 > uvs = allocTag;
+  ae::Array< ae::Vec4 > normals = allocTag;
+  ae::Array< FaceIndex > faceIndices = allocTag;
+  ae::Array< uint8_t > faces = allocTag;
+  
+  // @NOTE: strtof() is const safe but does not take a const string. Data is not modified.
+  char* current = (char*)_data;
+  uint32_t check = 0xcdcdcdcd;
+  for ( char c = *current; c; c = *current )
+  {
+    AE_ASSERT( check == 0xcdcdcdcd );
+    
+    Mode mode = Mode::None;
+    switch ( c )
+    {
+      case '#':
+        mode = Mode::Comment;
+        break;
+      case 'v':
+        switch ( current[ 1 ] )
+        {
+          case ' ':
+            mode = Mode::Vertex;
+            break;
+          case 't':
+            mode = Mode::Texture;
+            current++;
+            break;
+          case 'n':
+            mode = Mode::Normal;
+            current++;
+            break;
+        }
+        break;
+      case 'f':
+        mode = Mode::Face;
+        break;
+      // Ignore bad chars
+    }
+    current++;
+    if ( current[ 0 ] != ' ' )
+    {
+      mode = Mode::None;
+    }
+    
+    AE_ASSERT( check == 0xcdcdcdcd );
+    
+    switch ( mode )
+    {
+      case Mode::Vertex:
+      {
+        ae::Vec4 p;
+        p.x = strtof( current, &current );
+        p.y = strtof( current, &current );
+        p.z = strtof( current, &current );
+        p.w = 1.0f;
+        // @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
+        positions.Append( p );
+        break;
+      }
+      case Mode::Texture:
+      {
+        ae::Vec2 uv;
+        uv.x = strtof( current, &current );
+        uv.y = strtof( current, &current );
+        uvs.Append( uv );
+        break;
+      }
+      case Mode::Normal:
+      {
+        ae::Vec4 n;
+        n.x = strtof( current, &current );
+        n.y = strtof( current, &current );
+        n.z = strtof( current, &current );
+        n.w = 0.0f;
+        normals.Append( n.SafeNormalizeCopy() );
+        break;
+      }
+      case Mode::Face:
+      {
+        uint32_t faceVertexCount = 0;
+        while ( *current != '\n' && *current != '\r' )
+        {
+          FaceIndex faceIndex;
+          faceIndex.position = strtoul( current, &current, 10 ) - 1;
+          if ( *current == '/' )
+          {
+            current++;
+            if ( *current != '/' )
+            {
+              faceIndex.texture = strtoul( current, &current, 10 ) - 1;
+            }
+          }
+          if ( *current == '/' )
+          {
+            current++;
+            faceIndex.normal = strtoul( current, &current, 10 ) - 1;
+          }
+          faceIndices.Append( faceIndex );
+          faceVertexCount++;
+          
+          while ( !isspace( *current ) )
+          {
+            current++;
+          }
+        }
+        faces.Append( faceVertexCount );
+        break;
+      }
+      default:
+        // Ignore line
+        break;
+    }
+    
+    // Find first non white space char of next line
+    bool foundNewline = false;
+    for ( char c = *current; c; c = *(++current) )
+    {
+      if ( c == '\r' || c == '\n' )
+      {
+        foundNewline = true;
+      }
+      else if ( foundNewline && !isspace( c ) )
+      {
+        break;
+      }
+    }
+  }
+  
+  vertices.Clear();
+  indices.Clear();
+  // @TODO: Reserve vertices and indices
+  
+  FaceIndex* currentFaceIdx = &faceIndices[ 0 ];
+  ae::Map< ae::Int3, uint32_t > vertexMap = allocTag;
+  for ( uint8_t f : faces )
+  {
+    if ( f <= 2 ) { continue; } // Invalid face
+    
+    // Triangulate faces
+    uint32_t triCount = ( f - 2 );
+    for ( uint32_t i = 0; i < triCount; i++ )
+    {
+      FaceIndex tri[ 3 ];
+      tri[ 0 ] = currentFaceIdx[ 0 ];
+      tri[ 1 ] = currentFaceIdx[ i + 1 ];
+      tri[ 2 ] = currentFaceIdx[ i + 2 ];
+      for ( uint32_t j = 0; j < 3; j++ )
+      {
+        int posIdx = tri[ j ].position;
+        int uvIdx = tri[ j ].texture;
+        int normIdx = tri[ j ].normal;
+        ae::Int3 key( posIdx, uvIdx, normIdx );
+        uint32_t* existingIndex = vertexMap.TryGet( key );
+        if ( existingIndex )
+        {
+          indices.Append( *existingIndex );
+        }
+        else
+        {
+          Vertex vertex;
+          vertex.position = ( posIdx >= 0 ? positions[ posIdx ] : ae::Vec4( 0.0f, 1.0f ) );
+          vertex.texture = ( uvIdx >= 0 ? uvs[ uvIdx ] : ae::Vec2( 0.0f ) );
+          vertex.normal = ( normIdx >= 0 ? normals[ normIdx ] : ae::Vec4( 0.0f ) );
+          vertex.color = ae::Vec4( 1.0f, 1.0f );
+          vertexMap.Set( key, vertices.Length() );
+          indices.Append( vertices.Length() );
+          vertices.Append( vertex );
+        }
+      }
+    }
+    
+    currentFaceIdx += f;
+  }
+  
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -13825,7 +13892,12 @@ CollisionMesh::CollisionMesh( ae::Tag tag ) :
 
 void CollisionMesh::Load( const Params& params )
 {
-  AE_ASSERT_MSG( params.indexCount, "Currently only indexed meshes are supported." ); // @TODO: Remove
+  if ( !params.positionCount )
+  {
+    AE_ASSERT_MSG( !params.indexCount, "Mesh indices supplied without vertex data" );
+    return;
+  }
+  AE_ASSERT_MSG( params.indexCount, "Currently only indexed meshes are supported" ); // @TODO: Remove
   AE_ASSERT( params.positions );
   AE_ASSERT_MSG( params.positionStride >= sizeof(float) * 3, "Must specify the number of bytes between each position" );
   if ( params.indexCount )
