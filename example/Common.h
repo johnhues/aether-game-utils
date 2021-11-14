@@ -180,10 +180,10 @@ void SpriteRenderer::AddSprite( const ae::Matrix4& localToWorld, ae::Rect uvs, a
   ae::Vec2 max = uvs.GetMax();
   Vertex verts[] =
   {
-    { .pos = localToWorld * ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), .color = color.GetLinearRGBA(), .uv = ae::Vec2( min.x, min.y ) },
-    { .pos = localToWorld * ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), .color = color.GetLinearRGBA(), .uv = ae::Vec2( max.x, min.y ) },
-    { .pos = localToWorld * ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), .color = color.GetLinearRGBA(), .uv = ae::Vec2( max.x, max.y ) },
-    { .pos = localToWorld * ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), .color = color.GetLinearRGBA(), .uv = ae::Vec2( min.x, max.y ) }
+    { localToWorld * ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( min.x, min.y ) },
+    { localToWorld * ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( max.x, min.y ) },
+    { localToWorld * ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( max.x, max.y ) },
+    { localToWorld * ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( min.x, max.y ) }
   };
   m_vertexData.AppendVertices( verts, countof(verts) );
   

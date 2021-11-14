@@ -24,6 +24,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 	endif()
 
 	add_executable(${_AE_EXECUTABLE_NAME} ${_AE_EXE_TYPE} ${_AE_SRC_FILES} ${_AE_RESOURCES})
+	set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
 	if (_AE_LIBS)
 		target_link_libraries(${_AE_EXECUTABLE_NAME} ${_AE_LIBS})
 	endif()
@@ -213,8 +214,13 @@ include(AddExecutable)
 add_subdirectory(14_Emscripten)
 
 # OBJViewer
-set(AE_CURRENT_BUNDLE_NAME "OBJViewer")
-set(AE_CURRENT_EXECUTABLE_NAME 15_OBJViewer)
-set(AE_CURRENT_SOURCE_FILES 15_OBJViewer.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES "data/bunny.obj")
-include(AddExecutable)
+add_bundle("OBJViewer"
+	"15_OBJViewer"
+	"ae.15_OBJViewer"
+	"0.0.0"
+	"Icon"
+	"15_OBJViewer.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns;data/bunny.obj"
+	"ae;imgui;imguizmo"
+	""
+)
