@@ -107,9 +107,9 @@ int main()
 	AE_INFO( "Load obj" );
 	ae::OBJFile objFile = kObjAllocTag;
 	const char* fileName = "bunny.obj";
-	uint32_t fileSize = fs.GetSize( fileName );
+	uint32_t fileSize = fs.GetSize( ae::FileSystem::Root::Data, fileName );
 	uint8_t* data = (uint8_t*)ae::Allocate( kObjAllocTag, fileSize, 0 );
-	fs.Read( fileName, data, fileSize );
+	fs.Read( ae::FileSystem::Root::Data, fileName, data, fileSize );
 	objFile.Load( data, fileSize );
 	vertexData.Initialize(
 		sizeof(*objFile.vertices.Begin()), sizeof(*objFile.indices.Begin()),

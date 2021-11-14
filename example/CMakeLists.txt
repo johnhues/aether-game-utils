@@ -23,8 +23,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup")
 	endif()
 
-	add_executable(${_AE_EXECUTABLE_NAME} ${_AE_EXE_TYPE} ${_AE_SRC_FILES} ${_AE_RESOURCES})
-	set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+	add_executable(${_AE_EXECUTABLE_NAME} ${_AE_EXE_TYPE} ${_AE_SRC_FILES})
 	if (_AE_LIBS)
 		target_link_libraries(${_AE_EXECUTABLE_NAME} ${_AE_LIBS})
 	endif()
@@ -32,7 +31,15 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		target_include_directories(${_AE_EXECUTABLE_NAME} PRIVATE ${_AE_INCLUDE_DIRS})
 	endif()
 
-	if(APPLE)
+	if(WIN32)
+		# Set the working directory while debugging in visual studio to the location of this targets CMakeLists.txt
+		set_property(TARGET ${_AE_EXECUTABLE_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+	elseif(APPLE)
+		# Only add resource files to Apple bundles
+		# Adding resources on Windows causes an issue where files are copied only once on configure
+		target_sources(${_AE_EXECUTABLE_NAME} PUBLIC "${_AE_RESOURCES}")
+		set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+
 		set(CMAKE_OSX_SYSROOT macosx)
 		set(CMAKE_OSX_DEPLOYMENT_TARGET 10.10)
 
