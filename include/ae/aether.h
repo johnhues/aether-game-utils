@@ -8062,6 +8062,7 @@ class _DefaultAllocator final : public Allocator
 public:
   void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override
   {
+    alignment = ae::Max( 2u, alignment );
 #if _AE_WINDOWS_
     return _aligned_malloc( bytes, alignment );
 #elif _AE_OSX_
@@ -8074,6 +8075,7 @@ public:
 
   void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) override
   {
+    alignment = ae::Max( 2u, alignment );
 #if _AE_WINDOWS_
     return _aligned_realloc( data, bytes, alignment );
 #else
@@ -13709,32 +13711,43 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
   ae::Array< FaceIndex > faceIndices = allocTag;
   ae::Array< uint8_t > faces = allocTag;
   
-  // @NOTE: strtof() is const safe but does not take a const string. Data is not modified.
-  char* current = (char*)_data;
-  uint32_t check = 0xcdcdcdcd;
-  for ( char c = *current; c; c = *current )
+  ae::Str256 currentLine;
+  const char* data = (const char*)_data;
+  const char* dataEnd = (const char*)_data + length;
+  while ( data < dataEnd )
   {
-    AE_ASSERT( check == 0xcdcdcdcd );
-    
+    uint32_t lineLen = 0;
+    while ( data[ lineLen ] && data[ lineLen ] != '\n' && data[ lineLen ] != '\r' && ( data + lineLen < dataEnd ) )
+    {
+      lineLen++;
+    }
+    currentLine = ae::Str256( lineLen, data );
+    data += lineLen;
+    while ( data[ 0 ] == '\n' || data[ 0 ] == '\r' )
+    {
+      data++;
+    }
+
+    char* line = (char*)currentLine.c_str(); // strtof() takes a non-const string but does not modify it
     Mode mode = Mode::None;
-    switch ( c )
+    switch ( line[ 0 ] )
     {
       case '#':
         mode = Mode::Comment;
         break;
       case 'v':
-        switch ( current[ 1 ] )
+        switch ( line[ 1 ] )
         {
           case ' ':
             mode = Mode::Vertex;
             break;
           case 't':
             mode = Mode::Texture;
-            current++;
+            line++;
             break;
           case 'n':
             mode = Mode::Normal;
-            current++;
+            line++;
             break;
         }
         break;
@@ -13743,22 +13756,21 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
         break;
       // Ignore bad chars
     }
-    current++;
-    if ( current[ 0 ] != ' ' )
+    line++;
+    if ( line[ 0 ] != ' ' )
     {
+      // Unknown line tag
       mode = Mode::None;
     }
-    
-    AE_ASSERT( check == 0xcdcdcdcd );
     
     switch ( mode )
     {
       case Mode::Vertex:
       {
         ae::Vec4 p;
-        p.x = strtof( current, &current );
-        p.y = strtof( current, &current );
-        p.z = strtof( current, &current );
+        p.x = strtof( line, &line );
+        p.y = strtof( line, &line );
+        p.z = strtof( line, &line );
         p.w = 1.0f;
         // @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
         positions.Append( p );
@@ -13767,17 +13779,17 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
       case Mode::Texture:
       {
         ae::Vec2 uv;
-        uv.x = strtof( current, &current );
-        uv.y = strtof( current, &current );
+        uv.x = strtof( line, &line );
+        uv.y = strtof( line, &line );
         uvs.Append( uv );
         break;
       }
       case Mode::Normal:
       {
         ae::Vec4 n;
-        n.x = strtof( current, &current );
-        n.y = strtof( current, &current );
-        n.z = strtof( current, &current );
+        n.x = strtof( line, &line );
+        n.y = strtof( line, &line );
+        n.z = strtof( line, &line );
         n.w = 0.0f;
         normals.Append( n.SafeNormalizeCopy() );
         break;
@@ -13785,29 +13797,34 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
       case Mode::Face:
       {
         uint32_t faceVertexCount = 0;
-        while ( *current != '\n' && *current != '\r' )
+        while ( line[ 0 ] )
         {
           FaceIndex faceIndex;
-          faceIndex.position = strtoul( current, &current, 10 ) - 1;
-          if ( *current == '/' )
+          faceIndex.position = strtoul( line, &line, 10 ) - 1;
+          if ( line[ 0 ] == '/' )
           {
-            current++;
-            if ( *current != '/' )
+            line++;
+            if ( line[ 0 ] != '/' )
             {
-              faceIndex.texture = strtoul( current, &current, 10 ) - 1;
+              faceIndex.texture = strtoul( line, &line, 10 ) - 1;
             }
           }
-          if ( *current == '/' )
+          if ( line[ 0 ] == '/' )
           {
-            current++;
-            faceIndex.normal = strtoul( current, &current, 10 ) - 1;
+            line++;
+            faceIndex.normal = strtoul( line, &line, 10 ) - 1;
           }
+          if ( faceIndex.position < 0 )
+          {
+            break;
+          }
+          
           faceIndices.Append( faceIndex );
           faceVertexCount++;
-          
-          while ( !isspace( *current ) )
+
+          while ( isspace( line[ 0 ] ) )
           {
-            current++;
+            line++;
           }
         }
         faces.Append( faceVertexCount );
@@ -13817,22 +13834,13 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
         // Ignore line
         break;
     }
-    
-    // Find first non white space char of next line
-    bool foundNewline = false;
-    for ( char c = *current; c; c = *(++current) )
-    {
-      if ( c == '\r' || c == '\n' )
-      {
-        foundNewline = true;
-      }
-      else if ( foundNewline && !isspace( c ) )
-      {
-        break;
-      }
-    }
   }
-  
+
+  if ( !positions.Length() || !faceIndices.Length() )
+  {
+    return false;
+  }
+
   vertices.Clear();
   indices.Clear();
   // @TODO: Reserve vertices and indices
@@ -13865,7 +13873,7 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
         else
         {
           Vertex vertex;
-          vertex.position = ( posIdx >= 0 ? positions[ posIdx ] : ae::Vec4( 0.0f, 1.0f ) );
+          vertex.position = positions[ posIdx ];
           vertex.texture = ( uvIdx >= 0 ? uvs[ uvIdx ] : ae::Vec2( 0.0f ) );
           vertex.normal = ( normIdx >= 0 ? normals[ normIdx ] : ae::Vec4( 0.0f ) );
           vertex.color = ae::Vec4( 1.0f, 1.0f );
