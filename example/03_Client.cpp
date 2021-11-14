@@ -23,7 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
+#include "Common.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -35,13 +36,12 @@ int main()
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	AetherClient* client;
+	ae::Socket conn;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "client" );
 	render.Initialize( &window );
 	input.Initialize( &window );
-	client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
 	
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -49,54 +49,47 @@ int main()
 	while ( !input.quit )
 	{
 		input.Pump();
-		if ( !client->IsConnected() && !client->IsConnecting() )
+		if ( !conn.IsConnected() && !conn.IsConnecting() )
 		{
 			AE_LOG( "Connecting to server" );
-			AetherClient_Connect( client );
+			conn.Connect( ae::Socket::Protocol::TCP, "localhost", "3500" );
 		}
 		
-		ReceiveInfo receiveInfo;
-		while ( AetherClient_Receive( client, &receiveInfo ) )
+		uint16_t messageLen = 0;
+		uint8_t messageData[ 64 ];
+		while ( messageLen = conn.ReceiveMsg( messageData, sizeof(messageData) ) )
 		{
-			switch ( receiveInfo.msgId )
+			if ( messageLen > sizeof( messageData ) )
 			{
-				case kSysMsgServerConnect:
-					AE_LOG( "Connected to server" );
-					break;
-				case kSysMsgServerDisconnect:
-					AE_LOG( "Disconnected from server" );
-					break;
-				case 777:
-					if ( receiveInfo.data.Length() )
-					{
-						AE_LOG( "Received (#) '#'", client->localPlayer->uuid, (char*)&receiveInfo.data[ 0 ] );
-					}
-					break;
-				default:
-					break;
+				AE_LOG( "Received unexpected large message. Disconnect." );
+				conn.Disconnect();
+				break;
 			}
+
+			ae::Str32 msg;
+			ae::BinaryStream rStream = ae::BinaryStream::Reader( messageData, messageLen );
+			rStream.SerializeString( msg );
+			AE_INFO( "Received '#'", msg );
 		}
 
 		if ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
 		{
-			char msg[] = "ping";
-			AE_LOG( "Send (#) '#'", client->localPlayer->uuid, msg );
-			AetherClient_QueueSend( client, 666, true, msg, sizeof(msg) );
+			ae::Str32 msg = "ping";
+			uint8_t messageData[ 64 ];
+			ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, messageLen );
+			wStream.SerializeString( msg );
+			conn.SendMsg( wStream.GetData(), wStream.GetLength() );
+			AE_INFO( "Send '#'", msg );
 		}
-
-		AetherClient_SendAll( client );
 
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
 		render.Present();
-
 		timeStep.Wait();
 	}
 
 	AE_LOG( "Terminate" );
 
-	AetherClient_Delete( client );
-	client = nullptr;
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();

@@ -23,7 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
+#include "Common.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -35,13 +36,13 @@ int main()
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	AetherServer* server;
+	ae::ListenerSocket listener;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "server" );
 	render.Initialize( &window );
 	input.Initialize( &window );
-	server = AetherServer_New( 3500, 0, 1 );
+	listener.Listen( ae::Socket::Protocol::TCP, "3500", 2 );
 	
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -49,41 +50,48 @@ int main()
 	while ( !input.quit )
 	{
 		input.Pump();
-		AetherServer_Update( server );
-		
-		ServerReceiveInfo receiveInfo;
-		while ( AetherServer_Receive( server, &receiveInfo ) )
-		{
-			switch ( receiveInfo.msgId )
-			{
-				case kSysMsgPlayerConnect:
-				{
-					AE_LOG( "Player # connected", receiveInfo.player->uuid );
-					break;
-				}
-				case kSysMsgPlayerDisconnect:
-				{
-					AE_LOG( "Player # disconnected", receiveInfo.player->uuid );
-					break;
-				}
-				case 666:
-				{
-					if ( receiveInfo.data.Length() )
-					{
-						AE_LOG( "Received (#) '#'", receiveInfo.player->uuid, &receiveInfo.data[ 0 ] );
 
-						char msg[] = "pong";
-						AE_LOG( "Send (#) '#'", receiveInfo.player->uuid, msg );
-						AetherServer_QueueSendToPlayer( server, receiveInfo.player, 777, true, msg, sizeof(msg) );
-					}
-					break;
-				}
-				default:
-					break;
-			}
+		while ( ae::Socket* newConn = listener.Accept() )
+		{
+			AE_LOG( "New connection established" );
 		}
 		
-		AetherServer_SendAll( server );
+		for ( uint32_t i = 0; i < listener.GetConnectedCount(); i++ )
+		{
+			ae::Socket* conn = listener.GetConnected( i );
+
+			// Handle messages
+			uint16_t messageLen = 0;
+			uint8_t messageData[ 64 ];
+			while ( messageLen = conn->ReceiveMsg( messageData, sizeof(messageData) ) )
+			{
+				if ( messageLen > sizeof( messageData ) )
+				{
+					AE_LOG( "Received # unexpected large message. Disconnect.", 0 );
+					listener.Destroy( conn );
+					break;
+				}
+				
+				// Receive message data
+				ae::Str32 recvMsg;
+				ae::BinaryStream rStream = ae::BinaryStream::Reader( messageData, messageLen );
+				rStream.SerializeString( recvMsg );
+				
+				// Send response
+				ae::Str32 sendMsg = "pong";
+				ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, messageLen );
+				wStream.SerializeString( sendMsg );
+				conn->QueueMsg( wStream.GetData(), wStream.GetLength() );
+
+				AE_INFO( "Received '#'. Send '#'.", recvMsg, sendMsg );
+			}
+			
+			if ( !conn->IsConnected() )
+			{
+				AE_LOG( "Connection terminated" );
+				listener.Destroy( conn );
+			}
+		}
 
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
@@ -94,8 +102,7 @@ int main()
 
 	AE_LOG( "Terminate" );
 
-	AetherServer_Delete( server );
-	server = nullptr;
+	listener.DestroyAll();
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();
