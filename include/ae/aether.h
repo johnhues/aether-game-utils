@@ -10170,9 +10170,12 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
   NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
   if ( [currentPath isEqualToString:@"/"] )
   {
-    // Current path is root. This is Xcode's new default as of 7/21
-    // @TODO: When inside an App fallback to the resource directory instead
-    return "";
+    char path[ PATH_MAX ];
+    path[ 0 ] = 0;
+    CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL( CFBundleGetMainBundle() );
+    CFURLGetFileSystemRepresentation( resourcesURL, TRUE, (UInt8*)path, PATH_MAX );
+    CFRelease( resourcesURL );
+    return path;
   }
   NSString* path = [NSString stringWithUTF8String:filePath];
   AE_ASSERT( [currentPath characterAtIndex:0] != '~' );

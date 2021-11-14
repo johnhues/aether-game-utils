@@ -2,75 +2,7 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/safeguards.cmake)
 Include(FetchContent)
-
-# Bundle helper
-function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE_VERSION _AE_ICNS_FILE  _AE_SRC_FILES _AE_RESOURCES _AE_LIBS _AE_INCLUDE_DIRS)
-	message(STATUS "_AE_BUNDLE_NAME ${_AE_BUNDLE_NAME}")
-	message(STATUS "_AE_EXECUTABLE_NAME ${_AE_EXECUTABLE_NAME}")
-	message(STATUS "_AE_BUNDLE_ID ${_AE_BUNDLE_ID}")
-	message(STATUS "_AE_BUNDLE_VERSION ${_AE_BUNDLE_VERSION}")
-	message(STATUS "_AE_ICNS_FILE ${_AE_ICNS_FILE}")
-	message(STATUS "_AE_SRC_FILES ${_AE_SRC_FILES}")
-	message(STATUS "_AE_RESOURCES ${_AE_RESOURCES}")
-	message(STATUS "_AE_LIBS ${_AE_LIBS}")
-	message(STATUS "_AE_INCLUDE_DIRS ${_AE_INCLUDE_DIRS}")
-	message(STATUS "")
-
-	if(WIN32)
-		# Create a regular windowed application instead of the default console subsystem target
-		set(_AE_EXE_TYPE WIN32)
-		# Use main instead of WinMain
-		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup")
-	endif()
-
-	add_executable(${_AE_EXECUTABLE_NAME} ${_AE_EXE_TYPE} ${_AE_SRC_FILES})
-	if (_AE_LIBS)
-		target_link_libraries(${_AE_EXECUTABLE_NAME} ${_AE_LIBS})
-	endif()
-	if (_AE_INCLUDE_DIRS)
-		target_include_directories(${_AE_EXECUTABLE_NAME} PRIVATE ${_AE_INCLUDE_DIRS})
-	endif()
-
-	if(WIN32)
-		# Set the working directory while debugging in visual studio to the location of this targets CMakeLists.txt
-		set_property(TARGET ${_AE_EXECUTABLE_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-	elseif(APPLE)
-		# Only add resource files to Apple bundles
-		# Adding resources on Windows causes an issue where files are copied only once on configure
-		target_sources(${_AE_EXECUTABLE_NAME} PUBLIC "${_AE_RESOURCES}")
-		set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
-
-		set(CMAKE_OSX_SYSROOT macosx)
-		set(CMAKE_OSX_DEPLOYMENT_TARGET 10.10)
-
-		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
-			MACOSX_BUNDLE ON
-			OUTPUT_NAME "${_AE_BUNDLE_NAME}"
-			RESOURCE "${_AE_RESOURCES}"
-			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME "YES"
-			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "No"
-			MACOSX_BUNDLE_BUNDLE_NAME "${_AE_BUNDLE_NAME}" # CFBundleName
-			MACOSX_BUNDLE_BUNDLE_VERSION "${_AE_BUNDLE_VERSION}" # CFBundleVersion
-			MACOSX_BUNDLE_GUI_IDENTIFIER "${_AE_BUNDLE_ID}" # CFBundleIdentifier
-			MACOSX_BUNDLE_ICON_FILE "${_AE_ICNS_FILE}" # CFBundleIconFile (*.icns file name without extension)
-			MACOSX_BUNDLE_LONG_VERSION_STRING "${_AE_BUNDLE_VERSION}" # CFBundleLongVersionString
-			MACOSX_BUNDLE_SHORT_VERSION_STRING "${_AE_BUNDLE_VERSION}" # CFBundleShortVersionString
-			XCODE_ATTRIBUTE_INSTALL_PATH "$(LOCAL_APPS_DIR)"
-			XCODE_ATTRIBUTE_SKIP_INSTALL "No"
-		)
-
-		set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
-		if("${CMAKE_GENERATOR}" STREQUAL "Xcode")
-			# CMAKE_CURRENT_BINARY_DIR does not include CONFIG path with Xcode builds
-			set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/${CMAKE_BUILD_TYPE})
-		endif()
-		install(CODE "
-			include(BundleUtilities)
-			set(BU_CHMOD_BUNDLE_ITEMS TRUE)
-			fixup_bundle(\"${CMAKE_INSTALL_PREFIX}/${_AE_BUNDLE_NAME}.app\" \"\" \"${_AE_DEPS_LIBRARY_DIRS}\")
-		" COMPONENT Runtime)
-	endif()
-endfunction()
+Include(AddBundle)
 
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
@@ -93,51 +25,84 @@ FetchContent_MakeAvailable(imguizmo)
 set(EXAMPLE_SOURCES Common.h stb_image.h)
 
 # Hello World
-set(AE_CURRENT_BUNDLE_NAME "Hello World")
-set(AE_CURRENT_EXECUTABLE_NAME 00_hello_world)
-set(AE_CURRENT_SOURCE_FILES 00_HelloWorld.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
+add_bundle("Hello World"
+	"00_hello_world"
+	"ae.00_hello_world"
+	"0.0.0"
+	"Icon"
+	"00_HelloWorld.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
 
 # Window
-set(AE_CURRENT_BUNDLE_NAME "Example")
-set(AE_CURRENT_EXECUTABLE_NAME 01_example)
-set(AE_CURRENT_SOURCE_FILES 01_Example.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
+add_bundle("Example"
+	"01_example"
+	"ae.01_example"
+	"0.0.0"
+	"Icon"
+	"01_Example.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
 
 # Sprites
-set(AE_CURRENT_BUNDLE_NAME "Sprites")
-set(AE_CURRENT_EXECUTABLE_NAME 02_sprites)
-set(AE_CURRENT_SOURCE_FILES 02_Sprites.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns data/circle.png)
-include(AddExecutable)
+add_bundle("Sprites"
+	"02_sprites"
+	"ae.02_sprites"
+	"0.0.0"
+	"Icon"
+	"02_Sprites.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns;data/circle.png"
+	"ae"
+	""
+)
 
 # Client / Server
-set(AE_CURRENT_BUNDLE_NAME "Client")
-set(AE_CURRENT_EXECUTABLE_NAME 03_client)
-set(AE_CURRENT_SOURCE_FILES 03_Client.cpp)
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
-
-set(AE_CURRENT_BUNDLE_NAME "Server")
-set(AE_CURRENT_EXECUTABLE_NAME 03_server)
-set(AE_CURRENT_SOURCE_FILES 03_Server.cpp)
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
+add_bundle("Client"
+	"03_client"
+	"ae.03_client"
+	"0.0.0"
+	"Icon"
+	"03_Client.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
+add_bundle("Server"
+	"03_server"
+	"ae.03_server"
+	"0.0.0"
+	"Icon"
+	"03_Server.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
 
 # Network Objects
-set(AE_CURRENT_BUNDLE_NAME "NetObject Client")
-set(AE_CURRENT_EXECUTABLE_NAME 04_net_object_client)
-set(AE_CURRENT_SOURCE_FILES 04_NetObjectClient.cpp 04_NetObjectCommon.h ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
-
-set(AE_CURRENT_BUNDLE_NAME "NetObject Server")
-set(AE_CURRENT_EXECUTABLE_NAME 04_net_object_server)
-set(AE_CURRENT_SOURCE_FILES 04_NetObjectServer.cpp 04_NetObjectCommon.h ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
+add_bundle("NetObject Client"
+	"04_net_object_client"
+	"ae.04_net_object_client"
+	"0.0.0"
+	"Icon"
+	"04_NetObjectClient.cpp;04_NetObjectCommon.h;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
+add_bundle("NetObject Server"
+	"04_net_object_server"
+	"ae.04_net_object_server"
+	"0.0.0"
+	"Icon"
+	"04_NetObjectServer.cpp;04_NetObjectCommon.h;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
 
 # Input
 add_bundle("Text Input"
@@ -152,25 +117,40 @@ add_bundle("Text Input"
 )
 
 # Triangle
-set(AE_CURRENT_BUNDLE_NAME "Triangle")
-set(AE_CURRENT_EXECUTABLE_NAME 06_triangle)
-set(AE_CURRENT_SOURCE_FILES 06_Triangle.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
+add_bundle("Triangle"
+	"06_triangle"
+	"ae.06_triangle"
+	"0.0.0"
+	"Icon"
+	"06_Triangle.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
 
 # Cube
-set(AE_CURRENT_BUNDLE_NAME "Cube")
-set(AE_CURRENT_EXECUTABLE_NAME 07_cube)
-set(AE_CURRENT_SOURCE_FILES 07_Cube.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
+add_bundle("Cube"
+	"07_cube"
+	"ae.07_cube"
+	"0.0.0"
+	"Icon"
+	"07_Cube.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
 
 # Audio
-set(AE_CURRENT_BUNDLE_NAME "Audio")
-set(AE_CURRENT_EXECUTABLE_NAME 08_audio)
-set(AE_CURRENT_SOURCE_FILES 08_Audio.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns data/music.wav data/sound.wav)
-include(AddExecutable)
+add_bundle("Audio"
+	"08_audio"
+	"ae.08_audio"
+	"0.0.0"
+	"Icon"
+	"08_Audio.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns;data/music.wav;data/sound.wav"
+	"ae"
+	""
+)
 
 # Platformer2D
 add_bundle("Platformer2D"
@@ -185,11 +165,16 @@ add_bundle("Platformer2D"
 )
 
 # Splines
-set(AE_CURRENT_BUNDLE_NAME "Splines")
-set(AE_CURRENT_EXECUTABLE_NAME 10_splines)
-set(AE_CURRENT_SOURCE_FILES 10_Splines.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns data/circle.png)
-include(AddExecutable)
+add_bundle("Splines"
+	"10_splines"
+	"ae.10_splines"
+	"0.0.0"
+	"Icon"
+	"10_Splines.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns;data/circle.png"
+	"ae"
+	""
+)
 
 # Terrain
 add_bundle("Terrain"
@@ -198,32 +183,42 @@ add_bundle("Terrain"
 	"0.0.0"
 	"Icon"
 	"11_terrain.cpp;${EXAMPLE_SOURCES}"
-	"data/Icon.icns;data/terrain.png;data/font.png"
+	"data/Icon.icns;data/font.png"
 	"ae;imgui;imguizmo"
 	""
 )
 
 # Geometry
-set(AE_CURRENT_BUNDLE_NAME "Geometry")
-set(AE_CURRENT_EXECUTABLE_NAME 12_Geometry)
-set(AE_CURRENT_SOURCE_FILES 12_Geometry.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns data/font.png)
-include(AddExecutable)
+add_bundle("Geometry"
+	"12_geometry"
+	"ae.12_geometry"
+	"0.0.0"
+	"Icon"
+	"12_Geometry.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns;data/font.png"
+	"ae"
+	""
+)
 
 # FileDialogs
-set(AE_CURRENT_BUNDLE_NAME "FileDialogs")
-set(AE_CURRENT_EXECUTABLE_NAME 13_FileDialogs)
-set(AE_CURRENT_SOURCE_FILES 13_FileDialogs.cpp ${EXAMPLE_SOURCES})
-set(AE_RESOURCES data/Icon.icns)
-include(AddExecutable)
+add_bundle("File Dialogs"
+	"13_file_dialogs"
+	"ae.13_file_dialogs"
+	"0.0.0"
+	"Icon"
+	"13_FileDialogs.cpp;${EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
 
 # Emscripten
 add_subdirectory(14_Emscripten)
 
 # OBJViewer
 add_bundle("OBJViewer"
-	"15_OBJViewer"
-	"ae.15_OBJViewer"
+	"15_obj_viewer"
+	"ae.15_obj_viewer"
 	"0.0.0"
 	"Icon"
 	"15_OBJViewer.cpp;${EXAMPLE_SOURCES}"
