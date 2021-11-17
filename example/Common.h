@@ -222,63 +222,74 @@ class ListenerSocket; // Forward decl for ae::Socket
 class Socket
 {
 public:
-  enum class Protocol { TCP, UDP };
+  enum class Protocol { None, TCP, UDP };
 
-  Socket();
+  Socket( ae::Tag tag );
   ~Socket();
 
-  //! Attempts to connect to the given address over the given protocol. When
-  //! re-connecting this clears any pending sent or received data. To avoid
-  //! losing received data call ae::Socket::ReceiveData() or ae::Socket::ReceiveMsg()
-  //! repeatedly until they return empty before calling ae::Socket::Connect().
-  //! In this scenario pending sent data will be lost. @TODO: Calling ae::Socket::Connect
-  //! on a socket returned with ae::ListenerSocket::Accept().
+  //! Attempts to connect to the 'address' over the given protocol. Calling ae::Socket::Connect() clears
+  //! all pending sent and received data. To avoid losing received data call ae::Socket::ReceiveData() or
+  //! ae::Socket::ReceiveMsg() repeatedly until they return empty before calling ae::Socket::Connect().
+  //! In this scenario all pending sent data will always be lost. @TODO: Calling ae::Socket::Connect() on a
+  //! socket returned with ae::ListenerSocket::Accept().
   bool Connect( ae::Socket::Protocol proto, const char* address, const char* port );
   //! Closes ths connection established with ae::Socket::Connect().
   void Disconnect();
-  //! Returns true if the connection established with ae::Socket::Connect() or
-  //! ae::ListenerSocket::Accept() is still active. If this ae::Socket was returned
-  //! from ae::ListenerSocket::Accept() then ae::ListenerSocket::Destroy() or
-  //! ae::ListenerSocket::DestroyAll() should be called to clean it up. This can
-  //! return false while received data is still waiting to be read, and so
-  //! ae::Socket::ReceiveData() or ae::Socket::ReceiveMsg() can still be called.
+  //! Returns true if the connection established with ae::Socket::Connect() or ae::ListenerSocket::Accept() is
+  //! still active. If this ae::Socket was returned from ae::ListenerSocket::Accept() then
+  //! ae::ListenerSocket::Destroy() or ae::ListenerSocket::DestroyAll() should be called to clean it up.
+  //! This can return false while received data is still waiting to be read, and so ae::Socket::ReceiveData()
+  //! or ae::Socket::ReceiveMsg() can still be called.
   bool IsConnected() const;
-    
-  //! Queues 'length' data to be sent with ae::Socket::SendAll(). Call
-  //! ae::Socket::QueueData() multiple times to batch data sent with
-  //! ae::Socket::SendAll(). Data sent with ae::Socket::QueueData() can be read with
-  //! ae::Socket::PeekData() and ae::Socket::ReceiveData(). It's advised that
-  //! you do not mix ae::Socket::QueueMsg() and ae::Socket::QueueData().
+
+  //! Queues 'length' data to be sent with ae::Socket::SendAll(). Call ae::Socket::QueueData() multiple times
+  //! to batch data sent with ae::Socket::SendAll(). Data sent with ae::Socket::QueueData() can be read by
+  //! the receiver with ae::Socket::PeekData() and ae::Socket::ReceiveData(). It's advised that you do not
+  //! mix ae::Socket::QueueMsg() and ae::Socket::QueueData().
   void QueueData( const void* data, uint32_t length );
-  //! 
-  bool PeekData( void* dataOut, uint16_t length );
+  //! Returns true if 'length' bytes have been received. If 'dataOut' is non-null and 'length' bytes have been
+  //! received the data will be written to 'dataOut'. The read head will not move, so subsequent calls to
+  //! ae::Socket::PeekData() will return the same result. It's useful to call ae::Socket::DiscardData() and pass
+  //! it 'length' after receiving data through ae::Socket::PeekData().
+  bool PeekData( void* dataOut, uint16_t length, uint32_t offset );
+  //! Returns true if 'length' + 'offset' bytes have been received. If 'dataOut' is also non-null, pending received
+  //! data at 'offset' will be written to 'dataOut'. In this case the read head will move forward 'length' bytes.
+  //! Calling ae::Socket::ReceiveData() with a null 'dataOut' and calling ae::Socket::DiscardData() has the
+  //! exact same effect.
   bool ReceiveData( void* dataOut, uint16_t length );
+  //! Returns true if 'length' bytes have been received. In this case the read head will move forward 'length' bytes.
+  //! Calling ae::Socket::DiscardData() and calling ae::Socket::ReceiveData() with a null 'dataOut' has
+  //! the exact same effect.
   bool DiscardData( uint16_t length );
 
-  //! Queues data for sending. Ideally you should call ae::Socket::QueueMsg() for each
-  //! logical chunk of data you need to send over a 'network tick' and then
-  //! finally call ae::Socket::SendAll() once. A two byte (network order) message header is
-  //! prepended to the given message. It's unadvised to mix ae::Socket::QueueMsg() calls
-  //! with ae::Socket::QueueData().
+  //! Queues data for sending. A two byte (network order) message header is prepended to the given
+  //! message. Ideally you should call ae::Socket::QueueMsg() for each logical chunk of data you need to
+  //! send over a 'network tick' and then finally call ae::Socket::SendAll() once. It's unadvised to mix
+  //! ae::Socket::QueueMsg() calls with ae::Socket::QueueData().
   void QueueMsg( const void* data, uint16_t length );
-  //! Can return a value greater than maxLength, in which case 'dataOut' is not
-  //! written to. Call ae::Socket::ReceiveMessage() again with a big enough buffer or call
+  //! Can return a value greater than maxLength, in which case 'dataOut' is not modified.
+  //! Call ae::Socket::ReceiveMessage() again with a big enough buffer or skip the message by calling
   //! ae::Socket::DiscardMessage(). Uses a two byte (network order) message header.
   //! It's unadvised to mix ae::Socket::ReceiveMsg() calls with ae::Socket::ReceiveData().
   uint16_t ReceiveMsg( void* dataOut, uint16_t maxLength );
-  //! Discards one received sent with ae::Socket::QueueMsg(). Uses the two byte (network order)
-  //! message header to determine discard data size.
+  //! Discards one received sent with ae::Socket::QueueMsg(). Uses the two byte (network order) message
+  //! header to determine discard data size.
   bool DiscardMsg();
 
-  //! Sends all queued data from ae::Socket::QueueData() and ae::Socket::QueueMsg().
-  void SendAll();
+  //! Returns the number of bytes sent. Sends all queued data from ae::Socket::QueueData() and
+  //! ae::Socket::QueueMsg(). If the connection is lost all pending sent data will be discarded.
+  //! See ae::Socket::Connect() for more information.
+  uint32_t SendAll();
 
 private:
+  bool m_SocketSetup();
   int m_sock = 0;
-  ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
-  ae::Array< uint8_t > m_recvData = AE_ALLOC_TAG_NET;
+  Protocol m_protocol = Protocol::None;
+  uint32_t m_readHead = 0;
+  ae::Array< uint8_t > m_sendData;
+  ae::Array< uint8_t > m_recvData;
 public: // Internal
-  explicit Socket( int s );
+  Socket( ae::Tag tag, int s, Protocol proto );
 };
 
 //------------------------------------------------------------------------------
@@ -287,21 +298,24 @@ public: // Internal
 class ListenerSocket
 {
 public:
-  ListenerSocket();
+  ListenerSocket( ae::Tag tag );
   ~ListenerSocket();
 
   bool Listen( ae::Socket::Protocol proto, const char* port, uint32_t maxConnections );
+  bool IsListening() const;
   ae::Socket* Accept(); //!< Returns a socket if a connection has been established.
   void Reset(); //!< Disconnects all connections and stops listening. Must still call Destroy() or DestroyAll() on existing connections.
   void Destroy( ae::Socket* sock ); //!< Disconnects and releases an existing socket from Accept().
   void DestroyAll(); //!< Disconnects and releases all existing sockets from Accept(). It is not safe to access released sockets after calling this.
 
-  ae::Socket* GetConnected( uint32_t idx );
-  uint32_t GetConnectedCount() const;
+  ae::Socket* GetConnection( uint32_t idx );
+  uint32_t GetConnectionCount() const;
 
 private:
+  ae::Tag m_tag;
   int m_sock = 0;
-  ae::Array< ae::Socket* > m_connections = AE_ALLOC_TAG_NET;
+  ae::Socket::Protocol m_protocol = ae::Socket::Protocol::None;
+  ae::Array< ae::Socket* > m_connections;
 };
 
 }
@@ -309,8 +323,22 @@ private:
 //------------------------------------------------------------------------------
 // Includes
 //------------------------------------------------------------------------------
+#if _AE_WINDOWS_
 #include <WinSock2.h>
 #include <WS2tcpip.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <netdb.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <sys/ioctl.h>
+#include <netinet/tcp.h>
+#endif
 
 namespace ae
 {
@@ -318,20 +346,40 @@ namespace ae
 //------------------------------------------------------------------------------
 // ae::Socket member functions
 //------------------------------------------------------------------------------
-Socket::Socket()
-{
-}
-
-Socket::Socket( int s )
-  : m_sock( s )
+Socket::Socket( ae::Tag tag ) :
+  m_sendData( tag ),
+  m_recvData( tag )
 {}
+
+Socket::Socket( ae::Tag tag, int s, Protocol proto ) :
+  m_sock( s ),
+  m_protocol( proto ),
+  m_sendData( tag ),
+  m_recvData( tag )
+{
+  if ( !m_SocketSetup() )
+  {
+    Disconnect();
+  }
+}
 
 Socket::~Socket()
 {
+  Disconnect();
 }
 
 bool Socket::Connect( ae::Socket::Protocol proto, const char* address, const char* port )
 {
+  m_readHead = 0;
+  m_sendData.Clear();
+  m_recvData.Clear();
+  
+  if ( proto == Protocol::None )
+  {
+    return false;
+  }
+  m_protocol = proto;
+  
 #if _AE_WINDOWS_
   WSADATA wsaData;
   if ( WSAStartup( MAKEWORD( 1, 1 ), &wsaData ) != 0 )
@@ -343,7 +391,7 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, const cha
   addrinfo hints;
   memset( &hints, 0, sizeof hints );
   hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_socktype = ( proto == ae::Socket::Protocol::TCP ) ? SOCK_STREAM : SOCK_DGRAM;
 
   addrinfo* servinfo = nullptr;
   if ( int result = getaddrinfo( address, port, &hints, &servinfo ) )
@@ -376,25 +424,60 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, const cha
 
   freeaddrinfo( servinfo );
 
-  // Disable blocking
+  if ( !m_SocketSetup() )
+  {
+    Disconnect();
+    return false;
+  }
+
+  return true;
+}
+
+bool Socket::m_SocketSetup()
+{
+// Disable blocking
 #if _AE_WINDOWS_
   u_long mode = 1;
-  ioctlsocket( m_sock, FIONBIO, &mode );
+  if ( ioctlsocket( m_sock, FIONBIO, &mode ) )
 #else
-  fcntl( m_sock, F_SETFL, O_NONBLOCK );
+  if ( fcntl( m_sock, F_SETFL, O_NONBLOCK ) )
 #endif
+  {
+    return false;
+  }
+
+  // Disable Naggles algorithm
+#if _AE_WINDOWS_
+  const char* yes = "1";
+  socklen_t optlen = 1;
+#else
+  int yesValue = 1;
+  int* yes = &yesValue;
+  socklen_t optlen = sizeof(int);
+#endif
+  if ( setsockopt( m_sock, SOL_SOCKET, TCP_NODELAY, yes, optlen ) == -1 )
+  {
+    return false;
+  }
 
   return true;
 }
 
 void Socket::Disconnect()
 {
+  if ( !IsConnected() )
+  {
+    AE_ASSERT( m_protocol == Protocol::None );
+    return;
+  }
 #if _AE_WINDOWS_
   closesocket( m_sock );
 #else
   close( m_sock );
 #endif
+  // @NOTE: Do not modify buffers here, Connect() will perform actual cleanup
   m_sock = 0;
+  m_protocol = Protocol::None;
 }
 
 bool Socket::IsConnected() const
@@ -404,54 +487,221 @@ bool Socket::IsConnected() const
 
 void Socket::QueueData( const void* data, uint32_t length )
 {
+  if ( !IsConnected() )
+  {
+    return;
+  }
+  m_sendData.Append( (const uint8_t*)data, length );
 }
 
-bool Socket::PeekData( void* dataOut, uint16_t maxLength )
+bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 {
+  if ( !length )
+  {
+    return false;
+  }
+  
+  while ( IsConnected() && m_recvData.Length() < m_readHead + offset + length )
+  {
+    uint32_t readSize = 0;
+    if ( m_protocol == Protocol::TCP )
+    {
+      int availableBytes = 0;
+      if ( ioctl( m_sock, FIONREAD, &availableBytes ) == 0 )
+      {
+        readSize = availableBytes;
+      }
+    }
+    else if ( m_protocol == Protocol::UDP )
+    {
+      AE_FAIL_MSG( "Not implemented" );
+      // Get full datagram size
+      //int buflen = recv(sockfd, NULL, 0, MSG_PEEK | MSG_TRUNC);
+      //if (buflen < 0)
+      //{
+      //  // handle error
+      //  return;
+      //}
+      //uint8_t buf[ buflen ];
+      //rxlen = recv(sockfd, buf, buflen, 0);
+      //if (rxlen < 0)
+      //{
+      //  // again, handle error
+      //  return;
+      //}
+    }
+    else
+    {
+      AE_FAIL_MSG( "Invalid protocol" );
+    }
+
+    if ( !readSize )
+    {
+      // Check for closed connection
+      if ( m_protocol == Protocol::TCP )
+      {
+        uint8_t buffer;
+        int result = recv( m_sock, &buffer, 1, MSG_PEEK );
+        if ( !result || ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN ) )
+        {
+          Disconnect(); // Orderly shutdown
+        }
+      }
+      return false;
+    }
+
+    AE_ASSERT( readSize );
+    uint32_t totalSize = m_recvData.Length() + readSize;
+    m_recvData.Reserve( totalSize );
+    uint8_t* buffer = m_recvData.End();
+    while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
+    AE_ASSERT( buffer == m_recvData.End() - readSize );
+    
+    int result = recv( m_sock, buffer, readSize, 0 );
+    if ( result < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) )
+    {
+      return false;
+    }
+    else if ( result == 0 && m_protocol == Protocol::TCP )
+    {
+      Disconnect(); // Orderly shutdown
+      return false;
+    }
+    else if ( result != readSize )
+    {
+      Disconnect();
+      return false;
+    }
+    else if ( result )
+    {
+      break; // Received new data!
+    }
+  }
+  
+  if ( m_recvData.Length() >= m_readHead + offset + length )
+  {
+    if ( dataOut )
+    {
+      memcpy( dataOut, m_recvData.Begin() + m_readHead + offset, length );
+    }
+    return true;
+  }
   return false;
 }
 
-bool Socket::ReceiveData( void* dataOut, uint16_t maxLength )
+bool Socket::ReceiveData( void* dataOut, uint16_t length )
 {
+  if ( PeekData( dataOut, length, 0 ) )
+  {
+    DiscardData( length );
+  }
   return false;
 }
 
 bool Socket::DiscardData( uint16_t length )
 {
+  if ( m_readHead + length >= m_recvData.Length() )
+  {
+    m_readHead += length;
+    if ( m_readHead == m_recvData.Length() )
+    {
+      m_recvData.Clear();
+      m_readHead = 0;
+    }
+    return true;
+  }
   return false;
 }
 
 void Socket::QueueMsg( const void* data, uint16_t length )
 {
-
+  if ( !IsConnected() || !length )
+  {
+    return;
+  }
+  AE_ASSERT( length <= ae::MaxValue< uint16_t >() );
+  uint16_t length16 = htons( length );
+  m_sendData.Append( (const uint8_t*)&length16, sizeof(length16) );
+  m_sendData.Append( (const uint8_t*)data, length );
 }
 
 uint16_t Socket::ReceiveMsg( void* dataOut, uint16_t maxLength )
 {
+  uint16_t length = 0;
+  if ( PeekData( &length, sizeof(length), 0 ) )
+  {
+    length = ntohs( length );
+    if ( length > maxLength )
+    {
+      return length;
+    }
+    else if ( PeekData( dataOut, length, 2 ) )
+    {
+      DiscardData( length + 2 );
+      return length;
+    }
+  }
   return 0;
 }
 
 bool Socket::DiscardMsg()
 {
+  uint16_t length = 0;
+  if ( PeekData( &length, sizeof(length), 0 ) )
+  {
+    length = ntohs( length );
+    if ( PeekData( nullptr, length, 2 ) )
+    {
+      DiscardData( length + 2 );
+      return true;
+    }
+  }
   return false;
 }
 
-void Socket::SendAll()
-{}
+uint32_t Socket::SendAll()
+{
+  if ( !IsConnected() || !m_sendData.Length() )
+  {
+    return 0;
+  }
+  
+  int result = send( m_sock, m_sendData.Begin(), m_sendData.Length(), 0 );
+  if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
+  {
+    Disconnect();
+    return 0;
+  }
+  else
+  {
+    AE_ASSERT( m_sendData.Length() == result );
+    m_sendData.Clear();
+    return result;
+  }
+  return 0;
+}
 
 //------------------------------------------------------------------------------
 // ae::ListenerSocket member functions
 //------------------------------------------------------------------------------
-ListenerSocket::ListenerSocket()
-{
-}
+ListenerSocket::ListenerSocket( ae::Tag tag ) :
+  m_tag( tag ),
+  m_connections( tag )
+{}
 
 ListenerSocket::~ListenerSocket()
 {
+  AE_ASSERT_MSG( !m_connections.Length(), "Allocated connections must be destroyed before ae::ListenerSocket destruction" );
+  Reset();
 }
 
 bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint32_t maxConnections )
 {
+  if ( proto == ae::Socket::Protocol::None )
+  {
+    return false;
+  }
+  
 #if _AE_WINDOWS_
   WSADATA wsaData;
   if ( WSAStartup( MAKEWORD( 1, 1 ), &wsaData ) != 0 )
@@ -461,16 +711,16 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint3
 #endif
 
   addrinfo hints;
-  memset( &hints, 0, sizeof hints );
+  memset( &hints, 0, sizeof(hints) );
   hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_PASSIVE; // use my IP
+  hints.ai_socktype = ( proto == ae::Socket::Protocol::TCP ) ? SOCK_STREAM : SOCK_DGRAM;
+  hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
 
   addrinfo* servinfo;
-  if ( getaddrinfo( nullptr, port, &hints, &servinfo ) )
+  if ( getaddrinfo( "localhost", port, &hints, &servinfo ) )
   {
-    AE_ERR( "error");
-    return 1;
+    AE_ASSERT( m_sock == 0 && m_protocol == ae::Socket::Protocol::None );
+    return false;
   }
 
   addrinfo* p = nullptr;
@@ -484,12 +734,16 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint3
 
 #if _AE_WINDOWS_
     const char* yes = "1";
+    socklen_t optlen = 1;
 #else
     int yesValue = 1;
     int* yes = &yesValue;
+    socklen_t optlen = sizeof(int);
 #endif
-    if ( setsockopt( m_sock, SOL_SOCKET, SO_REUSEADDR, yes, sizeof( int ) ) == -1 )
+    if ( setsockopt( m_sock, SOL_SOCKET, SO_REUSEADDR, yes, optlen ) == -1 )
     {
+      m_sock = 0;
+      AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
       return false;
     }
 
@@ -503,18 +757,22 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint3
 #else
     close( m_sock );
 #endif
+    m_sock = 0;
   }
 
   freeaddrinfo( servinfo );
 
   if ( !p )
   {
+    AE_ASSERT( m_sock == 0 && m_protocol == ae::Socket::Protocol::None );
     return false;
   }
 
   int backlog = 10;
   if ( listen( m_sock, backlog ) == -1 )
   {
+    m_sock = 0;
+    AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
     return false;
   }
 
@@ -526,17 +784,34 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint3
   fcntl( m_sock, F_SETFL, O_NONBLOCK );
 #endif
 
+  m_protocol = proto;
   return true;
+}
+
+bool ListenerSocket::IsListening() const
+{
+  if ( m_sock )
+  {
+    return true;
+  }
+  AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
+  return false;
 }
 
 ae::Socket* ListenerSocket::Accept()
 {
+  if ( !m_sock )
+  {
+    AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
+    return nullptr;
+  }
+  
   sockaddr_storage their_addr;
   socklen_t sin_size = sizeof(their_addr);
   int new_fd = accept( m_sock, (sockaddr*)&their_addr, &sin_size );
   if ( new_fd == -1 )
   {
-    return false;
+    return nullptr;
   }
 
   // Disable blocking
@@ -547,31 +822,50 @@ ae::Socket* ListenerSocket::Accept()
   fcntl( m_sock, F_SETFL, O_NONBLOCK );
 #endif
 
-  ae::Socket* newSock = ae::New< ae::Socket >( AE_ALLOC_TAG_NET, new_fd );
+  AE_ASSERT( m_protocol != ae::Socket::Protocol::None );
+  ae::Socket* newSock = ae::New< ae::Socket >( m_tag, m_tag, new_fd, m_protocol );
   m_connections.Append( newSock );
   return newSock;
 }
 
 void ListenerSocket::Reset()
 {
+  for ( ae::Socket* sock : m_connections )
+  {
+    sock->Disconnect();
+  }
+#if _AE_WINDOWS_
+  closesocket( m_sock );
+#else
+  close( m_sock );
+#endif
+  m_sock = 0;
+  m_protocol = ae::Socket::Protocol::None;
 }
 
 void ListenerSocket::Destroy( ae::Socket* sock )
 {
+  ae::Delete( sock );
+  m_connections.RemoveAll( sock );
 }
 
 void ListenerSocket::DestroyAll()
 {
+  for ( ae::Socket* sock : m_connections )
+  {
+    ae::Delete( sock );
+  }
+  m_connections.Clear();
 }
 
-ae::Socket* ListenerSocket::GetConnected( uint32_t idx )
+ae::Socket* ListenerSocket::GetConnection( uint32_t idx )
 {
-  return nullptr;
+  return m_connections[ idx ];
 }
 
-uint32_t ListenerSocket::GetConnectedCount() const
+uint32_t ListenerSocket::GetConnectionCount() const
 {
-  return 0;
+  return m_connections.Length();
 }
 
 }

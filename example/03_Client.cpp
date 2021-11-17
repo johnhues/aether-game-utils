@@ -26,6 +26,8 @@
 #include "ae/aether.h"
 #include "Common.h"
 
+const ae::Tag kClientAllocTag = "client";
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -36,7 +38,7 @@ int main()
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	ae::Socket conn;
+	ae::Socket conn = kClientAllocTag;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "client" );
@@ -46,18 +48,21 @@ int main()
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
+	bool wasConnected = false;
 	while ( !input.quit )
 	{
 		input.Pump();
-		if ( !conn.IsConnected() && !conn.IsConnecting() )
+		const char* address = "localhost";
+		const char* port = "7230";
+		if ( !conn.IsConnected() && conn.Connect( ae::Socket::Protocol::TCP, address, port ) )
 		{
-			AE_LOG( "Connecting to server" );
-			conn.Connect( ae::Socket::Protocol::TCP, "localhost", "3500" );
+			AE_LOG( "Connected to '#:#'", address, port );
+			wasConnected = true;
 		}
 		
 		uint16_t messageLen = 0;
 		uint8_t messageData[ 64 ];
-		while ( messageLen = conn.ReceiveMsg( messageData, sizeof(messageData) ) )
+		while ( ( messageLen = conn.ReceiveMsg( messageData, sizeof(messageData) ) ) )
 		{
 			if ( messageLen > sizeof( messageData ) )
 			{
@@ -71,17 +76,24 @@ int main()
 			rStream.SerializeString( msg );
 			AE_INFO( "Received '#'", msg );
 		}
+		
+		if ( wasConnected && !conn.IsConnected() )
+		{
+			AE_INFO( "Disconnected" );
+			wasConnected = false;
+		}
 
 		if ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
 		{
 			ae::Str32 msg = "ping";
 			uint8_t messageData[ 64 ];
-			ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, messageLen );
+			ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, sizeof(messageData) );
 			wStream.SerializeString( msg );
-			conn.SendMsg( wStream.GetData(), wStream.GetLength() );
+			conn.QueueMsg( wStream.GetData(), wStream.GetOffset() );
 			AE_INFO( "Send '#'", msg );
 		}
 
+		conn.SendAll();
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
 		render.Present();

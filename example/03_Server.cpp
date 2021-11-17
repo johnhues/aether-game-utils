@@ -26,6 +26,8 @@
 #include "ae/aether.h"
 #include "Common.h"
 
+const ae::Tag kServerAllocTag = "client";
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -36,13 +38,12 @@ int main()
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	ae::ListenerSocket listener;
+	ae::ListenerSocket listener = kServerAllocTag;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "server" );
 	render.Initialize( &window );
 	input.Initialize( &window );
-	listener.Listen( ae::Socket::Protocol::TCP, "3500", 2 );
 	
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -51,19 +52,27 @@ int main()
 	{
 		input.Pump();
 
+		if ( !listener.IsListening() )
+		{
+			const char* port = "7230";
+			if ( listener.Listen( ae::Socket::Protocol::TCP, port, 2 ) )
+			{
+				AE_LOG( "Listening for connections on port '#'", port );
+			}
+		}
 		while ( ae::Socket* newConn = listener.Accept() )
 		{
 			AE_LOG( "New connection established" );
 		}
 		
-		for ( uint32_t i = 0; i < listener.GetConnectedCount(); i++ )
+		for ( uint32_t i = 0; i < listener.GetConnectionCount(); i++ )
 		{
-			ae::Socket* conn = listener.GetConnected( i );
+			ae::Socket* conn = listener.GetConnection( i );
 
 			// Handle messages
 			uint16_t messageLen = 0;
 			uint8_t messageData[ 64 ];
-			while ( messageLen = conn->ReceiveMsg( messageData, sizeof(messageData) ) )
+			while ( ( messageLen = conn->ReceiveMsg( messageData, sizeof(messageData) ) ) )
 			{
 				if ( messageLen > sizeof( messageData ) )
 				{
@@ -79,12 +88,13 @@ int main()
 				
 				// Send response
 				ae::Str32 sendMsg = "pong";
-				ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, messageLen );
+				ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, sizeof(messageData) );
 				wStream.SerializeString( sendMsg );
-				conn->QueueMsg( wStream.GetData(), wStream.GetLength() );
+				conn->QueueMsg( wStream.GetData(), wStream.GetOffset() );
 
 				AE_INFO( "Received '#'. Send '#'.", recvMsg, sendMsg );
 			}
+			conn->SendAll();
 			
 			if ( !conn->IsConnected() )
 			{
