@@ -482,17 +482,36 @@ int _IsConnected( int sock )
 
 bool _GetAddressString( const sockaddr* addr, char (&addrStr)[ INET6_ADDRSTRLEN ] )
 {
+  addrStr[ 0 ] = 0;
   void* inAddr = nullptr;
-  if ( addr->sa_family == AF_INET)
+  sa_family_t family = addr->sa_family;
+  if ( family == AF_INET)
   {
     inAddr = &( ( (sockaddr_in*)addr )->sin_addr );
   }
-  else
+  else if ( family == AF_INET6 )
   {
     inAddr = &( ( (sockaddr_in6*)addr )->sin6_addr );
   }
-  addrStr[ 0 ] = 0;
+  else
+  {
+    return false;
+  }
   return inet_ntop( addr->sa_family, inAddr, addrStr, sizeof(addrStr) ) != nullptr;
+}
+
+uint16_t _GetPort( const sockaddr* addr )
+{
+  sa_family_t family = addr->sa_family;
+  if ( family == AF_INET )
+  {
+    return ( (sockaddr_in*)addr )->sin_port;
+  }
+  else if ( family == AF_INET6 )
+  {
+    return ( (sockaddr_in6*)addr )->sin6_port;
+  }
+  return 0;
 }
 
 //------------------------------------------------------------------------------
@@ -997,22 +1016,17 @@ ae::Socket* ListenerSocket::Accept()
     }
     
     char addrStr[ INET6_ADDRSTRLEN ];
-    sockaddr_in sockAddr4;
-    sockaddr_in6 sockAddr6;
-    bool ipv4 = ( &listenSock == &m_sock4 );
-    sockaddr* sockAddr = ipv4 ? (sockaddr*)&sockAddr4 : (sockaddr*)&sockAddr6;
-    socklen_t sockAddrLenOrig = ipv4 ? sizeof(sockAddr4) : sizeof(sockAddr6);
-    socklen_t sockAddrLen = sockAddrLenOrig;
-    if ( getpeername( newSock, sockAddr, &sockAddrLen ) == -1
-      || sockAddrLen > sockAddrLenOrig
-      || !_GetAddressString( sockAddr, addrStr ) )
+    sockaddr_storage sockAddr;
+    socklen_t sockAddrLen = sizeof(sockAddr);
+    if ( getpeername( newSock, (sockaddr*)&sockAddr, &sockAddrLen ) == -1
+      || sockAddrLen > sizeof(sockAddr)
+      || !_GetAddressString( (sockaddr*)&sockAddr, addrStr ) )
     {
       _CloseSocket( newSock );
       continue;
     }
-    uint16_t port = ipv4 ? sockAddr4.sin_port : sockAddr6.sin6_port;
     
-    ae::Socket* s = ae::New< ae::Socket >( m_tag, m_tag, newSock, m_protocol, addrStr, port );
+    ae::Socket* s = ae::New< ae::Socket >( m_tag, m_tag, newSock, m_protocol, addrStr, _GetPort( (sockaddr*)&sockAddr ) );
     return m_connections.Append( s );
   }
   return nullptr;
