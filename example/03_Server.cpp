@@ -54,10 +54,9 @@ int main()
 
 		if ( !listener.IsListening() )
 		{
-			const char* port = "7230";
-			if ( listener.Listen( ae::Socket::Protocol::TCP, port, 2 ) )
+			if ( listener.Listen( ae::Socket::Protocol::TCP, 7230, 2 ) )
 			{
-				AE_LOG( "Listening for connections on port '#'", port );
+				AE_LOG( "Listening for connections on port '#'", listener.GetPort() );
 			}
 		}
 		while ( ae::Socket* newConn = listener.Accept() )

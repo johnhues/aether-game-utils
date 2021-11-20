@@ -281,8 +281,15 @@ public:
   //! See ae::Socket::Connect() for more information.
   uint32_t SendAll();
   
+  //! Returns the remote address that this socket is currently connected to or zero length string if not connected.
   const char* GetAddress() const { return m_address.c_str(); }
+  //! Returns the resolved remote address that this socket is currently connected to or zero length string if
+  //! not connected. This will either be a an IPv4 or IPv6 address. If ae::Socket::Connect() was given an
+  //! ip address ae::Socket::GetAddress() will likely return the same address.
   const char* GetResolvedAddress() const { return m_resolvedAddress.c_str(); }
+  //! Returns the protocol that this socket is currently connected with or ae::Socket::Protocol::None if not connected.
+  ae::Socket::Protocol GetProtocol() const { return m_protocol; }
+  //! Returns the remote port that this socket is currently connected to or 0 if not connected.
   uint16_t GetPort() const { return m_port; }
 
 private:
@@ -314,9 +321,10 @@ public:
   ~ListenerSocket();
 
   //! Starts listening on the given port. Will accept both incoming ipv4 and ipv6 connections. Does not affect
-  //! existing ae::Sockets.
-  bool Listen( ae::Socket::Protocol proto, const char* port, uint32_t maxConnections );
-  //! ae::ListenerSocket will no longer accept new connections. Does not affect existing ae::Sockets.
+  //! existing ae::Sockets allocated with ae::ListenerSocket::Accept().
+  bool Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t maxConnections );
+  //! ae::ListenerSocket will no longer accept new connections. Does not affect existing ae::Sockets allocated
+  //! with ae::ListenerSocket::Accept().
   void StopListening();
   //! Returns true if listening for either ipv4 or ipv6 connections.
   bool IsListening() const;
@@ -328,16 +336,22 @@ public:
   //! Disconnects and releases all existing sockets from Accept(). It is not safe to access released sockets
   //! obtained through ae::ListenerSocket::Accept() after calling this.
   void DestroyAll();
+  
   //! Returns ae::Socket by index allocated through ae::ListenerSocket::Accept().
   ae::Socket* GetConnection( uint32_t idx );
   //! Returns the number of ae::Socket current allocated through ae::ListenerSocket::Accept().
   uint32_t GetConnectionCount() const;
+  //! Returns the protocol that this socket is currently listening with or ae::Socket::Protocol::None if not listening.
+  ae::Socket::Protocol GetProtocol() const { return m_protocol; }
+  //! Returns the local port that this socket is currently listening on or 0 if not listening.
+  uint16_t GetPort() const { return m_port; }
 
 private:
   ae::Tag m_tag;
   int m_sock4 = 0;
   int m_sock6 = 0;
   ae::Socket::Protocol m_protocol = ae::Socket::Protocol::None;
+  uint16_t m_port = 0;
   ae::Array< ae::Socket* > m_connections;
 };
 
@@ -834,9 +848,9 @@ ListenerSocket::~ListenerSocket()
   StopListening();
 }
 
-bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint32_t maxConnections )
+bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t maxConnections )
 {
-  if ( proto == ae::Socket::Protocol::None )
+  if ( proto == ae::Socket::Protocol::None || !port )
   {
     return false;
   }
@@ -854,7 +868,8 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint3
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = ( proto == ae::Socket::Protocol::TCP ) ? SOCK_STREAM : SOCK_DGRAM;
   hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
-  if ( getaddrinfo( nullptr, port, &hints, (addrinfo**)&addrInfo ) == -1 )
+  ae::Str16 portStr = ae::Str16::Format( "#", port );
+  if ( getaddrinfo( nullptr, portStr.c_str(), &hints, (addrinfo**)&addrInfo ) == -1 )
   {
     return false;
   }
@@ -893,6 +908,7 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint3
   }
 
   m_protocol = proto;
+  m_port = port;
   return m_sock4 || m_sock6;
 }
 
@@ -904,6 +920,7 @@ bool ListenerSocket::IsListening() const
     return true;
   }
   AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
+  AE_ASSERT( m_port == 0 );
   return false;
 }
 
@@ -912,6 +929,7 @@ ae::Socket* ListenerSocket::Accept()
   if ( !m_sock4 && !m_sock6 )
   {
     AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
+    AE_ASSERT( m_port == 0 );
     return nullptr;
   }
   AE_ASSERT( m_protocol != ae::Socket::Protocol::None );
@@ -990,6 +1008,7 @@ void ListenerSocket::StopListening()
   m_sock4 = 0;
   m_sock6 = 0;
   m_protocol = ae::Socket::Protocol::None;
+  m_port = 0;
 }
 
 void ListenerSocket::Destroy( ae::Socket* sock )
