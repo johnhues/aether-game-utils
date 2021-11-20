@@ -281,11 +281,12 @@ public:
   //! See ae::Socket::Connect() for more information.
   uint32_t SendAll();
   
-  //! Returns the remote address that this socket is currently connected to or zero length string if not connected.
+  //! Returns the most recent remote address that this socket had or attempted a connection to.
   const char* GetAddress() const { return m_address.c_str(); }
-  //! Returns the resolved remote address that this socket is currently connected to or zero length string if
-  //! not connected. This will either be a an IPv4 or IPv6 address. If ae::Socket::Connect() was given an
-  //! ip address ae::Socket::GetAddress() will likely return the same address.
+  //! Returns the resolved remote address that this socket last successfully connected to, unless a connection
+  //! is in progress in which case this will return a zero length string. This will either be an IPv4 or IPv6 address.
+  //! If ae::Socket::Connect() was given an ip address (as opposed to a hostname) ae::Socket::GetAddress()
+  //! will likely return the same address.
   const char* GetResolvedAddress() const { return m_resolvedAddress.c_str(); }
   //! Returns the protocol that this socket is currently connected with or ae::Socket::Protocol::None if not connected.
   ae::Socket::Protocol GetProtocol() const { return m_protocol; }
@@ -308,7 +309,7 @@ private:
   ae::Array< uint8_t > m_sendData;
   ae::Array< uint8_t > m_recvData;
 public: // Internal
-  Socket( ae::Tag tag, int s, Protocol proto );
+  Socket( ae::Tag tag, int s, Protocol proto, const char* addr, uint16_t port );
 };
 
 //------------------------------------------------------------------------------
@@ -502,10 +503,13 @@ Socket::Socket( ae::Tag tag ) :
   m_recvData( tag )
 {}
 
-Socket::Socket( ae::Tag tag, int s, Protocol proto ) :
+Socket::Socket( ae::Tag tag, int s, Protocol proto, const char* addr, uint16_t port ) :
   m_sock( s ),
   m_protocol( proto ),
+  m_address( addr ),
+  m_port( port ),
   m_isConnected( true ),
+  m_resolvedAddress( addr ),
   m_sendData( tag ),
   m_recvData( tag )
 {}
@@ -537,6 +541,7 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t 
     m_protocol = proto;
     m_address = address;
     m_port = port;
+    m_resolvedAddress = "";
   }
   
   if ( !m_sock )
@@ -544,7 +549,6 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t 
     if ( !m_addrInfo )
     {
       AE_ASSERT( !m_currAddrInfo );
-      m_resolvedAddress = "";
       ae::Str16 portStr = ae::Str16::Format( "#", (uint32_t)port );
       addrinfo hints;
       memset( &hints, 0, sizeof hints );
@@ -621,13 +625,10 @@ void Socket::Disconnect()
   _CloseSocket( m_sock );
   freeaddrinfo( (addrinfo*)m_addrInfo );
   m_protocol = Protocol::None;
-  m_address = "";
-  m_port = 0;
   m_sock = 0;
   m_isConnected = false;
   m_addrInfo = nullptr;
   m_currAddrInfo = nullptr;
-  m_resolvedAddress = "";
   // @NOTE: Do not modify buffers here, Connect() will perform actual cleanup
 }
 
@@ -994,9 +995,25 @@ ae::Socket* ListenerSocket::Accept()
       _CloseSocket( newSock );
       continue;
     }
-
-    AE_ASSERT( m_protocol != ae::Socket::Protocol::None );
-    return m_connections.Append( ae::New< ae::Socket >( m_tag, m_tag, newSock, m_protocol ) );
+    
+    char addrStr[ INET6_ADDRSTRLEN ];
+    sockaddr_in sockAddr4;
+    sockaddr_in6 sockAddr6;
+    bool ipv4 = ( &listenSock == &m_sock4 );
+    sockaddr* sockAddr = ipv4 ? (sockaddr*)&sockAddr4 : (sockaddr*)&sockAddr6;
+    socklen_t sockAddrLenOrig = ipv4 ? sizeof(sockAddr4) : sizeof(sockAddr6);
+    socklen_t sockAddrLen = sockAddrLenOrig;
+    if ( getpeername( newSock, sockAddr, &sockAddrLen ) == -1
+      || sockAddrLen > sockAddrLenOrig
+      || !_GetAddressString( sockAddr, addrStr ) )
+    {
+      _CloseSocket( newSock );
+      continue;
+    }
+    uint16_t port = ipv4 ? sockAddr4.sin_port : sockAddr6.sin6_port;
+    
+    ae::Socket* s = ae::New< ae::Socket >( m_tag, m_tag, newSock, m_protocol, addrStr, port );
+    return m_connections.Append( s );
   }
   return nullptr;
 }

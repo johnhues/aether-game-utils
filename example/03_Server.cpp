@@ -61,7 +61,7 @@ int main()
 		}
 		while ( ae::Socket* newConn = listener.Accept() )
 		{
-			AE_LOG( "New connection established" );
+			AE_LOG( "New connection established from #:#", newConn->GetAddress(), newConn->GetPort() );
 		}
 		
 		for ( uint32_t i = 0; i < listener.GetConnectionCount(); i++ )
@@ -98,7 +98,7 @@ int main()
 			
 			if ( !conn->IsConnected() )
 			{
-				AE_LOG( "Connection terminated" );
+				AE_LOG( "Connection  from #:# terminated", conn->GetAddress(), conn->GetPort() );
 				listener.Destroy( conn );
 			}
 		}
