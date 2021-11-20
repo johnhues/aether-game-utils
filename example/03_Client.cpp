@@ -52,11 +52,13 @@ int main()
 	while ( !input.quit )
 	{
 		input.Pump();
-		const char* address = "localhost";
-		const char* port = "7230";
-		if ( !conn.IsConnected() && conn.Connect( ae::Socket::Protocol::TCP, address, port ) )
+
+		if ( !conn.IsConnected() && conn.Connect( ae::Socket::Protocol::TCP, "localhost", 7230 ) )
 		{
-			AE_LOG( "Connected to '#:#'", address, port );
+			AE_LOG( "Connected to '#(#):#'",
+				conn.GetAddress(),
+				conn.GetResolvedAddress(),
+				conn.GetPort() );
 			wasConnected = true;
 		}
 		
@@ -89,8 +91,14 @@ int main()
 			uint8_t messageData[ 64 ];
 			ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, sizeof(messageData) );
 			wStream.SerializeString( msg );
-			conn.QueueMsg( wStream.GetData(), wStream.GetOffset() );
-			AE_INFO( "Send '#'", msg );
+			if ( conn.QueueMsg( wStream.GetData(), wStream.GetOffset() ) )
+			{
+				AE_INFO( "Send '#'", msg );
+			}
+			else
+			{
+				AE_INFO( "Not connected" );
+			}
 		}
 
 		conn.SendAll();

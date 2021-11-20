@@ -232,7 +232,7 @@ public:
   //! ae::Socket::ReceiveMsg() repeatedly until they return empty before calling ae::Socket::Connect().
   //! In this scenario all pending sent data will always be lost. @TODO: Calling ae::Socket::Connect() on a
   //! socket returned with ae::ListenerSocket::Accept().
-  bool Connect( ae::Socket::Protocol proto, const char* address, const char* port );
+  bool Connect( ae::Socket::Protocol proto, const char* address, uint16_t port );
   //! Closes ths connection established with ae::Socket::Connect().
   void Disconnect();
   //! Returns true if the connection established with ae::Socket::Connect() or ae::ListenerSocket::Accept() is
@@ -246,7 +246,7 @@ public:
   //! to batch data sent with ae::Socket::SendAll(). Data sent with ae::Socket::QueueData() can be read by
   //! the receiver with ae::Socket::PeekData() and ae::Socket::ReceiveData(). It's advised that you do not
   //! mix ae::Socket::QueueMsg() and ae::Socket::QueueData().
-  void QueueData( const void* data, uint32_t length );
+  bool QueueData( const void* data, uint32_t length );
   //! Returns true if 'length' bytes have been received. If 'dataOut' is non-null and 'length' bytes have been
   //! received the data will be written to 'dataOut'. The read head will not move, so subsequent calls to
   //! ae::Socket::PeekData() will return the same result. It's useful to call ae::Socket::DiscardData() and pass
@@ -266,7 +266,7 @@ public:
   //! message. Ideally you should call ae::Socket::QueueMsg() for each logical chunk of data you need to
   //! send over a 'network tick' and then finally call ae::Socket::SendAll() once. It's unadvised to mix
   //! ae::Socket::QueueMsg() calls with ae::Socket::QueueData().
-  void QueueMsg( const void* data, uint16_t length );
+  bool QueueMsg( const void* data, uint16_t length );
   //! Can return a value greater than maxLength, in which case 'dataOut' is not modified.
   //! Call ae::Socket::ReceiveMessage() again with a big enough buffer or skip the message by calling
   //! ae::Socket::DiscardMessage(). Uses a two byte (network order) message header.
@@ -280,11 +280,23 @@ public:
   //! ae::Socket::QueueMsg(). If the connection is lost all pending sent data will be discarded.
   //! See ae::Socket::Connect() for more information.
   uint32_t SendAll();
+  
+  const char* GetAddress() const { return m_address.c_str(); }
+  const char* GetResolvedAddress() const { return m_resolvedAddress.c_str(); }
+  uint16_t GetPort() const { return m_port; }
 
 private:
-  bool m_SocketSetup();
-  int m_sock = 0;
+  // Params
   Protocol m_protocol = Protocol::None;
+  ae::Str128 m_address;
+  uint16_t m_port = 0;
+  // Connection state
+  int m_sock = 0;
+  bool m_isConnected = false;
+  void* m_addrInfo = nullptr;
+  void* m_currAddrInfo = nullptr;
+  ae::Str64 m_resolvedAddress;
+  // Data buffers
   uint32_t m_readHead = 0;
   ae::Array< uint8_t > m_sendData;
   ae::Array< uint8_t > m_recvData;
@@ -301,19 +313,30 @@ public:
   ListenerSocket( ae::Tag tag );
   ~ListenerSocket();
 
+  //! Starts listening on the given port. Will accept both incoming ipv4 and ipv6 connections. Does not affect
+  //! existing ae::Sockets.
   bool Listen( ae::Socket::Protocol proto, const char* port, uint32_t maxConnections );
+  //! ae::ListenerSocket will no longer accept new connections. Does not affect existing ae::Sockets.
+  void StopListening();
+  //! Returns true if listening for either ipv4 or ipv6 connections.
   bool IsListening() const;
-  ae::Socket* Accept(); //!< Returns a socket if a connection has been established.
-  void Reset(); //!< Disconnects all connections and stops listening. Must still call Destroy() or DestroyAll() on existing connections.
-  void Destroy( ae::Socket* sock ); //!< Disconnects and releases an existing socket from Accept().
-  void DestroyAll(); //!< Disconnects and releases all existing sockets from Accept(). It is not safe to access released sockets after calling this.
-
+  
+  //! Returns a socket if a connection has been established.
+  ae::Socket* Accept();
+  //! Disconnects and releases an existing socket from ae::ListenerSocket::Accept().
+  void Destroy( ae::Socket* sock );
+  //! Disconnects and releases all existing sockets from Accept(). It is not safe to access released sockets
+  //! obtained through ae::ListenerSocket::Accept() after calling this.
+  void DestroyAll();
+  //! Returns ae::Socket by index allocated through ae::ListenerSocket::Accept().
   ae::Socket* GetConnection( uint32_t idx );
+  //! Returns the number of ae::Socket current allocated through ae::ListenerSocket::Accept().
   uint32_t GetConnectionCount() const;
 
 private:
   ae::Tag m_tag;
-  int m_sock = 0;
+  int m_sock4 = 0;
+  int m_sock6 = 0;
   ae::Socket::Protocol m_protocol = ae::Socket::Protocol::None;
   ae::Array< ae::Socket* > m_connections;
 };
@@ -324,24 +347,138 @@ private:
 // Includes
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
-#include <WinSock2.h>
-#include <WS2tcpip.h>
+  #include <WinSock2.h>
+  #include <WS2tcpip.h>
 #else
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
-#include <netdb.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
-#include <netinet/tcp.h>
+  #include <fcntl.h>
+  #include <unistd.h>
+  #include <errno.h>
+  #include <netdb.h>
+  #include <sys/stat.h>
+  #include <sys/types.h>
+  #include <netinet/in.h>
+  #include <sys/socket.h>
+  #include <arpa/inet.h>
+  #include <sys/ioctl.h>
+  #include <sys/poll.h>
+  #include <netinet/tcp.h>
 #endif
 
 namespace ae
 {
+
+uint32_t _winsockCount = 0;
+bool _WinsockInit()
+{
+#if _AE_WINDOWS_
+  if ( !_winsockCount )
+  {
+    WSADATA wsaData;
+    if ( WSAStartup( MAKEWORD( 1, 1 ), &wsaData ) != 0 )
+    {
+      return false;
+    }
+  }
+  _winsockCount++;
+#endif
+  return true;
+}
+
+void _CloseSocket( int sock )
+{
+#if _AE_WINDOWS_
+  closesocket( sock );
+#else
+  close( sock );
+#endif
+}
+
+bool _DisableBlocking( int sock )
+{
+  #if _AE_WINDOWS_
+  u_long mode = 1;
+  return ioctlsocket( sock, FIONBIO, &mode ) != -1;
+#else
+  return fcntl( sock, F_SETFL, O_NONBLOCK ) != -1;
+#endif
+}
+
+bool _DisableNagles( int sock )
+{
+#if _AE_WINDOWS_
+  const char* yes = "1";
+  socklen_t optlen = 1;
+#else
+  int yesValue = 1;
+  int* yes = &yesValue;
+  socklen_t optlen = sizeof(int);
+#endif
+  return setsockopt( sock, SOL_SOCKET, TCP_NODELAY, yes, optlen ) != -1;
+}
+
+bool _ReuseAddress( int sock )
+{
+#if _AE_WINDOWS_
+  const char* yes = "1";
+  socklen_t optlen = 1;
+#else
+  int yesValue = 1;
+  int* yes = &yesValue;
+  socklen_t optlen = sizeof(int);
+#endif
+  if ( setsockopt( sock, SOL_SOCKET, SO_REUSEADDR, yes, optlen ) != -1 )
+  {
+#if _AE_APPLE_
+    // Apple platforms require both SO_REUSE_PORT and SO_REUSEADDR to be set or
+    // listening sockets will run into issues with the firewall.
+    return setsockopt( sock, SOL_SOCKET, 0x0200, yes, optlen ) != -1; // SO_REUSE_PORT
+#endif
+    return true;
+  }
+  return false;
+}
+
+int _IsConnected( int sock )
+{
+  pollfd pollParam;
+  memset( &pollParam, 0, sizeof(pollParam) );
+  pollParam.fd = sock;
+  pollParam.events = POLLOUT;
+  if ( poll( &pollParam, 1, 0 ) > 0 )
+  {
+    if ( pollParam.revents & POLLOUT )
+    {
+      return 1;
+    }
+    else if ( pollParam.revents & ( POLLERR | POLLHUP | POLLNVAL ) )
+    {
+      int err = 0;
+      socklen_t optLen = sizeof(err);
+      if ( getsockopt( sock, SOL_SOCKET, SO_ERROR, &err, &optLen ) == 0 )
+      {
+        return ( err == 0 ) ? 0 : -1;
+      }
+      return -1;
+    }
+    return 0;
+  }
+  return ( errno == EINPROGRESS ) ? 0 : -1;
+}
+
+bool _GetAddressString( const sockaddr* addr, char (&addrStr)[ INET6_ADDRSTRLEN ] )
+{
+  void* inAddr = nullptr;
+  if ( addr->sa_family == AF_INET)
+  {
+    inAddr = &( ( (sockaddr_in*)addr )->sin_addr );
+  }
+  else
+  {
+    inAddr = &( ( (sockaddr_in6*)addr )->sin6_addr );
+  }
+  addrStr[ 0 ] = 0;
+  return inet_ntop( addr->sa_family, inAddr, addrStr, sizeof(addrStr) ) != nullptr;
+}
 
 //------------------------------------------------------------------------------
 // ae::Socket member functions
@@ -354,144 +491,145 @@ Socket::Socket( ae::Tag tag ) :
 Socket::Socket( ae::Tag tag, int s, Protocol proto ) :
   m_sock( s ),
   m_protocol( proto ),
+  m_isConnected( true ),
   m_sendData( tag ),
   m_recvData( tag )
-{
-  if ( !m_SocketSetup() )
-  {
-    Disconnect();
-  }
-}
+{}
 
 Socket::~Socket()
 {
   Disconnect();
 }
 
-bool Socket::Connect( ae::Socket::Protocol proto, const char* address, const char* port )
+bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t port )
 {
   m_readHead = 0;
   m_sendData.Clear();
   m_recvData.Clear();
   
-  if ( proto == Protocol::None )
+  if ( !_WinsockInit() )
   {
     return false;
   }
-  m_protocol = proto;
   
-#if _AE_WINDOWS_
-  WSADATA wsaData;
-  if ( WSAStartup( MAKEWORD( 1, 1 ), &wsaData ) != 0 )
-  {
-    return false;
-  }
-#endif
-
-  addrinfo hints;
-  memset( &hints, 0, sizeof hints );
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = ( proto == ae::Socket::Protocol::TCP ) ? SOCK_STREAM : SOCK_DGRAM;
-
-  addrinfo* servinfo = nullptr;
-  if ( int result = getaddrinfo( address, port, &hints, &servinfo ) )
-  {
-    EAI_AGAIN;
-    AE_INFO( "result #", result );
-    return false;
-  }
-
-  addrinfo* p;
-  for ( p = servinfo; p; p = p->ai_next )
-  {
-    if ( ( m_sock = socket( p->ai_family, p->ai_socktype, p->ai_protocol ) ) == -1 )
-    {
-      continue;
-    }
-
-    if ( connect( m_sock, p->ai_addr, p->ai_addrlen ) != -1 )
-    {
-      break; // Success!
-    }
-
-    Disconnect();
-  }
-
-  if ( !p )
-  {
-    return false;
-  }
-
-  freeaddrinfo( servinfo );
-
-  if ( !m_SocketSetup() )
+  address = address ? address : "";
+  if ( m_protocol != proto || m_address != address || m_port != port )
   {
     Disconnect();
-    return false;
+    if ( proto == ae::Socket::Protocol::None || !address[ 0 ] || port == 0 )
+    {
+      return false;
+    }
+    m_protocol = proto;
+    m_address = address;
+    m_port = port;
   }
-
-  return true;
-}
-
-bool Socket::m_SocketSetup()
-{
-// Disable blocking
-#if _AE_WINDOWS_
-  u_long mode = 1;
-  if ( ioctlsocket( m_sock, FIONBIO, &mode ) )
-#else
-  if ( fcntl( m_sock, F_SETFL, O_NONBLOCK ) )
-#endif
+  
+  if ( !m_sock )
   {
-    return false;
-  }
+    if ( !m_addrInfo )
+    {
+      AE_ASSERT( !m_currAddrInfo );
+      m_resolvedAddress = "";
+      ae::Str16 portStr = ae::Str16::Format( "#", (uint32_t)port );
+      addrinfo hints;
+      memset( &hints, 0, sizeof hints );
+      hints.ai_family = AF_UNSPEC;
+      hints.ai_socktype = ( proto == ae::Socket::Protocol::TCP ) ? SOCK_STREAM : SOCK_DGRAM;
+      // @TODO: Fix error '[si_destination_compare] send failed: Bad file descriptor'
+      if ( getaddrinfo( address, portStr.c_str(), &hints, (addrinfo**)&m_addrInfo ) == -1 )
+      {
+        return false;
+      }
+      m_currAddrInfo = m_addrInfo;
+    }
+    else
+    {
+      m_currAddrInfo = ((addrinfo*)m_currAddrInfo)->ai_next;
+      if ( !m_currAddrInfo )
+      {
+        m_currAddrInfo = m_addrInfo;
+      }
+    }
+    AE_ASSERT( m_currAddrInfo );
+    addrinfo* addrInfo = (addrinfo*)m_currAddrInfo;
 
-  // Disable Naggles algorithm
-#if _AE_WINDOWS_
-  const char* yes = "1";
-  socklen_t optlen = 1;
-#else
-  int yesValue = 1;
-  int* yes = &yesValue;
-  socklen_t optlen = sizeof(int);
-#endif
-  if ( setsockopt( m_sock, SOL_SOCKET, TCP_NODELAY, yes, optlen ) == -1 )
+    m_sock = socket( addrInfo->ai_family, addrInfo->ai_socktype, addrInfo->ai_protocol );
+    if ( m_sock == -1 )
+    {
+      m_sock = 0;
+      return false;
+    }
+    
+    if ( !_DisableBlocking( m_sock )
+      || !_DisableNagles( m_sock )
+      || ( connect( m_sock, addrInfo->ai_addr, addrInfo->ai_addrlen ) == -1
+        && errno != EAGAIN && errno != EALREADY && errno != EINPROGRESS && errno != EISCONN ) )
+    {
+      _CloseSocket( m_sock );
+      m_sock = 0;
+      return false;
+    }
+  }
+  
+  if ( !m_isConnected && m_protocol == Protocol::TCP )
   {
-    return false;
+    int connectedResult = _IsConnected( m_sock );
+    if ( connectedResult > 0 )
+    {
+      char addrStr[ INET6_ADDRSTRLEN ];
+      AE_STATIC_ASSERT( decltype(m_resolvedAddress)::MaxLength() > INET6_ADDRSTRLEN );
+      _GetAddressString( ((addrinfo*)m_currAddrInfo)->ai_addr, addrStr );
+      m_resolvedAddress = addrStr;
+      
+      m_isConnected = true;
+      freeaddrinfo( (addrinfo*)m_addrInfo );
+      m_addrInfo = nullptr;
+      m_currAddrInfo = nullptr;
+    }
+    else if ( connectedResult == 0 )
+    {
+      return false;
+    }
+    else if ( connectedResult < 0 )
+    {
+      _CloseSocket( m_sock );
+      m_sock = 0;
+      return false;
+    }
   }
-
+  
   return true;
 }
 
 void Socket::Disconnect()
 {
-  if ( !IsConnected() )
-  {
-    AE_ASSERT( m_protocol == Protocol::None );
-    return;
-  }
-#if _AE_WINDOWS_
-  closesocket( m_sock );
-#else
-  close( m_sock );
-#endif
-  // @NOTE: Do not modify buffers here, Connect() will perform actual cleanup
-  m_sock = 0;
+  _CloseSocket( m_sock );
+  freeaddrinfo( (addrinfo*)m_addrInfo );
   m_protocol = Protocol::None;
+  m_address = "";
+  m_port = 0;
+  m_sock = 0;
+  m_isConnected = false;
+  m_addrInfo = nullptr;
+  m_currAddrInfo = nullptr;
+  m_resolvedAddress = "";
+  // @NOTE: Do not modify buffers here, Connect() will perform actual cleanup
 }
 
 bool Socket::IsConnected() const
 {
-  return ( m_sock != 0 );
+  return m_isConnected;
 }
 
-void Socket::QueueData( const void* data, uint32_t length )
+bool Socket::QueueData( const void* data, uint32_t length )
 {
   if ( !IsConnected() )
   {
-    return;
+    return false;
   }
   m_sendData.Append( (const uint8_t*)data, length );
+  return true;
 }
 
 bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
@@ -544,7 +682,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
         int result = recv( m_sock, &buffer, 1, MSG_PEEK );
         if ( !result || ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN ) )
         {
-          Disconnect(); // Orderly shutdown
+          Disconnect();
         }
       }
       return false;
@@ -613,16 +751,17 @@ bool Socket::DiscardData( uint16_t length )
   return false;
 }
 
-void Socket::QueueMsg( const void* data, uint16_t length )
+bool Socket::QueueMsg( const void* data, uint16_t length )
 {
   if ( !IsConnected() || !length )
   {
-    return;
+    return false;
   }
   AE_ASSERT( length <= ae::MaxValue< uint16_t >() );
   uint16_t length16 = htons( length );
   m_sendData.Append( (const uint8_t*)&length16, sizeof(length16) );
   m_sendData.Append( (const uint8_t*)data, length );
+  return true;
 }
 
 uint16_t Socket::ReceiveMsg( void* dataOut, uint16_t maxLength )
@@ -692,7 +831,7 @@ ListenerSocket::ListenerSocket( ae::Tag tag ) :
 ListenerSocket::~ListenerSocket()
 {
   AE_ASSERT_MSG( !m_connections.Length(), "Allocated connections must be destroyed before ae::ListenerSocket destruction" );
-  Reset();
+  StopListening();
 }
 
 bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint32_t maxConnections )
@@ -701,96 +840,66 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, const char* port, uint3
   {
     return false;
   }
-  
-#if _AE_WINDOWS_
-  WSADATA wsaData;
-  if ( WSAStartup( MAKEWORD( 1, 1 ), &wsaData ) != 0 )
+
+  if ( !_WinsockInit() )
   {
     return false;
   }
-#endif
-
+  
+  StopListening();
+  
+  addrinfo* addrInfo = nullptr;
   addrinfo hints;
   memset( &hints, 0, sizeof(hints) );
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = ( proto == ae::Socket::Protocol::TCP ) ? SOCK_STREAM : SOCK_DGRAM;
   hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
-
-  addrinfo* servinfo;
-  if ( getaddrinfo( "localhost", port, &hints, &servinfo ) )
+  if ( getaddrinfo( nullptr, port, &hints, (addrinfo**)&addrInfo ) == -1 )
   {
-    AE_ASSERT( m_sock == 0 && m_protocol == ae::Socket::Protocol::None );
     return false;
   }
-
-  addrinfo* p = nullptr;
-  for ( p = servinfo; p; p = p->ai_next )
+  for (; addrInfo; addrInfo = addrInfo->ai_next )
   {
-    m_sock = socket( p->ai_family, p->ai_socktype, p->ai_protocol );
-    if ( m_sock == -1 )
+    int* sock;
+    if ( addrInfo->ai_family == AF_INET && m_sock4 == 0 )
+    {
+      sock = &m_sock4;
+    }
+    else if ( addrInfo->ai_family == AF_INET6 && m_sock6 == 0 )
+    {
+      sock = &m_sock6;
+    }
+    else
     {
       continue;
     }
 
-#if _AE_WINDOWS_
-    const char* yes = "1";
-    socklen_t optlen = 1;
-#else
-    int yesValue = 1;
-    int* yes = &yesValue;
-    socklen_t optlen = sizeof(int);
-#endif
-    if ( setsockopt( m_sock, SOL_SOCKET, SO_REUSEADDR, yes, optlen ) == -1 )
+    *sock = socket( addrInfo->ai_family, addrInfo->ai_socktype, addrInfo->ai_protocol );
+    if ( *sock == -1 )
     {
-      m_sock = 0;
-      AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
-      return false;
+      *sock = 0;
+      continue;
+    }
+    
+    if ( _DisableBlocking( *sock ) && _ReuseAddress( *sock )
+      && bind( *sock, addrInfo->ai_addr, addrInfo->ai_addrlen ) != -1
+      && listen( *sock, 1 ) != -1 )
+    {
+      continue; // Success!
     }
 
-    if ( bind( m_sock, p->ai_addr, p->ai_addrlen ) != -1 )
-    {
-      break; // Success!
-    }
-
-#if _AE_WINDOWS_
-    closesocket( m_sock );
-#else
-    close( m_sock );
-#endif
-    m_sock = 0;
+    _CloseSocket( *sock );
+    *sock = 0;
   }
-
-  freeaddrinfo( servinfo );
-
-  if ( !p )
-  {
-    AE_ASSERT( m_sock == 0 && m_protocol == ae::Socket::Protocol::None );
-    return false;
-  }
-
-  int backlog = 10;
-  if ( listen( m_sock, backlog ) == -1 )
-  {
-    m_sock = 0;
-    AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
-    return false;
-  }
-
-  // Disable blocking
-#if _AE_WINDOWS_
-  u_long mode = 1;
-  ioctlsocket( m_sock, FIONBIO, &mode );
-#else
-  fcntl( m_sock, F_SETFL, O_NONBLOCK );
-#endif
 
   m_protocol = proto;
-  return true;
+  return m_sock4 || m_sock6;
 }
 
+  
 bool ListenerSocket::IsListening() const
 {
-  if ( m_sock )
+  if ( m_sock4 || m_sock6 )
   {
     return true;
   }
@@ -800,46 +909,86 @@ bool ListenerSocket::IsListening() const
 
 ae::Socket* ListenerSocket::Accept()
 {
-  if ( !m_sock )
+  if ( !m_sock4 && !m_sock6 )
   {
     AE_ASSERT( m_protocol == ae::Socket::Protocol::None );
     return nullptr;
   }
-  
-  sockaddr_storage their_addr;
-  socklen_t sin_size = sizeof(their_addr);
-  int new_fd = accept( m_sock, (sockaddr*)&their_addr, &sin_size );
-  if ( new_fd == -1 )
-  {
-    return nullptr;
-  }
-
-  // Disable blocking
-#if _AE_WINDOWS_
-  u_long mode = 1;
-  ioctlsocket( new_fd, FIONBIO, &mode );
-#else
-  fcntl( m_sock, F_SETFL, O_NONBLOCK );
-#endif
-
   AE_ASSERT( m_protocol != ae::Socket::Protocol::None );
-  ae::Socket* newSock = ae::New< ae::Socket >( m_tag, m_tag, new_fd, m_protocol );
-  m_connections.Append( newSock );
-  return newSock;
+  
+  int* listenSocks[] = { &m_sock4, &m_sock6 };
+  for ( uint32_t i = 0; i < countof(listenSocks); i++ )
+  {
+    int& listenSock = *(listenSocks[ i ]);
+    if ( !listenSock )
+    {
+      continue;
+    }
+    
+    int newSock = 0;
+    if ( m_protocol == ae::Socket::Protocol::TCP )
+    {
+      sockaddr_storage their_addr;
+      socklen_t sin_size = sizeof(their_addr);
+      newSock = accept( listenSock, (sockaddr*)&their_addr, &sin_size );
+      if ( newSock == -1 )
+      {
+        if ( errno != EAGAIN && errno != EWOULDBLOCK )
+        {
+          StopListening();
+          return nullptr;
+        }
+        continue;
+      }
+    }
+    else if ( m_protocol == ae::Socket::Protocol::UDP )
+    {
+      uint8_t buffer[ 256 ];
+      sockaddr_storage their_addr;
+      socklen_t addr_len = sizeof(their_addr);
+      // @TODO: Get rid of -1
+      int numbytes = recvfrom( listenSock, buffer, sizeof(buffer)-1, 0, (struct sockaddr*)&their_addr, &addr_len );
+      if ( numbytes == -1)
+      {
+        continue;
+      }
+
+      buffer[ numbytes ] = '\0';
+      char addrStr[INET6_ADDRSTRLEN];
+      void* inAddr = nullptr;
+      if ( ( (sockaddr*)&their_addr )->sa_family == AF_INET)
+      {
+        inAddr = &( ( (sockaddr_in*)&their_addr )->sin_addr );
+      }
+      else
+      {
+        inAddr = &( ( (sockaddr_in6*)&their_addr )->sin6_addr );
+      }
+      inet_ntop( their_addr.ss_family, inAddr, addrStr, sizeof(addrStr) );
+
+      printf("listener: got packet from %s\n", addrStr );
+      printf("listener: packet is %d bytes long\n", numbytes);
+      printf("listener: packet contains \"%s\"\n", buffer);
+    }
+    
+    if ( !_DisableBlocking( newSock ) || !_DisableNagles( newSock ) )
+    {
+      _CloseSocket( newSock );
+      continue;
+    }
+
+    AE_ASSERT( m_protocol != ae::Socket::Protocol::None );
+    return m_connections.Append( ae::New< ae::Socket >( m_tag, m_tag, newSock, m_protocol ) );
+  }
+  return nullptr;
 }
 
-void ListenerSocket::Reset()
+void ListenerSocket::StopListening()
 {
-  for ( ae::Socket* sock : m_connections )
-  {
-    sock->Disconnect();
-  }
-#if _AE_WINDOWS_
-  closesocket( m_sock );
-#else
-  close( m_sock );
-#endif
-  m_sock = 0;
+  _CloseSocket( m_sock4 );
+  _CloseSocket( m_sock6 );
+  m_sock4 = 0;
+  m_sock6 = 0;
   m_protocol = ae::Socket::Protocol::None;
 }
 
