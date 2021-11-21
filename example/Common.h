@@ -326,7 +326,11 @@ public:
   ~ListenerSocket();
 
   //! Starts listening on the given port. Will accept both incoming ipv4 and ipv6 connections. Does not affect
-  //! existing ae::Sockets allocated with ae::ListenerSocket::Accept().
+  //! existing ae::Sockets allocated with ae::ListenerSocket::Accept(). 'maxConnections' specifies how many
+  //! active sockets can be returned by ae::ListenerSocket::Accept() before new connections will be rejected.
+  //! Existing ae::Sockets that are disconnected count towards the 'maxConnection' total, and must be
+  //! cleaned up with ae::ListenerSocket::Destroy() before ae::ListenerSocket::Accept() will allow new
+  //! connections.
   bool Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t maxConnections );
   //! ae::ListenerSocket will no longer accept new connections. Does not affect existing ae::Sockets allocated
   //! with ae::ListenerSocket::Accept().
@@ -334,7 +338,7 @@ public:
   //! Returns true if listening for either ipv4 or ipv6 connections.
   bool IsListening() const;
   
-  //! Returns a socket if a connection has been established.
+  //! Returns a socket if a connection has been established. See ae::ListenerSocket::Listen() for more information.
   ae::Socket* Accept();
   //! Disconnects and releases an existing socket from ae::ListenerSocket::Accept().
   void Destroy( ae::Socket* sock );
@@ -357,6 +361,7 @@ private:
   int m_sock6 = 0;
   ae::Socket::Protocol m_protocol = ae::Socket::Protocol::None;
   uint16_t m_port = 0;
+  uint32_t m_maxConnections = 0;
   ae::Array< ae::Socket* > m_connections;
 };
 
@@ -938,6 +943,8 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t
     *sock = 0;
   }
 
+  m_maxConnections = maxConnections;
+  m_connections.Reserve( maxConnections );
   m_protocol = proto;
   m_port = port;
   return m_sock4 || m_sock6;
@@ -999,10 +1006,28 @@ ae::Socket* ListenerSocket::Accept()
     }
     else if ( m_protocol == ae::Socket::Protocol::UDP )
     {
+      // Discard all pending messages when max connections are established
+      if ( m_connections.Length() >= m_maxConnections )
+      {
+        uint8_t buffer;
+        int result = recv( listenSock, &buffer, sizeof(buffer), 0 );
+        if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
+        {
+          StopListening();
+          return nullptr;
+        }
+        continue;
+      }
+      
       uint8_t buffer;
       int numbytes = recvfrom( listenSock, &buffer, sizeof(buffer), MSG_PEEK, (sockaddr*)&sockAddr, &sockAddrLen );
       if ( numbytes == -1 )
       {
+        if ( errno != EAGAIN && errno != EWOULDBLOCK )
+        {
+          StopListening();
+          return nullptr;
+        }
         continue;
       }
       
