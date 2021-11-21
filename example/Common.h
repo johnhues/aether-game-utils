@@ -638,6 +638,12 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t 
       m_sock = -1;
       return false;
     }
+    
+    AE_ASSERT( !m_isConnected );
+    if ( m_protocol == Protocol::UDP )
+    {
+      m_isConnected = true;
+    }
   }
   
   if ( !m_isConnected && m_protocol == Protocol::TCP )
