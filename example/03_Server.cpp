@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
-#include "Common.h"
 
 const ae::Tag kServerAllocTag = "client";
 
@@ -76,7 +75,7 @@ int main()
 				if ( messageLen > sizeof( messageData ) )
 				{
 					AE_LOG( "Received # unexpected large message. Disconnect.", 0 );
-					listener.Destroy( conn );
+					conn->Disconnect();
 					break;
 				}
 				

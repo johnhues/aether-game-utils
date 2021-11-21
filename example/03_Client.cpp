@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
-#include "Common.h"
 
 const ae::Tag kClientAllocTag = "client";
 
