@@ -230,8 +230,7 @@ public:
   //! Attempts to connect to the 'address' over the given protocol. Calling ae::Socket::Connect() clears
   //! all pending sent and received data. To avoid losing received data call ae::Socket::ReceiveData() or
   //! ae::Socket::ReceiveMsg() repeatedly until they return empty before calling ae::Socket::Connect().
-  //! In this scenario all pending sent data will always be lost. @TODO: Calling ae::Socket::Connect() on a
-  //! socket returned with ae::ListenerSocket::Accept().
+  //! In this scenario all pending sent data will always be lost.
   bool Connect( ae::Socket::Protocol proto, const char* address, uint16_t port );
   //! Closes ths connection established with ae::Socket::Connect().
   void Disconnect();
@@ -261,6 +260,11 @@ public:
   //! Calling ae::Socket::DiscardData() and calling ae::Socket::ReceiveData() with a null 'dataOut' has
   //! the exact same effect.
   bool DiscardData( uint16_t length );
+  //! Returns the number of bytes available for reading. This is mostly intended for use with
+  //! ae::Socket::ReceiveData() when it is not possible to know how much data will be received in advance.
+  //! If you are using ae::Socket::QueueMsg() and ae::Socket::ReceiveMsg() the returned value will include
+  //! all message headers.
+  uint32_t ReceiveDataLength();
 
   //! Queues data for sending. A two byte (network order) message header is prepended to the given
   //! message. Ideally you should call ae::Socket::QueueMsg() for each logical chunk of data you need to
@@ -685,7 +689,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
       return false;
     }
     
-    if ( !readSize )
+    if ( readSize == 0 )
     {
       // Check for closed connection
       if ( m_protocol == Protocol::TCP )
@@ -763,7 +767,9 @@ bool Socket::ReceiveData( void* dataOut, uint16_t length )
 {
   if ( PeekData( dataOut, length, 0 ) )
   {
-    DiscardData( length );
+    bool discardSuccess = DiscardData( length );
+    AE_ASSERT( discardSuccess );
+    return true;
   }
   return false;
 }
@@ -781,6 +787,12 @@ bool Socket::DiscardData( uint16_t length )
     return true;
   }
   return false;
+}
+
+uint32_t Socket::ReceiveDataLength()
+{
+  PeekData( nullptr, 1, 0 );
+  return m_recvData.Length() - m_readHead;
 }
 
 bool Socket::QueueMsg( const void* data, uint16_t length )
