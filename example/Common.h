@@ -303,7 +303,7 @@ private:
   ae::Str128 m_address;
   uint16_t m_port = 0;
   // Connection state
-  int m_sock = 0;
+  int m_sock = -1;
   bool m_isConnected = false;
   void* m_addrInfo = nullptr;
   void* m_currAddrInfo = nullptr;
@@ -357,8 +357,8 @@ public:
 
 private:
   ae::Tag m_tag;
-  int m_sock4 = 0;
-  int m_sock6 = 0;
+  int m_sock4 = -1;
+  int m_sock6 = -1;
   ae::Socket::Protocol m_protocol = ae::Socket::Protocol::None;
   uint16_t m_port = 0;
   uint32_t m_maxConnections = 0;
@@ -410,6 +410,10 @@ bool _WinsockInit()
 
 void _CloseSocket( int sock )
 {
+  if ( sock < 0 )
+  {
+    return;
+  }
 #if _AE_WINDOWS_
   closesocket( sock );
 #else
@@ -419,6 +423,10 @@ void _CloseSocket( int sock )
 
 bool _DisableBlocking( int sock )
 {
+  if ( sock < 0 )
+  {
+    return false;
+  }
   #if _AE_WINDOWS_
   u_long mode = 1;
   return ioctlsocket( sock, FIONBIO, &mode ) != -1;
@@ -429,6 +437,10 @@ bool _DisableBlocking( int sock )
 
 bool _DisableNagles( int sock )
 {
+  if ( sock < 0 )
+  {
+    return false;
+  }
 #if _AE_WINDOWS_
   const char* yes = "1";
   socklen_t optlen = 1;
@@ -442,6 +454,10 @@ bool _DisableNagles( int sock )
 
 bool _ReuseAddress( int sock )
 {
+  if ( sock < 0 )
+  {
+    return false;
+  }
 #if _AE_WINDOWS_
   const char* yes = "1";
   socklen_t optlen = 1;
@@ -462,8 +478,12 @@ bool _ReuseAddress( int sock )
   return false;
 }
 
-int _IsConnected( int sock )
+int _IsConnected( int sock ) // 1 connected, 0 connecting, -1 not connected
 {
+  if ( sock < 0 )
+  {
+    return -1;
+  }
   pollfd pollParam;
   memset( &pollParam, 0, sizeof(pollParam) );
   pollParam.fd = sock;
@@ -575,7 +595,7 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t 
     m_resolvedAddress = "";
   }
   
-  if ( !m_sock )
+  if ( m_sock < 0 )
   {
     if ( !m_addrInfo )
     {
@@ -606,7 +626,6 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t 
     m_sock = socket( addrInfo->ai_family, addrInfo->ai_socktype, addrInfo->ai_protocol );
     if ( m_sock == -1 )
     {
-      m_sock = 0;
       return false;
     }
     
@@ -616,7 +635,7 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t 
         && errno != EAGAIN && errno != EALREADY && errno != EINPROGRESS && errno != EISCONN ) )
     {
       _CloseSocket( m_sock );
-      m_sock = 0;
+      m_sock = -1;
       return false;
     }
   }
@@ -643,7 +662,7 @@ bool Socket::Connect( ae::Socket::Protocol proto, const char* address, uint16_t 
     else if ( connectedResult < 0 )
     {
       _CloseSocket( m_sock );
-      m_sock = 0;
+      m_sock = -1;
       return false;
     }
   }
@@ -656,7 +675,7 @@ void Socket::Disconnect()
   _CloseSocket( m_sock );
   freeaddrinfo( (addrinfo*)m_addrInfo );
   m_protocol = Protocol::None;
-  m_sock = 0;
+  m_sock = -1;
   m_isConnected = false;
   m_addrInfo = nullptr;
   m_currAddrInfo = nullptr;
@@ -911,11 +930,11 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t
   for (; addrInfo; addrInfo = addrInfo->ai_next )
   {
     int* sock;
-    if ( addrInfo->ai_family == AF_INET && m_sock4 == 0 )
+    if ( addrInfo->ai_family == AF_INET && m_sock4 < 0 )
     {
       sock = &m_sock4;
     }
-    else if ( addrInfo->ai_family == AF_INET6 && m_sock6 == 0 )
+    else if ( addrInfo->ai_family == AF_INET6 && m_sock6 < 0 )
     {
       sock = &m_sock6;
     }
@@ -927,7 +946,6 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t
     *sock = socket( addrInfo->ai_family, addrInfo->ai_socktype, addrInfo->ai_protocol );
     if ( *sock == -1 )
     {
-      *sock = 0;
       continue;
     }
     
@@ -940,20 +958,20 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t
     }
 
     _CloseSocket( *sock );
-    *sock = 0;
+    *sock = -1;
   }
 
   m_maxConnections = maxConnections;
   m_connections.Reserve( maxConnections );
   m_protocol = proto;
   m_port = port;
-  return m_sock4 || m_sock6;
+  return ( m_sock4 >= 0 ) || ( m_sock6 >= 0 );
 }
 
   
 bool ListenerSocket::IsListening() const
 {
-  if ( m_sock4 || m_sock6 )
+  if ( ( m_sock4 >= 0 ) || ( m_sock6 >= 0 ) )
   {
     return true;
   }
@@ -981,7 +999,7 @@ ae::Socket* ListenerSocket::Accept()
       continue;
     }
     
-    int newSock = 0;
+    int newSock = -1;
     sockaddr_storage sockAddr;
     socklen_t sockAddrLen = sizeof(sockAddr);
     if ( m_protocol == ae::Socket::Protocol::TCP )
@@ -1001,6 +1019,7 @@ ae::Socket* ListenerSocket::Accept()
         || !_DisableNagles( newSock ) )
       {
         _CloseSocket( newSock );
+        newSock = -1;
         continue;
       }
     }
@@ -1048,7 +1067,7 @@ ae::Socket* ListenerSocket::Accept()
         || ( connect( newSock, (sockaddr*)&sockAddr, sockAddrLen ) == -1 ) )
       {
         _CloseSocket( newSock );
-        newSock = 0;
+        newSock = -1;
         continue;
       }
       
@@ -1056,7 +1075,7 @@ ae::Socket* ListenerSocket::Accept()
       listenSock = socket( listenSockAddr.ss_family, SOCK_DGRAM, 0 );
       if ( listenSock == -1 )
       {
-        listenSock = 0;
+        listenSock = -1;
         continue;
       }
       if ( !_DisableBlocking( listenSock )
@@ -1064,7 +1083,7 @@ ae::Socket* ListenerSocket::Accept()
         || bind( listenSock, (sockaddr*)&listenSockAddr, listenSockAddrLen ) == -1 )
       {
         _CloseSocket( listenSock );
-        listenSock = 0;
+        listenSock = -1;
       }
     }
     
@@ -1075,6 +1094,7 @@ ae::Socket* ListenerSocket::Accept()
       continue;
     }
     
+    AE_ASSERT( newSock >= 0 );
     ae::Socket* s = ae::New< ae::Socket >( m_tag, m_tag, newSock, m_protocol, addrStr, _GetPort( (sockaddr*)&sockAddr ) );
     return m_connections.Append( s );
   }
@@ -1085,8 +1105,8 @@ void ListenerSocket::StopListening()
 {
   _CloseSocket( m_sock4 );
   _CloseSocket( m_sock6 );
-  m_sock4 = 0;
-  m_sock6 = 0;
+  m_sock4 = -1;
+  m_sock6 = -1;
   m_protocol = ae::Socket::Protocol::None;
   m_port = 0;
 }
