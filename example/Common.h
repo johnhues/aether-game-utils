@@ -484,20 +484,23 @@ bool _GetAddressString( const sockaddr* addr, char (&addrStr)[ INET6_ADDRSTRLEN 
 {
   addrStr[ 0 ] = 0;
   void* inAddr = nullptr;
+  socklen_t inAddrLen = 0;
   sa_family_t family = addr->sa_family;
-  if ( family == AF_INET)
+  if ( family == AF_INET )
   {
     inAddr = &( ( (sockaddr_in*)addr )->sin_addr );
+    inAddrLen = sizeof(sockaddr_in);
   }
   else if ( family == AF_INET6 )
   {
     inAddr = &( ( (sockaddr_in6*)addr )->sin6_addr );
+    inAddrLen = sizeof(sockaddr_in6);
   }
   else
   {
     return false;
   }
-  return inet_ntop( addr->sa_family, inAddr, addrStr, sizeof(addrStr) ) != nullptr;
+  return inet_ntop( addr->sa_family, inAddr, addrStr, inAddrLen ) != nullptr;
 }
 
 uint16_t _GetPort( const sockaddr* addr )
@@ -505,11 +508,11 @@ uint16_t _GetPort( const sockaddr* addr )
   sa_family_t family = addr->sa_family;
   if ( family == AF_INET )
   {
-    return ( (sockaddr_in*)addr )->sin_port;
+    return ntohs( ( (sockaddr_in*)addr )->sin_port );
   }
   else if ( family == AF_INET6 )
   {
-    return ( (sockaddr_in6*)addr )->sin6_port;
+    return ntohs( ( (sockaddr_in6*)addr )->sin6_port );
   }
   return 0;
 }
@@ -675,38 +678,13 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
   
   while ( IsConnected() && m_recvData.Length() < m_readHead + offset + length )
   {
-    uint32_t readSize = 0;
-    if ( m_protocol == Protocol::TCP )
+    int readSize = 0;
+    if ( ioctl( m_sock, FIONREAD, &readSize ) == -1 )
     {
-      int availableBytes = 0;
-      if ( ioctl( m_sock, FIONREAD, &availableBytes ) == 0 )
-      {
-        readSize = availableBytes;
-      }
+      Disconnect();
+      return false;
     }
-    else if ( m_protocol == Protocol::UDP )
-    {
-      AE_FAIL_MSG( "Not implemented" );
-      // Get full datagram size
-      //int buflen = recv(sockfd, NULL, 0, MSG_PEEK | MSG_TRUNC);
-      //if (buflen < 0)
-      //{
-      //  // handle error
-      //  return;
-      //}
-      //uint8_t buf[ buflen ];
-      //rxlen = recv(sockfd, buf, buflen, 0);
-      //if (rxlen < 0)
-      //{
-      //  // again, handle error
-      //  return;
-      //}
-    }
-    else
-    {
-      AE_FAIL_MSG( "Invalid protocol" );
-    }
-
+    
     if ( !readSize )
     {
       // Check for closed connection
@@ -714,9 +692,27 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
       {
         uint8_t buffer;
         int result = recv( m_sock, &buffer, 1, MSG_PEEK );
-        if ( !result || ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN ) )
+        if ( result == 0 || ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN ) )
         {
           Disconnect();
+        }
+      }
+      else if ( m_protocol == Protocol::UDP )
+      {
+        uint8_t buffer;
+        int result = recv( m_sock, &buffer, 1, MSG_PEEK );
+        if ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN )
+        {
+          Disconnect();
+        }
+        else if ( result == 0 )
+        {
+          // Discard zero length packet
+          if ( recv( m_sock, &buffer, 0, 0 ) != 0 )
+          {
+            Disconnect();
+          }
+          continue;
         }
       }
       return false;
@@ -739,13 +735,15 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
       Disconnect(); // Orderly shutdown
       return false;
     }
-    else if ( result != readSize )
-    {
-      Disconnect();
-      return false;
-    }
     else if ( result )
     {
+      AE_ASSERT( result <= readSize );
+      // ioctl with FIONREAD includes udp headers on some platforms so use actual read length here
+      if ( result < readSize )
+      {
+        totalSize -= ( readSize - result );
+        while ( m_recvData.Length() > totalSize ) { m_recvData.Remove( m_recvData.Length() - 1 ); } // @TODO: Should be single function call
+      }
       break; // Received new data!
     }
   }
@@ -916,9 +914,10 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t
       continue;
     }
     
-    if ( _DisableBlocking( *sock ) && _ReuseAddress( *sock )
+    if ( _DisableBlocking( *sock )
+      && _ReuseAddress( *sock )
       && bind( *sock, addrInfo->ai_addr, addrInfo->ai_addrlen ) != -1
-      && listen( *sock, 1 ) != -1 )
+      && ( proto == ae::Socket::Protocol::UDP || listen( *sock, 1 ) != -1 ) )
     {
       continue; // Success!
     }
@@ -964,11 +963,11 @@ ae::Socket* ListenerSocket::Accept()
     }
     
     int newSock = 0;
+    sockaddr_storage sockAddr;
+    socklen_t sockAddrLen = sizeof(sockAddr);
     if ( m_protocol == ae::Socket::Protocol::TCP )
     {
-      sockaddr_storage their_addr;
-      socklen_t sin_size = sizeof(their_addr);
-      newSock = accept( listenSock, (sockaddr*)&their_addr, &sin_size );
+      newSock = accept( listenSock, (sockaddr*)&sockAddr, &sockAddrLen );
       if ( newSock == -1 )
       {
         if ( errno != EAGAIN && errno != EWOULDBLOCK )
@@ -978,49 +977,62 @@ ae::Socket* ListenerSocket::Accept()
         }
         continue;
       }
+      
+      if ( !_DisableBlocking( newSock )
+        || !_DisableNagles( newSock ) )
+      {
+        _CloseSocket( newSock );
+        continue;
+      }
     }
     else if ( m_protocol == ae::Socket::Protocol::UDP )
     {
-      uint8_t buffer[ 256 ];
-      sockaddr_storage their_addr;
-      socklen_t addr_len = sizeof(their_addr);
-      // @TODO: Get rid of -1
-      int numbytes = recvfrom( listenSock, buffer, sizeof(buffer)-1, 0, (struct sockaddr*)&their_addr, &addr_len );
-      if ( numbytes == -1)
+      uint8_t buffer;
+      int numbytes = recvfrom( listenSock, &buffer, sizeof(buffer), MSG_PEEK, (sockaddr*)&sockAddr, &sockAddrLen );
+      if ( numbytes == -1 )
       {
         continue;
       }
-
-      buffer[ numbytes ] = '\0';
-      char addrStr[INET6_ADDRSTRLEN];
-      void* inAddr = nullptr;
-      if ( ( (sockaddr*)&their_addr )->sa_family == AF_INET)
+      
+      sockaddr_storage listenSockAddr;
+      socklen_t listenSockAddrLen = sizeof(listenSockAddr);
+      if ( getsockname( listenSock, (sockaddr*)&listenSockAddr, &listenSockAddrLen ) == -1 )
       {
-        inAddr = &( ( (sockaddr_in*)&their_addr )->sin_addr );
+        continue;
       }
-      else
+      char addrStr[ INET6_ADDRSTRLEN ];
+      _GetAddressString( (sockaddr*)&listenSockAddr, addrStr );
+      uint16_t portTest = _GetPort( (sockaddr*)&listenSockAddr );
+      
+      // Connect and give old listening socket to new ae::Socket
+      newSock = listenSock;
+      if ( !_DisableBlocking( newSock )
+        || !_DisableNagles( newSock )
+        || ( connect( newSock, (sockaddr*)&sockAddr, sockAddrLen ) == -1 ) )
       {
-        inAddr = &( ( (sockaddr_in6*)&their_addr )->sin6_addr );
+        _CloseSocket( newSock );
+        newSock = 0;
+        continue;
       }
-      inet_ntop( their_addr.ss_family, inAddr, addrStr, sizeof(addrStr) );
-
-      printf("listener: got packet from %s\n", addrStr );
-      printf("listener: packet is %d bytes long\n", numbytes);
-      printf("listener: packet contains \"%s\"\n", buffer);
-    }
-    
-    if ( !_DisableBlocking( newSock ) || !_DisableNagles( newSock ) )
-    {
-      _CloseSocket( newSock );
-      continue;
+      
+      // Create another listening socket
+      listenSock = socket( listenSockAddr.ss_family, SOCK_DGRAM, 0 );
+      if ( listenSock == -1 )
+      {
+        listenSock = 0;
+        continue;
+      }
+      if ( !_DisableBlocking( listenSock )
+        || !_ReuseAddress( listenSock )
+        || bind( listenSock, (sockaddr*)&listenSockAddr, listenSockAddrLen ) == -1 )
+      {
+        _CloseSocket( listenSock );
+        listenSock = 0;
+      }
     }
     
     char addrStr[ INET6_ADDRSTRLEN ];
-    sockaddr_storage sockAddr;
-    socklen_t sockAddrLen = sizeof(sockAddr);
-    if ( getpeername( newSock, (sockaddr*)&sockAddr, &sockAddrLen ) == -1
-      || sockAddrLen > sizeof(sockAddr)
-      || !_GetAddressString( (sockaddr*)&sockAddr, addrStr ) )
+    if ( !_GetAddressString( (sockaddr*)&sockAddr, addrStr ) )
     {
       _CloseSocket( newSock );
       continue;
