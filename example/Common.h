@@ -996,6 +996,12 @@ ae::Socket* ListenerSocket::Accept()
   }
   AE_ASSERT( m_protocol != ae::Socket::Protocol::None );
   
+  // @TODO: It's possible that m_maxConnections should be handled by not listening
+  // (in addition to the existing checks) so that failed connections attempts
+  // are handled at a lower level in the networking stack (ICMP) for both
+  // TCP and UDP. This should prevent connecting clients from seeing a successful
+  // connection which is immediately lost.
+  
   int* listenSocks[] = { &m_sock4, &m_sock6 };
   for ( uint32_t i = 0; i < countof(listenSocks); i++ )
   {
@@ -1021,7 +1027,8 @@ ae::Socket* ListenerSocket::Accept()
         continue;
       }
       
-      if ( !_DisableBlocking( newSock )
+      if ( ( m_connections.Length() >= m_maxConnections )
+        || !_DisableBlocking( newSock )
         || !_DisableNagles( newSock ) )
       {
         _CloseSocket( newSock );
