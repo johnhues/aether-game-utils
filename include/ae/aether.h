@@ -880,6 +880,8 @@ struct Color
   static Color RGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
   static Color SRGB8( uint8_t r, uint8_t g, uint8_t b );
   static Color SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a );
+  //! hue: 0-1 saturation: 0-1 value: 0-1
+  static Color HSV( float hue, float saturation, float value );
 
   Vec3 GetLinearRGB() const;
   Vec4 GetLinearRGBA() const;
@@ -1886,6 +1888,8 @@ public: // Internal
 
 //------------------------------------------------------------------------------
 // ae::ListenerSocket class
+//! Used in conjunction with ae::Socket to send data over UDP/TCP. Supports both IPv4 and IPv6.
+//! See ae::ListenerSocket::Listen() for more detailed information on usage.
 //------------------------------------------------------------------------------
 class ListenerSocket
 {
@@ -1898,8 +1902,9 @@ public:
   //! active sockets can be returned by ae::ListenerSocket::Accept() before new connections will be rejected.
   //! Existing ae::Sockets that are disconnected count towards the 'maxConnection' total, and must be
   //! cleaned up with ae::ListenerSocket::Destroy() before ae::ListenerSocket::Accept() will allow new
-  //! connections.
-  bool Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t maxConnections );
+  //! connections. Providing false for 'allowRemote' will prevent connections from other devices, and will also
+  //! prevent firewall popups on most platforms.
+  bool Listen( ae::Socket::Protocol proto, bool allowRemote, uint16_t port, uint32_t maxConnections );
   //! ae::ListenerSocket will no longer accept new connections. Does not affect existing ae::Sockets allocated
   //! with ae::ListenerSocket::Accept().
   void StopListening();
@@ -1916,7 +1921,7 @@ public:
   
   //! Returns ae::Socket by index allocated through ae::ListenerSocket::Accept().
   ae::Socket* GetConnection( uint32_t idx );
-  //! Returns the number of ae::Socket current allocated through ae::ListenerSocket::Accept().
+  //! Returns the number of ae::Sockets currently allocated through ae::ListenerSocket::Accept().
   uint32_t GetConnectionCount() const;
   //! Returns the protocol that this socket is currently listening with or ae::Socket::Protocol::None if not listening.
   ae::Socket::Protocol GetProtocol() const { return m_protocol; }
@@ -2851,9 +2856,9 @@ public:
   //------------------------------------------------------------------------------
   // True until SetInitData() is called
   bool IsPendingInit() const;
-  // Call once after NetObjectServer::CreateNetObject(), will trigger Create event
+  // Call once after ae::NetObjectServer::CreateNetObject(), will trigger Create event
   // on clients. You can pass 'nullptr' and '0' as params, but you still must call
-  // before the object will be created remotely. Clients can call NetObject::GetInitData()
+  // before the object will be created remotely. Clients can call ae::NetObject::GetInitData()
   // to get the data set here.
   void SetInitData( const void* initData, uint32_t initDataLength );
   // Call SetSyncData each frame to update that state of the clients NetObject.
@@ -2949,8 +2954,12 @@ private:
 class NetObjectConnection
 {
 public:
-  const uint8_t* GetSendData() const; // Call NetObjectServer::UpdateSendData() first
-  uint32_t GetSendLength() const; // Call NetObjectServer::UpdateSendData() first
+  //! This data should be sent to a client with and consumed with ae::NetObjectClient::ReceiveData(). Call
+  //! ae::NetObjectServer::UpdateSendData() once each network tick before calling this.
+  const uint8_t* GetSendData() const;
+  //! The length of the data that should be sent to a client with and consumed with ae::NetObjectClient::ReceiveData().
+  //! Call ae::NetObjectServer::UpdateSendData() once each network tick before calling this.
+  uint32_t GetSendLength() const;
 
 public:
   void m_UpdateSendData();
@@ -2977,15 +2986,21 @@ class NetObjectServer
 {
 public:
   NetObjectServer();
-  // Create a server authoritative NetObject which will be replicated to clients through NetObjectConnection/NetObjectClient
+  //! Creates a server authoritative NetObject which will be replicated to clients through ae::NetObjectConnection
+  //! and ae::NetObjectClient. Call ae::NetObject::SetInitData() on the object to finalize the object for remote creation.
+  //! Call ae::NetObjectServer::DestroyNetObject() when finished.
   NetObject* CreateNetObject();
+  //! Will cause the ae::NetObject to be detroyed on remote clients. Must be called for each ae::NetObject
+  //! allocated with ae::NetObjectServer::CreateNetObject().
   void DestroyNetObject( NetObject* netObject );
 
-  // Allocate one ae::NetObjectConnection per client
+  //! Allocate one ae::NetObjectConnection per client. Call ae::NetObjectServer::DestroyConnection() to
+  //! clean it up.
   NetObjectConnection* CreateConnection();
+  //! Must be called for each ae::NetObjectConnection allocated with ae::NetObjectServer::CreateConnection().
   void DestroyConnection( NetObjectConnection* connection );
 
-  // Call each frame before NetObjectConnection::GetSendData()
+  //! Call each frame before ae::NetObjectConnection::GetSendData()
   void UpdateSendData();
 
 private:
@@ -4690,6 +4705,35 @@ inline Color Color::SRGBA8( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
 {
   return Color( SRGBToRGB( r / 255.0f ), SRGBToRGB( g / 255.0f ), SRGBToRGB( b / 255.0f ), a / 255.0f );
 }
+inline ae::Color Color::HSV( float hue, float saturation, float value )
+{
+  if ( saturation <= 0.0f )
+  {
+    return ae::Color( value );
+  }
+  float hh = ae::Clip01( hue ) * 6.0f;
+  uint32_t i = (uint32_t)hh;
+  float ff = hh - i;
+  float p = value * ( 1.0f - saturation );
+  float q = value * ( 1.0f - ( saturation * ff ) );
+  float t = value * ( 1.0f - ( saturation * ( 1.0f - ff ) ) );
+  switch( i )
+  {
+    case 0:
+      return ae::Color( value, t, p );
+    case 1:
+      return ae::Color( q, value, p );
+    case 2:
+      return ae::Color( p, value, t );
+    case 3:
+      return ae::Color( p, q, value );
+    case 4:
+      return ae::Color( t, p, value );
+    case 5:
+    default:
+      return ae::Color( value, p, q );
+  }
+}
 inline Vec3 Color::GetLinearRGB() const { return Vec3( r, g, b ); }
 inline Vec4 Color::GetLinearRGBA() const { return Vec4( r, g, b, a ); }
 inline Vec3 Color::GetSRGB() const { return Vec3( RGBToSRGB( r ), RGBToSRGB( g ), RGBToSRGB( b ) ); }
@@ -6288,6 +6332,7 @@ bool ae::Type::IsType() const
 template < typename T >
 const ae::Type* ae::GetType()
 {
+  AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
   const char* typeName = ae::GetTypeName< T >();
   auto it = _GetTypeNameMap().find( typeName );
   if ( it != _GetTypeNameMap().end() )
@@ -10838,7 +10883,7 @@ bool _DisableBlocking( int sock )
   {
     return false;
   }
-  #if _AE_WINDOWS_
+#if _AE_WINDOWS_
   u_long mode = 1;
   return ioctlsocket( sock, FIONBIO, &mode ) != -1;
 #else
@@ -11218,7 +11263,7 @@ bool Socket::ReceiveData( void* dataOut, uint16_t length )
 
 bool Socket::DiscardData( uint16_t length )
 {
-  if ( m_readHead + length >= m_recvData.Length() )
+  if ( m_recvData.Length() >= m_readHead + length )
   {
     m_readHead += length;
     if ( m_readHead == m_recvData.Length() )
@@ -11291,7 +11336,7 @@ uint32_t Socket::SendAll()
     return 0;
   }
   
-  int result = send( m_sock, m_sendData.Begin(), m_sendData.Length(), 0 );
+  int result = send( m_sock, m_sendData.Begin(), m_sendData.Length(), MSG_NOSIGNAL );
   if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
   {
     Disconnect();
@@ -11320,7 +11365,7 @@ ListenerSocket::~ListenerSocket()
   StopListening();
 }
 
-bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t maxConnections )
+bool ListenerSocket::Listen( ae::Socket::Protocol proto, bool allowRemote, uint16_t port, uint32_t maxConnections )
 {
   if ( proto == ae::Socket::Protocol::None || !port )
   {
@@ -11341,7 +11386,7 @@ bool ListenerSocket::Listen( ae::Socket::Protocol proto, uint16_t port, uint32_t
   hints.ai_socktype = ( proto == ae::Socket::Protocol::TCP ) ? SOCK_STREAM : SOCK_DGRAM;
   hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
   ae::Str16 portStr = ae::Str16::Format( "#", port );
-  if ( getaddrinfo( nullptr, portStr.c_str(), &hints, (addrinfo**)&addrInfo ) == -1 )
+  if ( getaddrinfo( allowRemote ? nullptr : "localhost", portStr.c_str(), &hints, (addrinfo**)&addrInfo ) == -1 )
   {
     return false;
   }
