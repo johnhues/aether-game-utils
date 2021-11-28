@@ -32,12 +32,30 @@ bool EditorMain( int argc, char *argv[] );
 class LevelObject
 {
 public:
-  ae::NetObject* netObj = nullptr;
-  bool hidden = false;
+  Entity id = kInvalidEntity;
+  ae::Str16 name;
   ae::Matrix4 transform = ae::Matrix4::Identity();
+  ae::Map< ae::Str32, ae::Dict > components = TAG_EDITOR;
   
   void Initialize( const void* data, uint32_t length );
   void Sync( const void* data, uint32_t length );
+  ae::NetObject* netObj = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// Level functions
+//------------------------------------------------------------------------------
+class Level
+{
+public:
+  void Save( const class Registry* registry );
+  bool Load( class Registry* registry ) const;
+  
+  bool Write() const;
+  bool Read( const char* path );
+  
+  ae::Str256 filePath;
+  ae::Map< Entity, LevelObject > objects = TAG_EDITOR;
 };
 
 //------------------------------------------------------------------------------
@@ -54,6 +72,8 @@ public:
   
   void Launch();
   bool IsConnected() const { return m_sock.IsConnected(); }
+  
+  Level level;
 
 private:
   void m_Connect();
@@ -62,6 +82,8 @@ private:
   ae::Socket m_sock;
   ae::NetObjectClient m_netObjClient;
   ae::Array< LevelObject > m_objects; // @TODO: Should probably be a pool
+  uint32_t m_msgBufferSize = 0;
+  uint8_t* m_msgBuffer = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -70,9 +92,14 @@ private:
 class EditorObject
 {
 public:
+  void Initialize( ae::NetObject* netObj, Entity entity, ae::Matrix4 transform );
+  void SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
+  ae::Matrix4 GetTransform( const class EditorProgram* program ) const;
   ae::NetObject* netObj = nullptr;
   bool hidden = false;
-  ae::Matrix4 transform = ae::Matrix4::Identity();
+  Entity entity = kInvalidEntity; // @TODO: Should have it's own storage for object properties
+private:
+  ae::Matrix4 m_transform = ae::Matrix4::Identity();
 };
 
 //------------------------------------------------------------------------------
@@ -110,22 +137,24 @@ public:
   ae::NetObjectServer netObjectServer;
   
 private:
-  void m_SetActive( class EditorProgram* program, bool active );
   void m_ShowVar( class EditorProgram* program, Component* component, const ae::Var* var );
   void m_ShowVarValue( class EditorProgram* program, Component* component, const ae::Var* var, int32_t idx = -1 );
   void m_ShowRefVar( class EditorProgram* program, Component* component, const ae::Var* var, int32_t idx = -1 );
+  Entity m_PickObject( class EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut );
+  void m_ShowEditorObject( EditorProgram* program, Entity entity, ae::Color color );
   bool m_first = true;
   bool m_active = true;
   bool m_showInvisible = false;
   bool m_toHide = false;
   std::function< bool( const ae::Type*, const char*, ae::Object** ) > m_getObjectPointerFromString;
 
+  const ae::Type* m_selectedType = nullptr;
   Entity selected = kInvalidEntity;
   ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
   ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
   class Level* level;
 
-  ae::Array< EditorConnection > connections = TAG_EDITOR;
+  ae::Array< EditorConnection* > connections = TAG_EDITOR;
   ae::Map< Entity, EditorObject > m_objects = TAG_EDITOR;
   
   struct SelectRef
@@ -156,7 +185,7 @@ public:
   ae::Matrix4 GetProjToWorld() const { return m_projToWorld; }
   void SetFOV( float fov ) { m_fov = fov; }
   float GetFOV() const { return m_fov; }
-  ae::Vec3 GetMouseRay() const { return m_mouseRay; }
+  ae::Vec3 GetMouseRay() const { return m_mouseRay; } // Is normalized
   
   ae::Window window;
   ae::GraphicsDevice render;
