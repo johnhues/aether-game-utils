@@ -2696,6 +2696,8 @@ public:
   static BinaryStream Writer();
   static BinaryStream Reader( const uint8_t* data, uint32_t length );
   static BinaryStream Reader( const Array< uint8_t >& data );
+  template < uint32_t N > static BinaryStream Writer( uint8_t (&data)[ N ] );
+  template < uint32_t N > static BinaryStream Reader( uint8_t (&data)[ N ] );
 
   void SerializeUint8( uint8_t& v );
   void SerializeUint8( const uint8_t& v );
@@ -4824,6 +4826,25 @@ Str64 ToString( const T& v )
   return os.str().c_str();
 }
 
+template < typename T >
+inline T FromString( const char* str )
+{
+  AE_FAIL_MSG( "Not implemented" );
+  return {};
+}
+
+template <>
+inline ae::Matrix4 FromString( const char* str )
+{
+  ae::Matrix4 r;
+  sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
+    r.data, r.data + 1, r.data + 2, r.data + 3,
+    r.data + 4, r.data + 5, r.data + 6, r.data + 7,
+    r.data + 8, r.data + 9, r.data + 10, r.data + 11,
+    r.data + 12, r.data + 13, r.data + 14, r.data + 15 );
+  return r;
+}
+
 template < uint32_t N >
 Str< N >::Str()
 {
@@ -5763,6 +5784,18 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 //------------------------------------------------------------------------------
 // ae::BinaryStream member functions
 //------------------------------------------------------------------------------
+template < uint32_t N >
+BinaryStream BinaryStream::Writer( uint8_t (&data)[ N ] )
+{
+  return BinaryStream( Mode::WriteBuffer, data, N );
+}
+
+template < uint32_t N >
+BinaryStream BinaryStream::Reader( uint8_t (&data)[ N ] )
+{
+  return BinaryStream( Mode::ReadBuffer, data, N );
+}
+
 template < uint32_t N >
 void BinaryStream::SerializeString( Str< N >& str )
 {
@@ -7611,7 +7644,7 @@ bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) con
   Vec3 m = origin - center;
   float b = m.Dot( direction );
   float c = m.Dot( m ) - radius * radius;
-  // Exit if r�s origin outside s (c > 0) and r pointing away from s (b > 0)
+  // Exit if r's origin outside s (c > 0) and r pointing away from s (b > 0)
   if ( c > 0.0f && b > 0.0f )
   {
   return false;
@@ -7626,20 +7659,18 @@ bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) con
 
   // Ray now found to intersect sphere, compute smallest t value of intersection
   float t = -b - sqrtf( discr );
-  // If t is negative, ray started inside sphere so clamp t to zero
   if ( t < 0.0f )
   {
-  t = 0.0f;
+    t = 0.0f; // If t is negative, ray started inside sphere so clamp t to zero
   }
-
+  
   if ( tOut )
   {
-  *tOut = t;
+    *tOut = t;
   }
-
   if ( pOut )
   {
-  *pOut = origin + direction * t;
+    *pOut = origin + direction * t;
   }
 
   return true;
@@ -12495,7 +12526,7 @@ void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t m
   AE_ASSERT( m_vertexSize == 0 );
   AE_ASSERT( vertexSize );
   AE_ASSERT( m_indexSize == 0 );
-  AE_ASSERT( indexSize == sizeof(uint8_t) || indexSize == sizeof(uint16_t) || indexSize == sizeof(uint32_t) );
+  AE_ASSERT( indexSize <= 4 && indexSize != 3 );
   AE_ASSERT_MSG( maxVertexCount, "VertexData can't be initialized without storage" );
 
   m_maxVertexCount = maxVertexCount;
@@ -12915,7 +12946,7 @@ void VertexData::Render( const Shader* shader, const UniformList& uniforms ) con
 void VertexData::Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const
 {
   AE_ASSERT( shader );
-  AE_ASSERT_MSG( m_vertexSize && m_indexSize, "Must call Initialize() before Render()" );
+  AE_ASSERT_MSG( m_vertexSize && ( !m_indexCount || m_indexSize ), "Must call Initialize() before Render()" );
   
   const_cast< VertexData* >( this )->Upload(); // Make sure latest vertex data has been sent to GPU
   if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
@@ -16772,11 +16803,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
       AE_ASSERT( m_size == sizeof(ae::Matrix4) );
       ae::Matrix4* v = (ae::Matrix4*)varData;
       // @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-      sscanf( value, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
-             v->data, v->data + 1, v->data + 2, v->data + 3,
-             v->data + 4, v->data + 5, v->data + 6, v->data + 7,
-             v->data + 8, v->data + 9, v->data + 10, v->data + 11,
-             v->data + 12, v->data + 13, v->data + 14, v->data + 15 );
+      *v = ae::FromString< ae::Matrix4 >( value );
       return true;
     }
     case Var::Enum:
