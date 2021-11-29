@@ -21,6 +21,7 @@ namespace ae {
 
 enum class EditorMsg : uint8_t
 {
+  None,
   Modification,
   Load
 };
@@ -80,7 +81,7 @@ void Level::Save( const Registry* registry )
   }
 }
 
-bool Level::Load( Registry* registry ) const
+bool Level::Load( Registry* registry, CreateObjectFn fn ) const
 {
   registry->Clear();
   
@@ -90,6 +91,10 @@ bool Level::Load( Registry* registry ) const
   {
     const LevelObject& levelObject = objects.GetValue( i );
     Entity entity = registry->CreateEntity( levelObject.id, levelObject.name.c_str() );
+    if ( fn )
+    {
+      fn( levelObject, entity, registry );
+    }
     for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
     {
       const char* typeName = levelObject.components.GetKey( j ).c_str();
@@ -517,8 +522,7 @@ void LevelObject::Sync( const void* data, uint32_t length )
 // Editor member functions
 //------------------------------------------------------------------------------
 EditorClient::EditorClient( const ae::Tag& tag ) :
-  m_sock( tag ),
-  m_objects( tag )
+  m_sock( tag )
 {}
 
 void EditorClient::Initialize( uint16_t port, Axis worldUp )
@@ -549,6 +553,7 @@ void EditorClient::Launch()
 
 void EditorClient::Update()
 {
+  levelDidChange = false;
   if ( m_port == 0 )
   {
     return;
@@ -556,57 +561,44 @@ void EditorClient::Update()
   m_Connect();
   
   uint32_t msgLength = 0;
-  while ( ( msgLength = m_sock.ReceiveMsg( m_msgBuffer, m_msgBufferSize ) ) )
+  while ( ( msgLength = m_sock.ReceiveMsg( m_msgBuffer, sizeof(m_msgBuffer) ) ) )
   {
-    if ( msgLength > m_msgBufferSize )
+    EditorMsg msgType = EditorMsg::None;
+    ae::BinaryStream rStream = ae::BinaryStream::Reader( m_msgBuffer, sizeof(m_msgBuffer) );
+    rStream.SerializeRaw( msgType );
+    switch ( msgType )
     {
-      ae::Free( m_msgBuffer );
-      m_msgBuffer = (uint8_t*)ae::Allocate( TAG_EDITOR, msgLength, 16 );
-      m_msgBufferSize = msgLength;
-      continue;
+      case EditorMsg::Modification:
+      {
+        Entity entity;
+        ae::Matrix4 transform;
+        rStream.SerializeUint32( entity );
+        rStream.SerializeRaw( transform );
+        AE_ASSERT( rStream.IsValid() );
+        LevelObject* levelObj = level.objects.TryGet( entity );
+        if ( levelObj )
+        {
+          levelObj->transform = transform;
+        }
+        break;
+      }
+      case EditorMsg::Load:
+      {
+        ae::Str256 levelPath;
+        rStream.SerializeString( levelPath );
+        if ( level.Read( levelPath.c_str() ) )
+        {
+          levelDidChange = true;
+        }
+        else
+        {
+          AE_ERR( "Could not load level '#'", levelPath );
+        }
+        break;
+      }
+      default:
+        break;
     }
-    
-    m_netObjClient.ReceiveData( m_msgBuffer, msgLength );
-    while ( ae::NetObject* netObj = m_netObjClient.PumpCreate() )
-    {
-      LevelObject* obj = &m_objects.Append( {} );
-      obj->netObj = netObj;
-      obj->Initialize( netObj->GetInitData(), netObj->InitDataLength() );
-    }
-  }
-  
-  for ( LevelObject& object : m_objects )
-  {
-    if ( object.netObj->SyncDataLength() )
-    {
-      object.Sync( object.netObj->GetSyncData(), object.netObj->SyncDataLength() );
-      object.netObj->ClearSyncData();
-    }
-  }
-  m_objects.RemoveAllFn( [=]( LevelObject& o ) {
-    if ( o.netObj->IsPendingDestroy() )
-    {
-      m_netObjClient.Destroy( o.netObj );
-      return true;
-    }
-    return false; }
-  );
-}
-
-void EditorClient::RenderHack( ResourceManager* resourceManager, const ae::Matrix4& worldToProj )
-{
-  for ( const LevelObject& obj : m_objects )
-  {
-    ae::UniformList uniformList;
-    uniformList.Set( "u_localToProj", worldToProj * obj.transform );
-    uniformList.Set( "u_localToWorld", obj.transform );
-    uniformList.Set( "u_normalToWorld", obj.transform.GetNormalMatrix() );
-    uniformList.Set( "u_tex", &resourceManager->Get( TextureId::White ).texture );
-    uniformList.Set( "u_color", ae::Color::PicoLightGray().GetLinearRGBA() );
-
-    const MeshResource& meshResource = resourceManager->Get( MeshId::Cube );
-    const ShaderResource& shaderResource = resourceManager->Get( ShaderId::Default );
-    meshResource.mesh.Render( &shaderResource.shader, uniformList );
   }
 }
 
@@ -614,8 +606,6 @@ void EditorClient::Terminate()
 {
   m_sock.Disconnect();
   m_port = 0;
-  ae::Free( m_msgBuffer );
-  m_msgBuffer = nullptr;
 }
 
 void EditorClient::m_Connect()
@@ -629,24 +619,21 @@ void EditorClient::m_Connect()
 //------------------------------------------------------------------------------
 // EditorObject member functions
 //------------------------------------------------------------------------------
-void EditorObject::Initialize( ae::NetObject* netObj, Entity entity, ae::Matrix4 transform )
+void EditorObject::Initialize( Entity entity, ae::Matrix4 transform )
 {
   this->entity = entity;
-  this->netObj = netObj;
   this->m_transform = transform;
-  
-  uint8_t buffer[ 128 ];
-  ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer );
-  wStream.SerializeUint32( entity );
-  wStream.SerializeRaw( m_transform );
-  netObj->SetInitData( wStream.GetData(), wStream.GetOffset() );
 }
 
 void EditorObject::SetTransform( const ae::Matrix4& transform, EditorProgram* program )
 {
 //  AE_ASSERT( entity != kInvalidEntity );
 //  program->registry.GetComponent< Transform >( entity );
-  m_transform = transform;
+  if ( m_transform != transform )
+  {
+    m_transform = transform;
+    m_dirty = true;
+  }
 }
 
 ae::Matrix4 EditorObject::GetTransform( const EditorProgram* program ) const
@@ -663,15 +650,12 @@ ae::Matrix4 EditorObject::GetTransform( const EditorProgram* program ) const
 EditorConnection::~EditorConnection()
 {
   AE_ASSERT( !sock );
-  AE_ASSERT( !netObjConn );
 }
 
 void EditorConnection::Destroy( EditorServer* editor )
 {
-  editor->netObjectServer.DestroyConnection( netObjConn );
   editor->sock.Destroy( sock );
   sock = nullptr;
-  netObjConn = nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -680,7 +664,6 @@ void EditorConnection::Destroy( EditorServer* editor )
 void EditorServer::Initialize( EditorProgram* program )
 {
   level = ae::New< Level >( TAG_EDITOR );
-  //OpenLevel( program );
 }
 
 void EditorServer::Terminate( EditorProgram* program )
@@ -707,16 +690,32 @@ void EditorServer::Update( EditorProgram* program )
     AE_INFO( "ae::Editor client connected from #:#", newConn->GetResolvedAddress(), newConn->GetPort() );
     EditorConnection* editorConn = connections.Append( ae::New< EditorConnection >( TAG_EDITOR ) );
     editorConn->sock = newConn;
-    editorConn->netObjConn = netObjectServer.CreateConnection();
   }
   AE_ASSERT( connections.Length() == sock.GetConnectionCount() );
   
-  netObjectServer.UpdateSendData();
+  for ( uint32_t i = 0; i < m_objects.Length(); i++ )
+  {
+    EditorObject* editorObj = &m_objects.GetValue( i );
+    if ( editorObj->IsDirty() )
+    {
+      ae::Matrix4 transform = editorObj->GetTransform( program );
+      ae::BinaryStream wStream = ae::BinaryStream::Writer( m_msgBuffer, sizeof(m_msgBuffer) );
+      wStream.SerializeRaw( EditorMsg::Modification );
+      wStream.SerializeUint32( editorObj->entity );
+      wStream.SerializeRaw( transform );
+      AE_ASSERT( wStream.IsValid() );
+      for ( EditorConnection* conn : connections )
+      {
+        conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+      }
+      editorObj->ClearDirty();
+    }
+  }
+  
   for ( EditorConnection* (&conn) : connections )
   {
     if ( conn->sock->IsConnected() )
     {
-      conn->sock->QueueMsg( conn->netObjConn->GetSendData(), conn->netObjConn->GetSendLength() );
       conn->sock->SendAll();
     }
     else
@@ -728,14 +727,6 @@ void EditorServer::Update( EditorProgram* program )
     }
   }
   connections.RemoveAllFn( []( const EditorConnection* c ){ return !c; } );
-  
-  uint32_t editorObjectCount = m_objects.Length();
-  for ( uint32_t i = 0; i < editorObjectCount; i++ )
-  {
-    EditorObject* editorObject = &m_objects.GetValue( i );
-    ae::Matrix4 transform = editorObject->GetTransform( program );
-    editorObject->netObj->SetSyncData( &transform, sizeof(transform) );
-  }
 }
 
 void EditorServer::Render( EditorProgram* program )
@@ -1041,7 +1032,14 @@ void EditorServer::ShowUI( EditorProgram* program )
     }
     if ( ImGui::Button( "Game Load" ) )
     {
-      // todo
+      uint8_t buffer[ kMaxEditorMessageSize ];
+      ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer );
+      wStream.SerializeRaw( EditorMsg::Load );
+      wStream.SerializeString( level->filePath );
+      for ( uint32_t i = 0; i < connections.Length(); i++ )
+      {
+        connections[ i ]->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+      }
     }
     ImGui::TreePop();
   }
@@ -1093,7 +1091,7 @@ void EditorServer::ShowUI( EditorProgram* program )
       ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetFocus() );
       
       EditorObject* editorObject = &m_objects.Set( entity, {} );
-      editorObject->Initialize( netObjectServer.CreateNetObject(), entity, transform );
+      editorObject->Initialize( entity, transform );
       
       selected = entity;
     }
@@ -1332,7 +1330,7 @@ bool EditorServer::OpenLevel( EditorProgram* program )
         {
           const LevelObject& levelObj = level->objects.GetValue( i );
           EditorObject& editorObj = m_objects.Set( levelObj.id, {} );
-          editorObj.Initialize( netObjectServer.CreateNetObject(), levelObj.id, levelObj.transform );
+          editorObj.Initialize( levelObj.id, levelObj.transform );
         }
       
         AE_INFO( "Loaded level" );

@@ -24,6 +24,8 @@ class Level;
 
 namespace ae {
 
+const uint32_t kMaxEditorMessageSize = 1024;
+
 bool EditorMain( int argc, char *argv[] );
 
 //------------------------------------------------------------------------------
@@ -39,17 +41,17 @@ public:
   
   void Initialize( const void* data, uint32_t length );
   void Sync( const void* data, uint32_t length );
-  ae::NetObject* netObj = nullptr;
 };
 
 //------------------------------------------------------------------------------
 // Level functions
 //------------------------------------------------------------------------------
+typedef std::function< void( const LevelObject& levelObject, Entity entity, class Registry* registry ) > CreateObjectFn;
 class Level
 {
 public:
   void Save( const class Registry* registry );
-  bool Load( class Registry* registry ) const;
+  bool Load( class Registry* registry, CreateObjectFn fn = nullptr ) const;
   
   bool Write() const;
   bool Read( const char* path );
@@ -67,12 +69,12 @@ public:
   EditorClient( const ae::Tag& tag );
   void Initialize( uint16_t port, ae::Axis worldUp );
   void Update();
-  void RenderHack( class ResourceManager* resourceManagerm, const ae::Matrix4& worldToProj );
   void Terminate();
   
   void Launch();
   bool IsConnected() const { return m_sock.IsConnected(); }
   
+  bool levelDidChange = false;
   Level level;
 
 private:
@@ -80,10 +82,7 @@ private:
   uint16_t m_port = 0;
   ae::Axis m_worldUp = ae::Axis::Z;
   ae::Socket m_sock;
-  ae::NetObjectClient m_netObjClient;
-  ae::Array< LevelObject > m_objects; // @TODO: Should probably be a pool
-  uint32_t m_msgBufferSize = 0;
-  uint8_t* m_msgBuffer = nullptr;
+  uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 };
 
 //------------------------------------------------------------------------------
@@ -92,14 +91,18 @@ private:
 class EditorObject
 {
 public:
-  void Initialize( ae::NetObject* netObj, Entity entity, ae::Matrix4 transform );
+  void Initialize( Entity entity, ae::Matrix4 transform );
   void SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
   ae::Matrix4 GetTransform( const class EditorProgram* program ) const;
-  ae::NetObject* netObj = nullptr;
+  
+  bool IsDirty() const { return m_dirty; }
+  void ClearDirty() { m_dirty = false; }
+  
   bool hidden = false;
   Entity entity = kInvalidEntity; // @TODO: Should have it's own storage for object properties
 private:
   ae::Matrix4 m_transform = ae::Matrix4::Identity();
+  bool m_dirty = false;
 };
 
 //------------------------------------------------------------------------------
@@ -111,7 +114,6 @@ public:
   ~EditorConnection();
   void Destroy( class EditorServer* editor );
   ae::Socket* sock = nullptr;
-  ae::NetObjectConnection* netObjConn = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -134,7 +136,6 @@ public:
   void SetOpen( bool isOpen );
   
   ae::ListenerSocket sock = TAG_EDITOR;
-  ae::NetObjectServer netObjectServer;
   
 private:
   void m_ShowVar( class EditorProgram* program, Component* component, const ae::Var* var );
@@ -156,6 +157,8 @@ private:
 
   ae::Array< EditorConnection* > connections = TAG_EDITOR;
   ae::Map< Entity, EditorObject > m_objects = TAG_EDITOR;
+  
+  uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
   
   struct SelectRef
   {
