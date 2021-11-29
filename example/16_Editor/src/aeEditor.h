@@ -134,6 +134,7 @@ public:
   bool GetActive() const { return m_active; }
   bool GetShowInvisible() const { return m_showInvisible; }
   void SetOpen( bool isOpen );
+  uint32_t GetObjectCount() const { return m_objects.Length(); }
   
   ae::ListenerSocket sock = TAG_EDITOR;
   
@@ -205,6 +206,8 @@ public:
   ae::RenderTarget gameTarget;
   ae::Shader shader;
   ae::VertexData vertexData;
+  ae::VertexData quad;
+  ae::Shader iconShader;
   
   uint16_t port = 0;
   ae::Axis worldUp = ae::Axis::Z;

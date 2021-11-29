@@ -325,6 +325,52 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
   vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
   vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
   vertexData.Upload();
+  
+  struct QuadVertex
+  {
+    ae::Vec4 pos;
+    ae::Vec2 uv;
+  };
+  QuadVertex quadVerts[] =
+  {
+    { ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), ae::Vec2( 0.0f, 1.0f ) },
+    { ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), ae::Vec2( 0.0f, 0.0f ) },
+    { ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), ae::Vec2( 1.0f, 0.0f ) },
+    { ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), ae::Vec2( 0.0f, 1.0f ) },
+    { ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), ae::Vec2( 1.0f, 0.0f ) },
+    { ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), ae::Vec2( 1.0f, 1.0f ) }
+  };
+  quad.Initialize( sizeof( *quadVerts ), 0, countof( quadVerts ), 0, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+  quad.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( QuadVertex, pos ) );
+  quad.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( QuadVertex, uv ) );
+  quad.SetVertices( quadVerts, countof( quadVerts ) );
+  quad.Upload();
+  
+  const char* iconVertexShader = R"(
+    AE_UNIFORM mat4 u_worldToProj;
+    AE_IN_HIGHP vec4 a_position;
+    AE_IN_HIGHP vec2 a_uv;
+    AE_OUT_HIGHP vec2 v_uv;
+    void main()
+    {
+      v_uv = a_uv;
+      gl_Position = u_worldToProj * a_position;
+    })";
+  const char* iconFragShader = R"(
+    AE_UNIFORM sampler2D u_tex;
+    AE_UNIFORM vec4 u_color;
+    AE_IN_HIGHP vec2 v_uv;
+    void main()
+    {
+      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * u_color;
+      AE_COLOR.rgb *= AE_COLOR.a;
+    })";
+  iconShader.Initialize( iconVertexShader, iconFragShader, nullptr, 0 );
+  iconShader.SetDepthTest( true );
+  iconShader.SetDepthWrite( false );
+  iconShader.SetBlending( true );
+  iconShader.SetBlendingPremul( true );
+  iconShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
 }
 
 void EditorProgram::Terminate()
@@ -431,11 +477,14 @@ void EditorProgram::Run()
       m_mouseRay = ( worldPos.GetXYZ() - camera.GetPosition() ).SafeNormalizeCopy();
     }
     
-    ae::UniformList uniformList;
-    ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
-    uniformList.Set( "u_worldToProj", m_viewToProj * m_worldToView * modelToWorld );
-    uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-    vertexData.Render( &shader, uniformList );
+    if ( !editor.GetObjectCount() )
+    {
+      ae::UniformList uniformList;
+      ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
+      uniformList.Set( "u_worldToProj", m_viewToProj * m_worldToView * modelToWorld );
+      uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
+      vertexData.Render( &shader, uniformList );
+    }
 
     editor.Render( this );
     
@@ -731,28 +780,36 @@ void EditorServer::Update( EditorProgram* program )
 
 void EditorServer::Render( EditorProgram* program )
 {
+  struct LogicObj
+  {
+    const EditorObject* obj;
+    float distanceSq;
+  };
+  ae::Array< LogicObj > logicObjects = TAG_EDITOR;
+  
+  ae::Vec3 camPos = program->camera.GetPosition();
+  ae::Vec3 camUp = program->camera.GetLocalUp();
   ae::Matrix4 worldToProj = program->GetWorldToProj();
+  
   uint32_t editorObjectCount = m_objects.Length();
   for ( uint32_t i = 0; i < editorObjectCount; i++ )
   {
     const EditorObject& obj = m_objects.GetValue( i );
-    ae::Matrix4 objTransform = obj.GetTransform( program );
-    
-    MeshId mesh = MeshId::Cube;
-    ShaderId shader = ShaderId::Default;
-    TextureId tex = TextureId::White;
     const ModelComponent* model = program->registry.TryGetComponent< ModelComponent >( obj.entity );
-    if ( model )
+    if ( !model )
     {
-      const ModelResource* modelResource = &model->GetModel( program->resourceManager );
-      objTransform *= modelResource->preTransform;
-      mesh = modelResource->mesh;
-      shader = modelResource->shader;
-      tex = modelResource->texture0;
+      float distanceSq = ( camPos - obj.GetTransform( program ).GetTranslation() ).LengthSquared();
+      logicObjects.Append( { &obj, distanceSq } );
+      continue;
     }
-    
     uint64_t seed = obj.entity * 43313;
     ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
+    
+    const ModelResource* modelResource = &model->GetModel( program->resourceManager );
+    ae::Matrix4 objTransform = obj.GetTransform( program ) * modelResource->preTransform;
+    MeshId mesh = modelResource->mesh;
+    ShaderId shader = modelResource->shader;
+    TextureId tex = modelResource->texture0;
     
     ae::UniformList uniformList;
     uniformList.Set( "u_localToProj", worldToProj * objTransform );
@@ -764,6 +821,24 @@ void EditorServer::Render( EditorProgram* program )
     const MeshResource& meshResource = program->resourceManager->Get( mesh );
     const ShaderResource& shaderResource = program->resourceManager->Get( shader );
     meshResource.mesh.Render( &shaderResource.shader, uniformList );
+  }
+  
+  std::sort( logicObjects.begin(), logicObjects.end(), []( const LogicObj& a, const LogicObj& b ){ return a.distanceSq > b.distanceSq; } );
+  for ( const LogicObj& logicObj : logicObjects )
+  {
+    const EditorObject& obj = *logicObj.obj;
+    uint64_t seed = obj.entity * 43313;
+    ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
+    
+    ae::UniformList uniformList;
+    ae::Vec3 objPos = obj.GetTransform( program ).GetTranslation();
+    ae::Vec3 toCamera = camPos - objPos;
+    ae::Matrix4 modelToWorld = ae::Matrix4::Rotation( ae::Vec3(0,0,1), ae::Vec3(0,1,0), toCamera, camUp );
+    modelToWorld.SetTranslation( objPos );
+    uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
+    uniformList.Set( "u_tex", &program->resourceManager->Get( TextureId::Cog ).texture );
+    uniformList.Set( "u_color", color.GetLinearRGBA() );
+    program->quad.Render( &program->iconShader, uniformList );
   }
 }
 
@@ -1569,7 +1644,7 @@ Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::
     {
       float hitT = INFINITY;
       ae::Vec3 hitPos( 0.0f );
-      ae::Sphere sphere( editorObj->GetTransform( program ).GetTranslation(), 0.25f );
+      ae::Sphere sphere( editorObj->GetTransform( program ).GetTranslation(), 0.5f );
       if ( sphere.Raycast( camPos, mouseRay, &hitT, &hitPos ) && ( !result.hitCount || hitT < result.hits[ 0 ].distance ) )
       {
         result.hits[ 0 ].position = hitPos;
@@ -1596,15 +1671,21 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, Entity entity, ae
 {
   if ( entity )
   {
+    const EditorObject* editorObj = &m_objects.Get( entity );
     const ModelComponent* model = program->registry.TryGetComponent< ModelComponent >( entity );
     if ( model )
     {
-      const EditorObject* editorObj = &m_objects.Get( entity );
       const ModelResource* modelResource = &model->GetModel( program->resourceManager );
       const MeshResource* meshResource = &model->GetMesh( program->resourceManager );
       ae::Matrix4 obbTransform = editorObj->GetTransform( program ) * modelResource->preTransform * model->GetMesh( program->resourceManager ).collision.GetAABB().GetTransform();
       ae::OBB obb = obbTransform;
       program->debugLines.AddOBB( obb.GetTransform(), color );
+    }
+    else
+    {
+      ae::Vec3 pos = editorObj->GetTransform( program ).GetTranslation();
+      ae::Vec3 normal = program->camera.GetPosition() - pos;
+      program->debugLines.AddCircle( pos, normal, 0.475f, color, 16 );
     }
   }
 }
