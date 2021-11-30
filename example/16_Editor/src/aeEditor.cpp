@@ -447,7 +447,7 @@ void EditorProgram::Run()
       gameTarget.AddDepth( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
     }
     gameTarget.Activate();
-    gameTarget.Clear( ae::Color::PicoDarkGray() );
+    gameTarget.Clear( ae::Color::SRGB8( 85, 66, 82 ) );
 
     m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
     m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, 500.0f );
@@ -781,51 +781,76 @@ void EditorServer::Update( EditorProgram* program )
 
 void EditorServer::Render( EditorProgram* program )
 {
-  struct LogicObj
+  // Constants
+  const ae::Vec3 camPos = program->camera.GetPosition();
+  const ae::Vec3 camUp = program->camera.GetLocalUp();
+  const ae::Matrix4 worldToProj = program->GetWorldToProj();
+  
+  // Categories
+  struct RenderObj
   {
-    const EditorObject* obj;
-    float distanceSq;
+    const EditorObject* obj = nullptr;
+    const ModelComponent* model = nullptr;
+    float distanceSq = INFINITY;
   };
-  ae::Array< LogicObj > logicObjects = TAG_EDITOR;
+  ae::Array< RenderObj > opaqueObjects = TAG_EDITOR;
+  ae::Array< RenderObj > transparentObjects = TAG_EDITOR;
+  ae::Array< RenderObj > logicObjects = TAG_EDITOR;
   
-  ae::Vec3 camPos = program->camera.GetPosition();
-  ae::Vec3 camUp = program->camera.GetLocalUp();
-  ae::Matrix4 worldToProj = program->GetWorldToProj();
-  
+  // Split up render passes
   uint32_t editorObjectCount = m_objects.Length();
   for ( uint32_t i = 0; i < editorObjectCount; i++ )
   {
     const EditorObject& obj = m_objects.GetValue( i );
     const ModelComponent* model = program->registry.TryGetComponent< ModelComponent >( obj.entity );
-    if ( !model )
+    float distanceSq = ( camPos - obj.GetTransform( program ).GetTranslation() ).LengthSquared();
+    if ( model )
     {
-      float distanceSq = ( camPos - obj.GetTransform( program ).GetTranslation() ).LengthSquared();
-      logicObjects.Append( { &obj, distanceSq } );
-      continue;
+      if ( model->render ) { opaqueObjects.Append( { &obj, model, distanceSq } ); }
+      else { transparentObjects.Append( { &obj, model, distanceSq } ); }
     }
-    
-    const ModelResource* modelResource = &model->GetModel( program->resourceManager );
-    ae::Matrix4 objTransform = obj.GetTransform( program ) * modelResource->preTransform;
-    MeshId mesh = modelResource->mesh;
-    ShaderId shader = modelResource->shader;
-    TextureId tex = modelResource->texture0;
-    
-    ae::UniformList uniformList;
-    uniformList.Set( "u_localToProj", worldToProj * objTransform );
-    uniformList.Set( "u_localToWorld", objTransform );
-    uniformList.Set( "u_normalToWorld", objTransform.GetNormalMatrix() );
-    uniformList.Set( "u_tex", &program->resourceManager->Get( tex ).texture );
-    uniformList.Set( "u_color", m_GetColor( obj.entity, false ).GetLinearRGBA() );
-
-    const MeshResource& meshResource = program->resourceManager->Get( mesh );
-    const ShaderResource& shaderResource = program->resourceManager->Get( shader );
-    meshResource.mesh.Render( &shaderResource.shader, uniformList );
+    else { logicObjects.Append( { &obj, model, distanceSq } ); }
   }
   
-  std::sort( logicObjects.begin(), logicObjects.end(), []( const LogicObj& a, const LogicObj& b ){ return a.distanceSq > b.distanceSq; } );
-  for ( const LogicObj& logicObj : logicObjects )
+  // Opaque and transparent models
+  auto renderModel = [program, worldToProj]( const RenderObj& renderObj, ae::Color color )
   {
-    const EditorObject& obj = *logicObj.obj;
+    const EditorObject& obj = *renderObj.obj;
+    const ModelComponent* model = renderObj.model;
+
+    const ModelResource* modelResource = &model->GetModel( program->resourceManager );
+    const MeshResource& meshResource = program->resourceManager->Get( modelResource->mesh );
+    const ShaderResource& shaderResource = program->resourceManager->Get( modelResource->shader );
+    ae::Matrix4 transform = obj.GetTransform( program ) * modelResource->preTransform;
+    ae::UniformList uniformList;
+    uniformList.Set( "u_localToProj", worldToProj * transform );
+    uniformList.Set( "u_localToWorld", transform );
+    uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
+    uniformList.Set( "u_tex", &program->resourceManager->Get( modelResource->texture0 ).texture );
+    uniformList.Set( "u_color", color.GetLinearRGBA() );
+    meshResource.mesh.Render( &shaderResource.shader, uniformList );
+  };
+  
+  // Opaque objects
+  std::sort( opaqueObjects.begin(), opaqueObjects.end(), []( const RenderObj& a, const RenderObj& b )
+  {
+    return a.distanceSq < b.distanceSq;
+  } );
+  for ( const RenderObj& renderObj : opaqueObjects )
+  {
+    const EditorObject& obj = *renderObj.obj;
+    ae::Color color = m_GetColor( obj.entity, false );
+    renderModel( renderObj, color );
+  }
+  
+  // Logic objects
+  std::sort( logicObjects.begin(), logicObjects.end(), []( const RenderObj& a, const RenderObj& b )
+  {
+    return a.distanceSq > b.distanceSq;
+  } );
+  for ( const RenderObj& renderObj : logicObjects )
+  {
+    const EditorObject& obj = *renderObj.obj;
     ae::UniformList uniformList;
     ae::Vec3 objPos = obj.GetTransform( program ).GetTranslation();
     ae::Vec3 toCamera = camPos - objPos;
@@ -835,6 +860,21 @@ void EditorServer::Render( EditorProgram* program )
     uniformList.Set( "u_tex", &program->resourceManager->Get( TextureId::Cog ).texture );
     uniformList.Set( "u_color", m_GetColor( obj.entity, false ).GetLinearRGBA() );
     program->quad.Render( &program->iconShader, uniformList );
+  }
+  
+  // Transparent objects
+  if ( GetShowInvisible() )
+  {
+    std::sort( transparentObjects.begin(), transparentObjects.end(), []( const RenderObj& a, const RenderObj& b )
+    {
+      return a.distanceSq > b.distanceSq;
+    } );
+    for ( const RenderObj& renderObj : transparentObjects )
+    {
+      const EditorObject& obj = *renderObj.obj;
+      ae::Color color = m_GetColor( obj.entity, false ).ScaleA( 0.5f );
+      renderModel( renderObj, color );
+    }
   }
 }
 
@@ -1031,6 +1071,10 @@ void EditorServer::ShowUI( EditorProgram* program )
   else if ( program->input.Get( ae::Key::R ) && !program->input.GetPrev( ae::Key::R ) )
   {
     gizmoOperation = ImGuizmo::SCALE;
+  }
+  else if ( program->input.Get( ae::Key::I ) && !program->input.GetPrev( ae::Key::I ) )
+  {
+    m_showInvisible = !m_showInvisible;
   }
   else if ( program->input.Get( ae::Key::LeftMeta ) )
   {
@@ -1633,6 +1677,10 @@ Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::
     const ModelComponent* model = program->registry.TryGetComponent< ModelComponent >( editorObj->entity );
     if ( model )
     {
+      if ( !GetShowInvisible() && !model->render )
+      {
+        continue;
+      }
       const ModelResource* modelResource = &model->GetModel( program->resourceManager );
       const MeshResource* mesh = &model->GetMesh( program->resourceManager );
       ae::CollisionMesh::RaycastParams params;
