@@ -167,7 +167,7 @@ bool Level::Write() const
         jsonObject.AddMember( "name", rapidjson::StringRef( levelObject.name.c_str() ), allocator );
       }
       rapidjson::Value transformJson;
-      ae::Str64 transformStr = ae::ToString( levelObject.transform );
+      ae::Str128 transformStr = ae::ToString( levelObject.transform );
       transformJson.SetString( transformStr.c_str(), allocator );
       jsonObject.AddMember( "transform", transformJson, allocator );
       
@@ -1398,6 +1398,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 
 bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 {
+  ae::Str256 oldFilePath = level->filePath;
   bool fileSelected = level->filePath.Length();
   if ( !fileSelected || saveAs )
   {
@@ -1420,6 +1421,8 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
     if ( level->Write() )
     {
       AE_INFO( "Saved '#'", level->filePath );
+      program->window.SetTitle( level->filePath.c_str() );
+      return true;
     }
     else
     {
@@ -1430,6 +1433,11 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
   {
     AE_INFO( "No file selected" );
   }
+  if ( oldFilePath.Length() )
+  {
+    level->filePath = oldFilePath;
+  }
+  return false;
 }
 
 bool EditorServer::OpenLevel( EditorProgram* program )

@@ -4797,7 +4797,7 @@ inline Str16 ToString( double value )
 }
 
 template < typename T >
-Str64 ToString( const T& v )
+Str128 ToString( const T& v )
 {
   std::stringstream os;
   os << v;
@@ -4835,7 +4835,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 Str< N >::Str( const Str<N2>& str )
 {
-  AE_ASSERT( str.m_length <= (uint16_t)MaxLength() );
+  AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "Length:# Max:#", str.m_length, MaxLength() );
   m_length = str.m_length;
   memcpy( m_str, str.m_str, m_length + 1u );
 }
