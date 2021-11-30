@@ -2425,7 +2425,7 @@ private:
 class DebugLines
 {
 public:
-  void Initialize( uint32_t maxObjects );
+  void Initialize( uint32_t maxVerts );
   void Terminate();
   void Render( const Matrix4& worldToNdc ); //!< Also calls Clear() so AddLine() etc should be called every frame
   void SetXRayEnabled( bool enabled ) { m_xray = enabled; } //!< Draw desaturated lines on failed depth test
@@ -2437,6 +2437,8 @@ public:
   bool AddAABB( Vec3 pos, Vec3 halfSize, Color color );
   bool AddOBB( Matrix4 transform, Color color );
   bool AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount );
+  bool AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color );
+  bool AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t vertexCount, const void* indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color );
   void Clear();
 
 private:
@@ -2445,33 +2447,9 @@ private:
     Vec3 pos;
     Color color;
   };
-  Array< DebugVertex > m_verts = AE_ALLOC_TAG_RENDER;
   VertexData m_vertexData;
   Shader m_shader;
   bool m_xray = true;
-  enum class DebugType
-  {
-    Line,
-    Rect,
-    Circle,
-    Sphere,
-    AABB,
-    Cube,
-  };
-  // @TODO: Should just store verts, Init() should take a max vert count
-  struct DebugObject
-  {
-    DebugType type;
-    Vec3 pos;
-    Vec3 end;
-    Quaternion rotation;
-    Vec3 size;
-    float radius;
-    Color color;
-    uint32_t pointCount; // circle only
-    Matrix4 transform;
-  };
-  Array< DebugObject > m_objs = AE_ALLOC_TAG_RENDER;
 };
 
 //------------------------------------------------------------------------------
@@ -14078,14 +14056,9 @@ uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t
 //------------------------------------------------------------------------------
 // ae::DebugLines member functions
 //------------------------------------------------------------------------------
-const uint32_t kDebugVertexCountPerObject = 32;
-
-void DebugLines::Initialize( uint32_t maxObjects )
+void DebugLines::Initialize( uint32_t maxVerts )
 {
-  m_objs = ae::Array< DebugObject >( AE_ALLOC_TAG_RENDER, maxObjects );
-
-  // @HACK: Should handle vert count in a safer way
-  m_vertexData.Initialize( sizeof(DebugVertex), sizeof(uint16_t), m_objs.Size() * kDebugVertexCountPerObject, 0, VertexData::Primitive::Line, VertexData::Usage::Dynamic, VertexData::Usage::Static );
+  m_vertexData.Initialize( sizeof(DebugVertex), 0, maxVerts, 0, VertexData::Primitive::Line, VertexData::Usage::Dynamic, VertexData::Usage::Static );
   m_vertexData.AddAttribute( "a_position", 3, VertexData::Type::Float, offsetof(DebugVertex, pos) );
   m_vertexData.AddAttribute( "a_color", 4, VertexData::Type::Float, offsetof(DebugVertex, color) );
 
@@ -14121,313 +14094,243 @@ void DebugLines::Terminate()
 
 void DebugLines::Render( const Matrix4& worldToNdc )
 {
-  if ( !m_objs.Length() )
+  m_vertexData.Upload();
+
+  UniformList uniforms;
+  uniforms.Set( "u_worldToNdc", worldToNdc );
+
+  if ( m_xray )
   {
-    return;
-  }
-
-  const uint16_t kQuadIndices[] = {
-    3, 1, 0,
-    3, 1, 2
-  };
-
-  m_verts.Clear();
-  m_verts.Reserve( m_objs.Size() * kDebugVertexCountPerObject );
-
-  for ( uint32_t i = 0; i < m_objs.Length(); i++ )
-  {
-    DebugObject obj = m_objs[ i ];
-    if ( obj.type == DebugType::Rect )
-    {
-      Vec3 halfSize = obj.size * 0.5f;
-
-      DebugVertex verts[ 4 ];
-      
-      verts[ 0 ].pos = obj.pos + obj.rotation.Rotate( Vec3( -halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Left
-      verts[ 1 ].pos = obj.pos + obj.rotation.Rotate( Vec3( halfSize.x, 0.0f, -halfSize.y ) ); // Bottom Right
-      verts[ 2 ].pos = obj.pos + obj.rotation.Rotate( Vec3( halfSize.x, 0.0f, halfSize.y ) ); // Top Right
-      verts[ 3 ].pos = obj.pos + obj.rotation.Rotate( Vec3( -halfSize.x, 0.0f, halfSize.y ) ); // Top Left
-
-      verts[ 0 ].color = obj.color;
-      verts[ 1 ].color = obj.color;
-      verts[ 2 ].color = obj.color;
-      verts[ 3 ].color = obj.color;
-
-      m_verts.Append( verts[ 0 ] );
-      m_verts.Append( verts[ 1 ] );
-      m_verts.Append( verts[ 1 ] );
-      m_verts.Append( verts[ 2 ] );
-      m_verts.Append( verts[ 2 ] );
-      m_verts.Append( verts[ 3 ] );
-      m_verts.Append( verts[ 3 ] );
-      m_verts.Append( verts[ 0 ] );
-    }
-    else if ( obj.type == DebugType::Circle )
-    {
-      float angleInc = ae::PI * 2.0f / obj.pointCount;
-      for ( uint32_t i = 0; i < obj.pointCount; i++ )
-      {
-        float angle0 = angleInc * i;
-        float angle1 = angleInc * ( i + 1 );
-
-        DebugVertex verts[ 2 ];
-
-        verts[ 0 ].pos = Vec3( cosf( angle0 ) * obj.radius, 0.0f, sinf( angle0 ) * obj.radius );
-        verts[ 1 ].pos = Vec3( cosf( angle1 ) * obj.radius, 0.0f, sinf( angle1 ) * obj.radius );
-        verts[ 0 ].pos = obj.rotation.Rotate( verts[ 0 ].pos );
-        verts[ 1 ].pos = obj.rotation.Rotate( verts[ 1 ].pos );
-        verts[ 0 ].pos += obj.pos;
-        verts[ 1 ].pos += obj.pos;
-
-        verts[ 0 ].color = obj.color;
-        verts[ 1 ].color = obj.color;
-
-        m_verts.Append( verts, countof( verts ) );
-      }
-    }
-    else if ( obj.type == DebugType::Line )
-    {
-      DebugVertex verts[ 2 ];
-      verts[ 0 ].pos = obj.pos;
-      verts[ 0 ].color = obj.color;
-      verts[ 1 ].pos = obj.end;
-      verts[ 1 ].color = obj.color;
-
-      m_verts.Append( verts, countof( verts ) );
-    }
-    else if ( obj.type == DebugType::AABB )
-    {
-      Vec3 s = obj.size;
-      Vec3 c[] =
-      {
-        obj.pos + Vec3( -s.x, s.y, s.z ),
-        obj.pos + s,
-        obj.pos + Vec3( s.x, -s.y, s.z ),
-        obj.pos + Vec3( -s.x, -s.y, s.z ),
-        obj.pos + Vec3( -s.x, s.y, -s.z ),
-        obj.pos + Vec3( s.x, s.y, -s.z ),
-        obj.pos + Vec3( s.x, -s.y, -s.z ),
-        obj.pos + Vec3( -s.x, -s.y, -s.z )
-      };
-      AE_STATIC_ASSERT( countof( c ) == 8 );
-
-      DebugVertex verts[] =
-      {
-        // Top
-        { c[ 0 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 0 ], obj.color },
-        // Sides
-        { c[ 0 ], obj.color },
-        { c[ 4 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 7 ], obj.color },
-        //Bottom
-        { c[ 4 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 4 ], obj.color },
-      };
-      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
-      
-      m_verts.Append( verts, countof( verts ) );
-    }
-    else if ( obj.type == DebugType::Cube )
-    {
-      Vec3 c[] =
-      {
-        ( obj.transform * Vec4( -0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * Vec4( 0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * Vec4( 0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * Vec4( -0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * Vec4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * Vec4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * Vec4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-        ( obj.transform * Vec4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ()
-      };
-      AE_STATIC_ASSERT( countof( c ) == 8 );
-
-      DebugVertex verts[] =
-      {
-        // Top
-        { c[ 0 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 0 ], obj.color },
-        // Sides
-        { c[ 0 ], obj.color },
-        { c[ 4 ], obj.color },
-        { c[ 1 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 2 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 3 ], obj.color },
-        { c[ 7 ], obj.color },
-        //Bottom
-        { c[ 4 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 5 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 6 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 7 ], obj.color },
-        { c[ 4 ], obj.color },
-      };
-      AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
-
-      m_verts.Append( verts, countof( verts ) );
-    }
-  }
-
-  if ( m_verts.Length() )
-  {
-    m_vertexData.SetVertices( &m_verts[ 0 ], ae::Min( m_verts.Length(), m_vertexData.GetMaxVertexCount() ) );
-    m_vertexData.Upload();
-
-    UniformList uniforms;
-    uniforms.Set( "u_worldToNdc", worldToNdc );
-
-    if ( m_xray )
-    {
-      m_shader.SetDepthTest( false );
-      m_shader.SetDepthWrite( false );
-      uniforms.Set( "u_saturation", 0.1f );
-      m_vertexData.Render( &m_shader, uniforms );
-    }
-
-    m_shader.SetDepthTest( true );
-    m_shader.SetDepthWrite( true );
-    uniforms.Set( "u_saturation", 1.0f );
+    m_shader.SetDepthTest( false );
+    m_shader.SetDepthWrite( false );
+    uniforms.Set( "u_saturation", 0.1f );
     m_vertexData.Render( &m_shader, uniforms );
   }
 
-  m_objs.Clear();
+  m_shader.SetDepthTest( true );
+  m_shader.SetDepthWrite( true );
+  uniforms.Set( "u_saturation", 1.0f );
+  m_vertexData.Render( &m_shader, uniforms );
+  
+  m_vertexData.ClearVertices();
 }
 
 void DebugLines::Clear()
 {
-  m_objs.Clear();
+  m_vertexData.ClearVertices();
 }
 
 bool DebugLines::AddLine( Vec3 p0, Vec3 p1, Color color )
 {
-  if ( m_objs.Length() < m_objs.Size() )
+  if ( m_vertexData.GetVertexCount() + 2 > m_vertexData.GetMaxVertexCount() )
   {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Line;
-    obj->pos = p0;
-    obj->end = p1;
-    obj->color = color;
-    return true;
+    return false;
   }
-  return false;
+  DebugVertex verts[] =
+  {
+    { p0, color },
+    { p1, color }
+  };
+  m_vertexData.AppendVertices( verts, countof( verts ) );
+  return true;
 }
 
 bool DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance )
 {
-  if ( m_objs.Length() < m_objs.Size() )
+  if ( m_vertexData.GetVertexCount() + 2 > m_vertexData.GetMaxVertexCount() )
   {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Line;
-    obj->pos = p0;
-    obj->end = p1;
-    obj->color = ( ( p1 - p0 ).Length() <= distance ) ? Color::Green() : Color::Red();
-    return true;
+    return false;
   }
-  return false;
+  ae::Color color = ( ( p1 - p0 ).Length() <= distance ) ? Color::Green() : Color::Red();
+  DebugVertex verts[] =
+  {
+    { p0, color },
+    { p1, color }
+  };
+  m_vertexData.AppendVertices( verts, countof( verts ) );
 }
 
 bool DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color )
 {
-  if ( m_objs.Length() < m_objs.Size()
-    && up.LengthSquared() > 0.001f
-    && normal.LengthSquared() > 0.001f )
+  if ( m_vertexData.GetVertexCount() + 8 > m_vertexData.GetMaxVertexCount()
+    || up.LengthSquared() < 0.001f
+    || normal.LengthSquared() < 0.001f )
   {
-    up.SafeNormalize();
-    normal.SafeNormalize();
-    if ( normal.Dot( up ) < 0.999f )
-    {
-      DebugObject* obj = &m_objs.Append( DebugObject() );
-      obj->type = DebugType::Rect;
-      obj->pos = pos;
-      obj->rotation = Quaternion( normal, up );
-      obj->size = Vec3( size );
-      obj->color = color;
-      obj->pointCount = 0;
-      return true;
-    }
+    return false;
   }
-  return false;
+  up.Normalize();
+  normal.Normalize();
+  if ( normal.Dot( up ) > 0.999f )
+  {
+    return false;
+  }
+  
+  size *= 0.5f;
+  ae::Quaternion rotation( normal, up );
+  ae::Vec3 positions[] =
+  {
+    pos + rotation.Rotate( Vec3( -size.x, 0.0f, -size.y ) ), // Bottom Left
+    pos + rotation.Rotate( Vec3( size.x, 0.0f, -size.y ) ), // Bottom Right
+    pos + rotation.Rotate( Vec3( size.x, 0.0f, size.y ) ), // Top Right
+    pos + rotation.Rotate( Vec3( -size.x, 0.0f, size.y ) ) // Top Left
+  };
+
+  DebugVertex verts[] =
+  {
+    { positions[ 0 ], color },
+    { positions[ 1 ], color },
+    { positions[ 1 ], color },
+    { positions[ 2 ], color },
+    { positions[ 2 ], color },
+    { positions[ 3 ], color },
+    { positions[ 3 ], color },
+    { positions[ 0 ], color }
+  };
+  m_vertexData.AppendVertices( verts, countof( verts ) );
+  
+  return true;
 }
 
 bool DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount )
 {
-  if ( m_objs.Length() < m_objs.Size() && normal.LengthSquared() > 0.001f )
+  if ( m_vertexData.GetVertexCount() + pointCount * 2 > m_vertexData.GetMaxVertexCount()
+    || normal.LengthSquared() < 0.001f )
   {
-    normal.SafeNormalize();
-    float dot = normal.Dot( Vec3(0,0,1) );
-    
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Circle;
-    obj->pos = pos;
-    obj->rotation = Quaternion( normal, ( dot < 0.99f && dot > -0.99f ) ? Vec3(0,0,1) : Vec3(1,0,0) );
-    obj->radius = radius;
-    obj->color = color;
-    obj->pointCount = pointCount;
-    return true;
+    return false;
   }
-  return false;
+  
+  normal.Normalize();
+  float dot = normal.Dot( Vec3(0,0,1) );
+  ae::Quaternion rotation( normal, ( dot < 0.99f && dot > -0.99f ) ? Vec3(0,0,1) : Vec3(1,0,0) );
+  float angleInc = ae::PI * 2.0f / pointCount;
+  for ( uint32_t i = 0; i < pointCount; i++ )
+  {
+    float angle0 = angleInc * i;
+    float angle1 = angleInc * ( i + 1 );
+    
+    DebugVertex verts[ 2 ];
+    verts[ 0 ].pos = Vec3( cosf( angle0 ) * radius, 0.0f, sinf( angle0 ) * radius );
+    verts[ 1 ].pos = Vec3( cosf( angle1 ) * radius, 0.0f, sinf( angle1 ) * radius );
+    verts[ 0 ].pos = rotation.Rotate( verts[ 0 ].pos );
+    verts[ 1 ].pos = rotation.Rotate( verts[ 1 ].pos );
+    verts[ 0 ].pos += pos;
+    verts[ 1 ].pos += pos;
+    verts[ 0 ].color = color;
+    verts[ 1 ].color = color;
+    m_vertexData.AppendVertices( verts, countof( verts ) );
+  }
+  return true;
 }
 
 bool DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
 {
-  if ( m_objs.Length() < m_objs.Size() )
+  if ( m_vertexData.GetVertexCount() + 24 > m_vertexData.GetMaxVertexCount() )
   {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::AABB;
-    obj->pos = pos;
-    obj->rotation = Quaternion::Identity();
-    obj->size = halfSize;
-    obj->color = color;
-    obj->pointCount = 0;
-    return true;
+    return false;
   }
-  return false;
+  Vec3 c[] =
+  {
+    pos + Vec3( -halfSize.x, halfSize.y, halfSize.z ),
+    pos + halfSize,
+    pos + Vec3( halfSize.x, -halfSize.y, halfSize.z ),
+    pos + Vec3( -halfSize.x, -halfSize.y, halfSize.z ),
+    pos + Vec3( -halfSize.x, halfSize.y, -halfSize.z ),
+    pos + Vec3( halfSize.x, halfSize.y, -halfSize.z ),
+    pos + Vec3( halfSize.x, -halfSize.y, -halfSize.z ),
+    pos + Vec3( -halfSize.x, -halfSize.y, -halfSize.z )
+  };
+  AE_STATIC_ASSERT( countof( c ) == 8 );
+  DebugVertex verts[] =
+  {
+    // Top
+    { c[ 0 ], color },
+    { c[ 1 ], color },
+    { c[ 1 ], color },
+    { c[ 2 ], color },
+    { c[ 2 ], color },
+    { c[ 3 ], color },
+    { c[ 3 ], color },
+    { c[ 0 ], color },
+    // Sides
+    { c[ 0 ], color },
+    { c[ 4 ], color },
+    { c[ 1 ], color },
+    { c[ 5 ], color },
+    { c[ 2 ], color },
+    { c[ 6 ], color },
+    { c[ 3 ], color },
+    { c[ 7 ], color },
+    //Bottom
+    { c[ 4 ], color },
+    { c[ 5 ], color },
+    { c[ 5 ], color },
+    { c[ 6 ], color },
+    { c[ 6 ], color },
+    { c[ 7 ], color },
+    { c[ 7 ], color },
+    { c[ 4 ], color },
+  };
+  AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
+  m_vertexData.AppendVertices( verts, countof( verts ) );
+  return true;
 }
 
 bool DebugLines::AddOBB( Matrix4 transform, Color color )
 {
-  if ( m_objs.Length() < m_objs.Size() )
+  if ( m_vertexData.GetVertexCount() + 24 > m_vertexData.GetMaxVertexCount() )
   {
-    DebugObject* obj = &m_objs.Append( DebugObject() );
-    obj->type = DebugType::Cube;
-    obj->transform = transform;
-    obj->color = color;
-    return true;
+    return false;
   }
-  return false;
+  Vec3 c[] =
+  {
+    ( transform * Vec4( -0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+    ( transform * Vec4( 0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+    ( transform * Vec4( 0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+    ( transform * Vec4( -0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
+    ( transform * Vec4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+    ( transform * Vec4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+    ( transform * Vec4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+    ( transform * Vec4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ()
+  };
+  AE_STATIC_ASSERT( countof( c ) == 8 );
+  DebugVertex verts[] =
+  {
+    // Top
+    { c[ 0 ], color },
+    { c[ 1 ], color },
+    { c[ 1 ], color },
+    { c[ 2 ], color },
+    { c[ 2 ], color },
+    { c[ 3 ], color },
+    { c[ 3 ], color },
+    { c[ 0 ], color },
+    // Sides
+    { c[ 0 ], color },
+    { c[ 4 ], color },
+    { c[ 1 ], color },
+    { c[ 5 ], color },
+    { c[ 2 ], color },
+    { c[ 6 ], color },
+    { c[ 3 ], color },
+    { c[ 7 ], color },
+    //Bottom
+    { c[ 4 ], color },
+    { c[ 5 ], color },
+    { c[ 5 ], color },
+    { c[ 6 ], color },
+    { c[ 6 ], color },
+    { c[ 7 ], color },
+    { c[ 7 ], color },
+    { c[ 4 ], color },
+  };
+  AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
+  m_vertexData.AppendVertices( verts, countof( verts ) );
+  return true;
 }
 
 bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount )
 {
-  if ( m_objs.Length() + 3 <= m_objs.Size() )
+  if ( m_vertexData.GetVertexCount() + pointCount * 2 * 3 > m_vertexData.GetMaxVertexCount() )
   if ( AddCircle( pos, Vec3(1,0,0), radius, color, pointCount ) )
   if ( AddCircle( pos, Vec3(0,1,0), radius, color, pointCount ) )
   if ( AddCircle( pos, Vec3(0,0,1), radius, color, pointCount ) )
@@ -14435,6 +14338,89 @@ bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointC
     return true;
   }
   return false;
+}
+
+bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color )
+{
+  if ( m_vertexData.GetVertexCount() + count * 2 > m_vertexData.GetMaxVertexCount()
+    || count % 3 != 0 )
+  {
+    return false;
+  }
+  const uint8_t* vertices = (const uint8_t*)_vertices;
+  bool identity = ( transform == ae::Matrix4::Identity() );
+  for ( uint32_t i = 0; i < count; i += 3 )
+  {
+    ae::Vec3 p[] =
+    {
+      *(const Vec3*)( vertices + i * vertexStride ),
+      *(const Vec3*)( vertices + ( i + 1 ) * vertexStride ),
+      *(const Vec3*)( vertices + ( i + 2 ) * vertexStride )
+    };
+    if ( !identity )
+    {
+      p[ 0 ] = ( transform * ae::Vec4( p[ 0 ], 1.0f ) ).GetXYZ();
+      p[ 1 ] = ( transform * ae::Vec4( p[ 1 ], 1.0f ) ).GetXYZ();
+      p[ 2 ] = ( transform * ae::Vec4( p[ 2 ], 1.0f ) ).GetXYZ();
+    }
+    DebugVertex verts[] =
+    {
+      { p[ 0 ], color },
+      { p[ 1 ], color },
+      { p[ 1 ], color },
+      { p[ 2 ], color },
+      { p[ 2 ], color },
+      { p[ 0 ], color }
+    };
+    m_vertexData.AppendVertices( verts, countof( verts ) ); // @TODO: AppendVertices() does a bunch of safety checks. This could be really slow for big meshes.
+  }
+  return true;
+}
+
+bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t vertexCount, const void* _indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color )
+{
+  if ( m_vertexData.GetVertexCount() + indexCount * 2 > m_vertexData.GetMaxVertexCount()
+    || indexCount % 3 != 0
+    || ( indexSize != 2 && indexSize != 4 ) )
+  {
+    return false;
+  }
+  const uint8_t* vertices = (const uint8_t*)_vertices;
+  const uint16_t* indices16 = ( indexSize == 2 ) ? (const uint16_t*)_indices : nullptr;
+  const uint32_t* indices32 = ( indexSize == 4 ) ? (const uint32_t*)_indices : nullptr;
+  bool identity = ( transform == ae::Matrix4::Identity() );
+  for ( uint32_t i = 0; i < indexCount; i += 3 )
+  {
+    uint32_t index0 = indices16 ? (uint32_t)indices16[ i ] : indices32[ i ];
+    uint32_t index1 = indices16 ? (uint32_t)indices16[ i + 1 ] : indices32[ i + 1 ];
+    uint32_t index2 = indices16 ? (uint32_t)indices16[ i + 2 ] : indices32[ i + 2 ];
+    AE_ASSERT( index0 < vertexCount );
+    AE_ASSERT( index1 < vertexCount );
+    AE_ASSERT( index2 < vertexCount );
+    ae::Vec3 p[] =
+    {
+      *(const Vec3*)( vertices + index0 * vertexStride ),
+      *(const Vec3*)( vertices + index1 * vertexStride ),
+      *(const Vec3*)( vertices + index2 * vertexStride )
+    };
+    if ( !identity )
+    {
+      p[ 0 ] = ( transform * ae::Vec4( p[ 0 ], 1.0f ) ).GetXYZ();
+      p[ 1 ] = ( transform * ae::Vec4( p[ 1 ], 1.0f ) ).GetXYZ();
+      p[ 2 ] = ( transform * ae::Vec4( p[ 2 ], 1.0f ) ).GetXYZ();
+    }
+    DebugVertex verts[] =
+    {
+      { p[ 0 ], color },
+      { p[ 1 ], color },
+      { p[ 1 ], color },
+      { p[ 2 ], color },
+      { p[ 2 ], color },
+      { p[ 0 ], color }
+    };
+    m_vertexData.AppendVertices( verts, countof( verts ) ); // @TODO: AppendVertices() does a bunch of safety checks. This could be really slow for big meshes.
+  }
+  return true;
 }
 
 //------------------------------------------------------------------------------
