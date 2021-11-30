@@ -144,6 +144,7 @@ private:
   void m_ShowRefVar( class EditorProgram* program, Component* component, const ae::Var* var, int32_t idx = -1 );
   Entity m_PickObject( class EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut );
   void m_ShowEditorObject( EditorProgram* program, Entity entity, ae::Color color );
+  ae::Color m_GetColor( Entity entity, bool lines ) const;
   bool m_first = true;
   bool m_active = true;
   bool m_showInvisible = false;
@@ -152,6 +153,7 @@ private:
 
   const ae::Type* m_selectedType = nullptr;
   Entity selected = kInvalidEntity;
+  Entity hoverEntity = kInvalidEntity;
   ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
   ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
   class Level* level;

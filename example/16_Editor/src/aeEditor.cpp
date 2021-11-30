@@ -308,7 +308,8 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
   timeStep.SetTimeStep( 1.0f / 60.0f );
   ui.Initialize();
   camera.Reset( worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
-  debugLines.Initialize( 512 );
+  debugLines.Initialize( 20480 );
+  debugLines.SetXRayEnabled( false );
   editor.Initialize( this );
   resourceManager = ae::New< ResourceManager >( TAG_RESOURCE );
   resourceManager->Initialize( &fileSystem );
@@ -802,8 +803,6 @@ void EditorServer::Render( EditorProgram* program )
       logicObjects.Append( { &obj, distanceSq } );
       continue;
     }
-    uint64_t seed = obj.entity * 43313;
-    ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
     
     const ModelResource* modelResource = &model->GetModel( program->resourceManager );
     ae::Matrix4 objTransform = obj.GetTransform( program ) * modelResource->preTransform;
@@ -816,7 +815,7 @@ void EditorServer::Render( EditorProgram* program )
     uniformList.Set( "u_localToWorld", objTransform );
     uniformList.Set( "u_normalToWorld", objTransform.GetNormalMatrix() );
     uniformList.Set( "u_tex", &program->resourceManager->Get( tex ).texture );
-    uniformList.Set( "u_color", color.GetLinearRGBA() );
+    uniformList.Set( "u_color", m_GetColor( obj.entity, false ).GetLinearRGBA() );
 
     const MeshResource& meshResource = program->resourceManager->Get( mesh );
     const ShaderResource& shaderResource = program->resourceManager->Get( shader );
@@ -827,9 +826,6 @@ void EditorServer::Render( EditorProgram* program )
   for ( const LogicObj& logicObj : logicObjects )
   {
     const EditorObject& obj = *logicObj.obj;
-    uint64_t seed = obj.entity * 43313;
-    ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
-    
     ae::UniformList uniformList;
     ae::Vec3 objPos = obj.GetTransform( program ).GetTranslation();
     ae::Vec3 toCamera = camPos - objPos;
@@ -837,7 +833,7 @@ void EditorServer::Render( EditorProgram* program )
     modelToWorld.SetTranslation( objPos );
     uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
     uniformList.Set( "u_tex", &program->resourceManager->Get( TextureId::Cog ).texture );
-    uniformList.Set( "u_color", color.GetLinearRGBA() );
+    uniformList.Set( "u_color", m_GetColor( obj.entity, false ).GetLinearRGBA() );
     program->quad.Render( &program->iconShader, uniformList );
   }
 }
@@ -855,7 +851,15 @@ void EditorServer::ShowUI( EditorProgram* program )
   ae::Color cursorColor = ae::Color::PicoGreen();
   ae::Vec3 mouseHover( 0.0f );
   ae::Vec3 mouseHoverNormal( 0, 1, 0 );
-  Entity pickedEntity = m_PickObject( program, cursorColor, &mouseHover, &mouseHoverNormal );
+  if ( program->camera.GetMode() == ae::DebugCamera::Mode::None
+    && !ImGuizmo::IsUsing() && ( !gizmoOperation || !ImGuizmo::IsOver() ) )
+  {
+    hoverEntity = m_PickObject( program, cursorColor, &mouseHover, &mouseHoverNormal );
+  }
+  else
+  {
+    hoverEntity = kInvalidEntity;
+  }
   
   static float s_hold = 0.0f;
   static ae::Vec2 s_mouseMove( 0.0f );
@@ -869,7 +873,7 @@ void EditorServer::ShowUI( EditorProgram* program )
     {
       s_hold = -1.0f;
     }
-    else if ( pickedEntity )
+    else if ( hoverEntity )
     {
       cursorColor = ae::Color::PicoOrange();
       if ( s_hold > 0.35f )
@@ -903,7 +907,7 @@ void EditorServer::ShowUI( EditorProgram* program )
           continue;
         }
         
-        Component* otherComp = program->registry.TryGetComponent( pickedEntity, otherType->GetName() );
+        Component* otherComp = program->registry.TryGetComponent( hoverEntity, otherType->GetName() );
         if ( !otherComp )
         {
           continue;
@@ -924,18 +928,18 @@ void EditorServer::ShowUI( EditorProgram* program )
       }
       else
       {
-        m_selectRef.pending = pickedEntity;
+        m_selectRef.pending = hoverEntity;
       }
     }
-    else if ( !pickedEntity && selected )
+    else if ( !hoverEntity && selected )
     {
       AE_INFO( "Deselect Entity" );
       selected = kInvalidEntity;
     }
-    else if ( pickedEntity != selected )
+    else if ( hoverEntity != selected )
     {
       AE_INFO( "Select Entity" );
-      selected = pickedEntity;
+      selected = hoverEntity;
     }
   }
   
@@ -973,13 +977,13 @@ void EditorServer::ShowUI( EditorProgram* program )
     ImGui::EndPopup();
   }
   
-  m_ShowEditorObject( program, selected, ae::Color::Green() );
-  if ( pickedEntity )
+  m_ShowEditorObject( program, selected, m_GetColor( selected, true ) );
+  if ( hoverEntity )
   {
     program->debugLines.AddCircle( mouseHover + mouseHoverNormal * 0.025f, mouseHoverNormal, 0.5f, cursorColor, 8 );
-    if ( selected != pickedEntity )
+    if ( selected != hoverEntity )
     {
-      m_ShowEditorObject( program, pickedEntity, ae::Color::PicoDarkGray() );
+      m_ShowEditorObject( program, hoverEntity, m_GetColor( hoverEntity, true ) );
     }
   }
   
@@ -1618,8 +1622,8 @@ bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, a
 //------------------------------------------------------------------------------
 Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut )
 {
-  ae::Vec3 camPos = program->camera.GetPosition();
   ae::Vec3 mouseRay = program->GetMouseRay();
+  ae::Vec3 mouseRaySrc = program->camera.GetPosition();// + mouseRay * 0.;
   
   ae::CollisionMesh::RaycastResult result;
   uint32_t editorObjectCount = m_objects.Length();
@@ -1633,10 +1637,10 @@ Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::
       const MeshResource* mesh = &model->GetMesh( program->resourceManager );
       ae::CollisionMesh::RaycastParams params;
       params.userData = editorObj;
-      params.source = camPos;
+      params.source = mouseRaySrc;
       params.direction = mouseRay;
       params.transform = editorObj->GetTransform( program ) * modelResource->preTransform;
-      params.hitClockwise = true;
+      params.hitClockwise = false;
       params.hitCounterclockwise = true;
       result = mesh->collision.Raycast( params, result );
     }
@@ -1645,10 +1649,10 @@ Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::
       float hitT = INFINITY;
       ae::Vec3 hitPos( 0.0f );
       ae::Sphere sphere( editorObj->GetTransform( program ).GetTranslation(), 0.5f );
-      if ( sphere.Raycast( camPos, mouseRay, &hitT, &hitPos ) && ( !result.hitCount || hitT < result.hits[ 0 ].distance ) )
+      if ( sphere.Raycast( mouseRaySrc, mouseRay, &hitT, &hitPos ) && ( !result.hitCount || hitT < result.hits[ 0 ].distance ) )
       {
         result.hits[ 0 ].position = hitPos;
-        result.hits[ 0 ].normal = ( camPos - hitPos ).SafeNormalizeCopy();
+        result.hits[ 0 ].normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
         result.hits[ 0 ].distance = hitT;
         result.hits[ 0 ].userData = editorObj;
         result.hitCount = 1;
@@ -1677,9 +1681,13 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, Entity entity, ae
     {
       const ModelResource* modelResource = &model->GetModel( program->resourceManager );
       const MeshResource* meshResource = &model->GetMesh( program->resourceManager );
-      ae::Matrix4 obbTransform = editorObj->GetTransform( program ) * modelResource->preTransform * model->GetMesh( program->resourceManager ).collision.GetAABB().GetTransform();
-      ae::OBB obb = obbTransform;
-      program->debugLines.AddOBB( obb.GetTransform(), color );
+      ae::Matrix4 transform = editorObj->GetTransform( program ) * modelResource->preTransform;
+      const Vertex* verts = (const Vertex*)meshResource->mesh.GetVertices(); // @TODO: using resource.h vertex
+      uint32_t vertexCount = meshResource->mesh.GetVertexCount();
+      const uint16_t* indices = (const uint16_t*)meshResource->mesh.GetIndices();
+      AE_ASSERT( meshResource->mesh.GetIndexSize() == 2 );
+      uint32_t indexCount = meshResource->mesh.GetIndexCount();
+      program->debugLines.AddMesh( (const ae::Vec3*)&verts->pos, sizeof(*verts), vertexCount, indices, 2, indexCount, transform, color );
     }
     else
     {
@@ -1689,5 +1697,28 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, Entity entity, ae
     }
   }
 }
+
+ae::Color EditorServer::m_GetColor( Entity entity, bool lines ) const
+{
+  uint64_t seed = entity * 43313;
+  ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
+  if ( entity == selected && entity == hoverEntity )
+  {
+    color = ae::Color::PicoOrange();
+  }
+  else if ( entity == selected && lines )
+  {
+    color = ae::Color::PicoOrange();
+  }
+  else if ( entity == selected )
+  {
+    color = color.Lerp( ae::Color::PicoOrange(), 0.25f );
+  }
+  else if ( entity == hoverEntity )
+  {
+    color = color.Lerp( ae::Color::PicoOrange(), 0.75f );
+  }
+  return color;
+};
 
 }
