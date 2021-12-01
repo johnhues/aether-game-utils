@@ -79,6 +79,7 @@ public:
   bool GetShowInvisible() const { return m_showInvisible; }
   void SetOpen( bool isOpen );
   uint32_t GetObjectCount() const { return m_objects.Length(); }
+  EditorObject* GetObject( Entity entity ) { return m_objects.TryGet( entity ); }
   
   ae::ListenerSocket sock = TAG_EDITOR;
   
@@ -182,7 +183,7 @@ private:
 //------------------------------------------------------------------------------
 // Level member functions
 //------------------------------------------------------------------------------
-void Level::Save( const Registry* registry )
+void Level::Save( const Registry* registry, class EditorServer* editor_HACK )
 {
   uint32_t typeCount = registry->GetTypeCount();
   for ( uint32_t typeIdx = 0; typeIdx < typeCount; typeIdx++ )
@@ -203,6 +204,7 @@ void Level::Save( const Registry* registry )
       
       levelObject->id = component.GetEntity();
       levelObject->name = registry->GetNameByEntity( component.GetEntity() );
+      levelObject->transform = editor_HACK->GetObject( component.GetEntity() )->GetTransform( nullptr );
       
       ae::Dict& props = levelObject->components.Set( typeName, TAG_LEVEL );
       for ( uint32_t varIdx = 0; varIdx < varCount; varIdx++ )
@@ -1569,7 +1571,7 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
   
   if ( fileSelected )
   {
-    level->Save( &program->registry );
+    level->Save( &program->registry, this );
     if ( level->Write() )
     {
       AE_INFO( "Saved '#'", level->filePath );

@@ -50,7 +50,7 @@ typedef std::function< void( const LevelObject& levelObject, Entity entity, clas
 class Level
 {
 public:
-  void Save( const class Registry* registry );
+  void Save( const class Registry* registry, class EditorServer* editor_HACK );
   bool Load( class Registry* registry, CreateObjectFn fn = nullptr ) const;
   
   bool Write() const;
