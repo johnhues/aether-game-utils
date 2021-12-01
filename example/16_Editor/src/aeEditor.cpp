@@ -19,11 +19,164 @@
 #include <unistd.h>
 namespace ae {
 
+//------------------------------------------------------------------------------
+// EditorMsg
+//------------------------------------------------------------------------------
 enum class EditorMsg : uint8_t
 {
   None,
   Modification,
   Load
+};
+
+//------------------------------------------------------------------------------
+// EditorObject
+//------------------------------------------------------------------------------
+class EditorObject
+{
+public:
+  void Initialize( Entity entity, ae::Matrix4 transform );
+  void SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
+  ae::Matrix4 GetTransform( const class EditorProgram* program ) const;
+  
+  bool IsDirty() const { return m_dirty; }
+  void ClearDirty() { m_dirty = false; }
+  
+  bool hidden = false;
+  Entity entity = kInvalidEntity; // @TODO: Should have it's own storage for object properties
+private:
+  ae::Matrix4 m_transform = ae::Matrix4::Identity();
+  bool m_dirty = false;
+};
+
+//------------------------------------------------------------------------------
+// EditorConnection
+//------------------------------------------------------------------------------
+class EditorConnection
+{
+public:
+  ~EditorConnection();
+  void Destroy( class EditorServer* editor );
+  ae::Socket* sock = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// EditorServer class
+//------------------------------------------------------------------------------
+class EditorServer
+{
+public:
+  void Initialize( class EditorProgram* program );
+  void Terminate( class EditorProgram* program );
+  void Update( class EditorProgram* program );
+  void Render( class EditorProgram* program );
+  void ShowUI( class EditorProgram* program );
+  
+  bool SaveLevel( class EditorProgram* program, bool saveAs );
+  bool OpenLevel( class EditorProgram* program );
+  
+  bool GetActive() const { return m_active; }
+  bool GetShowInvisible() const { return m_showInvisible; }
+  void SetOpen( bool isOpen );
+  uint32_t GetObjectCount() const { return m_objects.Length(); }
+  
+  ae::ListenerSocket sock = TAG_EDITOR;
+  
+private:
+  void m_ShowVar( class EditorProgram* program, Component* component, const ae::Var* var );
+  void m_ShowVarValue( class EditorProgram* program, Component* component, const ae::Var* var, int32_t idx = -1 );
+  void m_ShowRefVar( class EditorProgram* program, Component* component, const ae::Var* var, int32_t idx = -1 );
+  Entity m_PickObject( class EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut );
+  void m_ShowEditorObject( EditorProgram* program, Entity entity, ae::Color color );
+  ae::Color m_GetColor( Entity entity, bool lines ) const;
+  bool m_first = true;
+  bool m_active = true;
+  bool m_showInvisible = false;
+  bool m_toHide = false;
+  std::function< bool( const ae::Type*, const char*, ae::Object** ) > m_getObjectPointerFromString;
+
+  const ae::Type* m_selectedType = nullptr;
+  Entity selected = kInvalidEntity;
+  Entity hoverEntity = kInvalidEntity;
+  ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+  ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
+  class Level* level;
+
+  ae::Array< EditorConnection* > connections = TAG_EDITOR;
+  ae::Map< Entity, EditorObject > m_objects = TAG_EDITOR;
+  
+  uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
+  
+  struct SelectRef
+  {
+    bool enabled = false;
+    Component* component = nullptr;
+    const ae::Var* componentVar = nullptr;
+    int32_t varIdx = -1;
+    
+    Entity pending = kInvalidEntity;
+  };
+  SelectRef m_selectRef;
+};
+
+class EditorProgram
+{
+public:
+  void Initialize( uint32_t port, ae::Axis worldUp );
+  void Terminate();
+  void Run();
+  float GetDt() const { return m_dt; }
+  
+  ae::RectInt GetRenderRect() const;
+  float GetAspectRatio() const;
+  ae::Matrix4 GetViewToProj() const { return m_viewToProj; }
+  ae::Matrix4 GetWorldToView() const { return m_worldToView; }
+  ae::Matrix4 GetWorldToProj() const { return m_worldToProj; }
+  ae::Matrix4 GetProjToWorld() const { return m_projToWorld; }
+  void SetFOV( float fov ) { m_fov = fov; }
+  float GetFOV() const { return m_fov; }
+  ae::Vec3 GetMouseRay() const { return m_mouseRay; } // Is normalized
+  
+  ae::Window window;
+  ae::GraphicsDevice render;
+  ae::Input input;
+  ae::FileSystem fileSystem;
+  ae::TimeStep timeStep;
+  aeImGui ui;
+  ae::DebugCamera camera;
+  ae::DebugLines debugLines;
+  EditorServer editor;
+  Registry registry;
+  class ResourceManager* resourceManager;
+
+  ae::RenderTarget gameTarget;
+  ae::Shader shader;
+  ae::VertexData vertexData;
+  ae::VertexData quad;
+  ae::Shader iconShader;
+  
+  uint16_t port = 0;
+  ae::Axis worldUp = ae::Axis::Z;
+  
+  // Serialization
+  class Serializer : public ae::Var::Serializer
+  {
+  public:
+    Serializer( EditorProgram* program ) : program( program ) { ae::Var::SetSerializer( this ); }
+    std::string ObjectPointerToString( const ae::Object* obj ) const override;
+    bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const override;
+    EditorProgram* program = nullptr;
+  } serializer = this;
+  
+private:
+  float m_dt;
+  ae::Matrix4 m_viewToProj = ae::Matrix4::Identity();
+  ae::Matrix4 m_worldToView = ae::Matrix4::Identity();
+  ae::Matrix4 m_worldToProj = ae::Matrix4::Identity();
+  ae::Matrix4 m_projToWorld = ae::Matrix4::Identity();
+  float m_fov = 0.46f; // 28mm camera 65.5 degree horizontal fov
+  ae::Vec3 m_mouseRay = ae::Vec3( 0.0f );
+  float m_barWidth = 0.0f;
 };
 
 //------------------------------------------------------------------------------
@@ -313,7 +466,7 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
   editor.Initialize( this );
   resourceManager = ae::New< ResourceManager >( TAG_RESOURCE );
   resourceManager->Initialize( &fileSystem );
-
+  
   shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
   shader.SetDepthTest( true );
   shader.SetDepthWrite( true );
@@ -528,7 +681,7 @@ void _ae_EditorMain( uint16_t port, ae::Axis worldUpAxis )
 //------------------------------------------------------------------------------
 int _ae_argc = 0;
 char** _ae_argv = nullptr;
-bool EditorMain( int argc, char *argv[] )
+void EditorMain( int argc, char *argv[] )
 {
 //  _ae_EditorMain( 7200, ae::Axis::Y );
 //  return true;
@@ -547,9 +700,8 @@ bool EditorMain( int argc, char *argv[] )
     {
       _ae_EditorMain( port, worldUpAxis );
     }
-    return true;
+    exit( 0 );
   }
-  return false;
 }
 
 //------------------------------------------------------------------------------
