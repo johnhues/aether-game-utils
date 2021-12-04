@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// EditorClient.h
+// Editor.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 // Created by John Hughes on 11/22/21.
@@ -25,8 +25,6 @@ class Level;
 namespace ae {
 
 const uint32_t kMaxEditorMessageSize = 1024;
-
-void EditorMain( int argc, char *argv[] );
 
 //------------------------------------------------------------------------------
 // LevelObject
@@ -63,14 +61,21 @@ public:
 //------------------------------------------------------------------------------
 // Editor class
 //------------------------------------------------------------------------------
-class EditorClient
+class Editor
 {
 public:
-  EditorClient( const ae::Tag& tag );
-  void Initialize( uint16_t port, ae::Axis worldUp );
-  void Update();
-  void Terminate();
+  struct Params
+  {
+    int argc = 0;
+    char** argv = nullptr;
+    uint16_t port = 7200;
+    //! Only ae::Axis::Z and ae::Axis::Y are supported
+    ae::Axis worldUp = ae::Axis::Z;
+  };
+  static Editor* Main( const ae::Tag& tag, const Params& params );
+  static void Destroy( Editor* editor );
   
+  void Update();
   void Launch();
   bool IsConnected() const { return m_sock.IsConnected(); }
   
@@ -78,9 +83,9 @@ public:
   Level level;
 
 private:
+  Editor( const ae::Tag& tag, const Params& params );
   void m_Connect();
-  uint16_t m_port = 0;
-  ae::Axis m_worldUp = ae::Axis::Z;
+  const Params m_params;
   ae::Socket m_sock;
   uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 };

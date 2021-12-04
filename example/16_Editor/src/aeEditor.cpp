@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// EditorClient.cpp
+// Editor.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 // Created by John Hughes on 11/22/21.
@@ -693,30 +693,18 @@ void _ae_EditorMain( uint16_t port, ae::Axis worldUpAxis )
 //------------------------------------------------------------------------------
 // ae::EditorMain entry point
 //------------------------------------------------------------------------------
-int _ae_argc = 0;
-char** _ae_argv = nullptr;
-void EditorMain( int argc, char *argv[] )
+Editor* Editor::Main( const ae::Tag& tag, const Params& params )
 {
-//  _ae_EditorMain( 7200, ae::Axis::Y );
-//  _ae_EditorMain( 7272, ae::Axis::Z );
-//  exit( 0 );
-
-  _ae_argc = argc;
-  _ae_argv = argv;
-  if ( argc > 2 && strcmp( argv[ 1 ], "ae_editor" ) == 0 )
+  AE_ASSERT( params.argc && params.argv );
+  AE_ASSERT( params.worldUp == ae::Axis::Z || params.worldUp == ae::Axis::Y );
+  AE_ASSERT( params.port );
+  if ( params.argc >= 2 && strcmp( params.argv[ 1 ], "ae_editor" ) == 0 )
   {
-    if ( argc != 4 )
-    {
-      exit( -1 );
-    }
-    uint16_t port = std::stoi( argv[ 2 ] );
-    ae::Axis worldUpAxis = ( strcmp( argv[ 3 ], "yUp" ) == 0 ) ? ae::Axis::Y : ae::Axis::Z;
-    if ( port )
-    {
-      _ae_EditorMain( port, worldUpAxis );
-    }
+    _ae_EditorMain( params.port, params.worldUp );
     exit( 0 );
   }
+
+  return new Editor( tag, params );
 }
 
 //------------------------------------------------------------------------------
@@ -738,40 +726,33 @@ void LevelObject::Sync( const void* data, uint32_t length )
 //------------------------------------------------------------------------------
 // Editor member functions
 //------------------------------------------------------------------------------
-EditorClient::EditorClient( const ae::Tag& tag ) :
-  m_sock( tag )
-{}
-
-void EditorClient::Initialize( uint16_t port, Axis worldUp )
+Editor::Editor( const ae::Tag& tag, const Params& params ) :
+  m_sock( tag ),
+  m_params( params )
 {
-  Terminate();
-  m_port = port;
-  m_worldUp = worldUp;
-  m_sock.Disconnect();
   m_Connect();
 }
 
-void EditorClient::Launch()
+void Editor::Launch()
 {
-  if ( m_port == 0 || m_sock.IsConnected() )
+  m_Connect();
+  if ( !m_sock.IsConnected() && !fork() )
   {
-    return;
-  }
-  
-  if ( !fork() )
-  {
-    ae::Str16 portStr = ae::Str16( "#", m_port );
-    const char* worldUpStr = ( m_worldUp == ae::Axis::Y ) ? "yUp" : "zUp";
-    char* execArgs[] = { _ae_argv[ 0 ], (char*)"ae_editor", (char*)portStr.c_str(), (char*)worldUpStr, nullptr };
-    execv( _ae_argv[ 0 ], execArgs );
+    char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", nullptr };
+    execv( m_params.argv[ 0 ], execArgs );
     return;
   }
 }
 
-void EditorClient::Update()
+void Editor::Destroy( Editor* editor )
+{
+  editor->m_sock.Disconnect();
+}
+
+void Editor::Update()
 {
   levelDidChange = false;
-  if ( m_port == 0 )
+  if ( m_params.port == 0 )
   {
     return;
   }
@@ -819,17 +800,11 @@ void EditorClient::Update()
   }
 }
 
-void EditorClient::Terminate()
+void Editor::m_Connect()
 {
-  m_sock.Disconnect();
-  m_port = 0;
-}
-
-void EditorClient::m_Connect()
-{
-  if ( !m_sock.IsConnected() )
+  if ( m_params.port && !m_sock.IsConnected() )
   {
-    m_sock.Connect( ae::Socket::Protocol::TCP, "localhost", m_port );
+    m_sock.Connect( ae::Socket::Protocol::TCP, "localhost", m_params.port );
   }
 }
 
