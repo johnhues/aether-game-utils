@@ -14333,13 +14333,13 @@ bool DebugLines::AddOBB( Matrix4 transform, Color color )
 bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount )
 {
   if ( m_vertexData.GetVertexCount() + pointCount * 2 * 3 > m_vertexData.GetMaxVertexCount() )
-  if ( AddCircle( pos, Vec3(1,0,0), radius, color, pointCount ) )
-  if ( AddCircle( pos, Vec3(0,1,0), radius, color, pointCount ) )
-  if ( AddCircle( pos, Vec3(0,0,1), radius, color, pointCount ) )
   {
-    return true;
+    return false;
   }
-  return false;
+  AddCircle( pos, Vec3(1,0,0), radius, color, pointCount );
+  AddCircle( pos, Vec3(0,1,0), radius, color, pointCount );
+  AddCircle( pos, Vec3(0,0,1), radius, color, pointCount );
+  return true;
 }
 
 bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color )
