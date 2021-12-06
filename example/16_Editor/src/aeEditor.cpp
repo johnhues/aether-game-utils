@@ -7,9 +7,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aeEditor.h"
-#include "Level.h"
-#include "Resource.h"
-#include "ModelComponent.h" // @TODO: Remove
+#include "Level.h" // @TODO: Only used for TAG_LEVEL. Remove.
 
 // Level
 #include "rapidjson/document.h"
@@ -18,6 +16,43 @@
 
 #include <unistd.h>
 namespace ae {
+
+const uint32_t kCogTextureDataSize = 32;
+const uint8_t kCogTextureData[] =
+{
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,83,184,185,123,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,165,255,255,218,7,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,1,209,255,255,248,41,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,122,146,20,0,0,0,65,248,255,255,255,109,0,0,0,23,154,144,0,0,0,0,0,0,0,
+  0,0,0,0,0,4,125,255,255,213,80,69,178,244,255,255,255,255,246,178,69,86,218,255,255,147,8,0,0,0,0,0,
+  0,0,0,0,0,16,225,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,232,21,0,0,0,0,0,
+  0,0,0,0,0,0,90,255,255,255,255,255,255,230,168,131,131,167,230,255,255,255,255,255,255,96,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,167,255,255,255,251,135,26,0,0,0,0,26,135,251,255,255,255,174,2,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,87,255,255,249,94,0,0,0,0,0,0,0,0,94,250,255,255,89,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,176,255,255,135,0,0,0,0,0,0,0,0,0,0,135,255,255,175,0,0,0,0,0,0,0,
+  0,0,0,0,0,6,65,244,255,229,21,0,0,0,0,0,0,0,0,0,0,21,229,255,243,65,6,0,0,0,0,0,
+  0,0,0,80,159,208,249,255,255,167,0,0,0,0,0,0,0,0,0,0,0,0,167,255,255,249,208,160,80,0,0,0,
+  0,0,0,192,255,255,255,255,255,133,0,0,0,0,0,0,0,0,0,0,0,0,133,255,255,255,255,255,192,0,0,0,
+  0,0,0,192,255,255,255,255,255,133,0,0,0,0,0,0,0,0,0,0,0,0,133,255,255,255,255,255,192,0,0,0,
+  0,0,0,124,212,248,255,255,255,167,0,0,0,0,0,0,0,0,0,0,0,0,167,255,255,255,248,212,123,0,0,0,
+  0,0,0,0,9,44,108,245,255,229,21,0,0,0,0,0,0,0,0,0,0,21,230,255,244,108,44,9,0,0,0,0,
+  0,0,0,0,0,0,0,179,255,255,135,0,0,0,0,0,0,0,0,0,0,135,255,255,179,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,69,251,255,249,94,0,0,0,0,0,0,0,0,94,249,255,251,68,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,80,252,255,255,251,135,25,0,0,0,0,25,135,251,255,255,252,84,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,17,215,255,255,255,255,255,230,167,131,131,167,230,255,255,255,255,255,220,20,0,0,0,0,0,0,
+  0,0,0,0,0,0,149,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,156,0,0,0,0,0,0,
+  0,0,0,0,0,0,121,255,255,255,167,91,176,244,255,255,255,255,246,176,92,172,255,255,255,144,1,0,0,0,0,0,
+  0,0,0,0,0,0,0,125,214,89,0,0,0,65,248,255,255,255,109,0,0,0,95,223,147,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,16,0,0,0,0,1,209,255,255,248,41,0,0,0,0,22,3,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,165,255,255,219,8,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,82,184,185,123,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+};
 
 //------------------------------------------------------------------------------
 // EditorMsg
@@ -30,24 +65,46 @@ enum class EditorMsg : uint8_t
 };
 
 //------------------------------------------------------------------------------
+// EditorServerMesh class
+//------------------------------------------------------------------------------
+class EditorServerMesh
+{
+public:
+  struct Vertex
+  {
+    ae::Vec4 position;
+    ae::Vec4 normal;
+  };
+  EditorServerMesh( const ae::Tag& tag ) : collision( tag ) {}
+  void Initialize( const ae::Tag& tag, const EditorMesh* mesh );
+  ae::VertexData data;
+  ae::CollisionMesh collision;
+};
+
+//------------------------------------------------------------------------------
 // EditorObject
 //------------------------------------------------------------------------------
 class EditorObject
 {
 public:
+  EditorObject( const ae::Tag& tag ) : components( tag ) {}
   ~EditorObject() { AE_ASSERT( !components.Length() ); }
   void Initialize( Entity entity, ae::Matrix4 transform );
   void Terminate();
   void SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
   ae::Matrix4 GetTransform( const class EditorProgram* program ) const;
   
-  bool IsDirty() const { return m_dirty; }
-  void ClearDirty() { m_dirty = false; }
+  void HandleVarChange( class EditorProgram* program, ae::Object* component, const ae::Type* type, const ae::Var* var );
+  bool IsDirty() const { return m_dirty; } // @TODO: Rename, transform only
+  void ClearDirty() { m_dirty = false; } // @TODO: Rename, transform only
   
   Entity entity = kInvalidEntity;
   ae::Str16 name;
-  ae::Array< ae::Object* > components = TAG_EDITOR;
+  ae::Array< ae::Object* > components;
   bool hidden = false;
+  
+  EditorServerMesh* mesh = nullptr;
+  bool opaque = true;
   
 private:
   ae::Matrix4 m_transform = ae::Matrix4::Identity();
@@ -71,6 +128,15 @@ public:
 class EditorServer
 {
 public:
+  EditorServer( const ae::Tag& tag ) :
+    sock( tag ),
+    m_tag( tag ),
+    m_objects( tag ),
+    m_components( tag ),
+    m_meshResourceVars( tag ),
+    m_meshVisibleVars( tag ),
+    connections( tag )
+  {}
   void Initialize( class EditorProgram* program );
   void Terminate( class EditorProgram* program );
   void Update( class EditorProgram* program );
@@ -90,18 +156,22 @@ public:
   uint32_t GetObjectCount() const { return m_objects.Length(); }
   EditorObject* GetObject( Entity entity ) { return m_objects.Get( entity, nullptr ); }
   const EditorObject* GetObjectFromComponent( const ae::Object* component );
+  const ae::Var* GetMeshResourceVar( const ae::Type* componentType );
+  const ae::Var* GetMeshVisibleVar( const ae::Type* componentType );
   
-  ae::ListenerSocket sock = TAG_EDITOR;
+  ae::ListenerSocket sock;
   
 private:
   void m_Save( Level* level ) const;
-  bool m_Load( const Level* level );
-  void m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
-  void m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
-  void m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
+  bool m_Load( class EditorProgram* program, const Level* level );
+  bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
+  bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
+  bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
   Entity m_PickObject( class EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut );
   void m_ShowEditorObject( EditorProgram* program, Entity entity, ae::Color color );
   ae::Color m_GetColor( Entity entity, bool lines ) const;
+  
+  const ae::Tag m_tag;
   bool m_first = true;
   bool m_showInvisible = false;
   std::function< bool( const ae::Type*, const char*, ae::Object** ) > m_getObjectPointerFromString;
@@ -109,16 +179,17 @@ private:
   const ae::Type* m_selectedType = nullptr;
   Entity selected = kInvalidEntity;
   Entity hoverEntity = kInvalidEntity;
-  ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+  ImGuizmo::OPERATION gizmoOperation = (ImGuizmo::OPERATION)0;
   ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
   class Level* level;
 
   Entity m_nextEntityId = 1;
-  ae::Map< Entity, EditorObject* > m_objects = TAG_EDITOR;
-  ae::Map< ae::TypeId, ae::Map< Entity, ae::Object* > > m_components = TAG_EDITOR;
-  ae::Array< const ae::Type* > m_meshTypes = TAG_EDITOR;
+  ae::Map< Entity, EditorObject* > m_objects;
+  ae::Map< ae::TypeId, ae::Map< Entity, ae::Object* > > m_components;
+  ae::Map< const ae::Type*, const ae::Var* > m_meshResourceVars;
+  ae::Map< const ae::Type*, const ae::Var* > m_meshVisibleVars;
   
-  ae::Array< EditorConnection* > connections = TAG_EDITOR;
+  ae::Array< EditorConnection* > connections;
   uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
   
   struct SelectRef
@@ -136,7 +207,13 @@ private:
 class EditorProgram
 {
 public:
-  void Initialize( uint32_t port, ae::Axis worldUp );
+  EditorProgram( const ae::Tag& tag, const Editor::Params& params ) :
+    m_tag( tag ),
+    editor( tag ),
+    params( params ),
+    m_meshes( tag )
+  {}
+  void Initialize();
   void Terminate();
   void Run();
   float GetDt() const { return m_dt; }
@@ -150,6 +227,7 @@ public:
   void SetFOV( float fov ) { m_fov = fov; }
   float GetFOV() const { return m_fov; }
   ae::Vec3 GetMouseRay() const { return m_mouseRay; } // Is normalized
+  EditorServerMesh* GetMesh( const char* resourceId );
   
   ae::Window window;
   ae::GraphicsDevice render;
@@ -160,16 +238,8 @@ public:
   ae::DebugCamera camera;
   ae::DebugLines debugLines;
   EditorServer editor;
-  class ResourceManager* resourceManager;
 
-  ae::RenderTarget gameTarget;
-  ae::Shader shader;
-  ae::VertexData vertexData;
-  ae::VertexData quad;
-  ae::Shader iconShader;
-  
-  uint16_t port = 0;
-  ae::Axis worldUp = ae::Axis::Z;
+  const Editor::Params params;
   
   // Serialization
   class Serializer : public ae::Var::Serializer
@@ -182,6 +252,7 @@ public:
   } serializer = this;
   
 private:
+  const ae::Tag m_tag;
   float m_dt;
   ae::Matrix4 m_viewToProj = ae::Matrix4::Identity();
   ae::Matrix4 m_worldToView = ae::Matrix4::Identity();
@@ -190,6 +261,16 @@ private:
   float m_fov = 0.46f; // 28mm camera 65.5 degree horizontal fov
   ae::Vec3 m_mouseRay = ae::Vec3( 0.0f );
   float m_barWidth = 0.0f;
+  
+  ae::RenderTarget m_gameTarget;
+  ae::Map< std::string, EditorServerMesh* > m_meshes; // @TODO: Dynamic ae::Str
+public:
+  ae::VertexData m_introMesh;
+  ae::VertexData m_quad;
+  ae::Shader m_introShader;
+  ae::Shader m_meshShader;
+  ae::Shader m_iconShader;
+  ae::Texture2D m_cogTexture;
 };
 
 //------------------------------------------------------------------------------
@@ -211,7 +292,7 @@ void Level::Save( const Registry* registry, class EditorServer* editor_HACK )
       LevelObject* levelObject = objects.TryGet( component.GetEntity() );
       if ( !levelObject )
       {
-        levelObject = &objects.Set( component.GetEntity(), {} );
+        levelObject = &objects.Set( component.GetEntity(), { tag } );
       }
       
       levelObject->id = component.GetEntity();
@@ -394,7 +475,7 @@ bool Level::Read( const char* path )
   for ( const auto& jsonObject : jsonObjects.GetArray() )
   {
     Entity entity = jsonObject[ "id" ].GetUint();
-    LevelObject& levelObject = objects.Set( entity, {} );
+    LevelObject& levelObject = objects.Set( entity, { tag } );
     levelObject.id = entity;
     if ( jsonObject.HasMember( "name" ) )
     {
@@ -416,8 +497,79 @@ bool Level::Read( const char* path )
   return true;
 }
 
-void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
+//------------------------------------------------------------------------------
+// EditorServerMesh member functions
+//------------------------------------------------------------------------------
+void EditorServerMesh::Initialize( const ae::Tag& tag, const EditorMesh* _mesh )
 {
+  ae::Array< Vertex > vertices = tag;
+  
+  if ( _mesh->indices.Length() )
+  {
+    uint32_t triangleCount = _mesh->indices.Length() / 3;
+    vertices.Reserve( triangleCount * 3 );
+    for ( uint32_t i = 0; i < triangleCount; i++ )
+    {
+      ae::Vec3 p0 = _mesh->verts[ _mesh->indices[ i * 3 ] ];
+      ae::Vec3 p1 = _mesh->verts[ _mesh->indices[ i * 3 + 1 ] ];
+      ae::Vec3 p2 = _mesh->verts[ _mesh->indices[ i * 3 + 2 ] ];
+      ae::Vec4 n( ( p2 - p1 ).Cross( p0 - p1 ).SafeNormalizeCopy(), 0.0f );
+      vertices.Append( { ae::Vec4( p0, 1.0f ), n } );
+      vertices.Append( { ae::Vec4( p1, 1.0f ), n } );
+      vertices.Append( { ae::Vec4( p2, 1.0f ), n } );
+    }
+  }
+  else
+  {
+    uint32_t triangleCount = _mesh->verts.Length() / 3;
+    vertices.Reserve( triangleCount * 3 );
+    for ( uint32_t i = 0; i < triangleCount; i++ )
+    {
+      ae::Vec3 p0 = _mesh->verts[ i * 3 ];
+      ae::Vec3 p1 = _mesh->verts[ i * 3 + 1 ];
+      ae::Vec3 p2 = _mesh->verts[ i * 3 + 2 ];
+      ae::Vec4 n( ( p2 - p1 ).Cross( p0 - p1 ).SafeNormalizeCopy(), 0.0f );
+      vertices.Append( { ae::Vec4( p0, 1.0f ), n } );
+      vertices.Append( { ae::Vec4( p1, 1.0f ), n } );
+      vertices.Append( { ae::Vec4( p2, 1.0f ), n } );
+    }
+  }
+  
+  data.Initialize( sizeof( Vertex ), sizeof( uint32_t ), vertices.Length(), 0, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+  data.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( Vertex, position ) );
+  data.AddAttribute( "a_normal", 4, ae::VertexData::Type::Float, offsetof( Vertex, normal ) );
+  data.SetVertices( vertices.Begin(), vertices.Length() );
+  data.Upload();
+  
+  ae::CollisionMesh::Params collisionParams;
+  collisionParams.positions = _mesh->verts.Begin()[ 0 ].data;
+  collisionParams.positionCount = _mesh->verts.Length();
+  collisionParams.positionStride = sizeof( *_mesh->verts.Begin() );
+  collisionParams.indices = _mesh->indices.Begin();
+  collisionParams.indexSize = sizeof( *_mesh->indices.Begin() );
+  collisionParams.indexCount = _mesh->indices.Length();
+  collision.Load( collisionParams );
+}
+
+//------------------------------------------------------------------------------
+// EditorProgram member functions
+//------------------------------------------------------------------------------
+void EditorProgram::Initialize()
+{
+  AE_INFO( "Editor Initialize (port: #)", params.port );
+
+  window.Initialize( 800, 600, false, true );
+  window.SetTitle( "ae" );
+  render.Initialize( &window );
+  input.Initialize( &window );
+  fileSystem.Initialize( "", "ae", "editor" );
+  timeStep.SetTimeStep( 1.0f / 60.0f );
+  ui.Initialize();
+  camera.Reset( params.worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
+  debugLines.Initialize( 20480 );
+  debugLines.SetXRayEnabled( false );
+  editor.Initialize( this );
+  
   const char* kVertShader = "\
     AE_UNIFORM mat4 u_worldToProj;\
     AE_UNIFORM vec4 u_color;\
@@ -436,6 +588,11 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
     {\
       AE_COLOR = v_color;\
     }";
+  m_introShader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+  m_introShader.SetDepthTest( true );
+  m_introShader.SetDepthWrite( true );
+  m_introShader.SetBlending( true );
+  m_introShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
 
   struct Vertex
   {
@@ -453,7 +610,6 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
     { ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoPink().GetLinearRGBA() },
     { ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
   };
-
   uint16_t kCubeIndices[] =
   {
     4, 5, 6, 4, 6, 7, // Top
@@ -463,36 +619,36 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
     6, 2, 3, 6, 3, 7, // Back
     0, 1, 5, 0, 5, 4 // Front
   };
-
-  AE_INFO( "Editor Initialize (port: #)", port );
-  this->port = port;
-
-  window.Initialize( 800, 600, false, true );
-  window.SetTitle( "ae" );
-  render.Initialize( &window );
-  input.Initialize( &window );
-  fileSystem.Initialize( "", "ae", "editor" );
-  timeStep.SetTimeStep( 1.0f / 60.0f );
-  ui.Initialize();
-  camera.Reset( worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
-  debugLines.Initialize( 20480 );
-  debugLines.SetXRayEnabled( false );
-  editor.Initialize( this );
-  resourceManager = ae::New< ResourceManager >( TAG_RESOURCE );
-  resourceManager->Initialize( &fileSystem );
+  m_introMesh.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+  m_introMesh.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
+  m_introMesh.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
+  m_introMesh.SetVertices( kCubeVerts, countof( kCubeVerts ) );
+  m_introMesh.SetIndices( kCubeIndices, countof( kCubeIndices ) );
+  m_introMesh.Upload();
   
-  shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
-  shader.SetDepthTest( true );
-  shader.SetDepthWrite( true );
-  shader.SetBlending( true );
-  shader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
-
-  vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-  vertexData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
-  vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
-  vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
-  vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
-  vertexData.Upload();
+  const char* meshVertShader = R"(
+    AE_UNIFORM mat4 u_localToProj;
+    AE_UNIFORM mat4 u_normalToWorld;
+    AE_IN_HIGHP vec4 a_position;
+    AE_IN_HIGHP vec4 a_normal;
+    AE_OUT_HIGHP vec4 v_normal;
+    void main()
+    {
+      v_normal = u_normalToWorld * a_normal;
+      gl_Position = u_localToProj * a_position;
+    })";
+  const char* meshFragShader = R"(
+    AE_UNIFORM vec4 u_color;
+    AE_IN_HIGHP vec4 v_normal;
+    void main()
+    {
+      float light = dot( normalize( vec3(2.0, 3.0, -4.0)), normalize( v_normal.xyz ) );
+      light = 0.6 + 0.4 * max( 0.0, light );
+      AE_COLOR.rgb = u_color.rgb * light;
+      AE_COLOR.a = u_color.a;
+    })";
+  m_meshShader.Initialize( meshVertShader, meshFragShader, nullptr, 0 );
+  m_meshShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
   
   struct QuadVertex
   {
@@ -508,11 +664,11 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
     { ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), ae::Vec2( 1.0f, 0.0f ) },
     { ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), ae::Vec2( 1.0f, 1.0f ) }
   };
-  quad.Initialize( sizeof( *quadVerts ), 0, countof( quadVerts ), 0, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-  quad.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( QuadVertex, pos ) );
-  quad.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( QuadVertex, uv ) );
-  quad.SetVertices( quadVerts, countof( quadVerts ) );
-  quad.Upload();
+  m_quad.Initialize( sizeof( *quadVerts ), 0, countof( quadVerts ), 0, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+  m_quad.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( QuadVertex, pos ) );
+  m_quad.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( QuadVertex, uv ) );
+  m_quad.SetVertices( quadVerts, countof( quadVerts ) );
+  m_quad.Upload();
   
   const char* iconVertexShader = R"(
     AE_UNIFORM mat4 u_worldToProj;
@@ -530,21 +686,31 @@ void EditorProgram::Initialize( uint32_t port, ae::Axis worldUp )
     AE_IN_HIGHP vec2 v_uv;
     void main()
     {
-      AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * u_color;
-      AE_COLOR.rgb *= AE_COLOR.a;
+      float a = length( v_uv * 2.0 - vec2( 1.0 ) );
+      a -= 0.95;
+      a /= 0.05;
+      a = 1.0 - a;
+      a *= u_color.a;
+      a = clamp( a, 0.0, 1.0 );
+      float r = 0.4 + 0.6 * AE_TEXTURE2D( u_tex, v_uv ).r;
+      AE_COLOR.rgb = u_color.rgb * r * a;
+      AE_COLOR.a = a;
     })";
-  iconShader.Initialize( iconVertexShader, iconFragShader, nullptr, 0 );
-  iconShader.SetDepthTest( true );
-  iconShader.SetDepthWrite( false );
-  iconShader.SetBlending( true );
-  iconShader.SetBlendingPremul( true );
-  iconShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+  m_iconShader.Initialize( iconVertexShader, iconFragShader, nullptr, 0 );
+  m_iconShader.SetDepthTest( true );
+  m_iconShader.SetDepthWrite( false );
+  m_iconShader.SetBlending( true );
+  m_iconShader.SetBlendingPremul( true );
+  m_iconShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+  
+  AE_STATIC_ASSERT( sizeof(kCogTextureData) == kCogTextureDataSize * kCogTextureDataSize );
+  m_cogTexture.Initialize( kCogTextureData, kCogTextureDataSize, kCogTextureDataSize, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp, true );
 }
 
 void EditorProgram::Terminate()
 {
   AE_INFO( "Terminate" );
-  gameTarget.Terminate();
+  m_gameTarget.Terminate();
   editor.Terminate( this );
   debugLines.Terminate();
   ui.Terminate();
@@ -605,16 +771,16 @@ void EditorProgram::Run()
       m_barWidth = imWin->Size.x * ImGui::GetIO().DisplayFramebufferScale.x;
     }
 
-    ae::Int2 oldSize( gameTarget.GetWidth(), gameTarget.GetHeight() );
+    ae::Int2 oldSize( m_gameTarget.GetWidth(), m_gameTarget.GetHeight() );
     ae::Int2 targetSize = GetRenderRect().GetSize();
     if ( oldSize != targetSize )
     {
-      gameTarget.Initialize( targetSize.x, targetSize.y );
-      gameTarget.AddTexture( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
-      gameTarget.AddDepth( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
+      m_gameTarget.Initialize( targetSize.x, targetSize.y );
+      m_gameTarget.AddTexture( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
+      m_gameTarget.AddDepth( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
     }
-    gameTarget.Activate();
-    gameTarget.Clear( ae::Color::SRGB8( 85, 66, 82 ) );
+    m_gameTarget.Activate();
+    m_gameTarget.Clear( ae::Color::SRGB8( 85, 66, 82 ) );
 
     m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
     m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, 500.0f );
@@ -651,7 +817,7 @@ void EditorProgram::Run()
       ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
       uniformList.Set( "u_worldToProj", m_viewToProj * m_worldToView * modelToWorld );
       uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-      vertexData.Render( &shader, uniformList );
+      m_introMesh.Render( &m_introShader, uniformList );
     }
 
     editor.Render( this );
@@ -663,7 +829,7 @@ void EditorProgram::Run()
     
     float devNdc = ( m_barWidth / render.GetWidth() ) * 2.0f;
     ae::Rect ndcRect( devNdc - 1.0f, -1.0f, 2.0f - devNdc, 2.0f );
-    gameTarget.Render2D( 0, ndcRect, 0.0f );
+    m_gameTarget.Render2D( 0, ndcRect, 0.0f );
     ui.Render();
     render.Present();
 
@@ -682,25 +848,49 @@ float EditorProgram::GetAspectRatio() const
   return rect.w / (float)rect.h;
 }
 
-void _ae_EditorMain( uint16_t port, ae::Axis worldUpAxis )
+EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
 {
-  EditorProgram program;
-  program.Initialize( port, worldUpAxis );
-  program.Run();
-  program.Terminate();
+  EditorServerMesh* mesh = m_meshes.Get( resourceId, nullptr );
+  if ( !mesh && params.loadMeshFn )
+  {
+    EditorMesh temp = params.loadMeshFn( resourceId );
+    if ( temp.verts.Length() )
+    {
+      mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
+      mesh->Initialize( m_tag, &temp );
+      m_meshes.Set( resourceId, mesh );
+    }
+  }
+  return mesh;
 }
+
+//------------------------------------------------------------------------------
+// ae::EditorMesh member functions
+//------------------------------------------------------------------------------
+EditorMesh::EditorMesh( const ae::Tag& tag ) :
+  verts( tag ),
+  indices( tag )
+{}
 
 //------------------------------------------------------------------------------
 // ae::EditorMain entry point
 //------------------------------------------------------------------------------
-Editor* Editor::Main( const ae::Tag& tag, const Params& params )
+bool Editor::Params::IsEditorMode() const
+{
+  return launchEditor || ( argc >= 2 && strcmp( argv[ 1 ], "ae_editor" ) == 0 );
+}
+
+Editor* Editor::Create( const ae::Tag& tag, const Params& params )
 {
   AE_ASSERT( params.argc && params.argv );
   AE_ASSERT( params.worldUp == ae::Axis::Z || params.worldUp == ae::Axis::Y );
   AE_ASSERT( params.port );
-  if ( params.argc >= 2 && strcmp( params.argv[ 1 ], "ae_editor" ) == 0 )
+  if ( params.IsEditorMode() )
   {
-    _ae_EditorMain( params.port, params.worldUp );
+    EditorProgram program( tag, params );
+    program.Initialize();
+    program.Run();
+    program.Terminate();
     exit( 0 );
   }
 
@@ -727,6 +917,8 @@ void LevelObject::Sync( const void* data, uint32_t length )
 // Editor member functions
 //------------------------------------------------------------------------------
 Editor::Editor( const ae::Tag& tag, const Params& params ) :
+  level( tag ),
+  m_tag( tag ),
   m_sock( tag ),
   m_params( params )
 {
@@ -846,6 +1038,26 @@ ae::Matrix4 EditorObject::GetTransform( const EditorProgram* program ) const
   return m_transform;
 }
 
+void EditorObject::HandleVarChange( EditorProgram* program, ae::Object* component, const ae::Type* type, const ae::Var* var )
+{
+  if ( var == program->editor.GetMeshResourceVar( type ) )
+  {
+    auto varStr = var->GetObjectValueAsString( component );
+    if ( varStr != "" )
+    {
+      mesh = program->GetMesh( varStr.c_str() );
+    }
+    else
+    {
+      mesh = nullptr;
+    }
+  }
+  else if ( var == program->editor.GetMeshVisibleVar( type ) )
+  {
+    var->GetObjectValue( component, &opaque );
+  }
+}
+
 //------------------------------------------------------------------------------
 // EditorConnection member functions
 //------------------------------------------------------------------------------
@@ -865,15 +1077,34 @@ void EditorConnection::Destroy( EditorServer* editor )
 //------------------------------------------------------------------------------
 void EditorServer::Initialize( EditorProgram* program )
 {
-  level = ae::New< Level >( TAG_EDITOR );
+  level = ae::New< Level >( m_tag, m_tag );
   
   uint32_t typeCount = ae::GetTypeCount();
   for ( uint32_t i = 0; i < typeCount; i++ )
   {
     const ae::Type* type = ae::GetTypeByIndex( i );
-    if ( type->HasProperty( "ae_editor_mesh" ) )
+    int32_t resourcePropIdx = type->GetPropertyIndex( "ae_mesh_resource" );
+    if ( resourcePropIdx >= 0 )
     {
-      m_meshTypes.Append( type );
+      const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_resource, memberVar );";
+      AE_ASSERT_MSG( type->GetPropertyValueCount( resourcePropIdx ), mustRegisterErr, type->GetName() );
+      const char* varName = type->GetPropertyValue( resourcePropIdx, 0 );
+      AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
+      const ae::Var* var = type->GetVarByName( varName );
+      AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
+      m_meshResourceVars.Set( type, var );
+      
+      int32_t visiblePropIdx = type->GetPropertyIndex( "ae_mesh_visible" );
+      if ( visiblePropIdx >= 0 )
+      {
+        const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_visible, memberVar );";
+        AE_ASSERT_MSG( type->GetPropertyValueCount( visiblePropIdx ), mustRegisterErr, type->GetName() );
+        const char* varName = type->GetPropertyValue( visiblePropIdx, 0 );
+        AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
+        const ae::Var* var = type->GetVarByName( varName );
+        AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
+        m_meshVisibleVars.Set( type, var );
+      }
     }
   }
 }
@@ -895,12 +1126,12 @@ void EditorServer::Update( EditorProgram* program )
 {
   if ( !sock.IsListening() )
   {
-    sock.Listen( ae::Socket::Protocol::TCP, false, program->port, 8 );
+    sock.Listen( ae::Socket::Protocol::TCP, false, program->params.port, 8 );
   }
   while ( ae::Socket* newConn = sock.Accept() )
   {
     AE_INFO( "ae::Editor client connected from #:#", newConn->GetResolvedAddress(), newConn->GetPort() );
-    EditorConnection* editorConn = connections.Append( ae::New< EditorConnection >( TAG_EDITOR ) );
+    EditorConnection* editorConn = connections.Append( ae::New< EditorConnection >( m_tag ) );
     editorConn->sock = newConn;
   }
   AE_ASSERT( connections.Length() == sock.GetConnectionCount() );
@@ -952,45 +1183,36 @@ void EditorServer::Render( EditorProgram* program )
   struct RenderObj
   {
     const EditorObject* obj = nullptr;
-    const ModelComponent* model = nullptr;
     float distanceSq = INFINITY;
   };
-  ae::Array< RenderObj > opaqueObjects = TAG_EDITOR;
-  ae::Array< RenderObj > transparentObjects = TAG_EDITOR;
-  ae::Array< RenderObj > logicObjects = TAG_EDITOR;
+  ae::Array< RenderObj > opaqueObjects = m_tag;
+  ae::Array< RenderObj > transparentObjects = m_tag;
+  ae::Array< RenderObj > logicObjects = m_tag;
   
   // Split up render passes
   uint32_t editorObjectCount = m_objects.Length();
   for ( uint32_t i = 0; i < editorObjectCount; i++ )
   {
     const EditorObject* obj = m_objects.GetValue( i );
-    const ModelComponent* model = ae::Cast< ModelComponent >( GetComponent( obj, "ModelComponent" ) );
     float distanceSq = ( camPos - obj->GetTransform( program ).GetTranslation() ).LengthSquared();
-    if ( model )
+    if ( obj->mesh )
     {
-      if ( model->render ) { opaqueObjects.Append( { obj, model, distanceSq } ); }
-      else { transparentObjects.Append( { obj, model, distanceSq } ); }
+      if ( obj->opaque ) { opaqueObjects.Append( { obj, distanceSq } ); }
+      else { transparentObjects.Append( { obj, distanceSq } ); }
     }
-    else { logicObjects.Append( { obj, model, distanceSq } ); }
+    else { logicObjects.Append( { obj, distanceSq } ); }
   }
   
-  // Opaque and transparent models
-  auto renderModel = [program, worldToProj]( const RenderObj& renderObj, ae::Color color )
+  // Opaque and transparent meshes
+  auto renderMesh = [program, worldToProj]( const RenderObj& renderObj, ae::Color color )
   {
     const EditorObject& obj = *renderObj.obj;
-    const ModelComponent* model = renderObj.model;
-
-    const ModelResource* modelResource = &model->GetModel( program->resourceManager );
-    const MeshResource& meshResource = program->resourceManager->Get( modelResource->mesh );
-    const ShaderResource& shaderResource = program->resourceManager->Get( modelResource->shader );
-    ae::Matrix4 transform = obj.GetTransform( program ) * modelResource->preTransform;
+    ae::Matrix4 transform = obj.GetTransform( program );
     ae::UniformList uniformList;
     uniformList.Set( "u_localToProj", worldToProj * transform );
-    uniformList.Set( "u_localToWorld", transform );
     uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
-    uniformList.Set( "u_tex", &program->resourceManager->Get( modelResource->texture0 ).texture );
     uniformList.Set( "u_color", color.GetLinearRGBA() );
-    meshResource.mesh.Render( &shaderResource.shader, uniformList );
+    obj.mesh->data.Render( &program->m_meshShader, uniformList );
   };
   
   // Opaque objects
@@ -998,11 +1220,14 @@ void EditorServer::Render( EditorProgram* program )
   {
     return a.distanceSq < b.distanceSq;
   } );
+  program->m_meshShader.SetDepthTest( true );
+  program->m_meshShader.SetDepthWrite( true );
+  program->m_meshShader.SetBlending( false );
   for ( const RenderObj& renderObj : opaqueObjects )
   {
     const EditorObject& obj = *renderObj.obj;
     ae::Color color = m_GetColor( obj.entity, false );
-    renderModel( renderObj, color );
+    renderMesh( renderObj, color );
   }
   
   // Logic objects
@@ -1019,9 +1244,9 @@ void EditorServer::Render( EditorProgram* program )
     ae::Matrix4 modelToWorld = ae::Matrix4::Rotation( ae::Vec3(0,0,1), ae::Vec3(0,1,0), toCamera, camUp );
     modelToWorld.SetTranslation( objPos );
     uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
-    uniformList.Set( "u_tex", &program->resourceManager->Get( TextureId::Cog ).texture );
+    uniformList.Set( "u_tex", &program->m_cogTexture );
     uniformList.Set( "u_color", m_GetColor( obj.entity, false ).GetLinearRGBA() );
-    program->quad.Render( &program->iconShader, uniformList );
+    program->m_quad.Render( &program->m_iconShader, uniformList );
   }
   
   // Transparent objects
@@ -1031,11 +1256,14 @@ void EditorServer::Render( EditorProgram* program )
     {
       return a.distanceSq > b.distanceSq;
     } );
+    program->m_meshShader.SetDepthTest( true );
+    program->m_meshShader.SetDepthWrite( false );
+    program->m_meshShader.SetBlending( true );
     for ( const RenderObj& renderObj : transparentObjects )
     {
       const EditorObject& obj = *renderObj.obj;
       ae::Color color = m_GetColor( obj.entity, false ).ScaleA( 0.5f );
-      renderModel( renderObj, color );
+      renderMesh( renderObj, color );
     }
   }
 }
@@ -1404,7 +1632,11 @@ void EditorServer::ShowUI( EditorProgram* program )
           uint32_t varCount = type->GetVarCount();
           for ( uint32_t i = 0; i < varCount; i++ )
           {
-            m_ShowVar( program, component, type->GetVarByIndex( i ) );
+            const ae::Var* var = type->GetVarByIndex( i );
+            if ( m_ShowVar( program, component, var ) )
+            {
+              selectedObject->HandleVarChange( program, component, type, var );
+            }
           }
           ImGui::TreePop();
         }
@@ -1544,7 +1776,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 EditorObject* EditorServer::CreateObject( Entity id, const ae::Matrix4& transform )
 {
   AE_ASSERT( !GetObject( id ) );
-  EditorObject* editorObject = ae::New< EditorObject >( TAG_EDITOR );
+  EditorObject* editorObject = ae::New< EditorObject >( m_tag, m_tag );
   editorObject->Initialize( id, transform );
   m_objects.Set( id, editorObject );
   m_nextEntityId = ae::Max( m_nextEntityId, id + 1 );
@@ -1557,14 +1789,14 @@ ae::Object* EditorServer::AddComponent( EditorObject* obj, const char* typeName 
   AE_ASSERT( type );
   AE_ASSERT( !GetComponent( obj, typeName ) );
   
-  ae::Object* component = (ae::Object*)ae::Allocate( TAG_REGISTRY, type->GetSize(), type->GetAlignment() );
+  ae::Object* component = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
   type->New( component );
   
   obj->components.Append( component );
   ae::Map< Entity, ae::Object* >* typeComponents = m_components.TryGet( type->GetId() );
   if ( !typeComponents )
   {
-    typeComponents = &m_components.Set( type->GetId(), TAG_REGISTRY );
+    typeComponents = &m_components.Set( type->GetId(), m_tag );
   }
   typeComponents->Set( obj->entity, component );
   
@@ -1605,6 +1837,16 @@ const EditorObject* EditorServer::GetObjectFromComponent( const ae::Object* comp
     }
   }
   return nullptr;
+}
+
+const ae::Var* EditorServer::GetMeshResourceVar( const ae::Type* componentType )
+{
+  return m_meshResourceVars.Get( componentType, nullptr );
+}
+
+const ae::Var* EditorServer::GetMeshVisibleVar( const ae::Type* componentType )
+{
+  return m_meshVisibleVars.Get( componentType, nullptr );
 }
 
 bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
@@ -1664,7 +1906,7 @@ bool EditorServer::OpenLevel( EditorProgram* program )
     if ( level->Read( filePath[ 0 ].c_str() ) )
     {
       AE_INFO( "Loading..." );
-      if ( m_Load( level ) )
+      if ( m_Load( program, level ) )
       {
         AE_INFO( "Loaded level" );
         program->window.SetTitle( level->filePath.c_str() );
@@ -1709,7 +1951,7 @@ void EditorServer::m_Save( Level* level ) const
   for ( uint32_t i = 0; i < editorObjectCount; i++ )
   {
     const EditorObject* editorObj = m_objects.GetValue( i );
-    LevelObject* levelObj = &level->objects.Set( editorObj->entity, {} );
+    LevelObject* levelObj = &level->objects.Set( editorObj->entity, { m_tag } );
     levelObj->id = editorObj->entity;
     levelObj->name = editorObj->name;
     levelObj->transform = editorObj->GetTransform( nullptr );
@@ -1747,7 +1989,7 @@ void EditorServer::m_Save( Level* level ) const
   }
 }
 
-bool EditorServer::m_Load( const Level* level )
+bool EditorServer::m_Load( EditorProgram* program, const Level* level )
 {
   Unload();
   
@@ -1801,29 +2043,28 @@ bool EditorServer::m_Load( const Level* level )
         {
           var->SetObjectValueFromString( component, value );
         }
+        
+        editorObj->HandleVarChange( program, component, type, var );
       }
     }
   }
   return true;
 }
 
-void EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::Var* var )
+bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::Var* var )
 {
+  bool changed = false;
   ImGui::PushID( var->GetName() );
   if ( var->IsArray() )
   {
     uint32_t arrayLength = var->GetArrayLength( component );
-    if ( arrayLength > 231 )
-    {
-      arrayLength = var->GetArrayLength( component );
-    }
     ImGui::Text( "%s", var->GetName() );
     ImVec2 size( ImGui::GetContentRegionAvail().x, 8 * ImGui::GetTextLineHeightWithSpacing() );
     ImGui::BeginChild( "ChildL", size, true, 0 );
     for ( int i = 0; i < arrayLength; i++ )
     {
       ImGui::PushID( i );
-      m_ShowVarValue( program, component, var, i );
+      changed |= m_ShowVarValue( program, component, var, i );
       ImGui::PopID();
     }
     ImGui::EndChild();
@@ -1832,22 +2073,25 @@ void EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
       if ( ImGui::Button( "Add" ) )
       {
         var->SetArrayLength( component, arrayLength + 1 );
+        changed = true;
       }
       ImGui::SameLine();
       if ( ImGui::Button( "Remove" ) && arrayLength )
       {
         var->SetArrayLength( component, arrayLength - 1 );
+        changed = true;
       }
     }
   }
   else
   {
-    m_ShowVarValue( program, component, var );
+    changed |= m_ShowVarValue( program, component, var );
   }
   ImGui::PopID();
+  return changed;
 }
 
-void EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx )
+bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx )
 {
   switch ( var->GetType() )
   {
@@ -1855,8 +2099,10 @@ void EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
     {
       auto currentStr = var->GetObjectValueAsString( component, idx );
       auto valueStr = aeImGui_Enum( var->GetEnum(), var->GetName(), currentStr.c_str() );
-      var->SetObjectValueFromString( component, valueStr.c_str(), idx );
-      break;
+      if ( var->SetObjectValueFromString( component, valueStr.c_str(), idx ) )
+      {
+        return ( currentStr != valueStr.c_str() );
+      }
     }
     case ae::Var::Type::Bool:
     {
@@ -1864,9 +2110,9 @@ void EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
       var->GetObjectValue( component, &b, idx );
       if ( ImGui::Checkbox( var->GetName(), &b ) )
       {
-        var->SetObjectValue( component, b, idx );
+        return var->SetObjectValue( component, b, idx );
       }
-      break;
+      return false;
     }
     case ae::Var::Type::Float:
     {
@@ -1874,9 +2120,9 @@ void EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
       var->GetObjectValue( component, &f, idx );
       if ( ImGui::InputFloat( var->GetName(), &f ) )
       {
-        var->SetObjectValue( component, f, idx );
+        return var->SetObjectValue( component, f, idx );
       }
-      break;
+      return false;
     }
     case ae::Var::Type::String:
     {
@@ -1886,22 +2132,22 @@ void EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
       ImGui::Text( "%s", var->GetName() );
       if ( ImGui::InputTextMultiline( var->GetName(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
       {
-        var->SetObjectValueFromString( component, buf, idx );
+        return var->SetObjectValueFromString( component, buf, idx );
       }
-      break;
+      return false;
     }
     case ae::Var::Type::Ref:
     {
-      m_ShowRefVar( program, component, var, idx );
-      break;
+      return m_ShowRefVar( program, component, var, idx );
     }
     default:
       ImGui::Text( "%s (Unsupported type)", var->GetName() );
       break;
   }
+  return false;
 }
 
-void EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx )
+bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx )
 {
   const ae::Type* componentType = ae::GetTypeFromObject( component );
   auto val = var->GetObjectValueAsString( component, idx );
@@ -1953,6 +2199,7 @@ void EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
       }
     }
   }
+  return false; // @TODO: Handle ref vars changing
 }
 
 std::string EditorProgram::Serializer::ObjectPointerToString( const ae::Object* obj ) const
@@ -2004,23 +2251,20 @@ Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::
   for ( uint32_t i = 0; i < editorObjectCount; i++ )
   {
     const EditorObject* editorObj = m_objects.GetValue( i );
-    const ModelComponent* model = ae::Cast< ModelComponent >( GetComponent( editorObj, "ModelComponent" ) );
-    if ( model )
+    if ( editorObj->mesh )
     {
-      if ( !GetShowInvisible() && !model->render )
+      if ( !GetShowInvisible() && !editorObj->opaque )
       {
         continue;
       }
-      const ModelResource* modelResource = &model->GetModel( program->resourceManager );
-      const MeshResource* mesh = &model->GetMesh( program->resourceManager );
       ae::CollisionMesh::RaycastParams params;
       params.userData = editorObj;
       params.source = mouseRaySrc;
       params.direction = mouseRay;
-      params.transform = editorObj->GetTransform( program ) * modelResource->preTransform;
+      params.transform = editorObj->GetTransform( program );
       params.hitClockwise = false;
       params.hitCounterclockwise = true;
-      result = mesh->collision.Raycast( params, result );
+      result = editorObj->mesh->collision.Raycast( params, result );
     }
     else
     {
@@ -2054,18 +2298,15 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, Entity entity, ae
   if ( entity )
   {
     const EditorObject* editorObj = m_objects.Get( entity );
-    const ModelComponent* model = ae::Cast< ModelComponent >( GetComponent( editorObj, "ModelComponent" ) );
-    if ( model )
+    if ( editorObj->mesh )
     {
-      const ModelResource* modelResource = &model->GetModel( program->resourceManager );
-      const MeshResource* meshResource = &model->GetMesh( program->resourceManager );
-      ae::Matrix4 transform = editorObj->GetTransform( program ) * modelResource->preTransform;
-      const Vertex* verts = (const Vertex*)meshResource->mesh.GetVertices(); // @TODO: using resource.h vertex
-      uint32_t vertexCount = meshResource->mesh.GetVertexCount();
-      const uint16_t* indices = (const uint16_t*)meshResource->mesh.GetIndices();
-      AE_ASSERT( meshResource->mesh.GetIndexSize() == 2 );
-      uint32_t indexCount = meshResource->mesh.GetIndexCount();
-      program->debugLines.AddMesh( (const ae::Vec3*)&verts->pos, sizeof(*verts), vertexCount, indices, 2, indexCount, transform, color );
+      const ae::VertexData* meshData = &editorObj->mesh->data;
+      ae::Matrix4 transform = editorObj->GetTransform( program );
+      auto verts = (const ae::EditorServerMesh::Vertex*)meshData->GetVertices();
+      uint32_t vertexCount = meshData->GetVertexCount();
+      const void* indices = meshData->GetIndices();
+      uint32_t indexCount = meshData->GetIndexCount();
+      program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, indices, meshData->GetIndexSize(), indexCount, transform, color );
     }
     else
     {
