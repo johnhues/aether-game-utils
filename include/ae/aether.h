@@ -1183,9 +1183,9 @@ public:
   void Clear(); //!< Remove all key/value pairs from the map. ae::Map::Length() will return 0 after calling this.
 
   // Access elements by index
-  const K& GetKey( uint32_t index ) const; //!< Returns the nth key in the map
-  const V& GetValue( uint32_t index ) const; //!< Returns the nth value in the map
-  V& GetValue( uint32_t index ); //!< Returns a modifiable reference to the nth value in the map
+  const K& GetKey( int32_t index ) const; //!< Returns the nth key in the map
+  const V& GetValue( int32_t index ) const; //!< Returns the nth value in the map
+  V& GetValue( int32_t index ); //!< Returns a modifiable reference to the nth value in the map
   int32_t GetIndex( const K& key ) const; //!< Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
   uint32_t Length() const; //!< Returns the number of key/value pairs in the map
 
@@ -3014,12 +3014,6 @@ public:
   template <> const char* ae::_TypeName< x >::Get() { return #x; } \
   template <> void ae::_DefineType< x >( ae::Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
   static ae::_TypeCreator< x > ae_type_creator_##x( #x );
-
-//------------------------------------------------------------------------------
-// External meta var registerer
-//------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_VAR( c, v ) \
-  static ae::_VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
 //------------------------------------------------------------------------------
 // External meta property registerer
 //------------------------------------------------------------------------------
@@ -3027,7 +3021,14 @@ public:
   static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p, "" );
 
 #define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
-static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
+  static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
+
+//------------------------------------------------------------------------------
+// External meta var registerer
+//------------------------------------------------------------------------------
+#define AE_REGISTER_CLASS_VAR( c, v ) \
+  static ae::_VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
+// @TODO: AE_REGISTER_CLASS_VAR_PROPERTY & AE_REGISTER_CLASS_VAR_PROPERTY_VALUE
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -3294,11 +3295,12 @@ public:
     
   // Properties
   bool HasProperty( const char* prop ) const;
-  uint32_t GetPropertyCount() const;
-  const char* GetPropertyName( uint32_t propIndex ) const;
-  uint32_t GetPropertyValueCount( uint32_t propIndex ) const;
+  int32_t GetPropertyIndex( const char* prop ) const;
+  int32_t GetPropertyCount() const;
+  const char* GetPropertyName( int32_t propIndex ) const;
+  uint32_t GetPropertyValueCount( int32_t propIndex ) const;
   uint32_t GetPropertyValueCount( const char* propName ) const;
-  const char* GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const;
+  const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
   const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
     
   // Vars
@@ -5558,7 +5560,7 @@ uint32_t Array< T, N >::m_GetNextSize() const
 }
 
 //------------------------------------------------------------------------------
-// ae::Map functions
+// ae::Map member functions
 //------------------------------------------------------------------------------
 template < typename K >
 bool Map_IsEqual( const K& k0, const K& k1 );
@@ -5708,13 +5710,13 @@ void Map< K, V, N >::Clear()
 }
 
 template < typename K, typename V, uint32_t N >
-const K& Map< K, V, N >::GetKey( uint32_t index ) const
+const K& Map< K, V, N >::GetKey( int32_t index ) const
 {
   return m_entries[ index ].key;
 }
 
 template < typename K, typename V, uint32_t N >
-V& Map< K, V, N >::GetValue( uint32_t index )
+V& Map< K, V, N >::GetValue( int32_t index )
 {
   return m_entries[ index ].value;
 }
@@ -5733,7 +5735,7 @@ int32_t Map< K, V, N >::GetIndex( const K& key ) const
 }
 
 template < typename K, typename V, uint32_t N >
-const V& Map< K, V, N >::GetValue( uint32_t index ) const
+const V& Map< K, V, N >::GetValue( int32_t index ) const
 {
   return m_entries[ index ].value;
 }
@@ -14331,13 +14333,13 @@ bool DebugLines::AddOBB( Matrix4 transform, Color color )
 bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount )
 {
   if ( m_vertexData.GetVertexCount() + pointCount * 2 * 3 > m_vertexData.GetMaxVertexCount() )
-  if ( AddCircle( pos, Vec3(1,0,0), radius, color, pointCount ) )
-  if ( AddCircle( pos, Vec3(0,1,0), radius, color, pointCount ) )
-  if ( AddCircle( pos, Vec3(0,0,1), radius, color, pointCount ) )
   {
-    return true;
+    return false;
   }
-  return false;
+  AddCircle( pos, Vec3(1,0,0), radius, color, pointCount );
+  AddCircle( pos, Vec3(0,1,0), radius, color, pointCount );
+  AddCircle( pos, Vec3(0,0,1), radius, color, pointCount );
+  return true;
 }
 
 bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color )
@@ -17122,12 +17124,13 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 }
 
 ae::TypeId ae::Type::GetId() const { return m_id; }
-bool ae::Type::HasProperty( const char* prop ) const { return m_props.TryGet( prop ) != nullptr; }
-uint32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
-const char* ae::Type::GetPropertyName( uint32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
-uint32_t ae::Type::GetPropertyValueCount( uint32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
+bool ae::Type::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
+int32_t ae::Type::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
+int32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
+const char* ae::Type::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
+uint32_t ae::Type::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
 uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-const char* ae::Type::GetPropertyValue( uint32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
+const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
 const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
 uint32_t ae::Type::GetVarCount() const { return m_vars.Length(); }
 const ae::Var* ae::Type::GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
