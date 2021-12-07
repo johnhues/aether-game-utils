@@ -7,11 +7,15 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/Editor.h"
+#include <unistd.h> // fork
+
+// @TODO: Remove these dependencies
+#include "ae/aeImGui.h"
+#include "ImGuizmo.h"
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
 
-#include <unistd.h>
 namespace ae {
 
 class EditorServer;
@@ -836,7 +840,7 @@ bool Editor::Read( const char* path )
     for ( const auto& componentIter : jsonObject[ "components" ].GetObject() )
     {
       const char* typeName = componentIter.name.GetString();
-      ae::Dict& props = levelObject.components.Set( typeName, TAG_LEVEL );
+      ae::Dict& props = levelObject.components.Set( typeName, m_tag );
       for ( const auto& propIter : componentIter.value.GetObject() )
       {
         props.SetString( propIter.name.GetString(), propIter.value.GetString() );
@@ -1810,7 +1814,7 @@ void EditorServer::m_Save( Editor* client ) const
     for ( const ae::Object* component : editorObj->components )
     {
       const ae::Type* type = ae::GetTypeFromObject( component );
-      ae::Dict& props = levelObj->components.Set( type->GetName(), TAG_LEVEL );
+      ae::Dict& props = levelObj->components.Set( type->GetName(), m_tag );
       for ( uint32_t varIdx = 0; varIdx < type->GetVarCount(); varIdx++ )
       {
         const ae::Var* var = type->GetVarByIndex( varIdx );
