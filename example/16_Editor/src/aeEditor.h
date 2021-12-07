@@ -12,51 +12,28 @@
 //------------------------------------------------------------------------------
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
-#include "Entity.h"
 
 //------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
-class Level;
-
 namespace ae {
 
 const uint32_t kMaxEditorMessageSize = 1024;
 
+typedef uint32_t EditorObjectId;
+const EditorObjectId kInvalidEditorObjectId = 0;
+
 //------------------------------------------------------------------------------
-// LevelObject
+// ae::EditorObject class
 //------------------------------------------------------------------------------
-class LevelObject
+class EditorObject
 {
 public:
-  LevelObject( const ae::Tag& tag ) : components( tag ) {}
-  Entity id = kInvalidEntity;
+  EditorObject( const ae::Tag& tag ) : components( tag ) {}
+  EditorObjectId id = kInvalidEditorObjectId;
   ae::Str16 name;
   ae::Matrix4 transform = ae::Matrix4::Identity();
   ae::Map< ae::Str32, ae::Dict > components;
-  
-  void Initialize( const void* data, uint32_t length );
-  void Sync( const void* data, uint32_t length );
-};
-
-//------------------------------------------------------------------------------
-// Level functions
-//------------------------------------------------------------------------------
-typedef std::function< void( const LevelObject& levelObject, Entity entity, class Registry* registry ) > CreateObjectFn;
-class Level
-{
-public:
-  Level( const ae::Tag& tag ) : tag( tag ), objects( tag ) {}
-  
-  void Save( const class Registry* registry, class EditorServer* editor_HACK );
-  bool Load( class Registry* registry, CreateObjectFn fn = nullptr ) const;
-  
-  bool Write() const;
-  bool Read( const char* path );
-  
-  const ae::Tag tag;
-  ae::Str256 filePath;
-  ae::Map< Entity, LevelObject > objects;
 };
 
 //------------------------------------------------------------------------------
@@ -71,42 +48,45 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::EditorParams class
+//------------------------------------------------------------------------------
+struct EditorParams
+{
+  int argc = 0;
+  char** argv = nullptr;
+  uint16_t port = 7200;
+  //! Only ae::Axis::Z and ae::Axis::Y are supported
+  ae::Axis worldUp = ae::Axis::Z;
+  //! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
+  //! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
+  //! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
+  std::function< ae::EditorMesh( const char* resourceId ) > loadMeshFn;
+  bool launchEditor = false;
+};
+
+//------------------------------------------------------------------------------
 // ae::Editor class
 //------------------------------------------------------------------------------
 class Editor
 {
 public:
-  struct Params
-  {
-    bool IsEditorMode() const;
-    
-    int argc = 0;
-    char** argv = nullptr;
-    uint16_t port = 7200;
-    //! Only ae::Axis::Z and ae::Axis::Y are supported
-    ae::Axis worldUp = ae::Axis::Z;
-    //! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
-    //! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_editor_mesh, myVar );
-    //! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
-    std::function< ae::EditorMesh( const char* resourceId ) > loadMeshFn;
-    bool launchEditor = false;
-  };
-  // @TODO: Replace Create() with ctor?
-  static ae::Editor* Create( const ae::Tag& tag, const ae::Editor::Params& params );
-  static void Destroy( ae::Editor* editor );
-  
+  Editor( const ae::Tag& tag );
+  ~Editor();
+  void Initialize( const EditorParams& params );
   void Update();
   void Launch();
   bool IsConnected() const { return m_sock.IsConnected(); }
+  bool Write() const;
+  bool Read( const char* path );
   
+  ae::Str256 filePath;
   bool levelDidChange = false;
-  Level level;
+  ae::Map< EditorObjectId, EditorObject > objects;
 
 private:
-  Editor( const ae::Tag& tag, const Params& params );
   void m_Connect();
   const ae::Tag m_tag;
-  const Params m_params;
+  EditorParams m_params;
   ae::Socket m_sock;
   uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 };
