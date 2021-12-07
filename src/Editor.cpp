@@ -6,10 +6,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeEditor.h"
-#include "Level.h" // @TODO: Only used for TAG_LEVEL. Remove.
-
-// Level
+#include "ae/Editor.h"
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
