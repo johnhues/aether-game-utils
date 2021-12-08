@@ -3011,23 +3011,23 @@ public:
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS( x ) \
   int force_link_##x = 0; \
-  template <> const char* ae::_TypeName< x >::Get() { return #x; } \
-  template <> void ae::_DefineType< x >( ae::Type *type, uint32_t index ) { type->Init< x >( #x, index ); } \
-  static ae::_TypeCreator< x > ae_type_creator_##x( #x );
+  template <> const char* ae::_TypeName< ::x >::Get() { return #x; } \
+  template <> void ae::_DefineType< ::x >( ae::Type *type, uint32_t index ) { type->Init< ::x >( #x, index ); } \
+  static ae::_TypeCreator< ::x > ae_type_creator_##x( #x );
 //------------------------------------------------------------------------------
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) \
-  static ae::_PropCreator< c > ae_prop_creator_##c##_##p( #c, #p, "" );
+  static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( #c, #p, "" );
 
 #define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
-  static ae::_PropCreator< c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
+  static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External meta var registerer
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_VAR( c, v ) \
-  static ae::_VarCreator< c, decltype(c::v), offsetof( c, v ) > ae_var_creator_##c##_##v( #c, #v );
+  static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( #c, #v );
 // @TODO: AE_REGISTER_CLASS_VAR_PROPERTY & AE_REGISTER_CLASS_VAR_PROPERTY_VALUE
 
 //------------------------------------------------------------------------------
@@ -6072,7 +6072,7 @@ const char* Inheritor< Parent, This >::GetParentTypeName()
 template < typename Parent, typename This >
 const ae::Type* Inheritor< Parent, This >::GetParentType()
 {
-  return ae::GetType( ae::_TypeName< Parent >::Get() );
+  return ae::GetTypeByName( ae::_TypeName< Parent >::Get() );
 }
 
 //------------------------------------------------------------------------------
