@@ -98,6 +98,7 @@ Component* Registry::AddComponent( Entity entity, const char* typeName )
 {
 	const ae::Type* type = ae::GetTypeByName( typeName );
 	AE_ASSERT( type );
+	AE_ASSERT_MSG( type->IsType< ae::Component >(), "Type '#' does not inherit from ae::Component", type->GetName() );
 	
 	ae::Object* object = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
 	type->New( object );

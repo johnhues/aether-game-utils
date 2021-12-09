@@ -149,6 +149,7 @@ public:
   
   bool SaveLevel( class EditorProgram* program, bool saveAs );
   bool OpenLevel( class EditorProgram* program );
+  bool OpenLevel( class EditorProgram* program, const char* path );
   void Unload();
   
   bool GetShowInvisible() const { return m_showInvisible; }
@@ -166,8 +167,8 @@ public:
   ae::ListenerSocket sock;
   
 private:
-  void m_Save( Editor* client ) const;
-  bool m_Load( class EditorProgram* program, const Editor* client );
+  void m_Save() const;
+  bool m_Load( class EditorProgram* program );
   bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
   bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
   bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
@@ -676,6 +677,10 @@ void Editor::Initialize( const EditorParams& params )
   {
     EditorProgram program( m_tag, params, this );
     program.Initialize();
+    if ( params.argc >= 3 )
+    {
+      program.editor.OpenLevel( &program, params.argv[ 2 ] );
+    }
     program.Run();
     program.Terminate();
     exit( 0 );
@@ -688,7 +693,7 @@ void Editor::Launch()
   m_Connect();
   if ( !m_sock.IsConnected() && !fork() )
   {
-    char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", nullptr };
+    char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)filePath.c_str(), nullptr };
     execv( m_params.argv[ 0 ], execArgs );
     return;
   }
@@ -1725,7 +1730,7 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
   
   if ( fileSelected )
   {
-    m_Save( client );
+    m_Save();
     if ( client->Write() )
     {
       AE_INFO( "Saved '#'", client->filePath );
@@ -1756,30 +1761,42 @@ bool EditorServer::OpenLevel( EditorProgram* program )
   auto filePath = program->fileSystem.OpenDialog( params );
   if ( filePath.Length() )
   {
-    AE_INFO( "Level '#'", filePath );
-    AE_INFO( "Reading..." );
-    if ( client->Read( filePath[ 0 ].c_str() ) )
-    {
-      AE_INFO( "Loading..." );
-      if ( m_Load( program, client ) )
-      {
-        AE_INFO( "Loaded level" );
-        program->window.SetTitle( client->filePath.c_str() );
-      }
-      else
-      {
-        AE_INFO( "Failed to load level" );
-      }
-    }
-    else
-    {
-      AE_INFO( "Failed to read level" );
-    }
+    return OpenLevel( program, filePath[ 0 ].c_str() );
   }
   else
   {
     AE_INFO( "No file selected" );
   }
+  return false;
+}
+
+bool EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
+{
+  if ( !filePath || !filePath[ 0 ] )
+  {
+    return false;
+  }
+  AE_INFO( "Level '#'", filePath );
+  AE_INFO( "Reading..." );
+  if ( client->Read( filePath ) )
+  {
+    AE_INFO( "Loading..." );
+    if ( m_Load( program ) )
+    {
+      AE_INFO( "Loaded level" );
+      program->window.SetTitle( client->filePath.c_str() );
+      return true;
+    }
+    else
+    {
+      AE_INFO( "Failed to load level" );
+    }
+  }
+  else
+  {
+    AE_INFO( "Failed to read level" );
+  }
+  return false;
 }
 
 void EditorServer::Unload()
@@ -1799,7 +1816,7 @@ void EditorServer::Unload()
   m_components.Clear();
 }
 
-void EditorServer::m_Save( Editor* client ) const
+void EditorServer::m_Save() const
 {
   client->objects.Clear();
   uint32_t editorObjectCount = m_objects.Length();
@@ -1834,6 +1851,15 @@ void EditorServer::m_Save( Editor* client ) const
             props.SetString( key.c_str(), value.c_str() );
           }
         }
+        else if ( var->GetType() == ae::Var::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
+        {
+          props.SetMatrix4( var->GetName(), levelObj->transform );
+        }
+        else if ( var->GetType() == ae::Var::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
+        {
+          props.SetVec3( var->GetName(), levelObj->transform.GetTranslation() );
+        }
+        // @TODO: 'scale' and 'rotation'
         else
         {
           auto value = var->GetObjectValueAsString( component );
@@ -1844,7 +1870,7 @@ void EditorServer::m_Save( Editor* client ) const
   }
 }
 
-bool EditorServer::m_Load( EditorProgram* program, const Editor* client )
+bool EditorServer::m_Load( EditorProgram* program )
 {
   Unload();
   
@@ -1908,6 +1934,14 @@ bool EditorServer::m_Load( EditorProgram* program, const Editor* client )
 
 bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::Var* var )
 {
+  if ( var->GetType() == ae::Var::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
+  {
+    return false; // Handled by entity transform
+  }
+  else if ( var->GetType() == ae::Var::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
+  {
+    return false; // Handled by entity transform
+  }
   bool changed = false;
   ImGui::PushID( var->GetName() );
   if ( var->IsArray() )
