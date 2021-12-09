@@ -419,11 +419,12 @@ void EditorProgram::Initialize()
       gl_Position = u_localToProj * a_position;
     })";
   const char* meshFragShader = R"(
+    AE_UNIFORM vec3 u_lightDir;
     AE_UNIFORM vec4 u_color;
     AE_IN_HIGHP vec4 v_normal;
     void main()
     {
-      float light = dot( normalize( vec3(2.0, 3.0, -4.0)), normalize( v_normal.xyz ) );
+      float light = dot( -u_lightDir, normalize( v_normal.xyz ) );
       light = 0.6 + 0.4 * max( 0.0, light );
       AE_COLOR.rgb = u_color.rgb * light;
       AE_COLOR.a = u_color.a;
@@ -1038,6 +1039,7 @@ void EditorServer::Render( EditorProgram* program )
   const ae::Vec3 camPos = program->camera.GetPosition();
   const ae::Vec3 camUp = program->camera.GetLocalUp();
   const ae::Matrix4 worldToProj = program->GetWorldToProj();
+  const ae::Vec3 lightDir = ( ( program->params.worldUp == ae::Axis::Z ) ? ae::Vec3( -2.0f, -3.0f, -4.0f ) : ae::Vec3( -2.0f, -4.0f, -3.0f ) ).SafeNormalizeCopy();
   
   // Categories
   struct RenderObj
@@ -1064,13 +1066,14 @@ void EditorServer::Render( EditorProgram* program )
   }
   
   // Opaque and transparent meshes
-  auto renderMesh = [program, worldToProj]( const RenderObj& renderObj, ae::Color color )
+  auto renderMesh = [program, worldToProj, lightDir]( const RenderObj& renderObj, ae::Color color )
   {
     const EditorServerObject& obj = *renderObj.obj;
     ae::Matrix4 transform = obj.GetTransform( program );
     ae::UniformList uniformList;
     uniformList.Set( "u_localToProj", worldToProj * transform );
     uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
+    uniformList.Set( "u_lightDir", lightDir );
     uniformList.Set( "u_color", color.GetLinearRGBA() );
     obj.mesh->data.Render( &program->m_meshShader, uniformList );
   };
