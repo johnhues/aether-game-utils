@@ -1217,6 +1217,7 @@ public:
   void SetVec3( const char* key, ae::Vec3 value );
   void SetVec4( const char* key, ae::Vec4 value );
   void SetInt2( const char* key, ae::Int2 value );
+  void SetMatrix4( const char* key, const ae::Matrix4& value );
   void Clear();
 
   const char* GetString( const char* key, const char* defaultValue ) const;
@@ -1227,6 +1228,7 @@ public:
   ae::Vec3 GetVec3( const char* key, ae::Vec3 defaultValue ) const;
   ae::Vec4 GetVec4( const char* key, ae::Vec4 defaultValue ) const;
   ae::Int2 GetInt2( const char* key, ae::Int2 defaultValue ) const;
+  ae::Matrix4 GetMatrix4( const char* key, const ae::Matrix4& defaultValue ) const;
   ae::Color GetColor( const char* key, ae::Color defaultValue ) const;
   bool Has( const char* key ) const;
 
@@ -1250,6 +1252,7 @@ private:
   template < typename T > void SetVec3( const char*, T ) = delete;
   template < typename T > void SetVec4( const char*, T ) = delete;
   template < typename T > void SetInt2( const char*, T ) = delete;
+  template < typename T > void SetMatrix4( const char*, T ) = delete;
   
   ae::Map< ae::Str128, ae::Str128 > m_entries; // @TODO: Should support static allocation
 };
@@ -3222,6 +3225,7 @@ public:
     Int64,
     Bool,
     Float,
+    Vec3,
     Matrix4,
     Enum,
     Ref
@@ -4798,6 +4802,19 @@ inline Str16 ToString( double value )
   return Str16( length, str );
 }
 
+inline Str128 ToString( const ae::Matrix4& v )
+{
+  char str[ Str128::MaxLength() + 1u ];
+  uint32_t length = snprintf( str, sizeof( str ) - 1,
+    "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f",
+    v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ],
+    v.data[ 4 ], v.data[ 5 ], v.data[ 6 ], v.data[ 7 ],
+    v.data[ 8 ], v.data[ 9 ], v.data[ 10 ], v.data[ 11 ],
+    v.data[ 12 ], v.data[ 13 ], v.data[ 14 ], v.data[ 15 ]
+  );
+  return Str128( length, str );
+}
+
 template < typename T >
 Str128 ToString( const T& v )
 {
@@ -4814,9 +4831,17 @@ inline T FromString( const char* str )
 }
 
 template <>
+inline ae::Vec3 FromString( const char* str )
+{
+  ae::Vec3 r( 0.0f );
+  sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 );
+  return r;
+}
+
+template <>
 inline ae::Matrix4 FromString( const char* str )
 {
-  ae::Matrix4 r;
+  ae::Matrix4 r = ae::Matrix4::Identity();
   sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
     r.data, r.data + 1, r.data + 2, r.data + 3,
     r.data + 4, r.data + 5, r.data + 6, r.data + 7,
@@ -6239,6 +6264,7 @@ _ae_DefineMetaVarType( int32_t, Int32 );
 _ae_DefineMetaVarType( int64_t, Int64 );
 _ae_DefineMetaVarType( bool, Bool );
 _ae_DefineMetaVarType( float, Float );
+_ae_DefineMetaVarType( ae::Vec3, Vec3 );
 _ae_DefineMetaVarType( ae::Matrix4, Matrix4 );
 
 template < uint32_t N >
@@ -8484,6 +8510,12 @@ void Dict::SetInt2( const char* key, ae::Int2 value )
   SetString( key, buf );
 }
 
+void Dict::SetMatrix4( const char* key, const ae::Matrix4& value )
+{
+  ae::Str128& v = m_entries.Set( key, "" );
+  v = ToString( value );
+}
+
 void Dict::Clear()
 {
   m_entries.Clear();
@@ -8572,6 +8604,15 @@ ae::Int2 Dict::GetInt2( const char* key, ae::Int2 defaultValue ) const
     ae::Int2 result( 0.0f );
     sscanf( value->c_str(), "%d %d", &result.x, &result.y );
     return result;
+  }
+  return defaultValue;
+}
+
+ae::Matrix4 Dict::GetMatrix4( const char* key, const ae::Matrix4& defaultValue ) const
+{
+  if ( const ae::Str128* value = m_entries.TryGet( key ) )
+  {
+    return ae::FromString< ae::Matrix4 >( value->c_str() );
   }
   return defaultValue;
 }
@@ -16786,6 +16827,14 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
       sscanf( value, "%f", f );
       return true;
     }
+    case Var::Vec3:
+    {
+      AE_ASSERT( m_size == sizeof(ae::Vec3) );
+      ae::Vec3* v = (ae::Vec3*)varData;
+      // @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+      *v = ae::FromString< ae::Vec3 >( value );
+      return true;
+    }
     case Var::Matrix4:
     {
       AE_ASSERT( m_size == sizeof(ae::Matrix4) );
@@ -17096,6 +17145,8 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
       return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
     case Var::Float:
       return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
+    case Var::Vec3:
+      return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec3* >( varData ) ).c_str();
     case Var::Matrix4:
       return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
     case Var::Enum:
