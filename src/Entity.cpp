@@ -97,7 +97,10 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 Component* Registry::AddComponent( Entity entity, const char* typeName )
 {
 	const ae::Type* type = ae::GetTypeByName( typeName );
-	AE_ASSERT( type );
+	if ( !type )
+	{
+		return nullptr;
+	}
 	AE_ASSERT_MSG( type->IsType< ae::Component >(), "Type '#' does not inherit from ae::Component", type->GetName() );
 	
 	ae::Object* object = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
@@ -131,7 +134,10 @@ Component* Registry::TryGetComponent( Entity entity, const char* typeName )
 	}
 	
 	const ae::Type* type = ae::GetTypeByName( typeName );
-	AE_ASSERT_MSG( type, "No type registered named '#'", typeName );
+	if ( !type )
+	{
+		return nullptr;
+	}
 	
 	if ( ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
 	{
@@ -276,7 +282,11 @@ bool Registry::Load( const ae::Editor* editor, CreateObjectFn fn )
       const ae::Type* type = ae::GetTypeByName( typeName );
       const ae::Dict& props = levelObject.components.GetValue( j );
 
-      Component* component = &GetComponent( entity, typeName );
+      Component* component = TryGetComponent( entity, typeName );
+      if ( !component )
+      {
+        continue;
+      }
       uint32_t varCount = type->GetVarCount();
       for ( uint32_t k = 0; k < varCount; k++ )
       {

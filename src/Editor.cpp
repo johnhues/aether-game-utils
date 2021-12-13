@@ -1649,7 +1649,10 @@ EditorServerObject* EditorServer::CreateObject( EditorObjectId id, const ae::Mat
 ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typeName )
 {
   const ae::Type* type = ae::GetTypeByName( typeName );
-  AE_ASSERT( type );
+  if ( !type )
+  {
+    return nullptr;
+  }
   AE_ASSERT( !GetComponent( obj, typeName ) );
   
   ae::Object* component = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
@@ -1900,7 +1903,10 @@ bool EditorServer::m_Load( EditorProgram* program )
     {
       const char* typeName = levelObject.components.GetKey( j ).c_str();
       const ae::Type* type = ae::GetTypeByName( typeName );
-      AE_ASSERT( type ); // @TODO: Handle missing types
+      if ( !type )
+      {
+        continue;
+      }
       const ae::Dict& props = levelObject.components.GetValue( j );
       
       ae::Object* component = GetComponent( editorObj, typeName );
