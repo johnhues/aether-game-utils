@@ -2532,6 +2532,20 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::TargaFile class
+//------------------------------------------------------------------------------
+class TargaFile
+{
+public:
+  TargaFile( ae::Tag allocTag ) : m_data( allocTag ) {}
+  bool Load( const uint8_t* data, uint32_t length );
+  
+  ae::TextureParams textureParams;
+private:
+  ae::Array< uint8_t > m_data;
+};
+
+//------------------------------------------------------------------------------
 // ae::CollisionMesh class
 //------------------------------------------------------------------------------
 class CollisionMesh
@@ -14919,6 +14933,72 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
     currentFaceIdx += f;
   }
   
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// ae::TargaFile member functions
+//------------------------------------------------------------------------------
+bool TargaFile::Load( const uint8_t* data, uint32_t length )
+{
+  m_data.Clear();
+  if ( !length )
+  {
+    return false;
+  }
+
+  struct TargaHeader
+  {
+    uint8_t idLength;
+    uint8_t colorMapType;
+    uint8_t imageType;
+
+    uint16_t colorMapOrigin;
+    uint16_t colorMapLength;
+    uint8_t colorMapDepth;
+
+    uint16_t xOrigin;
+    uint16_t yOrigin;
+    uint16_t width;
+    uint16_t height;
+
+    uint8_t bitsPerPixel;
+    uint8_t imageDescriptor;
+  } __attribute__((packed));
+
+  ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
+  TargaHeader header;
+  stream.SerializeRaw( header );
+  AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type is not supported" );
+  AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
+  AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
+  AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
+  AE_ASSERT_MSG( header.bitsPerPixel != 32 || header.imageDescriptor == 8, "Alpha mode not supported" );
+
+  stream.Discard( header.idLength );
+  stream.Discard( header.colorMapLength );
+
+  const uint8_t* pixels = stream.GetData() + stream.GetOffset();
+  uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
+  AE_ASSERT( stream.GetRemaining() >= dataLength );
+  m_data.Append( pixels, dataLength );
+  textureParams.data = m_data.Begin();
+  textureParams.width = header.width;
+  textureParams.height = header.height;
+  if ( header.bitsPerPixel == 24 )
+  {
+    textureParams.format = ae::Texture::Format::RGB8_SRGB;
+  }
+  else if ( header.bitsPerPixel == 24 )
+  {
+    textureParams.format = ae::Texture::Format::RGBA8_SRGB;
+  }
+  else
+  {
+    textureParams.format = ae::Texture::Format::R8;
+  }
+  textureParams.bgrData = true;
+
   return true;
 }
 
