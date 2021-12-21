@@ -2107,14 +2107,21 @@ public:
   void SetIndices( const void* indices, uint32_t count );
   //! Add vertices to end of existing array.
   void AppendVertices( const void* vertices, uint32_t count );
-  //! Add indices to end of existing array. Given indices are each offset based
-  //! on @indexOffset. It could be useful to use GetVertexCount() as a parameter
-  //! to @indexOffset before appending new vertices.
+  //! Add indices to end of existing array. Given indices are each offset based on @indexOffset. It could be
+  //! useful to use GetVertexCount() as a parameter to @indexOffset before appending new vertices.
   void AppendIndices( const void* indices, uint32_t count, uint32_t indexOffset );
   //! Sets dynamic vertex count to 0. Has no effect if vertices are using VertexData::Usage::Static.
   void ClearVertices();
   //! Sets dynamic index count to 0. Has no effect if indices are using VertexData::Usage::Static.
   void ClearIndices();
+  //! Allows direct modification of vertices. ae::VertexData::Upload() should be called after modifying vertices
+  //! or the next call to ae::VertexData::Render() will automatically force an upload. Use this in conjunction with
+  //! ae::VertexData::GetVertexCount().
+  template < typename T > T* GetWritableVertices();
+  //! Allows direct modification of indices. ae::VertexData::Upload() should be called after modifying indices
+  //! or the next call to ae::VertexData::Render() will automatically force an upload. Use this in conjunction with
+  //! ae::VertexData::GetIndexCount().
+  template < typename T > T* GetWritableIndices();
   
   //! Preemptively prepares buffers for rendering. Call after Setting/Appending vertices and
   //! indices, but before Render() to avoid waiting for upload when rendering. This will result
@@ -2125,15 +2132,14 @@ public:
   //! Renders vertex data range. Automatically calls Upload() first.
   void Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const;
   
-  // Get info
-  const void* GetVertices() const;
-  const void* GetIndices() const;
-  uint32_t GetVertexSize() const { return m_vertexSize; }
-  uint32_t GetIndexSize() const { return m_indexSize; }
+  template < typename T > const T* GetVertices() const;
+  template < typename T > const T* GetIndices() const;
   uint32_t GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
   uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
   uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
+  uint32_t GetVertexSize() const { return m_vertexSize; }
+  uint32_t GetIndexSize() const { return m_indexSize; }
   uint32_t GetAttributeCount() const { return m_attributes.Length(); }
   VertexData::Primitive GetPrimitiveType() const { return m_primitive; }
   
@@ -5805,6 +5811,44 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
     }
   }
   return os << "}";
+}
+
+//------------------------------------------------------------------------------
+// ae::VertexData member functions
+//------------------------------------------------------------------------------
+template <> void* VertexData::GetWritableVertices();
+template <> void* VertexData::GetWritableIndices();
+template <> const void* VertexData::GetVertices() const;
+template <> const void* VertexData::GetIndices() const;
+
+template < typename T >
+T* VertexData::GetWritableVertices()
+{
+  AE_ASSERT( m_vertexSize == sizeof( T ) );
+  m_vertexDirty = true;
+  return static_cast< T* >( m_vertexReadable );
+}
+
+template < typename T >
+T* VertexData::GetWritableIndices()
+{
+  AE_ASSERT( m_indexSize == sizeof( T ) );
+  m_indexDirty = true;
+  return static_cast< T* >( m_indexReadable );
+}
+
+template < typename T >
+const T* VertexData::GetVertices() const
+{
+  AE_ASSERT( m_vertexSize == sizeof( T ) );
+  return static_cast< const T* >( m_vertexReadable );
+}
+
+template < typename T >
+const T* VertexData::GetIndices() const
+{
+  AE_ASSERT( m_indexSize == sizeof( T ) );
+  return static_cast< const T* >( m_indexReadable );
 }
 
 //------------------------------------------------------------------------------
@@ -12958,11 +13002,27 @@ void VertexData::ClearIndices()
   }
 }
 
+template <>
+void* VertexData::GetWritableVertices()
+{
+  m_vertexDirty = true;
+  return m_vertexReadable;
+}
+
+template <>
+void* VertexData::GetWritableIndices()
+{
+  m_indexDirty = true;
+  return m_indexReadable;
+}
+
+template <>
 const void* VertexData::GetVertices() const
 {
   return m_vertexReadable;
 }
 
+template <>
 const void* VertexData::GetIndices() const
 {
   return m_indexReadable;
