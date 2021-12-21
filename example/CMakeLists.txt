@@ -21,6 +21,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imguizmo)
 
+# openfbx
+FetchContent_Declare(
+	openfbx
+	GIT_REPOSITORY https://github.com/nem0/OpenFBX.git
+	GIT_TAG 5ce5c3490a90d346366abcda48e1d77526d09a15
+)
+FetchContent_Populate(openfbx) # Download but don't build
+FetchContent_GetProperties(openfbx SOURCE_DIR OPENFBX_SOURCE_DIR)
+file(GLOB_RECURSE OPENFBX_SOURCES CONFIGURE_DEPENDS "${OPENFBX_SOURCE_DIR}/src/*")
+add_library(openfbx ${OPENFBX_SOURCES})
+target_include_directories(openfbx INTERFACE "${OPENFBX_SOURCE_DIR}/src")
+
 # Example common
 set(EXAMPLE_SOURCES Common.h stb_image.h)
 
@@ -224,5 +236,17 @@ add_bundle("OBJViewer"
 	"15_OBJViewer.cpp;${EXAMPLE_SOURCES}"
 	"data/Icon.icns;data/bunny.obj"
 	"ae;imgui;imguizmo"
+	""
+)
+
+# SkinnedMesh
+add_bundle("SkinnedMesh"
+	"16_skinned_mesh"
+	"ae.16_skinned_mesh"
+	"0.0.0"
+	"Icon"
+	"16_SkinnedMesh.cpp;${AE_EXAMPLE_SOURCES}"
+	"data/Icon.icns;data/character.fbx;data/character.tga"
+	"ae;openfbx"
 	""
 )
