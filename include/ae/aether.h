@@ -533,7 +533,6 @@ public:
   void SetScale( const Vec3& s );
   void SetRotation( const class Quaternion& r );
   Vec3 GetTranslation() const;
-  Vec3 GetPosition() const { return GetTranslation(); } // HACK Remove
   Vec3 GetScale() const;
   class Quaternion GetRotation() const;
 
@@ -2464,14 +2463,22 @@ public:
   enum class Mode { None, Rotate, Pan, Zoom };
   
   DebugCamera();
+  //! Interupts refocus. Does not affect in progress input.
+  void Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos );
+  //! Prevents the position of the camera from being less than @min distance from the focus point and
+  //! greater than @max distance from the focus point. May affect the current position of the camera.
   void SetDistanceLimits( float min, float max );
-  void Update( const ae::Input* input, float dt ); // @TODO: This should take input values, not the whole input system
-
-  void Reset( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos ); //!< Interupts refocus. Does not affect input mode.
-  void SetDistanceFromFocus( float distance ); //!< Updates position. Does not affect input mode or refocus.
-  void Refocus( ae::Vec3 focus ); //!< Updates focus and position over time
-  void SetInputEnabled( bool enabled ); //!< True by default
-  void SetRotation( ae::Vec2 angle );
+  //! Updates the cameras position. Does not affect in progress input or refocus.
+  void SetDistanceFromFocus( float distance );
+  //! Passing false cancels in progress input and prevents new input until called again with true. True by default.
+  void SetInputEnabled( bool enabled );
+  //! Sets the yaw and pitch of the camera. Updates the cameras position.
+  void SetRotation( ae::Vec2 angles );
+  //! Updates focus and position over time
+  void Refocus( ae::Vec3 focus );
+  //! Call this every frame even when no input has taken place so refocus works as expected.
+  //! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
+  void Update( const ae::Input* input, float dt );
 
   Mode GetMode() const; //!< Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
   ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
@@ -14505,6 +14512,7 @@ void DebugCamera::SetDistanceLimits( float min, float max )
 {
   m_min = min;
   m_max = max;
+  m_Precalculate();
 }
 
 void DebugCamera::Update( const ae::Input* input, float dt )
@@ -14637,7 +14645,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
   }
 }
 
-void DebugCamera::Reset( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
+void DebugCamera::Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
 {
   m_refocus = false;
   m_refocusPos = focus;
@@ -14688,10 +14696,10 @@ void DebugCamera::SetInputEnabled( bool enabled )
   m_inputEnabled = enabled;
 }
 
-void DebugCamera::SetRotation( ae::Vec2 angle )
+void DebugCamera::SetRotation( ae::Vec2 angles )
 {
-  m_yaw = angle.x;
-  m_pitch = angle.y;
+  m_yaw = angles.x;
+  m_pitch = angles.y;
   m_Precalculate();
 }
 
@@ -14713,6 +14721,8 @@ bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
 void DebugCamera::m_Precalculate()
 {
   ae::Vec3 worldUp = GetWorldUp();
+  
+  m_dist = ae::Clip( m_dist, m_min, m_max );
 
   if ( m_worldUp == Axis::Y )
   {
