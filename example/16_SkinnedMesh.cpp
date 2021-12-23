@@ -83,7 +83,7 @@ int main()
 	ae::DebugLines debugLines;
 
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "cube" );
+	window.SetTitle( "16_SkinnedMesh" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );

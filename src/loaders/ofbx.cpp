@@ -280,7 +280,7 @@ bool ae_ofbx_LoadSkinnedMesh( const ae::Tag& tag, ae::FileSystem* fileSystem, co
 	skinOut->Initialize( bindPose, skinVerts.Begin(), skinVerts.Length() );
 	
 	// Animations
-	if ( scene->getAnimationStackCount() )
+	if ( animOut && scene->getAnimationStackCount() )
 	{
 		const ofbx::AnimationStack* animStack = scene->getAnimationStack( 0 );
 		const ofbx::AnimationLayer* animLayer = animStack->getLayer( 0 );

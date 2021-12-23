@@ -2667,6 +2667,8 @@ public:
 //------------------------------------------------------------------------------
 struct Keyframe
 {
+	Keyframe() = default;
+	Keyframe( const ae::Matrix4& transform );
 	ae::Matrix4 GetLocalTransform() const;
 	Keyframe Lerp( const Keyframe& target, float t ) const;
 	
@@ -15530,6 +15532,13 @@ void CollisionMesh::PushOutInfo::Accumulate( const PushOutParams& params, const 
 //------------------------------------------------------------------------------
 // ae::Keyframe member functions
 //------------------------------------------------------------------------------
+Keyframe::Keyframe( const ae::Matrix4& transform )
+{
+	position = transform.GetTranslation();
+	rotation = transform.GetRotation();
+	scale = transform.GetScale();
+}
+
 ae::Matrix4 Keyframe::GetLocalTransform() const
 {
 	ae::Matrix4 rot = ae::Matrix4::Identity();
