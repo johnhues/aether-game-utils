@@ -50,10 +50,12 @@ public:
 	Animation( const ae::Tag& tag ) : keyframes( tag ) {}
 	ae::Keyframe GetKeyframeByTime( const char* boneName, float time ) const;
 	ae::Keyframe GetKeyframeByPercent( const char* boneName, float percent ) const;
+	void AnimateByTime( class Skeleton* target, float time, float strength, const class Bone** mask, uint32_t maskCount ) const;
+	void AnimateByPercent( class Skeleton* target, float percent, float strength, const class Bone** mask, uint32_t maskCount ) const;
 	
 	float duration = 0.0f;
 	bool loop = false;
-	ae::Map< ae::Str64, ae::Array< ae::Keyframe > > keyframes;
+	ae::Map< ae::Str64, ae::Array< ae::Keyframe > > keyframes; // @TODO: boneKeyframes. Maybe private
 };
 
 //------------------------------------------------------------------------------
@@ -76,17 +78,23 @@ struct Bone
 class Skeleton
 {
 public:
-	Skeleton( const ae::Tag& tag ) : m_bones( tag ) {}
+	Skeleton( const ae::Tag& tag ) : m_bones( tag ), m_boneSorts( tag ) {}
 	void Initialize( uint32_t maxBones );
+	void Initialize( const Skeleton* otherPose );
 	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
+	void SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count );
+	void SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform );
 	
 	const Bone* GetRoot() const;
 	const Bone* GetBoneByName( const char* name ) const;
 	const Bone* GetBoneByIndex( uint32_t index ) const;
+	const Bone* GetBones() const;
 	uint32_t GetBoneCount() const;
 	
 private:
+	struct BoneSort { ae::Bone* b; const ae::Matrix4* t; };
 	ae::Array< ae::Bone > m_bones;
+	ae::Array< BoneSort > m_boneSorts;
 };
 
 //------------------------------------------------------------------------------
@@ -103,14 +111,18 @@ public:
 		uint8_t weights[ 4 ] = { 0 };
 	};
 	
-	Skin( const ae::Tag& tag ) : m_verts( tag ), m_invBindPoses( tag ) {}
+	Skin( const ae::Tag& tag ) : m_bindPose( tag ), m_verts( tag ), m_invBindPoses( tag ) {}
+	void Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount );
 	
-	void SetInvBindPose( const char* name, const ae::Matrix4& invBindPose );
+	const class Skeleton* GetBindPose() const;
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
-	ae::Array< Vertex > m_verts;
+	void ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
+	
 private:
+	Skeleton m_bindPose;
 	ae::Map< ae::Str64, ae::Matrix4 > m_invBindPoses;
+	ae::Array< Vertex > m_verts;
 };
 
 //------------------------------------------------------------------------------
@@ -156,6 +168,51 @@ ae::Keyframe Animation::GetKeyframeByPercent( const char* boneName, float percen
 	return (*boneKeyframes)[ f0 ].Lerp( (*boneKeyframes)[ f1 ], ae::Clip01( f - f0 ) );
 }
 
+void Animation::AnimateByTime( class Skeleton* target, float time, float strength, const ae::Bone** mask, uint32_t maskCount ) const
+{
+	AnimateByPercent( target, ae::Delerp( 0.0f, duration, time ), strength, mask, maskCount );
+}
+
+void Animation::AnimateByPercent( class Skeleton* target, float percent, float strength, const ae::Bone** mask, uint32_t maskCount ) const
+{
+	ae::Array< const ae::Bone* > tempBones = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
+	ae::Array< ae::Matrix4 > temp = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
+	tempBones.Reserve( target->GetBoneCount() );
+	temp.Reserve( target->GetBoneCount() );
+	
+	strength = ae::Clip01( strength );
+	const ae::Bone** maskEnd = mask + maskCount;
+	
+	for ( uint32_t i = 0; i < target->GetBoneCount(); i++ )
+	{
+		const ae::Bone* bone = target->GetBoneByIndex( i );
+		AE_ASSERT( bone->index == i );
+		AE_ASSERT( bone > bone->parent );
+		
+		float keyStrength = strength;
+		bool found = ( std::find( mask, maskEnd, bone ) != maskEnd );
+		if ( found )
+		{
+			keyStrength = 0.0f;
+		}
+		
+		tempBones.Append( bone );
+		ae::Keyframe keyframe = GetKeyframeByPercent( bone->name.c_str(), percent );
+		if ( keyStrength < 1.0f )
+		{
+			const ae::Matrix4 current = bone->localTransform;
+			const ae::Vec3 currTranslation = current.GetTranslation();
+			const ae::Quaternion currRotation = current.GetRotation();
+			const ae::Vec3 currScale = current.GetScale();
+			keyframe.position = currTranslation.Lerp( keyframe.position, keyStrength );
+			keyframe.rotation = currRotation.Nlerp( keyframe.rotation, keyStrength );
+			keyframe.scale = currScale.Lerp( keyframe.scale, keyStrength );
+		}
+		temp.Append( keyframe.GetLocalTransform() );
+	}
+	target->SetLocalTransforms( tempBones.Begin(), temp.Begin(), target->GetBoneCount() );
+}
+
 //------------------------------------------------------------------------------
 // ae::Skeleton member functions
 //------------------------------------------------------------------------------
@@ -163,6 +220,8 @@ void Skeleton::Initialize( uint32_t maxBones )
 {
 	m_bones.Clear();
 	m_bones.Reserve( maxBones );
+	m_boneSorts.Clear();
+	m_boneSorts.Reserve( maxBones );
 	
 	Bone* bone = &m_bones.Append( {} );
 	bone->name = "root";
@@ -172,10 +231,25 @@ void Skeleton::Initialize( uint32_t maxBones )
 	bone->parent = nullptr;
 }
 
+void Skeleton::Initialize( const Skeleton* otherPose )
+{
+	Initialize( otherPose->GetBoneCount() );
+	
+	const void* beginCheck = m_bones.Begin();
+	for ( uint32_t i = 1; i < otherPose->m_bones.Length(); i++ ) // Skip root
+	{
+		const ae::Bone& otherBone = otherPose->m_bones[ i ];
+		const ae::Bone* parent = &m_bones[ otherBone.parent->index ];
+		AddBone( parent, otherBone.name.c_str(), otherBone.localTransform );
+	}
+	AE_ASSERT( beginCheck == m_bones.Begin() );
+}
+
 const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& localTransform )
 {
 	Bone* parent = const_cast< Bone* >( _parent );
 	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
+	AE_ASSERT_MSG( m_bones.Begin() <= parent && parent < m_bones.End(), "ae::Bones must have a parent from the same ae::Skeleton" );
 	if ( !parent || m_bones.Length() == m_bones.Size() )
 	{
 		return nullptr;
@@ -204,6 +278,33 @@ const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::
 	return bone;
 }
 
+void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count )
+{
+	// @TODO: If count is less than bone count other children may need to be updated
+	AE_ASSERT_MSG( count == m_bones.Length(), "TODO: Support partial skeleton updates" );
+	AE_ASSERT_MSG( count <= m_bones.Length(), "Attempting to transform # bones, but ae::Skeleton has # bones", count, m_bones.Length() );
+	m_boneSorts.Clear();
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		AE_ASSERT_MSG( targets[ i ], "Null bone passed to skeleton when setting transforms" );
+		m_boneSorts.Append( { const_cast< Bone* >( targets[ i ] ), &localTransforms[ i ] } );
+	}
+	std::sort( m_boneSorts.Begin(), m_boneSorts.End(), []( const BoneSort& b0, const BoneSort& b1 ){ return b0.b < b1.b; } );
+	
+	for ( BoneSort& b : m_boneSorts )
+	{
+		AE_ASSERT( b.b->parent < b.b );
+		ae::Matrix4 parentTransform = b.b->parent ? b.b->parent->transform : ae::Matrix4::Identity();
+		b.b->localTransform = *b.t;
+		b.b->transform = parentTransform * b.b->localTransform;
+	}
+}
+
+void Skeleton::SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform )
+{
+	SetLocalTransforms( &target, &localTransform, 1 );
+}
+
 const Bone* Skeleton::GetRoot() const
 {
 	return m_bones.Begin();
@@ -223,6 +324,11 @@ const Bone* Skeleton::GetBoneByIndex( uint32_t index ) const
 	return &m_bones[ index ];
 }
 
+const Bone* Skeleton::GetBones() const
+{
+	return m_bones.Begin();
+}
+
 uint32_t Skeleton::GetBoneCount() const
 {
 	return m_bones.Length();
@@ -231,14 +337,62 @@ uint32_t Skeleton::GetBoneCount() const
 //------------------------------------------------------------------------------
 // ae::Skin member functions
 //------------------------------------------------------------------------------
-void Skin::SetInvBindPose( const char* name, const ae::Matrix4& invBindPose )
+void Skin::Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount )
 {
-	m_invBindPoses.Set( name, invBindPose );
+	AE_ASSERT( bindPose.GetBoneCount() );
+	m_bindPose.Initialize( &bindPose );
+	
+	m_invBindPoses.Clear();
+	m_invBindPoses.Reserve( m_bindPose.GetBoneCount() );
+	for ( uint32_t i = 0; i < m_bindPose.GetBoneCount(); i++ )
+	{
+		const ae::Bone* bone = m_bindPose.GetBoneByIndex( i );
+		m_invBindPoses.Set( bone->name, bone->transform.GetInverse() );
+	}
+	
+	m_verts.Clear();
+	m_verts.Append( vertices, vertexCount );
+}
+
+const Skeleton* Skin::GetBindPose() const
+{
+	return &m_bindPose;
 }
 
 const ae::Matrix4& Skin::GetInvBindPose( const char* name ) const
 {
 	return m_invBindPoses.Get( name, ae::Matrix4::Identity() );
+}
+
+void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
+{
+	AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
+	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bine pose hierarchy" );
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		ae::Vec3 pos( 0.0f );
+		const ae::Skin::Vertex& skinVert = m_verts[ i ];
+		for ( uint32_t j = 0; j < 4; j++ )
+		{
+			const ae::Bone* bone = pose->GetBoneByIndex( skinVert.bones[ j ] );
+			const ae::Bone* bindPoseBone = m_bindPose.GetBoneByIndex( skinVert.bones[ j ] );
+			if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bine pose hierarchy" ); }
+			else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bine pose hierarchy" ); }
+			
+			ae::Matrix4 transform = bone->transform * m_invBindPoses.GetValue( skinVert.bones[ j ] );
+			float weight = skinVert.weights[ j ] / 256.0f;
+			pos += ( transform * ae::Vec4( skinVert.position, 1.0f ) ).GetXYZ() * weight;
+		}
+		
+		float* p = (float*)( (uint8_t*)positions + ( i * positionStride ) );
+		float* n = (float*)( (uint8_t*)normals + ( i * normalStride ) );
+		p[ 0 ] = pos.x;
+		p[ 1 ] = pos.y;
+		p[ 2 ] = pos.z;
+		n[ 0 ] = skinVert.normal.x;
+		n[ 1 ] = skinVert.normal.y;
+		n[ 2 ] = skinVert.normal.z;
+	}
 }
 
 } // ae namespace end
@@ -284,7 +438,7 @@ static ae::Matrix4 getBindPoseMatrix( const ofbx::Skin* skin, const ofbx::Object
 	return ofbxToAe( node->getGlobalTransform() );
 }
 
-bool LoadFBX( ae::FileSystem* fileSystem, const char* fileName, ae::VertexData* vertexData, ae::Skeleton* skeleton, ae::Skin* skinOut, ae::Animation* animOut )
+bool LoadFBX( ae::FileSystem* fileSystem, const char* fileName, ae::VertexData* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
 {
 	uint32_t fileSize = fileSystem->GetSize( fileName );
 	if ( !fileSize )
@@ -302,11 +456,13 @@ bool LoadFBX( ae::FileSystem* fileSystem, const char* fileName, ae::VertexData* 
 		return false;
 	}
 	
+	// Scene globals
 	const ofbx::GlobalSettings* ofbxSettings = scene->getGlobalSettings();
 	const float frameRate = scene->getSceneFrameRate();
 	const float startTime = ofbxSettings->TimeSpanStart;
 	const float endTime = ofbxSettings->TimeSpanStop;
 	
+	// Find skin
 	const ofbx::Skin* ofbxSkin = nullptr;
 	for ( uint32_t i = 0; i < scene->getAllObjectCount(); i++ )
 	{
@@ -320,50 +476,208 @@ bool LoadFBX( ae::FileSystem* fileSystem, const char* fileName, ae::VertexData* 
 	}
 	AE_ASSERT( ofbxSkin );
 	
-	// Skeleton
-	skeleton->Initialize( 32 );
-	// @TODO: Fix this, should use Skin instead to determines bone hierarchy
-	ae::Array< const ofbx::Object* > sceneBones = TAG_ALL;
-	for ( uint32_t i = 0; i < scene->getAllObjectCount(); i++ )
+	// Find the root node of the skinned meshes skeleton (the parent of root bone)
+	const ofbx::Object* ofbxSkeletonRoot = nullptr;
 	{
-		const ofbx::Object* ofbxObj = scene->getAllObjects()[ i ];
-		if ( strcmp( "QuickRigCharacter_Reference", ofbxObj->name ) == 0 )
+		AE_ASSERT( ofbxSkin->getClusterCount() );
+		const ofbx::Cluster* cluster = ofbxSkin->getCluster( 1 );
+		ofbxSkeletonRoot = cluster->getLink();
+		AE_ASSERT( ofbxSkeletonRoot );
+		AE_ASSERT( ofbxSkeletonRoot->getType() == ofbx::Object::Type::LIMB_NODE );
+		while ( true )
 		{
-			sceneBones.Append( ofbxObj );
+			const ofbx::Object* ofbxParent = ofbxSkeletonRoot->getParent();
+			if ( ofbxParent && ofbxParent->getType() == ofbx::Object::Type::LIMB_NODE )
+			{
+				ofbxSkeletonRoot = ofbxParent;
+				continue;
+			}
 			break;
 		}
+		AE_ASSERT( ofbxSkeletonRoot );
+		ofbxSkeletonRoot = ofbxSkeletonRoot->getParent(); // Not an actual bone, scene root or something
+		AE_ASSERT( ofbxSkeletonRoot );
 	}
-	if ( !sceneBones.Length() )
-	{
-		return false;
-	}
+	
+	// Skeleton
+	ae::Skeleton bindPose = TAG_ALL;
+	bindPose.Initialize( 32 ); // @TODO: Count ofbxSkeletonRoot bones
+	ae::Array< const ofbx::Object* > sceneBones = TAG_ALL;
+	sceneBones.Append( ofbxSkeletonRoot );
 	std::function< void( const ofbx::Object*, const ae::Bone* ) > skeletonBuilderFn = [ & ]( const ofbx::Object* ofbxParent, const ae::Bone* parent )
 	{
 		int32_t i = 0;
+		ae::Matrix4 parentInverseWorldTransform = getBindPoseMatrix( ofbxSkin, ofbxParent ).GetInverse();
 		while ( const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ) )
 		{
 			if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
 			{
-				ae::Matrix4 transform = ofbxToAe( ofbxBone->getLocalTransform() );
-				const ae::Bone* bone = skeleton->AddBone( parent, ofbxBone->name, transform );
+				ae::Matrix4 worldTransform = getBindPoseMatrix( ofbxSkin, ofbxBone );
+				ae::Matrix4 transform = parentInverseWorldTransform * worldTransform;
+				const ae::Bone* bone = bindPose.AddBone( parent, ofbxBone->name, transform );
 				sceneBones.Append( ofbxBone );
 				skeletonBuilderFn( ofbxBone, bone );
 			}
 			i++;
 		}
 	};
-	skeletonBuilderFn( sceneBones[ 0 ], skeleton->GetRoot() );
+	skeletonBuilderFn( sceneBones[ 0 ], bindPose.GetRoot() );
 	
-	// Animation
+	// Mesh
+	// @TODO: Get mesh from ofbxSkin
+	uint32_t meshCount = scene->getMeshCount();
+	AE_ASSERT( meshCount == 1 );
+
+	uint32_t totalVerts = 0;
+	uint32_t totalIndices = 0;
+	for ( uint32_t i = 0; i < meshCount; i++ )
+	{
+		const ofbx::Mesh* mesh = scene->getMesh( i );
+		const ofbx::Geometry* geo = mesh->getGeometry();
+		totalVerts += geo->getVertexCount();
+		totalIndices += geo->getIndexCount();
+	}
+	
+	ae::Array< ae::Skin::Vertex > skinVerts = TAG_ALL;
+	skinVerts.Reserve( totalVerts );
+	for ( uint32_t i = 0; i < totalVerts; i++ )
+	{
+		skinVerts.Append( {} );
+	}
+
+	uint32_t indexOffset = 0;
+	ae::Array< Vertex > vertices( TAG_ALL, totalVerts );
+	ae::Array< uint32_t > indices( TAG_ALL, totalIndices );
+	for ( uint32_t i = 0; i < meshCount; i++ )
+	{
+		const ofbx::Mesh* mesh = scene->getMesh( i );
+		const ofbx::Geometry* geo = mesh->getGeometry();
+		ae::Matrix4 localToWorld = ofbxToAe( mesh->getGlobalTransform() );
+		ae::Matrix4 normalMatrix = localToWorld.GetNormalMatrix();
+
+		uint32_t vertexCount = geo->getVertexCount();
+		const ofbx::Vec3* meshVerts = geo->getVertices();
+		const ofbx::Vec3* meshNormals = geo->getNormals();
+		const ofbx::Vec4* meshColors = geo->getColors();
+		const ofbx::Vec2* meshUvs = geo->getUVs();
+		for ( uint32_t j = 0; j < vertexCount; j++ )
+		{
+			ofbx::Vec3 p0 = meshVerts[ j ];
+			ae::Vec4 p( p0.x, p0.y, p0.z, 1.0f );
+			ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
+			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
+
+			Vertex v;
+			v.pos = p;
+			v.pos = localToWorld * v.pos;
+			v.normal = ae::Vec4( 0.0f );
+			v.color = color.GetLinearRGBA();
+			v.uv = uv;
+			vertices.Append( v );
+			
+			skinVerts[ j ].position = v.pos.GetXYZ();
+		}
+
+		uint32_t indexCount = geo->getIndexCount();
+		const int32_t* meshIndices = geo->getFaceIndices();
+		for ( uint32_t j = 0; j < indexCount; j++ )
+		{
+			int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
+			AE_ASSERT( index < vertexCount );
+			index += indexOffset;
+			indices.Append( index );
+
+			ofbx::Vec3 n = meshNormals[ j ];
+			Vertex& v = vertices[ index ];
+			v.normal.x = n.x;
+			v.normal.y = n.y;
+			v.normal.z = n.z;
+			v.normal.w = 0.0f;
+			v.normal = normalMatrix * v.normal;
+			v.normal.SafeNormalize();
+			
+			skinVerts[ index ].normal = v.normal.GetXYZ();
+		}
+
+		indexOffset += vertexCount;
+	}
+	
+	// Skin
+	for (int i = 0, c = ofbxSkin->getClusterCount(); i < c; ++i)
+	{
+		const ofbx::Cluster* cluster = ofbxSkin->getCluster(i);
+		uint32_t indexCount = cluster->getIndicesCount();
+		if ( !indexCount )
+		{
+			continue;
+		}
+		
+		const ofbx::Object* ofbxBone = cluster->getLink();
+		int32_t boneIndex = sceneBones.Find( ofbxBone );
+#if _AE_DEBUG_
+		const ae::Bone* bone = bindPose.GetBoneByIndex( boneIndex );
+		AE_ASSERT( bone );
+		AE_ASSERT( bone->name == ofbxBone->name );
+#endif
+
+		const int* clusterIndices = cluster->getIndices();
+		const double* clusterWeights = cluster->getWeights();
+		for ( uint32_t j = 0; j < indexCount; j++ )
+		{
+			ae::Skin::Vertex* vertex = &skinVerts[ clusterIndices[ j ] ];
+			int32_t weightIdx = 0;
+			while ( vertex->weights[ weightIdx ] )
+			{
+				weightIdx++;
+			}
+			AE_ASSERT_MSG( weightIdx < countof( vertex->weights ), "Export FBX with skin weight limit set to 4" );
+			vertex->bones[ weightIdx ] = boneIndex;
+			vertex->weights[ weightIdx ] = ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
+			// Fix up weights so they total 255
+			if ( weightIdx == 3 )
+			{
+				int32_t total = 0;
+				uint8_t* greatest = nullptr;
+				for ( uint32_t i = 0; i < 4; i++ )
+				{
+					total += vertex->weights[ i ];
+					if ( !greatest || *greatest < vertex->weights[ i ] )
+					{
+						greatest = &vertex->weights[ i ];
+					}
+				}
+#if _AE_DEBUG_
+				AE_ASSERT_MSG( total > 128, "Skin weights missing" );
+#endif
+				if ( total != 255 )
+				{
+					*greatest += ( 255 - total );
+				}
+#if _AE_DEBUG_
+				total = 0;
+				for ( uint32_t i = 0; i < 4; i++ )
+				{
+					total += vertex->weights[ i ];
+				}
+				AE_ASSERT( total == 255 );
+#endif
+			}
+		}
+	}
+	
+	// Finalize skin
+	skinOut->Initialize( bindPose, skinVerts.Begin(), skinVerts.Length() );
+	
+	// Animations
 	if ( scene->getAnimationStackCount() )
 	{
 		const ofbx::AnimationStack* animStack = scene->getAnimationStack( 0 );
 		const ofbx::AnimationLayer* animLayer = animStack->getLayer( 0 );
 		if ( animLayer )
 		{
-			for ( uint32_t i = 1; i < skeleton->GetBoneCount(); i++ )
+			for ( uint32_t i = 1; i < bindPose.GetBoneCount(); i++ )
 			{
-				const ae::Bone* bone = skeleton->GetBoneByIndex( i );
+				const ae::Bone* bone = bindPose.GetBoneByIndex( i );
 				const ofbx::Object* ofbxBone = sceneBones[ i ];
 				AE_ASSERT( bone->name == ofbxBone->name );
 
@@ -433,147 +747,6 @@ bool LoadFBX( ae::FileSystem* fileSystem, const char* fileName, ae::VertexData* 
 						boneKeyframes.Append( keyframe );
 					}
 				}
-			}
-		}
-	}
-	
-	// Mesh
-	uint32_t meshCount = scene->getMeshCount();
-	AE_ASSERT( meshCount == 1 );
-
-	uint32_t totalVerts = 0;
-	uint32_t totalIndices = 0;
-	for ( uint32_t i = 0; i < meshCount; i++ )
-	{
-		const ofbx::Mesh* mesh = scene->getMesh( i );
-		const ofbx::Geometry* geo = mesh->getGeometry();
-		totalVerts += geo->getVertexCount();
-		totalIndices += geo->getIndexCount();
-	}
-	
-	skinOut->m_verts.Reserve( totalVerts );
-	for ( uint32_t i = 0; i < totalVerts; i++ )
-	{
-		skinOut->m_verts.Append( {} );
-	}
-
-	uint32_t indexOffset = 0;
-	ae::Array< Vertex > vertices( TAG_ALL, totalVerts );
-	ae::Array< uint32_t > indices( TAG_ALL, totalIndices );
-	for ( uint32_t i = 0; i < meshCount; i++ )
-	{
-		const ofbx::Mesh* mesh = scene->getMesh( i );
-		const ofbx::Geometry* geo = mesh->getGeometry();
-		ae::Matrix4 localToWorld = ofbxToAe( mesh->getGlobalTransform() );
-		ae::Matrix4 normalMatrix = localToWorld.GetNormalMatrix();
-
-		uint32_t vertexCount = geo->getVertexCount();
-		const ofbx::Vec3* meshVerts = geo->getVertices();
-		const ofbx::Vec3* meshNormals = geo->getNormals();
-		const ofbx::Vec4* meshColors = geo->getColors();
-		const ofbx::Vec2* meshUvs = geo->getUVs();
-		for ( uint32_t j = 0; j < vertexCount; j++ )
-		{
-			ofbx::Vec3 p0 = meshVerts[ j ];
-			ae::Vec4 p( p0.x, p0.y, p0.z, 1.0f );
-			ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
-			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
-
-			Vertex v;
-			v.pos = p;
-			v.pos = localToWorld * v.pos;
-			v.normal = ae::Vec4( 0.0f );
-			v.color = color.GetLinearRGBA();
-			v.uv = uv;
-			vertices.Append( v );
-			
-			skinOut->m_verts[ j ].position = v.pos.GetXYZ();
-		}
-
-		uint32_t indexCount = geo->getIndexCount();
-		const int32_t* meshIndices = geo->getFaceIndices();
-		for ( uint32_t j = 0; j < indexCount; j++ )
-		{
-			int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
-			AE_ASSERT( index < vertexCount );
-			index += indexOffset;
-			indices.Append( index );
-
-			ofbx::Vec3 n = meshNormals[ j ];
-			Vertex& v = vertices[ index ];
-			v.normal.x = n.x;
-			v.normal.y = n.y;
-			v.normal.z = n.z;
-			v.normal.w = 0.0f;
-			v.normal = normalMatrix * v.normal;
-			v.normal.SafeNormalize();
-			
-			skinOut->m_verts[ index ].normal = v.normal.GetXYZ();
-		}
-
-		indexOffset += vertexCount;
-	}
-	
-	// Skin
-	for (int i = 0, c = ofbxSkin->getClusterCount(); i < c; ++i)
-	{
-		const ofbx::Cluster* cluster = ofbxSkin->getCluster(i);
-		uint32_t indexCount = cluster->getIndicesCount();
-		if ( !indexCount )
-		{
-			continue;
-		}
-		
-		const ofbx::Object* ofbxBone = cluster->getLink();
-		int32_t boneIndex = sceneBones.Find( ofbxBone );
-#if _AE_DEBUG_
-		const ae::Bone* bone = skeleton->GetBoneByIndex( boneIndex );
-		AE_ASSERT( bone );
-		AE_ASSERT( bone->name == ofbxBone->name );
-#endif
-		skinOut->SetInvBindPose( ofbxBone->name, getBindPoseMatrix( ofbxSkin, ofbxBone ).GetInverse() );
-		
-		const int* clusterIndices = cluster->getIndices();
-		const double* clusterWeights = cluster->getWeights();
-		for ( uint32_t j = 0; j < indexCount; j++ )
-		{
-			ae::Skin::Vertex* vertex = &skinOut->m_verts[ clusterIndices[ j ] ];
-			int32_t weightIdx = 0;
-			while ( vertex->weights[ weightIdx ] )
-			{
-				weightIdx++;
-			}
-			AE_ASSERT_MSG( weightIdx < countof( vertex->weights ), "Export FBX with skin weight limit set to 4" );
-			vertex->bones[ weightIdx ] = boneIndex;
-			vertex->weights[ weightIdx ] = ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
-			// Fix up weights so they total 255
-			if ( weightIdx == 3 )
-			{
-				int32_t total = 0;
-				uint8_t* greatest = nullptr;
-				for ( uint32_t i = 0; i < 4; i++ )
-				{
-					total += vertex->weights[ i ];
-					if ( !greatest || *greatest < vertex->weights[ i ] )
-					{
-						greatest = &vertex->weights[ i ];
-					}
-				}
-#if _AE_DEBUG_
-				AE_ASSERT_MSG( total > 128, "Skin weights missing" );
-#endif
-				if ( total != 255 )
-				{
-					*greatest += ( 255 - total );
-				}
-#if _AE_DEBUG_
-				total = 0;
-				for ( uint32_t i = 0; i < 4; i++ )
-				{
-					total += vertex->weights[ i ];
-				}
-				AE_ASSERT( total == 255 );
-#endif
 			}
 		}
 	}
@@ -661,12 +834,11 @@ int main()
 		targaFile.Load( fileData.Data(), fileData.Length() );
 		texture.Initialize( targaFile.textureParams );
 	}
-
-	ae::Skeleton skeleton = TAG_ALL;
+	
 	ae::Skin skin = TAG_ALL;
 	ae::Animation anim = TAG_ALL;
 	ae::VertexData vertexData;
-	LoadFBX( &fileSystem, "character.fbx", &vertexData, &skeleton, &skin, &anim );
+	LoadFBX( &fileSystem, "character.fbx", &vertexData, &skin, &anim );
 	anim.loop = true;
 	
 	double animTime = 0.0;
@@ -677,81 +849,97 @@ int main()
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
 		
-		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
-		
-		ae::UniformList uniformList;
-		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
-		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
-		ae::Matrix4 worldToProj = viewToProj * worldToView;
-		
 		animTime += timeStep.GetDt() * 0.01;
-		struct TempBone
+		
+		// Update skeleton
+		ae::Skeleton currentPose = TAG_ALL;
+		currentPose.Initialize( skin.GetBindPose() );
+		
+		// Settings update
+		static int32_t s_strength10 = 10;
+		if ( input.Get( ae::Key::Minus ) && !input.GetPrev( ae::Key::Minus ) )
 		{
-			int32_t parentIdx;
-			ae::Matrix4 transform;
-			ae::Matrix4 animationOffset;
-		};
-		ae::Array< TempBone > bones = TAG_ALL;
-		for ( uint32_t i = 0; i < skeleton.GetBoneCount(); i++ )
-		{
-			const ae::Bone* bone = skeleton.GetBoneByIndex( i );
-			int32_t parentIdx = bone->parent ? (int32_t)bone->parent->index : -1;
-			//AE_INFO( "bone index: # parent index: # parent: #", bone->index, parentIdx, bone->parent );
-			AE_ASSERT( bone->index == i );
-			AE_ASSERT( parentIdx < (int32_t)bone->index );
-			ae::Matrix4 parentTransform = ( parentIdx >= 0 ) ? bones[ parentIdx ].transform : ae::Matrix4::Identity();
-			ae::Matrix4 animationOffset = anim.GetKeyframeByTime( bone->name.c_str(), animTime ).GetLocalTransform();
-			ae::Matrix4 transform = parentTransform * animationOffset;
-			bones.Append( { parentIdx, transform, animationOffset } );
+			s_strength10--;
 		}
-		for ( const TempBone& bone : bones )
+		if ( input.Get( ae::Key::Equals ) && !input.GetPrev( ae::Key::Equals ) )
 		{
-			if ( bone.parentIdx >= 0 )
+			s_strength10++;
+		}
+		static int32_t s_strength10Prev = -1;
+		if ( s_strength10Prev != s_strength10 )
+		{
+			s_strength10 = ae::Clip( s_strength10, 0, 10 );
+			AE_INFO( "Anim blend strength: #", s_strength10 / 10.0f );
+			s_strength10Prev = s_strength10;
+		}
+		ae::Array< const ae::Bone* > mask = TAG_ALL;
+		static int32_t s_maskCountPrev = -1;
+		if ( input.Get( ae::Key::Space ) )
+		{
+			std::function< void( const ae::Bone* ) > maskFn = [&]( const ae::Bone* bone )
 			{
-				const TempBone& parent = bones[ bone.parentIdx ];
-				debugLines.AddLine( parent.transform.GetTranslation(), bone.transform.GetTranslation(), ae::Color::Blue() );
-				//AE_INFO( "pIdx:# p0:[#] p1:[#]", bone.parentIdx, parent.transform.GetTranslation(), bone.transform.GetTranslation() );
-				debugLines.AddOBB( bone.transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Blue() );
-			}
+				if ( bone )
+				{
+					mask.Append( bone );
+					for ( bone = bone->firstChild; bone; bone = bone->nextSibling )
+					{
+						maskFn( bone );
+					}
+				}
+			};
+			mask.Append( currentPose.GetBoneByName( "QuickRigCharacter_Hips" ) );
+			maskFn( currentPose.GetBoneByName( "QuickRigCharacter_LeftUpLeg" ) );
+			maskFn( currentPose.GetBoneByName( "QuickRigCharacter_RightUpLeg" ) );
 		}
-		for ( uint32_t i = 0; i < skeleton.GetBoneCount(); i++ )
+		if ( s_maskCountPrev != mask.Length() )
 		{
-			const ae::Bone* bone = skeleton.GetBoneByIndex( i );
+			AE_INFO( "Animation Mask" );
+			for ( const ae::Bone* b : mask )
+			{
+				AE_INFO( "\t#", b->name );
+			}
+			if ( !mask.Length() )
+			{
+				AE_INFO( "\tNone" );
+			}
+			s_maskCountPrev = mask.Length();
+		}
+		
+		// Update mesh
+		anim.AnimateByTime( &currentPose, animTime, s_strength10 / 10.0f, mask.Begin(), mask.Length() );
+		Vertex* meshVerts = vertexData.GetWritableVertices< Vertex >();
+		skin.ApplyPoseToMesh( &currentPose, meshVerts->pos.data, meshVerts->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetVertexCount() );
+		vertexData.Upload();
+		
+		// Debug
+		for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+		{
+			const ae::Bone* bone = currentPose.GetBoneByIndex( i );
 			const ae::Bone* parent = bone->parent;
 			if ( parent )
 			{
 				debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::Red() );
-				//AE_INFO( "pIdx:# p0:[#] p1:[#]", bone.parentIdx, parent.transform.GetTranslation(), bone.transform.GetTranslation() );
 				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Red() );
 			}
 		}
 		
-		ae::Matrix4 localToWorld = anim.GetKeyframeByTime( "joint1", ae::GetTime() ).GetLocalTransform();
-		uniformList.Set( "u_worldToProj", worldToProj * localToWorld );
+		// Start frame
+		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
+		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
+		ae::Matrix4 worldToProj = viewToProj * worldToView;
+		render.Activate();
+		render.Clear( ae::Color::PicoDarkPurple() );
+		
+		// Render mesh
+		ae::UniformList uniformList;
+		uniformList.Set( "u_worldToProj", worldToProj );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		uniformList.Set( "u_tex", &texture );
-		Vertex* verts = vertexData.GetWritableVertices< Vertex >();
-		for ( uint32_t i = 0; i < vertexData.GetVertexCount(); i++ )
-		{
-			ae::Vec3 pos( 0.0f );
-			const ae::Skin::Vertex& skinVert = skin.m_verts[ i ];
-			for ( uint32_t j = 0; j < 4; j++ )
-			{
-				const ae::Bone* bone = skeleton.GetBoneByIndex( skinVert.bones[ j ] );
-				const TempBone* tempBone = &bones[ skinVert.bones[ j ] ];
-				ae::Matrix4 transform = tempBone->transform * skin.GetInvBindPose( bone->name.c_str() );
-				float weight = skinVert.weights[ j ] / 256.0f;
-				pos += ( transform * ae::Vec4( skinVert.position, 1.0f ) ).GetXYZ() * weight;
-			}
-			verts[ i ].pos = ae::Vec4( pos, 1.0f );
-			verts[ i ].normal = ae::Vec4( skinVert.normal, 0.0f );
-		}
 		vertexData.Render( &shader, uniformList );
 		
+		// Frame end
 		debugLines.Render( worldToProj );
 		render.Present();
-
 		timeStep.Wait();
 	}
 
