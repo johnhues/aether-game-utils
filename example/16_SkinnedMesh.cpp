@@ -78,7 +78,7 @@ struct Bone
 class Skeleton
 {
 public:
-	Skeleton( const ae::Tag& tag ) : m_bones( tag ), m_boneSorts( tag ) {}
+	Skeleton( const ae::Tag& tag ) : m_bones( tag ) {}
 	void Initialize( uint32_t maxBones );
 	void Initialize( const Skeleton* otherPose );
 	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
@@ -92,9 +92,7 @@ public:
 	uint32_t GetBoneCount() const;
 	
 private:
-	struct BoneSort { ae::Bone* b; const ae::Matrix4* t; };
 	ae::Array< ae::Bone > m_bones;
-	ae::Array< BoneSort > m_boneSorts;
 };
 
 //------------------------------------------------------------------------------
@@ -220,8 +218,6 @@ void Skeleton::Initialize( uint32_t maxBones )
 {
 	m_bones.Clear();
 	m_bones.Reserve( maxBones );
-	m_boneSorts.Clear();
-	m_boneSorts.Reserve( maxBones );
 	
 	Bone* bone = &m_bones.Append( {} );
 	bone->name = "root";
@@ -280,23 +276,26 @@ const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::
 
 void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count )
 {
-	// @TODO: If count is less than bone count other children may need to be updated
-	AE_ASSERT_MSG( count == m_bones.Length(), "TODO: Support partial skeleton updates" );
-	AE_ASSERT_MSG( count <= m_bones.Length(), "Attempting to transform # bones, but ae::Skeleton has # bones", count, m_bones.Length() );
-	m_boneSorts.Clear();
+	if ( !count )
+	{
+		return;
+	}
+	
 	for ( uint32_t i = 0; i < count; i++ )
 	{
-		AE_ASSERT_MSG( targets[ i ], "Null bone passed to skeleton when setting transforms" );
-		m_boneSorts.Append( { const_cast< Bone* >( targets[ i ] ), &localTransforms[ i ] } );
+		ae::Bone* bone = const_cast< ae::Bone* >( targets[ i ] );
+		AE_ASSERT_MSG( bone, "Null bone passed to skeleton when setting transforms" );
+		AE_ASSERT_MSG( m_bones.Begin() <= bone && bone < m_bones.End(), "Transform target '#' is not part of this skeleton", bone->name );
+		bone->localTransform = localTransforms[ i ];
 	}
-	std::sort( m_boneSorts.Begin(), m_boneSorts.End(), []( const BoneSort& b0, const BoneSort& b1 ){ return b0.b < b1.b; } );
 	
-	for ( BoneSort& b : m_boneSorts )
+	m_bones[ 0 ].transform = m_bones[ 0 ].localTransform;
+	for ( uint32_t i = 1; i < m_bones.Length(); i++ )
 	{
-		AE_ASSERT( b.b->parent < b.b );
-		ae::Matrix4 parentTransform = b.b->parent ? b.b->parent->transform : ae::Matrix4::Identity();
-		b.b->localTransform = *b.t;
-		b.b->transform = parentTransform * b.b->localTransform;
+		ae::Bone* bone = &m_bones[ i ];
+		AE_ASSERT( bone->parent );
+		AE_ASSERT( bone->parent < bone );
+		bone->transform = bone->parent->transform * bone->localTransform;
 	}
 }
 
@@ -367,7 +366,7 @@ const ae::Matrix4& Skin::GetInvBindPose( const char* name ) const
 void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
 {
 	AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
-	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bine pose hierarchy" );
+	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		ae::Vec3 pos( 0.0f );
@@ -376,8 +375,8 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* norma
 		{
 			const ae::Bone* bone = pose->GetBoneByIndex( skinVert.bones[ j ] );
 			const ae::Bone* bindPoseBone = m_bindPose.GetBoneByIndex( skinVert.bones[ j ] );
-			if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bine pose hierarchy" ); }
-			else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bine pose hierarchy" ); }
+			if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
+			else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
 			
 			ae::Matrix4 transform = bone->transform * m_invBindPoses.GetValue( skinVert.bones[ j ] );
 			float weight = skinVert.weights[ j ] / 256.0f;
