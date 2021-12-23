@@ -4,6 +4,11 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/safeguards.cmake)
 Include(FetchContent)
 Include(AddBundle)
 
+# stb
+add_library(stb INTERFACE)
+target_sources(stb INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/stb_image.h)
+target_include_directories(stb INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
 FetchContent_Declare(
@@ -34,7 +39,7 @@ add_library(openfbx ${OPENFBX_SOURCES})
 target_include_directories(openfbx INTERFACE "${OPENFBX_SOURCE_DIR}/src")
 
 # Example common
-set(EXAMPLE_SOURCES Common.h stb_image.h)
+set(EXAMPLE_SOURCES Common.h)
 
 # Hello World
 add_bundle("Hello World"
@@ -66,9 +71,9 @@ add_bundle("Sprites"
 	"ae.02_sprites"
 	"0.0.0"
 	"Icon"
-	"02_Sprites.cpp;${EXAMPLE_SOURCES}"
+	"02_Sprites.cpp;${EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
 	"data/Icon.icns;data/circle.png"
-	"ae"
+	"ae;stb"
 	""
 )
 
@@ -245,8 +250,20 @@ add_bundle("SkinnedMesh"
 	"ae.16_skinned_mesh"
 	"0.0.0"
 	"Icon"
-	"16_SkinnedMesh.cpp;${AE_EXAMPLE_SOURCES}"
+	"16_SkinnedMesh.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_OFBX_LOADER_SRC}"
 	"data/Icon.icns;data/character.fbx;data/character.tga"
 	"ae;openfbx"
+	""
+)
+
+# IK
+add_bundle("IK"
+	"17_ik"
+	"ae.17_ik"
+	"0.0.0"
+	"Icon"
+	"17_IK.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_OFBX_LOADER_SRC}"
+	"data/Icon.icns;data/character.fbx;data/character.tga"
+	"ae;openfbx;imgui;imguizmo"
 	""
 )

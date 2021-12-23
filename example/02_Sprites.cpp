@@ -24,6 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
+#include "ae/loaders.h"
 #include "Common.h"
 
 //------------------------------------------------------------------------------
@@ -45,7 +46,7 @@ int main()
   // Sprites
   ae::Texture2D spriteTex;
   SpriteRenderer spriteRenderer;
-  LoadPng( &spriteTex, "circle.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+  ae_stb_LoadPng( &spriteTex, "circle.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
   spriteRenderer.Initialize( 16 );
   
   while ( !input.quit )

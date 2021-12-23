@@ -146,6 +146,15 @@ if(APPLE)
 	set(CMAKE_OSX_ARCHITECTURES arm64 x86_64)
 endif()
 
+# Library paths
+set(AE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(AE_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Loaders
+set(AE_LOADER_INCLUDE ${AE_INCLUDE_DIR}/ae/loaders.h)
+set(AE_STB_LOADER_SRC ${AE_SRC_DIR}/loaders/stb.cpp)
+set(AE_OFBX_LOADER_SRC ${AE_SRC_DIR}/loaders/ofbx.cpp)
+
 # library, tests, and examples
 add_subdirectory(src)
 if(NOT ${AE_LEAN_AND_MEAN})
