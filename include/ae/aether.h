@@ -1621,10 +1621,14 @@ struct MouseState
 
 struct GamepadState
 {
+  bool connected = false;
+  bool anyInput = false;
+  bool anyButton = false;
+  
   ae::Vec2 leftAnalog = Vec2( 0.0f );
   ae::Vec2 rightAnalog = Vec2( 0.0f );
-  ae::Int2 dpad = ae::Int2( 0 );
   
+  ae::Int2 dpad = ae::Int2( 0 );
   bool up = false;
   bool down = false;
   bool left = false;
@@ -1638,21 +1642,23 @@ struct GamepadState
   bool x = false;
   bool y = false;
   
+  bool leftBumper = false;
+  bool rightBumper = false;
   float leftTrigger = 0.0f;
   float rightTrigger = 0.0f;
-  bool l = false;
-  bool r = false;
+  bool leftAnalogClick = false;
+  bool rightAnalogClick = false;
   
-  enum class BatteryLevel
+  enum class BatteryState
   {
     None,
-    Empty,
-    Low,
-    Medium,
+    InUse,
+    Charging,
     Full,
     Wired
   };
-  BatteryLevel batteryLevel = BatteryLevel::None;
+  BatteryState batteryState = BatteryState::None;
+  float batteryLevel = 0.0f;
 };
 
 //------------------------------------------------------------------------------
@@ -1676,6 +1682,11 @@ public:
   const char* GetText() const { return m_text.c_str(); }
   const char* GetTextInput() const { return m_textInput.c_str(); }
   
+  void SetLeftAnalogThreshold( float threshold ) { m_leftAnalogThreshold = threshold; }
+  void SetRightAnalogThreshold( float threshold ) { m_rightAnalogThreshold = threshold; }
+  float GetLeftAnalogThreshold() { return m_leftAnalogThreshold; }
+  float GetRightAnalogThreshold() { return m_rightAnalogThreshold; }
+  
   bool Get( ae::Key key ) const;
   bool GetPrev( ae::Key key ) const;
   MouseState mouse;
@@ -1695,6 +1706,8 @@ public:
   void* m_textInputHandler = nullptr;
   std::string m_text;
   std::string m_textInput;
+  float m_leftAnalogThreshold = 0.05f;
+  float m_rightAnalogThreshold = 0.05f;
 };
 
 //------------------------------------------------------------------------------
@@ -6791,11 +6804,13 @@ T* ae::Cast( C* obj )
     @import CoreFoundation;
     @import OpenGL;
     @import OpenAL;
+    @import GameController;
   #else
     #include <Cocoa/Cocoa.h>
     #include <Carbon/Carbon.h>
     #include <OpenAL/al.h>
     #include <OpenAL/alc.h>
+    #include <GameController/GameController.h>
   #endif
   #define AE_USE_OPENAL 1
 #elif _AE_LINUX_
@@ -10035,6 +10050,75 @@ void Input::Pump()
 #else
   m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
   m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
+#endif
+
+  gamepadPrev = gamepad;
+  gamepad = GamepadState();
+#if _AE_APPLE_
+  if ( [[GCController controllers] count] )
+  {
+    auto& gp = this->gamepad;
+    gp.connected = true;
+    
+    GCController* appleController = [GCController controllers][ 0 ];
+    GCExtendedGamepad* appleGamepad = [appleController extendedGamepad];
+    if ( appleGamepad )
+    {
+      auto leftAnalog = [appleGamepad leftThumbstick];
+      auto rightAnalog = [appleGamepad rightThumbstick];
+      gp.leftAnalog = Vec2( [leftAnalog xAxis].value, [leftAnalog yAxis].value );
+      gp.rightAnalog = Vec2( [rightAnalog xAxis].value, [rightAnalog yAxis].value );
+      gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
+      gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
+      
+      auto dpad = [appleGamepad dpad];
+      gp.up = [dpad up].value;
+      gp.down = [dpad down].value;
+      gp.left = [dpad left].value;
+      gp.right = [dpad right].value;
+      gp.dpad = ae::Int2( ( gp.up ? 0 : 1 ) - ( gp.down ? 0 : 1 ), ( gp.right ? 0 : 1 ) - ( gp.left ? 0 : 1 ) );
+      
+      gp.start = [appleGamepad buttonMenu].value;
+      gp.select = [appleGamepad buttonOptions].value;
+      gp.a = [appleGamepad buttonA].value;
+      gp.b = [appleGamepad buttonB].value;
+      gp.x = [appleGamepad buttonX].value;
+      gp.y = [appleGamepad buttonY].value;
+      gp.leftBumper = [appleGamepad leftShoulder].value;
+      gp.rightBumper = [appleGamepad rightShoulder].value;
+      gp.leftTrigger = [appleGamepad leftTrigger].value;
+      gp.rightTrigger = [appleGamepad rightTrigger].value;
+      gp.leftAnalogClick = [appleGamepad leftThumbstickButton].value;
+      gp.rightAnalogClick = [appleGamepad rightThumbstickButton].value;
+      
+      gp.anyButton = gp.up || gp.down || gp.left || gp.right
+        || gp.start || gp.select
+        || gp.a || gp.b || gp.x || gp.y
+        || gp.leftBumper || gp.rightBumper
+        || gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
+        || gp.leftAnalogClick || gp.rightAnalogClick;
+      gp.anyInput = gp.anyButton
+        || fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
+        || fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
+      
+      gp.batteryLevel = [[appleController battery] batteryLevel];
+      switch ( [[appleController battery] batteryState] )
+      {
+        case GCDeviceBatteryStateDischarging:
+          gp.batteryState = GamepadState::BatteryState::InUse;
+          break;
+        case GCDeviceBatteryStateCharging:
+          gp.batteryState = GamepadState::BatteryState::Charging;
+          break;
+        case GCDeviceBatteryStateFull:
+          gp.batteryState = GamepadState::BatteryState::Full;
+          break;
+        default:
+          gp.batteryState = GamepadState::BatteryState::None;
+          break;
+      };
+    }
+  }
 #endif
 }
 
