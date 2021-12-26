@@ -2644,7 +2644,7 @@ public:
   CollisionMesh( ae::Tag tag );
   void Load( const Params& params );
   void Clear();
-  bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const;
+  bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const; // @TODO: Remove 'non-cumulative' raycast function
   RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
   PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
   ae::AABB GetAABB() const { return m_aabb; }
@@ -9328,7 +9328,9 @@ void Window::m_Initialize()
   NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
   if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
   {
-    [NSApp run];
+    // @TODO: This fixes initial window focusing issues and does not seem to cause any problems but more testing is needed.
+    //[NSApp run];
+    [NSApp activateIgnoringOtherApps:YES];
   }
 #elif _AE_EMSCRIPTEN_
   m_width = 0;
