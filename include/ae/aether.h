@@ -9324,7 +9324,9 @@ void Window::m_Initialize()
   m_height = contentScreenRect.size.height;
   m_scaleFactor = nsWindow.backingScaleFactor;
   
-  if (![[NSRunningApplication currentApplication] isFinishedLaunching]) // Make sure run is only called once
+  // Make sure run is only called when executable is bundled, and is also only called once
+  NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
+  if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
   {
     [NSApp run];
   }
@@ -14168,28 +14170,28 @@ void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
   m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
 
   // Load shader
-  const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_uiToScreen;\
-    AE_IN_HIGHP vec3 a_position;\
-    AE_IN_HIGHP vec2 a_uv;\
-    AE_IN_HIGHP vec4 a_color;\
-    AE_OUT_HIGHP vec2 v_uv;\
-    AE_OUT_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      v_uv = a_uv;\
-      v_color = a_color;\
-      gl_Position = u_uiToScreen * vec4( a_position, 1.0 );\
-    }";
-  const char* fragStr = "\
-    uniform sampler2D u_tex;\
-    AE_IN_HIGHP vec2 v_uv;\
-    AE_IN_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      if ( AE_TEXTURE2D( u_tex, v_uv ).r < 0.5 ) { discard; };\
-      AE_COLOR = v_color;\
-    }";
+  const char* vertexStr = R"(
+    AE_UNIFORM_HIGHP mat4 u_uiToScreen;
+    AE_IN_HIGHP vec3 a_position;
+    AE_IN_HIGHP vec2 a_uv;
+    AE_IN_HIGHP vec4 a_color;
+    AE_OUT_HIGHP vec2 v_uv;
+    AE_OUT_HIGHP vec4 v_color;
+    void main()
+    {
+      v_uv = a_uv;
+      v_color = a_color;
+      gl_Position = u_uiToScreen * vec4( a_position, 1.0 );
+    })";
+  const char* fragStr = R"(
+    uniform sampler2D u_tex;
+    AE_IN_HIGHP vec2 v_uv;
+    AE_IN_HIGHP vec4 v_color;
+    void main()
+    {
+      if ( AE_TEXTURE2D( u_tex, v_uv ).r < 0.5 ) { discard; };
+      AE_COLOR = v_color;
+    })";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 }
 
@@ -14370,24 +14372,24 @@ void DebugLines::Initialize( uint32_t maxVerts )
   m_vertexData.AddAttribute( "a_color", 4, VertexData::Type::Float, offsetof(DebugVertex, color) );
 
   // Load shader
-  const char* vertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_worldToNdc;\
-    AE_UNIFORM float u_saturation;\
-    AE_IN_HIGHP vec3 a_position;\
-    AE_IN_HIGHP vec4 a_color;\
-    AE_OUT_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5;\
-      v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);\
-      gl_Position = u_worldToNdc * vec4( a_position, 1.0 );\
-    }";
-  const char* fragStr = "\
-    AE_IN_HIGHP vec4 v_color;\
-    void main()\
-    {\
-      AE_COLOR = v_color;\
-    }";
+  const char* vertexStr = R"(
+    AE_UNIFORM_HIGHP mat4 u_worldToNdc;
+    AE_UNIFORM float u_saturation;
+    AE_IN_HIGHP vec3 a_position;
+    AE_IN_HIGHP vec4 a_color;
+    AE_OUT_HIGHP vec4 v_color;
+    void main()
+    {
+      float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5;
+      v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);
+      gl_Position = u_worldToNdc * vec4( a_position, 1.0 );
+    })";
+  const char* fragStr = R"(
+    AE_IN_HIGHP vec4 v_color;
+    void main()
+    {
+      AE_COLOR = v_color;
+    })";
   m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
   m_shader.SetBlending( true );
   m_shader.SetDepthTest( true );
