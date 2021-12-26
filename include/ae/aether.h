@@ -2145,8 +2145,8 @@ public:
   //! Renders vertex data range. Automatically calls Upload() first.
   void Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const;
   
-  template < typename T > const T* GetVertices() const;
-  template < typename T > const T* GetIndices() const;
+  template < typename T = void > const T* GetVertices() const;
+  template < typename T = void > const T* GetIndices() const;
   uint32_t GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
   uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
