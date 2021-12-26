@@ -42,29 +42,42 @@ struct Vertex
 //------------------------------------------------------------------------------
 // Shaders
 //------------------------------------------------------------------------------
-const char* kVertShader = "\
-	AE_UNIFORM mat4 u_worldToProj;\
-	AE_UNIFORM vec4 u_color;\
-	AE_IN_HIGHP vec4 a_position;\
-	AE_IN_HIGHP vec4 a_color;\
-	AE_IN_HIGHP vec2 a_uv;\
-	AE_OUT_HIGHP vec4 v_color;\
-	AE_OUT_HIGHP vec2 v_uv;\
-	void main()\
-	{\
-		v_color = a_color * u_color;\
-		v_uv = a_uv;\
-		gl_Position = u_worldToProj * a_position;\
-	}";
+const char* kVertShader = R"(
+	AE_UNIFORM mat4 u_worldToProj;
+	AE_UNIFORM mat4 u_normalToWorld;
+	AE_UNIFORM vec4 u_color;
+	AE_IN_HIGHP vec4 a_position;
+	AE_IN_HIGHP vec4 a_normal;
+	AE_IN_HIGHP vec4 a_color;
+	AE_IN_HIGHP vec2 a_uv;
+	AE_OUT_HIGHP vec3 v_normal;
+	AE_OUT_HIGHP vec4 v_color;
+	AE_OUT_HIGHP vec2 v_uv;
+	void main()
+	{
+		v_normal = (u_normalToWorld * a_normal).xyz;
+		v_color = a_color * u_color;
+		v_uv = a_uv;
+		gl_Position = u_worldToProj * a_position;
+	})";
 
-const char* kFragShader = "\
-	AE_UNIFORM sampler2D u_tex;\
-	AE_IN_HIGHP vec4 v_color;\
-	AE_IN_HIGHP vec2 v_uv;\
-	void main()\
-	{\
-		AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
-	}";
+const char* kFragShader = R"(
+	AE_UNIFORM sampler2D u_tex;
+	AE_UNIFORM vec3 u_lightDir;
+	AE_UNIFORM vec3 u_lightColor;
+	AE_UNIFORM vec3 u_ambColor;
+	AE_IN_HIGHP vec3 v_normal;
+	AE_IN_HIGHP vec4 v_color;
+	AE_IN_HIGHP vec2 v_uv;
+	void main()
+	{
+		vec4 diff = AE_TEXTURE2D( u_tex, v_uv );
+		float lightAmt = max(0.0, dot(normalize(v_normal), -u_lightDir));
+		vec3 light = u_ambColor + lightAmt * u_lightColor;
+		AE_COLOR.rgb = diff.rgb * v_color.rgb * light;
+		AE_COLOR.a = diff.a * v_color.a;
+		
+	})";
 
 //------------------------------------------------------------------------------
 // Main
@@ -201,7 +214,7 @@ int main()
 			if ( parent )
 			{
 				debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::Red() );
-				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Red() );
+				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::Red() );
 			}
 		}
 		
@@ -213,8 +226,13 @@ int main()
 		render.Clear( ae::Color::PicoDarkPurple() );
 		
 		// Render mesh
+		ae::Matrix4 modelToWorld = ae::Matrix4::Identity();
 		ae::UniformList uniformList;
-		uniformList.Set( "u_worldToProj", worldToProj );
+		uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
+		uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
+		uniformList.Set( "u_lightDir", ae::Vec3( 0.0f, 0.0f, -1.0f ).NormalizeCopy() );
+		uniformList.Set( "u_lightColor", ae::Color::PicoPeach().GetLinearRGB() );
+		uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		uniformList.Set( "u_tex", &texture );
 		vertexData.Render( &shader, uniformList );
