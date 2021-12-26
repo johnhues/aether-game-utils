@@ -24,7 +24,9 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/loaders.h"
+#include "ae/Editor.h"
 #include "ofbx.h"
+namespace ae {
 
 //------------------------------------------------------------------------------
 // Helpers
@@ -54,19 +56,117 @@ static ae::Matrix4 getBindPoseMatrix( const ofbx::Skin* skin, const ofbx::Object
 	return ofbxToAe( node->getGlobalTransform() );
 }
 
-bool ae_ofbx_LoadSkinnedMesh( const ae::Tag& tag, ae::FileSystem* fileSystem, const char* fileName, const ae_VertexLoaderInfo& vertexInfo, ae::VertexData* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
+bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, const LoadMeshParams& params )
 {
-	uint32_t fileSize = fileSystem->GetSize( fileName );
-	if ( !fileSize )
+	ofbx::IScene* scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
+	if ( !scene )
 	{
 		return false;
 	}
-	ae::Scratch< uint8_t > fileData( tag, fileSize );
-	if ( fileSize != fileSystem->Read( fileName, fileData.Data(), fileSize ) )
+	
+	uint32_t meshCount = scene->getMeshCount();
+	
+	uint32_t totalVerts = 0;
+	uint32_t totalIndices = 0;
+	for ( uint32_t i = 0; i < meshCount; i++ )
 	{
-		return false;
+		const ofbx::Mesh* mesh = scene->getMesh( i );
+		const ofbx::Geometry* geo = mesh->getGeometry();
+		totalVerts += geo->getVertexCount();
+		totalIndices += geo->getIndexCount();
 	}
-	ofbx::IScene* scene = ofbx::load( (ofbx::u8*)fileData.Data(), fileSize, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
+	
+	uint32_t indexOffset = 0;
+	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.size );
+	ae::Array< uint32_t > indices( tag, totalIndices );
+	for ( uint32_t i = 0; i < meshCount; i++ )
+	{
+		const ofbx::Mesh* mesh = scene->getMesh( i );
+		const ofbx::Geometry* geo = mesh->getGeometry();
+		ae::Matrix4 localToWorld = params.transform * ofbxToAe( mesh->getGlobalTransform() );
+		ae::Matrix4 normalMatrix = localToWorld.GetNormalMatrix();
+		
+		uint32_t vertexCount = geo->getVertexCount();
+		const ofbx::Vec3* meshVerts = geo->getVertices();
+		const ofbx::Vec3* meshNormals = geo->getNormals();
+		const ofbx::Vec4* meshColors = geo->getColors();
+		const ofbx::Vec2* meshUvs = geo->getUVs();
+		for ( uint32_t j = 0; j < vertexCount; j++ )
+		{
+			ofbx::Vec3 p0 = meshVerts[ j ];
+			ae::Vec4 p( p0.x, p0.y, p0.z, 1.0f );
+			ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
+			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
+			
+			uint8_t vertex[ 128 ];
+			AE_ASSERT( vertexHelper.size <= sizeof(vertex) );
+			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
+			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
+			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
+			vertexHelper.SetUV( vertex, 0, uv );
+			vertexBuffer.Append( vertex, vertexHelper.size );
+		}
+		
+		uint32_t indexCount = geo->getIndexCount();
+		const int32_t* meshIndices = geo->getFaceIndices();
+		for ( uint32_t j = 0; j < indexCount; j++ )
+		{
+			int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
+			AE_ASSERT( index < vertexCount );
+			index += indexOffset;
+			indices.Append( index );
+			
+			ofbx::Vec3 n = meshNormals[ j ];
+			ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
+			vertexHelper.SetNormal( vertexBuffer.Begin(), index, normal );
+		}
+		
+		indexOffset += vertexCount;
+	}
+	
+	if ( params.vertexData )
+	{
+		params.vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
+			totalVerts, indices.Length(),
+			ae::VertexData::Primitive::Triangle,
+			ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
+		if ( vertexHelper.posOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::VertexData::Type::Float, vertexHelper.posOffset ); }
+		if ( vertexHelper.normalOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::VertexData::Type::Float, vertexHelper.normalOffset ); }
+		if ( vertexHelper.colorOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::VertexData::Type::Float, vertexHelper.colorOffset ); }
+		if ( vertexHelper.uvOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::VertexData::Type::Float, vertexHelper.uvOffset ); }
+		params.vertexData->SetVertices( vertexBuffer.Begin(), totalVerts );
+		params.vertexData->SetIndices( indices.Begin(), indices.Length() );
+		params.vertexData->Upload();
+	}
+	
+	if ( params.collisionMesh )
+	{
+		ae::CollisionMesh::Params collisionParams;
+		collisionParams.positionCount = totalVerts;
+		collisionParams.positions = vertexHelper.GetPosition( vertexBuffer.Begin(), 0 ).data;
+		collisionParams.positionStride = vertexHelper.size;
+		collisionParams.indices = indices.Begin();
+		collisionParams.indexCount = indices.Length();
+		collisionParams.indexSize = sizeof(uint32_t);
+		params.collisionMesh->Load( collisionParams );
+	}
+	
+	if ( params.editorMesh )
+	{
+		params.editorMesh->verts.Reserve( totalVerts );
+		for ( uint32_t i = 0; i < totalVerts; i++ )
+		{
+			params.editorMesh->verts.Append( vertexHelper.GetPosition( vertexBuffer.Begin(), i ).GetXYZ() );
+		}
+		params.editorMesh->indices.Append( indices.Begin(), indices.Length() );
+	}
+	
+	return true;
+}
+
+bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, ae::VertexData* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
+{
+	ofbx::IScene* scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
 	if ( !scene )
 	{
 		return false;
@@ -162,7 +262,7 @@ bool ae_ofbx_LoadSkinnedMesh( const ae::Tag& tag, ae::FileSystem* fileSystem, co
 	}
 
 	uint32_t indexOffset = 0;
-	ae::Array< uint8_t > vertexBuffer( tag, totalVerts );
+	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.size );
 	ae::Array< uint32_t > indices( tag, totalIndices );
 	for ( uint32_t i = 0; i < meshCount; i++ )
 	{
@@ -184,12 +284,12 @@ bool ae_ofbx_LoadSkinnedMesh( const ae::Tag& tag, ae::FileSystem* fileSystem, co
 			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
 
 			uint8_t vertex[ 128 ];
-			AE_ASSERT( vertexInfo.size <= sizeof(vertex) );
-			vertexInfo.SetPosition( vertex, 0, localToWorld * p );
-			vertexInfo.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
-			vertexInfo.SetColor( vertex, 0, color.GetLinearRGBA() );
-			vertexInfo.SetUV( vertex, 0, uv );
-			vertexBuffer.Append( vertex, vertexInfo.size );
+			AE_ASSERT( vertexHelper.size <= sizeof(vertex) );
+			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
+			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
+			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
+			vertexHelper.SetUV( vertex, 0, uv );
+			vertexBuffer.Append( vertex, vertexHelper.size );
 			
 			skinVerts[ j ].position = p.GetXYZ();
 		}
@@ -205,7 +305,7 @@ bool ae_ofbx_LoadSkinnedMesh( const ae::Tag& tag, ae::FileSystem* fileSystem, co
 
 			ofbx::Vec3 n = meshNormals[ j ];
 			ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
-			vertexInfo.SetNormal( vertexBuffer.Begin(), index, normal );
+			vertexHelper.SetNormal( vertexBuffer.Begin(), index, normal );
 			
 			skinVerts[ index ].normal = normal.GetXYZ();
 		}
@@ -362,16 +462,18 @@ bool ae_ofbx_LoadSkinnedMesh( const ae::Tag& tag, ae::FileSystem* fileSystem, co
 		}
 	}
 	
-	vertexData->Initialize( vertexInfo.size, sizeof(uint32_t),
+	vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
 		totalVerts, indices.Length(),
 		ae::VertexData::Primitive::Triangle,
 		ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Static );
-	if ( vertexInfo.posOffset >= 0 ) { vertexData->AddAttribute( vertexInfo.posAttrib, vertexInfo.posComponents, ae::VertexData::Type::Float, vertexInfo.posOffset ); }
-	if ( vertexInfo.normalOffset >= 0 ) { vertexData->AddAttribute( vertexInfo.normalAttrib, vertexInfo.normalComponents, ae::VertexData::Type::Float, vertexInfo.normalOffset ); }
-	if ( vertexInfo.colorOffset >= 0 ) { vertexData->AddAttribute( vertexInfo.colorAttrib, vertexInfo.colorComponents, ae::VertexData::Type::Float, vertexInfo.colorOffset ); }
-	if ( vertexInfo.uvOffset >= 0 ) { vertexData->AddAttribute( vertexInfo.uvAttrib, vertexInfo.uvComponents, ae::VertexData::Type::Float, vertexInfo.uvOffset ); }
+	if ( vertexHelper.posOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::VertexData::Type::Float, vertexHelper.posOffset ); }
+	if ( vertexHelper.normalOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::VertexData::Type::Float, vertexHelper.normalOffset ); }
+	if ( vertexHelper.colorOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::VertexData::Type::Float, vertexHelper.colorOffset ); }
+	if ( vertexHelper.uvOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::VertexData::Type::Float, vertexHelper.uvOffset ); }
 	vertexData->SetVertices( vertexBuffer.Begin(), totalVerts );
 	vertexData->SetIndices( indices.Begin(), indices.Length() );
 	
 	return true;
 }
+
+} // End ae namespace
