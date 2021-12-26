@@ -533,7 +533,6 @@ public:
   void SetScale( const Vec3& s );
   void SetRotation( const class Quaternion& r );
   Vec3 GetTranslation() const;
-  Vec3 GetPosition() const { return GetTranslation(); } // HACK Remove
   Vec3 GetScale() const;
   class Quaternion GetRotation() const;
 
@@ -1622,10 +1621,14 @@ struct MouseState
 
 struct GamepadState
 {
+  bool connected = false;
+  bool anyInput = false;
+  bool anyButton = false;
+  
   ae::Vec2 leftAnalog = Vec2( 0.0f );
   ae::Vec2 rightAnalog = Vec2( 0.0f );
-  ae::Int2 dpad = ae::Int2( 0 );
   
+  ae::Int2 dpad = ae::Int2( 0 );
   bool up = false;
   bool down = false;
   bool left = false;
@@ -1639,21 +1642,23 @@ struct GamepadState
   bool x = false;
   bool y = false;
   
+  bool leftBumper = false;
+  bool rightBumper = false;
   float leftTrigger = 0.0f;
   float rightTrigger = 0.0f;
-  bool l = false;
-  bool r = false;
+  bool leftAnalogClick = false;
+  bool rightAnalogClick = false;
   
-  enum class BatteryLevel
+  enum class BatteryState
   {
     None,
-    Empty,
-    Low,
-    Medium,
+    InUse,
+    Charging,
     Full,
     Wired
   };
-  BatteryLevel batteryLevel = BatteryLevel::None;
+  BatteryState batteryState = BatteryState::None;
+  float batteryLevel = 0.0f;
 };
 
 //------------------------------------------------------------------------------
@@ -1677,6 +1682,11 @@ public:
   const char* GetText() const { return m_text.c_str(); }
   const char* GetTextInput() const { return m_textInput.c_str(); }
   
+  void SetLeftAnalogThreshold( float threshold ) { m_leftAnalogThreshold = threshold; }
+  void SetRightAnalogThreshold( float threshold ) { m_rightAnalogThreshold = threshold; }
+  float GetLeftAnalogThreshold() { return m_leftAnalogThreshold; }
+  float GetRightAnalogThreshold() { return m_rightAnalogThreshold; }
+  
   bool Get( ae::Key key ) const;
   bool GetPrev( ae::Key key ) const;
   MouseState mouse;
@@ -1696,6 +1706,8 @@ public:
   void* m_textInputHandler = nullptr;
   std::string m_text;
   std::string m_textInput;
+  float m_leftAnalogThreshold = 0.05f;
+  float m_rightAnalogThreshold = 0.05f;
 };
 
 //------------------------------------------------------------------------------
@@ -2108,14 +2120,21 @@ public:
   void SetIndices( const void* indices, uint32_t count );
   //! Add vertices to end of existing array.
   void AppendVertices( const void* vertices, uint32_t count );
-  //! Add indices to end of existing array. Given indices are each offset based
-  //! on @indexOffset. It could be useful to use GetVertexCount() as a parameter
-  //! to @indexOffset before appending new vertices.
+  //! Add indices to end of existing array. Given indices are each offset based on @indexOffset. It could be
+  //! useful to use GetVertexCount() as a parameter to @indexOffset before appending new vertices.
   void AppendIndices( const void* indices, uint32_t count, uint32_t indexOffset );
   //! Sets dynamic vertex count to 0. Has no effect if vertices are using VertexData::Usage::Static.
   void ClearVertices();
   //! Sets dynamic index count to 0. Has no effect if indices are using VertexData::Usage::Static.
   void ClearIndices();
+  //! Allows direct modification of vertices. ae::VertexData::Upload() should be called after modifying vertices
+  //! or the next call to ae::VertexData::Render() will automatically force an upload. Use this in conjunction with
+  //! ae::VertexData::GetVertexCount().
+  template < typename T > T* GetWritableVertices();
+  //! Allows direct modification of indices. ae::VertexData::Upload() should be called after modifying indices
+  //! or the next call to ae::VertexData::Render() will automatically force an upload. Use this in conjunction with
+  //! ae::VertexData::GetIndexCount().
+  template < typename T > T* GetWritableIndices();
   
   //! Preemptively prepares buffers for rendering. Call after Setting/Appending vertices and
   //! indices, but before Render() to avoid waiting for upload when rendering. This will result
@@ -2126,15 +2145,14 @@ public:
   //! Renders vertex data range. Automatically calls Upload() first.
   void Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const;
   
-  // Get info
-  const void* GetVertices() const;
-  const void* GetIndices() const;
-  uint32_t GetVertexSize() const { return m_vertexSize; }
-  uint32_t GetIndexSize() const { return m_indexSize; }
+  template < typename T > const T* GetVertices() const;
+  template < typename T > const T* GetIndices() const;
   uint32_t GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
   uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
   uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
+  uint32_t GetVertexSize() const { return m_vertexSize; }
+  uint32_t GetIndexSize() const { return m_indexSize; }
   uint32_t GetAttributeCount() const { return m_attributes.Length(); }
   VertexData::Primitive GetPrimitiveType() const { return m_primitive; }
   
@@ -2464,14 +2482,22 @@ public:
   enum class Mode { None, Rotate, Pan, Zoom };
   
   DebugCamera();
+  //! Interupts refocus. Does not affect in progress input.
+  void Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos );
+  //! Prevents the position of the camera from being less than @min distance from the focus point and
+  //! greater than @max distance from the focus point. May affect the current position of the camera.
   void SetDistanceLimits( float min, float max );
-  void Update( const ae::Input* input, float dt ); // @TODO: This should take input values, not the whole input system
-
-  void Reset( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos ); //!< Interupts refocus. Does not affect input mode.
-  void SetDistanceFromFocus( float distance ); //!< Updates position. Does not affect input mode or refocus.
-  void Refocus( ae::Vec3 focus ); //!< Updates focus and position over time
-  void SetInputEnabled( bool enabled ); //!< True by default
-  void SetRotation( ae::Vec2 angle );
+  //! Updates the cameras position. Does not affect in progress input or refocus.
+  void SetDistanceFromFocus( float distance );
+  //! Passing false cancels in progress input and prevents new input until called again with true. True by default.
+  void SetInputEnabled( bool enabled );
+  //! Sets the yaw and pitch of the camera. Updates the cameras position.
+  void SetRotation( ae::Vec2 angles );
+  //! Updates focus and position over time
+  void Refocus( ae::Vec3 focus );
+  //! Call this every frame even when no input has taken place so refocus works as expected.
+  //! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
+  void Update( const ae::Input* input, float dt );
 
   Mode GetMode() const; //!< Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
   ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
@@ -2647,6 +2673,105 @@ public:
   ae::Str64 name;
   uint32_t buffer;
   float length;
+};
+
+//------------------------------------------------------------------------------
+// ae::Keyframe struct
+//------------------------------------------------------------------------------
+struct Keyframe
+{
+	Keyframe() = default;
+	Keyframe( const ae::Matrix4& transform );
+	ae::Matrix4 GetLocalTransform() const;
+	Keyframe Lerp( const Keyframe& target, float t ) const;
+	
+	ae::Vec3 position = ae::Vec3( 0.0f );
+	ae::Quaternion rotation = ae::Quaternion::Identity();
+	ae::Vec3 scale = ae::Vec3( 1.0f );
+};
+
+//------------------------------------------------------------------------------
+// ae::Animation class
+//------------------------------------------------------------------------------
+class Animation
+{
+public:
+	Animation( const ae::Tag& tag ) : keyframes( tag ) {}
+	ae::Keyframe GetKeyframeByTime( const char* boneName, float time ) const;
+	ae::Keyframe GetKeyframeByPercent( const char* boneName, float percent ) const;
+	void AnimateByTime( class Skeleton* target, float time, float strength, const class Bone** mask, uint32_t maskCount ) const;
+	void AnimateByPercent( class Skeleton* target, float percent, float strength, const class Bone** mask, uint32_t maskCount ) const;
+	
+	float duration = 0.0f;
+	bool loop = false;
+	ae::Map< ae::Str64, ae::Array< ae::Keyframe > > keyframes; // @TODO: boneKeyframes. Maybe private
+};
+
+//------------------------------------------------------------------------------
+// ae::Bone struct
+//------------------------------------------------------------------------------
+struct Bone
+{
+	ae::Str64 name;
+  uint32_t index = 0;
+  ae::Matrix4 transform = ae::Matrix4::Identity();
+  ae::Matrix4 localTransform = ae::Matrix4::Identity();
+  ae::Matrix4 inverseTransform = ae::Matrix4::Identity(); 
+  Bone* firstChild = nullptr;
+  Bone* nextSibling = nullptr;
+  Bone* parent = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// ae::Skeleton class
+//------------------------------------------------------------------------------
+class Skeleton
+{
+public:
+	Skeleton( const ae::Tag& tag ) : m_bones( tag ) {}
+	void Initialize( uint32_t maxBones );
+	void Initialize( const Skeleton* otherPose );
+  const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
+  void SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count );
+  void SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform );
+  void SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count );
+  void SetTransform( const Bone* target, const ae::Matrix4& transform );
+  
+  const Bone* GetRoot() const;
+  const Bone* GetBoneByName( const char* name ) const;
+	const Bone* GetBoneByIndex( uint32_t index ) const;
+	const Bone* GetBones() const;
+	uint32_t GetBoneCount() const;
+	
+private:
+	ae::Array< ae::Bone > m_bones;
+};
+
+//------------------------------------------------------------------------------
+// ae::Skin class
+//------------------------------------------------------------------------------
+class Skin
+{
+public:
+	struct Vertex
+	{
+		ae::Vec3 position;
+		ae::Vec3 normal;
+		uint16_t bones[ 4 ];
+    uint8_t weights[ 4 ] = { 0 };
+  };
+  
+  Skin( const ae::Tag& tag ) : m_bindPose( tag ), m_verts( tag ) {}
+  void Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount );
+  
+  const class Skeleton* GetBindPose() const;
+	const ae::Matrix4& GetInvBindPose( const char* name ) const;
+	
+	void ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
+  
+private:
+  Skeleton m_bindPose;
+  ae::Array< Vertex > m_verts;
 };
 
 //------------------------------------------------------------------------------
@@ -5801,6 +5926,44 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 }
 
 //------------------------------------------------------------------------------
+// ae::VertexData member functions
+//------------------------------------------------------------------------------
+template <> void* VertexData::GetWritableVertices();
+template <> void* VertexData::GetWritableIndices();
+template <> const void* VertexData::GetVertices() const;
+template <> const void* VertexData::GetIndices() const;
+
+template < typename T >
+T* VertexData::GetWritableVertices()
+{
+  AE_ASSERT( m_vertexSize == sizeof( T ) );
+  m_vertexDirty = true;
+  return static_cast< T* >( m_vertexReadable );
+}
+
+template < typename T >
+T* VertexData::GetWritableIndices()
+{
+  AE_ASSERT( m_indexSize == sizeof( T ) );
+  m_indexDirty = true;
+  return static_cast< T* >( m_indexReadable );
+}
+
+template < typename T >
+const T* VertexData::GetVertices() const
+{
+  AE_ASSERT( m_vertexSize == sizeof( T ) );
+  return static_cast< const T* >( m_vertexReadable );
+}
+
+template < typename T >
+const T* VertexData::GetIndices() const
+{
+  AE_ASSERT( m_indexSize == sizeof( T ) );
+  return static_cast< const T* >( m_indexReadable );
+}
+
+//------------------------------------------------------------------------------
 // ae::BinaryStream member functions
 //------------------------------------------------------------------------------
 template < uint32_t N >
@@ -6643,11 +6806,13 @@ T* ae::Cast( C* obj )
     @import CoreFoundation;
     @import OpenGL;
     @import OpenAL;
+    @import GameController;
   #else
     #include <Cocoa/Cocoa.h>
     #include <Carbon/Carbon.h>
     #include <OpenAL/al.h>
     #include <OpenAL/alc.h>
+    #include <GameController/GameController.h>
   #endif
   #define AE_USE_OPENAL 1
 #elif _AE_LINUX_
@@ -9888,6 +10053,75 @@ void Input::Pump()
   m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
   m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
 #endif
+
+  gamepadPrev = gamepad;
+  gamepad = GamepadState();
+#if _AE_APPLE_
+  if ( [[GCController controllers] count] )
+  {
+    auto& gp = this->gamepad;
+    gp.connected = true;
+    
+    GCController* appleController = [GCController controllers][ 0 ];
+    GCExtendedGamepad* appleGamepad = [appleController extendedGamepad];
+    if ( appleGamepad )
+    {
+      auto leftAnalog = [appleGamepad leftThumbstick];
+      auto rightAnalog = [appleGamepad rightThumbstick];
+      gp.leftAnalog = Vec2( [leftAnalog xAxis].value, [leftAnalog yAxis].value );
+      gp.rightAnalog = Vec2( [rightAnalog xAxis].value, [rightAnalog yAxis].value );
+      gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
+      gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
+      
+      auto dpad = [appleGamepad dpad];
+      gp.up = [dpad up].value;
+      gp.down = [dpad down].value;
+      gp.left = [dpad left].value;
+      gp.right = [dpad right].value;
+      gp.dpad = ae::Int2( ( gp.up ? 0 : 1 ) - ( gp.down ? 0 : 1 ), ( gp.right ? 0 : 1 ) - ( gp.left ? 0 : 1 ) );
+      
+      gp.start = [appleGamepad buttonMenu].value;
+      gp.select = [appleGamepad buttonOptions].value;
+      gp.a = [appleGamepad buttonA].value;
+      gp.b = [appleGamepad buttonB].value;
+      gp.x = [appleGamepad buttonX].value;
+      gp.y = [appleGamepad buttonY].value;
+      gp.leftBumper = [appleGamepad leftShoulder].value;
+      gp.rightBumper = [appleGamepad rightShoulder].value;
+      gp.leftTrigger = [appleGamepad leftTrigger].value;
+      gp.rightTrigger = [appleGamepad rightTrigger].value;
+      gp.leftAnalogClick = [appleGamepad leftThumbstickButton].value;
+      gp.rightAnalogClick = [appleGamepad rightThumbstickButton].value;
+      
+      gp.anyButton = gp.up || gp.down || gp.left || gp.right
+        || gp.start || gp.select
+        || gp.a || gp.b || gp.x || gp.y
+        || gp.leftBumper || gp.rightBumper
+        || gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
+        || gp.leftAnalogClick || gp.rightAnalogClick;
+      gp.anyInput = gp.anyButton
+        || fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
+        || fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
+      
+      gp.batteryLevel = [[appleController battery] batteryLevel];
+      switch ( [[appleController battery] batteryState] )
+      {
+        case GCDeviceBatteryStateDischarging:
+          gp.batteryState = GamepadState::BatteryState::InUse;
+          break;
+        case GCDeviceBatteryStateCharging:
+          gp.batteryState = GamepadState::BatteryState::Charging;
+          break;
+        case GCDeviceBatteryStateFull:
+          gp.batteryState = GamepadState::BatteryState::Full;
+          break;
+        default:
+          gp.batteryState = GamepadState::BatteryState::None;
+          break;
+      };
+    }
+  }
+#endif
 }
 
 void Input::SetMouseCaptured( bool enable )
@@ -12951,11 +13185,27 @@ void VertexData::ClearIndices()
   }
 }
 
+template <>
+void* VertexData::GetWritableVertices()
+{
+  m_vertexDirty = true;
+  return m_vertexReadable;
+}
+
+template <>
+void* VertexData::GetWritableIndices()
+{
+  m_indexDirty = true;
+  return m_indexReadable;
+}
+
+template <>
 const void* VertexData::GetVertices() const
 {
   return m_vertexReadable;
 }
 
+template <>
 const void* VertexData::GetIndices() const
 {
   return m_indexReadable;
@@ -14505,6 +14755,7 @@ void DebugCamera::SetDistanceLimits( float min, float max )
 {
   m_min = min;
   m_max = max;
+  m_Precalculate();
 }
 
 void DebugCamera::Update( const ae::Input* input, float dt )
@@ -14637,7 +14888,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
   }
 }
 
-void DebugCamera::Reset( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
+void DebugCamera::Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
 {
   m_refocus = false;
   m_refocusPos = focus;
@@ -14688,10 +14939,10 @@ void DebugCamera::SetInputEnabled( bool enabled )
   m_inputEnabled = enabled;
 }
 
-void DebugCamera::SetRotation( ae::Vec2 angle )
+void DebugCamera::SetRotation( ae::Vec2 angles )
 {
-  m_yaw = angle.x;
-  m_pitch = angle.y;
+  m_yaw = angles.x;
+  m_pitch = angles.y;
   m_Precalculate();
 }
 
@@ -14713,6 +14964,8 @@ bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
 void DebugCamera::m_Precalculate()
 {
   ae::Vec3 worldUp = GetWorldUp();
+  
+  m_dist = ae::Clip( m_dist, m_min, m_max );
 
   if ( m_worldUp == Axis::Y )
   {
@@ -15359,6 +15612,307 @@ void CollisionMesh::PushOutInfo::Accumulate( const PushOutParams& params, const 
     {
       break;
     }
+  }
+}
+
+//------------------------------------------------------------------------------
+// ae::Keyframe member functions
+//------------------------------------------------------------------------------
+Keyframe::Keyframe( const ae::Matrix4& transform )
+{
+	position = transform.GetTranslation();
+	rotation = transform.GetRotation();
+	scale = transform.GetScale();
+}
+
+ae::Matrix4 Keyframe::GetLocalTransform() const
+{
+	ae::Matrix4 rot = ae::Matrix4::Identity();
+	rot.SetRotation( rotation );
+	return ae::Matrix4::Translation( position ) * rot * ae::Matrix4::Scaling( scale );
+}
+
+Keyframe Keyframe::Lerp( const Keyframe& target, float t ) const
+{
+	Keyframe result;
+	result.position = position.Lerp( target.position, t );
+	result.rotation = rotation.Nlerp( target.rotation, t );
+	result.scale = scale.Lerp( target.scale, t );
+	return result;
+}
+
+//------------------------------------------------------------------------------
+// ae::Animation member functions
+//------------------------------------------------------------------------------
+ae::Keyframe Animation::GetKeyframeByTime( const char* boneName, float time ) const
+{
+	return GetKeyframeByPercent( boneName, ae::Delerp( 0.0f, duration, time ) );
+}
+
+ae::Keyframe Animation::GetKeyframeByPercent( const char* boneName, float percent ) const
+{
+	const ae::Array< ae::Keyframe >* boneKeyframes = keyframes.TryGet( boneName );
+	if ( !boneKeyframes || !boneKeyframes->Length() )
+	{
+		return ae::Keyframe();
+	}
+	percent = loop ? ae::Mod( percent, 1.0f ) : ae::Clip01( percent );
+	float f = boneKeyframes->Length() * percent;
+	uint32_t f0 = (uint32_t)f;
+	uint32_t f1 = ( f0 + 1 );
+	f0 = loop ? ( f0 % boneKeyframes->Length() ) : ae::Clip( f0, 0u, boneKeyframes->Length() - 1 );
+	f1 = loop ? ( f1 % boneKeyframes->Length() ) : ae::Clip( f1, 0u, boneKeyframes->Length() - 1 );
+	return (*boneKeyframes)[ f0 ].Lerp( (*boneKeyframes)[ f1 ], ae::Clip01( f - f0 ) );
+}
+
+void Animation::AnimateByTime( class Skeleton* target, float time, float strength, const ae::Bone** mask, uint32_t maskCount ) const
+{
+	AnimateByPercent( target, ae::Delerp( 0.0f, duration, time ), strength, mask, maskCount );
+}
+
+void Animation::AnimateByPercent( class Skeleton* target, float percent, float strength, const ae::Bone** mask, uint32_t maskCount ) const
+{
+	ae::Array< const ae::Bone* > tempBones = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
+	ae::Array< ae::Matrix4 > temp = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
+	tempBones.Reserve( target->GetBoneCount() );
+	temp.Reserve( target->GetBoneCount() );
+	
+	strength = ae::Clip01( strength );
+	const ae::Bone** maskEnd = mask + maskCount;
+	
+	for ( uint32_t i = 0; i < target->GetBoneCount(); i++ )
+	{
+		const ae::Bone* bone = target->GetBoneByIndex( i );
+		AE_ASSERT( bone->index == i );
+		AE_ASSERT( bone > bone->parent );
+		
+		float keyStrength = strength;
+		bool found = ( std::find( mask, maskEnd, bone ) != maskEnd );
+		if ( found )
+		{
+			keyStrength = 0.0f;
+		}
+		
+		tempBones.Append( bone );
+		ae::Keyframe keyframe = GetKeyframeByPercent( bone->name.c_str(), percent );
+		if ( keyStrength < 1.0f )
+		{
+			const ae::Matrix4 current = bone->localTransform;
+			const ae::Vec3 currTranslation = current.GetTranslation();
+			const ae::Quaternion currRotation = current.GetRotation();
+			const ae::Vec3 currScale = current.GetScale();
+			keyframe.position = currTranslation.Lerp( keyframe.position, keyStrength );
+			keyframe.rotation = currRotation.Nlerp( keyframe.rotation, keyStrength );
+			keyframe.scale = currScale.Lerp( keyframe.scale, keyStrength );
+		}
+		temp.Append( keyframe.GetLocalTransform() );
+	}
+	target->SetLocalTransforms( tempBones.Begin(), temp.Begin(), target->GetBoneCount() );
+}
+
+//------------------------------------------------------------------------------
+// ae::Skeleton member functions
+//------------------------------------------------------------------------------
+void Skeleton::Initialize( uint32_t maxBones )
+{
+	m_bones.Clear();
+	m_bones.Reserve( maxBones );
+	
+	Bone* bone = &m_bones.Append( {} );
+	bone->name = "root";
+	bone->index = 0;
+	bone->transform = ae::Matrix4::Identity();
+	bone->localTransform = ae::Matrix4::Identity();
+	bone->parent = nullptr;
+}
+
+void Skeleton::Initialize( const Skeleton* otherPose )
+{
+	Initialize( otherPose->GetBoneCount() );
+	
+	const void* beginCheck = m_bones.Begin();
+	for ( uint32_t i = 1; i < otherPose->m_bones.Length(); i++ ) // Skip root
+	{
+		const ae::Bone& otherBone = otherPose->m_bones[ i ];
+		const ae::Bone* parent = &m_bones[ otherBone.parent->index ];
+		AddBone( parent, otherBone.name.c_str(), otherBone.localTransform );
+	}
+	AE_ASSERT( beginCheck == m_bones.Begin() );
+}
+
+const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& localTransform )
+{
+	Bone* parent = const_cast< Bone* >( _parent );
+	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
+	AE_ASSERT_MSG( m_bones.Begin() <= parent && parent < m_bones.End(), "ae::Bones must have a parent from the same ae::Skeleton" );
+	if ( !parent || m_bones.Length() == m_bones.Size() )
+	{
+		return nullptr;
+	}
+#if _AE_DEBUG_
+	Bone* beginCheck = m_bones.Begin();
+#endif
+	Bone* bone = &m_bones.Append( {} );
+#if _AE_DEBUG_
+	AE_ASSERT( beginCheck == m_bones.Begin() );
+#endif
+
+	bone->name = name;
+  bone->index = m_bones.Length() - 1;
+  bone->transform = parent->transform * localTransform;
+  bone->localTransform = localTransform;
+  bone->inverseTransform = bone->transform.GetInverse();
+  bone->parent = parent;
+  
+  Bone** children = &parent->firstChild;
+	while ( *children )
+	{
+		children = &(*children)->nextSibling;
+	}
+	*children = bone;
+	
+	return bone;
+}
+
+void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count )
+{
+	if ( !count )
+	{
+		return;
+	}
+	
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		ae::Bone* bone = const_cast< ae::Bone* >( targets[ i ] );
+		AE_ASSERT_MSG( bone, "Null bone passed to skeleton when setting transforms" );
+		AE_ASSERT_MSG( m_bones.Begin() <= bone && bone < m_bones.End(), "Transform target '#' is not part of this skeleton", bone->name );
+		bone->localTransform = localTransforms[ i ];
+	}
+	
+	m_bones[ 0 ].transform = m_bones[ 0 ].localTransform;
+	for ( uint32_t i = 1; i < m_bones.Length(); i++ )
+	{
+		ae::Bone* bone = &m_bones[ i ];
+    AE_ASSERT( bone->parent );
+    AE_ASSERT( bone->parent < bone );
+    bone->transform = bone->parent->transform * bone->localTransform;
+    bone->inverseTransform = bone->transform.GetInverse();
+  }
+}
+
+void Skeleton::SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count )
+{
+  if ( !count )
+  {
+    return;
+  }
+  
+  for ( uint32_t i = 0; i < count; i++ )
+  {
+    ae::Bone* bone = const_cast< ae::Bone* >( targets[ i ] );
+    AE_ASSERT_MSG( bone, "Null bone passed to skeleton when setting transforms" );
+    AE_ASSERT_MSG( m_bones.Begin() <= bone && bone < m_bones.End(), "Transform target '#' is not part of this skeleton", bone->name );
+    bone->transform = transforms[ i ];
+    bone->inverseTransform = bone->transform.GetInverse();
+  }
+  
+  m_bones[ 0 ].transform = m_bones[ 0 ].localTransform;
+  for ( uint32_t i = 1; i < m_bones.Length(); i++ )
+  {
+    ae::Bone* bone = &m_bones[ i ];
+    AE_ASSERT( bone->parent );
+    AE_ASSERT( bone->parent < bone );
+    bone->localTransform = bone->parent->inverseTransform * bone->transform;
+  }
+}
+
+void Skeleton::SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform )
+{
+  SetLocalTransforms( &target, &localTransform, 1 );
+}
+
+void Skeleton::SetTransform( const Bone* target, const ae::Matrix4& transform )
+{
+  SetTransforms( &target, &transform, 1 );
+}
+
+const Bone* Skeleton::GetRoot() const
+{
+  return m_bones.Begin();
+}
+
+const Bone* Skeleton::GetBoneByName( const char* name ) const
+{
+	int32_t idx = m_bones.FindFn( [ name ]( const Bone& b ){ return b.name == name; } );
+	return ( idx >= 0 ) ? &m_bones[ idx ] : nullptr;
+}
+
+const Bone* Skeleton::GetBoneByIndex( uint32_t index ) const
+{
+#if _AE_DEBUG_
+	AE_ASSERT( m_bones[ index ].index == index );
+#endif
+	return &m_bones[ index ];
+}
+
+const Bone* Skeleton::GetBones() const
+{
+	return m_bones.Begin();
+}
+
+uint32_t Skeleton::GetBoneCount() const
+{
+	return m_bones.Length();
+}
+
+//------------------------------------------------------------------------------
+// ae::Skin member functions
+//------------------------------------------------------------------------------
+void Skin::Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount )
+{
+  AE_ASSERT( bindPose.GetBoneCount() );
+  m_bindPose.Initialize( &bindPose );
+  
+  m_verts.Clear();
+  m_verts.Append( vertices, vertexCount );
+}
+
+const Skeleton* Skin::GetBindPose() const
+{
+  return &m_bindPose;
+}
+
+void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
+{
+  AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
+  AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
+  for ( uint32_t i = 0; i < count; i++ )
+  {
+    ae::Vec3 pos( 0.0f );
+    ae::Vec3 normal( 0.0f );
+    const ae::Skin::Vertex& skinVert = m_verts[ i ];
+    for ( uint32_t j = 0; j < 4; j++ )
+    {
+			const ae::Bone* bone = pose->GetBoneByIndex( skinVert.bones[ j ] );
+			const ae::Bone* bindPoseBone = m_bindPose.GetBoneByIndex( skinVert.bones[ j ] );
+      if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
+      else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
+      
+      ae::Matrix4 transform = bone->transform * bindPoseBone->inverseTransform;
+      float weight = skinVert.weights[ j ] / 255.0f;
+      pos += ( transform * ae::Vec4( skinVert.position, 1.0f ) ).GetXYZ() * weight;
+      normal += ( transform.GetNormalMatrix() * ae::Vec4( skinVert.normal, 0.0f ) ).GetXYZ() * weight;
+    }
+    normal.SafeNormalize();
+    
+    float* p = (float*)( (uint8_t*)positions + ( i * positionStride ) );
+    float* n = (float*)( (uint8_t*)normals + ( i * normalStride ) );
+    p[ 0 ] = pos.x;
+    p[ 1 ] = pos.y;
+    p[ 2 ] = pos.z;
+    n[ 0 ] = normal.x;
+    n[ 1 ] = normal.y;
+    n[ 2 ] = normal.z;
   }
 }
 
