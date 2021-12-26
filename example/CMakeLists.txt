@@ -26,6 +26,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imguizmo)
 
+# rapidjson
+FetchContent_Declare(
+	rapidjson
+	GIT_REPOSITORY "https://github.com/Tencent/rapidjson.git"
+	GIT_TAG v1.1.0
+)
+FetchContent_Populate(rapidjson) # Download but don't build
+file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/include/*")
+add_library(rapidjson INTERFACE ${rapidjson_SOURCES}) # Header only
+target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
+
 # openfbx
 FetchContent_Declare(
 	openfbx
@@ -266,4 +277,16 @@ add_bundle("IK"
 	"data/Icon.icns;data/character.fbx;data/character.tga"
 	"ae;openfbx;imgui;imguizmo"
 	""
+)
+
+# Editor
+add_bundle("Editor"
+	"18_editor"
+	"ae.18_editor"
+	"0.0.0"
+	"Icon"
+	"18_editor.cpp;${CMAKE_SOURCE_DIR}/src/aether.mm;${CMAKE_SOURCE_DIR}/include/ae/Editor.h;${CMAKE_SOURCE_DIR}/src/Editor.cpp;${CMAKE_SOURCE_DIR}/src/Entity.cpp;${AE_EXAMPLE_SOURCES}"
+	"data/Icon.icns;data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
+	"ae;imgui;imguizmo;rapidjson"
+	"${CMAKE_SOURCE_DIR}/include"
 )

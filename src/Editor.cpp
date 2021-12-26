@@ -346,7 +346,7 @@ void EditorProgram::Initialize()
   fileSystem.Initialize( "", "ae", "editor" );
   timeStep.SetTimeStep( 1.0f / 60.0f );
   ui.Initialize();
-  camera.Reset( params.worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
+  camera.Initialize( params.worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
   debugLines.Initialize( 20480 );
   debugLines.SetXRayEnabled( false );
   editor.Initialize( this );
@@ -674,7 +674,7 @@ void Editor::Initialize( const EditorParams& params )
   AE_ASSERT( params.worldUp == ae::Axis::Z || params.worldUp == ae::Axis::Y );
   AE_ASSERT( params.port );
   m_params = params;
-  if ( params.launchEditor || ( params.argc >= 2 && strcmp( params.argv[ 1 ], "ae_editor" ) == 0 ) )
+  if ( params.argc >= 2 && strcmp( params.argv[ 1 ], "ae_editor" ) == 0 )
   {
     EditorProgram program( m_tag, params, this );
     program.Initialize();
@@ -1382,7 +1382,7 @@ void EditorServer::ShowUI( EditorProgram* program )
     {
       SaveLevel( program, true );
     }
-    if ( ImGui::Button( "Game Load" ) )
+    if ( ImGui::Button( "Game Load" ) && connections.Length() )
     {
       uint8_t buffer[ kMaxEditorMessageSize ];
       ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer );
@@ -2200,7 +2200,7 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, EditorObjectId en
     {
       const ae::VertexData* meshData = &editorObj->mesh->data;
       ae::Matrix4 transform = editorObj->GetTransform( program );
-      auto verts = (const ae::EditorServerMesh::Vertex*)meshData->GetVertices();
+      auto verts = meshData->GetVertices< ae::EditorServerMesh::Vertex >();
       uint32_t vertexCount = meshData->GetVertexCount();
       const void* indices = meshData->GetIndices();
       uint32_t indexCount = meshData->GetIndexCount();

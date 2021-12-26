@@ -60,7 +60,6 @@ struct EditorParams
   //! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
   //! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
   std::function< ae::EditorMesh( const char* resourceId ) > loadMeshFn;
-  bool launchEditor = false;
 };
 
 //------------------------------------------------------------------------------
