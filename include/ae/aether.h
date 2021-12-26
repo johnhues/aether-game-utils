@@ -2713,12 +2713,13 @@ public:
 struct Bone
 {
 	ae::Str64 name;
-	uint32_t index = 0;
-	ae::Matrix4 transform = ae::Matrix4::Identity();
-	ae::Matrix4 localTransform = ae::Matrix4::Identity();
-	Bone* firstChild = nullptr;
-	Bone* nextSibling = nullptr;
-	Bone* parent = nullptr;
+  uint32_t index = 0;
+  ae::Matrix4 transform = ae::Matrix4::Identity();
+  ae::Matrix4 localTransform = ae::Matrix4::Identity();
+  ae::Matrix4 inverseTransform = ae::Matrix4::Identity(); 
+  Bone* firstChild = nullptr;
+  Bone* nextSibling = nullptr;
+  Bone* parent = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -2730,12 +2731,14 @@ public:
 	Skeleton( const ae::Tag& tag ) : m_bones( tag ) {}
 	void Initialize( uint32_t maxBones );
 	void Initialize( const Skeleton* otherPose );
-	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
-	void SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count );
-	void SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform );
-	
-	const Bone* GetRoot() const;
-	const Bone* GetBoneByName( const char* name ) const;
+  const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
+  void SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count );
+  void SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform );
+  void SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count );
+  void SetTransform( const Bone* target, const ae::Matrix4& transform );
+  
+  const Bone* GetRoot() const;
+  const Bone* GetBoneByName( const char* name ) const;
 	const Bone* GetBoneByIndex( uint32_t index ) const;
 	const Bone* GetBones() const;
 	uint32_t GetBoneCount() const;
@@ -2755,21 +2758,20 @@ public:
 		ae::Vec3 position;
 		ae::Vec3 normal;
 		uint16_t bones[ 4 ];
-		uint8_t weights[ 4 ] = { 0 };
-	};
-	
-	Skin( const ae::Tag& tag ) : m_bindPose( tag ), m_verts( tag ), m_invBindPoses( tag ) {}
-	void Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount );
-	
-	const class Skeleton* GetBindPose() const;
+    uint8_t weights[ 4 ] = { 0 };
+  };
+  
+  Skin( const ae::Tag& tag ) : m_bindPose( tag ), m_verts( tag ) {}
+  void Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount );
+  
+  const class Skeleton* GetBindPose() const;
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
 	void ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
-	
+  
 private:
-	Skeleton m_bindPose;
-	ae::Map< ae::Str64, ae::Matrix4 > m_invBindPoses;
-	ae::Array< Vertex > m_verts;
+  Skeleton m_bindPose;
+  ae::Array< Vertex > m_verts;
 };
 
 //------------------------------------------------------------------------------
@@ -15756,12 +15758,13 @@ const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::
 #endif
 
 	bone->name = name;
-	bone->index = m_bones.Length() - 1;
-	bone->transform = parent->transform * localTransform;
-	bone->localTransform = localTransform;
-	bone->parent = parent;
-	
-	Bone** children = &parent->firstChild;
+  bone->index = m_bones.Length() - 1;
+  bone->transform = parent->transform * localTransform;
+  bone->localTransform = localTransform;
+  bone->inverseTransform = bone->transform.GetInverse();
+  bone->parent = parent;
+  
+  Bone** children = &parent->firstChild;
 	while ( *children )
 	{
 		children = &(*children)->nextSibling;
@@ -15790,20 +15793,52 @@ void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* loca
 	for ( uint32_t i = 1; i < m_bones.Length(); i++ )
 	{
 		ae::Bone* bone = &m_bones[ i ];
-		AE_ASSERT( bone->parent );
-		AE_ASSERT( bone->parent < bone );
-		bone->transform = bone->parent->transform * bone->localTransform;
-	}
+    AE_ASSERT( bone->parent );
+    AE_ASSERT( bone->parent < bone );
+    bone->transform = bone->parent->transform * bone->localTransform;
+    bone->inverseTransform = bone->transform.GetInverse();
+  }
+}
+
+void Skeleton::SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count )
+{
+  if ( !count )
+  {
+    return;
+  }
+  
+  for ( uint32_t i = 0; i < count; i++ )
+  {
+    ae::Bone* bone = const_cast< ae::Bone* >( targets[ i ] );
+    AE_ASSERT_MSG( bone, "Null bone passed to skeleton when setting transforms" );
+    AE_ASSERT_MSG( m_bones.Begin() <= bone && bone < m_bones.End(), "Transform target '#' is not part of this skeleton", bone->name );
+    bone->transform = transforms[ i ];
+    bone->inverseTransform = bone->transform.GetInverse();
+  }
+  
+  m_bones[ 0 ].transform = m_bones[ 0 ].localTransform;
+  for ( uint32_t i = 1; i < m_bones.Length(); i++ )
+  {
+    ae::Bone* bone = &m_bones[ i ];
+    AE_ASSERT( bone->parent );
+    AE_ASSERT( bone->parent < bone );
+    bone->localTransform = bone->parent->inverseTransform * bone->transform;
+  }
 }
 
 void Skeleton::SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform )
 {
-	SetLocalTransforms( &target, &localTransform, 1 );
+  SetLocalTransforms( &target, &localTransform, 1 );
+}
+
+void Skeleton::SetTransform( const Bone* target, const ae::Matrix4& transform )
+{
+  SetTransforms( &target, &transform, 1 );
 }
 
 const Bone* Skeleton::GetRoot() const
 {
-	return m_bones.Begin();
+  return m_bones.Begin();
 }
 
 const Bone* Skeleton::GetBoneByName( const char* name ) const
@@ -15835,60 +15870,50 @@ uint32_t Skeleton::GetBoneCount() const
 //------------------------------------------------------------------------------
 void Skin::Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount )
 {
-	AE_ASSERT( bindPose.GetBoneCount() );
-	m_bindPose.Initialize( &bindPose );
-	
-	m_invBindPoses.Clear();
-	m_invBindPoses.Reserve( m_bindPose.GetBoneCount() );
-	for ( uint32_t i = 0; i < m_bindPose.GetBoneCount(); i++ )
-	{
-		const ae::Bone* bone = m_bindPose.GetBoneByIndex( i );
-		m_invBindPoses.Set( bone->name, bone->transform.GetInverse() );
-	}
-	
-	m_verts.Clear();
-	m_verts.Append( vertices, vertexCount );
+  AE_ASSERT( bindPose.GetBoneCount() );
+  m_bindPose.Initialize( &bindPose );
+  
+  m_verts.Clear();
+  m_verts.Append( vertices, vertexCount );
 }
 
 const Skeleton* Skin::GetBindPose() const
 {
-	return &m_bindPose;
-}
-
-const ae::Matrix4& Skin::GetInvBindPose( const char* name ) const
-{
-	return m_invBindPoses.Get( name, ae::Matrix4::Identity() );
+  return &m_bindPose;
 }
 
 void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
 {
-	AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
-	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
-	for ( uint32_t i = 0; i < count; i++ )
-	{
-		ae::Vec3 pos( 0.0f );
-		const ae::Skin::Vertex& skinVert = m_verts[ i ];
-		for ( uint32_t j = 0; j < 4; j++ )
-		{
+  AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
+  AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
+  for ( uint32_t i = 0; i < count; i++ )
+  {
+    ae::Vec3 pos( 0.0f );
+    ae::Vec3 normal( 0.0f );
+    const ae::Skin::Vertex& skinVert = m_verts[ i ];
+    for ( uint32_t j = 0; j < 4; j++ )
+    {
 			const ae::Bone* bone = pose->GetBoneByIndex( skinVert.bones[ j ] );
 			const ae::Bone* bindPoseBone = m_bindPose.GetBoneByIndex( skinVert.bones[ j ] );
-			if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
-			else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
-			
-			ae::Matrix4 transform = bone->transform * m_invBindPoses.GetValue( skinVert.bones[ j ] );
-			float weight = skinVert.weights[ j ] / 256.0f;
-			pos += ( transform * ae::Vec4( skinVert.position, 1.0f ) ).GetXYZ() * weight;
-		}
-		
-		float* p = (float*)( (uint8_t*)positions + ( i * positionStride ) );
-		float* n = (float*)( (uint8_t*)normals + ( i * normalStride ) );
-		p[ 0 ] = pos.x;
-		p[ 1 ] = pos.y;
-		p[ 2 ] = pos.z;
-		n[ 0 ] = skinVert.normal.x;
-		n[ 1 ] = skinVert.normal.y;
-		n[ 2 ] = skinVert.normal.z;
-	}
+      if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
+      else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
+      
+      ae::Matrix4 transform = bone->transform * bindPoseBone->inverseTransform;
+      float weight = skinVert.weights[ j ] / 255.0f;
+      pos += ( transform * ae::Vec4( skinVert.position, 1.0f ) ).GetXYZ() * weight;
+      normal += ( transform.GetNormalMatrix() * ae::Vec4( skinVert.normal, 0.0f ) ).GetXYZ() * weight;
+    }
+    normal.SafeNormalize();
+    
+    float* p = (float*)( (uint8_t*)positions + ( i * positionStride ) );
+    float* n = (float*)( (uint8_t*)normals + ( i * normalStride ) );
+    p[ 0 ] = pos.x;
+    p[ 1 ] = pos.y;
+    p[ 2 ] = pos.z;
+    n[ 0 ] = normal.x;
+    n[ 1 ] = normal.y;
+    n[ 2 ] = normal.z;
+  }
 }
 
 //------------------------------------------------------------------------------
