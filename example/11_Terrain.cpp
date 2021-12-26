@@ -37,66 +37,66 @@ const ae::Tag TAG_EXAMPLE = ae::Tag( "example" );
 //------------------------------------------------------------------------------
 // Terrain Shader
 //------------------------------------------------------------------------------
-const char* kTerrainVertShader = "\
-  AE_UNIFORM mat4 u_worldToProj;\
-  AE_IN_HIGHP vec3 a_position;\
-  AE_IN_HIGHP vec3 a_normal;\
-  AE_IN_HIGHP vec4 a_materials;\
-  AE_OUT_HIGHP vec3 v_normal;\
-  AE_OUT_HIGHP vec4 v_materials;\
-  void main()\
-  {\
-    v_normal = a_normal;\
-    v_materials = a_materials;\
-    gl_Position = u_worldToProj * vec4( a_position, 1.0 );\
-  }";
+const char* kTerrainVertShader = R"(
+  AE_UNIFORM mat4 u_worldToProj;
+  AE_IN_HIGHP vec3 a_position;
+  AE_IN_HIGHP vec3 a_normal;
+  AE_IN_HIGHP vec4 a_materials;
+  AE_OUT_HIGHP vec3 v_normal;
+  AE_OUT_HIGHP vec4 v_materials;
+  void main()
+  {
+    v_normal = a_normal;
+    v_materials = a_materials;
+    gl_Position = u_worldToProj * vec4( a_position, 1.0 );
+  })";
 
-const char* kTerrainFragShader = "\
-  AE_UNIFORM vec4 u_topColor;\
-  AE_UNIFORM vec4 u_sideColor;\
-  AE_UNIFORM vec4 u_pathColor;\
-  AE_IN_HIGHP vec3 v_normal;\
-  AE_IN_HIGHP vec4 v_materials;\
-  void main()\
-  {\
-    float top = max( 0.0, v_normal.z );\
-    top *= top;\
-    top *= top;\
-    vec4 color = mix( u_sideColor, u_topColor, top ) * v_materials.r;\
-    color += u_pathColor * v_materials.g;\
-    \
-    float light = dot( normalize( v_normal ), normalize( vec3( 1.0 ) ) );\
-    light = max( 0.0, light );\
-    light = mix( 0.8, 4.0, light );\
-    \
-    AE_COLOR = vec4( color.rgb * vec3( light ), color.a );\
-  }";
+const char* kTerrainFragShader = R"(
+  AE_UNIFORM vec4 u_topColor;
+  AE_UNIFORM vec4 u_sideColor;
+  AE_UNIFORM vec4 u_pathColor;
+  AE_IN_HIGHP vec3 v_normal;
+  AE_IN_HIGHP vec4 v_materials;
+  void main()
+  {
+    float top = max( 0.0, v_normal.z );
+    top *= top;
+    top *= top;
+    vec4 color = mix( u_sideColor, u_topColor, top ) * v_materials.r;
+    color += u_pathColor * v_materials.g;
+    
+    float light = dot( normalize( v_normal ), normalize( vec3( 1.0 ) ) );
+    light = max( 0.0, light );
+    light = mix( 0.8, 4.0, light );
+    
+    AE_COLOR = vec4( color.rgb * vec3( light ), color.a );
+  })";
 
 //------------------------------------------------------------------------------
 // Grid Shader
 //------------------------------------------------------------------------------
-const char* kGridVertexStr = "\
-    AE_UNIFORM_HIGHP mat4 u_screenToWorld;\
-    AE_IN_HIGHP vec4 a_position;\
-    AE_OUT_HIGHP vec3 v_worldPos;\
-    void main()\
-    {\
-      v_worldPos = vec3( u_screenToWorld * a_position );\
-      gl_Position = a_position;\
-    }";
+const char* kGridVertexStr = R"(
+    AE_UNIFORM_HIGHP mat4 u_screenToWorld;
+    AE_IN_HIGHP vec4 a_position;
+    AE_OUT_HIGHP vec3 v_worldPos;
+    void main()
+    {
+      v_worldPos = vec3( u_screenToWorld * a_position );
+      gl_Position = a_position;
+    })";
 
-const char* kGridFragStr = "\
-    AE_IN_HIGHP vec3 v_worldPos;\
-    void main()\
-    {\
-      int x = int( floor( v_worldPos.x ) ) % 2;\
-      int y = int( floor( v_worldPos.y ) ) % 2;\
-      AE_COLOR.rgb = mix( vec3( 0.3 ), vec3( 0.35 ), int( x != y ) );\
-      float gridX = mod( v_worldPos.x + 16.0, 32.0 ) - 16.0;\
-      float gridY = mod( v_worldPos.y + 16.0, 32.0 ) - 16.0;\
-      if ( abs( gridX ) < 0.05 || abs( gridY ) < 0.05 ) { AE_COLOR.rgb = vec3( 0.25 ); } \
-      AE_COLOR.a = 1.0;\
-    }";
+const char* kGridFragStr = R"(
+    AE_IN_HIGHP vec3 v_worldPos;
+    void main()
+    {
+      int x = int( floor( v_worldPos.x ) ) % 2;
+      int y = int( floor( v_worldPos.y ) ) % 2;
+      AE_COLOR.rgb = mix( vec3( 0.3 ), vec3( 0.35 ), int( x != y ) );
+      float gridX = mod( v_worldPos.x + 16.0, 32.0 ) - 16.0;
+      float gridY = mod( v_worldPos.y + 16.0, 32.0 ) - 16.0;
+      if ( abs( gridX ) < 0.05 || abs( gridY ) < 0.05 ) { AE_COLOR.rgb = vec3( 0.25 ); }
+      AE_COLOR.a = 1.0;
+    })";
 
 class Grid
 {

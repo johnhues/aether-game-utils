@@ -28,24 +28,24 @@
 //------------------------------------------------------------------------------
 // Shaders
 //------------------------------------------------------------------------------
-const char* kVertShader = "\
-	AE_UNIFORM mat4 u_worldToProj;\
-	AE_UNIFORM vec4 u_color;\
-	AE_IN_HIGHP vec4 a_position;\
-	AE_IN_HIGHP vec4 a_color;\
-	AE_OUT_HIGHP vec4 v_color;\
-	void main()\
-	{\
-		v_color = a_color * u_color;\
-		gl_Position = u_worldToProj * a_position;\
-	}";
+const char* kVertShader = R"(
+	AE_UNIFORM mat4 u_worldToProj;
+	AE_UNIFORM vec4 u_color;
+	AE_IN_HIGHP vec4 a_position;
+	AE_IN_HIGHP vec4 a_color;
+	AE_OUT_HIGHP vec4 v_color;
+	void main()
+	{
+		v_color = a_color * u_color;
+		gl_Position = u_worldToProj * a_position;
+	})";
 
-const char* kFragShader = "\
-	AE_IN_HIGHP vec4 v_color;\
-	void main()\
-	{\
-		AE_COLOR = v_color;\
-	}";
+const char* kFragShader = R"(
+	AE_IN_HIGHP vec4 v_color;
+	void main()
+	{
+		AE_COLOR = v_color;
+	})";
 
 //------------------------------------------------------------------------------
 // Cube
