@@ -9324,7 +9324,9 @@ void Window::m_Initialize()
   m_height = contentScreenRect.size.height;
   m_scaleFactor = nsWindow.backingScaleFactor;
   
-  if (![[NSRunningApplication currentApplication] isFinishedLaunching]) // Make sure run is only called once
+  // Make sure run is only called when executable is bundled, and is also only called once
+  NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
+  if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
   {
     [NSApp run];
   }
