@@ -1148,7 +1148,7 @@ private:
   Storage< N > m_storage;
 #endif
 public:
-  // @NOTE: Ranged-based loop. Lowercase to match c++ standard ('-.-)
+  // Ranged-based loop. Lowercase to match c++ standard ('-.-)
   T* begin() { return m_array; }
   T* end() { return m_array + m_length; }
   const T* begin() const { return m_array; }
@@ -1188,17 +1188,22 @@ public:
   int32_t GetIndex( const K& key ) const; //!< Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
   uint32_t Length() const; //!< Returns the number of key/value pairs in the map
 
-private:
-  template < typename K2, typename V2, uint32_t N2 >
-  friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
-  struct Entry
+  struct Pair
   {
-    Entry() = default;
-    Entry( const K& k, const V& v );
+    Pair( const K& k, const V& v );
     K key;
     V value;
   };
-  Array< Entry, N > m_entries;
+  // Ranged-based loop. Lowercase to match c++ standard ('-.-)
+  Pair* begin() { return m_pairs.begin(); }
+  Pair* end() { return m_pairs.end(); }
+  const Pair* begin() const { return m_pairs.begin(); }
+  const Pair* end() const { return m_pairs.end(); }
+
+private:
+  template < typename K2, typename V2, uint32_t N2 >
+  friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
+  Array< Pair, N > m_pairs;
 };
 
 //------------------------------------------------------------------------------
@@ -5749,13 +5754,13 @@ Map< K, V, N >::Map()
 
 template < typename K, typename V, uint32_t N >
 Map< K, V, N >::Map( ae::Tag pool ) :
-  m_entries( pool )
+  m_pairs( pool )
 {
   AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static maps" );
 }
 
 template < typename K, typename V, uint32_t N >
-Map< K, V, N >::Entry::Entry( const K& k, const V& v ) :
+Map< K, V, N >::Pair::Pair( const K& k, const V& v ) :
   key( k ),
   value( v )
 {}
@@ -5764,35 +5769,35 @@ template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::Set( const K& key, const V& value )
 {
   int32_t index = GetIndex( key );
-  Entry* entry = ( index >= 0 ) ? &m_entries[ index ] : nullptr;
-  if ( entry )
+  Pair* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
+  if ( pair )
   {
-    entry->value = value;
-    return entry->value;
+    pair->value = value;
+    return pair->value;
   }
   else
   {
-    return m_entries.Append( Entry( key, value ) ).value;
+    return m_pairs.Append( Pair( key, value ) ).value;
   }
 }
 
 template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::Get( const K& key )
 {
-  return m_entries[ GetIndex( key ) ].value;
+  return m_pairs[ GetIndex( key ) ].value;
 }
 
 template < typename K, typename V, uint32_t N >
 const V& Map< K, V, N >::Get( const K& key ) const
 {
-  return m_entries[ GetIndex( key ) ].value;
+  return m_pairs[ GetIndex( key ) ].value;
 }
 
 template < typename K, typename V, uint32_t N >
 const V& Map< K, V, N >::Get( const K& key, const V& defaultValue ) const
 {
   int32_t index = GetIndex( key );
-  return ( index >= 0 ) ? m_entries[ index ].value : defaultValue;
+  return ( index >= 0 ) ? m_pairs[ index ].value : defaultValue;
 }
 
 template < typename K, typename V, uint32_t N >
@@ -5807,7 +5812,7 @@ const V* Map< K, V, N >::TryGet( const K& key ) const
   int32_t index = GetIndex( key );
   if ( index >= 0 )
   {
-    return &m_entries[ index ].value;
+    return &m_pairs[ index ].value;
   }
   else
   {
@@ -5850,9 +5855,9 @@ bool Map< K, V, N >::Remove( const K& key, V* valueOut )
   {
     if ( valueOut )
     {
-      *valueOut = m_entries[ index ].value;
+      *valueOut = m_pairs[ index ].value;
     }
-    m_entries.Remove( index );
+    m_pairs.Remove( index );
     return true;
   }
   else
@@ -5864,33 +5869,33 @@ bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 template < typename K, typename V, uint32_t N >
 void Map< K, V, N >::Reserve( uint32_t count )
 {
-  m_entries.Reserve( count );
+  m_pairs.Reserve( count );
 }
 
 template < typename K, typename V, uint32_t N >
 void Map< K, V, N >::Clear()
 {
-  m_entries.Clear();
+  m_pairs.Clear();
 }
 
 template < typename K, typename V, uint32_t N >
 const K& Map< K, V, N >::GetKey( int32_t index ) const
 {
-  return m_entries[ index ].key;
+  return m_pairs[ index ].key;
 }
 
 template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::GetValue( int32_t index )
 {
-  return m_entries[ index ].value;
+  return m_pairs[ index ].value;
 }
 
 template < typename K, typename V, uint32_t N >
 int32_t Map< K, V, N >::GetIndex( const K& key ) const
 {
-  for ( uint32_t i = 0; i < m_entries.Length(); i++ )
+  for ( uint32_t i = 0; i < m_pairs.Length(); i++ )
   {
-    if ( Map_IsEqual( m_entries[ i ].key, key ) )
+    if ( Map_IsEqual( m_pairs[ i ].key, key ) )
     {
       return i;
     }
@@ -5901,23 +5906,23 @@ int32_t Map< K, V, N >::GetIndex( const K& key ) const
 template < typename K, typename V, uint32_t N >
 const V& Map< K, V, N >::GetValue( int32_t index ) const
 {
-  return m_entries[ index ].value;
+  return m_pairs[ index ].value;
 }
 
 template < typename K, typename V, uint32_t N >
 uint32_t Map< K, V, N >::Length() const
 {
-  return m_entries.Length();
+  return m_pairs.Length();
 }
 
 template < typename K, typename V, uint32_t N >
 std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 {
   os << "{";
-  for ( uint32_t i = 0; i < map.m_entries.Length(); i++ )
+  for ( uint32_t i = 0; i < map.m_pairs.Length(); i++ )
   {
-    os << "(" << map.m_entries[ i ].key << ", " << map.m_entries[ i ].value << ")";
-    if ( i != map.m_entries.Length() - 1 )
+    os << "(" << map.m_pairs[ i ].key << ", " << map.m_pairs[ i ].value << ")";
+    if ( i != map.m_pairs.Length() - 1 )
     {
       os << ", ";
     }
