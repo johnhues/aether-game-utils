@@ -53,6 +53,7 @@ class Registry
 {
 public:
 	Registry( const ae::Tag& tag );
+	void SetOnCreateFn( std::function< void(Component*) > fn );
 	
 	// Creation
 	Entity CreateEntity( const char* name = "" );
@@ -100,6 +101,7 @@ private:
 	Entity m_lastEntity = kInvalidEntity;
 	ae::Map< ae::Str16, Entity > m_entityNames;
 	ae::Map< ae::TypeId, ae::Map< Entity, Component* > > m_components;
+	std::function< void(Component*) > m_onCreate;
 };
 
 //------------------------------------------------------------------------------
@@ -172,6 +174,7 @@ T* Registry::AddComponent( Entity entity )
 	}
 	components->Set( entity, component );
 	
+	m_onCreate( component );
 	return (T*)component;
 }
 
@@ -212,7 +215,11 @@ T& Registry::GetComponent( const char* name )
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	AE_ASSERT( name && name[ 0 ] );
 	T* t = TryGetComponent< T >( name );
-	AE_ASSERT_MSG( t, "No component '#' attached to entity '#'", "X", name );
+	if ( !t )
+	{
+		AE_ASSERT_MSG( GetEntityByName( name ) != kInvalidEntity, "No entity named '#'", name );
+		AE_ASSERT_MSG( t, "No component '#' attached to entity '#'", ae::GetType< T >()->GetName(), name );
+	}
 	return *t;
 }
 
