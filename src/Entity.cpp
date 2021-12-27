@@ -62,6 +62,11 @@ Registry::Registry( const ae::Tag& tag ) :
 	m_components( tag )
 {}
 
+void Registry::SetOnCreateFn( std::function< void(Component*) > fn )
+{
+	m_onCreate = fn;
+}
+
 Entity Registry::CreateEntity( const char* name )
 {
 	m_lastEntity++;
@@ -118,6 +123,7 @@ Component* Registry::AddComponent( Entity entity, const char* typeName )
 	}
 	components->Set( entity, component );
 	
+	m_onCreate( component );
 	return component;
 }
 

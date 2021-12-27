@@ -233,6 +233,7 @@ public:
   float GetFOV() const { return m_fov; }
   ae::Vec3 GetMouseRay() const { return m_mouseRay; } // Is normalized
   EditorServerMesh* GetMesh( const char* resourceId );
+  void UnloadMeshes();
   
   ae::Window window;
   ae::GraphicsDevice render;
@@ -492,6 +493,7 @@ void EditorProgram::Initialize()
 void EditorProgram::Terminate()
 {
   AE_INFO( "Terminate" );
+  UnloadMeshes();
   m_gameTarget.Terminate();
   editor.Terminate( this );
   debugLines.Terminate();
@@ -644,6 +646,15 @@ EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
     }
   }
   return mesh;
+}
+
+void EditorProgram::UnloadMeshes()
+{
+  for ( uint32_t i = 0; i < m_meshes.Length(); i++ )
+  {
+    ae::Delete( m_meshes.GetValue( i ) );
+  }
+  m_meshes.Clear();
 }
 
 //------------------------------------------------------------------------------
@@ -968,6 +979,19 @@ void EditorServer::Initialize( EditorProgram* program )
         const ae::Var* var = type->GetVarByName( varName );
         AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
         m_meshVisibleVars.Set( type, var );
+      }
+    }
+    
+    int32_t depPropIdx = type->GetPropertyIndex( "ae_editor_dep" );
+    if ( depPropIdx >= 0 )
+    {
+      uint32_t depCount = type->GetPropertyValueCount( depPropIdx );
+      for ( uint32_t i = 0; i < depCount; i++ )
+      {
+        const char* depName = type->GetPropertyValue( depPropIdx, i );
+        const ae::Type* depType = ae::GetTypeByName( depName );
+        AE_ASSERT_MSG( depType, "Type '#' has invalid dependency '#'", type->GetName(), depName );
+        AE_ASSERT_MSG( depType->HasProperty( "ae_editor_type" ), "Type '#' has dependency '#' which is not an editor type. It must have property 'ae_editor_type'.", type->GetName(), depName );
       }
     }
   }
@@ -1444,6 +1468,22 @@ void EditorServer::ShowUI( EditorProgram* program )
       selected = editorObject->entity;
     }
     
+    if ( ImGui::Button( "Reload Resources" ) )
+    {
+      program->UnloadMeshes();
+      for ( auto [ _, object ] : m_objects )
+      {
+        for ( ae::Object* component : object->components )
+        {
+          const ae::Type* type = ae::GetTypeFromObject( component );
+          if ( const ae::Var* var = GetMeshResourceVar( type ) )
+          {
+            object->HandleVarChange( program, component, type, var );
+          }
+        }
+      }
+    }
+    
     static bool s_imGuiDemo = false;
     if ( ImGui::Button( "Show ImGui Demo" ) )
     {
@@ -1653,9 +1693,28 @@ ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typ
   {
     return nullptr;
   }
-  AE_ASSERT( !GetComponent( obj, typeName ) );
+  ae::Object* component = GetComponent( obj, typeName );
+  if ( component )
+  {
+    return component;
+  }
   
-  ae::Object* component = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
+  int32_t propIdx = type->GetPropertyIndex( "ae_editor_dep" );
+  if ( propIdx >= 0 )
+  {
+    uint32_t propCount = type->GetPropertyValueCount( propIdx );
+    for ( uint32_t i = 0; i < propCount; i++ )
+    {
+      const char* prop = type->GetPropertyValue( propIdx, i );
+      if ( !GetComponent( obj, typeName ) )
+      {
+        AE_INFO( "Added '#' dependency to '#'", prop, typeName );
+        AddComponent( obj, prop );
+      }
+    }
+  }
+  
+  component = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
   type->New( component );
   
   obj->components.Append( component );
