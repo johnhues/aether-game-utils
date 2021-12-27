@@ -10679,7 +10679,7 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
   NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-  if ( [currentPath isEqualToString:@"/"] )
+  if ( [currentPath isEqualToString:@"/"] && filePath[ 0 ] != '/' )
   {
     char path[ PATH_MAX ];
     path[ 0 ] = 0;
