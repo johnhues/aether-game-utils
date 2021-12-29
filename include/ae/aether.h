@@ -8107,15 +8107,8 @@ ae::Matrix4 AABB::GetTransform() const
 
 float AABB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
 {
-  ae::Vec3 center = GetCenter();
-  ae::Vec3 halfSize = GetHalfSize();
-
-  ae::Vec3 d = p - center;
-  d.x = ae::Max( ae::Abs( d.x ) - halfSize.x, 0.0f );
-  d.y = ae::Max( ae::Abs( d.y ) - halfSize.y, 0.0f );
-  d.z = ae::Max( ae::Abs( d.z ) - halfSize.z, 0.0f );
-
-  return d.Length();
+  ae::Vec3 q = ae::Abs( p ) - GetHalfSize();
+  return ae::Max( q, ae::Vec3( 0.0f ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f );
 }
 
 bool AABB::Intersect( AABB other ) const
@@ -8128,7 +8121,6 @@ bool AABB::Intersect( AABB other ) const
   {
   return true;
   }
-
   return false;
 }
 
