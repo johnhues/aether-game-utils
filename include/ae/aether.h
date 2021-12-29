@@ -2615,14 +2615,14 @@ public:
   // RaycastResult
   struct RaycastResult
   {
-    uint32_t hitCount = 0;
     struct Hit
     {
       ae::Vec3 position = ae::Vec3( 0.0f );
       ae::Vec3 normal = ae::Vec3( 0.0f );
       float distance = 0.0f;
       const void* userData = nullptr;
-    } hits[ 8 ];
+    };
+    ae::Array< Hit, 8 > hits;
     
     static void Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next );
   };
@@ -2652,7 +2652,6 @@ public:
   CollisionMesh( ae::Tag tag );
   void Load( const Params& params );
   void Clear();
-  bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const; // @TODO: Remove 'non-cumulative' raycast function
   RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
   PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
   ae::AABB GetAABB() const { return m_aabb; }
@@ -15353,14 +15352,15 @@ void CollisionMesh::Clear()
   m_aabb = ae::AABB();
 }
 
-bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
+CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
 {
   // Early out for parameters that will give no results
   if ( params.maxLength < 0.0f || params.maxHits == 0 )
   {
-    return false;
+    return prevResult;
   }
   
+  // @TODO: Set max length to prevResult hit distance for obb early out when params request a single hit out
   bool limitRay = ( params.maxLength > 0.0f ) && ( params.maxLength < INFINITY );
   ae::Vec3 normParamsDir = params.direction.SafeNormalizeCopy();
 
@@ -15376,7 +15376,7 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
         ae::Vec3 rayEnd = params.source + normParamsDir * ( limitRay ? params.maxLength : 1000.0f );
         debug->AddLine( params.source, rayEnd, params.debugColor );
       }
-      return false; // Early out if ray doesn't touch obb
+      return prevResult; // Early out if ray doesn't touch obb
     }
     
     if ( ae::DebugLines* debug = params.debug )
@@ -15397,9 +15397,10 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
   const uint32_t* indices = m_indices.Begin();
   const ae::Vec3* vertices = &m_vertices[ 0 ];
 
+  CollisionMesh::RaycastResult result;
   uint32_t hitCount  = 0;
-  RaycastResult::Hit hits[ countof(RaycastResult::hits) + 1 ];
-  const uint32_t maxHits = ae::Min( params.maxHits, countof(RaycastResult::hits) );
+  RaycastResult::Hit hits[ result.hits.Size() + 1 ];
+  const uint32_t maxHits = ae::Min( params.maxHits, result.hits.Size() );
   for ( uint32_t i = 0; i < triCount; i++ )
   {
     ae::Vec3 p, n;
@@ -15456,29 +15457,14 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
     }
   }
   
-  if ( outResult )
+  std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
+  for ( uint32_t i = 0; i < hitCount; i++ )
   {
-    std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
-    outResult->hitCount = hitCount;
-    for ( uint32_t i = 0; i < hitCount; i++ )
-    {
-      hits[ i ].normal.SafeNormalize();
-      outResult->hits[ i ] = hits[ i ];
-    }
+    hits[ i ].normal.SafeNormalize();
+    result.hits.Append( hits[ i ] );
   }
-  return hitCount;
-}
-
-CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
-{
-  // @TODO: For params requesting a single hit set max length of ray to prevResult hit distance for obb early out
-  RaycastResult nextResult;
-  if ( Raycast( params, &nextResult ) )
-  {
-    CollisionMesh::RaycastResult::Accumulate( params, prevResult, &nextResult );
-    return nextResult;
-  }
-  return prevResult;
+  CollisionMesh::RaycastResult::Accumulate( params, prevResult, &result );
+  return result;
 }
 
 CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
@@ -15585,24 +15571,25 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 void CollisionMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
 {
   uint32_t accumHitCount = 0;
-  Hit accumHits[ countof(next->hits) * 2 ];
+  Hit accumHits[ next->hits.Size() * 2 ];
   
-  for ( uint32_t i = 0; i < next->hitCount; i++ )
+  for ( uint32_t i = 0; i < next->hits.Length(); i++ )
   {
     accumHits[ accumHitCount ] = next->hits[ i ];
     accumHitCount++;
   }
-  for ( uint32_t i = 0; i < prev.hitCount; i++ )
+  for ( uint32_t i = 0; i < prev.hits.Length(); i++ )
   {
     accumHits[ accumHitCount ] = prev.hits[ i ];
     accumHitCount++;
   }
   std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.distance < h1.distance; } );
   
-  next->hitCount = ae::Min( accumHitCount, params.maxHits, countof(next->hits) );
-  for ( uint32_t i = 0; i < next->hitCount; i++ )
+  next->hits.Clear();
+  accumHitCount = ae::Min( accumHitCount, params.maxHits, next->hits.Size() );
+  for ( uint32_t i = 0; i < accumHitCount; i++ )
   {
-    next->hits[ i ] = accumHits[ i ];
+    next->hits.Append( accumHits[ i ] );
   }
 }
 
