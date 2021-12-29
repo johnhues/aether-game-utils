@@ -139,6 +139,8 @@ public:
     m_components( tag ),
     m_meshResourceVars( tag ),
     m_meshVisibleVars( tag ),
+    m_typeMesh( tag ),
+    m_typeInvisible( tag ),
     connections( tag )
   {}
   void Initialize( class EditorProgram* program );
@@ -155,7 +157,7 @@ public:
   bool GetShowInvisible() const { return m_showInvisible; }
   
   EditorServerObject* CreateObject( EditorObjectId id, const ae::Matrix4& transform );
-  ae::Object* AddComponent( EditorServerObject* obj, const char* typeName );
+  ae::Object* AddComponent( class EditorProgram* program, EditorServerObject* obj, const char* typeName );
   ae::Object* GetComponent( EditorServerObject* obj, const char* typeName );
   const ae::Object* GetComponent( const EditorServerObject* obj, const char* typeName );
   uint32_t GetObjectCount() const { return m_objects.Length(); }
@@ -193,6 +195,8 @@ private:
   ae::Map< ae::TypeId, ae::Map< EditorObjectId, ae::Object* > > m_components;
   ae::Map< const ae::Type*, const ae::Var* > m_meshResourceVars;
   ae::Map< const ae::Type*, const ae::Var* > m_meshVisibleVars;
+  ae::Map< const ae::Type*, ae::Str32 > m_typeMesh;
+  ae::Map< const ae::Type*, bool > m_typeInvisible;
   
   ae::Array< EditorConnection* > connections;
   uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
@@ -994,6 +998,18 @@ void EditorServer::Initialize( EditorProgram* program )
         AE_ASSERT_MSG( depType->HasProperty( "ae_editor_type" ), "Type '#' has dependency '#' which is not an editor type. It must have property 'ae_editor_type'.", type->GetName(), depName );
       }
     }
+    
+    int32_t typeMeshIdx = type->GetPropertyIndex( "ae_type_mesh" );
+    if ( typeMeshIdx >= 0 && type->GetPropertyValueCount( typeMeshIdx ) )
+    {
+      m_typeMesh.Set( type, type->GetPropertyValue( typeMeshIdx, 0 ) );
+    }
+    
+    int32_t typeInvisibleIdx = type->GetPropertyIndex( "ae_type_invisible" );
+    if ( typeInvisibleIdx >= 0 )
+    {
+      m_typeInvisible.Set( type, true );
+    }
   }
 }
 
@@ -1579,7 +1595,7 @@ void EditorServer::ShowUI( EditorProgram* program )
           if ( ImGui::Selectable( type->GetName() ) )
           {
             AE_INFO( "Create #", type->GetName() );
-            AddComponent( selectedObject, type->GetName() );
+            AddComponent( program, selectedObject, type->GetName() );
           }
           foundAny = true;
         }
@@ -1693,7 +1709,7 @@ EditorServerObject* EditorServer::CreateObject( EditorObjectId id, const ae::Mat
   return editorObject;
 }
 
-ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typeName )
+ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const char* typeName )
 {
   const ae::Type* type = ae::GetTypeByName( typeName );
   if ( !type )
@@ -1721,7 +1737,7 @@ ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typ
         const char* prop = t->GetPropertyValue( propIdx, i );
         if ( strcmp( type->GetName(), prop ) != 0 && !GetComponent( obj, typeName ) )
         {
-          AddComponent( obj, prop );
+          AddComponent( program, obj, prop );
         }
       }
     }
@@ -1738,6 +1754,16 @@ ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typ
     typeComponents = &m_components.Set( type->GetId(), m_tag );
   }
   typeComponents->Set( obj->entity, component );
+  
+  const auto& meshName = m_typeMesh.Get( type, "" );
+  if ( meshName.Length() )
+  {
+    obj->mesh = program->GetMesh( meshName.c_str() );
+  }
+  if ( m_typeInvisible.Get( type, false ) )
+  {
+    obj->opaque = false;
+  }
   
   return component;
 }
@@ -1963,7 +1989,7 @@ bool EditorServer::m_Load( EditorProgram* program )
     for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
     {
       const char* typeName = levelObject.components.GetKey( j ).c_str();
-      AddComponent( editorObj, typeName );
+      AddComponent( program, editorObj, typeName );
     }
   }
   // Serialize all components (second phase to handle references)
