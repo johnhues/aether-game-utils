@@ -1086,6 +1086,8 @@ using Str512 = Str< 512 >;
 //------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
+#define _AE_STATIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
+#define _AE_DYNAMIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 template < typename T, uint32_t N = 0 >
 class Array
 {
@@ -1130,7 +1132,8 @@ public:
 
   // Array info
   uint32_t Length() const { return m_length; }
-  uint32_t Size() const { return m_size; }
+  _AE_STATIC_ARRAY static constexpr uint32_t Size() { return N; }
+  _AE_DYNAMIC_ARRAY uint32_t Size(...) const { return m_size; }
   
 private:
   uint32_t m_GetNextSize() const;
