@@ -4996,6 +4996,25 @@ inline ae::Matrix4 FromString( const char* str )
   return r;
 }
 
+template <>
+inline bool FromString( const char* str )
+{
+  if ( !str[ 0 ] )
+  {
+    return false;
+  }
+  // @TODO: Clean this up. Should check for both `true` and `false`, and return false if neither match
+  const char* trueStr = "true";
+  for ( uint32_t i = 0; ( str[ i ] && trueStr[ i ] ); i++ )
+  {
+    if ( trueStr[ i ] != tolower( str[ i ] ) )
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
 template < uint32_t N >
 Str< N >::Str()
 {
@@ -17429,20 +17448,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
     }
     case Var::Bool:
     {
-      // @TODO: Clean this up. Should check for both `true` and `false`, and return false if neither match
-      const char* trueStr = "true";
-      bool b = value[ 0 ];
-      if ( b )
-      {
-        for ( uint32_t i = 0; ( value[ i ] && trueStr[ i ] ); i++ )
-        {
-          if ( trueStr[ i ] != tolower( value[ i ] ) )
-          {
-            b = false;
-          }
-        }
-      }
-      *(bool*)varData = b;
+      *(bool*)varData = ae::FromString< bool >( value );
       return true;
     }
     case Var::Float:
