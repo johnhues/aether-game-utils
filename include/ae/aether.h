@@ -549,15 +549,7 @@ public:
   Vec3 GetAxis( uint32_t column ) const;
   Vec4 GetRow( uint32_t row ) const;
 };
-
-inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
-{
-  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
-    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
-    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
-    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
-  return os;
-}
+inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat );
 
 //------------------------------------------------------------------------------
 // ae::Quaternion class
@@ -606,6 +598,7 @@ public:
   Quaternion& SetInverse();
   Vec3 Rotate( Vec3 v ) const;
 };
+inline std::ostream& operator << ( std::ostream& os, const Quaternion& quat );
 
 //------------------------------------------------------------------------------
 // ae::Int2 shared member functions
@@ -2692,7 +2685,7 @@ struct Keyframe
 	ae::Matrix4 GetLocalTransform() const;
 	Keyframe Lerp( const Keyframe& target, float t ) const;
 	
-	ae::Vec3 position = ae::Vec3( 0.0f );
+	ae::Vec3 translation = ae::Vec3( 0.0f );
 	ae::Quaternion rotation = ae::Quaternion::Identity();
 	ae::Vec3 scale = ae::Vec3( 1.0f );
 };
@@ -4551,6 +4544,27 @@ inline Vec4::Vec4( const float* v4 ) : x( v4[ 0 ] ), y( v4[ 1 ] ), z( v4[ 2 ] ),
 inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
+
+//------------------------------------------------------------------------------
+// ae::Quaternion member functions
+//------------------------------------------------------------------------------
+inline std::ostream& operator << ( std::ostream& os, const Quaternion& quat )
+{
+  os << quat.i << " " << quat.j << " " << quat.k << " " << quat.r;
+  return os;
+}
+
+//------------------------------------------------------------------------------
+// ae::Matrix4 member functions
+//------------------------------------------------------------------------------
+inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
+{
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
+  return os;
+}
 
 //------------------------------------------------------------------------------
 // ae::Int2 shared member functions
@@ -15630,7 +15644,7 @@ void CollisionMesh::PushOutInfo::Accumulate( const PushOutParams& params, const 
 //------------------------------------------------------------------------------
 Keyframe::Keyframe( const ae::Matrix4& transform )
 {
-	position = transform.GetTranslation();
+	translation = transform.GetTranslation();
 	rotation = transform.GetRotation();
 	scale = transform.GetScale();
 }
@@ -15639,13 +15653,13 @@ ae::Matrix4 Keyframe::GetLocalTransform() const
 {
 	ae::Matrix4 rot = ae::Matrix4::Identity();
 	rot.SetRotation( rotation );
-	return ae::Matrix4::Translation( position ) * rot * ae::Matrix4::Scaling( scale );
+	return ae::Matrix4::Translation( translation ) * rot * ae::Matrix4::Scaling( scale );
 }
 
 Keyframe Keyframe::Lerp( const Keyframe& target, float t ) const
 {
 	Keyframe result;
-	result.position = position.Lerp( target.position, t );
+	result.translation = translation.Lerp( target.translation, t );
 	result.rotation = rotation.Nlerp( target.rotation, t );
 	result.scale = scale.Lerp( target.scale, t );
 	return result;
@@ -15683,9 +15697,9 @@ void Animation::AnimateByTime( class Skeleton* target, float time, float strengt
 void Animation::AnimateByPercent( class Skeleton* target, float percent, float strength, const ae::Bone** mask, uint32_t maskCount ) const
 {
 	ae::Array< const ae::Bone* > tempBones = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
-	ae::Array< ae::Matrix4 > temp = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
+	ae::Array< ae::Matrix4 > tempTransforms = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
 	tempBones.Reserve( target->GetBoneCount() );
-	temp.Reserve( target->GetBoneCount() );
+	tempTransforms.Reserve( target->GetBoneCount() );
 	
 	strength = ae::Clip01( strength );
 	const ae::Bone** maskEnd = mask + maskCount;
@@ -15711,13 +15725,13 @@ void Animation::AnimateByPercent( class Skeleton* target, float percent, float s
 			const ae::Vec3 currTranslation = current.GetTranslation();
 			const ae::Quaternion currRotation = current.GetRotation();
 			const ae::Vec3 currScale = current.GetScale();
-			keyframe.position = currTranslation.Lerp( keyframe.position, keyStrength );
+			keyframe.translation = currTranslation.Lerp( keyframe.translation, keyStrength );
 			keyframe.rotation = currRotation.Nlerp( keyframe.rotation, keyStrength );
 			keyframe.scale = currScale.Lerp( keyframe.scale, keyStrength );
 		}
-		temp.Append( keyframe.GetLocalTransform() );
+		tempTransforms.Append( keyframe.GetLocalTransform() );
 	}
-	target->SetLocalTransforms( tempBones.Begin(), temp.Begin(), target->GetBoneCount() );
+	target->SetLocalTransforms( tempBones.Begin(), tempTransforms.Begin(), target->GetBoneCount() );
 }
 
 //------------------------------------------------------------------------------

@@ -2572,11 +2572,10 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
   ae::CollisionMesh::RaycastResult resultsAccum;
   while ( true )
   {
-    ae::CollisionMesh::RaycastResult r;
     const TerrainChunk* chunk = GetChunk( ae::Int3( x, y, z ) );
-    if ( chunk && chunk->m_mesh.Raycast( params, &r ) )
+    if ( chunk )
     {
-      ae::CollisionMesh::RaycastResult::Accumulate( params, r, &resultsAccum );
+      resultsAccum = chunk->m_mesh.Raycast( params, resultsAccum );
     }
     
     if ( tmax.x < tmax.y )
@@ -2627,7 +2626,7 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
   {
     *outResult = resultsAccum;
   }
-  return resultsAccum.hitCount != 0;
+  return resultsAccum.hits.Length();
 }
 
 ae::CollisionMesh::PushOutInfo Terrain::PushOutSphere( const ae::CollisionMesh::PushOutParams& _params, const ae::CollisionMesh::PushOutInfo& info ) const

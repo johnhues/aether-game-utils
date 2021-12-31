@@ -451,7 +451,7 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 							((ae::Bone*)bone)->transform = parentTransform * animTransform;
 						}
 						ae::Matrix4 offsetTransform = animTransform;
-						keyframe.position = offsetTransform.GetTranslation();
+						keyframe.translation = offsetTransform.GetTranslation();
 						keyframe.rotation = offsetTransform.GetRotation();
 						keyframe.scale = offsetTransform.GetScale();
 						//AE_INFO( "f:# p:# r:X s:#", i, keyframe.position, keyframe.scale );
