@@ -262,67 +262,67 @@ void Registry::Clear()
 
 bool Registry::Load( const ae::Editor* editor, CreateObjectFn fn )
 {
-  Clear();
+	Clear();
 
-  uint32_t objectCount = editor->objects.Length();
-  // Create all components
-  for ( uint32_t i = 0; i < objectCount; i++ )
-  {
-    const ae::EditorObject& levelObject = editor->objects.GetValue( i );
-    Entity entity = CreateEntity( levelObject.id, levelObject.name.c_str() );
-    if ( fn )
-    {
-      fn( levelObject, entity, this );
-    }
-    for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
-    {
-      const char* typeName = levelObject.components.GetKey( j ).c_str();
-      AddComponent( entity, typeName );
-    }
-  }
-  // Serialize all components (second phase to handle references)
-  for ( uint32_t i = 0; i < objectCount; i++ )
-  {
-    const ae::EditorObject& levelObject = editor->objects.GetValue( i );
-    Entity entity = levelObject.id;
-    for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
-    {
-      const char* typeName = levelObject.components.GetKey( j ).c_str();
-      const ae::Type* type = ae::GetTypeByName( typeName );
-      const ae::Dict& props = levelObject.components.GetValue( j );
+	uint32_t objectCount = editor->objects.Length();
+	// Create all components
+	for ( uint32_t i = 0; i < objectCount; i++ )
+	{
+		const ae::EditorObject& levelObject = editor->objects.GetValue( i );
+		Entity entity = CreateEntity( levelObject.id, levelObject.name.c_str() );
+		if ( fn )
+		{
+			fn( levelObject, entity, this );
+		}
+		for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
+		{
+			const char* typeName = levelObject.components.GetKey( j ).c_str();
+			AddComponent( entity, typeName );
+		}
+	}
+	// Serialize all components (second phase to handle references)
+	for ( uint32_t i = 0; i < objectCount; i++ )
+	{
+		const ae::EditorObject& levelObject = editor->objects.GetValue( i );
+		Entity entity = levelObject.id;
+		for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
+		{
+			const char* typeName = levelObject.components.GetKey( j ).c_str();
+			const ae::Type* type = ae::GetTypeByName( typeName );
+			const ae::Dict& props = levelObject.components.GetValue( j );
 
-      Component* component = TryGetComponent( entity, typeName );
-      if ( !component )
-      {
-        continue;
-      }
-      uint32_t varCount = type->GetVarCount();
-      for ( uint32_t k = 0; k < varCount; k++ )
-      {
-        const ae::Var* var = type->GetVarByIndex( k );
-        if ( var->IsArray() )
-        {
-          ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), "COUNT" );
-          uint32_t length = props.GetInt( key.c_str(), 0 );
-          length = var->SetArrayLength( component, length );
+			Component* component = TryGetComponent( entity, typeName );
+			if ( !component )
+			{
+				continue;
+			}
+			uint32_t varCount = type->GetVarCount();
+			for ( uint32_t k = 0; k < varCount; k++ )
+			{
+				const ae::Var* var = type->GetVarByIndex( k );
+				if ( var->IsArray() )
+				{
+					ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), "COUNT" );
+					uint32_t length = props.GetInt( key.c_str(), 0 );
+					length = var->SetArrayLength( component, length );
 
-          for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
-          {
-            key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-            if ( const char* value = props.GetString( key.c_str(), nullptr ) )
-            {
-              var->SetObjectValueFromString( component, value, arrIdx );
-            }
-          }
-        }
-        else if ( const char* value = props.GetString( var->GetName(), nullptr ) )
-        {
-          var->SetObjectValueFromString( component, value );
-        }
-      }
-    }
-  }
-  return true;
+					for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
+					{
+						key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+						if ( const char* value = props.GetString( key.c_str(), nullptr ) )
+						{
+							var->SetObjectValueFromString( component, value, arrIdx );
+						}
+					}
+				}
+				else if ( const char* value = props.GetString( var->GetName(), nullptr ) )
+				{
+					var->SetObjectValueFromString( component, value );
+				}
+			}
+		}
+	}
+	return true;
 }
 
 } // End ae namespace
