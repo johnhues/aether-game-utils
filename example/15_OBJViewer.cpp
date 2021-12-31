@@ -89,7 +89,7 @@ int main()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fs.Initialize( "data", "ae", "objviewer" );
-	camera.Reset( ae::Axis::Z, ae::Vec3( 0.0f, 0.0f, 0.35f ), ae::Vec3( 0.0f, -2.5f, 0.7f ) );
+	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f, 0.0f, 0.35f ), ae::Vec3( 0.0f, -2.5f, 0.7f ) );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );

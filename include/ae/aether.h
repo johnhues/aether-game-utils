@@ -549,15 +549,7 @@ public:
   Vec3 GetAxis( uint32_t column ) const;
   Vec4 GetRow( uint32_t row ) const;
 };
-
-inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
-{
-  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
-    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
-    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
-    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
-  return os;
-}
+inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat );
 
 //------------------------------------------------------------------------------
 // ae::Quaternion class
@@ -606,6 +598,7 @@ public:
   Quaternion& SetInverse();
   Vec3 Rotate( Vec3 v ) const;
 };
+inline std::ostream& operator << ( std::ostream& os, const Quaternion& quat );
 
 //------------------------------------------------------------------------------
 // ae::Int2 shared member functions
@@ -1086,6 +1079,8 @@ using Str512 = Str< 512 >;
 //------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
+#define _AE_STATIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
+#define _AE_DYNAMIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 template < typename T, uint32_t N = 0 >
 class Array
 {
@@ -1130,7 +1125,8 @@ public:
 
   // Array info
   uint32_t Length() const { return m_length; }
-  uint32_t Size() const { return m_size; }
+  _AE_STATIC_ARRAY static constexpr uint32_t Size() { return N; }
+  _AE_DYNAMIC_ARRAY uint32_t Size(...) const { return m_size; }
   
 private:
   uint32_t m_GetNextSize() const;
@@ -2612,14 +2608,14 @@ public:
   // RaycastResult
   struct RaycastResult
   {
-    uint32_t hitCount = 0;
     struct Hit
     {
       ae::Vec3 position = ae::Vec3( 0.0f );
       ae::Vec3 normal = ae::Vec3( 0.0f );
       float distance = 0.0f;
       const void* userData = nullptr;
-    } hits[ 8 ];
+    };
+    ae::Array< Hit, 8 > hits;
     
     static void Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next );
   };
@@ -2649,7 +2645,6 @@ public:
   CollisionMesh( ae::Tag tag );
   void Load( const Params& params );
   void Clear();
-  bool Raycast( const RaycastParams& params, RaycastResult* outResult ) const; // @TODO: Remove 'non-cumulative' raycast function
   RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
   PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
   ae::AABB GetAABB() const { return m_aabb; }
@@ -2690,7 +2685,7 @@ struct Keyframe
 	ae::Matrix4 GetLocalTransform() const;
 	Keyframe Lerp( const Keyframe& target, float t ) const;
 	
-	ae::Vec3 position = ae::Vec3( 0.0f );
+	ae::Vec3 translation = ae::Vec3( 0.0f );
 	ae::Quaternion rotation = ae::Quaternion::Identity();
 	ae::Vec3 scale = ae::Vec3( 1.0f );
 };
@@ -4551,6 +4546,27 @@ inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
 
 //------------------------------------------------------------------------------
+// ae::Quaternion member functions
+//------------------------------------------------------------------------------
+inline std::ostream& operator << ( std::ostream& os, const Quaternion& quat )
+{
+  os << quat.i << " " << quat.j << " " << quat.k << " " << quat.r;
+  return os;
+}
+
+//------------------------------------------------------------------------------
+// ae::Matrix4 member functions
+//------------------------------------------------------------------------------
+inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat )
+{
+  os << mat.data[ 0 ] << " " << mat.data[ 1 ] << " " << mat.data[ 2 ] << " " << mat.data[ 3 ]
+    << " " << mat.data[ 4 ] << " " << mat.data[ 5 ] << " " << mat.data[ 6 ] << " " << mat.data[ 7 ]
+    << " " << mat.data[ 8 ] << " " << mat.data[ 9 ] << " " << mat.data[ 10 ] << " " << mat.data[ 11 ]
+    << " " << mat.data[ 12 ] << " " << mat.data[ 13 ] << " " << mat.data[ 14 ] << " " << mat.data[ 15 ];
+  return os;
+}
+
+//------------------------------------------------------------------------------
 // ae::Int2 shared member functions
 // ae::Int3 shared member functions
 //------------------------------------------------------------------------------
@@ -4992,6 +5008,25 @@ inline ae::Matrix4 FromString( const char* str )
     r.data + 8, r.data + 9, r.data + 10, r.data + 11,
     r.data + 12, r.data + 13, r.data + 14, r.data + 15 );
   return r;
+}
+
+template <>
+inline bool FromString( const char* str )
+{
+  if ( !str[ 0 ] )
+  {
+    return false;
+  }
+  // @TODO: Clean this up. Should check for both `true` and `false`, and return false if neither match
+  const char* trueStr = "true";
+  for ( uint32_t i = 0; ( str[ i ] && trueStr[ i ] ); i++ )
+  {
+    if ( trueStr[ i ] != tolower( str[ i ] ) )
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 template < uint32_t N >
@@ -8105,15 +8140,8 @@ ae::Matrix4 AABB::GetTransform() const
 
 float AABB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
 {
-  ae::Vec3 center = GetCenter();
-  ae::Vec3 halfSize = GetHalfSize();
-
-  ae::Vec3 d = p - center;
-  d.x = ae::Max( ae::Abs( d.x ) - halfSize.x, 0.0f );
-  d.y = ae::Max( ae::Abs( d.y ) - halfSize.y, 0.0f );
-  d.z = ae::Max( ae::Abs( d.z ) - halfSize.z, 0.0f );
-
-  return d.Length();
+  ae::Vec3 q = ae::Abs( p ) - GetHalfSize();
+  return ae::Max( q, ae::Vec3( 0.0f ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f );
 }
 
 bool AABB::Intersect( AABB other ) const
@@ -8126,7 +8154,6 @@ bool AABB::Intersect( AABB other ) const
   {
   return true;
   }
-
   return false;
 }
 
@@ -15350,14 +15377,15 @@ void CollisionMesh::Clear()
   m_aabb = ae::AABB();
 }
 
-bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResult ) const
+CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
 {
   // Early out for parameters that will give no results
   if ( params.maxLength < 0.0f || params.maxHits == 0 )
   {
-    return false;
+    return prevResult;
   }
   
+  // @TODO: Set max length to prevResult hit distance for obb early out when params request a single hit out
   bool limitRay = ( params.maxLength > 0.0f ) && ( params.maxLength < INFINITY );
   ae::Vec3 normParamsDir = params.direction.SafeNormalizeCopy();
 
@@ -15373,7 +15401,7 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
         ae::Vec3 rayEnd = params.source + normParamsDir * ( limitRay ? params.maxLength : 1000.0f );
         debug->AddLine( params.source, rayEnd, params.debugColor );
       }
-      return false; // Early out if ray doesn't touch obb
+      return prevResult; // Early out if ray doesn't touch obb
     }
     
     if ( ae::DebugLines* debug = params.debug )
@@ -15394,9 +15422,10 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
   const uint32_t* indices = m_indices.Begin();
   const ae::Vec3* vertices = &m_vertices[ 0 ];
 
+  CollisionMesh::RaycastResult result;
   uint32_t hitCount  = 0;
-  RaycastResult::Hit hits[ countof(RaycastResult::hits) + 1 ];
-  const uint32_t maxHits = ae::Min( params.maxHits, countof(RaycastResult::hits) );
+  RaycastResult::Hit hits[ result.hits.Size() + 1 ];
+  const uint32_t maxHits = ae::Min( params.maxHits, result.hits.Size() );
   for ( uint32_t i = 0; i < triCount; i++ )
   {
     ae::Vec3 p, n;
@@ -15453,29 +15482,14 @@ bool CollisionMesh::Raycast( const RaycastParams& params, RaycastResult* outResu
     }
   }
   
-  if ( outResult )
+  std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
+  for ( uint32_t i = 0; i < hitCount; i++ )
   {
-    std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
-    outResult->hitCount = hitCount;
-    for ( uint32_t i = 0; i < hitCount; i++ )
-    {
-      hits[ i ].normal.SafeNormalize();
-      outResult->hits[ i ] = hits[ i ];
-    }
+    hits[ i ].normal.SafeNormalize();
+    result.hits.Append( hits[ i ] );
   }
-  return hitCount;
-}
-
-CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
-{
-  // @TODO: For params requesting a single hit set max length of ray to prevResult hit distance for obb early out
-  RaycastResult nextResult;
-  if ( Raycast( params, &nextResult ) )
-  {
-    CollisionMesh::RaycastResult::Accumulate( params, prevResult, &nextResult );
-    return nextResult;
-  }
-  return prevResult;
+  CollisionMesh::RaycastResult::Accumulate( params, prevResult, &result );
+  return result;
 }
 
 CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
@@ -15582,24 +15596,25 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 void CollisionMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
 {
   uint32_t accumHitCount = 0;
-  Hit accumHits[ countof(next->hits) * 2 ];
+  Hit accumHits[ next->hits.Size() * 2 ];
   
-  for ( uint32_t i = 0; i < next->hitCount; i++ )
+  for ( uint32_t i = 0; i < next->hits.Length(); i++ )
   {
     accumHits[ accumHitCount ] = next->hits[ i ];
     accumHitCount++;
   }
-  for ( uint32_t i = 0; i < prev.hitCount; i++ )
+  for ( uint32_t i = 0; i < prev.hits.Length(); i++ )
   {
     accumHits[ accumHitCount ] = prev.hits[ i ];
     accumHitCount++;
   }
   std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.distance < h1.distance; } );
   
-  next->hitCount = ae::Min( accumHitCount, params.maxHits, countof(next->hits) );
-  for ( uint32_t i = 0; i < next->hitCount; i++ )
+  next->hits.Clear();
+  accumHitCount = ae::Min( accumHitCount, params.maxHits, next->hits.Size() );
+  for ( uint32_t i = 0; i < accumHitCount; i++ )
   {
-    next->hits[ i ] = accumHits[ i ];
+    next->hits.Append( accumHits[ i ] );
   }
 }
 
@@ -15629,7 +15644,7 @@ void CollisionMesh::PushOutInfo::Accumulate( const PushOutParams& params, const 
 //------------------------------------------------------------------------------
 Keyframe::Keyframe( const ae::Matrix4& transform )
 {
-	position = transform.GetTranslation();
+	translation = transform.GetTranslation();
 	rotation = transform.GetRotation();
 	scale = transform.GetScale();
 }
@@ -15638,13 +15653,13 @@ ae::Matrix4 Keyframe::GetLocalTransform() const
 {
 	ae::Matrix4 rot = ae::Matrix4::Identity();
 	rot.SetRotation( rotation );
-	return ae::Matrix4::Translation( position ) * rot * ae::Matrix4::Scaling( scale );
+	return ae::Matrix4::Translation( translation ) * rot * ae::Matrix4::Scaling( scale );
 }
 
 Keyframe Keyframe::Lerp( const Keyframe& target, float t ) const
 {
 	Keyframe result;
-	result.position = position.Lerp( target.position, t );
+	result.translation = translation.Lerp( target.translation, t );
 	result.rotation = rotation.Nlerp( target.rotation, t );
 	result.scale = scale.Lerp( target.scale, t );
 	return result;
@@ -15682,9 +15697,9 @@ void Animation::AnimateByTime( class Skeleton* target, float time, float strengt
 void Animation::AnimateByPercent( class Skeleton* target, float percent, float strength, const ae::Bone** mask, uint32_t maskCount ) const
 {
 	ae::Array< const ae::Bone* > tempBones = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
-	ae::Array< ae::Matrix4 > temp = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
+	ae::Array< ae::Matrix4 > tempTransforms = AE_ALLOC_TAG_FIXME; // @TODO: Allocate once in Animation class
 	tempBones.Reserve( target->GetBoneCount() );
-	temp.Reserve( target->GetBoneCount() );
+	tempTransforms.Reserve( target->GetBoneCount() );
 	
 	strength = ae::Clip01( strength );
 	const ae::Bone** maskEnd = mask + maskCount;
@@ -15710,13 +15725,13 @@ void Animation::AnimateByPercent( class Skeleton* target, float percent, float s
 			const ae::Vec3 currTranslation = current.GetTranslation();
 			const ae::Quaternion currRotation = current.GetRotation();
 			const ae::Vec3 currScale = current.GetScale();
-			keyframe.position = currTranslation.Lerp( keyframe.position, keyStrength );
+			keyframe.translation = currTranslation.Lerp( keyframe.translation, keyStrength );
 			keyframe.rotation = currRotation.Nlerp( keyframe.rotation, keyStrength );
 			keyframe.scale = currScale.Lerp( keyframe.scale, keyStrength );
 		}
-		temp.Append( keyframe.GetLocalTransform() );
+		tempTransforms.Append( keyframe.GetLocalTransform() );
 	}
-	target->SetLocalTransforms( tempBones.Begin(), temp.Begin(), target->GetBoneCount() );
+	target->SetLocalTransforms( tempBones.Begin(), tempTransforms.Begin(), target->GetBoneCount() );
 }
 
 //------------------------------------------------------------------------------
@@ -17447,20 +17462,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
     }
     case Var::Bool:
     {
-      // @TODO: Clean this up. Should check for both `true` and `false`, and return false if neither match
-      const char* trueStr = "true";
-      bool b = value[ 0 ];
-      if ( b )
-      {
-        for ( uint32_t i = 0; ( value[ i ] && trueStr[ i ] ); i++ )
-        {
-          if ( trueStr[ i ] != tolower( value[ i ] ) )
-          {
-            b = false;
-          }
-        }
-      }
-      *(bool*)varData = b;
+      *(bool*)varData = ae::FromString< bool >( value );
       return true;
     }
     case Var::Float:

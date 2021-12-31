@@ -129,13 +129,19 @@ int main()
 	ae::Skin skin = TAG_ALL;
 	ae::VertexData vertexData;
 	{
-		ae_VertexLoaderInfo vertexInfo;
+		const char* fileName = "character.fbx";
+		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
+		ae::Scratch< uint8_t > fileData( TAG_ALL, fileSize );
+		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() );
+		
+		ae::VertexLoaderHelper vertexInfo;
 		vertexInfo.size = sizeof(Vertex);
 		vertexInfo.posOffset = offsetof( Vertex, pos );
 		vertexInfo.normalOffset = offsetof( Vertex, normal );
 		vertexInfo.colorOffset = offsetof( Vertex, color );
 		vertexInfo.uvOffset = offsetof( Vertex, uv );
-		ae_ofbx_LoadSkinnedMesh( TAG_ALL, &fileSystem, "character.fbx", vertexInfo, &vertexData, &skin, nullptr );
+		ae::ofbxLoadSkinnedMesh( TAG_ALL, fileData.Data(), fileData.Length(), vertexInfo, &vertexData, &skin, nullptr );
 	}
 	
 	double animTime = 0.0;

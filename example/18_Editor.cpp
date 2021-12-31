@@ -442,7 +442,7 @@ void Avatar::Update( Game* game )
 		finalPos += ae::Vec4( pushOutInfo.sphere.center, 1.0f );
 		velocity = pushOutInfo.velocity;
 	}
-	if ( outResult.hitCount )
+	if ( outResult.hits.Length() )
 	{
 		if ( outResult.hits[ 0 ].distance < rayLength )
 		{

@@ -28,7 +28,9 @@
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
 
-struct ae_VertexLoaderInfo
+namespace ae {
+
+struct VertexLoaderHelper
 {
 	uint32_t size = 0;
 
@@ -51,16 +53,30 @@ struct ae_VertexLoaderInfo
 	void SetNormal( void* vertices, uint32_t index, ae::Vec4 normal ) const { if ( normalOffset >= 0 && size ) { *(ae::Vec4*)( (uint8_t*)vertices + index * size + normalOffset ) = normal; } }
 	void SetColor( void* vertices, uint32_t index, ae::Vec4 color ) const { if ( colorOffset >= 0 && size ) { *(ae::Vec4*)( (uint8_t*)vertices + index * size + colorOffset ) = color; } }
 	void SetUV( void* vertices, uint32_t index, ae::Vec2 uv ) const { if ( uvOffset >= 0 && size ) { *(ae::Vec2*)( (uint8_t*)vertices + index * size + uvOffset ) = uv; } }
+	ae::Vec4& GetPosition( void* vertices, uint32_t index ) const { AE_ASSERT( posOffset >= 0 && size ); return *(ae::Vec4*)( (uint8_t*)vertices + index * size + posOffset ); }
+	ae::Vec4& GetNormal( void* vertices, uint32_t index ) const { AE_ASSERT( normalOffset >= 0 && size ); return *(ae::Vec4*)( (uint8_t*)vertices + index * size + normalOffset ); }
+	ae::Vec4& GetColor( void* vertices, uint32_t index ) const { AE_ASSERT( colorOffset >= 0 && size ); return *(ae::Vec4*)( (uint8_t*)vertices + index * size + colorOffset ); }
+	ae::Vec2& GetUV( void* vertices, uint32_t index ) const { AE_ASSERT( uvOffset >= 0 && size ); return *(ae::Vec2*)( (uint8_t*)vertices + index * size + uvOffset ); }
+};
+
+struct LoadMeshParams
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	ae::VertexData* vertexData = nullptr;
+	ae::CollisionMesh* collisionMesh = nullptr;
+	class EditorMesh* editorMesh = nullptr;
 };
 
 //------------------------------------------------------------------------------
 // stb
 //------------------------------------------------------------------------------
-void ae_stb_LoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB );
+void stbLoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB );
 
 //------------------------------------------------------------------------------
 // ofbx
 //------------------------------------------------------------------------------
-bool ae_ofbx_LoadSkinnedMesh( const ae::Tag& tag, ae::FileSystem* fileSystem, const char* fileName, const ae_VertexLoaderInfo& vertexInfo, ae::VertexData* vertexData, ae::Skin* skinOut, ae::Animation* animOut );
+bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* data, uint32_t dataLen, const VertexLoaderHelper& vertexInfo, const LoadMeshParams& params );
+bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* data, uint32_t dataLen, const VertexLoaderHelper& vertexInfo, ae::VertexData* vertexData, ae::Skin* skinOut, ae::Animation* animOut );
 
+} // End ae namespace
 #endif

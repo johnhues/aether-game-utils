@@ -139,6 +139,8 @@ public:
     m_components( tag ),
     m_meshResourceVars( tag ),
     m_meshVisibleVars( tag ),
+    m_typeMesh( tag ),
+    m_typeInvisible( tag ),
     connections( tag )
   {}
   void Initialize( class EditorProgram* program );
@@ -155,7 +157,7 @@ public:
   bool GetShowInvisible() const { return m_showInvisible; }
   
   EditorServerObject* CreateObject( EditorObjectId id, const ae::Matrix4& transform );
-  ae::Object* AddComponent( EditorServerObject* obj, const char* typeName );
+  ae::Object* AddComponent( class EditorProgram* program, EditorServerObject* obj, const char* typeName );
   ae::Object* GetComponent( EditorServerObject* obj, const char* typeName );
   const ae::Object* GetComponent( const EditorServerObject* obj, const char* typeName );
   uint32_t GetObjectCount() const { return m_objects.Length(); }
@@ -193,6 +195,8 @@ private:
   ae::Map< ae::TypeId, ae::Map< EditorObjectId, ae::Object* > > m_components;
   ae::Map< const ae::Type*, const ae::Var* > m_meshResourceVars;
   ae::Map< const ae::Type*, const ae::Var* > m_meshVisibleVars;
+  ae::Map< const ae::Type*, ae::Str32 > m_typeMesh;
+  ae::Map< const ae::Type*, bool > m_typeInvisible;
   
   ae::Array< EditorConnection* > connections;
   uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
@@ -968,18 +972,18 @@ void EditorServer::Initialize( EditorProgram* program )
       const ae::Var* var = type->GetVarByName( varName );
       AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
       m_meshResourceVars.Set( type, var );
-      
-      int32_t visiblePropIdx = type->GetPropertyIndex( "ae_mesh_visible" );
-      if ( visiblePropIdx >= 0 )
-      {
-        const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_visible, memberVar );";
-        AE_ASSERT_MSG( type->GetPropertyValueCount( visiblePropIdx ), mustRegisterErr, type->GetName() );
-        const char* varName = type->GetPropertyValue( visiblePropIdx, 0 );
-        AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
-        const ae::Var* var = type->GetVarByName( varName );
-        AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
-        m_meshVisibleVars.Set( type, var );
-      }
+    }
+    
+    int32_t visiblePropIdx = type->GetPropertyIndex( "ae_mesh_visible" );
+    if ( visiblePropIdx >= 0 )
+    {
+      const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_visible, memberVar );";
+      AE_ASSERT_MSG( type->GetPropertyValueCount( visiblePropIdx ), mustRegisterErr, type->GetName() );
+      const char* varName = type->GetPropertyValue( visiblePropIdx, 0 );
+      AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
+      const ae::Var* var = type->GetVarByName( varName );
+      AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
+      m_meshVisibleVars.Set( type, var );
     }
     
     int32_t depPropIdx = type->GetPropertyIndex( "ae_editor_dep" );
@@ -993,6 +997,18 @@ void EditorServer::Initialize( EditorProgram* program )
         AE_ASSERT_MSG( depType, "Type '#' has invalid dependency '#'", type->GetName(), depName );
         AE_ASSERT_MSG( depType->HasProperty( "ae_editor_type" ), "Type '#' has dependency '#' which is not an editor type. It must have property 'ae_editor_type'.", type->GetName(), depName );
       }
+    }
+    
+    int32_t typeMeshIdx = type->GetPropertyIndex( "ae_type_mesh" );
+    if ( typeMeshIdx >= 0 && type->GetPropertyValueCount( typeMeshIdx ) )
+    {
+      m_typeMesh.Set( type, type->GetPropertyValue( typeMeshIdx, 0 ) );
+    }
+    
+    int32_t typeInvisibleIdx = type->GetPropertyIndex( "ae_type_invisible" );
+    if ( typeInvisibleIdx >= 0 )
+    {
+      m_typeInvisible.Set( type, true );
     }
   }
 }
@@ -1529,18 +1545,25 @@ void EditorServer::ShowUI( EditorProgram* program )
       for ( ae::Object* component : selectedObject->components )
       {
         const ae::Type* type = ae::GetTypeFromObject( component );
-        
         if ( ImGui::TreeNode( type->GetName() ) )
         {
-          uint32_t varCount = type->GetVarCount();
-          for ( uint32_t i = 0; i < varCount; i++ )
+          std::function< void(const ae::Type*, ae::Object*) > fn = [&]( const ae::Type* type, ae::Object* component )
           {
-            const ae::Var* var = type->GetVarByIndex( i );
-            if ( m_ShowVar( program, component, var ) )
+            if ( type->GetParentType() )
             {
-              selectedObject->HandleVarChange( program, component, type, var );
+              fn( type->GetParentType(), component );
             }
-          }
+            uint32_t varCount = type->GetVarCount();
+            for ( uint32_t i = 0; i < varCount; i++ )
+            {
+              const ae::Var* var = type->GetVarByIndex( i );
+              if ( m_ShowVar( program, component, var ) )
+              {
+                selectedObject->HandleVarChange( program, component, type, var );
+              }
+            }
+          };
+          fn( type, component );
           ImGui::TreePop();
         }
       }
@@ -1572,7 +1595,7 @@ void EditorServer::ShowUI( EditorProgram* program )
           if ( ImGui::Selectable( type->GetName() ) )
           {
             AE_INFO( "Create #", type->GetName() );
-            AddComponent( selectedObject, type->GetName() );
+            AddComponent( program, selectedObject, type->GetName() );
           }
           foundAny = true;
         }
@@ -1686,7 +1709,7 @@ EditorServerObject* EditorServer::CreateObject( EditorObjectId id, const ae::Mat
   return editorObject;
 }
 
-ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typeName )
+ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const char* typeName )
 {
   const ae::Type* type = ae::GetTypeByName( typeName );
   if ( !type )
@@ -1699,20 +1722,27 @@ ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typ
     return component;
   }
   
-  int32_t propIdx = type->GetPropertyIndex( "ae_editor_dep" );
-  if ( propIdx >= 0 )
+  std::function< void(const ae::Type*, ae::Object*) > fn = [&]( const ae::Type* t, ae::Object* component )
   {
-    uint32_t propCount = type->GetPropertyValueCount( propIdx );
-    for ( uint32_t i = 0; i < propCount; i++ )
+    if ( t->GetParentType() )
     {
-      const char* prop = type->GetPropertyValue( propIdx, i );
-      if ( !GetComponent( obj, typeName ) )
+      fn( t->GetParentType(), component );
+    }
+    int32_t propIdx = t->GetPropertyIndex( "ae_editor_dep" );
+    if ( propIdx >= 0 )
+    {
+      uint32_t propCount = t->GetPropertyValueCount( propIdx );
+      for ( uint32_t i = 0; i < propCount; i++ )
       {
-        AE_INFO( "Added '#' dependency to '#'", prop, typeName );
-        AddComponent( obj, prop );
+        const char* prop = t->GetPropertyValue( propIdx, i );
+        if ( strcmp( type->GetName(), prop ) != 0 && !GetComponent( obj, typeName ) )
+        {
+          AddComponent( program, obj, prop );
+        }
       }
     }
-  }
+  };
+  fn( type, component );
   
   component = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
   type->New( component );
@@ -1724,6 +1754,16 @@ ae::Object* EditorServer::AddComponent( EditorServerObject* obj, const char* typ
     typeComponents = &m_components.Set( type->GetId(), m_tag );
   }
   typeComponents->Set( obj->entity, component );
+  
+  const auto& meshName = m_typeMesh.Get( type, "" );
+  if ( meshName.Length() )
+  {
+    obj->mesh = program->GetMesh( meshName.c_str() );
+  }
+  if ( m_typeInvisible.Get( type, false ) )
+  {
+    obj->opaque = false;
+  }
   
   return component;
 }
@@ -1949,7 +1989,7 @@ bool EditorServer::m_Load( EditorProgram* program )
     for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
     {
       const char* typeName = levelObject.components.GetKey( j ).c_str();
-      AddComponent( editorObj, typeName );
+      AddComponent( program, editorObj, typeName );
     }
   }
   // Serialize all components (second phase to handle references)
@@ -2203,6 +2243,11 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
   ae::Vec3 mouseRay = program->GetMouseRay();
   ae::Vec3 mouseRaySrc = program->camera.GetPosition();// + mouseRay * 0.;
   
+  ae::CollisionMesh::RaycastParams raycastParams;
+  raycastParams.source = mouseRaySrc;
+  raycastParams.direction = mouseRay;
+  raycastParams.hitClockwise = false;
+  raycastParams.hitCounterclockwise = true;
   ae::CollisionMesh::RaycastResult result;
   uint32_t editorObjectCount = m_objects.Length();
   for ( uint32_t i = 0; i < editorObjectCount; i++ )
@@ -2214,31 +2259,30 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
       {
         continue;
       }
-      ae::CollisionMesh::RaycastParams params;
-      params.userData = editorObj;
-      params.source = mouseRaySrc;
-      params.direction = mouseRay;
-      params.transform = editorObj->GetTransform( program );
-      params.hitClockwise = false;
-      params.hitCounterclockwise = true;
-      result = editorObj->mesh->collision.Raycast( params, result );
+      raycastParams.userData = editorObj;
+      raycastParams.transform = editorObj->GetTransform( program );
+      result = editorObj->mesh->collision.Raycast( raycastParams, result );
     }
     else
     {
       float hitT = INFINITY;
       ae::Vec3 hitPos( 0.0f );
       ae::Sphere sphere( editorObj->GetTransform( program ).GetTranslation(), 0.5f );
-      if ( sphere.Raycast( mouseRaySrc, mouseRay, &hitT, &hitPos ) && ( !result.hitCount || hitT < result.hits[ 0 ].distance ) )
+      if ( sphere.Raycast( mouseRaySrc, mouseRay, &hitT, &hitPos ) )
       {
-        result.hits[ 0 ].position = hitPos;
-        result.hits[ 0 ].normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
-        result.hits[ 0 ].distance = hitT;
-        result.hits[ 0 ].userData = editorObj;
-        result.hitCount = 1;
+        raycastParams.userData = nullptr;
+        raycastParams.transform = ae::Matrix4::Identity();
+        ae::CollisionMesh::RaycastResult sphereResult;
+        auto* hit = &sphereResult.hits.Append( {} );
+        hit->position = hitPos;
+        hit->normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
+        hit->distance = hitT;
+        hit->userData = editorObj;
+        ae::CollisionMesh::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
       }
     }
   }
-  if ( result.hitCount )
+  if ( result.hits.Length() )
   {
     *hitOut = result.hits[ 0 ].position;
     *normalOut = result.hits[ 0 ].normal;
