@@ -91,7 +91,7 @@ public:
 	uint32_t GetComponentCountByIndex( uint32_t typeIndex ) const;
 	const Component& GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex ) const;
 	Component& GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex );
-	template < typename T > uint32_t CallFn( std::function< void( T* ) > fn );
+	template < typename T, typename Fn > uint32_t CallFn( Fn fn );
 	
 	// Removal
 	void Clear();
@@ -255,8 +255,8 @@ T& Registry::GetComponentByIndex( uint32_t index )
 	return *(T*)components->GetValue( index );
 }
 
-template < typename T >
-uint32_t Registry::CallFn( std::function< void( T* ) > fn )
+template < typename T, typename Fn >
+uint32_t Registry::CallFn( Fn fn )
 {
 	uint32_t result = 0;
 	const ae::Type* type = ae::GetType< T >();
