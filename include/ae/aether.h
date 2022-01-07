@@ -709,6 +709,7 @@ public:
 	Plane() = default;
 	Plane( ae::Vec3 point, ae::Vec3 normal );
 	Plane( ae::Vec4 pointNormal );
+	explicit operator Vec4 () const;
 	
 	ae::Vec3 GetNormal() const;
 	ae::Vec3 GetClosestPointToOrigin() const;
@@ -827,7 +828,7 @@ public:
 	OBB( const Matrix4& transform );
 
 	void SetTransform( const Matrix4& transform );
-	const Matrix4& GetTransform() const;
+	Matrix4 GetTransform() const;
 
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
 	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, float* tOut = nullptr ) const;
@@ -835,9 +836,9 @@ public:
 	AABB GetAABB() const;
 
 private:
-	Matrix4 m_transform;
-	Matrix4 m_invTransRot;
-	AABB m_scaledAABB;
+	Vec3 c; // OBB center point
+	Vec3 u[ 3 ]; // Local x, y, and z-axes
+	Vec3 e; // Positive halfwidth extents of OBB along each axis
 };
 
 //------------------------------------------------------------------------------
@@ -7928,6 +7929,11 @@ Plane::Plane( ae::Vec3 point, ae::Vec3 normal )
 	m_plane.w = GetSignedDistance( point );
 }
 
+Plane::operator Vec4 () const
+{
+	return m_plane;
+}
+
 ae::Vec3 Plane::GetNormal() const
 {
 	return m_plane.GetXYZ();
@@ -8224,69 +8230,141 @@ OBB::OBB( const ae::Matrix4& transform )
 
 void OBB::SetTransform( const ae::Matrix4& transform )
 {
-	m_transform = transform;
-	
-	ae::Vec3 scale = transform.GetScale();
-	m_scaledAABB = AABB( scale * -0.5f, scale * 0.5f );
-	
-	m_invTransRot = transform;
-	m_invTransRot = m_invTransRot.GetScaleRemoved();
-	m_invTransRot.SetInverse();
+	c = transform.GetTranslation();
+	u[ 0 ] = transform.GetAxis( 0 );
+	u[ 1 ] = transform.GetAxis( 1 );
+	u[ 2 ] = transform.GetAxis( 2 );
+	e[ 0 ] = u[ 0 ].Normalize();
+	e[ 1 ] = u[ 1 ].Normalize();
+	e[ 2 ] = u[ 2 ].Normalize();
 }
 
-const ae::Matrix4& OBB::GetTransform() const
+ae::Matrix4 OBB::GetTransform() const
 {
-	return m_transform;
+	ae::Matrix4 result;
+	result.SetAxis( 0, u[ 0 ] * e[ 0 ] );
+	result.SetAxis( 1, u[ 1 ] * e[ 1 ] );
+	result.SetAxis( 2, u[ 2 ] * e[ 2 ] );
+	result.SetTranslation( c );
+	return result;
 }
 
 float OBB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
 {
-	p = ( m_invTransRot * ae::Vec4( p, 1.0f ) ).GetXYZ();
-	return m_scaledAABB.GetSignedDistanceFromSurface( p );
+	const ae::OBB& b = *this;
+	Vec3 v = p - b.c;
+	float sqDist = 0.0f;
+	for ( int i = 0; i < 3; i++ )
+	{
+		// Project vector from box center to p on each axis, getting the distance
+		// of p along that axis, and count any excess distance outside box extents
+		float d = v.Dot( b.u[ i ] );
+		float excess = 0.0f;
+		if ( d < -b.e[ i ] )
+		{
+			excess = d + b.e[ i ];
+		}
+		else if ( d > b.e[ i ] )
+		{
+			excess = d - b.e[ i ];
+		}
+		sqDist += excess * excess;
+	}
+	return sqrt( sqDist );
 }
 
-bool OBB::IntersectRay( ae::Vec3 _p, ae::Vec3 _d, ae::Vec3* pOut, float* tOut ) const
+// Intersect segment S(t)=A+t(B-A), 0<=t<=1 against convex polyhedron specified
+// by the n halfspaces defined by the planes p[]. On exit tfirst and tlast
+// define the intersection, if any
+bool OBB::IntersectRay( ae::Vec3 a, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) const
 {
-	ae::Vec3 p = ( m_invTransRot * ae::Vec4( _p, 1.0f ) ).GetXYZ();
-	ae::Vec3 d = ( m_invTransRot * ae::Vec4( _d, 0.0f ) ).GetXYZ();
-
-	float rayT = 0.0f;
-	if ( m_scaledAABB.IntersectRay( p, d, nullptr, &rayT ) )
+	// Set initial interval to being the whole segment. For a ray, tlast should be
+	// set to +FLT_MAX. For a line, additionally tfirst should be set to –FLT_MAX
+	float tfirst = 0.0f;
+	float tlast = 1.0f;
+	ae::Plane planes[] =
 	{
-		if ( tOut )
+		{ c, u[ 0 ] * e[ 0 ] },
+		{ c, u[ 1 ] * e[ 1 ] },
+		{ c, u[ 2 ] * e[ 2 ] },
+		{ c, u[ 0 ] * -e[ 0 ] },
+		{ c, u[ 1 ] * -e[ 1 ] },
+		{ c, u[ 2 ] * -e[ 2 ] }
+	};
+	// Intersect segment against each plane
+	for (int i = 0; i < countof(planes); i++)
+	{
+		Vec4 p( planes[ i ] );
+		float denom = d.Dot( p.GetXYZ() );
+		float dist = p.w - a.Dot( p.GetXYZ() );
+		// Test if segment runs parallel to the plane
+		if (denom == 0.0f)
 		{
-			*tOut = rayT;
+			// If so, return “no intersection” if segment lies outside plane
+			if (dist > 0.0f)
+			{
+				return false;
+			}
 		}
-		if ( pOut )
+		else
 		{
-			*pOut = _p + _d * rayT;
+			// Compute parameterized t value for intersection with current plane
+			float t = dist / denom;
+			if (denom < 0.0f)
+			{
+				// When entering halfspace, update tfirst if t is larger
+				if (t > tfirst)
+				{
+					tfirst = t;
+				}
+			}
+			else
+			{
+				// When exiting halfspace, update tlast if t is smaller
+				if (t < tlast)
+				{
+					tlast = t;
+				}
+			}
+			// Exit with “no intersection” if intersection becomes empty
+			if (tfirst > tlast)
+			{
+				return false;
+			}
 		}
-		return true;
 	}
-
-	return false;
+	// A nonzero logical intersection, so the segment intersects the polyhedron
+	AE_ASSERT( tfirst >= 0.0f );
+	if ( tOut )
+	{
+		*tOut = tfirst;
+	}
+	if ( pOut )
+	{
+		*pOut = a + d * tfirst;
+	}
+	return true;
 }
 
 AABB OBB::GetAABB() const
 {
+	ae::Matrix4 transform = GetTransform();
 	ae::Vec4 corners[] =
 	{
-		m_transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
-		m_transform * ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ),
-		m_transform * ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ),
-		m_transform * ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ),
-		m_transform * ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ),
-		m_transform * ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ),
-		m_transform * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
-		m_transform * ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
+		transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
+		transform * ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ),
+		transform * ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ),
+		transform * ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ),
+		transform * ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ),
+		transform * ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ),
+		transform * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
+		transform * ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
 	};
-	
 	AABB result( corners[ 0 ].GetXYZ(), corners[ 1 ].GetXYZ() );
 	for ( uint32_t i = 2; i < countof( corners ); i++ )
 	{
 		result.Expand( corners[ i ].GetXYZ() );
 	}
-
 	return result;
 }
 
