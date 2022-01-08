@@ -2687,19 +2687,18 @@ public:
 	ae::AABB GetAABB() const { return m_aabb; }
 	
 	const ae::Vec3* GetVertices() const { return m_vertices.Begin(); }
-	const uint32_t* GetIndices() const { return m_indices.Begin(); }
+	const uint32_t* GetIndices() const { return (uint32_t*)m_tris.Begin(); }
 	uint32_t GetVertexCount() const { return m_vertices.Length(); }
-	uint32_t GetIndexCount() const { return m_indices.Length(); }
+	uint32_t GetIndexCount() const { return m_tris.Length() * 3; }
 	
 private:
-	struct BVHTri { ae::Vec3 p[ 3 ]; };
+	struct BVHTri { uint32_t idx[ 3 ]; };
 	struct BVHLeafnode { BVHTri* tris; uint32_t count; };
 	typedef ae::BVH< BVHLeafnode > TriangleBVH;
-	static void m_BuildBVH( BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx );
+	static void m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx );
 	const ae::Tag m_tag;
-	ae::Array< ae::Vec3 > m_vertices; // @TODO: Remove these and only use m_tris
-	ae::Array< uint32_t > m_indices; // @TODO: Remove these and only use m_tris
 	ae::AABB m_aabb;
+	ae::Array< ae::Vec3 > m_vertices;
 	ae::Array< BVHTri > m_tris;
 	ae::Array< TriangleBVH > m_bvh;
 };
@@ -15567,7 +15566,6 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 CollisionMesh::CollisionMesh( ae::Tag tag ) :
 	m_tag( tag ),
 	m_vertices( tag ),
-	m_indices( tag ),
 	m_tris( tag ),
 	m_bvh( tag )
 {
@@ -15576,37 +15574,24 @@ CollisionMesh::CollisionMesh( ae::Tag tag ) :
 
 void CollisionMesh::Load( const Params& params )
 {
+	AE_STATIC_ASSERT( sizeof(BVHTri) == sizeof(uint32_t) * 3 ); // Safe to cast BVHTri's to a uint32_t array
 	if ( !params.positionCount )
 	{
 		AE_ASSERT_MSG( !params.indexCount, "Mesh indices supplied without vertex data" );
 		return;
 	}
-	AE_ASSERT_MSG( params.indexCount, "Currently only indexed meshes are supported" ); // @TODO: Remove
+	AE_ASSERT_MSG( params.indexCount, "TODO: Currently only indexed meshes are supported" );
 	AE_ASSERT( params.positions );
 	AE_ASSERT_MSG( params.positionStride >= sizeof(float) * 3, "Must specify the number of bytes between each position" );
-	if ( params.indexCount )
-	{
-		AE_ASSERT( params.indexCount % 3 == 0 );
-	}
-	else
-	{
-		AE_ASSERT( params.positionCount % 3 == 0 );
-	}
+	if ( params.indexCount ) { AE_ASSERT( params.indexCount % 3 == 0 ); }
+	else { AE_ASSERT( params.positionCount % 3 == 0 ); }
 	AE_ASSERT( params.indexSize == 2 || params.indexSize == 4 );
 	
 	bool identityTransform = ( params.transform == ae::Matrix4::Identity() );
 
 	uint32_t initialVertexCount = m_vertices.Length();
-	if ( !initialVertexCount )
-	{
-		ae::Vec3 p0( params.positions );
-		if ( !identityTransform )
-		{
-			p0 = ( params.transform * ae::Vec4( p0, 1.0f ) ).GetXYZ();
-		}
-		m_aabb = ae::AABB( p0, p0 );
-	}
-
+	uint32_t initialTriCount = m_tris.Length();
+	
 	m_vertices.Reserve( initialVertexCount + params.positionCount );
 	for ( uint32_t i = 0; i < params.positionCount; i++ )
 	{
@@ -15615,48 +15600,36 @@ void CollisionMesh::Load( const Params& params )
 		{
 			pos = ( params.transform * ae::Vec4( pos, 1.0f ) ).GetXYZ();
 		}
-		
 		m_aabb.Expand( pos );
 		m_vertices.Append( pos );
 	}
 	
-	m_indices.Reserve( m_indices.Length() + params.indexCount );
-	if ( params.indexSize == 4 )
-	{
-		const uint32_t* indices = (const uint32_t*)params.indices;
-		for ( uint32_t i = 0; i < params.indexCount; i++ )
-		{
-			m_indices.Append( indices[ i ] + initialVertexCount );
-		}
-	}
-	else if ( params.indexSize == 2 )
-	{
-		for ( uint32_t i = 0; i < params.indexCount; i++ )
-		{
-			const uint16_t* indices = (const uint16_t*)params.indices;
-			m_indices.Append( (uint32_t)indices[ i ] + initialVertexCount );
-		}
-	}
-	else
-	{
-		AE_FAIL_MSG( "Invalid index size" );
-	}
-	
 	uint32_t triCount = params.indexCount / 3;
-	m_tris.Reserve( triCount );
-	for ( uint32_t i = 0; i < triCount; i++ )
-	{
-		BVHTri& tri = m_tris.Append( {} );
-		tri.p[ 0 ] = m_vertices[ m_indices[ i * 3 ] ];
-		tri.p[ 1 ] = m_vertices[ m_indices[ i * 3 + 1 ] ];
-		tri.p[ 2 ] = m_vertices[ m_indices[ i * 3 + 2 ] ];
+	m_tris.Reserve( m_tris.Length() + triCount );
+#define COPY_INDICES( intType )\
+	BVHTri tri;\
+	const intType* indices = (const intType*)params.indices;\
+	for ( uint32_t i = 0; i < triCount; i++ )\
+	{\
+		for ( uint32_t j = 0; j < 3; j++ )\
+		{\
+			tri.idx[ j ] = initialVertexCount + (uint32_t)indices[ i * 3 + j ];\
+		}\
+		m_tris.Append( tri );\
 	}
+	if ( params.indexSize == 8 ) { COPY_INDICES( uint64_t ); }
+	else if ( params.indexSize == 4 ) { COPY_INDICES( uint32_t ); }
+	else if ( params.indexSize == 2 ) { COPY_INDICES( uint16_t ); }
+	else if ( params.indexSize == 1 ) { COPY_INDICES( uint8_t ); }
+	else { AE_FAIL_MSG( "Invalid index size" ); }
+#undef COPY_INDICES
+	
 	auto* bvh = &m_bvh.Append( { m_tag } );
 	bvh->AddRoot( m_aabb );
-	m_BuildBVH( m_tris.Begin(), m_tris.Length(), bvh, 0 );
+	m_BuildBVH( m_vertices.Begin(), m_tris.Begin() + initialTriCount, triCount, bvh, 0 );
 }
 
-void CollisionMesh::m_BuildBVH( BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx )
+void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx )
 {
 	AE_ASSERT( count );
 	if ( count <= 32 )
@@ -15678,14 +15651,14 @@ void CollisionMesh::m_BuildBVH( BVHTri* tris, uint32_t count, TriangleBVH* bvh, 
 	
 	ae::AABB leftBoundary;
 	ae::AABB rightBoundary;
-	BVHTri* middle = std::partition( tris, tris + count, [splitPlane, &leftBoundary, &rightBoundary]( const BVHTri& t )
+	BVHTri* middle = std::partition( tris, tris + count, [verts, splitPlane, &leftBoundary, &rightBoundary]( const BVHTri& t )
 	{
 		float left = -INFINITY;
 		float right = -INFINITY;
+		ae::Vec3 p[] = { verts[ t.idx[ 0 ] ], verts[ t.idx[ 1 ] ], verts[ t.idx[ 2 ] ] };
 		for ( uint32_t j = 0; j < 3; j++ )
 		{
-			ae::Vec3 p = t.p[ j ];
-			float d = splitPlane.GetSignedDistance( p );
+			float d = splitPlane.GetSignedDistance( p[ j ] );
 			if ( d >= 0.0f )
 			{
 				right = ae::Max( right, d );
@@ -15697,16 +15670,16 @@ void CollisionMesh::m_BuildBVH( BVHTri* tris, uint32_t count, TriangleBVH* bvh, 
 		}
 		if ( left > right )
 		{
-			leftBoundary.Expand( t.p[ 0 ] );
-			leftBoundary.Expand( t.p[ 1 ] );
-			leftBoundary.Expand( t.p[ 2 ] );
+			leftBoundary.Expand( p[ 0 ] );
+			leftBoundary.Expand( p[ 1 ] );
+			leftBoundary.Expand( p[ 2 ] );
 			return true;
 		}
 		else
 		{
-			rightBoundary.Expand( t.p[ 0 ] );
-			rightBoundary.Expand( t.p[ 1 ] );
-			rightBoundary.Expand( t.p[ 2 ] );
+			rightBoundary.Expand( p[ 0 ] );
+			rightBoundary.Expand( p[ 1 ] );
+			rightBoundary.Expand( p[ 2 ] );
 			return false;
 		}
 	});
@@ -15731,14 +15704,14 @@ void CollisionMesh::m_BuildBVH( BVHTri* tris, uint32_t count, TriangleBVH* bvh, 
 	}
 	
 	auto childIndices = bvh->AddChildren( bvhNodeIdx, leftBoundary, rightBoundary );
-	m_BuildBVH( tris, leftCount, bvh, childIndices.first );
-	m_BuildBVH( middle, rightCount, bvh, childIndices.second );
+	m_BuildBVH( verts, tris, leftCount, bvh, childIndices.first );
+	m_BuildBVH( verts, middle, rightCount, bvh, childIndices.second );
 }
 
 void CollisionMesh::Clear()
 {
 	m_vertices.Clear();
-	m_indices.Clear();
+	m_tris.Clear();
 	m_aabb = ae::AABB();
 }
 
@@ -15803,9 +15776,9 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 			for ( uint32_t i = 0; i < leafnode->count; i++ )
 			{
 				ae::Vec3 p, n;
-				ae::Vec3 a = leafnode->tris[ i ].p[ 0 ];
-				ae::Vec3 b = leafnode->tris[ i ].p[ 1 ];
-				ae::Vec3 c = leafnode->tris[ i ].p[ 2 ];
+				ae::Vec3 a = m_vertices[ leafnode->tris[ i ].idx[ 0 ] ];
+				ae::Vec3 b = m_vertices[ leafnode->tris[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_vertices[ leafnode->tris[ i ].idx[ 2 ] ];
 				if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit& outHit = hits[ hitCount ];
@@ -15944,9 +15917,9 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 			for ( uint32_t i = 0; i < leafnode->count; i++ )
 			{
 				ae::Vec3 p, n;
-				ae::Vec3 a = leafnode->tris[ i ].p[ 0 ];
-				ae::Vec3 b = leafnode->tris[ i ].p[ 1 ];
-				ae::Vec3 c = leafnode->tris[ i ].p[ 2 ];
+				ae::Vec3 a = m_vertices[ leafnode->tris[ i ].idx[ 0 ] ];
+				ae::Vec3 b = m_vertices[ leafnode->tris[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_vertices[ leafnode->tris[ i ].idx[ 2 ] ];
 				if ( !hasIdentityTransform )
 				{
 					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
