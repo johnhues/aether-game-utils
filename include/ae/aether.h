@@ -831,14 +831,16 @@ public:
 	Matrix4 GetTransform() const;
 
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
+	Vec3 GetClosestPointOnSurface( Vec3 p ) const;
+	bool IntersectLine( Vec3 p, Vec3 d, float* firstOut = nullptr, float* lastOut = nullptr ) const;
 	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, float* tOut = nullptr ) const;
 
 	AABB GetAABB() const;
 
 private:
-	Vec3 c; // OBB center point
-	Vec3 u[ 3 ]; // Local x, y, and z-axes
-	Vec3 e; // Positive halfwidth extents of OBB along each axis
+	Vec3 m_center;
+	Vec3 m_axes[ 3 ];
+	Vec3 m_halfSize;
 };
 
 //------------------------------------------------------------------------------
@@ -8230,125 +8232,164 @@ OBB::OBB( const ae::Matrix4& transform )
 
 void OBB::SetTransform( const ae::Matrix4& transform )
 {
-	c = transform.GetTranslation();
-	u[ 0 ] = transform.GetAxis( 0 );
-	u[ 1 ] = transform.GetAxis( 1 );
-	u[ 2 ] = transform.GetAxis( 2 );
-	e[ 0 ] = u[ 0 ].Normalize();
-	e[ 1 ] = u[ 1 ].Normalize();
-	e[ 2 ] = u[ 2 ].Normalize();
+	m_center = transform.GetTranslation();
+	m_axes[ 0 ] = transform.GetAxis( 0 );
+	m_axes[ 1 ] = transform.GetAxis( 1 );
+	m_axes[ 2 ] = transform.GetAxis( 2 );
+	m_halfSize[ 0 ] = m_axes[ 0 ].Normalize() * 0.5f;
+	m_halfSize[ 1 ] = m_axes[ 1 ].Normalize() * 0.5f;
+	m_halfSize[ 2 ] = m_axes[ 2 ].Normalize() * 0.5f;
+	if ( m_halfSize[ 0 ] == 0.0f ) { m_axes[ 0 ] = m_axes[ 1 ].Cross( m_axes[ 2 ] ).SafeNormalizeCopy(); }
+	else if ( m_halfSize[ 1 ] == 0.0f ) { m_axes[ 1 ] = m_axes[ 2 ].Cross( m_axes[ 0 ] ).SafeNormalizeCopy(); }
+	else if ( m_halfSize[ 2 ] == 0.0f ) { m_axes[ 2 ] = m_axes[ 0 ].Cross( m_axes[ 1 ] ).SafeNormalizeCopy(); }
 }
 
 ae::Matrix4 OBB::GetTransform() const
 {
 	ae::Matrix4 result;
-	result.SetAxis( 0, u[ 0 ] * e[ 0 ] );
-	result.SetAxis( 1, u[ 1 ] * e[ 1 ] );
-	result.SetAxis( 2, u[ 2 ] * e[ 2 ] );
-	result.SetTranslation( c );
+	result.SetAxis( 0, m_axes[ 0 ] * ( m_halfSize[ 0 ] * 2.0f ) );
+	result.SetAxis( 1, m_axes[ 1 ] * ( m_halfSize[ 1 ] * 2.0f ) );
+	result.SetAxis( 2, m_axes[ 2 ] * ( m_halfSize[ 2 ] * 2.0f ) );
+	result.SetTranslation( m_center );
 	return result;
 }
 
 float OBB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
 {
-	const ae::OBB& b = *this;
-	Vec3 v = p - b.c;
-	float sqDist = 0.0f;
-	for ( int i = 0; i < 3; i++ )
-	{
-		// Project vector from box center to p on each axis, getting the distance
-		// of p along that axis, and count any excess distance outside box extents
-		float d = v.Dot( b.u[ i ] );
-		float excess = 0.0f;
-		if ( d < -b.e[ i ] )
-		{
-			excess = d + b.e[ i ];
-		}
-		else if ( d > b.e[ i ] )
-		{
-			excess = d - b.e[ i ];
-		}
-		sqDist += excess * excess;
-	}
-	return sqrt( sqDist );
+	p -= m_center;
+	p = ae::Vec3( p.Dot( m_axes[ 0 ] ), p.Dot( m_axes[ 1 ] ), p.Dot( m_axes[ 2 ] ) );
+	ae::Vec3 q = ae::Abs( p ) - m_halfSize;
+	return ae::Max( q, ae::Vec3( 0.0f ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f );
 }
 
-// Intersect segment S(t)=A+t(B-A), 0<=t<=1 against convex polyhedron specified
-// by the n halfspaces defined by the planes p[]. On exit tfirst and tlast
-// define the intersection, if any
-bool OBB::IntersectRay( ae::Vec3 a, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) const
+bool OBB::IntersectLine( Vec3 p, Vec3 d, float* firstOut, float* lastOut ) const
 {
-	// Set initial interval to being the whole segment. For a ray, tlast should be
-	// set to +FLT_MAX. For a line, additionally tfirst should be set to –FLT_MAX
-	float tfirst = 0.0f;
-	float tlast = 1.0f;
-	ae::Plane planes[] =
+	float tfirst = -INFINITY;
+	float tlast = INFINITY;
+	ae::Plane sides[] =
 	{
-		{ c, u[ 0 ] * e[ 0 ] },
-		{ c, u[ 1 ] * e[ 1 ] },
-		{ c, u[ 2 ] * e[ 2 ] },
-		{ c, u[ 0 ] * -e[ 0 ] },
-		{ c, u[ 1 ] * -e[ 1 ] },
-		{ c, u[ 2 ] * -e[ 2 ] }
+		{ m_center + m_axes[ 0 ] * m_halfSize[ 0 ], m_axes[ 0 ] },
+		{ m_center + m_axes[ 1 ] * m_halfSize[ 1 ], m_axes[ 1 ] },
+		{ m_center + m_axes[ 2 ] * m_halfSize[ 2 ], m_axes[ 2 ] },
+		{ m_center - m_axes[ 0 ] * m_halfSize[ 0 ], -m_axes[ 0 ] },
+		{ m_center - m_axes[ 1 ] * m_halfSize[ 1 ], -m_axes[ 1 ] },
+		{ m_center - m_axes[ 2 ] * m_halfSize[ 2 ], -m_axes[ 2 ] }
 	};
-	// Intersect segment against each plane
-	for (int i = 0; i < countof(planes); i++)
+	for (int i = 0; i < countof(sides); i++)
 	{
-		Vec4 p( planes[ i ] );
-		float denom = d.Dot( p.GetXYZ() );
-		float dist = p.w - a.Dot( p.GetXYZ() );
-		// Test if segment runs parallel to the plane
-		if (denom == 0.0f)
+		Vec4 side( sides[ i ] );
+		float denom = d.Dot( side.GetXYZ() );
+		float dist = side.w - p.Dot( side.GetXYZ() );
+		if ( denom == 0.0f )
 		{
-			// If so, return “no intersection” if segment lies outside plane
-			if (dist > 0.0f)
+			if ( dist > 0.0f )
 			{
 				return false;
 			}
 		}
 		else
 		{
-			// Compute parameterized t value for intersection with current plane
 			float t = dist / denom;
-			if (denom < 0.0f)
+			if ( denom < 0.0f )
 			{
-				// When entering halfspace, update tfirst if t is larger
-				if (t > tfirst)
+				if ( t > tfirst )
 				{
 					tfirst = t;
 				}
 			}
 			else
 			{
-				// When exiting halfspace, update tlast if t is smaller
-				if (t < tlast)
+				if ( t < tlast )
 				{
 					tlast = t;
 				}
 			}
-			// Exit with “no intersection” if intersection becomes empty
-			if (tfirst > tlast)
+			if ( tfirst > tlast )
 			{
 				return false;
 			}
 		}
 	}
-	// A nonzero logical intersection, so the segment intersects the polyhedron
-	AE_ASSERT( tfirst >= 0.0f );
-	if ( tOut )
+	if ( firstOut )
 	{
-		*tOut = tfirst;
+		*firstOut = tfirst;
 	}
-	if ( pOut )
+	if ( lastOut )
 	{
-		*pOut = a + d * tfirst;
+		*lastOut = tlast;
 	}
 	return true;
+}
+
+bool OBB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) const
+{
+	float t;
+	if ( IntersectLine( p, d, &t, nullptr ) && t >= 0.0f )
+	{
+		if ( tOut )
+		{
+			*tOut = t;
+		}
+		if ( pOut )
+		{
+			*pOut = p + d * t;
+		}
+		return true;
+	}
+	return false;
+}
+
+Vec3 OBB::GetClosestPointOnSurface( Vec3 p ) const
+{
+	Vec3 q = m_center;
+	Vec3 d = p - m_center;
+	Vec3 l = Vec3( d.Dot( m_axes[ 0 ] ), d.Dot( m_axes[ 1 ] ), d.Dot( m_axes[ 2 ] ) );
+	l /= m_halfSize;
+	Vec3 l2 = ae::Abs( l );
+	float m = ae::Max( l2.x, l2.y, l2.z );
+	if ( m > 1.0f ) // Outside
+	{
+		for ( uint32_t i = 0; i < 3; i++ )
+		{
+			float dist = d.Dot( m_axes[ i ] );
+			if ( dist > m_halfSize[ i ] )
+			{
+				dist = m_halfSize[ i ];
+			}
+			if ( dist < -m_halfSize[ i ] )
+			{
+				dist = -m_halfSize[ i ];
+			}
+			q += m_axes[ i ] * dist;
+		}
+	}
+	else // Inside
+	{
+		int32_t cs;
+		if ( l2.x > l2.y && l2.x > l2.z ) { cs = 0; }
+		else if ( l2.y > l2.z ) { cs = 1; }
+		else { cs = 2; }
+		for ( uint32_t i = 0; i < 3; i++ )
+		{
+			float dist;
+			if ( i == cs )
+			{
+				dist = ( d.Dot( m_axes[ i ] ) > 0.0f ) ? m_halfSize[ i ] : -m_halfSize[ i ];
+			}
+			else
+			{
+				dist = m_halfSize[ i ] * l[ i ];
+			}
+			q += m_axes[ i ] * dist;
+		}
+	}
+	return q;
 }
 
 AABB OBB::GetAABB() const
 {
 	ae::Matrix4 transform = GetTransform();
+	// @TODO: Only have to transform 4 of these and negate them in local space
 	ae::Vec4 corners[] =
 	{
 		transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
