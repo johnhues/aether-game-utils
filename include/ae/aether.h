@@ -280,7 +280,7 @@ const float TWO_PI = 2.0f * PI;
 const float HALF_PI = 0.5f * PI;
 const float QUARTER_PI = 0.25f * PI;
 
-enum class Axis { X, Y, Z };
+enum class Axis { None, X, Y, Z };
 
 //------------------------------------------------------------------------------
 // Standard math operations
@@ -808,12 +808,13 @@ public:
 	Matrix4 GetTransform() const;
 
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
+	bool Contains( Vec3 p ) const;
 	bool Intersect( AABB other ) const;
 	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, float* tOut = nullptr ) const;
 
 private:
-	Vec3 m_min;
-	Vec3 m_max;
+	Vec3 m_min = Vec3( INFINITY );
+	Vec3 m_max = Vec3( -INFINITY );
 };
 std::ostream& operator<<( std::ostream& os, AABB aabb );
 
@@ -1264,6 +1265,7 @@ inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
 
 //------------------------------------------------------------------------------
 // ae::Rect class
+// @TODO: Move this up near Vec3 etc
 //------------------------------------------------------------------------------
 struct Rect
 {
@@ -1292,6 +1294,7 @@ inline std::ostream& operator<<( std::ostream& os, Rect r )
 
 //------------------------------------------------------------------------------
 // ae::RectInt class
+// @TODO: Move this up near Vec3 etc
 //------------------------------------------------------------------------------
 struct RectInt
 {
@@ -1314,6 +1317,37 @@ inline std::ostream& operator<<( std::ostream& os, RectInt r )
 {
 	return os << r.x << " " << r.y << " " << r.w << " " << r.h;
 }
+
+//------------------------------------------------------------------------------
+// ae::BVH class
+//------------------------------------------------------------------------------
+template < typename T >
+class BVH
+{
+public:
+	BVH( const ae::Tag& allocTag );
+	struct Node // @TODO: This could just be BVHNode outside of BVH
+	{
+		ae::AABB aabb;
+		int32_t parent = -1;
+		int32_t left = -1;
+		int32_t right = -1;
+		int32_t leafnode = -1;
+	};
+	
+	void AddRoot( const ae::AABB& aabb );
+	std::pair< int32_t, int32_t > AddChildren( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB );
+	void SetLeafnode( int32_t nodeIdx, const T& data );
+	
+	ae::AABB GetAABB() const;
+	const Node* GetRoot() const;
+	const Node* GetNode( int32_t nodeIdx ) const;
+	const T* GetLeafnode( int32_t leafIdx ) const;
+	
+private:
+	ae::Array< Node > m_nodes;
+	ae::Array< T > m_leafnodes;
+};
 
 //------------------------------------------------------------------------------
 // ae::Hash class (fnv1a)
@@ -2656,11 +2690,18 @@ public:
 	const uint32_t* GetIndices() const { return m_indices.Begin(); }
 	uint32_t GetVertexCount() const { return m_vertices.Length(); }
 	uint32_t GetIndexCount() const { return m_indices.Length(); }
-
+	
 private:
-	ae::Array< ae::Vec3 > m_vertices;
-	ae::Array< uint32_t > m_indices;
+	struct BVHTri { ae::Vec3 p[ 3 ]; };
+	struct BVHLeafnode { BVHTri* tris; uint32_t count; };
+	typedef ae::BVH< BVHLeafnode > TriangleBVH;
+	static void m_BuildBVH( BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx );
+	const ae::Tag m_tag;
+	ae::Array< ae::Vec3 > m_vertices; // @TODO: Remove these and only use m_tris
+	ae::Array< uint32_t > m_indices; // @TODO: Remove these and only use m_tris
 	ae::AABB m_aabb;
+	ae::Array< BVHTri > m_tris;
+	ae::Array< TriangleBVH > m_bvh;
 };
 
 //------------------------------------------------------------------------------
@@ -5969,6 +6010,87 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 }
 
 //------------------------------------------------------------------------------
+// ae::BVH member functions
+//------------------------------------------------------------------------------
+template < typename T >
+BVH< T >::BVH( const ae::Tag& allocTag ) :
+	m_nodes( allocTag ),
+	m_leafnodes( allocTag )
+{}
+
+template < typename T >
+void BVH< T >::AddRoot( const ae::AABB& aabb )
+{
+	AE_ASSERT( !m_nodes.Length() );
+	Node* root = &m_nodes.Append( {} );
+	root->aabb = aabb;
+}
+
+template < typename T >
+std::pair< int32_t, int32_t > BVH< T >::AddChildren( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB )
+{
+	Node* parent = &m_nodes[ parentIdx ];
+	AE_ASSERT( parent->left == -1 && parent->right == -1 );
+	parent->left = m_nodes.Length();
+	parent->right = m_nodes.Length() + 1;
+	parent->aabb = leftAABB;
+	parent->aabb.Expand( rightAABB );
+
+	m_nodes.Append( {} );
+	m_nodes.Append( {} );
+	int32_t leftIdx = m_nodes.Length() - 2;
+	int32_t rightIdx = m_nodes.Length() - 1;
+	Node* left = &m_nodes[ leftIdx ];
+	Node* right = &m_nodes[ rightIdx ];
+	
+	left->aabb = leftAABB;
+	left->parent = parentIdx;
+	right->aabb = rightAABB;
+	right->parent = parentIdx;
+	
+	return { leftIdx, rightIdx };
+}
+
+template < typename T >
+void BVH< T >::SetLeafnode( int32_t nodeIdx, const T& data )
+{
+	Node* node = &m_nodes[ nodeIdx ];
+	if ( node->leafnode >= 0 )
+	{
+		m_leafnodes[ node->leafnode ] = data;
+	}
+	else
+	{
+		node->leafnode = m_leafnodes.Length();
+		m_leafnodes.Append( data );
+	}
+}
+
+template < typename T >
+const typename BVH< T >::Node* BVH< T >::GetRoot() const
+{
+	return GetNode( 0 );
+}
+
+template < typename T >
+const typename BVH< T >::Node* BVH< T >::GetNode( int32_t nodeIdx ) const
+{
+	return ( nodeIdx >= 0 ) ? &m_nodes[ nodeIdx ] : nullptr;
+}
+
+template < typename T >
+const T* BVH< T >::GetLeafnode( int32_t leafIdx ) const
+{
+	return ( leafIdx >= 0 ) ? &m_leafnodes[ leafIdx ] : nullptr;
+}
+
+template < typename T >
+ae::AABB BVH< T >::GetAABB() const
+{
+	return GetRoot()->aabb;
+}
+
+//------------------------------------------------------------------------------
 // ae::VertexData member functions
 //------------------------------------------------------------------------------
 template <> void* VertexData::GetWritableVertices();
@@ -7381,6 +7503,28 @@ Matrix4 Matrix4::GetInverse() const
 	{
 		r.data[ i ] *= det;
 	}
+	
+#if _AE_DEBUG_
+	AE_ASSERT_MSG( r.data[ 0 ] == r.data[ 0 ] &&
+		r.data[ 1 ] == r.data[ 1 ] &&
+		r.data[ 2 ] == r.data[ 2 ] &&
+		r.data[ 3 ] == r.data[ 3 ] &&
+		r.data[ 4 ] == r.data[ 4 ] &&
+		r.data[ 5 ] == r.data[ 5 ] &&
+		r.data[ 6 ] == r.data[ 6 ] &&
+		r.data[ 7 ] == r.data[ 7 ] &&
+		r.data[ 8 ] == r.data[ 8 ] &&
+		r.data[ 9 ] == r.data[ 9 ] &&
+		r.data[ 10 ] == r.data[ 10 ] &&
+		r.data[ 11 ] == r.data[ 11 ] &&
+		r.data[ 12 ] == r.data[ 12 ] &&
+		r.data[ 13 ] == r.data[ 13 ] &&
+		r.data[ 14 ] == r.data[ 14 ] &&
+		r.data[ 15 ] == r.data[ 15 ],
+		"NAN detected on ae::Matrix4::GetInverse()"
+	);
+#endif
+	
 	return r;
 }
 
@@ -8148,8 +8292,15 @@ ae::Matrix4 AABB::GetTransform() const
 
 float AABB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
 {
-	ae::Vec3 q = ae::Abs( p ) - GetHalfSize();
-	return ae::Max( q, ae::Vec3( 0.0f ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f );
+	ae::Vec3 q = ae::Abs( p - GetCenter() ) - GetHalfSize();
+	return ae::Max( q, ae::Vec3( 0.0f ) ).Length() + ae::Min( ae::Max( q.x, q.y, q.z ), 0.0f );
+}
+
+bool AABB::Contains( Vec3 p ) const
+{
+	return !( p.x < m_min.x || m_max.x < p.x
+		|| p.y < m_min.y || m_max.y < p.y
+		|| p.z < m_min.z || m_max.z < p.z );
 }
 
 bool AABB::Intersect( AABB other ) const
@@ -12297,8 +12448,8 @@ void OpenGLDebugCallback( GLenum source,
 	//std::cout << "---------------------opengl-callback-start------------" << std::endl;
 	//std::cout << "message: " << message << std::endl;
 	//std::cout << "type: ";
-	switch ( type )
-	{
+	//switch ( type )
+	//{
 	//	case GL_DEBUG_TYPE_ERROR:
 	//		std::cout << "ERROR";
 	//		break;
@@ -15414,8 +15565,11 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 // ae::CollisionMesh member functions
 //------------------------------------------------------------------------------
 CollisionMesh::CollisionMesh( ae::Tag tag ) :
+	m_tag( tag ),
 	m_vertices( tag ),
-	m_indices( tag )
+	m_indices( tag ),
+	m_tris( tag ),
+	m_bvh( tag )
 {
 	Clear();
 }
@@ -15487,6 +15641,98 @@ void CollisionMesh::Load( const Params& params )
 	{
 		AE_FAIL_MSG( "Invalid index size" );
 	}
+	
+	uint32_t triCount = params.indexCount / 3;
+	m_tris.Reserve( triCount );
+	for ( uint32_t i = 0; i < triCount; i++ )
+	{
+		BVHTri& tri = m_tris.Append( {} );
+		tri.p[ 0 ] = m_vertices[ m_indices[ i * 3 ] ];
+		tri.p[ 1 ] = m_vertices[ m_indices[ i * 3 + 1 ] ];
+		tri.p[ 2 ] = m_vertices[ m_indices[ i * 3 + 2 ] ];
+	}
+	auto* bvh = &m_bvh.Append( { m_tag } );
+	bvh->AddRoot( m_aabb );
+	m_BuildBVH( m_tris.Begin(), m_tris.Length(), bvh, 0 );
+}
+
+void CollisionMesh::m_BuildBVH( BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx )
+{
+	AE_ASSERT( count );
+	if ( count <= 32 )
+	{
+		BVHLeafnode leafnode;
+		leafnode.tris = tris;
+		leafnode.count = count;
+		bvh->SetLeafnode( bvhNodeIdx, leafnode );
+		return;
+	}
+	
+	const TriangleBVH::Node* bvhNode = bvh->GetNode( bvhNodeIdx );
+	ae::Vec3 splitAxis( 0.0f );
+	ae::Vec3 halfSize = bvhNode->aabb.GetHalfSize();
+	if ( halfSize.x > halfSize.y && halfSize.x > halfSize.z ) { splitAxis = ae::Vec3( 1.0f, 0.0f, 0.0f ); }
+	else if ( halfSize.y > halfSize.z ) { splitAxis = ae::Vec3( 0.0f, 1.0f, 0.0f ); }
+	else { splitAxis = ae::Vec3( 0.0f, 0.0f, 1.0f ); }
+	ae::Plane splitPlane( bvhNode->aabb.GetCenter(), splitAxis );
+	
+	ae::AABB leftBoundary;
+	ae::AABB rightBoundary;
+	BVHTri* middle = std::partition( tris, tris + count, [splitPlane, &leftBoundary, &rightBoundary]( const BVHTri& t )
+	{
+		float left = -INFINITY;
+		float right = -INFINITY;
+		for ( uint32_t j = 0; j < 3; j++ )
+		{
+			ae::Vec3 p = t.p[ j ];
+			float d = splitPlane.GetSignedDistance( p );
+			if ( d >= 0.0f )
+			{
+				right = ae::Max( right, d );
+			}
+			else
+			{
+				left = ae::Max( left, -d );
+			}
+		}
+		if ( left > right )
+		{
+			leftBoundary.Expand( t.p[ 0 ] );
+			leftBoundary.Expand( t.p[ 1 ] );
+			leftBoundary.Expand( t.p[ 2 ] );
+			return true;
+		}
+		else
+		{
+			rightBoundary.Expand( t.p[ 0 ] );
+			rightBoundary.Expand( t.p[ 1 ] );
+			rightBoundary.Expand( t.p[ 2 ] );
+			return false;
+		}
+	});
+	uint32_t leftCount = middle - tris;
+	uint32_t rightCount = ( tris + count ) - middle;
+	
+	if ( !leftCount )
+	{
+		BVHLeafnode leafnode;
+		leafnode.tris = middle;
+		leafnode.count = rightCount;
+		bvh->SetLeafnode( bvhNodeIdx, leafnode );
+		return;
+	}
+	else if ( !rightCount )
+	{
+		BVHLeafnode leafnode;
+		leafnode.tris = tris;
+		leafnode.count = leftCount;
+		bvh->SetLeafnode( bvhNodeIdx, leafnode );
+		return;
+	}
+	
+	auto childIndices = bvh->AddChildren( bvhNodeIdx, leftBoundary, rightBoundary );
+	m_BuildBVH( tris, leftCount, bvh, childIndices.first );
+	m_BuildBVH( middle, rightCount, bvh, childIndices.second );
 }
 
 void CollisionMesh::Clear()
@@ -15537,37 +15783,67 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	const bool ccw = params.hitCounterclockwise;
 	const bool cw = params.hitClockwise;
 	
-	const uint32_t triCount = m_indices.Length() / 3;
-	const uint32_t* indices = m_indices.Begin();
-	const ae::Vec3* vertices = &m_vertices[ 0 ];
-
 	CollisionMesh::RaycastResult result;
 	uint32_t hitCount  = 0;
 	RaycastResult::Hit hits[ result.hits.Size() + 1 ];
 	const uint32_t maxHits = ae::Min( params.maxHits, result.hits.Size() );
-	for ( uint32_t i = 0; i < triCount; i++ )
+	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const TriangleBVH::Node* current ) -> void
 	{
-		ae::Vec3 p, n;
-		ae::Vec3 a = vertices[ indices[ i * 3 ] ];
-		ae::Vec3 b = vertices[ indices[ i * 3 + 1 ] ];
-		ae::Vec3 c = vertices[ indices[ i * 3 + 2 ] ];
-		if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
+		if ( !current->aabb.IntersectRay( source, ray ) )
 		{
-			RaycastResult::Hit& outHit = hits[ hitCount ];
-			hitCount++;
-			AE_ASSERT( hitCount <= maxHits + 1 ); // Allow one extra hit, then sort and remove last hit below
-			
-			outHit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) );
-			outHit.normal = ae::Vec3( params.transform * ae::Vec4( n, 0.0f ) );
-			outHit.distance = ( outHit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
-			outHit.userData = params.userData;
-			
-			if ( hitCount > maxHits )
+			return;
+		}
+		if ( params.debug )
+		{
+			ae::OBB obb( params.transform * current->aabb.GetTransform() );
+			params.debug->AddOBB( obb.GetTransform(), params.debugColor );
+		}
+		if ( const BVHLeafnode* leafnode = bvh->GetLeafnode( current->leafnode ) )
+		{
+			for ( uint32_t i = 0; i < leafnode->count; i++ )
 			{
-				std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b ) { return a.distance < b.distance; } );
-				hitCount = maxHits;
+				ae::Vec3 p, n;
+				ae::Vec3 a = leafnode->tris[ i ].p[ 0 ];
+				ae::Vec3 b = leafnode->tris[ i ].p[ 1 ];
+				ae::Vec3 c = leafnode->tris[ i ].p[ 2 ];
+				if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
+				{
+					RaycastResult::Hit& outHit = hits[ hitCount ];
+					hitCount++;
+					AE_ASSERT( hitCount <= maxHits + 1 ); // Allow one extra hit, then sort and remove last hit below
+
+					// Undo local space transforms
+					outHit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) );
+					outHit.normal = ae::Vec3( params.transform * ae::Vec4( n, 0.0f ) );
+					outHit.distance = ( outHit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
+					outHit.userData = params.userData;
+
+					if ( hitCount > maxHits )
+					{
+						std::sort( hits, hits + hitCount, []( const RaycastResult::Hit& a, const RaycastResult::Hit& b )
+						{
+							return a.distance < b.distance;
+						});
+						hitCount = maxHits;
+					}
+				}
 			}
 		}
+		// @TODO: Depth-first here is not ideal. See Real-time Collision Detection: 6.3.1 Descent Rules
+		// Improving this will require early out when max hits have been recorded
+		// and pending search volumes are farther away than the farthest hit.
+		if ( const TriangleBVH::Node* left = bvh->GetNode( current->left ) )
+		{
+			bvhFn( bvhFn, bvh, left );
+		}
+		if ( const TriangleBVH::Node* right = bvh->GetNode( current->right ) )
+		{
+			bvhFn( bvhFn, bvh, right );
+		}
+	};
+	for ( const TriangleBVH& bvh : m_bvh )
+	{
+		bvhFn( bvhFn, &bvh, bvh.GetRoot() );
 	}
 	
 	if ( ae::DebugLines* debug = params.debug )
@@ -15633,69 +15909,107 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 	PushOutInfo result;
 	result.sphere = prevInfo.sphere;
 	result.velocity = prevInfo.velocity;
-	bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
+	const bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
 	
-	const uint32_t triCount = m_indices.Length() / 3;
-	const uint32_t* indices = m_indices.Begin();
-	const ae::Vec3* vertices = &m_vertices[ 0 ];
-	
-	for ( uint32_t i = 0; i < triCount; i++ )
+	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const TriangleBVH::Node* current ) -> void
 	{
-		ae::Vec3 a, b, c;
+		// AABB/OBB early out
+		ae::AABB aabb = current->aabb;
 		if ( hasIdentityTransform )
 		{
-			a = vertices[ indices[ i * 3 ] ];
-			b = vertices[ indices[ i * 3 + 1 ] ];
-			c = vertices[ indices[ i * 3 + 2 ] ];
+			if ( aabb.GetSignedDistanceFromSurface( prevInfo.sphere.center ) > prevInfo.sphere.radius )
+			{
+				return;
+			}
+			if ( params.debug )
+			{
+				params.debug->AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), params.debugColor );
+			}
 		}
 		else
 		{
-			a = ae::Vec3( params.transform * ae::Vec4( vertices[ indices[ i * 3 ] ], 1.0f ) );
-			b = ae::Vec3( params.transform * ae::Vec4( vertices[ indices[ i * 3 + 1 ] ], 1.0f ) );
-			c = ae::Vec3( params.transform * ae::Vec4( vertices[ indices[ i * 3 + 2 ] ], 1.0f ) );
+			ae::OBB obb( params.transform * aabb.GetTransform() );
+			if ( obb.GetSignedDistanceFromSurface( prevInfo.sphere.center ) > prevInfo.sphere.radius )
+			{
+				return;
+			}
+			if ( params.debug )
+			{
+				params.debug->AddOBB( obb.GetTransform(), params.debugColor );
+			}
 		}
-		
-		ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
-		ae::Vec3 triCenter( ( a + b + c ) / 3.0f );
-		
-		ae::Vec3 triToSphereDir = ( result.sphere.center - triCenter );
-		if ( triNormal.Dot( triToSphereDir ) < 0.0f )
+		// Triangle checks
+		if ( const BVHLeafnode* leafnode = bvh->GetLeafnode( current->leafnode ) )
 		{
-			continue;
-		}
+			for ( uint32_t i = 0; i < leafnode->count; i++ )
+			{
+				ae::Vec3 p, n;
+				ae::Vec3 a = leafnode->tris[ i ].p[ 0 ];
+				ae::Vec3 b = leafnode->tris[ i ].p[ 1 ];
+				ae::Vec3 c = leafnode->tris[ i ].p[ 2 ];
+				if ( !hasIdentityTransform )
+				{
+					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
+					b = ae::Vec3( params.transform * ae::Vec4( b, 1.0f ) );
+					c = ae::Vec3( params.transform * ae::Vec4( c, 1.0f ) );
+				}
 		
-		ae::Vec3 triHitPos;
-		if ( result.sphere.IntersectTriangle( a, b, c, &triHitPos ) )
-		{
-			triToSphereDir = ( result.sphere.center - triHitPos );
-			if ( triNormal.Dot( triToSphereDir ) < 0.0f )
-			{
-				continue;
-			}
-			
-			ae::Vec3 closestSpherePoint = ( triHitPos - result.sphere.center ).SafeNormalizeCopy();
-			closestSpherePoint *= result.sphere.radius;
-			closestSpherePoint += result.sphere.center;
-			
-			result.sphere.center += triHitPos - closestSpherePoint;
-			result.velocity.ZeroDirection( -triNormal );
-			
-			// @TODO: Sort. Shouldn't randomly discard hits.
-			if ( result.hits.Length() < result.hits.Size() )
-			{
-				result.hits.Append( { triHitPos, triNormal } );
-			}
-			
-			if ( ae::DebugLines* debug = params.debug )
-			{
-				debug->AddLine( a, b, params.debugColor );
-				debug->AddLine( b, c, params.debugColor );
-				debug->AddLine( c, a, params.debugColor );
-				
-				debug->AddLine( triHitPos, triHitPos + triNormal * 2.0f, params.debugColor );
-				debug->AddSphere( triHitPos, 0.05f, params.debugColor, 4 );
+				ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
+				ae::Vec3 triCenter( ( a + b + c ) / 3.0f );
+		
+				ae::Vec3 triToSphereDir = ( result.sphere.center - triCenter );
+				if ( triNormal.Dot( triToSphereDir ) < 0.0f )
+				{
+					continue;
+				}
+		
+				ae::Vec3 triHitPos;
+				if ( result.sphere.IntersectTriangle( a, b, c, &triHitPos ) )
+				{
+					triToSphereDir = ( result.sphere.center - triHitPos );
+					if ( triNormal.Dot( triToSphereDir ) < 0.0f )
+					{
+						continue;
+					}
+		
+					ae::Vec3 closestSpherePoint = ( triHitPos - result.sphere.center ).SafeNormalizeCopy();
+					closestSpherePoint *= result.sphere.radius;
+					closestSpherePoint += result.sphere.center;
+		
+					result.sphere.center += triHitPos - closestSpherePoint;
+					result.velocity.ZeroDirection( -triNormal );
+		
+					// @TODO: Sort. Shouldn't randomly discard hits.
+					if ( result.hits.Length() < result.hits.Size() )
+					{
+						result.hits.Append( { triHitPos, triNormal } );
+					}
+		
+					if ( ae::DebugLines* debug = params.debug )
+					{
+						debug->AddLine( a, b, params.debugColor );
+						debug->AddLine( b, c, params.debugColor );
+						debug->AddLine( c, a, params.debugColor );
+		
+						debug->AddLine( triHitPos, triHitPos + triNormal * 2.0f, params.debugColor );
+						debug->AddSphere( triHitPos, 0.05f, params.debugColor, 4 );
+					}
+				}
 			}
 		}
+		// @TODO: Depth-first here is not ideal. See Real-time Collision Detection: 6.3.1 Descent Rules
+		if ( const TriangleBVH::Node* left = bvh->GetNode( current->left ) )
+		{
+			bvhFn( bvhFn, bvh, left );
+		}
+		if ( const TriangleBVH::Node* right = bvh->GetNode( current->right ) )
+		{
+			bvhFn( bvhFn, bvh, right );
+		}
+	};
+	for ( const TriangleBVH& bvh : m_bvh )
+	{
+		bvhFn( bvhFn, &bvh, bvh.GetRoot() );
 	}
 	
 	if ( result.hits.Length() )
