@@ -1319,34 +1319,37 @@ inline std::ostream& operator<<( std::ostream& os, RectInt r )
 }
 
 //------------------------------------------------------------------------------
+// ae::BVHNode struct
+//------------------------------------------------------------------------------
+struct BVHNode
+{
+	ae::AABB aabb;
+	int32_t parentIdx = -1;
+	int32_t leftIdx = -1;
+	int32_t rightIdx = -1;
+	int32_t leafIdx = -1;
+};
+
+//------------------------------------------------------------------------------
 // ae::BVH class
 //------------------------------------------------------------------------------
-template < typename T >
+template < typename Leaf >
 class BVH
 {
 public:
 	BVH( const ae::Tag& allocTag );
-	struct Node // @TODO: This could just be BVHNode outside of BVH
-	{
-		ae::AABB aabb;
-		int32_t parent = -1;
-		int32_t left = -1;
-		int32_t right = -1;
-		int32_t leafnode = -1;
-	};
-	
 	void AddRoot( const ae::AABB& aabb );
 	std::pair< int32_t, int32_t > AddChildren( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB );
-	void SetLeafnode( int32_t nodeIdx, const T& data );
+	void SetLeaf( int32_t nodeIdx, const Leaf& data );
 	
 	ae::AABB GetAABB() const;
-	const Node* GetRoot() const;
-	const Node* GetNode( int32_t nodeIdx ) const;
-	const T* GetLeafnode( int32_t leafIdx ) const;
+	const BVHNode* GetRoot() const;
+	const BVHNode* GetNode( int32_t nodeIdx ) const;
+	const Leaf* GetLeaf( int32_t leafIdx ) const;
 	
 private:
-	ae::Array< Node > m_nodes;
-	ae::Array< T > m_leafnodes;
+	ae::Array< BVHNode > m_nodes;
+	ae::Array< Leaf > m_leafs;
 };
 
 //------------------------------------------------------------------------------
@@ -2693,8 +2696,8 @@ public:
 	
 private:
 	struct BVHTri { uint32_t idx[ 3 ]; };
-	struct BVHLeafnode { BVHTri* tris; uint32_t count; };
-	typedef ae::BVH< BVHLeafnode > TriangleBVH;
+	struct BVHLeaf { BVHTri* tris; uint32_t count; };
+	typedef ae::BVH< BVHLeaf > TriangleBVH;
 	static void m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx );
 	const ae::Tag m_tag;
 	ae::AABB m_aabb;
@@ -6011,27 +6014,27 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 //------------------------------------------------------------------------------
 // ae::BVH member functions
 //------------------------------------------------------------------------------
-template < typename T >
-BVH< T >::BVH( const ae::Tag& allocTag ) :
+template < typename Leaf >
+BVH< Leaf >::BVH( const ae::Tag& allocTag ) :
 	m_nodes( allocTag ),
-	m_leafnodes( allocTag )
+	m_leafs( allocTag )
 {}
 
-template < typename T >
-void BVH< T >::AddRoot( const ae::AABB& aabb )
+template < typename Leaf >
+void BVH< Leaf >::AddRoot( const ae::AABB& aabb )
 {
 	AE_ASSERT( !m_nodes.Length() );
-	Node* root = &m_nodes.Append( {} );
+	BVHNode* root = &m_nodes.Append( {} );
 	root->aabb = aabb;
 }
 
-template < typename T >
-std::pair< int32_t, int32_t > BVH< T >::AddChildren( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB )
+template < typename Leaf >
+std::pair< int32_t, int32_t > BVH< Leaf >::AddChildren( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB )
 {
-	Node* parent = &m_nodes[ parentIdx ];
-	AE_ASSERT( parent->left == -1 && parent->right == -1 );
-	parent->left = m_nodes.Length();
-	parent->right = m_nodes.Length() + 1;
+	BVHNode* parent = &m_nodes[ parentIdx ];
+	AE_ASSERT( parent->leftIdx == -1 && parent->rightIdx == -1 );
+	parent->leftIdx = m_nodes.Length();
+	parent->rightIdx = m_nodes.Length() + 1;
 	parent->aabb = leftAABB;
 	parent->aabb.Expand( rightAABB );
 
@@ -6039,52 +6042,52 @@ std::pair< int32_t, int32_t > BVH< T >::AddChildren( int32_t parentIdx, const ae
 	m_nodes.Append( {} );
 	int32_t leftIdx = m_nodes.Length() - 2;
 	int32_t rightIdx = m_nodes.Length() - 1;
-	Node* left = &m_nodes[ leftIdx ];
-	Node* right = &m_nodes[ rightIdx ];
+	BVHNode* left = &m_nodes[ leftIdx ];
+	BVHNode* right = &m_nodes[ rightIdx ];
 	
 	left->aabb = leftAABB;
-	left->parent = parentIdx;
+	left->parentIdx = parentIdx;
 	right->aabb = rightAABB;
-	right->parent = parentIdx;
+	right->parentIdx = parentIdx;
 	
 	return { leftIdx, rightIdx };
 }
 
-template < typename T >
-void BVH< T >::SetLeafnode( int32_t nodeIdx, const T& data )
+template < typename Leaf >
+void BVH< Leaf >::SetLeaf( int32_t nodeIdx, const Leaf& data )
 {
-	Node* node = &m_nodes[ nodeIdx ];
-	if ( node->leafnode >= 0 )
+	BVHNode* node = &m_nodes[ nodeIdx ];
+	if ( node->leafIdx >= 0 )
 	{
-		m_leafnodes[ node->leafnode ] = data;
+		m_leafs[ node->leafIdx ] = data;
 	}
 	else
 	{
-		node->leafnode = m_leafnodes.Length();
-		m_leafnodes.Append( data );
+		node->leafIdx = m_leafs.Length();
+		m_leafs.Append( data );
 	}
 }
 
-template < typename T >
-const typename BVH< T >::Node* BVH< T >::GetRoot() const
+template < typename Leaf >
+const BVHNode* BVH< Leaf >::GetRoot() const
 {
 	return GetNode( 0 );
 }
 
-template < typename T >
-const typename BVH< T >::Node* BVH< T >::GetNode( int32_t nodeIdx ) const
+template < typename Leaf >
+const BVHNode* BVH< Leaf >::GetNode( int32_t nodeIdx ) const
 {
 	return ( nodeIdx >= 0 ) ? &m_nodes[ nodeIdx ] : nullptr;
 }
 
-template < typename T >
-const T* BVH< T >::GetLeafnode( int32_t leafIdx ) const
+template < typename Leaf >
+const Leaf* BVH< Leaf >::GetLeaf( int32_t leafIdx ) const
 {
-	return ( leafIdx >= 0 ) ? &m_leafnodes[ leafIdx ] : nullptr;
+	return ( leafIdx >= 0 ) ? &m_leafs[ leafIdx ] : nullptr;
 }
 
-template < typename T >
-ae::AABB BVH< T >::GetAABB() const
+template < typename Leaf >
+ae::AABB BVH< Leaf >::GetAABB() const
 {
 	return GetRoot()->aabb;
 }
@@ -15634,14 +15637,14 @@ void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t co
 	AE_ASSERT( count );
 	if ( count <= 32 )
 	{
-		BVHLeafnode leafnode;
-		leafnode.tris = tris;
-		leafnode.count = count;
-		bvh->SetLeafnode( bvhNodeIdx, leafnode );
+		BVHLeaf leaf;
+		leaf.tris = tris;
+		leaf.count = count;
+		bvh->SetLeaf( bvhNodeIdx, leaf );
 		return;
 	}
 	
-	const TriangleBVH::Node* bvhNode = bvh->GetNode( bvhNodeIdx );
+	const BVHNode* bvhNode = bvh->GetNode( bvhNodeIdx );
 	ae::Vec3 splitAxis( 0.0f );
 	ae::Vec3 halfSize = bvhNode->aabb.GetHalfSize();
 	if ( halfSize.x > halfSize.y && halfSize.x > halfSize.z ) { splitAxis = ae::Vec3( 1.0f, 0.0f, 0.0f ); }
@@ -15688,18 +15691,18 @@ void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t co
 	
 	if ( !leftCount )
 	{
-		BVHLeafnode leafnode;
-		leafnode.tris = middle;
-		leafnode.count = rightCount;
-		bvh->SetLeafnode( bvhNodeIdx, leafnode );
+		BVHLeaf leaf;
+		leaf.tris = middle;
+		leaf.count = rightCount;
+		bvh->SetLeaf( bvhNodeIdx, leaf );
 		return;
 	}
 	else if ( !rightCount )
 	{
-		BVHLeafnode leafnode;
-		leafnode.tris = tris;
-		leafnode.count = leftCount;
-		bvh->SetLeafnode( bvhNodeIdx, leafnode );
+		BVHLeaf leaf;
+		leaf.tris = tris;
+		leaf.count = leftCount;
+		bvh->SetLeaf( bvhNodeIdx, leaf );
 		return;
 	}
 	
@@ -15760,7 +15763,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	uint32_t hitCount  = 0;
 	RaycastResult::Hit hits[ result.hits.Size() + 1 ];
 	const uint32_t maxHits = ae::Min( params.maxHits, result.hits.Size() );
-	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const TriangleBVH::Node* current ) -> void
+	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const BVHNode* current ) -> void
 	{
 		if ( !current->aabb.IntersectRay( source, ray ) )
 		{
@@ -15771,14 +15774,14 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 			ae::OBB obb( params.transform * current->aabb.GetTransform() );
 			params.debug->AddOBB( obb.GetTransform(), params.debugColor );
 		}
-		if ( const BVHLeafnode* leafnode = bvh->GetLeafnode( current->leafnode ) )
+		if ( const BVHLeaf* leaf = bvh->GetLeaf( current->leafIdx ) )
 		{
-			for ( uint32_t i = 0; i < leafnode->count; i++ )
+			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
 				ae::Vec3 p, n;
-				ae::Vec3 a = m_vertices[ leafnode->tris[ i ].idx[ 0 ] ];
-				ae::Vec3 b = m_vertices[ leafnode->tris[ i ].idx[ 1 ] ];
-				ae::Vec3 c = m_vertices[ leafnode->tris[ i ].idx[ 2 ] ];
+				ae::Vec3 a = m_vertices[ leaf->tris[ i ].idx[ 0 ] ];
+				ae::Vec3 b = m_vertices[ leaf->tris[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_vertices[ leaf->tris[ i ].idx[ 2 ] ];
 				if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit& outHit = hits[ hitCount ];
@@ -15805,11 +15808,11 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 		// @TODO: Depth-first here is not ideal. See Real-time Collision Detection: 6.3.1 Descent Rules
 		// Improving this will require early out when max hits have been recorded
 		// and pending search volumes are farther away than the farthest hit.
-		if ( const TriangleBVH::Node* left = bvh->GetNode( current->left ) )
+		if ( const BVHNode* left = bvh->GetNode( current->leftIdx ) )
 		{
 			bvhFn( bvhFn, bvh, left );
 		}
-		if ( const TriangleBVH::Node* right = bvh->GetNode( current->right ) )
+		if ( const BVHNode* right = bvh->GetNode( current->rightIdx ) )
 		{
 			bvhFn( bvhFn, bvh, right );
 		}
@@ -15884,7 +15887,7 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 	result.velocity = prevInfo.velocity;
 	const bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
 	
-	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const TriangleBVH::Node* current ) -> void
+	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const BVHNode* current ) -> void
 	{
 		// AABB/OBB early out
 		ae::AABB aabb = current->aabb;
@@ -15912,14 +15915,14 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 			}
 		}
 		// Triangle checks
-		if ( const BVHLeafnode* leafnode = bvh->GetLeafnode( current->leafnode ) )
+		if ( const BVHLeaf* leaf = bvh->GetLeaf( current->leafIdx ) )
 		{
-			for ( uint32_t i = 0; i < leafnode->count; i++ )
+			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
 				ae::Vec3 p, n;
-				ae::Vec3 a = m_vertices[ leafnode->tris[ i ].idx[ 0 ] ];
-				ae::Vec3 b = m_vertices[ leafnode->tris[ i ].idx[ 1 ] ];
-				ae::Vec3 c = m_vertices[ leafnode->tris[ i ].idx[ 2 ] ];
+				ae::Vec3 a = m_vertices[ leaf->tris[ i ].idx[ 0 ] ];
+				ae::Vec3 b = m_vertices[ leaf->tris[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_vertices[ leaf->tris[ i ].idx[ 2 ] ];
 				if ( !hasIdentityTransform )
 				{
 					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
@@ -15971,11 +15974,11 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 			}
 		}
 		// @TODO: Depth-first here is not ideal. See Real-time Collision Detection: 6.3.1 Descent Rules
-		if ( const TriangleBVH::Node* left = bvh->GetNode( current->left ) )
+		if ( const BVHNode* left = bvh->GetNode( current->leftIdx ) )
 		{
 			bvhFn( bvhFn, bvh, left );
 		}
-		if ( const TriangleBVH::Node* right = bvh->GetNode( current->right ) )
+		if ( const BVHNode* right = bvh->GetNode( current->rightIdx ) )
 		{
 			bvhFn( bvhFn, bvh, right );
 		}
