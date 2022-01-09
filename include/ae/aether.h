@@ -833,8 +833,8 @@ public:
 
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
 	Vec3 GetClosestPointOnSurface( Vec3 p ) const;
-	bool IntersectLine( Vec3 p, Vec3 d, float* firstOut = nullptr, float* lastOut = nullptr ) const;
-	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, float* tOut = nullptr ) const;
+	bool IntersectLine( Vec3 p, Vec3 d, float* firstOut = nullptr, float* lastOut = nullptr, ae::Vec3* n0Out = nullptr, ae::Vec3* n1Out = nullptr ) const;
+	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, ae::Vec3* nOut = nullptr, float* tOut = nullptr ) const;
 
 	AABB GetAABB() const;
 
@@ -8092,8 +8092,9 @@ ae::Vec3 Plane::GetClosestPointToOrigin() const
 	return m_plane.GetXYZ() * m_plane.w;
 }
 
-bool Plane::IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* out ) const
+bool Plane::IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* pOut ) const
 {
+	// @TODO: Rename dir to ray. Don't normalize. tOut should be relative to input dir.
 	dir.SafeNormalize();
 	
 	ae::Vec3 n = m_plane.GetXYZ();
@@ -8108,15 +8109,15 @@ bool Plane::IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* out
 
 	ae::Vec3 diff = pos - p;
 	float b = diff.Dot( n );
-	float c = b / a;
+	float t = b / a;
 
 	if ( tOut )
 	{
-		*tOut = c;
+		*tOut = t;
 	}
-	if ( out )
+	if ( pOut )
 	{
-		*out = pos - dir * c;
+		*pOut = pos - dir * t;
 	}
 	return true;
 }
@@ -8415,10 +8416,11 @@ float OBB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
 	return ae::Max( q, ae::Vec3( 0.0f ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f );
 }
 
-bool OBB::IntersectLine( Vec3 p, Vec3 d, float* firstOut, float* lastOut ) const
+bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n0Out, ae::Vec3* n1Out ) const
 {
 	float tfirst = -INFINITY;
 	float tlast = INFINITY;
+	ae::Vec3 n0, n1;
 	ae::Plane sides[] =
 	{
 		{ m_center + m_axes[ 0 ] * m_halfSize[ 0 ], m_axes[ 0 ] },
@@ -8428,7 +8430,7 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* firstOut, float* lastOut ) const
 		{ m_center - m_axes[ 1 ] * m_halfSize[ 1 ], -m_axes[ 1 ] },
 		{ m_center - m_axes[ 2 ] * m_halfSize[ 2 ], -m_axes[ 2 ] }
 	};
-	for (int i = 0; i < countof(sides); i++)
+	for ( uint32_t i = 0; i < countof(sides); i++ )
 	{
 		Vec4 side( sides[ i ] );
 		float denom = d.Dot( side.GetXYZ() );
@@ -8448,14 +8450,13 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* firstOut, float* lastOut ) const
 				if ( t > tfirst )
 				{
 					tfirst = t;
+					n0 = ( i < 3 ) ? m_axes[ i % 3 ] : -m_axes[ i % 3 ];
 				}
 			}
-			else
+			else if ( t < tlast )
 			{
-				if ( t < tlast )
-				{
-					tlast = t;
-				}
+				tlast = t;
+				n1 = ( i < 3 ) ? m_axes[ i % 3 ] : -m_axes[ i % 3 ];
 			}
 			if ( tfirst > tlast )
 			{
@@ -8463,21 +8464,17 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* firstOut, float* lastOut ) const
 			}
 		}
 	}
-	if ( firstOut )
-	{
-		*firstOut = tfirst;
-	}
-	if ( lastOut )
-	{
-		*lastOut = tlast;
-	}
+	if ( t0Out ) { *t0Out = tfirst; }
+	if ( t1Out ) { *t1Out = tlast; }
+	if ( n0Out ) { *n0Out = n0; }
+	if ( n1Out ) { *n1Out = n1; }
 	return true;
 }
 
-bool OBB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) const
+bool OBB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut ) const
 {
 	float t;
-	if ( IntersectLine( p, d, &t, nullptr ) && t >= 0.0f )
+	if ( IntersectLine( p, d, &t, nullptr, nOut, nullptr ) && t >= 0.0f && t <= 1.0f )
 	{
 		if ( tOut )
 		{
@@ -8494,13 +8491,12 @@ bool OBB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) co
 
 Vec3 OBB::GetClosestPointOnSurface( Vec3 p ) const
 {
-	Vec3 q = m_center;
-	Vec3 d = p - m_center;
-	Vec3 l = Vec3( d.Dot( m_axes[ 0 ] ), d.Dot( m_axes[ 1 ] ), d.Dot( m_axes[ 2 ] ) );
-	l /= m_halfSize;
-	Vec3 l2 = ae::Abs( l );
-	float m = ae::Max( l2.x, l2.y, l2.z );
-	if ( m > 1.0f ) // Outside
+	Vec3 result = m_center;
+	const Vec3 d = p - m_center;
+	const Vec3 l = Vec3( d.Dot( m_axes[ 0 ] ), d.Dot( m_axes[ 1 ] ), d.Dot( m_axes[ 2 ] ) );
+	const Vec3 l2 = ae::Abs( l ) - m_halfSize;
+	const float m = ae::Max( l2.x, l2.y, l2.z );
+	if ( m > 0.0f ) // Outside
 	{
 		for ( uint32_t i = 0; i < 3; i++ )
 		{
@@ -8513,7 +8509,7 @@ Vec3 OBB::GetClosestPointOnSurface( Vec3 p ) const
 			{
 				dist = -m_halfSize[ i ];
 			}
-			q += m_axes[ i ] * dist;
+			result += m_axes[ i ] * dist;
 		}
 	}
 	else // Inside
@@ -8527,16 +8523,16 @@ Vec3 OBB::GetClosestPointOnSurface( Vec3 p ) const
 			float dist;
 			if ( i == cs )
 			{
-				dist = ( d.Dot( m_axes[ i ] ) > 0.0f ) ? m_halfSize[ i ] : -m_halfSize[ i ];
+				dist = ( l[ i ] > 0.0f ) ? m_halfSize[ i ] : -m_halfSize[ i ];
 			}
 			else
 			{
-				dist = m_halfSize[ i ] * l[ i ];
+				dist = l[ i ];
 			}
-			q += m_axes[ i ] * dist;
+			result += m_axes[ i ] * dist;
 		}
 	}
-	return q;
+	return result;
 }
 
 AABB OBB::GetAABB() const
@@ -15734,7 +15730,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	{
 		float obbDistance = ae::MaxValue< float >();
 		ae::OBB obb( params.transform * m_aabb.GetTransform() );
-		if ( !obb.IntersectRay( params.source, normParamsDir, nullptr, &obbDistance )
+		if ( !obb.IntersectRay( params.source, normParamsDir, nullptr, nullptr, &obbDistance )
 			|| ( limitRay && obbDistance > params.maxLength ) )
 		{
 			if ( ae::DebugLines* debug = params.debug )

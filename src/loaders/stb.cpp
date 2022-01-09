@@ -27,10 +27,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+namespace ae {
+
 //------------------------------------------------------------------------------
 // stb_LoadPng
 //------------------------------------------------------------------------------
-void ae_stb_LoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
+void stbLoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
 {
   uint32_t fileSize = ae::FileSystem::GetSize( file );
   AE_ASSERT_MSG( fileSize, "Could not load #", file );
@@ -88,3 +90,5 @@ void ae_stb_LoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filt
   stbi_image_free( image );
   free( fileBuffer );
 }
+
+} // End ae namespace

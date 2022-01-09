@@ -222,9 +222,9 @@ add_bundle("Geometry"
 	"ae.12_geometry"
 	"0.0.0"
 	"Icon"
-	"12_Geometry.cpp;${AE_EXAMPLE_SOURCES}"
+	"12_Geometry.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
 	"data/Icon.icns;data/font.png"
-	"ae"
+	"ae;stb"
 	""
 )
 
