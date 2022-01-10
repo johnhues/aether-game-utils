@@ -831,11 +831,27 @@ public:
 	void SetTransform( const Matrix4& transform );
 	Matrix4 GetTransform() const;
 
+	//! Returns the distance @p is to the surface of the obb. The returned value
+	//! will be negative if @p is inside the obb.
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
-	Vec3 GetClosestPointOnSurface( Vec3 p ) const;
-	bool IntersectLine( Vec3 p, Vec3 d, float* firstOut = nullptr, float* lastOut = nullptr, ae::Vec3* n0Out = nullptr, ae::Vec3* n1Out = nullptr ) const;
+	//! Returns the point on the obbs surface  that is closest to the given point.
+	//! If @containsOut is given it will be set to false if the point does not
+	//! touch the obb, and true otherwise.
+	Vec3 GetClosestPointOnSurface( Vec3 p, bool* containsOut = nullptr ) const;
+	//! Returns true if any point along the line p + d intersects the obb. On
+	//! intersection @t0Out will be set so that p+d*t=first point along the line
+	//! in the direction of d that is on the surface of the obb. @t1Out will be
+	//! similarly set but for the last point on the line. n0Out and n1Out will
+	//! be set to the face normals of the obb at t0 and t1 respectively.
+	bool IntersectLine( Vec3 p, Vec3 d, float* t0Out = nullptr, float* t1Out = nullptr, ae::Vec3* n0Out = nullptr, ae::Vec3* n1Out = nullptr ) const;
+	//! Returns true if the segment [p, p + d] intersects the obb (including when
+	//! p is inside obb). On returning true: @pOut will be set to the first point
+	//! on the surface (or the point inside of the obb if ray starts within).
+	//! @nOut will be set to the normal of the face of the contact point, or the
+	//! normal of the nearest face to pOut if p is inside the obb. @tOut will be
+	//! set to a value so that p + d * t = pOut.
 	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, ae::Vec3* nOut = nullptr, float* tOut = nullptr ) const;
-
+	//! Returns an AABB that tightly fits this obb.
 	AABB GetAABB() const;
 
 private:
@@ -8474,22 +8490,32 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 bool OBB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut ) const
 {
 	float t;
-	if ( IntersectLine( p, d, &t, nullptr, nOut, nullptr ) && t >= 0.0f && t <= 1.0f )
+	if ( IntersectLine( p, d, &t, nullptr, nOut, nullptr ) && t <= 1.0f )
 	{
-		if ( tOut )
+		if ( t >= 0.0f )
 		{
-			*tOut = t;
+			if ( tOut ) { *tOut = t; }
+			if ( pOut ) { *pOut = p + d * t; }
+			return true;
 		}
-		if ( pOut )
+		else
 		{
-			*pOut = p + d * t;
+			bool inside;
+			ae::Vec3 c = GetClosestPointOnSurface( p, &inside );
+			if ( inside )
+			{
+				if ( tOut ) { *tOut = 0.0f; }
+				if ( pOut ) { *pOut = p; }
+				if ( nOut ) { *nOut = ( c - p ).SafeNormalizeCopy(); }
+				return true;
+			}
 		}
-		return true;
+		
 	}
 	return false;
 }
 
-Vec3 OBB::GetClosestPointOnSurface( Vec3 p ) const
+Vec3 OBB::GetClosestPointOnSurface( Vec3 p, bool* containsOut ) const
 {
 	Vec3 result = m_center;
 	const Vec3 d = p - m_center;
@@ -8511,6 +8537,7 @@ Vec3 OBB::GetClosestPointOnSurface( Vec3 p ) const
 			}
 			result += m_axes[ i ] * dist;
 		}
+		if ( containsOut ) { *containsOut = false; }
 	}
 	else // Inside
 	{
@@ -8531,6 +8558,7 @@ Vec3 OBB::GetClosestPointOnSurface( Vec3 p ) const
 			}
 			result += m_axes[ i ] * dist;
 		}
+		if ( containsOut ) { *containsOut = true; }
 	}
 	return result;
 }
