@@ -807,10 +807,30 @@ public:
 	Vec3 GetHalfSize() const { return ( m_max - m_min ) * 0.5f; }
 	Matrix4 GetTransform() const;
 
-	float GetSignedDistanceFromSurface( Vec3 p ) const;
 	bool Contains( Vec3 p ) const;
 	bool Intersect( AABB other ) const;
-	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, float* tOut = nullptr ) const;
+	//! Returns the distance @p is to the surface of the aabb. The returned value
+	//! will be negative if @p is inside the aabb.
+	float GetSignedDistanceFromSurface( Vec3 p ) const;
+	//! Returns the point on the aabbs surface  that is closest to the given point.
+	//! If @containsOut is provided it will be set to false if the point does not
+	//! touch the aabb, and true otherwise.
+	Vec3 GetClosestPointOnSurface( Vec3 p, bool* containsOut = nullptr ) const;
+	//! Returns true if any point along the line @p + @d intersects the aabb. On
+	//! intersection @t0Out will be set so that @p + @d * @t0Out = p0 (where p0
+	//! is the first point along the line in the direction of @d that is on the
+	//! surface of the aabb). @t1Out will be similarly set but for the last
+	//! intersection point on the line. @n0Out and @n1Out will be set to the face
+	//! normals of the aabb at @t0Out and @t1Out respectively.
+	bool IntersectLine( Vec3 p, Vec3 d, float* t0Out = nullptr, float* t1Out = nullptr, ae::Vec3* n0Out = nullptr, ae::Vec3* n1Out = nullptr ) const;
+	//! Returns true if the segment [@source, @source + @ray] intersects the aabb
+	//! (including when @source is inside the aabb). On returning true: @hitOut
+	//! will be set to the first intersection point on the surface (or to @source
+	//! if the ray starts within the aabb). @normOut will be set to the normal of
+	//! the face of the contact point, or to the normal of the nearest face to
+	//! @source if it is inside the aabb. @tOut will be set to a value so that
+	//! @source + @ray * @tOut = @hitOut.
+	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
 
 private:
 	Vec3 m_min = Vec3( INFINITY );
@@ -835,22 +855,24 @@ public:
 	//! will be negative if @p is inside the obb.
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
 	//! Returns the point on the obbs surface  that is closest to the given point.
-	//! If @containsOut is given it will be set to false if the point does not
+	//! If @containsOut is provided it will be set to false if the point does not
 	//! touch the obb, and true otherwise.
 	Vec3 GetClosestPointOnSurface( Vec3 p, bool* containsOut = nullptr ) const;
-	//! Returns true if any point along the line p + d intersects the obb. On
-	//! intersection @t0Out will be set so that p+d*t=first point along the line
-	//! in the direction of d that is on the surface of the obb. @t1Out will be
-	//! similarly set but for the last point on the line. n0Out and n1Out will
-	//! be set to the face normals of the obb at t0 and t1 respectively.
+	//! Returns true if any point along the line @p + @d intersects the obb. On
+	//! intersection @t0Out will be set so that @p + @d * @t0Out = p0 (where p0
+	//! is the first point along the line in the direction of @d that is on the
+	//! surface of the obb). @t1Out will be similarly set but for the last
+	//! intersection point on the line. @n0Out and @n1Out will be set to the face
+	//! normals of the obb at @t0Out and @t1Out respectively.
 	bool IntersectLine( Vec3 p, Vec3 d, float* t0Out = nullptr, float* t1Out = nullptr, ae::Vec3* n0Out = nullptr, ae::Vec3* n1Out = nullptr ) const;
-	//! Returns true if the segment [p, p + d] intersects the obb (including when
-	//! p is inside obb). On returning true: @pOut will be set to the first point
-	//! on the surface (or the point inside of the obb if ray starts within).
-	//! @nOut will be set to the normal of the face of the contact point, or the
-	//! normal of the nearest face to pOut if p is inside the obb. @tOut will be
-	//! set to a value so that p + d * t = pOut.
-	bool IntersectRay( Vec3 p, Vec3 d, Vec3* pOut = nullptr, ae::Vec3* nOut = nullptr, float* tOut = nullptr ) const;
+	//! Returns true if the segment [@source, @source + @ray] intersects the obb
+	//! (including when @source is inside the obb). On returning true: @hitOut
+	//! will be set to the first intersection point on the surface (or to @source
+	//! if the ray starts within the obb). @normOut will be set to the normal of
+	//! the face of the contact point, or to the normal of the nearest face to
+	//! @source if it is inside the obb. @tOut will be set to a value so that
+	//! @source + @ray * @tOut = @hitOut.
+	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
 	//! Returns an AABB that tightly fits this obb.
 	AABB GetAABB() const;
 
@@ -2653,8 +2675,7 @@ public:
 		ae::Matrix4 transform = ae::Matrix4::Identity();
 		const void* userData = nullptr;
 		ae::Vec3 source = ae::Vec3( 0.0f );
-		ae::Vec3 direction = ae::Vec3( 0.0f, 0.0f, -1.0f );
-		float maxLength = 0.0f;
+		ae::Vec3 ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
 		uint32_t maxHits = 1;
 		bool hitCounterclockwise = true;
 		bool hitClockwise = false;
@@ -2778,7 +2799,7 @@ struct Bone
 	uint32_t index = 0;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 	ae::Matrix4 localTransform = ae::Matrix4::Identity();
-	ae::Matrix4 inverseTransform = ae::Matrix4::Identity(); 
+	ae::Matrix4 inverseTransform = ae::Matrix4::Identity();
 	Bone* firstChild = nullptr;
 	Bone* nextSibling = nullptr;
 	Bone* parent = nullptr;
@@ -8335,17 +8356,57 @@ bool AABB::Intersect( AABB other ) const
 	return false;
 }
 
-// Intersect ray R(t) = p + t*d against AABB a. When intersecting,
-// return intersection distance tmin and point q of intersection
-bool AABB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) const
+Vec3 AABB::GetClosestPointOnSurface( Vec3 p, bool* containsOut ) const
 {
-	float tmin = 0.0f; // set to -FLT_MAX to get first hit on line
-	float tmax = ae::MaxValue< float >(); // set to max distance ray can travel (for segment)
-	for ( int32_t i = 0; i < 3; i++ ) // For all three slabs
+	ae::Vec3 result;
+	bool outside = false;
+	for ( uint32_t i = 0; i < 3; i++ )
+	{
+		result[ i ] = p[ i ];
+		if ( result[ i ] < m_min[ i ] )
+		{
+			result[ i ] = m_min[ i ];
+			outside = true;
+		}
+		if ( result[ i ] > m_max[ i ] )
+		{
+			result[ i ] = m_max[ i ];
+			outside = true;
+		}
+	}
+	if ( !outside )
+	{
+		ae::Vec3 d = p - GetCenter();
+		ae::Vec3 q = ae::Abs( d ) - GetHalfSize();
+		int32_t cs;
+		if ( q.x > q.y && q.x > q.z ) { cs = 0; }
+		else if ( q.y > q.z ) { cs = 1; }
+		else { cs = 2; }
+		if ( d[ cs ] > 0.0f ) { result[ cs ] = m_max[ cs ]; }
+		else { result[ cs ] = m_min[ cs ]; }
+	}
+	if ( containsOut )
+	{
+		*containsOut = !outside;
+	}
+	return result;
+}
+
+bool AABB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n0Out, ae::Vec3* n1Out ) const
+{
+	float tMin = -INFINITY;
+	float tMax = INFINITY;
+	ae::Vec3 nMin, nMax;
+	ae::Vec3 axes[] =
+	{
+		ae::Vec3( 1.0f, 0.0f, 0.0f ),
+		ae::Vec3( 0.0f, 1.0f, 0.0f ),
+		ae::Vec3( 0.0f, 0.0f, 1.0f )
+	};
+	for ( int32_t i = 0; i < 3; i++ )
 	{
 		if ( ae::Abs( d[ i ] ) < 0.001f )
 		{
-			// Ray is parallel to slab. No hit if origin not within slab
 			if ( p[ i ] < m_min[ i ] || p[ i ] > m_max[ i ] )
 			{
 				return false;
@@ -8353,38 +8414,65 @@ bool AABB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, float* tOut ) c
 		}
 		else
 		{
-			// Compute intersection t value of ray with near and far plane of slab
 			float ood = 1.0f / d[ i ];
-			float t1 = ( m_min[ i ] - p[ i ] ) * ood;
-			float t2 = ( m_max[ i ] - p[ i ] ) * ood;
-			// Make t1 be intersection with near plane, t2 with far plane
-			if ( t1 > t2 )
+			float t0 = ( m_min[ i ] - p[ i ] ) * ood;
+			float t1 = ( m_max[ i ] - p[ i ] ) * ood;
+			ae::Vec3 n0 = -axes[ i ];
+			ae::Vec3 n1 = axes[ i ];
+			if ( t0 > t1 )
 			{
-				std::swap( t1, t2 );
+				std::swap( t0, t1 );
+				std::swap( n0, n1 );
 			}
-
-			// Compute the intersection of slab intersection intervals
-			tmin = ae::Max( tmin, t1 );
-			tmax = ae::Min( tmax, t2 );
-
-			// Exit with no collision as soon as slab intersection becomes empty
-			if ( tmin > tmax )
+			if ( t0 > tMin )
+			{
+				tMin = t0;
+				nMin = n0;
+			}
+			if ( t1 < tMax )
+			{
+				tMax = t1;
+				nMax = n1;
+			}
+			if ( tMin > tMax )
 			{
 				return false;
 			}
 		}
 	}
-
-	// Ray intersects all 3 slabs. Return point (q) and intersection t value (tmin)
-	if ( tOut )
-	{
-		*tOut = tmin;
-	}
-	if ( pOut )
-	{
-		*pOut = p + d * tmin;
-	}
+	if ( t0Out ) { *t0Out = tMin; }
+	if ( t1Out ) { *t1Out = tMax; }
+	if ( n0Out ) { *n0Out = nMin; }
+	if ( n1Out ) { *n1Out = nMax; }
 	return true;
+}
+
+bool AABB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
+{
+	float t;
+	if ( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
+	{
+		if ( t >= 0.0f )
+		{
+			if ( tOut ) { *tOut = t; }
+			if ( hitOut ) { *hitOut = source + ray * t; }
+			return true;
+		}
+		else
+		{
+			bool inside;
+			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
+			if ( inside )
+			{
+				if ( tOut ) { *tOut = 0.0f; }
+				if ( hitOut ) { *hitOut = source; }
+				if ( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
+				return true;
+			}
+		}
+		
+	}
+	return false;
 }
 
 std::ostream& operator<<( std::ostream& os, AABB aabb )
@@ -8487,26 +8575,26 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 	return true;
 }
 
-bool OBB::IntersectRay( ae::Vec3 p, ae::Vec3 d, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut ) const
+bool OBB::IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut, ae::Vec3* normOut, float* tOut ) const
 {
 	float t;
-	if ( IntersectLine( p, d, &t, nullptr, nOut, nullptr ) && t <= 1.0f )
+	if ( IntersectLine( source, ray, &t, nullptr, normOut, nullptr ) && t <= 1.0f )
 	{
 		if ( t >= 0.0f )
 		{
 			if ( tOut ) { *tOut = t; }
-			if ( pOut ) { *pOut = p + d * t; }
+			if ( hitOut ) { *hitOut = source + ray * t; }
 			return true;
 		}
 		else
 		{
 			bool inside;
-			ae::Vec3 c = GetClosestPointOnSurface( p, &inside );
+			ae::Vec3 closest = GetClosestPointOnSurface( source, &inside );
 			if ( inside )
 			{
 				if ( tOut ) { *tOut = 0.0f; }
-				if ( pOut ) { *pOut = p; }
-				if ( nOut ) { *nOut = ( c - p ).SafeNormalizeCopy(); }
+				if ( hitOut ) { *hitOut = source; }
+				if ( normOut ) { *normOut = ( closest - source ).SafeNormalizeCopy(); }
 				return true;
 			}
 		}
@@ -15745,26 +15833,19 @@ void CollisionMesh::Clear()
 CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
 {
 	// Early out for parameters that will give no results
-	if ( params.maxLength < 0.0f || params.maxHits == 0 )
+	if ( params.maxHits == 0 )
 	{
 		return prevResult;
 	}
 	
-	// @TODO: Set max length to prevResult hit distance for obb early out when params request a single hit out
-	bool limitRay = ( params.maxLength > 0.0f ) && ( params.maxLength < INFINITY );
-	ae::Vec3 normParamsDir = params.direction.SafeNormalizeCopy();
-
 	// Obb in world space
 	{
-		float obbDistance = ae::MaxValue< float >();
 		ae::OBB obb( params.transform * m_aabb.GetTransform() );
-		if ( !obb.IntersectRay( params.source, normParamsDir, nullptr, nullptr, &obbDistance )
-			|| ( limitRay && obbDistance > params.maxLength ) )
+		if ( !obb.IntersectRay( params.source, params.ray ) )
 		{
 			if ( ae::DebugLines* debug = params.debug )
 			{
-				ae::Vec3 rayEnd = params.source + normParamsDir * ( limitRay ? params.maxLength : 1000.0f );
-				debug->AddLine( params.source, rayEnd, params.debugColor );
+				debug->AddLine( params.source, params.source + params.ray, params.debugColor );
 			}
 			return prevResult; // Early out if ray doesn't touch obb
 		}
@@ -15778,8 +15859,8 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	
 	const ae::Matrix4 invTransform = params.transform.GetInverse();
 	const ae::Vec3 source( invTransform * ae::Vec4( params.source, 1.0f ) );
-	const ae::Vec3 ray( invTransform * ae::Vec4( normParamsDir * ( limitRay ? params.maxLength : 1.0f ), 0.0f ) );
-	const ae::Vec3 normDir = ray.SafeNormalizeCopy();
+	const ae::Vec3 rayEnd( invTransform * ae::Vec4( params.source + params.ray, 1.0f ) );
+	const ae::Vec3 ray = rayEnd - source;
 	const bool ccw = params.hitCounterclockwise;
 	const bool cw = params.hitClockwise;
 	
@@ -15806,7 +15887,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 				ae::Vec3 a = m_vertices[ leaf->tris[ i ].idx[ 0 ] ];
 				ae::Vec3 b = m_vertices[ leaf->tris[ i ].idx[ 1 ] ];
 				ae::Vec3 c = m_vertices[ leaf->tris[ i ].idx[ 2 ] ];
-				if ( IntersectRayTriangle( source, ray, a, b, c, limitRay, ccw, cw, &p, &n, nullptr ) )
+				if ( IntersectRayTriangle( source, ray, a, b, c, true, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit& outHit = hits[ hitCount ];
 					hitCount++;
@@ -15848,22 +15929,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	
 	if ( ae::DebugLines* debug = params.debug )
 	{
-		ae::Vec3 rayEnd;
-		if ( !limitRay )
-		{
-			if ( hitCount )
-			{
-				rayEnd = hits[ hitCount - 1 ].position;
-			}
-			else
-			{
-				rayEnd = params.source + normParamsDir * 1000.0f;
-			}
-		}
-		else
-		{
-			rayEnd = params.source + normParamsDir * params.maxLength;
-		}
+		ae::Vec3 rayEnd = hitCount ? hits[ hitCount - 1 ].position : params.source + params.ray;
 		debug->AddLine( params.source, rayEnd, params.debugColor );
 		
 		for ( uint32_t i = 0; i < hitCount; i++ )

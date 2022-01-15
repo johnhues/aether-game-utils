@@ -2464,11 +2464,12 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
 bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::CollisionMesh::RaycastResult* outResult ) const
 {
   ae::Vec3 start = _params.source;
-  ae::Vec3 dir = _params.direction.SafeNormalizeCopy();
-  ae::Vec3 ray = dir * _params.maxLength;
+  ae::Vec3 ray = _params.ray;
+  ae::Vec3 dir = ray;
+  float length = dir.SafeNormalize();
   DebugRay debugRay( start, ray, m_params.debug );
   
-  if ( _params.maxLength < 0.001f )
+  if ( length < 0.001f )
   {
     return false;
   }

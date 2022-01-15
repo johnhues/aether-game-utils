@@ -51,6 +51,13 @@ int main()
 	ae::stbLoadPng( &fontTexture, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
 	text.Initialize( &fontTexture, 8 );
 	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f ), ae::Vec3( 0.0f, -5.0f, 5.0f ) );
+	
+	// AABB and OBB test state
+	static ae::Vec3 s_translation( 0.0f );
+	static ae::Vec3 s_rotation( 0.0f );
+	static ae::Vec3 s_scale( 1.0f );
+	static float s_pa = 0.0f;
+	static float s_pb = 0.0f;
 
 	AE_INFO( "Run" );
 	while ( !input.quit )
@@ -116,7 +123,7 @@ int main()
 		};
 
 		// Test selection
-		static int32_t currentTest = 5;
+		static int32_t currentTest = 0;
 		if ( input.Get( ae::Key::Left ) && !input.GetPrev( ae::Key::Left ) )
 		{
 			currentTest--;
@@ -125,7 +132,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = ae::Mod( currentTest, 6 );
+		currentTest = ae::Mod( currentTest, 7 );
 
 		// Geometry calculations / rendering
 		switch ( currentTest )
@@ -394,40 +401,105 @@ int main()
 			}
 			case 5:
 			{
+				infoText.Append( "AABB-Ray/Point\n" );
+				doRay( false );
+				infoText.Append( "Rotate Point: Space\n" );
+				
+				if ( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
+				if ( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
+				if ( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
+				if ( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
+				if ( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
+				if ( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				
+				if ( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
+				if ( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
+				if ( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
+				if ( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
+				if ( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
+				if ( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				s_scale = ae::Max( ae::Vec3( 0.0f ), s_scale );
+				
+				ae::Matrix4 transform = ae::Matrix4::Translation( s_translation );
+				transform *= ae::Matrix4::Scaling( s_scale );
+				ae::Vec4 pMin = transform * ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f );
+				ae::Vec4 pMax = transform * ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f );
+				ae::AABB aabb( pMin.GetXYZ(), pMax.GetXYZ() );
+				debug.AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), ae::Color::Green() );
+				
+				if ( input.Get( ae::Key::Space ) )
+				{
+					s_pa += 0.007f;
+					s_pb += 0.01f;
+				}
+				
+				ae::Vec3 p( 0.0f );
+				p += ae::Vec3( cosf( s_pa ), sinf( s_pa ), 0.0f );
+				p += ae::Vec3( cosf( s_pb ), 0.0f, sinf( s_pb ) );
+				
+				float dist = aabb.GetSignedDistanceFromSurface( p );
+				debug.AddSphere( p, 0.05f, ae::Color::PicoPink(), 8 );
+				
+				ae::Color nearestColor = ( dist > 0.0f ) ? ae::Color::PicoGreen() : ae::Color::PicoRed();
+				ae::Vec3 surface = aabb.GetClosestPointOnSurface( p );
+				debug.AddSphere( surface, 0.05f, nearestColor, 8 );
+				ae::Vec3 toSurface = ( surface - p ).NormalizeCopy() * ae::Abs( dist );
+				debug.AddLine( p, p + toSurface, nearestColor );
+				
+				ae::Vec3 rayP, rayN;
+				float rayT;
+				if ( aabb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
+				{
+					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
+					debug.AddLine( rayP, raySource + ray, ae::Color::Red() );
+
+					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
+					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
+					
+					float t1;
+					ae::Vec3 n1;
+					AE_ASSERT( aabb.IntersectLine( raySource, ray, nullptr, &t1, nullptr, &n1 ) );
+					ae::Vec3 p1 = raySource + ray * t1;
+					debug.AddSphere( p1, 0.05f, ae::Color::Red(), 8 );
+					debug.AddLine( p1, p1 + n1, ae::Color::Red() );
+				}
+				else
+				{
+					debug.AddLine( raySource, raySource + ray, ae::Color::Red() );
+					debug.AddSphere( raySource + ray, 0.05f, ae::Color::Red(), 8 );
+				}
+				break;
+			}
+			case 6:
+			{
 				infoText.Append( "OBB-Ray/Point\n" );
 				doRay( false );
 				infoText.Append( "Rotate Point: Space\n" );
 				
-				static ae::Vec3 s_obbTranslation( 0.0f );
-				static ae::Vec3 s_obbRotation( 0.0f );
-				static ae::Vec3 s_obbScale( 1.0f );
-				static float s_pa = 0.0f;
-				static float s_pb = 0.0f;
+				if ( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
+				if ( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
+				if ( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
+				if ( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
+				if ( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
+				if ( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
 				
-				if ( input.Get( ae::Key::D ) ) { s_obbTranslation.x += 0.01f; }
-				if ( input.Get( ae::Key::A ) ) { s_obbTranslation.x -= 0.01f; }
-				if ( input.Get( ae::Key::W ) ) { s_obbTranslation.y += 0.01f; }
-				if ( input.Get( ae::Key::S ) ) { s_obbTranslation.y -= 0.01f; }
-				if ( input.Get( ae::Key::E ) ) { s_obbTranslation.z += 0.01f; }
-				if ( input.Get( ae::Key::Q ) ) { s_obbTranslation.z -= 0.01f; }
+				if ( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
+				if ( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
+				if ( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
+				if ( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
+				if ( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
+				if ( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				s_scale = ae::Max( ae::Vec3( 0.0f ), s_scale );
 				
-				if ( input.Get( ae::Key::L ) ) { s_obbScale.x += 0.07f; }
-				if ( input.Get( ae::Key::J ) ) { s_obbScale.x -= 0.07f; }
-				if ( input.Get( ae::Key::I ) ) { s_obbScale.y += 0.07f; }
-				if ( input.Get( ae::Key::K ) ) { s_obbScale.y -= 0.07f; }
-				if ( input.Get( ae::Key::O ) ) { s_obbScale.z += 0.07f; }
-				if ( input.Get( ae::Key::U ) ) { s_obbScale.z -= 0.07f; }
-				s_obbScale = ae::Max( ae::Vec3( 0.0f ), s_obbScale );
+				if ( input.Get( ae::Key::Z ) ) { s_rotation.x += 0.01f; }
+				if ( input.Get( ae::Key::X ) ) { s_rotation.y += 0.01f; }
+				if ( input.Get( ae::Key::C ) ) { s_rotation.z += 0.01f; }
 				
-				if ( input.Get( ae::Key::Z ) ) { s_obbRotation.x += 0.01f; }
-				if ( input.Get( ae::Key::X ) ) { s_obbRotation.y += 0.01f; }
-				if ( input.Get( ae::Key::C ) ) { s_obbRotation.z += 0.01f; }
-				
-				ae::Matrix4 transform = ae::Matrix4::Translation( s_obbTranslation );
-				transform *= ae::Matrix4::RotationX( s_obbRotation.x );
-				transform *= ae::Matrix4::RotationY( s_obbRotation.y );
-				transform *= ae::Matrix4::RotationZ( s_obbRotation.z );
-				transform *= ae::Matrix4::Scaling( s_obbScale );
+				ae::Matrix4 transform = ae::Matrix4::Translation( s_translation );
+				transform *= ae::Matrix4::RotationX( s_rotation.x );
+				transform *= ae::Matrix4::RotationY( s_rotation.y );
+				transform *= ae::Matrix4::RotationZ( s_rotation.z );
+				transform *= ae::Matrix4::Scaling( s_scale );
 				ae::OBB obb( transform );
 				debug.AddOBB( obb.GetTransform(), ae::Color::Green() );
 				
@@ -459,6 +531,13 @@ int main()
 					
 					debug.AddSphere( rayP, 0.05f, ae::Color::PicoBlue(), 8 );
 					debug.AddLine( rayP, rayP + rayN, ae::Color::PicoBlue() );
+					
+					float t1;
+					ae::Vec3 n1;
+					AE_ASSERT( obb.IntersectLine( raySource, ray, nullptr, &t1, nullptr, &n1 ) );
+					ae::Vec3 p1 = raySource + ray * t1;
+					debug.AddSphere( p1, 0.05f, ae::Color::Red(), 8 );
+					debug.AddLine( p1, p1 + n1, ae::Color::Red() );
 				}
 				else
 				{
