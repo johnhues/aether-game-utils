@@ -714,7 +714,8 @@ public:
 	ae::Vec3 GetNormal() const;
 	ae::Vec3 GetClosestPointToOrigin() const;
 
-	bool IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* out ) const;
+	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const;
+	bool IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut = nullptr, float* tOut = nullptr ) const;
 	ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
 	float GetSignedDistance( ae::Vec3 pos ) const;
 
@@ -8129,32 +8130,48 @@ ae::Vec3 Plane::GetClosestPointToOrigin() const
 	return m_plane.GetXYZ() * m_plane.w;
 }
 
-bool Plane::IntersectRay( ae::Vec3 pos, ae::Vec3 dir, float* tOut, ae::Vec3* pOut ) const
+bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const
 {
-	// @TODO: Rename dir to ray. Don't normalize. tOut should be relative to input dir.
-	dir.SafeNormalize();
-	
 	ae::Vec3 n = m_plane.GetXYZ();
-	ae::Vec3 p = n * m_plane.w;
-
-	float a = dir.Dot( n );
-	if ( a > -0.01f )
+	ae::Vec3 q = n * m_plane.w;
+	float a = d.Dot( n );
+	if ( ae::Abs( a ) < 0.001f )
 	{
-		// Ray is pointing away from or parallel to plane
-		return false;
+		return false; // Line is parallel to plane
 	}
-
-	ae::Vec3 diff = pos - p;
+	ae::Vec3 diff = q - p;
 	float b = diff.Dot( n );
 	float t = b / a;
-
 	if ( tOut )
 	{
 		*tOut = t;
 	}
-	if ( pOut )
+	return true;
+}
+
+bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tOut ) const
+{
+	ae::Vec3 n = m_plane.GetXYZ();
+	ae::Vec3 p = n * m_plane.w;
+	float a = ray.Dot( n );
+	if ( a > -0.001f )
 	{
-		*pOut = pos - dir * t;
+		return false; // Ray is pointing away from or parallel to plane
+	}
+	ae::Vec3 diff = p - source;
+	float b = diff.Dot( n );
+	float t = b / a;
+	if ( t < 0.0f || t > 1.0f )
+	{
+		return false;
+	}
+	if ( hitOut )
+	{
+		*hitOut = source + ray * t;
+	}
+	if ( tOut )
+	{
+		*tOut = t;
 	}
 	return true;
 }
