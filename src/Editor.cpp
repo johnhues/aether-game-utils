@@ -57,6 +57,8 @@ const uint8_t kCogTextureData[] =
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 };
 
+const float kEditorViewDistance = 1000.0f;
+
 //------------------------------------------------------------------------------
 // EditorMsg
 //------------------------------------------------------------------------------
@@ -571,7 +573,7 @@ void EditorProgram::Run()
     m_gameTarget.Clear( ae::Color::SRGB8( 85, 66, 82 ) );
 
     m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
-    m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, 500.0f );
+    m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, kEditorViewDistance );
     m_worldToProj = m_viewToProj * m_worldToView;
     m_projToWorld = m_worldToProj.GetInverse();
     
@@ -2241,11 +2243,11 @@ bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, a
 EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut )
 {
   ae::Vec3 mouseRay = program->GetMouseRay();
-  ae::Vec3 mouseRaySrc = program->camera.GetPosition();// + mouseRay * 0.;
+  ae::Vec3 mouseRaySrc = program->camera.GetPosition();
   
   ae::CollisionMesh::RaycastParams raycastParams;
   raycastParams.source = mouseRaySrc;
-  raycastParams.direction = mouseRay;
+  raycastParams.ray = mouseRay * kEditorViewDistance;
   raycastParams.hitClockwise = false;
   raycastParams.hitCounterclockwise = true;
   ae::CollisionMesh::RaycastResult result;
