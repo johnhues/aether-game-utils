@@ -886,8 +886,8 @@ private:
 //------------------------------------------------------------------------------
 // Geometry helpers
 //------------------------------------------------------------------------------
-bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitRay, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut );
-Vec3 ClosestPtPointTriangle( Vec3 p, Vec3 a, Vec3 b, Vec3 c );
+bool IntersectRayTriangle( ae::Vec3 p, ae::Vec3 ray, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c, bool ccw, bool cw, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut );
+Vec3 ClosestPtPointTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c );
 
 //! @} End Math group
 
@@ -8694,12 +8694,12 @@ AABB OBB::GetAABB() const
 //------------------------------------------------------------------------------
 // Geometry helpers
 //------------------------------------------------------------------------------
-bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitRay, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut )
+bool IntersectRayTriangle( Vec3 p, Vec3 ray, Vec3 a, Vec3 b, Vec3 c, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut )
 {
 	ae::Vec3 ab = b - a;
 	ae::Vec3 ac = c - a;
 	ae::Vec3 n = ab.Cross( ac );
-	ae::Vec3 qp = -dir;
+	ae::Vec3 qp = -ray;
 	
 	// Compute denominator d
 	float d = qp.Dot( n );
@@ -8721,13 +8721,8 @@ bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitR
 	// Compute intersection t value of pq with plane of triangle
 	ae::Vec3 ap = p - a;
 	float t = ap.Dot( n ) * ood;
-	// Ray intersects if 0 <= t
-	if ( t < 0.0f )
-	{
-		return false;
-	}
-	// Segment intersects if 0 <= t <= 1
-	if ( limitRay && t > 1.0f )
+	// Ray intersects if 0 <= t <= 1
+	if ( t < 0.0f || t > 1.0f )
 	{
 		return false;
 	}
@@ -8748,7 +8743,7 @@ bool IntersectRayTriangle( Vec3 p, Vec3 dir, Vec3 a, Vec3 b, Vec3 c, bool limitR
 	// Result
 	if ( pOut )
 	{
-		*pOut = p + dir * t;
+		*pOut = p + ray * t;
 	}
 	if ( nOut )
 	{
@@ -15904,7 +15899,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 				ae::Vec3 a = m_vertices[ leaf->tris[ i ].idx[ 0 ] ];
 				ae::Vec3 b = m_vertices[ leaf->tris[ i ].idx[ 1 ] ];
 				ae::Vec3 c = m_vertices[ leaf->tris[ i ].idx[ 2 ] ];
-				if ( IntersectRayTriangle( source, ray, a, b, c, true, ccw, cw, &p, &n, nullptr ) )
+				if ( IntersectRayTriangle( source, ray, a, b, c, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit& outHit = hits[ hitCount ];
 					hitCount++;

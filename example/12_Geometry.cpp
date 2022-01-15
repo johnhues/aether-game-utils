@@ -167,14 +167,13 @@ int main()
 				if ( input.Get( ae::Key::Num4 ) ) r += 0.016f;
 				r = ae::Clip( r, 0.01f, 8.0f );
 				
-				bool limitRay = true;
 				bool ccw = true;
 				bool cw = false;
 				
 				ae::Vec3 p;
 				ae::Vec3 n;
 				float t;
-				if ( ae::IntersectRayTriangle( raySource, ray, triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], limitRay, ccw, cw, &p, &n, &t ) )
+				if ( ae::IntersectRayTriangle( raySource, ray, triangle[ 0 ], triangle[ 1 ], triangle[ 2 ], ccw, cw, &p, &n, &t ) )
 				{
 					debug.AddSphere( p, 0.1f, ae::Color::Green(), 8 );
 					debug.AddLine( p, p + n, ae::Color::Green() );
