@@ -15336,24 +15336,30 @@ void DebugCamera::Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
 	ae::Vec3 diff = focus - pos;
 	m_dist = diff.Length();
 	
-	if ( m_dist > 0.01f ) // Only update rotation if focus is different than position
+	if ( m_worldUp == Axis::Y )
 	{
-		if ( m_worldUp == Axis::Y )
-		{
+		ae::Vec2 xz = diff.GetXZ();
 #if _AE_DEBUG_
-			AE_ASSERT( focus.x != pos.x || focus.z != pos.z );
+		AE_ASSERT( focus.x != pos.x || focus.z != pos.z );
+#else
+		if ( xz != ae::Vec2( 0.0f ) )
 #endif
-			ae::Vec2 xz = diff.GetXZ();
+		{
 			xz.y = -xz.y; // -Z forward for right handed Y-Up
 			m_yaw = xz.GetAngle();
 			m_pitch = asinf( diff.y / m_dist );
 		}
-		else if ( m_worldUp == Axis::Z )
-		{
+	}
+	else if ( m_worldUp == Axis::Z )
+	{
+		ae::Vec2 xy = diff.GetXY();
 #if _AE_DEBUG_
-			AE_ASSERT( focus.x != pos.x || focus.y != pos.y );
+		AE_ASSERT( focus.x != pos.x || focus.y != pos.y );
+#else
+		if ( xy != ae::Vec2( 0.0f ) )
 #endif
-			m_yaw = diff.GetXY().GetAngle();
+		{
+			m_yaw = xy.GetAngle();
 			m_pitch = asinf( diff.z / m_dist );
 		}
 	}
