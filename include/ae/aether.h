@@ -4263,14 +4263,20 @@ template < typename T >
 bool VecT< T >::operator==( const T& v ) const
 {
 	auto&& self = *(T*)this;
-	return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
+	for ( uint32_t i = 0; i < countof(T::data); i++ )
+	{
+		if ( self.data[ i ] != v.data[ i ] )
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 template < typename T >
 bool VecT< T >::operator!=( const T& v ) const
 {
-	auto&& self = *(T*)this;
-	return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
+	return !operator ==( v );
 }
 
 template < typename T >
@@ -7330,10 +7336,17 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
 	position = -position;
 	forward.Normalize();
 	up.Normalize();
-
 	Vec3 right = forward.Cross( up );
 	right.Normalize();
 	up = right.Cross( forward );
+#if _AE_DEBUG_
+	AE_ASSERT( forward == forward );
+	AE_ASSERT( right == right );
+	AE_ASSERT( up == up );
+	AE_ASSERT( forward.LengthSquared() );
+	AE_ASSERT( right.LengthSquared() );
+	AE_ASSERT( up.LengthSquared() );
+#endif
 
 	Matrix4 result;
 	memset( &result, 0, sizeof( result ) );
@@ -7543,32 +7556,15 @@ Matrix4 Matrix4::GetInverse() const
 		data[8] * data[2] * data[5];
 
 	float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
+#if _AE_DEBUG_
+	AE_ASSERT_MSG( det == det, "Non-invertible matrix" );
+	AE_ASSERT_MSG( det, "Non-invertible matrix" );
+#endif
 	det = 1.0f / det;
 	for ( uint32_t i = 0; i < 16; i++ )
 	{
 		r.data[ i ] *= det;
 	}
-	
-#if _AE_DEBUG_
-	AE_ASSERT_MSG( r.data[ 0 ] == r.data[ 0 ] &&
-		r.data[ 1 ] == r.data[ 1 ] &&
-		r.data[ 2 ] == r.data[ 2 ] &&
-		r.data[ 3 ] == r.data[ 3 ] &&
-		r.data[ 4 ] == r.data[ 4 ] &&
-		r.data[ 5 ] == r.data[ 5 ] &&
-		r.data[ 6 ] == r.data[ 6 ] &&
-		r.data[ 7 ] == r.data[ 7 ] &&
-		r.data[ 8 ] == r.data[ 8 ] &&
-		r.data[ 9 ] == r.data[ 9 ] &&
-		r.data[ 10 ] == r.data[ 10 ] &&
-		r.data[ 11 ] == r.data[ 11 ] &&
-		r.data[ 12 ] == r.data[ 12 ] &&
-		r.data[ 13 ] == r.data[ 13 ] &&
-		r.data[ 14 ] == r.data[ 14 ] &&
-		r.data[ 15 ] == r.data[ 15 ],
-		"NAN detected on ae::Matrix4::GetInverse()"
-	);
-#endif
 	
 	return r;
 }
@@ -15344,6 +15340,9 @@ void DebugCamera::Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
 	{
 		if ( m_worldUp == Axis::Y )
 		{
+#if _AE_DEBUG_
+			AE_ASSERT( focus.x != pos.x || focus.z != pos.z );
+#endif
 			ae::Vec2 xz = diff.GetXZ();
 			xz.y = -xz.y; // -Z forward for right handed Y-Up
 			m_yaw = xz.GetAngle();
@@ -15351,6 +15350,9 @@ void DebugCamera::Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
 		}
 		else if ( m_worldUp == Axis::Z )
 		{
+#if _AE_DEBUG_
+			AE_ASSERT( focus.x != pos.x || focus.y != pos.y );
+#endif
 			m_yaw = diff.GetXY().GetAngle();
 			m_pitch = asinf( diff.z / m_dist );
 		}
