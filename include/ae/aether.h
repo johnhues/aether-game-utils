@@ -1120,6 +1120,17 @@ using Str256 = Str< 256 >;
 using Str512 = Str< 512 >;
 
 //------------------------------------------------------------------------------
+// ae::Pair class
+//------------------------------------------------------------------------------
+template < typename K, typename V >
+struct Pair
+{
+	Pair( const K& k, const V& v ) : key( k ), value( v ) {}
+	K key;
+	V value;
+};
+
+//------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
 #define _AE_STATIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
@@ -1187,7 +1198,7 @@ private:
 	Storage< N > m_storage;
 #endif
 public:
-	// Ranged-based loop. Lowercase to match c++ standard ('-.-)
+	// Ranged-based loop. Lowercase to match c++ standard
 	T* begin() { return m_array; }
 	T* end() { return m_array + m_length; }
 	const T* begin() const { return m_array; }
@@ -1227,22 +1238,16 @@ public:
 	int32_t GetIndex( const K& key ) const; //!< Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
 	uint32_t Length() const; //!< Returns the number of key/value pairs in the map
 
-	struct Pair
-	{
-		Pair( const K& k, const V& v );
-		K key;
-		V value;
-	};
-	// Ranged-based loop. Lowercase to match c++ standard ('-.-)
-	Pair* begin() { return m_pairs.begin(); }
-	Pair* end() { return m_pairs.end(); }
-	const Pair* begin() const { return m_pairs.begin(); }
-	const Pair* end() const { return m_pairs.end(); }
+	// Ranged-based loop. Lowercase to match c++ standard
+	ae::Pair< K, V >* begin() { return m_pairs.begin(); }
+	ae::Pair< K, V >* end() { return m_pairs.end(); }
+	const ae::Pair< K, V >* begin() const { return m_pairs.begin(); }
+	const ae::Pair< K, V >* end() const { return m_pairs.end(); }
 
 private:
 	template < typename K2, typename V2, uint32_t N2 >
 	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
-	Array< Pair, N > m_pairs;
+	Array< ae::Pair< K, V >, N > m_pairs;
 };
 
 //------------------------------------------------------------------------------
@@ -1283,6 +1288,12 @@ public:
 	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
 	void SetInt( const char* key, uint32_t value ) { SetInt( key, (int32_t)value ); }
 	void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
+	
+	// Ranged-based loop. Lowercase to match c++ standard
+	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
+	ae::Pair< ae::Str128, ae::Str128 >* end() { return m_entries.end(); }
+	const ae::Pair< ae::Str128, ae::Str128 >* begin() const { return m_entries.begin(); }
+	const ae::Pair< ae::Str128, ae::Str128 >* end() const { return m_entries.end(); }
 
 private:
 	Dict() = delete;
@@ -5879,16 +5890,10 @@ Map< K, V, N >::Map( ae::Tag pool ) :
 }
 
 template < typename K, typename V, uint32_t N >
-Map< K, V, N >::Pair::Pair( const K& k, const V& v ) :
-	key( k ),
-	value( v )
-{}
-
-template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::Set( const K& key, const V& value )
 {
 	int32_t index = GetIndex( key );
-	Pair* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
+	Pair< K, V >* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
 	if ( pair )
 	{
 		pair->value = value;
