@@ -17860,7 +17860,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	// Safety check to make sure 'this' Var belongs to 'obj' ae::Type
 	const ae::Type* objType = ae::GetTypeFromObject( obj );
 	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType == m_owner, "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
+	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
 	
 	void* varData = nullptr;
 	if ( m_arrayAdapter )
