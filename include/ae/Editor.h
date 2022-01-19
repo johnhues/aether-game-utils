@@ -23,6 +23,17 @@ typedef uint32_t EditorObjectId;
 const EditorObjectId kInvalidEditorObjectId = 0;
 
 //------------------------------------------------------------------------------
+// ae::EditorComponent class
+//------------------------------------------------------------------------------
+class EditorComponent
+{
+public:
+	EditorComponent( const ae::Tag& tag ) : members( tag ) {}
+	ae::Str32 type;
+	ae::Dict members;
+};
+
+//------------------------------------------------------------------------------
 // ae::EditorObject class
 //------------------------------------------------------------------------------
 class EditorObject
@@ -32,7 +43,7 @@ public:
 	EditorObjectId id = kInvalidEditorObjectId;
 	ae::Str16 name;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
-	ae::Map< ae::Str32, ae::Dict > components;
+	ae::Array< EditorComponent > components;
 };
 
 //------------------------------------------------------------------------------

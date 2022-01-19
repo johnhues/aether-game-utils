@@ -274,10 +274,9 @@ bool Registry::Load( const ae::Editor* editor, CreateObjectFn fn )
 		{
 			fn( levelObject, entity, this );
 		}
-		for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
+		for ( const EditorComponent& levelComponent : levelObject.components )
 		{
-			const char* typeName = levelObject.components.GetKey( j ).c_str();
-			AddComponent( entity, typeName );
+			AddComponent( entity, levelComponent.type.c_str() );
 		}
 	}
 	// Serialize all components (second phase to handle references)
@@ -285,30 +284,28 @@ bool Registry::Load( const ae::Editor* editor, CreateObjectFn fn )
 	{
 		const ae::EditorObject& levelObject = editor->objects.GetValue( i );
 		Entity entity = levelObject.id;
-		for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
+		for ( const EditorComponent& levelComponent : levelObject.components )
 		{
-			const char* typeName = levelObject.components.GetKey( j ).c_str();
+			const char* typeName = levelComponent.type.c_str();
+			AE_INFO( "typeName #", typeName );
 			const ae::Type* type = ae::GetTypeByName( typeName );
-			const ae::Dict& props = levelObject.components.GetValue( j );
-
+			const ae::Dict& props = levelComponent.members;
 			Component* component = TryGetComponent( entity, typeName );
 			if ( !component )
 			{
 				continue;
 			}
-			uint32_t varCount = type->GetVarCount();
-			for ( uint32_t k = 0; k < varCount; k++ )
+			uint32_t varCount = type->GetVarCount( true );
+			for ( uint32_t j = 0; j < varCount; j++ )
 			{
-				const ae::Var* var = type->GetVarByIndex( k );
+				const ae::Var* var = type->GetVarByIndex( j, true );
 				if ( var->IsArray() )
 				{
-					ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), "COUNT" );
-					uint32_t length = props.GetInt( key.c_str(), 0 );
+					uint32_t length = props.GetInt( var->GetName(), 0 );
 					length = var->SetArrayLength( component, length );
-
 					for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
 					{
-						key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
 						if ( const char* value = props.GetString( key.c_str(), nullptr ) )
 						{
 							var->SetObjectValueFromString( component, value, arrIdx );

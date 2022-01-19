@@ -3362,7 +3362,7 @@ const uint32_t kMaxMetaProps = 8;
 class Type;
 
 //------------------------------------------------------------------------------
-// External base meta object
+// ae::Object
 //! Base class for all meta registered objects. Inherit from this using
 //! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
 //------------------------------------------------------------------------------
@@ -3378,7 +3378,7 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// External inheritor meta object
+// ae::Inheritor
 //------------------------------------------------------------------------------
 template < typename Parent, typename This >
 class Inheritor : public Parent
@@ -3405,7 +3405,7 @@ ae::TypeId GetObjectTypeId( const ae::Object* obj ); //!< Get a registered ae::T
 ae::TypeId GetTypeIdFromName( const char* name ); //!< Get a registered ae::TypeId from a type name
 	
 //------------------------------------------------------------------------------
-// Enum class
+// ae::Enum class
 //------------------------------------------------------------------------------
 class Enum
 {
@@ -3441,7 +3441,7 @@ public: // Internal
 };
 	
 //------------------------------------------------------------------------------
-// Var class
+// ae::Var class
 //------------------------------------------------------------------------------
 class Var
 {
@@ -3524,7 +3524,7 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// External MetaType class
+// ae::Type class
 //------------------------------------------------------------------------------
 class Type
 {
@@ -3542,9 +3542,9 @@ public:
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
 		
 	// Vars
-	uint32_t GetVarCount() const;
-	const ae::Var* GetVarByIndex( uint32_t i ) const;
-	const ae::Var* GetVarByName( const char* name ) const;
+	uint32_t GetVarCount( bool parents ) const;
+	const ae::Var* GetVarByIndex( uint32_t i, bool parents ) const;
+	const ae::Var* GetVarByName( const char* name, bool parents ) const;
 
 	// C++ type info
 	template < typename T = ae::Object > T* New( void* obj ) const;
@@ -17802,6 +17802,7 @@ const ae::Type* ae::GetTypeById( ae::TypeId id )
 
 const ae::Type* ae::GetTypeByName( const char* typeName )
 {
+	if ( !typeName[ 0 ] ) { return nullptr; }
 	auto it = _GetTypeNameMap().find( typeName );
 	if ( it != _GetTypeNameMap().end() ) { return it->second; }
 	else { return nullptr; }
@@ -18086,17 +18087,53 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			return false;
 		}
 	}
-	
 	return false;
 }
 
-const ae::Var* ae::Type::GetVarByName( const char* name ) const
+uint32_t ae::Type::GetVarCount( bool parents ) const
 {
-	int32_t i = m_vars.FindFn( [name]( auto&& v )
+	const ae::Type* parent = ( parents ? GetParentType() : nullptr );
+	return m_vars.Length() + ( parent ? parent->GetVarCount( parents ) : 0 );
+}
+
+const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
+{
+	if ( !parents )
+	{
+		return &m_vars[ i ];
+	}
+	// @HACK: This whole function should be re-written to avoid recreating this array and all of this recursion
+	ae::Array< const ae::Var*, 32 > vars;
+	auto fn = [&vars]( auto fn, const ae::Type* type ) -> void
+	{
+		if ( const ae::Type* parent = type->GetParentType() )
+		{
+			fn( fn, parent );
+		}
+		for ( const ae::Var& v : type->m_vars )
+		{
+			vars.Append( &v );
+		}
+	};
+	fn( fn, this );
+	return vars[ i ];
+}
+
+const ae::Var* ae::Type::GetVarByName( const char* name, bool parents ) const
+{
+	int32_t i = m_vars.FindFn( [name]( const ae::Var& v )
 	{
 		return v.m_name == name;
 	} );
-	return ( i >= 0 ) ? &m_vars[ i ] : nullptr;
+	if ( i >= 0 )
+	{
+		return &m_vars[ i ];
+	}
+	else if ( const ae::Type* parent = ( parents ? GetParentType() : nullptr ) )
+	{
+		return parent->GetVarByName( name, parents );
+	}
+	return nullptr;
 }
 
 const ae::Type* ae::Type::GetParentType() const
@@ -18356,8 +18393,6 @@ uint32_t ae::Type::GetPropertyValueCount( int32_t propIndex ) const { return m_p
 uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
 const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
 const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
-uint32_t ae::Type::GetVarCount() const { return m_vars.Length(); }
-const ae::Var* ae::Type::GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
 uint32_t ae::Type::GetSize() const { return m_size; }
 uint32_t ae::Type::GetAlignment() const { return m_align; }
 const char* ae::Type::GetName() const { return m_name.c_str(); }

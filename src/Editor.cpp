@@ -797,21 +797,17 @@ bool Editor::Write() const
 			transformJson.SetString( transformStr.c_str(), allocator );
 			jsonObject.AddMember( "transform", transformJson, allocator );
 			
-			uint32_t componentCount = levelObject.components.Length();
 			rapidjson::Value jsonComponents( rapidjson::kObjectType );
-			for ( uint32_t compIdx = 0; compIdx < componentCount; compIdx++ )
+			for ( const EditorComponent& levelComponent : levelObject.components )
 			{
-				const ae::Dict& levelComponent = levelObject.components.GetValue( compIdx );
-				uint32_t propCount = levelComponent.Length();
 				rapidjson::Value jsonComponent( rapidjson::kObjectType );
-				for ( uint32_t propIdx = 0; propIdx < propCount; propIdx++ )
+				for ( const auto& member : levelComponent.members )
 				{
-					auto k = rapidjson::StringRef( levelComponent.GetKey( propIdx ) );
-					auto v = rapidjson::StringRef( levelComponent.GetValue( propIdx ) );
+					auto k = rapidjson::StringRef( member.key.c_str() );
+					auto v = rapidjson::StringRef( member.value.c_str() );
 					jsonComponent.AddMember( k, v, allocator );
 				}
-				const char* type = levelObject.components.GetKey( compIdx ).c_str();
-				jsonComponents.AddMember( rapidjson::StringRef( type ), jsonComponent, allocator );
+				jsonComponents.AddMember( rapidjson::StringRef( levelComponent.type.c_str() ), jsonComponent, allocator );
 			}
 			jsonObject.AddMember( "components", jsonComponents, allocator );
 			jsonObjects.PushBack( jsonObject, allocator );
@@ -862,11 +858,11 @@ bool Editor::Read( const char* path )
 		levelObject.transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString() );
 		for ( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
-			const char* typeName = componentIter.name.GetString();
-			ae::Dict& props = levelObject.components.Set( typeName, m_tag );
+			EditorComponent& levelComponent = levelObject.components.Append( m_tag );
+			levelComponent.type = componentIter.name.GetString();
 			for ( const auto& propIter : componentIter.value.GetObject() )
 			{
-				props.SetString( propIter.name.GetString(), propIter.value.GetString() );
+				levelComponent.members.SetString( propIter.name.GetString(), propIter.value.GetString() );
 			}
 		}
 	}
@@ -971,7 +967,7 @@ void EditorServer::Initialize( EditorProgram* program )
 			AE_ASSERT_MSG( type->GetPropertyValueCount( resourcePropIdx ), mustRegisterErr, type->GetName() );
 			const char* varName = type->GetPropertyValue( resourcePropIdx, 0 );
 			AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
-			const ae::Var* var = type->GetVarByName( varName );
+			const ae::Var* var = type->GetVarByName( varName, false );
 			AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
 			m_meshResourceVars.Set( type, var );
 		}
@@ -983,7 +979,7 @@ void EditorServer::Initialize( EditorProgram* program )
 			AE_ASSERT_MSG( type->GetPropertyValueCount( visiblePropIdx ), mustRegisterErr, type->GetName() );
 			const char* varName = type->GetPropertyValue( visiblePropIdx, 0 );
 			AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
-			const ae::Var* var = type->GetVarByName( varName );
+			const ae::Var* var = type->GetVarByName( varName, false );
 			AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
 			m_meshVisibleVars.Set( type, var );
 		}
@@ -1438,6 +1434,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGui::TreePop();
 	}
 	
+	ImGui::Separator();
+	ImGui::Separator();
+	
 	if ( m_first )
 	{
 		ImGui::SetNextItemOpen( true );
@@ -1477,6 +1476,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGui::TreePop();
 	}
 	
+	ImGui::Separator();
+	ImGui::Separator();
+	
 	if ( ImGui::TreeNode( "Operations" ) )
 	{
 		if ( ImGui::Button( "Create" ) )
@@ -1515,6 +1517,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGui::TreePop();
 	}
 	
+	ImGui::Separator();
+	ImGui::Separator();
+	
 	if ( ImGui::TreeNode( "Object properties" ) )
 	{
 		if ( selected )
@@ -1546,30 +1551,41 @@ void EditorServer::ShowUI( EditorProgram* program )
 			
 			for ( ae::Object* component : selectedObject->components )
 			{
-				const ae::Type* type = ae::GetTypeFromObject( component );
-				if ( ImGui::TreeNode( type->GetName() ) )
+				ImGui::Separator();
+				const ae::Type* componentType = ae::GetTypeFromObject( component );
+				if ( ImGui::TreeNode( componentType->GetName() ) )
 				{
 					std::function< void(const ae::Type*, ae::Object*) > fn = [&]( const ae::Type* type, ae::Object* component )
 					{
+						uint32_t varCount = type->GetVarCount( false );
+						if ( varCount )
+						{
+							ImGui::Separator();
+							if ( type != componentType )
+							{
+								ImGui::Text( "%s", type->GetName() );
+								ImGui::Separator();
+							}
+							for ( uint32_t i = 0; i < varCount; i++ )
+							{
+								const ae::Var* var = type->GetVarByIndex( i, false );
+								if ( m_ShowVar( program, component, var ) )
+								{
+									selectedObject->HandleVarChange( program, component, type, var );
+								}
+							}
+						}
 						if ( type->GetParentType() )
 						{
 							fn( type->GetParentType(), component );
 						}
-						uint32_t varCount = type->GetVarCount();
-						for ( uint32_t i = 0; i < varCount; i++ )
-						{
-							const ae::Var* var = type->GetVarByIndex( i );
-							if ( m_ShowVar( program, component, var ) )
-							{
-								selectedObject->HandleVarChange( program, component, type, var );
-							}
-						}
 					};
-					fn( type, component );
+					fn( componentType, component );
 					ImGui::TreePop();
 				}
 			}
 			
+			ImGui::Separator();
 			if ( ImGui::Button( "Add Component" ) )
 			{
 				ImGui::OpenPopup( "add_component_popup" );
@@ -1618,6 +1634,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 		}
 		ImGui::TreePop();
 	}
+	
+	ImGui::Separator();
+	ImGui::Separator();
 	
 	if ( ImGui::TreeNode( "Object List" ) )
 	{
@@ -1925,6 +1944,46 @@ void EditorServer::Unload()
 
 void EditorServer::m_Save() const
 {
+	ae::Map< ae::Str32, ae::Object* > defaults = m_tag;
+	
+	auto readMembers = []( const ae::Type* type, const EditorObject* levelObj, const ae::Object* component, const ae::Object* defaultComponent, ae::Dict* propsOut ) -> void
+	{
+		uint32_t varCount = type->GetVarCount( true );
+		for ( uint32_t varIdx = 0; varIdx < varCount; varIdx++ )
+		{
+			const ae::Var* var = type->GetVarByIndex( varIdx, true );
+			if ( var->IsArray() )
+			{
+				uint32_t length = var->GetArrayLength( component );
+				propsOut->SetInt( var->GetName(), length );
+				for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
+				{
+					ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+					auto value = var->GetObjectValueAsString( component, arrIdx );
+					propsOut->SetString( key.c_str(), value.c_str() );
+				}
+			}
+			else if ( var->GetType() == ae::Var::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
+			{
+				propsOut->SetMatrix4( var->GetName(), levelObj->transform );
+			}
+			else if ( var->GetType() == ae::Var::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
+			{
+				propsOut->SetVec3( var->GetName(), levelObj->transform.GetTranslation() );
+			}
+			// @TODO: 'scale' and 'rotation'
+			else
+			{
+				auto value = var->GetObjectValueAsString( component );
+				auto defaultValue = var->GetObjectValueAsString( defaultComponent );
+				if ( value != defaultValue )
+				{
+					propsOut->SetString( var->GetName(), value.c_str() );
+				}
+			}
+		}
+	};
+
 	client->objects.Clear();
 	uint32_t editorObjectCount = m_objects.Length();
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )
@@ -1938,42 +1997,25 @@ void EditorServer::m_Save() const
 		for ( const ae::Object* component : editorObj->components )
 		{
 			const ae::Type* type = ae::GetTypeFromObject( component );
-			ae::Dict& props = levelObj->components.Set( type->GetName(), m_tag );
-			for ( uint32_t varIdx = 0; varIdx < type->GetVarCount(); varIdx++ )
+			const ae::Object* defaultComponent = defaults.Get( type->GetName(), nullptr );
+			if ( !defaultComponent )
 			{
-				const ae::Var* var = type->GetVarByIndex( varIdx );
-				if ( var->IsArray() )
-				{
-					ae::Str32 key;
-					uint32_t length = var->GetArrayLength( component );
-					
-					key = ae::Str32::Format( "#::#", var->GetName(), "COUNT" );
-					props.SetInt( key.c_str(), length );
-					
-					std::string value;
-					for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
-					{
-						key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-						value = var->GetObjectValueAsString( component, arrIdx );
-						props.SetString( key.c_str(), value.c_str() );
-					}
-				}
-				else if ( var->GetType() == ae::Var::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
-				{
-					props.SetMatrix4( var->GetName(), levelObj->transform );
-				}
-				else if ( var->GetType() == ae::Var::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
-				{
-					props.SetVec3( var->GetName(), levelObj->transform.GetTranslation() );
-				}
-				// @TODO: 'scale' and 'rotation'
-				else
-				{
-					auto value = var->GetObjectValueAsString( component );
-					props.SetString( var->GetName(), value.c_str() );
-				}
+				auto c = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
+				type->New( c );
+				defaultComponent = c;
 			}
+			
+			EditorComponent& levelComponent = levelObj->components.Append( m_tag );
+			levelComponent.type = type->GetName();
+			readMembers( type, levelObj, component, defaultComponent, &levelComponent.members );
 		}
+	}
+	
+	for ( auto& _obj : defaults )
+	{
+		ae::Object* obj = _obj.value;
+		obj->~Object();
+		ae::Free( obj );
 	}
 }
 
@@ -1988,10 +2030,9 @@ bool EditorServer::m_Load( EditorProgram* program )
 		const EditorObject& levelObject = client->objects.GetValue( i );
 		EditorServerObject* editorObj = CreateObject( levelObject.id, levelObject.transform );
 		editorObj->name = levelObject.name;
-		for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
+		for ( const EditorComponent& levelComponent : levelObject.components )
 		{
-			const char* typeName = levelObject.components.GetKey( j ).c_str();
-			AddComponent( program, editorObj, typeName );
+			AddComponent( program, editorObj, levelComponent.type.c_str() );
 		}
 	}
 	// Serialize all components (second phase to handle references)
@@ -2000,42 +2041,41 @@ bool EditorServer::m_Load( EditorProgram* program )
 		const EditorObject& levelObject = client->objects.GetValue( i );
 		EditorServerObject* editorObj = GetObject( levelObject.id );
 		AE_ASSERT( editorObj );
-		for ( uint32_t j = 0; j < levelObject.components.Length(); j++ )
+		for ( const EditorComponent& levelComponent : levelObject.components )
 		{
-			const char* typeName = levelObject.components.GetKey( j ).c_str();
+			const char* typeName = levelComponent.type.c_str();
 			const ae::Type* type = ae::GetTypeByName( typeName );
 			if ( !type )
 			{
 				continue;
 			}
-			const ae::Dict& props = levelObject.components.GetValue( j );
-			
 			ae::Object* component = GetComponent( editorObj, typeName );
-			uint32_t varCount = type->GetVarCount();
-			for ( uint32_t k = 0; k < varCount; k++ )
+			AE_ASSERT( component );
+			for ( ae::Pair< ae::Str128, ae::Str128 > member : levelComponent.members )
 			{
-				const ae::Var* var = type->GetVarByIndex( k );
-				if ( var->IsArray() )
+				if ( const ae::Var* var = type->GetVarByName( member.key.c_str(), true ) )
 				{
-					ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), "COUNT" );
-					uint32_t length = props.GetInt( key.c_str(), 0 );
-					length = var->SetArrayLength( component, length );
-					
-					for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
+					if ( var->IsArray() )
 					{
-						key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-						if ( const char* value = props.GetString( key.c_str(), nullptr ) )
+						uint32_t length = atoi( member.value.c_str() );
+						length = var->SetArrayLength( component, length );
+
+						for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
 						{
-							var->SetObjectValueFromString( component, value, arrIdx );
+							ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+							if ( const char* value = levelComponent.members.GetString( key.c_str(), nullptr ) )
+							{
+								var->SetObjectValueFromString( component, value, arrIdx );
+							}
 						}
 					}
+					else
+					{
+						var->SetObjectValueFromString( component, member.value.c_str() );
+					}
+
+					editorObj->HandleVarChange( program, component, type, var );
 				}
-				else if ( const char* value = props.GetString( var->GetName(), nullptr ) )
-				{
-					var->SetObjectValueFromString( component, value );
-				}
-				
-				editorObj->HandleVarChange( program, component, type, var );
 			}
 		}
 	}
