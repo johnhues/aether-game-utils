@@ -346,7 +346,7 @@ void EditorProgram::Initialize()
 {
 	AE_INFO( "Editor Initialize (port: #)", params.port );
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 1600, 1200, false, true );
 	window.SetTitle( "ae" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -2441,19 +2441,11 @@ ae::Color EditorServer::m_GetColor( EditorObjectId entity, bool lines ) const
 {
 	uint64_t seed = entity * 43313;
 	ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
-	if ( entity == selected && entity == hoverEntity )
-	{
-		color = ae::Color::PicoOrange();
-	}
-	else if ( entity == selected && lines )
+	if ( entity == selected && lines )
 	{
 		color = ae::Color::PicoOrange();
 	}
 	else if ( entity == selected )
-	{
-		color = color.Lerp( ae::Color::PicoOrange(), 0.25f );
-	}
-	else if ( entity == hoverEntity )
 	{
 		color = color.Lerp( ae::Color::PicoOrange(), 0.75f );
 	}
