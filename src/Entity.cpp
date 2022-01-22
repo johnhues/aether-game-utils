@@ -287,7 +287,6 @@ bool Registry::Load( const ae::Editor* editor, CreateObjectFn fn )
 		for ( const EditorComponent& levelComponent : levelObject.components )
 		{
 			const char* typeName = levelComponent.type.c_str();
-			AE_INFO( "typeName #", typeName );
 			const ae::Type* type = ae::GetTypeByName( typeName );
 			const ae::Dict& props = levelComponent.members;
 			Component* component = TryGetComponent( entity, typeName );
