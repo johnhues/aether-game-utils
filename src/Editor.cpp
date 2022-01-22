@@ -800,12 +800,34 @@ bool Editor::Write() const
 			rapidjson::Value jsonComponents( rapidjson::kObjectType );
 			for ( const EditorComponent& levelComponent : levelObject.components )
 			{
+				const ae::Type* type = ae::GetTypeByName( levelComponent.type.c_str() );
 				rapidjson::Value jsonComponent( rapidjson::kObjectType );
-				for ( const auto& member : levelComponent.members )
+				uint32_t varCount = type->GetVarCount( true );
+				for ( uint32_t i = 0; i < varCount; i++ )
 				{
-					auto k = rapidjson::StringRef( member.key.c_str() );
-					auto v = rapidjson::StringRef( member.value.c_str() );
-					jsonComponent.AddMember( k, v, allocator );
+					const ae::Var* var = type->GetVarByIndex( i, true );
+					auto k = rapidjson::StringRef( var->GetName() );
+					if ( var->IsArray() )
+					{
+						int32_t arrayLen = levelComponent.members.GetInt( var->GetName(), 0 );
+						if ( arrayLen )
+						{
+							rapidjson::Value jsonArray( rapidjson::kArrayType );
+							jsonArray.Reserve( arrayLen, allocator );
+							for ( uint32_t arrIdx = 0; arrIdx < arrayLen; arrIdx++ )
+							{
+								ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+								const char* value = levelComponent.members.GetString( key.c_str(), nullptr );
+								AE_ASSERT( value );
+								jsonArray.PushBack( rapidjson::StringRef( value ), allocator );
+							}
+							jsonComponent.AddMember( k, jsonArray, allocator );
+						}
+					}
+					else if ( const char* value = levelComponent.members.GetString( var->GetName(), nullptr ) )
+					{
+						jsonComponent.AddMember( k, rapidjson::StringRef( value ), allocator );
+					}
 				}
 				jsonComponents.AddMember( rapidjson::StringRef( levelComponent.type.c_str() ), jsonComponent, allocator );
 			}
@@ -858,11 +880,44 @@ bool Editor::Read( const char* path )
 		levelObject.transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString() );
 		for ( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
+			if ( !componentIter.value.IsObject() )
+			{
+				continue;
+			}
+			const auto jsonComponent = componentIter.value.GetObject();
 			EditorComponent& levelComponent = levelObject.components.Append( m_tag );
 			levelComponent.type = componentIter.name.GetString();
-			for ( const auto& propIter : componentIter.value.GetObject() )
+			const ae::Type* type = ae::GetTypeByName( levelComponent.type.c_str() );
+			if ( !type )
 			{
-				levelComponent.members.SetString( propIter.name.GetString(), propIter.value.GetString() );
+				continue;
+			}
+			
+			uint32_t varCount = type->GetVarCount( true );
+			for ( uint32_t varIdx = 0; varIdx < varCount; varIdx++ )
+			{
+				const ae::Var* var = type->GetVarByIndex( varIdx, true );
+				if ( !jsonComponent.HasMember( var->GetName() ) )
+				{
+					continue;
+				}
+				const auto& jsonVar = jsonComponent[ var->GetName() ];
+				if ( var->IsArray() && jsonVar.IsArray() )
+				{
+					uint32_t arrIdx = 0;
+					const auto& jsonVarArray = jsonVar.GetArray();
+					levelComponent.members.SetInt( var->GetName(), jsonVarArray.Size() );
+					for ( const auto& jsonVarArrayValue : jsonVarArray )
+					{
+						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+						levelComponent.members.SetString( key.c_str(), jsonVarArrayValue.GetString() );
+						arrIdx++;
+					}
+				}
+				else if ( !jsonVar.IsObject() && !jsonVar.IsArray() )
+				{
+					levelComponent.members.SetString( var->GetName(), jsonVar.GetString() );
+				}
 			}
 		}
 	}
@@ -2051,31 +2106,39 @@ bool EditorServer::m_Load( EditorProgram* program )
 			}
 			ae::Object* component = GetComponent( editorObj, typeName );
 			AE_ASSERT( component );
-			for ( ae::Pair< ae::Str128, ae::Str128 > member : levelComponent.members )
+			AE_ASSERT( ae::GetTypeFromObject( component ) == type );
+			uint32_t varCount = type->GetVarCount( true );
+			for ( uint32_t varIdx = 0; varIdx < varCount; varIdx++ )
 			{
-				if ( const ae::Var* var = type->GetVarByName( member.key.c_str(), true ) )
+				const ae::Var* var = type->GetVarByIndex( varIdx, true );
+				if ( var->IsArray() )
 				{
-					if ( var->IsArray() )
+					uint32_t length = levelComponent.members.GetInt( var->GetName(), 0 );
+					if ( !length )
 					{
-						uint32_t length = atoi( member.value.c_str() );
-						length = var->SetArrayLength( component, length );
-
-						for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
+						continue;
+					}
+					length = var->SetArrayLength( component, length );
+					for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
+					{
+						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+						if ( const char* value = levelComponent.members.GetString( key.c_str(), nullptr ) )
 						{
-							ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-							if ( const char* value = levelComponent.members.GetString( key.c_str(), nullptr ) )
-							{
-								var->SetObjectValueFromString( component, value, arrIdx );
-							}
+							var->SetObjectValueFromString( component, value, arrIdx );
 						}
 					}
-					else
-					{
-						var->SetObjectValueFromString( component, member.value.c_str() );
-					}
-
-					editorObj->HandleVarChange( program, component, type, var );
 				}
+				else
+				{
+					const char* value = levelComponent.members.GetString( var->GetName(), nullptr );
+					if ( !value )
+					{
+						continue;
+					}
+					var->SetObjectValueFromString( component, value );
+				}
+				// @NOTE: This should only be called when the above succeeds
+				editorObj->HandleVarChange( program, component, type, var );
 			}
 		}
 	}
@@ -2107,12 +2170,23 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 			ImGui::PopID();
 		}
 		ImGui::EndChild();
-		if ( var->IsArrayResizable() )
+		if ( !var->IsArrayFixedLength() )
 		{
+			bool arrayMaxLength = ( var->GetArrayLength( component ) >= var->GetArraySize() );
+			if ( arrayMaxLength )
+			{
+				ImGui::PushItemFlag( ImGuiItemFlags_Disabled, true );
+				ImGui::PushStyleVar( ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f );
+			}
 			if ( ImGui::Button( "Add" ) )
 			{
 				var->SetArrayLength( component, arrayLength + 1 );
 				changed = true;
+			}
+			if ( arrayMaxLength )
+			{
+				ImGui::PopItemFlag();
+				ImGui::PopStyleVar();
 			}
 			ImGui::SameLine();
 			if ( ImGui::Button( "Remove" ) && arrayLength )
@@ -2213,7 +2287,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 		ImGui::SameLine();
 		if ( val == "NULL" )
 		{
-			if ( ImGui::Button( "Select" ) )
+			if ( ImGui::Button( "Set" ) )
 			{
 				m_selectRef.enabled = true;
 				m_selectRef.component = component;
@@ -2223,18 +2297,21 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 		}
 		else
 		{
+			if ( ImGui::Button( "Select" ) )
+			{
+				ae::Object* selectComp = nullptr;
+				if ( program->serializer.StringToObjectPointer( val.c_str(), &selectComp ) )
+				{
+					AE_ASSERT( selectComp );
+					const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
+					AE_ASSERT( selectObj );
+					selected = selectObj->entity;
+				}
+			}
+			ImGui::SameLine();
 			if ( ImGui::Button( "Clear" ) )
 			{
 				var->SetObjectValueFromString( component, "NULL", idx );
-			}
-			ImGui::SameLine();
-			ae::Object* selectComp = nullptr;
-			if ( ImGui::Button( "Select" ) && program->serializer.StringToObjectPointer( val.c_str(), &selectComp ) )
-			{
-				AE_ASSERT( selectComp );
-				const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
-				AE_ASSERT( selectObj );
-				selected = selectObj->entity;
 			}
 		}
 	}

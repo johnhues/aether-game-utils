@@ -3493,9 +3493,10 @@ public:
 	bool IsArray() const;
 	
 	// Array
-	bool IsArrayResizable() const;
+	bool IsArrayFixedLength() const;
 	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const; //!< Returns new length
 	uint32_t GetArrayLength( const ae::Object* obj ) const;
+	uint32_t GetArraySize() const;
 
 	//------------------------------------------------------------------------------
 	// Internal
@@ -3517,8 +3518,8 @@ public:
 		virtual const void* GetElement( const void* a, uint32_t idx ) const = 0;
 		virtual uint32_t Resize( void* a, uint32_t size ) const = 0;
 		virtual uint32_t GetLength( const void* a ) const = 0; //!< Current array length
-		virtual uint32_t GetMaxLength() const = 0; //!< Return uint max for no hard limit
-		virtual uint32_t IsResizable() const = 0;
+		virtual uint32_t GetSize() const = 0; //!< Return uint max for no hard limit
+		virtual uint32_t IsFixedLength() const = 0;
 	};
 	const ArrayAdapter* m_arrayAdapter = nullptr;
 };
@@ -6709,8 +6710,8 @@ public:
 		return a.Length();
 	}
 	uint32_t GetLength( const void* a ) const override { return ((Arr*)a)->Length(); }
-	uint32_t GetMaxLength() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
-	uint32_t IsResizable() const override { return ( N == 0 ); }
+	uint32_t GetSize() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
+	uint32_t IsFixedLength() const override { return false; }
 
 	typedef ae::Array< T, N > Arr;
 };
@@ -6736,8 +6737,8 @@ public:
 	const void* GetElement( const void* a, uint32_t idx ) const override { return &((T*)a)[ idx ]; }
 	uint32_t Resize( void* a, uint32_t length ) const override { return N; }
 	uint32_t GetLength( const void* a ) const override { return N; }
-	uint32_t GetMaxLength() const override { return N; }
-	uint32_t IsResizable() const override { return false; }
+	uint32_t GetSize() const override { return N; }
+	uint32_t IsFixedLength() const override { return true; }
 };
 
 template < typename T, uint32_t N >
@@ -18183,9 +18184,9 @@ bool ae::Var::IsArray() const
 	return m_arrayAdapter != nullptr;
 }
 
-bool ae::Var::IsArrayResizable() const
+bool ae::Var::IsArrayFixedLength() const
 {
-	return IsArray() && ( m_arrayAdapter->IsResizable() );
+	return IsArray() && ( m_arrayAdapter->IsFixedLength() );
 }
 
 uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
@@ -18214,6 +18215,12 @@ uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 	
 	void* arr = (uint8_t*)obj + m_offset;
 	return m_arrayAdapter->GetLength( arr );
+}
+
+uint32_t ae::Var::GetArraySize() const
+{
+	AE_ASSERT( IsArray() );
+	return m_arrayAdapter->GetSize();
 }
 
 //------------------------------------------------------------------------------
