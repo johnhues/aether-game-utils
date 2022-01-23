@@ -1120,6 +1120,17 @@ using Str256 = Str< 256 >;
 using Str512 = Str< 512 >;
 
 //------------------------------------------------------------------------------
+// ae::Pair class
+//------------------------------------------------------------------------------
+template < typename K, typename V >
+struct Pair
+{
+	Pair( const K& k, const V& v ) : key( k ), value( v ) {}
+	K key;
+	V value;
+};
+
+//------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
 #define _AE_STATIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
@@ -1187,7 +1198,7 @@ private:
 	Storage< N > m_storage;
 #endif
 public:
-	// Ranged-based loop. Lowercase to match c++ standard ('-.-)
+	// Ranged-based loop. Lowercase to match c++ standard
 	T* begin() { return m_array; }
 	T* end() { return m_array + m_length; }
 	const T* begin() const { return m_array; }
@@ -1227,22 +1238,16 @@ public:
 	int32_t GetIndex( const K& key ) const; //!< Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
 	uint32_t Length() const; //!< Returns the number of key/value pairs in the map
 
-	struct Pair
-	{
-		Pair( const K& k, const V& v );
-		K key;
-		V value;
-	};
-	// Ranged-based loop. Lowercase to match c++ standard ('-.-)
-	Pair* begin() { return m_pairs.begin(); }
-	Pair* end() { return m_pairs.end(); }
-	const Pair* begin() const { return m_pairs.begin(); }
-	const Pair* end() const { return m_pairs.end(); }
+	// Ranged-based loop. Lowercase to match c++ standard
+	ae::Pair< K, V >* begin() { return m_pairs.begin(); }
+	ae::Pair< K, V >* end() { return m_pairs.end(); }
+	const ae::Pair< K, V >* begin() const { return m_pairs.begin(); }
+	const ae::Pair< K, V >* end() const { return m_pairs.end(); }
 
 private:
 	template < typename K2, typename V2, uint32_t N2 >
 	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
-	Array< Pair, N > m_pairs;
+	Array< ae::Pair< K, V >, N > m_pairs;
 };
 
 //------------------------------------------------------------------------------
@@ -1283,6 +1288,12 @@ public:
 	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
 	void SetInt( const char* key, uint32_t value ) { SetInt( key, (int32_t)value ); }
 	void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
+	
+	// Ranged-based loop. Lowercase to match c++ standard
+	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
+	ae::Pair< ae::Str128, ae::Str128 >* end() { return m_entries.end(); }
+	const ae::Pair< ae::Str128, ae::Str128 >* begin() const { return m_entries.begin(); }
+	const ae::Pair< ae::Str128, ae::Str128 >* end() const { return m_entries.end(); }
 
 private:
 	Dict() = delete;
@@ -3351,7 +3362,7 @@ const uint32_t kMaxMetaProps = 8;
 class Type;
 
 //------------------------------------------------------------------------------
-// External base meta object
+// ae::Object
 //! Base class for all meta registered objects. Inherit from this using
 //! ae::Inheritor and register your classes with AE_REGISTER_CLASS.
 //------------------------------------------------------------------------------
@@ -3367,7 +3378,7 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// External inheritor meta object
+// ae::Inheritor
 //------------------------------------------------------------------------------
 template < typename Parent, typename This >
 class Inheritor : public Parent
@@ -3394,7 +3405,7 @@ ae::TypeId GetObjectTypeId( const ae::Object* obj ); //!< Get a registered ae::T
 ae::TypeId GetTypeIdFromName( const char* name ); //!< Get a registered ae::TypeId from a type name
 	
 //------------------------------------------------------------------------------
-// Enum class
+// ae::Enum class
 //------------------------------------------------------------------------------
 class Enum
 {
@@ -3430,7 +3441,7 @@ public: // Internal
 };
 	
 //------------------------------------------------------------------------------
-// Var class
+// ae::Var class
 //------------------------------------------------------------------------------
 class Var
 {
@@ -3482,9 +3493,10 @@ public:
 	bool IsArray() const;
 	
 	// Array
-	bool IsArrayResizable() const;
+	bool IsArrayFixedLength() const;
 	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const; //!< Returns new length
 	uint32_t GetArrayLength( const ae::Object* obj ) const;
+	uint32_t GetArraySize() const;
 
 	//------------------------------------------------------------------------------
 	// Internal
@@ -3506,14 +3518,14 @@ public:
 		virtual const void* GetElement( const void* a, uint32_t idx ) const = 0;
 		virtual uint32_t Resize( void* a, uint32_t size ) const = 0;
 		virtual uint32_t GetLength( const void* a ) const = 0; //!< Current array length
-		virtual uint32_t GetMaxLength() const = 0; //!< Return uint max for no hard limit
-		virtual uint32_t IsResizable() const = 0;
+		virtual uint32_t GetSize() const = 0; //!< Return uint max for no hard limit
+		virtual uint32_t IsFixedLength() const = 0;
 	};
 	const ArrayAdapter* m_arrayAdapter = nullptr;
 };
 
 //------------------------------------------------------------------------------
-// External MetaType class
+// ae::Type class
 //------------------------------------------------------------------------------
 class Type
 {
@@ -3531,9 +3543,9 @@ public:
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
 		
 	// Vars
-	uint32_t GetVarCount() const;
-	const ae::Var* GetVarByIndex( uint32_t i ) const;
-	const ae::Var* GetVarByName( const char* name ) const;
+	uint32_t GetVarCount( bool parents ) const;
+	const ae::Var* GetVarByIndex( uint32_t i, bool parents ) const;
+	const ae::Var* GetVarByName( const char* name, bool parents ) const;
 
 	// C++ type info
 	template < typename T = ae::Object > T* New( void* obj ) const;
@@ -4252,14 +4264,20 @@ template < typename T >
 bool VecT< T >::operator==( const T& v ) const
 {
 	auto&& self = *(T*)this;
-	return memcmp( self.data, v.data, sizeof(T::data) ) == 0;
+	for ( uint32_t i = 0; i < countof(T::data); i++ )
+	{
+		if ( self.data[ i ] != v.data[ i ] )
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 template < typename T >
 bool VecT< T >::operator!=( const T& v ) const
 {
-	auto&& self = *(T*)this;
-	return memcmp( self.data, v.data, sizeof(T::data) ) != 0;
+	return !operator ==( v );
 }
 
 template < typename T >
@@ -5879,16 +5897,10 @@ Map< K, V, N >::Map( ae::Tag pool ) :
 }
 
 template < typename K, typename V, uint32_t N >
-Map< K, V, N >::Pair::Pair( const K& k, const V& v ) :
-	key( k ),
-	value( v )
-{}
-
-template < typename K, typename V, uint32_t N >
 V& Map< K, V, N >::Set( const K& key, const V& value )
 {
 	int32_t index = GetIndex( key );
-	Pair* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
+	Pair< K, V >* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
 	if ( pair )
 	{
 		pair->value = value;
@@ -6698,8 +6710,8 @@ public:
 		return a.Length();
 	}
 	uint32_t GetLength( const void* a ) const override { return ((Arr*)a)->Length(); }
-	uint32_t GetMaxLength() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
-	uint32_t IsResizable() const override { return ( N == 0 ); }
+	uint32_t GetSize() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
+	uint32_t IsFixedLength() const override { return false; }
 
 	typedef ae::Array< T, N > Arr;
 };
@@ -6725,8 +6737,8 @@ public:
 	const void* GetElement( const void* a, uint32_t idx ) const override { return &((T*)a)[ idx ]; }
 	uint32_t Resize( void* a, uint32_t length ) const override { return N; }
 	uint32_t GetLength( const void* a ) const override { return N; }
-	uint32_t GetMaxLength() const override { return N; }
-	uint32_t IsResizable() const override { return false; }
+	uint32_t GetSize() const override { return N; }
+	uint32_t IsFixedLength() const override { return true; }
 };
 
 template < typename T, uint32_t N >
@@ -7325,10 +7337,17 @@ Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
 	position = -position;
 	forward.Normalize();
 	up.Normalize();
-
 	Vec3 right = forward.Cross( up );
 	right.Normalize();
 	up = right.Cross( forward );
+#if _AE_DEBUG_
+	AE_ASSERT( forward == forward );
+	AE_ASSERT( right == right );
+	AE_ASSERT( up == up );
+	AE_ASSERT( forward.LengthSquared() );
+	AE_ASSERT( right.LengthSquared() );
+	AE_ASSERT( up.LengthSquared() );
+#endif
 
 	Matrix4 result;
 	memset( &result, 0, sizeof( result ) );
@@ -7538,32 +7557,15 @@ Matrix4 Matrix4::GetInverse() const
 		data[8] * data[2] * data[5];
 
 	float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
+#if _AE_DEBUG_
+	AE_ASSERT_MSG( det == det, "Non-invertible matrix" );
+	AE_ASSERT_MSG( det, "Non-invertible matrix" );
+#endif
 	det = 1.0f / det;
 	for ( uint32_t i = 0; i < 16; i++ )
 	{
 		r.data[ i ] *= det;
 	}
-	
-#if _AE_DEBUG_
-	AE_ASSERT_MSG( r.data[ 0 ] == r.data[ 0 ] &&
-		r.data[ 1 ] == r.data[ 1 ] &&
-		r.data[ 2 ] == r.data[ 2 ] &&
-		r.data[ 3 ] == r.data[ 3 ] &&
-		r.data[ 4 ] == r.data[ 4 ] &&
-		r.data[ 5 ] == r.data[ 5 ] &&
-		r.data[ 6 ] == r.data[ 6 ] &&
-		r.data[ 7 ] == r.data[ 7 ] &&
-		r.data[ 8 ] == r.data[ 8 ] &&
-		r.data[ 9 ] == r.data[ 9 ] &&
-		r.data[ 10 ] == r.data[ 10 ] &&
-		r.data[ 11 ] == r.data[ 11 ] &&
-		r.data[ 12 ] == r.data[ 12 ] &&
-		r.data[ 13 ] == r.data[ 13 ] &&
-		r.data[ 14 ] == r.data[ 14 ] &&
-		r.data[ 15 ] == r.data[ 15 ],
-		"NAN detected on ae::Matrix4::GetInverse()"
-	);
-#endif
 	
 	return r;
 }
@@ -15335,18 +15337,30 @@ void DebugCamera::Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
 	ae::Vec3 diff = focus - pos;
 	m_dist = diff.Length();
 	
-	if ( m_dist > 0.01f ) // Only update rotation if focus is different than position
+	if ( m_worldUp == Axis::Y )
 	{
-		if ( m_worldUp == Axis::Y )
+		ae::Vec2 xz = diff.GetXZ();
+#if _AE_DEBUG_
+		AE_ASSERT( focus.x != pos.x || focus.z != pos.z );
+#else
+		if ( xz != ae::Vec2( 0.0f ) )
+#endif
 		{
-			ae::Vec2 xz = diff.GetXZ();
 			xz.y = -xz.y; // -Z forward for right handed Y-Up
 			m_yaw = xz.GetAngle();
 			m_pitch = asinf( diff.y / m_dist );
 		}
-		else if ( m_worldUp == Axis::Z )
+	}
+	else if ( m_worldUp == Axis::Z )
+	{
+		ae::Vec2 xy = diff.GetXY();
+#if _AE_DEBUG_
+		AE_ASSERT( focus.x != pos.x || focus.y != pos.y );
+#else
+		if ( xy != ae::Vec2( 0.0f ) )
+#endif
 		{
-			m_yaw = diff.GetXY().GetAngle();
+			m_yaw = xy.GetAngle();
 			m_pitch = asinf( diff.z / m_dist );
 		}
 	}
@@ -17789,6 +17803,7 @@ const ae::Type* ae::GetTypeById( ae::TypeId id )
 
 const ae::Type* ae::GetTypeByName( const char* typeName )
 {
+	if ( !typeName[ 0 ] ) { return nullptr; }
 	auto it = _GetTypeNameMap().find( typeName );
 	if ( it != _GetTypeNameMap().end() ) { return it->second; }
 	else { return nullptr; }
@@ -17847,7 +17862,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	// Safety check to make sure 'this' Var belongs to 'obj' ae::Type
 	const ae::Type* objType = ae::GetTypeFromObject( obj );
 	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType == m_owner, "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
+	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
 	
 	void* varData = nullptr;
 	if ( m_arrayAdapter )
@@ -18073,17 +18088,53 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			return false;
 		}
 	}
-	
 	return false;
 }
 
-const ae::Var* ae::Type::GetVarByName( const char* name ) const
+uint32_t ae::Type::GetVarCount( bool parents ) const
 {
-	int32_t i = m_vars.FindFn( [name]( auto&& v )
+	const ae::Type* parent = ( parents ? GetParentType() : nullptr );
+	return m_vars.Length() + ( parent ? parent->GetVarCount( parents ) : 0 );
+}
+
+const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
+{
+	if ( !parents )
+	{
+		return &m_vars[ i ];
+	}
+	// @HACK: This whole function should be re-written to avoid recreating this array and all of this recursion
+	ae::Array< const ae::Var*, 32 > vars;
+	auto fn = [&vars]( auto fn, const ae::Type* type ) -> void
+	{
+		if ( const ae::Type* parent = type->GetParentType() )
+		{
+			fn( fn, parent );
+		}
+		for ( const ae::Var& v : type->m_vars )
+		{
+			vars.Append( &v );
+		}
+	};
+	fn( fn, this );
+	return vars[ i ];
+}
+
+const ae::Var* ae::Type::GetVarByName( const char* name, bool parents ) const
+{
+	int32_t i = m_vars.FindFn( [name]( const ae::Var& v )
 	{
 		return v.m_name == name;
 	} );
-	return ( i >= 0 ) ? &m_vars[ i ] : nullptr;
+	if ( i >= 0 )
+	{
+		return &m_vars[ i ];
+	}
+	else if ( const ae::Type* parent = ( parents ? GetParentType() : nullptr ) )
+	{
+		return parent->GetVarByName( name, parents );
+	}
+	return nullptr;
 }
 
 const ae::Type* ae::Type::GetParentType() const
@@ -18133,9 +18184,9 @@ bool ae::Var::IsArray() const
 	return m_arrayAdapter != nullptr;
 }
 
-bool ae::Var::IsArrayResizable() const
+bool ae::Var::IsArrayFixedLength() const
 {
-	return IsArray() && ( m_arrayAdapter->IsResizable() );
+	return IsArray() && ( m_arrayAdapter->IsFixedLength() );
 }
 
 uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
@@ -18164,6 +18215,12 @@ uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 	
 	void* arr = (uint8_t*)obj + m_offset;
 	return m_arrayAdapter->GetLength( arr );
+}
+
+uint32_t ae::Var::GetArraySize() const
+{
+	AE_ASSERT( IsArray() );
+	return m_arrayAdapter->GetSize();
 }
 
 //------------------------------------------------------------------------------
@@ -18343,8 +18400,6 @@ uint32_t ae::Type::GetPropertyValueCount( int32_t propIndex ) const { return m_p
 uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
 const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
 const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
-uint32_t ae::Type::GetVarCount() const { return m_vars.Length(); }
-const ae::Var* ae::Type::GetVarByIndex( uint32_t i ) const { return &m_vars[ i ]; }
 uint32_t ae::Type::GetSize() const { return m_size; }
 uint32_t ae::Type::GetAlignment() const { return m_align; }
 const char* ae::Type::GetName() const { return m_name.c_str(); }
