@@ -171,11 +171,16 @@ namespace ae {
 //! \defgroup Platform
 //! @{
 //------------------------------------------------------------------------------
-uint32_t GetPID(); //!< Returns the process ID on Windows, OSX, and Linux. Returns 0 with Emscripten builds.
-uint32_t GetMaxConcurrentThreads(); //!< Returns the number of virtual cores available.
-bool IsDebuggerAttached(); //!< Returns true if attached to Visual Studio or Xcode.
-template < typename T > const char* GetTypeName(); //!< Returns the name of the given class or basic type.
-double GetTime(); //!< Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
+//! Returns the process ID on Windows, OSX, and Linux. Returns 0 with Emscripten builds.
+uint32_t GetPID();
+//! Returns the number of virtual cores available.
+uint32_t GetMaxConcurrentThreads();
+//! Returns true if attached to Visual Studio or Xcode.
+bool IsDebuggerAttached();
+//! Returns the name of the given class or basic type.
+template < typename T > const char* GetTypeName();
+//! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
+double GetTime();
 //! @}
 
 //------------------------------------------------------------------------------
@@ -896,7 +901,8 @@ Vec3 ClosestPtPointTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c );
 //------------------------------------------------------------------------------
 struct Color
 {
-	Color() {} //!< Empty default constructor for performance of vertex arrays etc
+	//! Empty default constructor for performance of vertex arrays etc
+	Color() {}
 	Color( const Color& ) = default;
 	Color( float rgb ); // @TODO: Delete. Color space should be explicit
 	Color( float r, float g, float b ); // @TODO: Delete. Color space should be explicit
@@ -1034,7 +1040,8 @@ public:
 	uint32_t GetStepCount() const;
 
 	float GetDt() const;
-	void SetDt( float sec ); //!< Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+	//! Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+	void SetDt( float sec );
 
 	void Wait();
 
@@ -1139,40 +1146,51 @@ template < typename T, uint32_t N = 0 >
 class Array
 {
 public:
-	// Static array (N > 0)
+	//! Static array (N > 0) only
 	Array();
-	Array( uint32_t length, const T& val ); //!< Appends 'length' number of 'val's
-	// Dynamic array (N == 0)
+	//! Static array (N > 0) only. Appends 'length' number of 'val's
+	Array( uint32_t length, const T& val );
+
+	//! Dynamic array (N == 0) only
 	Array( ae::Tag tag );
-	Array( ae::Tag tag, uint32_t size ); //!< Reserve size (with length of 0)
-	Array( ae::Tag tag, uint32_t length, const T& val ); //!< Reserves 'length' and appends 'length' number of 'val's
+	//! Dynamic array (N == 0) only. Reserve size (with length of 0).
+	Array( ae::Tag tag, uint32_t size );
+	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length' number of 'val's
+	Array( ae::Tag tag, uint32_t length, const T& val );
 	void Reserve( uint32_t total );
-	// Static and dynamic arrays
+
 	Array( const Array< T, N >& other );
-	Array( Array< T, N >&& other ) noexcept; //!< Move operators fallback to regular operators if ae::Tags don't match
+	//! Move operators fallback to regular operators if ae::Tags don't match
+	Array( Array< T, N >&& other ) noexcept;
 	void operator =( const Array< T, N >& other );
 	void operator =( Array< T, N >&& other ) noexcept;
 	~Array();
 	
-	// Add elements
+	//! Add elements
 	T& Append( const T& value );
+	//! Add elements
 	void Append( const T* values, uint32_t count );
+	//! Add elements
 	T& Insert( uint32_t index, const T& value );
 
-	// Find elements
-	template < typename U > int32_t Find( const U& value ) const; //!< Returns -1 when not found
-	template < typename Fn > int32_t FindFn( Fn testFn ) const; //!< Returns -1 when not found
+	//! Find elements. Returns -1 when not found.
+	template < typename U > int32_t Find( const U& value ) const;
+	//! Find elements. Returns -1 when not found.
+	template < typename Fn > int32_t FindFn( Fn testFn ) const;
 
-	// Remove elements
+	//! Remove elements
 	template < typename U > uint32_t RemoveAll( const U& value );
+	//! Remove elements
 	template < typename Fn > uint32_t RemoveAllFn( Fn testFn );
+	//! Remove elements
 	void Remove( uint32_t index );
 	void Clear();
 
-	// Access elements
-	const T& operator[]( int32_t index ) const; //!< Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
+	//! Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
+	const T& operator[]( int32_t index ) const;
 	T& operator[]( int32_t index );
-	T* Begin() { return m_array; } //!< These functions can return null when array length is zero
+	//! These functions can return null when array length is zero
+	T* Begin() { return m_array; }
 	T* End() { return m_array + m_length; }
 	const T* Begin() const { return m_array; }
 	const T* End() const { return m_array + m_length; }
@@ -1188,6 +1206,7 @@ private:
 	uint32_t m_size;
 	T* m_array;
 	ae::Tag m_tag;
+	// clang-format off
 	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
 #if _AE_LINUX_
 	struct Storage { AlignedStorageT data[ N ]; };
@@ -1197,6 +1216,7 @@ private:
 	template <> struct Storage< 0 > {};
 	Storage< N > m_storage;
 #endif
+	// clang-format on
 public:
 	// Ranged-based loop. Lowercase to match c++ standard
 	T* begin() { return m_array; }
@@ -1212,31 +1232,47 @@ template < typename K, typename V, uint32_t N = 0 >
 class Map
 {
 public:
-	Map(); //!< Constructor for a map with static allocated storage (N > 0)
-	Map( ae::Tag pool ); //!< Constructor for a map with dynamically allocated storage (N == 0)
-	void Reserve( uint32_t count ); //!< Expands the map storage if necessary so a @count number of key/value pairs can be added without any allocations. Asserts if using static storage and @count is less than N.
+	//! Constructor for a map with static allocated storage (N > 0)
+	Map();
+	//! Constructor for a map with dynamically allocated storage (N == 0)
+	Map( ae::Tag pool );
+	//! Expands the map storage if necessary so a @count number of key/value pairs can be added without any allocations. Asserts if using static storage and @count is less than N.
+	void Reserve( uint32_t count );
 	
-	// Access elements by key
-	V& Set( const K& key, const V& value ); //!< Add or replace a key/value pair in the map. Can be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the value across non-const operations.
-	V& Get( const K& key ); //!< Returns a modifiable reference to the value set with @key. Asserts when key/value pair is missing.
-	const V& Get( const K& key ) const; //!< Returns the value set with @key. Asserts when key/value pair is missing.
-	const V& Get( const K& key, const V& defaultValue ) const; //!< Returns the value set with @key. Returns @defaultValue otherwise when the key/value pair is missing.
-	V* TryGet( const K& key ); //!< Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
-	const V* TryGet( const K& key ) const; //!< Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
-	bool TryGet( const K& key, V* valueOut ); //!< Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
-	bool TryGet( const K& key, V* valueOut ) const; //!< Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
+	//! Access elements by key. Add or replace a key/value pair in the map. Can be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the value across non-const operations.
+	V& Set( const K& key, const V& value );
+	//! Access elements by key. Returns a modifiable reference to the value set with @key. Asserts when key/value pair is missing.
+	V& Get( const K& key );
+	//! Access elements by key. Returns the value set with @key. Asserts when key/value pair is missing.
+	const V& Get( const K& key ) const;
+	//! Returns the value set with @key. Returns @defaultValue otherwise when the key/value pair is missing.
+	const V& Get( const K& key, const V& defaultValue ) const;
+	//! Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
+	V* TryGet( const K& key );
+	//! Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
+	const V* TryGet( const K& key ) const;
+	//! Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
+	bool TryGet( const K& key, V* valueOut );
+	//! Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
+	bool TryGet( const K& key, V* valueOut ) const;
 	
-	// Remove elements
-	bool Remove( const K& key ); //!< Find and remove a key/value pair from the map. Returns true.
-	bool Remove( const K& key, V* valueOut ); //!< Find and remove a key/value pair from the map. Returns true on success and a copy of the value is set to @valueOut.
-	void Clear(); //!< Remove all key/value pairs from the map. ae::Map::Length() will return 0 after calling this.
+	//! Find and remove a key/value pair from the map. Returns true.
+	bool Remove( const K& key );
+	//! Find and remove a key/value pair from the map. Returns true on success and a copy of the value is set to @valueOut.
+	bool Remove( const K& key, V* valueOut );
+	//! Remove all key/value pairs from the map. ae::Map::Length() will return 0 after calling this.
+	void Clear();
 
-	// Access elements by index
-	const K& GetKey( int32_t index ) const; //!< Returns the nth key in the map
-	const V& GetValue( int32_t index ) const; //!< Returns the nth value in the map
-	V& GetValue( int32_t index ); //!< Returns a modifiable reference to the nth value in the map
-	int32_t GetIndex( const K& key ) const; //!< Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
-	uint32_t Length() const; //!< Returns the number of key/value pairs in the map
+	//! Access elements by index. Returns the nth key in the map.
+	const K& GetKey( int32_t index ) const;
+	//! Access elements by index. Returns the nth value in the map.
+	const V& GetValue( int32_t index ) const;
+	//! Access elements by index. Returns a modifiable reference to the nth value in the map.
+	V& GetValue( int32_t index );
+	//! Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
+	int32_t GetIndex( const K& key ) const;
+	//! Returns the number of key/value pairs in the map
+	uint32_t Length() const;
 
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< K, V >* begin() { return m_pairs.begin(); }
@@ -1356,7 +1392,8 @@ struct RectInt
 	ae::Int2 GetSize() const { return ae::Int2( w, h ); }
 	bool Contains( ae::Int2 pos ) const;
 	bool Intersects( RectInt other ) const;
-	void Expand( ae::Int2 pos ); //!< Zero size rect is expanded to 1x1 grid square by Expand()
+	//! Zero size rect is expanded to 1x1 grid square by Expand()
+	void Expand( ae::Int2 pos );
 	
 	int32_t x = 0;
 	int32_t y = 0;
@@ -1444,6 +1481,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 //------------------------------------------------------------------------------
 // Logging functions
 //------------------------------------------------------------------------------
+// clang-format off
 #define AE_LOG(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_TRACE(...) ae::LogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_DEBUG(...) ae::LogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
@@ -1466,6 +1504,7 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 #define AE_STATIC_ASSERT( _x ) static_assert( _x, "static assert" )
 #define AE_STATIC_ASSERT_MSG( _x, _m ) static_assert( _x, _m )
 #define AE_STATIC_FAIL( _m ) static_assert( 0, _m )
+// clang-format on
 
 //------------------------------------------------------------------------------
 // Handle missing 'standard' C functions
@@ -1538,17 +1577,22 @@ public:
 	void SetTitle( const char* title );
 	void SetFullScreen( bool fullScreen );
 	void SetPosition( Int2 pos );
-	void SetSize( uint32_t width, uint32_t height ); //!< Window size is specified in virtual DPI units, content size is subject to the displays scale factor
+	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
+	void SetSize( uint32_t width, uint32_t height );
 	void SetMaximized( bool maximized );
 
 	const char* GetTitle() const { return m_windowTitle.c_str(); }
 	bool GetFullScreen() const { return m_fullScreen; }
 	bool GetMaximized() const { return m_maximized; }
-	bool GetFocused() const { return m_focused; } //!< True if the user is currently working with this window
+	//! True if the user is currently working with this window
+	bool GetFocused() const { return m_focused; }
 	Int2 GetPosition() const { return m_pos; }
-	int32_t GetWidth() const; //!< Virtual window width (unscaled by display scale factor)
-	int32_t GetHeight() const; //!< Virtual window height (unscaled by display scale factor)
-	float GetScaleFactor() const { return m_scaleFactor; } //!<  Window content scale factor
+	//! Virtual window width (unscaled by display scale factor)
+	int32_t GetWidth() const;
+	//! Virtual window height (unscaled by display scale factor)
+	int32_t GetHeight() const;
+	//! Window content scale factor
+	float GetScaleFactor() const { return m_scaleFactor; }
 
 private:
 	void m_Initialize();
@@ -2464,7 +2508,8 @@ public:
 	void Activate();
 	void Clear( Color color );
 	void Present();
-	void AddTextureBarrier(); //!< Must call to readback from active render target (GL only)
+	//! Must call to readback from active render target (GL only)
+	void AddTextureBarrier();
 
 	class Window* GetWindow() { return m_window; }
 	RenderTarget* GetCanvas() { return &m_canvas; }
@@ -2539,8 +2584,10 @@ class DebugLines
 public:
 	void Initialize( uint32_t maxVerts );
 	void Terminate();
-	void Render( const Matrix4& worldToNdc ); //!< Also calls Clear() so AddLine() etc should be called every frame
-	void SetXRayEnabled( bool enabled ) { m_xray = enabled; } //!< Draw desaturated lines on failed depth test
+	//! Also calls Clear() so AddLine() etc should be called every frame
+	void Render( const Matrix4& worldToNdc );
+	//! Draw desaturated lines on failed depth test
+	void SetXRayEnabled( bool enabled ) { m_xray = enabled; }
 
 	bool AddLine( Vec3 p0, Vec3 p1, Color color );
 	bool AddDistanceCheck( Vec3 p0, Vec3 p1, float distance );
@@ -2590,7 +2637,8 @@ public:
 	//! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
 	void Update( const ae::Input* input, float dt );
 
-	Mode GetMode() const; //!< Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
+	//! Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
+	Mode GetMode() const;
 	ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
 	ae::Vec3 GetFocus() const { return m_focusPos; }
 	ae::Vec3 GetForward() const { return m_forward; }
@@ -2880,7 +2928,8 @@ public:
 
 	void SetVolume( float volume );
 	void PlayMusic( const AudioData* audioFile, float volume, uint32_t channel );
-	void PlaySfx( const AudioData* audioFile, float volume, int32_t priority ); //!< Lower priority values interrupt sfx with higher values
+	//! Lower priority values interrupt sfx with higher values
+	void PlaySfx( const AudioData* audioFile, float volume, int32_t priority );
 	void StopMusic( uint32_t channel );
 	void StopAllSfx();
 
@@ -3238,6 +3287,7 @@ public:
 //------------------------------------------------------------------------------
 // External macros to force module linking
 //------------------------------------------------------------------------------
+// clang-format off
 #define AE_FORCE_LINK_CLASS( x ) \
 	extern int force_link_##x; \
 	struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
@@ -3351,6 +3401,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
 	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
+// clang-format on
 
 //------------------------------------------------------------------------------
 // Meta constants
@@ -3393,16 +3444,26 @@ public:
 //------------------------------------------------------------------------------
 // External meta functions
 //------------------------------------------------------------------------------
-uint32_t GetTypeCount(); //!< Get the number of registered ae::Type's
-const Type* GetTypeByIndex( uint32_t i ); //!< Get a registered ae::Type by index
-const Type* GetTypeById( ae::TypeId id ); //!< Get a registered ae::Type by id. Same as ae::Type::GetId()
-const Type* GetTypeByName( const char* typeName ); //!< Get a registered ae::Type from a type name
-const Type* GetTypeFromObject( const ae::Object& obj ); //!< Get a registered ae::Type from an ae::Object
-const Type* GetTypeFromObject( const ae::Object* obj ); //!< Get a registered ae::Type from a pointer to an ae::Object
-template < typename T > const Type* GetType(); //!< Get a registered ae::Type directly from a type
-const class Enum* GetEnum( const char* enumName ); //!< Get a registered ae::Enum by name
-ae::TypeId GetObjectTypeId( const ae::Object* obj ); //!< Get a registered ae::TypeId from an ae::Object
-ae::TypeId GetTypeIdFromName( const char* name ); //!< Get a registered ae::TypeId from a type name
+//! Get the number of registered ae::Type's
+uint32_t GetTypeCount();
+//! Get a registered ae::Type by index
+const Type* GetTypeByIndex( uint32_t i );
+//! Get a registered ae::Type by id. Same as ae::Type::GetId()
+const Type* GetTypeById( ae::TypeId id );
+//! Get a registered ae::Type from a type name
+const Type* GetTypeByName( const char* typeName );
+//! Get a registered ae::Type from an ae::Object
+const Type* GetTypeFromObject( const ae::Object& obj );
+//! Get a registered ae::Type from a pointer to an ae::Object
+const Type* GetTypeFromObject( const ae::Object* obj );
+//! Get a registered ae::Type directly from a type
+template < typename T > const Type* GetType();
+//! Get a registered ae::Enum by name
+const class Enum* GetEnum( const char* enumName );
+//! Get a registered ae::TypeId from an ae::Object
+ae::TypeId GetObjectTypeId( const ae::Object* obj );
+//! Get a registered ae::TypeId from a type name
+ae::TypeId GetTypeIdFromName( const char* name );
 	
 //------------------------------------------------------------------------------
 // ae::Enum class
@@ -3470,7 +3531,8 @@ public:
 	public:
 		virtual ~Serializer() {}
 		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
-		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0; //!< Return false when mapping should fail so SetObjectValueFromString() will not overwrite existing value.
+		//! Return false when mapping should fail so SetObjectValueFromString() will not overwrite existing value.
+		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
 	};
 	static void SetSerializer( const ae::Var::Serializer* serializer );
 
@@ -3489,12 +3551,14 @@ public:
 	
 	// Types
 	const class Enum* GetEnum() const;
-	const ae::Type* GetSubType() const; //!< For Ref and Array types
+	//! For Ref and Array types
+	const ae::Type* GetSubType() const;
 	bool IsArray() const;
 	
 	// Array
 	bool IsArrayFixedLength() const;
-	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const; //!< Returns new length
+	//! Returns new length of array.
+	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
 	uint32_t GetArrayLength( const ae::Object* obj ) const;
 	uint32_t GetArraySize() const;
 
@@ -3517,8 +3581,10 @@ public:
 		virtual void* GetElement( void* a, uint32_t idx ) const = 0;
 		virtual const void* GetElement( const void* a, uint32_t idx ) const = 0;
 		virtual uint32_t Resize( void* a, uint32_t size ) const = 0;
-		virtual uint32_t GetLength( const void* a ) const = 0; //!< Current array length
-		virtual uint32_t GetSize() const = 0; //!< Return uint max for no hard limit
+		//! Current array length
+		virtual uint32_t GetLength( const void* a ) const = 0;
+		//! Return uint max for no hard limit
+		virtual uint32_t GetSize() const = 0;
 		virtual uint32_t IsFixedLength() const = 0;
 	};
 	const ArrayAdapter* m_arrayAdapter = nullptr;
@@ -4885,6 +4951,7 @@ inline Int2 Int3::GetXY() const { return Int2( x, y ); }
 // It's expensive to do the srgb conversion everytime these are constructed so
 // do it once and then return a copy each time static Color functions are called.
 //------------------------------------------------------------------------------
+// clang-format off
 // Grayscale
 inline Color Color::White() { static Color c = Color::SRGB8( 255, 255, 255 ); return c; }
 inline Color Color::Gray() { static Color c = Color::SRGB8( 127, 127, 127 ); return c; }
@@ -4917,6 +4984,7 @@ inline Color Color::PicoBlue() { static Color c = Color::SRGB8( 41, 173, 255 ); 
 inline Color Color::PicoIndigo() { static Color c = Color::SRGB8( 131, 118, 156 ); return c; }
 inline Color Color::PicoPink() { static Color c = Color::SRGB8( 255, 119, 168 ); return c; }
 inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 ); return c; }
+// clang-format on
 
 //------------------------------------------------------------------------------
 // ae::Color functions
@@ -7211,6 +7279,7 @@ Vec3 Vec3::DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon )
 //------------------------------------------------------------------------------
 // ae::Matrix4 member functions
 //------------------------------------------------------------------------------
+// clang-format off
 Matrix4 Matrix4::Identity()
 {
 	Matrix4 r;
@@ -7240,6 +7309,47 @@ Matrix4 Matrix4::Translation( const Vec3& t )
 	r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
 	return r;
 }
+
+Matrix4 Matrix4::RotationX( float angle )
+{
+	Matrix4 r;
+	r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f;          r.data[ 8 ] = 0.0f;           r.data[ 12 ] = 0.0f;
+	r.data[ 1 ] = 0.0f; r.data[ 5 ] = cosf( angle ); r.data[ 9 ] = -sinf( angle ); r.data[ 13 ] = 0.0f;
+	r.data[ 2 ] = 0.0f; r.data[ 6 ] = sinf( angle ); r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+	r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f;          r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
+	return r;
+}
+
+Matrix4 Matrix4::RotationY( float angle )
+{
+	Matrix4 r;
+	r.data[ 0 ] = cosf( angle );  r.data[ 4 ] = 0.0f; r.data[ 8 ] = sinf( angle );  r.data[ 12 ] = 0.0f;
+	r.data[ 1 ] = 0.0f;           r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;           r.data[ 13 ] = 0.0f;
+	r.data[ 2 ] = -sinf( angle ); r.data[ 6 ] = 0.0f; r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
+	r.data[ 3 ] = 0.0f;           r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
+	return r;
+}
+
+Matrix4 Matrix4::RotationZ( float angle )
+{
+	Matrix4 r;
+	r.data[ 0 ] = cosf( angle ); r.data[ 4 ] = -sinf( angle ); r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+	r.data[ 1 ] = sinf( angle ); r.data[ 5 ] = cosf( angle );  r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+	r.data[ 2 ] = 0.0f;          r.data[ 6 ] = 0.0f;           r.data[ 10 ] = 1.0f; r.data[ 14 ] = 0.0f;
+	r.data[ 3 ] = 0.0f;          r.data[ 7 ] = 0.0f;           r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
+	return r;
+}
+
+Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
+{
+	Matrix4 r;
+	r.data[ 0 ] = sx;   r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
+	r.data[ 1 ] = 0.0f; r.data[ 5 ] = sy;   r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
+	r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = sz;   r.data[ 14 ] = 0.0f;
+	r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
+	return r;
+}
+// clang-format on
 
 Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 {
@@ -7277,36 +7387,6 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 	return newRotation * removeRotation;
 }
 
-Matrix4 Matrix4::RotationX( float angle )
-{
-	Matrix4 r;
-	r.data[ 0 ] = 1.0f; r.data[ 4 ] = 0.0f;          r.data[ 8 ] = 0.0f;           r.data[ 12 ] = 0.0f;
-	r.data[ 1 ] = 0.0f; r.data[ 5 ] = cosf( angle ); r.data[ 9 ] = -sinf( angle ); r.data[ 13 ] = 0.0f;
-	r.data[ 2 ] = 0.0f; r.data[ 6 ] = sinf( angle ); r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
-	r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f;          r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
-	return r;
-}
-
-Matrix4 Matrix4::RotationY( float angle )
-{
-	Matrix4 r;
-	r.data[ 0 ] = cosf( angle );  r.data[ 4 ] = 0.0f; r.data[ 8 ] = sinf( angle );  r.data[ 12 ] = 0.0f;
-	r.data[ 1 ] = 0.0f;           r.data[ 5 ] = 1.0f; r.data[ 9 ] = 0.0f;           r.data[ 13 ] = 0.0f;
-	r.data[ 2 ] = -sinf( angle ); r.data[ 6 ] = 0.0f; r.data[ 10 ] = cosf( angle ); r.data[ 14 ] = 0.0f;
-	r.data[ 3 ] = 0.0f;           r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f;          r.data[ 15 ] = 1.0f;
-	return r;
-}
-
-Matrix4 Matrix4::RotationZ( float angle )
-{
-	Matrix4 r;
-	r.data[ 0 ] = cosf( angle ); r.data[ 4 ] = -sinf( angle ); r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
-	r.data[ 1 ] = sinf( angle ); r.data[ 5 ] = cosf( angle );  r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
-	r.data[ 2 ] = 0.0f;          r.data[ 6 ] = 0.0f;           r.data[ 10 ] = 1.0f; r.data[ 14 ] = 0.0f;
-	r.data[ 3 ] = 0.0f;          r.data[ 7 ] = 0.0f;           r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
-	return r;
-}
-
 Matrix4 Matrix4::Scaling( float s )
 {
 	return Scaling( s, s, s );
@@ -7315,16 +7395,6 @@ Matrix4 Matrix4::Scaling( float s )
 Matrix4 Matrix4::Scaling( const Vec3& s )
 {
 	return Scaling( s.x, s.y, s.z );
-}
-
-Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
-{
-	Matrix4 r;
-	r.data[ 0 ] = sx;   r.data[ 4 ] = 0.0f; r.data[ 8 ] = 0.0f;  r.data[ 12 ] = 0.0f;
-	r.data[ 1 ] = 0.0f; r.data[ 5 ] = sy;   r.data[ 9 ] = 0.0f;  r.data[ 13 ] = 0.0f;
-	r.data[ 2 ] = 0.0f; r.data[ 6 ] = 0.0f; r.data[ 10 ] = sz;   r.data[ 14 ] = 0.0f;
-	r.data[ 3 ] = 0.0f; r.data[ 7 ] = 0.0f; r.data[ 11 ] = 0.0f; r.data[ 15 ] = 1.0f;
-	return r;
 }
 
 Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
@@ -7440,6 +7510,7 @@ void Matrix4::SetInverse()
 	*this = GetInverse();
 }
 
+// clang-format off
 Matrix4 Matrix4::GetInverse() const
 {
 	Matrix4 r;
@@ -7569,6 +7640,7 @@ Matrix4 Matrix4::GetInverse() const
 	
 	return r;
 }
+// clang-format on
 
 void Matrix4::SetRotation( const Quaternion& q2 )
 {
@@ -8420,7 +8492,7 @@ bool AABB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* 
 	{
 		ae::Vec3( 1.0f, 0.0f, 0.0f ),
 		ae::Vec3( 0.0f, 1.0f, 0.0f ),
-		ae::Vec3( 0.0f, 0.0f, 1.0f )
+		ae::Vec3( 0.0f, 0.0f, 1.0f ),
 	};
 	for ( int32_t i = 0; i < 3; i++ )
 	{
@@ -8551,7 +8623,7 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 		{ m_center + m_axes[ 2 ] * m_halfSize[ 2 ], m_axes[ 2 ] },
 		{ m_center - m_axes[ 0 ] * m_halfSize[ 0 ], -m_axes[ 0 ] },
 		{ m_center - m_axes[ 1 ] * m_halfSize[ 1 ], -m_axes[ 1 ] },
-		{ m_center - m_axes[ 2 ] * m_halfSize[ 2 ], -m_axes[ 2 ] }
+		{ m_center - m_axes[ 2 ] * m_halfSize[ 2 ], -m_axes[ 2 ] },
 	};
 	for ( uint32_t i = 0; i < countof(sides); i++ )
 	{
@@ -8820,7 +8892,7 @@ const char* LogLevelNames[] =
 	"INFO ",
 	"WARN ",
 	"ERROR",
-	"FATAL"
+	"FATAL",
 };
 
 //------------------------------------------------------------------------------
@@ -8834,7 +8906,7 @@ const char* LogLevelColors[] =
 	"\x1b[32m",
 	"\x1b[33m",
 	"\x1b[31m",
-	"\x1b[35m"
+	"\x1b[35m",
 };
 #endif
 
@@ -9720,6 +9792,7 @@ void Window::m_Initialize()
 	{
 		openglProfile = NSOpenGLProfileVersionLegacy;
 	}
+	// clang-format off
 	NSOpenGLPixelFormatAttribute nsPixelAttribs[] =
 	{
 		NSOpenGLPFAAccelerated,
@@ -9732,6 +9805,7 @@ void Window::m_Initialize()
 		NSOpenGLPFADoubleBuffer, YES,
 		0
 	};
+	// clang-format on
 	NSRect frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
 	AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
@@ -12510,11 +12584,13 @@ void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam )
 #endif
 
 // Helpers
+// clang-format off
 #if _AE_DEBUG_
 	#define AE_CHECK_GL_ERROR() do { if ( GLenum err = glGetError() ) { AE_FAIL_MSG( "GL Error: #", err ); } } while ( 0 )
 #else
 	#define AE_CHECK_GL_ERROR() do {} while ( 0 )
 #endif
+// clang-format on
 
 namespace ae {
 
@@ -14388,7 +14464,7 @@ void GraphicsDevice::Initialize( class Window* window )
 		{ _kQuadVertPos[ 0 ], _kQuadVertUvs[ 0 ] },
 		{ _kQuadVertPos[ 1 ], _kQuadVertUvs[ 1 ] },
 		{ _kQuadVertPos[ 2 ], _kQuadVertUvs[ 2 ] },
-		{ _kQuadVertPos[ 3 ], _kQuadVertUvs[ 3 ] }
+		{ _kQuadVertPos[ 3 ], _kQuadVertUvs[ 3 ] },
 	};
 	AE_STATIC_ASSERT( countof( quadVerts ) == _kQuadVertCount );
 	m_renderQuad.Initialize( sizeof( Vertex ), sizeof( _kQuadIndex ), _kQuadVertCount, _kQuadIndexCount, VertexData::Primitive::Triangle, VertexData::Usage::Static, VertexData::Usage::Static );
@@ -14917,7 +14993,7 @@ bool DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color
 		pos + rotation.Rotate( Vec3( -size.x, 0.0f, -size.y ) ), // Bottom Left
 		pos + rotation.Rotate( Vec3( size.x, 0.0f, -size.y ) ), // Bottom Right
 		pos + rotation.Rotate( Vec3( size.x, 0.0f, size.y ) ), // Top Right
-		pos + rotation.Rotate( Vec3( -size.x, 0.0f, size.y ) ) // Top Left
+		pos + rotation.Rotate( Vec3( -size.x, 0.0f, size.y ) ), // Top Left
 	};
 
 	DebugVertex verts[] =
@@ -14929,7 +15005,7 @@ bool DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color
 		{ positions[ 2 ], color },
 		{ positions[ 3 ], color },
 		{ positions[ 3 ], color },
-		{ positions[ 0 ], color }
+		{ positions[ 0 ], color },
 	};
 	m_vertexData.AppendVertices( verts, countof( verts ) );
 	
@@ -14982,7 +15058,7 @@ bool DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
 		pos + Vec3( -halfSize.x, halfSize.y, -halfSize.z ),
 		pos + Vec3( halfSize.x, halfSize.y, -halfSize.z ),
 		pos + Vec3( halfSize.x, -halfSize.y, -halfSize.z ),
-		pos + Vec3( -halfSize.x, -halfSize.y, -halfSize.z )
+		pos + Vec3( -halfSize.x, -halfSize.y, -halfSize.z ),
 	};
 	AE_STATIC_ASSERT( countof( c ) == 8 );
 	DebugVertex verts[] =
@@ -15035,7 +15111,7 @@ bool DebugLines::AddOBB( Matrix4 transform, Color color )
 		( transform * Vec4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
 		( transform * Vec4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
 		( transform * Vec4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ()
+		( transform * Vec4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
 	};
 	AE_STATIC_ASSERT( countof( c ) == 8 );
 	DebugVertex verts[] =
@@ -15100,7 +15176,7 @@ bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t
 		{
 			*(const Vec3*)( vertices + i * vertexStride ),
 			*(const Vec3*)( vertices + ( i + 1 ) * vertexStride ),
-			*(const Vec3*)( vertices + ( i + 2 ) * vertexStride )
+			*(const Vec3*)( vertices + ( i + 2 ) * vertexStride ),
 		};
 		if ( !identity )
 		{
@@ -15115,7 +15191,7 @@ bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t
 			{ p[ 1 ], color },
 			{ p[ 2 ], color },
 			{ p[ 2 ], color },
-			{ p[ 0 ], color }
+			{ p[ 0 ], color },
 		};
 		m_vertexData.AppendVertices( verts, countof( verts ) ); // @TODO: AppendVertices() does a bunch of safety checks. This could be really slow for big meshes.
 	}
@@ -15146,7 +15222,7 @@ bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t
 		{
 			*(const Vec3*)( vertices + index0 * vertexStride ),
 			*(const Vec3*)( vertices + index1 * vertexStride ),
-			*(const Vec3*)( vertices + index2 * vertexStride )
+			*(const Vec3*)( vertices + index2 * vertexStride ),
 		};
 		if ( !identity )
 		{
@@ -15161,7 +15237,7 @@ bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t
 			{ p[ 1 ], color },
 			{ p[ 2 ], color },
 			{ p[ 2 ], color },
-			{ p[ 0 ], color }
+			{ p[ 0 ], color },
 		};
 		m_vertexData.AppendVertices( verts, countof( verts ) ); // @TODO: AppendVertices() does a bunch of safety checks. This could be really slow for big meshes.
 	}
@@ -15751,6 +15827,7 @@ void CollisionMesh::Load( const Params& params )
 	
 	uint32_t triCount = params.indexCount / 3;
 	m_tris.Reserve( m_tris.Length() + triCount );
+	// clang-format off
 #define COPY_INDICES( intType )\
 	BVHTri tri;\
 	const intType* indices = (const intType*)params.indices;\
@@ -15768,6 +15845,7 @@ void CollisionMesh::Load( const Params& params )
 	else if ( params.indexSize == 1 ) { COPY_INDICES( uint8_t ); }
 	else { AE_FAIL_MSG( "Invalid index size" ); }
 #undef COPY_INDICES
+	// clang-format on
 	
 	auto* bvh = &m_bvh.Append( { m_tag } );
 	bvh->AddRoot( m_aabb );
