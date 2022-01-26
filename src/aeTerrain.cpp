@@ -35,7 +35,7 @@
 #endif
 
 #ifndef AE_TERRAIN_SIMD
-  #if _AE_LINUX_
+  #if _AE_LINUX_ || _AE_EMSCRIPTEN_
     #define AE_TERRAIN_SIMD 0
   #else
     #define AE_TERRAIN_SIMD 1

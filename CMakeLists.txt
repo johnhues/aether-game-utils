@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 # project name and supported languages
-project(aether-game-utils LANGUAGES CXX VERSION 0.1.0)
+project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 set(AE_LIBRARY_NAME ae)
 set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 
@@ -23,6 +23,7 @@ set(AE_LEAN_AND_MEAN OFF CACHE BOOL "Disables building tests and examples")
 # find dependencies
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# OpenGL
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OpenGLES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
 	if (EXISTS ${OpenGLES})
@@ -31,6 +32,8 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 		message(SEND_ERROR "Could not find OpenGLES")
 		set(OpenGLES "")
 	endif()
+elseif(EMSCRIPTEN)
+	set(OPENGL_LIBRARIES GL)
 else()
 	set(OpenGL_GL_PREFERENCE GLVND) # See https://cmake.org/cmake/help/latest/policy/CMP0072.html
 	find_package(OpenGL REQUIRED)
@@ -51,6 +54,7 @@ if (MSVC)
 	list(APPEND AE_DEPS_TARGETS glew)
 endif()
 
+# UUID
 if(NOT EMSCRIPTEN)
 	if(UNIX AND NOT APPLE)
 		find_package(uuid REQUIRED)

@@ -86,7 +86,7 @@
 //------------------------------------------------------------------------------
 // Debug define
 //------------------------------------------------------------------------------
-#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) )
+#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) ) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
 	#define _AE_DEBUG_ 1
 #else
 	#define _AE_DEBUG_ 0
@@ -127,6 +127,10 @@
 	#endif
 #elif _AE_WINDOWS_
 	#include <intrin.h>
+#elif _AE_EMSCRIPTEN_
+	#include <emscripten.h>
+	#include <emscripten/html5.h>
+	#include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
 #endif
 
 //------------------------------------------------------------------------------
@@ -137,7 +141,7 @@
 #elif _AE_APPLE_
 	#define aeAssert() __builtin_trap()
 #elif _AE_EMSCRIPTEN_
-	#define aeAssert() throw
+	#define aeAssert() assert( 0 )
 #else
 	#define aeAssert() asm( "int $3" )
 #endif
@@ -3816,7 +3820,7 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 // C++ style allocation functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-// @NOTE: Max alignment is 8 bytes, sizeof(long double) https://github.com/emscripten-core/emscripten/issues/10072
+// @NOTE: Max alignment is 8 bytes https://github.com/emscripten-core/emscripten/issues/10072
 const uint32_t _kDefaultAlignment = 8;
 #else
 const uint32_t _kDefaultAlignment = 16;
@@ -3916,7 +3920,16 @@ void Delete( T* obj )
 //------------------------------------------------------------------------------
 inline void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment )
 {
-	return ae::GetGlobalAllocator()->Allocate( tag, bytes, alignment );
+#if _AE_DEBUG_
+	AE_ASSERT_MSG( tag != ae::Tag(), "Allocation of # bytes and alignment # is not tagged", bytes, alignment );
+#endif
+	void* result = ae::GetGlobalAllocator()->Allocate( tag, bytes, alignment );
+#if _AE_DEBUG_
+	AE_ASSERT_MSG( result, "Failed to allocate # bytes with alignment # (#)", bytes, alignment, tag );
+	intptr_t alignmentOffset = (intptr_t)result % alignment;
+	AE_ASSERT_MSG( alignmentOffset == 0, "Allocation of # bytes (#) with alignment # off by # bytes", bytes, tag, alignment, alignmentOffset );
+#endif
+	return result;
 }
 
 inline void* Reallocate( void* data, uint32_t bytes, uint32_t alignment )
@@ -6702,7 +6715,7 @@ public:
 	}
 };
 
-} // ae end
+ } // ae end
 
 //------------------------------------------------------------------------------
 // Internal meta var registration
@@ -7118,7 +7131,7 @@ T* ae::Cast( C* obj )
 	#include <sys/socket.h>
 	#include <arpa/inet.h>
 	#include <sys/ioctl.h>
-	#include <sys/poll.h>
+	#include <poll.h>
 	#include <netinet/tcp.h>
 #endif
 
@@ -8993,6 +9006,9 @@ public:
 #elif _AE_OSX_
 		// @HACK: macosx clang c++11 does not have aligned alloc
 		return malloc( bytes );
+#elif _AE_EMSCRIPTEN_
+		// Emscripten malloc always uses 8 byte alignment https://github.com/emscripten-core/emscripten/issues/10072
+		return malloc( bytes );
 #else
 		return aligned_alloc( alignment, bytes );
 #endif
@@ -10075,8 +10091,8 @@ EM_BOOL ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent
 		AE_ASSERT( userData );
 		Input* input = (Input*)userData;
 		// Use 'code' instead of 'key' so value is not affected by modifiers/layout
-		// const char* type = EMSCRIPTEN_EVENT_KEYUP == eventType ? "up" : "down";
-		// AE_LOG( "# #", keyEvent->code, type );
+		// const char* typeStr = EMSCRIPTEN_EVENT_KEYUP == eventType ? "up" : "down";
+		// AE_LOG( "Key '#' #", keyEvent->code, typeStr );
 		bool pressed = EMSCRIPTEN_EVENT_KEYUP != eventType;
 		if ( strcmp( keyEvent->code, "ArrowRight" ) == 0 ) { input->m_keys[ (int)Key::Right ] = pressed; }
 		if ( strcmp( keyEvent->code, "ArrowLeft" ) == 0 ) { input->m_keys[ (int)Key::Left ] = pressed; }
@@ -10122,7 +10138,11 @@ void Input::Terminate()
 void Input::Pump()
 {
 	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+#if _AE_APPLE_ || _AE_WINDOWS_
+	// Clear keys each frame and then check for presses below
+	// Emscripten doesn't do this because it uses a callback to set m_keys
 	memset( m_keys, 0, sizeof(m_keys) );
+#endif
 	mousePrev = mouse;
 	mouse.movement = ae::Int2( 0 );
 	mouse.scroll = ae::Vec2( 0.0f );
@@ -11684,6 +11704,8 @@ void _CloseSocket( int sock )
 	}
 #if _AE_WINDOWS_
 	closesocket( sock );
+#elif _AE_EMSCRIPTEN_
+	shutdown( sock, SHUT_RDWR );
 #else
 	close( sock );
 #endif
@@ -12639,7 +12661,7 @@ void CheckFramebufferComplete( GLuint framebuffer )
 	}
 }
 
-#if _AE_DEBUG_ && !_AE_APPLE_
+#if _AE_DEBUG_ && !_AE_APPLE_ && !_AE_EMSCRIPTEN_
 	// Apple platforms only support OpenGL 4.1 and lower
 	#define AE_GL_DEBUG_MODE 1
 #endif
@@ -13444,8 +13466,8 @@ void VertexData::m_SetVertices( const void* vertices, uint32_t count )
 void VertexData::m_SetIndices( const void* indices, uint32_t count )
 {
 	AE_ASSERT( m_indexSize );
-	AE_ASSERT( count % 3 == 0 );
-	AE_ASSERT( count <= m_maxIndexCount );
+	AE_ASSERT_MSG( count % 3 == 0, "Index count: #", count );
+	AE_ASSERT_MSG( count <= m_maxIndexCount, "Index count: # max: #", count, m_maxIndexCount );
 	
 	m_indexDirty = false;
 	
@@ -13457,6 +13479,7 @@ void VertexData::m_SetIndices( const void* indices, uint32_t count )
 		glGenBuffers( 1, &m_indices );
 		glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
 		glBufferData( GL_ELEMENT_ARRAY_BUFFER, m_indexCount * m_indexSize, indices, GL_STATIC_DRAW );
+
 		return;
 	}
 	
@@ -13812,10 +13835,12 @@ void VertexData::Render( const Shader* shader, const UniformList& uniforms, uint
 	}
 	else
 	{
+#if !_AE_EMSCRIPTEN_
 		if ( mode == GL_POINTS )
 		{
 			glEnable( GL_VERTEX_PROGRAM_POINT_SIZE );
 		}
+#endif
 		AE_ASSERT( ( primitiveStart + primitiveCount ) * primitiveSize <= m_vertexCount );
 		GLint start = primitiveStart * primitiveSize;
 		GLsizei count = primitiveCount ? primitiveCount * primitiveSize : m_vertexCount;
@@ -13891,6 +13916,12 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, F
 void Texture2D::Initialize( const TextureParams& params )
 {
 	Texture::Initialize( GL_TEXTURE_2D );
+
+#if _AE_EMSCRIPTEN_
+	// @TODO: Handle bgr texture data in emscripten builds
+	const auto GL_BGR = GL_RGB;
+	const auto GL_BGRA = GL_RGBA;
+#endif
 
 	m_width = params.width;
 	m_height = params.height;
@@ -14051,7 +14082,7 @@ void Texture2D::Initialize( const TextureParams& params )
 		glPixelStorei( GL_UNPACK_ALIGNMENT, unpackAlignment );
 	}
 
-		// count the mip levels
+	// count the mip levels
 	int w = params.width;
 	int h = params.height;
 	
@@ -14381,8 +14412,9 @@ void GraphicsDevice::Initialize( class Window* window )
 	attrs.majorVersion = ae::GLMajorVersion;
 	attrs.minorVersion = ae::GLMinorVersion;
 	m_context = emscripten_webgl_create_context( "canvas", &attrs );
-	AE_ASSERT( m_context );
-	emscripten_webgl_make_context_current( m_context );
+	AE_ASSERT( m_context > 0 );
+	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
 #endif
 	
 	AE_CHECK_GL_ERROR();
@@ -14548,6 +14580,7 @@ void GraphicsDevice::Terminate()
 
 void GraphicsDevice::Activate()
 {
+	AE_ASSERT( m_window );
 	AE_ASSERT( m_context );
 
 	float scaleFactor = m_window->GetScaleFactor();
@@ -14969,6 +15002,7 @@ bool DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance )
 		{ p1, color }
 	};
 	m_vertexData.AppendVertices( verts, countof( verts ) );
+	return true;
 }
 
 bool DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color )

@@ -29,6 +29,11 @@ if(NOT cmake_build_type_tolower STREQUAL "debug" AND
 	)
 	message(FATAL_ERROR "Unknown build type \"${CMAKE_BUILD_TYPE}\". Allowed values are Debug, Release, RelWithDebInfo, and MinSizeRel (case-insensitive).")
 endif()
+if(cmake_build_type_tolower STREQUAL "debug")
+	set(AE_IS_DEBUG 1)
+else()
+	set(AE_IS_DEBUG 0)
+endif()
 
 # Helpers
 get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)

@@ -1,6 +1,6 @@
 # Bundle helper
 function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE_VERSION _AE_ICNS_FILE  _AE_SRC_FILES _AE_RESOURCES _AE_LIBS _AE_INCLUDE_DIRS)
-	message(STATUS "_AE_BUNDLE_NAME ${_AE_BUNDLE_NAME}")
+	message(STATUS "_AE_BUNDLE_NAME ${_AE_BUNDLE_NAME} (${CMAKE_BUILD_TYPE})")
 	message(STATUS "_AE_EXECUTABLE_NAME ${_AE_EXECUTABLE_NAME}")
 	message(STATUS "_AE_BUNDLE_ID ${_AE_BUNDLE_ID}")
 	message(STATUS "_AE_BUNDLE_VERSION ${_AE_BUNDLE_VERSION}")
@@ -64,5 +64,53 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			set(BU_CHMOD_BUNDLE_ITEMS TRUE)
 			fixup_bundle(\"${CMAKE_INSTALL_PREFIX}/${_AE_BUNDLE_NAME}.app\" \"\" \"${_AE_DEPS_LIBRARY_DIRS}\")
 		" COMPONENT Runtime)
+	elseif(EMSCRIPTEN)
+		set(_AE_EM_LINKER_FLAGS
+			"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance
+			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
+			"-s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3" # Require WebGL 3 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
+			"-s ENVIRONMENT=web" # The generated build output is only to be expected to be run in a web browser, never in a native CLI shell, or in a web worker.
+			"-s ABORTING_MALLOC=0" # Fine tuning for code size: do not generate code to abort program execution on malloc() failures, that will not be interesting here.
+			"-s GL_SUPPORT_AUTOMATIC_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: We do not need GLES2 emulation for automatic GL extension enabling
+			"-s GL_EXTENSIONS_IN_PREFIXED_FORMAT=0" # Reduce WebGL code size: We do not need GLES2 emulation for GL extension names
+			"-s GL_EMULATE_GLES_VERSION_STRING_FORMAT=0" # Reduce WebGL code size: No need to specify the GL_VENDOR/GL_RENDERER etc. fields in format required by GLES2 spec.
+			"-s GL_POOL_TEMP_BUFFERS=0" # Reduce WebGL code size at the expense of performance (this only has an effect in WebGL 1, practically a no-op here)
+			"-s GL_TRACK_ERRORS=0" # Reduce WebGL code size: WebGL bindings layer should not keep track of certain WebGL errors that are only meaningful for C/C++ applications. (good to enable for release when glGetError() is not used, but disable in debug)
+			"-s GL_SUPPORT_SIMPLE_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: do not emit code for extensions that we might not need.
+			"-s SUPPORT_ERRNO=0" # Reduce code size: We do not need libc errno field support in our build output.
+			"-s FILESYSTEM=0" # Reduce code size: We do not need native POSIX filesystem emulation support (Emscripten FS/MEMFS)
+			# Choose the oldest browser versions that should be supported. The higher minimum bar you choose, the less emulation code may be present for old browser quirks.
+			"-s MIN_FIREFOX_VERSION=70"
+			"-s MIN_SAFARI_VERSION=130000"
+			"-s MIN_IE_VERSION=0x7FFFFFFF" # Do not support Internet Explorer at all (this is the Emscripten default, shown here for posterity)
+			"-s MIN_EDGE_VERSION=79" # Require Chromium-based Edge browser
+			"-s MIN_CHROME_VERSION=80"
+		)
+		if (AE_IS_DEBUG)
+			list(APPEND _AE_EM_LINKER_FLAGS
+				"-s SAFE_HEAP=1" # Enable safe heap mode
+				"-s ASSERTIONS=1" # Enable assertions
+				"-s DEMANGLE_SUPPORT=1"
+				"-s STACK_OVERFLOW_CHECK=1"
+				"-O0"
+				"-frtti"
+				"-fsanitize=undefined"
+				"-g" # Debug
+				# "-gsource-map" # Debug mode with mappings to c/c++ source files
+				# "--source-map-base http://localhost:8000/embuild/example/"
+			)
+		else()
+			list(APPEND _AE_EM_LINKER_FLAGS
+				"--closure=1" # Enable Closure compiler for aggressive JS size minification
+				"-Oz" # Optimization flag to optimize aggressively for size. (other options -Os, -O3, -O2, -O1, -O0)
+			)
+		endif()
+		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
+		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
+			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
+			SUFFIX ".html"
+		)
+		
+		file(COPY "${_AE_RESOURCES}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
 	endif()
 endfunction()
