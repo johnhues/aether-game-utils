@@ -6153,7 +6153,7 @@ const ae::Type* ae::GetType()
 }
 
 template < typename T >
-std::string ae::Enum::GetNameFromValue( T value )
+std::string ae::Enum::GetNameFromValue( T value ) // @TODO: Return const char*
 {
   const Enum* enumType = GetEnum< T >();
   AE_ASSERT( enumType );
@@ -6170,8 +6170,9 @@ T ae::Enum::GetValueFromString( const char* str, T defaultValue )
 }
 
 template < typename T >
-std::string ae::Enum::GetNameByValue( T value ) const
+std::string ae::Enum::GetNameByValue( T value ) const // @TODO: Return const char*
 {
+  const T _enumTypeCheck = value;
   return m_enumValueToName.Get( (int32_t)value, "" );
 }
 
@@ -15645,7 +15646,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
   // Safety check to make sure 'this' Var belongs to 'obj' ae::Type
   const ae::Type* objType = ae::GetTypeFromObject( obj );
   AE_ASSERT( objType );
-  AE_ASSERT_MSG( objType == m_owner, "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
+  AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
   
   void* varData = nullptr;
   if ( m_arrayAdapter )
