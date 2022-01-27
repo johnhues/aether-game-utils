@@ -711,14 +711,16 @@ public:
 
 //------------------------------------------------------------------------------
 // ae::Plane class
+//! A plane in the form of ax+by+cz+d=0. This means that n<x,y,z>*d equals the
+//! closest point on the plane to the origin.
 //------------------------------------------------------------------------------
 class Plane
 {
 public:
 	Plane() = default;
 	Plane( ae::Vec3 point, ae::Vec3 normal );
-	Plane( ae::Vec4 pointNormal );
-	explicit operator Vec4 () const;
+	Plane( ae::Vec4 pointNormal ); // @TODO: Maybe this should be removed, it's very easy to provide a vector where the sign of the w component is incorrect
+	explicit operator Vec4() const;
 	
 	ae::Vec3 GetNormal() const;
 	ae::Vec3 GetClosestPointToOrigin() const;
@@ -8202,7 +8204,7 @@ Plane::Plane( ae::Vec3 point, ae::Vec3 normal )
 	m_plane.w = GetSignedDistance( point );
 }
 
-Plane::operator Vec4 () const
+Plane::operator Vec4() const
 {
 	return m_plane;
 }
@@ -8640,10 +8642,10 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 	};
 	for ( uint32_t i = 0; i < countof(sides); i++ )
 	{
-		Vec4 side( sides[ i ] );
-		float denom = d.Dot( side.GetXYZ() );
-		float dist = side.w - p.Dot( side.GetXYZ() );
-		if ( denom == 0.0f )
+		ae::Plane side = sides[ i ];
+		float denom = d.Dot( side.GetNormal() );
+		float dist = side.GetSignedDistance( p );
+		if ( ae::Abs( denom ) < 0.001f )
 		{
 			if ( dist > 0.0f )
 			{
@@ -8652,7 +8654,7 @@ bool OBB::IntersectLine( Vec3 p, Vec3 d, float* t0Out, float* t1Out, ae::Vec3* n
 		}
 		else
 		{
-			float t = dist / denom;
+			float t = -dist / denom;
 			if ( denom < 0.0f )
 			{
 				if ( t > tfirst )

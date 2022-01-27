@@ -408,6 +408,8 @@ int main()
 				infoText.Append( "AABB-Ray/Point\n" );
 				doRay( false );
 				infoText.Append( "Rotate Point: Space\n" );
+				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
+				infoText.Append( "Scale: I,J,K,L,U,O\n" );
 				
 				if ( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
 				if ( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
@@ -479,6 +481,9 @@ int main()
 				infoText.Append( "OBB-Ray/Point\n" );
 				doRay( false );
 				infoText.Append( "Rotate Point: Space\n" );
+				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
+				infoText.Append( "Scale: I,J,K,L,U,O\n" );
+				infoText.Append( "Rotate: Z,X,C\n" );
 				
 				if ( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
 				if ( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
@@ -528,6 +533,27 @@ int main()
 				
 				ae::Vec3 rayP, rayN;
 				float rayT;
+				
+				struct
+				{
+					ae::Vec3 from;
+					ae::Vec3 to;
+					ae::Color color;
+				} rays[] = {
+					{ ae::Vec3( 10.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoRed() },
+					{ ae::Vec3( 0.0f, 10.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoGreen() },
+					{ ae::Vec3( 0.0f, 0.0f, 10.0f ), ae::Vec3( 0.0f ), ae::Color::PicoBlue() },
+					{ ae::Vec3( -10.0f, 0.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoRed() },
+					{ ae::Vec3( 0.0f, -10.0f, 0.0f ), ae::Vec3( 0.0f ), ae::Color::PicoGreen() },
+					{ ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Vec3( 0.0f ), ae::Color::PicoBlue() },
+				};
+				for ( uint32_t i = 0; i < countof(rays); i++ )
+				{
+					rayP = rays[ i ].to;
+					obb.IntersectRay( rays[ i ].from, rays[ i ].to - rays[ i ].from, &rayP );
+					debug.AddLine( rays[ i ].from, rayP, rays[ i ].color );
+				}
+				
 				if ( obb.IntersectRay( raySource, ray, &rayP, &rayN, &rayT ) )
 				{
 					debug.AddLine( raySource, raySource + ray * rayT, ae::Color::PicoBlue() );
