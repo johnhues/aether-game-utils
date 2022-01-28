@@ -53,7 +53,7 @@ int main()
 
 		if ( !listener.IsListening() )
 		{
-			if ( listener.Listen( ae::Socket::Protocol::TCP, 7230, 2 ) )
+			if ( listener.Listen( ae::Socket::Protocol::TCP, false, 7230, 2 ) )
 			{
 				AE_LOG( "Listening for connections on port '#'", listener.GetPort() );
 			}

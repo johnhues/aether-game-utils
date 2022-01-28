@@ -34,7 +34,7 @@ FetchContent_Declare(
 )
 FetchContent_Populate(rapidjson) # Download but don't build
 file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/include/*")
-add_library(rapidjson INTERFACE ${rapidjson_SOURCES}) # Header only
+add_library(rapidjson INTERFACE) # Header only
 target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
 
 # openfbx

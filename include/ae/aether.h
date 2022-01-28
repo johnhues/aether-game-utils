@@ -161,6 +161,12 @@
 	#define AE_ALIGN( _x )
 #endif
 
+#if _AE_WINDOWS_
+	#define AE_PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
+#else
+	#define AE_PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#endif
+
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
@@ -2033,7 +2039,7 @@ private:
 	bool m_isConnected = false;
 	void* m_addrInfo = nullptr;
 	void* m_currAddrInfo = nullptr;
-	ae::Str64 m_resolvedAddress;
+	ae::Str128 m_resolvedAddress;
 	// Data buffers
 	uint32_t m_readHead = 0;
 	ae::Array< uint8_t > m_sendData;
@@ -7127,6 +7133,12 @@ T* ae::Cast( C* obj )
 #if _AE_WINDOWS_
 	#include <WinSock2.h>
 	#include <WS2tcpip.h>
+	typedef uint16_t _ae_sa_family_t;
+	typedef char _ae_sock_err_t;
+	typedef WSAPOLLFD _ae_poll_fd_t;
+	typedef char _ae_sock_buff_t;
+	#define _ae_sock_poll WSAPoll
+	#define _ae_ioctl ioctlsocket
 #else
 	#include <netdb.h>
 	#include <netinet/in.h>
@@ -7135,6 +7147,13 @@ T* ae::Cast( C* obj )
 	#include <sys/ioctl.h>
 	#include <poll.h>
 	#include <netinet/tcp.h>
+	#include <fcntl.h>
+	typedef sa_family_t _ae_sa_family_t;
+	typedef int _ae_sock_err_t;
+	typedef pollfd _ae_poll_fd_t;
+	typedef uint8_t _ae_sock_buff_t;
+	#define _ae_sock_poll poll
+	#define _ae_ioctl ioctl
 #endif
 
 //------------------------------------------------------------------------------
@@ -11776,11 +11795,12 @@ int _IsConnected( int sock ) // 1 connected, 0 connecting, -1 not connected
 	{
 		return -1;
 	}
-	pollfd pollParam;
+	_ae_poll_fd_t pollParam;
 	memset( &pollParam, 0, sizeof(pollParam) );
 	pollParam.fd = sock;
 	pollParam.events = POLLOUT;
-	if ( poll( &pollParam, 1, 0 ) > 0 )
+
+	if ( _ae_sock_poll( &pollParam, 1, 0 ) > 0 )
 	{
 		if ( pollParam.revents & POLLOUT )
 		{
@@ -11788,7 +11808,7 @@ int _IsConnected( int sock ) // 1 connected, 0 connecting, -1 not connected
 		}
 		else if ( pollParam.revents & ( POLLERR | POLLHUP | POLLNVAL ) )
 		{
-			int err = 0;
+			_ae_sock_err_t err = 0;
 			socklen_t optLen = sizeof(err);
 			if ( getsockopt( sock, SOL_SOCKET, SO_ERROR, &err, &optLen ) == 0 )
 			{
@@ -11806,7 +11826,7 @@ bool _GetAddressString( const sockaddr* addr, char (&addrStr)[ INET6_ADDRSTRLEN 
 	addrStr[ 0 ] = 0;
 	void* inAddr = nullptr;
 	socklen_t inAddrLen = 0;
-	sa_family_t family = addr->sa_family;
+	_ae_sa_family_t family = addr->sa_family;
 	if ( family == AF_INET )
 	{
 		inAddr = &( ( (sockaddr_in*)addr )->sin_addr );
@@ -11826,7 +11846,7 @@ bool _GetAddressString( const sockaddr* addr, char (&addrStr)[ INET6_ADDRSTRLEN 
 
 uint16_t _GetPort( const sockaddr* addr )
 {
-	sa_family_t family = addr->sa_family;
+	_ae_sa_family_t family = addr->sa_family;
 	if ( family == AF_INET )
 	{
 		return ntohs( ( (sockaddr_in*)addr )->sin_port );
@@ -12005,8 +12025,12 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 	
 	while ( IsConnected() && m_recvData.Length() < m_readHead + offset + length )
 	{
+#if _AE_WINDOWS_
+		u_long readSize = 0;
+#else
 		int readSize = 0;
-		if ( ioctl( m_sock, FIONREAD, &readSize ) == -1 )
+#endif
+		if ( _ae_ioctl( m_sock, FIONREAD, &readSize ) == -1 )
 		{
 			Disconnect();
 			return false;
@@ -12017,7 +12041,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 			// Check for closed connection
 			if ( m_protocol == Protocol::TCP )
 			{
-				uint8_t buffer;
+				_ae_sock_buff_t buffer;
 				int result = recv( m_sock, &buffer, 1, MSG_PEEK );
 				if ( result == 0 || ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN ) )
 				{
@@ -12026,7 +12050,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 			}
 			else if ( m_protocol == Protocol::UDP )
 			{
-				uint8_t buffer;
+				_ae_sock_buff_t buffer;
 				int result = recv( m_sock, &buffer, 1, MSG_PEEK );
 				if ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN )
 				{
@@ -12048,9 +12072,9 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		AE_ASSERT( readSize );
 		uint32_t totalSize = m_recvData.Length() + readSize;
 		m_recvData.Reserve( totalSize );
-		uint8_t* buffer = m_recvData.End();
+		_ae_sock_buff_t* buffer = (_ae_sock_buff_t*)m_recvData.End();
 		while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
-		AE_ASSERT( buffer == m_recvData.End() - readSize );
+		AE_ASSERT( buffer == (_ae_sock_buff_t*)m_recvData.End() - readSize );
 		
 		int result = recv( m_sock, buffer, readSize, 0 );
 		if ( result < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) )
@@ -12172,7 +12196,11 @@ uint32_t Socket::SendAll()
 		return 0;
 	}
 	
-	int result = send( m_sock, m_sendData.Begin(), m_sendData.Length(), MSG_NOSIGNAL );
+	int sendFlags = 0;
+#if !_AE_WINDOWS_
+	sendFlags |= MSG_NOSIGNAL;
+#endif
+	int result = send( m_sock, (const _ae_sock_buff_t*)m_sendData.Begin(), m_sendData.Length(), sendFlags );
 	if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
 	{
 		Disconnect();
@@ -12334,7 +12362,7 @@ ae::Socket* ListenerSocket::Accept()
 			// Discard all pending messages when max connections are established
 			if ( m_connections.Length() >= m_maxConnections )
 			{
-				uint8_t buffer;
+				_ae_sock_buff_t buffer;
 				int result = recv( listenSock, &buffer, sizeof(buffer), 0 );
 				if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
 				{
@@ -12344,7 +12372,7 @@ ae::Socket* ListenerSocket::Accept()
 				continue;
 			}
 			
-			uint8_t buffer;
+			_ae_sock_buff_t buffer;
 			int numbytes = recvfrom( listenSock, &buffer, sizeof(buffer), MSG_PEEK, (sockaddr*)&sockAddr, &sockAddrLen );
 			if ( numbytes == -1 )
 			{
@@ -15762,7 +15790,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 		return false;
 	}
 
-	struct TargaHeader
+	AE_PACK( struct TargaHeader
 	{
 		uint8_t idLength;
 		uint8_t colorMapType;
@@ -15779,7 +15807,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 
 		uint8_t bitsPerPixel;
 		uint8_t imageDescriptor;
-	} __attribute__((packed));
+	} );
 
 	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
 	TargaHeader header;

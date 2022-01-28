@@ -14,8 +14,6 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 	if(WIN32)
 		# Create a regular windowed application instead of the default console subsystem target
 		set(_AE_EXE_TYPE WIN32)
-		# Use main instead of WinMain
-		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup")
 	endif()
 
 	add_executable(${_AE_EXECUTABLE_NAME} ${_AE_EXE_TYPE} ${_AE_SRC_FILES})
@@ -27,8 +25,10 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 	endif()
 
 	if(WIN32)
-		# Set the working directory while debugging in visual studio to the location of this targets CMakeLists.txt
-		set_property(TARGET ${_AE_EXECUTABLE_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
+			VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" # Set the working directory while debugging in visual studio to the location of this targets CMakeLists.txt
+			LINK_FLAGS "/ENTRY:mainCRTStartup" # Use main instead of WinMain
+		)
 	elseif(APPLE)
 		# Only add resource files to Apple bundles
 		# Adding resources on Windows causes an issue where files are copied only once on configure
