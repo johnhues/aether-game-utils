@@ -2846,23 +2846,6 @@ struct Keyframe
 };
 
 //------------------------------------------------------------------------------
-// ae::Animation class
-//------------------------------------------------------------------------------
-class Animation
-{
-public:
-	Animation( const ae::Tag& tag ) : keyframes( tag ) {}
-	ae::Keyframe GetKeyframeByTime( const char* boneName, float time ) const;
-	ae::Keyframe GetKeyframeByPercent( const char* boneName, float percent ) const;
-	void AnimateByTime( class Skeleton* target, float time, float strength, const class Bone** mask, uint32_t maskCount ) const;
-	void AnimateByPercent( class Skeleton* target, float percent, float strength, const class Bone** mask, uint32_t maskCount ) const;
-	
-	float duration = 0.0f;
-	bool loop = false;
-	ae::Map< ae::Str64, ae::Array< ae::Keyframe > > keyframes; // @TODO: boneKeyframes. Maybe private
-};
-
-//------------------------------------------------------------------------------
 // ae::Bone struct
 //------------------------------------------------------------------------------
 struct Bone
@@ -2875,6 +2858,23 @@ struct Bone
 	Bone* firstChild = nullptr;
 	Bone* nextSibling = nullptr;
 	Bone* parent = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// ae::Animation class
+//------------------------------------------------------------------------------
+class Animation
+{
+public:
+	Animation( const ae::Tag& tag ) : keyframes( tag ) {}
+	ae::Keyframe GetKeyframeByTime( const char* boneName, float time ) const;
+	ae::Keyframe GetKeyframeByPercent( const char* boneName, float percent ) const;
+	void AnimateByTime( class Skeleton* target, float time, float strength, const Bone** mask, uint32_t maskCount ) const;
+	void AnimateByPercent( class Skeleton* target, float percent, float strength, const Bone** mask, uint32_t maskCount ) const;
+	
+	float duration = 0.0f;
+	bool loop = false;
+	ae::Map< ae::Str64, ae::Array< ae::Keyframe > > keyframes; // @TODO: boneKeyframes. Maybe private
 };
 
 //------------------------------------------------------------------------------
@@ -3717,9 +3717,10 @@ namespace ae {
 template < typename T >
 const char* GetTypeName()
 {
+	// @TODO: Thread safe version of this
 	const char* typeName = typeid( typename std::decay< T >::type ).name();
 #ifdef _MSC_VER
-	// @TODO: Support pointers to types
+	// @TODO: This isn't super well tested.. Should likely use a real demangler
 	if ( strncmp( typeName, "class ", 6 ) == 0 )
 	{
 		typeName += 6;
@@ -3727,6 +3728,15 @@ const char* GetTypeName()
 	else if ( strncmp( typeName, "struct ", 7 ) == 0 )
 	{
 		typeName += 7;
+	}
+	static char s_buffer[ 64 ];
+	if ( strcpy_s( s_buffer, sizeof( s_buffer ), typeName ) == 0 )
+	{
+		if ( char* space = strchr( s_buffer, ' ' ) )
+		{
+			*space = 0;
+		}
+		return s_buffer;
 	}
 #else
 	// @NOTE: Demangle calls realloc on given buffer
@@ -6854,7 +6864,7 @@ bool ae::Type::IsType() const
 template < typename T >
 const ae::Type* ae::GetType()
 {
-	AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
+	//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) ); // @TODO: This check doesn't compile when T is an incomplete type
 	const char* typeName = ae::GetTypeName< T >();
 	auto it = _GetTypeNameMap().find( typeName );
 	if ( it != _GetTypeNameMap().end() )
@@ -7095,6 +7105,7 @@ T* ae::Cast( C* obj )
 #if _AE_WINDOWS_
 	#define WIN32_LEAN_AND_MEAN 1
 	#include <Windows.h>
+	#include <Windowsx.h>
 	#include <shellapi.h>
 	#include <Shlobj_core.h>
 	#include <commdlg.h>
@@ -9748,11 +9759,27 @@ void Window::m_Initialize()
 		AE_FAIL_MSG( "Failed to register window. Error: #", GetLastError() );
 	}
 
-	// WS_POPUP for full screen
+	// @TODO: WS_POPUP for full screen
 	uint32_t windowStyle = WS_OVERLAPPEDWINDOW;
 	windowStyle |= WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
-	HWND hwnd = CreateWindowEx( NULL, WNDCLASSNAME, L"Window", WS_OVERLAPPEDWINDOW, 0, 0, GetWidth(), GetHeight(), NULL, NULL, hinstance, this );
+
+	RECT windowRect;
+	windowRect.left = 0;
+	windowRect.right = GetWidth();
+	windowRect.top = 0;
+	windowRect.bottom = GetHeight();
+	bool windowSuccess = AdjustWindowRectEx( &windowRect, windowStyle, false, 0 );
+	AE_ASSERT( windowSuccess );
+	m_width = ( windowRect.right - windowRect.left );
+	m_height = ( windowRect.bottom - windowRect.top );
+
+	HWND hwnd = CreateWindowEx( 0, WNDCLASSNAME, L"Window", WS_OVERLAPPEDWINDOW, 0, 0, GetWidth(), GetHeight(), NULL, NULL, hinstance, this );
 	AE_ASSERT_MSG( hwnd, "Failed to create window. Error: #", GetLastError() );
+
+	windowSuccess = GetClientRect( hwnd, &windowRect );
+	AE_ASSERT( windowSuccess );
+	m_width = ( windowRect.right - windowRect.left );
+	m_height = ( windowRect.bottom - windowRect.top );
 
 	HDC hdc = GetDC( hwnd );
 	AE_ASSERT_MSG( hdc, "Failed to Get the Window Device Context" );
@@ -10105,7 +10132,7 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-EM_BOOL ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
+EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
 	if ( !keyEvent->repeat )
 	{
@@ -10122,6 +10149,20 @@ EM_BOOL ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent
 	}
 	return true;
 }
+#elif _AE_WINDOWS_
+// @TODO: Window hover flag
+//void _ae_HandleMouseEnterExit( Window* window, uint32_t flags )
+//{
+//	AE_ASSERT( window );
+//	AE_ASSERT( window->window );
+//	TRACKMOUSEEVENT trackMouse;
+//	trackMouse.cbSize = sizeof( trackMouse );
+//	trackMouse.dwFlags = flags;
+//	trackMouse.hwndTrack = (HWND)window->window;
+//	trackMouse.dwHoverTime = HOVER_DEFAULT;
+//	bool trackMouseSuccess = TrackMouseEvent( &trackMouse );
+//	AE_ASSERT( trackMouseSuccess );
+//}
 #endif
 
 void Input::Initialize( Window* window )
@@ -10135,11 +10176,11 @@ void Input::Initialize( Window* window )
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 
 #if _AE_EMSCRIPTEN_
-	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
-	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &ae_em_handle_key );
-#endif
-	
-#if _AE_OSX_
+	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
+	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
+#elif _AE_WINDOWS_
+	//_ae_HandleMouseEnterExit( m_window, TME_HOVER | TME_LEAVE ); // @TODO: Window hover flag
+#elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
 	m_textInputHandler = textInput;
@@ -10159,7 +10200,7 @@ void Input::Terminate()
 void Input::Pump()
 {
 	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-#if _AE_APPLE_ || _AE_WINDOWS_
+#if !_AE_EMSCRIPTEN_
 	// Clear keys each frame and then check for presses below
 	// Emscripten doesn't do this because it uses a callback to set m_keys
 	memset( m_keys, 0, sizeof(m_keys) );
@@ -10171,15 +10212,56 @@ void Input::Pump()
 
 	// Handle system events
 #if _AE_WINDOWS_
+	m_window->m_UpdateFocused( m_window->window == GetFocus() );
 	MSG msg;
 	// Get messages for current thread
 	while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
 	{
-		switch ( msg.message )
+		if ( msg.message == WM_QUIT )
 		{
-			case WM_QUIT:
-				quit = true;
-				break;
+			quit = true;
+		}
+		else if ( msg.message == WM_MOUSEMOVE ) // @TODO: Hover start
+		{
+			ae::Int2 pos( GET_X_LPARAM( msg.lParam ), GET_Y_LPARAM( msg.lParam ) );
+			pos.y = m_window->GetHeight() - pos.y;
+			AE_INFO( "pos <#>", pos );
+			m_SetMousePos( pos );
+		}
+		//else if ( msg.message == WM_MOUSELEAVE ) // @TODO: Hover end
+		//{
+		//	AE_INFO( "WM_MOUSELEAVE" );
+		//	_ae_HandleMouseEnterExit( m_window, TME_HOVER ); // Reset tracking
+		//}
+		else if ( m_window->GetFocused() )
+		{
+			switch ( msg.message )
+			{
+				case WM_LBUTTONDOWN:
+					AE_INFO( "WM_LBUTTONDOWN" );
+					break;
+				case WM_LBUTTONUP:
+					AE_INFO( "WM_LBUTTONUP" );
+					break;
+				case WM_MBUTTONDOWN:
+					AE_INFO( "WM_MBUTTONDOWN" );
+					break;
+				case WM_MBUTTONUP:
+					AE_INFO( "WM_MBUTTONUP" );
+					break;
+				case WM_RBUTTONDOWN:
+					AE_INFO( "WM_RBUTTONDOWN" );
+					break;
+				case WM_RBUTTONUP:
+					AE_INFO( "WM_RBUTTONUP" );
+					break;
+				case WM_MOUSEWHEEL:
+					AE_INFO( "WM_MOUSEWHEEL" );
+					break;
+				case WM_MOUSEHWHEEL:
+					AE_INFO( "WM_MOUSEHWHEEL" );
+					break;
+			}
 		}
 		TranslateMessage( &msg );
 		DispatchMessage( &msg );
@@ -10288,7 +10370,7 @@ void Input::Pump()
 #if _AE_WINDOWS_
 #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
 	uint8_t keyStates[ 256 ];
-	if ( GetKeyboardState( keyStates ) )
+	if ( m_window->GetFocused() && GetKeyboardState( keyStates ) )
 	{
 		// @TODO: ae::Key::NumPadEnter is currently not handled
 		AE_UPDATE_KEY( Backspace, VK_BACK );

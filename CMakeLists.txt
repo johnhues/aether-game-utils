@@ -63,6 +63,7 @@ endif()
 
 # enet
 add_subdirectory(deps/enet)
+set(ENET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/enet/include)
 
 # OpenAL
 if (IOS_TOOLCHAIN_HAS_RUN)
@@ -104,7 +105,7 @@ endif()
 
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
-	${CMAKE_CURRENT_SOURCE_DIR}/deps/enet/include
+	${ENET_INCLUDE_DIR}
 	${GLEW_INCLUDE_DIR}
 	${OPENAL_INCLUDE_DIR}
 )

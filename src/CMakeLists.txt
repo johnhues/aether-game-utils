@@ -11,11 +11,11 @@ endif()
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
-		${AE_DEPS_LIBRARY_INCLUDE_DIRS}
-		${PROJECT_SOURCE_DIR}/src
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/${AE_LIBRARY_NAME}> # for headers when building
 	PUBLIC
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> # for headers when building
+		"$<BUILD_INTERFACE:${AE_DEPS_LIBRARY_INCLUDE_DIRS}>" # expose glew etc to targets dependent on ae. Must be in quotes for BUILD_INTERFACE to work
 		$<INSTALL_INTERFACE:include> # <install prefix>/include
 )
 
