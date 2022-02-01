@@ -210,9 +210,9 @@ add_bundle("Terrain"
 	"ae.11_terrain"
 	"0.0.0"
 	"Icon"
-	"11_terrain.cpp;${AE_EXAMPLE_SOURCES}"
+	"11_terrain.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
 	"data/Icon.icns;data/font.png"
-	"ae;imgui;imguizmo"
+	"ae;imgui;imguizmo;stb"
 	""
 )
 

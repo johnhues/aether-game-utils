@@ -301,7 +301,7 @@ int main()
     terrainShader.SetDepthTest( true );
     terrainShader.SetDepthWrite( true );
 
-    LoadPng( &fontTexture, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+    ae::stbLoadPng( &fontTexture, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
     textRender.Initialize( &fontTexture, 8 );
   }
 
@@ -645,8 +645,7 @@ int main()
               {
                 ae::CollisionMesh::RaycastParams params;
                 params.source = object->raySrc;
-                params.direction = object->rayDir;
-                params.maxLength = object->rayLength;
+                params.ray = ray;
                 terrain->Raycast( params, nullptr );
               }
             }

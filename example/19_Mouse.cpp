@@ -183,7 +183,7 @@ bool Program::Update()
 	{
 		return false;
 	}
-	const ae::Vec2 currentCursorPos( m_input.mouse.position );
+	const ae::Vec2 currentCursorPos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
 
 	int32_t hoverIdx = m_currentFolder->subFolders.FindLastFn( [&]( const Folder* folder )
 	{
@@ -346,7 +346,7 @@ void Program::DrawWindow()
 void Program::DrawCursor()
 {
 	ae::UniformList uniformList;
-	ae::Vec2 mousePos( m_input.mouse.position );
+	ae::Vec2 mousePos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
 
 	ae::Matrix4 localToWorld = ae::Matrix4::Translation( mousePos.x - 2.0f, mousePos.y + 4.0f, 0.0f ) * ae::Matrix4::Scaling( 30.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
@@ -361,7 +361,7 @@ void Program::DrawCursor()
 
 void Program::DrawFolders()
 {
-	const ae::Vec2 currentCursorPos( m_input.mouse.position );
+	const ae::Vec2 currentCursorPos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
 	const ae::Vec2 dragOffset = currentCursorPos - m_dragStart;
 	for ( const Folder* folder : m_currentFolder->subFolders )
 	{
