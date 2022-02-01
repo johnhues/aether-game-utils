@@ -1185,10 +1185,14 @@ public:
 	//! Add elements
 	T& Insert( uint32_t index, const T& value );
 
-	//! Find elements. Returns -1 when not found.
+	//! Find first matching element. Returns -1 when not found.
 	template < typename U > int32_t Find( const U& value ) const;
-	//! Find elements. Returns -1 when not found.
+	//! Find first matching element. Returns -1 when not found.
 	template < typename Fn > int32_t FindFn( Fn testFn ) const;
+	//! Find last matching element. Returns -1 when not found.
+	template < typename U > int32_t FindLast( const U& value ) const;
+	//! Find last matching element. Returns -1 when not found.
+	template < typename Fn > int32_t FindLastFn( Fn testFn ) const;
 
 	//! Remove elements
 	template < typename U > uint32_t RemoveAll( const U& value );
@@ -1365,29 +1369,28 @@ inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
 // ae::Rect class
 // @TODO: Move this up near Vec3 etc
 //------------------------------------------------------------------------------
-struct Rect
+class Rect
 {
-	Rect() = default;
-	Rect( const Rect& ) = default;
-	Rect( float x, float y, float w, float h ) : x(x), y(y), w(w), h(h) {}
-	Rect( Vec2 p0, Vec2 p1 );
-	explicit operator Vec4() const { return Vec4( x, y, w, h ); }
-	
-	Vec2 GetMin() const { return Vec2( x, y ); }
-	Vec2 GetMax() const { return Vec2( x + w, y + h ); }
-	Vec2 GetSize() const { return Vec2( w, h ); }
+public:
+	static Rect FromCenterAndSize( ae::Vec2 center, ae::Vec2 size );
+	static Rect FromPoints( ae::Vec2 p0, ae::Vec2 p1 );
+
+	Vec2 GetMin() const { return m_min; }
+	Vec2 GetMax() const { return m_max; }
+	Vec2 GetSize() const { return m_max - m_min; }
+	Vec2 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
 	bool Contains( Vec2 pos ) const;
-	void Expand( Vec2 pos ); // @NOTE: Zero size rect is maintained by Expand()
-	bool GetIntersection( const Rect& other, Rect* intersectionOut ) const;
+	void Expand( Vec2 pos );
+	bool GetIntersection( const Rect& other, Rect* intersectionOut = nullptr ) const;
 	
-	float x = 0.0f;
-	float y = 0.0f;
-	float w = 0.0f;
-	float h = 0.0f;
+private:
+	friend std::ostream& operator<<( std::ostream& os, Rect r );
+	ae::Vec2 m_min = ae::Vec2( INFINITY );
+	ae::Vec2 m_max = ae::Vec2( -INFINITY );
 };
 inline std::ostream& operator<<( std::ostream& os, Rect r )
 {
-	return os << r.x << " " << r.y << " " << r.w << " " << r.h;
+	return os << r.m_min.x << " " << r.m_min.y << " " << r.m_max.x << " " << r.m_max.y;
 }
 
 //------------------------------------------------------------------------------
@@ -2469,6 +2472,7 @@ public:
 
 	const Texture2D* GetTexture( uint32_t index ) const;
 	const Texture2D* GetDepth() const;
+	float GetAspectRatio() const;
 	uint32_t GetWidth() const;
 	uint32_t GetHeight() const;
 
@@ -4040,14 +4044,13 @@ auto Min( T0&& v0, T1&& v1, Tn&&... vn )
 {
 	return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
 }
-
+inline ae::Vec2 Min( ae::Vec2 v0, ae::Vec2 v1 )
+{
+	return ae::Vec2( Min( v0.x, v1.x ), Min( v0.y, v1.y ) );
+}
 inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
 {
-	return ae::Vec3(
-		Min( v0.x, v1.x ),
-		Min( v0.y, v1.y ),
-		Min( v0.z, v1.z )
-	);
+	return ae::Vec3( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ) );
 }
 
 template< typename T >
@@ -4060,14 +4063,13 @@ auto Max( T0&& v0, T1&& v1, Tn&&... vn )
 {
 	return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
 }
-
+inline ae::Vec2 Max( ae::Vec2 v0, ae::Vec2 v1 )
+{
+	return ae::Vec2( Max( v0.x, v1.x ), Max( v0.y, v1.y ) );
+}
 inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
 {
-	return ae::Vec3(
-		Max( v0.x, v1.x ),
-		Max( v0.y, v1.y ),
-		Max( v0.z, v1.z )
-	);
+	return ae::Vec3( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ) );
 }
 
 template < typename T >
@@ -5867,6 +5869,34 @@ template < typename Fn >
 int32_t Array< T, N >::FindFn( Fn testFn ) const
 {
 	for ( uint32_t i = 0; i < m_length; i++ )
+	{
+		if ( testFn( m_array[ i ] ) )
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+template < typename T, uint32_t N >
+template < typename U >
+int32_t Array< T, N >::FindLast( const U& value ) const
+{
+	for ( int32_t i = m_length - 1; i >= 0; i-- )
+	{
+		if ( m_array[ i ] == value )
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+template < typename T, uint32_t N >
+template < typename Fn >
+int32_t Array< T, N >::FindLastFn( Fn testFn ) const
+{
+	for ( int32_t i = m_length - 1; i >= 0; i-- )
 	{
 		if ( testFn( m_array[ i ] ) )
 		{
@@ -9390,72 +9420,43 @@ std::ostream& operator<<( std::ostream& os, const Dict& dict )
 //------------------------------------------------------------------------------
 // ae::Rect member functions
 //------------------------------------------------------------------------------
-Rect::Rect( Vec2 p0, Vec2 p1 )
+Rect Rect::FromCenterAndSize( ae::Vec2 center, ae::Vec2 size )
 {
-	if ( p0.x < p1.x )
-	{
-		x = p0.x;
-		w = p1.x - p0.x;
-	}
-	else
-	{
-		x = p1.x;
-		w = p0.x - p1.x;
-	}
+	Rect rect;
+	rect.Expand( center - size * 0.5f );
+	rect.Expand( center + size * 0.5f );
+	return rect;
+}
 
-	if ( p0.y < p1.y )
-	{
-		y = p0.y;
-		h = p1.y - p0.y;
-	}
-	else
-	{
-		y = p1.y;
-		h = p0.y - p1.y;
-	}
+Rect Rect::FromPoints( ae::Vec2 p0, ae::Vec2 p1 )
+{
+	Rect rect;
+	rect.Expand( p0 );
+	rect.Expand( p1 );
+	return rect;
 }
 
 bool Rect::Contains( Vec2 pos ) const
 {
-	return !( pos.x < x || pos.x >= ( x + w ) || pos.y < y || pos.y >= ( y + h ) );
+	return ( m_min.x <= pos.x && pos.x <= m_max.x ) && ( m_min.y <= pos.y && pos.y <= m_max.y );
 }
 
 void Rect::Expand( Vec2 pos )
 {
-	if ( w == 0.0f )
-	{
-		x = pos.x;
-	}
-	else
-	{
-		float x1 = ae::Max( x + w, pos.x );
-		x = ae::Min( x, pos.x );
-		w = x1 - x;
-	}
-
-	if ( h == 0.0f )
-	{
-		y = pos.y;
-	}
-	else
-	{
-		float y1 = ae::Max( y + h, pos.y );
-		y = ae::Min( y, pos.y );
-		h = y1 - y;
-	}
+	m_min = ae::Min( m_min, pos );
+	m_max = ae::Max( m_max, pos );
 }
 
 bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
 {
-	float x0 = ae::Max( x, other.x );
-	float x1 = ae::Min( x + w, other.x + other.w );
-	float y0 = ae::Max( y, other.y );
-	float y1 = ae::Min( y + h, other.y + other.h );
-	if ( x0 < x1 && y0 < y1 )
+	ae::Vec2 min = ae::Max( m_min, other.m_min );
+	ae::Vec2 max = ae::Min( m_max, other.m_max );
+	if ( min.x <= max.x && min.y <= max.y )
 	{
 		if ( intersectionOut )
 		{
-			*intersectionOut = Rect( Vec2( x0, y0 ), Vec2( x1, y1 ) );
+			intersectionOut->m_min = min;
+			intersectionOut->m_max = max;
 		}
 		return true;
 	}
@@ -10226,7 +10227,6 @@ void Input::Pump()
 		{
 			ae::Int2 pos( GET_X_LPARAM( msg.lParam ), GET_Y_LPARAM( msg.lParam ) );
 			pos.y = m_window->GetHeight() - pos.y;
-			AE_INFO( "pos <#>", pos );
 			m_SetMousePos( pos );
 		}
 		//else if ( msg.message == WM_MOUSELEAVE ) // @TODO: Hover end
@@ -10239,28 +10239,28 @@ void Input::Pump()
 			switch ( msg.message )
 			{
 				case WM_LBUTTONDOWN:
-					AE_INFO( "WM_LBUTTONDOWN" );
+					mouse.leftButton = true;
 					break;
 				case WM_LBUTTONUP:
-					AE_INFO( "WM_LBUTTONUP" );
+					mouse.leftButton = false;
 					break;
 				case WM_MBUTTONDOWN:
-					AE_INFO( "WM_MBUTTONDOWN" );
+					mouse.middleButton = true;
 					break;
 				case WM_MBUTTONUP:
-					AE_INFO( "WM_MBUTTONUP" );
+					mouse.middleButton = false;
 					break;
 				case WM_RBUTTONDOWN:
-					AE_INFO( "WM_RBUTTONDOWN" );
+					mouse.rightButton = true;
 					break;
 				case WM_RBUTTONUP:
-					AE_INFO( "WM_RBUTTONUP" );
+					mouse.rightButton = false;
 					break;
 				case WM_MOUSEWHEEL:
-					AE_INFO( "WM_MOUSEWHEEL" );
+					mouse.scroll.y += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
 					break;
 				case WM_MOUSEHWHEEL:
-					AE_INFO( "WM_MOUSEHWHEEL" );
+					mouse.scroll.x += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
 					break;
 			}
 		}
@@ -14433,6 +14433,18 @@ const Texture2D* RenderTarget::GetDepth() const
 	return m_depth.GetTexture() ? &m_depth : nullptr;
 }
 
+float RenderTarget::GetAspectRatio() const
+{
+	if ( m_width * m_height == 0 )
+	{
+		return 0.0f;
+	}
+	else
+	{
+		return m_width / (float)m_height;
+	}
+}
+
 uint32_t RenderTarget::GetWidth() const
 {
 	return m_width;
@@ -14465,13 +14477,13 @@ Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherH
 	{
 		// Fit width
 		float height = targetAspect / canvasAspect;
-		return Rect( -1.0f, -height, 2.0f, height * 2.0f );
+		return ae::Rect::FromCenterAndSize( ae::Vec2( -1.0f, -height ) - ae::Vec2( 2.0f, height * 2.0f ) * 0.5f, ae::Vec2( 2.0f, height * 2.0f ) );
 	}
 	else
 	{
 		// Fit height
 		float width = canvasAspect / targetAspect;
-		return Rect( -width, -1.0f, width * 2.0f, 2.0f );
+		return ae::Rect::FromCenterAndSize( ae::Vec2( -width, -1.0f ) - ae::Vec2( width * 2.0f, 2.0f ) * 0.5f, ae::Vec2( width * 2.0f, 2.0f ) );
 	}
 }
 
@@ -14483,8 +14495,10 @@ Matrix4 RenderTarget::GetTargetPixelsToWorld( const Matrix4& otherTargetToLocal,
 
 Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 {
-	Matrix4 localToNdc = Matrix4::Translation( Vec3( ndc.x, ndc.y, z ) );
-	localToNdc *= Matrix4::Scaling( Vec3( ndc.w, ndc.h, 1.0f ) );
+	ae::Vec2 ndcPos = ndc.GetMin();
+	ae::Vec2 ndcSize = ndc.GetSize();
+	Matrix4 localToNdc = Matrix4::Translation( Vec3( ndcPos.x, ndcPos.y, z ) );
+	localToNdc *= Matrix4::Scaling( Vec3( ndcSize.x, ndcSize.y, 1.0f ) );
 	localToNdc *= Matrix4::Translation( Vec3( 0.5f, 0.5f, 0.0f ) );
 	return localToNdc;
 }
@@ -14771,7 +14785,7 @@ void GraphicsDevice::Present()
 	// Currently all platforms expect the backbuffer contents to be in sRGB space
 	m_rgbToSrgb = true;
 #endif
-	m_canvas.Render2D( 0, Rect( Vec2( -1.0f ), Vec2( 1.0f ) ), 0.5f );
+	m_canvas.Render2D( 0, ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f ) ), 0.5f );
 	m_rgbToSrgb = false;
 	
 	AE_CHECK_GL_ERROR();
@@ -14790,14 +14804,7 @@ void GraphicsDevice::Present()
 
 float GraphicsDevice::GetAspectRatio() const
 {
-	if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
-	{
-		return 0.0f;
-	}
-	else
-	{
-		return m_canvas.GetWidth() / (float)m_canvas.GetHeight();
-	}
+	return m_canvas.GetAspectRatio();
 }
 
 void GraphicsDevice::AddTextureBarrier()

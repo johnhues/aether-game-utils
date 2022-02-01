@@ -290,3 +290,15 @@ add_bundle("Editor"
 	"ae;imgui;imguizmo;rapidjson"
 	"${CMAKE_SOURCE_DIR}/include"
 )
+
+# Mouse
+add_bundle("Mouse"
+	"19_mouse"
+	"ae.19_mouse"
+	"0.0.0"
+	"Icon"
+	"19_Mouse.cpp;${AE_EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)

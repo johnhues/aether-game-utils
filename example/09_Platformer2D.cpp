@@ -159,8 +159,7 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 void Player::Render( SpriteRenderer* spriteRender, ae::Texture2D* tex )
 {
   ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
-  transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 1.0f ) );
-  spriteRender->AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
+  spriteRender->AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
 }
 
 //------------------------------------------------------------------------------
@@ -261,8 +260,7 @@ int main()
           default: color = ae::Color::PicoOrange(); break;
         }
         ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
-        transform *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-        spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), color );
+        spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), color );
       }
     }
     

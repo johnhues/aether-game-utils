@@ -114,10 +114,10 @@ int main()
 	ae::Texture2D texture;
 	{
 		ae::TargaFile targaFile = TAG_ALL;
-		uint32_t fileSize = fileSystem.GetSize( "character.tga" );
+		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, "character.tga" );
 		AE_ASSERT( fileSize );
 		ae::Scratch< uint8_t > fileData( TAG_ALL, fileSize );
-		fileSystem.Read( "character.tga", fileData.Data(), fileData.Length() );
+		fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", fileData.Data(), fileData.Length() );
 		targaFile.Load( fileData.Data(), fileData.Length() );
 		texture.Initialize( targaFile.textureParams );
 	}

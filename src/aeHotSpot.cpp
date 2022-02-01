@@ -264,7 +264,7 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
     intersections.Set( HotSpotWorld::_GetTilePos( m_position + ae::Vec2( 0.5f ) ), 1 );
     intersections.Set( HotSpotWorld::_GetTilePos( m_position + ae::Vec2( -0.5f, 0.5f ) ), 1 );
     intersections.Set( HotSpotWorld::_GetTilePos( m_position + ae::Vec2( 0.5f, -0.5f ) ), 1 );
-    ae::Rect objRect( m_position.x - 0.5f, m_position.y - 0.5f, 1.0f, 1.0f );
+    ae::Rect objRect = ae::Rect::FromCenterAndSize( m_position, ae::Vec2( 1.0f ) );
     for ( uint32_t i = 0; i < intersections.Length(); i++ )
     {
       ae::Int2 tilePos = intersections.GetKey( i );
@@ -273,11 +273,12 @@ void HotSpotObject::Update( HotSpotWorld* world, float dt )
       if ( density > 0.0f )
       {
         ae::Rect intersection;
-        ae::Rect tileRect( tilePos.x - 0.5f, tilePos.y - 0.5f, 1.0f, 1.0f );
+        ae::Rect tileRect = ae::Rect::FromCenterAndSize( ae::Vec2( tilePos ), ae::Vec2( 1.0f ) );
         if ( tileRect.GetIntersection( objRect, &intersection ) )
         {
           // Buoyant force = (density of liquid(kg/m3))*(gravitational acceleration(m/s2))*(volume of liquid(m3))
-          float displaced = intersection.w * intersection.h * m_volume;
+          ae::Vec2 intersectionSize = intersection.GetSize();
+          float displaced = intersectionSize.x * intersectionSize.y * m_volume;
           forces -= m_gravity * ( density * displaced );
         }
       }

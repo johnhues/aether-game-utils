@@ -13,6 +13,9 @@
 //------------------------------------------------------------------------------
 // ae::Array tests
 //------------------------------------------------------------------------------
+
+// @TODO: Add specific Find() FindFn() FindLast() and FindLastFn() tests
+
 TEST_CASE( "arrays elements can be removed by value", "[ae::Array]" )
 {
   ae::Array< int > array = AE_ALLOC_TAG_FIXME;
