@@ -10876,20 +10876,12 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	return false;
 }
 #elif _AE_LINUX_
-bool FileSystem_GetUserDir( Str256* outDir )
+const char* FileSystem_GetHomeDir()
 {
-	return false;
-}
-bool FileSystem_GetCacheDir( Str256* outDir )
-{
-	// Something like /users/someone/.cache
-	const char* cacheFolderName = ".cache";
 	const char* homeDir = getenv( "HOME" );
 	if ( homeDir && homeDir[ 0 ] )
 	{
-		*outDir = homeDir;
-		FileSystem::AppendToPath( outDir, cacheFolderName );
-		return true;
+		return homeDir;
 	}
 	else
 	{
@@ -10899,11 +10891,33 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 			const char* homeDir = pw->pw_dir;
 			if ( homeDir && homeDir[ 0 ] )
 			{
-				*outDir = homeDir;
-				FileSystem::AppendToPath( outDir, cacheFolderName );
-				return true;
+				return homeDir;
 			}
 		}
+	}
+	return nullptr;
+}
+
+bool FileSystem_GetUserDir( Str256* outDir )
+{
+	// Something like /users/someone/.local/share
+	if ( const char* homeDir = FileSystem_GetHomeDir() )
+	{
+		*outDir = homeDir;
+		FileSystem::AppendToPath( outDir, ".local/share" );
+		return true;
+	}
+	return false;
+}
+
+bool FileSystem_GetCacheDir( Str256* outDir )
+{
+	// Something like /users/someone/.cache
+	if ( const char* homeDir = FileSystem_GetHomeDir() )
+	{
+		*outDir = homeDir;
+		FileSystem::AppendToPath( outDir, ".cache" );
+		return true;
 	}
 	return false;
 }
