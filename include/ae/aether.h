@@ -6864,7 +6864,8 @@ bool ae::Type::IsType() const
 template < typename T >
 const ae::Type* ae::GetType()
 {
-	//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) ); // @TODO: This check doesn't compile when T is an incomplete type
+	// @TODO: Conditionally enable this check when T is not a forward declaration
+	//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
 	const char* typeName = ae::GetTypeName< T >();
 	auto it = _GetTypeNameMap().find( typeName );
 	if ( it != _GetTypeNameMap().end() )
@@ -16095,6 +16096,11 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	// Obb in world space
 	{
 		ae::OBB obb( params.transform * m_aabb.GetTransform() );
+		if ( ae::DebugLines* debug = params.debug )
+		{
+			// Ray intersects obb
+			debug->AddOBB( obb.GetTransform(), params.debugColor );
+		}
 		if ( !obb.IntersectRay( params.source, params.ray ) )
 		{
 			if ( ae::DebugLines* debug = params.debug )
@@ -16102,12 +16108,6 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 				debug->AddLine( params.source, params.source + params.ray, params.debugColor );
 			}
 			return prevResult; // Early out if ray doesn't touch obb
-		}
-		
-		if ( ae::DebugLines* debug = params.debug )
-		{
-			// Ray intersects obb
-			debug->AddOBB( obb.GetTransform(), params.debugColor );
 		}
 	}
 	
@@ -17727,11 +17727,19 @@ void NetObjectClient::Destroy( NetObject* pendingDestroy )
 	bool removed = m_netObjects.Remove( pendingDestroy->GetId() );
 	AE_ASSERT_MSG( removed, "ae::NetObject can't be destroyed. It's' not managed by this ae::NetObjectClient." );
 	
-	if ( pendingDestroy->IsPendingDestroy() )
+	if ( !pendingDestroy->IsPendingDestroy() )
 	{
 		m_StartNetObjectDestruction( pendingDestroy );
 	}
 	ae::Delete( pendingDestroy );
+	
+#if _AE_DEBUG_
+	if ( !m_netObjects.Length() )
+	{
+		AE_ASSERT( !m_localToRemoteIdMap.Length() );
+		AE_ASSERT( !m_remoteToLocalIdMap.Length() );
+	}
+#endif
 }
 
 NetObject* NetObjectClient::m_CreateNetObject( BinaryStream* rStream, bool allowResolve )

@@ -179,6 +179,7 @@ AetherClient* AetherClient_New( AetherUuid uuid, const char* ip, uint16_t port )
 void AetherClient_Delete( AetherClient* );
 
 void AetherClient_Connect( AetherClient* _ac );
+void AetherClient_Disconnect( AetherClient* _ac );
 bool AetherClient_Receive( AetherClient*, ReceiveInfo* infoOut );
 void AetherClient_SendAll( AetherClient* );
 void AetherClient_QueueSend( AetherClient* ac, AetherMsgId msgId, bool reliable, const void* data, uint32_t length );

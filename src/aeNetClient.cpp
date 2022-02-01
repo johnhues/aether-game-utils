@@ -189,6 +189,25 @@ AetherClient* AetherClient_New( AetherUuid uuid, const char* ip, uint16_t port )
   return (AetherClient*)ac;
 }
 
+void AetherClient_Disconnect( AetherClient* _ac )
+{
+  AetherClientInternal* ac = (AetherClientInternal*)_ac;
+  if ( !ac )
+  {
+	return;
+  }
+	
+#ifndef __EMSCRIPTEN__
+  ENetPeer* peer = ac->priv.host->peerCount ? ac->priv.host->peers : nullptr;
+  if ( peer && peer->state == ENET_PEER_STATE_CONNECTED )
+  {
+	// @TODO: Make sure all queued packets are sent
+	enet_peer_disconnect( ac->priv.host->peers, 0 );
+	enet_host_flush( ac->priv.host );
+  }
+#endif
+}
+
 void AetherClient_Delete( AetherClient* _ac )
 {
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
