@@ -2476,13 +2476,20 @@ public:
 	uint32_t GetWidth() const;
 	uint32_t GetHeight() const;
 
-	//! Get ndc space rect of this target within another target (fill but maintain aspect ratio)
+	//! Get the ndc space rect of this target within another target (fill but
+	//! maintain aspect ratio). Use this function by providing the width and height
+	//! of the target that this texture will be written to. In other words call this
+	//! function on the source ae::RenderTarget and provide the width and height of
+	//! the ae::RenderTarget being written to.
 	//! GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
 	//! GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
 	Rect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
 
-	//! Other target to local transform (pixels->pixels)
-	//! Useful for transforming window/mouse pixel coordinates to local pixels
+	//! Other target to local transform (pixels->pixels). Useful for transforming
+	//! window/mouse pixel coordinates to local pixels. Call this function on the
+	//! 'inner' target (ie. viewport) and provide the width and height of the
+	//! 'outermost' target (ie. window). The resulting matrix can be used to transform
+	//! from the outer target to the inner target (ie. window to viewport).
 	//! GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
 	Matrix4 GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const;
 
@@ -14475,15 +14482,13 @@ Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherH
 	float targetAspect = otherWidth / (float)otherHeight;
 	if ( canvasAspect >= targetAspect )
 	{
-		// Fit width
 		float height = targetAspect / canvasAspect;
-		return ae::Rect::FromCenterAndSize( ae::Vec2( -1.0f, -height ) - ae::Vec2( 2.0f, height * 2.0f ) * 0.5f, ae::Vec2( 2.0f, height * 2.0f ) );
+		return ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f, height * 2.0f ) );
 	}
 	else
 	{
-		// Fit height
 		float width = canvasAspect / targetAspect;
-		return ae::Rect::FromCenterAndSize( ae::Vec2( -width, -1.0f ) - ae::Vec2( width * 2.0f, 2.0f ) * 0.5f, ae::Vec2( width * 2.0f, 2.0f ) );
+		return ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( width * 2.0f, 2.0f ) );
 	}
 }
 

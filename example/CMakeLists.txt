@@ -302,3 +302,15 @@ add_bundle("Mouse"
 	"ae"
 	""
 )
+
+# Render Target
+add_bundle("Render Target"
+	"20_render_target"
+	"ae.20_render_target"
+	"0.0.0"
+	"Icon"
+	"20_RenderTarget.cpp;${AE_EXAMPLE_SOURCES}"
+	"data/Icon.icns"
+	"ae"
+	""
+)
