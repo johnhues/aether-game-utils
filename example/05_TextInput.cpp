@@ -23,8 +23,13 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aetherEXT.h"
+#include "ae/aether.h"
 #include "Common.h"
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const ae::Tag TAG_EXAMPLE = "example";
 
 //------------------------------------------------------------------------------
 // Main
@@ -36,6 +41,7 @@ int main()
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
+  ae::FileSystem fileSystem;
   ae::TextRender textRender;
   
   window.Initialize( 1280, 720, false, true );
@@ -43,10 +49,18 @@ int main()
   render.Initialize( &window );
   input.Initialize( &window );
   input.SetTextMode( true );
+  fileSystem.Initialize( "data", "ae", "text_input" );
   
-  ae::Texture2D tex;
-  LoadPng( &tex, "font.png", ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false, true );
-  textRender.Initialize( &tex, 8 );
+  ae::Texture2D fontTexture;
+  {
+    const char* fileName = "font.png";
+    uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+    AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
+    ae::Scratch< uint8_t > fileBuffer( TAG_EXAMPLE, fileSize );
+    fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
+    ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false, true );
+  }
+  textRender.Initialize( &fontTexture, 8 );
   
   ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -60,7 +74,6 @@ int main()
     input.Pump();
     render.Activate();
     render.Clear( ae::Color::Green().ScaleRGB( 0.01f ) );
-    //render.StartFrame( window.GetWidth() / 4, window.GetHeight() / 4 );
     
     if ( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
     {
@@ -105,6 +118,7 @@ int main()
   AE_LOG( "Terminate" );
 
   textRender.Terminate();
+  fontTexture.Terminate();
   input.Terminate();
   render.Terminate();
   window.Terminate();

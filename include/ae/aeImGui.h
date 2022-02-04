@@ -34,6 +34,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h" // For advanced imgui features like docking
 #if _AE_WINDOWS_
+	#include "GL/glew.h"
   #define IMGUI_IMPL_OPENGL_LOADER_GLEW
 #elif _AE_APPLE_
   #define GL_SILENCE_DEPRECATION
@@ -298,6 +299,10 @@ private:
 	}
 	else
 	{
+#if _AE_WINDOWS_
+		GLenum err = glewInit();
+		AE_ASSERT( err == GLEW_OK, "Error: #", glewGetErrorString( err ) );
+#endif
 	  ae::Str32 version = "#version ";
 	  version += ae::Str16::Format( "##0 core", ae::GLMajorVersion, ae::GLMinorVersion );
 	  ImGui_ImplOpenGL3_Init( version.c_str() );

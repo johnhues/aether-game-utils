@@ -32,14 +32,8 @@ namespace ae {
 //------------------------------------------------------------------------------
 // stb_LoadPng
 //------------------------------------------------------------------------------
-void stbLoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
+void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB )
 {
-  uint32_t fileSize = ae::FileSystem::GetSize( file );
-  AE_ASSERT_MSG( fileSize, "Could not load #", file );
-  
-  uint8_t* fileBuffer = (uint8_t*)malloc( fileSize );
-  ae::FileSystem::Read( file, fileBuffer, fileSize );
-
   int32_t width = 0;
   int32_t height = 0;
   int32_t channels = 0;
@@ -47,16 +41,16 @@ void stbLoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter f
 #if _AE_IOS_
   stbi_convert_iphone_png_to_rgb( 1 );
 #endif
-  bool is16BitImage = stbi_is_16_bit_from_memory( fileBuffer, fileSize );
+  bool is16BitImage = stbi_is_16_bit_from_memory( data, dataLen );
 
   uint8_t* image;
   if (is16BitImage)
   {
-     image = (uint8_t*)stbi_load_16_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+     image = (uint8_t*)stbi_load_16_from_memory( data, dataLen, &width, &height, &channels, STBI_default );
   }
   else
   {
-    image = stbi_load_from_memory( fileBuffer, fileSize, &width, &height, &channels, STBI_default );
+    image = stbi_load_from_memory( data, dataLen, &width, &height, &channels, STBI_default );
   }
   AE_ASSERT( image );
 
@@ -88,7 +82,6 @@ void stbLoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter f
   texture->Initialize( image, width, height, format, type, filter, wrap, autoGenerateMipmaps );
   
   stbi_image_free( image );
-  free( fileBuffer );
 }
 
 } // End ae namespace

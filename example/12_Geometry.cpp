@@ -27,6 +27,11 @@
 #include "Common.h"
 
 //------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const ae::Tag TAG_EXAMPLE = "example";
+
+//------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main()
@@ -37,6 +42,7 @@ int main()
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
+	ae::FileSystem fileSystem;
 	ae::DebugLines debug;
 	ae::Texture2D fontTexture;
 	ae::TextRender text;
@@ -47,8 +53,16 @@ int main()
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
+	fileSystem.Initialize( "data", "ae", "geometry" );
 	debug.Initialize( 512 );
-	ae::stbLoadPng( &fontTexture, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+	{
+		const char* fileName = "font.png";
+		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
+		ae::Scratch< uint8_t > fileBuffer( TAG_EXAMPLE, fileSize );
+		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
+		ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+	}
 	text.Initialize( &fontTexture, 8 );
 	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	

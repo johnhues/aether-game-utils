@@ -34,7 +34,7 @@ int main()
   window.Initialize( 800, 600, false, true );
   input.Initialize( &window );
   device.Initialize( &window );
-  fs.Initialize( "data", "ae", "filesystem" );
+  fs.Initialize( "data", "ae", "file_dialogs" );
   while ( !input.quit )
   {
     input.Pump();

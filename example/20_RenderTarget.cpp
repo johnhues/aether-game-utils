@@ -160,7 +160,6 @@ int main()
 		ae::Rect ndcRect = target.GetNDCFillRectForTarget( render.GetCanvas()->GetWidth(), render.GetCanvas()->GetHeight() );
 		ae::Matrix4 windowToTarget = target.GetTargetPixelsToLocalTransform( window.GetWidth(), window.GetHeight(), ndcRect );
 		ae::Vec4 mouse = windowToTarget * ae::Vec4( input.mouse.position.x, input.mouse.position.y, 0.0f, 1.0f );
-		AE_INFO( "mouse local #", mouse.GetXY() );
 		
 		// Cube
 		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );

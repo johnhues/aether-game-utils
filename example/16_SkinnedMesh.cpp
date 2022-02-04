@@ -100,7 +100,7 @@ int main()
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fileSystem.Initialize( "data", "johnhues", "16_SkinnedMesh" );
+	fileSystem.Initialize( "data", "ae", "skinned_mesh" );
 	camera.Initialize( ae::Axis::Y, ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
 	camera.SetDistanceLimits( 1.0f, 25.0f );
 	debugLines.Initialize( 4096 );

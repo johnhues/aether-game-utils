@@ -10269,6 +10269,33 @@ void Input::Pump()
 				case WM_MOUSEHWHEEL:
 					mouse.scroll.x += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
 					break;
+				case WM_CHAR:
+				{
+					char c[ MB_LEN_MAX ];
+					if ( wctomb( c, (wchar_t)msg.wParam ) == 1 && isprint( c[ 0 ] ) )
+					{
+						m_text += c[ 0 ];
+						m_textInput += c[ 0 ];
+					}
+					break;
+				}
+				case WM_KEYDOWN:
+					if ( msg.wParam == VK_RETURN )
+					{
+						m_text += '\n';
+						m_textInput += '\n';
+					}
+					else if ( msg.wParam == VK_TAB )
+					{
+						m_text += '\t';
+						m_textInput += '\t';
+					}
+					else if ( msg.wParam == VK_BACK && !m_text.empty() )
+					{
+						// Don't modify m_textInput on backspace presses, it only stores incoming printable keys and is cleared each frame
+						m_text.pop_back();
+					}
+					break;
 			}
 		}
 		TranslateMessage( &msg );
@@ -10792,11 +10819,10 @@ void Input::SetMouseCaptured( bool enable )
 
 void Input::SetTextMode( bool enabled )
 {
-#if _AE_APPLE_
 	if ( m_textMode != enabled )
 	{
 		m_textMode = enabled;
-		
+#if _AE_APPLE_
 		NSWindow* nsWindow = (NSWindow*)m_window->window;
 		if ( m_textMode )
 		{
@@ -10808,8 +10834,8 @@ void Input::SetTextMode( bool enabled )
 			NSOpenGLView* glView = [nsWindow contentView];
 			[nsWindow makeFirstResponder:glView];
 		}
-	}
 #endif
+	}
 }
 
 bool Input::Get( ae::Key key ) const

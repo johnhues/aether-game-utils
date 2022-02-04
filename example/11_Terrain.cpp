@@ -188,7 +188,7 @@ void Object::Serialize( ae::BinaryStream* stream )
   }
 }
 
-void WriteObjects( ae::FileSystem* vfs, const ae::Array< Object* >& objects )
+void WriteObjects( ae::FileSystem* fileSystem, const ae::Array< Object* >& objects )
 {
   ae::BinaryStream wStream = ae::BinaryStream::Writer();
   wStream.SerializeUint32( kCurrentFileVersion );
@@ -207,13 +207,13 @@ void WriteObjects( ae::FileSystem* vfs, const ae::Array< Object* >& objects )
     
     wStream.SerializeObject( *object );
   }
-  vfs->Write( ae::FileSystem::Root::User, kFileName, wStream.GetData(), wStream.GetOffset(), false );
+  fileSystem->Write( ae::FileSystem::Root::User, kFileName, wStream.GetData(), wStream.GetOffset(), false );
 }
 
-bool ReadObjects( ae::FileSystem* vfs, ae::Terrain* terrain, ae::Image* heightmapImage, ae::Array< Object* >& objects )
+bool ReadObjects( ae::FileSystem* fileSystem, ae::Terrain* terrain, ae::Image* heightmapImage, ae::Array< Object* >& objects )
 {
-  ae::Scratch< uint8_t > scratch( AE_ALLOC_TAG_TERRAIN, vfs->GetSize( ae::FileSystem::Root::User, kFileName ) );
-  vfs->Read( ae::FileSystem::Root::User, kFileName, scratch.Data(), scratch.Length() );
+  ae::Scratch< uint8_t > scratch( AE_ALLOC_TAG_TERRAIN, fileSystem->GetSize( ae::FileSystem::Root::User, kFileName ) );
+  fileSystem->Read( ae::FileSystem::Root::User, kFileName, scratch.Data(), scratch.Length() );
   ae::BinaryStream rStream = ae::BinaryStream::Reader( scratch.Data(), scratch.Length() );
 
   uint32_t version = 0;
@@ -264,7 +264,7 @@ int main()
 
   bool headless = _AE_LINUX_;
   
-  ae::FileSystem vfs;
+  ae::FileSystem fileSystem;
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
@@ -276,7 +276,7 @@ int main()
   ae::TextRender textRender;
   class aeImGui* ui = nullptr;
 
-  vfs.Initialize( "", "ae", "terrainedit" );
+  fileSystem.Initialize( "data", "ae", "terrain" );
   ui = ae::New< aeImGui >( TAG_EXAMPLE );
   if ( headless )
   {
@@ -301,13 +301,20 @@ int main()
     terrainShader.SetDepthTest( true );
     terrainShader.SetDepthWrite( true );
 
-    LoadPng( &fontTexture, "font.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+    {
+      const char* fileName = "font.png";
+      uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+      AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
+      ae::Scratch< uint8_t > fileBuffer( TAG_EXAMPLE, fileSize );
+      fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
+      ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+    }
     textRender.Initialize( &fontTexture, 8 );
   }
 
 //  ae::Image heightmapImage;
-//  ae::Scratch< uint8_t > fileBuffer( AE_ALLOC_TAG_TERRAIN, vfs.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
-//  vfs.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
+//  ae::Scratch< uint8_t > fileBuffer( AE_ALLOC_TAG_TERRAIN, fileSystem.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
+//  fileSystem.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
 //  heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
   uint32_t terrainThreads = ae::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
@@ -328,7 +335,7 @@ int main()
   ae::Array< Object* > objects = TAG_EXAMPLE;
   Object* currentObject = nullptr;
 //
-//  if ( !ReadObjects( &vfs, terrain, &heightmapImage, objects ) )
+//  if ( !ReadObjects( &fileSystem, terrain, &heightmapImage, objects ) )
 //  {
 //    ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
 //    box->SetTransform( ae::Matrix4::Translation( camera.GetFocus() ) * ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
@@ -645,8 +652,7 @@ int main()
               {
                 ae::CollisionMesh::RaycastParams params;
                 params.source = object->raySrc;
-                params.direction = object->rayDir;
-                params.maxLength = object->rayLength;
+                params.ray = ray;
                 terrain->Raycast( params, nullptr );
               }
             }
@@ -726,7 +732,7 @@ int main()
     timeStep.Wait();
   }
   
-  WriteObjects( &vfs, objects );
+  WriteObjects( &fileSystem, objects );
 
   AE_INFO( "Terminate" );
   ui->Terminate();

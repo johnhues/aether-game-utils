@@ -70,7 +70,7 @@ struct LoadMeshParams
 //------------------------------------------------------------------------------
 // stb
 //------------------------------------------------------------------------------
-void stbLoadPng( ae::Texture2D* texture, const char* file, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB );
+void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB );
 
 //------------------------------------------------------------------------------
 // ofbx
