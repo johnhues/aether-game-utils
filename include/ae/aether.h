@@ -2471,6 +2471,7 @@ public:
 	void Render2D( uint32_t textureIndex, Rect ndc, float z );
 
 	const Texture2D* GetTexture( uint32_t index ) const;
+	uint32_t GetTextureCount() const;
 	const Texture2D* GetDepth() const;
 	float GetAspectRatio() const;
 	uint32_t GetWidth() const;
@@ -2636,6 +2637,10 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::DebugCamera class
+//! A camera utility which provides basic mouse and keyboard navigation functionality. The default controls are:
+//! LMB: rotate, MMB/Alt+LMB: pan, Scroll/Alt+RMB: zoom. These controls were picked to function without a
+//! middle mouse button, so navigation is still possible with a trackpad. Call ae::DebugCamera::SetEditorControls()
+//! to use controls that mimic some popular cad software.
 //------------------------------------------------------------------------------
 class DebugCamera
 {
@@ -2645,6 +2650,9 @@ public:
 	DebugCamera();
 	//! Interupts refocus. Does not affect in progress input.
 	void Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos );
+	//! Sets editor mode controls. This mimics the controls of some standard cad programs so:
+	//! Alt+LMB: rotate, Alt+MMB: pan, Scroll/Alt+RMB: zoom
+	void SetEditorControls( bool editor );
 	//! Prevents the position of the camera from being less than @min distance from the focus point and
 	//! greater than @max distance from the focus point. May affect the current position of the camera.
 	void SetDistanceLimits( float min, float max );
@@ -2679,10 +2687,11 @@ private:
 	Axis m_worldUp;
 	// Mode
 	bool m_inputEnabled;
+	bool m_editorControls;
 	Mode m_mode;
 	ae::Vec3 m_refocusPos;
 	bool m_refocus;
-	ae::Vec2 m_moveAccum;
+	float m_moveAccum;
 	uint32_t m_forceCapture;
 	// Positioning
 	ae::Vec3 m_focusPos;
@@ -14461,6 +14470,11 @@ const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
 	return m_targets[ index ];
 }
 
+uint32_t RenderTarget::GetTextureCount() const
+{
+	return m_targets.Length();
+}
+
 const Texture2D* RenderTarget::GetDepth() const
 {
 	return m_depth.GetTexture() ? &m_depth : nullptr;
@@ -15452,10 +15466,11 @@ DebugCamera::DebugCamera()
 	m_max = ae::MaxValue< float >();
 	m_worldUp = Axis::Z;
 	m_inputEnabled = true;
+	m_editorControls = false;
 	m_mode = Mode::None;
 	m_refocusPos = ae::Vec3( 0.0f );
 	m_refocus = false;
-	m_moveAccum = ae::Vec2( 0.0f );
+	m_moveAccum = 0.0f;
 	m_forceCapture = 0;
 	m_focusPos = ae::Vec3( 0.0f );
 	m_dist = 5.0f;
@@ -15494,25 +15509,45 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	}
 	else if ( input )
 	{
-		ae::Key panKey = ae::Key::LeftAlt;
+		ae::Key modifierKey = ae::Key::LeftAlt;
 		mouseMovement = ae::Vec2( input->mouse.movement );
-		m_moveAccum += mouseMovement;
-		mousePan = input->mouse.middleButton;
-		if ( !mousePan
-			&& input->mouse.leftButton
-			&& input->Get( panKey ) )
+		m_moveAccum += mouseMovement.Length();
+		
+		if ( !m_editorControls )
 		{
-			mousePan = true;
-		}
-		mouseZoom = input->mouse.rightButton;
+			mousePan = input->mouse.middleButton;
+			if ( !mousePan
+				&& input->mouse.leftButton
+				&& input->Get( modifierKey ) )
+			{
+				mousePan = true;
+			}
+			mouseZoom = input->mouse.rightButton;
 
-		if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
-		{
-			mouseRotate = true;
+			if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
+			{
+				mouseRotate = true;
+			}
+			else if ( !input->Get( modifierKey ) )
+			{
+				mouseRotate = input->mouse.leftButton;
+			}
 		}
-		else if ( !input->Get( panKey ) )
+		else if ( m_editorControls )
 		{
-			mouseRotate = input->mouse.leftButton;
+			bool modifierPressed = input->Get( modifierKey );
+			if ( input->mouse.middleButton && ( modifierPressed || m_mode == Mode::Pan ) )
+			{
+				mousePan = true;
+			}
+			else if ( input->mouse.leftButton && ( modifierPressed || m_mode == Mode::Rotate ) )
+			{
+				mouseRotate = true;
+			}
+			else if ( input->mouse.rightButton && ( modifierPressed || m_mode == Mode::Zoom ) )
+			{
+				mouseZoom = true;
+			}
 		}
 	}
 
@@ -15523,7 +15558,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 				|| ( m_mode == Mode::Pan && !mousePan )
 				|| ( m_mode == Mode::Zoom && !mouseZoom ) )
 		{
-			if ( m_moveAccum.Length() >= 5.0f ) // In pixels
+			if ( m_moveAccum >= 5.0f ) // In pixels
 			{
 				// Delay resetting mode
 				m_forceCapture = 2;
@@ -15541,18 +15576,18 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 		if ( mouseRotate )
 		{
 			m_mode = Mode::Rotate;
-			m_moveAccum = ae::Vec2( 0.0f );
+			m_moveAccum = 0.0f;
 		}
 		else if ( mousePan )
 		{
 			m_mode = Mode::Pan;
 			m_refocus = false;
-			m_moveAccum = ae::Vec2( 0.0f );
+			m_moveAccum = 0.0f;
 		}
 		else if ( mouseZoom )
 		{
 			m_mode = Mode::Zoom;
-			m_moveAccum = ae::Vec2( 0.0f );
+			m_moveAccum = 0.0f;
 		}
 	}
 
@@ -15664,6 +15699,11 @@ void DebugCamera::SetInputEnabled( bool enabled )
 	m_inputEnabled = enabled;
 }
 
+void DebugCamera::SetEditorControls( bool editor )
+{
+	m_editorControls = editor;
+}
+
 void DebugCamera::SetRotation( ae::Vec2 angles )
 {
 	m_yaw = angles.x;
@@ -15673,7 +15713,7 @@ void DebugCamera::SetRotation( ae::Vec2 angles )
 
 DebugCamera::Mode DebugCamera::GetMode() const
 {
-	return m_moveAccum.Length() >= 5.0f ? m_mode : Mode::None;
+	return m_moveAccum >= 5.0f ? m_mode : Mode::None;
 }
 
 bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
