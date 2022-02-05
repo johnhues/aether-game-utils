@@ -7,7 +7,14 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/Editor.h"
+#if _AE_APPLE_
 #include <unistd.h> // fork
+#elif _AE_WINDOWS_
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <processthreadsapi.h>
+#include <atlstr.h>
+#endif
 
 // @TODO: Remove these dependencies
 #include "ae/aeImGui.h"
@@ -581,11 +588,9 @@ void EditorProgram::Run()
 		{
 			const float scaleFactor = window.GetScaleFactor();
 			const ae::RectInt renderRectInt = GetRenderRect();
-			const ae::Rect renderRect(
-				renderRectInt.x / scaleFactor,
-				renderRectInt.y / scaleFactor,
-				renderRectInt.w / scaleFactor,
-				renderRectInt.h / scaleFactor
+			const ae::Rect renderRect = ae::Rect::FromPoints(
+				ae::Vec2( renderRectInt.x / scaleFactor, renderRectInt.y / scaleFactor ),
+				ae::Vec2( ( renderRectInt.x + renderRectInt.w ) / scaleFactor, ( renderRectInt.y + renderRectInt.h ) / scaleFactor )
 			);
 			
 			ae::Vec2 mouseGameWindowPixelPos( input.mouse.position );
@@ -618,7 +623,7 @@ void EditorProgram::Run()
 		render.Clear( ae::Color::Black() );
 		
 		float devNdc = ( m_barWidth / render.GetWidth() ) * 2.0f;
-		ae::Rect ndcRect( devNdc - 1.0f, -1.0f, 2.0f - devNdc, 2.0f );
+		ae::Rect ndcRect = ae::Rect::FromCenterAndSize( ae::Vec2( devNdc - 1.0f + ( 2.0f - devNdc ) * 0.5f, 0.0f ), ae::Vec2( 2.0f - devNdc, 2.0f ) );
 		m_gameTarget.Render2D( 0, ndcRect, 0.0f );
 		ui.Render();
 		render.Present();
@@ -709,11 +714,38 @@ void Editor::Initialize( const EditorParams& params )
 void Editor::Launch()
 {
 	m_Connect();
-	if ( !m_sock.IsConnected() && !fork() )
+	if ( !m_sock.IsConnected() )
 	{
-		char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)filePath.c_str(), nullptr };
-		execv( m_params.argv[ 0 ], execArgs );
-		return;
+#if _AE_APPLE_
+		if ( !fork() )
+		{
+			char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)filePath.c_str(), nullptr };
+			execv( m_params.argv[ 0 ], execArgs );
+		}
+#elif _AE_WINDOWS_
+		STARTUPINFO startupInfo;
+		memset( &startupInfo, 0, sizeof( startupInfo ) );
+		startupInfo.cb = sizeof( startupInfo );
+		PROCESS_INFORMATION procInfo;
+		CStringW executableStr( m_params.argv[ 0 ] );
+		CStringW args = m_params.argv[ 0 ];
+		args += " ae_editor ";
+		args += filePath.c_str();
+		CreateProcess(
+			executableStr,
+			(LPWSTR)(LPCWSTR)args,
+			nullptr,
+			nullptr,
+			false,
+			NORMAL_PRIORITY_CLASS,
+			nullptr,
+			nullptr,
+			&startupInfo,
+			&procInfo );
+		// Don't need these so clean them up right away
+		CloseHandle( procInfo.hProcess );
+		CloseHandle( procInfo.hThread );
+#endif
 	}
 }
 
@@ -1427,11 +1459,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		const float scaleFactor = program->window.GetScaleFactor();
 		const ae::RectInt renderRectInt = program->GetRenderRect();
-		const ae::Rect renderRect(
-			renderRectInt.x / scaleFactor,
-			renderRectInt.y / scaleFactor,
-			renderRectInt.w / scaleFactor,
-			renderRectInt.h / scaleFactor
+		const ae::Rect renderRect = ae::Rect::FromPoints(
+				ae::Vec2( renderRectInt.x / scaleFactor, renderRectInt.y / scaleFactor ),
+				ae::Vec2( ( renderRectInt.x + renderRectInt.w ) / scaleFactor, ( renderRectInt.y + renderRectInt.h ) / scaleFactor )
 		);
 		
 		ImGuiIO& io = ImGui::GetIO();
@@ -1439,7 +1469,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGuizmo::SetOrthographic( false );
 		ImGuizmo::AllowAxisFlip( false );
 		ImGuizmo::BeginFrame();
-		ImGuizmo::SetRect( renderRect.x, renderRect.y, renderRect.w, renderRect.h );
+		ImGuizmo::SetRect( renderRect.GetMin().x, renderRect.GetMin().y, renderRect.GetSize().x, renderRect.GetSize().y );
 		
 		EditorServerObject* selectedObject = m_objects.Get( selected );
 		ae::Matrix4 transform = selectedObject->GetTransform( program );

@@ -88,7 +88,7 @@ int main()
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fs.Initialize( "data", "ae", "objviewer" );
+	fs.Initialize( "data", "ae", "obj_viewer" );
 	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f, 0.0f, 0.35f ), ae::Vec3( 0.0f, -2.5f, 0.7f ) );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );

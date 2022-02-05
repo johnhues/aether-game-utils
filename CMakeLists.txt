@@ -40,6 +40,7 @@ else()
 endif()
 
 if (MSVC)
+	add_definitions(-DGLEW_STATIC)
 	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
 	ExternalProject_Add(glew
 		PREFIX glew

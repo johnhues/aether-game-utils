@@ -2471,18 +2471,26 @@ public:
 	void Render2D( uint32_t textureIndex, Rect ndc, float z );
 
 	const Texture2D* GetTexture( uint32_t index ) const;
+	uint32_t GetTextureCount() const;
 	const Texture2D* GetDepth() const;
 	float GetAspectRatio() const;
 	uint32_t GetWidth() const;
 	uint32_t GetHeight() const;
 
-	//! Get ndc space rect of this target within another target (fill but maintain aspect ratio)
+	//! Get the ndc space rect of this target within another target (fill but
+	//! maintain aspect ratio). Use this function by providing the width and height
+	//! of the target that this texture will be written to. In other words call this
+	//! function on the source ae::RenderTarget and provide the width and height of
+	//! the ae::RenderTarget being written to.
 	//! GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
 	//! GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
 	Rect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
 
-	//! Other target to local transform (pixels->pixels)
-	//! Useful for transforming window/mouse pixel coordinates to local pixels
+	//! Other target to local transform (pixels->pixels). Useful for transforming
+	//! window/mouse pixel coordinates to local pixels. Call this function on the
+	//! 'inner' target (ie. viewport) and provide the width and height of the
+	//! 'outermost' target (ie. window). The resulting matrix can be used to transform
+	//! from the outer target to the inner target (ie. window to viewport).
 	//! GetTargetPixelsToLocalTransform( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height(), GetNDCFillRectForTarget( ... ) )
 	Matrix4 GetTargetPixelsToLocalTransform( uint32_t otherPixelWidth, uint32_t otherPixelHeight, Rect ndc ) const;
 
@@ -2629,6 +2637,10 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::DebugCamera class
+//! A camera utility which provides basic mouse and keyboard navigation functionality. The default controls are:
+//! LMB: rotate, MMB/Alt+LMB: pan, Scroll/Alt+RMB: zoom. These controls were picked to function without a
+//! middle mouse button, so navigation is still possible with a trackpad. Call ae::DebugCamera::SetEditorControls()
+//! to use controls that mimic some popular cad software.
 //------------------------------------------------------------------------------
 class DebugCamera
 {
@@ -2638,6 +2650,9 @@ public:
 	DebugCamera();
 	//! Interupts refocus. Does not affect in progress input.
 	void Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos );
+	//! Sets editor mode controls. This mimics the controls of some standard cad programs so:
+	//! Alt+LMB: rotate, Alt+MMB: pan, Scroll/Alt+RMB: zoom
+	void SetEditorControls( bool editor );
 	//! Prevents the position of the camera from being less than @min distance from the focus point and
 	//! greater than @max distance from the focus point. May affect the current position of the camera.
 	void SetDistanceLimits( float min, float max );
@@ -2672,10 +2687,11 @@ private:
 	Axis m_worldUp;
 	// Mode
 	bool m_inputEnabled;
+	bool m_editorControls;
 	Mode m_mode;
 	ae::Vec3 m_refocusPos;
 	bool m_refocus;
-	ae::Vec2 m_moveAccum;
+	float m_moveAccum;
 	uint32_t m_forceCapture;
 	// Positioning
 	ae::Vec3 m_focusPos;
@@ -8676,6 +8692,7 @@ ae::Matrix4 OBB::GetTransform() const
 	result.SetAxis( 1, m_axes[ 1 ] * ( m_halfSize[ 1 ] * 2.0f ) );
 	result.SetAxis( 2, m_axes[ 2 ] * ( m_halfSize[ 2 ] * 2.0f ) );
 	result.SetTranslation( m_center );
+	result.SetRow( 3, ae::Vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 	return result;
 }
 
@@ -10262,6 +10279,33 @@ void Input::Pump()
 				case WM_MOUSEHWHEEL:
 					mouse.scroll.x += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
 					break;
+				case WM_CHAR:
+				{
+					char c[ MB_LEN_MAX ];
+					if ( wctomb( c, (wchar_t)msg.wParam ) == 1 && isprint( c[ 0 ] ) )
+					{
+						m_text += c[ 0 ];
+						m_textInput += c[ 0 ];
+					}
+					break;
+				}
+				case WM_KEYDOWN:
+					if ( msg.wParam == VK_RETURN )
+					{
+						m_text += '\n';
+						m_textInput += '\n';
+					}
+					else if ( msg.wParam == VK_TAB )
+					{
+						m_text += '\t';
+						m_textInput += '\t';
+					}
+					else if ( msg.wParam == VK_BACK && !m_text.empty() )
+					{
+						// Don't modify m_textInput on backspace presses, it only stores incoming printable keys and is cleared each frame
+						m_text.pop_back();
+					}
+					break;
 			}
 		}
 		TranslateMessage( &msg );
@@ -10785,11 +10829,10 @@ void Input::SetMouseCaptured( bool enable )
 
 void Input::SetTextMode( bool enabled )
 {
-#if _AE_APPLE_
 	if ( m_textMode != enabled )
 	{
 		m_textMode = enabled;
-		
+#if _AE_APPLE_
 		NSWindow* nsWindow = (NSWindow*)m_window->window;
 		if ( m_textMode )
 		{
@@ -10801,8 +10844,8 @@ void Input::SetTextMode( bool enabled )
 			NSOpenGLView* glView = [nsWindow contentView];
 			[nsWindow makeFirstResponder:glView];
 		}
-	}
 #endif
+	}
 }
 
 bool Input::Get( ae::Key key ) const
@@ -14428,6 +14471,11 @@ const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
 	return m_targets[ index ];
 }
 
+uint32_t RenderTarget::GetTextureCount() const
+{
+	return m_targets.Length();
+}
+
 const Texture2D* RenderTarget::GetDepth() const
 {
 	return m_depth.GetTexture() ? &m_depth : nullptr;
@@ -14475,15 +14523,13 @@ Rect RenderTarget::GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherH
 	float targetAspect = otherWidth / (float)otherHeight;
 	if ( canvasAspect >= targetAspect )
 	{
-		// Fit width
 		float height = targetAspect / canvasAspect;
-		return ae::Rect::FromCenterAndSize( ae::Vec2( -1.0f, -height ) - ae::Vec2( 2.0f, height * 2.0f ) * 0.5f, ae::Vec2( 2.0f, height * 2.0f ) );
+		return ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( 2.0f, height * 2.0f ) );
 	}
 	else
 	{
-		// Fit height
 		float width = canvasAspect / targetAspect;
-		return ae::Rect::FromCenterAndSize( ae::Vec2( -width, -1.0f ) - ae::Vec2( width * 2.0f, 2.0f ) * 0.5f, ae::Vec2( width * 2.0f, 2.0f ) );
+		return ae::Rect::FromCenterAndSize( ae::Vec2( 0.0f ), ae::Vec2( width * 2.0f, 2.0f ) );
 	}
 }
 
@@ -15421,10 +15467,11 @@ DebugCamera::DebugCamera()
 	m_max = ae::MaxValue< float >();
 	m_worldUp = Axis::Z;
 	m_inputEnabled = true;
+	m_editorControls = false;
 	m_mode = Mode::None;
 	m_refocusPos = ae::Vec3( 0.0f );
 	m_refocus = false;
-	m_moveAccum = ae::Vec2( 0.0f );
+	m_moveAccum = 0.0f;
 	m_forceCapture = 0;
 	m_focusPos = ae::Vec3( 0.0f );
 	m_dist = 5.0f;
@@ -15463,25 +15510,45 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	}
 	else if ( input )
 	{
-		ae::Key panKey = ae::Key::LeftAlt;
+		ae::Key modifierKey = ae::Key::LeftAlt;
 		mouseMovement = ae::Vec2( input->mouse.movement );
-		m_moveAccum += mouseMovement;
-		mousePan = input->mouse.middleButton;
-		if ( !mousePan
-			&& input->mouse.leftButton
-			&& input->Get( panKey ) )
+		m_moveAccum += mouseMovement.Length();
+		
+		if ( !m_editorControls )
 		{
-			mousePan = true;
-		}
-		mouseZoom = input->mouse.rightButton;
+			mousePan = input->mouse.middleButton;
+			if ( !mousePan
+				&& input->mouse.leftButton
+				&& input->Get( modifierKey ) )
+			{
+				mousePan = true;
+			}
+			mouseZoom = input->mouse.rightButton;
 
-		if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
-		{
-			mouseRotate = true;
+			if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
+			{
+				mouseRotate = true;
+			}
+			else if ( !input->Get( modifierKey ) )
+			{
+				mouseRotate = input->mouse.leftButton;
+			}
 		}
-		else if ( !input->Get( panKey ) )
+		else if ( m_editorControls )
 		{
-			mouseRotate = input->mouse.leftButton;
+			bool modifierPressed = input->Get( modifierKey );
+			if ( input->mouse.middleButton && ( modifierPressed || m_mode == Mode::Pan ) )
+			{
+				mousePan = true;
+			}
+			else if ( input->mouse.leftButton && ( modifierPressed || m_mode == Mode::Rotate ) )
+			{
+				mouseRotate = true;
+			}
+			else if ( input->mouse.rightButton && ( modifierPressed || m_mode == Mode::Zoom ) )
+			{
+				mouseZoom = true;
+			}
 		}
 	}
 
@@ -15492,7 +15559,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 				|| ( m_mode == Mode::Pan && !mousePan )
 				|| ( m_mode == Mode::Zoom && !mouseZoom ) )
 		{
-			if ( m_moveAccum.Length() >= 5.0f ) // In pixels
+			if ( m_moveAccum >= 5.0f ) // In pixels
 			{
 				// Delay resetting mode
 				m_forceCapture = 2;
@@ -15510,18 +15577,18 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 		if ( mouseRotate )
 		{
 			m_mode = Mode::Rotate;
-			m_moveAccum = ae::Vec2( 0.0f );
+			m_moveAccum = 0.0f;
 		}
 		else if ( mousePan )
 		{
 			m_mode = Mode::Pan;
 			m_refocus = false;
-			m_moveAccum = ae::Vec2( 0.0f );
+			m_moveAccum = 0.0f;
 		}
 		else if ( mouseZoom )
 		{
 			m_mode = Mode::Zoom;
-			m_moveAccum = ae::Vec2( 0.0f );
+			m_moveAccum = 0.0f;
 		}
 	}
 
@@ -15633,6 +15700,11 @@ void DebugCamera::SetInputEnabled( bool enabled )
 	m_inputEnabled = enabled;
 }
 
+void DebugCamera::SetEditorControls( bool editor )
+{
+	m_editorControls = editor;
+}
+
 void DebugCamera::SetRotation( ae::Vec2 angles )
 {
 	m_yaw = angles.x;
@@ -15642,7 +15714,7 @@ void DebugCamera::SetRotation( ae::Vec2 angles )
 
 DebugCamera::Mode DebugCamera::GetMode() const
 {
-	return m_moveAccum.Length() >= 5.0f ? m_mode : Mode::None;
+	return m_moveAccum >= 5.0f ? m_mode : Mode::None;
 }
 
 bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const

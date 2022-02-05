@@ -220,7 +220,7 @@ void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* t
 //------------------------------------------------------------------------------
 void Game::Initialize( int argc, char* argv[] )
 {
-	fs.Initialize( "data", "johnhues", "test" );
+	fs.Initialize( "data", "ae", "editor" );
 	
 	ae::EditorParams editorParams;
 	editorParams.argc = argc;
@@ -410,7 +410,7 @@ void Avatar::Update( Game* game )
 	
 	ae::CollisionMesh::RaycastParams rayParams;
 	rayParams.source = ae::Vec3( position );
-	rayParams.direction = ae::Vec3( 0.0f, 0.0f, -1.0f );
+	rayParams.ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
 	ae::CollisionMesh::RaycastResult outResult;
 	
 	ae::CollisionMesh::PushOutParams pushOutParams;
