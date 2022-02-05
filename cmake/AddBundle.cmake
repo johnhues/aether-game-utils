@@ -92,6 +92,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 				"-s ASSERTIONS=1" # Enable assertions
 				"-s DEMANGLE_SUPPORT=1"
 				"-s STACK_OVERFLOW_CHECK=1"
+				"-s SOCKET_DEBUG=1" # Print socket debug information automatically
 				"-O0"
 				"-frtti"
 				"-fsanitize=undefined"
@@ -111,6 +112,9 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			SUFFIX ".html"
 		)
 		
-		file(COPY "${_AE_RESOURCES}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
+		## @TODO: Handle Emscripten resources
+		# file(COPY "${_AE_RESOURCES}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
+		# target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
+		# set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
 	endif()
 endfunction()

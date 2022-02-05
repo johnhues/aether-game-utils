@@ -7269,6 +7269,13 @@ bool IsDebuggerAttached()
 }
 #endif
 
+#if _AE_EMSCRIPTEN_
+EM_JS( float, _ae_performance_now, (),
+{
+	return performance.now();
+} );
+#endif
+
 double GetTime()
 {
 #if _AE_WINDOWS_
@@ -7283,6 +7290,8 @@ double GetTime()
 	bool success = QueryPerformanceCounter( &performanceCount ) != 0;
 	AE_ASSERT( success );
 	return performanceCount.QuadPart / (double)counterFrequency.QuadPart;
+#elif _AE_EMSCRIPTEN_
+	return _ae_performance_now() / 1000.0f;
 #else
 	return std::chrono::duration_cast< std::chrono::microseconds >( std::chrono::high_resolution_clock::now().time_since_epoch() ).count() / 1000000.0;
 #endif
@@ -9178,13 +9187,18 @@ void TimeStep::SetDt( float sec )
 
 void TimeStep::Wait()
 {
-	const bool zeroTimeStep = ( m_timeStep == 0.0 );
+#if _AE_EMSCRIPTEN_
+	// Frame rate of emscripten builds is controlled by the browser
+	const bool allowSleep = false;
+#else
+	const bool allowSleep = ( m_timeStep == 0.0 );
+#endif
 	
 	if ( m_stepCount == 0 )
 	{
 		m_frameStart = ae::GetTime();
 	}
-	else if ( zeroTimeStep )
+	else if ( allowSleep )
 	{
 		double currentTime = ae::GetTime();
 		m_sleepOverhead = 0.0;

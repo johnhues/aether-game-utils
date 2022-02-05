@@ -179,10 +179,7 @@ void Program::Terminate()
 bool Program::Update()
 {
 	m_input.Pump();
-	if ( m_input.quit )
-	{
-		return false;
-	}
+	
 	const ae::Vec2 currentCursorPos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
 
 	int32_t hoverIdx = m_currentFolder->subFolders.FindLastFn( [&]( const Folder* folder )
@@ -316,7 +313,7 @@ bool Program::Update()
 
 	m_gfx.Present();
 	m_timeStep.Wait();
-	return true;
+	return !m_input.quit;
 }
 
 void Program::DrawRect( ae::Rect rect, ae::Color color )
@@ -387,15 +384,13 @@ void Program::DrawFolders()
 //------------------------------------------------------------------------------
 int main()
 {
-	AE_INFO( "Initialize" );
 	Program program;
 	program.Initialize();
-
-	AE_INFO( "Run" );
-	while ( program.Update() ) {}
-
-	AE_INFO( "Terminate" );
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* example ) { ((Example*)example)->Tick(); }, &example, 0, 1 );
+#else
+	while ( example.Tick() ) {}
+#endif
 	program.Terminate();
-
 	return 0;
 }

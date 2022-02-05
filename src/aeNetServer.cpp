@@ -523,8 +523,8 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
   }
 
 #ifdef USE_WEBWOCKETS
-  AE_ASSERT( dataLength <= kMaxMessageSize );
-  uint8_t data[ kMaxMessageSize ];
+  AE_ASSERT( dataLength <= kEmMaxMessageSize );
+  uint8_t data[ kEmMaxMessageSize ];
 
   memcpy( data, &header, sizeof( header ) );
   memcpy( data + sizeof( header ), info->data, info->length );

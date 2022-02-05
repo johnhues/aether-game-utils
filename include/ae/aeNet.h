@@ -121,6 +121,10 @@ const AetherMsgId kSysMsgServerDisconnect = 2 | kSysMsgMask;
 const AetherMsgId kSysMsgPlayerConnect = 3 | kSysMsgMask;
 const AetherMsgId kSysMsgPlayerDisconnect = 4 | kSysMsgMask;
 
+#if _AE_EMSCRIPTEN_
+const uint32_t kEmMaxMessageSize = 1500;
+#endif
+
 struct AetherAddress
 {
   bool IsLocalhost() const;

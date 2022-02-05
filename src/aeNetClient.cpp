@@ -292,18 +292,18 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
       SendInfo info;
       info.msgId = kSysMsgPlayerConnect;
       info.length = sizeof(AetherMsgConnect);
-      memcpy( info.data, &msg, info.length );
+      info.data = &msg;
       info.reliable = true;
       AetherClient_QueueSend( _ac, &info );
       
       infoOut->msgId = kSysMsgServerConnect;
       // infoOut->player = ac->pub.localPlayer;
-      infoOut->length = 0;
+      infoOut->data.Clear();
       
       return true;
     }
 
-    uint8_t msg[ kMaxMessageSize ];
+    uint8_t msg[ kEmMaxMessageSize ];
     while ( 1 )
     {
       uint32_t msgLength = s->Recv( msg, sizeof(msg) );
@@ -329,8 +329,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
       {
         infoOut->msgId = header.msgId;
         // infoOut->player = nullptr;
-        infoOut->length = length;
-        memcpy( infoOut->data, data, length );
+        infoOut->data.Append( data, length );
         return true;
       }
     }
@@ -466,8 +465,8 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
 	header.uuid = ac->pub.localPlayer->uuid;
 	
 #ifdef __EMSCRIPTEN__
-//	AE_ASSERT( dataLength <= kMaxMessageSize);
-//	uint8_t data[ kMaxMessageSize ];
+	AE_ASSERT( dataLength <= kEmMaxMessageSize);
+	uint8_t data[ kEmMaxMessageSize ];
 	memcpy( data, &header, sizeof(header) );
 	memcpy( data + sizeof(AetherClientHeader), info->data, info->length );
 
