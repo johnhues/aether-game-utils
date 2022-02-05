@@ -2401,18 +2401,18 @@ public:
 	// Interface
 	Texture() = default;
 	virtual ~Texture();
-	void Initialize( uint32_t target );
+	void Initialize( uint32_t target ); // GL_TEXTURE_2D etc
 	virtual void Terminate();
 	uint32_t GetTexture() const { return m_texture; }
-	uint32_t GetTarget() const { return m_target; }
+	uint32_t GetTarget() const { return m_target; } // GL_TEXTURE_2D etc
 
-private:
+// private:
 	Texture( const Texture& ) = delete;
 	Texture( Texture&& ) = delete;
 	void operator=( const Texture& ) = delete;
 	void operator=( Texture&& ) = delete;
 	uint32_t m_texture = 0;
-	uint32_t m_target = 0;
+	uint32_t m_target = 0; // GL_TEXTURE_2D etc
 };
 
 //------------------------------------------------------------------------------
@@ -2447,7 +2447,7 @@ public:
 	uint32_t GetWidth() const { return m_width; }
 	uint32_t GetHeight() const { return m_height; }
 
-private:
+// private:
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
 	bool m_hasAlpha = false;
@@ -14059,7 +14059,7 @@ Texture::~Texture()
 void Texture::Initialize( uint32_t target )
 {
 	// @NOTE: To avoid undoing any initialization logic only ae::Texture should
-	//        call Destroy() on initialize, and inherited Initialize()'s should
+	//        call Terminate() on initialize, and inherited Initialize()'s should
 	//        always call Base::Initialize() before any other logic.
 	Terminate();
 
