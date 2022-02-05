@@ -8692,6 +8692,7 @@ ae::Matrix4 OBB::GetTransform() const
 	result.SetAxis( 1, m_axes[ 1 ] * ( m_halfSize[ 1 ] * 2.0f ) );
 	result.SetAxis( 2, m_axes[ 2 ] * ( m_halfSize[ 2 ] * 2.0f ) );
 	result.SetTranslation( m_center );
+	result.SetRow( 3, ae::Vec4( 0.0f, 0.0f, 0.0f, 1.0f ) );
 	return result;
 }
 
