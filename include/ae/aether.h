@@ -7159,7 +7159,15 @@ T* ae::Cast( C* obj )
 	#include "processthreadsapi.h" // For GetCurrentProcessId()
 	#include <filesystem> // @HACK: Shouldn't need this just for Windows
 	#include <timeapi.h>
-	#define AE_USE_OPENAL 0
+	#pragma comment (lib, "Winmm.lib")
+	#pragma comment (lib, "Ws2_32.lib")
+	#ifndef AE_USE_OPENAL
+		#define AE_USE_OPENAL 0
+	#endif
+	#if AE_USE_OPENAL
+		#include "AL/al.h"
+		#include "AL/alc.h"
+	#endif
 #elif _AE_APPLE_
 	#include <sys/sysctl.h>
 	#include <unistd.h>
