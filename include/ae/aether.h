@@ -11428,7 +11428,32 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
 	return [absoluteUrl.path UTF8String];
 #elif _AE_LINUX_
-	char* resolvedPath = realpath( filePath, nullptr );
+	// @TODO: Handle non-existing dirs
+	char* resolvedPath;
+	if ( filePath[ 0 ] == '~' && filePath[ 1 ] == '/' )
+	{
+		char path[ PATH_MAX + 1 ];
+		const char* homeDir = FileSystem_GetHomeDir();
+		if ( !homeDir )
+		{
+			return "";
+		}
+		size_t pathLength = strlcpy( path, homeDir, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		pathLength = strlcat( path, filePath + 1, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		resolvedPath = realpath( path, nullptr );
+	}
+	else
+	{
+		resolvedPath = realpath( filePath, nullptr );
+	}
 	if ( resolvedPath )
 	{
 		ae::Str256 result( resolvedPath );
