@@ -7190,6 +7190,7 @@ T* ae::Cast( C* obj )
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
+	#include <limits.h>
 	#include <sys/stat.h>
 	#define AE_USE_OPENAL 0
 #endif
@@ -11358,6 +11359,31 @@ bool FileSystem::CreateFolder( const char* folderPath )
 	NSError* error = nil;
 	BOOL success = [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:&error];
 	return success && !error;
+#elif _AE_LINUX_
+	char path[ PATH_MAX + 1 ];
+	size_t pathLength = strlcpy( path, folderPath, PATH_MAX );
+	if ( pathLength >= PATH_MAX )
+	{
+		return false;
+	}
+	else if ( path[ pathLength - 1 ] != '/' )
+	{
+		path[ pathLength++ ] = '/';
+		path[ pathLength ] = 0;
+	}
+	for ( char* p = path + 1; *p; p++ )
+	{
+		if ( *p == '/' )
+		{
+			*p = 0;
+			if ( mkdir( path, S_IRWXU ) == -1 && errno != EEXIST ) // Only accessible by owner
+			{
+				return false;
+			}
+			*p = '/';
+		}
+	}
+	return true;
 #elif _AE_WINDOWS_
 	switch ( SHCreateDirectoryExA( nullptr, folderPath, nullptr ) )
 	{
@@ -11367,23 +11393,20 @@ bool FileSystem::CreateFolder( const char* folderPath )
 		default:
 			return false;
 	}
-#elif _AE_LINUX_
-	// @TODO: Recursive https://stackoverflow.com/questions/2336242/recursive-mkdir-system-call-on-unix
-	int result = mkdir( folderPath, 0777 ) == 0;
-	return ( result == 0 ) || errno == EEXIST;
 #endif
 	return false;
 }
 
 void FileSystem::ShowFolder( const char* folderPath )
 {
-#if _AE_WINDOWS_
-	ShellExecuteA( NULL, "explore", folderPath, NULL, NULL, SW_SHOWDEFAULT );
-#elif _AE_OSX_
+#if _AE_OSX_
 	NSString* path = [NSString stringWithUTF8String:folderPath];
 	[[NSWorkspace sharedWorkspace] selectFile:path inFileViewerRootedAtPath:@""];
-#endif
+#elif _AE_LINUX_
 	// @TODO: Linux
+#elif _AE_WINDOWS_
+	ShellExecuteA( NULL, "explore", folderPath, NULL, NULL, SW_SHOWDEFAULT );
+#endif
 }
 
 Str256 FileSystem::GetAbsolutePath( const char* filePath )
@@ -11404,6 +11427,18 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
 	NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
 	return [absoluteUrl.path UTF8String];
+#elif _AE_LINUX_
+	char* resolvedPath = realpath( filePath, nullptr );
+	if ( resolvedPath )
+	{
+		ae::Str256 result( resolvedPath );
+		free( resolvedPath );
+		return result;
+	}
+	else
+	{
+		return "";
+	}
 #elif _AE_WINDOWS_
 	char result[ ae::Str256::MaxLength() ];
 	if ( _fullpath( result, filePath, countof(result) ) )
@@ -11414,9 +11449,10 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	{
 		return "";
 	}
-#endif
-	// @TODO: Linux
+#elif
+	#warning "ae::FileSystem::GetAbsolutePath() not implemeneted. ae::FileSystem functionality will be limited."
 	return filePath;
+#endif
 }
 
 const char* FileSystem::GetFileNameFromPath( const char* filePath )
