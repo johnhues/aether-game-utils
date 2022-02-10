@@ -108,8 +108,6 @@ public:
 
 	void Initialize()
 	{
-		Validate();
-
 		printf( "Initialize\n" );
 		window.Initialize( 0, 0, "WebGL Demo", true );
 		gfx.Initialize( &window );
@@ -122,20 +120,17 @@ public:
 		vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
 		vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
 
+		uint8_t data = 255;
+		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
 		find_or_cache_url( "moon.png" );
-
-		Validate();
 	}
 
 	void Update( float dt )
 	{
-		Validate();
-
 		static bool s_first = true;
 		Texture* tex = find_or_cache_url( "moon.png" );
 		if ( s_first && tex->w && tex->h )
 		{
-			
 			AE_INFO( "# w:# h:#", tex->url, tex->w, tex->h );
 			m_texture.m_texture = tex->texture;
 			m_texture.m_hasAlpha = true;
@@ -162,50 +157,29 @@ public:
 		charPos += charVel * dt;
 
 		rotation += dt;
-
-		Validate();
 	}
 
 	void Render( float dt )
 	{
-		Validate();
 		gfx.Activate();
 		gfx.Clear( ae::Color::PicoDarkPurple() );
 
-		if ( m_texture.GetTexture() )
-		{
-			ae::Matrix4 transform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / gfx.GetAspectRatio(), 1.0f, 1.0f ) );
-			transform *= ae::Matrix4::Translation( ae::Vec3( charPos, 0.0f ) );
-			transform *= ae::Matrix4::RotationY( rotation );
-			ae::UniformList uniformList;
-			uniformList.Set( "u_modelToNdc", transform );
-			uniformList.Set( "u_tex", &m_texture );
-			vertexData.Render( &shader, uniformList );
-		}
+		ae::Matrix4 transform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / gfx.GetAspectRatio(), 1.0f, 1.0f ) );
+		transform *= ae::Matrix4::Translation( ae::Vec3( charPos, 0.0f ) );
+		transform *= ae::Matrix4::RotationY( rotation );
+		ae::UniformList uniformList;
+		uniformList.Set( "u_modelToNdc", transform );
+		uniformList.Set( "u_tex", &m_texture );
+		vertexData.Render( &shader, uniformList );
 
 		gfx.Present();
-		Validate();
 	}
 
-	void Validate()
-	{
-		AE_ASSERT( check0 == 0xCDCDCDCD );
-		AE_ASSERT( check1 == 0xCDCDCDCD );
-		AE_ASSERT( check2 == 0xCDCDCDCD );
-		AE_ASSERT( check3 == 0xCDCDCDCD );
-	}
-
-	uint32_t check0 = 0xCDCDCDCD;
 	ae::Window window;
-	uint32_t check1 = 0xCDCDCDCD;
 	ae::GraphicsDevice gfx;
-	uint32_t check2 = 0xCDCDCDCD;
 	ae::Input input;
-	uint32_t check3 = 0xCDCDCDCD;
 	ae::Shader shader;
-	uint32_t check4 = 0xCDCDCDCD;
 	ae::VertexData vertexData;
-	uint32_t check5 = 0xCDCDCDCD;
 };
 
 EM_BOOL draw_frame( double t, void* userData )
@@ -215,10 +189,8 @@ EM_BOOL draw_frame( double t, void* userData )
 	prevT = t;
 
 	Game* game = (Game*)userData;
-	game->Validate();
 	game->Update( dt );
 	game->Render( dt );
-	game->Validate();
 
 	return EM_TRUE;
 }
@@ -227,7 +199,6 @@ int main()
 {
 	Game* game = ae::New< Game >( "game" );
 	game->Initialize();
-	game->Validate();
 	emscripten_request_animation_frame_loop( &draw_frame, game );
 }
 

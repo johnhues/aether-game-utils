@@ -11474,7 +11474,9 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	{
 		return "";
 	}
-#elif
+#elif _AE_EMSCRIPTEN_
+	return filePath;
+#else
 	#warning "ae::FileSystem::GetAbsolutePath() not implemeneted. ae::FileSystem functionality will be limited."
 	return filePath;
 #endif
