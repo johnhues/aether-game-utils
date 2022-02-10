@@ -827,27 +827,27 @@ public:
 
 	bool Contains( Vec3 p ) const;
 	bool Intersect( AABB other ) const;
-	//! Returns the distance @p is to the surface of the aabb. The returned value
-	//! will be negative if @p is inside the aabb.
+	//! Returns the distance \p p is to the surface of the aabb. The returned value
+	//! will be negative if \p p is inside the aabb.
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
 	//! Returns the point on the aabbs surface  that is closest to the given point.
-	//! If @containsOut is provided it will be set to false if the point does not
+	//! If \p containsOut is provided it will be set to false if the point does not
 	//! touch the aabb, and true otherwise.
 	Vec3 GetClosestPointOnSurface( Vec3 p, bool* containsOut = nullptr ) const;
-	//! Returns true if any point along the line @p + @d intersects the aabb. On
-	//! intersection @t0Out will be set so that @p + @d * @t0Out = p0 (where p0
-	//! is the first point along the line in the direction of @d that is on the
-	//! surface of the aabb). @t1Out will be similarly set but for the last
-	//! intersection point on the line. @n0Out and @n1Out will be set to the face
-	//! normals of the aabb at @t0Out and @t1Out respectively.
+	//! Returns true if any point along the line \p p + \p d intersects the aabb. On
+	//! intersection \p t0Out will be set so that \p p + \p d * \p t0Out = p0 (where p0
+	//! is the first point along the line in the direction of \p d that is on the
+	//! surface of the aabb). \p t1Out will be similarly set but for the last
+	//! intersection point on the line. \p n0Out and \p n1Out will be set to the face
+	//! normals of the aabb at \p t0Out and \p t1Out respectively.
 	bool IntersectLine( Vec3 p, Vec3 d, float* t0Out = nullptr, float* t1Out = nullptr, ae::Vec3* n0Out = nullptr, ae::Vec3* n1Out = nullptr ) const;
-	//! Returns true if the segment [@source, @source + @ray] intersects the aabb
-	//! (including when @source is inside the aabb). On returning true: @hitOut
-	//! will be set to the first intersection point on the surface (or to @source
-	//! if the ray starts within the aabb). @normOut will be set to the normal of
+	//! Returns true if the segment [\p source, \p source + \p ray] intersects the aabb
+	//! (including when \p source is inside the aabb). On returning true: \p hitOut
+	//! will be set to the first intersection point on the surface (or to \p source
+	//! if the ray starts within the aabb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! @source if it is inside the aabb. @tOut will be set to a value so that
-	//! @source + @ray * @tOut = @hitOut.
+	//! \p source if it is inside the aabb. \p tOut will be set to a value so that
+	//! \p source + \p ray * \p tOut = \p hitOut.
 	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
 
 private:
@@ -869,27 +869,27 @@ public:
 	void SetTransform( const Matrix4& transform );
 	Matrix4 GetTransform() const;
 
-	//! Returns the distance @p is to the surface of the obb. The returned value
-	//! will be negative if @p is inside the obb.
+	//! Returns the distance \p p is to the surface of the obb. The returned value
+	//! will be negative if \p p is inside the obb.
 	float GetSignedDistanceFromSurface( Vec3 p ) const;
 	//! Returns the point on the obbs surface  that is closest to the given point.
-	//! If @containsOut is provided it will be set to false if the point does not
+	//! If \p containsOut is provided it will be set to false if the point does not
 	//! touch the obb, and true otherwise.
 	Vec3 GetClosestPointOnSurface( Vec3 p, bool* containsOut = nullptr ) const;
-	//! Returns true if any point along the line @p + @d intersects the obb. On
-	//! intersection @t0Out will be set so that @p + @d * @t0Out = p0 (where p0
-	//! is the first point along the line in the direction of @d that is on the
-	//! surface of the obb). @t1Out will be similarly set but for the last
-	//! intersection point on the line. @n0Out and @n1Out will be set to the face
-	//! normals of the obb at @t0Out and @t1Out respectively.
+	//! Returns true if any point along the line \p p + \p d intersects the obb. On
+	//! intersection \p t0Out will be set so that \p p + \p d * \p t0Out = p0 (where p0
+	//! is the first point along the line in the direction of \p d that is on the
+	//! surface of the obb). \p t1Out will be similarly set but for the last
+	//! intersection point on the line. \p n0Out and \p n1Out will be set to the face
+	//! normals of the obb at \p t0Out and \p t1Out respectively.
 	bool IntersectLine( Vec3 p, Vec3 d, float* t0Out = nullptr, float* t1Out = nullptr, ae::Vec3* n0Out = nullptr, ae::Vec3* n1Out = nullptr ) const;
-	//! Returns true if the segment [@source, @source + @ray] intersects the obb
-	//! (including when @source is inside the obb). On returning true: @hitOut
-	//! will be set to the first intersection point on the surface (or to @source
-	//! if the ray starts within the obb). @normOut will be set to the normal of
+	//! Returns true if the segment [\p source, \p source + \p ray] intersects the obb
+	//! (including when \p source is inside the obb). On returning true: \p hitOut
+	//! will be set to the first intersection point on the surface (or to \p source
+	//! if the ray starts within the obb). \p normOut will be set to the normal of
 	//! the face of the contact point, or to the normal of the nearest face to
-	//! @source if it is inside the obb. @tOut will be set to a value so that
-	//! @source + @ray * @tOut = @hitOut.
+	//! \p source if it is inside the obb. \p tOut will be set to a value so that
+	//! \p source + \p ray * \p tOut = \p hitOut.
 	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
 	//! Returns an AABB that tightly fits this obb.
 	AABB GetAABB() const;
@@ -1252,29 +1252,29 @@ public:
 	Map();
 	//! Constructor for a map with dynamically allocated storage (N == 0)
 	Map( ae::Tag pool );
-	//! Expands the map storage if necessary so a @count number of key/value pairs can be added without any allocations. Asserts if using static storage and @count is less than N.
+	//! Expands the map storage if necessary so a \p count number of key/value pairs can be added without any allocations. Asserts if using static storage and \p count is less than N.
 	void Reserve( uint32_t count );
 	
 	//! Access elements by key. Add or replace a key/value pair in the map. Can be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the value across non-const operations.
 	V& Set( const K& key, const V& value );
-	//! Access elements by key. Returns a modifiable reference to the value set with @key. Asserts when key/value pair is missing.
+	//! Access elements by key. Returns a modifiable reference to the value set with \p key. Asserts when key/value pair is missing.
 	V& Get( const K& key );
-	//! Access elements by key. Returns the value set with @key. Asserts when key/value pair is missing.
+	//! Access elements by key. Returns the value set with \p key. Asserts when key/value pair is missing.
 	const V& Get( const K& key ) const;
-	//! Returns the value set with @key. Returns @defaultValue otherwise when the key/value pair is missing.
+	//! Returns the value set with \p key. Returns \p defaultValue otherwise when the key/value pair is missing.
 	const V& Get( const K& key, const V& defaultValue ) const;
-	//! Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
+	//! Returns a pointer to the value set with \p key. Returns null otherwise when the key/value pair is missing.
 	V* TryGet( const K& key );
-	//! Returns a pointer to the value set with @key. Returns null otherwise when the key/value pair is missing.
+	//! Returns a pointer to the value set with \p key. Returns null otherwise when the key/value pair is missing.
 	const V* TryGet( const K& key ) const;
-	//! Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
+	//! Returns true when \p key matches an existing key/value pair. A copy of the value is set to \p valueOut.
 	bool TryGet( const K& key, V* valueOut );
-	//! Returns true when @key matches an existing key/value pair. A copy of the value is set to @valueOut.
+	//! Returns true when \p key matches an existing key/value pair. A copy of the value is set to \p valueOut.
 	bool TryGet( const K& key, V* valueOut ) const;
 	
 	//! Find and remove a key/value pair from the map. Returns true.
 	bool Remove( const K& key );
-	//! Find and remove a key/value pair from the map. Returns true on success and a copy of the value is set to @valueOut.
+	//! Find and remove a key/value pair from the map. Returns true on success and a copy of the value is set to \p valueOut.
 	bool Remove( const K& key, V* valueOut );
 	//! Remove all key/value pairs from the map. ae::Map::Length() will return 0 after calling this.
 	void Clear();
@@ -2270,8 +2270,8 @@ public:
 	void SetIndices( const void* indices, uint32_t count );
 	//! Add vertices to end of existing array.
 	void AppendVertices( const void* vertices, uint32_t count );
-	//! Add indices to end of existing array. Given indices are each offset based on @indexOffset. It could be
-	//! useful to use GetVertexCount() as a parameter to @indexOffset before appending new vertices.
+	//! Add indices to end of existing array. Given indices are each offset based on \p indexOffset. It could be
+	//! useful to use GetVertexCount() as a parameter to \p indexOffset before appending new vertices.
 	void AppendIndices( const void* indices, uint32_t count, uint32_t indexOffset );
 	//! Sets dynamic vertex count to 0. Has no effect if vertices are using VertexData::Usage::Static.
 	void ClearVertices();
@@ -2566,9 +2566,9 @@ public:
 class TextRender
 {
 public:
-	//! @texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
+	//! \p texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
 	//! texture can be a single channel without transparency. Luminance of the red channel is used for transparency.
-	//! @fontSize is the width and height of each character in the texture.
+	//! \p fontSize is the width and height of each character in the texture.
 	void Initialize( const ae::Texture2D* texture, uint32_t fontSize );
 	void Terminate();
 	void Render( const ae::Matrix4& uiToScreen );
@@ -2653,8 +2653,8 @@ public:
 	//! Sets editor mode controls. This mimics the controls of some standard cad programs so:
 	//! Alt+LMB: rotate, Alt+MMB: pan, Scroll/Alt+RMB: zoom
 	void SetEditorControls( bool editor );
-	//! Prevents the position of the camera from being less than @min distance from the focus point and
-	//! greater than @max distance from the focus point. May affect the current position of the camera.
+	//! Prevents the position of the camera from being less than \p min distance from the focus point and
+	//! greater than \p max distance from the focus point. May affect the current position of the camera.
 	void SetDistanceLimits( float min, float max );
 	//! Updates the cameras position. Does not affect in progress input or refocus.
 	void SetDistanceFromFocus( float distance );
@@ -7159,7 +7159,15 @@ T* ae::Cast( C* obj )
 	#include "processthreadsapi.h" // For GetCurrentProcessId()
 	#include <filesystem> // @HACK: Shouldn't need this just for Windows
 	#include <timeapi.h>
-	#define AE_USE_OPENAL 0
+	#pragma comment (lib, "Winmm.lib")
+	#pragma comment (lib, "Ws2_32.lib")
+	#ifndef AE_USE_OPENAL
+		#define AE_USE_OPENAL 0
+	#endif
+	#if AE_USE_OPENAL
+		#include "AL/al.h"
+		#include "AL/alc.h"
+	#endif
 #elif _AE_APPLE_
 	#include <sys/sysctl.h>
 	#include <unistd.h>
@@ -7182,6 +7190,7 @@ T* ae::Cast( C* obj )
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
+	#include <limits.h>
 	#include <sys/stat.h>
 	#define AE_USE_OPENAL 0
 #endif
@@ -11350,6 +11359,31 @@ bool FileSystem::CreateFolder( const char* folderPath )
 	NSError* error = nil;
 	BOOL success = [[NSFileManager defaultManager] createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:&error];
 	return success && !error;
+#elif _AE_LINUX_
+	char path[ PATH_MAX + 1 ];
+	size_t pathLength = strlcpy( path, folderPath, PATH_MAX );
+	if ( pathLength >= PATH_MAX )
+	{
+		return false;
+	}
+	else if ( path[ pathLength - 1 ] != '/' )
+	{
+		path[ pathLength++ ] = '/';
+		path[ pathLength ] = 0;
+	}
+	for ( char* p = path + 1; *p; p++ )
+	{
+		if ( *p == '/' )
+		{
+			*p = 0;
+			if ( mkdir( path, S_IRWXU ) == -1 && errno != EEXIST ) // Only accessible by owner
+			{
+				return false;
+			}
+			*p = '/';
+		}
+	}
+	return true;
 #elif _AE_WINDOWS_
 	switch ( SHCreateDirectoryExA( nullptr, folderPath, nullptr ) )
 	{
@@ -11359,23 +11393,20 @@ bool FileSystem::CreateFolder( const char* folderPath )
 		default:
 			return false;
 	}
-#elif _AE_LINUX_
-	// @TODO: Recursive https://stackoverflow.com/questions/2336242/recursive-mkdir-system-call-on-unix
-	int result = mkdir( folderPath, 0777 ) == 0;
-	return ( result == 0 ) || errno == EEXIST;
 #endif
 	return false;
 }
 
 void FileSystem::ShowFolder( const char* folderPath )
 {
-#if _AE_WINDOWS_
-	ShellExecuteA( NULL, "explore", folderPath, NULL, NULL, SW_SHOWDEFAULT );
-#elif _AE_OSX_
+#if _AE_OSX_
 	NSString* path = [NSString stringWithUTF8String:folderPath];
 	[[NSWorkspace sharedWorkspace] selectFile:path inFileViewerRootedAtPath:@""];
-#endif
+#elif _AE_LINUX_
 	// @TODO: Linux
+#elif _AE_WINDOWS_
+	ShellExecuteA( NULL, "explore", folderPath, NULL, NULL, SW_SHOWDEFAULT );
+#endif
 }
 
 Str256 FileSystem::GetAbsolutePath( const char* filePath )
@@ -11396,6 +11427,43 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
 	NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
 	return [absoluteUrl.path UTF8String];
+#elif _AE_LINUX_
+	// @TODO: Handle non-existing dirs
+	char* resolvedPath;
+	if ( filePath[ 0 ] == '~' && filePath[ 1 ] == '/' )
+	{
+		char path[ PATH_MAX + 1 ];
+		const char* homeDir = FileSystem_GetHomeDir();
+		if ( !homeDir )
+		{
+			return "";
+		}
+		size_t pathLength = strlcpy( path, homeDir, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		pathLength = strlcat( path, filePath + 1, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		resolvedPath = realpath( path, nullptr );
+	}
+	else
+	{
+		resolvedPath = realpath( filePath, nullptr );
+	}
+	if ( resolvedPath )
+	{
+		ae::Str256 result( resolvedPath );
+		free( resolvedPath );
+		return result;
+	}
+	else
+	{
+		return "";
+	}
 #elif _AE_WINDOWS_
 	char result[ ae::Str256::MaxLength() ];
 	if ( _fullpath( result, filePath, countof(result) ) )
@@ -11406,9 +11474,10 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	{
 		return "";
 	}
-#endif
-	// @TODO: Linux
+#elif
+	#warning "ae::FileSystem::GetAbsolutePath() not implemeneted. ae::FileSystem functionality will be limited."
 	return filePath;
+#endif
 }
 
 const char* FileSystem::GetFileNameFromPath( const char* filePath )
