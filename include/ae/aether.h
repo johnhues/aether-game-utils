@@ -199,7 +199,6 @@ double GetTime();
 using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_RENDER ae::Tag( "aeGraphics" )
 #define AE_ALLOC_TAG_AUDIO ae::Tag( "aeAudio" )
-#define AE_ALLOC_TAG_META ae::Tag( "aeMeta" )
 #define AE_ALLOC_TAG_TERRAIN ae::Tag( "aeTerrain" )
 #define AE_ALLOC_TAG_NET ae::Tag( "aeNet" )
 #define AE_ALLOC_TAG_HOTSPOT ae::Tag( "aeHotSpot" )
@@ -3440,8 +3439,11 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 const ae::TypeId kInvalidTypeId = 0;
-const uint32_t kMaxMetaTypes = 64;
-const uint32_t kMaxMetaProps = 8;
+const uint32_t kMaxMetaProps = 16;
+const uint32_t kMaxMetaPropListLength = 16;
+const uint32_t kMetaMaxVars = 24;
+const uint32_t kMetaEnumValues = 32;
+const uint32_t kMetaEnumTypes = 32;
 class Type;
 
 //------------------------------------------------------------------------------
@@ -3525,8 +3527,8 @@ private:
 	ae::Str32 m_name;
 	uint32_t m_size;
 	bool m_isSigned;
-	ae::Map< int32_t, std::string > m_enumValueToName = AE_ALLOC_TAG_META;
-	ae::Map< std::string, int32_t > m_enumNameToValue = AE_ALLOC_TAG_META;
+	ae::Map< int32_t, std::string, kMetaEnumValues > m_enumValueToName;
+	ae::Map< std::string, int32_t, kMetaEnumValues > m_enumNameToValue;
 public: // Internal
 	Enum( const char* name, uint32_t size, bool isSigned );
 	void m_AddValue( const char* name, int32_t value );
@@ -3678,8 +3680,8 @@ private:
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
-	ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
-	ae::Array< Var > m_vars = AE_ALLOC_TAG_META;
+	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
+	ae::Array< Var, kMetaMaxVars > m_vars;
 	ae::Str32 m_parent;
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
@@ -18681,15 +18683,15 @@ void ae::Enum::m_AddValue( const char* name, int32_t value )
 
 ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
 {
-	static ae::Map< std::string, Enum* > enums = AE_ALLOC_TAG_META;
+	static ae::Map< std::string, Enum, kMetaEnumTypes > enums;
 	if ( create )
 	{
 		AE_ASSERT( !enums.TryGet( enumName ) );
-		return enums.Set( enumName, ae::New< Enum >( AE_ALLOC_TAG_META, enumName, size, isSigned ) );
+		return &enums.Set( enumName, Enum( enumName, size, isSigned ) );
 	}
 	else
 	{
-		Enum* metaEnum = enums.Get( enumName, nullptr );
+		Enum* metaEnum = enums.TryGet( enumName );
 		AE_ASSERT_MSG( metaEnum, "Could not find meta registered Enum named '#'", enumName );
 		return metaEnum;
 	}
@@ -18822,7 +18824,7 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 	auto* props = m_props.TryGet( prop );
 	if ( !props )
 	{
-		props = &m_props.Set( prop, AE_ALLOC_TAG_META );
+		props = &m_props.Set( prop, {} );
 	}
 	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties with no value specified
 	{
