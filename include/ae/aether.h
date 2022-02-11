@@ -9139,12 +9139,14 @@ public:
 // Allocator functions
 //------------------------------------------------------------------------------
 static Allocator* g_allocator = nullptr;
+static std::thread::id g_allocatorThread;
 
 void SetGlobalAllocator( Allocator* alloc )
 {
 	AE_ASSERT_MSG( alloc, "No allocator provided to ae::SetGlobalAllocator()" );
 	AE_ASSERT_MSG( !g_allocator, "Call ae::SetGlobalAllocator() before making any allocations to use your own allocator" );
 	g_allocator = alloc;
+	g_allocatorThread = std::this_thread::get_id();
 }
 
 Allocator* GetGlobalAllocator()
@@ -9153,8 +9155,11 @@ Allocator* GetGlobalAllocator()
 	{
 		// @TODO: Allocating this statically here won't work for hotloading
 		static _DefaultAllocator s_allocator;
-		g_allocator = &s_allocator;
+		SetGlobalAllocator( &s_allocator );
 	}
+#if _AE_DEBUG_
+	AE_ASSERT_MSG( std::this_thread::get_id() == g_allocatorThread, "ae::Allocate() etc are not thread safe and can only be called on the thread ae::SetGlobalAllocator() was called on" );
+#endif
 	return g_allocator;
 }
 
