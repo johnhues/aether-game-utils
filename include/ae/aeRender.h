@@ -46,6 +46,7 @@ class aeSpriteRender
 {
 public:
   aeSpriteRender();
+  ~aeSpriteRender();
   void Initialize( uint32_t maxCount );
   void Destroy();
   void Render( const ae::Matrix4& localToProjection );
@@ -85,6 +86,7 @@ private:
   uint32_t m_count;
   uint32_t m_maxCount;
   Sprite* m_sprites;
+  Vertex* m_vertices;
   ae::VertexData m_vertexData;
   ae::Shader* m_shaderAll;
   ae::Shader* m_shaderOpaque;

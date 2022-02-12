@@ -228,6 +228,8 @@ public:
 	virtual void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) = 0;
 	//! Free memory allocated with ae::Allocator::Allocate() or ae::Allocator::Reallocate().
 	virtual void Free( void* data ) = 0;
+	//! Used for safety checks.
+	virtual bool IsThreadSafe() const = 0;
 };
 //! The given ae::Allocator is used for all memory allocations. You must call
 //! ae::SetGlobalAllocator() before any allocations are made or else a default
@@ -2138,7 +2140,7 @@ public:
 	ae::Hash GetHash() const { return m_hash; }
 
 private:
-	ae::Map< Str32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
+	ae::Map< Str32, Value, 32 > m_uniforms;
 	ae::Hash m_hash;
 };
 
@@ -3979,7 +3981,10 @@ inline void* Reallocate( void* data, uint32_t bytes, uint32_t alignment )
 
 inline void Free( void* data )
 {
-	ae::GetGlobalAllocator()->Free( data );
+	if ( data )
+	{
+		ae::GetGlobalAllocator()->Free( data );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -9133,20 +9138,27 @@ public:
 		free( data );
 #endif
 	}
+	
+	bool IsThreadSafe() const override
+	{
+		return true;
+	}
 };
 
 //------------------------------------------------------------------------------
 // Allocator functions
 //------------------------------------------------------------------------------
 static Allocator* g_allocator = nullptr;
+static bool g_allocatorIsThreadSafe = false;
 static std::thread::id g_allocatorThread;
 
-void SetGlobalAllocator( Allocator* alloc )
+void SetGlobalAllocator( Allocator* allocator )
 {
-	AE_ASSERT_MSG( alloc, "No allocator provided to ae::SetGlobalAllocator()" );
+	AE_ASSERT_MSG( allocator, "No allocator provided to ae::SetGlobalAllocator()" );
 	AE_ASSERT_MSG( !g_allocator, "Call ae::SetGlobalAllocator() before making any allocations to use your own allocator" );
-	g_allocator = alloc;
 	g_allocatorThread = std::this_thread::get_id();
+	g_allocatorIsThreadSafe = allocator->IsThreadSafe();
+	g_allocator = allocator;
 }
 
 Allocator* GetGlobalAllocator()
@@ -9158,7 +9170,7 @@ Allocator* GetGlobalAllocator()
 		SetGlobalAllocator( &s_allocator );
 	}
 #if _AE_DEBUG_
-	AE_ASSERT_MSG( std::this_thread::get_id() == g_allocatorThread, "ae::Allocate() etc are not thread safe and can only be called on the thread ae::SetGlobalAllocator() was called on" );
+	AE_ASSERT_MSG( g_allocatorIsThreadSafe || std::this_thread::get_id() == g_allocatorThread, "The specified global ae::Allocator is not thread safe and can only be accessed on the thread it was set on." );
 #endif
 	return g_allocator;
 }
