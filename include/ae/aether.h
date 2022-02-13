@@ -11693,27 +11693,35 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 	// Open window
 	if ( GetOpenFileNameA( &winParams ) )
 	{
-		uint32_t offset = (uint32_t)strlen( winParams.lpstrFile ) + 1; // Double null terminated
-		if ( winParams.lpstrFile[ offset ] == 0 )
+		if ( !params.allowMultiselect )
 		{
 			return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
 		}
-		else // Multiple results
+		else
 		{
-			const char* head = winParams.lpstrFile;
-			const char* directory = head;
-			head += offset; // Null separated
-			ae::Array< std::string > result = AE_ALLOC_TAG_FILE;
-			while ( *head )
+			// Null separated and double null terminated when OFN_ALLOWMULTISELECT is specified
+			uint32_t offset = (uint32_t)strlen( winParams.lpstrFile ) + 1; 
+			if ( winParams.lpstrFile[ offset ] == 0 ) // One result
 			{
-				auto&& r = result.Append( directory );
-				r += AE_PATH_SEPARATOR;
-				r += head;
-
-				offset = (uint32_t)strlen( head ) + 1; // Double null terminated
-				head += offset; // Null separated
+				return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
 			}
-			return result;
+			else // Multiple results
+			{
+				const char* head = winParams.lpstrFile;
+				const char* directory = head;
+				head += offset; // Null separated
+				ae::Array< std::string > result = AE_ALLOC_TAG_FILE;
+				while ( *head )
+				{
+					auto&& r = result.Append( directory );
+					r += AE_PATH_SEPARATOR;
+					r += head;
+
+					offset = (uint32_t)strlen( head ) + 1; // Double null terminated
+					head += offset; // Null separated
+				}
+				return result;
+			}
 		}
 	}
 

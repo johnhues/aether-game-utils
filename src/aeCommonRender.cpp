@@ -55,6 +55,7 @@ aeSpriteRender::aeSpriteRender()
   m_count = 0;
   m_maxCount = 0;
   m_sprites = nullptr;
+  m_vertices = nullptr;
   
   m_shaderAll = nullptr;
   m_shaderOpaque = nullptr;
