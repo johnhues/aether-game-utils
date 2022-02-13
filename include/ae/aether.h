@@ -219,7 +219,7 @@ using Tag = std::string; // @TODO: Fixed length string
 class Allocator
 {
 public:
-	virtual ~Allocator() {}
+	virtual ~Allocator();
 	//! Should return 'bytes' with minimum alignment of 'alignment'. Optionally, a
 	//! tag should be used to select a pool of memory, or for diagnostics/debugging.
 	virtual void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) = 0;
@@ -9148,9 +9148,18 @@ public:
 //------------------------------------------------------------------------------
 // Allocator functions
 //------------------------------------------------------------------------------
+static bool g_allocatorInitialized = false;
 static Allocator* g_allocator = nullptr;
 static bool g_allocatorIsThreadSafe = false;
 static std::thread::id g_allocatorThread;
+
+Allocator::~Allocator()
+{
+	if ( g_allocator == this )
+	{
+		g_allocator = nullptr;
+	}
+}
 
 void SetGlobalAllocator( Allocator* allocator )
 {
@@ -9159,12 +9168,14 @@ void SetGlobalAllocator( Allocator* allocator )
 	g_allocatorThread = std::this_thread::get_id();
 	g_allocatorIsThreadSafe = allocator->IsThreadSafe();
 	g_allocator = allocator;
+	g_allocatorInitialized = true;
 }
 
 Allocator* GetGlobalAllocator()
 {
 	if ( !g_allocator )
 	{
+		AE_ASSERT_MSG( !g_allocatorInitialized, "Global Allocator has already been destroyed" );
 		// @TODO: Allocating this statically here won't work for hotloading
 		static _DefaultAllocator s_allocator;
 		SetGlobalAllocator( &s_allocator );
