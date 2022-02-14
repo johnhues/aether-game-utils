@@ -111,39 +111,33 @@ static Texture* find_or_cache_url( const char* url )
 struct LoadFileInfo
 {
 	bool finished = false;
-	uint8_t* data = nullptr;
+	uint8_t* data = nullptr; // Null terminated for convenience
 	uint32_t length = 0;
+	uint32_t status = 0;
 };
 
 extern "C" {
-// void handle_file_load_success( void* arg, void* data, int length )
-// {
-// 	LoadFileInfo* info = (LoadFileInfo*)arg;
-// 	info->data = (uint8_t*)ae::Allocate( TAG_ALL, length, 4 );
-// 	memcpy( info->data, data, length );
-// 	info->length = length;
-// 	info->finished = true;
-// }
-
-// void handle_file_load_fail( void* arg )
-// {
-// 	LoadFileInfo* info = (LoadFileInfo*)arg;
-// 	info->finished = true;
-// }
 void EMSCRIPTEN_KEEPALIVE handle_file_load_success( void* arg, void* data, uint32_t length )
 {
-	AE_INFO( "load success # # #", arg, data, length );
+	LoadFileInfo* info = (LoadFileInfo*)arg;
+	info->data = (uint8_t*)ae::Allocate( TAG_ALL, length + 1, 8 );
+	memcpy( info->data, data, length );
+	info->data[ length ] = 0;
+	info->length = length;
+	info->finished = true;
 }
 
-void EMSCRIPTEN_KEEPALIVE handle_file_load_fail( void* arg, uint32_t code )
+void EMSCRIPTEN_KEEPALIVE handle_file_load_fail( void* arg, uint32_t status )
 {
-	AE_INFO( "load fail # #", arg, code );
+	LoadFileInfo* info = (LoadFileInfo*)arg;
+	info->status = status;
+	info->finished = true;
 }
 }
 
-typedef void (load_url_success_fn)( void*, void*, uint32_t );
-typedef void (load_url_fail_fn)( void*, uint32_t );
-EM_JS( void, load_url, ( const char* url, void* arg, uint32_t timeoutMs, load_url_success_fn* onload, load_url_fail_fn onerror ),
+typedef void (file_load_async_success_fn)( void*, void*, uint32_t );
+typedef void (file_load_async_fail_fn)( void*, uint32_t );
+EM_JS( void, file_load_async_impl, ( const char* url, void* arg, uint32_t timeoutMs, file_load_async_success_fn* onload, file_load_async_fail_fn onerror ),
 {
 	var xhr = new XMLHttpRequest();
 	xhr.timeout = timeoutMs;
@@ -168,6 +162,21 @@ EM_JS( void, load_url, ( const char* url, void* arg, uint32_t timeoutMs, load_ur
 	};
 	xhr.send(null);
 } );
+LoadFileInfo* file_load_async( const char* url, uint32_t timeoutMs, file_load_async_success_fn* onload, file_load_async_fail_fn onerror )
+{
+	LoadFileInfo* info = ae::New< LoadFileInfo >( TAG_ALL );
+	file_load_async_impl( url, info, timeoutMs, onload, onerror );
+	return info;
+}
+
+void file_free( LoadFileInfo* info )
+{
+	if ( info )
+	{
+		ae::Free( info->data );
+		ae::Delete( info );
+	}
+}
 
 class Game
 {
@@ -176,7 +185,7 @@ public:
 	ae::Vec2 charVel = ae::Vec2( 0.0f );
 	float rotation = 0.0f;
 	ae::Texture2D m_texture;
-	LoadFileInfo m_info;
+	LoadFileInfo* m_info = nullptr;
 
 	Game() : charPos( 0.0f ), charVel( 0.0f ), rotation( 0.0f ) {}
 
@@ -198,7 +207,7 @@ public:
 		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
 		find_or_cache_url( "moon.png" );
 
-		load_url( "moon.png", &m_info, 2500, handle_file_load_success, handle_file_load_fail );
+		m_info = file_load_async( "test.txt", 2500, handle_file_load_success, handle_file_load_fail );
 	}
 
 	void Update( float dt )
@@ -216,9 +225,18 @@ public:
 			s_first = false;
 		}
 
-		if ( m_info.finished )
+		if ( m_info && m_info->finished )
 		{
-			AE_INFO( "loaded file. length: #", m_info.length );
+			if ( m_info->data )
+			{
+				AE_INFO( "loaded file. '#' length: #", (const char*)m_info->data, m_info->length );
+			}
+			else
+			{
+				AE_INFO( "failed to load file. status: #", m_info->status );
+			}
+			file_free( m_info );
+			m_info = nullptr;
 		}
 
 		input.Pump();

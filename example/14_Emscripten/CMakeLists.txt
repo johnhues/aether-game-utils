@@ -46,6 +46,7 @@ target_include_directories(14_Emscripten PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../
 set_property(TARGET 14_Emscripten PROPERTY LINK_FLAGS "${SOEMTHING}")
 
 file(GLOB_RECURSE assets *.png)
+list(APPEND assets test.txt)
 foreach(asset ${assets})
 	message("Adding asset ${asset}")
 	file(COPY "${asset}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
