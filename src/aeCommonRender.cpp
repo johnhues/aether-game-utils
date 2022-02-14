@@ -55,6 +55,7 @@ aeSpriteRender::aeSpriteRender()
   m_count = 0;
   m_maxCount = 0;
   m_sprites = nullptr;
+  m_vertices = nullptr;
   
   m_shaderAll = nullptr;
   m_shaderOpaque = nullptr;
@@ -66,6 +67,11 @@ aeSpriteRender::aeSpriteRender()
   m_sorting = false;
 }
 
+aeSpriteRender::~aeSpriteRender()
+{
+	Destroy();
+}
+
 void aeSpriteRender::Initialize( uint32_t maxCount )
 {
   AE_ASSERT( maxCount );
@@ -73,6 +79,7 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_maxCount = maxCount;
   m_count = 0;
   m_sprites = ae::NewArray< Sprite >( AE_ALLOC_TAG_RENDER, m_maxCount );
+  m_vertices = ae::NewArray< Vertex >( AE_ALLOC_TAG_RENDER, m_maxCount * aeQuadVertCount );
 
   m_vertexData.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Static );
   m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof(Vertex, pos) );
@@ -115,7 +122,9 @@ void aeSpriteRender::Destroy()
   
   m_vertexData.Terminate();
   
+  ae::Delete( m_vertices );
   ae::Delete( m_sprites );
+  m_vertices = nullptr;
   m_sprites = nullptr;
 }
 
@@ -188,8 +197,6 @@ void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader*
     uint32_t textureId = texture->GetTexture();
 
     uint32_t count = 0;
-    ae::Scratch< Vertex > scratch( AE_ALLOC_TAG_RENDER, m_count * aeQuadVertCount );
-    Vertex* vertices = scratch.Data();
     for ( uint32_t j = 0; j < m_count; j++ )
     {
       Sprite* sprite = &m_sprites[ j ];
@@ -203,25 +210,25 @@ void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader*
       uint32_t idx2 = count * aeQuadVertCount + 2;
       uint32_t idx3 = count * aeQuadVertCount + 3;
       
-      vertices[ idx0 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 0 ], 1.0f ) );
-      vertices[ idx1 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 1 ], 1.0f ) );
-      vertices[ idx2 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 2 ], 1.0f ) );
-      vertices[ idx3 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 3 ], 1.0f ) );
+      m_vertices[ idx0 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 0 ], 1.0f ) );
+      m_vertices[ idx1 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 1 ], 1.0f ) );
+      m_vertices[ idx2 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 2 ], 1.0f ) );
+      m_vertices[ idx3 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 3 ], 1.0f ) );
 
-      vertices[ idx0 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMin.y );
-      vertices[ idx1 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMin.y );
-      vertices[ idx2 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMax.y );
-      vertices[ idx3 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMax.y );
+      m_vertices[ idx0 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMin.y );
+      m_vertices[ idx1 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMin.y );
+      m_vertices[ idx2 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMax.y );
+      m_vertices[ idx3 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMax.y );
 
-      vertices[ idx0 ].color = sprite->color.GetLinearRGBA();
-      vertices[ idx1 ].color = sprite->color.GetLinearRGBA();
-      vertices[ idx2 ].color = sprite->color.GetLinearRGBA();
-      vertices[ idx3 ].color = sprite->color.GetLinearRGBA();
+      m_vertices[ idx0 ].color = sprite->color.GetLinearRGBA();
+      m_vertices[ idx1 ].color = sprite->color.GetLinearRGBA();
+      m_vertices[ idx2 ].color = sprite->color.GetLinearRGBA();
+      m_vertices[ idx3 ].color = sprite->color.GetLinearRGBA();
       
       count++;
     }
     // @TODO: Should set all vertices first then render multiple times
-    m_vertexData.SetVertices( vertices, count * 4 );
+    m_vertexData.SetVertices( m_vertices, count * 4 );
 
     ae::UniformList uniforms;
     uniforms.Set( "u_localToProjection", localToProjection );

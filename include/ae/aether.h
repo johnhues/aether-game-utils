@@ -199,7 +199,6 @@ double GetTime();
 using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_RENDER ae::Tag( "aeGraphics" )
 #define AE_ALLOC_TAG_AUDIO ae::Tag( "aeAudio" )
-#define AE_ALLOC_TAG_META ae::Tag( "aeMeta" )
 #define AE_ALLOC_TAG_TERRAIN ae::Tag( "aeTerrain" )
 #define AE_ALLOC_TAG_NET ae::Tag( "aeNet" )
 #define AE_ALLOC_TAG_HOTSPOT ae::Tag( "aeHotSpot" )
@@ -220,7 +219,7 @@ using Tag = std::string; // @TODO: Fixed length string
 class Allocator
 {
 public:
-	virtual ~Allocator() {}
+	virtual ~Allocator();
 	//! Should return 'bytes' with minimum alignment of 'alignment'. Optionally, a
 	//! tag should be used to select a pool of memory, or for diagnostics/debugging.
 	virtual void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) = 0;
@@ -229,6 +228,8 @@ public:
 	virtual void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) = 0;
 	//! Free memory allocated with ae::Allocator::Allocate() or ae::Allocator::Reallocate().
 	virtual void Free( void* data ) = 0;
+	//! Used for safety checks.
+	virtual bool IsThreadSafe() const = 0;
 };
 //! The given ae::Allocator is used for all memory allocations. You must call
 //! ae::SetGlobalAllocator() before any allocations are made or else a default
@@ -2139,7 +2140,7 @@ public:
 	ae::Hash GetHash() const { return m_hash; }
 
 private:
-	ae::Map< Str32, Value > m_uniforms = AE_ALLOC_TAG_RENDER;
+	ae::Map< Str32, Value, 32 > m_uniforms;
 	ae::Hash m_hash;
 };
 
@@ -3440,8 +3441,11 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 const ae::TypeId kInvalidTypeId = 0;
-const uint32_t kMaxMetaTypes = 64;
-const uint32_t kMaxMetaProps = 8;
+const uint32_t kMaxMetaProps = 16;
+const uint32_t kMaxMetaPropListLength = 16;
+const uint32_t kMetaMaxVars = 24;
+const uint32_t kMetaEnumValues = 32;
+const uint32_t kMetaEnumTypes = 32;
 class Type;
 
 //------------------------------------------------------------------------------
@@ -3525,8 +3529,8 @@ private:
 	ae::Str32 m_name;
 	uint32_t m_size;
 	bool m_isSigned;
-	ae::Map< int32_t, std::string > m_enumValueToName = AE_ALLOC_TAG_META;
-	ae::Map< std::string, int32_t > m_enumNameToValue = AE_ALLOC_TAG_META;
+	ae::Map< int32_t, std::string, kMetaEnumValues > m_enumValueToName;
+	ae::Map< std::string, int32_t, kMetaEnumValues > m_enumNameToValue;
 public: // Internal
 	Enum( const char* name, uint32_t size, bool isSigned );
 	void m_AddValue( const char* name, int32_t value );
@@ -3678,8 +3682,8 @@ private:
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
-	ae::Map< ae::Str32, ae::Array< ae::Str32 >, kMaxMetaProps > m_props;
-	ae::Array< Var > m_vars = AE_ALLOC_TAG_META;
+	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
+	ae::Array< Var, kMetaMaxVars > m_vars;
 	ae::Str32 m_parent;
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
@@ -3977,7 +3981,10 @@ inline void* Reallocate( void* data, uint32_t bytes, uint32_t alignment )
 
 inline void Free( void* data )
 {
-	ae::GetGlobalAllocator()->Free( data );
+	if ( data )
+	{
+		ae::GetGlobalAllocator()->Free( data );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -9131,28 +9138,51 @@ public:
 		free( data );
 #endif
 	}
+	
+	bool IsThreadSafe() const override
+	{
+		return true;
+	}
 };
 
 //------------------------------------------------------------------------------
 // Allocator functions
 //------------------------------------------------------------------------------
+static bool g_allocatorInitialized = false;
 static Allocator* g_allocator = nullptr;
+static bool g_allocatorIsThreadSafe = false;
+static std::thread::id g_allocatorThread;
 
-void SetGlobalAllocator( Allocator* alloc )
+Allocator::~Allocator()
 {
-	AE_ASSERT_MSG( alloc, "No allocator provided to ae::SetGlobalAllocator()" );
+	if ( g_allocator == this )
+	{
+		g_allocator = nullptr;
+	}
+}
+
+void SetGlobalAllocator( Allocator* allocator )
+{
+	AE_ASSERT_MSG( allocator, "No allocator provided to ae::SetGlobalAllocator()" );
 	AE_ASSERT_MSG( !g_allocator, "Call ae::SetGlobalAllocator() before making any allocations to use your own allocator" );
-	g_allocator = alloc;
+	g_allocatorThread = std::this_thread::get_id();
+	g_allocatorIsThreadSafe = allocator->IsThreadSafe();
+	g_allocator = allocator;
+	g_allocatorInitialized = true;
 }
 
 Allocator* GetGlobalAllocator()
 {
 	if ( !g_allocator )
 	{
+		AE_ASSERT_MSG( !g_allocatorInitialized, "Global Allocator has already been destroyed" );
 		// @TODO: Allocating this statically here won't work for hotloading
 		static _DefaultAllocator s_allocator;
-		g_allocator = &s_allocator;
+		SetGlobalAllocator( &s_allocator );
 	}
+#if _AE_DEBUG_
+	AE_ASSERT_MSG( g_allocatorIsThreadSafe || std::this_thread::get_id() == g_allocatorThread, "The specified global ae::Allocator is not thread safe and can only be accessed on the thread it was set on." );
+#endif
 	return g_allocator;
 }
 
@@ -11676,27 +11706,35 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 	// Open window
 	if ( GetOpenFileNameA( &winParams ) )
 	{
-		uint32_t offset = (uint32_t)strlen( winParams.lpstrFile ) + 1; // Double null terminated
-		if ( winParams.lpstrFile[ offset ] == 0 )
+		if ( !params.allowMultiselect )
 		{
 			return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
 		}
-		else // Multiple results
+		else
 		{
-			const char* head = winParams.lpstrFile;
-			const char* directory = head;
-			head += offset; // Null separated
-			ae::Array< std::string > result = AE_ALLOC_TAG_FILE;
-			while ( *head )
+			// Null separated and double null terminated when OFN_ALLOWMULTISELECT is specified
+			uint32_t offset = (uint32_t)strlen( winParams.lpstrFile ) + 1; 
+			if ( winParams.lpstrFile[ offset ] == 0 ) // One result
 			{
-				auto&& r = result.Append( directory );
-				r += AE_PATH_SEPARATOR;
-				r += head;
-
-				offset = (uint32_t)strlen( head ) + 1; // Double null terminated
-				head += offset; // Null separated
+				return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
 			}
-			return result;
+			else // Multiple results
+			{
+				const char* head = winParams.lpstrFile;
+				const char* directory = head;
+				head += offset; // Null separated
+				ae::Array< std::string > result = AE_ALLOC_TAG_FILE;
+				while ( *head )
+				{
+					auto&& r = result.Append( directory );
+					r += AE_PATH_SEPARATOR;
+					r += head;
+
+					offset = (uint32_t)strlen( head ) + 1; // Double null terminated
+					head += offset; // Null separated
+				}
+				return result;
+			}
 		}
 	}
 
@@ -18683,15 +18721,15 @@ void ae::Enum::m_AddValue( const char* name, int32_t value )
 
 ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
 {
-	static ae::Map< std::string, Enum* > enums = AE_ALLOC_TAG_META;
+	static ae::Map< std::string, Enum, kMetaEnumTypes > enums;
 	if ( create )
 	{
 		AE_ASSERT( !enums.TryGet( enumName ) );
-		return enums.Set( enumName, ae::New< Enum >( AE_ALLOC_TAG_META, enumName, size, isSigned ) );
+		return &enums.Set( enumName, Enum( enumName, size, isSigned ) );
 	}
 	else
 	{
-		Enum* metaEnum = enums.Get( enumName, nullptr );
+		Enum* metaEnum = enums.TryGet( enumName );
 		AE_ASSERT_MSG( metaEnum, "Could not find meta registered Enum named '#'", enumName );
 		return metaEnum;
 	}
@@ -18824,7 +18862,7 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 	auto* props = m_props.TryGet( prop );
 	if ( !props )
 	{
-		props = &m_props.Set( prop, AE_ALLOC_TAG_META );
+		props = &m_props.Set( prop, {} );
 	}
 	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties with no value specified
 	{
