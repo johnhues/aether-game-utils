@@ -11,7 +11,6 @@ if (EMSCRIPTEN)
 	set(CMAKE_EXECUTABLE_SUFFIX ".html")
 
 	set(SOEMTHING
-		"--js-library ${CMAKE_CURRENT_LIST_DIR}/library_js.js" # Link in the JS library file for support code
 		"-lGL" # Link in to WebGL/GLES system library
 		"--closure=1" # Enable Closure compiler for aggressive JS size minification
 		"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance

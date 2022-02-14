@@ -9,6 +9,8 @@
 #include <string.h> // For NULL and strcmp()
 #include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
 
+const ae::Tag TAG_ALL = "all";
+
 //------------------------------------------------------------------------------
 // Shaders
 //------------------------------------------------------------------------------
@@ -66,10 +68,20 @@ typedef struct Texture
 #define MAX_TEXTURES 256
 static Texture textures[ MAX_TEXTURES ] = {};
 
-extern "C"
+EM_JS( void, load_texture_from_url, ( GLuint texture, const char* url, int* outWidth, int* outHeight ),
 {
-	void load_texture_from_url( GLuint texture, const char* url, int* outWidth, int* outHeight );
-}
+	var img = new Image();
+    img.onload = function()
+	{
+      HEAPU32[outWidth>>2] = img.width;
+      HEAPU32[outHeight>>2] = img.height;
+      GLctx.bindTexture(GLctx.TEXTURE_2D, GL.textures[ texture ]);
+      GLctx.pixelStorei(GLctx.UNPACK_FLIP_Y_WEBGL, true);
+      GLctx.texImage2D(GLctx.TEXTURE_2D, 0, GLctx.RGBA, GLctx.RGBA, GLctx.UNSIGNED_BYTE, img);
+      GLctx.pixelStorei(GLctx.UNPACK_FLIP_Y_WEBGL, false);
+    };
+    img.src = UTF8ToString(url);
+} );
 
 static Texture* find_or_cache_url( const char* url )
 {
@@ -96,6 +108,67 @@ static Texture* find_or_cache_url( const char* url )
 	return 0; // fail
 }
 
+struct LoadFileInfo
+{
+	bool finished = false;
+	uint8_t* data = nullptr;
+	uint32_t length = 0;
+};
+
+extern "C" {
+// void handle_file_load_success( void* arg, void* data, int length )
+// {
+// 	LoadFileInfo* info = (LoadFileInfo*)arg;
+// 	info->data = (uint8_t*)ae::Allocate( TAG_ALL, length, 4 );
+// 	memcpy( info->data, data, length );
+// 	info->length = length;
+// 	info->finished = true;
+// }
+
+// void handle_file_load_fail( void* arg )
+// {
+// 	LoadFileInfo* info = (LoadFileInfo*)arg;
+// 	info->finished = true;
+// }
+void EMSCRIPTEN_KEEPALIVE handle_file_load_success( void* arg, void* data, uint32_t length )
+{
+	AE_INFO( "load success # # #", arg, data, length );
+}
+
+void EMSCRIPTEN_KEEPALIVE handle_file_load_fail( void* arg, uint32_t code )
+{
+	AE_INFO( "load fail # #", arg, code );
+}
+}
+
+typedef void (load_url_success_fn)( void*, void*, uint32_t );
+typedef void (load_url_fail_fn)( void*, uint32_t );
+EM_JS( void, load_url, ( const char* url, void* arg, uint32_t timeoutMs, load_url_success_fn* onload, load_url_fail_fn onerror ),
+{
+	var xhr = new XMLHttpRequest();
+	xhr.timeout = timeoutMs;
+	xhr.open('GET', UTF8ToString(url), true);
+	xhr.responseType = 'arraybuffer';
+	xhr.ontimeout = function xhr_ontimeout() {
+		_handle_file_load_fail(arg, xhr.status);
+	};
+	xhr.onload = function xhr_onload() {
+		if (xhr.status == 200 && xhr.response) {
+			var byteArray = new Uint8Array(xhr.response);
+			var buffer = _malloc(byteArray.length);
+			HEAPU8.set(byteArray, buffer);
+			_handle_file_load_success(arg, buffer, byteArray.length);
+			_free(buffer);
+		} else {
+			_handle_file_load_fail(arg, xhr.status);
+		}
+	};
+	xhr.onerror = function xhrError() {
+		_handle_file_load_fail(arg, xhr.status);
+	};
+	xhr.send(null);
+} );
+
 class Game
 {
 public:
@@ -103,6 +176,7 @@ public:
 	ae::Vec2 charVel = ae::Vec2( 0.0f );
 	float rotation = 0.0f;
 	ae::Texture2D m_texture;
+	LoadFileInfo m_info;
 
 	Game() : charPos( 0.0f ), charVel( 0.0f ), rotation( 0.0f ) {}
 
@@ -123,6 +197,8 @@ public:
 		uint8_t data = 255;
 		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
 		find_or_cache_url( "moon.png" );
+
+		load_url( "moon.png", &m_info, 2500, handle_file_load_success, handle_file_load_fail );
 	}
 
 	void Update( float dt )
@@ -138,6 +214,11 @@ public:
 			m_texture.m_height = tex->h;
 			m_texture.m_target = tex->target;
 			s_first = false;
+		}
+
+		if ( m_info.finished )
+		{
+			AE_INFO( "loaded file. length: #", m_info.length );
 		}
 
 		input.Pump();
