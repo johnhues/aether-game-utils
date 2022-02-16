@@ -112,9 +112,11 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			SUFFIX ".html"
 		)
 		
-		## @TODO: Handle Emscripten resources
-		# file(COPY "${_AE_RESOURCES}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
-		# target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
-		# set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+		if(EMSCRIPTEN)
+			foreach(resource ${_AE_RESOURCES})
+				message("Adding resource ${resource}")
+				file(COPY "${resource}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
+			endforeach()
+		endif()
 	endif()
 endfunction()
