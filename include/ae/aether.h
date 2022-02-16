@@ -328,7 +328,7 @@ inline float Clip01( float x );
 //------------------------------------------------------------------------------
 // Interpolation
 //------------------------------------------------------------------------------
-template< typename T > T Lerp( T start, T end, float t );
+template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
 template< typename T > T DtLerp( T value, float snappiness, float dt, T target );
@@ -1861,6 +1861,45 @@ public:
 	float m_rightAnalogThreshold = 0.05f;
 };
 
+/* Internal */ } extern "C" { void _ae_FileSystem_LoadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_LoadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
+//------------------------------------------------------------------------------
+// ae::AsyncFile class
+//! \brief Used to asynchronously load data from remote sources.
+//------------------------------------------------------------------------------
+class AsyncFile
+{
+public:
+	enum class Status
+	{
+		Success,
+		Pending,
+		NotFound,
+		Timeout,
+		Error
+	};
+
+	const char* GetUrl() const;
+	Status GetStatus() const;
+	//! Platform specific error code eg. 200, 404, etc. for http
+	uint32_t GetCode() const;
+	//! Null terminated for convenience
+	const void* GetData() const;
+	uint32_t GetLength() const;
+	float GetElapsedTime() const;
+
+private:
+	friend void ::_ae_FileSystem_LoadSuccess( void* arg, void* data, uint32_t length );
+	friend void ::_ae_FileSystem_LoadFail( void* arg, uint32_t code, bool timeout );
+	friend class FileSystem;
+	ae::Str256 m_url;
+	uint8_t* m_data = nullptr;
+	uint32_t m_length = 0;
+	Status m_status = Status::Pending;
+	uint32_t m_code = 0;
+	double m_startTime = 0.0;
+	double m_finishTime = 0.0;
+};
+
 //------------------------------------------------------------------------------
 // ae::FileFilter for ae::FileDialogParams
 //------------------------------------------------------------------------------
@@ -1896,6 +1935,7 @@ struct FileDialogParams
 class FileSystem
 {
 public:
+	~FileSystem();
 	//! Represents directories that the FileSystem class can load/save from.
 	enum class Root
 	{
@@ -1921,6 +1961,19 @@ public:
 	bool CreateFolder( Root root, const char* folderPath ) const;
 	void ShowFolder( Root root, const char* folderPath ) const;
 
+	//! Loads a file asynchronously. Returns an ae::AsyncFile object to be freed
+	//! later with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec
+	//! value will disable the timeout.
+	const AsyncFile* LoadAsyncFile( const char* url, float timeoutSec );
+	//! Destroys the given ae::AsyncFile object returned by ae::FileSystem::Load().
+	void Destroy( const AsyncFile* info );
+	//! Frees all existing ae::AsyncFile objects. It is not safe to access any
+	//! ae::AsyncFile objects returned earlier by ae::FileSystem::Load() after
+	//! calling this.
+	void DestroyAll();
+	const AsyncFile* GetAsyncFile( uint32_t idx ) const;
+	uint32_t GetAsyncFileCount() const;
+
 	// Static member functions intended to be used when not creating a  instance
 	static uint32_t GetSize( const char* filePath );
 	static uint32_t Read( const char* filePath, void* buffer, uint32_t bufferSize );
@@ -1945,6 +1998,7 @@ private:
 	void m_SetCacheDir( const char* organizationName, const char* applicationName );
 	void m_SetUserSharedDir( const char* organizationName );
 	void m_SetCacheSharedDir( const char* organizationName );
+	ae::Array< AsyncFile* > m_files = AE_ALLOC_TAG_FILE;
 	Str256 m_dataDir;
 	Str256 m_userDir;
 	Str256 m_cacheDir;
@@ -4224,8 +4278,8 @@ constexpr double MinValue< double >()
 	return -1 * std::numeric_limits< double >::infinity();
 }
 
-template< typename T >
-T Lerp( T start, T end, float t )
+template< typename T0, typename T1 >
+T0 Lerp( T0 start, T0 end, T1 t )
 {
 	return start + ( end - start ) * t;
 }
@@ -7228,6 +7282,9 @@ T* ae::Cast( C* obj )
 	typedef uint8_t _ae_sock_buff_t;
 	#define _ae_sock_poll poll
 	#define _ae_ioctl ioctl
+#endif
+#if !_AE_EMSCRIPTEN_
+#define EMSCRIPTEN_KEEPALIVE
 #endif
 
 //------------------------------------------------------------------------------
@@ -10924,6 +10981,39 @@ void Input::m_SetMousePos( ae::Int2 pos )
 }
 
 //------------------------------------------------------------------------------
+// ae::AsyncFile member functions
+//------------------------------------------------------------------------------
+const char* AsyncFile::GetUrl() const
+{
+	return m_url.c_str();
+}
+
+AsyncFile::Status AsyncFile::GetStatus() const
+{
+	return m_status;
+}
+
+uint32_t AsyncFile::GetCode() const
+{
+	return m_code;
+}
+
+const void* AsyncFile::GetData() const
+{
+	return m_data;
+}
+
+uint32_t AsyncFile::GetLength() const
+{
+	return m_length;
+}
+
+float AsyncFile::GetElapsedTime() const
+{
+	return m_finishTime ? ( m_finishTime - m_startTime ) : ( ae::GetTime() - m_startTime );
+}
+
+//------------------------------------------------------------------------------
 // ae::FileFilter member functions
 //------------------------------------------------------------------------------
 FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCount )
@@ -11017,6 +11107,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	}
 	return false;
 }
+void _ae_FileSystem_LoadImpl( const char* url, void* arg, uint32_t timeoutMs ) {}
 #elif _AE_WINDOWS_
 bool FileSystem_GetDir( KNOWNFOLDERID folderId, Str256* outDir )
 {
@@ -11049,6 +11140,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	// Something like C:\Users\someone\AppData\Local\Company\Game
 	return FileSystem_GetDir( FOLDERID_LocalAppData, outDir );
 }
+void _ae_FileSystem_LoadImpl( const char* url, void* arg, uint32_t timeoutMs ) {}
 #elif _AE_EMSCRIPTEN_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
@@ -11059,6 +11151,83 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	return false;
 }
 #endif
+
+} // namespace ae
+
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_LoadSuccess( void* arg, void* data, uint32_t length )
+{
+	ae::AsyncFile* info = (ae::AsyncFile*)arg;
+	info->m_finishTime = ae::GetTime();
+	info->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
+	memcpy( info->m_data, data, length );
+	info->m_data[ length ] = 0;
+	info->m_length = length;
+
+	info->m_status = ae::AsyncFile::Status::Success;
+	info->m_code = 200;
+}
+
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_LoadFail( void* arg, uint32_t code, bool timeout )
+{
+	ae::AsyncFile* info = (ae::AsyncFile*)arg;
+	info->m_finishTime = ae::GetTime();
+	info->m_code = code;
+	if ( timeout )
+	{
+		info->m_status = ae::AsyncFile::Status::Timeout;
+	}
+	else
+	{
+		switch ( code )
+		{
+			case 404:
+				info->m_status = ae::AsyncFile::Status::NotFound;
+				break;
+			default:
+				info->m_status = ae::AsyncFile::Status::Error;
+				break;
+		}
+	}
+}
+
+#if _AE_EMSCRIPTEN_
+EM_JS( void, _ae_FileSystem_LoadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
+{
+	var xhr = new XMLHttpRequest();
+	xhr.timeout = timeoutMs;
+	xhr.open('GET', UTF8ToString(url), true);
+	xhr.responseType = 'arraybuffer';
+	xhr.ontimeout = function xhr_ontimeout() {
+		__ae_FileSystem_LoadFail(arg, xhr.status, true);
+	};
+	xhr.onload = function xhr_onload() {
+		if (xhr.status == 200) {
+			if (xhr.response) {
+				var byteArray = new Uint8Array(xhr.response);
+				var buffer = _malloc(byteArray.length);
+				HEAPU8.set(byteArray, buffer);
+				__ae_FileSystem_LoadSuccess(arg, buffer, byteArray.length);
+				_free(buffer);
+			}
+			else {
+				__ae_FileSystem_LoadSuccess(arg, 0, 0); // Empty response but request succeeded
+			}
+			
+		}
+	};
+	xhr.onerror = function xhrError() {
+		__ae_FileSystem_LoadFail(arg, xhr.status, false);
+	};
+	xhr.send(null);
+} );
+#endif
+
+namespace ae {
+
+FileSystem::~FileSystem()
+{
+	AE_ASSERT_MSG( !m_files.Length(), "All files must be destroyed before destroying the loader" );
+}
 
 void FileSystem::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
@@ -11224,6 +11393,57 @@ void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 		fullName += folderPath;
 		ShowFolder( fullName.c_str() );
 	}
+}
+
+const AsyncFile* FileSystem::LoadAsyncFile( const char* url, float timeoutSec )
+{
+	double t = ae::GetTime();
+	AsyncFile* info = ae::New< AsyncFile >( AE_ALLOC_TAG_FILE );
+	info->m_url = url;
+	info->m_startTime = t;
+	uint32_t timeoutMs;
+	if ( timeoutSec <= 0.0f )
+	{
+		timeoutMs = 0.0f;
+	}
+	else
+	{
+		timeoutMs = timeoutSec * 1000.0f;
+		timeoutMs = ae::Max( 1u, timeoutMs ); // Prevent rounding down to infinite timeout
+	}
+	m_files.Append( info );
+	_ae_FileSystem_LoadImpl( url, info, timeoutMs );
+	return info;
+}
+
+void FileSystem::Destroy( const AsyncFile* info )
+{
+	if ( info )
+	{
+		m_files.Remove( m_files.Find( info ) );
+		ae::Free( info->m_data );
+		ae::Delete( info );
+	}
+}
+
+void FileSystem::DestroyAll()
+{
+	for ( auto info : m_files )
+	{
+		ae::Free( info->m_data );
+		ae::Delete( info );
+	}
+	m_files.Clear();
+}
+
+const AsyncFile* FileSystem::GetAsyncFile( uint32_t idx ) const
+{
+	return m_files[ idx ];
+}
+
+uint32_t FileSystem::GetAsyncFileCount() const
+{
+	return m_files.Length();
 }
 
 bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
@@ -12339,7 +12559,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
 		AE_ASSERT( buffer == (_ae_sock_buff_t*)m_recvData.End() - readSize );
 		
-		int result = recv( m_sock, buffer, readSize, 0 );
+		int32_t result = recv( m_sock, buffer, readSize, 0 );
 		if ( result < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) )
 		{
 			return false;
@@ -12351,9 +12571,9 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		}
 		else if ( result )
 		{
-			AE_ASSERT( result <= readSize );
+			AE_ASSERT( result <= (int32_t)readSize );
 			// ioctl with FIONREAD includes udp headers on some platforms so use actual read length here
-			if ( result < readSize )
+			if ( result < (int32_t)readSize )
 			{
 				totalSize -= ( readSize - result );
 				while ( m_recvData.Length() > totalSize ) { m_recvData.Remove( m_recvData.Length() - 1 ); } // @TODO: Should be single function call
@@ -18316,7 +18536,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	if ( m_arrayAdapter )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		if ( arrayIdx >= 0 && arrayIdx < m_arrayAdapter->GetLength( arr ) )
+		if ( arrayIdx >= 0 && arrayIdx < (int32_t)m_arrayAdapter->GetLength( arr ) )
 		{
 			varData = m_arrayAdapter->GetElement( arr, arrayIdx );
 		}
@@ -18748,7 +18968,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 	if ( m_arrayAdapter )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		if ( arrayIdx >= 0 && arrayIdx < m_arrayAdapter->GetLength( arr ) )
+		if ( arrayIdx >= 0 && arrayIdx < (int32_t)m_arrayAdapter->GetLength( arr ) )
 		{
 			varData = m_arrayAdapter->GetElement( arr, arrayIdx );
 		}
