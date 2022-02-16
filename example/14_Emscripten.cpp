@@ -56,59 +56,6 @@ Vertex kTriangleVerts[] = {
 
 uint16_t kTriangleIndices[] = { 0, 1, 2, 3, 1, 2 };
 
-typedef struct Texture
-{
-	// Image
-	char* url;
-	int w, h;
-
-	GLuint texture;
-	GLuint target;
-} Texture;
-
-#define MAX_TEXTURES 256
-static Texture textures[ MAX_TEXTURES ] = {};
-
-EM_JS( void, load_texture_from_url, ( GLuint texture, const char* url, int* outWidth, int* outHeight ),
-{
-	var img = new Image();
-    img.onload = function()
-	{
-      HEAPU32[outWidth>>2] = img.width;
-      HEAPU32[outHeight>>2] = img.height;
-      GLctx.bindTexture(GLctx.TEXTURE_2D, GL.textures[ texture ]);
-      GLctx.pixelStorei(GLctx.UNPACK_FLIP_Y_WEBGL, true);
-      GLctx.texImage2D(GLctx.TEXTURE_2D, 0, GLctx.RGBA, GLctx.RGBA, GLctx.UNSIGNED_BYTE, img);
-      GLctx.pixelStorei(GLctx.UNPACK_FLIP_Y_WEBGL, false);
-    };
-    img.src = UTF8ToString(url);
-} );
-
-static Texture* find_or_cache_url( const char* url )
-{
-	for ( int i = 0; i < MAX_TEXTURES; ++i ) // Naive O(n) lookup for tiny code size
-	{
-		if ( !strcmp( textures[ i ].url, url ) )
-		{
-			return textures + i;
-		}
-		else if ( !textures[ i ].url )
-		{
-			textures[ i ].url = strdup( url );
-			textures[ i ].target = GL_TEXTURE_2D;
-			glGenTextures( 1, &textures[ i ].texture );
-			glBindTexture( textures[ i ].target, textures[ i ].texture );
-			glTexParameteri( textures[ i ].target, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-			glTexParameteri( textures[ i ].target, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-			glTexParameteri( textures[ i ].target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-			glTexParameteri( textures[ i ].target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-			load_texture_from_url( textures[ i ].texture, url, &textures[ i ].w, &textures[ i ].h );
-			return textures + i;
-		}
-	}
-	return 0; // fail
-}
-
 //------------------------------------------------------------------------------
 // File forward declarations
 //------------------------------------------------------------------------------
@@ -160,11 +107,17 @@ private:
 class AsyncFileLoader
 {
 public:
+	~AsyncFileLoader();
 	//! Loads a file asynchronously. Returns a LoadFileInfo object to be freed
 	//! later with AsyncFileLoader::Destroy(). A zero or negative /p timeoutSec
 	//! value will disable the timeout.
 	const LoadFileInfo* Load( const char* url, float timeoutSec );
+	//! Destroys the given LoadFileInfo object returned by AsyncFileLoader::Load().
 	void Destroy( const LoadFileInfo* info );
+	//! Frees all existing LoadFileInfo objects. It is not safe to access any
+	//! LoadFileInfo objects returned earlier by AsyncFileLoader::Load() after
+	//! calling this.
+	void DestroyAll();
 
 	const LoadFileInfo* GetFile( uint32_t idx ) const;
 	uint32_t GetFileCount() const;
@@ -270,6 +223,11 @@ EM_JS( void, _AsyncFileLoader_LoadImpl, ( const char* url, void* arg, uint32_t t
 	xhr.send(null);
 } );
 
+AsyncFileLoader::~AsyncFileLoader()
+{
+	AE_ASSERT_MSG( !m_files.Length(), "All files must be destroyed before destroying the loader" );
+}
+
 const LoadFileInfo* AsyncFileLoader::Load( const char* url, float timeoutSec )
 {
 	double t = ae::GetTime();
@@ -286,6 +244,7 @@ const LoadFileInfo* AsyncFileLoader::Load( const char* url, float timeoutSec )
 		timeoutMs = timeoutSec * 1000.0f;
 		timeoutMs = ae::Max( 1u, timeoutMs ); // Prevent rounding down to infinite timeout
 	}
+	m_files.Append( info );
 	_AsyncFileLoader_LoadImpl( url, info, timeoutMs );
 	return info;
 }
@@ -294,9 +253,20 @@ void AsyncFileLoader::Destroy( const LoadFileInfo* info )
 {
 	if ( info )
 	{
+		m_files.Remove( m_files.Find( info ) );
 		ae::Free( info->m_data );
 		ae::Delete( info );
 	}
+}
+
+void AsyncFileLoader::DestroyAll()
+{
+	for ( auto info : m_files )
+	{
+		ae::Free( info->m_data );
+		ae::Delete( info );
+	}
+	m_files.Clear();
 }
 
 const LoadFileInfo* AsyncFileLoader::GetFile( uint32_t idx ) const
@@ -321,7 +291,9 @@ public:
 	ae::Texture2D m_texture;
 
 	AsyncFileLoader fileLoader;
-	const LoadFileInfo* m_info = nullptr;
+	const LoadFileInfo* m_moonFile = nullptr;
+	const LoadFileInfo* m_testFile = nullptr;
+	const LoadFileInfo* m_licenseFile = nullptr;
 
 	Game() : charPos( 0.0f ), charVel( 0.0f ), rotation( 0.0f ) {}
 
@@ -339,51 +311,61 @@ public:
 		vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
 		vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
 
-		uint8_t data = 255;
-		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
-		find_or_cache_url( "moon.png" );
+		uint8_t data[] = { 255, 255, 255 };
+		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
 
-		m_info = fileLoader.Load( "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/LICENSE", 2.1f );
+		m_moonFile = fileLoader.Load( "moon.tga", 2.5f );
+		m_testFile = fileLoader.Load( "test.txt", 2.5f );
+		m_licenseFile = fileLoader.Load( "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/LICENSE", 2.5f );
 	}
 
 	void Update( float dt )
 	{
-		static bool s_first = true;
-		Texture* tex = find_or_cache_url( "moon.png" );
-		if ( s_first && tex->w && tex->h )
+		if ( m_moonFile && m_moonFile->GetStatus() != LoadFileInfo::Status::Pending )
 		{
-			AE_INFO( "# w:# h:#", tex->url, tex->w, tex->h );
-			m_texture.m_texture = tex->texture;
-			m_texture.m_hasAlpha = true;
-			m_texture.m_width = tex->w;
-			m_texture.m_height = tex->h;
-			m_texture.m_target = tex->target;
-			s_first = false;
-		}
-
-		if ( m_info && m_info->GetStatus() != LoadFileInfo::Status::Pending )
-		{
-			AE_INFO( "finish time: #s", m_info->GetElapsedTime() );
-			switch ( m_info->GetStatus() )
+			if ( m_moonFile->GetStatus() == LoadFileInfo::Status::Success )
 			{
-				case LoadFileInfo::Status::Success:
-					AE_INFO( "Loaded file: '#' Length: # (#)", m_info->GetUrl(), m_info->GetLength(), m_info->GetCode() );
-					printf( "%s\n", (const char*)m_info->GetData() );
-					break;
-				case LoadFileInfo::Status::NotFound:
-					AE_ERR( "File not found: '#' (#)", m_info->GetUrl(), m_info->GetCode() );
-					break;
-				case LoadFileInfo::Status::Timeout:
-					AE_ERR( "File load timeout: '#' (#)", m_info->GetUrl(), m_info->GetCode() );
-					break;
-				default:
-					AE_ERR( "Error loading file: '#' (#)", m_info->GetUrl(), m_info->GetCode() );
-					break;
+				ae::TargaFile targa = TAG_ALL;
+				if ( targa.Load( (const uint8_t*)m_moonFile->GetData(), m_moonFile->GetLength() ) )
+				{
+					AE_INFO( "Loaded '#' (#x#)", m_moonFile->GetUrl(), targa.textureParams.width, targa.textureParams.height );
+					m_texture.Initialize( targa.textureParams );
+				}
 			}
-			fileLoader.Destroy( m_info );
-			m_info = nullptr;
+			fileLoader.Destroy( m_moonFile );
+			m_moonFile = nullptr;
 		}
 
+		const LoadFileInfo** files[] = { &m_moonFile, &m_testFile, &m_licenseFile };
+		for ( const LoadFileInfo** _file : files )
+		{
+			const LoadFileInfo*& file = *_file;
+			if ( file && file->GetStatus() != LoadFileInfo::Status::Pending )
+			{
+				switch ( file->GetStatus() )
+				{
+					case LoadFileInfo::Status::Success:
+						AE_INFO( "Loaded file: '#' Length: # (#) (#sec)", file->GetUrl(), file->GetLength(), file->GetCode(), file->GetElapsedTime() );
+						if ( strcmp( ae::FileSystem::GetFileExtFromPath( file->GetUrl() ), "tga" ) != 0 )
+						{
+							printf( "%s\n", (const char*)file->GetData() );
+						}
+						break;
+					case LoadFileInfo::Status::NotFound:
+						AE_ERR( "File not found: '#' (#) (#sec)", file->GetUrl(), file->GetCode(), file->GetElapsedTime() );
+						break;
+					case LoadFileInfo::Status::Timeout:
+						AE_ERR( "File load timeout: '#' (#) (#sec)", file->GetUrl(), file->GetCode(), file->GetElapsedTime() );
+						break;
+					default:
+						AE_ERR( "Error loading file: '#' (#) (#sec)", file->GetUrl(), file->GetCode(), file->GetElapsedTime() );
+						break;
+				}
+				fileLoader.Destroy( file );
+				file = nullptr;
+			}
+		}
+		
 		input.Pump();
 
 		float speed = 5.0f;
@@ -445,6 +427,3 @@ int main()
 	game->Initialize();
 	emscripten_request_animation_frame_loop( &draw_frame, game );
 }
-
-#define AE_MAIN
-#include "ae/aether.h"
