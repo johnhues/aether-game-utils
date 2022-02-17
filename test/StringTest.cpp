@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aeString.h"
+#include "ae/aether.h"
 #include "catch2/catch.hpp"
 
 #if _AE_WINDOWS_
@@ -37,13 +37,13 @@
 //------------------------------------------------------------------------------
 TEST_CASE( "string construction should set length correctly", "[aeString]" )
 {
-  REQUIRE( ( aeStr16().Length() == 0 ) );
-  REQUIRE( ( aeStr16( "abc" ).Length() == 3 ) );
+  REQUIRE( ( ae::Str16().Length() == 0 ) );
+  REQUIRE( ( ae::Str16( "abc" ).Length() == 3 ) );
 
   char str[ 32 ] = {};
-  memset( str, 'q', aeStr16::MaxLength() );
-  const uint32_t maxLength = aeStr16::MaxLength();
-  REQUIRE( aeStr16( str ).Length() == maxLength );
+  memset( str, 'q', ae::Str16::MaxLength() );
+  const uint32_t maxLength = ae::Str16::MaxLength();
+  REQUIRE( ae::Str16( str ).Length() == maxLength );
 }
 
 TEST_CASE( "strings of the same length can be compared alphabetically", "[aeString]" )
