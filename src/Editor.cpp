@@ -881,6 +881,7 @@ bool Editor::Write() const
 
 bool Editor::Read( const char* path )
 {
+	// @TODO: ae::Editor should be able to load levels using an instance of ae::FileSystem
 	uint32_t fileSize = ae::FileSystem::GetSize( path );
 	if ( !fileSize )
 	{

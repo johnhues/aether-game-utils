@@ -82,8 +82,9 @@ public:
 		uint8_t data[] = { 255, 255, 255 };
 		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
 
-		m_moonFile = fileSystem.LoadAsyncFile( "moon.tga", 2.5f );
-		m_testFile = fileSystem.LoadAsyncFile( "test.txt", 2.5f );
+		fileSystem.Initialize( "data", "ae", "emscripten" );
+		m_moonFile = fileSystem.LoadAsyncFile( ae::FileSystem::Root::Data, "moon.tga", 2.5f );
+		m_testFile = fileSystem.LoadAsyncFile( ae::FileSystem::Root::Data, "test.txt", 2.5f );
 		m_licenseFile = fileSystem.LoadAsyncFile( "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/LICENSE", 2.5f );
 	}
 

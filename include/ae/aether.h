@@ -1961,6 +1961,7 @@ public:
 	bool CreateFolder( Root root, const char* folderPath ) const;
 	void ShowFolder( Root root, const char* folderPath ) const;
 
+	const AsyncFile* LoadAsyncFile( Root root, const char* url, float timeoutSec );
 	//! Loads a file asynchronously. Returns an ae::AsyncFile object to be freed
 	//! later with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec
 	//! value will disable the timeout.
@@ -11395,12 +11396,33 @@ void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 	}
 }
 
+const AsyncFile* FileSystem::LoadAsyncFile( Root root, const char* url, float timeoutSec )
+{
+	Str256 fullName;
+	if ( GetRootDir( root, &fullName ) )
+	{
+		fullName += url;
+		return LoadAsyncFile( fullName.c_str(), timeoutSec );
+	}
+	else
+	{
+		double t = ae::GetTime();
+		AsyncFile* asyncFile = ae::New< AsyncFile >( AE_ALLOC_TAG_FILE );
+		asyncFile->m_url = url;
+		asyncFile->m_startTime = t;
+		asyncFile->m_finishTime = t;
+		asyncFile->m_status = AsyncFile::Status::Error;
+		m_files.Append( asyncFile );
+		return asyncFile;
+	}
+}
+
 const AsyncFile* FileSystem::LoadAsyncFile( const char* url, float timeoutSec )
 {
 	double t = ae::GetTime();
-	AsyncFile* info = ae::New< AsyncFile >( AE_ALLOC_TAG_FILE );
-	info->m_url = url;
-	info->m_startTime = t;
+	AsyncFile* asyncFile = ae::New< AsyncFile >( AE_ALLOC_TAG_FILE );
+	asyncFile->m_url = url;
+	asyncFile->m_startTime = t;
 	uint32_t timeoutMs;
 	if ( timeoutSec <= 0.0f )
 	{
@@ -11411,27 +11433,27 @@ const AsyncFile* FileSystem::LoadAsyncFile( const char* url, float timeoutSec )
 		timeoutMs = timeoutSec * 1000.0f;
 		timeoutMs = ae::Max( 1u, timeoutMs ); // Prevent rounding down to infinite timeout
 	}
-	m_files.Append( info );
-	_ae_FileSystem_LoadImpl( url, info, timeoutMs );
-	return info;
+	m_files.Append( asyncFile );
+	_ae_FileSystem_LoadImpl( url, asyncFile, timeoutMs );
+	return asyncFile;
 }
 
-void FileSystem::Destroy( const AsyncFile* info )
+void FileSystem::Destroy( const AsyncFile* asyncFile )
 {
-	if ( info )
+	if ( asyncFile )
 	{
-		m_files.Remove( m_files.Find( info ) );
-		ae::Free( info->m_data );
-		ae::Delete( info );
+		m_files.Remove( m_files.Find( asyncFile ) );
+		ae::Free( asyncFile->m_data );
+		ae::Delete( asyncFile );
 	}
 }
 
 void FileSystem::DestroyAll()
 {
-	for ( auto info : m_files )
+	for ( auto asyncFile : m_files )
 	{
-		ae::Free( info->m_data );
-		ae::Delete( info );
+		ae::Free( asyncFile->m_data );
+		ae::Delete( asyncFile );
 	}
 	m_files.Clear();
 }

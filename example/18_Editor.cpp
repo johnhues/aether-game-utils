@@ -253,8 +253,17 @@ void Game::Initialize( int argc, char* argv[] )
 	avatarShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
 	LoadTarga( "character.tga", &fs, &spacesuitTex );
 	
-	editor.Read( "example.level" );
-	registry.Load( &editor );
+	ae::Str256 levelPath;
+	if ( fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
+	{
+		ae::FileSystem::AppendToPath( &levelPath, "example.level" );
+		bool success = editor.Read( levelPath.c_str() );
+		success = success ? registry.Load( &editor ) : false;
+		if ( !success )
+		{
+			AE_WARN( "Editor could not find level file '#'", levelPath );
+		}
+	}
 }
 
 void Game::Run()

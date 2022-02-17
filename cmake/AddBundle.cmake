@@ -26,7 +26,6 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 
 	if(WIN32)
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
-			VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" # Set the working directory while debugging in visual studio to the location of this targets CMakeLists.txt
 			LINK_FLAGS "/ENTRY:mainCRTStartup" # Use main instead of WinMain
 		)
 	elseif(APPLE)
@@ -111,12 +110,16 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
 			SUFFIX ".html"
 		)
-		
-		if(EMSCRIPTEN)
-			foreach(resource ${_AE_RESOURCES})
-				message("Adding resource ${resource}")
-				file(COPY "${resource}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
-			endforeach()
-		endif()
 	endif()
+	
+	if(NOT APPLE)
+		foreach(resource ${_AE_RESOURCES})
+			add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					${CMAKE_CURRENT_SOURCE_DIR}/${resource}
+					$<TARGET_FILE_DIR:${_AE_EXECUTABLE_NAME}>/${resource}
+			)
+		endforeach()
+	endif()
+	
 endfunction()
