@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "MetaTest.h"
-#include "ae/aeMeta.h"
 
 // @NOTE: This is file exists for two reasons:
 // 1) To make sure that no aeMeta utilities  produce duplicate symbol errors.

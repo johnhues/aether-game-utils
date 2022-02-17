@@ -3539,6 +3539,7 @@ public: // Internal
 	
 //------------------------------------------------------------------------------
 // ae::Var class
+//! Information about a member variable registered with AE_REGISTER_CLASS_VAR().
 //------------------------------------------------------------------------------
 class Var
 {
@@ -3565,50 +3566,101 @@ public:
 	class Serializer
 	{
 	public:
-		virtual ~Serializer() {}
+		virtual ~Serializer();
 		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
 		//! Return false when mapping should fail so SetObjectValueFromString() will not overwrite existing value.
 		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
 	};
 	static void SetSerializer( const ae::Var::Serializer* serializer );
 
+	//------------------------------------------------------------------------------
 	// Info
+	//------------------------------------------------------------------------------
 	const char* GetName() const;
 	Var::Type GetType() const;
 	const char* GetTypeName() const;
 	uint32_t GetOffset() const;
 	uint32_t GetSize() const;
 	
-	// Value
+	//------------------------------------------------------------------------------
+	// Get and set value functions
+	//------------------------------------------------------------------------------
+	//! Get the value of this variable from the given \p obj. If the type of this
+	//! variable is a reference then ae::SetSerializer() must be called in
+	//! advance, otherwise this function will assert.
+	//! @param obj The object to get the value from.
+	//! @param arrayIdx Must be negative for non-array types. For array types this
+	//! specifies which array element to return. Must be a valid array index,
+	//! less than ae::Var::GetGetArrayLength().
+	//! @return Returns a string representation of the value of this variable
+	//! from the given \p obj.
 	std::string GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
+
+	//! Set the value of this variable on the given \p obj. If the type of this
+	//! variable is a reference then ae::SetSerializer() must be called in
+	//! advance, otherwise this function will assert.
+	//! @param obj The object to set the value on.
+	//! @param value A string representation of the value to set.
+	//! @param arrayIdx Must be negative for non-array types. For array types this
+	//! specifies which array element to set. Must be a valid array index, less
+	//! than ae::Var::GetGetArrayLength().
+	//! @return True if \p obj was modified, and false otherwise. Reference
+	//! types fail to be set if the value does not represent null or a valid
+	//! reference to an existing object of the correct type.
 	bool SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx = -1 ) const;
+
+	//! Get the value of this variable from the given \p obj. If the type of this
+	//! variable is a reference then ae::SetSerializer() must be called in
+	//! advance, otherwise this function will assert.
+	//! @tparam T The type of the value to return.
+	//! @param obj The object to get the value from.
+	//! @param valueOut A pointer to the value to set. Will only be set if the
+	//! type matches this variable's type.
+	//! @param arrayIdx Must be negative for non-array types. For array types this
+	//! specifies which array element to return. Must be a valid array index,
+	//! less than ae::Var::GetGetArrayLength().
+	//! @return Returns true if \p valueOut was set, and false otherwise.
+	template < typename T > bool GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
+
+	//! Set the value of this variable on the given \p obj. If the type of this
+	//! variable is a reference then ae::SetSerializer() must be called in
+	//! advance, otherwise this function will assert.
+	//! @tparam T The type of the value to set.
+	//! @param obj The object to set the value on.
+	//! @param value The value to set.
+	//! @param arrayIdx Must be negative for non-array types. For array types this
+	//! specifies which array element to set. Must be a valid array index, less
+	//! than ae::Var::GetGetArrayLength().
+	//! @return True if \p obj was modified, and false otherwise. Reference
+	//! types fail to be set if the value does not represent null or a valid
+	//! reference to an existing object of the correct type.
 	template < typename T > bool SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx = -1 ) const;
-	template < typename T > bool GetObjectValue( ae::Object* obj, T* value, int32_t arrayIdx = -1 ) const;
 	
+	//------------------------------------------------------------------------------
 	// Types
+	//------------------------------------------------------------------------------
 	const class Enum* GetEnum() const;
 	//! For Ref and Array types
 	const ae::Type* GetSubType() const;
 	bool IsArray() const;
-	
-	// Array
 	bool IsArrayFixedLength() const;
 	//! Returns new length of array.
 	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
 	uint32_t GetArrayLength( const ae::Object* obj ) const;
-	uint32_t GetArraySize() const;
+	uint32_t GetArrayMaxLength() const;
 
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
 	static const Serializer* s_serializer;
+	static bool s_serializerInitialized;
 	const ae::Type* m_owner = nullptr;
 	ae::Str32 m_name = "";
 	Var::Type m_type;
 	ae::Str32 m_typeName = "";
 	uint32_t m_offset = 0;
 	uint32_t m_size = 0;
-	ae::TypeId m_subTypeId = ae::kInvalidTypeId; // @TODO: Need to use an id here in case type has not been registered yet
+	ae::TypeId m_subTypeId = ae::kInvalidTypeId;
 	mutable const class Enum* m_enum = nullptr;
 	class ArrayAdapter
 	{
@@ -3620,7 +3672,7 @@ public:
 		//! Current array length
 		virtual uint32_t GetLength( const void* a ) const = 0;
 		//! Return uint max for no hard limit
-		virtual uint32_t GetSize() const = 0;
+		virtual uint32_t GetMaxLength() const = 0;
 		virtual uint32_t IsFixedLength() const = 0;
 	};
 	const ArrayAdapter* m_arrayAdapter = nullptr;
@@ -6862,7 +6914,7 @@ public:
 		return a.Length();
 	}
 	uint32_t GetLength( const void* a ) const override { return ((Arr*)a)->Length(); }
-	uint32_t GetSize() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
+	uint32_t GetMaxLength() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
 	uint32_t IsFixedLength() const override { return false; }
 
 	typedef ae::Array< T, N > Arr;
@@ -6889,7 +6941,7 @@ public:
 	const void* GetElement( const void* a, uint32_t idx ) const override { return &((T*)a)[ idx ]; }
 	uint32_t Resize( void* a, uint32_t length ) const override { return N; }
 	uint32_t GetLength( const void* a ) const override { return N; }
-	uint32_t GetSize() const override { return N; }
+	uint32_t GetMaxLength() const override { return N; }
 	uint32_t IsFixedLength() const override { return true; }
 };
 
@@ -7078,7 +7130,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 }
 
 template < typename T >
-bool ae::Var::GetObjectValue( ae::Object* obj, T* value, int32_t arrayIdx ) const
+bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) const
 {
 	if ( !obj )
 	{
@@ -7109,7 +7161,7 @@ bool ae::Var::GetObjectValue( ae::Object* obj, T* value, int32_t arrayIdx ) cons
 	}
 	AE_ASSERT( varData );
 	
-	*value = *(const T*)varData;
+	*valueOut = *(const T*)varData;
 	return true;
 }
 
@@ -18286,9 +18338,22 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 }
 
 const ae::Var::Serializer* ae::Var::s_serializer = nullptr;
+bool ae::Var::s_serializerInitialized = false;
+
+ae::Var::Serializer::~Serializer()
+{
+	if ( s_serializer == this )
+	{
+		s_serializer = nullptr;
+	}
+}
 
 void ae::Var::SetSerializer( const ae::Var::Serializer* serializer )
 {
+	if ( serializer )
+	{
+		s_serializerInitialized = true;
+	}
 	s_serializer = serializer;
 }
 
@@ -18512,19 +18577,19 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		case Var::Ref:
 		{
 			const ae::Type* refType = GetSubType();
-			AE_ASSERT_MSG( s_serializer, "Must provide mapping function with ae::Var::SetSerializer() for reference types when calling SetObjectValueFromString" );
-			
+			AE_ASSERT_MSG( s_serializerInitialized, "Must provide mapping function with ae::Var::SetSerializer() for reference types when calling SetObjectValueFromString" );
+			AE_ASSERT_MSG( s_serializer, "ae::Var::Serializer was set, but has been destroyed" );
+
 			class ae::Object* obj = nullptr;
 			if ( s_serializer->StringToObjectPointer( value, &obj ) )
 			{
 				if ( obj )
 				{
-					// If user function returns success on conversion but the type is wrong then write null to var
 					const ae::Type* objType = ae::GetTypeFromObject( obj );
 					AE_ASSERT( objType );
 					if ( !objType->IsType( refType ) )
 					{
-						obj = nullptr;
+						return false;
 					}
 				}
 				class ae::Object** varPtr = reinterpret_cast< class ae::Object** >( varData );
@@ -18663,10 +18728,10 @@ uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 	return m_arrayAdapter->GetLength( arr );
 }
 
-uint32_t ae::Var::GetArraySize() const
+uint32_t ae::Var::GetArrayMaxLength() const
 {
 	AE_ASSERT( IsArray() );
-	return m_arrayAdapter->GetSize();
+	return m_arrayAdapter->GetMaxLength();
 }
 
 //------------------------------------------------------------------------------
@@ -18746,22 +18811,20 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 	if ( m_arrayAdapter )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		if ( arrayIdx >= 0 && arrayIdx < m_arrayAdapter->GetLength( arr ) )
+		int32_t arrayLength = (int32_t)m_arrayAdapter->GetLength( arr );
+		if ( arrayIdx >= 0 && arrayIdx < arrayLength )
 		{
 			varData = m_arrayAdapter->GetElement( arr, arrayIdx );
 		}
 		else
 		{
-			return "";
+			AE_FAIL_MSG( "Array index '#' out of bounds (length: #).", arrayIdx, arrayLength );
 		}
-	}
-	else if ( arrayIdx < 0 )
-	{
-		varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
 	}
 	else
 	{
-		return "";
+		AE_ASSERT_MSG( arrayIdx < 0, "Can't index into non-array type, 'arrayIdx' must be negative (default value)." );
+		varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
 	}
 	AE_ASSERT( varData );
 	

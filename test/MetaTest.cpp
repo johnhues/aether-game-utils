@@ -92,7 +92,7 @@ TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" 
 {
   SomeClass c;
   const ae::Type* type = ae::GetTypeFromObject( &c );
-  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
   
   c.enumTest = TestEnumClass::Five;
   REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Five" );
@@ -114,7 +114,7 @@ TEST_CASE( "can't read invalid enum values from object using meta definition", "
 {
   SomeClass c;
   const ae::Type* type = ae::GetTypeFromObject( &c );
-  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
   
   c.enumTest = (TestEnumClass)6;
   REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "" );
@@ -124,7 +124,7 @@ TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 {
   SomeClass c;
   const ae::Type* type = ae::GetTypeFromObject( &c );
-  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
   
   REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Five" ) );
   REQUIRE( c.enumTest == TestEnumClass::Five );
@@ -161,7 +161,7 @@ TEST_CASE( "can't set invalid enum values on object using meta definition", "[ae
 {
   SomeClass c;
   const ae::Type* type = ae::GetTypeFromObject( &c );
-  const ae::Var* enumTestVar = type->GetVarByName( "enumTest" );
+  const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
   
   c.enumTest = TestEnumClass::Four;
   REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "Six" ) );
@@ -287,44 +287,47 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 {
   const ae::Type* typeA = ae::GetType< RefTesterA >();
   REQUIRE( typeA );
-  const ae::Var* typeA_notRef = typeA->GetVarByName( "notRef" );
-  const ae::Var* typeA_varA = typeA->GetVarByName( "refA" );
-  const ae::Var* typeA_varB = typeA->GetVarByName( "refB" );
+  const ae::Var* typeA_notRef = typeA->GetVarByName( "notRef", false );
+  const ae::Var* typeA_varA = typeA->GetVarByName( "refA", false );
+  const ae::Var* typeA_varB = typeA->GetVarByName( "refB", false );
   REQUIRE( typeA_notRef );
   REQUIRE( typeA_varA );
   REQUIRE( typeA_varB );
   
   const ae::Type* typeB = ae::GetType< RefTesterB >();
   REQUIRE( typeB );
-  const ae::Var* typeB_varA = typeB->GetVarByName( "refA" );
+  const ae::Var* typeB_varA = typeB->GetVarByName( "refA", false );
   REQUIRE( typeB_varA );
   
-  REQUIRE( !typeA_notRef->GetRefType() );
-  REQUIRE( typeA_varA->GetRefType() == typeA );
-  REQUIRE( typeA_varB->GetRefType() == typeB );
-  REQUIRE( typeB_varA->GetRefType() == typeA );
+  REQUIRE( !typeA_notRef->GetSubType() );
+  REQUIRE( typeA_varA->GetSubType() == typeA );
+  REQUIRE( typeA_varB->GetSubType() == typeB );
+  REQUIRE( typeB_varA->GetSubType() == typeA );
   
-  RefTesterManager manager;
-  auto refStrToValFn = [&]( const ae::Type* type, const char* str, ae::Object** objOut )
+  class RefSerializer : public ae::Var::Serializer
   {
-    uint32_t id = 0;
-    if ( RefTester::StringToId( str, &id ) )
+  public:
+    RefSerializer( RefTesterManager* manager ) : m_manager( manager ) {}
+    std::string ObjectPointerToString( const ae::Object* obj ) const override
     {
-      RefTester* object = manager.GetObjectById( id );
-      const ae::Type* objType = ae::GetTypeFromObject( object );
-      if ( objType && !objType->IsType( type ) )
-      {
-        return false;
-      }
-      *objOut = object;
-      return true;
+      return RefTester::GetIdString( ae::Cast< RefTester >( obj ) );
     }
-    return false;
+		bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const override
+    {
+      uint32_t id = 0;
+      if ( RefTester::StringToId( pointerVal, &id ) )
+      {
+        *objOut = m_manager->GetObjectById( id );
+        return true;
+      }
+      return false;
+    }
+  private:
+    RefTesterManager* m_manager;
   };
-  auto refValToStrFn = []( const ae::Object* o )
-  {
-    return RefTester::GetIdString( ae::Cast< RefTester >( o ) );
-  };
+  RefTesterManager manager;
+  RefSerializer refSerializer = &manager;
+  ae::Var::SetSerializer( &refSerializer );
   
   RefTesterA* testerA1 = manager.Create< RefTesterA >();
   RefTesterA* testerA2 = manager.Create< RefTesterA >();
@@ -346,12 +349,12 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( testerA2->refA == nullptr );
   REQUIRE( testerA2->refB == nullptr );
   REQUIRE( testerB3->refA == nullptr );
-  REQUIRE( typeA_varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "0" );
-  REQUIRE( typeA_varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
-  REQUIRE( typeB_varA->GetObjectValueAsString( testerB3, refValToStrFn ) == "0" );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA1 ) == "0" );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA2 ) == "0" );
+  REQUIRE( typeB_varA->GetObjectValueAsString( testerB3 ) == "0" );
   
   // Set type A's ref to type A
-  REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "2", refStrToValFn ) );
+  REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "2" ) );
   REQUIRE( testerA1->notRef == 0xfdfdfdfd );
   REQUIRE( testerA1->refA == testerA2 );
   REQUIRE( testerA1->refB == nullptr );
@@ -361,7 +364,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( testerB3->refA == nullptr );
   
   // Set type B's ref to type A
-  REQUIRE( typeB_varA->SetObjectValueFromString( testerB3, "2", refStrToValFn ) );
+  REQUIRE( typeB_varA->SetObjectValueFromString( testerB3, "2" ) );
   REQUIRE( testerA1->notRef == 0xfdfdfdfd );
   REQUIRE( testerA1->refA == testerA2 );
   REQUIRE( testerA1->refB == nullptr );
@@ -370,12 +373,12 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( testerA2->refB == nullptr );
   REQUIRE( testerB3->refA == testerA2 );
   
-  REQUIRE( typeA_varA->GetObjectValueAsString( testerA1, refValToStrFn ) == "2" );
-  REQUIRE( typeA_varA->GetObjectValueAsString( testerA2, refValToStrFn ) == "0" );
-  REQUIRE( typeB_varA->GetObjectValueAsString( testerB3, refValToStrFn ) == "2" );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA1 ) == "2" );
+  REQUIRE( typeA_varA->GetObjectValueAsString( testerA2 ) == "0" );
+  REQUIRE( typeB_varA->GetObjectValueAsString( testerB3 ) == "2" );
   
   // Set type A's ref B to type B
-  REQUIRE( typeA_varB->SetObjectValueFromString( testerA2, "3", refStrToValFn ) );
+  REQUIRE( typeA_varB->SetObjectValueFromString( testerA2, "3" ) );
   REQUIRE( testerA1->notRef == 0xfdfdfdfd );
   REQUIRE( testerA1->refA == testerA2 );
   REQUIRE( testerA1->refB == nullptr );
@@ -385,7 +388,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( testerB3->refA == testerA2 );
   
   // Setting type A ref A to type B should do nothing
-  REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "3", refStrToValFn ) );
+  REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "3" ) );
   REQUIRE( testerA1->notRef == 0xfdfdfdfd );
   REQUIRE( testerA1->refA == testerA2 );
   REQUIRE( testerA1->refB == nullptr );
@@ -395,7 +398,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( testerB3->refA == testerA2 );
   
   // Setting ref from random string value does nothing
-  REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "qwerty", refStrToValFn ) );
+  REQUIRE( !typeA_varA->SetObjectValueFromString( testerA1, "qwerty" ) );
   REQUIRE( testerA1->notRef == 0xfdfdfdfd );
   REQUIRE( testerA1->refA == testerA2 );
   REQUIRE( testerA1->refB == nullptr );
@@ -405,7 +408,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
   REQUIRE( testerB3->refA == testerA2 );
   
   // Setting ref to null value succeeds and clears ref
-  REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "0", refStrToValFn ) );
+  REQUIRE( typeA_varA->SetObjectValueFromString( testerA1, "0" ) );
   REQUIRE( testerA1->notRef == 0xfdfdfdfd );
   REQUIRE( testerA1->refA == nullptr );
   REQUIRE( testerA1->refB == nullptr );
