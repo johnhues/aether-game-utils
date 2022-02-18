@@ -11114,6 +11114,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	}
 	return false;
 }
+void _ae_FileSystem_LoadImpl( const char* url, void* arg, uint32_t timeoutMs ) {}
 #elif _AE_LINUX_
 const char* FileSystem_GetHomeDir()
 {
@@ -14709,12 +14710,14 @@ void Texture2D::Initialize( const TextureParams& params )
 		// upload the first mipmap
 		glTexSubImage2D( GetTarget(), 0, 0,0, params.width, params.height, glFormat, glType, params.data );
 
+#if !_AE_EMSCRIPTEN_
 		// autogen only works for uncompressed textures
 		// Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
 		if ( numberOfMipmaps > 1 && params.autoGenerateMipmaps )
 		{
 			glGenerateMipmap( GetTarget() );
 		}
+#endif
 	}
 	
 	AE_CHECK_GL_ERROR();
