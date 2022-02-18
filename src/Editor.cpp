@@ -2203,7 +2203,7 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 		ImGui::EndChild();
 		if ( !var->IsArrayFixedLength() )
 		{
-			bool arrayMaxLength = ( var->GetArrayLength( component ) >= var->GetArraySize() );
+			bool arrayMaxLength = ( var->GetArrayLength( component ) >= var->GetArrayMaxLength() );
 			if ( arrayMaxLength )
 			{
 				ImGui::PushItemFlag( ImGuiItemFlags_Disabled, true );
