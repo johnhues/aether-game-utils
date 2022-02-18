@@ -96,8 +96,8 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 				"-frtti"
 				"-fsanitize=undefined"
 				"-g" # Debug
-				# "-gsource-map" # Debug mode with mappings to c/c++ source files
-				# "--source-map-base http://localhost:8000/embuild/example/"
+				"-gsource-map" # Debug mode with mappings to c/c++ source files
+				"--source-map-base http://localhost:8000/embuild/example/"
 			)
 		else()
 			list(APPEND _AE_EM_LINKER_FLAGS
@@ -112,7 +112,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		)
 	endif()
 	
-	if(NOT APPLE)
+	if(NOT XCODE)
 		foreach(resource ${_AE_RESOURCES})
 			add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
 				COMMAND ${CMAKE_COMMAND} -E copy_if_different

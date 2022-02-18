@@ -246,18 +246,16 @@ add_bundle("File Dialogs"
 )
 
 # Emscripten
-if(EMSCRIPTEN)
-	add_bundle("Emscripten"
-		"14_emscripten"
-		"ae.14_emscripten"
-		"0.0.0"
-		"Icon"
-		"14_Emscripten.cpp;${AE_CORE_SOURCES}"
-		"data/moon.tga;data/test.txt"
-		""
-		"${CMAKE_SOURCE_DIR}/include"
-	)
-endif()
+add_bundle("Emscripten"
+	"14_emscripten"
+	"ae.14_emscripten"
+	"0.0.0"
+	"Icon"
+	"14_Emscripten.cpp;${AE_CORE_SOURCES}"
+	"data/moon.tga;data/test.txt"
+	""
+	"${CMAKE_SOURCE_DIR}/include"
+)
 
 # OBJViewer
 add_bundle("OBJViewer"

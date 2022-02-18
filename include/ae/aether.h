@@ -11114,7 +11114,6 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	}
 	return false;
 }
-void _ae_FileSystem_LoadImpl( const char* url, void* arg, uint32_t timeoutMs ) {}
 #elif _AE_LINUX_
 const char* FileSystem_GetHomeDir()
 {
@@ -11161,7 +11160,6 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	}
 	return false;
 }
-void _ae_FileSystem_LoadImpl( const char* url, void* arg, uint32_t timeoutMs ) {}
 #elif _AE_WINDOWS_
 bool FileSystem_GetDir( KNOWNFOLDERID folderId, Str256* outDir )
 {
@@ -11194,7 +11192,6 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	// Something like C:\Users\someone\AppData\Local\Company\Game
 	return FileSystem_GetDir( FOLDERID_LocalAppData, outDir );
 }
-void _ae_FileSystem_LoadImpl( const char* url, void* arg, uint32_t timeoutMs ) {}
 #elif _AE_EMSCRIPTEN_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
@@ -11487,7 +11484,23 @@ const AsyncFile* FileSystem::LoadAsyncFile( const char* url, float timeoutSec )
 		timeoutMs = ae::Max( 1u, timeoutMs ); // Prevent rounding down to infinite timeout
 	}
 	m_files.Append( asyncFile );
+#if _AE_EMSCRIPTEN_
 	_ae_FileSystem_LoadImpl( url, asyncFile, timeoutMs );
+#else
+	if ( uint32_t length = GetSize( url ) )
+	{
+		asyncFile->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
+		Read( url, asyncFile->m_data, length );
+		asyncFile->m_data[ length ] = 0;
+		asyncFile->m_length = length;
+		asyncFile->m_status = ae::AsyncFile::Status::Success;
+	}
+	else
+	{
+		asyncFile->m_status = AsyncFile::Status::Error;
+	}
+	asyncFile->m_finishTime = ae::GetTime();
+#endif
 	return asyncFile;
 }
 

@@ -68,7 +68,7 @@ public:
 	void Initialize()
 	{
 		printf( "Initialize\n" );
-		window.Initialize( 0, 0, "WebGL Demo", true );
+		window.Initialize( 1280, 720, "WebGL Demo", true );
 		gfx.Initialize( &window );
 		input.Initialize( &window );
 		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
@@ -78,6 +78,7 @@ public:
 		vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( Vertex, uv ) );
 		vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
 		vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
 
 		uint8_t data[] = { 255, 255, 255 };
 		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
@@ -88,8 +89,18 @@ public:
 		m_licenseFile = fileSystem.LoadAsyncFile( "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/LICENSE", 2.5f );
 	}
 
-	void Update( float dt )
+	bool Tick()
 	{
+		Update();
+		Render();
+		timeStep.Wait();
+		return !input.quit;
+	}
+
+	void Update()
+	{
+		const float dt = timeStep.GetDt();
+		
 		if ( m_moonFile && m_moonFile->GetStatus() != ae::AsyncFile::Status::Pending )
 		{
 			if ( m_moonFile->GetStatus() == ae::AsyncFile::Status::Success )
@@ -154,7 +165,7 @@ public:
 		rotation += dt;
 	}
 
-	void Render( float dt )
+	void Render()
 	{
 		gfx.Activate();
 		gfx.Clear( ae::Color::Black() );
@@ -175,24 +186,17 @@ public:
 	ae::Input input;
 	ae::Shader shader;
 	ae::VertexData vertexData;
+	ae::TimeStep timeStep;
 };
-
-EM_BOOL draw_frame( double t, void* userData )
-{
-	static double prevT = t;
-	float dt = ( t - prevT ) * 0.001f;
-	prevT = t;
-
-	Game* game = (Game*)userData;
-	game->Update( dt );
-	game->Render( dt );
-
-	return EM_TRUE;
-}
 
 int main()
 {
 	Game* game = ae::New< Game >( "game" );
 	game->Initialize();
-	emscripten_request_animation_frame_loop( &draw_frame, game );
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* game ) { ((Game*)game)->Tick(); }, game, 0, 1 );
+#else
+	while ( game->Tick() ) {}
+#endif
+	ae::Delete( game );
 }
