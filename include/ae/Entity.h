@@ -174,7 +174,10 @@ T* Registry::AddComponent( Entity entity )
 	}
 	components->Set( entity, component );
 	
-	m_onCreate( component );
+	if ( m_onCreate )
+	{
+		m_onCreate( component );
+	}
 	return (T*)component;
 }
 
