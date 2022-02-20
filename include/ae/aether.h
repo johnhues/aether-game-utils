@@ -1861,7 +1861,7 @@ public:
 	float m_rightAnalogThreshold = 0.05f;
 };
 
-/* Internal */ } extern "C" { void _ae_FileSystem_LoadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_LoadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
+/* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
 //------------------------------------------------------------------------------
 // ae::AsyncFile class
 //! \brief Used to asynchronously load data from remote sources.
@@ -1888,8 +1888,8 @@ public:
 	float GetElapsedTime() const;
 
 private:
-	friend void ::_ae_FileSystem_LoadSuccess( void* arg, void* data, uint32_t length );
-	friend void ::_ae_FileSystem_LoadFail( void* arg, uint32_t code, bool timeout );
+	friend void ::_ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length );
+	friend void ::_ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout );
 	friend class FileSystem;
 	ae::Str256 m_url;
 	uint8_t* m_data = nullptr;
@@ -1953,19 +1953,19 @@ public:
 	//! folders for Root::User and Root::Cache.
 	void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
 
-	// Member functions for use of Root directories
-	bool GetRootDir( Root root, Str256* outDir ) const;
-	uint32_t GetSize( Root root, const char* filePath ) const;
-	uint32_t Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
-	uint32_t Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
-	bool CreateFolder( Root root, const char* folderPath ) const;
-	void ShowFolder( Root root, const char* folderPath ) const;
-
-	const AsyncFile* LoadAsyncFile( Root root, const char* url, float timeoutSec );
-	//! Loads a file asynchronously. Returns an ae::AsyncFile object to be freed
+	// Asynchronous file loading
+	//! Loads a file asynchronously from disk or from the network (@TODO: currently
+	//! only in emscripten builds). <b>Prefer this function over all other
+	//! ae::FileSystem::Read...() methods as it will work the most consistently
+	//! on all platforms.</b> Returns an ae::AsyncFile object to be freed later
+	//! with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec value
+	//! will disable the timeout.
+	const AsyncFile* ReadAsync( Root root, const char* url, float timeoutSec );
+	//! Loads a file asynchronously from disk or from the network (@TODO: currently
+	//! only in emscripten builds). Returns an ae::AsyncFile object to be freed
 	//! later with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec
 	//! value will disable the timeout.
-	const AsyncFile* LoadAsyncFile( const char* url, float timeoutSec );
+	const AsyncFile* ReadAsync( const char* url, float timeoutSec );
 	//! Destroys the given ae::AsyncFile object returned by ae::FileSystem::Load().
 	void Destroy( const AsyncFile* info );
 	//! Frees all existing ae::AsyncFile objects. It is not safe to access any
@@ -1974,6 +1974,14 @@ public:
 	void DestroyAll();
 	const AsyncFile* GetAsyncFile( uint32_t idx ) const;
 	uint32_t GetAsyncFileCount() const;
+
+	// Member functions for use of Root directories
+	bool GetRootDir( Root root, Str256* outDir ) const;
+	uint32_t GetSize( Root root, const char* filePath ) const;
+	uint32_t Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
+	uint32_t Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
+	bool CreateFolder( Root root, const char* folderPath ) const;
+	void ShowFolder( Root root, const char* folderPath ) const;
 
 	// Static member functions intended to be used when not creating a  instance
 	static uint32_t GetSize( const char* filePath );
@@ -1990,8 +1998,8 @@ public:
 	static void AppendToPath( Str256* path, const char* str );
 
 	// File dialogs
-	ae::Array< std::string > OpenDialog( const FileDialogParams& params );
-	std::string SaveDialog( const FileDialogParams& params );
+	static ae::Array< std::string > OpenDialog( const FileDialogParams& params );
+	static std::string SaveDialog( const FileDialogParams& params );
 
 private:
 	void m_SetDataDir( const char* dataDir );
@@ -11205,7 +11213,7 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 
 } // namespace ae
 
-extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_LoadSuccess( void* arg, void* data, uint32_t length )
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length )
 {
 	ae::AsyncFile* info = (ae::AsyncFile*)arg;
 	info->m_finishTime = ae::GetTime();
@@ -11218,7 +11226,7 @@ extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_LoadSuccess( void* arg, void
 	info->m_code = 200;
 }
 
-extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_LoadFail( void* arg, uint32_t code, bool timeout )
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout )
 {
 	ae::AsyncFile* info = (ae::AsyncFile*)arg;
 	info->m_finishTime = ae::GetTime();
@@ -11242,14 +11250,14 @@ extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_LoadFail( void* arg, uint32_
 }
 
 #if _AE_EMSCRIPTEN_
-EM_JS( void, _ae_FileSystem_LoadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
+EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
 {
 	var xhr = new XMLHttpRequest();
 	xhr.timeout = timeoutMs;
 	xhr.open('GET', UTF8ToString(url), true);
 	xhr.responseType = 'arraybuffer';
 	xhr.ontimeout = function xhr_ontimeout() {
-		__ae_FileSystem_LoadFail(arg, xhr.status, true);
+		__ae_FileSystem_ReadFail(arg, xhr.status, true);
 	};
 	xhr.onload = function xhr_onload() {
 		if (xhr.status == 200) {
@@ -11257,17 +11265,17 @@ EM_JS( void, _ae_FileSystem_LoadImpl, ( const char* url, void* arg, uint32_t tim
 				var byteArray = new Uint8Array(xhr.response);
 				var buffer = _malloc(byteArray.length);
 				HEAPU8.set(byteArray, buffer);
-				__ae_FileSystem_LoadSuccess(arg, buffer, byteArray.length);
+				__ae_FileSystem_ReadSuccess(arg, buffer, byteArray.length);
 				_free(buffer);
 			}
 			else {
-				__ae_FileSystem_LoadSuccess(arg, 0, 0); // Empty response but request succeeded
+				__ae_FileSystem_ReadSuccess(arg, 0, 0); // Empty response but request succeeded
 			}
 			
 		}
 	};
 	xhr.onerror = function xhrError() {
-		__ae_FileSystem_LoadFail(arg, xhr.status, false);
+		__ae_FileSystem_ReadFail(arg, xhr.status, false);
 	};
 	xhr.send(null);
 } );
@@ -11446,13 +11454,13 @@ void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 	}
 }
 
-const AsyncFile* FileSystem::LoadAsyncFile( Root root, const char* url, float timeoutSec )
+const AsyncFile* FileSystem::ReadAsync( Root root, const char* url, float timeoutSec )
 {
 	Str256 fullName;
 	if ( GetRootDir( root, &fullName ) )
 	{
 		fullName += url;
-		return LoadAsyncFile( fullName.c_str(), timeoutSec );
+		return ReadAsync( fullName.c_str(), timeoutSec );
 	}
 	else
 	{
@@ -11467,7 +11475,7 @@ const AsyncFile* FileSystem::LoadAsyncFile( Root root, const char* url, float ti
 	}
 }
 
-const AsyncFile* FileSystem::LoadAsyncFile( const char* url, float timeoutSec )
+const AsyncFile* FileSystem::ReadAsync( const char* url, float timeoutSec )
 {
 	double t = ae::GetTime();
 	AsyncFile* asyncFile = ae::New< AsyncFile >( AE_ALLOC_TAG_FILE );
@@ -11485,7 +11493,7 @@ const AsyncFile* FileSystem::LoadAsyncFile( const char* url, float timeoutSec )
 	}
 	m_files.Append( asyncFile );
 #if _AE_EMSCRIPTEN_
-	_ae_FileSystem_LoadImpl( url, asyncFile, timeoutMs );
+	_ae_FileSystem_ReadImpl( url, asyncFile, timeoutMs );
 #else
 	if ( uint32_t length = GetSize( url ) )
 	{
