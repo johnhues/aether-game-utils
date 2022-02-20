@@ -77,7 +77,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			"-s GL_TRACK_ERRORS=0" # Reduce WebGL code size: WebGL bindings layer should not keep track of certain WebGL errors that are only meaningful for C/C++ applications. (good to enable for release when glGetError() is not used, but disable in debug)
 			"-s GL_SUPPORT_SIMPLE_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: do not emit code for extensions that we might not need.
 			"-s SUPPORT_ERRNO=0" # Reduce code size: We do not need libc errno field support in our build output.
-			"-s FILESYSTEM=0" # Reduce code size: We do not need native POSIX filesystem emulation support (Emscripten FS/MEMFS)
+			# "-s FILESYSTEM=0" # Reduce code size: We do not need native POSIX filesystem emulation support (Emscripten FS/MEMFS) @TODO: Filesystem is required for sockets
 			# Choose the oldest browser versions that should be supported. The higher minimum bar you choose, the less emulation code may be present for old browser quirks.
 			"-s MIN_FIREFOX_VERSION=70"
 			"-s MIN_SAFARI_VERSION=130000"
