@@ -52,4 +52,5 @@ else()
 endif()
 
 # Directory for external dependencies
+# @TODO: Remove and use _deps
 set(AE_THIRDPARTY_DIR ${CMAKE_CURRENT_BINARY_DIR}/thirdparty)

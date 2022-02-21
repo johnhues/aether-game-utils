@@ -11103,8 +11103,10 @@ bool FileSystem::IsAbsolutePath( const char* path )
 #if _AE_EMSCRIPTEN_
 	// @TODO: Should check if url has a scheme or something
 	return false;
-#else
+#elif _AE_WINDOWS_
 	return std::filesystem::path( path ).is_absolute();
+#else
+	return path[ 0 ] == '/' || path[ 0 ] == '~';
 #endif
 }
 
@@ -11219,6 +11221,13 @@ bool FileSystem_GetUserDir( Str256* outDir )
 bool FileSystem_GetCacheDir( Str256* outDir )
 {
 	return false;
+}
+void _ae_GetCurrentWorkingDir( Str256* outDir )
+{
+	char url[ 256 ];
+	url[ 0 ] = 0;
+	EM_ASM( { stringToUTF8(window.location.href, $0, 256) }, url );
+	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
 }
 #endif
 
@@ -11832,7 +11841,9 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		return "";
 	}
 #elif _AE_EMSCRIPTEN_
-	return filePath;
+	ae::Str256 result;
+	_ae_GetCurrentWorkingDir( &result );
+	return result;
 #else
 	#warning "ae::FileSystem::GetAbsolutePath() not implemeneted. ae::FileSystem functionality will be limited."
 	return filePath;

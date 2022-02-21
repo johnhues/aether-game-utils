@@ -695,7 +695,9 @@ Editor::Editor( const ae::Tag& tag ) :
 
 Editor::~Editor()
 {
+#if !_AE_EMSCRIPTEN_
 	m_sock.Disconnect();
+#endif
 }
 
 void Editor::Initialize( const EditorParams& params )
@@ -984,10 +986,12 @@ void Editor::m_Read()
 
 void Editor::m_Connect()
 {
+#if !_AE_EMSCRIPTEN_
 	if ( m_params.port && !m_sock.IsConnected() )
 	{
 		m_sock.Connect( ae::Socket::Protocol::TCP, "localhost", m_params.port );
 	}
+#endif
 }
 
 //------------------------------------------------------------------------------
