@@ -99,7 +99,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 				"-fsanitize=undefined"
 				"-g" # Debug
 				"-gsource-map" # Debug mode with mappings to c/c++ source files
-				"--source-map-base http://localhost:8000/embuild/example/"
+				"--source-map-base http://localhost:8000/embuild/"
 			)
 		else()
 			list(APPEND _AE_EM_LINKER_FLAGS
