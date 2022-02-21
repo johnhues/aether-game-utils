@@ -1883,7 +1883,7 @@ public:
 	//! Platform specific error code eg. 200, 404, etc. for http
 	uint32_t GetCode() const;
 	//! Null terminated for convenience
-	const void* GetData() const;
+	const uint8_t* GetData() const;
 	uint32_t GetLength() const;
 	float GetElapsedTime() const;
 
@@ -2325,8 +2325,8 @@ public:
 	// Initialization
 	VertexData() = default;
 	~VertexData();
-	void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage );
-	void AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset );
+	void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::VertexData::Primitive primitive, ae::VertexData::Usage vertexUsage, ae::VertexData::Usage indexUsage );
+	void AddAttribute( const char *name, uint32_t componentCount, ae::VertexData::Type type, uint32_t offset );
 	void Terminate();
 	
 	//! Sets current vertex data. Equivalent to calling Clear() then Append().
@@ -2506,7 +2506,7 @@ class Texture2D : public Texture
 {
 public:
 	void Initialize( const TextureParams& params );
-	void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps );
+	void Initialize( const void* data, uint32_t width, uint32_t height, ae::Texture::Format format, ae::Texture::Type type, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps );
 	void Terminate() override;
 
 	uint32_t GetWidth() const { return m_width; }
@@ -2772,42 +2772,6 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::OBJFile class
-//------------------------------------------------------------------------------
-class OBJFile
-{
-public:
-	struct Vertex
-	{
-		ae::Vec4 position;
-		ae::Vec2 texture;
-		ae::Vec4 normal;
-		ae::Vec4 color;
-	};
-	
-	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
-	bool Load( const uint8_t* data, uint32_t length );
-	
-	ae::Tag allocTag;
-	ae::Array< Vertex > vertices;
-	ae::Array< uint32_t > indices;
-};
-
-//------------------------------------------------------------------------------
-// ae::TargaFile class
-//------------------------------------------------------------------------------
-class TargaFile
-{
-public:
-	TargaFile( ae::Tag allocTag ) : m_data( allocTag ) {}
-	bool Load( const uint8_t* data, uint32_t length );
-	
-	ae::TextureParams textureParams;
-private:
-	ae::Array< uint8_t > m_data;
-};
-
-//------------------------------------------------------------------------------
 // ae::CollisionMesh class
 //------------------------------------------------------------------------------
 class CollisionMesh
@@ -2898,21 +2862,6 @@ private:
 	ae::Array< ae::Vec3 > m_vertices;
 	ae::Array< BVHTri > m_tris;
 	ae::Array< TriangleBVH > m_bvh;
-};
-
-//------------------------------------------------------------------------------
-// ae::AudioData class
-//------------------------------------------------------------------------------
-class AudioData
-{
-public:
-	AudioData();
-	void Initialize( const char* filePath );
-	void Terminate();
-
-	ae::Str64 name;
-	uint32_t buffer;
-	float length;
 };
 
 //------------------------------------------------------------------------------
@@ -3012,6 +2961,72 @@ public:
 private:
 	Skeleton m_bindPose;
 	ae::Array< Vertex > m_verts;
+};
+
+//------------------------------------------------------------------------------
+// ae::OBJFile class
+//------------------------------------------------------------------------------
+class OBJFile
+{
+public:
+	struct Vertex
+	{
+		ae::Vec4 position;
+		ae::Vec2 texture;
+		ae::Vec4 normal;
+		ae::Vec4 color;
+	};
+	
+	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
+	bool Load( const uint8_t* data, uint32_t length );
+	
+	//! Helper struct to load OBJ files directly into an ae::VertexData
+	struct VertexDataParams
+	{
+		ae::VertexData* vertexData = nullptr;
+		//ae::Matrix4 localToWorld; // @TODO: implement
+		const char* posAttrib = "a_position";
+		const char* normalAttrib = "a_normal";
+		const char* colorAttrib = "a_color";
+		const char* uvAttrib = "a_uv";
+	};
+	//! Helper function to load OBJ files directly into an ae::VertexData
+	void InitializeVertexData( const ae::OBJFile::VertexDataParams& params );
+	//! Helper function to load OBJ files directly into an ae::CollisionMesh
+	void InitializeCollisionMesh( ae::CollisionMesh* mesh, const ae::Matrix4& localToWorld );
+	
+	ae::Tag allocTag;
+	ae::Array< ae::OBJFile::Vertex > vertices;
+	ae::Array< uint32_t > indices;
+};
+
+//------------------------------------------------------------------------------
+// ae::TargaFile class
+//------------------------------------------------------------------------------
+class TargaFile
+{
+public:
+	TargaFile( ae::Tag allocTag ) : m_data( allocTag ) {}
+	bool Load( const uint8_t* data, uint32_t length );
+	
+	ae::TextureParams textureParams;
+private:
+	ae::Array< uint8_t > m_data;
+};
+
+//------------------------------------------------------------------------------
+// ae::AudioData class
+//------------------------------------------------------------------------------
+class AudioData
+{
+public:
+	AudioData();
+	void Initialize( const char* filePath );
+	void Terminate();
+
+	ae::Str64 name;
+	uint32_t buffer;
+	float length;
 };
 
 //------------------------------------------------------------------------------
@@ -11060,7 +11075,7 @@ uint32_t AsyncFile::GetCode() const
 	return m_code;
 }
 
-const void* AsyncFile::GetData() const
+const uint8_t* AsyncFile::GetData() const
 {
 	return m_data;
 }
@@ -16214,277 +16229,6 @@ void DebugCamera::m_Precalculate()
 }
 
 //------------------------------------------------------------------------------
-// ae::OBJFile member functions
-//------------------------------------------------------------------------------
-bool OBJFile::Load( const uint8_t* _data, uint32_t length )
-{
-	enum class Mode
-	{
-		None,
-		Comment,
-		Vertex,
-		Texture,
-		Normal,
-		Face
-	};
-	struct FaceIndex
-	{
-		int position = -1;
-		int texture = -1;
-		int normal = -1;
-	};
-	ae::Array< ae::Vec4 > positions = allocTag;
-	ae::Array< ae::Vec2 > uvs = allocTag;
-	ae::Array< ae::Vec4 > normals = allocTag;
-	ae::Array< FaceIndex > faceIndices = allocTag;
-	ae::Array< uint8_t > faces = allocTag;
-	
-	ae::Str256 currentLine;
-	const char* data = (const char*)_data;
-	const char* dataEnd = (const char*)_data + length;
-	while ( data < dataEnd )
-	{
-		uint32_t lineLen = 0;
-		while ( data[ lineLen ] && data[ lineLen ] != '\n' && data[ lineLen ] != '\r' && ( data + lineLen < dataEnd ) )
-		{
-			lineLen++;
-		}
-		currentLine = ae::Str256( lineLen, data );
-		data += lineLen;
-		while ( data[ 0 ] == '\n' || data[ 0 ] == '\r' )
-		{
-			data++;
-		}
-
-		char* line = (char*)currentLine.c_str(); // strtof() takes a non-const string but does not modify it
-		Mode mode = Mode::None;
-		switch ( line[ 0 ] )
-		{
-			case '#':
-				mode = Mode::Comment;
-				break;
-			case 'v':
-				switch ( line[ 1 ] )
-				{
-					case ' ':
-						mode = Mode::Vertex;
-						break;
-					case 't':
-						mode = Mode::Texture;
-						line++;
-						break;
-					case 'n':
-						mode = Mode::Normal;
-						line++;
-						break;
-				}
-				break;
-			case 'f':
-				mode = Mode::Face;
-				break;
-			// Ignore bad chars
-		}
-		line++;
-		if ( line[ 0 ] != ' ' )
-		{
-			// Unknown line tag
-			mode = Mode::None;
-		}
-		
-		switch ( mode )
-		{
-			case Mode::Vertex:
-			{
-				ae::Vec4 p;
-				p.x = strtof( line, &line );
-				p.y = strtof( line, &line );
-				p.z = strtof( line, &line );
-				p.w = 1.0f;
-				// @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
-				positions.Append( p );
-				break;
-			}
-			case Mode::Texture:
-			{
-				ae::Vec2 uv;
-				uv.x = strtof( line, &line );
-				uv.y = strtof( line, &line );
-				uvs.Append( uv );
-				break;
-			}
-			case Mode::Normal:
-			{
-				ae::Vec4 n;
-				n.x = strtof( line, &line );
-				n.y = strtof( line, &line );
-				n.z = strtof( line, &line );
-				n.w = 0.0f;
-				normals.Append( n.SafeNormalizeCopy() );
-				break;
-			}
-			case Mode::Face:
-			{
-				uint32_t faceVertexCount = 0;
-				while ( line[ 0 ] )
-				{
-					FaceIndex faceIndex;
-					faceIndex.position = strtoul( line, &line, 10 ) - 1;
-					if ( line[ 0 ] == '/' )
-					{
-						line++;
-						if ( line[ 0 ] != '/' )
-						{
-							faceIndex.texture = strtoul( line, &line, 10 ) - 1;
-						}
-					}
-					if ( line[ 0 ] == '/' )
-					{
-						line++;
-						faceIndex.normal = strtoul( line, &line, 10 ) - 1;
-					}
-					if ( faceIndex.position < 0 )
-					{
-						break;
-					}
-					
-					faceIndices.Append( faceIndex );
-					faceVertexCount++;
-
-					while ( isspace( line[ 0 ] ) )
-					{
-						line++;
-					}
-				}
-				faces.Append( faceVertexCount );
-				break;
-			}
-			default:
-				// Ignore line
-				break;
-		}
-	}
-
-	if ( !positions.Length() || !faceIndices.Length() )
-	{
-		return false;
-	}
-
-	vertices.Clear();
-	indices.Clear();
-	// @TODO: Reserve vertices and indices
-	
-	FaceIndex* currentFaceIdx = &faceIndices[ 0 ];
-	ae::Map< ae::Int3, uint32_t > vertexMap = allocTag;
-	for ( uint8_t f : faces )
-	{
-		if ( f <= 2 ) { continue; } // Invalid face
-		
-		// Triangulate faces
-		uint32_t triCount = ( f - 2 );
-		for ( uint32_t i = 0; i < triCount; i++ )
-		{
-			FaceIndex tri[ 3 ];
-			tri[ 0 ] = currentFaceIdx[ 0 ];
-			tri[ 1 ] = currentFaceIdx[ i + 1 ];
-			tri[ 2 ] = currentFaceIdx[ i + 2 ];
-			for ( uint32_t j = 0; j < 3; j++ )
-			{
-				int posIdx = tri[ j ].position;
-				int uvIdx = tri[ j ].texture;
-				int normIdx = tri[ j ].normal;
-				ae::Int3 key( posIdx, uvIdx, normIdx );
-				uint32_t* existingIndex = vertexMap.TryGet( key );
-				if ( existingIndex )
-				{
-					indices.Append( *existingIndex );
-				}
-				else
-				{
-					Vertex vertex;
-					vertex.position = positions[ posIdx ];
-					vertex.texture = ( uvIdx >= 0 ? uvs[ uvIdx ] : ae::Vec2( 0.0f ) );
-					vertex.normal = ( normIdx >= 0 ? normals[ normIdx ] : ae::Vec4( 0.0f ) );
-					vertex.color = ae::Vec4( 1.0f, 1.0f );
-					vertexMap.Set( key, vertices.Length() );
-					indices.Append( vertices.Length() );
-					vertices.Append( vertex );
-				}
-			}
-		}
-		
-		currentFaceIdx += f;
-	}
-	
-	return true;
-}
-
-//------------------------------------------------------------------------------
-// ae::TargaFile member functions
-//------------------------------------------------------------------------------
-bool TargaFile::Load( const uint8_t* data, uint32_t length )
-{
-	m_data.Clear();
-	if ( !length )
-	{
-		return false;
-	}
-
-	AE_PACK( struct TargaHeader
-	{
-		uint8_t idLength;
-		uint8_t colorMapType;
-		uint8_t imageType;
-
-		uint16_t colorMapOrigin;
-		uint16_t colorMapLength;
-		uint8_t colorMapDepth;
-
-		uint16_t xOrigin;
-		uint16_t yOrigin;
-		uint16_t width;
-		uint16_t height;
-
-		uint8_t bitsPerPixel;
-		uint8_t imageDescriptor;
-	} );
-
-	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
-	TargaHeader header;
-	stream.SerializeRaw( header );
-	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type is not supported" );
-	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
-	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
-	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
-	AE_ASSERT_MSG( header.bitsPerPixel != 32 || header.imageDescriptor == 8, "Alpha mode not supported" );
-
-	stream.Discard( header.idLength );
-	stream.Discard( header.colorMapLength );
-
-	const uint8_t* pixels = stream.GetData() + stream.GetOffset();
-	uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
-	AE_ASSERT( stream.GetRemaining() >= dataLength );
-	m_data.Append( pixels, dataLength );
-	textureParams.data = m_data.Begin();
-	textureParams.width = header.width;
-	textureParams.height = header.height;
-	if ( header.bitsPerPixel == 24 )
-	{
-		textureParams.format = ae::Texture::Format::RGB8_SRGB;
-	}
-	else if ( header.bitsPerPixel == 24 )
-	{
-		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
-	}
-	else
-	{
-		textureParams.format = ae::Texture::Format::R8;
-	}
-	textureParams.bgrData = true;
-
-	return true;
-}
-
-//------------------------------------------------------------------------------
 // ae::CollisionMesh member functions
 //------------------------------------------------------------------------------
 CollisionMesh::CollisionMesh( ae::Tag tag ) :
@@ -17247,6 +16991,316 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* norma
 		n[ 1 ] = normal.y;
 		n[ 2 ] = normal.z;
 	}
+}
+
+//------------------------------------------------------------------------------
+// ae::OBJFile member functions
+//------------------------------------------------------------------------------
+bool OBJFile::Load( const uint8_t* _data, uint32_t length )
+{
+	enum class Mode
+	{
+		None,
+		Comment,
+		Vertex,
+		Texture,
+		Normal,
+		Face
+	};
+	struct FaceIndex
+	{
+		int position = -1;
+		int texture = -1;
+		int normal = -1;
+	};
+	ae::Array< ae::Vec4 > positions = allocTag;
+	ae::Array< ae::Vec2 > uvs = allocTag;
+	ae::Array< ae::Vec4 > normals = allocTag;
+	ae::Array< FaceIndex > faceIndices = allocTag;
+	ae::Array< uint8_t > faces = allocTag;
+	
+	ae::Str256 currentLine;
+	const char* data = (const char*)_data;
+	const char* dataEnd = (const char*)_data + length;
+	while ( data < dataEnd )
+	{
+		uint32_t lineLen = 0;
+		while ( data[ lineLen ] && data[ lineLen ] != '\n' && data[ lineLen ] != '\r' && ( data + lineLen < dataEnd ) )
+		{
+			lineLen++;
+		}
+		currentLine = ae::Str256( lineLen, data );
+		data += lineLen;
+		while ( data[ 0 ] == '\n' || data[ 0 ] == '\r' )
+		{
+			data++;
+		}
+
+		char* line = (char*)currentLine.c_str(); // strtof() takes a non-const string but does not modify it
+		Mode mode = Mode::None;
+		switch ( line[ 0 ] )
+		{
+			case '#':
+				mode = Mode::Comment;
+				break;
+			case 'v':
+				switch ( line[ 1 ] )
+				{
+					case ' ':
+						mode = Mode::Vertex;
+						break;
+					case 't':
+						mode = Mode::Texture;
+						line++;
+						break;
+					case 'n':
+						mode = Mode::Normal;
+						line++;
+						break;
+				}
+				break;
+			case 'f':
+				mode = Mode::Face;
+				break;
+			// Ignore bad chars
+		}
+		line++;
+		if ( line[ 0 ] != ' ' )
+		{
+			// Unknown line tag
+			mode = Mode::None;
+		}
+		
+		switch ( mode )
+		{
+			case Mode::Vertex:
+			{
+				ae::Vec4 p;
+				p.x = strtof( line, &line );
+				p.y = strtof( line, &line );
+				p.z = strtof( line, &line );
+				p.w = 1.0f;
+				// @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
+				positions.Append( p );
+				break;
+			}
+			case Mode::Texture:
+			{
+				ae::Vec2 uv;
+				uv.x = strtof( line, &line );
+				uv.y = strtof( line, &line );
+				uvs.Append( uv );
+				break;
+			}
+			case Mode::Normal:
+			{
+				ae::Vec4 n;
+				n.x = strtof( line, &line );
+				n.y = strtof( line, &line );
+				n.z = strtof( line, &line );
+				n.w = 0.0f;
+				normals.Append( n.SafeNormalizeCopy() );
+				break;
+			}
+			case Mode::Face:
+			{
+				uint32_t faceVertexCount = 0;
+				while ( line[ 0 ] )
+				{
+					FaceIndex faceIndex;
+					faceIndex.position = strtoul( line, &line, 10 ) - 1;
+					if ( line[ 0 ] == '/' )
+					{
+						line++;
+						if ( line[ 0 ] != '/' )
+						{
+							faceIndex.texture = strtoul( line, &line, 10 ) - 1;
+						}
+					}
+					if ( line[ 0 ] == '/' )
+					{
+						line++;
+						faceIndex.normal = strtoul( line, &line, 10 ) - 1;
+					}
+					if ( faceIndex.position < 0 )
+					{
+						break;
+					}
+					
+					faceIndices.Append( faceIndex );
+					faceVertexCount++;
+
+					while ( isspace( line[ 0 ] ) )
+					{
+						line++;
+					}
+				}
+				faces.Append( faceVertexCount );
+				break;
+			}
+			default:
+				// Ignore line
+				break;
+		}
+	}
+
+	if ( !positions.Length() || !faceIndices.Length() )
+	{
+		return false;
+	}
+
+	vertices.Clear();
+	indices.Clear();
+	// @TODO: Reserve vertices and indices
+	
+	FaceIndex* currentFaceIdx = &faceIndices[ 0 ];
+	ae::Map< ae::Int3, uint32_t > vertexMap = allocTag;
+	for ( uint8_t f : faces )
+	{
+		if ( f <= 2 ) { continue; } // Invalid face
+		
+		// Triangulate faces
+		uint32_t triCount = ( f - 2 );
+		for ( uint32_t i = 0; i < triCount; i++ )
+		{
+			FaceIndex tri[ 3 ];
+			tri[ 0 ] = currentFaceIdx[ 0 ];
+			tri[ 1 ] = currentFaceIdx[ i + 1 ];
+			tri[ 2 ] = currentFaceIdx[ i + 2 ];
+			for ( uint32_t j = 0; j < 3; j++ )
+			{
+				int posIdx = tri[ j ].position;
+				int uvIdx = tri[ j ].texture;
+				int normIdx = tri[ j ].normal;
+				ae::Int3 key( posIdx, uvIdx, normIdx );
+				uint32_t* existingIndex = vertexMap.TryGet( key );
+				if ( existingIndex )
+				{
+					indices.Append( *existingIndex );
+				}
+				else
+				{
+					Vertex vertex;
+					vertex.position = positions[ posIdx ];
+					vertex.texture = ( uvIdx >= 0 ? uvs[ uvIdx ] : ae::Vec2( 0.0f ) );
+					vertex.normal = ( normIdx >= 0 ? normals[ normIdx ] : ae::Vec4( 0.0f ) );
+					vertex.color = ae::Vec4( 1.0f, 1.0f );
+					vertexMap.Set( key, vertices.Length() );
+					indices.Append( vertices.Length() );
+					vertices.Append( vertex );
+				}
+			}
+		}
+		
+		currentFaceIdx += f;
+	}
+	
+	return true;
+}
+
+void OBJFile::InitializeVertexData( const ae::OBJFile::VertexDataParams& params )
+{
+	if ( !params.vertexData )
+	{
+		return;
+	}
+
+	params.vertexData->Initialize(
+		sizeof(*vertices.Begin()), sizeof(*indices.Begin()),
+		vertices.Length(), indices.Length(),
+		VertexData::Primitive::Triangle,
+		VertexData::Usage::Static, VertexData::Usage::Static );
+	params.vertexData->AddAttribute( params.posAttrib, 3, VertexData::Type::Float, offsetof( Vertex, position ) );
+	params.vertexData->AddAttribute( params.uvAttrib, 2, VertexData::Type::Float, offsetof( Vertex, texture ) );
+	params.vertexData->AddAttribute( params.normalAttrib, 4, VertexData::Type::Float, offsetof( Vertex, normal ) );
+	params.vertexData->AddAttribute( params.colorAttrib, 4, VertexData::Type::Float, offsetof( Vertex, color ) );
+	params.vertexData->SetVertices( vertices.Begin(), vertices.Length() );
+	params.vertexData->SetIndices( indices.Begin(), indices.Length() );
+}
+
+void OBJFile::InitializeCollisionMesh( ae::CollisionMesh* mesh, const ae::Matrix4& localToWorld )
+{
+	if ( !mesh )
+	{
+		return;
+	}
+	
+	ae::CollisionMesh::Params params;
+	params.transform = localToWorld;
+	params.positions = vertices.Begin()->position.data;
+	params.indices = indices.Begin();
+	params.positionCount = vertices.Length();
+	params.positionStride = sizeof( Vertex );
+	params.indexSize = sizeof( uint32_t );
+	params.indexCount = indices.Length();
+	mesh->Clear();
+	mesh->Load( params );
+}
+
+//------------------------------------------------------------------------------
+// ae::TargaFile member functions
+//------------------------------------------------------------------------------
+bool TargaFile::Load( const uint8_t* data, uint32_t length )
+{
+	m_data.Clear();
+	if ( !length )
+	{
+		return false;
+	}
+
+	AE_PACK( struct TargaHeader
+	{
+		uint8_t idLength;
+		uint8_t colorMapType;
+		uint8_t imageType;
+
+		uint16_t colorMapOrigin;
+		uint16_t colorMapLength;
+		uint8_t colorMapDepth;
+
+		uint16_t xOrigin;
+		uint16_t yOrigin;
+		uint16_t width;
+		uint16_t height;
+
+		uint8_t bitsPerPixel;
+		uint8_t imageDescriptor;
+	} );
+
+	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
+	TargaHeader header;
+	stream.SerializeRaw( header );
+	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type is not supported" );
+	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
+	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
+	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
+	AE_ASSERT_MSG( header.bitsPerPixel != 32 || header.imageDescriptor == 8, "Alpha mode not supported" );
+
+	stream.Discard( header.idLength );
+	stream.Discard( header.colorMapLength );
+
+	const uint8_t* pixels = stream.GetData() + stream.GetOffset();
+	uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
+	AE_ASSERT( stream.GetRemaining() >= dataLength );
+	m_data.Append( pixels, dataLength );
+	textureParams.data = m_data.Begin();
+	textureParams.width = header.width;
+	textureParams.height = header.height;
+	if ( header.bitsPerPixel == 24 )
+	{
+		textureParams.format = ae::Texture::Format::RGB8_SRGB;
+	}
+	else if ( header.bitsPerPixel == 24 )
+	{
+		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
+	}
+	else
+	{
+		textureParams.format = ae::Texture::Format::R8;
+	}
+	textureParams.bgrData = true;
+
+	return true;
 }
 
 //------------------------------------------------------------------------------
