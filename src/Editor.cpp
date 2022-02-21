@@ -762,6 +762,8 @@ void Editor::Launch()
 
 void Editor::Update()
 {
+	m_Read();
+
 	if ( m_params.port == 0 )
 	{
 		return;
@@ -801,8 +803,6 @@ void Editor::Update()
 				break;
 		}
 	}
-
-	m_Read();
 }
 
 bool Editor::Write() const
@@ -980,6 +980,7 @@ void Editor::m_Read()
 		}
 	}
 	
+	AE_INFO( "Read level '#'", m_asyncFile->GetUrl() );
 	m_level.filePath = m_asyncFile->GetUrl();
 	m_levelSeq++;
 }
