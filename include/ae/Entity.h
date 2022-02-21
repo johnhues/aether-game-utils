@@ -18,6 +18,7 @@ namespace ae {
 //------------------------------------------------------------------------------
 typedef uint32_t Entity;
 const Entity kInvalidEntity = 0;
+class EditorLevel;
 
 //------------------------------------------------------------------------------
 // Component
@@ -60,7 +61,7 @@ public:
 	Entity CreateEntity( Entity entity, const char* name = "" );
 	Component* AddComponent( Entity entity, const char* typeName );
 	template < typename T > T* AddComponent( Entity entity );
-	bool Load( const class Editor* editor, CreateObjectFn fn = nullptr );
+	bool Load( const ae::EditorLevel* level, CreateObjectFn fn = nullptr );
 	
 	// Get reference
 	Component& GetComponent( Entity entity, const char* typeName );

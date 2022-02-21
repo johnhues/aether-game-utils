@@ -25,6 +25,15 @@
 
 namespace ae {
 
+// Helper
+template < typename T >
+struct RunOnDestroy
+{
+	RunOnDestroy( T&& func ) : m_func( std::forward< T >( func ) ) {}
+	~RunOnDestroy() { m_func(); }
+	T m_func;
+};
+
 class EditorServer;
 
 const uint32_t kCogTextureDataSize = 32;
@@ -159,8 +168,8 @@ public:
 	void ShowUI( class EditorProgram* program );
 	
 	bool SaveLevel( class EditorProgram* program, bool saveAs );
-	bool OpenLevel( class EditorProgram* program );
-	bool OpenLevel( class EditorProgram* program, const char* path );
+	void OpenLevel( class EditorProgram* program );
+	void OpenLevel( class EditorProgram* program, const char* path );
 	void Unload();
 	
 	bool GetShowInvisible() const { return m_showInvisible; }
@@ -178,7 +187,7 @@ public:
 	ae::ListenerSocket sock;
 	
 private:
-	void m_Save() const;
+	void m_Save( ae::EditorLevel* levelOut ) const;
 	bool m_Load( class EditorProgram* program );
 	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
 	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
@@ -198,6 +207,7 @@ private:
 	ImGuizmo::OPERATION gizmoOperation = (ImGuizmo::OPERATION)0;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
 	class Editor* client;
+	uint32_t m_levelSeq_HACK = 0;
 
 	EditorObjectId m_nextEntityId = 1;
 	ae::Map< EditorObjectId, EditorServerObject* > m_objects;
@@ -251,7 +261,6 @@ public:
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	ae::FileSystem fileSystem;
 	ae::TimeStep timeStep;
 	aeImGui ui;
 	ae::DebugCamera camera;
@@ -357,7 +366,6 @@ void EditorProgram::Initialize()
 	window.SetTitle( "ae" );
 	render.Initialize( &window );
 	input.Initialize( &window );
-	fileSystem.Initialize( "", "ae", "editor" );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	ui.Initialize();
 	camera.Initialize( params.worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
@@ -533,7 +541,7 @@ void EditorProgram::Run()
 		{
 			m_dt = 0.00001f;
 		}
-	
+
 		input.Pump();
 		ui.NewFrame( &render, &input, GetDt() );
 		ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
@@ -550,14 +558,14 @@ void EditorProgram::Run()
 			s_once = false;
 		}
 
+		editor.Update( this );
+
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;
 		
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse );
 		camera.Update( &input, GetDt() );
 		
-		editor.Update( this );
-
 		if ( ImGui::Begin( "Dev" ) )
 		{
 			editor.ShowUI( this );
@@ -680,8 +688,8 @@ ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
 // Editor member functions
 //------------------------------------------------------------------------------
 Editor::Editor( const ae::Tag& tag ) :
-	objects( tag ),
 	m_tag( tag ),
+	m_level( tag ),
 	m_sock( tag )
 {}
 
@@ -696,6 +704,7 @@ void Editor::Initialize( const EditorParams& params )
 	AE_ASSERT( params.worldUp == ae::Axis::Z || params.worldUp == ae::Axis::Y );
 	AE_ASSERT( params.port );
 	m_params = params;
+	m_fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );	
 	if ( params.argc >= 2 && strcmp( params.argv[ 1 ], "ae_editor" ) == 0 )
 	{
 		EditorProgram program( m_tag, params, this );
@@ -719,7 +728,7 @@ void Editor::Launch()
 #if _AE_APPLE_
 		if ( !fork() )
 		{
-			char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)filePath.c_str(), nullptr };
+			char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)m_level.filePath.c_str(), nullptr };
 			execv( m_params.argv[ 0 ], execArgs );
 		}
 #elif _AE_WINDOWS_
@@ -730,7 +739,7 @@ void Editor::Launch()
 		CStringW executableStr( m_params.argv[ 0 ] );
 		CStringW args = m_params.argv[ 0 ];
 		args += " ae_editor ";
-		args += filePath.c_str();
+		args += m_level.filePath.c_str();
 		CreateProcess(
 			executableStr,
 			(LPWSTR)(LPCWSTR)args,
@@ -751,7 +760,6 @@ void Editor::Launch()
 
 void Editor::Update()
 {
-	levelDidChange = false;
 	if ( m_params.port == 0 )
 	{
 		return;
@@ -773,7 +781,7 @@ void Editor::Update()
 				rStream.SerializeUint32( entity );
 				rStream.SerializeRaw( transform );
 				AE_ASSERT( rStream.IsValid() );
-				EditorObject* levelObj = objects.TryGet( entity );
+				EditorObject* levelObj = m_level.objects.TryGet( entity );
 				if ( levelObj )
 				{
 					levelObj->transform = transform;
@@ -784,25 +792,20 @@ void Editor::Update()
 			{
 				ae::Str256 levelPath;
 				rStream.SerializeString( levelPath );
-				if ( Read( levelPath.c_str() ) )
-				{
-					levelDidChange = true;
-				}
-				else
-				{
-					AE_ERR( "Could not load level '#'", levelPath );
-				}
+				QueueRead( levelPath.c_str() );
 				break;
 			}
 			default:
 				break;
 		}
 	}
+
+	m_Read();
 }
 
 bool Editor::Write() const
 {
-	if ( !filePath.Length() )
+	if ( !m_level.filePath.Length() )
 	{
 		return false;
 	}
@@ -811,13 +814,13 @@ bool Editor::Write() const
 	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
 	document.SetObject();
 	{
-		uint32_t objectCount = objects.Length();
+		uint32_t objectCount = m_level.objects.Length();
 		rapidjson::Value jsonObjects( rapidjson::kArrayType );
 		jsonObjects.Reserve( objectCount, allocator );
 
 		for ( uint32_t objIdx = 0; objIdx < objectCount; objIdx++ )
 		{
-			const EditorObject& levelObject = objects.GetValue( objIdx );
+			const EditorObject& levelObject = m_level.objects.GetValue( objIdx );
 			rapidjson::Value jsonObject( rapidjson::kObjectType );
 			jsonObject.AddMember( "id", levelObject.id, allocator );
 			if ( levelObject.name.Length() )
@@ -874,28 +877,48 @@ bool Editor::Write() const
 	rapidjson::PrettyWriter< rapidjson::StringBuffer > writer( buffer );
 	document.Accept( writer );
 
-	uint32_t writtenBytes = ae::FileSystem::Write( filePath.c_str(), buffer.GetString(), buffer.GetSize(), false );
+	uint32_t writtenBytes = m_fileSystem.Write( ae::FileSystem::Root::Data, m_level.filePath.c_str(), buffer.GetString(), buffer.GetSize(), false );
 	AE_ASSERT( writtenBytes == 0 || writtenBytes == buffer.GetSize() );
 	return writtenBytes != 0;
 }
 
-bool Editor::Read( const char* path )
+void Editor::QueueRead( const char* levelPath )
 {
-	// @TODO: ae::Editor should be able to load levels using an instance of ae::FileSystem
-	uint32_t fileSize = ae::FileSystem::GetSize( path );
+	if ( m_asyncFile )
+	{
+		AE_WARN( "Cancelling level read '#'", m_asyncFile->GetUrl() );
+		m_fileSystem.Destroy( m_asyncFile );
+	}
+	AE_INFO( "Queuing level load '#'", levelPath );
+	m_asyncFile = m_fileSystem.ReadAsync( ae::FileSystem::Root::Data, levelPath, 2.0f );
+}
+
+void Editor::m_Read()
+{
+	if ( !m_asyncFile || m_asyncFile->GetStatus() == ae::AsyncFile::Status::Pending )
+	{
+		return;
+	}
+
+	RunOnDestroy destroyFile{ [this]()
+	{
+		m_fileSystem.Destroy( m_asyncFile );
+		m_asyncFile = nullptr;
+	} };
+
+	uint32_t fileSize = m_asyncFile->GetLength();
 	if ( !fileSize )
 	{
-		return false;
+		return;
 	}
 	
-	objects.Clear();
+	m_level.objects.Clear();
 	
-	char* jsonBuffer = new char[ fileSize + 1 ];
-	ae::FileSystem::Read( path, jsonBuffer, fileSize );
-	jsonBuffer[ fileSize ] = 0;
+	const char* jsonBuffer = (const char*)m_asyncFile->GetData();
+	AE_ASSERT( jsonBuffer[ m_asyncFile->GetLength() ] == 0 );
 	
 	rapidjson::Document document;
-	AE_ASSERT( !document.ParseInsitu( jsonBuffer ).HasParseError() );
+	AE_ASSERT( !document.Parse( jsonBuffer ).HasParseError() );
 	AE_ASSERT( document.IsObject() );
 	
 	const auto& jsonObjects = document[ "objects" ];
@@ -904,7 +927,7 @@ bool Editor::Read( const char* path )
 	for ( const auto& jsonObject : jsonObjects.GetArray() )
 	{
 		EditorObjectId entity = jsonObject[ "id" ].GetUint();
-		EditorObject& levelObject = objects.Set( entity, { m_tag } );
+		EditorObject& levelObject = m_level.objects.Set( entity, { m_tag } );
 		levelObject.id = entity;
 		if ( jsonObject.HasMember( "name" ) )
 		{
@@ -955,8 +978,8 @@ bool Editor::Read( const char* path )
 		}
 	}
 	
-	filePath = path;
-	return true;
+	m_level.filePath = m_asyncFile->GetUrl();
+	m_levelSeq++;
 }
 
 void Editor::m_Connect()
@@ -1157,6 +1180,22 @@ void EditorServer::Update( EditorProgram* program )
 		}
 	}
 	connections.RemoveAllFn( []( const EditorConnection* c ){ return !c; } );
+
+	if ( m_levelSeq_HACK < client->GetLevelChangeSeq() )
+	{
+		AE_INFO( "Loading '#'", client->GetLevel()->filePath );
+		if ( m_Load( program ) )
+		{
+			AE_INFO( "Loaded '#'", client->GetLevel()->filePath );
+			program->window.SetTitle( client->GetLevel()->filePath.c_str() );
+			return;
+		}
+		else
+		{
+			AE_INFO( "Failed to load level '#'", client->GetLevel()->filePath );
+		}
+		m_levelSeq_HACK = client->GetLevelChangeSeq();
+	}
 }
 
 void EditorServer::Render( EditorProgram* program )
@@ -1511,7 +1550,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			uint8_t buffer[ kMaxEditorMessageSize ];
 			ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer );
 			wStream.SerializeRaw( EditorMsg::Load );
-			wStream.SerializeString( client->filePath );
+			wStream.SerializeString( client->GetLevel()->filePath );
 			for ( uint32_t i = 0; i < connections.Length(); i++ )
 			{
 				connections[ i ]->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
@@ -1923,54 +1962,61 @@ const ae::Var* EditorServer::GetMeshVisibleVar( const ae::Type* componentType )
 
 bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 {
-	ae::Str256 oldFilePath = client->filePath;
-	bool fileSelected = client->filePath.Length();
+	if ( !client->GetWritableLevel() )
+	{
+		return false;
+	}
+
+	// @TODO: Techincally ae::Editor::Level is already an intermidiate representation of the level, so this should be cleaned up.
+	ae::EditorLevel tempLevel = m_tag;
+	tempLevel.filePath = client->GetLevel()->filePath;
+	
+	bool fileSelected = tempLevel.filePath.Length();
 	if ( !fileSelected || saveAs )
 	{
 		fileSelected = false;
 		ae::FileDialogParams params;
 		params.window = &program->window;
 		params.filters.Append( { "Level File", "level" } );
-		params.defaultPath = client->filePath.c_str();
-		auto filePath = program->fileSystem.SaveDialog( params );
+		params.defaultPath = tempLevel.filePath.c_str();
+		auto filePath = ae::FileSystem::SaveDialog( params );
 		if ( filePath.c_str()[ 0 ] )
 		{
 			fileSelected = true;
-			client->filePath = filePath.c_str();
+			tempLevel.filePath = filePath.c_str();
 		}
 	}
 	
 	if ( fileSelected )
 	{
-		m_Save();
+		m_Save( &tempLevel );
+		ae::EditorLevel* level = client->GetWritableLevel();
+		AE_ASSERT( level );
+		*level = std::move( tempLevel );
 		if ( client->Write() )
 		{
-			AE_INFO( "Saved '#'", client->filePath );
-			program->window.SetTitle( client->filePath.c_str() );
+			AE_INFO( "Saved '#'", level->filePath );
+			program->window.SetTitle( level->filePath.c_str() );
 			return true;
 		}
 		else
 		{
-			AE_INFO( "Failed to save '#'", client->filePath );
+			AE_INFO( "Failed to save '#'", level->filePath );
 		}
 	}
 	else
 	{
 		AE_INFO( "No file selected" );
 	}
-	if ( oldFilePath.Length() )
-	{
-		client->filePath = oldFilePath;
-	}
 	return false;
 }
 
-bool EditorServer::OpenLevel( EditorProgram* program )
+void EditorServer::OpenLevel( EditorProgram* program )
 {
 	ae::FileDialogParams params;
 	params.window = &program->window;
 	params.filters.Append( { "Level File", "level" } );
-	auto filePath = program->fileSystem.OpenDialog( params );
+	auto filePath = ae::FileSystem::OpenDialog( params );
 	if ( filePath.Length() )
 	{
 		return OpenLevel( program, filePath[ 0 ].c_str() );
@@ -1979,36 +2025,17 @@ bool EditorServer::OpenLevel( EditorProgram* program )
 	{
 		AE_INFO( "No file selected" );
 	}
-	return false;
 }
 
-bool EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
+void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 {
 	if ( !filePath || !filePath[ 0 ] )
 	{
-		return false;
+		return;
 	}
 	AE_INFO( "Level '#'", filePath );
 	AE_INFO( "Reading..." );
-	if ( client->Read( filePath ) )
-	{
-		AE_INFO( "Loading..." );
-		if ( m_Load( program ) )
-		{
-			AE_INFO( "Loaded level" );
-			program->window.SetTitle( client->filePath.c_str() );
-			return true;
-		}
-		else
-		{
-			AE_INFO( "Failed to load level" );
-		}
-	}
-	else
-	{
-		AE_INFO( "Failed to read level" );
-	}
-	return false;
+	client->QueueRead( filePath );
 }
 
 void EditorServer::Unload()
@@ -2028,7 +2055,7 @@ void EditorServer::Unload()
 	m_components.Clear();
 }
 
-void EditorServer::m_Save() const
+void EditorServer::m_Save( ae::EditorLevel* levelOut ) const
 {
 	ae::Map< ae::Str32, ae::Object* > defaults = m_tag;
 	
@@ -2070,12 +2097,12 @@ void EditorServer::m_Save() const
 		}
 	};
 
-	client->objects.Clear();
+	levelOut->objects.Clear();
 	uint32_t editorObjectCount = m_objects.Length();
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
 		const EditorServerObject* editorObj = m_objects.GetValue( i );
-		EditorObject* levelObj = &client->objects.Set( editorObj->entity, { m_tag } );
+		EditorObject* levelObj = &levelOut->objects.Set( editorObj->entity, { m_tag } );
 		levelObj->id = editorObj->entity;
 		levelObj->name = editorObj->name;
 		levelObj->transform = editorObj->GetTransform( nullptr );
@@ -2108,12 +2135,13 @@ void EditorServer::m_Save() const
 bool EditorServer::m_Load( EditorProgram* program )
 {
 	Unload();
+	const ae::EditorLevel* level = client->GetLevel();
 	
-	uint32_t objectCount = client->objects.Length();
+	uint32_t objectCount = level->objects.Length();
 	// Create all components
 	for ( uint32_t i = 0; i < objectCount; i++ )
 	{
-		const EditorObject& levelObject = client->objects.GetValue( i );
+		const EditorObject& levelObject = level->objects.GetValue( i );
 		EditorServerObject* editorObj = CreateObject( levelObject.id, levelObject.transform );
 		editorObj->name = levelObject.name;
 		for ( const EditorComponent& levelComponent : levelObject.components )
@@ -2124,7 +2152,7 @@ bool EditorServer::m_Load( EditorProgram* program )
 	// Serialize all components (second phase to handle references)
 	for ( uint32_t i = 0; i < objectCount; i++ )
 	{
-		const EditorObject& levelObject = client->objects.GetValue( i );
+		const EditorObject& levelObject = level->objects.GetValue( i );
 		EditorServerObject* editorObj = GetObject( levelObject.id );
 		AE_ASSERT( editorObj );
 		for ( const EditorComponent& levelComponent : levelObject.components )

@@ -47,6 +47,17 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::EditorLevel class
+//------------------------------------------------------------------------------
+class EditorLevel
+{
+public:
+	EditorLevel( const ae::Tag& tag ) : objects( tag ) {}
+	ae::Str256 filePath;
+	ae::Map< EditorObjectId, EditorObject > objects;
+};
+
+//------------------------------------------------------------------------------
 // ae::EditorMesh class
 //------------------------------------------------------------------------------
 class EditorMesh
@@ -67,6 +78,8 @@ struct EditorParams
 	uint16_t port = 7200;
 	//! Only ae::Axis::Z and ae::Axis::Y are supported
 	ae::Axis worldUp = ae::Axis::Z;
+	//! When ae::Editor is given a relative path it will use this instead of the current working directory
+	ae::Str256 dataDir;
 	//! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
 	//! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
 	//! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
@@ -86,16 +99,22 @@ public:
 	void Launch();
 	bool IsConnected() const { return m_sock.IsConnected(); }
 	bool Write() const;
-	bool Read( const char* path );
+	void QueueRead( const char* levelPath );
 	
-	ae::Str256 filePath;
-	bool levelDidChange = false;
-	ae::Map< EditorObjectId, EditorObject > objects;
+	// @TODO: Editor message queue for: level loaded success/failure, mesh requested, object changed
+	ae::EditorLevel* GetWritableLevel() { return m_asyncFile ? nullptr : &m_level; }
+	const ae::EditorLevel* GetLevel() const { return &m_level; }
+	uint32_t GetLevelChangeSeq() const { return m_levelSeq; }
 
 private:
 	void m_Connect();
+	void m_Read();
 	const ae::Tag m_tag;
 	EditorParams m_params;
+	ae::FileSystem m_fileSystem;
+	const ae::AsyncFile* m_asyncFile = nullptr;
+	ae::EditorLevel m_level;
+	uint32_t m_levelSeq = 0;
 	ae::Socket m_sock;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 };

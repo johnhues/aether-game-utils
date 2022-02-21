@@ -260,15 +260,20 @@ void Registry::Clear()
 	m_components.Clear();
 }
 
-bool Registry::Load( const ae::Editor* editor, CreateObjectFn fn )
+bool Registry::Load( const ae::EditorLevel* level, CreateObjectFn fn )
 {
+	if ( !level )
+	{
+		return false;
+	}
+
 	Clear();
 
-	uint32_t objectCount = editor->objects.Length();
+	uint32_t objectCount = level->objects.Length();
 	// Create all components
 	for ( uint32_t i = 0; i < objectCount; i++ )
 	{
-		const ae::EditorObject& levelObject = editor->objects.GetValue( i );
+		const ae::EditorObject& levelObject = level->objects.GetValue( i );
 		Entity entity = CreateEntity( levelObject.id, levelObject.name.c_str() );
 		if ( fn )
 		{
@@ -282,7 +287,7 @@ bool Registry::Load( const ae::Editor* editor, CreateObjectFn fn )
 	// Serialize all components (second phase to handle references)
 	for ( uint32_t i = 0; i < objectCount; i++ )
 	{
-		const ae::EditorObject& levelObject = editor->objects.GetValue( i );
+		const ae::EditorObject& levelObject = level->objects.GetValue( i );
 		Entity entity = levelObject.id;
 		for ( const EditorComponent& levelComponent : levelObject.components )
 		{

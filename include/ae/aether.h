@@ -1992,6 +1992,7 @@ public:
 	
 	// Static helpers
 	static Str256 GetAbsolutePath( const char* filePath );
+	static bool IsAbsolutePath( const char* filePath );
 	static const char* GetFileNameFromPath( const char* filePath );
 	static const char* GetFileExtFromPath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
@@ -11097,6 +11098,16 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 	#define AE_PATH_SEPARATOR '/'
 #endif
 
+bool FileSystem::IsAbsolutePath( const char* path )
+{
+#if _AE_EMSCRIPTEN_
+	// @TODO: Should check if url has a scheme or something
+	return false;
+#else
+	return std::filesystem::path( path ).is_absolute();
+#endif
+}
+
 #if _AE_APPLE_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
@@ -11403,7 +11414,7 @@ void FileSystem::m_SetCacheSharedDir( const char* organizationName )
 uint32_t FileSystem::GetSize( Root root, const char* filePath ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( filePath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += filePath;
 		return GetSize( fullName.c_str() );
@@ -11414,7 +11425,7 @@ uint32_t FileSystem::GetSize( Root root, const char* filePath ) const
 uint32_t FileSystem::Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( filePath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += filePath;
 		return Read( fullName.c_str(), buffer, bufferSize );
@@ -11425,7 +11436,7 @@ uint32_t FileSystem::Read( Root root, const char* filePath, void* buffer, uint32
 uint32_t FileSystem::Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( filePath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += filePath;
 		return Write( fullName.c_str(), buffer, bufferSize, createIntermediateDirs );
@@ -11436,7 +11447,7 @@ uint32_t FileSystem::Write( Root root, const char* filePath, const void* buffer,
 bool FileSystem::CreateFolder( Root root, const char* folderPath ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( folderPath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += folderPath;
 		return CreateFolder( fullName.c_str() );
@@ -11447,7 +11458,7 @@ bool FileSystem::CreateFolder( Root root, const char* folderPath ) const
 void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( folderPath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += folderPath;
 		ShowFolder( fullName.c_str() );
@@ -11457,7 +11468,7 @@ void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 const AsyncFile* FileSystem::ReadAsync( Root root, const char* url, float timeoutSec )
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( url ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += url;
 		return ReadAsync( fullName.c_str(), timeoutSec );
