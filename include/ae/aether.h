@@ -10340,18 +10340,76 @@ namespace ae {
 #if _AE_EMSCRIPTEN_
 EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
-	if ( !keyEvent->repeat )
+	static ae::Key s_keyMap[ 255 ];
+	static bool s_first = true;
+	if ( s_first )
 	{
-		AE_ASSERT( userData );
-		Input* input = (Input*)userData;
-		// Use 'code' instead of 'key' so value is not affected by modifiers/layout
-		// const char* typeStr = EMSCRIPTEN_EVENT_KEYUP == eventType ? "up" : "down";
-		// AE_LOG( "Key '#' #", keyEvent->code, typeStr );
-		bool pressed = EMSCRIPTEN_EVENT_KEYUP != eventType;
-		if ( strcmp( keyEvent->code, "ArrowRight" ) == 0 ) { input->m_keys[ (int)Key::Right ] = pressed; }
-		if ( strcmp( keyEvent->code, "ArrowLeft" ) == 0 ) { input->m_keys[ (int)Key::Left ] = pressed; }
-		if ( strcmp( keyEvent->code, "ArrowUp" ) == 0 ) { input->m_keys[ (int)Key::Up ] = pressed; }
-		if ( strcmp( keyEvent->code, "ArrowDown" ) == 0 ) { input->m_keys[ (int)Key::Down ] = pressed; }
+		s_first = false;
+		memset( s_keyMap, 0, sizeof( s_keyMap ) );
+		s_keyMap[ 8 ] = ae::Key::Backspace;
+		s_keyMap[ 9 ] = ae::Key::Tab;
+		s_keyMap[ 13 ] = ae::Key::Enter;
+		s_keyMap[ 16 ] = ae::Key::LeftShift;
+		s_keyMap[ 17 ] = ae::Key::LeftControl;
+		s_keyMap[ 18 ] = ae::Key::LeftControl;
+		s_keyMap[ 19 ] = ae::Key::Pause;
+		s_keyMap[ 20 ] = ae::Key::CapsLock;
+		s_keyMap[ 27 ] = ae::Key::Escape;
+		s_keyMap[ 32 ] = ae::Key::Space;
+		s_keyMap[ 33 ] = ae::Key::PageUp;
+		s_keyMap[ 34 ] = ae::Key::PageDown;
+		s_keyMap[ 35 ] = ae::Key::End;
+		s_keyMap[ 36 ] = ae::Key::Home;
+		s_keyMap[ 37 ] = ae::Key::Left;
+		s_keyMap[ 38 ] = ae::Key::Up;
+		s_keyMap[ 39 ] = ae::Key::Right;
+		s_keyMap[ 40 ] = ae::Key::Down;
+		s_keyMap[ 45 ] = ae::Key::Insert;
+		s_keyMap[ 46 ] = ae::Key::Delete;
+		for ( uint32_t i = 0; i <= 9; i++ )
+		{
+			s_keyMap[ 48 + i ] = (ae::Key)((int)ae::Key::Num0 + i);
+		}
+		for ( uint32_t i = 0; i < 26; i++ )
+		{
+			s_keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
+		}
+		s_keyMap[ 91 ] = ae::Key::LeftSuper;
+		s_keyMap[ 92 ] = ae::Key::RightSuper;
+		for ( uint32_t i = 0; i <= 9; i++ )
+		{
+			s_keyMap[ 96 + i ] = (ae::Key)((int)ae::Key::NumPad0 + i);
+		}
+		s_keyMap[ 106 ] = ae::Key::NumPadMultiply;
+		s_keyMap[ 107 ] = ae::Key::NumPadPlus;
+		s_keyMap[ 109 ] = ae::Key::NumPadMinus;
+		s_keyMap[ 110 ] = ae::Key::NumPadPeriod;
+		s_keyMap[ 111 ] = ae::Key::NumPadDivide;
+		for ( uint32_t i = 0; i < 12; i++ )
+		{
+			s_keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
+		}
+		s_keyMap[ 144 ] = ae::Key::NumLock;
+		s_keyMap[ 145 ] = ae::Key::ScrollLock;
+		s_keyMap[ 186 ] = ae::Key::Semicolon;
+		s_keyMap[ 187 ] = ae::Key::Equals;
+		s_keyMap[ 188 ] = ae::Key::Comma;
+		s_keyMap[ 189 ] = ae::Key::Minus;
+		s_keyMap[ 190 ] = ae::Key::Period;
+		s_keyMap[ 191 ] = ae::Key::Slash;
+		s_keyMap[ 192 ] = ae::Key::Tilde;
+		s_keyMap[ 219 ] = ae::Key::LeftBracket;
+		s_keyMap[ 220 ] = ae::Key::Backslash;
+		s_keyMap[ 221 ] = ae::Key::RightBracket;
+		s_keyMap[ 222 ] = ae::Key::Apostrophe;
+	}
+
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+	if ( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
+	{
+		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
+		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
 	}
 	return true;
 }
