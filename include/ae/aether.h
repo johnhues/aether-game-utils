@@ -1859,6 +1859,7 @@ public:
 	std::string m_textInput;
 	float m_leftAnalogThreshold = 0.05f;
 	float m_rightAnalogThreshold = 0.05f;
+	bool newFrame_HACK = false;
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
@@ -3021,10 +3022,9 @@ class AudioData
 {
 public:
 	AudioData();
-	void Initialize( const char* filePath );
+	void LoadWavFile( const uint8_t* data, uint32_t length );
 	void Terminate();
 
-	ae::Str64 name;
 	uint32_t buffer;
 	float length;
 };
@@ -6068,7 +6068,7 @@ void Array< T, N >::Reserve( uint32_t size )
 #if _AE_DEBUG_
 		AE_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
 #endif
-		AE_ASSERT( N >= size );
+		AE_ASSERT_MSG( N >= size, "# >= #", N, size );
 		return;
 	}
 	else if ( size <= m_size )
@@ -7302,10 +7302,6 @@ T* ae::Cast( C* obj )
 	#ifndef AE_USE_OPENAL
 		#define AE_USE_OPENAL 0
 	#endif
-	#if AE_USE_OPENAL
-		#include "AL/al.h"
-		#include "AL/alc.h"
-	#endif
 #elif _AE_APPLE_
 	#include <sys/sysctl.h>
 	#include <unistd.h>
@@ -7320,17 +7316,19 @@ T* ae::Cast( C* obj )
 	#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
-		#include <OpenAL/al.h>
-		#include <OpenAL/alc.h>
 		#include <GameController/GameController.h>
 	#endif
-	#define AE_USE_OPENAL 1
+	#ifndef AE_USE_OPENAL
+		#define AE_USE_OPENAL 1
+	#endif
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
 	#include <sys/stat.h>
-	#define AE_USE_OPENAL 0
+	#ifndef AE_USE_OPENAL
+		#define AE_USE_OPENAL 0
+	#endif
 #endif
 #include <thread>
 #include <random>
@@ -7359,6 +7357,15 @@ T* ae::Cast( C* obj )
 	typedef uint8_t _ae_sock_buff_t;
 	#define _ae_sock_poll poll
 	#define _ae_ioctl ioctl
+#endif
+#if AE_USE_OPENAL
+	#if _AE_APPLE_
+		#include <OpenAL/al.h>
+		#include <OpenAL/alc.h>
+	#else
+		#include "AL/al.h"
+		#include "AL/alc.h"
+	#endif
 #endif
 #if !_AE_EMSCRIPTEN_
 #define EMSCRIPTEN_KEEPALIVE
@@ -9371,7 +9378,7 @@ void TimeStep::Wait()
 	{
 		m_frameStart = ae::GetTime();
 	}
-	else if ( allowSleep )
+	else if ( !allowSleep )
 	{
 		double currentTime = ae::GetTime();
 		m_sleepOverhead = 0.0;
@@ -10406,6 +10413,13 @@ EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEven
 
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
+
+	if ( input->newFrame_HACK )
+	{
+		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
+		input->newFrame_HACK = false;
+	}
+
 	if ( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
 	{
 		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
@@ -10463,10 +10477,17 @@ void Input::Terminate()
 
 void Input::Pump()
 {
-	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-#if !_AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_
+	if ( newFrame_HACK )
+	{
+		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+		newFrame_HACK = false;
+	}
+	newFrame_HACK = true;
+#else
 	// Clear keys each frame and then check for presses below
 	// Emscripten doesn't do this because it uses a callback to set m_keys
+	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
 	memset( m_keys, 0, sizeof(m_keys) );
 #endif
 	mousePrev = mouse;
@@ -11343,6 +11364,11 @@ extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadFail( void* arg, uint32_
 }
 
 #if _AE_EMSCRIPTEN_
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_em_free( void* p )
+{
+	free( p ); // -Oz prevents free() from being linked so force it
+}
+
 EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
 {
 	var xhr = new XMLHttpRequest();
@@ -11357,9 +11383,14 @@ EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t tim
 			if (xhr.response) {
 				var byteArray = new Uint8Array(xhr.response);
 				var buffer = _malloc(byteArray.length);
-				HEAPU8.set(byteArray, buffer);
-				__ae_FileSystem_ReadSuccess(arg, buffer, byteArray.length);
-				_free(buffer);
+				if (buffer) {
+					HEAPU8.set(byteArray, buffer);
+					__ae_FileSystem_ReadSuccess(arg, buffer, byteArray.length);
+					__ae_em_free(buffer);
+				}
+				else {
+					__ae_FileSystem_ReadFail(arg, 0, false);
+				}
 			}
 			else {
 				__ae_FileSystem_ReadSuccess(arg, 0, 0); // Empty response but request succeeded
@@ -17383,7 +17414,7 @@ void _CheckALError()
 #endif
 }
 
-void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
+void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* bufferOut, float* lengthOut )
 {
 #if AE_USE_OPENAL
 	struct ChunkHeader
@@ -17412,13 +17443,6 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 	FormatChunk wave_format;
 	bool hasReadFormat = false;
 	uint32_t dataSize = 0;
-
-	uint32_t fileSize = ae::FileSystem::GetSize( fileName );
-	AE_ASSERT_MSG( fileSize, "Could not open wav file: #", fileName );
-
-	ae::Scratch< uint8_t > fileScratch( AE_ALLOC_TAG_AUDIO, fileSize );
-	uint8_t* fileBuffer = fileScratch.Data();
-	ae::FileSystem::Read( fileName, fileBuffer, fileSize );
 
 	ChunkHeader header;
 
@@ -17464,8 +17488,8 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_STEREO8; }
 				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_STEREO16; }
 			}
-			alGenBuffers( 1, buffer );
-			alBufferData( *buffer, format, (void*)data, size, frequency );
+			alGenBuffers( 1, bufferOut );
+			alBufferData( *bufferOut, format, (void*)data, size, frequency );
 			delete[] data;
 		}
 		else
@@ -17482,7 +17506,7 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 	AE_ASSERT( hasReadFormat );
 	AE_ASSERT( dataSize );
 
-	*length = dataSize / ( wave_format.sampleRate * wave_format.numChannels * wave_format.bitsPerSample / 8.0f );
+	*lengthOut = dataSize / ( wave_format.sampleRate * wave_format.numChannels * wave_format.bitsPerSample / 8.0f );
 #endif
 }
 
@@ -17491,16 +17515,14 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 //------------------------------------------------------------------------------
 AudioData::AudioData()
 {
-	name = "";
 	buffer = 0;
 	length = 0.0f;
 }
 
-void AudioData::Initialize( const char* filePath )
+void AudioData::LoadWavFile( const uint8_t* data, uint32_t length )
 {
 	AE_ASSERT( !buffer );
-	this->name = filePath; // @TODO: Should just be file name or file hash
-	_LoadWavFile( filePath, &this->buffer, &this->length );
+	_LoadWavFile( data, length, &this->buffer, &this->length );
 	AE_ASSERT( buffer );
 }
 
@@ -17743,11 +17765,13 @@ void Audio::Log()
 
 			float playLength = channel->resource->length;
 
-			const char* soundName = strrchr( channel->resource->name.c_str(), '/' );
-			soundName = soundName ? soundName + 1 : channel->resource->name.c_str();
-			const char* soundNameEnd = strrchr( channel->resource->name.c_str(), '.' );
-			soundNameEnd = soundNameEnd ? soundNameEnd : soundName + strlen( soundName );
-			uint32_t soundNameLen = (uint32_t)(soundNameEnd - soundName);
+			// const char* soundName = strrchr( , '/' );
+			// soundName = soundName ? soundName + 1 : channel->resource->name.c_str();
+			// const char* soundNameEnd = strrchr( channel->resource->name.c_str(), '.' );
+			// soundNameEnd = soundNameEnd ? soundNameEnd : soundName + strlen( soundName );
+			// uint32_t soundNameLen = (uint32_t)(soundNameEnd - soundName);
+			const char* soundName = "unknown";
+			uint32_t soundNameLen = strlen( soundName );
 
 			char buffer[ 512 ];
 			sprintf( buffer, "channel:%u name:%.*s offset:%.2fs length:%.2fs", i, soundNameLen, soundName, playOffset, playLength );

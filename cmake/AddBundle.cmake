@@ -67,6 +67,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		" COMPONENT Runtime)
 	elseif(EMSCRIPTEN)
 		set(_AE_EM_LINKER_FLAGS
+			"-lopenal"
 			"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance
 			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
 			"-s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3" # Require WebGL 3 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
@@ -97,19 +98,19 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 				"-O0"
 				"-frtti"
 				"-fsanitize=undefined"
-				"-g" # Debug
-				"-gsource-map" # Debug mode with mappings to c/c++ source files
-				"--source-map-base http://localhost:8000/embuild/"
+				"-g" # Debug symbols (DWARF https://developer.chrome.com/blog/wasm-debugging-2020/)
 			)
 		else()
 			list(APPEND _AE_EM_LINKER_FLAGS
 				"--closure=1" # Enable Closure compiler for aggressive JS size minification
-				"-Oz" # Optimization flag to optimize aggressively for size. (other options -Os, -O3, -O2, -O1, -O0)
+				"-O3"
 			)
 		endif()
 		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
 			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
+			# Output index.html
+			OUTPUT_NAME "index"
 			SUFFIX ".html"
 		)
 	endif()
