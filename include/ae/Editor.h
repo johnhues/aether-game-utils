@@ -102,7 +102,7 @@ public:
 	void QueueRead( const char* levelPath );
 	
 	// @TODO: Editor message queue for: level loaded success/failure, mesh requested, object changed
-	ae::EditorLevel* GetWritableLevel() { return m_asyncFile ? nullptr : &m_level; }
+	ae::EditorLevel* GetWritableLevel() { return m_file ? nullptr : &m_level; }
 	const ae::EditorLevel* GetLevel() const { return &m_level; }
 	uint32_t GetLevelChangeSeq() const { return m_levelSeq; }
 
@@ -112,7 +112,7 @@ private:
 	const ae::Tag m_tag;
 	EditorParams m_params;
 	ae::FileSystem m_fileSystem;
-	const ae::AsyncFile* m_asyncFile = nullptr;
+	const ae::File* m_file = nullptr;
 	ae::EditorLevel m_level;
 	uint32_t m_levelSeq = 0;
 	ae::Socket m_sock;

@@ -1864,10 +1864,10 @@ public:
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
 //------------------------------------------------------------------------------
-// ae::AsyncFile class
+// ae::File class
 //! \brief Used to asynchronously load data from remote sources.
 //------------------------------------------------------------------------------
-class AsyncFile
+class File
 {
 public:
 	enum class Status
@@ -1887,6 +1887,8 @@ public:
 	const uint8_t* GetData() const;
 	uint32_t GetLength() const;
 	float GetElapsedTime() const;
+	float GetTimeout() const;
+	uint32_t GetRetryCount() const;
 
 private:
 	friend void ::_ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length );
@@ -1899,6 +1901,8 @@ private:
 	uint32_t m_code = 0;
 	double m_startTime = 0.0;
 	double m_finishTime = 0.0;
+	float m_timeout = 0.0f;
+	uint32_t m_retryCount = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -1958,23 +1962,30 @@ public:
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
 	//! only in emscripten builds). <b>Prefer this function over all other
 	//! ae::FileSystem::Read...() methods as it will work the most consistently
-	//! on all platforms.</b> Returns an ae::AsyncFile object to be freed later
+	//! on all platforms.</b> Returns an ae::File object to be freed later
 	//! with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec value
 	//! will disable the timeout.
-	const AsyncFile* ReadAsync( Root root, const char* url, float timeoutSec );
+	const ae::File* Read( Root root, const char* url, float timeoutSec );
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
-	//! only in emscripten builds). Returns an ae::AsyncFile object to be freed
+	//! only in emscripten builds). Returns an ae::File object to be freed
 	//! later with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec
 	//! value will disable the timeout.
-	const AsyncFile* ReadAsync( const char* url, float timeoutSec );
-	//! Destroys the given ae::AsyncFile object returned by ae::FileSystem::Load().
-	void Destroy( const AsyncFile* info );
-	//! Frees all existing ae::AsyncFile objects. It is not safe to access any
-	//! ae::AsyncFile objects returned earlier by ae::FileSystem::Load() after
+	const ae::File* Read( const char* url, float timeoutSec );
+	//! Retry if reading or writing of the given \p file did not finish
+	//! successfully. It's recomended (but not necessary) that you call this
+	//! function only when a file has the status ae::File::Status::Timeout, and
+	//! then you might want back off with a longer \p timeoutSec. Calling this
+	//! function on an ae::File that is successfully loaded or pending will have
+	//! no effect.
+	void Retry( const ae::File* file, float timeoutSec );
+	//! Destroys the given ae::File object returned by ae::FileSystem::Load().
+	void Destroy( const ae::File* file );
+	//! Frees all existing ae::File objects. It is not safe to access any
+	//! ae::File objects returned earlier by ae::FileSystem::Load() after
 	//! calling this.
 	void DestroyAll();
-	const AsyncFile* GetAsyncFile( uint32_t idx ) const;
-	uint32_t GetAsyncFileCount() const;
+	const ae::File* GetFile( uint32_t idx ) const;
+	uint32_t GetFileCount() const;
 
 	// Member functions for use of Root directories
 	bool GetRootDir( Root root, Str256* outDir ) const;
@@ -2009,7 +2020,8 @@ private:
 	void m_SetCacheDir( const char* organizationName, const char* applicationName );
 	void m_SetUserSharedDir( const char* organizationName );
 	void m_SetCacheSharedDir( const char* organizationName );
-	ae::Array< AsyncFile* > m_files = AE_ALLOC_TAG_FILE;
+	void m_Read( ae::File* file, float timeoutSec ) const;
+	ae::Array< ae::File* > m_files = AE_ALLOC_TAG_FILE;
 	Str256 m_dataDir;
 	Str256 m_userDir;
 	Str256 m_cacheDir;
@@ -11137,36 +11149,46 @@ void Input::m_SetMousePos( ae::Int2 pos )
 }
 
 //------------------------------------------------------------------------------
-// ae::AsyncFile member functions
+// ae::File member functions
 //------------------------------------------------------------------------------
-const char* AsyncFile::GetUrl() const
+const char* File::GetUrl() const
 {
 	return m_url.c_str();
 }
 
-AsyncFile::Status AsyncFile::GetStatus() const
+File::Status File::GetStatus() const
 {
 	return m_status;
 }
 
-uint32_t AsyncFile::GetCode() const
+uint32_t File::GetCode() const
 {
 	return m_code;
 }
 
-const uint8_t* AsyncFile::GetData() const
+const uint8_t* File::GetData() const
 {
 	return m_data;
 }
 
-uint32_t AsyncFile::GetLength() const
+uint32_t File::GetLength() const
 {
 	return m_length;
 }
 
-float AsyncFile::GetElapsedTime() const
+float File::GetElapsedTime() const
 {
 	return m_finishTime ? ( m_finishTime - m_startTime ) : ( ae::GetTime() - m_startTime );
+}
+
+float File::GetTimeout() const
+{
+	return m_timeout;
+}
+
+uint32_t File::GetRetryCount() const
+{
+	return m_retryCount;
 }
 
 //------------------------------------------------------------------------------
@@ -11329,35 +11351,35 @@ void _ae_GetCurrentWorkingDir( Str256* outDir )
 
 extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length )
 {
-	ae::AsyncFile* info = (ae::AsyncFile*)arg;
-	info->m_finishTime = ae::GetTime();
-	info->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
-	memcpy( info->m_data, data, length );
-	info->m_data[ length ] = 0;
-	info->m_length = length;
+	ae::File* file = (ae::File*)arg;
+	file->m_finishTime = ae::GetTime();
+	file->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
+	memcpy( file->m_data, data, length );
+	file->m_data[ length ] = 0;
+	file->m_length = length;
 
-	info->m_status = ae::AsyncFile::Status::Success;
-	info->m_code = 200;
+	file->m_status = ae::File::Status::Success;
+	file->m_code = 200;
 }
 
 extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout )
 {
-	ae::AsyncFile* info = (ae::AsyncFile*)arg;
-	info->m_finishTime = ae::GetTime();
-	info->m_code = code;
+	ae::File* file = (ae::File*)arg;
+	file->m_finishTime = ae::GetTime();
+	file->m_code = code;
 	if ( timeout )
 	{
-		info->m_status = ae::AsyncFile::Status::Timeout;
+		file->m_status = ae::File::Status::Timeout;
 	}
 	else
 	{
 		switch ( code )
 		{
 			case 404:
-				info->m_status = ae::AsyncFile::Status::NotFound;
+				file->m_status = ae::File::Status::NotFound;
 				break;
 			default:
-				info->m_status = ae::AsyncFile::Status::Error;
+				file->m_status = ae::File::Status::Error;
 				break;
 		}
 	}
@@ -11578,33 +11600,69 @@ void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 	}
 }
 
-const AsyncFile* FileSystem::ReadAsync( Root root, const char* url, float timeoutSec )
+const File* FileSystem::Read( Root root, const char* url, float timeoutSec )
 {
 	Str256 fullName;
 	if ( IsAbsolutePath( url ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += url;
-		return ReadAsync( fullName.c_str(), timeoutSec );
+		return Read( fullName.c_str(), timeoutSec );
 	}
 	else
 	{
 		double t = ae::GetTime();
-		AsyncFile* asyncFile = ae::New< AsyncFile >( AE_ALLOC_TAG_FILE );
-		asyncFile->m_url = url;
-		asyncFile->m_startTime = t;
-		asyncFile->m_finishTime = t;
-		asyncFile->m_status = AsyncFile::Status::Error;
-		m_files.Append( asyncFile );
-		return asyncFile;
+		File* file = ae::New< File >( AE_ALLOC_TAG_FILE );
+		file->m_url = url;
+		file->m_startTime = t;
+		file->m_finishTime = t;
+		file->m_status = File::Status::Error;
+		file->m_timeout = timeoutSec;
+		m_files.Append( file );
+		return file;
 	}
 }
 
-const AsyncFile* FileSystem::ReadAsync( const char* url, float timeoutSec )
+const File* FileSystem::Read( const char* url, float timeoutSec )
 {
-	double t = ae::GetTime();
-	AsyncFile* asyncFile = ae::New< AsyncFile >( AE_ALLOC_TAG_FILE );
-	asyncFile->m_url = url;
-	asyncFile->m_startTime = t;
+	File* file = ae::New< File >( AE_ALLOC_TAG_FILE );
+	file->m_url = url;
+	m_Read( file, timeoutSec );
+	m_files.Append( file );
+	return file;
+}
+
+void FileSystem::Retry( const ae::File* _file, float timeoutSec )
+{
+	if ( _file )
+	{
+		switch ( _file->m_status )
+		{
+			case ae::File::Status::Success:
+			case ae::File::Status::Pending:
+				break;
+			default:
+			{
+				ae::File* file = const_cast< ae::File* >( _file );
+				m_Read( file, timeoutSec );
+				file->m_retryCount++;
+				break;
+			}
+		}
+	}
+}
+
+void FileSystem::m_Read( ae::File* file, float timeoutSec ) const
+{
+	AE_ASSERT( file );
+	AE_ASSERT( file->m_url.Length() );
+	AE_ASSERT( !file->m_data && !file->m_length );
+
+	file->m_status = ae::File::Status::Pending;
+	file->m_code = 0;
+	file->m_startTime = ae::GetTime();
+	file->m_finishTime = 0.0;
+	file->m_timeout = timeoutSec;
+
 	uint32_t timeoutMs;
 	if ( timeoutSec <= 0.0f )
 	{
@@ -11615,53 +11673,51 @@ const AsyncFile* FileSystem::ReadAsync( const char* url, float timeoutSec )
 		timeoutMs = timeoutSec * 1000.0f;
 		timeoutMs = ae::Max( 1u, timeoutMs ); // Prevent rounding down to infinite timeout
 	}
-	m_files.Append( asyncFile );
 #if _AE_EMSCRIPTEN_
-	_ae_FileSystem_ReadImpl( url, asyncFile, timeoutMs );
+	_ae_FileSystem_ReadImpl( file->m_url.c_str(), file, timeoutMs );
 #else
-	if ( uint32_t length = GetSize( url ) )
+	if ( uint32_t length = GetSize( file->m_url.c_str() ) )
 	{
-		asyncFile->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
-		Read( url, asyncFile->m_data, length );
-		asyncFile->m_data[ length ] = 0;
-		asyncFile->m_length = length;
-		asyncFile->m_status = ae::AsyncFile::Status::Success;
+		file->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
+		Read( file->m_url.c_str(), file->m_data, length );
+		file->m_data[ length ] = 0;
+		file->m_length = length;
+		file->m_status = ae::File::Status::Success;
 	}
 	else
 	{
-		asyncFile->m_status = AsyncFile::Status::Error;
+		file->m_status = File::Status::Error;
 	}
-	asyncFile->m_finishTime = ae::GetTime();
+	file->m_finishTime = ae::GetTime();
 #endif
-	return asyncFile;
 }
 
-void FileSystem::Destroy( const AsyncFile* asyncFile )
+void FileSystem::Destroy( const File* file )
 {
-	if ( asyncFile )
+	if ( file )
 	{
-		m_files.Remove( m_files.Find( asyncFile ) );
-		ae::Free( asyncFile->m_data );
-		ae::Delete( asyncFile );
+		m_files.Remove( m_files.Find( file ) );
+		ae::Free( file->m_data );
+		ae::Delete( file );
 	}
 }
 
 void FileSystem::DestroyAll()
 {
-	for ( auto asyncFile : m_files )
+	for ( auto file : m_files )
 	{
-		ae::Free( asyncFile->m_data );
-		ae::Delete( asyncFile );
+		ae::Free( file->m_data );
+		ae::Delete( file );
 	}
 	m_files.Clear();
 }
 
-const AsyncFile* FileSystem::GetAsyncFile( uint32_t idx ) const
+const File* FileSystem::GetFile( uint32_t idx ) const
 {
 	return m_files[ idx ];
 }
 
-uint32_t FileSystem::GetAsyncFileCount() const
+uint32_t FileSystem::GetFileCount() const
 {
 	return m_files.Length();
 }

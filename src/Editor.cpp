@@ -886,29 +886,29 @@ bool Editor::Write() const
 
 void Editor::QueueRead( const char* levelPath )
 {
-	if ( m_asyncFile )
+	if ( m_file )
 	{
-		AE_WARN( "Cancelling level read '#'", m_asyncFile->GetUrl() );
-		m_fileSystem.Destroy( m_asyncFile );
+		AE_WARN( "Cancelling level read '#'", m_file->GetUrl() );
+		m_fileSystem.Destroy( m_file );
 	}
 	AE_INFO( "Queuing level load '#'", levelPath );
-	m_asyncFile = m_fileSystem.ReadAsync( ae::FileSystem::Root::Data, levelPath, 2.0f );
+	m_file = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
 }
 
 void Editor::m_Read()
 {
-	if ( !m_asyncFile || m_asyncFile->GetStatus() == ae::AsyncFile::Status::Pending )
+	if ( !m_file || m_file->GetStatus() == ae::File::Status::Pending )
 	{
 		return;
 	}
 
 	RunOnDestroy destroyFile{ [this]()
 	{
-		m_fileSystem.Destroy( m_asyncFile );
-		m_asyncFile = nullptr;
+		m_fileSystem.Destroy( m_file );
+		m_file = nullptr;
 	} };
 
-	uint32_t fileSize = m_asyncFile->GetLength();
+	uint32_t fileSize = m_file->GetLength();
 	if ( !fileSize )
 	{
 		return;
@@ -916,8 +916,8 @@ void Editor::m_Read()
 	
 	m_level.objects.Clear();
 	
-	const char* jsonBuffer = (const char*)m_asyncFile->GetData();
-	AE_ASSERT( jsonBuffer[ m_asyncFile->GetLength() ] == 0 );
+	const char* jsonBuffer = (const char*)m_file->GetData();
+	AE_ASSERT( jsonBuffer[ m_file->GetLength() ] == 0 );
 	
 	rapidjson::Document document;
 	AE_ASSERT( !document.Parse( jsonBuffer ).HasParseError() );
@@ -980,8 +980,8 @@ void Editor::m_Read()
 		}
 	}
 	
-	AE_INFO( "Read level '#'", m_asyncFile->GetUrl() );
-	m_level.filePath = m_asyncFile->GetUrl();
+	AE_INFO( "Read level '#'", m_file->GetUrl() );
+	m_level.filePath = m_file->GetUrl();
 	m_levelSeq++;
 }
 
