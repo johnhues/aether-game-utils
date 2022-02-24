@@ -21,9 +21,11 @@ Dependencies:
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)
 
 ## Games using aether game utils
-[Bella Lunaux: The Case of the Diamond Panther Tiara](https://johnhues.itch.io/bella-lunaux-tiara)
+[Bella Lunaux: The Case of the Diamond Panther Tiara](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
 
-<a href="https://johnhues.itch.io/bella-lunaux-tiara"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
+<a href="https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
+
+[https://johnhues.itch.io/bella-lunaux-tiara](https://johnhues.itch.io/bella-lunaux-tiara)
 
 ## Example
 A complete working example showing a window with a red background.
