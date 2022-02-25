@@ -107,6 +107,7 @@ public:
 	uint32_t GetLevelChangeSeq() const { return m_levelSeq; }
 
 private:
+	friend class EditorServer;
 	void m_Connect();
 	void m_Read();
 	const ae::Tag m_tag;

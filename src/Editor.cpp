@@ -1139,6 +1139,8 @@ void EditorServer::Terminate( EditorProgram* program )
 
 void EditorServer::Update( EditorProgram* program )
 {
+	client->m_Read(); // @TODO: This only partially updates the client
+	
 	if ( !sock.IsListening() )
 	{
 		sock.Listen( ae::Socket::Protocol::TCP, false, program->params.port, 8 );
@@ -1193,13 +1195,13 @@ void EditorServer::Update( EditorProgram* program )
 		{
 			AE_INFO( "Loaded '#'", client->GetLevel()->filePath );
 			program->window.SetTitle( client->GetLevel()->filePath.c_str() );
+			m_levelSeq_HACK = client->GetLevelChangeSeq();
 			return;
 		}
 		else
 		{
 			AE_INFO( "Failed to load level '#'", client->GetLevel()->filePath );
 		}
-		m_levelSeq_HACK = client->GetLevelChangeSeq();
 	}
 }
 
@@ -1320,8 +1322,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 	
 	static float s_hold = 0.0f;
 	static ae::Vec2 s_mouseMove( 0.0f );
-	if ( !ImGui::GetIO().WantCaptureMouse
-		&& program->input.mouse.leftButton && s_hold >= 0.0f )
+	if ( !ImGui::GetIO().WantCaptureMouse && program->input.mouse.leftButton && s_hold >= 0.0f )
 	{
 		s_hold += dt;
 		s_mouseMove += ae::Vec2( program->input.mouse.movement );
@@ -1345,7 +1346,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		s_hold = 0.0f;
 		s_mouseMove = ae::Vec2( 0.0f );
 	}
-	
+
 	if ( !program->input.mouse.leftButton && program->input.mousePrev.leftButton // Release
 		&& !ImGui::GetIO().WantCaptureMouse && program->camera.GetMode() == ae::DebugCamera::Mode::None )
 	{

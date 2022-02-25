@@ -11603,7 +11603,7 @@ void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 const File* FileSystem::Read( Root root, const char* url, float timeoutSec )
 {
 	Str256 fullName;
-	if ( IsAbsolutePath( url ) || GetRootDir( root, &fullName ) )
+	if ( url[ 0 ] && ( IsAbsolutePath( url ) || GetRootDir( root, &fullName ) ) )
 	{
 		fullName += url;
 		return Read( fullName.c_str(), timeoutSec );
