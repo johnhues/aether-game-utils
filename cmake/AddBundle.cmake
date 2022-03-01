@@ -33,8 +33,8 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 	elseif(APPLE)
 		# Only add resource files to Apple bundles
 		# Adding resources on Windows causes an issue where files are copied only once on configure
-		target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
-		set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+		# target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
+		# set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 		set(CMAKE_OSX_SYSROOT macosx)
 		set(CMAKE_OSX_DEPLOYMENT_TARGET 10.10)
@@ -42,7 +42,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
 			MACOSX_BUNDLE ON
 			OUTPUT_NAME "${_AE_BUNDLE_NAME}"
-			RESOURCE "${_AE_RESOURCES}"
+			# RESOURCE "${_AE_RESOURCES}"
 			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME "YES"
 			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "No"
 			MACOSX_BUNDLE_BUNDLE_NAME "${_AE_BUNDLE_NAME}" # CFBundleName
@@ -116,14 +116,16 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		)
 	endif()
 	
-	if(NOT XCODE)
+	# if(NOT APPLE)
+		set(APPLE_THING ../Resources/)
 		foreach(resource ${_AE_RESOURCES})
+			file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${resource})
 			add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
 				COMMAND ${CMAKE_COMMAND} -E copy_if_different
 					${CMAKE_CURRENT_SOURCE_DIR}/${resource}
-					$<TARGET_FILE_DIR:${_AE_EXECUTABLE_NAME}>/${resource}
+					$<TARGET_FILE_DIR:${_AE_EXECUTABLE_NAME}>/${APPLE_THING}${resource}
 			)
 		endforeach()
-	endif()
+	# endif()
 	
 endfunction()

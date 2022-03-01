@@ -11938,21 +11938,33 @@ void FileSystem::ShowFolder( const char* folderPath )
 Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
-	NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-	if ( [currentPath isEqualToString:@"/"] && filePath[ 0 ] != '/' )
+	if ( filePath[ 0 ] == '/' )
 	{
+		// Already absolute
+		return filePath;
+	}
+	else if ( CFBundleGetMainBundle() )
+	{
+		// Assume filePath is relative to the app resource folder
 		char path[ PATH_MAX ];
 		path[ 0 ] = 0;
 		CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL( CFBundleGetMainBundle() );
 		CFURLGetFileSystemRepresentation( resourcesURL, TRUE, (UInt8*)path, PATH_MAX );
 		CFRelease( resourcesURL );
+		strlcat( path, "/", sizeof(path) );
+		strlcat( path, filePath, sizeof(path) );
 		return path;
 	}
-	NSString* path = [NSString stringWithUTF8String:filePath];
-	AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
-	NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
-	NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
-	return [absoluteUrl.path UTF8String];
+	else
+	{
+		// Assume filePath is relative to the executables directory
+		NSString* path = [NSString stringWithUTF8String:filePath];
+		NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
+		AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
+		NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
+		NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
+		return [absoluteUrl.path UTF8String];
+	}
 #elif _AE_LINUX_
 	// @TODO: Handle non-existing dirs
 	char* resolvedPath;
