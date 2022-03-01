@@ -13,7 +13,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <processthreadsapi.h>
-#include <atlstr.h>
 #endif
 
 // @TODO: Remove these dependencies
@@ -369,6 +368,7 @@ void EditorProgram::Initialize()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	ui.Initialize();
 	camera.Initialize( params.worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
+	camera.SetEditorControls( true );
 	debugLines.Initialize( 20480 );
 	debugLines.SetXRayEnabled( false );
 	editor.Initialize( this );
@@ -734,17 +734,18 @@ void Editor::Launch()
 			execv( m_params.argv[ 0 ], execArgs );
 		}
 #elif _AE_WINDOWS_
-		STARTUPINFO startupInfo;
+		STARTUPINFOA startupInfo;
 		memset( &startupInfo, 0, sizeof( startupInfo ) );
 		startupInfo.cb = sizeof( startupInfo );
 		PROCESS_INFORMATION procInfo;
-		CStringW executableStr( m_params.argv[ 0 ] );
-		CStringW args = m_params.argv[ 0 ];
-		args += " ae_editor ";
-		args += m_level.filePath.c_str();
-		CreateProcess(
-			executableStr,
-			(LPWSTR)(LPCWSTR)args,
+		char args[ 256 ];
+		args[ 0 ] = 0;
+		strlcat( args, m_params.argv[ 0 ], sizeof(args) );
+		strlcat( args, " ae_editor ", sizeof(args) );
+		strlcat( args, m_level.filePath.c_str(), sizeof(args) );
+		CreateProcessA(
+			m_params.argv[ 0 ],
+			args,
 			nullptr,
 			nullptr,
 			false,
