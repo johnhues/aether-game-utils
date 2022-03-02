@@ -1951,11 +1951,14 @@ public:
 		CacheShared //!< Same as above but shared accross the 'organization name'
 	};
 	
-	//! Passing an empty string to dataDir is equivalent to using
-	//! the applications working directory. Organization name should be your name
-	//! or your companies name and should be consistent across apps. Application
-	//! name should be the name of this application. Initialize() creates missing
-	//! folders for Root::User and Root::Cache.
+	//! If \p dataDir is absolute no processing on the path will be done. Passing
+	//! an empty string or relative path to \p dataDir will cause a platform
+	//! specific directory to be chosen as the base path. For bundled Apple applications
+	//! the base path will be the 'Resources' bundle folder. In all other cases the base
+	//! path will be relative to the executable (ignoring the working directory).
+	//! Organization name should be your name or your companies name and should be
+	//! consistent across apps. Application name should be the name of this application.
+	//! Initialize() creates missing folders for Root::User and Root::Cache.
 	void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
 
 	// Asynchronous file loading
@@ -2003,6 +2006,11 @@ public:
 	static void ShowFolder( const char* folderPath );
 	
 	// Static helpers
+	//! If \p filePath is absolute no processing on the path will be done. Passing
+	//! an empty string or relative path to \p filePath will cause a platform
+	//! specific directory to be chosen as the base path. For bundled Apple applications
+	//! the base path will be the 'Resources' bundle folder. In all other cases the base
+	//! path will be relative to the executable (ignoring the working directory).
 	static Str256 GetAbsolutePath( const char* filePath );
 	static bool IsAbsolutePath( const char* filePath );
 	static const char* GetFileNameFromPath( const char* filePath );
@@ -12003,14 +12011,18 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		return "";
 	}
 #elif _AE_WINDOWS_
-	char result[ ae::Str256::MaxLength() ];
-	if ( _fullpath( result, filePath, countof(result) ) )
+	if ( IsAbsolutePath( filePath ) )
 	{
-		return result;
+		return filePath;
 	}
 	else
 	{
-		return "";
+		char result[ ae::Str256::MaxLength() ];
+		result[ 0 ] = 0;
+		GetModuleFileNameA( nullptr, result, sizeof( result ) );
+		const_cast< char* >( GetFileNameFromPath( result ) )[ 0 ] = 0;
+		strlcat( result, filePath, sizeof( result ) );
+		return result;
 	}
 #elif _AE_EMSCRIPTEN_
 	ae::Str256 result;
