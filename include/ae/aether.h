@@ -1757,7 +1757,7 @@ enum class Key : uint8_t
 };
 
 //------------------------------------------------------------------------------
-// ae::MouseState class
+// ae::MouseState struct
 //------------------------------------------------------------------------------
 struct MouseState
 {
@@ -1770,6 +1770,9 @@ struct MouseState
 	bool usingTouch = false;
 };
 
+//------------------------------------------------------------------------------
+// ae::GamepadState struct
+//------------------------------------------------------------------------------
 struct GamepadState
 {
 	bool connected = false;
@@ -7317,8 +7320,10 @@ T* ae::Cast( C* obj )
 	#include "processthreadsapi.h" // For GetCurrentProcessId()
 	#include <filesystem> // @HACK: Shouldn't need this just for Windows
 	#include <timeapi.h>
+	#include <xinput.h>
 	#pragma comment (lib, "Winmm.lib")
 	#pragma comment (lib, "Ws2_32.lib")
+	#pragma comment (lib, "XInput.lib")
 	#ifndef AE_USE_OPENAL
 		#define AE_USE_OPENAL 0
 	#endif
@@ -10518,8 +10523,8 @@ void Input::Pump()
 	// Handle system events
 #if _AE_WINDOWS_
 	m_window->m_UpdateFocused( m_window->window == GetFocus() );
-	MSG msg;
-	// Get messages for current thread
+	XInputEnable( m_window->GetFocused() );
+	MSG msg; // Get messages for current thread
 	while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
 	{
 		if ( msg.message == WM_QUIT )
@@ -11022,10 +11027,95 @@ void Input::Pump()
 
 	gamepadPrev = gamepad;
 	gamepad = GamepadState();
-#if _AE_APPLE_
+	auto& gp = this->gamepad;
+#if _AE_WINDOWS_
+	{
+		DWORD i = 0;
+		// for ( DWORD i = 0; i < XUSER_MAX_COUNT; i++ )
+		{
+			XINPUT_STATE state;
+			ZeroMemory( &state, sizeof(state) );
+			DWORD dwResult = XInputGetState( i, &state );
+			if( dwResult == ERROR_SUCCESS )
+			{
+				const XINPUT_GAMEPAD& gamepad = state.Gamepad;
+
+				gp.connected = true;
+				
+				gp.leftAnalog = Vec2( gamepad.sThumbLX / 32767.0f, gamepad.sThumbLY / 32767.0f );
+				gp.rightAnalog = Vec2( gamepad.sThumbRX / 32767.0f, gamepad.sThumbRY / 32767.0f );
+				
+				gp.up = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP;
+				gp.down = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN;
+				gp.left = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT;
+				gp.right = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT;
+				
+				gp.start = gamepad.wButtons & XINPUT_GAMEPAD_START;
+				gp.select = gamepad.wButtons & XINPUT_GAMEPAD_BACK;
+				gp.a = gamepad.wButtons & XINPUT_GAMEPAD_A;
+				gp.b = gamepad.wButtons & XINPUT_GAMEPAD_B;
+				gp.x = gamepad.wButtons & XINPUT_GAMEPAD_X;
+				gp.y = gamepad.wButtons & XINPUT_GAMEPAD_Y;
+				gp.leftBumper = gamepad.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER;
+				gp.rightBumper = gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER;
+				gp.leftTrigger = gamepad.bLeftTrigger / 255.0f;
+				gp.rightTrigger = gamepad.bRightTrigger / 255.0f;
+				gp.leftAnalogClick = gamepad.wButtons & XINPUT_GAMEPAD_LEFT_THUMB;
+				gp.rightAnalogClick = gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_THUMB;
+
+				XINPUT_BATTERY_INFORMATION batteryInfo;
+				ZeroMemory( &batteryInfo, sizeof(batteryInfo) );
+				dwResult = XInputGetBatteryInformation( i, BATTERY_DEVTYPE_GAMEPAD, &batteryInfo );
+				if ( dwResult == ERROR_SUCCESS )
+				{
+					switch ( batteryInfo.BatteryType )
+					{
+						case BATTERY_TYPE_WIRED:
+							gp.batteryState = GamepadState::BatteryState::Wired;
+							break;
+						case BATTERY_TYPE_ALKALINE:
+						case BATTERY_TYPE_NIMH:
+							// @TODO: How to detect BatteryState::Charging?
+							gp.batteryState = GamepadState::BatteryState::InUse;
+							break;
+						default:
+							gp.batteryState = GamepadState::BatteryState::None;
+							break;
+					}
+					switch ( gp.batteryState )
+					{
+						case GamepadState::BatteryState::Wired:
+							gp.batteryLevel = 1.0f;
+							break;
+						case GamepadState::BatteryState::InUse:
+						case GamepadState::BatteryState::Charging:
+							switch ( batteryInfo.BatteryLevel )
+							{
+								case BATTERY_LEVEL_LOW:
+									gp.batteryLevel = 0.25f;
+									break;
+								case BATTERY_LEVEL_MEDIUM:
+									gp.batteryLevel = 0.5f;
+									break;
+								case BATTERY_LEVEL_FULL:
+									gp.batteryState = GamepadState::BatteryState::Full;
+									gp.batteryLevel = 1.0f;
+									break;
+								default:
+									gp.batteryLevel = 0.0f;
+									break;
+							}
+							break;
+						defaut:
+							break;
+					}
+				}
+			}
+		}
+	}
+#elif _AE_APPLE_
 	if ( [(NSWindow*)m_window->window isMainWindow] && [[GCController controllers] count] )
 	{
-		auto& gp = this->gamepad;
 		gp.connected = true;
 		
 		GCController* appleController = [GCController controllers][ 0 ];
@@ -11036,15 +11126,12 @@ void Input::Pump()
 			auto rightAnalog = [appleGamepad rightThumbstick];
 			gp.leftAnalog = Vec2( [leftAnalog xAxis].value, [leftAnalog yAxis].value );
 			gp.rightAnalog = Vec2( [rightAnalog xAxis].value, [rightAnalog yAxis].value );
-			gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
-			gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
 			
 			auto dpad = [appleGamepad dpad];
 			gp.up = [dpad up].value;
 			gp.down = [dpad down].value;
 			gp.left = [dpad left].value;
 			gp.right = [dpad right].value;
-			gp.dpad = ae::Int2( ( gp.up ? 0 : 1 ) - ( gp.down ? 0 : 1 ), ( gp.right ? 0 : 1 ) - ( gp.left ? 0 : 1 ) );
 			
 			gp.start = [appleGamepad buttonMenu].value;
 			gp.select = [appleGamepad buttonOptions].value;
@@ -11058,16 +11145,6 @@ void Input::Pump()
 			gp.rightTrigger = [appleGamepad rightTrigger].value;
 			gp.leftAnalogClick = [appleGamepad leftThumbstickButton].value;
 			gp.rightAnalogClick = [appleGamepad rightThumbstickButton].value;
-			
-			gp.anyButton = gp.up || gp.down || gp.left || gp.right
-				|| gp.start || gp.select
-				|| gp.a || gp.b || gp.x || gp.y
-				|| gp.leftBumper || gp.rightBumper
-				|| gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
-				|| gp.leftAnalogClick || gp.rightAnalogClick;
-			gp.anyInput = gp.anyButton
-				|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
-				|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
 			
 			gp.batteryLevel = [[appleController battery] batteryLevel];
 			switch ( [[appleController battery] batteryState] )
@@ -11088,6 +11165,19 @@ void Input::Pump()
 		}
 	}
 #endif
+	// Additional shared gamepad state processing
+	gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
+	gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
+	gp.dpad = ae::Int2( ( gp.up ? 0 : 1 ) - ( gp.down ? 0 : 1 ), ( gp.right ? 0 : 1 ) - ( gp.left ? 0 : 1 ) );
+	gp.anyButton = gp.up || gp.down || gp.left || gp.right
+		|| gp.start || gp.select
+		|| gp.a || gp.b || gp.x || gp.y
+		|| gp.leftBumper || gp.rightBumper
+		|| gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
+		|| gp.leftAnalogClick || gp.rightAnalogClick;
+	gp.anyInput = gp.anyButton
+		|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
+		|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
 }
 
 void Input::SetMouseCaptured( bool enable )
