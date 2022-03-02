@@ -269,10 +269,10 @@ uint32_t Registry::CallFn( Fn fn )
 		const ae::Type* componentType = ae::GetTypeById( m_components.GetKey( i ) );
 		if ( componentType->IsType( type ) )
 		{
-			auto& c = m_components.GetValue( i );
-			for ( uint32_t j = 0; j < c.Length(); j++ )
+			// Get components each loop because m_components could grow at any iteration
+			for ( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
 			{
-				fn( (T*)c.GetValue( j ) );
+				fn( (T*)m_components.GetValue( i ).GetValue( j ) );
 				result++;
 			}
 		}
