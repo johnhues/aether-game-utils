@@ -249,10 +249,10 @@ void Registry::Clear()
 	m_entityNames.Clear();
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
-		const ae::Map< Entity, Component* >& components = m_components.GetValue( i );
-		for ( uint32_t j = 0; j < components.Length(); j++ )
+		// Get components each loop because m_components could grow at any iteration
+		for ( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
 		{
-			Component* c = components.GetValue( j );
+			Component* c = m_components.GetValue( i ).GetValue( j );
 			c->~Component();
 			ae::Free( c );
 		}

@@ -363,6 +363,7 @@ void EditorProgram::Initialize()
 
 	window.Initialize( 1600, 1200, false, true );
 	window.SetTitle( "ae" );
+	window.SetMaximized( true );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -1274,15 +1275,18 @@ void EditorServer::Render( EditorProgram* program )
 	for ( const RenderObj& renderObj : logicObjects )
 	{
 		const EditorServerObject& obj = *renderObj.obj;
+		const ae::Matrix4 transform = obj.GetTransform( program );
+		const ae::Color color = m_GetColor( obj.entity, false );
 		ae::UniformList uniformList;
-		ae::Vec3 objPos = obj.GetTransform( program ).GetTranslation();
+		ae::Vec3 objPos = transform.GetTranslation();
 		ae::Vec3 toCamera = camPos - objPos;
 		ae::Matrix4 modelToWorld = ae::Matrix4::Rotation( ae::Vec3(0,0,1), ae::Vec3(0,1,0), toCamera, camUp );
 		modelToWorld.SetTranslation( objPos );
 		uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
 		uniformList.Set( "u_tex", &program->m_cogTexture );
-		uniformList.Set( "u_color", m_GetColor( obj.entity, false ).GetLinearRGBA() );
+		uniformList.Set( "u_color", color.GetLinearRGBA() );
 		program->m_quad.Render( &program->m_iconShader, uniformList );
+		program->debugLines.AddOBB( transform, color );
 	}
 	
 	// Transparent objects
@@ -1552,6 +1556,19 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			SaveLevel( program, true );
 		}
+		if ( ImGui::Button( "New" ) )
+		{
+			AE_INFO( "New level" );
+			EditorLevel* level = client->GetWritableLevel();
+			if ( level )
+			{
+				level->objects.Clear();
+				level->filePath = "";
+				client->m_levelSeq++;
+			}
+			
+		}
+		ImGui::SameLine();
 		if ( ImGui::Button( "Game Load" ) && connections.Length() )
 		{
 			uint8_t buffer[ kMaxEditorMessageSize ];
@@ -2180,30 +2197,27 @@ bool EditorServer::m_Load( EditorProgram* program )
 				if ( var->IsArray() )
 				{
 					uint32_t length = levelComponent.members.GetInt( var->GetName(), 0 );
-					if ( !length )
+					if ( length )
 					{
-						continue;
-					}
-					length = var->SetArrayLength( component, length );
-					for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
-					{
-						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-						if ( const char* value = levelComponent.members.GetString( key.c_str(), nullptr ) )
+						length = var->SetArrayLength( component, length );
+						for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
 						{
-							var->SetObjectValueFromString( component, value, arrIdx );
+							ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
+							if ( const char* value = levelComponent.members.GetString( key.c_str(), nullptr ) )
+							{
+								var->SetObjectValueFromString( component, value, arrIdx );
+							}
 						}
 					}
 				}
 				else
 				{
 					const char* value = levelComponent.members.GetString( var->GetName(), nullptr );
-					if ( !value )
+					if ( value )
 					{
-						continue;
+						var->SetObjectValueFromString( component, value );
 					}
-					var->SetObjectValueFromString( component, value );
 				}
-				// @NOTE: This should only be called when the above succeeds
 				editorObj->HandleVarChange( program, component, type, var );
 			}
 		}

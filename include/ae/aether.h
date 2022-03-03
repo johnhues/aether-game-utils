@@ -1860,8 +1860,8 @@ public:
 	void* m_textInputHandler = nullptr;
 	std::string m_text;
 	std::string m_textInput;
-	float m_leftAnalogThreshold = 0.05f;
-	float m_rightAnalogThreshold = 0.05f;
+	float m_leftAnalogThreshold = 0.1f;
+	float m_rightAnalogThreshold = 0.1f;
 	bool newFrame_HACK = false;
 };
 
@@ -2767,6 +2767,7 @@ public:
 	float GetDistanceFromFocus() const { return m_dist; }
 	ae::Vec2 GetRotation() const { return ae::Vec2( m_yaw, m_pitch ); }
 	bool GetRefocusTarget( ae::Vec3* targetOut ) const;
+	ae::Vec3 RotationToForward( ae::Vec2 rotation ) const;
 
 private:
 	void m_Precalculate();
@@ -9821,11 +9822,18 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 		}
 		case WM_SIZE:
 		{
-			if ( window->graphicsDevice )
+			uint32_t width = LOWORD( lParam );
+			uint32_t height = HIWORD( lParam );
+			window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
+			switch ( wParam )
 			{
-				uint32_t width = LOWORD( lParam );
-				uint32_t height = HIWORD( lParam );
-				window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
+				case SIZE_MAXIMIZED:
+					window->m_UpdateMaximized( true );
+					break;
+				case SIZE_MINIMIZED:
+				case SIZE_RESTORED:
+					window->m_UpdateMaximized( false );
+					break;
 			}
 			break;
 		}
@@ -9834,6 +9842,8 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 			PostQuitMessage( 0 );
 			break;
 		}
+		default:
+			break;
 	}
 	return DefWindowProc( hWnd, msg, wParam, lParam );
 }
@@ -10242,15 +10252,17 @@ void Window::SetSize( uint32_t width, uint32_t height )
 
 void Window::SetMaximized( bool maximized )
 {
-//	if ( maximized )
-//	{
-//		SDL_MaximizeWindow( (SDL_Window*)window );
-//	}
-//	else
-//	{
-//		SDL_RestoreWindow( (SDL_Window*)window );
-//	}
-//	m_maximized = maximized;
+#if _AE_WINDOWS_
+	if ( maximized )
+	{
+		ShowWindow( (HWND)window, SW_MAXIMIZE );
+	}
+	else
+	{
+		ShowWindow( (HWND)window, SW_RESTORE );
+	}
+	m_maximized = maximized;
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -10523,6 +10535,7 @@ void Input::Pump()
 	// Handle system events
 #if _AE_WINDOWS_
 	m_window->m_UpdateFocused( m_window->window == GetFocus() );
+	// @TODO: Use GameInput https://docs.microsoft.com/en-us/gaming/gdk/_content/gc/input/porting/input-porting-xinput#optimizingSection
 	XInputEnable( m_window->GetFocused() );
 	MSG msg; // Get messages for current thread
 	while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
@@ -16464,26 +16477,29 @@ bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
 	return true;
 }
 
-void DebugCamera::m_Precalculate()
+ae::Vec3 DebugCamera::RotationToForward( ae::Vec2 rotation ) const
 {
-	ae::Vec3 worldUp = GetWorldUp();
-	
-	m_dist = ae::Clip( m_dist, m_min, m_max );
-
+	ae::Vec3 forward;
 	if ( m_worldUp == Axis::Y )
 	{
-		m_forward = ae::Vec3( ae::Cos( m_yaw ), 0.0f, -ae::Sin( m_yaw ) );
+		forward = ae::Vec3( ae::Cos( rotation.x ), 0.0f, -ae::Sin( rotation.x ) );
 	}
 	else if ( m_worldUp == Axis::Z )
 	{
-		m_forward = ae::Vec3( ae::Cos( m_yaw ), ae::Sin( m_yaw ), 0.0f );
+		forward = ae::Vec3( ae::Cos( rotation.x ), ae::Sin( rotation.x ), 0.0f );
 	}
-	m_forward *= ae::Cos( m_pitch );
-	m_forward += worldUp * ae::Sin( m_pitch );
+	forward *= ae::Cos( rotation.y );
+	forward += GetWorldUp() * ae::Sin( rotation.y );
+	return forward;
+}
 
+void DebugCamera::m_Precalculate()
+{
+	m_dist = ae::Clip( m_dist, m_min, m_max );
+	m_forward = RotationToForward( ae::Vec2( m_yaw, m_pitch ) );
 	m_offset = -m_forward;
 	m_offset *= m_dist;
-	m_right = m_forward.Cross( worldUp ).SafeNormalizeCopy();
+	m_right = m_forward.Cross( GetWorldUp() ).SafeNormalizeCopy();
 	m_up = m_right.Cross( m_forward ).SafeNormalizeCopy();
 }
 
