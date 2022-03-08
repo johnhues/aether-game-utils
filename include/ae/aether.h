@@ -418,7 +418,7 @@ struct Vec2 : public VecT< Vec2 >
 	struct Int2 CeilCopy() const;
 	Vec2 RotateCopy( float rotation ) const;
 	float GetAngle() const;
-	Vec2 Reflect( Vec2 v, Vec2 n ) const;
+	static Vec2 Reflect( Vec2 v, Vec2 n );
 	union
 	{
 		struct
@@ -4844,7 +4844,7 @@ inline float Vec2::GetAngle() const
 	}
 	return ae::Atan2( y, x );
 }
-inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n ) const
+inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n )
 {
 	return n * ( 2.0f * v.Dot( n ) / n.LengthSquared() ) - v;
 }

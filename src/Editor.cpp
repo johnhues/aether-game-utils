@@ -1231,11 +1231,8 @@ void EditorServer::Render( EditorProgram* program )
 	{
 		const EditorServerObject* obj = m_objects.GetValue( i );
 		float distanceSq = ( camPos - obj->GetTransform( program ).GetTranslation() ).LengthSquared();
-		if ( obj->mesh )
-		{
-			if ( obj->opaque ) { opaqueObjects.Append( { obj, distanceSq } ); }
-			else { transparentObjects.Append( { obj, distanceSq } ); }
-		}
+		if ( obj->mesh && obj->opaque ) { opaqueObjects.Append( { obj, distanceSq } ); }
+		else if ( obj->mesh && GetShowInvisible() ) { transparentObjects.Append( { obj, distanceSq } ); }
 		else { logicObjects.Append( { obj, distanceSq } ); }
 	}
 	
@@ -1290,21 +1287,18 @@ void EditorServer::Render( EditorProgram* program )
 	}
 	
 	// Transparent objects
-	if ( GetShowInvisible() )
+	std::sort( transparentObjects.begin(), transparentObjects.end(), []( const RenderObj& a, const RenderObj& b )
 	{
-		std::sort( transparentObjects.begin(), transparentObjects.end(), []( const RenderObj& a, const RenderObj& b )
-		{
-			return a.distanceSq > b.distanceSq;
-		} );
-		program->m_meshShader.SetDepthTest( true );
-		program->m_meshShader.SetDepthWrite( false );
-		program->m_meshShader.SetBlending( true );
-		for ( const RenderObj& renderObj : transparentObjects )
-		{
-			const EditorServerObject& obj = *renderObj.obj;
-			ae::Color color = m_GetColor( obj.entity, false ).ScaleA( 0.5f );
-			renderMesh( renderObj, color );
-		}
+		return a.distanceSq > b.distanceSq;
+	} );
+	program->m_meshShader.SetDepthTest( true );
+	program->m_meshShader.SetDepthWrite( false );
+	program->m_meshShader.SetBlending( true );
+	for ( const RenderObj& renderObj : transparentObjects )
+	{
+		const EditorServerObject& obj = *renderObj.obj;
+		ae::Color color = m_GetColor( obj.entity, false ).ScaleA( 0.5f );
+		renderMesh( renderObj, color );
 	}
 }
 
@@ -2452,12 +2446,8 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
 		const EditorServerObject* editorObj = m_objects.GetValue( i );
-		if ( editorObj->mesh )
+		if ( editorObj->mesh && ( editorObj->opaque || GetShowInvisible() ) )
 		{
-			if ( !GetShowInvisible() && !editorObj->opaque )
-			{
-				continue;
-			}
 			raycastParams.userData = editorObj;
 			raycastParams.transform = editorObj->GetTransform( program );
 			result = editorObj->mesh->collision.Raycast( raycastParams, result );
