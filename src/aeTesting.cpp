@@ -46,6 +46,7 @@ int32_t LifetimeTester::currentCount = 0;
 LifetimeTester::LifetimeTester()
 {
   check = kConstructed;
+  value = 0;
   
   ctorCount++;
   currentCount++;
@@ -55,6 +56,7 @@ LifetimeTester::LifetimeTester( const LifetimeTester& o ) // copy ctor
 {
   AE_ASSERT( o.check == kConstructed );
   check = o.check;
+  value = o.value;
   
   copyCount++;
   currentCount++;
@@ -64,6 +66,7 @@ LifetimeTester::LifetimeTester( LifetimeTester&& o ) noexcept // move ctor
 {
   AE_ASSERT( o.check == kConstructed );
   check = o.check;
+  value = o.value;
   o.check = kMoved;
   
   moveCount++;
@@ -75,6 +78,7 @@ LifetimeTester& LifetimeTester::operator=( const LifetimeTester& o ) // copy ass
   AE_ASSERT( check == kConstructed || check == kMoved );
   AE_ASSERT( o.check == kConstructed );
   check = o.check;
+  value = o.value;
   
   copyAssignCount++;
   
@@ -86,6 +90,7 @@ LifetimeTester& LifetimeTester::operator=( LifetimeTester&& o ) noexcept // move
   AE_ASSERT( check == kConstructed || check == kMoved );
   AE_ASSERT( o.check == kConstructed );
   check = o.check;
+  value = o.value;
   o.check = kMoved;
   
   moveAssignCount++;
@@ -96,7 +101,7 @@ LifetimeTester& LifetimeTester::operator=( LifetimeTester&& o ) noexcept // move
 LifetimeTester::~LifetimeTester()
 {
   AE_ASSERT( check == kConstructed || check == kMoved );
-  
+
   dtorCount++;
   currentCount--;
 }

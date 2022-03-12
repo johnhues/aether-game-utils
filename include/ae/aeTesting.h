@@ -48,6 +48,7 @@ public:
   static const uint32_t kMoved;
   
   uint32_t check;
+  uint32_t value;
   
   static void ClearStats();
   

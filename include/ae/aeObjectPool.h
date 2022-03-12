@@ -28,6 +28,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+#include "aeList.h"
 
 namespace ae {
 

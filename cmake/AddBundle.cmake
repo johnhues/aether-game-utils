@@ -120,7 +120,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		set(APPLE_RESOURCE_DIR ../Resources/)
 	endif()
 	foreach(resource ${_AE_RESOURCES})
-		file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${resource})
+		file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${resource})
 		add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
 				${CMAKE_CURRENT_SOURCE_DIR}/${resource}
