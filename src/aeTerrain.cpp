@@ -989,7 +989,7 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
       
       TempTri* t;
       uint16_t* i;
-      aeListNode< SplitTri > node;
+      ae::ListNode< SplitTri > node;
     };
     
     for ( uint32_t vi = 0; vi < tempVerts.Length(); vi++ )
@@ -998,7 +998,7 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
       SplitTri vertTris[ 16 ]; // @TODO: What is actual max?
       
       uint32_t normalGroupCount = 0;
-      aeList< SplitTri > normalGroups[ countof(vertTris) ];
+      ae::List< SplitTri > normalGroups[ countof(vertTris) ];
       
       for ( uint32_t ti = 0; ti < tempTris.Length(); ti++ )
       {
@@ -1019,7 +1019,7 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
           
           // Create or find a normal group for triangle
           ae::Vec3 n = tri.n;
-          aeList< SplitTri >* normalGroup = std::find_if( normalGroups, normalGroups + normalGroupCount, [n]( const auto& normalGroup )
+          ae::List< SplitTri >* normalGroup = std::find_if( normalGroups, normalGroups + normalGroupCount, [n]( const auto& normalGroup )
           {
             for ( const SplitTri* tri = normalGroup.GetFirst(); tri; tri = tri->node.GetNext() )
             {
@@ -1044,7 +1044,7 @@ void TerrainChunk::Generate( const TerrainSdfCache* sdf, const TerrainJob* job, 
       
       for ( uint32_t ni = 0; ni < normalGroupCount; ni++ )
       {
-        aeList< SplitTri >& normalGroup = normalGroups[ ni ];
+        ae::List< SplitTri >& normalGroup = normalGroups[ ni ];
         
         // Calculate average group normal
         ae::Vec3 n( 0.0f );

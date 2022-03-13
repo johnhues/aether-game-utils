@@ -1367,6 +1367,82 @@ private:
 inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
 
 //------------------------------------------------------------------------------
+// ae::ListNode class
+//------------------------------------------------------------------------------
+template < typename T > class List; // ae::List forward declaration
+template < typename T >
+class ListNode
+{
+public:
+	ListNode( T* owner );
+	~ListNode();
+
+	void Remove();
+
+	T* GetFirst();
+	T* GetNext();
+	T* GetPrev();
+	T* GetLast();
+
+	const T* GetFirst() const;
+	const T* GetNext() const;
+	const T* GetPrev() const;
+	const T* GetLast() const;
+
+	List< T >* GetList();
+	const List< T >* GetList() const;
+
+private:
+	friend class List< T >;
+	
+	// @NOTE: These operations don't make sense when either node is in a list,
+	// to avoid a potentially hard to diagnose random assert, assignment is
+	// disabled altogether
+	ListNode( ListNode& ) = delete;
+	void operator = ( ListNode& ) = delete;
+
+	List< T >* m_root;
+	ListNode* m_next;
+	ListNode* m_prev;
+	T* m_owner;
+};
+
+//------------------------------------------------------------------------------
+// ae::List class
+//------------------------------------------------------------------------------
+template < typename T >
+class List
+{
+public:
+	List();
+	~List();
+
+	void Append( ListNode< T >& node );
+
+	T* GetFirst();
+	T* GetLast();
+
+	const T* GetFirst() const;
+	const T* GetLast() const;
+
+	template < typename U > T* Find( const U& value );
+	template < typename Fn > T* FindFn( Fn predicateFn );
+
+	uint32_t Length() const;
+
+private:
+	friend class ListNode< T >;
+	
+	// @NOTE: Disable assignment. Assigning a list to another list technically makes sense,
+	// but could result in unexpected orphaning of list nodes. Additionally disabing these
+	// operations is consistent with list node.
+	List( List& ) = delete;
+	void operator = ( List& ) = delete;
+
+	ListNode< T >* m_first;
+};
+
+//------------------------------------------------------------------------------
 // ae::Rect class
 // @TODO: Move this up near Vec3 etc
 //------------------------------------------------------------------------------
@@ -6366,6 +6442,249 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 		}
 	}
 	return os << "}";
+}
+
+//------------------------------------------------------------------------------
+// ae::ListNode member functions
+//------------------------------------------------------------------------------
+template < typename T >
+ListNode< T >::ListNode( T* owner )
+{
+	m_root = nullptr;
+	m_next = this;
+	m_prev = this;
+	m_owner = owner;
+}
+
+template < typename T >
+ListNode< T >::~ListNode()
+{
+	Remove();
+}
+
+template < typename T >
+void ListNode< T >::Remove()
+{
+	if ( !m_root )
+	{
+		return;
+	}
+
+	AE_ASSERT( m_root->m_first );
+	if ( m_root->m_first == this )
+	{
+		if ( m_next == this )
+		{
+			// Last node in list
+			m_root->m_first = nullptr;
+		}
+		else
+		{
+			// Was head. Set next as head.
+			m_root->m_first = m_next;
+		}
+	}
+
+	m_next->m_prev = m_prev;
+	m_prev->m_next = m_next;
+
+	m_root = nullptr;
+	m_next = this;
+	m_prev = this;
+}
+
+template < typename T >
+T* ListNode< T >::GetFirst()
+{
+	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetFirst() );
+}
+
+template < typename T >
+T* ListNode< T >::GetNext()
+{
+	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetNext() );
+}
+
+template < typename T >
+T* ListNode< T >::GetPrev()
+{
+	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetPrev() );
+}
+
+template < typename T >
+T* ListNode< T >::GetLast()
+{
+	return const_cast<T*>( const_cast<const ListNode< T >*>( this )->GetLast() );
+}
+
+template < typename T >
+const T* ListNode< T >::GetFirst() const
+{
+	return m_root ? m_root->GetFirst() : nullptr;
+}
+
+template < typename T >
+const T* ListNode< T >::GetNext() const
+{
+	if ( !m_root || m_root->m_first == m_next )
+	{
+		return nullptr;
+	}
+	return m_next->m_owner;
+}
+
+template < typename T >
+const T* ListNode< T >::GetPrev() const
+{
+	if ( !m_root || m_root->m_first == this )
+	{
+		return nullptr;
+	}
+	return m_prev->m_owner;
+}
+
+template < typename T >
+const T* ListNode< T >::GetLast() const
+{
+	return m_root ? m_root->GetLast() : nullptr;
+}
+
+template < typename T >
+List< T >* ListNode< T >::GetList()
+{
+	return m_root;
+}
+
+template < typename T >
+const List< T >* ListNode< T >::GetList() const
+{
+	return m_root;
+}
+
+//------------------------------------------------------------------------------
+// ae::List member functions
+//------------------------------------------------------------------------------
+template < typename T >
+List< T >::List() : m_first( nullptr )
+{}
+
+template < typename T >
+List< T >::~List()
+{
+	while ( m_first )
+	{
+		m_first->Remove();
+	}
+}
+
+template < typename T >
+void List< T >::Append( ListNode< T >& node )
+{
+	if ( m_first )
+	{
+		node.Remove();
+
+		node.m_root = this;
+
+		node.m_next = m_first;
+		node.m_prev = m_first->m_prev;
+
+		node.m_next->m_prev = &node;
+		node.m_prev->m_next = &node;
+	}
+	else
+	{
+		m_first = &node;
+		node.m_root = this;
+	}
+}
+
+template < typename T >
+T* List< T >::GetFirst()
+{
+	return m_first ? m_first->m_owner : nullptr;
+}
+
+template < typename T >
+T* List< T >::GetLast()
+{
+	return m_first ? m_first->m_prev->m_owner : nullptr;
+}
+
+template < typename T >
+const T* List< T >::GetFirst() const
+{
+	return m_first ? m_first->m_owner : nullptr;
+}
+
+template < typename T >
+const T* List< T >::GetLast() const
+{
+	return m_first ? m_first->m_prev->m_owner : nullptr;
+}
+
+template < typename T >
+template < typename U >
+T* List< T >::Find( const U& value )
+{
+	if ( !m_first )
+	{
+		return nullptr;
+	}
+
+	ListNode< T >* current = m_first;
+	do
+	{
+		if ( *( current->m_owner ) == value )
+		{
+			return current->m_owner;
+		}
+		current = current->m_next;
+	} while ( current != m_first );
+
+	return nullptr;
+}
+
+template < typename T >
+template < typename Fn >
+T* List< T >::FindFn( Fn predicateFn )
+{
+	if ( !m_first )
+	{
+		return nullptr;
+	}
+
+	ListNode< T >* current = m_first;
+	do
+	{
+		if ( predicateFn( current->m_owner ) )
+		{
+			return current->m_owner;
+		}
+		current = current->m_next;
+	} while ( current != m_first );
+
+	return nullptr;
+}
+
+template < typename T >
+uint32_t List< T >::Length() const
+{
+	if ( !m_first )
+	{
+		return 0;
+	}
+
+	// @TODO: Should be constant time
+	uint32_t count = 1;
+	ListNode< T >* current = m_first;
+	while ( current->m_next != m_first )
+	{
+		current = current->m_next;
+		count++;
+	}
+
+	return count;
 }
 
 //------------------------------------------------------------------------------

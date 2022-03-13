@@ -28,7 +28,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeList.h"
 #include "aether.h"
 
 //------------------------------------------------------------------------------
@@ -58,13 +57,13 @@ private:
   {
     Shape() : node( this ) {}
 
-    aeListNode< Shape > node;
+    ae::ListNode< Shape > node;
     ae::Array< ae::Int2 > cells;
     T value;
   };
   
   ae::Tag m_pool;
-  aeList< Shape > m_shapeList;
+  ae::List< Shape > m_shapeList;
 };
 
 template < typename T >

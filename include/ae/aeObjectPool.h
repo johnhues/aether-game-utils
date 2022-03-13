@@ -27,7 +27,6 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aether.h"
 #include "aeList.h"
 
 namespace ae {
@@ -152,12 +151,12 @@ private:
 	struct Page
 	{
 		Page() : node( this ) {}
-		aeListNode< Page > node;
+		ae::ListNode< Page > node;
 		ObjectPool< T, N > pool;
 	};
 	
 	uint32_t m_length;
-	aeList< Page > m_pages;
+	ae::List< Page > m_pages;
 	Tag m_tag;
 };
 
