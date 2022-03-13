@@ -27,7 +27,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeList.h"
+#include "aether.h"
 
 namespace ae {
 
@@ -108,6 +108,8 @@ public:
 	//! Returns true if the object \p obj is currently allocated. False will be returned
 	//! if \p obj is null.
 	bool IsAllocated( const T* obj ) const;
+	//! Returns true if \p obj is part of this pool (allocated or not), and false otherwise.
+	bool IsInPool( const T* obj ) const;
 	//! Returns true if the pool has any unallocated objects available.
 	bool HasFree() const;
 	//! Returns the number of allocated objects.
@@ -119,9 +121,6 @@ private:
 	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
 	ae::FreeList< N > m_freeList;
 	AlignedStorageT m_objects[ N ];
-public:
-	// @NOTE: This is a hack to allow PagedObjectPools to search for the correct ObjectPool
-	bool _HACK_IsOnPage( const T* obj ) const;
 };
 
 //------------------------------------------------------------------------------
@@ -380,6 +379,15 @@ bool ObjectPool< T, N >::IsAllocated( const T* obj ) const
 }
 
 template < typename T, uint32_t N >
+bool ObjectPool< T, N >::IsInPool( const T* obj ) const
+{
+	if ( !obj ) { return false; }
+	if ( (intptr_t)obj % alignof(T) != 0 ) { return false; }
+	int32_t index = (int32_t)( obj - (const T*)m_objects );
+	return 0 <= index && index < N;
+}
+
+template < typename T, uint32_t N >
 bool ObjectPool< T, N >::HasFree() const
 {
 	return m_freeList.HasFree();
@@ -389,15 +397,6 @@ template < typename T, uint32_t N >
 uint32_t ObjectPool< T, N >::Length() const
 {
 	return m_freeList.Length();
-}
-
-template < typename T, uint32_t N >
-bool ObjectPool< T, N >::_HACK_IsOnPage( const T* obj ) const
-{
-	if ( !obj ) { return false; }
-	if ( (intptr_t)obj % alignof(T) != 0 ) { return false; }
-	int32_t index = (int32_t)( obj - (const T*)m_objects );
-	return 0 <= index && index < N;
 }
 
 //------------------------------------------------------------------------------
@@ -444,7 +443,7 @@ bool PagedObjectPool< T, N >::Delete( T* obj )
 	Page* page = m_pages.GetFirst();
 	while ( page )
 	{
-		if ( page->pool._HACK_IsOnPage( obj ) )
+		if ( page->pool.IsInPool( obj ) )
 		{
 			page->pool.Delete( obj );
 			if ( page->pool.Length() == 0 )
@@ -498,7 +497,7 @@ const T* PagedObjectPool< T, N >::GetNext( const T* obj ) const
 	while ( page )
 	{
 		AE_ASSERT( page->pool.Length() );
-		bool inPrev = page->pool._HACK_IsOnPage( obj );
+		bool inPrev = page->pool.IsInPool( obj );
 		if ( inPrev )
 		{
 			if ( const T* o = page->pool.GetNext( obj ) )
@@ -537,7 +536,7 @@ bool PagedObjectPool< T, N >::IsAllocated( const T* obj ) const
 		const Page* page = m_pages.GetFirst();
 		while ( page )
 		{
-			if ( page->pool._HACK_IsOnPage( obj ) && page->pool.IsAllocated( obj ) )
+			if ( page->pool.IsInPool( obj ) && page->pool.IsAllocated( obj ) )
 			{
 				return true;
 			}

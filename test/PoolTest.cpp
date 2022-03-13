@@ -260,12 +260,12 @@ TEST_CASE( "Pages can be checked for objects", "[aeObjectPool]" )
 	for ( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		int32_t* p = pool.New();
-		REQUIRE( pool._HACK_IsOnPage( p ) );
-		REQUIRE( !pool._HACK_IsOnPage( (int32_t*)( (uint8_t*)p + 1 ) ) );
+		REQUIRE( pool.IsInPool( p ) );
+		REQUIRE( !pool.IsInPool( (int32_t*)( (uint8_t*)p + 1 ) ) );
 	}
 	
 	int32_t something = 0;
-	REQUIRE( !pool._HACK_IsOnPage( &something ) );
+	REQUIRE( !pool.IsInPool( &something ) );
 
 	pool.DeleteAll();
 }
