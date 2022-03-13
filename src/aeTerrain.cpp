@@ -1200,7 +1200,7 @@ void Terrain::UpdateChunkLighting( TerrainChunk* chunk )
 
 TerrainChunk* Terrain::AllocChunk( ae::Int3 pos )
 {
-  TerrainChunk* chunk = m_chunkPool.Allocate();
+  TerrainChunk* chunk = m_chunkPool.New();
   if ( !chunk )
   {
     return nullptr;
@@ -1229,7 +1229,7 @@ void Terrain::FreeChunk( TerrainChunk* chunk )
   chunk->m_mesh.Clear();
 
   // @NOTE: This has to be done last because CompactingAllocator keeps a pointer to m_vertices
-  m_chunkPool.Free( chunk );
+  m_chunkPool.Delete( chunk );
 }
 
 void Terrain::m_SetVertexCount( uint32_t chunkIndex, VertexCount count )
