@@ -77,10 +77,16 @@ private:
 //------------------------------------------------------------------------------
 // ae::ObjectPool class
 //------------------------------------------------------------------------------
-template< typename T, uint32_t N >
+template< typename T, uint32_t N, bool Paged = false >
 class ObjectPool
-{  
+{
 public:
+	//! Constructor for static ae::ObjectPool's only.
+	ObjectPool();
+	//! Constructor for paged ae::ObjectPool's only.
+	ObjectPool( const ae::Tag& tag );
+	//! All objects allocated with ae::ObjectPool::New() must be destroyed before
+	//! the ae::ObjectPool is destroyed.
 	~ObjectPool();
 
 	//! Returns a pointer to a freshly constructed object T or null if there
@@ -105,11 +111,6 @@ public:
 	//! Null will be returned if \p obj is null.
 	T* GetNext( T* obj );
 
-	//! Returns true if the object \p obj is currently allocated. False will be returned
-	//! if \p obj is null.
-	bool IsAllocated( const T* obj ) const;
-	//! Returns true if \p obj is part of this pool (allocated or not), and false otherwise.
-	bool IsInPool( const T* obj ) const;
 	//! Returns true if the pool has any unallocated objects available.
 	bool HasFree() const;
 	//! Returns the number of allocated objects.
@@ -118,45 +119,27 @@ public:
 	constexpr uint32_t Size() const { return N; }
 
 private:
+	// @TODO: Disable copy constructor etc or fix list on copy.
 	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
-	ae::FreeList< N > m_freeList;
-	AlignedStorageT m_objects[ N ];
-};
-
-//------------------------------------------------------------------------------
-// ae::PagedObjectPool class
-//------------------------------------------------------------------------------
-template < typename T, uint32_t N >
-class PagedObjectPool
-{
-public:
-	PagedObjectPool( Tag tag );
-	~PagedObjectPool();
-
-	T* New();
-	bool Delete( T* obj );
-	void DeleteAll();
-
-	const T* GetFirst() const;
-	const T* GetNext( const T* obj ) const;
-	T* GetFirst();
-	T* GetNext( T* obj );
-
-	bool IsAllocated( const T* obj ) const;
-	uint32_t Length() const;
-	constexpr uint32_t PageSize() const { return N; }
-	
-private:
 	struct Page
 	{
-		Page() : node( this ) {}
-		ae::ListNode< Page > node;
-		ObjectPool< T, N > pool;
+		ae::ListNode< Page > node = this;
+		ae::FreeList< N > freeList;
+		AlignedStorageT objects[ N ];
 	};
-	
-	uint32_t m_length;
+	template < bool Allocate > struct ConditionalPage {
+		Page* Get() { return nullptr; }
+		const Page* Get() const { return nullptr; }
+	};
+	template <> struct ConditionalPage< false > {
+		Page* Get() { return &page; }
+		const Page* Get() const { return &page; }
+		Page page;
+	};
+	uint32_t m_length = 0;
+	ae::Tag m_tag;
 	ae::List< Page > m_pages;
-	Tag m_tag;
+	ConditionalPage< Paged > m_firstPage;
 };
 
 //------------------------------------------------------------------------------
@@ -287,276 +270,193 @@ uint32_t FreeList< N >::Length() const
 //------------------------------------------------------------------------------
 // ae::ObjectPool member functions
 //------------------------------------------------------------------------------
-template < typename T, uint32_t N >
-ObjectPool< T, N >::~ObjectPool()
+template < typename T, uint32_t N, bool Paged >
+ObjectPool< T, N, Paged >::ObjectPool()
+{
+	AE_STATIC_ASSERT_MSG( !Paged, "Paged ae::ObjectPool requires an allocation tag" );
+	m_pages.Append( m_firstPage.Get()->node );
+}
+
+template < typename T, uint32_t N, bool Paged >
+ObjectPool< T, N, Paged >::ObjectPool( const ae::Tag& tag )
+	: m_tag( tag )
+{
+	AE_STATIC_ASSERT_MSG( Paged, "Static ae::ObjectPool does not need an allocation tag" );
+	AE_ASSERT( m_tag != ae::Tag() );
+}
+
+template < typename T, uint32_t N, bool Paged >
+ObjectPool< T, N, Paged >::~ObjectPool()
 {
 	AE_ASSERT( Length() == 0 );
 }
 
-template < typename T, uint32_t N >
-T* ObjectPool< T, N >::New()
+template < typename T, uint32_t N, bool Paged >
+T* ObjectPool< T, N, Paged >::New()
 {
-	int32_t index = m_freeList.Allocate();
-	if ( index >= 0 )
+	// @TODO: FindFn's parameter should be a reference to match ae::Array
+	Page* page = m_pages.FindFn( []( const Page* page ) { return page->freeList.HasFree(); } );
+	if ( Paged && !page )
 	{
-		return new ( &m_objects[ index ] ) T();
+		page = ae::New< Page >( m_tag );
+		m_pages.Append( page->node );
+	}
+	if ( page )
+	{
+		int32_t index = page->freeList.Allocate();
+		if ( index >= 0 )
+		{
+			m_length++;
+			return new ( &page->objects[ index ] ) T();
+		}
 	}
 	return nullptr;
 }
 
-template < typename T, uint32_t N >
-void ObjectPool< T, N >::Delete( T* obj )
+template < typename T, uint32_t N, bool Paged >
+void ObjectPool< T, N, Paged >::Delete( T* obj )
 {
 	if ( !obj ) { return; }
-	int32_t index = (int32_t)( obj - (T*)m_objects );
-#if _AE_DEBUG_
-	AE_ASSERT( 0 <= index && index < N );
-	AE_ASSERT( (T*)&m_objects[ index ] == obj );
-	AE_ASSERT( m_freeList.IsAllocated( index ) );
-#endif
-	obj->~T();
-#if _AE_DEBUG_
-	memset( obj, 0xDD, sizeof(*obj) );
-#endif
-	m_freeList.Free( index );
-}
+	if ( (intptr_t)obj % alignof(T) != 0 ) { return; } // @TODO: Should this be an assert?
 
-template < typename T, uint32_t N >
-void ObjectPool< T, N >::DeleteAll()
-{
-	for ( uint32_t i = 0; i < N; i++ )
-	{
-		if ( m_freeList.IsAllocated( i ) )
-		{
-			( (T*)&m_objects[ i ] )->~T();
-		}
-	}
-	m_freeList.FreeAll();
-}
-
-template < typename T, uint32_t N >
-const T* ObjectPool< T, N >::GetFirst() const
-{
-	return m_freeList.Length() ? (const T*)&m_objects[ m_freeList.GetFirst() ] : nullptr;
-}
-
-template < typename T, uint32_t N >
-const T* ObjectPool< T, N >::GetNext( const T* obj ) const
-{
-	if ( !obj ) { return nullptr; }
-	int32_t index = (int32_t)( obj - (const T*)m_objects );
-#if _AE_DEBUG_
-	AE_ASSERT( 0 <= index && index < N );
-	AE_ASSERT( (const T*)&m_objects[ index ] == obj );
-	AE_ASSERT( m_freeList.IsAllocated( index ) );
-#endif
-	int32_t nextIndex = m_freeList.GetNext( index );
-	return ( nextIndex >= 0 ) ? (T*)&m_objects[ nextIndex ] : nullptr;
-}
-
-template < typename T, uint32_t N >
-T* ObjectPool< T, N >::GetFirst()
-{
-	return const_cast< T* >( const_cast< const ObjectPool< T, N >* >( this )->GetFirst() );
-}
-
-template < typename T, uint32_t N >
-T* ObjectPool< T, N >::GetNext( T* obj )
-{
-	return const_cast< T* >( const_cast< const ObjectPool< T, N >* >( this )->GetNext( obj ) );
-}
-
-template < typename T, uint32_t N >
-bool ObjectPool< T, N >::IsAllocated( const T* obj ) const
-{
-	if ( !obj ) { return false; }
-	int32_t index = (int32_t)( obj - (const T*)m_objects );
-#if _AE_DEBUG_
-	AE_ASSERT( 0 <= index && index < N );
-	AE_ASSERT( (const T*)&m_objects[ index ] == obj );
-#endif
-	return m_freeList.IsAllocated( index );
-}
-
-template < typename T, uint32_t N >
-bool ObjectPool< T, N >::IsInPool( const T* obj ) const
-{
-	if ( !obj ) { return false; }
-	if ( (intptr_t)obj % alignof(T) != 0 ) { return false; }
-	int32_t index = (int32_t)( obj - (const T*)m_objects );
-	return 0 <= index && index < N;
-}
-
-template < typename T, uint32_t N >
-bool ObjectPool< T, N >::HasFree() const
-{
-	return m_freeList.HasFree();
-}
-
-template < typename T, uint32_t N >
-uint32_t ObjectPool< T, N >::Length() const
-{
-	return m_freeList.Length();
-}
-
-//------------------------------------------------------------------------------
-// ae::PagedObjectPool member functions
-//------------------------------------------------------------------------------
-template < typename T, uint32_t N >
-PagedObjectPool< T, N >::PagedObjectPool( Tag tag ) :
-	m_tag( tag )
-{
-	m_length = 0;
-}
-
-template < typename T, uint32_t N >
-PagedObjectPool< T, N >::~PagedObjectPool()
-{
-	AE_ASSERT( !m_length );
-}
-
-template < typename T, uint32_t N >
-T* PagedObjectPool< T, N >::New()
-{
-	m_length++;
-	
+	int32_t index;
 	Page* page = m_pages.GetFirst();
 	while ( page )
 	{
-		if ( T* obj = page->pool.New() )
+		index = (int32_t)( obj - (const T*)page->objects );
+		if ( 0 <= index && index < N )
 		{
-			return obj;
+			break;
 		}
 		page = page->node.GetNext();
 	}
-	
-	page = ae::New< Page >( m_tag );
-	m_pages.Append( page->node );
-	T* obj = page->pool.New();
-	AE_ASSERT( obj );
-	return obj;
+	if ( !Paged || page )
+	{
+#if _AE_DEBUG_
+		AE_ASSERT( (T*)&page->objects[ index ] == obj );
+		AE_ASSERT( page->freeList.IsAllocated( index ) );
+#endif
+		obj->~T();
+#if _AE_DEBUG_
+		memset( obj, 0xDD, sizeof(*obj) );
+#endif
+		page->freeList.Free( index );
+		m_length--;
+
+		if ( Paged && page->freeList.Length() == 0 )
+		{
+			ae::Delete( page );
+		}
+	}
 }
 
-template < typename T, uint32_t N >
-bool PagedObjectPool< T, N >::Delete( T* obj )
+template < typename T, uint32_t N, bool Paged >
+void ObjectPool< T, N, Paged >::DeleteAll()
 {
-	Page* page = m_pages.GetFirst();
-	while ( page )
+	auto deleteAllFn = []( Page* page )
 	{
-		if ( page->pool.IsInPool( obj ) )
+		for ( uint32_t i = 0; i < N; i++ )
 		{
-			page->pool.Delete( obj );
-			if ( page->pool.Length() == 0 )
+			if ( page->freeList.IsAllocated( i ) )
 			{
-				ae::Delete( page );
+				( (T*)&page->objects[ i ] )->~T();
 			}
-			m_length--;
-			return true;
 		}
-		page = page->node.GetNext();
-	}
-	return false;
-}
-
-template < typename T, uint32_t N >
-void PagedObjectPool< T, N >::DeleteAll()
-{
-	Page* page = m_pages.GetLast();
-	while ( page )
+		page->freeList.FreeAll();
+	};
+	if ( Paged )
 	{
-		Page* prev = page->node.GetPrev();
-		page->pool.DeleteAll();
-		ae::Delete( page );
-		page = prev;
+		Page* page = m_pages.GetLast();
+		while ( page )
+		{
+			Page* prev = page->node.GetPrev();
+			deleteAllFn( page );
+			ae::Delete( page );
+			page = prev;
+		}
+	}
+	else
+	{
+		deleteAllFn( m_firstPage.Get() );
 	}
 	m_length = 0;
 }
 
-template < typename T, uint32_t N >
-const T* PagedObjectPool< T, N >::GetFirst() const
+template < typename T, uint32_t N, bool Paged >
+const T* ObjectPool< T, N, Paged >::GetFirst() const
 {
-	const Page* page = m_pages.GetFirst();
-	if ( page )
+	if ( Paged )
 	{
-		AE_ASSERT( page->pool.Length() );
-		return page->pool.GetFirst();
+		const Page* page = m_pages.GetFirst();
+		if ( page )
+		{
+			AE_ASSERT( page->freeList.Length() );
+			return page->freeList.Length() ? (const T*)&page->objects[ page->freeList.GetFirst() ] : nullptr;
+		}
+	}
+	else if ( !Paged && m_length )
+	{
+		int32_t index = m_firstPage.Get()->freeList.GetFirst();
+		AE_ASSERT( index >= 0 );
+		return (const T*)&m_firstPage.Get()->objects[ index ];
 	}
 	AE_ASSERT( m_length == 0 );
 	return nullptr;
 }
 
-template < typename T, uint32_t N >
-const T* PagedObjectPool< T, N >::GetNext( const T* obj ) const
+template < typename T, uint32_t N, bool Paged >
+const T* ObjectPool< T, N, Paged >::GetNext( const T* obj ) const
 {
-	if ( !obj )
-	{
-		return nullptr;
-	}
-	
+	if ( !obj ) { return nullptr; }
 	const Page* page = m_pages.GetFirst();
 	while ( page )
 	{
-		AE_ASSERT( page->pool.Length() );
-		bool inPrev = page->pool.IsInPool( obj );
-		if ( inPrev )
+		AE_ASSERT( !Paged || page->freeList.Length() );
+		int32_t index = (int32_t)( obj - (const T*)page->objects );
+		bool found = ( 0 <= index && index < N );
+		if ( found )
 		{
-			if ( const T* o = page->pool.GetNext( obj ) )
+			AE_ASSERT( (const T*)&page->objects[ index ] == obj );
+			AE_ASSERT( page->freeList.IsAllocated( index ) );
+			int32_t next = page->freeList.GetNext( index );
+			if ( next >= 0 )
 			{
-				return o;
+				return (const T*)&page->objects[ next ];
 			}
 		}
 		page = page->node.GetNext();
-		if ( inPrev && page )
+		if ( found && page )
 		{
 			// Given object is last element of previous page
-			return page->pool.GetFirst();
+			int32_t next = page->freeList.GetFirst();
+			AE_ASSERT( 0 <= next && next < N );
+			return (const T*)&page->objects[ next ];
 		}
 	}
-	
 	return nullptr;
 }
 
-template < typename T, uint32_t N >
-T* PagedObjectPool< T, N >::GetFirst()
+template < typename T, uint32_t N, bool Paged >
+T* ObjectPool< T, N, Paged >::GetFirst()
 {
-	return const_cast< T* >( const_cast< const PagedObjectPool< T, N >* >( this )->GetFirst() );
+	return const_cast< T* >( const_cast< const ObjectPool< T, N, Paged >* >( this )->GetFirst() );
 }
 
-template < typename T, uint32_t N >
-T* PagedObjectPool< T, N >::GetNext( T* obj )
+template < typename T, uint32_t N, bool Paged >
+T* ObjectPool< T, N, Paged >::GetNext( T* obj )
 {
-	return const_cast< T* >( const_cast< const PagedObjectPool< T, N >* >( this )->GetNext( obj ) );
+	return const_cast< T* >( const_cast< const ObjectPool< T, N, Paged >* >( this )->GetNext( obj ) );
 }
 
-template < typename T, uint32_t N >
-bool PagedObjectPool< T, N >::IsAllocated( const T* obj ) const
+template < typename T, uint32_t N, bool Paged >
+bool ObjectPool< T, N, Paged >::HasFree() const
 {
-	if ( obj )
-	{
-		const Page* page = m_pages.GetFirst();
-		while ( page )
-		{
-			if ( page->pool.IsInPool( obj ) && page->pool.IsAllocated( obj ) )
-			{
-				return true;
-			}
-			page = page->node.GetNext();
-		}
-	}
-	return false;
+	return Paged || m_firstPage.Get()->freeList.HasFree();
 }
 
-template < typename T, uint32_t N >
-uint32_t PagedObjectPool< T, N >::Length() const
+template < typename T, uint32_t N, bool Paged >
+uint32_t ObjectPool< T, N, Paged >::Length() const
 {
-#if _AE_DEBUG_
-	uint32_t length = 0;
-	for ( const Page* page = m_pages.GetFirst(); page; page = page->node.GetNext() )
-	{
-		length += page->pool.Length();
-	}
-	AE_ASSERT( m_length == length );
-#endif
 	return m_length;
 }
 

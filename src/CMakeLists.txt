@@ -33,7 +33,6 @@ set(AE_HEADER_FILES
 	../include/ae/aeImGui.h
 	../include/ae/aeInitializer.h
 	../include/ae/aeInventoryGrid.h
-	../include/ae/aeList.h
 	../include/ae/aeNet.h
 	../include/ae/aeObjectPool.h
 	../include/ae/aeRef.h
