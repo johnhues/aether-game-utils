@@ -34,11 +34,12 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::FreeList class
 //------------------------------------------------------------------------------
-template< uint32_t N >
+template< uint32_t N = 0 >
 class FreeList
 {
 public:
 	FreeList();
+	FreeList( const ae::Tag& tag, uint32_t size );
 
 	//! Returns (0 <= index < N) on success, and negative on failure.
 	int32_t Allocate();
@@ -64,14 +65,16 @@ public:
 	bool HasFree() const;
 	//! Returns the number of allocated elements.
 	uint32_t Length() const;
+	//! Returns the maximum length of the list (constxpr for static ae::FreeList's).
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
 	//! Returns the maximum length of the list.
-	constexpr uint32_t Size() const { return N; }
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_pool.Length(); }
 
 private:
 	struct Entry { Entry* next; };
 	uint32_t m_length;
 	Entry* m_free;
-	Entry m_pool[ N ];
+	ae::Array< Entry, N > m_pool;
 };
 
 //------------------------------------------------------------------------------
@@ -117,6 +120,9 @@ public:
 	uint32_t Length() const;
 	//! Returns the total number of objects in the pool.
 	constexpr uint32_t Size() const { return N; }
+	
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return N * m_pages.Length(); }
 
 private:
 	// @TODO: Disable copy constructor etc or fix list on copy.
@@ -136,25 +142,100 @@ private:
 		const Page* Get() const { return &page; }
 		Page page;
 	};
-	uint32_t m_length = 0;
 	ae::Tag m_tag;
+	uint32_t m_length = 0;
 	ae::List< Page > m_pages;
 	ConditionalPage< Paged > m_firstPage;
+};
+
+//------------------------------------------------------------------------------
+// ae::OpaquePool class
+//------------------------------------------------------------------------------
+class OpaquePool
+{
+public:
+	OpaquePool( const ae::Tag& tag, uint32_t pageSize, bool paged, uint32_t objectSize, uint32_t objectAlignment );
+	//! All objects allocated with ae::OpaquePool::New() must be destroyed before
+	//! the ae::OpaquePool is destroyed.
+	~OpaquePool();
+
+	//! Returns a pointer to a freshly constructed object T or null if there
+	//! are no free objects. Call ae::OpaquePool::Delete() to destroy the object.
+	//! ae::OpaquePool::Delete() must be called on every object returned
+	//! by ae::OpaquePool::New().
+	void* New();
+	//! Destructs and releases the object \p obj for future use by ae::OpaquePool::New().
+	//! It is safe for the \p obj parameter to be null.
+	void Delete( void* obj );
+	//! Destructs and releases all objects for future use by ae::OpaquePool::New().
+	void DeleteAll();
+
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	const void* GetFirst() const;
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	const void* GetNext( const void* obj ) const;
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	void* GetFirst();
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	void* GetNext( void* obj );
+
+	//! Returns true if the pool has any unallocated objects available.
+	bool HasFree() const;
+	//! Returns the number of allocated objects.
+	uint32_t Length() const;
+	//! Returns the total number of objects in the pool.
+	uint32_t Size() const { return 0; }
+
+private:
+	// @TODO: Disable copy constructor etc or fix list on copy.
+	struct Page
+	{
+		Page( const ae::Tag& tag, uint32_t size ) : freeList( tag, size ) {}
+		ae::ListNode< Page > node = this;
+		ae::FreeList<> freeList;
+		void* objects;
+	};
+	ae::Tag m_tag;
+	uint32_t m_pageSize;
+	bool m_paged;
+	uint32_t m_objectSize;
+	uint32_t m_objectAlignment;
+	uint32_t m_length;
+	ae::List< Page > m_pages;
 };
 
 //------------------------------------------------------------------------------
 // ae::FreeList member functions
 //------------------------------------------------------------------------------
 template < uint32_t N >
-FreeList< N >::FreeList()
+FreeList< N >::FreeList() :
+	m_pool( N, Entry() )
 {
+	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	m_length = 0;
-	for ( uint32_t i = 0; i < N - 1; i++ )
+	for ( uint32_t i = 0; i < m_pool.Length() - 1; i++ )
 	{
 		m_pool[ i ].next = &m_pool[ i + 1 ];
 	}
 	// Last element points to itself so it can be used as a sentinel.
-	m_pool[ N - 1 ].next = &m_pool[ N - 1 ];
+	m_pool[ m_pool.Length() - 1 ].next = &m_pool[ m_pool.Length() - 1 ];
+	m_free = &m_pool[ 0 ];
+}
+
+template < uint32_t N >
+FreeList< N >::FreeList( const ae::Tag& tag, uint32_t size ) :
+	m_pool( tag, size, Entry() )
+{
+	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+	m_length = 0;
+	for ( uint32_t i = 0; i < m_pool.Length() - 1; i++ )
+	{
+		m_pool[ i ].next = &m_pool[ i + 1 ];
+	}
+	// Last element points to itself so it can be used as a sentinel.
+	m_pool[ m_pool.Length() - 1 ].next = &m_pool[ m_pool.Length() - 1 ];
 	m_free = &m_pool[ 0 ];
 }
 
@@ -167,7 +248,7 @@ int32_t FreeList< N >::Allocate()
 	m_free = ( m_free->next == m_free ) ? nullptr : m_free->next;
 	entry->next = nullptr;
 	m_length++;
-	return (int32_t)( entry - m_pool );
+	return (int32_t)( entry - m_pool.Begin() );
 }
 
 template < uint32_t N >
@@ -177,7 +258,7 @@ void FreeList< N >::Free( int32_t idx )
 	Entry* entry = &m_pool[ idx ];
 #if _AE_DEBUG_
 	AE_ASSERT( m_length );
-	AE_ASSERT( 0 <= idx && idx < N );
+	AE_ASSERT( 0 <= idx && idx < m_pool.Length() );
 	AE_ASSERT( !entry->next );
 #endif
 	
@@ -189,7 +270,7 @@ void FreeList< N >::Free( int32_t idx )
 #if _AE_DEBUG_
 	if ( !m_length )
 	{
-		for ( uint32_t i = 0; i < N; i++ )
+		for ( uint32_t i = 0; i < m_pool.Length(); i++ )
 		{
 			AE_ASSERT( m_pool[ i ].next );
 		}
@@ -202,7 +283,7 @@ void FreeList< N >::FreeAll()
 {
 	m_length = 0;
 	m_free = nullptr;
-	memset( m_pool, 0, sizeof( m_pool ) );
+	memset( m_pool.Begin(), 0, sizeof( *m_pool.Begin() ) * m_pool.Length() );
 }
 
 template < uint32_t N >
@@ -212,7 +293,7 @@ int32_t FreeList< N >::GetFirst() const
 	{
 		return -1;
 	}
-	for ( uint32_t i = 0; i < N; i++ )
+	for ( uint32_t i = 0; i < m_pool.Length(); i++ )
 	{
 		if ( !m_pool[ i ].next )
 		{
@@ -232,7 +313,7 @@ int32_t FreeList< N >::GetNext( int32_t idx ) const
 	{
 		return -1;
 	}
-	for ( uint32_t i = idx + 1; i < N; i++ )
+	for ( uint32_t i = idx + 1; i < m_pool.Length(); i++ )
 	{
 		if ( !m_pool[ i ].next )
 		{
@@ -250,7 +331,7 @@ bool FreeList< N >::IsAllocated( int32_t idx ) const
 		return false;
 	}
 #if _AE_DEBUG_
-	AE_ASSERT( idx < N );
+	AE_ASSERT( idx < m_pool.Length() );
 #endif
 	return !m_pool[ idx ].next;
 }

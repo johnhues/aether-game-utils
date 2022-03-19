@@ -12,13 +12,91 @@
 const ae::Tag TAG_POOL = "pool";
 
 //------------------------------------------------------------------------------
-// ae::FreeList tests
+// ae::FreeList (static) tests
 //------------------------------------------------------------------------------
-TEST_CASE( "Indices can be allocated and deallocated", "[aeObjectPool]" )
+TEST_CASE( "Static indices can be allocated and deallocated", "[ae::FreeList (static)]" )
 {
 	const uint32_t kNumElements = 10;
 	int32_t objects[ kNumElements ];
 	ae::FreeList< kNumElements > freeList;
+	REQUIRE( freeList.Size() == kNumElements );
+	REQUIRE( freeList.GetFirst() < 0 );
+
+	for ( uint32_t i = 0; i < kNumElements; i++ )
+	{
+		objects[ i ] = freeList.Allocate();
+		REQUIRE( objects[ i ] >= 0 );
+	}
+	REQUIRE( freeList.Length() == kNumElements );
+	REQUIRE( !freeList.HasFree() );
+
+	SECTION( "excess Allocate()'s return negative values" )
+	{
+		REQUIRE( freeList.Allocate() < 0 );
+	}
+
+	SECTION( "can free objects" )
+	{
+		for ( uint32_t i = 0; i < kNumElements; i++ )
+		{
+			int32_t idx = objects[ i ];
+			uint32_t remaining = kNumElements - ( i + 1 );
+			freeList.Free( idx );
+			REQUIRE( freeList.Length() == remaining );
+		}
+	}
+
+	SECTION( "negative indices are handled gracefully" )
+	{
+		freeList.Free( -1 );
+		REQUIRE( freeList.Length() == kNumElements );
+		REQUIRE( !freeList.HasFree() );
+
+		REQUIRE( freeList.GetNext( -1 ) < 0 );
+	}
+
+	SECTION( "can iterate over allocated objects" )
+	{
+		uint32_t count = 0;
+		for ( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
+		{
+			REQUIRE( 0 <= idx );
+			REQUIRE( idx < kNumElements );
+			REQUIRE( freeList.IsAllocated( idx ) );
+			count++;
+		}
+		REQUIRE( count == kNumElements );
+	}
+
+	SECTION( "can iterate over allocated objects after freeing some" )
+	{
+		freeList.Free( objects[ 0 ] );
+		freeList.Free( objects[ kNumElements / 2 ] );
+		freeList.Free( objects[ kNumElements - 1 ] );
+		REQUIRE( !freeList.IsAllocated( objects[ 0 ] ) );
+		REQUIRE( !freeList.IsAllocated( objects[ kNumElements / 2 ] ) );
+		REQUIRE( !freeList.IsAllocated( objects[ kNumElements - 1 ] ) );
+
+		uint32_t count = 0;
+		for ( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
+		{
+			REQUIRE( 0 <= idx );
+			REQUIRE( idx < kNumElements );
+			REQUIRE( freeList.IsAllocated( idx ) );
+			count++;
+		}
+		REQUIRE( count == kNumElements - 3 );
+	}
+}
+
+//------------------------------------------------------------------------------
+// ae::FreeList (dynamic) tests
+//------------------------------------------------------------------------------
+TEST_CASE( "Dynamic indices can be allocated and deallocated", "[ae::FreeList (dynamic)]" )
+{
+	const uint32_t kNumElements = 10;
+	int32_t objects[ kNumElements ];
+	ae::FreeList<> freeList( TAG_POOL, kNumElements );
 	REQUIRE( freeList.Size() == kNumElements );
 	REQUIRE( freeList.GetFirst() < 0 );
 

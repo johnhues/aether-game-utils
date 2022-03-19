@@ -172,8 +172,9 @@
 //------------------------------------------------------------------------------
 template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 #define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) )
-
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
+#define _AE_STATIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
+#define _AE_DYNAMIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 
 namespace ae {
 
@@ -1153,8 +1154,6 @@ struct Pair
 //------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
-#define _AE_STATIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
-#define _AE_DYNAMIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 template < typename T, uint32_t N = 0 >
 class Array
 {
@@ -1214,8 +1213,8 @@ public:
 
 	// Array info
 	uint32_t Length() const { return m_length; }
-	_AE_STATIC_ARRAY static constexpr uint32_t Size() { return N; }
-	_AE_DYNAMIC_ARRAY uint32_t Size(...) const { return m_size; }
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
 	
 private:
 	uint32_t m_GetNextSize() const;
