@@ -2140,7 +2140,7 @@ public:
 	ae::Hash GetHash() const { return m_hash; }
 
 private:
-	ae::Map< Str32, Value, 32 > m_uniforms;
+	ae::Map< Str32, Value, 64 > m_uniforms;
 	ae::Hash m_hash;
 };
 
@@ -2153,7 +2153,7 @@ private:
 //        GLSL can be provided instead.
 // Example vertex shader:
 /*
-AE_UNIFORM_HIGHP mat4 u_worldToScreen;
+AE_UNIFORM_HIGHP mat4 u_worldToProj;
 
 AE_IN_HIGHP vec3 a_position;
 AE_IN_HIGHP vec2 a_uv;
@@ -2166,7 +2166,7 @@ void main()
 {
 	v_uv = a_uv;
 	v_color = a_color;
-	gl_Position = u_worldToScreen * vec4( a_position, 1.0 );
+	gl_Position = u_worldToProj * vec4( a_position, 1.0 );
 }
 */
 // Example fragment shader:
@@ -11494,6 +11494,8 @@ void FileSystem::ShowFolder( const char* folderPath )
 Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
+	// @TODO: Should match ae::FileSystem::GetSize behavior and check resource dir in bundles
+
 	NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
 	if ( [currentPath isEqualToString:@"/"] && filePath[ 0 ] != '/' )
 	{
@@ -14588,6 +14590,8 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 
 void RenderTarget::Activate()
 {
+	AE_ASSERT( GetWidth() && GetHeight() );
+	
 	CheckFramebufferComplete( m_fbo );
 	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
 	
