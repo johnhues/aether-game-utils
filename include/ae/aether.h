@@ -9253,6 +9253,7 @@ TimeStep::TimeStep()
 
 void TimeStep::SetTimeStep( float timeStep )
 {
+	AE_ASSERT_MSG( timeStep < 1.0f, "Invalid timestep: #sec", timeStep );
 	m_timeStep = timeStep;
 }
 
