@@ -2303,7 +2303,7 @@ public:
 	ae::Hash GetHash() const { return m_hash; }
 
 private:
-	ae::Map< Str32, Value, 32 > m_uniforms;
+	ae::Map< Str32, Value, 64 > m_uniforms;
 	ae::Hash m_hash;
 };
 
@@ -2316,7 +2316,7 @@ private:
 //        GLSL can be provided instead.
 // Example vertex shader:
 /*
-AE_UNIFORM_HIGHP mat4 u_worldToScreen;
+AE_UNIFORM_HIGHP mat4 u_worldToProj;
 
 AE_IN_HIGHP vec3 a_position;
 AE_IN_HIGHP vec2 a_uv;
@@ -2329,7 +2329,7 @@ void main()
 {
 	v_uv = a_uv;
 	v_color = a_color;
-	gl_Position = u_worldToScreen * vec4( a_position, 1.0 );
+	gl_Position = u_worldToProj * vec4( a_position, 1.0 );
 }
 */
 // Example fragment shader:
@@ -9686,6 +9686,7 @@ TimeStep::TimeStep()
 
 void TimeStep::SetTimeStep( float timeStep )
 {
+	AE_ASSERT_MSG( timeStep < 1.0f, "Invalid timestep: #sec", timeStep );
 	m_timeStep = timeStep;
 }
 
@@ -10300,7 +10301,9 @@ void Window::m_UpdateFocused( bool focused )
 	m_focused = focused;
 	if ( !m_focused && input )
 	{
+		// @TODO: Input::m_UpdateFocused()
 		input->SetMouseCaptured( false );
+		input->m_positionSet = false;
 	}
 }
 
@@ -10936,70 +10939,87 @@ void Input::Pump()
 #elif _AE_OSX_
 	@autoreleasepool
 	{
-		while ( 1 )
+		while ( true )
 		{
 			NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
 				untilDate:[NSDate distantPast]
 				inMode:NSDefaultRunLoopMode
 				dequeue:YES];
-			if (event == nil)
+			if ( event == nil )
 			{
 				break;
 			}
 			
-			switch ( event.type )
+			// Mouse
+			NSPoint p = [NSEvent mouseLocation];
+			m_SetMousePos( ae::Int2( p.x, p.y ) );
+			// @TODO: Can these boundaries be calculated somehow?
+			if ( mouse.position.x > 2
+				&& mouse.position.y > 2
+				&& mouse.position.x < m_window->GetWidth() - 3
+				&& mouse.position.y < m_window->GetHeight() ) // No border because of title bar
 			{
-					// Mouse
-				case NSEventTypeMouseMoved: // @NOTE: Move events are not sent if any mouse button is clicked
-				case NSEventTypeLeftMouseDragged:
-				case NSEventTypeRightMouseDragged:
-				case NSEventTypeOtherMouseDragged:
+				bool clicked = false;
+				switch ( event.type )
 				{
-					NSPoint p = [NSEvent mouseLocation];
-					m_SetMousePos( ae::Int2( p.x, p.y ) );
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					break;
-				}
-				case NSEventTypeLeftMouseDown:
-				{
-					NSPoint p = [NSEvent mouseLocation];
-					m_SetMousePos( ae::Int2( p.x, p.y ) );
-					// @TODO: Can these values be calculated somehow?
-					if ( mouse.position.x > 2
-						&& mouse.position.y > 2
-						&& mouse.position.x < m_window->GetWidth() - 3
-						&& mouse.position.y < m_window->GetHeight() ) // No border because of title bar
+					// @NOTE: Move events are not sent if any mouse button is clicked
+					case NSEventTypeMouseMoved:
+					case NSEventTypeLeftMouseDragged:
+					case NSEventTypeRightMouseDragged:
+					case NSEventTypeOtherMouseDragged:
 					{
+						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						break;
+					}
+					case NSEventTypeLeftMouseDown:
 						mouse.leftButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					}
-					break;
+						clicked = true;
+						break;
+					case NSEventTypeLeftMouseUp:
+						mouse.leftButton = false;
+						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						clicked = true;
+						break;
+					case NSEventTypeRightMouseDown:
+						mouse.rightButton = true;
+						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						clicked = true;
+						break;
+					case NSEventTypeRightMouseUp:
+						mouse.rightButton = false;
+						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						clicked = true;
+						break;
+					case NSEventTypeOtherMouseDown:
+						mouse.middleButton = true;
+						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						clicked = true;
+						break;
+					case NSEventTypeOtherMouseUp:
+						mouse.middleButton = false;
+						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+						clicked = true;
+						break;
+					case NSEventTypeScrollWheel:
+						mouse.scroll.x += event.deltaX;
+						mouse.scroll.y += event.deltaY;
+						// @NOTE: Scroll is never NSEventSubtypeTouchfffffff
+						break;
+					default:
+						break;
 				}
-				case NSEventTypeLeftMouseUp:
-					mouse.leftButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					break;
-				case NSEventTypeRightMouseDown:
-					mouse.rightButton = true;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					break;
-				case NSEventTypeRightMouseUp:
-					mouse.rightButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					break;
-				case NSEventTypeOtherMouseDown:
-					mouse.middleButton = true;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					break;
-				case NSEventTypeOtherMouseUp:
-					mouse.middleButton = false;
-					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-					break;
-				case NSEventTypeScrollWheel:
-					mouse.scroll.x += event.deltaX;
-					mouse.scroll.y += event.deltaY;
-					// Scroll is never NSEventSubtypeTouch
-					break;
+				
+				// By default only left click activates the window, so force activation on middle and right click
+				if ( clicked && !m_window->GetFocused() )
+				{
+					[NSApp activateIgnoringOtherApps:YES];
+				}
+			}
+			
+			// Keyboard
+			switch ( event.type )
+			{
 				case NSEventTypeKeyDown:
 					if ( m_textMode )
 					{
@@ -12367,7 +12387,10 @@ void FileSystem::ShowFolder( const char* folderPath )
 Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
-	if ( filePath[ 0 ] == '/' )
+	// @TODO: Should match ae::FileSystem::GetSize behavior and check resource dir in bundles
+
+	NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
+	if ( [currentPath isEqualToString:@"/"] && filePath[ 0 ] != '/' )
 	{
 		// Already absolute
 		return filePath;
@@ -15483,6 +15506,8 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 
 void RenderTarget::Activate()
 {
+	AE_ASSERT( GetWidth() && GetHeight() );
+	
 	CheckFramebufferComplete( m_fbo );
 	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
 	
