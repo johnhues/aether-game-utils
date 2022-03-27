@@ -1,3 +1,5 @@
+Include(safeguards)
+
 # Bundle helper
 function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE_VERSION _AE_ICNS_FILE  _AE_SRC_FILES _AE_RESOURCES _AE_LIBS _AE_INCLUDE_DIRS)
 	message(STATUS "_AE_BUNDLE_NAME ${_AE_BUNDLE_NAME} (${CMAKE_BUILD_TYPE})")
@@ -26,14 +28,13 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 
 	if(WIN32)
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
-			VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" # Set the working directory while debugging in visual studio to the location of this targets CMakeLists.txt
 			LINK_FLAGS "/ENTRY:mainCRTStartup" # Use main instead of WinMain
 		)
 	elseif(APPLE)
 		# Only add resource files to Apple bundles
 		# Adding resources on Windows causes an issue where files are copied only once on configure
-		target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
-		set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+		# target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
+		# set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 		set(CMAKE_OSX_SYSROOT macosx)
 		set(CMAKE_OSX_DEPLOYMENT_TARGET 10.10)
@@ -41,7 +42,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
 			MACOSX_BUNDLE ON
 			OUTPUT_NAME "${_AE_BUNDLE_NAME}"
-			RESOURCE "${_AE_RESOURCES}"
+			# RESOURCE "${_AE_RESOURCES}"
 			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME "YES"
 			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "No"
 			MACOSX_BUNDLE_BUNDLE_NAME "${_AE_BUNDLE_NAME}" # CFBundleName
@@ -52,6 +53,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			MACOSX_BUNDLE_SHORT_VERSION_STRING "${_AE_BUNDLE_VERSION}" # CFBundleShortVersionString
 			XCODE_ATTRIBUTE_INSTALL_PATH "$(LOCAL_APPS_DIR)"
 			XCODE_ATTRIBUTE_SKIP_INSTALL "No"
+			LINK_FLAGS "-Wl,-all_load"
 		)
 
 		set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
@@ -66,6 +68,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		" COMPONENT Runtime)
 	elseif(EMSCRIPTEN)
 		set(_AE_EM_LINKER_FLAGS
+			"-lopenal"
 			"-s TEXTDECODER=2" # When marshalling C UTF-8 strings across the JS<->Wasm language boundary, favor smallest generated code size rather than performance
 			# "-s MINIMAL_RUNTIME=2" # Enable aggressive MINIMAL_RUNTIME mode.
 			"-s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3" # Require WebGL 3 support in target browser, for smallest generated code size. (pass -s MIN_WEBGL_VERSION=1 to dual-target WebGL 1 and WebGL 2)
@@ -78,7 +81,7 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			"-s GL_TRACK_ERRORS=0" # Reduce WebGL code size: WebGL bindings layer should not keep track of certain WebGL errors that are only meaningful for C/C++ applications. (good to enable for release when glGetError() is not used, but disable in debug)
 			"-s GL_SUPPORT_SIMPLE_ENABLE_EXTENSIONS=0" # Reduce WebGL code size: do not emit code for extensions that we might not need.
 			"-s SUPPORT_ERRNO=0" # Reduce code size: We do not need libc errno field support in our build output.
-			"-s FILESYSTEM=0" # Reduce code size: We do not need native POSIX filesystem emulation support (Emscripten FS/MEMFS)
+			# "-s FILESYSTEM=0" # Reduce code size: We do not need native POSIX filesystem emulation support (Emscripten FS/MEMFS) @TODO: Filesystem is required for sockets
 			# Choose the oldest browser versions that should be supported. The higher minimum bar you choose, the less emulation code may be present for old browser quirks.
 			"-s MIN_FIREFOX_VERSION=70"
 			"-s MIN_SAFARI_VERSION=130000"
@@ -96,25 +99,33 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 				"-O0"
 				"-frtti"
 				"-fsanitize=undefined"
-				"-g" # Debug
-				# "-gsource-map" # Debug mode with mappings to c/c++ source files
-				# "--source-map-base http://localhost:8000/embuild/example/"
+				"-g" # Debug symbols (DWARF https://developer.chrome.com/blog/wasm-debugging-2020/)
 			)
 		else()
 			list(APPEND _AE_EM_LINKER_FLAGS
 				"--closure=1" # Enable Closure compiler for aggressive JS size minification
-				"-Oz" # Optimization flag to optimize aggressively for size. (other options -Os, -O3, -O2, -O1, -O0)
+				"-O3"
 			)
 		endif()
 		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
 			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
+			# Output index.html
+			OUTPUT_NAME "index"
 			SUFFIX ".html"
 		)
-		
-		## @TODO: Handle Emscripten resources
-		# file(COPY "${_AE_RESOURCES}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/")
-		# target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
-		# set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
 	endif()
+	
+	if(APPLE)
+		set(APPLE_RESOURCE_DIR ../Resources/)
+	endif()
+	foreach(resource ${_AE_RESOURCES})
+		file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${resource})
+		add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				${CMAKE_CURRENT_SOURCE_DIR}/${resource}
+				$<TARGET_FILE_DIR:${_AE_EXECUTABLE_NAME}>/${APPLE_RESOURCE_DIR}${resource}
+		)
+	endforeach()
+	
 endfunction()

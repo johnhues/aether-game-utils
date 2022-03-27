@@ -49,7 +49,12 @@ file(GLOB_RECURSE OPENFBX_SOURCES CONFIGURE_DEPENDS "${OPENFBX_SOURCE_DIR}/src/*
 add_library(openfbx ${OPENFBX_SOURCES})
 target_include_directories(openfbx INTERFACE "${OPENFBX_SOURCE_DIR}/src")
 
-# Example common
+# Example source helpers
+set(AE_CORE_SOURCES
+	${CMAKE_SOURCE_DIR}/include/ae/aether.h
+	${CMAKE_SOURCE_DIR}/src/aether.cpp
+	${CMAKE_SOURCE_DIR}/src/aether.mm
+)
 set(AE_EXAMPLE_SOURCES Common.h)
 
 # Hello World
@@ -150,10 +155,10 @@ add_bundle("Triangle"
 	"ae.06_triangle"
 	"0.0.0"
 	"Icon"
-	"06_Triangle.cpp;${AE_EXAMPLE_SOURCES}"
+	"06_Triangle.cpp;${AE_CORE_SOURCES}"
 	"data/Icon.icns"
-	"ae"
 	""
+	"${CMAKE_SOURCE_DIR}/include"
 )
 
 # Cube
@@ -162,10 +167,10 @@ add_bundle("Cube"
 	"ae.07_cube"
 	"0.0.0"
 	"Icon"
-	"07_Cube.cpp;${AE_EXAMPLE_SOURCES}"
+	"07_Cube.cpp;${AE_CORE_SOURCES}"
 	"data/Icon.icns"
-	"ae"
 	""
+	"${CMAKE_SOURCE_DIR}/include"
 )
 
 # Audio
@@ -241,7 +246,16 @@ add_bundle("File Dialogs"
 )
 
 # Emscripten
-add_subdirectory(14_Emscripten)
+add_bundle("Emscripten"
+	"14_emscripten"
+	"ae.14_emscripten"
+	"0.0.0"
+	"Icon"
+	"14_Emscripten.cpp;${AE_CORE_SOURCES}"
+	"data/moon.tga;data/test.txt"
+	""
+	"${CMAKE_SOURCE_DIR}/include"
+)
 
 # OBJViewer
 add_bundle("OBJViewer"

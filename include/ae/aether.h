@@ -172,8 +172,9 @@
 //------------------------------------------------------------------------------
 template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 #define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) )
-
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
+#define _AE_STATIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
+#define _AE_DYNAMIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 
 namespace ae {
 
@@ -328,7 +329,7 @@ inline float Clip01( float x );
 //------------------------------------------------------------------------------
 // Interpolation
 //------------------------------------------------------------------------------
-template< typename T > T Lerp( T start, T end, float t );
+template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
 template< typename T > T DtLerp( T value, float snappiness, float dt, T target );
@@ -418,7 +419,7 @@ struct Vec2 : public VecT< Vec2 >
 	struct Int2 CeilCopy() const;
 	Vec2 RotateCopy( float rotation ) const;
 	float GetAngle() const;
-	Vec2 Reflect( Vec2 v, Vec2 n ) const;
+	static Vec2 Reflect( Vec2 v, Vec2 n );
 	union
 	{
 		struct
@@ -1153,8 +1154,6 @@ struct Pair
 //------------------------------------------------------------------------------
 // ae::Array class
 //------------------------------------------------------------------------------
-#define _AE_STATIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
-#define _AE_DYNAMIC_ARRAY template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
 template < typename T, uint32_t N = 0 >
 class Array
 {
@@ -1214,8 +1213,8 @@ public:
 
 	// Array info
 	uint32_t Length() const { return m_length; }
-	_AE_STATIC_ARRAY static constexpr uint32_t Size() { return N; }
-	_AE_DYNAMIC_ARRAY uint32_t Size(...) const { return m_size; }
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
 	
 private:
 	uint32_t m_GetNextSize() const;
@@ -1365,6 +1364,199 @@ private:
 };
 
 inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
+
+//------------------------------------------------------------------------------
+// ae::ListNode class
+//------------------------------------------------------------------------------
+template < typename T > class List; // ae::List forward declaration
+template < typename T >
+class ListNode
+{
+public:
+	ListNode( T* owner );
+	~ListNode();
+
+	void Remove();
+
+	T* GetFirst();
+	T* GetNext();
+	T* GetPrev();
+	T* GetLast();
+
+	const T* GetFirst() const;
+	const T* GetNext() const;
+	const T* GetPrev() const;
+	const T* GetLast() const;
+
+	List< T >* GetList();
+	const List< T >* GetList() const;
+
+private:
+	friend class List< T >;
+	
+	// @NOTE: These operations don't make sense when either node is in a list,
+	// to avoid a potentially hard to diagnose random assert, assignment is
+	// disabled altogether
+	ListNode( ListNode& ) = delete;
+	void operator = ( ListNode& ) = delete;
+
+	List< T >* m_root;
+	ListNode* m_next;
+	ListNode* m_prev;
+	T* m_owner;
+};
+
+//------------------------------------------------------------------------------
+// ae::List class
+//------------------------------------------------------------------------------
+template < typename T >
+class List
+{
+public:
+	List();
+	~List();
+
+	void Append( ListNode< T >& node );
+
+	T* GetFirst();
+	T* GetLast();
+
+	const T* GetFirst() const;
+	const T* GetLast() const;
+
+	template < typename U > T* Find( const U& value );
+	template < typename Fn > T* FindFn( Fn predicateFn );
+
+	uint32_t Length() const;
+
+private:
+	friend class ListNode< T >;
+	
+	// @NOTE: Disable assignment. Assigning a list to another list technically makes sense,
+	// but could result in unexpected orphaning of list nodes. Additionally disabing these
+	// operations is consistent with list node.
+	List( List& ) = delete;
+	void operator = ( List& ) = delete;
+
+	ListNode< T >* m_first;
+};
+
+//------------------------------------------------------------------------------
+// ae::FreeList class
+//------------------------------------------------------------------------------
+template< uint32_t N = 0 >
+class FreeList
+{
+public:
+	FreeList();
+	FreeList( const ae::Tag& tag, uint32_t size );
+
+	//! Returns (0 <= index < N) on success, and negative on failure.
+	int32_t Allocate();
+	//! Releases \p idx for future calls to ae::FreeList::Allocate(). \p idx must
+	//! be an allocated index or negative (a result of ae::FreeList::Allocate() failure).
+	void Free( int32_t idx );
+	//! Frees all allocated indices.
+	void FreeAll();
+
+	//! Returns the index of the first allocated object. Returns a negative value
+	//! if there are no allocated objects.
+	int32_t GetFirst() const;
+	//! Returns the index of the next allocated object after \p idx. Returns a
+	//! negative value if there are no more allocated objects. \p idx must
+	//! be an allocated index or negative. A negative value will be returned
+	//! if \p idx is negative.
+	int32_t GetNext( int32_t idx ) const;
+
+	//! Returns true if the given \p idx is currently allocated. \p idx must be
+	//! negative or less than N.
+	bool IsAllocated( int32_t idx ) const;
+	//! Returns true if the next Allocate() will succeed.
+	bool HasFree() const;
+	//! Returns the number of allocated elements.
+	uint32_t Length() const;
+	//! Returns the maximum length of the list (constxpr for static ae::FreeList's).
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	//! Returns the maximum length of the list.
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_pool.Length(); }
+
+private:
+	struct Entry { Entry* next; };
+	uint32_t m_length;
+	Entry* m_free;
+	ae::Array< Entry, N > m_pool;
+};
+
+//------------------------------------------------------------------------------
+// ae::ObjectPool class
+//------------------------------------------------------------------------------
+template< typename T, uint32_t N, bool Paged = false >
+class ObjectPool
+{
+public:
+	//! Constructor for static ae::ObjectPool's only.
+	ObjectPool();
+	//! Constructor for paged ae::ObjectPool's only.
+	ObjectPool( const ae::Tag& tag );
+	//! All objects allocated with ae::ObjectPool::New() must be destroyed before
+	//! the ae::ObjectPool is destroyed.
+	~ObjectPool();
+
+	//! Returns a pointer to a freshly constructed object T or null if there
+	//! are no free objects. Call ae::ObjectPool::Delete() to destroy the object.
+	//! ae::ObjectPool::Delete() must be called on every object returned
+	//! by ae::ObjectPool::New().
+	T* New();
+	//! Destructs and releases the object \p obj for future use by ae::ObjectPool::New().
+	//! It is safe for the \p obj parameter to be null.
+	void Delete( T* obj );
+	//! Destructs and releases all objects for future use by ae::ObjectPool::New().
+	void DeleteAll();
+
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	const T* GetFirst() const;
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	const T* GetNext( const T* obj ) const;
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	T* GetFirst();
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	T* GetNext( T* obj );
+
+	//! Returns true if the pool has any unallocated objects available.
+	bool HasFree() const;
+	//! Returns the number of allocated objects.
+	uint32_t Length() const;
+	//! Returns the total number of objects in the pool.
+	constexpr uint32_t Size() const { return N; }
+	
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return N * m_pages.Length(); }
+
+private:
+	// @TODO: Disable copy constructor etc or fix list on copy.
+	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
+	struct Page
+	{
+		ae::ListNode< Page > node = this;
+		ae::FreeList< N > freeList;
+		AlignedStorageT objects[ N ];
+	};
+	template < bool Allocate > struct ConditionalPage {
+		Page* Get() { return nullptr; }
+		const Page* Get() const { return nullptr; }
+	};
+	template <> struct ConditionalPage< false > {
+		Page* Get() { return &page; }
+		const Page* Get() const { return &page; }
+		Page page;
+	};
+	ae::Tag m_tag;
+	uint32_t m_length = 0;
+	ae::List< Page > m_pages;
+	ConditionalPage< Paged > m_firstPage;
+};
 
 //------------------------------------------------------------------------------
 // ae::Rect class
@@ -1757,7 +1949,7 @@ enum class Key : uint8_t
 };
 
 //------------------------------------------------------------------------------
-// ae::MouseState class
+// ae::MouseState struct
 //------------------------------------------------------------------------------
 struct MouseState
 {
@@ -1770,6 +1962,9 @@ struct MouseState
 	bool usingTouch = false;
 };
 
+//------------------------------------------------------------------------------
+// ae::GamepadState struct
+//------------------------------------------------------------------------------
 struct GamepadState
 {
 	bool connected = false;
@@ -1857,8 +2052,52 @@ public:
 	void* m_textInputHandler = nullptr;
 	std::string m_text;
 	std::string m_textInput;
-	float m_leftAnalogThreshold = 0.05f;
-	float m_rightAnalogThreshold = 0.05f;
+	float m_leftAnalogThreshold = 0.1f;
+	float m_rightAnalogThreshold = 0.1f;
+	bool newFrame_HACK = false;
+};
+
+/* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
+//------------------------------------------------------------------------------
+// ae::File class
+//! \brief Used to asynchronously load data from remote sources.
+//------------------------------------------------------------------------------
+class File
+{
+public:
+	enum class Status
+	{
+		Success,
+		Pending,
+		NotFound,
+		Timeout,
+		Error
+	};
+
+	const char* GetUrl() const;
+	Status GetStatus() const;
+	//! Platform specific error code eg. 200, 404, etc. for http
+	uint32_t GetCode() const;
+	//! Null terminated for convenience
+	const uint8_t* GetData() const;
+	uint32_t GetLength() const;
+	float GetElapsedTime() const;
+	float GetTimeout() const;
+	uint32_t GetRetryCount() const;
+
+private:
+	friend void ::_ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length );
+	friend void ::_ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout );
+	friend class FileSystem;
+	ae::Str256 m_url;
+	uint8_t* m_data = nullptr;
+	uint32_t m_length = 0;
+	Status m_status = Status::Pending;
+	uint32_t m_code = 0;
+	double m_startTime = 0.0;
+	double m_finishTime = 0.0;
+	float m_timeout = 0.0f;
+	uint32_t m_retryCount = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -1896,6 +2135,7 @@ struct FileDialogParams
 class FileSystem
 {
 public:
+	~FileSystem();
 	//! Represents directories that the FileSystem class can load/save from.
 	enum class Root
 	{
@@ -1906,12 +2146,44 @@ public:
 		CacheShared //!< Same as above but shared accross the 'organization name'
 	};
 	
-	//! Passing an empty string to dataDir is equivalent to using
-	//! the applications working directory. Organization name should be your name
-	//! or your companies name and should be consistent across apps. Application
-	//! name should be the name of this application. Initialize() creates missing
-	//! folders for Root::User and Root::Cache.
+	//! If \p dataDir is absolute no processing on the path will be done. Passing
+	//! an empty string or relative path to \p dataDir will cause a platform
+	//! specific directory to be chosen as the base path. For bundled Apple applications
+	//! the base path will be the 'Resources' bundle folder. In all other cases the base
+	//! path will be relative to the executable (ignoring the working directory).
+	//! Organization name should be your name or your companies name and should be
+	//! consistent across apps. Application name should be the name of this application.
+	//! Initialize() creates missing folders for Root::User and Root::Cache.
 	void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
+
+	// Asynchronous file loading
+	//! Loads a file asynchronously from disk or from the network (@TODO: currently
+	//! only in emscripten builds). <b>Prefer this function over all other
+	//! ae::FileSystem::Read...() methods as it will work the most consistently
+	//! on all platforms.</b> Returns an ae::File object to be freed later
+	//! with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec value
+	//! will disable the timeout.
+	const ae::File* Read( Root root, const char* url, float timeoutSec );
+	//! Loads a file asynchronously from disk or from the network (@TODO: currently
+	//! only in emscripten builds). Returns an ae::File object to be freed
+	//! later with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec
+	//! value will disable the timeout.
+	const ae::File* Read( const char* url, float timeoutSec );
+	//! Retry if reading or writing of the given \p file did not finish
+	//! successfully. It's recomended (but not necessary) that you call this
+	//! function only when a file has the status ae::File::Status::Timeout, and
+	//! then you might want back off with a longer \p timeoutSec. Calling this
+	//! function on an ae::File that is successfully loaded or pending will have
+	//! no effect.
+	void Retry( const ae::File* file, float timeoutSec );
+	//! Destroys the given ae::File object returned by ae::FileSystem::Load().
+	void Destroy( const ae::File* file );
+	//! Frees all existing ae::File objects. It is not safe to access any
+	//! ae::File objects returned earlier by ae::FileSystem::Load() after
+	//! calling this.
+	void DestroyAll();
+	const ae::File* GetFile( uint32_t idx ) const;
+	uint32_t GetFileCount() const;
 
 	// Member functions for use of Root directories
 	bool GetRootDir( Root root, Str256* outDir ) const;
@@ -1929,15 +2201,21 @@ public:
 	static void ShowFolder( const char* folderPath );
 	
 	// Static helpers
+	//! If \p filePath is absolute no processing on the path will be done. Passing
+	//! an empty string or relative path to \p filePath will cause a platform
+	//! specific directory to be chosen as the base path. For bundled Apple applications
+	//! the base path will be the 'Resources' bundle folder. In all other cases the base
+	//! path will be relative to the executable (ignoring the working directory).
 	static Str256 GetAbsolutePath( const char* filePath );
+	static bool IsAbsolutePath( const char* filePath );
 	static const char* GetFileNameFromPath( const char* filePath );
 	static const char* GetFileExtFromPath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
 
 	// File dialogs
-	ae::Array< std::string > OpenDialog( const FileDialogParams& params );
-	std::string SaveDialog( const FileDialogParams& params );
+	static ae::Array< std::string > OpenDialog( const FileDialogParams& params );
+	static std::string SaveDialog( const FileDialogParams& params );
 
 private:
 	void m_SetDataDir( const char* dataDir );
@@ -1945,6 +2223,8 @@ private:
 	void m_SetCacheDir( const char* organizationName, const char* applicationName );
 	void m_SetUserSharedDir( const char* organizationName );
 	void m_SetCacheSharedDir( const char* organizationName );
+	void m_Read( ae::File* file, float timeoutSec ) const;
+	ae::Array< ae::File* > m_files = AE_ALLOC_TAG_FILE;
 	Str256 m_dataDir;
 	Str256 m_userDir;
 	Str256 m_cacheDir;
@@ -2261,8 +2541,8 @@ public:
 	// Initialization
 	VertexData() = default;
 	~VertexData();
-	void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage );
-	void AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset );
+	void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::VertexData::Primitive primitive, ae::VertexData::Usage vertexUsage, ae::VertexData::Usage indexUsage );
+	void AddAttribute( const char *name, uint32_t componentCount, ae::VertexData::Type type, uint32_t offset );
 	void Terminate();
 	
 	//! Sets current vertex data. Equivalent to calling Clear() then Append().
@@ -2402,18 +2682,18 @@ public:
 	// Interface
 	Texture() = default;
 	virtual ~Texture();
-	void Initialize( uint32_t target );
+	void Initialize( uint32_t target ); // GL_TEXTURE_2D etc
 	virtual void Terminate();
 	uint32_t GetTexture() const { return m_texture; }
-	uint32_t GetTarget() const { return m_target; }
+	uint32_t GetTarget() const { return m_target; } // GL_TEXTURE_2D etc
 
-private:
+// private:
 	Texture( const Texture& ) = delete;
 	Texture( Texture&& ) = delete;
 	void operator=( const Texture& ) = delete;
 	void operator=( Texture&& ) = delete;
 	uint32_t m_texture = 0;
-	uint32_t m_target = 0;
+	uint32_t m_target = 0; // GL_TEXTURE_2D etc
 };
 
 //------------------------------------------------------------------------------
@@ -2442,13 +2722,13 @@ class Texture2D : public Texture
 {
 public:
 	void Initialize( const TextureParams& params );
-	void Initialize( const void* data, uint32_t width, uint32_t height, Format format, Type type, Filter filter, Wrap wrap, bool autoGenerateMipmaps );
+	void Initialize( const void* data, uint32_t width, uint32_t height, ae::Texture::Format format, ae::Texture::Type type, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps );
 	void Terminate() override;
 
 	uint32_t GetWidth() const { return m_width; }
 	uint32_t GetHeight() const { return m_height; }
 
-private:
+// private:
 	uint32_t m_width = 0;
 	uint32_t m_height = 0;
 	bool m_hasAlpha = false;
@@ -2679,6 +2959,7 @@ public:
 	float GetDistanceFromFocus() const { return m_dist; }
 	ae::Vec2 GetRotation() const { return ae::Vec2( m_yaw, m_pitch ); }
 	bool GetRefocusTarget( ae::Vec3* targetOut ) const;
+	ae::Vec3 RotationToForward( ae::Vec2 rotation ) const;
 
 private:
 	void m_Precalculate();
@@ -2705,42 +2986,6 @@ private:
 	ae::Vec3 m_forward;
 	ae::Vec3 m_right;
 	ae::Vec3 m_up;
-};
-
-//------------------------------------------------------------------------------
-// ae::OBJFile class
-//------------------------------------------------------------------------------
-class OBJFile
-{
-public:
-	struct Vertex
-	{
-		ae::Vec4 position;
-		ae::Vec2 texture;
-		ae::Vec4 normal;
-		ae::Vec4 color;
-	};
-	
-	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
-	bool Load( const uint8_t* data, uint32_t length );
-	
-	ae::Tag allocTag;
-	ae::Array< Vertex > vertices;
-	ae::Array< uint32_t > indices;
-};
-
-//------------------------------------------------------------------------------
-// ae::TargaFile class
-//------------------------------------------------------------------------------
-class TargaFile
-{
-public:
-	TargaFile( ae::Tag allocTag ) : m_data( allocTag ) {}
-	bool Load( const uint8_t* data, uint32_t length );
-	
-	ae::TextureParams textureParams;
-private:
-	ae::Array< uint8_t > m_data;
 };
 
 //------------------------------------------------------------------------------
@@ -2834,21 +3079,6 @@ private:
 	ae::Array< ae::Vec3 > m_vertices;
 	ae::Array< BVHTri > m_tris;
 	ae::Array< TriangleBVH > m_bvh;
-};
-
-//------------------------------------------------------------------------------
-// ae::AudioData class
-//------------------------------------------------------------------------------
-class AudioData
-{
-public:
-	AudioData();
-	void Initialize( const char* filePath );
-	void Terminate();
-
-	ae::Str64 name;
-	uint32_t buffer;
-	float length;
 };
 
 //------------------------------------------------------------------------------
@@ -2948,6 +3178,71 @@ public:
 private:
 	Skeleton m_bindPose;
 	ae::Array< Vertex > m_verts;
+};
+
+//------------------------------------------------------------------------------
+// ae::OBJFile class
+//------------------------------------------------------------------------------
+class OBJFile
+{
+public:
+	struct Vertex
+	{
+		ae::Vec4 position;
+		ae::Vec2 texture;
+		ae::Vec4 normal;
+		ae::Vec4 color;
+	};
+	
+	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
+	bool Load( const uint8_t* data, uint32_t length );
+	
+	//! Helper struct to load OBJ files directly into an ae::VertexData
+	struct VertexDataParams
+	{
+		ae::VertexData* vertexData = nullptr;
+		//ae::Matrix4 localToWorld; // @TODO: implement
+		const char* posAttrib = "a_position";
+		const char* normalAttrib = "a_normal";
+		const char* colorAttrib = "a_color";
+		const char* uvAttrib = "a_uv";
+	};
+	//! Helper function to load OBJ files directly into an ae::VertexData
+	void InitializeVertexData( const ae::OBJFile::VertexDataParams& params );
+	//! Helper function to load OBJ files directly into an ae::CollisionMesh
+	void InitializeCollisionMesh( ae::CollisionMesh* mesh, const ae::Matrix4& localToWorld );
+	
+	ae::Tag allocTag;
+	ae::Array< ae::OBJFile::Vertex > vertices;
+	ae::Array< uint32_t > indices;
+};
+
+//------------------------------------------------------------------------------
+// ae::TargaFile class
+//------------------------------------------------------------------------------
+class TargaFile
+{
+public:
+	TargaFile( ae::Tag allocTag ) : m_data( allocTag ) {}
+	bool Load( const uint8_t* data, uint32_t length );
+	
+	ae::TextureParams textureParams;
+private:
+	ae::Array< uint8_t > m_data;
+};
+
+//------------------------------------------------------------------------------
+// ae::AudioData class
+//------------------------------------------------------------------------------
+class AudioData
+{
+public:
+	AudioData();
+	void LoadWavFile( const uint8_t* data, uint32_t length );
+	void Terminate();
+
+	uint32_t buffer;
+	float length;
 };
 
 //------------------------------------------------------------------------------
@@ -4276,8 +4571,8 @@ constexpr double MinValue< double >()
 	return -1 * std::numeric_limits< double >::infinity();
 }
 
-template< typename T >
-T Lerp( T start, T end, float t )
+template< typename T0, typename T1 >
+T0 Lerp( T0 start, T0 end, T1 t )
 {
 	return start + ( end - start ) * t;
 }
@@ -4741,7 +5036,7 @@ inline float Vec2::GetAngle() const
 	}
 	return ae::Atan2( y, x );
 }
-inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n ) const
+inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n )
 {
 	return n * ( 2.0f * v.Dot( n ) / n.LengthSquared() ) - v;
 }
@@ -5989,7 +6284,7 @@ void Array< T, N >::Reserve( uint32_t size )
 #if _AE_DEBUG_
 		AE_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
 #endif
-		AE_ASSERT( N >= size );
+		AE_ASSERT_MSG( N >= size, "# >= #", N, size );
 		return;
 	}
 	else if ( size <= m_size )
@@ -6263,6 +6558,584 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
 		}
 	}
 	return os << "}";
+}
+
+//------------------------------------------------------------------------------
+// ae::ListNode member functions
+//------------------------------------------------------------------------------
+template < typename T >
+ListNode< T >::ListNode( T* owner )
+{
+	m_root = nullptr;
+	m_next = this;
+	m_prev = this;
+	m_owner = owner;
+}
+
+template < typename T >
+ListNode< T >::~ListNode()
+{
+	Remove();
+}
+
+template < typename T >
+void ListNode< T >::Remove()
+{
+	if ( !m_root )
+	{
+		return;
+	}
+
+	AE_ASSERT( m_root->m_first );
+	if ( m_root->m_first == this )
+	{
+		if ( m_next == this )
+		{
+			// Last node in list
+			m_root->m_first = nullptr;
+		}
+		else
+		{
+			// Was head. Set next as head.
+			m_root->m_first = m_next;
+		}
+	}
+
+	m_next->m_prev = m_prev;
+	m_prev->m_next = m_next;
+
+	m_root = nullptr;
+	m_next = this;
+	m_prev = this;
+}
+
+template < typename T >
+T* ListNode< T >::GetFirst()
+{
+	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetFirst() );
+}
+
+template < typename T >
+T* ListNode< T >::GetNext()
+{
+	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetNext() );
+}
+
+template < typename T >
+T* ListNode< T >::GetPrev()
+{
+	return const_cast< T* >( const_cast< const ListNode< T >* >( this )->GetPrev() );
+}
+
+template < typename T >
+T* ListNode< T >::GetLast()
+{
+	return const_cast<T*>( const_cast<const ListNode< T >*>( this )->GetLast() );
+}
+
+template < typename T >
+const T* ListNode< T >::GetFirst() const
+{
+	return m_root ? m_root->GetFirst() : nullptr;
+}
+
+template < typename T >
+const T* ListNode< T >::GetNext() const
+{
+	if ( !m_root || m_root->m_first == m_next )
+	{
+		return nullptr;
+	}
+	return m_next->m_owner;
+}
+
+template < typename T >
+const T* ListNode< T >::GetPrev() const
+{
+	if ( !m_root || m_root->m_first == this )
+	{
+		return nullptr;
+	}
+	return m_prev->m_owner;
+}
+
+template < typename T >
+const T* ListNode< T >::GetLast() const
+{
+	return m_root ? m_root->GetLast() : nullptr;
+}
+
+template < typename T >
+List< T >* ListNode< T >::GetList()
+{
+	return m_root;
+}
+
+template < typename T >
+const List< T >* ListNode< T >::GetList() const
+{
+	return m_root;
+}
+
+//------------------------------------------------------------------------------
+// ae::List member functions
+//------------------------------------------------------------------------------
+template < typename T >
+List< T >::List() : m_first( nullptr )
+{}
+
+template < typename T >
+List< T >::~List()
+{
+	while ( m_first )
+	{
+		m_first->Remove();
+	}
+}
+
+template < typename T >
+void List< T >::Append( ListNode< T >& node )
+{
+	if ( m_first )
+	{
+		node.Remove();
+
+		node.m_root = this;
+
+		node.m_next = m_first;
+		node.m_prev = m_first->m_prev;
+
+		node.m_next->m_prev = &node;
+		node.m_prev->m_next = &node;
+	}
+	else
+	{
+		m_first = &node;
+		node.m_root = this;
+	}
+}
+
+template < typename T >
+T* List< T >::GetFirst()
+{
+	return m_first ? m_first->m_owner : nullptr;
+}
+
+template < typename T >
+T* List< T >::GetLast()
+{
+	return m_first ? m_first->m_prev->m_owner : nullptr;
+}
+
+template < typename T >
+const T* List< T >::GetFirst() const
+{
+	return m_first ? m_first->m_owner : nullptr;
+}
+
+template < typename T >
+const T* List< T >::GetLast() const
+{
+	return m_first ? m_first->m_prev->m_owner : nullptr;
+}
+
+template < typename T >
+template < typename U >
+T* List< T >::Find( const U& value )
+{
+	if ( !m_first )
+	{
+		return nullptr;
+	}
+
+	ListNode< T >* current = m_first;
+	do
+	{
+		if ( *( current->m_owner ) == value )
+		{
+			return current->m_owner;
+		}
+		current = current->m_next;
+	} while ( current != m_first );
+
+	return nullptr;
+}
+
+template < typename T >
+template < typename Fn >
+T* List< T >::FindFn( Fn predicateFn )
+{
+	if ( !m_first )
+	{
+		return nullptr;
+	}
+
+	ListNode< T >* current = m_first;
+	do
+	{
+		if ( predicateFn( current->m_owner ) )
+		{
+			return current->m_owner;
+		}
+		current = current->m_next;
+	} while ( current != m_first );
+
+	return nullptr;
+}
+
+template < typename T >
+uint32_t List< T >::Length() const
+{
+	if ( !m_first )
+	{
+		return 0;
+	}
+
+	// @TODO: Should be constant time
+	uint32_t count = 1;
+	ListNode< T >* current = m_first;
+	while ( current->m_next != m_first )
+	{
+		current = current->m_next;
+		count++;
+	}
+
+	return count;
+}
+
+//------------------------------------------------------------------------------
+// ae::FreeList member functions
+//------------------------------------------------------------------------------
+template < uint32_t N >
+FreeList< N >::FreeList() :
+	m_pool( N, Entry() )
+{
+	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+	m_length = 0;
+	for ( uint32_t i = 0; i < m_pool.Length() - 1; i++ )
+	{
+		m_pool[ i ].next = &m_pool[ i + 1 ];
+	}
+	// Last element points to itself so it can be used as a sentinel.
+	m_pool[ m_pool.Length() - 1 ].next = &m_pool[ m_pool.Length() - 1 ];
+	m_free = &m_pool[ 0 ];
+}
+
+template < uint32_t N >
+FreeList< N >::FreeList( const ae::Tag& tag, uint32_t size ) :
+	m_pool( tag, size, Entry() )
+{
+	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+	m_length = 0;
+	for ( uint32_t i = 0; i < m_pool.Length() - 1; i++ )
+	{
+		m_pool[ i ].next = &m_pool[ i + 1 ];
+	}
+	// Last element points to itself so it can be used as a sentinel.
+	m_pool[ m_pool.Length() - 1 ].next = &m_pool[ m_pool.Length() - 1 ];
+	m_free = &m_pool[ 0 ];
+}
+
+template < uint32_t N >
+int32_t FreeList< N >::Allocate()
+{
+	if ( !m_free ) { return -1; }
+	Entry* entry = m_free;
+	// Advance the free pointer until the sentinel is reached.
+	m_free = ( m_free->next == m_free ) ? nullptr : m_free->next;
+	entry->next = nullptr;
+	m_length++;
+	return (int32_t)( entry - m_pool.Begin() );
+}
+
+template < uint32_t N >
+void FreeList< N >::Free( int32_t idx )
+{
+	if ( idx < 0 ) { return; }
+	Entry* entry = &m_pool[ idx ];
+#if _AE_DEBUG_
+	AE_ASSERT( m_length );
+	AE_ASSERT( 0 <= idx && idx < m_pool.Length() );
+	AE_ASSERT( !entry->next );
+#endif
+	
+	// List length of 1, last element points to itself.
+	entry->next = m_free ? m_free : entry;
+	m_free = entry;
+	m_length--;
+
+#if _AE_DEBUG_
+	if ( !m_length )
+	{
+		for ( uint32_t i = 0; i < m_pool.Length(); i++ )
+		{
+			AE_ASSERT( m_pool[ i ].next );
+		}
+	}
+#endif
+}
+
+template < uint32_t N >
+void FreeList< N >::FreeAll()
+{
+	m_length = 0;
+	m_free = nullptr;
+	memset( m_pool.Begin(), 0, sizeof( *m_pool.Begin() ) * m_pool.Length() );
+}
+
+template < uint32_t N >
+int32_t FreeList< N >::GetFirst() const
+{
+	if ( !m_length )
+	{
+		return -1;
+	}
+	for ( uint32_t i = 0; i < m_pool.Length(); i++ )
+	{
+		if ( !m_pool[ i ].next )
+		{
+			return (int32_t)i;
+		}
+	}
+#if _AE_DEBUG_
+	AE_FAIL();
+#endif
+	return -1;
+}
+
+template < uint32_t N >
+int32_t FreeList< N >::GetNext( int32_t idx ) const
+{
+	if ( idx < 0 )
+	{
+		return -1;
+	}
+	for ( uint32_t i = idx + 1; i < m_pool.Length(); i++ )
+	{
+		if ( !m_pool[ i ].next )
+		{
+			return (int32_t)i;
+		}
+	}
+	return -1;
+}
+
+template < uint32_t N >
+bool FreeList< N >::IsAllocated( int32_t idx ) const
+{
+	if ( idx < 0 )
+	{
+		return false;
+	}
+#if _AE_DEBUG_
+	AE_ASSERT( idx < m_pool.Length() );
+#endif
+	return !m_pool[ idx ].next;
+}
+
+template < uint32_t N >
+bool FreeList< N >::HasFree() const
+{
+	return m_free;
+}
+
+template < uint32_t N >
+uint32_t FreeList< N >::Length() const
+{
+	return m_length;
+}
+
+//------------------------------------------------------------------------------
+// ae::ObjectPool member functions
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N, bool Paged >
+ObjectPool< T, N, Paged >::ObjectPool()
+{
+	AE_STATIC_ASSERT_MSG( !Paged, "Paged ae::ObjectPool requires an allocation tag" );
+	m_pages.Append( m_firstPage.Get()->node );
+}
+
+template < typename T, uint32_t N, bool Paged >
+ObjectPool< T, N, Paged >::ObjectPool( const ae::Tag& tag )
+	: m_tag( tag )
+{
+	AE_STATIC_ASSERT_MSG( Paged, "Static ae::ObjectPool does not need an allocation tag" );
+	AE_ASSERT( m_tag != ae::Tag() );
+}
+
+template < typename T, uint32_t N, bool Paged >
+ObjectPool< T, N, Paged >::~ObjectPool()
+{
+	AE_ASSERT( Length() == 0 );
+}
+
+template < typename T, uint32_t N, bool Paged >
+T* ObjectPool< T, N, Paged >::New()
+{
+	// @TODO: FindFn's parameter should be a reference to match ae::Array
+	Page* page = m_pages.FindFn( []( const Page* page ) { return page->freeList.HasFree(); } );
+	if ( Paged && !page )
+	{
+		page = ae::New< Page >( m_tag );
+		m_pages.Append( page->node );
+	}
+	if ( page )
+	{
+		int32_t index = page->freeList.Allocate();
+		if ( index >= 0 )
+		{
+			m_length++;
+			return new ( &page->objects[ index ] ) T();
+		}
+	}
+	return nullptr;
+}
+
+template < typename T, uint32_t N, bool Paged >
+void ObjectPool< T, N, Paged >::Delete( T* obj )
+{
+	if ( !obj ) { return; }
+	if ( (intptr_t)obj % alignof(T) != 0 ) { return; } // @TODO: Should this be an assert?
+
+	int32_t index;
+	Page* page = m_pages.GetFirst();
+	while ( page )
+	{
+		index = (int32_t)( obj - (const T*)page->objects );
+		if ( 0 <= index && index < N )
+		{
+			break;
+		}
+		page = page->node.GetNext();
+	}
+	if ( !Paged || page )
+	{
+#if _AE_DEBUG_
+		AE_ASSERT( (T*)&page->objects[ index ] == obj );
+		AE_ASSERT( page->freeList.IsAllocated( index ) );
+#endif
+		obj->~T();
+#if _AE_DEBUG_
+		memset( obj, 0xDD, sizeof(*obj) );
+#endif
+		page->freeList.Free( index );
+		m_length--;
+
+		if ( Paged && page->freeList.Length() == 0 )
+		{
+			ae::Delete( page );
+		}
+	}
+}
+
+template < typename T, uint32_t N, bool Paged >
+void ObjectPool< T, N, Paged >::DeleteAll()
+{
+	auto deleteAllFn = []( Page* page )
+	{
+		for ( uint32_t i = 0; i < N; i++ )
+		{
+			if ( page->freeList.IsAllocated( i ) )
+			{
+				( (T*)&page->objects[ i ] )->~T();
+			}
+		}
+		page->freeList.FreeAll();
+	};
+	if ( Paged )
+	{
+		Page* page = m_pages.GetLast();
+		while ( page )
+		{
+			Page* prev = page->node.GetPrev();
+			deleteAllFn( page );
+			ae::Delete( page );
+			page = prev;
+		}
+	}
+	else
+	{
+		deleteAllFn( m_firstPage.Get() );
+	}
+	m_length = 0;
+}
+
+template < typename T, uint32_t N, bool Paged >
+const T* ObjectPool< T, N, Paged >::GetFirst() const
+{
+	if ( Paged )
+	{
+		const Page* page = m_pages.GetFirst();
+		if ( page )
+		{
+			AE_ASSERT( page->freeList.Length() );
+			return page->freeList.Length() ? (const T*)&page->objects[ page->freeList.GetFirst() ] : nullptr;
+		}
+	}
+	else if ( !Paged && m_length )
+	{
+		int32_t index = m_firstPage.Get()->freeList.GetFirst();
+		AE_ASSERT( index >= 0 );
+		return (const T*)&m_firstPage.Get()->objects[ index ];
+	}
+	AE_ASSERT( m_length == 0 );
+	return nullptr;
+}
+
+template < typename T, uint32_t N, bool Paged >
+const T* ObjectPool< T, N, Paged >::GetNext( const T* obj ) const
+{
+	if ( !obj ) { return nullptr; }
+	const Page* page = m_pages.GetFirst();
+	while ( page )
+	{
+		AE_ASSERT( !Paged || page->freeList.Length() );
+		int32_t index = (int32_t)( obj - (const T*)page->objects );
+		bool found = ( 0 <= index && index < N );
+		if ( found )
+		{
+			AE_ASSERT( (const T*)&page->objects[ index ] == obj );
+			AE_ASSERT( page->freeList.IsAllocated( index ) );
+			int32_t next = page->freeList.GetNext( index );
+			if ( next >= 0 )
+			{
+				return (const T*)&page->objects[ next ];
+			}
+		}
+		page = page->node.GetNext();
+		if ( found && page )
+		{
+			// Given object is last element of previous page
+			int32_t next = page->freeList.GetFirst();
+			AE_ASSERT( 0 <= next && next < N );
+			return (const T*)&page->objects[ next ];
+		}
+	}
+	return nullptr;
+}
+
+template < typename T, uint32_t N, bool Paged >
+T* ObjectPool< T, N, Paged >::GetFirst()
+{
+	return const_cast< T* >( const_cast< const ObjectPool< T, N, Paged >* >( this )->GetFirst() );
+}
+
+template < typename T, uint32_t N, bool Paged >
+T* ObjectPool< T, N, Paged >::GetNext( T* obj )
+{
+	return const_cast< T* >( const_cast< const ObjectPool< T, N, Paged >* >( this )->GetNext( obj ) );
+}
+
+template < typename T, uint32_t N, bool Paged >
+bool ObjectPool< T, N, Paged >::HasFree() const
+{
+	return Paged || m_firstPage.Get()->freeList.HasFree();
+}
+
+template < typename T, uint32_t N, bool Paged >
+uint32_t ObjectPool< T, N, Paged >::Length() const
+{
+	return m_length;
 }
 
 //------------------------------------------------------------------------------
@@ -7218,14 +8091,12 @@ T* ae::Cast( C* obj )
 	#include "processthreadsapi.h" // For GetCurrentProcessId()
 	#include <filesystem> // @HACK: Shouldn't need this just for Windows
 	#include <timeapi.h>
+	#include <xinput.h>
 	#pragma comment (lib, "Winmm.lib")
 	#pragma comment (lib, "Ws2_32.lib")
+	#pragma comment (lib, "XInput.lib")
 	#ifndef AE_USE_OPENAL
 		#define AE_USE_OPENAL 0
-	#endif
-	#if AE_USE_OPENAL
-		#include "AL/al.h"
-		#include "AL/alc.h"
 	#endif
 #elif _AE_APPLE_
 	#include <sys/sysctl.h>
@@ -7241,17 +8112,19 @@ T* ae::Cast( C* obj )
 	#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
-		#include <OpenAL/al.h>
-		#include <OpenAL/alc.h>
 		#include <GameController/GameController.h>
 	#endif
-	#define AE_USE_OPENAL 1
+	#ifndef AE_USE_OPENAL
+		#define AE_USE_OPENAL 1
+	#endif
 #elif _AE_LINUX_
 	#include <unistd.h>
 	#include <pwd.h>
 	#include <limits.h>
 	#include <sys/stat.h>
-	#define AE_USE_OPENAL 0
+	#ifndef AE_USE_OPENAL
+		#define AE_USE_OPENAL 0
+	#endif
 #endif
 #include <thread>
 #include <random>
@@ -7280,6 +8153,18 @@ T* ae::Cast( C* obj )
 	typedef uint8_t _ae_sock_buff_t;
 	#define _ae_sock_poll poll
 	#define _ae_ioctl ioctl
+#endif
+#if AE_USE_OPENAL
+	#if _AE_APPLE_
+		#include <OpenAL/al.h>
+		#include <OpenAL/alc.h>
+	#else
+		#include "AL/al.h"
+		#include "AL/alc.h"
+	#endif
+#endif
+#if !_AE_EMSCRIPTEN_
+#define EMSCRIPTEN_KEEPALIVE
 #endif
 
 //------------------------------------------------------------------------------
@@ -9283,14 +10168,14 @@ void TimeStep::Wait()
 	// Frame rate of emscripten builds is controlled by the browser
 	const bool allowSleep = false;
 #else
-	const bool allowSleep = ( m_timeStep == 0.0 );
+	const bool allowSleep = ( m_timeStep > 0.0 );
 #endif
 	
 	if ( m_stepCount == 0 )
 	{
 		m_frameStart = ae::GetTime();
 	}
-	else if ( allowSleep )
+	else if ( !allowSleep )
 	{
 		double currentTime = ae::GetTime();
 		m_sleepOverhead = 0.0;
@@ -9708,11 +10593,18 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 		}
 		case WM_SIZE:
 		{
-			if ( window->graphicsDevice )
+			uint32_t width = LOWORD( lParam );
+			uint32_t height = HIWORD( lParam );
+			window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
+			switch ( wParam )
 			{
-				uint32_t width = LOWORD( lParam );
-				uint32_t height = HIWORD( lParam );
-				window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
+				case SIZE_MAXIMIZED:
+					window->m_UpdateMaximized( true );
+					break;
+				case SIZE_MINIMIZED:
+				case SIZE_RESTORED:
+					window->m_UpdateMaximized( false );
+					break;
 			}
 			break;
 		}
@@ -9721,6 +10613,8 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 			PostQuitMessage( 0 );
 			break;
 		}
+		default:
+			break;
 	}
 	return DefWindowProc( hWnd, msg, wParam, lParam );
 }
@@ -10131,15 +11025,17 @@ void Window::SetSize( uint32_t width, uint32_t height )
 
 void Window::SetMaximized( bool maximized )
 {
-//	if ( maximized )
-//	{
-//		SDL_MaximizeWindow( (SDL_Window*)window );
-//	}
-//	else
-//	{
-//		SDL_RestoreWindow( (SDL_Window*)window );
-//	}
-//	m_maximized = maximized;
+#if _AE_WINDOWS_
+	if ( maximized )
+	{
+		ShowWindow( (HWND)window, SW_MAXIMIZE );
+	}
+	else
+	{
+		ShowWindow( (HWND)window, SW_RESTORE );
+	}
+	m_maximized = maximized;
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -10261,18 +11157,83 @@ namespace ae {
 #if _AE_EMSCRIPTEN_
 EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
-	if ( !keyEvent->repeat )
+	static ae::Key s_keyMap[ 255 ];
+	static bool s_first = true;
+	if ( s_first )
 	{
-		AE_ASSERT( userData );
-		Input* input = (Input*)userData;
-		// Use 'code' instead of 'key' so value is not affected by modifiers/layout
-		// const char* typeStr = EMSCRIPTEN_EVENT_KEYUP == eventType ? "up" : "down";
-		// AE_LOG( "Key '#' #", keyEvent->code, typeStr );
-		bool pressed = EMSCRIPTEN_EVENT_KEYUP != eventType;
-		if ( strcmp( keyEvent->code, "ArrowRight" ) == 0 ) { input->m_keys[ (int)Key::Right ] = pressed; }
-		if ( strcmp( keyEvent->code, "ArrowLeft" ) == 0 ) { input->m_keys[ (int)Key::Left ] = pressed; }
-		if ( strcmp( keyEvent->code, "ArrowUp" ) == 0 ) { input->m_keys[ (int)Key::Up ] = pressed; }
-		if ( strcmp( keyEvent->code, "ArrowDown" ) == 0 ) { input->m_keys[ (int)Key::Down ] = pressed; }
+		s_first = false;
+		memset( s_keyMap, 0, sizeof( s_keyMap ) );
+		s_keyMap[ 8 ] = ae::Key::Backspace;
+		s_keyMap[ 9 ] = ae::Key::Tab;
+		s_keyMap[ 13 ] = ae::Key::Enter;
+		s_keyMap[ 16 ] = ae::Key::LeftShift;
+		s_keyMap[ 17 ] = ae::Key::LeftControl;
+		s_keyMap[ 18 ] = ae::Key::LeftControl;
+		s_keyMap[ 19 ] = ae::Key::Pause;
+		s_keyMap[ 20 ] = ae::Key::CapsLock;
+		s_keyMap[ 27 ] = ae::Key::Escape;
+		s_keyMap[ 32 ] = ae::Key::Space;
+		s_keyMap[ 33 ] = ae::Key::PageUp;
+		s_keyMap[ 34 ] = ae::Key::PageDown;
+		s_keyMap[ 35 ] = ae::Key::End;
+		s_keyMap[ 36 ] = ae::Key::Home;
+		s_keyMap[ 37 ] = ae::Key::Left;
+		s_keyMap[ 38 ] = ae::Key::Up;
+		s_keyMap[ 39 ] = ae::Key::Right;
+		s_keyMap[ 40 ] = ae::Key::Down;
+		s_keyMap[ 45 ] = ae::Key::Insert;
+		s_keyMap[ 46 ] = ae::Key::Delete;
+		for ( uint32_t i = 0; i <= 9; i++ )
+		{
+			s_keyMap[ 48 + i ] = (ae::Key)((int)ae::Key::Num0 + i);
+		}
+		for ( uint32_t i = 0; i < 26; i++ )
+		{
+			s_keyMap[ 65 + i ] = (ae::Key)((int)ae::Key::A + i);
+		}
+		s_keyMap[ 91 ] = ae::Key::LeftSuper;
+		s_keyMap[ 92 ] = ae::Key::RightSuper;
+		for ( uint32_t i = 0; i <= 9; i++ )
+		{
+			s_keyMap[ 96 + i ] = (ae::Key)((int)ae::Key::NumPad0 + i);
+		}
+		s_keyMap[ 106 ] = ae::Key::NumPadMultiply;
+		s_keyMap[ 107 ] = ae::Key::NumPadPlus;
+		s_keyMap[ 109 ] = ae::Key::NumPadMinus;
+		s_keyMap[ 110 ] = ae::Key::NumPadPeriod;
+		s_keyMap[ 111 ] = ae::Key::NumPadDivide;
+		for ( uint32_t i = 0; i < 12; i++ )
+		{
+			s_keyMap[ 112 + i ] = (ae::Key)((int)ae::Key::F1 + i);
+		}
+		s_keyMap[ 144 ] = ae::Key::NumLock;
+		s_keyMap[ 145 ] = ae::Key::ScrollLock;
+		s_keyMap[ 186 ] = ae::Key::Semicolon;
+		s_keyMap[ 187 ] = ae::Key::Equals;
+		s_keyMap[ 188 ] = ae::Key::Comma;
+		s_keyMap[ 189 ] = ae::Key::Minus;
+		s_keyMap[ 190 ] = ae::Key::Period;
+		s_keyMap[ 191 ] = ae::Key::Slash;
+		s_keyMap[ 192 ] = ae::Key::Tilde;
+		s_keyMap[ 219 ] = ae::Key::LeftBracket;
+		s_keyMap[ 220 ] = ae::Key::Backslash;
+		s_keyMap[ 221 ] = ae::Key::RightBracket;
+		s_keyMap[ 222 ] = ae::Key::Apostrophe;
+	}
+
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+
+	if ( input->newFrame_HACK )
+	{
+		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
+		input->newFrame_HACK = false;
+	}
+
+	if ( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
+	{
+		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
+		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
 	}
 	return true;
 }
@@ -10326,10 +11287,17 @@ void Input::Terminate()
 
 void Input::Pump()
 {
-	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-#if !_AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_
+	if ( newFrame_HACK )
+	{
+		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
+		newFrame_HACK = false;
+	}
+	newFrame_HACK = true;
+#else
 	// Clear keys each frame and then check for presses below
 	// Emscripten doesn't do this because it uses a callback to set m_keys
+	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
 	memset( m_keys, 0, sizeof(m_keys) );
 #endif
 	mousePrev = mouse;
@@ -10340,8 +11308,9 @@ void Input::Pump()
 	// Handle system events
 #if _AE_WINDOWS_
 	m_window->m_UpdateFocused( m_window->window == GetFocus() );
-	MSG msg;
-	// Get messages for current thread
+	// @TODO: Use GameInput https://docs.microsoft.com/en-us/gaming/gdk/_content/gc/input/porting/input-porting-xinput#optimizingSection
+	XInputEnable( m_window->GetFocused() );
+	MSG msg; // Get messages for current thread
 	while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
 	{
 		if ( msg.message == WM_QUIT )
@@ -10861,10 +11830,95 @@ void Input::Pump()
 
 	gamepadPrev = gamepad;
 	gamepad = GamepadState();
-#if _AE_APPLE_
+	auto& gp = this->gamepad;
+#if _AE_WINDOWS_
+	{
+		DWORD i = 0;
+		// for ( DWORD i = 0; i < XUSER_MAX_COUNT; i++ )
+		{
+			XINPUT_STATE state;
+			ZeroMemory( &state, sizeof(state) );
+			DWORD dwResult = XInputGetState( i, &state );
+			if( dwResult == ERROR_SUCCESS )
+			{
+				const XINPUT_GAMEPAD& gamepad = state.Gamepad;
+
+				gp.connected = true;
+				
+				gp.leftAnalog = Vec2( gamepad.sThumbLX / 32767.0f, gamepad.sThumbLY / 32767.0f );
+				gp.rightAnalog = Vec2( gamepad.sThumbRX / 32767.0f, gamepad.sThumbRY / 32767.0f );
+				
+				gp.up = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP;
+				gp.down = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN;
+				gp.left = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT;
+				gp.right = gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT;
+				
+				gp.start = gamepad.wButtons & XINPUT_GAMEPAD_START;
+				gp.select = gamepad.wButtons & XINPUT_GAMEPAD_BACK;
+				gp.a = gamepad.wButtons & XINPUT_GAMEPAD_A;
+				gp.b = gamepad.wButtons & XINPUT_GAMEPAD_B;
+				gp.x = gamepad.wButtons & XINPUT_GAMEPAD_X;
+				gp.y = gamepad.wButtons & XINPUT_GAMEPAD_Y;
+				gp.leftBumper = gamepad.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER;
+				gp.rightBumper = gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER;
+				gp.leftTrigger = gamepad.bLeftTrigger / 255.0f;
+				gp.rightTrigger = gamepad.bRightTrigger / 255.0f;
+				gp.leftAnalogClick = gamepad.wButtons & XINPUT_GAMEPAD_LEFT_THUMB;
+				gp.rightAnalogClick = gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_THUMB;
+
+				XINPUT_BATTERY_INFORMATION batteryInfo;
+				ZeroMemory( &batteryInfo, sizeof(batteryInfo) );
+				dwResult = XInputGetBatteryInformation( i, BATTERY_DEVTYPE_GAMEPAD, &batteryInfo );
+				if ( dwResult == ERROR_SUCCESS )
+				{
+					switch ( batteryInfo.BatteryType )
+					{
+						case BATTERY_TYPE_WIRED:
+							gp.batteryState = GamepadState::BatteryState::Wired;
+							break;
+						case BATTERY_TYPE_ALKALINE:
+						case BATTERY_TYPE_NIMH:
+							// @TODO: How to detect BatteryState::Charging?
+							gp.batteryState = GamepadState::BatteryState::InUse;
+							break;
+						default:
+							gp.batteryState = GamepadState::BatteryState::None;
+							break;
+					}
+					switch ( gp.batteryState )
+					{
+						case GamepadState::BatteryState::Wired:
+							gp.batteryLevel = 1.0f;
+							break;
+						case GamepadState::BatteryState::InUse:
+						case GamepadState::BatteryState::Charging:
+							switch ( batteryInfo.BatteryLevel )
+							{
+								case BATTERY_LEVEL_LOW:
+									gp.batteryLevel = 0.25f;
+									break;
+								case BATTERY_LEVEL_MEDIUM:
+									gp.batteryLevel = 0.5f;
+									break;
+								case BATTERY_LEVEL_FULL:
+									gp.batteryState = GamepadState::BatteryState::Full;
+									gp.batteryLevel = 1.0f;
+									break;
+								default:
+									gp.batteryLevel = 0.0f;
+									break;
+							}
+							break;
+						defaut:
+							break;
+					}
+				}
+			}
+		}
+	}
+#elif _AE_APPLE_
 	if ( [(NSWindow*)m_window->window isMainWindow] && [[GCController controllers] count] )
 	{
-		auto& gp = this->gamepad;
 		gp.connected = true;
 		
 		GCController* appleController = [GCController controllers][ 0 ];
@@ -10875,15 +11929,12 @@ void Input::Pump()
 			auto rightAnalog = [appleGamepad rightThumbstick];
 			gp.leftAnalog = Vec2( [leftAnalog xAxis].value, [leftAnalog yAxis].value );
 			gp.rightAnalog = Vec2( [rightAnalog xAxis].value, [rightAnalog yAxis].value );
-			gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
-			gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
 			
 			auto dpad = [appleGamepad dpad];
 			gp.up = [dpad up].value;
 			gp.down = [dpad down].value;
 			gp.left = [dpad left].value;
 			gp.right = [dpad right].value;
-			gp.dpad = ae::Int2( ( gp.up ? 0 : 1 ) - ( gp.down ? 0 : 1 ), ( gp.right ? 0 : 1 ) - ( gp.left ? 0 : 1 ) );
 			
 			gp.start = [appleGamepad buttonMenu].value;
 			gp.select = [appleGamepad buttonOptions].value;
@@ -10897,16 +11948,6 @@ void Input::Pump()
 			gp.rightTrigger = [appleGamepad rightTrigger].value;
 			gp.leftAnalogClick = [appleGamepad leftThumbstickButton].value;
 			gp.rightAnalogClick = [appleGamepad rightThumbstickButton].value;
-			
-			gp.anyButton = gp.up || gp.down || gp.left || gp.right
-				|| gp.start || gp.select
-				|| gp.a || gp.b || gp.x || gp.y
-				|| gp.leftBumper || gp.rightBumper
-				|| gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
-				|| gp.leftAnalogClick || gp.rightAnalogClick;
-			gp.anyInput = gp.anyButton
-				|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
-				|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
 			
 			gp.batteryLevel = [[appleController battery] batteryLevel];
 			switch ( [[appleController battery] batteryState] )
@@ -10927,6 +11968,19 @@ void Input::Pump()
 		}
 	}
 #endif
+	// Additional shared gamepad state processing
+	gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
+	gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
+	gp.dpad = ae::Int2( ( gp.up ? 0 : 1 ) - ( gp.down ? 0 : 1 ), ( gp.right ? 0 : 1 ) - ( gp.left ? 0 : 1 ) );
+	gp.anyButton = gp.up || gp.down || gp.left || gp.right
+		|| gp.start || gp.select
+		|| gp.a || gp.b || gp.x || gp.y
+		|| gp.leftBumper || gp.rightBumper
+		|| gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
+		|| gp.leftAnalogClick || gp.rightAnalogClick;
+	gp.anyInput = gp.anyButton
+		|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
+		|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
 }
 
 void Input::SetMouseCaptured( bool enable )
@@ -10996,6 +12050,49 @@ void Input::m_SetMousePos( ae::Int2 pos )
 }
 
 //------------------------------------------------------------------------------
+// ae::File member functions
+//------------------------------------------------------------------------------
+const char* File::GetUrl() const
+{
+	return m_url.c_str();
+}
+
+File::Status File::GetStatus() const
+{
+	return m_status;
+}
+
+uint32_t File::GetCode() const
+{
+	return m_code;
+}
+
+const uint8_t* File::GetData() const
+{
+	return m_data;
+}
+
+uint32_t File::GetLength() const
+{
+	return m_length;
+}
+
+float File::GetElapsedTime() const
+{
+	return m_finishTime ? ( m_finishTime - m_startTime ) : ( ae::GetTime() - m_startTime );
+}
+
+float File::GetTimeout() const
+{
+	return m_timeout;
+}
+
+uint32_t File::GetRetryCount() const
+{
+	return m_retryCount;
+}
+
+//------------------------------------------------------------------------------
 // ae::FileFilter member functions
 //------------------------------------------------------------------------------
 FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCount )
@@ -11017,6 +12114,18 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 #else
 	#define AE_PATH_SEPARATOR '/'
 #endif
+
+bool FileSystem::IsAbsolutePath( const char* path )
+{
+#if _AE_EMSCRIPTEN_
+	// @TODO: Should check if url has a scheme or something
+	return false;
+#elif _AE_WINDOWS_
+	return std::filesystem::path( path ).is_absolute();
+#else
+	return path[ 0 ] == '/' || path[ 0 ] == '~';
+#endif
+}
 
 #if _AE_APPLE_
 bool FileSystem_GetUserDir( Str256* outDir )
@@ -11130,7 +12239,101 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 {
 	return false;
 }
+void _ae_GetCurrentWorkingDir( Str256* outDir )
+{
+	char url[ 256 ];
+	url[ 0 ] = 0;
+	EM_ASM( { stringToUTF8(window.location.href, $0, 256) }, url );
+	*outDir = ae::FileSystem::GetDirectoryFromPath( url );
+}
 #endif
+
+} // namespace ae
+
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length )
+{
+	ae::File* file = (ae::File*)arg;
+	file->m_finishTime = ae::GetTime();
+	file->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
+	memcpy( file->m_data, data, length );
+	file->m_data[ length ] = 0;
+	file->m_length = length;
+
+	file->m_status = ae::File::Status::Success;
+	file->m_code = 200;
+}
+
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout )
+{
+	ae::File* file = (ae::File*)arg;
+	file->m_finishTime = ae::GetTime();
+	file->m_code = code;
+	if ( timeout )
+	{
+		file->m_status = ae::File::Status::Timeout;
+	}
+	else
+	{
+		switch ( code )
+		{
+			case 404:
+				file->m_status = ae::File::Status::NotFound;
+				break;
+			default:
+				file->m_status = ae::File::Status::Error;
+				break;
+		}
+	}
+}
+
+#if _AE_EMSCRIPTEN_
+extern "C" void EMSCRIPTEN_KEEPALIVE _ae_em_free( void* p )
+{
+	free( p ); // -Oz prevents free() from being linked so force it
+}
+
+EM_JS( void, _ae_FileSystem_ReadImpl, ( const char* url, void* arg, uint32_t timeoutMs ),
+{
+	var xhr = new XMLHttpRequest();
+	xhr.timeout = timeoutMs;
+	xhr.open('GET', UTF8ToString(url), true);
+	xhr.responseType = 'arraybuffer';
+	xhr.ontimeout = function xhr_ontimeout() {
+		__ae_FileSystem_ReadFail(arg, xhr.status, true);
+	};
+	xhr.onload = function xhr_onload() {
+		if (xhr.status == 200) {
+			if (xhr.response) {
+				var byteArray = new Uint8Array(xhr.response);
+				var buffer = _malloc(byteArray.length);
+				if (buffer) {
+					HEAPU8.set(byteArray, buffer);
+					__ae_FileSystem_ReadSuccess(arg, buffer, byteArray.length);
+					__ae_em_free(buffer);
+				}
+				else {
+					__ae_FileSystem_ReadFail(arg, 0, false);
+				}
+			}
+			else {
+				__ae_FileSystem_ReadSuccess(arg, 0, 0); // Empty response but request succeeded
+			}
+			
+		}
+	};
+	xhr.onerror = function xhrError() {
+		__ae_FileSystem_ReadFail(arg, xhr.status, false);
+	};
+	xhr.send(null);
+} );
+#endif
+
+namespace ae {
+
+FileSystem::~FileSystem()
+{
+	AE_ASSERT_MSG( !m_files.Length(), "All files must be destroyed before destroying the loader" );
+}
 
 void FileSystem::Initialize( const char* dataDir, const char* organizationName, const char* applicationName )
 {
@@ -11247,7 +12450,7 @@ void FileSystem::m_SetCacheSharedDir( const char* organizationName )
 uint32_t FileSystem::GetSize( Root root, const char* filePath ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( filePath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += filePath;
 		return GetSize( fullName.c_str() );
@@ -11258,7 +12461,7 @@ uint32_t FileSystem::GetSize( Root root, const char* filePath ) const
 uint32_t FileSystem::Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( filePath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += filePath;
 		return Read( fullName.c_str(), buffer, bufferSize );
@@ -11269,7 +12472,7 @@ uint32_t FileSystem::Read( Root root, const char* filePath, void* buffer, uint32
 uint32_t FileSystem::Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( filePath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += filePath;
 		return Write( fullName.c_str(), buffer, bufferSize, createIntermediateDirs );
@@ -11280,7 +12483,7 @@ uint32_t FileSystem::Write( Root root, const char* filePath, const void* buffer,
 bool FileSystem::CreateFolder( Root root, const char* folderPath ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( folderPath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += folderPath;
 		return CreateFolder( fullName.c_str() );
@@ -11291,11 +12494,133 @@ bool FileSystem::CreateFolder( Root root, const char* folderPath ) const
 void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 {
 	Str256 fullName;
-	if ( GetRootDir( root, &fullName ) )
+	if ( IsAbsolutePath( folderPath ) || GetRootDir( root, &fullName ) )
 	{
 		fullName += folderPath;
 		ShowFolder( fullName.c_str() );
 	}
+}
+
+const File* FileSystem::Read( Root root, const char* url, float timeoutSec )
+{
+	Str256 fullName;
+	if ( url[ 0 ] && ( IsAbsolutePath( url ) || GetRootDir( root, &fullName ) ) )
+	{
+		fullName += url;
+		return Read( fullName.c_str(), timeoutSec );
+	}
+	else
+	{
+		double t = ae::GetTime();
+		File* file = ae::New< File >( AE_ALLOC_TAG_FILE );
+		file->m_url = url;
+		file->m_startTime = t;
+		file->m_finishTime = t;
+		file->m_status = File::Status::Error;
+		file->m_timeout = timeoutSec;
+		m_files.Append( file );
+		return file;
+	}
+}
+
+const File* FileSystem::Read( const char* url, float timeoutSec )
+{
+	File* file = ae::New< File >( AE_ALLOC_TAG_FILE );
+	file->m_url = url;
+	m_Read( file, timeoutSec );
+	m_files.Append( file );
+	return file;
+}
+
+void FileSystem::Retry( const ae::File* _file, float timeoutSec )
+{
+	if ( _file )
+	{
+		switch ( _file->m_status )
+		{
+			case ae::File::Status::Success:
+			case ae::File::Status::Pending:
+				break;
+			default:
+			{
+				ae::File* file = const_cast< ae::File* >( _file );
+				m_Read( file, timeoutSec );
+				file->m_retryCount++;
+				break;
+			}
+		}
+	}
+}
+
+void FileSystem::m_Read( ae::File* file, float timeoutSec ) const
+{
+	AE_ASSERT( file );
+	AE_ASSERT( file->m_url.Length() );
+	AE_ASSERT( !file->m_data && !file->m_length );
+
+	file->m_status = ae::File::Status::Pending;
+	file->m_code = 0;
+	file->m_startTime = ae::GetTime();
+	file->m_finishTime = 0.0;
+	file->m_timeout = timeoutSec;
+
+	uint32_t timeoutMs;
+	if ( timeoutSec <= 0.0f )
+	{
+		timeoutMs = 0.0f;
+	}
+	else
+	{
+		timeoutMs = timeoutSec * 1000.0f;
+		timeoutMs = ae::Max( 1u, timeoutMs ); // Prevent rounding down to infinite timeout
+	}
+#if _AE_EMSCRIPTEN_
+	_ae_FileSystem_ReadImpl( file->m_url.c_str(), file, timeoutMs );
+#else
+	if ( uint32_t length = GetSize( file->m_url.c_str() ) )
+	{
+		file->m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FILE, length + 1, 8 );
+		Read( file->m_url.c_str(), file->m_data, length );
+		file->m_data[ length ] = 0;
+		file->m_length = length;
+		file->m_status = ae::File::Status::Success;
+	}
+	else
+	{
+		file->m_status = File::Status::Error;
+	}
+	file->m_finishTime = ae::GetTime();
+#endif
+}
+
+void FileSystem::Destroy( const File* file )
+{
+	if ( file )
+	{
+		m_files.Remove( m_files.Find( file ) );
+		ae::Free( file->m_data );
+		ae::Delete( file );
+	}
+}
+
+void FileSystem::DestroyAll()
+{
+	for ( auto file : m_files )
+	{
+		ae::Free( file->m_data );
+		ae::Delete( file );
+	}
+	m_files.Clear();
+}
+
+const File* FileSystem::GetFile( uint32_t idx ) const
+{
+	return m_files[ idx ];
+}
+
+uint32_t FileSystem::GetFileCount() const
+{
+	return m_files.Length();
 }
 
 bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
@@ -11519,18 +12844,31 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
 	if ( [currentPath isEqualToString:@"/"] && filePath[ 0 ] != '/' )
 	{
+		// Already absolute
+		return filePath;
+	}
+	else if ( CFBundleGetMainBundle() )
+	{
+		// Assume filePath is relative to the app resource folder
 		char path[ PATH_MAX ];
 		path[ 0 ] = 0;
 		CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL( CFBundleGetMainBundle() );
 		CFURLGetFileSystemRepresentation( resourcesURL, TRUE, (UInt8*)path, PATH_MAX );
 		CFRelease( resourcesURL );
+		strlcat( path, "/", sizeof(path) );
+		strlcat( path, filePath, sizeof(path) );
 		return path;
 	}
-	NSString* path = [NSString stringWithUTF8String:filePath];
-	AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
-	NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
-	NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
-	return [absoluteUrl.path UTF8String];
+	else
+	{
+		// Assume filePath is relative to the executables directory
+		NSString* path = [NSString stringWithUTF8String:filePath];
+		NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
+		AE_ASSERT( [currentPath characterAtIndex:0] != '~' );
+		NSURL* currentPathUrl = [NSURL fileURLWithPath:currentPath];
+		NSURL* absoluteUrl = [NSURL URLWithString:path relativeToURL:currentPathUrl];
+		return [absoluteUrl.path UTF8String];
+	}
 #elif _AE_LINUX_
 	// @TODO: Handle non-existing dirs
 	char* resolvedPath;
@@ -11569,16 +12907,24 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		return "";
 	}
 #elif _AE_WINDOWS_
-	char result[ ae::Str256::MaxLength() ];
-	if ( _fullpath( result, filePath, countof(result) ) )
+	if ( IsAbsolutePath( filePath ) )
 	{
-		return result;
+		return filePath;
 	}
 	else
 	{
-		return "";
+		char result[ ae::Str256::MaxLength() ];
+		result[ 0 ] = 0;
+		GetModuleFileNameA( nullptr, result, sizeof( result ) );
+		const_cast< char* >( GetFileNameFromPath( result ) )[ 0 ] = 0;
+		strlcat( result, filePath, sizeof( result ) );
+		return result;
 	}
-#elif
+#elif _AE_EMSCRIPTEN_
+	ae::Str256 result;
+	_ae_GetCurrentWorkingDir( &result );
+	return result;
+#else
 	#warning "ae::FileSystem::GetAbsolutePath() not implemeneted. ae::FileSystem functionality will be limited."
 	return filePath;
 #endif
@@ -12411,7 +13757,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
 		AE_ASSERT( buffer == (_ae_sock_buff_t*)m_recvData.End() - readSize );
 		
-		int result = recv( m_sock, buffer, readSize, 0 );
+		int32_t result = recv( m_sock, buffer, readSize, 0 );
 		if ( result < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) )
 		{
 			return false;
@@ -12423,9 +13769,9 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		}
 		else if ( result )
 		{
-			AE_ASSERT( result <= readSize );
+			AE_ASSERT( result <= (int32_t)readSize );
 			// ioctl with FIONREAD includes udp headers on some platforms so use actual read length here
-			if ( result < readSize )
+			if ( result < (int32_t)readSize )
 			{
 				totalSize -= ( readSize - result );
 				while ( m_recvData.Length() > totalSize ) { m_recvData.Remove( m_recvData.Length() - 1 ); } // @TODO: Should be single function call
@@ -14240,7 +15586,7 @@ Texture::~Texture()
 void Texture::Initialize( uint32_t target )
 {
 	// @NOTE: To avoid undoing any initialization logic only ae::Texture should
-	//        call Destroy() on initialize, and inherited Initialize()'s should
+	//        call Terminate() on initialize, and inherited Initialize()'s should
 	//        always call Base::Initialize() before any other logic.
 	Terminate();
 
@@ -14487,12 +15833,14 @@ void Texture2D::Initialize( const TextureParams& params )
 		// upload the first mipmap
 		glTexSubImage2D( GetTarget(), 0, 0,0, params.width, params.height, glFormat, glType, params.data );
 
+#if !_AE_EMSCRIPTEN_
 		// autogen only works for uncompressed textures
 		// Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
 		if ( numberOfMipmaps > 1 && params.autoGenerateMipmaps )
 		{
 			glGenerateMipmap( GetTarget() );
 		}
+#endif
 	}
 	
 	AE_CHECK_GL_ERROR();
@@ -15924,298 +17272,30 @@ bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
 	return true;
 }
 
-void DebugCamera::m_Precalculate()
+ae::Vec3 DebugCamera::RotationToForward( ae::Vec2 rotation ) const
 {
-	ae::Vec3 worldUp = GetWorldUp();
-	
-	m_dist = ae::Clip( m_dist, m_min, m_max );
-
+	ae::Vec3 forward;
 	if ( m_worldUp == Axis::Y )
 	{
-		m_forward = ae::Vec3( ae::Cos( m_yaw ), 0.0f, -ae::Sin( m_yaw ) );
+		forward = ae::Vec3( ae::Cos( rotation.x ), 0.0f, -ae::Sin( rotation.x ) );
 	}
 	else if ( m_worldUp == Axis::Z )
 	{
-		m_forward = ae::Vec3( ae::Cos( m_yaw ), ae::Sin( m_yaw ), 0.0f );
+		forward = ae::Vec3( ae::Cos( rotation.x ), ae::Sin( rotation.x ), 0.0f );
 	}
-	m_forward *= ae::Cos( m_pitch );
-	m_forward += worldUp * ae::Sin( m_pitch );
+	forward *= ae::Cos( rotation.y );
+	forward += GetWorldUp() * ae::Sin( rotation.y );
+	return forward;
+}
 
+void DebugCamera::m_Precalculate()
+{
+	m_dist = ae::Clip( m_dist, m_min, m_max );
+	m_forward = RotationToForward( ae::Vec2( m_yaw, m_pitch ) );
 	m_offset = -m_forward;
 	m_offset *= m_dist;
-	m_right = m_forward.Cross( worldUp ).SafeNormalizeCopy();
+	m_right = m_forward.Cross( GetWorldUp() ).SafeNormalizeCopy();
 	m_up = m_right.Cross( m_forward ).SafeNormalizeCopy();
-}
-
-//------------------------------------------------------------------------------
-// ae::OBJFile member functions
-//------------------------------------------------------------------------------
-bool OBJFile::Load( const uint8_t* _data, uint32_t length )
-{
-	enum class Mode
-	{
-		None,
-		Comment,
-		Vertex,
-		Texture,
-		Normal,
-		Face
-	};
-	struct FaceIndex
-	{
-		int position = -1;
-		int texture = -1;
-		int normal = -1;
-	};
-	ae::Array< ae::Vec4 > positions = allocTag;
-	ae::Array< ae::Vec2 > uvs = allocTag;
-	ae::Array< ae::Vec4 > normals = allocTag;
-	ae::Array< FaceIndex > faceIndices = allocTag;
-	ae::Array< uint8_t > faces = allocTag;
-	
-	ae::Str256 currentLine;
-	const char* data = (const char*)_data;
-	const char* dataEnd = (const char*)_data + length;
-	while ( data < dataEnd )
-	{
-		uint32_t lineLen = 0;
-		while ( data[ lineLen ] && data[ lineLen ] != '\n' && data[ lineLen ] != '\r' && ( data + lineLen < dataEnd ) )
-		{
-			lineLen++;
-		}
-		currentLine = ae::Str256( lineLen, data );
-		data += lineLen;
-		while ( data[ 0 ] == '\n' || data[ 0 ] == '\r' )
-		{
-			data++;
-		}
-
-		char* line = (char*)currentLine.c_str(); // strtof() takes a non-const string but does not modify it
-		Mode mode = Mode::None;
-		switch ( line[ 0 ] )
-		{
-			case '#':
-				mode = Mode::Comment;
-				break;
-			case 'v':
-				switch ( line[ 1 ] )
-				{
-					case ' ':
-						mode = Mode::Vertex;
-						break;
-					case 't':
-						mode = Mode::Texture;
-						line++;
-						break;
-					case 'n':
-						mode = Mode::Normal;
-						line++;
-						break;
-				}
-				break;
-			case 'f':
-				mode = Mode::Face;
-				break;
-			// Ignore bad chars
-		}
-		line++;
-		if ( line[ 0 ] != ' ' )
-		{
-			// Unknown line tag
-			mode = Mode::None;
-		}
-		
-		switch ( mode )
-		{
-			case Mode::Vertex:
-			{
-				ae::Vec4 p;
-				p.x = strtof( line, &line );
-				p.y = strtof( line, &line );
-				p.z = strtof( line, &line );
-				p.w = 1.0f;
-				// @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
-				positions.Append( p );
-				break;
-			}
-			case Mode::Texture:
-			{
-				ae::Vec2 uv;
-				uv.x = strtof( line, &line );
-				uv.y = strtof( line, &line );
-				uvs.Append( uv );
-				break;
-			}
-			case Mode::Normal:
-			{
-				ae::Vec4 n;
-				n.x = strtof( line, &line );
-				n.y = strtof( line, &line );
-				n.z = strtof( line, &line );
-				n.w = 0.0f;
-				normals.Append( n.SafeNormalizeCopy() );
-				break;
-			}
-			case Mode::Face:
-			{
-				uint32_t faceVertexCount = 0;
-				while ( line[ 0 ] )
-				{
-					FaceIndex faceIndex;
-					faceIndex.position = strtoul( line, &line, 10 ) - 1;
-					if ( line[ 0 ] == '/' )
-					{
-						line++;
-						if ( line[ 0 ] != '/' )
-						{
-							faceIndex.texture = strtoul( line, &line, 10 ) - 1;
-						}
-					}
-					if ( line[ 0 ] == '/' )
-					{
-						line++;
-						faceIndex.normal = strtoul( line, &line, 10 ) - 1;
-					}
-					if ( faceIndex.position < 0 )
-					{
-						break;
-					}
-					
-					faceIndices.Append( faceIndex );
-					faceVertexCount++;
-
-					while ( isspace( line[ 0 ] ) )
-					{
-						line++;
-					}
-				}
-				faces.Append( faceVertexCount );
-				break;
-			}
-			default:
-				// Ignore line
-				break;
-		}
-	}
-
-	if ( !positions.Length() || !faceIndices.Length() )
-	{
-		return false;
-	}
-
-	vertices.Clear();
-	indices.Clear();
-	// @TODO: Reserve vertices and indices
-	
-	FaceIndex* currentFaceIdx = &faceIndices[ 0 ];
-	ae::Map< ae::Int3, uint32_t > vertexMap = allocTag;
-	for ( uint8_t f : faces )
-	{
-		if ( f <= 2 ) { continue; } // Invalid face
-		
-		// Triangulate faces
-		uint32_t triCount = ( f - 2 );
-		for ( uint32_t i = 0; i < triCount; i++ )
-		{
-			FaceIndex tri[ 3 ];
-			tri[ 0 ] = currentFaceIdx[ 0 ];
-			tri[ 1 ] = currentFaceIdx[ i + 1 ];
-			tri[ 2 ] = currentFaceIdx[ i + 2 ];
-			for ( uint32_t j = 0; j < 3; j++ )
-			{
-				int posIdx = tri[ j ].position;
-				int uvIdx = tri[ j ].texture;
-				int normIdx = tri[ j ].normal;
-				ae::Int3 key( posIdx, uvIdx, normIdx );
-				uint32_t* existingIndex = vertexMap.TryGet( key );
-				if ( existingIndex )
-				{
-					indices.Append( *existingIndex );
-				}
-				else
-				{
-					Vertex vertex;
-					vertex.position = positions[ posIdx ];
-					vertex.texture = ( uvIdx >= 0 ? uvs[ uvIdx ] : ae::Vec2( 0.0f ) );
-					vertex.normal = ( normIdx >= 0 ? normals[ normIdx ] : ae::Vec4( 0.0f ) );
-					vertex.color = ae::Vec4( 1.0f, 1.0f );
-					vertexMap.Set( key, vertices.Length() );
-					indices.Append( vertices.Length() );
-					vertices.Append( vertex );
-				}
-			}
-		}
-		
-		currentFaceIdx += f;
-	}
-	
-	return true;
-}
-
-//------------------------------------------------------------------------------
-// ae::TargaFile member functions
-//------------------------------------------------------------------------------
-bool TargaFile::Load( const uint8_t* data, uint32_t length )
-{
-	m_data.Clear();
-	if ( !length )
-	{
-		return false;
-	}
-
-	AE_PACK( struct TargaHeader
-	{
-		uint8_t idLength;
-		uint8_t colorMapType;
-		uint8_t imageType;
-
-		uint16_t colorMapOrigin;
-		uint16_t colorMapLength;
-		uint8_t colorMapDepth;
-
-		uint16_t xOrigin;
-		uint16_t yOrigin;
-		uint16_t width;
-		uint16_t height;
-
-		uint8_t bitsPerPixel;
-		uint8_t imageDescriptor;
-	} );
-
-	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
-	TargaHeader header;
-	stream.SerializeRaw( header );
-	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type is not supported" );
-	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
-	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
-	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
-	AE_ASSERT_MSG( header.bitsPerPixel != 32 || header.imageDescriptor == 8, "Alpha mode not supported" );
-
-	stream.Discard( header.idLength );
-	stream.Discard( header.colorMapLength );
-
-	const uint8_t* pixels = stream.GetData() + stream.GetOffset();
-	uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
-	AE_ASSERT( stream.GetRemaining() >= dataLength );
-	m_data.Append( pixels, dataLength );
-	textureParams.data = m_data.Begin();
-	textureParams.width = header.width;
-	textureParams.height = header.height;
-	if ( header.bitsPerPixel == 24 )
-	{
-		textureParams.format = ae::Texture::Format::RGB8_SRGB;
-	}
-	else if ( header.bitsPerPixel == 24 )
-	{
-		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
-	}
-	else
-	{
-		textureParams.format = ae::Texture::Format::R8;
-	}
-	textureParams.bgrData = true;
-
-	return true;
 }
 
 //------------------------------------------------------------------------------
@@ -16984,6 +18064,316 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* norma
 }
 
 //------------------------------------------------------------------------------
+// ae::OBJFile member functions
+//------------------------------------------------------------------------------
+bool OBJFile::Load( const uint8_t* _data, uint32_t length )
+{
+	enum class Mode
+	{
+		None,
+		Comment,
+		Vertex,
+		Texture,
+		Normal,
+		Face
+	};
+	struct FaceIndex
+	{
+		int position = -1;
+		int texture = -1;
+		int normal = -1;
+	};
+	ae::Array< ae::Vec4 > positions = allocTag;
+	ae::Array< ae::Vec2 > uvs = allocTag;
+	ae::Array< ae::Vec4 > normals = allocTag;
+	ae::Array< FaceIndex > faceIndices = allocTag;
+	ae::Array< uint8_t > faces = allocTag;
+	
+	ae::Str256 currentLine;
+	const char* data = (const char*)_data;
+	const char* dataEnd = (const char*)_data + length;
+	while ( data < dataEnd )
+	{
+		uint32_t lineLen = 0;
+		while ( data[ lineLen ] && data[ lineLen ] != '\n' && data[ lineLen ] != '\r' && ( data + lineLen < dataEnd ) )
+		{
+			lineLen++;
+		}
+		currentLine = ae::Str256( lineLen, data );
+		data += lineLen;
+		while ( data[ 0 ] == '\n' || data[ 0 ] == '\r' )
+		{
+			data++;
+		}
+
+		char* line = (char*)currentLine.c_str(); // strtof() takes a non-const string but does not modify it
+		Mode mode = Mode::None;
+		switch ( line[ 0 ] )
+		{
+			case '#':
+				mode = Mode::Comment;
+				break;
+			case 'v':
+				switch ( line[ 1 ] )
+				{
+					case ' ':
+						mode = Mode::Vertex;
+						break;
+					case 't':
+						mode = Mode::Texture;
+						line++;
+						break;
+					case 'n':
+						mode = Mode::Normal;
+						line++;
+						break;
+				}
+				break;
+			case 'f':
+				mode = Mode::Face;
+				break;
+			// Ignore bad chars
+		}
+		line++;
+		if ( line[ 0 ] != ' ' )
+		{
+			// Unknown line tag
+			mode = Mode::None;
+		}
+		
+		switch ( mode )
+		{
+			case Mode::Vertex:
+			{
+				ae::Vec4 p;
+				p.x = strtof( line, &line );
+				p.y = strtof( line, &line );
+				p.z = strtof( line, &line );
+				p.w = 1.0f;
+				// @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
+				positions.Append( p );
+				break;
+			}
+			case Mode::Texture:
+			{
+				ae::Vec2 uv;
+				uv.x = strtof( line, &line );
+				uv.y = strtof( line, &line );
+				uvs.Append( uv );
+				break;
+			}
+			case Mode::Normal:
+			{
+				ae::Vec4 n;
+				n.x = strtof( line, &line );
+				n.y = strtof( line, &line );
+				n.z = strtof( line, &line );
+				n.w = 0.0f;
+				normals.Append( n.SafeNormalizeCopy() );
+				break;
+			}
+			case Mode::Face:
+			{
+				uint32_t faceVertexCount = 0;
+				while ( line[ 0 ] )
+				{
+					FaceIndex faceIndex;
+					faceIndex.position = strtoul( line, &line, 10 ) - 1;
+					if ( line[ 0 ] == '/' )
+					{
+						line++;
+						if ( line[ 0 ] != '/' )
+						{
+							faceIndex.texture = strtoul( line, &line, 10 ) - 1;
+						}
+					}
+					if ( line[ 0 ] == '/' )
+					{
+						line++;
+						faceIndex.normal = strtoul( line, &line, 10 ) - 1;
+					}
+					if ( faceIndex.position < 0 )
+					{
+						break;
+					}
+					
+					faceIndices.Append( faceIndex );
+					faceVertexCount++;
+
+					while ( isspace( line[ 0 ] ) )
+					{
+						line++;
+					}
+				}
+				faces.Append( faceVertexCount );
+				break;
+			}
+			default:
+				// Ignore line
+				break;
+		}
+	}
+
+	if ( !positions.Length() || !faceIndices.Length() )
+	{
+		return false;
+	}
+
+	vertices.Clear();
+	indices.Clear();
+	// @TODO: Reserve vertices and indices
+	
+	FaceIndex* currentFaceIdx = &faceIndices[ 0 ];
+	ae::Map< ae::Int3, uint32_t > vertexMap = allocTag;
+	for ( uint8_t f : faces )
+	{
+		if ( f <= 2 ) { continue; } // Invalid face
+		
+		// Triangulate faces
+		uint32_t triCount = ( f - 2 );
+		for ( uint32_t i = 0; i < triCount; i++ )
+		{
+			FaceIndex tri[ 3 ];
+			tri[ 0 ] = currentFaceIdx[ 0 ];
+			tri[ 1 ] = currentFaceIdx[ i + 1 ];
+			tri[ 2 ] = currentFaceIdx[ i + 2 ];
+			for ( uint32_t j = 0; j < 3; j++ )
+			{
+				int posIdx = tri[ j ].position;
+				int uvIdx = tri[ j ].texture;
+				int normIdx = tri[ j ].normal;
+				ae::Int3 key( posIdx, uvIdx, normIdx );
+				uint32_t* existingIndex = vertexMap.TryGet( key );
+				if ( existingIndex )
+				{
+					indices.Append( *existingIndex );
+				}
+				else
+				{
+					Vertex vertex;
+					vertex.position = positions[ posIdx ];
+					vertex.texture = ( uvIdx >= 0 ? uvs[ uvIdx ] : ae::Vec2( 0.0f ) );
+					vertex.normal = ( normIdx >= 0 ? normals[ normIdx ] : ae::Vec4( 0.0f ) );
+					vertex.color = ae::Vec4( 1.0f, 1.0f );
+					vertexMap.Set( key, vertices.Length() );
+					indices.Append( vertices.Length() );
+					vertices.Append( vertex );
+				}
+			}
+		}
+		
+		currentFaceIdx += f;
+	}
+	
+	return true;
+}
+
+void OBJFile::InitializeVertexData( const ae::OBJFile::VertexDataParams& params )
+{
+	if ( !params.vertexData )
+	{
+		return;
+	}
+
+	params.vertexData->Initialize(
+		sizeof(*vertices.Begin()), sizeof(*indices.Begin()),
+		vertices.Length(), indices.Length(),
+		VertexData::Primitive::Triangle,
+		VertexData::Usage::Static, VertexData::Usage::Static );
+	params.vertexData->AddAttribute( params.posAttrib, 3, VertexData::Type::Float, offsetof( Vertex, position ) );
+	params.vertexData->AddAttribute( params.uvAttrib, 2, VertexData::Type::Float, offsetof( Vertex, texture ) );
+	params.vertexData->AddAttribute( params.normalAttrib, 4, VertexData::Type::Float, offsetof( Vertex, normal ) );
+	params.vertexData->AddAttribute( params.colorAttrib, 4, VertexData::Type::Float, offsetof( Vertex, color ) );
+	params.vertexData->SetVertices( vertices.Begin(), vertices.Length() );
+	params.vertexData->SetIndices( indices.Begin(), indices.Length() );
+}
+
+void OBJFile::InitializeCollisionMesh( ae::CollisionMesh* mesh, const ae::Matrix4& localToWorld )
+{
+	if ( !mesh )
+	{
+		return;
+	}
+	
+	ae::CollisionMesh::Params params;
+	params.transform = localToWorld;
+	params.positions = vertices.Begin()->position.data;
+	params.indices = indices.Begin();
+	params.positionCount = vertices.Length();
+	params.positionStride = sizeof( Vertex );
+	params.indexSize = sizeof( uint32_t );
+	params.indexCount = indices.Length();
+	mesh->Clear();
+	mesh->Load( params );
+}
+
+//------------------------------------------------------------------------------
+// ae::TargaFile member functions
+//------------------------------------------------------------------------------
+bool TargaFile::Load( const uint8_t* data, uint32_t length )
+{
+	m_data.Clear();
+	if ( !length )
+	{
+		return false;
+	}
+
+	AE_PACK( struct TargaHeader
+	{
+		uint8_t idLength;
+		uint8_t colorMapType;
+		uint8_t imageType;
+
+		uint16_t colorMapOrigin;
+		uint16_t colorMapLength;
+		uint8_t colorMapDepth;
+
+		uint16_t xOrigin;
+		uint16_t yOrigin;
+		uint16_t width;
+		uint16_t height;
+
+		uint8_t bitsPerPixel;
+		uint8_t imageDescriptor;
+	} );
+
+	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
+	TargaHeader header;
+	stream.SerializeRaw( header );
+	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type is not supported" );
+	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
+	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
+	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
+	AE_ASSERT_MSG( header.bitsPerPixel != 32 || header.imageDescriptor == 8, "Alpha mode not supported" );
+
+	stream.Discard( header.idLength );
+	stream.Discard( header.colorMapLength );
+
+	const uint8_t* pixels = stream.GetData() + stream.GetOffset();
+	uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
+	AE_ASSERT( stream.GetRemaining() >= dataLength );
+	m_data.Append( pixels, dataLength );
+	textureParams.data = m_data.Begin();
+	textureParams.width = header.width;
+	textureParams.height = header.height;
+	if ( header.bitsPerPixel == 24 )
+	{
+		textureParams.format = ae::Texture::Format::RGB8_SRGB;
+	}
+	else if ( header.bitsPerPixel == 24 )
+	{
+		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
+	}
+	else
+	{
+		textureParams.format = ae::Texture::Format::R8;
+	}
+	textureParams.bgrData = true;
+
+	return true;
+}
+
+//------------------------------------------------------------------------------
 // ae::Audio Helpers
 //------------------------------------------------------------------------------
 void _CheckALError()
@@ -17005,7 +18395,7 @@ void _CheckALError()
 #endif
 }
 
-void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
+void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* bufferOut, float* lengthOut )
 {
 #if AE_USE_OPENAL
 	struct ChunkHeader
@@ -17034,13 +18424,6 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 	FormatChunk wave_format;
 	bool hasReadFormat = false;
 	uint32_t dataSize = 0;
-
-	uint32_t fileSize = ae::FileSystem::GetSize( fileName );
-	AE_ASSERT_MSG( fileSize, "Could not open wav file: #", fileName );
-
-	ae::Scratch< uint8_t > fileScratch( AE_ALLOC_TAG_AUDIO, fileSize );
-	uint8_t* fileBuffer = fileScratch.Data();
-	ae::FileSystem::Read( fileName, fileBuffer, fileSize );
 
 	ChunkHeader header;
 
@@ -17086,8 +18469,8 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_STEREO8; }
 				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_STEREO16; }
 			}
-			alGenBuffers( 1, buffer );
-			alBufferData( *buffer, format, (void*)data, size, frequency );
+			alGenBuffers( 1, bufferOut );
+			alBufferData( *bufferOut, format, (void*)data, size, frequency );
 			delete[] data;
 		}
 		else
@@ -17104,7 +18487,7 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 	AE_ASSERT( hasReadFormat );
 	AE_ASSERT( dataSize );
 
-	*length = dataSize / ( wave_format.sampleRate * wave_format.numChannels * wave_format.bitsPerSample / 8.0f );
+	*lengthOut = dataSize / ( wave_format.sampleRate * wave_format.numChannels * wave_format.bitsPerSample / 8.0f );
 #endif
 }
 
@@ -17113,16 +18496,14 @@ void _LoadWavFile( const char* fileName, uint32_t* buffer, float* length )
 //------------------------------------------------------------------------------
 AudioData::AudioData()
 {
-	name = "";
 	buffer = 0;
 	length = 0.0f;
 }
 
-void AudioData::Initialize( const char* filePath )
+void AudioData::LoadWavFile( const uint8_t* data, uint32_t length )
 {
 	AE_ASSERT( !buffer );
-	this->name = filePath; // @TODO: Should just be file name or file hash
-	_LoadWavFile( filePath, &this->buffer, &this->length );
+	_LoadWavFile( data, length, &this->buffer, &this->length );
 	AE_ASSERT( buffer );
 }
 
@@ -17365,11 +18746,13 @@ void Audio::Log()
 
 			float playLength = channel->resource->length;
 
-			const char* soundName = strrchr( channel->resource->name.c_str(), '/' );
-			soundName = soundName ? soundName + 1 : channel->resource->name.c_str();
-			const char* soundNameEnd = strrchr( channel->resource->name.c_str(), '.' );
-			soundNameEnd = soundNameEnd ? soundNameEnd : soundName + strlen( soundName );
-			uint32_t soundNameLen = (uint32_t)(soundNameEnd - soundName);
+			// const char* soundName = strrchr( , '/' );
+			// soundName = soundName ? soundName + 1 : channel->resource->name.c_str();
+			// const char* soundNameEnd = strrchr( channel->resource->name.c_str(), '.' );
+			// soundNameEnd = soundNameEnd ? soundNameEnd : soundName + strlen( soundName );
+			// uint32_t soundNameLen = (uint32_t)(soundNameEnd - soundName);
+			const char* soundName = "unknown";
+			uint32_t soundNameLen = strlen( soundName );
 
 			char buffer[ 512 ];
 			sprintf( buffer, "channel:%u name:%.*s offset:%.2fs length:%.2fs", i, soundNameLen, soundName, playOffset, playLength );
@@ -18403,7 +19786,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	if ( m_arrayAdapter )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		if ( arrayIdx >= 0 && arrayIdx < m_arrayAdapter->GetLength( arr ) )
+		if ( arrayIdx >= 0 && arrayIdx < (int32_t)m_arrayAdapter->GetLength( arr ) )
 		{
 			varData = m_arrayAdapter->GetElement( arr, arrayIdx );
 		}

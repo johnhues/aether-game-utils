@@ -30,7 +30,6 @@
 #include <atomic>
 #include "aeCompactingAllocator.h"
 #include "aeImage.h"
-#include "aeList.h"
 #include "aether.h"
 #include "aeObjectPool.h"
 #include "aeRender.h"
@@ -462,7 +461,7 @@ struct TerrainChunk
   bool m_lightDirty;
   ae::VertexData m_data;
   ae::CollisionMesh m_mesh = AE_ALLOC_TAG_TERRAIN;
-  aeListNode< TerrainChunk > m_generatedList;
+  ae::ListNode< TerrainChunk > m_generatedList;
   
   Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
   aeFloat16 m_l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
@@ -547,7 +546,7 @@ private:
   std::map< uint32_t, ChunkSort > t_chunkMap_hack;
   ae::Array< ChunkSort > t_chunkSorts = AE_ALLOC_TAG_TERRAIN;
 
-  aeList< TerrainChunk > m_generatedList;
+  ae::List< TerrainChunk > m_generatedList;
   
   bool m_blockCollision[ Block::COUNT ];
   aeFloat16 m_blockDensity[ Block::COUNT ];

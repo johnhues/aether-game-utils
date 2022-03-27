@@ -18,6 +18,7 @@ namespace ae {
 //------------------------------------------------------------------------------
 typedef uint32_t Entity;
 const Entity kInvalidEntity = 0;
+class EditorLevel;
 
 //------------------------------------------------------------------------------
 // Component
@@ -60,7 +61,7 @@ public:
 	Entity CreateEntity( Entity entity, const char* name = "" );
 	Component* AddComponent( Entity entity, const char* typeName );
 	template < typename T > T* AddComponent( Entity entity );
-	bool Load( const class Editor* editor, CreateObjectFn fn = nullptr );
+	bool Load( const ae::EditorLevel* level, CreateObjectFn fn = nullptr );
 	
 	// Get reference
 	Component& GetComponent( Entity entity, const char* typeName );
@@ -174,7 +175,10 @@ T* Registry::AddComponent( Entity entity )
 	}
 	components->Set( entity, component );
 	
-	m_onCreate( component );
+	if ( m_onCreate )
+	{
+		m_onCreate( component );
+	}
 	return (T*)component;
 }
 
@@ -265,10 +269,10 @@ uint32_t Registry::CallFn( Fn fn )
 		const ae::Type* componentType = ae::GetTypeById( m_components.GetKey( i ) );
 		if ( componentType->IsType( type ) )
 		{
-			auto& c = m_components.GetValue( i );
-			for ( uint32_t j = 0; j < c.Length(); j++ )
+			// Get components each loop because m_components could grow at any iteration
+			for ( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
 			{
-				fn( (T*)c.GetValue( j ) );
+				fn( (T*)m_components.GetValue( i ).GetValue( j ) );
 				result++;
 			}
 		}
