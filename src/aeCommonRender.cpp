@@ -81,10 +81,10 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_sprites = ae::NewArray< Sprite >( AE_ALLOC_TAG_RENDER, m_maxCount );
   m_vertices = ae::NewArray< Vertex >( AE_ALLOC_TAG_RENDER, m_maxCount * aeQuadVertCount );
 
-  m_vertexData.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Static );
-  m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof(Vertex, pos) );
-  m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof(Vertex, color) );
-  m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof(Vertex, uv) );
+  m_vertexData.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
+  m_vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof(Vertex, pos) );
+  m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(Vertex, color) );
+  m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(Vertex, uv) );
 
   ae::Scratch< uint16_t > scratch( AE_ALLOC_TAG_RENDER, m_maxCount * aeQuadIndexCount );
   uint16_t* indices = scratch.Data();

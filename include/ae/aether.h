@@ -2527,44 +2527,107 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::VertexData class
+// ae::Vertex types
 //------------------------------------------------------------------------------
-class VertexData
+namespace Vertex
 {
-public:
 	// Constants
 	enum class Usage { Dynamic, Static };
 	enum class Type { UInt8, UInt16, UInt32, NormalizedUInt8, NormalizedUInt16, NormalizedUInt32, Float };
-	//! Don't forget to set gl_PointSize in your vertex shader when using ae::VertexData::Primitive::Point.
+	//! Don't forget to set gl_PointSize in your vertex shader when using ae::Vertex::Primitive::Point.
 	enum class Primitive { Point, Line, Triangle };
-	
+}
+
+//------------------------------------------------------------------------------
+// ae::VertexBuffer class
+//------------------------------------------------------------------------------
+class VertexBuffer
+{
+public:
 	// Initialization
-	VertexData() = default;
-	~VertexData();
-	void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::VertexData::Primitive primitive, ae::VertexData::Usage vertexUsage, ae::VertexData::Usage indexUsage );
-	void AddAttribute( const char *name, uint32_t componentCount, ae::VertexData::Type type, uint32_t offset );
+	VertexBuffer() = default;
+	~VertexBuffer();
+	void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::Vertex::Primitive primitive, ae::Vertex::Usage vertexUsage, ae::Vertex::Usage indexUsage );
+	void AddAttribute( const char *name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset );
 	void Terminate();
 	
 	//! Sets current vertex data. Equivalent to calling Clear() then Append().
-	void SetVertices( const void* vertices, uint32_t count );
+	void UploadVertices( uint32_t startIdx, const void* vertices, uint32_t count );
 	//! Sets current index data. Equivalent to calling Clear() then Append().
+	void UploadIndices( uint32_t startIdx, const void* indices, uint32_t count );
+	//! Renders vertex data range. Automatically calls Upload() first.
+	void Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStartIdx, uint32_t primitiveCount ) const;
+	
+	uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
+	uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
+	uint32_t GetVertexSize() const { return m_vertexSize; }
+	uint32_t GetIndexSize() const { return m_indexSize; }
+	uint32_t GetAttributeCount() const { return m_attributes.Length(); }
+	ae::Vertex::Primitive GetPrimitiveType() const { return m_primitive; }
+	
+	// Implementation
+private:
+	struct Attribute
+	{
+		char name[ _kMaxShaderAttributeNameLength ];
+		uint32_t componentCount;
+		uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
+		uint32_t offset;
+		bool normalized;
+	};
+	VertexBuffer( const VertexBuffer& ) = delete;
+	VertexBuffer( VertexBuffer&& ) = delete;
+	void operator=( const VertexBuffer& ) = delete;
+	void operator=( VertexBuffer&& ) = delete;
+	const Attribute* m_GetAttributeByName( const char* name ) const;
+	// Params
+	uint32_t m_vertexSize = 0;
+	uint32_t m_indexSize = 0;
+	ae::Vertex::Primitive m_primitive = (ae::Vertex::Primitive)-1;
+	ae::Vertex::Usage m_vertexUsage = (ae::Vertex::Usage)-1;
+	ae::Vertex::Usage m_indexUsage = (ae::Vertex::Usage)-1;
+	ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
+	uint32_t m_maxVertexCount = 0;
+	uint32_t m_maxIndexCount = 0;
+	// System resources
+	uint32_t m_array = 0;
+	uint32_t m_vertices = ~0;
+	uint32_t m_indices = ~0;
+};
+
+//------------------------------------------------------------------------------
+// ae::VertexArray class
+//------------------------------------------------------------------------------
+class VertexArray
+{
+public:
+	// Initialization
+	VertexArray() = default;
+	~VertexArray();
+	void Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::Vertex::Primitive primitive, ae::Vertex::Usage vertexUsage, ae::Vertex::Usage indexUsage );
+	void AddAttribute( const char *name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset );
+	void Terminate();
+	
+	//! Sets current vertex data. Equivalent to calling ae::VertexArray::Clear() then ae::VertexArray::Append().
+	void SetVertices( const void* vertices, uint32_t count );
+	//! Sets current index data. Equivalent to calling ae::VertexArray::Clear() then ae::VertexArray::Append().
 	void SetIndices( const void* indices, uint32_t count );
 	//! Add vertices to end of existing array.
 	void AppendVertices( const void* vertices, uint32_t count );
 	//! Add indices to end of existing array. Given indices are each offset based on \p indexOffset. It could be
 	//! useful to use GetVertexCount() as a parameter to \p indexOffset before appending new vertices.
 	void AppendIndices( const void* indices, uint32_t count, uint32_t indexOffset );
-	//! Sets dynamic vertex count to 0. Has no effect if vertices are using VertexData::Usage::Static.
+	//! Sets dynamic vertex count to 0. Has no effect if vertices are using ae::Vertex::Usage::Static.
 	void ClearVertices();
-	//! Sets dynamic index count to 0. Has no effect if indices are using VertexData::Usage::Static.
+	//! Sets dynamic index count to 0. Has no effect if indices are using ae::Vertex::Usage::Static.
 	void ClearIndices();
-	//! Allows direct modification of vertices. ae::VertexData::Upload() should be called after modifying vertices
-	//! or the next call to ae::VertexData::Render() will automatically force an upload. Use this in conjunction with
-	//! ae::VertexData::GetVertexCount().
+	//! Allows direct modification of vertices. ae::VertexArray::Upload() should be called after modifying vertices
+	//! or the next call to ae::VertexArray::Render() will automatically force an upload. Use this in conjunction with
+	//! ae::VertexArray::GetVertexCount().
 	template < typename T > T* GetWritableVertices();
-	//! Allows direct modification of indices. ae::VertexData::Upload() should be called after modifying indices
-	//! or the next call to ae::VertexData::Render() will automatically force an upload. Use this in conjunction with
-	//! ae::VertexData::GetIndexCount().
+	//! Allows direct modification of indices. ae::VertexArray::Upload() should be called after modifying indices
+	//! or the next call to ae::VertexArray::Render() will automatically force an upload. Use this in conjunction with
+	//! ae::VertexArray::GetIndexCount().
 	template < typename T > T* GetWritableIndices();
 	
 	//! Preemptively prepares buffers for rendering. Call after Setting/Appending vertices and
@@ -2580,39 +2643,15 @@ public:
 	template < typename T = void > const T* GetIndices() const;
 	uint32_t GetVertexCount() const { return m_vertexCount; }
 	uint32_t GetIndexCount() const { return m_indexCount; }
-	uint32_t GetMaxVertexCount() const { return m_maxVertexCount; }
-	uint32_t GetMaxIndexCount() const { return m_maxIndexCount; }
-	uint32_t GetVertexSize() const { return m_vertexSize; }
-	uint32_t GetIndexSize() const { return m_indexSize; }
-	uint32_t GetAttributeCount() const { return m_attributes.Length(); }
-	VertexData::Primitive GetPrimitiveType() const { return m_primitive; }
+	uint32_t GetMaxVertexCount() const { return m_buffer.GetMaxVertexCount(); }
+	uint32_t GetMaxIndexCount() const { return m_buffer.GetMaxIndexCount(); }
+	uint32_t GetVertexSize() const { return m_buffer.GetVertexSize(); }
+	uint32_t GetIndexSize() const { return m_buffer.GetIndexSize(); }
+	uint32_t GetAttributeCount() const { return m_buffer.GetAttributeCount(); }
+	ae::Vertex::Primitive GetPrimitiveType() const { return m_buffer.GetPrimitiveType(); }
 	
 	// Implementation
 private:
-	struct Attribute
-	{
-		char name[ _kMaxShaderAttributeNameLength ];
-		uint32_t componentCount;
-		uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
-		uint32_t offset;
-		bool normalized;
-	};
-	VertexData( const VertexData& ) = delete;
-	VertexData( VertexData&& ) = delete;
-	void operator=( const VertexData& ) = delete;
-	void operator=( VertexData&& ) = delete;
-	void m_SetVertices( const void* vertices, uint32_t count );
-	void m_SetIndices( const void* indices, uint32_t count );
-	const Attribute* m_GetAttributeByName( const char* name ) const;
-	// Params
-	uint32_t m_vertexSize = 0;
-	uint32_t m_indexSize = 0;
-	VertexData::Primitive m_primitive = (VertexData::Primitive)-1;
-	VertexData::Usage m_vertexUsage = (VertexData::Usage)-1;
-	VertexData::Usage m_indexUsage = (VertexData::Usage)-1;
-	ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
-	uint32_t m_maxVertexCount = 0;
-	uint32_t m_maxIndexCount = 0;
 	// Dynamic state
 	uint32_t m_vertexCount = 0;
 	uint32_t m_indexCount = 0;
@@ -2621,10 +2660,9 @@ private:
 	bool m_vertexDirty = false;
 	bool m_indexDirty = false;
 	// System resources
-	uint32_t m_array = 0;
-	uint32_t m_vertices = ~0;
-	uint32_t m_indices = ~0;
+	ae::VertexBuffer m_buffer;
 };
+typedef VertexArray VertexData;
 
 //------------------------------------------------------------------------------
 // ae::Texture class
@@ -2794,7 +2832,7 @@ private:
 //------------------------------------------------------------------------------
 // ae::GraphicsDevice class
 //! \brief Handles the final presentation of rendered graphics to the screen/window. The final phase of your rendering
-//! should be to use Activate() and Clear(), then render your scene (with ae::VertexData::Render(), ae::RenderTarget::Render(), etc)
+//! should be to use Activate() and Clear(), then render your scene (with ae::VertexBuffer/Array::Render(), ae::RenderTarget::Render(), etc)
 //! to the contained target, and then finally call Present(). The width and height of this target is automatically controlled by the
 //! window size (multiplied by the scale factor for maximum resolution). This target is linear and so colors transferred
 //! to it should also be linear. There is no need to to use sRGB at any point in your pipeline unless you have an explicit
@@ -7230,7 +7268,7 @@ template <> const void* VertexData::GetIndices() const;
 template < typename T >
 T* VertexData::GetWritableVertices()
 {
-	AE_ASSERT( m_vertexSize == sizeof( T ) );
+	AE_ASSERT( m_buffer.GetVertexSize() == sizeof( T ) );
 	m_vertexDirty = true;
 	return static_cast< T* >( m_vertexReadable );
 }
@@ -7238,7 +7276,7 @@ T* VertexData::GetWritableVertices()
 template < typename T >
 T* VertexData::GetWritableIndices()
 {
-	AE_ASSERT( m_indexSize == sizeof( T ) );
+	AE_ASSERT( m_buffer.GetIndexSize() == sizeof( T ) );
 	m_indexDirty = true;
 	return static_cast< T* >( m_indexReadable );
 }
@@ -7246,14 +7284,14 @@ T* VertexData::GetWritableIndices()
 template < typename T >
 const T* VertexData::GetVertices() const
 {
-	AE_ASSERT( m_vertexSize == sizeof( T ) );
+	AE_ASSERT( m_buffer.GetVertexSize() == sizeof( T ) );
 	return static_cast< const T* >( m_vertexReadable );
 }
 
 template < typename T >
 const T* VertexData::GetIndices() const
 {
-	AE_ASSERT( m_indexSize == sizeof( T ) );
+	AE_ASSERT( m_buffer.GetIndexSize() == sizeof( T ) );
 	return static_cast< const T* >( m_indexReadable );
 }
 
@@ -14439,23 +14477,23 @@ void OpenGLDebugCallback( GLenum source,
 }
 #endif
 
-GLenum VertexDataTypeToGL( VertexData::Type type )
+GLenum VertexDataTypeToGL( Vertex::Type type )
 {
 	switch ( type )
 	{
-		case VertexData::Type::UInt8:
+		case Vertex::Type::UInt8:
 			return GL_UNSIGNED_BYTE;
-		case VertexData::Type::UInt16:
+		case Vertex::Type::UInt16:
 			return GL_UNSIGNED_SHORT;
-		case VertexData::Type::UInt32:
+		case Vertex::Type::UInt32:
 			return GL_UNSIGNED_INT;
-		case VertexData::Type::NormalizedUInt8:
+		case Vertex::Type::NormalizedUInt8:
 			return GL_UNSIGNED_BYTE;
-		case VertexData::Type::NormalizedUInt16:
+		case Vertex::Type::NormalizedUInt16:
 			return GL_UNSIGNED_SHORT;
-		case VertexData::Type::NormalizedUInt32:
+		case Vertex::Type::NormalizedUInt32:
 			return GL_UNSIGNED_INT;
-		case VertexData::Type::Float:
+		case Vertex::Type::Float:
 			return GL_FLOAT;
 		default:
 			AE_FAIL();
@@ -15028,14 +15066,14 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 }
 
 //------------------------------------------------------------------------------
-// ae::VertexData member functions
+// ae::VertexBuffer member functions
 //------------------------------------------------------------------------------
-VertexData::~VertexData()
+VertexBuffer::~VertexBuffer()
 {
 	Terminate();
 }
 
-void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, VertexData::Primitive primitive, VertexData::Usage vertexUsage, VertexData::Usage indexUsage )
+void VertexBuffer::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, ae::Vertex::Primitive primitive, ae::Vertex::Usage vertexUsage, ae::Vertex::Usage indexUsage )
 {
 	Terminate();
 
@@ -15057,17 +15095,12 @@ void VertexData::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t m
 	glBindVertexArray( m_array );
 }
 
-void VertexData::Terminate()
+void VertexBuffer::AddAttribute( const char *name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset )
 {
-	if ( m_vertexReadable )
-	{
-		ae::Delete( (uint8_t*)m_vertexReadable );
-	}
-	if ( m_indexReadable )
-	{
-		ae::Delete( (uint8_t*)m_indexReadable );
-	}
-	
+}
+
+void VertexBuffer::Terminate()
+{
 	if ( m_array )
 	{
 		glDeleteVertexArrays( 1, &m_array );
@@ -15086,11 +15119,56 @@ void VertexData::Terminate()
 	// Params
 	m_vertexSize = 0;
 	m_indexSize = 0;
-	m_primitive = (VertexData::Primitive)-1;
-	m_vertexUsage = (VertexData::Usage)-1;
-	m_indexUsage = (VertexData::Usage)-1;
+	m_primitive = (ae::Vertex::Primitive)-1;
+	m_vertexUsage = (ae::Vertex::Usage)-1;
+	m_indexUsage = (ae::Vertex::Usage)-1;
 	m_maxVertexCount = 0;
 	m_maxIndexCount = 0;
+	// System resources
+	m_array = 0;
+	m_vertices = ~0;
+	m_indices = ~0;
+}
+
+void VertexBuffer::UploadVertices( uint32_t startIdx, const void* vertices, uint32_t count )
+{
+}
+
+void VertexBuffer::UploadIndices( uint32_t startIdx, const void* indices, uint32_t count )
+{
+}
+
+void VertexBuffer::Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStartIdx, uint32_t primitiveCount ) const
+{
+}
+
+//------------------------------------------------------------------------------
+// ae::VertexArray member functions
+//------------------------------------------------------------------------------
+VertexArray::~VertexArray()
+{
+	Terminate();
+}
+
+void VertexArray::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t maxVertexCount, uint32_t maxIndexCount, Vertex::Primitive primitive, Vertex::Usage vertexUsage, Vertex::Usage indexUsage )
+{
+	Terminate();
+	m_buffer.Initialize( vertexSize, indexSize, maxVertexCount, maxIndexCount, primitive, vertexUsage, indexUsage );
+}
+
+void VertexArray::Terminate()
+{
+	m_buffer.Terminate();
+	
+	if ( m_vertexReadable )
+	{
+		ae::Delete( (uint8_t*)m_vertexReadable );
+	}
+	if ( m_indexReadable )
+	{
+		ae::Delete( (uint8_t*)m_indexReadable );
+	}
+	
 	// Dynamic state
 	m_vertexCount = 0;
 	m_indexCount = 0;
@@ -15098,13 +15176,9 @@ void VertexData::Terminate()
 	m_indexReadable = nullptr;
 	m_vertexDirty = false;
 	m_indexDirty = false;
-	// System resources
-	m_array = 0;
-	m_vertices = ~0;
-	m_indices = ~0;
 }
 
-void VertexData::AddAttribute( const char *name, uint32_t componentCount, VertexData::Type type, uint32_t offset )
+void VertexArray::AddAttribute( const char *name, uint32_t componentCount, VertexArray::Type type, uint32_t offset )
 {
 	AE_ASSERT( m_vertices == ~0 && m_indices == ~0 );
 	
@@ -15114,15 +15188,15 @@ void VertexData::AddAttribute( const char *name, uint32_t componentCount, Vertex
 	AE_ASSERT( length < _kMaxShaderAttributeNameLength );
 	strcpy( attribute->name, name );
 	attribute->componentCount = componentCount;
-	attribute->type = VertexDataTypeToGL( type );
+	attribute->type = VertexArrayTypeToGL( type );
 	attribute->offset = offset;
 	attribute->normalized =
-		type == VertexData::Type::NormalizedUInt8 ||
-		type == VertexData::Type::NormalizedUInt16 ||
-		type == VertexData::Type::NormalizedUInt32;
+		type == Vertex::Type::NormalizedUInt8 ||
+		type == Vertex::Type::NormalizedUInt16 ||
+		type == Vertex::Type::NormalizedUInt32;
 }
 
-void VertexData::m_SetVertices( const void* vertices, uint32_t count )
+void VertexArray::m_UploadVertices( uint32_t startIdx, const void* vertices, uint32_t count )
 {
 	AE_ASSERT( m_vertexSize );
 	AE_ASSERT_MSG( count <= m_maxVertexCount, "# #", count, m_maxVertexCount );
@@ -15142,6 +15216,7 @@ void VertexData::m_SetVertices( const void* vertices, uint32_t count )
 	{
 		AE_ASSERT( count );
 		AE_ASSERT( m_vertices == ~0 );
+		AE_ASSERT( startIdx == 0 );
 
 		glGenBuffers( 1, &m_vertices );
 		glBindVertexArray( m_array );
@@ -15167,14 +15242,14 @@ void VertexData::m_SetVertices( const void* vertices, uint32_t count )
 		
 		glBindVertexArray( m_array );
 		glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
-		glBufferSubData( GL_ARRAY_BUFFER, 0, count * m_vertexSize, vertices );
+		glBufferSubData( GL_ARRAY_BUFFER, startIdx * m_vertexSize, count * m_vertexSize, vertices );
 		return;
 	}
 	
 	AE_FAIL();
 }
 
-void VertexData::m_SetIndices( const void* indices, uint32_t count )
+void VertexArray::m_UploadIndices( uint32_t startIdx, const void* indices, uint32_t count )
 {
 	AE_ASSERT( m_indexSize );
 	AE_ASSERT_MSG( count % 3 == 0, "Index count: #", count );
@@ -15186,6 +15261,7 @@ void VertexData::m_SetIndices( const void* indices, uint32_t count )
 	{
 		AE_ASSERT( count );
 		AE_ASSERT( m_indices == ~0 );
+		AE_ASSERT( startIdx == 0 );
 
 		glGenBuffers( 1, &m_indices );
 		glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
@@ -15209,14 +15285,14 @@ void VertexData::m_SetIndices( const void* indices, uint32_t count )
 		}
 		
 		glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
-		glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, 0, m_indexCount * m_indexSize, indices );
+		glBufferSubData( GL_ELEMENT_ARRAY_BUFFER, startIdx * m_indexSize, m_indexCount * m_indexSize, indices );
 		return;
 	}
 	
 	AE_FAIL();
 }
 
-void VertexData::SetVertices( const void* vertices, uint32_t count )
+void VertexArray::SetVertices( const void* vertices, uint32_t count )
 {
 	// State validation
 	AE_ASSERT( m_vertexSize );
@@ -15229,7 +15305,7 @@ void VertexData::SetVertices( const void* vertices, uint32_t count )
 	// Set vertices
 	if ( count )
 	{
-		if ( m_vertexUsage == VertexData::Usage::Static )
+		if ( m_vertexUsage == VertexArray::Usage::Static )
 		{
 			AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
 		}
@@ -15245,7 +15321,7 @@ void VertexData::SetVertices( const void* vertices, uint32_t count )
 	m_vertexDirty = true;
 }
 
-void VertexData::SetIndices( const void* indices, uint32_t count )
+void VertexArray::SetIndices( const void* indices, uint32_t count )
 {
 	// State validation
 	AE_ASSERT( m_indexSize );
@@ -15306,7 +15382,7 @@ void VertexData::SetIndices( const void* indices, uint32_t count )
 	// Set indices
 	if ( count )
 	{
-		if ( m_indexUsage == VertexData::Usage::Static )
+		if ( m_indexUsage == VertexArray::Usage::Static )
 		{
 			AE_ASSERT_MSG( !m_indexCount, "Cannot re-set indices, buffer was created as static!" );
 		}
@@ -15322,11 +15398,11 @@ void VertexData::SetIndices( const void* indices, uint32_t count )
 	m_indexDirty = true;
 }
 
-void VertexData::AppendVertices( const void* vertices, uint32_t count )
+void VertexArray::AppendVertices( const void* vertices, uint32_t count )
 {
 	// State validation
 	AE_ASSERT( m_vertexSize );
-	if ( m_vertexUsage == VertexData::Usage::Static )
+	if ( m_vertexUsage == VertexArray::Usage::Static )
 	{
 		AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
 	}
@@ -15350,11 +15426,11 @@ void VertexData::AppendVertices( const void* vertices, uint32_t count )
 	m_vertexDirty = true;
 }
 
-void VertexData::AppendIndices( const void* indices, uint32_t count, uint32_t _indexOffset )
+void VertexArray::AppendIndices( const void* indices, uint32_t count, uint32_t _indexOffset )
 {
 	// State validation
 	AE_ASSERT( m_indexSize );
-	if ( m_indexUsage == VertexData::Usage::Static )
+	if ( m_indexUsage == VertexArray::Usage::Static )
 	{
 		AE_ASSERT_MSG( !m_indexCount, "Cannot re-set indices, buffer was created as static!" );
 	}
@@ -15415,18 +15491,18 @@ void VertexData::AppendIndices( const void* indices, uint32_t count, uint32_t _i
 	m_indexDirty = true;
 }
 
-void VertexData::ClearVertices()
+void VertexArray::ClearVertices()
 {
-	if ( m_vertexCount && m_vertexUsage == VertexData::Usage::Dynamic )
+	if ( m_vertexCount && m_vertexUsage == VertexArray::Usage::Dynamic )
 	{
 		m_vertexCount = 0;
 		m_vertexDirty = true;
 	}
 }
 
-void VertexData::ClearIndices()
+void VertexArray::ClearIndices()
 {
-	if ( m_indexCount && m_indexUsage == VertexData::Usage::Dynamic )
+	if ( m_indexCount && m_indexUsage == VertexArray::Usage::Dynamic )
 	{
 		m_indexCount = 0;
 		m_indexDirty = true;
@@ -15434,54 +15510,54 @@ void VertexData::ClearIndices()
 }
 
 template <>
-void* VertexData::GetWritableVertices()
+void* VertexArray::GetWritableVertices()
 {
 	m_vertexDirty = true;
 	return m_vertexReadable;
 }
 
 template <>
-void* VertexData::GetWritableIndices()
+void* VertexArray::GetWritableIndices()
 {
 	m_indexDirty = true;
 	return m_indexReadable;
 }
 
 template <>
-const void* VertexData::GetVertices() const
+const void* VertexArray::GetVertices() const
 {
 	return m_vertexReadable;
 }
 
 template <>
-const void* VertexData::GetIndices() const
+const void* VertexArray::GetIndices() const
 {
 	return m_indexReadable;
 }
 
-void VertexData::Upload()
+void VertexArray::Upload()
 {
 	if ( m_vertexDirty )
 	{
-		m_SetVertices( m_vertexReadable, m_vertexCount );
+		m_UploadVertices( 0, m_vertexReadable, m_vertexCount );
 	}
 	if ( m_indexDirty )
 	{
-		m_SetIndices( m_indexReadable, m_indexCount );
+		m_UploadIndices( 0, m_indexReadable, m_indexCount );
 	}
 }
 
-void VertexData::Render( const Shader* shader, const UniformList& uniforms ) const
+void VertexArray::Render( const Shader* shader, const UniformList& uniforms ) const
 {
 	Render( shader, uniforms, 0, 0 ); // Draw all
 }
 
-void VertexData::Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const
+void VertexArray::Render( const Shader* shader, const UniformList& uniforms, uint32_t primitiveStart, uint32_t primitiveCount ) const
 {
 	AE_ASSERT( shader );
 	AE_ASSERT_MSG( m_vertexSize && ( !m_indexCount || m_indexSize ), "Must call Initialize() before Render()" );
 	
-	const_cast< VertexData* >( this )->Upload(); // Make sure latest vertex data has been sent to GPU
+	const_cast< VertexArray* >( this )->Upload(); // Make sure latest vertex data has been sent to GPU
 	if ( m_vertices == ~0 || !m_vertexCount || ( m_indices != ~0 && !m_indexCount ) )
 	{
 		return;
@@ -15561,7 +15637,7 @@ void VertexData::Render( const Shader* shader, const UniformList& uniforms, uint
 	}
 }
 
-const VertexData::Attribute* VertexData::m_GetAttributeByName( const char* name ) const
+const VertexArray::Attribute* VertexData::m_GetAttributeByName( const char* name ) const
 {
 	for ( uint32_t i = 0; i < m_attributes.Length(); i++ )
 	{
@@ -16434,10 +16510,10 @@ void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
 	m_fontSize = fontSize;
 	m_rectCount = 0;
 
-	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * _kQuadVertCount, kMaxTextRects * kTextCharsPerString * _kQuadIndexCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
-	m_vertexData.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
-	m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( Vertex, uv ) );
-	m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
+	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * _kQuadVertCount, kMaxTextRects * kTextCharsPerString * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+	m_vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+	m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
+	m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
 
 	// Load shader
 	const char* vertexStr = R"(
