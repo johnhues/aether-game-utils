@@ -1146,11 +1146,11 @@ void TerrainChunk::m_SetVertexData( const TerrainVertex* verts, const TerrainInd
     || VertexCount( m_data.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
     || m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
   {
-    m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), (uint32_t)vertexCount, indexCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
-    m_data.AddAttribute( "a_position", 3, ae::VertexData::Type::Float, offsetof( TerrainVertex, position ) );
-    m_data.AddAttribute( "a_normal", 3, ae::VertexData::Type::Float, offsetof( TerrainVertex, normal ) );
-    m_data.AddAttribute( "a_info", 4, ae::VertexData::Type::UInt8, offsetof( TerrainVertex, info ) );
-    m_data.AddAttribute( "a_materials", 4, ae::VertexData::Type::NormalizedUInt8, offsetof( TerrainVertex, materials ) );
+    m_data.Initialize( sizeof( TerrainVertex ), sizeof( TerrainIndex ), (uint32_t)vertexCount, indexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+    m_data.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( TerrainVertex, position ) );
+    m_data.AddAttribute( "a_normal", 3, ae::Vertex::Type::Float, offsetof( TerrainVertex, normal ) );
+    m_data.AddAttribute( "a_info", 4, ae::Vertex::Type::UInt8, offsetof( TerrainVertex, info ) );
+    m_data.AddAttribute( "a_materials", 4, ae::Vertex::Type::NormalizedUInt8, offsetof( TerrainVertex, materials ) );
   }
 
   // Set vertices
