@@ -89,10 +89,10 @@ void SpriteRenderer::Initialize( uint32_t maxCount )
   m_shader.Initialize( vertShader, fragShader, nullptr, 0 );
   m_shader.SetBlending( true );
   
-  m_vertexData.Initialize( sizeof(Vertex), 2, 4 * m_maxCount, 6 * m_maxCount, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Dynamic );
-  m_vertexData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof(Vertex, pos) );
-  m_vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof(Vertex, color) );
-  m_vertexData.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof(Vertex, uv) );
+  m_vertexData.Initialize( sizeof(Vertex), 2, 4 * m_maxCount, 6 * m_maxCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+  m_vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof(Vertex, pos) );
+  m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(Vertex, color) );
+  m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(Vertex, uv) );
 }
 
 void SpriteRenderer::Terminate()

@@ -120,7 +120,11 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		set(APPLE_RESOURCE_DIR ../Resources/)
 	endif()
 	foreach(resource ${_AE_RESOURCES})
-		file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${resource})
+		# First get absolute path to resource
+		get_filename_component(resource ${resource} ABSOLUTE)
+		# Get the relative path to the resource from the root of the resource
+		file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${resource})
+		# Copy file to platform specific resource directory keeping the relative path
 		add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
 				${CMAKE_CURRENT_SOURCE_DIR}/${resource}

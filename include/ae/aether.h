@@ -4189,7 +4189,7 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 //------------------------------------------------------------------------------
 // Log colors internal implementation
 //------------------------------------------------------------------------------
-#if _AE_WINDOWS_ || _AE_APPLE_
+#if _AE_APPLE_
 #define _AE_LOG_COLORS_ false
 #else
 #define _AE_LOG_COLORS_ true
@@ -9988,9 +9988,16 @@ const char* LogLevelColors[] =
 #if _AE_WINDOWS_
 void LogInternal( std::stringstream& os, const char* message )
 {
+	static bool s_logStdOut = !ae::IsDebuggerAttached();
 	os << message << std::endl;
-	printf( os.str().c_str() ); // std out
-	OutputDebugStringA( os.str().c_str() ); // visual studio debug output
+	if ( s_logStdOut )
+	{
+		printf( os.str().c_str() ); // std out
+	}
+	else
+	{
+		OutputDebugStringA( os.str().c_str() ); // visual studio debug output
+	}
 }
 #else
 void LogInternal( std::stringstream& os, const char* message )

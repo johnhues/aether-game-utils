@@ -114,14 +114,14 @@ int main()
 	vertexData.Initialize(
 		sizeof(*objFile.vertices.Begin()), sizeof(*objFile.indices.Begin()),
 		objFile.vertices.Length(), objFile.indices.Length(),
-		ae::VertexData::Primitive::Triangle,
-		ae::VertexData::Usage::Static, ae::VertexData::Usage::Static
+		ae::Vertex::Primitive::Triangle,
+		ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
 	);
 	if ( objFile.vertices.Length() )
 	{
-		vertexData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
-		vertexData.AddAttribute( "a_normal", 4, ae::VertexData::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
-		vertexData.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
+		vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
+		vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
+		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
 		vertexData.SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
 		vertexData.SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
 	}

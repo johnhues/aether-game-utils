@@ -338,9 +338,9 @@ void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _me
 		}
 	}
 	
-	data.Initialize( sizeof( Vertex ), sizeof( uint32_t ), vertices.Length(), 0, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-	data.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( Vertex, position ) );
-	data.AddAttribute( "a_normal", 4, ae::VertexData::Type::Float, offsetof( Vertex, normal ) );
+	data.Initialize( sizeof( Vertex ), sizeof( uint32_t ), vertices.Length(), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	data.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
+	data.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
 	data.SetVertices( vertices.Begin(), vertices.Length() );
 	data.Upload();
 	
@@ -423,9 +423,9 @@ void EditorProgram::Initialize()
 		6, 2, 3, 6, 3, 7, // Back
 		0, 1, 5, 0, 5, 4 // Front
 	};
-	m_introMesh.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-	m_introMesh.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( Vertex, pos ) );
-	m_introMesh.AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( Vertex, color ) );
+	m_introMesh.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	m_introMesh.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+	m_introMesh.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
 	m_introMesh.SetVertices( kCubeVerts, countof( kCubeVerts ) );
 	m_introMesh.SetIndices( kCubeIndices, countof( kCubeIndices ) );
 	m_introMesh.Upload();
@@ -469,9 +469,9 @@ void EditorProgram::Initialize()
 		{ ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), ae::Vec2( 1.0f, 0.0f ) },
 		{ ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), ae::Vec2( 1.0f, 1.0f ) }
 	};
-	m_quad.Initialize( sizeof( *quadVerts ), 0, countof( quadVerts ), 0, ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-	m_quad.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( QuadVertex, pos ) );
-	m_quad.AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( QuadVertex, uv ) );
+	m_quad.Initialize( sizeof( *quadVerts ), 0, countof( quadVerts ), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	m_quad.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( QuadVertex, pos ) );
+	m_quad.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( QuadVertex, uv ) );
 	m_quad.SetVertices( quadVerts, countof( quadVerts ) );
 	m_quad.Upload();
 	

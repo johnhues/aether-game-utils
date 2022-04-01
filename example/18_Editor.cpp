@@ -169,13 +169,13 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexData* ve
 			vertexDataOut->Initialize(
 				sizeof(*objFile.vertices.Begin()), sizeof(*objFile.indices.Begin()),
 				objFile.vertices.Length(), objFile.indices.Length(),
-				ae::VertexData::Primitive::Triangle,
-				ae::VertexData::Usage::Static, ae::VertexData::Usage::Static
+				ae::Vertex::Primitive::Triangle,
+				ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
 			);
-			vertexDataOut->AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
-			vertexDataOut->AddAttribute( "a_normal", 4, ae::VertexData::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
-			vertexDataOut->AddAttribute( "a_uv", 2, ae::VertexData::Type::Float, offsetof( ae::OBJFile::Vertex, texture ) );
-			vertexDataOut->AddAttribute( "a_color", 4, ae::VertexData::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
+			vertexDataOut->AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
+			vertexDataOut->AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
+			vertexDataOut->AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, texture ) );
+			vertexDataOut->AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
 			vertexDataOut->SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
 			vertexDataOut->SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
 		}

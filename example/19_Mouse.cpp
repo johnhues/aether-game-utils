@@ -152,13 +152,13 @@ void Program::Initialize()
 	m_shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	m_shader.SetBlending( true );
 
-	m_triangle.Initialize( sizeof( *kCursorVerts ), sizeof( *kCursorIndices ), countof( kCursorVerts ), countof( kCursorIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-	m_triangle.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, 0 );
+	m_triangle.Initialize( sizeof( *kCursorVerts ), sizeof( *kCursorIndices ), countof( kCursorVerts ), countof( kCursorIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	m_triangle.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, 0 );
 	m_triangle.SetVertices( kCursorVerts, countof( kCursorVerts ) );
 	m_triangle.SetIndices( kCursorIndices, countof( kCursorIndices ) );
 
-	m_quad.Initialize( sizeof( *kQuadVerts ), sizeof( *kQuadIndices ), countof( kQuadVerts ), countof( kQuadIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-	m_quad.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, 0 );
+	m_quad.Initialize( sizeof( *kQuadVerts ), sizeof( *kQuadIndices ), countof( kQuadVerts ), countof( kQuadIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	m_quad.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, 0 );
 	m_quad.SetVertices( kQuadVerts, countof( kQuadVerts ) );
 	m_quad.SetIndices( kQuadIndices, countof( kQuadIndices ) );
 

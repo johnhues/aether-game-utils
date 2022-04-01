@@ -128,12 +128,12 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	{
 		params.vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
 			totalVerts, indices.Length(),
-			ae::VertexData::Primitive::Triangle,
-			ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-		if ( vertexHelper.posOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::VertexData::Type::Float, vertexHelper.posOffset ); }
-		if ( vertexHelper.normalOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::VertexData::Type::Float, vertexHelper.normalOffset ); }
-		if ( vertexHelper.colorOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::VertexData::Type::Float, vertexHelper.colorOffset ); }
-		if ( vertexHelper.uvOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::VertexData::Type::Float, vertexHelper.uvOffset ); }
+			ae::Vertex::Primitive::Triangle,
+			ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+		if ( vertexHelper.posOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::Vertex::Type::Float, vertexHelper.posOffset ); }
+		if ( vertexHelper.normalOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::Vertex::Type::Float, vertexHelper.normalOffset ); }
+		if ( vertexHelper.colorOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::Vertex::Type::Float, vertexHelper.colorOffset ); }
+		if ( vertexHelper.uvOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::Vertex::Type::Float, vertexHelper.uvOffset ); }
 		params.vertexData->SetVertices( vertexBuffer.Begin(), totalVerts );
 		params.vertexData->SetIndices( indices.Begin(), indices.Length() );
 		params.vertexData->Upload();
@@ -464,12 +464,12 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 	
 	vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
 		totalVerts, indices.Length(),
-		ae::VertexData::Primitive::Triangle,
-		ae::VertexData::Usage::Dynamic, ae::VertexData::Usage::Static );
-	if ( vertexHelper.posOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::VertexData::Type::Float, vertexHelper.posOffset ); }
-	if ( vertexHelper.normalOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::VertexData::Type::Float, vertexHelper.normalOffset ); }
-	if ( vertexHelper.colorOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::VertexData::Type::Float, vertexHelper.colorOffset ); }
-	if ( vertexHelper.uvOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::VertexData::Type::Float, vertexHelper.uvOffset ); }
+		ae::Vertex::Primitive::Triangle,
+		ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
+	if ( vertexHelper.posOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::Vertex::Type::Float, vertexHelper.posOffset ); }
+	if ( vertexHelper.normalOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::Vertex::Type::Float, vertexHelper.normalOffset ); }
+	if ( vertexHelper.colorOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::Vertex::Type::Float, vertexHelper.colorOffset ); }
+	if ( vertexHelper.uvOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::Vertex::Type::Float, vertexHelper.uvOffset ); }
 	vertexData->SetVertices( vertexBuffer.Begin(), totalVerts );
 	vertexData->SetIndices( indices.Begin(), indices.Length() );
 	

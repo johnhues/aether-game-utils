@@ -119,8 +119,8 @@ public:
       bgIndices[ i ] = aeQuadIndices[ i ];
     }
 
-    m_bgVertexData.Initialize( sizeof( BGVertex ), sizeof( uint8_t ), countof( bgVertices ), countof( bgIndices ), ae::VertexData::Primitive::Triangle, ae::VertexData::Usage::Static, ae::VertexData::Usage::Static );
-    m_bgVertexData.AddAttribute( "a_position", 4, ae::VertexData::Type::Float, offsetof( BGVertex, pos ) );
+    m_bgVertexData.Initialize( sizeof( BGVertex ), sizeof( uint8_t ), countof( bgVertices ), countof( bgIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+    m_bgVertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( BGVertex, pos ) );
     m_bgVertexData.SetVertices( bgVertices, countof( bgVertices ) );
     m_bgVertexData.SetIndices( bgIndices, countof( bgIndices ) );
 
