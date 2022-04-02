@@ -1417,6 +1417,7 @@ public:
 	~List();
 
 	void Append( ListNode< T >& node );
+	void Clear();
 
 	T* GetFirst();
 	T* GetLast();
@@ -6722,10 +6723,7 @@ List< T >::List() : m_first( nullptr )
 template < typename T >
 List< T >::~List()
 {
-	while ( m_first )
-	{
-		m_first->Remove();
-	}
+	Clear();
 }
 
 template < typename T >
@@ -6747,6 +6745,15 @@ void List< T >::Append( ListNode< T >& node )
 	{
 		m_first = &node;
 		node.m_root = this;
+	}
+}
+
+template < typename T >
+void List< T >::Clear()
+{
+	while ( m_first )
+	{
+		m_first->Remove();
 	}
 }
 
