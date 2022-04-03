@@ -89,6 +89,40 @@ TEST_CASE( "Static indices can be allocated and deallocated", "[ae::FreeList (st
 	}
 }
 
+TEST_CASE( "can allocate objects after FreeAll", "[ae::FreeList (static)]" )
+{
+	const uint32_t kNumElements = 10;
+	ae::FreeList< kNumElements > freeList;
+	REQUIRE( freeList.Size() == kNumElements );
+	REQUIRE( freeList.GetFirst() < 0 );
+	REQUIRE( freeList.Length() == 0 );
+
+	freeList.FreeAll();
+	REQUIRE( freeList.GetFirst() < 0 );
+	REQUIRE( freeList.Length() == 0 );
+
+	int32_t idx = freeList.Allocate();
+	REQUIRE( idx >= 0 );
+	REQUIRE( freeList.Length() == 1 );
+	freeList.Free( idx );
+	REQUIRE( freeList.Length() == 0 );
+
+	int32_t objects[ kNumElements ];
+	for ( uint32_t i = 0; i < kNumElements; i++ )
+	{
+		objects[ i ] = freeList.Allocate();
+		REQUIRE( objects[ i ] >= 0 );
+		REQUIRE( freeList.Length() == i + 1 );
+	}
+	REQUIRE( freeList.Length() == kNumElements );
+	for ( uint32_t i = 0; i < kNumElements; i++ )
+	{
+		freeList.Free( objects[ i ] );
+		REQUIRE( freeList.Length() == kNumElements - ( i + 1 ) );
+	}
+	REQUIRE( freeList.Length() == 0 );
+}
+
 //------------------------------------------------------------------------------
 // ae::FreeList (dynamic) tests
 //------------------------------------------------------------------------------
@@ -221,6 +255,8 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 
 	SECTION( "can free objects" )
 	{
+		REQUIRE( pool.Length() == pool.Size() );
+		REQUIRE( pool.Length() == kNumElements );
 		for ( uint32_t i = 0; i < kNumElements; i++ )
 		{
 			auto* p = objects[ i ];
@@ -237,6 +273,12 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 			REQUIRE( ae::LifetimeTester::dtorCount == i + 1 );
 			REQUIRE( ae::LifetimeTester::currentCount == remaining );
 		}
+		REQUIRE( pool.Length() == 0 );
+		auto* p = pool.New();
+		REQUIRE( p );
+		REQUIRE( pool.Length() == 1 );
+		pool.Delete( p );
+		REQUIRE( pool.Length() == 0 );
 	}
 
 	SECTION( "null pointers are handled gracefully" )
@@ -339,6 +381,22 @@ TEST_CASE( "Pages can be checked for objects", "[aeObjectPool]" )
 	//REQUIRE( !pool.IsInPool( &something ) );
 
 	pool.DeleteAll();
+}
+
+TEST_CASE( "can allocate objects after clear", "[aeObjectPool]" )
+{
+	const uint32_t kNumElements = 10;
+	ae::ObjectPool< int32_t, kNumElements > pool;
+	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
+
+	pool.DeleteAll();
+	auto* p = pool.New();
+	REQUIRE( p );
+	REQUIRE( pool.Length() == 1 );
+	pool.Delete( p );
+	REQUIRE( pool.Length() == 0 );
 }
 
 //------------------------------------------------------------------------------

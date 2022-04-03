@@ -1966,6 +1966,7 @@ struct MouseState
 //------------------------------------------------------------------------------
 // ae::GamepadState struct
 //------------------------------------------------------------------------------
+// @TODO: Add or replace this with ae::Button/ae::Stick/ae::Trigger like ae::Key
 struct GamepadState
 {
 	bool connected = false;
@@ -6853,14 +6854,7 @@ FreeList< N >::FreeList() :
 	m_pool( N, Entry() )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
-	m_length = 0;
-	for ( uint32_t i = 0; i < m_pool.Length() - 1; i++ )
-	{
-		m_pool[ i ].next = &m_pool[ i + 1 ];
-	}
-	// Last element points to itself so it can be used as a sentinel.
-	m_pool[ m_pool.Length() - 1 ].next = &m_pool[ m_pool.Length() - 1 ];
-	m_free = &m_pool[ 0 ];
+	FreeAll();
 }
 
 template < uint32_t N >
@@ -6868,14 +6862,7 @@ FreeList< N >::FreeList( const ae::Tag& tag, uint32_t size ) :
 	m_pool( tag, size, Entry() )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
-	m_length = 0;
-	for ( uint32_t i = 0; i < m_pool.Length() - 1; i++ )
-	{
-		m_pool[ i ].next = &m_pool[ i + 1 ];
-	}
-	// Last element points to itself so it can be used as a sentinel.
-	m_pool[ m_pool.Length() - 1 ].next = &m_pool[ m_pool.Length() - 1 ];
-	m_free = &m_pool[ 0 ];
+	FreeAll();
 }
 
 template < uint32_t N >
@@ -6921,8 +6908,13 @@ template < uint32_t N >
 void FreeList< N >::FreeAll()
 {
 	m_length = 0;
-	m_free = nullptr;
-	memset( m_pool.Begin(), 0, sizeof( *m_pool.Begin() ) * m_pool.Length() );
+	for ( uint32_t i = 0; i < m_pool.Length() - 1; i++ )
+	{
+		m_pool[ i ].next = &m_pool[ i + 1 ];
+	}
+	// Last element points to itself so it can be used as a sentinel.
+	m_pool[ m_pool.Length() - 1 ].next = &m_pool[ m_pool.Length() - 1 ];
+	m_free = &m_pool[ 0 ];
 }
 
 template < uint32_t N >
@@ -7098,6 +7090,7 @@ void ObjectPool< T, N, Paged >::DeleteAll()
 	else
 	{
 		deleteAllFn( m_firstPage.Get() );
+		// m_pages.Append( m_firstPage.Get()->node );
 	}
 	m_length = 0;
 }
