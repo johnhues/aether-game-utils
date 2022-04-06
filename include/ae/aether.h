@@ -2887,7 +2887,7 @@ public:
 	//! \p texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
 	//! texture can be a single channel without transparency. Luminance of the red channel is used for transparency.
 	//! \p fontSize is the width and height of each character in the texture.
-	void Initialize( const ae::Texture2D* texture, uint32_t fontSize );
+	void Initialize( const ae::Texture2D* texture, uint32_t fontSize, float spacing );
 	void Terminate();
 	void Render( const ae::Matrix4& uiToScreen );
 	void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit );
@@ -2911,6 +2911,7 @@ private:
 		ae::Color color;
 	};
 	uint32_t m_fontSize;
+	float m_spacing;
 	ae::VertexData m_vertexData;
 	ae::Shader m_shader;
 	const ae::Texture2D* m_texture = nullptr;
@@ -16501,11 +16502,12 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 //------------------------------------------------------------------------------
 const uint32_t kTextCharsPerString = 64;
 
-void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize )
+void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize, float spacing )
 {
 	AE_ASSERT( texture->GetTexture() );
 	m_texture = texture;
 	m_fontSize = fontSize;
+	m_spacing = spacing;
 	m_rectCount = 0;
 
 	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * _kQuadVertCount, kMaxTextRects * kTextCharsPerString * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
@@ -16604,7 +16606,7 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 			}
 			else
 			{
-				pos.x += rect.size.x;
+				pos.x += rect.size.x * m_spacing;
 			}
 			str++;
 		}
