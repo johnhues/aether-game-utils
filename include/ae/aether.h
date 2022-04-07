@@ -1544,6 +1544,14 @@ private:
 		ae::FreeList< N > freeList;
 		AlignedStorageT objects[ N ];
 	};
+	
+#if _AE_LINUX_
+	template < bool Allocate > struct ConditionalPage {
+		Page* Get() { return Allocate ? nullptr : page; }
+		const Page* Get() const { return Allocate ? nullptr : page; }
+		Page page[ Allocate ? 0 : 1 ];
+	};
+#else
 	template < bool Allocate > struct ConditionalPage {
 		Page* Get() { return nullptr; }
 		const Page* Get() const { return nullptr; }
@@ -1553,6 +1561,7 @@ private:
 		const Page* Get() const { return &page; }
 		Page page;
 	};
+#endif
 	ae::Tag m_tag;
 	uint32_t m_length = 0;
 	ae::List< Page > m_pages;
