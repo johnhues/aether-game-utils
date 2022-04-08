@@ -1834,188 +1834,15 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::Key enum
+// ae::BatteryState enum
 //------------------------------------------------------------------------------
-enum class Key : uint8_t
+enum class BatteryState
 {
-	Unknown = 0,
-
-	A = 4,
-	B = 5,
-	C = 6,
-	D = 7,
-	E = 8,
-	F = 9,
-	G = 10,
-	H = 11,
-	I = 12,
-	J = 13,
-	K = 14,
-	L = 15,
-	M = 16,
-	N = 17,
-	O = 18,
-	P = 19,
-	Q = 20,
-	R = 21,
-	S = 22,
-	T = 23,
-	U = 24,
-	V = 25,
-	W = 26,
-	X = 27,
-	Y = 28,
-	Z = 29,
-
-	Num1 = 30,
-	Num2 = 31,
-	Num3 = 32,
-	Num4 = 33,
-	Num5 = 34,
-	Num6 = 35,
-	Num7 = 36,
-	Num8 = 37,
-	Num9 = 38,
-	Num0 = 39,
-
-	Enter = 40,
-	Escape = 41,
-	Backspace = 42,
-	Tab = 43,
-	Space = 44,
-
-	Minus = 45,
-	Equals = 46,
-	LeftBracket = 47,
-	RightBracket = 48,
-	Backslash = 49,
-
-	Semicolon = 51,
-	Apostrophe = 52,
-	Tilde = 53,
-	Comma = 54,
-	Period = 55,
-	Slash = 56,
-	CapsLock = 57,
-
-	F1 = 58,
-	F2 = 59,
-	F3 = 60,
-	F4 = 61,
-	F5 = 62,
-	F6 = 63,
-	F7 = 64,
-	F8 = 65,
-	F9 = 66,
-	F10 = 67,
-	F11 = 68,
-	F12 = 69,
-
-	PrintScreen = 70,
-	ScrollLock = 71,
-	Pause = 72,
-
-	Insert = 73,
-	Home = 74,
-	PageUp = 75,
-	Delete = 76,
-	End = 77,
-	PageDown = 78,
-
-	Right = 79,
-	Left = 80,
-	Down = 81,
-	Up = 82,
-
-	NumLock = 84,
-	NumPadDivide = 84,
-	NumPadMultiply = 85,
-	NumPadMinus = 86,
-	NumPadPlus = 87,
-	NumPadEnter = 88,
-	NumPad1 = 89,
-	NumPad2 = 90,
-	NumPad3 = 91,
-	NumPad4 = 92,
-	NumPad5 = 93,
-	NumPad6 = 94,
-	NumPad7 = 95,
-	NumPad8 = 96,
-	NumPad9 = 97,
-	NumPad0 = 98,
-	NumPadPeriod = 99,
-	NumPadEquals = 103,
-
-	LeftControl = 224,
-	LeftShift = 225,
-	LeftAlt = 226,
-	LeftSuper = 227,
-	RightControl = 228,
-	RightShift = 229,
-	RightAlt = 230,
-	RightSuper = 231,
-	LeftMeta = 254, // Command on Apple, Control on others
-	RightMeta = 255, // Command on Apple, Control on others
-};
-
-//------------------------------------------------------------------------------
-// ae::MouseState struct
-//------------------------------------------------------------------------------
-struct MouseState
-{
-	bool leftButton = false;
-	bool middleButton = false;
-	bool rightButton = false;
-	ae::Int2 position = ae::Int2( 0 ); //!< Window space coordinates (ie. not affected by window scale factor)
-	ae::Int2 movement = ae::Int2( 0 ); //!< Window space coordinates (ie. not affected by window scale factor)
-	ae::Vec2 scroll = ae::Vec2( 0.0f );
-	bool usingTouch = false;
-};
-
-//------------------------------------------------------------------------------
-// ae::GamepadState struct
-//------------------------------------------------------------------------------
-// @TODO: Add or replace this with ae::Button/ae::Stick/ae::Trigger like ae::Key
-struct GamepadState
-{
-	bool connected = false;
-	bool anyInput = false;
-	bool anyButton = false;
-	
-	ae::Vec2 leftAnalog = Vec2( 0.0f );
-	ae::Vec2 rightAnalog = Vec2( 0.0f );
-	
-	ae::Int2 dpad = ae::Int2( 0 );
-	bool up = false;
-	bool down = false;
-	bool left = false;
-	bool right = false;
-
-	bool start = false;
-	bool select = false;
-
-	bool a = false;
-	bool b = false;
-	bool x = false;
-	bool y = false;
-	
-	bool leftBumper = false;
-	bool rightBumper = false;
-	float leftTrigger = 0.0f;
-	float rightTrigger = 0.0f;
-	bool leftAnalogClick = false;
-	bool rightAnalogClick = false;
-	
-	enum class BatteryState
-	{
-		None,
-		InUse,
-		Charging,
-		Full,
-		Wired
-	};
-	BatteryState batteryState = BatteryState::None;
-	float batteryLevel = 0.0f;
+	None,
+	InUse,
+	Charging,
+	Full,
+	Wired
 };
 
 //------------------------------------------------------------------------------
@@ -2024,48 +1851,231 @@ struct GamepadState
 class Input
 {
 public:
+	//------------------------------------------------------------------------------
+	// ae::Input::Type enum
+	//------------------------------------------------------------------------------
+	enum Type : uint32_t
+	{
+		Unknown = 0,
+
+		// Keyboard
+		KeyA = 4,
+		KeyB = 5,
+		KeyC = 6,
+		KeyD = 7,
+		KeyE = 8,
+		KeyF = 9,
+		KeyG = 10,
+		KeyH = 11,
+		KeyI = 12,
+		KeyJ = 13,
+		KeyK = 14,
+		KeyL = 15,
+		KeyM = 16,
+		KeyN = 17,
+		KeyO = 18,
+		KeyP = 19,
+		KeyQ = 20,
+		KeyR = 21,
+		KeyS = 22,
+		KeyT = 23,
+		KeyU = 24,
+		KeyV = 25,
+		KeyW = 26,
+		KeyX = 27,
+		KeyY = 28,
+		KeyZ = 29,
+
+		KeyNum1 = 30,
+		KeyNum2 = 31,
+		KeyNum3 = 32,
+		KeyNum4 = 33,
+		KeyNum5 = 34,
+		KeyNum6 = 35,
+		KeyNum7 = 36,
+		KeyNum8 = 37,
+		KeyNum9 = 38,
+		KeyNum0 = 39,
+
+		KeyEnter = 40,
+		KeyEscape = 41,
+		KeyBackspace = 42,
+		KeyTab = 43,
+		KeySpace = 44,
+
+		KeyMinus = 45,
+		KeyEquals = 46,
+		KeyLeftBracket = 47,
+		KeyRightBracket = 48,
+		KeyBackslash = 49,
+
+		KeySemicolon = 51,
+		KeyApostrophe = 52,
+		KeyTilde = 53,
+		KeyComma = 54,
+		KeyPeriod = 55,
+		KeySlash = 56,
+		KeyCapsLock = 57,
+
+		KeyF1 = 58,
+		KeyF2 = 59,
+		KeyF3 = 60,
+		KeyF4 = 61,
+		KeyF5 = 62,
+		KeyF6 = 63,
+		KeyF7 = 64,
+		KeyF8 = 65,
+		KeyF9 = 66,
+		KeyF10 = 67,
+		KeyF11 = 68,
+		KeyF12 = 69,
+
+		KeyPrintScreen = 70,
+		KeyScrollLock = 71,
+		KeyPause = 72,
+
+		KeyInsert = 73,
+		KeyHome = 74,
+		KeyPageUp = 75,
+		KeyDelete = 76,
+		KeyEnd = 77,
+		KeyPageDown = 78,
+
+		KeyRight = 79,
+		KeyLeft = 80,
+		KeyDown = 81,
+		KeyUp = 82,
+
+		KeyNumLock = 84,
+		KeyNumPadDivide = 84,
+		KeyNumPadMultiply = 85,
+		KeyNumPadMinus = 86,
+		KeyNumPadPlus = 87,
+		KeyNumPadEnter = 88,
+		KeyNumPad1 = 89,
+		KeyNumPad2 = 90,
+		KeyNumPad3 = 91,
+		KeyNumPad4 = 92,
+		KeyNumPad5 = 93,
+		KeyNumPad6 = 94,
+		KeyNumPad7 = 95,
+		KeyNumPad8 = 96,
+		KeyNumPad9 = 97,
+		KeyNumPad0 = 98,
+		KeyNumPadPeriod = 99,
+		KeyNumPadEquals = 103,
+		
+		KeyLeftControl = 224,
+		KeyLeftShift = 225,
+		KeyLeftAlt = 226,
+		KeyLeftSuper = 227,
+		KeyRightControl = 228,
+		KeyRightShift = 229,
+		KeyRightAlt = 230,
+		KeyRightSuper = 231,
+		KeyLeftMeta = 254, // Command on Apple, Control on others
+		KeyRightMeta = 255, // Command on Apple, Control on others
+
+		// Mouse
+		MouseLeft,
+		MouseMiddle,
+		MouseRight,
+		MouseScrollVertical, // @TODO: Maybe these should be replaced with Input::GetMouseScroll
+		MouseScrollHorizontal,
+
+		// Gamepad buttons
+		GamepadA, // B0
+		GamepadB, // B1
+		GamepadX, // B2
+		GamepadY, // B3
+
+		GamepadLeftBumper, // B4
+		GamepadRightBumper, // B5
+		GamepadLeftTrigger, // B6
+		GamepadRightTrigger, // B7
+
+		GamepadSelect, // B8
+		GamepadStart, // B9
+
+		GamepadLeftStick, // B10
+		GamepadRightStick, // B11
+
+		GamepadDpadUp, // B12
+		GamepadDpadDown, // B13
+		GamepadDpadLeft, // B14
+		GamepadDpadRight, // B15
+
+		GamepadGuide, // B16
+
+		GamePadLeftThumbstickVertical,
+		GamePadLeftThumbstickHorizontal,
+		GamePadRightThumbstickVertical,
+		GamePadRightThumbstickHorizontal,
+
+		// General system inputs (like pressing alt+f4 on windows)
+		SystemQuit,
+
+		COUNT,
+		/* @HACK: Remove old keyboard names without Key prefix */ A = 4, B = 5, C = 6, D = 7, E = 8, F = 9, G = 10, H = 11, I = 12, J = 13, K = 14, L = 15, M = 16, N = 17, O = 18, P = 19, Q = 20, R = 21, S = 22, T = 23, U = 24, V = 25, W = 26, X = 27, Y = 28, Z = 29, Num1 = 30, Num2 = 31, Num3 = 32, Num4 = 33, Num5 = 34, Num6 = 35, Num7 = 36, Num8 = 37, Num9 = 38, Num0 = 39, Enter = 40, Escape = 41, Backspace = 42, Tab = 43, Space = 44, Minus = 45, Equals = 46, LeftBracket = 47, RightBracket = 48, Backslash = 49, Semicolon = 51, Apostrophe = 52, Tilde = 53, Comma = 54, Period = 55, Slash = 56, CapsLock = 57, F1 = 58, F2 = 59, F3 = 60, F4 = 61, F5 = 62, F6 = 63, F7 = 64, F8 = 65, F9 = 66, F10 = 67, F11 = 68, F12 = 69, PrintScreen = 70, ScrollLock = 71, Pause = 72, Insert = 73, Home = 74, PageUp = 75, Delete = 76, End = 77, PageDown = 78, Right = 79, Left = 80, Down = 81, Up = 82, NumLock = 84, NumPadDivide = 84, NumPadMultiply = 85, NumPadMinus = 86, NumPadPlus = 87, NumPadEnter = 88, NumPad1 = 89, NumPad2 = 90, NumPad3 = 91, NumPad4 = 92, NumPad5 = 93, NumPad6 = 94, NumPad7 = 95, NumPad8 = 96, NumPad9 = 97, NumPad0 = 98, NumPadPeriod = 99, NumPadEquals = 103, LeftControl = 224, LeftShift = 225, LeftAlt = 226, LeftSuper = 227, RightControl = 228, RightShift = 229, RightAlt = 230, RightSuper = 231, LeftMeta = 254, RightMeta = 255,
+	};
+
 	void Initialize( Window* window );
 	void Terminate();
 	void Pump();
 	
+	bool Get( uint32_t playerIdx, ae::Input::Type type ) const;
+	bool GetPrev( uint32_t playerIdx, ae::Input::Type type ) const;
+	float GetAnalog( uint32_t playerIdx, ae::Input::Type type ) const;
+	float GetAnalogPrev( uint32_t playerIdx, ae::Input::Type type ) const;
+	bool GetGamepadConnected( uint32_t playerIdx ) const;
+	bool GetGamepadAnyInput( uint32_t playerIdx ) const;
+	bool GetGamepadAnyButton( uint32_t playerIdx ) const;
+	float GetGamepadBatteryLevel( uint32_t playerIdx ) const;
+
+	bool Capture( uint32_t playerIdx, ae::Input::Type type );
+	void Release( uint32_t playerIdx, ae::Input::Type type );
+	void CaptureAll( uint32_t playerIdx );
+	void ReleaseAll( uint32_t playerIdx );
+
+	void SetAnalogThreshold( ae::Input::Type type, float threshold ); // Default is 0.1
+	float GetAnalogThreshold( ae::Input::Type type ) const;
+
+	//! Window space coordinates (ie. not affected by window scale factor)
+	ae::Int2 GetMousePosition() const;
+	//! Window space coordinates (ie. not affected by window scale factor)
+	ae::Int2 GetMouseMovement() const;
+	bool IsUsingTouch() const { return m_isUsingTouch; }
 	//! Locks cursor to center of window if it is focused. Use mouse.movement to get input information. Mouse capture is automatically released when the window loses focus. This can be checked with Input::GetMouseCaptured(). Automatically hides the cursor.
 	void SetMouseCaptured( bool enable );
 	//! Returns true if the mouse is currently captured. Always returns false when the window does not have focus.
 	bool GetMouseCaptured() const { return m_captureMouse; }
-	
+
 	void SetTextMode( bool enabled );
 	bool GetTextMode() const { return m_textMode; }
 	void SetText( const char* text ) { m_text = text; }
 	const char* GetText() const { return m_text.c_str(); }
 	const char* GetTextInput() const { return m_textInput.c_str(); }
-	
-	void SetLeftAnalogThreshold( float threshold ) { m_leftAnalogThreshold = threshold; }
-	void SetRightAnalogThreshold( float threshold ) { m_rightAnalogThreshold = threshold; }
-	float GetLeftAnalogThreshold() { return m_leftAnalogThreshold; }
-	float GetRightAnalogThreshold() { return m_rightAnalogThreshold; }
-	
-	bool Get( ae::Key key ) const;
-	bool GetPrev( ae::Key key ) const;
-	MouseState mouse;
-	MouseState mousePrev;
-	GamepadState gamepad;
-	GamepadState gamepadPrev;
-	bool quit = false;
 
 // private:
 	void m_SetMousePos( ae::Int2 pos );
 	ae::Window* m_window = nullptr;
 	bool m_captureMouse = false;
 	bool m_positionSet = false;
-	bool m_keys[ 256 ];
-	bool m_keysPrev[ 256 ];
+	bool newFrame_HACK = false;
+	bool m_isUsingTouch = false;
+	float m_analogThreshold[ (uint32_t)ae::Input::Type::COUNT ];
+
+	// @TODO: Per player controller
+	float m_keys[ (uint32_t)ae::Input::Type::COUNT ];
+	float m_keysPrev[ (uint32_t)ae::Input::Type::COUNT ];
+	bool m_keysCapture[ (uint32_t)ae::Input::Type::COUNT ];
+	BatteryState batteryState = BatteryState::None;
+	float batteryLevel = 0.0f;
+	
 	bool m_textMode = false;
 	void* m_textInputHandler = nullptr;
 	std::string m_text;
 	std::string m_textInput;
-	float m_leftAnalogThreshold = 0.1f;
-	float m_rightAnalogThreshold = 0.1f;
-	bool newFrame_HACK = false;
 };
 
 /* Internal */ } extern "C" { void _ae_FileSystem_ReadSuccess( void* arg, void* data, uint32_t length ); void _ae_FileSystem_ReadFail( void* arg, uint32_t code, bool timeout ); } namespace ae {
@@ -10684,7 +10694,7 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
 	AE_ASSERT( _aewindow );
 	AE_ASSERT( _aewindow->input );
-	_aewindow->input->quit = true;
+	_aewindow->input->m_keys[ (int)ae::Input::SystemQuit ] = 1.0f;
 }
 - (void)windowDidResize:(NSWindow*)sender
 {
@@ -11296,6 +11306,8 @@ void Input::Initialize( Window* window )
 	}
 	memset( m_keys, 0, sizeof(m_keys) );
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
+	memset( m_keysCapture, 0, sizeof(m_keysCapture) );
+	for ( float& f : m_analogThreshold ) { f = 0.1f; }
 
 #if _AE_EMSCRIPTEN_
 	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
@@ -11332,7 +11344,7 @@ void Input::Pump()
 	// Clear keys each frame and then check for presses below
 	// Emscripten doesn't do this because it uses a callback to set m_keys
 	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-	memset( m_keys, 0, sizeof(m_keys) );
+	memset( m_keys, 0, sizeof(*m_keys) * 255 ); // Only zero keyboard state, the rest is maintained manually
 #endif
 	mousePrev = mouse;
 	mouse.movement = ae::Int2( 0 );
@@ -11367,22 +11379,22 @@ void Input::Pump()
 			switch ( msg.message )
 			{
 				case WM_LBUTTONDOWN:
-					mouse.leftButton = true;
+					m_mouseBtns[ (int)ae::Mouse::Left ] = true;
 					break;
 				case WM_LBUTTONUP:
-					mouse.leftButton = false;
+					m_mouseBtns[ (int)ae::Mouse::Left ] = false;
 					break;
 				case WM_MBUTTONDOWN:
-					mouse.middleButton = true;
+					m_mouseBtns[ (int)ae::Mouse::Middle ] = true;
 					break;
 				case WM_MBUTTONUP:
-					mouse.middleButton = false;
+					m_mouseBtns[ (int)ae::Mouse::Middle ] = false;
 					break;
 				case WM_RBUTTONDOWN:
-					mouse.rightButton = true;
+					m_mouseBtns[ (int)ae::Mouse::Right ] = true;
 					break;
 				case WM_RBUTTONUP:
-					mouse.rightButton = false;
+					m_mouseBtns[ (int)ae::Mouse::Right ] = false;
 					break;
 				case WM_MOUSEWHEEL:
 					mouse.scroll.y += GET_WHEEL_DELTA_WPARAM( msg.wParam ) / (float)WHEEL_DELTA;
@@ -11458,32 +11470,32 @@ void Input::Pump()
 						break;
 					}
 					case NSEventTypeLeftMouseDown:
-						mouse.leftButton = true;
+						m_mouseBtns[ (int)ae::Mouse::Left ] = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
 						break;
 					case NSEventTypeLeftMouseUp:
-						mouse.leftButton = false;
+						m_mouseBtns[ (int)ae::Mouse::Left ] = false;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
 						break;
 					case NSEventTypeRightMouseDown:
-						mouse.rightButton = true;
+						m_mouseBtns[ (int)ae::Mouse::Right ] = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
 						break;
 					case NSEventTypeRightMouseUp:
-						mouse.rightButton = false;
+						m_mouseBtns[ (int)ae::Mouse::Right ] = false;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
 						break;
 					case NSEventTypeOtherMouseDown:
-						mouse.middleButton = true;
+						m_mouseBtns[ (int)ae::Mouse::Middle ] = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
 						break;
 					case NSEventTypeOtherMouseUp:
-						mouse.middleButton = false;
+						m_mouseBtns[ (int)ae::Mouse::Middle ] = false;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
 						break;
@@ -12017,6 +12029,145 @@ void Input::Pump()
 		|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
 }
 
+
+bool Input::Get( uint32_t playerIdx, Input::Type type ) const
+{
+	return false;
+}
+
+bool Input::GetPrev( uint32_t playerIdx, Input::Type type ) const
+{
+	return false;
+}
+
+float Input::GetAnalog( uint32_t playerIdx, Input::Type type ) const
+{
+	return 0.0f;
+}
+
+float Input::GetAnalogPrev( uint32_t playerIdx, Input::Type type ) const
+{
+	return 0.0f;
+}
+
+bool Input::GetGamepadConnected( uint32_t playerIdx ) const
+{
+	return false;
+}
+
+bool Input::GetGamepadAnyInput( uint32_t playerIdx ) const
+{
+	return false;
+}
+
+bool Input::GetGamepadAnyButton( uint32_t playerIdx ) const
+{
+	return false;
+}
+
+float Input::GetGamepadBatteryLevel( uint32_t playerIdx ) const
+{
+	return 0.0f;
+}
+
+bool Input::Capture( uint32_t playerIdx, Input::Type type )
+{
+	return false;
+}
+
+void Input::Release( uint32_t playerIdx, Input::Type type )
+{
+}
+
+void Input::CaptureAll( uint32_t playerIdx )
+{
+}
+
+void Input::ReleaseAll( uint32_t playerIdx )
+{
+}
+
+void Input::SetAnalogThreshold( Input::Type type, float threshold )
+{
+}
+
+float Input::GetAnalogThreshold( Input::Type type ) const
+{
+	return 0.0f;
+}
+
+ae::Int2 Input::GetMousePosition() const
+{
+	return ae::Int2( 0, 0 );
+}
+
+ae::Int2 Input::GetMouseMovement() const
+{
+	return ae::Int2( 0, 0 );
+}
+
+
+// bool Input::Get( ae::Key key ) const
+// {
+// 	return m_keys[ static_cast< int >( key ) ];
+// }
+
+// bool Input::GetPrev( ae::Key key ) const
+// {
+// 	return m_keysPrev[ static_cast< int >( key ) ];
+// }
+
+// bool Input::Get( ae::Mouse button ) const
+// {
+// 	int idx = static_cast< int >( button );
+// 	return m_mouseBtnsCapture[ idx ] ? false : m_mouseBtns[ idx ];
+// }
+
+// bool Input::GetPrev( ae::Mouse button ) const
+// {
+// 	int idx = static_cast< int >( button );
+// 	return m_mouseBtnsCapture[ idx ] ? false : m_mouseBtnsPrev[ idx ];
+// }
+
+// bool Input::Capture( ae::Key key )
+// {
+// 	AE_FAIL();
+// 	return false;
+// }
+
+// bool Input::Capture( ae::Mouse button )
+// {
+// 	bool result = Get( button );
+// 	m_mouseBtnsCapture[ static_cast< int >( button ) ] = true;
+// 	return result;
+// }
+
+// void Input::CaptureAll()
+// {
+// 	for ( uint32_t i = 0; i < countof(m_mouseBtnsCapture); i++ )
+// 	{
+// 		m_mouseBtnsCapture[ i ] = true;
+// 	}
+// }
+
+// void Input::Release( ae::Key key )
+// {
+// 	AE_FAIL();
+// }
+
+// void Input::Release( ae::Mouse button )
+// {
+// 	m_mouseBtnsCapture[ static_cast< int >( button ) ] = false;
+// }
+
+// void Input::ReleaseAll()
+// {
+// 	for ( uint32_t i = 0; i < countof(m_mouseBtnsCapture); i++ )
+// 	{
+// 		m_mouseBtnsCapture[ i ] = false;
+// 	}
+// }
+
 void Input::SetMouseCaptured( bool enable )
 {
 	if ( enable && m_window && !m_window->GetFocused() )
@@ -12059,16 +12210,6 @@ void Input::SetTextMode( bool enabled )
 		}
 #endif
 	}
-}
-
-bool Input::Get( ae::Key key ) const
-{
-	return m_keys[ static_cast< int >( key ) ];
-}
-
-bool Input::GetPrev( ae::Key key ) const
-{
-	return m_keysPrev[ static_cast< int >( key ) ];
 }
 
 void Input::m_SetMousePos( ae::Int2 pos )
@@ -17146,14 +17287,14 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 		
 		if ( !m_editorControls )
 		{
-			mousePan = input->mouse.middleButton;
+			mousePan = input->Get( ae::Mouse::Middle );
 			if ( !mousePan
-				&& input->mouse.leftButton
+				&& input->Get( ae::Mouse::Left )
 				&& input->Get( modifierKey ) )
 			{
 				mousePan = true;
 			}
-			mouseZoom = input->mouse.rightButton;
+			mouseZoom = input->Get( ae::Mouse::Right );
 
 			if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
 			{
@@ -17161,21 +17302,21 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 			}
 			else if ( !input->Get( modifierKey ) )
 			{
-				mouseRotate = input->mouse.leftButton;
+				mouseRotate = input->Get( ae::Mouse::Left );
 			}
 		}
 		else if ( m_editorControls )
 		{
 			bool modifierPressed = input->Get( modifierKey );
-			if ( input->mouse.middleButton && ( modifierPressed || m_mode == Mode::Pan ) )
+			if ( input->Get( ae::Mouse::Middle ) && ( modifierPressed || m_mode == Mode::Pan ) )
 			{
 				mousePan = true;
 			}
-			else if ( input->mouse.leftButton && ( modifierPressed || m_mode == Mode::Rotate ) )
+			else if ( input->Get( ae::Mouse::Left ) && ( modifierPressed || m_mode == Mode::Rotate ) )
 			{
 				mouseRotate = true;
 			}
-			else if ( input->mouse.rightButton && ( modifierPressed || m_mode == Mode::Zoom ) )
+			else if ( input->Get( ae::Mouse::Right ) && ( modifierPressed || m_mode == Mode::Zoom ) )
 			{
 				mouseZoom = true;
 			}

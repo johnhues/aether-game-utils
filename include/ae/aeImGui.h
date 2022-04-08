@@ -103,9 +103,9 @@ public:
 	io.DeltaTime = dt;
 	
 	// @TODO: Check ImGuiIO::WantCaptureMouse https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-how-can-i-tell-whether-to-dispatch-mousekeyboard-to-dear-imgui-or-to-my-application
-	io.MouseDown[ 0 ] = input->mouse.leftButton;
-	io.MouseDown[ 1 ] = input->mouse.rightButton;
-	io.MouseDown[ 2 ] = input->mouse.middleButton;
+	io.MouseDown[ 0 ] = input->Get( ae::Mouse::Left );
+	io.MouseDown[ 1 ] = input->Get( ae::Mouse::Right );
+	io.MouseDown[ 2 ] = input->Get( ae::Mouse::Middle );
 	io.MouseWheel += input->mouse.scroll.y;
 	ae::Vec2 mousePos( input->mouse.position.x, windowHeight - input->mouse.position.y );
 	io.MousePos = ImVec2( mousePos.x, mousePos.y );
