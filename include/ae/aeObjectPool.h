@@ -37,22 +37,45 @@ namespace ae {
 class OpaquePool
 {
 public:
-	OpaquePool( const ae::Tag& tag, uint32_t pageSize, bool paged, uint32_t objectSize, uint32_t objectAlignment );
-	//! All objects allocated with ae::OpaquePool::New() must be destroyed before
+	OpaquePool( const ae::Tag& tag, uint32_t poolSize, bool paged, uint32_t objectSize, uint32_t objectAlignment );
+	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
 	//! the ae::OpaquePool is destroyed.
 	~OpaquePool();
 
-	//! Returns a pointer to a freshly constructed object T or null if there
-	//! are no free objects. Call ae::OpaquePool::Delete() to destroy the object.
-	//! ae::OpaquePool::Delete() must be called on every object returned
-	//! by ae::OpaquePool::New().
-	void* New();
-	//! Destructs and releases the object \p obj for future use by ae::OpaquePool::New().
-	//! It is safe for the \p obj parameter to be null.
-	void Delete( void* obj );
-	//! Destructs and releases all objects for future use by ae::OpaquePool::New().
-	void DeleteAll();
+	// //! Returns a pointer to a freshly constructed object T or null if there
+	// //! are no free objects. Call ae::OpaquePool::Delete() to destroy the object.
+	// //! ae::OpaquePool::Delete() must be called on every object returned
+	// //! by ae::OpaquePool::New() although it is safe to mix calls to ae::OpaquePool::Allocate/New()
+	// //! and ae::OpaquePool::Free/Delete() as long as constructors and destructors
+	// //! are called manually with ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
+	// template < typename T = void > T* New();
+	// //! Destructs and releases the object \p obj for future use. It is safe for \p obj to be null.
+	// template < typename T = void > void Delete( T* obj );
+	// //! Destructs and releases all objects for future use.
+	// template < typename T = void > void DeleteAll();
+	// //! Returns the first allocated object in the pool or null if the pool is empty.
+	// template < typename T = void > const T* GetFirst() const;
+	// //! Returns the next allocated object after \p obj or null if there are no more objects.
+	// //! Null will be returned if \p obj is null.
+	// template < typename T = void > const T* GetNext( const T* obj ) const;
+	// //! Returns the first allocated object in the pool or null if the pool is empty.
+	// template < typename T = void > T* GetFirst();
+	// //! Returns the next allocated object after \p obj or null if there are no more objects.
+	// //! Null will be returned if \p obj is null.
+	// template < typename T = void > T* GetNext( T* obj );
 
+	//! Returns a pointer to an object or null if there are no free objects. The
+	//! user is responsible for any constructor calls. ae::OpaquePool::Free() must
+	//! be called on every object returned by ae::OpaquePool::Allocate(). It is safe
+	//! to mix calls to ae::OpaquePool::Allocate/New() and ae::OpaquePool::Free/Delete()
+	//! as long as constructors and destructors are called manually with
+	//! ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
+	void* Allocate();
+	//! Releases the object \p obj for future use. It is safe for \p obj to be null.
+	void Free( void* obj );
+	//! Releases all objects for future use by ae::OpaquePool::Allocate().
+	//! THIS FUNCTION DOES NOT CALL THE OBJECTS DESTRUCTORS, so please use with caution!
+	void FreeAll();
 	//! Returns the first allocated object in the pool or null if the pool is empty.
 	const void* GetFirst() const;
 	//! Returns the next allocated object after \p obj or null if there are no more objects.

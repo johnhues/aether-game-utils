@@ -1530,8 +1530,6 @@ public:
 	//! Returns the number of allocated objects.
 	uint32_t Length() const;
 	//! Returns the total number of objects in the pool.
-	constexpr uint32_t Size() const { return N; }
-	
 	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
 	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return N * m_pages.Length(); }
 
