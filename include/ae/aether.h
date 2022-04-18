@@ -8128,6 +8128,7 @@ T* ae::Cast( C* obj )
 #elif _AE_APPLE_
 	#include <sys/sysctl.h>
 	#include <unistd.h>
+	#include <pwd.h>
 	#ifdef AE_USE_MODULES
 		@import AppKit;
 		@import Carbon;
@@ -12161,6 +12162,25 @@ bool FileSystem::IsAbsolutePath( const char* path )
 #endif
 }
 
+#if _AE_APPLE_ || _AE_LINUX_
+const char* FileSystem_GetHomeDir()
+{
+	const char* homeDir = getenv( "HOME" );
+	if ( homeDir && homeDir[ 0 ] )
+	{
+		return homeDir;
+	}
+	else if ( const passwd* pw = getpwuid( getuid() ) )
+	{
+		const char* homeDir = pw->pw_dir;
+		if ( homeDir && homeDir[ 0 ] )
+		{
+			return homeDir;
+		}
+	}
+	return nullptr;
+}
+#endif
 #if _AE_APPLE_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
@@ -12187,28 +12207,6 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	return false;
 }
 #elif _AE_LINUX_
-const char* FileSystem_GetHomeDir()
-{
-	const char* homeDir = getenv( "HOME" );
-	if ( homeDir && homeDir[ 0 ] )
-	{
-		return homeDir;
-	}
-	else
-	{
-		const passwd* pw = getpwuid( getuid() );
-		if ( pw )
-		{
-			const char* homeDir = pw->pw_dir;
-			if ( homeDir && homeDir[ 0 ] )
-			{
-				return homeDir;
-			}
-		}
-	}
-	return nullptr;
-}
-
 bool FileSystem_GetUserDir( Str256* outDir )
 {
 	// Something like /users/someone/.local/share
@@ -12874,12 +12872,40 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
 	// @TODO: Should match ae::FileSystem::GetSize behavior and check resource dir in bundles
-
-	NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-	if ( [currentPath isEqualToString:@"/"] && filePath[ 0 ] != '/' )
+	if ( filePath[ 0 ] == '/' )
 	{
 		// Already absolute
 		return filePath;
+	}
+	else if ( filePath[ 0 ] == '~' && filePath[ 1 ] == '/' )
+	{
+		// Relative to home directory
+		char path[ PATH_MAX + 1 ];
+		const char* homeDir = FileSystem_GetHomeDir();
+		if ( !homeDir )
+		{
+			return "";
+		}
+		size_t pathLength = strlcpy( path, homeDir, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		pathLength = strlcat( path, filePath + 1, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		if ( char* resolvedPath = realpath( path, nullptr ) )
+		{
+			ae::Str256 result( resolvedPath );
+			free( resolvedPath );
+			return result;
+		}
+		else
+		{
+			return "";
+		}
 	}
 	else if ( CFBundleGetMainBundle() )
 	{
