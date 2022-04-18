@@ -11440,68 +11440,80 @@ void Input::Pump()
 			// Mouse
 			NSPoint p = [NSEvent mouseLocation];
 			m_SetMousePos( ae::Int2( p.x, p.y ) );
+			
 			// @TODO: Can these boundaries be calculated somehow?
-			if ( mouse.position.x > 2
+			const bool mouseWithinWindow = mouse.position.x > 2
 				&& mouse.position.y > 2
 				&& mouse.position.x < m_window->GetWidth() - 3
-				&& mouse.position.y < m_window->GetHeight() ) // No border because of title bar
+				&& mouse.position.y < m_window->GetHeight();
+			
+			bool clicked = false;
+			switch ( event.type )
 			{
-				bool clicked = false;
-				switch ( event.type )
+				// @NOTE: Move events are not sent if any mouse button is clicked
+				case NSEventTypeMouseMoved:
 				{
-					// @NOTE: Move events are not sent if any mouse button is clicked
-					case NSEventTypeMouseMoved:
-					case NSEventTypeLeftMouseDragged:
-					case NSEventTypeRightMouseDragged:
-					case NSEventTypeOtherMouseDragged:
+					if( mouseWithinWindow )
 					{
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						break;
 					}
-					case NSEventTypeLeftMouseDown:
+					break;
+				}
+				case NSEventTypeLeftMouseDown:
+				case NSEventTypeLeftMouseDragged:
+					if( mouseWithinWindow )
+					{
 						mouse.leftButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
-						break;
-					case NSEventTypeLeftMouseUp:
-						mouse.leftButton = false;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
-						break;
-					case NSEventTypeRightMouseDown:
+					}
+					break;
+				case NSEventTypeLeftMouseUp:
+					mouse.leftButton = false;
+					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					break;
+				case NSEventTypeRightMouseDown:
+				case NSEventTypeRightMouseDragged:
+					if( mouseWithinWindow )
+					{
 						mouse.rightButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
-						break;
-					case NSEventTypeRightMouseUp:
-						mouse.rightButton = false;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
-						break;
-					case NSEventTypeOtherMouseDown:
+					}
+					break;
+				case NSEventTypeRightMouseUp:
+					mouse.rightButton = false;
+					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					break;
+				case NSEventTypeOtherMouseDown:
+				case NSEventTypeOtherMouseDragged:
+					if( mouseWithinWindow )
+					{
 						mouse.middleButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
-						break;
-					case NSEventTypeOtherMouseUp:
-						mouse.middleButton = false;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
-						break;
-					case NSEventTypeScrollWheel:
+					}
+					break;
+				case NSEventTypeOtherMouseUp:
+					mouse.middleButton = false;
+					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					break;
+				case NSEventTypeScrollWheel:
+					if( mouseWithinWindow )
+					{
 						mouse.scroll.x += event.deltaX;
 						mouse.scroll.y += event.deltaY;
-						// @NOTE: Scroll is never NSEventSubtypeTouchfffffff
-						break;
-					default:
-						break;
-				}
-				
-				// By default only left click activates the window, so force activation on middle and right click
-				if ( clicked && !m_window->GetFocused() )
-				{
-					[NSApp activateIgnoringOtherApps:YES];
-				}
+					}
+					// @NOTE: Scroll is never NSEventSubtypeTouchfffffff
+					break;
+				default:
+					break;
+			}
+			
+			// By default only left click activates the window, so force activation on middle and right click
+			if ( mouseWithinWindow && clicked && !m_window->GetFocused() )
+			{
+				[NSApp activateIgnoringOtherApps:YES];
 			}
 			
 			// Keyboard
