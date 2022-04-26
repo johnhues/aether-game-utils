@@ -338,7 +338,7 @@ void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _me
 		}
 	}
 	
-	data.Initialize( sizeof( Vertex ), sizeof( uint32_t ), vertices.Length(), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	data.Initialize( sizeof( Vertex ), 0, vertices.Length(), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	data.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
 	data.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
 	data.SetVertices( vertices.Begin(), vertices.Length() );
@@ -684,6 +684,22 @@ ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
 	verts( tag ),
 	indices( tag )
 {}
+
+void ae::EditorMesh::Load( const ae::OBJFile& file )
+{
+	verts.Clear();
+	indices.Clear();
+	verts.Reserve( file.vertices.Length() );
+	indices.Reserve( file.indices.Length() );
+	for ( const auto& vert : file.vertices )
+	{
+		verts.Append( vert.position.GetXYZ() );
+	}
+	for ( auto index : file.indices )
+	{
+		indices.Append( index );
+	}
+}
 
 //------------------------------------------------------------------------------
 // Editor member functions
@@ -1236,7 +1252,7 @@ void EditorServer::Render( EditorProgram* program )
 		else { logicObjects.Append( { obj, distanceSq } ); }
 	}
 	
-	// Opaque and transparent meshes
+	// Opaque and transparent meshes helper
 	auto renderMesh = [program, worldToProj, lightDir]( const RenderObj& renderObj, ae::Color color )
 	{
 		const EditorServerObject& obj = *renderObj.obj;
