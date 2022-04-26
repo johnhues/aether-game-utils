@@ -2046,6 +2046,8 @@ public:
 	
 	bool Get( ae::Key key ) const;
 	bool GetPrev( ae::Key key ) const;
+	inline bool GetPress( ae::Key key ) const { return Get( key ) && !GetPrev( key ); }
+	inline bool GetRelease( ae::Key key ) const { return !Get( key ) && GetPrev( key ); }
 	MouseState mouse;
 	MouseState mousePrev;
 	GamepadState gamepad;
