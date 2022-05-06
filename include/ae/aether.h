@@ -2898,7 +2898,7 @@ public:
 	//! \p texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
 	//! texture can be a single channel without transparency. Luminance of the red channel is used for transparency.
 	//! \p fontSize is the width and height of each character in the texture.
-	void Initialize( const ae::Texture2D* texture, uint32_t fontSize, float spacing );
+	void Initialize( uint32_t maxCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing );
 	void Terminate();
 	void Render( const ae::Matrix4& uiToScreen );
 	void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit );
@@ -2906,7 +2906,6 @@ public:
 	uint32_t GetFontSize() const { return m_fontSize; }
 
 private:
-	static const uint32_t kMaxTextRects = 32;
 	uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const;
 	struct Vertex
 	{
@@ -2927,7 +2926,8 @@ private:
 	ae::Shader m_shader;
 	const ae::Texture2D* m_texture = nullptr;
 	uint32_t m_rectCount;
-	TextRect m_rects[ kMaxTextRects ];
+	uint32_t m_maxRectCount;
+	TextRect* m_rects = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -12783,7 +12783,7 @@ uint32_t FileSystem::Read( const char* filePath, void* buffer, uint32_t bufferSi
 		if ( resultLen <= bufferSize )
 		{
 			size_t readLen = fread( buffer, sizeof(uint8_t), resultLen, file );
-			AE_ASSERT( readLen == resultLen );
+			AE_ASSERT_MSG( readLen == resultLen, "File path: '#' read:# result:#", filePath, readLen, resultLen );
 		}
 		else
 		{
@@ -16551,15 +16551,16 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 //------------------------------------------------------------------------------
 const uint32_t kTextCharsPerString = 64;
 
-void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize, float spacing )
+void TextRender::Initialize( uint32_t maxCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing )
 {
 	AE_ASSERT( texture->GetTexture() );
 	m_texture = texture;
 	m_fontSize = fontSize;
 	m_spacing = spacing;
 	m_rectCount = 0;
+	m_maxRectCount = maxCount;
 
-	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * _kQuadVertCount, kMaxTextRects * kTextCharsPerString * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), m_maxRectCount * m_rects[ 0 ].text.Size() * _kQuadVertCount, m_maxRectCount * kTextCharsPerString * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
 	m_vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
 	m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
@@ -16588,10 +16589,15 @@ void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize, fl
 			AE_COLOR = v_color;
 		})";
 	m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+	m_shader.SetBlending( true );
+	
+	m_rects = ae::NewArray< TextRect >( AE_ALLOC_TAG_FIXME, m_maxRectCount );
 }
 
 void TextRender::Terminate()
 {
+	ae::Delete( m_rects );
+	m_rects = nullptr;
 	m_shader.Terminate();
 	m_vertexData.Terminate();
 }
@@ -16675,7 +16681,7 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 
 void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit )
 {
-	if ( m_rectCount >= kMaxTextRects )
+	if ( m_rectCount >= m_maxRectCount )
 	{
 		return;
 	}
