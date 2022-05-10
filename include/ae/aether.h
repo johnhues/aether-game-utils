@@ -3300,18 +3300,24 @@ public:
 class Audio
 {
 public:
-	void Initialize( uint32_t musicChannels, uint32_t sfxChannels );
+	void Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels );
 	void Terminate();
 
 	void SetVolume( float volume );
+	void SetMusicVolume( float volume, uint32_t channel );
+	void SetSfxLoopVolume( float volume, uint32_t channel );
 	void PlayMusic( const AudioData* audioFile, float volume, uint32_t channel );
 	//! Lower priority values interrupt sfx with higher values
 	void PlaySfx( const AudioData* audioFile, float volume, int32_t priority );
+	void PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel );
 	void StopMusic( uint32_t channel );
+	void StopSfxLoop( uint32_t channel );
 	void StopAllSfx();
-
+	void StopAllSfxLoops();
+	
 	uint32_t GetMusicChannelCount() const;
 	uint32_t GetSfxChannelCount() const;
+	uint32_t GetSfxLoopChannelCount() const;
 	void Log();
 
 private:
@@ -3324,6 +3330,7 @@ private:
 	};
 	ae::Array< Channel > m_musicChannels = AE_ALLOC_TAG_AUDIO;
 	ae::Array< Channel > m_sfxChannels = AE_ALLOC_TAG_AUDIO;
+	ae::Array< Channel > m_sfxLoopChannels = AE_ALLOC_TAG_AUDIO;
 };
 
 //------------------------------------------------------------------------------
@@ -18662,7 +18669,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 // ae::Audio member functions
 //------------------------------------------------------------------------------
-void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
+void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels )
 {
 #if AE_USE_OPENAL
 	ALCdevice* device = alcOpenDevice( nullptr );
@@ -18672,7 +18679,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
 	AE_ASSERT( ctx );
 	_CheckALError();
 	
-	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels, 0 );
+	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels + sfxLoopChannels, 0 );
 	alGenSources( (ALuint)sources.Length(), sources.Begin() );
 
 	m_musicChannels.Reserve( musicChannels );
@@ -18692,6 +18699,17 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
 	{
 		Channel* channel = &m_sfxChannels.Append( Channel() );
 		channel->source = sources[ musicChannels + i ];
+		alSourcef( channel->source, AL_PITCH, 1 );
+		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
+		alSourcei( channel->source, AL_LOOPING, AL_FALSE );
+	}
+	
+	m_sfxLoopChannels.Reserve( sfxLoopChannels );
+	for ( uint32_t i = 0; i < sfxLoopChannels; i++ )
+	{
+		Channel* channel = &m_sfxLoopChannels.Append( Channel() );
+		channel->source = sources[ musicChannels + sfxChannels + i ];
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
@@ -18723,6 +18741,13 @@ void Audio::Terminate()
 		alDeleteSources( 1, &channel->source );
 		channel->source = -1;
 	}
+	
+	for ( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
+	{
+		Channel* channel = &m_sfxLoopChannels[ i ];
+		alDeleteSources( 1, &channel->source );
+		channel->source = -1;
+	}
 
 	ALCcontext* ctx = alcGetCurrentContext();
 	ALCdevice* device = alcGetContextsDevice( ctx );
@@ -18737,6 +18762,32 @@ void Audio::SetVolume( float volume )
 #if AE_USE_OPENAL
 	volume = ae::Clip01( volume );
 	alListenerf( AL_GAIN, volume );
+#endif
+}
+
+void Audio::SetMusicVolume( float volume, uint32_t channel )
+{
+#if AE_USE_OPENAL
+	if ( channel >= m_musicChannels.Length() )
+	{
+		return;
+	}
+
+	Channel* musicChannel = &m_musicChannels[ channel ];
+	alSourcef( musicChannel->source, AL_GAIN, volume );
+#endif
+}
+
+void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
+{
+#if AE_USE_OPENAL
+	if ( channel >= m_sfxLoopChannels.Length() )
+	{
+		return;
+	}
+
+	Channel* sfxLoopChannel = &m_sfxLoopChannels[ channel ];
+	alSourcef( sfxLoopChannel->source, AL_GAIN, volume );
 #endif
 }
 
@@ -18828,12 +18879,53 @@ void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority 
 #endif
 }
 
+void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel )
+{
+#if AE_USE_OPENAL
+	AE_ASSERT( audioFile );
+	if ( channel >= m_sfxLoopChannels.Length() )
+	{
+		return;
+	}
+
+	Channel* sfxLoopChannel = &m_sfxLoopChannels[ channel ];
+
+	ALint state;
+	alGetSourcei( sfxLoopChannel->source, AL_SOURCE_STATE, &state );
+	if ( ( audioFile == sfxLoopChannel->resource ) && state == AL_PLAYING )
+	{
+		return;
+	}
+
+	if ( state == AL_PLAYING )
+	{
+		alSourceStop( sfxLoopChannel->source );
+	}
+
+	alSourcei( sfxLoopChannel->source, AL_BUFFER, audioFile->buffer );
+	alSourcei( sfxLoopChannel->source, AL_LOOPING, 1 );
+	alSourcef( sfxLoopChannel->source, AL_GAIN, volume );
+	alSourcePlay( sfxLoopChannel->source );
+	_CheckALError();
+#endif
+}
+
 void Audio::StopMusic( uint32_t channel )
 {
 #if AE_USE_OPENAL
 	if ( channel < m_musicChannels.Length() )
 	{
 		alSourceStop( m_musicChannels[ channel ].source );
+	}
+#endif
+}
+
+void Audio::StopSfxLoop( uint32_t channel )
+{
+#if AE_USE_OPENAL
+	if ( channel < m_sfxLoopChannels.Length() )
+	{
+		alSourceStop( m_sfxLoopChannels[ channel ].source );
 	}
 #endif
 }
@@ -18848,6 +18940,16 @@ void Audio::StopAllSfx()
 #endif
 }
 
+void Audio::StopAllSfxLoops()
+{
+#if AE_USE_OPENAL
+	for ( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
+	{
+		alSourceStop( m_sfxLoopChannels[ i ].source );
+	}
+#endif
+}
+
 uint32_t Audio::GetMusicChannelCount() const
 {
 	return m_musicChannels.Length();
@@ -18856,6 +18958,11 @@ uint32_t Audio::GetMusicChannelCount() const
 uint32_t Audio::GetSfxChannelCount() const
 {
 	return m_sfxChannels.Length();
+}
+
+uint32_t Audio::GetSfxLoopChannelCount() const
+{
+	return m_sfxLoopChannels.Length();
 }
 
 // @TODO: Should return a string with current state of audio channels
