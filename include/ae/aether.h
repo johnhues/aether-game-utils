@@ -7678,11 +7678,30 @@ struct _EnumCreator
 	{
 		ae::Enum* enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
 			
+		// Remove whitespace
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
-		strMap.erase( std::remove( strMap.begin(), strMap.end(), '(' ), strMap.end() );
-		std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
+		strMap.erase( std::remove( strMap.begin(), strMap.end(), '\t' ), strMap.end() );
+		
+		// Remove comments
+		for ( std::size_t s0 = strMap.find( "/*" ); s0 != std::string::npos; s0 = strMap.find( "/*" ) )
+		{
+			std::size_t s1 = strMap.find( "*/", s0 + 2 );
+			AE_ASSERT( s1 != std::string::npos );
+			s1 += 2;
+			strMap.erase( s0, s1 - s0 );
+		}
+		for ( std::size_t s0 = strMap.find( "//" ); s0 != std::string::npos; s0 = strMap.find( "//" ) )
+		{
+			std::size_t s1 = strMap.find( "\n", s0 + 2 );
+			if ( s1 == std::string::npos ) { s1 = strMap.length(); }
+			strMap.erase( s0, s1 - s0 );
+		}
+		
+		// Remove new lines (after comments)
+		strMap.erase( std::remove( strMap.begin(), strMap.end(), '\n' ), strMap.end() );
 
 		T currentValue = 0;
+		std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
 		for ( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
 		{
 			std::string enumName;
