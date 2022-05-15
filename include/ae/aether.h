@@ -20456,9 +20456,7 @@ ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, boo
 	}
 	else
 	{
-		Enum* metaEnum = enums.TryGet( enumName );
-		AE_ASSERT_MSG( metaEnum, "Could not find meta registered Enum named '#'", enumName );
-		return metaEnum;
+		return enums.TryGet( enumName );
 	}
 }
 
@@ -20542,6 +20540,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 		case Var::Enum:
 		{
 			const class Enum* enumType = GetEnum();
+			AE_ASSERT_MSG( enumType, "Enum '#' is not registered", GetTypeName() );
 			int32_t value = 0;
 			switch ( enumType->TypeSize() )
 			{
@@ -20571,8 +20570,16 @@ int32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
 const char* ae::Type::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
 uint32_t ae::Type::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
 uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
-const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
+const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
+{
+	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
+{
+	const auto* vals = m_props.TryGet( propName );
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
 uint32_t ae::Type::GetSize() const { return m_size; }
 uint32_t ae::Type::GetAlignment() const { return m_align; }
 const char* ae::Type::GetName() const { return m_name.c_str(); }
