@@ -3794,7 +3794,7 @@ using TypeId = uint32_t;
 const ae::TypeId kInvalidTypeId = 0;
 const uint32_t kMaxMetaProps = 16;
 const uint32_t kMaxMetaPropListLength = 16;
-const uint32_t kMetaMaxVars = 24;
+const uint32_t kMetaMaxVars = 32;
 const uint32_t kMetaEnumValues = 32;
 const uint32_t kMetaEnumTypes = 32;
 class Type;
