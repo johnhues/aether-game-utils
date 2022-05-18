@@ -3287,9 +3287,6 @@ class AudioData
 {
 public:
 	AudioData();
-	void LoadWavFile( const uint8_t* data, uint32_t length );
-	void Terminate();
-
 	uint32_t buffer;
 	float length;
 };
@@ -3300,8 +3297,10 @@ public:
 class Audio
 {
 public:
-	void Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels );
+	void Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas );
 	void Terminate();
+	
+	const AudioData* LoadWavFile( const uint8_t* data, uint32_t length );
 
 	void SetVolume( float volume );
 	void SetMusicVolume( float volume, uint32_t channel );
@@ -3328,6 +3327,8 @@ private:
 		int32_t priority;
 		const AudioData* resource;
 	};
+	uint32_t m_maxAudioDatas = 0;
+	ae::Array< AudioData > m_audioDatas = AE_ALLOC_TAG_AUDIO;
 	ae::Array< Channel > m_musicChannels = AE_ALLOC_TAG_AUDIO;
 	ae::Array< Channel > m_sfxChannels = AE_ALLOC_TAG_AUDIO;
 	ae::Array< Channel > m_sfxLoopChannels = AE_ALLOC_TAG_AUDIO;
@@ -5670,7 +5671,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 Str< N >::Str( const Str<N2>& str )
 {
-	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "Length:# Max:#", str.m_length, MaxLength() );
+	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, str.m_length, MaxLength() );
 	m_length = str.m_length;
 	memcpy( m_str, str.m_str, m_length + 1u );
 }
@@ -5679,7 +5680,7 @@ template < uint32_t N >
 Str< N >::Str( const char* str )
 {
 	m_length = (uint16_t)strlen( str );
-	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Length:# Max:#", m_length, MaxLength() );
+	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, m_length, MaxLength() );
 	memcpy( m_str, str, m_length + 1u );
 }
 
@@ -18616,18 +18617,25 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 			dataSize = size;
 
 			ALenum format;
+			bool success = true;
 			if ( wave_format.numChannels == 1 )
 			{
 				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_MONO8; }
 				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_MONO16; }
+				else { success = false; }
 			}
 			else if ( wave_format.numChannels == 2 )
 			{
 				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_STEREO8; }
 				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_STEREO16; }
+				else { success = false; }
 			}
-			alGenBuffers( 1, bufferOut );
-			alBufferData( *bufferOut, format, (void*)data, size, frequency );
+			else { success = false; }
+			if ( success )
+			{
+				alGenBuffers( 1, bufferOut );
+				alBufferData( *bufferOut, format, (void*)data, size, frequency );
+			}
 			delete[] data;
 		}
 		else
@@ -18657,22 +18665,24 @@ AudioData::AudioData()
 	length = 0.0f;
 }
 
-void AudioData::LoadWavFile( const uint8_t* data, uint32_t length )
+const AudioData* Audio::LoadWavFile( const uint8_t* data, uint32_t length )
 {
-	AE_ASSERT( !buffer );
-	_LoadWavFile( data, length, &this->buffer, &this->length );
-	AE_ASSERT( buffer );
-}
-
-void AudioData::Terminate()
-{
-#if AE_USE_OPENAL
-	AE_ASSERT( buffer );
-
-	alDeleteBuffers( 1, &this->buffer );
-	_CheckALError();
-#endif
-	*this = AudioData();
+	if ( m_audioDatas.Length() >= m_maxAudioDatas )
+	{
+		return nullptr;
+	}
+	
+	uint32_t buffer = 0;
+	float duration = 0.0f;
+	_LoadWavFile( data, length, &buffer, &duration );
+	if ( buffer )
+	{
+		AudioData* audioData = &m_audioDatas.Append( {} );
+		audioData->buffer = buffer;
+		audioData->length = duration;
+		return audioData;
+	}
+	return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -18688,7 +18698,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 // ae::Audio member functions
 //------------------------------------------------------------------------------
-void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels )
+void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas )
 {
 #if AE_USE_OPENAL
 	ALCdevice* device = alcOpenDevice( nullptr );
@@ -18697,6 +18707,9 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 	alcMakeContextCurrent( ctx );
 	AE_ASSERT( ctx );
 	_CheckALError();
+	
+	m_maxAudioDatas = maxAudioDatas;
+	m_audioDatas.Reserve( m_maxAudioDatas );
 	
 	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels + sfxLoopChannels, 0 );
 	alGenSources( (ALuint)sources.Length(), sources.Begin() );
@@ -18767,6 +18780,12 @@ void Audio::Terminate()
 		alDeleteSources( 1, &channel->source );
 		channel->source = -1;
 	}
+	
+	// Unload buffers after channels incase they are referenced
+	for ( AudioData& audioData : m_audioDatas )
+	{
+		alDeleteBuffers( 1, &audioData.buffer );
+	}
 
 	ALCcontext* ctx = alcGetCurrentContext();
 	ALCdevice* device = alcGetContextsDevice( ctx );
@@ -18832,6 +18851,8 @@ void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channe
 	{
 		alSourceStop( musicChannel->source );
 	}
+	
+	musicChannel->resource = audioFile;
 
 	alSourcei( musicChannel->source, AL_BUFFER, audioFile->buffer );
 	alSourcef( musicChannel->source, AL_GAIN, volume );
@@ -18913,6 +18934,7 @@ void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t chan
 	alGetSourcei( sfxLoopChannel->source, AL_SOURCE_STATE, &state );
 	if ( ( audioFile == sfxLoopChannel->resource ) && state == AL_PLAYING )
 	{
+		alSourcef( sfxLoopChannel->source, AL_GAIN, volume );
 		return;
 	}
 
@@ -18920,6 +18942,8 @@ void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t chan
 	{
 		alSourceStop( sfxLoopChannel->source );
 	}
+	
+	sfxLoopChannel->resource = audioFile;
 
 	alSourcei( sfxLoopChannel->source, AL_BUFFER, audioFile->buffer );
 	alSourcei( sfxLoopChannel->source, AL_LOOPING, 1 );
@@ -18935,6 +18959,7 @@ void Audio::StopMusic( uint32_t channel )
 	if ( channel < m_musicChannels.Length() )
 	{
 		alSourceStop( m_musicChannels[ channel ].source );
+		m_musicChannels[ channel ].resource = nullptr;
 	}
 #endif
 }
@@ -18945,6 +18970,7 @@ void Audio::StopSfxLoop( uint32_t channel )
 	if ( channel < m_sfxLoopChannels.Length() )
 	{
 		alSourceStop( m_sfxLoopChannels[ channel ].source );
+		m_sfxLoopChannels[ channel ].resource = nullptr;
 	}
 #endif
 }
@@ -18955,6 +18981,7 @@ void Audio::StopAllSfx()
 	for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxChannels[ i ].source );
+		m_sfxChannels[ i ].resource = nullptr;
 	}
 #endif
 }
@@ -18965,6 +18992,7 @@ void Audio::StopAllSfxLoops()
 	for ( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxLoopChannels[ i ].source );
+		m_sfxLoopChannels[ i ].resource = nullptr;
 	}
 #endif
 }
