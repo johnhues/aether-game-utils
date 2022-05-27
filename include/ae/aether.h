@@ -2044,6 +2044,8 @@ public:
 	
 	bool Get( ae::Key key ) const;
 	bool GetPrev( ae::Key key ) const;
+	inline bool GetPress( ae::Key key ) const { return Get( key ) && !GetPrev( key ); }
+	inline bool GetRelease( ae::Key key ) const { return !Get( key ) && GetPrev( key ); }
 	MouseState mouse;
 	MouseState mousePrev;
 	GamepadState gamepad;
@@ -2894,7 +2896,7 @@ public:
 	//! \p texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
 	//! texture can be a single channel without transparency. Luminance of the red channel is used for transparency.
 	//! \p fontSize is the width and height of each character in the texture.
-	void Initialize( const ae::Texture2D* texture, uint32_t fontSize, float spacing );
+	void Initialize( uint32_t maxCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing );
 	void Terminate();
 	void Render( const ae::Matrix4& uiToScreen );
 	void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit );
@@ -2902,7 +2904,6 @@ public:
 	uint32_t GetFontSize() const { return m_fontSize; }
 
 private:
-	static const uint32_t kMaxTextRects = 32;
 	uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const;
 	struct Vertex
 	{
@@ -2923,7 +2924,8 @@ private:
 	ae::Shader m_shader;
 	const ae::Texture2D* m_texture = nullptr;
 	uint32_t m_rectCount;
-	TextRect m_rects[ kMaxTextRects ];
+	uint32_t m_maxRectCount;
+	TextRect* m_rects = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -3283,9 +3285,6 @@ class AudioData
 {
 public:
 	AudioData();
-	void LoadWavFile( const uint8_t* data, uint32_t length );
-	void Terminate();
-
 	uint32_t buffer;
 	float length;
 };
@@ -3296,18 +3295,26 @@ public:
 class Audio
 {
 public:
-	void Initialize( uint32_t musicChannels, uint32_t sfxChannels );
+	void Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas );
 	void Terminate();
+	
+	const AudioData* LoadWavFile( const uint8_t* data, uint32_t length );
 
 	void SetVolume( float volume );
+	void SetMusicVolume( float volume, uint32_t channel );
+	void SetSfxLoopVolume( float volume, uint32_t channel );
 	void PlayMusic( const AudioData* audioFile, float volume, uint32_t channel );
 	//! Lower priority values interrupt sfx with higher values
 	void PlaySfx( const AudioData* audioFile, float volume, int32_t priority );
+	void PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel );
 	void StopMusic( uint32_t channel );
+	void StopSfxLoop( uint32_t channel );
 	void StopAllSfx();
-
+	void StopAllSfxLoops();
+	
 	uint32_t GetMusicChannelCount() const;
 	uint32_t GetSfxChannelCount() const;
+	uint32_t GetSfxLoopChannelCount() const;
 	void Log();
 
 private:
@@ -3318,8 +3325,11 @@ private:
 		int32_t priority;
 		const AudioData* resource;
 	};
+	uint32_t m_maxAudioDatas = 0;
+	ae::Array< AudioData > m_audioDatas = AE_ALLOC_TAG_AUDIO;
 	ae::Array< Channel > m_musicChannels = AE_ALLOC_TAG_AUDIO;
 	ae::Array< Channel > m_sfxChannels = AE_ALLOC_TAG_AUDIO;
+	ae::Array< Channel > m_sfxLoopChannels = AE_ALLOC_TAG_AUDIO;
 };
 
 //------------------------------------------------------------------------------
@@ -3783,7 +3793,7 @@ using TypeId = uint32_t;
 const ae::TypeId kInvalidTypeId = 0;
 const uint32_t kMaxMetaProps = 16;
 const uint32_t kMaxMetaPropListLength = 16;
-const uint32_t kMetaMaxVars = 24;
+const uint32_t kMetaMaxVars = 32;
 const uint32_t kMetaEnumValues = 32;
 const uint32_t kMetaEnumTypes = 32;
 class Type;
@@ -5659,7 +5669,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 Str< N >::Str( const Str<N2>& str )
 {
-	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "Length:# Max:#", str.m_length, MaxLength() );
+	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, str.m_length, MaxLength() );
 	m_length = str.m_length;
 	memcpy( m_str, str.m_str, m_length + 1u );
 }
@@ -5668,7 +5678,7 @@ template < uint32_t N >
 Str< N >::Str( const char* str )
 {
 	m_length = (uint16_t)strlen( str );
-	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Length:# Max:#", m_length, MaxLength() );
+	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, m_length, MaxLength() );
 	memcpy( m_str, str, m_length + 1u );
 }
 
@@ -7665,11 +7675,30 @@ struct _EnumCreator
 	{
 		ae::Enum* enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
 			
+		// Remove whitespace
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
-		strMap.erase( std::remove( strMap.begin(), strMap.end(), '(' ), strMap.end() );
-		std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
+		strMap.erase( std::remove( strMap.begin(), strMap.end(), '\t' ), strMap.end() );
+		
+		// Remove comments
+		for ( std::size_t s0 = strMap.find( "/*" ); s0 != std::string::npos; s0 = strMap.find( "/*" ) )
+		{
+			std::size_t s1 = strMap.find( "*/", s0 + 2 );
+			AE_ASSERT( s1 != std::string::npos );
+			s1 += 2;
+			strMap.erase( s0, s1 - s0 );
+		}
+		for ( std::size_t s0 = strMap.find( "//" ); s0 != std::string::npos; s0 = strMap.find( "//" ) )
+		{
+			std::size_t s1 = strMap.find( "\n", s0 + 2 );
+			if ( s1 == std::string::npos ) { s1 = strMap.length(); }
+			strMap.erase( s0, s1 - s0 );
+		}
+		
+		// Remove new lines (after comments)
+		strMap.erase( std::remove( strMap.begin(), strMap.end(), '\n' ), strMap.end() );
 
 		T currentValue = 0;
+		std::vector< std::string > enumTokens( m_SplitString( strMap, ',' ) );
 		for ( auto iter = enumTokens.begin(); iter != enumTokens.end(); ++iter )
 		{
 			std::string enumName;
@@ -8124,6 +8153,7 @@ T* ae::Cast( C* obj )
 #elif _AE_APPLE_
 	#include <sys/sysctl.h>
 	#include <unistd.h>
+	#include <pwd.h>
 	#ifdef AE_USE_MODULES
 		@import AppKit;
 		@import Carbon;
@@ -11435,68 +11465,80 @@ void Input::Pump()
 			// Mouse
 			NSPoint p = [NSEvent mouseLocation];
 			m_SetMousePos( ae::Int2( p.x, p.y ) );
+			
 			// @TODO: Can these boundaries be calculated somehow?
-			if ( mouse.position.x > 2
+			const bool mouseWithinWindow = mouse.position.x > 2
 				&& mouse.position.y > 2
 				&& mouse.position.x < m_window->GetWidth() - 3
-				&& mouse.position.y < m_window->GetHeight() ) // No border because of title bar
+				&& mouse.position.y < m_window->GetHeight();
+			
+			bool clicked = false;
+			switch ( event.type )
 			{
-				bool clicked = false;
-				switch ( event.type )
+				// @NOTE: Move events are not sent if any mouse button is clicked
+				case NSEventTypeMouseMoved:
 				{
-					// @NOTE: Move events are not sent if any mouse button is clicked
-					case NSEventTypeMouseMoved:
-					case NSEventTypeLeftMouseDragged:
-					case NSEventTypeRightMouseDragged:
-					case NSEventTypeOtherMouseDragged:
+					if( mouseWithinWindow )
 					{
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						break;
 					}
-					case NSEventTypeLeftMouseDown:
+					break;
+				}
+				case NSEventTypeLeftMouseDown:
+				case NSEventTypeLeftMouseDragged:
+					if( mouseWithinWindow )
+					{
 						mouse.leftButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
-						break;
-					case NSEventTypeLeftMouseUp:
-						mouse.leftButton = false;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
-						break;
-					case NSEventTypeRightMouseDown:
+					}
+					break;
+				case NSEventTypeLeftMouseUp:
+					mouse.leftButton = false;
+					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					break;
+				case NSEventTypeRightMouseDown:
+				case NSEventTypeRightMouseDragged:
+					if( mouseWithinWindow )
+					{
 						mouse.rightButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
-						break;
-					case NSEventTypeRightMouseUp:
-						mouse.rightButton = false;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
-						break;
-					case NSEventTypeOtherMouseDown:
+					}
+					break;
+				case NSEventTypeRightMouseUp:
+					mouse.rightButton = false;
+					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					break;
+				case NSEventTypeOtherMouseDown:
+				case NSEventTypeOtherMouseDragged:
+					if( mouseWithinWindow )
+					{
 						mouse.middleButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 						clicked = true;
-						break;
-					case NSEventTypeOtherMouseUp:
-						mouse.middleButton = false;
-						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
-						break;
-					case NSEventTypeScrollWheel:
+					}
+					break;
+				case NSEventTypeOtherMouseUp:
+					mouse.middleButton = false;
+					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
+					break;
+				case NSEventTypeScrollWheel:
+					if( mouseWithinWindow )
+					{
 						mouse.scroll.x += event.deltaX;
 						mouse.scroll.y += event.deltaY;
-						// @NOTE: Scroll is never NSEventSubtypeTouchfffffff
-						break;
-					default:
-						break;
-				}
-				
-				// By default only left click activates the window, so force activation on middle and right click
-				if ( clicked && !m_window->GetFocused() )
-				{
-					[NSApp activateIgnoringOtherApps:YES];
-				}
+					}
+					// @NOTE: Scroll is never NSEventSubtypeTouchfffffff
+					break;
+				default:
+					break;
+			}
+			
+			// By default only left click activates the window, so force activation on middle and right click
+			if ( mouseWithinWindow && clicked && !m_window->GetFocused() )
+			{
+				[NSApp activateIgnoringOtherApps:YES];
 			}
 			
 			// Keyboard
@@ -12157,6 +12199,25 @@ bool FileSystem::IsAbsolutePath( const char* path )
 #endif
 }
 
+#if _AE_APPLE_ || _AE_LINUX_
+const char* FileSystem_GetHomeDir()
+{
+	const char* homeDir = getenv( "HOME" );
+	if ( homeDir && homeDir[ 0 ] )
+	{
+		return homeDir;
+	}
+	else if ( const passwd* pw = getpwuid( getuid() ) )
+	{
+		const char* homeDir = pw->pw_dir;
+		if ( homeDir && homeDir[ 0 ] )
+		{
+			return homeDir;
+		}
+	}
+	return nullptr;
+}
+#endif
 #if _AE_APPLE_
 bool FileSystem_GetUserDir( Str256* outDir )
 {
@@ -12183,28 +12244,6 @@ bool FileSystem_GetCacheDir( Str256* outDir )
 	return false;
 }
 #elif _AE_LINUX_
-const char* FileSystem_GetHomeDir()
-{
-	const char* homeDir = getenv( "HOME" );
-	if ( homeDir && homeDir[ 0 ] )
-	{
-		return homeDir;
-	}
-	else
-	{
-		const passwd* pw = getpwuid( getuid() );
-		if ( pw )
-		{
-			const char* homeDir = pw->pw_dir;
-			if ( homeDir && homeDir[ 0 ] )
-			{
-				return homeDir;
-			}
-		}
-	}
-	return nullptr;
-}
-
 bool FileSystem_GetUserDir( Str256* outDir )
 {
 	// Something like /users/someone/.local/share
@@ -12767,7 +12806,7 @@ uint32_t FileSystem::Read( const char* filePath, void* buffer, uint32_t bufferSi
 		if ( resultLen <= bufferSize )
 		{
 			size_t readLen = fread( buffer, sizeof(uint8_t), resultLen, file );
-			AE_ASSERT( readLen == resultLen );
+			AE_ASSERT_MSG( readLen == resultLen, "File path: '#' read:# result:#", filePath, readLen, resultLen );
 		}
 		else
 		{
@@ -12870,12 +12909,40 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 {
 #if _AE_APPLE_
 	// @TODO: Should match ae::FileSystem::GetSize behavior and check resource dir in bundles
-
-	NSString* currentPath = [[NSFileManager defaultManager] currentDirectoryPath];
-	if ( [currentPath isEqualToString:@"/"] && filePath[ 0 ] != '/' )
+	if ( filePath[ 0 ] == '/' )
 	{
 		// Already absolute
 		return filePath;
+	}
+	else if ( filePath[ 0 ] == '~' && filePath[ 1 ] == '/' )
+	{
+		// Relative to home directory
+		char path[ PATH_MAX + 1 ];
+		const char* homeDir = FileSystem_GetHomeDir();
+		if ( !homeDir )
+		{
+			return "";
+		}
+		size_t pathLength = strlcpy( path, homeDir, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		pathLength = strlcat( path, filePath + 1, PATH_MAX );
+		if ( pathLength >= PATH_MAX )
+		{
+			return "";
+		}
+		if ( char* resolvedPath = realpath( path, nullptr ) )
+		{
+			ae::Str256 result( resolvedPath );
+			free( resolvedPath );
+			return result;
+		}
+		else
+		{
+			return "";
+		}
 	}
 	else if ( CFBundleGetMainBundle() )
 	{
@@ -16507,15 +16574,16 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 //------------------------------------------------------------------------------
 const uint32_t kTextCharsPerString = 64;
 
-void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize, float spacing )
+void TextRender::Initialize( uint32_t maxCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing )
 {
 	AE_ASSERT( texture->GetTexture() );
 	m_texture = texture;
 	m_fontSize = fontSize;
 	m_spacing = spacing;
 	m_rectCount = 0;
+	m_maxRectCount = maxCount;
 
-	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), kMaxTextRects * m_rects[ 0 ].text.Size() * _kQuadVertCount, kMaxTextRects * kTextCharsPerString * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), m_maxRectCount * m_rects[ 0 ].text.Size() * _kQuadVertCount, m_maxRectCount * kTextCharsPerString * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
 	m_vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
 	m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
@@ -16544,10 +16612,15 @@ void TextRender::Initialize( const ae::Texture2D* texture, uint32_t fontSize, fl
 			AE_COLOR = v_color;
 		})";
 	m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
+	m_shader.SetBlending( true );
+	
+	m_rects = ae::NewArray< TextRect >( AE_ALLOC_TAG_FIXME, m_maxRectCount );
 }
 
 void TextRender::Terminate()
 {
+	ae::Delete( m_rects );
+	m_rects = nullptr;
 	m_shader.Terminate();
 	m_vertexData.Terminate();
 }
@@ -16631,7 +16704,7 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 
 void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit )
 {
-	if ( m_rectCount >= kMaxTextRects )
+	if ( m_rectCount >= m_maxRectCount )
 	{
 		return;
 	}
@@ -18540,18 +18613,25 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 			dataSize = size;
 
 			ALenum format;
+			bool success = true;
 			if ( wave_format.numChannels == 1 )
 			{
 				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_MONO8; }
 				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_MONO16; }
+				else { success = false; }
 			}
 			else if ( wave_format.numChannels == 2 )
 			{
 				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_STEREO8; }
 				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_STEREO16; }
+				else { success = false; }
 			}
-			alGenBuffers( 1, bufferOut );
-			alBufferData( *bufferOut, format, (void*)data, size, frequency );
+			else { success = false; }
+			if ( success )
+			{
+				alGenBuffers( 1, bufferOut );
+				alBufferData( *bufferOut, format, (void*)data, size, frequency );
+			}
 			delete[] data;
 		}
 		else
@@ -18581,22 +18661,24 @@ AudioData::AudioData()
 	length = 0.0f;
 }
 
-void AudioData::LoadWavFile( const uint8_t* data, uint32_t length )
+const AudioData* Audio::LoadWavFile( const uint8_t* data, uint32_t length )
 {
-	AE_ASSERT( !buffer );
-	_LoadWavFile( data, length, &this->buffer, &this->length );
-	AE_ASSERT( buffer );
-}
-
-void AudioData::Terminate()
-{
-#if AE_USE_OPENAL
-	AE_ASSERT( buffer );
-
-	alDeleteBuffers( 1, &this->buffer );
-	_CheckALError();
-#endif
-	*this = AudioData();
+	if ( m_audioDatas.Length() >= m_maxAudioDatas )
+	{
+		return nullptr;
+	}
+	
+	uint32_t buffer = 0;
+	float duration = 0.0f;
+	_LoadWavFile( data, length, &buffer, &duration );
+	if ( buffer )
+	{
+		AudioData* audioData = &m_audioDatas.Append( {} );
+		audioData->buffer = buffer;
+		audioData->length = duration;
+		return audioData;
+	}
+	return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -18612,7 +18694,7 @@ Audio::Channel::Channel()
 //------------------------------------------------------------------------------
 // ae::Audio member functions
 //------------------------------------------------------------------------------
-void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
+void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t sfxLoopChannels, uint32_t maxAudioDatas )
 {
 #if AE_USE_OPENAL
 	ALCdevice* device = alcOpenDevice( nullptr );
@@ -18622,7 +18704,10 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
 	AE_ASSERT( ctx );
 	_CheckALError();
 	
-	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels, 0 );
+	m_maxAudioDatas = maxAudioDatas;
+	m_audioDatas.Reserve( m_maxAudioDatas );
+	
+	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels + sfxLoopChannels, 0 );
 	alGenSources( (ALuint)sources.Length(), sources.Begin() );
 
 	m_musicChannels.Reserve( musicChannels );
@@ -18642,6 +18727,17 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels )
 	{
 		Channel* channel = &m_sfxChannels.Append( Channel() );
 		channel->source = sources[ musicChannels + i ];
+		alSourcef( channel->source, AL_PITCH, 1 );
+		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
+		alSourcei( channel->source, AL_LOOPING, AL_FALSE );
+	}
+	
+	m_sfxLoopChannels.Reserve( sfxLoopChannels );
+	for ( uint32_t i = 0; i < sfxLoopChannels; i++ )
+	{
+		Channel* channel = &m_sfxLoopChannels.Append( Channel() );
+		channel->source = sources[ musicChannels + sfxChannels + i ];
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
@@ -18673,6 +18769,19 @@ void Audio::Terminate()
 		alDeleteSources( 1, &channel->source );
 		channel->source = -1;
 	}
+	
+	for ( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
+	{
+		Channel* channel = &m_sfxLoopChannels[ i ];
+		alDeleteSources( 1, &channel->source );
+		channel->source = -1;
+	}
+	
+	// Unload buffers after channels incase they are referenced
+	for ( AudioData& audioData : m_audioDatas )
+	{
+		alDeleteBuffers( 1, &audioData.buffer );
+	}
 
 	ALCcontext* ctx = alcGetCurrentContext();
 	ALCdevice* device = alcGetContextsDevice( ctx );
@@ -18687,6 +18796,32 @@ void Audio::SetVolume( float volume )
 #if AE_USE_OPENAL
 	volume = ae::Clip01( volume );
 	alListenerf( AL_GAIN, volume );
+#endif
+}
+
+void Audio::SetMusicVolume( float volume, uint32_t channel )
+{
+#if AE_USE_OPENAL
+	if ( channel >= m_musicChannels.Length() )
+	{
+		return;
+	}
+
+	Channel* musicChannel = &m_musicChannels[ channel ];
+	alSourcef( musicChannel->source, AL_GAIN, volume );
+#endif
+}
+
+void Audio::SetSfxLoopVolume( float volume, uint32_t channel )
+{
+#if AE_USE_OPENAL
+	if ( channel >= m_sfxLoopChannels.Length() )
+	{
+		return;
+	}
+
+	Channel* sfxLoopChannel = &m_sfxLoopChannels[ channel ];
+	alSourcef( sfxLoopChannel->source, AL_GAIN, volume );
 #endif
 }
 
@@ -18712,6 +18847,8 @@ void Audio::PlayMusic( const AudioData* audioFile, float volume, uint32_t channe
 	{
 		alSourceStop( musicChannel->source );
 	}
+	
+	musicChannel->resource = audioFile;
 
 	alSourcei( musicChannel->source, AL_BUFFER, audioFile->buffer );
 	alSourcef( musicChannel->source, AL_GAIN, volume );
@@ -18778,12 +18915,58 @@ void Audio::PlaySfx( const AudioData* audioFile, float volume, int32_t priority 
 #endif
 }
 
+void Audio::PlaySfxLoop( const AudioData* audioFile, float volume, uint32_t channel )
+{
+#if AE_USE_OPENAL
+	AE_ASSERT( audioFile );
+	if ( channel >= m_sfxLoopChannels.Length() )
+	{
+		return;
+	}
+
+	Channel* sfxLoopChannel = &m_sfxLoopChannels[ channel ];
+
+	ALint state;
+	alGetSourcei( sfxLoopChannel->source, AL_SOURCE_STATE, &state );
+	if ( ( audioFile == sfxLoopChannel->resource ) && state == AL_PLAYING )
+	{
+		alSourcef( sfxLoopChannel->source, AL_GAIN, volume );
+		return;
+	}
+
+	if ( state == AL_PLAYING )
+	{
+		alSourceStop( sfxLoopChannel->source );
+	}
+	
+	sfxLoopChannel->resource = audioFile;
+
+	alSourcei( sfxLoopChannel->source, AL_BUFFER, audioFile->buffer );
+	alSourcei( sfxLoopChannel->source, AL_LOOPING, 1 );
+	alSourcef( sfxLoopChannel->source, AL_GAIN, volume );
+	alSourcePlay( sfxLoopChannel->source );
+	_CheckALError();
+#endif
+}
+
 void Audio::StopMusic( uint32_t channel )
 {
 #if AE_USE_OPENAL
 	if ( channel < m_musicChannels.Length() )
 	{
 		alSourceStop( m_musicChannels[ channel ].source );
+		m_musicChannels[ channel ].resource = nullptr;
+	}
+#endif
+}
+
+void Audio::StopSfxLoop( uint32_t channel )
+{
+#if AE_USE_OPENAL
+	if ( channel < m_sfxLoopChannels.Length() )
+	{
+		alSourceStop( m_sfxLoopChannels[ channel ].source );
+		m_sfxLoopChannels[ channel ].resource = nullptr;
 	}
 #endif
 }
@@ -18794,6 +18977,18 @@ void Audio::StopAllSfx()
 	for ( uint32_t i = 0; i < m_sfxChannels.Length(); i++ )
 	{
 		alSourceStop( m_sfxChannels[ i ].source );
+		m_sfxChannels[ i ].resource = nullptr;
+	}
+#endif
+}
+
+void Audio::StopAllSfxLoops()
+{
+#if AE_USE_OPENAL
+	for ( uint32_t i = 0; i < m_sfxLoopChannels.Length(); i++ )
+	{
+		alSourceStop( m_sfxLoopChannels[ i ].source );
+		m_sfxLoopChannels[ i ].resource = nullptr;
 	}
 #endif
 }
@@ -18806,6 +19001,11 @@ uint32_t Audio::GetMusicChannelCount() const
 uint32_t Audio::GetSfxChannelCount() const
 {
 	return m_sfxChannels.Length();
+}
+
+uint32_t Audio::GetSfxLoopChannelCount() const
+{
+	return m_sfxLoopChannels.Length();
 }
 
 // @TODO: Should return a string with current state of audio channels
@@ -20280,9 +20480,7 @@ ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, boo
 	}
 	else
 	{
-		Enum* metaEnum = enums.TryGet( enumName );
-		AE_ASSERT_MSG( metaEnum, "Could not find meta registered Enum named '#'", enumName );
-		return metaEnum;
+		return enums.TryGet( enumName );
 	}
 }
 
@@ -20366,6 +20564,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 		case Var::Enum:
 		{
 			const class Enum* enumType = GetEnum();
+			AE_ASSERT_MSG( enumType, "Enum '#' is not registered", GetTypeName() );
 			int32_t value = 0;
 			switch ( enumType->TypeSize() )
 			{
@@ -20395,8 +20594,16 @@ int32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
 const char* ae::Type::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
 uint32_t ae::Type::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
 uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
-const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const { return m_props.GetValue( propIndex )[ valueIndex ].c_str(); }
-const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const { return m_props.Get( propName )[ valueIndex ].c_str(); }
+const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
+{
+	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
+{
+	const auto* vals = m_props.TryGet( propName );
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
 uint32_t ae::Type::GetSize() const { return m_size; }
 uint32_t ae::Type::GetAlignment() const { return m_align; }
 const char* ae::Type::GetName() const { return m_name.c_str(); }

@@ -157,8 +157,9 @@ public:
 	return ImGui::InputText( label, buffer, maxSize, flags, aeImGui::m_StringCallback< N >, (void*)str );
   }
 
-  static void BeginGroupPanel( const char* name, const ImVec2& size )
+  static void BeginGroupPanel( const char* name, const ImVec2& size = ImVec2( -1.0f, 0.0f ) )
   {
+	ImGui::PushID( name );
 	ImGui::BeginGroup();
 
 	auto cursorPos = ImGui::GetCursorScreenPos();
@@ -277,6 +278,8 @@ public:
 	ImGui::Dummy( ImVec2( 0.0f, 0.0f ) );
 
 	ImGui::EndGroup();
+	
+	ImGui::PopID();
   }
 
 private:
