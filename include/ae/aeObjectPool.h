@@ -103,17 +103,19 @@ private:
 	// @TODO: Disable copy constructor etc or fix list on copy.
 	struct Page
 	{
+		// Pages are deleted by the pool when empty, so it's safe to
+		// assume pages always contain at least one object.
 		Page( const ae::Tag& tag, uint32_t size ) : freeList( tag, size ) {}
-		ae::ListNode< Page > node = this;
-		ae::FreeList<> freeList;
-		void* objects;
+		ae::ListNode< Page > node = this; // List node.
+		ae::FreeList<> freeList; // Free object information.
+		void* objects; // Pointer to array of objects in this page.
 	};
 	ae::Tag m_tag;
-	uint32_t m_pageSize;
-	bool m_paged;
-	uint32_t m_objectSize;
-	uint32_t m_objectAlignment;
-	uint32_t m_length;
+	uint32_t m_pageSize; // Number of objects per page.
+	bool m_paged; // If true, pool can be infinitely big.
+	uint32_t m_objectSize; // Size of each object.
+	uint32_t m_objectAlignment; // Alignment of each object.
+	uint32_t m_length; // Number of actively allocated objects.
 	ae::List< Page > m_pages;
 };
 

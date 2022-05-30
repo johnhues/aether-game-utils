@@ -57,19 +57,24 @@ void* OpaquePool::Allocate()
 
 void OpaquePool::Free( void* obj )
 {
-	if ( !obj ) { return; }
-	if ( (intptr_t)obj % m_objectAlignment != 0 ) { return; } // @TODO: Should this be an assert?
+	if ( !obj )
+	{
+		return;
+	}
+#if _AE_DEBUG_
+	AE_ASSERT( (intptr_t)obj % m_objectAlignment == 0 );
+#endif
 
-	int32_t index;
+	uint32_t index;
 	Page* page = m_pages.GetFirst();
 	while ( page )
 	{
-		index = (int32_t)( (uint8_t*)obj - page->objects );
-#if _AE_DEBUG_
-		AE_ASSERT( index % m_objectSize == 0 );
-#endif
-		index /= m_objectSize;
-		if ( 0 <= index && index < m_pageSize )
+		if ( obj < page->objects )
+		{
+			break;
+		}
+		index = (int32_t)( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;
+		if ( index < m_pageSize )
 		{
 			break;
 		}
@@ -78,6 +83,7 @@ void OpaquePool::Free( void* obj )
 	if ( page )
 	{
 #if _AE_DEBUG_
+		AE_ASSERT( m_length > 0 );
 		AE_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
 		AE_ASSERT( page->freeList.IsAllocated( index ) );
 		memset( obj, 0xDD, m_objectSize );
@@ -85,12 +91,16 @@ void OpaquePool::Free( void* obj )
 		page->freeList.Free( index );
 		m_length--;
 
-		if ( m_paged && page->freeList.Length() == 0 )
+		if ( page->freeList.Length() == 0 )
 		{
 			ae::Free( page->objects );
 			ae::Delete( page );
 		}
+		return;
 	}
+#if _AE_DEBUG_
+	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", m_objectSize, m_objectAlignment, m_pageSize, m_paged );
+#endif
 }
 
 void OpaquePool::FreeAll()
@@ -126,22 +136,17 @@ void OpaquePool::FreeAll()
 
 const void* OpaquePool::GetFirst() const
 {
-	if ( m_paged )
+	if ( const Page* page = m_pages.GetFirst() )
 	{
-		const Page* page = m_pages.GetFirst();
-		if ( page )
-		{
-			AE_ASSERT( page->freeList.Length() );
-			return page->freeList.Length() ? _AE_POOL_ELEMENT( page->objects, page->freeList.GetFirst() ) : nullptr;
-		}
+#if _AE_DEBUG_
+		AE_ASSERT( m_length > 0 );
+		AE_ASSERT( page->freeList.Length() );
+#endif
+		return _AE_POOL_ELEMENT( page->objects, page->freeList.GetFirst() );
 	}
-	else if ( !m_paged && m_length )
-	{
-		int32_t index = m_firstPage.Get()->freeList.GetFirst();
-		AE_ASSERT( index >= 0 );
-		return (const T*)&m_firstPage.Get()->objects[ index ];
-	}
+#if _AE_DEBUG_
 	AE_ASSERT( m_length == 0 );
+#endif
 	return nullptr;
 }
 
