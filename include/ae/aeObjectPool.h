@@ -116,14 +116,17 @@ private:
 	uint32_t m_objectSize; // Size of each object.
 	uint32_t m_objectAlignment; // Alignment of each object.
 	uint32_t m_length; // Number of actively allocated objects.
+	//Page m_firstPage; // @TODO: Having a static first page would prevent an additional indirection for every operation on all non-paged pools.
 	ae::List< Page > m_pages;
 };
 
 template < typename T >
 T* OpaquePool::New()
 {
+#ifdef _AE_DEBUG_
 	AE_ASSERT( sizeof( T ) == m_objectSize );
 	AE_ASSERT( alignof( T ) == m_objectAlignment );
+#endif
 	void* obj = Allocate();
 	if( obj )
 	{
@@ -135,8 +138,10 @@ T* OpaquePool::New()
 template < typename T >
 void OpaquePool::Delete( T* obj )
 {
+#ifdef _AE_DEBUG_
 	AE_ASSERT( sizeof( T ) == m_objectSize );
 	AE_ASSERT( alignof( T ) == m_objectAlignment );
+#endif
 	if( obj )
 	{
 		obj->~T();
@@ -147,8 +152,10 @@ void OpaquePool::Delete( T* obj )
 template < typename T >
 void OpaquePool::DeleteAll()
 {
+#ifdef _AE_DEBUG_
 	AE_ASSERT( sizeof( T ) == m_objectSize );
 	AE_ASSERT( alignof( T ) == m_objectAlignment );
+#endif
 	for ( void* p = GetFirst(); p; p = GetNext( p ) )
 	{
 		( (T*)p )->~T();
