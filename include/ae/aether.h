@@ -3916,6 +3916,7 @@ public:
 		Int64,
 		Bool,
 		Float,
+		Double,
 		Vec2,
 		Vec3,
 		Vec4,
@@ -7825,6 +7826,7 @@ _ae_DefineMetaVarType( int32_t, Int32 );
 _ae_DefineMetaVarType( int64_t, Int64 );
 _ae_DefineMetaVarType( bool, Bool );
 _ae_DefineMetaVarType( float, Float );
+_ae_DefineMetaVarType( double, Double );
 _ae_DefineMetaVarType( ae::Vec2, Vec2 );
 _ae_DefineMetaVarType( ae::Vec3, Vec3 );
 _ae_DefineMetaVarType( ae::Vec4, Vec4 );
@@ -20242,6 +20244,13 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			sscanf( value, "%f", f );
 			return true;
 		}
+		case Var::Double:
+		{
+			AE_ASSERT( m_size == sizeof(double) );
+			double* f = (double*)varData;
+			sscanf( value, "%lf", f );
+			return true;
+		}
 		case Var::Vec2:
 		{
 			AE_ASSERT( m_size == sizeof(ae::Vec2) );
@@ -20622,6 +20631,8 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 			return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
 		case Var::Float:
 			return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
+		case Var::Double:
+			return ae::Str32::Format( "#", *reinterpret_cast< const double* >( varData ) ).c_str();
 		case Var::Vec2:
 			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec2* >( varData ) ).c_str();
 		case Var::Vec3:
