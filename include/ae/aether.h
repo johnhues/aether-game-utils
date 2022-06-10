@@ -2030,6 +2030,9 @@ struct GamepadState
 //------------------------------------------------------------------------------
 class Input
 {
+#define AE_INPUT_PRESS( value, property ) value.property && !value##Prev.property
+#define AE_INPUT_RELEASE( value, property ) !value.property && value##Prev.property
+	
 public:
 	void Initialize( Window* window );
 	void Terminate();
@@ -2055,6 +2058,25 @@ public:
 	bool GetPrev( ae::Key key ) const;
 	inline bool GetPress( ae::Key key ) const { return Get( key ) && !GetPrev( key ); }
 	inline bool GetRelease( ae::Key key ) const { return !Get( key ) && GetPrev( key ); }
+	
+	inline bool GetMousePressLeft() const { return AE_INPUT_PRESS( mouse, leftButton ); }
+	inline bool GetMousePressMid() const { return AE_INPUT_PRESS( mouse, middleButton ); }
+	inline bool GetMousePressRight() const { return AE_INPUT_PRESS( mouse, rightButton ); }
+	inline bool GetMouseReleaseLeft() const { return AE_INPUT_RELEASE( mouse, leftButton ); }
+	inline bool GetMouseReleaseMid() const { return AE_INPUT_RELEASE( mouse, middleButton ); }
+	inline bool GetMouseReleaseRight() const { return AE_INPUT_RELEASE( mouse, rightButton ); }
+	
+	inline bool GetGamepadPressA() const { return AE_INPUT_PRESS( gamepad, a ); }
+	inline bool GetGamepadPressB() const { return AE_INPUT_PRESS( gamepad, b ); }
+	inline bool GetGamepadPressX() const { return AE_INPUT_PRESS( gamepad, x ); }
+	inline bool GetGamepadPressY() const { return AE_INPUT_PRESS( gamepad, y ); }
+	inline bool GetGamepadPressStart() const { return AE_INPUT_PRESS( gamepad, start ); }
+	inline bool GetGamepadPressSelect() const { return AE_INPUT_PRESS( gamepad, select ); }
+	inline bool GetGamepadPressUp() const { return AE_INPUT_PRESS( gamepad, up ); }
+	inline bool GetGamepadPressDown() const { return AE_INPUT_PRESS( gamepad, down ); }
+	inline bool GetGamepadPressLeft() const { return AE_INPUT_PRESS( gamepad, left ); }
+	inline bool GetGamepadPressRight() const { return AE_INPUT_PRESS( gamepad, right ); }
+	
 	MouseState mouse;
 	MouseState mousePrev;
 	GamepadState gamepad;
@@ -2065,6 +2087,7 @@ public:
 	void m_SetMousePos( ae::Int2 pos );
 	ae::Window* m_window = nullptr;
 	bool m_captureMouse = false;
+	ae::Int2 m_capturedMousePos = ae::Int2( 0, 0 );
 	bool m_positionSet = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
@@ -12107,14 +12130,21 @@ void Input::SetMouseCaptured( bool enable )
 	}
 	
 #if _AE_APPLE_
-	if ( enable && !m_captureMouse )
+	if( enable != m_captureMouse )
 	{
-		CGDisplayHideCursor( kCGDirectMainDisplay );
 		m_positionSet = false;
-	}
-	else if ( !enable && m_captureMouse )
-	{
-		CGDisplayShowCursor( kCGDirectMainDisplay );
+		if ( enable )
+		{
+			m_capturedMousePos = mouse.position + m_window->GetPosition();
+			CGDisplayHideCursor( kCGDirectMainDisplay );
+		}
+		else
+		{
+			m_SetMousePos( m_capturedMousePos );
+			CGDisplayShowCursor( kCGDirectMainDisplay );
+			float nsCapturedMouseY = NSMaxY( NSScreen.screens[ 0 ].frame ) - m_capturedMousePos.y;
+			CGWarpMouseCursorPosition( CGPointMake( m_capturedMousePos.x, nsCapturedMouseY ) );
+		}
 	}
 #endif
 	
@@ -18761,6 +18791,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 		alGenSources( (ALuint)1, &channel->source );
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSourcef( channel->source, AL_MIN_GAIN, 0.f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
 		alSourcei( channel->source, AL_LOOPING, AL_TRUE );
 	}
@@ -18772,6 +18803,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 		channel->source = sources[ musicChannels + i ];
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSourcef( channel->source, AL_MIN_GAIN, 0.f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
 		alSourcei( channel->source, AL_LOOPING, AL_FALSE );
 	}
@@ -18783,8 +18815,9 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 		channel->source = sources[ musicChannels + sfxChannels + i ];
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSourcef( channel->source, AL_MIN_GAIN, 0.f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
-		alSourcei( channel->source, AL_LOOPING, AL_FALSE );
+		alSourcei( channel->source, AL_LOOPING, AL_TRUE );
 	}
 
 	ALfloat listenerOri[] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
