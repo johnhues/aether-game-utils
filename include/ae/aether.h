@@ -1720,6 +1720,8 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
 #define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
+#define AE_DEBUG_ASSERT( _x ) do { if ( !(_x) && _AE_DEBUG_ ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
+#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( !(_x) && _AE_DEBUG_ ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
 #define AE_FAIL() do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert(); } while (0)
 #define AE_FAIL_MSG( ... ) do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert(); } while (0)
 
@@ -20678,16 +20680,50 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
 		case Var::Enum:
 		{
+			// @NOTE: Enums with very large or small values (outside the range of int32) are not currently supported
 			const class Enum* enumType = GetEnum();
 			AE_ASSERT_MSG( enumType, "Enum '#' is not registered", GetTypeName() );
 			int32_t value = 0;
-			switch ( enumType->TypeSize() )
+			if ( enumType->TypeIsSigned() )
 			{
-				case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
-				case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
-				case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
-				case 8: value = *reinterpret_cast< const int64_t* >( varData ); break;
-				default: AE_FAIL();
+				switch ( enumType->TypeSize() )
+				{
+					case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
+					case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
+					case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
+					case 8:
+					{
+						auto v = *reinterpret_cast< const int64_t* >( varData );
+						AE_DEBUG_ASSERT( v <= (int64_t)INT32_MAX );
+						AE_DEBUG_ASSERT( v >= (int64_t)INT32_MIN );
+						value = v;
+						break;
+					}
+					default: AE_FAIL();
+				}
+			}
+			else
+			{
+				switch ( enumType->TypeSize() )
+				{
+					case 1: value = *reinterpret_cast< const uint8_t* >( varData ); break;
+					case 2: value = *reinterpret_cast< const uint16_t* >( varData ); break;
+					case 4:
+					{
+						auto v = *reinterpret_cast< const uint32_t* >( varData );
+						AE_DEBUG_ASSERT( v <= (uint32_t)INT32_MAX );
+						value = v;
+						break;
+					}
+					case 8:
+					{
+						auto v = *reinterpret_cast< const uint64_t* >( varData );
+						AE_DEBUG_ASSERT( v <= (uint64_t)INT32_MAX );
+						value = v;
+						break;
+					}
+					default: AE_FAIL();
+				}
 			}
 			return enumType->GetNameByValue( value );
 		}
