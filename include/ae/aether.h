@@ -8763,7 +8763,7 @@ Matrix4 Matrix4::GetInverse() const
 
 	float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
 #if _AE_DEBUG_
-	// AE_ASSERT_MSG( det == det, "Non-invertible matrix" );
+	AE_ASSERT_MSG( det == det, "Non-invertible matrix" );
 	AE_ASSERT_MSG( det, "Non-invertible matrix" );
 #endif
 	det = 1.0f / det;
