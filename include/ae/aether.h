@@ -985,10 +985,17 @@ struct Color
 	static Color PicoPink();
 	static Color PicoPeach();
 
-	float r;
-	float g;
-	float b;
-	float a;
+	union
+	{
+		struct
+		{
+			float r;
+			float g;
+			float b;
+			float a;
+		};
+		float data[ 4 ];
+	};
 
 private:
 	// Delete implicit conversions to try to catch color space issues
@@ -3819,7 +3826,7 @@ const ae::TypeId kInvalidTypeId = 0;
 const uint32_t kMaxMetaProps = 16;
 const uint32_t kMaxMetaPropListLength = 16;
 const uint32_t kMetaMaxVars = 32;
-const uint32_t kMetaEnumValues = 32;
+const uint32_t kMetaEnumValues = 256;
 const uint32_t kMetaEnumTypes = 32;
 class Type;
 
@@ -3932,8 +3939,12 @@ public:
 		Int64,
 		Bool,
 		Float,
+		Double,
+		Vec2,
 		Vec3,
+		Vec4,
 		Matrix4,
+		Color,
 		Enum,
 		Ref
 	};
@@ -5474,7 +5485,7 @@ inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 )
 //------------------------------------------------------------------------------
 inline std::ostream& operator<<( std::ostream& os, Color c )
 {
-	return os << "<" << c.r << ", " << c.g << ", " << c.b << ", " << c.a << ">";
+	return os << c.r << " " << c.g << " " << c.b << " " << c.a;
 }
 inline Color::Color( float rgb ) : r( rgb ), g( rgb ), b( rgb ), a( 1.0f ) {}
 inline Color::Color( float r, float g, float b ) : r( r ), g( g ), b( b ), a( 1.0f ) {}
@@ -5644,10 +5655,26 @@ inline T FromString( const char* str )
 }
 
 template <>
+inline ae::Vec2 FromString( const char* str )
+{
+	ae::Vec2 r( 0.0f );
+	sscanf( str, "%f %f", r.data, r.data + 1 );
+	return r;
+}
+
+template <>
 inline ae::Vec3 FromString( const char* str )
 {
 	ae::Vec3 r( 0.0f );
 	sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 );
+	return r;
+}
+
+template <>
+inline ae::Vec4 FromString( const char* str )
+{
+	ae::Vec4 r( 0.0f );
+	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
 	return r;
 }
 
@@ -5660,6 +5687,14 @@ inline ae::Matrix4 FromString( const char* str )
 		r.data + 4, r.data + 5, r.data + 6, r.data + 7,
 		r.data + 8, r.data + 9, r.data + 10, r.data + 11,
 		r.data + 12, r.data + 13, r.data + 14, r.data + 15 );
+	return r;
+}
+
+template <>
+inline ae::Color FromString( const char* str )
+{
+	ae::Color r( 0.0f );
+	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
 	return r;
 }
 
@@ -7814,7 +7849,11 @@ _ae_DefineMetaVarType( int32_t, Int32 );
 _ae_DefineMetaVarType( int64_t, Int64 );
 _ae_DefineMetaVarType( bool, Bool );
 _ae_DefineMetaVarType( float, Float );
+_ae_DefineMetaVarType( double, Double );
+_ae_DefineMetaVarType( ae::Vec2, Vec2 );
 _ae_DefineMetaVarType( ae::Vec3, Vec3 );
+_ae_DefineMetaVarType( ae::Vec4, Vec4 );
+_ae_DefineMetaVarType( ae::Color, Color );
 _ae_DefineMetaVarType( ae::Matrix4, Matrix4 );
 
 template < uint32_t N >
@@ -20238,6 +20277,21 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			sscanf( value, "%f", f );
 			return true;
 		}
+		case Var::Double:
+		{
+			AE_ASSERT( m_size == sizeof(double) );
+			double* f = (double*)varData;
+			sscanf( value, "%lf", f );
+			return true;
+		}
+		case Var::Vec2:
+		{
+			AE_ASSERT( m_size == sizeof(ae::Vec2) );
+			ae::Vec2* v = (ae::Vec2*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Vec2 >( value );
+			return true;
+		}
 		case Var::Vec3:
 		{
 			AE_ASSERT( m_size == sizeof(ae::Vec3) );
@@ -20246,12 +20300,28 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			*v = ae::FromString< ae::Vec3 >( value );
 			return true;
 		}
+		case Var::Vec4:
+		{
+			AE_ASSERT( m_size == sizeof(ae::Vec4) );
+			ae::Vec4* v = (ae::Vec4*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Vec4 >( value );
+			return true;
+		}
 		case Var::Matrix4:
 		{
 			AE_ASSERT( m_size == sizeof(ae::Matrix4) );
 			ae::Matrix4* v = (ae::Matrix4*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
 			*v = ae::FromString< ae::Matrix4 >( value );
+			return true;
+		}
+		case Var::Color:
+		{
+			AE_ASSERT( m_size == sizeof(ae::Color) );
+			ae::Color* v = (ae::Color*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Color >( value );
 			return true;
 		}
 		case Var::Enum:
@@ -20594,10 +20664,18 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 			return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
 		case Var::Float:
 			return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
+		case Var::Double:
+			return ae::Str32::Format( "#", *reinterpret_cast< const double* >( varData ) ).c_str();
+		case Var::Vec2:
+			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec2* >( varData ) ).c_str();
 		case Var::Vec3:
 			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec3* >( varData ) ).c_str();
+		case Var::Vec4:
+			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
 		case Var::Matrix4:
 			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
+		case Var::Color:
+			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
 		case Var::Enum:
 		{
 			const class Enum* enumType = GetEnum();
