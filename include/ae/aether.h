@@ -7650,9 +7650,9 @@ struct _VarType
 template < typename Parent, typename This >
 Inheritor< Parent, This >::Inheritor()
 {
-	const ae::Type* t = ae::GetTypeByName( ae::_TypeName< This >::Get() );
-	AE_ASSERT_MSG( t, "No inheritor type" );
-	ae::Object::_metaTypeId = t->GetId();
+	// @NOTE: Don't get type here because this object could be constructed
+	// before meta types are constructed.
+	ae::Object::_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
 	ae::Object::_typeName = ae::_TypeName< This >::Get();
 }
 
