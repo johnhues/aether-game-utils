@@ -355,6 +355,39 @@ template< typename T > constexpr T MaxValue();
 template< typename T > constexpr T MinValue();
 
 //------------------------------------------------------------------------------
+// ae::Random functions
+//------------------------------------------------------------------------------
+extern uint64_t _randomSeed;
+void RandomSeed();
+inline float Random01( uint64_t& seed = _randomSeed );
+inline bool RandomBool( uint64_t& seed = _randomSeed );
+inline int32_t Random( int32_t min, int32_t max, uint64_t& seed = _randomSeed );
+inline float Random( float min, float max, uint64_t& seed = _randomSeed );
+
+template < typename T >
+class RandomValue
+{
+public:
+	RandomValue( uint64_t& seed = _randomSeed ) : m_seed( seed ) {}
+	RandomValue( T min, T max, uint64_t& seed = _randomSeed );
+	RandomValue( T value, uint64_t& seed = _randomSeed );
+	
+	void SetMin( T min );
+	void SetMax( T max );
+	
+	T GetMin() const;
+	T GetMax() const;
+	
+	T Get() const;
+	operator T() const;
+	
+private:
+	uint64_t& m_seed;
+	T m_min = T();
+	T m_max = T();
+};
+
+//------------------------------------------------------------------------------
 // ae::Vec2 shared member functions
 // ae::Vec3 shared member functions
 // ae::Vec4 shared member functions
@@ -775,6 +808,7 @@ public:
 	void SetRadius( float radius ) { m_radius = radius; }
 
 	bool Intersect( const Circle& other, ae::Vec2* out ) const;
+	ae::Vec2 GetRandomPoint( uint64_t& seed = _randomSeed ) const;
 
 private:
 	ae::Vec2 m_point;
@@ -1009,39 +1043,6 @@ private:
 };
 
 #pragma warning(default:26495) // Re-enable uninitialized variable warning
-
-//------------------------------------------------------------------------------
-// ae::Random functions
-//------------------------------------------------------------------------------
-extern uint64_t _randomSeed;
-void RandomSeed();
-inline uint32_t Random( uint64_t& seed = _randomSeed );
-inline int32_t Random( int32_t min, int32_t max, uint64_t& seed = _randomSeed );
-inline float Random( float min, float max, uint64_t& seed = _randomSeed );
-inline bool RandomBool( uint64_t& seed = _randomSeed );
-
-template < typename T >
-class RandomValue
-{
-public:
-	RandomValue( uint64_t& seed = _randomSeed ) : m_seed( seed ) {}
-	RandomValue( T min, T max, uint64_t& seed = _randomSeed );
-	RandomValue( T value, uint64_t& seed = _randomSeed );
-	
-	void SetMin( T min );
-	void SetMax( T max );
-	
-	T GetMin() const;
-	T GetMax() const;
-	
-	T Get() const;
-	operator T() const;
-	
-private:
-	uint64_t& m_seed;
-	T m_min = T();
-	T m_max = T();
-};
 
 //------------------------------------------------------------------------------
 // ae::TimeStep
@@ -4740,7 +4741,7 @@ namespace Interpolation
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
-inline uint32_t Random( uint64_t& seed )
+inline uint32_t _Random( uint64_t& seed )
 {
 	// splitmix https://arvid.io/2018/07/02/better-cxx-prng/
 	uint64_t z = ( seed += UINT64_C( 0x9E3779B97F4A7C15 ) );
@@ -4749,13 +4750,23 @@ inline uint32_t Random( uint64_t& seed )
 	return uint32_t( ( z ^ ( z >> 31 ) ) >> 31 );
 }
 
+inline float Random01( uint64_t& seed )
+{
+	return ae::_Random( seed ) / (float)ae::MaxValue< uint32_t >();
+}
+
+inline bool RandomBool( uint64_t& seed )
+{
+	return Random( 0, 2, seed );
+}
+
 inline int32_t Random( int32_t min, int32_t max, uint64_t& seed )
 {
 	if ( min >= max )
 	{
 		return min;
 	}
-	return min + ( ae::Random( seed ) % ( max - min ) );
+	return min + ( ae::_Random( seed ) % ( max - min ) );
 }
 
 inline float Random( float min, float max, uint64_t& seed )
@@ -4764,12 +4775,7 @@ inline float Random( float min, float max, uint64_t& seed )
 	{
 		return min;
 	}
-	return min + ( ( ae::Random( seed ) / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
-}
-
-inline bool RandomBool( uint64_t& seed )
-{
-	return Random( 0, 2, seed );
+	return min + ( ( ae::_Random( seed ) / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
 }
 
 //------------------------------------------------------------------------------
@@ -9500,6 +9506,13 @@ bool Circle::Intersect( const Circle& other, ae::Vec2* out ) const
 		*out = m_point + diff.SafeNormalizeCopy() * ( ( m_radius + dist - other.m_radius ) * 0.5f );
 	}
 	return true;
+}
+
+ae::Vec2 Circle::GetRandomPoint( uint64_t& seed ) const
+{
+	float r = m_radius * sqrt( ae::Random01( seed ) );
+	float theta = ae::Random( 0.0f, ae::TWO_PI, seed );
+	return ae::Vec2( ae::Cos( theta ) * r + m_point.x, ae::Sin( theta ) * r + m_point.y );
 }
 
 //------------------------------------------------------------------------------
