@@ -192,6 +192,8 @@ bool IsDebuggerAttached();
 template < typename T > const char* GetTypeName();
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 double GetTime();
+//! Shows a generic message box
+void ShowMessage( const char* msg );
 //! @}
 
 //------------------------------------------------------------------------------
@@ -321,8 +323,10 @@ inline int32_t Abs( int32_t x );
 //------------------------------------------------------------------------------
 // Range functions
 //------------------------------------------------------------------------------
-template< typename T0, typename T1, typename... Tn > auto Min( T0&& v0, T1&& v1, Tn&&... vn );
-template< typename T0, typename T1, typename... Tn > auto Max( T0&& v0, T1&& v1, Tn&&... vn );
+template< typename T0, typename T1 > inline auto Min( T0 v0, T1 v1 );
+template< typename T0, typename T1 > inline auto Max( T0 v0, T1 v1 );
+template< typename T0, typename T1, typename T2 > inline auto Min( T0 v0, T1 v1, T2 v2 );
+template< typename T0, typename T1, typename T2 > inline auto Max( T0 v0, T1 v1, T2 v2 );
 template < typename T > inline T Clip( T x, T min, T max );
 inline float Clip01( float x );
 
@@ -1701,6 +1705,11 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 	}
 	return *this;
 }
+
+//------------------------------------------------------------------------------
+// Log settings
+//------------------------------------------------------------------------------
+void SetLogColorsEnabled( bool enabled );
 
 } // ae end
 
@@ -4243,17 +4252,8 @@ template < typename T, typename... Args >
 void LogInternal( std::stringstream& os, const char* format, T value, Args... args );
 template < typename... Args >
 void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
-// extern const char* LogLevelNames[ 6 ];
-
-//------------------------------------------------------------------------------
-// Log colors internal implementation
-//------------------------------------------------------------------------------
-#if _AE_APPLE_
-#define _AE_LOG_COLORS_ false
-#else
-#define _AE_LOG_COLORS_ true
+extern const char* LogLevelNames[ 6 ];
 extern const char* LogLevelColors[ 6 ];
-#endif
 
 //------------------------------------------------------------------------------
 // Internal Logging functions internal implementation
@@ -4264,7 +4264,7 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 template < typename T, typename... Args >
 void LogInternal( std::stringstream& os, const char* format, T value, Args... args )
 {
-	if ( !*format )
+	if ( !(*format) )
 	{
 		os << std::endl;
 		return;
@@ -4297,6 +4297,13 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 	os << std::boolalpha;
 	LogFormat( os, severity, filePath, line, assertInfo, format );
 	LogInternal( os, format, args... );
+	if ( severity == _AE_LOG_FATAL_ && !ae::IsDebuggerAttached() )
+	{
+		std::stringstream ss;
+		ss << os.rdbuf();
+		std::string str = ss.str();
+		ShowMessage( str.c_str() );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -4498,39 +4505,45 @@ inline T Abs( const VecT< T >& x )
 	return result;
 }
 
-template< typename T >
-T&& Min( T&& v )
+template< typename T0, typename T1 >
+inline auto Min( T0 v0, T1 v1 )
 {
-	return std::forward< T >( v );
+	return ( v0 < v1 ) ? v0 : v1;
 }
-template< typename T0, typename T1, typename... Tn >
-auto Min( T0&& v0, T1&& v1, Tn&&... vn )
+
+template< typename T0, typename T1, typename T2 >
+inline auto Min( T0 v0, T1 v1, T2 v2 )
 {
-	return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
+	return Min( v0, Min( v1, v2 ) );
 }
+
 inline ae::Vec2 Min( ae::Vec2 v0, ae::Vec2 v1 )
 {
 	return ae::Vec2( Min( v0.x, v1.x ), Min( v0.y, v1.y ) );
 }
+
 inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
 {
 	return ae::Vec3( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ) );
 }
 
-template< typename T >
-T&& Max( T&& v )
+template< typename T0, typename T1 >
+inline auto Max( T0 v0, T1 v1 )
 {
-	return std::forward< T >( v );
+	return ( v0 > v1 ) ? v0 : v1;
 }
-template< typename T0, typename T1, typename... Tn >
-auto Max( T0&& v0, T1&& v1, Tn&&... vn )
+
+template< typename T0, typename T1, typename T2 >
+inline auto Max( T0 v0, T1 v1, T2 v2 )
 {
-	return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
+	return Max( v0, Max( v1, v2 ) );
 }
+
 inline ae::Vec2 Max( ae::Vec2 v0, ae::Vec2 v1 )
 {
 	return ae::Vec2( Max( v0.x, v1.x ), Max( v0.y, v1.y ) );
 }
+
 inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
 {
 	return ae::Vec3( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ) );
@@ -8377,6 +8390,13 @@ double GetTime()
 #endif
 }
 
+void ShowMessage( const char* msg )
+{
+#if _AE_WINDOWS_
+	MessageBoxA( nullptr, msg, nullptr, MB_OK );
+#endif
+}
+
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
@@ -8810,8 +8830,8 @@ Matrix4 Matrix4::GetInverse() const
 
 	float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
 #if _AE_DEBUG_
-	AE_ASSERT_MSG( det == det, "Non-invertible matrix" );
-	AE_ASSERT_MSG( det, "Non-invertible matrix" );
+	AE_ASSERT_MSG( det == det, "Non-invertible matrix '#'", *this );
+	AE_ASSERT_MSG( det, "Non-invertible matrix '#'", *this );
 #endif
 	det = 1.0f / det;
 	for ( uint32_t i = 0; i < 16; i++ )
@@ -10087,7 +10107,6 @@ const char* LogLevelNames[] =
 //------------------------------------------------------------------------------
 // Log colors internal implementation
 //------------------------------------------------------------------------------
-#if _AE_LOG_COLORS_
 const char* LogLevelColors[] =
 {
 	"\x1b[94m",
@@ -10097,11 +10116,12 @@ const char* LogLevelColors[] =
 	"\x1b[31m",
 	"\x1b[35m",
 };
-#endif
 
 //------------------------------------------------------------------------------
 // Logging functions internal implementation
 //------------------------------------------------------------------------------
+bool _ae_logColors = false;
+
 #if _AE_WINDOWS_
 void LogInternal( std::stringstream& os, const char* message )
 {
@@ -10144,17 +10164,20 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 		fileName = filePath;
 	}
 
-#if _AE_LOG_COLORS_
-	os << "\x1b[90m" << timeBuf;
-	os << " [" << ae::GetPID() << "] ";
-	os << LogLevelColors[ severity ] << LogLevelNames[ severity ];
-	os << " \x1b[90m" << fileName << ":" << line;
-#else
-	os << timeBuf;
-	os << " [" << ae::GetPID() << "] ";
-	os << LogLevelNames[ severity ];
-	os << " " << fileName << ":" << line;
-#endif
+	if ( _ae_logColors )
+	{
+		os << "\x1b[90m" << timeBuf;
+		os << " [" << ae::GetPID() << "] ";
+		os << LogLevelColors[ severity ] << LogLevelNames[ severity ];
+		os << " \x1b[90m" << fileName << ":" << line;
+	}
+	else
+	{
+		os << timeBuf;
+		os << " [" << ae::GetPID() << "] ";
+		os << LogLevelNames[ severity ];
+		os << " " << fileName << ":" << line;
+	}
 
 	bool hasAssertInfo = ( assertInfo && assertInfo[ 0 ] );
 	bool hasFormat = ( format && format[ 0 ] );
@@ -10162,9 +10185,10 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 	{
 		os << ": ";
 	}
-#if _AE_LOG_COLORS_
-	os << "\x1b[0m";
-#endif
+	if ( _ae_logColors )
+	{
+		os << "\x1b[0m";
+	}
 	if ( hasAssertInfo )
 	{
 		os << assertInfo;
@@ -10173,6 +10197,11 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 			os << " ";
 		}
 	}
+}
+
+void SetLogColorsEnabled( bool enabled )
+{
+	_ae_logColors = enabled;
 }
 
 //------------------------------------------------------------------------------
