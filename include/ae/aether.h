@@ -2651,6 +2651,9 @@ private:
 	uint32_t m_array = 0;
 	uint32_t m_vertices = ~0;
 	uint32_t m_indices = ~0;
+public:
+	bool m_HasUploadedVertices() const { return m_vertices != ~0; }
+	bool m_HasUploadedIndices() const { return m_indices != ~0; }
 };
 
 //------------------------------------------------------------------------------
@@ -3284,6 +3287,7 @@ public:
 		ae::Vec4 normal;
 		ae::Vec4 color;
 	};
+	typedef uint32_t Index;
 	
 	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
 	bool Load( const uint8_t* data, uint32_t length );
@@ -3305,7 +3309,7 @@ public:
 	
 	ae::Tag allocTag;
 	ae::Array< ae::OBJFile::Vertex > vertices;
-	ae::Array< uint32_t > indices;
+	ae::Array< ae::OBJFile::Index > indices;
 };
 
 //------------------------------------------------------------------------------
@@ -15682,7 +15686,7 @@ void VertexArray::AppendVertices( const void* vertices, uint32_t count )
 	AE_ASSERT( m_buffer.GetVertexSize() );
 	if ( m_buffer.GetVertexUsage() == Vertex::Usage::Static )
 	{
-		AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
+		AE_ASSERT_MSG( !m_buffer.m_HasUploadedVertices(), "Cannot re-set vertices, buffer was created as static!" );
 	}
 	AE_ASSERT_MSG( m_vertexCount + count <= m_buffer.GetMaxVertexCount(), "Vertex limit exceeded #/#", m_vertexCount + count, m_buffer.GetMaxVertexCount() );
 	
@@ -15710,7 +15714,7 @@ void VertexArray::AppendIndices( const void* indices, uint32_t count, uint32_t _
 	AE_ASSERT( m_buffer.IsIndexed() );
 	if ( m_buffer.GetIndexUsage() == Vertex::Usage::Static )
 	{
-		AE_ASSERT_MSG( !m_indexCount, "Cannot re-set indices, buffer was created as static!" );
+		AE_ASSERT_MSG( !m_buffer.m_HasUploadedIndices(), "Cannot re-set indices, buffer was created as static!" );
 	}
 	AE_ASSERT_MSG( m_indexCount + count <= m_buffer.GetMaxIndexCount(), "Index limit exceeded #/#", m_indexCount + count, m_buffer.GetMaxIndexCount() );
 	
