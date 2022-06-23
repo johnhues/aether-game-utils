@@ -192,6 +192,8 @@ bool IsDebuggerAttached();
 template < typename T > const char* GetTypeName();
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 double GetTime();
+//! Shows a generic message box
+void ShowMessage( const char* msg );
 //! @}
 
 //------------------------------------------------------------------------------
@@ -321,8 +323,10 @@ inline int32_t Abs( int32_t x );
 //------------------------------------------------------------------------------
 // Range functions
 //------------------------------------------------------------------------------
-template< typename T0, typename T1, typename... Tn > auto Min( T0&& v0, T1&& v1, Tn&&... vn );
-template< typename T0, typename T1, typename... Tn > auto Max( T0&& v0, T1&& v1, Tn&&... vn );
+template< typename T0, typename T1 > inline auto Min( T0 v0, T1 v1 );
+template< typename T0, typename T1 > inline auto Max( T0 v0, T1 v1 );
+template< typename T0, typename T1, typename T2 > inline auto Min( T0 v0, T1 v1, T2 v2 );
+template< typename T0, typename T1, typename T2 > inline auto Max( T0 v0, T1 v1, T2 v2 );
 template < typename T > inline T Clip( T x, T min, T max );
 inline float Clip01( float x );
 
@@ -353,6 +357,39 @@ inline float RadToDeg( float radians );
 //------------------------------------------------------------------------------
 template< typename T > constexpr T MaxValue();
 template< typename T > constexpr T MinValue();
+
+//------------------------------------------------------------------------------
+// ae::Random functions
+//------------------------------------------------------------------------------
+extern uint64_t _randomSeed;
+void RandomSeed();
+inline float Random01( uint64_t& seed = _randomSeed );
+inline bool RandomBool( uint64_t& seed = _randomSeed );
+inline int32_t Random( int32_t min, int32_t max, uint64_t& seed = _randomSeed );
+inline float Random( float min, float max, uint64_t& seed = _randomSeed );
+
+template < typename T >
+class RandomValue
+{
+public:
+	RandomValue( uint64_t& seed = _randomSeed ) : m_seed( seed ) {}
+	RandomValue( T min, T max, uint64_t& seed = _randomSeed );
+	RandomValue( T value, uint64_t& seed = _randomSeed );
+	
+	void SetMin( T min );
+	void SetMax( T max );
+	
+	T GetMin() const;
+	T GetMax() const;
+	
+	T Get() const;
+	operator T() const;
+	
+private:
+	uint64_t& m_seed;
+	T m_min = T();
+	T m_max = T();
+};
 
 //------------------------------------------------------------------------------
 // ae::Vec2 shared member functions
@@ -775,6 +812,7 @@ public:
 	void SetRadius( float radius ) { m_radius = radius; }
 
 	bool Intersect( const Circle& other, ae::Vec2* out ) const;
+	ae::Vec2 GetRandomPoint( uint64_t& seed = _randomSeed ) const;
 
 private:
 	ae::Vec2 m_point;
@@ -985,10 +1023,17 @@ struct Color
 	static Color PicoPink();
 	static Color PicoPeach();
 
-	float r;
-	float g;
-	float b;
-	float a;
+	union
+	{
+		struct
+		{
+			float r;
+			float g;
+			float b;
+			float a;
+		};
+		float data[ 4 ];
+	};
 
 private:
 	// Delete implicit conversions to try to catch color space issues
@@ -1002,39 +1047,6 @@ private:
 };
 
 #pragma warning(default:26495) // Re-enable uninitialized variable warning
-
-//------------------------------------------------------------------------------
-// ae::Random functions
-//------------------------------------------------------------------------------
-extern uint64_t _randomSeed;
-void RandomSeed();
-inline uint32_t Random( uint64_t& seed = _randomSeed );
-inline int32_t Random( int32_t min, int32_t max, uint64_t& seed = _randomSeed );
-inline float Random( float min, float max, uint64_t& seed = _randomSeed );
-inline bool RandomBool( uint64_t& seed = _randomSeed );
-
-template < typename T >
-class RandomValue
-{
-public:
-	RandomValue( uint64_t& seed = _randomSeed ) : m_seed( seed ) {}
-	RandomValue( T min, T max, uint64_t& seed = _randomSeed );
-	RandomValue( T value, uint64_t& seed = _randomSeed );
-	
-	void SetMin( T min );
-	void SetMax( T max );
-	
-	T GetMin() const;
-	T GetMax() const;
-	
-	T Get() const;
-	operator T() const;
-	
-private:
-	uint64_t& m_seed;
-	T m_min = T();
-	T m_max = T();
-};
 
 //------------------------------------------------------------------------------
 // ae::TimeStep
@@ -1692,6 +1704,11 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 	return *this;
 }
 
+//------------------------------------------------------------------------------
+// Log settings
+//------------------------------------------------------------------------------
+void SetLogColorsEnabled( bool enabled );
+
 } // ae end
 
 //------------------------------------------------------------------------------
@@ -1711,6 +1728,8 @@ Hash& Hash::HashFloatArray( const float (&f)[ N ] )
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
 #define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
+#define AE_DEBUG_ASSERT( _x ) do { if ( !(_x) && _AE_DEBUG_ ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
+#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( !(_x) && _AE_DEBUG_ ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
 #define AE_FAIL() do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert(); } while (0)
 #define AE_FAIL_MSG( ... ) do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert(); } while (0)
 
@@ -2021,6 +2040,9 @@ struct GamepadState
 //------------------------------------------------------------------------------
 class Input
 {
+#define AE_INPUT_PRESS( value, property ) value.property && !value##Prev.property
+#define AE_INPUT_RELEASE( value, property ) !value.property && value##Prev.property
+	
 public:
 	void Initialize( Window* window );
 	void Terminate();
@@ -2046,6 +2068,25 @@ public:
 	bool GetPrev( ae::Key key ) const;
 	inline bool GetPress( ae::Key key ) const { return Get( key ) && !GetPrev( key ); }
 	inline bool GetRelease( ae::Key key ) const { return !Get( key ) && GetPrev( key ); }
+	
+	inline bool GetMousePressLeft() const { return AE_INPUT_PRESS( mouse, leftButton ); }
+	inline bool GetMousePressMid() const { return AE_INPUT_PRESS( mouse, middleButton ); }
+	inline bool GetMousePressRight() const { return AE_INPUT_PRESS( mouse, rightButton ); }
+	inline bool GetMouseReleaseLeft() const { return AE_INPUT_RELEASE( mouse, leftButton ); }
+	inline bool GetMouseReleaseMid() const { return AE_INPUT_RELEASE( mouse, middleButton ); }
+	inline bool GetMouseReleaseRight() const { return AE_INPUT_RELEASE( mouse, rightButton ); }
+	
+	inline bool GetGamepadPressA() const { return AE_INPUT_PRESS( gamepad, a ); }
+	inline bool GetGamepadPressB() const { return AE_INPUT_PRESS( gamepad, b ); }
+	inline bool GetGamepadPressX() const { return AE_INPUT_PRESS( gamepad, x ); }
+	inline bool GetGamepadPressY() const { return AE_INPUT_PRESS( gamepad, y ); }
+	inline bool GetGamepadPressStart() const { return AE_INPUT_PRESS( gamepad, start ); }
+	inline bool GetGamepadPressSelect() const { return AE_INPUT_PRESS( gamepad, select ); }
+	inline bool GetGamepadPressUp() const { return AE_INPUT_PRESS( gamepad, up ); }
+	inline bool GetGamepadPressDown() const { return AE_INPUT_PRESS( gamepad, down ); }
+	inline bool GetGamepadPressLeft() const { return AE_INPUT_PRESS( gamepad, left ); }
+	inline bool GetGamepadPressRight() const { return AE_INPUT_PRESS( gamepad, right ); }
+	
 	MouseState mouse;
 	MouseState mousePrev;
 	GamepadState gamepad;
@@ -2056,6 +2097,7 @@ public:
 	void m_SetMousePos( ae::Int2 pos );
 	ae::Window* m_window = nullptr;
 	bool m_captureMouse = false;
+	ae::Int2 m_capturedMousePos = ae::Int2( 0, 0 );
 	bool m_positionSet = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
@@ -2607,6 +2649,9 @@ private:
 	uint32_t m_array = 0;
 	uint32_t m_vertices = ~0;
 	uint32_t m_indices = ~0;
+public:
+	bool m_HasUploadedVertices() const { return m_vertices != ~0; }
+	bool m_HasUploadedIndices() const { return m_indices != ~0; }
 };
 
 //------------------------------------------------------------------------------
@@ -3240,6 +3285,7 @@ public:
 		ae::Vec4 normal;
 		ae::Vec4 color;
 	};
+	typedef uint32_t Index;
 	
 	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
 	bool Load( const uint8_t* data, uint32_t length );
@@ -3261,7 +3307,7 @@ public:
 	
 	ae::Tag allocTag;
 	ae::Array< ae::OBJFile::Vertex > vertices;
-	ae::Array< uint32_t > indices;
+	ae::Array< ae::OBJFile::Index > indices;
 };
 
 //------------------------------------------------------------------------------
@@ -3794,8 +3840,8 @@ const ae::TypeId kInvalidTypeId = 0;
 const uint32_t kMaxMetaProps = 16;
 const uint32_t kMaxMetaPropListLength = 16;
 const uint32_t kMetaMaxVars = 32;
-const uint32_t kMetaEnumValues = 32;
-const uint32_t kMetaEnumTypes = 32;
+const uint32_t kMetaEnumValues = 256;
+const uint32_t kMetaEnumTypes = 64;
 class Type;
 
 //------------------------------------------------------------------------------
@@ -3907,8 +3953,12 @@ public:
 		Int64,
 		Bool,
 		Float,
+		Double,
+		Vec2,
 		Vec3,
+		Vec4,
 		Matrix4,
+		Color,
 		Enum,
 		Ref
 	};
@@ -4204,17 +4254,8 @@ template < typename T, typename... Args >
 void LogInternal( std::stringstream& os, const char* format, T value, Args... args );
 template < typename... Args >
 void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
-// extern const char* LogLevelNames[ 6 ];
-
-//------------------------------------------------------------------------------
-// Log colors internal implementation
-//------------------------------------------------------------------------------
-#if _AE_APPLE_
-#define _AE_LOG_COLORS_ false
-#else
-#define _AE_LOG_COLORS_ true
+extern const char* LogLevelNames[ 6 ];
 extern const char* LogLevelColors[ 6 ];
-#endif
 
 //------------------------------------------------------------------------------
 // Internal Logging functions internal implementation
@@ -4225,7 +4266,7 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 template < typename T, typename... Args >
 void LogInternal( std::stringstream& os, const char* format, T value, Args... args )
 {
-	if ( !*format )
+	if ( !(*format) )
 	{
 		os << std::endl;
 		return;
@@ -4258,6 +4299,13 @@ void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const 
 	os << std::boolalpha;
 	LogFormat( os, severity, filePath, line, assertInfo, format );
 	LogInternal( os, format, args... );
+	if ( severity == _AE_LOG_FATAL_ && !ae::IsDebuggerAttached() )
+	{
+		std::stringstream ss;
+		ss << os.rdbuf();
+		std::string str = ss.str();
+		ShowMessage( str.c_str() );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -4459,39 +4507,45 @@ inline T Abs( const VecT< T >& x )
 	return result;
 }
 
-template< typename T >
-T&& Min( T&& v )
+template< typename T0, typename T1 >
+inline auto Min( T0 v0, T1 v1 )
 {
-	return std::forward< T >( v );
+	return ( v0 < v1 ) ? v0 : v1;
 }
-template< typename T0, typename T1, typename... Tn >
-auto Min( T0&& v0, T1&& v1, Tn&&... vn )
+
+template< typename T0, typename T1, typename T2 >
+inline auto Min( T0 v0, T1 v1, T2 v2 )
 {
-	return ( v0 < v1 ) ? Min( v0, std::forward< Tn >( vn )... ) : Min( v1, std::forward< Tn >( vn )... );
+	return Min( v0, Min( v1, v2 ) );
 }
+
 inline ae::Vec2 Min( ae::Vec2 v0, ae::Vec2 v1 )
 {
 	return ae::Vec2( Min( v0.x, v1.x ), Min( v0.y, v1.y ) );
 }
+
 inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
 {
 	return ae::Vec3( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ) );
 }
 
-template< typename T >
-T&& Max( T&& v )
+template< typename T0, typename T1 >
+inline auto Max( T0 v0, T1 v1 )
 {
-	return std::forward< T >( v );
+	return ( v0 > v1 ) ? v0 : v1;
 }
-template< typename T0, typename T1, typename... Tn >
-auto Max( T0&& v0, T1&& v1, Tn&&... vn )
+
+template< typename T0, typename T1, typename T2 >
+inline auto Max( T0 v0, T1 v1, T2 v2 )
 {
-	return ( v0 > v1 ) ? Max( v0, std::forward< Tn >( vn )... ) : Max( v1, std::forward< Tn >( vn )... );
+	return Max( v0, Max( v1, v2 ) );
 }
+
 inline ae::Vec2 Max( ae::Vec2 v0, ae::Vec2 v1 )
 {
 	return ae::Vec2( Max( v0.x, v1.x ), Max( v0.y, v1.y ) );
 }
+
 inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
 {
 	return ae::Vec3( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ) );
@@ -4702,7 +4756,7 @@ namespace Interpolation
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
-inline uint32_t Random( uint64_t& seed )
+inline uint32_t _Random( uint64_t& seed )
 {
 	// splitmix https://arvid.io/2018/07/02/better-cxx-prng/
 	uint64_t z = ( seed += UINT64_C( 0x9E3779B97F4A7C15 ) );
@@ -4711,13 +4765,23 @@ inline uint32_t Random( uint64_t& seed )
 	return uint32_t( ( z ^ ( z >> 31 ) ) >> 31 );
 }
 
+inline float Random01( uint64_t& seed )
+{
+	return ae::_Random( seed ) / (float)ae::MaxValue< uint32_t >();
+}
+
+inline bool RandomBool( uint64_t& seed )
+{
+	return Random( 0, 2, seed );
+}
+
 inline int32_t Random( int32_t min, int32_t max, uint64_t& seed )
 {
 	if ( min >= max )
 	{
 		return min;
 	}
-	return min + ( ae::Random( seed ) % ( max - min ) );
+	return min + ( ae::_Random( seed ) % ( max - min ) );
 }
 
 inline float Random( float min, float max, uint64_t& seed )
@@ -4726,12 +4790,7 @@ inline float Random( float min, float max, uint64_t& seed )
 	{
 		return min;
 	}
-	return min + ( ( ae::Random( seed ) / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
-}
-
-inline bool RandomBool( uint64_t& seed )
-{
-	return Random( 0, 2, seed );
+	return min + ( ( ae::_Random( seed ) / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
 }
 
 //------------------------------------------------------------------------------
@@ -5449,7 +5508,7 @@ inline Color Color::PicoPeach() { static Color c = Color::SRGB8( 255, 204, 170 )
 //------------------------------------------------------------------------------
 inline std::ostream& operator<<( std::ostream& os, Color c )
 {
-	return os << "<" << c.r << ", " << c.g << ", " << c.b << ", " << c.a << ">";
+	return os << c.r << " " << c.g << " " << c.b << " " << c.a;
 }
 inline Color::Color( float rgb ) : r( rgb ), g( rgb ), b( rgb ), a( 1.0f ) {}
 inline Color::Color( float r, float g, float b ) : r( r ), g( g ), b( b ), a( 1.0f ) {}
@@ -5619,10 +5678,26 @@ inline T FromString( const char* str )
 }
 
 template <>
+inline ae::Vec2 FromString( const char* str )
+{
+	ae::Vec2 r( 0.0f );
+	sscanf( str, "%f %f", r.data, r.data + 1 );
+	return r;
+}
+
+template <>
 inline ae::Vec3 FromString( const char* str )
 {
 	ae::Vec3 r( 0.0f );
 	sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 );
+	return r;
+}
+
+template <>
+inline ae::Vec4 FromString( const char* str )
+{
+	ae::Vec4 r( 0.0f );
+	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
 	return r;
 }
 
@@ -5635,6 +5710,14 @@ inline ae::Matrix4 FromString( const char* str )
 		r.data + 4, r.data + 5, r.data + 6, r.data + 7,
 		r.data + 8, r.data + 9, r.data + 10, r.data + 11,
 		r.data + 12, r.data + 13, r.data + 14, r.data + 15 );
+	return r;
+}
+
+template <>
+inline ae::Color FromString( const char* str )
+{
+	ae::Color r( 0.0f );
+	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
 	return r;
 }
 
@@ -7586,9 +7669,9 @@ struct _VarType
 template < typename Parent, typename This >
 Inheritor< Parent, This >::Inheritor()
 {
-	const ae::Type* t = ae::GetTypeByName( ae::_TypeName< This >::Get() );
-	AE_ASSERT_MSG( t, "No inheritor type" );
-	ae::Object::_metaTypeId = t->GetId();
+	// @NOTE: Don't get type here because this object could be constructed
+	// before meta types are constructed.
+	ae::Object::_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
 	ae::Object::_typeName = ae::_TypeName< This >::Get();
 }
 
@@ -7787,7 +7870,11 @@ _ae_DefineMetaVarType( int32_t, Int32 );
 _ae_DefineMetaVarType( int64_t, Int64 );
 _ae_DefineMetaVarType( bool, Bool );
 _ae_DefineMetaVarType( float, Float );
+_ae_DefineMetaVarType( double, Double );
+_ae_DefineMetaVarType( ae::Vec2, Vec2 );
 _ae_DefineMetaVarType( ae::Vec3, Vec3 );
+_ae_DefineMetaVarType( ae::Vec4, Vec4 );
+_ae_DefineMetaVarType( ae::Color, Color );
 _ae_DefineMetaVarType( ae::Matrix4, Matrix4 );
 
 template < uint32_t N >
@@ -8303,6 +8390,13 @@ double GetTime()
 #endif
 }
 
+void ShowMessage( const char* msg )
+{
+#if _AE_WINDOWS_
+	MessageBoxA( nullptr, msg, nullptr, MB_OK );
+#endif
+}
+
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
@@ -8736,8 +8830,8 @@ Matrix4 Matrix4::GetInverse() const
 
 	float det = data[0] * r.data[0] + data[1] * r.data[4] + data[2] * r.data[8] + data[3] * r.data[12];
 #if _AE_DEBUG_
-	AE_ASSERT_MSG( det == det, "Non-invertible matrix" );
-	AE_ASSERT_MSG( det, "Non-invertible matrix" );
+	AE_ASSERT_MSG( det == det, "Non-invertible matrix '#'", *this );
+	AE_ASSERT_MSG( det, "Non-invertible matrix '#'", *this );
 #endif
 	det = 1.0f / det;
 	for ( uint32_t i = 0; i < 16; i++ )
@@ -9434,6 +9528,13 @@ bool Circle::Intersect( const Circle& other, ae::Vec2* out ) const
 	return true;
 }
 
+ae::Vec2 Circle::GetRandomPoint( uint64_t& seed ) const
+{
+	float r = m_radius * sqrt( ae::Random01( seed ) );
+	float theta = ae::Random( 0.0f, ae::TWO_PI, seed );
+	return ae::Vec2( ae::Cos( theta ) * r + m_point.x, ae::Sin( theta ) * r + m_point.y );
+}
+
 //------------------------------------------------------------------------------
 // ae::Frustum member functions
 //------------------------------------------------------------------------------
@@ -10006,7 +10107,6 @@ const char* LogLevelNames[] =
 //------------------------------------------------------------------------------
 // Log colors internal implementation
 //------------------------------------------------------------------------------
-#if _AE_LOG_COLORS_
 const char* LogLevelColors[] =
 {
 	"\x1b[94m",
@@ -10016,11 +10116,12 @@ const char* LogLevelColors[] =
 	"\x1b[31m",
 	"\x1b[35m",
 };
-#endif
 
 //------------------------------------------------------------------------------
 // Logging functions internal implementation
 //------------------------------------------------------------------------------
+bool _ae_logColors = false;
+
 #if _AE_WINDOWS_
 void LogInternal( std::stringstream& os, const char* message )
 {
@@ -10063,17 +10164,20 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 		fileName = filePath;
 	}
 
-#if _AE_LOG_COLORS_
-	os << "\x1b[90m" << timeBuf;
-	os << " [" << ae::GetPID() << "] ";
-	os << LogLevelColors[ severity ] << LogLevelNames[ severity ];
-	os << " \x1b[90m" << fileName << ":" << line;
-#else
-	os << timeBuf;
-	os << " [" << ae::GetPID() << "] ";
-	os << LogLevelNames[ severity ];
-	os << " " << fileName << ":" << line;
-#endif
+	if ( _ae_logColors )
+	{
+		os << "\x1b[90m" << timeBuf;
+		os << " [" << ae::GetPID() << "] ";
+		os << LogLevelColors[ severity ] << LogLevelNames[ severity ];
+		os << " \x1b[90m" << fileName << ":" << line;
+	}
+	else
+	{
+		os << timeBuf;
+		os << " [" << ae::GetPID() << "] ";
+		os << LogLevelNames[ severity ];
+		os << " " << fileName << ":" << line;
+	}
 
 	bool hasAssertInfo = ( assertInfo && assertInfo[ 0 ] );
 	bool hasFormat = ( format && format[ 0 ] );
@@ -10081,9 +10185,10 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 	{
 		os << ": ";
 	}
-#if _AE_LOG_COLORS_
-	os << "\x1b[0m";
-#endif
+	if ( _ae_logColors )
+	{
+		os << "\x1b[0m";
+	}
 	if ( hasAssertInfo )
 	{
 		os << assertInfo;
@@ -10092,6 +10197,11 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 			os << " ";
 		}
 	}
+}
+
+void SetLogColorsEnabled( bool enabled )
+{
+	_ae_logColors = enabled;
 }
 
 //------------------------------------------------------------------------------
@@ -12064,14 +12174,21 @@ void Input::SetMouseCaptured( bool enable )
 	}
 	
 #if _AE_APPLE_
-	if ( enable && !m_captureMouse )
+	if( enable != m_captureMouse )
 	{
-		CGDisplayHideCursor( kCGDirectMainDisplay );
 		m_positionSet = false;
-	}
-	else if ( !enable && m_captureMouse )
-	{
-		CGDisplayShowCursor( kCGDirectMainDisplay );
+		if ( enable )
+		{
+			m_capturedMousePos = mouse.position + m_window->GetPosition();
+			CGDisplayHideCursor( kCGDirectMainDisplay );
+		}
+		else
+		{
+			m_SetMousePos( m_capturedMousePos );
+			CGDisplayShowCursor( kCGDirectMainDisplay );
+			float nsCapturedMouseY = NSMaxY( NSScreen.screens[ 0 ].frame ) - m_capturedMousePos.y;
+			CGWarpMouseCursorPosition( CGPointMake( m_capturedMousePos.x, nsCapturedMouseY ) );
+		}
 	}
 #endif
 	
@@ -15565,7 +15682,7 @@ void VertexArray::AppendVertices( const void* vertices, uint32_t count )
 	AE_ASSERT( m_buffer.GetVertexSize() );
 	if ( m_buffer.GetVertexUsage() == Vertex::Usage::Static )
 	{
-		AE_ASSERT_MSG( !m_vertexCount, "Cannot re-set vertices, buffer was created as static!" );
+		AE_ASSERT_MSG( !m_buffer.m_HasUploadedVertices(), "Cannot re-set vertices, buffer was created as static!" );
 	}
 	AE_ASSERT_MSG( m_vertexCount + count <= m_buffer.GetMaxVertexCount(), "Vertex limit exceeded #/#", m_vertexCount + count, m_buffer.GetMaxVertexCount() );
 	
@@ -15593,7 +15710,7 @@ void VertexArray::AppendIndices( const void* indices, uint32_t count, uint32_t _
 	AE_ASSERT( m_buffer.IsIndexed() );
 	if ( m_buffer.GetIndexUsage() == Vertex::Usage::Static )
 	{
-		AE_ASSERT_MSG( !m_indexCount, "Cannot re-set indices, buffer was created as static!" );
+		AE_ASSERT_MSG( !m_buffer.m_HasUploadedIndices(), "Cannot re-set indices, buffer was created as static!" );
 	}
 	AE_ASSERT_MSG( m_indexCount + count <= m_buffer.GetMaxIndexCount(), "Index limit exceeded #/#", m_indexCount + count, m_buffer.GetMaxIndexCount() );
 	
@@ -18718,6 +18835,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 		alGenSources( (ALuint)1, &channel->source );
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSourcef( channel->source, AL_MIN_GAIN, 0.f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
 		alSourcei( channel->source, AL_LOOPING, AL_TRUE );
 	}
@@ -18729,6 +18847,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 		channel->source = sources[ musicChannels + i ];
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSourcef( channel->source, AL_MIN_GAIN, 0.f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
 		alSourcei( channel->source, AL_LOOPING, AL_FALSE );
 	}
@@ -18740,8 +18859,9 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 		channel->source = sources[ musicChannels + sfxChannels + i ];
 		alSourcef( channel->source, AL_PITCH, 1 );
 		alSourcef( channel->source, AL_GAIN, 1.0f );
+		alSourcef( channel->source, AL_MIN_GAIN, 0.f );
 		alSource3f( channel->source, AL_POSITION, 0, 0, 0 );
-		alSourcei( channel->source, AL_LOOPING, AL_FALSE );
+		alSourcei( channel->source, AL_LOOPING, AL_TRUE );
 	}
 
 	ALfloat listenerOri[] = { 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f };
@@ -20201,6 +20321,21 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			sscanf( value, "%f", f );
 			return true;
 		}
+		case Var::Double:
+		{
+			AE_ASSERT( m_size == sizeof(double) );
+			double* f = (double*)varData;
+			sscanf( value, "%lf", f );
+			return true;
+		}
+		case Var::Vec2:
+		{
+			AE_ASSERT( m_size == sizeof(ae::Vec2) );
+			ae::Vec2* v = (ae::Vec2*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Vec2 >( value );
+			return true;
+		}
 		case Var::Vec3:
 		{
 			AE_ASSERT( m_size == sizeof(ae::Vec3) );
@@ -20209,12 +20344,28 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			*v = ae::FromString< ae::Vec3 >( value );
 			return true;
 		}
+		case Var::Vec4:
+		{
+			AE_ASSERT( m_size == sizeof(ae::Vec4) );
+			ae::Vec4* v = (ae::Vec4*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Vec4 >( value );
+			return true;
+		}
 		case Var::Matrix4:
 		{
 			AE_ASSERT( m_size == sizeof(ae::Matrix4) );
 			ae::Matrix4* v = (ae::Matrix4*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
 			*v = ae::FromString< ae::Matrix4 >( value );
+			return true;
+		}
+		case Var::Color:
+		{
+			AE_ASSERT( m_size == sizeof(ae::Color) );
+			ae::Color* v = (ae::Color*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Color >( value );
 			return true;
 		}
 		case Var::Enum:
@@ -20557,22 +20708,64 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 			return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
 		case Var::Float:
 			return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
+		case Var::Double:
+			return ae::Str32::Format( "#", *reinterpret_cast< const double* >( varData ) ).c_str();
+		case Var::Vec2:
+			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec2* >( varData ) ).c_str();
 		case Var::Vec3:
 			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec3* >( varData ) ).c_str();
+		case Var::Vec4:
+			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
 		case Var::Matrix4:
 			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
+		case Var::Color:
+			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
 		case Var::Enum:
 		{
+			// @NOTE: Enums with very large or small values (outside the range of int32) are not currently supported
 			const class Enum* enumType = GetEnum();
 			AE_ASSERT_MSG( enumType, "Enum '#' is not registered", GetTypeName() );
 			int32_t value = 0;
-			switch ( enumType->TypeSize() )
+			if ( enumType->TypeIsSigned() )
 			{
-				case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
-				case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
-				case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
-				case 8: value = *reinterpret_cast< const int64_t* >( varData ); break;
-				default: AE_FAIL();
+				switch ( enumType->TypeSize() )
+				{
+					case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
+					case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
+					case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
+					case 8:
+					{
+						auto v = *reinterpret_cast< const int64_t* >( varData );
+						AE_DEBUG_ASSERT( v <= (int64_t)INT32_MAX );
+						AE_DEBUG_ASSERT( v >= (int64_t)INT32_MIN );
+						value = v;
+						break;
+					}
+					default: AE_FAIL();
+				}
+			}
+			else
+			{
+				switch ( enumType->TypeSize() )
+				{
+					case 1: value = *reinterpret_cast< const uint8_t* >( varData ); break;
+					case 2: value = *reinterpret_cast< const uint16_t* >( varData ); break;
+					case 4:
+					{
+						auto v = *reinterpret_cast< const uint32_t* >( varData );
+						AE_DEBUG_ASSERT( v <= (uint32_t)INT32_MAX );
+						value = v;
+						break;
+					}
+					case 8:
+					{
+						auto v = *reinterpret_cast< const uint64_t* >( varData );
+						AE_DEBUG_ASSERT( v <= (uint64_t)INT32_MAX );
+						value = v;
+						break;
+					}
+					default: AE_FAIL();
+				}
 			}
 			return enumType->GetNameByValue( value );
 		}
