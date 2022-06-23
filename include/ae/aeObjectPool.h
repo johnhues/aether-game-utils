@@ -116,8 +116,8 @@ private:
 	uint32_t m_objectSize; // Size of each object.
 	uint32_t m_objectAlignment; // Alignment of each object.
 	uint32_t m_length; // Number of actively allocated objects.
-	//Page m_firstPage; // @TODO: Having a static first page would prevent an additional indirection for every operation on all non-paged pools.
 	ae::List< Page > m_pages;
+	Page m_firstPage;
 };
 
 template < typename T >

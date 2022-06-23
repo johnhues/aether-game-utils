@@ -549,6 +549,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	REQUIRE( pool.PageSize() == kNumElements );
 	REQUIRE( pool.Size() == 0 );
 	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
 
 	REQUIRE( ae::LifetimeTester::ctorCount == 0 );
 	REQUIRE( ae::LifetimeTester::copyCount == 0 );
@@ -706,8 +707,10 @@ TEST_CASE( "aeOpaquePool Pages can be checked for objects", "[aeOpaquePool]" )
 
 	const uint32_t kNumElements = 10;
 	ae::OpaquePool pool( TAG_POOL, sizeof(int32_t), alignof(int32_t), kNumElements, false );
-	REQUIRE( pool.Size() == kNumElements );
+	REQUIRE( pool.PageSize() == kNumElements );
+	REQUIRE( pool.Size() == 0 );
 	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
 
 	for ( uint32_t i = 0; i < kNumElements; i++ )
 	{
@@ -742,7 +745,7 @@ TEST_CASE( "aeOpaquePool can allocate objects after clear", "[aeOpaquePool]" )
 //------------------------------------------------------------------------------
 // ae::OpaquePool tests
 //------------------------------------------------------------------------------
-TEST_CASE( "aePagedOpaquePool Paged pool objects can be allocated and deallocated", "[aePagedOpaquePool]" )
+TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "[aeOpaquePool]" )
 {
 	ae::LifetimeTester::ClearStats();
 
@@ -750,8 +753,10 @@ TEST_CASE( "aePagedOpaquePool Paged pool objects can be allocated and deallocate
 	const uint32_t kNumElements = 10;
 	ae::LifetimeTester* objects[ kNumElements ];
 	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kPageSize, true );
-	REQUIRE( !pool.Length() );
+	REQUIRE( pool.PageSize() == kPageSize );
+	REQUIRE( pool.Size() == 0 );
 	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
 
 	REQUIRE( ae::LifetimeTester::ctorCount == 0 );
 	REQUIRE( ae::LifetimeTester::copyCount == 0 );

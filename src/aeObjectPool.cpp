@@ -4,17 +4,8 @@ namespace ae {
 
 #define _AE_POOL_ELEMENT( _arr, _idx ) ( (uint8_t*)_arr + _idx * m_objectSize )
 
-#define _AE_POOL_GET_INDEX( _obj, _idx )\
-	([&]( void* objOut, uint32_t* idxOut ) -> bool\
-	{\
-		if ( obj < page->objects ) { return false; }\
-		uint32_t index = (uint32_t)( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;\
-		if ( index < m_pageSize ) { return false; }\
-		*idxOut = index;\
-		return true;\
-	}( _obj, _idx ))
-
-OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged )
+OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged ) :
+	m_firstPage( tag, poolSize )
 {
 	AE_ASSERT( tag != ae::Tag() );
 	AE_ASSERT( poolSize > 0 );
@@ -34,11 +25,23 @@ OpaquePool::~OpaquePool()
 void* OpaquePool::Allocate()
 {
 	Page* page = m_pages.FindFn( []( const Page* page ) { return page->freeList.HasFree(); } );
-	if ( !page && ( !m_pages.Length() || m_paged ) )
+	if ( !page )
 	{
-		page = ae::New< Page >( m_tag, m_tag, m_pageSize );
-		page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
-		m_pages.Append( page->node );
+		if ( !m_firstPage.node.GetList() )
+		{
+#if _AE_DEBUG_
+			AE_ASSERT( m_firstPage.freeList.Length() == 0 );
+#endif
+			page = &m_firstPage;
+			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			m_pages.Append( page->node );
+		}
+		else if ( m_paged )
+		{
+			page = ae::New< Page >( m_tag, m_tag, m_pageSize );
+			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			m_pages.Append( page->node );
+		}
 	}
 	if ( page )
 	{
@@ -60,12 +63,13 @@ void OpaquePool::Free( void* obj )
 	AE_ASSERT( (intptr_t)obj % m_objectAlignment == 0 );
 #endif
 
-	uint32_t index;
+	int32_t index = -1;
 	Page* page = m_pages.GetFirst();
 	while ( page )
 	{
-		
-		if ( _AE_POOL_GET_INDEX( obj, &index ) )
+		index = ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;
+		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		if ( found )
 		{
 			break;
 		}
@@ -85,7 +89,15 @@ void OpaquePool::Free( void* obj )
 		if ( page->freeList.Length() == 0 )
 		{
 			ae::Free( page->objects );
-			ae::Delete( page );
+			if ( page == &m_firstPage )
+			{
+				m_firstPage.node.Remove();
+				m_firstPage.freeList.FreeAll();
+			}
+			else
+			{
+				ae::Delete( page );
+			}
 		}
 		return;
 	}
@@ -101,7 +113,15 @@ void OpaquePool::FreeAll()
 	{
 		Page* prev = page->node.GetPrev();
 		ae::Free( page->objects );
-		ae::Delete( page );
+		if ( page == &m_firstPage )
+		{
+			m_firstPage.node.Remove();
+			m_firstPage.freeList.FreeAll();
+		}
+		else
+		{
+			ae::Delete( page );
+		}
 		page = prev;
 	}
 	m_length = 0;
@@ -131,8 +151,9 @@ const void* OpaquePool::GetNext( const void* obj ) const
 	{
 #if _AE_DEBUG_
 		AE_ASSERT( m_length > 0 );
+		AE_ASSERT( page->freeList.Length() );
 #endif
-		int32_t index = ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize; // @TODO: Use _AE_POOL_GET_INDEX or delete it
+		int32_t index = ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;
 		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
 		if ( found )
 		{
@@ -149,10 +170,12 @@ const void* OpaquePool::GetNext( const void* obj ) const
 		page = page->node.GetNext();
 		if ( found && page )
 		{
+#if _AE_DEBUG_
+			AE_ASSERT( page->freeList.Length() > 0 );
+#endif
 			// Given object is last element of previous page so return the first element on next page
 			int32_t next = page->freeList.GetFirst();
 #if _AE_DEBUG_
-			AE_ASSERT( page->freeList.Length() > 0 );
 			AE_ASSERT( 0 <= next && next < (int32_t)m_pageSize );
 #endif
 			return _AE_POOL_ELEMENT( page->objects, next );
