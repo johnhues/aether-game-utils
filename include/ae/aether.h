@@ -402,7 +402,7 @@ private:
 template < typename T >
 struct AE_ALIGN( 16 ) VecT
 {
-	VecT() {}
+	VecT() = default;
 	VecT( bool ) = delete;
 
 	bool operator==( const T& v ) const;
@@ -444,7 +444,7 @@ struct AE_ALIGN( 16 ) VecT
 //------------------------------------------------------------------------------
 struct Vec2 : public VecT< Vec2 >
 {
-	Vec2() {} // Empty default constructor for performance of vertex arrays etc
+	Vec2() = default; // Trivial default constructor for performance of vertex arrays etc
 	Vec2( const Vec2& ) = default;
 	explicit Vec2( float v );
 	Vec2( float x, float y );
@@ -473,7 +473,7 @@ struct Vec2 : public VecT< Vec2 >
 //------------------------------------------------------------------------------
 struct Vec3 : public VecT< Vec3 >
 {
-	Vec3() {} // Empty default constructor for performance of vertex arrays etc
+	Vec3() = default; // Trivial constructor for performance of vertex arrays etc
 	explicit Vec3( float v );
 	Vec3( float x, float y, float z );
 	explicit Vec3( const float* v3 );
@@ -521,7 +521,7 @@ struct Vec3 : public VecT< Vec3 >
 //------------------------------------------------------------------------------
 struct Vec4 : public VecT< Vec4 >
 {
-	Vec4() {} // Empty default constructor for performance of vertex arrays etc
+	Vec4() = default; // Trivial Empty default constructor for performance of vertex arrays etc
 	Vec4( const Vec4& ) = default;
 	explicit Vec4( float f );
 	explicit Vec4( float* v );
@@ -662,7 +662,7 @@ inline std::ostream& operator << ( std::ostream& os, const Quaternion& quat );
 template < typename T >
 struct IntT
 {
-	IntT() {}
+	IntT() = default;
 	IntT( bool ) = delete;
 	bool operator==( const T& v ) const;
 	bool operator!=( const T& v ) const;
@@ -4349,11 +4349,14 @@ T* NewArray( ae::Tag tag, uint32_t count )
 	header->typeSize = sizeof( T );
 
 	T* result = (T*)( base + _kHeaderSize );
-	for ( uint32_t i = 0; i < count; i++ )
+	if ( !std::is_trivially_constructible< T >::value )
 	{
-		new( &result[ i ] ) T();
+		for ( uint32_t i = 0; i < count; i++ )
+		{
+			new( &result[ i ] ) T();
+		}
 	}
-
+	
 	return result;
 }
 
@@ -4391,13 +4394,16 @@ void Delete( T* obj )
 
 	_Header* header = (_Header*)( base );
 	AE_ASSERT( header->check == 0xABCD );
-
-	uint32_t count = header->count;
 	AE_ASSERT_MSG( sizeof( T ) <= header->typeSize, "Released type T '#' does not match allocated type of size #", ae::GetTypeName< T >(), header->typeSize );
-	for ( uint32_t i = 0; i < count; i++ )
+
+	if ( !std::is_trivially_destructible< T >::value )
 	{
-		T* o = (T*)( (uint8_t*)obj + header->typeSize * i );
-		o->~T();
+		uint32_t count = header->count;
+		for ( uint32_t i = 0; i < count; i++ )
+		{
+			T* o = (T*)( (uint8_t*)obj + header->typeSize * i );
+			o->~T();
+		}
 	}
 
 #if _AE_DEBUG_
