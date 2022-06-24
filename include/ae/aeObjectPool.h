@@ -37,58 +37,53 @@ namespace ae {
 class OpaquePool
 {
 public:
+	//! Constructs an ae::OpaquePool with dynamic internal storage. \p tag will
+	//! be used for all internal allocations. All objects returned by the pool
+	//! will have \p objectSize and \p objectAlignment. If the pool is \p paged
+	//! it will allocate pages of size \p poolSize as necessary. If the pool is
+	//! not \p paged, then \p objects can be allocated at a time.
 	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged );
 	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
 	//! the ae::OpaquePool is destroyed.
 	~OpaquePool();
 
-	//! Returns a pointer to a freshly constructed object T or null if there
-	//! are no free objects. Call ae::OpaquePool::Delete() to destroy the object.
-	//! ae::OpaquePool::Delete() must be called on every object returned
-	//! by ae::OpaquePool::New() although it is safe to mix calls to ae::OpaquePool::Allocate/New()
-	//! and ae::OpaquePool::Free/Delete() as long as constructors and destructors
-	//! are called manually with ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
+	//! Returns a pointer to a freshly constructed object T. If the pool is not
+	//! paged and there are no free objects null will be returned. Call
+	//! ae::OpaquePool::Delete() to destroy the object. ae::OpaquePool::Delete()
+	//! must be called on every object returned by ae::OpaquePool::New(), although
+	//! it is safe to mix calls to ae::OpaquePool::Allocate/New() and
+	//! ae::OpaquePool::Free/Delete() as long as constructors and destructors are
+	//! called manually with ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
 	template < typename T > T* New();
 	//! Destructs and releases the object \p obj for future use. It is safe for \p obj to be null.
 	template < typename T > void Delete( T* obj );
 	//! Destructs and releases all objects for future use.
 	template < typename T > void DeleteAll();
 
-	// //! Returns the first allocated object in the pool or null if the pool is empty.
-	// template < typename T = void > const T* GetFirst() const;
-	// //! Returns the next allocated object after \p obj or null if there are no more objects.
-	// //! Null will be returned if \p obj is null.
-	// template < typename T = void > const T* GetNext( const T* obj ) const;
-	// //! Returns the first allocated object in the pool or null if the pool is empty.
-	// template < typename T = void > T* GetFirst();
-	// //! Returns the next allocated object after \p obj or null if there are no more objects.
-	// //! Null will be returned if \p obj is null.
-	// template < typename T = void > T* GetNext( T* obj );
-
-	//! Returns a pointer to an object or null if there are no free objects. The
-	//! user is responsible for any constructor calls. ae::OpaquePool::Free() must
-	//! be called on every object returned by ae::OpaquePool::Allocate(). It is safe
-	//! to mix calls to ae::OpaquePool::Allocate/New() and ae::OpaquePool::Free/Delete()
-	//! as long as constructors and destructors are called manually with
-	//! ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
+	//! Returns a pointer to an object. If the pool is not paged and there are no free
+	//! objects null will be returned. The user is responsible for any constructor
+	//! calls. ae::OpaquePool::Free() must be called on every object returned by
+	//! ae::OpaquePool::Allocate(). It is safe to mix calls to ae::OpaquePool::Allocate/New()
+	//! and ae::OpaquePool::Free/Delete() as long as constructors and destructors are
+	//! called manually with ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
 	void* Allocate();
 	//! Releases the object \p obj for future use. It is safe for \p obj to be null.
 	void Free( void* obj );
-
 	//! Releases all objects for future use by ae::OpaquePool::Allocate().
 	//! THIS FUNCTION DOES NOT CALL THE OBJECTS DESTRUCTORS, so please use with caution!
 	void FreeAll();
-	//! Returns the first allocated object in the pool or null if the pool is empty.
-	const void* GetFirst() const;
-	//! Returns the next allocated object after \p obj or null if there are no more objects.
-	//! Null will be returned if \p obj is null.
-	const void* GetNext( const void* obj ) const;
-	//! Returns the first allocated object in the pool or null if the pool is empty.
-	void* GetFirst();
-	//! Returns the next allocated object after \p obj or null if there are no more objects.
-	//! Null will be returned if \p obj is null.
-	void* GetNext( void* obj );
 
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	template < typename T = void > const T* GetFirst() const;
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	template < typename T = void > const T* GetNext( const T* obj ) const;
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	template < typename T = void > T* GetFirst();
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	template < typename T = void > T* GetNext( const T* obj );
+	
 	//! Returns true if the pool has any unallocated objects available.
 	bool HasFree() const;
 	//! Returns the number of allocated objects.
@@ -100,7 +95,8 @@ public:
 	uint32_t PageSize() const { return m_pageSize; }
 
 private:
-	// @TODO: Disable copy constructor etc or fix list on copy.
+	OpaquePool( OpaquePool& other ) = delete;
+	void operator=( OpaquePool& other ) = delete;
 	struct Page
 	{
 		// Pages are deleted by the pool when empty, so it's safe to
@@ -110,6 +106,8 @@ private:
 		ae::FreeList<> freeList; // Free object information.
 		void* objects; // Pointer to array of objects in this page.
 	};
+	const void* m_GetFirst() const;
+	const void* m_GetNext( const void* obj ) const;
 	ae::Tag m_tag;
 	uint32_t m_pageSize; // Number of objects per page.
 	bool m_paged; // If true, pool can be infinitely big.
@@ -123,10 +121,8 @@ private:
 template < typename T >
 T* OpaquePool::New()
 {
-#ifdef _AE_DEBUG_
-	AE_ASSERT( sizeof( T ) == m_objectSize );
-	AE_ASSERT( alignof( T ) == m_objectAlignment );
-#endif
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
 	void* obj = Allocate();
 	if( obj )
 	{
@@ -138,10 +134,8 @@ T* OpaquePool::New()
 template < typename T >
 void OpaquePool::Delete( T* obj )
 {
-#ifdef _AE_DEBUG_
-	AE_ASSERT( sizeof( T ) == m_objectSize );
-	AE_ASSERT( alignof( T ) == m_objectAlignment );
-#endif
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
 	if( obj )
 	{
 		obj->~T();
@@ -152,15 +146,45 @@ void OpaquePool::Delete( T* obj )
 template < typename T >
 void OpaquePool::DeleteAll()
 {
-#ifdef _AE_DEBUG_
-	AE_ASSERT( sizeof( T ) == m_objectSize );
-	AE_ASSERT( alignof( T ) == m_objectAlignment );
-#endif
-	for ( void* p = GetFirst(); p; p = GetNext( p ) )
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	for ( T* p = GetFirst< T >(); p; p = GetNext( p ) )
 	{
-		( (T*)p )->~T();
+		p->~T();
 	}
 	FreeAll();
+}
+
+template < typename T >
+const T* OpaquePool::GetFirst() const
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (const T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
+}
+
+template < typename T >
+const T* OpaquePool::GetNext( const T* obj ) const
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (const T*)( const_cast<const OpaquePool*>( this )->m_GetNext( obj ) );
+}
+
+template < typename T >
+T* OpaquePool::GetFirst()
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
+}
+
+template < typename T >
+T* OpaquePool::GetNext( const T* obj )
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (T*)( const_cast< const OpaquePool* >( this )->m_GetNext( obj ) );
 }
 
 } // ae
