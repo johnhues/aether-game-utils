@@ -34,7 +34,6 @@ set(AE_HEADER_FILES
 	../include/ae/aeInitializer.h
 	../include/ae/aeInventoryGrid.h
 	../include/ae/aeNet.h
-	../include/ae/aeObjectPool.h
 	../include/ae/aeRef.h
 	../include/ae/aeRender.h
 	../include/ae/aeRingBuffer.h
@@ -58,7 +57,6 @@ target_sources(${AE_LIBRARY_NAME}
 		aeImage.cpp
 		aeNetClient.cpp
 		aeNetServer.cpp
-		aeObjectPool.cpp
 		aeSpline.cpp
 		aeTerrain.cpp
 		aeTerrainSDF.cpp

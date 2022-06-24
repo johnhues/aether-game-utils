@@ -31,7 +31,6 @@
 #include "aeCompactingAllocator.h"
 #include "aeImage.h"
 #include "aether.h"
-#include "aeObjectPool.h"
 #include "aeRender.h"
 #include <map>
 

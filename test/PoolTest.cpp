@@ -6,7 +6,6 @@
 //------------------------------------------------------------------------------
 #include "catch2/catch.hpp"
 #include "ae/aether.h"
-#include "ae/aeObjectPool.h" // @TODO: Move to aether.h
 #include "ae/aeTesting.h"
 
 const ae::Tag TAG_POOL = "pool";

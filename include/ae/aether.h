@@ -1579,6 +1579,93 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::OpaquePool class
+//------------------------------------------------------------------------------
+class OpaquePool
+{
+public:
+	//! Constructs an ae::OpaquePool with dynamic internal storage. \p tag will
+	//! be used for all internal allocations. All objects returned by the pool
+	//! will have \p objectSize and \p objectAlignment. If the pool is \p paged
+	//! it will allocate pages of size \p poolSize as necessary. If the pool is
+	//! not \p paged, then \p objects can be allocated at a time.
+	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged );
+	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
+	//! the ae::OpaquePool is destroyed.
+	~OpaquePool();
+
+	//! Returns a pointer to a freshly constructed object T. If the pool is not
+	//! paged and there are no free objects null will be returned. Call
+	//! ae::OpaquePool::Delete() to destroy the object. ae::OpaquePool::Delete()
+	//! must be called on every object returned by ae::OpaquePool::New(), although
+	//! it is safe to mix calls to ae::OpaquePool::Allocate/New() and
+	//! ae::OpaquePool::Free/Delete() as long as constructors and destructors are
+	//! called manually with ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
+	template < typename T > T* New();
+	//! Destructs and releases the object \p obj for future use. It is safe for \p obj to be null.
+	template < typename T > void Delete( T* obj );
+	//! Destructs and releases all objects for future use.
+	template < typename T > void DeleteAll();
+
+	//! Returns a pointer to an object. If the pool is not paged and there are no free
+	//! objects null will be returned. The user is responsible for any constructor
+	//! calls. ae::OpaquePool::Free() must be called on every object returned by
+	//! ae::OpaquePool::Allocate(). It is safe to mix calls to ae::OpaquePool::Allocate/New()
+	//! and ae::OpaquePool::Free/Delete() as long as constructors and destructors are
+	//! called manually with ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
+	void* Allocate();
+	//! Releases the object \p obj for future use. It is safe for \p obj to be null.
+	void Free( void* obj );
+	//! Releases all objects for future use by ae::OpaquePool::Allocate().
+	//! THIS FUNCTION DOES NOT CALL THE OBJECTS DESTRUCTORS, so please use with caution!
+	void FreeAll();
+
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	template < typename T = void > const T* GetFirst() const;
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	template < typename T = void > const T* GetNext( const T* obj ) const;
+	//! Returns the first allocated object in the pool or null if the pool is empty.
+	template < typename T = void > T* GetFirst();
+	//! Returns the next allocated object after \p obj or null if there are no more objects.
+	//! Null will be returned if \p obj is null.
+	template < typename T = void > T* GetNext( const T* obj );
+	
+	//! Returns true if the pool has any unallocated objects available.
+	bool HasFree() const;
+	//! Returns the number of allocated objects.
+	uint32_t Length() const { return m_length; }
+	//! Returns the total number of objects in the pool. Note that this number
+	//! can grow and shrink for paged pools.
+	uint32_t Size() const { return m_pageSize * m_pages.Length(); }
+	//! Returns the maximum number of objects per page.
+	uint32_t PageSize() const { return m_pageSize; }
+
+private:
+	OpaquePool( OpaquePool& other ) = delete;
+	void operator=( OpaquePool& other ) = delete;
+	struct Page
+	{
+		// Pages are deleted by the pool when empty, so it's safe to
+		// assume pages always contain at least one object.
+		Page( const ae::Tag& tag, uint32_t size ) : freeList( tag, size ) {}
+		ae::ListNode< Page > node = this; // List node.
+		ae::FreeList<> freeList; // Free object information.
+		void* objects; // Pointer to array of objects in this page.
+	};
+	const void* m_GetFirst() const;
+	const void* m_GetNext( const void* obj ) const;
+	ae::Tag m_tag;
+	uint32_t m_pageSize; // Number of objects per page.
+	bool m_paged; // If true, pool can be infinitely big.
+	uint32_t m_objectSize; // Size of each object.
+	uint32_t m_objectAlignment; // Alignment of each object.
+	uint32_t m_length; // Number of actively allocated objects.
+	ae::List< Page > m_pages;
+	Page m_firstPage;
+};
+
+//------------------------------------------------------------------------------
 // ae::Rect class
 // @TODO: Move this up near Vec3 etc
 //------------------------------------------------------------------------------
@@ -7279,6 +7366,78 @@ uint32_t ObjectPool< T, N, Paged >::Length() const
 }
 
 //------------------------------------------------------------------------------
+// ae::OpaquePool member functions
+//------------------------------------------------------------------------------
+template < typename T >
+T* OpaquePool::New()
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	void* obj = Allocate();
+	if( obj )
+	{
+		return new( obj ) T();
+	}
+	return nullptr;
+}
+
+template < typename T >
+void OpaquePool::Delete( T* obj )
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	if ( obj )
+	{
+		obj->~T();
+		Free( obj );
+	}
+}
+
+template < typename T >
+void OpaquePool::DeleteAll()
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	for ( T* p = GetFirst< T >(); p; p = GetNext( p ) )
+	{
+		p->~T();
+	}
+	FreeAll();
+}
+
+template < typename T >
+const T* OpaquePool::GetFirst() const
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (const T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
+}
+
+template < typename T >
+const T* OpaquePool::GetNext( const T* obj ) const
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (const T*)( const_cast< const OpaquePool* >( this )->m_GetNext( obj ) );
+}
+
+template < typename T >
+T* OpaquePool::GetFirst()
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
+}
+
+template < typename T >
+T* OpaquePool::GetNext( const T* obj )
+{
+	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	return (T*)( const_cast< const OpaquePool* >( this )->m_GetNext( obj ) );
+}
+
+//------------------------------------------------------------------------------
 // ae::BVH member functions
 //------------------------------------------------------------------------------
 template < typename Leaf >
@@ -10599,6 +10758,180 @@ std::ostream& operator<<( std::ostream& os, const Dict& dict )
 		os << "<'" << dict.GetKey( i ) << "','" << dict.GetValue( i ) << "'>";
 	}
 	return os << "]";
+}
+
+//------------------------------------------------------------------------------
+// ae::OpaquePool member functions
+//------------------------------------------------------------------------------
+#define _AE_POOL_ELEMENT( _arr, _idx ) ( (uint8_t*)_arr + (intptr_t)_idx * m_objectSize )
+
+OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged ) :
+	m_firstPage( tag, poolSize )
+{
+	AE_ASSERT( tag != ae::Tag() );
+	AE_ASSERT( poolSize > 0 );
+	m_tag = tag;
+	m_pageSize = poolSize;
+	m_paged = paged;
+	m_objectSize = objectSize;
+	m_objectAlignment = objectAlignment;
+	m_length = 0;
+}
+
+OpaquePool::~OpaquePool()
+{
+	AE_ASSERT( Length() == 0 );
+}
+
+void* OpaquePool::Allocate()
+{
+	Page* page = m_pages.FindFn( []( const Page* page ) { return page->freeList.HasFree(); } );
+	if ( !page )
+	{
+		if ( !m_firstPage.node.GetList() )
+		{
+			AE_DEBUG_ASSERT( m_firstPage.freeList.Length() == 0 );
+			page = &m_firstPage;
+			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			m_pages.Append( page->node );
+		}
+		else if ( m_paged )
+		{
+			page = ae::New< Page >( m_tag, m_tag, m_pageSize );
+			page->objects = ae::Allocate( m_tag, m_pageSize * m_objectSize, m_objectAlignment );
+			m_pages.Append( page->node );
+		}
+	}
+	if ( page )
+	{
+		int32_t index = page->freeList.Allocate();
+		AE_ASSERT( index >= 0 );
+		m_length++;
+		return _AE_POOL_ELEMENT( page->objects, index );
+	}
+	return nullptr;
+}
+
+void OpaquePool::Free( void* obj )
+{
+	if ( !obj )
+	{
+		return;
+	}
+	AE_DEBUG_ASSERT( (intptr_t)obj % m_objectAlignment == 0 );
+
+	int32_t index = -1;
+	Page* page = m_pages.GetFirst();
+	while ( page )
+	{
+		index = ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;
+		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		if ( found )
+		{
+			break;
+		}
+		page = page->node.GetNext();
+	}
+	if ( page )
+	{
+#if _AE_DEBUG_
+		AE_ASSERT( m_length > 0 );
+		AE_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
+		AE_ASSERT( page->freeList.IsAllocated( index ) );
+		memset( obj, 0xDD, m_objectSize );
+#endif
+		page->freeList.Free( index );
+		m_length--;
+
+		if ( page->freeList.Length() == 0 )
+		{
+			ae::Free( page->objects );
+			if ( page == &m_firstPage )
+			{
+				m_firstPage.node.Remove();
+				m_firstPage.freeList.FreeAll();
+			}
+			else
+			{
+				ae::Delete( page );
+			}
+		}
+		return;
+	}
+#if _AE_DEBUG_
+	AE_FAIL_MSG( "Object '#' not found in pool '#:#:#:#'", obj, m_objectSize, m_objectAlignment, m_pageSize, m_paged );
+#endif
+}
+
+void OpaquePool::FreeAll()
+{
+	Page* page = m_pages.GetLast();
+	while ( page )
+	{
+		Page* prev = page->node.GetPrev();
+		ae::Free( page->objects );
+		if ( page == &m_firstPage )
+		{
+			m_firstPage.node.Remove();
+			m_firstPage.freeList.FreeAll();
+		}
+		else
+		{
+			ae::Delete( page );
+		}
+		page = prev;
+	}
+	m_length = 0;
+}
+
+bool OpaquePool::HasFree() const
+{
+	return m_paged || !m_pages.Length() || m_pages.GetFirst()->freeList.HasFree();
+}
+
+const void* OpaquePool::m_GetFirst() const
+{
+	if ( const Page* page = m_pages.GetFirst() )
+	{
+		AE_DEBUG_ASSERT( m_length > 0 );
+		AE_DEBUG_ASSERT( page->freeList.Length() );
+		return _AE_POOL_ELEMENT( page->objects, page->freeList.GetFirst() );
+	}
+	AE_DEBUG_ASSERT( m_length == 0 );
+	return nullptr;
+}
+
+const void* OpaquePool::m_GetNext( const void* obj ) const
+{
+	if ( !obj ) { return nullptr; }
+	const Page* page = m_pages.GetFirst();
+	while ( page )
+	{
+		AE_DEBUG_ASSERT( m_length > 0 );
+		AE_DEBUG_ASSERT( page->freeList.Length() );
+		int32_t index = ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;
+		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
+		if ( found )
+		{
+			AE_DEBUG_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
+			AE_DEBUG_ASSERT( page->freeList.IsAllocated( index ) );
+			int32_t next = page->freeList.GetNext( index );
+			if ( next >= 0 )
+			{
+				return _AE_POOL_ELEMENT( page->objects, next );
+			}
+		}
+		page = page->node.GetNext();
+		if ( found && page )
+		{
+			// Given object is last element of previous page so return the first element on next page
+			AE_DEBUG_ASSERT( page->freeList.Length() > 0 );
+			int32_t next = page->freeList.GetFirst();
+			AE_DEBUG_ASSERT( 0 <= next && next < (int32_t)m_pageSize );
+			return _AE_POOL_ELEMENT( page->objects, next );
+		}
+	}
+	return nullptr;
 }
 
 //------------------------------------------------------------------------------
