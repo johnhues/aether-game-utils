@@ -58,6 +58,7 @@ target_sources(${AE_LIBRARY_NAME}
 		aeImage.cpp
 		aeNetClient.cpp
 		aeNetServer.cpp
+		aeObjectPool.cpp
 		aeSpline.cpp
 		aeTerrain.cpp
 		aeTerrainSDF.cpp

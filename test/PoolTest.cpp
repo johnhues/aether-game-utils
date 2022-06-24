@@ -535,3 +535,351 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
 	REQUIRE( ae::LifetimeTester::currentCount == 0 );
 }
+
+//------------------------------------------------------------------------------
+// ae::OpaquePool tests
+//------------------------------------------------------------------------------
+TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePool]" )
+{
+	ae::LifetimeTester::ClearStats();
+
+	const uint32_t kNumElements = 10;
+	ae::LifetimeTester* objects[ kNumElements ];
+	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kNumElements, false );
+	REQUIRE( pool.PageSize() == kNumElements );
+	REQUIRE( pool.Size() == 0 );
+	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
+
+	REQUIRE( ae::LifetimeTester::ctorCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 0 );
+
+	for ( uint32_t i = 0; i < kNumElements; i++ )
+	{
+		objects[ i ] = pool.New< ae::LifetimeTester >();
+		REQUIRE( objects[ i ] );
+		objects[ i ]->value = 'a' + i;
+	}
+	REQUIRE( pool.Length() == kNumElements );
+	REQUIRE( !pool.HasFree() );
+
+	REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+	REQUIRE( ae::LifetimeTester::copyCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+
+	SECTION( "excess New()'s return null" )
+	{
+		REQUIRE( !pool.New< ae::LifetimeTester >() );
+
+		// No changes
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+	}
+
+	SECTION( "can free objects" )
+	{
+		REQUIRE( pool.Length() == pool.Size() );
+		REQUIRE( pool.Length() == kNumElements );
+		for ( uint32_t i = 0; i < kNumElements; i++ )
+		{
+			auto* p = objects[ i ];
+			uint32_t remaining = kNumElements - ( i + 1 );
+			REQUIRE( p->check == ae::LifetimeTester::kConstructed );
+			pool.Delete( p );
+			REQUIRE( pool.Length() == remaining );
+
+			REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+			REQUIRE( ae::LifetimeTester::copyCount == 0 );
+			REQUIRE( ae::LifetimeTester::moveCount == 0 );
+			REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+			REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+			REQUIRE( ae::LifetimeTester::dtorCount == i + 1 );
+			REQUIRE( ae::LifetimeTester::currentCount == remaining );
+		}
+		REQUIRE( pool.Length() == 0 );
+		auto* p = pool.New< ae::LifetimeTester >();
+		REQUIRE( p );
+		REQUIRE( pool.Length() == 1 );
+		pool.Delete( p );
+		REQUIRE( pool.Length() == 0 );
+	}
+
+	SECTION( "null pointers are handled gracefully" )
+	{
+		ae::LifetimeTester* nullObj = nullptr;
+		pool.Delete( nullObj );
+		REQUIRE( pool.Length() == kNumElements );
+		REQUIRE( !pool.HasFree() );
+		REQUIRE( !pool.GetNext( nullObj ) );
+	}
+
+	SECTION( "can iterate over allocated objects" )
+	{
+		uint32_t i = 0;
+		for ( auto* p = pool.GetFirst(); p; p = pool.GetNext( p ) )
+		{
+			ae::LifetimeTester* obj = (ae::LifetimeTester*)p;
+			REQUIRE( obj->check == ae::LifetimeTester::kConstructed );
+			REQUIRE( obj->value == 'a' + i );
+			i++;
+		}
+		REQUIRE( i == kNumElements );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+	}
+
+	SECTION( "can iterate over allocated objects (const)" )
+	{
+		const auto* constPool = &pool;
+		uint32_t i = 0;
+		for ( auto* p = constPool->GetFirst(); p; p = constPool->GetNext( p ) )
+		{
+			ae::LifetimeTester* obj = (ae::LifetimeTester*)p;
+			REQUIRE( obj->check == ae::LifetimeTester::kConstructed );
+			REQUIRE( obj->value == 'a' + i );
+			i++;
+		}
+		REQUIRE( i == kNumElements );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+	}
+
+	SECTION( "can iterate over allocated objects after freeing some" )
+	{
+		pool.Delete( objects[ 0 ] );
+		pool.Delete( objects[ kNumElements / 2 ] );
+		pool.Delete( objects[ kNumElements - 1 ] );
+
+		uint32_t count = 0;
+		for ( const auto* obj = pool.GetFirst(); obj; obj = pool.GetNext( obj ) )
+		{
+			count++;
+		}
+		REQUIRE( count == kNumElements - 3 );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 3 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements - 3 );
+	}
+
+	pool.DeleteAll< ae::LifetimeTester >();
+	REQUIRE( ae::LifetimeTester::ctorCount == ae::LifetimeTester::dtorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 0 );
+}
+
+TEST_CASE( "aeOpaquePool Pages can be checked for objects", "[aeOpaquePool]" )
+{
+	ae::LifetimeTester::ClearStats();
+
+	const uint32_t kNumElements = 10;
+	ae::OpaquePool pool( TAG_POOL, sizeof(int32_t), alignof(int32_t), kNumElements, false );
+	REQUIRE( pool.PageSize() == kNumElements );
+	REQUIRE( pool.Size() == 0 );
+	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
+
+	for ( uint32_t i = 0; i < kNumElements; i++ )
+	{
+		int32_t* p = pool.New< int32_t >();
+		//REQUIRE( pool.IsInPool( p ) );
+		//REQUIRE( !pool.IsInPool( (int32_t*)( (uint8_t*)p + 1 ) ) );
+	}
+	
+	int32_t something = 0;
+	//REQUIRE( !pool.IsInPool( &something ) );
+
+	pool.DeleteAll< int32_t >();
+}
+
+TEST_CASE( "aeOpaquePool can allocate objects after clear", "[aeOpaquePool]" )
+{
+	const uint32_t kNumElements = 10;
+	ae::OpaquePool pool( TAG_POOL, sizeof(int32_t), alignof(int32_t), kNumElements, false );
+	REQUIRE( pool.PageSize() == kNumElements );
+	REQUIRE( pool.Size() == 0 );
+	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
+
+	pool.DeleteAll< int32_t >();
+	auto* p = pool.New< int32_t >();
+	REQUIRE( p );
+	REQUIRE( pool.Length() == 1 );
+	pool.Delete( p );
+	REQUIRE( pool.Length() == 0 );
+}
+
+//------------------------------------------------------------------------------
+// ae::OpaquePool tests
+//------------------------------------------------------------------------------
+TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "[aeOpaquePool]" )
+{
+	ae::LifetimeTester::ClearStats();
+
+	const uint32_t kPageSize = 3;
+	const uint32_t kNumElements = 10;
+	ae::LifetimeTester* objects[ kNumElements ];
+	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kPageSize, true );
+	REQUIRE( pool.PageSize() == kPageSize );
+	REQUIRE( pool.Size() == 0 );
+	REQUIRE( !pool.GetFirst() );
+	REQUIRE( pool.Length() == 0 );
+
+	REQUIRE( ae::LifetimeTester::ctorCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 0 );
+
+	for ( uint32_t i = 0; i < kNumElements; i++ )
+	{
+		objects[ i ] = pool.New< ae::LifetimeTester >();
+		REQUIRE( objects[ i ] );
+		objects[ i ]->value = 'a' + i;
+	}
+	REQUIRE( pool.Length() == kNumElements );
+
+	REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+	REQUIRE( ae::LifetimeTester::copyCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+
+	SECTION( "can free objects" )
+	{
+		for ( uint32_t i = 0; i < kNumElements; i++ )
+		{
+			auto* p = objects[ i ];
+			uint32_t remaining = kNumElements - ( i + 1 );
+			REQUIRE( p->check == ae::LifetimeTester::kConstructed );
+			pool.Delete( p );
+			REQUIRE( pool.Length() == remaining );
+
+			REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+			REQUIRE( ae::LifetimeTester::copyCount == 0 );
+			REQUIRE( ae::LifetimeTester::moveCount == 0 );
+			REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+			REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+			REQUIRE( ae::LifetimeTester::dtorCount == i + 1 );
+			REQUIRE( ae::LifetimeTester::currentCount == remaining );
+		}
+	}
+
+	SECTION( "null pointers are handled gracefully" )
+	{
+		ae::LifetimeTester* nullObj = nullptr;
+		pool.Delete( nullObj );
+		REQUIRE( pool.Length() == kNumElements );
+		REQUIRE( !pool.GetNext( nullObj ) );
+	}
+
+	SECTION( "can iterate over allocated objects" )
+	{
+		uint32_t i = 0;
+		for ( auto* p = pool.GetFirst(); p; p = pool.GetNext( p ) )
+		{
+			ae::LifetimeTester* obj = (ae::LifetimeTester*)p;
+			REQUIRE( obj->check == ae::LifetimeTester::kConstructed );
+			REQUIRE( obj->value == 'a' + i );
+			i++;
+		}
+		REQUIRE( i == kNumElements );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+	}
+
+	SECTION( "can iterate over allocated objects (const)" )
+	{
+		const auto* constPool = &pool;
+		uint32_t i = 0;
+		for ( auto* p = constPool->GetFirst(); p; p = constPool->GetNext( p ) )
+		{
+			ae::LifetimeTester* obj = (ae::LifetimeTester*)p;
+			REQUIRE( obj->check == ae::LifetimeTester::kConstructed );
+			REQUIRE( obj->value == 'a' + i );
+			i++;
+		}
+		REQUIRE( i == kNumElements );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+	}
+
+	SECTION( "can iterate over allocated objects after freeing some" )
+	{
+		pool.Delete( objects[ 0 ] );
+		pool.Delete( objects[ kNumElements / 2 ] );
+		pool.Delete( objects[ kNumElements - 1 ] );
+
+		uint32_t count = 0;
+		for ( const auto* obj = pool.GetFirst(); obj; obj = pool.GetNext( obj ) )
+		{
+			count++;
+		}
+		REQUIRE( count == kNumElements - 3 );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 3 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements - 3 );
+	}
+
+	pool.DeleteAll< ae::LifetimeTester >();
+	REQUIRE( ae::LifetimeTester::ctorCount == ae::LifetimeTester::dtorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 0 );
+}

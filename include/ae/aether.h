@@ -1438,7 +1438,7 @@ public:
 	const T* GetLast() const;
 
 	template < typename U > T* Find( const U& value );
-	template < typename Fn > T* FindFn( Fn predicateFn );
+	template < typename Fn > T* FindFn( Fn predicateFn ); // @TODO: FindFn's parameter should be a reference to match ae::Array
 
 	uint32_t Length() const;
 
@@ -1542,8 +1542,6 @@ public:
 	//! Returns the number of allocated objects.
 	uint32_t Length() const;
 	//! Returns the total number of objects in the pool.
-	constexpr uint32_t Size() const { return N; }
-	
 	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
 	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return N * m_pages.Length(); }
 
@@ -7065,7 +7063,7 @@ bool FreeList< N >::IsAllocated( int32_t idx ) const
 		return false;
 	}
 #if _AE_DEBUG_
-	AE_ASSERT( idx < m_pool.Length() );
+	AE_ASSERT( (uint32_t)idx < m_pool.Length() );
 #endif
 	return !m_pool[ idx ].next;
 }
@@ -7109,7 +7107,6 @@ ObjectPool< T, N, Paged >::~ObjectPool()
 template < typename T, uint32_t N, bool Paged >
 T* ObjectPool< T, N, Paged >::New()
 {
-	// @TODO: FindFn's parameter should be a reference to match ae::Array
 	Page* page = m_pages.FindFn( []( const Page* page ) { return page->freeList.HasFree(); } );
 	if ( Paged && !page )
 	{
@@ -7193,7 +7190,6 @@ void ObjectPool< T, N, Paged >::DeleteAll()
 	else
 	{
 		deleteAllFn( m_firstPage.Get() );
-		// m_pages.Append( m_firstPage.Get()->node );
 	}
 	m_length = 0;
 }
