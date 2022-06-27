@@ -8146,18 +8146,27 @@ bool ae::Type::IsType() const
 template < typename T >
 const ae::Type* ae::GetType()
 {
-	// @TODO: Conditionally enable this check when T is not a forward declaration
-	//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
-	const char* typeName = ae::GetTypeName< T >();
-	auto it = _GetTypeNameMap().find( typeName );
-	if ( it != _GetTypeNameMap().end() )
+	static const ae::Type* s_type = nullptr;
+	if ( s_type )
 	{
-		return it->second;
+		return s_type;
 	}
 	else
 	{
-		AE_ASSERT_MSG( false, "No meta info for type name: #", typeName );
-		return nullptr;
+		// @TODO: Conditionally enable this check when T is not a forward declaration
+		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
+		const char* typeName = ae::GetTypeName< T >();
+		auto it = _GetTypeNameMap().find( typeName );
+		if ( it != _GetTypeNameMap().end() )
+		{
+			s_type = it->second;
+			return it->second;
+		}
+		else
+		{
+			AE_ASSERT_MSG( false, "No meta info for type name: #", typeName );
+			return nullptr;
+		}
 	}
 }
 
