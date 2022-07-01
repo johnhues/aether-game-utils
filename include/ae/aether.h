@@ -854,6 +854,8 @@ public:
 	AABB( const AABB& ) = default;
 	AABB( Vec3 p0, Vec3 p1 );
 	explicit AABB( const Sphere& sphere );
+	bool operator == ( const AABB& aabb ) const;
+	bool operator != ( const AABB& aabb ) const;
 
 	void Expand( Vec3 p );
 	void Expand( AABB other );
@@ -1322,8 +1324,11 @@ class Dict
 public:
 	Dict( ae::Tag tag );
 	void SetString( const char* key, const char* value );
+	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
 	void SetInt( const char* key, int32_t value );
+	void SetUint( const char* key, uint32_t value );
 	void SetFloat( const char* key, float value );
+	void SetDouble( const char* key, double value );
 	void SetBool( const char* key, bool value );
 	void SetVec2( const char* key, ae::Vec2 value );
 	void SetVec3( const char* key, ae::Vec3 value );
@@ -1334,7 +1339,9 @@ public:
 
 	const char* GetString( const char* key, const char* defaultValue ) const;
 	int32_t GetInt( const char* key, int32_t defaultValue ) const;
+	uint32_t GetUint( const char* key, uint32_t defaultValue ) const;
 	float GetFloat( const char* key, float defaultValue ) const;
+	double GetDouble( const char* key, double defaultValue ) const;
 	bool GetBool( const char* key, bool defaultValue ) const;
 	ae::Vec2 GetVec2( const char* key, ae::Vec2 defaultValue ) const;
 	ae::Vec3 GetVec3( const char* key, ae::Vec3 defaultValue ) const;
@@ -1348,11 +1355,6 @@ public:
 	const char* GetValue( uint32_t idx ) const;
 	uint32_t Length() const { return m_entries.Length(); }
 	
-	// Supported automatic conversions which would otherwise be deleted below
-	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
-	void SetInt( const char* key, uint32_t value ) { SetInt( key, (int32_t)value ); }
-	void SetFloat( const char* key, double value ) { SetFloat( key, (float)value ); }
-	
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
 	ae::Pair< ae::Str128, ae::Str128 >* end() { return m_entries.end(); }
@@ -1364,14 +1366,15 @@ private:
 	// Prevent the above functions from being called accidentally through automatic conversions
 	template < typename T > void SetString( const char*, T ) = delete;
 	template < typename T > void SetInt( const char*, T ) = delete;
+	template < typename T > void SetUint( const char*, T ) = delete;
 	template < typename T > void SetFloat( const char*, T ) = delete;
+	template < typename T > void SetDouble( const char*, T ) = delete;
 	template < typename T > void SetBool( const char*, T ) = delete;
 	template < typename T > void SetVec2( const char*, T ) = delete;
 	template < typename T > void SetVec3( const char*, T ) = delete;
 	template < typename T > void SetVec4( const char*, T ) = delete;
 	template < typename T > void SetInt2( const char*, T ) = delete;
 	template < typename T > void SetMatrix4( const char*, T ) = delete;
-	
 	ae::Map< ae::Str128, ae::Str128 > m_entries; // @TODO: Should support static allocation
 };
 
@@ -1771,8 +1774,6 @@ public:
 	Hash& HashString( const char* str );
 	Hash& HashData( const void* data, uint32_t length );
 	template < typename T > Hash& HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
-	Hash& HashFloat( float f );
-	template < uint32_t N > Hash& HashFloatArray( const float (&f)[ N ] );
 
 	void Set( uint32_t hash );
 	uint32_t Get() const;
@@ -1780,16 +1781,6 @@ public:
 private:
 	uint32_t m_hash = 0x811c9dc5;
 };
-
-template < uint32_t N >
-Hash& Hash::HashFloatArray( const float (&f)[ N ] )
-{
-	for ( uint32_t i = 0; i < N; i++ )
-	{
-		HashFloat( f[ i ] );
-	}
-	return *this;
-}
 
 //------------------------------------------------------------------------------
 // Log settings
@@ -3821,16 +3812,16 @@ public:
 // External meta property registerer
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) \
-	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( #c, #p, "" );
+	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( ae_type_creator_##c, #c, #p, "" );
 
 #define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
-	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p_##v( #c, #p, #v );
+	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p_##v( ae_type_creator_##c, #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External meta var registerer
 //------------------------------------------------------------------------------
 #define AE_REGISTER_CLASS_VAR( c, v ) \
-	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( #c, #v );
+	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v );
 // @TODO: AE_REGISTER_CLASS_VAR_PROPERTY & AE_REGISTER_CLASS_VAR_PROPERTY_VALUE
 
 //------------------------------------------------------------------------------
@@ -7405,35 +7396,40 @@ void OpaquePool::DeleteAll()
 	FreeAll();
 }
 
+template <> const void* OpaquePool::GetFirst() const;
+template <> const void* OpaquePool::GetNext( const void* obj ) const;
+template <> void* OpaquePool::GetFirst();
+template <> void* OpaquePool::GetNext( const void* obj );
+
 template < typename T >
 const T* OpaquePool::GetFirst() const
 {
-	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
 	return (const T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
 }
 
 template < typename T >
 const T* OpaquePool::GetNext( const T* obj ) const
 {
-	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
 	return (const T*)( const_cast< const OpaquePool* >( this )->m_GetNext( obj ) );
 }
 
 template < typename T >
 T* OpaquePool::GetFirst()
 {
-	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
 	return (T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
 }
 
 template < typename T >
 T* OpaquePool::GetNext( const T* obj )
 {
-	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
+	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
+	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
 	return (T*)( const_cast< const OpaquePool* >( this )->m_GetNext( obj ) );
 }
 
@@ -7872,10 +7868,22 @@ struct _TypeCreator
 	}
 };
 
+template< typename C >
+struct _PropCreator
+{
+	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
+	_PropCreator( ae::_TypeCreator< C >&, const char* typeName, const char* propName, const char* propValue )
+	{
+		ae::Type* type = _GetTypeNameMap().find( typeName )->second;
+		type->m_AddProp( propName, propValue );
+	}
+};
+
 template< typename C, typename V, uint32_t Offset >
 struct _VarCreator
 {
-	_VarCreator( const char* typeName, const char* varName )
+	// Take _TypeCreator param as a safety check that _VarCreator typeName is provided correctly
+	_VarCreator( ae::_TypeCreator< C >&, const char* typeName, const char* varName )
 	{
 		ae::Type* type = _GetTypeNameMap().find( typeName )->second;
 		AE_ASSERT( type );
@@ -7898,16 +7906,6 @@ struct _VarCreator
 		var.m_size = sizeof(V);
 
 		type->m_AddVar( var );
-	}
-};
-	
-template< typename C >
-struct _PropCreator
-{
-	_PropCreator( const char* typeName, const char* propName, const char* propValue )
-	{
-		ae::Type* type = _GetTypeNameMap().find( typeName )->second;
-		type->m_AddProp( propName, propValue );
 	}
 };
 	
@@ -9780,6 +9778,16 @@ AABB::AABB( const Sphere& sphere )
 	m_max = sphere.center + r;
 }
 
+bool AABB::operator == ( const AABB& aabb ) const
+{
+	return ( aabb.m_min == m_min ) && ( aabb.m_max == m_max );
+}
+
+bool AABB::operator != ( const AABB& aabb ) const
+{
+	return !( operator == ( aabb ) );
+}
+
 void AABB::Expand( ae::Vec3 p )
 {
 	m_min = ae::Min( p, m_min );
@@ -10582,10 +10590,24 @@ void Dict::SetInt( const char* key, int32_t value )
 	SetString( key, buf );
 }
 
+void Dict::SetUint( const char* key, uint32_t value )
+{
+	char buf[ 128 ];
+	sprintf( buf, "%u", value );
+	SetString( key, buf );
+}
+
 void Dict::SetFloat( const char* key, float value )
 {
 	char buf[ 128 ];
 	sprintf( buf, "%f", value );
+	SetString( key, buf );
+}
+
+void Dict::SetDouble( const char* key, double value )
+{
+	char buf[ 128 ];
+	sprintf( buf, "%lf", value );
 	SetString( key, buf );
 }
 
@@ -10651,11 +10673,29 @@ int32_t Dict::GetInt( const char* key, int32_t defaultValue ) const
 	return defaultValue;
 }
 
+uint32_t Dict::GetUint( const char* key, uint32_t defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return strtoul( value->c_str(), value->c_str() + value->Length(), 10 );
+	}
+	return defaultValue;
+}
+
 float Dict::GetFloat( const char* key, float defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
 		return (float)atof( value->c_str() );
+	}
+	return defaultValue;
+}
+
+double Dict::GetDouble( const char* key, double defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return (double)atof( value->c_str() );
 	}
 	return defaultValue;
 }
@@ -10893,6 +10933,30 @@ void OpaquePool::FreeAll()
 	m_length = 0;
 }
 
+template <>
+const void* OpaquePool::GetFirst() const
+{
+	return const_cast< const OpaquePool* >( this )->m_GetFirst();
+}
+
+template <>
+const void* OpaquePool::GetNext( const void* obj ) const
+{
+	return const_cast< const OpaquePool* >( this )->m_GetNext( obj );
+}
+
+template <>
+void* OpaquePool::GetFirst()
+{
+	return (void*)const_cast< const OpaquePool* >( this )->m_GetFirst();
+}
+
+template <>
+void* OpaquePool::GetNext( const void* obj )
+{
+	return (void*)const_cast< const OpaquePool* >( this )->m_GetNext( obj );
+}
+
 bool OpaquePool::HasFree() const
 {
 	return m_paged || !m_pages.Length() || m_pages.GetFirst()->freeList.HasFree();
@@ -11065,14 +11129,6 @@ Hash& Hash::HashData( const void* _data, uint32_t length )
 	}
 
 	return *this;
-}
-
-Hash& Hash::HashFloat( float f )
-{
-	uint32_t ui;
-	memcpy( &ui, &f, sizeof( float ) );
-	ui &= 0xfffff000;
-	return HashBasicType( ui );
 }
 
 void Hash::Set( uint32_t hash )
@@ -15061,7 +15117,7 @@ void UniformList::Set( const char* name, float value )
 	uniform.size = 1;
 	uniform.value.data[ 0 ] = value;
 	m_hash.HashString( name );
-	m_hash.HashFloat( value );
+	m_hash.HashBasicType( value );
 }
 
 void UniformList::Set( const char* name, Vec2 value )
@@ -15073,7 +15129,7 @@ void UniformList::Set( const char* name, Vec2 value )
 	uniform.value.data[ 0 ] = value.x;
 	uniform.value.data[ 1 ] = value.y;
 	m_hash.HashString( name );
-	m_hash.HashFloatArray( value.data );
+	m_hash.HashBasicType( value.data );
 }
 
 void UniformList::Set( const char* name, Vec3 value )
@@ -15086,7 +15142,7 @@ void UniformList::Set( const char* name, Vec3 value )
 	uniform.value.data[ 1 ] = value.y;
 	uniform.value.data[ 2 ] = value.z;
 	m_hash.HashString( name );
-	m_hash.HashFloatArray( value.data );
+	m_hash.HashBasicType( value.data );
 }
 
 void UniformList::Set( const char* name, Vec4 value )
@@ -15100,7 +15156,7 @@ void UniformList::Set( const char* name, Vec4 value )
 	uniform.value.data[ 2 ] = value.z;
 	uniform.value.data[ 3 ] = value.w;
 	m_hash.HashString( name );
-	m_hash.HashFloatArray( value.data );
+	m_hash.HashBasicType( value.data );
 }
 
 void UniformList::Set( const char* name, const Matrix4& value )
@@ -15111,7 +15167,7 @@ void UniformList::Set( const char* name, const Matrix4& value )
 	uniform.size = 16;
 	uniform.value = value;
 	m_hash.HashString( name );
-	m_hash.HashFloatArray( value.data );
+	m_hash.HashBasicType( value.data );
 }
 
 void UniformList::Set( const char* name, const Texture* tex )
