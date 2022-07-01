@@ -10677,7 +10677,7 @@ uint32_t Dict::GetUint( const char* key, uint32_t defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return strtoul( value->c_str(), value->c_str() + value->Length(), 10 );
+		return strtoul( value->c_str(), nullptr, 10 );
 	}
 	return defaultValue;
 }
