@@ -78,6 +78,18 @@ TEST_CASE( "enum string conversions", "[aeMeta]" )
 	REQUIRE( playerStateEnum->GetNameByValue( PlayerState::Jump ) == "Jump" );
 	REQUIRE( playerStateEnum->GetValueFromString( "Jump", (PlayerState)666 ) == PlayerState::Jump );
 	REQUIRE( playerStateEnum->GetValueFromString( "2", (PlayerState)666 ) == PlayerState::Jump );
+
+	REQUIRE( ae::ToString( PlayerState::Idle ) == "Idle" );
+	REQUIRE( ae::FromString< PlayerState >( "Idle", (PlayerState)666 ) == PlayerState::Idle );
+	REQUIRE( ae::FromString< PlayerState >( "0", (PlayerState)666 ) == PlayerState::Idle );
+
+	REQUIRE( ae::ToString( PlayerState::Run ) == "Run" );
+	REQUIRE( ae::FromString< PlayerState >( "Run", (PlayerState)666 ) == PlayerState::Run );
+	REQUIRE( ae::FromString< PlayerState >( "1", (PlayerState)666 ) == PlayerState::Run );
+
+	REQUIRE( ae::ToString( PlayerState::Jump ) == "Jump" );
+	REQUIRE( ae::FromString< PlayerState >( "Jump", (PlayerState)666 ) == PlayerState::Jump );
+	REQUIRE( ae::FromString< PlayerState >( "2", (PlayerState)666 ) == PlayerState::Jump );
 }
 
 TEST_CASE( "enum string conversions using missing values", "[aeMeta]" )
@@ -432,8 +444,8 @@ TEST_CASE( "bitfield registration", "[aeMeta]" )
 	const ae::Enum* gamePadBitFieldEnum = ae::GetEnum( "GamePadBitField" );
 
 	REQUIRE( gamePadBitFieldEnum->GetName() == ae::Str32( "GamePadBitField" ) );
-	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "ButtonA", (GamePadBitField)666 ) == GamePadBitField::A );
-	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "0", (GamePadBitField)666 ) == GamePadBitField::A );
+	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "A", (GamePadBitField)666 ) == GamePadBitField::A );
+	REQUIRE( gamePadBitFieldEnum->GetValueFromString( "1", (GamePadBitField)666 ) == GamePadBitField::A );
 
 	uint16_t something = GamePadBitField::Y | GamePadBitField::X;
 	something = something | GamePadBitField::A;

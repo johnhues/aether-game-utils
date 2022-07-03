@@ -978,6 +978,9 @@ struct Color
 	//! hue: 0-1 saturation: 0-1 value: 0-1
 	static Color HSV( float hue, float saturation, float value );
 
+	bool operator == ( ae::Color o ) const { return r == o.r && g == o.g && b == o.b && a == o.a; }
+	bool operator != ( ae::Color o ) const { return !( operator == ( o ) ); }
+
 	Vec3 GetLinearRGB() const;
 	Vec4 GetLinearRGBA() const;
 	Vec3 GetSRGB() const;
@@ -1348,7 +1351,6 @@ public:
 	ae::Vec4 GetVec4( const char* key, ae::Vec4 defaultValue ) const;
 	ae::Int2 GetInt2( const char* key, ae::Int2 defaultValue ) const;
 	ae::Matrix4 GetMatrix4( const char* key, const ae::Matrix4& defaultValue ) const;
-	ae::Color GetColor( const char* key, ae::Color defaultValue ) const;
 	bool Has( const char* key ) const;
 
 	const char* GetKey( uint32_t idx ) const;
@@ -3840,16 +3842,21 @@ public:
 		static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
 	}; \
 	struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
-	static std::ostream &operator << ( std::ostream &os, E e ) { \
-		os << ae::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
-		return os; \
-	}
+	std::ostream &operator << ( std::ostream &os, E e ); \
+	namespace ae { template <> E FromString( const char* str, const E& e ); }
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E ) \
 	AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
 	AE_ENUM_##E ae_enum_creator_##E; \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; } \
+	std::ostream &operator << ( std::ostream &os, E e ) { \
+		os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); \
+		return os; \
+	} \
+	namespace ae { template <> E FromString( const char* str, const E& e ) { \
+		return ae::GetEnum< E >()->GetValueFromString( str, e ); \
+	} }
 
 //------------------------------------------------------------------------------
 // External c-style enum registerer
@@ -5731,6 +5738,11 @@ inline Str16 ToString( double value )
 	return Str16( length, str );
 }
 
+inline Str16 ToString( bool value )
+{
+	return value ? "true" : "false";
+}
+
 inline Str128 ToString( const ae::Matrix4& v )
 {
 	char str[ Str128::MaxLength() + 1u ];
@@ -5753,73 +5765,87 @@ Str128 ToString( const T& v )
 }
 
 template < typename T >
-inline T FromString( const char* str )
+inline T FromString( const char* str, const T& defaultValue )
 {
 	AE_FAIL_MSG( "Not implemented" );
-	return {};
+	return defaultValue;
 }
 
 template <>
-inline ae::Vec2 FromString( const char* str )
+inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )
 {
-	ae::Vec2 r( 0.0f );
-	sscanf( str, "%f %f", r.data, r.data + 1 );
-	return r;
+	ae::Vec2 r;
+	if ( sscanf( str, "%f %f", r.data, r.data + 1 ) == 2 )
+	{
+		return r;
+	}
+	return defaultValue;
 }
 
 template <>
-inline ae::Vec3 FromString( const char* str )
+inline ae::Vec3 FromString( const char* str, const ae::Vec3& defaultValue )
 {
-	ae::Vec3 r( 0.0f );
-	sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 );
-	return r;
+	ae::Vec3 r;
+	if ( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) == 3 )
+	{
+		return r;
+	}
+	return defaultValue;
 }
 
 template <>
-inline ae::Vec4 FromString( const char* str )
+inline ae::Vec4 FromString( const char* str, const ae::Vec4& defaultValue )
 {
-	ae::Vec4 r( 0.0f );
-	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
-	return r;
+	ae::Vec4 r;
+	if ( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	{
+		return r;
+	}
+	return defaultValue;
 }
 
 template <>
-inline ae::Matrix4 FromString( const char* str )
+inline ae::Matrix4 FromString( const char* str, const ae::Matrix4& defaultValue )
 {
-	ae::Matrix4 r = ae::Matrix4::Identity();
-	sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
+	ae::Matrix4 r;
+	if ( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
 		r.data, r.data + 1, r.data + 2, r.data + 3,
 		r.data + 4, r.data + 5, r.data + 6, r.data + 7,
 		r.data + 8, r.data + 9, r.data + 10, r.data + 11,
-		r.data + 12, r.data + 13, r.data + 14, r.data + 15 );
-	return r;
-}
-
-template <>
-inline ae::Color FromString( const char* str )
-{
-	ae::Color r( 0.0f );
-	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
-	return r;
-}
-
-template <>
-inline bool FromString( const char* str )
-{
-	if ( !str[ 0 ] )
+		r.data + 12, r.data + 13, r.data + 14, r.data + 15 ) == 16 )
 	{
-		return false;
+		return r;
 	}
-	// @TODO: Clean this up. Should check for both `true` and `false`, and return false if neither match
-	const char* trueStr = "true";
-	for ( uint32_t i = 0; ( str[ i ] && trueStr[ i ] ); i++ )
+	return defaultValue;
+}
+
+template <>
+inline ae::Color FromString( const char* str, const ae::Color& defaultValue )
+{
+	ae::Color r;
+	if ( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
 	{
-		if ( trueStr[ i ] != tolower( str[ i ] ) )
+		return r;
+	}
+	return defaultValue;
+}
+
+template <>
+inline bool FromString( const char* str, const bool& defaultValue )
+{
+	auto StrCmp = []( const char* boolStr, const char* inputStr )
+	{
+		while ( *boolStr && *inputStr )
 		{
-			return false;
+			if ( *boolStr != tolower( *inputStr ) ) { return false; }
+			boolStr++;
+			inputStr++;
 		}
-	}
-	return true;
+		return ( !*boolStr && !*inputStr );
+	};
+	if ( StrCmp( "true", str ) ) { return true; }
+	if ( StrCmp( "false", str ) ) { return false; }
+	return defaultValue;
 }
 
 template < uint32_t N >
@@ -10751,19 +10777,8 @@ ae::Matrix4 Dict::GetMatrix4( const char* key, const ae::Matrix4& defaultValue )
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return ae::FromString< ae::Matrix4 >( value->c_str() );
+		return ae::FromString< ae::Matrix4 >( value->c_str(), defaultValue );
 	}
-	return defaultValue;
-}
-
-ae::Color Dict::GetColor( const char* key, ae::Color defaultValue ) const
-{
-	// uint8_t c[ 4 ];
-	// const KeyValue* kv = m_GetValue( key );
-	// if ( kv && kv->value.Length() == 9 && sscanf( kv->value.c_str(), "#%2hhx%2hhx%2hhx%2hhx", &c[ 0 ], &c[ 1 ], &c[ 2 ], &c[ 3 ] ) == 4 )
-	// {
-	//   return (Color)((c[ 0 ] << 24) | (c[ 1 ] << 16) | (c[ 2 ] << 8) | c[ 3 ]);
-	// }
 	return defaultValue;
 }
 
@@ -20702,7 +20717,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		}
 		case Var::Bool:
 		{
-			*(bool*)varData = ae::FromString< bool >( value );
+			*(bool*)varData = ae::FromString< bool >( value, false );
 			return true;
 		}
 		case Var::Float:
@@ -20724,7 +20739,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Vec2) );
 			ae::Vec2* v = (ae::Vec2*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec2 >( value );
+			*v = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
 			return true;
 		}
 		case Var::Vec3:
@@ -20732,7 +20747,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Vec3) );
 			ae::Vec3* v = (ae::Vec3*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec3 >( value );
+			*v = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
 			return true;
 		}
 		case Var::Vec4:
@@ -20740,7 +20755,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Vec4) );
 			ae::Vec4* v = (ae::Vec4*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec4 >( value );
+			*v = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
 			return true;
 		}
 		case Var::Matrix4:
@@ -20748,7 +20763,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Matrix4) );
 			ae::Matrix4* v = (ae::Matrix4*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Matrix4 >( value );
+			*v = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
 			return true;
 		}
 		case Var::Color:
@@ -20756,7 +20771,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Color) );
 			ae::Color* v = (ae::Color*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Color >( value );
+			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
 			return true;
 		}
 		case Var::Enum:
