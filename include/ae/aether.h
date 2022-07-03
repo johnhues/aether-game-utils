@@ -3842,21 +3842,15 @@ public:
 		static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
 	}; \
 	struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
-	std::ostream &operator << ( std::ostream &os, E e ); \
-	namespace ae { template <> E FromString( const char* str, const E& e ); }
+	template <> const ae::Enum* ae::GetEnum< E >(); \
+	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); return os; } \
+	namespace ae { template <> inline E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E ) \
 	AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
 	AE_ENUM_##E ae_enum_creator_##E; \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; } \
-	std::ostream &operator << ( std::ostream &os, E e ) { \
-		os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); \
-		return os; \
-	} \
-	namespace ae { template <> E FromString( const char* str, const E& e ) { \
-		return ae::GetEnum< E >()->GetValueFromString( str, e ); \
-	} }
+	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
 
 //------------------------------------------------------------------------------
 // External c-style enum registerer
@@ -3872,7 +3866,9 @@ public:
 		static const char* GetPrefix() { return ""; } \
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; } \
+	namespace ae { std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
+	namespace ae { template <> E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
 //! Register an already defined c-style enum type where each value has a prefix
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) \
@@ -5764,12 +5760,7 @@ Str128 ToString( const T& v )
 	return os.str().c_str();
 }
 
-template < typename T >
-inline T FromString( const char* str, const T& defaultValue )
-{
-	AE_FAIL_MSG( "Not implemented" );
-	return defaultValue;
-}
+template < typename T > T FromString( const char* str, const T& defaultValue ); // No implementation so this acts as a forward declaration
 
 template <>
 inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )

@@ -100,6 +100,10 @@ TEST_CASE( "enum string conversions using missing values", "[aeMeta]" )
 	REQUIRE( playerStateEnum->GetNameByValue( (PlayerState)666 ) == "" );
 	REQUIRE( playerStateEnum->GetValueFromString( "3", PlayerState::Jump ) == PlayerState::Jump );
 	REQUIRE( playerStateEnum->GetValueFromString( "", PlayerState::Jump ) == PlayerState::Jump );
+
+	REQUIRE( ae::ToString( (PlayerState)666 ) == "" );
+	REQUIRE( ae::FromString< PlayerState >( "3", PlayerState::Jump ) == PlayerState::Jump );
+	REQUIRE( ae::FromString< PlayerState >( "", PlayerState::Jump ) == PlayerState::Jump );
 }
 
 //------------------------------------------------------------------------------
@@ -203,6 +207,47 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 	REQUIRE( enumType->GetValueByIndex( 0 ) == 4 );
 	REQUIRE( enumType->GetValueByIndex( 1 ) == 5 );
 	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
+}
+
+// @TODO: ToString should be templated like FromString to avoid needing forward declarations
+namespace ae { std::string ToString( SomeOldEnum ); }
+
+TEST_CASE( "existing c-style enum string conversions", "[aeMeta]" )
+{
+	const ae::Enum* enumType = ae::GetEnum< SomeOldEnum >();
+	REQUIRE( enumType == ae::GetEnum( "SomeOldEnum" ) );
+
+	REQUIRE( enumType->GetNameByValue( SomeOldEnum::Bleep ) == "Bleep" );
+	REQUIRE( enumType->GetValueFromString( "Bleep", (SomeOldEnum)666 ) == SomeOldEnum::Bleep );
+	REQUIRE( enumType->GetValueFromString( "4", (SomeOldEnum)666 ) == SomeOldEnum::Bleep );
+
+	REQUIRE( enumType->GetNameByValue( SomeOldEnum::Bloop ) == "Bloop" );
+	REQUIRE( enumType->GetValueFromString( "Bloop", (SomeOldEnum)666 ) == SomeOldEnum::Bloop );
+	REQUIRE( enumType->GetValueFromString( "5", (SomeOldEnum)666 ) == SomeOldEnum::Bloop );
+
+	REQUIRE( enumType->GetNameByValue( SomeOldEnum::Blop ) == "Blop" );
+	REQUIRE( enumType->GetValueFromString( "Blop", (SomeOldEnum)666 ) == SomeOldEnum::Blop );
+	REQUIRE( enumType->GetValueFromString( "7", (SomeOldEnum)666 ) == SomeOldEnum::Blop );
+	
+	REQUIRE( ae::ToString( SomeOldEnum::Bleep ) == "Bleep" );
+	REQUIRE( ae::FromString< SomeOldEnum >( "Bleep", (SomeOldEnum)666 ) == SomeOldEnum::Bleep );
+	REQUIRE( ae::FromString< SomeOldEnum >( "4", (SomeOldEnum)666 ) == SomeOldEnum::Bleep );
+
+	REQUIRE( ae::ToString( SomeOldEnum::Bloop ) == "Bloop" );
+	REQUIRE( ae::FromString< SomeOldEnum >( "Bloop", (SomeOldEnum)666 ) == SomeOldEnum::Bloop );
+	REQUIRE( ae::FromString< SomeOldEnum >( "5", (SomeOldEnum)666 ) == SomeOldEnum::Bloop );
+
+	REQUIRE( ae::ToString( SomeOldEnum::Blop ) == "Blop" );
+	REQUIRE( ae::FromString< SomeOldEnum >( "Blop", (SomeOldEnum)666 ) == SomeOldEnum::Blop );
+	REQUIRE( ae::FromString< SomeOldEnum >( "7", (SomeOldEnum)666 ) == SomeOldEnum::Blop );
+
+	REQUIRE( enumType->GetNameByValue( (SomeOldEnum)666 ) == "" );
+	REQUIRE( enumType->GetValueFromString( "3", SomeOldEnum::Bleep ) == SomeOldEnum::Bleep );
+	REQUIRE( enumType->GetValueFromString( "", SomeOldEnum::Bleep ) == SomeOldEnum::Bleep );
+
+	REQUIRE( ae::ToString( (SomeOldEnum)666 ) == "" );
+	REQUIRE( ae::FromString< SomeOldEnum >( "3", SomeOldEnum::Bleep ) == SomeOldEnum::Bleep );
+	REQUIRE( ae::FromString< SomeOldEnum >( "", SomeOldEnum::Bleep ) == SomeOldEnum::Bleep );
 }
 
 //------------------------------------------------------------------------------
