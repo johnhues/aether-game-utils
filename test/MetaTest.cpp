@@ -209,9 +209,6 @@ TEST_CASE( "can register an already existing c-style enum", "[aeMeta]" )
 	REQUIRE( enumType->GetValueByIndex( 2 ) == 7 );
 }
 
-// @TODO: ToString should be templated like FromString to avoid needing forward declarations
-namespace ae { std::string ToString( SomeOldEnum ); }
-
 TEST_CASE( "existing c-style enum string conversions", "[aeMeta]" )
 {
 	const ae::Enum* enumType = ae::GetEnum< SomeOldEnum >();

@@ -3844,6 +3844,7 @@ public:
 	struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
 	template <> const ae::Enum* ae::GetEnum< E >(); \
 	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); return os; } \
+	namespace ae { template <> inline std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> inline E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
@@ -3867,7 +3868,7 @@ public:
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; } \
-	namespace ae { std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
+	namespace ae { template <> std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
 //! Register an already defined c-style enum type where each value has a prefix
@@ -5695,72 +5696,118 @@ std::istream& operator>>( std::istream& in, Str< N >& str )
 	return in;
 }
 
+//------------------------------------------------------------------------------
+// ae::ToString functions
+//------------------------------------------------------------------------------
+// No implementation so this acts as a forward declaration. Also a default
+// templated ae::ToString function would prevent the compiler/linker from looking
+// for ae::ToString implementations in other modules.
+template < typename T > std::string ToString( T value ); // @TODO: Add ref
+
+// template <> // @TODO: Where should this empty template parameter list go?
 template < uint32_t N >
-const Str< N >& ToString( const Str< N >& value )
+std::string ToString( Str< N > value )
 {
 	return value;
 }
 
-inline const char* ToString( const char* value )
+template <>
+inline std::string ToString( char const * value )
 {
 	return value;
 }
 
-inline Str16 ToString( int32_t value )
+template <>
+inline std::string ToString( int32_t value )
 {
-	char str[ Str16::MaxLength() + 1u ];
+	char str[ 16 ];
 	uint32_t length = snprintf( str, sizeof( str ) - 1, "%d", value );
-	return Str16( length, str );
+	return std::string( str, length );
 }
 
-inline Str16 ToString( uint32_t value )
+template <>
+inline std::string ToString( uint32_t value )
 {
-	char str[ Str16::MaxLength() + 1u ];
+	char str[ 16 ];
 	uint32_t length = snprintf( str, sizeof( str ) - 1, "%u", value );
-	return Str16( length, str );
+	return std::string( str, length );
 }
 
-inline Str16 ToString( float value )
+template <>
+inline std::string ToString( float value )
 {
-	char str[ Str16::MaxLength() + 1u ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
-	return Str16( length, str );
+	char str[ 16 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	return std::string( str, length );
 }
 
-inline Str16 ToString( double value )
+template <>
+inline std::string ToString( double value )
 {
-	char str[ Str16::MaxLength() + 1u ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
-	return Str16( length, str );
+	char str[ 16 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	return std::string( str, length );
 }
 
-inline Str16 ToString( bool value )
+template <>
+inline std::string ToString( bool v )
 {
-	return value ? "true" : "false";
+	return v ? "true" : "false";
 }
 
-inline Str128 ToString( const ae::Matrix4& v )
+template <>
+inline std::string ToString( ae::Vec2 v )
 {
-	char str[ Str128::MaxLength() + 1u ];
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f", v.x, v.y );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Vec3 v )
+{
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f", v.x, v.y, v.z );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Vec4 v )
+{
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Color v )
+{
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Matrix4 v )
+{
+	char str[ 128 ];
 	uint32_t length = snprintf( str, sizeof( str ) - 1,
-		"%.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f",
+		"%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
 		v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ],
 		v.data[ 4 ], v.data[ 5 ], v.data[ 6 ], v.data[ 7 ],
 		v.data[ 8 ], v.data[ 9 ], v.data[ 10 ], v.data[ 11 ],
 		v.data[ 12 ], v.data[ 13 ], v.data[ 14 ], v.data[ 15 ]
 	);
-	return Str128( length, str );
+	return std::string( str, length );
 }
 
-template < typename T >
-Str128 ToString( const T& v )
-{
-	std::stringstream os;
-	os << v;
-	return os.str().c_str();
-}
-
-template < typename T > T FromString( const char* str, const T& defaultValue ); // No implementation so this acts as a forward declaration
+//------------------------------------------------------------------------------
+// ae::FromString functions
+//------------------------------------------------------------------------------
+// No implementation so this acts as a forward declaration. Also a default
+// templated ae::ToString function would prevent the compiler/linker from looking
+// for ae::ToString implementations in other modules.
+template < typename T > T FromString( const char* str, const T& defaultValue );
 
 template <>
 inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )
@@ -5834,8 +5881,11 @@ inline bool FromString( const char* str, const bool& defaultValue )
 		}
 		return ( !*boolStr && !*inputStr );
 	};
+	
+	float f;
 	if ( StrCmp( "true", str ) ) { return true; }
 	if ( StrCmp( "false", str ) ) { return false; }
+	if ( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
 	return defaultValue;
 }
 
@@ -10578,6 +10628,7 @@ void TimeStep::Wait()
 //------------------------------------------------------------------------------
 // ae::Dict members
 //------------------------------------------------------------------------------
+// @TODO: These should use ToString and FromString
 Dict::Dict( ae::Tag tag ) :
 	m_entries( tag )
 {}
@@ -10623,21 +10674,21 @@ void Dict::SetBool( const char* key, bool value )
 void Dict::SetVec2( const char* key, ae::Vec2 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.2f %.2f", value.x, value.y );
+	sprintf( buf, "%.3f %.3f", value.x, value.y );
 	SetString( key, buf );
 }
 
 void Dict::SetVec3( const char* key, ae::Vec3 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.2f %.2f %.2f", value.x, value.y, value.z );
+	sprintf( buf, "%.3f %.3f %.3f", value.x, value.y, value.z );
 	SetString( key, buf );
 }
 
 void Dict::SetVec4( const char* key, ae::Vec4 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.2f %.2f %.2f %.2f", value.x, value.y, value.z, value.w );
+	sprintf( buf, "%.3f %.3f %.3f %.3f", value.x, value.y, value.z, value.w );
 	SetString( key, buf );
 }
 
@@ -10650,8 +10701,8 @@ void Dict::SetInt2( const char* key, ae::Int2 value )
 
 void Dict::SetMatrix4( const char* key, const ae::Matrix4& value )
 {
-	ae::Str128& v = m_entries.Set( key, "" );
-	v = ToString( value );
+	auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 void Dict::Clear()

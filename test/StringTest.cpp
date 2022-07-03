@@ -198,11 +198,11 @@ TEST_CASE( "strings of different lengths can be compared alphabetically", "[aeSt
 
 TEST_CASE( "ToString", "[aeString]" )
 {
-	REQUIRE( ae::ToString( ae::Vec2( 1.0f, 2.0f ) ) == "1 2" );
-	REQUIRE( ae::ToString( ae::Vec3( 1.0f, 2.0f, 3.0f ) ) == "1 2 3" );
-	REQUIRE( ae::ToString( ae::Vec4( 1.0f, 2.0f, 3.0f, 4.0f ) ) == "1 2 3 4" );
-	REQUIRE( ae::ToString( ae::Matrix4::Identity() ) == "1.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 1.00" );
-	REQUIRE( ae::ToString( ae::Color::Red() ) == "1 0 0 1" );
+	REQUIRE( ae::ToString( ae::Vec2( 1.0f, 2.0f ) ) == "1.000 2.000" );
+	REQUIRE( ae::ToString( ae::Vec3( 1.0f, 2.0f, 3.0f ) ) == "1.000 2.000 3.000" );
+	REQUIRE( ae::ToString( ae::Vec4( 1.0f, 2.0f, 3.0f, 4.0f ) ) == "1.000 2.000 3.000 4.000" );
+	REQUIRE( ae::ToString( ae::Matrix4::Identity() ) == "1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000" );
+	REQUIRE( ae::ToString( ae::Color::Red() ) == "1.000 0.000 0.000 1.000" );
 	REQUIRE( ae::ToString( true ) == "true" );
 	REQUIRE( ae::ToString( false ) == "false" );
 }
@@ -215,12 +215,27 @@ TEST_CASE( "FromString success", "[aeString]" )
 	REQUIRE( ae::FromString( "1 2 3", ae::Vec3( 0.0f ) ) == ae::Vec3( 1.0f, 2.0f, 3.0f ) );
 	REQUIRE( ae::FromString( "1 2 3 4", ae::Vec3( 0.0f ) ) == ae::Vec3( 1.0f, 2.0f, 3.0f ) );
 	REQUIRE( ae::FromString( "1 2 3 4", ae::Vec4( 0.0f ) ) == ae::Vec4( 1.0f, 2.0f, 3.0f, 4.0f ) );
-	REQUIRE( ae::FromString( "1.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 0.00 0.00 1.00", ae::Matrix4::Scaling( 0.0f ) ) == ae::Matrix4::Identity() );
+	REQUIRE( ae::FromString( "1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1", ae::Matrix4::Scaling( 0.0f ) ) == ae::Matrix4::Identity() );
 	REQUIRE( ae::FromString( "1 0 0 1", ae::Color::Black() ) == ae::Color::Red() );
+	
 	REQUIRE( ae::FromString( "true", false ) == true );
 	REQUIRE( ae::FromString( "false", true ) == false );
 	REQUIRE( ae::FromString( "TRUE", false ) == true );
 	REQUIRE( ae::FromString( "FALSE", true ) == false );
+	REQUIRE( ae::FromString( "1", false ) == true );
+	REQUIRE( ae::FromString( "123", false ) == true );
+	REQUIRE( ae::FromString( "-123", false ) == true );
+	REQUIRE( ae::FromString( "10.04", false ) == true );
+	REQUIRE( ae::FromString( "-10.04", false ) == true );
+	REQUIRE( ae::FromString( "0", true ) == false );
+	REQUIRE( ae::FromString( "0.0", true ) == false );
+	REQUIRE( ae::FromString( ".0", true ) == false );
+	REQUIRE( ae::FromString( "-0", true ) == false );
+	REQUIRE( ae::FromString( "-0.0", true ) == false );
+	REQUIRE( ae::FromString( "-.0", true ) == false );
+	REQUIRE( ae::FromString( "INF", false ) == true );
+	REQUIRE( ae::FromString( "-INF", false ) == true );
+	REQUIRE( ae::FromString( "NAN", false ) == true );
 }
 
 TEST_CASE( "FromString fail", "[aeString]" )
@@ -230,7 +245,7 @@ TEST_CASE( "FromString fail", "[aeString]" )
 
 	REQUIRE( ae::FromString( "1 2", ae::Vec3( 1.0f, 2.0f, 3.0f ) ) == ae::Vec3( 1.0f, 2.0f, 3.0f ) );
 	REQUIRE( ae::FromString( "1 2 3", ae::Vec4( 1.0f, 2.0f, 3.0f, 4.0f ) ) == ae::Vec4( 1.0f, 2.0f, 3.0f, 4.0f ) );
-	REQUIRE( ae::FromString( "1.00 0.00 0.00 0.00 0.00 1.00 0.00 0.00 4.00 0.00 1.00 0.00 0.00 0.00 2.00", ae::Matrix4::Identity() ) == ae::Matrix4::Identity() );
+	REQUIRE( ae::FromString( "1 0 0 0 0 1 0 0 4 0 1 0 0 0 2", ae::Matrix4::Identity() ) == ae::Matrix4::Identity() );
 	REQUIRE( ae::FromString( "1 0 0", ae::Color::Red() ) == ae::Color::Red() );
 	
 	REQUIRE( ae::FromString( "tru", false ) == false );
@@ -239,4 +254,8 @@ TEST_CASE( "FromString fail", "[aeString]" )
 	REQUIRE( ae::FromString( "falsex", true ) == true );
 	REQUIRE( ae::FromString( "a", false ) == false );
 	REQUIRE( ae::FromString( "a", true ) == true );
+	REQUIRE( ae::FromString( "", false ) == false );
+	REQUIRE( ae::FromString( "", true ) == true );
+	REQUIRE( ae::FromString( ".", false ) == false );
+	REQUIRE( ae::FromString( ".", true ) == true );
 }
