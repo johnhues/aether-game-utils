@@ -3987,15 +3987,13 @@ public:
 		
 	template < typename T > std::string GetNameByValue( T value ) const;
 	template < typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
+	template < typename T > T GetValueFromString( const char* str, T defaultValue ) const;
 	template < typename T > bool HasValue( T value ) const;
 		
 	int32_t GetValueByIndex( int32_t index ) const;
 	std::string GetNameByIndex( int32_t index ) const;
 	uint32_t Length() const;
 		
-	template < typename T > static std::string GetNameFromValue( T value );
-	template < typename T > static T GetValueFromString( const char* str, T defaultValue );
-	
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
@@ -8169,23 +8167,6 @@ const ae::Type* ae::GetType()
 }
 
 template < typename T >
-std::string ae::Enum::GetNameFromValue( T value )
-{
-	const Enum* enumType = GetEnum< T >();
-	AE_ASSERT( enumType );
-	return enumType->m_enumValueToName.Get( (int32_t)value, "" );
-}
-
-template < typename T >
-T ae::Enum::GetValueFromString( const char* str, T defaultValue )
-{
-	const Enum* enumType = GetEnum< T >();
-	AE_ASSERT_MSG( enumType, "Value '#' has no Enum #", str, typeid(T).name() ); // TODO: Pretty print
-	enumType->GetValueFromString( str, &defaultValue );
-	return defaultValue;
-}
-
-template < typename T >
 std::string ae::Enum::GetNameByValue( T value ) const
 {
 	return m_enumValueToName.Get( (int32_t)value, "" );
@@ -8209,8 +8190,14 @@ bool ae::Enum::GetValueFromString( const char* str, T* valueOut ) const
 			return true;
 		}
 	}
-	
 	return false;
+}
+
+template < typename T >
+T ae::Enum::GetValueFromString( const char* str, T defaultValue ) const
+{
+	GetValueFromString( str, &defaultValue );
+	return defaultValue;
 }
 
 template < typename T >

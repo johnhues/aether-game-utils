@@ -85,6 +85,11 @@ AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Bloop );
 AE_REGISTER_ENUM_CLASS2_VALUE( A::B::SomeNewEnum, Blop );
 
 //------------------------------------------------------------------------------
+// GamePadBitField
+//------------------------------------------------------------------------------
+AE_REGISTER_ENUM_CLASS( GamePadBitField );
+
+//------------------------------------------------------------------------------
 // Reference testing
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( RefTester );
