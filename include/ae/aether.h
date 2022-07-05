@@ -3909,6 +3909,12 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
 	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
+
+// #define AE_REGISTER_ENUM_PROPERTY( E, P )
+// #define AE_REGISTER_ENUM_PROPERTY_VALUE( E, P, PV )
+// #define AE_REGISTER_ENUM_VALUE_PROPERTY( E, V, P )
+// #define AE_REGISTER_ENUM_VALUE_PROPERTY_VALUE( E, V, P, PV )
+
 // clang-format on
 
 //------------------------------------------------------------------------------
