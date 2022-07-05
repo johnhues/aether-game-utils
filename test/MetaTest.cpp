@@ -39,6 +39,122 @@ TEST_CASE( "Can get base type with templates", "[aeMeta]" )
 	REQUIRE( ae::GetType< ae::Object >() );
 }
 
+TEST_CASE( "Class registration", "[aeMeta]" )
+{
+	REQUIRE( ae::GetType< SomeClass >() );
+	REQUIRE( ae::GetTypeByName( "SomeClass" ) );
+	REQUIRE( ae::GetType< SomeClass >() == ae::GetTypeByName( "SomeClass" ) );
+}
+
+TEST_CASE( "Class properties", "[aeMeta]" )
+{
+	const ae::Type* type = ae::GetType< SomeClass >();
+	REQUIRE( type );
+	REQUIRE( type->GetPropertyCount() == 3 );
+	
+	REQUIRE( type->HasProperty( "someProp0" ) );
+	REQUIRE( type->GetPropertyIndex( "someProp0" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyName( 0 ), "someProp0" ) == 0 );
+	REQUIRE( type->GetPropertyValueCount( 0 ) == 0 );
+	REQUIRE( type->GetPropertyValueCount( "someProp0" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( 0, 0 ), "" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp0", 0 ), "" ) == 0 );
+
+	REQUIRE( type->HasProperty( "someProp1" ) );
+	REQUIRE( type->GetPropertyIndex( "someProp1" ) == 1 );
+	REQUIRE( strcmp( type->GetPropertyName( 1 ), "someProp1" ) == 0 );
+	REQUIRE( type->GetPropertyValueCount( 1 ) == 2 );
+	REQUIRE( type->GetPropertyValueCount( "someProp1" ) == 2 );
+	REQUIRE( strcmp( type->GetPropertyValue( 1, 0 ), "v0" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp1", 0 ), "v0" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( 1, 1 ), "v1" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp1", 1 ), "v1" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( 1, 2 ), "" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp1", 2 ), "" ) == 0 );
+
+	REQUIRE( type->HasProperty( "someProp2" ) );
+	REQUIRE( type->GetPropertyIndex( "someProp2" ) == 2 );
+	REQUIRE( strcmp( type->GetPropertyName( 2 ), "someProp2" ) == 0 );
+	REQUIRE( type->GetPropertyValueCount( 2 ) == 3 );
+	REQUIRE( type->GetPropertyValueCount( "someProp2" ) == 3 );
+	REQUIRE( strcmp( type->GetPropertyValue( 2, 0 ), "v0" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp2", 0 ), "v0" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( 2, 1 ), "v1" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp2", 1 ), "v1" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( 2, 2 ), "v2" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp2", 2 ), "v2" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( 2, 3 ), "" ) == 0 );
+	REQUIRE( strcmp( type->GetPropertyValue( "someProp2", 3 ), "" ) == 0 );
+
+	REQUIRE( !type->HasProperty( "someProp3" ) );
+	REQUIRE( type->GetPropertyIndex( "someProp3" ) == -1 );
+	// REQUIRE_THROWS_AS( type->GetPropertyName( 3 ), std::runtime_error );
+	// REQUIRE_THROWS( type->GetPropertyValueCount( 3 ) );
+	// REQUIRE( type->GetPropertyValueCount( "someProp3" ) == 3 );
+	// REQUIRE( strcmp( type->GetPropertyValue( 3, 0 ), "" ) == 0 );
+	// REQUIRE( strcmp( type->GetPropertyValue( "someProp3", 0 ), "" ) == 0 );
+}
+
+TEST_CASE( "Class vars", "[aeMeta]" )
+{
+	const ae::Type* type = ae::GetType< SomeClass >();
+	REQUIRE( type );
+	REQUIRE( type->GetVarCount( false ) );
+
+	REQUIRE( type->GetVarByName( "intMember", false ) );
+	REQUIRE( type->GetVarByIndex( 0, false ) );
+	REQUIRE( type->GetVarByName( "intMember", false ) == type->GetVarByIndex( 0, false ) );
+	const ae::Var* intVar = type->GetVarByName( "intMember", false );
+	REQUIRE( intVar->HasProperty( "intProp" ) );
+	REQUIRE( intVar->GetPropertyIndex( "intProp" ) == 0 );
+	REQUIRE( intVar->GetPropertyCount() == 1 );
+	REQUIRE( strcmp( intVar->GetPropertyName( 0 ), "intProp" ) == 0 );
+	REQUIRE( intVar->GetPropertyValueCount( 0 ) == 0 );
+	REQUIRE( intVar->GetPropertyValueCount( "intProp" ) == 0 );
+
+	REQUIRE( type->GetVarByName( "boolMember", false ) );
+	REQUIRE( type->GetVarByIndex( 1, false ) );
+	REQUIRE( type->GetVarByName( "boolMember", false ) == type->GetVarByIndex( 1, false ) );
+	const ae::Var* boolVar = type->GetVarByName( "boolMember", false );
+	REQUIRE( boolVar->HasProperty( "boolProp" ) );
+	REQUIRE( boolVar->GetPropertyIndex( "boolProp" ) == 0 );
+	REQUIRE( boolVar->GetPropertyCount() == 1 );
+	REQUIRE( strcmp( boolVar->GetPropertyName( 0 ), "boolProp" ) == 0 );
+	REQUIRE( boolVar->GetPropertyValueCount( 0 ) == 1 );
+	REQUIRE( boolVar->GetPropertyValueCount( "boolProp" ) == 1 );
+	REQUIRE( strcmp( boolVar->GetPropertyValue( 0, 0 ), "val" ) == 0 );
+	REQUIRE( strcmp( boolVar->GetPropertyValue( "boolProp", 0 ), "val" ) == 0 );
+
+	REQUIRE( type->GetVarByName( "enumTest", false ) );
+	REQUIRE( type->GetVarByIndex( 2, false ) );
+	REQUIRE( type->GetVarByName( "enumTest", false ) == type->GetVarByIndex( 2, false ) );
+	const ae::Var* enumVar = type->GetVarByName( "enumTest", false );
+	REQUIRE( enumVar->GetPropertyCount() == 2 );
+	
+	// prop0
+	REQUIRE( enumVar->HasProperty( "prop0" ) );
+	REQUIRE( enumVar->GetPropertyIndex( "prop0" ) == 0 );
+	REQUIRE( strcmp( enumVar->GetPropertyName( 0 ), "prop0" ) == 0 );
+	REQUIRE( enumVar->GetPropertyValueCount( 0 ) == 1 );
+	REQUIRE( enumVar->GetPropertyValueCount( "prop0" ) == 1 );
+
+	REQUIRE( strcmp( enumVar->GetPropertyValue( 0, 0 ), "val0" ) == 0 );
+	REQUIRE( strcmp( enumVar->GetPropertyValue( "prop0", 0 ), "val0" ) == 0 );
+
+	// prop1
+	REQUIRE( enumVar->HasProperty( "prop1" ) );
+	REQUIRE( enumVar->GetPropertyIndex( "prop1" ) == 1 );
+	REQUIRE( strcmp( enumVar->GetPropertyName( 1 ), "prop1" ) == 0 );
+	REQUIRE( enumVar->GetPropertyValueCount( 1 ) == 2 );
+	REQUIRE( enumVar->GetPropertyValueCount( "prop1" ) == 2 );
+
+	REQUIRE( strcmp( enumVar->GetPropertyValue( 1, 0 ), "val0" ) == 0 );
+	REQUIRE( strcmp( enumVar->GetPropertyValue( "prop1", 0 ), "val0" ) == 0 );
+
+	REQUIRE( strcmp( enumVar->GetPropertyValue( 1, 1 ), "val1" ) == 0 );
+	REQUIRE( strcmp( enumVar->GetPropertyValue( "prop1", 1 ), "val1" ) == 0 );
+}
+
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------

@@ -3813,18 +3813,15 @@ public:
 //------------------------------------------------------------------------------
 // External meta property registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_PROPERTY( c, p ) \
-	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( ae_type_creator_##c, #c, #p, "" );
-
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
-	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p_##v( ae_type_creator_##c, #c, #p, #v );
+#define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( ae_type_creator_##c, #c, #p, "" );
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p##_##v( ae_type_creator_##c, #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External meta var registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_VAR( c, v ) \
-	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v );
-// @TODO: AE_REGISTER_CLASS_VAR_PROPERTY & AE_REGISTER_CLASS_VAR_PROPERTY_VALUE
+#define AE_REGISTER_CLASS_VAR( c, v ) static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v );
+#define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #v, #p, #pv );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -4130,6 +4127,18 @@ public:
 	uint32_t GetArrayMaxLength() const;
 
 	//------------------------------------------------------------------------------
+	// Properties
+	//------------------------------------------------------------------------------
+	bool HasProperty( const char* prop ) const;
+	int32_t GetPropertyIndex( const char* prop ) const;
+	int32_t GetPropertyCount() const;
+	const char* GetPropertyName( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( const char* propName ) const;
+	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
+	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
+
+	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
 	static const Serializer* s_serializer;
@@ -4156,6 +4165,9 @@ public:
 		virtual uint32_t IsFixedLength() const = 0;
 	};
 	const ArrayAdapter* m_arrayAdapter = nullptr;
+
+	void m_AddProp( const char* prop, const char* value );
+	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
 };
 
 //------------------------------------------------------------------------------
@@ -7971,6 +7983,20 @@ struct _VarCreator
 		var.m_size = sizeof(V);
 
 		type->m_AddVar( var );
+	}
+};
+
+template< typename C, typename V, uint32_t Offset >
+struct _VarPropCreator
+{
+	// Take _VarCreator param as a safety check
+	_VarPropCreator( ae::_VarCreator< C, V, Offset >&, const char* varName, const char* propName, const char* propValue )
+	{
+		ae::Type* type = const_cast< ae::Type* >( ae::GetType< C >() );
+		AE_ASSERT( type );
+		ae::Var* var = const_cast< ae::Var* >( type->GetVarByName( varName, false ) );
+		AE_ASSERT( var );
+		var->m_AddProp( propName, propValue );
 	}
 };
 	
@@ -20593,6 +20619,9 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 	}
 }
 
+//------------------------------------------------------------------------------
+// ae::Var member functions
+//------------------------------------------------------------------------------
 const ae::Var::Serializer* ae::Var::s_serializer = nullptr;
 bool ae::Var::s_serializerInitialized = false;
 
@@ -20887,6 +20916,36 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		}
 	}
 	return false;
+}
+
+bool ae::Var::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
+int32_t ae::Var::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
+int32_t ae::Var::GetPropertyCount() const { return m_props.Length(); }
+const char* ae::Var::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
+uint32_t ae::Var::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
+uint32_t ae::Var::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
+const char* ae::Var::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
+{
+	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+const char* ae::Var::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
+{
+	const auto* vals = m_props.TryGet( propName );
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+
+void ae::Var::m_AddProp( const char* prop, const char* value )
+{
+	auto* props = m_props.TryGet( prop );
+	if ( !props )
+	{
+		props = &m_props.Set( prop, {} );
+	}
+	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
+	{
+		props->Append( value );
+	}
 }
 
 uint32_t ae::Type::GetVarCount( bool parents ) const
@@ -21261,7 +21320,7 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 	{
 		props = &m_props.Set( prop, {} );
 	}
-	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties with no value specified
+	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
 	{
 		props->Append( value );
 	}

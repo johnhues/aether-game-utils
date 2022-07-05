@@ -39,8 +39,28 @@ AE_REGISTER_ENUM_CLASS( PlayerState );
 // SomeClass + TestEnumClass
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( SomeClass );
+
+AE_REGISTER_CLASS_PROPERTY( SomeClass, someProp0 );
+
+AE_REGISTER_CLASS_PROPERTY_VALUE( SomeClass, someProp1, v0 );
+AE_REGISTER_CLASS_PROPERTY_VALUE( SomeClass, someProp1, v1 );
+
+AE_REGISTER_CLASS_PROPERTY( SomeClass, someProp2 );
+AE_REGISTER_CLASS_PROPERTY_VALUE( SomeClass, someProp2, v0 );
+AE_REGISTER_CLASS_PROPERTY_VALUE( SomeClass, someProp2, v1 );
+AE_REGISTER_CLASS_PROPERTY_VALUE( SomeClass, someProp2, v2 );
+
 AE_REGISTER_CLASS_VAR( SomeClass, intMember );
+AE_REGISTER_CLASS_VAR_PROPERTY( SomeClass, intMember, intProp );
+
+AE_REGISTER_CLASS_VAR( SomeClass, boolMember );
+AE_REGISTER_CLASS_VAR_PROPERTY( SomeClass, boolMember, boolProp );
+AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, boolMember, boolProp, val );
+
 AE_REGISTER_CLASS_VAR( SomeClass, enumTest );
+AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop0, val0 );
+AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop1, val0 );
+AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop1, val1 );
 
 AE_REGISTER_ENUM_CLASS( TestEnumClass );
 

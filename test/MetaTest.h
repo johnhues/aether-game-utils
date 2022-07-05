@@ -58,6 +58,7 @@ class SomeClass : public ae::Inheritor< ae::Object, SomeClass >
 {
 public:
 	int32_t intMember;
+	bool boolMember;
 	TestEnumClass enumTest;
 };
 
@@ -150,11 +151,6 @@ AE_DEFINE_ENUM_CLASS( GamePadBitField, uint16_t,
 	Right
 );
 AE_DEFINE_ENUM_BITFIELD( GamePadBitField );
-
-// #define AE_REGISTER_ENUM_PROPERTY( E, P )
-// #define AE_REGISTER_ENUM_PROPERTY_VALUE( E, P, PV )
-// #define AE_REGISTER_ENUM_VALUE_PROPERTY( E, V, P )
-// #define AE_REGISTER_ENUM_VALUE_PROPERTY_VALUE( E, V, P, PV )
 
 //------------------------------------------------------------------------------
 // Reference testing
