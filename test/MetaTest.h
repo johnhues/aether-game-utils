@@ -33,22 +33,22 @@
 // TestEnumClass
 //------------------------------------------------------------------------------
 AE_DEFINE_ENUM_CLASS( TestEnumClass, int32_t,
-  NegativeOne = -1,
-  Zero,
-  One,
-  Two = 0x02,
-  Three = 0x03,
-  Four,
-  Five
+	NegativeOne = -1,
+	Zero,
+	One,
+	Two = 0x02,
+	Three = 0x03,
+	Four,
+	Five
 );
 
 //------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
 AE_DEFINE_ENUM_CLASS( PlayerState, uint16_t,
-  Idle,
-  Run,
-  Jump
+	Idle,
+	Run,
+	Jump
 );
 
 //------------------------------------------------------------------------------
@@ -57,8 +57,9 @@ AE_DEFINE_ENUM_CLASS( PlayerState, uint16_t,
 class SomeClass : public ae::Inheritor< ae::Object, SomeClass >
 {
 public:
-  int32_t intMember;
-  TestEnumClass enumTest;
+	int32_t intMember;
+	bool boolMember;
+	TestEnumClass enumTest;
 };
 
 //------------------------------------------------------------------------------
@@ -66,9 +67,9 @@ public:
 //------------------------------------------------------------------------------
 enum SomeOldEnum
 {
-  Bleep = 4,
-  Bloop,
-  Blop = 7
+	Bleep = 4,
+	Bloop,
+	Blop = 7
 };
 
 //------------------------------------------------------------------------------
@@ -76,9 +77,9 @@ enum SomeOldEnum
 //------------------------------------------------------------------------------
 enum SomeOldPrefixEnum
 {
-  kSomeOldPrefixEnum_Bleep = 4,
-  kSomeOldPrefixEnum_Bloop,
-  kSomeOldPrefixEnum_Blop = 7
+	kSomeOldPrefixEnum_Bleep = 4,
+	kSomeOldPrefixEnum_Bloop,
+	kSomeOldPrefixEnum_Blop = 7
 };
 
 //------------------------------------------------------------------------------
@@ -86,9 +87,9 @@ enum SomeOldPrefixEnum
 //------------------------------------------------------------------------------
 enum SomeOldRenamedEnum
 {
-  BLEEP = 4,
-  BLOOP,
-  BLOP = 7
+	BLEEP = 4,
+	BLOOP,
+	BLOP = 7
 };
 
 //------------------------------------------------------------------------------
@@ -96,9 +97,9 @@ enum SomeOldRenamedEnum
 //------------------------------------------------------------------------------
 enum class SomeNewEnum
 {
-  Bleep = 4,
-  Bloop,
-  Blop = 7
+	Bleep = 4,
+	Bloop,
+	Blop = 7
 };
 
 //------------------------------------------------------------------------------
@@ -106,16 +107,50 @@ enum class SomeNewEnum
 //------------------------------------------------------------------------------
 namespace A
 {
-  namespace B
-  {
-    enum class SomeNewEnum
-    {
-      Bleep = 4,
-      Bloop,
-      Blop = 7
-    };
-  }
+	namespace B
+	{
+		enum class SomeNewEnum
+		{
+			Bleep = 4,
+			Bloop,
+			Blop = 7
+		};
+	}
 }
+
+//------------------------------------------------------------------------------
+// PlayerState
+//------------------------------------------------------------------------------
+// #define AE_DEFINE_ENUM_BITFIELD( E )\
+// 	typedef std::underlying_type< E >::type _ae_##E;\
+// 	inline E operator | ( E a, E b ) { return (E)( (_ae_##E)a | (_ae_##E)b ); }\
+// 	inline E operator & ( E a, E b ) { return (E)( (_ae_##E)a & (_ae_##E)b ); }\
+// 	inline E operator ^ ( E a, E b ) { return (E)( (_ae_##E)a ^ (_ae_##E)b ); }\
+// 	inline E operator ~ ( E e ) { return (E)( ~(_ae_##E)e ); }
+
+#define AE_DEFINE_ENUM_BITFIELD( E )\
+	typedef std::underlying_type< E >::type _ae_##E;\
+	inline _ae_##E operator | ( E a, E b ) { return ( (_ae_##E)a | (_ae_##E)b ); }\
+	inline _ae_##E operator | ( _ae_##E a, E b ) { return ( a | (_ae_##E)b ); }\
+	inline _ae_##E operator | ( E a, _ae_##E b ) { return ( (_ae_##E)a | b ); }\
+	inline _ae_##E operator & ( E a, E b ) { return ( (_ae_##E)a & (_ae_##E)b ); }\
+	inline _ae_##E operator ^ ( E a, E b ) { return ( (_ae_##E)a ^ (_ae_##E)b ); }\
+	inline _ae_##E operator ~ ( E e ) { return ~(_ae_##E)e; }
+
+AE_DEFINE_ENUM_CLASS( GamePadBitField, uint16_t,
+	None,
+	A,
+	B,
+	X,
+	Y,
+	L,
+	R,
+	Up,
+	Down,
+	Left,
+	Right
+);
+AE_DEFINE_ENUM_BITFIELD( GamePadBitField );
 
 //------------------------------------------------------------------------------
 // Reference testing
@@ -124,42 +159,42 @@ namespace A
 class RefTester : public ae::Inheritor< ae::Object, RefTester >
 {
 public:
-  
-  static std::string GetIdString( const RefTester* obj );
-  static bool StringToId( const char* str, uint32_t* idOut );
-  
-  uint32_t id = 0;
+	
+	static std::string GetIdString( const RefTester* obj );
+	static bool StringToId( const char* str, uint32_t* idOut );
+	
+	uint32_t id = 0;
 };
 
 // RefTesterA
 class RefTesterA : public ae::Inheritor< RefTester, RefTesterA >
 {
 public:
-  int notRef = 0xfdfdfdfd;
-  class RefTesterA* refA = nullptr;
-  class RefTesterB* refB = nullptr;
+	int notRef = 0xfdfdfdfd;
+	class RefTesterA* refA = nullptr;
+	class RefTesterB* refB = nullptr;
 };
 
 // RefTesterB
 class RefTesterB : public ae::Inheritor< RefTester, RefTesterB >
 {
 public:
-  class RefTesterA* refA = nullptr;
+	class RefTesterA* refA = nullptr;
 };
 
 // RefTesterManager
 class RefTesterManager
 {
 public:
-  template < typename T >
-  T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::New< T >( AE_ALLOC_TAG_FIXME ) ); o->id = m_nextId; m_nextId++; return o; }
-  void Destroy( RefTester* object );
-  
-  RefTester* GetObjectById( uint32_t id );
+	template < typename T >
+	T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::New< T >( AE_ALLOC_TAG_FIXME ) ); o->id = m_nextId; m_nextId++; return o; }
+	void Destroy( RefTester* object );
+	
+	RefTester* GetObjectById( uint32_t id );
 
 private:
-  uint32_t m_nextId = 1;
-  ae::Map< uint32_t, RefTester* > m_objectMap = AE_ALLOC_TAG_FIXME;
+	uint32_t m_nextId = 1;
+	ae::Map< uint32_t, RefTester* > m_objectMap = AE_ALLOC_TAG_FIXME;
 };
 
 #endif

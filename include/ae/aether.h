@@ -978,6 +978,9 @@ struct Color
 	//! hue: 0-1 saturation: 0-1 value: 0-1
 	static Color HSV( float hue, float saturation, float value );
 
+	bool operator == ( ae::Color o ) const { return r == o.r && g == o.g && b == o.b && a == o.a; }
+	bool operator != ( ae::Color o ) const { return !( operator == ( o ) ); }
+
 	Vec3 GetLinearRGB() const;
 	Vec4 GetLinearRGBA() const;
 	Vec3 GetSRGB() const;
@@ -1348,7 +1351,6 @@ public:
 	ae::Vec4 GetVec4( const char* key, ae::Vec4 defaultValue ) const;
 	ae::Int2 GetInt2( const char* key, ae::Int2 defaultValue ) const;
 	ae::Matrix4 GetMatrix4( const char* key, const ae::Matrix4& defaultValue ) const;
-	ae::Color GetColor( const char* key, ae::Color defaultValue ) const;
 	bool Has( const char* key ) const;
 
 	const char* GetKey( uint32_t idx ) const;
@@ -3811,18 +3813,15 @@ public:
 //------------------------------------------------------------------------------
 // External meta property registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_PROPERTY( c, p ) \
-	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( ae_type_creator_##c, #c, #p, "" );
-
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) \
-	static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p_##v( ae_type_creator_##c, #c, #p, #v );
+#define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( ae_type_creator_##c, #c, #p, "" );
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p##_##v( ae_type_creator_##c, #c, #p, #v );
 
 //------------------------------------------------------------------------------
 // External meta var registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_VAR( c, v ) \
-	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v );
-// @TODO: AE_REGISTER_CLASS_VAR_PROPERTY & AE_REGISTER_CLASS_VAR_PROPERTY_VALUE
+#define AE_REGISTER_CLASS_VAR( c, v ) static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v );
+#define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #v, #p, #pv );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -3840,10 +3839,10 @@ public:
 		static const ae::Var::ArrayAdapter* GetArrayAdapter() { return nullptr; } \
 	}; \
 	struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
-	static std::ostream &operator << ( std::ostream &os, E e ) { \
-		os << ae::GetEnum( #E )->GetNameByValue( (int32_t)e ); \
-		return os; \
-	}
+	template <> const ae::Enum* ae::GetEnum< E >(); \
+	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); return os; } \
+	namespace ae { template <> inline std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
+	namespace ae { template <> inline E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E ) \
@@ -3865,7 +3864,9 @@ public:
 		static const char* GetPrefix() { return ""; } \
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; } \
+	namespace ae { template <> std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
+	namespace ae { template <> E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
 //! Register an already defined c-style enum type where each value has a prefix
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) \
@@ -3908,6 +3909,12 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
 	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
+
+// #define AE_REGISTER_ENUM_PROPERTY( E, P )
+// #define AE_REGISTER_ENUM_PROPERTY_VALUE( E, P, PV )
+// #define AE_REGISTER_ENUM_VALUE_PROPERTY( E, V, P )
+// #define AE_REGISTER_ENUM_VALUE_PROPERTY_VALUE( E, V, P, PV )
+
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -3987,15 +3994,13 @@ public:
 		
 	template < typename T > std::string GetNameByValue( T value ) const;
 	template < typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
+	template < typename T > T GetValueFromString( const char* str, T defaultValue ) const;
 	template < typename T > bool HasValue( T value ) const;
 		
 	int32_t GetValueByIndex( int32_t index ) const;
 	std::string GetNameByIndex( int32_t index ) const;
 	uint32_t Length() const;
 		
-	template < typename T > static std::string GetNameFromValue( T value );
-	template < typename T > static T GetValueFromString( const char* str, T defaultValue );
-	
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
@@ -4128,6 +4133,18 @@ public:
 	uint32_t GetArrayMaxLength() const;
 
 	//------------------------------------------------------------------------------
+	// Properties
+	//------------------------------------------------------------------------------
+	bool HasProperty( const char* prop ) const;
+	int32_t GetPropertyIndex( const char* prop ) const;
+	int32_t GetPropertyCount() const;
+	const char* GetPropertyName( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( const char* propName ) const;
+	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
+	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
+
+	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
 	static const Serializer* s_serializer;
@@ -4154,6 +4171,9 @@ public:
 		virtual uint32_t IsFixedLength() const = 0;
 	};
 	const ArrayAdapter* m_arrayAdapter = nullptr;
+
+	void m_AddProp( const char* prop, const char* value );
+	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
 };
 
 //------------------------------------------------------------------------------
@@ -5694,134 +5714,197 @@ std::istream& operator>>( std::istream& in, Str< N >& str )
 	return in;
 }
 
+//------------------------------------------------------------------------------
+// ae::ToString functions
+//------------------------------------------------------------------------------
+// No implementation so this acts as a forward declaration. Also a default
+// templated ae::ToString function would prevent the compiler/linker from looking
+// for ae::ToString implementations in other modules.
+template < typename T > std::string ToString( T value ); // @TODO: Add ref
+
+// template <> // @TODO: Where should this empty template parameter list go?
 template < uint32_t N >
-const Str< N >& ToString( const Str< N >& value )
+std::string ToString( Str< N > value )
 {
 	return value;
 }
 
-inline const char* ToString( const char* value )
+template <>
+inline std::string ToString( char const * value )
 {
 	return value;
 }
 
-inline Str16 ToString( int32_t value )
+template <>
+inline std::string ToString( int32_t value )
 {
-	char str[ Str16::MaxLength() + 1u ];
+	char str[ 16 ];
 	uint32_t length = snprintf( str, sizeof( str ) - 1, "%d", value );
-	return Str16( length, str );
+	return std::string( str, length );
 }
 
-inline Str16 ToString( uint32_t value )
+template <>
+inline std::string ToString( uint32_t value )
 {
-	char str[ Str16::MaxLength() + 1u ];
+	char str[ 16 ];
 	uint32_t length = snprintf( str, sizeof( str ) - 1, "%u", value );
-	return Str16( length, str );
+	return std::string( str, length );
 }
 
-inline Str16 ToString( float value )
+template <>
+inline std::string ToString( float value )
 {
-	char str[ Str16::MaxLength() + 1u ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
-	return Str16( length, str );
+	char str[ 16 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	return std::string( str, length );
 }
 
-inline Str16 ToString( double value )
+template <>
+inline std::string ToString( double value )
 {
-	char str[ Str16::MaxLength() + 1u ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.2f", value );
-	return Str16( length, str );
+	char str[ 16 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	return std::string( str, length );
 }
 
-inline Str128 ToString( const ae::Matrix4& v )
+template <>
+inline std::string ToString( bool v )
 {
-	char str[ Str128::MaxLength() + 1u ];
+	return v ? "true" : "false";
+}
+
+template <>
+inline std::string ToString( ae::Vec2 v )
+{
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f", v.x, v.y );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Vec3 v )
+{
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f", v.x, v.y, v.z );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Vec4 v )
+{
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Color v )
+{
+	char str[ 128 ];
+	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Matrix4 v )
+{
+	char str[ 128 ];
 	uint32_t length = snprintf( str, sizeof( str ) - 1,
-		"%.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f",
+		"%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
 		v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ],
 		v.data[ 4 ], v.data[ 5 ], v.data[ 6 ], v.data[ 7 ],
 		v.data[ 8 ], v.data[ 9 ], v.data[ 10 ], v.data[ 11 ],
 		v.data[ 12 ], v.data[ 13 ], v.data[ 14 ], v.data[ 15 ]
 	);
-	return Str128( length, str );
+	return std::string( str, length );
 }
 
-template < typename T >
-Str128 ToString( const T& v )
-{
-	std::stringstream os;
-	os << v;
-	return os.str().c_str();
-}
+//------------------------------------------------------------------------------
+// ae::FromString functions
+//------------------------------------------------------------------------------
+// No implementation so this acts as a forward declaration. Also a default
+// templated ae::ToString function would prevent the compiler/linker from looking
+// for ae::ToString implementations in other modules.
+template < typename T > T FromString( const char* str, const T& defaultValue );
 
-template < typename T >
-inline T FromString( const char* str )
+template <>
+inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )
 {
-	AE_FAIL_MSG( "Not implemented" );
-	return {};
+	ae::Vec2 r;
+	if ( sscanf( str, "%f %f", r.data, r.data + 1 ) == 2 )
+	{
+		return r;
+	}
+	return defaultValue;
 }
 
 template <>
-inline ae::Vec2 FromString( const char* str )
+inline ae::Vec3 FromString( const char* str, const ae::Vec3& defaultValue )
 {
-	ae::Vec2 r( 0.0f );
-	sscanf( str, "%f %f", r.data, r.data + 1 );
-	return r;
+	ae::Vec3 r;
+	if ( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) == 3 )
+	{
+		return r;
+	}
+	return defaultValue;
 }
 
 template <>
-inline ae::Vec3 FromString( const char* str )
+inline ae::Vec4 FromString( const char* str, const ae::Vec4& defaultValue )
 {
-	ae::Vec3 r( 0.0f );
-	sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 );
-	return r;
+	ae::Vec4 r;
+	if ( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	{
+		return r;
+	}
+	return defaultValue;
 }
 
 template <>
-inline ae::Vec4 FromString( const char* str )
+inline ae::Matrix4 FromString( const char* str, const ae::Matrix4& defaultValue )
 {
-	ae::Vec4 r( 0.0f );
-	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
-	return r;
-}
-
-template <>
-inline ae::Matrix4 FromString( const char* str )
-{
-	ae::Matrix4 r = ae::Matrix4::Identity();
-	sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
+	ae::Matrix4 r;
+	if ( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
 		r.data, r.data + 1, r.data + 2, r.data + 3,
 		r.data + 4, r.data + 5, r.data + 6, r.data + 7,
 		r.data + 8, r.data + 9, r.data + 10, r.data + 11,
-		r.data + 12, r.data + 13, r.data + 14, r.data + 15 );
-	return r;
-}
-
-template <>
-inline ae::Color FromString( const char* str )
-{
-	ae::Color r( 0.0f );
-	sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 );
-	return r;
-}
-
-template <>
-inline bool FromString( const char* str )
-{
-	if ( !str[ 0 ] )
+		r.data + 12, r.data + 13, r.data + 14, r.data + 15 ) == 16 )
 	{
-		return false;
+		return r;
 	}
-	// @TODO: Clean this up. Should check for both `true` and `false`, and return false if neither match
-	const char* trueStr = "true";
-	for ( uint32_t i = 0; ( str[ i ] && trueStr[ i ] ); i++ )
+	return defaultValue;
+}
+
+template <>
+inline ae::Color FromString( const char* str, const ae::Color& defaultValue )
+{
+	ae::Color r;
+	if ( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
 	{
-		if ( trueStr[ i ] != tolower( str[ i ] ) )
+		return r;
+	}
+	return defaultValue;
+}
+
+template <>
+inline bool FromString( const char* str, const bool& defaultValue )
+{
+	auto StrCmp = []( const char* boolStr, const char* inputStr )
+	{
+		while ( *boolStr && *inputStr )
 		{
-			return false;
+			if ( *boolStr != tolower( *inputStr ) ) { return false; }
+			boolStr++;
+			inputStr++;
 		}
-	}
-	return true;
+		return ( !*boolStr && !*inputStr );
+	};
+	
+	float f;
+	if ( StrCmp( "true", str ) ) { return true; }
+	if ( StrCmp( "false", str ) ) { return false; }
+	if ( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
+	return defaultValue;
 }
 
 template < uint32_t N >
@@ -7908,6 +7991,20 @@ struct _VarCreator
 		type->m_AddVar( var );
 	}
 };
+
+template< typename C, typename V, uint32_t Offset >
+struct _VarPropCreator
+{
+	// Take _VarCreator param as a safety check
+	_VarPropCreator( ae::_VarCreator< C, V, Offset >&, const char* varName, const char* propName, const char* propValue )
+	{
+		ae::Type* type = const_cast< ae::Type* >( ae::GetType< C >() );
+		AE_ASSERT( type );
+		ae::Var* var = const_cast< ae::Var* >( type->GetVarByName( varName, false ) );
+		AE_ASSERT( var );
+		var->m_AddProp( propName, propValue );
+	}
+};
 	
 // @NOTE: Internal. Non-specialized GetEnum() has no implementation so templated GetEnum() calls (defined
 // with AE_DEFINE_ENUM_CLASS, AE_META_ENUM, and AE_META_ENUM_PREFIX) will call the specialized function.
@@ -8169,23 +8266,6 @@ const ae::Type* ae::GetType()
 }
 
 template < typename T >
-std::string ae::Enum::GetNameFromValue( T value )
-{
-	const Enum* enumType = GetEnum< T >();
-	AE_ASSERT( enumType );
-	return enumType->m_enumValueToName.Get( (int32_t)value, "" );
-}
-
-template < typename T >
-T ae::Enum::GetValueFromString( const char* str, T defaultValue )
-{
-	const Enum* enumType = GetEnum< T >();
-	AE_ASSERT_MSG( enumType, "Value '#' has no Enum #", str, typeid(T).name() ); // TODO: Pretty print
-	enumType->GetValueFromString( str, &defaultValue );
-	return defaultValue;
-}
-
-template < typename T >
 std::string ae::Enum::GetNameByValue( T value ) const
 {
 	return m_enumValueToName.Get( (int32_t)value, "" );
@@ -8209,8 +8289,14 @@ bool ae::Enum::GetValueFromString( const char* str, T* valueOut ) const
 			return true;
 		}
 	}
-	
 	return false;
+}
+
+template < typename T >
+T ae::Enum::GetValueFromString( const char* str, T defaultValue ) const
+{
+	GetValueFromString( str, &defaultValue );
+	return defaultValue;
 }
 
 template < typename T >
@@ -10574,6 +10660,7 @@ void TimeStep::Wait()
 //------------------------------------------------------------------------------
 // ae::Dict members
 //------------------------------------------------------------------------------
+// @TODO: These should use ToString and FromString
 Dict::Dict( ae::Tag tag ) :
 	m_entries( tag )
 {}
@@ -10619,21 +10706,21 @@ void Dict::SetBool( const char* key, bool value )
 void Dict::SetVec2( const char* key, ae::Vec2 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.2f %.2f", value.x, value.y );
+	sprintf( buf, "%.3f %.3f", value.x, value.y );
 	SetString( key, buf );
 }
 
 void Dict::SetVec3( const char* key, ae::Vec3 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.2f %.2f %.2f", value.x, value.y, value.z );
+	sprintf( buf, "%.3f %.3f %.3f", value.x, value.y, value.z );
 	SetString( key, buf );
 }
 
 void Dict::SetVec4( const char* key, ae::Vec4 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.2f %.2f %.2f %.2f", value.x, value.y, value.z, value.w );
+	sprintf( buf, "%.3f %.3f %.3f %.3f", value.x, value.y, value.z, value.w );
 	SetString( key, buf );
 }
 
@@ -10646,8 +10733,8 @@ void Dict::SetInt2( const char* key, ae::Int2 value )
 
 void Dict::SetMatrix4( const char* key, const ae::Matrix4& value )
 {
-	ae::Str128& v = m_entries.Set( key, "" );
-	v = ToString( value );
+	auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 void Dict::Clear()
@@ -10764,19 +10851,8 @@ ae::Matrix4 Dict::GetMatrix4( const char* key, const ae::Matrix4& defaultValue )
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return ae::FromString< ae::Matrix4 >( value->c_str() );
+		return ae::FromString< ae::Matrix4 >( value->c_str(), defaultValue );
 	}
-	return defaultValue;
-}
-
-ae::Color Dict::GetColor( const char* key, ae::Color defaultValue ) const
-{
-	// uint8_t c[ 4 ];
-	// const KeyValue* kv = m_GetValue( key );
-	// if ( kv && kv->value.Length() == 9 && sscanf( kv->value.c_str(), "#%2hhx%2hhx%2hhx%2hhx", &c[ 0 ], &c[ 1 ], &c[ 2 ], &c[ 3 ] ) == 4 )
-	// {
-	//   return (Color)((c[ 0 ] << 24) | (c[ 1 ] << 16) | (c[ 2 ] << 8) | c[ 3 ]);
-	// }
 	return defaultValue;
 }
 
@@ -20549,6 +20625,9 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 	}
 }
 
+//------------------------------------------------------------------------------
+// ae::Var member functions
+//------------------------------------------------------------------------------
 const ae::Var::Serializer* ae::Var::s_serializer = nullptr;
 bool ae::Var::s_serializerInitialized = false;
 
@@ -20715,7 +20794,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		}
 		case Var::Bool:
 		{
-			*(bool*)varData = ae::FromString< bool >( value );
+			*(bool*)varData = ae::FromString< bool >( value, false );
 			return true;
 		}
 		case Var::Float:
@@ -20737,7 +20816,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Vec2) );
 			ae::Vec2* v = (ae::Vec2*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec2 >( value );
+			*v = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
 			return true;
 		}
 		case Var::Vec3:
@@ -20745,7 +20824,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Vec3) );
 			ae::Vec3* v = (ae::Vec3*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec3 >( value );
+			*v = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
 			return true;
 		}
 		case Var::Vec4:
@@ -20753,7 +20832,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Vec4) );
 			ae::Vec4* v = (ae::Vec4*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec4 >( value );
+			*v = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
 			return true;
 		}
 		case Var::Matrix4:
@@ -20761,7 +20840,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Matrix4) );
 			ae::Matrix4* v = (ae::Matrix4*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Matrix4 >( value );
+			*v = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
 			return true;
 		}
 		case Var::Color:
@@ -20769,7 +20848,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			AE_ASSERT( m_size == sizeof(ae::Color) );
 			ae::Color* v = (ae::Color*)varData;
 			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Color >( value );
+			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
 			return true;
 		}
 		case Var::Enum:
@@ -20843,6 +20922,36 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		}
 	}
 	return false;
+}
+
+bool ae::Var::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
+int32_t ae::Var::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
+int32_t ae::Var::GetPropertyCount() const { return m_props.Length(); }
+const char* ae::Var::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
+uint32_t ae::Var::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
+uint32_t ae::Var::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
+const char* ae::Var::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
+{
+	const auto* vals = ( propIndex < m_props.Length() ) ? &m_props.GetValue( propIndex ) : nullptr;
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+const char* ae::Var::GetPropertyValue( const char* propName, uint32_t valueIndex ) const
+{
+	const auto* vals = m_props.TryGet( propName );
+	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+
+void ae::Var::m_AddProp( const char* prop, const char* value )
+{
+	auto* props = m_props.TryGet( prop );
+	if ( !props )
+	{
+		props = &m_props.Set( prop, {} );
+	}
+	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
+	{
+		props->Append( value );
+	}
 }
 
 uint32_t ae::Type::GetVarCount( bool parents ) const
@@ -21217,7 +21326,7 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 	{
 		props = &m_props.Set( prop, {} );
 	}
-	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties with no value specified
+	if ( value && value[ 0 ] ) // 'm_props' will have an empty array for properties when no value is specified
 	{
 		props->Append( value );
 	}
