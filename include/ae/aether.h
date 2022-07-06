@@ -746,6 +746,7 @@ class Sphere
 public:
 	Sphere() = default;
 	Sphere( ae::Vec3 center, float radius ) : center( center ), radius( radius ) {}
+	explicit Sphere( const class OBB& obb );
 
 	bool Raycast( ae::Vec3 origin, ae::Vec3 direction, float* tOut = nullptr, ae::Vec3* pOut = nullptr ) const;
 	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
@@ -835,7 +836,7 @@ public:
 		Bottom
 	};
 	
-	Frustum( ae::Matrix4 worldToProjection );
+	explicit Frustum( ae::Matrix4 worldToProjection );
 	bool Intersects( const ae::Sphere& sphere ) const;
 	bool Intersects( ae::Vec3 point ) const;
 	ae::Plane GetPlane( ae::Frustum::Plane plane ) const;
@@ -935,6 +936,10 @@ public:
 	bool IntersectRay( Vec3 source, Vec3 ray, Vec3* hitOut = nullptr, ae::Vec3* normOut = nullptr, float* tOut = nullptr ) const;
 	//! Returns an AABB that tightly fits this obb.
 	AABB GetAABB() const;
+	
+	ae::Vec3 GetCenter() const { return m_center; }
+	ae::Vec3 GetAxis( uint32_t idx ) const { return m_axes[ idx ]; }
+	ae::Vec3 GetHalfSize() const { return m_halfSize; }
 
 private:
 	Vec3 m_center;
@@ -2294,12 +2299,12 @@ public:
 	//! only in emscripten builds). <b>Prefer this function over all other
 	//! ae::FileSystem::Read...() methods as it will work the most consistently
 	//! on all platforms.</b> Returns an ae::File object to be freed later
-	//! with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec value
+	//! with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec value
 	//! will disable the timeout.
 	const ae::File* Read( Root root, const char* url, float timeoutSec );
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
 	//! only in emscripten builds). Returns an ae::File object to be freed
-	//! later with ae::FileSystem::Destroy(). A zero or negative /p timeoutSec
+	//! later with ae::FileSystem::Destroy(). A zero or negative \p timeoutSec
 	//! value will disable the timeout.
 	const ae::File* Read( const char* url, float timeoutSec );
 	//! Retry if reading or writing of the given \p file did not finish
@@ -3059,23 +3064,50 @@ private:
 class DebugLines
 {
 public:
+	~DebugLines();
+	//! Call this before ae::DebugLines::Add...() and before calling ae::DebugLines::Render(). \p maxVerts
+	//! are allocated when this function is called. All subsequent calls to ae::DebugLines::Add...() will return
+	//! false once this limit has been reached until ae::DebugLines::Clear() or ae::DebugLines::Render()
+	//! is called.
 	void Initialize( uint32_t maxVerts );
+	//! Deallocates vertices and frees GPU recources.
 	void Terminate();
-	//! Also calls Clear() so AddLine() etc should be called every frame
+	//! Draws all debug lines submitted with ae::DebugLines::Add...() since the last call to ae::DebugLines::Clear()
+	//! or ae::DebugLines::Render(). All debug lines must be resubmitted after calling this.
 	void Render( const Matrix4& worldToNdc );
-	//! Draw desaturated lines on failed depth test
+	//! Enable or disable drawing of desaturated lines on failed depth test.
 	void SetXRayEnabled( bool enabled ) { m_xray = enabled; }
-
-	bool AddLine( Vec3 p0, Vec3 p1, Color color );
-	bool AddDistanceCheck( Vec3 p0, Vec3 p1, float distance );
-	bool AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color );
-	bool AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount );
-	bool AddAABB( Vec3 pos, Vec3 halfSize, Color color );
-	bool AddOBB( Matrix4 transform, Color color );
-	bool AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount );
-	bool AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color );
-	bool AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t vertexCount, const void* indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color );
+	//! Resets the internal vertex buffer without uploading anything to the GPU. Use this if a call to
+	//! ae::DebugLines::Render() is ever skipped.
 	void Clear();
+
+	//! Adds a line from \p p0 to \p p1 with \p color to be transformed and drawn with ae::DebugLines::Render().
+	//! Returns false and the line is not added if ae::DebugLines::GetMaxVertexCount() would be exceeded.
+	uint32_t AddLine( Vec3 p0, Vec3 p1, Color color );
+	//! Adds a line from \p p0 to \p p1 to be transformed and drawn with ae::DebugLines::Render(). The
+	//! color will be \p successColor if the distance between \p p0 and \p p1 is less than \p distance,
+	//! otherwise the line color will be \p failColor. Returns false and the line is not added if
+	//! ae::DebugLines::GetMaxVertexCount() would be exceeded.
+	uint32_t AddDistanceCheck( Vec3 p0, Vec3 p1, float distance, ae::Color successColor, ae::Color failColor );
+	//! Adds a \p color rectangle with center \p pos facing \p normal rotated so the top line is
+	//! perpendicular to \p up to be transformed and drawn with ae::DebugLines::Render().
+	//! Returns false and the rectangle is not added if ae::DebugLines::GetMaxVertexCount() would be exceeded.
+	uint32_t AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color );
+	//! Adds a \p color circle with center \p pos facing \p normal to be transformed and drawn with
+	//! ae::DebugLines::Render(). \p pointCount determines the number of points along the circumference.
+	//! Returns false and the circle is not added if ae::DebugLines::GetMaxVertexCount() would be exceeded.
+	uint32_t AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount );
+	uint32_t AddAABB( Vec3 pos, Vec3 halfSize, Color color );
+	uint32_t AddOBB( Matrix4 transform, Color color );
+	uint32_t AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount );
+	uint32_t AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color );
+	uint32_t AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t vertexCount, const void* indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color );
+	
+	//! Returns the number of vertices submitted since the last call to ae::DebugLines::Clear() or ae::DebugLines::Render().
+	uint32_t GetVertexCount() const;
+	//! Returns the maximum number of vertices that can be submitted between calls to ae::DebugLines::Clear()
+	//! and ae::DebugLines::Render(). This is the value provided to ae::DebugLines::Initialize().
+	uint32_t GetMaxVertexCount() const;
 
 private:
 	struct DebugVertex
@@ -9582,6 +9614,12 @@ float Quaternion::Dot( const Quaternion& q ) const
 //------------------------------------------------------------------------------
 // ae::Sphere member functions
 //------------------------------------------------------------------------------
+Sphere::Sphere( const OBB& obb )
+{
+	center = obb.GetCenter();
+	radius = obb.GetHalfSize().Length();
+}
+
 bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) const
 {
 	direction.SafeNormalize();
@@ -17386,6 +17424,11 @@ uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t
 //------------------------------------------------------------------------------
 // ae::DebugLines member functions
 //------------------------------------------------------------------------------
+DebugLines::~DebugLines()
+{
+	Terminate();
+}
+
 void DebugLines::Initialize( uint32_t maxVerts )
 {
 	m_vertexData.Initialize( sizeof(DebugVertex), 0, maxVerts, 0, Vertex::Primitive::Line, Vertex::Usage::Dynamic, Vertex::Usage::Static );
@@ -17420,6 +17463,7 @@ void DebugLines::Terminate()
 {
 	m_shader.Terminate();
 	m_vertexData.Terminate();
+	m_xray = true;
 }
 
 void DebugLines::Render( const Matrix4& worldToNdc )
@@ -17450,11 +17494,11 @@ void DebugLines::Clear()
 	m_vertexData.ClearVertices();
 }
 
-bool DebugLines::AddLine( Vec3 p0, Vec3 p1, Color color )
+uint32_t DebugLines::AddLine( Vec3 p0, Vec3 p1, Color color )
 {
 	if ( m_vertexData.GetVertexCount() + 2 > m_vertexData.GetMaxVertexCount() )
 	{
-		return false;
+		return 0;
 	}
 	DebugVertex verts[] =
 	{
@@ -17462,38 +17506,38 @@ bool DebugLines::AddLine( Vec3 p0, Vec3 p1, Color color )
 		{ p1, color }
 	};
 	m_vertexData.AppendVertices( verts, countof( verts ) );
-	return true;
+	return countof( verts );
 }
 
-bool DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance )
+uint32_t DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance, ae::Color successColor, ae::Color failColor )
 {
 	if ( m_vertexData.GetVertexCount() + 2 > m_vertexData.GetMaxVertexCount() )
 	{
-		return false;
+		return 0;
 	}
-	ae::Color color = ( ( p1 - p0 ).Length() <= distance ) ? Color::Green() : Color::Red();
+	ae::Color color = ( ( p1 - p0 ).Length() <= distance ) ? successColor : failColor;
 	DebugVertex verts[] =
 	{
 		{ p0, color },
 		{ p1, color }
 	};
 	m_vertexData.AppendVertices( verts, countof( verts ) );
-	return true;
+	return countof( verts );
 }
 
-bool DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color )
+uint32_t DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color )
 {
 	if ( m_vertexData.GetVertexCount() + 8 > m_vertexData.GetMaxVertexCount()
 		|| up.LengthSquared() < 0.001f
 		|| normal.LengthSquared() < 0.001f )
 	{
-		return false;
+		return 0;
 	}
 	up.Normalize();
 	normal.Normalize();
 	if ( normal.Dot( up ) > 0.999f )
 	{
-		return false;
+		return 0;
 	}
 	
 	size *= 0.5f;
@@ -17519,21 +17563,23 @@ bool DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color
 	};
 	m_vertexData.AppendVertices( verts, countof( verts ) );
 	
-	return true;
+	return countof( verts );
 }
 
-bool DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount )
+uint32_t DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount )
 {
-	if ( m_vertexData.GetVertexCount() + pointCount * 2 > m_vertexData.GetMaxVertexCount()
+	uint32_t startVerts = m_vertexData.GetVertexCount();
+	if ( startVerts + pointCount * 2 > m_vertexData.GetMaxVertexCount()
 		|| normal.LengthSquared() < 0.001f )
 	{
-		return false;
+		return 0;
 	}
 	
 	normal.Normalize();
 	float dot = normal.Dot( Vec3(0,0,1) );
 	ae::Quaternion rotation( normal, ( dot < 0.99f && dot > -0.99f ) ? Vec3(0,0,1) : Vec3(1,0,0) );
 	float angleInc = ae::PI * 2.0f / pointCount;
+	
 	for ( uint32_t i = 0; i < pointCount; i++ )
 	{
 		float angle0 = angleInc * i;
@@ -17550,14 +17596,14 @@ bool DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, ui
 		verts[ 1 ].color = color;
 		m_vertexData.AppendVertices( verts, countof( verts ) );
 	}
-	return true;
+	return m_vertexData.GetVertexCount() - startVerts;
 }
 
-bool DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
+uint32_t DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
 {
 	if ( m_vertexData.GetVertexCount() + 24 > m_vertexData.GetMaxVertexCount() )
 	{
-		return false;
+		return 0;
 	}
 	Vec3 c[] =
 	{
@@ -17603,14 +17649,14 @@ bool DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
 	};
 	AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
 	m_vertexData.AppendVertices( verts, countof( verts ) );
-	return true;
+	return countof( verts );
 }
 
-bool DebugLines::AddOBB( Matrix4 transform, Color color )
+uint32_t DebugLines::AddOBB( Matrix4 transform, Color color )
 {
 	if ( m_vertexData.GetVertexCount() + 24 > m_vertexData.GetMaxVertexCount() )
 	{
-		return false;
+		return 0;
 	}
 	Vec3 c[] =
 	{
@@ -17656,27 +17702,27 @@ bool DebugLines::AddOBB( Matrix4 transform, Color color )
 	};
 	AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
 	m_vertexData.AppendVertices( verts, countof( verts ) );
-	return true;
+	return countof( verts );
 }
 
-bool DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount )
+uint32_t DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount )
 {
 	if ( m_vertexData.GetVertexCount() + pointCount * 2 * 3 > m_vertexData.GetMaxVertexCount() )
 	{
-		return false;
+		return 0;
 	}
-	AddCircle( pos, Vec3(1,0,0), radius, color, pointCount );
-	AddCircle( pos, Vec3(0,1,0), radius, color, pointCount );
-	AddCircle( pos, Vec3(0,0,1), radius, color, pointCount );
-	return true;
+	return AddCircle( pos, Vec3(1,0,0), radius, color, pointCount )
+		+ AddCircle( pos, Vec3(0,1,0), radius, color, pointCount )
+		+ AddCircle( pos, Vec3(0,0,1), radius, color, pointCount );
 }
 
-bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color )
+uint32_t DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color )
 {
-	if ( m_vertexData.GetVertexCount() + count * 2 > m_vertexData.GetMaxVertexCount()
+	uint32_t startVerts = m_vertexData.GetVertexCount();
+	if ( startVerts + count * 2 > m_vertexData.GetMaxVertexCount()
 		|| count % 3 != 0 )
 	{
-		return false;
+		return 0;
 	}
 	const uint8_t* vertices = (const uint8_t*)_vertices;
 	bool identity = ( transform == ae::Matrix4::Identity() );
@@ -17705,16 +17751,17 @@ bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t
 		};
 		m_vertexData.AppendVertices( verts, countof( verts ) ); // @TODO: AppendVertices() does a bunch of safety checks. This could be really slow for big meshes.
 	}
-	return true;
+	return m_vertexData.GetVertexCount() - startVerts;
 }
 
-bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t vertexCount, const void* _indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color )
+uint32_t DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t vertexCount, const void* _indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color )
 {
-	if ( m_vertexData.GetVertexCount() + indexCount * 2 > m_vertexData.GetMaxVertexCount()
+	uint32_t startVerts = m_vertexData.GetVertexCount();
+	if ( startVerts + indexCount * 2 > m_vertexData.GetMaxVertexCount()
 		|| indexCount % 3 != 0
 		|| ( indexSize != 2 && indexSize != 4 ) )
 	{
-		return false;
+		return 0;
 	}
 	const uint8_t* vertices = (const uint8_t*)_vertices;
 	const uint16_t* indices16 = ( indexSize == 2 ) ? (const uint16_t*)_indices : nullptr;
@@ -17751,7 +17798,17 @@ bool DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t
 		};
 		m_vertexData.AppendVertices( verts, countof( verts ) ); // @TODO: AppendVertices() does a bunch of safety checks. This could be really slow for big meshes.
 	}
-	return true;
+	return m_vertexData.GetVertexCount() - startVerts;
+}
+
+uint32_t DebugLines::GetVertexCount() const
+{
+	return m_vertexData.GetVertexCount();
+}
+
+uint32_t DebugLines::GetMaxVertexCount() const
+{
+	return m_vertexData.GetVertexCount();
 }
 
 //------------------------------------------------------------------------------
