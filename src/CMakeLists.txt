@@ -39,7 +39,6 @@ set(AE_HEADER_FILES
 	../include/ae/aeRingBuffer.h
 	../include/ae/aeSignal.h
 	../include/ae/aeSparseGrid.h
-	../include/ae/aeSpline.h
 	../include/ae/aeTerrain.h
 	../include/ae/aeTesting.h
 	../include/ae/aether.h
@@ -57,7 +56,6 @@ target_sources(${AE_LIBRARY_NAME}
 		aeImage.cpp
 		aeNetClient.cpp
 		aeNetServer.cpp
-		aeSpline.cpp
 		aeTerrain.cpp
 		aeTerrainSDF.cpp
 		aeTesting.cpp
