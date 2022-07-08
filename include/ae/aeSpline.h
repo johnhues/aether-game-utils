@@ -34,21 +34,24 @@
 //------------------------------------------------------------------------------
 // aeSpline class
 //------------------------------------------------------------------------------
+// @TODO: ae::Spline
 class aeSpline
 {
 public:
   aeSpline( ae::Tag tag );
   aeSpline( ae::Tag tag, ae::Vec3* controlPoints, uint32_t count );
+  void Reserve( uint32_t controlPointCount );
 
   void AppendControlPoint( ae::Vec3 p );
   void RemoveControlPoint( uint32_t index );
+  // @TODO: Clear()
   void SetLooping( bool enabled );
 
   ae::Vec3 GetControlPoint( uint32_t index ) const;
   uint32_t GetControlPointCount() const;
 
   ae::Vec3 GetPoint( float distance ) const; // 0 <= distance <= length
-  float GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr );
+  float GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr, float* tOut = nullptr );
   float GetLength() const;
 
   ae::AABB GetAABB() const { return m_aabb; }
@@ -62,7 +65,7 @@ private:
     ae::Vec3 GetPoint0() const;
     ae::Vec3 GetPoint1() const;
     ae::Vec3 GetPoint( float d ) const;
-    float GetMinDistance( ae::Vec3 p, ae::Vec3* pOut ) const;
+    float GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut ) const;
     float GetLength() const { return m_length; }
     ae::AABB GetAABB() const { return m_aabb; }
 

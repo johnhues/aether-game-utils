@@ -45,6 +45,12 @@ aeSpline::aeSpline( ae::Tag tag, ae::Vec3* controlPoints, uint32_t count ) :
   }
 }
 
+void aeSpline::Reserve( uint32_t controlPointCount )
+{
+    m_controlPoints.Reserve( controlPointCount );
+    m_segments.Reserve( controlPointCount - 1 ); // @TODO: Verify if this is correct
+}
+
 void aeSpline::AppendControlPoint( ae::Vec3 p )
 {
   m_controlPoints.Append( p );
@@ -110,14 +116,17 @@ ae::Vec3 aeSpline::GetPoint( float distance ) const
   return m_controlPoints[ m_controlPoints.Length() - 1 ];
 }
 
-float aeSpline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut )
+float aeSpline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut, float* tOut )
 {
   ae::Vec3 closest( 0.0f );
   float closestDistance = ae::MaxValue< float >();
 
+  float t = 0.0f;
+  float tClosest = 0.0f;
   for ( uint32_t i = 0; i < m_segments.Length(); i++ )
   {
     const Segment& segment = m_segments[ i ];
+    t += segment.GetLength();
 
     if ( segment.GetAABB().GetSignedDistanceFromSurface( p ) > closestDistance )
     {
@@ -131,13 +140,20 @@ float aeSpline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut )
     {
       closest = segmentP;
       closestDistance = d;
+      tClosest = t;
     }
   }
-
   if ( nearestOut )
   {
     *nearestOut = closest;
   }
+
+  if ( tOut )
+  {
+
+      *tOut;
+  }
+
   return closestDistance;
 }
 
@@ -291,8 +307,9 @@ ae::Vec3 aeSpline::Segment::GetPoint( float d ) const
   return GetPoint1();
 }
 
-float aeSpline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut ) const
+float aeSpline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut ) const
 {
+    float t = 0.0f;
   uint32_t closestIndex = 0;
   ae::Vec3 closest = GetPoint0();
   float closestDistSq = ae::MaxValue< float >();
