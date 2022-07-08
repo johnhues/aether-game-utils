@@ -203,9 +203,9 @@ add_bundle("Splines"
 	"ae.10_splines"
 	"0.0.0"
 	"Icon"
-	"10_Splines.cpp;${AE_EXAMPLE_SOURCES}"
+	"10_Splines.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
 	"data/Icon.icns;data/circle.png"
-	"ae"
+	"ae;stb"
 	""
 )
 

@@ -790,6 +790,9 @@ public:
 	LineSegment( ae::Vec3 p0, ae::Vec3 p1 );
 
 	float GetDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr ) const;
+	ae::Vec3 GetStart() const;
+	ae::Vec3 GetEnd() const;
+	float GetLength() const;
 
 private:
 	ae::Vec3 m_p0;
@@ -9792,6 +9795,21 @@ float LineSegment::GetDistance( ae::Vec3 p, ae::Vec3* nearestOut ) const
 		*nearestOut = linePos;
 	}
 	return ( p - linePos ).Length();
+}
+
+float LineSegment::GetLength() const
+{
+	return ( m_p1 - m_p0 ).Length();
+}
+
+ae::Vec3 LineSegment::GetStart() const
+{
+	return m_p0;
+}
+
+ae::Vec3 LineSegment::GetEnd() const
+{
+	return m_p1;
 }
 
 //------------------------------------------------------------------------------

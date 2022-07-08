@@ -126,22 +126,20 @@ float aeSpline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut, float* tOut )
   for ( uint32_t i = 0; i < m_segments.Length(); i++ )
   {
     const Segment& segment = m_segments[ i ];
-    t += segment.GetLength();
-
-    if ( segment.GetAABB().GetSignedDistanceFromSurface( p ) > closestDistance )
+    // @NOTE: Don't check segments that are further away than the already closest point
+    if ( segment.GetAABB().GetSignedDistanceFromSurface( p ) <= closestDistance )
     {
-      // @NOTE: Don't check segments that are further away than the already closest point
-      continue;
+      ae::Vec3 segmentP;
+      float tSegment;
+      float d = segment.GetMinDistance( p, &segmentP, &tSegment );
+      if ( d < closestDistance )
+      {
+        closest = segmentP;
+        closestDistance = d;
+        tClosest = t + tSegment;
+      }
     }
-
-    ae::Vec3 segmentP;
-    float d = segment.GetMinDistance( p, &segmentP );
-    if ( d < closestDistance )
-    {
-      closest = segmentP;
-      closestDistance = d;
-      tClosest = t;
-    }
+    t += segment.GetLength(); // After closest check so segment is not included
   }
   if ( nearestOut )
   {
@@ -150,8 +148,7 @@ float aeSpline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut, float* tOut )
 
   if ( tOut )
   {
-
-      *tOut;
+      *tOut = tClosest;
   }
 
   return closestDistance;
@@ -309,46 +306,41 @@ ae::Vec3 aeSpline::Segment::GetPoint( float d ) const
 
 float aeSpline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut ) const
 {
-    float t = 0.0f;
-  uint32_t closestIndex = 0;
-  ae::Vec3 closest = GetPoint0();
-  float closestDistSq = ae::MaxValue< float >();
-  for ( uint32_t i = 0; i < m_resolution; i++ )
+  float t = 0.0f;
+  ae::Vec3 s0 = GetPoint0();
+  ae::Vec3 closest = s0;
+  float tClosest = 0.0f;
+  float closestDist = ae::MaxValue< float >();
+  for ( uint32_t i = 1; i <= m_resolution; i++ )
   {
-    ae::Vec3 s = GetPoint01( i / (float)m_resolution );
-    float d = ( s - p ).LengthSquared();
-    if ( d < closestDistSq )
-    {
-      closestIndex = i;
-      closest = s;
-      closestDistSq = d;
-    }
-  }
+    ae::Vec3 s1 = GetPoint01( i / (float)m_resolution );
+    ae::LineSegment segment( s0, s1 );
+    s0 = s1;
 
-  ae::Vec3 other;
-  if ( closestIndex == 0 )
-  {
-    other = GetPoint01( 1 / (float)m_resolution );
-  }
-  else if ( closestIndex == m_resolution )
-  {
-    other = GetPoint01( ( m_resolution - 1 ) / (float)m_resolution );
-  }
-  else
-  {
-    ae::Vec3 prev = GetPoint01( ( closestIndex - 1 ) / (float)m_resolution );
-    ae::Vec3 next = GetPoint01( ( closestIndex + 1 ) / (float)m_resolution );
-    float prevDist = ( prev - p ).LengthSquared();
-    float nextDist = ( next - p ).LengthSquared();
-    if ( prevDist < nextDist )
+    ae::Vec3 r;
+    float d = segment.GetDistance( p, &r );
+    if ( d < closestDist )
     {
-      other = prev;
+      closest = r;
+      closestDist = d;
+      if ( tOut )
+      {
+        tClosest = t + ( r - segment.GetStart() ).Length();
+      }
     }
-    else
-    {
-      other = next;
-    }
-  }
 
-  return ae::LineSegment( closest, other ).GetDistance( p, pOut );
+    if ( tOut )
+    {
+      t += segment.GetLength();
+    }
+  }
+  if ( pOut )
+  {
+    *pOut = closest;
+  }
+  if ( tOut )
+  {
+    *tOut = tClosest;
+  }
+  return closestDist;
 }

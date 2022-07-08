@@ -25,7 +25,10 @@
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
 #include "ae/aeSpline.h"
+#include "ae/loaders.h"
 #include "Common.h"
+
+const ae::Tag TAG_EXAMPLE = "example";
 
 //------------------------------------------------------------------------------
 // Main
@@ -37,14 +40,16 @@ int main()
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
-  aeSpline spline( ae::Tag( "example" ) );
+  ae::FileSystem fileSystem;
+  aeSpline spline( TAG_EXAMPLE );
   SpriteRenderer spriteRender;
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "splines" );
   render.Initialize( &window );
   input.Initialize( &window );
-  spriteRender.Initialize( 64 );
+  fileSystem.Initialize( "data", "ae", "splines" );
+  spriteRender.Initialize( 128 );
   
   spline.AppendControlPoint( ae::Vec3( -0.4f, -2.0f, 0.0f ) );
   spline.AppendControlPoint( ae::Vec3( -2.0f, 2.0f, 0.0f ) );
@@ -57,9 +62,17 @@ int main()
   timeStep.SetTimeStep( 1.0f / 60.0f );
 
   ae::Texture2D tex;
-  LoadPng( &tex, "circle.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+  {
+    const char* fileName = "circle.png";
+    uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+    AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
+    ae::Scratch< uint8_t > fileBuffer( TAG_EXAMPLE, fileSize );
+    fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
+    ae::stbLoadPng( &tex, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+  }
 
   float t = 0.0f;
+  float angle = 0.0f;
 
   while ( !input.quit )
   {
@@ -75,24 +88,48 @@ int main()
     {
       transform = ae::Matrix4::Translation( spline.GetPoint( d ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
-      spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::Blue() );
+      spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Blue() );
     }
     
     for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
     {
       transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-      spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::Red() );
+      spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Red() );
     }
+
+    ae::Vec3 p = spline.GetPoint( t );
+
+    float t1;
+    spline.GetMinDistance( p, nullptr, &t1 );
+    transform = ae::Matrix4::Translation( spline.GetPoint( t1 ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
+    transform *= ae::Matrix4::Scaling( ae::Vec3( 0.4f ) );
+    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
 
     t += timeStep.GetTimeStep();
     if ( t > splineLen )
     {
       t -= splineLen;
     }
-    transform = ae::Matrix4::Translation( spline.GetPoint( t ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
+    transform = ae::Matrix4::Translation( p - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
-    spriteRender.AddSprite( transform, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::Green() );
+    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Green() );
+
+    angle += timeStep.GetTimeStep();
+    // Orbit dot
+    ae::Vec3 rotPos = p + ae::Vec3( cosf(angle), sinf(angle), 0.0f ) * 0.5f;
+    transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
+    transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
+    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
+    // Closest dot (check)
+    spline.GetMinDistance( rotPos, &rotPos, &t1 );
+    transform = ae::Matrix4::Translation( spline.GetPoint( t1 ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
+    transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
+    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
+    // Closest dot
+    transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
+    transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
+    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
 
     ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
     spriteRender.Render( screenTransform, &tex );

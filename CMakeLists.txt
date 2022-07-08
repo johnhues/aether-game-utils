@@ -23,6 +23,20 @@ set(AE_LEAN_AND_MEAN OFF CACHE BOOL "Disables building tests and examples")
 # find dependencies
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# use c++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# use unicode
+add_definitions(-D_UNICODE -DUNICODE)
+# disable standard library warnings on windows
+add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+if(APPLE)
+	add_definitions(-DAE_USE_MODULES)
+	add_compile_options(-fmodules)
+	add_compile_options(-fcxx-modules)
+	set(CMAKE_OSX_ARCHITECTURES arm64 x86_64)
+endif()
+
 # OpenGL
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OpenGLES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
@@ -136,20 +150,6 @@ elseif(UNIX)
 		${OPENAL_LIBRARY}
 		uuid
 	)
-endif()
-
-# use c++17
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# use unicode
-add_definitions(-D_UNICODE -DUNICODE)
-# disable standard library warnings on windows
-add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-if(APPLE)
-	add_definitions(-DAE_USE_MODULES)
-	add_compile_options(-fmodules)
-	add_compile_options(-fcxx-modules)
-	set(CMAKE_OSX_ARCHITECTURES arm64 x86_64)
 endif()
 
 # Library paths
