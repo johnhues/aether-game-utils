@@ -3202,13 +3202,15 @@ class Spline
 {
 public:
 	Spline( ae::Tag tag );
-	Spline( ae::Tag tag, ae::Vec3* controlPoints, uint32_t count );
+	Spline( ae::Tag tag, const ae::Vec3* controlPoints, uint32_t count, bool loop );
 	void Reserve( uint32_t controlPointCount );
 
+	//! Enables looped spline calculations on other functions. Call this before
+	//! other functions to avoid recalculating the spline internally.
+	void SetLooping( bool enabled );
 	void AppendControlPoint( ae::Vec3 p );
 	void RemoveControlPoint( uint32_t index );
-	// @TODO: Clear()
-	void SetLooping( bool enabled );
+	void Clear();
 
 	ae::Vec3 GetControlPoint( uint32_t index ) const;
 	uint32_t GetControlPointCount() const;
@@ -18189,20 +18191,32 @@ Spline::Spline( ae::Tag tag ) :
 	m_segments( tag )
 {}
 
-Spline::Spline( ae::Tag tag, ae::Vec3* controlPoints, uint32_t count ) :
+Spline::Spline( ae::Tag tag, const ae::Vec3* controlPoints, uint32_t count, bool loop ) :
 	m_controlPoints( tag ),
-	m_segments( tag )
+	m_segments( tag ),
+	m_loop( loop )
 {
+	Reserve( count );
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		m_controlPoints.Append( controlPoints[ i ] );
 	}
+	m_RecalculateSegments();
 }
 
 void Spline::Reserve( uint32_t controlPointCount )
 {
 	m_controlPoints.Reserve( controlPointCount );
-	m_segments.Reserve( controlPointCount - 1 ); // @TODO: Verify if this is correct
+	m_segments.Reserve( controlPointCount - ( m_loop ? 0 : 1 ) );
+}
+
+void Spline::SetLooping( bool enabled )
+{
+	if ( m_loop != enabled )
+	{
+		m_loop = enabled;
+		m_RecalculateSegments();
+	}
 }
 
 void Spline::AppendControlPoint( ae::Vec3 p )
@@ -18217,13 +18231,12 @@ void Spline::RemoveControlPoint( uint32_t index )
 	m_RecalculateSegments();
 }
 
-void Spline::SetLooping( bool enabled )
+void Spline::Clear()
 {
-	if ( m_loop != enabled )
-	{
-		m_loop = enabled;
-		m_RecalculateSegments();
-	}
+	m_controlPoints.Clear();
+	m_segments.Clear();
+	m_length = 0.0f;
+	m_aabb = ae::AABB();
 }
 
 ae::Vec3 Spline::GetControlPoint( uint32_t index ) const
