@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aether.h"
-#include "ae/aeSpline.h"
 #include "ae/loaders.h"
 #include "Common.h"
 
@@ -41,7 +40,7 @@ int main()
   ae::GraphicsDevice render;
   ae::Input input;
   ae::FileSystem fileSystem;
-  aeSpline spline( TAG_EXAMPLE );
+  ae::Spline spline( TAG_EXAMPLE );
   SpriteRenderer spriteRender;
   
   window.Initialize( 800, 600, false, true );
