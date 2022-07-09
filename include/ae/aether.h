@@ -334,6 +334,7 @@ inline float Clip01( float x );
 // Interpolation
 //------------------------------------------------------------------------------
 template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
+inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
 template< typename T > T DtLerp( T value, float snappiness, float dt, T target );
@@ -4882,6 +4883,27 @@ template< typename T0, typename T1 >
 T0 Lerp( T0 start, T0 end, T1 t )
 {
 	return start + ( end - start ) * t;
+}
+
+inline float LerpAngle( float start, float end, float t )
+{
+	start = ae::Mod( start, ae::TWO_PI );
+	end = ae::Mod( end, ae::TWO_PI );
+	float innerDist = ae::Abs( end - start );
+	float preDist = ae::Abs( ( end - ae::TWO_PI ) - start );
+	float postDist = ae::Abs( ( end + ae::TWO_PI ) - start );
+	if ( innerDist >= preDist || innerDist >= postDist )
+	{
+		if ( preDist < postDist )
+		{
+			end -= ae::TWO_PI;
+		}
+		else
+		{
+			end += ae::TWO_PI;
+		}
+	}
+	return ae::Lerp( start, end, t );
 }
 
 inline float Delerp( float start, float end, float value )
