@@ -337,8 +337,8 @@ template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
 inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
-template< typename T > T DtLerp( T value, float snappiness, float dt, T target );
-inline float DtLerpAngle( float value, float snappiness, float dt, float target );
+template< typename T > T DtLerp( T start, float snappiness, float dt, T end );
+inline float DtLerpAngle( float start, float snappiness, float dt, float end );
 // @TODO: Cleanup duplicate interpolation functions
 template< typename T > T CosineInterpolate( T start, T end, float t );
 namespace Interpolation
@@ -4893,22 +4893,7 @@ T0 Lerp( T0 start, T0 end, T1 t )
 
 inline float LerpAngle( float start, float end, float t )
 {
-	start = ae::Mod( start, ae::TWO_PI );
-	end = ae::Mod( end, ae::TWO_PI );
-	float innerDist = ae::Abs( end - start );
-	float preDist = ae::Abs( ( end - ae::TWO_PI ) - start );
-	float postDist = ae::Abs( ( end + ae::TWO_PI ) - start );
-	if ( innerDist >= preDist || innerDist >= postDist )
-	{
-		if ( preDist < postDist )
-		{
-			end -= ae::TWO_PI;
-		}
-		else
-		{
-			end += ae::TWO_PI;
-		}
-	}
+	end = start + ae::Mod( ( end - start ) + ae::PI, ae::TWO_PI ) - ae::PI;
 	return ae::Lerp( start, end, t );
 }
 
@@ -4923,33 +4908,19 @@ inline float Delerp01( float start, float end, float value )
 }
 
 template< typename T >
-T DtLerp( T value, float snappiness, float dt, T target )
+T DtLerp( T start, float snappiness, float dt, T end )
 {
 	if ( snappiness == 0.0f || dt == 0.0f )
 	{
-		return value;
+		return start;
 	}
-	return ae::Lerp( target, value, exp2( -exp2( snappiness ) * dt ) );
+	return ae::Lerp( end, start, exp2( -exp2( snappiness ) * dt ) );
 }
 
-inline float DtLerpAngle( float value, float snappiness, float dt, float target )
+inline float DtLerpAngle( float start, float snappiness, float dt, float end )
 {
-	target = ae::Mod( target, ae::TWO_PI );
-	float innerDist = ae::Abs( target - value );
-	float preDist = ae::Abs( ( target - ae::TWO_PI ) - value );
-	float postDist = ae::Abs( ( target + ae::TWO_PI ) - value );
-	if ( innerDist >= preDist || innerDist >= postDist )
-	{
-		if ( preDist < postDist )
-		{
-			target -= ae::TWO_PI;
-		}
-		else
-		{
-			target += ae::TWO_PI;
-		}
-	}
-	return ae::DtLerp( value, snappiness, dt, target );
+	end = start + ae::Mod( ( end - start ) + ae::PI, ae::TWO_PI ) - ae::PI;
+	return ae::DtLerp( start, snappiness, dt, end );
 }
 
 template< typename T >
