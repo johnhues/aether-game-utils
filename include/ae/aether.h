@@ -482,8 +482,14 @@ struct Vec3 : public VecT< Vec3 >
 	Vec3( Vec2 xy, float z ); // @TODO: Support Y up
 	explicit Vec3( Vec2 xy );
 	explicit operator Vec2() const;
+	
 	Vec2 GetXY() const;
 	Vec2 GetXZ() const;
+	Vec2 GetZY() const;
+	void SetXY( Vec2 xy );
+	void SetXZ( Vec2 xz );
+	void SetYZ( Vec2 yz );
+	
 	struct Int3 NearestCopy() const;
 	struct Int3 FloorCopy() const;
 	struct Int3 CeilCopy() const;
@@ -5387,6 +5393,10 @@ inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
+inline Vec2 Vec3::GetZY() const { return Vec2( z, y ); }
+inline void Vec3::SetXY( Vec2 xy ) { x = xy.x; y = xy.y; }
+inline void Vec3::SetXZ( Vec2 xz ) { x = xz.x; z = xz.y; }
+inline void Vec3::SetYZ( Vec2 yz ) { y = yz.x; z = yz.y; }
 inline Int3 Vec3::NearestCopy() const { return Int3( (int32_t)(x + 0.5f), (int32_t)(y + 0.5f), (int32_t)(z + 0.5f) ); }
 inline Int3 Vec3::FloorCopy() const { return Int3( (int32_t)floorf( x ), (int32_t)floorf( y ), (int32_t)floorf( z ) ); }
 inline Int3 Vec3::CeilCopy() const { return Int3( (int32_t)ceilf( x ), (int32_t)ceilf( y ), (int32_t)ceilf( z ) ); }
