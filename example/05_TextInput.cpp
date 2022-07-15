@@ -60,7 +60,7 @@ int main()
     fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
     ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false, true );
   }
-  textRender.Initialize( 1, 512, &fontTexture, 8, 0.0f );
+  textRender.Initialize( 1, 512, &fontTexture, 8, 1.0f );
   
   ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );

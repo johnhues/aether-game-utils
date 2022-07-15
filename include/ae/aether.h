@@ -3056,7 +3056,7 @@ public:
 	uint32_t GetFontSize() const { return m_fontSize; }
 
 private:
-	uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, char** _outStr ) const;
+	uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, char** _outStr, uint32_t* lenOut ) const;
 	struct Vertex
 	{
 		ae::Vec3 pos;
@@ -13609,8 +13609,7 @@ uint32_t FileSystem::Read( const char* filePath, void* buffer, uint32_t bufferSi
 
 		if ( resultLen <= bufferSize )
 		{
-			size_t readLen = fread( buffer, sizeof(uint8_t), resultLen, file );
-			AE_ASSERT_MSG( readLen == resultLen, "File path: '#' read:# result:#", filePath, readLen, resultLen );
+			resultLen = fread( buffer, sizeof(uint8_t), resultLen, file );
 		}
 		else
 		{
@@ -17513,7 +17512,7 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 			}
 			else
 			{
-				pos.x += rect.size.x * ( 1.0f + m_spacing );
+				pos.x += rect.size.x * m_spacing;
 			}
 			str++;
 		}
@@ -17539,9 +17538,11 @@ void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color co
 		return;
 	}
 
+	uint32_t len = 0;
 	char* rectStr = m_stringData + m_allocatedChars;
-	if ( m_ParseText( str, lineLength, charLimit, &rectStr ) )
+	if ( m_ParseText( str, lineLength, charLimit, &rectStr, &len ) )
 	{
+		m_allocatedChars += len + 1; // Include null terminator
 		TextRect* rect = &m_strings[ m_allocatedStrings ];
 		m_allocatedStrings++;
 		rect->pos = pos;
@@ -17553,10 +17554,10 @@ void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color co
 
 uint32_t TextRender::GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const
 {
-	return m_ParseText( str, lineLength, charLimit, nullptr );
+	return m_ParseText( str, lineLength, charLimit, nullptr, nullptr );
 }
 
-uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, char** _outStr ) const
+uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, char** _outStr, uint32_t* lenOut ) const
 {
 	const char* strDataLast = m_stringData + m_maxGlyphCount - 1;
 	char* outStr = nullptr;
@@ -17628,6 +17629,10 @@ uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t
 		}
 
 		str++;
+	}
+	if ( outStr && lenOut )
+	{
+		*lenOut = ( outStr - *_outStr );
 	}
 
 	return lineCount;
