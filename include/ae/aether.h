@@ -3033,10 +3033,20 @@ public:
 class TextRender
 {
 public:
-	//! \p texture should be a square texture with ascii characters evenly spaced from top left to bottom right. The
-	//! texture can be a single channel without transparency. Luminance of the red channel is used for transparency.
-	//! \p fontSize is the width and height of each character in the texture.
-	void Initialize( uint32_t maxCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing );
+	TextRender( const ae::Tag& tag );
+	~TextRender();
+	//! Initializes this TextRender. Must be called before other functions.
+	//! @param maxStringCount the maximum number of times TextRender::Add() can
+	//! be called between calls to TextRender::Render()
+	//! @param maxGlyphCount the maximum number of total characters that can
+	//! be submitted with TextRender::Add() between calls to TextRender::Render()
+	//! @param texture a square texture with ascii characters evenly spaced from
+	//! top left to bottom right, the red channel of the texture can be used for
+	//! transparency
+	//! @param fontSize the width and height of each character in the texture
+	//! @param spacing distance between each character, the given value is
+	//! multiplied by \p fontSize
+	void Initialize( uint32_t maxStringCount, uint32_t maxGlyphCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing );
 	void Terminate();
 	void Render( const ae::Matrix4& uiToScreen );
 	void Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit );
@@ -3044,7 +3054,7 @@ public:
 	uint32_t GetFontSize() const { return m_fontSize; }
 
 private:
-	uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const;
+	uint32_t m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, char** _outStr ) const;
 	struct Vertex
 	{
 		ae::Vec3 pos;
@@ -3053,19 +3063,25 @@ private:
 	};
 	struct TextRect
 	{
-		ae::Str512 text;
+		const char* str;
 		ae::Vec3 pos;
 		ae::Vec2 size;
 		ae::Color color;
 	};
-	uint32_t m_fontSize;
-	float m_spacing;
+	// Params
+	const ae::Tag m_tag;
+	uint32_t m_maxRectCount = 0;
+	uint32_t m_maxGlyphCount = 0;
+	const ae::Texture2D* m_texture = nullptr;
+	uint32_t m_fontSize = 0;
+	float m_spacing = 0.0f;
+	// Data
 	ae::VertexData m_vertexData;
 	ae::Shader m_shader;
-	const ae::Texture2D* m_texture = nullptr;
-	uint32_t m_rectCount;
-	uint32_t m_maxRectCount;
-	TextRect* m_rects = nullptr;
+	TextRect* m_strings = nullptr;
+	char* m_stringData = nullptr;
+	uint32_t m_allocatedStrings = 0;
+	uint32_t m_allocatedChars = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -3168,6 +3184,7 @@ public:
 	ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
 	ae::Vec3 GetFocus() const { return m_focusPos; }
 	ae::Vec3 GetForward() const { return m_forward; }
+	ae::Vec3 GetRight() const { return m_right; }
 	ae::Vec3 GetLocalUp() const { return m_up; }
 	ae::Vec3 GetWorldUp() const { return ( m_worldUp == Axis::Z ) ? ae::Vec3(0,0,1) : ae::Vec3(0,1,0); }
 	float GetDistanceFromFocus() const { return m_dist; }
@@ -17287,18 +17304,28 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 //------------------------------------------------------------------------------
 // ae::TextRender member functions
 //------------------------------------------------------------------------------
-const uint32_t kTextCharsPerString = 64;
+TextRender::TextRender( const ae::Tag& tag ) :
+	m_tag( tag )
+{}
 
-void TextRender::Initialize( uint32_t maxCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing )
+TextRender::~TextRender()
 {
-	AE_ASSERT( texture->GetTexture() );
+	Terminate();
+}
+
+void TextRender::Initialize( uint32_t maxStringCount, uint32_t maxGlyphCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing )
+{
+	Terminate();
+	
 	m_texture = texture;
 	m_fontSize = fontSize;
 	m_spacing = spacing;
-	m_rectCount = 0;
-	m_maxRectCount = maxCount;
+	m_allocatedStrings = 0;
+	m_allocatedChars = 0;
+	m_maxRectCount = maxStringCount;
+	m_maxGlyphCount = maxGlyphCount;
 
-	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), m_maxRectCount * m_rects[ 0 ].text.Size() * _kQuadVertCount, m_maxRectCount * kTextCharsPerString * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+	m_vertexData.Initialize( sizeof( Vertex ), sizeof( uint16_t ), m_maxGlyphCount * _kQuadVertCount, m_maxGlyphCount * _kQuadIndexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
 	m_vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
 	m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
@@ -17329,35 +17356,48 @@ void TextRender::Initialize( uint32_t maxCount, const ae::Texture2D* texture, ui
 	m_shader.Initialize( vertexStr, fragStr, nullptr, 0 );
 	m_shader.SetBlending( true );
 	
-	m_rects = ae::NewArray< TextRect >( AE_ALLOC_TAG_FIXME, m_maxRectCount );
+	m_strings = ae::NewArray< TextRect >( m_tag, m_maxRectCount );
+	m_stringData = ae::NewArray< char >( m_tag, m_maxGlyphCount );
 }
 
 void TextRender::Terminate()
 {
-	ae::Delete( m_rects );
-	m_rects = nullptr;
+	ae::Delete( m_stringData );
+	ae::Delete( m_strings );
+
+	m_allocatedChars = 0;
+	m_allocatedStrings = 0;
+	m_stringData = nullptr;
+	m_strings = nullptr;
 	m_shader.Terminate();
 	m_vertexData.Terminate();
+
+	m_fontSize = 0;
+	m_spacing = 0.0f;
+	m_texture = nullptr;
+	m_maxGlyphCount = 0;
+	m_maxRectCount = 0;
 }
 
 void TextRender::Render( const ae::Matrix4& uiToScreen )
 {
 	uint32_t vertCount = 0;
 	uint32_t indexCount = 0;
-	ae::Scratch< Vertex > verts( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxVertexCount() );
-	ae::Scratch< uint16_t > indices( AE_ALLOC_TAG_RENDER, m_vertexData.GetMaxIndexCount() );
+	ae::Scratch< Vertex > verts( m_tag, m_vertexData.GetMaxVertexCount() );
+	ae::Scratch< uint16_t > indices( m_tag, m_vertexData.GetMaxIndexCount() );
 
-	for ( uint32_t i = 0; i < m_rectCount; i++ )
+	uint32_t charCount = 0;
+	for ( uint32_t i = 0; i < m_allocatedStrings; i++ )
 	{
-		const TextRect& rect = m_rects[ i ];
+		const TextRect& rect = m_strings[ i ];
 		ae::Vec3 pos = rect.pos;
 		pos.y -= rect.size.y;
 
-		const char* start = rect.text.c_str();
+		const char* start = rect.str;
 		const char* str = start;
 		while ( str[ 0 ] )
 		{
-			if ( !isspace( str[ 0 ] ) )
+			if ( !isspace( str[ 0 ] ) && charCount < m_maxGlyphCount )
 			{
 				int32_t index = str[ 0 ];
 				uint32_t columns = m_texture->GetWidth() / m_fontSize;
@@ -17390,6 +17430,8 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 				verts[ vertCount ].uv = ( _kQuadVertUvs[ 3 ] + offset ) / columns;
 				verts[ vertCount ].color = rect.color.GetLinearRGBA();
 				vertCount++;
+
+				charCount++;
 			}
 
 			if ( str[ 0 ] == '\n' || str[ 0 ] == '\r' )
@@ -17399,7 +17441,7 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 			}
 			else
 			{
-				pos.x += rect.size.x * m_spacing;
+				pos.x += rect.size.x * ( 1.0f + m_spacing );
 			}
 			str++;
 		}
@@ -17414,23 +17456,27 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 	uniforms.Set( "u_tex", m_texture );
 	m_vertexData.Render( &m_shader, uniforms );
 
-	m_rectCount = 0;
+	m_allocatedStrings = 0;
+	m_allocatedChars = 0;
 }
 
 void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color color, uint32_t lineLength, uint32_t charLimit )
 {
-	if ( m_rectCount >= m_maxRectCount )
+	if ( m_allocatedStrings >= m_maxRectCount )
 	{
 		return;
 	}
 
-	TextRect* rect = &m_rects[ m_rectCount ];
-	m_rectCount++;
-
-	rect->pos = pos;
-	rect->size = size;
-	m_ParseText( str, lineLength, charLimit, &rect->text );
-	rect->color = color;
+	char* rectStr = m_stringData + m_allocatedChars;
+	if ( m_ParseText( str, lineLength, charLimit, &rectStr ) )
+	{
+		TextRect* rect = &m_strings[ m_allocatedStrings ];
+		m_allocatedStrings++;
+		rect->pos = pos;
+		rect->str = rectStr;
+		rect->size = size;
+		rect->color = color;
+	}
 }
 
 uint32_t TextRender::GetLineCount( const char* str, uint32_t lineLength, uint32_t charLimit ) const
@@ -17438,11 +17484,18 @@ uint32_t TextRender::GetLineCount( const char* str, uint32_t lineLength, uint32_
 	return m_ParseText( str, lineLength, charLimit, nullptr );
 }
 
-uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, ae::Str512* outText ) const
+uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t charLimit, char** _outStr ) const
 {
-	if ( outText )
+	const char* strDataLast = m_stringData + m_maxGlyphCount - 1;
+	char* outStr = nullptr;
+	if ( _outStr && *_outStr )
 	{
-		*outText = "";
+		outStr = *_outStr;
+		if ( outStr == strDataLast )
+		{
+			return 0;
+		}
+		outStr[ 0 ] = '\0';
 	}
 
 	uint32_t lineCount = 1;
@@ -17452,6 +17505,10 @@ uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t
 	{
 		// Truncate displayed string based on param
 		if ( charLimit && (uint32_t)( str - start ) >= charLimit )
+		{
+			break;
+		}
+		if ( outStr == strDataLast )
 		{
 			break;
 		}
@@ -17469,23 +17526,26 @@ uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t
 
 			if ( lineChars + wordRemainder > lineLength )
 			{
-				if ( outText )
+				if ( outStr )
 				{
-					outText->Append( "\n" );
+					outStr[ 0 ] = '\n';
+					outStr[ 1 ] = '\0';
+					outStr++;
 				}
 				lineCount++;
 				lineChars = 0;
+				continue; // Only append one char per loop
 			}
 		}
 
 		// Skip non-newline whitespace at the beginning of a line
 		if ( lineChars || isNewlineChar || !isspace( str[ 0 ] ) )
 		{
-			if ( outText )
+			if ( outStr )
 			{
-				// @TODO: aeStr should support appending chars
-				char hack[] = { str[ 0 ], 0 };
-				outText->Append( hack );
+				outStr[ 0 ] = str[ 0 ];
+				outStr[ 1 ] = '\0';
+				outStr++;
 			}
 
 			lineChars = isNewlineChar ? 0 : lineChars + 1;

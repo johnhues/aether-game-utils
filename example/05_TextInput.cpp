@@ -42,7 +42,7 @@ int main()
   ae::GraphicsDevice render;
   ae::Input input;
   ae::FileSystem fileSystem;
-  ae::TextRender textRender;
+  ae::TextRender textRender = TAG_EXAMPLE;
   
   window.Initialize( 1280, 720, false, true );
   window.SetTitle( "example" );
@@ -60,7 +60,7 @@ int main()
     fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
     ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false, true );
   }
-  textRender.Initialize( &fontTexture, 8 );
+  textRender.Initialize( 1, 512, &fontTexture, 8, 0.0f );
   
   ae::TimeStep timeStep;
   timeStep.SetTimeStep( 1.0f / 60.0f );
