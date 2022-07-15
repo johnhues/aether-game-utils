@@ -45,7 +45,7 @@ int main()
 	ae::FileSystem fileSystem;
 	ae::DebugLines debug;
 	ae::Texture2D fontTexture;
-	ae::TextRender text;
+	ae::TextRender text = TAG_EXAMPLE;
 	ae::DebugCamera camera;
 
 	window.Initialize( 800, 600, false, true );
@@ -63,7 +63,7 @@ int main()
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
 		ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
 	}
-	text.Initialize( &fontTexture, 8 );
+	text.Initialize( 16, 512, &fontTexture, 8, 0.0f );
 	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
 	// AABB and OBB test state
@@ -147,7 +147,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = ae::Mod( currentTest, 7 );
+		currentTest = ae::Mod( currentTest, 8 );
 
 		// Geometry calculations / rendering
 		switch ( currentTest )
@@ -589,6 +589,54 @@ int main()
 					debug.AddSphere( raySource + ray, 0.05f, ae::Color::Red(), 8 );
 				}
 				break;
+			}
+			case 7:
+			{
+				infoText.Append( "Angle Lerp\n" );
+				infoText.Append( "Rotate Speed: 1-2\n" );
+				infoText.Append( "Lerp: Space\n" );
+
+				debug.AddCircle( ae::Vec3( 0.0f ), camera.GetPosition(), 1.0f, ae::Color::PicoPink(), 32 );
+
+				static float s_setAngle = 0.0f;
+				ae::Vec3 s = camera.GetRight();
+				s = s.RotateCopy( camera.GetPosition(), s_setAngle );
+				debug.AddLine( ae::Vec3( 0.0f ), s, ae::Color::Black() );
+
+				static float s_setAnglePrev = 0.0f;
+				ae::Vec3 p = camera.GetRight();
+				p = p.RotateCopy( camera.GetPosition(), s_setAnglePrev );
+				debug.AddLine( ae::Vec3( 0.0f ), p, ae::Color::Black() );
+
+				static float s_dtLerp = 0.0f;
+				s_dtLerp = ae::DtLerpAngle( s_dtLerp, 4.0f, timeStep.GetTimeStep(), s_setAngle );
+				ae::Vec3 l = camera.GetRight();
+				l = l.RotateCopy( camera.GetPosition(), s_dtLerp );
+				debug.AddLine( ae::Vec3( 0.0f ), l, ae::Color::Green() );
+
+				static float s_lerpAmt = 0.0f;
+				s_lerpAmt += timeStep.GetTimeStep();
+				s_lerpAmt = ae::Min( s_lerpAmt, 1.0f );
+				float lerpAngle = ae::LerpAngle( s_setAnglePrev, s_setAngle, s_lerpAmt );
+				ae::Vec3 l2 = camera.GetRight();
+				l2 = l2.RotateCopy( camera.GetPosition(), lerpAngle );
+				debug.AddLine( ae::Vec3( 0.0f ), l2, ae::Color::Blue() );
+
+				static float s_turnerAngle = 0.0f;
+				static float s_turnerVel = 0.0f;
+				if ( input.Get( ae::Key::Num1 ) ) { s_turnerVel -= timeStep.GetTimeStep(); }
+				if ( input.Get( ae::Key::Num2 ) ) { s_turnerVel += timeStep.GetTimeStep(); }
+				if ( input.Get( ae::Key::Num3 ) ) { s_turnerVel = 0.0f; }
+				if ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
+				{
+					s_setAnglePrev = s_setAngle;
+					s_setAngle = s_turnerAngle;
+					s_lerpAmt = 0.0f;
+				}
+				s_turnerAngle += s_turnerVel * timeStep.GetTimeStep();
+				ae::Vec3 t = camera.GetRight();
+				t = t.RotateCopy( camera.GetPosition(), s_turnerAngle );
+				debug.AddLine( ae::Vec3( 0.0f ), t, ae::Color::Red() );
 			}
 			default:
 				break;
