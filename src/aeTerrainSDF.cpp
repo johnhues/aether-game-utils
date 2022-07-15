@@ -352,7 +352,7 @@ TerrainSdf::TerrainSdf( Terrain* terrain ) :
   m_terrain( terrain )
 {
   ae::RandomValue r( -1.0f, 1.0f );
-  ae::Scratch< aeStaticImage3D< float, TerrainNoiseSize, TerrainNoiseSize, TerrainNoiseSize > > tempScratch( AE_ALLOC_TAG_TERRAIN, 1 );
+  ae::Scratch< aeStaticImage3D< float, TerrainNoiseSize, TerrainNoiseSize, TerrainNoiseSize > > tempScratch( 1 );
   auto& temp = *tempScratch.Data();
   for ( uint32_t z = 0; z < temp.GetDepth(); z++ )
   for ( uint32_t y = 0; y < temp.GetHeight(); y++ )

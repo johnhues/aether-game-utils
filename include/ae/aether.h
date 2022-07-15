@@ -274,11 +274,11 @@ template < typename T >
 class Scratch
 {
 public:
-	Scratch( ae::Tag tag, uint32_t count );
+	Scratch( uint32_t count );
 	~Scratch();
 	
 	T* Data();
-	uint32_t Length() const;
+	uint32_t Length() const; // @TODO: Rename Size()
 
 	T& operator[] ( int32_t index );
 	const T& operator[] ( int32_t index ) const;
@@ -287,7 +287,8 @@ public:
 
 private:
 	T* m_data;
-	uint32_t m_count;
+	uint32_t m_size;
+	uint32_t m_prevOffsetCheck;
 };
 
 //------------------------------------------------------------------------------
@@ -1767,7 +1768,8 @@ public:
 	ae::AABB GetAABB() const;
 	const BVHNode* GetRoot() const;
 	const BVHNode* GetNode( int32_t nodeIdx ) const;
-	const Leaf* GetLeaf( int32_t leafIdx ) const;
+	const Leaf& GetLeaf( int32_t leafIdx ) const;
+	const Leaf* TryGetLeaf( int32_t leafIdx ) const;
 	
 private:
 	ae::Array< BVHNode > m_nodes;
@@ -4660,19 +4662,83 @@ inline void Free( void* data )
 }
 
 //------------------------------------------------------------------------------
+// Interinal ae::_ScratchBuffer storage
+//------------------------------------------------------------------------------
+class _ScratchBuffer
+{
+public:
+	_ScratchBuffer( uint32_t size ) : size( size )
+	{
+		offset = 0;
+		data = new uint8_t[ size ];
+		AE_ASSERT( (intptr_t)data % kScratchAlignment == 0 );
+	}
+	~_ScratchBuffer()
+	{
+		AE_ASSERT( offset == 0 );
+		delete [] data;
+	}
+//	_ScratchBuffer() { data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FIXME, kScratchSize, kScratchAlignment ); offset = 0; }
+//	~_ScratchBuffer() { AE_ASSERT( offset == 0 ); ae::Free( data ); }
+	static _ScratchBuffer* Get() { static _ScratchBuffer s_scratchBuffer( 4 * 1024 * 1024 ); return &s_scratchBuffer; }
+	static const uint32_t kScratchAlignment = 16; // @TODO: Should be max supported
+	uint8_t* data = nullptr;
+	uint32_t offset = 0;
+	uint32_t size = 0;
+	
+	static uint32_t GetScratchBytes( uint32_t count, uint32_t typeSize )
+	{
+		// Round up allocation size as needed to maintain offset alignment
+		return ( ( ( count * typeSize ) + kScratchAlignment - 1 ) / kScratchAlignment ) * kScratchAlignment;
+	}
+};
+
+
+//------------------------------------------------------------------------------
 // ae::Scratch< T > member functions
 //------------------------------------------------------------------------------
 template < typename T >
-Scratch< T >::Scratch( ae::Tag tag, uint32_t count )
+Scratch< T >::Scratch( uint32_t count )
 {
-	m_count = count;
-	m_data = ae::NewArray< T >( tag, count );
+	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
+	ae::_ScratchBuffer* scratchBuffer = ae::_ScratchBuffer::Get();
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( count, sizeof(T) );
+	
+	m_size = count;
+	m_data = (T*)( scratchBuffer->data + scratchBuffer->offset );
+	AE_DEBUG_ASSERT( ( (intptr_t)m_data % ae::_ScratchBuffer::kScratchAlignment ) == 0 );
+	m_prevOffsetCheck = scratchBuffer->offset;
+	scratchBuffer->offset += bytes;
+	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->size, "Scratch buffer size exceeded: # bytes / (# bytes)", scratchBuffer->offset, scratchBuffer->size );
+	
+#if _AE_DEBUG_
+	memset( m_data, 0xCD, bytes );
+#endif
+	if ( !std::is_trivially_constructible< T >::value )
+	{
+		for ( uint32_t i = 0; i < m_size; i++ )
+		{
+			new ( &m_data[ i ] ) T();
+		}
+	}
 }
 
 template < typename T >
 Scratch< T >::~Scratch()
 {
-	ae::Delete( m_data );
+	ae::_ScratchBuffer* scratchBuffer = ae::_ScratchBuffer::Get();
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size, sizeof(T) );
+	AE_ASSERT( scratchBuffer->offset >= bytes );
+	if ( !std::is_trivially_constructible< T >::value )
+	{
+		for ( int32_t i = m_size - 1; i >= 0; i-- )
+		{
+			m_data[ i ].~T();
+		}
+	}
+	m_data = nullptr;
+	scratchBuffer->offset -= bytes;
+	AE_ASSERT_MSG( scratchBuffer->offset == m_prevOffsetCheck, "ae::Scratch destroyed out of order" );
 }
 
 template < typename T >
@@ -4684,7 +4750,7 @@ T* Scratch< T >::Data()
 template < typename T >
 uint32_t Scratch< T >::Length() const
 {
-	return m_count;
+	return m_size;
 }
 
 template < typename T >
@@ -4702,14 +4768,14 @@ const T& Scratch< T >::operator[] ( int32_t index ) const
 template < typename T >
 T& Scratch< T >::GetSafe( int32_t index )
 {
-	AE_ASSERT( index < (int32_t)m_count );
+	AE_ASSERT( index < (int32_t)m_size );
 	return m_data[ index ];
 }
 
 template < typename T >
 const T& Scratch< T >::GetSafe( int32_t index ) const
 {
-	AE_ASSERT( index < (int32_t)m_count );
+	AE_ASSERT( index < (int32_t)m_size );
 	return m_data[ index ];
 }
 
@@ -7700,7 +7766,13 @@ const BVHNode* BVH< Leaf >::GetNode( int32_t nodeIdx ) const
 }
 
 template < typename Leaf >
-const Leaf* BVH< Leaf >::GetLeaf( int32_t leafIdx ) const
+const Leaf& BVH< Leaf >::GetLeaf( int32_t leafIdx ) const
+{
+	return m_leafs[ leafIdx ];
+}
+
+template < typename Leaf >
+const Leaf* BVH< Leaf >::TryGetLeaf( int32_t leafIdx ) const
 {
 	return ( leafIdx >= 0 ) ? &m_leafs[ leafIdx ] : nullptr;
 }
@@ -17383,8 +17455,8 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 {
 	uint32_t vertCount = 0;
 	uint32_t indexCount = 0;
-	ae::Scratch< Vertex > verts( m_tag, m_vertexData.GetMaxVertexCount() );
-	ae::Scratch< uint16_t > indices( m_tag, m_vertexData.GetMaxIndexCount() );
+	ae::Scratch< Vertex > verts( m_vertexData.GetMaxVertexCount() );
+	ae::Scratch< uint16_t > indices( m_vertexData.GetMaxIndexCount() );
 
 	uint32_t charCount = 0;
 	for ( uint32_t i = 0; i < m_allocatedStrings; i++ )
@@ -18780,7 +18852,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 			ae::OBB obb( params.transform * current->aabb.GetTransform() );
 			params.debug->AddOBB( obb.GetTransform(), params.debugColor );
 		}
-		if ( const BVHLeaf* leaf = bvh->GetLeaf( current->leafIdx ) )
+		if ( const BVHLeaf* leaf = bvh->TryGetLeaf( current->leafIdx ) )
 		{
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
@@ -18906,7 +18978,7 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 			}
 		}
 		// Triangle checks
-		if ( const BVHLeaf* leaf = bvh->GetLeaf( current->leafIdx ) )
+		if ( const BVHLeaf* leaf = bvh->TryGetLeaf( current->leafIdx ) )
 		{
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
