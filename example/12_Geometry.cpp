@@ -63,7 +63,7 @@ int main()
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
 		ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
 	}
-	text.Initialize( 16, 512, &fontTexture, 8, 0.0f );
+	text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
 	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
 	// AABB and OBB test state

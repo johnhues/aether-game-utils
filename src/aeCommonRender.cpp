@@ -86,7 +86,7 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(Vertex, color) );
   m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(Vertex, uv) );
 
-  ae::Scratch< uint16_t > scratch( AE_ALLOC_TAG_RENDER, m_maxCount * aeQuadIndexCount );
+  ae::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
   uint16_t* indices = scratch.Data();
   for ( uint32_t i = 0; i < m_maxCount; i++ )
   {
