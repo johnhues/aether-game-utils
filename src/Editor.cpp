@@ -848,7 +848,7 @@ bool Editor::Write() const
 				jsonObject.AddMember( "name", rapidjson::StringRef( levelObject.name.c_str() ), allocator );
 			}
 			rapidjson::Value transformJson;
-			ae::Str128 transformStr = ae::ToString( levelObject.transform );
+			auto transformStr = ae::ToString( levelObject.transform );
 			transformJson.SetString( transformStr.c_str(), allocator );
 			jsonObject.AddMember( "transform", transformJson, allocator );
 			
@@ -953,7 +953,7 @@ void Editor::m_Read()
 		{
 			levelObject.name = jsonObject[ "name" ].GetString();
 		}
-		levelObject.transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString() );
+		levelObject.transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
 		for ( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			if ( !componentIter.value.IsObject() )
@@ -982,7 +982,7 @@ void Editor::m_Read()
 				{
 					uint32_t arrIdx = 0;
 					const auto& jsonVarArray = jsonVar.GetArray();
-					levelComponent.members.SetInt( var->GetName(), jsonVarArray.Size() );
+					levelComponent.members.SetUint( var->GetName(), jsonVarArray.Size() );
 					for ( const auto& jsonVarArrayValue : jsonVarArray )
 					{
 						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
@@ -2102,7 +2102,7 @@ void EditorServer::m_Save( ae::EditorLevel* levelOut ) const
 			if ( var->IsArray() )
 			{
 				uint32_t length = var->GetArrayLength( component );
-				propsOut->SetInt( var->GetName(), length );
+				propsOut->SetUint( var->GetName(), length );
 				for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
 				{
 					ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
@@ -2457,6 +2457,7 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
 	raycastParams.ray = mouseRay * kEditorViewDistance;
 	raycastParams.hitClockwise = false;
 	raycastParams.hitCounterclockwise = true;
+	//raycastParams.debug = &program->debugLines;
 	ae::CollisionMesh::RaycastResult result;
 	uint32_t editorObjectCount = m_objects.Length();
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )

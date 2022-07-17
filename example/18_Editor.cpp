@@ -108,6 +108,7 @@ public:
 	class Avatar* avatar = nullptr;
 	
 private:
+	uint32_t m_levelLoadSeq = 0;
 	float m_dt = 0.0f;
 };
 
@@ -158,7 +159,7 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexData* ve
 {
 	ae::OBJFile objFile = TAG_ALL;
 	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
-	ae::Scratch< uint8_t > fileBuffer( TAG_ALL, fileSize );
+	ae::Scratch< uint8_t > fileBuffer( fileSize );
 	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
 	objFile.Load( fileBuffer.Data(), fileBuffer.Length() );
 	
@@ -209,7 +210,7 @@ void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* t
 {
 	ae::TargaFile tgaFile = TAG_ALL;
 	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
-	ae::Scratch< uint8_t > fileBuffer( TAG_ALL, fileSize );
+	ae::Scratch< uint8_t > fileBuffer( fileSize );
 	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
 	tgaFile.Load( fileBuffer.Data(), fileBuffer.Length() );
 	tex->Initialize( tgaFile.textureParams );
@@ -254,15 +255,11 @@ void Game::Initialize( int argc, char* argv[] )
 	LoadTarga( "character.tga", &fs, &spacesuitTex );
 	
 	ae::Str256 levelPath;
+	m_levelLoadSeq = editor.GetLevelChangeSeq();
 	if ( fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
 	{
 		ae::FileSystem::AppendToPath( &levelPath, "example.level" );
-		bool success = editor.Read( levelPath.c_str() );
-		success = success ? registry.Load( &editor ) : false;
-		if ( !success )
-		{
-			AE_WARN( "Editor could not find level file '#'", levelPath );
-		}
+		editor.QueueRead( levelPath.c_str() );
 	}
 }
 
@@ -283,10 +280,11 @@ void Game::Run()
 		input.Pump();
 		editor.Update();
 		
-		if ( editor.levelDidChange )
+		if ( m_levelLoadSeq != editor.GetLevelChangeSeq() )
 		{
+			m_levelLoadSeq = editor.GetLevelChangeSeq();
 			registry.CallFn< Object >( [&]( Object* o ){ o->Terminate( this ); } );
-			registry.Load( &editor );
+			registry.Load( editor.GetLevel() );
 		}
 		
 		if ( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) )
@@ -420,6 +418,7 @@ void Avatar::Update( Game* game )
 	ae::CollisionMesh::RaycastParams rayParams;
 	rayParams.source = ae::Vec3( position );
 	rayParams.ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
+	//rayParams.debug = &game->debugLines;
 	ae::CollisionMesh::RaycastResult outResult;
 	
 	ae::CollisionMesh::PushOutParams pushOutParams;
