@@ -18957,6 +18957,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	}
 	
 	const ae::Matrix4 invTransform = params.transform.GetInverse();
+	const ae::Matrix4 normalTransform = invTransform.GetTranspose();
 	const ae::Vec3 source( invTransform * ae::Vec4( params.source, 1.0f ) );
 	const ae::Vec3 rayEnd( invTransform * ae::Vec4( params.source + params.ray, 1.0f ) );
 	const ae::Vec3 ray = rayEnd - source;
@@ -18994,7 +18995,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 
 					// Undo local space transforms
 					outHit.position = ae::Vec3( params.transform * ae::Vec4( p, 1.0f ) );
-					outHit.normal = ae::Vec3( params.transform * ae::Vec4( n, 0.0f ) );
+					outHit.normal = ae::Vec3( normalTransform * ae::Vec4( n, 0.0f ) );
 					outHit.distance = ( outHit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
 					outHit.userData = params.userData;
 
