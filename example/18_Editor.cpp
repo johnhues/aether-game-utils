@@ -184,14 +184,16 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexData* ve
 		if ( collisionOut )
 		{
 			collisionOut->Clear();
-			ae::CollisionMesh::Params params;
-			params.positions = objFile.vertices.Begin()->position.data;
-			params.positionCount = objFile.vertices.Length();
-			params.positionStride = sizeof( *objFile.vertices.Begin() );
-			params.indices = objFile.indices.Begin();
-			params.indexCount = objFile.indices.Length();
-			params.indexSize = sizeof( *objFile.indices.Begin() );
-			collisionOut->Load( params );
+			collisionOut->AddIndexed(
+				ae::Matrix4::Identity(),
+				objFile.vertices.Begin()->position.data,
+				objFile.vertices.Length(),
+				sizeof( *objFile.vertices.Begin() ),
+				objFile.indices.Begin(),
+				objFile.indices.Length(),
+				sizeof( *objFile.indices.Begin() )
+			);
+			collisionOut->BuildBVH();
 		}
 		
 		if ( editorMeshOut )
@@ -415,14 +417,14 @@ void Avatar::Update( Game* game )
 	velocity.y = ae::DtLerp( velocity.y, friction, game->GetDt(), 0.0f );
 	position += game->GetDt() * velocity;
 	
-	ae::CollisionMesh::RaycastParams rayParams;
+	ae::RaycastParams rayParams;
 	rayParams.source = ae::Vec3( position );
 	rayParams.ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
 	//rayParams.debug = &game->debugLines;
-	ae::CollisionMesh::RaycastResult outResult;
+	ae::RaycastResult outResult;
 	
-	ae::CollisionMesh::PushOutParams pushOutParams;
-	ae::CollisionMesh::PushOutInfo pushOutInfo;
+	ae::PushOutParams pushOutParams;
+	ae::PushOutInfo pushOutInfo;
 	pushOutInfo.sphere.center = position;
 	pushOutInfo.sphere.radius = radius;
 	pushOutInfo.velocity = velocity;

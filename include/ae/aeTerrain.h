@@ -509,9 +509,9 @@ public:
   //TerrainRaycastResult RaycastFast( ae::Vec3 start, ae::Vec3 ray, bool allowSourceCollision ) const;
   
   // Triangle raycast against terrain
-  bool Raycast( const ae::CollisionMesh::RaycastParams& params, ae::CollisionMesh::RaycastResult* outResult ) const;
+  bool Raycast( const ae::RaycastParams& params, ae::RaycastResult* outResult ) const;
   // Triangle-sphere push out
-  ae::CollisionMesh::PushOutInfo PushOutSphere( const ae::CollisionMesh::PushOutParams& params, const ae::CollisionMesh::PushOutInfo& info ) const;
+  ae::PushOutInfo PushOutSphere( const ae::PushOutParams& params, const ae::PushOutInfo& info ) const;
   
   TerrainSdf sdf;
 

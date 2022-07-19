@@ -344,14 +344,17 @@ void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _me
 	data.SetVertices( vertices.Begin(), vertices.Length() );
 	data.Upload();
 	
-	ae::CollisionMesh::Params collisionParams;
-	collisionParams.positions = _mesh->verts.Begin()[ 0 ].data;
-	collisionParams.positionCount = _mesh->verts.Length();
-	collisionParams.positionStride = sizeof( *_mesh->verts.Begin() );
-	collisionParams.indices = _mesh->indices.Begin();
-	collisionParams.indexSize = sizeof( *_mesh->indices.Begin() );
-	collisionParams.indexCount = _mesh->indices.Length();
-	collision.Load( collisionParams );
+	collision.Clear();
+	collision.AddIndexed(
+		ae::Matrix4::Identity(),
+		_mesh->verts.Begin()[ 0 ].data,
+		_mesh->verts.Length(),
+		sizeof( *_mesh->verts.Begin() ),
+		_mesh->indices.Begin(),
+		_mesh->indices.Length(),
+		sizeof( *_mesh->indices.Begin() )
+	);
+	collision.BuildBVH();
 }
 
 //------------------------------------------------------------------------------
@@ -2452,13 +2455,13 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
 	ae::Vec3 mouseRay = program->GetMouseRay();
 	ae::Vec3 mouseRaySrc = program->camera.GetPosition();
 	
-	ae::CollisionMesh::RaycastParams raycastParams;
+	ae::RaycastParams raycastParams;
 	raycastParams.source = mouseRaySrc;
 	raycastParams.ray = mouseRay * kEditorViewDistance;
 	raycastParams.hitClockwise = false;
 	raycastParams.hitCounterclockwise = true;
 	//raycastParams.debug = &program->debugLines;
-	ae::CollisionMesh::RaycastResult result;
+	ae::RaycastResult result;
 	uint32_t editorObjectCount = m_objects.Length();
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
@@ -2478,13 +2481,13 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
 			{
 				raycastParams.userData = nullptr;
 				raycastParams.transform = ae::Matrix4::Identity();
-				ae::CollisionMesh::RaycastResult sphereResult;
+				ae::RaycastResult sphereResult;
 				auto* hit = &sphereResult.hits.Append( {} );
 				hit->position = hitPos;
 				hit->normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
 				hit->distance = hitT;
 				hit->userData = editorObj;
-				ae::CollisionMesh::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
+				ae::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
 			}
 		}
 	}

@@ -1773,8 +1773,10 @@ public:
 	//! left and right nodes respectively. It is not safe to use pointers to
 	//! BVHNodes after calling this if using constructor 2.
 	std::pair< int32_t, int32_t > AddNodes( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB );
-	//! Sets the leaf data of the node at 
+	//! Sets the leaf data of the node at \p nodeIdx
 	void SetLeaf( int32_t nodeIdx, const Leaf& data );
+	//! Resets BVH to state directly after construction. Does not affect node limit.
+	void Clear();
 	
 	//! Returns the aabb that contains all node aabbs
 	ae::AABB GetAABB() const;
@@ -3305,86 +3307,91 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::RaycastParams
+//------------------------------------------------------------------------------
+struct RaycastParams
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	const void* userData = nullptr;
+	ae::Vec3 source = ae::Vec3( 0.0f );
+	ae::Vec3 ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
+	uint32_t maxHits = 1;
+	bool hitCounterclockwise = true;
+	bool hitClockwise = false;
+	ae::DebugLines* debug = nullptr; // Draw collision results
+	ae::Color debugColor = ae::Color::Red();
+};
+
+//------------------------------------------------------------------------------
+// ae::RaycastResult
+//------------------------------------------------------------------------------
+struct RaycastResult
+{
+	struct Hit
+	{
+		ae::Vec3 position = ae::Vec3( 0.0f );
+		ae::Vec3 normal = ae::Vec3( 0.0f );
+		float distance = 0.0f;
+		const void* userData = nullptr;
+	};
+	ae::Array< Hit, 8 > hits;
+	
+	static void Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next );
+};
+
+//------------------------------------------------------------------------------
+// ae::PushOutParams
+//! Sphere collision
+//------------------------------------------------------------------------------
+struct PushOutParams
+{
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	ae::DebugLines* debug = nullptr; // Draw collision results
+	ae::Color debugColor = ae::Color::Red();
+};
+
+//------------------------------------------------------------------------------
+// ae::PushOutInfo
+//! Sphere collision
+//------------------------------------------------------------------------------
+struct PushOutInfo
+{
+	ae::Sphere sphere;
+	ae::Vec3 velocity = ae::Vec3( 0.0f );
+	struct Hit
+	{
+		ae::Vec3 position;
+		ae::Vec3 normal;
+	};
+	ae::Array< Hit, 8 > hits;
+
+	static void Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next );
+};
+
+//------------------------------------------------------------------------------
 // ae::CollisionMesh class
 //------------------------------------------------------------------------------
+// template < uint32_t VertMax, uint32_t TriMax, uint32_t BVHMax >
 class CollisionMesh
 {
 public:
-	//! Initialization params passed to ae::CollisionMesh::Load(). If ae::CollisionMesh::Load() is called mlutiple times indices will
-	//! be automatically offset internally.
-	struct Params
-	{
-		ae::Matrix4 transform = ae::Matrix4::Identity(); //!< To transform given position values while storing them
-		const float* positions = nullptr;
-		const void* indices = nullptr;
-		uint32_t positionCount = 0; //!< Number of X,Y,Z position values provided. Must be greater than 0.
-		uint32_t positionStride = 0; //!< Bytes between X,Y,Z position values.
-		uint32_t indexSize = 0; //!< Size in bytes of index type. Either 2 or 4.
-		uint32_t indexCount = 0; //!< Number of indices provided. Must be a multiple of 3, or 0 if no indices are provided.
-	};
-	
-	// RaycastParams
-	struct RaycastParams
-	{
-		ae::Matrix4 transform = ae::Matrix4::Identity();
-		const void* userData = nullptr;
-		ae::Vec3 source = ae::Vec3( 0.0f );
-		ae::Vec3 ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
-		uint32_t maxHits = 1;
-		bool hitCounterclockwise = true;
-		bool hitClockwise = false;
-		ae::DebugLines* debug = nullptr; // Draw collision results
-		ae::Color debugColor = ae::Color::Red();
-	};
-	// RaycastResult
-	struct RaycastResult
-	{
-		struct Hit
-		{
-			ae::Vec3 position = ae::Vec3( 0.0f );
-			ae::Vec3 normal = ae::Vec3( 0.0f );
-			float distance = 0.0f;
-			const void* userData = nullptr;
-		};
-		ae::Array< Hit, 8 > hits;
-		
-		static void Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next );
-	};
+	// CollisionMesh(); //!< Static (V == T == B == 0)
+	CollisionMesh( ae::Tag tag ); //!< Dynamic (V != 0) && (T != 0) && (B != 0)
+	void Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount );
 
-	// Sphere collision PushOutParams
-	struct PushOutParams
-	{
-		ae::Matrix4 transform = ae::Matrix4::Identity();
-		ae::DebugLines* debug = nullptr; // Draw collision results
-		ae::Color debugColor = ae::Color::Red();
-	};
-	// Sphere collision PushOutInfo
-	struct PushOutInfo
-	{
-		ae::Sphere sphere;
-		ae::Vec3 velocity = ae::Vec3( 0.0f );
-		struct Hit
-		{
-			ae::Vec3 position;
-			ae::Vec3 normal;
-		};
-		ae::Array< Hit, 8 > hits;
-
-		static void Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next );
-	};
-	
-	CollisionMesh( ae::Tag tag );
-	void Load( const Params& params );
+	void AddIndexed( ae::Matrix4 transform, const float* positions, uint32_t positionCount, uint32_t positionStride, const void* indices, uint32_t indexCount, uint32_t indexSize );
+	void BuildBVH();
 	void Clear();
+
 	RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
 	PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
-	ae::AABB GetAABB() const { return m_aabb; }
+	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
 	
 	const ae::Vec3* GetVertices() const { return m_vertices.Begin(); }
 	const uint32_t* GetIndices() const { return (uint32_t*)m_tris.Begin(); }
 	uint32_t GetVertexCount() const { return m_vertices.Length(); }
 	uint32_t GetIndexCount() const { return m_tris.Length() * 3; }
-	
+
 private:
 	struct BVHTri { uint32_t idx[ 3 ]; };
 	struct BVHLeaf { BVHTri* tris; uint32_t count; };
@@ -3392,9 +3399,10 @@ private:
 	void m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx, uint32_t availableNodes );
 	const ae::Tag m_tag;
 	ae::AABB m_aabb;
+	bool m_requiresRebuild = false;
 	ae::Array< ae::Vec3 > m_vertices;
 	ae::Array< BVHTri > m_tris;
-	ae::Array< TriangleBVH > m_bvh;
+	TriangleBVH m_bvh;
 };
 
 //------------------------------------------------------------------------------
@@ -7821,6 +7829,14 @@ void BVH< Leaf, N >::SetLeaf( int32_t nodeIdx, const Leaf& data )
 		node->leafIdx = m_leafs.Length();
 		m_leafs.Append( data );
 	}
+	// @TODO: Return leaf
+}
+
+template < typename Leaf, uint32_t N >
+void BVH< Leaf, N >::Clear()
+{
+	m_nodes.Clear();
+	m_leafs.Clear();
 }
 
 template < typename Leaf, uint32_t N >
@@ -18730,66 +18746,83 @@ CollisionMesh::CollisionMesh( ae::Tag tag ) :
 	m_vertices( tag ),
 	m_tris( tag ),
 	m_bvh( tag )
+{}
+
+void CollisionMesh::Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount )
 {
-	Clear();
+	m_vertices.Reserve( vertCount );
+	m_tris.Reserve( triCount );
+	if ( m_bvh.GetLimit() < bvhNodeCount )
+	{
+		m_bvh = std::move( TriangleBVH( m_tag, bvhNodeCount ) );
+		m_requiresRebuild = true;
+	}
 }
 
-void CollisionMesh::Load( const Params& params )
+void CollisionMesh::AddIndexed( ae::Matrix4 transform, const float* positions, uint32_t positionCount, uint32_t positionStride, const void* _indices, uint32_t indexCount, uint32_t indexSize )
 {
 	AE_STATIC_ASSERT( sizeof(BVHTri) == sizeof(uint32_t) * 3 ); // Safe to cast BVHTri's to a uint32_t array
-	if ( !params.positionCount )
+	AE_ASSERT_MSG( positionStride >= sizeof(float) * 3, "Must specify the number of bytes between each position" );
+	AE_ASSERT( indexSize == 1 || indexSize == 2 || indexSize == 4 );
+	AE_ASSERT_MSG( positionCount || !indexCount, "Mesh indices supplied without vertex data" );
+	if ( !positions || !positionCount || !_indices || !indexCount )
 	{
-		AE_ASSERT_MSG( !params.indexCount, "Mesh indices supplied without vertex data" );
 		return;
 	}
-	AE_ASSERT_MSG( params.indexCount, "TODO: Currently only indexed meshes are supported" );
-	AE_ASSERT( params.positions );
-	AE_ASSERT_MSG( params.positionStride >= sizeof(float) * 3, "Must specify the number of bytes between each position" );
-	if ( params.indexCount ) { AE_ASSERT( params.indexCount % 3 == 0 ); }
-	else { AE_ASSERT( params.positionCount % 3 == 0 ); }
-	AE_ASSERT( params.indexSize == 2 || params.indexSize == 4 );
-	
-	bool identityTransform = ( params.transform == ae::Matrix4::Identity() );
+	AE_ASSERT( indexCount % 3 == 0 );
 
-	uint32_t initialVertexCount = m_vertices.Length();
-	uint32_t initialTriCount = m_tris.Length();
+	const bool identityTransform = ( transform == ae::Matrix4::Identity() );
+	const uint32_t initialVertexCount = m_vertices.Length();
+	const uint32_t initialTriCount = m_tris.Length();
+	const uint32_t triCount = indexCount / 3;
 	
-	m_vertices.Reserve( initialVertexCount + params.positionCount );
-	for ( uint32_t i = 0; i < params.positionCount; i++ )
+	m_vertices.Reserve( initialVertexCount + positionCount );
+	for ( uint32_t i = 0; i < positionCount; i++ )
 	{
-		ae::Vec3 pos( (const float*)( (const uint8_t*)params.positions + params.positionStride * i ) );
+		ae::Vec3 pos( (const float*)( (const uint8_t*)positions + positionStride * i ) );
 		if ( !identityTransform )
 		{
-			pos = ( params.transform * ae::Vec4( pos, 1.0f ) ).GetXYZ();
+			pos = ( transform * ae::Vec4( pos, 1.0f ) ).GetXYZ();
 		}
 		m_aabb.Expand( pos ); // Expand root aabb before calling m_BuildBVH() for the first partition
 		m_vertices.Append( pos );
 	}
 	
-	uint32_t triCount = params.indexCount / 3;
 	m_tris.Reserve( m_tris.Length() + triCount );
 	// clang-format off
 #define COPY_INDICES( intType )\
 	BVHTri tri;\
-	const intType* indices = (const intType*)params.indices;\
+	const intType* indices = (const intType*)_indices;\
 	for ( uint32_t i = 0; i < triCount; i++ )\
 	{\
 		for ( uint32_t j = 0; j < 3; j++ )\
 		{\
-			tri.idx[ j ] = initialVertexCount + (uint32_t)indices[ i * 3 + j ];\
+			uint32_t idx = (uint32_t)indices[ i * 3 + j ];\
+			AE_DEBUG_ASSERT_MSG( idx < positionCount, "Index out of bounds: # Vertex count: #", idx, positionCount );\
+			tri.idx[ j ] = initialVertexCount + idx;\
 		}\
 		m_tris.Append( tri );\
 	}
-	if ( params.indexSize == 8 ) { COPY_INDICES( uint64_t ); }
-	else if ( params.indexSize == 4 ) { COPY_INDICES( uint32_t ); }
-	else if ( params.indexSize == 2 ) { COPY_INDICES( uint16_t ); }
-	else if ( params.indexSize == 1 ) { COPY_INDICES( uint8_t ); }
+	if ( indexSize == 8 ) { COPY_INDICES( uint64_t ); }
+	else if ( indexSize == 4 ) { COPY_INDICES( uint32_t ); }
+	else if ( indexSize == 2 ) { COPY_INDICES( uint16_t ); }
+	else if ( indexSize == 1 ) { COPY_INDICES( uint8_t ); }
 	else { AE_FAIL_MSG( "Invalid index size" ); }
 #undef COPY_INDICES
 	// clang-format on
-	
-	auto* bvh = &m_bvh.Append( { m_tag } );
-	m_BuildBVH( m_vertices.Begin(), m_tris.Begin() + initialTriCount, triCount, bvh, 0, bvh->GetAvailable() );
+
+	m_requiresRebuild = true;
+}
+
+void CollisionMesh::BuildBVH()
+{
+	if ( m_requiresRebuild )
+	{
+		AE_DEBUG_ASSERT( m_vertices.Length() );
+		AE_DEBUG_ASSERT( m_tris.Length() );
+		m_BuildBVH( m_vertices.Begin(), m_tris.Begin(), m_tris.Length(), &m_bvh, 0, m_bvh.GetAvailable() );
+		m_requiresRebuild = false;
+	}
 }
 
 void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t triCount, TriangleBVH* bvh, int32_t bvhNodeIdx, uint32_t availableNodes )
@@ -18925,12 +18958,14 @@ void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t tr
 
 void CollisionMesh::Clear()
 {
+	m_aabb = ae::AABB();
+	m_requiresRebuild = false;
 	m_vertices.Clear();
 	m_tris.Clear();
-	m_aabb = ae::AABB();
+	m_bvh.Clear();
 }
 
-CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
+RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
 {
 	// Early out for parameters that will give no results
 	if ( params.maxHits == 0 )
@@ -18964,7 +18999,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 	const bool ccw = params.hitCounterclockwise;
 	const bool cw = params.hitClockwise;
 	
-	CollisionMesh::RaycastResult result;
+	RaycastResult result;
 	uint32_t hitCount  = 0;
 	RaycastResult::Hit hits[ result.hits.Size() + 1 ];
 	const uint32_t maxHits = ae::Min( params.maxHits, result.hits.Size() );
@@ -19022,10 +19057,7 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 			bvhFn( bvhFn, bvh, right );
 		}
 	};
-	for ( const TriangleBVH& bvh : m_bvh )
-	{
-		bvhFn( bvhFn, &bvh, bvh.GetRoot() );
-	}
+	bvhFn( bvhFn, &m_bvh, m_bvh.GetRoot() );
 	
 	if ( ae::DebugLines* debug = params.debug )
 	{
@@ -19049,11 +19081,11 @@ CollisionMesh::RaycastResult CollisionMesh::Raycast( const RaycastParams& params
 		hits[ i ].normal.SafeNormalize();
 		result.hits.Append( hits[ i ] );
 	}
-	CollisionMesh::RaycastResult::Accumulate( params, prevResult, &result );
+	RaycastResult::Accumulate( params, prevResult, &result );
 	return result;
 }
 
-CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
+PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
 {
 	if ( ae::DebugLines* debug = params.debug )
 	{
@@ -19173,10 +19205,7 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 			bvhFn( bvhFn, bvh, right );
 		}
 	};
-	for ( const TriangleBVH& bvh : m_bvh )
-	{
-		bvhFn( bvhFn, &bvh, bvh.GetRoot() );
-	}
+	bvhFn( bvhFn, &m_bvh, m_bvh.GetRoot() );
 	
 	if ( result.hits.Length() )
 	{
@@ -19190,9 +19219,9 @@ CollisionMesh::PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, 
 }
 
 //------------------------------------------------------------------------------
-// ae::CollisionMesh::RaycastResult member functions
+// ae::RaycastResult member functions
 //------------------------------------------------------------------------------
-void CollisionMesh::RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
+void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
 {
 	uint32_t accumHitCount = 0;
 	Hit accumHits[ next->hits.Size() * 2 ];
@@ -19218,9 +19247,9 @@ void CollisionMesh::RaycastResult::Accumulate( const RaycastParams& params, cons
 }
 
 //------------------------------------------------------------------------------
-// ae::CollisionMesh::PushOutInfo member functions
+// ae::PushOutInfo member functions
 //------------------------------------------------------------------------------
-void CollisionMesh::PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next )
+void PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next )
 {
 	// @NOTE: Leave next::position/velocity unchanged since it's the latest
 	// @TODO: Params are currently not used, but they could be used for sorting later
@@ -19770,17 +19799,18 @@ void OBJFile::InitializeCollisionMesh( ae::CollisionMesh* mesh, const ae::Matrix
 	{
 		return;
 	}
-	
-	ae::CollisionMesh::Params params;
-	params.transform = localToWorld;
-	params.positions = vertices.Begin()->position.data;
-	params.indices = indices.Begin();
-	params.positionCount = vertices.Length();
-	params.positionStride = sizeof( Vertex );
-	params.indexSize = sizeof( uint32_t );
-	params.indexCount = indices.Length();
+
 	mesh->Clear();
-	mesh->Load( params );
+	mesh->AddIndexed(
+		localToWorld,
+		vertices.Begin()->position.data,
+		vertices.Length(),
+		sizeof( Vertex ),
+		indices.Begin(),
+		indices.Length(),
+		sizeof( uint32_t )
+	);
+	mesh->BuildBVH();
 }
 
 //------------------------------------------------------------------------------
