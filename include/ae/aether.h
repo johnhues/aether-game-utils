@@ -1755,9 +1755,25 @@ struct BVHNode
 };
 
 //------------------------------------------------------------------------------
+// ae::BVHLeaf struct
+//------------------------------------------------------------------------------
+//! ae::BVHLeaf's store all user provided data. When automatically building the
+//! bvh ae::BVHLeaf::count is automatically determined by the number of given
+//! nodes, the more that are available the lower count will be. The tree bvh
+//! represents the structure of the given data best when ae::BVHLeaf::count is
+//! low.
+//------------------------------------------------------------------------------
+template < typename T >
+struct BVHLeaf
+{
+	T* data;
+	uint32_t count;
+};
+
+//------------------------------------------------------------------------------
 // ae::BVH class
 //------------------------------------------------------------------------------
-template < typename Leaf, uint32_t N = 0 >
+template < typename T, uint32_t N = 0 >
 class BVH
 {
 public:
@@ -1774,7 +1790,7 @@ public:
 	//! BVHNodes after calling this if using constructor 2.
 	std::pair< int32_t, int32_t > AddNodes( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB );
 	//! Sets the leaf data of the node at \p nodeIdx
-	void SetLeaf( int32_t nodeIdx, const Leaf& data );
+	void SetLeaf( int32_t nodeIdx, T* data, uint32_t count );
 	//! Resets BVH to state directly after construction. Does not affect node limit.
 	void Clear();
 	
@@ -1786,20 +1802,20 @@ public:
 	//! ae::BVHNode::leftIdx, and ae::BVHNode::rightIdx.
 	const BVHNode* GetNode( int32_t nodeIdx ) const;
 	//! Get the leaf at \p leafIdx. Corresponds to ae::BVHNode::leafIdx.
-	const Leaf& GetLeaf( int32_t leafIdx ) const;
+	const BVHLeaf< T >& GetLeaf( int32_t leafIdx ) const;
 	//! Returns the leaf at \p leafIdx or null if it does not exist. Corresponds
 	//! to ae::BVHNode::leafIdx.
-	const Leaf* TryGetLeaf( int32_t leafIdx ) const;
+	const BVHLeaf< T >* TryGetLeaf( int32_t leafIdx ) const;
 
 	//! Returns the remaining number of nodes, or 0 if no limit was specified
 	uint32_t GetAvailable() const { return m_limit ? m_limit - ae::Max( 1u, m_nodes.Length() ): 0; }
 	//! Returns the max number of nodes, or 0 if no limit was specified
 	uint32_t GetLimit() const { return m_limit; }
-	
+
 private:
 	uint32_t m_limit = 0;
 	ae::Array< BVHNode, N > m_nodes;
-	ae::Array< Leaf, (N + 1)/2 > m_leafs;
+	ae::Array< BVHLeaf< T >, (N + 1)/2 > m_leafs;
 };
 
 //------------------------------------------------------------------------------
@@ -3380,7 +3396,17 @@ public:
 	void Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount );
 
 	void AddIndexed( ae::Matrix4 transform, const float* positions, uint32_t positionCount, uint32_t positionStride, const void* indices, uint32_t indexCount, uint32_t indexSize );
+	
+	//! Must be called after AddIndexed() or Reserve() for Raycast() and PushOut()
+	//! to work. This can be slightly expensive, so try to call this only once
+	//! when all mesh data is submitted. Internally this will early out if no
+	//! rebuild is required.
 	void BuildBVH();
+	//! Returns true if  BuildBVH() should be called. Returns false if BuildBVH()
+	//! will early out.
+	bool RequiresBVHRebuild() const { return m_requiresRebuild; }
+	//! Resets CollisionMesh to state after construction, except reserved buffer
+	//! sizes are maintained.
 	void Clear();
 
 	RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
@@ -3394,8 +3420,7 @@ public:
 
 private:
 	struct BVHTri { uint32_t idx[ 3 ]; };
-	struct BVHLeaf { BVHTri* tris; uint32_t count; };
-	typedef ae::BVH< BVHLeaf > TriangleBVH;
+	typedef ae::BVH< BVHTri > TriangleBVH;
 	void m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx, uint32_t availableNodes );
 	const ae::Tag m_tag;
 	ae::AABB m_aabb;
@@ -7731,27 +7756,27 @@ T* OpaquePool::GetNext( const T* obj )
 //------------------------------------------------------------------------------
 // ae::BVH member functions
 //------------------------------------------------------------------------------
-template < typename Leaf, uint32_t N >
-BVH< Leaf, N >::BVH() :
+template < typename T, uint32_t N >
+BVH< T, N >::BVH() :
 	m_limit( N )
 {}
 
-template < typename Leaf, uint32_t N >
-BVH< Leaf, N >::BVH( const ae::Tag& allocTag ) :
+template < typename T, uint32_t N >
+BVH< T, N >::BVH( const ae::Tag& allocTag ) :
 	m_limit( 0 ),
 	m_nodes( allocTag ),
 	m_leafs( allocTag )
 {}
 
-template < typename Leaf, uint32_t N >
-BVH< Leaf, N >::BVH( const ae::Tag& allocTag, uint32_t nodeLimit ) :
+template < typename T, uint32_t N >
+BVH< T, N >::BVH( const ae::Tag& allocTag, uint32_t nodeLimit ) :
 	m_limit( nodeLimit ),
 	m_nodes( allocTag, nodeLimit ),
 	m_leafs( allocTag, (nodeLimit + 1)/2 )
 {}
 
-template < typename Leaf, uint32_t N >
-BVH< Leaf, N >::BVH( const BVH< Leaf, N >& other ) :
+template < typename T, uint32_t N >
+BVH< T, N >::BVH( const BVH< T, N >& other ) :
 	m_limit( other.m_limit ),
 	m_nodes( other.m_nodes.GetTag(), m_limit ),
 	m_leafs( other.m_leafs.GetTag(), (m_limit + 1)/2 )
@@ -7760,8 +7785,8 @@ BVH< Leaf, N >::BVH( const BVH< Leaf, N >& other ) :
 	m_leafs = other.m_leafs;
 }
 
-template < typename Leaf, uint32_t N >
-BVH< Leaf, N >& BVH< Leaf, N >::operator = ( const BVH< Leaf, N >& other )
+template < typename T, uint32_t N >
+BVH< T, N >& BVH< T, N >::operator = ( const BVH< T, N >& other )
 {
 	m_limit = other.m_limit;
 	m_nodes.Clear();
@@ -7770,10 +7795,11 @@ BVH< Leaf, N >& BVH< Leaf, N >::operator = ( const BVH< Leaf, N >& other )
 	m_leafs.Reserve( (m_limit + 1)/2 );
 	m_nodes = other.m_nodes;
 	m_leafs = other.m_leafs;
+	return *this;
 }
 
-template < typename Leaf, uint32_t N >
-std::pair< int32_t, int32_t > BVH< Leaf, N >::AddNodes( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB )
+template < typename T, uint32_t N >
+std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB )
 {
 	if ( !m_nodes.Length() )
 	{
@@ -7816,55 +7842,58 @@ std::pair< int32_t, int32_t > BVH< Leaf, N >::AddNodes( int32_t parentIdx, const
 	return { leftIdx, rightIdx };
 }
 
-template < typename Leaf, uint32_t N >
-void BVH< Leaf, N >::SetLeaf( int32_t nodeIdx, const Leaf& data )
+template < typename T, uint32_t N >
+void BVH< T, N >::SetLeaf( int32_t nodeIdx, T* data, uint32_t count )
 {
+	BVHLeaf< T >* leaf;
 	BVHNode* node = &m_nodes[ nodeIdx ];
 	if ( node->leafIdx >= 0 )
 	{
-		m_leafs[ node->leafIdx ] = data;
+		leaf = &m_leafs[ node->leafIdx ];
 	}
 	else
 	{
 		node->leafIdx = m_leafs.Length();
-		m_leafs.Append( data );
+		leaf = &m_leafs.Append( {} );
 	}
-	// @TODO: Return leaf
+	leaf->data = data;
+	leaf->count = count;
+	// @TODO: Return leaf?
 }
 
-template < typename Leaf, uint32_t N >
-void BVH< Leaf, N >::Clear()
+template < typename T, uint32_t N >
+void BVH< T, N >::Clear()
 {
 	m_nodes.Clear();
 	m_leafs.Clear();
 }
 
-template < typename Leaf, uint32_t N >
-const BVHNode* BVH< Leaf, N >::GetRoot() const
+template < typename T, uint32_t N >
+const BVHNode* BVH< T, N >::GetRoot() const
 {
 	return GetNode( 0 );
 }
 
-template < typename Leaf, uint32_t N >
-const BVHNode* BVH< Leaf, N >::GetNode( int32_t nodeIdx ) const
+template < typename T, uint32_t N >
+const BVHNode* BVH< T, N >::GetNode( int32_t nodeIdx ) const
 {
 	return ( nodeIdx >= 0 ) ? &m_nodes[ nodeIdx ] : nullptr;
 }
 
-template < typename Leaf, uint32_t N >
-const Leaf& BVH< Leaf, N >::GetLeaf( int32_t leafIdx ) const
+template < typename T, uint32_t N >
+const BVHLeaf< T >& BVH< T, N >::GetLeaf( int32_t leafIdx ) const
 {
 	return m_leafs[ leafIdx ];
 }
 
-template < typename Leaf, uint32_t N >
-const Leaf* BVH< Leaf, N >::TryGetLeaf( int32_t leafIdx ) const
+template < typename T, uint32_t N >
+const BVHLeaf< T >* BVH< T, N >::TryGetLeaf( int32_t leafIdx ) const
 {
 	return ( leafIdx >= 0 ) ? &m_leafs[ leafIdx ] : nullptr;
 }
 
-template < typename Leaf, uint32_t N >
-ae::AABB BVH< Leaf, N >::GetAABB() const
+template < typename T, uint32_t N >
+ae::AABB BVH< T, N >::GetAABB() const
 {
 	return GetRoot()->aabb;
 }
@@ -18750,11 +18779,11 @@ CollisionMesh::CollisionMesh( ae::Tag tag ) :
 
 void CollisionMesh::Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount )
 {
-	m_vertices.Reserve( vertCount );
-	m_tris.Reserve( triCount );
-	if ( m_bvh.GetLimit() < bvhNodeCount )
+	if ( m_vertices.Size() < vertCount || m_tris.Size() < triCount || m_bvh.GetLimit() < bvhNodeCount )
 	{
-		m_bvh = std::move( TriangleBVH( m_tag, bvhNodeCount ) );
+		m_vertices.Reserve( vertCount );
+		m_tris.Reserve( triCount );
+		m_bvh = std::move( TriangleBVH( m_tag, bvhNodeCount ) ); // Clear bvh because pointers into m_tris could be invalid after Reserve()
 		m_requiresRebuild = true;
 	}
 }
@@ -18831,10 +18860,7 @@ void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t tr
 	AE_DEBUG_ASSERT( triCount );
 	if ( triCount <= 32 )
 	{
-		BVHLeaf leaf;
-		leaf.tris = tris;
-		leaf.count = triCount;
-		bvh->SetLeaf( bvhNodeIdx, leaf );
+		bvh->SetLeaf( bvhNodeIdx, tris, triCount );
 		return;
 	}
 	
@@ -18885,10 +18911,7 @@ void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t tr
 
 	if ( !leftTriCount || !rightTriCount )
 	{
-		BVHLeaf leaf;
-		leaf.tris = tris;
-		leaf.count = triCount;
-		bvh->SetLeaf( bvhNodeIdx, leaf );
+		bvh->SetLeaf( bvhNodeIdx, tris, triCount );
 		return;
 	}
 
@@ -18930,10 +18953,7 @@ void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t tr
 		}
 		else
 		{
-			BVHLeaf leaf;
-			leaf.tris = tris;
-			leaf.count = leftTriCount;
-			bvh->SetLeaf( childIndices.first, leaf );
+			bvh->SetLeaf( childIndices.first, tris, leftTriCount );
 		}
 		
 		if ( rightNodes >= 2 )
@@ -18942,10 +18962,7 @@ void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t tr
 		}
 		else
 		{
-			BVHLeaf leaf;
-			leaf.tris = middle;
-			leaf.count = rightTriCount;
-			bvh->SetLeaf( childIndices.second, leaf );
+			bvh->SetLeaf( childIndices.second, middle, rightTriCount );
 		}
 	}
 	else
@@ -19014,14 +19031,14 @@ RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const Raycast
 			ae::OBB obb( params.transform * current->aabb.GetTransform() );
 			params.debug->AddOBB( obb.GetTransform(), params.debugColor );
 		}
-		if ( const BVHLeaf* leaf = bvh->TryGetLeaf( current->leafIdx ) )
+		if ( const BVHLeaf< BVHTri >* leaf = bvh->TryGetLeaf( current->leafIdx ) )
 		{
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
 				ae::Vec3 p, n;
-				ae::Vec3 a = m_vertices[ leaf->tris[ i ].idx[ 0 ] ];
-				ae::Vec3 b = m_vertices[ leaf->tris[ i ].idx[ 1 ] ];
-				ae::Vec3 c = m_vertices[ leaf->tris[ i ].idx[ 2 ] ];
+				ae::Vec3 a = m_vertices[ leaf->data[ i ].idx[ 0 ] ];
+				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ];
 				if ( IntersectRayTriangle( source, ray, a, b, c, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit& outHit = hits[ hitCount ];
@@ -19137,14 +19154,14 @@ PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, const PushOutIn
 			}
 		}
 		// Triangle checks
-		if ( const BVHLeaf* leaf = bvh->TryGetLeaf( current->leafIdx ) )
+		if ( const BVHLeaf< BVHTri >* leaf = bvh->TryGetLeaf( current->leafIdx ) )
 		{
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
 				ae::Vec3 p, n;
-				ae::Vec3 a = m_vertices[ leaf->tris[ i ].idx[ 0 ] ];
-				ae::Vec3 b = m_vertices[ leaf->tris[ i ].idx[ 1 ] ];
-				ae::Vec3 c = m_vertices[ leaf->tris[ i ].idx[ 2 ] ];
+				ae::Vec3 a = m_vertices[ leaf->data[ i ].idx[ 0 ] ];
+				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ];
 				if ( !hasIdentityTransform )
 				{
 					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
