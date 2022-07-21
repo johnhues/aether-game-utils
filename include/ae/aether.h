@@ -1783,11 +1783,25 @@ public:
 	BVH( const BVH& other );
 	BVH& operator = ( const BVH& other );
 
+	//! Builds an ae::BVH for the given \p data. \p data elements are not copied
+	//! into the ae::BVH, so the given \p data lifetime must be greater than the
+	//! lifetime of this ae::BVH. In addition to this \p data will be
+	//! reorganized so it can be accessed contiguously with ae::BVHLeaf::data
+	//! and ae::BVHLeaf::count. \p count should be the number of \p data
+	//! elements to be processed. \p aabbFn should roughly have the signature
+	//! ae::AABB()( const T& elem ), but it's valid to return anything that
+	//! can be converted to an ae::AABB (like an ae::Sphere). \p targetLeafCount
+	//! optionally specifies a stopping point to limit tree depth. It's possible
+	//! ae::BVHLeaf::count will be less than \p targetLeafCount (but at least 1)
+	//! if the data is unbalanced, or more if nodes are limited.
+	template < typename AABBFn >
+	void Build( T* data, uint32_t count, AABBFn aabbFn, uint32_t targetLeafCount = 0 );
+
 	//! Add two child nodes to the given node at \p parentIdx. The index of the
 	//! root node is 0. The given \p leftAABB and \p rightAABB will determine
 	//! the aabb of their parent. The returned values are the node index of the
-	//! left and right nodes respectively. It is not safe to use pointers to
-	//! BVHNodes after calling this if using constructor 2.
+	//! left and right nodes respectively. It is not safe to use previous
+	//! pointers to BVHNodes after calling this if using constructor 2.
 	std::pair< int32_t, int32_t > AddNodes( int32_t parentIdx, const ae::AABB& leftAABB, const ae::AABB& rightAABB );
 	//! Sets the leaf data of the node at \p nodeIdx
 	void SetLeaf( int32_t nodeIdx, T* data, uint32_t count );
@@ -1813,9 +1827,11 @@ public:
 	uint32_t GetLimit() const { return m_limit; }
 
 private:
+	template < typename AABBFn >
+	void m_Build( T* data, uint32_t count, AABBFn aabbFn, uint32_t targetLeafCount, int32_t bvhNodeIdx, uint32_t availableNodes );
 	uint32_t m_limit = 0;
 	ae::Array< BVHNode, N > m_nodes;
-	ae::Array< BVHLeaf< T >, (N + 1)/2 > m_leafs;
+	ae::Array< BVHLeaf< T >, (N + 1)/2 > m_leaves;
 };
 
 //------------------------------------------------------------------------------
@@ -3398,7 +3414,7 @@ public:
 	void AddIndexed( ae::Matrix4 transform, const float* positions, uint32_t positionCount, uint32_t positionStride, const void* indices, uint32_t indexCount, uint32_t indexSize );
 	
 	//! Must be called after AddIndexed() or Reserve() for Raycast() and PushOut()
-	//! to work. This can be slightly expensive, so try to call this only once
+	//! to work. This can be slightly expensive, so try to only call this once
 	//! when all mesh data is submitted. Internally this will early out if no
 	//! rebuild is required.
 	void BuildBVH();
@@ -3420,14 +3436,12 @@ public:
 
 private:
 	struct BVHTri { uint32_t idx[ 3 ]; };
-	typedef ae::BVH< BVHTri > TriangleBVH;
-	void m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t count, TriangleBVH* bvh, int32_t bvhNodeIdx, uint32_t availableNodes );
 	const ae::Tag m_tag;
 	ae::AABB m_aabb;
 	bool m_requiresRebuild = false;
 	ae::Array< ae::Vec3 > m_vertices;
 	ae::Array< BVHTri > m_tris;
-	TriangleBVH m_bvh;
+	ae::BVH< BVHTri > m_bvh;
 };
 
 //------------------------------------------------------------------------------
@@ -7765,24 +7779,24 @@ template < typename T, uint32_t N >
 BVH< T, N >::BVH( const ae::Tag& allocTag ) :
 	m_limit( 0 ),
 	m_nodes( allocTag ),
-	m_leafs( allocTag )
+	m_leaves( allocTag )
 {}
 
 template < typename T, uint32_t N >
 BVH< T, N >::BVH( const ae::Tag& allocTag, uint32_t nodeLimit ) :
 	m_limit( nodeLimit ),
 	m_nodes( allocTag, nodeLimit ),
-	m_leafs( allocTag, (nodeLimit + 1)/2 )
+	m_leaves( allocTag, (nodeLimit + 1)/2 )
 {}
 
 template < typename T, uint32_t N >
 BVH< T, N >::BVH( const BVH< T, N >& other ) :
 	m_limit( other.m_limit ),
 	m_nodes( other.m_nodes.GetTag(), m_limit ),
-	m_leafs( other.m_leafs.GetTag(), (m_limit + 1)/2 )
+	m_leaves( other.m_leaves.GetTag(), (m_limit + 1)/2 )
 {
 	m_nodes = other.m_nodes;
-	m_leafs = other.m_leafs;
+	m_leaves = other.m_leaves;
 }
 
 template < typename T, uint32_t N >
@@ -7790,12 +7804,134 @@ BVH< T, N >& BVH< T, N >::operator = ( const BVH< T, N >& other )
 {
 	m_limit = other.m_limit;
 	m_nodes.Clear();
-	m_leafs.Clear();
+	m_leaves.Clear();
 	m_nodes.Reserve( m_limit );
-	m_leafs.Reserve( (m_limit + 1)/2 );
+	m_leaves.Reserve( (m_limit + 1)/2 );
 	m_nodes = other.m_nodes;
-	m_leafs = other.m_leafs;
+	m_leaves = other.m_leaves;
 	return *this;
+}
+
+template < typename T, uint32_t N >
+template < typename AABBFn >
+void BVH< T, N >::Build( T* data, uint32_t count, AABBFn aabbFn, uint32_t targetLeafCount )
+{
+	Clear();
+	if ( count )
+	{
+		AE_ASSERT_MSG( data, "Non-zero count provided with null data param" );
+		ae::AABB rootAABB;
+		for ( uint32_t i = 0; i < count; i++ )
+		{
+			rootAABB.Expand( ae::AABB( aabbFn( data[ i ] ) ) );
+		}
+		m_nodes.Append( {} ).aabb = rootAABB;
+		m_Build( data, count, aabbFn, targetLeafCount, 0, GetAvailable() );
+	}
+}
+
+template < typename T, uint32_t N >
+template < typename AABBFn >
+void BVH< T, N >::m_Build( T* data, uint32_t count, AABBFn aabbFn, uint32_t targetLeafCount, int32_t bvhNodeIdx, uint32_t availableNodes )
+{
+	AE_DEBUG_ASSERT( !GetLimit() || ( GetAvailable() >= availableNodes ) );
+	AE_DEBUG_ASSERT( count );
+	if ( count <= targetLeafCount )
+	{
+		SetLeaf( bvhNodeIdx, data, count );
+		return;
+	}
+	
+	const ae::AABB bvhNodeAABB = GetNode( bvhNodeIdx )->aabb;
+	ae::Vec3 splitAxis( 0.0f );
+	ae::Vec3 halfSize = bvhNodeAABB.GetHalfSize();
+	if ( halfSize.x > halfSize.y && halfSize.x > halfSize.z ) { splitAxis = ae::Vec3( 1.0f, 0.0f, 0.0f ); }
+	else if ( halfSize.y > halfSize.z ) { splitAxis = ae::Vec3( 0.0f, 1.0f, 0.0f ); }
+	else { splitAxis = ae::Vec3( 0.0f, 0.0f, 1.0f ); }
+	ae::Plane splitPlane( bvhNodeAABB.GetCenter(), splitAxis );
+	
+	ae::AABB leftBoundary;
+	ae::AABB rightBoundary;
+	T* middle = std::partition( data, data + count, [splitPlane, &leftBoundary, &rightBoundary, &aabbFn]( const T& t )
+	{
+		ae::AABB temp( aabbFn( t ) );
+		ae::Vec3 aabbCenter = temp.GetCenter();
+		if ( splitPlane.GetSignedDistance( aabbCenter ) < 0.0f )
+		{
+			leftBoundary.Expand( temp );
+			return true;
+		}
+		else
+		{
+			rightBoundary.Expand( temp );
+			return false;
+		}
+	});
+	uint32_t leftCount = middle - data;
+	uint32_t rightCount = ( data + count ) - middle;
+
+	if ( !leftCount || !rightCount )
+	{
+		SetLeaf( bvhNodeIdx, data, count );
+		return;
+	}
+
+	auto childIndices = AddNodes( bvhNodeIdx, leftBoundary, rightBoundary );
+	if ( availableNodes )
+	{
+		AE_DEBUG_ASSERT( GetLimit() );
+		availableNodes -= 2;
+		AE_DEBUG_ASSERT( leftCount && rightCount );
+		float leftWeight = availableNodes * ( leftCount / (float)count );
+		float rightWeight = availableNodes * ( rightCount / (float)count );
+		uint32_t leftNodes = ae::Round( leftWeight );
+		uint32_t rightNodes = ( availableNodes - leftNodes );
+		if ( leftNodes < 2 || rightNodes < 2 )
+		{
+			if ( leftWeight < rightWeight )
+			{
+				leftNodes = 0;
+				rightNodes = availableNodes;
+			}
+			else
+			{
+				leftNodes = availableNodes;
+				rightNodes = 0;
+			}
+		}
+		else if ( ( leftNodes % 2 ) && ( rightNodes % 2 ) )
+		{
+			// Give node to bigger side if both have an odd number
+			if ( leftWeight > rightWeight ) { leftNodes++; rightNodes--; }
+			else { leftNodes--; rightNodes++; }
+		}
+		AE_DEBUG_ASSERT( leftNodes + rightNodes == availableNodes );
+		AE_DEBUG_ASSERT( availableNodes <= GetAvailable() );
+
+		if ( leftNodes >= 2 )
+		{
+			m_Build( data, leftCount, aabbFn, targetLeafCount, childIndices.first, leftNodes );
+		}
+		else
+		{
+			SetLeaf( childIndices.first, data, leftCount );
+		}
+		
+		if ( rightNodes >= 2 )
+		{
+			m_Build( middle, rightCount, aabbFn, targetLeafCount, childIndices.second, rightNodes );
+		}
+		else
+		{
+			SetLeaf( childIndices.second, middle, rightCount );
+		}
+	}
+	else
+	{
+		AE_DEBUG_ASSERT( !GetLimit() );
+		m_Build( data, leftCount, aabbFn, targetLeafCount, childIndices.first, 0 );
+		m_Build( middle, rightCount, aabbFn, targetLeafCount, childIndices.second, 0 );
+	}
 }
 
 template < typename T, uint32_t N >
@@ -7849,12 +7985,12 @@ void BVH< T, N >::SetLeaf( int32_t nodeIdx, T* data, uint32_t count )
 	BVHNode* node = &m_nodes[ nodeIdx ];
 	if ( node->leafIdx >= 0 )
 	{
-		leaf = &m_leafs[ node->leafIdx ];
+		leaf = &m_leaves[ node->leafIdx ];
 	}
 	else
 	{
-		node->leafIdx = m_leafs.Length();
-		leaf = &m_leafs.Append( {} );
+		node->leafIdx = m_leaves.Length();
+		leaf = &m_leaves.Append( {} );
 	}
 	leaf->data = data;
 	leaf->count = count;
@@ -7865,7 +8001,7 @@ template < typename T, uint32_t N >
 void BVH< T, N >::Clear()
 {
 	m_nodes.Clear();
-	m_leafs.Clear();
+	m_leaves.Clear();
 }
 
 template < typename T, uint32_t N >
@@ -7883,13 +8019,13 @@ const BVHNode* BVH< T, N >::GetNode( int32_t nodeIdx ) const
 template < typename T, uint32_t N >
 const BVHLeaf< T >& BVH< T, N >::GetLeaf( int32_t leafIdx ) const
 {
-	return m_leafs[ leafIdx ];
+	return m_leaves[ leafIdx ];
 }
 
 template < typename T, uint32_t N >
 const BVHLeaf< T >* BVH< T, N >::TryGetLeaf( int32_t leafIdx ) const
 {
-	return ( leafIdx >= 0 ) ? &m_leafs[ leafIdx ] : nullptr;
+	return ( leafIdx >= 0 ) ? &m_leaves[ leafIdx ] : nullptr;
 }
 
 template < typename T, uint32_t N >
@@ -18783,7 +18919,7 @@ void CollisionMesh::Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvh
 	{
 		m_vertices.Reserve( vertCount );
 		m_tris.Reserve( triCount );
-		m_bvh = std::move( TriangleBVH( m_tag, bvhNodeCount ) ); // Clear bvh because pointers into m_tris could be invalid after Reserve()
+		m_bvh = std::move( ae::BVH< BVHTri >( m_tag, bvhNodeCount ) ); // Clear bvh because pointers into m_tris could be invalid after Reserve()
 		m_requiresRebuild = true;
 	}
 }
@@ -18849,127 +18985,17 @@ void CollisionMesh::BuildBVH()
 	{
 		AE_DEBUG_ASSERT( m_vertices.Length() );
 		AE_DEBUG_ASSERT( m_tris.Length() );
-		m_BuildBVH( m_vertices.Begin(), m_tris.Begin(), m_tris.Length(), &m_bvh, 0, m_bvh.GetAvailable() );
+		const ae::Vec3* verts = m_vertices.Begin();
+		auto aabbFn = [verts]( BVHTri tri )
+		{
+			ae::AABB aabb;
+			aabb.Expand( verts[ tri.idx[ 0 ] ] );
+			aabb.Expand( verts[ tri.idx[ 1 ] ] );
+			aabb.Expand( verts[ tri.idx[ 2 ] ] );
+			return aabb;
+		};
+		m_bvh.Build( m_tris.Begin(), m_tris.Length(), aabbFn, 32 );
 		m_requiresRebuild = false;
-	}
-}
-
-void CollisionMesh::m_BuildBVH( const ae::Vec3* verts, BVHTri* tris, uint32_t triCount, TriangleBVH* bvh, int32_t bvhNodeIdx, uint32_t availableNodes )
-{
-	AE_DEBUG_ASSERT( !bvh->GetLimit() || ( bvh->GetAvailable() >= availableNodes ) );
-	AE_DEBUG_ASSERT( triCount );
-	if ( triCount <= 32 )
-	{
-		bvh->SetLeaf( bvhNodeIdx, tris, triCount );
-		return;
-	}
-	
-	const ae::AABB bvhNodeAABB = bvhNodeIdx ? bvh->GetNode( bvhNodeIdx )->aabb : m_aabb;
-	ae::Vec3 splitAxis( 0.0f );
-	ae::Vec3 halfSize = bvhNodeAABB.GetHalfSize();
-	if ( halfSize.x > halfSize.y && halfSize.x > halfSize.z ) { splitAxis = ae::Vec3( 1.0f, 0.0f, 0.0f ); }
-	else if ( halfSize.y > halfSize.z ) { splitAxis = ae::Vec3( 0.0f, 1.0f, 0.0f ); }
-	else { splitAxis = ae::Vec3( 0.0f, 0.0f, 1.0f ); }
-	ae::Plane splitPlane( bvhNodeAABB.GetCenter(), splitAxis );
-	
-	ae::AABB leftBoundary;
-	ae::AABB rightBoundary;
-	BVHTri* middle = std::partition( tris, tris + triCount, [verts, splitPlane, &leftBoundary, &rightBoundary]( const BVHTri& t )
-	{
-		float left = -INFINITY;
-		float right = -INFINITY;
-		ae::Vec3 p[] = { verts[ t.idx[ 0 ] ], verts[ t.idx[ 1 ] ], verts[ t.idx[ 2 ] ] };
-		for ( uint32_t j = 0; j < 3; j++ )
-		{
-			float d = splitPlane.GetSignedDistance( p[ j ] );
-			if ( d >= 0.0f )
-			{
-				right = ae::Max( right, d );
-			}
-			else
-			{
-				left = ae::Max( left, -d );
-			}
-		}
-		if ( left > right )
-		{
-			leftBoundary.Expand( p[ 0 ] );
-			leftBoundary.Expand( p[ 1 ] );
-			leftBoundary.Expand( p[ 2 ] );
-			return true;
-		}
-		else
-		{
-			rightBoundary.Expand( p[ 0 ] );
-			rightBoundary.Expand( p[ 1 ] );
-			rightBoundary.Expand( p[ 2 ] );
-			return false;
-		}
-	});
-	uint32_t leftTriCount = middle - tris;
-	uint32_t rightTriCount = ( tris + triCount ) - middle;
-
-	if ( !leftTriCount || !rightTriCount )
-	{
-		bvh->SetLeaf( bvhNodeIdx, tris, triCount );
-		return;
-	}
-
-	auto childIndices = bvh->AddNodes( bvhNodeIdx, leftBoundary, rightBoundary );
-	if ( availableNodes )
-	{
-		AE_DEBUG_ASSERT( bvh->GetLimit() );
-		availableNodes -= 2;
-		AE_DEBUG_ASSERT( leftTriCount && rightTriCount );
-		float leftWeight = availableNodes * ( leftTriCount / (float)triCount );
-		float rightWeight = availableNodes * ( rightTriCount / (float)triCount );
-		uint32_t leftNodes = ae::Round( leftWeight );
-		uint32_t rightNodes = ( availableNodes - leftNodes );
-		if ( leftNodes < 2 || rightNodes < 2 )
-		{
-			if ( leftWeight < rightWeight )
-			{
-				leftNodes = 0;
-				rightNodes = availableNodes;
-			}
-			else
-			{
-				leftNodes = availableNodes;
-				rightNodes = 0;
-			}
-		}
-		else if ( ( leftNodes % 2 ) && ( rightNodes % 2 ) )
-		{
-			// Give node to bigger side if both have an odd number
-			if ( leftWeight > rightWeight ) { leftNodes++; rightNodes--; }
-			else { leftNodes--; rightNodes++; }
-		}
-		AE_DEBUG_ASSERT( leftNodes + rightNodes == availableNodes );
-		AE_DEBUG_ASSERT( availableNodes <= bvh->GetAvailable() );
-
-		if ( leftNodes >= 2 )
-		{
-			m_BuildBVH( verts, tris, leftTriCount, bvh, childIndices.first, leftNodes );
-		}
-		else
-		{
-			bvh->SetLeaf( childIndices.first, tris, leftTriCount );
-		}
-		
-		if ( rightNodes >= 2 )
-		{
-			m_BuildBVH( verts, middle, rightTriCount, bvh, childIndices.second, rightNodes );
-		}
-		else
-		{
-			bvh->SetLeaf( childIndices.second, middle, rightTriCount );
-		}
-	}
-	else
-	{
-		AE_DEBUG_ASSERT( !bvh->GetLimit() );
-		m_BuildBVH( verts, tris, leftTriCount, bvh, childIndices.first, 0 );
-		m_BuildBVH( verts, middle, rightTriCount, bvh, childIndices.second, 0 );
 	}
 }
 
@@ -19020,7 +19046,7 @@ RaycastResult CollisionMesh::Raycast( const RaycastParams& params, const Raycast
 	uint32_t hitCount  = 0;
 	RaycastResult::Hit hits[ result.hits.Size() + 1 ];
 	const uint32_t maxHits = ae::Min( params.maxHits, result.hits.Size() );
-	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const BVHNode* current ) -> void
+	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri >* bvh, const BVHNode* current ) -> void
 	{
 		if ( !current->aabb.IntersectRay( source, ray ) )
 		{
@@ -19126,7 +19152,7 @@ PushOutInfo CollisionMesh::PushOut( const PushOutParams& params, const PushOutIn
 	result.velocity = prevInfo.velocity;
 	const bool hasIdentityTransform = ( params.transform == ae::Matrix4::Identity() );
 	
-	auto bvhFn = [&]( auto&& bvhFn, const TriangleBVH* bvh, const BVHNode* current ) -> void
+	auto bvhFn = [&]( auto&& bvhFn, const ae::BVH< BVHTri >* bvh, const BVHNode* current ) -> void
 	{
 		// AABB/OBB early out
 		ae::AABB aabb = current->aabb;
