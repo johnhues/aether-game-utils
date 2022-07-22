@@ -98,7 +98,7 @@ public:
 	EditorServerMesh( const ae::Tag& tag ) : collision( tag ) {}
 	void Initialize( const ae::Tag& tag, const ae::EditorMesh* mesh );
 	ae::VertexData data;
-	ae::CollisionMesh collision;
+	ae::CollisionMesh<> collision;
 };
 
 //------------------------------------------------------------------------------

@@ -92,7 +92,7 @@ public:
 	// Resources
 	ae::VertexData bunnyVertexData;
 	ae::VertexData avatarVertexData;
-	ae::CollisionMesh bunnyCollision = TAG_ALL;
+	ae::CollisionMesh<> bunnyCollision = TAG_ALL;
 	ae::Shader meshShader;
 	ae::Shader avatarShader;
 	ae::Texture2D spacesuitTex;
@@ -155,7 +155,7 @@ const char* kFragShader = R"(
 		AE_COLOR.a = v_color.a;
 	})";
 
-void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexData* vertexDataOut, ae::CollisionMesh* collisionOut, ae::EditorMesh* editorMeshOut )
+void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexData* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
 {
 	ae::OBJFile objFile = TAG_ALL;
 	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
@@ -181,20 +181,7 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexData* ve
 			vertexDataOut->SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
 		}
 		
-		if ( collisionOut )
-		{
-			collisionOut->Clear();
-			collisionOut->AddIndexed(
-				ae::Matrix4::Identity(),
-				objFile.vertices.Begin()->position.data,
-				objFile.vertices.Length(),
-				sizeof( *objFile.vertices.Begin() ),
-				objFile.indices.Begin(),
-				objFile.indices.Length(),
-				sizeof( *objFile.indices.Begin() )
-			);
-			collisionOut->BuildBVH();
-		}
+		objFile.InitializeCollisionMesh( collisionOut, ae::Matrix4::Identity() );
 		
 		if ( editorMeshOut )
 		{
