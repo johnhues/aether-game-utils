@@ -7,6 +7,8 @@
 #include "catch2/catch.hpp"
 #include "ae/aether.h"
 
+const ae::Tag TAG_TEST = "test";
+
 //------------------------------------------------------------------------------
 // ae::GetHash tests
 //------------------------------------------------------------------------------
@@ -94,65 +96,67 @@ TEST_CASE( "hash map handles collisions", "[ae::HashMap]" )
 {
 	ae::HashMap< 5 > map;
 	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Insert( -2, 776 ) );
 	REQUIRE( map.Insert( 4, 777 ) );
 	REQUIRE( map.Insert( 14, 778 ) );
 	REQUIRE( map.Insert( 104, 779 ) );
 	REQUIRE( map.Insert( 1004, 780 ) );
-	REQUIRE( map.Insert( 10004, 781 ) );
+	REQUIRE( !map.Insert( 10004, 781 ) );
 	REQUIRE( map.Length() == 5 );
 	REQUIRE( !map.Insert( 5, 780 ) );
 	REQUIRE( map.Length() == 5 );
 
 	SECTION( "can retrieve previously set values" )
 	{
+		REQUIRE( map.Get( -2 ) == 776 );
 		REQUIRE( map.Get( 4 ) == 777 );
 		REQUIRE( map.Get( 14 ) == 778 );
 		REQUIRE( map.Get( 104 ) == 779 );
 		REQUIRE( map.Get( 1004 ) == 780 );
-		REQUIRE( map.Get( 10004 ) == 781 );
+		REQUIRE( map.Get( 10004 ) == -1 );
 	}
 
 	SECTION( "can retrieve previously set values after removal" )
 	{
 		REQUIRE( map.Remove( 104 ) == 779 );
 		REQUIRE( map.Length() == 4 );
+		REQUIRE( map.Get( -2 ) == 776 );
 		REQUIRE( map.Get( 4 ) == 777 );
 		REQUIRE( map.Get( 14 ) == 778 );
 		REQUIRE( map.Get( 104 ) == -1 );
 		REQUIRE( map.Get( 1004 ) == 780 );
-		REQUIRE( map.Get( 10004 ) == 781 );
 
 		REQUIRE( map.Remove( 14 ) == 778 );
 		REQUIRE( map.Length() == 3 );
+		REQUIRE( map.Get( -2 ) == 776 );
 		REQUIRE( map.Get( 4 ) == 777 );
 		REQUIRE( map.Get( 14 ) == -1 );
 		REQUIRE( map.Get( 104 ) == -1 );
 		REQUIRE( map.Get( 1004 ) == 780 );
-		REQUIRE( map.Get( 10004 ) == 781 );
 
 		REQUIRE( map.Remove( 1004 ) == 780 );
 		REQUIRE( map.Length() == 2 );
+		REQUIRE( map.Get( -2 ) == 776 );
 		REQUIRE( map.Get( 4 ) == 777 );
 		REQUIRE( map.Get( 14 ) == -1 );
 		REQUIRE( map.Get( 104 ) == -1 );
 		REQUIRE( map.Get( 1004 ) == -1 );
-		REQUIRE( map.Get( 10004 ) == 781 );
 
-		REQUIRE( map.Remove( 10004 ) == 781 );
+		REQUIRE( map.Remove( -2 ) == 776 );
 		REQUIRE( map.Length() == 1 );
+		REQUIRE( map.Get( -2 ) == -1 );
 		REQUIRE( map.Get( 4 ) == 777 );
 		REQUIRE( map.Get( 14 ) == -1 );
 		REQUIRE( map.Get( 104 ) == -1 );
 		REQUIRE( map.Get( 1004 ) == -1 );
-		REQUIRE( map.Get( 10004 ) == -1 );
 
 		REQUIRE( map.Remove( 4 ) == 777 );
 		REQUIRE( map.Length() == 0 );
+		REQUIRE( map.Get( -2 ) == -1 );
 		REQUIRE( map.Get( 4 ) == -1 );
 		REQUIRE( map.Get( 14 ) == -1 );
 		REQUIRE( map.Get( 104 ) == -1 );
 		REQUIRE( map.Get( 1004 ) == -1 );
-		REQUIRE( map.Get( 10004 ) == -1 );
 	}
 }
 
@@ -200,5 +204,25 @@ TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 		REQUIRE( map.Get( 7 )  == 'H' );
 		REQUIRE( map.Get( 8 )  == 'I' );
 		REQUIRE( map.Get( 9 )  == 'J' );
+	}
+}
+
+TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap]" )
+{
+	ae::HashMap<> map = TAG_TEST;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		REQUIRE( map.Insert( 1000 + i, i ) );
+	}
+	REQUIRE( map.Length() == 100 );
+
+	SECTION( "can retrieve previously set values" )
+	{
+		REQUIRE( map.Get( -1 ) == -1 );
+		for ( uint32_t i = 0; i < 100; i++ )
+		{
+			REQUIRE( map.Get( 1000 + i ) == i );
+		}
+		REQUIRE( map.Get( -1 ) == -1 );
 	}
 }

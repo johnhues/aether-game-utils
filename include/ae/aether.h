@@ -1310,8 +1310,8 @@ private:
 	int32_t m_Find( int32_t key );
 	struct Entry
 	{
-		int32_t key = -1;
-		uint32_t index;
+		uint32_t key;
+		int32_t index = -1;
 	};
 	ae::Tag m_tag;
 	Entry* m_entries = nullptr;
@@ -6974,36 +6974,49 @@ bool HashMap< N >::Insert( uint32_t key, uint32_t index )
 	{
 		return false;
 	}
+	auto InsertHelper = [&]( uint32_t key, uint32_t index )
+	{
+		const uint32_t startIdx = key % m_size;
+		for ( uint32_t i = 0; i < m_size; i++ )
+		{
+			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			if ( e->index < 0 )
+			{
+				e->key = key;
+				e->index = index;
+				m_length++;
+				return true;
+			}
+		}
+		return false;
+	};
 	if ( !N && ( !m_size || ( m_length / (float)m_size ) > 0.7f ) )
 	{
-		m_size = m_size ? m_size * 2 : 32;
 		Entry* prevEntries = m_entries;
+		uint32_t prevSize = m_size;
+		uint32_t prevLength = m_length;
+		m_length = 0;
+		m_size = m_size ? m_size * 2 : 32;
 		m_entries = ae::NewArray< Entry >( m_tag, m_size );
 		if ( prevEntries )
 		{
-			AE_FAIL_MSG( "TODO: re hash and insert" );
-			memcpy( prevEntries, m_entries, m_length * sizeof( Entry ) );
+			for ( uint32_t i = 0; i < prevSize; i++ )
+			{
+				if ( prevEntries[ i ].index >= 0 )
+				{
+					bool success = InsertHelper( prevEntries[ i ].key, prevEntries[ i ].index );
+					AE_DEBUG_ASSERT( success );
+				}
+			}
 			ae::Delete( prevEntries );
+			AE_DEBUG_ASSERT( prevLength == m_length );
 		}
 	}
 	else if ( N && ( m_length >= N ) )
 	{
 		return false;
 	}
-	const uint32_t startIdx = key % m_size;
-	for ( uint32_t i = 0; i < m_size; i++ )
-	{
-		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
-		if ( e->key == -1 )
-		{
-			e->key = key;
-			e->index = index;
-			m_length++;
-			return true;
-		}
-	}
-	AE_FAIL();
-	return false;
+	return InsertHelper( key, index );
 }
 
 template < uint32_t N >
@@ -7019,14 +7032,14 @@ int32_t HashMap< N >::Remove( uint32_t key )
 		for ( uint32_t i = 0; i < m_size; i++ )
 		{
 			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
-			if ( e->key == key )
+			if ( e->index < 0 )
+			{
+				return -1;
+			}
+			else if ( e->key == key )
 			{
 				entry = e;
 				break;
-			}
-			else if ( e->key == -1 )
-			{
-				return -1;
 			}
 		}
 	}
@@ -7039,20 +7052,16 @@ int32_t HashMap< N >::Remove( uint32_t key )
 		uint32_t prevIdx = startIdx;
 		for ( uint32_t i = 1; i < m_size; i++ )
 		{
-			uint32_t idx = ( i + startIdx ) % m_size;
-			Entry* e = &m_entries[ idx ];
-			uint32_t keyIndex = ( e->key % m_size );
-			if ( idx != keyIndex )
-			{
-				m_entries[ prevIdx ] = *e;
-			}
-			else
+			uint32_t actualIdx = ( i + startIdx ) % m_size;
+			Entry* e = &m_entries[ actualIdx ];
+			if ( e->index < 0 || ( e->key % m_size ) == actualIdx )
 			{
 				break;
 			}
-			prevIdx = idx;
+			m_entries[ prevIdx ] = *e;
+			prevIdx = actualIdx;
 		}
-		m_entries[ prevIdx ].key = -1;
+		m_entries[ prevIdx ].index = -1;
 		AE_DEBUG_ASSERT( m_length > 0  );
 		m_length--;
 		return result;
@@ -7067,13 +7076,13 @@ int32_t HashMap< N >::Get( uint32_t key ) const
 	for ( uint32_t i = 0; i < m_size; i++ )
 	{
 		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
-		if ( e->key == key )
-		{
-			return e->index;
-		}
-		else if ( e->key == -1 )
+		if ( e->index < 0 )
 		{
 			return -1;
+		}
+		else if ( e->key == key )
+		{
+			return e->index;
 		}
 	}
 	return -1;
@@ -7085,7 +7094,7 @@ void HashMap< N >::Clear()
 	m_length = 0;
 	for ( uint32_t i = 0; i < m_size; i++ )
 	{
-		m_entries[ i ].key = -1;
+		m_entries[ i ].index = -1;
 	}
 }
 
