@@ -26,7 +26,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
+#include "aether.h"
 
 namespace ae {
 
@@ -63,7 +63,7 @@ struct LoadMeshParams
 {
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 	ae::VertexData* vertexData = nullptr;
-	ae::CollisionMesh* collisionMesh = nullptr;
+	ae::CollisionMesh<>* collisionMesh = nullptr;
 	class EditorMesh* editorMesh = nullptr;
 };
 

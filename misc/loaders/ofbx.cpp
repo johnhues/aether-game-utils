@@ -23,8 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/loaders.h"
-#include "ae/Editor.h"
+#include "loaders.h"
+#include "Editor.h"
 #include "ofbx.h"
 namespace ae {
 

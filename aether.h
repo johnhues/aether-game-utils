@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 //! @file aether.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2022 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -277,7 +277,7 @@ public:
 	Scratch( uint32_t count );
 	~Scratch();
 	
-	T* Data();
+	T* Data(); // @TODO: Rename Get()
 	uint32_t Length() const; // @TODO: Rename Size()
 
 	T& operator[] ( int32_t index );
@@ -4529,7 +4529,7 @@ template< typename T, typename C > T* Cast( C* obj );
 } // ae end
 
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2022 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal

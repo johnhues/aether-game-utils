@@ -23,9 +23,9 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
-#include "ae/aeImGui.h"
-#include "ae/aeTerrain.h"
+#include "aether.h"
+#include "aeImGui.h"
+#include "aeTerrain.h"
 #include "ImGuizmo.h"
 #include "Common.h"
 

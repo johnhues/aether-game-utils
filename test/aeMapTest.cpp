@@ -5,7 +5,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "catch2/catch.hpp"
-#include "ae/aether.h"
+#include "aether.h"
 
 const ae::Tag TAG_TEST = "test";
 

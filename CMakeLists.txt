@@ -153,16 +153,16 @@ elseif(UNIX)
 endif()
 
 # Library paths
-set(AE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
-set(AE_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(AE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(AE_MISC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc)
 
 # Loaders
-set(AE_LOADER_INCLUDE ${AE_INCLUDE_DIR}/ae/loaders.h)
-set(AE_STB_LOADER_SRC ${AE_SRC_DIR}/loaders/stb.cpp)
-set(AE_OFBX_LOADER_SRC ${AE_SRC_DIR}/loaders/ofbx.cpp)
+set(AE_LOADER_INCLUDE ${AE_MISC_DIR}/loaders.h)
+set(AE_STB_LOADER_SRC ${AE_MISC_DIR}/loaders/stb.cpp)
+set(AE_OFBX_LOADER_SRC ${AE_MISC_DIR}/loaders/ofbx.cpp)
 
 # library, tests, and examples
-add_subdirectory(src)
+add_subdirectory(misc)
 if(NOT ${AE_LEAN_AND_MEAN})
 	add_subdirectory(test)
 	add_subdirectory(example)

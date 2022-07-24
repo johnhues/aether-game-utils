@@ -4,8 +4,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
-#include "ae/aeTesting.h"
+#include "aether.h"
+#include "aeTesting.h"
 
 #define CATCH_CONFIG_MAIN
 #include "catch2/catch.hpp"

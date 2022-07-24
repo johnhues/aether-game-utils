@@ -4,11 +4,13 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 add_subdirectory(../deps/Catch2 Catch2)
 
 # unit test executable
-file(GLOB_RECURSE TEST_HEADERS CONFIGURE_DEPENDS "*.h")
-file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "${AE_MISC_DIR}/*.h" "*.cpp")
 add_executable(test
-	${TEST_HEADERS}
 	${TEST_SOURCES}
+)
+
+target_include_directories(test PRIVATE
+	${AE_MISC_DIR}
 )
 
 # ae library

@@ -11,12 +11,12 @@ endif()
 
 target_include_directories(${AE_LIBRARY_NAME}
 	PRIVATE
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/${AE_LIBRARY_NAME}> # for headers when building
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/misc>
 	PUBLIC
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> # for headers when building
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/misc>
 		"$<BUILD_INTERFACE:${AE_DEPS_LIBRARY_INCLUDE_DIRS}>" # expose glew etc to targets dependent on ae. Must be in quotes for BUILD_INTERFACE to work
-		$<INSTALL_INTERFACE:include> # <install prefix>/include
 )
 
 # dependency linking
@@ -27,23 +27,23 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 
 # source files
 set(AE_HEADER_FILES
-	../include/ae/aeCompactingAllocator.h
-	../include/ae/aeHotSpot.h
-	../include/ae/aeImage.h
-	../include/ae/aeImGui.h
-	../include/ae/aeInitializer.h
-	../include/ae/aeInventoryGrid.h
-	../include/ae/aeNet.h
-	../include/ae/aeRef.h
-	../include/ae/aeRender.h
-	../include/ae/aeRingBuffer.h
-	../include/ae/aeSignal.h
-	../include/ae/aeSparseGrid.h
-	../include/ae/aeTerrain.h
-	../include/ae/aeTesting.h
-	../include/ae/aether.h
-	../include/ae/aeUuid.h
-	../include/ae/EmSocket.h
+	../aether.h
+	aeCompactingAllocator.h
+	aeHotSpot.h
+	aeImage.h
+	aeImGui.h
+	aeInitializer.h
+	aeInventoryGrid.h
+	aeNet.h
+	aeRef.h
+	aeRender.h
+	aeRingBuffer.h
+	aeSignal.h
+	aeSparseGrid.h
+	aeTerrain.h
+	aeTesting.h
+	aeUuid.h
+	EmSocket.h
 )
 
 # @NOTE: Include header files as private source so they are added to generated IDE projects
@@ -68,13 +68,3 @@ target_sources(${AE_LIBRARY_NAME}
 if(APPLE)
 	target_sources(${AE_LIBRARY_NAME} PRIVATE aether.mm)
 endif()
-
-# ae lib installation
-# message(STATUS "ae installation path: ${CMAKE_INSTALL_PREFIX}")
-# install(TARGETS ${AE_LIBRARY_NAME} EXPORT ${AE_LIBRARY_NAME}Config
-# 	LIBRARY DESTINATION lib
-# 	ARCHIVE DESTINATION lib
-# 	INCLUDES DESTINATION include
-# )
-# install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
-# install(EXPORT ${AE_LIBRARY_NAME}Config DESTINATION lib/cmake/${AE_LIBRARY_NAME})

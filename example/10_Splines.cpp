@@ -23,8 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
-#include "ae/loaders.h"
+#include "aether.h"
+#include "loaders.h"
 #include "Common.h"
 
 const ae::Tag TAG_EXAMPLE = "example";

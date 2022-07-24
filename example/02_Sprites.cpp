@@ -23,8 +23,8 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
-#include "ae/loaders.h"
+#include "aether.h"
+#include "loaders.h"
 #include "Common.h"
 
 //------------------------------------------------------------------------------
@@ -33,21 +33,27 @@
 int main()
 {
   AE_LOG( "Initialize" );
+  ae::FileSystem fileSystem;
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
   ae::TimeStep timeStep;
+  SpriteRenderer spriteRenderer;
+  fileSystem.Initialize( "data", "ae", "sprites" );
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "sprites" );
   render.Initialize( &window );
   input.Initialize( &window );
   timeStep.SetTimeStep( 1.0f / 60.0f );
+  spriteRenderer.Initialize( 16 );
   
   // Sprites
   ae::Texture2D spriteTex;
-  SpriteRenderer spriteRenderer;
-  ae_stb_LoadPng( &spriteTex, "circle.png", ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
-  spriteRenderer.Initialize( 16 );
+  {
+    ae::Scratch< uint8_t > fileData( fileSystem.GetSize( ae::FileSystem::Root::Data, "circle.png" ) );
+    fileSystem.Read( ae::FileSystem::Root::Data, "circle.png", fileData.Data(), fileData.Length() );
+    stbLoadPng( &spriteTex, fileData.Data(), fileData.Length(), ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+  }
   
   while ( !input.quit )
   {
@@ -59,16 +65,16 @@ int main()
     // Back
     ae::Matrix4 localToWorld = ae::Matrix4::Translation( ae::Vec3( -0.5f, -0.5f, 0.5f ) );
     localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-    spriteRenderer.AddSprite( localToWorld, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::PicoRed() );
+    spriteRenderer.AddSprite( localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoRed() );
 
     // Middle
     localToWorld = ae::Matrix4::Scaling(  ae::Vec3( 1.0f, 1.0f, 0.5f ) );
-    spriteRenderer.AddSprite( localToWorld, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::PicoGreen() );
+    spriteRenderer.AddSprite( localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoGreen() );
 
     // Front
     localToWorld = ae::Matrix4::Translation( ae::Vec3( 0.5f, 0.5f, -0.5f ) );
     localToWorld *= ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
-    spriteRenderer.AddSprite( localToWorld, ae::Rect( 0.0f, 0.0f, 1.0f, 1.0f ), ae::Color::PicoBlue() );
+    spriteRenderer.AddSprite( localToWorld, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoBlue() );
 
     spriteRenderer.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / 2.0f, render.GetAspectRatio() / 2.0f, 1.0f ) ), &spriteTex );
     render.Present();

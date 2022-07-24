@@ -6,7 +6,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/Editor.h"
+#include "Editor.h"
 #if _AE_APPLE_
 #include <unistd.h> // fork
 #elif _AE_WINDOWS_
@@ -16,7 +16,7 @@
 #endif
 
 // @TODO: Remove these dependencies
-#include "ae/aeImGui.h"
+#include "aeImGui.h"
 #include "ImGuizmo.h"
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
