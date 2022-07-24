@@ -424,17 +424,17 @@ void TerrainJob::Do()
     m_sdfCache.Generate( m_chunk->m_pos, this );
     m_chunk->Generate( &m_sdfCache, this, edgeInfo, &m_vertices[ 0 ], &m_indices[ 0 ], &m_vertexCount, &m_indexCount );
     
-    ae::CollisionMesh::Params meshParams;
-    // Vertices
-    meshParams.positions = (float*)&m_vertices[ 0 ].position;
-    meshParams.positionCount = (uint32_t)m_vertexCount;
-    meshParams.positionStride = sizeof(m_vertices[ 0 ]);
-    // Indices
-    meshParams.indices = &m_indices[ 0 ];
-    meshParams.indexCount = m_indexCount;
-    meshParams.indexSize = sizeof(m_indices[ 0 ]);
     // Load
-    m_chunk->m_mesh.Load( meshParams );
+    m_chunk->m_mesh.AddIndexed(
+      ae::Matrix4::Identity(),
+      (float*)&m_vertices[ 0 ].position,
+      (uint32_t)m_vertexCount,
+      sizeof(m_vertices[ 0 ]),
+      &m_indices[ 0 ],
+      m_indexCount,
+      sizeof(m_indices[ 0 ])
+    );
+    m_chunk->m_mesh.BuildBVH();
     
     if ( m_p.vfs )
     {
@@ -2461,7 +2461,7 @@ bool Terrain::VoxelRaycast( ae::Vec3 start, ae::Vec3 ray, int32_t minSteps ) con
 //  return result;
 //}
 
-bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::CollisionMesh::RaycastResult* outResult ) const
+bool Terrain::Raycast( const ae::RaycastParams& _params, ae::RaycastResult* outResult ) const
 {
   ae::Vec3 start = _params.source;
   ae::Vec3 ray = _params.ray;
@@ -2474,7 +2474,7 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
     return false;
   }
   
-  ae::CollisionMesh::RaycastParams params = _params;
+  ae::RaycastParams params = _params;
   if ( !params.debug )
   {
     params.debug = m_params.debug;
@@ -2570,7 +2570,7 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
     tmax.z = 1000000;
   }
 
-  ae::CollisionMesh::RaycastResult resultsAccum;
+  ae::RaycastResult resultsAccum;
   while ( true )
   {
     const TerrainChunk* chunk = GetChunk( ae::Int3( x, y, z ) );
@@ -2630,9 +2630,9 @@ bool Terrain::Raycast( const ae::CollisionMesh::RaycastParams& _params, ae::Coll
   return resultsAccum.hits.Length();
 }
 
-ae::CollisionMesh::PushOutInfo Terrain::PushOutSphere( const ae::CollisionMesh::PushOutParams& _params, const ae::CollisionMesh::PushOutInfo& info ) const
+ae::PushOutInfo Terrain::PushOutSphere( const ae::PushOutParams& _params, const ae::PushOutInfo& info ) const
 {
-  ae::CollisionMesh::PushOutParams params = _params;
+  ae::PushOutParams params = _params;
   params.transform = ae::Matrix4::Identity();
   
   ae::Int3 sphereMin, sphereMax;
@@ -2640,7 +2640,7 @@ ae::CollisionMesh::PushOutInfo Terrain::PushOutSphere( const ae::CollisionMesh::
   TerrainChunk::GetPosFromWorld( sphereAABB.GetMin().FloorCopy(), &sphereMin, nullptr );
   TerrainChunk::GetPosFromWorld( sphereAABB.GetMax().CeilCopy(), &sphereMax, nullptr );
   
-  ae::CollisionMesh::PushOutInfo results = info;
+  ae::PushOutInfo results = info;
   for ( int32_t z = sphereMin.z; z <= sphereMax.z; z++ )
   for ( int32_t y = sphereMin.y; y <= sphereMax.y; y++ )
   for ( int32_t x = sphereMin.x; x <= sphereMax.x; x++ )

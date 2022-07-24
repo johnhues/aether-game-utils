@@ -98,7 +98,7 @@ public:
 	EditorServerMesh( const ae::Tag& tag ) : collision( tag ) {}
 	void Initialize( const ae::Tag& tag, const ae::EditorMesh* mesh );
 	ae::VertexData data;
-	ae::CollisionMesh collision;
+	ae::CollisionMesh<> collision;
 };
 
 //------------------------------------------------------------------------------
@@ -344,14 +344,17 @@ void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _me
 	data.SetVertices( vertices.Begin(), vertices.Length() );
 	data.Upload();
 	
-	ae::CollisionMesh::Params collisionParams;
-	collisionParams.positions = _mesh->verts.Begin()[ 0 ].data;
-	collisionParams.positionCount = _mesh->verts.Length();
-	collisionParams.positionStride = sizeof( *_mesh->verts.Begin() );
-	collisionParams.indices = _mesh->indices.Begin();
-	collisionParams.indexSize = sizeof( *_mesh->indices.Begin() );
-	collisionParams.indexCount = _mesh->indices.Length();
-	collision.Load( collisionParams );
+	collision.Clear();
+	collision.AddIndexed(
+		ae::Matrix4::Identity(),
+		_mesh->verts.Begin()[ 0 ].data,
+		_mesh->verts.Length(),
+		sizeof( *_mesh->verts.Begin() ),
+		_mesh->indices.Begin(),
+		_mesh->indices.Length(),
+		sizeof( *_mesh->indices.Begin() )
+	);
+	collision.BuildBVH();
 }
 
 //------------------------------------------------------------------------------
@@ -848,7 +851,7 @@ bool Editor::Write() const
 				jsonObject.AddMember( "name", rapidjson::StringRef( levelObject.name.c_str() ), allocator );
 			}
 			rapidjson::Value transformJson;
-			ae::Str128 transformStr = ae::ToString( levelObject.transform );
+			auto transformStr = ae::ToString( levelObject.transform );
 			transformJson.SetString( transformStr.c_str(), allocator );
 			jsonObject.AddMember( "transform", transformJson, allocator );
 			
@@ -953,7 +956,7 @@ void Editor::m_Read()
 		{
 			levelObject.name = jsonObject[ "name" ].GetString();
 		}
-		levelObject.transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString() );
+		levelObject.transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
 		for ( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			if ( !componentIter.value.IsObject() )
@@ -982,7 +985,7 @@ void Editor::m_Read()
 				{
 					uint32_t arrIdx = 0;
 					const auto& jsonVarArray = jsonVar.GetArray();
-					levelComponent.members.SetInt( var->GetName(), jsonVarArray.Size() );
+					levelComponent.members.SetUint( var->GetName(), jsonVarArray.Size() );
 					for ( const auto& jsonVarArrayValue : jsonVarArray )
 					{
 						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
@@ -2102,7 +2105,7 @@ void EditorServer::m_Save( ae::EditorLevel* levelOut ) const
 			if ( var->IsArray() )
 			{
 				uint32_t length = var->GetArrayLength( component );
-				propsOut->SetInt( var->GetName(), length );
+				propsOut->SetUint( var->GetName(), length );
 				for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
 				{
 					ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
@@ -2452,12 +2455,13 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
 	ae::Vec3 mouseRay = program->GetMouseRay();
 	ae::Vec3 mouseRaySrc = program->camera.GetPosition();
 	
-	ae::CollisionMesh::RaycastParams raycastParams;
+	ae::RaycastParams raycastParams;
 	raycastParams.source = mouseRaySrc;
 	raycastParams.ray = mouseRay * kEditorViewDistance;
 	raycastParams.hitClockwise = false;
 	raycastParams.hitCounterclockwise = true;
-	ae::CollisionMesh::RaycastResult result;
+	//raycastParams.debug = &program->debugLines;
+	ae::RaycastResult result;
 	uint32_t editorObjectCount = m_objects.Length();
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
@@ -2477,13 +2481,13 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
 			{
 				raycastParams.userData = nullptr;
 				raycastParams.transform = ae::Matrix4::Identity();
-				ae::CollisionMesh::RaycastResult sphereResult;
+				ae::RaycastResult sphereResult;
 				auto* hit = &sphereResult.hits.Append( {} );
 				hit->position = hitPos;
 				hit->normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
 				hit->distance = hitT;
 				hit->userData = editorObj;
-				ae::CollisionMesh::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
+				ae::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
 			}
 		}
 	}
