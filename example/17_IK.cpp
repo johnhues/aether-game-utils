@@ -120,7 +120,7 @@ int main()
 		ae::TargaFile targaFile = TAG_ALL;
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, "character.tga" );
 		AE_ASSERT( fileSize );
-		ae::Scratch< uint8_t > fileData( TAG_ALL, fileSize );
+		ae::Scratch< uint8_t > fileData( fileSize );
 		fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", fileData.Data(), fileData.Length() );
 		targaFile.Load( fileData.Data(), fileData.Length() );
 		texture.Initialize( targaFile.textureParams );
@@ -132,7 +132,7 @@ int main()
 		const char* fileName = "character.fbx";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
 		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
-		ae::Scratch< uint8_t > fileData( TAG_ALL, fileSize );
+		ae::Scratch< uint8_t > fileData( fileSize );
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() );
 		
 		ae::VertexLoaderHelper vertexInfo;

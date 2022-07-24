@@ -42,6 +42,15 @@ public:
   int callCount = 0;
 };
 
+namespace ae
+{
+  template <>
+  uint32_t GetHash< aeId< Thing > >( aeId< Thing > key )
+  {
+    return key.GetInternalId();
+  }
+}
+
 void Thing::Fn()
 {
   val = 1;

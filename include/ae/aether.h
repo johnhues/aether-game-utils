@@ -1276,7 +1276,76 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::HashMap class
+//------------------------------------------------------------------------------
+template < uint32_t N = 0 >
+class HashMap
+{
+public:
+	//! Constructor for a hash map with static allocated storage (N > 0).
+	HashMap();
+	//! Constructor for a hash map with dynamically allocated storage (N == 0).
+	HashMap( ae::Tag pool );
+	//! Expands the storage if necessary so a \p count number of key/index pairs
+	//! can be added without any internal allocations. Asserts if using static
+	//! storage and \p count is less than N.
+	void Reserve( uint32_t size );
+	
+	HashMap( const HashMap< N >& other );
+	void operator =( const HashMap< N >& other );
+	// @TODO: Move operators
+	//! Releases allocated storage
+	~HashMap();
+	
+	//! Adds an entry for lookup with ae::HashMap::Get(). If the key already
+	//! exists the index will be updated. In both cases the return value will be
+	//! true, and false otherwise.
+	bool Insert( uint32_t key, uint32_t index );
+	//! Removes the entry with \p key if it exists. Returns the index associated
+	//! with the removed key on success, -1 otherwise.
+	int32_t Remove( uint32_t key );
+	//! Decrements the existing index values supplied to ae::HashMap::Insert()
+	//! of all entries greater than \p index. Useful when index values represent
+	//! offsets into another array being compacted after the removal of an entry.
+	void Decrement( uint32_t index );
+	//! Returns the index associated with the given key, or -1 if the key is not found.
+	int32_t Get( uint32_t key ) const;
+	//! Removes all entries.
+	void Clear();
+
+	//! Returns the number of entries.
+	uint32_t Length() const;
+	//! Returns the number of allocated entries.
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	//! Returns the number of allocated entries.
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
+
+private:
+	bool m_Insert( uint32_t key, uint32_t index );
+	struct Entry
+	{
+		uint32_t key;
+		int32_t index = -1;
+	};
+	ae::Tag m_tag;
+	Entry* m_entries;
+	uint32_t m_size;
+	uint32_t m_length;
+	// clang-format off
+#if _AE_LINUX_
+	struct Storage { Entry data[ N ]; };
+	Storage m_storage;
+#else
+	template < uint32_t > struct Storage { Entry data[ N ]; };
+	template <> struct Storage< 0 > {};
+	Storage< N > m_storage;
+#endif
+	// clang-format on
+};
+
+//------------------------------------------------------------------------------
 // ae::Map class
+// @TODO: Rename K->Key and V->Value
 //------------------------------------------------------------------------------
 template < typename K, typename V, uint32_t N = 0 >
 class Map
@@ -1286,7 +1355,7 @@ public:
 	Map();
 	//! Constructor for a map with dynamically allocated storage (N == 0)
 	Map( ae::Tag pool );
-	//! Expands the map storage if necessary so a \p count number of key/value pairs can be added without any allocations. Asserts if using static storage and \p count is less than N.
+	//! Expands the map storage if necessary so a \p count number of key/value pairs can be added without any internal allocations. Asserts if using static storage and \p count is less than N.
 	void Reserve( uint32_t count );
 	
 	//! Access elements by key. Add or replace a key/value pair in the map. Can be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the value across non-const operations.
@@ -1333,6 +1402,7 @@ public:
 private:
 	template < typename K2, typename V2, uint32_t N2 >
 	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
+	HashMap< N > m_hashMap;
 	Array< ae::Pair< K, V >, N > m_pairs;
 };
 
@@ -1858,6 +1928,21 @@ public:
 private:
 	uint32_t m_hash = 0x811c9dc5;
 };
+
+//------------------------------------------------------------------------------
+// ae::GetHash helper
+//! Implement this helper for types that are used as ae::Map< Key, ...>
+//------------------------------------------------------------------------------
+template < typename T > uint32_t GetHash( T key );
+template <> uint32_t GetHash( uint32_t key );
+template <> uint32_t GetHash( int32_t key );
+template < typename T > uint32_t GetHash( T* key );
+template <> uint32_t GetHash( const char* key );
+template <> uint32_t GetHash( char* key );
+template < uint32_t N > uint32_t GetHash( ae::Str< N > key );
+template <> uint32_t GetHash( std::string key );
+template <> uint32_t GetHash( ae::Hash key );
+template <> uint32_t GetHash( ae::Int3 key );
 
 //------------------------------------------------------------------------------
 // Log settings
@@ -3798,6 +3883,7 @@ private:
 	uint32_t m_id = 0;
 };
 using RemoteId = NetId;
+template <> uint32_t GetHash( ae::NetId key );
 
 //------------------------------------------------------------------------------
 // ae::NetObject class
@@ -6591,16 +6677,18 @@ Array< T, N >::Array( const Array< T, N >& other )
 template < typename T, uint32_t N >
 Array< T, N >::Array( Array< T, N >&& other ) noexcept
 {
-	m_tag = other.m_tag;
 	if ( N )
 	{
+		AE_DEBUG_ASSERT( m_tag == ae::Tag() );
+		AE_DEBUG_ASSERT( other.m_tag == ae::Tag() );
 		m_length = 0;
 		m_size = N;
-		m_array = N ? (T*)&m_storage : nullptr;
+		m_array = (T*)&m_storage;
 		*this = other; // Regular assignment (without std::move)
 	}
 	else
 	{
+		m_tag = other.m_tag;
 		m_length = other.m_length;
 		m_size = other.m_size;
 		m_array = other.m_array;
@@ -6613,22 +6701,9 @@ Array< T, N >::Array( Array< T, N >&& other ) noexcept
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::~Array()
-{
-	Clear();
-	
-	if ( N == 0 )
-	{
-		ae::Free( m_array );
-	}
-	m_size = 0;
-	m_array = nullptr;
-}
-
-template < typename T, uint32_t N >
 void Array< T, N >::operator =( const Array< T, N >& other )
 {
-	if ( m_array == other.m_array )
+	if ( this == &other )
 	{
 		return;
 	}
@@ -6650,7 +6725,11 @@ void Array< T, N >::operator =( const Array< T, N >& other )
 template < typename T, uint32_t N >
 void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
 {
-	if ( N || m_tag != other.m_tag )
+	if ( this == &other )
+	{
+		return;
+	}
+	else if ( N || m_tag != other.m_tag )
 	{
 		*this = other; // Regular assignment (without std::move)
 	}
@@ -6670,6 +6749,18 @@ void Array< T, N >::operator =( Array< T, N >&& other ) noexcept
 		other.m_size = 0;
 		other.m_array = nullptr;
 	}
+}
+
+template < typename T, uint32_t N >
+Array< T, N >::~Array()
+{
+	Clear();
+	if ( N == 0 )
+	{
+		ae::Free( m_array );
+	}
+	m_size = 0;
+	m_array = nullptr;
 }
 
 template < typename T, uint32_t N >
@@ -6922,6 +7013,269 @@ uint32_t Array< T, N >::m_GetNextSize() const
 }
 
 //------------------------------------------------------------------------------
+// ae::HashMap member functions
+//------------------------------------------------------------------------------
+template < uint32_t N >
+HashMap< N >::HashMap() :
+	m_length( 0 ),
+	m_size( N ),
+	m_entries( (Entry*)&m_storage )
+{
+	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+}
+
+template < uint32_t N >
+HashMap< N >::HashMap( ae::Tag tag ) :
+	m_tag( tag ),
+	m_length( 0 ),
+	m_size( 0 ),
+	m_entries( nullptr )
+{
+	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
+	AE_ASSERT( tag != ae::Tag() );
+}
+
+template < uint32_t N >
+void HashMap< N >::Reserve( uint32_t size )
+{
+	if ( N )
+	{
+		AE_ASSERT( m_size >= size );
+		return;
+	}
+	
+	Entry* prevEntries = m_entries;
+	uint32_t prevSize = m_size;
+	uint32_t prevLength = m_length;
+	m_length = 0;
+	m_size = size;
+	m_entries = ae::NewArray< Entry >( m_tag, m_size );
+	if ( prevEntries )
+	{
+		for ( uint32_t i = 0; i < prevSize; i++ )
+		{
+			if ( prevEntries[ i ].index >= 0 )
+			{
+				bool success = m_Insert( prevEntries[ i ].key, prevEntries[ i ].index );
+				AE_DEBUG_ASSERT( success );
+			}
+		}
+		ae::Delete( prevEntries );
+		AE_DEBUG_ASSERT( prevLength == m_length );
+	}
+}
+
+template < uint32_t N >
+HashMap< N >::HashMap( const HashMap< N >& other ) :
+	m_length( 0 ),
+	m_size( N )
+{
+	if ( N )
+	{
+		AE_DEBUG_ASSERT( other.m_tag == ae::Tag() );
+		m_entries = (Entry*)&m_storage;
+	}
+	else
+	{
+		AE_DEBUG_ASSERT( other.m_tag != ae::Tag() );
+		m_tag = other.m_tag;
+		m_entries = nullptr;
+	}
+	*this = other;
+}
+
+template < uint32_t N >
+void HashMap< N >::operator =( const HashMap< N >& other )
+{
+	if ( this == &other )
+	{
+		return;
+	}
+	Clear();
+	Reserve( other.m_size );
+	if ( N )
+	{
+		std::copy_n( other.m_entries, N, m_entries );
+		m_length = other.m_length;
+	}
+	else if ( m_size == other.m_size )
+	{
+		std::copy_n( other.m_entries, m_size, m_entries );
+		m_length = other.m_length;
+	}
+	else
+	{
+		for ( uint32_t i = 0; i < other.m_size; i++ )
+		{
+			Entry e = other.m_entries[ i ];
+			m_Insert( e.key, e.index );
+		}
+	}
+}
+
+template < uint32_t N >
+HashMap< N >::~HashMap()
+{
+	if ( N == 0 )
+	{
+		ae::Delete( m_entries );
+	}
+	m_length = 0;
+	m_size = 0;
+	m_entries = nullptr;
+}
+
+template < uint32_t N >
+bool HashMap< N >::Insert( uint32_t key, uint32_t index )
+{
+	const uint32_t startIdx = key % m_size;
+	for ( uint32_t i = 0; i < m_size; i++ )
+	{
+		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+		if ( e->index < 0 )
+		{
+			break;
+		}
+		else if ( e->key == key )
+		{
+			e->index = index;
+			return true;
+		}
+	}
+	if ( N && ( m_length >= N ) )
+	{
+		return false;
+	}
+	else if ( !N && ( !m_size || ( m_length / (float)m_size ) > 0.8f ) )
+	{
+		Reserve( m_size ? m_size * 2 : 32 );
+	}
+	return m_Insert( key, index );
+}
+
+template < uint32_t N >
+int32_t HashMap< N >::Remove( uint32_t key )
+{
+	if ( !m_length )
+	{
+		return -1;
+	}
+	Entry* entry = nullptr;
+	{
+		const uint32_t startIdx = key % m_size;
+		for ( uint32_t i = 0; i < m_size; i++ )
+		{
+			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			if ( e->index < 0 )
+			{
+				return -1;
+			}
+			else if ( e->key == key )
+			{
+				entry = e;
+				break;
+			}
+		}
+	}
+	if ( entry )
+	{
+		uint32_t result = entry->index;
+		// Compact section of table at removed entry until an entry matches
+		// their hash index exactly or a gap is found.
+		const uint32_t startIdx = entry - m_entries;
+		uint32_t prevIdx = startIdx;
+		for ( uint32_t i = 1; i < m_size; i++ )
+		{
+			uint32_t actualIdx = ( i + startIdx ) % m_size;
+			Entry* e = &m_entries[ actualIdx ];
+			if ( e->index < 0 || ( e->key % m_size ) == actualIdx )
+			{
+				break;
+			}
+			m_entries[ prevIdx ] = *e;
+			prevIdx = actualIdx;
+		}
+		m_entries[ prevIdx ].index = -1;
+		AE_DEBUG_ASSERT( m_length > 0  );
+		m_length--;
+		return result;
+	}
+	return -1;
+}
+
+template < uint32_t N >
+void HashMap< N >::Decrement( uint32_t index )
+{
+	if ( m_length )
+	{
+		for ( uint32_t i = 0; i < m_size; i++ )
+		{
+			Entry* e = &m_entries[ i ];
+			if ( e->index > index )
+			{
+				e->index--;
+			}
+		}
+	}
+}
+
+template < uint32_t N >
+int32_t HashMap< N >::Get( uint32_t key ) const
+{
+	const uint32_t startIdx = key % m_size;
+	for ( uint32_t i = 0; i < m_size; i++ )
+	{
+		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+		if ( e->index < 0 )
+		{
+			return -1;
+		}
+		else if ( e->key == key )
+		{
+			return e->index;
+		}
+	}
+	return -1;
+}
+
+template < uint32_t N >
+void HashMap< N >::Clear()
+{
+	if ( m_length )
+	{
+		m_length = 0;
+		for ( uint32_t i = 0; i < m_size; i++ )
+		{
+			m_entries[ i ].index = -1;
+		}
+	}
+}
+
+template < uint32_t N >
+uint32_t HashMap< N >::Length() const
+{
+	return m_length;
+}
+
+template < uint32_t N >
+bool HashMap< N >::m_Insert( uint32_t key, uint32_t index )
+{
+	const uint32_t startIdx = key % m_size;
+	for ( uint32_t i = 0; i < m_size; i++ )
+	{
+		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+		if ( e->index < 0 )
+		{
+			e->key = key;
+			e->index = index;
+			m_length++;
+			return true;
+		}
+	}
+	return false;
+};
+
+//------------------------------------------------------------------------------
 // ae::Map member functions
 //------------------------------------------------------------------------------
 template < typename K >
@@ -6947,6 +7301,7 @@ Map< K, V, N >::Map()
 
 template < typename K, typename V, uint32_t N >
 Map< K, V, N >::Map( ae::Tag pool ) :
+	m_hashMap( pool ),
 	m_pairs( pool )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static maps" );
@@ -6964,6 +7319,8 @@ V& Map< K, V, N >::Set( const K& key, const V& value )
 	}
 	else
 	{
+		uint32_t idx = m_pairs.Length();
+		m_hashMap.Insert( ae::GetHash( key ), idx );
 		return m_pairs.Append( Pair( key, value ) ).value;
 	}
 }
@@ -7037,9 +7394,10 @@ bool Map< K, V, N >::Remove( const K& key )
 template < typename K, typename V, uint32_t N >
 bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 {
-	int32_t index = GetIndex( key );
+	int32_t index = m_hashMap.Remove( ae::GetHash( key ) );
 	if ( index >= 0 )
 	{
+		m_hashMap.Decrement( index );
 		if ( valueOut )
 		{
 			*valueOut = m_pairs[ index ].value;
@@ -7056,12 +7414,14 @@ bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 template < typename K, typename V, uint32_t N >
 void Map< K, V, N >::Reserve( uint32_t count )
 {
+	m_hashMap.Reserve( count );
 	m_pairs.Reserve( count );
 }
 
 template < typename K, typename V, uint32_t N >
 void Map< K, V, N >::Clear()
 {
+	m_hashMap.Clear();
 	m_pairs.Clear();
 }
 
@@ -7080,14 +7440,7 @@ V& Map< K, V, N >::GetValue( int32_t index )
 template < typename K, typename V, uint32_t N >
 int32_t Map< K, V, N >::GetIndex( const K& key ) const
 {
-	for ( uint32_t i = 0; i < m_pairs.Length(); i++ )
-	{
-		if ( Map_IsEqual( m_pairs[ i ].key, key ) )
-		{
-			return i;
-		}
-	}
-	return -1;
+	return m_hashMap.Get( ae::GetHash( key ) );
 }
 
 template < typename K, typename V, uint32_t N >
@@ -7099,6 +7452,7 @@ const V& Map< K, V, N >::GetValue( int32_t index ) const
 template < typename K, typename V, uint32_t N >
 uint32_t Map< K, V, N >::Length() const
 {
+	AE_DEBUG_ASSERT( m_hashMap.Length() == m_pairs.Length() );
 	return m_pairs.Length();
 }
 
@@ -8034,6 +8388,12 @@ ae::AABB BVH< T, N >::GetAABB() const
 {
 	return GetRoot()->aabb;
 }
+
+//------------------------------------------------------------------------------
+// ae::GetHash helper
+//------------------------------------------------------------------------------
+template < typename T > uint32_t GetHash( T* key ) { return ae::Hash().HashBasicType( key ).Get(); }
+template < uint32_t N > uint32_t GetHash( ae::Str< N > key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::CollisionMesh member functions
@@ -12069,6 +12429,30 @@ void Hash::Set( uint32_t hash )
 uint32_t Hash::Get() const
 {
 	return m_hash;
+}
+
+//------------------------------------------------------------------------------
+// ae::GetHash helper
+//------------------------------------------------------------------------------
+template <> uint32_t GetHash( uint32_t key ) { return key; }
+template <> uint32_t GetHash( int32_t key ) { return (uint32_t)key; }
+template <> uint32_t GetHash( const char* key ) { return ae::Hash().HashString( key ).Get(); }
+template <> uint32_t GetHash( char* key ) { return ae::Hash().HashString( key ).Get(); }
+template <> uint32_t GetHash( std::string key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
+template <> uint32_t GetHash( ae::Hash key ) { return key.Get(); }
+template <> uint32_t GetHash( ae::NetId key ) { return ae::Hash().HashBasicType( key.GetInternalId() ).Get(); }
+template <> uint32_t GetHash( ae::Int3 key )
+{
+	// Szudzik Pairing: https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
+	uint32_t x = ( key.x >= 0 ) ? 2 * key.x : -2 * key.x - 1;
+	uint32_t y = ( key.y >= 0 ) ? 2 * key.y : -2 * key.y - 1;
+	uint32_t z = ( key.z >= 0 ) ? 2 * key.z : -2 * key.z - 1;
+	uint32_t max = ae::Max( x, y, z );
+	uint32_t hash = max * max * max + ( 2 * max * z ) + z;
+	if ( max == z ) { uint32_t xy = ae::Max( x, y ); hash += xy * xy; }
+	if ( y >= x ) { hash += x + y; }
+	else { hash += y; }
+	return hash;
 }
 
 //------------------------------------------------------------------------------
