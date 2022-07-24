@@ -90,6 +90,28 @@ TEST_CASE( "hash map elements can be set and retrieved", "[ae::HashMap]" )
 		REQUIRE( map.Remove( 107 ) == 7 );
 		REQUIRE( map.Get( 107 ) == -1 );
 	}
+	
+	SECTION( "can update and read previously set values" )
+	{
+		REQUIRE( map.Get( 100 ) == 0 );
+		REQUIRE( map.Insert( 100, 777 ) );
+		REQUIRE( map.Get( 100 ) == 777 );
+	}
+	
+	SECTION( "can decrement previously set values" )
+	{
+		map.Decrement( 4 );
+		REQUIRE( map.Get( 100 ) == 0 );
+		REQUIRE( map.Get( 101 ) == 1 );
+		REQUIRE( map.Get( 102 ) == 2 );
+		REQUIRE( map.Get( 103 ) == 3 );
+		REQUIRE( map.Get( 104 ) == 4 );
+		REQUIRE( map.Get( 105 ) == 4 );
+		REQUIRE( map.Get( 106 ) == 5 );
+		REQUIRE( map.Get( 107 ) == 6 );
+		REQUIRE( map.Get( 108 ) == 7 );
+		REQUIRE( map.Get( 109 ) == 8 );
+	}
 }
 
 TEST_CASE( "hash map handles collisions", "[ae::HashMap]" )
@@ -226,3 +248,200 @@ TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap]"
 		REQUIRE( map.Get( -1 ) == -1 );
 	}
 }
+
+TEST_CASE( "can access elements after reserve", "[ae::HashMap]" )
+{
+	ae::HashMap<> map = TAG_TEST;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		REQUIRE( map.Insert( 1000 + i, i ) );
+	}
+	REQUIRE( map.Length() == 100 );
+	map.Reserve( 1000 );
+	REQUIRE( map.Length() == 100 );
+	REQUIRE( map.Size() >= 1000 );
+
+	SECTION( "can retrieve previously set values" )
+	{
+		REQUIRE( map.Get( -1 ) == -1 );
+		for ( uint32_t i = 0; i < 100; i++ )
+		{
+			REQUIRE( map.Get( 1000 + i ) == i );
+		}
+		REQUIRE( map.Get( -1 ) == -1 );
+	}
+}
+
+TEST_CASE( "copy construct static hash map", "[ae::HashMap]" )
+{
+	ae::HashMap< 128 > map0;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		REQUIRE( map0.Insert( 1000 + i, i ) );
+	}
+	REQUIRE( map0.Length() == 100 );
+	map0.Reserve( 100 );
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() == 128 );
+	
+	ae::HashMap< 128 > map1 = map0;
+	REQUIRE( map1.Length() == 100 );
+	REQUIRE( map1.Size() == 128 );
+
+	SECTION( "can retrieve previously set values" )
+	{
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+		for ( uint32_t i = 0; i < 100; i++ )
+		{
+			REQUIRE( map0.Get( 1000 + i ) == i );
+			REQUIRE( map1.Get( 1000 + i ) == i );
+		}
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+	}
+}
+
+TEST_CASE( "copy assign static hash map", "[ae::HashMap]" )
+{
+	ae::HashMap< 128 > map0;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		REQUIRE( map0.Insert( 1000 + i, i ) );
+	}
+	REQUIRE( map0.Length() == 100 );
+	map0.Reserve( 100 );
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() == 128 );
+	
+	ae::HashMap< 128 > map1;
+	REQUIRE( map1.Length() == 0 );
+	REQUIRE( map1.Size() == 128 );
+	map1 = map0;
+	REQUIRE( map1.Length() == 100 );
+	REQUIRE( map1.Size() == 128 );
+
+	SECTION( "can retrieve previously set values" )
+	{
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+		for ( uint32_t i = 0; i < 100; i++ )
+		{
+			REQUIRE( map0.Get( 1000 + i ) == i );
+			REQUIRE( map1.Get( 1000 + i ) == i );
+		}
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+	}
+}
+
+TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMap]" )
+{
+	ae::HashMap<> map0 = TAG_TEST;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		REQUIRE( map0.Insert( 1000 + i, i ) );
+	}
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() >= 100 );
+	
+	ae::HashMap<> map1 = TAG_TEST;
+	REQUIRE( map1.Length() == 0 );
+	REQUIRE( map1.Size() == 0 );
+	map1.Reserve( map0.Size() );
+	REQUIRE( map1.Length() == 0 );
+	REQUIRE( map1.Size() == map0.Size() );
+	map1 = map0;
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map1.Length() == 100 );
+	REQUIRE( map1.Size() >= 100 );
+
+	SECTION( "can retrieve previously set values" )
+	{
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+		for ( uint32_t i = 0; i < 100; i++ )
+		{
+			REQUIRE( map0.Get( 1000 + i ) == i );
+			REQUIRE( map1.Get( 1000 + i ) == i );
+		}
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+	}
+}
+
+TEST_CASE( "can access elements after assignment of smaller map", "[ae::HashMap]" )
+{
+	ae::HashMap<> map0 = TAG_TEST;
+	ae::HashMap<> map1 = TAG_TEST;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		REQUIRE( map0.Insert( 1000 + i, i ) );
+	}
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map1.Length() == 0 );
+	REQUIRE( map1.Size() == 0 );
+	
+	map1.Reserve( 1000 );
+	REQUIRE( map1.Length() == 0 );
+	REQUIRE( map1.Size() >= 1000 );
+	
+	map1 = map0;
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map1.Length() == 100 );
+	REQUIRE( map1.Size() >= 100 );
+
+	SECTION( "can retrieve previously set values" )
+	{
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+		for ( uint32_t i = 0; i < 100; i++ )
+		{
+			REQUIRE( map0.Get( 1000 + i ) == i );
+			REQUIRE( map1.Get( 1000 + i ) == i );
+		}
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+	}
+}
+
+TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap]" )
+{
+	ae::HashMap<> map0 = TAG_TEST;
+	ae::HashMap<> map1 = TAG_TEST;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		REQUIRE( map0.Insert( 1000 + i, i ) );
+	}
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map1.Length() == 0 );
+	REQUIRE( map1.Size() == 0 );
+	
+	map1.Reserve( 10 );
+	REQUIRE( map1.Length() == 0 );
+	REQUIRE( map1.Size() >= 10 );
+	
+	map1 = map0;
+	REQUIRE( map0.Length() == 100 );
+	REQUIRE( map0.Size() >= 100 );
+	REQUIRE( map1.Length() == 100 );
+	REQUIRE( map1.Size() >= 100 );
+
+	SECTION( "can retrieve previously set values" )
+	{
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+		for ( uint32_t i = 0; i < 100; i++ )
+		{
+			REQUIRE( map0.Get( 1000 + i ) == i );
+			REQUIRE( map1.Get( 1000 + i ) == i );
+		}
+		REQUIRE( map0.Get( -1 ) == -1 );
+		REQUIRE( map1.Get( -1 ) == -1 );
+	}
+}
+
