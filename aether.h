@@ -7128,18 +7128,22 @@ HashMap< N >::~HashMap()
 template < uint32_t N >
 bool HashMap< N >::Insert( uint32_t key, uint32_t index )
 {
-	const uint32_t startIdx = key % m_size;
-	for ( uint32_t i = 0; i < m_size; i++ )
+	if ( m_length )
 	{
-		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
-		if ( e->index < 0 )
+		AE_DEBUG_ASSERT( m_size );
+		const uint32_t startIdx = key % m_size;
+		for ( uint32_t i = 0; i < m_size; i++ )
 		{
-			break;
-		}
-		else if ( e->key == key )
-		{
-			e->index = index;
-			return true;
+			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			if ( e->index < 0 )
+			{
+				break;
+			}
+			else if ( e->key == key )
+			{
+				e->index = index;
+				return true;
+			}
 		}
 	}
 	if ( N && ( m_length >= N ) )
@@ -7162,6 +7166,7 @@ int32_t HashMap< N >::Remove( uint32_t key )
 	}
 	Entry* entry = nullptr;
 	{
+		AE_DEBUG_ASSERT( m_size );
 		const uint32_t startIdx = key % m_size;
 		for ( uint32_t i = 0; i < m_size; i++ )
 		{
@@ -7222,17 +7227,21 @@ void HashMap< N >::Decrement( uint32_t index )
 template < uint32_t N >
 int32_t HashMap< N >::Get( uint32_t key ) const
 {
-	const uint32_t startIdx = key % m_size;
-	for ( uint32_t i = 0; i < m_size; i++ )
+	if ( m_length )
 	{
-		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
-		if ( e->index < 0 )
+		AE_DEBUG_ASSERT( m_size );
+		const uint32_t startIdx = key % m_size;
+		for ( uint32_t i = 0; i < m_size; i++ )
 		{
-			return -1;
-		}
-		else if ( e->key == key )
-		{
-			return e->index;
+			Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+			if ( e->index < 0 )
+			{
+				return -1;
+			}
+			else if ( e->key == key )
+			{
+				return e->index;
+			}
 		}
 	}
 	return -1;
