@@ -12441,17 +12441,24 @@ template <> uint32_t GetHash( char* key ) { return ae::Hash().HashString( key ).
 template <> uint32_t GetHash( std::string key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
 template <> uint32_t GetHash( ae::Hash key ) { return key.Get(); }
 template <> uint32_t GetHash( ae::NetId key ) { return ae::Hash().HashBasicType( key.GetInternalId() ).Get(); }
+template <> uint32_t GetHash( ae::Int2 key )
+{
+	// NxN->N Pairing: https://stackoverflow.com/questions/919612/mapping-two-integers-to-one-in-a-unique-and-deterministic-way
+	uint32_t hash = (int16_t)key.x;
+	hash = ( hash << 16 );
+	return hash + (int16_t)key.y;
+}
 template <> uint32_t GetHash( ae::Int3 key )
 {
 	// Szudzik Pairing: https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
-	uint32_t x = ( key.x >= 0 ) ? 2 * key.x : -2 * key.x - 1;
-	uint32_t y = ( key.y >= 0 ) ? 2 * key.y : -2 * key.y - 1;
-	uint32_t z = ( key.z >= 0 ) ? 2 * key.z : -2 * key.z - 1;
-	uint32_t max = ae::Max( x, y, z );
-	uint32_t hash = max * max * max + ( 2 * max * z ) + z;
-	if ( max == z ) { uint32_t xy = ae::Max( x, y ); hash += xy * xy; }
-	if ( y >= x ) { hash += x + y; }
-	else { hash += y; }
+	uint32_t i = ( key.x >= 0 ) ? ( 2 * key.x ) : ( -2 * key.x - 1 );
+	uint32_t j = ( key.y >= 0 ) ? ( 2 * key.y ) : ( -2 * key.y - 1 );
+	uint32_t k = ( key.z >= 0 ) ? ( 2 * key.z ) : ( -2 * key.z - 1 );
+	uint32_t ijk = ae::Max( i, j, k );
+	uint32_t hash = ijk * ijk * ijk + ( 2 * ijk * k ) + k;
+	if ( ijk == k ) { uint32_t ij = ae::Max( i, j ); hash += ij * ij; }
+	if ( j >= i ) { hash += i + j; }
+	else { hash += j; }
 	return hash;
 }
 
