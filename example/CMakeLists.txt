@@ -328,3 +328,15 @@ add_bundle("Render Target"
 	"ae"
 	""
 )
+
+# Instancing
+add_bundle("Instancing"
+	"21_instancing"
+	"ae.21_instancing"
+	"0.0.0"
+	"Icon"
+	"21_Instancing.cpp;${AE_CORE_SOURCES}"
+	"data/Icon.icns"
+	""
+	"${AE_INCLUDE_DIR}"
+)

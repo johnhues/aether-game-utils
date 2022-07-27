@@ -2758,34 +2758,14 @@ void main()
 const uint32_t _kMaxShaderAttributeCount = 16;
 const uint32_t _kMaxShaderAttributeNameLength = 16;
 const uint32_t _kMaxShaderDefines = 4;
+class InstanceData;
 
 class Shader
 {
 public:
 	// Constants
-	enum class Type
-	{
-		Vertex,
-		Fragment
-	};
-	enum class Culling
-	{
-		None,
-		ClockwiseFront,
-		CounterclockwiseFront,
-	};
-	struct Attribute
-	{
-		char name[ _kMaxShaderAttributeNameLength ];
-		uint32_t type; // GL_FLOAT, GL_FLOAT_VEC4, GL_FLOAT_MAT4...
-		int32_t location;
-	};
-	struct Uniform
-	{
-		Str32 name;
-		uint32_t type;
-		int32_t location;
-	};
+	enum class Type { Vertex, Fragment };
+	enum class Culling { None, ClockwiseFront, CounterclockwiseFront };
 	
 	// Interface
 	Shader();
@@ -2811,12 +2791,26 @@ private:
 	bool m_depthWrite;
 	Culling m_culling;
 	bool m_wireframe;
-	ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
-	ae::Map< Str32, Uniform > m_uniforms = AE_ALLOC_TAG_RENDER;
 public:
-	void Activate( const UniformList& uniforms ) const;
-	const Attribute* GetAttributeByIndex( uint32_t index ) const;
-	uint32_t GetAttributeCount() const { return m_attributes.Length(); }
+	struct _Attribute
+	{
+		char name[ _kMaxShaderAttributeNameLength ];
+		uint32_t type; // GL_FLOAT, GL_FLOAT_VEC4, GL_FLOAT_MAT4...
+		int32_t location;
+	};
+	struct _Uniform
+	{
+		Str32 name;
+		uint32_t type;
+		int32_t location;
+	};
+private:
+	ae::Array< _Attribute, _kMaxShaderAttributeCount > m_attributes;
+	ae::Map< Str32, _Uniform > m_uniforms = AE_ALLOC_TAG_RENDER;
+public:
+	void m_Activate( const UniformList& uniforms ) const;
+	const _Attribute* m_GetAttributeByIndex( uint32_t index ) const;
+	uint32_t m_GetAttributeCount() const { return m_attributes.Length(); }
 };
 
 //------------------------------------------------------------------------------
@@ -2849,9 +2843,9 @@ public:
 	//! Sends index data to the gpu.
 	void UploadIndices( uint32_t startIdx, const void* indices, uint32_t count );
 	//! Call once directly before all calls to ae::VertexBuffer::Draw().
-	void Bind( const ae::Shader* shader, const ae::UniformList& uniforms ) const;
+	void Bind( const ae::Shader* shader, const ae::UniformList& uniforms, const ae::InstanceData** instanceDatas = nullptr, uint32_t instanceDataCount = 0 ) const;
 	//! Renders a range of primitives (ie. \p primitiveCount of 1 to render a triangle).
-	void Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount ) const;
+	void Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, uint32_t instanceCount ) const;
 	
 	uint32_t GetVertexSize() const { return m_vertexSize; }
 	uint32_t GetIndexSize() const { return m_indexSize; }
@@ -2860,18 +2854,9 @@ public:
 	ae::Vertex::Primitive GetPrimitiveType() const { return m_primitive; }
 	ae::Vertex::Usage GetVertexUsage() const { return m_vertexUsage; }
 	ae::Vertex::Usage GetIndexUsage() const { return m_indexUsage; }
-	uint32_t GetAttributeCount() const { return m_attributes.Length(); }
 	bool IsIndexed() const { return m_indexSize != 0; }
 
 private:
-	struct Attribute
-	{
-		char name[ _kMaxShaderAttributeNameLength ];
-		uint32_t componentCount;
-		uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
-		uint32_t offset;
-		bool normalized;
-	};
 	VertexBuffer( const VertexBuffer& ) = delete;
 	VertexBuffer( VertexBuffer&& ) = delete;
 	void operator=( const VertexBuffer& ) = delete;
@@ -2882,7 +2867,6 @@ private:
 	ae::Vertex::Primitive m_primitive = (ae::Vertex::Primitive)-1;
 	ae::Vertex::Usage m_vertexUsage = (ae::Vertex::Usage)-1;
 	ae::Vertex::Usage m_indexUsage = (ae::Vertex::Usage)-1;
-	ae::Array< Attribute, _kMaxShaderAttributeCount > m_attributes;
 	uint32_t m_maxVertexCount = 0;
 	uint32_t m_maxIndexCount = 0;
 	// System resources
@@ -2890,6 +2874,16 @@ private:
 	uint32_t m_vertices = ~0;
 	uint32_t m_indices = ~0;
 public:
+	struct _Attribute
+	{
+		char name[ _kMaxShaderAttributeNameLength ];
+		uint32_t componentCount;
+		uint32_t type; // GL_BYTE, GL_SHORT, GL_FLOAT...
+		uint32_t offset;
+		bool normalized;
+	};
+	ae::Array< _Attribute, _kMaxShaderAttributeCount > m_attributes;
+	uint32_t _GetAttributeCount() const { return m_attributes.Length(); }
 	bool m_HasUploadedVertices() const { return m_vertices != ~0; }
 	bool m_HasUploadedIndices() const { return m_indices != ~0; }
 };
@@ -2938,7 +2932,6 @@ public:
 	uint32_t GetMaxIndexCount() const { return m_buffer.GetMaxIndexCount(); }
 	uint32_t GetVertexSize() const { return m_buffer.GetVertexSize(); }
 	uint32_t GetIndexSize() const { return m_buffer.GetIndexSize(); }
-	uint32_t GetAttributeCount() const { return m_buffer.GetAttributeCount(); }
 	ae::Vertex::Primitive GetPrimitiveType() const { return m_buffer.GetPrimitiveType(); }
 	
 private:
@@ -2951,11 +2944,41 @@ private:
 	bool m_indexDirty = false;
 	// System resources
 	ae::VertexBuffer m_buffer;
-public: // Deprecated
-	void Render( const ae::Shader* s, const ae::UniformList& u ) const { Draw( s, u ); }
-	void Render( const ae::Shader* s, const ae::UniformList& u, uint32_t ps, uint32_t pc ) const { Draw( s, u, ps, pc ); }
+public:
+	uint32_t _GetAttributeCount() const { return m_buffer._GetAttributeCount(); }
 };
-typedef VertexArray VertexData;
+
+//------------------------------------------------------------------------------
+// ae::InstanceData class
+//------------------------------------------------------------------------------
+class InstanceData
+{
+public:
+	InstanceData() = default;
+	~InstanceData();
+
+	void Initialize( uint32_t dataStride, uint32_t maxInstanceCount, ae::Vertex::Usage usage );
+	void AddAttribute( const char *name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset );
+	void Terminate();
+	void UploadData( uint32_t startIdx, const void* data, uint32_t count );
+
+	uint32_t GetStride() const { return m_dataStride; }
+	uint32_t GetMaxInstanceCount() const { return m_maxInstanceCount; }
+
+private:
+	InstanceData( const InstanceData& ) = delete;
+	InstanceData( InstanceData&& ) = delete;
+	void operator=( const InstanceData& ) = delete;
+	void operator=( InstanceData&& ) = delete;
+	ae::Array< VertexBuffer::_Attribute, _kMaxShaderAttributeCount > m_attributes;
+	uint32_t m_buffer = ~0;
+	uint32_t m_dataStride = 0;
+	uint32_t m_maxInstanceCount = 0;
+	Vertex::Usage m_usage = (ae::Vertex::Usage)-1;
+public:
+	uint32_t _GetBuffer() const { return m_buffer; }
+	const VertexBuffer::_Attribute* _GetAttribute( const char* n ) const;
+};
 
 //------------------------------------------------------------------------------
 // ae::Texture class
@@ -3166,7 +3189,7 @@ public:
 	int32_t m_defaultFbo = 0;
 	
 	static GraphicsDevice* s_graphicsDevice;
-	VertexData m_renderQuad;
+	VertexArray m_renderQuad;
 	Shader m_renderShaderRGB;
 	Shader m_renderShaderSRGB;
 	bool m_rgbToSrgb = false;
@@ -3221,7 +3244,7 @@ private:
 	uint32_t m_fontSize = 0;
 	float m_spacing = 0.0f;
 	// Data
-	ae::VertexData m_vertexData;
+	ae::VertexArray m_vertexData;
 	ae::Shader m_shader;
 	TextRect* m_strings = nullptr;
 	char* m_stringData = nullptr;
@@ -3286,7 +3309,7 @@ private:
 		Vec3 pos;
 		Color color;
 	};
-	VertexData m_vertexData;
+	VertexArray m_vertexData;
 	Shader m_shader;
 	bool m_xray = true;
 };
@@ -3646,17 +3669,17 @@ public:
 	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
 	bool Load( const uint8_t* data, uint32_t length );
 	
-	//! Helper struct to load OBJ files directly into an ae::VertexData
+	//! Helper struct to load OBJ files directly into an ae::VertexArray
 	struct VertexDataParams
 	{
-		ae::VertexData* vertexData = nullptr;
+		ae::VertexArray* vertexData = nullptr;
 		//ae::Matrix4 localToWorld; // @TODO: implement
 		const char* posAttrib = "a_position";
 		const char* normalAttrib = "a_normal";
 		const char* colorAttrib = "a_color";
 		const char* uvAttrib = "a_uv";
 	};
-	//! Helper function to load OBJ files directly into an ae::VertexData
+	//! Helper function to load OBJ files directly into an ae::VertexArray
 	void InitializeVertexData( const ae::OBJFile::VertexDataParams& params );
 	//! Helper function to load OBJ files directly into an ae::CollisionMesh
 	template < uint32_t V, uint32_t T, uint32_t B >
@@ -16605,7 +16628,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 	AE_ASSERT( 0 < maxLen && maxLen <= _kMaxShaderAttributeNameLength );
 	for ( int32_t i = 0; i < attribCount; i++ )
 	{
-		Attribute* attribute = &m_attributes.Append( Attribute() );
+		_Attribute* attribute = &m_attributes.Append( _Attribute() );
 
 		GLsizei length;
 		GLint size;
@@ -16623,7 +16646,7 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 
 	for ( int32_t i = 0; i < uniformCount; i++ )
 	{
-		Uniform uniform;
+		_Uniform uniform;
 
 		GLint size = 0;
 		char name[ Str32::MaxLength() ]; // @TODO: Read from Uniform
@@ -16683,7 +16706,7 @@ void Shader::Terminate()
 	AE_CHECK_GL_ERROR();
 }
 
-void Shader::Activate( const UniformList& uniforms ) const
+void Shader::m_Activate( const UniformList& uniforms ) const
 {
 	ae::Hash shaderHash;
 	shaderHash.HashBasicType( this );
@@ -16773,7 +16796,7 @@ void Shader::Activate( const UniformList& uniforms ) const
 	for ( uint32_t i = 0; i < m_uniforms.Length(); i++ )
 	{
 		const char* uniformVarName = m_uniforms.GetKey( i ).c_str();
-		const Uniform* uniformVar = &m_uniforms.GetValue( i );
+		const _Uniform* uniformVar = &m_uniforms.GetValue( i );
 		const UniformList::Value* uniformValue = uniforms.Get( uniformVarName );
 
 		// Start validation
@@ -16861,7 +16884,7 @@ void Shader::Activate( const UniformList& uniforms ) const
 	AE_ASSERT_MSG( !missingUniforms, "Missing shader uniform parameters" );
 }
 
-const ae::Shader::Attribute* Shader::GetAttributeByIndex( uint32_t index ) const
+const ae::Shader::_Attribute* Shader::m_GetAttributeByIndex( uint32_t index ) const
 {
 	return &m_attributes[ index ];
 }
@@ -17010,7 +17033,7 @@ void VertexBuffer::AddAttribute( const char *name, uint32_t componentCount, ae::
 {
 	AE_ASSERT( m_vertices == ~0 && m_indices == ~0 );
 	
-	Attribute* attribute = &m_attributes.Append( Attribute() );
+	_Attribute* attribute = &m_attributes.Append( _Attribute() );
 	
 	size_t length = strlen( name );
 	AE_ASSERT( length < _kMaxShaderAttributeNameLength );
@@ -17060,7 +17083,7 @@ void VertexBuffer::Terminate()
 void VertexBuffer::UploadVertices( uint32_t startIdx, const void* vertices, uint32_t count )
 {
 	AE_ASSERT( m_vertexSize );
-	AE_ASSERT_MSG( count <= m_maxVertexCount, "# #", count, m_maxVertexCount );
+	AE_ASSERT_MSG( ( startIdx + count ) <= m_maxVertexCount, "Vertex start: # count: # max: #", startIdx, count, m_maxVertexCount );
 	if ( m_indices != ~0 )
 	{
 		AE_ASSERT( m_indexSize != 0 );
@@ -17114,7 +17137,7 @@ void VertexBuffer::UploadIndices( uint32_t startIdx, const void* indices, uint32
 {
 	AE_ASSERT( IsIndexed() );
 	AE_ASSERT_MSG( count % 3 == 0, "Index count: #", count );
-	AE_ASSERT_MSG( count <= m_maxIndexCount, "Index count: # max: #", count, m_maxIndexCount );
+	AE_ASSERT_MSG( ( startIdx + count ) <= m_maxIndexCount, "Index start: # count: # max: #", startIdx, count, m_maxIndexCount );
 	
 	if( m_indexUsage == Vertex::Usage::Static )
 	{
@@ -17153,7 +17176,7 @@ void VertexBuffer::UploadIndices( uint32_t startIdx, const void* indices, uint32
 	AE_FAIL();
 }
 
-void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms ) const
+void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, const InstanceData** instanceDatas, uint32_t instanceDataCount ) const
 {
 	AE_ASSERT( shader );
 	AE_ASSERT_MSG( m_vertexSize, "Must call Initialize() before Bind()" );
@@ -17170,15 +17193,71 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms ) con
 	else if ( m_primitive == Vertex::Primitive::Point ) { mode = GL_POINTS; primitiveSize = 1; primitiveTypeName = "Point"; }
 	else { AE_FAIL(); return; }
 
-	shader->Activate( uniforms );
+	shader->m_Activate( uniforms );
 
 	glBindVertexArray( m_array );
 	AE_CHECK_GL_ERROR();
 
-	glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
-	AE_CHECK_GL_ERROR();
+	for ( uint32_t i = 0; i < shader->m_GetAttributeCount(); i++ )
+	{
+		const Shader::_Attribute* shaderAttribute = shader->m_GetAttributeByIndex( i );
+		const ae::Str32 attribName = shaderAttribute->name;
+		AE_STATIC_ASSERT( attribName.MaxLength() >= _kMaxShaderAttributeNameLength );
 
-#if !_AE_EMSCRIPTEN_
+		GLint location = shaderAttribute->location;
+		AE_ASSERT( location >= 0 );
+		glEnableVertexAttribArray( location );
+		AE_CHECK_GL_ERROR();
+
+		const ae::InstanceData* instanceData = nullptr;
+		const _Attribute* instanceAttrib = nullptr;
+		for ( uint32_t i = 0; i < instanceDataCount; i++ )
+		{
+			if ( const ae::InstanceData* inst = instanceDatas[ i ] )
+			{
+				instanceAttrib = inst->_GetAttribute( attribName.c_str() );
+				if ( instanceAttrib )
+				{
+					instanceData = inst;
+					break;
+				}
+			}
+		}
+
+		if ( instanceData )
+		{
+			AE_ASSERT( instanceAttrib );
+
+			glBindBuffer( GL_ARRAY_BUFFER, instanceData->_GetBuffer() );
+			AE_CHECK_GL_ERROR();
+
+			uint32_t dataSize = instanceData->GetStride();
+			uint32_t componentCount = instanceAttrib->componentCount;
+			uint64_t attribOffset = instanceAttrib->offset;
+			glVertexAttribPointer( location, componentCount, instanceAttrib->type, instanceAttrib->normalized, dataSize, (void*)attribOffset );
+			AE_CHECK_GL_ERROR();
+		}
+		else
+		{
+			int32_t idx = m_attributes.FindFn( [ attribName ]( const _Attribute& a ){ return a.name == attribName; } );
+			AE_ASSERT_MSG( idx >= 0, "No vertex attribute named '#'", attribName );
+			const _Attribute* vertexAttribute = &m_attributes[ idx ];
+			// @TODO: Verify attribute type and size match
+
+			glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
+			AE_CHECK_GL_ERROR();
+
+			uint32_t componentCount = vertexAttribute->componentCount;
+			uint64_t attribOffset = vertexAttribute->offset;
+			glVertexAttribPointer( location, componentCount, vertexAttribute->type, vertexAttribute->normalized, m_vertexSize, (void*)attribOffset );
+			AE_CHECK_GL_ERROR();
+		}
+
+		glVertexAttribDivisor( location, instanceAttrib ? 1 : 0 );
+		AE_CHECK_GL_ERROR();
+	}
+
+	#if !_AE_EMSCRIPTEN_
 	if ( m_primitive == Vertex::Primitive::Point )
 	{
 		glEnable( GL_VERTEX_PROGRAM_POINT_SIZE );
@@ -17190,34 +17269,12 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms ) con
 		glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, m_indices );
 		AE_CHECK_GL_ERROR();
 	}
-
-	for ( uint32_t i = 0; i < shader->GetAttributeCount(); i++ )
-	{
-		const Shader::Attribute* shaderAttribute = shader->GetAttributeByIndex( i );
-		const ae::Str32 attribName = shaderAttribute->name;
-		AE_STATIC_ASSERT( attribName.MaxLength() >= _kMaxShaderAttributeNameLength );
-
-		int32_t idx = m_attributes.FindFn( [ attribName ]( const Attribute& a ){ return a.name == attribName; } );
-		AE_ASSERT_MSG( idx >= 0, "No vertex attribute named '#'", attribName );
-		const Attribute* vertexAttribute = &m_attributes[ idx ];
-		// @TODO: Verify attribute type and size match
-
-		GLint location = shaderAttribute->location;
-		AE_ASSERT( location >= 0 );
-		glEnableVertexAttribArray( location );
-		AE_CHECK_GL_ERROR();
-
-		uint32_t componentCount = vertexAttribute->componentCount;
-		uint64_t attribOffset = vertexAttribute->offset;
-		glVertexAttribPointer( location, componentCount, vertexAttribute->type, vertexAttribute->normalized, m_vertexSize, (void*)attribOffset );
-		AE_CHECK_GL_ERROR();
-	}
 }
 
-void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount ) const
+void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, uint32_t instanceCount ) const
 {
 	AE_ASSERT_MSG( m_vertexSize, "Must call Initialize() before Draw()" );
-	if ( !primitiveCount || m_vertices == ~0 || ( IsIndexed() && m_indices == ~0 ) )
+	if ( !primitiveCount || m_vertices == ~0 || ( IsIndexed() && m_indices == ~0 ) || !instanceCount )
 	{
 		return;
 	}
@@ -17239,7 +17296,14 @@ void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount ) c
 		if ( m_indexSize == sizeof(uint8_t) ) { type = GL_UNSIGNED_BYTE; }
 		else if ( m_indexSize == sizeof(uint16_t) ) { type = GL_UNSIGNED_SHORT; }
 		else if ( m_indexSize == sizeof(uint32_t) ) { type = GL_UNSIGNED_INT; }
-		glDrawElements( mode, count, type, (void*)start );
+		if ( instanceCount == 1 )
+		{
+			glDrawElements( mode, count, type, (void*)start );
+		}
+		else
+		{
+			glDrawElementsInstanced( mode, count, type, (void*)start, instanceCount );
+		}
 		AE_CHECK_GL_ERROR();
 	}
 	else
@@ -17248,7 +17312,14 @@ void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount ) c
 		GLint start = primitiveStartIdx * primitiveSize;
 		GLsizei count = primitiveCount * primitiveSize;
 		AE_ASSERT_MSG( count % primitiveSize == 0, "Vertex count must be a multiple of # when rendering #s without indices", primitiveSize, primitiveTypeName );
-		glDrawArrays( mode, start, count );
+		if ( instanceCount == 1 )
+		{
+			glDrawArrays( mode, start, count );
+		}
+		else
+		{
+			glDrawArraysInstanced( mode, start, count, instanceCount );
+		}
 		AE_CHECK_GL_ERROR();
 	}
 }
@@ -17568,7 +17639,105 @@ void VertexArray::Draw( const Shader* shader, const UniformList& uniforms, uint3
 		return;
 	}
 	m_buffer.Bind( shader, uniforms );
-	m_buffer.Draw( primitiveStart, primitiveCount );
+	m_buffer.Draw( primitiveStart, primitiveCount, 1 );
+}
+
+//------------------------------------------------------------------------------
+// ae::InstanceData member functions
+//------------------------------------------------------------------------------
+InstanceData::~InstanceData()
+{
+	Terminate();
+}
+
+void InstanceData::Initialize( uint32_t dataStride, uint32_t maxInstanceCount, Vertex::Usage usage )
+{
+	Terminate();
+	
+	m_dataStride = dataStride;
+	m_maxInstanceCount = maxInstanceCount;
+	m_usage = usage;
+}
+
+void InstanceData::Terminate()
+{
+	if ( m_buffer != ~0 )
+	{
+		glDeleteBuffers( 1, &m_buffer );
+		m_buffer = ~0;
+	}
+	m_attributes.Clear();
+	m_dataStride = 0;
+	m_maxInstanceCount = 0;
+}
+
+void InstanceData::AddAttribute( const char *name, uint32_t componentCount, ae::Vertex::Type type, uint32_t offset )
+{
+	AE_ASSERT( m_buffer == ~0 );
+	
+	VertexBuffer::_Attribute* attribute = &m_attributes.Append( VertexBuffer::_Attribute() );
+	
+	size_t length = strlen( name );
+	AE_ASSERT( length < _kMaxShaderAttributeNameLength );
+	strcpy( attribute->name, name );
+	attribute->componentCount = componentCount;
+	attribute->type = VertexTypeToGL( type );
+	attribute->offset = offset;
+	attribute->normalized =
+		type == Vertex::Type::NormalizedUInt8 ||
+		type == Vertex::Type::NormalizedUInt16 ||
+		type == Vertex::Type::NormalizedUInt32;
+}
+
+void InstanceData::UploadData( uint32_t startIdx, const void* data, uint32_t count )
+{
+	AE_ASSERT( m_dataStride );
+	AE_ASSERT_MSG( ( startIdx + count ) <= m_maxInstanceCount, "Instance start: # count: # max: #", startIdx, count, m_maxInstanceCount );
+	
+	if( m_usage == Vertex::Usage::Static )
+	{
+		AE_ASSERT( count );
+		AE_ASSERT( m_buffer == ~0 );
+		AE_ASSERT( startIdx == 0 ); // @TODO: Remove this, shouldn't force data to start from zero
+
+		glGenBuffers( 1, &m_buffer );
+		glBindBuffer( GL_ARRAY_BUFFER, m_buffer );
+		glBufferData( GL_ARRAY_BUFFER, count * m_dataStride, data, GL_STATIC_DRAW );
+		AE_CHECK_GL_ERROR();
+		return;
+	}
+	if( m_usage == Vertex::Usage::Dynamic )
+	{
+		if ( !count )
+		{
+			return;
+		}
+		
+		if( m_buffer == ~0 )
+		{
+			glGenBuffers( 1, &m_buffer );
+			glBindBuffer( GL_ARRAY_BUFFER, m_buffer );
+			glBufferData( GL_ARRAY_BUFFER, m_maxInstanceCount * m_dataStride, nullptr, GL_DYNAMIC_DRAW );
+		}
+		else
+		{
+			glBindBuffer( GL_ARRAY_BUFFER, m_buffer );
+		}
+		
+		glBufferSubData( GL_ARRAY_BUFFER, startIdx * m_dataStride, count * m_dataStride, data );
+		AE_CHECK_GL_ERROR();
+		return;
+	}
+	AE_FAIL();
+}
+
+const VertexBuffer::_Attribute* InstanceData::_GetAttribute( const char* n ) const
+{
+	int32_t idx = m_attributes.FindFn( [ n ]( const VertexBuffer::_Attribute& a )
+	{
+		return strcmp( a.name, n ) == 0;
+	} );
+	return ( idx >= 0 ) ? &m_attributes[ idx ] : nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -17991,7 +18160,7 @@ void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
 	AE_ASSERT( GraphicsDevice::s_graphicsDevice );
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
-	GraphicsDevice::s_graphicsDevice->m_renderQuad.Render( shader, uniforms );
+	GraphicsDevice::s_graphicsDevice->m_renderQuad.Draw( shader, uniforms );
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
@@ -18005,7 +18174,7 @@ void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 	Shader* shader = GraphicsDevice::s_graphicsDevice->m_rgbToSrgb
 		? &GraphicsDevice::s_graphicsDevice->m_renderShaderSRGB
 		: &GraphicsDevice::s_graphicsDevice->m_renderShaderRGB;
-	GraphicsDevice::s_graphicsDevice->m_renderQuad.Render( shader, uniforms );
+	GraphicsDevice::s_graphicsDevice->m_renderQuad.Draw( shader, uniforms );
 }
 
 const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
@@ -18572,7 +18741,7 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 	ae::UniformList uniforms;
 	uniforms.Set( "u_uiToScreen", uiToScreen );
 	uniforms.Set( "u_tex", m_texture );
-	m_vertexData.Render( &m_shader, uniforms );
+	m_vertexData.Draw( &m_shader, uniforms );
 
 	m_allocatedStrings = 0;
 	m_allocatedChars = 0;
@@ -18742,13 +18911,13 @@ void DebugLines::Render( const Matrix4& worldToNdc )
 		m_shader.SetDepthTest( false );
 		m_shader.SetDepthWrite( false );
 		uniforms.Set( "u_saturation", 0.1f );
-		m_vertexData.Render( &m_shader, uniforms );
+		m_vertexData.Draw( &m_shader, uniforms );
 	}
 
 	m_shader.SetDepthTest( true );
 	m_shader.SetDepthWrite( true );
 	uniforms.Set( "u_saturation", 1.0f );
-	m_vertexData.Render( &m_shader, uniforms );
+	m_vertexData.Draw( &m_shader, uniforms );
 	
 	m_vertexData.ClearVertices();
 }
