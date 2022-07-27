@@ -107,7 +107,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
-	ae::VertexData cube, cursor;
+	ae::VertexArray cube, cursor;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "render target" );
@@ -165,19 +165,19 @@ int main()
 		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		cube.Render( &shader, uniformList );
+		cube.Draw( &shader, uniformList );
 		
 		// Shadow
 		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -1.25f ) ) * ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::Black().ScaleA( 0.1f ).GetLinearRGBA() );
-		cube.Render( &shader, uniformList );
+		cube.Draw( &shader, uniformList );
 
 		// Cursor
 		ae::Matrix4 cursorToWorld = ae::Matrix4::Translation( mouse.GetXYZ() ) * ae::Matrix4::Scaling( 8.0f );
 		uniformList.Set( "u_worldToProj", targetToNdc * cursorToWorld );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		cursor.Render( &shader, uniformList );
+		cursor.Draw( &shader, uniformList );
 		
 		render.Clear( ae::Color::PicoDarkGray() );
 		target.Render2D( 0, ndcRect, 0.0f );

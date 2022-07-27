@@ -1892,7 +1892,7 @@ void Terrain::Render( const ae::Shader* shader, const ae::UniformList& shaderPar
     // Only render the visible chunks
     //if( frustum.TestChunk( chunk ) ) // @TODO: Should make sure chunk is visible
     {
-      chunk->m_data.Render( shader, shaderParams );
+      chunk->m_data.Draw( shader, shaderParams );
       activeCount++;
     }
   }

@@ -2845,7 +2845,12 @@ public:
 	//! Call once directly before all calls to ae::VertexBuffer::Draw().
 	void Bind( const ae::Shader* shader, const ae::UniformList& uniforms, const ae::InstanceData** instanceDatas = nullptr, uint32_t instanceDataCount = 0 ) const;
 	//! Renders a range of primitives (ie. \p primitiveCount of 1 to render a triangle).
-	void Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, uint32_t instanceCount ) const;
+	void Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount ) const;
+	//! Renders a range of primitives (ie. \p primitiveCount of 1 to render a
+	//! triangle). \p instanceCount specifies the number of times to render the
+	//! range of primitives. Supply ae::InstanceData to ae::VertexBuffer::Bind()
+	//! when calling this function.
+	void DrawInstanced( uint32_t primitiveStartIdx, uint32_t primitiveCount, uint32_t instanceCount ) const;
 	
 	uint32_t GetVertexSize() const { return m_vertexSize; }
 	uint32_t GetIndexSize() const { return m_indexSize; }
@@ -2861,6 +2866,7 @@ private:
 	VertexBuffer( VertexBuffer&& ) = delete;
 	void operator=( const VertexBuffer& ) = delete;
 	void operator=( VertexBuffer&& ) = delete;
+	void m_Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, int32_t instanceCount ) const;
 	// Params
 	uint32_t m_vertexSize = 0;
 	uint32_t m_indexSize = 0;
@@ -17271,10 +17277,23 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 	}
 }
 
-void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, uint32_t instanceCount ) const
+void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount ) const
+{
+	m_Draw( primitiveStartIdx, primitiveCount, -1 );
+}
+
+void VertexBuffer::DrawInstanced( uint32_t primitiveStartIdx, uint32_t primitiveCount, uint32_t instanceCount ) const
+{
+	if ( instanceCount )
+	{
+		m_Draw( primitiveStartIdx, primitiveCount, instanceCount );
+	}
+}
+
+void VertexBuffer::m_Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, int32_t instanceCount ) const
 {
 	AE_ASSERT_MSG( m_vertexSize, "Must call Initialize() before Draw()" );
-	if ( !primitiveCount || m_vertices == ~0 || ( IsIndexed() && m_indices == ~0 ) || !instanceCount )
+	if ( !primitiveCount || m_vertices == ~0 || ( IsIndexed() && m_indices == ~0 ) )
 	{
 		return;
 	}
@@ -17296,13 +17315,13 @@ void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, ui
 		if ( m_indexSize == sizeof(uint8_t) ) { type = GL_UNSIGNED_BYTE; }
 		else if ( m_indexSize == sizeof(uint16_t) ) { type = GL_UNSIGNED_SHORT; }
 		else if ( m_indexSize == sizeof(uint32_t) ) { type = GL_UNSIGNED_INT; }
-		if ( instanceCount == 1 )
+		if ( instanceCount >= 0 )
 		{
-			glDrawElements( mode, count, type, (void*)start );
+			glDrawElementsInstanced( mode, count, type, (void*)start, instanceCount );
 		}
 		else
 		{
-			glDrawElementsInstanced( mode, count, type, (void*)start, instanceCount );
+			glDrawElements( mode, count, type, (void*)start );
 		}
 		AE_CHECK_GL_ERROR();
 	}
@@ -17312,13 +17331,13 @@ void VertexBuffer::Draw( uint32_t primitiveStartIdx, uint32_t primitiveCount, ui
 		GLint start = primitiveStartIdx * primitiveSize;
 		GLsizei count = primitiveCount * primitiveSize;
 		AE_ASSERT_MSG( count % primitiveSize == 0, "Vertex count must be a multiple of # when rendering #s without indices", primitiveSize, primitiveTypeName );
-		if ( instanceCount == 1 )
+		if ( instanceCount >= 0 )
 		{
-			glDrawArrays( mode, start, count );
+			glDrawArraysInstanced( mode, start, count, instanceCount );
 		}
 		else
 		{
-			glDrawArraysInstanced( mode, start, count, instanceCount );
+			glDrawArrays( mode, start, count );
 		}
 		AE_CHECK_GL_ERROR();
 	}
@@ -17639,7 +17658,7 @@ void VertexArray::Draw( const Shader* shader, const UniformList& uniforms, uint3
 		return;
 	}
 	m_buffer.Bind( shader, uniforms );
-	m_buffer.Draw( primitiveStart, primitiveCount, 1 );
+	m_buffer.Draw( primitiveStart, primitiveCount );
 }
 
 //------------------------------------------------------------------------------

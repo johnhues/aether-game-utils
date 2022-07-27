@@ -90,7 +90,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
-	ae::VertexData vertexData;
+	ae::VertexArray vertexData;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "cube" );
@@ -133,14 +133,14 @@ int main()
 		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		vertexData.Render( &shader, uniformList );
+		vertexData.Draw( &shader, uniformList );
 		
 		// Shadow
 		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -1.25f ) )
 			* ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::Black().ScaleA( 0.1f ).GetLinearRGBA() );
-		vertexData.Render( &shader, uniformList );
+		vertexData.Draw( &shader, uniformList );
 		
 		render.Present();
 

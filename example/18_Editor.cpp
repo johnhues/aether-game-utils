@@ -90,8 +90,8 @@ public:
 	ae::Registry registry = TAG_ALL;
 
 	// Resources
-	ae::VertexData bunnyVertexData;
-	ae::VertexData avatarVertexData;
+	ae::VertexArray bunnyVertexData;
+	ae::VertexArray avatarVertexData;
 	ae::CollisionMesh<> bunnyCollision = TAG_ALL;
 	ae::Shader meshShader;
 	ae::Shader avatarShader;
@@ -155,7 +155,7 @@ const char* kFragShader = R"(
 		AE_COLOR.a = v_color.a;
 	})";
 
-void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexData* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
+void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexArray* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
 {
 	ae::OBJFile objFile = TAG_ALL;
 	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
@@ -318,7 +318,7 @@ void Game::Run()
 		{
 			uniformList.Set( "u_worldToProj", worldToProj * m->transform );
 			uniformList.Set( "u_normalToWorld", m->transform.GetNormalMatrix() );
-			bunnyVertexData.Render( &meshShader, uniformList );
+			bunnyVertexData.Draw( &meshShader, uniformList );
 		} );
 		
 		registry.CallFn< Object >( [&]( Object* o ){ o->Render( this ); } );
@@ -481,7 +481,7 @@ void Avatar::Render( Game* game )
 	uniformList.Set( "u_worldToProj", game->worldToProj * transform );
 	uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
 	uniformList.Set( "u_tex", &game->spacesuitTex );
-	game->avatarVertexData.Render( &game->avatarShader, uniformList );
+	game->avatarVertexData.Draw( &game->avatarShader, uniformList );
 }
 
 //------------------------------------------------------------------------------

@@ -157,7 +157,7 @@ int main()
 
 		const ae::InstanceData* datas[] = { &instanceData };
 		vertexData.Bind( &shader, uniformList, datas, 1 );
-		vertexData.Draw( 0, countof( kCubeIndices ) / 3, kMaxInstances );
+		vertexData.DrawInstanced( 0, countof( kCubeIndices ) / 3, kMaxInstances );
 		
 		render.Present();
 

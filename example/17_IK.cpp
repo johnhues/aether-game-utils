@@ -127,7 +127,7 @@ int main()
 	}
 	
 	ae::Skin skin = TAG_ALL;
-	ae::VertexData vertexData;
+	ae::VertexArray vertexData;
 	{
 		const char* fileName = "character.fbx";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
@@ -309,7 +309,7 @@ int main()
 		uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		uniformList.Set( "u_tex", &texture );
-		vertexData.Render( &shader, uniformList );
+		vertexData.Draw( &shader, uniformList );
 		
 		// Frame end
 		debugLines.Render( worldToProj );

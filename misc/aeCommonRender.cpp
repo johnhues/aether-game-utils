@@ -235,7 +235,7 @@ void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader*
     uniforms.Set( "u_tex", texture );
 
     m_vertexData.Upload();
-    m_vertexData.Render( shader, uniforms, 0, count * 2 );
+    m_vertexData.Draw( shader, uniforms, 0, count * 2 );
   }
 }
 

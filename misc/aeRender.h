@@ -87,7 +87,7 @@ private:
   uint32_t m_maxCount;
   Sprite* m_sprites;
   Vertex* m_vertices;
-  ae::VertexData m_vertexData;
+  ae::VertexArray m_vertexData;
   ae::Shader* m_shaderAll;
   ae::Shader* m_shaderOpaque;
   ae::Shader* m_shaderTransparent;
