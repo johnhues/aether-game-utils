@@ -2,8 +2,8 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "Editor.h"
-#include "Entity.h"
+#include "ae/Editor.h"
+#include "ae/Entity.h"
 
 //------------------------------------------------------------------------------
 // Constants

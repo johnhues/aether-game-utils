@@ -445,3 +445,34 @@ TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap]"
 	}
 }
 
+TEST_CASE( "stress test", "[ae::HashMap]" )
+{
+	const uint32_t count = 10000;
+	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		map.Set( ( i * 1669 ) % count, i );
+	}
+	REQUIRE( map.Length() == count );
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
+	}
+	REQUIRE( map.Length() == 0 );
+}
+
+TEST_CASE( "full map stress test", "[ae::HashMap]" )
+{
+	const uint32_t count = 10000;
+	ae::Map< uint32_t, uint32_t, 10000 > map;
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		map.Set( ( i * 1669 ) % count, i );
+	}
+	REQUIRE( map.Length() == count );
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
+	}
+	REQUIRE( map.Length() == 0 );
+}

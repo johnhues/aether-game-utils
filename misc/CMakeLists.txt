@@ -28,22 +28,22 @@ target_link_libraries(${AE_LIBRARY_NAME} ${AE_DEPS_LIBARARIES})
 # source files
 set(AE_HEADER_FILES
 	../aether.h
-	aeCompactingAllocator.h
-	aeHotSpot.h
-	aeImage.h
-	aeImGui.h
-	aeInitializer.h
-	aeInventoryGrid.h
-	aeNet.h
-	aeRef.h
-	aeRender.h
-	aeRingBuffer.h
-	aeSignal.h
-	aeSparseGrid.h
-	aeTerrain.h
-	aeTesting.h
-	aeUuid.h
-	EmSocket.h
+	ae/aeCompactingAllocator.h
+	ae/aeHotSpot.h
+	ae/aeImage.h
+	ae/aeImGui.h
+	ae/aeInitializer.h
+	ae/aeInventoryGrid.h
+	ae/aeNet.h
+	ae/aeRef.h
+	ae/aeRender.h
+	ae/aeRingBuffer.h
+	ae/aeSignal.h
+	ae/aeSparseGrid.h
+	ae/aeTerrain.h
+	ae/aeTesting.h
+	ae/aeUuid.h
+	ae/EmSocket.h
 )
 
 # @NOTE: Include header files as private source so they are added to generated IDE projects

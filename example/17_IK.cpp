@@ -24,8 +24,8 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "loaders.h"
-#include "aeImGui.h"
+#include "ae/loaders.h"
+#include "ae/aeImGui.h"
 #include "ImGuizmo.h"
 
 //------------------------------------------------------------------------------

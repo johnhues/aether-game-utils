@@ -157,7 +157,7 @@ set(AE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(AE_MISC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc)
 
 # Loaders
-set(AE_LOADER_INCLUDE ${AE_MISC_DIR}/loaders.h)
+set(AE_LOADER_INCLUDE ${AE_MISC_DIR}/ae/loaders.h)
 set(AE_STB_LOADER_SRC ${AE_MISC_DIR}/loaders/stb.cpp)
 set(AE_OFBX_LOADER_SRC ${AE_MISC_DIR}/loaders/ofbx.cpp)
 

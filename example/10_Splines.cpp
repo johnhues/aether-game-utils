@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "loaders.h"
+#include "ae/loaders.h"
 #include "Common.h"
 
 const ae::Tag TAG_EXAMPLE = "example";
