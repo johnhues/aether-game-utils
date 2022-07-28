@@ -185,7 +185,7 @@ public:
 	ae::GraphicsDevice gfx;
 	ae::Input input;
 	ae::Shader shader;
-	ae::VertexData vertexData;
+	ae::VertexArray vertexData;
 	ae::TimeStep timeStep;
 };
 

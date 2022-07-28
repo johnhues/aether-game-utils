@@ -164,7 +164,7 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	return true;
 }
 
-bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, ae::VertexData* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
+bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, ae::VertexArray* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
 {
 	ofbx::IScene* scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
 	if ( !scene )

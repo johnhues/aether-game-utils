@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeImage.h"
+#include "ae/aeImage.h"
 
 void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Format format, Format storage )
 {

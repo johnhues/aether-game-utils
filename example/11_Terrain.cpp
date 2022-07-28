@@ -136,7 +136,7 @@ public:
 
 private:
   ae::Shader m_gridShader;
-  ae::VertexData m_bgVertexData;
+  ae::VertexArray m_bgVertexData;
 };
 
 //------------------------------------------------------------------------------

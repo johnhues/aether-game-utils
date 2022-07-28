@@ -112,7 +112,7 @@ private:
 	ae::Input m_input;
 	ae::TimeStep m_timeStep;
 	ae::Shader m_shader;
-	ae::VertexData m_triangle, m_quad;
+	ae::VertexArray m_triangle, m_quad;
 
 	ae::Matrix4 m_worldToProj;
 	enum class State
@@ -324,7 +324,7 @@ void Program::DrawRect( ae::Rect rect, ae::Color color )
 	ae::UniformList uniformList;
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
 	uniformList.Set( "u_color", color.GetLinearRGBA() );
-	m_quad.Render( &m_shader, uniformList );
+	m_quad.Draw( &m_shader, uniformList );
 }
 
 void Program::DrawWindow()
@@ -348,12 +348,12 @@ void Program::DrawCursor()
 	ae::Matrix4 localToWorld = ae::Matrix4::Translation( mousePos.x - 2.0f, mousePos.y + 4.0f, 0.0f ) * ae::Matrix4::Scaling( 30.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
 	uniformList.Set( "u_color", ae::Color::PicoDarkGray().GetLinearRGBA() );
-	m_triangle.Render( &m_shader, uniformList );
+	m_triangle.Draw( &m_shader, uniformList );
 
 	localToWorld = ae::Matrix4::Translation( mousePos.x, mousePos.y, 0.0f ) * ae::Matrix4::Scaling( 20.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
 	uniformList.Set( "u_color", ae::Color::PicoWhite().GetLinearRGBA() );
-	m_triangle.Render( &m_shader, uniformList );
+	m_triangle.Draw( &m_shader, uniformList );
 }
 
 void Program::DrawFolders()
@@ -389,7 +389,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* example ) { ((Example*)example)->Tick(); }, &example, 0, 1 );
 #else
-	while ( example.Tick() ) {}
+	while ( program.Update() ) {}
 #endif
 	program.Terminate();
 	return 0;

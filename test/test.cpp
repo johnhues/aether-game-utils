@@ -5,7 +5,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "aeTesting.h"
+#include "ae/aeTesting.h"
 
 #define CATCH_CONFIG_MAIN
 #include "catch2/catch.hpp"

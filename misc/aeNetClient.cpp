@@ -23,13 +23,13 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeNet.h"
+#include "ae/aeNet.h"
 #include <inttypes.h>
 #include <vector>
-#include "aeUuid.h"
+#include "ae/aeUuid.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-#include "EmSocket.h"
+#include "ae/EmSocket.h"
 #else
 #include <enet/enet.h>
 #endif

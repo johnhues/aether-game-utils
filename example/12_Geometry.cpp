@@ -59,7 +59,7 @@ int main()
 		const char* fileName = "font.png";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
 		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-		ae::Scratch< uint8_t > fileBuffer( TAG_EXAMPLE, fileSize );
+		ae::Scratch< uint8_t > fileBuffer( fileSize );
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
 		ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
 	}

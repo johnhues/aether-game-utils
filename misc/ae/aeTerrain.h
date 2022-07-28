@@ -28,11 +28,11 @@
 // Headers
 //------------------------------------------------------------------------------
 #include <atomic>
-#include "aeCompactingAllocator.h"
-#include "aeImage.h"
-#include "aether.h"
-#include "aeRender.h"
 #include <map>
+#include "aether.h"
+#include "ae/aeCompactingAllocator.h"
+#include "ae/aeImage.h"
+#include "ae/aeRender.h"
 
 //------------------------------------------------------------------------------
 // aeUnit

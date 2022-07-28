@@ -47,7 +47,7 @@ private:
   uint32_t m_count = 0;
   uint32_t m_maxCount = 0;
   ae::Shader m_shader;
-  ae::VertexData m_vertexData;
+  ae::VertexArray m_vertexData;
 };
 
 //------------------------------------------------------------------------------
@@ -144,5 +144,5 @@ void SpriteRenderer::Render( const ae::Matrix4& worldToProj, const ae::Texture2D
   uniforms.Set( "u_worldToProj", worldToProj );
   uniforms.Set( "u_tex", texture );
   m_vertexData.Upload();
-  m_vertexData.Render( &m_shader, uniforms, 0, m_count * 2 );
+  m_vertexData.Draw( &m_shader, uniforms, 0, m_count * 2 );
 }

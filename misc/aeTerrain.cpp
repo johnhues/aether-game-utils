@@ -1141,7 +1141,7 @@ ae::AABB TerrainChunk::GetAABB( ae::Int3 chunkPos )
 
 void TerrainChunk::m_SetVertexData( const TerrainVertex* verts, const TerrainIndex* indices, VertexCount vertexCount, uint32_t indexCount )
 {
-  // (Re)Initialize ae::VertexData here only when needed
+  // (Re)Initialize ae::VertexArray here only when needed
   if ( m_data.GetIndexCount() == 0 // Not initialized
     || VertexCount( m_data.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
     || m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices

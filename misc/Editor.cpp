@@ -6,7 +6,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "Editor.h"
+#include "ae/Editor.h"
 #if _AE_APPLE_
 #include <unistd.h> // fork
 #elif _AE_WINDOWS_
@@ -16,7 +16,7 @@
 #endif
 
 // @TODO: Remove these dependencies
-#include "aeImGui.h"
+#include "ae/aeImGui.h"
 #include "ImGuizmo.h"
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
@@ -97,7 +97,7 @@ public:
 	};
 	EditorServerMesh( const ae::Tag& tag ) : collision( tag ) {}
 	void Initialize( const ae::Tag& tag, const ae::EditorMesh* mesh );
-	ae::VertexData data;
+	ae::VertexArray data;
 	ae::CollisionMesh<> collision;
 };
 
@@ -292,8 +292,8 @@ private:
 	ae::RenderTarget m_gameTarget;
 	ae::Map< std::string, EditorServerMesh* > m_meshes; // @TODO: Dynamic ae::Str
 public:
-	ae::VertexData m_introMesh;
-	ae::VertexData m_quad;
+	ae::VertexArray m_introMesh;
+	ae::VertexArray m_quad;
 	ae::Shader m_introShader;
 	ae::Shader m_meshShader;
 	ae::Shader m_iconShader;
@@ -624,7 +624,7 @@ void EditorProgram::Run()
 			ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
 			uniformList.Set( "u_worldToProj", m_viewToProj * m_worldToView * modelToWorld );
 			uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-			m_introMesh.Render( &m_introShader, uniformList );
+			m_introMesh.Draw( &m_introShader, uniformList );
 		}
 
 		editor.Render( this );
@@ -1265,7 +1265,7 @@ void EditorServer::Render( EditorProgram* program )
 		uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
 		uniformList.Set( "u_lightDir", lightDir );
 		uniformList.Set( "u_color", color.GetLinearRGBA() );
-		obj.mesh->data.Render( &program->m_meshShader, uniformList );
+		obj.mesh->data.Draw( &program->m_meshShader, uniformList );
 	};
 	
 	// Opaque objects
@@ -1301,7 +1301,7 @@ void EditorServer::Render( EditorProgram* program )
 		uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
 		uniformList.Set( "u_tex", &program->m_cogTexture );
 		uniformList.Set( "u_color", color.GetLinearRGBA() );
-		program->m_quad.Render( &program->m_iconShader, uniformList );
+		program->m_quad.Draw( &program->m_iconShader, uniformList );
 		program->debugLines.AddOBB( transform, color );
 	}
 	
@@ -2510,7 +2510,7 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, EditorObjectId en
 		const EditorServerObject* editorObj = m_objects.Get( entity );
 		if ( editorObj->mesh )
 		{
-			const ae::VertexData* meshData = &editorObj->mesh->data;
+			const ae::VertexArray* meshData = &editorObj->mesh->data;
 			ae::Matrix4 transform = editorObj->GetTransform( program );
 			auto verts = meshData->GetVertices< ae::EditorServerMesh::Vertex >();
 			uint32_t vertexCount = meshData->GetVertexCount();

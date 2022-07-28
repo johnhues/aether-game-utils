@@ -5,7 +5,7 @@
 //  Copyright (c) 2016 John Hughes. All rights reserved.
 //
 
-#include "EmSocket.h"
+#include "ae/EmSocket.h"
 
 #ifdef __EMSCRIPTEN__
 #include <errno.h>
