@@ -21570,7 +21570,7 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 		return &m_vars[ i ];
 	}
 	// @HACK: This whole function should be re-written to avoid recreating this array and all of this recursion
-	ae::Array< const ae::Var*, 32 > vars;
+	ae::Array< const ae::Var*, kMetaMaxVars > vars;
 	auto fn = [&vars]( auto fn, const ae::Type* type ) -> void
 	{
 		if ( const ae::Type* parent = type->GetParentType() )
