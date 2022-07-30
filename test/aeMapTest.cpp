@@ -182,6 +182,96 @@ TEST_CASE( "hash map handles collisions", "[ae::HashMap]" )
 	}
 }
 
+TEST_CASE( "hash map compaction", "[ae::HashMap]" )
+{
+	ae::HashMap< 5 > map;
+	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Insert( 0, 0 ) );
+	REQUIRE( map.Insert( 1, 1 ) );
+	REQUIRE( map.Insert( 5, 5 ) );
+	REQUIRE( map.Insert( 6, 1 ) );
+	REQUIRE( map.Length() == 4 );
+
+	REQUIRE( map.Remove( 0 ) == 0 );
+	REQUIRE( map.Length() == 3 );
+	REQUIRE( map.Get( 0 ) == -1 );
+	REQUIRE( map.Get( 1 ) == 1 );
+	REQUIRE( map.Get( 5 ) == 5 );
+	REQUIRE( map.Get( 6 ) == 1 );
+}
+
+TEST_CASE( "hash map compaction 2", "[ae::HashMap]" )
+{
+	ae::HashMap< 5 > map;
+	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Insert( 0, 0 ) );
+	REQUIRE( map.Insert( 1, 0 ) );
+	REQUIRE( map.Insert( 6, 0 ) );
+	REQUIRE( map.Insert( 5, 0 ) );
+	REQUIRE( map.Length() == 4 );
+
+	REQUIRE( map.Remove( 0 ) == 0 );
+	REQUIRE( map.Length() == 3 );
+	REQUIRE( map.Get( 0 ) == -1 );
+	REQUIRE( map.Get( 1 ) == 0 );
+	REQUIRE( map.Get( 6 ) == 0 );
+	REQUIRE( map.Get( 5 ) == 0 );
+}
+
+TEST_CASE( "hash map compaction (wrapping)", "[ae::HashMap]" )
+{
+	ae::HashMap< 5 > map;
+	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Insert( 3, 0 ) );
+	REQUIRE( map.Insert( 4, 0 ) );
+	REQUIRE( map.Insert( 8, 0 ) );
+	REQUIRE( map.Insert( 9, 0 ) );
+	REQUIRE( map.Length() == 4 );
+
+	REQUIRE( map.Remove( 3 ) == 0 );
+	REQUIRE( map.Length() == 3 );
+	REQUIRE( map.Get( 3 ) == -1 );
+	REQUIRE( map.Get( 4 ) == 0 );
+	REQUIRE( map.Get( 8 ) == 0 );
+	REQUIRE( map.Get( 9 ) == 0 );
+}
+
+TEST_CASE( "hash map compaction (wrapping 2)", "[ae::HashMap]" )
+{
+	ae::HashMap< 5 > map;
+	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Insert( 3, 0 ) );
+	REQUIRE( map.Insert( 4, 0 ) );
+	REQUIRE( map.Insert( 9, 0 ) );
+	REQUIRE( map.Insert( 8, 0 ) );
+	REQUIRE( map.Length() == 4 );
+
+	REQUIRE( map.Remove( 3 ) == 0 );
+	REQUIRE( map.Length() == 3 );
+	REQUIRE( map.Get( 3 ) == -1 );
+	REQUIRE( map.Get( 4 ) == 0 );
+	REQUIRE( map.Get( 9 ) == 0 );
+	REQUIRE( map.Get( 8 ) == 0 );
+}
+
+TEST_CASE( "hash map compaction (wrapping 3)", "[ae::HashMap]" )
+{
+	ae::HashMap< 5 > map;
+	REQUIRE( map.Size() == 5 );
+	REQUIRE( map.Insert( 3, 0 ) );
+	REQUIRE( map.Insert( 4, 0 ) );
+	REQUIRE( map.Insert( 0, 0 ) );
+	REQUIRE( map.Insert( 9, 0 ) );
+	REQUIRE( map.Length() == 4 );
+
+	REQUIRE( map.Remove( 3 ) == 0 );
+	REQUIRE( map.Length() == 3 );
+	REQUIRE( map.Get( 3 ) == -1 );
+	REQUIRE( map.Get( 4 ) == 0 );
+	REQUIRE( map.Get( 0 ) == 0 );
+	REQUIRE( map.Get( 9 ) == 0 );
+}
+
 //------------------------------------------------------------------------------
 // aeMap tests
 //------------------------------------------------------------------------------
@@ -457,6 +547,60 @@ TEST_CASE( "stress test", "[ae::HashMap]" )
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
+	}
+	REQUIRE( map.Length() == 0 );
+}
+
+TEST_CASE( "stress test 2", "[ae::HashMap]" )
+{
+	const uint32_t count = 10000;
+	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
+	auto validateFn = [&]()
+	{
+		for ( auto& pair : map )
+		{
+			uint32_t* v = map.TryGet( pair.key );
+			AE_ASSERT( v );
+			AE_ASSERT( *v == pair.value );
+		}
+	};
+
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		map.Set( ( i * 1669 ) % count, i );
+		validateFn();
+	}
+	REQUIRE( map.Length() == count );
+
+	uint64_t r = 543534;
+	for ( uint32_t i = 0; i < 100; i++ )
+	{
+		uint32_t removeCount = ae::Random( 0, map.Length(), r );
+		for ( uint32_t j = 0; j < removeCount; j++ )
+		{
+			uint32_t idx = ae::Random( 0, map.Length(), r );
+			uint32_t key = map.GetKey( idx );
+			uint32_t value = map.GetValue( idx );
+			uint32_t valueCheck = 0;
+			AE_ASSERT( map.Remove( key, &valueCheck ) );
+			AE_ASSERT( value == valueCheck );
+			validateFn();
+		}
+
+		uint32_t addCount = ae::Random( 0, map.Length(), r );
+		for ( uint32_t j = 0; j < addCount; j++ )
+		{
+			map.Set( ae::Random( 0, 100000, r ), 0 );
+			validateFn();
+		}
+	}
+
+	while ( map.Length() )
+	{
+		uint32_t idx = ae::Random( 0, map.Length(), r );
+		uint32_t key = map.GetKey( idx );
+		AE_ASSERT( map.Remove( key ) );
+		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
 }

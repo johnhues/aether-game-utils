@@ -367,7 +367,7 @@ extern uint64_t _randomSeed;
 void RandomSeed();
 inline float Random01( uint64_t& seed = _randomSeed );
 inline bool RandomBool( uint64_t& seed = _randomSeed );
-inline int32_t Random( int32_t min, int32_t max, uint64_t& seed = _randomSeed );
+inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t& seed = _randomSeed );
 inline float Random( float min, float max, uint64_t& seed = _randomSeed );
 
 template < typename T >
@@ -7214,24 +7214,32 @@ int32_t HashMap< N >::Remove( uint32_t key )
 	}
 	if ( entry )
 	{
-		uint32_t result = entry->index;
+		int32_t result = entry->index;
+		AE_DEBUG_ASSERT( result >= 0 );
 		// Compact section of table at removed entry until an entry matches
 		// their hash index exactly or a gap is found.
-		const uint32_t startIdx = entry - m_entries;
+		const uint32_t startIdx = ( entry - m_entries );
 		uint32_t prevIdx = startIdx;
 		for ( uint32_t i = 1; i < m_size; i++ )
 		{
-			uint32_t actualIdx = ( i + startIdx ) % m_size;
-			Entry* e = &m_entries[ actualIdx ];
-			if ( e->index < 0 || ( e->key % m_size ) == actualIdx )
+			uint32_t currentIdx = ( i + startIdx ) % m_size;
+			Entry* e = &m_entries[ currentIdx ];
+			if ( e->index < 0 )
 			{
 				break;
 			}
-			m_entries[ prevIdx ] = *e;
-			prevIdx = actualIdx;
+			uint32_t targetIdx = ( e->key % m_size );
+			uint32_t sub = m_size - targetIdx;
+			uint32_t currDist = ( currentIdx + sub ) % m_size;
+			uint32_t dist = ( prevIdx + sub ) % m_size;
+			if ( currDist > dist )
+			{
+				m_entries[ prevIdx ] = *e;
+				prevIdx = currentIdx;
+			}
 		}
 		m_entries[ prevIdx ].index = -1;
-		AE_DEBUG_ASSERT( m_length > 0  );
+		AE_DEBUG_ASSERT( m_length > 0 );
 		m_length--;
 		return result;
 	}
@@ -7317,7 +7325,7 @@ bool HashMap< N >::m_Insert( uint32_t key, uint32_t index )
 //------------------------------------------------------------------------------
 // ae::Map member functions
 //------------------------------------------------------------------------------
-#define AE_HASHMAP_FALLBACK 1
+#define AE_HASHMAP_FALLBACK 0
 
 template < typename K >
 bool Map_IsEqual( const K& k0, const K& k1 );
@@ -7441,7 +7449,7 @@ bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 	int32_t index = GetIndex( key );
 	if ( index >= 0 )
 	{
-#elif
+#else
 	int32_t index = m_hashMap.Remove( ae::GetHash( key ) );
 	if ( index >= 0 )
 	{
@@ -7498,27 +7506,27 @@ int32_t Map< K, V, N >::GetIndex( const K& key ) const
 	{
 		return Map_IsEqual( key, p.key );
 	} );
-#elif
+#else
 	int32_t result = m_hashMap.Get( ae::GetHash( key ) );
-	if ( result >= 0 )
-	{
-		AE_ASSERT( m_pairs[ result ].key == key );
-	}
-	else
-	{
-		int32_t findIdx = m_pairs.FindFn( [key]( const ae::Pair< K, V >& p )
-		{
-			return Map_IsEqual( key, p.key );
-		} );
-		if ( findIdx >= 0 )
-		{
-			GetIndex( key );
-		}
-		for ( const ae::Pair< K, V >& p : m_pairs )
-		{
-			AE_ASSERT( p.key != key );
-		}
-	}
+	// if ( result >= 0 )
+	// {
+	// 	AE_ASSERT( m_pairs[ result ].key == key );
+	// }
+	// else
+	// {
+	// 	int32_t findIdx = m_pairs.FindFn( [key]( const ae::Pair< K, V >& p )
+	// 	{
+	// 		return Map_IsEqual( key, p.key );
+	// 	} );
+	// 	if ( findIdx >= 0 )
+	// 	{
+	// 		GetIndex( key );
+	// 	}
+	// 	for ( const ae::Pair< K, V >& p : m_pairs )
+	// 	{
+	// 		AE_ASSERT( p.key != key );
+	// 	}
+	// }
 #endif
 	return result;
 }
