@@ -7325,8 +7325,6 @@ bool HashMap< N >::m_Insert( uint32_t key, uint32_t index )
 //------------------------------------------------------------------------------
 // ae::Map member functions
 //------------------------------------------------------------------------------
-#define AE_HASHMAP_FALLBACK 0
-
 template < typename K >
 bool Map_IsEqual( const K& k0, const K& k1 );
 
@@ -7368,10 +7366,8 @@ V& Map< K, V, N >::Set( const K& key, const V& value )
 	}
 	else
 	{
-#if !AE_HASHMAP_FALLBACK
 		uint32_t idx = m_pairs.Length();
 		m_hashMap.Insert( ae::GetHash( key ), idx );
-#endif
 		return m_pairs.Append( Pair( key, value ) ).value;
 	}
 }
@@ -7445,16 +7441,10 @@ bool Map< K, V, N >::Remove( const K& key )
 template < typename K, typename V, uint32_t N >
 bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 {
-#if AE_HASHMAP_FALLBACK
-	int32_t index = GetIndex( key );
-	if ( index >= 0 )
-	{
-#else
 	int32_t index = m_hashMap.Remove( ae::GetHash( key ) );
 	if ( index >= 0 )
 	{
 		m_hashMap.Decrement( index );
-#endif
 		if ( valueOut )
 		{
 			*valueOut = m_pairs[ index ].value;
@@ -7471,18 +7461,14 @@ bool Map< K, V, N >::Remove( const K& key, V* valueOut )
 template < typename K, typename V, uint32_t N >
 void Map< K, V, N >::Reserve( uint32_t count )
 {
-#if !AE_HASHMAP_FALLBACK
 	m_hashMap.Reserve( count );
-#endif
 	m_pairs.Reserve( count );
 }
 
 template < typename K, typename V, uint32_t N >
 void Map< K, V, N >::Clear()
 {
-#if !AE_HASHMAP_FALLBACK
 	m_hashMap.Clear();
-#endif
 	m_pairs.Clear();
 }
 
@@ -7501,34 +7487,7 @@ V& Map< K, V, N >::GetValue( int32_t index )
 template < typename K, typename V, uint32_t N >
 int32_t Map< K, V, N >::GetIndex( const K& key ) const
 {
-#if AE_HASHMAP_FALLBACK
-	int32_t result = m_pairs.FindFn( [key]( const ae::Pair< K, V >& p )
-	{
-		return Map_IsEqual( key, p.key );
-	} );
-#else
-	int32_t result = m_hashMap.Get( ae::GetHash( key ) );
-	// if ( result >= 0 )
-	// {
-	// 	AE_ASSERT( m_pairs[ result ].key == key );
-	// }
-	// else
-	// {
-	// 	int32_t findIdx = m_pairs.FindFn( [key]( const ae::Pair< K, V >& p )
-	// 	{
-	// 		return Map_IsEqual( key, p.key );
-	// 	} );
-	// 	if ( findIdx >= 0 )
-	// 	{
-	// 		GetIndex( key );
-	// 	}
-	// 	for ( const ae::Pair< K, V >& p : m_pairs )
-	// 	{
-	// 		AE_ASSERT( p.key != key );
-	// 	}
-	// }
-#endif
-	return result;
+	return m_hashMap.Get( ae::GetHash( key ) );
 }
 
 template < typename K, typename V, uint32_t N >
@@ -7540,9 +7499,7 @@ const V& Map< K, V, N >::GetValue( int32_t index ) const
 template < typename K, typename V, uint32_t N >
 uint32_t Map< K, V, N >::Length() const
 {
-#if !AE_HASHMAP_FALLBACK
 	AE_DEBUG_ASSERT( m_hashMap.Length() == m_pairs.Length() );
-#endif
 	return m_pairs.Length();
 }
 
