@@ -599,7 +599,7 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 	{
 		uint32_t idx = ae::Random( 0, map.Length(), r );
 		uint32_t key = map.GetKey( idx );
-		AE_ASSERT( map.MAP_REMOVE( key ) );
+		AE_ASSERT( map.RemoveFast( key ) );
 		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
@@ -625,14 +625,24 @@ TEST_CASE( "stable stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
 	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
+	auto validateFn = [&]()
+	{
+		for ( uint32_t i = 1; i < map.Length(); i++ )
+		{
+			AE_ASSERT( map.GetValue( i - 1 ) < map.GetValue( i ) );
+		}
+	};
+
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
 	}
+	validateFn();
 	REQUIRE( map.Length() == count );
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		AE_ASSERT( map.RemoveStable( ( i * 5437 ) % count ) );
+		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
 }
@@ -648,6 +658,10 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 			uint32_t* v = map.TryGet( pair.key );
 			AE_ASSERT( v );
 			AE_ASSERT( *v == pair.value );
+		}
+		for ( uint32_t i = 1; i < map.Length(); i++ )
+		{
+			AE_ASSERT( map.GetValue( i - 1 ) < map.GetValue( i ) );
 		}
 	};
 
@@ -676,7 +690,13 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 		uint32_t addCount = ae::Random( 0, map.Length(), r );
 		for ( uint32_t j = 0; j < addCount; j++ )
 		{
-			map.Set( ae::Random( 0, 100000, r ), 0 );
+			for (uint32_t k = 0; k < map.Length(); k++ )
+			{
+				map.GetValue( k ) = k;
+			}
+			uint32_t key = ae::Random( 0, 100000, r );
+			uint32_t val = map.Get( key, map.Length() );
+			map.Set( key, val );
 			validateFn();
 		}
 	}
@@ -685,7 +705,7 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 	{
 		uint32_t idx = ae::Random( 0, map.Length(), r );
 		uint32_t key = map.GetKey( idx );
-		AE_ASSERT( map.MAP_REMOVE( key ) );
+		AE_ASSERT( map.RemoveStable( key ) );
 		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
@@ -695,14 +715,25 @@ TEST_CASE( "stable full map stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
 	ae::Map< uint32_t, uint32_t, 10000 > map;
+	auto validateFn = [&]()
+	{
+		for ( uint32_t i = 1; i < map.Length(); i++ )
+		{
+			AE_ASSERT( map.GetValue( i - 1 ) < map.GetValue( i ) );
+		}
+	};
+
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
+		validateFn();
 	}
 	REQUIRE( map.Length() == count );
+
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		AE_ASSERT( map.RemoveStable( ( i * 5437 ) % count ) );
+		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
 }

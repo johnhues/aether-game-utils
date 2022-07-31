@@ -1359,15 +1359,15 @@ public:
 	//! static storage and \p count is less than N.
 	void Reserve( uint32_t count );
 	
-	//! Access elements by key. Add or replace a key/value pair in the map. Can
-	//! be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the
-	//!  value across non-const operations.
+	//! Add or replace a key/value pair in the map. Can be retrieved with
+	//! ae::Map::Get(). The value is updated in place if the element is found,
+	//! otherwise the new pair is appended. It's not safe to keep a pointer to
+	//! the value across non-const operations.
 	Value& Set( const Key& key, const Value& value );
-	//! Access elements by key. Returns a modifiable reference to the value set
-	//! with \p key. Asserts when key/value pair is missing.
+	//! Returns a modifiable reference to the value set with \p key. Asserts
+	//! when key/value pair is missing.
 	Value& Get( const Key& key );
-	//! Access elements by key. Returns the value set with \p key. Asserts when
-	//! key/value pair is missing.
+	//! Returns the value set with \p key. Asserts when key/value pair is missing.
 	const Value& Get( const Key& key ) const;
 	//! Returns the value set with \p key. Returns \p defaultValue otherwise
 	//! when the key/value pair is missing.
