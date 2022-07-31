@@ -449,7 +449,7 @@ bool RefTester::StringToId( const char* str, uint32_t* idOut )
 
 void RefTesterManager::Destroy( RefTester* object )
 {
-	m_objectMap.Remove( object->id );
+	m_objectMap.RemoveFast( object->id );
 	ae::Delete( object );
 }
 

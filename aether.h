@@ -1300,7 +1300,7 @@ public:
 	//! Adds an entry for lookup with ae::HashMap::Get(). If the key already
 	//! exists the index will be updated. In both cases the return value will be
 	//! true, and false otherwise.
-	bool Insert( uint32_t key, uint32_t index );
+	bool Set( uint32_t key, uint32_t index );
 	//! Removes the entry with \p key if it exists. Returns the index associated
 	//! with the removed key on success, -1 otherwise.
 	int32_t Remove( uint32_t key );
@@ -1345,9 +1345,8 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::Map class
-// @TODO: Rename K->Key and V->Value
 //------------------------------------------------------------------------------
-template < typename K, typename V, uint32_t N = 0 >
+template < typename Key, typename Value, uint32_t N = 0 >
 class Map
 {
 public:
@@ -1355,55 +1354,73 @@ public:
 	Map();
 	//! Constructor for a map with dynamically allocated storage (N == 0)
 	Map( ae::Tag pool );
-	//! Expands the map storage if necessary so a \p count number of key/value pairs can be added without any internal allocations. Asserts if using static storage and \p count is less than N.
+	//! Expands the map storage if necessary so a \p count number of key/value
+	//! pairs can be added without any internal allocations. Asserts if using
+	//! static storage and \p count is less than N.
 	void Reserve( uint32_t count );
 	
-	//! Access elements by key. Add or replace a key/value pair in the map. Can be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the value across non-const operations.
-	V& Set( const K& key, const V& value );
-	//! Access elements by key. Returns a modifiable reference to the value set with \p key. Asserts when key/value pair is missing.
-	V& Get( const K& key );
-	//! Access elements by key. Returns the value set with \p key. Asserts when key/value pair is missing.
-	const V& Get( const K& key ) const;
-	//! Returns the value set with \p key. Returns \p defaultValue otherwise when the key/value pair is missing.
-	const V& Get( const K& key, const V& defaultValue ) const;
-	//! Returns a pointer to the value set with \p key. Returns null otherwise when the key/value pair is missing.
-	V* TryGet( const K& key );
-	//! Returns a pointer to the value set with \p key. Returns null otherwise when the key/value pair is missing.
-	const V* TryGet( const K& key ) const;
-	//! Returns true when \p key matches an existing key/value pair. A copy of the value is set to \p valueOut.
-	bool TryGet( const K& key, V* valueOut );
-	//! Returns true when \p key matches an existing key/value pair. A copy of the value is set to \p valueOut.
-	bool TryGet( const K& key, V* valueOut ) const;
+	//! Access elements by key. Add or replace a key/value pair in the map. Can
+	//! be retrieved with ae::Map::Get(). It's not safe to keep a pointer to the
+	//!  value across non-const operations.
+	Value& Set( const Key& key, const Value& value );
+	//! Access elements by key. Returns a modifiable reference to the value set
+	//! with \p key. Asserts when key/value pair is missing.
+	Value& Get( const Key& key );
+	//! Access elements by key. Returns the value set with \p key. Asserts when
+	//! key/value pair is missing.
+	const Value& Get( const Key& key ) const;
+	//! Returns the value set with \p key. Returns \p defaultValue otherwise
+	//! when the key/value pair is missing.
+	const Value& Get( const Key& key, const Value& defaultValue ) const;
+	//! Returns a pointer to the value set with \p key. Returns null otherwise
+	//! when the key/value pair is missing.
+	Value* TryGet( const Key& key );
+	//! Returns a pointer to the value set with \p key. Returns null otherwise
+	//! when the key/value pair is missing.
+	const Value* TryGet( const Key& key ) const;
+	//! Returns true when \p key matches an existing key/value pair. A copy of
+	//! the value is set to \p valueOut.
+	bool TryGet( const Key& key, Value* valueOut );
+	//! Returns true when \p key matches an existing key/value pair. A copy of
+	//! the value is set to \p valueOut.
+	bool TryGet( const Key& key, Value* valueOut ) const;
 	
-	//! Find and remove a key/value pair from the map. Returns true.
-	bool Remove( const K& key );
-	//! Find and remove a key/value pair from the map. Returns true on success and a copy of the value is set to \p valueOut.
-	bool Remove( const K& key, V* valueOut );
-	//! Remove all key/value pairs from the map. ae::Map::Length() will return 0 after calling this.
+	//! Performs a constant time removal of an element with \p key, while
+	//! potentially reordering elements. Returns true on success, and a copy of
+	//! the value is set to \p valueOut if it is not null.
+	bool RemoveFast( const Key& key, Value* valueOut = nullptr );
+	//! Performs a linear time removal of an element with \p key. Element order
+	//! is maintained. Returns true on success, and a copy of the value is set
+	//! to \p valueOut if it is not null.
+	bool RemoveStable( const Key& key, Value* valueOut = nullptr );
+	//! Remove all key/value pairs from the map.
 	void Clear();
 
 	//! Access elements by index. Returns the nth key in the map.
-	const K& GetKey( int32_t index ) const;
+	const Key& GetKey( int32_t index ) const;
 	//! Access elements by index. Returns the nth value in the map.
-	const V& GetValue( int32_t index ) const;
-	//! Access elements by index. Returns a modifiable reference to the nth value in the map.
-	V& GetValue( int32_t index );
-	//! Returns the index of a key/value pair in the map. Returns -1 when key/value pair is missing.
-	int32_t GetIndex( const K& key ) const;
+	const Value& GetValue( int32_t index ) const;
+	//! Access elements by index. Returns a modifiable reference to the nth
+	//! value in the map.
+	Value& GetValue( int32_t index );
+	//! Returns the index of a key/value pair in the map. Returns -1 when
+	//! key/value pair is missing.
+	int32_t GetIndex( const Key& key ) const;
 	//! Returns the number of key/value pairs in the map
 	uint32_t Length() const;
 
 	// Ranged-based loop. Lowercase to match c++ standard
-	ae::Pair< K, V >* begin() { return m_pairs.begin(); }
-	ae::Pair< K, V >* end() { return m_pairs.end(); }
-	const ae::Pair< K, V >* begin() const { return m_pairs.begin(); }
-	const ae::Pair< K, V >* end() const { return m_pairs.end(); }
+	ae::Pair< Key, Value >* begin() { return m_pairs.begin(); }
+	ae::Pair< Key, Value >* end() { return m_pairs.end(); }
+	const ae::Pair< Key, Value >* begin() const { return m_pairs.begin(); }
+	const ae::Pair< Key, Value >* end() const { return m_pairs.end(); }
 
 private:
+	bool m_Remove( const Key& key, bool ordered, Value* valueOut );
 	template < typename K2, typename V2, uint32_t N2 >
 	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
 	HashMap< N > m_hashMap;
-	Array< ae::Pair< K, V >, N > m_pairs;
+	Array< ae::Pair< Key, Value >, N > m_pairs;
 };
 
 //------------------------------------------------------------------------------
@@ -7004,7 +7021,7 @@ void Array< T, N >::Clear()
 {
 	for ( uint32_t i = 0; i < m_length; i++ )
 	{
-		m_array[ i ].~T();
+		m_array[ i ].~T(); // @TODO: Skip this for basic types
 	}
 	m_length = 0;
 }
@@ -7156,7 +7173,7 @@ HashMap< N >::~HashMap()
 }
 
 template < uint32_t N >
-bool HashMap< N >::Insert( uint32_t key, uint32_t index )
+bool HashMap< N >::Set( uint32_t key, uint32_t index )
 {
 	if ( m_length )
 	{
@@ -7367,7 +7384,7 @@ V& Map< K, V, N >::Set( const K& key, const V& value )
 	else
 	{
 		uint32_t idx = m_pairs.Length();
-		m_hashMap.Insert( ae::GetHash( key ), idx );
+		m_hashMap.Set( ae::GetHash( key ), idx );
 		return m_pairs.Append( Pair( key, value ) ).value;
 	}
 }
@@ -7433,23 +7450,45 @@ bool Map< K, V, N >::TryGet( const K& key, V* valueOut ) const
 }
 
 template < typename K, typename V, uint32_t N >
-bool Map< K, V, N >::Remove( const K& key )
+bool Map< K, V, N >::RemoveFast( const K& key, V* valueOut )
 {
-	return Remove( key, nullptr );
+	return m_Remove( key, false, valueOut );
 }
 
 template < typename K, typename V, uint32_t N >
-bool Map< K, V, N >::Remove( const K& key, V* valueOut )
+bool Map< K, V, N >::RemoveStable( const K& key, V* valueOut )
+{
+	return m_Remove( key, true, valueOut );
+}
+
+template < typename K, typename V, uint32_t N >
+bool Map< K, V, N >::m_Remove( const K& key, bool ordered, V* valueOut )
 {
 	int32_t index = m_hashMap.Remove( ae::GetHash( key ) );
 	if ( index >= 0 )
 	{
-		m_hashMap.Decrement( index );
-		if ( valueOut )
+		AE_DEBUG_ASSERT( m_pairs.Length() );
+		AE_DEBUG_ASSERT( m_pairs[ index ].key == key );
+		if ( valueOut ) { *valueOut = m_pairs[ index ].value; }
+		if ( index == m_pairs.Length() - 1 )
 		{
-			*valueOut = m_pairs[ index ].value;
+			m_pairs.Remove( index );
 		}
-		m_pairs.Remove( index );
+		else if ( ordered )
+		{
+			m_pairs.Remove( index );
+			m_hashMap.Decrement( index );
+		}
+		else
+		{
+			uint32_t lastIdx = m_pairs.Length() - 1;
+			uint32_t lastKey = ae::GetHash( m_pairs[ lastIdx ].key );
+			m_pairs[ index ] = std::move( m_pairs[ lastIdx ] );
+			m_pairs.Remove( lastIdx );
+			m_hashMap.Set( lastKey, index );
+
+		}
+		AE_DEBUG_ASSERT( m_pairs.Length() == m_hashMap.Length() );
 		return true;
 	}
 	else
@@ -7991,7 +8030,7 @@ void ObjectPool< T, N, Paged >::DeleteAll()
 		{
 			if ( page->freeList.IsAllocated( i ) )
 			{
-				( (T*)&page->objects[ i ] )->~T();
+				( (T*)&page->objects[ i ] )->~T(); // @TODO: Skip this for basic types
 			}
 		}
 		page->freeList.FreeAll();
@@ -21566,7 +21605,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 				for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
 				{
 					NetObject* created = m_CreateNetObject( &rStream, allowResolve );
-					toDestroy.Remove( created );
+					toDestroy.RemoveFast( created );
 				}
 				for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
 				{
@@ -21694,7 +21733,7 @@ void NetObjectClient::Destroy( NetObject* pendingDestroy )
 	{
 		return;
 	}
-	bool removed = m_netObjects.Remove( pendingDestroy->GetId() );
+	bool removed = m_netObjects.RemoveStable( pendingDestroy->GetId() );
 	AE_ASSERT_MSG( removed, "ae::NetObject can't be destroyed. It's' not managed by this ae::NetObjectClient." );
 	
 	if ( !pendingDestroy->IsPendingDestroy() )
@@ -21755,9 +21794,9 @@ void NetObjectClient::m_StartNetObjectDestruction( NetObject* netObject )
 	}
 	
 	RemoteId remoteId;
-	bool found = m_localToRemoteIdMap.Remove( netObject->GetId(), &remoteId );
+	bool found = m_localToRemoteIdMap.RemoveFast( netObject->GetId(), &remoteId );
 	AE_ASSERT( found );
-	found = m_remoteToLocalIdMap.Remove( remoteId );
+	found = m_remoteToLocalIdMap.RemoveFast( remoteId );
 	AE_ASSERT( found );
 	netObject->m_FlagForDestruction();
 }
@@ -21867,7 +21906,7 @@ void NetObjectServer::DestroyNetObject( NetObject* netObject )
 	}
 
 	NetId id = netObject->GetId();
-	bool removed = m_netObjects.Remove( id );
+	bool removed = m_netObjects.RemoveFast( id );
 	AE_ASSERT_MSG( removed, "NetObject was not found." );
 
 	for ( uint32_t i = 0; i < m_servers.Length(); i++ )
