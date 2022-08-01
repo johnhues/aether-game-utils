@@ -1343,10 +1343,14 @@ private:
 	// clang-format on
 };
 
+
 //------------------------------------------------------------------------------
 // ae::Map class
 //------------------------------------------------------------------------------
-template < typename Key, typename Value, uint32_t N = 0 >
+//! Set ae::Map to Fast mode to allow reording of elements. Stable to maintain
+//! the order of inserted elements.
+enum class MapMode { Fast, Stable };
+template < typename Key, typename Value, uint32_t N = 0, ae::MapMode Mode = ae::MapMode::Fast >
 class Map
 {
 public:
@@ -1385,14 +1389,13 @@ public:
 	//! the value is set to \p valueOut.
 	bool TryGet( const Key& key, Value* valueOut ) const;
 	
-	//! Performs a constant time removal of an element with \p key, while
-	//! potentially reordering elements. Returns true on success, and a copy of
-	//! the value is set to \p valueOut if it is not null.
-	bool RemoveFast( const Key& key, Value* valueOut = nullptr );
-	//! Performs a linear time removal of an element with \p key. Element order
-	//! is maintained. Returns true on success, and a copy of the value is set
-	//! to \p valueOut if it is not null.
-	bool RemoveStable( const Key& key, Value* valueOut = nullptr );
+	//! Performs a constant time removal of an element with \p key while
+	//! potentially reordering elements with ae::MapMode::Fast. Performs a
+	//! linear time removal of an element with \p key with ae::MapMode::Stable.
+	//! Returns true on success, and a copy of the value is set to \p valueOut
+	//! if it is not null.
+	bool Remove( const Key& key, Value* valueOut = nullptr );
+	bool RemoveIndex( int32_t index, Value* valueOut = nullptr );
 	//! Remove all key/value pairs from the map.
 	void Clear();
 
@@ -1416,9 +1419,8 @@ public:
 	const ae::Pair< Key, Value >* end() const { return m_pairs.end(); }
 
 private:
-	bool m_Remove( const Key& key, bool ordered, Value* valueOut );
-	template < typename K2, typename V2, uint32_t N2 >
-	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2 >& );
+	template < typename K2, typename V2, uint32_t N2, ae::MapMode M2 >
+	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2, M2 >& );
 	HashMap< N > m_hashMap;
 	Array< ae::Pair< Key, Value >, N > m_pairs;
 };
@@ -4041,7 +4043,7 @@ private:
 	uint32_t m_serverSignature = 0;
 	uint32_t m_lastNetId = 0;
 	bool m_delayCreationForDestroy = false;
-	ae::Map< NetId, NetObject* > m_netObjects = AE_ALLOC_TAG_NET;
+	ae::Map< NetId, NetObject*, 0, ae::MapMode::Stable > m_netObjects = AE_ALLOC_TAG_NET;
 	ae::Map< RemoteId, NetId > m_remoteToLocalIdMap = AE_ALLOC_TAG_NET;
 	ae::Map< NetId, RemoteId > m_localToRemoteIdMap = AE_ALLOC_TAG_NET;
 	ae::Array< NetObject* > m_created = AE_ALLOC_TAG_NET;
@@ -4106,7 +4108,7 @@ private:
 	uint32_t m_signature = 0;
 	uint32_t m_lastNetId = 0;
 	ae::Array< NetObject* > m_pendingCreate = AE_ALLOC_TAG_NET;
-	ae::Map< NetId, NetObject* > m_netObjects = AE_ALLOC_TAG_NET;
+	ae::Map< NetId, NetObject*, 0, ae::MapMode::Stable > m_netObjects = AE_ALLOC_TAG_NET;
 	ae::Array< NetObjectConnection* > m_servers = AE_ALLOC_TAG_NET;
 public:
 	// Internal
@@ -7357,22 +7359,22 @@ bool Map_IsEqual( const K& k0, const K& k1 )
 	return k0 == k1;
 }
 
-template < typename K, typename V, uint32_t N >
-Map< K, V, N >::Map()
+template < typename K, typename V, uint32_t N, MapMode M >
+Map< K, V, N, M >::Map()
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static maps" );
 }
 
-template < typename K, typename V, uint32_t N >
-Map< K, V, N >::Map( ae::Tag pool ) :
+template < typename K, typename V, uint32_t N, MapMode M >
+Map< K, V, N, M >::Map( ae::Tag pool ) :
 	m_hashMap( pool ),
 	m_pairs( pool )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static maps" );
 }
 
-template < typename K, typename V, uint32_t N >
-V& Map< K, V, N >::Set( const K& key, const V& value )
+template < typename K, typename V, uint32_t N, MapMode M >
+V& Map< K, V, N, M >::Set( const K& key, const V& value )
 {
 	int32_t index = GetIndex( key );
 	Pair< K, V >* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
@@ -7389,33 +7391,33 @@ V& Map< K, V, N >::Set( const K& key, const V& value )
 	}
 }
 
-template < typename K, typename V, uint32_t N >
-V& Map< K, V, N >::Get( const K& key )
+template < typename K, typename V, uint32_t N, MapMode M >
+V& Map< K, V, N, M >::Get( const K& key )
 {
 	return m_pairs[ GetIndex( key ) ].value;
 }
 
-template < typename K, typename V, uint32_t N >
-const V& Map< K, V, N >::Get( const K& key ) const
+template < typename K, typename V, uint32_t N, MapMode M >
+const V& Map< K, V, N, M >::Get( const K& key ) const
 {
 	return m_pairs[ GetIndex( key ) ].value;
 }
 
-template < typename K, typename V, uint32_t N >
-const V& Map< K, V, N >::Get( const K& key, const V& defaultValue ) const
+template < typename K, typename V, uint32_t N, MapMode M >
+const V& Map< K, V, N, M >::Get( const K& key, const V& defaultValue ) const
 {
 	int32_t index = GetIndex( key );
 	return ( index >= 0 ) ? m_pairs[ index ].value : defaultValue;
 }
 
-template < typename K, typename V, uint32_t N >
-V* Map< K, V, N >::TryGet( const K& key )
+template < typename K, typename V, uint32_t N, MapMode M >
+V* Map< K, V, N, M >::TryGet( const K& key )
 {
-	return const_cast< V* >( const_cast< const Map< K, V, N >* >( this )->TryGet( key ) );
+	return const_cast< V* >( const_cast< const Map< K, V, N, M >* >( this )->TryGet( key ) );
 }
 
-template < typename K, typename V, uint32_t N >
-const V* Map< K, V, N >::TryGet( const K& key ) const
+template < typename K, typename V, uint32_t N, MapMode M >
+const V* Map< K, V, N, M >::TryGet( const K& key ) const
 {
 	int32_t index = GetIndex( key );
 	if ( index >= 0 )
@@ -7428,14 +7430,14 @@ const V* Map< K, V, N >::TryGet( const K& key ) const
 	}
 }
 
-template < typename K, typename V, uint32_t N >
-bool Map< K, V, N >::TryGet( const K& key, V* valueOut )
+template < typename K, typename V, uint32_t N, MapMode M >
+bool Map< K, V, N, M >::TryGet( const K& key, V* valueOut )
 {
-	return const_cast< const Map< K, V, N >* >( this )->TryGet( key, valueOut );
+	return const_cast< const Map< K, V, N, M >* >( this )->TryGet( key, valueOut );
 }
 
-template < typename K, typename V, uint32_t N >
-bool Map< K, V, N >::TryGet( const K& key, V* valueOut ) const
+template < typename K, typename V, uint32_t N, MapMode M >
+bool Map< K, V, N, M >::TryGet( const K& key, V* valueOut ) const
 {
 	const V* val = TryGet( key );
 	if ( val )
@@ -7449,37 +7451,29 @@ bool Map< K, V, N >::TryGet( const K& key, V* valueOut ) const
 	return false;
 }
 
-template < typename K, typename V, uint32_t N >
-bool Map< K, V, N >::RemoveFast( const K& key, V* valueOut )
+template < typename K, typename V, uint32_t N, MapMode M >
+bool Map< K, V, N, M >::Remove( const K& key, V* valueOut )
 {
-	return m_Remove( key, false, valueOut );
+	return RemoveIndex( m_hashMap.Remove( ae::GetHash( key ) ), valueOut );
 }
 
-template < typename K, typename V, uint32_t N >
-bool Map< K, V, N >::RemoveStable( const K& key, V* valueOut )
+template < typename K, typename V, uint32_t N, MapMode M >
+bool Map< K, V, N, M >::RemoveIndex( int32_t index, V* valueOut )
 {
-	return m_Remove( key, true, valueOut );
-}
-
-template < typename K, typename V, uint32_t N >
-bool Map< K, V, N >::m_Remove( const K& key, bool ordered, V* valueOut )
-{
-	int32_t index = m_hashMap.Remove( ae::GetHash( key ) );
 	if ( index >= 0 )
 	{
 		AE_DEBUG_ASSERT( m_pairs.Length() );
-		AE_DEBUG_ASSERT( m_pairs[ index ].key == key );
 		if ( valueOut ) { *valueOut = m_pairs[ index ].value; }
 		if ( index == m_pairs.Length() - 1 )
 		{
 			m_pairs.Remove( index );
 		}
-		else if ( ordered )
+		else if ( M == ae::MapMode::Stable )
 		{
 			m_pairs.Remove( index );
 			m_hashMap.Decrement( index );
 		}
-		else
+		else if ( M == ae::MapMode::Fast )
 		{
 			uint32_t lastIdx = m_pairs.Length() - 1;
 			uint32_t lastKey = ae::GetHash( m_pairs[ lastIdx ].key );
@@ -7497,53 +7491,53 @@ bool Map< K, V, N >::m_Remove( const K& key, bool ordered, V* valueOut )
 	}
 }
 
-template < typename K, typename V, uint32_t N >
-void Map< K, V, N >::Reserve( uint32_t count )
+template < typename K, typename V, uint32_t N, MapMode M >
+void Map< K, V, N, M >::Reserve( uint32_t count )
 {
 	m_hashMap.Reserve( count );
 	m_pairs.Reserve( count );
 }
 
-template < typename K, typename V, uint32_t N >
-void Map< K, V, N >::Clear()
+template < typename K, typename V, uint32_t N, MapMode M >
+void Map< K, V, N, M >::Clear()
 {
 	m_hashMap.Clear();
 	m_pairs.Clear();
 }
 
-template < typename K, typename V, uint32_t N >
-const K& Map< K, V, N >::GetKey( int32_t index ) const
+template < typename K, typename V, uint32_t N, MapMode M >
+const K& Map< K, V, N, M >::GetKey( int32_t index ) const
 {
 	return m_pairs[ index ].key;
 }
 
-template < typename K, typename V, uint32_t N >
-V& Map< K, V, N >::GetValue( int32_t index )
+template < typename K, typename V, uint32_t N, MapMode M >
+V& Map< K, V, N, M >::GetValue( int32_t index )
 {
 	return m_pairs[ index ].value;
 }
 
-template < typename K, typename V, uint32_t N >
-int32_t Map< K, V, N >::GetIndex( const K& key ) const
+template < typename K, typename V, uint32_t N, MapMode M >
+int32_t Map< K, V, N, M >::GetIndex( const K& key ) const
 {
 	return m_hashMap.Get( ae::GetHash( key ) );
 }
 
-template < typename K, typename V, uint32_t N >
-const V& Map< K, V, N >::GetValue( int32_t index ) const
+template < typename K, typename V, uint32_t N, MapMode M >
+const V& Map< K, V, N, M >::GetValue( int32_t index ) const
 {
 	return m_pairs[ index ].value;
 }
 
-template < typename K, typename V, uint32_t N >
-uint32_t Map< K, V, N >::Length() const
+template < typename K, typename V, uint32_t N, MapMode M >
+uint32_t Map< K, V, N, M >::Length() const
 {
 	AE_DEBUG_ASSERT( m_hashMap.Length() == m_pairs.Length() );
 	return m_pairs.Length();
 }
 
-template < typename K, typename V, uint32_t N >
-std::ostream& operator<<( std::ostream& os, const Map< K, V, N >& map )
+template < typename K, typename V, uint32_t N, MapMode M >
+std::ostream& operator<<( std::ostream& os, const Map< K, V, N, M >& map )
 {
 	os << "{";
 	for ( uint32_t i = 0; i < map.m_pairs.Length(); i++ )
@@ -21605,7 +21599,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 				for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
 				{
 					NetObject* created = m_CreateNetObject( &rStream, allowResolve );
-					toDestroy.RemoveFast( created );
+					toDestroy.Remove( created );
 				}
 				for ( uint32_t i = 0; i < toDestroy.Length(); i++ )
 				{
@@ -21733,7 +21727,7 @@ void NetObjectClient::Destroy( NetObject* pendingDestroy )
 	{
 		return;
 	}
-	bool removed = m_netObjects.RemoveStable( pendingDestroy->GetId() );
+	bool removed = m_netObjects.Remove( pendingDestroy->GetId() );
 	AE_ASSERT_MSG( removed, "ae::NetObject can't be destroyed. It's' not managed by this ae::NetObjectClient." );
 	
 	if ( !pendingDestroy->IsPendingDestroy() )
@@ -21794,9 +21788,9 @@ void NetObjectClient::m_StartNetObjectDestruction( NetObject* netObject )
 	}
 	
 	RemoteId remoteId;
-	bool found = m_localToRemoteIdMap.RemoveFast( netObject->GetId(), &remoteId );
+	bool found = m_localToRemoteIdMap.Remove( netObject->GetId(), &remoteId );
 	AE_ASSERT( found );
-	found = m_remoteToLocalIdMap.RemoveFast( remoteId );
+	found = m_remoteToLocalIdMap.Remove( remoteId );
 	AE_ASSERT( found );
 	netObject->m_FlagForDestruction();
 }
@@ -21906,7 +21900,7 @@ void NetObjectServer::DestroyNetObject( NetObject* netObject )
 	}
 
 	NetId id = netObject->GetId();
-	bool removed = m_netObjects.RemoveFast( id );
+	bool removed = m_netObjects.Remove( id );
 	AE_ASSERT_MSG( removed, "NetObject was not found." );
 
 	for ( uint32_t i = 0; i < m_servers.Length(); i++ )

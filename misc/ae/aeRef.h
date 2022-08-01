@@ -97,7 +97,7 @@ class aeRefable
 {
 public:
   aeRefable( T* owner ) : m_id( aeId< T >::CreateNew() ) { s_GetMap()->Set( m_id, owner ); }
-  ~aeRefable() { s_GetMap()->RemoveFast( m_id ); }
+  ~aeRefable() { s_GetMap()->Remove( m_id ); }
 
   aeId< T > GetId() const { return m_id; }
   static T* GetById( aeId< T > id ) { return s_GetMap()->Get( id, nullptr ); }
