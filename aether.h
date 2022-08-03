@@ -1321,7 +1321,7 @@ public:
 	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
 
 private:
-	bool m_Insert( uint32_t key, uint32_t index );
+	bool m_Insert( uint32_t key, int32_t index );
 	struct Entry
 	{
 		uint32_t key;
@@ -1395,6 +1395,7 @@ public:
 	//! Returns true on success, and a copy of the value is set to \p valueOut
 	//! if it is not null.
 	bool Remove( const Key& key, Value* valueOut = nullptr );
+	//! Removes an element by index. See ae::Map::Remove() for more details.
 	bool RemoveIndex( int32_t index, Value* valueOut = nullptr );
 	//! Remove all key/value pairs from the map.
 	void Clear();
@@ -7243,19 +7244,12 @@ int32_t HashMap< N >::Remove( uint32_t key )
 		{
 			uint32_t currentIdx = ( i + startIdx ) % m_size;
 			Entry* e = &m_entries[ currentIdx ];
-			if ( e->index < 0 )
+			if ( e->index < 0 || ( ( e->key % m_size ) == currentIdx ) )
 			{
 				break;
 			}
-			uint32_t targetIdx = ( e->key % m_size );
-			uint32_t sub = m_size - targetIdx;
-			uint32_t currDist = ( currentIdx + sub ) % m_size;
-			uint32_t dist = ( prevIdx + sub ) % m_size;
-			if ( currDist > dist )
-			{
-				m_entries[ prevIdx ] = *e;
-				prevIdx = currentIdx;
-			}
+			m_entries[ prevIdx ] = *e;
+			prevIdx = currentIdx;
 		}
 		m_entries[ prevIdx ].index = -1;
 		AE_DEBUG_ASSERT( m_length > 0 );
@@ -7324,18 +7318,28 @@ uint32_t HashMap< N >::Length() const
 }
 
 template < uint32_t N >
-bool HashMap< N >::m_Insert( uint32_t key, uint32_t index )
+bool HashMap< N >::m_Insert( uint32_t key, int32_t index )
 {
-	const uint32_t startIdx = key % m_size;
+	uint32_t startIdx = ( key % m_size );
 	for ( uint32_t i = 0; i < m_size; i++ )
 	{
-		Entry* e = &m_entries[ ( i + startIdx ) % m_size ];
+		uint32_t currentIdx = ( i + startIdx ) % m_size;
+		Entry* e = &m_entries[ currentIdx ];
 		if ( e->index < 0 )
 		{
 			e->key = key;
 			e->index = index;
 			m_length++;
 			return true;
+		}
+#define mod_subtract( idx, baseIdx ) ( ( (idx) + m_size - (baseIdx) ) % m_size )
+		uint32_t currDist = mod_subtract( currentIdx, ( e->key % m_size ) );
+		uint32_t dist = mod_subtract( currentIdx, ( key % m_size ) );
+#undef mod_subtract
+		if ( dist > currDist )
+		{
+			std::swap( e->key, key );
+			std::swap( e->index, index );
 		}
 	}
 	return false;
@@ -7376,7 +7380,7 @@ Map< K, V, N, M >::Map( ae::Tag pool ) :
 template < typename K, typename V, uint32_t N, MapMode M >
 V& Map< K, V, N, M >::Set( const K& key, const V& value )
 {
-	int32_t index = GetIndex( key );
+	int32_t index = GetIndex( key ); // @TODO: SetIfMissing()? to avoid double lookup of key
 	Pair< K, V >* pair = ( index >= 0 ) ? &m_pairs[ index ] : nullptr;
 	if ( pair )
 	{

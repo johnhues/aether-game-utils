@@ -546,7 +546,7 @@ TEST_CASE( "fast stress test", "[ae::Map]" )
 	REQUIRE( map.Length() == count );
 	for ( uint32_t i = 0; i < count; i++ )
 	{
-		AE_ASSERT( map.RemoveFast( ( i * 5437 ) % count ) );
+		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 	}
 	REQUIRE( map.Length() == 0 );
 }
@@ -582,7 +582,7 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 			uint32_t key = map.GetKey( idx );
 			uint32_t value = map.GetValue( idx );
 			uint32_t valueCheck = 0;
-			AE_ASSERT( map.RemoveFast( key, &valueCheck ) );
+			AE_ASSERT( map.Remove( key, &valueCheck ) );
 			AE_ASSERT( value == valueCheck );
 			validateFn();
 		}
@@ -599,7 +599,7 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 	{
 		uint32_t idx = ae::Random( 0, map.Length(), r );
 		uint32_t key = map.GetKey( idx );
-		AE_ASSERT( map.RemoveFast( key ) );
+		AE_ASSERT( map.Remove( key ) );
 		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
@@ -616,7 +616,7 @@ TEST_CASE( "fast full map stress test", "[ae::Map]" )
 	REQUIRE( map.Length() == count );
 	for ( uint32_t i = 0; i < count; i++ )
 	{
-		AE_ASSERT( map.RemoveFast( ( i * 5437 ) % count ) );
+		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 	}
 	REQUIRE( map.Length() == 0 );
 }
@@ -624,7 +624,7 @@ TEST_CASE( "fast full map stress test", "[ae::Map]" )
 TEST_CASE( "stable stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
 		for ( uint32_t i = 1; i < map.Length(); i++ )
@@ -641,7 +641,7 @@ TEST_CASE( "stable stress test", "[ae::Map]" )
 	REQUIRE( map.Length() == count );
 	for ( uint32_t i = 0; i < count; i++ )
 	{
-		AE_ASSERT( map.RemoveStable( ( i * 5437 ) % count ) );
+		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
@@ -650,7 +650,7 @@ TEST_CASE( "stable stress test", "[ae::Map]" )
 TEST_CASE( "stable stress test 2", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
 		for ( auto& pair : map )
@@ -682,7 +682,7 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 			uint32_t key = map.GetKey( idx );
 			uint32_t value = map.GetValue( idx );
 			uint32_t valueCheck = 0;
-			AE_ASSERT( map.RemoveStable( key, &valueCheck ) );
+			AE_ASSERT( map.Remove( key, &valueCheck ) );
 			AE_ASSERT( value == valueCheck );
 			validateFn();
 		}
@@ -705,7 +705,7 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 	{
 		uint32_t idx = ae::Random( 0, map.Length(), r );
 		uint32_t key = map.GetKey( idx );
-		AE_ASSERT( map.RemoveStable( key ) );
+		AE_ASSERT( map.Remove( key ) );
 		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
@@ -714,7 +714,7 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 TEST_CASE( "stable full map stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 10000 > map;
+	ae::Map< uint32_t, uint32_t, 10000, ae::MapMode::Stable > map;
 	auto validateFn = [&]()
 	{
 		for ( uint32_t i = 1; i < map.Length(); i++ )
@@ -732,7 +732,7 @@ TEST_CASE( "stable full map stress test", "[ae::Map]" )
 
 	for ( uint32_t i = 0; i < count; i++ )
 	{
-		AE_ASSERT( map.RemoveStable( ( i * 5437 ) % count ) );
+		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 		validateFn();
 	}
 	REQUIRE( map.Length() == 0 );
