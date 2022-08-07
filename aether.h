@@ -565,8 +565,6 @@ struct Vec4 : public VecT< Vec4 >
 class Matrix4
 {
 public:
-	float data[ 16 ];
-
 	Matrix4() = default;
 	Matrix4( const Matrix4& ) = default;
 
@@ -584,32 +582,35 @@ public:
 	static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
 	static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
+	// Multiplication operators / helpers
 	bool operator==( const Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
 	bool operator!=( const Matrix4& o ) const { return !operator== ( o ); }
 	Vec4 operator*( const Vec4& v ) const;
 	Matrix4 operator*( const Matrix4& m ) const;
 	void operator*=( const Matrix4& m );
-
+	
+	// Modification helpers
 	void SetTranslation( float x, float y, float z );
 	void SetTranslation( const Vec3& t );
 	void SetScale( const Vec3& s );
 	void SetRotation( const class Quaternion& r );
-	Vec3 GetTranslation() const;
-	Vec3 GetScale() const;
 	class Quaternion GetRotation() const;
-
 	void SetTranspose();
 	void SetInverse();
+	Vec3 GetTranslation() const;
+	Vec3 GetScale() const;
 	Matrix4 GetTranspose() const;
 	Matrix4 GetInverse() const;
 	Matrix4 GetNormalMatrix() const;
 	Matrix4 GetScaleRemoved() const;
-
+	
+	// Internal access
 	void SetAxis( uint32_t column, const Vec3& v );
 	void SetRow( uint32_t row, const Vec3& v );
 	void SetRow( uint32_t row, const Vec4& v );
 	Vec3 GetAxis( uint32_t column ) const;
 	Vec4 GetRow( uint32_t row ) const;
+	float data[ 16 ];
 };
 inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat );
 
@@ -996,6 +997,8 @@ struct Color
 
 	bool operator == ( ae::Color o ) const { return r == o.r && g == o.g && b == o.b && a == o.a; }
 	bool operator != ( ae::Color o ) const { return !( operator == ( o ) ); }
+	ae::Color operator * ( ae::Color o ) const { return RGBA( r * o.r, g * o.g, b * o.b, a * o.a ); }
+	ae::Color& operator *= ( ae::Color o ) { r *= o.r; g *= o.g; b *= o.b; a *= o.a; return *this; }
 
 	Vec3 GetLinearRGB() const;
 	Vec4 GetLinearRGBA() const;
