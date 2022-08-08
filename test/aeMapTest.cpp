@@ -586,6 +586,17 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 			AE_ASSERT( value == valueCheck );
 			validateFn();
 		}
+		
+		removeCount = ae::Random( 0, map.Length(), r );
+		for ( uint32_t j = 0; j < removeCount; j++ )
+		{
+			uint32_t idx = ae::Random( 0, map.Length(), r );
+			uint32_t value = map.GetValue( idx );
+			uint32_t valueCheck = 0;
+			map.RemoveIndex( idx, &valueCheck );
+			AE_ASSERT( value == valueCheck );
+			validateFn();
+		}
 
 		uint32_t addCount = ae::Random( 0, map.Length(), r );
 		for ( uint32_t j = 0; j < addCount; j++ )
@@ -683,6 +694,17 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 			uint32_t value = map.GetValue( idx );
 			uint32_t valueCheck = 0;
 			AE_ASSERT( map.Remove( key, &valueCheck ) );
+			AE_ASSERT( value == valueCheck );
+			validateFn();
+		}
+		
+		removeCount = ae::Random( 0, map.Length(), r );
+		for ( uint32_t j = 0; j < removeCount; j++ )
+		{
+			uint32_t idx = ae::Random( 0, map.Length(), r );
+			uint32_t value = map.GetValue( idx );
+			uint32_t valueCheck = 0;
+			map.RemoveIndex( idx, &valueCheck );
 			AE_ASSERT( value == valueCheck );
 			validateFn();
 		}

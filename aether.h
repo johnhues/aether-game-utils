@@ -1393,13 +1393,13 @@ public:
 	bool TryGet( const Key& key, Value* valueOut ) const;
 	
 	//! Performs a constant time removal of an element with \p key while
-	//! potentially reordering elements with ae::MapMode::Fast. Performs a
+	//! potentially re-ordering elements with ae::MapMode::Fast. Performs a
 	//! linear time removal of an element with \p key with ae::MapMode::Stable.
 	//! Returns true on success, and a copy of the value is set to \p valueOut
 	//! if it is not null.
 	bool Remove( const Key& key, Value* valueOut = nullptr );
 	//! Removes an element by index. See ae::Map::Remove() for more details.
-	bool RemoveIndex( int32_t index, Value* valueOut = nullptr );
+	void RemoveIndex( uint32_t index, Value* valueOut = nullptr );
 	//! Remove all key/value pairs from the map.
 	void Clear();
 
@@ -1423,6 +1423,7 @@ public:
 	const ae::Pair< Key, Value >* end() const { return m_pairs.end(); }
 
 private:
+	bool m_RemoveIndex( int32_t index, Value* valueOut );
 	template < typename K2, typename V2, uint32_t N2, ae::MapMode M2 >
 	friend std::ostream& operator<<( std::ostream&, const Map< K2, V2, N2, M2 >& );
 	HashMap< N > m_hashMap;
@@ -7461,11 +7462,24 @@ bool Map< K, V, N, M >::TryGet( const K& key, V* valueOut ) const
 template < typename K, typename V, uint32_t N, MapMode M >
 bool Map< K, V, N, M >::Remove( const K& key, V* valueOut )
 {
-	return RemoveIndex( m_hashMap.Remove( ae::GetHash( key ) ), valueOut );
+	return m_RemoveIndex( m_hashMap.Remove( ae::GetHash( key ) ), valueOut );
 }
 
 template < typename K, typename V, uint32_t N, MapMode M >
-bool Map< K, V, N, M >::RemoveIndex( int32_t index, V* valueOut )
+void Map< K, V, N, M >::RemoveIndex( uint32_t index, V* valueOut )
+{
+	uint32_t hash = ae::GetHash( m_pairs[ index ].key );
+#if _AE_DEBUG_
+	int32_t checkIdx = m_hashMap.Remove( hash );
+	AE_ASSERT( checkIdx == checkIdx );
+#else
+	m_hashMap.Remove( hash );
+#endif
+	m_RemoveIndex( index, valueOut );
+}
+
+template < typename K, typename V, uint32_t N, MapMode M >
+bool Map< K, V, N, M >::m_RemoveIndex( int32_t index, V* valueOut )
 {
 	if ( index >= 0 )
 	{
@@ -7487,7 +7501,6 @@ bool Map< K, V, N, M >::RemoveIndex( int32_t index, V* valueOut )
 			m_pairs[ index ] = std::move( m_pairs[ lastIdx ] );
 			m_pairs.Remove( lastIdx );
 			m_hashMap.Set( lastKey, index );
-
 		}
 		AE_DEBUG_ASSERT( m_pairs.Length() == m_hashMap.Length() );
 		return true;
