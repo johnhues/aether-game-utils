@@ -17299,10 +17299,30 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 			glBindBuffer( GL_ARRAY_BUFFER, instanceData->_GetBuffer() );
 			AE_CHECK_GL_ERROR();
 
-			uint32_t dataSize = instanceData->GetStride();
 			uint32_t componentCount = instanceAttrib->componentCount;
+			uint32_t type = instanceAttrib->type;
+			bool normalized = instanceAttrib->normalized;
+			uint32_t dataSize = instanceData->GetStride();
 			uint64_t attribOffset = instanceAttrib->offset;
-			glVertexAttribPointer( location, componentCount, instanceAttrib->type, instanceAttrib->normalized, dataSize, (void*)attribOffset );
+			if ( componentCount == 16 ) // Matrix4
+			{
+				glEnableVertexAttribArray( location + 1 );
+				glEnableVertexAttribArray( location + 2 );
+				glEnableVertexAttribArray( location + 3 );
+				
+				glVertexAttribPointer( location, 4, type, normalized, dataSize, (void*)attribOffset );
+				glVertexAttribPointer( location + 1, 4, type, normalized, dataSize, (void*)( attribOffset + sizeof(ae::Vec4) ) );
+				glVertexAttribPointer( location + 2, 4, type, normalized, dataSize, (void*)( attribOffset + sizeof(ae::Vec4) * 2 ) );
+				glVertexAttribPointer( location + 3, 4, type, normalized, dataSize, (void*)( attribOffset + sizeof(ae::Vec4) * 3 ) );
+				
+				glVertexAttribDivisor( location + 1, 1 );
+				glVertexAttribDivisor( location + 2, 1 );
+				glVertexAttribDivisor( location + 3, 1 );
+			}
+			else
+			{
+				glVertexAttribPointer( location, componentCount, type, normalized, dataSize, (void*)attribOffset );
+			}
 			AE_CHECK_GL_ERROR();
 		}
 		else
