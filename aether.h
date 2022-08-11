@@ -756,8 +756,9 @@ public:
 	Sphere() = default;
 	Sphere( ae::Vec3 center, float radius ) : center( center ), radius( radius ) {}
 	explicit Sphere( const class OBB& obb );
+	void Expand( ae::Vec3 p );
 
-	bool Raycast( ae::Vec3 origin, ae::Vec3 direction, float* tOut = nullptr, ae::Vec3* pOut = nullptr ) const;
+	bool IntersectRay( ae::Vec3 origin, ae::Vec3 direction, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
 	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
 
 	ae::Vec3 center = ae::Vec3( 0.0f );
@@ -4525,6 +4526,8 @@ public:
 	uint32_t GetPropertyValueCount( const char* propName ) const;
 	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
+	//bool HasPropertyValue( int32_t propIndex, const char* value ) const; // @TODO
+	//bool HasPropertyValue( const char* propName, const char* value ) const; // @TODO
 		
 	// Vars
 	uint32_t GetVarCount( bool parents ) const;
@@ -4540,6 +4543,7 @@ public:
 	bool IsAbstract() const;
 	bool IsPolymorphic() const;
 	bool IsDefaultConstructible() const;
+	bool IsFinal() const;
 
 	// Inheritance info
 	const char* GetParentTypeName() const;
@@ -4570,6 +4574,7 @@ private:
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
 	bool m_isDefaultConstructible = false;
+	bool m_isFinal = false;
 };
 
 //------------------------------------------------------------------------------
@@ -8620,21 +8625,41 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 		return prevResult;
 	}
 	
-	// Obb in world space
+	// Sphere/OBB check in world space
 	{
+		float t = 0.0f;
+		
+		// Sphere
+		ae::Vec3 c = ( params.transform * ae::Vec4( m_aabb.GetCenter(), 1.0f ) ).GetXYZ();
+		float r = ( params.transform * ae::Vec4( m_aabb.GetMax(), 0.0f ) ).GetXYZ().Length();
+		ae::Sphere sphere( c, r );
+		if ( !sphere.IntersectRay( params.source, params.ray, nullptr, &t ) )
+		{
+			return prevResult; // Early out if ray doesn't touch sphere
+		}
+		else if ( params.maxHits == prevResult.hits.Length() && prevResult.hits[ prevResult.hits.Length() - 1 ].distance < t )
+		{
+			return prevResult; // Early out if sphere is farther away than previous hits
+		}
+		
+		// OBB
 		ae::OBB obb( params.transform * m_aabb.GetTransform() );
 		if ( ae::DebugLines* debug = params.debug )
 		{
 			// Ray intersects obb
 			debug->AddOBB( obb.GetTransform(), params.debugColor );
 		}
-		if ( !obb.IntersectRay( params.source, params.ray ) )
+		if ( !obb.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
 		{
 			if ( ae::DebugLines* debug = params.debug )
 			{
 				debug->AddLine( params.source, params.source + params.ray, params.debugColor );
 			}
 			return prevResult; // Early out if ray doesn't touch obb
+		}
+		else if ( params.maxHits == prevResult.hits.Length() && prevResult.hits[ prevResult.hits.Length() - 1 ].distance < t )
+		{
+			return prevResult; // Early out if obb is farther away than previous hits
 		}
 	}
 	
@@ -9623,6 +9648,7 @@ ae::Type::Init( const char* name, uint32_t index )
 	m_isAbstract = false;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
 	m_isDefaultConstructible = true;
+	m_isFinal = std::is_final< T >::value;
 }
 template < typename T >
 typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
@@ -9637,6 +9663,7 @@ ae::Type::Init( const char* name, uint32_t index )
 	m_isAbstract = std::is_abstract< T >::value;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
 	m_isDefaultConstructible = std::is_default_constructible< T >::value;
+	m_isFinal = std::is_final< T >::value;
 }
 
 template < typename T >
@@ -10881,7 +10908,14 @@ Sphere::Sphere( const OBB& obb )
 	radius = obb.GetHalfSize().Length();
 }
 
-bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) const
+void Sphere::Expand( ae::Vec3 p0 )
+{
+	ae::Vec3 p1 = ( center - p0 ).SafeNormalizeCopy() * radius;
+	center = ( p0 + p1 ) * 0.5f;
+	radius = ( center - p1 ).Length();
+}
+
+bool Sphere::IntersectRay( Vec3 origin, Vec3 direction, Vec3* pOut, float* tOut ) const
 {
 	direction.SafeNormalize();
 
@@ -10891,14 +10925,14 @@ bool Sphere::Raycast( Vec3 origin, Vec3 direction, float* tOut, Vec3* pOut ) con
 	// Exit if r's origin outside s (c > 0) and r pointing away from s (b > 0)
 	if ( c > 0.0f && b > 0.0f )
 	{
-	return false;
+		return false;
 	}
 
 	// A negative discriminant corresponds to ray missing sphere
 	float discr = b * b - c;
 	if ( discr < 0.0f )
 	{
-	return false;
+		return false;
 	}
 
 	// Ray now found to intersect sphere, compute smallest t value of intersection
@@ -11208,7 +11242,9 @@ void AABB::Expand( float boundary )
 
 ae::Matrix4 AABB::GetTransform() const
 {
-	return ae::Matrix4::Translation( GetCenter() ) * ae::Matrix4::Scaling( m_max - m_min );
+	ae::Matrix4 r = ae::Matrix4::Scaling( m_max - m_min );
+	r.SetAxis( 3, GetCenter() );
+	return r;
 }
 
 float AABB::GetSignedDistanceFromSurface( ae::Vec3 p ) const
@@ -22806,6 +22842,7 @@ bool ae::Type::HasNew() const { return m_placementNew; }
 bool ae::Type::IsAbstract() const { return m_isAbstract; }
 bool ae::Type::IsPolymorphic() const { return m_isPolymorphic; }
 bool ae::Type::IsDefaultConstructible() const { return m_isDefaultConstructible; }
+bool ae::Type::IsFinal() const { return m_isFinal; }
 const char* ae::Type::GetParentTypeName() const { return m_parent.c_str(); }
 
 void ae::Type::m_AddProp( const char* prop, const char* value )
