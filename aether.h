@@ -14028,6 +14028,11 @@ void Input::Pump()
 
 void Input::SetMouseCaptured( bool enable )
 {
+	if ( !m_window )
+	{
+		return;
+	}
+	
 	if ( enable && m_window && !m_window->GetFocused() )
 	{
 		AE_ASSERT( !m_captureMouse );

@@ -222,6 +222,8 @@ AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPla
 void AetherServer_Delete( AetherServer* );
 void AetherServer_Update( AetherServer* );
 
+void AetherServer_Disconnect( AetherServer*, AetherPlayer* player );
+
 bool AetherServer_Receive( AetherServer*, ServerReceiveInfo* infoOut );
 void AetherServer_SendAll( AetherServer* );
 

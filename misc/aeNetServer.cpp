@@ -246,6 +246,33 @@ static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *use
 
 #endif
 
+void AetherServer_Disconnect( AetherServer* _as, AetherPlayer* player )
+{
+	if ( !_as || !player )
+	{
+		return;
+	}
+	
+	AetherServerInternal* as = (AetherServerInternal*)_as;
+	ENetPeer* peers = as->priv.host->peers;
+	int32_t peerCount = (int32_t)as->priv.host->peerCount;
+	
+	ENetPeer* peer = nullptr;
+	for ( uint32_t i = 0; i < peerCount; i++ )
+	{
+		if ( player == (AetherPlayer*)peers[ i ].data )
+		{
+			peer = &peers[ i ];
+			break;
+		}
+	}
+
+	if ( peer )
+	{
+		enet_peer_disconnect_later( peer, 0 );
+	}
+}
+
 void AetherServer_Update( AetherServer* _as )
 {
   AetherServerInternal* as = (AetherServerInternal*)_as;
