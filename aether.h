@@ -15002,6 +15002,7 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 #elif _AE_EMSCRIPTEN_
 	ae::Str256 result;
 	_ae_GetCurrentWorkingDir( &result );
+	AppendToPath( &result, filePath );
 	return result;
 #else
 	#warning "ae::FileSystem::GetAbsolutePath() not implemeneted. ae::FileSystem functionality will be limited."
