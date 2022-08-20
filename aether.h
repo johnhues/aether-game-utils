@@ -4367,6 +4367,8 @@ public:
 		Int16,
 		Int32,
 		Int64,
+		Int2,
+		Int3,
 		Bool,
 		Float,
 		Double,
@@ -5272,13 +5274,13 @@ inline bool RandomBool( uint64_t& seed )
 	return Random( 0, 2, seed );
 }
 
-inline int32_t Random( int32_t min, int32_t max, uint64_t& seed )
+inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t& seed )
 {
-	if ( min >= max )
+	if ( minInclusive >= maxExclusive )
 	{
-		return min;
+		return minInclusive;
 	}
-	return min + ( ae::_Random( seed ) % ( max - min ) );
+	return minInclusive + ( ae::_Random( seed ) % ( maxExclusive - minInclusive ) );
 }
 
 inline float Random( float min, float max, uint64_t& seed )
@@ -6223,6 +6225,28 @@ inline std::string ToString( ae::Matrix4 v )
 // templated ae::ToString function would prevent the compiler/linker from looking
 // for ae::ToString implementations in other modules.
 template < typename T > T FromString( const char* str, const T& defaultValue );
+
+template <>
+inline ae::Int2 FromString( const char* str, const ae::Int2& defaultValue )
+{
+	ae::Int2 r;
+	if ( sscanf( str, "%d %d", r.data, r.data + 1 ) == 2 )
+	{
+		return r;
+	}
+	return defaultValue;
+}
+
+template <>
+inline ae::Int3 FromString( const char* str, const ae::Int3& defaultValue )
+{
+	ae::Int3 r;
+	if ( sscanf( str, "%d %d %d", r.data, r.data + 1, r.data + 2 ) == 3 )
+	{
+		return r;
+	}
+	return defaultValue;
+}
 
 template <>
 inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )
@@ -9446,6 +9470,8 @@ _ae_DefineMetaVarType( int8_t, Int8 );
 _ae_DefineMetaVarType( int16_t, Int16 );
 _ae_DefineMetaVarType( int32_t, Int32 );
 _ae_DefineMetaVarType( int64_t, Int64 );
+_ae_DefineMetaVarType( ae::Int2, Int2 );
+_ae_DefineMetaVarType( ae::Int3, Int3 );
 _ae_DefineMetaVarType( bool, Bool );
 _ae_DefineMetaVarType( float, Float );
 _ae_DefineMetaVarType( double, Double );
@@ -22323,6 +22349,20 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			sscanf( value, "%lld", i64 );
 			return true;
 		}
+		case Var::Int2:
+		{
+			AE_ASSERT( m_size == sizeof( ae::Int2 ) );
+			ae::Int2* v = (ae::Int2*)varData;
+			*v = ae::FromString< ae::Int2 >( value, ae::Int2( 0.0f ) );
+			return true;
+		}
+		case Var::Int3:
+		{
+			AE_ASSERT( m_size == sizeof( ae::Int3 ) );
+			ae::Int3* v = (ae::Int3*)varData;
+			*v = ae::FromString< ae::Int3 >( value, ae::Int3( 0.0f ) );
+			return true;
+		}
 		case Var::Bool:
 		{
 			*(bool*)varData = ae::FromString< bool >( value, false );
@@ -22731,8 +22771,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 					return "";
 			}
 		case Var::UInt8:
-			// Prevent char formatting
-			return ae::Str32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str();
+			return ae::Str32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str(); // Prevent char formatting
 		case Var::UInt16:
 			return ae::Str32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
 		case Var::UInt32:
@@ -22740,14 +22779,17 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 		case Var::UInt64:
 			return ae::Str32::Format( "#", *reinterpret_cast< const uint64_t* >( varData ) ).c_str();
 		case Var::Int8:
-			// Prevent char formatting
-			return ae::Str32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str();
+			return ae::Str32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str(); // Prevent char formatting
 		case Var::Int16:
 			return ae::Str32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
 		case Var::Int32:
 			return ae::Str32::Format( "#", *reinterpret_cast< const int32_t* >( varData ) ).c_str();
 		case Var::Int64:
 			return ae::Str32::Format( "#", *reinterpret_cast< const int64_t* >( varData ) ).c_str();
+		case Var::Int2:
+			return ae::Str256::Format( "#", *reinterpret_cast<const ae::Int2*>( varData ) ).c_str();
+		case Var::Int3:
+			return ae::Str256::Format( "#", *reinterpret_cast<const ae::Int3*>( varData ) ).c_str();
 		case Var::Bool:
 			return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
 		case Var::Float:

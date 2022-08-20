@@ -362,15 +362,24 @@ private:
 //------------------------------------------------------------------------------
 // Var helpers
 //------------------------------------------------------------------------------
-static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, const char* currentValue )
+static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, const char* currentValue, uint32_t showSearchCount = 16 )
 {
   ae::Str32 result = currentValue;
   if ( ImGui::BeginCombo( varName, currentValue ) )
   {
-	for ( uint32_t i = 0; i < enumType->Length(); i++ )
+	uint32_t count = enumType->Length();
+	static ImGuiTextFilter filter;
+	bool search = ( count >= showSearchCount );
+	if ( search )
+	{
+		filter.Draw( "" );
+	}
+
+	for ( uint32_t i = 0; i < count; i++ )
 	{
 	  auto indexName = enumType->GetNameByIndex( i );
-	  if ( ImGui::Selectable( indexName.c_str(), indexName == currentValue ) )
+	  bool show = !search || filter.PassFilter( indexName.c_str() );
+	  if ( show && ImGui::Selectable( indexName.c_str(), indexName == currentValue ) )
 	  {
 		result = indexName.c_str();
 	  }
@@ -381,11 +390,11 @@ static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, co
 }
 
 template < typename T >
-bool aeImGui_Enum( const char* varName, T* valueOut )
+bool aeImGui_Enum( const char* varName, T* valueOut, uint32_t showSearchCount = 16 )
 {
   const ae::Enum* enumType = ae::GetEnum< T >();
   auto currentValue = enumType->GetNameByValue( *valueOut );
-  auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str() );
+  auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str(), showSearchCount );
   
   T prev = *valueOut;
   if ( enumType->GetValueFromString( resultName.c_str(), valueOut ) )
