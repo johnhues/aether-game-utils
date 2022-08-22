@@ -4255,8 +4255,8 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 const ae::TypeId kInvalidTypeId = 0;
-const uint32_t kMaxMetaProps = 32;
-const uint32_t kMaxMetaPropListLength = 16;
+const uint32_t kMaxMetaProps = 24;
+const uint32_t kMaxMetaPropListLength = 24;
 const uint32_t kMetaMaxVars = 64;
 const uint32_t kMetaEnumValues = 512;
 const uint32_t kMetaEnumTypes = 64;
