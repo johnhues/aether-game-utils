@@ -1797,7 +1797,9 @@ public:
 	Vec2 GetSize() const { return m_max - m_min; }
 	Vec2 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
 	bool Contains( Vec2 pos ) const;
-	void Expand( Vec2 pos );
+	Vec2 Clip( Vec2 pos ) const;
+	void ExpandPoint( Vec2 pos );
+	void ExpandEdge( Vec2 amount );
 	bool GetIntersection( const Rect& other, Rect* intersectionOut = nullptr ) const;
 	
 private:
@@ -12465,16 +12467,16 @@ const void* OpaquePool::m_GetNext( const void* obj ) const
 Rect Rect::FromCenterAndSize( ae::Vec2 center, ae::Vec2 size )
 {
 	Rect rect;
-	rect.Expand( center - size * 0.5f );
-	rect.Expand( center + size * 0.5f );
+	rect.ExpandPoint( center - size * 0.5f );
+	rect.ExpandPoint( center + size * 0.5f );
 	return rect;
 }
 
 Rect Rect::FromPoints( ae::Vec2 p0, ae::Vec2 p1 )
 {
 	Rect rect;
-	rect.Expand( p0 );
-	rect.Expand( p1 );
+	rect.ExpandPoint( p0 );
+	rect.ExpandPoint( p1 );
 	return rect;
 }
 
@@ -12483,10 +12485,23 @@ bool Rect::Contains( Vec2 pos ) const
 	return ( m_min.x <= pos.x && pos.x <= m_max.x ) && ( m_min.y <= pos.y && pos.y <= m_max.y );
 }
 
-void Rect::Expand( Vec2 pos )
+Vec2 Rect::Clip( Vec2 pos ) const
+{
+	return ae::Vec2( ae::Clip( pos.x, m_min.x, m_max.x ), ae::Clip( pos.y, m_min.y, m_max.y ) );
+}
+
+void Rect::ExpandPoint( Vec2 pos )
 {
 	m_min = ae::Min( m_min, pos );
 	m_max = ae::Max( m_max, pos );
+}
+
+void Rect::ExpandEdge( Vec2 amount )
+{
+	m_min -= amount;
+	m_max += amount;
+	if ( m_max.x < m_min.x ) { m_min.x = ( m_min.x + m_max.x ) * 0.5f; m_max.x = m_min.x; }
+	if ( m_max.y < m_min.y ) { m_min.y = ( m_min.y + m_max.y ) * 0.5f; m_max.y = m_min.y; }
 }
 
 bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
