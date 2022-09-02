@@ -109,7 +109,7 @@ int main()
 	shader.SetDepthTest( true );
 	shader.SetDepthWrite( true );
 	shader.SetBlending( true );
-	shader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 
 	ae::Texture2D texture;
 	{

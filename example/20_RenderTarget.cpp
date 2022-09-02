@@ -119,7 +119,7 @@ int main()
 	shader.SetDepthTest( true );
 	shader.SetDepthWrite( true );
 	shader.SetBlending( true );
-	shader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 
 	cube.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	cube.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );

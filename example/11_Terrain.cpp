@@ -551,7 +551,7 @@ int main()
         uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
         terrainShader.SetBlending( false );
-        terrainShader.SetCulling( ae::Shader::Culling::None );
+        terrainShader.SetCulling( ae::Culling::None );
         terrainShader.SetWireframe( true );
         terrain->Render( &terrainShader, uniformList );
 
@@ -559,7 +559,7 @@ int main()
         uniformList.Set( "u_sideColor", side.SetA( 0.5f ).GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.SetA( 0.5f ).GetLinearRGBA() );
         terrainShader.SetBlending( true );
-        terrainShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+        terrainShader.SetCulling( ae::Culling::CounterclockwiseFront );
         terrainShader.SetWireframe( false );
         terrain->Render( &terrainShader, uniformList );
       }
@@ -569,7 +569,7 @@ int main()
         uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
         terrainShader.SetBlending( false );
-        terrainShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+        terrainShader.SetCulling( ae::Culling::CounterclockwiseFront );
         terrainShader.SetWireframe( false );
         terrain->Render( &terrainShader, uniformList );
       }

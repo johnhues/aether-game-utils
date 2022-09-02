@@ -2785,12 +2785,18 @@ const uint32_t _kMaxShaderAttributeNameLength = 16;
 const uint32_t _kMaxShaderDefines = 4;
 class InstanceData;
 
+//------------------------------------------------------------------------------
+//! Backface culling mode. ClockwiseFront front specifies that triangles with
+//! clockwise winding should be visible. CounterclockwiseFront front specifies
+//! that triangles with counter-clockwise winding should be visible.
+//------------------------------------------------------------------------------
+enum class Culling { None, ClockwiseFront, CounterclockwiseFront };
+
 class Shader
 {
 public:
 	// Constants
 	enum class Type { Vertex, Fragment };
-	enum class Culling { None, ClockwiseFront, CounterclockwiseFront };
 	
 	// Interface
 	Shader();

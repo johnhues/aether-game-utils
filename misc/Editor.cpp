@@ -399,7 +399,7 @@ void EditorProgram::Initialize()
 	m_introShader.SetDepthTest( true );
 	m_introShader.SetDepthWrite( true );
 	m_introShader.SetBlending( true );
-	m_introShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	m_introShader.SetCulling( ae::Culling::CounterclockwiseFront );
 
 	struct Vertex
 	{
@@ -456,7 +456,7 @@ void EditorProgram::Initialize()
 			AE_COLOR.a = u_color.a;
 		})";
 	m_meshShader.Initialize( meshVertShader, meshFragShader, nullptr, 0 );
-	m_meshShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	m_meshShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	struct QuadVertex
 	{
@@ -509,7 +509,7 @@ void EditorProgram::Initialize()
 	m_iconShader.SetDepthWrite( false );
 	m_iconShader.SetBlending( true );
 	m_iconShader.SetBlendingPremul( true );
-	m_iconShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	m_iconShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	AE_STATIC_ASSERT( sizeof(kCogTextureData) == kCogTextureDataSize * kCogTextureDataSize );
 	m_cogTexture.Initialize( kCogTextureData, kCogTextureDataSize, kCogTextureDataSize, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp, true );

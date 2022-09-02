@@ -233,14 +233,14 @@ void Game::Initialize( int argc, char* argv[] )
 	meshShader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	meshShader.SetDepthTest( true );
 	meshShader.SetDepthWrite( true );
-	meshShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	meshShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	LoadOBj( "character.obj", &fs, &avatarVertexData, nullptr, nullptr );
 	const char* avatarShaderDefines[] = { "#define DIFFUSE 1" };
 	avatarShader.Initialize( kVertShader, kFragShader, avatarShaderDefines, countof(avatarShaderDefines) );
 	avatarShader.SetDepthTest( true );
 	avatarShader.SetDepthWrite( true );
-	avatarShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	avatarShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	LoadTarga( "character.tga", &fs, &spacesuitTex );
 	
 	ae::Str256 levelPath;

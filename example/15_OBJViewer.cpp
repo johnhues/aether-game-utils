@@ -95,14 +95,14 @@ int main()
 	shader.SetDepthTest( true );
 	shader.SetDepthWrite( true );
 	shader.SetBlending( true );
-	shader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	const char* defines[] { "#define FLAT_COLOR" };
 	shadowShader.Initialize( kVertShader, kFragShader, defines, countof(defines) );
 	shadowShader.SetDepthTest( true );
 	shadowShader.SetDepthWrite( true );
 	shadowShader.SetBlending( true );
-	shadowShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	shadowShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	AE_INFO( "Load obj" );
 	ae::OBJFile objFile = kObjAllocTag;
