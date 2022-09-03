@@ -2477,7 +2477,7 @@ EditorObjectId EditorServer::m_PickObject( EditorProgram* program, ae::Color col
 			float hitT = INFINITY;
 			ae::Vec3 hitPos( 0.0f );
 			ae::Sphere sphere( editorObj->GetTransform( program ).GetTranslation(), 0.5f );
-			if ( sphere.Raycast( mouseRaySrc, mouseRay, &hitT, &hitPos ) )
+			if ( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, &hitT ) )
 			{
 				raycastParams.userData = nullptr;
 				raycastParams.transform = ae::Matrix4::Identity();

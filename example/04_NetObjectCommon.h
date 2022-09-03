@@ -28,7 +28,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "aetherEXT.h"
+#include "ae/aeNet.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -89,8 +89,8 @@ public:
     netObject = nullptr;
     alive = true;
     playerId = AetherUuid::Zero();
-    m_pos = ae::Vec3( aeMath::Random( -10.0f, 10.0f ), aeMath::Random( -10.0f, 10.0f ), 0.0f );
-    m_radius = aeMath::Random( 0.5f, 2.0f );
+    m_pos = ae::Vec3( ae::Random( -10.0f, 10.0f ), ae::Random( -10.0f, 10.0f ), 0.0f );
+    m_radius = ae::Random( 0.5f, 2.0f );
     m_color = color;
   }
 

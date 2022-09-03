@@ -3683,7 +3683,7 @@ public:
 	const class Skeleton* GetBindPose() const;
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
-	void ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
+	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
 	
 private:
 	Skeleton m_bindPose;
@@ -20377,7 +20377,7 @@ const Skeleton* Skin::GetBindPose() const
 	return &m_bindPose;
 }
 
-void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* normals, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
+void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
 {
 	AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
 	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
@@ -20400,8 +20400,8 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positions, float* norma
 		}
 		normal.SafeNormalize();
 		
-		float* p = (float*)( (uint8_t*)positions + ( i * positionStride ) );
-		float* n = (float*)( (uint8_t*)normals + ( i * normalStride ) );
+		float* p = (float*)( (uint8_t*)positionsOut + ( i * positionStride ) );
+		float* n = (float*)( (uint8_t*)normalsOut + ( i * normalStride ) );
 		p[ 0 ] = pos.x;
 		p[ 1 ] = pos.y;
 		p[ 2 ] = pos.z;

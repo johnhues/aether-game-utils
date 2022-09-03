@@ -271,8 +271,8 @@ bool Program::Update()
 		if ( m_state == State::BoxSelect )
 		{
 			m_selectRect = ae::Rect();
-			m_selectRect.Expand( m_selectStart );
-			m_selectRect.Expand( currentCursorPos );
+			m_selectRect.ExpandPoint( m_selectStart );
+			m_selectRect.ExpandPoint( currentCursorPos );
 			DrawRect( m_selectRect, ae::Color::PicoBlue().ScaleA( 0.5f ) );
 		}
 	}
@@ -331,12 +331,12 @@ void Program::DrawWindow()
 {
 	m_gfx.Clear( ae::Color::PicoLightGray() );
 	ae::Rect bgRect;
-	bgRect.Expand( ae::Vec2( 20.0f ) );
-	bgRect.Expand( ae::Vec2( m_gfx.GetWidth() - 20.0f, m_gfx.GetHeight() - 60.0f ) );
+	bgRect.ExpandPoint( ae::Vec2( 20.0f ) );
+	bgRect.ExpandPoint( ae::Vec2( m_gfx.GetWidth() - 20.0f, m_gfx.GetHeight() - 60.0f ) );
 	DrawRect( bgRect, ae::Color::PicoWhite() );
 	bgRect = ae::Rect();
-	bgRect.Expand( ae::Vec2( 20.0f, m_gfx.GetHeight() - 50.0f ) );
-	bgRect.Expand( ae::Vec2( m_gfx.GetWidth() - 20.0f, m_gfx.GetHeight() - 20.0f ) );
+	bgRect.ExpandPoint( ae::Vec2( 20.0f, m_gfx.GetHeight() - 50.0f ) );
+	bgRect.ExpandPoint( ae::Vec2( m_gfx.GetWidth() - 20.0f, m_gfx.GetHeight() - 20.0f ) );
 	DrawRect( bgRect, ae::Color::PicoWhite() );
 }
 

@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "loaders.h"
+#include "ae/loaders.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -125,6 +125,7 @@ int main()
 	ae::Skin skin = TAG_ALL;
 	ae::Animation anim = TAG_ALL;
 	ae::VertexArray vertexData;
+	Vertex* vertices = nullptr;
 	{
 		const char* fileName = "character.fbx";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
@@ -139,6 +140,9 @@ int main()
 		vertexInfo.colorOffset = offsetof( Vertex, color );
 		vertexInfo.uvOffset = offsetof( Vertex, uv );
 		ae::ofbxLoadSkinnedMesh( TAG_ALL, fileData.Data(), fileData.Length(), vertexInfo, &vertexData, &skin, &anim );
+
+		vertices = ae::NewArray< Vertex >( TAG_ALL, vertexData.GetVertexCount() );
+		memcpy( vertices, vertexData.GetVertices< Vertex >(), ( sizeof(Vertex) * vertexData.GetVertexCount() ) );
 	}
 	anim.loop = true;
 	
@@ -208,8 +212,8 @@ int main()
 		
 		// Update mesh
 		anim.AnimateByTime( &currentPose, animTime, s_strength10 / 10.0f, mask.Begin(), mask.Length() );
-		Vertex* meshVerts = vertexData.GetWritableVertices< Vertex >();
-		skin.ApplyPoseToMesh( &currentPose, meshVerts->pos.data, meshVerts->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetVertexCount() );
+		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetVertexCount() );
+		vertexData.SetVertices( vertices, vertexData.GetVertexCount() );
 		vertexData.Upload();
 		
 		// Debug
@@ -250,6 +254,8 @@ int main()
 	}
 
 	AE_INFO( "Terminate" );
+	ae::Delete( vertices );
+	vertices = nullptr;
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();

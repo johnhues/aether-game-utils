@@ -23,8 +23,9 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "loaders.h"
-#include "Editor.h"
+#include "aether.h"
+#include "ae/loaders.h"
+#include "ae/Editor.h"
 #include "ofbx.h"
 namespace ae {
 
@@ -141,14 +142,16 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	
 	if ( params.collisionMesh )
 	{
-		ae::CollisionMesh::Params collisionParams;
-		collisionParams.positionCount = totalVerts;
-		collisionParams.positions = vertexHelper.GetPosition( vertexBuffer.Begin(), 0 ).data;
-		collisionParams.positionStride = vertexHelper.size;
-		collisionParams.indices = indices.Begin();
-		collisionParams.indexCount = indices.Length();
-		collisionParams.indexSize = sizeof(uint32_t);
-		params.collisionMesh->Load( collisionParams );
+		params.collisionMesh->AddIndexed(
+			ae::Matrix4::Identity(),
+			vertexHelper.GetPosition( vertexBuffer.Begin(), 0 ).data,
+			totalVerts,
+			vertexHelper.size,
+			indices.Begin(),
+			indices.Length(),
+			sizeof(uint32_t)
+		);
+		params.collisionMesh->BuildBVH();
 	}
 	
 	if ( params.editorMesh )
