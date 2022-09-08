@@ -19054,6 +19054,13 @@ void TextRender::Add( ae::Vec3 pos, ae::Vec2 size, const char* str, ae::Color co
 		return;
 	}
 
+	uint32_t remainingChars = (uint32_t)ae::Max( 0, (int32_t)m_maxGlyphCount - (int32_t)m_allocatedChars );
+	charLimit = charLimit ? ae::Min( charLimit, remainingChars ) : remainingChars;
+	if ( !charLimit )
+	{
+		return;
+	}
+
 	uint32_t len = 0;
 	char* rectStr = m_stringData + m_allocatedChars;
 	if ( m_ParseText( str, lineLength, charLimit, &rectStr, &len ) )
