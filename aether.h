@@ -4552,9 +4552,15 @@ class Type
 {
 public:
 	ae::TypeId GetId() const;
-		
-	// Properties
-	bool HasProperty( const char* prop ) const;
+
+	//! Check if this ae::Type has a \p property registered with
+	//! AE_REGISTER_CLASS_PROPERTY() or AE_REGISTER_CLASS_PROPERTY_VALUE().
+	//! @return True if \p property is found.
+	bool HasProperty( const char* property ) const;
+	//! Search for an inherited type (starting from this one) that has a \p property
+	//! registered with AE_REGISTER_CLASS_PROPERTY() or AE_REGISTER_CLASS_PROPERTY_VALUE().
+	//! @return The first ae::Type found with \p property.
+	const Type* GetTypeWithProperty( const char* property ) const;
 	int32_t GetPropertyIndex( const char* prop ) const;
 	int32_t GetPropertyCount() const;
 	const char* GetPropertyName( int32_t propIndex ) const;
@@ -23005,7 +23011,20 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 }
 
 ae::TypeId ae::Type::GetId() const { return m_id; }
-bool ae::Type::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
+bool ae::Type::HasProperty( const char* property ) const { return GetPropertyIndex( property ) >= 0; }
+const ae::Type* ae::Type::GetTypeWithProperty( const char* property ) const
+{
+	const ae::Type* result = this;
+	while ( result )
+	{
+		if ( result->HasProperty( property ) )
+		{
+			break;
+		}
+		result = result->GetParentType();
+	}
+	return result;
+}
 int32_t ae::Type::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
 int32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
 const char* ae::Type::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
