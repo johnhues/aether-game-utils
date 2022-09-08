@@ -339,6 +339,7 @@ inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
 template< typename T > T DtLerp( T start, float snappiness, float dt, T end );
+template< typename T > T DtSlerp( T start, float snappiness, float dt, T end );
 inline float DtLerpAngle( float start, float snappiness, float dt, float end );
 // @TODO: Cleanup duplicate interpolation functions
 template< typename T > T CosineInterpolate( T start, T end, float t );
@@ -453,12 +454,17 @@ struct Vec2 : public VecT< Vec2 >
 	explicit Vec2( const float* v2 );
 	explicit Vec2( struct Int2 i2 );
 	static Vec2 FromAngle( float angle );
+
 	struct Int2 NearestCopy() const;
 	struct Int2 FloorCopy() const;
 	struct Int2 CeilCopy() const;
+	
 	Vec2 RotateCopy( float rotation ) const;
 	float GetAngle() const;
+	Vec2 DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
+	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
 	static Vec2 Reflect( Vec2 v, Vec2 n );
+
 	union
 	{
 		struct
@@ -1818,17 +1824,37 @@ inline std::ostream& operator<<( std::ostream& os, Rect r )
 //------------------------------------------------------------------------------
 struct RectInt
 {
-	RectInt() = default;
-	RectInt( const RectInt& ) = default;
-	RectInt( int32_t x, int32_t y, int32_t w, int32_t h ) : x(x), y(y), w(w), h(h) {}
+	//! Create an ae::RectInt from a corner position and size (non-inclusive).
+	//! ie. ae::RectInt::Contains( pos + size ) will always return false.
+	//! ae::RectInt::Contains( pos ) will return true only if size is non-zero.
+	//! @TODO: Handle negative size.
+	static RectInt FromPointAndSize( ae::Int2 pos, ae::Int2 size );
+	//! Create an ae::RectInt from a corner position and size (non-inclusive).
+	//! ie. ae::RectInt::Contains( pos + size ) will always return false.
+	//! ae::RectInt::Contains( pos ) will return true only if size is non-zero.
+	//! @TODO: Handle negative size.
+	static RectInt FromPointAndSize( int32_t x, int32_t y, int32_t w, int32_t h );
+	//! Create an ae::RectInt from points (inclusive) ie. ae::RectInt::Contains()
+	//! will always return true for both points.
+	static RectInt FromPoints( ae::Int2 p0, ae::Int2 p1 );
+	//! Create ae::RectInt from points (inclusive) ie. ae::RectInt::Contains()
+	//! will always return true for both points.
+	static RectInt FromPoints( int32_t x0, int32_t y0, int32_t x1, int32_t y1 );
+	// No FromCenterAndSize() function because the intended result is ambiguous
+	// when width or height is odd.
 
 	ae::Int2 GetPos() const { return ae::Int2( x, y ); }
 	ae::Int2 GetSize() const { return ae::Int2( w, h ); }
 	bool Contains( ae::Int2 pos ) const;
 	bool Intersects( RectInt other ) const;
-	//! Zero size rect is expanded to 1x1 grid square by Expand()
+	//! Expand ae::RectInt by point (inclusive), ie. ae::RectInt::Contains()
+	//! will return true. A zero size ae::RectInt is expanded so its width and
+	//! height are 1.
 	void Expand( ae::Int2 pos );
-	
+
+private:
+	friend std::ostream& operator<<( std::ostream& os, RectInt r );
+	// Private so w and h are never negative
 	int32_t x = 0;
 	int32_t y = 0;
 	int32_t w = 0;
@@ -5227,6 +5253,12 @@ T DtLerp( T start, float snappiness, float dt, T end )
 	return ae::Lerp( end, start, exp2( -exp2( snappiness ) * dt ) );
 }
 
+template< typename T >
+T DtSlerp( T start, float snappiness, float dt, T end )
+{
+	return start.DtSlerp( end, snappiness, dt );
+}
+
 inline float DtLerpAngle( float start, float snappiness, float dt, float end )
 {
 	end = start + ae::Mod( ( end - start ) + ae::PI, ae::TWO_PI ) - ae::PI;
@@ -5660,6 +5692,10 @@ inline float Vec2::GetAngle() const
 inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n )
 {
 	return n * ( 2.0f * v.Dot( n ) / n.LengthSquared() ) - v;
+}
+inline Vec2 Vec2::DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon ) const
+{
+	return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
 }
 
 //------------------------------------------------------------------------------
@@ -10021,6 +10057,42 @@ void RandomSeed()
 }
 
 //------------------------------------------------------------------------------
+// ae::Vec2 functions
+//------------------------------------------------------------------------------
+Vec2 Vec2::Slerp( const Vec2& end, float t, float epsilon ) const
+{
+	Vec2 v0 = *this;
+	Vec2 v1 = end;
+	float l0 = v0.SafeNormalize();
+	float l1 = v1.SafeNormalize();
+	if ( l0 < epsilon && l1 < epsilon )
+	{
+		return Vec2( 0.0f );
+	}
+	else if ( l1 < epsilon ) // Zero length target
+	{
+		return v0 * ae::Lerp( l0, 0.0f, t );
+	}
+	else if ( l0 < epsilon ) // Zero length initial vector
+	{
+		return v1 * ae::Lerp( 0.0f, l1, t );
+	}
+	float d = ae::Clip( v0.Dot( v1 ), -1.0f, 1.0f );
+	if ( d > ( 1.0f - epsilon ) )
+	{
+		return v1;
+	}
+	if ( d < -( 1.0f - epsilon ) )
+	{
+		return v0;
+	}
+	float angle = std::acos( d ) * t;
+	Vec2 v2 = v1 - v0 * d;
+	v2.Normalize();
+	return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) );
+}
+
+//------------------------------------------------------------------------------
 // ae::Vec3 functions
 //------------------------------------------------------------------------------
 float Vec3::GetAngleBetween( const Vec3& v ) const
@@ -10063,12 +10135,22 @@ Vec3 Vec3::RotateCopy( Vec3 axis, float angle ) const
 
 Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 {
-	if ( Length() < epsilon || end.Length() < epsilon )
+	Vec3 v0 = *this;
+	Vec3 v1 = end;
+	float l0 = v0.SafeNormalize();
+	float l1 = v1.SafeNormalize();
+	if ( l0 < epsilon && l1 < epsilon )
 	{
 		return Vec3( 0.0f );
 	}
-	Vec3 v0 = NormalizeCopy();
-	Vec3 v1 = end.NormalizeCopy();
+	else if ( l1 < epsilon ) // Zero length target
+	{
+		return v0 * ae::Lerp( l0, 0.0f, t );
+	}
+	else if ( l0 < epsilon ) // Zero length initial vector
+	{
+		return v1 * ae::Lerp( 0.0f, l1, t );
+	}
 	float d = ae::Clip( v0.Dot( v1 ), -1.0f, 1.0f );
 	if ( d > ( 1.0f - epsilon ) )
 	{
@@ -12532,6 +12614,34 @@ bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
 //------------------------------------------------------------------------------
 // ae::RectInt member functions
 //------------------------------------------------------------------------------
+RectInt RectInt::FromPointAndSize( ae::Int2 pos, ae::Int2 size )
+{
+	return FromPointAndSize( pos.x, pos.y, size.x, size.y );
+}
+
+RectInt RectInt::FromPointAndSize( int32_t x, int32_t y, int32_t w, int32_t h )
+{
+	RectInt rect;// @TODO: Handle negative width and height
+	rect.x = x;
+	rect.y = y;
+	rect.w = w;
+	rect.h = h;
+	return rect;
+}
+
+RectInt RectInt::FromPoints( ae::Int2 p0, ae::Int2 p1 )
+{
+	return FromPoints( p0.x, p0.y, p1.x, p1.y );
+}
+
+RectInt RectInt::FromPoints( int32_t x0, int32_t y0, int32_t x1, int32_t y1 )
+{
+	RectInt rect;
+	rect.Expand( ae::Int2( x0, y0 ) );
+	rect.Expand( ae::Int2( x1, y1 ) );
+	return rect;
+}
+
 bool RectInt::Contains( ae::Int2 pos ) const
 {
 	return !( pos.x < x || pos.x >= ( x + w ) || pos.y < y || pos.y >= ( y + h ) );
