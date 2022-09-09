@@ -1,4 +1,4 @@
-#include "ae/aether.h"
+#include "aether.h"
 
 const ae::Tag TAG_ALL = "all";
 
@@ -59,9 +59,9 @@ public:
 	ae::Texture2D m_texture;
 
 	ae::FileSystem fileSystem;
-	const ae::AsyncFile* m_moonFile = nullptr;
-	const ae::AsyncFile* m_testFile = nullptr;
-	const ae::AsyncFile* m_licenseFile = nullptr;
+	const ae::File* m_moonFile = nullptr;
+	const ae::File* m_testFile = nullptr;
+	const ae::File* m_licenseFile = nullptr;
 
 	Game() : charPos( 0.0f ), charVel( 0.0f ), rotation( 0.0f ) {}
 
@@ -84,9 +84,9 @@ public:
 		m_texture.Initialize( &data, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false );
 
 		fileSystem.Initialize( "data", "ae", "emscripten" );
-		m_moonFile = fileSystem.LoadAsyncFile( ae::FileSystem::Root::Data, "moon.tga", 2.5f );
-		m_testFile = fileSystem.LoadAsyncFile( ae::FileSystem::Root::Data, "test.txt", 2.5f );
-		m_licenseFile = fileSystem.LoadAsyncFile( "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/LICENSE", 2.5f );
+		m_moonFile = fileSystem.Read( ae::FileSystem::Root::Data, "moon.tga", 2.5f );
+		m_testFile = fileSystem.Read( ae::FileSystem::Root::Data, "test.txt", 2.5f );
+		m_licenseFile = fileSystem.Read( "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/LICENSE", 2.5f );
 	}
 
 	bool Tick()
@@ -101,9 +101,9 @@ public:
 	{
 		const float dt = timeStep.GetDt();
 		
-		if ( m_moonFile && m_moonFile->GetStatus() != ae::AsyncFile::Status::Pending )
+		if ( m_moonFile && m_moonFile->GetStatus() != ae::File::Status::Pending )
 		{
-			if ( m_moonFile->GetStatus() == ae::AsyncFile::Status::Success )
+			if ( m_moonFile->GetStatus() == ae::File::Status::Success )
 			{
 				ae::TargaFile targa = TAG_ALL;
 				if ( targa.Load( (const uint8_t*)m_moonFile->GetData(), m_moonFile->GetLength() ) )
@@ -116,25 +116,25 @@ public:
 			m_moonFile = nullptr;
 		}
 
-		const ae::AsyncFile** files[] = { &m_moonFile, &m_testFile, &m_licenseFile };
-		for ( const ae::AsyncFile** _file : files )
+		const ae::File** files[] = { &m_moonFile, &m_testFile, &m_licenseFile };
+		for ( const ae::File** _file : files )
 		{
-			const ae::AsyncFile*& file = *_file;
-			if ( file && file->GetStatus() != ae::AsyncFile::Status::Pending )
+			const ae::File*& file = *_file;
+			if ( file && file->GetStatus() != ae::File::Status::Pending )
 			{
 				switch ( file->GetStatus() )
 				{
-					case ae::AsyncFile::Status::Success:
+					case ae::File::Status::Success:
 						AE_INFO( "Loaded file: '#' Length: # (#) (#sec)", file->GetUrl(), file->GetLength(), file->GetCode(), file->GetElapsedTime() );
 						if ( strcmp( ae::FileSystem::GetFileExtFromPath( file->GetUrl() ), "tga" ) != 0 )
 						{
 							printf( "%s\n", (const char*)file->GetData() );
 						}
 						break;
-					case ae::AsyncFile::Status::NotFound:
+					case ae::File::Status::NotFound:
 						AE_ERR( "File not found: '#' (#) (#sec)", file->GetUrl(), file->GetCode(), file->GetElapsedTime() );
 						break;
-					case ae::AsyncFile::Status::Timeout:
+					case ae::File::Status::Timeout:
 						AE_ERR( "File load timeout: '#' (#) (#sec)", file->GetUrl(), file->GetCode(), file->GetElapsedTime() );
 						break;
 					default:
@@ -176,7 +176,7 @@ public:
 		ae::UniformList uniformList;
 		uniformList.Set( "u_modelToNdc", transform );
 		uniformList.Set( "u_tex", &m_texture );
-		vertexData.Render( &shader, uniformList );
+		vertexData.Draw( &shader, uniformList );
 
 		gfx.Present();
 	}
@@ -185,7 +185,7 @@ public:
 	ae::GraphicsDevice gfx;
 	ae::Input input;
 	ae::Shader shader;
-	ae::VertexData vertexData;
+	ae::VertexArray vertexData;
 	ae::TimeStep timeStep;
 };
 

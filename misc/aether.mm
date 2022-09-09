@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// 00_HelloWorld.cpp
+// aether.mm
 //------------------------------------------------------------------------------
-// Copyright (c) 2020 John Hughes
+// Copyright (c) 2021 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -23,18 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aether.h"
-
-//------------------------------------------------------------------------------
-// Main
-//------------------------------------------------------------------------------
-int main()
-{
-  AE_TRACE( "Hello World" );
-  AE_DEBUG( "Hello World" );
-  AE_INFO( "Hello World" );
-  AE_WARN( "Hello World" );
-  AE_ERR( "Hello World" );
-
-  return 0;
-}
+#ifdef __APPLE__
+  #define AE_MAIN
+  #include "aether.h"
+#endif

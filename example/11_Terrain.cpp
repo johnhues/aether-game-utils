@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
+#include "aether.h"
 #include "ae/aeImGui.h"
 #include "ae/aeTerrain.h"
 #include "ImGuizmo.h"
@@ -131,12 +131,12 @@ public:
   {
     ae::UniformList uniforms;
     uniforms.Set( "u_screenToWorld", worldToProj.GetInverse() );
-    m_bgVertexData.Render( &m_gridShader, uniforms );
+    m_bgVertexData.Draw( &m_gridShader, uniforms );
   }
 
 private:
   ae::Shader m_gridShader;
-  ae::VertexData m_bgVertexData;
+  ae::VertexArray m_bgVertexData;
 };
 
 //------------------------------------------------------------------------------
@@ -212,7 +212,7 @@ void WriteObjects( ae::FileSystem* fileSystem, const ae::Array< Object* >& objec
 
 bool ReadObjects( ae::FileSystem* fileSystem, ae::Terrain* terrain, ae::Image* heightmapImage, ae::Array< Object* >& objects )
 {
-  ae::Scratch< uint8_t > scratch( AE_ALLOC_TAG_TERRAIN, fileSystem->GetSize( ae::FileSystem::Root::User, kFileName ) );
+  ae::Scratch< uint8_t > scratch( fileSystem->GetSize( ae::FileSystem::Root::User, kFileName ) );
   fileSystem->Read( ae::FileSystem::Root::User, kFileName, scratch.Data(), scratch.Length() );
   ae::BinaryStream rStream = ae::BinaryStream::Reader( scratch.Data(), scratch.Length() );
 
@@ -273,7 +273,7 @@ int main()
   ae::Shader terrainShader;
   ae::DebugCamera camera;
   ae::Texture2D fontTexture;
-  ae::TextRender textRender;
+  ae::TextRender textRender = TAG_EXAMPLE;
   class aeImGui* ui = nullptr;
 
   fileSystem.Initialize( "data", "ae", "terrain" );
@@ -305,15 +305,16 @@ int main()
       const char* fileName = "font.png";
       uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
       AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-      ae::Scratch< uint8_t > fileBuffer( TAG_EXAMPLE, fileSize );
+      ae::Scratch< uint8_t > fileBuffer( fileSize );
       fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
       ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
     }
-    textRender.Initialize( &fontTexture, 8 );
+    //uint32_t maxStringCount, uint32_t maxGlyphCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing
+    textRender.Initialize( 128, 2048, &fontTexture, 8, 1.0f );
   }
 
 //  ae::Image heightmapImage;
-//  ae::Scratch< uint8_t > fileBuffer( AE_ALLOC_TAG_TERRAIN, fileSystem.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
+//  ae::Scratch< uint8_t > fileBuffer( fileSystem.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
 //  fileSystem.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
 //  heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
@@ -550,7 +551,7 @@ int main()
         uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
         terrainShader.SetBlending( false );
-        terrainShader.SetCulling( ae::Shader::Culling::None );
+        terrainShader.SetCulling( ae::Culling::None );
         terrainShader.SetWireframe( true );
         terrain->Render( &terrainShader, uniformList );
 
@@ -558,7 +559,7 @@ int main()
         uniformList.Set( "u_sideColor", side.SetA( 0.5f ).GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.SetA( 0.5f ).GetLinearRGBA() );
         terrainShader.SetBlending( true );
-        terrainShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+        terrainShader.SetCulling( ae::Culling::CounterclockwiseFront );
         terrainShader.SetWireframe( false );
         terrain->Render( &terrainShader, uniformList );
       }
@@ -568,7 +569,7 @@ int main()
         uniformList.Set( "u_sideColor", side.GetLinearRGBA() );
         uniformList.Set( "u_pathColor", path.GetLinearRGBA() );
         terrainShader.SetBlending( false );
-        terrainShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+        terrainShader.SetCulling( ae::Culling::CounterclockwiseFront );
         terrainShader.SetWireframe( false );
         terrain->Render( &terrainShader, uniformList );
       }
@@ -650,7 +651,7 @@ int main()
               }
               else
               {
-                ae::CollisionMesh::RaycastParams params;
+                ae::RaycastParams params;
                 params.source = object->raySrc;
                 params.ray = ray;
                 terrain->Raycast( params, nullptr );

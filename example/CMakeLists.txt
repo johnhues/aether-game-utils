@@ -51,9 +51,9 @@ target_include_directories(openfbx INTERFACE "${OPENFBX_SOURCE_DIR}/src")
 
 # Example source helpers
 set(AE_CORE_SOURCES
-	${CMAKE_SOURCE_DIR}/include/ae/aether.h
-	${CMAKE_SOURCE_DIR}/src/aether.cpp
-	${CMAKE_SOURCE_DIR}/src/aether.mm
+	${CMAKE_SOURCE_DIR}/aether.h
+	${AE_MISC_DIR}/aether.cpp
+	${AE_MISC_DIR}/aether.mm
 )
 set(AE_EXAMPLE_SOURCES Common.h)
 
@@ -158,7 +158,7 @@ add_bundle("Triangle"
 	"06_Triangle.cpp;${AE_CORE_SOURCES}"
 	"data/Icon.icns"
 	""
-	"${CMAKE_SOURCE_DIR}/include"
+	"${AE_INCLUDE_DIR}"
 )
 
 # Cube
@@ -170,7 +170,7 @@ add_bundle("Cube"
 	"07_Cube.cpp;${AE_CORE_SOURCES}"
 	"data/Icon.icns"
 	""
-	"${CMAKE_SOURCE_DIR}/include"
+	"${AE_INCLUDE_DIR}"
 )
 
 # Audio
@@ -254,7 +254,7 @@ add_bundle("Emscripten"
 	"14_Emscripten.cpp;${AE_CORE_SOURCES}"
 	"data/moon.tga;data/test.txt"
 	""
-	"${CMAKE_SOURCE_DIR}/include"
+	"${AE_INCLUDE_DIR}"
 )
 
 # OBJViewer
@@ -299,10 +299,10 @@ add_bundle("Editor"
 	"ae.18_editor"
 	"0.0.0"
 	"Icon"
-	"18_editor.cpp;${CMAKE_SOURCE_DIR}/src/aether.mm;${CMAKE_SOURCE_DIR}/include/ae/Editor.h;${CMAKE_SOURCE_DIR}/src/Editor.cpp;${CMAKE_SOURCE_DIR}/src/Entity.cpp;${AE_EXAMPLE_SOURCES}"
+	"18_editor.cpp;${AE_EXAMPLE_SOURCES};${AE_MISC_DIR}/ae/Editor.h;${AE_MISC_DIR}/Editor.cpp;${AE_MISC_DIR}/Entity.cpp"
 	"data/Icon.icns;data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
 	"ae;imgui;imguizmo;rapidjson"
-	"${CMAKE_SOURCE_DIR}/include"
+	""
 )
 
 # Mouse
@@ -327,4 +327,16 @@ add_bundle("Render Target"
 	"data/Icon.icns"
 	"ae"
 	""
+)
+
+# Instancing
+add_bundle("Instancing"
+	"21_instancing"
+	"ae.21_instancing"
+	"0.0.0"
+	"Icon"
+	"21_Instancing.cpp;${AE_CORE_SOURCES}"
+	"data/Icon.icns"
+	""
+	"${AE_INCLUDE_DIR}"
 )

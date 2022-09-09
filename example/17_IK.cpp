@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
+#include "aether.h"
 #include "ae/loaders.h"
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
@@ -113,26 +113,27 @@ int main()
 	shader.SetDepthTest( true );
 	shader.SetDepthWrite( true );
 	shader.SetBlending( true );
-	shader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 
 	ae::Texture2D texture;
 	{
 		ae::TargaFile targaFile = TAG_ALL;
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, "character.tga" );
 		AE_ASSERT( fileSize );
-		ae::Scratch< uint8_t > fileData( TAG_ALL, fileSize );
+		ae::Scratch< uint8_t > fileData( fileSize );
 		fileSystem.Read( ae::FileSystem::Root::Data, "character.tga", fileData.Data(), fileData.Length() );
 		targaFile.Load( fileData.Data(), fileData.Length() );
 		texture.Initialize( targaFile.textureParams );
 	}
 	
 	ae::Skin skin = TAG_ALL;
-	ae::VertexData vertexData;
+	ae::VertexArray vertexData;
+	Vertex* vertices = nullptr;
 	{
 		const char* fileName = "character.fbx";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
 		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
-		ae::Scratch< uint8_t > fileData( TAG_ALL, fileSize );
+		ae::Scratch< uint8_t > fileData( fileSize );
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() );
 		
 		ae::VertexLoaderHelper vertexInfo;
@@ -142,6 +143,9 @@ int main()
 		vertexInfo.colorOffset = offsetof( Vertex, color );
 		vertexInfo.uvOffset = offsetof( Vertex, uv );
 		ae::ofbxLoadSkinnedMesh( TAG_ALL, fileData.Data(), fileData.Length(), vertexInfo, &vertexData, &skin, nullptr );
+
+		vertices = ae::NewArray< Vertex >( TAG_ALL, vertexData.GetVertexCount() );
+		memcpy( vertices, vertexData.GetVertices< Vertex >(), ( sizeof(Vertex) * vertexData.GetVertexCount() ) );
 	}
 	
 	double animTime = 0.0;
@@ -267,8 +271,8 @@ int main()
 		}
 		
 		// Update mesh
-		Vertex* meshVerts = vertexData.GetWritableVertices< Vertex >();
-		skin.ApplyPoseToMesh( &currentPose, meshVerts->pos.data, meshVerts->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetVertexCount() );
+		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetVertexCount() );
+		vertexData.SetVertices( vertices, vertexData.GetVertexCount() );
 		vertexData.Upload();
 		
 		// Debug
@@ -309,7 +313,7 @@ int main()
 		uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		uniformList.Set( "u_tex", &texture );
-		vertexData.Render( &shader, uniformList );
+		vertexData.Draw( &shader, uniformList );
 		
 		// Frame end
 		debugLines.Render( worldToProj );
@@ -319,6 +323,8 @@ int main()
 	}
 
 	AE_INFO( "Terminate" );
+	ae::Delete( vertices );
+	vertices = nullptr;
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();

@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
+#include "aether.h"
 #include "ae/loaders.h"
 #include "Common.h"
 
@@ -65,7 +65,7 @@ int main()
     const char* fileName = "circle.png";
     uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
     AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-    ae::Scratch< uint8_t > fileBuffer( TAG_EXAMPLE, fileSize );
+    ae::Scratch< uint8_t > fileBuffer( fileSize );
     fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
     ae::stbLoadPng( &tex, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
   }

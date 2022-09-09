@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
+#include "aether.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -79,7 +79,7 @@ int main()
 	ae::TimeStep timeStep;
 	ae::Shader shader;
 	ae::Shader shadowShader;
-	ae::VertexData vertexData;
+	ae::VertexArray vertexData;
 	ae::FileSystem fs;
 	ae::DebugCamera camera;
 
@@ -95,14 +95,14 @@ int main()
 	shader.SetDepthTest( true );
 	shader.SetDepthWrite( true );
 	shader.SetBlending( true );
-	shader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	const char* defines[] { "#define FLAT_COLOR" };
 	shadowShader.Initialize( kVertShader, kFragShader, defines, countof(defines) );
 	shadowShader.SetDepthTest( true );
 	shadowShader.SetDepthWrite( true );
 	shadowShader.SetBlending( true );
-	shadowShader.SetCulling( ae::Shader::Culling::CounterclockwiseFront );
+	shadowShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	AE_INFO( "Load obj" );
 	ae::OBJFile objFile = kObjAllocTag;
@@ -151,14 +151,14 @@ int main()
 		uniformList.Set( "u_lightDir", ae::Vec3( -7.0f, 5.0f, -3.0f ).NormalizeCopy() );
 		uniformList.Set( "u_ambLight", ae::Color::PicoDarkPurple().ScaleRGB( 0.5f ).GetLinearRGB() );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		vertexData.Render( &shader, uniformList );
+		vertexData.Draw( &shader, uniformList );
 		
 		// Shadow
 		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -0.25f ) )
 			* ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::PicoDarkPurple().ScaleRGB( 0.6f ).GetLinearRGBA() );
-		vertexData.Render( &shadowShader, uniformList );
+		vertexData.Draw( &shadowShader, uniformList );
 		
 		render.Present();
 		timeStep.Wait();

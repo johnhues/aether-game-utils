@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
+#include "aether.h"
 
 //------------------------------------------------------------------------------
 // Triangle
@@ -56,7 +56,7 @@ public:
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
-	ae::VertexData vertexData;
+	ae::VertexArray vertexData;
 
 	ae::Vec3 pos = ae::Vec3( 0.0f );
 	float scale = 1.0f;
@@ -145,7 +145,7 @@ bool Example::Tick()
 
 	ae::UniformList uniformList;
 	uniformList.Set( "u_modelToNdc", transform );
-	vertexData.Render( &shader, uniformList );
+	vertexData.Draw( &shader, uniformList );
 
 	render.Present();
 	timeStep.Wait();

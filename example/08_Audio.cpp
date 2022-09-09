@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "ae/aether.h"
+#include "aether.h"
 
 //------------------------------------------------------------------------------
 // Main
@@ -32,23 +32,33 @@ int main()
 {
 	AE_LOG( "Initialize" );
 
+	ae::FileSystem fs;
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::Audio audio;
+	ae::TimeStep timeStep;
 	
+	fs.Initialize( "data", "ae", "audio" );
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "audio" );
 	render.Initialize( &window );
 	input.Initialize( &window );
-	audio.Initialize( 1, 3 );
-	
-	ae::TimeStep timeStep;
+	audio.Initialize( 1, 3, 0, 2 );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	ae::AudioData music, sfx;
-	music.Initialize( "music.wav" );
-	sfx.Initialize( "sound.wav" );
+	auto LoadWavFn = [&]( const char* fileName )
+	{
+		uint32_t fileSize = fs.GetSize( ae::FileSystem::Root::Data, fileName );
+		AE_ASSERT( fileSize );
+		ae::Scratch< uint8_t > fileScratch( fileSize );
+		uint32_t readLen = fs.Read( ae::FileSystem::Root::Data, fileName, fileScratch.Data(), fileSize );
+		AE_ASSERT( readLen == fileSize );
+		return audio.LoadWavFile( fileScratch.Data(), fileSize );
+	};
+
+	const ae::AudioData* music = LoadWavFn( "music.wav" );
+	const ae::AudioData* sfx = LoadWavFn( "sound.wav" );
 
 	bool musicPlaying = false;
 	float musicTime = 0.0f;
@@ -79,7 +89,7 @@ int main()
 			}
 			else
 			{
-				audio.PlayMusic( &music, 0.5f, 0 );
+				audio.PlayMusic( music, 0.5f, 0 );
 				musicPlaying = true;
 				musicTime = 0.0f;
 			}
@@ -88,7 +98,7 @@ int main()
 		if ( ( input.mouse.leftButton && !input.mousePrev.leftButton )
 			|| ( input.gamepad.a && !input.gamepadPrev.a ) )
 		{
-			audio.PlaySfx( &sfx, 1.0f, 0 );
+			audio.PlaySfx( sfx, 1.0f, 0 );
 			hitFade = 1.0f;
 		}
 
