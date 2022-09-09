@@ -43,3 +43,4 @@ cmake-build-debug
 
 # System
 .DS_Store
+deps/dawn
