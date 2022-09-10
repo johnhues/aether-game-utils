@@ -1,5 +1,5 @@
 # aether game utils
-`aether.h` is a single-header collection of cross platform utilities for quickly creating small games in C++. Core tenants of this library are to statisfy the (often times at odds!) goals of:
+`aether.h` is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development
 * Providing utilities that naturally conform to game development best practices
 * Not overstepping or emposing a particular game engine architecture
@@ -64,6 +64,12 @@ TODO:
 ```
 
 ## Building on Windows
+TODO:
+```
+// todo
+```
+
+## Building with Emscripten
 TODO:
 ```
 // todo
