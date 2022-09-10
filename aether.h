@@ -2589,74 +2589,90 @@ public:
 	Socket( ae::Tag tag );
 	~Socket();
 
-	//! Attempts to connect to the 'address' over the given protocol. Calling ae::Socket::Connect() clears
-	//! all pending sent and received data. To avoid losing received data call ae::Socket::ReceiveData() or
-	//! ae::Socket::ReceiveMsg() repeatedly until they return empty before calling ae::Socket::Connect().
+	//! Attempts to connect to the \p address over the given \p protocol. Calling
+	//! ae::Socket::Connect() clears all pending sent and received data. To avoid
+	//! losing received data call ae::Socket::ReceiveData() or ae::Socket::ReceiveMsg()
+	//! repeatedly until they return empty before calling ae::Socket::Connect().
 	//! In this scenario all pending sent data will always be lost.
-	bool Connect( ae::Socket::Protocol proto, const char* address, uint16_t port );
+	bool Connect( ae::Socket::Protocol protocol, const char* address, uint16_t port );
 	//! Closes ths connection established with ae::Socket::Connect().
 	void Disconnect();
-	//! Returns true if the connection established with ae::Socket::Connect() or ae::ListenerSocket::Accept() is
-	//! still active. If this ae::Socket was returned from ae::ListenerSocket::Accept() then
-	//! ae::ListenerSocket::Destroy() or ae::ListenerSocket::DestroyAll() should be called to clean it up.
-	//! This can return false while received data is still waiting to be read, and so ae::Socket::ReceiveData()
-	//! or ae::Socket::ReceiveMsg() can still be called.
+	//! Returns true if the connection established with ae::Socket::Connect() or
+	//! ae::ListenerSocket::Accept() is still active. If this ae::Socket was
+	//! returned from ae::ListenerSocket::Accept() then ae::ListenerSocket::Destroy()
+	//! or ae::ListenerSocket::DestroyAll() should be called to clean it up.
+	//! This can return false while received data is still waiting to be read,
+	//! and so ae::Socket::ReceiveData() or ae::Socket::ReceiveMsg() can still
+	//! be called.
 	bool IsConnected() const;
 
-	//! Queues 'length' data to be sent with ae::Socket::SendAll(). Call ae::Socket::QueueData() multiple times
-	//! to batch data sent with ae::Socket::SendAll(). Data sent with ae::Socket::QueueData() can be read by
-	//! the receiver with ae::Socket::PeekData() and ae::Socket::ReceiveData(). It's advised that you do not
-	//! mix ae::Socket::QueueMsg() and ae::Socket::QueueData().
+	//! Queues \p length data to be sent with ae::Socket::SendAll(). Call
+	//! ae::Socket::QueueData() multiple times to batch data sent with
+	//! ae::Socket::SendAll(). Data sent with ae::Socket::QueueData() can be read
+	//! by the receiver with ae::Socket::PeekData() and ae::Socket::ReceiveData().
+	//! It's advised that you do not mix ae::Socket::QueueMsg() and ae::Socket::QueueData().
 	bool QueueData( const void* data, uint32_t length );
-	//! Returns true if 'length' bytes have been received. If 'dataOut' is non-null and 'length' bytes have been
-	//! received the data will be written to 'dataOut'. The read head will not move, so subsequent calls to
-	//! ae::Socket::PeekData() will return the same result. It's useful to call ae::Socket::DiscardData() and pass
-	//! it 'length' after receiving data through ae::Socket::PeekData().
+	//! Returns true if \p length bytes have been received. If \p dataOut is
+	//! non-null and \p length bytes have been received the data will be written
+	//! to \p dataOut. The read head will not move, so subsequent calls to
+	//! ae::Socket::PeekData() will return the same result. It's useful to call
+	//! ae::Socket::DiscardData() and pass it \p length after receiving data
+	//! through ae::Socket::PeekData().
 	bool PeekData( void* dataOut, uint16_t length, uint32_t offset );
-	//! Returns true if 'length' + 'offset' bytes have been received. If 'dataOut' is also non-null, pending received
-	//! data at 'offset' will be written to 'dataOut'. In this case the read head will move forward 'length' bytes.
-	//! Calling ae::Socket::ReceiveData() with a null 'dataOut' and calling ae::Socket::DiscardData() has the
-	//! exact same effect.
+	//! Returns true if \p length + \p offset bytes have been received. If
+	//! \p dataOut is also non-null, pending received data at 'offset' will be
+	//! written to \p dataOut. In this case the read head will move forward
+	//! \p length bytes. Calling ae::Socket::ReceiveData() with a null \p dataOut
+	//! and calling ae::Socket::DiscardData() has the exact same effect.
 	bool ReceiveData( void* dataOut, uint16_t length );
-	//! Returns true if 'length' bytes have been received. In this case the read head will move forward 'length' bytes.
-	//! Calling ae::Socket::DiscardData() and calling ae::Socket::ReceiveData() with a null 'dataOut' has
-	//! the exact same effect.
+	//! Returns true if \p length bytes have been received. In this case the read
+	//! head will move forward \p length bytes. Calling ae::Socket::DiscardData()
+	//! and calling ae::Socket::ReceiveData() with a null \p dataOut has the exact
+	//! same effect.
 	bool DiscardData( uint16_t length );
-	//! Returns the number of bytes available for reading. This is mostly intended for use with
-	//! ae::Socket::ReceiveData() when it is not possible to know how much data will be received in advance.
-	//! If you are using ae::Socket::QueueMsg() and ae::Socket::ReceiveMsg() the returned value will include
-	//! all message headers.
+	//! Returns the number of bytes available for reading. This is mostly intended
+	//! for use with ae::Socket::ReceiveData() when it is not possible to know
+	//! how much data will be received in advance. If you are using ae::Socket::QueueMsg()
+	//! and ae::Socket::ReceiveMsg() the returned value will include all message headers.
 	uint32_t ReceiveDataLength();
 
-	//! Queues data for sending. A two byte (network order) message header is prepended to the given
-	//! message. Ideally you should call ae::Socket::QueueMsg() for each logical chunk of data you need to
-	//! send over a 'network tick' and then finally call ae::Socket::SendAll() once. It's unadvised to mix
-	//! ae::Socket::QueueMsg() calls with ae::Socket::QueueData().
+	//! Queues data for sending. A two byte (network order) message header is
+	//! prepended to the given message. Ideally you should call ae::Socket::QueueMsg()
+	//! for each logical chunk of data you need to send over a 'network tick' and
+	//! then finally call ae::Socket::SendAll() once. Oftern times calling this
+	//! ~10 times per second (independent of the update/render ticks) for a real
+	//! time multiplayer game will work fine. It's unadvised to mix ae::Socket::QueueMsg()
+	//! calls with ae::Socket::QueueData().
 	bool QueueMsg( const void* data, uint16_t length );
-	//! Can return a value greater than maxLength, in which case 'dataOut' is not modified.
-	//! Call ae::Socket::ReceiveMessage() again with a big enough buffer or skip the message by calling
-	//! ae::Socket::DiscardMessage(). Uses a two byte (network order) message header.
-	//! It's unadvised to mix ae::Socket::ReceiveMsg() calls with ae::Socket::ReceiveData().
+	//! Can return a value greater than maxLength, in which case \p dataOut is not
+	//! modified. Call ae::Socket::ReceiveMessage() again with a big enough buffer
+	//! or skip the message by calling ae::Socket::DiscardMessage(). Uses a two
+	//! byte (network order) message header. It's unadvised to mix ae::Socket::ReceiveMsg()
+	//! calls with ae::Socket::ReceiveData().
 	uint16_t ReceiveMsg( void* dataOut, uint16_t maxLength );
-	//! Discards one received sent with ae::Socket::QueueMsg(). Uses the two byte (network order) message
-	//! header to determine discard data size.
+	//! Discards one received message sent with ae::Socket::QueueMsg(). Uses the
+	//! two byte (network order) message header to determine discard data size.
 	bool DiscardMsg();
 
-	//! Returns the number of bytes sent. Sends all queued data from ae::Socket::QueueData() and
-	//! ae::Socket::QueueMsg(). If the connection is lost all pending sent data will be discarded.
-	//! See ae::Socket::Connect() for more information.
+	//! Returns the number of bytes sent. Sends all queued data from ae::Socket::QueueData()
+	//! and ae::Socket::QueueMsg(). If the connection is lost all pending sent
+	//! data will be discarded. See ae::Socket::Connect() for more information.
 	uint32_t SendAll();
 	
-	//! Returns the most recent remote address that this socket had or attempted a connection to.
+	//! Returns the most recent remote address that this socket had or attempted
+	//! a connection to.
 	const char* GetAddress() const { return m_address.c_str(); }
-	//! Returns the resolved remote address that this socket last successfully connected to, unless a connection
-	//! is in progress in which case this will return a zero length string. This will either be an IPv4 or IPv6 address.
-	//! If ae::Socket::Connect() was given an ip address (as opposed to a hostname) ae::Socket::GetAddress()
-	//! will likely return the same address.
+	//! Returns the resolved remote address that this socket last successfully
+	//! connected to, unless a connection is in progress in which case this will
+	//! return a zero length string. This will either be an IPv4 or IPv6 address.
+	//! If ae::Socket::Connect() was given an ip address (as opposed to a hostname)
+	//! ae::Socket::GetAddress() will likely return the same address.
 	const char* GetResolvedAddress() const { return m_resolvedAddress.c_str(); }
-	//! Returns the protocol that this socket is currently connected with or ae::Socket::Protocol::None if not connected.
+	//! Returns the protocol that this socket is currently connected with or
+	//! ae::Socket::Protocol::None if not connected.
 	ae::Socket::Protocol GetProtocol() const { return m_protocol; }
-	//! Returns the remote port that this socket is currently connected to or 0 if not connected.
+	//! Returns the remote port that this socket is currently connected to or 0
+	//! if not connected.
 	uint16_t GetPort() const { return m_port; }
 
 private:
@@ -2680,8 +2696,9 @@ public: // Internal
 
 //------------------------------------------------------------------------------
 // ae::ListenerSocket class
-//! Used in conjunction with ae::Socket to send data over UDP/TCP. Supports both IPv4 and IPv6.
-//! See ae::ListenerSocket::Listen() for more detailed information on usage.
+//! Used in conjunction with ae::Socket to send data over UDP/TCP. Supports both
+//! IPv4 and IPv6. See ae::ListenerSocket::Listen() for more detailed information
+//! on usage.
 //------------------------------------------------------------------------------
 class ListenerSocket
 {
@@ -2689,35 +2706,43 @@ public:
 	ListenerSocket( ae::Tag tag );
 	~ListenerSocket();
 
-	//! Starts listening on the given port. Will accept both incoming ipv4 and ipv6 connections. Does not affect
-	//! existing ae::Sockets allocated with ae::ListenerSocket::Accept(). 'maxConnections' specifies how many
-	//! active sockets can be returned by ae::ListenerSocket::Accept() before new connections will be rejected.
-	//! Existing ae::Sockets that are disconnected count towards the 'maxConnection' total, and must be
-	//! cleaned up with ae::ListenerSocket::Destroy() before ae::ListenerSocket::Accept() will allow new
-	//! connections. Providing false for 'allowRemote' will prevent connections from other devices, and will also
-	//! prevent firewall popups on most platforms.
+	//! Starts listening on the given port. Will accept both incoming ipv4 and
+	//! ipv6 connections. Does not affect existing ae::Sockets allocated with
+	//! ae::ListenerSocket::Accept(). \p maxConnections specifies how many
+	//! active sockets can be returned by ae::ListenerSocket::Accept() before
+	//! new connections will be rejected. Existing ae::Sockets that are
+	//! disconnected count towards the \p maxConnections total, and must be
+	//! cleaned up with ae::ListenerSocket::Destroy() before ae::ListenerSocket::Accept()
+	//! will allow new connections. Providing false for \p allowRemote will
+	//! prevent connections from other devices, and will also prevent firewall
+	//! popups on most platforms.
 	bool Listen( ae::Socket::Protocol proto, bool allowRemote, uint16_t port, uint32_t maxConnections );
-	//! ae::ListenerSocket will no longer accept new connections. Does not affect existing ae::Sockets allocated
-	//! with ae::ListenerSocket::Accept().
+	//! ae::ListenerSocket will no longer accept new connections. Does not affect
+	//! existing ae::Sockets allocated with ae::ListenerSocket::Accept().
 	void StopListening();
 	//! Returns true if listening for either ipv4 or ipv6 connections.
 	bool IsListening() const;
 	
-	//! Returns a socket if a connection has been established. See ae::ListenerSocket::Listen() for more information.
+	//! Returns a socket if a connection has been established. See
+	//! ae::ListenerSocket::Listen() for more information.
 	ae::Socket* Accept();
 	//! Disconnects and releases an existing socket from ae::ListenerSocket::Accept().
 	void Destroy( ae::Socket* sock );
-	//! Disconnects and releases all existing sockets from Accept(). It is not safe to access released sockets
-	//! obtained through ae::ListenerSocket::Accept() after calling this.
+	//! Disconnects and releases all existing sockets from Accept(). It is not
+	//! safe to access released sockets obtained through ae::ListenerSocket::Accept()
+	//! after calling this.
 	void DestroyAll();
 	
 	//! Returns ae::Socket by index allocated through ae::ListenerSocket::Accept().
 	ae::Socket* GetConnection( uint32_t idx );
-	//! Returns the number of ae::Sockets currently allocated through ae::ListenerSocket::Accept().
+	//! Returns the number of ae::Sockets currently allocated through
+	//! ae::ListenerSocket::Accept().
 	uint32_t GetConnectionCount() const;
-	//! Returns the protocol that this socket is currently listening with or ae::Socket::Protocol::None if not listening.
+	//! Returns the protocol that this socket is currently listening with or
+	//! ae::Socket::Protocol::None if not listening.
 	ae::Socket::Protocol GetProtocol() const { return m_protocol; }
-	//! Returns the local port that this socket is currently listening on or 0 if not listening.
+	//! Returns the local port that this socket is currently listening on or 0
+	//! if not listening.
 	uint16_t GetPort() const { return m_port; }
 
 private:

@@ -31,20 +31,17 @@
 int main()
 {
 	AE_LOG( "Initialize" );
-
 	ae::Window window;
-  ae::GraphicsDevice graphicsDevice;
+	ae::GraphicsDevice graphicsDevice;
 	ae::Input input;
+	ae::TimeStep timeStep;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "example" );
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );
-	
-	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	//while ( !input.GetState()->exit )
 	while ( !input.quit )
 	{
 		input.Pump();
@@ -55,8 +52,7 @@ int main()
 	}
 
 	AE_LOG( "Terminate" );
-
-	//input.Terminate();
+	input.Terminate();
 	graphicsDevice.Terminate();
 	window.Terminate();
 
