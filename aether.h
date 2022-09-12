@@ -2122,6 +2122,10 @@ public:
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
 
+	//! Enable window events logging to console
+	void SetLoggingEnabled( bool enable ) { m_debugLog = enable; }
+	bool GetLoggingEnabled() const { return m_debugLog; }
+
 private:
 	void m_Initialize();
 	Int2 m_pos;
@@ -2132,6 +2136,7 @@ private:
 	bool m_focused;
 	float m_scaleFactor;
 	Str256 m_windowTitle;
+	bool m_debugLog;
 public:
 	// Internal
 	void m_UpdatePos( Int2 pos ) { m_pos = pos; }
@@ -2276,8 +2281,16 @@ struct MouseState
 	bool leftButton = false;
 	bool middleButton = false;
 	bool rightButton = false;
-	ae::Int2 position = ae::Int2( 0 ); //!< Window space coordinates (ie. not affected by window scale factor)
-	ae::Int2 movement = ae::Int2( 0 ); //!< Window space coordinates (ie. not affected by window scale factor)
+	//! Window space coordinates (ie. not affected by window scale factor). This
+	//! value should be used for cursors etc. and not for calculating changes in
+	//! position. In other words don't subtract mouse position from a previous
+	//! frame. Use ae::MouseState::movement for changes in position.
+	ae::Int2 position = ae::Int2( 0 );
+	//! Window space coordinates (ie. not affected by window scale factor). This
+	//! value should be used for detecting how much the mouse cursor is moved.
+	//! Cursor jumps are filtered when the mouse is captured and when the window
+	//! becomes active.
+	ae::Int2 movement = ae::Int2( 0 );
 	ae::Vec2 scroll = ae::Vec2( 0.0f );
 	bool usingTouch = false;
 };
@@ -12791,7 +12804,7 @@ template <> uint32_t GetHash( ae::Int3 key )
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
 // @TODO: Cleanup namespace
-LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
 	ae::Window* window = (ae::Window*)GetWindowLongPtr( hWnd, GWLP_USERDATA );
 	switch ( msg )
@@ -12810,18 +12823,26 @@ LRESULT CALLBACK WinProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 			window->window = hWnd;
 			break;
 		}
+		case WM_MOVE:
+		{
+			ae::Int2 pos( (int16_t)LOWORD( lParam ), (int16_t)HIWORD( lParam ) );
+			window->m_UpdatePos( pos );
+			if ( window->GetLoggingEnabled() ) { AE_INFO( "window pos #", pos ); }
+			break;
+		}
 		case WM_SIZE:
 		{
 			uint32_t width = LOWORD( lParam );
 			uint32_t height = HIWORD( lParam );
-			window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor
+			window->m_UpdateSize( width, height, 1.0f ); // @TODO: Scale factor with PROCESS_DPI_AWARENESS
 			switch ( wParam )
 			{
 				case SIZE_MAXIMIZED:
 					window->m_UpdateMaximized( true );
+					if ( window->GetLoggingEnabled() ) { AE_INFO( "maximize # #", width, height ); }
 					break;
-				case SIZE_MINIMIZED:
-				case SIZE_RESTORED:
+				default:
+					if ( window->GetLoggingEnabled() ) { AE_INFO( "unmaximize # #", width, height ); }
 					window->m_UpdateMaximized( false );
 					break;
 			}
@@ -12988,7 +13009,7 @@ void Window::m_Initialize()
 	memset( &ex, 0, sizeof( ex ) );
 	ex.cbSize = sizeof( ex );
 	ex.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-	ex.lpfnWndProc = WinProc;
+	ex.lpfnWndProc = WndProc;
 	ex.hInstance = hinstance;
 	ex.hIcon = LoadIcon( NULL, IDI_APPLICATION );
 	ex.hCursor = LoadCursor( NULL, IDC_ARROW );
@@ -13004,16 +13025,41 @@ void Window::m_Initialize()
 	windowStyle |= WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
 
 	RECT windowRect;
-	windowRect.left = 0;
-	windowRect.right = GetWidth();
-	windowRect.top = 0;
-	windowRect.bottom = GetHeight();
-	bool windowSuccess = AdjustWindowRectEx( &windowRect, windowStyle, false, 0 );
-	AE_ASSERT( windowSuccess );
-	m_width = ( windowRect.right - windowRect.left );
-	m_height = ( windowRect.bottom - windowRect.top );
+	//windowRect.left = m_pos.x;
+	//windowRect.right = m_pos.x + GetWidth();
+	//windowRect.top = m_pos.y;
+	//windowRect.bottom = m_pos.y + GetHeight();
+	bool windowSuccess = false;// AdjustWindowRectEx( &windowRect, windowStyle, false, 0 );
+	////AE_ASSERT( windowSuccess );
+	////m_width = ( windowRect.right - windowRect.left );
+	////m_height = ( windowRect.bottom - windowRect.top );
+	//{
+	//	LPRECT prc = &windowRect;
+	//	int         w = prc->right - prc->left;
+	//	int         h = prc->bottom - prc->top;
 
-	HWND hwnd = CreateWindowEx( 0, WNDCLASSNAME, L"Window", WS_OVERLAPPEDWINDOW, 0, 0, GetWidth(), GetHeight(), NULL, NULL, hinstance, this );
+	//	// get the nearest monitor to the passed rect. 
+	//	HMONITOR hMonitor = MonitorFromRect( prc, MONITOR_DEFAULTTONEAREST );
+
+	//	// get the work area or entire monitor rect. 
+	//	MONITORINFO mi;
+	//	memset( &mi, 0, sizeof(mi) );
+	//	mi.cbSize = sizeof( mi );
+	//	GetMonitorInfo( hMonitor, &mi );
+
+	//	RECT rc;
+	//	//if ( flags & MONITOR_WORKAREA )
+	//		rc = mi.rcWork;
+	//	//else
+	//	//	rc = mi.rcMonitor;
+
+	//	prc->left = max( rc.left, min( rc.right - w, prc->left ) );
+	//	prc->top = max( rc.top, min( rc.bottom - h, prc->top ) );
+	//	prc->right = prc->left + w;
+	//	prc->bottom = prc->top + h;
+	//}
+
+	HWND hwnd = CreateWindowEx( 0, WNDCLASSNAME, L"Window", WS_OVERLAPPEDWINDOW, m_pos.x, m_pos.y, GetWidth(), GetHeight(), NULL, NULL, hinstance, this );
 	AE_ASSERT_MSG( hwnd, "Failed to create window. Error: #", GetLastError() );
 
 	windowSuccess = GetClientRect( hwnd, &windowRect );
@@ -13456,20 +13502,6 @@ EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEven
 	}
 	return true;
 }
-#elif _AE_WINDOWS_
-// @TODO: Window hover flag
-//void _ae_HandleMouseEnterExit( Window* window, uint32_t flags )
-//{
-//	AE_ASSERT( window );
-//	AE_ASSERT( window->window );
-//	TRACKMOUSEEVENT trackMouse;
-//	trackMouse.cbSize = sizeof( trackMouse );
-//	trackMouse.dwFlags = flags;
-//	trackMouse.hwndTrack = (HWND)window->window;
-//	trackMouse.dwHoverTime = HOVER_DEFAULT;
-//	bool trackMouseSuccess = TrackMouseEvent( &trackMouse );
-//	AE_ASSERT( trackMouseSuccess );
-//}
 #endif
 
 void Input::Initialize( Window* window )
@@ -13485,8 +13517,6 @@ void Input::Initialize( Window* window )
 #if _AE_EMSCRIPTEN_
 	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
 	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
-#elif _AE_WINDOWS_
-	//_ae_HandleMouseEnterExit( m_window, TME_HOVER | TME_LEAVE ); // @TODO: Window hover flag
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -13536,17 +13566,6 @@ void Input::Pump()
 		{
 			quit = true;
 		}
-		else if ( msg.message == WM_MOUSEMOVE ) // @TODO: Hover start
-		{
-			ae::Int2 pos( GET_X_LPARAM( msg.lParam ), GET_Y_LPARAM( msg.lParam ) );
-			pos.y = m_window->GetHeight() - pos.y;
-			m_SetMousePos( pos );
-		}
-		//else if ( msg.message == WM_MOUSELEAVE ) // @TODO: Hover end
-		//{
-		//	AE_INFO( "WM_MOUSELEAVE" );
-		//	_ae_HandleMouseEnterExit( m_window, TME_HOVER ); // Reset tracking
-		//}
 		else if ( m_window->GetFocused() )
 		{
 			switch ( msg.message )
@@ -13606,6 +13625,29 @@ void Input::Pump()
 		}
 		TranslateMessage( &msg );
 		DispatchMessage( &msg );
+	}
+	// Update mouse pos
+	bool mouseJustSet = false; // Don't set m_positionSet because m_SetMousePos() checks it
+	if ( m_window )
+	{
+		POINT mouseWindowPt;
+		if ( GetCursorPos( &mouseWindowPt ) )
+		{
+			if ( ScreenToClient( (HWND)m_window->window, &mouseWindowPt ) )
+			{
+				ae::RectInt windowRect = ae::RectInt::FromPointAndSize( 0, 0, m_window->GetWidth(), m_window->GetHeight() );
+				ae::Int2 localMouse( mouseWindowPt.x, m_window->GetHeight() - mouseWindowPt.y );
+				if ( windowRect.Contains( localMouse ) )
+				{
+					m_SetMousePos( localMouse );
+					mouseJustSet = true;
+				}
+			}
+		}
+	}
+	if ( !mouseJustSet )
+	{
+		m_positionSet = false;
 	}
 #elif _AE_OSX_
 	@autoreleasepool
@@ -13716,26 +13758,38 @@ void Input::Pump()
 			}
 			[NSApp sendEvent:event];
 		}
-		
-		if ( m_captureMouse && m_window )
+	}
+#endif
+
+	// Mouse capture
+	if ( m_captureMouse && m_window )
+	{
+		// Calculate center in case the window height is an odd number
+		ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
+#if _AE_WINDOWS_
 		{
-			NSWindow* nsWindow = (NSWindow*)m_window->window;
-			ae::Int2 posWindow( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-			NSPoint posScreen = [nsWindow convertPointToScreen:NSMakePoint( posWindow.x, posWindow.y )];
+			POINT centerPt = { localCenter.x, m_window->GetHeight() - localCenter.y };
+			if ( ClientToScreen( (HWND)m_window->window, &centerPt ) )
+			{
+				SetCursorPos( centerPt.x, centerPt.y );
+			}
+		}
+#elif _AE_OSX_
+		@autoreleasepool
+		{
+			NSWindow * nsWindow = (NSWindow*)m_window->window;
+			NSPoint posScreen = [ nsWindow convertPointToScreen : NSMakePoint( localCenter.x, localCenter.y ) ];
 			// @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
 			posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
 			CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
 			CGAssociateMouseAndMouseCursorPosition( true );
-			
-			if ( m_positionSet )
-			{
-				mouse.movement = mouse.position - posWindow;
-			}
-			mouse.position = posWindow;
-			m_positionSet = true;
 		}
-	}
 #endif
+		// Mouse pos is previously set elsewhere, so when the mouse position is set
+		// to the window center the movement vector needs to be reversed.
+		m_SetMousePos( localCenter );
+		mouse.movement = -mouse.movement;
+	}
 
 #if _AE_WINDOWS_
 #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
@@ -14227,26 +14281,29 @@ void Input::SetMouseCaptured( bool enable )
 		return;
 	}
 	
-#if _AE_APPLE_
 	if( enable != m_captureMouse )
 	{
 		m_positionSet = false;
 		if ( enable )
 		{
-			m_capturedMousePos = mouse.position + m_window->GetPosition();
+#if _AE_WINDOWS_
+			ShowCursor( FALSE );
+#elif _AE_APPLE_
 			CGDisplayHideCursor( kCGDirectMainDisplay );
+#endif
 		}
 		else
 		{
-			m_SetMousePos( m_capturedMousePos );
+#if _AE_WINDOWS_
+			ShowCursor( TRUE );
+#elif _AE_APPLE_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
-			float nsCapturedMouseY = NSMaxY( NSScreen.screens[ 0 ].frame ) - m_capturedMousePos.y;
-			CGWarpMouseCursorPosition( CGPointMake( m_capturedMousePos.x, nsCapturedMouseY ) );
-		}
-	}
+			//float nsCapturedMouseY = NSMaxY( NSScreen.screens[ 0 ].frame ) - m_capturedMousePos.y;
+			//CGWarpMouseCursorPosition( CGPointMake( m_capturedMousePos.x, nsCapturedMouseY ) );
 #endif
-	
-	m_captureMouse = enable;
+		}
+		m_captureMouse = enable;
+	}
 }
 
 void Input::SetTextMode( bool enabled )
@@ -14283,7 +14340,6 @@ bool Input::GetPrev( ae::Key key ) const
 void Input::m_SetMousePos( ae::Int2 pos )
 {
 	AE_ASSERT( m_window );
-	pos -= m_window->GetPosition();
 	if ( m_positionSet )
 	{
 		mouse.movement = pos - mouse.position;
@@ -15248,6 +15304,17 @@ void FileSystem::AppendToPath( Str256* path, const char* str )
 	if ( !path )
 	{
 		return;
+	}
+
+	// Fix existing path for platform
+	const char otherSeparator = ( AE_PATH_SEPARATOR == '/' ) ? '\\' : '/';
+	for ( uint32_t i = 0; i < path->Length(); i++ )
+	{
+		char& c = path->operator[]( i );
+		if ( c == otherSeparator )
+		{
+			c = AE_PATH_SEPARATOR;
+		}
 	}
 	
 	// @TODO: Handle paths that already have a file name and extension
@@ -16577,7 +16644,11 @@ void ( *glBufferData ) ( GLenum target, GLsizeiptr size, const void *data, GLenu
 void ( *glBufferSubData ) ( GLenum target, GLintptr offset, GLsizeiptr size, const void *data ) = nullptr;
 void ( *glEnableVertexAttribArray ) ( GLuint index ) = nullptr;
 void ( *glVertexAttribPointer ) ( GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer ) = nullptr;
-void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void *userParam ) = nullptr;
+void ( *glVertexAttribDivisor )( GLuint index, GLuint divisor ) = nullptr;
+void ( *glDrawElementsInstanced )( GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount ) = nullptr;
+void ( *glDrawArraysInstanced )( GLenum mode, GLint first, GLsizei count, GLsizei instancecount ) = nullptr;
+// Debug functions
+void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam ) = nullptr;
 #endif
 
 #if _AE_EMSCRIPTEN_
@@ -16871,15 +16942,6 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 
 	m_vertexShader = m_LoadShader( vertexStr, Type::Vertex, defines, defineCount );
 	m_fragmentShader = m_LoadShader( fragStr, Type::Fragment, defines, defineCount );
-
-	if ( !m_vertexShader )
-	{
-		AE_ERR( "Failed to load vertex shader! #", vertexStr );
-	}
-	if ( !m_fragmentShader )
-	{
-		AE_ERR( "Failed to load fragment shader! #", fragStr );
-	}
 
 	if ( !m_vertexShader || !m_fragmentShader )
 	{
@@ -17271,10 +17333,12 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	glGetShaderiv( shader, GL_COMPILE_STATUS, &status );
 	if ( status == GL_FALSE )
 	{
+		const char* typeStr = ( type == Type::Vertex ? "vertex" : "fragment" );
+		AE_ERR( "Failed to load # shader! #", typeStr, shaderStr );
+
 		GLint logLength;
 		glGetShaderiv( shader, GL_INFO_LOG_LENGTH, &logLength );
 
-		const char* typeStr = ( type == Type::Vertex ? "vertex" : "fragment" );
 		if ( logLength > 0 )
 		{
 			unsigned char* log = new unsigned char[ logLength ];
@@ -18697,6 +18761,9 @@ void GraphicsDevice::Initialize( class Window* window )
 	LOAD_OPENGL_FN( glBufferSubData );
 	LOAD_OPENGL_FN( glEnableVertexAttribArray );
 	LOAD_OPENGL_FN( glVertexAttribPointer );
+	LOAD_OPENGL_FN( glVertexAttribDivisor );
+	LOAD_OPENGL_FN( glDrawElementsInstanced );
+	LOAD_OPENGL_FN( glDrawArraysInstanced );
 	// Debug functions
 	LOAD_OPENGL_FN( glDebugMessageCallback );
 	AE_CHECK_GL_ERROR();
