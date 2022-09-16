@@ -2136,7 +2136,7 @@ private:
 	bool m_focused;
 	float m_scaleFactor;
 	Str256 m_windowTitle;
-	bool m_debugLog;
+	bool m_debugLog = false;
 public:
 	// Internal
 	void m_UpdatePos( Int2 pos ) { m_pos = pos; }
@@ -9923,9 +9923,18 @@ T* ae::Cast( C* obj )
 	#include <filesystem> // @HACK: Shouldn't need this just for Windows
 	#include <timeapi.h>
 	#include <xinput.h>
+	#pragma comment (lib, "Comdlg32.lib")
+	#pragma comment (lib, "Gdi32.lib")
+	#pragma comment (lib, "Imm32.lib")
+	#pragma comment (lib, "Ole32.lib")
+	#pragma comment (lib, "Setupapi.lib")
+	#pragma comment (lib, "Shell32.lib")
+	#pragma comment (lib, "User32.lib")
+	#pragma comment (lib, "version.lib")
 	#pragma comment (lib, "Winmm.lib")
 	#pragma comment (lib, "Ws2_32.lib")
 	#pragma comment (lib, "XInput.lib")
+	#pragma comment (lib, "OpenGL32.lib")
 	#ifndef AE_USE_OPENAL
 		#define AE_USE_OPENAL 0
 	#endif
@@ -13558,7 +13567,9 @@ void Input::Pump()
 #if _AE_WINDOWS_
 	m_window->m_UpdateFocused( m_window->window == GetFocus() );
 	// @TODO: Use GameInput https://docs.microsoft.com/en-us/gaming/gdk/_content/gc/input/porting/input-porting-xinput#optimizingSection
+#pragma warning( disable : 4995 ) // Disable deprecation warnings for XInput
 	XInputEnable( m_window->GetFocused() );
+#pragma warning( enable : 4995 ) // Enable deprecation warnings
 	MSG msg; // Get messages for current thread
 	while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
 	{

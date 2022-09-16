@@ -23,6 +23,8 @@ A complete working example showing a window with a purple background:
 
 `main.cpp`
 ```
+#define AE_MAIN
+#define AE_USE_MODULES
 #include "aether.h"
 
 int main()
@@ -64,9 +66,19 @@ TODO:
 ```
 
 ## Building on Windows
-TODO:
+Install visual studio. Press the Start button then find and run `Developer Command Prompt for VS 20XX`. Run the following to download this repository:
 ```
-// todo
+c:
+cd C:\
+git clone https://github.com/johnhues/aether-game-utils.git
+```
+Create a file called `main.cpp` with the above contents and build it with:
+```
+cl /std:c++17 -D_UNICODE -DUNICODE /I C:\aether-game-utils main.cpp
+```
+Run the example with:
+```
+main.exe
 ```
 
 ## Building with Emscripten
