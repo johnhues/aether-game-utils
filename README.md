@@ -18,7 +18,7 @@ Modules and utilities include:
 * Serialization
 * Sockets
 
-## Example Source
+# Example
 A complete working example showing a window with a purple background:
 
 `main.cpp`
@@ -60,29 +60,21 @@ int main()
 ```
 
 ## Building on Mac
-TODO:
 ```
 // todo
 ```
 
 ## Building on Windows
-Install visual studio. Press the Start button then find and run `Developer Command Prompt for VS 20XX`. Run the following to download this repository:
+Download the repository with:
 ```
-c:
-cd C:\
-git clone https://github.com/johnhues/aether-game-utils.git
+git clone https://github.com/johnhues/aether-game-utils.git C:\aether-game-utils
 ```
-Create a file called `main.cpp` with the above contents and build it with:
+Create a file called `main.cpp` with the above contents. With Visual Studio installed, right click in the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
 cl /std:c++17 -D_UNICODE -DUNICODE /I C:\aether-game-utils main.cpp
 ```
-Run the example with:
-```
-main.exe
-```
 
 ## Building with Emscripten
-TODO:
 ```
 // todo
 ```
@@ -90,7 +82,7 @@ TODO:
 ## Building on Linux
 All utilities are currently supported on Linux except for windowing and graphics. Full windowing and graphics support is planned.
 
-## Games using aether game utils
+# Games using aether game utils
 [Bella Lunaux: The Case of the Diamond Panther Tiara](https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html)
 
 <a href="https://v6p9d9t4.ssl.hwcdn.net/html/5321468/index.html"><img src="https://img.itch.zone/aW1hZ2UvOTQzMzU2LzUzNDY4NTMucG5n/original/%2BypGAU.png" width="250"></a>
@@ -99,7 +91,7 @@ All utilities are currently supported on Linux except for windowing and graphics
 
 [See on Itch.io](https://johnhues.itch.io/bella-lunaux-tiara)
 
-## Dependencies
+# Dependencies
 * [Catch2](https://github.com/catchorg/Catch2) (Test framework)
 * [ENet](http://enet.bespin.org/) (Optional)
 * [OpenAL](https://github.com/kcat/openal-soft) (Optional)
