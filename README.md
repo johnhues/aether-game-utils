@@ -22,7 +22,7 @@ Modules and utilities include:
 # Example
 A complete working example showing a window with a purple background:
 
-`main.cpp`
+`main.cpp` (or `main.mm` on Mac)
 ```
 #define AE_MAIN
 #define AE_USE_MODULES
@@ -61,8 +61,13 @@ int main()
 ```
 
 ## Building on Mac
+Download the repository with:
 ```
-// todo
+git clone https://github.com/johnhues/aether-game-utils.git ~/aether-game-utils
+```
+Create a file called `main.mm` with the above contents. Open the `Terminal` application. Type `cd ` (with a space after) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
+```
+clang++ -std=c++17 -fmodules -fcxx-modules -I ~/aether-game-utils main.mm
 ```
 
 ## Building on Windows
