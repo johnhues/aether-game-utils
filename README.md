@@ -8,6 +8,7 @@ Modules and utilities include:
 * Allocation
 * C++ reflection
 * Data structures
+* File IO
 * Frame rate control and timing
 * Geometry and collision detection
 * Graphics and windowing

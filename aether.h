@@ -30,7 +30,7 @@
 // Optionally you can define AE_USE_MODULES so linking system dependencies such
 // as OpenGL will be handled for you.
 //
-// Recommentations:
+// Recommendations:
 // For bigger projects it's worth defining AE_MAIN in it's own module to limit the
 // number of dependencies brought into your own code. For instance 'Windows.h'
 // is included with AE_MAIN and this can easily cause naming conflicts with
@@ -970,7 +970,7 @@ private:
 // Geometry helpers
 //------------------------------------------------------------------------------
 bool IntersectRayTriangle( ae::Vec3 p, ae::Vec3 ray, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c, bool ccw, bool cw, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut );
-Vec3 ClosestPtPointTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c );
+Vec3 ClosestPointOnTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c );
 
 //! @} End Math group
 
@@ -1296,9 +1296,9 @@ public:
 	HashMap();
 	//! Constructor for a hash map with dynamically allocated storage (N == 0).
 	HashMap( ae::Tag pool );
-	//! Expands the storage if necessary so a \p count number of key/index pairs
+	//! Expands the storage if necessary so a \p size number of key/index pairs
 	//! can be added without any internal allocations. Asserts if using static
-	//! storage and \p count is less than N.
+	//! storage and \p size is greater than N.
 	void Reserve( uint32_t size );
 	
 	HashMap( const HashMap< N >& other );
@@ -1579,6 +1579,9 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::FreeList class
+//! ae::FreeList can be used along side a separate data array to track allocated
+//! elements. Given a size, ae::FreeList allows allocation and release of array
+//! indices from 0 to size - 1.
 //------------------------------------------------------------------------------
 template< uint32_t N = 0 >
 class FreeList
@@ -2529,7 +2532,7 @@ public:
 	//! value will disable the timeout.
 	const ae::File* Read( const char* url, float timeoutSec );
 	//! Retry if reading or writing of the given \p file did not finish
-	//! successfully. It's recomended (but not necessary) that you call this
+	//! successfully. It's recommended (but not necessary) that you call this
 	//! function only when a file has the status ae::File::Status::Timeout, and
 	//! then you might want back off with a longer \p timeoutSec. Calling this
 	//! function on an ae::File that is successfully loaded or pending will have
@@ -11125,7 +11128,7 @@ bool Sphere::IntersectRay( Vec3 origin, Vec3 direction, Vec3* pOut, float* tOut 
 
 bool Sphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const
 {
-	ae::Vec3 closest = ClosestPtPointTriangle( center, t0, t1, t2 );
+	ae::Vec3 closest = ClosestPointOnTriangle( center, t0, t1, t2 );
 	if ( ( closest - center ).LengthSquared() <= radius * radius )
 	{
 	if ( outNearestIntersectionPoint )
@@ -11826,7 +11829,7 @@ bool IntersectRayTriangle( Vec3 p, Vec3 ray, Vec3 a, Vec3 b, Vec3 c, bool ccw, b
 	return true;
 }
 
-ae::Vec3 ClosestPtPointTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c )
+ae::Vec3 ClosestPointOnTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c )
 {
 	ae::Vec3 ab = b - a;
 	ae::Vec3 ac = c - a;
