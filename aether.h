@@ -2555,7 +2555,7 @@ public:
 	bool CreateFolder( Root root, const char* folderPath ) const;
 	void ShowFolder( Root root, const char* folderPath ) const;
 
-	// Static member functions intended to be used when not creating a  instance
+	// Static member functions intended to be used when not creating a instance
 	static uint32_t GetSize( const char* filePath );
 	static uint32_t Read( const char* filePath, void* buffer, uint32_t bufferSize );
 	static uint32_t Write( const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs );
@@ -2853,29 +2853,29 @@ const uint32_t _kMaxShaderAttributeCount = 16;
 const uint32_t _kMaxShaderAttributeNameLength = 16;
 const uint32_t _kMaxShaderDefines = 4;
 class InstanceData;
-
-//------------------------------------------------------------------------------
-//! Backface culling mode. ClockwiseFront front specifies that triangles with
-//! clockwise winding should be visible. CounterclockwiseFront front specifies
-//! that triangles with counter-clockwise winding should be visible.
-//------------------------------------------------------------------------------
 enum class Culling { None, ClockwiseFront, CounterclockwiseFront };
 
 class Shader
 {
 public:
-	// Constants
 	enum class Type { Vertex, Fragment };
-	
-	// Interface
 	Shader();
 	~Shader();
+
 	void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
 	void Terminate();
+	//! Enable alpha blending. Defaults to false.
 	void SetBlending( bool enabled ) { m_blending = enabled; }
+	//! Enable depth testing. Defaults to false.
 	void SetDepthTest( bool enabled ) { m_depthTest = enabled; }
+	//! Enable writing to depth buffer. Defaults to false.
 	void SetDepthWrite( bool enabled ) { m_depthWrite = enabled; }
+	//! Sets the backface culling mode. ClockwiseFront front specifies that
+	//! triangles with clockwise winding should be visible. CounterclockwiseFront
+	//! front specifies that triangles with counter-clockwise winding should be
+	//! visible. Defaults to None.
 	void SetCulling( Culling culling ) { m_culling = culling; }
+	//! Enable wireframe rendering mode. Defaults to false.
 	void SetWireframe( bool enabled ) { m_wireframe = enabled; }
 	void SetBlendingPremul( bool enabled ) { m_blendingPremul = enabled; }
 
