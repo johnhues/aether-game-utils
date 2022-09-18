@@ -23,7 +23,7 @@ Modules and utilities include:
 A complete working example showing a window with a purple background:
 
 `main.cpp` (or `main.mm` on Mac)
-```
+```cpp
 #define AE_MAIN
 #define AE_USE_MODULES
 #include "aether.h"
