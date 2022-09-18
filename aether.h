@@ -2546,6 +2546,11 @@ public:
 	void DestroyAll();
 	const ae::File* GetFile( uint32_t idx ) const;
 	uint32_t GetFileCount() const;
+	//! Returns true if any ae::File reads are pending. Returns false if file
+	//! count is zero.
+	bool AnyPending() const;
+	//! Returns true if all ae::File reads have succeeded or if file count is zero.
+	bool AllSuccess() const;
 
 	// Member functions for use of Root directories
 	bool GetRootDir( Root root, Str256* outDir ) const;
@@ -14931,6 +14936,30 @@ const File* FileSystem::GetFile( uint32_t idx ) const
 uint32_t FileSystem::GetFileCount() const
 {
 	return m_files.Length();
+}
+
+bool FileSystem::AnyPending() const
+{
+	for ( auto file : m_files )
+	{
+		if ( file->GetStatus() == File::Status::Pending )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool FileSystem::AllSuccess() const
+{
+	for ( auto file : m_files )
+	{
+		if ( file->GetStatus() != File::Status::Success )
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 bool FileSystem::GetRootDir( Root root, Str256* outDir ) const

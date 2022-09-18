@@ -42,26 +42,28 @@ const char kVertexShader[] = R"(
 )";
 
 const char kFragmentShader[] = R"(
-	// AE_UNIFORM sampler2D u_tex;
+	AE_UNIFORM sampler2D u_tex;
 	AE_IN_HIGHP vec2 v_uv;
 	void main()
 	{
-		AE_COLOR = vec4( 1, 0, 0, 1 );
+		AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );
 	}
 )";
 
 int main()
 {
+	// Initialization
 	ae::Window window;
 	ae::GraphicsDevice graphicsDevice;
 	ae::Input input;
 	ae::FileSystem fileSystem;
 	ae::TimeStep timeStep;
 	ae::OBJFile obj = TAG_EXAMPLE;
+	ae::TargaFile checkerTarga = TAG_EXAMPLE;
 	ae::Shader shader;
 	ae::VertexArray vertexData;
+	ae::Texture2D tex;
 	ae::CollisionMesh<> collisionMesh = TAG_EXAMPLE;
-
 	window.Initialize( 1280, 800, false, true );
 	window.SetTitle( "Game" );
 	graphicsDevice.Initialize( &window );
@@ -69,65 +71,62 @@ int main()
 	fileSystem.Initialize( "", "ae", "Game" );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	const ae::File* file = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
-	while ( file->GetStatus() == ae::File::Status::Pending ) { sleep( 0 ); }
-	if ( file->GetStatus() != ae::File::Status::Success )
-	{
-		ae::ShowMessage( "Could not load 'level.obj'" );
-		std::exit( EXIT_FAILURE );
-	}
-	obj.Load( file->GetData(), file->GetLength() );
+	// Load resources
+	const ae::File* geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
+	const ae::File* textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
+	while ( fileSystem.AnyPending() ) { std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) ); }
+	if ( !fileSystem.AllSuccess() ) { std::exit( EXIT_FAILURE ); }
+	obj.Load( geoFile->GetData(), geoFile->GetLength() );
+	obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
 	obj.InitializeVertexData( { &vertexData } );
 	vertexData.Upload();
+	checkerTarga.Load( textureFile->GetData(), textureFile->GetLength() );
+	tex.Initialize( checkerTarga.textureParams );
 	shader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
 	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 	shader.SetDepthWrite( true );
 	shader.SetDepthTest( true );
-	obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
 
-	ae::Vec3 pos = ae::Vec3( 0.0f );
-	ae::Vec3 vel = ae::Vec3( 0.0f );
+	// Game state
+	ae::PushOutInfo player;
+	player.sphere.radius = 0.75f;
+	player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
 	float angle = 0.0f;
 	float angularVel = 0.0f;
 	while ( !input.quit )
 	{
+		// Update input and physics
 		input.Pump();
+		player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, timeStep.GetDt(), ae::Vec2( 0.0f ) ) );
+		angularVel = ae::DtLerp( angularVel, 3.5f, timeStep.GetDt(), 0.0f );
+		ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
+		if ( input.Get( ae::Key::Up ) ) { player.velocity += forward * timeStep.GetDt() * 25.0f; }
+		if ( input.Get( ae::Key::Down ) ) { player.velocity -= forward * timeStep.GetDt() * 25.0f; }
+		if ( input.Get( ae::Key::Left ) ) { angularVel += timeStep.GetDt() * 15.0f; }
+		if ( input.Get( ae::Key::Right ) ) { angularVel -= timeStep.GetDt() * 15.0f; }
+		player.velocity.y -= timeStep.GetDt() * 20.0f;
+		player.sphere.center += player.velocity * timeStep.GetDt();
+		angle += angularVel * timeStep.GetDt();
+		player = collisionMesh.PushOut( ae::PushOutParams(), player );
+
+		// Render frame
+		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( player.sphere.center, forward, ae::Vec3( 0, 1, 0 ) );
+		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, graphicsDevice.GetAspectRatio(), 0.5f, 1000.0f );
 		graphicsDevice.Activate();
 		graphicsDevice.Clear( ae::Color::Black() );
-
-		vel = ae::DtLerp( vel, 2.0f, timeStep.GetDt(), ae::Vec3( 0.0f ) );
-		angularVel = ae::DtLerp( angularVel, 3.0f, timeStep.GetDt(), 0.0f );
-		ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
-		if ( input.Get( ae::Key::Up ) ) { vel += forward * timeStep.GetDt() * 20.0f; }
-		if ( input.Get( ae::Key::Down ) ) { vel -= forward * timeStep.GetDt() * 20.0f; }
-		if ( input.Get( ae::Key::Left ) ) { angularVel += timeStep.GetDt() * 10.0f; }
-		if ( input.Get( ae::Key::Right ) ) { angularVel -= timeStep.GetDt() * 10.0f; }
-		pos += vel * timeStep.GetDt();
-		angle += angularVel * timeStep.GetDt();
-
-		ae::PushOutInfo info;
-		info.sphere.center = pos;
-		info.sphere.radius = 0.75f;
-		info.velocity = vel;
-		info = collisionMesh.PushOut( ae::PushOutParams(), info );
-		pos = info.sphere.center;
-		vel = info.velocity;
-
 		ae::UniformList uniforms;
-		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( pos, forward, ae::Vec3( 0, 1, 0 ) );
-		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, graphicsDevice.GetAspectRatio(), 0.5f, 1000.0f );
 		uniforms.Set( "u_worldToProj", viewToProj * worldToView );
+		uniforms.Set( "u_tex", &tex );
 		vertexData.Draw( &shader, uniforms );
-
 		graphicsDevice.Present();
 		timeStep.Wait();
 	}
 
-	fileSystem.Destroy( file );
+	// Terminate
+	fileSystem.DestroyAll();
 	input.Terminate();
 	graphicsDevice.Terminate();
 	window.Terminate();
-
 	return 0;
 }
 ```
@@ -137,7 +136,7 @@ Download the repository with:
 ```
 git clone https://github.com/johnhues/aether-game-utils.git ~/aether-game-utils
 ```
-Create a file called `main.mm` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj), placing them in the same folder. Open the `Terminal` application. Type `cd ` (with a space after) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
+Create a file called `main.mm` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga), placing them in the same folder. Open the `Terminal` application. Type `cd ` (with a space after) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
 ```
 clang++ -std=c++17 -fmodules -fcxx-modules -I ~/aether-game-utils main.mm
 ```
@@ -147,7 +146,7 @@ Download the repository with:
 ```
 git clone https://github.com/johnhues/aether-game-utils.git C:\aether-game-utils
 ```
-Create a file called `main.cpp` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj), placing them in the same folder. With Visual Studio installed, right click in the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
+Create a file called `main.cpp` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga), placing them in the same folder. With Visual Studio installed, right click in the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
 cl /std:c++17 -D_UNICODE -DUNICODE /I C:\aether-game-utils main.cpp
 ```
