@@ -137,7 +137,7 @@ Download the repository with:
 ```
 git clone https://github.com/johnhues/aether-game-utils.git ~/aether-game-utils
 ```
-Create a file called `main.mm` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/bunny.obj), placing them in the same folder. Open the `Terminal` application. Type `cd ` (with a space after) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
+Create a file called `main.mm` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj), placing them in the same folder. Open the `Terminal` application. Type `cd ` (with a space after) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
 ```
 clang++ -std=c++17 -fmodules -fcxx-modules -I ~/aether-game-utils main.mm
 ```
@@ -147,7 +147,7 @@ Download the repository with:
 ```
 git clone https://github.com/johnhues/aether-game-utils.git C:\aether-game-utils
 ```
-Create a file called `main.cpp` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/bunny.obj), placing them in the same folder. With Visual Studio installed, right click in the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
+Create a file called `main.cpp` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj), placing them in the same folder. With Visual Studio installed, right click in the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
 cl /std:c++17 -D_UNICODE -DUNICODE /I C:\aether-game-utils main.cpp
 ```
