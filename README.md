@@ -1,5 +1,5 @@
 # aether game utils
-`aether.h` is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
+[`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development
 * Providing utilities that naturally conform to game development best practices
 * Not overstepping or emposing a particular game engine architecture
@@ -20,7 +20,7 @@ Modules and utilities include:
 * Sockets
 
 # Example
-A complete working example showing a window with a purple background:
+The following are instructions to get started with aether-game-utils. This example is a single source file which only includes [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) (which handles linking the required system libraries). It is a complete first person exploration experience with textured geometry and basic kinematic physics. Use the arrow keys to move.
 
 `main.cpp` (or `main.mm` on Mac)
 ```cpp
@@ -28,27 +28,8 @@ A complete working example showing a window with a purple background:
 #define AE_USE_MODULES
 #include "aether.h"
 const ae::Tag TAG_EXAMPLE = "example";
-
-const char kVertexShader[] = R"(
-	AE_UNIFORM_HIGHP mat4 u_worldToProj;
-	AE_IN_HIGHP vec3 a_position;
-	AE_IN_HIGHP vec2 a_uv;
-	AE_OUT_HIGHP vec2 v_uv;
-	void main()
-	{
-		v_uv = a_uv;
-		gl_Position = u_worldToProj * vec4( a_position, 1.0 );
-	}
-)";
-
-const char kFragmentShader[] = R"(
-	AE_UNIFORM sampler2D u_tex;
-	AE_IN_HIGHP vec2 v_uv;
-	void main()
-	{
-		AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );
-	}
-)";
+extern const char* kVertexShader;
+extern const char* kFragmentShader;
 
 int main()
 {
@@ -56,36 +37,38 @@ int main()
 	ae::Window window;
 	ae::GraphicsDevice graphicsDevice;
 	ae::Input input;
-	ae::FileSystem fileSystem;
 	ae::TimeStep timeStep;
-	ae::OBJFile obj = TAG_EXAMPLE;
-	ae::TargaFile checkerTarga = TAG_EXAMPLE;
-	ae::Shader shader;
-	ae::VertexArray vertexData;
-	ae::Texture2D tex;
-	ae::CollisionMesh<> collisionMesh = TAG_EXAMPLE;
 	window.Initialize( 1280, 800, false, true );
 	window.SetTitle( "Game" );
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );
-	fileSystem.Initialize( "", "ae", "Game" );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	// Load resources
+	// File loading
+	ae::FileSystem fileSystem;
+	fileSystem.Initialize( "", "ae", "Game" );
 	const ae::File* geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
 	const ae::File* textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
 	while ( fileSystem.AnyPending() ) { std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) ); }
 	if ( !fileSystem.AllSuccess() ) { std::exit( EXIT_FAILURE ); }
+	ae::OBJFile obj = TAG_EXAMPLE;
+	ae::TargaFile tga = TAG_EXAMPLE;
+	tga.Load( textureFile->GetData(), textureFile->GetLength() );
 	obj.Load( geoFile->GetData(), geoFile->GetLength() );
+
+	// Resources
+	ae::CollisionMesh<> collisionMesh = TAG_EXAMPLE;
+	ae::Shader shader;
+	ae::Texture2D tex;
+	ae::VertexArray vertexData;
 	obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
-	obj.InitializeVertexData( { &vertexData } );
-	vertexData.Upload();
-	checkerTarga.Load( textureFile->GetData(), textureFile->GetLength() );
-	tex.Initialize( checkerTarga.textureParams );
 	shader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
 	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 	shader.SetDepthWrite( true );
 	shader.SetDepthTest( true );
+	tex.Initialize( tga.textureParams );
+	obj.InitializeVertexData( { &vertexData } );
+	vertexData.Upload();
 
 	// Game state
 	ae::PushOutInfo player;
@@ -93,30 +76,35 @@ int main()
 	player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
 	float angle = 0.0f;
 	float angularVel = 0.0f;
+	
 	while ( !input.quit )
 	{
-		// Update input and physics
+		const float dt = ae::Min( timeStep.GetDt(), 0.03f );
+		const ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
+
+		// Input
 		input.Pump();
-		player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, timeStep.GetDt(), ae::Vec2( 0.0f ) ) );
-		angularVel = ae::DtLerp( angularVel, 3.5f, timeStep.GetDt(), 0.0f );
-		ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
-		if ( input.Get( ae::Key::Up ) ) { player.velocity += forward * timeStep.GetDt() * 25.0f; }
-		if ( input.Get( ae::Key::Down ) ) { player.velocity -= forward * timeStep.GetDt() * 25.0f; }
-		if ( input.Get( ae::Key::Left ) ) { angularVel += timeStep.GetDt() * 15.0f; }
-		if ( input.Get( ae::Key::Right ) ) { angularVel -= timeStep.GetDt() * 15.0f; }
-		player.velocity.y -= timeStep.GetDt() * 20.0f;
-		player.sphere.center += player.velocity * timeStep.GetDt();
-		angle += angularVel * timeStep.GetDt();
+		if ( input.Get( ae::Key::Up ) ) { player.velocity += forward * dt * 25.0f; }
+		if ( input.Get( ae::Key::Down ) ) { player.velocity -= forward * dt * 25.0f; }
+		if ( input.Get( ae::Key::Left ) ) { angularVel += dt * 15.0f; }
+		if ( input.Get( ae::Key::Right ) ) { angularVel -= dt * 15.0f; }
+
+		// Physics
+		player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
+		angularVel = ae::DtLerp( angularVel, 3.5f, dt, 0.0f );
+		player.velocity.y -= dt * 20.0f;
+		player.sphere.center += player.velocity * dt;
+		angle += angularVel * dt;
 		player = collisionMesh.PushOut( ae::PushOutParams(), player );
 
-		// Render frame
+		// Rendering
+		ae::UniformList uniforms;
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( player.sphere.center, forward, ae::Vec3( 0, 1, 0 ) );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, graphicsDevice.GetAspectRatio(), 0.5f, 1000.0f );
-		graphicsDevice.Activate();
-		graphicsDevice.Clear( ae::Color::Black() );
-		ae::UniformList uniforms;
 		uniforms.Set( "u_worldToProj", viewToProj * worldToView );
 		uniforms.Set( "u_tex", &tex );
+		graphicsDevice.Activate();
+		graphicsDevice.Clear( ae::Color::Black() );
 		vertexData.Draw( &shader, uniforms );
 		graphicsDevice.Present();
 		timeStep.Wait();
@@ -129,6 +117,27 @@ int main()
 	window.Terminate();
 	return 0;
 }
+
+const char* kVertexShader = R"(
+	AE_UNIFORM_HIGHP mat4 u_worldToProj;
+	AE_IN_HIGHP vec3 a_position;
+	AE_IN_HIGHP vec2 a_uv;
+	AE_OUT_HIGHP vec2 v_uv;
+	void main()
+	{
+		v_uv = a_uv;
+		gl_Position = u_worldToProj * vec4( a_position, 1.0 );
+	}
+)";
+
+const char* kFragmentShader = R"(
+	AE_UNIFORM sampler2D u_tex;
+	AE_IN_HIGHP vec2 v_uv;
+	void main()
+	{
+		AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );
+	}
+)";
 ```
 
 ## Building on Mac
