@@ -13683,8 +13683,11 @@ void Input::Pump()
 			}
 			
 			// Mouse
-			NSPoint p = [NSEvent mouseLocation];
-			m_SetMousePos( ae::Int2( p.x, p.y ) );
+			{
+				NSPoint p = [NSEvent mouseLocation];
+				ae::Int2 windowPos = m_window->GetPosition();
+				m_SetMousePos( ae::Int2( p.x, p.y ) - windowPos );
+			}
 			
 			// @TODO: Can these boundaries be calculated somehow?
 			const bool mouseWithinWindow = mouse.position.x > 2
@@ -13796,7 +13799,7 @@ void Input::Pump()
 #elif _AE_OSX_
 		@autoreleasepool
 		{
-			NSWindow * nsWindow = (NSWindow*)m_window->window;
+			NSWindow* nsWindow = (NSWindow*)m_window->window;
 			NSPoint posScreen = [ nsWindow convertPointToScreen : NSMakePoint( localCenter.x, localCenter.y ) ];
 			// @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
 			posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
@@ -14317,8 +14320,6 @@ void Input::SetMouseCaptured( bool enable )
 			ShowCursor( TRUE );
 #elif _AE_APPLE_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
-			//float nsCapturedMouseY = NSMaxY( NSScreen.screens[ 0 ].frame ) - m_capturedMousePos.y;
-			//CGWarpMouseCursorPosition( CGPointMake( m_capturedMousePos.x, nsCapturedMouseY ) );
 #endif
 		}
 		m_captureMouse = enable;
