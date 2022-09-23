@@ -19261,7 +19261,8 @@ uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t
 				wordRemainder++;
 			}
 
-			if ( lineChars + wordRemainder > lineLength )
+			// If lineChars is 0 then the current word is longer than lineLength
+			if ( lineChars && lineChars + wordRemainder > lineLength )
 			{
 				if ( outStr )
 				{
