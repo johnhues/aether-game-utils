@@ -148,7 +148,6 @@ int main()
 		memcpy( vertices, vertexData.GetVertices< Vertex >(), ( sizeof(Vertex) * vertexData.GetVertexCount() ) );
 	}
 	
-	double animTime = 0.0;
 	const char* handBoneName = "QuickRigCharacter_RightHand";
 	const char* armBoneName = "QuickRigCharacter_RightArm";
 	ae::Matrix4 targetTransform = skin.GetBindPose()->GetBoneByName( handBoneName )->transform;
@@ -182,81 +181,23 @@ int main()
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
 		camera.Update( &input, dt );
 		
-		animTime += dt * 0.01;
-		
 		ae::Skeleton currentPose = TAG_ALL;
 		{
 			currentPose.Initialize( skin.GetBindPose() );
 
-			const ae::Bone* armBone = currentPose.GetBoneByName( armBoneName );
-			const ae::Vec3 targetPos = targetTransform.GetTranslation();
+			ae::IK<> ik = TAG_ALL;
 			ae::Array< const ae::Bone* > bones = TAG_ALL;
-			ae::Array< ae::Vec3 > joints = TAG_ALL;
-			ae::Array< float > jointLengths = TAG_ALL;
+			const ae::Bone* armBone = currentPose.GetBoneByName( armBoneName );
 			for ( auto b = armBone; b; b = b->firstChild )
 			{
 				bones.Append( b );
-				ae::Vec3 p = b->transform.GetTranslation();
-				ae::Vec3 p1 = b->parent->transform.GetTranslation();
-				joints.Append( p );
-				jointLengths.Append( ( p1 - p ).Length() );
+				ik.bones.Append( { b->transform, b->parent->transform.GetTranslation() } );
 			}
-			const ae::Vec3 rootPos = joints[ 0 ];
-			const ae::Vec3 polePos = rootPos + ae::Vec3( -1.0f, 0.0f, -1.0f );
-			const float targetDistance = ( targetPos - rootPos ).Length();
-			float armLength = 0.0f;
-			for ( float f : jointLengths ) { armLength += f; }
+			ik.targetTransform = targetTransform;
+			ik.polePos = ik.bones[ 0 ].transform.GetTranslation() + ae::Vec3( -1.0f, 0.0f, -1.0f );
+			ik.Update( 10 );
 			
-			uint32_t iterationCount = 0;
-			while ( ( joints[ joints.Length() - 1 ] - targetPos ).Length() > 0.1f && iterationCount < 10 )
-			{
-				joints[ joints.Length() - 1 ] = targetPos;
-				for ( int32_t i = joints.Length() - 2; i >= 0; i-- )
-				{
-					ae::Vec3 oldPos = joints[ i ];
-					ae::Vec3 childPos = joints[ i + 1 ];
-					float childBoneLength = jointLengths[ i + 1 ];
-					ae::Vec3 childToOld = ( oldPos - childPos ).SafeNormalizeCopy() * childBoneLength;
-					joints[ i ] = childPos + childToOld;
-				}
-				
-				joints[ 0 ] = rootPos;
-				for ( uint32_t i = 1; i < joints.Length(); i++ )
-				{
-					ae::Vec3 oldPos = joints[ i ];
-					ae::Vec3 parentPos = joints[ i - 1 ];
-					float boneLength = jointLengths[ i ];
-					ae::Vec3 parentToOld = ( oldPos - parentPos ).SafeNormalizeCopy() * boneLength;
-					joints[ i ] = parentPos + parentToOld;
-				}
-				
-				iterationCount++;
-			}
-			
-			ae::Array< ae::Matrix4 > finalTransforms = TAG_ALL;
-			for ( uint32_t i = 0; i < joints.Length() - 1; i++ )
-			{
-				ae::Vec3 boneDir = joints[ i + 1 ] - joints[ i ];
-				const ae::Matrix4 oldTransform = bones[ i ]->transform;
-				ae::Matrix4 newTransform = ae::Matrix4::Identity();
-				
-				ae::Vec3 xAxis = -boneDir.SafeNormalizeCopy();
-				//ae::Vec3 zAxis = xAxis.Cross( polePos - joints[ i ] );
-				//ae::Vec3 yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
-				//zAxis = xAxis.Cross( yAxis ).SafeNormalizeCopy();
-				ae::Vec3 yAxis = oldTransform.GetAxis( 2 ).Cross( xAxis ).SafeNormalizeCopy();
-				ae::Vec3 zAxis = xAxis.Cross( yAxis );
-				yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
-				
-				newTransform.SetAxis( 0, xAxis );
-				newTransform.SetAxis( 1, yAxis );
-				newTransform.SetAxis( 2, zAxis );
-				newTransform.SetTranslation( joints[ i ] );
-				finalTransforms.Append( newTransform );
-			}
-			finalTransforms.Append( targetTransform ).SetTranslation( joints[ joints.Length() - 1 ] );
-			AE_ASSERT( finalTransforms.Length() == bones.Length() );
-			for ( const auto& t : finalTransforms )
+			for ( const auto& t : ik.finalTransforms )
 			{
 				ae::Vec3 p = t.GetTranslation();
 				ae::Vec3 xAxis = t.GetAxis( 0 );
@@ -265,9 +206,9 @@ int main()
 				debugLines.AddLine( p, p + xAxis * 0.2f, ae::Color::Red() );
 				debugLines.AddLine( p, p + yAxis * 0.2f, ae::Color::Green() );
 				debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
-				debugLines.AddLine( p, polePos, ae::Color::Yellow() );
+				debugLines.AddLine( p, ik.polePos, ae::Color::Yellow() );
 			}
-			currentPose.SetTransforms( bones.Begin(), finalTransforms.Begin(), bones.Length() );
+			currentPose.SetTransforms( bones.Begin(), ik.finalTransforms.Begin(), bones.Length() );
 		}
 		
 		// Update mesh

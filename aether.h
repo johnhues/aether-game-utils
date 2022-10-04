@@ -3664,6 +3664,31 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::IK helper struct
+//------------------------------------------------------------------------------
+template < uint32_t NumBones = 0 >
+struct IK
+{
+	IK() = default;
+	IK( ae::Tag tag );
+	void Update( uint32_t iterationCount );
+
+	// Input
+	struct Bone
+	{
+		Bone( const ae::Matrix4& transform, ae::Vec3 parentPos = ae::Vec3( 0.0f ) ) : transform( transform ), parentPos( parentPos ) {}
+		ae::Matrix4 transform;
+		ae::Vec3 parentPos;
+	};
+	const ae::Tag tag;
+	ae::Vec3 polePos = ae::Vec3( 0.0f );
+	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
+	ae::Array< Bone, NumBones > bones;
+	// Output
+	ae::Array< ae::Matrix4, NumBones > finalTransforms;
+};
+
+//------------------------------------------------------------------------------
 // ae::Keyframe struct
 //------------------------------------------------------------------------------
 struct Keyframe
@@ -8619,6 +8644,82 @@ ae::AABB BVH< T, N >::GetAABB() const
 //------------------------------------------------------------------------------
 template < typename T > uint32_t GetHash( T* key ) { return ae::Hash().HashBasicType( key ).Get(); }
 template < uint32_t N > uint32_t GetHash( ae::Str< N > key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
+
+//------------------------------------------------------------------------------
+// ae::IK member functions
+//------------------------------------------------------------------------------
+template < uint32_t NumBones >
+IK< NumBones >::IK( ae::Tag tag ) :
+	tag( tag ),
+	bones( tag ),
+	finalTransforms( tag )
+{}
+
+template < uint32_t NumBones >
+void IK< NumBones >::Update( uint32_t iterationCount )
+{
+	finalTransforms.Clear();
+
+	ae::Array< ae::Vec3, NumBones > joints = tag;
+	ae::Array< float, NumBones > jointLengths = tag;
+	for ( uint32_t i = 0; i < bones.Length(); i++ )
+	{
+		ae::Vec3 p0 = bones[ i ].transform.GetTranslation();
+		ae::Vec3 p1 = bones[ i ].parentPos;
+		joints.Append( p0 );
+		jointLengths.Append( ( p1 - p0 ).Length() );
+	}
+
+	const ae::Vec3 rootPos = joints[ 0 ];
+	const ae::Vec3 targetPos = targetTransform.GetTranslation();
+	const float targetDistance = ( targetPos - rootPos ).Length();
+
+	uint32_t iters = 0;
+	while ( ( joints[ joints.Length() - 1 ] - targetPos ).Length() > 0.001f && iters < iterationCount )
+	{
+		joints[ joints.Length() - 1 ] = targetPos;
+		for ( int32_t i = joints.Length() - 2; i >= 0; i-- )
+		{
+			ae::Vec3 oldPos = joints[ i ];
+			ae::Vec3 childPos = joints[ i + 1 ];
+			float childBoneLength = jointLengths[ i + 1 ];
+			ae::Vec3 childToOld = ( oldPos - childPos ).SafeNormalizeCopy() * childBoneLength;
+			joints[ i ] = childPos + childToOld;
+		}
+		
+		joints[ 0 ] = rootPos;
+		for ( uint32_t i = 1; i < joints.Length(); i++ )
+		{
+			ae::Vec3 oldPos = joints[ i ];
+			ae::Vec3 parentPos = joints[ i - 1 ];
+			float boneLength = jointLengths[ i ];
+			ae::Vec3 parentToOld = ( oldPos - parentPos ).SafeNormalizeCopy() * boneLength;
+			joints[ i ] = parentPos + parentToOld;
+		}
+		
+		iters++;
+	}
+
+	for ( uint32_t i = 0; i < joints.Length() - 1; i++ )
+	{
+		ae::Vec3 boneDir = joints[ i + 1 ] - joints[ i ];
+		const ae::Matrix4 oldTransform = bones[ i ].transform;
+		ae::Matrix4 newTransform = ae::Matrix4::Identity();
+		
+		ae::Vec3 xAxis = -boneDir.SafeNormalizeCopy();
+		ae::Vec3 yAxis = oldTransform.GetAxis( 2 ).Cross( xAxis ).SafeNormalizeCopy();
+		ae::Vec3 zAxis = xAxis.Cross( yAxis );
+		yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
+		
+		newTransform.SetAxis( 0, xAxis );
+		newTransform.SetAxis( 1, yAxis );
+		newTransform.SetAxis( 2, zAxis );
+		newTransform.SetTranslation( joints[ i ] );
+		finalTransforms.Append( newTransform );
+	}
+	finalTransforms.Append( targetTransform ).SetTranslation( joints[ joints.Length() - 1 ] );
+	AE_ASSERT( finalTransforms.Length() == bones.Length() );
+}
 
 //------------------------------------------------------------------------------
 // ae::CollisionMesh member functions
