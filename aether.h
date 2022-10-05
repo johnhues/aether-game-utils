@@ -3664,7 +3664,7 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::IK helper struct
+// ae::IK struct
 //------------------------------------------------------------------------------
 template < uint32_t NumBones = 0 >
 struct IK
@@ -3685,6 +3685,8 @@ struct IK
 	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
 	ae::Array< Bone, NumBones > bones;
 	// Output
+	ae::Array< ae::Vec3, NumBones > joints;
+	ae::Array< float, NumBones > jointLengths;
 	ae::Array< ae::Matrix4, NumBones > finalTransforms;
 };
 
@@ -8648,20 +8650,26 @@ template < uint32_t N > uint32_t GetHash( ae::Str< N > key ) { return ae::Hash()
 //------------------------------------------------------------------------------
 // ae::IK member functions
 //------------------------------------------------------------------------------
-template < uint32_t NumBones >
-IK< NumBones >::IK( ae::Tag tag ) :
+template <>
+inline IK< 0 >::IK( ae::Tag tag ) :
 	tag( tag ),
 	bones( tag ),
+	joints( tag ),
+	jointLengths( tag ),
 	finalTransforms( tag )
+{}
+
+template < uint32_t NumBones >
+IK< NumBones >::IK( ae::Tag tag )
 {}
 
 template < uint32_t NumBones >
 void IK< NumBones >::Update( uint32_t iterationCount )
 {
+	joints.Clear();
+	jointLengths.Clear();
 	finalTransforms.Clear();
-
-	ae::Array< ae::Vec3, NumBones > joints = tag;
-	ae::Array< float, NumBones > jointLengths = tag;
+	
 	for ( uint32_t i = 0; i < bones.Length(); i++ )
 	{
 		ae::Vec3 p0 = bones[ i ].transform.GetTranslation();
