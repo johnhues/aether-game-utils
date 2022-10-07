@@ -6208,7 +6208,7 @@ inline Color Color::Lerp( const Color& end, float t ) const
 }
 inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) const
 {
-	return Lerp( target, exp2( -exp2( snappiness ) * dt ) );
+	return target.Lerp( *this, exp2( -exp2( snappiness ) * dt ) );
 }
 inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
 inline Color Color::ScaleA( float s ) const { return Color( r, g, b, a * s ); }
@@ -18672,7 +18672,8 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 
 void RenderTarget::Activate()
 {
-	AE_ASSERT( GetWidth() && GetHeight() );
+	AE_ASSERT_MSG( GetWidth() && GetHeight(), "ae::RenderTarget is not initialized" );
+	AE_ASSERT_MSG( m_targets.Length(), "ae::RenderTarget is not complete. Call AddTexture() before Activate()." );
 	AE_CHECK_GL_ERROR();
 	
 	CheckFramebufferComplete( m_fbo );
