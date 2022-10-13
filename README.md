@@ -1,3 +1,7 @@
+<p align="center">
+	<img src="https://github.com/johnhues/aether-game-utils/blob/master/example/data/Icon.png?raw=true" width="250">
+</p>
+
 # aether game utils
 [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development
