@@ -601,8 +601,8 @@ void EditorProgram::Run()
 			const float scaleFactor = window.GetScaleFactor();
 			const ae::RectInt renderRectInt = GetRenderRect();
 			const ae::Rect renderRect = ae::Rect::FromPoints(
-				ae::Vec2( renderRectInt.x / scaleFactor, renderRectInt.y / scaleFactor ),
-				ae::Vec2( ( renderRectInt.x + renderRectInt.w ) / scaleFactor, ( renderRectInt.y + renderRectInt.h ) / scaleFactor )
+				ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
+				ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
 			);
 			
 			ae::Vec2 mouseGameWindowPixelPos( input.mouse.position );
@@ -651,8 +651,8 @@ ae::RectInt EditorProgram::GetRenderRect() const
 
 float EditorProgram::GetAspectRatio() const
 {
-	ae::RectInt rect = GetRenderRect();
-	return rect.w / (float)rect.h;
+	ae::Int2 size = GetRenderRect().GetSize();
+	return size.x / (float)size.y;
 }
 
 EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
