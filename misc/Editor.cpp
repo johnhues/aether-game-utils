@@ -646,7 +646,7 @@ void EditorProgram::Run()
 
 ae::RectInt EditorProgram::GetRenderRect() const
 {
-	return ae::RectInt( m_barWidth, 0, render.GetWidth() - m_barWidth, render.GetHeight() );
+	return ae::RectInt::FromPointAndSize( m_barWidth, 0, render.GetWidth() - m_barWidth, render.GetHeight() );
 }
 
 float EditorProgram::GetAspectRatio() const
@@ -1524,8 +1524,8 @@ void EditorServer::ShowUI( EditorProgram* program )
 		const float scaleFactor = program->window.GetScaleFactor();
 		const ae::RectInt renderRectInt = program->GetRenderRect();
 		const ae::Rect renderRect = ae::Rect::FromPoints(
-				ae::Vec2( renderRectInt.x / scaleFactor, renderRectInt.y / scaleFactor ),
-				ae::Vec2( ( renderRectInt.x + renderRectInt.w ) / scaleFactor, ( renderRectInt.y + renderRectInt.h ) / scaleFactor )
+				ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
+				ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
 		);
 		
 		ImGuiIO& io = ImGui::GetIO();
