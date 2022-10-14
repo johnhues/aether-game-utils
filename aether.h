@@ -1746,6 +1746,10 @@ public:
 	//! THIS FUNCTION DOES NOT CALL THE OBJECTS DESTRUCTORS, so please use with caution!
 	void FreeAll();
 
+	class Iterator
+	{
+		
+	};
 	//! Returns the first allocated object in the pool or null if the pool is empty.
 	template < typename T = void > const T* GetFirst() const;
 	//! Returns the next allocated object after \p obj or null if there are no more objects.
@@ -1768,6 +1772,7 @@ public:
 	uint32_t PageSize() const { return m_pageSize; }
 
 private:
+	friend class Iterator;
 	OpaquePool( OpaquePool& other ) = delete;
 	void operator=( OpaquePool& other ) = delete;
 	struct Page
@@ -1789,6 +1794,34 @@ private:
 	uint32_t m_length; // Number of actively allocated objects.
 	ae::List< Page > m_pages;
 	Page m_firstPage;
+
+// public:
+// 	template < typename T >
+// 	class Iterator
+// 	{
+// 	public:
+// 		using iterator_category = std::forward_iterator_tag;
+// 		using difference_type = std::ptrdiff_t;
+// 		using value_type = T;
+// 		using pointer = T*;
+// 		using reference = T&;
+// 		Iterator() = default;
+// 		Iterator( T* ptr, struct Page* page, OpaquePool* pool );
+// 		T& operator*() const { return *m_ptr; }
+// 		T* operator->() { return m_ptr; }
+// 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
+// 		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
+// 		Iterator& operator++();// { m_ptr++; return *this; }
+// 		Iterator operator++( int );// { Iterator tmp = *this; ++(*this); return tmp; }
+// 		Iterator begin() { return m_pool->begin(); }
+// 		Iterator end() { return m_pool->end(); }
+// 	private:
+// 		value_type* m_ptr = nullptr;
+// 		struct Page* m_page = nullptr;
+// 		OpaquePool* m_pool = nullptr;
+// 	};
+// 	Iterator< T > Begin() { return m_pool->begin(); }
+// 	Iterator< T > End() { return m_pool->end(); }
 };
 
 //------------------------------------------------------------------------------
