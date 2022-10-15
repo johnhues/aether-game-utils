@@ -1746,21 +1746,6 @@ public:
 	//! THIS FUNCTION DOES NOT CALL THE OBJECTS DESTRUCTORS, so please use with caution!
 	void FreeAll();
 
-	class Iterator
-	{
-		
-	};
-	//! Returns the first allocated object in the pool or null if the pool is empty.
-	template < typename T = void > const T* GetFirst() const;
-	//! Returns the next allocated object after \p obj or null if there are no more objects.
-	//! Null will be returned if \p obj is null.
-	template < typename T = void > const T* GetNext( const T* obj ) const;
-	//! Returns the first allocated object in the pool or null if the pool is empty.
-	template < typename T = void > T* GetFirst();
-	//! Returns the next allocated object after \p obj or null if there are no more objects.
-	//! Null will be returned if \p obj is null.
-	template < typename T = void > T* GetNext( const T* obj );
-	
 	//! Returns true if the pool has any unallocated objects available.
 	bool HasFree() const;
 	//! Returns the number of allocated objects.
@@ -1772,7 +1757,43 @@ public:
 	uint32_t PageSize() const { return m_pageSize; }
 
 private:
-	friend class Iterator;
+	struct Page; // Internal forward declaration
+public:
+	//! TODO
+	template < typename T >
+	class Iterator
+	{
+	public:
+		using iterator_category = std::forward_iterator_tag;
+		using difference_type = std::ptrdiff_t;
+		using value_type = T;
+		using pointer = T*;
+		using reference = T&;
+		Iterator() = default;
+		Iterator( Iterator& ) = default;
+		Iterator( OpaquePool* pool, struct Page* page, pointer ptr );
+		reference operator*() const { return *m_ptr; }
+		pointer operator->() { return m_ptr; }
+		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
+		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
+		Iterator& operator++();
+		Iterator operator++( int );
+		Iterator begin();
+		Iterator end();
+	private:
+		pointer m_ptr = nullptr;
+		struct Page* m_page = nullptr;
+		OpaquePool* m_pool = nullptr;
+	};
+	//! Returns an ae::OpaquePool::Iterator which is stl conformant.
+	//! ae::OpaquePool does not have standard begin() and end() functions although
+	//! ae::OpaquePool::Iterator does, so the result of this function can be used
+	//! directly with a range-based for loop.
+	template < typename T > Iterator< T > Iterate();
+	// template < typename T > const Iterator< T > Iterate() const;
+
+private:
+	template < typename T > friend class Iterator;
 	OpaquePool( OpaquePool& other ) = delete;
 	void operator=( OpaquePool& other ) = delete;
 	struct Page
@@ -1785,7 +1806,7 @@ private:
 		void* objects; // Pointer to array of objects in this page.
 	};
 	const void* m_GetFirst() const;
-	const void* m_GetNext( const void* obj ) const;
+	const void* m_GetNext( Page*& page, const void* obj ) const;
 	ae::Tag m_tag;
 	uint32_t m_pageSize; // Number of objects per page.
 	bool m_paged; // If true, pool can be infinitely big.
@@ -1794,34 +1815,6 @@ private:
 	uint32_t m_length; // Number of actively allocated objects.
 	ae::List< Page > m_pages;
 	Page m_firstPage;
-
-// public:
-// 	template < typename T >
-// 	class Iterator
-// 	{
-// 	public:
-// 		using iterator_category = std::forward_iterator_tag;
-// 		using difference_type = std::ptrdiff_t;
-// 		using value_type = T;
-// 		using pointer = T*;
-// 		using reference = T&;
-// 		Iterator() = default;
-// 		Iterator( T* ptr, struct Page* page, OpaquePool* pool );
-// 		T& operator*() const { return *m_ptr; }
-// 		T* operator->() { return m_ptr; }
-// 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
-// 		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
-// 		Iterator& operator++();// { m_ptr++; return *this; }
-// 		Iterator operator++( int );// { Iterator tmp = *this; ++(*this); return tmp; }
-// 		Iterator begin() { return m_pool->begin(); }
-// 		Iterator end() { return m_pool->end(); }
-// 	private:
-// 		value_type* m_ptr = nullptr;
-// 		struct Page* m_page = nullptr;
-// 		OpaquePool* m_pool = nullptr;
-// 	};
-// 	Iterator< T > Begin() { return m_pool->begin(); }
-// 	Iterator< T > End() { return m_pool->end(); }
 };
 
 //------------------------------------------------------------------------------
@@ -8363,48 +8356,69 @@ void OpaquePool::DeleteAll()
 {
 	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
 	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );
-	for ( T* p = GetFirst< T >(); p; p = GetNext( p ) )
+	for ( T& p : Iterate< T >() )
 	{
-		p->~T();
+		p.~T();
 	}
 	FreeAll();
 }
 
-template <> const void* OpaquePool::GetFirst() const;
-template <> const void* OpaquePool::GetNext( const void* obj ) const;
-template <> void* OpaquePool::GetFirst();
-template <> void* OpaquePool::GetNext( const void* obj );
+template < typename T >
+OpaquePool::Iterator< T > OpaquePool::Iterate()
+{
+	AE_DEBUG_ASSERT_MSG( m_objectSize >= sizeof( T ), "Object size does not match the initial configuration of this ae::OpaquePool: (# >= #)", m_objectSize, sizeof(T) );
+	AE_DEBUG_ASSERT_MSG( m_objectAlignment >= alignof( T ), "Object alignment does not match the initial configuration of this ae::OpaquePool: (# >= #)", m_objectAlignment, alignof(T) );
+	return Iterator< T >( this, m_pages.GetFirst(), (T*)m_GetFirst() );
+}
+
+//------------------------------------------------------------------------------
+// ae::OpaquePool::Iterator member functions
+//------------------------------------------------------------------------------
+template < typename T >
+OpaquePool::Iterator< T >::Iterator( OpaquePool* pool, struct Page* page, pointer ptr ) :
+	m_pool( pool ),
+	m_page( page ),
+	m_ptr( ptr )
+{}
 
 template < typename T >
-const T* OpaquePool::GetFirst() const
+OpaquePool::Iterator< T >& OpaquePool::Iterator< T >::operator++()
 {
-	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
-	return (const T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
+	if ( m_pool )
+	{
+		m_ptr = (T*)m_pool->m_GetNext( m_page, m_ptr );
+		if ( !m_ptr )
+		{
+			*this = end();
+		}
+	}
+	return *this;
 }
 
 template < typename T >
-const T* OpaquePool::GetNext( const T* obj ) const
+OpaquePool::Iterator< T > OpaquePool::Iterator< T >::operator++( int )
 {
-	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
-	return (const T*)( const_cast< const OpaquePool* >( this )->m_GetNext( obj ) );
+	Iterator< T > result = *this;
+	++(*this);
+	return result;
 }
 
 template < typename T >
-T* OpaquePool::GetFirst()
+OpaquePool::Iterator< T > OpaquePool::Iterator< T >::begin()
 {
-	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
-	return (T*)( const_cast< const OpaquePool* >( this )->m_GetFirst() );
+	return m_pool ? m_pool->Iterate< T >() : Iterator< T >();
 }
 
 template < typename T >
-T* OpaquePool::GetNext( const T* obj )
+OpaquePool::Iterator< T > OpaquePool::Iterator< T >::end()
 {
-	AE_DEBUG_ASSERT( sizeof( T ) <= m_objectSize );
-	AE_DEBUG_ASSERT( alignof( T ) <= m_objectAlignment );
-	return (T*)( const_cast< const OpaquePool* >( this )->m_GetNext( obj ) );
+	if ( Page* lastPage = ( m_pool ? m_pool->m_pages.GetLast() : nullptr ) )
+	{
+		uint8_t* endPtr = (uint8_t*)lastPage->objects;
+		endPtr += ( m_pool->m_pageSize * m_pool->m_objectSize );
+		return Iterator< T >( m_pool, lastPage, (T*)endPtr );
+	}
+	return Iterator< T >();
 }
 
 //------------------------------------------------------------------------------
@@ -12678,30 +12692,6 @@ void OpaquePool::FreeAll()
 	m_length = 0;
 }
 
-template <>
-const void* OpaquePool::GetFirst() const
-{
-	return const_cast< const OpaquePool* >( this )->m_GetFirst();
-}
-
-template <>
-const void* OpaquePool::GetNext( const void* obj ) const
-{
-	return const_cast< const OpaquePool* >( this )->m_GetNext( obj );
-}
-
-template <>
-void* OpaquePool::GetFirst()
-{
-	return (void*)const_cast< const OpaquePool* >( this )->m_GetFirst();
-}
-
-template <>
-void* OpaquePool::GetNext( const void* obj )
-{
-	return (void*)const_cast< const OpaquePool* >( this )->m_GetNext( obj );
-}
-
 bool OpaquePool::HasFree() const
 {
 	return m_paged || !m_pages.Length() || m_pages.GetFirst()->freeList.HasFree();
@@ -12719,10 +12709,10 @@ const void* OpaquePool::m_GetFirst() const
 	return nullptr;
 }
 
-const void* OpaquePool::m_GetNext( const void* obj ) const
+const void* OpaquePool::m_GetNext( Page*& page, const void* obj ) const
 {
 	if ( !obj ) { return nullptr; }
-	const Page* page = m_pages.GetFirst();
+	AE_DEBUG_ASSERT( page );
 	while ( page )
 	{
 		AE_DEBUG_ASSERT( m_length > 0 );
