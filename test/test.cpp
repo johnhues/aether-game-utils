@@ -391,10 +391,10 @@ TEST_CASE( "append to non-empty array", "[ae::Array]" )
 {
   ae::LifetimeTester::ClearStats();
   
-  int32_t ctor = 0;
-  int32_t copy = 0;
-  int32_t dtor = 0;
-  int32_t current = 0;
+  uint32_t ctor = 0;
+  uint32_t copy = 0;
+  uint32_t dtor = 0;
+  uint32_t current = 0;
   
   {
     ae::Array< ae::LifetimeTester > array5( AE_ALLOC_TAG_FIXME, 5, ae::LifetimeTester() );
@@ -449,7 +449,7 @@ TEST_CASE( "append array to empty array", "[ae::Array]" )
   {
     ae::Array< ae::LifetimeTester > array = AE_ALLOC_TAG_FIXME;
     REQUIRE( array.Length() == current );
-    REQUIRE( array.Size() >= current );
+    REQUIRE( array.Size() >= (uint32_t)current );
     REQUIRE( ae::LifetimeTester::ctorCount == ctor );
     REQUIRE( ae::LifetimeTester::copyCount == copy );
     REQUIRE( ae::LifetimeTester::dtorCount == dtor );
@@ -474,7 +474,7 @@ TEST_CASE( "append array to empty array", "[ae::Array]" )
       current -= i;
       
       REQUIRE( array.Length() == current );
-      REQUIRE( array.Size() >= current );
+      REQUIRE( array.Size() >= (uint32_t)current );
       REQUIRE( ae::LifetimeTester::ctorCount == ctor );
       REQUIRE( ae::LifetimeTester::copyCount == copy );
       REQUIRE( ae::LifetimeTester::dtorCount == dtor + ae::LifetimeTester::moveCount ); // dtor called after move on array resize
@@ -509,7 +509,7 @@ TEST_CASE( "append array to array", "[ae::Array]" )
     current += 5;
     
     REQUIRE( array.Length() == current );
-    REQUIRE( array.Size() >= current );
+    REQUIRE( array.Size() >= (uint32_t)current );
     REQUIRE( ae::LifetimeTester::ctorCount == ctor );
     REQUIRE( ae::LifetimeTester::copyCount == copy );
     REQUIRE( ae::LifetimeTester::dtorCount == dtor );
@@ -534,7 +534,7 @@ TEST_CASE( "append array to array", "[ae::Array]" )
       current -= i;
       
       REQUIRE( array.Length() == current );
-      REQUIRE( array.Size() >= current );
+      REQUIRE( array.Size() >= (uint32_t)current );
       REQUIRE( ae::LifetimeTester::ctorCount == ctor );
       REQUIRE( ae::LifetimeTester::copyCount == copy );
       REQUIRE( ae::LifetimeTester::dtorCount == dtor + ae::LifetimeTester::moveCount ); // dtor called after move on array resize
@@ -565,7 +565,7 @@ TEST_CASE( "insert element at end of array", "[ae::Array]" )
   {
     ae::Array< ae::LifetimeTester > array = AE_ALLOC_TAG_FIXME;
     REQUIRE( array.Length() == current );
-    REQUIRE( array.Size() >= current );
+    REQUIRE( array.Size() >= (uint32_t)current );
     REQUIRE( ae::LifetimeTester::ctorCount == ctor );
     REQUIRE( ae::LifetimeTester::copyCount == copy );
     REQUIRE( ae::LifetimeTester::dtorCount == dtor );
@@ -579,7 +579,7 @@ TEST_CASE( "insert element at end of array", "[ae::Array]" )
       dtor++;
       current++;
       REQUIRE( array.Length() == current );
-      REQUIRE( array.Size() >= current );
+      REQUIRE( array.Size() >= (uint32_t)current );
       REQUIRE( ae::LifetimeTester::ctorCount == ctor );
       REQUIRE( ae::LifetimeTester::copyCount == copy );
       REQUIRE( ae::LifetimeTester::dtorCount == dtor + ae::LifetimeTester::moveCount );
@@ -612,7 +612,7 @@ TEST_CASE( "insert element at beginning of array", "[ae::Array]" )
   {
     ae::Array< ae::LifetimeTester > array = AE_ALLOC_TAG_FIXME;
     REQUIRE( array.Length() == current );
-    REQUIRE( array.Size() >= current );
+    REQUIRE( array.Size() >= (uint32_t)current );
     REQUIRE( ae::LifetimeTester::ctorCount == ctor );
     REQUIRE( ae::LifetimeTester::copyCount == copy );
     REQUIRE( ae::LifetimeTester::dtorCount == dtor );
@@ -624,7 +624,7 @@ TEST_CASE( "insert element at beginning of array", "[ae::Array]" )
     dtor++;
     current++;
     REQUIRE( array.Length() == current );
-    REQUIRE( array.Size() >= current );
+    REQUIRE( array.Size() >= (uint32_t)current );
     REQUIRE( ae::LifetimeTester::ctorCount == ctor );
     REQUIRE( ae::LifetimeTester::copyCount == copy );
     REQUIRE( ae::LifetimeTester::dtorCount == dtor + ae::LifetimeTester::moveCount );
@@ -647,7 +647,7 @@ TEST_CASE( "insert element at beginning of array", "[ae::Array]" )
       current++;
       
       REQUIRE( array.Length() == current );
-      REQUIRE( array.Size() >= current );
+      REQUIRE( array.Size() >= (uint32_t)current );
       REQUIRE( ae::LifetimeTester::ctorCount == ctor );
       REQUIRE( ae::LifetimeTester::moveCount == move );
       REQUIRE( ae::LifetimeTester::copyAssignCount == assign );
