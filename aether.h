@@ -1707,6 +1707,14 @@ private:
 //------------------------------------------------------------------------------
 // ae::OpaquePool class
 //------------------------------------------------------------------------------
+//! ae::OpaquePool is useful for dynamically allocating memory for many object
+//! instances when the object type is not known at compile time. It's particularly
+//! useful in conjunction with ae::Type (see constructor for more info on this).
+//! It's possible to iterate over an ae::OpaquePool by calling ae::OpaquePool::Iterate< T >
+//! (where the template parameter is required because ae::OpaquePool is not
+//! templated itself). Additionally, a static ae::Map of ae::OpaquePool's is a
+//! great way to allocate game objects or components loaded from a level file.
+//------------------------------------------------------------------------------
 class OpaquePool
 {
 public:
@@ -1714,7 +1722,10 @@ public:
 	//! be used for all internal allocations. All objects returned by the pool
 	//! will have \p objectSize and \p objectAlignment. If the pool is \p paged
 	//! it will allocate pages of size \p poolSize as necessary. If the pool is
-	//! not \p paged, then \p objects can be allocated at a time.
+	//! not \p paged, then \p objects can be allocated at a time. It may be
+	//! useful to use this in conjunction with registered ae::Type's, passing the
+	//! results of ae::Type::GetSize() to \p objectSize and ae::Type::GetAlignment()
+	//! to \p objectAlignment.
 	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged );
 	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
 	//! the ae::OpaquePool is destroyed.
@@ -1786,10 +1797,8 @@ public:
 		const OpaquePool* m_pool = nullptr;
 	};
 	//! Returns an ae::OpaquePool::Iterator which is stl conformant.
-	//! ae::OpaquePool does not have standard begin() and end() functions although
-	//! ae::OpaquePool::Iterator does, so the result of this function can be used
-	//! directly with a range-based for loop.
 	template < typename T > Iterator< T > Iterate();
+	//! Returns an ae::OpaquePool::Iterator which is stl conformant.
 	template < typename T > Iterator< const T > Iterate() const;
 
 private:
