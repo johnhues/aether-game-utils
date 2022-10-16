@@ -13352,6 +13352,9 @@ void Window::m_Initialize()
 		//[NSApp run];
 		[NSApp activateIgnoringOtherApps:YES];
 	}
+	// This prevents keystrokes from being output to the terminal when running
+	// as a console app.
+	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
 	m_width = 0;
 	m_height = 0;
