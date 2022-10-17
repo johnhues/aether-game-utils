@@ -3644,7 +3644,7 @@ public:
 	//! sizes are maintained.
 	void Clear();
 
-	RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const;
+	RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult = RaycastResult() ) const;
 	PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
 	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
 	
