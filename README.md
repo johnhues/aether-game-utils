@@ -24,7 +24,10 @@ Modules and utilities include:
 * Sockets
 
 # Example
-The following are instructions to get started with aether-game-utils. This example is a single source file which only includes [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) (which handles linking the required system libraries). It is a complete first person exploration experience with textured geometry and basic kinematic physics. Use the arrow keys to move.
+The following are instructions to get started with aether-game-utils. This example is a single source file which only includes [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) (which handles linking the required system libraries). It has first person arrow key controls, textured geometry and basic kinematic physics.
+<p align="center">
+	<img src="https://github.com/johnhues/aether-game-utils/blob/master/example/data/example.png?raw=true" height="350">
+</p>
 
 `main.cpp` (or `main.mm` on Mac)
 ```cpp
