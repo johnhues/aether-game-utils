@@ -1783,8 +1783,10 @@ public:
 		Iterator() = default;
 		Iterator( Iterator& ) = default;
 		Iterator( const OpaquePool* pool, const struct Page* page, pointer ptr );
-		reference operator*() const { return *m_ptr; }
+		reference operator*() { return *m_ptr; }
 		pointer operator->() { return m_ptr; }
+		const T& operator*() const { return *m_ptr; }
+		const T* operator->() const { return m_ptr; }
 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
 		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
 		Iterator& operator++();
