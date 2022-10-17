@@ -42,7 +42,7 @@ int main()
 	ae::GraphicsDevice graphicsDevice;
 	ae::Input input;
 	ae::TimeStep timeStep;
-	window.Initialize( 1280, 800, false, true );
+	window.Initialize( 640, 320, false, true );
 	window.SetTitle( "Game" );
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );
@@ -76,7 +76,7 @@ int main()
 
 	// Game state
 	ae::PushOutInfo player;
-	player.sphere.radius = 0.75f;
+	player.sphere.radius = 0.7f;
 	player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
 	float angle = 0.0f;
 	float angularVel = 0.0f;
@@ -100,6 +100,15 @@ int main()
 		player.sphere.center += player.velocity * dt;
 		angle += angularVel * dt;
 		player = collisionMesh.PushOut( ae::PushOutParams(), player );
+		ae::RaycastParams raycastParams;
+		raycastParams.source = player.sphere.center;
+		raycastParams.ray = ae::Vec3( 0, player.sphere.radius * -1.1f, 0 );
+		ae::RaycastResult r = collisionMesh.Raycast( raycastParams );
+		if ( r.hits.Length() )
+		{
+			player.sphere.center = r.hits[ 0 ].position +  ae::Vec3( 0, player.sphere.radius * 1.1f, 0 );
+			player.velocity.y = ae::Max( 0.0f, player.velocity.y );
+		}
 
 		// Rendering
 		ae::UniformList uniforms;
@@ -145,23 +154,15 @@ const char* kFragmentShader = R"(
 ```
 
 ## Building on Mac
-Download the repository with:
+Create a file called `main.mm` with the above contents and download [aether.h](https://github.com/johnhues/aether-game-utils/blob/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
 ```
-git clone https://github.com/johnhues/aether-game-utils.git ~/aether-game-utils
-```
-Create a file called `main.mm` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga), placing them in the same folder. Open the `Terminal` application. Type `cd ` (with a space after) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
-```
-clang++ -std=c++17 -fmodules -fcxx-modules -I ~/aether-game-utils main.mm
+clang++ -std=c++17 -fmodules -fcxx-modules main.mm && ./a.out
 ```
 
 ## Building on Windows
-Download the repository with:
+Create a file called `main.cpp` with the above contents and download [aether.h](https://github.com/johnhues/aether-game-utils/blob/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. With Visual Studio installed, right click inside the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
-git clone https://github.com/johnhues/aether-game-utils.git C:\aether-game-utils
-```
-Create a file called `main.cpp` with the above contents and download [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga), placing them in the same folder. With Visual Studio installed, right click in the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
-```
-cl /std:c++17 -D_UNICODE -DUNICODE /I C:\aether-game-utils main.cpp
+cl /std:c++17 -D_UNICODE -DUNICODE main.cpp
 ```
 
 ## Building with Emscripten
