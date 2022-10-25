@@ -21148,6 +21148,11 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 		uint32_t chunkSize;
 	};
 
+	struct RiffChunk
+	{
+		char waveId[ 4 ];
+	};
+	
 	struct FormatChunk
 	{
 		uint16_t formatCode;
@@ -21156,89 +21161,76 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 		uint32_t byteRate;
 		uint16_t blockAlign;
 		uint16_t bitsPerSample;
-		uint16_t dwChannelMask;
-		uint8_t subformat[ 16 ];
 	};
-
-	struct RiffChunk
-	{
-		char waveId[ 4 ];
-	};
-
-	FormatChunk wave_format;
-	bool hasReadFormat = false;
-	uint32_t dataSize = 0;
 
 	ChunkHeader header;
-
+	FormatChunk waveFormat;
+	bool hasReadFormat = false;
+	uint32_t dataSize = 0;
 	uint32_t fileOffset = 0;
-	memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
-	fileOffset += sizeof(header);
-	while ( fileOffset < fileSize )
+
+	// Some wav files have weird chunk sizes, so the entire length of the file might not be used
+	while ( ( fileSize - fileOffset ) >= sizeof(header) )
 	{
+		memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
+		fileOffset += sizeof(header);
+		AE_ASSERT( ( fileSize - fileOffset ) >= header.chunkSize );
+		
 		if ( memcmp( header.chunkId, "RIFF", 4 ) == 0 )
 		{
 			RiffChunk riff;
 			memcpy( &riff, fileBuffer + fileOffset, sizeof(riff) );
-			fileOffset += sizeof(riff);
 			AE_ASSERT( memcmp( riff.waveId, "WAVE", 4 ) == 0 );
-		}
-		else if ( memcmp( header.chunkId, "fmt ", 4 ) == 0 )
-		{
-			memcpy( &wave_format, fileBuffer + fileOffset, header.chunkSize );
-			fileOffset += header.chunkSize;
-			hasReadFormat = true;
-		}
-		else if ( memcmp( header.chunkId, "data", 4 ) == 0 )
-		{
-			AE_ASSERT( hasReadFormat );
-			AE_ASSERT_MSG( dataSize == 0, "Combining WAV data chunks is currently not supported" );
-
-			uint8_t* data = new uint8_t[ header.chunkSize ];
-			memcpy( data, fileBuffer + fileOffset, header.chunkSize );
-			fileOffset += header.chunkSize;
-
-			ALsizei size = header.chunkSize;
-			ALsizei frequency = wave_format.sampleRate;
-			dataSize = size;
-
-			ALenum format;
-			bool success = true;
-			if ( wave_format.numChannels == 1 )
-			{
-				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_MONO8; }
-				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_MONO16; }
-				else { success = false; }
-			}
-			else if ( wave_format.numChannels == 2 )
-			{
-				if ( wave_format.bitsPerSample == 8 ) { format = AL_FORMAT_STEREO8; }
-				else if ( wave_format.bitsPerSample == 16 ) { format = AL_FORMAT_STEREO16; }
-				else { success = false; }
-			}
-			else { success = false; }
-			if ( success )
-			{
-				alGenBuffers( 1, bufferOut );
-				alBufferData( *bufferOut, format, (void*)data, size, frequency );
-			}
-			delete[] data;
+			fileOffset += sizeof(riff);
 		}
 		else
 		{
+			if ( memcmp( header.chunkId, "fmt ", 4 ) == 0 )
+			{
+				AE_ASSERT( header.chunkSize >= sizeof(FormatChunk) );
+				memcpy( &waveFormat, fileBuffer + fileOffset, sizeof(FormatChunk) );
+				hasReadFormat = true;
+			}
+			else if ( memcmp( header.chunkId, "data", 4 ) == 0 )
+			{
+				AE_ASSERT( hasReadFormat );
+				AE_ASSERT_MSG( dataSize == 0, "Combining WAV data chunks is currently not supported" );
+				
+				const uint8_t* data = ( fileBuffer + fileOffset );
+				ALsizei size = header.chunkSize;
+				ALsizei frequency = waveFormat.sampleRate;
+				dataSize = size;
+				
+				ALenum format;
+				if ( waveFormat.numChannels == 1 )
+				{
+					if ( waveFormat.bitsPerSample == 8 ) { format = AL_FORMAT_MONO8; }
+					else if ( waveFormat.bitsPerSample == 16 ) { format = AL_FORMAT_MONO16; }
+					else { AE_FAIL_MSG( "Unsupported WAV bits per sample: #", waveFormat.bitsPerSample ); }
+				}
+				else if ( waveFormat.numChannels == 2 )
+				{
+					if ( waveFormat.bitsPerSample == 8 ) { format = AL_FORMAT_STEREO8; }
+					else if ( waveFormat.bitsPerSample == 16 ) { format = AL_FORMAT_STEREO16; }
+					else { AE_FAIL_MSG( "Unsupported WAV bits per sample: #", waveFormat.bitsPerSample ); }
+				}
+				else
+				{
+					AE_FAIL_MSG( "Unsupported WAV channel count: #", waveFormat.numChannels );
+				}
+				
+				alGenBuffers( 1, bufferOut );
+				alBufferData( *bufferOut, format, (void*)data, size, frequency );
+				_CheckALError();
+			}
+			
 			fileOffset += header.chunkSize;
 		}
-
-		memcpy( &header, fileBuffer + fileOffset, sizeof(header) );
-		fileOffset += sizeof(header);
 	}
-
-	_CheckALError();
 
 	AE_ASSERT( hasReadFormat );
 	AE_ASSERT( dataSize );
-
-	*lengthOut = dataSize / ( wave_format.sampleRate * wave_format.numChannels * wave_format.bitsPerSample / 8.0f );
+	*lengthOut = dataSize / ( waveFormat.sampleRate * waveFormat.numChannels * waveFormat.bitsPerSample / 8.0f );
 #endif
 }
 
