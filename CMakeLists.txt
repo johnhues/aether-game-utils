@@ -89,33 +89,8 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 		message(SEND_ERROR "Could not find OpenAL")
 		set(OPENAL_LIBRARY "")
 	endif()
-elseif(APPLE)
-	find_package(OpenAL REQUIRED)
 elseif(NOT EMSCRIPTEN)
-	# @NOTE: It would be convenient to use MakeAvailable but openal defines a project called 'common' which can easily cause conflicts
-	# FetchContent_Declare(
-	# 	openal
-	# 	GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-	# 	GIT_TAG openal-soft-1.20.1
-	# 	CMAKE_ARGS -DLIBTYPE=STATIC
-	# )
-	# FetchContent_MakeAvailable(openal)
-	set(AE_OPENAL_SRC ${AE_THIRDPARTY_DIR}/openal)
-	set(AE_OPENAL_INSTALL ${CMAKE_CURRENT_BINARY_DIR}/openal)
-	ExternalProject_Add(openal
-		PREFIX openal
-		SOURCE_DIR ${AE_OPENAL_SRC}
-		GIT_REPOSITORY https://github.com/kcat/openal-soft.git
-		GIT_TAG openal-soft-1.20.1
-		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${AE_OPENAL_INSTALL}
-	)
-	set(OPENAL_INCLUDE_DIR ${AE_OPENAL_INSTALL}/include)
-	if (MSVC)
-		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/OpenAL32.lib)
-	else()
-		set(OPENAL_LIBRARY ${AE_OPENAL_INSTALL}/lib/${CMAKE_SHARED_MODULE_PREFIX}openal${CMAKE_SHARED_LIBRARY_SUFFIX})
-	endif()
-	list(APPEND AE_DEPS_TARGETS openal)
+	find_package(OpenAL REQUIRED)
 endif()
 
 # dependency include directories

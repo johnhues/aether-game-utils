@@ -30,7 +30,7 @@ FetchContent_MakeAvailable(imguizmo)
 FetchContent_Declare(
 	rapidjson
 	GIT_REPOSITORY "https://github.com/Tencent/rapidjson.git"
-	GIT_TAG v1.1.0
+	GIT_TAG 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
 )
 FetchContent_Populate(rapidjson) # Download but don't build
 file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/include/*")
@@ -41,13 +41,13 @@ target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include"
 FetchContent_Declare(
 	openfbx
 	GIT_REPOSITORY https://github.com/nem0/OpenFBX.git
-	GIT_TAG 5ce5c3490a90d346366abcda48e1d77526d09a15
+	GIT_TAG b2e720c8f6d5979fc4ed346262e6270084b15836
 )
 FetchContent_Populate(openfbx) # Download but don't build
 FetchContent_GetProperties(openfbx SOURCE_DIR OPENFBX_SOURCE_DIR)
-file(GLOB_RECURSE OPENFBX_SOURCES CONFIGURE_DEPENDS "${OPENFBX_SOURCE_DIR}/src/*")
-add_library(openfbx ${OPENFBX_SOURCES})
-target_include_directories(openfbx INTERFACE "${OPENFBX_SOURCE_DIR}/src")
+file(GLOB_RECURSE openfbx_SOURCES CONFIGURE_DEPENDS "${openfbx_SOURCE_DIR}/src/*")
+add_library(openfbx ${openfbx_SOURCES})
+target_include_directories(openfbx INTERFACE "${openfbx_SOURCE_DIR}/src")
 
 # Example source helpers
 set(AE_CORE_SOURCES
@@ -215,7 +215,7 @@ add_bundle("Terrain"
 	"ae.11_terrain"
 	"0.0.0"
 	"Icon"
-	"11_terrain.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
+	"11_Terrain.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
 	"data/Icon.icns;data/font.png"
 	"ae;imgui;imguizmo;stb"
 	""
@@ -299,7 +299,7 @@ add_bundle("Editor"
 	"ae.18_editor"
 	"0.0.0"
 	"Icon"
-	"18_editor.cpp;${AE_EXAMPLE_SOURCES};${AE_MISC_DIR}/ae/Editor.h;${AE_MISC_DIR}/Editor.cpp;${AE_MISC_DIR}/Entity.cpp"
+	"18_Editor.cpp;${AE_EXAMPLE_SOURCES};${AE_MISC_DIR}/ae/Editor.h;${AE_MISC_DIR}/Editor.cpp;${AE_MISC_DIR}/Entity.cpp"
 	"data/Icon.icns;data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
 	"ae;imgui;imguizmo;rapidjson"
 	""
