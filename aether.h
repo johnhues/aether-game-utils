@@ -175,6 +175,13 @@ template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
 #define _AE_STATIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
+#if !_AE_WINDOWS_
+	#define AE_DISABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Winvalid-offsetof\"")
+	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
+#else
+	#define AE_DISABLE_INVALID_OFFSET_WARNING
+	#define AE_ENABLE_INVALID_OFFSET_WARNING
+#endif
 
 namespace ae {
 
@@ -4295,7 +4302,10 @@ public:
 //------------------------------------------------------------------------------
 // External meta var registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_VAR( c, v ) static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v );
+#define AE_REGISTER_CLASS_VAR( c, v ) \
+	AE_DISABLE_INVALID_OFFSET_WARNING \
+	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v ); \
+	AE_ENABLE_INVALID_OFFSET_WARNING
 #define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
 #define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #v, #p, #pv );
 
