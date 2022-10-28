@@ -9986,11 +9986,6 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 	AE_ASSERT( objType );
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
 	
-	ae::VarType< T > varType;
-	Var::Type typeCheck = varType.GetType();
-	AE_ASSERT( typeCheck == m_type );
-	//AE_ASSERT( m_arrayAdapter || m_size == sizeof( T ) ); // @TODO: Fix for custom ref types
-
 	ae::Object* valueObj = nullptr;
 	if ( m_type == Pointer || m_type == CustomRef )
 	{
@@ -9999,6 +9994,13 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 		const ae::Type* valueType = ae::GetTypeFromObject( valueObj );
 		AE_ASSERT( valueType );
 		AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
+	}
+	else
+	{
+		ae::VarType< T > varType;
+		Var::Type typeCheck = varType.GetType();
+		AE_ASSERT( typeCheck == m_type );
+		AE_ASSERT( m_arrayAdapter || m_size == sizeof( T ) );
 	}
 	
 	T* varData = nullptr;
