@@ -14,7 +14,7 @@ add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue
 FetchContent_Declare(
 	imgui
 	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
-	GIT_TAG e25fc1e2a1ebdd38db1003c2ae2f7e281d285df5
+	GIT_TAG 526e2764bc15a3482bd7b550471e96f3c5454864
 )
 FetchContent_MakeAvailable(imgui)
 

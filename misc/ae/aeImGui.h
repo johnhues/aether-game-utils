@@ -38,7 +38,6 @@
   #define IMGUI_IMPL_OPENGL_LOADER_GLEW
 #elif _AE_APPLE_
   #define GL_SILENCE_DEPRECATION
-  #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM <OpenGL/gl3.h>
 #elif _AE_LINUX_
   #define GL_GLEXT_PROTOTYPES 1
   #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM <GL/glcorearb.h>
@@ -172,7 +171,7 @@ public:
 
 	ImVec2 effectiveSize = size;
 	if ( size.x < 0.0f )
-	  effectiveSize.x = ImGui::GetContentRegionAvailWidth();
+	  effectiveSize.x = ImGui::GetContentRegionAvail().x;
 	else
 	  effectiveSize.x = size.x;
 	ImGui::Dummy( ImVec2( effectiveSize.x, 0.0f ) );
