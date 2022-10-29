@@ -40,7 +40,6 @@
   #define GL_SILENCE_DEPRECATION
 #elif _AE_LINUX_
   #define GL_GLEXT_PROTOTYPES 1
-  #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM <GL/glcorearb.h>
 #endif
 #include "imgui_impl_opengl3.h"
 
