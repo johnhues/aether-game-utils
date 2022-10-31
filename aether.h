@@ -13853,11 +13853,15 @@ void Input::Pump()
 				m_SetMousePos( ae::Int2( p.x, p.y ) - windowPos );
 			}
 			
-			// @TODO: Can these boundaries be calculated somehow?
-			const bool mouseWithinWindow = mouse.position.x > 2
-				&& mouse.position.y > 2
-				&& mouse.position.x < m_window->GetWidth() - 3
-				&& mouse.position.y < m_window->GetHeight();
+			// @TODO: ae::Window uses NSWindow::contentLayoutRect which represents
+			// the visible content size, but it does not account for the window
+			// manipulation control boundaries (resize and drag). Can this boundary
+			// be calculated somehow?
+			const int32_t kBorder = 3;
+			const bool mouseWithinWindow = mouse.position.x > kBorder
+				&& mouse.position.y > kBorder
+				&& mouse.position.x < m_window->GetWidth() - kBorder
+				&& mouse.position.y < m_window->GetHeight() - kBorder;
 			
 			bool clicked = false;
 			switch ( event.type )
@@ -13948,33 +13952,37 @@ void Input::Pump()
 #endif
 
 	// Mouse capture
-	if ( m_captureMouse && m_window )
+	if ( m_captureMouse )
 	{
-		// Calculate center in case the window height is an odd number
-		ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
+		mouse.movement = ae::Int2( 0 );
+		if ( m_window )
+		{
+			// Calculate center in case the window height is an odd number
+			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
 #if _AE_WINDOWS_
-		{
-			POINT centerPt = { localCenter.x, m_window->GetHeight() - localCenter.y };
-			if ( ClientToScreen( (HWND)m_window->window, &centerPt ) )
 			{
-				SetCursorPos( centerPt.x, centerPt.y );
+				POINT centerPt = { localCenter.x, m_window->GetHeight() - localCenter.y };
+				if ( ClientToScreen( (HWND)m_window->window, &centerPt ) )
+				{
+					SetCursorPos( centerPt.x, centerPt.y );
+				}
 			}
-		}
 #elif _AE_OSX_
-		@autoreleasepool
-		{
-			NSWindow* nsWindow = (NSWindow*)m_window->window;
-			NSPoint posScreen = [ nsWindow convertPointToScreen : NSMakePoint( localCenter.x, localCenter.y ) ];
-			// @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
-			posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
-			CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
-			CGAssociateMouseAndMouseCursorPosition( true );
-		}
+			@autoreleasepool
+			{
+				NSWindow* nsWindow = (NSWindow*)m_window->window;
+				NSPoint posScreen = [ nsWindow convertPointToScreen : NSMakePoint( localCenter.x, localCenter.y ) ];
+				// @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
+				posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
+				CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
+				CGAssociateMouseAndMouseCursorPosition( true );
+			}
 #endif
-		// Mouse pos is previously set elsewhere, so when the mouse position is set
-		// to the window center the movement vector needs to be reversed.
-		m_SetMousePos( localCenter );
-		mouse.movement = -mouse.movement;
+			// Mouse pos is previously set elsewhere, so when the mouse position is set
+			// to the window center the movement vector needs to be reversed.
+			m_SetMousePos( localCenter );
+			mouse.movement = -mouse.movement;
+		}
 	}
 
 #if _AE_WINDOWS_
@@ -14526,7 +14534,7 @@ void Input::m_SetMousePos( ae::Int2 pos )
 	AE_ASSERT( m_window );
 	if ( m_positionSet )
 	{
-		mouse.movement = pos - mouse.position;
+		mouse.movement += pos - mouse.position;
 	}
 	mouse.position = pos;
 	m_positionSet = true;
