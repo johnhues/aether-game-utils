@@ -2448,10 +2448,11 @@ public:
 
 // private:
 	void m_SetMousePos( ae::Int2 pos );
+	void m_SetCursorPos( ae::Int2 pos );
 	ae::Window* m_window = nullptr;
 	bool m_captureMouse = false;
 	ae::Int2 m_capturedMousePos = ae::Int2( 0, 0 );
-	bool m_positionSet = false;
+	bool m_mousePosSet = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
 	bool m_textMode = false;
@@ -13173,7 +13174,7 @@ void Window::m_UpdateFocused( bool focused )
 	{
 		// @TODO: Input::m_UpdateFocused()
 		input->SetMouseCaptured( false );
-		input->m_positionSet = false;
+		input->m_mousePosSet = false;
 	}
 }
 
@@ -13810,7 +13811,7 @@ void Input::Pump()
 		DispatchMessage( &msg );
 	}
 	// Update mouse pos
-	bool mouseJustSet = false; // Don't set m_positionSet because m_SetMousePos() checks it
+	bool mouseJustSet = false; // Don't enable m_mousePosSet because m_SetMousePos() checks it
 	if ( m_window )
 	{
 		POINT mouseWindowPt;
@@ -13830,7 +13831,7 @@ void Input::Pump()
 	}
 	if ( !mouseJustSet )
 	{
-		m_positionSet = false;
+		m_mousePosSet = false;
 	}
 #elif _AE_OSX_
 	@autoreleasepool
@@ -13959,25 +13960,7 @@ void Input::Pump()
 		{
 			// Calculate center in case the window height is an odd number
 			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
-#if _AE_WINDOWS_
-			{
-				POINT centerPt = { localCenter.x, m_window->GetHeight() - localCenter.y };
-				if ( ClientToScreen( (HWND)m_window->window, &centerPt ) )
-				{
-					SetCursorPos( centerPt.x, centerPt.y );
-				}
-			}
-#elif _AE_OSX_
-			@autoreleasepool
-			{
-				NSWindow* nsWindow = (NSWindow*)m_window->window;
-				NSPoint posScreen = [ nsWindow convertPointToScreen : NSMakePoint( localCenter.x, localCenter.y ) ];
-				// @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
-				posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
-				CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
-				CGAssociateMouseAndMouseCursorPosition( true );
-			}
-#endif
+			m_SetCursorPos( localCenter );
 			// Mouse pos is previously set elsewhere, so when the mouse position is set
 			// to the window center the movement vector needs to be reversed.
 			m_SetMousePos( localCenter );
@@ -14468,8 +14451,7 @@ void Input::SetMouseCaptured( bool enable )
 	{
 		return;
 	}
-	
-	if ( enable && m_window && !m_window->GetFocused() )
+	else if ( enable && !m_window->GetFocused() )
 	{
 		AE_ASSERT( !m_captureMouse );
 		return;
@@ -14477,9 +14459,10 @@ void Input::SetMouseCaptured( bool enable )
 	
 	if( enable != m_captureMouse )
 	{
-		m_positionSet = false;
 		if ( enable )
 		{
+			// Remember original cursor position
+			m_capturedMousePos = m_mousePosSet ? mouse.position : ae::Int2( INT_MAX );
 #if _AE_WINDOWS_
 			ShowCursor( FALSE );
 #elif _AE_APPLE_
@@ -14488,13 +14471,22 @@ void Input::SetMouseCaptured( bool enable )
 		}
 		else
 		{
+			// Restore original cursor position
+			if ( m_capturedMousePos != ae::Int2( INT_MAX ) )
+			{
+				m_SetCursorPos( m_capturedMousePos );
+				mouse.position = m_capturedMousePos;
+			}
 #if _AE_WINDOWS_
 			ShowCursor( TRUE );
 #elif _AE_APPLE_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
 #endif
 		}
+		
 		m_captureMouse = enable;
+		m_mousePosSet = false; // Disable so movement isn't considered when changing capture states
+		mouse.movement = ae::Int2( 0 );
 	}
 }
 
@@ -14532,12 +14524,35 @@ bool Input::GetPrev( ae::Key key ) const
 void Input::m_SetMousePos( ae::Int2 pos )
 {
 	AE_ASSERT( m_window );
-	if ( m_positionSet )
+	if ( m_mousePosSet )
 	{
 		mouse.movement += pos - mouse.position;
 	}
 	mouse.position = pos;
-	m_positionSet = true;
+	m_mousePosSet = true;
+}
+
+void Input::m_SetCursorPos( ae::Int2 pos )
+{
+#if _AE_WINDOWS_
+	{
+		POINT centerPt = { pos.x, m_window->GetHeight() - pos.y };
+		if ( ClientToScreen( (HWND)m_window->window, &centerPt ) )
+		{
+			SetCursorPos( centerPt.x, centerPt.y );
+		}
+	}
+#elif _AE_OSX_
+	@autoreleasepool
+	{
+		NSWindow* nsWindow = (NSWindow*)m_window->window;
+		NSPoint posScreen = [ nsWindow convertPointToScreen : NSMakePoint( pos.x, pos.y ) ];
+		// @NOTE: Quartz coordinate space has (0,0) at the top left, Cocoa uses bottom left
+		posScreen.y = NSMaxY( NSScreen.screens[ 0 ].frame ) - posScreen.y;
+		CGWarpMouseCursorPosition( CGPointMake( posScreen.x, posScreen.y ) );
+		CGAssociateMouseAndMouseCursorPosition( true );
+	}
+#endif
 }
 
 //------------------------------------------------------------------------------
