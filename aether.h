@@ -10069,8 +10069,16 @@ bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) c
 	}
 	AE_ASSERT( varData );
 	
-	*valueOut = *(const T*)varData;
-	return true;
+	if ( m_type == Var::CustomRef )
+	{
+		AE_FAIL_MSG( "Getting the value of registered CustomRefs is currently not supported. Try GetObjectValueAsString()." );
+		return false;
+	}
+	else
+	{
+		*valueOut = *(const T*)varData;
+		return true;
+	}
 }
 
 template< typename T, typename C >
