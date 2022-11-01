@@ -1212,6 +1212,8 @@ public:
 	Array();
 	//! Static array (N > 0) only. Appends 'length' number of 'val's
 	Array( uint32_t length, const T& val );
+	//! Static array (N > 0) only. Construct from a standard initializer list.
+	Array( std::initializer_list< T > initList );
 
 	//! Dynamic array (N == 0) only
 	Array( ae::Tag tag );
@@ -1219,6 +1221,8 @@ public:
 	Array( ae::Tag tag, uint32_t size );
 	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length' number of 'val's
 	Array( ae::Tag tag, uint32_t length, const T& val );
+	//! Dynamic array (N == 0) only. Expands array storage to avoid copying data unneccesarily
+	//! on Append(). Retrieve current storage limit with Size().
 	void Reserve( uint32_t total );
 
 	Array( const Array< T, N >& other );
@@ -1232,6 +1236,8 @@ public:
 	T& Append( const T& value );
 	//! Add elements
 	void Append( const T* values, uint32_t count );
+	//! Adds the list of given elements to the end of the array
+	void AppendList( std::initializer_list< T > initList );
 	//! Add elements
 	T& Insert( uint32_t index, const T& value );
 
@@ -6867,6 +6873,23 @@ Array< T, N >::Array( uint32_t length, const T& value )
 }
 
 template < typename T, uint32_t N >
+Array< T, N >::Array( std::initializer_list< T > initList )
+{
+	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
+	AE_ASSERT_MSG( N >= initList.size(), "Initializer list is longer than max length (# >= #)", N, initList.size() );
+	
+	m_length = initList.size();
+	m_size = N;
+	m_array = (T*)&m_storage;
+	uint32_t i = 0;
+	for ( const T& value : initList )
+	{
+		new ( &m_array[ i ] ) T ( value );
+		i++;
+	}
+}
+
+template < typename T, uint32_t N >
 Array< T, N >::Array( ae::Tag tag )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
@@ -7035,10 +7058,7 @@ template < typename T, uint32_t N >
 void Array< T, N >::Append( const T* values, uint32_t count )
 {
 	Reserve( m_length + count );
-
-#if _AE_DEBUG_
-	AE_ASSERT( m_size >= m_length + count );
-#endif
+	AE_DEBUG_ASSERT( m_size >= m_length + count );
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		new ( &m_array[ m_length ] ) T ( values[ i ] );
@@ -7047,11 +7067,22 @@ void Array< T, N >::Append( const T* values, uint32_t count )
 }
 
 template < typename T, uint32_t N >
+void Array< T, N >::AppendList( std::initializer_list< T > initList )
+{
+	Reserve( Size() + initList.size() );
+	m_length += initList.size();
+	uint32_t i = 0;
+	for ( const T& value : initList )
+	{
+		new ( &m_array[ i ] ) T ( value );
+		i++;
+	}
+}
+
+template < typename T, uint32_t N >
 T& Array< T, N >::Insert( uint32_t index, const T& value )
 {
-#if _AE_DEBUG_
-	AE_ASSERT( index <= m_length );
-#endif
+	AE_DEBUG_ASSERT( index <= m_length );
 
 	if ( m_length == m_size )
 	{
@@ -7080,9 +7111,7 @@ T& Array< T, N >::Insert( uint32_t index, const T& value )
 template < typename T, uint32_t N >
 void Array< T, N >::Remove( uint32_t index )
 {
-#if _AE_DEBUG_
-	AE_ASSERT( index < m_length );
-#endif
+	AE_DEBUG_ASSERT( index < m_length );
 
 	m_length--;
 	for ( uint32_t i = index; i < m_length; i++ )
