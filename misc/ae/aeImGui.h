@@ -370,7 +370,7 @@ static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, co
 	bool search = ( count >= showSearchCount );
 	if ( search )
 	{
-		filter.Draw( "" );
+		filter.Draw( "##filter" );
 	}
 
 	for ( uint32_t i = 0; i < count; i++ )
