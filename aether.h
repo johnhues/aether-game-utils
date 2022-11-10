@@ -15979,7 +15979,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 //------------------------------------------------------------------------------
 Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params )
 {
-	return { AE_ALLOC_TAG_FILE };
+	return Array< std::string >( AE_ALLOC_TAG_FILE );
 }
 
 //------------------------------------------------------------------------------
