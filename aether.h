@@ -2174,6 +2174,10 @@ public:
 	int32_t GetHeight() const;
 	//! Window content scale factor
 	float GetScaleFactor() const { return m_scaleFactor; }
+	
+	//! Get the clickable or touchable region of a window (ie. a rectangle that does not intersect screen notches or title bars)
+	//! Returned rect is in local window space (the same as ae::Input::mouse::position).
+	ae::RectInt GetSafeArea() const;
 
 	//! Enable window events logging to console
 	void SetLoggingEnabled( bool enable ) { m_debugLog = enable; }
@@ -13533,6 +13537,22 @@ void Window::SetMaximized( bool maximized )
 #endif
 }
 
+ae::RectInt Window::GetSafeArea() const
+{
+#if _AE_OSX_
+	// @TODO: ae::Window uses NSWindow::contentLayoutRect which represents
+	// the visible content size, but it does not account for the window
+	// manipulation control boundaries (resize and drag). Can this boundary
+	// be calculated somehow?
+	const int32_t kBorder = 3;
+	const int32_t width = ae::Max( 0, m_width - kBorder );
+	const int32_t height = ae::Max( 0, m_height - kBorder );
+	return ae::RectInt::FromPointAndSize( ae::Int2( kBorder ), ae::Int2( width, height ) );
+#else // @TODO: iOS safe areas
+	return ae::RectInt::FromPointAndSize( ae::Int2( 0, 0 ), ae::Int2( m_window->GetWidth(), m_window->GetHeight() ) );
+#endif
+}
+
 //------------------------------------------------------------------------------
 // ae::Input Objective-C aeTextInputDelegate and aeKeyInput classes
 //------------------------------------------------------------------------------
@@ -13902,16 +13922,8 @@ void Input::Pump()
 				m_SetMousePos( ae::Int2( p.x, p.y ) - windowPos );
 			}
 			
-			// @TODO: ae::Window uses NSWindow::contentLayoutRect which represents
-			// the visible content size, but it does not account for the window
-			// manipulation control boundaries (resize and drag). Can this boundary
-			// be calculated somehow?
-			const int32_t kBorder = 3;
-			const bool mouseWithinWindow = mouse.position.x > kBorder
-				&& mouse.position.y > kBorder
-				&& mouse.position.x < m_window->GetWidth() - kBorder
-				&& mouse.position.y < m_window->GetHeight() - kBorder;
-			
+			ae::RectInt safeRect = m_window->GetSafeArea();
+			const bool mouseWithinWindow = safeRect.Contains( mouse.position );
 			bool clicked = false;
 			switch ( event.type )
 			{
@@ -14503,6 +14515,14 @@ void Input::SetMouseCaptured( bool enable )
 	{
 		AE_ASSERT( !m_captureMouse );
 		return;
+	}
+	else if ( enable && m_mousePosSet )
+	{
+		ae::RectInt safeRect = m_window->GetSafeArea();
+		if ( !safeRect.Contains( mouse.position ) )
+		{
+			return;
+		}
 	}
 	
 	if( enable != m_captureMouse )
