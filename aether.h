@@ -2403,6 +2403,7 @@ class Input
 #define AE_INPUT_RELEASE( value, property ) !value.property && value##Prev.property
 	
 public:
+	Input();
 	void Initialize( Window* window );
 	void Terminate();
 	void Pump();
@@ -13733,6 +13734,12 @@ EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEven
 	return true;
 }
 #endif
+
+Input::Input()
+{
+	memset( m_keys, 0, sizeof(m_keys) );
+	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
+}
 
 void Input::Initialize( Window* window )
 {
