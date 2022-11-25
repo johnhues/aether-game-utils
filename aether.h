@@ -1453,65 +1453,47 @@ private:
 //------------------------------------------------------------------------------
 // ae::Dict class
 //------------------------------------------------------------------------------
+// @TODO: Handle string special cases
+//void Set( const char* key, const char* value );
+//void Set( const char* key, char* value ) { SetString( key, (const char*)value ); }
+//const char* GetString( const char* key, const char* defaultValue ) const;
+//const char* GetString( int32_t index, const char* defaultValue ) const;
+template < uint32_t N >
 class Dict
 {
 public:
+	Dict();
 	Dict( ae::Tag tag );
-	void SetString( const char* key, const char* value );
-	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
-	void SetInt( const char* key, int32_t value );
-	void SetUint( const char* key, uint32_t value );
-	void SetFloat( const char* key, float value );
-	void SetDouble( const char* key, double value );
-	void SetBool( const char* key, bool value );
-	void SetVec2( const char* key, ae::Vec2 value );
-	void SetVec3( const char* key, ae::Vec3 value );
-	void SetVec4( const char* key, ae::Vec4 value );
-	void SetInt2( const char* key, ae::Int2 value );
-	void SetMatrix4( const char* key, const ae::Matrix4& value );
+	
+	template < typename T > void Set( const char* key, const T& value );
+	template < typename T > T Get( const char* key, const T& defaultValue ) const;
+	//! Returns true if the given \p key is found and the value can be converted
+	//! to the given type, and false otherwise. If true is returned and \p valueOut
+	//! is provided, \p valueOut will be set to the value of the found key.
+	template < typename T > bool Has( const char* key, T* valueOut = nullptr ) const;
+	//! Resets this ae::Dict so it has zero length.
 	void Clear();
 
-	const char* GetString( const char* key, const char* defaultValue ) const;
-	int32_t GetInt( const char* key, int32_t defaultValue ) const;
-	uint32_t GetUint( const char* key, uint32_t defaultValue ) const;
-	float GetFloat( const char* key, float defaultValue ) const;
-	double GetDouble( const char* key, double defaultValue ) const;
-	bool GetBool( const char* key, bool defaultValue ) const;
-	ae::Vec2 GetVec2( const char* key, ae::Vec2 defaultValue ) const;
-	ae::Vec3 GetVec3( const char* key, ae::Vec3 defaultValue ) const;
-	ae::Vec4 GetVec4( const char* key, ae::Vec4 defaultValue ) const;
-	ae::Int2 GetInt2( const char* key, ae::Int2 defaultValue ) const;
-	ae::Matrix4 GetMatrix4( const char* key, const ae::Matrix4& defaultValue ) const;
-	bool Has( const char* key ) const;
-
-	const char* GetKey( uint32_t idx ) const;
-	const char* GetValue( uint32_t idx ) const;
+	//! Returns the key of at the given \p index. Use with ae::Dict::Length() to
+	//! iterate over elements.
+	const char* GetKey( uint32_t index ) const;
+	//! Returns the string representation of a value at the given \p index. Use
+	//! with ae::Dict::Length() to iterate over elements.
+	const char* GetValue( uint32_t index ) const;
+	//! Returns the the number of contained elements. Use with ae::Dict::GetKey()
+	//! and ae::Dict::GetValue() to iterate over elements.
 	uint32_t Length() const { return m_entries.Length(); }
 	
-	// Ranged-based loop. Lowercase to match c++ standard
+	// Ranged-based loop functions. Lowercase to match c++ standard
 	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
 	ae::Pair< ae::Str128, ae::Str128 >* end() { return m_entries.end(); }
 	const ae::Pair< ae::Str128, ae::Str128 >* begin() const { return m_entries.begin(); }
 	const ae::Pair< ae::Str128, ae::Str128 >* end() const { return m_entries.end(); }
 
 private:
-	Dict() = delete;
-	// Prevent the above functions from being called accidentally through automatic conversions
-	template < typename T > void SetString( const char*, T ) = delete;
-	template < typename T > void SetInt( const char*, T ) = delete;
-	template < typename T > void SetUint( const char*, T ) = delete;
-	template < typename T > void SetFloat( const char*, T ) = delete;
-	template < typename T > void SetDouble( const char*, T ) = delete;
-	template < typename T > void SetBool( const char*, T ) = delete;
-	template < typename T > void SetVec2( const char*, T ) = delete;
-	template < typename T > void SetVec3( const char*, T ) = delete;
-	template < typename T > void SetVec4( const char*, T ) = delete;
-	template < typename T > void SetInt2( const char*, T ) = delete;
-	template < typename T > void SetMatrix4( const char*, T ) = delete;
 	ae::Map< ae::Str128, ae::Str128 > m_entries; // @TODO: Should support static allocation
 };
-
-inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
+template < uint32_t N > std::ostream& operator<<( std::ostream& os, const ae::Dict< N >& dict );
 
 //------------------------------------------------------------------------------
 // ae::ListNode class
@@ -6395,7 +6377,7 @@ inline std::string ToString( ae::Matrix4 v )
 // No implementation so this acts as a forward declaration. Also a default
 // templated ae::ToString function would prevent the compiler/linker from looking
 // for ae::ToString implementations in other modules.
-template < typename T > T FromString( const char* str, const T& defaultValue );
+template < typename T > T FromString( const char* str, const T& defaultValue, bool* success = nullptr );
 
 template <>
 inline ae::Int2 FromString( const char* str, const ae::Int2& defaultValue )
