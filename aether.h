@@ -1088,26 +1088,33 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::TimeStep
-//! A utility for controlling frame time. Create once at the beginning of your program and set a desired frame
-//! length with ae::TimeStep::SetTimeStep() and call ae::TimeStep::Wait() each frame after drawing your scene.
-//! ae::TimeStep will attempt to keep a steady frame rate, but you should still use ae::TimeStep::GetDt() in case
-//! your frame takes too long. On some platforms the high resolution clock can go backwards,
-//! ae::TimeStep::GetDt() protects against that.
+//! A utility for measuring and controlling frame time. Create once at the
+//! beginning of your game, and set a desired frame rate with ae::TimeStep::SetTimeStep(),
+//! then call ae::TimeStep::Tick() each frame after drawing your scene.
 //------------------------------------------------------------------------------
 class TimeStep
 {
 public:
 	TimeStep();
 
+	//! ae::TimeStep::Tick() will sleep to target the provided frame rate.
+	//! Otherwise provide 0.0 to disable sleeping in ae::TimeStep::Tick().
 	void SetTimeStep( float timeStep );
+	//! Returns the value set by ae::TimeStep::SetTimeStep(). Default is 0.0.
 	float GetTimeStep() const;
+	//! Returns the number of times ae::TimeStep::Tick() has been called.
 	uint32_t GetStepCount() const;
 
+	//! Returns the time between the last call to ae::TimeStep::Tick() in
+	//! seconds. The return value is always 0.0 or greater.
 	float GetDt() const;
-	//! Useful for handling frames with high delta time, eg: timeStep.SetDt( timeStep.GetTimeStep() )
+	//! Useful for handling frames with 0.0 or high dt, eg: timeStep.SetDt( timeStep.GetTimeStep() )
 	void SetDt( float sec );
 
-	void Wait();
+	//! Call this every frame to update dt. If a non-zero frame rate is specified
+	//! ae::TimeStep will attempt to keep a steady frame rate, but you should
+	//! still use ae::TimeStep::GetDt() in case your frame takes too long.
+	void Tick();
 
 private:
 	uint32_t m_stepCount = 0;
@@ -2456,6 +2463,7 @@ public:
 // private:
 	void m_SetMousePos( ae::Int2 pos );
 	void m_SetCursorPos( ae::Int2 pos );
+	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
 	bool m_captureMouse = false;
 	ae::Int2 m_capturedMousePos = ae::Int2( 0, 0 );
@@ -12396,7 +12404,7 @@ void TimeStep::SetDt( float sec )
 	m_prevFrameLength = sec;
 }
 
-void TimeStep::Wait()
+void TimeStep::Tick()
 {
 #if _AE_EMSCRIPTEN_
 	// Frame rate of emscripten builds is controlled by the browser
@@ -13807,6 +13815,7 @@ void Input::Terminate()
 
 void Input::Pump()
 {
+	m_timeStep.Tick();
 #if _AE_EMSCRIPTEN_
 	if ( newFrame_HACK )
 	{
@@ -14007,10 +14016,10 @@ void Input::Pump()
 				case NSEventTypeScrollWheel:
 					if( mouseWithinWindow )
 					{
-						mouse.scroll.x += event.deltaX;
-						mouse.scroll.y += event.deltaY;
+						mouse.scroll.x += event.scrollingDeltaX * m_timeStep.GetDt();
+						mouse.scroll.y += event.scrollingDeltaY * m_timeStep.GetDt();
 					}
-					// @NOTE: Scroll is never NSEventSubtypeTouchfffffff
+					// @NOTE: Scroll is never NSEventSubtypeTouch
 					break;
 				default:
 					break;
