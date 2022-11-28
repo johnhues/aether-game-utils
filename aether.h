@@ -1089,7 +1089,7 @@ private:
 //------------------------------------------------------------------------------
 // ae::TimeStep
 //! A utility for measuring and controlling frame time. Create once at the
-//! beginning of your game, and set a desired frame rate with ae::TimeStep::SetTimeStep(),
+//! beginning of your game, and set a desired frame time with ae::TimeStep::SetTimeStep(),
 //! then call ae::TimeStep::Tick() each frame after drawing your scene.
 //------------------------------------------------------------------------------
 class TimeStep
@@ -1097,9 +1097,9 @@ class TimeStep
 public:
 	TimeStep();
 
-	//! ae::TimeStep::Tick() will sleep to target the provided frame rate.
+	//! ae::TimeStep::Tick() will sleep to target the provided frame time.
 	//! Otherwise provide 0.0 to disable sleeping in ae::TimeStep::Tick().
-	void SetTimeStep( float timeStep );
+	void SetTimeStep( float frameTime );
 	//! Returns the value set by ae::TimeStep::SetTimeStep(). Default is 0.0.
 	float GetTimeStep() const;
 	//! Returns the number of times ae::TimeStep::Tick() has been called.
