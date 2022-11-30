@@ -14016,8 +14016,10 @@ void Input::Pump()
 				case NSEventTypeScrollWheel:
 					if( mouseWithinWindow )
 					{
-						mouse.scroll.x += event.scrollingDeltaX * m_timeStep.GetDt();
-						mouse.scroll.y += event.scrollingDeltaY * m_timeStep.GetDt();
+						mouse.usingTouch = [event hasPreciseScrollingDeltas];
+						float mult = mouse.usingTouch ? m_timeStep.GetDt() : 1.0f;
+						mouse.scroll.x += event.scrollingDeltaX * mult;
+						mouse.scroll.y += event.scrollingDeltaY * mult;
 					}
 					// @NOTE: Scroll is never NSEventSubtypeTouch
 					break;
@@ -20385,34 +20387,41 @@ float Spline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut, float* tOut )
 
 	float t = 0.0f;
 	float tClosest = 0.0f;
-	for ( uint32_t i = 0; i < m_segments.Length(); i++ )
+	if ( m_controlPoints.Length() == 1 )
 	{
-		const Segment& segment = m_segments[ i ];
-		// @NOTE: Don't check segments that are further away than the already closest point
-		if ( segment.GetAABB().GetSignedDistanceFromSurface( p ) <= closestDistance )
-		{
-			ae::Vec3 segmentP;
-			float tSegment;
-			float d = segment.GetMinDistance( p, &segmentP, &tSegment );
-			if ( d < closestDistance )
-			{
-				closest = segmentP;
-				closestDistance = d;
-				tClosest = t + tSegment;
-			}
-		}
-		t += segment.GetLength(); // After closest check so segment is not included
+		closest = m_controlPoints[ 0 ];
+		closestDistance = ( closest - p ).Length();
 	}
+	else
+	{
+		for ( uint32_t i = 0; i < m_segments.Length(); i++ )
+		{
+			const Segment& segment = m_segments[ i ];
+			// @NOTE: Don't check segments that are further away than the already closest point
+			if ( segment.GetAABB().GetSignedDistanceFromSurface( p ) <= closestDistance )
+			{
+				ae::Vec3 segmentP;
+				float tSegment;
+				float d = segment.GetMinDistance( p, &segmentP, &tSegment );
+				if ( d < closestDistance )
+				{
+					closest = segmentP;
+					closestDistance = d;
+					tClosest = t + tSegment;
+				}
+			}
+			t += segment.GetLength(); // After closest check so segment is not included
+		}
+	}
+	
 	if ( nearestOut )
 	{
 		*nearestOut = closest;
 	}
-
 	if ( tOut )
 	{
-			*tOut = tClosest;
+		*tOut = tClosest;
 	}
-
 	return closestDistance;
 }
 
