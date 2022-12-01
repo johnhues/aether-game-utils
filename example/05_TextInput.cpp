@@ -112,7 +112,7 @@ int main()
     textRender.Render( textToNdc );
 
     render.Present();
-    timeStep.Wait();
+    timeStep.Tick();
   }
 
   AE_LOG( "Terminate" );

@@ -250,7 +250,7 @@ int main()
 		// Frame end
 		debugLines.Render( worldToProj );
 		render.Present();
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	AE_INFO( "Terminate" );

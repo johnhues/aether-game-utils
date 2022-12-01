@@ -272,7 +272,7 @@ int main()
     spriteRender.Render( screenTransform, &tex );
 
     render.Present();
-    timeStep.Wait();
+    timeStep.Tick();
   }
 
   //------------------------------------------------------------------------------

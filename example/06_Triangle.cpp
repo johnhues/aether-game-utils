@@ -148,7 +148,7 @@ bool Example::Tick()
 	vertexData.Draw( &shader, uniformList );
 
 	render.Present();
-	timeStep.Wait();
+	timeStep.Tick();
 	
 	return !input.quit;
 }

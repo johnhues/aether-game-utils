@@ -161,7 +161,7 @@ int main()
 		vertexData.Draw( &shadowShader, uniformList );
 		
 		render.Present();
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	AE_INFO( "Terminate" );

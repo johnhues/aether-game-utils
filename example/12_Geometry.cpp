@@ -659,7 +659,7 @@ int main()
 
 		render.Present();
 
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	AE_INFO( "Terminate" );

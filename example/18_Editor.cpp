@@ -325,7 +325,7 @@ void Game::Run()
 		
 		debugLines.Render( worldToProj );
 		gfx.Present();
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 }
 

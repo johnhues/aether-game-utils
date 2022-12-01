@@ -78,7 +78,7 @@ int main()
 
     spriteRenderer.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / 2.0f, render.GetAspectRatio() / 2.0f, 1.0f ) ), &spriteTex );
     render.Present();
-    timeStep.Wait();
+    timeStep.Tick();
   }
 
   AE_LOG( "Terminate" );

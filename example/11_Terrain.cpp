@@ -730,7 +730,7 @@ int main()
       render.Present();
     }
     
-    timeStep.Wait();
+    timeStep.Tick();
   }
   
   WriteObjects( &fileSystem, objects );

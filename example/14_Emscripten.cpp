@@ -93,7 +93,7 @@ public:
 	{
 		Update();
 		Render();
-		timeStep.Wait();
+		timeStep.Tick();
 		return !input.quit;
 	}
 

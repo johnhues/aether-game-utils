@@ -123,7 +123,7 @@ int main()
 		render.Clear( color.Lerp( ae::Color::PicoWhite(), hitOpacity * 0.8f ) );
 		render.Present();
 		
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	AE_LOG( "Terminate" );

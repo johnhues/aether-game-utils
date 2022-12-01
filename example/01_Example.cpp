@@ -48,7 +48,7 @@ int main()
 		graphicsDevice.Activate();
 		graphicsDevice.Clear( ae::Color::PicoDarkPurple() );
 		graphicsDevice.Present();
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	AE_LOG( "Terminate" );

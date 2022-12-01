@@ -106,7 +106,7 @@ int main()
 		render.Clear( ae::Color::PicoDarkPurple() );
 		render.Present();
 
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	AE_LOG( "Terminate" );

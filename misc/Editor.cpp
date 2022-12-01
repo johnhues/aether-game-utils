@@ -640,7 +640,7 @@ void EditorProgram::Run()
 		ui.Render();
 		render.Present();
 
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 }
 

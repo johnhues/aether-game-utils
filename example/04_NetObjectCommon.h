@@ -68,7 +68,7 @@ public:
     debugLines.Render( worldToNdc );
     
     render.Present();
-    timeStep.Wait();
+    timeStep.Tick();
   }
   
   ae::Window window;

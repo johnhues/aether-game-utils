@@ -312,7 +312,7 @@ bool Program::Update()
 	DrawCursor();
 
 	m_gfx.Present();
-	m_timeStep.Wait();
+	m_timeStep.Tick();
 	return !m_input.quit;
 }
 

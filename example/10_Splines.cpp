@@ -133,7 +133,7 @@ int main()
     ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
     spriteRender.Render( screenTransform, &tex );
     render.Present();
-    timeStep.Wait();
+    timeStep.Tick();
   }
 
   AE_LOG( "Terminate" );

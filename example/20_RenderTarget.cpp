@@ -183,7 +183,7 @@ int main()
 		target.Render2D( 0, ndcRect, 0.0f );
 		render.Present();
 
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	AE_INFO( "Terminate" );
