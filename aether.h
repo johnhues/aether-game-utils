@@ -13693,8 +13693,20 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
+void _ae_em_new_frame( Input* input )
+{
+	if ( input->newFrame_HACK )
+	{
+		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
+		input->mousePrev = input->mouse;
+		input->mouse.movement = ae::Int2( 0 );
+		input->newFrame_HACK = false;
+	}
+}
+
 EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
+	// First time this function is called only
 	static ae::Key s_keyMap[ 255 ];
 	static bool s_first = true;
 	if ( s_first )
@@ -13759,20 +13771,43 @@ EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEven
 		s_keyMap[ 222 ] = ae::Key::Apostrophe;
 	}
 
+	// Start key handling
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-
-	if ( input->newFrame_HACK )
-	{
-		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
-		input->newFrame_HACK = false;
-	}
+	
+	_ae_em_new_frame( input );
 
 	if ( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
 	{
 		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
 		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
 	}
+	return true;
+}
+
+EM_BOOL _ae_em_handle_mouse( int32_t eventType, const EmscriptenMouseEvent* mouseEvent, void* userData )
+{
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+	
+	_ae_em_new_frame( input );
+	
+	switch ( eventType )
+	{
+		case EMSCRIPTEN_EVENT_MOUSEENTER: // @TODO: It seems like this event is never received
+			input->m_window->m_UpdateFocused( true );
+			break;
+		case EMSCRIPTEN_EVENT_MOUSELEAVE: // @TODO: It seems like this event is never received
+			input->m_window->m_UpdateFocused( false );
+			break;
+		default:
+			break;
+	}
+	
+	input->m_SetMousePos( ae::Int2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY ) );
+	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
+	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
+	
 	return true;
 }
 #endif
@@ -13796,6 +13831,11 @@ void Input::Initialize( Window* window )
 #if _AE_EMSCRIPTEN_
 	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
 	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
+	emscripten_set_mousedown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
+	emscripten_set_mouseup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
+	emscripten_set_mousemove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
+	emscripten_set_mouseenter_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
+	emscripten_set_mouseleave_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -13817,21 +13857,17 @@ void Input::Pump()
 {
 	m_timeStep.Tick();
 #if _AE_EMSCRIPTEN_
-	if ( newFrame_HACK )
-	{
-		memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
-		newFrame_HACK = false;
-	}
+	_ae_em_new_frame( this );
 	newFrame_HACK = true;
 #else
 	// Clear keys each frame and then check for presses below
 	// Emscripten doesn't do this because it uses a callback to set m_keys
 	memcpy( m_keysPrev, m_keys, sizeof(m_keys) );
 	memset( m_keys, 0, sizeof(m_keys) );
-#endif
 	mousePrev = mouse;
 	mouse.movement = ae::Int2( 0 );
 	mouse.scroll = ae::Vec2( 0.0f );
+#endif
 	m_textInput = ""; // Clear last frames text input
 
 	// Handle system events
