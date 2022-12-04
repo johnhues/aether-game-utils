@@ -79,43 +79,44 @@ uint16_t kCubeIndices[] =
 };
 
 //------------------------------------------------------------------------------
-// Main
+// Example
 //------------------------------------------------------------------------------
-int main()
+struct Example
 {
-	AE_INFO( "Initialize" );
-
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
 	ae::VertexArray vertexData;
-
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "cube" );
-	render.Initialize( &window );
-	input.Initialize( &window );
-	timeStep.SetTimeStep( 1.0f / 60.0f );
-
-	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
-	shader.SetDepthTest( true );
-	shader.SetDepthWrite( true );
-	shader.SetBlending( true );
-	shader.SetCulling( ae::Culling::CounterclockwiseFront );
-
-	vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
-	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
-	vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
-  vertexData.Upload();
-	
 	float r0 = 0.0f;
 	float r1 = 0.0f;
 
-	AE_INFO( "Run" );
-	while ( !input.quit )
+	void Initialize()
+	{
+		AE_INFO( "Initialize" );
+
+		window.Initialize( 800, 600, false, true );
+		window.SetTitle( "cube" );
+		render.Initialize( &window );
+		input.Initialize( &window );
+		timeStep.SetTimeStep( 1.0f / 60.0f );
+
+		shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
+		shader.SetDepthTest( true );
+		shader.SetDepthWrite( true );
+		shader.SetBlending( true );
+		shader.SetCulling( ae::Culling::CounterclockwiseFront );
+
+		vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+		vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
+		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
+		vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
+		vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
+		vertexData.Upload();
+	}
+
+	bool Tick()
 	{
 		input.Pump();
 		
@@ -143,14 +144,32 @@ int main()
 		vertexData.Draw( &shader, uniformList );
 		
 		render.Present();
-
 		timeStep.Tick();
+
+		return !input.quit;
 	}
 
-	AE_INFO( "Terminate" );
-	//input.Terminate();
-	render.Terminate();
-	window.Terminate();
+	void Terminate()
+	{
+		AE_INFO( "Terminate" );
+		input.Terminate();
+		render.Terminate();
+		window.Terminate();
+	}
+};
 
+//------------------------------------------------------------------------------
+// Main
+//------------------------------------------------------------------------------
+int main()
+{
+	Example example;
+	example.Initialize();
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* example ) { ((Example*)example)->Tick(); }, &example, 0, 1 );
+#else
+	while ( example.Tick() ) {}
+#endif
+	example.Terminate();
 	return 0;
 }

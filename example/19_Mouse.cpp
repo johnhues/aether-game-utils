@@ -99,7 +99,7 @@ class Program
 public:
 	void Initialize();
 	void Terminate();
-	bool Update();
+	bool Tick();
 
 	void DrawRect( ae::Rect rect, ae::Color color );
 	void DrawWindow();
@@ -176,7 +176,7 @@ void Program::Terminate()
 	m_window.Terminate();
 }
 
-bool Program::Update()
+bool Program::Tick()
 {
 	m_input.Pump();
 	
@@ -387,9 +387,9 @@ int main()
 	Program program;
 	program.Initialize();
 #if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* example ) { ((Example*)example)->Tick(); }, &example, 0, 1 );
+	emscripten_set_main_loop_arg( []( void* program ) { ((Program*)program)->Tick(); }, &program, 0, 1 );
 #else
-	while ( program.Update() ) {}
+	while ( program.Tick() ) {}
 #endif
 	program.Terminate();
 	return 0;

@@ -96,6 +96,8 @@ uint32_t HotSpotWorld::GetCollisionMask() const
 
 void HotSpotWorld::LoadTiles( const uint32_t* tiles, uint32_t width, uint32_t height, bool flipVertical )
 {
+  m_width = width;
+  m_height = height;
   for ( uint32_t y = 0; y < height; y++ )
   {
     for ( uint32_t x = 0; x < width; x++ )

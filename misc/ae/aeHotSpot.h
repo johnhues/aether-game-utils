@@ -39,6 +39,8 @@ class HotSpotWorld
 public:
   void Initialize( float timeStep );
   void Update( float dt );
+  uint32_t GetWidth() const { return m_width; }
+  uint32_t GetHeight() const { return m_height; }
 
   // 1) Tiles - Setup tile properties and enable collision
   void SetTileProperties( uint32_t type, uint32_t mask );
@@ -61,6 +63,8 @@ public:
 private:
   float m_timeStep = 0.0f;
   float m_timeAccumulator = 0.0f;
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
 
   aeSparseGrid< aeSparseGridZone< uint32_t, 16, 16, 1 > > m_tiles;
 
