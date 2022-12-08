@@ -255,8 +255,8 @@ struct Game
 		player.Render( &spriteRender, &tex );
 
 		ae::Vec2 camera = player.GetPosition();
-		ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 10.0f, render.GetAspectRatio() / 10.0f, 1.0f ) );
-		screenTransform *= ae::Matrix4::Translation( ae::Vec3( -camera.x, -camera.y, 0.0f ) );
+		ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 5.0f * render.GetAspectRatio() ), 1.0f / 5.0f, 1.0f ) );
+		screenTransform *= ae::Matrix4::Translation( ae::Vec3( -camera.x, -1.5f - camera.y, 0.0f ) );
 		spriteRender.Render( screenTransform, &tex );
 
 		render.Present();

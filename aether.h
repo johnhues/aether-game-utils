@@ -3354,10 +3354,13 @@ public:
 	RenderTarget m_canvas;
 #if _AE_EMSCRIPTEN_
 	EMSCRIPTEN_WEBGL_CONTEXT_HANDLE m_context = 0;
+	double m_lastResize = 0.0;
+	int32_t m_resizeWidthPrev = 0;
+	int32_t m_resizeHeightPrev = 0;
 #else
 	void* m_context = nullptr;
 #endif
-	int32_t m_defaultFbo = 0;
+	int32_t m_defaultFbo = -1;
 	
 	static GraphicsDevice* s_graphicsDevice;
 	VertexArray m_renderQuad;
@@ -13204,6 +13207,15 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::Window member functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+void _aeEmscriptenGetCanvasInfo( uint32_t* widthOut, uint32_t* heightOut, float* scaleOut )
+{
+	*scaleOut = emscripten_get_device_pixel_ratio();
+	*widthOut = EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetWidth; }) / *scaleOut;
+	*heightOut = EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetHeight; }) / *scaleOut;
+}
+#endif
+
 Window::Window()
 {
 	window = nullptr;
@@ -13215,7 +13227,7 @@ Window::Window()
 	m_fullScreen = false;
 	m_maximized = false;
 	m_focused = false;
-	m_scaleFactor = 0.0f;
+	m_scaleFactor = 1.0f;
 }
 
 bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor )
@@ -13460,20 +13472,7 @@ void Window::m_Initialize()
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
-	m_width = 0;
-	m_height = 0;
-	// double dpr = emscripten_get_device_pixel_ratio();
-	// emscripten_set_element_css_size("canvas", GetWidth() / dpr, GetHeight() / dpr);
-	emscripten_set_canvas_element_size( "canvas", GetWidth(), GetHeight() );
-	EM_ASM({
-		var canvas = document.getElementsByTagName('canvas')[0];
-		canvas.style.position = "absolute";
-		canvas.style.top = "0px";
-		canvas.style.left = "0px";
-		canvas.style.width = "100%";
-		canvas.style.height = "100%";
-	});
-	m_scaleFactor = 1.0f;
+	_aeEmscriptenGetCanvasInfo( (uint32_t*)&m_width, (uint32_t*)&m_height, &m_scaleFactor );
 #endif
 }
 
@@ -13482,17 +13481,6 @@ void Window::Terminate()
 	//SDL_DestroyWindow( (SDL_Window*)window );
 }
 
-#if _AE_EMSCRIPTEN_
-int32_t Window::GetWidth() const
-{
-	return EM_ASM_INT({ return window.innerWidth; });
-}
-
-int32_t Window::GetHeight() const
-{
-	return EM_ASM_INT({ return window.innerHeight; });
-}
-#else
 int32_t Window::GetWidth() const
 {
 	return m_width;
@@ -13502,16 +13490,17 @@ int32_t Window::GetHeight() const
 {
 	return m_height;
 }
-#endif
 
 void Window::SetTitle( const char* title )
 {
-	if ( window && m_windowTitle != title )
+	if ( m_windowTitle != title )
 	{
 #if _AE_WINDOWS_
-		SetWindowTextA( (HWND)window, title );
+		if ( window ) { SetWindowTextA( (HWND)window, title ); }
 #elif _AE_OSX_
-		((NSWindow*)window).title = [NSString stringWithUTF8String:title];
+		if ( window ) { ((NSWindow*)window).title = [NSString stringWithUTF8String:title]; }
+#elif _AE_EMSCRIPTEN_
+		emscripten_set_window_title( title );
 #endif
 		m_windowTitle = title;
 	}
@@ -13693,7 +13682,7 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-void _ae_em_new_frame( Input* input )
+void _aeEmscriptenNewFrame( Input* input )
 {
 	if ( input->newFrame_HACK )
 	{
@@ -13704,7 +13693,7 @@ void _ae_em_new_frame( Input* input )
 	}
 }
 
-EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
+EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
 	// First time this function is called only
 	static ae::Key s_keyMap[ 255 ];
@@ -13775,7 +13764,7 @@ EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEven
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
 	
-	_ae_em_new_frame( input );
+	_aeEmscriptenNewFrame( input );
 
 	if ( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
 	{
@@ -13785,12 +13774,12 @@ EM_BOOL _ae_em_handle_key( int eventType, const EmscriptenKeyboardEvent* keyEven
 	return true;
 }
 
-EM_BOOL _ae_em_handle_mouse( int32_t eventType, const EmscriptenMouseEvent* mouseEvent, void* userData )
+EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent* mouseEvent, void* userData )
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
 	
-	_ae_em_new_frame( input );
+	_aeEmscriptenNewFrame( input );
 	
 	switch ( eventType )
 	{
@@ -13829,13 +13818,13 @@ void Input::Initialize( Window* window )
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 
 #if _AE_EMSCRIPTEN_
-	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
-	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_key );
-	emscripten_set_mousedown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
-	emscripten_set_mouseup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
-	emscripten_set_mousemove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
-	emscripten_set_mouseenter_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
-	emscripten_set_mouseleave_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_ae_em_handle_mouse );
+	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
+	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
+	emscripten_set_mousedown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mouseup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mousemove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mouseenter_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_mouseleave_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -13857,7 +13846,7 @@ void Input::Pump()
 {
 	m_timeStep.Tick();
 #if _AE_EMSCRIPTEN_
-	_ae_em_new_frame( this );
+	_aeEmscriptenNewFrame( this );
 	newFrame_HACK = true;
 #else
 	// Clear keys each frame and then check for presses below
@@ -14085,6 +14074,13 @@ void Input::Pump()
 			}
 			[NSApp sendEvent:event];
 		}
+	}
+#elif _AE_EMSCRIPTEN_
+	{
+		uint32_t width, height;
+		float scale;
+		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
+		m_window->m_UpdateSize( width, height, scale );
 	}
 #endif
 
@@ -18816,20 +18812,21 @@ void RenderTarget::Initialize( uint32_t width, uint32_t height )
 
 void RenderTarget::Terminate()
 {
+	if ( m_fbo )
+	{
+		// On Emscripten it seems to matter that the framebuffer is deleted
+		// first so it's not referencing its textures.
+		glDeleteFramebuffers( 1, (uint32_t*)&m_fbo );
+		m_fbo = 0;
+	}
+	
 	for ( uint32_t i = 0; i < m_targets.Length(); i++ )
 	{
 		m_targets[ i ]->Terminate();
 		ae::Delete( m_targets[ i ] );
 	}
 	m_targets.Clear();
-
 	m_depth.Terminate();
-
-	if ( m_fbo )
-	{
-		glDeleteFramebuffers( 1, &m_fbo );
-		m_fbo = 0;
-	}
 
 	m_width = 0;
 	m_height = 0;
@@ -19024,7 +19021,7 @@ Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 }
 
 //------------------------------------------------------------------------------
-// GraphicsDevice member functions
+// ae::GraphicsDevice member functions
 //------------------------------------------------------------------------------
 GraphicsDevice* GraphicsDevice::s_graphicsDevice = nullptr;
 
@@ -19144,11 +19141,6 @@ void GraphicsDevice::Initialize( class Window* window )
 	glGetIntegerv( GL_FRAMEBUFFER_BINDING, &m_defaultFbo );
 	AE_CHECK_GL_ERROR();
 	
-	float scaleFactor = m_window->GetScaleFactor();
-	int32_t contentWidth = m_window->GetWidth() * scaleFactor;
-	int32_t contentHeight = m_window->GetHeight() * scaleFactor;
-	m_HandleResize( contentWidth, contentHeight );
-	
 	// Initialize shared RenderTarget resources
 	struct Vertex
 	{
@@ -19253,18 +19245,31 @@ void GraphicsDevice::Activate()
 	if ( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
 	{
 #if _AE_EMSCRIPTEN_
-		emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
-#else
-		 m_HandleResize( contentWidth, contentHeight );
+		const double currentTime = ae::GetTime();
+		if ( m_resizeWidthPrev != contentWidth || m_resizeHeightPrev != contentHeight )
+		{
+			m_resizeWidthPrev = contentWidth;
+			m_resizeHeightPrev = contentHeight;
+			m_lastResize = currentTime;
+		}
+		// Quarter second delay before resizing so it doesn't change every frame
+		if ( m_lastResize + 0.25 < currentTime )
 #endif
+		{
+#if _AE_EMSCRIPTEN_
+			// @NOTE: The window size is the 'real' size of the canvas dom, which
+			// is determined by the web page. This function sets the emscripten
+			// managed backbuffer size.
+			emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
+#endif
+			m_HandleResize( contentWidth, contentHeight );
+		}
 	}
 
-	if ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 )
+	if ( m_canvas.GetWidth() * m_canvas.GetHeight() )
 	{
-		return;
+		m_canvas.Activate();
 	}
-
-	m_canvas.Activate();
 }
 
 void GraphicsDevice::Clear( Color color )
@@ -19287,11 +19292,14 @@ void GraphicsDevice::Present()
 	AE_ASSERT( m_context );
 	AE_CHECK_GL_ERROR();
 
+#if _AE_EMSCRIPTEN_
+	EMSCRIPTEN_RESULT activateResult = emscripten_webgl_make_context_current( m_context );
+	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
+#endif
 	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
+	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // @HACK
 
-	// Clear window target in case canvas doesn't fit exactly
-	glClearColor( 1.0f, 0.0f, 0.0f, 1.0f );
+	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClearDepth( 1.0f );
 
 	glDepthMask( GL_TRUE );
@@ -19299,7 +19307,7 @@ void GraphicsDevice::Present()
 	glDisable( GL_DEPTH_TEST );
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	AE_CHECK_GL_ERROR();
-
+	
 	// @NOTE: Conversion to srgb is only needed for the backbuffer. The rest of the pipeline should be implemented as linear.
 #if _AE_IOS_
 	// SRGB conversion is automatic on ios/OpenGLES because GL_FRAMEBUFFER_SRGB is always on
@@ -19341,9 +19349,6 @@ void GraphicsDevice::AddTextureBarrier()
 
 void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 {
-	// @TODO: Also resize actual canvas element with emscripten?
-	// emscripten_set_canvas_element_size( "canvas", m_window->GetWidth(), m_window->GetHeight() );
-	// emscripten_set_canvas_size( m_window->GetWidth(), m_window->GetHeight() );
 	// @TODO: Allow user to pass in a canvas scale factor / aspect ratio parameter
 	m_canvas.Initialize( width, height );
 	m_canvas.AddTexture( Texture::Filter::Nearest, Texture::Wrap::Clamp );

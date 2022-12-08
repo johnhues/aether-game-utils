@@ -95,7 +95,6 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 				"-s ASSERTIONS=1" # Enable assertions
 				"-s DEMANGLE_SUPPORT=1"
 				"-s STACK_OVERFLOW_CHECK=1"
-				"-s SOCKET_DEBUG=1" # Print socket debug information automatically
 				"-O0"
 				"-frtti"
 				"-fsanitize=undefined"
@@ -108,11 +107,17 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			)
 		endif()
 		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
+		
+		set(_AE_EM_OUT_SUFFIX ".html")
+		string(FIND "${_AE_RESOURCES}" ".html" _AE_FOUND_HTML)
+		if(NOT _AE_FOUND_HTML EQUAL -1)
+			set(_AE_EM_OUT_SUFFIX ".js") # Export js if an html file is specified
+		endif()
+
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
 			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
-			# Output index.html
 			OUTPUT_NAME "index"
-			SUFFIX ".html"
+			SUFFIX ${_AE_EM_OUT_SUFFIX}
 		)
 	endif()
 	
