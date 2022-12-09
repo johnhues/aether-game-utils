@@ -1,35 +1,24 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
-# project name and supported languages
+# Project definition
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 set(AE_LIBRARY_NAME ae)
 set(AE_LIBRARIES ${AE_LIBRARY_NAME})
+set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
 
-# guard against in-source builds and bad build-type strings
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake)
-
-# get git hash
-include(cmake/git_revision.cmake)
-
+# Includes
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake) # guard against in-source builds and bad build-type strings
+include(cmake/git_revision.cmake) # print current local git repo status
 include(ExternalProject)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake") # find dependencies
 
-# codesigning configuration
-if(APPLE)
-	set(AE_CODESIGN_IDENTITY "" CACHE STRING "Codesigning identity to use for apple builds")
-endif()
-
-set(AE_LEAN_AND_MEAN OFF CACHE BOOL "Disables building tests and examples")
-
-# find dependencies
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-# use c++17
-set(CMAKE_CXX_STANDARD 17)
+# Defines and configuration
+set(CMAKE_CXX_STANDARD 17) # use c++17
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# use unicode
-add_definitions(-D_UNICODE -DUNICODE)
-# disable standard library warnings on windows
-add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+if (MSVC)
+	add_definitions(-D_UNICODE -DUNICODE) # use unicode
+	add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
+endif()
 if(APPLE)
 	add_definitions(-DAE_USE_MODULES)
 	add_compile_options(-fmodules)
@@ -39,12 +28,12 @@ endif()
 
 # OpenGL
 if (IOS_TOOLCHAIN_HAS_RUN)
-	set(OpenGLES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
-	if (EXISTS ${OpenGLES})
+	set(OPENGL_LIBRARIES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
+	if (EXISTS ${OPENGL_LIBRARIES})
 		message(STATUS "Found OpenGLES")
 	else()
 		message(SEND_ERROR "Could not find OpenGLES")
-		set(OpenGLES "")
+		set(OPENGL_LIBRARIES "")
 	endif()
 elseif(EMSCRIPTEN)
 	set(OPENGL_LIBRARIES GL)
@@ -52,7 +41,6 @@ else()
 	set(OpenGL_GL_PREFERENCE GLVND) # See https://cmake.org/cmake/help/latest/policy/CMP0072.html
 	find_package(OpenGL REQUIRED)
 endif()
-
 if (MSVC)
 	add_definitions(-DGLEW_STATIC)
 	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
@@ -65,20 +53,23 @@ if (MSVC)
 		INSTALL_COMMAND ""
 	)
 	set(GLEW_INCLUDE_DIR ${AE_GLEW_SRC}/include)
-	set(GLEW_LIBRARY ${AE_GLEW_SRC}/lib/Release/x64/glew32s.lib)
-	list(APPEND AE_DEPS_TARGETS glew)
+	list(APPEND OPENGL_LIBRARIES glew ${AE_GLEW_SRC}/lib/Release/x64/glew32s.lib)
 endif()
 
-# UUID
-if(NOT EMSCRIPTEN)
-	if(UNIX AND NOT APPLE)
+if(AE_NET)
+	include(FetchContent)
+	# UUID
+	if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
 		find_package(uuid REQUIRED)
 	endif()
+	# enet
+	FetchContent_Declare(
+		enet
+		GIT_REPOSITORY "https://github.com/lsalzman/enet.git"
+		GIT_TAG cf735e639e5c9e3d2d84d71f1dbf789e8c2f3fd0
+	)
+	FetchContent_MakeAvailable(enet)
 endif()
-
-# enet
-add_subdirectory(deps/enet)
-set(ENET_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/enet/include)
 
 # OpenAL
 if (IOS_TOOLCHAIN_HAS_RUN)
@@ -93,43 +84,29 @@ elseif(NOT EMSCRIPTEN)
 	find_package(OpenAL REQUIRED)
 endif()
 
-# dependency include directories
+# Dependency headers
+set(AE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(AE_MISC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc)
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
-	${ENET_INCLUDE_DIR}
 	${GLEW_INCLUDE_DIR}
 	${OPENAL_INCLUDE_DIR}
 )
-
-# dependency libraries
-set(AE_DEPS_LIBARARIES
+# Dependency libraries
+set(AE_DEPS
 	${OPENGL_LIBRARIES}
-	${OpenGLES}
-	enet
+	${OPENAL_LIBRARY}
 )
-if(APPLE)
-	list(APPEND AE_DEPS_LIBARARIES
-		${OPENAL_LIBRARY}
-	)
-elseif(MSVC)
-	list(APPEND AE_DEPS_LIBARARIES
+if(MSVC)
+	list(APPEND AE_DEPS
 		version
 		Winmm
 		Imm32
 		Setupapi
 		Ws2_32
-		${GLEW_LIBRARY}
-		${OPENAL_LIBRARY}
 	)
-elseif(UNIX)
-	list(APPEND AE_DEPS_LIBARARIES
-		${OPENAL_LIBRARY}
-		uuid
-	)
+elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
+	list(APPEND AE_DEPS uuid)
 endif()
-
-# Library paths
-set(AE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(AE_MISC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc)
 
 # Loaders
 set(AE_LOADER_INCLUDE ${AE_MISC_DIR}/ae/loaders.h)
