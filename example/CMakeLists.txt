@@ -4,11 +4,6 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/safeguards.cmake)
 Include(FetchContent)
 Include(AddBundle)
 
-# stb
-add_library(stb INTERFACE)
-target_sources(stb INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/stb_image.h)
-target_include_directories(stb INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
-
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
 FetchContent_Declare(
@@ -37,18 +32,6 @@ file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/i
 add_library(rapidjson INTERFACE) # Header only
 target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
 
-# openfbx
-FetchContent_Declare(
-	openfbx
-	GIT_REPOSITORY https://github.com/nem0/OpenFBX.git
-	GIT_TAG b2e720c8f6d5979fc4ed346262e6270084b15836
-)
-FetchContent_Populate(openfbx) # Download but don't build
-FetchContent_GetProperties(openfbx SOURCE_DIR OPENFBX_SOURCE_DIR)
-file(GLOB_RECURSE openfbx_SOURCES CONFIGURE_DEPENDS "${openfbx_SOURCE_DIR}/src/*")
-add_library(openfbx ${openfbx_SOURCES})
-target_include_directories(openfbx INTERFACE "${openfbx_SOURCE_DIR}/src")
-
 # Example source helpers
 set(AE_EXAMPLE_SOURCES Common.h)
 if(EMSCRIPTEN)
@@ -63,7 +46,7 @@ add_bundle("Hello World"
 	"ae.00_hello_world"
 	"0.0.0"
 	"data/Icon.icns"
-	"00_HelloWorld.cpp;${AE_EXAMPLE_SOURCES}"
+	"00_HelloWorld.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
@@ -75,23 +58,25 @@ add_bundle("Example"
 	"ae.01_example"
 	"0.0.0"
 	"data/Icon.icns"
-	"01_Example.cpp;${AE_EXAMPLE_SOURCES}"
+	"01_Example.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
 )
 
 # Sprites
-add_bundle("Sprites"
-	"02_sprites"
-	"ae.02_sprites"
-	"0.0.0"
-	"data/Icon.icns"
-	"02_Sprites.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
-	"${AE_EXAMPLE_RESOURCES};data/circle.png"
-	"ae;stb"
-	"${AE_MISC_DIR}"
-)
+if(AE_LOADERS_STB)
+	add_bundle("Sprites"
+		"02_sprites"
+		"ae.02_sprites"
+		"0.0.0"
+		"data/Icon.icns"
+		"02_Sprites.cpp"
+		"${AE_EXAMPLE_RESOURCES};data/circle.png"
+		"ae;ae_loaders"
+		""
+	)
+endif()
 
 # Client / Server
 add_bundle("Client"
@@ -99,7 +84,7 @@ add_bundle("Client"
 	"ae.03_client"
 	"0.0.0"
 	"data/Icon.icns"
-	"03_Client.cpp;${AE_EXAMPLE_SOURCES}"
+	"03_Client.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
@@ -109,47 +94,47 @@ add_bundle("Server"
 	"ae.03_server"
 	"0.0.0"
 	"data/Icon.icns"
-	"03_Server.cpp;${AE_EXAMPLE_SOURCES}"
+	"03_Server.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
 )
 
 # Network Objects
-if(AE_NET)
-	add_bundle("NetObject Client"
-		"04_net_object_client"
-		"ae.04_net_object_client"
-		"0.0.0"
-		"data/Icon.icns"
-		"04_NetObjectClient.cpp;04_NetObjectCommon.h;${AE_EXAMPLE_SOURCES}"
-		"${AE_EXAMPLE_RESOURCES}"
-		"ae"
-		"${AE_MISC_DIR}"
-	)
-	add_bundle("NetObject Server"
-		"04_net_object_server"
-		"ae.04_net_object_server"
-		"0.0.0"
-		"data/Icon.icns"
-		"04_NetObjectServer.cpp;04_NetObjectCommon.h;${AE_EXAMPLE_SOURCES}"
-		"${AE_EXAMPLE_RESOURCES}"
-		"ae"
-		"${AE_MISC_DIR}"
-	)
-endif()
-
-# Input
-add_bundle("Text Input"
-	"05_text_input"
-	"ae.05_text_input"
+add_bundle("NetObject Client"
+	"04_net_object_client"
+	"ae.04_net_object_client"
 	"0.0.0"
 	"data/Icon.icns"
-	"05_TextInput.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
-	"${AE_EXAMPLE_RESOURCES};data/font.png"
-	"ae;stb"
-	"${AE_MISC_DIR}"
+	"04_NetObjectClient.cpp;04_NetObjectCommon.h"
+	"${AE_EXAMPLE_RESOURCES}"
+	"ae_net"
+	""
 )
+add_bundle("NetObject Server"
+	"04_net_object_server"
+	"ae.04_net_object_server"
+	"0.0.0"
+	"data/Icon.icns"
+	"04_NetObjectServer.cpp;04_NetObjectCommon.h"
+	"${AE_EXAMPLE_RESOURCES}"
+	"ae_net"
+	""
+)
+
+# Text Input
+if(AE_LOADERS_STB)
+	add_bundle("Text Input"
+		"05_text_input"
+		"ae.05_text_input"
+		"0.0.0"
+		"data/Icon.icns"
+		"05_TextInput.cpp"
+		"${AE_EXAMPLE_RESOURCES};data/font.png"
+		"ae;ae_loaders"
+		""
+	)
+endif()
 
 # Triangle
 add_bundle("Triangle"
@@ -160,7 +145,7 @@ add_bundle("Triangle"
 	"06_Triangle.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
-	"${AE_INCLUDE_DIR}"
+	""
 )
 
 # Cube
@@ -172,7 +157,7 @@ add_bundle("Cube"
 	"07_Cube.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
-	"${AE_INCLUDE_DIR}"
+	""
 )
 
 # Audio
@@ -181,7 +166,7 @@ add_bundle("Audio"
 	"ae.08_audio"
 	"0.0.0"
 	"data/Icon.icns"
-	"08_Audio.cpp;${AE_EXAMPLE_SOURCES}"
+	"08_Audio.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/music.wav;data/sound.wav"
 	"ae"
 	""
@@ -193,47 +178,49 @@ add_bundle("Platformer2D"
 	"ae.09_platformer2d"
 	"0.0.0"
 	"data/Icon.icns"
-	"09_Platformer2D.cpp;${AE_EXAMPLE_SOURCES};${AE_MISC_DIR}/ae/aeHotSpot.h;${AE_MISC_DIR}/aeHotSpot.cpp"
+	"09_Platformer2D.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
-	"ae"
-	"${AE_MISC_DIR}"
+	"ae_extras"
+	""
 )
 
 # Splines
-add_bundle("Splines"
-	"10_splines"
-	"ae.10_splines"
-	"0.0.0"
-	"data/Icon.icns"
-	"10_Splines.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
-	"${AE_EXAMPLE_RESOURCES};data/circle.png"
-	"ae;stb"
-	"${AE_MISC_DIR}"
-)
+if(AE_LOADERS_STB)
+	add_bundle("Splines"
+		"10_splines"
+		"ae.10_splines"
+		"0.0.0"
+		"data/Icon.icns"
+		"10_Splines.cpp"
+		"${AE_EXAMPLE_RESOURCES};data/circle.png"
+		"ae;ae_loaders"
+		""
+	)
 
-# Terrain
-add_bundle("Terrain"
-	"11_terrain"
-	"ae.11_terrain"
-	"0.0.0"
-	"data/Icon.icns"
-	"11_Terrain.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC};${AE_MISC_DIR}/ae/aeTerrain.h;${AE_MISC_DIR}/ae/aeImage.h;${AE_MISC_DIR}/aeTerrain.cpp;${AE_MISC_DIR}/aeTerrainSdf.cpp;${AE_MISC_DIR}/aeImage.cpp"
-	"${AE_EXAMPLE_RESOURCES};data/font.png"
-	"ae;imgui;imguizmo;stb"
-	"${AE_MISC_DIR}"
-)
+	# Terrain
+	add_bundle("Terrain"
+		"11_terrain"
+		"ae.11_terrain"
+		"0.0.0"
+		"data/Icon.icns"
+		"11_Terrain.cpp"
+		"${AE_EXAMPLE_RESOURCES};data/font.png"
+		"ae;ae_extras;ae_loaders;imgui;imguizmo"
+		""
+	)
 
-# Geometry
-add_bundle("Geometry"
-	"12_geometry"
-	"ae.12_geometry"
-	"0.0.0"
-	"data/Icon.icns"
-	"12_Geometry.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_STB_LOADER_SRC}"
-	"${AE_EXAMPLE_RESOURCES};data/font.png"
-	"ae;stb"
-	"${AE_MISC_DIR}"
-)
+	# Geometry
+	add_bundle("Geometry"
+		"12_geometry"
+		"ae.12_geometry"
+		"0.0.0"
+		"data/Icon.icns"
+		"12_Geometry.cpp"
+		"${AE_EXAMPLE_RESOURCES};data/font.png"
+		"ae;ae_loaders"
+		""
+	)
+endif()
 
 # FileDialogs
 add_bundle("File Dialogs"
@@ -241,7 +228,7 @@ add_bundle("File Dialogs"
 	"ae.13_file_dialogs"
 	"0.0.0"
 	"data/Icon.icns"
-	"13_FileDialogs.cpp;${AE_EXAMPLE_SOURCES}"
+	"13_FileDialogs.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
@@ -256,7 +243,7 @@ add_bundle("Emscripten"
 	"14_Emscripten.cpp"
 	"index.html;data/moon.tga;data/test.txt"
 	"ae"
-	"${AE_INCLUDE_DIR}"
+	""
 )
 
 # OBJViewer
@@ -265,47 +252,49 @@ add_bundle("OBJViewer"
 	"ae.15_obj_viewer"
 	"0.0.0"
 	"data/Icon.icns"
-	"15_OBJViewer.cpp;${AE_EXAMPLE_SOURCES}"
+	"15_OBJViewer.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/bunny.obj"
 	"ae;imgui;imguizmo"
 	""
 )
 
 # SkinnedMesh
-add_bundle("SkinnedMesh"
-	"16_skinned_mesh"
-	"ae.16_skinned_mesh"
-	"0.0.0"
-	"data/Icon.icns"
-	"16_SkinnedMesh.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_OFBX_LOADER_SRC}"
-	"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
-	"ae;openfbx"
-	"${AE_MISC_DIR}"
-)
+if(AE_LOADERS_OFBX)
+	add_bundle("SkinnedMesh"
+		"16_skinned_mesh"
+		"ae.16_skinned_mesh"
+		"0.0.0"
+		"data/Icon.icns"
+		"16_SkinnedMesh.cpp"
+		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
+		"ae;ae_loaders"
+		""
+	)
 
-# IK
-add_bundle("IK"
-	"17_ik"
-	"ae.17_ik"
-	"0.0.0"
-	"data/Icon.icns"
-	"17_IK.cpp;${AE_EXAMPLE_SOURCES};${AE_LOADER_INCLUDE};${AE_OFBX_LOADER_SRC}"
-	"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
-	"ae;openfbx;imgui;imguizmo"
-	"${AE_MISC_DIR}"
-)
+	# IK
+	add_bundle("IK"
+		"17_ik"
+		"ae.17_ik"
+		"0.0.0"
+		"data/Icon.icns"
+		"17_IK.cpp"
+		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
+		"ae;ae_loaders;imgui;imguizmo"
+		""
+	)
+endif()
 
-# Editor
-add_bundle("Editor"
-	"18_editor"
-	"ae.18_editor"
-	"0.0.0"
-	"data/Icon.icns"
-	"18_Editor.cpp;${AE_EXAMPLE_SOURCES};${AE_MISC_DIR}/ae/Editor.h;${AE_MISC_DIR}/Editor.cpp;${AE_MISC_DIR}/Entity.cpp"
-	"${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
-	"ae;imgui;imguizmo;rapidjson"
-	"${AE_MISC_DIR}"
-)
+# # Editor
+# add_bundle("Editor"
+# 	"18_editor"
+# 	"ae.18_editor"
+# 	"0.0.0"
+# 	"data/Icon.icns"
+# 	"18_Editor.cpp"
+# 	"${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
+# 	"ae_extras;imgui;imguizmo;rapidjson"
+# 	""
+# )
 
 # Mouse
 add_bundle("Mouse"
@@ -313,7 +302,7 @@ add_bundle("Mouse"
 	"ae.19_mouse"
 	"0.0.0"
 	"data/Icon.icns"
-	"19_Mouse.cpp;${AE_EXAMPLE_SOURCES}"
+	"19_Mouse.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
@@ -325,7 +314,7 @@ add_bundle("Render Target"
 	"ae.20_render_target"
 	"0.0.0"
 	"data/Icon.icns"
-	"20_RenderTarget.cpp;${AE_EXAMPLE_SOURCES}"
+	"20_RenderTarget.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
@@ -340,5 +329,5 @@ add_bundle("Instancing"
 	"21_Instancing.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
-	"${AE_INCLUDE_DIR}"
+	""
 )

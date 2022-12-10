@@ -26,8 +26,9 @@
 #include "aether.h"
 #include "ae/aeImGui.h"
 #include "ae/aeTerrain.h"
+#include "ae/loaders.h"
+#include "ae/SpriteRenderer.h"
 #include "ImGuizmo.h"
-#include "Common.h"
 
 const char* kFileName = "objects.dat";
 const uint32_t kCurrentFileVersion = 3;

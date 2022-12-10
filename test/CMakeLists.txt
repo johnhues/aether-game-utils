@@ -5,19 +5,11 @@ add_subdirectory(../deps/Catch2 Catch2)
 
 # unit test executable
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
-add_executable(test
-	${TEST_SOURCES}
-	${AE_MISC_DIR}/ae/aeTesting.h
-	${AE_MISC_DIR}/aeTesting.cpp
-)
-
-target_include_directories(test PRIVATE
-	${AE_MISC_DIR}
-)
+add_executable(test ${TEST_SOURCES})
 
 # ae library
 target_link_libraries(test PRIVATE
-	${AE_LIBRARIES}
+	ae_extras
 	Catch2::Catch2
 )
 

@@ -1,9 +1,7 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
-# Project definition
+# aether-game-utils project
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
-set(AE_LIBRARY_NAME ae)
-set(AE_LIBRARIES ${AE_LIBRARY_NAME})
 set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
 
 # Includes
@@ -26,7 +24,7 @@ if(APPLE)
 	set(CMAKE_OSX_ARCHITECTURES arm64 x86_64)
 endif()
 
-# OpenGL
+# OpenGL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OPENGL_LIBRARIES "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
 	if (EXISTS ${OPENGL_LIBRARIES})
@@ -56,22 +54,7 @@ if (MSVC)
 	list(APPEND OPENGL_LIBRARIES glew ${AE_GLEW_SRC}/lib/Release/x64/glew32s.lib)
 endif()
 
-if(AE_NET)
-	include(FetchContent)
-	# UUID
-	if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
-		find_package(uuid REQUIRED)
-	endif()
-	# enet
-	FetchContent_Declare(
-		enet
-		GIT_REPOSITORY "https://github.com/lsalzman/enet.git"
-		GIT_TAG cf735e639e5c9e3d2d84d71f1dbf789e8c2f3fd0
-	)
-	FetchContent_MakeAvailable(enet)
-endif()
-
-# OpenAL
+# OpenAL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OPENAL_LIBRARY "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
 	if (EXISTS ${OPENAL_LIBRARY})
@@ -84,38 +67,25 @@ elseif(NOT EMSCRIPTEN)
 	find_package(OpenAL REQUIRED)
 endif()
 
-# Dependency headers
-set(AE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(AE_MISC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc)
-set(AE_DEPS_LIBRARY_INCLUDE_DIRS
-	${GLEW_INCLUDE_DIR}
-	${OPENAL_INCLUDE_DIR}
-)
-# Dependency libraries
-set(AE_DEPS
-	${OPENGL_LIBRARIES}
-	${OPENAL_LIBRARY}
-)
+# ae library
+add_library(ae STATIC "")
+set_target_properties(ae PROPERTIES DEBUG_POSTFIX "d")
+target_link_libraries(ae ${OPENGL_LIBRARIES} ${OPENAL_LIBRARY})
 if(MSVC)
-	list(APPEND AE_DEPS
-		version
-		Winmm
-		Imm32
-		Setupapi
-		Ws2_32
-	)
-elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
-	list(APPEND AE_DEPS uuid)
+	target_link_libraries(ae version Winmm Imm32 Setupapi Ws2_32)
+endif()
+target_include_directories(ae PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+if(APPLE)
+	target_sources(ae PRIVATE aether.h aether.mm)
+else()
+	target_sources(ae PRIVATE aether.h aether.cpp)
 endif()
 
-# Loaders
-set(AE_LOADER_INCLUDE ${AE_MISC_DIR}/ae/loaders.h)
-set(AE_STB_LOADER_SRC ${AE_MISC_DIR}/loaders/stb.cpp)
-set(AE_OFBX_LOADER_SRC ${AE_MISC_DIR}/loaders/ofbx.cpp)
-
-# library, tests, and examples
-add_subdirectory(misc)
+# Examples, extra utilities, and tests
 if(NOT ${AE_LEAN_AND_MEAN})
-	add_subdirectory(test)
+	add_subdirectory(extras)
+	add_subdirectory(net)
+	add_subdirectory(loaders)
 	add_subdirectory(example)
+	add_subdirectory(test)
 endif()

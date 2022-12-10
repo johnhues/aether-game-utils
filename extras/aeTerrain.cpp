@@ -25,7 +25,7 @@
 //------------------------------------------------------------------------------
 #include "ae/aeTerrain.h"
 #include "ae/aeCompactingAllocator.h"
-#include <ctpl_stl.h>
+#include "ctpl_stl.h"
 
 //------------------------------------------------------------------------------
 // Configuration
