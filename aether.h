@@ -1239,13 +1239,19 @@ public:
 	void operator =( Array< T, N >&& other ) noexcept;
 	~Array();
 	
-	//! Add elements
+	//! Adds an element. Can reallocate internal storage for dynamic arrays
+	//! (N == 0), so take care when taking the address of any elements.
 	T& Append( const T& value );
-	//! Add elements
+	//! Adds \p count elements from \p values. Can reallocate internal storage
+	//! for  dynamic arrays (N == 0), so take care when taking the address of
+	//! any elements.
 	void Append( const T* values, uint32_t count );
-	//! Adds the list of given elements to the end of the array
+	//! Adds the list of given elements to the end of the array. Can reallocate
+	//! internal storage for dynamic arrays (N == 0), so take care when taking
+	//! the address of any elements.
 	void AppendList( std::initializer_list< T > initList );
-	//! Add elements
+	//! Adds \p value at \p index. Can reallocate internal storage for dynamic
+	//! arrays (N == 0), so take care when taking the address of any elements.
 	T& Insert( uint32_t index, const T& value );
 
 	//! Find first matching element. Returns -1 when not found.
