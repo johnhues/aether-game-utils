@@ -21265,7 +21265,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
 	TargaHeader header;
 	stream.SerializeRaw( header );
-	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type is not supported" );
+	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type '#' is not supported", (int)header.imageType );
 	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
 	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
 	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
@@ -21281,13 +21281,13 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	textureParams.data = m_data.Begin();
 	textureParams.width = header.width;
 	textureParams.height = header.height;
-	if ( header.bitsPerPixel == 24 )
+	if ( header.bitsPerPixel == 32 )
 	{
-		textureParams.format = ae::Texture::Format::RGB8_SRGB;
+		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
 	}
 	else if ( header.bitsPerPixel == 24 )
 	{
-		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
+		textureParams.format = ae::Texture::Format::RGB8_SRGB;
 	}
 	else
 	{
