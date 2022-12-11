@@ -1239,13 +1239,19 @@ public:
 	void operator =( Array< T, N >&& other ) noexcept;
 	~Array();
 	
-	//! Add elements
+	//! Adds an element. Can reallocate internal storage for dynamic arrays
+	//! (N == 0), so take care when taking the address of any elements.
 	T& Append( const T& value );
-	//! Add elements
+	//! Adds \p count elements from \p values. Can reallocate internal storage
+	//! for  dynamic arrays (N == 0), so take care when taking the address of
+	//! any elements.
 	void Append( const T* values, uint32_t count );
-	//! Adds the list of given elements to the end of the array
+	//! Adds the list of given elements to the end of the array. Can reallocate
+	//! internal storage for dynamic arrays (N == 0), so take care when taking
+	//! the address of any elements.
 	void AppendList( std::initializer_list< T > initList );
-	//! Add elements
+	//! Adds \p value at \p index. Can reallocate internal storage for dynamic
+	//! arrays (N == 0), so take care when taking the address of any elements.
 	T& Insert( uint32_t index, const T& value );
 
 	//! Find first matching element. Returns -1 when not found.
@@ -2530,9 +2536,9 @@ struct FileFilter
 	FileFilter() = default;
 	FileFilter( const char* desc, const char* ext ) : description( desc ) { extensions[ 0 ] = ext; }
 	FileFilter( const char* desc, const char** ext, uint32_t extensionCount );
-	const char* description = ""; // "JPEG Image"
+	ae::Str64 description = ""; // "JPEG Image"
 	// Only alphanumeric extension strings are supported (with the exception of "*")
-	const char* extensions[ 8 ] = { 0 }; // { "jpg", "jpeg", "jpe" }
+	ae::Str16 extensions[ 8 ]; // { "jpg", "jpeg", "jpe" }
 };
 
 //------------------------------------------------------------------------------
@@ -15739,16 +15745,16 @@ ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 		uint32_t extCount = 0;
 		for ( uint32_t j = 0; j < countof( FileFilter::extensions ); j++ )
 		{
-			const char* ext = filter.extensions[ j ];
-			if ( ext == nullptr )
+			const auto& ext = filter.extensions[ j ];
+			if ( !ext.Length() )
 			{
 				continue;
 			}
 
 			// Validate extension
-			if ( strcmp( "*", ext ) != 0 )
+			if ( ext != "*" )
 			{
-				for ( const char* extCheck = ext; *extCheck; extCheck++ )
+				for ( const char* extCheck = ext.c_str(); *extCheck; extCheck++ )
 				{
 					if ( !std::isalnum( *extCheck ) )
 					{
@@ -15768,7 +15774,7 @@ ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 				tempFilterStr.Append( ";*.", 3 );
 			}
 
-			tempFilterStr.Append( ext, (uint32_t)strlen( ext ) );
+			tempFilterStr.Append( ext.c_str(), (uint32_t)strlen( ext ) );
 			extCount++;
 		}
 
@@ -15923,15 +15929,15 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 	NSMutableArray* filters = [NSMutableArray arrayWithCapacity:params.filters.Length()];
 	for ( const FileFilter& filter : params.filters )
 	{
-		for ( const char* ext : filter.extensions )
+		for ( const auto& ext : filter.extensions )
 		{
-			if ( ext )
+			if ( ext.Length() )
 			{
-				if ( strcmp( ext, "*" ) == 0 )
+				if ( ext == "*" )
 				{
 					allowAny = true;
 				}
-				[filters addObject:[NSString stringWithUTF8String:ext]];
+				[filters addObject:[NSString stringWithUTF8String:ext.c_str()]];
 			}
 		}
 	}
@@ -16006,15 +16012,15 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 	NSMutableArray* filters = [NSMutableArray arrayWithCapacity:params.filters.Length()];
 	for ( const FileFilter& filter : params.filters )
 	{
-		for ( const char* ext : filter.extensions )
+		for ( const auto& ext : filter.extensions )
 		{
-			if ( ext )
+			if ( ext.Length() )
 			{
-				if ( strcmp( ext, "*" ) == 0 )
+				if ( ext == "*" )
 				{
 					allowAny = true;
 				}
-				[filters addObject:[NSString stringWithUTF8String:ext]];
+				[filters addObject:[NSString stringWithUTF8String:ext.c_str()]];
 			}
 		}
 	}
@@ -19041,6 +19047,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
 	AE_ASSERT( window );
+	AE_ASSERT( window->GetWidth() && window->GetHeight() );
 	m_window = window;
 	window->graphicsDevice = this;
 
@@ -19202,6 +19209,9 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_CHECK_GL_ERROR();
 	
 	s_graphicsDevice = this;
+	
+	Activate(); // Init primary render target
+	AE_ASSERT( GetWidth() && GetHeight() );
 }
 
 void GraphicsDevice::SetVsyncEnbled( bool enabled )
@@ -19253,7 +19263,7 @@ void GraphicsDevice::Activate()
 			m_lastResize = currentTime;
 		}
 		// Quarter second delay before resizing so it doesn't change every frame
-		if ( m_lastResize + 0.25 < currentTime )
+		if ( m_lastResize + 0.25 < currentTime || ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 ) )
 #endif
 		{
 #if _AE_EMSCRIPTEN_
@@ -19681,7 +19691,7 @@ void DebugLines::Terminate()
 void DebugLines::Render( const Matrix4& worldToNdc )
 {
 	m_vertexData.Upload();
-
+	
 	UniformList uniforms;
 	uniforms.Set( "u_worldToNdc", worldToNdc );
 
@@ -21265,7 +21275,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
 	TargaHeader header;
 	stream.SerializeRaw( header );
-	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type is not supported" );
+	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type '#' is not supported", (int)header.imageType );
 	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
 	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
 	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
@@ -21281,13 +21291,13 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	textureParams.data = m_data.Begin();
 	textureParams.width = header.width;
 	textureParams.height = header.height;
-	if ( header.bitsPerPixel == 24 )
+	if ( header.bitsPerPixel == 32 )
 	{
-		textureParams.format = ae::Texture::Format::RGB8_SRGB;
+		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
 	}
 	else if ( header.bitsPerPixel == 24 )
 	{
-		textureParams.format = ae::Texture::Format::RGBA8_SRGB;
+		textureParams.format = ae::Texture::Format::RGB8_SRGB;
 	}
 	else
 	{
