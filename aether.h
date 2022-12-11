@@ -19208,6 +19208,12 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_CHECK_GL_ERROR();
 	
 	s_graphicsDevice = this;
+	
+	// Init main render target
+	float scaleFactor = m_window->GetScaleFactor();
+	int32_t contentWidth = m_window->GetWidth() * scaleFactor;
+	int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+	m_HandleResize( contentWidth, contentHeight );
 }
 
 void GraphicsDevice::SetVsyncEnbled( bool enabled )
