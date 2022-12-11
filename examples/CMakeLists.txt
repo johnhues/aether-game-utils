@@ -65,18 +65,16 @@ add_bundle("Example"
 )
 
 # Sprites
-if(AE_LOADERS_STB)
-	add_bundle("Sprites"
-		"02_sprites"
-		"ae.02_sprites"
-		"0.0.0"
-		"data/Icon.icns"
-		"02_Sprites.cpp"
-		"${AE_EXAMPLE_RESOURCES};data/circle.png"
-		"ae;ae_loaders"
-		""
-	)
-endif()
+add_bundle("Sprites"
+	"02_sprites"
+	"ae.02_sprites"
+	"0.0.0"
+	"data/Icon.icns"
+	"02_Sprites.cpp"
+	"${AE_EXAMPLE_RESOURCES};data/circle.tga"
+	"ae;ae_extras"
+	""
+)
 
 # Client / Server
 add_bundle("Client"
@@ -123,18 +121,16 @@ add_bundle("NetObject Server"
 )
 
 # Text Input
-if(AE_LOADERS_STB)
-	add_bundle("Text Input"
-		"05_text_input"
-		"ae.05_text_input"
-		"0.0.0"
-		"data/Icon.icns"
-		"05_TextInput.cpp"
-		"${AE_EXAMPLE_RESOURCES};data/font.png"
-		"ae;ae_loaders"
-		""
-	)
-endif()
+add_bundle("Text Input"
+	"05_text_input"
+	"ae.05_text_input"
+	"0.0.0"
+	"data/Icon.icns"
+	"05_TextInput.cpp"
+	"${AE_EXAMPLE_RESOURCES};data/font.tga"
+	"ae"
+	""
+)
 
 # Triangle
 add_bundle("Triangle"
@@ -185,42 +181,40 @@ add_bundle("Platformer2D"
 )
 
 # Splines
-if(AE_LOADERS_STB)
-	add_bundle("Splines"
-		"10_splines"
-		"ae.10_splines"
-		"0.0.0"
-		"data/Icon.icns"
-		"10_Splines.cpp"
-		"${AE_EXAMPLE_RESOURCES};data/circle.png"
-		"ae;ae_loaders"
-		""
-	)
+add_bundle("Splines"
+	"10_splines"
+	"ae.10_splines"
+	"0.0.0"
+	"data/Icon.icns"
+	"10_Splines.cpp"
+	"${AE_EXAMPLE_RESOURCES};data/circle.tga"
+	"ae;ae_extras"
+	""
+)
 
-	# Terrain
-	add_bundle("Terrain"
-		"11_terrain"
-		"ae.11_terrain"
-		"0.0.0"
-		"data/Icon.icns"
-		"11_Terrain.cpp"
-		"${AE_EXAMPLE_RESOURCES};data/font.png"
-		"ae;ae_extras;ae_loaders;imgui;imguizmo"
-		""
-	)
+# Terrain
+add_bundle("Terrain"
+	"11_terrain"
+	"ae.11_terrain"
+	"0.0.0"
+	"data/Icon.icns"
+	"11_Terrain.cpp"
+	"${AE_EXAMPLE_RESOURCES};data/font.tga"
+	"ae;ae_extras;imgui;imguizmo"
+	""
+)
 
-	# Geometry
-	add_bundle("Geometry"
-		"12_geometry"
-		"ae.12_geometry"
-		"0.0.0"
-		"data/Icon.icns"
-		"12_Geometry.cpp"
-		"${AE_EXAMPLE_RESOURCES};data/font.png"
-		"ae;ae_loaders"
-		""
-	)
-endif()
+# Geometry
+add_bundle("Geometry"
+	"12_geometry"
+	"ae.12_geometry"
+	"0.0.0"
+	"data/Icon.icns"
+	"12_Geometry.cpp"
+	"${AE_EXAMPLE_RESOURCES};data/font.tga"
+	"ae;ae_extras"
+	""
+)
 
 # FileDialogs
 add_bundle("File Dialogs"

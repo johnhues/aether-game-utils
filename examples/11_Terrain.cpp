@@ -26,7 +26,6 @@
 #include "aether.h"
 #include "ae/aeImGui.h"
 #include "ae/aeTerrain.h"
-#include "ae/loaders.h"
 #include "ae/SpriteRenderer.h"
 #include "ImGuizmo.h"
 
@@ -303,21 +302,17 @@ int main()
     terrainShader.SetDepthWrite( true );
 
     {
-      const char* fileName = "font.png";
+      const char* fileName = "font.tga";
       uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
       AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
       ae::Scratch< uint8_t > fileBuffer( fileSize );
       fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-      ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+      ae::TargaFile targa = TAG_EXAMPLE;
+      targa.Load( fileBuffer.Data(), fileSize );
+      fontTexture.Initialize( targa.textureParams );
     }
-    //uint32_t maxStringCount, uint32_t maxGlyphCount, const ae::Texture2D* texture, uint32_t fontSize, float spacing
     textRender.Initialize( 128, 2048, &fontTexture, 8, 1.0f );
   }
-
-//  ae::Image heightmapImage;
-//  ae::Scratch< uint8_t > fileBuffer( fileSystem.GetSize( ae::FileSystem::Root::Data, "terrain.png" ) );
-//  fileSystem.Read( ae::FileSystem::Root::Data, "terrain.png", fileBuffer.Data(), fileBuffer.Length() );
-//  heightmapImage.LoadFile( fileBuffer.Data(), fileBuffer.Length(), ae::Image::Extension::PNG, ae::Image::Format::R );
 
   uint32_t terrainThreads = ae::Max( 1u, (uint32_t)( ae::GetMaxConcurrentThreads() * 0.75f ) );
   ae::Terrain* terrain = ae::New< ae::Terrain >( TAG_EXAMPLE );
