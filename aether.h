@@ -19047,6 +19047,7 @@ void GraphicsDevice::Initialize( class Window* window )
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
 	AE_ASSERT( window );
+	AE_ASSERT( window->GetWidth() && window->GetHeight() );
 	m_window = window;
 	window->graphicsDevice = this;
 
@@ -19209,11 +19210,8 @@ void GraphicsDevice::Initialize( class Window* window )
 	
 	s_graphicsDevice = this;
 	
-	// Init main render target
-	float scaleFactor = m_window->GetScaleFactor();
-	int32_t contentWidth = m_window->GetWidth() * scaleFactor;
-	int32_t contentHeight = m_window->GetHeight() * scaleFactor;
-	m_HandleResize( contentWidth, contentHeight );
+	Activate(); // Init primary render target
+	AE_ASSERT( GetWidth() && GetHeight() );
 }
 
 void GraphicsDevice::SetVsyncEnbled( bool enabled )
@@ -19265,7 +19263,7 @@ void GraphicsDevice::Activate()
 			m_lastResize = currentTime;
 		}
 		// Quarter second delay before resizing so it doesn't change every frame
-		if ( m_lastResize + 0.25 < currentTime )
+		if ( m_lastResize + 0.25 < currentTime || ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 ) )
 #endif
 		{
 #if _AE_EMSCRIPTEN_
