@@ -2536,9 +2536,9 @@ struct FileFilter
 	FileFilter() = default;
 	FileFilter( const char* desc, const char* ext ) : description( desc ) { extensions[ 0 ] = ext; }
 	FileFilter( const char* desc, const char** ext, uint32_t extensionCount );
-	const char* description = ""; // "JPEG Image"
+	ae::Str64 description = ""; // "JPEG Image"
 	// Only alphanumeric extension strings are supported (with the exception of "*")
-	const char* extensions[ 8 ] = { 0 }; // { "jpg", "jpeg", "jpe" }
+	ae::Str16 extensions[ 8 ]; // { "jpg", "jpeg", "jpe" }
 };
 
 //------------------------------------------------------------------------------
@@ -15745,16 +15745,16 @@ ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 		uint32_t extCount = 0;
 		for ( uint32_t j = 0; j < countof( FileFilter::extensions ); j++ )
 		{
-			const char* ext = filter.extensions[ j ];
-			if ( ext == nullptr )
+			const auto& ext = filter.extensions[ j ];
+			if ( !ext.Length() )
 			{
 				continue;
 			}
 
 			// Validate extension
-			if ( strcmp( "*", ext ) != 0 )
+			if ( ext != "*" )
 			{
-				for ( const char* extCheck = ext; *extCheck; extCheck++ )
+				for ( const char* extCheck = ext.c_str(); *extCheck; extCheck++ )
 				{
 					if ( !std::isalnum( *extCheck ) )
 					{
@@ -15774,7 +15774,7 @@ ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 				tempFilterStr.Append( ";*.", 3 );
 			}
 
-			tempFilterStr.Append( ext, (uint32_t)strlen( ext ) );
+			tempFilterStr.Append( ext.c_str(), (uint32_t)strlen( ext ) );
 			extCount++;
 		}
 
@@ -15929,15 +15929,15 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 	NSMutableArray* filters = [NSMutableArray arrayWithCapacity:params.filters.Length()];
 	for ( const FileFilter& filter : params.filters )
 	{
-		for ( const char* ext : filter.extensions )
+		for ( const auto& ext : filter.extensions )
 		{
-			if ( ext )
+			if ( ext.Length() )
 			{
-				if ( strcmp( ext, "*" ) == 0 )
+				if ( ext == "*" )
 				{
 					allowAny = true;
 				}
-				[filters addObject:[NSString stringWithUTF8String:ext]];
+				[filters addObject:[NSString stringWithUTF8String:ext.c_str()]];
 			}
 		}
 	}
@@ -16012,15 +16012,15 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 	NSMutableArray* filters = [NSMutableArray arrayWithCapacity:params.filters.Length()];
 	for ( const FileFilter& filter : params.filters )
 	{
-		for ( const char* ext : filter.extensions )
+		for ( const auto& ext : filter.extensions )
 		{
-			if ( ext )
+			if ( ext.Length() )
 			{
-				if ( strcmp( ext, "*" ) == 0 )
+				if ( ext == "*" )
 				{
 					allowAny = true;
 				}
-				[filters addObject:[NSString stringWithUTF8String:ext]];
+				[filters addObject:[NSString stringWithUTF8String:ext.c_str()]];
 			}
 		}
 	}
@@ -19693,7 +19693,7 @@ void DebugLines::Terminate()
 void DebugLines::Render( const Matrix4& worldToNdc )
 {
 	m_vertexData.Upload();
-
+	
 	UniformList uniforms;
 	uniforms.Set( "u_worldToNdc", worldToNdc );
 
