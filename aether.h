@@ -110,6 +110,7 @@
 #include <sstream>
 #include <functional>
 #include <ostream>
+#include <thread>
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
@@ -2583,6 +2584,7 @@ public:
 	//! consistent across apps. Application name should be the name of this application.
 	//! Initialize() creates missing folders for Root::User and Root::Cache.
 	void Initialize( const char* dataDir, const char* organizationName, const char* applicationName );
+	void Update();
 
 	// Asynchronous file loading
 	//! Loads a file asynchronously from disk or from the network (@TODO: currently
@@ -2604,19 +2606,18 @@ public:
 	//! function on an ae::File that is successfully loaded or pending will have
 	//! no effect.
 	void Retry( const ae::File* file, float timeoutSec );
-	//! Destroys the given ae::File object returned by ae::FileSystem::Load().
+	//! Destroys the given ae::File object returned by ae::FileSystem::Read().
 	void Destroy( const ae::File* file );
 	//! Frees all existing ae::File objects. It is not safe to access any
-	//! ae::File objects returned earlier by ae::FileSystem::Load() after
+	//! ae::File objects returned earlier by ae::FileSystem::Read() after
 	//! calling this.
 	void DestroyAll();
+	//! Get a file read created with ae::FileSystem::Read().
 	const ae::File* GetFile( uint32_t idx ) const;
+	//! Returns the number of file reads iterable with ae::FileSystem::GetFile().
 	uint32_t GetFileCount() const;
-	//! Returns true if any ae::File reads are pending. Returns false if file
-	//! count is zero.
-	bool AnyPending() const;
-	//! Returns true if all ae::File reads have succeeded or if file count is zero.
-	bool AllSuccess() const;
+	//! Returns the number of file reads with the given \p status.
+	uint32_t GetFileStatusCount( ae::File::Status status ) const;
 
 	// Member functions for use of Root directories
 	bool GetRootDir( Root root, Str256* outDir ) const;
@@ -2656,13 +2657,14 @@ private:
 	void m_SetCacheDir( const char* organizationName, const char* applicationName );
 	void m_SetUserSharedDir( const char* organizationName );
 	void m_SetCacheSharedDir( const char* organizationName );
-	void m_Read( ae::File* file, float timeoutSec ) const;
+	void m_Read( ae::File* file, float timeoutSec );
 	ae::Array< ae::File* > m_files = AE_ALLOC_TAG_FILE;
 	Str256 m_dataDir;
 	Str256 m_userDir;
 	Str256 m_cacheDir;
 	Str256 m_userSharedDir;
 	Str256 m_cacheSharedDir;
+	std::thread m_thread;
 };
 
 //------------------------------------------------------------------------------
@@ -10261,7 +10263,6 @@ T* ae::Cast( C* obj )
 		#define AE_USE_OPENAL 0
 	#endif
 #endif
-#include <thread>
 #include <random>
 // Socket
 #if _AE_WINDOWS_
@@ -15001,6 +15002,11 @@ void FileSystem::Initialize( const char* dataDir, const char* organizationName, 
 	m_SetCacheSharedDir( organizationName );
 }
 
+void FileSystem::Update()
+{
+	
+}
+
 void FileSystem::m_SetDataDir( const char* dataDir )
 {
 	m_dataDir = GetAbsolutePath( dataDir );
@@ -15166,6 +15172,11 @@ const File* FileSystem::Read( Root root, const char* url, float timeoutSec )
 
 const File* FileSystem::Read( const char* url, float timeoutSec )
 {
+	int32_t idx = m_files.FindFn( [&]( File* f ){ return f->m_url == url; } );
+	if ( idx >= 0 )
+	{
+		return m_files[ idx ];
+	}
 	File* file = ae::New< File >( AE_ALLOC_TAG_FILE );
 	file->m_url = url;
 	m_Read( file, timeoutSec );
@@ -15193,11 +15204,28 @@ void FileSystem::Retry( const ae::File* _file, float timeoutSec )
 	}
 }
 
-void FileSystem::m_Read( ae::File* file, float timeoutSec ) const
+void _ae_FileSystem_ThreadMain( uint32_t something )
+{
+	printf( "thread start\n" );
+	printf( "something: %u\n", something );
+	for ( uint32_t i = 0; i < 10; i++ )
+	{
+		std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
+		printf( "doing stuff %u\n", i );
+	}
+	printf( "thread finished\n" );
+}
+
+void FileSystem::m_Read( ae::File* file, float timeoutSec )
 {
 	AE_ASSERT( file );
 	AE_ASSERT( file->m_url.Length() );
 	AE_ASSERT( !file->m_data && !file->m_length );
+	
+	if ( m_thread.get_id() == std::thread::id() )
+	{
+		m_thread = std::thread( _ae_FileSystem_ThreadMain, 666 );
+	}
 
 	file->m_status = ae::File::Status::Pending;
 	file->m_code = 0;
@@ -15264,28 +15292,17 @@ uint32_t FileSystem::GetFileCount() const
 	return m_files.Length();
 }
 
-bool FileSystem::AnyPending() const
+uint32_t FileSystem::GetFileStatusCount( ae::File::Status status ) const
 {
+	uint32_t count = 0;
 	for ( auto file : m_files )
 	{
-		if ( file->GetStatus() == File::Status::Pending )
+		if ( file->GetStatus() == status )
 		{
-			return true;
+			count++;
 		}
 	}
-	return false;
-}
-
-bool FileSystem::AllSuccess() const
-{
-	for ( auto file : m_files )
-	{
-		if ( file->GetStatus() != File::Status::Success )
-		{
-			return false;
-		}
-	}
-	return true;
+	return count;
 }
 
 bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
