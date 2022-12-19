@@ -771,6 +771,7 @@ public:
 	explicit Sphere( const class OBB& obb );
 	void Expand( ae::Vec3 p );
 
+	// @TODO: IntersectLine() which should have hit0Out and hit1Out
 	bool IntersectRay( ae::Vec3 origin, ae::Vec3 direction, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
 	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
 
@@ -794,7 +795,7 @@ public:
 	ae::Vec3 GetNormal() const;
 	ae::Vec3 GetClosestPointToOrigin() const;
 
-	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const;
+	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const; // @TODO: Add hitOut
 	bool IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut = nullptr, float* tOut = nullptr ) const;
 	ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
 	float GetSignedDistance( ae::Vec3 pos ) const;
@@ -5066,7 +5067,7 @@ inline void Free( void* data )
 }
 
 //------------------------------------------------------------------------------
-// Interinal ae::_ScratchBuffer storage
+// Internal ae::_ScratchBuffer storage
 //------------------------------------------------------------------------------
 class _ScratchBuffer
 {
@@ -11398,6 +11399,7 @@ bool Sphere::IntersectRay( Vec3 origin, Vec3 direction, Vec3* pOut, float* tOut 
 		return false;
 	}
 
+	// @TODO: This check should be against the ray segment, and so should be limited here
 	// Ray now found to intersect sphere, compute smallest t value of intersection
 	float t = -b - sqrtf( discr );
 	if ( t < 0.0f )
