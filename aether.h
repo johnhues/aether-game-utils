@@ -367,6 +367,11 @@ inline float RadToDeg( float radians );
 //------------------------------------------------------------------------------
 template< typename T > constexpr T MaxValue();
 template< typename T > constexpr T MinValue();
+// Forward declare to avoid https://stackoverflow.com/questions/7774188/explicit-specialization-after-instantiation
+template<> constexpr float MaxValue< float >();
+template<> constexpr float MinValue< float >();
+template<> constexpr double MaxValue< double >();
+template<> constexpr double MinValue< double >();
 
 //------------------------------------------------------------------------------
 // ae::Random functions
@@ -3506,9 +3511,9 @@ class DebugCamera
 public:
 	enum class Mode { None, Rotate, Pan, Zoom };
 	
-	DebugCamera();
+	DebugCamera( ae::Axis upAxis );
 	//! Interupts refocus. Does not affect in progress input.
-	void Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos );
+	void Reset( ae::Vec3 focus, ae::Vec3 pos );
 	//! Sets editor mode controls. This mimics the controls of some standard cad programs so:
 	//! Alt+LMB: rotate, Alt+MMB: pan, Scroll/Alt+RMB: zoom
 	void SetEditorControls( bool editor );
@@ -3535,6 +3540,7 @@ public:
 	ae::Vec3 GetRight() const { return m_right; }
 	ae::Vec3 GetLocalUp() const { return m_up; }
 	ae::Vec3 GetWorldUp() const { return ( m_worldUp == Axis::Z ) ? ae::Vec3(0,0,1) : ae::Vec3(0,1,0); }
+	ae::Axis GetUpAxis() const { return m_worldUp; }
 	float GetDistanceFromFocus() const { return m_dist; }
 	ae::Vec2 GetRotation() const { return ae::Vec2( m_yaw, m_pitch ); }
 	bool GetRefocusTarget( ae::Vec3* targetOut ) const;
@@ -3543,23 +3549,23 @@ public:
 private:
 	void m_Precalculate();
 	// Params
-	float m_min;
-	float m_max;
-	Axis m_worldUp;
+	float m_min = 1.0f;
+	float m_max = ae::MaxValue< float >();
+	Axis m_worldUp = Axis::Z;
 	// Mode
-	bool m_inputEnabled;
-	bool m_editorControls;
-	Mode m_mode;
-	ae::Vec3 m_refocusPos;
-	bool m_refocus;
-	float m_moveAccum;
-	uint32_t m_forceCapture;
+	bool m_inputEnabled = true;
+	bool m_editorControls = false;
+	Mode m_mode = Mode::None;
+	ae::Vec3 m_refocusPos = ae::Vec3( 0.0f );
+	bool m_refocus = false;
+	float m_moveAccum = 0.0f;
+	uint32_t m_forceCapture = 0;
 	// Positioning
-	ae::Vec3 m_focusPos;
-	float m_dist;
+	ae::Vec3 m_focusPos = ae::Vec3( 0.0f );
+	float m_dist = 5.0f;
 	// Rotation
-	float m_yaw;
-	float m_pitch;
+	float m_yaw = 0.77f;
+	float m_pitch = 0.0f;
 	// Pre-calculated values for getters
 	ae::Vec3 m_offset;
 	ae::Vec3 m_forward;
@@ -3859,7 +3865,7 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::OBJFile class
+// ae::OBJFile class // @TODO: ae::OBJLoader
 //------------------------------------------------------------------------------
 class OBJFile
 {
@@ -3874,7 +3880,7 @@ public:
 	typedef uint32_t Index;
 	
 	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
-	bool Load( const uint8_t* data, uint32_t length );
+	bool Load( const uint8_t* data, uint32_t length ); // @TODO: const ae::Matrix4& localToWorld
 	
 	//! Helper struct to load OBJ files directly into an ae::VertexArray
 	struct VertexDataParams
@@ -3895,6 +3901,7 @@ public:
 	ae::Tag allocTag;
 	ae::Array< ae::OBJFile::Vertex > vertices;
 	ae::Array< ae::OBJFile::Index > indices;
+	ae::AABB aabb;
 };
 
 //------------------------------------------------------------------------------
@@ -20038,22 +20045,9 @@ uint32_t DebugLines::GetMaxVertexCount() const
 //------------------------------------------------------------------------------
 // ae::DebugCamera member functions
 //------------------------------------------------------------------------------
-DebugCamera::DebugCamera()
+DebugCamera::DebugCamera( ae::Axis upAxis )
 {
-	m_min = 1.0f;
-	m_max = ae::MaxValue< float >();
-	m_worldUp = Axis::Z;
-	m_inputEnabled = true;
-	m_editorControls = false;
-	m_mode = Mode::None;
-	m_refocusPos = ae::Vec3( 0.0f );
-	m_refocus = false;
-	m_moveAccum = 0.0f;
-	m_forceCapture = 0;
-	m_focusPos = ae::Vec3( 0.0f );
-	m_dist = 5.0f;
-	m_yaw = 0.77f;
-	m_pitch = 0.5f;
+	m_worldUp = upAxis;
 	m_Precalculate();
 }
 
@@ -20214,12 +20208,10 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	}
 }
 
-void DebugCamera::Initialize( Axis worldUp, ae::Vec3 focus, ae::Vec3 pos )
+void DebugCamera::Reset( ae::Vec3 focus, ae::Vec3 pos )
 {
 	m_refocus = false;
 	m_refocusPos = focus;
-	
-	m_worldUp = worldUp;
 	m_focusPos = focus;
 	
 	ae::Vec3 diff = focus - pos;
@@ -21024,6 +21016,10 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 //------------------------------------------------------------------------------
 bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 {
+	vertices.Clear();
+	indices.Clear();
+	aabb = ae::AABB();
+	
 	enum class Mode
 	{
 		None,
@@ -21108,6 +21104,7 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 				p.w = 1.0f;
 				// @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
 				positions.Append( p );
+				aabb.Expand( p.GetXYZ() );
 				break;
 			}
 			case Mode::Texture:
@@ -21175,8 +21172,6 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 		return false;
 	}
 
-	vertices.Clear();
-	indices.Clear();
 	// @TODO: Reserve vertices and indices
 	
 	FaceIndex* currentFaceIdx = &faceIndices[ 0 ];
