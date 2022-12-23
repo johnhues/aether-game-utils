@@ -271,7 +271,7 @@ int main()
   ae::DebugLines debug;
   ae::TimeStep timeStep;
   ae::Shader terrainShader;
-  ae::DebugCamera camera;
+  ae::DebugCamera camera = ae::Axis::Z;
   ae::Texture2D fontTexture;
   ae::TextRender textRender = TAG_EXAMPLE;
   class aeImGui* ui = nullptr;

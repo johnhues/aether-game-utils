@@ -93,7 +93,7 @@ int main()
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
-	ae::DebugCamera camera;
+	ae::DebugCamera camera = ae::Axis::Y;
 	ae::Shader shader;
 	ae::VertexBuffer vertexData;
 	ae::InstanceData instanceData;
@@ -104,7 +104,7 @@ int main()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	camera.Initialize( ae::Axis::Y, ae::Vec3( 0.0f ), ae::Vec3( 25.0f ) );
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 25.0f ) );
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );

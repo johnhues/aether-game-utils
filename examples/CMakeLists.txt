@@ -248,7 +248,7 @@ add_bundle("OBJViewer"
 	"data/Icon.icns"
 	"15_OBJViewer.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/bunny.obj"
-	"ae;imgui;imguizmo"
+	"ae"
 	""
 )
 
@@ -273,7 +273,7 @@ if(AE_LOADERS_OFBX)
 		"data/Icon.icns"
 		"17_IK.cpp"
 		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
-		"ae;ae_loaders;imgui;imguizmo"
+		"ae;ae_loaders;ae_extras;imgui;imguizmo"
 		""
 	)
 endif()

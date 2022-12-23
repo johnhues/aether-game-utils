@@ -94,7 +94,7 @@ int main()
 	ae::TimeStep timeStep;
 	ae::Shader shader;
 	ae::FileSystem fileSystem;
-	ae::DebugCamera camera;
+	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines;
 	aeImGui ui;
 
@@ -104,7 +104,7 @@ int main()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fileSystem.Initialize( "data", "ae", "ik" );
-	camera.Initialize( ae::Axis::Y, ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
+	camera.Reset( ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
 	camera.SetDistanceLimits( 1.0f, 25.0f );
 	debugLines.Initialize( 4096 );
 	ui.Initialize();
@@ -137,7 +137,8 @@ int main()
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() );
 		
 		ae::VertexLoaderHelper vertexInfo;
-		vertexInfo.size = sizeof(Vertex);
+		vertexInfo.vertexSize = sizeof(Vertex);
+		vertexInfo.indexSize = 4;
 		vertexInfo.posOffset = offsetof( Vertex, pos );
 		vertexInfo.normalOffset = offsetof( Vertex, normal );
 		vertexInfo.colorOffset = offsetof( Vertex, color );

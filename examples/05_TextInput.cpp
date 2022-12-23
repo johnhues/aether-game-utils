@@ -59,6 +59,7 @@ int main()
     fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
     ae::TargaFile targa = TAG_EXAMPLE;
     targa.Load( fileBuffer.Data(), fileSize );
+    targa.textureParams.filter = ae::Texture::Filter::Nearest;
     fontTexture.Initialize( targa.textureParams );
   }
   textRender.Initialize( 1, 512, &fontTexture, 8, 1.0f );

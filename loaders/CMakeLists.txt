@@ -16,6 +16,7 @@ endif()
 
 # openfbx
 if(AE_LOADERS_OFBX)
+	include(FetchContent)
 	FetchContent_Declare(
 		openfbx
 		GIT_REPOSITORY https://github.com/nem0/OpenFBX.git

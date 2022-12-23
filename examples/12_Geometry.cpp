@@ -46,7 +46,7 @@ int main()
 	ae::DebugLines debug;
 	ae::Texture2D fontTexture;
 	ae::TextRender text = TAG_EXAMPLE;
-	ae::DebugCamera camera;
+	ae::DebugCamera camera = ae::Axis::Z;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "geometry" );
@@ -66,7 +66,7 @@ int main()
 		fontTexture.Initialize( targa.textureParams );
 	}
 	text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
-	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
 	// AABB and OBB test state
 	static ae::Vec3 s_translation( 0.0f );
