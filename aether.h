@@ -21024,7 +21024,6 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 	enum class Mode
 	{
 		None,
-		Comment,
 		Vertex,
 		Texture,
 		Normal,
@@ -21042,7 +21041,6 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 	ae::Array< FaceIndex > faceIndices = allocTag;
 	ae::Array< uint8_t > faces = allocTag;
 	
-	ae::Str256 currentLine;
 	const char* data = (const char*)_data;
 	const char* dataEnd = (const char*)_data + length;
 	while ( data < dataEnd )
@@ -21052,20 +21050,18 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 		{
 			lineLen++;
 		}
-		currentLine = ae::Str256( lineLen, data );
+		const char* line = data;
+		const char* lineEnd = line + lineLen;
+		
 		data += lineLen;
-		while ( data[ 0 ] == '\n' || data[ 0 ] == '\r' )
+		while ( !data[ 0 ] || data[ 0 ] == '\n' || data[ 0 ] == '\r' )
 		{
 			data++;
 		}
 
-		char* line = (char*)currentLine.c_str(); // strtof() takes a non-const string but does not modify it
 		Mode mode = Mode::None;
 		switch ( line[ 0 ] )
 		{
-			case '#':
-				mode = Mode::Comment;
-				break;
 			case 'v':
 				switch ( line[ 1 ] )
 				{
@@ -21085,7 +21081,8 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 			case 'f':
 				mode = Mode::Face;
 				break;
-			// Ignore bad chars
+			default:
+				break; // Ignore bad chars
 		}
 		line++;
 		if ( line[ 0 ] != ' ' )
@@ -21094,14 +21091,15 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 			mode = Mode::None;
 		}
 		
+		// @NOTE: strtof() takes a non-const string but does not modify it
 		switch ( mode )
 		{
 			case Mode::Vertex:
 			{
 				ae::Vec4 p;
-				p.x = strtof( line, &line );
-				p.y = strtof( line, &line );
-				p.z = strtof( line, &line );
+				p.x = strtof( line, (char**)&line );
+				p.y = strtof( line, (char**)&line );
+				p.z = strtof( line, (char**)&line );
 				p.w = 1.0f;
 				// @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
 				positions.Append( p );
@@ -21111,17 +21109,17 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 			case Mode::Texture:
 			{
 				ae::Vec2 uv;
-				uv.x = strtof( line, &line );
-				uv.y = strtof( line, &line );
+				uv.x = strtof( line, (char**)&line );
+				uv.y = strtof( line, (char**)&line );
 				uvs.Append( uv );
 				break;
 			}
 			case Mode::Normal:
 			{
 				ae::Vec4 n;
-				n.x = strtof( line, &line );
-				n.y = strtof( line, &line );
-				n.z = strtof( line, &line );
+				n.x = strtof( line, (char**)&line );
+				n.y = strtof( line, (char**)&line );
+				n.z = strtof( line, (char**)&line );
 				n.w = 0.0f;
 				normals.Append( n.SafeNormalizeCopy() );
 				break;
@@ -21129,22 +21127,22 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 			case Mode::Face:
 			{
 				uint32_t faceVertexCount = 0;
-				while ( line[ 0 ] )
+				while ( line < lineEnd )
 				{
 					FaceIndex faceIndex;
-					faceIndex.position = strtoul( line, &line, 10 ) - 1;
+					faceIndex.position = strtoul( line, (char**)&line, 10 ) - 1;
 					if ( line[ 0 ] == '/' )
 					{
 						line++;
 						if ( line[ 0 ] != '/' )
 						{
-							faceIndex.texture = strtoul( line, &line, 10 ) - 1;
+							faceIndex.texture = strtoul( line, (char**)&line, 10 ) - 1;
 						}
 					}
 					if ( line[ 0 ] == '/' )
 					{
 						line++;
-						faceIndex.normal = strtoul( line, &line, 10 ) - 1;
+						faceIndex.normal = strtoul( line, (char**)&line, 10 ) - 1;
 					}
 					if ( faceIndex.position < 0 )
 					{

@@ -90,9 +90,8 @@ int main()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fs.Initialize( "data", "ae", "obj_viewer" );
-	camera.SetDistanceLimits( 0.25f, 1000.0f );
+	camera.SetDistanceLimits( 0.25f, 10.0f );
 	debugLines.Initialize( 1024 );
-	
 	
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );
@@ -111,28 +110,28 @@ int main()
 	ae::OBJFile objFile = kObjAllocTag;
 	const char* fileName = "bunny.obj";
 	uint32_t fileSize = fs.GetSize( ae::FileSystem::Root::Data, fileName );
+	AE_ASSERT_MSG( fileSize, "Error reading file '#'", fileName );
 	uint8_t* data = (uint8_t*)ae::Allocate( kObjAllocTag, fileSize, 1 );
 	fs.Read( ae::FileSystem::Root::Data, fileName, data, fileSize );
 	objFile.Load( data, fileSize );
+	AE_ASSERT_MSG( objFile.vertices.Length(), "Invalid obj file '#'", fileName );
+	
 	vertexData.Initialize(
 		sizeof(*objFile.vertices.Begin()), sizeof(*objFile.indices.Begin()),
 		objFile.vertices.Length(), objFile.indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
 	);
-	if ( objFile.vertices.Length() )
-	{
-		vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
-		vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
-		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
-		vertexData.SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
-		vertexData.SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
-		
-		ae::Vec3 focus = objFile.aabb.GetCenter();
-		ae::Vec3 offset = camera.GetPosition() - camera.GetFocus();
-		offset = offset.SafeNormalizeCopy() * objFile.aabb.GetHalfSize().Length() * 3.0f;
-		camera.Reset( focus, focus + offset );
-	}
+	vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
+	vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
+	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
+	vertexData.SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
+	vertexData.SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
+	
+	ae::Vec3 offset = camera.GetPosition() - camera.GetFocus();
+	offset = offset.SafeNormalizeCopy() * 3.0f;
+	ae::Vec3 focus = objFile.aabb.GetCenter() / objFile.aabb.GetHalfSize().Length();
+	camera.Reset( focus, focus + offset );
 
 	float spin = 0.0f;
 
@@ -150,7 +149,7 @@ int main()
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 100.0f );
 		
 		// Bunny
-		ae::Matrix4 modelToWorld = ae::Matrix4::RotationY( spin );
+		ae::Matrix4 modelToWorld = ae::Matrix4::RotationY( spin ) * ae::Matrix4::Scaling( 1.0f / objFile.aabb.GetHalfSize().Length() );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 		uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
 		uniformList.Set( "u_lightColor", ae::Color::White().Lerp( ae::Color::PicoPeach(), 0.75f ).GetLinearRGB() );
