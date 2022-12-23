@@ -2220,7 +2220,7 @@ public:
 //------------------------------------------------------------------------------
 enum class Key : uint8_t
 {
-	Unknown = 0,
+	None = 0,
 
 	A = 4,
 	B = 5,
@@ -2923,7 +2923,7 @@ void main()
 //------------------------------------------------------------------------------
 const uint32_t _kMaxShaderAttributeCount = 16;
 const uint32_t _kMaxShaderAttributeNameLength = 16;
-const uint32_t _kMaxShaderDefines = 4;
+const uint32_t _kMaxShaderDefines = 32;
 class InstanceData;
 enum class Culling { None, ClockwiseFront, CounterclockwiseFront };
 
@@ -2931,7 +2931,6 @@ class Shader
 {
 public:
 	enum class Type { Vertex, Fragment };
-	Shader();
 	~Shader();
 
 	void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
@@ -2954,15 +2953,15 @@ public:
 	// Internal
 private:
 	int m_LoadShader( const char* shaderStr, Type type, const char* const* defines, int32_t defineCount );
-	uint32_t m_fragmentShader;
-	uint32_t m_vertexShader;
-	uint32_t m_program;
-	bool m_blending;
-	bool m_blendingPremul;
-	bool m_depthTest;
-	bool m_depthWrite;
-	Culling m_culling;
-	bool m_wireframe;
+	uint32_t m_fragmentShader = 0;
+	uint32_t m_vertexShader = 0;
+	uint32_t m_program = 0;
+	bool m_blending = false;
+	bool m_blendingPremul = false;
+	bool m_depthTest = false;
+	bool m_depthWrite = false;
+	Culling m_culling = Culling::None;
+	bool m_wireframe = false;
 public:
 	struct _Attribute
 	{
@@ -4966,7 +4965,7 @@ T* NewArray( ae::Tag tag, uint32_t count )
 	AE_STATIC_ASSERT( _kHeaderSize % _kDefaultAlignment == 0 );
 
 	_Header* header = (_Header*)base;
-	header->check = 0xABCD;
+	header->check = 0xBDBD;
 	header->count = count;
 	header->size = size;
 	header->typeSize = sizeof( T );
@@ -4996,7 +4995,7 @@ T* New( ae::Tag tag, Args ... args )
 #endif
 
 	_Header* header = (_Header*)base;
-	header->check = 0xABCD;
+	header->check = 0xBDBD;
 	header->count = 1;
 	header->size = size;
 	header->typeSize = sizeof( T );
@@ -5016,7 +5015,7 @@ void Delete( T* obj )
 	uint8_t* base = (uint8_t*)obj - _kHeaderSize;
 
 	_Header* header = (_Header*)( base );
-	AE_ASSERT( header->check == 0xABCD );
+	AE_ASSERT( header->check == 0xBDBD );
 	AE_ASSERT_MSG( sizeof( T ) <= header->typeSize, "Released type T '#' does not match allocated type of size #", ae::GetTypeName< T >(), header->typeSize );
 
 	if ( !std::is_trivially_destructible< T >::value )
@@ -5083,18 +5082,19 @@ public:
 		AE_ASSERT( offset == 0 );
 		delete [] data;
 	}
-//	_ScratchBuffer() { data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FIXME, kScratchSize, kScratchAlignment ); offset = 0; }
-//	~_ScratchBuffer() { AE_ASSERT( offset == 0 ); ae::Free( data ); }
 	static _ScratchBuffer* Get() { static _ScratchBuffer s_scratchBuffer( 4 * 1024 * 1024 ); return &s_scratchBuffer; }
 	static const uint32_t kScratchAlignment = 16; // @TODO: Should be max supported
 	uint8_t* data = nullptr;
 	uint32_t offset = 0;
 	uint32_t size = 0;
 	
-	static uint32_t GetScratchBytes( uint32_t count, uint32_t typeSize )
+	static uint32_t GetScratchBytes( uint32_t bytes )
 	{
 		// Round up allocation size as needed to maintain offset alignment
-		return ( ( ( count * typeSize ) + kScratchAlignment - 1 ) / kScratchAlignment ) * kScratchAlignment;
+#if _AE_DEBUG_
+		bytes += 2; // At least 2 byte guard
+#endif
+		return ( ( bytes + kScratchAlignment - 1 ) / kScratchAlignment ) * kScratchAlignment;
 	}
 };
 
@@ -5107,7 +5107,7 @@ Scratch< T >::Scratch( uint32_t count )
 {
 	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
 	ae::_ScratchBuffer* scratchBuffer = ae::_ScratchBuffer::Get();
-	const uint32_t bytes = scratchBuffer->GetScratchBytes( count, sizeof(T) );
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( count * sizeof(T) );
 	
 	m_size = count;
 	m_data = (T*)( scratchBuffer->data + scratchBuffer->offset );
@@ -5117,7 +5117,11 @@ Scratch< T >::Scratch( uint32_t count )
 	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->size, "Scratch buffer size exceeded: # bytes / (# bytes)", scratchBuffer->offset, scratchBuffer->size );
 	
 #if _AE_DEBUG_
-	memset( m_data, 0xCD, bytes );
+	memset( m_data, 0xCD, m_size * sizeof(T) );
+	// Guard
+	uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
+	for ( uint32_t i = 0; i < guardLength; i++ ) { guard[ i ] = 0xBD; }
 #endif
 	if ( !std::is_trivially_constructible< T >::value )
 	{
@@ -5132,8 +5136,16 @@ template < typename T >
 Scratch< T >::~Scratch()
 {
 	ae::_ScratchBuffer* scratchBuffer = ae::_ScratchBuffer::Get();
-	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size, sizeof(T) );
+	
+	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size * sizeof(T) );
+#if _AE_DEBUG_
+	// Guard
+	const uint8_t* guard = (uint8_t*)m_data + m_size * sizeof(T);
+	const intptr_t guardLength = ( (uint8_t*)m_data + bytes ) - guard;
+	for ( uint32_t i = 0; i < guardLength; i++ ) { AE_ASSERT_MSG( guard[ i ] == 0xBD, "Scratch buffer guard has been overwritten" ); }
+#endif
 	AE_ASSERT( scratchBuffer->offset >= bytes );
+	
 	if ( !std::is_trivially_constructible< T >::value )
 	{
 		for ( int32_t i = m_size - 1; i >= 0; i-- )
@@ -8265,10 +8277,8 @@ void ObjectPool< T, N, Paged >::Delete( T* obj )
 	}
 	if ( !Paged || page )
 	{
-#if _AE_DEBUG_
-		AE_ASSERT( (T*)&page->objects[ index ] == obj );
-		AE_ASSERT( page->freeList.IsAllocated( index ) );
-#endif
+		AE_DEBUG_ASSERT( (T*)&page->objects[ index ] == obj );
+		AE_DEBUG_ASSERT_MSG( page->freeList.IsAllocated( index ), "Can't Delete() previously deleted object" );
 		obj->~T();
 #if _AE_DEBUG_
 		memset( obj, 0xDD, sizeof(*obj) );
@@ -8346,11 +8356,11 @@ const T* ObjectPool< T, N, Paged >::GetNext( const T* obj ) const
 	{
 		AE_ASSERT( !Paged || page->freeList.Length() );
 		int32_t index = (int32_t)( obj - (const T*)page->objects );
-		bool found = ( 0 <= index && index < N );
-		if ( found )
+		bool foundPage = ( 0 <= index && index < N );
+		if ( foundPage )
 		{
 			AE_ASSERT( (const T*)&page->objects[ index ] == obj );
-			AE_ASSERT( page->freeList.IsAllocated( index ) );
+			AE_ASSERT_MSG( page->freeList.IsAllocated( index ), "Can't GetNext() with previously deleted object" );
 			int32_t next = page->freeList.GetNext( index );
 			if ( next >= 0 )
 			{
@@ -8358,7 +8368,7 @@ const T* ObjectPool< T, N, Paged >::GetNext( const T* obj ) const
 			}
 		}
 		page = page->node.GetNext();
-		if ( found && page )
+		if ( foundPage && page )
 		{
 			// Given object is last element of previous page
 			int32_t next = page->freeList.GetFirst();
@@ -12777,7 +12787,7 @@ void OpaquePool::Free( void* obj )
 #if _AE_DEBUG_
 		AE_ASSERT( m_length > 0 );
 		AE_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
-		AE_ASSERT( page->freeList.IsAllocated( index ) );
+		AE_ASSERT_MSG( page->freeList.IsAllocated( index ), "Can't Free() previously deleted object" );
 		memset( obj, 0xDD, m_objectSize );
 #endif
 		page->freeList.Free( index );
@@ -12854,7 +12864,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj ) const
 		if ( found )
 		{
 			AE_DEBUG_ASSERT( _AE_POOL_ELEMENT( page->objects, index ) == obj );
-			AE_DEBUG_ASSERT( page->freeList.IsAllocated( index ) );
+			AE_DEBUG_ASSERT_MSG( page->freeList.IsAllocated( index ), "Can't iterate with previously deleted object" );
 			int32_t next = page->freeList.GetNext( index );
 			if ( next >= 0 )
 			{
@@ -13845,6 +13855,8 @@ void Input::Initialize( Window* window )
 	[nsWindow makeKeyAndOrderFront:nil]; // nil sender
 	[nsWindow orderFrontRegardless];
 #endif
+
+	Pump(); // Pump once to process any system window creation events
 }
 
 void Input::Terminate()
@@ -17266,6 +17278,8 @@ void UniformList::Set( const char* name, const Texture* tex )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
+	AE_ASSERT_MSG( tex, "Texture uniform value '#' is invalid", name );
+	AE_ASSERT_MSG( tex->GetTexture(), "Texture uniform value '#' is invalid", name );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.sampler = tex->GetTexture();
 	uniform.target = tex->GetTarget();
@@ -17284,20 +17298,6 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 ae::Hash s_shaderHash;
 ae::Hash s_uniformHash;
-
-Shader::Shader()
-{
-	m_fragmentShader = 0;
-	m_vertexShader = 0;
-	m_program = 0;
-
-	m_blending = false;
-	m_blendingPremul = false;
-	m_depthTest = false;
-	m_depthWrite = false;
-	m_culling = Culling::None;
-	m_wireframe = false;
-}
 
 Shader::~Shader()
 {
@@ -17570,7 +17570,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 
 		if ( uniformVar->type == GL_SAMPLER_2D )
 		{
-			AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
+			AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid", uniformVarName );
 			glActiveTexture( GL_TEXTURE0 + textureIndex );
 			glBindTexture( uniformValue->target, uniformValue->sampler );
 			glUniform1i( uniformVar->location, textureIndex );
@@ -17578,7 +17578,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		}
 		else if ( uniformVar->type == GL_SAMPLER_3D )
 		{
-			AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid #", uniformVarName, uniformValue->sampler );
+			AE_ASSERT_MSG( uniformValue->sampler, "Uniform sampler 2d '#' value is invalid", uniformVarName );
 			glActiveTexture( GL_TEXTURE0 + textureIndex );
 			glBindTexture( GL_TEXTURE_3D, uniformValue->sampler );
 			glUniform1i( uniformVar->location, textureIndex );
@@ -17622,6 +17622,7 @@ const ae::Shader::_Attribute* Shader::m_GetAttributeByIndex( uint32_t index ) co
 
 int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* defines, int32_t defineCount )
 {
+	AE_ASSERT( defineCount <= _kMaxShaderDefines );
 	GLenum glType = -1;
 	if ( type == Type::Vertex )
 	{
@@ -17633,8 +17634,7 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	}
 
 	const uint32_t kPrependMax = 16;
-	uint32_t sourceCount = 0;
-	const char* shaderSource[ kPrependMax + _kMaxShaderDefines * 2 + 1 ]; // x2 max defines to make room for newlines. Plus one for actual shader.
+	ae::Array< const char*, kPrependMax + _kMaxShaderDefines * 2 + 1 > shaderSource;// x2 max defines to make room for newlines. Plus one for actual shader.
 
 	// Version
 	ae::Str32 glVersionStr = "#version ";
@@ -17646,58 +17646,55 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	glVersionStr += "\n";
 	if ( glVersionStr.Length() )
 	{
-		shaderSource[ sourceCount++ ] = glVersionStr.c_str();
+		shaderSource.Append( glVersionStr.c_str() );
 	}
 
 	// Precision
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
-	shaderSource[ sourceCount++ ] = "precision highp float;\n";
+	shaderSource.Append( "precision highp float;\n" );
 #else
 	// No default precision specified
 #endif
 
 	// Input/output
 //	#if _AE_EMSCRIPTEN_
-//	shaderSource[ sourceCount++ ] = "#define AE_COLOR gl_FragColor\n";
-//	shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture2d\n";
-//	shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//	shaderSource.Append( "#define AE_COLOR gl_FragColor\n" );
+//	shaderSource.Append( "#define AE_TEXTURE2D texture2d\n" );
+//	shaderSource.Append( "#define AE_UNIFORM_HIGHP uniform highp\n" );
 //	if ( type == Type::Vertex )
 //	{
-//		shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP attribute highp\n";
-//		shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP varying highp\n";
+//		shaderSource.Append( "#define AE_IN_HIGHP attribute highp\n" );
+//		shaderSource.Append( "#define AE_OUT_HIGHP varying highp\n" );
 //	}
 //	else if ( type == Type::Fragment )
 //	{
-//		shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP varying highp\n";
-//		shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform highp\n";
+//		shaderSource.Append( "#define AE_IN_HIGHP varying highp\n" );
+//		shaderSource.Append( "#define AE_UNIFORM_HIGHP uniform highp\n" );
 //	}
 // #else
-	shaderSource[ sourceCount++ ] = "#define AE_TEXTURE2D texture\n";
-	shaderSource[ sourceCount++ ] = "#define AE_UNIFORM uniform\n";
-	shaderSource[ sourceCount++ ] = "#define AE_UNIFORM_HIGHP uniform\n";
-	shaderSource[ sourceCount++ ] = "#define AE_IN_HIGHP in\n";
-	shaderSource[ sourceCount++ ] = "#define AE_OUT_HIGHP out\n";
+	shaderSource.Append( "#define AE_TEXTURE2D texture\n" );
+	shaderSource.Append( "#define AE_UNIFORM uniform\n" );
+	shaderSource.Append( "#define AE_UNIFORM_HIGHP uniform\n" );
+	shaderSource.Append( "#define AE_IN_HIGHP in\n" );
+	shaderSource.Append( "#define AE_OUT_HIGHP out\n" );
 	if ( type == Type::Fragment )
 	{
-		shaderSource[ sourceCount++ ] = "out vec4 AE_COLOR;\n";
+		shaderSource.Append( "out vec4 AE_COLOR;\n" );
 	}
 // #endif
 
-	AE_ASSERT( sourceCount <= kPrependMax );
+	AE_ASSERT( shaderSource.Length() <= kPrependMax );
 
 	for ( int32_t i = 0; i < defineCount; i++ )
 	{
-		shaderSource[ sourceCount ] = defines[ i ];
-		sourceCount++;
-		shaderSource[ sourceCount ] = "\n";
-		sourceCount++;
+		shaderSource.Append( defines[ i ] );
+		shaderSource.Append( "\n" );
 	}
 
-	shaderSource[ sourceCount ] = shaderStr;
-	sourceCount++;
+	shaderSource.Append( shaderStr );
 
 	GLuint shader = glCreateShader( glType );
-	glShaderSource( shader, sourceCount, shaderSource, nullptr );
+	glShaderSource( shader, shaderSource.Length(), shaderSource.Begin(), nullptr );
 	glCompileShader( shader );
 
 	GLint status;
@@ -18928,6 +18925,8 @@ void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
 	AE_ASSERT( GraphicsDevice::s_graphicsDevice );
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+	AE_CHECK_GL_ERROR();
+	
 	GraphicsDevice::s_graphicsDevice->m_renderQuad.Draw( shader, uniforms );
 }
 
@@ -18935,6 +18934,7 @@ void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
 	AE_ASSERT( GraphicsDevice::s_graphicsDevice );
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+	AE_CHECK_GL_ERROR();
 
 	UniformList uniforms;
 	uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
@@ -19309,7 +19309,7 @@ void GraphicsDevice::Present()
 	AE_ASSERT( activateResult == EMSCRIPTEN_RESULT_SUCCESS );
 #endif
 	glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_defaultFbo );
-	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() ); // @HACK
+	glViewport( 0, 0, m_canvas.GetWidth(), m_canvas.GetHeight() );
 
 	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClearDepth( 1.0f );
