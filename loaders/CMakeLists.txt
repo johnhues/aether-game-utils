@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
-add_library(ae_loaders STATIC "")
-set_target_properties(ae_loaders PROPERTIES DEBUG_POSTFIX "d")
-target_link_libraries(ae_loaders ae_extras)
-target_include_directories(ae_loaders PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_sources(ae_loaders PRIVATE include/ae/loaders.h)
+# ae_loaders
+if(AE_LOADERS_STB OR AE_LOADERS_OFBX)
+	add_library(ae_loaders STATIC "")
+	set_target_properties(ae_loaders PROPERTIES DEBUG_POSTFIX "d")
+	target_link_libraries(ae_loaders ae)
+	target_include_directories(ae_loaders PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+	target_sources(ae_loaders PRIVATE include/ae/loaders.h)
+endif()
 
 # stb
 if(AE_LOADERS_STB)

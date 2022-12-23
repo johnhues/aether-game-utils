@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 # aether-game-utils project
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
+set(AE_LOADERS_OFBX OFF CACHE BOOL "Enables aether FBX utilitiy and ofbx dependency")
+set(AE_LOADERS_STB OFF CACHE BOOL "Enables aether PNG utilitiy and stb dependency")
 
 # Includes
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake) # guard against in-source builds and bad build-type strings
@@ -82,10 +84,10 @@ else()
 endif()
 
 # Examples, extra utilities, and tests
+add_subdirectory(loaders)
 if(NOT ${AE_LEAN_AND_MEAN})
 	add_subdirectory(extras)
 	add_subdirectory(net)
-	add_subdirectory(loaders)
 	add_subdirectory(examples)
 	add_subdirectory(test)
 endif()
