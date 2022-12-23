@@ -5049,6 +5049,7 @@ inline void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment )
 {
 #if _AE_DEBUG_
 	AE_ASSERT_MSG( tag != ae::Tag(), "Allocation of # bytes and alignment # is not tagged", bytes, alignment );
+	AE_ASSERT_MSG( alignment, "Allocation '#' has invalid 0 byte alignment", tag );
 #endif
 	void* result = ae::GetGlobalAllocator()->Allocate( tag, bytes, alignment );
 #if _AE_DEBUG_
