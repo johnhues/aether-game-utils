@@ -81,16 +81,18 @@ int main()
 	ae::Shader shadowShader;
 	ae::VertexArray vertexData;
 	ae::FileSystem fs;
-	ae::DebugCamera camera;
-
+	ae::DebugCamera camera = ae::Axis::Y;
+	ae::DebugLines debugLines;
+	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "OBJ Viewer" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fs.Initialize( "data", "ae", "obj_viewer" );
-	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f, 0.0f, 0.35f ), ae::Vec3( 0.0f, -2.5f, 0.7f ) );
-
+	camera.SetDistanceLimits( 0.25f, 10.0f );
+	debugLines.Initialize( 1024 );
+	
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );
 	shader.SetDepthWrite( true );
@@ -108,23 +110,28 @@ int main()
 	ae::OBJFile objFile = kObjAllocTag;
 	const char* fileName = "bunny.obj";
 	uint32_t fileSize = fs.GetSize( ae::FileSystem::Root::Data, fileName );
-	uint8_t* data = (uint8_t*)ae::Allocate( kObjAllocTag, fileSize, 0 );
+	AE_ASSERT_MSG( fileSize, "Error reading file '#'", fileName );
+	uint8_t* data = (uint8_t*)ae::Allocate( kObjAllocTag, fileSize, 1 );
 	fs.Read( ae::FileSystem::Root::Data, fileName, data, fileSize );
 	objFile.Load( data, fileSize );
+	AE_ASSERT_MSG( objFile.vertices.Length(), "Invalid obj file '#'", fileName );
+	
 	vertexData.Initialize(
 		sizeof(*objFile.vertices.Begin()), sizeof(*objFile.indices.Begin()),
 		objFile.vertices.Length(), objFile.indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
 	);
-	if ( objFile.vertices.Length() )
-	{
-		vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
-		vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
-		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
-		vertexData.SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
-		vertexData.SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
-	}
+	vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
+	vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
+	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
+	vertexData.SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
+	vertexData.SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
+	
+	ae::Vec3 offset = camera.GetPosition() - camera.GetFocus();
+	offset = offset.SafeNormalizeCopy() * 3.0f;
+	ae::Vec3 focus = objFile.aabb.GetCenter() / objFile.aabb.GetHalfSize().Length();
+	camera.Reset( focus, focus + offset );
 
 	float spin = 0.0f;
 
@@ -139,26 +146,26 @@ int main()
 		
 		ae::UniformList uniformList;
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
-		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
+		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 100.0f );
 		
 		// Bunny
-		ae::Matrix4 modelToWorld = ae::Matrix4::RotationZ( spin )
-			* ae::Matrix4::RotationX( ae::HALF_PI )
-			* ae::Matrix4::Scaling( ae::Vec3( 7.5f ) );
+		ae::Matrix4 modelToWorld = ae::Matrix4::RotationY( spin ) * ae::Matrix4::Scaling( 1.0f / objFile.aabb.GetHalfSize().Length() );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 		uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
 		uniformList.Set( "u_lightColor", ae::Color::White().Lerp( ae::Color::PicoPeach(), 0.75f ).GetLinearRGB() );
-		uniformList.Set( "u_lightDir", ae::Vec3( -7.0f, 5.0f, -3.0f ).NormalizeCopy() );
+		uniformList.Set( "u_lightDir", ae::Vec3( 7.0f, -3.0f, -5.0f ).NormalizeCopy() );
 		uniformList.Set( "u_ambLight", ae::Color::PicoDarkPurple().ScaleRGB( 0.5f ).GetLinearRGB() );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 		vertexData.Draw( &shader, uniformList );
 		
 		// Shadow
-		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -0.25f ) )
-			* ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
+		ae::Matrix4 flat = ae::Matrix4::Scaling( ae::Vec3( 1.0f, 0.0f, 1.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::PicoDarkPurple().ScaleRGB( 0.6f ).GetLinearRGBA() );
 		vertexData.Draw( &shadowShader, uniformList );
+		
+		debugLines.AddOBB( modelToWorld * objFile.aabb.GetTransform(), ae::Color::PicoPink() );
+		debugLines.Render( viewToProj * worldToView );
 		
 		render.Present();
 		timeStep.Tick();
