@@ -65,7 +65,7 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 		message(SEND_ERROR "Could not find OpenAL")
 		set(OPENAL_LIBRARY "")
 	endif()
-elseif(NOT EMSCRIPTEN)
+elseif(NOT EMSCRIPTEN AND NOT MSVC)
 	find_package(OpenAL REQUIRED)
 endif()
 
