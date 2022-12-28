@@ -15793,7 +15793,7 @@ ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 				tempFilterStr.Append( ";*.", 3 );
 			}
 
-			tempFilterStr.Append( ext.c_str(), (uint32_t)strlen( ext ) );
+			tempFilterStr.Append( ext.c_str(), ext.Length() );
 			extCount++;
 		}
 
@@ -15803,7 +15803,7 @@ ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 		}
 
 		// Description
-		result.Append( filter.description, (uint32_t)strlen( filter.description ) );
+		result.Append( filter.description.c_str(), filter.description.Length() );
 		result.Append( " (", 2 );
 		result.Append( &tempFilterStr[ 0 ], tempFilterStr.Length() );
 		result.Append( ")", 2 ); // Every description must be null terminated
@@ -15910,7 +15910,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 		if ( winParams.nFilterIndex >= 1 )
 		{
 			winParams.nFilterIndex--;
-			const char* ext = params.filters[ winParams.nFilterIndex ].extensions[ 0 ];
+			const char* ext = params.filters[ winParams.nFilterIndex ].extensions[ 0 ].c_str();
 			
 			FixPathExtension( ext, &result );
 		}
