@@ -39,24 +39,22 @@ int main()
   ae::NetObjectServer netObjectServer;
   ae::Map< AetherUuid, ae::NetObjectConnection* > netObjectConnections = TAG_EXAMPLE;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
+  double nextSend = 0.0;
 
-  // Load level objects
-  while ( gameObjects.Length() < 3 )
-  {
-    GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Gray() ) );
-    obj->netObject = netObjectServer.CreateNetObject();
-    obj->netObject->SetInitData( nullptr, 0 );
-  }
-  
   // Update
   while ( !game.input.quit )
   {
     // Poll input and net modules
     game.input.Pump();
     AetherServer_Update( server );
+    
     ServerReceiveInfo receiveInfo;
     while ( AetherServer_Receive( server, &receiveInfo ) )
     {
+      AetherUuid playerId = receiveInfo.player->uuid;
+      int32_t objIdx = gameObjects.FindFn( [ playerId ]( const GameObject& o ){ return o.playerId == playerId; } );
+      GameObject* obj = ( objIdx >= 0 ) ? &gameObjects[ objIdx ] : nullptr;
+      
       switch ( receiveInfo.msgId )
       {
         case kSysMsgPlayerConnect:
@@ -64,7 +62,7 @@ int main()
           AE_LOG( "Player # connected", receiveInfo.player->uuid );
           netObjectConnections.Set( receiveInfo.player->uuid, netObjectServer.CreateConnection() );
 
-          GameObject* obj = &gameObjects.Append( GameObject( ae::Color::Green() ) );
+          obj = &gameObjects.Append( GameObject( ae::Color::HSV( ae::Random01(), 1.0f, 1.0f ) ) );
           obj->playerId = receiveInfo.player->uuid;
           obj->netObject = netObjectServer.CreateNetObject();
           obj->netObject->SetInitData( nullptr, 0 );
@@ -72,14 +70,12 @@ int main()
         }
         case kSysMsgPlayerDisconnect:
         {
-          AetherUuid playerId = receiveInfo.player->uuid;
           AE_LOG( "Player # disconnected", playerId );
 
           // Kill player gameobject
-          int32_t playerIndex = gameObjects.FindFn( [=]( const GameObject& o ){ return o.playerId == playerId; } );
-          if ( playerIndex >= 0 )
+          if ( obj )
           {
-            gameObjects[ playerIndex ].alive = false;
+            obj->alive = false;
           }
 
           // Remove player from replica db
@@ -90,6 +86,15 @@ int main()
             netObjectServer.DestroyConnection( conn );
           }
 
+          break;
+        }
+        case kInputInfoMsg:
+        {
+          if ( obj )
+          {
+            ae::BinaryStream stream = ae::BinaryStream::Reader( receiveInfo.data );
+            stream.SerializeObject( obj->input );
+          }
           break;
         }
         default:
@@ -112,17 +117,22 @@ int main()
     }
     
     // Send replication data
-    netObjectServer.UpdateSendData();
-    for ( int32_t i = 0; i < server->playerCount; i++ )
+    double time = ae::GetTime();
+    if ( nextSend < time )
     {
-      AetherPlayer* player = server->allPlayers[ i ];
-      ae::NetObjectConnection* conn = nullptr;
-      if ( netObjectConnections.TryGet( player->uuid, &conn ) )
+      netObjectServer.UpdateSendData();
+      for ( int32_t i = 0; i < server->playerCount; i++ )
       {
-        AetherServer_QueueSendToPlayer( server, player, kObjectInfoMsg, true, conn->GetSendData(), conn->GetSendLength() );
+        AetherPlayer* player = server->allPlayers[ i ];
+        ae::NetObjectConnection* conn = nullptr;
+        if ( netObjectConnections.TryGet( player->uuid, &conn ) )
+        {
+          AetherServer_QueueSendToPlayer( server, player, kObjectInfoMsg, true, conn->GetSendData(), conn->GetSendLength() );
+        }
       }
+      AetherServer_SendAll( server );
+      nextSend = time + kNetTickSeconds;
     }
-    AetherServer_SendAll( server );
 
     // Render
     game.Render( ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 10.0f * game.render.GetAspectRatio() ), 1.0f / 10.0f, 1.0f ) ) );

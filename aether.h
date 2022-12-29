@@ -513,9 +513,11 @@ struct Vec3 : public VecT< Vec3 >
 	struct Int3 FloorCopy() const;
 	struct Int3 CeilCopy() const;
 	
-	float GetAngleBetween( const Vec3& v ) const;
 	void AddRotationXY( float rotation ); // @TODO: Support Y up
+	Vec3 AddRotationXYCopy( float rotation ) const;
+	float GetAngleBetween( const Vec3& v ) const;
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
+	
 	Vec3 Lerp( const Vec3& end, float t ) const;
 	Vec3 DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
 	Vec3 Slerp( const Vec3& end, float t, float epsilon = 0.0001f ) const;
@@ -4217,10 +4219,18 @@ class NetObjectClient
 {
 public:
 	// The following sequence should be performed each frame
-	void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
-	NetObject* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetObjects are returned)
-	// 3) Handle new sync data with NetObject::GetSyncData() and process incoming messages with NetObject::PumpMessages()
-	void Destroy( NetObject* pendingDestroy ); // 4) Call this on ae::NetObjects once NetObject::IsPendingDestroy() returns true
+	
+	//! 1) Handle raw data from server (call once when new data arrives)
+	void ReceiveData( const uint8_t* data, uint32_t length );
+	
+	//! 2) Get new objects (call this repeatedly until no new NetObjects are returned)
+	NetObject* PumpCreate();
+	
+	// 3) Handle new sync data with NetObject::GetSyncData()
+	
+	//! 4) Call this on ae::NetObjects once NetObject::IsPendingDestroy() returns true
+	void Destroy( NetObject* pendingDestroy );
+	
 	
 	NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
 	RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
@@ -4243,20 +4253,23 @@ private:
 class NetObjectConnection
 {
 public:
-	//! This data should be sent to a client with and consumed with ae::NetObjectClient::ReceiveData(). Call
-	//! ae::NetObjectServer::UpdateSendData() once each network tick before calling this.
+	//! This data should be sent to a client with and consumed with
+	//! ae::NetObjectClient::ReceiveData(). Call ae::NetObjectServer::UpdateSendData()
+	//! once each network tick before calling this.
 	const uint8_t* GetSendData() const;
-	//! The length of the data that should be sent to a client with and consumed with ae::NetObjectClient::ReceiveData().
-	//! Call ae::NetObjectServer::UpdateSendData() once each network tick before calling this.
+	//! The length of the data that should be sent to a client with and consumed
+	//! with ae::NetObjectClient::ReceiveData(). Call ae::NetObjectServer::UpdateSendData()
+	//! once each network tick before calling this.
 	uint32_t GetSendLength() const;
 
 public:
 	void m_UpdateSendData();
+	void m_ClearPending();
 
 	bool m_first = true;
 	class NetObjectServer* m_replicaDB = nullptr;
 	bool m_pendingClear = false;
-	ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
+	ae::Array< uint8_t > m_connData = AE_ALLOC_TAG_NET;
 	// Internal
 	enum class EventType : uint8_t
 	{
@@ -4275,29 +4288,31 @@ class NetObjectServer
 {
 public:
 	NetObjectServer();
-	//! Creates a server authoritative NetObject which will be replicated to clients through ae::NetObjectConnection
-	//! and ae::NetObjectClient. Call ae::NetObject::SetInitData() on the object to finalize the object for remote creation.
-	//! Call ae::NetObjectServer::DestroyNetObject() when finished.
+	//! Call each network tick before ae::NetObjectConnection::GetSendData()
+	void UpdateSendData();
+	
+	//! Creates a server authoritative NetObject which will be replicated to
+	//! clients through ae::NetObjectConnection and ae::NetObjectClient. Call
+	//! ae::NetObject::SetInitData() on the object to finalize the object for
+	//! remote creation. Call ae::NetObjectServer::DestroyNetObject() when finished.
 	NetObject* CreateNetObject();
-	//! Will cause the ae::NetObject to be detroyed on remote clients. Must be called for each ae::NetObject
-	//! allocated with ae::NetObjectServer::CreateNetObject().
+	//! Will cause the ae::NetObject to be detroyed on remote clients.
+	//! Must be called for each ae::NetObject allocated with
+	//! ae::NetObjectServer::CreateNetObject().
 	void DestroyNetObject( NetObject* netObject );
 
-	//! Allocate one ae::NetObjectConnection per client. Call ae::NetObjectServer::DestroyConnection() to
-	//! clean it up.
+	//! Allocate one ae::NetObjectConnection per client. Call
+	//! ae::NetObjectServer::DestroyConnection() to clean it up.
 	NetObjectConnection* CreateConnection();
 	//! Must be called for each ae::NetObjectConnection allocated with ae::NetObjectServer::CreateConnection().
 	void DestroyConnection( NetObjectConnection* connection );
-
-	//! Call each frame before ae::NetObjectConnection::GetSendData()
-	void UpdateSendData();
 
 private:
 	uint32_t m_signature = 0;
 	uint32_t m_lastNetId = 0;
 	ae::Array< NetObject* > m_pendingCreate = AE_ALLOC_TAG_NET;
 	ae::Map< NetId, NetObject*, 0, ae::MapMode::Stable > m_netObjects = AE_ALLOC_TAG_NET;
-	ae::Array< NetObjectConnection* > m_servers = AE_ALLOC_TAG_NET;
+	ae::Array< NetObjectConnection* > m_connections = AE_ALLOC_TAG_NET; // @TODO: Rename m_connections
 public:
 	// Internal
 	NetObject* GetNetObject( uint32_t index ) { return m_netObjects.GetValue( index ); }
@@ -10478,6 +10493,13 @@ void Vec3::AddRotationXY( float rotation )
 	float newY = x * sinTheta + y * cosTheta;
 	x = newX;
 	y = newY;
+}
+
+Vec3 Vec3::AddRotationXYCopy( float rotation ) const
+{
+	Vec3 r = *this;
+	r.AddRotationXY( rotation );
+	return r;
 }
 
 Vec3 Vec3::RotateCopy( Vec3 axis, float angle ) const
@@ -22540,7 +22562,7 @@ void NetObjectConnection::m_UpdateSendData()
 		}
 	}
 
-	BinaryStream wStream = BinaryStream::Writer( &m_sendData );
+	BinaryStream wStream = BinaryStream::Writer( &m_connData );
 
 	if ( toSync.Length() )
 	{
@@ -22575,14 +22597,23 @@ void NetObjectConnection::m_UpdateSendData()
 	m_first = false;
 }
 
+void NetObjectConnection::m_ClearPending()
+{
+	if ( m_pendingClear )
+	{
+		m_connData.Clear();
+		m_pendingClear = false;
+	}
+}
+
 const uint8_t* NetObjectConnection::GetSendData() const
 {
-	return m_sendData.Length() ? &m_sendData[ 0 ] : nullptr;
+	return m_connData.begin();
 }
 
 uint32_t NetObjectConnection::GetSendLength() const
 {
-	return m_sendData.Length();
+	return m_connData.Length();
 }
 
 //------------------------------------------------------------------------------
@@ -22625,16 +22656,11 @@ void NetObjectServer::DestroyNetObject( NetObject* netObject )
 	bool removed = m_netObjects.Remove( id );
 	AE_ASSERT_MSG( removed, "NetObject was not found." );
 
-	for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+	for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 	{
-		NetObjectConnection* server = m_servers[ i ];
-		if ( server->m_pendingClear )
-		{
-			server->m_sendData.Clear();
-			server->m_pendingClear = false;
-		}
-
-		BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+		NetObjectConnection* conn = m_connections[ i ];
+		conn->m_ClearPending(); // @TODO: Should this queue up like m_pendingCreate?
+		BinaryStream wStream = BinaryStream::Writer( &conn->m_connData );
 		wStream.SerializeRaw( NetObjectConnection::EventType::Destroy );
 		wStream.SerializeObject( id );
 	}
@@ -22644,12 +22670,12 @@ void NetObjectServer::DestroyNetObject( NetObject* netObject )
 
 NetObjectConnection* NetObjectServer::CreateConnection()
 {
-	NetObjectConnection* server = m_servers.Append( ae::New< NetObjectConnection >( AE_ALLOC_TAG_NET ) );
-	AE_ASSERT( !server->m_pendingClear );
-	server->m_replicaDB = this;
+	NetObjectConnection* conn = m_connections.Append( ae::New< NetObjectConnection >( AE_ALLOC_TAG_NET ) );
+	AE_ASSERT( !conn->m_pendingClear );
+	conn->m_replicaDB = this;
 
 	// Send initial net datas
-	BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+	BinaryStream wStream = BinaryStream::Writer( &conn->m_connData );
 	wStream.SerializeRaw( NetObjectConnection::EventType::Connect );
 	wStream.SerializeUint32( m_signature );
 	wStream.SerializeUint32( m_netObjects.Length() );
@@ -22660,35 +22686,30 @@ NetObjectConnection* NetObjectServer::CreateConnection()
 		wStream.SerializeArray( netObject->m_initData );
 	}
 
-	return server;
+	return conn;
 }
 
-void NetObjectServer::DestroyConnection( NetObjectConnection* server )
+void NetObjectServer::DestroyConnection( NetObjectConnection* conn )
 {
-	if ( !server )
+	if ( !conn )
 	{
 		return;
 	}
 
-	int32_t index = m_servers.Find( server );
+	int32_t index = m_connections.Find( conn );
 	if ( index >= 0 )
 	{
-		m_servers.Remove( index );
-		ae::Delete( server );
+		m_connections.Remove( index );
+		ae::Delete( conn );
 	}
 }
 
 void NetObjectServer::UpdateSendData()
 {
 	// Clear old send data before writing new
-	for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+	for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 	{
-		NetObjectConnection* server = m_servers[ i ];
-		if ( server->m_pendingClear )
-		{
-			server->m_sendData.Clear();
-			server->m_pendingClear = false;
-		}
+		m_connections[ i ]->m_ClearPending();
 	}
 	
 	// Send info about new objects (delayed until Update in case objects initData need to reference each other)
@@ -22700,10 +22721,9 @@ void NetObjectServer::UpdateSendData()
 			m_netObjects.Set( netObject->GetId(), netObject );
 			
 			// Send create messages on existing server connections
-			for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+			for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 			{
-				NetObjectConnection* server = m_servers[ i ];
-				BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+				BinaryStream wStream = BinaryStream::Writer( &m_connections[ i ]->m_connData );
 				wStream.SerializeRaw( NetObjectConnection::EventType::Create );
 				wStream.SerializeObject( netObject->GetId() );
 				wStream.SerializeArray( netObject->m_initData );
@@ -22718,9 +22738,9 @@ void NetObjectServer::UpdateSendData()
 		m_netObjects.GetValue( i )->m_UpdateHash();
 	}
 
-	for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+	for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 	{
-		m_servers[ i ]->m_UpdateSendData();
+		m_connections[ i ]->m_UpdateSendData();
 	}
 
 	for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
