@@ -131,7 +131,6 @@ AetherPlayer* AetherClient_AddPlayer( AetherClientInternal* ac, AetherUuid uuid 
 {
   AetherPlayer* player = ae::New< AetherPlayer >( AE_ALLOC_TAG_NET );
   player->uuid = uuid;
-  player->netId = 0;
   player->userData = nullptr;
   player->alive = true;
   player->pendingLevel = "";

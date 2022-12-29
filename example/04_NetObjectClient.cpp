@@ -37,10 +37,12 @@ int main()
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
   ae::NetObjectClient netObjectClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
+  double nextSend = 0.0;
 
   // Update
   while ( !game.input.quit )
   {
+    double time = ae::GetTime();
     game.input.Pump();
     
     //------------------------------------------------------------------------------
@@ -65,7 +67,7 @@ int main()
           AE_LOG( "Disconnected from server" );
           break;
         case kObjectInfoMsg:
-          netObjectClient.ReceiveData( receiveInfo.data.Begin(), receiveInfo.data.End() - receiveInfo.data.Begin() );
+          netObjectClient.ReceiveData( receiveInfo.data.Begin(), receiveInfo.data.Length() );
           break;
         default:
           break;
@@ -101,8 +103,30 @@ int main()
     }
     // Remove objects that no longer have replication data
     gameObjects.RemoveAllFn( []( const GameObject& o ) { return !o.netObject; } );
-    // Send messages generated during game update
-    AetherClient_SendAll( client );
+    
+    //------------------------------------------------------------------------------
+    // Send input to server
+    //------------------------------------------------------------------------------
+    if ( client->IsConnected() && nextSend < time )
+    {
+      AetherUuid playerId = client->localPlayer->uuid;
+      int32_t objIdx = gameObjects.FindFn( [ playerId ]( const GameObject& o ){ return o.playerId == playerId; } );
+      GameObject* obj = ( objIdx >= 0 ) ? &gameObjects[ objIdx ] : nullptr;
+      if ( obj )
+      {
+        uint8_t buffer[ 64 ];
+        ae::BinaryStream stream = ae::BinaryStream::Writer( buffer, countof(buffer) );
+        obj->input = InputInfo();
+        obj->input.accel += game.input.Get( ae::Key::Up ) ? 1.0f : 0.0f;
+        obj->input.accel -= game.input.Get( ae::Key::Down ) ? 1.0f : 0.0f;
+        obj->input.turn -= game.input.Get( ae::Key::Right ) ? 1.0f : 0.0f;
+        obj->input.turn += game.input.Get( ae::Key::Left ) ? 1.0f : 0.0f;
+        stream.SerializeObject( obj->input );
+        AetherClient_QueueSend( client, kInputInfoMsg, false, stream.GetData(), stream.GetOffset() );
+      }
+      AetherClient_SendAll( client ); // Send messages generated during game update
+      nextSend = time + kNetTickSeconds;
+    }
 
     //------------------------------------------------------------------------------
     // Render

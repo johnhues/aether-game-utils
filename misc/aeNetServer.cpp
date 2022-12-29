@@ -151,7 +151,6 @@ AetherPlayer* AetherServer_AddPlayer( AetherServerInternal* as, AetherUuid uuid 
 {
   AetherPlayer* player = new AetherPlayer();
   player->uuid = uuid;
-  player->netId = 0;
   player->userData = nullptr;
   player->alive = true;
   player->pendingLevel = "";
@@ -668,19 +667,6 @@ void AetherServer_SendAll( AetherServer* _as )
 #ifdef USE_WEBSOCKETS
   lws_callback_on_writable_all_protocol( as->priv.webContext, as->priv.webProtocols );
 #endif
-}
-
-AetherPlayer* AetherServer_GetPlayerByNetInstId( AetherServer* _as, NetInstId id )
-{
-  AetherServerInternal* as = (AetherServerInternal*)_as;
-  for ( int32_t i = 0; i < as->pub.playerCount; i++ )
-  {
-    if ( as->pub.allPlayers[ i ]->netId == id )
-    {
-      return as->pub.allPlayers[ i ];
-    }
-  }
-  return nullptr;
 }
 
 uint32_t AetherServer_GetPlayerByUserData( AetherServer* as, const void* userData, AetherPlayer* (&playersOut)[ 32 ] )
