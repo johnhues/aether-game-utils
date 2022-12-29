@@ -33,7 +33,7 @@ int main()
   // Init
   AE_LOG( "Initialize" );
   Game game;
-  game.Initialize( "NetObject Client" );
+  game.Initialize( "NetObject Client", false );
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
   ae::NetObjectClient netObjectClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;

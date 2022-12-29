@@ -34,8 +34,8 @@ int main()
 
   // Init
   Game game;
-  game.Initialize( "NetObject Server" );
-  AetherServer* server = AetherServer_New( 3500, 0, 16 );
+  game.Initialize( "NetObject Server", true );
+  AetherServer* server = AetherServer_New( 3500, 3600, 16 );
   ae::NetObjectServer netObjectServer;
   ae::Map< AetherUuid, ae::NetObjectConnection* > netObjectConnections = TAG_EXAMPLE;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;

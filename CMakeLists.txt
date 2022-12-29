@@ -93,6 +93,26 @@ elseif(NOT EMSCRIPTEN AND NOT MSVC)
 	find_package(OpenAL REQUIRED)
 endif()
 
+if (AE_USE_WEB_SOCKETS)
+	include(FetchContent)
+
+	# FetchContent_Declare(
+	# 	OpenSSL
+	# 	GIT_REPOSITORY https://github.com/openssl/openssl.git
+	# 	GIT_TAG openssl-3.0.7
+	# )
+	# FetchContent_MakeAvailable(OpenSSL)
+
+	FetchContent_Declare(
+		websockets
+		GIT_REPOSITORY https://github.com/warmcat/libwebsockets.git
+		GIT_TAG v4.3.2
+	)
+	FetchContent_MakeAvailable(websockets)
+	add_definitions(-DUSE_WEBSOCKETS)
+	set(WEBSOCKETS_LIBRARIES websockets)
+endif()
+
 # dependency include directories
 set(AE_DEPS_LIBRARY_INCLUDE_DIRS
 	${ENET_INCLUDE_DIR}
@@ -105,6 +125,7 @@ set(AE_DEPS_LIBARARIES
 	${OPENGL_LIBRARIES}
 	${OpenGLES}
 	enet
+	${WEBSOCKETS_LIBRARIES}
 )
 if(APPLE)
 	list(APPEND AE_DEPS_LIBARARIES

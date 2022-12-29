@@ -27,23 +27,88 @@
 #include <vector>
 #include <algorithm>
 #include <enet/enet.h>
-// #include "HVN_WebConn.h"
 
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-#if defined(DAEMON) && defined(__linux__) && !defined(__chip__)
-  #define USE_WEBWOCKETS 1
-#endif
-
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
 #include <libwebsockets.h>
+
+const uint32_t kMaxConnections = 32;
+const uint32_t kConnectionBufferSize = 8192;
+const uint32_t kMaxWebEvents = 2048;
+
+enum WebConnEventType
+{
+  kWebConn_Connect,
+  kWebConn_Receive,
+  kWebConn_Disconnect
+};
+
+struct WebConnEvent
+{
+  WebConnEventType type;
+  struct WebConnection* conn;
+  void* userdata;
+};
+
+class WebConnection
+{
+public:
+  void Initialize( uint32_t id, uint32_t sendBufferPadBytes );
+
+  uint32_t GetId() { return m_id; }
+  bool IsValid() { return m_isValid; }
+
+  void Send( const uint8_t* data, uint32_t length );
+  uint32_t Recv( uint8_t* data, uint32_t maxLength );
+
+  bool SendBufferPeek( uint8_t** dataOut, uint32_t* lengthOut );
+  void SendBufferPop( uint32_t length );
+  void RecvBufferPush( const uint8_t* data, uint32_t length );
+
+  void* userdata;
+
+private:
+  uint32_t m_id;
+  bool m_isValid;
+
+  uint8_t m_recvBuffer[ kConnectionBufferSize ];
+  uint32_t m_recvCurrent;
+
+  uint32_t m_sendPadBytes;
+  uint8_t m_sendBuffer[ kConnectionBufferSize ];
+  uint32_t m_sendCurrent;
+};
+
+class WebConnectionManager
+{
+public:
+  void Initialize();
+  WebConnection* AllocateConnection( uint32_t padBytes );
+  bool Service( WebConnEvent* event );
+  uint32_t GetConnections( WebConnection* (&conn)[ kMaxConnections ] );
+
+private:
+  void m_FreeConnection( uint32_t id );
+  
+  WebConnEvent m_events[ kMaxWebEvents ];
+  uint32_t m_firstEvent;
+  uint32_t m_eventCount;
+
+  bool m_isActive[ kMaxConnections ];
+  WebConnection m_connections[ kMaxConnections ];
+
+public:
+  WebConnection* GetConnection( uint32_t id );
+  void PushEvent( const WebConnEvent& event );
+};
 
 static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *userdata, void *msgData, size_t msgLength );
 
 struct SessionData
 {
-    uint32_t id;
+  uint32_t id;
 };
 #endif
 
@@ -59,7 +124,7 @@ namespace
     {
       std::vector<AetherPlayer*> players;
       ENetHost* host;
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
       WebConnectionManager webConnManager;
       lws_context* webContext;
       lws_protocols webProtocols[ 2 ];
@@ -114,7 +179,7 @@ AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPla
   as->pub.playerCount = 0;
   as->pub.allPlayers = as->priv.players.data();
 
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
   as->priv.webConnManager.Initialize();
 
   memset( as->priv.webProtocols, 0, sizeof(as->priv.webProtocols) );
@@ -144,7 +209,7 @@ AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPla
 void AetherServer_Delete( AetherServer* _as )
 {
   AetherServerInternal* as = (AetherServerInternal*)_as;
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
   lws_context_destroy( as->priv.webContext );
 #endif
 
@@ -161,7 +226,7 @@ void AetherServer_Delete( AetherServer* _as )
   enet_deinitialize();
 }
 
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
 static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *userdata, void *msgData, size_t msgLength )
 {
   const lws_protocols* proto = lws_get_protocol( wsi );
@@ -277,7 +342,7 @@ void AetherServer_Update( AetherServer* _as )
 {
   AetherServerInternal* as = (AetherServerInternal*)_as;
 
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
   lws_service( as->priv.webContext, 0 );
 #endif
 
@@ -410,7 +475,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
     }
   }
 
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
   WebConnEvent event;
   while ( as->priv.webConnManager.Service( &event ) )
   {
@@ -443,8 +508,8 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
           {
             infoOut->msgId = header.msgId;
             infoOut->player = AetherServer_GetPlayer( as, header.uuid );
-            infoOut->length = length;
-            memcpy( infoOut->data, data, length );
+            infoOut->data.Clear();
+            infoOut->data.Append( data, length );
             return true;
           }
         }
@@ -461,7 +526,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
           
           infoOut->msgId = kSysMsgPlayerDisconnect;
           infoOut->player = player;
-          infoOut->length = 0;
+          infoOut->data.Clear();
           return true;
         }
         break;
@@ -493,7 +558,7 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
   ENetPeer* peers = as->priv.host->peers;
   int32_t peerCount = (int32_t)as->priv.host->peerCount;
 
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
   WebConnection* connections[ kMaxConnections ];
   uint32_t webConnCount = as->priv.webConnManager.GetConnections( connections );
 #endif
@@ -549,12 +614,11 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
     }
   }
 
-#ifdef USE_WEBWOCKETS
-  AE_ASSERT( dataLength <= kEmMaxMessageSize );
-  uint8_t data[ kEmMaxMessageSize ];
-
-  memcpy( data, &header, sizeof( header ) );
-  memcpy( data + sizeof( header ), info->data, info->length );
+#ifdef USE_WEBSOCKETS
+  uint32_t sendSize =  sizeof(header) + info->length;
+  ae::Scratch< uint8_t > data( sendSize );
+  memcpy( data.Data(), &header, sizeof( header ) );
+  memcpy( data.Data() + sizeof( header ), info->data, info->length );
 
   for ( uint32_t i = 0; i < webConnCount; i++ )
   {
@@ -585,7 +649,7 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
       continue;
     }
 
-    connections[ i ]->Send( data, dataLength );
+    connections[ i ]->Send( data.Data(), data.Length() );
     
     if ( info->player )
     {
@@ -601,7 +665,7 @@ void AetherServer_SendAll( AetherServer* _as )
   AetherServerInternal* as = (AetherServerInternal*)_as;
   enet_host_flush( as->priv.host );
 
-#ifdef USE_WEBWOCKETS
+#ifdef USE_WEBSOCKETS
   lws_callback_on_writable_all_protocol( as->priv.webContext, as->priv.webProtocols );
 #endif
 }
@@ -670,3 +734,197 @@ void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId m
   info.group = group;
   AetherServer_QueueSend( as, &info );
 }
+
+#ifdef USE_WEBSOCKETS
+
+void WebConnection::Initialize( uint32_t id, uint32_t padBytes )
+{
+  m_id = id;
+  m_isValid = true;
+  m_recvCurrent = 0;
+  m_sendCurrent = 0;
+  m_sendPadBytes = padBytes;
+
+  userdata = nullptr;
+}
+
+void WebConnection::Send( const uint8_t* data, uint32_t length )
+{
+  if ( !m_isValid ) { return; }
+
+  uint16_t msgLen = htons( (uint16_t)length );
+  if ( m_sendPadBytes + m_sendCurrent + sizeof(msgLen) + length > kConnectionBufferSize )
+  {
+    m_isValid = false;
+    return;
+  }
+
+  memcpy( m_sendBuffer + m_sendPadBytes + m_sendCurrent, &msgLen, sizeof(msgLen) );
+  m_sendCurrent += sizeof(msgLen);
+  memcpy( m_sendBuffer + m_sendPadBytes + m_sendCurrent, (uint8_t*)data, length );
+  m_sendCurrent += length;
+}
+
+uint32_t WebConnection::Recv( uint8_t* data, uint32_t maxLength )
+{
+  if ( !m_isValid ) { return 0; }
+
+  uint16_t msgLen;
+  if ( m_recvCurrent <= sizeof(msgLen) )
+  {
+    return 0;
+  }
+
+  msgLen = *(uint16_t*)m_recvBuffer;
+  msgLen = ntohs( msgLen );
+  if ( msgLen > maxLength )
+  {
+    m_isValid = false;
+    return 0;
+  }
+
+  if ( m_recvCurrent >= sizeof(msgLen) + msgLen )
+  {
+    memcpy( data, m_recvBuffer + sizeof(msgLen), msgLen );
+    m_recvCurrent -= sizeof(msgLen) + msgLen;
+    memmove( m_recvBuffer, m_recvBuffer + sizeof(msgLen) + msgLen, m_recvCurrent );
+    return msgLen;
+  }
+
+  return 0;
+}
+
+bool WebConnection::SendBufferPeek( uint8_t** dataOut, uint32_t* lengthOut )
+{
+  if ( !m_isValid || m_sendCurrent == 0 )
+  {
+    return false;
+  }
+
+  *dataOut = m_sendBuffer + m_sendPadBytes;
+  *lengthOut = m_sendCurrent;
+
+  return true;
+}
+
+void WebConnection::SendBufferPop( uint32_t length )
+{
+  if ( !m_isValid ) { return; }
+
+  if ( length > m_sendCurrent )
+  {
+    m_isValid = false;
+    return;
+  }
+
+  m_sendCurrent -= length;
+  memmove( m_sendBuffer + m_sendPadBytes, m_sendBuffer + m_sendPadBytes + length, m_sendCurrent );
+}
+
+void WebConnection::RecvBufferPush( const uint8_t* data, uint32_t length )
+{
+  if ( !m_isValid ) { return; }
+
+  if ( m_recvCurrent + length > kConnectionBufferSize )
+  {
+    m_isValid = false;
+    return;
+  }
+
+  memcpy( m_recvBuffer + m_recvCurrent, (uint8_t*)data, length );
+  m_recvCurrent += length;
+}
+
+void WebConnectionManager::Initialize()
+{
+  m_firstEvent = 0;
+  m_eventCount = 0;
+  memset( m_isActive, 0, sizeof(m_isActive) );
+}
+
+WebConnection* WebConnectionManager::AllocateConnection( uint32_t padBytes )
+{
+  for ( uint32_t i = 0; i < kMaxConnections; i++ )
+  {
+    if ( !m_isActive[ i ] )
+    {
+      m_isActive[ i ] = true;
+      m_connections[ i ].Initialize( i, padBytes );
+      return &m_connections[ i ];
+    }
+  }
+  return nullptr;
+}
+
+void WebConnectionManager::m_FreeConnection( uint32_t id )
+{
+  AE_ASSERT( id >= 0 && id < kMaxConnections );
+  m_isActive[ id ] = false;
+}
+
+bool WebConnectionManager::Service( WebConnEvent* event )
+{
+  for ( uint32_t i = 0; i < kMaxConnections; i++ )
+  {
+    if ( m_isActive[ i ] && !m_connections[ i ].IsValid() )
+    {
+      WebConnEvent e;
+      e.type = kWebConn_Disconnect;
+      e.conn = &m_connections[ i ];
+      e.userdata = m_connections[ i ].userdata;
+      PushEvent( e );
+    }
+  }
+
+  if ( m_eventCount )
+  {
+    *event = m_events[ m_firstEvent ];
+    m_firstEvent++;
+    m_eventCount--;
+
+    if ( event->type == kWebConn_Disconnect )
+    {
+      m_FreeConnection( event->conn->GetId() );
+      event->conn = nullptr;
+    }
+
+    return true;
+  }
+  return false;
+}
+
+WebConnection* WebConnectionManager::GetConnection( uint32_t id )
+{
+  if ( m_isActive[ id ] )
+  {
+    return &m_connections[ id ];
+  }
+  return nullptr;
+}
+
+uint32_t WebConnectionManager::GetConnections( WebConnection* (&connections)[ kMaxConnections ] )
+{
+  uint32_t result = 0;
+  for ( uint32_t i = 0; i < kMaxConnections; i++ )
+  {
+    if ( m_isActive[ i ] )
+    {
+      connections[ result ] = &m_connections[ i ];
+      result++;
+    }
+  }
+  return result;
+}
+
+void WebConnectionManager::PushEvent( const WebConnEvent& event )
+{
+  if ( m_eventCount == 0 )
+  {
+    m_firstEvent = 0;
+  }
+  AE_ASSERT( m_firstEvent + m_eventCount < kMaxWebEvents );
+  m_events[ m_firstEvent + m_eventCount ] = event;
+  m_eventCount++;
+}
+
+#endif

@@ -42,32 +42,42 @@ const AetherMsgId kObjectInfoMsg = 1;
 class Game
 {
 public:
-  void Initialize( const char* windowTitle )
+  void Initialize( const char* windowTitle, bool headless )
   {
-    window.Initialize( 800, 600, false, true );
-    window.SetTitle( windowTitle );
-    render.Initialize( &window );
+    m_headless = headless;
+    if ( !m_headless )
+    {
+      window.Initialize( 800, 600, false, true );
+      window.SetTitle( windowTitle );
+      render.Initialize( &window );
+      debugLines.Initialize( 32 );
+    }
     input.Initialize( &window );
     timeStep.SetTimeStep( 1.0f / 10.0f );
-    debugLines.Initialize( 32 );
   }
 
   void Terminate()
   {
-    debugLines.Terminate();
-    //input.Terminate();
-    render.Terminate();
-    window.Terminate();
+    if ( !m_headless )
+    {
+      debugLines.Terminate();
+      render.Terminate();
+      window.Terminate();
+    }
+    input.Terminate();
   }
 
   void Render( const ae::Matrix4& worldToNdc )
   {
-    render.Activate();
-    render.Clear( ae::Color::PicoBlack() );
+    if ( !m_headless )
+    {
+      render.Activate();
+      render.Clear( ae::Color::PicoBlack() );
+      
+      debugLines.Render( worldToNdc );
+      render.Present();
+    }
     
-    debugLines.Render( worldToNdc );
-    
-    render.Present();
     timeStep.Tick();
   }
   
@@ -76,6 +86,8 @@ public:
   ae::Input input;
   ae::TimeStep timeStep;
   ae::DebugLines debugLines;
+private:
+  bool m_headless = false;
 };
 
 //------------------------------------------------------------------------------
