@@ -109,7 +109,7 @@ if (AE_USE_WEB_SOCKETS)
 		GIT_TAG v4.3.2
 	)
 	FetchContent_MakeAvailable(websockets)
-	add_definitions(-DUSE_WEBSOCKETS)
+	add_definitions(-DUSE_WEB_SOCKETS)
 	set(WEBSOCKETS_LIBRARIES websockets)
 endif()
 

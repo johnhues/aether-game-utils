@@ -31,7 +31,7 @@
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
 #include <libwebsockets.h>
 
 const uint32_t kMaxConnections = 32;
@@ -124,7 +124,7 @@ namespace
     {
       std::vector<AetherPlayer*> players;
       ENetHost* host;
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
       WebConnectionManager webConnManager;
       lws_context* webContext;
       lws_protocols webProtocols[ 2 ];
@@ -178,7 +178,7 @@ AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPla
   as->pub.playerCount = 0;
   as->pub.allPlayers = as->priv.players.data();
 
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
   as->priv.webConnManager.Initialize();
 
   memset( as->priv.webProtocols, 0, sizeof(as->priv.webProtocols) );
@@ -208,7 +208,7 @@ AetherServer* AetherServer_New( uint16_t port, uint16_t webPort, uint32_t maxPla
 void AetherServer_Delete( AetherServer* _as )
 {
   AetherServerInternal* as = (AetherServerInternal*)_as;
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
   lws_context_destroy( as->priv.webContext );
 #endif
 
@@ -225,7 +225,7 @@ void AetherServer_Delete( AetherServer* _as )
   enet_deinitialize();
 }
 
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
 static int ws_service_callback( lws *wsi, lws_callback_reasons reason, void *userdata, void *msgData, size_t msgLength )
 {
   const lws_protocols* proto = lws_get_protocol( wsi );
@@ -341,8 +341,8 @@ void AetherServer_Update( AetherServer* _as )
 {
   AetherServerInternal* as = (AetherServerInternal*)_as;
 
-#ifdef USE_WEBSOCKETS
-  lws_service( as->priv.webContext, 0 );
+#ifdef USE_WEB_SOCKETS
+  lws_service( as->priv.webContext, -1 );
 #endif
 
   auto removePlayers = [&]( AetherPlayer* player ) -> bool
@@ -474,7 +474,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
     }
   }
 
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
   WebConnEvent event;
   while ( as->priv.webConnManager.Service( &event ) )
   {
@@ -557,7 +557,7 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
   ENetPeer* peers = as->priv.host->peers;
   int32_t peerCount = (int32_t)as->priv.host->peerCount;
 
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
   WebConnection* connections[ kMaxConnections ];
   uint32_t webConnCount = as->priv.webConnManager.GetConnections( connections );
 #endif
@@ -613,7 +613,7 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
     }
   }
 
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
   uint32_t sendSize =  sizeof(header) + info->length;
   ae::Scratch< uint8_t > data( sendSize );
   memcpy( data.Data(), &header, sizeof( header ) );
@@ -664,7 +664,7 @@ void AetherServer_SendAll( AetherServer* _as )
   AetherServerInternal* as = (AetherServerInternal*)_as;
   enet_host_flush( as->priv.host );
 
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
   lws_callback_on_writable_all_protocol( as->priv.webContext, as->priv.webProtocols );
 #endif
 }
@@ -721,7 +721,7 @@ void AetherServer_QueueSendToGroup( AetherServer* as, void* group, AetherMsgId m
   AetherServer_QueueSend( as, &info );
 }
 
-#ifdef USE_WEBSOCKETS
+#ifdef USE_WEB_SOCKETS
 
 void WebConnection::Initialize( uint32_t id, uint32_t padBytes )
 {
