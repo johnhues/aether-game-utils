@@ -21073,13 +21073,14 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 		}
 		const char* line = data;
 		const char* lineEnd = line + lineLen;
-		
 		data += lineLen;
-		while ( !data[ 0 ] || data[ 0 ] == '\n' || data[ 0 ] == '\r' )
+		while ( ( !data[ 0 ] || data[ 0 ] == '\n' || data[ 0 ] == '\r' ) && data < dataEnd )
 		{
 			data++;
 		}
-
+		AE_ASSERT( line <= lineEnd );
+		AE_ASSERT( data <= dataEnd );
+		
 		Mode mode = Mode::None;
 		switch ( line[ 0 ] )
 		{
