@@ -13193,9 +13193,39 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @property ae::Window* aewindow;
 @end
 @implementation aeApplicationDelegate
+- (void)applicationWillFinishLaunching:(NSNotification*)notification
+{
+	// Create the application menu bar
+	NSMenu* menubar = [NSMenu new];
+	[NSApp setMainMenu:menubar];
+	
+	// Create the button in the menu bar
+	NSMenuItem* menuBarItem = [NSMenuItem new];
+	[menubar addItem:menuBarItem];
+	
+	// Create the menu and its contents
+	// @TODO: Currently this menu must be open for cmd+q to work, fix this
+	NSMenu* appMenu = [NSMenu new];
+	NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:@"Quit" action:@selector(terminate:) keyEquivalent:@"q"];
+	[appMenu addItem:quitMenuItem];
+	[menuBarItem setSubmenu:appMenu];
+}
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
-	[NSApp stop:nil]; // Prevents app run from blocking
+	// Makes sure applicationShouldTerminate will be called
+	NSProcessInfo* processInfo = [NSProcessInfo processInfo];
+	processInfo.automaticTerminationSupportEnabled = false;
+	[processInfo disableSuddenTermination];
+	
+	// Prevents app run from blocking
+	[NSApp stop:nil];
+}
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
+{
+	AE_ASSERT( _aewindow );
+	AE_ASSERT( _aewindow->input );
+	_aewindow->input->quit = true;
+	return NSTerminateCancel;
 }
 @end
 
@@ -13208,13 +13238,10 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @implementation aeWindowDelegate
 - (BOOL)windowShouldClose:(NSWindow *)sender
 {
-	return true; // @TODO: Allow user to prevent window from closing
-}
-- (void)windowWillClose:(NSNotification *)notification
-{
 	AE_ASSERT( _aewindow );
 	AE_ASSERT( _aewindow->input );
 	_aewindow->input->quit = true;
+	return false;
 }
 - (void)windowDidResize:(NSWindow*)sender
 {
@@ -13503,7 +13530,6 @@ void Window::m_Initialize()
 	[nsWindow makeFirstResponder:glView];
 	[nsWindow setOpaque:YES];
 	[nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
-	// @TODO: Create menus (especially Quit!)
 	
 	NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];
 	m_pos = ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y );
@@ -13515,9 +13541,8 @@ void Window::m_Initialize()
 	NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
 	if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
 	{
-		// @TODO: This fixes initial window focusing issues and does not seem to cause any problems but more testing is needed.
-		//[NSApp run];
-		[NSApp activateIgnoringOtherApps:YES];
+		dispatch_async( dispatch_get_main_queue(), ^{ [NSApp activateIgnoringOtherApps:YES]; } );
+		[NSApp run];
 	}
 	// This prevents keystrokes from being output to the terminal when running
 	// as a console app.
@@ -13529,7 +13554,7 @@ void Window::m_Initialize()
 
 void Window::Terminate()
 {
-	//SDL_DestroyWindow( (SDL_Window*)window );
+	// @TODO
 }
 
 int32_t Window::GetWidth() const
