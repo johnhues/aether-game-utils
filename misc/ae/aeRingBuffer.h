@@ -41,12 +41,11 @@ public:
   void Clear();
 
   const T& Get( uint32_t index ) const;
-  uint32_t Length() const { return m_count; }
+  uint32_t Length() const { return m_buffer.Length(); }
   uint32_t Size() const { return N; }
 
 private:
   uint32_t m_first;
-  uint32_t m_count;
   ae::Array< T, N > m_buffer;
 };
 
@@ -55,21 +54,20 @@ private:
 //------------------------------------------------------------------------------
 template < typename T, uint32_t N >
 aeRingBuffer< T, N >::aeRingBuffer() :
-  m_first( 0 ),
-  m_count( 0 )
+  m_first( 0 )
 {}
 
 template < typename T, uint32_t N >
 void aeRingBuffer< T, N >::Append( const T& val )
 {
-  if ( m_count < N )
+  if ( m_buffer.Length() < N )
   {
     m_buffer.Append( val );
-    m_count++;
   }
   else
   {
-    m_buffer[ ( m_first + m_count ) % N ] = val;
+	AE_DEBUG_ASSERT( m_buffer.Length() == N );
+    m_buffer[ m_first % N ] = val;
     m_first++;
   }
 }
@@ -78,13 +76,13 @@ template < typename T, uint32_t N >
 void aeRingBuffer< T, N >::Clear()
 {
   m_first = 0;
-  m_count = 0;
+  m_buffer.Clear();
 }
 
 template < typename T, uint32_t N >
 const T& aeRingBuffer< T, N >::Get( uint32_t index ) const
 {
-  AE_ASSERT( index < m_count );
+  AE_ASSERT( index < m_buffer.Length() );
   return m_buffer[ ( m_first + index ) % N ];
 }
 

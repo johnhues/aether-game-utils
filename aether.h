@@ -17964,6 +17964,13 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 {
 	AE_ASSERT( shader );
 	AE_ASSERT_MSG( m_vertexSize, "Must call Initialize() before Bind()" );
+	for ( uint32_t i = 0; i < instanceDataCount; i++ )
+	{
+		if ( instanceDatas[ i ]->_GetBuffer() == ~0 )
+		{
+			return;
+		}
+	}
 	if ( m_vertices == ~0 || ( IsIndexed() && m_indices == ~0 ) )
 	{
 		return;
