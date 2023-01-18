@@ -37,7 +37,6 @@ set(AE_HEADER_FILES
 	ae/aeNet.h
 	ae/aeRef.h
 	ae/aeRender.h
-	ae/aeRingBuffer.h
 	ae/aeSignal.h
 	ae/aeSparseGrid.h
 	ae/aeTerrain.h

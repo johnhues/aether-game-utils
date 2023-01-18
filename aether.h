@@ -1359,7 +1359,7 @@ public:
 
 	//! Returns the number of entries.
 	uint32_t Length() const;
-	//! Returns the number of allocated entries.
+	//! Returns the max number of entries.
 	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
 	//! Returns the number of allocated entries.
 	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
@@ -1386,7 +1386,6 @@ private:
 #endif
 	// clang-format on
 };
-
 
 //------------------------------------------------------------------------------
 // ae::Map class
@@ -1609,6 +1608,41 @@ private:
 	void operator = ( List& ) = delete;
 
 	ListNode< T >* m_first;
+};
+
+//------------------------------------------------------------------------------
+// ae::RingBuffer class
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N = 0 >
+class RingBuffer
+{
+public:
+	//! Constructor for a ring buffer with static allocated storage (N > 0).
+	RingBuffer();
+	//! Constructor for a ring buffer with dynamically allocated storage (N == 0).
+	RingBuffer( ae::Tag tag, uint32_t size );
+	//! Appends an element to the current end of the ring buffer. It's safe to
+	//! call this when the ring buffer is full, although in this case the element
+	//! previously at index 0 to be destroyed.
+	T& Append( const T& val );
+	//! Resets Length() to 0. Does not affect Size().
+	void Clear();
+
+	//! Returns the element at the given \p index, which must be left than Length().
+	T& Get( uint32_t index );
+	//! Returns the element at the given \p index, which must be left than Length().
+	const T& Get( uint32_t index ) const;
+	//! Returns the number of appended entries up to Size().
+	uint32_t Length() const { return m_buffer.Length(); }
+	//! Returns the max number of entries.
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	//! Returns the number of allocated entries.
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
+
+private:
+	uint32_t m_first;
+	uint32_t m_size;
+	ae::Array< T, N > m_buffer;
 };
 
 //------------------------------------------------------------------------------
@@ -8104,6 +8138,60 @@ uint32_t List< T >::Length() const
 	}
 
 	return count;
+}
+
+//------------------------------------------------------------------------------
+// ae::RingBuffer member functions
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N >
+RingBuffer< T, N >::RingBuffer() :
+	m_first( 0 ),
+	m_size( N )
+{}
+
+template < typename T, uint32_t N >
+RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t size ) :
+	m_first( 0 ),
+	m_size( size ),
+	m_buffer( tag )
+{}
+
+template < typename T, uint32_t N >
+T& RingBuffer< T, N >::Append( const T& val )
+{
+	if ( m_buffer.Length() < Size() )
+	{
+		return m_buffer.Append( val );
+	}
+	else
+	{
+		AE_DEBUG_ASSERT( m_buffer.Length() == Size() );
+		uint32_t idx = m_first % Size();
+		m_buffer[ idx ] = val;
+		m_first++;
+		return m_buffer[ idx ];
+	}
+}
+
+template < typename T, uint32_t N >
+void RingBuffer< T, N >::Clear()
+{
+	m_first = 0;
+	m_buffer.Clear();
+}
+
+template < typename T, uint32_t N >
+T& RingBuffer< T, N >::Get( uint32_t index )
+{
+	AE_ASSERT( index < m_buffer.Length() );
+	return m_buffer[ ( m_first + index ) % Size() ];
+}
+
+template < typename T, uint32_t N >
+const T& RingBuffer< T, N >::Get( uint32_t index ) const
+{
+	AE_ASSERT( index < m_buffer.Length() );
+	return m_buffer[ ( m_first + index ) % Size() ];
 }
 
 //------------------------------------------------------------------------------
