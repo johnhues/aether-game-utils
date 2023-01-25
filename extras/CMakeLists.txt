@@ -13,7 +13,6 @@ target_sources(ae_extras PRIVATE
 	include/ae/aeInventoryGrid.h
 	include/ae/aeRef.h
 	include/ae/aeRender.h
-	include/ae/aeRingBuffer.h
 	include/ae/aeSignal.h
 	include/ae/aeSparseGrid.h
 	include/ae/aeTerrain.h

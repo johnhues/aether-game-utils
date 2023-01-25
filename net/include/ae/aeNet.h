@@ -64,55 +64,6 @@ inline void Serialize( ae::BinaryStream* stream, const AetherUuid* uuid )
   stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }
 
-// //------------------------------------------------------------------------------
-// // Net structs
-// //------------------------------------------------------------------------------
-// struct NetPlayer
-// {
-//   uint8_t uuid[ 16 ];
-// };
-
-// struct NetInstInfo
-// {
-//   GameObjId gameId;
-//   struct Game* game;
-//   NetInstId netId;
-//   TypeId type;
-//   bool levelObject;
-// };
-
-// struct Net
-// {
-//   double lastSendTime;
-  
-//   NetInstInfo netInsts[ kMaxNetInst ];
-//   uint32_t netInstCount;
-
-//   MsgObject messages[ kMaxNetMessages ];
-//   uint32_t messageCount;
-// };
-
-// //------------------------------------------------------------------------------
-// // Net Public Functions
-// //------------------------------------------------------------------------------
-// Net* Net_New();
-// void Net_Delete( Net* );
-// void Net_UpdateServer( struct Net* net, struct AetherServer* aether, struct Game* games, uint32_t count );
-// void Net_UpdateClient( struct Net* net, struct AetherClient* aether, struct Game* game );
-// void Net_RemoveObject( GameObject* go );
-// GameObject* Net_GetGameObject( Net* net, Game* game, NetInstId id );
-// GameObject* Net_GetGameObject( Net* net, Game* game, NetInstInfo info );
-// AetherPlayer* Net_GetPlayer( Net* net, AetherServer* aether, NetInstId id );
-// bool Net_CanChangeLevel( Net* net, struct AetherServer* aether, struct Player* player, const char* level );
-// bool Net_PlayerChangeLevel( Net* net, struct AetherServer* aether, struct Player* player, const char* level, const char* link );
-
-// void Net_SendObjectMessage( struct Net* net, struct AetherServer* aether, void* group, NetInstId id, uint8_t type, const uint8_t* data, uint32_t length );
-// uint32_t Net_RecvObjectMessage( struct Net* net, NetInstId id, uint8_t* typeOut, uint8_t* dataOut );
-
-// void Net_AddObject( Net* net, GameObject* go, bool levelObject );
-
-// void Aether_SendRpc( struct AetherClient* aether, class Rpc* rpc );
-
 //------------------------------------------------------------------------------
 // Client / server constants
 //------------------------------------------------------------------------------
@@ -156,7 +107,6 @@ struct SendInfo
 struct AetherPlayer
 {
   AetherUuid uuid = AetherUuid::Zero();
-  NetInstId netId = 0;
   void* userData = nullptr;
   bool alive = false;
 

@@ -513,9 +513,11 @@ struct Vec3 : public VecT< Vec3 >
 	struct Int3 FloorCopy() const;
 	struct Int3 CeilCopy() const;
 	
-	float GetAngleBetween( const Vec3& v ) const;
 	void AddRotationXY( float rotation ); // @TODO: Support Y up
+	Vec3 AddRotationXYCopy( float rotation ) const;
+	float GetAngleBetween( const Vec3& v ) const;
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
+	
 	Vec3 Lerp( const Vec3& end, float t ) const;
 	Vec3 DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon = 0.0001f ) const;
 	Vec3 Slerp( const Vec3& end, float t, float epsilon = 0.0001f ) const;
@@ -1357,7 +1359,7 @@ public:
 
 	//! Returns the number of entries.
 	uint32_t Length() const;
-	//! Returns the number of allocated entries.
+	//! Returns the max number of entries.
 	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
 	//! Returns the number of allocated entries.
 	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
@@ -1384,7 +1386,6 @@ private:
 #endif
 	// clang-format on
 };
-
 
 //------------------------------------------------------------------------------
 // ae::Map class
@@ -1607,6 +1608,41 @@ private:
 	void operator = ( List& ) = delete;
 
 	ListNode< T >* m_first;
+};
+
+//------------------------------------------------------------------------------
+// ae::RingBuffer class
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N = 0 >
+class RingBuffer
+{
+public:
+	//! Constructor for a ring buffer with static allocated storage (N > 0).
+	RingBuffer();
+	//! Constructor for a ring buffer with dynamically allocated storage (N == 0).
+	RingBuffer( ae::Tag tag, uint32_t size );
+	//! Appends an element to the current end of the ring buffer. It's safe to
+	//! call this when the ring buffer is full, although in this case the element
+	//! previously at index 0 to be destroyed.
+	T& Append( const T& val );
+	//! Resets Length() to 0. Does not affect Size().
+	void Clear();
+
+	//! Returns the element at the given \p index, which must be left than Length().
+	T& Get( uint32_t index );
+	//! Returns the element at the given \p index, which must be left than Length().
+	const T& Get( uint32_t index ) const;
+	//! Returns the number of appended entries up to Size().
+	uint32_t Length() const { return m_buffer.Length(); }
+	//! Returns the max number of entries.
+	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	//! Returns the number of allocated entries.
+	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
+
+private:
+	uint32_t m_first;
+	uint32_t m_size;
+	ae::Array< T, N > m_buffer;
 };
 
 //------------------------------------------------------------------------------
@@ -4217,10 +4253,18 @@ class NetObjectClient
 {
 public:
 	// The following sequence should be performed each frame
-	void ReceiveData( const uint8_t* data, uint32_t length ); // 1) Handle raw data from server (call once when new data arrives)
-	NetObject* PumpCreate(); // 2) Get new objects (call this repeatedly until no new NetObjects are returned)
-	// 3) Handle new sync data with NetObject::GetSyncData() and process incoming messages with NetObject::PumpMessages()
-	void Destroy( NetObject* pendingDestroy ); // 4) Call this on ae::NetObjects once NetObject::IsPendingDestroy() returns true
+	
+	//! 1) Handle raw data from server (call once when new data arrives)
+	void ReceiveData( const uint8_t* data, uint32_t length );
+	
+	//! 2) Get new objects (call this repeatedly until no new NetObjects are returned)
+	NetObject* PumpCreate();
+	
+	// 3) Handle new sync data with NetObject::GetSyncData()
+	
+	//! 4) Call this on ae::NetObjects once NetObject::IsPendingDestroy() returns true
+	void Destroy( NetObject* pendingDestroy );
+	
 	
 	NetId GetLocalId( RemoteId remoteId ) const { return m_remoteToLocalIdMap.Get( remoteId, {} ); }
 	RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
@@ -4243,20 +4287,23 @@ private:
 class NetObjectConnection
 {
 public:
-	//! This data should be sent to a client with and consumed with ae::NetObjectClient::ReceiveData(). Call
-	//! ae::NetObjectServer::UpdateSendData() once each network tick before calling this.
+	//! This data should be sent to a client with and consumed with
+	//! ae::NetObjectClient::ReceiveData(). Call ae::NetObjectServer::UpdateSendData()
+	//! once each network tick before calling this.
 	const uint8_t* GetSendData() const;
-	//! The length of the data that should be sent to a client with and consumed with ae::NetObjectClient::ReceiveData().
-	//! Call ae::NetObjectServer::UpdateSendData() once each network tick before calling this.
+	//! The length of the data that should be sent to a client with and consumed
+	//! with ae::NetObjectClient::ReceiveData(). Call ae::NetObjectServer::UpdateSendData()
+	//! once each network tick before calling this.
 	uint32_t GetSendLength() const;
 
 public:
 	void m_UpdateSendData();
+	void m_ClearPending();
 
 	bool m_first = true;
 	class NetObjectServer* m_replicaDB = nullptr;
 	bool m_pendingClear = false;
-	ae::Array< uint8_t > m_sendData = AE_ALLOC_TAG_NET;
+	ae::Array< uint8_t > m_connData = AE_ALLOC_TAG_NET;
 	// Internal
 	enum class EventType : uint8_t
 	{
@@ -4275,29 +4322,31 @@ class NetObjectServer
 {
 public:
 	NetObjectServer();
-	//! Creates a server authoritative NetObject which will be replicated to clients through ae::NetObjectConnection
-	//! and ae::NetObjectClient. Call ae::NetObject::SetInitData() on the object to finalize the object for remote creation.
-	//! Call ae::NetObjectServer::DestroyNetObject() when finished.
+	//! Call each network tick before ae::NetObjectConnection::GetSendData()
+	void UpdateSendData();
+	
+	//! Creates a server authoritative NetObject which will be replicated to
+	//! clients through ae::NetObjectConnection and ae::NetObjectClient. Call
+	//! ae::NetObject::SetInitData() on the object to finalize the object for
+	//! remote creation. Call ae::NetObjectServer::DestroyNetObject() when finished.
 	NetObject* CreateNetObject();
-	//! Will cause the ae::NetObject to be detroyed on remote clients. Must be called for each ae::NetObject
-	//! allocated with ae::NetObjectServer::CreateNetObject().
+	//! Will cause the ae::NetObject to be detroyed on remote clients.
+	//! Must be called for each ae::NetObject allocated with
+	//! ae::NetObjectServer::CreateNetObject().
 	void DestroyNetObject( NetObject* netObject );
 
-	//! Allocate one ae::NetObjectConnection per client. Call ae::NetObjectServer::DestroyConnection() to
-	//! clean it up.
+	//! Allocate one ae::NetObjectConnection per client. Call
+	//! ae::NetObjectServer::DestroyConnection() to clean it up.
 	NetObjectConnection* CreateConnection();
 	//! Must be called for each ae::NetObjectConnection allocated with ae::NetObjectServer::CreateConnection().
 	void DestroyConnection( NetObjectConnection* connection );
-
-	//! Call each frame before ae::NetObjectConnection::GetSendData()
-	void UpdateSendData();
 
 private:
 	uint32_t m_signature = 0;
 	uint32_t m_lastNetId = 0;
 	ae::Array< NetObject* > m_pendingCreate = AE_ALLOC_TAG_NET;
 	ae::Map< NetId, NetObject*, 0, ae::MapMode::Stable > m_netObjects = AE_ALLOC_TAG_NET;
-	ae::Array< NetObjectConnection* > m_servers = AE_ALLOC_TAG_NET;
+	ae::Array< NetObjectConnection* > m_connections = AE_ALLOC_TAG_NET; // @TODO: Rename m_connections
 public:
 	// Internal
 	NetObject* GetNetObject( uint32_t index ) { return m_netObjects.GetValue( index ); }
@@ -8092,6 +8141,60 @@ uint32_t List< T >::Length() const
 }
 
 //------------------------------------------------------------------------------
+// ae::RingBuffer member functions
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N >
+RingBuffer< T, N >::RingBuffer() :
+	m_first( 0 ),
+	m_size( N )
+{}
+
+template < typename T, uint32_t N >
+RingBuffer< T, N >::RingBuffer( ae::Tag tag, uint32_t size ) :
+	m_first( 0 ),
+	m_size( size ),
+	m_buffer( tag )
+{}
+
+template < typename T, uint32_t N >
+T& RingBuffer< T, N >::Append( const T& val )
+{
+	if ( m_buffer.Length() < Size() )
+	{
+		return m_buffer.Append( val );
+	}
+	else
+	{
+		AE_DEBUG_ASSERT( m_buffer.Length() == Size() );
+		uint32_t idx = m_first % Size();
+		m_buffer[ idx ] = val;
+		m_first++;
+		return m_buffer[ idx ];
+	}
+}
+
+template < typename T, uint32_t N >
+void RingBuffer< T, N >::Clear()
+{
+	m_first = 0;
+	m_buffer.Clear();
+}
+
+template < typename T, uint32_t N >
+T& RingBuffer< T, N >::Get( uint32_t index )
+{
+	AE_ASSERT( index < m_buffer.Length() );
+	return m_buffer[ ( m_first + index ) % Size() ];
+}
+
+template < typename T, uint32_t N >
+const T& RingBuffer< T, N >::Get( uint32_t index ) const
+{
+	AE_ASSERT( index < m_buffer.Length() );
+	return m_buffer[ ( m_first + index ) % Size() ];
+}
+
+//------------------------------------------------------------------------------
 // ae::FreeList member functions
 //------------------------------------------------------------------------------
 template < uint32_t N >
@@ -9005,9 +9108,9 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 		float t = 0.0f;
 		
 		// Sphere
-		ae::Vec3 c = ( params.transform * ae::Vec4( m_aabb.GetCenter(), 1.0f ) ).GetXYZ();
-		float r = ( params.transform * ae::Vec4( m_aabb.GetMax(), 0.0f ) ).GetXYZ().Length();
-		ae::Sphere sphere( c, r );
+		ae::Vec3 aabbMin = ( params.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
+		ae::Vec3 aabbMax = ( params.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
+		ae::Sphere sphere( ( aabbMin + aabbMax ) * 0.5f, ( aabbMax - aabbMin ).Length() * 0.5f );
 		if ( !sphere.IntersectRay( params.source, params.ray, nullptr, &t ) )
 		{
 			return prevResult; // Early out if ray doesn't touch sphere
@@ -10478,6 +10581,13 @@ void Vec3::AddRotationXY( float rotation )
 	float newY = x * sinTheta + y * cosTheta;
 	x = newX;
 	y = newY;
+}
+
+Vec3 Vec3::AddRotationXYCopy( float rotation ) const
+{
+	Vec3 r = *this;
+	r.AddRotationXY( rotation );
+	return r;
 }
 
 Vec3 Vec3::RotateCopy( Vec3 axis, float angle ) const
@@ -13171,9 +13281,39 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @property ae::Window* aewindow;
 @end
 @implementation aeApplicationDelegate
+- (void)applicationWillFinishLaunching:(NSNotification*)notification
+{
+	// Create the application menu bar
+	NSMenu* menubar = [NSMenu new];
+	[NSApp setMainMenu:menubar];
+	
+	// Create the button in the menu bar
+	NSMenuItem* menuBarItem = [NSMenuItem new];
+	[menubar addItem:menuBarItem];
+	
+	// Create the menu and its contents
+	// @TODO: Currently this menu must be open for cmd+q to work, fix this
+	NSMenu* appMenu = [NSMenu new];
+	NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:@"Quit" action:@selector(terminate:) keyEquivalent:@"q"];
+	[appMenu addItem:quitMenuItem];
+	[menuBarItem setSubmenu:appMenu];
+}
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
-	[NSApp stop:nil]; // Prevents app run from blocking
+	// Makes sure applicationShouldTerminate will be called
+	NSProcessInfo* processInfo = [NSProcessInfo processInfo];
+	processInfo.automaticTerminationSupportEnabled = false;
+	[processInfo disableSuddenTermination];
+	
+	// Prevents app run from blocking
+	[NSApp stop:nil];
+}
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
+{
+	AE_ASSERT( _aewindow );
+	AE_ASSERT( _aewindow->input );
+	_aewindow->input->quit = true;
+	return NSTerminateCancel;
 }
 @end
 
@@ -13186,13 +13326,10 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 @implementation aeWindowDelegate
 - (BOOL)windowShouldClose:(NSWindow *)sender
 {
-	return true; // @TODO: Allow user to prevent window from closing
-}
-- (void)windowWillClose:(NSNotification *)notification
-{
 	AE_ASSERT( _aewindow );
 	AE_ASSERT( _aewindow->input );
 	_aewindow->input->quit = true;
+	return false;
 }
 - (void)windowDidResize:(NSWindow*)sender
 {
@@ -13481,7 +13618,6 @@ void Window::m_Initialize()
 	[nsWindow makeFirstResponder:glView];
 	[nsWindow setOpaque:YES];
 	[nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
-	// @TODO: Create menus (especially Quit!)
 	
 	NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];
 	m_pos = ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y );
@@ -13493,9 +13629,8 @@ void Window::m_Initialize()
 	NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
 	if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
 	{
-		// @TODO: This fixes initial window focusing issues and does not seem to cause any problems but more testing is needed.
-		//[NSApp run];
-		[NSApp activateIgnoringOtherApps:YES];
+		dispatch_async( dispatch_get_main_queue(), ^{ [NSApp activateIgnoringOtherApps:YES]; } );
+		[NSApp run];
 	}
 	// This prevents keystrokes from being output to the terminal when running
 	// as a console app.
@@ -13507,7 +13642,7 @@ void Window::m_Initialize()
 
 void Window::Terminate()
 {
-	//SDL_DestroyWindow( (SDL_Window*)window );
+	// @TODO
 }
 
 int32_t Window::GetWidth() const
@@ -17919,6 +18054,13 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 {
 	AE_ASSERT( shader );
 	AE_ASSERT_MSG( m_vertexSize, "Must call Initialize() before Bind()" );
+	for ( uint32_t i = 0; i < instanceDataCount; i++ )
+	{
+		if ( instanceDatas[ i ]->_GetBuffer() == ~0 )
+		{
+			return;
+		}
+	}
 	if ( m_vertices == ~0 || ( IsIndexed() && m_indices == ~0 ) )
 	{
 		return;
@@ -21053,13 +21195,14 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 		}
 		const char* line = data;
 		const char* lineEnd = line + lineLen;
-		
 		data += lineLen;
-		while ( !data[ 0 ] || data[ 0 ] == '\n' || data[ 0 ] == '\r' )
+		while ( ( !data[ 0 ] || data[ 0 ] == '\n' || data[ 0 ] == '\r' ) && data < dataEnd )
 		{
 			data++;
 		}
-
+		AE_ASSERT( line <= lineEnd );
+		AE_ASSERT( data <= dataEnd );
+		
 		Mode mode = Mode::None;
 		switch ( line[ 0 ] )
 		{
@@ -22542,7 +22685,7 @@ void NetObjectConnection::m_UpdateSendData()
 		}
 	}
 
-	BinaryStream wStream = BinaryStream::Writer( &m_sendData );
+	BinaryStream wStream = BinaryStream::Writer( &m_connData );
 
 	if ( toSync.Length() )
 	{
@@ -22577,14 +22720,23 @@ void NetObjectConnection::m_UpdateSendData()
 	m_first = false;
 }
 
+void NetObjectConnection::m_ClearPending()
+{
+	if ( m_pendingClear )
+	{
+		m_connData.Clear();
+		m_pendingClear = false;
+	}
+}
+
 const uint8_t* NetObjectConnection::GetSendData() const
 {
-	return m_sendData.Length() ? &m_sendData[ 0 ] : nullptr;
+	return m_connData.begin();
 }
 
 uint32_t NetObjectConnection::GetSendLength() const
 {
-	return m_sendData.Length();
+	return m_connData.Length();
 }
 
 //------------------------------------------------------------------------------
@@ -22627,16 +22779,11 @@ void NetObjectServer::DestroyNetObject( NetObject* netObject )
 	bool removed = m_netObjects.Remove( id );
 	AE_ASSERT_MSG( removed, "NetObject was not found." );
 
-	for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+	for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 	{
-		NetObjectConnection* server = m_servers[ i ];
-		if ( server->m_pendingClear )
-		{
-			server->m_sendData.Clear();
-			server->m_pendingClear = false;
-		}
-
-		BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+		NetObjectConnection* conn = m_connections[ i ];
+		conn->m_ClearPending(); // @TODO: Should this queue up like m_pendingCreate?
+		BinaryStream wStream = BinaryStream::Writer( &conn->m_connData );
 		wStream.SerializeRaw( NetObjectConnection::EventType::Destroy );
 		wStream.SerializeObject( id );
 	}
@@ -22646,12 +22793,12 @@ void NetObjectServer::DestroyNetObject( NetObject* netObject )
 
 NetObjectConnection* NetObjectServer::CreateConnection()
 {
-	NetObjectConnection* server = m_servers.Append( ae::New< NetObjectConnection >( AE_ALLOC_TAG_NET ) );
-	AE_ASSERT( !server->m_pendingClear );
-	server->m_replicaDB = this;
+	NetObjectConnection* conn = m_connections.Append( ae::New< NetObjectConnection >( AE_ALLOC_TAG_NET ) );
+	AE_ASSERT( !conn->m_pendingClear );
+	conn->m_replicaDB = this;
 
 	// Send initial net datas
-	BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+	BinaryStream wStream = BinaryStream::Writer( &conn->m_connData );
 	wStream.SerializeRaw( NetObjectConnection::EventType::Connect );
 	wStream.SerializeUint32( m_signature );
 	wStream.SerializeUint32( m_netObjects.Length() );
@@ -22662,35 +22809,30 @@ NetObjectConnection* NetObjectServer::CreateConnection()
 		wStream.SerializeArray( netObject->m_initData );
 	}
 
-	return server;
+	return conn;
 }
 
-void NetObjectServer::DestroyConnection( NetObjectConnection* server )
+void NetObjectServer::DestroyConnection( NetObjectConnection* conn )
 {
-	if ( !server )
+	if ( !conn )
 	{
 		return;
 	}
 
-	int32_t index = m_servers.Find( server );
+	int32_t index = m_connections.Find( conn );
 	if ( index >= 0 )
 	{
-		m_servers.Remove( index );
-		ae::Delete( server );
+		m_connections.Remove( index );
+		ae::Delete( conn );
 	}
 }
 
 void NetObjectServer::UpdateSendData()
 {
 	// Clear old send data before writing new
-	for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+	for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 	{
-		NetObjectConnection* server = m_servers[ i ];
-		if ( server->m_pendingClear )
-		{
-			server->m_sendData.Clear();
-			server->m_pendingClear = false;
-		}
+		m_connections[ i ]->m_ClearPending();
 	}
 	
 	// Send info about new objects (delayed until Update in case objects initData need to reference each other)
@@ -22702,10 +22844,9 @@ void NetObjectServer::UpdateSendData()
 			m_netObjects.Set( netObject->GetId(), netObject );
 			
 			// Send create messages on existing server connections
-			for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+			for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 			{
-				NetObjectConnection* server = m_servers[ i ];
-				BinaryStream wStream = BinaryStream::Writer( &server->m_sendData );
+				BinaryStream wStream = BinaryStream::Writer( &m_connections[ i ]->m_connData );
 				wStream.SerializeRaw( NetObjectConnection::EventType::Create );
 				wStream.SerializeObject( netObject->GetId() );
 				wStream.SerializeArray( netObject->m_initData );
@@ -22720,9 +22861,9 @@ void NetObjectServer::UpdateSendData()
 		m_netObjects.GetValue( i )->m_UpdateHash();
 	}
 
-	for ( uint32_t i = 0; i < m_servers.Length(); i++ )
+	for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 	{
-		m_servers[ i ]->m_UpdateSendData();
+		m_connections[ i ]->m_UpdateSendData();
 	}
 
 	for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
