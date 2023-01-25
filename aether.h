@@ -9108,9 +9108,9 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 		float t = 0.0f;
 		
 		// Sphere
-		ae::Vec3 c = ( params.transform * ae::Vec4( m_aabb.GetCenter(), 1.0f ) ).GetXYZ();
-		float r = ( params.transform * ae::Vec4( m_aabb.GetMax(), 0.0f ) ).GetXYZ().Length();
-		ae::Sphere sphere( c, r );
+		ae::Vec3 aabbMin = ( params.transform * ae::Vec4( m_aabb.GetMin(), 1.0f ) ).GetXYZ();
+		ae::Vec3 aabbMax = ( params.transform * ae::Vec4( m_aabb.GetMax(), 1.0f ) ).GetXYZ();
+		ae::Sphere sphere( ( aabbMin + aabbMax ) * 0.5f, ( aabbMax - aabbMin ).Length() * 0.5f );
 		if ( !sphere.IntersectRay( params.source, params.ray, nullptr, &t ) )
 		{
 			return prevResult; // Early out if ray doesn't touch sphere
