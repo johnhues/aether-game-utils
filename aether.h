@@ -1247,13 +1247,14 @@ public:
 	void operator =( Array< T, N >&& other ) noexcept;
 	~Array();
 	
-	//! Adds an element. Can reallocate internal storage for dynamic arrays
-	//! (N == 0), so take care when taking the address of any elements.
-	T& Append( const T& value );
+	//! Adds \p count copies of \p value. Can reallocate internal storage for
+	//! dynamic arrays (N == 0), so take care when taking the address of any
+	//! elements.
+	T& Append( const T& value, uint32_t count = 1 );
 	//! Adds \p count elements from \p values. Can reallocate internal storage
 	//! for  dynamic arrays (N == 0), so take care when taking the address of
 	//! any elements.
-	void Append( const T* values, uint32_t count );
+	void AppendArray( const T* values, uint32_t count );
 	//! Adds the list of given elements to the end of the array. Can reallocate
 	//! internal storage for dynamic arrays (N == 0), so take care when taking
 	//! the address of any elements.
@@ -1628,15 +1629,15 @@ public:
 	//! Resets Length() to 0. Does not affect Size().
 	void Clear();
 
-	//! Returns the element at the given \p index, which must be left than Length().
+	//! Returns the element at the given \p index, which must be less than Length().
 	T& Get( uint32_t index );
-	//! Returns the element at the given \p index, which must be left than Length().
+	//! Returns the element at the given \p index, which must be less than Length().
 	const T& Get( uint32_t index ) const;
 	//! Returns the number of appended entries up to Size().
 	uint32_t Length() const { return m_buffer.Length(); }
 	//! Returns the max number of entries.
 	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
-	//! Returns the number of allocated entries.
+	//! Returns the max number of entries.
 	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
 
 private:
@@ -7132,9 +7133,9 @@ Array< T, N >::~Array()
 }
 
 template < typename T, uint32_t N >
-T& Array< T, N >::Append( const T& value )
+T& Array< T, N >::Append( const T& value, uint32_t count )
 {
-	if ( m_length == m_size )
+	if ( m_length + count >= m_size )
 	{
 		Reserve( m_GetNextSize() );
 	}
@@ -7146,7 +7147,7 @@ T& Array< T, N >::Append( const T& value )
 }
 
 template < typename T, uint32_t N >
-void Array< T, N >::Append( const T* values, uint32_t count )
+void Array< T, N >::AppendArray( const T* values, uint32_t count )
 {
 	Reserve( m_length + count );
 	AE_DEBUG_ASSERT( m_size >= m_length + count );
@@ -9536,7 +9537,7 @@ void BinaryStream::SerializeRaw( T& v )
 		else
 		{
 			Array< uint8_t >& array = m_GetArray();
-			array.Append( (uint8_t*)&v, sizeof(T) );
+			array.AppendArray( (uint8_t*)&v, sizeof(T) );
 			m_offset = array.Length();
 			m_length = array.Size();
 		}
@@ -9591,8 +9592,8 @@ void BinaryStream::SerializeArray( char (&str)[ N ] )
 		else
 		{
 			Array< uint8_t >& array = m_GetArray();
-			array.Append( (uint8_t*)&len, sizeof(len) );
-			array.Append( (uint8_t*)&str, len );
+			array.AppendArray( (uint8_t*)&len, sizeof(len) );
+			array.AppendArray( (uint8_t*)&str, len );
 			m_offset = array.Length();
 			m_length = array.Size();
 		}
@@ -16551,7 +16552,7 @@ bool Socket::QueueData( const void* data, uint32_t length )
 	{
 		return false;
 	}
-	m_sendData.Append( (const uint8_t*)data, length );
+	m_sendData.AppendArray( (const uint8_t*)data, length );
 	return true;
 }
 
@@ -16689,8 +16690,8 @@ bool Socket::QueueMsg( const void* data, uint16_t length )
 	}
 	AE_ASSERT( length <= ae::MaxValue< uint16_t >() );
 	uint16_t length16 = htons( length );
-	m_sendData.Append( (const uint8_t*)&length16, sizeof(length16) );
-	m_sendData.Append( (const uint8_t*)data, length );
+	m_sendData.AppendArray( (const uint8_t*)&length16, sizeof(length16) );
+	m_sendData.AppendArray( (const uint8_t*)data, length );
 	return true;
 }
 
@@ -21111,7 +21112,7 @@ void Skin::Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertice
 	m_bindPose.Initialize( &bindPose );
 	
 	m_verts.Clear();
-	m_verts.Append( vertices, vertexCount );
+	m_verts.AppendArray( vertices, vertexCount );
 }
 
 const Skeleton* Skin::GetBindPose() const
@@ -21425,7 +21426,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	const uint8_t* pixels = stream.GetData() + stream.GetOffset();
 	uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
 	AE_ASSERT( stream.GetRemaining() >= dataLength );
-	m_data.Append( pixels, dataLength );
+	m_data.AppendArray( pixels, dataLength );
 	textureParams.data = m_data.Begin();
 	textureParams.width = header.width;
 	textureParams.height = header.height;
@@ -22190,7 +22191,7 @@ void BinaryStream::SerializeArray( Array< uint8_t >& array, uint32_t maxLength )
 			return;
 		}
 		
-		array.Append( PeekData(), length );
+		array.AppendArray( PeekData(), length );
 		Discard( length );
 	}
 	else if ( m_mode == Mode::WriteBuffer )
@@ -22251,7 +22252,7 @@ void BinaryStream::SerializeRaw( void* data, uint32_t length )
 		else
 		{
 			Array< uint8_t >& array = m_GetArray();
-			array.Append( (uint8_t*)data, length );
+			array.AppendArray( (uint8_t*)data, length );
 			m_offset = array.Length();
 			m_length = array.Size();
 		}
@@ -22301,7 +22302,7 @@ void NetObject::SetSyncData( const void* data, uint32_t length )
 {
 	AE_ASSERT_MSG( IsAuthority(), "Cannot set net data from client. The NetObjectConnection has exclusive ownership." );
 	m_data.Clear();
-	m_data.Append( (const uint8_t*)data, length );
+	m_data.AppendArray( (const uint8_t*)data, length );
 }
 
 // @HACK: Should rearrange file so windows.h is included with as little logic as possible after it
@@ -22312,14 +22313,14 @@ void NetObject::SendMessage( const void* data, uint32_t length )
 {
 	uint16_t lengthU16 = length;
 	m_messageDataOut.Reserve( m_messageDataOut.Length() + sizeof( lengthU16 ) + length );
-	m_messageDataOut.Append( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
-	m_messageDataOut.Append( (const uint8_t*)data, length );
+	m_messageDataOut.AppendArray( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
+	m_messageDataOut.AppendArray( (const uint8_t*)data, length );
 }
 
 void NetObject::SetInitData( const void* initData, uint32_t initDataLength )
 {
 	m_initData.Clear();
-	m_initData.Append( (uint8_t*)initData, initDataLength );
+	m_initData.AppendArray( (uint8_t*)initData, initDataLength );
 	m_isPendingInit = false;
 }
 
@@ -22393,12 +22394,12 @@ bool NetObject::IsPendingDestroy() const
 void NetObject::m_SetClientData( const uint8_t* data, uint32_t length )
 {
 	m_data.Clear();
-	m_data.Append( data, length );
+	m_data.AppendArray( data, length );
 }
 
 void NetObject::m_ReceiveMessages( const uint8_t* data, uint32_t length )
 {
-	m_messageDataIn.Append( data, length );
+	m_messageDataIn.AppendArray( data, length );
 }
 
 void NetObject::m_UpdateHash()

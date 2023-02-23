@@ -43,14 +43,14 @@ void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Form
   if ( formatChannels == m_channels )
   {
     // @NOTE: Direct copy
-    m_data.Append( data, length * m_channels );
+    m_data.AppendArray( data, length * m_channels );
   }
   else if ( formatChannels > m_channels )
   {
     // @NOTE: More channels provided than needed
     for ( uint32_t i = 0; i < length; i++ )
     {
-      m_data.Append( &data[ i * formatChannels ], m_channels );
+      m_data.AppendArray( &data[ i * formatChannels ], m_channels );
     }
   }
   else
@@ -65,7 +65,7 @@ void ae::Image::Load( const uint8_t* data, uint32_t width, uint32_t height, Form
       memcpy( p, &data[ index ], formatChannels );
       memset( p + formatChannels, data[ index + formatChannels - 1 ], 3 - formatChannels );
 
-      m_data.Append( p, m_channels );
+      m_data.AppendArray( p, m_channels );
     }
   }
 }

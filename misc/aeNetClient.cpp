@@ -381,7 +381,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         {
           infoOut->msgId = header.msgId;
           infoOut->data.Clear();
-          infoOut->data.Append( data, length );
+          infoOut->data.AppendArray( data, length );
           success = true;
         }
 
