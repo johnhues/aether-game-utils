@@ -1296,7 +1296,6 @@ public:
 	ae::Tag GetTag() const { return m_tag; }
 	
 private:
-	uint32_t m_GetNextSize() const;
 	uint32_t m_length;
 	uint32_t m_size;
 	T* m_array;
@@ -7079,10 +7078,7 @@ void Array< T, N >::operator =( const Array< T, N >& other )
 	
 	Clear();
 	
-	if ( m_size < other.m_length )
-	{
-		Reserve( other.m_length );
-	}
+	Reserve( other.m_length );
 
 	m_length = other.m_length;
 	for ( uint32_t i = 0; i < m_length; i++ )
@@ -7135,10 +7131,7 @@ Array< T, N >::~Array()
 template < typename T, uint32_t N >
 T& Array< T, N >::Append( const T& value, uint32_t count )
 {
-	if ( m_length + count >= m_size )
-	{
-		Reserve( m_GetNextSize() );
-	}
+	Reserve( m_length + count );
 
 	new ( &m_array[ m_length ] ) T ( value );
 	m_length++;
@@ -7176,10 +7169,7 @@ T& Array< T, N >::Insert( uint32_t index, const T& value )
 {
 	AE_DEBUG_ASSERT( index <= m_length );
 
-	if ( m_length == m_size )
-	{
-		Reserve( m_GetNextSize() );
-	}
+	Reserve( m_length + 1 );
 
 	if ( index == m_length )
 	{
@@ -7304,9 +7294,7 @@ void Array< T, N >::Reserve( uint32_t size )
 {
 	if ( N > 0 )
 	{
-#if _AE_DEBUG_
-		AE_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
-#endif
+		AE_DEBUG_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
 		AE_ASSERT_MSG( N >= size, "# >= #", N, size );
 		return;
 	}
@@ -7314,23 +7302,32 @@ void Array< T, N >::Reserve( uint32_t size )
 	{
 		return;
 	}
+	else if ( m_size == 0 )
+	{
+		// Initially allocate at least 64 bytes (rounded down) of type
+		size = ae::Max( size, 64u / (uint32_t)sizeof(T) );
+	}
+	else
+	{
+		// At least double the size, to reduce the number of resizes
+		size = ae::Max( size, m_size * 2 );
+	}
 	
-#if _AE_DEBUG_
-	AE_ASSERT( m_tag != ae::Tag() );
-#endif
+	AE_DEBUG_ASSERT( m_tag != ae::Tag() );
 	
-	// Next power of two
-	size--;
-	size |= size >> 1;
-	size |= size >> 2;
-	size |= size >> 4;
-	size |= size >> 8;
-	size |= size >> 16;
-	size++;
+	if ( m_size )
+	{
+		// Next power of two
+		size--;
+		size |= size >> 1;
+		size |= size >> 2;
+		size |= size >> 4;
+		size |= size >> 8;
+		size |= size >> 16;
+		size++;
+	}
 	
-#if _AE_DEBUG_
-	AE_ASSERT( size );
-#endif
+	AE_DEBUG_ASSERT( size );
 	m_size = size;
 	
 	T* arr = (T*)ae::Allocate( m_tag, m_size * sizeof(T), alignof(T) );
@@ -7372,19 +7369,6 @@ T& Array< T, N >::operator[]( int32_t index )
 	AE_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
 #endif
 	return m_array[ index ];
-}
-
-template < typename T, uint32_t N >
-uint32_t Array< T, N >::m_GetNextSize() const
-{
-	if ( m_size == 0 )
-	{
-		return ae::Max( 1u, 32u / (uint32_t)sizeof(T) ); // @NOTE: Initially allocate 32 bytes (rounded down) of type
-	}
-	else
-	{
-		return m_size * 2;
-	}
 }
 
 //------------------------------------------------------------------------------

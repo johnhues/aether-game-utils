@@ -70,7 +70,7 @@ AetherUuid AetherUuid::Zero()
 void AetherUuid::ToString( char* str, uint32_t max ) const
 {
   AE_ASSERT( max >= 37 );
-  sprintf( str, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", 
+  snprintf( str, max, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", 
     uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
     uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15] );
 }
