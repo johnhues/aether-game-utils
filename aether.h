@@ -11505,9 +11505,17 @@ Sphere::Sphere( const OBB& obb )
 
 void Sphere::Expand( ae::Vec3 p0 )
 {
-	ae::Vec3 p1 = ( center - p0 ).SafeNormalizeCopy() * radius;
-	center = ( p0 + p1 ) * 0.5f;
-	radius = ( center - p1 ).Length();
+	if ( radius < 0.00001f )
+	{
+		radius = ( center - p0 ).Length() * 0.5f;
+		center = ( center + p0 ) * 0.5f;
+	}
+	else
+	{
+		ae::Vec3 p1 = ( center - p0 ).SafeNormalizeCopy() * radius;
+		center = ( p0 + p1 ) * 0.5f;
+		radius = ( center - p1 ).Length();
+	}
 }
 
 bool Sphere::IntersectRay( Vec3 origin, Vec3 direction, Vec3* pOut, float* tOut ) const
