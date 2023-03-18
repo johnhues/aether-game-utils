@@ -13349,8 +13349,11 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	_aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
 	_aewindow->m_UpdateSize( contentScreenRect.size.width, contentScreenRect.size.height, [window backingScaleFactor] );
 	
-	NSPoint mouseScreenPos = [NSEvent mouseLocation];
-	_aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+	if ( _aewindow->input )
+	{
+		NSPoint mouseScreenPos = [NSEvent mouseLocation];
+		_aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+	}
 }
 - (void)windowDidMove:(NSNotification *)notification
 {
@@ -13576,7 +13579,7 @@ void Window::m_Initialize()
 	// Main window
 	aeWindowDelegate* windowDelegate = [[aeWindowDelegate alloc] init];
 	windowDelegate.aewindow = this;
-	NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, m_width, m_height )
+	NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect( m_pos.x, m_pos.y, m_width, m_height )
 		styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
 		backing:NSBackingStoreBuffered
 		defer:YES
@@ -13584,6 +13587,15 @@ void Window::m_Initialize()
 	nsWindow.delegate = windowDelegate;
 	[nsWindow setColorSpace:[NSColorSpace sRGBColorSpace]];
 	this->window = nsWindow;
+	
+	NSRect initFrame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
+	NSRect frame = NSMakeRect( m_pos.x, m_pos.y, m_width, m_height );
+	if ( !CGRectEqualToRect( initFrame, frame ) )
+	{
+		// Try once more to set window position, OSX doesn't do a good job of creating windows on second monitors
+		[nsWindow setFrame:frame display:YES];
+		frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
+	}
 	
 	NSOpenGLPixelFormatAttribute openglProfile;
 	if ( ae::GLMajorVersion >= 4 )
@@ -13612,7 +13624,6 @@ void Window::m_Initialize()
 		0
 	};
 	// clang-format on
-	NSRect frame = [nsWindow contentRectForFrameRect:[nsWindow frame]];
 	NSOpenGLPixelFormat* nsPixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:nsPixelAttribs];
 	AE_ASSERT_MSG( nsPixelFormat, "Could not determine a valid pixel format" );
 	
