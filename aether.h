@@ -14739,7 +14739,7 @@ void Input::Pump()
 	// Additional shared gamepad state processing
 	gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
 	gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
-	gp.dpad = ae::Int2( ( gp.up ? 0 : 1 ) - ( gp.down ? 0 : 1 ), ( gp.right ? 0 : 1 ) - ( gp.left ? 0 : 1 ) );
+	gp.dpad = ae::Int2( ( gp.right ? 1 : 0 ) + ( gp.left ? -1 : 0 ), ( gp.up ? 1 : 0 ) + ( gp.down ? -1 : 0 ) );
 	gp.anyButton = gp.up || gp.down || gp.left || gp.right
 		|| gp.start || gp.select
 		|| gp.a || gp.b || gp.x || gp.y
