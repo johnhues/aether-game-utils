@@ -67,7 +67,7 @@ int main()
           AE_LOG( "Disconnected from server" );
           break;
         case kObjectInfoMsg:
-          netObjectClient.ReceiveData( receiveInfo.data.Begin(), receiveInfo.data.Length() );
+          netObjectClient.ReceiveData( receiveInfo.data.Data(), receiveInfo.data.Length() );
           break;
         default:
           break;

@@ -235,6 +235,7 @@ class EditorProgram
 {
 public:
 	EditorProgram( const ae::Tag& tag, const EditorParams& params, Editor* client ) :
+		camera( params.worldUp ),
 		m_tag( tag ),
 		editor( tag, client ),
 		params( params ),
@@ -341,18 +342,18 @@ void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _me
 	data.Initialize( sizeof( Vertex ), 0, vertices.Length(), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	data.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
 	data.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
-	data.SetVertices( vertices.Begin(), vertices.Length() );
+	data.SetVertices( vertices.Data(), vertices.Length() );
 	data.Upload();
 	
 	collision.Clear();
 	collision.AddIndexed(
 		ae::Matrix4::Identity(),
-		_mesh->verts.Begin()[ 0 ].data,
+		_mesh->verts[ 0 ].data,
 		_mesh->verts.Length(),
-		sizeof( *_mesh->verts.Begin() ),
-		_mesh->indices.Begin(),
+		sizeof( _mesh->verts[ 0 ] ),
+		_mesh->indices.Data(),
 		_mesh->indices.Length(),
-		sizeof( *_mesh->indices.Begin() )
+		sizeof( *_mesh->indices.Data() )
 	);
 	collision.BuildBVH();
 }
@@ -371,7 +372,7 @@ void EditorProgram::Initialize()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	ui.Initialize();
-	camera.Initialize( params.worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
 	camera.SetEditorControls( true );
 	debugLines.Initialize( 20480 );
 	debugLines.SetXRayEnabled( false );
@@ -2113,11 +2114,11 @@ void EditorServer::m_Save( ae::EditorLevel* levelOut ) const
 					propsOut->SetString( key.c_str(), value.c_str() );
 				}
 			}
-			else if ( var->GetType() == ae::Var::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
+			else if ( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
 			{
 				propsOut->SetMatrix4( var->GetName(), levelObj->transform );
 			}
-			else if ( var->GetType() == ae::Var::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
+			else if ( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
 			{
 				propsOut->SetVec3( var->GetName(), levelObj->transform.GetTranslation() );
 			}
@@ -2240,11 +2241,11 @@ bool EditorServer::m_Load( EditorProgram* program )
 
 bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::Var* var )
 {
-	if ( var->GetType() == ae::Var::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
+	if ( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
 	{
 		return false; // Handled by entity transform
 	}
-	else if ( var->GetType() == ae::Var::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
+	else if ( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
 	{
 		return false; // Handled by entity transform
 	}
@@ -2301,7 +2302,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 {
 	switch ( var->GetType() )
 	{
-		case ae::Var::Type::Enum:
+		case ae::BasicType::Enum:
 		{
 			auto currentStr = var->GetObjectValueAsString( component, idx );
 			auto valueStr = aeImGui_Enum( var->GetEnum(), var->GetName(), currentStr.c_str() );
@@ -2310,7 +2311,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 				return ( currentStr != valueStr.c_str() );
 			}
 		}
-		case ae::Var::Type::Bool:
+		case ae::BasicType::Bool:
 		{
 			bool b = false;
 			var->GetObjectValue( component, &b, idx );
@@ -2320,7 +2321,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			}
 			return false;
 		}
-		case ae::Var::Type::Float:
+		case ae::BasicType::Float:
 		{
 			float f = 0.0f;
 			var->GetObjectValue( component, &f, idx );
@@ -2330,7 +2331,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			}
 			return false;
 		}
-		case ae::Var::Type::String:
+		case ae::BasicType::String:
 		{
 			char buf[ 256 ];
 			auto val = var->GetObjectValueAsString( component, idx );
@@ -2342,10 +2343,10 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			}
 			return false;
 		}
-		case ae::Var::Type::Ref:
-		{
-			return m_ShowRefVar( program, component, var, idx );
-		}
+		// case ae::BasicType::Ref: Pointer? CustomRef?
+		// {
+		// 	return m_ShowRefVar( program, component, var, idx );
+		// }
 		default:
 			ImGui::Text( "%s (Unsupported type)", var->GetName() );
 			break;

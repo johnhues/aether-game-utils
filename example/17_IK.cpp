@@ -208,7 +208,7 @@ int main()
 				debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
 				debugLines.AddLine( p, ik.polePos, ae::Color::Yellow() );
 			}
-			currentPose.SetTransforms( bones.Begin(), ik.finalTransforms.Begin(), bones.Length() );
+			currentPose.SetTransforms( bones.Data(), ik.finalTransforms.Data(), bones.Length() );
 		}
 		
 		// Update mesh

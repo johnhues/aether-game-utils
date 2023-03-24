@@ -168,7 +168,7 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexArray* v
 		if ( vertexDataOut )
 		{
 			vertexDataOut->Initialize(
-				sizeof(*objFile.vertices.Begin()), sizeof(*objFile.indices.Begin()),
+				sizeof(*objFile.vertices.Data()), sizeof(*objFile.indices.Data()),
 				objFile.vertices.Length(), objFile.indices.Length(),
 				ae::Vertex::Primitive::Triangle,
 				ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
@@ -177,8 +177,8 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexArray* v
 			vertexDataOut->AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
 			vertexDataOut->AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, texture ) );
 			vertexDataOut->AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
-			vertexDataOut->SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
-			vertexDataOut->SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
+			vertexDataOut->SetVertices( objFile.vertices.Data(), objFile.vertices.Length() );
+			vertexDataOut->SetIndices( objFile.indices.Data(), objFile.indices.Length() );
 		}
 		
 		objFile.InitializeCollisionMesh( collisionOut, ae::Matrix4::Identity() );
@@ -190,7 +190,7 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexArray* v
 			{
 				editorMeshOut->verts.Append( objFile.vertices[ i ].position.GetXYZ() );
 			}
-			editorMeshOut->indices.Append( objFile.indices.Begin(), objFile.indices.Length() );
+			editorMeshOut->indices.AppendArray( objFile.indices.Data(), objFile.indices.Length() );
 		}
 	}
 }

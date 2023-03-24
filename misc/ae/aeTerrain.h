@@ -379,8 +379,8 @@ public:
 
   const TerrainChunk* GetChunk() const { return m_chunk; }
   TerrainChunk* GetChunk() { return m_chunk; }
-  const TerrainVertex* GetVertices() const { return m_vertices.Begin(); }
-  const TerrainIndex* GetIndices() const { return m_indices.Begin(); }
+  const TerrainVertex* GetVertices() const { return m_vertices.Data(); }
+  const TerrainIndex* GetIndices() const { return m_indices.Data(); }
   VertexCount GetVertexCount() const { return m_vertexCount; }
   uint32_t GetIndexCount() const { return m_indexCount; }
   
