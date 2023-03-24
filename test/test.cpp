@@ -15,14 +15,12 @@
 //------------------------------------------------------------------------------
 const ae::Tag TAG_TEST = "test";
 
-// @TODO: Add specific Find() FindFn() FindLast() and FindLastFn() tests
-
 TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 {
   ae::Array< int > array = TAG_TEST;
   for ( uint32_t i = 0; i < 16; i++ )
   {
-    array.Append( 100 + i );
+    REQUIRE( array.Append( 100 + i ) == 100 + i );
     REQUIRE( array.Length() == i + 1 );
     REQUIRE( array.Size() == 16 );
   }
@@ -38,10 +36,10 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 
   SECTION( "array can be resized and elements can be queried" )
   {
-    for ( uint32_t i = 0; i < 3; i++ )
+    for ( uint32_t i = array.Length(); i < 19; i++ )
     {
-      array.Append( 116 + i );
-      REQUIRE( array.Length() == 16 + i + 1 );
+      REQUIRE( array.Append( 100 + i ) == 100 + i );
+      REQUIRE( array.Length() == i + 1 );
       REQUIRE( array.Size() == 32 );
     }
     REQUIRE( array.Length() == 19 );
@@ -50,6 +48,82 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
     {
       REQUIRE( array[ i ] == 100 + i );
     }
+  }
+}
+
+TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]" )
+{
+  ae::Array< int > array = TAG_TEST;
+  for ( uint32_t i = 0; i < 5; i++ )
+  {
+    REQUIRE( array.Append( 100 + i ) == 100 + i );
+    int* p = array.Append( 1000 + i, 2 );
+    REQUIRE( p[ 0 ] == 1000 + i );
+    REQUIRE( p[ 1 ] == 1000 + i );
+    REQUIRE( p == array.Data() + array.Length() - 2 );
+    REQUIRE( array.Length() == ( i + 1 ) * 3 );
+    REQUIRE( array.Size() == 16 );
+  }
+  REQUIRE( array.Length() == 15 );
+
+  SECTION( "elements can be queried" )
+  {
+    for ( uint32_t i = 0; i < 5; i++ )
+    {
+      REQUIRE( array[ i * 3 ] == 100 + i );
+      REQUIRE( array[ i * 3 + 1 ] == 1000 + i );
+      REQUIRE( array[ i * 3 + 2 ] == 1000 + i );
+    }
+  }
+
+  SECTION( "array can be resized and elements can be queried" )
+  {
+    for ( uint32_t i = array.Length() / 3; i < 8; i++ )
+    {
+      REQUIRE( array.Append( 100 + i ) == 100 + i );
+      int* p = array.Append( 1000 + i, 2 );
+      REQUIRE( p[ 0 ] == 1000 + i );
+      REQUIRE( p[ 1 ] == 1000 + i );
+      REQUIRE( p == array.Data() + array.Length() - 2 );
+      REQUIRE( array.Length() == ( i + 1 ) * 3 );
+      REQUIRE( array.Size() == 32 );
+    }
+    REQUIRE( array.Length() == 24 );
+
+    for ( uint32_t i = 0; i < 8; i++ )
+    {
+      REQUIRE( array[ i * 3 ] == 100 + i );
+      REQUIRE( array[ i * 3 + 1 ] == 1000 + i );
+      REQUIRE( array[ i * 3 + 2 ] == 1000 + i );
+    }
+  }
+}
+
+TEST_CASE( "arrays can be constructed from initializer lists", "[ae::Array]" )
+{
+  ae::Array< int, 8 > array = { 100, 101, 102, 103, 104, 105, 106, 107 };
+  for ( uint32_t i = 0; i < 8; i++ )
+  {
+    REQUIRE( array[ i ] == 100 + i );
+  }
+}
+
+TEST_CASE( "arrays can be appended to other arrays", "[ae::Array]" )
+{
+  int first[] = { 100, 101, 102, 103, 104, 105, 106, 107 };
+  int second[] = { 108, 109, 110, 111, 112, 113, 114, 115 };
+  ae::Array< int > array = TAG_TEST;
+
+  array.AppendArray( first, countof(first) );
+  for ( uint32_t i = 0; i < 8; i++ )
+  {
+    REQUIRE( array[ i ] == 100 + i );
+  }
+
+  array.AppendArray( second, countof(second) );
+  for ( uint32_t i = 0; i < 16; i++ )
+  {
+    REQUIRE( array[ i ] == 100 + i );
   }
 }
 
@@ -72,6 +146,8 @@ TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]
     }
   }
 }
+
+// @TODO: Add specific Find() FindFn() FindLast() and FindLastFn() tests
 
 TEST_CASE( "arrays elements can be removed by value", "[ae::Array]" )
 {
@@ -146,13 +222,65 @@ TEST_CASE( "arrays can be sized and resized", "[ae::Array]" )
 
 TEST_CASE( "arrays can be constructed with a specified length", "[ae::Array]" )
 {
-  ae::Array< int > a( TAG_TEST, 5, 7 );
+  ae::Array< int > a( TAG_TEST, 7, 5 );
 
   REQUIRE( a.Length() == 5 );
   REQUIRE( a.Size() == 16 );
 }
 
-TEST_CASE( "arrays elements can be inserted by index", "[ae::Array]" )
+TEST_CASE( "0 array elements can be inserted by index", "[ae::Array]" )
+{
+  ae::Array< int > empty = TAG_TEST;
+  REQUIRE( empty.Length() == 0 );
+
+  ae::Array< int > array = TAG_TEST;
+  for ( uint32_t i = 1; i <= 5; i++ )
+  {
+    array.Append( i );
+  }
+  REQUIRE( array.Length() == 5 );
+
+  SECTION( "inserting no elements at beginning does not move elements back" )
+  {
+    REQUIRE( array.Insert( 0, 7, 0 ) == array.Data() );
+    REQUIRE( array.Length() == 5 );
+    REQUIRE( array[ 0 ] == 1 );
+    REQUIRE( array[ 1 ] == 2 );
+    REQUIRE( array[ 2 ] == 3 );
+    REQUIRE( array[ 3 ] == 4 );
+    REQUIRE( array[ 4 ] == 5 );
+  }
+
+  SECTION( "insert no elements in middle does not move later elements back" )
+  {
+    REQUIRE( array.Insert( 3, 7, 0 ) == &array[ 3 ] );
+    REQUIRE( array.Length() == 5 );
+    REQUIRE( array[ 0 ] == 1 );
+    REQUIRE( array[ 1 ] == 2 );
+    REQUIRE( array[ 2 ] == 3 );
+    REQUIRE( array[ 3 ] == 4 );
+    REQUIRE( array[ 4 ] == 5 );
+  }
+
+  SECTION( "insert no elements at end does not append value" )
+  {
+    REQUIRE( array.Insert( 5, 7, 0 ) == array.end() );
+    REQUIRE( array.Length() == 5 );
+    REQUIRE( array[ 0 ] == 1 );
+    REQUIRE( array[ 1 ] == 2 );
+    REQUIRE( array[ 2 ] == 3 );
+    REQUIRE( array[ 3 ] == 4 );
+    REQUIRE( array[ 4 ] == 5 );
+  }
+
+  SECTION( "insert no elements into empty array does not change the size" )
+  {
+    REQUIRE( empty.Insert( 0, 7, 0 ) == nullptr );
+    REQUIRE( empty.Length() == 0 );
+  }
+}
+
+TEST_CASE( "array elements can be inserted by index", "[ae::Array]" )
 {
   ae::Array< int > empty = TAG_TEST;
   REQUIRE( empty.Length() == 0 );
@@ -205,6 +333,62 @@ TEST_CASE( "arrays elements can be inserted by index", "[ae::Array]" )
     REQUIRE( empty.Insert( 0, 7 ) == 7 );
     REQUIRE( empty.Length() == 1 );
     REQUIRE( empty[ 0 ] == 7 );
+  }
+}
+
+TEST_CASE( "multiple array elements can be inserted by index", "[ae::Array]" )
+{
+  ae::Array< int > array = TAG_TEST;
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    array.Append( 100 + i );
+  }
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    REQUIRE( array[ i ] == 100 + i );
+  }
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    int val = 1000 + i;
+    int* p = array.Insert( i * 4 + 1, val, 3 );
+    REQUIRE( p[ 0 ] == val );
+    REQUIRE( p[ 1 ] == val );
+    REQUIRE( p[ 2 ] == val );
+  }
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    REQUIRE( array[ i * 4 ] == 100 + i );
+    REQUIRE( array[ i * 4 + 1 ] == 1000 + i );
+    REQUIRE( array[ i * 4 + 2 ] == 1000 + i );
+    REQUIRE( array[ i * 4 + 3 ] == 1000 + i );
+  }
+}
+
+TEST_CASE( "arrays can be inserted into other arrays by index", "[ae::Array]" )
+{
+  ae::Array< uint32_t > array = TAG_TEST;
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    array.Append( 100 + i );
+  }
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    REQUIRE( array[ i ] == 100 + i );
+  }
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    uint32_t vals[] = { 200 + i, 300 + i, 400 + i };
+    uint32_t* p = array.InsertArray( i * 4 + 1, vals, countof(vals) );
+    REQUIRE( p[ 0 ] == vals[ 0 ] );
+    REQUIRE( p[ 1 ] == vals[ 1 ] );
+    REQUIRE( p[ 2 ] == vals[ 2 ] );
+  }
+  for ( uint32_t i = 0; i < 128; i++ )
+  {
+    REQUIRE( array[ i * 4 ] == 100 + i );
+    REQUIRE( array[ i * 4 + 1 ] == 200 + i );
+    REQUIRE( array[ i * 4 + 2 ] == 300 + i );
+    REQUIRE( array[ i * 4 + 3 ] == 400 + i );
   }
 }
 
@@ -264,7 +448,7 @@ TEST_CASE( "arrays only construct/destruct objects on non-zero length arrays", "
 {
   ae::LifetimeTester::ClearStats();
   
-  ae::Array< ae::LifetimeTester > array( TAG_TEST, 3, ae::LifetimeTester() ); // +1 ctor, +1 dtor, +3 copy
+  ae::Array< ae::LifetimeTester > array( TAG_TEST, ae::LifetimeTester(), 3 ); // +1 ctor, +1 dtor, +3 copy
   REQUIRE( array.Length() == 3 );
   REQUIRE( array.Size() >= 3 );
   
@@ -314,7 +498,7 @@ TEST_CASE( "copy construct", "[ae::Array]" )
   {
     ae::LifetimeTester::ClearStats();
     {
-      ae::Array< ae::LifetimeTester > array0( TAG_TEST, 5, ae::LifetimeTester() ); // +1 ctor, +1 dtor, +5 copy
+      ae::Array< ae::LifetimeTester > array0( TAG_TEST, ae::LifetimeTester(), 5 ); // +1 ctor, +1 dtor, +5 copy
       REQUIRE( array0.Length() == 5 );
       REQUIRE( array0.Size() >= 6 );
       REQUIRE( ae::LifetimeTester::ctorCount == 1 );
@@ -344,7 +528,7 @@ TEST_CASE( "assignment operator", "[ae::Array]" )
   {
     ae::LifetimeTester::ClearStats();
     {
-      ae::Array< ae::LifetimeTester > array0( TAG_TEST, 5, ae::LifetimeTester() ); // +1 ctor, +1 dtor, +5 copy
+      ae::Array< ae::LifetimeTester > array0( TAG_TEST, ae::LifetimeTester(), 5 ); // +1 ctor, +1 dtor, +5 copy
       REQUIRE( array0.Length() == 5 );
       REQUIRE( array0.Size() >= 6 );
       REQUIRE( ae::LifetimeTester::ctorCount == 1 );
@@ -378,7 +562,7 @@ TEST_CASE( "assignment operator", "[ae::Array]" )
   {
     ae::LifetimeTester::ClearStats();
     {
-      ae::Array< ae::LifetimeTester > array5( TAG_TEST, 5, ae::LifetimeTester() ); // +1 ctor, +1 dtor, +5 copy
+      ae::Array< ae::LifetimeTester > array5( TAG_TEST, ae::LifetimeTester(), 5 ); // +1 ctor, +1 dtor, +5 copy
       REQUIRE( array5.Length() == 5 );
       REQUIRE( array5.Size() >= 5 );
       REQUIRE( ae::LifetimeTester::ctorCount == 1 );
@@ -387,7 +571,7 @@ TEST_CASE( "assignment operator", "[ae::Array]" )
       REQUIRE( ae::LifetimeTester::currentCount == 5 );
       
       {
-        ae::Array< ae::LifetimeTester > array20( TAG_TEST, 20, ae::LifetimeTester() ); // +1 ctor, +1 dtor, +20 copy
+        ae::Array< ae::LifetimeTester > array20( TAG_TEST, ae::LifetimeTester(), 20 ); // +1 ctor, +1 dtor, +20 copy
         REQUIRE( ae::LifetimeTester::ctorCount == 2 );
         REQUIRE( ae::LifetimeTester::copyCount == 25 );
         REQUIRE( ae::LifetimeTester::dtorCount == 2 );
@@ -454,7 +638,7 @@ TEST_CASE( "append to non-empty array", "[ae::Array]" )
   uint32_t current = 0;
   
   {
-    ae::Array< ae::LifetimeTester > array5( TAG_TEST, 5, ae::LifetimeTester() );
+    ae::Array< ae::LifetimeTester > array5( TAG_TEST, ae::LifetimeTester(), 5 );
     ctor++;
     copy += 5;
     dtor++;
@@ -559,7 +743,7 @@ TEST_CASE( "append array to array", "[ae::Array]" )
   int32_t current = 0;
   
   {
-    ae::Array< ae::LifetimeTester > array( TAG_TEST, 5, ae::LifetimeTester() );
+    ae::Array< ae::LifetimeTester > array( TAG_TEST, ae::LifetimeTester(), 5 );
     ctor++;
     copy += 5;
     dtor++;
@@ -735,7 +919,7 @@ TEST_CASE( "remove all elements from array", "[ae::Array]" )
   int32_t dtor = 0;
   int32_t current = 0;
   
-  ae::Array< ae::LifetimeTester > array( TAG_TEST, 5, ae::LifetimeTester() );
+  ae::Array< ae::LifetimeTester > array( TAG_TEST, ae::LifetimeTester(), 5 );
   ctor++;
   copy += 5;
   dtor++;
@@ -760,6 +944,39 @@ TEST_CASE( "remove all elements from array", "[ae::Array]" )
   REQUIRE( ae::LifetimeTester::moveCount == 0 );
   REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
   REQUIRE( ae::LifetimeTester::currentCount == 0 );
+}
+
+TEST_CASE( "array elements can be removed by index", "[ae::Array]" )
+{
+  ae::Array< int > array = TAG_TEST;
+  for ( uint32_t i = 0; i < 16; i++ )
+  {
+    array.Append( i );
+  }
+  REQUIRE( array.Length() == 16 );
+
+  for ( uint32_t i = 0; i < 8; i++ )
+  {
+    array.Remove( i + 1 );
+  }
+  REQUIRE( array.Length() == 8 );
+  for ( uint32_t i = 0; i < 8; i++ )
+  {
+    REQUIRE( array[ i ] == i * 2 );
+  }
+}
+
+TEST_CASE( "multiple array elements can be removed by index", "[ae::Array]" )
+{
+  ae::Array< int > array = TAG_TEST;
+  int values[] = { 1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 5 };
+  array.AppendArray( values, countof(values) );
+  REQUIRE( array.Length() == 15 );
+  REQUIRE( array.Find( 4 ) == 6 );
+
+  array.Remove( 6, 4 );
+  REQUIRE( array.Length() == 11 );
+  REQUIRE( array.Find( 4 ) == -1 );
 }
 
 TEST_CASE( "arrays support range based loop", "[ae::Array]" )

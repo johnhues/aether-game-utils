@@ -260,7 +260,7 @@ bool Program::Tick()
 
 	DrawWindow();
 
-	std::sort( m_currentFolder->subFolders.Begin(), m_currentFolder->subFolders.End(), []( const Folder* a, const Folder* b )
+	std::sort( m_currentFolder->subFolders.begin(), m_currentFolder->subFolders.end(), []( const Folder* a, const Folder* b )
 	{
 		return a->selectionIdx < b->selectionIdx;
 	} );

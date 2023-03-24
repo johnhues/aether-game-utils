@@ -117,7 +117,7 @@ int main()
 	AE_ASSERT_MSG( objFile.vertices.Length(), "Invalid obj file '#'", fileName );
 	
 	vertexData.Initialize(
-		sizeof(*objFile.vertices.Begin()), sizeof(*objFile.indices.Begin()),
+		sizeof(*objFile.vertices.Data()), sizeof(*objFile.indices.Data()),
 		objFile.vertices.Length(), objFile.indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
@@ -125,8 +125,8 @@ int main()
 	vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
 	vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
 	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
-	vertexData.SetVertices( objFile.vertices.Begin(), objFile.vertices.Length() );
-	vertexData.SetIndices( objFile.indices.Begin(), objFile.indices.Length() );
+	vertexData.SetVertices( objFile.vertices.Data(), objFile.vertices.Length() );
+	vertexData.SetIndices( objFile.indices.Data(), objFile.indices.Length() );
 	
 	ae::Vec3 offset = camera.GetPosition() - camera.GetFocus();
 	offset = offset.SafeNormalizeCopy() * 3.0f;

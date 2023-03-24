@@ -173,8 +173,10 @@
 template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 #define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) )
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
-#define _AE_STATIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
-#define _AE_DYNAMIC_SIZE template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
+#define _AE_STATIC_STORAGE template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
+#define _AE_DYNAMIC_STORAGE template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
+#define _AE_FIXED_POOL template < bool P = Paged, typename = std::enable_if_t< !P > >
+#define _AE_PAGED_POOL template < bool P = Paged, typename = std::enable_if_t< P > >
 #if !_AE_WINDOWS_
 	#define AE_DISABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Winvalid-offsetof\"")
 	#define AE_ENABLE_INVALID_OFFSET_WARNING _Pragma("GCC diagnostic pop")
@@ -284,8 +286,8 @@ public:
 	Scratch( uint32_t count );
 	~Scratch();
 	
-	T* Data(); // @TODO: Rename Get()
-	uint32_t Length() const; // @TODO: Rename Size()
+	T* Data();
+	uint32_t Length() const;
 
 	T& operator[] ( int32_t index );
 	const T& operator[] ( int32_t index ) const;
@@ -1226,7 +1228,7 @@ public:
 	//! Static array (N > 0) only
 	Array();
 	//! Static array (N > 0) only. Appends 'length' number of 'val's
-	Array( uint32_t length, const T& val );
+	Array( const T& val, uint32_t length );
 	//! Static array (N > 0) only. Construct from a standard initializer list.
 	Array( std::initializer_list< T > initList );
 
@@ -1234,67 +1236,110 @@ public:
 	Array( ae::Tag tag );
 	//! Dynamic array (N == 0) only. Reserve size (with length of 0).
 	Array( ae::Tag tag, uint32_t size );
-	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length' number of 'val's
-	Array( ae::Tag tag, uint32_t length, const T& val );
-	//! Dynamic array (N == 0) only. Expands array storage to avoid copying data unneccesarily
-	//! on Append(). Retrieve current storage limit with Size().
+	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length'
+	//! number of 'val's.
+	Array( ae::Tag tag, const T& val, uint32_t length );
+	//! Dynamic array (N == 0) only. Expands array storage to avoid copying data
+	//! unneccesarily on Append(). Retrieve the current storage limit with Size().
 	void Reserve( uint32_t total );
 
+	//! Copy constructor. The ae::Tag of \p other will be used for the newly
+	//! constructed array if the array is dynamic (N == 0).
 	Array( const Array< T, N >& other );
-	//! Move operators fallback to regular operators if ae::Tags don't match
+	//! Move constructor falls back to the regular copy constructor for static
+	//! arrays (N > 0) or if the given ae::Tags don't match
 	Array( Array< T, N >&& other ) noexcept;
+	//! Assignment operator
 	void operator =( const Array< T, N >& other );
+	//! Move assignment operator falls back to the regular assignment operator
+	//! for static arrays (N > 0) or if the given ae::Tags don't match
 	void operator =( Array< T, N >&& other ) noexcept;
 	~Array();
-	
-	//! Adds \p count copies of \p value. Can reallocate internal storage for
-	//! dynamic arrays (N == 0), so take care when taking the address of any
-	//! elements.
-	T& Append( const T& value, uint32_t count = 1 );
+
+	//! Adds one copy of \p value to the end of the array. Can reallocate
+	//! internal storage for dynamic arrays (N == 0), so take care when taking
+	//! the address of any elements. Returns a reference to the added entry.
+	T& Append( const T& value );
+	//! Adds \p count copies of \p value to the end of the array. Can reallocate
+	//! internal storage for dynamic arrays (N == 0), so take care when taking
+	//! the address of any elements. Returns a pointer to the first new element
+	//! added, or one past the end of the array if \p count is zero.
+	T* Append( const T& value, uint32_t count );
 	//! Adds \p count elements from \p values. Can reallocate internal storage
 	//! for  dynamic arrays (N == 0), so take care when taking the address of
-	//! any elements.
-	void AppendArray( const T* values, uint32_t count );
-	//! Adds the list of given elements to the end of the array. Can reallocate
-	//! internal storage for dynamic arrays (N == 0), so take care when taking
-	//! the address of any elements.
-	void AppendList( std::initializer_list< T > initList );
-	//! Adds \p value at \p index. Can reallocate internal storage for dynamic
-	//! arrays (N == 0), so take care when taking the address of any elements.
-	T& Insert( uint32_t index, const T& value );
+	//! any elements. Returns a pointer to the first new element added, or one
+	//! past the end of the array if \p count is zero.
+	T* AppendArray( const T* values, uint32_t count );
 
-	//! Find first matching element. Returns -1 when not found.
+	//! Adds one copy of \p value at \p index. \p index must be less than or
+	//! equal to Length(). Can reallocate internal storage for dynamic arrays
+	//! (N == 0), so take care when taking the address of any elements. Returns
+	//! a reference to the added entry.
+	T& Insert( uint32_t index, const T& value );
+	//! Adds \p count copies of \p value at \p index. \p index must be less than
+	//! or equal to Length(). Can reallocate internal storage for dynamic arrays
+	//! (N == 0), so take care when taking the address of any elements. Returns
+	//! a pointer to the first new element added, or the address of the element
+	//! at \p index if \p count is zero.
+	T* Insert( uint32_t index, const T& value, uint32_t count );
+	//! Adds \p count elements from \p values at \p index. \p index must be less
+	//! than or equal to Length(). Can reallocate internal storage for  dynamic
+	//! arrays (N == 0), so take care when taking the address of any elements.
+	//! Returns a pointer to the first new element added, or the address of the
+	//! element at \p index if \p count is zero.
+	T* InsertArray( uint32_t index, const T* values, uint32_t count );
+
+	//! Returns the index of the first matching element or -1 when not found.
 	template < typename U > int32_t Find( const U& value ) const;
-	//! Find first matching element. Returns -1 when not found.
-	template < typename Fn > int32_t FindFn( Fn testFn ) const;
-	//! Find last matching element. Returns -1 when not found.
+	//! Returns the index of the last matching element or -1 when not found.
 	template < typename U > int32_t FindLast( const U& value ) const;
-	//! Find last matching element. Returns -1 when not found.
+	//! Returns the index of the first matching element or -1 when not found.
+	//! The function signature should match 'bool (*)( const T2& )' or
+	//! '[...]( const T2& ) -> bool'. Return true from the predicate for a
+	//! any matching element.
+	template < typename Fn > int32_t FindFn( Fn testFn ) const;
+	//! Returns the index of the last matching element or -1 when not found.
+	//! The function signature should match 'bool (*)( const U& )' or
+	//! '[...]( const T2& ) -> bool'. Return true from the predicate for any
+	//! matching element.
 	template < typename Fn > int32_t FindLastFn( Fn testFn ) const;
 
-	//! Remove elements
+	//! Remove all elements that match \p value. Returns the number of elements
+	//! that were removed.
 	template < typename U > uint32_t RemoveAll( const U& value );
-	//! Remove elements
+	//! Remove elements based on predicate \p testFn. The function signature
+	//! should match 'bool (*)( const U& )' and '[]( const U& ) -> bool'. Return
+	//! true from the predicate for removal of the given element. Returns the
+	//! number of elements that were removed.
 	template < typename Fn > uint32_t RemoveAllFn( Fn testFn );
-	//! Remove elements
-	void Remove( uint32_t index );
+	//! Removes \p count elements at \p index. \p index plus \p count must be
+	//! less than or equal to Length().
+	void Remove( uint32_t index, uint32_t count = 1 );
+	//! Destructs all elements in the array and resets the array to length zero.
+	//! Does not affect the size of the array.
 	void Clear();
 
-	//! Performs bounds checking in debug mode. Use 'Begin()' to get raw array.
+	//! Performs bounds checking in debug mode. Use 'GetData()' to get raw array.
 	const T& operator[]( int32_t index ) const;
+	//! Performs bounds checking in debug mode. Use 'GetData()' to get raw array.
 	T& operator[]( int32_t index );
-	//! These functions can return null when array length is zero
-	T* Begin() { return m_array; }
-	T* End() { return m_array + m_length; }
-	const T* Begin() const { return m_array; }
-	const T* End() const { return m_array + m_length; }
 
-	// Array info
+	//! Returns a pointer to the first element of the array, but can return null
+	//! when the array length is zero
+	T* Data() { return m_array; }
+	//! Returns a pointer to the first element of the array, but can return null
+	//! when the array length is zero
+	const T* Data() const { return m_array; }
+	//! Returns the number of elements currently in the array
 	uint32_t Length() const { return m_length; }
-	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
-	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
-	ae::Tag GetTag() const { return m_tag; }
-	
+	//! Returns the total size of a static array (N > 0)
+	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	//! Returns the total size of a dynamic array (N == 0)
+	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
+	//! Returns the tag provided to the constructor for dynamic arrays (N == 0).
+	//! Returns ae::Tag() for all static arrays (N > 0).
+	ae::Tag Tag() const { return m_tag; }
+
 private:
 	uint32_t m_length;
 	uint32_t m_size;
@@ -1312,10 +1357,21 @@ private:
 #endif
 	// clang-format on
 public:
-	// Ranged-based loop. Lowercase to match c++ standard
+	//! For ranged-based looping. Returns a pointer to the first element of the
+	//! array, but can return null when array length is zero. Lowercase to match
+	//! the c++ standard.
 	T* begin() { return m_array; }
+	//! For ranged-based looping. Returns a pointer one past the last element of
+	//! the array, but can return null when array length is zero. Lowercase to
+	//! match the c++ standard.
 	T* end() { return m_array + m_length; }
+	//! For ranged-based looping. Returns a pointer to the first element of the
+	//! array, but can return null when array length is zero. Lowercase to match
+	//! the c++ standard.
 	const T* begin() const { return m_array; }
+	//! For ranged-based looping. Returns a pointer one past the last element of
+	//! the array, but can return null when array length is zero. Lowercase to
+	//! match the c++ standard.
 	const T* end() const { return m_array + m_length; }
 };
 
@@ -1360,9 +1416,9 @@ public:
 	//! Returns the number of entries.
 	uint32_t Length() const;
 	//! Returns the max number of entries.
-	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
 	//! Returns the number of allocated entries.
-	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
 
 private:
 	bool m_Insert( uint32_t key, int32_t index );
@@ -1635,9 +1691,9 @@ public:
 	//! Returns the number of appended entries up to Size().
 	uint32_t Length() const { return m_buffer.Length(); }
 	//! Returns the max number of entries.
-	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
 	//! Returns the max number of entries.
-	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_size; }
+	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_size; }
 
 private:
 	uint32_t m_first;
@@ -1683,9 +1739,9 @@ public:
 	//! Returns the number of allocated elements.
 	uint32_t Length() const;
 	//! Returns the maximum length of the list (constxpr for static ae::FreeList's).
-	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
+	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
 	//! Returns the maximum length of the list.
-	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return m_pool.Length(); }
+	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pool.Length(); }
 
 private:
 	struct Entry { Entry* next; };
@@ -1731,13 +1787,15 @@ public:
 	//! Null will be returned if \p obj is null.
 	T* GetNext( T* obj );
 
-	//! Returns true if the pool has any unallocated objects available.
+	//! Returns true if the pool has any unallocated objects available. This
+	//! always returns true for paged pools.
 	bool HasFree() const;
 	//! Returns the number of allocated objects.
 	uint32_t Length() const;
 	//! Returns the total number of objects in the pool.
-	_AE_STATIC_SIZE static constexpr uint32_t Size() { return N; }
-	_AE_DYNAMIC_SIZE uint32_t Size(...) const { return N * m_pages.Length(); }
+	_AE_FIXED_POOL static constexpr uint32_t Size() { return N; }
+	//! Returns the total number of objects in the pool.
+	_AE_PAGED_POOL uint32_t Size(...) const { return N * m_pages.Length(); }
 
 private:
 	// @TODO: Disable copy constructor etc or fix list on copy.
@@ -3758,8 +3816,8 @@ public:
 	PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
 	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
 	
-	const ae::Vec3* GetVertices() const { return m_vertices.Begin(); }
-	const uint32_t* GetIndices() const { return (uint32_t*)m_tris.Begin(); }
+	const ae::Vec3* GetVertices() const { return m_vertices.Data(); }
+	const uint32_t* GetIndices() const { return (uint32_t*)m_tris.Data(); }
 	uint32_t GetVertexCount() const { return m_vertices.Length(); }
 	uint32_t GetIndexCount() const { return m_tris.Length() * 3; }
 
@@ -6950,7 +7008,7 @@ Array< T, N >::Array()
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::Array( uint32_t length, const T& value )
+Array< T, N >::Array( const T& value, uint32_t length )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	
@@ -6981,47 +7039,36 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag tag )
+Array< T, N >::Array( ae::Tag tag ) :
+	m_length( 0 ),
+	m_size( 0 ),
+	m_array( nullptr ),
+	m_tag( tag )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
 	AE_ASSERT( tag != ae::Tag() );
-	
-	m_length = 0;
-	m_size = 0;
-	m_array = nullptr;
-	m_tag = tag;
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag tag, uint32_t size )
+Array< T, N >::Array( ae::Tag tag, uint32_t size ) :
+	m_length( 0 ),
+	m_size( 0 ),
+	m_array( nullptr ),
+	m_tag( tag )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
-	
-	m_length = 0;
-	m_size = 0;
-	m_array = nullptr;
-	m_tag = tag;
-
 	Reserve( size );
 }
 
 template < typename T, uint32_t N >
-Array< T, N >::Array( ae::Tag tag, uint32_t length, const T& value )
+Array< T, N >::Array( ae::Tag tag, const T& value, uint32_t length ) :
+	m_length( 0 ),
+	m_size( 0 ),
+	m_array( nullptr ),
+	m_tag( tag )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
-	
-	m_length = 0;
-	m_size = 0;
-	m_array = nullptr;
-	m_tag = tag;
-
-	Reserve( length );
-
-	m_length = length;
-	for ( uint32_t i = 0; i < length; i++ )
-	{
-		new ( &m_array[ i ] ) T ( value );
-	}
+	Append( value, length );
 }
 
 template < typename T, uint32_t N >
@@ -7129,78 +7176,123 @@ Array< T, N >::~Array()
 }
 
 template < typename T, uint32_t N >
-T& Array< T, N >::Append( const T& value, uint32_t count )
+T& Array< T, N >::Append( const T& value )
 {
-	Reserve( m_length + count );
-
-	new ( &m_array[ m_length ] ) T ( value );
-	m_length++;
-
-	return m_array[ m_length - 1 ];
+	return *Append( value, 1 );
 }
 
 template < typename T, uint32_t N >
-void Array< T, N >::AppendArray( const T* values, uint32_t count )
+T* Array< T, N >::Append( const T& value, uint32_t count )
+{
+	Reserve( m_length + count );
+	T* result = m_array + m_length;
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		new ( &m_array[ m_length ] ) T ( value );
+		m_length++;
+	}
+	return result;
+}
+
+template < typename T, uint32_t N >
+T* Array< T, N >::AppendArray( const T* values, uint32_t count )
 {
 	Reserve( m_length + count );
 	AE_DEBUG_ASSERT( m_size >= m_length + count );
+	T* result = m_array + m_length;
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		new ( &m_array[ m_length ] ) T ( values[ i ] );
 		m_length++;
 	}
-}
-
-template < typename T, uint32_t N >
-void Array< T, N >::AppendList( std::initializer_list< T > initList )
-{
-	Reserve( Size() + initList.size() );
-	m_length += initList.size();
-	uint32_t i = 0;
-	for ( const T& value : initList )
-	{
-		new ( &m_array[ i ] ) T ( value );
-		i++;
-	}
+	return result;
 }
 
 template < typename T, uint32_t N >
 T& Array< T, N >::Insert( uint32_t index, const T& value )
 {
-	AE_DEBUG_ASSERT( index <= m_length );
-
-	Reserve( m_length + 1 );
-
-	if ( index == m_length )
-	{
-		new ( &m_array[ index ] ) T ( value );
-	}
-	else
-	{
-		new ( &m_array[ m_length ] ) T ( std::move( m_array[ m_length - 1 ] ) );
-		for ( int32_t i = m_length - 1; i > (int32_t)index; i-- )
-		{
-			m_array[ i ] = std::move( m_array[ i - 1 ] );
-		}
-		m_array[ index ] = value;
-	}
-	
-	m_length++;
-
-	return m_array[ index ];
+	return *Insert( index, value, 1 );
 }
 
 template < typename T, uint32_t N >
-void Array< T, N >::Remove( uint32_t index )
+T* Array< T, N >::Insert( uint32_t index, const T& value, uint32_t count )
+{
+	AE_DEBUG_ASSERT( index <= m_length );
+	Reserve( m_length + count );
+	T* result = m_array + index;
+	const int32_t indexCount = index + count;
+	const uint32_t pivot0 = ae::Min( (uint32_t)indexCount, m_length );
+	const int32_t pivot1 = ae::Max( indexCount, (int32_t)m_length );
+	m_length += count;
+	// Move elements back
+	for ( int32_t i = m_length - 1; i >= pivot1; i-- )
+	{
+		new ( &m_array[ i ] ) T ( std::move( m_array[ i - count ] ) );
+	}
+	for ( int32_t i = pivot1 - 1; i >= indexCount; i-- )
+	{
+		m_array[ i ] = std::move( m_array[ i - count ] );
+	}
+	// Copy new elements
+	for ( uint32_t i = index; i < pivot0; i++ )
+	{
+		m_array[ i ] = value;
+	}
+	for ( uint32_t i = pivot0; i < indexCount; i++ )
+	{
+		new ( &m_array[ i ] ) T ( value );
+	}
+	return result;
+}
+
+template < typename T, uint32_t N >
+T* Array< T, N >::InsertArray( uint32_t index, const T* values, uint32_t count )
+{
+	AE_DEBUG_ASSERT( index <= m_length );
+	Reserve( m_length + count );
+	T* result = m_array + index;
+	const int32_t indexCount = index + count;
+	const uint32_t pivot0 = ae::Min( (uint32_t)indexCount, m_length );
+	const int32_t pivot1 = ae::Max( indexCount, (int32_t)m_length );
+	m_length += count;
+	// Move elements back
+	for ( int32_t i = m_length - 1; i >= pivot1; i-- )
+	{
+		new ( &m_array[ i ] ) T ( std::move( m_array[ i - count ] ) );
+	}
+	for ( int32_t i = pivot1 - 1; i >= indexCount; i-- )
+	{
+		m_array[ i ] = std::move( m_array[ i - count ] );
+	}
+	// Copy new elements
+	uint32_t j = 0;
+	for ( uint32_t i = index; i < pivot0; i++, j++ )
+	{
+		m_array[ i ] = values[ j ];
+	}
+	for ( uint32_t i = pivot0; i < indexCount; i++, j++ )
+	{
+		new ( &m_array[ i ] ) T ( values[ j ] );
+	}
+	AE_DEBUG_ASSERT( j == count );
+	return result;
+}
+
+template < typename T, uint32_t N >
+void Array< T, N >::Remove( uint32_t index, uint32_t count )
 {
 	AE_DEBUG_ASSERT( index < m_length );
+	AE_DEBUG_ASSERT( index + count <= m_length );
 
-	m_length--;
+	m_length -= count;
 	for ( uint32_t i = index; i < m_length; i++ )
 	{
-		m_array[ i ] = std::move( m_array[ i + 1 ] );
+		m_array[ i ] = std::move( m_array[ i + count ] );
 	}
-	m_array[ m_length ].~T();
+	for ( uint32_t i = 0; i < count; i++ )
+	{
+		m_array[ m_length + i ].~T();
+	}
 }
 
 template < typename T, uint32_t N >
@@ -8184,7 +8276,7 @@ const T& RingBuffer< T, N >::Get( uint32_t index ) const
 //------------------------------------------------------------------------------
 template < uint32_t N >
 FreeList< N >::FreeList() :
-	m_pool( N, Entry() )
+	m_pool( Entry(), N )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	FreeAll();
@@ -8192,7 +8284,7 @@ FreeList< N >::FreeList() :
 
 template < uint32_t N >
 FreeList< N >::FreeList( const ae::Tag& tag, uint32_t size ) :
-	m_pool( tag, size, Entry() )
+	m_pool( tag, Entry(), size )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
 	FreeAll();
@@ -8207,7 +8299,7 @@ int32_t FreeList< N >::Allocate()
 	m_free = ( m_free->next == m_free ) ? nullptr : m_free->next;
 	entry->next = nullptr;
 	m_length++;
-	return (int32_t)( entry - m_pool.Begin() );
+	return (int32_t)( entry - m_pool.begin() );
 }
 
 template < uint32_t N >
@@ -8787,7 +8879,7 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 	{
 		AE_ASSERT( m_nodes.Size() >= m_limit );
 	}
-	auto* preCheck = m_nodes.Begin();
+	auto* preCheck = m_nodes.Data();
 #endif
 
 	BVHNode* parent = &m_nodes[ parentIdx ];
@@ -8812,7 +8904,7 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 #if _AE_DEBUG_ && ( N == 0 )
 	if ( m_limit )
 	{
-		AE_ASSERT( preCheck == m_nodes.Begin() );
+		AE_ASSERT( preCheck == m_nodes.Data() );
 	}
 #endif
 	
@@ -9055,7 +9147,7 @@ void CollisionMesh< V, T, B >::BuildBVH()
 	{
 		AE_DEBUG_ASSERT( m_vertices.Length() );
 		AE_DEBUG_ASSERT( m_tris.Length() );
-		const ae::Vec3* verts = m_vertices.Begin();
+		const ae::Vec3* verts = m_vertices.begin();
 		auto aabbFn = [verts]( BVHTri tri )
 		{
 			ae::AABB aabb;
@@ -9064,7 +9156,7 @@ void CollisionMesh< V, T, B >::BuildBVH()
 			aabb.Expand( verts[ tri.idx[ 2 ] ] );
 			return aabb;
 		};
-		m_bvh.Build( m_tris.Begin(), m_tris.Length(), aabbFn, 32 );
+		m_bvh.Build( m_tris.begin(), m_tris.Length(), aabbFn, 32 );
 		m_requiresRebuild = false;
 	}
 }
@@ -9368,10 +9460,10 @@ void OBJFile::InitializeCollisionMesh( ae::CollisionMesh< V, T, B >* mesh, const
 	mesh->Clear();
 	mesh->AddIndexed(
 		localToWorld,
-		vertices.Begin()->position.data,
+		vertices[ 0 ].position.data,
 		vertices.Length(),
 		sizeof( Vertex ),
-		indices.Begin(),
+		indices.Data(),
 		indices.Length(),
 		sizeof( uint32_t )
 	);
@@ -16596,9 +16688,9 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		AE_ASSERT( readSize );
 		uint32_t totalSize = m_recvData.Length() + readSize;
 		m_recvData.Reserve( totalSize );
-		_ae_sock_buff_t* buffer = (_ae_sock_buff_t*)m_recvData.End();
+		_ae_sock_buff_t* buffer = (_ae_sock_buff_t*)m_recvData.end();
 		while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
-		AE_ASSERT( buffer == (_ae_sock_buff_t*)m_recvData.End() - readSize );
+		AE_ASSERT( buffer == (_ae_sock_buff_t*)m_recvData.end() - readSize );
 		
 		int32_t result = recv( m_sock, buffer, readSize, 0 );
 		if ( result < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) )
@@ -16627,7 +16719,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 	{
 		if ( dataOut )
 		{
-			memcpy( dataOut, m_recvData.Begin() + m_readHead + offset, length );
+			memcpy( dataOut, m_recvData.Data() + m_readHead + offset, length );
 		}
 		return true;
 	}
@@ -16724,7 +16816,7 @@ uint32_t Socket::SendAll()
 #if !_AE_WINDOWS_
 	sendFlags |= MSG_NOSIGNAL;
 #endif
-	int result = send( m_sock, (const _ae_sock_buff_t*)m_sendData.Begin(), m_sendData.Length(), sendFlags );
+	int result = send( m_sock, (const _ae_sock_buff_t*)m_sendData.Data(), m_sendData.Length(), sendFlags );
 	if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
 	{
 		Disconnect();
@@ -17819,7 +17911,7 @@ int Shader::m_LoadShader( const char* shaderStr, Type type, const char* const* d
 	shaderSource.Append( shaderStr );
 
 	GLuint shader = glCreateShader( glType );
-	glShaderSource( shader, shaderSource.Length(), shaderSource.Begin(), nullptr );
+	glShaderSource( shader, shaderSource.Length(), shaderSource.Data(), nullptr );
 	glCompileShader( shader );
 
 	GLint status;
@@ -20929,7 +21021,7 @@ void Animation::AnimateByPercent( class Skeleton* target, float percent, float s
 		}
 		tempTransforms.Append( keyframe.GetLocalTransform() );
 	}
-	target->SetLocalTransforms( tempBones.Begin(), tempTransforms.Begin(), target->GetBoneCount() );
+	target->SetLocalTransforms( tempBones.Data(), tempTransforms.Data(), target->GetBoneCount() );
 }
 
 //------------------------------------------------------------------------------
@@ -20952,31 +21044,31 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 {
 	Initialize( otherPose->GetBoneCount() );
 	
-	const void* beginCheck = m_bones.Begin();
+	const void* beginCheck = m_bones.Data();
 	for ( uint32_t i = 1; i < otherPose->m_bones.Length(); i++ ) // Skip root
 	{
 		const ae::Bone& otherBone = otherPose->m_bones[ i ];
 		const ae::Bone* parent = &m_bones[ otherBone.parent->index ];
 		AddBone( parent, otherBone.name.c_str(), otherBone.localTransform );
 	}
-	AE_ASSERT( beginCheck == m_bones.Begin() );
+	AE_ASSERT( beginCheck == m_bones.Data() );
 }
 
 const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& localTransform )
 {
 	Bone* parent = const_cast< Bone* >( _parent );
 	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
-	AE_ASSERT_MSG( m_bones.Begin() <= parent && parent < m_bones.End(), "ae::Bones must have a parent from the same ae::Skeleton" );
+	AE_ASSERT_MSG( m_bones.begin() <= parent && parent < m_bones.end(), "ae::Bones must have a parent from the same ae::Skeleton" );
 	if ( !parent || m_bones.Length() == m_bones.Size() )
 	{
 		return nullptr;
 	}
 #if _AE_DEBUG_
-	Bone* beginCheck = m_bones.Begin();
+	Bone* beginCheck = m_bones.Data();
 #endif
 	Bone* bone = &m_bones.Append( {} );
 #if _AE_DEBUG_
-	AE_ASSERT( beginCheck == m_bones.Begin() );
+	AE_ASSERT( beginCheck == m_bones.Data() );
 #endif
 
 	bone->name = name;
@@ -21007,7 +21099,7 @@ void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* loca
 	{
 		ae::Bone* bone = const_cast< ae::Bone* >( targets[ i ] );
 		AE_ASSERT_MSG( bone, "Null bone passed to skeleton when setting transforms" );
-		AE_ASSERT_MSG( m_bones.Begin() <= bone && bone < m_bones.End(), "Transform target '#' is not part of this skeleton", bone->name );
+		AE_ASSERT_MSG( m_bones.begin() <= bone && bone < m_bones.end(), "Transform target '#' is not part of this skeleton", bone->name );
 		bone->localTransform = localTransforms[ i ];
 	}
 	
@@ -21033,7 +21125,7 @@ void Skeleton::SetTransforms( const Bone** targets, const ae::Matrix4* transform
 	{
 		ae::Bone* bone = const_cast< ae::Bone* >( targets[ i ] );
 		AE_ASSERT_MSG( bone, "Null bone passed to skeleton when setting transforms" );
-		AE_ASSERT_MSG( m_bones.Begin() <= bone && bone < m_bones.End(), "Transform target '#' is not part of this skeleton", bone->name );
+		AE_ASSERT_MSG( m_bones.begin() <= bone && bone < m_bones.end(), "Transform target '#' is not part of this skeleton", bone->name );
 		bone->transform = transforms[ i ];
 		bone->inverseTransform = bone->transform.GetInverse();
 	}
@@ -21060,7 +21152,7 @@ void Skeleton::SetTransform( const Bone* target, const ae::Matrix4& transform )
 
 const Bone* Skeleton::GetRoot() const
 {
-	return m_bones.Begin();
+	return m_bones.Data();
 }
 
 const Bone* Skeleton::GetBoneByName( const char* name ) const
@@ -21079,7 +21171,7 @@ const Bone* Skeleton::GetBoneByIndex( uint32_t index ) const
 
 const Bone* Skeleton::GetBones() const
 {
-	return m_bones.Begin();
+	return m_bones.Data();
 }
 
 uint32_t Skeleton::GetBoneCount() const
@@ -21353,7 +21445,7 @@ void OBJFile::InitializeVertexData( const ae::OBJFile::VertexDataParams& params 
 	}
 
 	params.vertexData->Initialize(
-		sizeof(*vertices.Begin()), sizeof(*indices.Begin()),
+		sizeof(*vertices.Data()), sizeof(*indices.Data()),
 		vertices.Length(), indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
@@ -21361,8 +21453,8 @@ void OBJFile::InitializeVertexData( const ae::OBJFile::VertexDataParams& params 
 	params.vertexData->AddAttribute( params.uvAttrib, 2, ae::Vertex::Type::Float, offsetof( Vertex, texture ) );
 	params.vertexData->AddAttribute( params.normalAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
 	params.vertexData->AddAttribute( params.colorAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	params.vertexData->SetVertices( vertices.Begin(), vertices.Length() );
-	params.vertexData->SetIndices( indices.Begin(), indices.Length() );
+	params.vertexData->SetVertices( vertices.Data(), vertices.Length() );
+	params.vertexData->SetIndices( indices.Data(), indices.Length() );
 }
 
 //------------------------------------------------------------------------------
@@ -21411,7 +21503,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
 	AE_ASSERT( stream.GetRemaining() >= dataLength );
 	m_data.AppendArray( pixels, dataLength );
-	textureParams.data = m_data.Begin();
+	textureParams.data = m_data.Data();
 	textureParams.width = header.width;
 	textureParams.height = header.height;
 	if ( header.bitsPerPixel == 32 )
@@ -21604,7 +21696,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 	m_audioDatas.Reserve( m_maxAudioDatas );
 	
 	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels + sfxLoopChannels, 0 );
-	alGenSources( (ALuint)sources.Length(), sources.Begin() );
+	alGenSources( (ALuint)sources.Length(), sources.Data() );
 
 	m_musicChannels.Reserve( musicChannels );
 	for ( uint32_t i = 0; i < musicChannels; i++ )
@@ -23670,7 +23762,7 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 void ae::Type::m_AddVar( const Var& var )
 {
 	m_vars.Append( var );
-	std::sort( m_vars.Begin(), m_vars.End(), []( const auto& a, const auto& b )
+	std::sort( m_vars.begin(), m_vars.end(), []( const auto& a, const auto& b )
 	{
 		return a.GetOffset() < b.GetOffset();
 	} );

@@ -326,8 +326,8 @@ TerrainJob::TerrainJob() :
   m_running( false ),
   m_vertexCount( kChunkCountEmpty ),
   m_indexCount( 0 ),
-  m_vertices( ae::Array< TerrainVertex >( AE_ALLOC_TAG_TERRAIN, (uint32_t)kMaxChunkVerts, TerrainVertex() ) ),
-  m_indices( ae::Array< TerrainIndex >( AE_ALLOC_TAG_TERRAIN, kMaxChunkIndices, TerrainIndex() ) ),
+  m_vertices( ae::Array< TerrainVertex >( AE_ALLOC_TAG_TERRAIN, TerrainVertex(), (uint32_t)kMaxChunkVerts ) ),
+  m_indices( ae::Array< TerrainIndex >( AE_ALLOC_TAG_TERRAIN, TerrainIndex(), kMaxChunkIndices ) ),
   m_chunk( nullptr )
 {
   edgeInfo = ae::NewArray< TempEdges >( AE_ALLOC_TAG_TERRAIN, kTempChunkSize3 );
@@ -366,7 +366,7 @@ void TerrainJob::StartNew( const TerrainParams& params, const TerrainSdf* sdf, T
   }
   
   // 2) Put shapes in order
-  std::stable_sort( m_shapes.Begin(), m_shapes.End(), []( const ae::Sdf* s0, const ae::Sdf* s1 )
+  std::stable_sort( m_shapes.begin(), m_shapes.end(), []( const ae::Sdf* s0, const ae::Sdf* s1 )
   {
     return s0->order < s1->order;
   } );
