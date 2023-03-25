@@ -8987,7 +8987,7 @@ inline IK< 0 >::IK( ae::Tag tag ) :
 
 template < uint32_t NumBones >
 IK< NumBones >::IK( ae::Tag tag )
-{}
+{} // @TODO: Cleanup static allocation
 
 template < uint32_t NumBones >
 void IK< NumBones >::Update( uint32_t iterationCount )
@@ -15980,13 +15980,13 @@ void FixPathExtension( const char* extension, std::filesystem::path* pathOut )
 
 ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 {
-	ae::Array< char > result( AE_ALLOC_TAG_FILE );
+	ae::Array< char > result = AE_ALLOC_TAG_FILE;
 	if ( !filters.Length() )
 	{
 		return result;
 	}
 
-	ae::Array< char > tempFilterStr( AE_ALLOC_TAG_FILE );
+	ae::Array< char > tempFilterStr = AE_ALLOC_TAG_FILE;
 	for ( uint32_t i = 0; i < filters.Length(); i++ )
 	{
 		const FileFilter& filter = filters[ i ];
@@ -16080,7 +16080,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 	{
 		if ( !params.allowMultiselect )
 		{
-			return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
+			return ae::Array< std::string >( AE_ALLOC_TAG_FILE, winParams.lpstrFile, 1 );
 		}
 		else
 		{
@@ -16088,7 +16088,7 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 			uint32_t offset = (uint32_t)strlen( winParams.lpstrFile ) + 1; 
 			if ( winParams.lpstrFile[ offset ] == 0 ) // One result
 			{
-				return ae::Array< std::string >( AE_ALLOC_TAG_FILE, 1, winParams.lpstrFile );
+				return ae::Array< std::string >( AE_ALLOC_TAG_FILE, winParams.lpstrFile, 1 );
 			}
 			else // Multiple results
 			{
@@ -21714,7 +21714,7 @@ void Audio::Initialize( uint32_t musicChannels, uint32_t sfxChannels, uint32_t s
 	m_maxAudioDatas = maxAudioDatas;
 	m_audioDatas.Reserve( m_maxAudioDatas );
 	
-	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, musicChannels + sfxChannels + sfxLoopChannels, 0 );
+	ae::Array< ALuint > sources( AE_ALLOC_TAG_AUDIO, 0, musicChannels + sfxChannels + sfxLoopChannels );
 	alGenSources( (ALuint)sources.Length(), sources.Data() );
 
 	m_musicChannels.Reserve( musicChannels );
