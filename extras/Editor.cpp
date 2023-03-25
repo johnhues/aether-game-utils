@@ -235,6 +235,7 @@ class EditorProgram
 {
 public:
 	EditorProgram( const ae::Tag& tag, const EditorParams& params, Editor* client ) :
+		camera( params.worldUp ),
 		m_tag( tag ),
 		editor( tag, client ),
 		params( params ),
@@ -341,18 +342,18 @@ void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _me
 	data.Initialize( sizeof( Vertex ), 0, vertices.Length(), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	data.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
 	data.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
-	data.SetVertices( vertices.Begin(), vertices.Length() );
+	data.SetVertices( vertices.Data(), vertices.Length() );
 	data.Upload();
 	
 	collision.Clear();
 	collision.AddIndexed(
 		ae::Matrix4::Identity(),
-		_mesh->verts.Begin()[ 0 ].data,
+		_mesh->verts[ 0 ].data,
 		_mesh->verts.Length(),
-		sizeof( *_mesh->verts.Begin() ),
-		_mesh->indices.Begin(),
+		sizeof( _mesh->verts[ 0 ] ),
+		_mesh->indices.Data(),
 		_mesh->indices.Length(),
-		sizeof( *_mesh->indices.Begin() )
+		sizeof( *_mesh->indices.Data() )
 	);
 	collision.BuildBVH();
 }
@@ -371,7 +372,7 @@ void EditorProgram::Initialize()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	ui.Initialize();
-	camera.Initialize( params.worldUp, ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
 	camera.SetEditorControls( true );
 	debugLines.Initialize( 20480 );
 	debugLines.SetXRayEnabled( false );
@@ -2342,10 +2343,17 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			}
 			return false;
 		}
+<<<<<<< HEAD:extras/Editor.cpp
 		case ae::BasicType::Pointer:
 		{
 			return m_ShowRefVar( program, component, var, idx );
 		}
+=======
+		// case ae::BasicType::Ref: Pointer? CustomRef?
+		// {
+		// 	return m_ShowRefVar( program, component, var, idx );
+		// }
+>>>>>>> master:misc/Editor.cpp
 		default:
 			ImGui::Text( "%s (Unsupported type)", var->GetName() );
 			break;

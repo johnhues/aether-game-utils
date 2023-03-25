@@ -368,7 +368,7 @@ bool AetherServer_Receive( AetherServer* _as, ServerReceiveInfo* infoOut )
           infoOut->msgId = header.msgId;
           infoOut->player = AetherServer_GetPlayer( as, header.uuid );
           infoOut->data.Clear();
-          infoOut->data.Append( data, length );
+          infoOut->data.AppendArray( data, length );
           success = true;
         }
 
