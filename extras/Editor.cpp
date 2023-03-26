@@ -2343,17 +2343,10 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			}
 			return false;
 		}
-<<<<<<< HEAD:extras/Editor.cpp
-		case ae::BasicType::Pointer:
-		{
-			return m_ShowRefVar( program, component, var, idx );
-		}
-=======
 		// case ae::BasicType::Ref: Pointer? CustomRef?
 		// {
 		// 	return m_ShowRefVar( program, component, var, idx );
 		// }
->>>>>>> master:misc/Editor.cpp
 		default:
 			ImGui::Text( "%s (Unsupported type)", var->GetName() );
 			break;

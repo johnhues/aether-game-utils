@@ -25,6 +25,7 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include "ae/loaders.h"
+#include "ae/Editor.h"
 #include "ofbx.h"
 namespace ae {
 
@@ -77,8 +78,8 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	}
 	
 	uint32_t indexOffset = 0;
-	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.vertexSize );
-	ae::Array< uint8_t > indices( tag, totalIndices * vertexHelper.indexSize );
+	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.size );
+	ae::Array< uint32_t > indices( tag, totalIndices );
 	for ( uint32_t i = 0; i < meshCount; i++ )
 	{
 		const ofbx::Mesh* mesh = scene->getMesh( i );
@@ -98,16 +99,15 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 			ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
 			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
 			
-			uint8_t vertex[ 256 ];
-			AE_ASSERT( vertexHelper.vertexSize <= sizeof(vertex) );
+			uint8_t vertex[ 128 ];
+			AE_ASSERT( vertexHelper.size <= sizeof(vertex) );
 			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
 			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
 			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
 			vertexHelper.SetUV( vertex, 0, uv );
-			vertexBuffer.Append( vertex, vertexHelper.vertexSize );
+			vertexBuffer.Append( vertex, vertexHelper.size );
 		}
 		
-		AE_ASSERT( vertexHelper.indexSize == 2 || vertexHelper.indexSize == 4 );
 		uint32_t indexCount = geo->getIndexCount();
 		const int32_t* meshIndices = geo->getFaceIndices();
 		for ( uint32_t j = 0; j < indexCount; j++ )
@@ -115,16 +115,7 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 			int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
 			AE_ASSERT( index < vertexCount );
 			index += indexOffset;
-			
-			if ( vertexHelper.indexSize == 2 )
-			{
-				uint16_t index16 = index;
-				indices.Append( (uint8_t*)&index16, sizeof(index16) );
-			}
-			else if ( vertexHelper.indexSize == 4 )
-			{
-				indices.Append( (uint8_t*)&index, sizeof(index) );
-			}
+			indices.Append( index );
 			
 			ofbx::Vec3 n = meshNormals[ j ];
 			ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
@@ -136,21 +127,16 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	
 	if ( params.vertexData )
 	{
-		params.vertexData->Initialize( vertexHelper.vertexSize, vertexHelper.indexSize,
-			totalVerts, totalIndices,
+		params.vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
+			totalVerts, indices.Length(),
 			ae::Vertex::Primitive::Triangle,
 			ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 		if ( vertexHelper.posOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::Vertex::Type::Float, vertexHelper.posOffset ); }
 		if ( vertexHelper.normalOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::Vertex::Type::Float, vertexHelper.normalOffset ); }
 		if ( vertexHelper.colorOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::Vertex::Type::Float, vertexHelper.colorOffset ); }
 		if ( vertexHelper.uvOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::Vertex::Type::Float, vertexHelper.uvOffset ); }
-<<<<<<< HEAD:loaders/ofbx.cpp
-		params.vertexData->SetVertices( vertexBuffer.Begin(), totalVerts );
-		params.vertexData->SetIndices( indices.Begin(), totalIndices );
-=======
 		params.vertexData->SetVertices( vertexBuffer.Data(), totalVerts );
 		params.vertexData->SetIndices( indices.Data(), indices.Length() );
->>>>>>> master:misc/loaders/ofbx.cpp
 		params.vertexData->Upload();
 	}
 	
@@ -160,23 +146,14 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 			ae::Matrix4::Identity(),
 			vertexHelper.GetPosition( vertexBuffer.Data(), 0 ).data,
 			totalVerts,
-<<<<<<< HEAD:loaders/ofbx.cpp
-			vertexHelper.vertexSize,
-			indices.Begin(),
-			totalIndices,
-			vertexHelper.indexSize
-=======
 			vertexHelper.size,
 			indices.Data(),
 			indices.Length(),
 			sizeof(uint32_t)
->>>>>>> master:misc/loaders/ofbx.cpp
 		);
 		params.collisionMesh->BuildBVH();
 	}
 	
-<<<<<<< HEAD:loaders/ofbx.cpp
-=======
 	if ( params.editorMesh )
 	{
 		params.editorMesh->verts.Reserve( totalVerts );
@@ -187,7 +164,6 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 		params.editorMesh->indices.Append( indices.Data(), indices.Length() );
 	}
 	
->>>>>>> master:misc/loaders/ofbx.cpp
 	return true;
 }
 
@@ -289,8 +265,8 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 	}
 
 	uint32_t indexOffset = 0;
-	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.vertexSize );
-	ae::Array< uint8_t > indices( tag, totalIndices * vertexHelper.indexSize );
+	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.size );
+	ae::Array< uint32_t > indices( tag, totalIndices );
 	for ( uint32_t i = 0; i < meshCount; i++ )
 	{
 		const ofbx::Mesh* mesh = scene->getMesh( i );
@@ -310,13 +286,13 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 			ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
 			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
 
-			uint8_t vertex[ 256 ];
-			AE_ASSERT( vertexHelper.vertexSize <= sizeof(vertex) );
+			uint8_t vertex[ 128 ];
+			AE_ASSERT( vertexHelper.size <= sizeof(vertex) );
 			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
 			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
 			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
 			vertexHelper.SetUV( vertex, 0, uv );
-			vertexBuffer.Append( vertex, vertexHelper.vertexSize );
+			vertexBuffer.Append( vertex, vertexHelper.size );
 			
 			skinVerts[ j ].position = p.GetXYZ();
 		}
@@ -328,16 +304,7 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 			int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
 			AE_ASSERT( index < vertexCount );
 			index += indexOffset;
-			
-			if ( vertexHelper.indexSize == 2 )
-			{
-				uint16_t index16 = index;
-				indices.Append( (uint8_t*)&index16, sizeof(index16) );
-			}
-			else if ( vertexHelper.indexSize == 4 )
-			{
-				indices.Append( (uint8_t*)&index, sizeof(index) );
-			}
+			indices.Append( index );
 
 			ofbx::Vec3 n = meshNormals[ j ];
 			ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
@@ -498,21 +465,16 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 		}
 	}
 	
-	vertexData->Initialize( vertexHelper.vertexSize, vertexHelper.indexSize,
-		totalVerts, totalIndices,
+	vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
+		totalVerts, indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
 	if ( vertexHelper.posOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::Vertex::Type::Float, vertexHelper.posOffset ); }
 	if ( vertexHelper.normalOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::Vertex::Type::Float, vertexHelper.normalOffset ); }
 	if ( vertexHelper.colorOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::Vertex::Type::Float, vertexHelper.colorOffset ); }
 	if ( vertexHelper.uvOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::Vertex::Type::Float, vertexHelper.uvOffset ); }
-<<<<<<< HEAD:loaders/ofbx.cpp
-	vertexData->SetVertices( vertexBuffer.Begin(), totalVerts );
-	vertexData->SetIndices( indices.Begin(), totalIndices );
-=======
 	vertexData->SetVertices( vertexBuffer.Data(), totalVerts );
 	vertexData->SetIndices( indices.Data(), indices.Length() );
->>>>>>> master:misc/loaders/ofbx.cpp
 	
 	return true;
 }
