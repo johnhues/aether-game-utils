@@ -8,7 +8,7 @@ if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
 endif()
 
 # Default to Release. This is important because the install config is determined on configure.
-# This will cause the install step to fail if the release bundle has not been build yet.
+# This will cause the install step to fail if the release bundle has not been built yet.
 if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
 	set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "" FORCE)
 endif()
