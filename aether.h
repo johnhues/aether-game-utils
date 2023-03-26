@@ -16017,34 +16017,34 @@ ae::Array< char > CreateFilterString( const Array< FileFilter, 8 >& filters )
 
 			if ( extCount == 0 )
 			{
-				tempFilterStr.Append( "*.", 2 );
+				tempFilterStr.AppendArray( "*.", 2 );
 			}
 			else
 			{
-				tempFilterStr.Append( ";*.", 3 );
+				tempFilterStr.AppendArray( ";*.", 3 );
 			}
 
-			tempFilterStr.Append( ext.c_str(), ext.Length() );
+			tempFilterStr.AppendArray( ext.c_str(), ext.Length() );
 			extCount++;
 		}
 
 		if ( extCount == 0 )
 		{
-			tempFilterStr.Append( "*.*", 3 );
+			tempFilterStr.AppendArray( "*.*", 3 );
 		}
 
 		// Description
-		result.Append( filter.description.c_str(), filter.description.Length() );
-		result.Append( " (", 2 );
-		result.Append( &tempFilterStr[ 0 ], tempFilterStr.Length() );
-		result.Append( ")", 2 ); // Every description must be null terminated
+		result.AppendArray( filter.description.c_str(), filter.description.Length() );
+		result.AppendArray( " (", 2 );
+		result.AppendArray( tempFilterStr.Data(), tempFilterStr.Length() );
+		result.AppendArray( ")", 2 ); // Every description must be null terminated
 
-		result.Append( &tempFilterStr[ 0 ], tempFilterStr.Length() );
-		result.Append( "", 1 ); // Every filter must be null terminated
+		result.AppendArray( tempFilterStr.Data(), tempFilterStr.Length() );
+		result.Append( '\0' ); // Every filter must be null terminated
 	}
 
 	// Append final null terminator because GetOpenFileName requires double termination at end of string
-	result.Append( "", 1 );
+	result.Append( '\0' );
 
 	return result;
 }
