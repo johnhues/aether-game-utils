@@ -157,13 +157,13 @@ const char* kFragmentShader = R"(
 ```
 
 ## Building on Mac
-Create a file called `main.mm` with the above contents and download [aether.h](https://github.com/johnhues/aether-game-utils/blob/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
+Create a file called `main.mm` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
 ```
 clang++ -std=c++17 -fmodules -fcxx-modules main.mm && ./a.out
 ```
 
 ## Building on Windows
-Create a file called `main.cpp` with the above contents and download [aether.h](https://github.com/johnhues/aether-game-utils/blob/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. With Visual Studio installed, right click inside the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
+Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. With Visual Studio installed, right click inside the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
 cl /std:c++17 -D_UNICODE -DUNICODE main.cpp
 ```
