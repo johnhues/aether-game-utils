@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// 16_IK.cpp
+// 16_SkinnedMesh.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2021 John Hughes
 //
@@ -25,8 +25,6 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include "ae/loaders.h"
-#include "ae/aeImGui.h"
-#include "ImGuizmo.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -94,20 +92,18 @@ int main()
 	ae::TimeStep timeStep;
 	ae::Shader shader;
 	ae::FileSystem fileSystem;
-	ae::DebugCamera camera;
+	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines;
-	aeImGui ui;
 
 	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "17_IK" );
+	window.SetTitle( "16_SkinnedMesh" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fileSystem.Initialize( "data", "ae", "ik" );
-	camera.Initialize( ae::Axis::Y, ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
+	fileSystem.Initialize( "data", "ae", "skinned_mesh" );
+	camera.Reset( ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
 	camera.SetDistanceLimits( 1.0f, 25.0f );
 	debugLines.Initialize( 4096 );
-	ui.Initialize();
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	shader.SetDepthTest( true );
@@ -127,6 +123,7 @@ int main()
 	}
 	
 	ae::Skin skin = TAG_ALL;
+	ae::Animation anim = TAG_ALL;
 	ae::VertexArray vertexData;
 	Vertex* vertices = nullptr;
 	{
@@ -137,81 +134,85 @@ int main()
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() );
 		
 		ae::VertexLoaderHelper vertexInfo;
-		vertexInfo.size = sizeof(Vertex);
+		vertexInfo.vertexSize = sizeof(Vertex);
+		vertexInfo.indexSize = 4;
 		vertexInfo.posOffset = offsetof( Vertex, pos );
 		vertexInfo.normalOffset = offsetof( Vertex, normal );
 		vertexInfo.colorOffset = offsetof( Vertex, color );
 		vertexInfo.uvOffset = offsetof( Vertex, uv );
-		ae::ofbxLoadSkinnedMesh( TAG_ALL, fileData.Data(), fileData.Length(), vertexInfo, &vertexData, &skin, nullptr );
+		ae::ofbxLoadSkinnedMesh( TAG_ALL, fileData.Data(), fileData.Length(), vertexInfo, &vertexData, &skin, &anim );
 
 		vertices = ae::NewArray< Vertex >( TAG_ALL, vertexData.GetVertexCount() );
 		memcpy( vertices, vertexData.GetVertices< Vertex >(), ( sizeof(Vertex) * vertexData.GetVertexCount() ) );
 	}
+	anim.loop = true;
 	
-	const char* handBoneName = "QuickRigCharacter_RightHand";
-	const char* armBoneName = "QuickRigCharacter_RightArm";
-	ae::Matrix4 targetTransform = skin.GetBindPose()->GetBoneByName( handBoneName )->transform;
-	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+	double animTime = 0.0;
 	
 	AE_INFO( "Run" );
 	while ( !input.quit )
 	{
-		float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
 		input.Pump();
+		camera.Update( &input, timeStep.GetDt() );
 		
-		if ( input.Get( ae::Key::R ) )
-		{
-			targetTransform = ae::Matrix4::Translation( skin.GetBindPose()->GetBoneByName( handBoneName )->transform.GetTranslation() );
-		}
-		if ( input.Get( ae::Key::W ) )
-		{
-			gizmoOperation = ImGuizmo::TRANSLATE;
-		}
-		if ( input.Get( ae::Key::E ) )
-		{
-			gizmoOperation = ImGuizmo::ROTATE;
-		}
+		animTime += timeStep.GetDt() * 0.01;
 		
-		ImGuiIO& io = ImGui::GetIO();
-		ui.NewFrame( &render, &input, dt );
-		ImGuizmo::SetOrthographic( false );
-		ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
-		ImGuizmo::BeginFrame();
-		
-		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
-		camera.Update( &input, dt );
-		
+		// Update skeleton
 		ae::Skeleton currentPose = TAG_ALL;
+		currentPose.Initialize( skin.GetBindPose() );
+		
+		// Settings update
+		static int32_t s_strength10 = 10;
+		if ( input.Get( ae::Key::Minus ) && !input.GetPrev( ae::Key::Minus ) )
 		{
-			currentPose.Initialize( skin.GetBindPose() );
-
-			ae::IK<> ik = TAG_ALL;
-			ae::Array< const ae::Bone* > bones = TAG_ALL;
-			const ae::Bone* armBone = currentPose.GetBoneByName( armBoneName );
-			for ( auto b = armBone; b; b = b->firstChild )
+			s_strength10--;
+		}
+		if ( input.Get( ae::Key::Equals ) && !input.GetPrev( ae::Key::Equals ) )
+		{
+			s_strength10++;
+		}
+		static int32_t s_strength10Prev = -1;
+		if ( s_strength10Prev != s_strength10 )
+		{
+			s_strength10 = ae::Clip( s_strength10, 0, 10 );
+			AE_INFO( "Anim blend strength: #", s_strength10 / 10.0f );
+			s_strength10Prev = s_strength10;
+		}
+		ae::Array< const ae::Bone* > mask = TAG_ALL;
+		static int32_t s_maskCountPrev = -1;
+		if ( input.Get( ae::Key::Space ) )
+		{
+			std::function< void( const ae::Bone* ) > maskFn = [&]( const ae::Bone* bone )
 			{
-				bones.Append( b );
-				ik.bones.Append( { b->transform, b->parent->transform.GetTranslation() } );
-			}
-			ik.targetTransform = targetTransform;
-			ik.polePos = ik.bones[ 0 ].transform.GetTranslation() + ae::Vec3( -1.0f, 0.0f, -1.0f );
-			ik.Update( 10 );
-			
-			for ( const auto& t : ik.finalTransforms )
+				if ( bone )
+				{
+					mask.Append( bone );
+					for ( bone = bone->firstChild; bone; bone = bone->nextSibling )
+					{
+						maskFn( bone );
+					}
+				}
+			};
+			mask.Append( currentPose.GetBoneByName( "QuickRigCharacter_Hips" ) );
+			maskFn( currentPose.GetBoneByName( "QuickRigCharacter_LeftUpLeg" ) );
+			maskFn( currentPose.GetBoneByName( "QuickRigCharacter_RightUpLeg" ) );
+		}
+		if ( s_maskCountPrev != mask.Length() )
+		{
+			AE_INFO( "Animation Mask" );
+			for ( const ae::Bone* b : mask )
 			{
-				ae::Vec3 p = t.GetTranslation();
-				ae::Vec3 xAxis = t.GetAxis( 0 );
-				ae::Vec3 yAxis = t.GetAxis( 1 );
-				ae::Vec3 zAxis = t.GetAxis( 2 );
-				debugLines.AddLine( p, p + xAxis * 0.2f, ae::Color::Red() );
-				debugLines.AddLine( p, p + yAxis * 0.2f, ae::Color::Green() );
-				debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
-				debugLines.AddLine( p, ik.polePos, ae::Color::Yellow() );
+				AE_INFO( "\t#", b->name );
 			}
-			currentPose.SetTransforms( bones.Data(), ik.finalTransforms.Data(), bones.Length() );
+			if ( !mask.Length() )
+			{
+				AE_INFO( "\tNone" );
+			}
+			s_maskCountPrev = mask.Length();
 		}
 		
 		// Update mesh
+		anim.AnimateByTime( &currentPose, animTime, s_strength10 / 10.0f, mask.Data(), mask.Length() );
 		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetVertexCount() );
 		vertexData.SetVertices( vertices, vertexData.GetVertexCount() );
 		vertexData.Upload();
@@ -232,15 +233,6 @@ int main()
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
 		ae::Matrix4 worldToProj = viewToProj * worldToView;
-		
-		ImGuizmo::Manipulate(
-			worldToView.data,
-			viewToProj.data,
-			gizmoOperation,
-			ImGuizmo::WORLD,
-			targetTransform.data
-		);
-		
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
 		
@@ -258,7 +250,6 @@ int main()
 		
 		// Frame end
 		debugLines.Render( worldToProj );
-		ui.Render();
 		render.Present();
 		timeStep.Tick();
 	}

@@ -17979,6 +17979,8 @@ void VertexBuffer::Initialize( uint32_t vertexSize, uint32_t indexSize, uint32_t
 	AE_ASSERT( vertexSize );
 	AE_ASSERT( m_indexSize == 0 );
 	AE_ASSERT( indexSize <= 4 && indexSize != 3 );
+	if ( indexSize ) { AE_ASSERT_MSG( maxIndexCount, "Must specify maxIndexCount with non-zero index size" ); }
+	if ( maxIndexCount ) { AE_ASSERT_MSG( indexSize, "Must specify an indexSize with non-zero index count" ); }
 	AE_ASSERT_MSG( maxVertexCount, "VertexBuffer can't be initialized without storage" );
 
 	m_maxVertexCount = maxVertexCount;

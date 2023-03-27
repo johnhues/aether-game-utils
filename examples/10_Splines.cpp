@@ -24,9 +24,11 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "ae/loaders.h"
-#include "Common.h"
+#include "ae/SpriteRenderer.h"
 
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
 const ae::Tag TAG_EXAMPLE = "example";
 
 //------------------------------------------------------------------------------
@@ -62,12 +64,14 @@ int main()
 
   ae::Texture2D tex;
   {
-    const char* fileName = "circle.png";
+    const char* fileName = "circle.tga";
     uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
     AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
     ae::Scratch< uint8_t > fileBuffer( fileSize );
     fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-    ae::stbLoadPng( &tex, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+    ae::TargaFile targa = TAG_EXAMPLE;
+    targa.Load( fileBuffer.Data(), fileBuffer.Length() );
+    tex.Initialize( targa.textureParams );
   }
 
   float t = 0.0f;

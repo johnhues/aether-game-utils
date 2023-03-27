@@ -24,8 +24,12 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "ae/loaders.h"
-#include "Common.h"
+#include "ae/SpriteRenderer.h"
+
+//------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const ae::Tag TAG_EXAMPLE = "example";
 
 //------------------------------------------------------------------------------
 // Main
@@ -50,9 +54,11 @@ int main()
   // Sprites
   ae::Texture2D spriteTex;
   {
-    ae::Scratch< uint8_t > fileData( fileSystem.GetSize( ae::FileSystem::Root::Data, "circle.png" ) );
-    fileSystem.Read( ae::FileSystem::Root::Data, "circle.png", fileData.Data(), fileData.Length() );
-    stbLoadPng( &spriteTex, fileData.Data(), fileData.Length(), ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+    ae::Scratch< uint8_t > fileData( fileSystem.GetSize( ae::FileSystem::Root::Data, "circle.tga" ) );
+    fileSystem.Read( ae::FileSystem::Root::Data, "circle.tga", fileData.Data(), fileData.Length() );
+    ae::TargaFile targa = TAG_EXAMPLE;
+    targa.Load( fileData.Data(), fileData.Length() );
+    spriteTex.Initialize( targa.textureParams );
   }
   
   while ( !input.quit )

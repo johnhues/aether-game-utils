@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "Common.h"
+#include "ae/SpriteRenderer.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -46,7 +46,7 @@ int main()
 	ae::DebugLines debug;
 	ae::Texture2D fontTexture;
 	ae::TextRender text = TAG_EXAMPLE;
-	ae::DebugCamera camera;
+	ae::DebugCamera camera = ae::Axis::Z;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "geometry" );
@@ -56,15 +56,17 @@ int main()
 	fileSystem.Initialize( "data", "ae", "geometry" );
 	debug.Initialize( 512 );
 	{
-		const char* fileName = "font.png";
+		const char* fileName = "font.tga";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
 		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
 		ae::Scratch< uint8_t > fileBuffer( fileSize );
 		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-		ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Linear, ae::Texture::Wrap::Repeat, false, true );
+		ae::TargaFile targa = TAG_EXAMPLE;
+		targa.Load( fileBuffer.Data(), fileSize );
+		fontTexture.Initialize( targa.textureParams );
 	}
 	text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
-	camera.Initialize( ae::Axis::Z, ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
 	// AABB and OBB test state
 	static ae::Vec3 s_translation( 0.0f );

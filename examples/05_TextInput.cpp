@@ -24,7 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "Common.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -53,12 +52,15 @@ int main()
   
   ae::Texture2D fontTexture;
   {
-    const char* fileName = "font.png";
+    const char* fileName = "font.tga";
     uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
     AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
     ae::Scratch< uint8_t > fileBuffer( fileSize );
     fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-    ae::stbLoadPng( &fontTexture, fileBuffer.Data(), fileSize, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Repeat, false, true );
+    ae::TargaFile targa = TAG_EXAMPLE;
+    targa.Load( fileBuffer.Data(), fileSize );
+    targa.textureParams.filter = ae::Texture::Filter::Nearest;
+    fontTexture.Initialize( targa.textureParams );
   }
   textRender.Initialize( 1, 512, &fontTexture, 8, 1.0f );
   

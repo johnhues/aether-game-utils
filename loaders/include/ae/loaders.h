@@ -32,7 +32,8 @@ namespace ae {
 
 struct VertexLoaderHelper
 {
-	uint32_t size = 0;
+	uint32_t vertexSize = 0;
+	uint32_t indexSize = 0;
 
 	int32_t posOffset = -1;
 	int32_t normalOffset = -1;
@@ -49,14 +50,14 @@ struct VertexLoaderHelper
 	uint32_t colorComponents = 4;
 	uint32_t uvComponents = 2;
 	
-	void SetPosition( void* vertices, uint32_t index, ae::Vec4 position ) const { if ( posOffset >= 0 && size ) { *(ae::Vec4*)( (uint8_t*)vertices + index * size + posOffset ) = position; } }
-	void SetNormal( void* vertices, uint32_t index, ae::Vec4 normal ) const { if ( normalOffset >= 0 && size ) { *(ae::Vec4*)( (uint8_t*)vertices + index * size + normalOffset ) = normal; } }
-	void SetColor( void* vertices, uint32_t index, ae::Vec4 color ) const { if ( colorOffset >= 0 && size ) { *(ae::Vec4*)( (uint8_t*)vertices + index * size + colorOffset ) = color; } }
-	void SetUV( void* vertices, uint32_t index, ae::Vec2 uv ) const { if ( uvOffset >= 0 && size ) { *(ae::Vec2*)( (uint8_t*)vertices + index * size + uvOffset ) = uv; } }
-	ae::Vec4& GetPosition( void* vertices, uint32_t index ) const { AE_ASSERT( posOffset >= 0 && size ); return *(ae::Vec4*)( (uint8_t*)vertices + index * size + posOffset ); }
-	ae::Vec4& GetNormal( void* vertices, uint32_t index ) const { AE_ASSERT( normalOffset >= 0 && size ); return *(ae::Vec4*)( (uint8_t*)vertices + index * size + normalOffset ); }
-	ae::Vec4& GetColor( void* vertices, uint32_t index ) const { AE_ASSERT( colorOffset >= 0 && size ); return *(ae::Vec4*)( (uint8_t*)vertices + index * size + colorOffset ); }
-	ae::Vec2& GetUV( void* vertices, uint32_t index ) const { AE_ASSERT( uvOffset >= 0 && size ); return *(ae::Vec2*)( (uint8_t*)vertices + index * size + uvOffset ); }
+	void SetPosition( void* vertices, uint32_t index, ae::Vec4 position ) const { if ( posOffset >= 0 && vertexSize ) { *(ae::Vec4*)( (uint8_t*)vertices + index * vertexSize + posOffset ) = position; } }
+	void SetNormal( void* vertices, uint32_t index, ae::Vec4 normal ) const { if ( normalOffset >= 0 && vertexSize ) { *(ae::Vec4*)( (uint8_t*)vertices + index * vertexSize + normalOffset ) = normal; } }
+	void SetColor( void* vertices, uint32_t index, ae::Vec4 color ) const { if ( colorOffset >= 0 && vertexSize ) { *(ae::Vec4*)( (uint8_t*)vertices + index * vertexSize + colorOffset ) = color; } }
+	void SetUV( void* vertices, uint32_t index, ae::Vec2 uv ) const { if ( uvOffset >= 0 && vertexSize ) { *(ae::Vec2*)( (uint8_t*)vertices + index * vertexSize + uvOffset ) = uv; } }
+	ae::Vec4& GetPosition( void* vertices, uint32_t index ) const { AE_ASSERT( posOffset >= 0 && vertexSize ); return *(ae::Vec4*)( (uint8_t*)vertices + index * vertexSize + posOffset ); }
+	ae::Vec4& GetNormal( void* vertices, uint32_t index ) const { AE_ASSERT( normalOffset >= 0 && vertexSize ); return *(ae::Vec4*)( (uint8_t*)vertices + index * vertexSize + normalOffset ); }
+	ae::Vec4& GetColor( void* vertices, uint32_t index ) const { AE_ASSERT( colorOffset >= 0 && vertexSize ); return *(ae::Vec4*)( (uint8_t*)vertices + index * vertexSize + colorOffset ); }
+	ae::Vec2& GetUV( void* vertices, uint32_t index ) const { AE_ASSERT( uvOffset >= 0 && vertexSize ); return *(ae::Vec2*)( (uint8_t*)vertices + index * vertexSize + uvOffset ); }
 };
 
 struct LoadMeshParams
@@ -64,7 +65,6 @@ struct LoadMeshParams
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 	ae::VertexArray* vertexData = nullptr;
 	ae::CollisionMesh<>* collisionMesh = nullptr;
-	class EditorMesh* editorMesh = nullptr;
 };
 
 //------------------------------------------------------------------------------
