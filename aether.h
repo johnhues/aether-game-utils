@@ -1802,7 +1802,8 @@ private:
 	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
 	struct Page
 	{
-		ae::ListNode< Page > node = this;
+		Page() : node( this ) {}
+		ae::ListNode< Page > node;
 		ae::FreeList< N > freeList;
 		AlignedStorageT objects[ N ];
 	};
@@ -4547,7 +4548,7 @@ const uint32_t kMetaMaxVars = 64;
 const uint32_t kMetaEnumValues = 512;
 const uint32_t kMetaEnumTypes = 64;
 class Type;
-class VarTypeBase;
+struct VarTypeBase;
 
 //------------------------------------------------------------------------------
 // ae::Object

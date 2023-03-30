@@ -25,7 +25,6 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include "ae/loaders.h"
-#include "ae/Editor.h"
 #include "ofbx.h"
 namespace ae {
 
@@ -78,7 +77,7 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	}
 	
 	uint32_t indexOffset = 0;
-	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.size );
+	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.vertexSize );
 	ae::Array< uint32_t > indices( tag, totalIndices );
 	for ( uint32_t i = 0; i < meshCount; i++ )
 	{
@@ -100,12 +99,12 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
 			
 			uint8_t vertex[ 128 ];
-			AE_ASSERT( vertexHelper.size <= sizeof(vertex) );
+			AE_ASSERT( vertexHelper.vertexSize <= sizeof(vertex) );
 			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
 			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
 			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
 			vertexHelper.SetUV( vertex, 0, uv );
-			vertexBuffer.Append( vertex, vertexHelper.size );
+			vertexBuffer.AppendArray( vertex, vertexHelper.vertexSize );
 		}
 		
 		uint32_t indexCount = geo->getIndexCount();
@@ -127,7 +126,7 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	
 	if ( params.vertexData )
 	{
-		params.vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
+		params.vertexData->Initialize( vertexHelper.vertexSize, sizeof(uint32_t),
 			totalVerts, indices.Length(),
 			ae::Vertex::Primitive::Triangle,
 			ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
@@ -146,22 +145,12 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 			ae::Matrix4::Identity(),
 			vertexHelper.GetPosition( vertexBuffer.Data(), 0 ).data,
 			totalVerts,
-			vertexHelper.size,
+			vertexHelper.vertexSize,
 			indices.Data(),
 			indices.Length(),
 			sizeof(uint32_t)
 		);
 		params.collisionMesh->BuildBVH();
-	}
-	
-	if ( params.editorMesh )
-	{
-		params.editorMesh->verts.Reserve( totalVerts );
-		for ( uint32_t i = 0; i < totalVerts; i++ )
-		{
-			params.editorMesh->verts.Append( vertexHelper.GetPosition( vertexBuffer.Data(), i ).GetXYZ() );
-		}
-		params.editorMesh->indices.Append( indices.Data(), indices.Length() );
 	}
 	
 	return true;
@@ -265,7 +254,7 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 	}
 
 	uint32_t indexOffset = 0;
-	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.size );
+	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.vertexSize );
 	ae::Array< uint32_t > indices( tag, totalIndices );
 	for ( uint32_t i = 0; i < meshCount; i++ )
 	{
@@ -287,12 +276,12 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
 
 			uint8_t vertex[ 128 ];
-			AE_ASSERT( vertexHelper.size <= sizeof(vertex) );
+			AE_ASSERT( vertexHelper.vertexSize <= sizeof(vertex) );
 			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
 			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
 			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
 			vertexHelper.SetUV( vertex, 0, uv );
-			vertexBuffer.Append( vertex, vertexHelper.size );
+			vertexBuffer.AppendArray( vertex, vertexHelper.vertexSize );
 			
 			skinVerts[ j ].position = p.GetXYZ();
 		}
@@ -457,7 +446,6 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 						keyframe.translation = offsetTransform.GetTranslation();
 						keyframe.rotation = offsetTransform.GetRotation();
 						keyframe.scale = offsetTransform.GetScale();
-						//AE_INFO( "f:# p:# r:X s:#", i, keyframe.position, keyframe.scale );
 						boneKeyframes.Append( keyframe );
 					}
 				}
@@ -465,7 +453,7 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 		}
 	}
 	
-	vertexData->Initialize( vertexHelper.size, sizeof(uint32_t),
+	vertexData->Initialize( vertexHelper.vertexSize, sizeof(uint32_t),
 		totalVerts, indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
