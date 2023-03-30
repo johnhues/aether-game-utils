@@ -1,5 +1,5 @@
 <p align="center">
-	<img src="https://github.com/johnhues/aether-game-utils/blob/master/example/data/Icon.png?raw=true" width="250">
+	<img src="https://github.com/johnhues/aether-game-utils/blob/master/examples/data/Icon.png?raw=true" width="250">
 </p>
 
 # aether game utils
@@ -26,7 +26,7 @@ Modules and utilities include:
 # Example
 The following are instructions to get started with aether-game-utils. This example is a single source file which only includes [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) (which handles linking the required system libraries). It has first person arrow key controls, textured geometry and basic kinematic physics.
 <p align="center">
-	<img src="https://github.com/johnhues/aether-game-utils/blob/master/example/data/example.png?raw=true" width="65%">
+	<img src="https://github.com/johnhues/aether-game-utils/blob/master/examples/data/example.png?raw=true" width="65%">
 </p>
 
 `main.cpp` (or `main.mm` on Mac)
@@ -56,8 +56,8 @@ int main()
 	fileSystem.Initialize( "", "ae", "Game" );
 	const ae::File* geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
 	const ae::File* textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
-	while ( fileSystem.AnyPending() ) { std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) ); }
-	if ( !fileSystem.AllSuccess() ) { std::exit( EXIT_FAILURE ); }
+	while ( fileSystem.GetFileStatusCount( ae::File::Status::Pending ) ) { std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) ); }
+	if ( fileSystem.GetFileStatusCount( ae::File::Status::Success ) != fileSystem.GetFileCount() ) { std::exit( EXIT_FAILURE ); }
 	ae::OBJFile obj = TAG_EXAMPLE;
 	ae::TargaFile tga = TAG_EXAMPLE;
 	tga.Load( textureFile->GetData(), textureFile->GetLength() );
@@ -123,7 +123,7 @@ int main()
 		graphicsDevice.Clear( ae::Color::Black() );
 		vertexData.Draw( &shader, uniforms );
 		graphicsDevice.Present();
-		timeStep.Wait();
+		timeStep.Tick();
 	}
 
 	// Terminate
@@ -157,13 +157,13 @@ const char* kFragmentShader = R"(
 ```
 
 ## Building on Mac
-Create a file called `main.mm` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
+Create a file called `main.mm` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.tga) to the same folder. Open the `Terminal` application. Type `cd` (with a space after it) and then drag the folder containing main.mm into the terminal window and press enter. With Xcode installed run the following:
 ```
 clang++ -std=c++17 -fmodules -fcxx-modules main.mm && ./a.out
 ```
 
 ## Building on Windows
-Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/example/data/level.tga) to the same folder. With Visual Studio installed, right click inside the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
+Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.obj) and [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.tga) to the same folder. With Visual Studio installed, right click inside the containing directory and choose `Open in Terminal`. Run `"C:\Program Files\Microsoft Visual Studio\20XX\EDITION\VC\Auxiliary\Build\vcvars64.bat"`, replacing `20XX` with the year, and `EDITION` with `Community` etc. Finally build it with:
 ```
 cl /std:c++17 -D_UNICODE -DUNICODE main.cpp
 ```
