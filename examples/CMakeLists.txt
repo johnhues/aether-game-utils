@@ -278,17 +278,17 @@ if(AE_LOADERS_OFBX)
 	)
 endif()
 
-# # Editor
-# add_bundle("Editor"
-# 	"18_editor"
-# 	"ae.18_editor"
-# 	"0.0.0"
-# 	"data/Icon.icns"
-# 	"18_Editor.cpp"
-# 	"${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
-# 	"ae_extras;imgui;imguizmo;rapidjson"
-# 	""
-# )
+# Editor
+add_bundle("Editor"
+	"18_editor"
+	"ae.18_editor"
+	"0.0.0"
+	"data/Icon.icns"
+	"18_Editor.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp"
+	"${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
+	"ae_extras;imgui;imguizmo;rapidjson"
+	""
+)
 
 # Mouse
 add_bundle("Mouse"

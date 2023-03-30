@@ -5,6 +5,7 @@ project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
 set(AE_LOADERS_OFBX OFF CACHE BOOL "Enables aether FBX utilitiy and ofbx dependency")
 set(AE_LOADERS_STB OFF CACHE BOOL "Enables aether PNG utilitiy and stb dependency")
+set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Includes
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake) # guard against in-source builds and bad build-type strings

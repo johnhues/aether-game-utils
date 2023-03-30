@@ -109,6 +109,7 @@ public:
 
 private:
 	friend class EditorServer;
+	void m_Fork();
 	void m_Connect();
 	void m_Read();
 	const ae::Tag m_tag;

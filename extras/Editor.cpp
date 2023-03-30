@@ -7,13 +7,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/Editor.h"
-#if _AE_APPLE_
-#include <unistd.h> // fork
-#elif _AE_WINDOWS_
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <processthreadsapi.h>
-#endif
 
 // @TODO: Remove these dependencies
 #include "ae/aeImGui.h"
@@ -748,37 +741,7 @@ void Editor::Launch()
 	m_Connect();
 	if ( !m_sock.IsConnected() )
 	{
-#if _AE_APPLE_
-		if ( !fork() )
-		{
-			char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)m_level.filePath.c_str(), nullptr };
-			execv( m_params.argv[ 0 ], execArgs );
-		}
-#elif _AE_WINDOWS_
-		STARTUPINFOA startupInfo;
-		memset( &startupInfo, 0, sizeof( startupInfo ) );
-		startupInfo.cb = sizeof( startupInfo );
-		PROCESS_INFORMATION procInfo;
-		char args[ 256 ];
-		args[ 0 ] = 0;
-		strlcat( args, m_params.argv[ 0 ], sizeof(args) );
-		strlcat( args, " ae_editor ", sizeof(args) );
-		strlcat( args, m_level.filePath.c_str(), sizeof(args) );
-		CreateProcessA(
-			m_params.argv[ 0 ],
-			args,
-			nullptr,
-			nullptr,
-			false,
-			NORMAL_PRIORITY_CLASS,
-			nullptr,
-			nullptr,
-			&startupInfo,
-			&procInfo );
-		// Don't need these so clean them up right away
-		CloseHandle( procInfo.hProcess );
-		CloseHandle( procInfo.hThread );
-#endif
+		m_Fork();
 	}
 }
 
@@ -2543,4 +2506,51 @@ ae::Color EditorServer::m_GetColor( EditorObjectId entity, bool lines ) const
 	return color;
 };
 
+} // End ae namespace
+
+#if _AE_APPLE_
+#include <unistd.h> // fork
+#elif _AE_WINDOWS_
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <processthreadsapi.h>
+#endif
+
+namespace ae {
+
+void Editor::m_Fork()
+{
+#if _AE_APPLE_
+	if ( !fork() )
+	{
+		char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)m_level.filePath.c_str(), nullptr };
+		execv( m_params.argv[ 0 ], execArgs );
+	}
+#elif _AE_WINDOWS_
+	STARTUPINFOA startupInfo;
+	memset( &startupInfo, 0, sizeof( startupInfo ) );
+	startupInfo.cb = sizeof( startupInfo );
+	PROCESS_INFORMATION procInfo;
+	char args[ 256 ];
+	args[ 0 ] = 0;
+	strlcat( args, m_params.argv[ 0 ], sizeof(args) );
+	strlcat( args, " ae_editor ", sizeof(args) );
+	strlcat( args, m_level.filePath.c_str(), sizeof(args) );
+	CreateProcessA(
+		m_params.argv[ 0 ],
+		args,
+		nullptr,
+		nullptr,
+		false,
+		NORMAL_PRIORITY_CLASS,
+		nullptr,
+		nullptr,
+		&startupInfo,
+		&procInfo );
+	// Don't need these so clean them up right away
+	CloseHandle( procInfo.hProcess );
+	CloseHandle( procInfo.hThread );
+#endif
 }
+
+} // End ae namespace
