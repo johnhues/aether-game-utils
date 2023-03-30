@@ -21298,6 +21298,7 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 		}
 		AE_ASSERT( line <= lineEnd );
 		AE_ASSERT( data <= dataEnd );
+		AE_ASSERT( lineEnd <= dataEnd );
 		
 		Mode mode = Mode::None;
 		switch ( line[ 0 ] )
@@ -21392,7 +21393,7 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 					faceIndices.Append( faceIndex );
 					faceVertexCount++;
 
-					while ( isspace( line[ 0 ] ) )
+					while ( isspace( line[ 0 ] ) && line < lineEnd )
 					{
 						line++;
 					}
