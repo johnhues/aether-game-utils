@@ -799,6 +799,7 @@ public:
 	Plane() = default;
 	Plane( ae::Vec3 point, ae::Vec3 normal );
 	Plane( ae::Vec4 pointNormal ); // @TODO: Maybe this should be removed, it's very easy to provide a vector where the sign of the w component is incorrect
+	Plane( ae::Vec3 p0, ae::Vec3 p1, ae::Vec3 p2 );
 	explicit operator Vec4() const;
 	
 	ae::Vec3 GetNormal() const;
@@ -9008,6 +9009,7 @@ void IK< NumBones >::Update( uint32_t iterationCount )
 	const ae::Vec3 rootPos = joints[ 0 ];
 	const ae::Vec3 targetPos = targetTransform.GetTranslation();
 	const float targetDistance = ( targetPos - rootPos ).Length();
+	const ae::Plane movementPlane = ae::Plane( rootPos, polePos, targetPos );
 
 	uint32_t iters = 0;
 	while ( ( joints[ joints.Length() - 1 ] - targetPos ).Length() > 0.001f && iters < iterationCount )
@@ -9015,21 +9017,21 @@ void IK< NumBones >::Update( uint32_t iterationCount )
 		joints[ joints.Length() - 1 ] = targetPos;
 		for ( int32_t i = joints.Length() - 2; i >= 0; i-- )
 		{
-			ae::Vec3 oldPos = joints[ i ];
-			ae::Vec3 childPos = joints[ i + 1 ];
-			float childBoneLength = jointLengths[ i + 1 ];
-			ae::Vec3 childToOld = ( oldPos - childPos ).SafeNormalizeCopy() * childBoneLength;
-			joints[ i ] = childPos + childToOld;
+			ae::Vec3 childPos = movementPlane.GetClosestPoint( joints[ i ] );
+			ae::Vec3 parentPos = movementPlane.GetClosestPoint( joints[ i + 1 ] );
+			float boneLength = jointLengths[ i + 1 ];
+			ae::Vec3 parentToChild = ( childPos - parentPos ).SafeNormalizeCopy() * boneLength;
+			joints[ i ] = parentPos + parentToChild;
 		}
 		
 		joints[ 0 ] = rootPos;
 		for ( uint32_t i = 1; i < joints.Length(); i++ )
 		{
-			ae::Vec3 oldPos = joints[ i ];
-			ae::Vec3 parentPos = joints[ i - 1 ];
+			ae::Vec3 parentPos = movementPlane.GetClosestPoint( joints[ i ] );
+			ae::Vec3 childPos = movementPlane.GetClosestPoint( joints[ i - 1 ] );
 			float boneLength = jointLengths[ i ];
-			ae::Vec3 parentToOld = ( oldPos - parentPos ).SafeNormalizeCopy() * boneLength;
-			joints[ i ] = parentPos + parentToOld;
+			ae::Vec3 childToParent = ( parentPos - childPos ).SafeNormalizeCopy() * boneLength;
+			joints[ i ] = childPos + childToParent;
 		}
 		
 		iters++;
@@ -11661,6 +11663,13 @@ Plane::Plane( ae::Vec3 point, ae::Vec3 normal )
 {
 	m_plane = ae::Vec4( normal.NormalizeCopy(), 0.0f );
 	m_plane.w = GetSignedDistance( point );
+}
+
+Plane::Plane( ae::Vec3 p0, ae::Vec3 p1, ae::Vec3 p2 )
+{
+	ae::Vec3 normal = ( p1 - p0 ).Cross( p2 - p0 ).NormalizeCopy();
+	m_plane = ae::Vec4( normal, 0.0f );
+	m_plane.w = GetSignedDistance( p0 );
 }
 
 Plane::operator Vec4() const
