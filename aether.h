@@ -2294,6 +2294,7 @@ public:
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
 	void SetSize( uint32_t width, uint32_t height );
 	void SetMaximized( bool maximized );
+	void SetAlwaysOnTop( bool alwaysOnTop );
 
 	const char* GetTitle() const { return m_windowTitle.c_str(); }
 	bool GetFullScreen() const { return m_fullScreen; }
@@ -13890,6 +13891,13 @@ void Window::SetMaximized( bool maximized )
 		ShowWindow( (HWND)window, SW_RESTORE );
 	}
 	m_maximized = maximized;
+#endif
+}
+
+void Window::SetAlwaysOnTop( bool alwaysOnTop )
+{
+#if _AE_WINDOWS_
+	SetWindowPos( (HWND)window, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
 #endif
 }
 
