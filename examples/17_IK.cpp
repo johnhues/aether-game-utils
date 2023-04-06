@@ -153,12 +153,18 @@ int main()
 	const char* armBoneName = "QuickRigCharacter_RightArm";
 	ae::Matrix4 targetTransform = skin.GetBindPose()->GetBoneByName( handBoneName )->transform;
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+	bool drawMesh = true;
 	
 	AE_INFO( "Run" );
 	while ( !input.quit )
 	{
 		float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
 		input.Pump();
+
+		if ( input.Get( ae::Key::V ) && !input.GetPrev( ae::Key::V ) )
+		{
+			drawMesh = !drawMesh;
+		}
 		
 		if ( input.Get( ae::Key::R ) )
 		{
@@ -224,8 +230,8 @@ int main()
 			const ae::Bone* parent = bone->parent;
 			if ( parent )
 			{
-				debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::Red() );
-				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::Red() );
+				debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::PicoBlue() );
+				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
 			}
 		}
 		
@@ -246,16 +252,19 @@ int main()
 		render.Clear( ae::Color::PicoDarkPurple() );
 		
 		// Render mesh
-		ae::Matrix4 modelToWorld = ae::Matrix4::Identity();
-		ae::UniformList uniformList;
-		uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
-		uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
-		uniformList.Set( "u_lightDir", ae::Vec3( 0.0f, 0.0f, -1.0f ).NormalizeCopy() );
-		uniformList.Set( "u_lightColor", ae::Color::PicoPeach().GetLinearRGB() );
-		uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
-		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		uniformList.Set( "u_tex", &texture );
-		vertexData.Draw( &shader, uniformList );
+		if ( drawMesh )
+		{
+			ae::Matrix4 modelToWorld = ae::Matrix4::Identity();
+			ae::UniformList uniformList;
+			uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
+			uniformList.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
+			uniformList.Set( "u_lightDir", ae::Vec3( 0.0f, 0.0f, -1.0f ).NormalizeCopy() );
+			uniformList.Set( "u_lightColor", ae::Color::PicoPeach().GetLinearRGB() );
+			uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
+			uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
+			uniformList.Set( "u_tex", &texture );
+			vertexData.Draw( &shader, uniformList );
+		}
 		
 		// Frame end
 		debugLines.Render( worldToProj );

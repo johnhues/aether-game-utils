@@ -9029,6 +9029,7 @@ void IK< NumBones >::Update( uint32_t iterationCount )
 	const ae::Vec3 targetPos = targetTransform.GetTranslation();
 	const float targetDistance = ( targetPos - rootPos ).Length();
 	const ae::Plane movementPlane = ae::Plane( rootPos, polePos, targetPos );
+	const ae::Plane clipPlane = ae::Plane( rootPos, polePos - ae::Line( rootPos, targetPos ).GetClosest( polePos ) );
 
 	uint32_t iters = 0;
 	while ( ( joints[ joints.Length() - 1 ] - targetPos ).Length() > 0.001f && iters < iterationCount )
@@ -9036,21 +9037,39 @@ void IK< NumBones >::Update( uint32_t iterationCount )
 		joints[ joints.Length() - 1 ] = targetPos;
 		for ( int32_t i = joints.Length() - 2; i >= 0; i-- )
 		{
-			ae::Vec3 childPos = movementPlane.GetClosestPoint( joints[ i ] );
-			ae::Vec3 parentPos = movementPlane.GetClosestPoint( joints[ i + 1 ] );
-			float boneLength = jointLengths[ i + 1 ];
-			ae::Vec3 parentToChild = ( childPos - parentPos ).SafeNormalizeCopy() * boneLength;
-			joints[ i ] = parentPos + parentToChild;
+			const float boneLength = jointLengths[ i + 1 ];
+			ae::Vec3 p0 = movementPlane.GetClosestPoint( joints[ i ] );
+			const ae::Vec3 p1 = movementPlane.GetClosestPoint( joints[ i + 1 ] );
+
+			float clipDist;
+			const ae::Vec3 clipPos = clipPlane.GetClosestPoint( p0, &clipDist );
+			if ( clipDist < 0.0f )
+			{
+				p0 += ( clipPos - p0 ) * 2.0f; // Bump pos to the right side of the plane
+			}
+
+			p0 = p1 + ( p0 - p1 ).SafeNormalizeCopy() * boneLength;
+
+			joints[ i ] = p0;
 		}
 		
 		joints[ 0 ] = rootPos;
 		for ( uint32_t i = 1; i < joints.Length(); i++ )
 		{
-			ae::Vec3 parentPos = movementPlane.GetClosestPoint( joints[ i ] );
-			ae::Vec3 childPos = movementPlane.GetClosestPoint( joints[ i - 1 ] );
-			float boneLength = jointLengths[ i ];
-			ae::Vec3 childToParent = ( parentPos - childPos ).SafeNormalizeCopy() * boneLength;
-			joints[ i ] = childPos + childToParent;
+			const float boneLength = jointLengths[ i ];
+			ae::Vec3 p0 = movementPlane.GetClosestPoint( joints[ i ] );
+			const ae::Vec3 p1 = movementPlane.GetClosestPoint( joints[ i - 1 ] );
+
+			float clipDist;
+			const ae::Vec3 clipPos = clipPlane.GetClosestPoint( p0, &clipDist );
+			if ( clipDist < 0.0f )
+			{
+				p0 += ( clipPos - p0 ) * 2.0f; // Bump pos to the right side of the plane
+			}
+
+			p0 = p1 + ( p0 - p1 ).SafeNormalizeCopy() * boneLength;
+
+			joints[ i ] = p0;
 		}
 		
 		iters++;
