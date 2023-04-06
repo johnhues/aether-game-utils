@@ -815,6 +815,23 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::Line class
+//------------------------------------------------------------------------------
+class Line
+{
+public:
+	Line() = default;
+	Line( ae::Vec3 p0, ae::Vec3 p1 );
+
+	ae::Vec3 GetClosest( ae::Vec3 p, float* distance = nullptr ) const;
+	float GetDistance( ae::Vec3 p, ae::Vec3* closestOut = nullptr ) const;
+
+private:
+	ae::Vec3 m_p;
+	ae::Vec3 m_n;
+};
+
+//------------------------------------------------------------------------------
 // ae::LineSegment class
 //------------------------------------------------------------------------------
 class LineSegment
@@ -823,7 +840,8 @@ public:
 	LineSegment() = default;
 	LineSegment( ae::Vec3 p0, ae::Vec3 p1 );
 
-	float GetDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr ) const;
+	ae::Vec3 GetClosest( ae::Vec3 p, float* distance = nullptr ) const;
+	float GetDistance( ae::Vec3 p, ae::Vec3* closestOut = nullptr ) const;
 	ae::Vec3 GetStart() const;
 	ae::Vec3 GetEnd() const;
 	float GetLength() const;
@@ -11750,6 +11768,35 @@ float Plane::GetSignedDistance( ae::Vec3 pos ) const
 }
 
 //------------------------------------------------------------------------------
+// ae::Line member functions
+//------------------------------------------------------------------------------
+Line::Line( ae::Vec3 p0, ae::Vec3 p1 )
+	: m_p( p0 ), m_n( ( p1 - p0 ).SafeNormalizeCopy() )
+{}
+
+ae::Vec3 Line::GetClosest( ae::Vec3 p, float* distanceOut ) const
+{
+	ae::Vec3 result;
+	float dist = GetDistance( p, &result );
+	if ( distanceOut )
+	{
+		*distanceOut = dist;
+	}
+	return result;
+}
+
+float Line::GetDistance( ae::Vec3 p, ae::Vec3* closestOut ) const
+{
+	float d = m_n.Dot( p - m_p );
+	ae::Vec3 closest = m_p + m_n * d;
+	if ( closestOut )
+	{
+		*closestOut = closest;
+	}
+	return ( p - closest ).Length();
+}
+
+//------------------------------------------------------------------------------
 // ae::LineSegment member functions
 //------------------------------------------------------------------------------
 LineSegment::LineSegment( ae::Vec3 p0, ae::Vec3 p1 )
@@ -11758,14 +11805,25 @@ LineSegment::LineSegment( ae::Vec3 p0, ae::Vec3 p1 )
 	m_p1 = p1;
 }
 
-float LineSegment::GetDistance( ae::Vec3 p, ae::Vec3* nearestOut ) const
+ae::Vec3 LineSegment::GetClosest( ae::Vec3 p, float* distanceOut ) const
+{
+	ae::Vec3 result;
+	float dist = GetDistance( p, &result );
+	if ( distanceOut )
+	{
+		*distanceOut = dist;
+	}
+	return result;
+}
+
+float LineSegment::GetDistance( ae::Vec3 p, ae::Vec3* closestOut ) const
 {
 	float lenSq = ( m_p1 - m_p0 ).LengthSquared();
 	if ( lenSq <= 0.001f )
 	{
-		if ( nearestOut )
+		if ( closestOut )
 		{
-			*nearestOut = m_p0;
+			*closestOut = m_p0;
 		}
 		return ( p - m_p0 ).Length();
 	}
@@ -11773,9 +11831,9 @@ float LineSegment::GetDistance( ae::Vec3 p, ae::Vec3* nearestOut ) const
 	float t = ae::Clip01( ( p - m_p0 ).Dot( m_p1 - m_p0 ) / lenSq );
 	ae::Vec3 linePos = ae::Lerp( m_p0, m_p1, t );
 
-	if ( nearestOut )
+	if ( closestOut )
 	{
-		*nearestOut = linePos;
+		*closestOut = linePos;
 	}
 	return ( p - linePos ).Length();
 }
