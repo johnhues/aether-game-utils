@@ -2314,6 +2314,7 @@ public:
 	bool GetLoggingEnabled() const { return m_debugLog; }
 
 private:
+	Window( const Window& ) = delete;
 	void m_Initialize();
 	Int2 m_pos;
 	int32_t m_width;
@@ -2588,6 +2589,7 @@ public:
 	bool quit = false;
 
 // private:
+	Input( const Input& ) = delete;
 	void m_SetMousePos( ae::Int2 pos );
 	void m_SetCursorPos( ae::Int2 pos );
 	ae::TimeStep m_timeStep;
@@ -3453,6 +3455,7 @@ private:
 class GraphicsDevice
 {
 public:
+	GraphicsDevice() = default;
 	~GraphicsDevice();
 	void Initialize( class Window* window );
 	void Terminate();
@@ -3474,6 +3477,7 @@ public:
 
 //private:
 	friend class ae::Window;
+	GraphicsDevice( const GraphicsDevice& ) = delete;
 	void m_HandleResize( uint32_t width, uint32_t height );
 	Window* m_window = nullptr;
 	RenderTarget m_canvas;
