@@ -517,7 +517,7 @@ struct Vec3 : public VecT< Vec3 >
 	
 	void AddRotationXY( float rotation ); // @TODO: Support Y up
 	Vec3 AddRotationXYCopy( float rotation ) const;
-	float GetAngleBetween( const Vec3& v ) const;
+	float GetAngleBetween( const Vec3& v, float epsilon = 0.0001f ) const;
 	Vec3 RotateCopy( Vec3 axis, float angle ) const;
 	
 	Vec3 Lerp( const Vec3& end, float t ) const;
@@ -10689,9 +10689,15 @@ Vec2 Vec2::Slerp( const Vec2& end, float t, float epsilon ) const
 //------------------------------------------------------------------------------
 // ae::Vec3 functions
 //------------------------------------------------------------------------------
-float Vec3::GetAngleBetween( const Vec3& v ) const
+float Vec3::GetAngleBetween( const Vec3& v, float epsilon ) const
 {
-	float result = acosf( Dot( v ) / ( Length() * v.Length() ) );
+	float l0 = Length();
+	float l1 = v.Length();
+	if ( l0 < epsilon || l1 < epsilon )
+	{
+		return 0.0f;
+	}
+	float result = std::acosf( ae::Clip( Dot( v ) / ( l0 * l1 ), -1.0f, 1.0f ) );
 	return ( result <= ae::PI ) ? result : ( result - ae::PI );
 }
 
