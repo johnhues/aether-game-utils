@@ -147,7 +147,7 @@ void aeSpriteRender::Render( const ae::Matrix4& localToProjection )
     {
       return a.sort > b.sort;
     };
-    std::sort( m_sprites, m_sprites + m_count, sortFn );
+    std::stable_sort( m_sprites, m_sprites + m_count, sortFn );
   }
   
   if ( m_depthWrite && m_blending )
@@ -187,55 +187,45 @@ void aeSpriteRender::Render( const ae::Matrix4& localToProjection )
 
 void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader* shader )
 {
-  for ( uint32_t i = 0; i < m_textures.Length(); i++ )
+  for ( uint32_t i = 0; i < m_count; i++ )
   {
-    const ae::Texture2D* texture = m_textures.GetKey( i );
-    if ( !texture )
-    {
-      continue;
-    }
-    uint32_t textureId = texture->GetTexture();
+    Sprite* sprite = &m_sprites[ i ];
 
-    uint32_t count = 0;
-    for ( uint32_t j = 0; j < m_count; j++ )
-    {
-      Sprite* sprite = &m_sprites[ j ];
-      if ( sprite->textureId != textureId )
-      {
-        continue;
-      }
+    uint32_t idx0 = i * aeQuadVertCount + 0;
+    uint32_t idx1 = i * aeQuadVertCount + 1;
+    uint32_t idx2 = i * aeQuadVertCount + 2;
+    uint32_t idx3 = i * aeQuadVertCount + 3;
     
-      uint32_t idx0 = count * aeQuadVertCount + 0;
-      uint32_t idx1 = count * aeQuadVertCount + 1;
-      uint32_t idx2 = count * aeQuadVertCount + 2;
-      uint32_t idx3 = count * aeQuadVertCount + 3;
-      
-      m_vertices[ idx0 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 0 ], 1.0f ) );
-      m_vertices[ idx1 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 1 ], 1.0f ) );
-      m_vertices[ idx2 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 2 ], 1.0f ) );
-      m_vertices[ idx3 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 3 ], 1.0f ) );
+    m_vertices[ idx0 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 0 ], 1.0f ) );
+    m_vertices[ idx1 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 1 ], 1.0f ) );
+    m_vertices[ idx2 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 2 ], 1.0f ) );
+    m_vertices[ idx3 ].pos = ae::Vec3( sprite->transform * ae::Vec4( aeQuadVertPos[ 3 ], 1.0f ) );
 
-      m_vertices[ idx0 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMin.y );
-      m_vertices[ idx1 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMin.y );
-      m_vertices[ idx2 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMax.y );
-      m_vertices[ idx3 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMax.y );
+    m_vertices[ idx0 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMin.y );
+    m_vertices[ idx1 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMin.y );
+    m_vertices[ idx2 ].uv = ae::Vec2( sprite->uvMax.x, sprite->uvMax.y );
+    m_vertices[ idx3 ].uv = ae::Vec2( sprite->uvMin.x, sprite->uvMax.y );
 
-      m_vertices[ idx0 ].color = sprite->color.GetLinearRGBA();
-      m_vertices[ idx1 ].color = sprite->color.GetLinearRGBA();
-      m_vertices[ idx2 ].color = sprite->color.GetLinearRGBA();
-      m_vertices[ idx3 ].color = sprite->color.GetLinearRGBA();
-      
-      count++;
-    }
-    // @TODO: Should set all vertices first then render multiple times
-    m_vertexData.SetVertices( m_vertices, count * 4 );
+    m_vertices[ idx0 ].color = sprite->color.GetLinearRGBA();
+    m_vertices[ idx1 ].color = sprite->color.GetLinearRGBA();
+    m_vertices[ idx2 ].color = sprite->color.GetLinearRGBA();
+    m_vertices[ idx3 ].color = sprite->color.GetLinearRGBA();
+  }
+  m_vertexData.SetVertices( m_vertices, m_count * 4 );
+
+  for ( uint32_t i = 0; i < m_count; i++ )
+  {
+    uint32_t start = i;
+    const ae::Texture2D* currentTexture = m_sprites[ start ].texture;
+    for (; i + 1 < m_count && m_sprites[ i + 1 ].texture == currentTexture; i++ ) {}
+    uint32_t count = 1 + ( i - start );
 
     ae::UniformList uniforms;
     uniforms.Set( "u_localToProjection", localToProjection );
-    uniforms.Set( "u_tex", texture );
+    uniforms.Set( "u_tex", currentTexture );
 
     m_vertexData.Upload();
-    m_vertexData.Draw( shader, uniforms, 0, count * 2 );
+    m_vertexData.Draw( shader, uniforms, start * 2, count * 2 );
   }
 }
 
@@ -273,18 +263,15 @@ void aeSpriteRender::AddSprite( const ae::Texture2D* texture, ae::Matrix4 transf
     sprite->uvMin = uvMin;
     sprite->uvMax = uvMax;
     sprite->color = color;
-    sprite->textureId = texture->GetTexture();
+    sprite->texture = texture;
     sprite->sort = 0.0f;
     m_count++;
-
-    m_textures.Set( texture, 0 );
   }
 }
 
 void aeSpriteRender::Clear()
 {
   m_count = 0;
-  m_textures.Clear();
 }
 
 void aeSpriteRender::m_LoadShaderAll()

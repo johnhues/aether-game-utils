@@ -79,7 +79,7 @@ private:
     ae::Vec2 uvMin;
     ae::Vec2 uvMax;
     ae::Color color;
-    uint32_t textureId;
+    const ae::Texture2D* texture;
     float sort;
   };
 
@@ -91,7 +91,6 @@ private:
   ae::Shader* m_shaderAll;
   ae::Shader* m_shaderOpaque;
   ae::Shader* m_shaderTransparent;
-  ae::Map< const ae::Texture2D*, uint32_t > m_textures = AE_ALLOC_TAG_RENDER;
   
   bool m_blending;
   bool m_depthTest;
