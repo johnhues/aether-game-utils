@@ -76,7 +76,7 @@ void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, 
 // ofbx
 //------------------------------------------------------------------------------
 bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* data, uint32_t dataLen, const VertexLoaderHelper& vertexInfo, const LoadMeshParams& params );
-bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* data, uint32_t dataLen, const VertexLoaderHelper& vertexInfo, ae::VertexArray* vertexData, ae::Skin* skinOut, ae::Animation* animOut );
+bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* data, uint32_t dataLen, const VertexLoaderHelper& vertexInfo, ae::VertexBuffer* vertexData, ae::Skin* skinOut, ae::Animation* animOut );
 
 } // End ae namespace
 #endif

@@ -3952,12 +3952,14 @@ public:
 	uint32_t GetBoneCount() const;
 	
 private:
+	Skeleton( const Skeleton& ) = delete;
 	ae::Array< ae::Bone > m_bones;
 };
 
 //------------------------------------------------------------------------------
 // ae::Skin class
 //------------------------------------------------------------------------------
+const uint32_t kMaxSkinWeights = 4;
 class Skin
 {
 public:
@@ -3965,19 +3967,23 @@ public:
 	{
 		ae::Vec3 position;
 		ae::Vec3 normal;
-		uint16_t bones[ 4 ];
-		uint8_t weights[ 4 ] = { 0 };
+		uint16_t bones[ kMaxSkinWeights ];
+		uint8_t weights[ kMaxSkinWeights ] = { 0 };
 	};
 	
 	Skin( const ae::Tag& tag ) : m_bindPose( tag ), m_verts( tag ) {}
 	void Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertices, uint32_t vertexCount );
 	
-	const class Skeleton* GetBindPose() const;
+	const class Skeleton& GetBindPose() const;
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
 	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
 	
+	uint32_t GetBoneCount() const { return m_bindPose.GetBoneCount(); }
+	uint32_t GetVertCount() const { return m_verts.Length(); }
+	
 private:
+	Skin( const Skin& ) = delete;
 	Skeleton m_bindPose;
 	ae::Array< Vertex > m_verts;
 };
@@ -21317,9 +21323,9 @@ void Skin::Initialize( const Skeleton& bindPose, const ae::Skin::Vertex* vertice
 	m_verts.AppendArray( vertices, vertexCount );
 }
 
-const Skeleton* Skin::GetBindPose() const
+const Skeleton& Skin::GetBindPose() const
 {
-	return &m_bindPose;
+	return m_bindPose;
 }
 
 void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const

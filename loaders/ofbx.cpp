@@ -156,7 +156,7 @@ bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDat
 	return true;
 }
 
-bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, ae::VertexArray* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
+bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, ae::VertexBuffer* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
 {
 	ofbx::IScene* scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
 	if ( !scene )
@@ -208,8 +208,23 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 	}
 	
 	// Skeleton
+	auto countBonesFn = [&]( auto&& countBonesFn, const ofbx::Object* ofbxParent ) -> uint32_t
+	{
+		int32_t i = 0;
+		uint32_t result = 1;
+		while ( const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ) )
+		{
+			if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
+			{
+				result += countBonesFn( countBonesFn, ofbxBone );
+			}
+			i++;
+		}
+		return result;
+	};
+	const uint32_t boneCount = countBonesFn( countBonesFn, ofbxSkeletonRoot );
 	ae::Skeleton bindPose = tag;
-	bindPose.Initialize( 32 ); // @TODO: Count ofbxSkeletonRoot bones
+	bindPose.Initialize( boneCount );
 	ae::Array< const ofbx::Object* > sceneBones = tag;
 	sceneBones.Append( ofbxSkeletonRoot );
 	std::function< void( const ofbx::Object*, const ae::Bone* ) > skeletonBuilderFn = [ & ]( const ofbx::Object* ofbxParent, const ae::Bone* parent )
@@ -223,13 +238,14 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 				ae::Matrix4 worldTransform = getBindPoseMatrix( ofbxSkin, ofbxBone );
 				ae::Matrix4 transform = parentInverseWorldTransform * worldTransform;
 				const ae::Bone* bone = bindPose.AddBone( parent, ofbxBone->name, transform );
+				AE_ASSERT( bone );
 				sceneBones.Append( ofbxBone );
 				skeletonBuilderFn( ofbxBone, bone );
 			}
 			i++;
 		}
 	};
-	skeletonBuilderFn( sceneBones[ 0 ], bindPose.GetRoot() );
+	skeletonBuilderFn( ofbxSkeletonRoot, bindPose.GetRoot() );
 	
 	// Mesh
 	// @TODO: Get mesh from ofbxSkin
@@ -328,48 +344,66 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 		for ( uint32_t j = 0; j < indexCount; j++ )
 		{
 			ae::Skin::Vertex* vertex = &skinVerts[ clusterIndices[ j ] ];
-			int32_t weightIdx = 0;
-			while ( vertex->weights[ weightIdx ] )
+			const uint8_t clusterWeight = ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
+			const uint32_t weightCount = [&](){ uint32_t c = 0; while ( c < kMaxSkinWeights && vertex->weights[ c ] ) { c++; } return c; }();
+			
+			if ( weightCount == kMaxSkinWeights )
 			{
-				weightIdx++;
-			}
-			AE_ASSERT_MSG( weightIdx < countof( vertex->weights ), "Export FBX with skin weight limit set to 4" );
-			vertex->bones[ weightIdx ] = boneIndex;
-			vertex->weights[ weightIdx ] = ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
-			// Fix up weights so they total 255
-			if ( weightIdx == 3 )
-			{
-				int32_t total = 0;
-				uint8_t* greatest = nullptr;
-				for ( uint32_t i = 0; i < 4; i++ )
+				// Replace the influence with the smallest contribution
+				int32_t lowestIdx = 0;
+				uint8_t lowestWeight = vertex->weights[ 0 ];
+				for ( uint32_t i = 1; i < kMaxSkinWeights; i++ )
 				{
-					total += vertex->weights[ i ];
-					if ( !greatest || *greatest < vertex->weights[ i ] )
+					const uint8_t weight = vertex->weights[ i ];
+					if ( lowestWeight > weight )
 					{
-						greatest = &vertex->weights[ i ];
+						lowestIdx = i;
+						lowestWeight = weight;
 					}
 				}
-#if _AE_DEBUG_
-				AE_ASSERT_MSG( total > 128, "Skin weights missing" );
-#endif
-				if ( total != 255 )
-				{
-					*greatest += ( 255 - total );
-				}
-#if _AE_DEBUG_
-				total = 0;
-				for ( uint32_t i = 0; i < 4; i++ )
-				{
-					total += vertex->weights[ i ];
-				}
-				AE_ASSERT( total == 255 );
-#endif
+				vertex->bones[ lowestIdx ] = boneIndex;
+				vertex->weights[ lowestIdx ] = clusterWeight;
+			}
+			else
+			{
+				vertex->bones[ weightCount ] = boneIndex;
+				vertex->weights[ weightCount ] = ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
 			}
 		}
 	}
+	// Fix up weights so they total 255
+	for ( ae::Skin::Vertex& vertex : skinVerts )
+	{
+		int32_t total = 0;
+		uint8_t* greatest = nullptr;
+		for ( uint32_t i = 0; i < kMaxSkinWeights; i++ )
+		{
+			total += vertex.weights[ i ];
+			if ( !greatest || *greatest < vertex.weights[ i ] )
+			{
+				greatest = &vertex.weights[ i ];
+			}
+		}
+		if ( total != 255 )
+		{
+			// Bump up the contribution of the strongest influence to total uint8 max
+			*greatest += ( 255 - total );
+		}
+#if _AE_DEBUG_
+		total = 0;
+		for ( uint32_t i = 0; i < kMaxSkinWeights; i++ )
+		{
+			total += vertex.weights[ i ];
+		}
+		AE_ASSERT( total == 255 );
+#endif
+	}
 	
 	// Finalize skin
-	skinOut->Initialize( bindPose, skinVerts.Data(), skinVerts.Length() );
+	if ( skinOut )
+	{
+		skinOut->Initialize( bindPose, skinVerts.Data(), skinVerts.Length() );
+	}
 	
 	// Animations
 	if ( animOut && scene->getAnimationStackCount() )
@@ -461,8 +495,8 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 	if ( vertexHelper.normalOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::Vertex::Type::Float, vertexHelper.normalOffset ); }
 	if ( vertexHelper.colorOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::Vertex::Type::Float, vertexHelper.colorOffset ); }
 	if ( vertexHelper.uvOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::Vertex::Type::Float, vertexHelper.uvOffset ); }
-	vertexData->SetVertices( vertexBuffer.Data(), totalVerts );
-	vertexData->SetIndices( indices.Data(), indices.Length() );
+	vertexData->UploadVertices( 0, vertexBuffer.Data(), totalVerts );
+	vertexData->UploadIndices( 0, indices.Data(), indices.Length() );
 	
 	return true;
 }
