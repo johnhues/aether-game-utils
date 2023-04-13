@@ -10697,7 +10697,7 @@ float Vec3::GetAngleBetween( const Vec3& v, float epsilon ) const
 	{
 		return 0.0f;
 	}
-	float result = std::acosf( ae::Clip( Dot( v ) / ( l0 * l1 ), -1.0f, 1.0f ) );
+	float result = acosf( ae::Clip( Dot( v ) / ( l0 * l1 ), -1.0f, 1.0f ) ); // No std::, for linux builds
 	return ( result <= ae::PI ) ? result : ( result - ae::PI );
 }
 
