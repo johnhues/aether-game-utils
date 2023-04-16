@@ -3877,6 +3877,7 @@ struct IK
 	ae::Vec3 polePos = ae::Vec3( 0.0f );
 	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
 	ae::Array< Bone, NumBones > bones;
+	bool flipBoneAxis = true;
 	// Output
 	ae::Array< ae::Vec3, NumBones > joints;
 	ae::Array< float, NumBones > jointLengths;
@@ -9089,20 +9090,23 @@ void IK< NumBones >::Update( uint32_t iterationCount )
 	{
 		ae::Vec3 boneDir = joints[ i + 1 ] - joints[ i ];
 		const ae::Matrix4 oldTransform = bones[ i ].transform;
-		ae::Matrix4 newTransform = ae::Matrix4::Identity();
 		
-		ae::Vec3 xAxis = -boneDir.SafeNormalizeCopy();
+		ae::Vec3 xAxis = boneDir.SafeNormalizeCopy();
+		if ( flipBoneAxis ) { xAxis = -xAxis; }
 		ae::Vec3 yAxis = oldTransform.GetAxis( 2 ).Cross( xAxis ).SafeNormalizeCopy();
 		ae::Vec3 zAxis = xAxis.Cross( yAxis );
 		yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
 		
+		ae::Matrix4 newTransform = ae::Matrix4::Identity();
 		newTransform.SetAxis( 0, xAxis );
 		newTransform.SetAxis( 1, yAxis );
 		newTransform.SetAxis( 2, zAxis );
 		newTransform.SetTranslation( joints[ i ] );
 		finalTransforms.Append( newTransform );
 	}
-	finalTransforms.Append( targetTransform ).SetTranslation( joints[ joints.Length() - 1 ] );
+	ae::Matrix4& finalTransform = finalTransforms.Append( targetTransform );
+	finalTransform.SetScale( bones[ 0 ].transform.GetScale() ); // Maintain the old bones scale
+	finalTransform.SetTranslation( joints[ joints.Length() - 1 ] );
 	AE_ASSERT( finalTransforms.Length() == bones.Length() );
 }
 
