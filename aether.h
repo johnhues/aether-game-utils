@@ -3712,7 +3712,7 @@ public:
 	uint32_t GetControlPointCount() const;
 
 	ae::Vec3 GetPoint( float distance ) const; // 0 <= distance <= length
-	float GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr, float* tOut = nullptr );
+	float GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut = nullptr, float* tOut = nullptr ) const;
 	float GetLength() const;
 
 	ae::AABB GetAABB() const { return m_aabb; }
@@ -20780,7 +20780,7 @@ ae::Vec3 Spline::GetPoint( float distance ) const
 	return m_controlPoints[ m_controlPoints.Length() - 1 ];
 }
 
-float Spline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut, float* tOut )
+float Spline::GetMinDistance( ae::Vec3 p, ae::Vec3* nearestOut, float* tOut ) const
 {
 	ae::Vec3 closest( 0.0f );
 	float closestDistance = ae::MaxValue< float >();
