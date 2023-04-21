@@ -21336,6 +21336,22 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 {
 	AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
 	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
+	
+	const uint32_t boneCount = pose->GetBoneCount();
+	ae::Scratch< ae::Matrix4 > tempBones( boneCount );
+	ae::Scratch< ae::Matrix4 > tempBoneNorm( boneCount );
+	for ( uint32_t i = 0; i < boneCount; i++ )
+	{
+		const ae::Bone* bone = pose->GetBoneByIndex( i );
+		const ae::Bone* bindPoseBone = m_bindPose.GetBoneByIndex( i );
+		if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
+		else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
+		
+		ae::Matrix4 transform = bone->transform * bindPoseBone->inverseTransform;
+		tempBones[ i ] = transform;
+		tempBoneNorm[ i ] = transform.GetNormalMatrix();
+	}
+	
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		ae::Vec3 pos( 0.0f );
@@ -21343,15 +21359,9 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 		const ae::Skin::Vertex& skinVert = m_verts[ i ];
 		for ( uint32_t j = 0; j < 4; j++ )
 		{
-			const ae::Bone* bone = pose->GetBoneByIndex( skinVert.bones[ j ] );
-			const ae::Bone* bindPoseBone = m_bindPose.GetBoneByIndex( skinVert.bones[ j ] );
-			if ( bone->parent ) { AE_ASSERT_MSG( bone->parent->index == bindPoseBone->parent->index, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
-			else { AE_ASSERT_MSG( !bindPoseBone->parent, "Given ae::Skeleton pose does not match bind pose hierarchy" ); }
-			
-			ae::Matrix4 transform = bone->transform * bindPoseBone->inverseTransform;
-			float weight = skinVert.weights[ j ] / 255.0f;
-			pos += ( transform * ae::Vec4( skinVert.position, 1.0f ) ).GetXYZ() * weight;
-			normal += ( transform.GetNormalMatrix() * ae::Vec4( skinVert.normal, 0.0f ) ).GetXYZ() * weight;
+			const float weight = skinVert.weights[ j ] / 255.0f;
+			pos += ( tempBones[ skinVert.bones[ j ] ] * ae::Vec4( skinVert.position, 1.0f ) ).GetXYZ() * weight;
+			normal += ( tempBoneNorm[ skinVert.bones[ j ] ] * ae::Vec4( skinVert.normal, 0.0f ) ).GetXYZ() * weight;
 		}
 		normal.SafeNormalize();
 		
