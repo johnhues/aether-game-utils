@@ -8972,7 +8972,7 @@ void BVH< T, N >::Clear()
 template < typename T, uint32_t N >
 const BVHNode* BVH< T, N >::GetRoot() const
 {
-	return GetNode( 0 );
+	return m_nodes.Length() ? GetNode( 0 ) : nullptr;
 }
 
 template < typename T, uint32_t N >
@@ -9088,20 +9088,29 @@ void IK< NumBones >::Update( uint32_t iterationCount )
 
 	for ( uint32_t i = 0; i < joints.Length() - 1; i++ )
 	{
+		ae::Matrix4 newTransform;
 		ae::Vec3 boneDir = joints[ i + 1 ] - joints[ i ];
 		const ae::Matrix4 oldTransform = bones[ i ].transform;
-		
-		ae::Vec3 xAxis = boneDir.SafeNormalizeCopy();
-		if ( flipBoneAxis ) { xAxis = -xAxis; }
-		ae::Vec3 yAxis = oldTransform.GetAxis( 2 ).Cross( xAxis ).SafeNormalizeCopy();
-		ae::Vec3 zAxis = xAxis.Cross( yAxis );
-		yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
-		
-		ae::Matrix4 newTransform = ae::Matrix4::Identity();
-		newTransform.SetAxis( 0, xAxis );
-		newTransform.SetAxis( 1, yAxis );
-		newTransform.SetAxis( 2, zAxis );
-		newTransform.SetTranslation( joints[ i ] );
+		if ( boneDir.Length() > 0.001f )
+		{
+			ae::Vec3 xAxis = boneDir.SafeNormalizeCopy();
+			if ( flipBoneAxis ) { xAxis = -xAxis; }
+			ae::Vec3 yAxis = oldTransform.GetAxis( 2 ).Cross( xAxis ).SafeNormalizeCopy();
+			ae::Vec3 zAxis = xAxis.Cross( yAxis );
+			yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
+			
+			newTransform = ae::Matrix4::Identity();
+			newTransform.SetAxis( 0, xAxis );
+			newTransform.SetAxis( 1, yAxis );
+			newTransform.SetAxis( 2, zAxis );
+			newTransform.SetTranslation( joints[ i ] );
+		}
+		else
+		{
+			newTransform = oldTransform;
+			newTransform.SetTranslation( joints[ i ] );
+		}
+		AE_DEBUG_ASSERT( newTransform.GetScale() != ae::Vec3( 0.0f ) );
 		finalTransforms.Append( newTransform );
 	}
 	ae::Matrix4& finalTransform = finalTransforms.Append( targetTransform );
@@ -9230,7 +9239,7 @@ template < uint32_t V, uint32_t T, uint32_t B >
 RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, const RaycastResult& prevResult ) const
 {
 	// Early out for parameters that will give no results
-	if ( params.maxHits == 0 )
+	if ( params.maxHits == 0 || !m_bvh.GetRoot() )
 	{
 		return prevResult;
 	}
@@ -9370,6 +9379,11 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 template < uint32_t V, uint32_t T, uint32_t B >
 PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const
 {
+	if ( !m_bvh.GetRoot() )
+	{
+		return prevInfo;
+	}
+	
 	if ( ae::DebugLines* debug = params.debug )
 	{
 		debug->AddSphere( prevInfo.sphere.center, prevInfo.sphere.radius, params.debugColor, 8 );
