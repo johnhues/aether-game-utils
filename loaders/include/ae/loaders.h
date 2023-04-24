@@ -30,7 +30,10 @@
 
 namespace ae {
 
-struct VertexLoaderHelper
+//------------------------------------------------------------------------------
+// ae::VertexDescriptor
+//------------------------------------------------------------------------------
+struct VertexDescriptor
 {
 	uint32_t vertexSize = 0;
 	uint32_t indexSize = 0;
@@ -59,13 +62,7 @@ struct VertexLoaderHelper
 	ae::Vec4& GetColor( void* vertices, uint32_t index ) const { AE_ASSERT( colorOffset >= 0 && vertexSize ); return *(ae::Vec4*)( (uint8_t*)vertices + index * vertexSize + colorOffset ); }
 	ae::Vec2& GetUV( void* vertices, uint32_t index ) const { AE_ASSERT( uvOffset >= 0 && vertexSize ); return *(ae::Vec2*)( (uint8_t*)vertices + index * vertexSize + uvOffset ); }
 };
-
-struct LoadMeshParams
-{
-	ae::Matrix4 transform = ae::Matrix4::Identity();
-	ae::VertexArray* vertexData = nullptr;
-	ae::CollisionMesh<>* collisionMesh = nullptr;
-};
+typedef VertexDescriptor VertexLoaderHelper;
 
 //------------------------------------------------------------------------------
 // stb
@@ -73,10 +70,51 @@ struct LoadMeshParams
 void stbLoadPng( ae::Texture2D* texture, const uint8_t* data, uint32_t dataLen, ae::Texture::Filter filter, ae::Texture::Wrap wrap, bool autoGenerateMipmaps, bool isSRGB );
 
 //------------------------------------------------------------------------------
-// ofbx
+// ae::FbxLoaderParams struct
 //------------------------------------------------------------------------------
-bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* data, uint32_t dataLen, const VertexLoaderHelper& vertexInfo, const LoadMeshParams& params );
-bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* data, uint32_t dataLen, const VertexLoaderHelper& vertexInfo, ae::VertexBuffer* vertexData, ae::Skin* skinOut, ae::Animation* animOut );
+struct FbxLoaderParams
+{
+	ae::VertexLoaderHelper descriptor;
+	
+	ae::VertexBuffer* vertexData = nullptr;
+	ae::CollisionMesh<>* collisionMesh = nullptr;
+	ae::Skin* skin = nullptr;
+	ae::Skeleton* skeleton = nullptr;
+	ae::Animation* anim = nullptr;
+	
+	void* vertexOut = nullptr;
+	void* indexOut = nullptr;
+	uint32_t maxVerts = 0;
+	uint32_t maxIndex = 0;
+};
+
+//------------------------------------------------------------------------------
+// ae::FbxLoader class (requires 'loaders/ofbx.cpp' and ofbx library)
+// @TODO: Enable FbxLoader impl when ofbx.h is included before AE_MAIN and aether.h
+//------------------------------------------------------------------------------
+class FbxLoader
+{
+public:
+	FbxLoader( const ae::Tag& tag );
+	~FbxLoader();
+	bool Initialize( const uint8_t* fileData, uint32_t fileDataLen );
+	void Terminate();
+	
+	uint32_t GetMeshCount() const;
+	const char* GetMeshName( uint32_t idx ) const;
+	uint32_t GetMeshVertexCount( uint32_t idx ) const;
+	uint32_t GetMeshIndexCount( uint32_t idx ) const;
+	uint32_t GetMeshBoneCount( uint32_t idx ) const;
+	uint32_t GetMeshVertexCount( const char* name ) const;
+	uint32_t GetMeshIndexCount( const char* name ) const;
+	uint32_t GetMeshBoneCount( const char* name ) const;
+	
+	bool Load( const char* meshName, const ae::FbxLoaderParams& params ) const;
+	
+private:
+	const ae::Tag m_tag;
+	struct FbxLoaderImpl* m_state = nullptr;
+};
 
 } // End ae namespace
 #endif

@@ -56,275 +56,272 @@ static ae::Matrix4 getBindPoseMatrix( const ofbx::Skin* skin, const ofbx::Object
 	return ofbxToAe( node->getGlobalTransform() );
 }
 
-bool ofbxLoadMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, const LoadMeshParams& params )
+struct FbxLoaderMeshInfo
 {
-	ofbx::IScene* scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
-	if ( !scene )
+	const ofbx::Mesh* mesh = nullptr;
+	const ofbx::Object* rootJoint = nullptr;
+	uint32_t boneCount = 0;
+};
+
+struct FbxLoaderImpl
+{
+	FbxLoaderImpl( const ae::Tag& tag ) : meshes( tag ) {}
+	ofbx::IScene* scene;
+	ae::Map< ae::Str128, FbxLoaderMeshInfo > meshes;
+};
+
+//------------------------------------------------------------------------------
+// ae::FbxLoader member functions
+//------------------------------------------------------------------------------
+FbxLoader::FbxLoader( const ae::Tag& tag ) :
+	m_tag( tag )
+{}
+
+FbxLoader::~FbxLoader()
+{
+	Terminate();
+}
+
+bool FbxLoader::Initialize( const uint8_t* fileData, uint32_t fileDataLen )
+{
+	Terminate();
+	m_state = ae::New< FbxLoaderImpl >( m_tag, m_tag );
+	m_state->scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
+	if ( !m_state->scene )
 	{
+		Terminate();
 		return false;
 	}
 	
-	uint32_t meshCount = scene->getMeshCount();
-	
-	uint32_t totalVerts = 0;
-	uint32_t totalIndices = 0;
+	const uint32_t meshCount = m_state->scene->getMeshCount();
 	for ( uint32_t i = 0; i < meshCount; i++ )
 	{
-		const ofbx::Mesh* mesh = scene->getMesh( i );
-		const ofbx::Geometry* geo = mesh->getGeometry();
-		totalVerts += geo->getVertexCount();
-		totalIndices += geo->getIndexCount();
-	}
-	
-	uint32_t indexOffset = 0;
-	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.vertexSize );
-	ae::Array< uint32_t > indices( tag, totalIndices );
-	for ( uint32_t i = 0; i < meshCount; i++ )
-	{
-		const ofbx::Mesh* mesh = scene->getMesh( i );
-		const ofbx::Geometry* geo = mesh->getGeometry();
-		ae::Matrix4 localToWorld = params.transform * ofbxToAe( mesh->getGlobalTransform() );
-		ae::Matrix4 normalMatrix = localToWorld.GetNormalMatrix();
-		
-		uint32_t vertexCount = geo->getVertexCount();
-		const ofbx::Vec3* meshVerts = geo->getVertices();
-		const ofbx::Vec3* meshNormals = geo->getNormals();
-		const ofbx::Vec4* meshColors = geo->getColors();
-		const ofbx::Vec2* meshUvs = geo->getUVs();
-		for ( uint32_t j = 0; j < vertexCount; j++ )
+		const ofbx::Mesh* ofbxMesh = m_state->scene->getMesh( i );
+		FbxLoaderMeshInfo* info = &m_state->meshes.Set( ofbxMesh->name, {} );
+		info->mesh = ofbxMesh;
+		if ( const ofbx::Skin* ofbxSkin = ofbxMesh->getGeometry()->getSkin() )
 		{
-			ofbx::Vec3 p0 = meshVerts[ j ];
-			ae::Vec4 p( p0.x, p0.y, p0.z, 1.0f );
-			ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
-			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
+			AE_ASSERT( ofbxSkin->getClusterCount() );
+			const ofbx::Object* ofbxSkeletonRoot = ofbxSkin->getCluster( 0 )->getLink();
+			AE_ASSERT( ofbxSkeletonRoot );
+			AE_ASSERT( ofbxSkeletonRoot->getType() == ofbx::Object::Type::LIMB_NODE );
+			while ( true )
+			{
+				const ofbx::Object* ofbxParent = ofbxSkeletonRoot->getParent();
+				if ( ofbxParent && ofbxParent->getType() == ofbx::Object::Type::LIMB_NODE )
+				{
+					ofbxSkeletonRoot = ofbxParent;
+					continue;
+				}
+				break;
+			}
+			AE_ASSERT( ofbxSkeletonRoot );
+			info->rootJoint = ofbxSkeletonRoot;
 			
-			uint8_t vertex[ 128 ];
-			AE_ASSERT( vertexHelper.vertexSize <= sizeof(vertex) );
-			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
-			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
-			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
-			vertexHelper.SetUV( vertex, 0, uv );
-			vertexBuffer.AppendArray( vertex, vertexHelper.vertexSize );
+			auto countBonesFn = [&]( auto&& countBonesFn, const ofbx::Object* ofbxParent ) -> uint32_t
+			{
+				uint32_t result = 1;
+				for ( int32_t i = 0; const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ); i++ )
+				{
+					if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
+					{
+						result += countBonesFn( countBonesFn, ofbxBone );
+					}
+				}
+				return result;
+			};
+			// An extra bone to maintain offset of hips etc
+			info->boneCount = ( 1 + countBonesFn( countBonesFn, ofbxSkeletonRoot ) );
 		}
-		
-		uint32_t indexCount = geo->getIndexCount();
-		const int32_t* meshIndices = geo->getFaceIndices();
-		for ( uint32_t j = 0; j < indexCount; j++ )
-		{
-			int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
-			AE_ASSERT( index < vertexCount );
-			index += indexOffset;
-			indices.Append( index );
-			
-			ofbx::Vec3 n = meshNormals[ j ];
-			ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
-			vertexHelper.SetNormal( vertexBuffer.Data(), index, normal );
-		}
-		
-		indexOffset += vertexCount;
-	}
-	
-	if ( params.vertexData )
-	{
-		params.vertexData->Initialize( vertexHelper.vertexSize, sizeof(uint32_t),
-			totalVerts, indices.Length(),
-			ae::Vertex::Primitive::Triangle,
-			ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-		if ( vertexHelper.posOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::Vertex::Type::Float, vertexHelper.posOffset ); }
-		if ( vertexHelper.normalOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::Vertex::Type::Float, vertexHelper.normalOffset ); }
-		if ( vertexHelper.colorOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::Vertex::Type::Float, vertexHelper.colorOffset ); }
-		if ( vertexHelper.uvOffset >= 0 ) { params.vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::Vertex::Type::Float, vertexHelper.uvOffset ); }
-		params.vertexData->SetVertices( vertexBuffer.Data(), totalVerts );
-		params.vertexData->SetIndices( indices.Data(), indices.Length() );
-		params.vertexData->Upload();
-	}
-	
-	if ( params.collisionMesh )
-	{
-		params.collisionMesh->AddIndexed(
-			ae::Matrix4::Identity(),
-			vertexHelper.GetPosition( vertexBuffer.Data(), 0 ).data,
-			totalVerts,
-			vertexHelper.vertexSize,
-			indices.Data(),
-			indices.Length(),
-			sizeof(uint32_t)
-		);
-		params.collisionMesh->BuildBVH();
 	}
 	
 	return true;
 }
 
-bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t fileDataLen, const VertexLoaderHelper& vertexHelper, ae::VertexBuffer* vertexData, ae::Skin* skinOut, ae::Animation* animOut )
+void FbxLoader::Terminate()
 {
-	ofbx::IScene* scene = ofbx::load( (ofbx::u8*)fileData, fileDataLen, (ofbx::u64)ofbx::LoadFlags::TRIANGULATE );
-	if ( !scene )
+	if ( m_state )
 	{
-		return false;
+		if ( m_state->scene )
+		{
+			m_state->scene->destroy();
+		}
+		ae::Delete( m_state );
+		m_state = nullptr;
 	}
+}
+
+uint32_t FbxLoader::GetMeshCount() const
+{
+	return m_state ? m_state->meshes.Length() : 0;
+}
+
+const char* FbxLoader::GetMeshName( uint32_t idx ) const
+{
+	return m_state ? m_state->meshes.GetKey( idx ).c_str() : "";
+}
+
+uint32_t FbxLoader::GetMeshVertexCount( uint32_t idx ) const
+{
+	return m_state ? m_state->meshes.GetValue( idx ).mesh->getGeometry()->getVertexCount() : 0;
+}
+
+uint32_t FbxLoader::GetMeshIndexCount( uint32_t idx ) const
+{
+	return m_state ? m_state->meshes.GetValue( idx ).mesh->getGeometry()->getIndexCount() : 0;
+}
+
+uint32_t FbxLoader::GetMeshBoneCount( uint32_t idx ) const
+{
+	return m_state ? m_state->meshes.GetValue( idx ).boneCount : 0;
+}
+
+uint32_t FbxLoader::GetMeshVertexCount( const char* name ) const
+{
+	if ( m_state )
+	{
+		if ( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
+		{
+			return info->mesh->getGeometry()->getVertexCount();
+		}
+	}
+	return 0;
+}
+
+uint32_t FbxLoader::GetMeshIndexCount( const char* name ) const
+{
+	if ( m_state )
+	{
+		if ( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
+		{
+			return info->mesh->getGeometry()->getIndexCount();
+		}
+	}
+	return 0;
+}
+
+uint32_t FbxLoader::GetMeshBoneCount( const char* name ) const
+{
+	if ( m_state )
+	{
+		if ( FbxLoaderMeshInfo* info = m_state->meshes.TryGet( name ) )
+		{
+			return info->boneCount;
+		}
+	}
+	return 0;
+}
+
+bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) const
+{
+	if ( !m_state ) { return false; }
+	const FbxLoaderMeshInfo* info = m_state->meshes.TryGet( meshName );
+	if ( !info ) { return false; }
 	
-	// Scene globals
-	const ofbx::GlobalSettings* ofbxSettings = scene->getGlobalSettings();
-	const float frameRate = scene->getSceneFrameRate();
+	AE_ASSERT_MSG( params.descriptor.indexSize == sizeof(uint32_t), "TODO" );
+	
+	ofbx::IScene* ofbxScene = m_state->scene;
+	AE_ASSERT( ofbxScene );
+	const ofbx::GlobalSettings* ofbxSettings = ofbxScene->getGlobalSettings();
+	const float frameRate = ofbxScene->getSceneFrameRate();
 	const float startTime = ofbxSettings->TimeSpanStart;
 	const float endTime = ofbxSettings->TimeSpanStop;
-	
-	// Find skin
-	const ofbx::Skin* ofbxSkin = nullptr;
-	for ( uint32_t i = 0; i < scene->getAllObjectCount(); i++ )
+	const ofbx::Mesh* mesh = info->mesh;
+	const ofbx::Geometry* geo = mesh->getGeometry();
+	const ae::Matrix4 localToWorld = ofbxToAe( mesh->getGlobalTransform() );
+	const ae::Matrix4 normalMatrix = localToWorld.GetNormalMatrix();
+	const uint32_t vertexCount = geo->getVertexCount();
+	const uint32_t indexCount = geo->getIndexCount();
+	const ofbx::Vec3* meshVerts = geo->getVertices();
+	const ofbx::Vec3* meshNormals = geo->getNormals();
+	const ofbx::Vec4* meshColors = geo->getColors();
+	const ofbx::Vec2* meshUvs = geo->getUVs();
+	const int32_t* meshIndices = geo->getFaceIndices();
+	if ( params.vertexOut )
 	{
-		const ofbx::Object* ofbxObj = scene->getAllObjects()[ i ];
-		if ( ofbxObj->getType() == ofbx::Object::Type::SKIN )
-		{
-			ofbxSkin = dynamic_cast< const ofbx::Skin* >( ofbxObj );
-			AE_ASSERT( ofbxSkin );
-			break;
-		}
+		if ( !params.indexOut ) { return false; }
+		if ( params.maxVerts < vertexCount ) { return false; }
+		if ( params.maxIndex < indexCount ) { return false; }
 	}
-	AE_ASSERT( ofbxSkin );
-	
-	// Find the root node of the skinned meshes skeleton (the parent of root bone)
-	const ofbx::Object* ofbxSkeletonRoot = nullptr;
+	const ofbx::Skin* ofbxSkin = info->mesh->getGeometry()->getSkin();
+	const ofbx::Object* ofbxSkeletonRoot = info->rootJoint;
+	if ( ofbxSkeletonRoot )
 	{
-		AE_ASSERT( ofbxSkin->getClusterCount() );
-		const ofbx::Cluster* cluster = ofbxSkin->getCluster( 1 );
-		ofbxSkeletonRoot = cluster->getLink();
-		AE_ASSERT( ofbxSkeletonRoot );
-		AE_ASSERT( ofbxSkeletonRoot->getType() == ofbx::Object::Type::LIMB_NODE );
-		while ( true )
-		{
-			const ofbx::Object* ofbxParent = ofbxSkeletonRoot->getParent();
-			if ( ofbxParent && ofbxParent->getType() == ofbx::Object::Type::LIMB_NODE )
-			{
-				ofbxSkeletonRoot = ofbxParent;
-				continue;
-			}
-			break;
-		}
-		AE_ASSERT( ofbxSkeletonRoot );
-		ofbxSkeletonRoot = ofbxSkeletonRoot->getParent(); // Not an actual bone, scene root or something
+		// Find the root node of the skinned meshes skeleton (the parent of root bone)
+		// Not an actual bone, scene root or something
+		ofbxSkeletonRoot = ofbxSkeletonRoot->getParent();
 		AE_ASSERT( ofbxSkeletonRoot );
 	}
+	const uint32_t clusterCount = ofbxSkin ? ofbxSkin->getClusterCount() : 0;
+	const uint32_t boneCount = info->boneCount;
 	
-	// Skeleton
-	auto countBonesFn = [&]( auto&& countBonesFn, const ofbx::Object* ofbxParent ) -> uint32_t
+	ae::Skeleton bindPose = m_tag;
+	ae::Array< const ofbx::Object* > sceneBones = m_tag;
+	if ( ofbxSkeletonRoot )
 	{
-		int32_t i = 0;
-		uint32_t result = 1;
-		while ( const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ) )
+		bindPose.Initialize( boneCount );
+		sceneBones.Append( ofbxSkeletonRoot );
+		std::function< void( const ofbx::Object*, const ae::Bone* ) > skeletonBuilderFn = [ & ]( const ofbx::Object* ofbxParent, const ae::Bone* parent )
 		{
-			if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
+			int32_t i = 0;
+			ae::Matrix4 parentInverseWorldTransform = getBindPoseMatrix( ofbxSkin, ofbxParent ).GetInverse();
+			while ( const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ) )
 			{
-				result += countBonesFn( countBonesFn, ofbxBone );
+				if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
+				{
+					ae::Matrix4 worldTransform = getBindPoseMatrix( ofbxSkin, ofbxBone );
+					ae::Matrix4 transform = parentInverseWorldTransform * worldTransform;
+					const ae::Bone* bone = bindPose.AddBone( parent, ofbxBone->name, transform );
+					AE_ASSERT( bone );
+					sceneBones.Append( ofbxBone );
+					skeletonBuilderFn( ofbxBone, bone );
+				}
+				i++;
 			}
-			i++;
-		}
-		return result;
-	};
-	const uint32_t boneCount = countBonesFn( countBonesFn, ofbxSkeletonRoot );
-	ae::Skeleton bindPose = tag;
-	bindPose.Initialize( boneCount );
-	ae::Array< const ofbx::Object* > sceneBones = tag;
-	sceneBones.Append( ofbxSkeletonRoot );
-	std::function< void( const ofbx::Object*, const ae::Bone* ) > skeletonBuilderFn = [ & ]( const ofbx::Object* ofbxParent, const ae::Bone* parent )
-	{
-		int32_t i = 0;
-		ae::Matrix4 parentInverseWorldTransform = getBindPoseMatrix( ofbxSkin, ofbxParent ).GetInverse();
-		while ( const ofbx::Object* ofbxBone = ofbxParent->resolveObjectLink( i ) )
-		{
-			if ( ofbxBone->getType() == ofbx::Object::Type::LIMB_NODE )
-			{
-				ae::Matrix4 worldTransform = getBindPoseMatrix( ofbxSkin, ofbxBone );
-				ae::Matrix4 transform = parentInverseWorldTransform * worldTransform;
-				const ae::Bone* bone = bindPose.AddBone( parent, ofbxBone->name, transform );
-				AE_ASSERT( bone );
-				sceneBones.Append( ofbxBone );
-				skeletonBuilderFn( ofbxBone, bone );
-			}
-			i++;
-		}
-	};
-	skeletonBuilderFn( ofbxSkeletonRoot, bindPose.GetRoot() );
+		};
+		skeletonBuilderFn( ofbxSkeletonRoot, bindPose.GetRoot() );
+	}
 	
 	// Mesh
-	// @TODO: Get mesh from ofbxSkin
-	uint32_t meshCount = scene->getMeshCount();
-	AE_ASSERT( meshCount == 1 );
-
-	uint32_t totalVerts = 0;
-	uint32_t totalIndices = 0;
-	for ( uint32_t i = 0; i < meshCount; i++ )
+	ae::Array< uint8_t > vertexBuffer( m_tag, vertexCount * params.descriptor.vertexSize );
+	ae::Array< uint32_t > indices( m_tag, indexCount );
+	ae::Array< ae::Skin::Vertex > skinVerts( m_tag, {}, vertexCount );
+	
+	for ( uint32_t j = 0; j < vertexCount; j++ )
 	{
-		const ofbx::Mesh* mesh = scene->getMesh( i );
-		const ofbx::Geometry* geo = mesh->getGeometry();
-		totalVerts += geo->getVertexCount();
-		totalIndices += geo->getIndexCount();
+		ofbx::Vec3 p0 = meshVerts[ j ];
+		ae::Vec4 p( p0.x, p0.y, p0.z, 1.0f );
+		ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
+		ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
+		
+		uint8_t vertex[ 128 ];
+		AE_ASSERT( params.descriptor.vertexSize <= sizeof(vertex) );
+		params.descriptor.SetPosition( vertex, 0, localToWorld * p );
+		params.descriptor.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
+		params.descriptor.SetColor( vertex, 0, color.GetLinearRGBA() );
+		params.descriptor.SetUV( vertex, 0, uv );
+		vertexBuffer.AppendArray( vertex, params.descriptor.vertexSize );
+		
+		skinVerts[ j ].position = p.GetXYZ();
 	}
 	
-	ae::Array< ae::Skin::Vertex > skinVerts = tag;
-	skinVerts.Reserve( totalVerts );
-	for ( uint32_t i = 0; i < totalVerts; i++ )
+	for ( uint32_t j = 0; j < indexCount; j++ )
 	{
-		skinVerts.Append( {} );
-	}
-
-	uint32_t indexOffset = 0;
-	ae::Array< uint8_t > vertexBuffer( tag, totalVerts * vertexHelper.vertexSize );
-	ae::Array< uint32_t > indices( tag, totalIndices );
-	for ( uint32_t i = 0; i < meshCount; i++ )
-	{
-		const ofbx::Mesh* mesh = scene->getMesh( i );
-		const ofbx::Geometry* geo = mesh->getGeometry();
-		ae::Matrix4 localToWorld = ofbxToAe( mesh->getGlobalTransform() );
-		ae::Matrix4 normalMatrix = localToWorld.GetNormalMatrix();
-
-		uint32_t vertexCount = geo->getVertexCount();
-		const ofbx::Vec3* meshVerts = geo->getVertices();
-		const ofbx::Vec3* meshNormals = geo->getNormals();
-		const ofbx::Vec4* meshColors = geo->getColors();
-		const ofbx::Vec2* meshUvs = geo->getUVs();
-		for ( uint32_t j = 0; j < vertexCount; j++ )
-		{
-			ofbx::Vec3 p0 = meshVerts[ j ];
-			ae::Vec4 p( p0.x, p0.y, p0.z, 1.0f );
-			ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
-			ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
-
-			uint8_t vertex[ 128 ];
-			AE_ASSERT( vertexHelper.vertexSize <= sizeof(vertex) );
-			vertexHelper.SetPosition( vertex, 0, localToWorld * p );
-			vertexHelper.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
-			vertexHelper.SetColor( vertex, 0, color.GetLinearRGBA() );
-			vertexHelper.SetUV( vertex, 0, uv );
-			vertexBuffer.AppendArray( vertex, vertexHelper.vertexSize );
-			
-			skinVerts[ j ].position = p.GetXYZ();
-		}
-
-		uint32_t indexCount = geo->getIndexCount();
-		const int32_t* meshIndices = geo->getFaceIndices();
-		for ( uint32_t j = 0; j < indexCount; j++ )
-		{
-			int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
-			AE_ASSERT( index < vertexCount );
-			index += indexOffset;
-			indices.Append( index );
-
-			ofbx::Vec3 n = meshNormals[ j ];
-			ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
-			vertexHelper.SetNormal( vertexBuffer.Data(), index, normal );
-			
-			skinVerts[ index ].normal = normal.GetXYZ();
-		}
-
-		indexOffset += vertexCount;
+		int32_t index = ( meshIndices[ j ] < 0 ) ? ( -meshIndices[ j ] - 1 ) : meshIndices[ j ];
+		AE_ASSERT( index < vertexCount );
+		indices.Append( index );
+		
+		ofbx::Vec3 n = meshNormals[ j ];
+		ae::Vec4 normal = ( normalMatrix * ae::Vec4( n.x, n.y, n.z, 0.0f ) ).SafeNormalizeCopy();
+		params.descriptor.SetNormal( vertexBuffer.Data(), index, normal );
+		
+		skinVerts[ index ].normal = normal.GetXYZ();
 	}
 	
 	// Skin
-	for (int i = 0, c = ofbxSkin->getClusterCount(); i < c; ++i)
+	for ( uint32_t i = 0; i < clusterCount; i++ )
 	{
-		const ofbx::Cluster* cluster = ofbxSkin->getCluster(i);
+		const ofbx::Cluster* cluster = ofbxSkin->getCluster( i );
 		uint32_t indexCount = cluster->getIndicesCount();
 		if ( !indexCount )
 		{
@@ -400,15 +397,15 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 	}
 	
 	// Finalize skin
-	if ( skinOut )
+	if ( params.skin )
 	{
-		skinOut->Initialize( bindPose, skinVerts.Data(), skinVerts.Length() );
+		params.skin->Initialize( bindPose, skinVerts.Data(), skinVerts.Length() );
 	}
 	
 	// Animations
-	if ( animOut && scene->getAnimationStackCount() )
+	if ( params.anim && ofbxScene->getAnimationStackCount() )
 	{
-		const ofbx::AnimationStack* animStack = scene->getAnimationStack( 0 );
+		const ofbx::AnimationStack* animStack = ofbxScene->getAnimationStack( 0 );
 		const ofbx::AnimationLayer* animLayer = animStack->getLayer( 0 );
 		if ( animLayer )
 		{
@@ -446,12 +443,12 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 
 				if ( hasKeyframes )
 				{
-					animOut->duration = ( endTime - startTime );
+					params.anim->duration = ( endTime - startTime );
 
-					ae::Array< ae::Keyframe >& boneKeyframes = animOut->keyframes.Set( bone->name, tag );
+					ae::Array< ae::Keyframe >& boneKeyframes = params.anim->keyframes.Set( bone->name, m_tag );
 
 					// The following is weird because when you select an animation frame window in Maya it always shows an extra frame
-					uint32_t sampleCount = ae::Round( animOut->duration * frameRate );
+					uint32_t sampleCount = ae::Round( params.anim->duration * frameRate );
 					sampleCount++; // If an animation has one keyframe at frame 0 and the last one at 48, it actually has 49 frames
 					boneKeyframes.Clear();
 					boneKeyframes.Reserve( sampleCount );
@@ -459,7 +456,7 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 					{
 						// Subtract 1 from sample count so last frame doesn't count towards final length
 						// ie. A 2 second animation playing at 2 frames per second should have 5 frames, at times: 0, 0.5, 1.0, 1.5, 2
-						float t = ( sampleCount > 1 ) ? startTime + ( j / ( sampleCount - 1.0f ) ) * animOut->duration : 0.0f;
+						float t = ( sampleCount > 1 ) ? startTime + ( j / ( sampleCount - 1.0f ) ) * params.anim->duration : 0.0f;
 						ofbx::Vec3 posFrame = { 0.0, 0.0, 0.0 };
 						ofbx::Vec3 rotFrame = { 0.0, 0.0, 0.0 };
 						ofbx::Vec3 scaleFrame = { 1.0, 1.0, 1.0 };
@@ -487,16 +484,39 @@ bool ofbxLoadSkinnedMesh( const ae::Tag& tag, const uint8_t* fileData, uint32_t 
 		}
 	}
 	
-	vertexData->Initialize( vertexHelper.vertexSize, sizeof(uint32_t),
-		totalVerts, indices.Length(),
-		ae::Vertex::Primitive::Triangle,
-		ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
-	if ( vertexHelper.posOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.posAttrib, vertexHelper.posComponents, ae::Vertex::Type::Float, vertexHelper.posOffset ); }
-	if ( vertexHelper.normalOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.normalAttrib, vertexHelper.normalComponents, ae::Vertex::Type::Float, vertexHelper.normalOffset ); }
-	if ( vertexHelper.colorOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.colorAttrib, vertexHelper.colorComponents, ae::Vertex::Type::Float, vertexHelper.colorOffset ); }
-	if ( vertexHelper.uvOffset >= 0 ) { vertexData->AddAttribute( vertexHelper.uvAttrib, vertexHelper.uvComponents, ae::Vertex::Type::Float, vertexHelper.uvOffset ); }
-	vertexData->UploadVertices( 0, vertexBuffer.Data(), totalVerts );
-	vertexData->UploadIndices( 0, indices.Data(), indices.Length() );
+	if ( params.vertexOut )
+	{
+		memcpy( params.vertexOut, vertexBuffer.Data(), vertexCount * params.descriptor.vertexSize );
+		memcpy( params.indexOut, indices.Data(), indexCount * params.descriptor.indexSize );
+	}
+	
+	if ( params.vertexData )
+	{
+		params.vertexData->Initialize( params.descriptor.vertexSize, sizeof(uint32_t),
+									  vertexCount, indices.Length(),
+									  ae::Vertex::Primitive::Triangle,
+									  ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+		if ( params.descriptor.posOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.posAttrib, params.descriptor.posComponents, ae::Vertex::Type::Float, params.descriptor.posOffset ); }
+		if ( params.descriptor.normalOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.normalAttrib, params.descriptor.normalComponents, ae::Vertex::Type::Float, params.descriptor.normalOffset ); }
+		if ( params.descriptor.colorOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.colorAttrib, params.descriptor.colorComponents, ae::Vertex::Type::Float, params.descriptor.colorOffset ); }
+		if ( params.descriptor.uvOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.uvAttrib, params.descriptor.uvComponents, ae::Vertex::Type::Float, params.descriptor.uvOffset ); }
+		params.vertexData->UploadVertices( 0, vertexBuffer.Data(), vertexCount );
+		params.vertexData->UploadIndices( 0, indices.Data(), indices.Length() );
+	}
+
+	if ( params.collisionMesh )
+	{
+		params.collisionMesh->AddIndexed(
+			ae::Matrix4::Identity(),
+			params.descriptor.GetPosition( vertexBuffer.Data(), 0 ).data,
+			vertexCount,
+			params.descriptor.vertexSize,
+			indices.Data(),
+			indices.Length(),
+			sizeof(uint32_t)
+		);
+		params.collisionMesh->BuildBVH();
+	}
 	
 	return true;
 }
