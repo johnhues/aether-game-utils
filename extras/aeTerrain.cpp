@@ -26,6 +26,9 @@
 #include "ae/aeTerrain.h"
 #include "ae/aeCompactingAllocator.h"
 #include "ctpl_stl.h"
+#if _AE_WINDOWS_
+  #pragma warning( disable : 4244 )
+#endif
 
 //------------------------------------------------------------------------------
 // Configuration

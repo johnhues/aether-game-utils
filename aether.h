@@ -36,14 +36,19 @@
 // is included with AE_MAIN and this can easily cause naming conflicts with
 // gameplay/engine code. The following could be compiled into a single module
 // and linked with the application.
-// Usage inside a cpp/mm file is:
-// // ae.cpp/ae.mm EXAMPLE START FILE
-//
-// #define AE_MAIN
-// #define AE_USE_MODULES // C++ Modules are optional
-// #include "aether.h"
-//
-// // ae.cpp/ae.mm EXAMPLE END OF FILE
+// Usage inside a cpp/mm file could be something like:
+
+// ae.cpp/ae.mm
+/*
+
+#define AE_MAIN
+#define AE_USE_MODULES // C++ Modules (optional)
+#include "aether.h"
+
+*/
+
+//------------------------------------------------------------------------------
+// AE_AETHER_H
 //------------------------------------------------------------------------------
 #ifndef AE_AETHER_H
 #define AE_AETHER_H
@@ -83,13 +88,26 @@
 	#error "Platform not supported"
 #endif
 
-//------------------------------------------------------------------------------
-// Debug define
-//------------------------------------------------------------------------------
 #if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) ) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
 	#define _AE_DEBUG_ 1
 #else
 	#define _AE_DEBUG_ 0
+#endif
+
+//------------------------------------------------------------------------------
+// Warnings
+//------------------------------------------------------------------------------
+#if _AE_WINDOWS_
+	#define AE_POP_WARNINGS
+	#pragma warning( push )
+	#pragma warning( disable : 4018 ) // signed/unsigned mismatch
+	#pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
+	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
+	#pragma warning( disable : 4800 )
+#elif _AE_APPLE_
+	#define AE_POP_WARNINGS
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
 //------------------------------------------------------------------------------
@@ -9438,7 +9456,6 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 		{
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
-				ae::Vec3 p, n;
 				ae::Vec3 a = m_vertices[ leaf->data[ i ].idx[ 0 ] ];
 				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ];
 				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ];
@@ -10451,12 +10468,12 @@ T* ae::Cast( C* obj )
 #endif // AE_AETHER_H
 
 //------------------------------------------------------------------------------
-// Implementation
+// AE_MAIN
 //------------------------------------------------------------------------------
 #if defined(AE_MAIN) && !defined(AE_MAIN_ALREADY)
 #define AE_MAIN_ALREADY
 #if _AE_APPLE_ && !defined(__OBJC__)
-#error "AE_MAIN must be defined in an Objective-C file on Apple platforms"
+	#error "AE_MAIN must be defined in an Objective-C file on Apple platforms"
 #endif
 
 //------------------------------------------------------------------------------
@@ -10466,12 +10483,8 @@ T* ae::Cast( C* obj )
 	#ifndef _CRT_SECURE_NO_WARNINGS
 		#define _CRT_SECURE_NO_WARNINGS
 	#endif
-	#pragma warning( disable : 4244 )
-	#pragma warning( disable : 4800 )
 #elif _AE_APPLE_
 	#define GL_SILENCE_DEPRECATION
-	#pragma clang diagnostic push
-	#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
 //------------------------------------------------------------------------------
@@ -14254,9 +14267,10 @@ void Input::Pump()
 #if _AE_WINDOWS_
 	m_window->m_UpdateFocused( m_window->window == GetFocus() );
 	// @TODO: Use GameInput https://docs.microsoft.com/en-us/gaming/gdk/_content/gc/input/porting/input-porting-xinput#optimizingSection
+#pragma warning( push )
 #pragma warning( disable : 4995 ) // Disable deprecation warnings for XInput
 	XInputEnable( m_window->GetFocused() );
-#pragma warning( enable : 4995 ) // Enable deprecation warnings
+#pragma warning( pop )
 	MSG msg; // Get messages for current thread
 	while ( PeekMessage( &msg, NULL, NULL, NULL, PM_REMOVE ) )
 	{
@@ -14894,7 +14908,7 @@ void Input::Pump()
 									break;
 							}
 							break;
-						defaut:
+						default:
 							break;
 					}
 				}
@@ -23929,12 +23943,16 @@ void ae::Type::m_AddVar( const Var& var )
 	} );
 }
 
+#endif // AE_MAIN
+
 //------------------------------------------------------------------------------
 // Warnings
 //------------------------------------------------------------------------------
-#if _AE_APPLE_
-	// Pop deprecated OpenGL function warning disable
-	#pragma clang diagnostic pop
+#ifdef AE_POP_WARNINGS
+	#if _AE_WINDOWS_
+		#pragma warning( pop )
+	#elif _AE_APPLE_
+		#pragma clang diagnostic pop
+	#endif
+	#undef AE_POP_WARNINGS
 #endif
-
-#endif // AE_MAIN

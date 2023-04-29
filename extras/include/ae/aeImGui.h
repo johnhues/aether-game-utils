@@ -34,8 +34,10 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h" // For advanced imgui features like docking
 #if _AE_WINDOWS_
-	#include "GL/glew.h"
+  #include "GL/glew.h"
   #define IMGUI_IMPL_OPENGL_LOADER_GLEW
+  #pragma warning( push )
+  #pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
 #elif _AE_APPLE_
   #define GL_SILENCE_DEPRECATION
 #elif _AE_LINUX_
@@ -302,7 +304,7 @@ private:
 	{
 #if _AE_WINDOWS_
 		GLenum err = glewInit();
-		AE_ASSERT( err == GLEW_OK, "Error: #", glewGetErrorString( err ) );
+		AE_ASSERT_MSG( err == GLEW_OK, "Error: #", glewGetErrorString( err ) );
 #endif
 		ae::Str32 glVersionStr = "#version ";
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
@@ -408,5 +410,9 @@ bool aeImGui_Enum( const char* varName, T* valueOut, uint32_t showSearchCount = 
 	return false;
   }
 }
+
+#if _AE_WINDOWS_
+  #pragma warning( pop )
+#endif
 
 #endif
