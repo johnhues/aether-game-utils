@@ -290,13 +290,13 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	for ( uint32_t j = 0; j < vertexCount; j++ )
 	{
 		ofbx::Vec3 p0 = meshVerts[ j ];
-		ae::Vec4 p( p0.x, p0.y, p0.z, 1.0f );
+		ae::Vec4 p = localToWorld * ae::Vec4( p0.x, p0.y, p0.z, 1.0f );
 		ae::Color color = meshColors ? ae::Color::SRGBA( (float)meshColors[ j ].x, (float)meshColors[ j ].y, (float)meshColors[ j ].z, (float)meshColors[ j ].w ) : ae::Color::White();
 		ae::Vec2 uv = meshUvs ? ae::Vec2( meshUvs[ j ].x, meshUvs[ j ].y ) : ae::Vec2( 0.0f );
 		
 		uint8_t vertex[ 128 ];
 		AE_ASSERT( params.descriptor.vertexSize <= sizeof(vertex) );
-		params.descriptor.SetPosition( vertex, 0, localToWorld * p );
+		params.descriptor.SetPosition( vertex, 0, p );
 		params.descriptor.SetNormal( vertex, 0, ae::Vec4( 0.0f ) );
 		params.descriptor.SetColor( vertex, 0, color.GetLinearRGBA() );
 		params.descriptor.SetUV( vertex, 0, uv );

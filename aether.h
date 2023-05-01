@@ -2478,6 +2478,7 @@ enum class Key : uint8_t
 	LeftMeta = 254, // Command on Apple, Control on others
 	RightMeta = 255, // Command on Apple, Control on others
 };
+// @TODO: ae::Key ToString
 
 //------------------------------------------------------------------------------
 // ae::MouseState struct
