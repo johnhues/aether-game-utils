@@ -4127,7 +4127,6 @@ public:
 	static BinaryStream Reader( const uint8_t* data, uint32_t length );
 	static BinaryStream Reader( const Array< uint8_t >& data );
 	template < uint32_t N > static BinaryStream Writer( uint8_t (&data)[ N ] );
-	template < uint32_t N > static BinaryStream Reader( uint8_t (&data)[ N ] );
 
 	void SerializeUint8( uint8_t& v );
 	void SerializeUint8( const uint8_t& v );
@@ -4162,8 +4161,6 @@ public:
 
 	template< typename T >
 	void SerializeObject( T& v );
-	template< typename T >
-	void SerializeObject( const T& v );
 	// Use SerializeObjectConditional() when an object may not be available for serialization when writing or reading. This function correctly updates read/write offsets when skipping serialization. Sends slightly more data than SerializeObject().
 	template < typename T >
 	void SerializeObjectConditional( T* obj );
@@ -4223,7 +4220,6 @@ private:
 	Array< uint8_t >* m_extArray = nullptr;
 	Array< uint8_t > m_array = AE_ALLOC_TAG_NET;
 
-public:
 	BinaryStream() = default;
 	BinaryStream( Mode mode, uint8_t * data, uint32_t length );
 	BinaryStream( Mode mode, const uint8_t * data, uint32_t length );
@@ -9586,12 +9582,6 @@ BinaryStream BinaryStream::Writer( uint8_t (&data)[ N ] )
 }
 
 template < uint32_t N >
-BinaryStream BinaryStream::Reader( uint8_t (&data)[ N ] )
-{
-	return BinaryStream( Mode::ReadBuffer, data, N );
-}
-
-template < uint32_t N >
 void BinaryStream::SerializeString( Str< N >& str )
 {
 	if ( IsWriter() )
@@ -9630,34 +9620,34 @@ void BinaryStream::SerializeString( const Str< N >& str )
 	SerializeRaw( str.c_str(), len );
 }
 
-template <typename C> static constexpr std::true_type _ae_serialize_test( decltype( std::declval<C&&>().Serialize( nullptr ) )* ) noexcept;
-template <typename C> static constexpr std::false_type _ae_serialize_test( ... ) noexcept;
-template <typename C> constexpr decltype( _ae_serialize_test<C>( nullptr ) ) _ae_has_Serialize{};
+template < class C >
+struct HasSerializeMethod
+{
+	template < class T > static std::true_type testSignature(void (T::*)( ae::BinaryStream* ));
+	template < class T > static decltype(testSignature(&T::Serialize)) test(std::nullptr_t);
+	template < class T > static std::false_type test(...);
+	static const bool value = decltype(test<C>(nullptr))::value;
+};
+
+template < class C >
+struct HasConstSerializeMethod
+{
+	template < class T > static std::true_type testSignature(void (T::*)( ae::BinaryStream* ) const);
+	template < class T > static decltype(testSignature(&T::Serialize)) test(std::nullptr_t);
+	template < class T > static std::false_type test(...);
+	static const bool value = decltype(test<C>(nullptr))::value;
+};
 
 template< typename T >
-typename std::enable_if<_ae_has_Serialize<T>>::type
-BinaryStream_SerializeObjectInternal( BinaryStream* stream, T& v )
+typename std::enable_if< HasSerializeMethod< T >::value || HasConstSerializeMethod< T >::value >::type
+BinaryStream_SerializeObjectInternal( ae::BinaryStream* stream, T& v )
 {
 	v.Serialize( stream );
 }
 
 template< typename T >
-typename std::enable_if<_ae_has_Serialize<T>>::type
-BinaryStream_SerializeObjectInternalConst( BinaryStream* stream, const T& v )
-{
-	v.Serialize( stream );
-}
-
-template< typename T >
-typename std::enable_if<!_ae_has_Serialize<T>>::type
-BinaryStream_SerializeObjectInternal( BinaryStream* stream, T& v, ... )
-{
-	Serialize( stream, &v );
-}
-
-template< typename T >
-typename std::enable_if<!_ae_has_Serialize<T>>::type
-BinaryStream_SerializeObjectInternalConst( BinaryStream* stream, const T& v, ... )
+typename std::enable_if< !HasSerializeMethod< T >::value && !HasConstSerializeMethod< T >::value >::type
+BinaryStream_SerializeObjectInternal( ae::BinaryStream* stream, T& v, ... )
 {
 	Serialize( stream, &v );
 }
@@ -9666,13 +9656,6 @@ template< typename T >
 void BinaryStream::SerializeObject( T& v )
 {
 	BinaryStream_SerializeObjectInternal( this, v );
-}
-
-template< typename T >
-void BinaryStream::SerializeObject( const T& v )
-{
-	AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
-	BinaryStream_SerializeObjectInternalConst( this, v );
 }
 
 template< typename T >
