@@ -15239,8 +15239,12 @@ bool FileSystem_GetDir( KNOWNFOLDERID folderId, Str256* outDir )
 	HRESULT pathResult = SHGetKnownFolderPath( folderId, 0, nullptr, &wpath );
 	if ( pathResult == S_OK )
 	{
-		constexpr uint32_t kBufLen = outDir->MaxLength() + 1; // Separate from array declaration for MSVC
+#ifdef _AE_WINDOWS_
+		constexpr uint32_t kBufLen = outDir->MaxLength() + 1;
 		char path[ kBufLen ];
+#else
+		char path[ outDir->MaxLength() + 1 ];
+#endif
 		int32_t pathLen = (int32_t)wcstombs( path, wpath, outDir->MaxLength() );
 		if ( pathLen > 0 )
 		{
@@ -21043,8 +21047,12 @@ float Spline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut )
 void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
 {
 	uint32_t accumHitCount = 0;
-	constexpr uint32_t kMaxHits = next->hits.Size() * 2; // Separate from array declaration for MSVC
+#ifdef _AE_WINDOWS_
+	constexpr uint32_t kMaxHits = next->hits.Size() * 2;
 	Hit accumHits[ kMaxHits ];
+#else
+	Hit accumHits[ next->hits.Size() * 2 ];
+#endif
 	
 	for ( uint32_t i = 0; i < next->hits.Length(); i++ )
 	{
