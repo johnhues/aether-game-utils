@@ -4161,6 +4161,8 @@ public:
 
 	template< typename T >
 	void SerializeObject( T& v );
+	template< typename T >
+	void SerializeObject( const T& v );
 	// Use SerializeObjectConditional() when an object may not be available for serialization when writing or reading. This function correctly updates read/write offsets when skipping serialization. Sends slightly more data than SerializeObject().
 	template < typename T >
 	void SerializeObjectConditional( T* obj );
@@ -9654,6 +9656,12 @@ BinaryStream_SerializeObjectInternal( ae::BinaryStream* stream, T& v, ... )
 
 template< typename T >
 void BinaryStream::SerializeObject( T& v )
+{
+	BinaryStream_SerializeObjectInternal( this, v );
+}
+
+template< typename T >
+void BinaryStream::SerializeObject( const T& v )
 {
 	BinaryStream_SerializeObjectInternal( this, v );
 }
