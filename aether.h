@@ -293,9 +293,11 @@ void Free( void* data );
 
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
-//! This class is useful for scoped allocations. (@TODO) In the future it
-//! should allocate from a stack. This should allow big allocations to happen
-//! cheaply each frame without creating any fragmentation.
+//! Can be used for scoped allocations within a single frame. Because this uses
+//! a stack internally it can be used to make many cheap allocations, while
+//! avoiding memory fragmentation. Up to kMaxScratchSize bytes may be allocated
+//! at a time. Allocated objects will have their constructors and destructors
+//! called in ae::Scratch() and ~ae::Scratch respectively.
 //------------------------------------------------------------------------------
 template < typename T >
 class Scratch
@@ -311,6 +313,9 @@ public:
 	const T& operator[] ( int32_t index ) const;
 	T& GetSafe( int32_t index );
 	const T& GetSafe( int32_t index ) const;
+
+	//! The max cumulative size of the internal scratch stack
+	static const uint32_t kMaxScratchSize = 4 * 1024 * 1024;
 
 private:
 	T* m_data;
@@ -5245,7 +5250,7 @@ public:
 		AE_ASSERT( offset == 0 );
 		delete [] data;
 	}
-	static _ScratchBuffer* Get() { static _ScratchBuffer s_scratchBuffer( 4 * 1024 * 1024 ); return &s_scratchBuffer; }
+	static _ScratchBuffer* Get() { static _ScratchBuffer s_scratchBuffer( ae::Scratch< uint8_t >::kMaxScratchSize ); return &s_scratchBuffer; }
 #if _AE_EMSCRIPTEN_
 	static const uint32_t kScratchAlignment = 8; // Emscripten only supports up to 8 byte alignment
 #else
