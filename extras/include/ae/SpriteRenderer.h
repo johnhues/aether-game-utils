@@ -35,6 +35,7 @@
 class SpriteRenderer
 {
 public:
+	SpriteRenderer( const ae::Tag& tag );
 	void Initialize( uint32_t maxCount );
 	void Terminate();
 	void AddSprite( const ae::Matrix4& localToWorld, ae::Rect uvs, ae::Color color );
@@ -50,6 +51,7 @@ private:
 	uint32_t m_count = 0;
 	uint32_t m_maxCount = 0;
 	ae::Shader m_shader;
+	ae::VertexBuffer m_vertexBuffer;
 	ae::VertexArray m_vertexData;
 };
 

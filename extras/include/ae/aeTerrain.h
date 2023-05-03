@@ -458,7 +458,7 @@ struct TerrainChunk
   ae::Int3 m_pos;
   bool m_geoDirty;
   bool m_lightDirty;
-  ae::VertexArray m_data;
+  ae::VertexBuffer m_data;
   ae::CollisionMesh<> m_mesh = AE_ALLOC_TAG_TERRAIN;
   ae::ListNode< TerrainChunk > m_generatedList;
   

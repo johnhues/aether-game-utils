@@ -78,7 +78,7 @@ public:
   ae::GraphicsDevice render;
   ae::Input input;
   ae::TimeStep timeStep;
-  ae::DebugLines debugLines;
+  ae::DebugLines debugLines = TAG_EXAMPLE;
 };
 
 //------------------------------------------------------------------------------

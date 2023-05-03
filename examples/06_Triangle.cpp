@@ -56,7 +56,7 @@ public:
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
-	ae::VertexArray vertexData;
+	ae::VertexBuffer vertexData;
 
 	ae::Vec3 pos = ae::Vec3( 0.0f );
 	float scale = 1.0f;
@@ -93,9 +93,8 @@ Example::Example()
 	vertexData.Initialize( sizeof( *kTriangleVerts ), sizeof( *kTriangleIndices ), countof( kTriangleVerts ), countof( kTriangleIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
-	vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
-	vertexData.Upload();
+	vertexData.UploadVertices( 0, kTriangleVerts, countof( kTriangleVerts ) );
+	vertexData.UploadIndices( 0, kTriangleIndices, countof( kTriangleIndices ) );
 }
 
 bool Example::Tick()
@@ -145,7 +144,8 @@ bool Example::Tick()
 
 	ae::UniformList uniformList;
 	uniformList.Set( "u_modelToNdc", transform );
-	vertexData.Draw( &shader, uniformList );
+	vertexData.Bind( &shader, uniformList );
+	vertexData.Draw();
 
 	render.Present();
 	timeStep.Tick();

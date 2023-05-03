@@ -112,7 +112,7 @@ private:
 	ae::Input m_input;
 	ae::TimeStep m_timeStep;
 	ae::Shader m_shader;
-	ae::VertexArray m_triangle, m_quad;
+	ae::VertexBuffer m_triangle, m_quad;
 
 	ae::Matrix4 m_worldToProj;
 	enum class State
@@ -154,13 +154,13 @@ void Program::Initialize()
 
 	m_triangle.Initialize( sizeof( *kCursorVerts ), sizeof( *kCursorIndices ), countof( kCursorVerts ), countof( kCursorIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	m_triangle.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, 0 );
-	m_triangle.SetVertices( kCursorVerts, countof( kCursorVerts ) );
-	m_triangle.SetIndices( kCursorIndices, countof( kCursorIndices ) );
+	m_triangle.UploadVertices( 0, kCursorVerts, countof( kCursorVerts ) );
+	m_triangle.UploadIndices( 0, kCursorIndices, countof( kCursorIndices ) );
 
 	m_quad.Initialize( sizeof( *kQuadVerts ), sizeof( *kQuadIndices ), countof( kQuadVerts ), countof( kQuadIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	m_quad.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, 0 );
-	m_quad.SetVertices( kQuadVerts, countof( kQuadVerts ) );
-	m_quad.SetIndices( kQuadIndices, countof( kQuadIndices ) );
+	m_quad.UploadVertices( 0, kQuadVerts, countof( kQuadVerts ) );
+	m_quad.UploadIndices( 0, kQuadIndices, countof( kQuadIndices ) );
 
 	m_rootFolder.subFolders.Append( ae::New< Folder >( TAG_FOLDER ) )->pos = ae::Vec2( 100.0f, 200.0f );
 	m_rootFolder.subFolders.Append( ae::New< Folder >( TAG_FOLDER ) )->pos = ae::Vec2( 300.0f, 300.0f );
@@ -324,7 +324,8 @@ void Program::DrawRect( ae::Rect rect, ae::Color color )
 	ae::UniformList uniformList;
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
 	uniformList.Set( "u_color", color.GetLinearRGBA() );
-	m_quad.Draw( &m_shader, uniformList );
+	m_quad.Bind( &m_shader, uniformList );
+	m_quad.Draw();
 }
 
 void Program::DrawWindow()
@@ -348,12 +349,14 @@ void Program::DrawCursor()
 	ae::Matrix4 localToWorld = ae::Matrix4::Translation( mousePos.x - 2.0f, mousePos.y + 4.0f, 0.0f ) * ae::Matrix4::Scaling( 30.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
 	uniformList.Set( "u_color", ae::Color::PicoDarkGray().GetLinearRGBA() );
-	m_triangle.Draw( &m_shader, uniformList );
+	m_triangle.Bind( &m_shader, uniformList );
+	m_triangle.Draw();
 
 	localToWorld = ae::Matrix4::Translation( mousePos.x, mousePos.y, 0.0f ) * ae::Matrix4::Scaling( 20.0f );
 	uniformList.Set( "u_worldToProj", m_worldToProj * localToWorld );
 	uniformList.Set( "u_color", ae::Color::PicoWhite().GetLinearRGBA() );
-	m_triangle.Draw( &m_shader, uniformList );
+	m_triangle.Bind( &m_shader, uniformList );
+	m_triangle.Draw();
 }
 
 void Program::DrawFolders()

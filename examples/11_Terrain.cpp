@@ -121,8 +121,8 @@ public:
 
     m_bgVertexData.Initialize( sizeof( BGVertex ), sizeof( uint8_t ), countof( bgVertices ), countof( bgIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
     m_bgVertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( BGVertex, pos ) );
-    m_bgVertexData.SetVertices( bgVertices, countof( bgVertices ) );
-    m_bgVertexData.SetIndices( bgIndices, countof( bgIndices ) );
+    m_bgVertexData.UploadVertices( 0, bgVertices, countof( bgVertices ) );
+    m_bgVertexData.UploadIndices( 0, bgIndices, countof( bgIndices ) );
 
     m_gridShader.Initialize( kGridVertexStr, kGridFragStr, nullptr, 0 );
   }
@@ -131,12 +131,13 @@ public:
   {
     ae::UniformList uniforms;
     uniforms.Set( "u_screenToWorld", worldToProj.GetInverse() );
-    m_bgVertexData.Draw( &m_gridShader, uniforms );
+    m_bgVertexData.Bind( &m_gridShader, uniforms );
+    m_bgVertexData.Draw();
   }
 
 private:
   ae::Shader m_gridShader;
-  ae::VertexArray m_bgVertexData;
+  ae::VertexBuffer m_bgVertexData;
 };
 
 //------------------------------------------------------------------------------
@@ -268,7 +269,7 @@ int main()
   ae::Window window;
   ae::GraphicsDevice render;
   ae::Input input;
-  ae::DebugLines debug;
+  ae::DebugLines debug = TAG_EXAMPLE;
   ae::TimeStep timeStep;
   ae::Shader terrainShader;
   ae::DebugCamera camera = ae::Axis::Z;

@@ -97,7 +97,7 @@ class FbxLoader
 public:
 	FbxLoader( const ae::Tag& tag );
 	~FbxLoader();
-	bool Initialize( const uint8_t* fileData, uint32_t fileDataLen );
+	bool Initialize( const void* fileData, uint32_t fileDataLen );
 	void Terminate();
 	
 	uint32_t GetMeshCount() const;

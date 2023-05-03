@@ -107,7 +107,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
-	ae::VertexArray cube, cursor;
+	ae::VertexBuffer cube, cursor;
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "render target" );
@@ -124,16 +124,14 @@ int main()
 	cube.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	cube.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	cube.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	cube.SetVertices( kCubeVerts, countof( kCubeVerts ) );
-	cube.SetIndices( kCubeIndices, countof( kCubeIndices ) );
-	cube.Upload();
+	cube.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
+	cube.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
 
 	cursor.Initialize( sizeof( *kCursorVerts ), sizeof( *kCursorIndices ), countof( kCursorVerts ), countof( kCursorIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	cursor.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	cursor.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	cursor.SetVertices( kCursorVerts, countof( kCursorVerts ) );
-	cursor.SetIndices( kCursorIndices, countof( kCursorIndices ) );
-	cursor.Upload();
+	cursor.UploadVertices( 0, kCursorVerts, countof( kCursorVerts ) );
+	cursor.UploadIndices( 0, kCursorIndices, countof( kCursorIndices ) );
 
 	ae::RenderTarget target;
 	target.Initialize( 240, 160 );
@@ -165,19 +163,22 @@ int main()
 		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		cube.Draw( &shader, uniformList );
+		cube.Bind( &shader, uniformList );
+		cube.Draw();
 		
 		// Shadow
 		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -1.25f ) ) * ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::Black().ScaleA( 0.1f ).GetLinearRGBA() );
-		cube.Draw( &shader, uniformList );
+		cube.Bind( &shader, uniformList );
+		cube.Draw();
 
 		// Cursor
 		ae::Matrix4 cursorToWorld = ae::Matrix4::Translation( mouse.GetXYZ() ) * ae::Matrix4::Scaling( 8.0f );
 		uniformList.Set( "u_worldToProj", targetToNdc * cursorToWorld );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		cursor.Draw( &shader, uniformList );
+		cursor.Bind( &shader, uniformList );
+		cursor.Draw();
 		
 		render.Clear( ae::Color::PicoDarkGray() );
 		target.Render2D( 0, ndcRect, 0.0f );

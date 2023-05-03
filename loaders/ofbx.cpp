@@ -82,7 +82,7 @@ FbxLoader::~FbxLoader()
 	Terminate();
 }
 
-bool FbxLoader::Initialize( const uint8_t* fileData, uint32_t fileDataLen )
+bool FbxLoader::Initialize( const void* fileData, uint32_t fileDataLen )
 {
 	Terminate();
 	m_state = ae::New< FbxLoaderImpl >( m_tag, m_tag );
@@ -237,12 +237,8 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	const ofbx::Vec4* meshColors = geo->getColors();
 	const ofbx::Vec2* meshUvs = geo->getUVs();
 	const int32_t* meshIndices = geo->getFaceIndices();
-	if ( params.vertexOut )
-	{
-		if ( !params.indexOut ) { return false; }
-		if ( params.maxVerts < vertexCount ) { return false; }
-		if ( params.maxIndex < indexCount ) { return false; }
-	}
+	if ( params.vertexOut && params.maxVerts < vertexCount ) { return false; }
+	if ( params.indexOut && params.maxIndex < indexCount ) { return false; }
 	const ofbx::Skin* ofbxSkin = info->mesh->getGeometry()->getSkin();
 	const ofbx::Object* ofbxSkeletonRoot = info->rootJoint;
 	if ( ofbxSkeletonRoot )
@@ -487,15 +483,18 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	if ( params.vertexOut )
 	{
 		memcpy( params.vertexOut, vertexBuffer.Data(), vertexCount * params.descriptor.vertexSize );
+	}
+	if ( params.indexOut )
+	{
 		memcpy( params.indexOut, indices.Data(), indexCount * params.descriptor.indexSize );
 	}
 	
 	if ( params.vertexData )
 	{
 		params.vertexData->Initialize( params.descriptor.vertexSize, sizeof(uint32_t),
-									  vertexCount, indices.Length(),
-									  ae::Vertex::Primitive::Triangle,
-									  ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+			vertexCount, indices.Length(),
+			ae::Vertex::Primitive::Triangle,
+			ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
 		if ( params.descriptor.posOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.posAttrib, params.descriptor.posComponents, ae::Vertex::Type::Float, params.descriptor.posOffset ); }
 		if ( params.descriptor.normalOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.normalAttrib, params.descriptor.normalComponents, ae::Vertex::Type::Float, params.descriptor.normalOffset ); }
 		if ( params.descriptor.colorOffset >= 0 ) { params.vertexData->AddAttribute( params.descriptor.colorAttrib, params.descriptor.colorComponents, ae::Vertex::Type::Float, params.descriptor.colorOffset ); }

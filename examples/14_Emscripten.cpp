@@ -76,8 +76,8 @@ public:
 		vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
 		vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( Vertex, uv ) );
-		vertexData.SetVertices( kTriangleVerts, countof( kTriangleVerts ) );
-		vertexData.SetIndices( kTriangleIndices, countof( kTriangleIndices ) );
+		vertexData.UploadVertices( 0, kTriangleVerts, countof( kTriangleVerts ) );
+		vertexData.UploadIndices( 0, kTriangleIndices, countof( kTriangleIndices ) );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
 
 		uint8_t data[] = { 255, 255, 255 };
@@ -176,7 +176,8 @@ public:
 		ae::UniformList uniformList;
 		uniformList.Set( "u_modelToNdc", transform );
 		uniformList.Set( "u_tex", &m_texture );
-		vertexData.Draw( &shader, uniformList );
+		vertexData.Bind( &shader, uniformList );
+		vertexData.Draw();
 
 		gfx.Present();
 	}
@@ -185,7 +186,7 @@ public:
 	ae::GraphicsDevice gfx;
 	ae::Input input;
 	ae::Shader shader;
-	ae::VertexArray vertexData;
+	ae::VertexBuffer vertexData;
 	ae::TimeStep timeStep;
 };
 

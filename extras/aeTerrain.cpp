@@ -1145,7 +1145,7 @@ ae::AABB TerrainChunk::GetAABB( ae::Int3 chunkPos )
 void TerrainChunk::m_SetVertexData( const TerrainVertex* verts, const TerrainIndex* indices, VertexCount vertexCount, uint32_t indexCount )
 {
   // (Re)Initialize ae::VertexArray here only when needed
-  if ( m_data.GetIndexCount() == 0 // Not initialized
+  if ( !m_data.GetMaxVertexCount() // Not initialized
     || VertexCount( m_data.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
     || m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
   {
@@ -1157,9 +1157,8 @@ void TerrainChunk::m_SetVertexData( const TerrainVertex* verts, const TerrainInd
   }
 
   // Set vertices
-  m_data.SetVertices( verts, (uint32_t)vertexCount );
-  m_data.SetIndices( indices, indexCount );
-  m_data.Upload();
+  m_data.UploadVertices( 0, verts, (uint32_t)vertexCount );
+  m_data.UploadIndices( 0, indices, indexCount );
 }
 
 //------------------------------------------------------------------------------
@@ -1749,7 +1748,7 @@ void Terrain::Update( ae::Vec3 center, float radius )
       //AE_ASSERT( chunk->m_mesh.GetVertexCount() );
       if ( m_render )
       {
-        AE_ASSERT( chunk->m_data.GetVertexCount() );
+        AE_ASSERT( chunk->m_data.GetMaxVertexCount() );
         AE_ASSERT( chunk->m_data.GetVertexSize() );
       }
     }
@@ -1889,13 +1888,14 @@ void Terrain::Render( const ae::Shader* shader, const ae::UniformList& shaderPar
     VertexCount vertexCount = GetVertexCount( index );
     AE_ASSERT( chunk->m_check == 0xCDCDCDCD );
     AE_ASSERT_MSG( vertexCount > kChunkCountEmpty, "vertex count: # index: #", vertexCount, index );
-    AE_ASSERT( chunk->m_data.GetVertexCount() );
+    AE_ASSERT( chunk->m_data.GetMaxVertexCount() );
     AE_ASSERT( chunk->m_data.GetVertexSize() );
     
     // Only render the visible chunks
     //if( frustum.TestChunk( chunk ) ) // @TODO: Should make sure chunk is visible
     {
-      chunk->m_data.Draw( shader, shaderParams );
+      chunk->m_data.Bind( shader, shaderParams );
+      chunk->m_data.Draw();
       activeCount++;
     }
   }

@@ -42,7 +42,7 @@ int main()
   ae::GraphicsDevice render;
   ae::Input input;
   ae::TimeStep timeStep;
-  SpriteRenderer spriteRenderer;
+  SpriteRenderer spriteRenderer = TAG_EXAMPLE;
   fileSystem.Initialize( "data", "ae", "sprites" );
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "sprites" );

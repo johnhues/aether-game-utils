@@ -79,10 +79,10 @@ int main()
 	ae::TimeStep timeStep;
 	ae::Shader shader;
 	ae::Shader shadowShader;
-	ae::VertexArray vertexData;
+	ae::VertexBuffer vertexData;
 	ae::FileSystem fs;
 	ae::DebugCamera camera = ae::Axis::Y;
-	ae::DebugLines debugLines;
+	ae::DebugLines debugLines = kObjAllocTag;
 	
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "OBJ Viewer" );
@@ -125,8 +125,8 @@ int main()
 	vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
 	vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
 	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
-	vertexData.SetVertices( objFile.vertices.Data(), objFile.vertices.Length() );
-	vertexData.SetIndices( objFile.indices.Data(), objFile.indices.Length() );
+	vertexData.UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
+	vertexData.UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
 	
 	ae::Vec3 offset = camera.GetPosition() - camera.GetFocus();
 	offset = offset.SafeNormalizeCopy() * 3.0f;
@@ -156,13 +156,15 @@ int main()
 		uniformList.Set( "u_lightDir", ae::Vec3( 7.0f, -3.0f, -5.0f ).NormalizeCopy() );
 		uniformList.Set( "u_ambLight", ae::Color::PicoDarkPurple().ScaleRGB( 0.5f ).GetLinearRGB() );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		vertexData.Draw( &shader, uniformList );
+		vertexData.Bind( &shader, uniformList );
+		vertexData.Draw();
 		
 		// Shadow
 		ae::Matrix4 flat = ae::Matrix4::Scaling( ae::Vec3( 1.0f, 0.0f, 1.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::PicoDarkPurple().ScaleRGB( 0.6f ).GetLinearRGBA() );
-		vertexData.Draw( &shadowShader, uniformList );
+		vertexData.Bind( &shadowShader, uniformList );
+		vertexData.Draw();
 		
 		debugLines.AddOBB( modelToWorld * objFile.aabb.GetTransform(), ae::Color::PicoPink() );
 		debugLines.Render( viewToProj * worldToView );

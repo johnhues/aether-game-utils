@@ -86,12 +86,12 @@ public:
 	ae::GraphicsDevice gfx;
 	ae::TimeStep timeStep;
 	ae::FileSystem fs;
-	ae::DebugLines debugLines;
+	ae::DebugLines debugLines = TAG_ALL;
 	ae::Registry registry = TAG_ALL;
 
 	// Resources
-	ae::VertexArray bunnyVertexData;
-	ae::VertexArray avatarVertexData;
+	ae::VertexBuffer bunnyVertexData;
+	ae::VertexBuffer avatarVertexData;
 	ae::CollisionMesh<> bunnyCollision = TAG_ALL;
 	ae::Shader meshShader;
 	ae::Shader avatarShader;
@@ -155,7 +155,7 @@ const char* kFragShader = R"(
 		AE_COLOR.a = v_color.a;
 	})";
 
-void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexArray* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
+void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
 {
 	ae::OBJFile objFile = TAG_ALL;
 	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
@@ -177,8 +177,8 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexArray* v
 			vertexDataOut->AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
 			vertexDataOut->AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, texture ) );
 			vertexDataOut->AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
-			vertexDataOut->SetVertices( objFile.vertices.Data(), objFile.vertices.Length() );
-			vertexDataOut->SetIndices( objFile.indices.Data(), objFile.indices.Length() );
+			vertexDataOut->UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
+			vertexDataOut->UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
 		}
 		
 		objFile.InitializeCollisionMesh( collisionOut, ae::Matrix4::Identity() );
@@ -318,7 +318,8 @@ void Game::Run()
 		{
 			uniformList.Set( "u_worldToProj", worldToProj * m->transform );
 			uniformList.Set( "u_normalToWorld", m->transform.GetNormalMatrix() );
-			bunnyVertexData.Draw( &meshShader, uniformList );
+			bunnyVertexData.Bind( &meshShader, uniformList );
+			bunnyVertexData.Draw();
 		} );
 		
 		registry.CallFn< Object >( [&]( Object* o ){ o->Render( this ); } );
@@ -481,7 +482,8 @@ void Avatar::Render( Game* game )
 	uniformList.Set( "u_worldToProj", game->worldToProj * transform );
 	uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
 	uniformList.Set( "u_tex", &game->spacesuitTex );
-	game->avatarVertexData.Draw( &game->avatarShader, uniformList );
+	game->avatarVertexData.Bind( &game->avatarShader, uniformList );
+	game->avatarVertexData.Draw();
 }
 
 //------------------------------------------------------------------------------

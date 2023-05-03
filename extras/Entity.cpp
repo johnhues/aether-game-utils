@@ -107,6 +107,8 @@ Component* Registry::AddComponent( Entity entity, const char* typeName )
 		return nullptr;
 	}
 	AE_ASSERT_MSG( type->IsType< ae::Component >(), "Type '#' does not inherit from ae::Component", type->GetName() );
+	AE_ASSERT_MSG( !type->IsAbstract(), "Type '#' is abstract", type->GetName() );
+	AE_ASSERT_MSG( type->IsDefaultConstructible(), "Type '#' is not default constructible", type->GetName() );
 	
 	ae::Object* object = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
 	type->New( object );

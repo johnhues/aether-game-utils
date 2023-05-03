@@ -95,7 +95,7 @@ int main()
 	ae::Shader shader;
 	ae::FileSystem fileSystem;
 	ae::DebugCamera camera = ae::Axis::Y;
-	ae::DebugLines debugLines;
+	ae::DebugLines debugLines = TAG_ALL;
 	aeImGui ui;
 
 	window.Initialize( 800, 600, false, true );
@@ -127,31 +127,48 @@ int main()
 	}
 	
 	ae::Skin skin = TAG_ALL;
-	ae::VertexArray vertexData;
+	ae::VertexBuffer vertexData;
 	Vertex* vertices = nullptr;
 	{
 		const char* fileName = "character.fbx";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
 		AE_ASSERT_MSG( fileSize, "Could not load '#'", fileName );
 		ae::Scratch< uint8_t > fileData( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() );
+		if ( !fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileData.Data(), fileData.Length() ) )
+		{
+			AE_ERR( "Error reading fbx file: '#'", fileName );
+			return -1;
+		}
 		
-		ae::VertexLoaderHelper vertexInfo;
-		vertexInfo.vertexSize = sizeof(Vertex);
-		vertexInfo.indexSize = 4;
-		vertexInfo.posOffset = offsetof( Vertex, pos );
-		vertexInfo.normalOffset = offsetof( Vertex, normal );
-		vertexInfo.colorOffset = offsetof( Vertex, color );
-		vertexInfo.uvOffset = offsetof( Vertex, uv );
-		ae::ofbxLoadSkinnedMesh( TAG_ALL, fileData.Data(), fileData.Length(), vertexInfo, &vertexData, &skin, nullptr );
-
-		vertices = ae::NewArray< Vertex >( TAG_ALL, vertexData.GetVertexCount() );
-		memcpy( vertices, vertexData.GetVertices< Vertex >(), ( sizeof(Vertex) * vertexData.GetVertexCount() ) );
+		ae::FbxLoader fbxLoader = TAG_ALL;
+		if ( !fbxLoader.Initialize( fileData.Data(), fileData.Length() ) )
+		{
+			AE_ERR( "Error parsing fbx file: '#'", fileName );
+			return -1;
+		}
+		
+		ae::FbxLoaderParams params;
+		params.descriptor.vertexSize = sizeof(Vertex);
+		params.descriptor.indexSize = 4;
+		params.descriptor.posOffset = offsetof( Vertex, pos );
+		params.descriptor.normalOffset = offsetof( Vertex, normal );
+		params.descriptor.colorOffset = offsetof( Vertex, color );
+		params.descriptor.uvOffset = offsetof( Vertex, uv );
+		params.vertexData = &vertexData;
+		params.skin = &skin;
+		params.maxVerts = fbxLoader.GetMeshVertexCount( 0u );
+		vertices = ae::NewArray< Vertex >( TAG_ALL, params.maxVerts );
+		params.vertexOut = vertices;
+		if ( !fbxLoader.Load( fbxLoader.GetMeshName( 0 ), params ) )
+		{
+			AE_ERR( "Error loading fbx file data: '#'", fileName );
+			return -1;
+		}
 	}
 	
 	const char* handBoneName = "QuickRigCharacter_RightHand";
 	const char* armBoneName = "QuickRigCharacter_RightArm";
-	ae::Matrix4 targetTransform = skin.GetBindPose()->GetBoneByName( handBoneName )->transform;
+	ae::Matrix4 targetTransform = skin.GetBindPose().GetBoneByName( handBoneName )->transform;
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	bool drawMesh = true;
 	
@@ -168,7 +185,7 @@ int main()
 		
 		if ( input.Get( ae::Key::R ) )
 		{
-			targetTransform = ae::Matrix4::Translation( skin.GetBindPose()->GetBoneByName( handBoneName )->transform.GetTranslation() );
+			targetTransform = ae::Matrix4::Translation( skin.GetBindPose().GetBoneByName( handBoneName )->transform.GetTranslation() );
 		}
 		if ( input.Get( ae::Key::W ) )
 		{
@@ -190,7 +207,7 @@ int main()
 		
 		ae::Skeleton currentPose = TAG_ALL;
 		{
-			currentPose.Initialize( skin.GetBindPose() );
+			currentPose.Initialize( &skin.GetBindPose() );
 
 			ae::IK<> ik = TAG_ALL;
 			ae::Array< const ae::Bone* > bones = TAG_ALL;
@@ -219,9 +236,8 @@ int main()
 		}
 		
 		// Update mesh
-		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetVertexCount() );
-		vertexData.SetVertices( vertices, vertexData.GetVertexCount() );
-		vertexData.Upload();
+		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetMaxVertexCount() );
+		vertexData.UploadVertices( 0, vertices, vertexData.GetMaxVertexCount() );
 		
 		// Debug
 		for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
@@ -263,7 +279,8 @@ int main()
 			uniformList.Set( "u_ambColor", ae::Vec3( 0.8f ) );
 			uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
 			uniformList.Set( "u_tex", &texture );
-			vertexData.Draw( &shader, uniformList );
+			vertexData.Bind( &shader, uniformList );
+			vertexData.Draw();
 		}
 		
 		// Frame end

@@ -43,7 +43,7 @@ int main()
   ae::Input input;
   ae::FileSystem fileSystem;
   ae::Spline spline( TAG_EXAMPLE );
-  SpriteRenderer spriteRender;
+  SpriteRenderer spriteRender = TAG_EXAMPLE;
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "splines" );

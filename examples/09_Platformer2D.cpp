@@ -30,6 +30,9 @@
 //------------------------------------------------------------------------------
 // Constants
 //------------------------------------------------------------------------------
+// Allocations
+const ae::Tag TAG_ALL = "all";
+
 // Frame rate
 const uint32_t kFramesPerSecond = 60;
 const uint32_t kSimulationStepsPerSecond = 240;
@@ -195,7 +198,7 @@ struct Game
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	SpriteRenderer spriteRender;
+	SpriteRenderer spriteRender = TAG_ALL;
 	ae::TimeStep timeStep;
 	HotSpotWorld world;
 	ae::Texture2D tex;

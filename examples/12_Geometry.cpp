@@ -43,7 +43,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::FileSystem fileSystem;
-	ae::DebugLines debug;
+	ae::DebugLines debug = TAG_EXAMPLE;
 	ae::Texture2D fontTexture;
 	ae::TextRender text = TAG_EXAMPLE;
 	ae::DebugCamera camera = ae::Axis::Z;

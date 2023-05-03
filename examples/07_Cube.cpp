@@ -88,7 +88,7 @@ struct Example
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::Shader shader;
-	ae::VertexArray vertexData;
+	ae::VertexBuffer vertexData;
 	float r0 = 0.0f;
 	float r1 = 0.0f;
 
@@ -111,9 +111,8 @@ struct Example
 		vertexData.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 		vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 		vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-		vertexData.SetVertices( kCubeVerts, countof( kCubeVerts ) );
-		vertexData.SetIndices( kCubeIndices, countof( kCubeIndices ) );
-		vertexData.Upload();
+		vertexData.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
+		vertexData.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
 	}
 
 	bool Tick()
@@ -134,14 +133,16 @@ struct Example
 		ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		vertexData.Draw( &shader, uniformList );
+		vertexData.Bind( &shader, uniformList );
+		vertexData.Draw();
 		
 		// Shadow
 		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -1.25f ) )
 			* ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
 		uniformList.Set( "u_color", ae::Color::Black().ScaleA( 0.1f ).GetLinearRGBA() );
-		vertexData.Draw( &shader, uniformList );
+		vertexData.Bind( &shader, uniformList );
+		vertexData.Draw();
 		
 		render.Present();
 		timeStep.Tick();

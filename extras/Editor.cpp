@@ -92,9 +92,11 @@ public:
 		ae::Vec4 position;
 		ae::Vec4 normal;
 	};
-	EditorServerMesh( const ae::Tag& tag ) : collision( tag ) {}
-	void Initialize( const ae::Tag& tag, const ae::EditorMesh* mesh );
-	ae::VertexArray data;
+	EditorServerMesh( const ae::Tag& tag ) : tag( tag ), vertices( tag ), collision( tag ) {}
+	void Initialize( const ae::EditorMesh* mesh );
+	const ae::Tag tag;
+	ae::Array< Vertex > vertices;
+	ae::VertexBuffer data;
 	ae::CollisionMesh<> collision;
 };
 
@@ -232,8 +234,9 @@ class EditorProgram
 {
 public:
 	EditorProgram( const ae::Tag& tag, const EditorParams& params, Editor* client ) :
-		camera( params.worldUp ),
 		m_tag( tag ),
+		camera( params.worldUp ),
+		debugLines( tag ),
 		editor( tag, client ),
 		params( params ),
 		m_meshes( tag )
@@ -290,8 +293,8 @@ private:
 	ae::RenderTarget m_gameTarget;
 	ae::Map< std::string, EditorServerMesh* > m_meshes; // @TODO: Dynamic ae::Str
 public:
-	ae::VertexArray m_introMesh;
-	ae::VertexArray m_quad;
+	ae::VertexBuffer m_introMesh;
+	ae::VertexBuffer m_quad;
 	ae::Shader m_introShader;
 	ae::Shader m_meshShader;
 	ae::Shader m_iconShader;
@@ -301,10 +304,9 @@ public:
 //------------------------------------------------------------------------------
 // EditorServerMesh member functions
 //------------------------------------------------------------------------------
-void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _mesh )
+void EditorServerMesh::Initialize( const ae::EditorMesh* _mesh )
 {
-	ae::Array< Vertex > vertices = tag;
-	
+	vertices.Clear();
 	if ( _mesh->indices.Length() )
 	{
 		uint32_t triangleCount = _mesh->indices.Length() / 3;
@@ -336,11 +338,10 @@ void EditorServerMesh::Initialize( const ae::Tag& tag, const ae::EditorMesh* _me
 		}
 	}
 	
-	data.Initialize( sizeof( Vertex ), 0, vertices.Length(), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
+	data.Initialize( sizeof(Vertex), 0, vertices.Length(), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	data.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
 	data.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
-	data.SetVertices( vertices.Data(), vertices.Length() );
-	data.Upload();
+	data.UploadVertices( 0, vertices.Data(), vertices.Length() );
 	
 	collision.Clear();
 	collision.AddIndexed(
@@ -427,9 +428,8 @@ void EditorProgram::Initialize()
 	m_introMesh.Initialize( sizeof( *kCubeVerts ), sizeof( *kCubeIndices ), countof( kCubeVerts ), countof( kCubeIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	m_introMesh.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	m_introMesh.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
-	m_introMesh.SetVertices( kCubeVerts, countof( kCubeVerts ) );
-	m_introMesh.SetIndices( kCubeIndices, countof( kCubeIndices ) );
-	m_introMesh.Upload();
+	m_introMesh.UploadVertices( 0, kCubeVerts, countof( kCubeVerts ) );
+	m_introMesh.UploadIndices( 0, kCubeIndices, countof( kCubeIndices ) );
 	
 	const char* meshVertShader = R"(
 		AE_UNIFORM mat4 u_localToProj;
@@ -473,8 +473,7 @@ void EditorProgram::Initialize()
 	m_quad.Initialize( sizeof( *quadVerts ), 0, countof( quadVerts ), 0, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	m_quad.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( QuadVertex, pos ) );
 	m_quad.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( QuadVertex, uv ) );
-	m_quad.SetVertices( quadVerts, countof( quadVerts ) );
-	m_quad.Upload();
+	m_quad.UploadVertices( 0, quadVerts, countof( quadVerts ) );
 	
 	const char* iconVertexShader = R"(
 		AE_UNIFORM mat4 u_worldToProj;
@@ -622,7 +621,8 @@ void EditorProgram::Run()
 			ae::Matrix4 modelToWorld = ae::Matrix4::RotationX( r0 ) * ae::Matrix4::RotationZ( r1 );
 			uniformList.Set( "u_worldToProj", m_viewToProj * m_worldToView * modelToWorld );
 			uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-			m_introMesh.Draw( &m_introShader, uniformList );
+			m_introMesh.Bind( &m_introShader, uniformList );
+			m_introMesh.Draw();
 		}
 
 		editor.Render( this );
@@ -662,7 +662,7 @@ EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
 		if ( temp.verts.Length() )
 		{
 			mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
-			mesh->Initialize( m_tag, &temp );
+			mesh->Initialize( &temp );
 			m_meshes.Set( resourceId, mesh );
 		}
 	}
@@ -1233,7 +1233,8 @@ void EditorServer::Render( EditorProgram* program )
 		uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
 		uniformList.Set( "u_lightDir", lightDir );
 		uniformList.Set( "u_color", color.GetLinearRGBA() );
-		obj.mesh->data.Draw( &program->m_meshShader, uniformList );
+		obj.mesh->data.Bind( &program->m_meshShader, uniformList );
+		obj.mesh->data.Draw();
 	};
 	
 	// Opaque objects
@@ -1269,7 +1270,8 @@ void EditorServer::Render( EditorProgram* program )
 		uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
 		uniformList.Set( "u_tex", &program->m_cogTexture );
 		uniformList.Set( "u_color", color.GetLinearRGBA() );
-		program->m_quad.Draw( &program->m_iconShader, uniformList );
+		program->m_quad.Bind( &program->m_iconShader, uniformList );
+		program->m_quad.Draw();
 		program->debugLines.AddOBB( transform, color );
 	}
 	
@@ -2478,13 +2480,11 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, EditorObjectId en
 		const EditorServerObject* editorObj = m_objects.Get( entity );
 		if ( editorObj->mesh )
 		{
-			const ae::VertexArray* meshData = &editorObj->mesh->data;
+			const ae::VertexBuffer* meshData = &editorObj->mesh->data;
 			ae::Matrix4 transform = editorObj->GetTransform( program );
-			auto verts = meshData->GetVertices< ae::EditorServerMesh::Vertex >();
-			uint32_t vertexCount = meshData->GetVertexCount();
-			const void* indices = meshData->GetIndices();
-			uint32_t indexCount = meshData->GetIndexCount();
-			program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, indices, meshData->GetIndexSize(), indexCount, transform, color );
+			uint32_t vertexCount = editorObj->mesh->vertices.Length();
+			ae::EditorServerMesh::Vertex* verts = editorObj->mesh->vertices.Data();
+			program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, transform, color );
 		}
 		else
 		{
