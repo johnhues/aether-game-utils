@@ -3019,7 +3019,7 @@ public:
 	ae::Hash GetHash() const { return m_hash; }
 
 private:
-	ae::Map< Str32, Value, 64 > m_uniforms;
+	ae::Map< Str32, Value, 128 > m_uniforms;
 	ae::Hash m_hash;
 };
 
