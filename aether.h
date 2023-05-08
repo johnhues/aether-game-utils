@@ -2015,6 +2015,7 @@ public:
 	Vec2 Clip( Vec2 pos ) const;
 	void ExpandPoint( Vec2 pos );
 	void ExpandEdge( Vec2 amount );
+	void Offset( Vec2 offset );
 	bool GetIntersection( const Rect& other, Rect* intersectionOut = nullptr ) const;
 	
 private:
@@ -13271,6 +13272,12 @@ void Rect::ExpandEdge( Vec2 amount )
 	m_max += amount;
 	if ( m_max.x < m_min.x ) { m_min.x = ( m_min.x + m_max.x ) * 0.5f; m_max.x = m_min.x; }
 	if ( m_max.y < m_min.y ) { m_min.y = ( m_min.y + m_max.y ) * 0.5f; m_max.y = m_min.y; }
+}
+
+void Rect::Offset( Vec2 offset )
+{
+	m_min += offset;
+	m_max += offset;
 }
 
 bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
