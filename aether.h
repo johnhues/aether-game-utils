@@ -2015,8 +2015,20 @@ public:
 	Vec2 Clip( Vec2 pos ) const;
 	void ExpandPoint( Vec2 pos );
 	void ExpandEdge( Vec2 amount );
-	void Offset( Vec2 offset );
 	bool GetIntersection( const Rect& other, Rect* intersectionOut = nullptr ) const;
+
+	Rect operator*( float s ) const;
+	Rect operator/( float s ) const;
+	Rect operator+( const Vec2& v ) const;
+	Rect operator-( const Vec2& v ) const;
+	Rect operator*( const Vec2& v ) const;
+	Rect operator/( const Vec2& v ) const;
+	void operator*=( float s );
+	void operator/=( float s );
+	void operator+=( const Vec2& v );
+	void operator-=( const Vec2& v );
+	void operator*=( const Vec2& v );
+	void operator/=( const Vec2& v );
 	
 private:
 	friend std::ostream& operator<<( std::ostream& os, Rect r );
@@ -13274,12 +13286,6 @@ void Rect::ExpandEdge( Vec2 amount )
 	if ( m_max.y < m_min.y ) { m_min.y = ( m_min.y + m_max.y ) * 0.5f; m_max.y = m_min.y; }
 }
 
-void Rect::Offset( Vec2 offset )
-{
-	m_min += offset;
-	m_max += offset;
-}
-
 bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
 {
 	ae::Vec2 min = ae::Max( m_min, other.m_min );
@@ -13297,6 +13303,90 @@ bool Rect::GetIntersection( const Rect& other, Rect* intersectionOut ) const
 	{
 		return false;
 	}
+}
+
+Rect Rect::operator*( float s ) const
+{
+	Rect rect;
+	rect.m_min = m_min * s;
+	rect.m_max = m_max * s;
+	return rect;
+}
+
+Rect Rect::operator/( float s ) const
+{
+	Rect rect;
+	rect.m_min = m_min / s;
+	rect.m_max = m_max / s;
+	return rect;
+}
+
+Rect Rect::operator+( const Vec2& v ) const
+{
+	Rect rect;
+	rect.m_min = m_min + v;
+	rect.m_max = m_max + v;
+	return rect;
+}
+
+Rect Rect::operator-( const Vec2& v ) const
+{
+	Rect rect;
+	rect.m_min = m_min - v;
+	rect.m_max = m_max - v;
+	return rect;
+}
+
+Rect Rect::operator*( const Vec2& v ) const
+{
+	Rect rect;
+	rect.m_min = m_min * v;
+	rect.m_max = m_max * v;
+	return rect;
+}
+
+Rect Rect::operator/( const Vec2& v ) const
+{
+	Rect rect;
+	rect.m_min = m_min / v;
+	rect.m_max = m_max / v;
+	return rect;
+}
+
+void Rect::operator*=( float s )
+{
+	m_min *= s;
+	m_max *= s;
+}
+
+void Rect::operator/=( float s )
+{
+	m_min /= s;
+	m_max /= s;
+}
+
+void Rect::operator+=( const Vec2& v )
+{
+	m_min += v;
+	m_max += v;
+}
+
+void Rect::operator-=( const Vec2& v )
+{
+	m_min -= v;
+	m_max -= v;
+}
+
+void Rect::operator*=( const Vec2& v )
+{
+	m_min *= v;
+	m_max *= v;
+}
+
+void Rect::operator/=( const Vec2& v )
+{
+	m_min /= v;
+	m_max /= v;
 }
 
 //------------------------------------------------------------------------------
