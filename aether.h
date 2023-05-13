@@ -37,15 +37,13 @@
 // gameplay/engine code. The following could be compiled into a single module
 // and linked with the application.
 // Usage inside a cpp/mm file could be something like:
-
-// ae.cpp/ae.mm
-/*
+#if 0 // ae.cpp/ae.mm start
 
 #define AE_MAIN
 #define AE_USE_MODULES // C++ Modules (optional)
 #include "aether.h"
 
-*/
+#endif // ae.cpp/ae.mm end
 
 //------------------------------------------------------------------------------
 // AE_AETHER_H
@@ -2306,6 +2304,16 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 #endif
 
 namespace ae {
+
+//------------------------------------------------------------------------------
+// ae::Screen
+//------------------------------------------------------------------------------
+struct Screen
+{
+	ae::Int2 position;
+	ae::Int2 size;
+};
+ae::Array< ae::Screen, 16 > GetScreens();
 
 //------------------------------------------------------------------------------
 // ae::Window class
@@ -13696,6 +13704,25 @@ namespace ae {
 #endif
 
 //------------------------------------------------------------------------------
+// ae::Screen functions
+//------------------------------------------------------------------------------
+ae::Array< ae::Screen, 16 > GetScreens()
+{
+	ae::Array< Screen, 16 > result;
+#if _AE_OSX_
+	NSArray< NSScreen* >* screens = [NSScreen screens];
+	for ( uint32_t i = 0; i < screens.count; i++ )
+	{
+		NSScreen* screen = screens[ i ];
+		Screen& s = result.Append( {} );
+		s.position = ae::Int2( screen.frame.origin.x, screen.frame.origin.y );
+		s.size = ae::Int2( screen.frame.size.width, screen.frame.size.height );
+	}
+#endif
+	return result;
+}
+
+//------------------------------------------------------------------------------
 // ae::Window member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
@@ -13725,17 +13752,18 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 {
 	AE_ASSERT( !window );
 
-	//m_pos = Int2( fullScreen ? 0 : (int)SDL_WINDOWPOS_CENTERED );
 	m_width = width;
 	m_height = height;
-	m_fullScreen = fullScreen;
+	m_fullScreen = false;
 
 	m_Initialize();
 
-	//SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
-	//SDL_GetWindowPosition( (SDL_Window*)window, &m_pos.x, &m_pos.y );
+	if ( fullScreen )
+	{
+		SetFullScreen( true );
+	}
 
-	return false;
+	return true;
 }
 
 bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor )
@@ -13751,7 +13779,7 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 
 	//SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
 
-	return false;
+	return true;
 }
 
 void Window::m_UpdateSize( int32_t width, int32_t height, float scaleFactor )
@@ -14005,27 +14033,14 @@ void Window::SetTitle( const char* title )
 
 void Window::SetFullScreen( bool fullScreen )
 {
-//	if ( window )
-//	{
-//		uint32_t oldFlags = SDL_GetWindowFlags( (SDL_Window*)window );
-//
-//		uint32_t newFlags = oldFlags;
-//		if ( fullScreen )
-//		{
-//			newFlags |= SDL_WINDOW_FULLSCREEN;
-//		}
-//		else
-//		{
-//			newFlags &= ~SDL_WINDOW_FULLSCREEN;
-//		}
-//
-//		if ( newFlags != oldFlags )
-//		{
-//			SDL_SetWindowFullscreen( (SDL_Window*)window, newFlags );
-//		}
-//
-//		m_fullScreen = fullScreen;
-//	}
+#if _AE_OSX_
+	if ( window )
+	{
+		NSWindow* nsWindow = (NSWindow*)window;
+		if (!nsWindow.zoomed) [nsWindow toggleFullScreen:[NSApplication sharedApplication]];
+		m_fullScreen = fullScreen;
+	}
+#endif
 }
 
 void Window::SetPosition( Int2 pos )
@@ -15018,8 +15033,13 @@ void Input::Pump()
 		}
 	}
 #elif _AE_APPLE_
-	if ( [(NSWindow*)m_window->window isMainWindow] && [[GCController controllers] count] )
+	uint32_t controllerCount = [[GCController controllers] count];
+	AE_INFO( "controllerCount #", controllerCount );
+	if ( [(NSWindow*)m_window->window isMainWindow] && controllerCount )
 	{
+		// for ( uint32_t i = 0; i < m_controllerCount; i++ )
+		// {
+		// }
 		gp.connected = true;
 		
 		GCController* appleController = [GCController controllers][ 0 ];
@@ -20196,8 +20216,8 @@ void DebugLines::Initialize( uint32_t maxVerts )
 		AE_OUT_HIGHP vec4 v_color;
 		void main()
 		{
-			float bw = (min(a_color.r, min(a_color.g, a_color.b)) + max(a_color.r, max(a_color.g, a_color.b))) * 0.5;
-			v_color = vec4(mix(vec3(bw), a_color.rgb, u_saturation), 1.0);
+			float bw = ( min( a_color.r, min( a_color.g, a_color.b ) ) + max( a_color.r, max( a_color.g, a_color.b ) ) ) * 0.5;
+			v_color = vec4( mix( vec3(bw), a_color.rgb, u_saturation ), a_color.a );
 			gl_Position = u_worldToNdc * vec4( a_position, 1.0 );
 		})";
 	const char* fragStr = R"(
