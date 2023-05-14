@@ -2534,6 +2534,7 @@ struct MouseState
 // @TODO: Add or replace this with ae::Button/ae::Stick/ae::Trigger like ae::Key
 struct GamepadState
 {
+	int32_t playerIndex = -1;
 	bool connected = false;
 	bool anyInput = false;
 	bool anyButton = false;
@@ -2616,21 +2617,21 @@ public:
 	inline bool GetMouseReleaseMid() const { return AE_INPUT_RELEASE( mouse, middleButton ); }
 	inline bool GetMouseReleaseRight() const { return AE_INPUT_RELEASE( mouse, rightButton ); }
 	
-	inline bool GetGamepadPressA() const { return AE_INPUT_PRESS( gamepad, a ); }
-	inline bool GetGamepadPressB() const { return AE_INPUT_PRESS( gamepad, b ); }
-	inline bool GetGamepadPressX() const { return AE_INPUT_PRESS( gamepad, x ); }
-	inline bool GetGamepadPressY() const { return AE_INPUT_PRESS( gamepad, y ); }
-	inline bool GetGamepadPressStart() const { return AE_INPUT_PRESS( gamepad, start ); }
-	inline bool GetGamepadPressSelect() const { return AE_INPUT_PRESS( gamepad, select ); }
-	inline bool GetGamepadPressUp() const { return AE_INPUT_PRESS( gamepad, up ); }
-	inline bool GetGamepadPressDown() const { return AE_INPUT_PRESS( gamepad, down ); }
-	inline bool GetGamepadPressLeft() const { return AE_INPUT_PRESS( gamepad, left ); }
-	inline bool GetGamepadPressRight() const { return AE_INPUT_PRESS( gamepad, right ); }
+	inline bool GetGamepadPressA( uint32_t idx = 0 ) const { return gamepads[ idx ].a && !gamepadsPrev[ idx ].a; }
+	inline bool GetGamepadPressB( uint32_t idx = 0 ) const { return gamepads[ idx ].b && !gamepadsPrev[ idx ].b; }
+	inline bool GetGamepadPressX( uint32_t idx = 0 ) const { return gamepads[ idx ].x && !gamepadsPrev[ idx ].x; }
+	inline bool GetGamepadPressY( uint32_t idx = 0 ) const { return gamepads[ idx ].y && !gamepadsPrev[ idx ].y; }
+	inline bool GetGamepadPressStart( uint32_t idx = 0 ) const { return gamepads[ idx ].start && !gamepadsPrev[ idx ].start; }
+	inline bool GetGamepadPressSelect( uint32_t idx = 0 ) const { return gamepads[ idx ].select && !gamepadsPrev[ idx ].select; }
+	inline bool GetGamepadPressUp( uint32_t idx = 0 ) const { return gamepads[ idx ].up && !gamepadsPrev[ idx ].up; }
+	inline bool GetGamepadPressDown( uint32_t idx = 0 ) const { return gamepads[ idx ].down && !gamepadsPrev[ idx ].down; }
+	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
+	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
 	
 	MouseState mouse;
 	MouseState mousePrev;
-	GamepadState gamepad;
-	GamepadState gamepadPrev;
+	GamepadState gamepads[ 4 ];
+	GamepadState gamepadsPrev[ 4 ];
 	bool quit = false;
 
 // private:
@@ -14336,6 +14337,13 @@ void Input::Initialize( Window* window )
 	memset( m_keys, 0, sizeof(m_keys) );
 	memset( m_keysPrev, 0, sizeof(m_keysPrev) );
 
+	AE_STATIC_ASSERT( countof(gamepads) == countof(gamepadsPrev) );
+	for ( uint32_t i = 0; i < countof(gamepads); i++ )
+	{
+		gamepads[ i ].playerIndex = i;
+		gamepadsPrev[ i ].playerIndex = i;
+	}
+
 #if _AE_EMSCRIPTEN_
 	emscripten_set_keydown_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
 	emscripten_set_keyup_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleKey );
@@ -14944,11 +14952,17 @@ void Input::Pump()
 	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
 #endif
 
-	gamepadPrev = gamepad;
-	gamepad = GamepadState();
-	auto& gp = this->gamepad;
+	// Reset gamepad states
+	for ( uint32_t i = 0; i < countof(gamepads); i++ )
+	{
+		gamepadsPrev[ i ] = gamepads[ i ];
+		gamepads[ i ] = GamepadState();
+		gamepads[ i ].playerIndex = i;
+	}
+
 #if _AE_WINDOWS_
 	{
+		auto& gp = this->gamepads[ 0 ];
 		DWORD i = 0;
 		// for ( DWORD i = 0; i < XUSER_MAX_COUNT; i++ )
 		{
@@ -15033,75 +15047,99 @@ void Input::Pump()
 		}
 	}
 #elif _AE_APPLE_
-	uint32_t controllerCount = [[GCController controllers] count];
-	AE_INFO( "controllerCount #", controllerCount );
-	if ( [(NSWindow*)m_window->window isMainWindow] && controllerCount )
 	{
-		// for ( uint32_t i = 0; i < m_controllerCount; i++ )
-		// {
-		// }
-		gp.connected = true;
-		
-		GCController* appleController = [GCController controllers][ 0 ];
-		GCExtendedGamepad* appleGamepad = [appleController extendedGamepad];
-		if ( appleGamepad )
+		const NSArray< GCController* >* controllers = [GCController controllers];
+		const uint32_t controllerCount = [controllers count];
+		auto GetAppleControllerFn = [&]( int32_t playerIndex ) -> const GCController*
 		{
-			auto leftAnalog = [appleGamepad leftThumbstick];
-			auto rightAnalog = [appleGamepad rightThumbstick];
-			gp.leftAnalog = Vec2( [leftAnalog xAxis].value, [leftAnalog yAxis].value );
-			gp.rightAnalog = Vec2( [rightAnalog xAxis].value, [rightAnalog yAxis].value );
-			
-			auto dpad = [appleGamepad dpad];
-			gp.up = [dpad up].value;
-			gp.down = [dpad down].value;
-			gp.left = [dpad left].value;
-			gp.right = [dpad right].value;
-			
-			gp.start = [appleGamepad buttonMenu].value;
-			gp.select = [appleGamepad buttonOptions].value;
-			gp.a = [appleGamepad buttonA].value;
-			gp.b = [appleGamepad buttonB].value;
-			gp.x = [appleGamepad buttonX].value;
-			gp.y = [appleGamepad buttonY].value;
-			gp.leftBumper = [appleGamepad leftShoulder].value;
-			gp.rightBumper = [appleGamepad rightShoulder].value;
-			gp.leftTrigger = [appleGamepad leftTrigger].value;
-			gp.rightTrigger = [appleGamepad rightTrigger].value;
-			gp.leftAnalogClick = [appleGamepad leftThumbstickButton].value;
-			gp.rightAnalogClick = [appleGamepad rightThumbstickButton].value;
-			
-			gp.batteryLevel = [[appleController battery] batteryLevel];
-			switch ( [[appleController battery] batteryState] )
+			for ( uint32_t i = 0; i < controllerCount; i++ )
 			{
-				case GCDeviceBatteryStateDischarging:
-					gp.batteryState = GamepadState::BatteryState::InUse;
-					break;
-				case GCDeviceBatteryStateCharging:
-					gp.batteryState = GamepadState::BatteryState::Charging;
-					break;
-				case GCDeviceBatteryStateFull:
-					gp.batteryState = GamepadState::BatteryState::Full;
-					break;
-				default:
-					gp.batteryState = GamepadState::BatteryState::None;
-					break;
-			};
+				if ( controllers[ i ].playerIndex == playerIndex )
+				{
+					return controllers[ i ];
+				}
+			}
+			return nullptr;
+		};
+
+		// Assign player indices to newly connected gamepads
+		for ( uint32_t i = 0; i < controllerCount; i++ )
+		{
+			GCController* appleController = controllers[ i ];
+			if ( appleController.playerIndex == GCControllerPlayerIndexUnset )
+			{
+				for ( int32_t j = 0; j < controllerCount; j++ )
+				{
+					if ( !GetAppleControllerFn( j ) )
+					{
+						appleController.playerIndex = GCControllerPlayerIndex( j );
+						break;
+					}
+				}
+				AE_ASSERT( appleController.playerIndex != GCControllerPlayerIndexUnset );
+			}
+		}
+
+		// Update gamepad states
+		for ( GamepadState& gp : gamepads )
+		{
+			const GCController* appleController = GetAppleControllerFn( gp.playerIndex );
+			const GCExtendedGamepad* appleGamepad = appleController ? [appleController extendedGamepad] : nullptr;
+			gp.connected = (bool)appleGamepad;
+			if ( gp.connected && [(NSWindow*)m_window->window isMainWindow] )
+			{
+				auto leftAnalog = [appleGamepad leftThumbstick];
+				auto rightAnalog = [appleGamepad rightThumbstick];
+				gp.leftAnalog = Vec2( [leftAnalog xAxis].value, [leftAnalog yAxis].value );
+				gp.rightAnalog = Vec2( [rightAnalog xAxis].value, [rightAnalog yAxis].value );
+				
+				auto dpad = [appleGamepad dpad];
+				gp.up = [dpad up].value;
+				gp.down = [dpad down].value;
+				gp.left = [dpad left].value;
+				gp.right = [dpad right].value;
+				
+				gp.start = [appleGamepad buttonMenu].value;
+				gp.select = [appleGamepad buttonOptions].value;
+				gp.a = [appleGamepad buttonA].value;
+				gp.b = [appleGamepad buttonB].value;
+				gp.x = [appleGamepad buttonX].value;
+				gp.y = [appleGamepad buttonY].value;
+				gp.leftBumper = [appleGamepad leftShoulder].value;
+				gp.rightBumper = [appleGamepad rightShoulder].value;
+				gp.leftTrigger = [appleGamepad leftTrigger].value;
+				gp.rightTrigger = [appleGamepad rightTrigger].value;
+				gp.leftAnalogClick = [appleGamepad leftThumbstickButton].value;
+				gp.rightAnalogClick = [appleGamepad rightThumbstickButton].value;
+				
+				gp.batteryLevel = [[appleController battery] batteryLevel];
+				switch ( [[appleController battery] batteryState] )
+				{
+					case GCDeviceBatteryStateDischarging: gp.batteryState = GamepadState::BatteryState::InUse; break;
+					case GCDeviceBatteryStateCharging: gp.batteryState = GamepadState::BatteryState::Charging; break;
+					case GCDeviceBatteryStateFull: gp.batteryState = GamepadState::BatteryState::Full; break;
+					default: gp.batteryState = GamepadState::BatteryState::None; break;
+				};
+			}
 		}
 	}
 #endif
-	// Additional shared gamepad state processing
-	gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
-	gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
-	gp.dpad = ae::Int2( ( gp.right ? 1 : 0 ) + ( gp.left ? -1 : 0 ), ( gp.up ? 1 : 0 ) + ( gp.down ? -1 : 0 ) );
-	gp.anyButton = gp.up || gp.down || gp.left || gp.right
-		|| gp.start || gp.select
-		|| gp.a || gp.b || gp.x || gp.y
-		|| gp.leftBumper || gp.rightBumper
-		|| gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
-		|| gp.leftAnalogClick || gp.rightAnalogClick;
-	gp.anyInput = gp.anyButton
-		|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
-		|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
+	// Additional gamepad state processing shared across platforms
+	for ( GamepadState& gp : gamepads )
+	{
+		gp.leftAnalog *= ae::Clip01( ae::Delerp( m_leftAnalogThreshold, 1.0f, gp.leftAnalog.SafeNormalize() ) );
+		gp.rightAnalog *= ae::Clip01( ae::Delerp( m_rightAnalogThreshold, 1.0f, gp.rightAnalog.SafeNormalize() ) );
+		gp.dpad = ae::Int2( ( gp.right ? 1 : 0 ) + ( gp.left ? -1 : 0 ), ( gp.up ? 1 : 0 ) + ( gp.down ? -1 : 0 ) );
+		gp.anyButton = gp.up || gp.down || gp.left || gp.right
+			|| gp.start || gp.select
+			|| gp.a || gp.b || gp.x || gp.y
+			|| gp.leftBumper || gp.rightBumper
+			|| gp.leftTrigger > 0.0f || gp.rightTrigger > 0.0f
+			|| gp.leftAnalogClick || gp.rightAnalogClick;
+		gp.anyInput = gp.anyButton
+			|| fabsf(gp.leftAnalog.x) > 0.0f || fabsf(gp.leftAnalog.y) > 0.0f
+			|| fabsf(gp.rightAnalog.x) > 0.0f || fabsf(gp.rightAnalog.y) > 0.0f;
+	}
 }
 
 void Input::SetMouseCaptured( bool enable )
