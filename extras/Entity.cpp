@@ -69,6 +69,7 @@ void Registry::SetOnCreateFn( std::function< void(Component*) > fn )
 
 Entity Registry::CreateEntity( const char* name )
 {
+	AE_ASSERT_MSG( !m_destroying, "Cannot create entity while destroying" );
 	m_lastEntity++;
 	Entity entity = m_lastEntity;
 	
@@ -83,6 +84,7 @@ Entity Registry::CreateEntity( const char* name )
 
 Entity Registry::CreateEntity( Entity entity, const char* name )
 {
+	AE_ASSERT_MSG( !m_destroying, "Cannot create entity while destroying" );
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
 		AE_ASSERT( !m_components.GetValue( i ).TryGet( entity ) );
@@ -101,6 +103,7 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 
 Component* Registry::AddComponent( Entity entity, const char* typeName )
 {
+	AE_ASSERT_MSG( !m_destroying, "Cannot add component while destroying" );
 	const ae::Type* type = ae::GetTypeByName( typeName );
 	if ( !type )
 	{
@@ -196,6 +199,8 @@ void Registry::SetEntityName( Entity entity, const char* name )
 	{
 		return;
 	}
+
+	AE_ASSERT_MSG( !m_destroying, "Cannot set entity name while destroying" );
 	
 	for ( uint32_t i = 0; i < m_entityNames.Length(); i++ )
 	{
@@ -245,13 +250,41 @@ Component& Registry::GetComponentByIndex( uint32_t typeIndex, uint32_t component
 	return *m_components.GetValue( typeIndex ).GetValue( componentIndex );
 }
 
-void Registry::Clear()
+void Registry::Destroy( Entity entity )
 {
-	m_lastEntity = kInvalidEntity;
-	m_entityNames.Clear();
+	AE_ASSERT_MSG( !m_destroying, "Cannot destroy while already destroying" );
+	m_destroying = true;
+
+	const char* name = GetNameByEntity( entity );
+	if ( name && name[ 0 ] )
+	{
+		m_entityNames.Remove( name );
+	}
+	// Get components each loop because m_components could grow at any iteration
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
-		// Get components each loop because m_components could grow at any iteration
+		Component* c;
+		ae::Map< Entity, Component* >* components = &m_components.GetValue( i );
+		if ( components->Remove( entity, &c ) )
+		{
+			c->~Component();
+			ae::Free( c );
+		}
+	}
+
+	m_destroying = false;
+}
+
+void Registry::Clear()
+{
+	AE_ASSERT_MSG( !m_destroying, "Cannot destroy while already destroying" );
+	m_destroying = true;
+
+	m_lastEntity = kInvalidEntity;
+	m_entityNames.Clear();
+	// Get components each loop because m_components could grow at any iteration
+	for ( uint32_t i = 0; i < m_components.Length(); i++ )
+	{
 		for ( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
 		{
 			Component* c = m_components.GetValue( i ).GetValue( j );
@@ -260,6 +293,8 @@ void Registry::Clear()
 		}
 	}
 	m_components.Clear();
+	
+	m_destroying = false;
 }
 
 bool Registry::Load( const ae::EditorLevel* level, CreateObjectFn fn )

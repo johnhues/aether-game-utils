@@ -15938,6 +15938,7 @@ uint32_t FileSystem::GetSize( const char* filePath )
 
 uint32_t FileSystem::Read( const char* filePath, void* buffer, uint32_t bufferSize )
 {
+	// @TODO: Handle paths to folders gracefully and return 0
 #if _AE_APPLE_
 	CFStringRef filePathIn = CFStringCreateWithCString( kCFAllocatorDefault, filePath, kCFStringEncodingUTF8 );
 	CFURLRef appUrl = CFBundleCopyResourceURL( CFBundleGetMainBundle(), filePathIn, nullptr, nullptr );

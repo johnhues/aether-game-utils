@@ -61,6 +61,8 @@ public:
 	Entity CreateEntity( Entity entity, const char* name = "" );
 	Component* AddComponent( Entity entity, const char* typeName );
 	template < typename T > T* AddComponent( Entity entity );
+	//! Loads object from the given level. If fn is not null, it will be called
+	//! for each object in the level before components are added.
 	bool Load( const ae::EditorLevel* level, CreateObjectFn fn = nullptr );
 	
 	// Get reference
@@ -95,6 +97,7 @@ public:
 	template < typename T, typename Fn > uint32_t CallFn( Fn fn );
 	
 	// Removal
+	void Destroy( Entity entity );
 	void Clear();
 	
 private:
@@ -103,6 +106,7 @@ private:
 	ae::Map< ae::Str16, Entity > m_entityNames;
 	ae::Map< ae::TypeId, ae::Map< Entity, Component* > > m_components;
 	std::function< void(Component*) > m_onCreate;
+	bool m_destroying = false;
 };
 
 //------------------------------------------------------------------------------
