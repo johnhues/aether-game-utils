@@ -2787,6 +2787,7 @@ public:
 	uint32_t GetFileStatusCount( ae::File::Status status ) const;
 
 	// Member functions for use of Root directories
+	bool GetAbsolutePath( Root root, const char* filePath, Str256* outPath ) const;
 	bool GetRootDir( Root root, Str256* outDir ) const;
 	uint32_t GetSize( Root root, const char* filePath ) const;
 	uint32_t Read( Root root, const char* filePath, void* buffer, uint32_t bufferSize ) const;
@@ -15846,57 +15847,61 @@ uint32_t FileSystem::GetFileCount() const
 	return m_files.Length();
 }
 
+bool FileSystem::GetAbsolutePath( Root root, const char* filePath, Str256* outPath ) const
+{
+	if ( IsAbsolutePath( filePath ) )
+	{
+		*outPath = filePath;
+		return true;
+	}
+	else if ( GetRootDir( root, outPath ) )
+	{
+		AppendToPath( outPath, filePath );
+		return true;
+	}
+	return false;
+}
+
 bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
 {
+	if ( !outDir )
+	{
+		return false;
+	}
 	switch ( root )
 	{
 		case Root::Data:
 			if ( m_dataDir.Length() )
 			{
-				if ( outDir )
-				{
-					*outDir = m_dataDir;
-				}
+				*outDir = m_dataDir;
 				return true;
 			}
 			break;
 		case Root::User:
 			if ( m_userDir.Length() )
 			{
-				if ( outDir )
-				{
-					*outDir = m_userDir;
-				}
+				*outDir = m_userDir;
 				return true;
 			}
 			break;
 		case Root::Cache:
 			if ( m_cacheDir.Length() )
 			{
-				if ( outDir )
-				{
-					*outDir = m_cacheDir;
-				}
+				*outDir = m_cacheDir;
 				return true;
 			}
 			break;
 		case Root::UserShared:
 			if ( m_userSharedDir.Length() )
 			{
-				if ( outDir )
-				{
-					*outDir = m_userSharedDir;
-				}
+				*outDir = m_userSharedDir;
 				return true;
 			}
 			break;
 		case Root::CacheShared:
 			if ( m_cacheSharedDir.Length() )
 			{
-				if ( outDir )
-				{
-					*outDir = m_cacheSharedDir;
-				}
+				*outDir = m_cacheSharedDir;
 				return true;
 			}
 			break;
