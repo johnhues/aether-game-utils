@@ -103,8 +103,12 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 
 Component* Registry::AddComponent( Entity entity, const char* typeName )
 {
+	return AddComponent( entity, ae::GetTypeByName( typeName ) );
+}
+
+Component* Registry::AddComponent( Entity entity, const ae::Type* type )
+{
 	AE_ASSERT_MSG( !m_destroying, "Cannot add component while destroying" );
-	const ae::Type* type = ae::GetTypeByName( typeName );
 	if ( !type )
 	{
 		return nullptr;
@@ -293,7 +297,7 @@ void Registry::Clear()
 		}
 	}
 	m_components.Clear();
-	
+
 	m_destroying = false;
 }
 

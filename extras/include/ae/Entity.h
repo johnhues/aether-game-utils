@@ -60,6 +60,7 @@ public:
 	Entity CreateEntity( const char* name = "" );
 	Entity CreateEntity( Entity entity, const char* name = "" );
 	Component* AddComponent( Entity entity, const char* typeName );
+	Component* AddComponent( Entity entity, const ae::Type* type );
 	template < typename T > T* AddComponent( Entity entity );
 	//! Loads object from the given level. If fn is not null, it will be called
 	//! for each object in the level before components are added.
@@ -91,6 +92,7 @@ public:
 	uint32_t GetTypeCount() const;
 	const ae::Type* GetTypeByIndex( uint32_t typeIndex ) const;
 	int32_t GetTypeIndexByType( const ae::Type* type ) const;
+	template < typename T > int32_t GetTypeIndexByType() const;
 	uint32_t GetComponentCountByIndex( uint32_t typeIndex ) const;
 	const Component& GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex ) const;
 	Component& GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex );
@@ -261,6 +263,12 @@ T& Registry::GetComponentByIndex( uint32_t index )
 	const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
 	AE_ASSERT_MSG( "No components of type '#'", type->GetName() );
 	return *(T*)components->GetValue( index );
+}
+
+template < typename T >
+int32_t Registry::GetTypeIndexByType() const
+{
+	return GetTypeIndexByType( ae::GetType< T >() );
 }
 
 template < typename T, typename Fn >
