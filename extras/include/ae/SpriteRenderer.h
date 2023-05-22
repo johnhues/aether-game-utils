@@ -28,31 +28,60 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+namespace ae {
 
 //------------------------------------------------------------------------------
-// SpriteRenderer example class
+// ae::SpriteFont
+//------------------------------------------------------------------------------
+class SpriteFont
+{
+public:
+	void SetChar( char c, ae::Rect quad, ae::Rect uvs, float advance );
+	
+	bool GetChar( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const;
+	float GetTextWidth( const char* text, float uiSize ) const;
+
+private:
+	struct CharData
+	{
+		CharData();
+		ae::Rect quad;
+		ae::Rect uvs;
+		float advance;
+	};
+	CharData m_chars[ 96 ];
+};
+
+//------------------------------------------------------------------------------
+// ae::SpriteRenderer utility
 //------------------------------------------------------------------------------
 class SpriteRenderer
 {
 public:
 	SpriteRenderer( const ae::Tag& tag );
-	void Initialize( uint32_t maxCount );
+	void Initialize( uint32_t maxGroups, uint32_t maxCount );
 	void Terminate();
-	void AddSprite( const ae::Matrix4& localToWorld, ae::Rect uvs, ae::Color color );
+
+	void AddSprite( uint32_t group, ae::Vec2 pos, ae::Vec2 size, ae::Rect uvs, ae::Color color );
+	void AddSprite( uint32_t group, ae::Rect quad, ae::Rect uvs, ae::Color color );
+	void AddSprite( uint32_t group, const ae::Matrix4& transform, ae::Rect uvs, ae::Color color );
+	void AddText( uint32_t group, const char* text, const SpriteFont* font, ae::Rect region, float fontSize, float lineHeight, ae::Color color );
+
+	void SetParams( uint32_t group, const ae::Shader* shader, const ae::UniformList& uniforms );
+	void Render();
 	void Clear();
-	void Render( const ae::Matrix4& worldToProj, const ae::Texture2D* texture );
+
 private:
-	struct Vertex
+	struct GroupParams
 	{
-		ae::Vec4 pos;
-		ae::Vec4 color;
-		ae::Vec2 uv;
+		const ae::Shader* shader = nullptr;
+		ae::UniformList uniforms;
 	};
-	uint32_t m_count = 0;
-	uint32_t m_maxCount = 0;
-	ae::Shader m_shader;
+	ae::Array< GroupParams > m_params;
+	ae::Array< uint32_t > m_spriteGroups;
 	ae::VertexBuffer m_vertexBuffer;
-	ae::VertexArray m_vertexData;
+	ae::VertexArray m_vertexArray;
 };
 
+} // ae namespace
 #endif
