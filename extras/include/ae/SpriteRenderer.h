@@ -36,20 +36,19 @@ namespace ae {
 class SpriteFont
 {
 public:
-	void SetChar( char c, ae::Rect quad, ae::Rect uvs, float advance );
-	
-	bool GetChar( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const;
+	void SetGlyph( char c, ae::Rect quad, ae::Rect uvs, float advance );
+	bool GetGlyph( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const;
 	float GetTextWidth( const char* text, float uiSize ) const;
 
 private:
-	struct CharData
+	struct GlyphData
 	{
-		CharData();
+		GlyphData();
 		ae::Rect quad;
 		ae::Rect uvs;
 		float advance;
 	};
-	CharData m_chars[ 96 ];
+	GlyphData m_glyphs[ 96 ];
 };
 
 //------------------------------------------------------------------------------

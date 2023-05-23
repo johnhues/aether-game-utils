@@ -40,39 +40,54 @@ using _SpriteIndex = uint16_t;
 //------------------------------------------------------------------------------
 // ae::SpriteFont
 //------------------------------------------------------------------------------
-SpriteFont::CharData::CharData()
+SpriteFont::GlyphData::GlyphData()
 {
 	quad = ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 0.0f ) );
 	uvs = ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 0.0f ) );
 	advance = 0.0f;
 }
 
-void SpriteFont::SetChar( char c, ae::Rect quad, ae::Rect uvs, float advance )
+void SpriteFont::SetGlyph( char c, ae::Rect quad, ae::Rect uvs, float advance )
 {
-	if ( c < 32 || c >= 32 + countof(m_chars) )
+	if ( c < 32 || c >= 32 + countof(m_glyphs) )
 	{
 		return;
 	}
-	m_chars[ c - 32 ].quad = quad;
-	m_chars[ c - 32 ].uvs = uvs;
-	m_chars[ c - 32 ].advance = advance;
+	m_glyphs[ c - 32 ].quad = quad;
+	m_glyphs[ c - 32 ].uvs = uvs;
+	m_glyphs[ c - 32 ].advance = advance;
 }
 
-bool SpriteFont::GetChar( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const
+bool SpriteFont::GetGlyph( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const
 {
-	if ( c < 32 || c >= 32 + countof(m_chars) )
+	if ( c < 32 || c >= 32 + countof(m_glyphs) )
 	{
 		return false;
 	}
-	if ( quad ) { *quad = m_chars[ c - 32 ].quad * uiSize; }
-	if ( uv ) { *uv = m_chars[ c - 32 ].uvs; }
-	if ( advance ) { *advance = m_chars[ c - 32 ].advance * uiSize; }
+	if ( quad ) { *quad = m_glyphs[ c - 32 ].quad * uiSize; }
+	if ( uv ) { *uv = m_glyphs[ c - 32 ].uvs; }
+	if ( advance ) { *advance = m_glyphs[ c - 32 ].advance * uiSize; }
 	return true;
 }
 
 float SpriteFont::GetTextWidth( const char* text, float uiSize ) const
 {
-	return 0.0f;
+	float width = 0.0f;
+	float advance = 0.0f;
+	while ( *text )
+	{
+		if ( *text == '\r' || *text == '\n' )
+		{
+			width = std::max( width, advance );
+			advance = 0.0f;
+		}
+		else
+		{
+			GetGlyph( *text, nullptr, nullptr, &advance, uiSize );
+		}
+		text++;
+	}
+	return std::max( width, advance );
 }
 
 //------------------------------------------------------------------------------
@@ -166,7 +181,7 @@ void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont
 		const bool isSpace = isspace( c );
 		ae::Rect quad, uv;
 		float advance;
-		font->GetChar( *text, &quad, &uv, &advance, fontSize );
+		font->GetGlyph( *text, &quad, &uv, &advance, fontSize );
 		if ( !isSpace )
 		{
 			AddSprite( group, quad + offset, uv, color );
@@ -182,7 +197,7 @@ void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont
 			while ( *word && !isspace( *word ) )
 			{
 				float advance2 = 0.0f;
-				font->GetChar( *word, nullptr, nullptr, &advance2, fontSize );
+				font->GetGlyph( *word, nullptr, nullptr, &advance2, fontSize );
 				wordSize += advance2;
 				word++;
 			}
