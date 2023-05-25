@@ -293,6 +293,16 @@ private:
 	// io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 	ImGui::StyleColorsDark();
 
+	// Convert default colors to linear color space
+	ImGuiStyle* style = &ImGui::GetStyle();
+	for ( ImVec4& color : style->Colors )
+	{
+		ae::Vec3 c = ae::Color::SRGB( color.x, color.y, color.z ).GetLinearRGB();
+		color.x = c.x;
+		color.y = c.y;
+		color.z = c.z;
+	}
+
 	if ( m_headless )
 	{
 	  ImGuiIO& io = ImGui::GetIO();

@@ -82,6 +82,7 @@ public:
 	template < typename T > uint32_t GetComponentCount() const;
 	template < typename T > Entity GetEntityByIndex( uint32_t index );
 	template < typename T > T& GetComponentByIndex( uint32_t index );
+	template < typename T > const T& GetComponentByIndex( uint32_t index ) const;
 	
 	// Entity names
 	Entity GetEntityByName( const char* name ) const;
@@ -257,12 +258,18 @@ Entity Registry::GetEntityByIndex( uint32_t index )
 template < typename T >
 T& Registry::GetComponentByIndex( uint32_t index )
 {
+	return const_cast< T& >( const_cast< const Registry* >( this )->GetComponentByIndex< T >( index ) );
+}
+
+template < typename T >
+const T& Registry::GetComponentByIndex( uint32_t index ) const
+{
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	const ae::Type* type = ae::GetType< T >();
 	AE_ASSERT_MSG( type, "No registered type" );
 	const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
 	AE_ASSERT_MSG( "No components of type '#'", type->GetName() );
-	return *(T*)components->GetValue( index );
+	return *(const T*)components->GetValue( index );
 }
 
 template < typename T >

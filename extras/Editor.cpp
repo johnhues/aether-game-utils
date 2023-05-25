@@ -151,6 +151,7 @@ public:
 		sock( tag ),
 		client( client ),
 		m_tag( tag ),
+		selected( tag ),
 		m_objects( tag ),
 		m_components( tag ),
 		m_meshResourceVars( tag ),
@@ -173,6 +174,7 @@ public:
 	bool GetShowInvisible() const { return m_showInvisible; }
 	
 	EditorServerObject* CreateObject( EditorObjectId id, const ae::Matrix4& transform );
+	void DestroyObject( EditorObjectId id );
 	ae::Object* AddComponent( class EditorProgram* program, EditorServerObject* obj, const char* typeName );
 	ae::Object* GetComponent( EditorServerObject* obj, const char* typeName );
 	const ae::Object* GetComponent( const EditorServerObject* obj, const char* typeName );
@@ -185,6 +187,7 @@ public:
 	ae::ListenerSocket sock;
 	
 private:
+	void m_SelectWithModifiers( class EditorProgram* program, EditorObjectId entity );
 	void m_Save( ae::EditorLevel* levelOut ) const;
 	bool m_Load( class EditorProgram* program );
 	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
@@ -200,8 +203,10 @@ private:
 	std::function< bool( const ae::Type*, const char*, ae::Object** ) > m_getObjectPointerFromString;
 
 	const ae::Type* m_selectedType = nullptr;
-	EditorObjectId selected = kInvalidEditorObjectId;
+	ae::Array< EditorObjectId > selected;
 	EditorObjectId hoverEntity = kInvalidEditorObjectId;
+	ae::Vec3 m_mouseHover = ae::Vec3( 0.0f );
+	ae::Vec3 m_mouseHoverNormal = ae::Vec3( 0, 1, 0 );
 	ImGuizmo::OPERATION gizmoOperation = (ImGuizmo::OPERATION)0;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
 	class Editor* client;
@@ -995,12 +1000,7 @@ void EditorServerObject::Initialize( EditorObjectId entity, ae::Matrix4 transfor
 
 void EditorServerObject::Terminate()
 {
-	for ( ae::Object* component : components )
-	{
-		component->~Object();
-		ae::Free( component );
-	}
-	components.Clear();
+	AE_ASSERT( components.Length() == 0 );
 }
 
 void EditorServerObject::SetTransform( const ae::Matrix4& transform, EditorProgram* program )
@@ -1296,45 +1296,16 @@ void EditorServer::ShowUI( EditorProgram* program )
 	float dt = program->GetDt();
 	
 	ae::Color cursorColor = ae::Color::PicoGreen();
-	ae::Vec3 mouseHover( 0.0f );
-	ae::Vec3 mouseHoverNormal( 0, 1, 0 );
 	if ( program->camera.GetMode() == ae::DebugCamera::Mode::None
 		&& !ImGuizmo::IsUsing() && ( !gizmoOperation || !ImGuizmo::IsOver() ) )
 	{
-		hoverEntity = m_PickObject( program, cursorColor, &mouseHover, &mouseHoverNormal );
+		hoverEntity = m_PickObject( program, cursorColor, &m_mouseHover, &m_mouseHoverNormal );
 	}
 	else
 	{
 		hoverEntity = kInvalidEditorObjectId;
 	}
 	
-	static float s_hold = 0.0f;
-	static ae::Vec2 s_mouseMove( 0.0f );
-	if ( !ImGui::GetIO().WantCaptureMouse && program->input.mouse.leftButton && s_hold >= 0.0f )
-	{
-		s_hold += dt;
-		s_mouseMove += ae::Vec2( program->input.mouse.movement );
-		
-		if ( s_mouseMove.Length() > 4.0f )
-		{
-			s_hold = -1.0f;
-		}
-		else if ( hoverEntity )
-		{
-			cursorColor = ae::Color::PicoOrange();
-			if ( s_hold > 0.35f )
-			{
-				program->camera.Refocus( mouseHover );
-				s_hold = -1.0f;
-			}
-		}
-	}
-	else if ( !program->input.mouse.leftButton )
-	{
-		s_hold = 0.0f;
-		s_mouseMove = ae::Vec2( 0.0f );
-	}
-
 	if ( !program->input.mouse.leftButton && program->input.mousePrev.leftButton // Release
 		&& !ImGui::GetIO().WantCaptureMouse && program->camera.GetMode() == ae::DebugCamera::Mode::None )
 	{
@@ -1370,15 +1341,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 				m_selectRef.pending = hoverEntity;
 			}
 		}
-		else if ( !hoverEntity && selected )
+		else
 		{
-			AE_INFO( "Deselect Object" );
-			selected = kInvalidEditorObjectId;
-		}
-		else if ( hoverEntity != selected )
-		{
-			AE_INFO( "Select Object" );
-			selected = hoverEntity;
+			m_SelectWithModifiers( program, hoverEntity );
 		}
 	}
 	
@@ -1406,11 +1371,14 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGui::EndPopup();
 	}
 	
-	m_ShowEditorObject( program, selected, m_GetColor( selected, true ) );
+	for ( EditorObjectId s : selected )
+	{
+		m_ShowEditorObject( program, s, m_GetColor( s, true ) );
+	}
 	if ( hoverEntity )
 	{
-		program->debugLines.AddCircle( mouseHover + mouseHoverNormal * 0.025f, mouseHoverNormal, 0.5f, cursorColor, 8 );
-		if ( selected != hoverEntity )
+		program->debugLines.AddCircle( m_mouseHover + m_mouseHoverNormal * 0.025f, m_mouseHoverNormal, 0.5f, cursorColor, 8 );
+		if ( selected.Find( hoverEntity ) < 0 )
 		{
 			m_ShowEditorObject( program, hoverEntity, m_GetColor( hoverEntity, true ) );
 		}
@@ -1427,9 +1395,22 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		// keyboard captured
 	}
-	else if ( selected && program->input.Get( ae::Key::F ) && !program->input.GetPrev( ae::Key::F ) )
+	else if ( program->input.Get( ae::Key::F ) && !program->input.GetPrev( ae::Key::F ) )
 	{
-		program->camera.Refocus( m_objects.Get( selected )->GetTransform( program ).GetTranslation() );
+		ae::Vec3 pos( 0.0f );
+		if ( program->input.Get( ae::Key::LeftMeta ) )
+		{
+			pos = m_mouseHover;
+		}
+		else if ( selected.Length() )
+		{
+			for ( EditorObjectId s : selected )
+			{
+				pos += m_objects.Get( s )->GetTransform( program ).GetTranslation();
+			}
+			pos /= (float)selected.Length();
+		}
+		program->camera.Refocus( pos );
 	}
 	else if ( program->input.Get( ae::Key::Q ) && !program->input.GetPrev( ae::Key::Q ) )
 	{
@@ -1477,10 +1458,13 @@ void EditorServer::ShowUI( EditorProgram* program )
 		}
 		else if ( program->input.Get( ae::Key::H ) && !program->input.GetPrev( ae::Key::H ) )
 		{
-			if ( selected )
+			if ( selected.Length() )
 			{
-				EditorServerObject* editorObject = m_objects.Get( selected );
-				editorObject->hidden = !editorObject->hidden;
+				for ( EditorObjectId s : selected )
+				{
+					EditorServerObject* editorObject = m_objects.Get( s );
+					editorObject->hidden = !editorObject->hidden;
+				}
 			}
 			else
 			{
@@ -1489,7 +1473,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		}
 	}
 	
-	if ( selected && gizmoOperation )
+	if ( selected.Length() && gizmoOperation )
 	{
 		const float scaleFactor = program->window.GetScaleFactor();
 		const ae::RectInt renderRectInt = program->GetRenderRect();
@@ -1505,17 +1489,37 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGuizmo::BeginFrame();
 		ImGuizmo::SetRect( renderRect.GetMin().x, renderRect.GetMin().y, renderRect.GetSize().x, renderRect.GetSize().y );
 		
-		EditorServerObject* selectedObject = m_objects.Get( selected );
-		ae::Matrix4 transform = selectedObject->GetTransform( program );
+		EditorServerObject* selectedObject = m_objects.Get( selected[ 0 ] );
+		ae::Matrix4 prevTransform = selectedObject->GetTransform( program );
+		ae::Matrix4 transform = prevTransform;
+		ImGuizmo::MODE mode = ( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode;
 		if ( ImGuizmo::Manipulate(
 			program->GetWorldToView().data,
 			program->GetViewToProj().data,
 			gizmoOperation,
-			( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode,
+			mode,
 			transform.data
 		) )
 		{
 			selectedObject->SetTransform( transform, program );
+
+			const ae::Matrix4 change = ( mode == ImGuizmo::LOCAL ) ? prevTransform.GetInverse() * transform : transform * prevTransform.GetInverse();
+			for ( EditorObjectId s : selected )
+			{
+				if ( s == selected[ 0 ] )
+				{
+					continue;
+				}
+				EditorServerObject* editorObject = m_objects.Get( s );
+				if ( mode == ImGuizmo::LOCAL )
+				{
+					editorObject->SetTransform( editorObject->GetTransform( program ) * change, program );
+				}
+				else
+				{
+					editorObject->SetTransform( change * editorObject->GetTransform( program ), program );
+				}
+			}
 		}
 	}
 	
@@ -1617,7 +1621,16 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetFocus() );
 			EditorServerObject* editorObject = CreateObject( m_nextEntityId, transform );
-			selected = editorObject->entity;
+			selected.Clear();
+			selected.Append( editorObject->entity );
+		}
+		if ( ImGui::Button( "Delete" ) && selected.Length() )
+		{
+			for ( EditorObjectId s : selected )
+			{
+				DestroyObject( s );
+			}
+			selected.Clear();
 		}
 		
 		if ( ImGui::Button( "Reload Resources" ) )
@@ -1654,10 +1667,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 	
 	if ( ImGui::TreeNode( "Object properties" ) )
 	{
-		if ( selected )
+		if ( selected.Length() == 1 )
 		{
-			EditorServerObject* selectedObject = m_objects.Get( selected );
-			ImGui::Text( "Object %u", selected );
+			EditorServerObject* selectedObject = m_objects.Get( selected[ 0 ] );
+			ImGui::Text( "Object %u", selectedObject->entity );
 		
 			char name[ ae::Str16::MaxLength() ];
 			strcpy( name, selectedObject->name.c_str() );
@@ -1760,6 +1773,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 				ImGui::EndPopup();
 			}
 		}
+		else if ( selected.Length() )
+		{
+			ImGui::Text( "Multiple Objects Selected" );
+		}
 		else
 		{
 			ImGui::Text( "No Selection" );
@@ -1802,11 +1819,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 
 		if ( ImGui::BeginListBox("##listbox", ImVec2( -FLT_MIN, 16 * ImGui::GetTextLineHeightWithSpacing() ) ) )
 		{
-			auto& selected = this->selected;
-			auto showObjInList = [&selected]( int idx, EditorObjectId entity, const char* entityName )
+			auto showObjInList = [&]( int idx, EditorObjectId entity, const char* entityName )
 			{
 				ImGui::PushID( idx );
-				const bool isSelected = ( entity == selected );
+				const bool isSelected = ( selected.Find( entity ) >= 0 );
 				ae::Str16 name = entityName;
 				if ( !name.Length() )
 				{
@@ -1814,7 +1830,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 				}
 				if ( ImGui::Selectable( name.c_str(), isSelected ) )
 				{
-					selected = entity;
+					m_SelectWithModifiers( program, entity );
 				}
 				if ( isSelected )
 				{
@@ -1860,6 +1876,27 @@ EditorServerObject* EditorServer::CreateObject( EditorObjectId id, const ae::Mat
 	m_objects.Set( id, editorObject );
 	m_nextEntityId = ae::Max( m_nextEntityId, id + 1 );
 	return editorObject;
+}
+
+void EditorServer::DestroyObject( EditorObjectId id )
+{
+	EditorServerObject* editorObject = nullptr;
+	if ( m_objects.Remove( id, &editorObject ) )
+	{
+		for ( ae::Object* component : editorObject->components )
+		{
+			const ae::Type* type = ae::GetTypeFromObject( component );
+			ae::Map< EditorObjectId, ae::Object* >& typeComponents = m_components.Get( type->GetId() );
+			ae::Object* componentCheck = nullptr;
+			typeComponents.Remove( editorObject->entity, &componentCheck );
+			AE_ASSERT( componentCheck == component );
+			component->~Object();
+			ae::Free( component );
+		}
+		editorObject->components.Clear();
+		editorObject->Terminate();
+		ae::Delete( editorObject );
+	}
 }
 
 ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const char* typeName )
@@ -2048,7 +2085,7 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 void EditorServer::Unload()
 {
 	m_selectedType = nullptr;
-	selected = kInvalidEditorObjectId;
+	selected.Clear();
 	hoverEntity = kInvalidEditorObjectId;
 	m_nextEntityId = 1;
 
@@ -2060,6 +2097,57 @@ void EditorServer::Unload()
 	}
 	m_objects.Clear();
 	m_components.Clear();
+}
+
+void EditorServer::m_SelectWithModifiers( EditorProgram* program, EditorObjectId entity )
+{
+	bool shift = program->input.Get( ae::Key::LeftShift );
+	bool ctrl = program->input.Get( ae::Key::LeftControl );
+	if ( shift && ctrl )
+	{
+		// Add
+		if ( entity != kInvalidEditorObjectId && selected.Find( entity ) < 0 )
+		{
+			selected.Append( entity );
+		}
+	}
+	else if ( shift )
+	{
+		// Toggle
+		if ( entity != kInvalidEditorObjectId )
+		{
+			int32_t idx = selected.Find( entity );
+			if ( idx < 0 )
+			{
+				selected.Append( entity );
+			}
+			else
+			{
+				selected.Remove( idx );
+			}
+		}
+	}
+	else if ( ctrl )
+	{
+		// Remove
+		if ( entity != kInvalidEditorObjectId )
+		{
+			int32_t idx = selected.Find( entity );
+			if ( idx >= 0 )
+			{
+				selected.Remove( idx );
+			}
+		}
+	}
+	else
+	{
+		// New selection
+		selected.Clear();
+		if ( entity != kInvalidEditorObjectId )
+		{
+			selected.Append( entity );
+		}
+	}
 }
 
 void EditorServer::m_Save( ae::EditorLevel* levelOut ) const
@@ -2368,7 +2456,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 					AE_ASSERT( selectComp );
 					const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
 					AE_ASSERT( selectObj );
-					selected = selectObj->entity;
+					m_SelectWithModifiers( program, selectObj->entity );
 				}
 			}
 			ImGui::SameLine();
@@ -2497,13 +2585,14 @@ void EditorServer::m_ShowEditorObject( EditorProgram* program, EditorObjectId en
 
 ae::Color EditorServer::m_GetColor( EditorObjectId entity, bool lines ) const
 {
+	const bool isSelected = ( selected.Find( entity ) >= 0 );
 	uint64_t seed = entity * 43313;
 	ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
-	if ( entity == selected && lines )
+	if ( isSelected && lines )
 	{
 		color = ae::Color::PicoOrange();
 	}
-	else if ( entity == selected )
+	else if ( isSelected )
 	{
 		color = color.Lerp( ae::Color::PicoOrange(), 0.75f );
 	}
