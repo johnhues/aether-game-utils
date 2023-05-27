@@ -643,7 +643,7 @@ public:
 	Vec3 GetTranslation() const;
 	Vec3 GetScale() const;
 	Matrix4 GetTranspose() const;
-	Matrix4 GetInverse() const;
+	Matrix4 GetInverse() const; // @TODO: Handle non-inverseable matrices in API
 	Matrix4 GetNormalMatrix() const;
 	Matrix4 GetScaleRemoved() const;
 	
@@ -2308,11 +2308,15 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::Screen
 //------------------------------------------------------------------------------
+//! Screen information. ae::Streen member values are in the same coordinate
+//! space as ae::Window.
 struct Screen
 {
 	ae::Int2 position;
 	ae::Int2 size;
 };
+//! Returns an array of all available screens. If a system error is encountered
+//! the returned array will be empty.
 ae::Array< ae::Screen, 16 > GetScreens();
 
 //------------------------------------------------------------------------------
@@ -2363,6 +2367,7 @@ private:
 	Int2 m_pos;
 	int32_t m_width;
 	int32_t m_height;
+	RectInt m_restoreRect; // Last pos/size before fullscreen
 	bool m_fullScreen;
 	bool m_maximized;
 	bool m_focused;
@@ -2375,6 +2380,8 @@ public:
 	void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
 	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
 	void m_UpdateFocused( bool focused );
+	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
+	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
 	void* window;
 	class GraphicsDevice* graphicsDevice;
 	class Input* input;
@@ -10522,6 +10529,7 @@ T* ae::Cast( C* obj )
 	#define WIN32_LEAN_AND_MEAN 1
 	#include <Windows.h>
 	#include <Windowsx.h>
+	#include <Winuser.h>
 	#include <shellapi.h>
 	#include <Shlobj_core.h>
 	#include <commdlg.h>
@@ -13720,6 +13728,28 @@ ae::Array< ae::Screen, 16 > GetScreens()
 		s.position = ae::Int2( screen.frame.origin.x, screen.frame.origin.y );
 		s.size = ae::Int2( screen.frame.size.width, screen.frame.size.height );
 	}
+#elif _AE_WINDOWS_
+	auto monitorEnumProc = []( HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData ) -> BOOL
+	{
+		ae::Array< Screen, 16 >& result = *(ae::Array< Screen, 16 >*)dwData;
+		MONITORINFO monitorInfo;
+		memset( &monitorInfo, 0, sizeof( monitorInfo ) );
+		monitorInfo.cbSize = sizeof( monitorInfo );
+		if ( GetMonitorInfo( hMonitor, &monitorInfo ) )
+		{
+			Screen& s = result.Append( {} );
+			// Use MONITORINFO::rcWork so that the taskbar is accounted for
+			s.position = ae::Int2( monitorInfo.rcWork.left, monitorInfo.rcWork.top );
+			s.size = ae::Int2( monitorInfo.rcWork.right - monitorInfo.rcWork.left, monitorInfo.rcWork.bottom - monitorInfo.rcWork.top );
+			return true;
+		}
+		result.Clear();
+		return false;
+	};
+	if ( !EnumDisplayMonitors( nullptr, nullptr, monitorEnumProc, (LPARAM)&result ) )
+	{
+		result.Clear();
+	}
 #endif
 	return result;
 }
@@ -13800,6 +13830,24 @@ void Window::m_UpdateFocused( bool focused )
 		input->SetMouseCaptured( false );
 		input->m_mousePosSet = false;
 	}
+}
+
+ae::Int2 Window::m_aeToNative( ae::Int2 pos, ae::Int2 size )
+{
+#if _AE_WINDOWS_
+	return ae::Int2( pos.x, GetSystemMetrics( SM_YVIRTUALSCREEN ) - pos.y + size.y );
+#elif _AE_OSX_
+	return ae::Int2( pos.x, pos.y );
+#endif
+}
+
+ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
+{
+#if _AE_WINDOWS_
+	return ae::Int2( pos.x, GetSystemMetrics( SM_YVIRTUALSCREEN ) - ( pos.y - size.y ) );
+#elif _AE_OSX_
+	return ae::Int2( pos.x, pos.y );
+#endif
 }
 
 void Window::m_Initialize()
@@ -14035,12 +14083,62 @@ void Window::SetTitle( const char* title )
 
 void Window::SetFullScreen( bool fullScreen )
 {
+	if ( GetLoggingEnabled() ) { AE_INFO( "fullscreen #", fullScreen ); }
 #if _AE_OSX_
 	if ( window )
 	{
+		m_fullScreen = fullScreen;
 		NSWindow* nsWindow = (NSWindow*)window;
 		if (!nsWindow.zoomed) [nsWindow toggleFullScreen:[NSApplication sharedApplication]];
-		m_fullScreen = fullScreen;
+	}
+#elif _AE_WINDOWS_
+	if ( window )
+	{
+		m_fullScreen = fullScreen; // First so triggered events can use this value
+		HWND hwnd = (HWND)window;
+		if ( fullScreen )
+		{
+			WINDOWPLACEMENT wp;
+			memset( &wp, 0, sizeof( wp ) );
+			wp.length = sizeof( wp );
+			if ( GetWindowPlacement( hwnd, &wp ) )
+			{
+				const ae::Int2 restoreSize( wp.rcNormalPosition.right - wp.rcNormalPosition.left, wp.rcNormalPosition.bottom - wp.rcNormalPosition.top );
+				const ae::Int2 aeRestorePos = m_nativeToAe( ae::Int2( wp.rcNormalPosition.left, wp.rcNormalPosition.top ), restoreSize );
+				m_restoreRect = ae::RectInt::FromPointAndSize( aeRestorePos, restoreSize );
+			}
+			if ( GetLoggingEnabled() )
+			{
+				const ae::Int2 restorePos = m_restoreRect.GetPos();
+				const ae::Int2 restoreSize = m_restoreRect.GetSize();
+				if ( GetLoggingEnabled() ) { AE_INFO( "restore rect # # # #", restorePos.x, restorePos.y, restoreSize.x, restoreSize.y ); }
+			}
+
+			RECT windowRect;
+			GetWindowRect( hwnd, &windowRect );
+			if ( HMONITOR hMonitor = MonitorFromRect( &windowRect, MONITOR_DEFAULTTOPRIMARY ) )
+			{
+				MONITORINFO monitorInfo;
+				memset( &monitorInfo, 0, sizeof( MONITORINFO ) );
+				monitorInfo.cbSize = sizeof( MONITORINFO );
+				if ( GetMonitorInfo( hMonitor, &monitorInfo ) )
+				{
+					const RECT monitorRect = monitorInfo.rcMonitor;
+					const ae::Int2 size( monitorRect.right - monitorRect.left, monitorRect.bottom - monitorRect.top );
+					SetWindowLongPtr( hwnd, GWL_STYLE, WS_VISIBLE | WS_POPUP );
+					SetWindowPos( hwnd, HWND_TOP, monitorRect.left, monitorRect.top, size.x, size.y, SWP_FRAMECHANGED );
+				}
+			}
+		}
+		else 
+		{
+			const ae::Int2 aeRestorePos = m_restoreRect.GetPos();
+			const ae::Int2 restoreSize = m_restoreRect.GetSize();
+			const ae::Int2 nativeRestorePos = m_aeToNative( aeRestorePos, restoreSize );
+			SetWindowLongPtr( hwnd, GWL_STYLE, WS_VISIBLE | WS_OVERLAPPEDWINDOW );
+			SetWindowPos( hwnd, nullptr, nativeRestorePos.x, nativeRestorePos.y, restoreSize.x, restoreSize.y, SWP_FRAMECHANGED );
+			if ( GetLoggingEnabled() ) { AE_INFO( "unfullscreen # # # #", aeRestorePos.x, aeRestorePos.y, restoreSize.x, restoreSize.y ); }
+		}
 	}
 #endif
 }
@@ -16174,7 +16272,17 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		GetModuleFileNameA( nullptr, result, sizeof( result ) );
 		const_cast< char* >( GetFileNameFromPath( result ) )[ 0 ] = 0;
 		strlcat( result, filePath, sizeof( result ) );
-		return result;
+
+		char buf[ _MAX_PATH ];
+		// 'Naturalize' path to remove relative path elements
+		if( _fullpath( buf, result, _MAX_PATH ) )
+		{
+			return buf;
+		}
+		else
+		{
+			return result;
+		}
 	}
 #elif _AE_EMSCRIPTEN_
 	ae::Str256 result;
