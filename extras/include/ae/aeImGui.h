@@ -78,6 +78,8 @@ public:
   void NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
   {
 	AE_ASSERT( m_init );
+
+	dt = ae::Max( dt, 0.0001f );
 	
 	if ( m_pendingRender )
 	{
