@@ -10709,6 +10709,10 @@ void ShowMessage( const char* msg )
 {
 #if _AE_WINDOWS_
 	MessageBoxA( nullptr, msg, nullptr, MB_OK );
+#elif _AE_OSX_
+	NSAlert* alert = [[NSAlert alloc] init];
+	[alert setMessageText: [NSString stringWithUTF8String: msg]];
+	[alert runModal];
 #endif
 }
 
