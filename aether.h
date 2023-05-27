@@ -14089,7 +14089,10 @@ void Window::SetFullScreen( bool fullScreen )
 	{
 		m_fullScreen = fullScreen;
 		NSWindow* nsWindow = (NSWindow*)window;
-		if (!nsWindow.zoomed) [nsWindow toggleFullScreen:[NSApplication sharedApplication]];
+		if ( m_fullScreen != nsWindow.zoomed )
+		{
+			[nsWindow toggleFullScreen:[NSApplication sharedApplication]];
+		}
 	}
 #elif _AE_WINDOWS_
 	if ( window )
