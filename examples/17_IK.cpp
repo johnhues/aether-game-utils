@@ -168,9 +168,23 @@ int main()
 	
 	const char* handBoneName = "QuickRigCharacter_RightHand";
 	const char* armBoneName = "QuickRigCharacter_RightArm";
-	ae::Matrix4 targetTransform = skin.GetBindPose().GetBoneByName( handBoneName )->transform;
+	ae::Matrix4 targetTransform;
+	ae::Matrix4 poleTransform;
+	auto SetDefault = [&]()
+	{
+		targetTransform = ae::Matrix4::Translation( skin.GetBindPose().GetBoneByName( handBoneName )->transform.GetTranslation() );
+		poleTransform = ae::Matrix4::Translation( skin.GetBindPose().GetBoneByName( armBoneName )->transform.GetTranslation() + ae::Vec3( 0.0f, 0.0f, -1.0f ) );
+	};
+	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
 	bool drawMesh = true;
+	int selection = 1;
+	bool effector = false;
+	auto GetSelectedTransform = [&]() -> ae::Matrix4&
+	{
+		return effector ? poleTransform : targetTransform;
+	};
 	
 	AE_INFO( "Run" );
 	while ( !input.quit )
@@ -183,18 +197,30 @@ int main()
 			drawMesh = !drawMesh;
 		}
 		
-		if ( input.Get( ae::Key::R ) )
+		if ( input.GetPress( ae::Key::Q ) )
 		{
-			targetTransform = ae::Matrix4::Translation( skin.GetBindPose().GetBoneByName( handBoneName )->transform.GetTranslation() );
+			effector = !effector;
 		}
 		if ( input.Get( ae::Key::W ) )
 		{
-			gizmoOperation = ImGuizmo::TRANSLATE;
+			if ( gizmoOperation != ImGuizmo::TRANSLATE ) { gizmoOperation = ImGuizmo::TRANSLATE; }
+			else { gizmoMode = ( gizmoMode == ImGuizmo::WORLD ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD; }
 		}
 		if ( input.Get( ae::Key::E ) )
 		{
-			gizmoOperation = ImGuizmo::ROTATE;
+			if ( gizmoOperation != ImGuizmo::ROTATE ) { gizmoOperation = ImGuizmo::ROTATE; }
+			else { gizmoMode = ( gizmoMode == ImGuizmo::WORLD ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD; }
 		}
+		if ( input.Get( ae::Key::R ) )
+		{
+			SetDefault();
+		}
+		if ( input.GetPress( ae::Key::F ) )
+		{
+			camera.Refocus( GetSelectedTransform().GetTranslation() );
+		}
+		if ( input.Get( ae::Key::Num1 ) ) { selection = 1; }
+		if ( input.Get( ae::Key::Num2 ) ) { selection = 2; }
 		
 		ImGuiIO& io = ImGui::GetIO();
 		ui.NewFrame( &render, &input, dt );
@@ -218,7 +244,7 @@ int main()
 				ik.bones.Append( { b->transform, b->parent->transform.GetTranslation() } );
 			}
 			ik.targetTransform = targetTransform;
-			ik.polePos = ik.bones[ 0 ].transform.GetTranslation() + ae::Vec3( -1.0f, 0.0f, -1.0f );
+			ik.polePos = poleTransform.GetTranslation();
 			ik.Update( 10 );
 			
 			for ( const auto& t : ik.finalTransforms )
@@ -259,9 +285,9 @@ int main()
 		ImGuizmo::Manipulate(
 			worldToView.data,
 			viewToProj.data,
-			gizmoOperation,
-			ImGuizmo::WORLD,
-			targetTransform.data
+			effector ? ImGuizmo::TRANSLATE : gizmoOperation,
+			gizmoMode,
+			GetSelectedTransform().data
 		);
 		
 		render.Activate();
