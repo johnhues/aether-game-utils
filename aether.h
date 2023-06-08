@@ -9152,9 +9152,8 @@ void IK< NumBones >::Update( uint32_t iterationCount )
 		{
 			ae::Vec3 xAxis = boneDir.SafeNormalizeCopy();
 			if ( flipBoneAxis ) { xAxis = -xAxis; }
-			ae::Vec3 yAxis = oldTransform.GetAxis( 2 ).Cross( xAxis ).SafeNormalizeCopy();
-			ae::Vec3 zAxis = xAxis.Cross( yAxis );
-			yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
+			ae::Vec3 zAxis = movementPlane.GetNormal();
+			ae::Vec3 yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
 			
 			newTransform = ae::Matrix4::Identity();
 			newTransform.SetAxis( 0, xAxis );
