@@ -486,7 +486,7 @@ struct Vec2 : public VecT< Vec2 >
 	Vec2( const Vec2& ) = default;
 	explicit Vec2( float v );
 	Vec2( float x, float y );
-	explicit Vec2( const float* v2 );
+	explicit Vec2( const float* xy );
 	explicit Vec2( struct Int2 i2 );
 	static Vec2 FromAngle( float angle );
 
@@ -519,7 +519,7 @@ struct Vec3 : public VecT< Vec3 >
 	Vec3() = default; // Trivial constructor for performance of vertex arrays etc
 	explicit Vec3( float v );
 	Vec3( float x, float y, float z );
-	explicit Vec3( const float* v3 );
+	explicit Vec3( const float* xyz );
 	explicit Vec3( struct Int3 i3 );
 	Vec3( Vec2 xy, float z ); // @TODO: Support Y up
 	explicit Vec3( Vec2 xy );
@@ -575,7 +575,6 @@ struct Vec4 : public VecT< Vec4 >
 	Vec4() = default; // Trivial Empty default constructor for performance of vertex arrays etc
 	Vec4( const Vec4& ) = default;
 	explicit Vec4( float f );
-	explicit Vec4( float* v );
 	explicit Vec4( float xyz, float w );
 	Vec4( float x, float y, float z, float w );
 	Vec4( Vec3 xyz, float w );
@@ -583,8 +582,8 @@ struct Vec4 : public VecT< Vec4 >
 	Vec4( Vec2 xy, Vec2 zw );
 	explicit operator Vec2() const;
 	explicit operator Vec3() const;
-	Vec4( const float* v3, float w );
-	explicit Vec4( const float* v4 );
+	Vec4( const float* xyz, float w );
+	explicit Vec4( const float* xyzw );
 	Vec2 GetXY() const;
 	Vec2 GetZW() const;
 	Vec3 GetXYZ() const;
@@ -6041,7 +6040,7 @@ inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 //------------------------------------------------------------------------------
 inline Vec2::Vec2( float v ) : x( v ), y( v ) {}
 inline Vec2::Vec2( float x, float y ) : x( x ), y( y ) {}
-inline Vec2::Vec2( const float* v2 ) : x( v2[ 0 ] ), y( v2[ 1 ] ) {}
+inline Vec2::Vec2( const float* xy ) : x( xy[ 0 ] ), y( xy[ 1 ] ) {}
 inline Vec2::Vec2( struct Int2 i2 ) : x( (float)i2.x ), y( (float)i2.y ) {}
 inline Vec2 Vec2::FromAngle( float angle ) { return Vec2( ae::Cos( angle ), ae::Sin( angle ) ); }
 inline Int2 Vec2::NearestCopy() const { return Int2( (int32_t)(x + 0.5f), (int32_t)(y + 0.5f) ); }
@@ -6075,7 +6074,7 @@ inline Vec2 Vec2::DtSlerp( const Vec2& end, float snappiness, float dt, float ep
 //------------------------------------------------------------------------------
 inline Vec3::Vec3( float v ) : x( v ), y( v ), z( v ), pad( 0.0f ) {}
 inline Vec3::Vec3( float x, float y, float z ) : x( x ), y( y ), z( z ), pad( 0.0f ) {}
-inline Vec3::Vec3( const float* v3 ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), pad( 0.0f ) {}
+inline Vec3::Vec3( const float* xyz ) : x( xyz[ 0 ] ), y( xyz[ 1 ] ), z( xyz[ 2 ] ), pad( 0.0f ) {}
 inline Vec3::Vec3( struct Int3 i3 ) : x( (float)i3.x ), y( (float)i3.y ), z( (float)i3.z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
@@ -6143,8 +6142,8 @@ inline Vec4::Vec4( Vec2 xy, float z, float w ) : x( xy.x ), y( xy.y ), z( z ), w
 inline Vec4::Vec4( Vec2 xy, Vec2 zw ) : x( xy.x ), y( xy.y ), z( zw.x ), w( zw.y ) {}
 inline Vec4::operator Vec2() const { return Vec2( x, y ); }
 inline Vec4::operator Vec3() const { return Vec3( x, y, z ); }
-inline Vec4::Vec4( const float* v3, float w ) : x( v3[ 0 ] ), y( v3[ 1 ] ), z( v3[ 2 ] ), w( w ) {}
-inline Vec4::Vec4( const float* v4 ) : x( v4[ 0 ] ), y( v4[ 1 ] ), z( v4[ 2 ] ), w( v4[ 3 ] ) {}
+inline Vec4::Vec4( const float* xyz, float w ) : x( xyz[ 0 ] ), y( xyz[ 1 ] ), z( xyz[ 2 ] ), w( w ) {}
+inline Vec4::Vec4( const float* xyzw ) : x( xyzw[ 0 ] ), y( xyzw[ 1 ] ), z( xyzw[ 2 ] ), w( xyzw[ 3 ] ) {}
 inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
 inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
@@ -8562,7 +8561,7 @@ void ObjectPool< T, N, Paged >::Delete( T* obj )
 		AE_DEBUG_ASSERT_MSG( page->freeList.IsAllocated( index ), "Can't Delete() previously deleted object" );
 		obj->~T();
 #if _AE_DEBUG_
-		memset( obj, 0xDD, sizeof(*obj) );
+		memset( (void*)obj, 0xDD, sizeof(*obj) ); // Cast to silence clang vtable warning
 #endif
 		page->freeList.Free( index );
 		m_length--;
@@ -23581,40 +23580,21 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		{
 			switch ( m_size )
 			{
-				case 16:
-				{
-					*(ae::Str16*)varData = value;
-					return true;
+#define CASE_STRING( _size ) \
+				case _size:\
+				{\
+					ae::Str##_size* str = (ae::Str##_size*)varData;\
+					if ( strlen( value ) > str->MaxLength() ) { return false; }\
+					*str = value;\
+					return true;\
 				}
-				case 32:
-				{
-					*(ae::Str32*)varData = value;
-					return true;
-				}
-				case 64:
-				{
-					ae::Str64* str = (ae::Str64*)varData;
-					*str = value;
-					return true;
-				}
-				case 128:
-				{
-					ae::Str128* str = (ae::Str128*)varData;
-					*str = value;
-					return true;
-				}
-				case 256:
-				{
-					ae::Str256* str = (ae::Str256*)varData;
-					*str = value;
-					return true;
-				}
-				case 512:
-				{
-					ae::Str512* str = (ae::Str512*)varData;
-					*str = value;
-					return true;
-				}
+				CASE_STRING( 16 )
+				CASE_STRING( 32 )
+				CASE_STRING( 64 )
+				CASE_STRING( 128 )
+				CASE_STRING( 256 )
+				CASE_STRING( 512 )
+#undef CASE_STRING
 				default:
 				{
 					AE_ASSERT_MSG( false, "Invalid string size '#'", m_size );

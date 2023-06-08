@@ -239,18 +239,24 @@ int32_t Registry::GetTypeIndexByType( const ae::Type* type ) const
 	return m_components.GetIndex( type->GetId() );
 }
 
-uint32_t Registry::GetComponentCountByIndex( uint32_t typeIndex ) const
+uint32_t Registry::GetComponentCountByIndex( int32_t typeIndex ) const
 {
+	if ( typeIndex < 0 || typeIndex >= m_components.Length() )
+	{
+		return 0;
+	}
 	return m_components.GetValue( typeIndex ).Length();
 }
 
-const Component& Registry::GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex ) const
+const Component& Registry::GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex ) const
 {
+	AE_ASSERT( typeIndex >= 0 && typeIndex < m_components.Length() );
 	return *m_components.GetValue( typeIndex ).GetValue( componentIndex );
 }
 
-Component& Registry::GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex )
+Component& Registry::GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex )
 {
+	AE_ASSERT( typeIndex >= 0 && typeIndex < m_components.Length() );
 	return *m_components.GetValue( typeIndex ).GetValue( componentIndex );
 }
 

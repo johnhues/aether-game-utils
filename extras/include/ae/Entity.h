@@ -94,9 +94,9 @@ public:
 	const ae::Type* GetTypeByIndex( uint32_t typeIndex ) const;
 	int32_t GetTypeIndexByType( const ae::Type* type ) const;
 	template < typename T > int32_t GetTypeIndexByType() const;
-	uint32_t GetComponentCountByIndex( uint32_t typeIndex ) const;
-	const Component& GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex ) const;
-	Component& GetComponentByIndex( uint32_t typeIndex, uint32_t componentIndex );
+	uint32_t GetComponentCountByIndex( int32_t typeIndex ) const;
+	const Component& GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex ) const;
+	Component& GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex );
 	template < typename T, typename Fn > uint32_t CallFn( Fn fn );
 	
 	// Removal

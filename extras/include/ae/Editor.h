@@ -76,6 +76,7 @@ struct EditorParams
 {
 	int argc = 0;
 	char** argv = nullptr;
+	bool run = false;
 	uint16_t port = 7200;
 	//! Only ae::Axis::Z and ae::Axis::Y are supported
 	ae::Axis worldUp = ae::Axis::Z;

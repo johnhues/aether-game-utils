@@ -218,6 +218,7 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 	const FbxLoaderMeshInfo* info = m_state->meshes.TryGet( meshName );
 	if ( !info ) { return false; }
 	
+	AE_ASSERT_MSG( params.descriptor.indexSize, "Must define index type size" );
 	AE_ASSERT_MSG( params.descriptor.indexSize == sizeof(uint32_t), "TODO" );
 	
 	ofbx::IScene* ofbxScene = m_state->scene;

@@ -176,6 +176,7 @@ public:
 	EditorServerObject* CreateObject( EditorObjectId id, const ae::Matrix4& transform );
 	void DestroyObject( EditorObjectId id );
 	ae::Object* AddComponent( class EditorProgram* program, EditorServerObject* obj, const char* typeName );
+	void DeleteComponent( EditorProgram* program, EditorServerObject* obj, ae::Object* component );
 	ae::Object* GetComponent( EditorServerObject* obj, const char* typeName );
 	const ae::Object* GetComponent( const EditorServerObject* obj, const char* typeName );
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
@@ -721,6 +722,11 @@ Editor::~Editor()
 #if !_AE_EMSCRIPTEN_
 	m_sock.Disconnect();
 #endif
+	if ( m_file )
+	{
+		m_fileSystem.Destroy( m_file );
+		m_file = nullptr;
+	}
 }
 
 void Editor::Initialize( const EditorParams& params )
@@ -730,14 +736,39 @@ void Editor::Initialize( const EditorParams& params )
 	AE_ASSERT( params.port );
 	m_params = params;
 	m_fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );	
-	if ( params.argc >= 2 && strcmp( params.argv[ 1 ], "ae_editor" ) == 0 )
+
+	bool run = params.run;
+	if ( !run )
+	{
+		for ( int i = 0; i < params.argc; i++ )
+		{
+			if ( strcmp( params.argv[ i ], "--editor" ) == 0 )
+			{
+				run = true;
+				break;
+			}
+		}
+	}
+
+	if ( run )
 	{
 		EditorProgram program( m_tag, params, this );
 		program.Initialize();
-		if ( params.argc >= 3 )
+
+		int32_t levelArg = -1;
+		for ( int i = 0; i < params.argc; i++ )
 		{
-			program.editor.OpenLevel( &program, params.argv[ 2 ] );
+			if ( strcmp( params.argv[ i ], "--level" ) == 0 )
+			{
+				levelArg = i + 1;
+				break;
+			}
 		}
+		if ( levelArg >= 0 )
+		{
+			program.editor.OpenLevel( &program, params.argv[ levelArg ] );
+		}
+
 		program.Run();
 		program.Terminate();
 		exit( 0 );
@@ -1567,6 +1598,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 				connections[ i ]->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
 			}
 		}
+		ImGui::SameLine();
+		if ( ImGui::Button( "Quit" ) )
+		{
+			program->input.quit = true;
+		}
 		ImGui::TreePop();
 	}
 	
@@ -1694,6 +1730,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 				}
 			}
 			
+			ae::Object* deleteComponent = nullptr;
 			for ( ae::Object* component : selectedObject->components )
 			{
 				ImGui::Separator();
@@ -1726,8 +1763,16 @@ void EditorServer::ShowUI( EditorProgram* program )
 						}
 					};
 					fn( componentType, component );
+					if ( ImGui::Button( "Delete Component" ) )
+					{
+						deleteComponent = component;
+					}
 					ImGui::TreePop();
 				}
+			}
+			if ( deleteComponent )
+			{
+				DeleteComponent( program, selectedObject, deleteComponent );
 			}
 			
 			ImGui::Separator();
@@ -1958,6 +2003,32 @@ ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObje
 	return component;
 }
 
+void EditorServer::DeleteComponent( EditorProgram* program, EditorServerObject* obj, ae::Object* component )
+{
+	if ( obj && component )
+	{
+		const ae::Type* type = ae::GetTypeFromObject( component );
+		AE_ASSERT( type );
+
+		int32_t componentIdx = obj->components.Find( component );
+		AE_ASSERT( componentIdx >= 0 );
+		obj->components.Remove( componentIdx );
+
+		ae::Map< EditorObjectId, ae::Object* >* typeComponents = m_components.TryGet( type->GetId() );
+		AE_ASSERT( typeComponents );
+		ae::Object* componentCheck = nullptr;
+		typeComponents->Remove( obj->entity, &componentCheck );
+		AE_ASSERT( componentCheck == component );
+		if ( !typeComponents->Length() )
+		{
+			m_components.Remove( type->GetId() );
+		}
+
+		component->~Object();
+		ae::Free( component );
+	}
+}
+
 ae::Object* EditorServer::GetComponent( EditorServerObject* obj, const char* typeName )
 {
 	return const_cast< ae::Object* >( GetComponent( const_cast< const EditorServerObject* >( obj ), typeName ) );
@@ -2089,13 +2160,11 @@ void EditorServer::Unload()
 	hoverEntity = kInvalidEditorObjectId;
 	m_nextEntityId = 1;
 
-	for ( uint32_t i = 0; i < m_objects.Length(); i++ )
+	while ( m_objects.Length() )
 	{
-		EditorServerObject* editorObj = m_objects.GetValue( i );
-		editorObj->Terminate();
-		ae::Delete( editorObj );
+		DestroyObject( m_objects.GetKey( m_objects.Length() - 1 ) );
 	}
-	m_objects.Clear();
+	AE_ASSERT( m_objects.Length() == 0 );
 	m_components.Clear();
 }
 
@@ -2400,10 +2469,11 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			}
 			return false;
 		}
-		// case ae::BasicType::Ref: Pointer? CustomRef?
-		// {
-		// 	return m_ShowRefVar( program, component, var, idx );
-		// }
+		case ae::BasicType::Pointer:
+		{
+			return m_ShowRefVar( program, component, var, idx );
+		}
+		// @TODO: case ae::BasicType::CustomRef
 		default:
 			ImGui::Text( "%s (Unsupported type)", var->GetName() );
 			break;
@@ -2616,7 +2686,13 @@ void Editor::m_Fork()
 #if _AE_APPLE_
 	if ( !fork() )
 	{
-		char* execArgs[] = { m_params.argv[ 0 ], (char*)"ae_editor", (char*)m_level.filePath.c_str(), nullptr };
+		char* execArgs[] =
+		{
+			m_params.argv[ 0 ],
+			(char*)"--editor",
+			(char*)"--level", (char*)m_level.filePath.c_str(),
+			nullptr
+		};
 		execv( m_params.argv[ 0 ], execArgs );
 	}
 #elif _AE_WINDOWS_
@@ -2627,7 +2703,7 @@ void Editor::m_Fork()
 	char args[ 256 ];
 	args[ 0 ] = 0;
 	strlcat( args, m_params.argv[ 0 ], sizeof(args) );
-	strlcat( args, " ae_editor ", sizeof(args) );
+	strlcat( args, " --editor --level ", sizeof(args) );
 	strlcat( args, m_level.filePath.c_str(), sizeof(args) );
 	CreateProcessA(
 		m_params.argv[ 0 ],
