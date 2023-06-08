@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 # aether-game-utils project
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
-set(AE_LOADERS_OFBX OFF CACHE BOOL "Enables aether FBX utilitiy and ofbx dependency")
-set(AE_LOADERS_STB OFF CACHE BOOL "Enables aether PNG utilitiy and stb dependency")
+set(AE_LOADERS_OFBX OFF CACHE BOOL "Enables aether FBX loader and ofbx dependency")
+set(AE_LOADERS_STB OFF CACHE BOOL "Enables aether PNG loader and stb dependency")
 set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Includes
