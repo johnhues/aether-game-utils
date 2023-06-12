@@ -699,7 +699,7 @@ public:
 	void AddRotationXY( float rotation);
 	Quaternion Nlerp( Quaternion end, float t ) const;
 	Matrix4 GetTransformMatrix() const;
-	Quaternion  GetInverse() const;
+	Quaternion GetInverse() const;
 	Quaternion& SetInverse();
 	Vec3 Rotate( Vec3 v ) const;
 };
@@ -3916,34 +3916,6 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::IK struct
-//------------------------------------------------------------------------------
-template < uint32_t NumBones = 0 >
-struct IK
-{
-	IK() = default;
-	IK( ae::Tag tag );
-	void Update( uint32_t iterationCount );
-
-	// Input
-	struct Bone
-	{
-		Bone( const ae::Matrix4& transform, ae::Vec3 parentPos = ae::Vec3( 0.0f ) ) : transform( transform ), parentPos( parentPos ) {}
-		ae::Matrix4 transform;
-		ae::Vec3 parentPos;
-	};
-	const ae::Tag tag;
-	ae::Vec3 polePos = ae::Vec3( 0.0f );
-	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
-	ae::Array< Bone, NumBones > bones;
-	bool flipBoneAxis = true;
-	// Output
-	ae::Array< ae::Vec3, NumBones > joints;
-	ae::Array< float, NumBones > jointLengths;
-	ae::Array< ae::Matrix4, NumBones > finalTransforms;
-};
-
-//------------------------------------------------------------------------------
 // ae::Keyframe struct
 //------------------------------------------------------------------------------
 struct Keyframe
@@ -3965,9 +3937,9 @@ struct Bone
 {
 	ae::Str64 name;
 	uint32_t index = 0;
-	ae::Matrix4 transform = ae::Matrix4::Identity();
-	ae::Matrix4 localTransform = ae::Matrix4::Identity();
-	ae::Matrix4 inverseTransform = ae::Matrix4::Identity();
+	ae::Matrix4 transform = ae::Matrix4::Identity(); //!< Model to bone space
+	ae::Matrix4 localTransform = ae::Matrix4::Identity(); //!< Parent to child space
+	ae::Matrix4 inverseTransform = ae::Matrix4::Identity(); //!< Bone to model space
 	Bone* firstChild = nullptr;
 	Bone* nextSibling = nullptr;
 	Bone* parent = nullptr;
@@ -4014,6 +3986,22 @@ public:
 private:
 	Skeleton( const Skeleton& ) = delete;
 	ae::Array< ae::Bone > m_bones;
+};
+
+//------------------------------------------------------------------------------
+// ae::IK struct
+//------------------------------------------------------------------------------
+struct IK
+{
+	IK( ae::Tag tag );
+	void Run( uint32_t iterationCount, ae::Skeleton* poseOut );
+
+	// Params
+	const ae::Tag tag;
+	ae::Vec3 primaryAxis = ae::Vec3( -1, 0, 0 ); //!< The axis that points towards the next bone
+	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
+	ae::Array< uint32_t > chain; //!< Bone indices. Ordered from root to extent.
+	ae::Skeleton pose;
 };
 
 //------------------------------------------------------------------------------
@@ -9061,119 +9049,6 @@ ae::AABB BVH< T, N >::GetAABB() const
 //------------------------------------------------------------------------------
 template < typename T > uint32_t GetHash( T* key ) { return ae::Hash().HashBasicType( key ).Get(); }
 template < uint32_t N > uint32_t GetHash( ae::Str< N > key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
-
-//------------------------------------------------------------------------------
-// ae::IK member functions
-//------------------------------------------------------------------------------
-template <>
-inline IK< 0 >::IK( ae::Tag tag ) :
-	tag( tag ),
-	bones( tag ),
-	joints( tag ),
-	jointLengths( tag ),
-	finalTransforms( tag )
-{}
-
-template < uint32_t NumBones >
-IK< NumBones >::IK( ae::Tag tag )
-{} // @TODO: Cleanup static allocation
-
-template < uint32_t NumBones >
-void IK< NumBones >::Update( uint32_t iterationCount )
-{
-	joints.Clear();
-	jointLengths.Clear();
-	finalTransforms.Clear();
-	
-	for ( uint32_t i = 0; i < bones.Length(); i++ )
-	{
-		ae::Vec3 p0 = bones[ i ].transform.GetTranslation();
-		ae::Vec3 p1 = bones[ i ].parentPos;
-		joints.Append( p0 );
-		jointLengths.Append( ( p1 - p0 ).Length() );
-	}
-
-	const ae::Vec3 rootPos = joints[ 0 ];
-	const ae::Vec3 targetPos = targetTransform.GetTranslation();
-	const float targetDistance = ( targetPos - rootPos ).Length();
-	const ae::Plane movementPlane = ae::Plane( rootPos, polePos, targetPos );
-	const ae::Plane clipPlane = ae::Plane( rootPos, polePos - ae::Line( rootPos, targetPos ).GetClosest( polePos ) );
-
-	uint32_t iters = 0;
-	while ( ( joints[ joints.Length() - 1 ] - targetPos ).Length() > 0.001f && iters < iterationCount )
-	{
-		joints[ joints.Length() - 1 ] = targetPos;
-		for ( int32_t i = joints.Length() - 2; i >= 0; i-- )
-		{
-			const float boneLength = jointLengths[ i + 1 ];
-			ae::Vec3 p0 = movementPlane.GetClosestPoint( joints[ i ] );
-			const ae::Vec3 p1 = movementPlane.GetClosestPoint( joints[ i + 1 ] );
-
-			float clipDist;
-			const ae::Vec3 clipPos = clipPlane.GetClosestPoint( p0, &clipDist );
-			if ( clipDist < 0.0f )
-			{
-				p0 += ( clipPos - p0 ) * 2.0f; // Bump pos to the right side of the plane
-			}
-
-			p0 = p1 + ( p0 - p1 ).SafeNormalizeCopy() * boneLength;
-
-			joints[ i ] = p0;
-		}
-		
-		joints[ 0 ] = rootPos;
-		for ( uint32_t i = 1; i < joints.Length(); i++ )
-		{
-			const float boneLength = jointLengths[ i ];
-			ae::Vec3 p0 = movementPlane.GetClosestPoint( joints[ i ] );
-			const ae::Vec3 p1 = movementPlane.GetClosestPoint( joints[ i - 1 ] );
-
-			float clipDist;
-			const ae::Vec3 clipPos = clipPlane.GetClosestPoint( p0, &clipDist );
-			if ( clipDist < 0.0f )
-			{
-				p0 += ( clipPos - p0 ) * 2.0f; // Bump pos to the right side of the plane
-			}
-
-			p0 = p1 + ( p0 - p1 ).SafeNormalizeCopy() * boneLength;
-
-			joints[ i ] = p0;
-		}
-		
-		iters++;
-	}
-
-	for ( uint32_t i = 0; i < joints.Length() - 1; i++ )
-	{
-		ae::Matrix4 newTransform;
-		ae::Vec3 boneDir = joints[ i + 1 ] - joints[ i ];
-		const ae::Matrix4 oldTransform = bones[ i ].transform;
-		if ( boneDir.Length() > 0.001f )
-		{
-			ae::Vec3 xAxis = boneDir.SafeNormalizeCopy();
-			if ( flipBoneAxis ) { xAxis = -xAxis; }
-			ae::Vec3 zAxis = movementPlane.GetNormal();
-			ae::Vec3 yAxis = zAxis.Cross( xAxis ).SafeNormalizeCopy();
-			
-			newTransform = ae::Matrix4::Identity();
-			newTransform.SetAxis( 0, xAxis );
-			newTransform.SetAxis( 1, yAxis );
-			newTransform.SetAxis( 2, zAxis );
-			newTransform.SetTranslation( joints[ i ] );
-		}
-		else
-		{
-			newTransform = oldTransform;
-			newTransform.SetTranslation( joints[ i ] );
-		}
-		AE_DEBUG_ASSERT( newTransform.GetScale() != ae::Vec3( 0.0f ) );
-		finalTransforms.Append( newTransform );
-	}
-	ae::Matrix4& finalTransform = finalTransforms.Append( targetTransform );
-	finalTransform.SetScale( bones[ 0 ].transform.GetScale() ); // Maintain the old bones scale
-	finalTransform.SetTranslation( joints[ joints.Length() - 1 ] );
-	AE_ASSERT( finalTransforms.Length() == bones.Length() );
-}
 
 //------------------------------------------------------------------------------
 // ae::CollisionMesh member functions
@@ -21661,6 +21536,91 @@ const Bone* Skeleton::GetBones() const
 uint32_t Skeleton::GetBoneCount() const
 {
 	return m_bones.Length();
+}
+
+//------------------------------------------------------------------------------
+// ae::IK member functions
+//------------------------------------------------------------------------------
+IK::IK( ae::Tag tag ) :
+	tag( tag ),
+	chain( tag ),
+	pose( tag )
+{}
+
+void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
+{
+	AE_ASSERT( !chain.Length() || pose.GetBoneCount() );
+
+	struct Joint
+	{
+		ae::Vec3 pos;
+		ae::Quaternion rotation;
+		float length;
+	};
+	ae::Array< Joint > joints( tag, pose.GetBoneCount() );
+	for ( uint32_t i = 0; i < chain.Length(); i++ )
+	{
+		const Bone* bone = pose.GetBoneByIndex( chain[ i ] );
+		AE_ASSERT( bone->parent );
+		Joint joint;
+		joint.pos = bone->transform.GetTranslation();
+		joint.rotation = bone->transform.GetRotation();
+		joint.length = ( joint.pos - bone->parent->transform.GetTranslation() ).Length();
+		joints.Append( joint );
+	}
+
+	const ae::Vec3 rootPos = joints[ 0 ].pos;
+	const ae::Vec3 targetPos = targetTransform.GetTranslation();
+
+	uint32_t iters = 0;
+	while ( ( joints[ joints.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount )
+	{
+		joints[ joints.Length() - 1 ].pos = targetPos;
+		for ( int32_t i = joints.Length() - 2; i >= 0; i-- )
+		{
+			ae::Vec3 p0 = joints[ i ].pos;
+			const ae::Vec3 p1 = joints[ i + 1 ].pos;
+			p0 = p1 + ( p0 - p1 ).SafeNormalizeCopy() * joints[ i + 1 ].length;
+			joints[ i ].pos = p0;
+		}
+		
+		joints[ 0 ].pos = rootPos;
+		for ( uint32_t i = 0; i < joints.Length() - 1; i++ )
+		{
+			const ae::Vec3 dir = ( joints[ i + 1 ].pos - joints[ i ].pos ).SafeNormalizeCopy();
+			const ae::Quaternion invRot = joints[ i ].rotation.GetInverse();
+			const ae::Vec3 boneDir = invRot.Rotate( dir );
+			const ae::Vec3 axis = primaryAxis.Cross( boneDir );
+			const float angle = boneDir.GetAngleBetween( primaryAxis );
+			const ae::Quaternion boneRot( axis, angle );
+			joints[ i ].rotation *= boneRot;
+			joints[ i + 1 ].pos = joints[ i ].pos + joints[ i ].rotation.Rotate( primaryAxis ) * joints[ i + 1 ].length;
+		}
+		
+		iters++;
+	}
+
+	poseOut->Initialize( &pose );
+	ae::Array< const ae::Bone* > outBones( tag, joints.Length() );
+	ae::Array< ae::Matrix4 > outTransforms( tag, joints.Length() );
+	AE_ASSERT( chain.Length() == joints.Length() );
+	for ( uint32_t i = 0; i < chain.Length(); i++ )
+	{
+		const uint32_t idx = chain[ i ];
+		const Joint& joint = joints[ i ];
+
+		outBones.Append( poseOut->GetBoneByIndex( idx ) );
+		
+		ae::Matrix4 transform = joint.rotation.GetTransformMatrix();
+		transform.SetTranslation( joint.pos );
+		outTransforms.Append( transform );
+	}
+
+	ae::Matrix4* finalTransform = &outTransforms[ outTransforms.Length() - 1 ];
+	*finalTransform = targetTransform;
+	// @TODO: Maintain the old bones scale
+	finalTransform->SetTranslation( joints[ joints.Length() - 1 ].pos );
+	poseOut->SetTransforms( outBones.Data(), outTransforms.Data(), chain.Length() );
 }
 
 //------------------------------------------------------------------------------

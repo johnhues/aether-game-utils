@@ -166,24 +166,30 @@ int main()
 		}
 	}
 	
-	const char* handBoneName = "QuickRigCharacter_RightHand";
-	const char* armBoneName = "QuickRigCharacter_RightArm";
+	// const char* anchorBoneName = "QuickRigCharacter_Hips";
+	// const char* headBoneName = "QuickRigCharacter_Head";
+	// const char* rightHandBoneName = "QuickRigCharacter_RightHand";
+	// const char* leftHandBoneName = "QuickRigCharacter_LeftHand";
+	// const char* leftFootBoneName = "QuickRigCharacter_LeftFoot";
+	// const char* rightFootBoneName = "QuickRigCharacter_RightFoot";
+
+	const char* rightHandBoneName = "QuickRigCharacter_RightHand";
+	const char* anchorBoneName = "QuickRigCharacter_RightShoulder";
+
 	ae::Matrix4 targetTransform;
-	ae::Matrix4 poleTransform;
 	auto SetDefault = [&]()
 	{
-		targetTransform = ae::Matrix4::Translation( skin.GetBindPose().GetBoneByName( handBoneName )->transform.GetTranslation() );
-		poleTransform = ae::Matrix4::Translation( skin.GetBindPose().GetBoneByName( armBoneName )->transform.GetTranslation() + ae::Vec3( 0.0f, 0.0f, -1.0f ) );
+		targetTransform = skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
-	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
+	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
 	bool drawMesh = true;
+	bool enableIK = true;
 	int selection = 1;
-	bool effector = false;
 	auto GetSelectedTransform = [&]() -> ae::Matrix4&
 	{
-		return effector ? poleTransform : targetTransform;
+		return targetTransform;
 	};
 	
 	AE_INFO( "Run" );
@@ -195,11 +201,6 @@ int main()
 		if ( input.Get( ae::Key::V ) && !input.GetPrev( ae::Key::V ) )
 		{
 			drawMesh = !drawMesh;
-		}
-		
-		if ( input.GetPress( ae::Key::Q ) )
-		{
-			effector = !effector;
 		}
 		if ( input.Get( ae::Key::W ) )
 		{
@@ -219,8 +220,14 @@ int main()
 		{
 			camera.Refocus( GetSelectedTransform().GetTranslation() );
 		}
+		if ( input.GetPress( ae::Key::I ) )
+		{
+			enableIK = !enableIK;
+		}
 		if ( input.Get( ae::Key::Num1 ) ) { selection = 1; }
 		if ( input.Get( ae::Key::Num2 ) ) { selection = 2; }
+		if ( input.Get( ae::Key::Num3 ) ) { selection = 3; }
+		if ( input.Get( ae::Key::Num4 ) ) { selection = 4; }
 		
 		ImGuiIO& io = ImGui::GetIO();
 		ui.NewFrame( &render, &input, dt );
@@ -232,33 +239,41 @@ int main()
 		camera.Update( &input, dt );
 		
 		ae::Skeleton currentPose = TAG_ALL;
+		currentPose.Initialize( &skin.GetBindPose() );
+		if ( enableIK )
 		{
-			currentPose.Initialize( &skin.GetBindPose() );
 
-			ae::IK<> ik = TAG_ALL;
-			ae::Array< const ae::Bone* > bones = TAG_ALL;
-			const ae::Bone* armBone = currentPose.GetBoneByName( armBoneName );
-			for ( auto b = armBone; b; b = b->firstChild )
+			ae::IK rightIK = TAG_ALL;
+			const ae::Bone* extentBone = currentPose.GetBoneByName( rightHandBoneName );
+			for ( auto b = extentBone; b; b = b->parent )
 			{
-				bones.Append( b );
-				ik.bones.Append( { b->transform, b->parent->transform.GetTranslation() } );
+				rightIK.chain.Insert( 0, b->index );
+				if ( b->name == anchorBoneName )
+				{
+					break;
+				}
 			}
-			ik.targetTransform = targetTransform;
-			ik.polePos = poleTransform.GetTranslation();
-			ik.Update( 10 );
-			
-			for ( const auto& t : ik.finalTransforms )
+			// ae::IKChain* chain = &rightIK.chains.Append();
+			// chain->bones.Append( { extentBone->transform, extentBone->parent->transform.GetTranslation() } );
+			rightIK.targetTransform = targetTransform;
+			rightIK.pose.Initialize( &currentPose );
+			rightIK.Run( 10, &currentPose );
+
+			for ( uint32_t idx : rightIK.chain )
 			{
-				ae::Vec3 p = t.GetTranslation();
-				ae::Vec3 xAxis = t.GetAxis( 0 );
-				ae::Vec3 yAxis = t.GetAxis( 1 );
-				ae::Vec3 zAxis = t.GetAxis( 2 );
-				debugLines.AddLine( p, p + xAxis * 0.2f, ae::Color::Red() );
-				debugLines.AddLine( p, p + yAxis * 0.2f, ae::Color::Green() );
-				debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
-				debugLines.AddLine( p, ik.polePos, ae::Color::Yellow() );
+				debugLines.AddOBB( currentPose.GetBoneByIndex( idx )->transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Magenta() );
 			}
-			currentPose.SetTransforms( bones.Data(), ik.finalTransforms.Data(), bones.Length() );
+		}
+		for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+		{
+			const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->transform;
+			ae::Vec3 p = t.GetTranslation();
+			ae::Vec3 xAxis = t.GetAxis( 0 );
+			ae::Vec3 yAxis = t.GetAxis( 1 );
+			ae::Vec3 zAxis = t.GetAxis( 2 );
+			debugLines.AddLine( p, p + xAxis * 0.2f, ae::Color::Red() );
+			debugLines.AddLine( p, p + yAxis * 0.2f, ae::Color::Green() );
+			debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
 		}
 		
 		// Update mesh
@@ -285,7 +300,7 @@ int main()
 		ImGuizmo::Manipulate(
 			worldToView.data,
 			viewToProj.data,
-			effector ? ImGuizmo::TRANSLATE : gizmoOperation,
+			gizmoOperation,
 			gizmoMode,
 			GetSelectedTransform().data
 		);
