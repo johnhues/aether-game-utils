@@ -96,6 +96,7 @@ int main()
 	ae::FileSystem fileSystem;
 	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines = TAG_ALL;
+	ae::DebugLines gridLines = TAG_ALL;
 	aeImGui ui;
 
 	window.Initialize( 800, 600, false, true );
@@ -107,6 +108,8 @@ int main()
 	camera.Reset( ae::Vec3( 0.0f, 1.0f, 0.0f ), ae::Vec3( 0.0f, 0.4f, 3.5f ) );
 	camera.SetDistanceLimits( 1.0f, 25.0f );
 	debugLines.Initialize( 4096 );
+	gridLines.Initialize( 4096 );
+	gridLines.SetXRayEnabled( false );
 	ui.Initialize();
 
 	shader.Initialize( kVertShader, kFragShader, nullptr, 0 );
@@ -187,12 +190,14 @@ int main()
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
 	bool drawMesh = true;
+	bool drawSkeleton = true;
 	bool autoIK = true;
 	int selection = 1;
 	auto GetSelectedTransform = [&]() -> ae::Matrix4&
 	{
 		return targetTransform;
 	};
+	float q[ 4 ] = { 0 };
 	
 	AE_INFO( "Run" );
 	while ( !input.quit )
@@ -208,11 +213,12 @@ int main()
 
 		bool shouldStep = false;
 		ImGui::SetNextWindowPos( ImVec2( 0, 0 ), ImGuiCond_FirstUseEver );
-		ImGui::SetNextWindowSize( ImVec2( 200, 200 ), ImGuiCond_FirstUseEver );
+		ImGui::SetNextWindowSize( ImVec2( 200, 300 ), ImGuiCond_FirstUseEver );
 		if ( ImGui::Begin( "Options" ) )
 		{
 			ImGui::Checkbox( "Draw Mesh", &drawMesh );
 			ImGui::Checkbox( "Auto IK", &autoIK );
+			ImGui::Checkbox( "Draw Skeleton", &drawSkeleton );
 
 			ImGui::Separator();
 
@@ -241,10 +247,21 @@ int main()
 			{
 				camera.Refocus( GetSelectedTransform().GetTranslation() );
 			}
+
+			ImGui::Separator();
+
+			ImGui::SliderFloat( "Q1", &q[ 0 ], -2.0f, 2.0f );
+			ImGui::SliderFloat( "Q2", &q[ 1 ], -2.0f, 2.0f );
+			ImGui::SliderFloat( "Q3", &q[ 2 ], -2.0f, 2.0f );
+			ImGui::SliderFloat( "Q4", &q[ 3 ], -2.0f, 2.0f );
 		}
 		if ( input.GetPress( ae::Key::V ) )
 		{
 			drawMesh = !drawMesh;
+		}
+		if ( input.GetPress( ae::Key::S ) )
+		{
+			drawSkeleton = !drawSkeleton;
 		}
 		if ( input.GetPress( ae::Key::W ) )
 		{
@@ -307,21 +324,14 @@ int main()
 			}
 			ik.Run( autoIK ? 10 : 1, &currentPose );
 
-			for ( uint32_t idx : ik.chain )
+			// Debug
+			if ( drawSkeleton )
 			{
-				debugLines.AddOBB( currentPose.GetBoneByIndex( idx )->transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Magenta() );
+				for ( uint32_t idx : ik.chain )
+				{
+					debugLines.AddOBB( currentPose.GetBoneByIndex( idx )->transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Magenta() );
+				}
 			}
-		}
-		for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
-		{
-			const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->transform;
-			ae::Vec3 p = t.GetTranslation();
-			ae::Vec3 xAxis = t.GetAxis( 0 );
-			ae::Vec3 yAxis = t.GetAxis( 1 );
-			ae::Vec3 zAxis = t.GetAxis( 2 );
-			debugLines.AddLine( p, p + xAxis * 0.2f, ae::Color::Red() );
-			debugLines.AddLine( p, p + yAxis * 0.2f, ae::Color::Green() );
-			debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
 		}
 		
 		// Update mesh
@@ -329,15 +339,49 @@ int main()
 		vertexData.UploadVertices( 0, vertices, vertexData.GetMaxVertexCount() );
 		
 		// Debug
-		for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+		if ( drawSkeleton )
 		{
-			const ae::Bone* bone = currentPose.GetBoneByIndex( i );
-			const ae::Bone* parent = bone->parent;
-			if ( parent )
+			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			{
-				debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::PicoBlue() );
-				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
+				const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->transform;
+				ae::Vec3 p = t.GetTranslation();
+				ae::Vec3 xAxis = t.GetAxis( 0 );
+				ae::Vec3 yAxis = t.GetAxis( 1 );
+				ae::Vec3 zAxis = t.GetAxis( 2 );
+				debugLines.AddLine( p, p + xAxis * 0.2f, ae::Color::Red() );
+				debugLines.AddLine( p, p + yAxis * 0.2f, ae::Color::Green() );
+				debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
 			}
+
+			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			{
+				const ae::Bone* bone = currentPose.GetBoneByIndex( i );
+				const ae::Bone* parent = bone->parent;
+				if ( parent )
+				{
+					debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::PicoBlue() );
+					debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
+				}
+			}
+		}
+
+		// Qs
+		float aveHorizontal = ( q[ 0 ] + q[ 2 ] ) * 0.5f;
+		float aveVertical = ( q[ 1 ] + q[ 3 ] ) * 0.5f;
+		debugLines.AddCircle( ae::Vec3( q[ 0 ], 0.0f, -aveVertical ), ae::Vec3( 0, 1, 0 ), 0.1f, ae::Color::Magenta(), 16 );
+		debugLines.AddCircle( ae::Vec3( aveHorizontal, 0.0f, -q[ 1 ] ), ae::Vec3( 0, 1, 0 ), 0.1f, ae::Color::Magenta(), 16 );
+		debugLines.AddCircle( ae::Vec3( q[ 2 ], 0.0f, -aveVertical ), ae::Vec3( 0, 1, 0 ), 0.1f, ae::Color::Magenta(), 16 );
+		debugLines.AddCircle( ae::Vec3( aveHorizontal, 0.0f, -q[ 3 ] ), ae::Vec3( 0, 1, 0 ), 0.1f, ae::Color::Magenta(), 16 );
+
+		// Add grid
+		gridLines.AddLine( ae::Vec3( -2, 0, 0 ), ae::Vec3( 2, 0, 0 ), ae::Color::Red() );
+		gridLines.AddLine( ae::Vec3( 0, -2, 0 ), ae::Vec3( 0, 2, 0 ), ae::Color::Green() );
+		gridLines.AddLine( ae::Vec3( 0, 0, -2 ), ae::Vec3( 0, 0, 2 ), ae::Color::Blue() );
+		for ( float i = -2; i <= 2.00001f; i += 0.2f )
+		{
+			if ( ae::Abs( i ) < 0.0001f ) { continue; }
+			gridLines.AddLine( ae::Vec3( i, 0, -2 ), ae::Vec3( i, 0, 2 ), ae::Color::PicoLightGray() );
+			gridLines.AddLine( ae::Vec3( -2, 0, i ), ae::Vec3( 2, 0, i ), ae::Color::PicoLightGray() );
 		}
 		
 		// Start frame
@@ -374,6 +418,7 @@ int main()
 		
 		// Frame end
 		debugLines.Render( worldToProj );
+		gridLines.Render( worldToProj );
 		ui.Render();
 		render.Present();
 		timeStep.Tick();

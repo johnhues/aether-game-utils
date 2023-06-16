@@ -3631,6 +3631,7 @@ public:
 	//! or ae::DebugLines::Render(). All debug lines must be resubmitted after calling this.
 	void Render( const Matrix4& worldToNdc );
 	//! Enable or disable drawing of desaturated lines on failed depth test.
+	//! Enabled by default.
 	void SetXRayEnabled( bool enabled ) { m_xray = enabled; }
 	//! Resets the internal vertex buffer without uploading anything to the GPU. Use this if a call to
 	//! ae::DebugLines::Render() is ever skipped.
