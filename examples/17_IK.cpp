@@ -176,16 +176,18 @@ int main()
 	const char* rightHandBoneName = "QuickRigCharacter_RightHand";
 	const char* anchorBoneName = "QuickRigCharacter_RightShoulder";
 
+	ae::Skeleton currentPose = TAG_ALL;
 	ae::Matrix4 targetTransform;
 	auto SetDefault = [&]()
 	{
 		targetTransform = skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
+		currentPose.Initialize( &skin.GetBindPose() );
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
 	bool drawMesh = true;
-	bool enableIK = true;
+	bool autoIK = true;
 	int selection = 1;
 	auto GetSelectedTransform = [&]() -> ae::Matrix4&
 	{
@@ -195,24 +197,66 @@ int main()
 	AE_INFO( "Run" );
 	while ( !input.quit )
 	{
-		float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
+		const float dt = ae::Max( timeStep.GetTimeStep(), timeStep.GetDt() );
 		input.Pump();
 
-		if ( input.Get( ae::Key::V ) && !input.GetPrev( ae::Key::V ) )
+		ImGuiIO& io = ImGui::GetIO();
+		ui.NewFrame( &render, &input, dt );
+		ImGuizmo::SetOrthographic( false );
+		ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
+		ImGuizmo::BeginFrame();
+
+		bool shouldStep = false;
+		ImGui::SetNextWindowPos( ImVec2( 0, 0 ), ImGuiCond_FirstUseEver );
+		ImGui::SetNextWindowSize( ImVec2( 200, 200 ), ImGuiCond_FirstUseEver );
+		if ( ImGui::Begin( "Options" ) )
+		{
+			ImGui::Checkbox( "Draw Mesh", &drawMesh );
+			ImGui::Checkbox( "Auto IK", &autoIK );
+
+			ImGui::Separator();
+
+			ImGui::RadioButton( "Translate", (int*)&gizmoOperation, ImGuizmo::TRANSLATE );
+			ImGui::SameLine();
+			ImGui::RadioButton( "Rotate", (int*)&gizmoOperation, ImGuizmo::ROTATE );
+
+			ImGui::RadioButton( "World", (int*)&gizmoMode, ImGuizmo::WORLD );
+			ImGui::SameLine();
+			ImGui::RadioButton( "Local", (int*)&gizmoMode, ImGuizmo::LOCAL );
+
+			ImGui::Separator();
+
+			ImGui::BeginDisabled( autoIK );
+			if ( ImGui::Button( "Step" ) )
+			{
+				shouldStep = true;
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			if ( ImGui::Button( "Reset" ) )
+			{
+				SetDefault();
+			}
+			if ( ImGui::Button( "Focus" ) )
+			{
+				camera.Refocus( GetSelectedTransform().GetTranslation() );
+			}
+		}
+		if ( input.GetPress( ae::Key::V ) )
 		{
 			drawMesh = !drawMesh;
 		}
-		if ( input.Get( ae::Key::W ) )
+		if ( input.GetPress( ae::Key::W ) )
 		{
 			if ( gizmoOperation != ImGuizmo::TRANSLATE ) { gizmoOperation = ImGuizmo::TRANSLATE; }
 			else { gizmoMode = ( gizmoMode == ImGuizmo::WORLD ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD; }
 		}
-		if ( input.Get( ae::Key::E ) )
+		if ( input.GetPress( ae::Key::E ) )
 		{
 			if ( gizmoOperation != ImGuizmo::ROTATE ) { gizmoOperation = ImGuizmo::ROTATE; }
 			else { gizmoMode = ( gizmoMode == ImGuizmo::WORLD ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD; }
 		}
-		if ( input.Get( ae::Key::R ) )
+		if ( input.GetPress( ae::Key::R ) )
 		{
 			SetDefault();
 		}
@@ -222,44 +266,48 @@ int main()
 		}
 		if ( input.GetPress( ae::Key::I ) )
 		{
-			enableIK = !enableIK;
+			autoIK = !autoIK;
 		}
 		if ( input.Get( ae::Key::Num1 ) ) { selection = 1; }
 		if ( input.Get( ae::Key::Num2 ) ) { selection = 2; }
 		if ( input.Get( ae::Key::Num3 ) ) { selection = 3; }
 		if ( input.Get( ae::Key::Num4 ) ) { selection = 4; }
-		
-		ImGuiIO& io = ImGui::GetIO();
-		ui.NewFrame( &render, &input, dt );
-		ImGuizmo::SetOrthographic( false );
-		ImGuizmo::SetRect( 0, 0, io.DisplaySize.x, io.DisplaySize.y );
-		ImGuizmo::BeginFrame();
+		if ( !autoIK && input.GetPress( ae::Key::Space ) )
+		{
+			shouldStep = true;
+		}
+		ImGui::End();
 		
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
 		camera.Update( &input, dt );
 		
-		ae::Skeleton currentPose = TAG_ALL;
-		currentPose.Initialize( &skin.GetBindPose() );
-		if ( enableIK )
+		if ( autoIK || shouldStep )
 		{
-
-			ae::IK rightIK = TAG_ALL;
+			ae::IK ik = TAG_ALL;
 			const ae::Bone* extentBone = currentPose.GetBoneByName( rightHandBoneName );
 			for ( auto b = extentBone; b; b = b->parent )
 			{
-				rightIK.chain.Insert( 0, b->index );
+				ik.chain.Insert( 0, b->index );
 				if ( b->name == anchorBoneName )
 				{
 					break;
 				}
 			}
-			// ae::IKChain* chain = &rightIK.chains.Append();
+			// ae::IKChain* chain = &ik.chains.Append();
 			// chain->bones.Append( { extentBone->transform, extentBone->parent->transform.GetTranslation() } );
-			rightIK.targetTransform = targetTransform;
-			rightIK.pose.Initialize( &currentPose );
-			rightIK.Run( 10, &currentPose );
+			ik.targetTransform = targetTransform;
+			ik.pose.Initialize( &currentPose );
+			for ( uint32_t idx : ik.chain )
+			{
+				ae::IKJoint joint;
+				const ae::Bone* bone = ik.pose.GetBoneByIndex( idx );
+				const bool right = memcmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen( "QuickRigCharacter_Right" ) ) == 0;
+				joint.primaryAxis = right ? ae::Vec3( -1, 0, 0 ) : ae::Vec3( 1, 0, 0 );
+				ik.joints.Append( joint );
+			}
+			ik.Run( autoIK ? 10 : 1, &currentPose );
 
-			for ( uint32_t idx : rightIK.chain )
+			for ( uint32_t idx : ik.chain )
 			{
 				debugLines.AddOBB( currentPose.GetBoneByIndex( idx )->transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Magenta() );
 			}

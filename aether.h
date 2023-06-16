@@ -3989,6 +3989,30 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::IKJoint struct
+//------------------------------------------------------------------------------
+struct IKJoint
+{
+	//! The axis that points towards the next bone. A specific/prominent
+	//! industry auto-rigger will inconsistently orient bones so that the
+	//! negative x axis points towards the next bone for "Right" bones and
+	//! the positive x axis points towards the next bone for all center and
+	//! Left bones.
+	ae::Vec3 primaryAxis = ae::Vec3( -1.0f, 0.0f, 0.0f );
+	//! The axis that corresponds to the 'vertical' rotation limits y component.
+	//! The implicitly specified tertiary axis corresponds to the horizontal
+	//! rotation limits x component.
+	ae::Vec3 secondaryAxis = ae::Vec3( 0.0f, 0.0f, 1.0f );
+	//! The half-range of motion of this joint in radians, or in other words
+	//! the maximum angle from the bind pose in either direction. See
+	//! secondaryAxis for more info.
+	ae::Vec2 rotationLimits = ae::Vec2( 0.0f );
+	//! The amount in radians that this joint is allowed to twist around the
+	//! primary axis in either direction.
+	float twistLimit = 0.0f;
+};
+
+//------------------------------------------------------------------------------
 // ae::IK struct
 //------------------------------------------------------------------------------
 struct IK
@@ -3997,10 +4021,14 @@ struct IK
 	void Run( uint32_t iterationCount, ae::Skeleton* poseOut );
 
 	const ae::Tag tag;
-	ae::Vec3 primaryAxis = ae::Vec3( -1, 0, 0 ); //!< The axis that points towards the next bone
 	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
 	//! Bone indices. Ordered from root to extent.
 	ae::Array< uint32_t > chain;
+	//! Joint info for each bone in the skeleton. Leave this empty to use the
+	//! default ae::IKJoint, or append a single ae::IKJoint to use that for all
+	//! bones. Otherwise this should be the same length as 'pose.GetBoneCount()'. 
+	ae::Array< ae::IKJoint > joints;
+	//! Used as the starting point for the IK.
 	ae::Skeleton pose;
 };
 
@@ -21544,6 +21572,7 @@ uint32_t Skeleton::GetBoneCount() const
 IK::IK( ae::Tag tag ) :
 	tag( tag ),
 	chain( tag ),
+	joints( tag ),
 	pose( tag )
 {}
 
@@ -21571,6 +21600,20 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 
 	const ae::Vec3 rootPos = bones[ 0 ].pos;
 	const ae::Vec3 targetPos = targetTransform.GetTranslation();
+	AE_ASSERT( joints.Length() == 0 || joints.Length() == 1 || joints.Length() == bones.Length() );
+	auto GetJointInfo = [ this ]( uint32_t idx ) -> const ae::IKJoint&
+	{
+		switch ( joints.Length() )
+		{
+			case 0:
+			{
+				static const ae::IKJoint s_default;
+				return s_default;
+			}
+			case 1: return joints[ 0 ];
+			default: return joints[ idx ];
+		}
+	};
 
 	uint32_t iters = 0;
 	while ( ( bones[ bones.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount )
@@ -21587,7 +21630,10 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 		bones[ 0 ].pos = rootPos;
 		for ( uint32_t i = 0; i < bones.Length() - 1; i++ )
 		{
-			const ae::Vec3 dir = ( bones[ i + 1 ].pos - bones[ i ].pos ).SafeNormalizeCopy();
+			ae::Vec3 dir = ( bones[ i + 1 ].pos - bones[ i ].pos ).SafeNormalizeCopy();
+			const ae::IKJoint& joint = GetJointInfo( i );
+			const ae::Vec3 primaryAxis = joint.primaryAxis;
+			
 			const ae::Quaternion invRot = bones[ i ].rotation.GetInverse();
 			const ae::Vec3 boneDir = invRot.Rotate( dir );
 			const ae::Vec3 axis = primaryAxis.Cross( boneDir );
