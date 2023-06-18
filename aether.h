@@ -325,10 +325,14 @@ private:
 //! \defgroup Math
 //! @{
 //------------------------------------------------------------------------------
-const float PI = 3.14159265358979323846f;
-const float TWO_PI = 2.0f * PI;
-const float HALF_PI = 0.5f * PI;
-const float QUARTER_PI = 0.25f * PI;
+constexpr float PI = 3.14159265358979323846f;
+constexpr float TWO_PI = 2.0f * PI;
+constexpr float HALF_PI = 0.5f * PI;
+constexpr float QUARTER_PI = 0.25f * PI;
+constexpr float Pi = 3.14159265358979323846f;
+constexpr float TwoPi = 2.0f * PI;
+constexpr float HalfPi = 0.5f * PI;
+constexpr float QuarterPi = 0.25f * PI;
 
 enum class Axis { None, X, Y, Z };
 
@@ -338,7 +342,13 @@ enum class Axis { None, X, Y, Z };
 inline float Pow( float x, float e );
 inline float Cos( float x );
 inline float Sin( float x );
+inline float Tan( float x );
+inline float Acos( float x );
+inline float Asin( float x );
+inline float Atan( float x );
 inline float Atan2( float y, float x );
+
+inline float Sqrt( float x );
 
 inline uint32_t Mod( uint32_t i, uint32_t n );
 inline int Mod( int32_t i, int32_t n );
@@ -825,8 +835,8 @@ public:
 	ae::Vec3 GetNormal() const;
 	ae::Vec3 GetClosestPointToOrigin() const;
 
-	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const; // @TODO: Add hitOut
-	bool IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut = nullptr, float* tOut = nullptr ) const;
+	bool IntersectLine( ae::Vec3 p, ae::Vec3 d, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
+	bool IntersectRay( ae::Vec3 source, ae::Vec3 ray, ae::Vec3* hitOut = nullptr, float* tOut = nullptr ) const; // @TODO: Handle ray hitting normal reverse
 	ae::Vec3 GetClosestPoint( ae::Vec3 pos, float* distanceOut = nullptr ) const;
 	float GetSignedDistance( ae::Vec3 pos ) const;
 
@@ -3751,6 +3761,11 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::CatmullRom @TODO: Implement, and Spline should use internally.
+//------------------------------------------------------------------------------
+ae::Vec3 CatmullRom( ae::Vec3 p0, ae::Vec3 p1, ae::Vec3 p2, ae::Vec3 p3, float t );
+
+//------------------------------------------------------------------------------
 // ae::Spline class
 //------------------------------------------------------------------------------
 class Spline
@@ -5551,9 +5566,34 @@ inline float Sin( float x )
 	return sinf( x );
 }
 
+inline float Tan( float x )
+{
+	return tanf( x );
+}
+
+inline float Acos( float x )
+{
+	return acosf( x );
+}
+
+inline float Asin( float x )
+{
+	return asinf( x );
+}
+
+inline float Atan( float x )
+{
+	return atanf( x );
+}
+
 inline float Atan2( float y, float x )
 {
 	return atan2( y, x );
+}
+
+inline float Sqrt( float x )
+{
+	return sqrtf( x );
 }
 
 template< typename T >
@@ -11811,7 +11851,7 @@ ae::Vec3 Plane::GetClosestPointToOrigin() const
 	return m_plane.GetXYZ() * m_plane.w;
 }
 
-bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const
+bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, Vec3* hitOut, float* tOut ) const
 {
 	ae::Vec3 n = m_plane.GetXYZ();
 	ae::Vec3 q = n * m_plane.w;
@@ -11823,6 +11863,10 @@ bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const
 	ae::Vec3 diff = q - p;
 	float b = diff.Dot( n );
 	float t = b / a;
+	if ( hitOut )
+	{
+		*hitOut = p + d * t;
+	}
 	if ( tOut )
 	{
 		*tOut = t;
@@ -11832,16 +11876,17 @@ bool Plane::IntersectLine( ae::Vec3 p, ae::Vec3 d, float* tOut ) const
 
 bool Plane::IntersectRay( ae::Vec3 source, ae::Vec3 ray, Vec3* hitOut, float* tOut ) const
 {
-	ae::Vec3 n = m_plane.GetXYZ();
-	ae::Vec3 p = n * m_plane.w;
-	float a = ray.Dot( n );
+	const ae::Vec4 plane = GetSignedDistance( source ) >= 0.0f ? m_plane : -m_plane; // Plane normal towards ray source
+	const ae::Vec3 n = plane.GetXYZ();
+	const ae::Vec3 p = n * plane.w;
+	const float a = ray.Dot( n );
 	if ( a > -0.001f )
 	{
 		return false; // Ray is pointing away from or parallel to plane
 	}
-	ae::Vec3 diff = p - source;
-	float b = diff.Dot( n );
-	float t = b / a;
+	const ae::Vec3 diff = p - source;
+	const float b = diff.Dot( n );
+	const float t = b / a;
 	if ( t < 0.0f || t > 1.0f )
 	{
 		return false;
