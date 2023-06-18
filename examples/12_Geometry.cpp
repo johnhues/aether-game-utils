@@ -342,26 +342,34 @@ int main()
 			}
 			case 4:
 			{
-				bool rayTest = !input.Get( ae::Key::Space );
+				static bool rayTest = true;
+				static float a0 = ae::HalfPi;
+				static float a1 = ae::QuarterPi;
+				static float d = 1.0f;
+
 				infoText.Append( rayTest ? "Plane-Ray" : "Plane-Line" );
 				infoText.Append( " (Toggle: Space)\n" );
 				doRay( false );
 				infoText.Append( "Rotate Normal XY: 3-4\n" );
 				infoText.Append( "Rotate Normal Z: 5-6\n" );
 				infoText.Append( "Plane Distance from Origin: 7-8\n" );
+				infoText.Append( "Flip Normal: F\n" );
 				
-				static float a0 = ae::HALF_PI;
-				static float a1 = ae::QUARTER_PI;
-				static float d = 1.0f;
+				if ( input.GetPress( ae::Key::Space ) ) { rayTest = !rayTest; }
 				if ( input.Get( ae::Key::Num3 ) ) a0 -= 0.016f;
 				if ( input.Get( ae::Key::Num4 ) ) a0 += 0.016f;
 				if ( input.Get( ae::Key::Num5 ) ) a1 -= 0.016f;
 				if ( input.Get( ae::Key::Num6 ) ) a1 += 0.016f;
 				if ( input.Get( ae::Key::Num7 ) ) d -= 0.016f;
 				if ( input.Get( ae::Key::Num8 ) ) d += 0.016f;
+				bool flipNormal = input.Get( ae::Key::F );
 				
 				ae::Vec2 xy( ae::Cos( a0 ), ae::Sin( a0 ) );
 				ae::Plane plane( ae::Vec4( xy * ae::Cos( a1 ), ae::Sin( a1 ), d ) );
+				if ( flipNormal )
+				{
+					plane = ae::Plane( plane.GetClosestPointToOrigin(), -plane.GetNormal() );
+				}
 				
 				ae::Vec3 p = plane.GetClosestPointToOrigin();
 				ae::Vec3 pn = plane.GetClosestPointToOrigin() + plane.GetNormal();
@@ -397,7 +405,7 @@ int main()
 					debug.AddCircle( p, plane.GetNormal(), ( p - rayHit ).Length(), ae::Color::PicoPink(), 32 );
 					debug.AddLine( rayHit, raySource + ray, ae::Color::Red() );
 				}
-				else if ( !rayTest && plane.IntersectLine( raySource, ray, &t ) )
+				else if ( !rayTest && plane.IntersectLine( raySource, ray, nullptr, &t ) )
 				{
 					rayHit = raySource + ray * t;
 					debug.AddSphere( rayHit, 0.05f, ae::Color::PicoPeach(), 8 );
