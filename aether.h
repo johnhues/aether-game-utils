@@ -1550,6 +1550,10 @@ public:
 	int32_t GetIndex( const Key& key ) const;
 	//! Returns the number of key/value pairs in the map
 	uint32_t Length() const;
+	//! Returns the max number of entries.
+	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	//! Returns the number of allocated entries.
+	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pairs.Size(); }
 
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< Key, Value >* begin() { return m_pairs.begin(); }
@@ -17883,6 +17887,7 @@ void UniformList::Set( const char* name, float value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 1;
 	uniform.value.data[ 0 ] = value;
@@ -17894,6 +17899,7 @@ void UniformList::Set( const char* name, Vec2 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 2;
 	uniform.value.data[ 0 ] = value.x;
@@ -17906,6 +17912,7 @@ void UniformList::Set( const char* name, Vec3 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 3;
 	uniform.value.data[ 0 ] = value.x;
@@ -17919,6 +17926,7 @@ void UniformList::Set( const char* name, Vec4 value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 4;
 	uniform.value.data[ 0 ] = value.x;
@@ -17933,6 +17941,7 @@ void UniformList::Set( const char* name, const Matrix4& value )
 {
 	AE_ASSERT( name );
 	AE_ASSERT( name[ 0 ] );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.size = 16;
 	uniform.value = value;
@@ -17946,6 +17955,7 @@ void UniformList::Set( const char* name, const Texture* tex )
 	AE_ASSERT( name[ 0 ] );
 	AE_ASSERT_MSG( tex, "Texture uniform value '#' is invalid", name );
 	AE_ASSERT_MSG( tex->GetTexture(), "Texture uniform value '#' is invalid", name );
+	AE_ASSERT_MSG( m_uniforms.Length() < m_uniforms.Size() || m_uniforms.TryGet( name ), "Max uniforms: #", m_uniforms.Size() );
 	Value& uniform = m_uniforms.Set( name, Value() );
 	uniform.sampler = tex->GetTexture();
 	uniform.target = tex->GetTarget();
