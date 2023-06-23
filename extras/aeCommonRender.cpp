@@ -81,11 +81,10 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   m_sprites = ae::NewArray< Sprite >( AE_ALLOC_TAG_RENDER, m_maxCount );
   m_vertices = ae::NewArray< Vertex >( AE_ALLOC_TAG_RENDER, m_maxCount * aeQuadVertCount );
 
-  m_vertexBuffer.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
-  m_vertexBuffer.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof(Vertex, pos) );
-  m_vertexBuffer.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(Vertex, color) );
-  m_vertexBuffer.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(Vertex, uv) );
-  m_vertexData.Initialize( &m_vertexBuffer );
+  m_vertexData.Initialize( sizeof(Vertex), sizeof(uint16_t), aeQuadVertCount * maxCount, aeQuadIndexCount * maxCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static );
+  m_vertexData.AddAttribute( "a_position", 3, ae::Vertex::Type::Float, offsetof(Vertex, pos) );
+  m_vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(Vertex, color) );
+  m_vertexData.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(Vertex, uv) );
 
   ae::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
   uint16_t* indices = scratch.Data();
@@ -98,7 +97,7 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
     indices[ i * aeQuadIndexCount + 4 ] = i * aeQuadVertCount + aeQuadIndices[ 4 ];
     indices[ i * aeQuadIndexCount + 5 ] = i * aeQuadVertCount + aeQuadIndices[ 5 ];
   }
-  m_vertexData.SetIndices( indices, m_maxCount * aeQuadIndexCount );
+  m_vertexData.UploadIndices( 0, indices, m_maxCount * aeQuadIndexCount );
 }
 
 void aeSpriteRender::Destroy()
@@ -212,7 +211,7 @@ void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader*
     m_vertices[ idx2 ].color = sprite->color.GetLinearRGBA();
     m_vertices[ idx3 ].color = sprite->color.GetLinearRGBA();
   }
-  m_vertexData.SetVertices( m_vertices, m_count * 4 );
+  m_vertexData.UploadVertices( 0, m_vertices, m_count * 4 );
 
   for ( uint32_t i = 0; i < m_count; i++ )
   {
@@ -225,8 +224,8 @@ void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader*
     uniforms.Set( "u_localToProjection", localToProjection );
     uniforms.Set( "u_tex", currentTexture );
 
-    m_vertexData.Upload();
-    m_vertexData.Draw( shader, uniforms, start * 2, count * 2 );
+	m_vertexData.Bind( shader, uniforms );
+    m_vertexData.Draw( start * 2, count * 2 );
   }
 }
 

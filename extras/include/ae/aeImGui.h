@@ -30,8 +30,10 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+#ifndef IMGUI_DEFINE_MATH_OPERATORS
+	#define IMGUI_DEFINE_MATH_OPERATORS
+#endif
 #include "imgui.h"
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h" // For advanced imgui features like docking
 #if _AE_WINDOWS_
   #include "GL/glew.h"
