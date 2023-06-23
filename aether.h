@@ -16196,10 +16196,11 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		{
 			return "";
 		}
-		if ( char* resolvedPath = realpath( path, nullptr ) )
+		char realPathBuf[ PATH_MAX ];
+		realPathBuf[ 0 ] = 0;
+		if ( char* resolvedPath = realpath( path, realPathBuf ) )
 		{
 			ae::Str256 result( resolvedPath );
-			free( resolvedPath );
 			return result;
 		}
 		else
@@ -16232,6 +16233,8 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 #elif _AE_LINUX_
 	// @TODO: Handle non-existing dirs
 	char* resolvedPath;
+	char realPathBuf[ PATH_MAX ];
+	realPathBuf[ 0 ] = 0;
 	if ( filePath[ 0 ] == '~' && filePath[ 1 ] == '/' )
 	{
 		char path[ PATH_MAX + 1 ];
@@ -16250,16 +16253,15 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 		{
 			return "";
 		}
-		resolvedPath = realpath( path, nullptr );
+		resolvedPath = realpath( path, realPathBuf );
 	}
 	else
 	{
-		resolvedPath = realpath( filePath, nullptr );
+		resolvedPath = realpath( filePath, realPathBuf );
 	}
 	if ( resolvedPath )
 	{
 		ae::Str256 result( resolvedPath );
-		free( resolvedPath );
 		return result;
 	}
 	else
