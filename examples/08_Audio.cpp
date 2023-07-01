@@ -80,7 +80,7 @@ int main()
 		
 		if ( ( !input.mouse.rightButton && input.mousePrev.rightButton )
 			|| ( !input.Get( ae::Key::Space ) && input.GetPrev( ae::Key::Space ) )
-			|| ( !input.gamepad.y && input.gamepadPrev.y ) )
+			|| ( !input.gamepads[ 0 ].y && input.gamepadsPrev[ 0 ].y ) )
 		{
 			if ( musicPlaying )
 			{
@@ -96,7 +96,7 @@ int main()
 		}
 
 		if ( ( input.mouse.leftButton && !input.mousePrev.leftButton )
-			|| ( input.gamepad.a && !input.gamepadPrev.a ) )
+			|| ( input.gamepads[ 0 ].a && !input.gamepadsPrev[ 0 ].a ) )
 		{
 			audio.PlaySfx( sfx, 1.0f, 0 );
 			hitFade = 1.0f;

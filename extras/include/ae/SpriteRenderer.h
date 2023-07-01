@@ -66,6 +66,36 @@ public:
 	void AddSprite( uint32_t group, const ae::Matrix4& transform, ae::Rect uvs, ae::Color color );
 	void AddText( uint32_t group, const char* text, const SpriteFont* font, ae::Rect region, float fontSize, float lineHeight, ae::Color color );
 
+	//! Vertex attributes: a_position (4 floats), a_color (4 floats), a_uv
+	//! (2 floats) are all provided to the vertex shader. See example below.
+	// Example vertex shader:
+	/*
+		AE_IN_HIGHP vec4 a_position;
+		AE_IN_HIGHP vec4 a_color;
+		AE_IN_HIGHP vec2 a_uv;
+
+		AE_OUT_HIGHP vec4 v_color;
+		AE_OUT_HIGHP vec2 v_uv;
+
+		void main()
+		{
+			v_color = a_color;
+			v_uv = a_uv;
+			gl_Position = a_position;
+		}
+	*/
+	// Example fragment shader:
+	/*
+		AE_UNIFORM sampler2D u_tex;
+
+		AE_IN_HIGHP vec4 v_color;
+		AE_IN_HIGHP vec2 v_uv;
+
+		void main()
+		{
+			AE_COLOR = v_color * AE_TEXTURE2D( u_tex, v_uv );
+		}
+	*/
 	void SetParams( uint32_t group, const ae::Shader* shader, const ae::UniformList& uniforms );
 	void Render();
 	void Clear();
@@ -78,7 +108,6 @@ private:
 	};
 	ae::Array< GroupParams > m_params;
 	ae::Array< uint32_t > m_spriteGroups;
-	ae::VertexBuffer m_vertexBuffer;
 	ae::VertexArray m_vertexArray;
 };
 

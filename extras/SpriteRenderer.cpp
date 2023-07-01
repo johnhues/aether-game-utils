@@ -104,16 +104,15 @@ void SpriteRenderer::Initialize( uint32_t maxGroups, uint32_t maxCount )
 	m_params.Append( {}, maxGroups );
 	m_spriteGroups.Reserve( maxCount );
 
-	m_vertexBuffer.Initialize(
+	m_vertexArray.Initialize(
 		sizeof(_SpriteVertex), sizeof(_SpriteIndex),
 		4 * maxCount, 6 * maxCount,
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static
 	);
-	m_vertexBuffer.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof(_SpriteVertex, pos) );
-	m_vertexBuffer.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(_SpriteVertex, color) );
-	m_vertexBuffer.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(_SpriteVertex, uv) );
-	m_vertexArray.Initialize( &m_vertexBuffer );
+	m_vertexArray.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof(_SpriteVertex, pos) );
+	m_vertexArray.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(_SpriteVertex, color) );
+	m_vertexArray.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(_SpriteVertex, uv) );
 
 	const uint16_t indices[] = { 3, 0, 1, 3, 1, 2 };
 	ae::Scratch< _SpriteIndex > indexBuffer( 6 * maxCount );
@@ -133,7 +132,7 @@ void SpriteRenderer::Initialize( uint32_t maxGroups, uint32_t maxCount )
 void SpriteRenderer::Terminate()
 {
 	m_vertexArray.Terminate();
-	m_vertexBuffer.Terminate();
+	m_vertexArray.Terminate();
 	m_spriteGroups.Clear();
 	m_params.Clear();
 }
@@ -235,8 +234,7 @@ void SpriteRenderer::Render()
 		// @TODO: Combine draw calls when consecutive sprites are the same group
 		if ( params.shader )
 		{
-			m_vertexBuffer.Bind( params.shader, params.uniforms );
-			m_vertexBuffer.Draw( i * 2, 2 );
+			m_vertexArray.Draw( params.shader, params.uniforms, i * 2, 2 );
 		}
 	}
 

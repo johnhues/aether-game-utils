@@ -33,7 +33,7 @@ int main()
   // Init
   AE_LOG( "Initialize" );
   Game game;
-  game.Initialize( "NetObject Client" );
+  game.Initialize();
   AetherClient* client = AetherClient_New( AetherUuid::Generate(), "127.0.0.1", 3500 );
   ae::NetObjectClient netObjectClient;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
@@ -44,10 +44,11 @@ int main()
   {
     double time = ae::GetTime();
     game.input.Pump();
+    game.window.SetTitle( client->IsConnected() ? "Spaceships Client (Connected)" : "Spaceships Client (Connecting...)" );
     
-    //------------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
     // Net update
-    //------------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
     // Update connection to server
     if ( !client->IsConnected() && !client->IsConnecting() )
     {

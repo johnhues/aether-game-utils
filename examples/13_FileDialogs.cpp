@@ -32,6 +32,7 @@ int main()
   ae::GraphicsDevice device;
   ae::FileSystem fs;
   window.Initialize( 800, 600, false, true );
+  window.SetTitle( "Press Cmd+S or Cmd+O" );
   input.Initialize( &window );
   device.Initialize( &window );
   fs.Initialize( "data", "ae", "file_dialogs" );
@@ -39,7 +40,7 @@ int main()
   {
     input.Pump();
     device.Activate();
-    device.Clear( ae::Color::Blue() );
+    device.Clear( ae::Color::PicoBlue() );
     device.Present();
 
     if ( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )

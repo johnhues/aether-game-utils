@@ -44,10 +44,9 @@ const double kNetTickSeconds = 0.1;
 class Game
 {
 public:
-  void Initialize( const char* windowTitle )
+  void Initialize()
   {
     window.Initialize( 800, 600, false, true );
-    window.SetTitle( windowTitle );
     render.Initialize( &window );
     debugLines.Initialize( 32 );
     input.Initialize( &window );

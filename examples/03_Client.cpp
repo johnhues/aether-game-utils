@@ -39,8 +39,7 @@ int main()
 	ae::Input input;
 	ae::Socket conn = kClientAllocTag;
 	
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "client" );
+	window.Initialize( 400, 300, false, true );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	
@@ -51,6 +50,7 @@ int main()
 	while ( !input.quit )
 	{
 		input.Pump();
+		window.SetTitle( conn.IsConnected() ? "Client (Connected)" : "Client (Connecting...)" );
 
 		if ( !conn.IsConnected() && conn.Connect( ae::Socket::Protocol::TCP, "localhost", 7230 ) )
 		{
@@ -102,7 +102,7 @@ int main()
 
 		conn.SendAll();
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( conn.IsConnected() ? ae::Color::PicoGreen() : ae::Color::PicoRed() );
 		render.Present();
 		timeStep.Tick();
 	}

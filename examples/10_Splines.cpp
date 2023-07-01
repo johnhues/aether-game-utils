@@ -31,6 +31,36 @@
 //------------------------------------------------------------------------------
 const ae::Tag TAG_EXAMPLE = "example";
 
+const char* kVertexShader = R"(
+  AE_UNIFORM_HIGHP mat4 u_worldToProj;
+
+  AE_IN_HIGHP vec4 a_position;
+  AE_IN_HIGHP vec4 a_color;
+  AE_IN_HIGHP vec2 a_uv;
+
+  AE_OUT_HIGHP vec4 v_color;
+  AE_OUT_HIGHP vec2 v_uv;
+
+  void main()
+  {
+    v_color = a_color;
+    v_uv = a_uv;
+    gl_Position = u_worldToProj * a_position;
+  }
+)";
+
+const char* kFragmentShader = R"(
+  AE_UNIFORM sampler2D u_tex;
+
+  AE_IN_HIGHP vec4 v_color;
+  AE_IN_HIGHP vec2 v_uv;
+
+  void main()
+  {
+    AE_COLOR = v_color * AE_TEXTURE2D( u_tex, v_uv );
+  }
+)";
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -43,14 +73,17 @@ int main()
   ae::Input input;
   ae::FileSystem fileSystem;
   ae::Spline spline( TAG_EXAMPLE );
-  SpriteRenderer spriteRender = TAG_EXAMPLE;
+  ae::SpriteRenderer spriteRender = TAG_EXAMPLE;
+  ae::Shader spriteShader;
   
   window.Initialize( 800, 600, false, true );
   window.SetTitle( "splines" );
   render.Initialize( &window );
   input.Initialize( &window );
   fileSystem.Initialize( "data", "ae", "splines" );
-  spriteRender.Initialize( 128 );
+  spriteRender.Initialize( 1, 128 );
+  spriteShader.Initialize( kVertexShader, kFragmentShader );
+  spriteShader.SetBlending( true );
   
   spline.AppendControlPoint( ae::Vec3( -0.4f, -2.0f, 0.0f ) );
   spline.AppendControlPoint( ae::Vec3( -2.0f, 2.0f, 0.0f ) );
@@ -91,14 +124,14 @@ int main()
     {
       transform = ae::Matrix4::Translation( spline.GetPoint( d ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
-      spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Blue() );
+      spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Blue() );
     }
     
     for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
     {
       transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-      spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Red() );
+      spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Red() );
     }
 
     ae::Vec3 p = spline.GetPoint( t );
@@ -107,7 +140,7 @@ int main()
     spline.GetMinDistance( p, nullptr, &t1 );
     transform = ae::Matrix4::Translation( spline.GetPoint( t1 ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.4f ) );
-    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
+    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
 
     t += timeStep.GetTimeStep();
     if ( t > splineLen )
@@ -116,26 +149,29 @@ int main()
     }
     transform = ae::Matrix4::Translation( p - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
-    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Green() );
+    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Green() );
 
     angle += timeStep.GetTimeStep();
     // Orbit dot
     ae::Vec3 rotPos = p + ae::Vec3( cosf(angle), sinf(angle), 0.0f ) * 0.5f;
     transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
+    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
     // Closest dot (check)
     spline.GetMinDistance( rotPos, &rotPos, &t1 );
     transform = ae::Matrix4::Translation( spline.GetPoint( t1 ) - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.3f ) );
-    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
+    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
     // Closest dot
     transform = ae::Matrix4::Translation( rotPos - ae::Vec3( 0.0f, 0.0f, 0.2f ) );
     transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
-    spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
+    spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::PicoDarkPurple() );
 
-    ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / 5.0f, render.GetAspectRatio() / 5.0f, 1.0f ) );
-    spriteRender.Render( screenTransform, &tex );
+    ae::UniformList uniforms;
+    uniforms.Set( "u_worldToProj", ae::Matrix4::Scaling( ae::Vec3( 0.2f / render.GetAspectRatio(), 0.2f, 1.0f ) ) );
+    uniforms.Set( "u_tex", &tex );
+    spriteRender.SetParams( 0, &spriteShader, uniforms );
+    spriteRender.Render();
     render.Present();
     timeStep.Tick();
   }
