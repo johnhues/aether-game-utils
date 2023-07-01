@@ -1,13 +1,3 @@
-Include(safeguards)
-
-string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)
-if(cmake_build_type_tolower STREQUAL "debug")
-	set(AE_IS_DEBUG 1)
-else()
-	set(AE_IS_DEBUG 0)
-endif()
-message(STATUS "AE_IS_DEBUG ${AE_IS_DEBUG}")
-
 # Bundle helper
 function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE_VERSION _AE_ICNS_FILE  _AE_SRC_FILES _AE_RESOURCES _AE_LIBS _AE_INCLUDE_DIRS)
 	message(STATUS "_AE_BUNDLE_NAME ${_AE_BUNDLE_NAME} (${CMAKE_BUILD_TYPE})")
@@ -97,7 +87,8 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 			"-s MIN_EDGE_VERSION=79" # Require Chromium-based Edge browser
 			"-s MIN_CHROME_VERSION=80"
 		)
-		if (AE_IS_DEBUG)
+		string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)
+		if (cmake_build_type_tolower STREQUAL "debug")
 			list(APPEND _AE_EM_LINKER_FLAGS
 				"-s SAFE_HEAP=1" # Enable safe heap mode
 				"-s ASSERTIONS=1" # Enable assertions

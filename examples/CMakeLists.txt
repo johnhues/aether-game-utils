@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/safeguards.cmake)
 Include(FetchContent)
-Include(AddBundle)
+Include(../cmake/AddBundle.cmake)
 
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict

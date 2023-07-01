@@ -3121,7 +3121,7 @@ public:
 	enum class Type { Vertex, Fragment };
 	~Shader();
 
-	void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines, int32_t defineCount );
+	void Initialize( const char* vertexStr, const char* fragStr, const char* const* defines = nullptr, int32_t defineCount = 0 );
 	void Terminate();
 	//! Enable alpha blending. Defaults to false.
 	void SetBlending( bool enabled ) { m_blending = enabled; }

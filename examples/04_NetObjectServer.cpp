@@ -34,7 +34,7 @@ int main()
 
   // Init
   Game game;
-  game.Initialize( "NetObject Server" );
+  game.Initialize();
   AetherServer* server = AetherServer_New( 3500, 0, 16 );
   ae::NetObjectServer netObjectServer;
   ae::Map< AetherUuid, ae::NetObjectConnection* > netObjectConnections = TAG_EXAMPLE;
@@ -46,6 +46,8 @@ int main()
   {
     // Poll input and net modules
     game.input.Pump();
+    ae::Str64 title = ae::Str64::Format( "Spaceships Server (Connections: #)", server->playerCount );
+    game.window.SetTitle( title.c_str() );
     AetherServer_Update( server );
     
     ServerReceiveInfo receiveInfo;

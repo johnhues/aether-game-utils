@@ -89,6 +89,30 @@ const uint32_t kMapData[] =
 const uint32_t kMapWidth = 28;
 const uint32_t kMapHeight = 12;
 
+const char* kVertexShader = R"(
+	AE_UNIFORM_HIGHP mat4 u_worldToProj;
+
+	AE_IN_HIGHP vec4 a_position;
+	AE_IN_HIGHP vec4 a_color;
+
+	AE_OUT_HIGHP vec4 v_color;
+
+	void main()
+	{
+		v_color = a_color;
+		gl_Position = u_worldToProj * a_position;
+	}
+)";
+
+const char* kFragmentShader = R"(
+	AE_IN_HIGHP vec4 v_color;
+
+	void main()
+	{
+		AE_COLOR = v_color;
+	}
+)";
+
 //------------------------------------------------------------------------------
 // Player class
 //------------------------------------------------------------------------------
@@ -99,7 +123,7 @@ public:
 	void OnCollision( const HotSpotObject::CollisionInfo* info );
 	void Update( HotSpotWorld* world, ae::Input* input, float dt );
 
-	void Render( SpriteRenderer* spriteRender, ae::Texture2D* tex );
+	void Render( ae::SpriteRenderer* spriteRender );
 	ae::Vec2 GetPosition() const { return m_body->GetPosition(); }
 	bool CanJump() const { return m_canJumpTimer > 0.0f; }
 
@@ -135,10 +159,10 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 {
 	uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
 	
-	bool up = input->Get( ae::Key::Up ) || input->gamepad.leftAnalog.y > 0.1f || input->gamepad.dpad.y > 0;
-	bool down = input->Get( ae::Key::Down ) || input->gamepad.leftAnalog.y < -0.1f || input->gamepad.dpad.y < 0;
-	bool left = input->Get( ae::Key::Left ) || input->gamepad.leftAnalog.x < -0.1f || input->gamepad.dpad.x < 0;
-	bool right = input->Get( ae::Key::Right ) || input->gamepad.leftAnalog.x > 0.1f || input->gamepad.dpad.x > 0;
+	bool up = input->Get( ae::Key::Up ) || input->gamepads[ 0 ].leftAnalog.y > 0.1f || input->gamepads[ 0 ].dpad.y > 0;
+	bool down = input->Get( ae::Key::Down ) || input->gamepads[ 0 ].leftAnalog.y < -0.1f || input->gamepads[ 0 ].dpad.y < 0;
+	bool left = input->Get( ae::Key::Left ) || input->gamepads[ 0 ].leftAnalog.x < -0.1f || input->gamepads[ 0 ].dpad.x < 0;
+	bool right = input->Get( ae::Key::Right ) || input->gamepads[ 0 ].leftAnalog.x > 0.1f || input->gamepads[ 0 ].dpad.x > 0;
 	bool jumpButton = ( up || input->Get( ae::Key::Space ) || input->Get( ae::Key::A ) );
 
 	m_canJumpTimer -= dt;
@@ -184,10 +208,10 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 	m_body->AddGravity( ae::Vec2( 0.0f, -kGravity ) );
 }
 
-void Player::Render( SpriteRenderer* spriteRender, ae::Texture2D* tex )
+void Player::Render( ae::SpriteRenderer* spriteRender )
 {
 	ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( GetPosition(), -0.5f ) );
-	spriteRender->AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
+	spriteRender->AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), CanJump() ? ae::Color::PicoRed() : ae::Color::PicoBlue() );
 }
 
 //------------------------------------------------------------------------------
@@ -198,10 +222,10 @@ struct Game
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	SpriteRenderer spriteRender = TAG_ALL;
+	ae::SpriteRenderer spriteRender = TAG_ALL;
+	ae::Shader spriteShader;
 	ae::TimeStep timeStep;
 	HotSpotWorld world;
-	ae::Texture2D tex;
 	Player player;
 
 	void Initialize()
@@ -211,7 +235,8 @@ struct Game
 		window.SetTitle( "Platformer 2D" );
 		render.Initialize( &window );
 		input.Initialize( &window );
-		spriteRender.Initialize( 512 );
+		spriteRender.Initialize( 1, 512 );
+		spriteShader.Initialize( kVertexShader, kFragmentShader );
 		timeStep.SetTimeStep( 1.0f / kFramesPerSecond );
 
 		world.Initialize( 1.0f / kSimulationStepsPerSecond );
@@ -224,12 +249,8 @@ struct Game
 		AE_STATIC_ASSERT( countof(kMapData) == kMapWidth * kMapHeight );
 		world.LoadTiles( kMapData, kMapWidth, kMapHeight, true );
 		
-		uint8_t texData[] = { 255, 255, 255 };
-		tex.Initialize( texData, 1, 1, ae::Texture::Format::RGB8, ae::Texture::Type::Uint8, ae::Texture::Filter::Nearest, ae::Texture::Wrap::Clamp, false );
-
 		player.Initialize( &world, ae::Vec2( 2.0f, 2.0f ) );
 	}
-
 
 	bool Tick()
 	{
@@ -252,15 +273,18 @@ struct Game
 				default: color = ae::Color::PicoOrange(); break;
 			}
 			ae::Matrix4 transform = ae::Matrix4::Translation( ae::Vec3( x, y, 0.0f ) );
-			spriteRender.AddSprite( transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), color );
+			spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), color );
 		}
 		
-		player.Render( &spriteRender, &tex );
+		player.Render( &spriteRender );
 
 		ae::Vec2 camera = player.GetPosition();
 		ae::Matrix4 screenTransform = ae::Matrix4::Scaling( ae::Vec3( 1.0f / ( 5.0f * render.GetAspectRatio() ), 1.0f / 5.0f, 1.0f ) );
 		screenTransform *= ae::Matrix4::Translation( ae::Vec3( -camera.x, -1.5f - camera.y, 0.0f ) );
-		spriteRender.Render( screenTransform, &tex );
+		ae::UniformList uniformList;
+		uniformList.Set( "u_worldToProj", screenTransform );
+		spriteRender.SetParams( 0, &spriteShader, uniformList );
+		spriteRender.Render();
 
 		render.Present();
 		timeStep.Tick();

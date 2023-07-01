@@ -224,6 +224,7 @@ void Game::Initialize( int argc, char* argv[] )
 
 	editor.Initialize( editorParams );
 	window.Initialize( 1280, 720, false, true );
+	window.SetTitle( "Press '~' to Open the Editor" );
 	input.Initialize( &window );
 	gfx.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );

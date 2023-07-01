@@ -39,8 +39,7 @@ int main()
 	ae::Input input;
 	ae::ListenerSocket listener = kServerAllocTag;
 	
-	window.Initialize( 800, 600, false, true );
-	window.SetTitle( "server" );
+	window.Initialize( 400, 300, false, true );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	
@@ -50,6 +49,9 @@ int main()
 	while ( !input.quit )
 	{
 		input.Pump();
+
+		ae::Str64 title = ae::Str64::Format( "Server (Connections: #)", listener.GetConnectionCount() );
+		window.SetTitle( title.c_str() );
 
 		if ( !listener.IsListening() )
 		{
@@ -103,7 +105,7 @@ int main()
 		}
 
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( listener.GetConnectionCount() ? ae::Color::PicoGreen() : ae::Color::PicoRed() );
 		render.Present();
 
 		timeStep.Tick();

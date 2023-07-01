@@ -1,17 +1,17 @@
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-
 # aether-game-utils project
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
 set(AE_LOADERS_OFBX OFF CACHE BOOL "Enables aether FBX loader and ofbx dependency")
 set(AE_LOADERS_STB OFF CACHE BOOL "Enables aether PNG loader and stb dependency")
 set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Includes
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/safeguards.cmake) # guard against in-source builds and bad build-type strings
-include(cmake/git_revision.cmake) # print current local git repo status
-include(ExternalProject)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake") # find dependencies
+# Safeguard against in-source builds
+set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
+	message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there.")
+endif()
 
 # Defines and configuration
 set(CMAKE_CXX_STANDARD 17) # use c++17
@@ -45,6 +45,7 @@ else()
 	list(APPEND AE_DEPS_LIBRARIES ${OPENGL_LIBRARIES})
 endif()
 if (MSVC)
+	include(ExternalProject)
 	add_definitions(-DGLEW_STATIC)
 	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
 	ExternalProject_Add(glew
