@@ -219,7 +219,7 @@ template < typename T > const char* GetTypeName();
 double GetTime();
 //! Shows a generic message box
 void ShowMessage( const char* msg );
-//! @}
+//! @} End Platform defgroup
 
 //------------------------------------------------------------------------------
 // Tags
@@ -287,7 +287,7 @@ template < typename T > void Delete( T* obj );
 void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment );
 void* Reallocate( void* data, uint32_t bytes, uint32_t alignment );
 void Free( void* data );
-//! @}
+//! @} End Allocation defgroup
 
 //------------------------------------------------------------------------------
 // ae::Scratch< T > class
@@ -1038,7 +1038,7 @@ private:
 bool IntersectRayTriangle( ae::Vec3 p, ae::Vec3 ray, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c, bool ccw, bool cw, ae::Vec3* pOut, ae::Vec3* nOut, float* tOut );
 Vec3 ClosestPointOnTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c );
 
-//! @} End Math group
+//! @} End Math defgroup
 
 //------------------------------------------------------------------------------
 // ae::Color struct
@@ -1182,6 +1182,9 @@ private:
 	double m_prevFrameLength = 0.0;
 	double m_frameStart = 0.0;
 };
+
+//! \defgroup DataStructures
+//! @{
 
 //------------------------------------------------------------------------------
 // ae::Str class
@@ -2007,6 +2010,8 @@ private:
 	ae::List< Page > m_pages;
 	Page m_firstPage;
 };
+
+//! @} End DataStructures defgroup
 
 //------------------------------------------------------------------------------
 // ae::Rect class
