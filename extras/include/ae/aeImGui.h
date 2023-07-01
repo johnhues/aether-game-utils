@@ -36,8 +36,6 @@
 #include "imgui.h"
 #include "imgui_internal.h" // For advanced imgui features like docking
 #if _AE_WINDOWS_
-  #include "GL/glew.h"
-  #define IMGUI_IMPL_OPENGL_LOADER_GLEW
   #pragma warning( push )
   #pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
 #elif _AE_APPLE_
@@ -46,8 +44,6 @@
   #define GL_GLEXT_PROTOTYPES 1
 #endif
 #include "imgui_impl_opengl3.h"
-
-#include "aeRender.h"
 
 //------------------------------------------------------------------------------
 // Imgui helpers
@@ -316,10 +312,6 @@ private:
 	}
 	else
 	{
-#if _AE_WINDOWS_
-		GLenum err = glewInit();
-		AE_ASSERT_MSG( err == GLEW_OK, "Error: #", glewGetErrorString( err ) );
-#endif
 		ae::Str32 glVersionStr = "#version ";
 #if _AE_IOS_ || _AE_EMSCRIPTEN_
 		glVersionStr += ae::Str16::Format( "##0 es", ae::GLMajorVersion, ae::GLMinorVersion );

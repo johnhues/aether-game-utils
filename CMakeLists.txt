@@ -44,22 +44,6 @@ else()
 	find_package(OpenGL REQUIRED)
 	list(APPEND AE_DEPS_LIBRARIES ${OPENGL_LIBRARIES})
 endif()
-if (MSVC)
-	include(ExternalProject)
-	add_definitions(-DGLEW_STATIC)
-	set(AE_GLEW_SRC ${AE_THIRDPARTY_DIR}/glew)
-	ExternalProject_Add(glew
-		PREFIX glew
-		SOURCE_DIR ${AE_GLEW_SRC}
-		URL https://github.com/nigels-com/glew/releases/download/glew-2.1.0/glew-2.1.0-win32.zip
-		CONFIGURE_COMMAND ""
-		BUILD_COMMAND ""
-		INSTALL_COMMAND ""
-	)
-	list(APPEND AE_DEPS_INCLUDE ${AE_GLEW_SRC}/include)
-	list(APPEND AE_DEPS_LIBRARIES ${AE_GLEW_SRC}/lib/Release/x64/glew32s.lib)
-	list(APPEND AE_DEPS_TARGETS glew)
-endif()
 
 # OpenAL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
