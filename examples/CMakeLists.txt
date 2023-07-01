@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 Include(FetchContent)
-Include(../cmake/AddBundle.cmake)
+Include(${AE_ROOT_DIR}/AddBundle.cmake)
 
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
