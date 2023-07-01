@@ -87,8 +87,7 @@ private:
   uint32_t m_maxCount;
   Sprite* m_sprites;
   Vertex* m_vertices;
-  ae::VertexBuffer m_vertexBuffer;
-  ae::VertexArray m_vertexData = AE_ALLOC_TAG_RENDER;
+  ae::VertexBuffer m_vertexData;
   ae::Shader* m_shaderAll;
   ae::Shader* m_shaderOpaque;
   ae::Shader* m_shaderTransparent;
