@@ -1,10 +1,6 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 include(FetchContent)
 
-# uuid dependency
-if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
-	find_package(uuid REQUIRED)
-endif()
 # enet dependency
 FetchContent_Declare(
 	enet
