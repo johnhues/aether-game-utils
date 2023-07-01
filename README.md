@@ -67,7 +67,7 @@ int main()
 	ae::CollisionMesh<> collisionMesh = TAG_EXAMPLE;
 	ae::Shader shader;
 	ae::Texture2D tex;
-	ae::VertexArray vertexData;
+	ae::VertexBuffer vertexData;
 	obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
 	shader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
 	shader.SetCulling( ae::Culling::CounterclockwiseFront );
@@ -75,7 +75,6 @@ int main()
 	shader.SetDepthTest( true );
 	tex.Initialize( tga.textureParams );
 	obj.InitializeVertexData( { &vertexData } );
-	vertexData.Upload();
 
 	// Game state
 	ae::PushOutInfo player;
@@ -121,7 +120,8 @@ int main()
 		uniforms.Set( "u_tex", &tex );
 		graphicsDevice.Activate();
 		graphicsDevice.Clear( ae::Color::Black() );
-		vertexData.Draw( &shader, uniforms );
+		vertexData.Bind( &shader, uniforms );
+		vertexData.Draw();
 		graphicsDevice.Present();
 		timeStep.Tick();
 	}
