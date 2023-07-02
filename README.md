@@ -9,16 +9,16 @@
 * Not overstepping or emposing a particular game engine architecture
 
 Modules and utilities include:
-* Allocation
-* C++ reflection
-* Data structures
+* [Allocation](docs/Allocation.md)
+* [C++ reflection](docs/Meta.md)
+* [Data structures](docs/DataStructures.md)
 * File IO
 * Frame rate control and timing
 * Geometry and collision detection
 * Graphics and windowing
 * Input
 * Logging
-* Math
+* [Math](docs/Math.md)
 * Networked object synchronization
 * Serialization
 * Sockets
