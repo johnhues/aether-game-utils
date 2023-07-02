@@ -1,19 +1,29 @@
 # aether-game-utils project
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
+
+# Configuration variables intended for external use
 set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
 set(AE_LOADERS_OFBX OFF CACHE BOOL "Enables aether FBX loader and ofbx dependency")
 set(AE_LOADERS_STB OFF CACHE BOOL "Enables aether PNG loader and stb dependency")
-set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Safeguard against in-source builds
-set(CMAKE_DISABLE_SOURCE_CHANGES ON)
-set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
-if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
-	message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there.")
+# Configuration for building ae on its own
+if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
+	# Safeguard against in-source builds
+	set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+	set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+	if(${PROJECT_SOURCE_DIR} STREQUAL ${PROJECT_BINARY_DIR})
+		message(FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there.")
+	endif()
+
+	# Default to RelWithDebInfo when not specified for single-config generators
+	if (NOT GENERATOR_IS_MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
+		set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+	endif()
 endif()
 
 # Defines and configuration
+set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CMAKE_CXX_STANDARD 17) # use c++17
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if (MSVC)
