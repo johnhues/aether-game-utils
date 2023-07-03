@@ -323,3 +323,18 @@ add_bundle("Instancing"
 	"ae"
 	""
 )
+
+# Instancing
+if(APPLE)
+	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
+endif()
+add_bundle("Read Me"
+	"22_read_me"
+	"ae.22_read_me"
+	"0.0.0"
+	"data/Icon.icns"
+	"22_ReadMe.cpp"
+	"${AE_EXAMPLE_RESOURCES};data/level.obj;data/level.tga"
+	""
+	"${AE_ROOT_DIR}"
+)
