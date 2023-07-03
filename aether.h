@@ -2757,6 +2757,8 @@ struct FileDialogParams
 class FileSystem
 {
 public:
+	//! ae::FileSystem::Destroy() or ae::FileSystem::DestroyAll() must be called
+	//! to free all ae::File's before an ae::FileSystem is destroyed.
 	~FileSystem();
 	//! Represents directories that the FileSystem class can load/save from.
 	enum class Root
@@ -2801,7 +2803,7 @@ public:
 	//! Destroys the given ae::File object returned by ae::FileSystem::Read().
 	void Destroy( const ae::File* file );
 	//! Frees all existing ae::File objects. It is not safe to access any
-	//! ae::File objects returned earlier by ae::FileSystem::Read() after
+	//! ae::File objects returned earlier from ae::FileSystem::Read() after
 	//! calling this.
 	void DestroyAll();
 	//! Get a file read created with ae::FileSystem::Read().
@@ -5340,15 +5342,15 @@ template < typename T >
 Scratch< T >::Scratch( uint32_t count )
 {
 	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
-	ae::_ScratchBuffer* scratchBuffer = ae::_ScratchBuffer::Get();
-	const uint32_t bytes = scratchBuffer->GetScratchBytes( count * sizeof(T) );
+	ae::_ScratchBuffer* globalScratch = ae::_ScratchBuffer::Get();
+	const uint32_t bytes = globalScratch->GetScratchBytes( count * sizeof(T) );
 	
 	m_size = count;
-	m_data = (T*)( scratchBuffer->data + scratchBuffer->offset );
+	m_data = (T*)( globalScratch->data + globalScratch->offset );
 	AE_DEBUG_ASSERT( ( (intptr_t)m_data % ae::_ScratchBuffer::kScratchAlignment ) == 0 );
-	m_prevOffsetCheck = scratchBuffer->offset;
-	scratchBuffer->offset += bytes;
-	AE_ASSERT_MSG( scratchBuffer->offset <= scratchBuffer->size, "Scratch buffer size exceeded: # bytes / (# bytes)", scratchBuffer->offset, scratchBuffer->size );
+	m_prevOffsetCheck = globalScratch->offset;
+	globalScratch->offset += bytes;
+	AE_ASSERT_MSG( globalScratch->offset <= globalScratch->size, "Global scratch buffer size exceeded: # bytes / (# bytes)", globalScratch->offset, globalScratch->size );
 	
 #if _AE_DEBUG_
 	memset( m_data, 0xCD, m_size * sizeof(T) );
@@ -19315,7 +19317,6 @@ void Texture2D::Initialize( const TextureParams& params )
 	Texture::Initialize( GL_TEXTURE_2D );
 
 #if _AE_EMSCRIPTEN_
-	// @TODO: Handle bgr texture data in emscripten builds
 	const auto GL_BGR = GL_RGB;
 	const auto GL_BGRA = GL_RGBA;
 #endif
@@ -19325,7 +19326,8 @@ void Texture2D::Initialize( const TextureParams& params )
 
 	glBindTexture( GetTarget(), GetTexture() );
 
-	if ( params.autoGenerateMipmaps )
+	const bool mipmapsEnabled = _AE_EMSCRIPTEN_ ? false : params.autoGenerateMipmaps;
+	if ( mipmapsEnabled )
 	{
 		glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR );
 		glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
@@ -19335,7 +19337,6 @@ void Texture2D::Initialize( const TextureParams& params )
 		glTexParameteri( GetTarget(), GL_TEXTURE_MIN_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
 		glTexParameteri( GetTarget(), GL_TEXTURE_MAG_FILTER, ( params.filter == Filter::Nearest ) ? GL_NEAREST : GL_LINEAR );
 	}
-	
 	glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_S, ( params.wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 	glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( params.wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
@@ -19363,6 +19364,7 @@ void Texture2D::Initialize( const TextureParams& params )
 	GLint glInternalFormat = 0;
 	GLenum glFormat = 0;
 	GLint unpackAlignment = 0;
+	int32_t components = 0;
 	switch ( params.format )
 	{
 		// TODO: need D32F_S8 format
@@ -19371,12 +19373,14 @@ void Texture2D::Initialize( const TextureParams& params )
 			glFormat = GL_DEPTH_COMPONENT;
 			unpackAlignment = 1;
 			m_hasAlpha = false;
+			components = 1;
 			break;
 		case Format::Depth32F:
 			glInternalFormat = GL_DEPTH_COMPONENT32F;
 			glFormat = GL_DEPTH_COMPONENT;
 			unpackAlignment = 1;
 			m_hasAlpha = false;
+			components = 1;
 			break;
 		case Format::R8:
 		case Format::R16_UNORM:
@@ -19403,6 +19407,7 @@ void Texture2D::Initialize( const TextureParams& params )
 			glFormat = GL_RED;
 			unpackAlignment = 1;
 			m_hasAlpha = false;
+			components = 1;
 			break;
 			
 #if _AE_OSX_
@@ -19421,6 +19426,7 @@ void Texture2D::Initialize( const TextureParams& params )
 			glFormat = GL_RG; // @TODO: Handle bgra flag
 			unpackAlignment = 1;
 			m_hasAlpha = false;
+			components = 2;
 			break;
 #endif
 		case Format::RGB8:
@@ -19436,6 +19442,7 @@ void Texture2D::Initialize( const TextureParams& params )
 			glFormat = params.bgrData ? GL_BGR : GL_RGB;
 			unpackAlignment = 1;
 			m_hasAlpha = false;
+			components = 3;
 			break;
 
 		case Format::RGBA8:
@@ -19451,28 +19458,32 @@ void Texture2D::Initialize( const TextureParams& params )
 			glFormat = params.bgrData ?  GL_BGRA : GL_RGBA;
 			unpackAlignment = 1;
 			m_hasAlpha = true;
+			components = 4;
 			break;
 			
 			// TODO: fix these constants, but they differ on ES2/3 and GL
 			// WebGL1 they require loading an extension (if present) to get at the constants.
 		case Format::RGB8_SRGB:
-		// ignore type
+			// ignore type
 			glInternalFormat = GL_SRGB8;
 			glFormat = params.bgrData ? GL_BGR : GL_RGB;
 			unpackAlignment = 1;
 			m_hasAlpha = false;
+			components = 3;
 			break;
 		case Format::RGBA8_SRGB:
-		// ignore type
+			// ignore type
 			glInternalFormat = GL_SRGB8_ALPHA8;
 			glFormat = params.bgrData ? GL_BGRA : GL_RGBA;
 			unpackAlignment = 1;
 			m_hasAlpha = false;
+			components = 4;
 			break;
 		default:
 			AE_FAIL_MSG( "Invalid texture format #", (int)params.format );
 			return;
 	}
+	AE_ASSERT( components );
 
 	if ( params.data )
 	{
@@ -19480,12 +19491,11 @@ void Texture2D::Initialize( const TextureParams& params )
 	}
 
 	// count the mip levels
-	int w = params.width;
-	int h = params.height;
-	
 	int numberOfMipmaps = 1;
-	if ( params.autoGenerateMipmaps )
+	if ( mipmapsEnabled )
 	{
+		int w = params.width;
+		int h = params.height;
 		while ( w > 1 || h > 1 )
 		{
 			numberOfMipmaps++;
@@ -19503,9 +19513,8 @@ void Texture2D::Initialize( const TextureParams& params )
 	// for compressed textures.
 	glTexStorage2D( GetTarget(), numberOfMipmaps, glInternalFormat, params.width, params.height );
 #else
-	w = params.width;
-	h = params.height;
-	
+	int w = params.width;
+	int h = params.height;
 	for ( int i = 0; i < numberOfMipmaps; ++i )
 	{
 		glTexImage2D( GetTarget(), i, glInternalFormat, w, h, 0, glFormat, glType, NULL );
@@ -19513,16 +19522,47 @@ void Texture2D::Initialize( const TextureParams& params )
 		h = (h+1) / 2;
 	}
 #endif
+
+	const void* data = params.data;
+	void* tempData = nullptr;
+#if _AE_EMSCRIPTEN_
+	if ( params.bgrData && components >= 3 )
+	{
+		const uint32_t totalComponents = params.width * params.height * components;
+#define _AE_BGR_TO_RGB_COPY( _type )\
+		tempData = ae::Allocate( AE_ALLOC_TAG_RENDER, totalComponents * sizeof(_type), 16 );\
+		data = tempData;\
+		for ( uint32_t i = 0; i < totalComponents; i += components )\
+		{\
+			((_type*)data)[ i + 0 ] = ((_type*)params.data)[ i + 2 ];\
+			((_type*)data)[ i + 1 ] = ((_type*)params.data)[ i + 1 ];\
+			((_type*)data)[ i + 2 ] = ((_type*)params.data)[ i + 0 ];\
+			if ( components == 4 ) { ((_type*)data)[ i + 3 ] = ((_type*)params.data)[ i + 3 ]; }\
+		}
+		switch ( params.type )
+		{
+			case Type::Uint8: _AE_BGR_TO_RGB_COPY( uint8_t ); break;
+			case Type::Uint16: _AE_BGR_TO_RGB_COPY( uint16_t ); break;
+			case Type::HalfFloat: _AE_BGR_TO_RGB_COPY( uint16_t ); break; // Use uint16_t for data copy
+			case Type::Float: _AE_BGR_TO_RGB_COPY( float ); break;
+			default: AE_FAIL();
+		}
+#undef _AE_BGR_TO_RGB_COPY
+	}
+#endif
 	
-	if ( params.data != nullptr )
+	if ( data )
 	{
 		// upload the first mipmap
-		glTexSubImage2D( GetTarget(), 0, 0,0, params.width, params.height, glFormat, glType, params.data );
-
+		glTexSubImage2D( GetTarget(), 0, 0, 0, params.width, params.height, glFormat, glType, data );
+		if ( tempData )
+		{
+			ae::Free( tempData );
+		}
 #if !_AE_EMSCRIPTEN_
 		// autogen only works for uncompressed textures
 		// Also need to know if format is filterable on platform, or this will fail (f.e. R32F)
-		if ( numberOfMipmaps > 1 && params.autoGenerateMipmaps )
+		if ( mipmapsEnabled && numberOfMipmaps > 1 )
 		{
 			glGenerateMipmap( GetTarget() );
 		}
