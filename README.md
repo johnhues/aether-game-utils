@@ -34,97 +34,111 @@ The following are instructions to get started with aether-game-utils. This examp
 #define AE_MAIN
 #define AE_USE_MODULES
 #include "aether.h"
-const ae::Tag TAG_EXAMPLE = "example";
+const ae::Tag TAG_RESOURCE = "resource";
 extern const char* kVertexShader;
 extern const char* kFragmentShader;
 
 int main()
 {
-	// Initialization
 	ae::Window window;
 	ae::GraphicsDevice graphicsDevice;
 	ae::Input input;
 	ae::TimeStep timeStep;
+	ae::FileSystem fileSystem;
 	window.Initialize( 640, 320, false, true );
 	window.SetTitle( "Game" );
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
+	fileSystem.Initialize( "data", "ae", "Game" );
 
-	// File loading
-	ae::FileSystem fileSystem;
-	fileSystem.Initialize( "", "ae", "Game" );
-	const ae::File* geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
-	const ae::File* textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
-	while ( fileSystem.GetFileStatusCount( ae::File::Status::Pending ) ) { std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) ); }
-	if ( fileSystem.GetFileStatusCount( ae::File::Status::Success ) != fileSystem.GetFileCount() ) { std::exit( EXIT_FAILURE ); }
-	ae::OBJFile obj = TAG_EXAMPLE;
-	ae::TargaFile tga = TAG_EXAMPLE;
-	tga.Load( textureFile->GetData(), textureFile->GetLength() );
-	obj.Load( geoFile->GetData(), geoFile->GetLength() );
-
-	// Resources
-	ae::CollisionMesh<> collisionMesh = TAG_EXAMPLE;
-	ae::Shader shader;
-	ae::Texture2D tex;
 	ae::VertexBuffer vertexData;
-	obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
+	ae::CollisionMesh<> collisionMesh = TAG_RESOURCE;
+	ae::Texture2D tex;
+	ae::Shader shader;
 	shader.Initialize( kVertexShader, kFragmentShader, nullptr, 0 );
 	shader.SetCulling( ae::Culling::CounterclockwiseFront );
 	shader.SetDepthWrite( true );
 	shader.SetDepthTest( true );
-	tex.Initialize( tga.textureParams );
-	obj.InitializeVertexData( { &vertexData } );
+	const ae::File* geoFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.obj", 2.5f );
+	const ae::File* textureFile = fileSystem.Read( ae::FileSystem::Root::Data, "level.tga", 2.5f );
 
-	// Game state
 	ae::PushOutInfo player;
 	player.sphere.radius = 0.7f;
 	player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
 	float angle = 0.0f;
 	float angularVel = 0.0f;
-	
-	while ( !input.quit )
+
+	auto Update = [&]()
 	{
 		const float dt = ae::Min( timeStep.GetDt(), 0.03f );
-		const ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
-
-		// Input
 		input.Pump();
-		if ( input.Get( ae::Key::Up ) ) { player.velocity += forward * dt * 25.0f; }
-		if ( input.Get( ae::Key::Down ) ) { player.velocity -= forward * dt * 25.0f; }
-		if ( input.Get( ae::Key::Left ) ) { angularVel += dt * 15.0f; }
-		if ( input.Get( ae::Key::Right ) ) { angularVel -= dt * 15.0f; }
 
-		// Physics
-		player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
-		angularVel = ae::DtLerp( angularVel, 3.5f, dt, 0.0f );
-		player.velocity.y -= dt * 20.0f;
-		player.sphere.center += player.velocity * dt;
-		angle += angularVel * dt;
-		player = collisionMesh.PushOut( ae::PushOutParams(), player );
-		ae::RaycastParams raycastParams;
-		raycastParams.source = player.sphere.center;
-		raycastParams.ray = ae::Vec3( 0, player.sphere.radius * -1.1f, 0 );
-		ae::RaycastResult r = collisionMesh.Raycast( raycastParams );
-		if ( r.hits.Length() )
+		// Async load for web
+		if ( geoFile && geoFile->GetStatus() == ae::File::Status::Success )
 		{
-			player.sphere.center = r.hits[ 0 ].position +  ae::Vec3( 0, player.sphere.radius * 1.1f, 0 );
-			player.velocity.y = ae::Max( 0.0f, player.velocity.y );
+			ae::OBJFile obj = TAG_RESOURCE;
+			obj.Load( geoFile->GetData(), geoFile->GetLength() );
+			obj.InitializeVertexData( { &vertexData } );
+			obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
+			geoFile = nullptr;
+		}
+		if ( textureFile && textureFile->GetStatus() == ae::File::Status::Success )
+		{
+			ae::TargaFile tga = TAG_RESOURCE;
+			tga.Load( textureFile->GetData(), textureFile->GetLength() );
+			tex.Initialize( tga.textureParams );
+			textureFile = nullptr;
 		}
 
-		// Rendering
-		ae::UniformList uniforms;
-		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( player.sphere.center, forward, ae::Vec3( 0, 1, 0 ) );
-		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, graphicsDevice.GetAspectRatio(), 0.5f, 1000.0f );
-		uniforms.Set( "u_worldToProj", viewToProj * worldToView );
-		uniforms.Set( "u_tex", &tex );
 		graphicsDevice.Activate();
 		graphicsDevice.Clear( ae::Color::Black() );
-		vertexData.Bind( &shader, uniforms );
-		vertexData.Draw();
+		if ( fileSystem.GetFileStatusCount( ae::File::Status::Success ) == fileSystem.GetFileCount() )
+		{
+			// Input
+			const ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
+			if ( input.Get( ae::Key::Up ) ) { player.velocity += forward * dt * 25.0f; }
+			if ( input.Get( ae::Key::Down ) ) { player.velocity -= forward * dt * 25.0f; }
+			if ( input.Get( ae::Key::Left ) ) { angularVel += dt * 15.0f; }
+			if ( input.Get( ae::Key::Right ) ) { angularVel -= dt * 15.0f; }
+
+			// Physics
+			player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
+			angularVel = ae::DtLerp( angularVel, 3.5f, dt, 0.0f );
+			player.velocity.y -= dt * 20.0f;
+			player.sphere.center += player.velocity * dt;
+			angle += angularVel * dt;
+			player = collisionMesh.PushOut( ae::PushOutParams(), player );
+			ae::RaycastParams raycastParams;
+			raycastParams.source = player.sphere.center;
+			raycastParams.ray = ae::Vec3( 0, player.sphere.radius * -1.1f, 0 );
+			ae::RaycastResult r = collisionMesh.Raycast( raycastParams );
+			if ( r.hits.Length() )
+			{
+				player.sphere.center = r.hits[ 0 ].position +  ae::Vec3( 0, player.sphere.radius * 1.1f, 0 );
+				player.velocity.y = ae::Max( 0.0f, player.velocity.y );
+			}
+
+			// Rendering
+			ae::UniformList uniforms;
+			ae::Matrix4 worldToView = ae::Matrix4::WorldToView( player.sphere.center, forward, ae::Vec3( 0, 1, 0 ) );
+			ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, graphicsDevice.GetAspectRatio(), 0.5f, 1000.0f );
+			uniforms.Set( "u_worldToProj", viewToProj * worldToView );
+			uniforms.Set( "u_tex", &tex );
+			vertexData.Bind( &shader, uniforms );
+			vertexData.Draw();
+		}
 		graphicsDevice.Present();
 		timeStep.Tick();
-	}
+
+		return !input.quit;
+	};
+
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while ( Update() ) {}
+#endif
 
 	// Terminate
 	fileSystem.DestroyAll();
