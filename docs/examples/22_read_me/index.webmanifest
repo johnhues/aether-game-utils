@@ -1,0 +1,12 @@
+{
+	"name": "Read Me Example",
+	"start_url": "https://johnhues.github.io/aether-game-utils/examples/22_read_me",
+	"display": "fullscreen",
+	"icons": [
+		{
+			"src": "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/Icon.png",
+			"type": "image/png",
+			"sizes": "512x512"
+		}
+	]
+}
