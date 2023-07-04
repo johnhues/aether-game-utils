@@ -68,6 +68,7 @@ int main()
 			if ( input.Get( ae::Key::Down ) ) { player.velocity -= forward * dt * 25.0f; }
 			if ( input.Get( ae::Key::Left ) ) { angularVel += dt * 15.0f; }
 			if ( input.Get( ae::Key::Right ) ) { angularVel -= dt * 15.0f; }
+			if ( input.Get( ae::Key::Meta ) && input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); }
 
 			// Physics
 			player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );

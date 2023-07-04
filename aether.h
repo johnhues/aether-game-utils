@@ -2526,6 +2526,12 @@ enum class Key : uint8_t
 	RightShift = 229,
 	RightAlt = 230,
 	RightSuper = 231,
+
+	Control = 249,
+	Shift = 250,
+	Alt = 251,
+	Super = 252,
+	Meta = 253,
 	LeftMeta = 254, // Command on Apple, Control on others
 	RightMeta = 255, // Command on Apple, Control on others
 };
@@ -2663,6 +2669,7 @@ public:
 	Input( const Input& ) = delete;
 	void m_SetMousePos( ae::Int2 pos );
 	void m_SetCursorPos( ae::Int2 pos );
+	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
 	bool m_captureMouse = false;
@@ -14203,6 +14210,21 @@ void Window::SetFullScreen( bool fullScreen )
 			if ( GetLoggingEnabled() ) { AE_INFO( "unfullscreen # # # #", aeRestorePos.x, aeRestorePos.y, restoreSize.x, restoreSize.y ); }
 		}
 	}
+#elif _AE_EMSCRIPTEN_
+	m_fullScreen = fullScreen;
+	if ( m_fullScreen )
+	{
+		EmscriptenFullscreenStrategy strategy;
+		memset( &strategy, 0, sizeof(strategy) );
+		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
+		strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
+		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
+		emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
+	}
+	else
+	{
+		emscripten_exit_fullscreen();
+	}
 #endif
 }
 
@@ -14377,9 +14399,9 @@ void _aeEmscriptenNewFrame( Input* input )
 
 EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* keyEvent, void* userData )
 {
-	// First time this function is called only
 	static ae::Key s_keyMap[ 255 ];
 	static bool s_first = true;
+	// First time this function is called only
 	if ( s_first )
 	{
 		s_first = false;
@@ -14453,6 +14475,7 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
 		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
 	}
+	input->m_UpdateModifiers();
 	return true;
 }
 
@@ -15105,14 +15128,7 @@ void Input::Pump()
 	}
 #endif
 
-	// Update meta key
-#if _AE_APPLE_
-	m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ];
-	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ];
-#else
-	m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
-	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
-#endif
+	m_UpdateModifiers();
 
 	// Reset gamepad states
 	for ( uint32_t i = 0; i < countof(gamepads); i++ )
@@ -15412,6 +15428,22 @@ void Input::m_SetCursorPos( ae::Int2 pos )
 		CGAssociateMouseAndMouseCursorPosition( true );
 	}
 #endif
+}
+
+void Input::m_UpdateModifiers()
+{
+#if _AE_APPLE_
+	m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftSuper ];
+	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightSuper ];
+#else
+	m_keys[ (int)ae::Key::LeftMeta ] = m_keys[ (int)ae::Key::LeftControl ];
+	m_keys[ (int)ae::Key::RightMeta ] = m_keys[ (int)ae::Key::RightControl ];
+#endif
+	m_keys[ (int)ae::Key::Control ] = m_keys[ (int)ae::Key::LeftControl ] || m_keys[ (int)ae::Key::RightControl ];
+	m_keys[ (int)ae::Key::Shift ] = m_keys[ (int)ae::Key::LeftShift ] || m_keys[ (int)ae::Key::RightShift ];
+	m_keys[ (int)ae::Key::Alt ] = m_keys[ (int)ae::Key::LeftAlt ] || m_keys[ (int)ae::Key::RightAlt ];
+	m_keys[ (int)ae::Key::Super ] = m_keys[ (int)ae::Key::LeftSuper ] || m_keys[ (int)ae::Key::RightSuper ];
+	m_keys[ (int)ae::Key::Meta ] = m_keys[ (int)ae::Key::LeftMeta ] || m_keys[ (int)ae::Key::RightMeta ];
 }
 
 //------------------------------------------------------------------------------
