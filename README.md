@@ -50,7 +50,7 @@ int main()
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fileSystem.Initialize( "data", "ae", "Game" );
+	fileSystem.Initialize( "", "ae", "Game" );
 
 	ae::VertexBuffer vertexData;
 	ae::CollisionMesh<> collisionMesh = TAG_RESOURCE;

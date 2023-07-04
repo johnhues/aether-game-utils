@@ -4,6 +4,9 @@
 const ae::Tag TAG_RESOURCE = "resource";
 extern const char* kVertexShader;
 extern const char* kFragmentShader;
+#ifndef DATA_DIR
+	#define DATA_DIR ""
+#endif
 
 int main()
 {
@@ -17,7 +20,7 @@ int main()
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fileSystem.Initialize( "data", "ae", "Game" );
+	fileSystem.Initialize( DATA_DIR, "ae", "Game" );
 
 	ae::VertexBuffer vertexData;
 	ae::CollisionMesh<> collisionMesh = TAG_RESOURCE;

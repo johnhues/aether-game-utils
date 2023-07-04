@@ -15515,8 +15515,8 @@ FileFilter::FileFilter( const char* desc, const char** ext, uint32_t extensionCo
 bool FileSystem::IsAbsolutePath( const char* path )
 {
 #if _AE_EMSCRIPTEN_
-	// @TODO: Should check if url has a scheme or something
-	return false;
+	const char* result = strchr( path, ':' );
+	return ( result && result[ 1 ] == '/' && result[ 2 ] == '/' );
 #elif _AE_WINDOWS_
 	return std::filesystem::path( path ).is_absolute();
 #else
@@ -16383,6 +16383,11 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	}
 #elif _AE_EMSCRIPTEN_
 	ae::Str256 result;
+	if ( IsAbsolutePath( filePath ) )
+	{
+		result = filePath;
+		return result;
+	}
 	_ae_GetCurrentWorkingDir( &result );
 	AppendToPath( &result, filePath );
 	return result;

@@ -338,3 +338,5 @@ add_bundle("Read Me"
 	""
 	"${AE_ROOT_DIR}"
 )
+target_compile_definitions("22_read_me" PUBLIC DATA_DIR="data")
+# target_compile_definitions(22_read_me PUBLIC DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data")
