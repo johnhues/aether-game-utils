@@ -14386,7 +14386,7 @@ namespace ae {
 // ae::Input member functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-void _aeEmscriptenNewFrame( Input* input )
+void _aeEmscriptenTryNewFrame( Input* input )
 {
 	if ( input->newFrame_HACK )
 	{
@@ -14467,8 +14467,7 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 	// Start key handling
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	
-	_aeEmscriptenNewFrame( input );
+	_aeEmscriptenTryNewFrame( input );
 
 	if ( keyEvent->which < countof(s_keyMap) && (int)s_keyMap[ keyEvent->which ] )
 	{
@@ -14483,8 +14482,7 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 {
 	AE_ASSERT( userData );
 	Input* input = (Input*)userData;
-	
-	_aeEmscriptenNewFrame( input );
+	_aeEmscriptenTryNewFrame( input );
 	
 	switch ( eventType )
 	{
@@ -14498,10 +14496,39 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 			break;
 	}
 	
-	input->m_SetMousePos( ae::Int2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY ) );
+	ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, mouseEvent->targetY ) / input->m_window->GetScaleFactor();
+	pos.y = input->m_window->GetHeight() - pos.y;
+	input->m_SetMousePos( pos.FloorCopy() );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
 	
+	return true;
+}
+
+EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* touchEvent, void* userData )
+{
+	AE_ASSERT( userData );
+	Input* input = (Input*)userData;
+	_aeEmscriptenTryNewFrame( input );
+
+	AE_ASSERT( touchEvent->numTouches );
+	const EmscriptenTouchPoint* touch = touchEvent->touches;
+	ae::Vec2 pos = ae::Vec2( touch->targetX, touch->targetY ) / input->m_window->GetScaleFactor();
+	pos.y = input->m_window->GetHeight() - pos.y;
+	input->m_SetMousePos( pos.FloorCopy() );
+
+	switch ( eventType )
+	{
+		case EMSCRIPTEN_EVENT_TOUCHSTART:
+			input->mouse.leftButton = true;
+			break;
+		case EMSCRIPTEN_EVENT_TOUCHEND:
+			input->mouse.leftButton = false;
+			break;
+		default:
+			break;
+	}
+
 	return true;
 }
 #endif
@@ -14537,6 +14564,10 @@ void Input::Initialize( Window* window )
 	emscripten_set_mousemove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
 	emscripten_set_mouseenter_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
 	emscripten_set_mouseleave_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleMouse );
+	emscripten_set_touchstart_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_touchend_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -14560,7 +14591,7 @@ void Input::Pump()
 {
 	m_timeStep.Tick();
 #if _AE_EMSCRIPTEN_
-	_aeEmscriptenNewFrame( this );
+	_aeEmscriptenTryNewFrame( this );
 	newFrame_HACK = true;
 #else
 	// Clear keys each frame and then check for presses below
