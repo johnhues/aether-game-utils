@@ -33,7 +33,7 @@ target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include"
 # Example source helpers
 set(AE_EXAMPLE_SOURCES Common.h)
 if(EMSCRIPTEN)
-	set(AE_EXAMPLE_RESOURCES "index.html")
+	set(AE_EXAMPLE_RESOURCES "index.html;index.webmanifest;data/Icon.png")
 elseif(APPLE)
 	set(AE_EXAMPLE_RESOURCES "data/Icon.icns")
 endif()
