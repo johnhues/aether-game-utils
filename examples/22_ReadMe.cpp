@@ -67,10 +67,11 @@ int main()
 		{
 			// Input
 			const ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
-			if ( input.Get( ae::Key::Up ) ) { player.velocity += forward * dt * 25.0f; }
-			if ( input.Get( ae::Key::Down ) ) { player.velocity -= forward * dt * 25.0f; }
-			if ( input.Get( ae::Key::Left ) ) { angularVel += dt * 15.0f; }
-			if ( input.Get( ae::Key::Right ) ) { angularVel -= dt * 15.0f; }
+			const ae::Vec2 mouse = ( ae::Vec2( input.mouse.position ) / window.GetWidth() ) - ae::Vec2( 0.5f, 0.15f );
+			if ( input.Get( ae::Key::Up ) || ( input.mouse.leftButton && mouse.y > 0.1f ) ) { player.velocity += forward * dt * 20.0f; }
+			if ( input.Get( ae::Key::Down ) || ( input.mouse.leftButton && mouse.y < -0.1f ) ) { player.velocity -= forward * dt * 20.0f; }
+			if ( input.Get( ae::Key::Left ) || ( input.mouse.leftButton && mouse.x < -0.2f ) ) { angularVel += dt * 10.0f; }
+			if ( input.Get( ae::Key::Right ) || ( input.mouse.leftButton && mouse.x > 0.2f ) ) { angularVel -= dt * 10.0f; }
 			if ( input.Get( ae::Key::Meta ) && input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); }
 
 			// Physics

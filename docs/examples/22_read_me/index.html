@@ -1,10 +1,11 @@
 <!DOCTYPE html5>
 <html lang="en">
-  <link rel="manifest" href="index.webmanifest">
   <body bgcolor="#000000" id="bg">
     <style>
       body, html {
-          overflow: hidden
+        overflow: hidden;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
       }
       #canvas {
         position: fixed;
@@ -25,7 +26,7 @@
         printErr: function(text) { console.log(text); },
         canvas: document.getElementById('canvas'),
       };
-      Module.canvas.oncontextmenu = function() { return false; };
+      Module.canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); return false; }
     </script>
     <script async type="text/javascript" src="index.js"></script>
   </body>
