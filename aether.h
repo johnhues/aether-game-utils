@@ -448,7 +448,7 @@ private:
 // of the vector, so in the case of Vec4 a dot product is implemented as
 // (a.x*b.x)+(a.y*b.y)+(a.z*b.z)+(a.w*b.w).
 template < typename T >
-struct AE_ALIGN( 16 ) VecT
+struct VecT
 {
 	VecT() = default;
 	VecT( bool ) = delete;
@@ -490,7 +490,7 @@ struct AE_ALIGN( 16 ) VecT
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
 //------------------------------------------------------------------------------
-struct Vec2 : public VecT< Vec2 >
+struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 {
 	Vec2() = default; // Trivial default constructor for performance of vertex arrays etc
 	Vec2( const Vec2& ) = default;
@@ -524,7 +524,7 @@ struct Vec2 : public VecT< Vec2 >
 //------------------------------------------------------------------------------
 // ae::Vec3 struct
 //------------------------------------------------------------------------------
-struct Vec3 : public VecT< Vec3 >
+struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 {
 	Vec3() = default; // Trivial constructor for performance of vertex arrays etc
 	explicit Vec3( float v );
@@ -580,7 +580,7 @@ struct Vec3 : public VecT< Vec3 >
 //------------------------------------------------------------------------------
 // ae::Vec4 struct
 //------------------------------------------------------------------------------
-struct Vec4 : public VecT< Vec4 >
+struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 {
 	Vec4() = default; // Trivial Empty default constructor for performance of vertex arrays etc
 	Vec4( const Vec4& ) = default;
@@ -614,7 +614,7 @@ struct Vec4 : public VecT< Vec4 >
 //------------------------------------------------------------------------------
 // ae::Matrix4 struct
 //------------------------------------------------------------------------------
-class Matrix4
+class AE_ALIGN( 16 ) Matrix4
 {
 public:
 	Matrix4() = default;
@@ -669,7 +669,7 @@ inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat );
 //------------------------------------------------------------------------------
 // ae::Quaternion class
 //------------------------------------------------------------------------------
-class Quaternion
+class AE_ALIGN( 16 ) Quaternion
 {
 public:
 	union
@@ -749,7 +749,7 @@ inline std::ostream& operator<<( std::ostream& os, const IntT< T >& v );
 //------------------------------------------------------------------------------
 // ae::Int2 class
 //------------------------------------------------------------------------------
-struct Int2 : public IntT< Int2 >
+struct AE_ALIGN( 8 ) Int2 : public IntT< Int2 >
 {
 	union
 	{
@@ -772,7 +772,7 @@ struct Int2 : public IntT< Int2 >
 //------------------------------------------------------------------------------
 // ae::Int3 class
 //------------------------------------------------------------------------------
-struct Int3 : public IntT< Int3 >
+struct AE_ALIGN( 16 ) Int3 : public IntT< Int3 >
 {
 	union
 	{
