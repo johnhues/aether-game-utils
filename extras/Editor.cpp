@@ -377,7 +377,6 @@ void EditorProgram::Initialize()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	ui.Initialize();
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
-	camera.SetEditorControls( true );
 	debugLines.Initialize( 20480 );
 	debugLines.SetXRayEnabled( false );
 	editor.Initialize( this );
@@ -569,7 +568,7 @@ void EditorProgram::Run()
 
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;
-		
+
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse );
 		camera.Update( &input, GetDt() );
 		

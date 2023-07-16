@@ -3709,10 +3709,12 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::DebugCamera class
-//! A camera utility which provides basic mouse and keyboard navigation functionality. The default controls are:
-//! LMB: rotate, MMB/Alt+LMB: pan, Scroll/Alt+RMB: zoom. These controls were picked to function without a
-//! middle mouse button, so navigation is still possible with a trackpad. Call ae::DebugCamera::SetEditorControls()
-//! to use controls that mimic some popular cad software.
+//! A camera utility which provides basic functionality for mouse and keyboard
+//! navigation. These controls mimic some popular CAD software, but are still
+//! slightly modified to be useable with a trackpad. The controls are:
+//! Orbit: (Alt+LMB)
+//! Pan: (Alt+MMB) or (Alt+touch scroll)
+//! Zoom: (Alt+RMB) or (Scroll)
 //------------------------------------------------------------------------------
 class DebugCamera
 {
@@ -3722,9 +3724,6 @@ public:
 	DebugCamera( ae::Axis upAxis );
 	//! Interupts refocus. Does not affect in progress input.
 	void Reset( ae::Vec3 focus, ae::Vec3 pos );
-	//! Sets editor mode controls. This mimics the controls of some standard cad programs so:
-	//! Alt+LMB: rotate, Alt+MMB: pan, Scroll/Alt+RMB: zoom
-	void SetEditorControls( bool editor );
 	//! Prevents the position of the camera from being less than \p min distance from the focus point and
 	//! greater than \p max distance from the focus point. May affect the current position of the camera.
 	void SetDistanceLimits( float min, float max );
@@ -3762,12 +3761,11 @@ private:
 	Axis m_worldUp = Axis::Z;
 	// Mode
 	bool m_inputEnabled = true;
-	bool m_editorControls = false;
 	Mode m_mode = Mode::None;
 	ae::Vec3 m_refocusPos = ae::Vec3( 0.0f );
 	bool m_refocus = false;
 	float m_moveAccum = 0.0f;
-	uint32_t m_forceCapture = 0;
+	uint32_t m_preventModeExitImm = 0;
 	// Positioning
 	ae::Vec3 m_focusPos = ae::Vec3( 0.0f );
 	float m_dist = 5.0f;
@@ -20929,110 +20927,76 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	}
 
 	// Input
-	ae::Vec2 mouseMovement( 0.0f );
-	bool mousePan = false;
-	bool mouseZoom = false;
-	bool mouseRotate = false;
-	if ( m_forceCapture )
-	{
-		// This delays releasing the mouse for a full frame so checks to (leftMousePrev && !leftMouse) fail, ie. mouse click up
-		m_forceCapture--;
-		if ( !m_forceCapture )
-		{
-			m_mode = Mode::None;
-		}
-	}
-	else if ( input )
-	{
-		ae::Key modifierKey = ae::Key::LeftAlt;
-		mouseMovement = ae::Vec2( input->mouse.movement );
-		m_moveAccum += mouseMovement.Length();
-		
-		if ( !m_editorControls )
-		{
-			mousePan = input->mouse.middleButton;
-			if ( !mousePan
-				&& input->mouse.leftButton
-				&& input->Get( modifierKey ) )
-			{
-				mousePan = true;
-			}
-			mouseZoom = input->mouse.rightButton;
+	const bool modifier = input ? input->Get( ae::Key::LeftAlt ) : false;
+	const bool usingTouch = input ? input->mouse.usingTouch : false;
+	const bool lmb = input ? input->mouse.leftButton : false;
+	const bool mmb = input ? input->mouse.middleButton : false;
+	const bool rmb = input ? input->mouse.rightButton : false;
+	const ae::Vec2 movement = input ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
+	const ae::Vec2 scroll = input ? input->mouse.scroll : ae::Vec2( 0.0f );
 
-			if ( input->GetMouseCaptured() && !mousePan && !mouseZoom )
-			{
-				mouseRotate = true;
-			}
-			else if ( !input->Get( modifierKey ) )
-			{
-				mouseRotate = input->mouse.leftButton;
-			}
-		}
-		else if ( m_editorControls )
-		{
-			bool modifierPressed = input->Get( modifierKey );
-			if ( input->mouse.middleButton && ( modifierPressed || m_mode == Mode::Pan ) )
-			{
-				mousePan = true;
-			}
-			else if ( input->mouse.leftButton && ( modifierPressed || m_mode == Mode::Rotate ) )
-			{
-				mouseRotate = true;
-			}
-			else if ( input->mouse.rightButton && ( modifierPressed || m_mode == Mode::Zoom ) )
-			{
-				mouseZoom = true;
-			}
-		}
+	// Update mode
+	Mode nextMode = m_mode;
+	if ( modifier && ( mmb || ( usingTouch && scroll.LengthSquared() ) ) )
+	{
+		nextMode = Mode::Pan;
+	}
+	else if ( modifier && lmb )
+	{
+		nextMode = Mode::Rotate;
+	}
+	else if ( modifier && rmb )
+	{
+		nextMode = Mode::Zoom;
+	}
+	else if ( ( m_mode == Mode::Pan && mmb )
+		|| ( m_mode == Mode::Rotate && lmb )
+		|| ( m_mode == Mode::Zoom && rmb ) )
+	{
+		// Stay in mode
+	}
+	else
+	{
+		nextMode = Mode::None;
 	}
 
-	// Return to default mode
-	if ( !m_forceCapture )
+	// Delay releasing the mouse so checks to mouse click up etc. fail
+	if ( m_preventModeExitImm )
 	{
-		if ( ( m_mode == Mode::Rotate && !mouseRotate )
-				|| ( m_mode == Mode::Pan && !mousePan )
-				|| ( m_mode == Mode::Zoom && !mouseZoom ) )
+		m_preventModeExitImm--;
+	}
+	else
+	{
+		m_moveAccum += movement.Length();
+	}
+	// Change modes
+	if ( m_mode != nextMode )
+	{
+		if ( nextMode != Mode::None )
+		{
+			m_mode = nextMode;
+		}
+		else if ( !m_preventModeExitImm )
 		{
 			if ( m_moveAccum >= 5.0f ) // In pixels
 			{
-				// Delay resetting mode
-				m_forceCapture = 2;
+				m_preventModeExitImm = 2;
 			}
 			else
 			{
 				m_mode = Mode::None;
 			}
 		}
+		m_moveAccum = 0.0f;
 	}
-
-	// Enter mode
-	if ( m_mode == Mode::None )
-	{
-		if ( mouseRotate )
-		{
-			m_mode = Mode::Rotate;
-			m_moveAccum = 0.0f;
-		}
-		else if ( mousePan )
-		{
-			m_mode = Mode::Pan;
-			m_refocus = false;
-			m_moveAccum = 0.0f;
-		}
-		else if ( mouseZoom )
-		{
-			m_mode = Mode::Zoom;
-			m_moveAccum = 0.0f;
-		}
-	}
-
+	
 	// Rotation
 	if ( m_mode == Mode::Rotate )
 	{
 		// Assume right handed coordinate system
 		// The focal point should move in the direction that the users hand is moving
-		m_yaw -= mouseMovement.x * 0.005f; // Positive horizontal input should result in clockwise rotation around the z axis
-		m_pitch += mouseMovement.y * 0.005f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
+		m_yaw -= movement.x * 0.005f; // Positive horizontal input should result in clockwise rotation around the z axis
+		m_pitch += movement.y * 0.005f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
 		m_pitch = ae::Clip( m_pitch, -ae::HALF_PI * 0.99f, ae::HALF_PI * 0.99f ); // Don't let camera flip
 	}
 
@@ -21040,22 +21004,36 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	float zoomSpeed = m_dist / 75.0f;
 	if ( m_mode == Mode::Zoom )
 	{
-		m_dist += mouseMovement.y * 0.1f * zoomSpeed;
-		m_dist -= mouseMovement.x * 0.1f * zoomSpeed;
+		m_dist += movement.y * 0.1f * zoomSpeed;
+		m_dist -= movement.x * 0.1f * zoomSpeed;
 	}
-	m_dist -= input ? input->mouse.scroll.y * 2.5f * zoomSpeed : 0.0f;
+	// Don't zoom when scrolling with touch, that's reserved for panning
+	if ( !usingTouch || !modifier )
+	{
+		m_dist -= scroll.y * 2.5f * zoomSpeed;
+	}
 	m_dist = ae::Clip( m_dist, m_min, m_max );
 
 	// Recalculate camera offset from focus and local axis'
 	m_Precalculate();
 
-	// Translation
+	// Pan
 	if ( m_mode == Mode::Pan )
 	{
-		AE_ASSERT( !m_refocus );
-		float panSpeed = m_dist / 1000.0f;
-		m_focusPos -= m_right * ( mouseMovement.x * panSpeed );
-		m_focusPos -= m_up * ( mouseMovement.y * panSpeed );
+		m_refocus = false; // Cancel refocus
+	
+		if ( usingTouch )
+		{
+			float panSpeed = m_dist / 100.0f;
+			m_focusPos += m_right * ( scroll.x * panSpeed );
+			m_focusPos -= m_up * ( scroll.y * panSpeed );
+		}
+		else
+		{
+			float panSpeed = m_dist / 1000.0f;
+			m_focusPos -= m_right * ( movement.x * panSpeed );
+			m_focusPos -= m_up * ( movement.y * panSpeed );
+		}
 	}
 
 	// Refocus
@@ -21130,11 +21108,6 @@ void DebugCamera::Refocus( ae::Vec3 focus )
 void DebugCamera::SetInputEnabled( bool enabled )
 {
 	m_inputEnabled = enabled;
-}
-
-void DebugCamera::SetEditorControls( bool editor )
-{
-	m_editorControls = editor;
 }
 
 void DebugCamera::SetRotation( ae::Vec2 angles )
