@@ -324,7 +324,7 @@ add_bundle("Instancing"
 	""
 )
 
-# Instancing
+# Read Me
 if(APPLE)
 	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
 endif()
