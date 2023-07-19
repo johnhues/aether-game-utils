@@ -12940,28 +12940,28 @@ void Dict::SetString( const char* key, const char* value )
 void Dict::SetInt( const char* key, int32_t value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%d", value );
+	snprintf( buf, sizeof(buf), "%d", value );
 	SetString( key, buf );
 }
 
 void Dict::SetUint( const char* key, uint32_t value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%u", value );
+	snprintf( buf, sizeof(buf), "%u", value );
 	SetString( key, buf );
 }
 
 void Dict::SetFloat( const char* key, float value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%f", value );
+	snprintf( buf, sizeof(buf), "%f", value );
 	SetString( key, buf );
 }
 
 void Dict::SetDouble( const char* key, double value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%lf", value );
+	snprintf( buf, sizeof(buf), "%lf", value );
 	SetString( key, buf );
 }
 
@@ -12973,28 +12973,28 @@ void Dict::SetBool( const char* key, bool value )
 void Dict::SetVec2( const char* key, ae::Vec2 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.3f %.3f", value.x, value.y );
+	snprintf( buf, sizeof(buf), "%.3f %.3f", value.x, value.y );
 	SetString( key, buf );
 }
 
 void Dict::SetVec3( const char* key, ae::Vec3 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.3f %.3f %.3f", value.x, value.y, value.z );
+	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f", value.x, value.y, value.z );
 	SetString( key, buf );
 }
 
 void Dict::SetVec4( const char* key, ae::Vec4 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%.3f %.3f %.3f %.3f", value.x, value.y, value.z, value.w );
+	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f %.3f", value.x, value.y, value.z, value.w );
 	SetString( key, buf );
 }
 
 void Dict::SetInt2( const char* key, ae::Int2 value )
 {
 	char buf[ 128 ];
-	sprintf( buf, "%d %d", value.x, value.y );
+	snprintf( buf, sizeof(buf), "%d %d", value.x, value.y );
 	SetString( key, buf );
 }
 
@@ -16421,7 +16421,7 @@ Str256 FileSystem::GetAbsolutePath( const char* filePath )
 	AppendToPath( &result, filePath );
 	return result;
 #else
-	#warning "ae::FileSystem::GetAbsolutePath() not implemeneted. ae::FileSystem functionality will be limited."
+	#warning "ae::FileSystem::GetAbsolutePath() not implemented. ae::FileSystem functionality will be limited."
 	return filePath;
 #endif
 }
@@ -22660,7 +22660,7 @@ void Audio::Log()
 			uint32_t soundNameLen = strlen( soundName );
 
 			char buffer[ 512 ];
-			sprintf( buffer, "channel:%u name:%.*s offset:%.2fs length:%.2fs", i, soundNameLen, soundName, playOffset, playLength );
+			snprintf( buffer, sizeof(buffer), "channel:%u name:%.*s offset:%.2fs length:%.2fs", i, soundNameLen, soundName, playOffset, playLength );
 			AE_LOG( buffer );
 		}
 	}
