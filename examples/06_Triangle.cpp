@@ -43,35 +43,22 @@ Vertex kTriangleVerts[] = {
 uint16_t kTriangleIndices[] = { 0, 1, 2 };
 
 //------------------------------------------------------------------------------
-// Example
+// Main
 //------------------------------------------------------------------------------
-class Example
+int main()
 {
-public:
-	Example();
-	bool Tick();
-	
+	AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
+
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
-	ae::Shader shader;
-	ae::VertexBuffer vertexData;
-
-	ae::Vec3 pos = ae::Vec3( 0.0f );
-	float scale = 1.0f;
-	float rotation = 0.0f;
-};
-
-Example::Example()
-{
-	AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "triangle" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	
+
 	const char* vertShader = R"(
 		AE_UNIFORM mat4 u_modelToNdc;
 		AE_IN_HIGHP vec4 a_position;
@@ -88,81 +75,80 @@ Example::Example()
 		{
 			AE_COLOR = v_color;
 		})";
+	ae::Shader shader;
 	shader.Initialize( vertShader, fragShader, nullptr, 0 );
 	
+	ae::VertexBuffer vertexData;
 	vertexData.Initialize( sizeof( *kTriangleVerts ), sizeof( *kTriangleIndices ), countof( kTriangleVerts ), countof( kTriangleIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
 	vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( Vertex, pos ) );
 	vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
 	vertexData.UploadVertices( 0, kTriangleVerts, countof( kTriangleVerts ) );
 	vertexData.UploadIndices( 0, kTriangleIndices, countof( kTriangleIndices ) );
-}
 
-bool Example::Tick()
-{
-	input.Pump();
-	rotation += timeStep.GetDt();
+	ae::Vec3 pos = ae::Vec3( 0.0f );
+	float scale = 1.0f;
+	float rotation = 0.0f;
 
-	if ( input.mouse.leftButton && !input.mousePrev.leftButton )
+	auto Update = [&]() -> bool
 	{
-		input.SetMouseCaptured( true );
-	}
-	if ( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
-	{
-		input.SetMouseCaptured( false );
-	}
+		input.Pump();
+		rotation += timeStep.GetDt();
 
-	ae::Vec3 dir( 0.0f );
-	if ( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
-	if ( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
-	if ( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
-	if ( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
-	dir.SafeNormalize();
-	pos += dir * 0.01f;
+		if ( input.mouse.leftButton && !input.mousePrev.leftButton )
+		{
+			input.SetMouseCaptured( true );
+		}
+		if ( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
+		{
+			input.SetMouseCaptured( false );
+		}
 
-	if ( input.GetMouseCaptured() )
-	{
-		pos.x += input.mouse.movement.x * 0.001f;
-		pos.y += input.mouse.movement.y * 0.001f;
-	}
-	else if ( input.mouse.usingTouch )
-	{
-		pos.x += input.mouse.scroll.x * 0.01f;
-		pos.y += input.mouse.scroll.y * -0.01f;
-	}
-	else
-	{
-		scale += input.mouse.scroll.y * 0.01f;
-		scale = ae::Clip( scale, 0.1f, 2.0f );
-	}
-	
-	render.Activate();
-	render.Clear( ae::Color::PicoDarkPurple() );
+		ae::Vec3 dir( 0.0f );
+		if ( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
+		if ( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
+		if ( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
+		if ( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
+		dir.SafeNormalize();
+		pos += dir * 0.01f;
 
-	ae::Matrix4 transform = ae::Matrix4::Translation( pos );
-	transform *= ae::Matrix4::RotationY( rotation );
-	transform *= ae::Matrix4::Scaling( ae::Vec3( scale / render.GetAspectRatio(), scale, scale ) );
+		if ( input.GetMouseCaptured() )
+		{
+			pos.x += input.mouse.movement.x * 0.001f;
+			pos.y += input.mouse.movement.y * 0.001f;
+		}
+		else if ( input.mouse.usingTouch )
+		{
+			pos.x += input.mouse.scroll.x * 0.01f;
+			pos.y += input.mouse.scroll.y * -0.01f;
+		}
+		else
+		{
+			scale += input.mouse.scroll.y * 0.01f;
+			scale = ae::Clip( scale, 0.1f, 2.0f );
+		}
+		
+		render.Activate();
+		render.Clear( ae::Color::PicoDarkPurple() );
 
-	ae::UniformList uniformList;
-	uniformList.Set( "u_modelToNdc", transform );
-	vertexData.Bind( &shader, uniformList );
-	vertexData.Draw();
+		ae::Matrix4 transform = ae::Matrix4::Translation( pos );
+		transform *= ae::Matrix4::RotationY( rotation );
+		transform *= ae::Matrix4::Scaling( ae::Vec3( scale / render.GetAspectRatio(), scale, scale ) );
 
-	render.Present();
-	timeStep.Tick();
-	
-	return !input.quit;
-}
+		ae::UniformList uniformList;
+		uniformList.Set( "u_modelToNdc", transform );
+		vertexData.Bind( &shader, uniformList );
+		vertexData.Draw();
 
-//------------------------------------------------------------------------------
-// Main
-//------------------------------------------------------------------------------
-int main()
-{
-	Example example;
+		render.Present();
+		timeStep.Tick();
+		
+		return !input.quit;
+	};
+
 #if _AE_EMSCRIPTEN_
-	emscripten_set_main_loop_arg( []( void* example ) { ((Example*)example)->Tick(); }, &example, 0, 1 );
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( example.Tick() ) {}
+	while ( Update() ) {}
 #endif
 	return 0;
 }
