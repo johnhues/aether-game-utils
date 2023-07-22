@@ -2324,6 +2324,63 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 namespace ae {
 
 //------------------------------------------------------------------------------
+// AE_EXPORT
+//------------------------------------------------------------------------------
+//! When building a hot loadable shared library for use with ae::HotLoader it is
+//! recommended to use the the following compiler flags when building, and this
+//! macro with any functions that will be called with ae::HotLoader::CallFn().
+//! This will stop the compiler from unintentionally exporting functions that
+//! could prevent the dynamic library from unloading.
+//! clang++: -fvisibility=hidden
+//! cl: @TODO
+//! g++: @TODO
+#define AE_EXPORT extern "C" __attribute__((visibility("default")))
+// Shared library AE_EXPORT example:
+#if 0
+	AE_EXPORT bool Game_Update( Game* game )
+	{
+		// ...
+	}
+#endif
+// Main executable ae::HotLoader::CallFn example:
+#if 0
+	while ( hotLoader.CallFn< bool(*)( Game* ) >( "Game_Update", &game ) )
+	{
+		// ...
+	}
+#endif
+
+//------------------------------------------------------------------------------
+// ae::HotLoader class
+//------------------------------------------------------------------------------
+//! Used to dynamically reload a shared library. The shared library should
+//! use AE_EXPORT to export any functions called with ae::HotLoader::CallFn().
+class HotLoader
+{
+public:
+	~HotLoader();
+	void Initialize( const char* buildCmd, const char* postBuildCmd, const char* libPath );
+	void Reload();
+	void Close();
+	bool IsLoaded() const { return m_dylib != nullptr; }
+
+	template < typename Fn, typename... Args >
+	decltype(auto) CallFn( const char* name, Args... args );
+
+	// Static helpers
+	static bool GetCMakeBuildCommand( ae::Str256* buildCmdOut, const char* cmakeBuildDir, const char* cmakeTargetName );
+	static bool GetCopyCommand( ae::Str256* copyCmdOut, const char* dest, const char* src );
+
+private:
+	void* m_LoadFn( const char* name );
+	void* m_dylib = nullptr;
+	ae::Str256 m_buildCmd;
+	ae::Str256 m_postBuildCmd;
+	ae::Str256 m_libPath;
+	ae::Map< ae::Str64, void*, 16 > m_fns;
+};
+
+//------------------------------------------------------------------------------
 // ae::Screen
 //------------------------------------------------------------------------------
 //! Screen information. ae::Streen member values are in the same coordinate
@@ -2770,6 +2827,7 @@ public:
 	//! Represents directories that the FileSystem class can load/save from.
 	enum class Root
 	{
+		Bundle, //!< The path to the app bundle on Apple platforms or the executable directory on other platforms
 		Data, //!< A given existing directory
 		User, //!< A directory for storing preferences and savedata
 		Cache, //!< A directory for storing expensive to generate data (computed, downloaded, etc)
@@ -2854,6 +2912,7 @@ public:
 	static std::string SaveDialog( const FileDialogParams& params );
 
 private:
+	void m_SetBundleDir();
 	void m_SetDataDir( const char* dataDir );
 	void m_SetUserDir( const char* organizationName, const char* applicationName );
 	void m_SetCacheDir( const char* organizationName, const char* applicationName );
@@ -2861,11 +2920,12 @@ private:
 	void m_SetCacheSharedDir( const char* organizationName );
 	void m_Read( ae::File* file, float timeoutSec ) const;
 	ae::Array< ae::File* > m_files = AE_ALLOC_TAG_FILE;
-	Str256 m_dataDir;
-	Str256 m_userDir;
-	Str256 m_cacheDir;
-	Str256 m_userSharedDir;
-	Str256 m_cacheSharedDir;
+	ae::Str256 m_bundleDir;
+	ae::Str256 m_dataDir;
+	ae::Str256 m_userDir;
+	ae::Str256 m_cacheDir;
+	ae::Str256 m_userSharedDir;
+	ae::Str256 m_cacheSharedDir;
 };
 
 //------------------------------------------------------------------------------
@@ -9122,6 +9182,18 @@ template < typename T > uint32_t GetHash( T* key ) { return ae::Hash().HashBasic
 template < uint32_t N > uint32_t GetHash( ae::Str< N > key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
+// HotLoader member functions
+//------------------------------------------------------------------------------
+template < typename Fn, typename... Args >
+decltype(auto) HotLoader::CallFn( const char* name, Args... args )
+{
+	AE_ASSERT_MSG( m_dylib, "No library loaded" );
+	Fn fn = (Fn)m_fns.Get( name, nullptr );
+	if ( !fn ) { fn = (Fn)m_LoadFn( name ); }
+	return fn( args... );
+}
+
+//------------------------------------------------------------------------------
 // ae::IK member functions
 //------------------------------------------------------------------------------
 template <>
@@ -10612,6 +10684,8 @@ T* ae::Cast( C* obj )
 	#include <sys/sysctl.h>
 	#include <unistd.h>
 	#include <pwd.h>
+	#include <dlfcn.h>
+	#include <mach-o/dyld.h>
 	#ifdef AE_USE_MODULES
 		@import AppKit;
 		@import Carbon;
@@ -13617,6 +13691,87 @@ template <> uint32_t GetHash( ae::Int3 key )
 }
 
 //------------------------------------------------------------------------------
+// ae::HotLoader member functions
+//------------------------------------------------------------------------------
+HotLoader::~HotLoader()
+{
+	Close();
+}
+
+void HotLoader::Initialize( const char* buildCmd, const char* postBuildCmd, const char* libPath )
+{
+	m_fns.Clear();
+	Close();
+	m_buildCmd = buildCmd;
+	m_postBuildCmd = postBuildCmd;
+	m_libPath = libPath;
+	Reload();
+}
+
+void HotLoader::Reload()
+{
+	if ( m_buildCmd.Length() )
+	{
+		system( m_buildCmd.c_str() );
+	}
+	if ( m_postBuildCmd.Length() )
+	{
+		system( m_postBuildCmd.c_str() );
+	}
+
+	Close();
+	AE_ASSERT_MSG( !dlopen( m_libPath.c_str(), RTLD_NOLOAD | RTLD_LOCAL ), "Could not unload library. See AE_EXPORT comments." );
+	m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
+	AE_ASSERT_MSG( m_dylib, "dlopen() failed: #", dlerror() );
+
+	for ( auto& fn : m_fns )
+	{
+		fn.value = dlsym( m_dylib, fn.key.c_str() );
+		AE_ASSERT_MSG( fn.value, "dlsym( \"#\" ) failed: #", fn.key, dlerror() );
+	}
+}
+
+void HotLoader::Close()
+{
+	for ( auto& fn : m_fns )
+	{
+		fn.value = nullptr;
+	}
+	if ( m_dylib && dlclose( m_dylib ) )
+	{
+		AE_FAIL_MSG( "dlclose() failed: #", dlerror() );
+	}
+	m_dylib = nullptr;
+}
+
+void* HotLoader::m_LoadFn( const char* name )
+{
+	void* fn = m_fns.Set( name, dlsym( m_dylib, name ) );
+	AE_ASSERT_MSG( fn, "Could not load function '#'", name );
+	return fn;
+}
+
+bool HotLoader::GetCMakeBuildCommand( ae::Str256* buildCmdOut, const char* cmakeBuildDir, const char* cmakeTargetName )
+{
+	if ( buildCmdOut && cmakeBuildDir[ 0 ] && cmakeTargetName[ 0 ] )
+	{
+		*buildCmdOut = ae::Str256::Format( "cmake --build \"#\" --target #", cmakeBuildDir, cmakeTargetName );
+		return true;
+	}
+	return false;
+}
+
+bool HotLoader::GetCopyCommand( ae::Str256* copyCmdOut, const char* dest, const char* src )
+{
+	if ( copyCmdOut && dest[ 0 ] && src[ 0 ] )
+	{
+		*copyCmdOut = ae::Str256::Format( "cp \"#\" \"#\"", src, dest );
+		return true;
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
 // ae::Window MSVC/Windows event callback
 //------------------------------------------------------------------------------
 #if _AE_WINDOWS_
@@ -15781,11 +15936,44 @@ void FileSystem::Initialize( const char* dataDir, const char* organizationName, 
 		validateAppName++;
 	}
 
+	m_SetBundleDir();
 	m_SetDataDir( dataDir ? dataDir : "" );
 	m_SetUserDir( organizationName, applicationName );
 	m_SetCacheDir( organizationName, applicationName );
 	m_SetUserSharedDir( organizationName );
 	m_SetCacheSharedDir( organizationName );
+}
+
+void FileSystem::m_SetBundleDir()
+{
+#if _AE_OSX_
+	CFURLRef appUrl = CFBundleCopyBundleURL( CFBundleGetMainBundle() );
+	if ( appUrl )
+	{
+		CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+		m_bundleDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+	}
+	else
+	{
+		char path[ PATH_MAX ];
+		uint32_t pathLen = countof(path);
+		if( _NSGetExecutablePath( path, &pathLen ) == 0 ) // If successful
+		{
+			m_bundleDir = path;
+			for ( int32_t len = m_bundleDir.Length() - 1; len > 0; len-- )
+			{
+				if ( m_bundleDir[ len ] == '/' )
+				{
+					m_bundleDir.Trim( len );
+					return;
+				}
+			}
+			m_bundleDir = "";
+		}
+	}
+#else
+	#warning "ae::FileSystem::m_SetBundleDir() not implemented. ae::FileSystem functionality will be limited."
+#endif
 }
 
 void FileSystem::m_SetDataDir( const char* dataDir )
@@ -16074,11 +16262,13 @@ bool FileSystem::GetAbsolutePath( Root root, const char* filePath, Str256* outPa
 	if ( IsAbsolutePath( filePath ) )
 	{
 		*outPath = filePath;
+		// @TODO: 'normalize' the path to remove '..'s etc
 		return true;
 	}
 	else if ( GetRootDir( root, outPath ) )
 	{
 		AppendToPath( outPath, filePath );
+		// @TODO: 'normalize' the path to remove '..'s etc
 		return true;
 	}
 	return false;
@@ -16092,6 +16282,13 @@ bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
 	}
 	switch ( root )
 	{
+		case Root::Bundle:
+			if ( m_bundleDir.Length() )
+			{
+				*outDir = m_bundleDir;
+				return true;
+			}
+			break;
 		case Root::Data:
 			if ( m_dataDir.Length() )
 			{

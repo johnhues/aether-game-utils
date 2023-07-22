@@ -73,6 +73,23 @@ public:
 	ImGui::DestroyContext();
   }
 
+	//! Call this from the same dll as the one that called Initialize() if imGui
+	//! globals are modified. This automatically happens once on Initialize().
+	void StoreGlobals()
+	{
+		m_globalContext = ImGui::GetCurrentContext();
+		ImGui::GetAllocatorFunctions( &m_globalAllocFn, &m_globalFreenFn, &m_globalUserData );
+	}
+
+	//! This must be called in all dlls that use imGui, other than the one that
+	//! called Initialize(). This must be called after Initialize() and before
+	//! any imGui functions are called.
+	void WriteGlobals()
+	{
+		ImGui::SetCurrentContext( m_globalContext );
+		ImGui::SetAllocatorFunctions( m_globalAllocFn, m_globalFreenFn, m_globalUserData );
+	}
+
   void NewFrame( ae::GraphicsDevice* render, ae::Input* input, float dt )
   {
 	AE_ASSERT( m_init );
@@ -343,6 +360,8 @@ private:
 	io.ConfigWindowsResizeFromEdges = true;
 	io.IniFilename = nullptr; // @TODO: Save layout. Currently disabled because window show states are not saved in the imgui ini file
 
+	StoreGlobals();
+
 	m_init = true;
   }
 
@@ -367,6 +386,11 @@ private:
   bool m_headless = false;
   ae::GraphicsDevice* m_render = nullptr;
   bool m_pendingRender = false;
+  // Globals
+	ImGuiContext* m_globalContext = nullptr;
+	ImGuiMemAllocFunc m_globalAllocFn = nullptr;
+	ImGuiMemFreeFunc m_globalFreenFn = nullptr;
+	void* m_globalUserData = nullptr;
 };
 
 //------------------------------------------------------------------------------
