@@ -104,6 +104,7 @@ public:
 	void Clear();
 	
 private:
+	Component* m_AddComponent( Entity entity, const ae::Type* type );
 	const ae::Tag m_tag;
 	Entity m_lastEntity = kInvalidEntity;
 	ae::Map< ae::Str16, Entity > m_entityNames;
@@ -166,27 +167,7 @@ T* Registry::AddComponent( Entity entity )
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	const ae::Type* type = ae::GetType< T >();
 	AE_ASSERT( type );
-	
-	ae::Object* object = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
-	type->New( object );
-	
-	Component* component = ae::Cast< T >( object );
-	AE_ASSERT( component );
-	component->m_entity = entity;
-	component->m_reg = this;
-	
-	ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
-	if ( !components )
-	{
-		components = &m_components.Set( type->GetId(), m_tag );
-	}
-	components->Set( entity, component );
-	
-	if ( m_onCreate )
-	{
-		m_onCreate( component );
-	}
-	return (T*)component;
+	return (T*)m_AddComponent( entity, type );
 }
 
 template < typename T >

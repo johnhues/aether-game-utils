@@ -373,4 +373,27 @@ bool Registry::Load( const ae::EditorLevel* level, CreateObjectFn fn )
 	return true;
 }
 
+Component* Registry::m_AddComponent( Entity entity, const ae::Type* type )
+{
+	Component* component = (Component*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
+	type->New( component );
+	component->m_entity = entity;
+	component->m_reg = this;
+	
+	ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
+	if ( !components )
+	{
+		components = &m_components.Set( type->GetId(), m_tag );
+	}
+	components->Set( entity, component );
+	
+	if ( m_onCreate )
+	{
+		// It's important that this is in a cpp, std::function can introduce
+		// exported '__ZTINSt3__117bad_function_callE' symbols which can prevent
+		// hot loading of game data.
+		m_onCreate( component );
+	}
+}
+
 } // End ae namespace
