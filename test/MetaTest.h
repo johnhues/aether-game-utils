@@ -63,6 +63,31 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// AggregateClass
+//------------------------------------------------------------------------------
+class AggregateClass : public ae::Inheritor< ae::Object, AggregateClass >
+{
+public:
+	SomeClass someClass;
+	SomeClass someClass1;
+};
+
+//------------------------------------------------------------------------------
+// ArrayClass
+//------------------------------------------------------------------------------
+class ArrayClass : public ae::Inheritor< ae::Object, ArrayClass >
+{
+public:
+	int32_t intArray[ 3 ];
+	ae::Array< int32_t, 4 > intArray2;
+	ae::Array< int32_t > intArray3 = AE_ALLOC_TAG_FIXME;
+
+	SomeClass someClassArray[ 3 ];
+	ae::Array< SomeClass, 4 > someClassArray2;
+	ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_FIXME;
+};
+
+//------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
 enum SomeOldEnum

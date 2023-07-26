@@ -4549,11 +4549,18 @@ public:
 //------------------------------------------------------------------------------
 // External meta class registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS( x ) \
-	int force_link_##x = 0; \
-	template <> const char* ae::_TypeName< ::x >::Get() { return #x; } \
-	template <> void ae::_DefineType< ::x >( ae::Type *type, uint32_t index ) { type->Init< ::x >( #x, index ); } \
-	static ae::_TypeCreator< ::x > ae_type_creator_##x( #x );
+#define AE_REGISTER_CLASS( x )\
+	int force_link_##x = 0;\
+	template <> const char* ae::_TypeName< ::x >::Get() { return #x; }\
+	template <> void ae::_DefineType< ::x >( ae::Type *type, uint32_t index ) { type->Init< ::x >( #x, index ); }\
+	static ae::_TypeCreator< ::x > ae_type_creator_##x( #x );\
+	template <>\
+	struct ae::VarType< x > : public ae::VarTypeBase {\
+		ae::BasicType GetType() const override { return ae::BasicType::Class; }\
+		const char* GetName() const override { return #x; }\
+		uint32_t GetSize() const override { return sizeof(x); }\
+		const char* GetSubTypeName() const override { return #x; }\
+	};
 //------------------------------------------------------------------------------
 // External meta property registerer
 //------------------------------------------------------------------------------
@@ -4764,6 +4771,7 @@ public: // Internal
 //------------------------------------------------------------------------------
 enum class BasicType
 {
+	Class,
 	String,
 	UInt8,
 	UInt16,
@@ -4867,12 +4875,21 @@ public:
 	//! types fail to be set if the value does not represent null or a valid
 	//! reference to an existing object of the correct type.
 	template < typename T > bool SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx = -1 ) const;
+
+	//! Gets a pointer to the value of this variable from the given \p obj.
+	//! @tparam T The type of the pointer to get.
+	//! @param obj The object to get the pointer from.
+	//! @param arrayIdx Must be negative for non-array types. For array types this
+	//! specifies which array element to get. Must be a valid array index, less
+	//! than ae::Var::GetGetArrayLength().
+	//! @return A pointer to the member variable of \p obj.
+	template < typename T > T* GetPointer( ae::Object* obj, int32_t arrayIdx = -1 ) const;
 	
 	//------------------------------------------------------------------------------
 	// Types
 	//------------------------------------------------------------------------------
 	const class Enum* GetEnum() const;
-	//! For Ref and Array types
+	//! For Class, Ref, and Array types
 	const ae::Type* GetSubType() const;
 	bool IsArray() const;
 	bool IsArrayFixedLength() const;
@@ -10431,6 +10448,7 @@ ae::Type::Init( const char* name, uint32_t index )
 template < typename T >
 bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
 {
+	// @TODO: Use GetPointer()
 	if ( !obj )
 	{
 		return false;
@@ -10501,6 +10519,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 template < typename T >
 bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) const
 {
+	// @TODO: Use GetPointer()
 	if ( !obj )
 	{
 		return false;
@@ -10540,6 +10559,38 @@ bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) c
 		*valueOut = *(const T*)varData;
 		return true;
 	}
+}
+
+template < typename T >
+T* ae::Var::GetPointer( ae::Object* obj, int32_t arrayIdx ) const
+{
+	// @TODO: Allow getting pointer to inherited types
+	AE_ASSERT( std::is_void< T >::value || GetSize() == sizeof(T) );
+	if ( !obj )
+	{
+		return nullptr;
+	}
+	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
+	
+	if ( m_arrayAdapter )
+	{
+		void* arr = (uint8_t*)obj + m_offset;
+		const uint32_t arrayLen = m_arrayAdapter->GetLength( arr );
+		if ( arrayIdx >= 0 && arrayLen )
+		{
+			AE_ASSERT_MSG( arrayIdx < arrayLen, "Attempted to get array var '#' (length #) with out of bounds index '#'", m_name, arrayLen, arrayIdx );
+			return (T*)( m_arrayAdapter->GetElement( arr, arrayIdx ) );
+		}
+		else
+		{
+			return nullptr;
+		}
+	}
+	else if ( arrayIdx < 0 )
+	{
+		return (T*)( reinterpret_cast< const uint8_t* >( obj ) + m_offset );
+	}
+	return nullptr;
 }
 
 template< typename T, typename C >
@@ -23713,6 +23764,13 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	
 	switch ( m_type )
 	{
+		case BasicType::Class:
+		{
+			const ae::Type* subType = GetSubType();
+			AE_ASSERT( subType );
+			AE_ASSERT_MSG( "Can't set member '#' with string '#'", subType->GetName(), value );
+			return false;
+		}
 		case BasicType::String:
 		{
 			switch ( m_size )
@@ -24201,6 +24259,13 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 	
 	switch ( m_type )
 	{
+		case BasicType::Class:
+		{
+			const ae::Type* subType = GetSubType();
+			AE_ASSERT( subType );
+			AE_ASSERT_MSG( "Can't get member '#' value as string", subType->GetName() );
+			return "";
+		}
 		case BasicType::String:
 			switch ( m_size )
 			{

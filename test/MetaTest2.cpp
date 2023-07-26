@@ -65,6 +65,24 @@ AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop1, val1 );
 AE_REGISTER_ENUM_CLASS( TestEnumClass );
 
 //------------------------------------------------------------------------------
+// AggregateClass
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( AggregateClass );
+AE_REGISTER_CLASS_VAR( AggregateClass, someClass );
+AE_REGISTER_CLASS_VAR( AggregateClass, someClass1 );
+
+//------------------------------------------------------------------------------
+// ArrayClass
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( ArrayClass );
+AE_REGISTER_CLASS_VAR( ArrayClass, intArray );
+AE_REGISTER_CLASS_VAR( ArrayClass, intArray2 );
+AE_REGISTER_CLASS_VAR( ArrayClass, intArray3 );
+AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray );
+AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray2 );
+AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray3 );
+
+//------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
 AE_REGISTER_ENUM( SomeOldEnum );
