@@ -178,6 +178,181 @@ TEST_CASE( "enum registration", "[aeMeta]" )
 	REQUIRE( playerStateEnum->GetValueByIndex( 2 ) == 2 );
 }
 
+TEST_CASE( "Aggregate vars", "[aeMeta]" )
+{
+	const ae::Type* type = ae::GetType< AggregateClass >();
+	REQUIRE( type );
+	REQUIRE( type->GetVarCount( false ) == 2 );
+
+	AggregateClass c;
+
+	{
+		const ae::Var* someClass = type->GetVarByName( "someClass", false );
+		REQUIRE( someClass );
+		REQUIRE( someClass->GetType() == ae::BasicType::Class );
+		REQUIRE( someClass->GetTypeName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( someClass->GetSize() == sizeof(SomeClass) );
+		REQUIRE( someClass->GetSubType() == ae::GetType< SomeClass >() );
+		SomeClass* someClassPtr = someClass->GetPointer< SomeClass >( &c );
+		REQUIRE( someClassPtr == &c.someClass );
+		REQUIRE( someClass->GetPointer< SomeClass >( &c, 0 ) == nullptr );
+		REQUIRE( someClass->GetPointer< SomeClass >( &c, 1 ) == nullptr );
+		const ae::Type* varType = ae::GetTypeFromObject( someClassPtr );
+		REQUIRE( varType );
+		REQUIRE( varType == ae::GetType< SomeClass >() );
+	}
+	{
+		const ae::Var* someClass1 = type->GetVarByName( "someClass1", false );
+		REQUIRE( someClass1 );
+		REQUIRE( someClass1->GetType() == ae::BasicType::Class );
+		REQUIRE( someClass1->GetTypeName() == ae::Str32( "SomeClass" ) );
+		REQUIRE( someClass1->GetSize() == sizeof(SomeClass) );
+		REQUIRE( someClass1->GetSubType() == ae::GetType< SomeClass >() );
+		SomeClass* someClass1Ptr = someClass1->GetPointer< SomeClass >( &c );
+		REQUIRE( someClass1Ptr == &c.someClass1 );
+		REQUIRE( someClass1->GetPointer< SomeClass >( &c, 0 ) == nullptr );
+		REQUIRE( someClass1->GetPointer< SomeClass >( &c, 1 ) == nullptr );
+		const ae::Type* varType = ae::GetTypeFromObject( someClass1Ptr );
+		REQUIRE( varType );
+		REQUIRE( varType == ae::GetType< SomeClass >() );
+	}
+}
+
+TEST_CASE( "Array vars", "[aeMeta]" )
+{
+	const ae::Type* type = ae::GetType< ArrayClass >();
+	REQUIRE( type );
+	REQUIRE( type->GetVarCount( false ) == 6 );
+
+	ArrayClass c;
+
+	{
+		const ae::Var* intArray = type->GetVarByName( "intArray", false );
+		REQUIRE( intArray );
+		REQUIRE( intArray->IsArray() );
+		REQUIRE( intArray->GetType() == ae::BasicType::Int32 );
+		REQUIRE( intArray->GetSize() == sizeof(int32_t) );
+		REQUIRE( intArray->IsArrayFixedLength() );
+		REQUIRE( intArray->GetArrayLength( &c ) == 3 );
+		REQUIRE( intArray->GetArrayMaxLength() == 3 );
+		REQUIRE( intArray->SetArrayLength( &c, 0 ) == 3 );
+		REQUIRE( intArray->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( intArray->SetArrayLength( &c, 4 ) == 3 );
+		REQUIRE( intArray->SetArrayLength( &c, 5 ) == 3 );
+	}
+	{
+		const ae::Var* intArray2 = type->GetVarByName( "intArray2", false );
+		REQUIRE( intArray2 );
+		REQUIRE( intArray2->IsArray() );
+		REQUIRE( intArray2->GetType() == ae::BasicType::Int32 );
+		REQUIRE( intArray2->GetSize() == sizeof(int32_t) );
+		REQUIRE( !intArray2->IsArrayFixedLength() );
+		REQUIRE( intArray2->GetArrayLength( &c ) == 0 );
+		REQUIRE( intArray2->GetArrayMaxLength() == 4 );
+		REQUIRE( intArray2->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( c.intArray2.Length() == 4 );
+		REQUIRE( intArray2->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( c.intArray2.Length() == 2 );
+		REQUIRE( intArray2->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( c.intArray2.Length() == 3 );
+		REQUIRE( intArray2->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( c.intArray2.Length() == 0 );
+		REQUIRE( intArray2->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( c.intArray2.Length() == 1 );
+	}
+	{
+		const ae::Var* intArray3 = type->GetVarByName( "intArray3", false );
+		REQUIRE( intArray3 );
+		REQUIRE( intArray3->IsArray() );
+		REQUIRE( intArray3->GetType() == ae::BasicType::Int32 );
+		REQUIRE( intArray3->GetSize() == sizeof(int32_t) );
+		REQUIRE( !intArray3->IsArrayFixedLength() );
+		REQUIRE( intArray3->GetArrayLength( &c ) == 0 );
+		REQUIRE( intArray3->GetArrayMaxLength() == ae::MaxValue< uint32_t >() );
+		REQUIRE( intArray3->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( c.intArray3.Length() == 4 );
+		REQUIRE( intArray3->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( c.intArray3.Length() == 2 );
+		REQUIRE( intArray3->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( c.intArray3.Length() == 3 );
+		REQUIRE( intArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( c.intArray3.Length() == 0 );
+		REQUIRE( intArray3->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( c.intArray3.Length() == 1 );
+		REQUIRE( intArray3->SetArrayLength( &c, 10020 ) == 10020 );
+		REQUIRE( c.intArray3.Length() == 10020 );
+		REQUIRE( intArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( c.intArray3.Length() == 0 );
+	}
+	{
+		const ae::Var* someClassArray = type->GetVarByName( "someClassArray", false );
+		REQUIRE( someClassArray );
+		REQUIRE( someClassArray->IsArray() );
+		REQUIRE( someClassArray->GetType() == ae::BasicType::Class );
+		REQUIRE( someClassArray->GetSize() == sizeof(SomeClass) );
+		REQUIRE( someClassArray->GetSubType() == ae::GetType< SomeClass >() );
+		REQUIRE( someClassArray->IsArrayFixedLength() );
+		REQUIRE( someClassArray->GetArrayLength( &c ) == 3 );
+		REQUIRE( someClassArray->GetArrayMaxLength() == 3 );
+		REQUIRE( someClassArray->SetArrayLength( &c, 0 ) == 3 );
+		REQUIRE( someClassArray->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( someClassArray->SetArrayLength( &c, 4 ) == 3 );
+		REQUIRE( someClassArray->SetArrayLength( &c, 5 ) == 3 );
+	}
+	{
+		const ae::Var* someClassArray2 = type->GetVarByName( "someClassArray2", false );
+		REQUIRE( someClassArray2 );
+		REQUIRE( someClassArray2->IsArray() );
+		REQUIRE( someClassArray2->GetType() == ae::BasicType::Class );
+		REQUIRE( someClassArray2->GetSize() == sizeof(SomeClass) );
+		REQUIRE( someClassArray2->GetSubType() == ae::GetType< SomeClass >() );
+		REQUIRE( !someClassArray2->IsArrayFixedLength() );
+		REQUIRE( someClassArray2->GetArrayLength( &c ) == 0 );
+		REQUIRE( someClassArray2->GetArrayMaxLength() == 4 );
+		REQUIRE( someClassArray2->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( c.someClassArray2.Length() == 4 );
+		REQUIRE( someClassArray2->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( c.someClassArray2.Length() == 2 );
+		REQUIRE( someClassArray2->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( c.someClassArray2.Length() == 3 );
+		REQUIRE( someClassArray2->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( c.someClassArray2.Length() == 0 );
+		REQUIRE( someClassArray2->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( c.someClassArray2.Length() == 1 );
+	}
+	{
+		const ae::Var* someClassArray3 = type->GetVarByName( "someClassArray3", false );
+		REQUIRE( someClassArray3 );
+		REQUIRE( someClassArray3->IsArray() );
+		REQUIRE( someClassArray3->GetType() == ae::BasicType::Class );
+		REQUIRE( someClassArray3->GetSize() == sizeof(SomeClass) );
+		REQUIRE( someClassArray3->GetSubType() == ae::GetType< SomeClass >() );
+		REQUIRE( !someClassArray3->IsArrayFixedLength() );
+		REQUIRE( someClassArray3->GetArrayLength( &c ) == 0 );
+		REQUIRE( someClassArray3->GetArrayMaxLength() == ae::MaxValue< uint32_t >() );
+		REQUIRE( someClassArray3->SetArrayLength( &c, 4 ) == 4 );
+		REQUIRE( c.someClassArray3.Length() == 4 );
+		REQUIRE( someClassArray3->SetArrayLength( &c, 2 ) == 2 );
+		REQUIRE( c.someClassArray3.Length() == 2 );
+		REQUIRE( someClassArray3->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( c.someClassArray3.Length() == 3 );
+		REQUIRE( someClassArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( c.someClassArray3.Length() == 0 );
+		REQUIRE( someClassArray3->SetArrayLength( &c, 1 ) == 1 );
+		REQUIRE( c.someClassArray3.Length() == 1 );
+		REQUIRE( someClassArray3->SetArrayLength( &c, 10020 ) == 10020 );
+		REQUIRE( c.someClassArray3.Length() == 10020 );
+		REQUIRE( someClassArray3->SetArrayLength( &c, 0 ) == 0 );
+		REQUIRE( c.someClassArray3.Length() == 0 );
+
+		REQUIRE( someClassArray3->SetArrayLength( &c, 3 ) == 3 );
+		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, -1 ) == nullptr );
+		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, 0 ) == &c.someClassArray3[ 0 ] );
+		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, 1 ) == &c.someClassArray3[ 1 ] );
+		REQUIRE( someClassArray3->GetPointer< SomeClass >( &c, 2 ) == &c.someClassArray3[ 2 ] );
+	}
+}
+
 TEST_CASE( "enum string conversions", "[aeMeta]" )
 {
 	const ae::Enum* playerStateEnum = ae::GetEnum( "PlayerState" );
