@@ -4885,6 +4885,15 @@ public:
 	//! @return A pointer to the member variable of \p obj.
 	template < typename T > T* GetPointer( ae::Object* obj, int32_t arrayIdx = -1 ) const;
 	
+	//! Gets a pointer to the value of this variable from the given \p obj.
+	//! @tparam T The type of the pointer to get.
+	//! @param obj The object to get the pointer from.
+	//! @param arrayIdx Must be negative for non-array types. For array types this
+	//! specifies which array element to get. Must be a valid array index, less
+	//! than ae::Var::GetGetArrayLength().
+	//! @return A pointer to the member variable of \p obj.
+	template < typename T > const T* GetPointer( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
+	
 	//------------------------------------------------------------------------------
 	// Types
 	//------------------------------------------------------------------------------
@@ -10564,13 +10573,18 @@ bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) c
 template < typename T >
 T* ae::Var::GetPointer( ae::Object* obj, int32_t arrayIdx ) const
 {
-	// @TODO: Allow getting pointer to inherited types
-	AE_ASSERT( std::is_void< T >::value || GetSize() == sizeof(T) );
+	return const_cast< T* >( GetPointer< T >( const_cast< const ae::Object* >( obj ), arrayIdx ) );
+}
+
+template < typename T >
+const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
+{
 	if ( !obj )
 	{
 		return nullptr;
 	}
-	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
+	
+	// @TODO: Safety checks
 	
 	if ( m_arrayAdapter )
 	{
