@@ -62,9 +62,10 @@ Registry::Registry( const ae::Tag& tag ) :
 	m_components( tag )
 {}
 
-void Registry::SetOnCreateFn( std::function< void(Component*) > fn )
+void Registry::SetOnCreateFn( void(*fn)(void*, Component*), void* userData )
 {
-	m_onCreate = fn;
+	m_onCreateFn = fn;
+	m_onCreateUserData = userData;
 }
 
 Entity Registry::CreateEntity( const char* name )
@@ -132,9 +133,9 @@ Component* Registry::AddComponent( Entity entity, const ae::Type* type )
 	}
 	components->Set( entity, component );
 	
-	if ( m_onCreate )
+	if ( m_onCreateFn )
 	{
-		m_onCreate( component );
+		m_onCreateFn( m_onCreateUserData, component );
 	}
 	return component;
 }
@@ -387,13 +388,11 @@ Component* Registry::m_AddComponent( Entity entity, const ae::Type* type )
 	}
 	components->Set( entity, component );
 	
-	if ( m_onCreate )
+	if ( m_onCreateFn )
 	{
-		// It's important that this is in a cpp, std::function can introduce
-		// exported '__ZTINSt3__117bad_function_callE' symbols which can prevent
-		// hot loading of game data.
-		m_onCreate( component );
+		m_onCreateFn( m_onCreateUserData, component );
 	}
+	return component;
 }
 
 } // End ae namespace

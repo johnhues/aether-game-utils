@@ -14,14 +14,14 @@
 namespace ae {
 
 //------------------------------------------------------------------------------
-// Entity
+// ae::Entity
 //------------------------------------------------------------------------------
 typedef uint32_t Entity;
 const Entity kInvalidEntity = 0;
 class EditorLevel;
 
 //------------------------------------------------------------------------------
-// Component
+// ae::Component
 //------------------------------------------------------------------------------
 class Component : public ae::Inheritor< ae::Object, Component >
 {
@@ -48,13 +48,13 @@ private:
 typedef std::function< void( const class EditorObject& levelObject, Entity entity, class Registry* registry ) > CreateObjectFn;
 
 //------------------------------------------------------------------------------
-// Registry
+// ae::Registry
 //------------------------------------------------------------------------------
 class Registry
 {
 public:
 	Registry( const ae::Tag& tag );
-	void SetOnCreateFn( std::function< void(Component*) > fn );
+	void SetOnCreateFn( void(*fn)(void*, Component*), void* userData );
 	
 	// Creation
 	Entity CreateEntity( const char* name = "" );
@@ -109,12 +109,13 @@ private:
 	Entity m_lastEntity = kInvalidEntity;
 	ae::Map< ae::Str16, Entity > m_entityNames;
 	ae::Map< ae::TypeId, ae::Map< Entity, Component* > > m_components;
-	std::function< void(Component*) > m_onCreate;
+	void(*m_onCreateFn)(void*, Component*) = nullptr;
+	void* m_onCreateUserData = nullptr;
 	bool m_destroying = false;
 };
 
 //------------------------------------------------------------------------------
-// Component member functions
+// ae::Component member functions
 //------------------------------------------------------------------------------
 template < typename T >
 T& Component::GetComponent()
@@ -159,7 +160,7 @@ const T* Component::TryGetComponent() const
 }
 
 //------------------------------------------------------------------------------
-// Registry member functions
+// ae::Registry member functions
 //------------------------------------------------------------------------------
 template < typename T >
 T* Registry::AddComponent( Entity entity )
