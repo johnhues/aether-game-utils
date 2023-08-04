@@ -440,6 +440,14 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// Vector math utilities
+//------------------------------------------------------------------------------
+class Vec2;
+class Vec3;
+class Vec4;
+class Matrix4;
+
+//------------------------------------------------------------------------------
 // ae::Vec2 shared member functions
 // ae::Vec3 shared member functions
 // ae::Vec4 shared member functions
