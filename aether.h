@@ -51,6 +51,12 @@
 #ifndef AE_AETHER_H
 #define AE_AETHER_H
 
+#ifdef AE_USER_CONFIG
+	// Something like: AE_USER_CONFIG="aeConfig.h"
+	// Use with AE_VEC3_CLASS_EXTRA etc.
+	#include AE_USER_CONFIG
+#endif
+
 //------------------------------------------------------------------------------
 // Platform defines
 //------------------------------------------------------------------------------
@@ -440,6 +446,14 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// Vector math utilities
+//------------------------------------------------------------------------------
+class Vec2;
+class Vec3;
+class Vec4;
+class Matrix4;
+
+//------------------------------------------------------------------------------
 // ae::Vec2 shared member functions
 // ae::Vec3 shared member functions
 // ae::Vec4 shared member functions
@@ -510,6 +524,10 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
 	static Vec2 Reflect( Vec2 v, Vec2 n );
 
+#ifdef AE_VEC2_CLASS_EXTRA
+	AE_VEC2_CLASS_EXTRA // Define conversion functions for ae::Vec2 with AE_USER_CONFIG
+#endif
+
 	union
 	{
 		struct
@@ -563,6 +581,10 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3 ZeroDirectionCopy( Vec3 direction ) const; // Zero component along positive half of axis (ie vec dot dir > 0)
 
 	static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
+
+#ifdef AE_VEC3_CLASS_EXTRA
+	AE_VEC3_CLASS_EXTRA // Define conversion functions for ae::Vec3 with AE_USER_CONFIG
+#endif
 	
 	union
 	{
@@ -597,6 +619,11 @@ struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 	Vec2 GetXY() const;
 	Vec2 GetZW() const;
 	Vec3 GetXYZ() const;
+
+#ifdef AE_VEC4_CLASS_EXTRA
+	AE_VEC4_CLASS_EXTRA // Define conversion functions for ae::Vec4 with AE_USER_CONFIG
+#endif
+
 	union
 	{
 		struct
@@ -655,6 +682,10 @@ public:
 	Matrix4 GetInverse() const; // @TODO: Handle non-inverseable matrices in API
 	Matrix4 GetNormalMatrix() const;
 	Matrix4 GetScaleRemoved() const;
+
+#ifdef AE_MAT4_CLASS_EXTRA
+	AE_MAT4_CLASS_EXTRA // Define conversion functions for ae::Matrix4 with AE_USER_CONFIG
+#endif
 	
 	// Internal access
 	void SetAxis( uint32_t column, const Vec3& v );
@@ -712,6 +743,10 @@ public:
 	Quaternion  GetInverse() const;
 	Quaternion& SetInverse();
 	Vec3 Rotate( Vec3 v ) const;
+
+#ifdef AE_QUAT_CLASS_EXTRA
+	AE_QUAT_CLASS_EXTRA // Define conversion functions for ae::Quaternion with AE_USER_CONFIG
+#endif
 };
 inline std::ostream& operator << ( std::ostream& os, const Quaternion& quat );
 
@@ -1119,6 +1154,10 @@ struct Color
 	static Color PicoIndigo();
 	static Color PicoPink();
 	static Color PicoPeach();
+
+#ifdef AE_COLOR_CLASS_EXTRA
+	AE_COLOR_CLASS_EXTRA // Define conversion functions for ae::Color with AE_USER_CONFIG
+#endif
 
 	union
 	{
@@ -2020,6 +2059,7 @@ private:
 class Rect
 {
 public:
+	Rect() = default;
 	static Rect FromCenterAndSize( ae::Vec2 center, ae::Vec2 size );
 	static Rect FromPoints( ae::Vec2 p0, ae::Vec2 p1 );
 
@@ -2045,6 +2085,10 @@ public:
 	void operator-=( const Vec2& v );
 	void operator*=( const Vec2& v );
 	void operator/=( const Vec2& v );
+
+#ifdef AE_RECT_CLASS_EXTRA
+	AE_RECT_CLASS_EXTRA
+#endif
 	
 private:
 	friend std::ostream& operator<<( std::ostream& os, Rect r );
