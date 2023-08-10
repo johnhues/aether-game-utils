@@ -24,9 +24,6 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aeNet.h"
-#include <inttypes.h>
-#include <vector>
-#include "ae/aeUuid.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include "ae/EmSocket.h"
@@ -35,60 +32,15 @@
 #endif
 
 //------------------------------------------------------------------------------
-// AetherUuid member functions
+// AetherAddress member functions
 //------------------------------------------------------------------------------
-AetherUuid::AetherUuid( const char* str )
-{
-#define _aescn8 "%2" SCNx8
-  sscanf( str, _aescn8 _aescn8 _aescn8 _aescn8 "-"
-    _aescn8 _aescn8 "-" _aescn8 _aescn8 "-" _aescn8 _aescn8 "-"
-    _aescn8 _aescn8 _aescn8 _aescn8 _aescn8 _aescn8,
-    &uuid[0], &uuid[1], &uuid[2], &uuid[3],
-    &uuid[4], &uuid[5], &uuid[6], &uuid[7], &uuid[8], &uuid[9],
-    &uuid[10], &uuid[11], &uuid[12], &uuid[13], &uuid[14], &uuid[15] );
-#undef _aescn8
-}
-
-AetherUuid AetherUuid::Generate()
-{
-  aeUuidGenerator gen;
-  aeUuid localUuid = gen.newGuid(); // @TODO: Should match naming convention
-  AE_ASSERT( localUuid._bytes.size() == 16 );
-
-  AetherUuid result;
-  memcpy( result.uuid, localUuid._bytes.data(), 16 );
-  return result;
-}
-
-AetherUuid AetherUuid::Zero()
-{
-  AetherUuid result;
-  memset( &result, 0, sizeof(result) );
-  return result;
-}
-
-void AetherUuid::ToString( char* str, uint32_t max ) const
-{
-  AE_ASSERT( max >= 37 );
-  snprintf( str, max, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", 
-    uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7],
-    uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15] );
-}
-
-std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid )
-{
-  char str[ 64 ];
-  uuid.ToString( str, countof(str) );
-  return os << str;
-}
-
 bool AetherAddress::IsLocalhost() const
 {
-    if ( strcmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 || strcmp(host, "::1") == 0 )
-    {
-        return true;
-    }
-    return false;
+	if ( strcmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 || strcmp(host, "::1") == 0 )
+	{
+		return true;
+	}
+	return false;
 }
 
 //------------------------------------------------------------------------------

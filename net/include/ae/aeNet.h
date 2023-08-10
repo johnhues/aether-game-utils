@@ -28,41 +28,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-
-//------------------------------------------------------------------------------
-// AetherUuid class
-//------------------------------------------------------------------------------
-struct AetherUuid
-{
-  AetherUuid() = default;
-  AetherUuid( const char* str );
-  
-  bool operator==( const AetherUuid& other ) const { return memcmp( uuid, other.uuid, 16 ) == 0; }
-  bool operator!=( const AetherUuid& other ) const { return memcmp( uuid, other.uuid, 16 ) != 0; }
-
-  static AetherUuid Generate();
-  static AetherUuid Zero();
-
-  void ToString( char* str, uint32_t max ) const;
-
-  uint8_t uuid[ 16 ];
-};
-namespace ae { template <> inline uint32_t GetHash( AetherUuid e )
-{
-  return ae::Hash().HashData( e.uuid, sizeof(e.uuid) ).Get();
-} }
-
-std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
-
-inline void Serialize( ae::BinaryStream* stream, AetherUuid* uuid )
-{
-	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
-}
-
-inline void Serialize( ae::BinaryStream* stream, const AetherUuid* uuid )
-{
-  stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
-}
+#include "ae/aeUuid.h"
 
 //------------------------------------------------------------------------------
 // Client / server constants
