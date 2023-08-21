@@ -14012,6 +14012,8 @@ ae::Int2 Window::m_aeToNative( ae::Int2 pos, ae::Int2 size )
 	return ae::Int2( pos.x, GetSystemMetrics( SM_YVIRTUALSCREEN ) - pos.y + size.y );
 #elif _AE_OSX_
 	return ae::Int2( pos.x, pos.y );
+#else
+	return ae::Int2( 0 );
 #endif
 }
 
@@ -14021,6 +14023,8 @@ ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
 	return ae::Int2( pos.x, GetSystemMetrics( SM_YVIRTUALSCREEN ) - ( pos.y - size.y ) );
 #elif _AE_OSX_
 	return ae::Int2( pos.x, pos.y );
+#else
+	return ae::Int2( 0 );
 #endif
 }
 
