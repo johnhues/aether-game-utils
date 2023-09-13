@@ -5123,10 +5123,8 @@ namespace ae {
 template < typename T >
 const char* GetTypeName()
 {
-	// @TODO: Thread safe version of this
 	const char* typeName = typeid( typename std::decay< T >::type ).name();
 #ifdef _MSC_VER
-	// @TODO: This isn't super well tested.. Should likely use a real demangler
 	if ( strncmp( typeName, "class ", 6 ) == 0 )
 	{
 		typeName += 6;
@@ -5135,7 +5133,7 @@ const char* GetTypeName()
 	{
 		typeName += 7;
 	}
-	static char s_buffer[ 64 ];
+	static thread_local char s_buffer[ 64 ];
 	if ( strcpy_s( s_buffer, sizeof( s_buffer ), typeName ) == 0 )
 	{
 		if ( char* space = strchr( s_buffer, ' ' ) )
@@ -5147,12 +5145,12 @@ const char* GetTypeName()
 #else
 	// @NOTE: Demangle calls realloc on given buffer
 	int status = 1;
-	static size_t s_length = 32;
-	static char* s_buffer = (char*)malloc( s_length );
+	static thread_local size_t s_length = 0;
+	static thread_local char* s_buffer = nullptr;
 	s_buffer = abi::__cxa_demangle( typeName, s_buffer, &s_length, &status );
 	if ( status == 0 )
 	{
-		int32_t len = strlen( s_buffer );
+		int32_t len = (int32_t)strlen( s_buffer );
 		while ( s_buffer[ len - 1 ] == '*' )
 		{
 			s_buffer[ len - 1 ] = 0;
