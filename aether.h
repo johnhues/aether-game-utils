@@ -1332,8 +1332,10 @@ public:
 	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length'
 	//! number of 'val's.
 	Array( ae::Tag tag, const T& val, uint32_t length );
-	//! Dynamic array (N == 0) only. Expands array storage to avoid copying data
-	//! unneccesarily on Append(). Retrieve the current storage limit with Size().
+	//! Dynamic array (N == 0) only. Expands the internal array storage to avoid
+	//! copying data unneccesarily on Append(). This does not affect the number
+	//! of elements returned by Length(). Retrieve the current storage limit
+	//! with Size().
 	void Reserve( uint32_t total );
 
 	//! Copy constructor. The ae::Tag of \p other will be used for the newly

@@ -1,19 +1,24 @@
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
+
 # Bundle helper
-function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE_VERSION _AE_ICNS_FILE  _AE_SRC_FILES _AE_RESOURCES _AE_LIBS _AE_INCLUDE_DIRS)
-	message(STATUS "_AE_BUNDLE_NAME ${_AE_BUNDLE_NAME} (${CMAKE_BUILD_TYPE})")
-	message(STATUS "_AE_EXECUTABLE_NAME ${_AE_EXECUTABLE_NAME}")
-	message(STATUS "_AE_BUNDLE_ID ${_AE_BUNDLE_ID}")
-	message(STATUS "_AE_BUNDLE_VERSION ${_AE_BUNDLE_VERSION}")
-	message(STATUS "_AE_ICNS_FILE ${_AE_ICNS_FILE}")
-	message(STATUS "_AE_SRC_FILES ${_AE_SRC_FILES}")
-	message(STATUS "_AE_RESOURCES ${_AE_RESOURCES}")
-	message(STATUS "_AE_LIBS ${_AE_LIBS}")
-	message(STATUS "_AE_INCLUDE_DIRS ${_AE_INCLUDE_DIRS}")
+function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_APPLE_DEVELOPMENT_TEAM _AE_MAJOR_MINOR_PATCH_VERSION _AE_ICNS_FILE _AE_SRC_FILES _AE_RESOURCES _AE_LIBS _AE_INCLUDE_DIRS)
+	message(STATUS "_AE_BUNDLE_NAME \"${_AE_BUNDLE_NAME}\" \(${CMAKE_BUILD_TYPE})")
+	message(STATUS "_AE_EXECUTABLE_NAME \"${_AE_EXECUTABLE_NAME}\"")
+	message(STATUS "_AE_BUNDLE_ID \"${_AE_BUNDLE_ID}\"")
+	message(STATUS "_AE_APPLE_DEVELOPMENT_TEAM \"${_AE_APPLE_DEVELOPMENT_TEAM}\"")
+	message(STATUS "_AE_MAJOR_MINOR_PATCH_VERSION \"${_AE_MAJOR_MINOR_PATCH_VERSION}\"")
+	message(STATUS "_AE_ICNS_FILE \"${_AE_ICNS_FILE}\"")
+	message(STATUS "_AE_SRC_FILES \"${_AE_SRC_FILES}\"")
+	message(STATUS "_AE_RESOURCES \"${_AE_RESOURCES}\"")
+	message(STATUS "_AE_LIBS \"${_AE_LIBS}\"")
+	message(STATUS "_AE_INCLUDE_DIRS \"${_AE_INCLUDE_DIRS}\"")
 	message(STATUS "")
 
 	if(WIN32)
 		# Create a regular windowed application instead of the default console subsystem target
 		set(_AE_EXE_TYPE WIN32)
+	elseif(APPLE)
+		set(_AE_EXE_TYPE MACOSX_BUNDLE)
 	endif()
 
 	add_executable(${_AE_EXECUTABLE_NAME} ${_AE_EXE_TYPE} ${_AE_SRC_FILES})
@@ -31,39 +36,56 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 	elseif(APPLE)
 		# Only add resource files to Apple bundles
 		# Adding resources on Windows causes an issue where files are copied only once on configure
-		# target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
-		# set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+		target_sources(${_AE_EXECUTABLE_NAME} PRIVATE "${_AE_RESOURCES}")
+		set_source_files_properties(${_AE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
+		foreach(resource ${_AE_RESOURCES})
+			get_filename_component(resource_path ${resource} ABSOLUTE) # First get absolute path to resource
+			file(RELATIVE_PATH resource_path ${CMAKE_CURRENT_SOURCE_DIR} ${resource_path}) # Get the relative path to the resource from the root of the resource
+			cmake_path(GET resource_path PARENT_PATH resource_path) # Remove file name from path
+			set_source_files_properties(${resource} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/${resource_path})
+		endforeach()
 
-		set(CMAKE_OSX_SYSROOT macosx)
-		set(CMAKE_OSX_DEPLOYMENT_TARGET 10.10)
+		set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+		set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+
+		if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
+			if (_AE_APPLE_DEVELOPMENT_TEAM)
+				set(_AE_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
+			endif()
+			set(_AE_APPLE_INSTALL_PATH "$(LOCAL_APPS_DIR)") # See Professional 24.7. Creating And Exporting Archives
+			set(_AE_APPLE_SKIP_INSTALL "NO") # See Professional 24.7. Creating And Exporting Archives
+		endif()
 
 		set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES
-			MACOSX_BUNDLE ON
-			OUTPUT_NAME "${_AE_BUNDLE_NAME}"
-			# RESOURCE "${_AE_RESOURCES}"
+			XCODE_ATTRIBUTE_PRODUCT_NAME "${_AE_BUNDLE_NAME}" # CFBundleName
+			XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${_AE_BUNDLE_ID}" # CFBundleIdentifier
+			XCODE_ATTRIBUTE_MARKETING_VERSION "${_AE_MAJOR_MINOR_PATCH_VERSION}"
+			XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION "${_AE_MAJOR_MINOR_PATCH_VERSION}"
+			XCODE_ATTRIBUTE_GENERATE_INFOPLIST_FILE YES
+			XCODE_ATTRIBUTE_INFOPLIST_FILE ""
+
+			XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName "${_AE_BUNDLE_NAME}"
+			XCODE_ATTRIBUTE_INFOPLIST_KEY_LSApplicationCategoryType "public.app-category.games"
+			# XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleIconFile "${_AE_ICNS_FILE}"
+			XCODE_ATTRIBUTE_INFOPLIST_KEY_NSPrincipalClass "NSApplication"
+			# XCODE_ATTRIBUTE_INFOPLIST_KEY_NSHumanReadableCopyright "(c)2023 Example Co." @TODO
+
+			XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${_AE_APPLE_DEVELOPMENT_TEAM}"
+			XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${_AE_APPLE_CODE_SIGN_IDENTITY}"
+
+			XCODE_ATTRIBUTE_INSTALL_PATH "${_AE_APPLE_INSTALL_PATH}" # See Professional 24.7. Creating And Exporting Archives
+			XCODE_ATTRIBUTE_SKIP_INSTALL "${_AE_APPLE_SKIP_INSTALL}" # See Professional 24.7. Creating And Exporting Archives
+
 			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME "YES"
 			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "No"
-			MACOSX_BUNDLE_BUNDLE_NAME "${_AE_BUNDLE_NAME}" # CFBundleName
-			MACOSX_BUNDLE_BUNDLE_VERSION "${_AE_BUNDLE_VERSION}" # CFBundleVersion
-			MACOSX_BUNDLE_GUI_IDENTIFIER "${_AE_BUNDLE_ID}" # CFBundleIdentifier
-			MACOSX_BUNDLE_ICON_FILE "${_AE_ICNS_FILE}" # CFBundleIconFile (*.icns file name without extension)
-			MACOSX_BUNDLE_LONG_VERSION_STRING "${_AE_BUNDLE_VERSION}" # CFBundleLongVersionString
-			MACOSX_BUNDLE_SHORT_VERSION_STRING "${_AE_BUNDLE_VERSION}" # CFBundleShortVersionString
-			XCODE_ATTRIBUTE_INSTALL_PATH "$(LOCAL_APPS_DIR)"
-			XCODE_ATTRIBUTE_SKIP_INSTALL "No"
-			LINK_FLAGS "-Wl,-all_load"
-		)
 
-		set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR})
-		if("${CMAKE_GENERATOR}" STREQUAL "Xcode")
-			# CMAKE_CURRENT_BINARY_DIR does not include CONFIG path with Xcode builds
-			set(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/${CMAKE_BUILD_TYPE})
-		endif()
-		install(CODE "
-			include(BundleUtilities)
-			set(BU_CHMOD_BUNDLE_ITEMS TRUE)
-			fixup_bundle(\"${CMAKE_INSTALL_PREFIX}/${_AE_BUNDLE_NAME}.app\" \"\" \"${_AE_DEPS_LIBRARY_DIRS}\")
-		" COMPONENT Runtime)
+			RESOURCE "${_AE_RESOURCES}"
+			MACOSX_BUNDLE_ICON_FILE "${_AE_ICNS_FILE}" # CFBundleIconFile (*.icns file path)
+
+			OUTPUT_NAME "${_AE_BUNDLE_NAME}"
+
+			INSTALL_RPATH @executable_path/../Frameworks
+		)
 	elseif(EMSCRIPTEN)
 		set(_AE_EM_LINKER_FLAGS
 			"-lopenal"
@@ -120,20 +142,19 @@ function(add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_BUNDLE
 		)
 	endif()
 	
-	if(APPLE)
-		set(APPLE_RESOURCE_DIR ../Resources/)
+	if(NOT APPLE)
+		foreach(resource ${_AE_RESOURCES})
+			# First get absolute path to resource
+			get_filename_component(resource ${resource} ABSOLUTE)
+			# Get the relative path to the resource from the root of the resource
+			file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${resource})
+			# Copy file to platform specific resource directory keeping the relative path
+			add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					${CMAKE_CURRENT_SOURCE_DIR}/${resource}
+					$<TARGET_FILE_DIR:${_AE_EXECUTABLE_NAME}>/${resource}
+			)
+		endforeach()
 	endif()
-	foreach(resource ${_AE_RESOURCES})
-		# First get absolute path to resource
-		get_filename_component(resource ${resource} ABSOLUTE)
-		# Get the relative path to the resource from the root of the resource
-		file(RELATIVE_PATH resource ${CMAKE_CURRENT_SOURCE_DIR} ${resource})
-		# Copy file to platform specific resource directory keeping the relative path
-		add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				${CMAKE_CURRENT_SOURCE_DIR}/${resource}
-				$<TARGET_FILE_DIR:${_AE_EXECUTABLE_NAME}>/${APPLE_RESOURCE_DIR}${resource}
-		)
-	endforeach()
-	
+
 endfunction()

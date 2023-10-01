@@ -1,5 +1,5 @@
 # aether-game-utils project
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 
 # Configuration variables intended for external use
@@ -72,6 +72,11 @@ endif()
 # ae library
 add_library(ae STATIC "")
 set_target_properties(ae PROPERTIES DEBUG_POSTFIX "d")
+if (APPLE)
+	# See Professional CMake 24.5.3 Deployment Target
+	set_target_properties(ae PROPERTIES XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET 13.0)
+	# @TODO: Other Apple platforms
+endif()
 if (AE_DEPS_LIBRARIES)
 	target_link_libraries(ae ${AE_DEPS_LIBRARIES})
 endif()

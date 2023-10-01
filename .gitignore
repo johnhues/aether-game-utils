@@ -36,15 +36,13 @@
 
 # CMake / CLion
 build
-embuild
+build_xcode
+build_em
+build_linux
 linux
 em
-cmake-build-debug
 
 # System
 .DS_Store
 deps/dawn
-
-deps/dawn
-
 .vscode/settings.json
