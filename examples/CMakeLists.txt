@@ -39,7 +39,7 @@ elseif(APPLE)
 endif()
 
 # Hello World
-add_bundle("Hello World"
+ae_add_bundle("Hello World"
 	"00_hello_world"
 	"ae.00_hello_world"
 	"" # No Apple Development Team
@@ -49,10 +49,11 @@ add_bundle("Hello World"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Window
-add_bundle("Example"
+ae_add_bundle("Example"
 	"01_example"
 	"ae.01_example"
 	"" # No Apple Development Team
@@ -62,10 +63,11 @@ add_bundle("Example"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Sprites
-add_bundle("Sprites"
+ae_add_bundle("Sprites"
 	"02_sprites"
 	"ae.02_sprites"
 	"" # No Apple Development Team
@@ -75,10 +77,11 @@ add_bundle("Sprites"
 	"${AE_EXAMPLE_RESOURCES};data/circle.tga"
 	"ae;ae_extras"
 	""
+	""
 )
 
 # Client / Server
-add_bundle("Client"
+ae_add_bundle("Client"
 	"03_client"
 	"ae.03_client"
 	"" # No Apple Development Team
@@ -88,8 +91,9 @@ add_bundle("Client"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
-add_bundle("Server"
+ae_add_bundle("Server"
 	"03_server"
 	"ae.03_server"
 	"" # No Apple Development Team
@@ -99,10 +103,11 @@ add_bundle("Server"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Network Objects
-add_bundle("NetObject Client"
+ae_add_bundle("NetObject Client"
 	"04_net_object_client"
 	"ae.04_net_object_client"
 	"" # No Apple Development Team
@@ -112,8 +117,9 @@ add_bundle("NetObject Client"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae_net"
 	""
+	""
 )
-add_bundle("NetObject Server"
+ae_add_bundle("NetObject Server"
 	"04_net_object_server"
 	"ae.04_net_object_server"
 	"" # No Apple Development Team
@@ -123,10 +129,11 @@ add_bundle("NetObject Server"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae_net"
 	""
+	""
 )
 
 # Text Input
-add_bundle("Text Input"
+ae_add_bundle("Text Input"
 	"05_text_input"
 	"ae.05_text_input"
 	"" # No Apple Development Team
@@ -136,10 +143,11 @@ add_bundle("Text Input"
 	"${AE_EXAMPLE_RESOURCES};data/font.tga"
 	"ae"
 	""
+	""
 )
 
 # Triangle
-add_bundle("Triangle"
+ae_add_bundle("Triangle"
 	"06_triangle"
 	"ae.06_triangle"
 	"" # No Apple Development Team
@@ -149,10 +157,11 @@ add_bundle("Triangle"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Cube
-add_bundle("Cube"
+ae_add_bundle("Cube"
 	"07_cube"
 	"ae.07_cube"
 	"" # No Apple Development Team
@@ -162,10 +171,11 @@ add_bundle("Cube"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Audio
-add_bundle("Audio"
+ae_add_bundle("Audio"
 	"08_audio"
 	"ae.08_audio"
 	"" # No Apple Development Team
@@ -175,10 +185,11 @@ add_bundle("Audio"
 	"${AE_EXAMPLE_RESOURCES};data/music.wav;data/sound.wav"
 	"ae"
 	""
+	""
 )
 
 # Platformer2D
-add_bundle("Platformer2D"
+ae_add_bundle("Platformer2D"
 	"09_platformer2d"
 	"ae.09_platformer2d"
 	"" # No Apple Development Team
@@ -188,10 +199,11 @@ add_bundle("Platformer2D"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae_extras"
 	""
+	""
 )
 
 # Splines
-add_bundle("Splines"
+ae_add_bundle("Splines"
 	"10_splines"
 	"ae.10_splines"
 	"" # No Apple Development Team
@@ -201,10 +213,11 @@ add_bundle("Splines"
 	"${AE_EXAMPLE_RESOURCES};data/circle.tga"
 	"ae;ae_extras"
 	""
+	""
 )
 
 # Terrain
-add_bundle("Terrain"
+ae_add_bundle("Terrain"
 	"11_terrain"
 	"ae.11_terrain"
 	"" # No Apple Development Team
@@ -214,10 +227,11 @@ add_bundle("Terrain"
 	"${AE_EXAMPLE_RESOURCES};data/font.tga"
 	"ae;ae_extras;imgui;imguizmo"
 	""
+	""
 )
 
 # Geometry
-add_bundle("Geometry"
+ae_add_bundle("Geometry"
 	"12_geometry"
 	"ae.12_geometry"
 	"" # No Apple Development Team
@@ -227,10 +241,11 @@ add_bundle("Geometry"
 	"${AE_EXAMPLE_RESOURCES};data/font.tga"
 	"ae;ae_extras"
 	""
+	""
 )
 
 # FileDialogs
-add_bundle("File Dialogs"
+ae_add_bundle("File Dialogs"
 	"13_file_dialogs"
 	"ae.13_file_dialogs"
 	"" # No Apple Development Team
@@ -240,10 +255,11 @@ add_bundle("File Dialogs"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Emscripten
-add_bundle("Emscripten"
+ae_add_bundle("Emscripten"
 	"14_emscripten"
 	"ae.14_emscripten"
 	"" # No Apple Development Team
@@ -253,10 +269,11 @@ add_bundle("Emscripten"
 	"index.html;data/moon.tga;data/test.txt"
 	"ae"
 	""
+	""
 )
 
 # OBJViewer
-add_bundle("OBJViewer"
+ae_add_bundle("OBJViewer"
 	"15_obj_viewer"
 	"ae.15_obj_viewer"
 	"" # No Apple Development Team
@@ -266,11 +283,12 @@ add_bundle("OBJViewer"
 	"${AE_EXAMPLE_RESOURCES};data/bunny.obj"
 	"ae"
 	""
+	""
 )
 
 # SkinnedMesh
 if(AE_LOADERS_OFBX)
-	add_bundle("SkinnedMesh"
+	ae_add_bundle("SkinnedMesh"
 		"16_skinned_mesh"
 		"ae.16_skinned_mesh"
 		"" # No Apple Development Team
@@ -280,10 +298,11 @@ if(AE_LOADERS_OFBX)
 		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
 		"ae;ae_loaders"
 		""
+		""
 	)
 
 	# IK
-	add_bundle("IK"
+	ae_add_bundle("IK"
 		"17_ik"
 		"ae.17_ik"
 		"" # No Apple Development Team
@@ -293,11 +312,12 @@ if(AE_LOADERS_OFBX)
 		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
 		"ae;ae_loaders;ae_extras;imgui;imguizmo"
 		""
+		""
 	)
 endif()
 
 # Editor
-add_bundle("Editor"
+ae_add_bundle("Editor"
 	"18_editor"
 	"ae.18_editor"
 	"" # No Apple Development Team
@@ -307,10 +327,11 @@ add_bundle("Editor"
 	"${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
 	"ae_extras;imgui;imguizmo;rapidjson"
 	""
+	""
 )
 
 # Mouse
-add_bundle("Mouse"
+ae_add_bundle("Mouse"
 	"19_mouse"
 	"ae.19_mouse"
 	"" # No Apple Development Team
@@ -320,10 +341,11 @@ add_bundle("Mouse"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Render Target
-add_bundle("Render Target"
+ae_add_bundle("Render Target"
 	"20_render_target"
 	"ae.20_render_target"
 	"" # No Apple Development Team
@@ -333,10 +355,11 @@ add_bundle("Render Target"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Instancing
-add_bundle("Instancing"
+ae_add_bundle("Instancing"
 	"21_instancing"
 	"ae.21_instancing"
 	"" # No Apple Development Team
@@ -346,13 +369,11 @@ add_bundle("Instancing"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Read Me
-if(APPLE)
-	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
-endif()
-add_bundle("Read Me"
+ae_add_bundle("Read Me"
 	"22_read_me"
 	"ae.22_read_me"
 	"" # No Apple Development Team
@@ -361,7 +382,34 @@ add_bundle("Read Me"
 	"22_ReadMe.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/level.obj;data/level.tga"
 	""
+	""
 	"${AE_ROOT_DIR}"
 )
+if(APPLE)
+	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
+	target_compile_options("22_read_me" PUBLIC "-fmodules;-fcxx-modules")
+endif()
 target_compile_definitions("22_read_me" PUBLIC DATA_DIR="data")
 # target_compile_definitions(22_read_me PUBLIC DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data")
+
+# Frameworks
+ae_add_shared_library("23_Framework"
+	"0.0.0"
+	"23_SharedLibrary.cpp"
+	""
+	"ae"
+	""
+	""
+)
+ae_add_bundle("Shared Library"
+	"23_shared_library"
+	"ae.23_shared_library"
+	"" # No Apple Development Team
+	"0.0.0"
+	"data/Icon.icns"
+	"23_Loader.cpp"
+	"${AE_EXAMPLE_RESOURCES}"
+	""
+	"23_Framework"
+	""
+)
