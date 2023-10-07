@@ -1,5 +1,10 @@
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
+if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
+	set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+	set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+endif()
+
 # aether-game-utils project
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 
 # Configuration variables intended for external use
@@ -30,12 +35,6 @@ if (MSVC)
 	add_definitions(-D_UNICODE -DUNICODE) # use unicode
 	add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
 	list(APPEND AE_DEPS_LIBRARIES version Winmm Imm32 Setupapi Ws2_32)
-endif()
-if(APPLE)
-	add_definitions(-DAE_USE_MODULES)
-	add_compile_options(-fmodules)
-	add_compile_options(-fcxx-modules)
-	set(CMAKE_OSX_ARCHITECTURES arm64 x86_64)
 endif()
 
 # OpenGL dependency
@@ -72,6 +71,10 @@ endif()
 # ae library
 function(add_ae_library NAME)
 	set_target_properties(${NAME} PROPERTIES DEBUG_POSTFIX "d")
+	if (APPLE)
+		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET 13.0) # See Professional CMake 24.5.3 Deployment Target
+		# @TODO: Other Apple platforms
+	endif()
 	if (AE_DEPS_LIBRARIES)
 		target_link_libraries(${NAME} ${AE_DEPS_LIBRARIES})
 	endif()
@@ -84,6 +87,16 @@ function(add_ae_library NAME)
 	target_include_directories(${NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 	if(APPLE)
 		target_sources(${NAME} PRIVATE aether.h aether.mm)
+		if (AE_USE_MODULES)
+			target_compile_definitions(${NAME} PUBLIC AE_USE_MODULES)
+			target_compile_options(${NAME} PUBLIC "-fmodules;-fcxx-modules")
+		else()
+			find_library(OPENAL_LIBRARY OpenAL REQUIRED)
+			find_library(CARBON_LIBRARY Carbon REQUIRED)
+			find_library(APPKIT_LIBRARY AppKit REQUIRED)
+			find_library(GAMECONTROLLER_LIBRARY GameController REQUIRED)
+			target_link_libraries(${NAME} ${OPENAL_LIBRARY} ${CARBON_LIBRARY} ${APPKIT_LIBRARY} ${GAMECONTROLLER_LIBRARY})
+		endif()
 	else()
 		target_sources(${NAME} PRIVATE aether.h aether.cpp)
 	endif()

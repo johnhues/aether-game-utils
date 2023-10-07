@@ -39,322 +39,395 @@ elseif(APPLE)
 endif()
 
 # Hello World
-add_bundle("Hello World"
+ae_add_bundle("Hello World"
 	"00_hello_world"
 	"ae.00_hello_world"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"00_HelloWorld.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Window
-add_bundle("Example"
+ae_add_bundle("Example"
 	"01_example"
 	"ae.01_example"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"01_Example.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Sprites
-add_bundle("Sprites"
+ae_add_bundle("Sprites"
 	"02_sprites"
 	"ae.02_sprites"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"02_Sprites.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/circle.tga"
 	"ae;ae_extras"
 	""
+	""
 )
 
 # Client / Server
-add_bundle("Client"
+ae_add_bundle("Client"
 	"03_client"
 	"ae.03_client"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"03_Client.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
-add_bundle("Server"
+ae_add_bundle("Server"
 	"03_server"
 	"ae.03_server"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"03_Server.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Network Objects
-add_bundle("NetObject Client"
+ae_add_bundle("NetObject Client"
 	"04_net_object_client"
 	"ae.04_net_object_client"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"04_NetObjectClient.cpp;04_NetObjectCommon.h"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae_net"
 	""
+	""
 )
-add_bundle("NetObject Server"
+ae_add_bundle("NetObject Server"
 	"04_net_object_server"
 	"ae.04_net_object_server"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"04_NetObjectServer.cpp;04_NetObjectCommon.h"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae_net"
 	""
+	""
 )
 
 # Text Input
-add_bundle("Text Input"
+ae_add_bundle("Text Input"
 	"05_text_input"
 	"ae.05_text_input"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"05_TextInput.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/font.tga"
 	"ae"
 	""
+	""
 )
 
 # Triangle
-add_bundle("Triangle"
+ae_add_bundle("Triangle"
 	"06_triangle"
 	"ae.06_triangle"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"06_Triangle.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Cube
-add_bundle("Cube"
+ae_add_bundle("Cube"
 	"07_cube"
 	"ae.07_cube"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"07_Cube.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Audio
-add_bundle("Audio"
+ae_add_bundle("Audio"
 	"08_audio"
 	"ae.08_audio"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"08_Audio.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/music.wav;data/sound.wav"
 	"ae"
 	""
+	""
 )
 
 # Platformer2D
-add_bundle("Platformer2D"
+ae_add_bundle("Platformer2D"
 	"09_platformer2d"
 	"ae.09_platformer2d"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"09_Platformer2D.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae_extras"
 	""
+	""
 )
 
 # Splines
-add_bundle("Splines"
+ae_add_bundle("Splines"
 	"10_splines"
 	"ae.10_splines"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"10_Splines.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/circle.tga"
 	"ae;ae_extras"
 	""
+	""
 )
 
 # Terrain
-add_bundle("Terrain"
+ae_add_bundle("Terrain"
 	"11_terrain"
 	"ae.11_terrain"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"11_Terrain.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/font.tga"
 	"ae;ae_extras;imgui;imguizmo"
 	""
+	""
 )
 
 # Geometry
-add_bundle("Geometry"
+ae_add_bundle("Geometry"
 	"12_geometry"
 	"ae.12_geometry"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"12_Geometry.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/font.tga"
 	"ae;ae_extras"
 	""
+	""
 )
 
 # FileDialogs
-add_bundle("File Dialogs"
+ae_add_bundle("File Dialogs"
 	"13_file_dialogs"
 	"ae.13_file_dialogs"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"13_FileDialogs.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Emscripten
-add_bundle("Emscripten"
+ae_add_bundle("Emscripten"
 	"14_emscripten"
 	"ae.14_emscripten"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"14_Emscripten.cpp"
 	"index.html;data/moon.tga;data/test.txt"
 	"ae"
 	""
+	""
 )
 
 # OBJViewer
-add_bundle("OBJViewer"
+ae_add_bundle("OBJViewer"
 	"15_obj_viewer"
 	"ae.15_obj_viewer"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"15_OBJViewer.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/bunny.obj"
 	"ae"
 	""
+	""
 )
 
 # SkinnedMesh
 if(AE_LOADERS_OFBX)
-	add_bundle("SkinnedMesh"
+	ae_add_bundle("SkinnedMesh"
 		"16_skinned_mesh"
 		"ae.16_skinned_mesh"
+		"" # No Apple Development Team
 		"0.0.0"
 		"data/Icon.icns"
 		"16_SkinnedMesh.cpp"
 		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
 		"ae;ae_loaders"
 		""
+		""
 	)
 
 	# IK
-	add_bundle("IK"
+	ae_add_bundle("IK"
 		"17_ik"
 		"ae.17_ik"
+		"" # No Apple Development Team
 		"0.0.0"
 		"data/Icon.icns"
 		"17_IK.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
 		"ae;ae_loaders;ae_extras;imgui;imguizmo"
 		""
+		""
 	)
 endif()
 
 # Editor
-add_bundle("Editor"
+ae_add_bundle("Editor"
 	"18_editor"
 	"ae.18_editor"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"18_Editor.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
 	"ae_extras;imgui;imguizmo;rapidjson"
 	""
+	""
 )
 
 # Mouse
-add_bundle("Mouse"
+ae_add_bundle("Mouse"
 	"19_mouse"
 	"ae.19_mouse"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"19_Mouse.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Render Target
-add_bundle("Render Target"
+ae_add_bundle("Render Target"
 	"20_render_target"
 	"ae.20_render_target"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"20_RenderTarget.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Instancing
-add_bundle("Instancing"
+ae_add_bundle("Instancing"
 	"21_instancing"
 	"ae.21_instancing"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"21_Instancing.cpp"
 	"${AE_EXAMPLE_RESOURCES}"
 	"ae"
 	""
+	""
 )
 
 # Read Me
-if(APPLE)
-	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
-endif()
-add_bundle("Read Me"
+ae_add_bundle("Read Me"
 	"22_read_me"
 	"ae.22_read_me"
+	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
 	"22_ReadMe.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/level.obj;data/level.tga"
 	""
+	""
 	"${AE_ROOT_DIR}"
 )
+if(APPLE)
+	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
+	target_compile_options("22_read_me" PUBLIC "-fmodules;-fcxx-modules")
+endif()
 target_compile_definitions("22_read_me" PUBLIC DATA_DIR="data")
 # target_compile_definitions(22_read_me PUBLIC DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data")
 
-# Hot Load
-add_bundle("Hot Load"
-	"24_hot_load"
-	"ae.24_hot_load"
+# Frameworks
+ae_add_shared_library("23_Framework"
 	"0.0.0"
-	"Icon.icns"
-	"24_HotLoad.cpp;24_HotLoad.h"
-	"${AE_EXAMPLE_RESOURCES};${CMAKE_CURRENT_BINARY_DIR}/HotLoadable.dylib"
-	"ae_shared" # Use shared library version of aether so symbols aren't duplicated
+	"23_SharedLibrary.cpp"
+	""
+	"ae"
+	""
 	""
 )
-# Hot Load shared library
+ae_add_bundle("Shared Library"
+	"23_shared_library"
+	"ae.23_shared_library"
+	"" # No Apple Development Team
+	"0.0.0"
+	"data/Icon.icns"
+	"23_Loader.cpp"
+	"${AE_EXAMPLE_RESOURCES}"
+	""
+	"23_Framework"
+	""
+)
+
+# Hot Load
 add_library(HotLoadable SHARED "24_HotLoadable.cpp;24_HotLoad.h")
 target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
 set_target_properties(HotLoadable PROPERTIES PREFIX "")
 target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
-add_dependencies(24_hot_load HotLoadable)
+ae_add_bundle("Hot Load"
+	"24_hot_load"
+	"ae.24_hot_load"
+	"" # No Apple Development Team
+	"0.0.0"
+	"data/Icon.icns"
+	"24_HotLoad.cpp;24_HotLoad.h"
+	"${AE_EXAMPLE_RESOURCES}" # ${CMAKE_CURRENT_BINARY_DIR}/HotLoadable.dylib
+	""
+	"ae_shared;HotLoadable" # Use shared library version of aether so symbols aren't duplicated
+	""
+)

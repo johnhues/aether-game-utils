@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeUuid.h
+// 23_SharedLibrary.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2023 John Hughes
 //
@@ -21,47 +21,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef AEUUID_H
-#define AEUUID_H
-
-//------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
 
 //------------------------------------------------------------------------------
-// AetherUuid class
+// Library entry point
 //------------------------------------------------------------------------------
-struct AetherUuid
+int Run()
 {
-	AetherUuid() = default;
-	AetherUuid( const char* str );
+	AE_LOG( "Initialize" );
+	ae::Window window;
+	ae::GraphicsDevice graphicsDevice;
+	ae::Input input;
+	ae::TimeStep timeStep;
 	
-	bool operator==( const AetherUuid& other ) const { return memcmp( uuid, other.uuid, 16 ) == 0; }
-	bool operator!=( const AetherUuid& other ) const { return memcmp( uuid, other.uuid, 16 ) != 0; }
+	window.Initialize( 800, 600, false, true );
+	window.SetTitle( "Shared Library" );
+	graphicsDevice.Initialize( &window );
+	input.Initialize( &window );
+	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	static AetherUuid Generate();
-	static AetherUuid Zero();
+	while ( !input.quit )
+	{
+		input.Pump();
+		graphicsDevice.Activate();
+		graphicsDevice.Clear( ae::Color::PicoDarkPurple() );
+		graphicsDevice.Present();
+		timeStep.Tick();
+	}
 
-	void ToString( char* str, uint32_t max ) const;
+	AE_LOG( "Terminate" );
+	input.Terminate();
+	graphicsDevice.Terminate();
+	window.Terminate();
 
-	uint8_t uuid[ 16 ];
-};
-namespace ae { template <> inline uint32_t GetHash( AetherUuid e )
-{
-	return ae::Hash().HashData( e.uuid, sizeof(e.uuid) ).Get();
-} }
-
-std::ostream& operator<<( std::ostream& os, const AetherUuid& uuid );
-
-inline void Serialize( ae::BinaryStream* stream, AetherUuid* uuid )
-{
-	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
+	return 0;
 }
-
-inline void Serialize( ae::BinaryStream* stream, const AetherUuid* uuid )
-{
-	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
-}
-
-#endif

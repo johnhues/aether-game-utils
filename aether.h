@@ -168,6 +168,8 @@
 	#define aeAssert() __builtin_trap()
 #elif _AE_EMSCRIPTEN_
 	#define aeAssert() assert( 0 )
+#elif defined( __aarch64__ )
+	#define aeAssert() asm( "brk #0" )
 #else
 	#define aeAssert() asm( "int $3" )
 #endif
@@ -1334,8 +1336,10 @@ public:
 	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length'
 	//! number of 'val's.
 	Array( ae::Tag tag, const T& val, uint32_t length );
-	//! Dynamic array (N == 0) only. Expands array storage to avoid copying data
-	//! unneccesarily on Append(). Retrieve the current storage limit with Size().
+	//! Dynamic array (N == 0) only. Expands the internal array storage to avoid
+	//! copying data unneccesarily on Append(). This does not affect the number
+	//! of elements returned by Length(). Retrieve the current storage limit
+	//! with Size().
 	void Reserve( uint32_t total );
 
 	//! Copy constructor. The ae::Tag of \p other will be used for the newly
@@ -10972,6 +10976,7 @@ const char* ae::_Globals::Demangle( const char* typeName )
 #else
 	// @NOTE: Demangle calls realloc on given buffer
 	int status = 1;
+	// @TODO: This should be thread safe!!!
 	typeNameBuf = abi::__cxa_demangle( typeName, typeNameBuf, &typeNameBufLength, &status );
 	if ( status == 0 )
 	{
@@ -14282,6 +14287,8 @@ ae::Int2 Window::m_aeToNative( ae::Int2 pos, ae::Int2 size )
 	return ae::Int2( pos.x, GetSystemMetrics( SM_YVIRTUALSCREEN ) - pos.y + size.y );
 #elif _AE_OSX_
 	return ae::Int2( pos.x, pos.y );
+#else
+	return ae::Int2( 0 );
 #endif
 }
 
@@ -14291,6 +14298,8 @@ ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
 	return ae::Int2( pos.x, GetSystemMetrics( SM_YVIRTUALSCREEN ) - ( pos.y - size.y ) );
 #elif _AE_OSX_
 	return ae::Int2( pos.x, pos.y );
+#else
+	return ae::Int2( 0 );
 #endif
 }
 
