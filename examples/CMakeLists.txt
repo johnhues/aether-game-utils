@@ -343,18 +343,18 @@ target_compile_definitions("22_read_me" PUBLIC DATA_DIR="data")
 
 # Hot Load
 add_bundle("Hot Load"
-	"23_hot_load"
-	"ae.23_hot_load"
+	"24_hot_load"
+	"ae.24_hot_load"
 	"0.0.0"
 	"Icon.icns"
-	"23_HotLoad.cpp;23_HotLoad.h"
+	"24_HotLoad.cpp;24_HotLoad.h"
 	"${AE_EXAMPLE_RESOURCES};${CMAKE_CURRENT_BINARY_DIR}/HotLoadable.dylib"
 	"ae_shared" # Use shared library version of aether so symbols aren't duplicated
 	""
 )
 # Hot Load shared library
-add_library(HotLoadable SHARED "23_HotLoadable.cpp;23_HotLoad.h")
+add_library(HotLoadable SHARED "24_HotLoadable.cpp;24_HotLoad.h")
 target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
 set_target_properties(HotLoadable PROPERTIES PREFIX "")
 target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
-add_dependencies(23_hot_load HotLoadable)
+add_dependencies(24_hot_load HotLoadable)

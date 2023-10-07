@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// 23_HotLoad.cpp
+// 24_HotLoad.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2023 John Hughes
 //
@@ -23,46 +23,26 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "23_HotLoad.h"
+#include "aether.h"
 
-//------------------------------------------------------------------------------
-// Main
-//------------------------------------------------------------------------------
-int main()
+typedef bool (*GameFn)( class Game* );
+
+struct Game
 {
-	ae::FileSystem fileSystem;
-	fileSystem.Initialize( "", "ae", "23_HotLoad" );
+public:
+	bool Initialize();
+	bool Update();
 
-	// Lib path
-	ae::Str256 libResourcePath;
-	ae::Str64 fileName = "HotLoadable.dylib";
-	fileSystem.GetAbsolutePath( ae::FileSystem::Root::Data, fileName.c_str(), &libResourcePath );
+	ae::FileSystem& fileSystem;
+	ae::Window window;
+	ae::GraphicsDevice render;
+	ae::Input input;
+	ae::TimeStep timeStep;
 
-	ae::Str256 buildCmd;
-	ae::Str256 postBuildCmd;
-	if ( ae::IsDebuggerAttached() )
-	{
-		ae::Str256 cmakeBuildDir;
-		fileSystem.GetAbsolutePath( ae::FileSystem::Root::Bundle, "..", &cmakeBuildDir ); // Root of CMake build dir
-		ae::Str256 libBuildPath = cmakeBuildDir;
-		ae::FileSystem::AppendToPath( &libBuildPath, "HotLoadable.dylib" );
+	ae::Shader shader;
+	ae::VertexBuffer vertexData;
 
-		ae::HotLoader::GetCMakeBuildCommand( &buildCmd, cmakeBuildDir.c_str(), "HotLoadable" );
-		ae::HotLoader::GetCopyCommand( &postBuildCmd, libResourcePath.c_str(), libBuildPath.c_str() );
-	}
-
-	Game game = { fileSystem };
-	ae::HotLoader hotLoader;
-	hotLoader.Initialize( buildCmd.c_str(), postBuildCmd.c_str(), libResourcePath.c_str() );
-	hotLoader.CallFn< GameFn >( "Game_Initialize", &game );
-	while ( hotLoader.CallFn< GameFn >( "Game_Update", &game ) )
-	{
-		if ( game.input.GetPress( ae::Key::R ) )
-		{
-			AE_INFO( "Reloading" );
-			hotLoader.Reload();
-		}
-	};
-
-	return 0;
-}
+	ae::Vec3 pos = ae::Vec3( 0.0f );
+	float scale = 1.0f;
+	float rotation = 0.0f;
+};
