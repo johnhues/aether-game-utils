@@ -54,7 +54,7 @@ class Registry
 {
 public:
 	Registry( const ae::Tag& tag );
-	void SetOnCreateFn( void(*fn)(void*, Component*), void* userData );
+	void SetOnCreateFn( void* userData, void(*fn)(void*, Component*) );
 	
 	// Creation
 	Entity CreateEntity( const char* name = "" );

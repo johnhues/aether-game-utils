@@ -62,7 +62,7 @@ Registry::Registry( const ae::Tag& tag ) :
 	m_components( tag )
 {}
 
-void Registry::SetOnCreateFn( void(*fn)(void*, Component*), void* userData )
+void Registry::SetOnCreateFn( void* userData, void(*fn)(void*, Component*) )
 {
 	m_onCreateFn = fn;
 	m_onCreateUserData = userData;

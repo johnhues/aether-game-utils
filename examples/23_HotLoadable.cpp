@@ -88,7 +88,7 @@ bool Game::Initialize()
 
 bool Game::Update()
 {
-	window.SetTitle( "Hot Load: Change this string and press R to hot load" );
+	window.SetTitle( "Hot Load: Change this string, build, and press R to hot load" );
 	input.Pump();
 
 	rotation += timeStep.GetDt();

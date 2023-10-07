@@ -23,7 +23,6 @@ target_sources(ae_extras PRIVATE
 	aeCompactingAllocator.cpp
 	aeHotSpot.cpp
 	aeImage.cpp
-	aeImGui.cpp
 	aeTerrain.cpp
 	aeTerrainSDF.cpp
 	ctpl_stl.h
