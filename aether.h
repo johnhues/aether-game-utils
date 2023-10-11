@@ -1140,9 +1140,22 @@ struct Color
 	static Color Blue();
 	static Color Indigo();
 	static Color Violet();
-	// Misc
+	// CMYK
 	static Color Cyan();
 	static Color Magenta();
+	// aether
+	static Color AetherDarkRed();
+	static Color AetherRed();
+	static Color AetherOrange();
+	static Color AetherYellow();
+	static Color AetherGreen();
+	static Color AetherTeal();
+	static Color AetherBlue();
+	static Color AetherPurple();
+	static Color AetherWhite();
+	static Color AetherGray();
+	static Color AetherDarkGray();
+	static Color AetherBlack();
 	// Pico
 	static Color PicoBlack();
 	static Color PicoDarkBlue();
@@ -6624,8 +6637,21 @@ inline Color Color::Blue() { static Color c = Color::SRGB8( 0, 0, 255 ); return 
 inline Color Color::Indigo() { static Color c = Color::SRGB8( 75, 0, 130 ); return c; }
 inline Color Color::Violet() { static Color c = Color::SRGB8( 148, 0, 211 ); return c; }
 // Other
-inline Color Color::Cyan() { return Color( 0.0f, 1.0f, 1.0f ); }
-inline Color Color::Magenta() { return Color( 1.0f, 0.0f, 1.0f ); }
+inline Color Color::Cyan() { static Color c = Color( 0.0f, 1.0f, 1.0f ); return c; }
+inline Color Color::Magenta() { static Color c = Color( 1.0f, 0.0f, 1.0f ); return c; }
+// aether
+inline Color Color::AetherDarkRed() { static Color c = Color::SRGB8( 175, 65, 90 ); return c; }
+inline Color Color::AetherRed() { static Color c = Color::SRGB8( 240, 75, 90 ); return c; }
+inline Color Color::AetherOrange() { static Color c = Color::SRGB8( 255, 150, 60 ); return c; }
+inline Color Color::AetherYellow() { static Color c = Color::SRGB8( 250, 205, 100 ); return c; }
+inline Color Color::AetherGreen() { static Color c = Color::SRGB8( 190, 225, 90 ); return c; }
+inline Color Color::AetherTeal() { static Color c = Color::SRGB8( 90, 195, 185 ); return c; }
+inline Color Color::AetherBlue() { static Color c = Color::SRGB8( 70, 120, 225 ); return c; }
+inline Color Color::AetherPurple() { static Color c = Color::SRGB8( 120, 90, 195 ); return c; }
+inline Color Color::AetherWhite() { static Color c = Color::SRGB8( 235, 230, 215 ); return c; }
+inline Color Color::AetherGray() { static Color c = Color::SRGB8( 145, 135, 130 ); return c; }
+inline Color Color::AetherDarkGray() { static Color c = Color::SRGB8( 105, 105, 100 ); return c; }
+inline Color Color::AetherBlack() { static Color c = Color::SRGB8( 45, 45, 45 ); return c; }
 // Pico
 inline Color Color::PicoBlack() { static Color c = Color::SRGB8( 0, 0, 0 ); return c; }
 inline Color Color::PicoDarkBlue() { static Color c = Color::SRGB8( 29, 43, 83 ); return c; }

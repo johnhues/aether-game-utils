@@ -63,9 +63,6 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 	else()
 		message(SEND_ERROR "Could not find OpenAL")
 	endif()
-elseif(NOT EMSCRIPTEN AND NOT MSVC)
-	find_package(OpenAL REQUIRED)
-	list(APPEND AE_DEPS_LIBRARIES ${OPENAL_LIBRARY})
 endif()
 
 # ae library
