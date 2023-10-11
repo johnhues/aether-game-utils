@@ -223,7 +223,7 @@ ae_add_bundle("Terrain"
 	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
-	"11_Terrain.cpp"
+	"11_Terrain.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/font.tga"
 	"ae;ae_extras;imgui;imguizmo"
 	""
@@ -308,7 +308,7 @@ if(AE_LOADERS_OFBX)
 		"" # No Apple Development Team
 		"0.0.0"
 		"data/Icon.icns"
-		"17_IK.cpp"
+		"17_IK.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 		"${AE_EXAMPLE_RESOURCES};data/character.fbx;data/character.tga"
 		"ae;ae_loaders;ae_extras;imgui;imguizmo"
 		""
@@ -323,7 +323,7 @@ ae_add_bundle("Editor"
 	"" # No Apple Development Team
 	"0.0.0"
 	"data/Icon.icns"
-	"18_Editor.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp"
+	"18_Editor.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 	"${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
 	"ae_extras;imgui;imguizmo;rapidjson"
 	""
@@ -413,3 +413,34 @@ ae_add_bundle("Shared Library"
 	"23_Framework"
 	""
 )
+
+# Hot Load
+add_library(HotLoadable SHARED "24_HotLoadable.cpp;24_HotLoad.h")
+target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
+set_target_properties(HotLoadable PROPERTIES PREFIX "")
+target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
+ae_add_bundle("Hot Load"
+	"24_hot_load"
+	"ae.24_hot_load"
+	"" # No Apple Development Team
+	"0.0.0"
+	"data/Icon.icns"
+	"24_HotLoad.cpp;24_HotLoad.h"
+	"${AE_EXAMPLE_RESOURCES}"
+	""
+	"ae_shared" # Use shared library version of aether so symbols aren't duplicated in HotLoadable library
+	""
+)
+add_dependencies(24_hot_load HotLoadable) # Make sure HotLoadable is built
+if(APPLE)
+	set_target_properties(HotLoadable PROPERTIES
+		# Output built HotLoadable library into app bundle
+		XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
+		XCODE_ATTRIBUTE_INSTALL_PATH "Applications/Hot Load.app/Contents/Resources/data"
+		ARCHIVE_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+		LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+		RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+	)
+else()
+	# @TODO
+endif()

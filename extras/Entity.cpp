@@ -62,9 +62,10 @@ Registry::Registry( const ae::Tag& tag ) :
 	m_components( tag )
 {}
 
-void Registry::SetOnCreateFn( std::function< void(Component*) > fn )
+void Registry::SetOnCreateFn( void* userData, void(*fn)(void*, Component*) )
 {
-	m_onCreate = fn;
+	m_onCreateFn = fn;
+	m_onCreateUserData = userData;
 }
 
 Entity Registry::CreateEntity( const char* name )
@@ -132,9 +133,9 @@ Component* Registry::AddComponent( Entity entity, const ae::Type* type )
 	}
 	components->Set( entity, component );
 	
-	if ( m_onCreate )
+	if ( m_onCreateFn )
 	{
-		m_onCreate( component );
+		m_onCreateFn( m_onCreateUserData, component );
 	}
 	return component;
 }
@@ -371,6 +372,27 @@ bool Registry::Load( const ae::EditorLevel* level, CreateObjectFn fn )
 		}
 	}
 	return true;
+}
+
+Component* Registry::m_AddComponent( Entity entity, const ae::Type* type )
+{
+	Component* component = (Component*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
+	type->New( component );
+	component->m_entity = entity;
+	component->m_reg = this;
+	
+	ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
+	if ( !components )
+	{
+		components = &m_components.Set( type->GetId(), m_tag );
+	}
+	components->Set( entity, component );
+	
+	if ( m_onCreateFn )
+	{
+		m_onCreateFn( m_onCreateUserData, component );
+	}
+	return component;
 }
 
 } // End ae namespace

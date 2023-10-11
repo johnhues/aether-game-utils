@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 //! @file aether.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2022 John Hughes
+// Copyright (c) 2023 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -127,19 +127,20 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <functional>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
-#include <functional>
+#include <map> // @TODO: Remove. For meta system.
 #include <ostream>
+#include <sstream>
+#include <thread> // @TODO: Remove. For Globals::allocatorThread.
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
-#include <map> // @TODO: Remove. For meta system.
 #include <vector> // @TODO: Remove. For meta system.
 
 //------------------------------------------------------------------------------
-// SIMD headers
+// Platform headers
 //------------------------------------------------------------------------------
 #if _AE_APPLE_
 	#ifdef __aarch64__
@@ -153,6 +154,9 @@
 	#include <emscripten.h>
 	#include <emscripten/html5.h>
 	#include <webgl/webgl1.h> // For Emscripten WebGL API headers (see also webgl/webgl1_ext.h and webgl/webgl2.h)
+#endif
+#if !_AE_WINDOWS_
+	#include <cxxabi.h>
 #endif
 
 //------------------------------------------------------------------------------
@@ -230,7 +234,7 @@ void ShowMessage( const char* msg );
 //! @} End Platform defgroup
 
 //------------------------------------------------------------------------------
-// Tags
+// Tags @TODO: Remove this! All tags should be user specified
 //------------------------------------------------------------------------------
 using Tag = std::string; // @TODO: Fixed length string
 #define AE_ALLOC_TAG_RENDER ae::Tag( "aeGraphics" )
@@ -2385,6 +2389,63 @@ inline size_t strlcpy( char* dst, const char* src, size_t size )
 namespace ae {
 
 //------------------------------------------------------------------------------
+// AE_EXPORT
+//------------------------------------------------------------------------------
+//! When building a hot loadable shared library for use with ae::HotLoader it is
+//! recommended to use the the following compiler flags when building, and this
+//! macro with any functions that will be called with ae::HotLoader::CallFn().
+//! This will stop the compiler from unintentionally exporting functions that
+//! could prevent the dynamic library from unloading.
+//! clang++: -fvisibility=hidden
+//! cl: @TODO
+//! g++: @TODO
+#define AE_EXPORT extern "C" __attribute__((visibility("default")))
+// Shared library AE_EXPORT example:
+#if 0
+	AE_EXPORT bool Game_Update( Game* game )
+	{
+		// ...
+	}
+#endif
+// Main executable ae::HotLoader::CallFn example:
+#if 0
+	while ( hotLoader.CallFn< bool(*)( Game* ) >( "Game_Update", &game ) )
+	{
+		// ...
+	}
+#endif
+
+//------------------------------------------------------------------------------
+// ae::HotLoader class
+//------------------------------------------------------------------------------
+//! Used to dynamically reload a shared library. The shared library should
+//! use AE_EXPORT to export any functions called with ae::HotLoader::CallFn().
+class HotLoader
+{
+public:
+	~HotLoader();
+	void Initialize( const char* buildCmd, const char* postBuildCmd, const char* libPath );
+	void Reload();
+	void Close();
+	bool IsLoaded() const { return m_dylib != nullptr; }
+
+	template < typename Fn, typename... Args >
+	decltype(auto) CallFn( const char* name, Args... args );
+
+	// Static helpers
+	static bool GetCMakeBuildCommand( ae::Str256* buildCmdOut, const char* cmakeBuildDir, const char* cmakeTargetName );
+	static bool GetCopyCommand( ae::Str256* copyCmdOut, const char* dest, const char* src );
+
+private:
+	void* m_LoadFn( const char* name );
+	void* m_dylib = nullptr;
+	ae::Str256 m_buildCmd;
+	ae::Str256 m_postBuildCmd;
+	ae::Str256 m_libPath;
+	ae::Map< ae::Str64, void*, 16 > m_fns;
+};
+
+//------------------------------------------------------------------------------
 // ae::Screen
 //------------------------------------------------------------------------------
 //! Screen information. ae::Streen member values are in the same coordinate
@@ -2831,6 +2892,7 @@ public:
 	//! Represents directories that the FileSystem class can load/save from.
 	enum class Root
 	{
+		Bundle, //!< The path to the app bundle on Apple platforms or the executable directory on other platforms
 		Data, //!< A given existing directory
 		User, //!< A directory for storing preferences and savedata
 		Cache, //!< A directory for storing expensive to generate data (computed, downloaded, etc)
@@ -2915,6 +2977,7 @@ public:
 	static std::string SaveDialog( const FileDialogParams& params );
 
 private:
+	void m_SetBundleDir();
 	void m_SetDataDir( const char* dataDir );
 	void m_SetUserDir( const char* organizationName, const char* applicationName );
 	void m_SetCacheDir( const char* organizationName, const char* applicationName );
@@ -2922,11 +2985,12 @@ private:
 	void m_SetCacheSharedDir( const char* organizationName );
 	void m_Read( ae::File* file, float timeoutSec ) const;
 	ae::Array< ae::File* > m_files = AE_ALLOC_TAG_FILE;
-	Str256 m_dataDir;
-	Str256 m_userDir;
-	Str256 m_cacheDir;
-	Str256 m_userSharedDir;
-	Str256 m_cacheSharedDir;
+	ae::Str256 m_bundleDir;
+	ae::Str256 m_dataDir;
+	ae::Str256 m_userDir;
+	ae::Str256 m_cacheDir;
+	ae::Str256 m_userSharedDir;
+	ae::Str256 m_cacheSharedDir;
 };
 
 //------------------------------------------------------------------------------
@@ -3641,7 +3705,6 @@ public:
 #endif
 	int32_t m_defaultFbo = -1;
 	
-	static GraphicsDevice* s_graphicsDevice;
 	VertexBuffer m_renderQuad;
 	Shader m_renderShaderRGB;
 	Shader m_renderShaderSRGB;
@@ -4652,7 +4715,10 @@ public:
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(T); } \
 	}; \
-	struct AE_ENUM_##E { AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ); };\
+	struct AE_ENUM_##E {\
+		AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ) : ec( name, def ) {}\
+		ae::_EnumCreator< E > ec;\
+	};\
 	template <> const ae::Enum* ae::GetEnum< E >(); \
 	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); return os; } \
 	namespace ae { template <> inline std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
@@ -4660,11 +4726,13 @@ public:
 	namespace ae { template <> inline uint32_t GetHash( E e ) { return (uint32_t)e; } }
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
-#define AE_REGISTER_ENUM_CLASS( E ) \
-	AE_ENUM_##E::AE_ENUM_##E( const char* name, const char* def ) { ae::_EnumCreator< E > ec( name, def ); } \
-	AE_ENUM_##E ae_enum_creator_##E; \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
-
+#define AE_REGISTER_ENUM_CLASS( E )\
+	AE_ENUM_##E ae_enum_creator_##E;\
+	template <> const ae::Enum* ae::GetEnum< E >(){\
+		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
+		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
+		return s_enum;\
+	}
 //------------------------------------------------------------------------------
 // External c-style enum registerer
 //------------------------------------------------------------------------------
@@ -4677,7 +4745,11 @@ public:
 		uint32_t GetSize() const override { return sizeof(E); } \
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; } \
+	template <> const ae::Enum* ae::GetEnum< E >() {\
+		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
+		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
+		return s_enum;\
+	}\
 	namespace ae { template <> std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
@@ -4691,7 +4763,11 @@ public:
 		const char* GetPrefix() const override { return #PREFIX; } \
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+	template <> const ae::Enum* ae::GetEnum< E >() {\
+		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
+		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
+		return s_enum;\
+	}
 
 //! Register c-style enum value
 #define AE_REGISTER_ENUM_VALUE( E, V ) \
@@ -4713,7 +4789,11 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 		uint32_t GetSize() const override { return sizeof(E); } \
 	}; \
 	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
-	template <> const ae::Enum* ae::GetEnum< E >() { static const ae::Enum* e = GetEnum( #E ); return e; }
+	template <> const ae::Enum* ae::GetEnum< E >() {\
+		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
+		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
+		return s_enum;\
+	}
 	// @NOTE: Nested namespace declaration requires C++17
 
 //! Register enum class value
@@ -4983,8 +5063,6 @@ public:
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
-	static const Serializer* s_serializer;
-	static bool s_serializerInitialized;
 	const ae::Type* m_owner = nullptr;
 	ae::Str32 m_name = "";
 	BasicType m_type;
@@ -5095,10 +5173,8 @@ template< typename T, typename C > T* Cast( C* obj );
 
 //! @}
 
-} // ae end
-
 //------------------------------------------------------------------------------
-// Copyright (c) 2022 John Hughes
+// Copyright (c) 2023 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -5128,53 +5204,108 @@ template< typename T, typename C > T* Cast( C* obj );
 //
 //
 //------------------------------------------------------------------------------
-// Platform internal implementation
+// Internal ae::_DefaultAllocator
 //------------------------------------------------------------------------------
-#ifndef _MSC_VER
-#include <cxxabi.h>
-#endif
-namespace ae {
+class _DefaultAllocator final : public Allocator
+{
+public:
+	void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override;
+	void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) override;
+	void Free( void* data ) override;
+	bool IsThreadSafe() const override;
+};
 
+//------------------------------------------------------------------------------
+// Internal ae::_ScratchBuffer storage
+//------------------------------------------------------------------------------
+class _ScratchBuffer
+{
+public:
+	_ScratchBuffer( uint32_t size );
+	~_ScratchBuffer();
+	static uint32_t GetScratchBytes( uint32_t bytes );
+
+#if _AE_EMSCRIPTEN_
+	static const uint32_t kScratchAlignment = 8; // Emscripten only supports up to 8 byte alignment
+#else
+	static const uint32_t kScratchAlignment = 16;
+#endif
+	uint8_t* data = nullptr;
+	uint32_t offset = 0;
+	uint32_t size = 0;
+};
+
+//------------------------------------------------------------------------------
+// Internal ae::_Globals
+//------------------------------------------------------------------------------
+struct _Globals
+{
+	static _Globals* Get();
+	const char* Demangle( const char* typeName );
+	
+	// Allocation
+	bool allocatorInitialized = false;
+	Allocator* allocator = nullptr;
+	bool allocatorIsThreadSafe = false;
+	std::thread::id allocatorThread;
+	_DefaultAllocator defaultAllocator;
+
+	// Scratch
+	_ScratchBuffer scratchBuffer = ae::Scratch< uint8_t >::kMaxScratchSize;
+
+	// Reflection
+	uint32_t metaCacheSeq = 0;
+	ae::Map< std::string, Enum, kMetaEnumTypes > enums;
+	std::map< ae::Str32, Type* > typeNameMap;
+	std::map< ae::TypeId, Type* > typeIdMap;
+	std::vector< ae::Type* > types;
+	const ae::Var::Serializer* varSerializer = nullptr;
+	bool varSerializerInitialized = false;
+#ifdef _MSC_VER
+	char typeNameBuf[ 64 ];
+#else
+	size_t typeNameBufLength = 0;
+	char* typeNameBuf = nullptr;
+#endif
+
+	// Graphics
+	class GraphicsDevice* graphicsDevice = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// Internal ae::_StaticCacheVar
+//------------------------------------------------------------------------------
+template < typename T >
+class _StaticCacheVar
+{
+public:
+	_StaticCacheVar( T defaultValue ) :
+		m_value( defaultValue ),
+		m_defaultValue( defaultValue ),
+		m_seq( _Globals::Get()->metaCacheSeq )
+	{}
+	operator T& ()
+	{
+		if ( m_seq != _Globals::Get()->metaCacheSeq )
+		{
+			m_seq = _Globals::Get()->metaCacheSeq;
+			m_value = m_defaultValue;
+		}
+		return m_value;
+	}
+private:
+	T m_value;
+	T m_defaultValue;
+	uint32_t m_seq;
+};
+
+//------------------------------------------------------------------------------
+// Type name internal implementation
+//------------------------------------------------------------------------------
 template < typename T >
 const char* GetTypeName()
 {
-	const char* typeName = typeid( typename std::decay< T >::type ).name();
-#ifdef _MSC_VER
-	if ( strncmp( typeName, "class ", 6 ) == 0 )
-	{
-		typeName += 6;
-	}
-	else if ( strncmp( typeName, "struct ", 7 ) == 0 )
-	{
-		typeName += 7;
-	}
-	static thread_local char s_buffer[ 64 ];
-	if ( strcpy_s( s_buffer, sizeof( s_buffer ), typeName ) == 0 )
-	{
-		if ( char* space = strchr( s_buffer, ' ' ) )
-		{
-			*space = 0;
-		}
-		return s_buffer;
-	}
-#else
-	// @NOTE: Demangle calls realloc on given buffer
-	int status = 1;
-	static thread_local size_t s_length = 0;
-	static thread_local char* s_buffer = nullptr;
-	s_buffer = abi::__cxa_demangle( typeName, s_buffer, &s_length, &status );
-	if ( status == 0 )
-	{
-		int32_t len = (int32_t)strlen( s_buffer );
-		while ( s_buffer[ len - 1 ] == '*' )
-		{
-			s_buffer[ len - 1 ] = 0;
-			len--;
-		}
-		return s_buffer;
-	}
-#endif
-	return typeName;
+	return _Globals::Get()->Demangle( typeid( T ).name() );
 }
 
 #if defined(__aarch64__) && _AE_OSX_
@@ -5388,51 +5519,13 @@ inline void Free( void* data )
 }
 
 //------------------------------------------------------------------------------
-// Internal ae::_ScratchBuffer storage
-//------------------------------------------------------------------------------
-class _ScratchBuffer
-{
-public:
-	_ScratchBuffer( uint32_t size ) : size( size )
-	{
-		offset = 0;
-		data = new uint8_t[ size ];
-		AE_ASSERT( (intptr_t)data % kScratchAlignment == 0 );
-	}
-	~_ScratchBuffer()
-	{
-		AE_ASSERT( offset == 0 );
-		delete [] data;
-	}
-	static _ScratchBuffer* Get() { static _ScratchBuffer s_scratchBuffer( ae::Scratch< uint8_t >::kMaxScratchSize ); return &s_scratchBuffer; }
-#if _AE_EMSCRIPTEN_
-	static const uint32_t kScratchAlignment = 8; // Emscripten only supports up to 8 byte alignment
-#else
-	static const uint32_t kScratchAlignment = 16;
-#endif
-	uint8_t* data = nullptr;
-	uint32_t offset = 0;
-	uint32_t size = 0;
-	
-	static uint32_t GetScratchBytes( uint32_t bytes )
-	{
-		// Round up allocation size as needed to maintain offset alignment
-#if _AE_DEBUG_
-		bytes += 2; // At least 2 byte guard
-#endif
-		return ( ( bytes + kScratchAlignment - 1 ) / kScratchAlignment ) * kScratchAlignment;
-	}
-};
-
-
-//------------------------------------------------------------------------------
 // ae::Scratch< T > member functions
 //------------------------------------------------------------------------------
 template < typename T >
 Scratch< T >::Scratch( uint32_t count )
 {
 	AE_STATIC_ASSERT( alignof(T) <= _ScratchBuffer::kScratchAlignment );
-	ae::_ScratchBuffer* globalScratch = ae::_ScratchBuffer::Get();
+	ae::_ScratchBuffer* globalScratch = &ae::_Globals::Get()->scratchBuffer;
 	const uint32_t bytes = globalScratch->GetScratchBytes( count * sizeof(T) );
 	
 	m_size = count;
@@ -5461,7 +5554,7 @@ Scratch< T >::Scratch( uint32_t count )
 template < typename T >
 Scratch< T >::~Scratch()
 {
-	ae::_ScratchBuffer* scratchBuffer = ae::_ScratchBuffer::Get();
+	ae::_ScratchBuffer* scratchBuffer = &ae::_Globals::Get()->scratchBuffer;
 	
 	const uint32_t bytes = scratchBuffer->GetScratchBytes( m_size * sizeof(T) );
 #if _AE_DEBUG_
@@ -9220,6 +9313,18 @@ template < typename T > uint32_t GetHash( T* key ) { return ae::Hash().HashBasic
 template < uint32_t N > uint32_t GetHash( ae::Str< N > key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
+// HotLoader member functions
+//------------------------------------------------------------------------------
+template < typename Fn, typename... Args >
+decltype(auto) HotLoader::CallFn( const char* name, Args... args )
+{
+	AE_ASSERT_MSG( m_dylib, "No library loaded" );
+	Fn fn = (Fn)m_fns.Get( name, nullptr );
+	if ( !fn ) { fn = (Fn)m_LoadFn( name ); }
+	return fn( args... );
+}
+
+//------------------------------------------------------------------------------
 // ae::IK member functions
 //------------------------------------------------------------------------------
 template <>
@@ -10037,9 +10142,6 @@ void BinaryStream::SerializeObjectConditional( T* obj )
 //------------------------------------------------------------------------------
 // Internal meta state
 //------------------------------------------------------------------------------
-std::map< ae::Str32, class Type* >& _GetTypeNameMap();
-std::map< ae::TypeId, class Type* >& _GetTypeIdMap();
-std::vector< class Type* >& _GetTypes();
 template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
 
 //------------------------------------------------------------------------------
@@ -10098,15 +10200,28 @@ void _DefineType( Type* type, uint32_t index );
 template < typename T >
 struct _TypeCreator
 {
-	_TypeCreator( const char *typeName )
+	_TypeCreator( const char* typeName )
 	{
-		static Type type;
-		// ae::TypeId id = m_GetNextTypeId();
-		_DefineType< T >( &type, 0 );
-		_GetTypeNameMap()[ typeName ] = &type;
-		_GetTypeIdMap()[ type.GetId() ] = &type; // @TODO: Should check for hash collision
-		_GetTypes().push_back( &type );
+		_Globals* globals = _Globals::Get();
+		_DefineType< T >( &m_type, 0 );
+		globals->typeNameMap[ typeName ] = &m_type;
+		globals->typeIdMap[ m_type.GetId() ] = &m_type; // @TODO: Should check for hash collision
+		globals->types.push_back( &m_type );
 	}
+	~_TypeCreator()
+	{
+		const char* typeName = m_type.GetName();
+		_Globals* globals = _Globals::Get();
+		globals->typeNameMap.erase( typeName );
+		globals->typeIdMap.erase( m_type.GetId() );
+		auto it = std::find( globals->types.begin(), globals->types.end(), &m_type );
+		if( it != globals->types.end() )
+		{
+			globals->types.erase( it );
+		}
+		globals->metaCacheSeq++;
+	}
+	Type m_type;
 };
 
 template< typename C >
@@ -10115,7 +10230,7 @@ struct _PropCreator
 	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
 	_PropCreator( ae::_TypeCreator< C >&, const char* typeName, const char* propName, const char* propValue )
 	{
-		ae::Type* type = _GetTypeNameMap().find( typeName )->second;
+		ae::Type* type = _Globals::Get()->typeNameMap.find( typeName )->second;
 		type->m_AddProp( propName, propValue );
 	}
 };
@@ -10126,19 +10241,17 @@ struct _VarCreator
 	// Take _TypeCreator param as a safety check that _VarCreator typeName is provided correctly
 	_VarCreator( ae::_TypeCreator< C >&, const char* typeName, const char* varName )
 	{
-		ae::Type* type = _GetTypeNameMap().find( typeName )->second;
+		ae::Type* type = _Globals::Get()->typeNameMap.find( typeName )->second;
 		AE_ASSERT( type );
-		
-		static ae::VarType< V > s_varType; // A pointer to this is held by ae::Var::m_varType
 		
 		Var var;
 		var.m_owner = type;
 		var.m_name = varName;
-		var.m_varType = &s_varType;
-		var.m_type = s_varType.GetType();
-		var.m_typeName = s_varType.GetName();
-		var.m_subTypeId = GetTypeIdFromName( s_varType.GetSubTypeName() );
-		var.m_arrayAdapter = s_varType.GetArrayAdapter();
+		var.m_varType = new ae::VarType< V >();
+		var.m_type = var.m_varType->GetType();
+		var.m_typeName = var.m_varType->GetName();
+		var.m_subTypeId = GetTypeIdFromName( var.m_varType->GetSubTypeName() );
+		var.m_arrayAdapter = var.m_varType->GetArrayAdapter();
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic push
 	#pragma clang diagnostic ignored "-Winvalid-offsetof"
@@ -10147,7 +10260,7 @@ struct _VarCreator
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic pop
 #endif
-		var.m_size = s_varType.GetSize();
+		var.m_size = var.m_varType->GetSize();
 
 		type->m_AddVar( var );
 	}
@@ -10175,9 +10288,12 @@ const Enum* GetEnum();
 template < typename E, typename T = typename std::underlying_type< E >::type >
 struct _EnumCreator
 {
+	ae::Enum* m_enumType = nullptr;
+
 	_EnumCreator( const char* typeName, std::string strMap )
 	{
-		ae::Enum* enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+		//AE_INFO( "Create enum '#'", typeName );
+		m_enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
 			
 		// Remove whitespace
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
@@ -10224,9 +10340,17 @@ struct _EnumCreator
 				}
 			}
 				
-			enumType->m_AddValue( enumName.c_str(), currentValue );
+			m_enumType->m_AddValue( enumName.c_str(), currentValue );
 			currentValue++;
 		}
+	}
+
+	~_EnumCreator()
+	{
+		auto&& enums = ae::_Globals::Get()->enums;
+		//AE_INFO( "Destroy enum '#'", m_enumType->GetName() );
+		enums.Remove( m_enumType->GetName() );
+		ae::_Globals::Get()->metaCacheSeq++;
 	}
 		
 private:
@@ -10265,6 +10389,13 @@ public:
 		ae::Enum* enumType = const_cast< ae::Enum* >( ae::GetEnum< T >() );
 		AE_ASSERT_MSG( enumType, "Could not register enum value '#'. No registered Enum.", valueName );
 		enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
+	}
+
+	~_EnumCreator2()
+	{
+		ae::_Globals* globals = ae::_Globals::Get();
+		globals->enums.Remove( ae::GetTypeName< T >() );
+		globals->metaCacheSeq++;
 	}
 };
 
@@ -10358,11 +10489,7 @@ template < typename T, uint32_t N >
 struct ae::VarType< ae::Array< T, N > > : public ae::VarTypeBase
 {
 	uint32_t GetSize() const override { return sizeof(T); }
-	const ae::Var::ArrayAdapter* GetArrayAdapter() const override
-	{
-		static ArrayAdapterDynamic< T, N > s_adapter;
-		return &s_adapter;
-	}
+	const ae::Var::ArrayAdapter* GetArrayAdapter() const override { return &m_adapter; }
 	// Use sub-type
 	ae::BasicType GetType() const override { return m_v.GetType(); }
 	const char* GetName() const override { return m_v.GetName(); }
@@ -10372,7 +10499,8 @@ struct ae::VarType< ae::Array< T, N > > : public ae::VarTypeBase
 	std::string GetStringFromRef( const void* ref ) const override { return m_v.GetStringFromRef( ref ); }
 	const char* GetSubTypeName() const override { return m_v.GetSubTypeName(); }
 private:
-	ae::VarType< T > m_v; // @TODO: Should use a global instance
+	ArrayAdapterDynamic< T, N > m_adapter; // @TODO: Should use a global instance?
+	ae::VarType< T > m_v; // @TODO: Should use a global instance?
 };
 
 template < typename T, uint32_t N >
@@ -10391,11 +10519,7 @@ template < typename T, uint32_t N >
 struct ae::VarType< T[ N ] > : public ae::VarTypeBase
 {
 	uint32_t GetSize() const override { return sizeof(T); }
-	const ae::Var::ArrayAdapter* GetArrayAdapter() const override
-	{
-		static ArrayAdapterStatic< T, N > s_adapter;
-		return &s_adapter;
-	}
+	const ae::Var::ArrayAdapter* GetArrayAdapter() const override { return &m_adapter; }
 	// Use sub-type
 	ae::BasicType GetType() const override { return m_v.GetType(); }
 	const char* GetName() const override { return m_v.GetName(); }
@@ -10405,7 +10529,8 @@ struct ae::VarType< T[ N ] > : public ae::VarTypeBase
 	std::string GetStringFromRef( const void* ref ) const override { return m_v.GetStringFromRef( ref ); }
 	const char* GetSubTypeName() const override { return m_v.GetSubTypeName(); }
 private:
-	ae::VarType< T > m_v; // @TODO: Should use a global instance
+	ArrayAdapterStatic< T, N > m_adapter; // @TODO: Should use a global instance?
+	ae::VarType< T > m_v; // @TODO: Should use a global instance?
 };
 
 template < typename T >
@@ -10419,18 +10544,19 @@ bool ae::Type::IsType() const
 template < typename T >
 const ae::Type* ae::GetType()
 {
-	static const ae::Type* s_type = nullptr;
+	static _StaticCacheVar< const ae::Type* > s_type = nullptr;
 	if ( s_type )
 	{
 		return s_type;
 	}
 	else
 	{
+		_Globals* globals = _Globals::Get();
 		// @TODO: Conditionally enable this check when T is not a forward declaration
 		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
 		const char* typeName = ae::GetTypeName< T >();
-		auto it = _GetTypeNameMap().find( typeName );
-		if ( it != _GetTypeNameMap().end() )
+		auto it = globals->typeNameMap.find( typeName );
+		if ( it != globals->typeNameMap.end() )
 		{
 			s_type = it->second;
 			return it->second;
@@ -10749,6 +10875,8 @@ T* ae::Cast( C* obj )
 	#include <sys/sysctl.h>
 	#include <unistd.h>
 	#include <pwd.h>
+	#include <dlfcn.h>
+	#include <mach-o/dyld.h>
 	#ifdef AE_USE_MODULES
 		@import AppKit;
 		@import Carbon;
@@ -10815,11 +10943,84 @@ T* ae::Cast( C* obj )
 #define EMSCRIPTEN_KEEPALIVE
 #endif
 
+namespace ae {
+
+//------------------------------------------------------------------------------
+// Internal ae::_ScratchBuffer storage
+//------------------------------------------------------------------------------
+_ScratchBuffer::_ScratchBuffer( uint32_t size ) : size( size )
+{
+	offset = 0;
+	data = new uint8_t[ size ]; // @TODO: Maybe this shouldn't use new/delete?
+	AE_ASSERT( (intptr_t)data % kScratchAlignment == 0 );
+}
+_ScratchBuffer::~_ScratchBuffer()
+{
+	AE_ASSERT( offset == 0 );
+	delete [] data;
+}
+
+uint32_t _ScratchBuffer::GetScratchBytes( uint32_t bytes )
+{
+	// Round up allocation size as needed to maintain offset alignment
+#if _AE_DEBUG_
+	bytes += 2; // At least 2 byte guard
+#endif
+	return ( ( bytes + kScratchAlignment - 1 ) / kScratchAlignment ) * kScratchAlignment;
+}
+
+//------------------------------------------------------------------------------
+// Internal ae::_Globals functions
+//------------------------------------------------------------------------------
+ae::_Globals* ae::_Globals::Get()
+{
+	static ae::_Globals s_globals;
+	return &s_globals;
+}
+
+const char* ae::_Globals::Demangle( const char* typeName )
+{
+	// @TODO: This should be thread safe
+#ifdef _MSC_VER
+	// @TODO: Should use a real demangler
+	if ( strncmp( typeName, "class ", 6 ) == 0 )
+	{
+		typeName += 6;
+	}
+	else if ( strncmp( typeName, "struct ", 7 ) == 0 )
+	{
+		typeName += 7;
+	}
+	if ( strcpy_s( typeNameBuf, sizeof(typeNameBuf), typeName ) == 0 )
+	{
+		if ( char* space = strchr( typeNameBuf, ' ' ) )
+		{
+			*space = 0;
+		}
+		return typeNameBuf;
+	}
+#else
+	// @NOTE: Demangle calls realloc on given buffer
+	int status = 1;
+	// @TODO: This should be thread safe!!!
+	typeNameBuf = abi::__cxa_demangle( typeName, typeNameBuf, &typeNameBufLength, &status );
+	if ( status == 0 )
+	{
+		int32_t len = strlen( typeNameBuf );
+		while ( typeNameBuf[ len - 1 ] == '*' )
+		{
+			typeNameBuf[ len - 1 ] = 0;
+			len--;
+		}
+		return typeNameBuf;
+	}
+#endif
+	return typeName;
+}
+
 //------------------------------------------------------------------------------
 // Platform functions internal implementation
 //------------------------------------------------------------------------------
-namespace ae {
-
 uint32_t GetPID()
 {
 #if _AE_WINDOWS_
@@ -12879,90 +13080,79 @@ void SetLogColorsEnabled( bool enabled )
 //------------------------------------------------------------------------------
 // _DefaultAllocator class
 //------------------------------------------------------------------------------
-class _DefaultAllocator final : public Allocator
+void* _DefaultAllocator::Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment )
 {
-public:
-	void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override
-	{
-		alignment = ae::Max( 2u, alignment );
+	alignment = ae::Max( 2u, alignment );
 #if _AE_WINDOWS_
-		return _aligned_malloc( bytes, alignment );
+	return _aligned_malloc( bytes, alignment );
 #elif _AE_OSX_
-		// @HACK: macosx clang c++11 does not have aligned alloc
-		return malloc( bytes );
+	// @HACK: macosx clang c++11 does not have aligned alloc
+	return malloc( bytes );
 #elif _AE_EMSCRIPTEN_
-		// Emscripten malloc always uses 8 byte alignment https://github.com/emscripten-core/emscripten/issues/10072
-		return malloc( bytes );
+	// Emscripten malloc always uses 8 byte alignment https://github.com/emscripten-core/emscripten/issues/10072
+	return malloc( bytes );
 #else
-		return aligned_alloc( alignment, bytes );
+	return aligned_alloc( alignment, bytes );
 #endif
-	}
+}
 
-	void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) override
-	{
-		alignment = ae::Max( 2u, alignment );
+void* _DefaultAllocator::Reallocate( void* data, uint32_t bytes, uint32_t alignment )
+{
+	alignment = ae::Max( 2u, alignment );
 #if _AE_WINDOWS_
-		return _aligned_realloc( data, bytes, alignment );
+	return _aligned_realloc( data, bytes, alignment );
 #else
-		aeCompilationWarning( "Aligned realloc() not determined on this platform" )
-		return nullptr;
+	aeCompilationWarning( "Aligned realloc() not determined on this platform" )
+	return nullptr;
 #endif
-	}
+}
 
-	void Free( void* data ) override
-	{
+void _DefaultAllocator::Free( void* data )
+{
 #if _AE_WINDOWS_
-		_aligned_free( data );
+	_aligned_free( data );
 #else
-		free( data );
+	free( data );
 #endif
-	}
-	
-	bool IsThreadSafe() const override
-	{
-		return true;
-	}
-};
+}
+
+bool _DefaultAllocator::IsThreadSafe() const
+{
+	return true;
+}
 
 //------------------------------------------------------------------------------
 // Allocator functions
 //------------------------------------------------------------------------------
-static bool g_allocatorInitialized = false;
-static Allocator* g_allocator = nullptr;
-static bool g_allocatorIsThreadSafe = false;
-static std::thread::id g_allocatorThread;
-
 Allocator::~Allocator()
 {
-	if ( g_allocator == this )
+	if ( ae::_Globals::Get()->allocator == this )
 	{
-		g_allocator = nullptr;
+		ae::_Globals::Get()->allocator = nullptr;
 	}
 }
 
 void SetGlobalAllocator( Allocator* allocator )
 {
 	AE_ASSERT_MSG( allocator, "No allocator provided to ae::SetGlobalAllocator()" );
-	AE_ASSERT_MSG( !g_allocator, "Call ae::SetGlobalAllocator() before making any allocations to use your own allocator" );
-	g_allocatorThread = std::this_thread::get_id();
-	g_allocatorIsThreadSafe = allocator->IsThreadSafe();
-	g_allocator = allocator;
-	g_allocatorInitialized = true;
+	AE_ASSERT_MSG( !ae::_Globals::Get()->allocator, "Call ae::SetGlobalAllocator() before making any allocations to use your own allocator" );
+	ae::_Globals::Get()->allocatorThread = std::this_thread::get_id();
+	ae::_Globals::Get()->allocatorIsThreadSafe = allocator->IsThreadSafe();
+	ae::_Globals::Get()->allocator = allocator;
+	ae::_Globals::Get()->allocatorInitialized = true;
 }
 
 Allocator* GetGlobalAllocator()
 {
-	if ( !g_allocator )
+	if ( !ae::_Globals::Get()->allocator )
 	{
-		AE_ASSERT_MSG( !g_allocatorInitialized, "Global Allocator has already been destroyed" );
-		// @TODO: Allocating this statically here won't work for hotloading
-		static _DefaultAllocator s_allocator;
-		SetGlobalAllocator( &s_allocator );
+		AE_ASSERT_MSG( !ae::_Globals::Get()->allocatorInitialized, "Global Allocator has already been destroyed" );
+		SetGlobalAllocator( &ae::_Globals::Get()->defaultAllocator );
 	}
 #if _AE_DEBUG_
-	AE_ASSERT_MSG( g_allocatorIsThreadSafe || std::this_thread::get_id() == g_allocatorThread, "The specified global ae::Allocator is not thread safe and can only be accessed on the thread it was set on." );
+	AE_ASSERT_MSG( ae::_Globals::Get()->allocatorIsThreadSafe || std::this_thread::get_id() == ae::_Globals::Get()->allocatorThread, "The specified global ae::Allocator is not thread safe and can only be accessed on the thread it was set on." );
 #endif
-	return g_allocator;
+	return ae::_Globals::Get()->allocator;
 }
 
 //------------------------------------------------------------------------------
@@ -13751,6 +13941,99 @@ template <> uint32_t GetHash( ae::Int3 key )
 	if ( j >= i ) { hash += i + j; }
 	else { hash += j; }
 	return hash;
+}
+
+//------------------------------------------------------------------------------
+// ae::HotLoader member functions
+//------------------------------------------------------------------------------
+HotLoader::~HotLoader()
+{
+	Close();
+}
+
+void HotLoader::Initialize( const char* buildCmd, const char* postBuildCmd, const char* libPath )
+{
+	m_fns.Clear();
+	Close();
+	m_buildCmd = buildCmd;
+	m_postBuildCmd = postBuildCmd;
+	m_libPath = libPath;
+	Reload();
+}
+
+void HotLoader::Reload()
+{
+	if ( m_buildCmd.Length() )
+	{
+		AE_INFO( m_buildCmd.c_str() );
+		system( m_buildCmd.c_str() );
+	}
+	if ( m_postBuildCmd.Length() )
+	{
+		AE_INFO( m_postBuildCmd.c_str() );
+		system( m_postBuildCmd.c_str() );
+	}
+
+	// @TODO: Don't reload library if the build failed
+	Close();
+
+	AE_INFO( "Loading: '#'", m_libPath );
+	m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
+	AE_ASSERT_MSG( m_dylib, "dlopen() failed: #", dlerror() );
+
+	for ( auto& fn : m_fns )
+	{
+		fn.value = dlsym( m_dylib, fn.key.c_str() );
+		AE_ASSERT_MSG( fn.value, "dlsym( \"#\" ) failed: #", fn.key, dlerror() );
+	}
+}
+
+void HotLoader::Close()
+{
+	for ( auto& fn : m_fns )
+	{
+		fn.value = nullptr;
+	}
+	if ( m_dylib )
+	{
+		AE_INFO( "Closing '#'", m_libPath );
+		if ( dlclose( m_dylib ) )
+		{
+			AE_FAIL_MSG( "dlclose() failed: #", dlerror() );
+		}
+		
+		const bool isLoaded = dlopen( m_libPath.c_str(), RTLD_NOLOAD | RTLD_LOCAL );
+		AE_ASSERT_MSG( !isLoaded, "Could not unload library '#'. See AE_EXPORT comments.", m_libPath );
+		
+		m_dylib = nullptr;
+	}
+}
+
+void* HotLoader::m_LoadFn( const char* name )
+{
+	void* fn = m_fns.Set( name, dlsym( m_dylib, name ) );
+	AE_ASSERT_MSG( fn, "Could not load function '#'", name );
+	return fn;
+}
+
+bool HotLoader::GetCMakeBuildCommand( ae::Str256* buildCmdOut, const char* cmakeBuildDir, const char* cmakeTargetName )
+{
+	if ( buildCmdOut && cmakeBuildDir[ 0 ] && cmakeTargetName[ 0 ] )
+	{
+		*buildCmdOut = ae::Str256::Format( "cmake --build \"#\" --target #", cmakeBuildDir, cmakeTargetName );
+		return true;
+	}
+	return false;
+}
+
+bool HotLoader::GetCopyCommand( ae::Str256* copyCmdOut, const char* dest, const char* src )
+{
+	if ( copyCmdOut && dest[ 0 ] && src[ 0 ] )
+	{
+		*copyCmdOut = ae::Str256::Format( "cp \"#\" \"#\"", src, dest );
+		return true;
+	}
+	return false;
 }
 
 //------------------------------------------------------------------------------
@@ -15923,11 +16206,44 @@ void FileSystem::Initialize( const char* dataDir, const char* organizationName, 
 		validateAppName++;
 	}
 
+	m_SetBundleDir();
 	m_SetDataDir( dataDir ? dataDir : "" );
 	m_SetUserDir( organizationName, applicationName );
 	m_SetCacheDir( organizationName, applicationName );
 	m_SetUserSharedDir( organizationName );
 	m_SetCacheSharedDir( organizationName );
+}
+
+void FileSystem::m_SetBundleDir()
+{
+#if _AE_OSX_
+	CFURLRef appUrl = CFBundleCopyBundleURL( CFBundleGetMainBundle() );
+	if ( appUrl )
+	{
+		CFStringRef bundlePath = CFURLCopyFileSystemPath( appUrl, kCFURLPOSIXPathStyle );
+		m_bundleDir = CFStringGetCStringPtr( bundlePath, kCFStringEncodingUTF8 );
+	}
+	else
+	{
+		char path[ PATH_MAX ];
+		uint32_t pathLen = countof(path);
+		if( _NSGetExecutablePath( path, &pathLen ) == 0 ) // If successful
+		{
+			m_bundleDir = path;
+			for ( int32_t len = m_bundleDir.Length() - 1; len > 0; len-- )
+			{
+				if ( m_bundleDir[ len ] == '/' )
+				{
+					m_bundleDir.Trim( len );
+					return;
+				}
+			}
+			m_bundleDir = "";
+		}
+	}
+#else
+	#warning "ae::FileSystem::m_SetBundleDir() not implemented. ae::FileSystem functionality will be limited."
+#endif
 }
 
 void FileSystem::m_SetDataDir( const char* dataDir )
@@ -16216,11 +16532,13 @@ bool FileSystem::GetAbsolutePath( Root root, const char* filePath, Str256* outPa
 	if ( IsAbsolutePath( filePath ) )
 	{
 		*outPath = filePath;
+		// @TODO: 'normalize' the path to remove '..'s etc
 		return true;
 	}
 	else if ( GetRootDir( root, outPath ) )
 	{
 		AppendToPath( outPath, filePath );
+		// @TODO: 'normalize' the path to remove '..'s etc
 		return true;
 	}
 	return false;
@@ -16234,6 +16552,13 @@ bool FileSystem::GetRootDir( Root root, Str256* outDir ) const
 	}
 	switch ( root )
 	{
+		case Root::Bundle:
+			if ( m_bundleDir.Length() )
+			{
+				*outDir = m_bundleDir;
+				return true;
+			}
+			break;
 		case Root::Data:
 			if ( m_dataDir.Length() )
 			{
@@ -19928,28 +20253,32 @@ void RenderTarget::Clear( Color color )
 
 void RenderTarget::Render( const Shader* shader, const UniformList& uniforms )
 {
-	AE_ASSERT( GraphicsDevice::s_graphicsDevice );
+	_Globals* globals = ae::_Globals::Get();
+	AE_ASSERT( globals->graphicsDevice );
+
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 	AE_CHECK_GL_ERROR();
 	
-	GraphicsDevice::s_graphicsDevice->m_renderQuad.Bind( shader, uniforms );
-	GraphicsDevice::s_graphicsDevice->m_renderQuad.Draw();
+	globals->graphicsDevice->m_renderQuad.Bind( shader, uniforms );
+	globals->graphicsDevice->m_renderQuad.Draw();
 }
 
 void RenderTarget::Render2D( uint32_t textureIndex, Rect ndc, float z )
 {
-	AE_ASSERT( GraphicsDevice::s_graphicsDevice );
+	_Globals* globals = ae::_Globals::Get();
+	AE_ASSERT( globals->graphicsDevice );
+
 	glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
 	AE_CHECK_GL_ERROR();
 
 	UniformList uniforms;
 	uniforms.Set( "u_localToNdc", RenderTarget::GetQuadToNDCTransform( ndc, z ) );
 	uniforms.Set( "u_tex", GetTexture( textureIndex ) );
-	Shader* shader = GraphicsDevice::s_graphicsDevice->m_rgbToSrgb
-		? &GraphicsDevice::s_graphicsDevice->m_renderShaderSRGB
-		: &GraphicsDevice::s_graphicsDevice->m_renderShaderRGB;
-	GraphicsDevice::s_graphicsDevice->m_renderQuad.Bind( shader, uniforms );
-	GraphicsDevice::s_graphicsDevice->m_renderQuad.Draw();
+	Shader* shader = globals->graphicsDevice->m_rgbToSrgb
+		? &globals->graphicsDevice->m_renderShaderSRGB
+		: &globals->graphicsDevice->m_renderShaderRGB;
+	globals->graphicsDevice->m_renderQuad.Bind( shader, uniforms );
+	globals->graphicsDevice->m_renderQuad.Draw();
 }
 
 const Texture2D* RenderTarget::GetTexture( uint32_t index ) const
@@ -20038,8 +20367,6 @@ Matrix4 RenderTarget::GetQuadToNDCTransform( Rect ndc, float z )
 //------------------------------------------------------------------------------
 // ae::GraphicsDevice member functions
 //------------------------------------------------------------------------------
-GraphicsDevice* GraphicsDevice::s_graphicsDevice = nullptr;
-
 GraphicsDevice::~GraphicsDevice()
 {
 	Terminate();
@@ -20216,10 +20543,13 @@ void GraphicsDevice::Initialize( class Window* window )
 	m_renderShaderSRGB.Initialize( vertexStr, fragStr, &srgbDefine, 1 ); // Do not blend when manually converting to srgb without GL_FRAMEBUFFER_SRGB
 	AE_CHECK_GL_ERROR();
 	
-	s_graphicsDevice = this;
+	_Globals* globals = ae::_Globals::Get();
+	AE_ASSERT_MSG( !globals->graphicsDevice, "Only one instance of ae::GraphicsDevice is supported" );
+	globals->graphicsDevice = this;
 	
 	Activate(); // Init primary render target
 	AE_ASSERT( GetWidth() && GetHeight() );
+	AE_ASSERT( m_context );
 }
 
 void GraphicsDevice::SetVsyncEnbled( bool enabled )
@@ -20239,15 +20569,16 @@ bool GraphicsDevice::GetVsyncEnabled() const
 
 void GraphicsDevice::Terminate()
 {
-	s_graphicsDevice = nullptr;
-	
-	m_renderShaderSRGB.Terminate();
-	m_renderShaderRGB.Terminate();
-	m_renderQuad.Terminate();
-	
 	if ( m_context )
 	{
-		//SDL_GL_DeleteContext( m_context );
+		_Globals* globals = ae::_Globals::Get();
+		AE_ASSERT( globals->graphicsDevice == this );
+		globals->graphicsDevice = nullptr;
+
+		m_renderShaderSRGB.Terminate();
+		m_renderShaderRGB.Terminate();
+		m_renderQuad.Terminate();
+
 		m_context = 0;
 	}
 }
@@ -23738,24 +24069,24 @@ static ae::_TypeCreator< ae::Object > ae_type_creator_aeObject( "ae::Object" );
 
 uint32_t ae::GetTypeCount()
 {
-	return (uint32_t)_GetTypes().size();
+	return (uint32_t)_Globals::Get()->types.size();
 }
 
 const ae::Type* ae::GetTypeByIndex( uint32_t i )
 {
-	return _GetTypes()[ i ];
+	return _Globals::Get()->types[ i ];
 }
 
 const ae::Type* ae::GetTypeById( ae::TypeId id )
 {
-	return _GetTypeIdMap()[ id ];
+	return _Globals::Get()->typeIdMap[ id ];
 }
 
 const ae::Type* ae::GetTypeByName( const char* typeName )
 {
 	if ( !typeName[ 0 ] ) { return nullptr; }
-	auto it = _GetTypeNameMap().find( typeName );
-	if ( it != _GetTypeNameMap().end() ) { return it->second; }
+	auto it = _Globals::Get()->typeNameMap.find( typeName );
+	if ( it != _Globals::Get()->typeNameMap.end() ) { return it->second; }
 	else { return nullptr; }
 }
 
@@ -23777,8 +24108,8 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 	}
 	
 	ae::TypeId id = GetObjectTypeId( obj );
-	auto it = _GetTypeIdMap().find( id );
-	if ( it != _GetTypeIdMap().end() )
+	auto it = _Globals::Get()->typeIdMap.find( id );
+	if ( it != _Globals::Get()->typeIdMap.end() )
 	{
 		return it->second;
 	}
@@ -23792,14 +24123,11 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 //------------------------------------------------------------------------------
 // ae::Var member functions
 //------------------------------------------------------------------------------
-const ae::Var::Serializer* ae::Var::s_serializer = nullptr;
-bool ae::Var::s_serializerInitialized = false;
-
 ae::Var::Serializer::~Serializer()
 {
-	if ( s_serializer == this )
+	if ( _Globals::Get()->varSerializer == this )
 	{
-		s_serializer = nullptr;
+		_Globals::Get()->varSerializer = nullptr;
 	}
 }
 
@@ -23807,9 +24135,9 @@ void ae::Var::SetSerializer( const ae::Var::Serializer* serializer )
 {
 	if ( serializer )
 	{
-		s_serializerInitialized = true;
+		_Globals::Get()->varSerializerInitialized = true;
 	}
-	s_serializer = serializer;
+	_Globals::Get()->varSerializer = serializer;
 }
 
 const char* ae::Var::GetName() const { return m_name.c_str(); }
@@ -24064,11 +24392,11 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		}
 		case BasicType::Pointer:
 		{
-			AE_ASSERT_MSG( s_serializerInitialized, "Must provide mapping function with ae::Var::SetSerializer() for pointer types when calling SetObjectValueFromString" );
-			AE_ASSERT_MSG( s_serializer, "ae::Var::Serializer was set, but has been destroyed" );
+			AE_ASSERT_MSG( _Globals::Get()->varSerializerInitialized, "Must provide mapping function with ae::Var::SetSerializer() for pointer types when calling SetObjectValueFromString" );
+			AE_ASSERT_MSG( _Globals::Get()->varSerializer, "ae::Var::Serializer was set, but has been destroyed" );
 
 			class ae::Object* obj = nullptr;
-			if ( s_serializer->StringToObjectPointer( value, &obj ) )
+			if ( _Globals::Get()->varSerializer->StringToObjectPointer( value, &obj ) )
 			{
 				if ( obj )
 				{
@@ -24270,24 +24598,6 @@ ae::TypeId ae::GetTypeIdFromName( const char* name )
 	return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
-std::map< ae::Str32, ae::Type* >& ae::_GetTypeNameMap()
-{
-	static std::map< ae::Str32, Type* > s_map;
-	return s_map;
-}
-
-std::map< ae::TypeId, ae::Type* >& ae::_GetTypeIdMap()
-{
-	static std::map< ae::TypeId, Type* > s_map;
-	return s_map;
-}
-
-std::vector< ae::Type* >& ae::_GetTypes()
-{
-	static std::vector< ae::Type* > s_vec;
-	return s_vec;
-}
-
 int32_t ae::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
 std::string ae::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
 uint32_t ae::Enum::Length() const { return m_enumValueToName.Length(); }
@@ -24306,10 +24616,11 @@ void ae::Enum::m_AddValue( const char* name, int32_t value )
 
 ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
 {
-	static ae::Map< std::string, Enum, kMetaEnumTypes > enums;
+	auto&& enums = ae::_Globals::Get()->enums;
 	if ( create )
 	{
 		AE_ASSERT( !enums.TryGet( enumName ) );
+		ae::_Globals::Get()->metaCacheSeq++;
 		return &enums.Set( enumName, Enum( enumName, size, isSigned ) );
 	}
 	else
@@ -24463,9 +24774,9 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 		}
 		case BasicType::Pointer:
 		{
-			AE_ASSERT_MSG( s_serializer, "Must provide mapping function with ae::Var::SetSerializer() for pointer types when calling GetObjectValueAsString" );
+			AE_ASSERT_MSG( _Globals::Get()->varSerializer, "Must provide mapping function with ae::Var::SetSerializer() for pointer types when calling GetObjectValueAsString" );
 			const ae::Object* obj = *reinterpret_cast< const ae::Object* const * >( varData );
-			return s_serializer->ObjectPointerToString( obj ).c_str();
+			return _Globals::Get()->varSerializer->ObjectPointerToString( obj ).c_str();
 		}
 		case BasicType::CustomRef:
 		{

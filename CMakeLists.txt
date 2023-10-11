@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
-set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
-set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
+	set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+	set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+endif()
 
 # aether-game-utils project
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
@@ -64,37 +66,42 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 endif()
 
 # ae library
-add_library(ae STATIC "")
-set_target_properties(ae PROPERTIES DEBUG_POSTFIX "d")
-if (APPLE)
-	set_target_properties(ae PROPERTIES XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET 13.0) # See Professional CMake 24.5.3 Deployment Target
-	# @TODO: Other Apple platforms
-endif()
-if (AE_DEPS_LIBRARIES)
-	target_link_libraries(ae ${AE_DEPS_LIBRARIES})
-endif()
-if (AE_DEPS_TARGETS)
-	add_dependencies(ae ${AE_DEPS_TARGETS})
-endif()
-if (AE_DEPS_INCLUDE)
-	target_include_directories(ae PUBLIC ${AE_DEPS_INCLUDE})
-endif()
-target_include_directories(ae PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-if(APPLE)
-	target_sources(ae PRIVATE aether.h aether.mm)
-	if (AE_USE_MODULES)
-		target_compile_definitions(ae PUBLIC AE_USE_MODULES)
-		target_compile_options(ae PUBLIC "-fmodules;-fcxx-modules")
-	else()
-		find_library(OPENAL_LIBRARY OpenAL REQUIRED)
-		find_library(CARBON_LIBRARY Carbon REQUIRED)
-		find_library(APPKIT_LIBRARY AppKit REQUIRED)
-		find_library(GAMECONTROLLER_LIBRARY GameController REQUIRED)
-		target_link_libraries(ae ${OPENAL_LIBRARY} ${CARBON_LIBRARY} ${APPKIT_LIBRARY} ${GAMECONTROLLER_LIBRARY})
+function(add_ae_library NAME)
+	if (APPLE)
+		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET 13.0) # See Professional CMake 24.5.3 Deployment Target
+		# @TODO: Other Apple platforms
 	endif()
-else()
-	target_sources(ae PRIVATE aether.h aether.cpp)
-endif()
+	if (AE_DEPS_LIBRARIES)
+		target_link_libraries(${NAME} ${AE_DEPS_LIBRARIES})
+	endif()
+	if (AE_DEPS_TARGETS)
+		add_dependencies(${NAME} ${AE_DEPS_TARGETS})
+	endif()
+	if (AE_DEPS_INCLUDE)
+		target_include_directories(${NAME} PUBLIC ${AE_DEPS_INCLUDE})
+	endif()
+	target_include_directories(${NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+	if(APPLE)
+		target_sources(${NAME} PRIVATE aether.h aether.mm)
+		if (AE_USE_MODULES)
+			target_compile_definitions(${NAME} PUBLIC AE_USE_MODULES)
+			target_compile_options(${NAME} PUBLIC "-fmodules;-fcxx-modules")
+		else()
+			find_library(AE_OPENAL_LIBRARY OpenAL REQUIRED)
+			find_library(AE_CARBON_LIBRARY Carbon REQUIRED)
+			find_library(AE_APPKIT_LIBRARY AppKit REQUIRED)
+			find_library(AE_GAMECONTROLLER_LIBRARY GameController REQUIRED)
+			target_link_libraries(${NAME} ${AE_OPENAL_LIBRARY} ${AE_CARBON_LIBRARY} ${AE_APPKIT_LIBRARY} ${AE_GAMECONTROLLER_LIBRARY})
+		endif()
+		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_SKIP_INSTALL "YES") # See Professional CMake 24.7. Creating And Exporting Archives
+	else()
+		target_sources(${NAME} PRIVATE aether.h aether.cpp)
+	endif()
+endfunction()
+add_library(ae STATIC "") # static library
+add_library(ae_shared SHARED "") # shared library (for hot loading)
+add_ae_library(ae)
+add_ae_library(ae_shared)
 
 # Examples, extra utilities, and tests
 add_subdirectory(loaders)

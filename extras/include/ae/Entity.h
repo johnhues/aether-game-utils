@@ -14,14 +14,14 @@
 namespace ae {
 
 //------------------------------------------------------------------------------
-// Entity
+// ae::Entity
 //------------------------------------------------------------------------------
 typedef uint32_t Entity;
 const Entity kInvalidEntity = 0;
 class EditorLevel;
 
 //------------------------------------------------------------------------------
-// Component
+// ae::Component
 //------------------------------------------------------------------------------
 class Component : public ae::Inheritor< ae::Object, Component >
 {
@@ -48,13 +48,13 @@ private:
 typedef std::function< void( const class EditorObject& levelObject, Entity entity, class Registry* registry ) > CreateObjectFn;
 
 //------------------------------------------------------------------------------
-// Registry
+// ae::Registry
 //------------------------------------------------------------------------------
 class Registry
 {
 public:
 	Registry( const ae::Tag& tag );
-	void SetOnCreateFn( std::function< void(Component*) > fn );
+	void SetOnCreateFn( void* userData, void(*fn)(void*, Component*) );
 	
 	// Creation
 	Entity CreateEntity( const char* name = "" );
@@ -104,16 +104,18 @@ public:
 	void Clear();
 	
 private:
+	Component* m_AddComponent( Entity entity, const ae::Type* type );
 	const ae::Tag m_tag;
 	Entity m_lastEntity = kInvalidEntity;
 	ae::Map< ae::Str16, Entity > m_entityNames;
 	ae::Map< ae::TypeId, ae::Map< Entity, Component* > > m_components;
-	std::function< void(Component*) > m_onCreate;
+	void(*m_onCreateFn)(void*, Component*) = nullptr;
+	void* m_onCreateUserData = nullptr;
 	bool m_destroying = false;
 };
 
 //------------------------------------------------------------------------------
-// Component member functions
+// ae::Component member functions
 //------------------------------------------------------------------------------
 template < typename T >
 T& Component::GetComponent()
@@ -158,7 +160,7 @@ const T* Component::TryGetComponent() const
 }
 
 //------------------------------------------------------------------------------
-// Registry member functions
+// ae::Registry member functions
 //------------------------------------------------------------------------------
 template < typename T >
 T* Registry::AddComponent( Entity entity )
@@ -166,27 +168,7 @@ T* Registry::AddComponent( Entity entity )
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	const ae::Type* type = ae::GetType< T >();
 	AE_ASSERT( type );
-	
-	ae::Object* object = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
-	type->New( object );
-	
-	Component* component = ae::Cast< T >( object );
-	AE_ASSERT( component );
-	component->m_entity = entity;
-	component->m_reg = this;
-	
-	ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
-	if ( !components )
-	{
-		components = &m_components.Set( type->GetId(), m_tag );
-	}
-	components->Set( entity, component );
-	
-	if ( m_onCreate )
-	{
-		m_onCreate( component );
-	}
-	return (T*)component;
+	return (T*)m_AddComponent( entity, type );
 }
 
 template < typename T >

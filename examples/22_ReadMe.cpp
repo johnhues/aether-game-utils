@@ -1,5 +1,5 @@
 #define AE_MAIN
-#define AE_USE_MODULES
+#define AE_USE_MODULES 1
 #include "aether.h"
 const ae::Tag TAG_RESOURCE = "resource";
 extern const char* kVertexShader;
