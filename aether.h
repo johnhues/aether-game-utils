@@ -14173,6 +14173,14 @@ void Window::m_Initialize()
 	aeApplicationDelegate* applicationDelegate = [[aeApplicationDelegate alloc] init];
 	applicationDelegate.aewindow = this;
 	[NSApp setDelegate:applicationDelegate];
+	
+	// Make sure run is only called when executable is bundled, and is also only called once
+	NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
+	if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
+	{
+		dispatch_async( dispatch_get_main_queue(), ^{ [NSApp activateIgnoringOtherApps:YES]; } );
+		[NSApp run];
+	}
 
 	// Main window
 	aeWindowDelegate* windowDelegate = [[aeWindowDelegate alloc] init];
@@ -14242,13 +14250,6 @@ void Window::m_Initialize()
 	m_height = contentScreenRect.size.height;
 	m_scaleFactor = nsWindow.backingScaleFactor;
 	
-	// Make sure run is only called when executable is bundled, and is also only called once
-	NSRunningApplication* currentApp = [NSRunningApplication currentApplication];
-	if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
-	{
-		dispatch_async( dispatch_get_main_queue(), ^{ [NSApp activateIgnoringOtherApps:YES]; } );
-		[NSApp run];
-	}
 	// This prevents keystrokes from being output to the terminal when running
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
