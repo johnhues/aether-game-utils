@@ -58,14 +58,14 @@ struct Vertex
 
 Vertex kCubeVerts[] =
 {
-	{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoRed().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::PicoOrange().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoYellow().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoGreen().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::PicoPeach().GetLinearRGBA() },
-	{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoPink().GetLinearRGBA() },
-	{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::PicoBlue().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherRed().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.5f, -0.5f, 1.0f ), ae::Color::AetherOrange().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherYellow().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, -0.5f, 1.0f ), ae::Color::AetherTeal().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherPurple().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, -0.5f, 0.5f, 1.0f ), ae::Color::AetherGreen().GetLinearRGBA() },
+	{ ae::Vec4( 0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherDarkRed().GetLinearRGBA() },
+	{ ae::Vec4( -0.5f, 0.5f, 0.5f, 1.0f ), ae::Color::AetherBlue().GetLinearRGBA() },
 };
 
 uint16_t kCubeIndices[] =
@@ -97,7 +97,7 @@ struct Example
 		AE_INFO( "Initialize" );
 
 		window.Initialize( 800, 600, false, true );
-		window.SetTitle( "cube" );
+		window.SetTitle( "Cube" );
 		render.Initialize( &window );
 		input.Initialize( &window );
 		timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -123,7 +123,7 @@ struct Example
 		r1 += timeStep.GetDt() * 0.75f;
 
 		render.Activate();
-		render.Clear( ae::Color::PicoDarkPurple() );
+		render.Clear( ae::Color::AetherBlack() );
 		
 		ae::UniformList uniformList;
 		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( ae::Vec3( 0.0f, 3.5f, -0.4f ), -ae::Vec3( 0.0f, 3.5f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 1.0f ) );
@@ -140,7 +140,7 @@ struct Example
 		ae::Matrix4 flat = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, -1.25f ) )
 			* ae::Matrix4::Scaling( ae::Vec3( 1.0f, 1.0f, 0.0f ) );
 		uniformList.Set( "u_worldToProj", viewToProj * worldToView * flat * modelToWorld );
-		uniformList.Set( "u_color", ae::Color::Black().ScaleA( 0.1f ).GetLinearRGBA() );
+		uniformList.Set( "u_color", ae::Color::Black().ScaleA( 0.4f ).GetLinearRGBA() );
 		vertexData.Bind( &shader, uniformList );
 		vertexData.Draw();
 		
