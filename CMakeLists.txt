@@ -67,7 +67,6 @@ endif()
 
 # ae library
 function(add_ae_library NAME)
-	set_target_properties(${NAME} PROPERTIES DEBUG_POSTFIX "d")
 	if (APPLE)
 		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET 13.0) # See Professional CMake 24.5.3 Deployment Target
 		# @TODO: Other Apple platforms
@@ -88,12 +87,13 @@ function(add_ae_library NAME)
 			target_compile_definitions(${NAME} PUBLIC AE_USE_MODULES)
 			target_compile_options(${NAME} PUBLIC "-fmodules;-fcxx-modules")
 		else()
-			find_library(OPENAL_LIBRARY OpenAL REQUIRED)
-			find_library(CARBON_LIBRARY Carbon REQUIRED)
-			find_library(APPKIT_LIBRARY AppKit REQUIRED)
-			find_library(GAMECONTROLLER_LIBRARY GameController REQUIRED)
-			target_link_libraries(${NAME} ${OPENAL_LIBRARY} ${CARBON_LIBRARY} ${APPKIT_LIBRARY} ${GAMECONTROLLER_LIBRARY})
+			find_library(AE_OPENAL_LIBRARY OpenAL REQUIRED)
+			find_library(AE_CARBON_LIBRARY Carbon REQUIRED)
+			find_library(AE_APPKIT_LIBRARY AppKit REQUIRED)
+			find_library(AE_GAMECONTROLLER_LIBRARY GameController REQUIRED)
+			target_link_libraries(${NAME} ${AE_OPENAL_LIBRARY} ${AE_CARBON_LIBRARY} ${AE_APPKIT_LIBRARY} ${AE_GAMECONTROLLER_LIBRARY})
 		endif()
+		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_SKIP_INSTALL "YES") # See Professional CMake 24.7. Creating And Exporting Archives
 	else()
 		target_sources(${NAME} PRIVATE aether.h aether.cpp)
 	endif()

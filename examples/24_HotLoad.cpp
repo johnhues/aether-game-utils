@@ -31,7 +31,7 @@
 int main()
 {
 	ae::FileSystem fileSystem;
-	fileSystem.Initialize( "", "ae", "24_HotLoad" );
+	fileSystem.Initialize( "data", "ae", "24_HotLoad" );
 
 	// Lib path
 	ae::Str256 libResourcePath;
@@ -39,21 +39,16 @@ int main()
 	fileSystem.GetAbsolutePath( ae::FileSystem::Root::Data, fileName.c_str(), &libResourcePath );
 
 	ae::Str256 buildCmd;
-	ae::Str256 postBuildCmd;
 	if ( ae::IsDebuggerAttached() )
 	{
 		ae::Str256 cmakeBuildDir;
 		fileSystem.GetAbsolutePath( ae::FileSystem::Root::Bundle, "..", &cmakeBuildDir ); // Root of CMake build dir
-		ae::Str256 libBuildPath = cmakeBuildDir;
-		ae::FileSystem::AppendToPath( &libBuildPath, "HotLoadable.dylib" );
-
 		ae::HotLoader::GetCMakeBuildCommand( &buildCmd, cmakeBuildDir.c_str(), "HotLoadable" );
-		ae::HotLoader::GetCopyCommand( &postBuildCmd, libResourcePath.c_str(), libBuildPath.c_str() );
 	}
 
 	Game game = { fileSystem };
 	ae::HotLoader hotLoader;
-	hotLoader.Initialize( buildCmd.c_str(), postBuildCmd.c_str(), libResourcePath.c_str() );
+	hotLoader.Initialize( buildCmd.c_str(), "", libResourcePath.c_str() );
 	hotLoader.CallFn< GameFn >( "Game_Initialize", &game );
 	while ( hotLoader.CallFn< GameFn >( "Game_Update", &game ) )
 	{

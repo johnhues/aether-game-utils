@@ -13959,23 +13959,25 @@ void HotLoader::Initialize( const char* buildCmd, const char* postBuildCmd, cons
 	m_postBuildCmd = postBuildCmd;
 	m_libPath = libPath;
 	Reload();
-	// Reload();
-	// Reload();
 }
 
 void HotLoader::Reload()
 {
 	if ( m_buildCmd.Length() )
 	{
+		AE_INFO( m_buildCmd.c_str() );
 		system( m_buildCmd.c_str() );
 	}
 	if ( m_postBuildCmd.Length() )
 	{
+		AE_INFO( m_postBuildCmd.c_str() );
 		system( m_postBuildCmd.c_str() );
 	}
 
+	// @TODO: Don't reload library if the build failed
 	Close();
-	AE_ASSERT_MSG( !dlopen( m_libPath.c_str(), RTLD_NOLOAD | RTLD_LOCAL ), "Could not unload library. See AE_EXPORT comments." );
+
+	AE_INFO( "Loading: '#'", m_libPath );
 	m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
 	AE_ASSERT_MSG( m_dylib, "dlopen() failed: #", dlerror() );
 
@@ -13992,11 +13994,19 @@ void HotLoader::Close()
 	{
 		fn.value = nullptr;
 	}
-	if ( m_dylib && dlclose( m_dylib ) )
+	if ( m_dylib )
 	{
-		AE_FAIL_MSG( "dlclose() failed: #", dlerror() );
+		AE_INFO( "Closing '#'", m_libPath );
+		if ( dlclose( m_dylib ) )
+		{
+			AE_FAIL_MSG( "dlclose() failed: #", dlerror() );
+		}
+		
+		const bool isLoaded = dlopen( m_libPath.c_str(), RTLD_NOLOAD | RTLD_LOCAL );
+		AE_ASSERT_MSG( !isLoaded, "Could not unload library '#'. See AE_EXPORT comments.", m_libPath );
+		
+		m_dylib = nullptr;
 	}
-	m_dylib = nullptr;
 }
 
 void* HotLoader::m_LoadFn( const char* name )

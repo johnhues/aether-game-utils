@@ -426,8 +426,21 @@ ae_add_bundle("Hot Load"
 	"0.0.0"
 	"data/Icon.icns"
 	"24_HotLoad.cpp;24_HotLoad.h"
-	"${AE_EXAMPLE_RESOURCES}" # ${CMAKE_CURRENT_BINARY_DIR}/HotLoadable.dylib
+	"${AE_EXAMPLE_RESOURCES}"
 	""
-	"ae_shared;HotLoadable" # Use shared library version of aether so symbols aren't duplicated
+	"ae_shared" # Use shared library version of aether so symbols aren't duplicated in HotLoadable library
 	""
 )
+add_dependencies(24_hot_load HotLoadable) # Make sure HotLoadable is built
+if(APPLE)
+	set_target_properties(HotLoadable PROPERTIES
+		# Output built HotLoadable library into app bundle
+		XCODE_ATTRIBUTE_SKIP_INSTALL "NO"
+		XCODE_ATTRIBUTE_INSTALL_PATH "Applications/Hot Load.app/Contents/Resources/data"
+		ARCHIVE_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+		LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+		RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE:24_hot_load>/../../Resources/data"
+	)
+else()
+	# @TODO
+endif()
