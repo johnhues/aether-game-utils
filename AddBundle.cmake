@@ -26,6 +26,8 @@ function(ae_add_shared_library _AE_NAME _AE_MAJOR_MINOR_PATCH_VERSION _AE_SRC_FI
 			FRAMEWORK_VERSION "${_AE_MAJOR_MINOR_PATCH_VERSION}"
 			PUBLIC_HEADER "${_AE_HEADER_FILES}"
 			XCODE_ATTRIBUTE_SKIP_INSTALL "${_AE_APPLE_SKIP_INSTALL}" # See Professional CMake 24.7. Creating And Exporting Archives
+			BUILD_RPATH @loader_path/../../..
+			INSTALL_RPATH @loader_path/../../..
 		)
 	endif()
 endfunction()
@@ -107,19 +109,25 @@ function(ae_add_bundle _AE_BUNDLE_NAME _AE_EXECUTABLE_NAME _AE_BUNDLE_ID _AE_APP
 			XCODE_ATTRIBUTE_INSTALL_PATH "${_AE_APPLE_INSTALL_PATH}" # See Professional CMake 24.7. Creating And Exporting Archives
 			XCODE_ATTRIBUTE_SKIP_INSTALL "${_AE_APPLE_SKIP_INSTALL}" # See Professional CMake 24.7. Creating And Exporting Archives
 
-			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME "YES"
-			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "No"
+			XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME YES
+			XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH NO
 
 			MACOSX_BUNDLE_ICON_FILE "${_AE_ICNS_FILE}" # CFBundleIconFile (*.icns file path)
 
 			OUTPUT_NAME "${_AE_BUNDLE_NAME}"
 
 			MACOSX_RPATH TRUE
+			BUILD_RPATH @executable_path/../Frameworks
 			INSTALL_RPATH @executable_path/../Frameworks
 		)
 
 		if(_AE_PACKAGE_LIBS)
 			set_target_properties(${_AE_EXECUTABLE_NAME} PROPERTIES XCODE_EMBED_FRAMEWORKS "${_AE_PACKAGE_LIBS}") # 24.10. Embedding Frameworks, Plugins And Extensions
+
+			install(TARGETS ${_AE_PACKAGE_LIBS} ${_AE_EXECUTABLE_NAME}
+				BUNDLE DESTINATION .
+				FRAMEWORK DESTINATION "${_AE_BUNDLE_NAME}.app/Contents/Frameworks"
+			)
 		endif()
 	elseif(EMSCRIPTEN)
 		set(_AE_EM_LINKER_FLAGS
