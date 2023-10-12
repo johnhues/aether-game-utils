@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
 	set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
 	set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+	if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+		set(CMAKE_OSX_DEPLOYMENT_TARGET "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)")
+	endif()
 endif()
 
 # aether-game-utils project
@@ -31,7 +34,7 @@ endif()
 set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CMAKE_CXX_STANDARD 17) # use c++17
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if (MSVC)
+if(MSVC)
 	add_definitions(-D_UNICODE -DUNICODE) # use unicode
 	add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
 	list(APPEND AE_DEPS_LIBRARIES version Winmm Imm32 Setupapi Ws2_32)
