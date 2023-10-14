@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
-function(ae_add_shared_library _AE_NAME _AE_MAJOR_MINOR_PATCH_VERSION _AE_SRC_FILES _AE_HEADER_FILES _AE_LIBS _AE_PUBLIC_INCLUDE_DIRS _AE_PRIVATE_INCLUDE_DIRS)
+function(ae_add_shared_library _AE_NAME _AE_APPLE_DEVELOPMENT_TEAM _AE_MAJOR_MINOR_PATCH_VERSION _AE_SRC_FILES _AE_HEADER_FILES _AE_LIBS _AE_PUBLIC_INCLUDE_DIRS _AE_PRIVATE_INCLUDE_DIRS)
 	message(STATUS "_AE_NAME \"${_AE_NAME}\" \(${CMAKE_BUILD_TYPE}\)")
 	message(STATUS "_AE_MAJOR_MINOR_PATCH_VERSION \"${_AE_MAJOR_MINOR_PATCH_VERSION}\"")
 	message(STATUS "_AE_SRC_FILES \"${_AE_SRC_FILES}\"")
@@ -18,13 +18,20 @@ function(ae_add_shared_library _AE_NAME _AE_MAJOR_MINOR_PATCH_VERSION _AE_SRC_FI
 		target_include_directories(${_AE_NAME} PRIVATE ${_AE_INCLUDE_DIRS})
 	endif()
 	if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
-		set(_AE_APPLE_SKIP_INSTALL "YES") # See Professional CMake 24.7. Creating And Exporting Archives
+		if (_AE_APPLE_DEVELOPMENT_TEAM)
+			set(_AE_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
+		endif()
+		set(_AE_APPLE_SKIP_INSTALL YES) # See Professional CMake 24.7. Creating And Exporting Archives
 	endif()
 	if(APPLE)
 		set_target_properties(${_AE_NAME} PROPERTIES
 			FRAMEWORK TRUE
 			FRAMEWORK_VERSION "${_AE_MAJOR_MINOR_PATCH_VERSION}"
 			PUBLIC_HEADER "${_AE_HEADER_FILES}"
+
+			XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${_AE_APPLE_DEVELOPMENT_TEAM}"
+			XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${_AE_APPLE_CODE_SIGN_IDENTITY}"
+
 			XCODE_ATTRIBUTE_SKIP_INSTALL "${_AE_APPLE_SKIP_INSTALL}" # See Professional CMake 24.7. Creating And Exporting Archives
 			BUILD_RPATH @loader_path/../../..
 			INSTALL_RPATH @loader_path/../../..
