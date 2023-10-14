@@ -13978,13 +13978,19 @@ void HotLoader::Reload()
 	Close();
 
 	AE_INFO( "Loading: '#'", m_libPath );
+#if _AE_APPLE_
 	m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
 	AE_ASSERT_MSG( m_dylib, "dlopen() failed: #", dlerror() );
+#else
+	AE_FAIL_MSG( "HotLoader not implemented for this platform" );
+#endif
 
 	for ( auto& fn : m_fns )
 	{
+#if _AE_APPLE_
 		fn.value = dlsym( m_dylib, fn.key.c_str() );
 		AE_ASSERT_MSG( fn.value, "dlsym( \"#\" ) failed: #", fn.key, dlerror() );
+#endif
 	}
 }
 
@@ -13997,13 +14003,17 @@ void HotLoader::Close()
 	if ( m_dylib )
 	{
 		AE_INFO( "Closing '#'", m_libPath );
+#if _AE_APPLE_
 		if ( dlclose( m_dylib ) )
 		{
 			AE_FAIL_MSG( "dlclose() failed: #", dlerror() );
 		}
+#endif
 		
+#if _AE_APPLE_
 		const bool isLoaded = dlopen( m_libPath.c_str(), RTLD_NOLOAD | RTLD_LOCAL );
 		AE_ASSERT_MSG( !isLoaded, "Could not unload library '#'. See AE_EXPORT comments.", m_libPath );
+#endif
 		
 		m_dylib = nullptr;
 	}
@@ -14011,9 +14021,13 @@ void HotLoader::Close()
 
 void* HotLoader::m_LoadFn( const char* name )
 {
+#if _AE_APPLE_
 	void* fn = m_fns.Set( name, dlsym( m_dylib, name ) );
 	AE_ASSERT_MSG( fn, "Could not load function '#'", name );
 	return fn;
+#else
+	return nullptr;
+#endif
 }
 
 bool HotLoader::GetCMakeBuildCommand( ae::Str256* buildCmdOut, const char* cmakeBuildDir, const char* cmakeTargetName )
