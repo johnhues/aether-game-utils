@@ -20,4 +20,4 @@ jobs:
       - name: Build
         run: cmake --build build --target all -- -j$(nproc)
       - name: Test
-        run: build/tests/tests
+        run: build/test/test
