@@ -9,7 +9,7 @@ add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue
 FetchContent_Declare(
 	imgui
 	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
-	GIT_TAG 526e2764bc15a3482bd7b550471e96f3c5454864
+	GIT_TAG 7a4fe3d930fcc93d9579df06f046d0738ef06391
 )
 FetchContent_MakeAvailable(imgui)
 
@@ -390,6 +390,8 @@ ae_add_bundle("Read Me"
 if(APPLE)
 	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
 	target_compile_options("22_read_me" PUBLIC "-fmodules;-fcxx-modules")
+elseif(UNIX)
+	target_link_libraries("22_read_me" PUBLIC GL)
 endif()
 target_compile_definitions("22_read_me" PUBLIC DATA_DIR="data")
 # target_compile_definitions(22_read_me PUBLIC DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data")

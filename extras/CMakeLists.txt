@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 add_library(ae_extras STATIC "")
 set_target_properties(ae_extras PROPERTIES DEBUG_POSTFIX "d")
 target_link_libraries(ae_extras ae)
+if(UNIX AND NOT APPLE)
+	target_link_libraries(ae_extras pthread)
+endif()
 target_include_directories(ae_extras PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_sources(ae_extras PRIVATE
 	include/ae/aeCompactingAllocator.h

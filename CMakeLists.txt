@@ -98,6 +98,9 @@ function(add_ae_library NAME)
 		endif()
 		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_SKIP_INSTALL "YES") # See Professional CMake 24.7. Creating And Exporting Archives
 	else()
+		if(UNIX)
+			target_compile_options(${NAME} PRIVATE -fPIC) # Fixes errors linking static ae into shared libraries: relocation against symbol 'X' which may bind externally 
+		endif()
 		target_sources(${NAME} PRIVATE aether.h aether.cpp)
 	endif()
 endfunction()
