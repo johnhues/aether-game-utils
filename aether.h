@@ -10805,6 +10805,7 @@ T* ae::Cast( C* obj )
 		#define AE_USE_OPENAL 0
 	#endif
 #endif
+#include <inttypes.h>
 #include <thread>
 #include <random>
 // Socket
@@ -24239,56 +24240,56 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		{
 			AE_ASSERT( m_size == sizeof(uint8_t) );
 			uint8_t* u8 = (uint8_t*)varData;
-			sscanf( value, "%hhu", u8 );
+			sscanf( value, "%" SCNu8, u8 );
 			return true;
 		}
 		case BasicType::UInt16:
 		{
 			AE_ASSERT( m_size == sizeof(uint16_t) );
 			uint16_t* u16 = (uint16_t*)varData;
-			sscanf( value, "%hu", u16 );
+			sscanf( value, "%" SCNu16, u16 );
 			return true;
 		}
 		case BasicType::UInt32:
 		{
 			AE_ASSERT( m_size == sizeof(uint32_t) );
 			uint32_t* u32 = (uint32_t*)varData;
-			sscanf( value, "%u", u32 );
+			sscanf( value, "%" SCNu32, u32 );
 			return true;
 		}
 		case BasicType::UInt64:
 		{
 			AE_ASSERT( m_size == sizeof(uint64_t) );
 			uint64_t* u64 = (uint64_t*)varData;
-			sscanf( value, "%llu", u64 );
+			sscanf( value, "%" SCNu64, u64 );
 			return true;
 		}
 		case BasicType::Int8:
 		{
 			AE_ASSERT( m_size == sizeof(int8_t) );
 			int8_t* i8 = (int8_t*)varData;
-			sscanf( value, "%hhd", i8 );
+			sscanf( value, "%" SCNi8, i8 );
 			return true;
 		}
 		case BasicType::Int16:
 		{
 			AE_ASSERT( m_size == sizeof(int16_t) );
 			int16_t* i16 = (int16_t*)varData;
-			sscanf( value, "%hd", i16 );
+			sscanf( value, "%" SCNi16, i16 );
 			return true;
 		}
 		case BasicType::Int32:
 		{
 			AE_ASSERT( m_size == sizeof(int32_t) );
 			int32_t* i32 = (int32_t*)varData;
-			sscanf( value, "%d", i32 );
+			sscanf( value, "%" SCNi32, i32 );
 			return true;
 		}
 		case BasicType::Int64:
 		{
 			AE_ASSERT( m_size == sizeof(int64_t) );
 			int64_t* i64 = (int64_t*)varData;
-			sscanf( value, "%lld", i64 );
+			sscanf( value, "%" SCNi64, i64 );
 			return true;
 		}
 		case BasicType::Int2:
