@@ -18060,7 +18060,6 @@ uint32_t ListenerSocket::GetConnectionCount() const
 #elif _AE_IOS_
 	#include <OpenGLES/ES3/gl.h>
 #else
-	#include <OpenGL/gl.h>
 	#include <OpenGL/glext.h>
 	#include <OpenGL/gl3.h>
 	#include <OpenGL/gl3ext.h>
