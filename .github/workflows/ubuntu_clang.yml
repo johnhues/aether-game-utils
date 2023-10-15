@@ -12,7 +12,7 @@ jobs:
       - name: Install Packages
         run: |
           sudo apt update -qq
-          sudo apt install -y --no-install-recommends libgl1-mesa-dev libuuid-dev
+          sudo apt install -y --no-install-recommends libgl1-mesa-dev uuid-dev
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
