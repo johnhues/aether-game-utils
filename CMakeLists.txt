@@ -103,6 +103,7 @@ function(add_ae_library NAME)
 endfunction()
 add_library(ae STATIC "") # static library
 add_library(ae_shared SHARED "") # shared library (for hot loading)
+set_target_properties(ae_shared PROPERTIES OUTPUT_NAME ae)
 add_ae_library(ae)
 add_ae_library(ae_shared)
 
