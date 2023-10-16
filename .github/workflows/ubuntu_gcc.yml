@@ -1,4 +1,4 @@
-name: Ubuntu Clang
+name: Ubuntu g++
 on: [push]
 jobs:
   build-and-test:
@@ -12,9 +12,8 @@ jobs:
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
-        run: cmake -S . -B build\
-          -DCMAKE_C_COMPILER=gcc\
-          -DCMAKE_CXX_COMPILER=g++\
+        run: CC=gcc CXX=g++\
+          cmake -S . -B build\
           -DCMAKE_BUILD_TYPE=Release\
           -DAE_LEAN_AND_MEAN=OFF
       - name: Build
