@@ -1,14 +1,10 @@
-name: Ubuntu Clang Tests
-
+name: Ubuntu Clang
 on: [push]
-
 jobs:
   build-and-test:
       runs-on: ubuntu-latest
       steps:
       - uses: actions/checkout@v4
-      - name: Print test
-        run: echo "test"
       - name: Install Packages
         run: |
           sudo apt update -qq

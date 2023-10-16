@@ -3,7 +3,7 @@
 </p>
 
 # aether game utils
-[![Ubuntu Clang Tests](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
+[![Ubuntu Clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
 
 [`aether.h`](https://github.com/johnhues/aether-game-utils/blob/master/aether.h) is a single-header collection of cross platform C++ utilities for quickly creating small games. Platforms currently supported are Mac, Windows, Linux, and Web. Core tenants of this library are to statisfy the (often times at odds!) goals of:
 * Providing useful and performant utilities tailored for game development
