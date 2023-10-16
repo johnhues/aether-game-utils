@@ -12,10 +12,8 @@ jobs:
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
-        run: CC=gcc CXX=g++ cmake -S . -B build\
-          -DCMAKE_BUILD_TYPE=Release\
-          -DAE_LEAN_AND_MEAN=OFF
+        run: CC=gcc CXX=g++ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
       - name: Build
-        run: cmake --build build --target all -- -j$(nproc)
+        run: make -C build all -j$(nproc)
       - name: Test
         run: build/test/test
