@@ -13867,34 +13867,41 @@ void HotLoader::Initialize( const char* buildCmd, const char* postBuildCmd, cons
 
 void HotLoader::Reload()
 {
+	bool reload = true;
 	if ( m_buildCmd.Length() )
 	{
 		AE_INFO( m_buildCmd.c_str() );
-		system( m_buildCmd.c_str() );
+		reload = reload && ( system( m_buildCmd.c_str() ) == 0 );
 	}
 	if ( m_postBuildCmd.Length() )
 	{
 		AE_INFO( m_postBuildCmd.c_str() );
-		system( m_postBuildCmd.c_str() );
+		reload = reload && ( system( m_postBuildCmd.c_str() ) == 0 );
 	}
 
-	// @TODO: Don't reload library if the build failed
-	Close();
-
-	AE_INFO( "Loading: '#'", m_libPath );
-#if _AE_APPLE_
-	m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
-	AE_ASSERT_MSG( m_dylib, "dlopen() failed: #", dlerror() );
-#else
-	AE_FAIL_MSG( "HotLoader not implemented for this platform" );
-#endif
-
-	for ( auto& fn : m_fns )
+	if ( reload )
 	{
+		Close();
+
+		AE_INFO( "Loading: '#'", m_libPath );
 #if _AE_APPLE_
-		fn.value = dlsym( m_dylib, fn.key.c_str() );
-		AE_ASSERT_MSG( fn.value, "dlsym( \"#\" ) failed: #", fn.key, dlerror() );
+		m_dylib = dlopen( m_libPath.c_str(), RTLD_NOW | RTLD_LOCAL );
+		AE_ASSERT_MSG( m_dylib, "dlopen() failed: #", dlerror() );
+#else
+		AE_FAIL_MSG( "HotLoader not implemented for this platform" );
 #endif
+
+		for ( auto& fn : m_fns )
+		{
+#if _AE_APPLE_
+			fn.value = dlsym( m_dylib, fn.key.c_str() );
+			AE_ASSERT_MSG( fn.value, "dlsym( \"#\" ) failed: #", fn.key, dlerror() );
+#endif
+		}
+	}
+	else
+	{
+		AE_WARN( "Reload aborted" );
 	}
 }
 
@@ -16160,7 +16167,7 @@ void FileSystem::m_SetBundleDir()
 		}
 	}
 #else
-	#warning "ae::FileSystem::m_SetBundleDir() not implemented. ae::FileSystem functionality will be limited."
+	// @TODO: Implement
 #endif
 }
 
