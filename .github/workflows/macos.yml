@@ -1,0 +1,15 @@
+name: MacOS
+on: [push]
+jobs:
+  build-and-test:
+      runs-on: macos-latest
+      steps:
+      - uses: actions/checkout@v4
+      - name: Create Build Directory
+        run: cmake -E make_directory build
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+      - name: Build
+        run: make -C build all -j$(nproc)
+      - name: Test
+        run: build/test/test
