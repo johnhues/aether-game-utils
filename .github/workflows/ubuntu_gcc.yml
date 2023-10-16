@@ -13,8 +13,8 @@ jobs:
         run: cmake -E make_directory build
       - name: Configure
         run: cmake -S . -B build\
-          -DCMAKE_C_COMPILER=clang\
-          -DCMAKE_CXX_COMPILER=clang++\
+          -DCMAKE_C_COMPILER=gcc\
+          -DCMAKE_CXX_COMPILER=g++\
           -DCMAKE_BUILD_TYPE=Release\
           -DAE_LEAN_AND_MEAN=OFF
       - name: Build
