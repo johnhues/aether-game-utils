@@ -11,9 +11,9 @@ endif()
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 
 # Configuration variables intended for external use
-set(AE_LEAN_AND_MEAN ON CACHE BOOL "Disables building tests and examples")
-set(AE_LOADERS_OFBX OFF CACHE BOOL "Enables aether FBX loader and ofbx dependency")
-set(AE_LOADERS_STB OFF CACHE BOOL "Enables aether PNG loader and stb dependency")
+option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
+option(AE_LOADERS_OFBX "Enables aether FBX loader and ofbx dependency" OFF)
+option(AE_LOADERS_STB "Enables aether PNG loader and stb dependency" OFF)
 
 # Configuration for building ae on its own
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
