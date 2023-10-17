@@ -2504,14 +2504,14 @@ public:
 private:
 	Window( const Window& ) = delete;
 	void m_Initialize();
-	Int2 m_pos;
-	int32_t m_width;
-	int32_t m_height;
+	Int2 m_pos = Int2( 0 );
+	int32_t m_width = 0;
+	int32_t m_height = 0;
 	RectInt m_restoreRect; // Last pos/size before fullscreen
-	bool m_fullScreen;
-	bool m_maximized;
-	bool m_focused;
-	float m_scaleFactor;
+	bool m_fullScreen = false;
+	bool m_maximized = false;
+	bool m_focused = false;
+	float m_scaleFactor = 1.0f;
 	Str256 m_windowTitle;
 	bool m_debugLog = false;
 public:
@@ -2522,9 +2522,9 @@ public:
 	void m_UpdateFocused( bool focused );
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
-	void* window;
-	class GraphicsDevice* graphicsDevice;
-	class Input* input;
+	void* window = nullptr;
+	class GraphicsDevice* graphicsDevice = nullptr;
+	class Input* input = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -14028,7 +14028,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 #if _AE_OSX_
 } // ae end
 @interface aeApplicationDelegate : NSObject< NSApplicationDelegate >
-@property ae::Window* aewindow;
+@property ae::Window* aeWindow;
 @end
 @implementation aeApplicationDelegate
 - (void)applicationWillFinishLaunching:(NSNotification*)notification
@@ -14060,9 +14060,9 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
 {
-	AE_ASSERT( _aewindow );
-	AE_ASSERT( _aewindow->input );
-	_aewindow->input->quit = true;
+	AE_ASSERT( _aeWindow );
+	AE_ASSERT( _aeWindow->input );
+	_aeWindow->input->quit = true;
 	return NSTerminateCancel;
 }
 @end
@@ -14071,53 +14071,53 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 // ae::Window Objective-C aeWindowDelegate class
 //------------------------------------------------------------------------------
 @interface aeWindowDelegate : NSObject< NSWindowDelegate >
-@property ae::Window* aewindow;
+@property ae::Window* aeWindow;
 @end
 @implementation aeWindowDelegate
 - (BOOL)windowShouldClose:(NSWindow *)sender
 {
-	AE_ASSERT( _aewindow );
-	AE_ASSERT( _aewindow->input );
-	_aewindow->input->quit = true;
+	AE_ASSERT( _aeWindow );
+	AE_ASSERT( _aeWindow->input );
+	_aeWindow->input->quit = true;
 	return false;
 }
 - (void)windowDidResize:(NSWindow*)sender
 {
-	AE_ASSERT( _aewindow );
-	NSWindow* window = (NSWindow*)_aewindow->window;
+	AE_ASSERT( _aeWindow );
+	NSWindow* window = (NSWindow*)_aeWindow->window;
 	AE_ASSERT( window );
 	
 	NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
-	_aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
-	_aewindow->m_UpdateSize( contentScreenRect.size.width, contentScreenRect.size.height, [window backingScaleFactor] );
+	_aeWindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
+	_aeWindow->m_UpdateSize( contentScreenRect.size.width, contentScreenRect.size.height, [window backingScaleFactor] );
 	
-	if ( _aewindow->input )
+	if ( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
-		_aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
 	}
 }
 - (void)windowDidMove:(NSNotification *)notification
 {
-	AE_ASSERT( _aewindow );
-	NSWindow* window = (NSWindow*)_aewindow->window;
+	AE_ASSERT( _aeWindow );
+	NSWindow* window = (NSWindow*)_aeWindow->window;
 	AE_ASSERT( window );
 	
 	NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
-	_aewindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
+	_aeWindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
 	
 	NSPoint mouseScreenPos = [NSEvent mouseLocation];
-	_aewindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+	_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
 }
 - (void)windowDidBecomeKey:(NSNotification *)notification
 {
-	AE_ASSERT( _aewindow );
-	_aewindow->m_UpdateFocused( true );
+	AE_ASSERT( _aeWindow );
+	_aeWindow->m_UpdateFocused( true );
 }
 - (void)windowDidResignKey:(NSNotification *)notification
 {
-	AE_ASSERT( _aewindow );
-	_aewindow->m_UpdateFocused( false );
+	AE_ASSERT( _aeWindow );
+	_aeWindow->m_UpdateFocused( false );
 }
 @end
 namespace ae {
@@ -14198,6 +14198,12 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	m_height = height;
 	m_fullScreen = false;
 
+	// Center window on primary screen
+	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
+	AE_ASSERT( screens.Length() > 0 );
+	m_pos = ( screens[ 0 ].size - ae::Int2( width, height ) ) / 2;
+	m_pos += screens[ 0 ].position;
+
 	m_Initialize();
 
 	if ( fullScreen )
@@ -14218,8 +14224,6 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 	m_fullScreen = false;
 
 	m_Initialize();
-
-	//SDL_ShowCursor( showCursor ? SDL_ENABLE : SDL_DISABLE );
 
 	return true;
 }
@@ -14379,7 +14383,7 @@ void Window::m_Initialize()
 	// Application
 	[NSApplication sharedApplication];
 	aeApplicationDelegate* applicationDelegate = [[aeApplicationDelegate alloc] init];
-	applicationDelegate.aewindow = this;
+	applicationDelegate.aeWindow = this;
 	[NSApp setDelegate:applicationDelegate];
 	
 	// Make sure run is only called when executable is bundled, and is also only called once
@@ -14387,12 +14391,11 @@ void Window::m_Initialize()
 	if ( [currentApp bundleIdentifier] && ![currentApp isFinishedLaunching] )
 	{
 		dispatch_async( dispatch_get_main_queue(), ^{ [NSApp activateIgnoringOtherApps:YES]; } );
-		[NSApp run];
 	}
 
 	// Main window
 	aeWindowDelegate* windowDelegate = [[aeWindowDelegate alloc] init];
-	windowDelegate.aewindow = this;
+	windowDelegate.aeWindow = this;
 	NSWindow* nsWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect( m_pos.x, m_pos.y, m_width, m_height )
 		styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
 		backing:NSBackingStoreBuffered
