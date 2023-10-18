@@ -365,10 +365,10 @@ ae_add_bundle(
 if(APPLE)
 	set_source_files_properties("22_ReadMe.cpp" PROPERTIES COMPILE_FLAGS "-x objective-c++")
 	target_compile_options("22_read_me" PUBLIC "-fmodules;-fcxx-modules")
+	target_compile_definitions("22_read_me" PUBLIC DATA_DIR="data")
 elseif(UNIX)
 	target_link_libraries("22_read_me" PUBLIC GL)
 endif()
-target_compile_definitions("22_read_me" PUBLIC DATA_DIR="data")
 # target_compile_definitions(22_read_me PUBLIC DATA_DIR="https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data")
 
 # Frameworks

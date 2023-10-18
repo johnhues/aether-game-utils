@@ -37,6 +37,7 @@
 # CMake / CLion
 build
 build_xcode
+build_vscode
 build_em
 build_linux
 linux

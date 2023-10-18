@@ -208,15 +208,14 @@ function(ae_add_bundle)
 	endif()
 	
 	if(NOT APPLE)
-		foreach(RESOURCE ${_AE_RESOURCES})
-		get_filename_component(RESOURCE ${RESOURCE} ABSOLUTE)
-		get_filename_component(RESOURCE_NAME ${RESOURCE} NAME)
-		get_property(DESTINATION SOURCE ${RESOURCE} PROPERTY DESTINATION)
-		add_custom_command(TARGET ${_AE_EXECUTABLE_NAME} POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				${RESOURCE}
-				$<TARGET_FILE_DIR:${_AE_EXECUTABLE_NAME}>/${DESTINATION}/${RESOURCE_NAME}
-		)
+		foreach(RESOURCE ${ADD_BUNDLE_RESOURCES})
+			get_filename_component(RESOURCE_PATH ${RESOURCE} ABSOLUTE)
+			cmake_path(RELATIVE_PATH RESOURCE_PATH OUTPUT_VARIABLE RESOURCE_RELATIVE)
+			add_custom_command(TARGET ${ADD_BUNDLE_EXECUTABLE_NAME} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					${RESOURCE_PATH}
+					$<TARGET_FILE_DIR:${ADD_BUNDLE_EXECUTABLE_NAME}>/${RESOURCE_RELATIVE}
+			)
 		endforeach()
 	endif()
 	

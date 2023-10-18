@@ -2399,7 +2399,11 @@ namespace ae {
 //! clang++: -fvisibility=hidden
 //! cl: @TODO
 //! g++: @TODO
-#define AE_EXPORT extern "C" __attribute__((visibility("default")))
+#if _AE_WINDOWS_
+	#define AE_EXPORT
+#else
+	#define AE_EXPORT extern "C" __attribute__((visibility("default")))
+#endif
 // Shared library AE_EXPORT example:
 #if 0
 	AE_EXPORT bool Game_Update( Game* game )
