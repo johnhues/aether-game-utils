@@ -3,8 +3,8 @@
 </p>
 
 # aether game utils
+[![Windows](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/windows.yml)
 [![MacOS](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/macos.yml)
-
 [![Ubuntu clang](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_clang.yml)
 [![Ubuntu g++](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml/badge.svg)](https://github.com/johnhues/aether-game-utils/actions/workflows/ubuntu_gcc.yml)
 
