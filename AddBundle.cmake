@@ -25,13 +25,15 @@ function(ae_add_shared_library)
 	if(ADD_SHARED_LIB_INCLUDE_DIRS)
 		target_include_directories(${ADD_SHARED_LIB_NAME} PRIVATE ${ADD_SHARED_LIB_INCLUDE_DIRS})
 	endif()
-	if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
-		if (ADD_SHARED_LIB_APPLE_DEVELOPMENT_TEAM)
-			set(ADD_SHARED_LIB_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
+	if(MSVC)
+		set_target_properties(${ADD_SHARED_LIB_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS YES)
+	elseif(APPLE)
+		if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
+			if (ADD_SHARED_LIB_APPLE_DEVELOPMENT_TEAM)
+				set(ADD_SHARED_LIB_APPLE_CODE_SIGN_IDENTITY "Apple Development") # See Professional CMake 24.6.1. Signing Identity And Development Team
+			endif()
+			set(ADD_SHARED_LIB_APPLE_SKIP_INSTALL YES) # See Professional CMake 24.7. Creating And Exporting Archives
 		endif()
-		set(ADD_SHARED_LIB_APPLE_SKIP_INSTALL YES) # See Professional CMake 24.7. Creating And Exporting Archives
-	endif()
-	if(APPLE)
 		set_target_properties(${ADD_SHARED_LIB_NAME} PROPERTIES
 			FRAMEWORK TRUE
 			FRAMEWORK_VERSION "${ADD_SHARED_LIB_MAJOR_MINOR_PATCH_VERSION}"
