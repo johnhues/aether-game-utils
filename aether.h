@@ -4968,6 +4968,7 @@ public:
 	class Serializer
 	{
 	public:
+		// @TODO: It's easy to miss patching this when hot loading, this interface should be improved
 		virtual ~Serializer();
 		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
 		//! Return false when mapping should fail so SetObjectValueFromString() will not overwrite existing value.
@@ -5145,6 +5146,7 @@ public:
 
 	// C++ type info
 	template < typename T = ae::Object > T* New( void* obj ) const;
+	void PatchVTable( ae::Object* obj ) const;
 	uint32_t GetSize() const;
 	uint32_t GetAlignment() const;
 	const char* GetName() const;
@@ -5191,6 +5193,21 @@ private:
 //------------------------------------------------------------------------------
 template< typename T, typename C > const T* Cast( const C* obj );
 template< typename T, typename C > T* Cast( C* obj );
+
+//------------------------------------------------------------------------------
+// ae::PatchVTable
+//! Overwrites the v-table of the given \p obj with the v-table of the given
+//! type. Use this over ae::Type::PatchVTable() when the type of \p obj
+//! is known at compile time. T Must be the bottom-most class in the given
+//! \p obj inheritance hierarchy.
+//------------------------------------------------------------------------------
+template< typename T >
+void PatchVTable( T* obj )
+{
+	T temp;
+	void* vtable = *(void**)&temp;
+	memcpy( (void*)obj, &vtable, sizeof(void*) );
+}
 
 //! @}
 
@@ -5295,6 +5312,9 @@ struct _Globals
 
 //------------------------------------------------------------------------------
 // Internal ae::_StaticCacheVar
+// This is used to cache static meta variables that are expensive to
+// find/compute. All cached variables are reset to their initial value when
+// the meta system is changed.
 //------------------------------------------------------------------------------
 template < typename T >
 class _StaticCacheVar
@@ -10114,6 +10134,7 @@ struct _TypeCreator
 		globals->typeNameMap[ typeName ] = &m_type;
 		globals->typeIdMap[ m_type.GetId() ] = &m_type; // @TODO: Should check for hash collision
 		globals->types.push_back( &m_type );
+		globals->metaCacheSeq++;
 	}
 	~_TypeCreator()
 	{
@@ -24097,9 +24118,16 @@ void NetObjectServer::UpdateSendData()
 // @TODO: Support registering classes in namespaces
 //AE_REGISTER_CLASS( ae::Object );
 int force_link_aeObject = 0;
-template <> const char* ae::_TypeName< ae::Object >::Get() { return "ae::Object"; }
-template <> void ae::_DefineType< ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ae::Object >( "ae::Object", index ); }
-static ae::_TypeCreator< ae::Object > ae_type_creator_aeObject( "ae::Object" );
+template <> const char* ae::_TypeName< ::ae::Object >::Get() { return "ae::Object"; }
+template <> void ae::_DefineType< ::ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ::ae::Object >( "ae::Object", index ); }
+static ae::_TypeCreator< ::ae::Object > ae_type_creator_aeObject( "ae::Object" );
+template <>
+struct ae::VarType< ae::Object > : public ae::VarTypeBase {
+	ae::BasicType GetType() const override { return ae::BasicType::Class; }
+	const char* GetName() const override { return "ae::Object"; }
+	uint32_t GetSize() const override { return sizeof(ae::Object); }
+	const char* GetSubTypeName() const override { return "ae::Object"; }
+};
 
 uint32_t ae::GetTypeCount()
 {
@@ -24850,6 +24878,21 @@ const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueInde
 {
 	const auto* vals = m_props.TryGet( propName );
 	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+void ae::Type::PatchVTable( ae::Object* obj ) const
+{
+	// @TODO: Get this without instantiating? At least cache it...
+	ae::Object* temp = (ae::Object*)ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
+	New( temp );
+	void* vtable = *(void**)temp;
+	temp->~Object();
+	ae::Free( temp );
+
+	if( memcmp( (void*)obj, &vtable, sizeof(void*) ) != 0 )
+	{
+		AE_WARN( "VTable pointer changed for #", GetName() );
+	}
+	memcpy( (void*)obj, &vtable, sizeof(void*) );
 }
 uint32_t ae::Type::GetSize() const { return m_size; }
 uint32_t ae::Type::GetAlignment() const { return m_align; }
