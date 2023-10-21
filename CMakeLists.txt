@@ -112,8 +112,10 @@ add_ae_library(ae_shared)
 
 # Examples, extra utilities, and tests
 add_subdirectory(loaders)
-if(NOT ${AE_LEAN_AND_MEAN})
+if(${AE_EXTRAS} OR (NOT ${AE_LEAN_AND_MEAN}))
 	add_subdirectory(extras)
+endif()
+if(NOT ${AE_LEAN_AND_MEAN})
 	add_subdirectory(net)
 	add_subdirectory(examples)
 	add_subdirectory(test)
