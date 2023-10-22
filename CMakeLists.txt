@@ -12,6 +12,7 @@ project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 
 # Configuration variables intended for external use
 option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
+option(AE_EXTRAS "Enables experimental utilities" OFF)
 option(AE_LOADERS_OFBX "Enables aether FBX loader and ofbx dependency" OFF)
 option(AE_LOADERS_STB "Enables aether PNG loader and stb dependency" OFF)
 
