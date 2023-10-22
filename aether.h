@@ -24887,11 +24887,6 @@ void ae::Type::PatchVTable( ae::Object* obj ) const
 	void* vtable = *(void**)temp;
 	temp->~Object();
 	ae::Free( temp );
-
-	if( memcmp( (void*)obj, &vtable, sizeof(void*) ) != 0 )
-	{
-		AE_WARN( "VTable pointer changed for #", GetName() );
-	}
 	memcpy( (void*)obj, &vtable, sizeof(void*) );
 }
 uint32_t ae::Type::GetSize() const { return m_size; }

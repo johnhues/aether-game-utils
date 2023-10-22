@@ -215,12 +215,14 @@ void Game::Initialize( int argc, char* argv[] )
 	ae::EditorParams editorParams;
 	editorParams.argc = argc;
 	editorParams.argv = argv;
-	editorParams.loadMeshFn = [&]( const char* resourceId )
+	editorParams.loadMeshFn = []( void* userData, const char* resourceId )
 	{
+		Game* game = (Game*)userData;
 		ae::EditorMesh result = TAG_ALL;
-		LoadOBj( resourceId, &fs, nullptr, nullptr, &result );
-		return result;
+		LoadOBj( resourceId, &game->fs, nullptr, nullptr, &result );
+		return std::move( result );
 	};
+	editorParams.loadMeshUserData = this;
 
 	editor.Initialize( editorParams );
 	window.Initialize( 1280, 720, false, true );

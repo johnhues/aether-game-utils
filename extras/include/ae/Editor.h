@@ -70,22 +70,31 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::LoadEditorMeshFn
+//------------------------------------------------------------------------------
+typedef ae::EditorMesh(*LoadEditorMeshFn)( void* userData, const char* resourceId );
+
+//------------------------------------------------------------------------------
 // ae::EditorParams class
 //------------------------------------------------------------------------------
 struct EditorParams
 {
 	int argc = 0;
 	char** argv = nullptr;
+	//! If true the editor will always run on initialization, ignoring the command line arguments.
 	bool run = false;
 	uint16_t port = 7200;
 	//! Only ae::Axis::Z and ae::Axis::Y are supported
 	ae::Axis worldUp = ae::Axis::Z;
 	//! When ae::Editor is given a relative path it will use this instead of the current working directory
 	ae::Str256 dataDir;
+
 	//! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
 	//! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
 	//! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
-	std::function< ae::EditorMesh( const char* resourceId ) > loadMeshFn;
+	LoadEditorMeshFn loadMeshFn = nullptr;
+	//! Provided to loadMeshFn() as the userData parameter
+	void* loadMeshUserData = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -107,6 +116,7 @@ public:
 	ae::EditorLevel* GetWritableLevel() { return m_file ? nullptr : &m_level; }
 	const ae::EditorLevel* GetLevel() const { return &m_level; }
 	uint32_t GetLevelChangeSeq() const { return m_levelSeq; }
+	void SetFunctionPointers( LoadEditorMeshFn loadMeshFn, void* loadMeshUserData );
 
 private:
 	friend class EditorServer;

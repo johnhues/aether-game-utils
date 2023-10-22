@@ -663,7 +663,7 @@ EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
 	EditorServerMesh* mesh = m_meshes.Get( resourceId, nullptr );
 	if ( !mesh && params.loadMeshFn )
 	{
-		ae::EditorMesh temp = params.loadMeshFn( resourceId );
+		ae::EditorMesh temp = params.loadMeshFn( params.loadMeshUserData, resourceId );
 		if ( temp.verts.Length() )
 		{
 			mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
@@ -917,6 +917,12 @@ void Editor::QueueRead( const char* levelPath )
 	}
 	AE_INFO( "Queuing level load '#'", levelPath );
 	m_file = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
+}
+
+void Editor::SetFunctionPointers( LoadEditorMeshFn loadMeshFn, void* loadMeshUserData )
+{
+	m_params.loadMeshFn = loadMeshFn;
+	m_params.loadMeshUserData = loadMeshUserData;
 }
 
 void Editor::m_Read()
