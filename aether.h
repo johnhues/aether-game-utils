@@ -21432,8 +21432,10 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 		m_pitch = ae::Clip( m_pitch, -ae::HALF_PI * 0.99f, ae::HALF_PI * 0.99f ); // Don't let camera flip
 	}
 
-	// Zoom
 	float zoomSpeed = m_dist / 75.0f;
+	float panSpeed = m_dist / 100.0f;
+
+	// Zoom
 	if ( m_mode == Mode::Zoom )
 	{
 		m_dist += movement.y * 0.1f * zoomSpeed;
@@ -21442,7 +21444,8 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	// Don't zoom when scrolling with touch, that's reserved for panning
 	if ( !usingTouch || !modifier )
 	{
-		m_dist -= scroll.y * 2.5f * zoomSpeed;
+		m_focusPos += m_right * ( scroll.x * panSpeed );
+		m_dist += scroll.y * 2.5f * zoomSpeed; // Natural scroll dir to match pan
 	}
 	m_dist = ae::Clip( m_dist, m_min, m_max );
 
@@ -21456,7 +21459,6 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	
 		if ( usingTouch )
 		{
-			float panSpeed = m_dist / 100.0f;
 			m_focusPos += m_right * ( scroll.x * panSpeed );
 			m_focusPos -= m_up * ( scroll.y * panSpeed );
 		}
@@ -21551,7 +21553,7 @@ void DebugCamera::SetRotation( ae::Vec2 angles )
 
 DebugCamera::Mode DebugCamera::GetMode() const
 {
-	return m_moveAccum >= 5.0f ? m_mode : Mode::None;
+	return ( m_moveAccum >= 5.0f || m_preventModeExitImm ) ? m_mode : Mode::None;
 }
 
 bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
