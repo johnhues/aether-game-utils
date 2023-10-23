@@ -1538,10 +1538,24 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		if ( selected.Length() )
 		{
-			for ( EditorObjectId entity : selected )
+			bool anyHidden = false;
+			bool anyVisible = false;
+			for( EditorObjectId entity : selected )
 			{
 				EditorServerObject* editorObject = m_objects.Get( entity );
-				editorObject->hidden = !editorObject->hidden;
+				if( editorObject->hidden )
+				{
+					anyHidden = true;
+				}
+				else
+				{
+					anyVisible = true;
+				}
+			}
+			const bool setHidden = !anyHidden || anyVisible;
+			for( EditorObjectId entity : selected )
+			{
+				m_objects.Get( entity )->hidden = setHidden;
 			}
 		}
 		else
