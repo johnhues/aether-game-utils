@@ -2750,6 +2750,10 @@ public:
 	void SetMouseCaptured( bool enable );
 	//! Returns true if the mouse is currently captured. Always returns false when the window does not have focus.
 	bool GetMouseCaptured() const { return m_captureMouse; }
+	//! Passing true enables gamepad input only when window is focused, otherwise gamepad input is always available. Default is true.
+	void SetGamepadRequiresFocus( bool enable ) { m_gamepadRequiresFocus = enable; }
+	//! Returns the current value of SetGamepadRequiresFocus().
+	bool GetGamepadRequiresFocus() const { return m_gamepadRequiresFocus; }
 	
 	void SetTextMode( bool enabled );
 	bool GetTextMode() const { return m_textMode; }
@@ -2809,6 +2813,7 @@ public:
 	std::string m_textInput;
 	float m_leftAnalogThreshold = 0.1f;
 	float m_rightAnalogThreshold = 0.1f;
+	bool m_gamepadRequiresFocus = true;
 	bool newFrame_HACK = false;
 };
 
@@ -14955,6 +14960,8 @@ void Input::Initialize( Window* window )
 	// Do this here so input is ready to handle events
 	[nsWindow makeKeyAndOrderFront:nil]; // nil sender
 	[nsWindow orderFrontRegardless];
+
+	[GCController setShouldMonitorBackgroundEvents: YES];
 #endif
 
 	Pump(); // Pump once to process any system window creation events
@@ -15671,7 +15678,7 @@ void Input::Pump()
 			const GCController* appleController = GetAppleControllerFn( gp.playerIndex );
 			const GCExtendedGamepad* appleGamepad = appleController ? [appleController extendedGamepad] : nullptr;
 			gp.connected = (bool)appleGamepad;
-			if ( gp.connected && [(NSWindow*)m_window->window isMainWindow] )
+			if ( gp.connected && ( !m_gamepadRequiresFocus || [(NSWindow*)m_window->window isMainWindow] ) )
 			{
 				auto leftAnalog = [appleGamepad leftThumbstick];
 				auto rightAnalog = [appleGamepad rightThumbstick];
