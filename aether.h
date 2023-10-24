@@ -3036,14 +3036,14 @@ public:
 	//! by the receiver with ae::Socket::PeekData() and ae::Socket::ReceiveData().
 	//! It's advised that you do not mix ae::Socket::QueueMsg() and ae::Socket::QueueData().
 	bool QueueData( const void* data, uint32_t length );
-	//! Returns true if \p length bytes have been received. If \p dataOut is
-	//! non-null and \p length bytes have been received the data will be written
-	//! to \p dataOut. The read head will not move, so subsequent calls to
-	//! ae::Socket::PeekData() will return the same result. It's useful to call
-	//! ae::Socket::DiscardData() and pass it \p length after receiving data
-	//! through ae::Socket::PeekData().
-	bool PeekData( void* dataOut, uint16_t length, uint32_t offset );
 	//! Returns true if \p length + \p offset bytes have been received. If
+	//! \p dataOut is non-null and \p length + \p offset bytes have been received
+	//! the data at \p offset will be written to \p dataOut. The read head will
+	//! not move, so subsequent calls to ae::Socket::PeekData() will return the
+	//! same result. It's useful to call ae::Socket::DiscardData() and pass it
+	//! \p length after receiving data through ae::Socket::PeekData().
+	bool PeekData( void* dataOut, uint16_t length, uint32_t offset );
+	//! Returns true if \p length bytes have been received. If
 	//! \p dataOut is also non-null, pending received data at 'offset' will be
 	//! written to \p dataOut. In this case the read head will move forward
 	//! \p length bytes. Calling ae::Socket::ReceiveData() with a null \p dataOut
@@ -3062,11 +3062,9 @@ public:
 
 	//! Queues data for sending. A two byte (network order) message header is
 	//! prepended to the given message. Ideally you should call ae::Socket::QueueMsg()
-	//! for each logical chunk of data you need to send over a 'network tick' and
-	//! then finally call ae::Socket::SendAll() once. Oftern times calling this
-	//! ~10 times per second (independent of the update/render ticks) for a real
-	//! time multiplayer game will work fine. It's unadvised to mix ae::Socket::QueueMsg()
-	//! calls with ae::Socket::QueueData().
+	//! for each logical chunk of data you need to send per 'network tick'.
+	//! Finally call ae::Socket::SendAll() once starting a new network tick. It's
+	//! unadvised to mix ae::Socket::QueueMsg() calls with ae::Socket::QueueData().
 	bool QueueMsg( const void* data, uint16_t length );
 	//! Can return a value greater than maxLength, in which case \p dataOut is not
 	//! modified. Call ae::Socket::ReceiveMessage() again with a big enough buffer
@@ -3081,6 +3079,8 @@ public:
 	//! Returns the number of bytes sent. Sends all queued data from ae::Socket::QueueData()
 	//! and ae::Socket::QueueMsg(). If the connection is lost all pending sent
 	//! data will be discarded. See ae::Socket::Connect() for more information.
+	//! For a real time multiplayer game this could be called 10 to 30 times
+	//! per second, each time all data and messages have been queued.
 	uint32_t SendAll();
 	
 	//! Returns the most recent remote address that this socket had or attempted
@@ -4060,7 +4060,7 @@ public:
 	//! Returns true if  BuildBVH() should be called. Returns false if BuildBVH()
 	//! will early out.
 	bool RequiresBVHRebuild() const { return m_requiresRebuild; }
-	//! Resets CollisionMesh to state after construction, except reserved buffer
+	//! Resets CollisionMesh to its original empty state, except reserved buffer
 	//! sizes are maintained.
 	void Clear();
 
