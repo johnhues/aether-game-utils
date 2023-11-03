@@ -47,20 +47,28 @@ public:
 	void Terminate();
 
 	//! Adds a resource to be later loaded by Load(). After loading the resource
-	//! can be accessed by the given \p name. The given \p filePath is relative
+	//! it can be accessed by the given \p name. The given \p filePath is relative
 	//! to \p rootDir.
 	bool Add( const char* type, const char* name, ae::FileSystem::Root rootDir, const char* filePath );
 	//! Adds a resource to be later loaded by Load(). After loading the resource
-	//! can be accessed by the given \p name. Prefer specifying a root directory.
+	//! it can be accessed by the given \p name. Prefer specifying a root directory.
 	bool Add( const char* type, const char* name, const char* filePath );
-	//! Adds a resource to be later processed by Load().
+	//! Adds a manually loaded resource. ae::Resource::IsLoaded() will always
+	//! return true for this resource.
 	template < typename T > T* Add( const char* name );
 
 	//! Loads all resources added with Add().
 	bool Load();
+	//! Returns true if any resources were added but have not yet loaded.
+	bool AnyPendingLoad() const;
 	
+	//! Returns a resource with the given \p name, or nullptr if it does not exist.
 	template < typename T > const T* TryGet( const char* name ) const;
+	//! Returns a resource with the given \p name, or asserts if it does not exist.
 	template < typename T > const T& Get( const char* name ) const;
+
+	//! Patches the vtable of ResourceManager and all added resources.
+	void HotLoad();
 	
 private:
 	Resource* m_Add( const char* type, const char* name );

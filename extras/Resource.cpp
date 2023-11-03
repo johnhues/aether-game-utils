@@ -58,7 +58,7 @@ void ae::ResourceManager::Terminate()
 
 bool ae::ResourceManager::Add( const char* type, const char* name, ae::FileSystem::Root rootDir, const char* filePath )
 {
-	if ( ae::Resource* resource = m_Add( type, name ) )
+	if( ae::Resource* resource = m_Add( type, name ) )
 	{
 		resource->m_file = m_fs->Read( rootDir, filePath, 1.0f );
 		AE_ASSERT( resource->m_file );
@@ -69,13 +69,7 @@ bool ae::ResourceManager::Add( const char* type, const char* name, ae::FileSyste
 
 bool ae::ResourceManager::Add( const char* type, const char* name, const char* filePath )
 {
-	if ( ae::Resource* resource = m_Add( type, name ) )
-	{
-		resource->m_file = m_fs->Read( filePath, 1.0f );
-		AE_ASSERT( resource->m_file );
-		return true;
-	}
-	return false;
+	return Add( type, name, ae::FileSystem::Root::Data, filePath );
 }
 
 ae::Resource* ae::ResourceManager::m_Add( const char* type, const char* name )
@@ -115,4 +109,27 @@ bool ae::ResourceManager::Load()
 		}
 	}
 	return allLoaded;
+}
+
+bool ae::ResourceManager::AnyPendingLoad() const
+{
+	for( const auto& resource : m_resources )
+	{
+		if ( !resource.value->IsLoaded() )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ae::ResourceManager::HotLoad()
+{
+	ae::ResourceManager temp = m_tag;
+	memcpy( this, &temp, sizeof(void*) );
+	for( const auto& resource : m_resources )
+	{
+		const ae::Type* type = ae::GetTypeFromObject( resource.value );
+		type->PatchVTable( resource.value );
+	}
 }
