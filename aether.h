@@ -4842,7 +4842,7 @@ const uint32_t kMaxMetaProps = 24;
 const uint32_t kMaxMetaPropListLength = 24;
 const uint32_t kMetaMaxVars = 64;
 const uint32_t kMetaEnumValues = 512;
-const uint32_t kMetaEnumTypes = 64;
+const uint32_t kMetaEnumTypes = 128;
 class Type;
 struct VarTypeBase;
 
