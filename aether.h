@@ -4859,7 +4859,6 @@ public:
 	static const ae::Type* GetParentType() { return nullptr; }
 	ae::TypeId GetTypeId() const { return _metaTypeId; }
 	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
-	ae::Str32 _typeName;
 };
 
 //------------------------------------------------------------------------------
@@ -5151,6 +5150,8 @@ public:
 
 	// C++ type info
 	template < typename T = ae::Object > T* New( void* obj ) const;
+	//! Creates a temporary instance of this type and copies the vtable from
+	//! the instance. This type must be default constructible.
 	void PatchVTable( ae::Object* obj ) const;
 	uint32_t GetSize() const;
 	uint32_t GetAlignment() const;
@@ -5204,12 +5205,14 @@ template< typename T, typename C > T* Cast( C* obj );
 //! Overwrites the v-table of the given \p obj with the v-table of the given
 //! type. Use this over ae::Type::PatchVTable() when the type of \p obj
 //! is known at compile time. T Must be the bottom-most class in the given
-//! \p obj inheritance hierarchy.
+//! \p obj inheritance hierarchy. A temporary instance of the object will be
+//! constructed. \p ctorArgs may be provided if the type does not have a default
+//! constructor. 
 //------------------------------------------------------------------------------
-template< typename T >
-void PatchVTable( T* obj )
+template< typename T, typename... Args >
+void PatchVTable( T* obj, Args... ctorArgs )
 {
-	T temp;
+	T temp = T( ctorArgs... );
 	void* vtable = *(void**)&temp;
 	memcpy( (void*)obj, &vtable, sizeof(void*) );
 }
@@ -10108,7 +10111,6 @@ Inheritor< Parent, This >::Inheritor()
 	// @NOTE: Don't get type here because this object could be constructed
 	// before meta types are constructed.
 	ae::Object::_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
-	ae::Object::_typeName = ae::_TypeName< This >::Get();
 }
 
 template < typename Parent, typename This >
@@ -24890,13 +24892,17 @@ const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueInde
 }
 void ae::Type::PatchVTable( ae::Object* obj ) const
 {
-	// @TODO: Get this without instantiating? At least cache it...
-	ae::Object* temp = (ae::Object*)ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
-	New( temp );
-	void* vtable = *(void**)temp;
-	temp->~Object();
-	ae::Free( temp );
-	memcpy( (void*)obj, &vtable, sizeof(void*) );
+	if( obj )
+	{
+		// @TODO: Get this without instantiating? At least cache it...
+		AE_ASSERT( obj->GetTypeId() == GetId() );
+		ae::Object* temp = (ae::Object*)ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
+		New( temp );
+		void* vtable = *(void**)temp;
+		temp->~Object();
+		ae::Free( temp );
+		memcpy( (void*)obj, &vtable, sizeof(void*) );
+	}
 }
 uint32_t ae::Type::GetSize() const { return m_size; }
 uint32_t ae::Type::GetAlignment() const { return m_align; }
