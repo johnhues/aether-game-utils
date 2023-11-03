@@ -2980,6 +2980,13 @@ public:
 	static const char* GetFileExtFromPath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
+	//! Replaces the extension of the given path with \p ext. If the given path
+	//! does not have an extension then \p ext will be appended to the path.
+	//! \p ext must be only alphanumeric characters.
+	static bool SetExtension( Str256* path, const char* ext );
+	//! Returns true if the given path is a directory. This function does not
+	//! access the underlying filesystem to see if the directory exists.
+	static bool IsDirectory( const char* path );
 
 	// File dialogs
 	static ae::Array< std::string > OpenDialog( const FileDialogParams& params );
@@ -16938,6 +16945,48 @@ void FileSystem::AppendToPath( Str256* path, const char* str )
 	
 	// @TODO: Handle one or more path separators at front of str
 	*path += str;
+}
+
+bool ae::FileSystem::SetExtension( Str256* path, const char* ext )
+{
+	if( !path || !path->Length()
+		|| !ext || !ext[ 0 ]
+		|| IsDirectory( path->c_str() ) )
+	{
+		return false;
+	}
+	const uint32_t extLength = (uint32_t)strlen( ext );
+	if( std::find_if(
+			ext, ext + extLength,
+			[]( char c ) { return !std::isalnum( c );
+		} ) != ext + extLength )
+	{
+		return false;
+	}
+
+	for( int32_t i = path->Length() - 1;
+		i >= 0 && (*path)[ i ] != '/' && (*path)[ i ] != '\\';
+		i-- )
+	{
+		if( (*path)[ i ] == '.' )
+		{
+			path->Trim( i );
+			break;
+		}
+	}
+	path->Append( "." );
+	path->Append( ext );
+	return true;
+}
+
+bool ae::FileSystem::IsDirectory( const char* path )
+{
+	uint32_t length = strlen( path );
+	if ( length == 0 )
+	{
+		return false;
+	}
+	return path[ length - 1 ] == '/' || path[ length - 1 ] == '\\';
 }
 
 #if _AE_WINDOWS_
