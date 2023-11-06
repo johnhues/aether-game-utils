@@ -4228,7 +4228,7 @@ public:
 	const class Skeleton& GetBindPose() const;
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
-	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
+	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, bool positionsW, bool normalsW, uint32_t count ) const;
 	
 	uint32_t GetBoneCount() const { return m_bindPose.GetBoneCount(); }
 	uint32_t GetVertCount() const { return m_verts.Length(); }
@@ -22398,7 +22398,7 @@ const Skeleton& Skin::GetBindPose() const
 	return m_bindPose;
 }
 
-void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
+void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, bool positionsW, bool normalsW, uint32_t count ) const
 {
 	AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
 	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
@@ -22436,9 +22436,11 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 		p[ 0 ] = pos.x;
 		p[ 1 ] = pos.y;
 		p[ 2 ] = pos.z;
+		if( positionsW ) { p[ 3 ] = 1.0f; }
 		n[ 0 ] = normal.x;
 		n[ 1 ] = normal.y;
 		n[ 2 ] = normal.z;
+		if( normalsW ) { n[ 3 ] = 0.0f; }
 	}
 }
 
