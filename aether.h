@@ -3108,7 +3108,7 @@ public:
 
 private:
 	// Params
-	Protocol m_protocol = Protocol::None;
+	ae::Socket::Protocol m_protocol = ae::Socket::Protocol::None;
 	ae::Str128 m_address;
 	uint16_t m_port = 0;
 	// Connection state

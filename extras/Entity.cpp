@@ -291,8 +291,6 @@ void Registry::Clear()
 	AE_ASSERT_MSG( !m_destroying, "Cannot destroy while already destroying" );
 	m_destroying = true;
 
-	m_lastEntity = kInvalidEntity;
-	m_entityNames.Clear();
 	// Get components each loop because m_components could grow at any iteration
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
@@ -304,6 +302,8 @@ void Registry::Clear()
 		}
 	}
 	m_components.Clear();
+	m_lastEntity = kInvalidEntity;
+	m_entityNames.Clear();
 
 	m_destroying = false;
 }

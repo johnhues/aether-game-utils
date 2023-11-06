@@ -77,12 +77,13 @@ ae::Resource* ae::ResourceManager::m_Add( const char* type, const char* name )
 	ae::Str64 key( name );
 	if ( m_resources.Get( key, nullptr ) )
 	{
-		AE_WARN( "Resource '#' already exists", name );
+		AE_FAIL_MSG( "Resource '#' already exists", name );
 		return nullptr;
 	}
 	const ae::Type* resourceType = ae::GetTypeByName( type );
 	if ( !resourceType )
 	{
+		AE_FAIL_MSG( "Unknown resource type '#'", type );
 		return nullptr;
 	}
 	ae::Resource* resource = (ae::Resource*)ae::Allocate( m_tag, resourceType->GetSize(), resourceType->GetAlignment() );
