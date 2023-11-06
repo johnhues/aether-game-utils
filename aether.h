@@ -18315,6 +18315,21 @@ void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam )
 
 namespace ae {
 
+int32_t _GLGetTypeCount( uint32_t glType )
+{
+	switch ( glType )
+	{
+		case GL_SAMPLER_2D: return 0;
+		case GL_SAMPLER_3D: return 0;
+		case GL_FLOAT: return 1;
+		case GL_FLOAT_VEC2: return 2;
+		case GL_FLOAT_VEC3: return 3;
+		case GL_FLOAT_VEC4: return 4;
+		case GL_FLOAT_MAT4: return 16;
+		default: return -1;
+	}
+}
+
 void CheckFramebufferComplete( GLuint framebuffer )
 {
 	GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
@@ -18802,43 +18817,18 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		const _Uniform* uniformVar = &m_uniforms.GetValue( i );
 		const UniformList::Value* uniformValue = uniforms.Get( uniformVarName );
 
-		// Start validation
-		if ( !uniformValue )
+		// Validation
 		{
-			AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
-			missingUniforms = true;
-			continue;
+			if ( !uniformValue )
+			{
+				AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
+				missingUniforms = true;
+				continue;
+			}
+			const int32_t typeSize = ae::_GLGetTypeCount( uniformVar->type );
+			AE_ASSERT_MSG( typeSize >= 0, "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
+			AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
 		}
-		uint32_t typeSize = 0;
-		switch ( uniformVar->type )
-		{
-			case GL_SAMPLER_2D:
-				typeSize = 0;
-				break;
-			case GL_SAMPLER_3D:
-				typeSize = 0;
-				break;
-			case GL_FLOAT:
-				typeSize = 1;
-				break;
-			case GL_FLOAT_VEC2:
-				typeSize = 2;
-				break;
-			case GL_FLOAT_VEC3:
-				typeSize = 3;
-				break;
-			case GL_FLOAT_VEC4:
-				typeSize = 4;
-				break;
-			case GL_FLOAT_MAT4:
-				typeSize = 16;
-				break;
-			default:
-				AE_FAIL_MSG( "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
-				break;
-		}
-		AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
-		// End validation
 
 		if ( uniformVar->type == GL_SAMPLER_2D )
 		{
@@ -19273,9 +19263,11 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 		else
 		{
 			int32_t idx = m_attributes.FindFn( [ attribName ]( const _Attribute& a ){ return a.name == attribName; } );
-			AE_ASSERT_MSG( idx >= 0, "No vertex attribute named '#'", attribName );
+			AE_ASSERT_MSG( idx >= 0, "Shader requires missing vertex attribute '#'", attribName );
 			const _Attribute* vertexAttribute = &m_attributes[ idx ];
-			// @TODO: Verify attribute type and size match
+			const uint32_t shaderAttribComponentCount = ae::_GLGetTypeCount( shaderAttribute->type );
+			AE_ASSERT_MSG( (int32_t)vertexAttribute->componentCount >= shaderAttribComponentCount, "Shader vertex attribute '#' requires # componenents, but vertex data only provides #", attribName, shaderAttribComponentCount, vertexAttribute->componentCount );
+			// @TODO: Verify attribute type matches
 
 			glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
 			AE_CHECK_GL_ERROR();
@@ -22670,7 +22662,7 @@ void OBJFile::InitializeVertexData( const ae::OBJFile::VertexDataParams& params 
 		vertices.Length(), indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	params.vertexData->AddAttribute( params.posAttrib, 3, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
+	params.vertexData->AddAttribute( params.posAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
 	params.vertexData->AddAttribute( params.uvAttrib, 2, ae::Vertex::Type::Float, offsetof( Vertex, texture ) );
 	params.vertexData->AddAttribute( params.normalAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
 	params.vertexData->AddAttribute( params.colorAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
