@@ -156,6 +156,16 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 }
 
 //------------------------------------------------------------------------------
+// NamespaceClass
+//------------------------------------------------------------------------------
+TEST_CASE( "Class registration in namespaces", "[aeMeta]" )
+{
+	REQUIRE( ae::GetType< Namespace0::Namespace1::NamespaceClass >() );
+	REQUIRE( ae::GetTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
+	REQUIRE( ae::GetType< Namespace0::Namespace1::NamespaceClass >() == ae::GetTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
+}
+
+//------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
 TEST_CASE( "enum registration", "[aeMeta]" )

@@ -11,12 +11,7 @@
 //------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
-// @TODO: Support registering classes in namespaces
-//AE_REGISTER_CLASS( ae::Resource );
-int force_link_aeResource = 0;
-template <> const char* ae::_TypeName< ae::Resource >::Get() { return "ae::Resource"; }
-template <> void ae::_DefineType< ae::Resource >( ae::Type *type, uint32_t index ) { type->Init< ae::Resource >( "ae::Resource", index ); }
-static ae::_TypeCreator< ae::Resource > ae_type_creator_aeResource( "ae::Resource" );
+AE_REGISTER_CLASS( ae, Resource );
 
 //------------------------------------------------------------------------------
 // Resource member functions

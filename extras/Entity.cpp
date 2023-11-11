@@ -12,12 +12,7 @@
 //------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
-// @TODO: Support registering classes in namespaces
-//AE_REGISTER_CLASS( ae::Component );
-int force_link_aeComponent = 0;
-template <> const char* ae::_TypeName< ae::Component >::Get() { return "ae::Component"; }
-template <> void ae::_DefineType< ae::Component >( ae::Type *type, uint32_t index ) { type->Init< ae::Component >( "ae::Component", index ); }
-static ae::_TypeCreator< ae::Component > ae_type_creator_aeComponent( "ae::Component" );
+AE_REGISTER_CLASS( ae, Component );
 
 namespace ae {
 

@@ -65,6 +65,12 @@ AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( SomeClass, enumTest, prop1, val1 );
 AE_REGISTER_ENUM_CLASS( TestEnumClass );
 
 //------------------------------------------------------------------------------
+// NamespaceClass
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( Namespace0, Namespace1, NamespaceClass );
+// AE_REGISTER_CLASS_VAR( Namespace0, Namespace1, NamespaceClass, boolMember ); // @TODO
+
+//------------------------------------------------------------------------------
 // AggregateClass
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( AggregateClass );

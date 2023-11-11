@@ -115,6 +115,24 @@
 #endif
 
 //------------------------------------------------------------------------------
+// Macro helpers
+//------------------------------------------------------------------------------
+//! Returns the number of arguments passed to this macro
+#define AE_NARGS(...) AE_EVAL(AE_NARGS_I(__VA_ARGS__,9,8,7,6,5,4,3,2,1,))
+//! Combines each argument into a single token
+#define AE_GLUE(...) AE_GLUE_I(AE_GLUE_,AE_NARGS(__VA_ARGS__))(__VA_ARGS__)
+//! Combines each argument into a single token, but arguments are separated by
+//! '::' (double colons).
+#define AE_GLUE_TYPE(...) AE_GLUE(AE_GLUE_TYPE_,AE_NARGS(__VA_ARGS__))(__VA_ARGS__)
+//! Converts the given argument to a string. Useful for converting the result of
+//! another macro invocation into a string.
+#define AE_STRINGIFY(S) AE_STRINGIFY_I(S)
+//! Returns the Nth element of __VA_ARGS__
+#define AE_GET_ELEM(N, ...) AE_GLUE(AE_GET_ELEM_, N)(__VA_ARGS__)
+//! Returns the last argument passed to this macro
+#define AE_GET_LAST(...) AE_GET_ELEM(AE_NARGS(__VA_ARGS__), _, __VA_ARGS__ ,,,,,,,,,,,) // Get last argument - placeholder decrements by one
+
+//------------------------------------------------------------------------------
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
@@ -4698,40 +4716,47 @@ public:
 // External macros to force module linking
 //------------------------------------------------------------------------------
 // clang-format off
-#define AE_FORCE_LINK_CLASS( x ) \
-	extern int force_link_##x; \
-	struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
-	ForceLink_##x forceLink_##x;
+//! Call signature: AE_FORCE_LINK_CLASS( Namespace0, NameSpace1, ..., MyType );
+#define AE_FORCE_LINK_CLASS(...) \
+	extern int AE_GLUE(_ae_force_link, __VA_ARGS__); \
+	struct AE_GLUE(_ae_ForceLink, __VA_ARGS__) { AE_GLUE(_ae_ForceLink, __VA_ARGS__)() { AE_GLUE(_ae_force_link, __VA_ARGS__) = 1; } }; \
+	AE_GLUE(_ae_ForceLink, __VA_ARGS__) AE_GLUE(_ae_forceLink, __VA_ARGS__);
 
 //------------------------------------------------------------------------------
 // External meta class registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS( x )\
-	int force_link_##x = 0;\
-	template <> const char* ae::_TypeName< ::x >::Get() { return #x; }\
-	template <> void ae::_DefineType< ::x >( ae::Type *type, uint32_t index ) { type->Init< ::x >( #x, index ); }\
-	static ae::_TypeCreator< ::x > ae_type_creator_##x( #x );\
+//! Call signature: AE_REGISTER_CLASS( Namespace0, NameSpace1, ..., MyType );
+//! Registers a new type that can be retrieved with ae::GetType( "Namespace0::NameSpace1::MyType" )
+//! or ae::GetType< Namespace0::NameSpace1::MyType >(). Call this once in the
+//! global scope of any cpp file. The class must indirectly inherit from from
+//! ae::Inheritor< ae::Object, MyType >.
+#define AE_REGISTER_CLASS(...)\
+	int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0;\
+	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
+	template <> void ae::_DefineType< ::AE_GLUE_TYPE(__VA_ARGS__) >( ae::Type *type, uint32_t index ) { type->Init< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)), index ); }\
+	static ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
 	template <>\
-	struct ae::VarType< x > : public ae::VarTypeBase {\
+	struct ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::VarTypeBase {\
 		ae::BasicType GetType() const override { return ae::BasicType::Class; }\
-		const char* GetName() const override { return #x; }\
-		uint32_t GetSize() const override { return sizeof(x); }\
-		const char* GetSubTypeName() const override { return #x; }\
+		const char* GetName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
+		uint32_t GetSize() const override { return sizeof(::AE_GLUE_TYPE(__VA_ARGS__)); }\
+		const char* GetSubTypeName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 	};
-//------------------------------------------------------------------------------
-// External meta property registerer
-//------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( ae_type_creator_##c, #c, #p, "" );
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p##_##v( ae_type_creator_##c, #c, #p, #v );
-
-//------------------------------------------------------------------------------
-// External meta var registerer
-//------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_VAR( c, v ) \
-	AE_DISABLE_INVALID_OFFSET_WARNING \
-	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v ); \
+//! Register a class property
+#define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
+//! Register a class property with an additional value. Multiple values can be
+//! specified per property.
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p##_##v( _ae_type_creator_##c, #c, #p, #v );
+//! Call signature: AE_REGISTER_CLASS_VAR( MyType, classVar );
+//! Registers the class variable 'MyType::classVar'
+#define AE_REGISTER_CLASS_VAR( c, v )\
+	AE_DISABLE_INVALID_OFFSET_WARNING\
+	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( _ae_type_creator_##c, #c, #v );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
+//! Register a property for a specific class variable
 #define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
+//! Register a property for a specific class variable with an additional value.
+//! Multiple values can be specified per property.
 #define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #v, #p, #pv );
 
 //------------------------------------------------------------------------------
@@ -5188,7 +5213,7 @@ public:
 	void m_AddVar( const Var& var );
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
-	ae::Str32 m_name;
+	ae::Str64 m_name;
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
@@ -5309,7 +5334,7 @@ struct _Globals
 	// Reflection
 	uint32_t metaCacheSeq = 0;
 	ae::Map< std::string, Enum, kMetaEnumTypes > enums;
-	std::map< ae::Str32, Type* > typeNameMap;
+	std::map< ae::Str64, Type* > typeNameMap;
 	std::map< ae::TypeId, Type* > typeIdMap;
 	std::vector< ae::Type* > types;
 	const ae::Var::Serializer* varSerializer = nullptr;
@@ -6817,24 +6842,6 @@ inline float Color::RGBToSRGB( float x ) { return powf( x, 1.0f / 2.2f ); }
 #pragma warning(default:26495) // Re-enable uninitialized variable warning
 
 //------------------------------------------------------------------------------
-// ae::Str functions
-//------------------------------------------------------------------------------
-template < uint32_t N >
-std::ostream& operator<<( std::ostream& out, const Str< N >& str )
-{
-	return out << str.c_str();
-}
-
-template < uint32_t N >
-std::istream& operator>>( std::istream& in, Str< N >& str )
-{
-	in.getline( str.m_str, Str< N >::MaxLength() );
-	str.m_length = in.gcount();
-	str.m_str[ str.m_length ] = 0;
-	return in;
-}
-
-//------------------------------------------------------------------------------
 // ae::ToString functions
 //------------------------------------------------------------------------------
 // No implementation so this acts as a forward declaration. Also a default
@@ -7047,6 +7054,24 @@ inline bool FromString( const char* str, const bool& defaultValue )
 	if ( StrCmp( "false", str ) ) { return false; }
 	if ( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
 	return defaultValue;
+}
+
+//------------------------------------------------------------------------------
+// ae::Str functions
+//------------------------------------------------------------------------------
+template < uint32_t N >
+std::ostream& operator<<( std::ostream& out, const Str< N >& str )
+{
+	return out << str.c_str();
+}
+
+template < uint32_t N >
+std::istream& operator>>( std::istream& in, Str< N >& str )
+{
+	in.getline( str.m_str, Str< N >::MaxLength() );
+	str.m_length = in.gcount();
+	str.m_str[ str.m_length ] = 0;
+	return in;
 }
 
 template < uint32_t N >
@@ -10082,9 +10107,32 @@ void BinaryStream::SerializeObjectConditional( T* obj )
 }
 
 //------------------------------------------------------------------------------
-// Internal meta state
+// Internal helpers
 //------------------------------------------------------------------------------
 template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
+#define AE_EVAL(...) __VA_ARGS__
+#define AE_NARGS_I(_,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
+#define AE_GLUE_I(X,Y) AE_GLUE_II(X,Y)
+#define AE_GLUE_II(X,Y) X##Y
+#define AE_GLUE_2(X,Y) X##Y
+#define AE_GLUE_3(X,Y,Z) X##Y##Z
+#define AE_GLUE_4(X,Y,Z,W) X##Y##Z##W
+#define AE_GLUE_TYPE_1(T) T
+#define AE_GLUE_TYPE_2(N0, T) N0::T
+#define AE_GLUE_TYPE_3(N0, N1, T) N0::N1::T
+#define AE_GLUE_TYPE_4(N0, N1, N2, T) N0::N1::N2::T
+#define AE_STRINGIFY_I(S) #S
+#define AE_GET_ELEM_0(_0, ...) _0
+#define AE_GET_ELEM_1(_0, _1, ...) _1
+#define AE_GET_ELEM_2(_0, _1, _2, ...) _2
+#define AE_GET_ELEM_3(_0, _1, _2, _3, ...) _3
+#define AE_GET_ELEM_4(_0, _1, _2, _3, _4, ...) _4
+#define AE_GET_ELEM_5(_0, _1, _2, _3, _4, _5, ...) _5
+#define AE_GET_ELEM_6(_0, _1, _2, _3, _4, _5, _6, ...) _6
+#define AE_GET_ELEM_7(_0, _1, _2, _3, _4, _5, _6, _7, ...) _7
+#define AE_GET_ELEM_8(_0, _1, _2, _3, _4, _5, _6, _7, _8, ...) _8
+#define AE_GET_ELEM_9(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ...) _9
+#define AE_GET_ELEM_10(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, ...) _10
 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
@@ -24169,19 +24217,7 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 // Meta register base object
 //------------------------------------------------------------------------------
-// @TODO: Support registering classes in namespaces
-//AE_REGISTER_CLASS( ae::Object );
-int force_link_aeObject = 0;
-template <> const char* ae::_TypeName< ::ae::Object >::Get() { return "ae::Object"; }
-template <> void ae::_DefineType< ::ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ::ae::Object >( "ae::Object", index ); }
-static ae::_TypeCreator< ::ae::Object > ae_type_creator_aeObject( "ae::Object" );
-template <>
-struct ae::VarType< ae::Object > : public ae::VarTypeBase {
-	ae::BasicType GetType() const override { return ae::BasicType::Class; }
-	const char* GetName() const override { return "ae::Object"; }
-	uint32_t GetSize() const override { return sizeof(ae::Object); }
-	const char* GetSubTypeName() const override { return "ae::Object"; }
-};
+AE_REGISTER_CLASS( ae, Object );
 
 uint32_t ae::GetTypeCount()
 {
