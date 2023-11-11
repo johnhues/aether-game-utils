@@ -67,6 +67,7 @@ AE_REGISTER_ENUM_CLASS( TestEnumClass );
 //------------------------------------------------------------------------------
 // NamespaceClass
 //------------------------------------------------------------------------------
+AE_FORCE_LINK_CLASS( Namespace0, Namespace1, NamespaceClass );
 AE_REGISTER_CLASS( Namespace0, Namespace1, NamespaceClass );
 // AE_REGISTER_CLASS_VAR( Namespace0, Namespace1, NamespaceClass, boolMember ); // @TODO
 
