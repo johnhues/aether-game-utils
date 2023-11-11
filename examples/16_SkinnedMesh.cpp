@@ -231,7 +231,7 @@ int main()
 		
 		// Update mesh
 		anim.AnimateByTime( &currentPose, animTime, s_strength10 / 10.0f, mask.Data(), mask.Length() );
-		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), vertexData.GetMaxVertexCount() );
+		skin.ApplyPoseToMesh( &currentPose, vertices->pos.data, vertices->normal.data, sizeof(Vertex), sizeof(Vertex), true, true, vertexData.GetMaxVertexCount() );
 		vertexData.UploadVertices( 0, vertices, vertexData.GetMaxVertexCount() );
 		
 		// Debug
