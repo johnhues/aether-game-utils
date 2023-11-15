@@ -11,12 +11,7 @@
 //------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
-// @TODO: Support registering classes in namespaces
-//AE_REGISTER_CLASS( ae::Resource );
-int force_link_aeResource = 0;
-template <> const char* ae::_TypeName< ae::Resource >::Get() { return "ae::Resource"; }
-template <> void ae::_DefineType< ae::Resource >( ae::Type *type, uint32_t index ) { type->Init< ae::Resource >( "ae::Resource", index ); }
-static ae::_TypeCreator< ae::Resource > ae_type_creator_aeResource( "ae::Resource" );
+AE_REGISTER_CLASS( ae, Resource );
 
 //------------------------------------------------------------------------------
 // Resource member functions
@@ -58,7 +53,7 @@ void ae::ResourceManager::Terminate()
 
 bool ae::ResourceManager::Add( const char* type, const char* name, ae::FileSystem::Root rootDir, const char* filePath )
 {
-	if ( ae::Resource* resource = m_Add( type, name ) )
+	if( ae::Resource* resource = m_Add( type, name ) )
 	{
 		resource->m_file = m_fs->Read( rootDir, filePath, 1.0f );
 		AE_ASSERT( resource->m_file );
@@ -69,13 +64,7 @@ bool ae::ResourceManager::Add( const char* type, const char* name, ae::FileSyste
 
 bool ae::ResourceManager::Add( const char* type, const char* name, const char* filePath )
 {
-	if ( ae::Resource* resource = m_Add( type, name ) )
-	{
-		resource->m_file = m_fs->Read( filePath, 1.0f );
-		AE_ASSERT( resource->m_file );
-		return true;
-	}
-	return false;
+	return Add( type, name, ae::FileSystem::Root::Data, filePath );
 }
 
 ae::Resource* ae::ResourceManager::m_Add( const char* type, const char* name )
@@ -83,12 +72,13 @@ ae::Resource* ae::ResourceManager::m_Add( const char* type, const char* name )
 	ae::Str64 key( name );
 	if ( m_resources.Get( key, nullptr ) )
 	{
-		AE_WARN( "Resource '#' already exists", name );
+		AE_FAIL_MSG( "Resource '#' already exists", name );
 		return nullptr;
 	}
 	const ae::Type* resourceType = ae::GetTypeByName( type );
 	if ( !resourceType )
 	{
+		AE_FAIL_MSG( "Unknown resource type '#'", type );
 		return nullptr;
 	}
 	ae::Resource* resource = (ae::Resource*)ae::Allocate( m_tag, resourceType->GetSize(), resourceType->GetAlignment() );
@@ -115,4 +105,27 @@ bool ae::ResourceManager::Load()
 		}
 	}
 	return allLoaded;
+}
+
+bool ae::ResourceManager::AnyPendingLoad() const
+{
+	for( const auto& resource : m_resources )
+	{
+		if ( !resource.value->IsLoaded() )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ae::ResourceManager::HotLoad()
+{
+	ae::ResourceManager temp = m_tag;
+	memcpy( this, &temp, sizeof(void*) );
+	for( const auto& resource : m_resources )
+	{
+		const ae::Type* type = ae::GetTypeFromObject( resource.value );
+		type->PatchVTable( resource.value );
+	}
 }

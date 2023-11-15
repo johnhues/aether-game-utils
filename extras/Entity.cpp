@@ -12,12 +12,7 @@
 //------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
-// @TODO: Support registering classes in namespaces
-//AE_REGISTER_CLASS( ae::Component );
-int force_link_aeComponent = 0;
-template <> const char* ae::_TypeName< ae::Component >::Get() { return "ae::Component"; }
-template <> void ae::_DefineType< ae::Component >( ae::Type *type, uint32_t index ) { type->Init< ae::Component >( "ae::Component", index ); }
-static ae::_TypeCreator< ae::Component > ae_type_creator_aeComponent( "ae::Component" );
+AE_REGISTER_CLASS( ae, Component );
 
 namespace ae {
 
@@ -291,8 +286,6 @@ void Registry::Clear()
 	AE_ASSERT_MSG( !m_destroying, "Cannot destroy while already destroying" );
 	m_destroying = true;
 
-	m_lastEntity = kInvalidEntity;
-	m_entityNames.Clear();
 	// Get components each loop because m_components could grow at any iteration
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
@@ -304,6 +297,8 @@ void Registry::Clear()
 		}
 	}
 	m_components.Clear();
+	m_lastEntity = kInvalidEntity;
+	m_entityNames.Clear();
 
 	m_destroying = false;
 }

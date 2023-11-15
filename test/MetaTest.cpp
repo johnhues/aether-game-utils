@@ -156,6 +156,16 @@ TEST_CASE( "Class vars", "[aeMeta]" )
 }
 
 //------------------------------------------------------------------------------
+// NamespaceClass
+//------------------------------------------------------------------------------
+TEST_CASE( "Class registration in namespaces", "[aeMeta]" )
+{
+	REQUIRE( ae::GetType< Namespace0::Namespace1::NamespaceClass >() );
+	REQUIRE( ae::GetTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
+	REQUIRE( ae::GetType< Namespace0::Namespace1::NamespaceClass >() == ae::GetTypeByName( "Namespace0::Namespace1::NamespaceClass" ) );
+}
+
+//------------------------------------------------------------------------------
 // PlayerState
 //------------------------------------------------------------------------------
 TEST_CASE( "enum registration", "[aeMeta]" )
@@ -405,6 +415,7 @@ TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" 
 	SomeClass c;
 	const ae::Type* type = ae::GetTypeFromObject( &c );
 	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
+	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
 	
 	c.enumTest = TestEnumClass::Five;
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "Five" );
@@ -427,6 +438,7 @@ TEST_CASE( "can't read invalid enum values from object using meta definition", "
 	SomeClass c;
 	const ae::Type* type = ae::GetTypeFromObject( &c );
 	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
+	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
 	
 	c.enumTest = (TestEnumClass)6;
 	REQUIRE( enumTestVar->GetObjectValueAsString( &c ) == "" );
@@ -437,6 +449,7 @@ TEST_CASE( "can set enum values on object using meta definition", "[aeMeta]" )
 	SomeClass c;
 	const ae::Type* type = ae::GetTypeFromObject( &c );
 	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
+	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
 	
 	REQUIRE( enumTestVar->SetObjectValueFromString( &c, "Five" ) );
 	REQUIRE( c.enumTest == TestEnumClass::Five );
@@ -474,6 +487,7 @@ TEST_CASE( "can't set invalid enum values on object using meta definition", "[ae
 	SomeClass c;
 	const ae::Type* type = ae::GetTypeFromObject( &c );
 	const ae::Var* enumTestVar = type->GetVarByName( "enumTest", false );
+	REQUIRE( enumTestVar->GetType() == ae::BasicType::Enum );
 	
 	c.enumTest = TestEnumClass::Four;
 	REQUIRE( !enumTestVar->SetObjectValueFromString( &c, "Six" ) );

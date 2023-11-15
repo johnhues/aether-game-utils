@@ -115,6 +115,24 @@
 #endif
 
 //------------------------------------------------------------------------------
+// Macro helpers
+//------------------------------------------------------------------------------
+//! Returns the number of arguments passed to this macro
+#define AE_NARGS(...) AE_EVAL(AE_NARGS_I(__VA_ARGS__,9,8,7,6,5,4,3,2,1,))
+//! Combines each argument into a single token
+#define AE_GLUE(...) AE_GLUE_I(AE_GLUE_,AE_NARGS(__VA_ARGS__))(__VA_ARGS__)
+//! Combines each argument into a single token, but arguments are separated by
+//! '::' (double colons).
+#define AE_GLUE_TYPE(...) AE_GLUE(AE_GLUE_TYPE_,AE_NARGS(__VA_ARGS__))(__VA_ARGS__)
+//! Converts the given argument to a string. Useful for converting the result of
+//! another macro invocation into a string.
+#define AE_STRINGIFY(S) AE_STRINGIFY_I(S)
+//! Returns the Nth element of __VA_ARGS__
+#define AE_GET_ELEM(N, ...) AE_GLUE(AE_GET_ELEM_, N)(__VA_ARGS__)
+//! Returns the last argument passed to this macro
+#define AE_GET_LAST(...) AE_GET_ELEM(AE_NARGS(__VA_ARGS__), _, __VA_ARGS__ ,,,,,,,,,,,) // Get last argument - placeholder decrements by one
+
+//------------------------------------------------------------------------------
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
@@ -2980,6 +2998,13 @@ public:
 	static const char* GetFileExtFromPath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
+	//! Replaces the extension of the given path with \p ext. If the given path
+	//! does not have an extension then \p ext will be appended to the path.
+	//! \p ext must be only alphanumeric characters.
+	static bool SetExtension( Str256* path, const char* ext );
+	//! Returns true if the given path is a directory. This function does not
+	//! access the underlying filesystem to see if the directory exists.
+	static bool IsDirectory( const char* path );
 
 	// File dialogs
 	static ae::Array< std::string > OpenDialog( const FileDialogParams& params );
@@ -3101,7 +3126,7 @@ public:
 
 private:
 	// Params
-	Protocol m_protocol = Protocol::None;
+	ae::Socket::Protocol m_protocol = ae::Socket::Protocol::None;
 	ae::Str128 m_address;
 	uint16_t m_port = 0;
 	// Connection state
@@ -4221,7 +4246,7 @@ public:
 	const class Skeleton& GetBindPose() const;
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
-	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const;
+	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, bool positionsW, bool normalsW, uint32_t count ) const;
 	
 	uint32_t GetBoneCount() const { return m_bindPose.GetBoneCount(); }
 	uint32_t GetVertCount() const { return m_verts.Length(); }
@@ -4691,40 +4716,49 @@ public:
 // External macros to force module linking
 //------------------------------------------------------------------------------
 // clang-format off
-#define AE_FORCE_LINK_CLASS( x ) \
-	extern int force_link_##x; \
-	struct ForceLink_##x { ForceLink_##x() { force_link_##x = 1; } }; \
-	ForceLink_##x forceLink_##x;
+//! Call signature: AE_FORCE_LINK_CLASS( Namespace0, NameSpace1, ..., MyType );
+#define AE_FORCE_LINK_CLASS(...) \
+	extern int AE_GLUE(_ae_force_link, __VA_ARGS__); \
+	struct AE_GLUE(_ae_ForceLink, __VA_ARGS__) { AE_GLUE(_ae_ForceLink, __VA_ARGS__)() { AE_GLUE(_ae_force_link, __VA_ARGS__) = 1; } }; \
+	AE_GLUE(_ae_ForceLink, __VA_ARGS__) AE_GLUE(_ae_forceLink, __VA_ARGS__);
 
 //------------------------------------------------------------------------------
 // External meta class registerer
 //------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS( x )\
-	int force_link_##x = 0;\
-	template <> const char* ae::_TypeName< ::x >::Get() { return #x; }\
-	template <> void ae::_DefineType< ::x >( ae::Type *type, uint32_t index ) { type->Init< ::x >( #x, index ); }\
-	static ae::_TypeCreator< ::x > ae_type_creator_##x( #x );\
+//! Call signature: AE_REGISTER_CLASS( Namespace0, NameSpace1, ..., MyType );
+//! Registers a new type that can be retrieved with ae::GetType( "Namespace0::NameSpace1::MyType" )
+//! or ae::GetType< Namespace0::NameSpace1::MyType >(). Call this once in the
+//! global scope of any cpp file. The class must indirectly inherit from from
+//! ae::Inheritor< ae::Object, MyType >.
+#define AE_REGISTER_CLASS(...)\
+	int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0;\
+	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
+	template <> void ae::_DefineType< ::AE_GLUE_TYPE(__VA_ARGS__) >( ae::Type *type, uint32_t index ) { type->Init< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)), index ); }\
+	static ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
 	template <>\
-	struct ae::VarType< x > : public ae::VarTypeBase {\
+	struct ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::VarTypeBase {\
 		ae::BasicType GetType() const override { return ae::BasicType::Class; }\
-		const char* GetName() const override { return #x; }\
-		uint32_t GetSize() const override { return sizeof(x); }\
-		const char* GetSubTypeName() const override { return #x; }\
-	};
-//------------------------------------------------------------------------------
-// External meta property registerer
-//------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( ae_type_creator_##c, #c, #p, "" );
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p##_##v( ae_type_creator_##c, #c, #p, #v );
-
-//------------------------------------------------------------------------------
-// External meta var registerer
-//------------------------------------------------------------------------------
-#define AE_REGISTER_CLASS_VAR( c, v ) \
-	AE_DISABLE_INVALID_OFFSET_WARNING \
-	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( ae_type_creator_##c, #c, #v ); \
+		const char* GetName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
+		uint32_t GetSize() const override { return sizeof(::AE_GLUE_TYPE(__VA_ARGS__)); }\
+		const char* GetSubTypeName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
+		static ae::VarTypeBase* Get() { static ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
+	};\
+	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }
+//! Register a class property
+#define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
+//! Register a class property with an additional value. Multiple values can be
+//! specified per property.
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p##_##v( _ae_type_creator_##c, #c, #p, #v );
+//! Call signature: AE_REGISTER_CLASS_VAR( MyType, classVar );
+//! Registers the class variable 'MyType::classVar'
+#define AE_REGISTER_CLASS_VAR( c, v )\
+	AE_DISABLE_INVALID_OFFSET_WARNING\
+	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( _ae_type_creator_##c, #c, #v );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
+//! Register a property for a specific class variable
 #define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
+//! Register a property for a specific class variable with an additional value.
+//! Multiple values can be specified per property.
 #define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #v, #p, #pv );
 
 //------------------------------------------------------------------------------
@@ -4740,6 +4774,7 @@ public:
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(T); } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	struct AE_ENUM_##E {\
 		AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ) : ec( name, def ) {}\
@@ -4769,6 +4804,7 @@ public:
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -4787,6 +4823,7 @@ public:
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
 		const char* GetPrefix() const override { return #PREFIX; } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -4813,6 +4850,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -4859,7 +4897,6 @@ public:
 	static const ae::Type* GetParentType() { return nullptr; }
 	ae::TypeId GetTypeId() const { return _metaTypeId; }
 	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
-	ae::Str32 _typeName;
 };
 
 //------------------------------------------------------------------------------
@@ -5151,6 +5188,8 @@ public:
 
 	// C++ type info
 	template < typename T = ae::Object > T* New( void* obj ) const;
+	//! Creates a temporary instance of this type and copies the vtable from
+	//! the instance. This type must be default constructible.
 	void PatchVTable( ae::Object* obj ) const;
 	uint32_t GetSize() const;
 	uint32_t GetAlignment() const;
@@ -5180,7 +5219,7 @@ public:
 	void m_AddVar( const Var& var );
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
-	ae::Str32 m_name;
+	ae::Str64 m_name;
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
@@ -5204,12 +5243,14 @@ template< typename T, typename C > T* Cast( C* obj );
 //! Overwrites the v-table of the given \p obj with the v-table of the given
 //! type. Use this over ae::Type::PatchVTable() when the type of \p obj
 //! is known at compile time. T Must be the bottom-most class in the given
-//! \p obj inheritance hierarchy.
+//! \p obj inheritance hierarchy. A temporary instance of the object will be
+//! constructed. \p ctorArgs may be provided if the type does not have a default
+//! constructor. 
 //------------------------------------------------------------------------------
-template< typename T >
-void PatchVTable( T* obj )
+template< typename T, typename... Args >
+void PatchVTable( T* obj, Args... ctorArgs )
 {
-	T temp;
+	T temp = T( ctorArgs... );
 	void* vtable = *(void**)&temp;
 	memcpy( (void*)obj, &vtable, sizeof(void*) );
 }
@@ -5299,7 +5340,7 @@ struct _Globals
 	// Reflection
 	uint32_t metaCacheSeq = 0;
 	ae::Map< std::string, Enum, kMetaEnumTypes > enums;
-	std::map< ae::Str32, Type* > typeNameMap;
+	std::map< ae::Str64, Type* > typeNameMap;
 	std::map< ae::TypeId, Type* > typeIdMap;
 	std::vector< ae::Type* > types;
 	const ae::Var::Serializer* varSerializer = nullptr;
@@ -6807,24 +6848,6 @@ inline float Color::RGBToSRGB( float x ) { return powf( x, 1.0f / 2.2f ); }
 #pragma warning(default:26495) // Re-enable uninitialized variable warning
 
 //------------------------------------------------------------------------------
-// ae::Str functions
-//------------------------------------------------------------------------------
-template < uint32_t N >
-std::ostream& operator<<( std::ostream& out, const Str< N >& str )
-{
-	return out << str.c_str();
-}
-
-template < uint32_t N >
-std::istream& operator>>( std::istream& in, Str< N >& str )
-{
-	in.getline( str.m_str, Str< N >::MaxLength() );
-	str.m_length = in.gcount();
-	str.m_str[ str.m_length ] = 0;
-	return in;
-}
-
-//------------------------------------------------------------------------------
 // ae::ToString functions
 //------------------------------------------------------------------------------
 // No implementation so this acts as a forward declaration. Also a default
@@ -7037,6 +7060,24 @@ inline bool FromString( const char* str, const bool& defaultValue )
 	if ( StrCmp( "false", str ) ) { return false; }
 	if ( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
 	return defaultValue;
+}
+
+//------------------------------------------------------------------------------
+// ae::Str functions
+//------------------------------------------------------------------------------
+template < uint32_t N >
+std::ostream& operator<<( std::ostream& out, const Str< N >& str )
+{
+	return out << str.c_str();
+}
+
+template < uint32_t N >
+std::istream& operator>>( std::istream& in, Str< N >& str )
+{
+	in.getline( str.m_str, Str< N >::MaxLength() );
+	str.m_length = in.gcount();
+	str.m_str[ str.m_length ] = 0;
+	return in;
 }
 
 template < uint32_t N >
@@ -10072,9 +10113,32 @@ void BinaryStream::SerializeObjectConditional( T* obj )
 }
 
 //------------------------------------------------------------------------------
-// Internal meta state
+// Internal helpers
 //------------------------------------------------------------------------------
 template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
+#define AE_EVAL(...) __VA_ARGS__
+#define AE_NARGS_I(_,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
+#define AE_GLUE_I(X,Y) AE_GLUE_II(X,Y)
+#define AE_GLUE_II(X,Y) X##Y
+#define AE_GLUE_2(X,Y) X##Y
+#define AE_GLUE_3(X,Y,Z) X##Y##Z
+#define AE_GLUE_4(X,Y,Z,W) X##Y##Z##W
+#define AE_GLUE_TYPE_1(T) T
+#define AE_GLUE_TYPE_2(N0, T) N0::T
+#define AE_GLUE_TYPE_3(N0, N1, T) N0::N1::T
+#define AE_GLUE_TYPE_4(N0, N1, N2, T) N0::N1::N2::T
+#define AE_STRINGIFY_I(S) #S
+#define AE_GET_ELEM_0(_0, ...) _0
+#define AE_GET_ELEM_1(_0, _1, ...) _1
+#define AE_GET_ELEM_2(_0, _1, _2, ...) _2
+#define AE_GET_ELEM_3(_0, _1, _2, _3, ...) _3
+#define AE_GET_ELEM_4(_0, _1, _2, _3, _4, ...) _4
+#define AE_GET_ELEM_5(_0, _1, _2, _3, _4, _5, ...) _5
+#define AE_GET_ELEM_6(_0, _1, _2, _3, _4, _5, _6, ...) _6
+#define AE_GET_ELEM_7(_0, _1, _2, _3, _4, _5, _6, _7, ...) _7
+#define AE_GET_ELEM_8(_0, _1, _2, _3, _4, _5, _6, _7, _8, ...) _8
+#define AE_GET_ELEM_9(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ...) _9
+#define AE_GET_ELEM_10(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, ...) _10
 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
@@ -10098,9 +10162,11 @@ struct VarTypeBase
 	virtual std::string GetStringFromRef( const void* ) const { return ""; } // Reference types
 	virtual const char* GetSubTypeName() const { return ""; } // Array and Reference types
 };
-
-template < typename T >
-struct VarType : public VarTypeBase {};
+template < typename T > VarTypeBase* GetVarType(); // Forward declaration
+template < typename T > struct VarType // Proxy for real VarType< T > if definition is not available
+{
+	static ae::VarTypeBase* Get() { return ae::GetVarType< T >(); }
+};
 
 template < typename Parent, typename This >
 Inheritor< Parent, This >::Inheritor()
@@ -10108,7 +10174,6 @@ Inheritor< Parent, This >::Inheritor()
 	// @NOTE: Don't get type here because this object could be constructed
 	// before meta types are constructed.
 	ae::Object::_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
-	ae::Object::_typeName = ae::_TypeName< This >::Get();
 }
 
 template < typename Parent, typename This >
@@ -10180,7 +10245,7 @@ struct _VarCreator
 		Var var;
 		var.m_owner = type;
 		var.m_name = varName;
-		var.m_varType = new ae::VarType< V >();
+		var.m_varType = ae::VarType< V >::Get();
 		var.m_type = var.m_varType->GetType();
 		var.m_typeName = var.m_varType->GetName();
 		var.m_subTypeId = GetTypeIdFromName( var.m_varType->GetSubTypeName() );
@@ -10313,8 +10378,7 @@ public:
 		
 	_EnumCreator2( const char* valueName, T value )
 	{
-		ae::VarType< T > varType; // @TODO: Get this from the real ae::Var::m_varType
-		const char* prefix = varType.GetPrefix();
+		const char* prefix = ae::VarType< T >::Get()->GetPrefix();
 		uint32_t prefixLen = (uint32_t)strlen( prefix );
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
@@ -10337,40 +10401,40 @@ public:
 //------------------------------------------------------------------------------
 // Internal meta var registration
 //------------------------------------------------------------------------------
-#define _ae_DefineMetaVarType( t, e ) \
+#define _ae_DefineMetaVarType( t, s, e ) \
 template <> \
 struct ae::VarType< t > : public ae::VarTypeBase { \
 	ae::BasicType GetType() const override { return ae::BasicType::e; } \
-	const char* GetName() const override { return #t; } \
+	const char* GetName() const override { return s; } \
 	uint32_t GetSize() const override { return sizeof(t); } \
+	static ae::VarTypeBase* Get() { static ae::VarType< t > s_type; return &s_type; }\
 };
 
-_ae_DefineMetaVarType( uint8_t, UInt8 );
-_ae_DefineMetaVarType( uint16_t, UInt16 );
-_ae_DefineMetaVarType( uint32_t, UInt32 );
-_ae_DefineMetaVarType( uint64_t, UInt64 );
-_ae_DefineMetaVarType( int8_t, Int8 );
-_ae_DefineMetaVarType( int16_t, Int16 );
-_ae_DefineMetaVarType( int32_t, Int32 );
-_ae_DefineMetaVarType( int64_t, Int64 );
-_ae_DefineMetaVarType( ae::Int2, Int2 );
-_ae_DefineMetaVarType( ae::Int3, Int3 );
-_ae_DefineMetaVarType( bool, Bool );
-_ae_DefineMetaVarType( float, Float );
-_ae_DefineMetaVarType( double, Double );
-_ae_DefineMetaVarType( ae::Vec2, Vec2 );
-_ae_DefineMetaVarType( ae::Vec3, Vec3 );
-_ae_DefineMetaVarType( ae::Vec4, Vec4 );
-_ae_DefineMetaVarType( ae::Color, Color );
-_ae_DefineMetaVarType( ae::Matrix4, Matrix4 );
-
-template < uint32_t N >
-struct ae::VarType< ae::Str< N > > : public ae::VarTypeBase
-{
-	ae::BasicType GetType() const override { return ae::BasicType::String; }
-	const char* GetName() const override { return "String"; }
-	uint32_t GetSize() const override { return sizeof(ae::Str< N >); }
-};
+// @TODO: Should these names be the actual type or enum? eg. int32_t has multiple aliases
+_ae_DefineMetaVarType( uint8_t, "uint8_t", UInt8 );
+_ae_DefineMetaVarType( uint16_t, "uint16_t", UInt16 );
+_ae_DefineMetaVarType( uint32_t, "uint32_t", UInt32 );
+_ae_DefineMetaVarType( uint64_t, "uint64_t", UInt64 );
+_ae_DefineMetaVarType( int8_t, "int8_t", Int8 );
+_ae_DefineMetaVarType( int16_t, "int16_t", Int16 );
+_ae_DefineMetaVarType( int32_t, "int32_t", Int32 );
+_ae_DefineMetaVarType( int64_t, "int64_t", Int64 );
+_ae_DefineMetaVarType( ae::Int2, "ae::Int2", Int2 );
+_ae_DefineMetaVarType( ae::Int3, "ae::Int3", Int3 );
+_ae_DefineMetaVarType( bool, "bool", Bool );
+_ae_DefineMetaVarType( float, "float", Float );
+_ae_DefineMetaVarType( double, "double", Double );
+_ae_DefineMetaVarType( ae::Vec2, "ae::Vec2", Vec2 );
+_ae_DefineMetaVarType( ae::Vec3, "ae::Vec3", Vec3 );
+_ae_DefineMetaVarType( ae::Vec4, "ae::Vec4", Vec4 );
+_ae_DefineMetaVarType( ae::Color, "ae::Color", Color );
+_ae_DefineMetaVarType( ae::Matrix4, "ae::Matrix4", Matrix4 );
+_ae_DefineMetaVarType( ae::Str16, "String", String );
+_ae_DefineMetaVarType( ae::Str32, "String", String );
+_ae_DefineMetaVarType( ae::Str64, "String", String );
+_ae_DefineMetaVarType( ae::Str128, "String", String );
+_ae_DefineMetaVarType( ae::Str256, "String", String );
+_ae_DefineMetaVarType( ae::Str512, "String", String );
 
 template < typename T >
 struct ae::VarType< T* > : public ae::VarTypeBase
@@ -10383,6 +10447,7 @@ struct ae::VarType< T* > : public ae::VarTypeBase
 	const char* GetName() const override { return "Ref"; }
 	uint32_t GetSize() const override { return sizeof(T*); }
 	const char* GetSubTypeName() const override { return ae::GetTypeName< T >(); }
+	static ae::VarTypeBase* Get() { static ae::VarType< T* > s_type; return &s_type; }
 };
 
 template < typename T, uint32_t N >
@@ -10424,16 +10489,16 @@ struct ae::VarType< ae::Array< T, N > > : public ae::VarTypeBase
 	uint32_t GetSize() const override { return sizeof(T); }
 	const ae::Var::ArrayAdapter* GetArrayAdapter() const override { return &m_adapter; }
 	// Use sub-type
-	ae::BasicType GetType() const override { return m_v.GetType(); }
-	const char* GetName() const override { return m_v.GetName(); }
-	const char* GetPrefix() const override { return m_v.GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return m_v.SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override{ return m_v.SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return m_v.GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return m_v.GetSubTypeName(); }
+	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
+	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
+	bool SetRef( void* varData, ae::Object* value ) const override{ return ae::VarType< T >::Get()->SetRef( varData, value ); }
+	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
+	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
+	static ae::VarTypeBase* Get() { static ae::VarType< ae::Array< T, N > > s_type; return &s_type; }
 private:
 	ArrayAdapterDynamic< T, N > m_adapter; // @TODO: Should use a global instance?
-	ae::VarType< T > m_v; // @TODO: Should use a global instance?
 };
 
 template < typename T, uint32_t N >
@@ -10454,16 +10519,16 @@ struct ae::VarType< T[ N ] > : public ae::VarTypeBase
 	uint32_t GetSize() const override { return sizeof(T); }
 	const ae::Var::ArrayAdapter* GetArrayAdapter() const override { return &m_adapter; }
 	// Use sub-type
-	ae::BasicType GetType() const override { return m_v.GetType(); }
-	const char* GetName() const override { return m_v.GetName(); }
-	const char* GetPrefix() const override { return m_v.GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return m_v.SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override { return m_v.SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return m_v.GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return m_v.GetSubTypeName(); }
+	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
+	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
+	bool SetRef( void* varData, ae::Object* value ) const override { return ae::VarType< T >::Get()->SetRef( varData, value ); }
+	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
+	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
+	static ae::VarTypeBase* Get() { static ae::VarType< T[ N ] > s_type; return &s_type; }
 private:
 	ArrayAdapterStatic< T, N > m_adapter; // @TODO: Should use a global instance?
-	ae::VarType< T > m_v; // @TODO: Should use a global instance?
 };
 
 template < typename T >
@@ -16938,6 +17003,48 @@ void FileSystem::AppendToPath( Str256* path, const char* str )
 	*path += str;
 }
 
+bool ae::FileSystem::SetExtension( Str256* path, const char* ext )
+{
+	if( !path || !path->Length()
+		|| !ext || !ext[ 0 ]
+		|| IsDirectory( path->c_str() ) )
+	{
+		return false;
+	}
+	const uint32_t extLength = (uint32_t)strlen( ext );
+	if( std::find_if(
+			ext, ext + extLength,
+			[]( char c ) { return !std::isalnum( c );
+		} ) != ext + extLength )
+	{
+		return false;
+	}
+
+	for( int32_t i = path->Length() - 1;
+		i >= 0 && (*path)[ i ] != '/' && (*path)[ i ] != '\\';
+		i-- )
+	{
+		if( (*path)[ i ] == '.' )
+		{
+			path->Trim( i );
+			break;
+		}
+	}
+	path->Append( "." );
+	path->Append( ext );
+	return true;
+}
+
+bool ae::FileSystem::IsDirectory( const char* path )
+{
+	uint32_t length = strlen( path );
+	if ( length == 0 )
+	{
+		return false;
+	}
+	return path[ length - 1 ] == '/' || path[ length - 1 ] == '\\';
+}
+
 #if _AE_WINDOWS_
 
 void FixPathExtension( const char* extension, std::filesystem::path* pathOut )
@@ -18264,6 +18371,21 @@ void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam )
 
 namespace ae {
 
+int32_t _GLGetTypeCount( uint32_t glType )
+{
+	switch ( glType )
+	{
+		case GL_SAMPLER_2D: return 0;
+		case GL_SAMPLER_3D: return 0;
+		case GL_FLOAT: return 1;
+		case GL_FLOAT_VEC2: return 2;
+		case GL_FLOAT_VEC3: return 3;
+		case GL_FLOAT_VEC4: return 4;
+		case GL_FLOAT_MAT4: return 16;
+		default: return -1;
+	}
+}
+
 void CheckFramebufferComplete( GLuint framebuffer )
 {
 	GLenum fboStatus = glCheckFramebufferStatus( GL_FRAMEBUFFER );
@@ -18751,43 +18873,18 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		const _Uniform* uniformVar = &m_uniforms.GetValue( i );
 		const UniformList::Value* uniformValue = uniforms.Get( uniformVarName );
 
-		// Start validation
-		if ( !uniformValue )
+		// Validation
 		{
-			AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
-			missingUniforms = true;
-			continue;
+			if ( !uniformValue )
+			{
+				AE_WARN( "Shader uniform '#' value is not set", uniformVarName );
+				missingUniforms = true;
+				continue;
+			}
+			const int32_t typeSize = ae::_GLGetTypeCount( uniformVar->type );
+			AE_ASSERT_MSG( typeSize >= 0, "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
+			AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
 		}
-		uint32_t typeSize = 0;
-		switch ( uniformVar->type )
-		{
-			case GL_SAMPLER_2D:
-				typeSize = 0;
-				break;
-			case GL_SAMPLER_3D:
-				typeSize = 0;
-				break;
-			case GL_FLOAT:
-				typeSize = 1;
-				break;
-			case GL_FLOAT_VEC2:
-				typeSize = 2;
-				break;
-			case GL_FLOAT_VEC3:
-				typeSize = 3;
-				break;
-			case GL_FLOAT_VEC4:
-				typeSize = 4;
-				break;
-			case GL_FLOAT_MAT4:
-				typeSize = 16;
-				break;
-			default:
-				AE_FAIL_MSG( "Unsupported uniform '#' type #", uniformVarName, uniformVar->type );
-				break;
-		}
-		AE_ASSERT_MSG( uniformValue->size == typeSize, "Uniform size mismatch '#' type:# var:# param:#", uniformVarName, uniformVar->type, typeSize, uniformValue->size );
-		// End validation
 
 		if ( uniformVar->type == GL_SAMPLER_2D )
 		{
@@ -19222,9 +19319,11 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 		else
 		{
 			int32_t idx = m_attributes.FindFn( [ attribName ]( const _Attribute& a ){ return a.name == attribName; } );
-			AE_ASSERT_MSG( idx >= 0, "No vertex attribute named '#'", attribName );
+			AE_ASSERT_MSG( idx >= 0, "Shader requires missing vertex attribute '#'", attribName );
 			const _Attribute* vertexAttribute = &m_attributes[ idx ];
-			// @TODO: Verify attribute type and size match
+			const uint32_t shaderAttribComponentCount = ae::_GLGetTypeCount( shaderAttribute->type );
+			AE_ASSERT_MSG( (int32_t)vertexAttribute->componentCount >= shaderAttribComponentCount, "Shader vertex attribute '#' requires # componenents, but vertex data only provides #", attribName, shaderAttribComponentCount, vertexAttribute->componentCount );
+			// @TODO: Verify attribute type matches
 
 			glBindBuffer( GL_ARRAY_BUFFER, m_vertices );
 			AE_CHECK_GL_ERROR();
@@ -22355,7 +22454,7 @@ const Skeleton& Skin::GetBindPose() const
 	return m_bindPose;
 }
 
-void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, uint32_t count ) const
+void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, bool positionsW, bool normalsW, uint32_t count ) const
 {
 	AE_ASSERT_MSG( count == m_verts.Length(), "Given mesh data does not match skin vertex count" );
 	AE_ASSERT_MSG( m_bindPose.GetBoneCount() == pose->GetBoneCount(), "Given ae::Skeleton pose does not match bind pose hierarchy" );
@@ -22393,9 +22492,11 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 		p[ 0 ] = pos.x;
 		p[ 1 ] = pos.y;
 		p[ 2 ] = pos.z;
+		if( positionsW ) { p[ 3 ] = 1.0f; }
 		n[ 0 ] = normal.x;
 		n[ 1 ] = normal.y;
 		n[ 2 ] = normal.z;
+		if( normalsW ) { n[ 3 ] = 0.0f; }
 	}
 }
 
@@ -22619,7 +22720,7 @@ void OBJFile::InitializeVertexData( const ae::OBJFile::VertexDataParams& params 
 		vertices.Length(), indices.Length(),
 		ae::Vertex::Primitive::Triangle,
 		ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );
-	params.vertexData->AddAttribute( params.posAttrib, 3, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
+	params.vertexData->AddAttribute( params.posAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, position ) );
 	params.vertexData->AddAttribute( params.uvAttrib, 2, ae::Vertex::Type::Float, offsetof( Vertex, texture ) );
 	params.vertexData->AddAttribute( params.normalAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, normal ) );
 	params.vertexData->AddAttribute( params.colorAttrib, 4, ae::Vertex::Type::Float, offsetof( Vertex, color ) );
@@ -24124,19 +24225,7 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 // Meta register base object
 //------------------------------------------------------------------------------
-// @TODO: Support registering classes in namespaces
-//AE_REGISTER_CLASS( ae::Object );
-int force_link_aeObject = 0;
-template <> const char* ae::_TypeName< ::ae::Object >::Get() { return "ae::Object"; }
-template <> void ae::_DefineType< ::ae::Object >( ae::Type *type, uint32_t index ) { type->Init< ::ae::Object >( "ae::Object", index ); }
-static ae::_TypeCreator< ::ae::Object > ae_type_creator_aeObject( "ae::Object" );
-template <>
-struct ae::VarType< ae::Object > : public ae::VarTypeBase {
-	ae::BasicType GetType() const override { return ae::BasicType::Class; }
-	const char* GetName() const override { return "ae::Object"; }
-	uint32_t GetSize() const override { return sizeof(ae::Object); }
-	const char* GetSubTypeName() const override { return "ae::Object"; }
-};
+AE_REGISTER_CLASS( ae, Object );
 
 uint32_t ae::GetTypeCount()
 {
@@ -24890,13 +24979,17 @@ const char* ae::Type::GetPropertyValue( const char* propName, uint32_t valueInde
 }
 void ae::Type::PatchVTable( ae::Object* obj ) const
 {
-	// @TODO: Get this without instantiating? At least cache it...
-	ae::Object* temp = (ae::Object*)ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
-	New( temp );
-	void* vtable = *(void**)temp;
-	temp->~Object();
-	ae::Free( temp );
-	memcpy( (void*)obj, &vtable, sizeof(void*) );
+	if( obj )
+	{
+		// @TODO: Get this without instantiating? At least cache it...
+		AE_ASSERT( obj->GetTypeId() == GetId() );
+		ae::Object* temp = (ae::Object*)ae::Allocate( AE_ALLOC_TAG_FIXME, GetSize(), GetAlignment() );
+		New( temp );
+		void* vtable = *(void**)temp;
+		temp->~Object();
+		ae::Free( temp );
+		memcpy( (void*)obj, &vtable, sizeof(void*) );
+	}
 }
 uint32_t ae::Type::GetSize() const { return m_size; }
 uint32_t ae::Type::GetAlignment() const { return m_align; }

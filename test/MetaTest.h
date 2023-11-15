@@ -63,6 +63,19 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// NamespaceClass
+//------------------------------------------------------------------------------
+namespace Namespace0 {
+	namespace Namespace1 {
+		class NamespaceClass : public ae::Inheritor< SomeClass, NamespaceClass >
+		{
+		public:
+			bool boolMember;
+		};
+	}
+}
+
+//------------------------------------------------------------------------------
 // AggregateClass
 //------------------------------------------------------------------------------
 class AggregateClass : public ae::Inheritor< ae::Object, AggregateClass >
