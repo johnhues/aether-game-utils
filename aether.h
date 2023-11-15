@@ -4741,7 +4741,9 @@ public:
 		const char* GetName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 		uint32_t GetSize() const override { return sizeof(::AE_GLUE_TYPE(__VA_ARGS__)); }\
 		const char* GetSubTypeName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-	};
+		static ae::VarTypeBase* Get() { static ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
+	};\
+	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }
 //! Register a class property
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
 //! Register a class property with an additional value. Multiple values can be
@@ -4772,6 +4774,7 @@ public:
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(T); } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	struct AE_ENUM_##E {\
 		AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ) : ec( name, def ) {}\
@@ -4801,6 +4804,7 @@ public:
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -4819,6 +4823,7 @@ public:
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
 		const char* GetPrefix() const override { return #PREFIX; } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -4845,6 +4850,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
+		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
 	}; \
 	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -10156,9 +10162,11 @@ struct VarTypeBase
 	virtual std::string GetStringFromRef( const void* ) const { return ""; } // Reference types
 	virtual const char* GetSubTypeName() const { return ""; } // Array and Reference types
 };
-
-template < typename T >
-struct VarType : public VarTypeBase {};
+template < typename T > VarTypeBase* GetVarType(); // Forward declaration
+template < typename T > struct VarType // Proxy for real VarType< T > if definition is not available
+{
+	static ae::VarTypeBase* Get() { return ae::GetVarType< T >(); }
+};
 
 template < typename Parent, typename This >
 Inheritor< Parent, This >::Inheritor()
@@ -10237,7 +10245,7 @@ struct _VarCreator
 		Var var;
 		var.m_owner = type;
 		var.m_name = varName;
-		var.m_varType = new ae::VarType< V >();
+		var.m_varType = ae::VarType< V >::Get();
 		var.m_type = var.m_varType->GetType();
 		var.m_typeName = var.m_varType->GetName();
 		var.m_subTypeId = GetTypeIdFromName( var.m_varType->GetSubTypeName() );
@@ -10370,8 +10378,7 @@ public:
 		
 	_EnumCreator2( const char* valueName, T value )
 	{
-		ae::VarType< T > varType; // @TODO: Get this from the real ae::Var::m_varType
-		const char* prefix = varType.GetPrefix();
+		const char* prefix = ae::VarType< T >::Get()->GetPrefix();
 		uint32_t prefixLen = (uint32_t)strlen( prefix );
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
@@ -10394,40 +10401,40 @@ public:
 //------------------------------------------------------------------------------
 // Internal meta var registration
 //------------------------------------------------------------------------------
-#define _ae_DefineMetaVarType( t, e ) \
+#define _ae_DefineMetaVarType( t, s, e ) \
 template <> \
 struct ae::VarType< t > : public ae::VarTypeBase { \
 	ae::BasicType GetType() const override { return ae::BasicType::e; } \
-	const char* GetName() const override { return #t; } \
+	const char* GetName() const override { return s; } \
 	uint32_t GetSize() const override { return sizeof(t); } \
+	static ae::VarTypeBase* Get() { static ae::VarType< t > s_type; return &s_type; }\
 };
 
-_ae_DefineMetaVarType( uint8_t, UInt8 );
-_ae_DefineMetaVarType( uint16_t, UInt16 );
-_ae_DefineMetaVarType( uint32_t, UInt32 );
-_ae_DefineMetaVarType( uint64_t, UInt64 );
-_ae_DefineMetaVarType( int8_t, Int8 );
-_ae_DefineMetaVarType( int16_t, Int16 );
-_ae_DefineMetaVarType( int32_t, Int32 );
-_ae_DefineMetaVarType( int64_t, Int64 );
-_ae_DefineMetaVarType( ae::Int2, Int2 );
-_ae_DefineMetaVarType( ae::Int3, Int3 );
-_ae_DefineMetaVarType( bool, Bool );
-_ae_DefineMetaVarType( float, Float );
-_ae_DefineMetaVarType( double, Double );
-_ae_DefineMetaVarType( ae::Vec2, Vec2 );
-_ae_DefineMetaVarType( ae::Vec3, Vec3 );
-_ae_DefineMetaVarType( ae::Vec4, Vec4 );
-_ae_DefineMetaVarType( ae::Color, Color );
-_ae_DefineMetaVarType( ae::Matrix4, Matrix4 );
-
-template < uint32_t N >
-struct ae::VarType< ae::Str< N > > : public ae::VarTypeBase
-{
-	ae::BasicType GetType() const override { return ae::BasicType::String; }
-	const char* GetName() const override { return "String"; }
-	uint32_t GetSize() const override { return sizeof(ae::Str< N >); }
-};
+// @TODO: Should these names be the actual type or enum? eg. int32_t has multiple aliases
+_ae_DefineMetaVarType( uint8_t, "uint8_t", UInt8 );
+_ae_DefineMetaVarType( uint16_t, "uint16_t", UInt16 );
+_ae_DefineMetaVarType( uint32_t, "uint32_t", UInt32 );
+_ae_DefineMetaVarType( uint64_t, "uint64_t", UInt64 );
+_ae_DefineMetaVarType( int8_t, "int8_t", Int8 );
+_ae_DefineMetaVarType( int16_t, "int16_t", Int16 );
+_ae_DefineMetaVarType( int32_t, "int32_t", Int32 );
+_ae_DefineMetaVarType( int64_t, "int64_t", Int64 );
+_ae_DefineMetaVarType( ae::Int2, "ae::Int2", Int2 );
+_ae_DefineMetaVarType( ae::Int3, "ae::Int3", Int3 );
+_ae_DefineMetaVarType( bool, "bool", Bool );
+_ae_DefineMetaVarType( float, "float", Float );
+_ae_DefineMetaVarType( double, "double", Double );
+_ae_DefineMetaVarType( ae::Vec2, "ae::Vec2", Vec2 );
+_ae_DefineMetaVarType( ae::Vec3, "ae::Vec3", Vec3 );
+_ae_DefineMetaVarType( ae::Vec4, "ae::Vec4", Vec4 );
+_ae_DefineMetaVarType( ae::Color, "ae::Color", Color );
+_ae_DefineMetaVarType( ae::Matrix4, "ae::Matrix4", Matrix4 );
+_ae_DefineMetaVarType( ae::Str16, "String", String );
+_ae_DefineMetaVarType( ae::Str32, "String", String );
+_ae_DefineMetaVarType( ae::Str64, "String", String );
+_ae_DefineMetaVarType( ae::Str128, "String", String );
+_ae_DefineMetaVarType( ae::Str256, "String", String );
+_ae_DefineMetaVarType( ae::Str512, "String", String );
 
 template < typename T >
 struct ae::VarType< T* > : public ae::VarTypeBase
@@ -10440,6 +10447,7 @@ struct ae::VarType< T* > : public ae::VarTypeBase
 	const char* GetName() const override { return "Ref"; }
 	uint32_t GetSize() const override { return sizeof(T*); }
 	const char* GetSubTypeName() const override { return ae::GetTypeName< T >(); }
+	static ae::VarTypeBase* Get() { static ae::VarType< T* > s_type; return &s_type; }
 };
 
 template < typename T, uint32_t N >
@@ -10481,16 +10489,16 @@ struct ae::VarType< ae::Array< T, N > > : public ae::VarTypeBase
 	uint32_t GetSize() const override { return sizeof(T); }
 	const ae::Var::ArrayAdapter* GetArrayAdapter() const override { return &m_adapter; }
 	// Use sub-type
-	ae::BasicType GetType() const override { return m_v.GetType(); }
-	const char* GetName() const override { return m_v.GetName(); }
-	const char* GetPrefix() const override { return m_v.GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return m_v.SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override{ return m_v.SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return m_v.GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return m_v.GetSubTypeName(); }
+	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
+	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
+	bool SetRef( void* varData, ae::Object* value ) const override{ return ae::VarType< T >::Get()->SetRef( varData, value ); }
+	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
+	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
+	static ae::VarTypeBase* Get() { static ae::VarType< ae::Array< T, N > > s_type; return &s_type; }
 private:
 	ArrayAdapterDynamic< T, N > m_adapter; // @TODO: Should use a global instance?
-	ae::VarType< T > m_v; // @TODO: Should use a global instance?
 };
 
 template < typename T, uint32_t N >
@@ -10511,16 +10519,16 @@ struct ae::VarType< T[ N ] > : public ae::VarTypeBase
 	uint32_t GetSize() const override { return sizeof(T); }
 	const ae::Var::ArrayAdapter* GetArrayAdapter() const override { return &m_adapter; }
 	// Use sub-type
-	ae::BasicType GetType() const override { return m_v.GetType(); }
-	const char* GetName() const override { return m_v.GetName(); }
-	const char* GetPrefix() const override { return m_v.GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return m_v.SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override { return m_v.SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return m_v.GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return m_v.GetSubTypeName(); }
+	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
+	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
+	bool SetRef( void* varData, ae::Object* value ) const override { return ae::VarType< T >::Get()->SetRef( varData, value ); }
+	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
+	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
+	static ae::VarTypeBase* Get() { static ae::VarType< T[ N ] > s_type; return &s_type; }
 private:
 	ArrayAdapterStatic< T, N > m_adapter; // @TODO: Should use a global instance?
-	ae::VarType< T > m_v; // @TODO: Should use a global instance?
 };
 
 template < typename T >
