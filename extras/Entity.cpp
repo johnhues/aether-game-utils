@@ -164,7 +164,7 @@ Component* Registry::TryGetComponent( Entity entity, const char* typeName )
 Component& Registry::GetComponent( Entity entity, const char* typeName )
 {
 	Component* component = TryGetComponent( entity, typeName );
-	AE_ASSERT_MSG( component, "Entity '#' has no compoent '#'", entity );
+	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", entity );
 	return *component;
 }
 
@@ -258,7 +258,7 @@ Component& Registry::GetComponentByIndex( int32_t typeIndex, uint32_t componentI
 
 void Registry::Destroy( Entity entity )
 {
-	AE_ASSERT_MSG( !m_destroying, "Cannot destroy while already destroying" );
+	AE_ASSERT_MSG( !m_destroying, "Recursive destruction of objects or components is not supported" );
 	m_destroying = true;
 
 	const char* name = GetNameByEntity( entity );
@@ -281,9 +281,28 @@ void Registry::Destroy( Entity entity )
 	m_destroying = false;
 }
 
+void Registry::DestroyComponent( Component* component )
+{
+	if( component )
+	{
+		AE_ASSERT_MSG( !m_destroying, "Recursive destruction of objects or components is not supported" );
+		m_destroying = true;
+
+		const ae::TypeId typeId = ae::GetObjectTypeId( component );
+		const ae::Entity entity = component->GetEntity();
+		const bool removeSuccess = m_components.Get( typeId ).Remove( entity );
+		AE_ASSERT( removeSuccess );
+
+		component->~Component();
+		ae::Free( component );
+
+		m_destroying = false;
+	}
+}
+
 void Registry::Clear()
 {
-	AE_ASSERT_MSG( !m_destroying, "Cannot destroy while already destroying" );
+	AE_ASSERT_MSG( !m_destroying, "Recursive destruction of objects or components is not supported" );
 	m_destroying = true;
 
 	// Get components each loop because m_components could grow at any iteration

@@ -102,6 +102,7 @@ public:
 	
 	// Removal
 	void Destroy( Entity entity );
+	void DestroyComponent( Component* component );
 	void Clear();
 	
 private:
@@ -175,21 +176,27 @@ T* Registry::AddComponent( Entity entity )
 template < typename T >
 T* Registry::TryGetComponent( Entity entity )
 {
+	if( !entity )
+	{
+		return nullptr;
+	}
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	const ae::Type* type = ae::GetType< T >();
 	AE_ASSERT_MSG( type, "No registered type" );
-	
 	if ( ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
 	{
 		return static_cast< T* >( components->Get( entity, nullptr ) );
 	}
-	
 	return nullptr;
 }
 
 template < typename T >
 T* Registry::TryGetComponent( const char* name )
 {
+	if( !name[ 0 ] )
+	{
+		return nullptr;
+	}
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	return TryGetComponent< T >( m_entityNames.Get( name, kInvalidEntity ) );
 }
