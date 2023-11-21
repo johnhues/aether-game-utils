@@ -11,6 +11,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+#include "Entity.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -19,8 +20,8 @@ namespace ae {
 
 const uint32_t kMaxEditorMessageSize = 1024;
 
-typedef uint32_t EditorObjectId;
-const EditorObjectId kInvalidEditorObjectId = 0;
+typedef Entity EditorObjectId;
+const EditorObjectId kInvalidEditorObjectId = kInvalidEntity;
 
 //------------------------------------------------------------------------------
 // ae::EditorComponent class

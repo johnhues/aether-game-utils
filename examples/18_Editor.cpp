@@ -11,9 +11,9 @@
 const ae::Tag TAG_ALL = "all";
 
 //------------------------------------------------------------------------------
-// Object
+// Component
 //------------------------------------------------------------------------------
-class Object : public ae::Inheritor< ae::Component, Object >
+class Component : public ae::Inheritor< ae::Component, Component >
 {
 public:
 	virtual void Initialize( class Game* game ) {}
@@ -22,12 +22,12 @@ public:
 	virtual void Render( class Game* game ) {}
 	bool initialized = false;
 };
-AE_REGISTER_CLASS( Object );
+AE_REGISTER_CLASS( Component );
 
 //------------------------------------------------------------------------------
 // Avatar
 //------------------------------------------------------------------------------
-class Avatar : public ae::Inheritor< Object, Avatar >
+class Avatar : public ae::Inheritor< Component, Avatar >
 {
 public:
 	void Initialize( class Game* game ) override;
@@ -55,7 +55,7 @@ AE_REGISTER_CLASS_VAR( Avatar, radius );
 //------------------------------------------------------------------------------
 // Mesh
 //------------------------------------------------------------------------------
-class Mesh : public ae::Inheritor< Object, Mesh >
+class Mesh : public ae::Inheritor< Component, Mesh >
 {
 public:
 	ae::Str32 name;
@@ -275,7 +275,7 @@ void Game::Run()
 		if ( m_levelLoadSeq != editor.GetLevelChangeSeq() )
 		{
 			m_levelLoadSeq = editor.GetLevelChangeSeq();
-			registry.CallFn< Object >( [&]( Object* o ){ o->Terminate( this ); } );
+			registry.CallFn< Component >( [&]( Component* o ){ o->Terminate( this ); } );
 			registry.Load( editor.GetLevel() );
 		}
 		
@@ -288,7 +288,7 @@ void Game::Run()
 			slowDt = !slowDt;
 		}
 		
-		registry.CallFn< Object >( [&]( Object* o )
+		registry.CallFn< Component >( [&]( Component* o )
 		{
 			if ( !o->initialized )
 			{
@@ -296,7 +296,7 @@ void Game::Run()
 				o->initialized = true;
 			}
 		} );
-		registry.CallFn< Object >( [&]( Object* o ){ o->Update( this ); } );
+		registry.CallFn< Component >( [&]( Component* o ){ o->Update( this ); } );
 		
 		gfx.Activate();
 		gfx.Clear( skyColor );
@@ -325,7 +325,7 @@ void Game::Run()
 			bunnyVertexData.Draw();
 		} );
 		
-		registry.CallFn< Object >( [&]( Object* o ){ o->Render( this ); } );
+		registry.CallFn< Component >( [&]( Component* o ){ o->Render( this ); } );
 		
 		debugLines.Render( worldToProj );
 		gfx.Present();

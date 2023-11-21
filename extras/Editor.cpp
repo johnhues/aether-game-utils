@@ -7,8 +7,8 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/Editor.h"
-
-// @TODO: Remove these dependencies
+#include "ae/Entity.h"
+// @TODO: Remove ImGui dependencies
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
 #include "rapidjson/document.h"
@@ -106,8 +106,8 @@ public:
 class EditorServerObject
 {
 public:
-	EditorServerObject( const ae::Tag& tag ) : components( tag ) {}
-	~EditorServerObject() { AE_ASSERT( !components.Length() ); }
+	EditorServerObject( const ae::Tag& tag ) {}
+	~EditorServerObject() {}
 	void Initialize( EditorObjectId entity, ae::Matrix4 transform );
 	void Terminate();
 	void SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
@@ -119,11 +119,8 @@ public:
 
 	ae::AABB GetAABB( class EditorProgram* program ) const;
 	
-	EditorObjectId entity = kInvalidEditorObjectId;
-	ae::Str16 name;
-	ae::Array< ae::Object* > components;
+	ae::Entity entity = ae::kInvalidEntity;
 	bool hidden = false;
-	
 	EditorServerMesh* mesh = nullptr;
 	bool opaque = true;
 	
@@ -155,7 +152,7 @@ public:
 		m_tag( tag ),
 		selected( tag ),
 		m_objects( tag ),
-		m_components( tag ),
+		m_registry( tag ),
 		m_meshResourceVars( tag ),
 		m_meshVisibleVars( tag ),
 		m_typeMesh( tag ),
@@ -175,15 +172,15 @@ public:
 	
 	bool GetShowInvisible() const { return m_showInvisible; }
 	
-	EditorServerObject* CreateObject( EditorObjectId id, const ae::Matrix4& transform );
-	void DestroyObject( EditorObjectId id );
-	ae::Object* AddComponent( class EditorProgram* program, EditorServerObject* obj, const char* typeName );
-	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, ae::Object* component );
-	ae::Object* GetComponent( EditorServerObject* obj, const char* typeName );
-	const ae::Object* GetComponent( const EditorServerObject* obj, const char* typeName );
+	EditorServerObject* CreateObject( ae::Entity entity, const ae::Matrix4& transform, const char* name );
+	void DestroyObject( ae::Entity entity );
+	ae::Object* AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::Type* type );
+	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, ae::Object* component ); // @TODO: Cleanup signature
+	ae::Object* GetComponent( EditorServerObject* obj, const ae::Type* type );
+	const ae::Object* GetComponent( const EditorServerObject* obj, const ae::Type* type );
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
 	EditorServerObject* GetObject( EditorObjectId entity ) { return m_objects.Get( entity, nullptr ); }
-	const EditorServerObject* GetObjectFromComponent( const ae::Object* component );
+	const EditorServerObject* GetObjectFromComponent( const ae::Object* component ); // @TODO: Cleanup signature
 	const ae::Var* GetMeshResourceVar( const ae::Type* componentType );
 	const ae::Var* GetMeshVisibleVar( const ae::Type* componentType );
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
@@ -203,8 +200,9 @@ private:
 	
 	const ae::Tag m_tag;
 	bool m_first = true;
-	bool m_showInvisible = false;
 	std::function< bool( const ae::Type*, const char*, ae::Object** ) > m_getObjectPointerFromString;
+
+	bool m_showInvisible = false;
 
 	const ae::Type* m_selectedType = nullptr;
 	ae::Array< EditorObjectId > selected;
@@ -217,9 +215,9 @@ private:
 	class Editor* client = nullptr;
 	uint32_t m_levelSeq_HACK = 0;
 
-	EditorObjectId m_nextEntityId = 1;
 	ae::Map< EditorObjectId, EditorServerObject* > m_objects;
-	ae::Map< ae::TypeId, ae::Map< EditorObjectId, ae::Object* > > m_components;
+	ae::Registry m_registry;
+
 	ae::Map< const ae::Type*, const ae::Var* > m_meshResourceVars;
 	ae::Map< const ae::Type*, const ae::Var* > m_meshVisibleVars;
 	ae::Map< const ae::Type*, ae::Str32 > m_typeMesh;
@@ -1039,9 +1037,7 @@ void EditorServerObject::Initialize( EditorObjectId entity, ae::Matrix4 transfor
 }
 
 void EditorServerObject::Terminate()
-{
-	AE_ASSERT( components.Length() == 0 );
-}
+{}
 
 void EditorServerObject::SetTransform( const ae::Matrix4& transform, EditorProgram* program )
 {
@@ -1121,6 +1117,7 @@ void EditorServer::Initialize( EditorProgram* program )
 		int32_t resourcePropIdx = type->GetPropertyIndex( "ae_mesh_resource" );
 		if ( resourcePropIdx >= 0 )
 		{
+			// @TODO: This should be a class variable property instead
 			const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_resource, memberVar );";
 			AE_ASSERT_MSG( type->GetPropertyValueCount( resourcePropIdx ), mustRegisterErr, type->GetName() );
 			const char* varName = type->GetPropertyValue( resourcePropIdx, 0 );
@@ -1133,6 +1130,7 @@ void EditorServer::Initialize( EditorProgram* program )
 		int32_t visiblePropIdx = type->GetPropertyIndex( "ae_mesh_visible" );
 		if ( visiblePropIdx >= 0 )
 		{
+			// @TODO: This should be a class variable property instead
 			const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_visible, memberVar );";
 			AE_ASSERT_MSG( type->GetPropertyValueCount( visiblePropIdx ), mustRegisterErr, type->GetName() );
 			const char* varName = type->GetPropertyValue( visiblePropIdx, 0 );
@@ -1366,21 +1364,23 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		if ( !program->input.mouse.leftButton && program->input.mousePrev.leftButton ) // Release
 		{
-			if ( m_selectRef.enabled )
+			if( m_selectRef.enabled )
 			{
 				uint32_t matchCount = 0;
 				const ae::Object* lastMatch = nullptr;
 				
 				const ae::Type* refType = m_selectRef.componentVar->GetSubType();
-				const EditorServerObject* hoverObj = GetObject( hoverEntity );
-				AE_ASSERT( hoverObj );
-				for ( const ae::Object* otherComp : hoverObj->components )
+				const uint32_t componentTypeCount = m_registry.GetTypeCount();
+				for( uint32_t i = 0; i < componentTypeCount; i++ )
 				{
-					const ae::Type* otherType = ae::GetTypeFromObject( otherComp );
-					if ( otherType->IsType( refType ) )
+					const ae::Type* hoverType = m_registry.GetTypeByIndex( i );
+					if( hoverType->IsType( refType ) )
 					{
-						matchCount++;
-						lastMatch = otherComp;
+						if( const ae::Component* hoverComponent = m_registry.TryGetComponent( hoverEntity, hoverType ) )
+						{
+							matchCount++;
+							lastMatch = hoverComponent;
+						}
 					}
 				}
 				
@@ -1414,16 +1414,21 @@ void EditorServer::ShowUI( EditorProgram* program )
 		const ae::Type* refType = m_selectRef.componentVar->GetSubType();
 		ImGui::Text( "Select %s", refType->GetName() );
 		ImGui::Separator();
-		const EditorServerObject* otherObj = GetObject( m_selectRef.pending );
-		AE_ASSERT( otherObj );
-		for ( const ae::Object* otherComp : otherObj->components )
+		const EditorServerObject* pendingObj = GetObject( m_selectRef.pending );
+		AE_ASSERT( pendingObj );
+		const uint32_t componentTypeCount = m_registry.GetTypeCount();
+		for( uint32_t i = 0; i < componentTypeCount; i++ )
 		{
-			const ae::Type* otherType = ae::GetTypeFromObject( otherComp );
-			AE_ASSERT( otherType );
-			if ( otherType->IsType( refType ) && ImGui::Selectable( otherType->GetName(), false ) )
+			const ae::Type* pendingType = m_registry.GetTypeByIndex( i );
+			if( pendingType->IsType( refType ) && ImGui::Selectable( pendingType->GetName(), false ) )
 			{
-				m_selectRef.componentVar->SetObjectValue( m_selectRef.component, otherComp, m_selectRef.varIdx );
-				m_selectRef = SelectRef();
+				const uint32_t componentCount = m_registry.GetComponentCountByIndex( i );
+				for( uint32_t j = 0; j < componentCount; j++ )
+				{
+					ae::Component* pendingComponent = &m_registry.GetComponentByIndex( i, j );
+					m_selectRef.componentVar->SetObjectValue( m_selectRef.component, pendingComponent, m_selectRef.varIdx );
+					m_selectRef = SelectRef();
+				}
 			}
 		}
 		ImGui::EndPopup();
@@ -1720,7 +1725,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		if ( ImGui::Button( "Create" ) )
 		{
 			ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetFocus() );
-			EditorServerObject* editorObject = CreateObject( m_nextEntityId, transform );
+			EditorServerObject* editorObject = CreateObject( kInvalidEntity, transform, "" );
 			selected.Clear();
 			selected.Append( editorObject->entity );
 		}
@@ -1733,16 +1738,20 @@ void EditorServer::ShowUI( EditorProgram* program )
 			selected.Clear();
 		}
 		
-		if ( ImGui::Button( "Reload Resources" ) )
+		if( ImGui::Button( "Reload Resources" ) )
 		{
 			program->UnloadMeshes();
-			for ( auto [ _, object ] : m_objects )
+			const uint32_t componentTypeCount = m_registry.GetTypeCount();
+			for( uint32_t i = 0; i < componentTypeCount; i++ )
 			{
-				for ( ae::Object* component : object->components )
+				const ae::Type* type = m_registry.GetTypeByIndex( i );
+				const uint32_t componentCount = m_registry.GetComponentCountByIndex( i );
+				for( uint32_t j = 0; j < componentCount; j++ )
 				{
-					const ae::Type* type = ae::GetTypeFromObject( component );
-					if ( const ae::Var* var = GetMeshResourceVar( type ) )
+					if( const ae::Var* var = GetMeshResourceVar( type ) )
 					{
+						ae::Component* component = &m_registry.GetComponentByIndex( i, j );
+						EditorServerObject* object = GetObject( component->GetEntity() );
 						object->HandleVarChange( program, component, type, var );
 					}
 				}
@@ -1773,11 +1782,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 			ImGui::Text( "Object %u", selectedObject->entity );
 		
 			char name[ ae::Str16::MaxLength() ];
-			strcpy( name, selectedObject->name.c_str() );
+			strcpy( name, m_registry.GetNameByEntity( selected[ 0 ] ) );
 			if ( ImGui::InputText( "Name", name, countof(name), ImGuiInputTextFlags_EnterReturnsTrue ) )
 			{
 				AE_INFO( "Set object name: #", name );
-				selectedObject->name = name;
+				m_registry.SetEntityName( selected[ 0 ], name );
 			}
 			{
 				bool changed = false;
@@ -1792,58 +1801,56 @@ void EditorServer::ShowUI( EditorProgram* program )
 					ImGuizmo::RecomposeMatrixFromComponents( matrixTranslation, matrixRotation, matrixScale, temp.data );
 					selectedObject->SetTransform( temp, program );
 				}
+				if ( ImGui::Button( "Add Component" ) )
+				{
+					ImGui::OpenPopup( "add_component_popup" );
+				}
 			}
 			
 			ae::Object* deleteComponent = nullptr;
-			for ( ae::Object* component : selectedObject->components )
+			const uint32_t componentTypesCount = m_registry.GetTypeCount();
+			for( uint32_t i = 0; i < componentTypesCount; i++ )
 			{
-				ImGui::Separator();
-				const ae::Type* componentType = ae::GetTypeFromObject( component );
-				if ( ImGui::TreeNode( componentType->GetName() ) )
+				const ae::Type* componentType = m_registry.GetTypeByIndex( i );
+				ae::Component* component = m_registry.TryGetComponent( selectedObject->entity, componentType );
+				if( component )
 				{
-					std::function< void(const ae::Type*, ae::Object*) > fn = [&]( const ae::Type* type, ae::Object* component )
+					ImGui::Separator();
+					if( ImGui::TreeNode( componentType->GetName() ) )
 					{
-						uint32_t varCount = type->GetVarCount( false );
-						if ( varCount )
+						std::function< void(const ae::Type*, ae::Object*) > fn = [&]( const ae::Type* type, ae::Object* component )
 						{
-							ImGui::Separator();
-							if ( type != componentType )
+							uint32_t varCount = type->GetVarCount( false );
+							if( varCount )
 							{
-								ImGui::Text( "%s", type->GetName() );
-								ImGui::Separator();
-							}
-							for ( uint32_t i = 0; i < varCount; i++ )
-							{
-								const ae::Var* var = type->GetVarByIndex( i, false );
-								if ( m_ShowVar( program, component, var ) )
+								for( uint32_t i = 0; i < varCount; i++ )
 								{
-									selectedObject->HandleVarChange( program, component, type, var );
+									const ae::Var* var = type->GetVarByIndex( i, false );
+									if( m_ShowVar( program, component, var ) )
+									{
+										selectedObject->HandleVarChange( program, component, type, var );
+									}
 								}
 							}
-						}
-						if ( type->GetParentType() )
+							if( type->GetParentType() )
+							{
+								fn( type->GetParentType(), component );
+							}
+						};
+						fn( componentType, component );
+						if( ImGui::Button( "Remove Component" ) )
 						{
-							fn( type->GetParentType(), component );
+							deleteComponent = component;
 						}
-					};
-					fn( componentType, component );
-					if ( ImGui::Button( "Remove Component" ) )
-					{
-						deleteComponent = component;
+						ImGui::TreePop();
 					}
-					ImGui::TreePop();
 				}
 			}
-			if ( deleteComponent )
+			if( deleteComponent )
 			{
 				RemoveComponent( program, selectedObject, deleteComponent );
 			}
 			
-			ImGui::Separator();
-			if ( ImGui::Button( "Add Component" ) )
-			{
-				ImGui::OpenPopup( "add_component_popup" );
-			}
 			if ( ImGui::BeginPopup( "add_component_popup" ) )
 			{
 				bool anyValid = false;
@@ -1859,7 +1866,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 					}
 					anyValid = true;
 					
-					if ( GetComponent( selectedObject, type->GetName() ) )
+					if ( GetComponent( selectedObject, type ) )
 					{
 						continue;
 					}
@@ -1867,7 +1874,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 					if ( ImGui::Selectable( type->GetName() ) )
 					{
 						AE_INFO( "Create #", type->GetName() );
-						AddComponent( program, selectedObject, type->GetName() );
+						AddComponent( program, selectedObject, type );
 					}
 					foundAny = true;
 				}
@@ -1910,10 +1917,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 			{
 				ImGui::SetItemDefaultFocus();
 			}
-			uint32_t componentTypesCount = m_components.Length();
+			const uint32_t componentTypesCount = m_registry.GetTypeCount();
 			for ( uint32_t i = 0; i < componentTypesCount; i++ )
 			{
-				const ae::Type* type = ae::GetTypeById( m_components.GetKey( i ) );
+				const ae::Type* type = m_registry.GetTypeByIndex( i );
 				const bool isSelected = ( m_selectedType == type );
 				if ( ImGui::Selectable( type->GetName(), isSelected ) )
 				{
@@ -1953,24 +1960,24 @@ void EditorServer::ShowUI( EditorProgram* program )
 				ImGui::PopID();
 			};
 			
-			if ( m_selectedType )
+			if( m_selectedType )
 			{
-				auto& components = m_components.Get( m_selectedType->GetId() );
-				uint32_t componentCount = components.Length();
-				for ( uint32_t i = 0; i < componentCount; i++ )
+				const int32_t typeIndex = m_registry.GetTypeIndexByType( m_selectedType );
+				AE_ASSERT( typeIndex >= 0 );
+				const uint32_t componentCount = m_registry.GetComponentCountByIndex( typeIndex );
+				for( uint32_t i = 0; i < componentCount; i++ )
 				{
-					const EditorServerObject* obj = m_objects.Get( components.GetKey( i ) );
-					const ae::Object* c = components.GetValue( i );
-					showObjInList( i, obj->entity, obj->name.c_str() );
+					const ae::Component* component = &m_registry.GetComponentByIndex( typeIndex, i );
+					showObjInList( i, component->GetEntity(), component->GetEntityName() );
 				}
 			}
 			else
 			{
 				uint32_t editorObjectCount = m_objects.Length();
-				for ( uint32_t i = 0; i < editorObjectCount; i++ )
+				for( uint32_t i = 0; i < editorObjectCount; i++ )
 				{
 					const EditorServerObject* editorObj = m_objects.GetValue( i );
-					showObjInList( i, editorObj->entity, editorObj->name.c_str() );
+					showObjInList( i, editorObj->entity, m_registry.GetNameByEntity( editorObj->entity ) );
 				}
 			}
 			ImGui::EndListBox();
@@ -1982,45 +1989,34 @@ void EditorServer::ShowUI( EditorProgram* program )
 	m_first = false;
 }
 
-EditorServerObject* EditorServer::CreateObject( EditorObjectId id, const ae::Matrix4& transform )
+EditorServerObject* EditorServer::CreateObject( Entity entity, const ae::Matrix4& transform, const char* name )
 {
-	AE_ASSERT( !GetObject( id ) );
+	AE_ASSERT( !GetObject( entity ) );
+	entity = m_registry.CreateEntity( entity, name );
 	EditorServerObject* editorObject = ae::New< EditorServerObject >( m_tag, m_tag );
-	editorObject->Initialize( id, transform );
-	m_objects.Set( id, editorObject );
-	m_nextEntityId = ae::Max( m_nextEntityId, id + 1 );
+	editorObject->Initialize( entity, transform );
+	m_objects.Set( entity, editorObject );
 	return editorObject;
 }
 
-void EditorServer::DestroyObject( EditorObjectId id )
+void EditorServer::DestroyObject( ae::Entity entity )
 {
 	EditorServerObject* editorObject = nullptr;
-	if ( m_objects.Remove( id, &editorObject ) )
+	if ( m_objects.Remove( entity, &editorObject ) )
 	{
-		for ( ae::Object* component : editorObject->components )
-		{
-			const ae::Type* type = ae::GetTypeFromObject( component );
-			ae::Map< EditorObjectId, ae::Object* >& typeComponents = m_components.Get( type->GetId() );
-			ae::Object* componentCheck = nullptr;
-			typeComponents.Remove( editorObject->entity, &componentCheck );
-			AE_ASSERT( componentCheck == component );
-			component->~Object();
-			ae::Free( component );
-		}
-		editorObject->components.Clear();
+		m_registry.Destroy( entity );
 		editorObject->Terminate();
 		ae::Delete( editorObject );
 	}
 }
 
-ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const char* typeName )
+ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const ae::Type* type )
 {
-	const ae::Type* type = ae::GetTypeByName( typeName );
 	if ( !type )
 	{
 		return nullptr;
 	}
-	ae::Object* component = GetComponent( obj, typeName );
+	ae::Object* component = GetComponent( obj, type );
 	if ( component )
 	{
 		return component;
@@ -2039,25 +2035,16 @@ ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObje
 			for ( uint32_t i = 0; i < propCount; i++ )
 			{
 				const char* prop = t->GetPropertyValue( propIdx, i );
-				if ( strcmp( type->GetName(), prop ) != 0 && !GetComponent( obj, typeName ) )
+				if ( strcmp( type->GetName(), prop ) != 0 && !GetComponent( obj, type ) )
 				{
-					AddComponent( program, obj, prop );
+					AddComponent( program, obj, ae::GetTypeByName( prop ) );
 				}
 			}
 		}
 	};
 	fn( type, component );
 	
-	component = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
-	type->New( component );
-	
-	obj->components.Append( component );
-	ae::Map< EditorObjectId, ae::Object* >* typeComponents = m_components.TryGet( type->GetId() );
-	if ( !typeComponents )
-	{
-		typeComponents = &m_components.Set( type->GetId(), m_tag );
-	}
-	typeComponents->Set( obj->entity, component );
+	component = m_registry.AddComponent( obj->entity, type );
 	
 	const auto& meshName = m_typeMesh.Get( type, "" );
 	if ( meshName.Length() )
@@ -2072,64 +2059,33 @@ ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObje
 	return component;
 }
 
-void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* obj, ae::Object* component )
+void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* obj, ae::Object* _component )
 {
-	if ( obj && component )
+	if ( obj && _component )
 	{
-		const ae::Type* type = ae::GetTypeFromObject( component );
-		AE_ASSERT( type );
-
-		int32_t componentIdx = obj->components.Find( component );
-		AE_ASSERT( componentIdx >= 0 );
-		obj->components.Remove( componentIdx );
-
-		ae::Map< EditorObjectId, ae::Object* >* typeComponents = m_components.TryGet( type->GetId() );
-		AE_ASSERT( typeComponents );
-		ae::Object* componentCheck = nullptr;
-		typeComponents->Remove( obj->entity, &componentCheck );
-		AE_ASSERT( componentCheck == component );
-		if ( !typeComponents->Length() )
-		{
-			m_components.Remove( type->GetId() );
-		}
-
-		component->~Object();
-		ae::Free( component );
+		ae::Component* component = ae::Cast< ae::Component >( _component );
+		AE_ASSERT( component );
+		m_registry.DestroyComponent( component );
 	}
 }
 
-ae::Object* EditorServer::GetComponent( EditorServerObject* obj, const char* typeName )
+ae::Object* EditorServer::GetComponent( EditorServerObject* obj, const ae::Type* type )
 {
-	return const_cast< ae::Object* >( GetComponent( const_cast< const EditorServerObject* >( obj ), typeName ) );
+	return const_cast< ae::Object* >( GetComponent( const_cast< const EditorServerObject* >( obj ), type ) );
 }
 
-const ae::Object* EditorServer::GetComponent( const EditorServerObject* obj, const char* typeName )
+const ae::Object* EditorServer::GetComponent( const EditorServerObject* obj, const ae::Type* type )
 {
-	const ae::Type* type = ae::GetTypeByName( typeName );
-	AE_ASSERT( type );
-	for ( const ae::Object* component : obj->components )
-	{
-		if ( type == ae::GetTypeFromObject( component ) )
-		{
-			return component;
-		}
-	}
-	return nullptr;
+	return obj ? m_registry.TryGetComponent( obj->entity, type ) : nullptr;
 }
 
-const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Object* component )
+const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Object* _component )
 {
-	const ae::Type* type = ae::GetTypeFromObject( component );
-	const ae::Map< EditorObjectId, ae::Object* >* components = m_components.TryGet( type->GetId() );
-	if ( components )
+	if( _component )
 	{
-		for ( uint32_t i = 0; i < components->Length(); i++ )
-		{
-			if ( components->GetValue( i ) == component )
-			{
-				return GetObject( components->GetKey( i ) );
-			}
-		}
+		const ae::Component* component = ae::Cast< ae::Component >( _component );
+		AE_ASSERT( component );
+		return GetObject( component->GetEntity() );
 	}
 	return nullptr;
 }
@@ -2183,6 +2139,9 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 	
 	if ( fileSelected )
 	{
+		// @TODO: Don't save to EditorLevel, should read and write json directly
+		// from objects. Should be able to delete EditorLevel and the client
+		// reference in EditorServer.
 		m_Save( &tempLevel );
 		ae::EditorLevel* level = client->GetWritableLevel();
 		AE_ASSERT( level );
@@ -2237,14 +2196,12 @@ void EditorServer::Unload()
 	m_selectedType = nullptr;
 	selected.Clear();
 	hoverEntity = kInvalidEditorObjectId;
-	m_nextEntityId = 1;
 
 	while ( m_objects.Length() )
 	{
 		DestroyObject( m_objects.GetKey( m_objects.Length() - 1 ) );
 	}
 	AE_ASSERT( m_objects.Length() == 0 );
-	m_components.Clear();
 }
 
 void EditorServer::m_SelectWithModifiers( EditorProgram* program, EditorObjectId entity )
@@ -2345,26 +2302,31 @@ void EditorServer::m_Save( ae::EditorLevel* levelOut ) const
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
 		const EditorServerObject* editorObj = m_objects.GetValue( i );
-		EditorObject* levelObj = &levelOut->objects.Set( editorObj->entity, { m_tag } );
-		levelObj->id = editorObj->entity;
-		levelObj->name = editorObj->name;
+		const ae::Entity entityId = editorObj->entity;
+		EditorObject* levelObj = &levelOut->objects.Set( entityId, { m_tag } );
+		levelObj->id = entityId;
+		levelObj->name = m_registry.GetNameByEntity( entityId );
 		levelObj->transform = editorObj->GetTransform( nullptr );
 		
-		for ( const ae::Object* component : editorObj->components )
+		const uint32_t componentTypeCount = m_registry.GetTypeCount();
+		for( uint32_t i = 0; i < componentTypeCount; i++ )
 		{
-			const ae::Type* type = ae::GetTypeFromObject( component );
-			EditorComponent& levelComponent = levelObj->components.Append( m_tag );
-			levelComponent.type = type->GetName();
-
-			// @TODO: StoreComponent()
-			const ae::Object* defaultComponent = defaults.Get( type->GetName(), nullptr );
-			if ( !defaultComponent )
+			const ae::Type* type = m_registry.GetTypeByIndex( i );
+			if( const ae::Component* component = m_registry.TryGetComponent( entityId, type ) )
 			{
-				auto c = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
-				type->New( c );
-				defaultComponent = c;
+				EditorComponent& levelComponent = levelObj->components.Append( m_tag );
+				levelComponent.type = type->GetName();
+
+				// @TODO: StoreComponent()
+				const ae::Object* defaultComponent = defaults.Get( type->GetName(), nullptr );
+				if ( !defaultComponent )
+				{
+					auto c = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
+					type->New( c );
+					defaultComponent = c;
+				}
+				readMembers( type, levelObj, component, defaultComponent, &levelComponent.members );
 			}
-			readMembers( type, levelObj, component, defaultComponent, &levelComponent.members );
 		}
 	}
 	
@@ -2386,11 +2348,10 @@ bool EditorServer::m_Load( EditorProgram* program )
 	for ( uint32_t i = 0; i < objectCount; i++ )
 	{
 		const EditorObject& levelObject = level->objects.GetValue( i );
-		EditorServerObject* editorObj = CreateObject( levelObject.id, levelObject.transform );
-		editorObj->name = levelObject.name;
+		EditorServerObject* editorObj = CreateObject( levelObject.id, levelObject.transform, levelObject.name.c_str() );
 		for ( const EditorComponent& levelComponent : levelObject.components )
 		{
-			AddComponent( program, editorObj, levelComponent.type.c_str() );
+			AddComponent( program, editorObj, ae::GetTypeByName( levelComponent.type.c_str() ) );
 		}
 	}
 	// Serialize all components (second phase to handle references)
@@ -2407,7 +2368,7 @@ bool EditorServer::m_Load( EditorProgram* program )
 			{
 				continue;
 			}
-			ae::Object* component = GetComponent( editorObj, typeName );
+			ae::Object* component = GetComponent( editorObj, type );
 			AE_ASSERT( component );
 			AE_ASSERT( ae::GetTypeFromObject( component ) == type );
 			uint32_t varCount = type->GetVarCount( true );
@@ -2648,7 +2609,7 @@ bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, a
 	{
 		if ( EditorServerObject* editorObj = program->editor.GetObject( entity ) )
 		{
-			*objOut = program->editor.GetComponent( editorObj, typeName );
+			*objOut = program->editor.GetComponent( editorObj, ae::GetTypeByName( typeName ) );
 		}
 		return true;
 	}
