@@ -20,9 +20,6 @@ namespace ae {
 
 const uint32_t kMaxEditorMessageSize = 1024;
 
-typedef Entity EditorObjectId;
-const EditorObjectId kInvalidEditorObjectId = kInvalidEntity;
-
 //------------------------------------------------------------------------------
 // ae::EditorComponent class
 //------------------------------------------------------------------------------
@@ -41,7 +38,7 @@ class EditorObject
 {
 public:
 	EditorObject( const ae::Tag& tag ) : components( tag ) {}
-	EditorObjectId id = kInvalidEditorObjectId;
+	ae::Entity id = kInvalidEntity;
 	ae::Str16 name;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 	ae::Array< EditorComponent > components;
@@ -55,7 +52,7 @@ class EditorLevel
 public:
 	EditorLevel( const ae::Tag& tag ) : objects( tag ) {}
 	ae::Str256 filePath;
-	ae::Map< EditorObjectId, EditorObject > objects;
+	ae::Map< ae::Entity, EditorObject > objects;
 };
 
 //------------------------------------------------------------------------------
