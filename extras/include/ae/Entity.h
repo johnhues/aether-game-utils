@@ -29,14 +29,14 @@ public:
 	Entity GetEntity() const { return m_entity; }
 	const char* GetEntityName() const;
 	
-	Component& GetComponent( const char* typeName );
+	Component& GetComponent( const ae::Type* type );
 	template < typename T > T& GetComponent();
-	const Component& GetComponent( const char* typeName ) const;
+	const Component& GetComponent( const ae::Type* type ) const;
 	template < typename T > const T& GetComponent() const;
 	
-	Component* TryGetComponent( const char* typeName );
+	Component* TryGetComponent( const ae::Type* type );
 	template < typename T > T* TryGetComponent();
-	const Component* TryGetComponent( const char* typeName ) const;
+	const Component* TryGetComponent( const ae::Type* type ) const;
 	template < typename T > const T* TryGetComponent() const;
 	
 private:
@@ -66,17 +66,25 @@ public:
 	//! for each object in the level before components are added.
 	bool Load( const ae::EditorLevel* level, CreateObjectFn fn = nullptr );
 	
-	// Get reference
-	Component& GetComponent( Entity entity, const char* typeName );
-	Component& GetComponent( const char* name, const char* typeName );
+	// Get component
+	Component& GetComponent( Entity entity, const ae::Type* type );
+	Component* TryGetComponent( Entity entity, const ae::Type* type );
+	Component& GetComponent( const char* name, const ae::Type* type );
+	Component* TryGetComponent( const char* name, const ae::Type* type );
 	template < typename T > T& GetComponent( Entity entity );
-	template < typename T > T& GetComponent( const char* name );
-	
-	// Try get pointer
-	Component* TryGetComponent( Entity entity, const char* typeName );
-	Component* TryGetComponent( const char* name, const char* typeName );
 	template < typename T > T* TryGetComponent( Entity entity );
-	template < typename T > T* TryGetComponent( const char* name );
+	template < typename T > T& GetComponent( const char* entityName );
+	template < typename T > T* TryGetComponent( const char* entityName );
+	
+	// Const get component
+	const Component& GetComponent( Entity entity, const ae::Type* type ) const;
+	const Component* TryGetComponent( Entity entity, const ae::Type* type ) const;
+	const Component& GetComponent( const char* name, const ae::Type* type ) const;
+	const Component* TryGetComponent( const char* name, const ae::Type* type ) const;
+	template < typename T > const T& GetComponent( Entity entity ) const;
+	template < typename T > const T* TryGetComponent( Entity entity ) const;
+	template < typename T > const T& GetComponent( const char* entityName ) const;
+	template < typename T > const T* TryGetComponent( const char* entityName ) const;
 	
 	// Templated iteration over component type
 	template < typename T > uint32_t GetComponentCount() const;
@@ -164,7 +172,7 @@ const T* Component::TryGetComponent() const
 //------------------------------------------------------------------------------
 // ae::Registry member functions
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 T* Registry::AddComponent( Entity entity )
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
@@ -173,35 +181,7 @@ T* Registry::AddComponent( Entity entity )
 	return (T*)m_AddComponent( entity, type );
 }
 
-template < typename T >
-T* Registry::TryGetComponent( Entity entity )
-{
-	if( !entity )
-	{
-		return nullptr;
-	}
-	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	const ae::Type* type = ae::GetType< T >();
-	AE_ASSERT_MSG( type, "No registered type" );
-	if ( ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
-	{
-		return static_cast< T* >( components->Get( entity, nullptr ) );
-	}
-	return nullptr;
-}
-
-template < typename T >
-T* Registry::TryGetComponent( const char* name )
-{
-	if( !name[ 0 ] )
-	{
-		return nullptr;
-	}
-	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	return TryGetComponent< T >( m_entityNames.Get( name, kInvalidEntity ) );
-}
-
-template < typename T >
+template< typename T >
 T& Registry::GetComponent( Entity entity )
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
@@ -211,17 +191,77 @@ T& Registry::GetComponent( Entity entity )
 }
 
 template < typename T >
-T& Registry::GetComponent( const char* name )
+T* Registry::TryGetComponent( Entity entity )
+{
+	return const_cast< T* >( const_cast< const Registry* >( this )->TryGetComponent< T >( entity ) );
+}
+
+template< typename T >
+T& Registry::GetComponent( const char* entityName )
+{
+	return const_cast< T& >( const_cast< const Registry* >( this )->GetComponent< T >( entityName ) );
+}
+
+template< typename T >
+T* Registry::TryGetComponent( const char* entityName )
+{
+	if( !entityName[ 0 ] )
+	{
+		return nullptr;
+	}
+	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
+	return TryGetComponent< T >( m_entityNames.Get( entityName, kInvalidEntity ) );
+}
+
+template< typename T >
+const T& Registry::GetComponent( Entity entity ) const
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	AE_ASSERT( name && name[ 0 ] );
-	T* t = TryGetComponent< T >( name );
+	const T* t = TryGetComponent< T >( entity );
+	AE_ASSERT( t );
+	return *t;
+}
+
+template< typename T >
+const T* Registry::TryGetComponent( Entity entity ) const
+{
+	if( !entity )
+	{
+		return nullptr;
+	}
+	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
+	const ae::Type* type = ae::GetType< T >();
+	AE_ASSERT_MSG( type, "No registered type" );
+	if ( const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
+	{
+		return static_cast< T* >( components->Get( entity, nullptr ) );
+	}
+	return nullptr;
+}
+
+template< typename T >
+const T& Registry::GetComponent( const char* entityName ) const
+{
+	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
+	AE_ASSERT( entityName && entityName[ 0 ] );
+	T* t = TryGetComponent< T >( entityName );
 	if ( !t )
 	{
-		AE_ASSERT_MSG( GetEntityByName( name ) != kInvalidEntity, "No entity named '#'", name );
-		AE_ASSERT_MSG( t, "No component '#' attached to entity '#'", ae::GetType< T >()->GetName(), name );
+		AE_ASSERT_MSG( GetEntityByName( entityName ) != kInvalidEntity, "No entity named '#'", entityName );
+		AE_ASSERT_MSG( t, "No component '#' attached to entity '#'", ae::GetType< T >()->GetName(), entityName );
 	}
 	return *t;
+}
+
+template< typename T >
+const T* Registry::TryGetComponent( const char* entityName ) const
+{
+	if( !entityName[ 0 ] )
+	{
+		return nullptr;
+	}
+	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
+	return TryGetComponent< T >( m_entityNames.Get( entityName, kInvalidEntity ) );
 }
 
 template < typename T >

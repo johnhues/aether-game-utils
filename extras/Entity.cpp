@@ -24,28 +24,28 @@ const char* Component::GetEntityName() const
 	return m_reg->GetNameByEntity( m_entity );
 }
 
-Component& Component::GetComponent( const char* typeName )
+Component& Component::GetComponent( const ae::Type* type )
 {
 	AE_ASSERT( m_reg );
-	return m_reg->GetComponent( m_entity, typeName );
+	return m_reg->GetComponent( m_entity, type );
 }
 
-Component* Component::TryGetComponent( const char* typeName )
+Component* Component::TryGetComponent( const ae::Type* type )
 {
 	AE_ASSERT( m_reg );
-	return m_reg->TryGetComponent( m_entity, typeName );
+	return m_reg->TryGetComponent( m_entity, type );
 }
 
-const Component& Component::GetComponent( const char* typeName ) const
+const Component& Component::GetComponent( const ae::Type* type ) const
 {
 	AE_ASSERT( m_reg );
-	return m_reg->GetComponent( m_entity, typeName );
+	return m_reg->GetComponent( m_entity, type );
 }
 
-const Component* Component::TryGetComponent( const char* typeName ) const
+const Component* Component::TryGetComponent( const ae::Type* type ) const
 {
 	AE_ASSERT( m_reg );
-	return m_reg->TryGetComponent( m_entity, typeName );
+	return m_reg->TryGetComponent( m_entity, type );
 }
 
 //------------------------------------------------------------------------------
@@ -135,25 +135,55 @@ Component* Registry::AddComponent( Entity entity, const ae::Type* type )
 	return component;
 }
 
-Component* Registry::TryGetComponent( const char* name, const char* typeName )
+Component& Registry::GetComponent( Entity entity, const ae::Type* type )
 {
-	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), typeName );
+	AE_ASSERT_MSG( type, "No type specified" );
+	Component* component = TryGetComponent( entity, type );
+	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", entity, type->GetName() );
+	return *component;
 }
 
-Component* Registry::TryGetComponent( Entity entity, const char* typeName )
+Component* Registry::TryGetComponent( Entity entity, const ae::Type* type )
 {
-	if ( entity == kInvalidEntity || !typeName || !typeName[ 0 ] )
+	return const_cast< Component* >( const_cast< const Registry* >( this )->TryGetComponent( entity, type ) );
+}
+
+Component& Registry::GetComponent( const char* name, const ae::Type* type )
+{
+	AE_ASSERT_MSG( name && name[ 0 ], "No name specified" );
+	AE_ASSERT_MSG( type, "No type specified" );
+	Component* component = TryGetComponent( name, type );
+	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", name, type->GetName() );
+	return *component;
+}
+
+Component* Registry::TryGetComponent( const char* name, const ae::Type* type )
+{
+	AE_ASSERT( name );
+	if( !name[ 0 ] )
+	{
+		return nullptr;
+	}
+	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), type );
+}
+
+const Component& Registry::GetComponent( Entity entity, const ae::Type* type ) const
+{
+	AE_ASSERT_MSG( entity != kInvalidEntity, "Invalid entity" );
+	AE_ASSERT_MSG( type, "No type specified" );
+	const Component* component = TryGetComponent( entity, type );
+	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", entity, type->GetName() );
+	return *component;
+}
+
+const Component* Registry::TryGetComponent( Entity entity, const ae::Type* type ) const
+{
+	if ( entity == kInvalidEntity || !type )
 	{
 		return nullptr;
 	}
 	
-	const ae::Type* type = ae::GetTypeByName( typeName );
-	if ( !type )
-	{
-		return nullptr;
-	}
-	
-	if ( ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
+	if ( const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
 	{
 		return components->Get( entity, nullptr );
 	}
@@ -161,19 +191,22 @@ Component* Registry::TryGetComponent( Entity entity, const char* typeName )
 	return nullptr;
 }
 
-Component& Registry::GetComponent( Entity entity, const char* typeName )
+const Component& Registry::GetComponent( const char* name, const ae::Type* type ) const
 {
-	Component* component = TryGetComponent( entity, typeName );
-	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", entity );
+	AE_ASSERT_MSG( name && name[ 0 ], "No name specified" );
+	const Component* component = TryGetComponent( name, type );
+	AE_ASSERT_MSG( component, "Entity '#' has no component '#'", name );
 	return *component;
 }
 
-Component& Registry::GetComponent( const char* name, const char* typeName )
+const Component* Registry::TryGetComponent( const char* name, const ae::Type* type ) const
 {
-	AE_ASSERT_MSG( name && name[ 0 ], "No name specified" );
-	Component* component = TryGetComponent( name, typeName );
-	AE_ASSERT_MSG( component, "Entity '#' has no compoent '#'", name );
-	return *component;
+	AE_ASSERT( name );
+	if( !name[ 0 ] )
+	{
+		return nullptr;
+	}
+	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), type );
 }
 
 Entity Registry::GetEntityByName( const char* name ) const
@@ -356,7 +389,7 @@ bool Registry::Load( const ae::EditorLevel* level, CreateObjectFn fn )
 			const char* typeName = levelComponent.type.c_str();
 			const ae::Type* type = ae::GetTypeByName( typeName );
 			const ae::Dict& props = levelComponent.members;
-			Component* component = TryGetComponent( entity, typeName );
+			Component* component = TryGetComponent( entity, type );
 			if ( !component )
 			{
 				continue;
