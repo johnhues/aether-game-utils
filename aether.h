@@ -2468,6 +2468,29 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::RunOnDestroy
+// Usage:
+/*
+	FILE* f = fopen( "file.txt", "w" );
+	ae::RunOnDestroy closeFile = [&]()
+	{
+		if( f )
+		{
+			fclose( f );
+		}
+	};
+	// Do things with the file...
+*/
+//------------------------------------------------------------------------------
+template< typename T >
+struct RunOnDestroy
+{
+	RunOnDestroy( T&& func ) : m_func( std::forward< T >( func ) ) {}
+	~RunOnDestroy() { m_func(); }
+	T m_func;
+};
+
+//------------------------------------------------------------------------------
 // ae::Screen
 //------------------------------------------------------------------------------
 //! Screen information. ae::Streen member values are in the same coordinate
@@ -4099,6 +4122,7 @@ public:
 	uint32_t GetIndexCount() const { return m_tris.Length() * 3; }
 
 private:
+	// @TODO: Support user data returned with raycast results
 	struct BVHTri { uint32_t idx[ 3 ]; };
 	const ae::Tag m_tag;
 	ae::AABB m_aabb;
@@ -4993,6 +5017,7 @@ enum class BasicType
 	Vec2,
 	Vec3,
 	Vec4,
+	// @TODO: Quaternion
 	Matrix4,
 	Color,
 	Enum,
