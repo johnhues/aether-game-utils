@@ -80,6 +80,7 @@ public:
 	void GetUniforms( ae::UniformList* uniformList );
 	
 	// System
+	ae::Registry registry = TAG_ALL;
 	ae::Editor editor = TAG_ALL;
 	ae::Window window;
 	ae::Input input;
@@ -87,7 +88,6 @@ public:
 	ae::TimeStep timeStep;
 	ae::FileSystem fs;
 	ae::DebugLines debugLines = TAG_ALL;
-	ae::Registry registry = TAG_ALL;
 
 	// Resources
 	ae::VertexBuffer bunnyVertexData;
@@ -108,7 +108,6 @@ public:
 	class Avatar* avatar = nullptr;
 	
 private:
-	uint32_t m_levelLoadSeq = 0;
 	float m_dt = 0.0f;
 };
 
@@ -212,9 +211,20 @@ void Game::Initialize( int argc, char* argv[] )
 {
 	fs.Initialize( "data", "ae", "editor" );
 	
-	ae::EditorParams editorParams;
-	editorParams.argc = argc;
-	editorParams.argv = argv;
+	ae::EditorParams editorParams( argc, argv, &registry );
+	editorParams.onLevelLoadStartFn = []( void* userData, const char* levelPath )
+	{
+		Game* game = (Game*)userData;
+		if( game->registry.GetTypeCount() )
+		{
+			AE_INFO( "Unloading previous level" );
+			game->registry.CallFn< Component >( [&]( Component* o ){ o->Terminate( game ); } );
+			game->registry.Clear();
+		}
+		AE_INFO( "Loading level: %s", levelPath );
+		
+	};
+	editorParams.onLevelLoadStartUserData = this;
 	editorParams.loadMeshFn = []( void* userData, const char* resourceId )
 	{
 		Game* game = (Game*)userData;
@@ -223,7 +233,6 @@ void Game::Initialize( int argc, char* argv[] )
 		return std::move( result );
 	};
 	editorParams.loadMeshUserData = this;
-
 	editor.Initialize( editorParams );
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "Press '~' to Open the Editor" );
@@ -247,7 +256,6 @@ void Game::Initialize( int argc, char* argv[] )
 	LoadTarga( "character.tga", &fs, &spacesuitTex );
 	
 	ae::Str256 levelPath;
-	m_levelLoadSeq = editor.GetLevelChangeSeq();
 	if ( fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
 	{
 		ae::FileSystem::AppendToPath( &levelPath, "example.level" );
@@ -271,13 +279,6 @@ void Game::Run()
 		
 		input.Pump();
 		editor.Update();
-		
-		if ( m_levelLoadSeq != editor.GetLevelChangeSeq() )
-		{
-			m_levelLoadSeq = editor.GetLevelChangeSeq();
-			registry.CallFn< Component >( [&]( Component* o ){ o->Terminate( this ); } );
-			registry.Load( editor.GetLevel() );
-		}
 		
 		if ( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) )
 		{

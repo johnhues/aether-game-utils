@@ -11,6 +11,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
+
 namespace ae {
 
 //------------------------------------------------------------------------------
@@ -18,7 +19,6 @@ namespace ae {
 //------------------------------------------------------------------------------
 typedef uint32_t Entity;
 const Entity kInvalidEntity = 0;
-class EditorLevel;
 
 //------------------------------------------------------------------------------
 // ae::Component
@@ -45,8 +45,6 @@ private:
 	Entity m_entity = kInvalidEntity;
 };
 
-typedef std::function< void( const class EditorObject& levelObject, Entity entity, class Registry* registry ) > CreateObjectFn;
-
 //------------------------------------------------------------------------------
 // ae::Registry
 //------------------------------------------------------------------------------
@@ -59,12 +57,12 @@ public:
 	// Creation
 	Entity CreateEntity( const char* name = "" );
 	Entity CreateEntity( Entity entity, const char* name = "" );
+	//! Returns nullptr if the entity/component pair already exists or if the type is not default constructible
 	Component* AddComponent( Entity entity, const char* typeName );
+	//! Returns nullptr if the entity/component pair already exists or if the type is not default constructible
 	Component* AddComponent( Entity entity, const ae::Type* type );
+	//! Returns nullptr if the entity/component pair already exists or if the type is not default constructible
 	template < typename T > T* AddComponent( Entity entity );
-	//! Loads object from the given level. If fn is not null, it will be called
-	//! for each object in the level before components are added.
-	bool Load( const ae::EditorLevel* level, CreateObjectFn fn = nullptr );
 	
 	// Get component
 	Component& GetComponent( Entity entity, const ae::Type* type );
@@ -107,14 +105,13 @@ public:
 	Component& GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex );
 	template < typename T, typename Fn > uint32_t CallFn( Fn fn );
 	template < typename T, typename Fn > uint32_t CallFn( Entity entity, Fn fn );
-	
+
 	// Removal
 	void Destroy( Entity entity );
 	void DestroyComponent( Component* component );
 	void Clear();
-	
+
 private:
-	Component* m_AddComponent( Entity entity, const ae::Type* type );
 	const ae::Tag m_tag;
 	Entity m_lastEntity = kInvalidEntity;
 	ae::Map< ae::Str16, Entity > m_entityNames;
@@ -178,7 +175,7 @@ T* Registry::AddComponent( Entity entity )
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	const ae::Type* type = ae::GetType< T >();
 	AE_ASSERT( type );
-	return (T*)m_AddComponent( entity, type );
+	return (T*)AddComponent( entity, type );
 }
 
 template< typename T >

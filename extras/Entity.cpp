@@ -105,30 +105,32 @@ Component* Registry::AddComponent( Entity entity, const char* typeName )
 Component* Registry::AddComponent( Entity entity, const ae::Type* type )
 {
 	AE_ASSERT_MSG( !m_destroying, "Cannot add component while destroying" );
-	if ( !type )
+	if( !type )
 	{
 		return nullptr;
 	}
 	AE_ASSERT_MSG( type->IsType< ae::Component >(), "Type '#' does not inherit from ae::Component", type->GetName() );
 	AE_ASSERT_MSG( !type->IsAbstract(), "Type '#' is abstract", type->GetName() );
 	AE_ASSERT_MSG( type->IsDefaultConstructible(), "Type '#' is not default constructible", type->GetName() );
-	
-	ae::Object* object = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
-	type->New( object );
-	
-	Component* component = ae::Cast< Component >( object );
+	if( TryGetComponent( entity, type ) )
+	{
+		return nullptr;
+	}
+
+	ae::Component* component = (ae::Component*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
 	AE_ASSERT( component );
+	type->New( component );
 	component->m_entity = entity;
 	component->m_reg = this;
 	
 	ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
-	if ( !components )
+	if( !components )
 	{
 		components = &m_components.Set( type->GetId(), m_tag );
 	}
 	components->Set( entity, component );
 	
-	if ( m_onCreateFn )
+	if( m_onCreateFn )
 	{
 		m_onCreateFn( m_onCreateUserData, component );
 	}
@@ -353,93 +355,6 @@ void Registry::Clear()
 	m_entityNames.Clear();
 
 	m_destroying = false;
-}
-
-bool Registry::Load( const ae::EditorLevel* level, CreateObjectFn fn )
-{
-	if ( !level )
-	{
-		return false;
-	}
-
-	Clear();
-
-	uint32_t objectCount = level->objects.Length();
-	// Create all components
-	for ( uint32_t i = 0; i < objectCount; i++ )
-	{
-		const ae::EditorObject& levelObject = level->objects.GetValue( i );
-		Entity entity = CreateEntity( levelObject.id, levelObject.name.c_str() );
-		if ( fn )
-		{
-			fn( levelObject, entity, this );
-		}
-		for ( const EditorComponent& levelComponent : levelObject.components )
-		{
-			AddComponent( entity, levelComponent.type.c_str() );
-		}
-	}
-	// Serialize all components (second phase to handle references)
-	for ( uint32_t i = 0; i < objectCount; i++ )
-	{
-		const ae::EditorObject& levelObject = level->objects.GetValue( i );
-		Entity entity = levelObject.id;
-		for ( const EditorComponent& levelComponent : levelObject.components )
-		{
-			const char* typeName = levelComponent.type.c_str();
-			const ae::Type* type = ae::GetTypeByName( typeName );
-			const ae::Dict& props = levelComponent.members;
-			Component* component = TryGetComponent( entity, type );
-			if ( !component )
-			{
-				continue;
-			}
-			uint32_t varCount = type->GetVarCount( true );
-			for ( uint32_t j = 0; j < varCount; j++ )
-			{
-				const ae::Var* var = type->GetVarByIndex( j, true );
-				if ( var->IsArray() )
-				{
-					uint32_t length = props.GetInt( var->GetName(), 0 );
-					length = var->SetArrayLength( component, length );
-					for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
-					{
-						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-						if ( const char* value = props.GetString( key.c_str(), nullptr ) )
-						{
-							var->SetObjectValueFromString( component, value, arrIdx );
-						}
-					}
-				}
-				else if ( const char* value = props.GetString( var->GetName(), nullptr ) )
-				{
-					var->SetObjectValueFromString( component, value );
-				}
-			}
-		}
-	}
-	return true;
-}
-
-Component* Registry::m_AddComponent( Entity entity, const ae::Type* type )
-{
-	Component* component = (Component*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
-	type->New( component );
-	component->m_entity = entity;
-	component->m_reg = this;
-	
-	ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
-	if ( !components )
-	{
-		components = &m_components.Set( type->GetId(), m_tag );
-	}
-	components->Set( entity, component );
-	
-	if ( m_onCreateFn )
-	{
-		m_onCreateFn( m_onCreateUserData, component );
-	}
-	return component;
 }
 
 } // End ae namespace

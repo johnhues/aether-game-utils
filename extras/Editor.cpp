@@ -11,6 +11,7 @@
 // @TODO: Remove ImGui dependencies
 #include "ae/aeImGui.h"
 #include "ImGuizmo.h"
+// @TODO: Remove rapidjson dependency
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
@@ -20,15 +21,6 @@
 #pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
 
 namespace ae {
-
-// Helper
-template < typename T >
-struct RunOnDestroy
-{
-	RunOnDestroy( T&& func ) : m_func( std::forward< T >( func ) ) {}
-	~RunOnDestroy() { m_func(); }
-	T m_func;
-};
 
 class EditorServer;
 
@@ -70,6 +62,14 @@ const uint8_t kCogTextureData[] =
 };
 
 const float kEditorViewDistance = 1000.0f;
+
+//------------------------------------------------------------------------------
+// Serialization helpers
+//------------------------------------------------------------------------------
+void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >* prereqs );
+void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
+void JsonToRegistry( const rapidjson::Value& jsonObjects, ae::Registry* registry );
+void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
 
 //------------------------------------------------------------------------------
 // EditorMsg
@@ -146,9 +146,8 @@ public:
 class EditorServer
 {
 public:
-	EditorServer( const ae::Tag& tag, Editor* client ) :
+	EditorServer( const ae::Tag& tag ) :
 		sock( tag ),
-		client( client ),
 		m_tag( tag ),
 		selected( tag ),
 		m_objects( tag ),
@@ -166,21 +165,21 @@ public:
 	void ShowUI( class EditorProgram* program );
 	
 	bool SaveLevel( class EditorProgram* program, bool saveAs );
-	void OpenLevel( class EditorProgram* program );
+	void OpenLevelDialog( class EditorProgram* program );
 	void OpenLevel( class EditorProgram* program, const char* path );
-	void Unload();
+	void Unload( class EditorProgram* program );
 	
 	bool GetShowInvisible() const { return m_showInvisible; }
 	
 	EditorServerObject* CreateObject( ae::Entity entity, const ae::Matrix4& transform, const char* name );
 	void DestroyObject( ae::Entity entity );
-	ae::Object* AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::Type* type );
-	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, ae::Object* component ); // @TODO: Cleanup signature
-	ae::Object* GetComponent( EditorServerObject* obj, const ae::Type* type );
-	const ae::Object* GetComponent( const EditorServerObject* obj, const ae::Type* type );
+	ae::Component* AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::Type* type );
+	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, ae::Component* component );
+	ae::Component* GetComponent( EditorServerObject* obj, const ae::Type* type );
+	const ae::Component* GetComponent( const EditorServerObject* obj, const ae::Type* type );
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
 	EditorServerObject* GetObject( ae::Entity entity ) { return m_objects.Get( entity, nullptr ); }
-	const EditorServerObject* GetObjectFromComponent( const ae::Object* component ); // @TODO: Cleanup signature
+	const EditorServerObject* GetObjectFromComponent( const ae::Component* component );
 	const ae::Var* GetMeshResourceVar( const ae::Type* componentType );
 	const ae::Var* GetMeshVisibleVar( const ae::Type* componentType );
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
@@ -188,44 +187,49 @@ public:
 	ae::ListenerSocket sock;
 	
 private:
+	void m_SetLevelPath( class EditorProgram* program, const char* path );
 	void m_SelectWithModifiers( class EditorProgram* program, ae::Entity entity );
-	void m_Save( ae::EditorLevel* levelOut ) const;
-	bool m_Load( class EditorProgram* program );
 	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
 	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
 	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
 	ae::Entity m_PickObject( class EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut );
 	void m_ShowEditorObject( EditorProgram* program, ae::Entity entity, ae::Color color );
 	ae::Color m_GetColor( ae::Entity entity, bool lines ) const;
+	void m_LoadLevel( class EditorProgram* program );
 	
 	const ae::Tag m_tag;
 	bool m_first = true;
-	std::function< bool( const ae::Type*, const char*, ae::Object** ) > m_getObjectPointerFromString;
+
+	ae::Str256 m_levelPath;
+	const ae::File* m_pendingLevel = nullptr;
 
 	bool m_showInvisible = false;
 
+	// Manipulation
 	const ae::Type* m_selectedType = nullptr;
 	ae::Array< ae::Entity > selected;
 	ae::Entity hoverEntity = kInvalidEntity;
 	ae::Entity uiHoverEntity = kInvalidEntity;
 	ae::Vec3 m_mouseHover = ae::Vec3( 0.0f );
 	ae::Vec3 m_mouseHoverNormal = ae::Vec3( 0, 1, 0 );
-	ImGuizmo::OPERATION gizmoOperation = (ImGuizmo::OPERATION)0;
-	ImGuizmo::MODE gizmoMode = ImGuizmo::LOCAL;
-	class Editor* client = nullptr;
-	uint32_t m_levelSeq_HACK = 0;
+	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
+	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
 
+	// Object state
 	ae::Map< ae::Entity, EditorServerObject* > m_objects;
 	ae::Registry m_registry;
 
+	// Configuration
 	ae::Map< const ae::Type*, const ae::Var* > m_meshResourceVars;
 	ae::Map< const ae::Type*, const ae::Var* > m_meshVisibleVars;
 	ae::Map< const ae::Type*, ae::Str32 > m_typeMesh;
 	ae::Map< const ae::Type*, bool > m_typeInvisible;
 	
+	// Connection to client
 	ae::Array< EditorConnection* > connections;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 	
+	// Selection
 	struct SelectRef
 	{
 		bool enabled = false;
@@ -241,11 +245,11 @@ private:
 class EditorProgram
 {
 public:
-	EditorProgram( const ae::Tag& tag, const EditorParams& params, Editor* client ) :
+	EditorProgram( const ae::Tag& tag, const EditorParams& params ) :
 		m_tag( tag ),
 		camera( params.worldUp ),
 		debugLines( tag ),
-		editor( tag, client ),
+		editor( tag ),
 		params( params ),
 		m_meshes( tag )
 	{}
@@ -273,6 +277,7 @@ public:
 	aeImGui ui;
 	ae::DebugCamera camera;
 	ae::DebugLines debugLines;
+	ae::FileSystem fileSystem;
 	EditorServer editor;
 
 	const EditorParams params;
@@ -371,8 +376,8 @@ void EditorProgram::Initialize()
 {
 	AE_INFO( "Editor Initialize (port: #)", params.port );
 
-	window.Initialize( 1600, 1200, false, true );
-	window.SetTitle( "ae" );
+	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
+	window.Initialize( screens[ 0 ].position, screens[ 0 ].size.x, screens[ 0 ].size.y, true );
 	window.SetMaximized( true );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -381,7 +386,6 @@ void EditorProgram::Initialize()
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
 	debugLines.Initialize( 20480 );
 	debugLines.SetXRayEnabled( false );
-	editor.Initialize( this );
 	
 	const char* kVertShader = "\
 		AE_UNIFORM mat4 u_worldToProj;\
@@ -517,6 +521,8 @@ void EditorProgram::Initialize()
 	
 	AE_STATIC_ASSERT( sizeof(kCogTextureData) == kCogTextureDataSize * kCogTextureDataSize );
 	m_cogTexture.Initialize( kCogTextureData, kCogTextureDataSize, kCogTextureDataSize, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp, true );
+
+	editor.Initialize( this );
 }
 
 void EditorProgram::Terminate()
@@ -714,28 +720,23 @@ void ae::EditorMesh::Load( const ae::OBJFile& file )
 //------------------------------------------------------------------------------
 Editor::Editor( const ae::Tag& tag ) :
 	m_tag( tag ),
-	m_level( tag ),
 	m_sock( tag )
-{}
+{
+	AE_ASSERT( m_tag != ae::Tag() );
+}
 
 Editor::~Editor()
 {
-#if !_AE_EMSCRIPTEN_
-	m_sock.Disconnect();
-#endif
-	if ( m_file )
-	{
-		m_fileSystem.Destroy( m_file );
-		m_file = nullptr;
-	}
+	Terminate();
 }
 
 void Editor::Initialize( const EditorParams& params )
 {
 	AE_ASSERT( params.argc && params.argv );
+	AE_ASSERT( params.registry );
 	AE_ASSERT( params.worldUp == ae::Axis::Z || params.worldUp == ae::Axis::Y );
 	AE_ASSERT( params.port );
-	m_params = params;
+	m_params = ae::New< EditorParams >( m_tag, params );
 	m_fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );	
 
 	bool run = params.run;
@@ -753,7 +754,7 @@ void Editor::Initialize( const EditorParams& params )
 
 	if ( run )
 	{
-		EditorProgram program( m_tag, params, this );
+		EditorProgram program( m_tag, params );
 		program.Initialize();
 
 		int32_t levelArg = -1;
@@ -777,8 +778,25 @@ void Editor::Initialize( const EditorParams& params )
 	m_Connect();
 }
 
+void Editor::Terminate()
+{
+#if !_AE_EMSCRIPTEN_
+	m_sock.Disconnect();
+#endif
+
+	if( m_pendingFile )
+	{
+		m_fileSystem.Destroy( m_pendingFile );
+		m_pendingFile = nullptr;
+	}
+
+	ae::Delete( m_params );
+	m_params = nullptr;
+}
+
 void Editor::Launch()
 {
+	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
 	m_Connect();
 	if ( !m_sock.IsConnected() )
 	{
@@ -788,9 +806,11 @@ void Editor::Launch()
 
 void Editor::Update()
 {
+	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
+
 	m_Read();
 
-	if ( m_params.port == 0 )
+	if ( m_params->port == 0 )
 	{
 		return;
 	}
@@ -811,11 +831,7 @@ void Editor::Update()
 				rStream.SerializeUint32( entity );
 				rStream.SerializeRaw( transform );
 				AE_ASSERT( rStream.IsValid() );
-				EditorObject* levelObj = m_level.objects.TryGet( entity );
-				if ( levelObj )
-				{
-					levelObj->transform = transform;
-				}
+				// @TODO: Apply transform to entity
 				break;
 			}
 			case EditorMsg::Load:
@@ -831,198 +847,90 @@ void Editor::Update()
 	}
 }
 
-bool Editor::Write() const
-{
-	if ( !m_level.filePath.Length() )
-	{
-		return false;
-	}
-
-	rapidjson::Document document;
-	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
-	document.SetObject();
-	{
-		uint32_t objectCount = m_level.objects.Length();
-		rapidjson::Value jsonObjects( rapidjson::kArrayType );
-		jsonObjects.Reserve( objectCount, allocator );
-
-		for ( uint32_t objIdx = 0; objIdx < objectCount; objIdx++ )
-		{
-			const EditorObject& levelObject = m_level.objects.GetValue( objIdx );
-			rapidjson::Value jsonObject( rapidjson::kObjectType );
-			jsonObject.AddMember( "id", levelObject.id, allocator );
-			if ( levelObject.name.Length() )
-			{
-				jsonObject.AddMember( "name", rapidjson::StringRef( levelObject.name.c_str() ), allocator );
-			}
-			rapidjson::Value transformJson;
-			auto transformStr = ae::ToString( levelObject.transform );
-			transformJson.SetString( transformStr.c_str(), allocator );
-			jsonObject.AddMember( "transform", transformJson, allocator );
-			
-			rapidjson::Value jsonComponents( rapidjson::kObjectType );
-			for ( const EditorComponent& levelComponent : levelObject.components )
-			{
-				const ae::Type* type = ae::GetTypeByName( levelComponent.type.c_str() );
-				rapidjson::Value jsonComponent( rapidjson::kObjectType );
-				uint32_t varCount = type->GetVarCount( true );
-				for ( uint32_t i = 0; i < varCount; i++ )
-				{
-					const ae::Var* var = type->GetVarByIndex( i, true );
-					auto k = rapidjson::StringRef( var->GetName() );
-					if ( var->IsArray() )
-					{
-						int32_t arrayLen = levelComponent.members.GetInt( var->GetName(), 0 );
-						if ( arrayLen )
-						{
-							rapidjson::Value jsonArray( rapidjson::kArrayType );
-							jsonArray.Reserve( arrayLen, allocator );
-							for ( uint32_t arrIdx = 0; arrIdx < arrayLen; arrIdx++ )
-							{
-								ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-								const char* value = levelComponent.members.GetString( key.c_str(), nullptr );
-								AE_ASSERT( value );
-								jsonArray.PushBack( rapidjson::StringRef( value ), allocator );
-							}
-							jsonComponent.AddMember( k, jsonArray, allocator );
-						}
-					}
-					else if ( const char* value = levelComponent.members.GetString( var->GetName(), nullptr ) )
-					{
-						jsonComponent.AddMember( k, rapidjson::StringRef( value ), allocator );
-					}
-				}
-				jsonComponents.AddMember( rapidjson::StringRef( levelComponent.type.c_str() ), jsonComponent, allocator );
-			}
-			jsonObject.AddMember( "components", jsonComponents, allocator );
-			jsonObjects.PushBack( jsonObject, allocator );
-		}
-
-		document.AddMember( "objects", jsonObjects, allocator );
-	}
-	
-	rapidjson::StringBuffer buffer;
-	rapidjson::PrettyWriter< rapidjson::StringBuffer > writer( buffer );
-	document.Accept( writer );
-
-	uint32_t writtenBytes = m_fileSystem.Write( ae::FileSystem::Root::Data, m_level.filePath.c_str(), buffer.GetString(), buffer.GetSize(), false );
-	AE_ASSERT( writtenBytes == 0 || writtenBytes == buffer.GetSize() );
-	return writtenBytes != 0;
-}
-
 void Editor::QueueRead( const char* levelPath )
 {
-	if ( m_file )
+	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
+	if ( m_pendingFile )
 	{
-		AE_WARN( "Cancelling level read '#'", m_file->GetUrl() );
-		m_fileSystem.Destroy( m_file );
+		AE_WARN( "Cancelling level read '#'", m_pendingFile->GetUrl() );
+		m_fileSystem.Destroy( m_pendingFile );
 	}
 	AE_INFO( "Queuing level load '#'", levelPath );
-	m_file = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
+	m_pendingFile = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
 }
 
 void Editor::SetFunctionPointers( LoadEditorMeshFn loadMeshFn, void* loadMeshUserData )
 {
-	m_params.loadMeshFn = loadMeshFn;
-	m_params.loadMeshUserData = loadMeshUserData;
+	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
+	m_params->loadMeshFn = loadMeshFn;
+	m_params->loadMeshUserData = loadMeshUserData;
 }
 
 void Editor::m_Read()
 {
-	if ( !m_file || m_file->GetStatus() == ae::File::Status::Pending )
+	if ( !m_pendingFile || m_pendingFile->GetStatus() == ae::File::Status::Pending )
 	{
 		return;
 	}
-
-	RunOnDestroy destroyFile{ [this]()
+	ae::RunOnDestroy destroyFile{ [this]()
 	{
-		m_fileSystem.Destroy( m_file );
-		m_file = nullptr;
+		m_fileSystem.Destroy( m_pendingFile );
+		m_pendingFile = nullptr;
 	} };
-
-	uint32_t fileSize = m_file->GetLength();
+	uint32_t fileSize = m_pendingFile->GetLength();
 	if ( !fileSize )
 	{
 		return;
 	}
 	
-	m_level.objects.Clear();
-	
-	const char* jsonBuffer = (const char*)m_file->GetData();
-	AE_ASSERT( jsonBuffer[ m_file->GetLength() ] == 0 );
-	
+	// @TODO: Gracefully handle file parsing errors
+	const char* jsonBuffer = (const char*)m_pendingFile->GetData();
+	AE_ASSERT( jsonBuffer[ m_pendingFile->GetLength() ] == 0 );
 	rapidjson::Document document;
 	AE_ASSERT( !document.Parse( jsonBuffer ).HasParseError() );
 	AE_ASSERT( document.IsObject() );
-	
 	const auto& jsonObjects = document[ "objects" ];
 	AE_ASSERT( jsonObjects.IsArray() );
 	
-	for ( const auto& jsonObject : jsonObjects.GetArray() )
+	// @TODO: Check that all objects/components are valid before starting committing to level load
+	m_lastLoadedLevel = m_pendingFile->GetUrl();
+	if( m_params->onLevelLoadStartFn )
 	{
-		ae::Entity entity = jsonObject[ "id" ].GetUint();
-		EditorObject& levelObject = m_level.objects.Set( entity, { m_tag } );
-		levelObject.id = entity;
-		if ( jsonObject.HasMember( "name" ) )
+		m_params->onLevelLoadStartFn( m_params->onLevelLoadStartUserData, m_pendingFile->GetUrl() );
+	}
+
+	// Create all components
+	ae::Array< const ae::Type* > prereqs = m_tag;
+	for( const auto& jsonObject : jsonObjects.GetArray() )
+	{
+		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
+		const ae::Matrix4 entityTransform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
+		const ae::Entity entity = m_params->registry->CreateEntity( jsonObject[ "id" ].GetUint(), entityName ); // @TODO: Handle patching references
+		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
-			levelObject.name = jsonObject[ "name" ].GetString();
-		}
-		levelObject.transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
-		for ( const auto& componentIter : jsonObject[ "components" ].GetObject() )
-		{
-			if ( !componentIter.value.IsObject() )
+			AE_ASSERT( componentIter.value.IsObject() );
+			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			GetComponentTypePrereqs( type, &prereqs );
+			for( const ae::Type* prereq : prereqs )
 			{
-				continue;
+				m_params->registry->AddComponent( entity, prereq );
 			}
-			const auto jsonComponent = componentIter.value.GetObject();
-			EditorComponent& levelComponent = levelObject.components.Append( m_tag );
-			levelComponent.type = componentIter.name.GetString();
-			const ae::Type* type = ae::GetTypeByName( levelComponent.type.c_str() );
-			if ( !type )
-			{
-				continue;
-			}
-			
-			uint32_t varCount = type->GetVarCount( true );
-			for ( uint32_t varIdx = 0; varIdx < varCount; varIdx++ )
-			{
-				const ae::Var* var = type->GetVarByIndex( varIdx, true );
-				if ( !jsonComponent.HasMember( var->GetName() ) )
-				{
-					continue;
-				}
-				const auto& jsonVar = jsonComponent[ var->GetName() ];
-				if ( var->IsArray() && jsonVar.IsArray() )
-				{
-					uint32_t arrIdx = 0;
-					const auto& jsonVarArray = jsonVar.GetArray();
-					levelComponent.members.SetUint( var->GetName(), jsonVarArray.Size() );
-					for ( const auto& jsonVarArrayValue : jsonVarArray )
-					{
-						ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-						levelComponent.members.SetString( key.c_str(), jsonVarArrayValue.GetString() );
-						arrIdx++;
-					}
-				}
-				else if ( !jsonVar.IsObject() && !jsonVar.IsArray() )
-				{
-					levelComponent.members.SetString( var->GetName(), jsonVar.GetString() );
-				}
-			}
+			m_params->registry->AddComponent( entity, type );
 		}
 	}
-	
-	AE_INFO( "Read level '#'", m_file->GetUrl() );
-	m_level.filePath = m_file->GetUrl();
-	m_levelSeq++;
+
+	// Serialize all components (second phase to handle references)
+	JsonToRegistry( jsonObjects, m_params->registry );
+
+	AE_INFO( "Loaded level '#'", m_pendingFile->GetUrl() );
 }
 
 void Editor::m_Connect()
 {
 #if !_AE_EMSCRIPTEN_
-	if ( m_params.port && !m_sock.IsConnected() )
+	if ( m_params->port && !m_sock.IsConnected() )
 	{
-		m_sock.Connect( ae::Socket::Protocol::TCP, "localhost", m_params.port );
+		m_sock.Connect( ae::Socket::Protocol::TCP, "localhost", m_params->port );
 	}
 #endif
 }
@@ -1165,6 +1073,94 @@ void EditorServer::Initialize( EditorProgram* program )
 			m_typeInvisible.Set( type, true );
 		}
 	}
+
+	m_SetLevelPath( program, "" );
+}
+
+void EditorServer::m_LoadLevel( EditorProgram* program )
+{
+	if( !m_pendingLevel || m_pendingLevel->GetStatus() == ae::File::Status::Pending )
+	{
+		return;
+	}
+
+	ae::RunOnDestroy destroyFile = [&]()
+	{
+		program->fileSystem.Destroy( m_pendingLevel );
+		m_pendingLevel = nullptr;
+	};
+
+	uint32_t fileSize = m_pendingLevel->GetLength();
+	if( !fileSize )
+	{
+		AE_ERR( "Could not read level '#'", m_pendingLevel->GetUrl() );
+		return;
+	}
+	AE_INFO( "Loading level... '#'", m_pendingLevel->GetUrl() );
+	
+	const char* jsonBuffer = (const char*)m_pendingLevel->GetData();
+	AE_ASSERT( jsonBuffer[ m_pendingLevel->GetLength() ] == 0 );
+	
+	rapidjson::Document document;
+	if( document.Parse( jsonBuffer ).HasParseError() || !document.IsObject() )
+	{
+		AE_ERR( "Could not parse level '#'", m_pendingLevel->GetUrl() );
+		return;
+	}
+
+	// @TODO: Make sure that the existing level has no modifications before unloading
+	Unload( program );
+	
+	const auto& jsonObjects = document[ "objects" ];
+	AE_ASSERT( jsonObjects.IsArray() );
+	// Create all components
+	for( const auto& jsonObject : jsonObjects.GetArray() )
+	{
+		EditorServerObject* object = CreateObject(
+			jsonObject[ "id" ].GetUint(),
+			ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() ),
+			jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : ""
+		);
+		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		{
+			if( !componentIter.value.IsObject() )
+			{
+				continue;
+			}
+			AddComponent( program, object, ae::GetTypeByName( componentIter.name.GetString() ) );
+		}
+	}
+	// Serialize all components (second phase to handle references)
+	JsonToRegistry( jsonObjects, &m_registry );
+	// Refresh editor objects
+	for( const auto& jsonObject : jsonObjects.GetArray() )
+	{
+		const ae::Entity entity = jsonObject[ "id" ].GetUint();
+		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
+		EditorServerObject* object = m_objects.Get( entity );
+		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		{
+			if( !componentIter.value.IsObject() )
+			{
+				continue;
+			}
+			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			if( !type )
+			{
+				continue;
+			}
+			ae::Component* component = &m_registry.GetComponent( entity, type );
+			const uint32_t varCount = type->GetVarCount( true );
+			for ( uint32_t j = 0; j < varCount; j++ )
+			{
+				const ae::Var* var = type->GetVarByIndex( j, true );
+				object->HandleVarChange( program, component, type, var );
+			}
+		}
+	}
+
+	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
+	m_SetLevelPath( program, m_pendingLevel->GetUrl() );
 }
 
 void EditorServer::Terminate( EditorProgram* program )
@@ -1179,7 +1175,7 @@ void EditorServer::Terminate( EditorProgram* program )
 
 void EditorServer::Update( EditorProgram* program )
 {
-	client->m_Read(); // @TODO: This only partially updates the client
+	m_LoadLevel( program ); // Checks if a pending level is ready to load
 	
 	if ( !sock.IsListening() )
 	{
@@ -1227,22 +1223,6 @@ void EditorServer::Update( EditorProgram* program )
 		}
 	}
 	connections.RemoveAllFn( []( const EditorConnection* c ){ return !c; } );
-
-	if ( m_levelSeq_HACK < client->GetLevelChangeSeq() )
-	{
-		AE_INFO( "Loading '#'", client->GetLevel()->filePath );
-		if ( m_Load( program ) )
-		{
-			AE_INFO( "Loaded '#'", client->GetLevel()->filePath );
-			program->window.SetTitle( client->GetLevel()->filePath.c_str() );
-			m_levelSeq_HACK = client->GetLevelChangeSeq();
-			return;
-		}
-		else
-		{
-			AE_INFO( "Failed to load level '#'", client->GetLevel()->filePath );
-		}
-	}
 }
 
 void EditorServer::Render( EditorProgram* program )
@@ -1476,7 +1456,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		}
 		else if ( program->input.Get( ae::Key::O ) && !program->input.GetPrev( ae::Key::O ) )
 		{
-			OpenLevel( program );
+			OpenLevelDialog( program );
 		}
 		else if( program->input.Get( ae::Key::D ) && !program->input.GetPrev( ae::Key::D ) )
 		{
@@ -1631,7 +1611,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		if ( ImGui::Button( "Open" ) )
 		{
-			OpenLevel( program );
+			OpenLevelDialog( program );
 		}
 		ImGui::SameLine();
 		if ( ImGui::Button( "Save" ) )
@@ -1646,27 +1626,22 @@ void EditorServer::ShowUI( EditorProgram* program )
 		if ( ImGui::Button( "New" ) )
 		{
 			AE_INFO( "New level" );
-			EditorLevel* level = client->GetWritableLevel();
-			if ( level )
-			{
-				level->objects.Clear();
-				level->filePath = "";
-				client->m_levelSeq++;
-			}
-			
+			Unload( program );
 		}
 		ImGui::SameLine();
+		ImGui::BeginDisabled( m_levelPath.Empty() || !connections.Length() );
 		if ( ImGui::Button( "Game Load" ) && connections.Length() )
 		{
 			uint8_t buffer[ kMaxEditorMessageSize ];
 			ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer );
 			wStream.SerializeRaw( EditorMsg::Load );
-			wStream.SerializeString( client->GetLevel()->filePath );
+			wStream.SerializeString( m_levelPath );
 			for ( uint32_t i = 0; i < connections.Length(); i++ )
 			{
 				connections[ i ]->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
 			}
 		}
+		ImGui::EndDisabled();
 		ImGui::SameLine();
 		if ( ImGui::Button( "Quit" ) )
 		{
@@ -1807,7 +1782,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 				}
 			}
 			
-			ae::Object* deleteComponent = nullptr;
+			ae::Component* deleteComponent = nullptr;
 			const uint32_t componentTypesCount = m_registry.GetTypeCount();
 			for( uint32_t i = 0; i < componentTypesCount; i++ )
 			{
@@ -1992,7 +1967,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 EditorServerObject* EditorServer::CreateObject( Entity entity, const ae::Matrix4& transform, const char* name )
 {
 	AE_ASSERT( !GetObject( entity ) );
-	entity = m_registry.CreateEntity( entity, name );
+	entity = m_registry.CreateEntity( entity, name ); // @TODO: Handle patching references
 	EditorServerObject* editorObject = ae::New< EditorServerObject >( m_tag, m_tag );
 	editorObject->Initialize( entity, transform );
 	m_objects.Set( entity, editorObject );
@@ -2010,84 +1985,64 @@ void EditorServer::DestroyObject( ae::Entity entity )
 	}
 }
 
-ae::Object* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const ae::Type* type )
+ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const ae::Type* type )
 {
 	if ( !type )
 	{
 		return nullptr;
 	}
-	ae::Object* component = GetComponent( obj, type );
+	ae::Component* component = GetComponent( obj, type );
 	if ( component )
 	{
 		return component;
 	}
-	
-	std::function< void(const ae::Type*, ae::Object*) > fn = [&]( const ae::Type* t, ae::Object* component )
+
+	ae::Array< const ae::Type* > prereqs = m_tag;
+	GetComponentTypePrereqs( type, &prereqs );
+	for( const ae::Type* prereq : prereqs )
 	{
-		if ( t->GetParentType() )
+		if( !GetComponent( obj, prereq ) )
 		{
-			fn( t->GetParentType(), component );
+			AddComponent( program, obj, prereq );
 		}
-		int32_t propIdx = t->GetPropertyIndex( "ae_editor_dep" );
-		if ( propIdx >= 0 )
-		{
-			uint32_t propCount = t->GetPropertyValueCount( propIdx );
-			for ( uint32_t i = 0; i < propCount; i++ )
-			{
-				const char* prop = t->GetPropertyValue( propIdx, i );
-				if ( strcmp( type->GetName(), prop ) != 0 && !GetComponent( obj, type ) )
-				{
-					AddComponent( program, obj, ae::GetTypeByName( prop ) );
-				}
-			}
-		}
-	};
-	fn( type, component );
-	
+	}
 	component = m_registry.AddComponent( obj->entity, type );
-	
-	const auto& meshName = m_typeMesh.Get( type, "" );
-	if ( meshName.Length() )
+	if( component )
 	{
-		obj->mesh = program->GetMesh( meshName.c_str() );
+		const auto& meshName = m_typeMesh.Get( type, "" );
+		if ( meshName.Length() )
+		{
+			obj->mesh = program->GetMesh( meshName.c_str() );
+		}
+		if ( m_typeInvisible.Get( type, false ) )
+		{
+			obj->opaque = false;
+		}
 	}
-	if ( m_typeInvisible.Get( type, false ) )
-	{
-		obj->opaque = false;
-	}
-	
 	return component;
 }
 
-void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* obj, ae::Object* _component )
+void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* obj, ae::Component* component )
 {
-	if ( obj && _component )
+	if ( obj && component )
 	{
-		ae::Component* component = ae::Cast< ae::Component >( _component );
-		AE_ASSERT( component );
 		m_registry.DestroyComponent( component );
 	}
 }
 
-ae::Object* EditorServer::GetComponent( EditorServerObject* obj, const ae::Type* type )
+ae::Component* EditorServer::GetComponent( EditorServerObject* obj, const ae::Type* type )
 {
-	return const_cast< ae::Object* >( GetComponent( const_cast< const EditorServerObject* >( obj ), type ) );
+	return const_cast< ae::Component* >( GetComponent( const_cast< const EditorServerObject* >( obj ), type ) );
 }
 
-const ae::Object* EditorServer::GetComponent( const EditorServerObject* obj, const ae::Type* type )
+const ae::Component* EditorServer::GetComponent( const EditorServerObject* obj, const ae::Type* type )
 {
 	return obj ? m_registry.TryGetComponent( obj->entity, type ) : nullptr;
 }
 
-const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Object* _component )
+const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Component* component )
 {
-	if( _component )
-	{
-		const ae::Component* component = ae::Cast< ae::Component >( _component );
-		AE_ASSERT( component );
-		return GetObject( component->GetEntity() );
-	}
-	return nullptr;
+	return component ? GetObject( component->GetEntity() ) : nullptr;
 }
 
 const ae::Var* EditorServer::GetMeshResourceVar( const ae::Type* componentType )
@@ -2112,59 +2067,107 @@ ae::AABB EditorServer::GetSelectedAABB( EditorProgram* program ) const
 
 bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 {
-	if ( !client->GetWritableLevel() )
-	{
-		return false;
-	}
-
-	// @TODO: Techincally ae::Editor::Level is already an intermidiate representation of the level, so this should be cleaned up.
-	ae::EditorLevel tempLevel = m_tag;
-	tempLevel.filePath = client->GetLevel()->filePath;
-	
-	bool fileSelected = tempLevel.filePath.Length();
+	bool fileSelected = !m_levelPath.Empty();
 	if ( !fileSelected || saveAs )
 	{
 		fileSelected = false;
 		ae::FileDialogParams params;
 		params.window = &program->window;
 		params.filters.Append( { "Level File", "level" } );
-		params.defaultPath = tempLevel.filePath.c_str();
+		params.defaultPath = m_levelPath.c_str();
 		auto filePath = ae::FileSystem::SaveDialog( params );
 		if ( filePath.c_str()[ 0 ] )
 		{
 			fileSelected = true;
-			tempLevel.filePath = filePath.c_str();
+			m_SetLevelPath( program, filePath.c_str() );
 		}
 	}
-	
-	if ( fileSelected )
-	{
-		// @TODO: Don't save to EditorLevel, should read and write json directly
-		// from objects. Should be able to delete EditorLevel and the client
-		// reference in EditorServer.
-		m_Save( &tempLevel );
-		ae::EditorLevel* level = client->GetWritableLevel();
-		AE_ASSERT( level );
-		*level = std::move( tempLevel );
-		if ( client->Write() )
-		{
-			AE_INFO( "Saved '#'", level->filePath );
-			program->window.SetTitle( level->filePath.c_str() );
-			return true;
-		}
-		else
-		{
-			AE_INFO( "Failed to save '#'", level->filePath );
-		}
-	}
-	else
+	if ( !fileSelected )
 	{
 		AE_INFO( "No file selected" );
+		return false;
 	}
-	return false;
+
+	AE_INFO( "Saving... '#'", m_levelPath );
+
+	ae::Map< const ae::Type*, ae::Component* > defaults = m_tag;
+	ae::RunOnDestroy destroyDefaults = [&]()
+	{
+		for ( auto& _component : defaults )
+		{
+			ae::Component* component = _component.value;
+			std::destroy_at( component );
+			ae::Free( component );
+		}
+	};
+
+	rapidjson::Document document;
+	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+	document.SetObject();
+	{
+		rapidjson::Value jsonObjects( rapidjson::kArrayType );
+		jsonObjects.Reserve( m_objects.Length(), allocator );
+
+		for( const auto& _obj : m_objects )
+		{
+			const ae::Entity entity = _obj.key;
+			const EditorServerObject* levelObject = _obj.value;
+
+			rapidjson::Value jsonObject( rapidjson::kObjectType );
+			jsonObject.AddMember( "id", entity, allocator );
+			const char* objectName = m_registry.GetNameByEntity( entity );
+			if ( objectName[ 0 ] )
+			{
+				jsonObject.AddMember( "name", rapidjson::StringRef( objectName ), allocator );
+			}
+			rapidjson::Value transformJson;
+			const ae::Matrix4 transform = levelObject->GetTransform( program );
+			const auto transformStr = ae::ToString( transform );
+			transformJson.SetString( transformStr.c_str(), allocator );
+			jsonObject.AddMember( "transform", transformJson, allocator );
+		
+			rapidjson::Value jsonComponents( rapidjson::kObjectType );
+			const uint32_t componentTypeCount = m_registry.GetTypeCount();
+			for( uint32_t i = 0; i < componentTypeCount; i++ )
+			{
+				const ae::Type* type = m_registry.GetTypeByIndex( i );
+				if( const ae::Component* component = m_registry.TryGetComponent( entity, type ) )
+				{
+					const ae::Component* defaultComponent = defaults.Get( type, nullptr );
+					if ( !defaultComponent )
+					{
+						auto c = (ae::Component*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
+						type->New( c );
+						defaultComponent = c;
+					}
+
+					rapidjson::Value jsonComponent( rapidjson::kObjectType );
+					ae::ComponentToJson( component, defaultComponent, allocator, &jsonComponent );
+					jsonComponents.AddMember( rapidjson::StringRef( type->GetName() ), jsonComponent, allocator );
+				}
+			}
+			jsonObject.AddMember( "components", jsonComponents, allocator );
+			jsonObjects.PushBack( jsonObject, allocator );
+		}
+
+		document.AddMember( "objects", jsonObjects, allocator );
+	}
+
+	rapidjson::StringBuffer buffer;
+	rapidjson::PrettyWriter< rapidjson::StringBuffer > writer( buffer );
+	document.Accept( writer );
+
+	const uint32_t writtenBytes = program->fileSystem.Write( ae::FileSystem::Root::Data, m_levelPath.c_str(), buffer.GetString(), buffer.GetSize(), false );
+	AE_ASSERT( writtenBytes == 0 || writtenBytes == buffer.GetSize() );
+	if( writtenBytes == 0 )
+	{
+		AE_WARN( "Failed to write level '#'", m_levelPath );
+		return false;
+	}
+	return true;
 }
 
-void EditorServer::OpenLevel( EditorProgram* program )
+void EditorServer::OpenLevelDialog( EditorProgram* program )
 {
 	ae::FileDialogParams params;
 	params.window = &program->window;
@@ -2186,22 +2189,46 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 	{
 		return;
 	}
-	AE_INFO( "Level '#'", filePath );
-	AE_INFO( "Reading..." );
-	client->QueueRead( filePath );
+	if( m_pendingLevel )
+	{
+		AE_WARN( "Cancelling level read '#'", m_pendingLevel->GetUrl() );
+		program->fileSystem.Destroy( m_pendingLevel );
+	}
+	AE_INFO( "Reading... '#'", filePath );
+	m_pendingLevel = program->fileSystem.Read( ae::FileSystem::Root::Data, filePath, 2.0f );
 }
 
-void EditorServer::Unload()
+void EditorServer::Unload( EditorProgram* program )
 {
 	m_selectedType = nullptr;
 	selected.Clear();
 	hoverEntity = kInvalidEntity;
+	uiHoverEntity = kInvalidEntity;
+	m_selectRef = SelectRef();
+
+	m_SetLevelPath( program, "" );
 
 	while ( m_objects.Length() )
 	{
 		DestroyObject( m_objects.GetKey( m_objects.Length() - 1 ) );
 	}
 	AE_ASSERT( m_objects.Length() == 0 );
+
+	m_registry.Clear();
+}
+
+void EditorServer::m_SetLevelPath( EditorProgram* program, const char* filePath )
+{
+	if( filePath[ 0 ] )
+	{
+		m_levelPath = filePath;
+		program->window.SetTitle( filePath );
+	}
+	else
+	{
+		m_levelPath = "";
+		program->window.SetTitle( "Untitled" );
+	}
 }
 
 void EditorServer::m_SelectWithModifiers( EditorProgram* program, ae::Entity entity )
@@ -2255,157 +2282,6 @@ void EditorServer::m_SelectWithModifiers( EditorProgram* program, ae::Entity ent
 	}
 }
 
-void EditorServer::m_Save( ae::EditorLevel* levelOut ) const
-{
-	ae::Map< ae::Str32, ae::Object* > defaults = m_tag;
-	
-	auto readMembers = []( const ae::Type* type, const EditorObject* levelObj, const ae::Object* component, const ae::Object* defaultComponent, ae::Dict* propsOut ) -> void
-	{
-		uint32_t varCount = type->GetVarCount( true );
-		for ( uint32_t varIdx = 0; varIdx < varCount; varIdx++ )
-		{
-			const ae::Var* var = type->GetVarByIndex( varIdx, true );
-			if ( var->IsArray() )
-			{
-				uint32_t length = var->GetArrayLength( component );
-				propsOut->SetUint( var->GetName(), length );
-				for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
-				{
-					ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-					auto value = var->GetObjectValueAsString( component, arrIdx );
-					propsOut->SetString( key.c_str(), value.c_str() );
-				}
-			}
-			else if ( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
-			{
-				propsOut->SetMatrix4( var->GetName(), levelObj->transform );
-			}
-			else if ( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
-			{
-				propsOut->SetVec3( var->GetName(), levelObj->transform.GetTranslation() );
-			}
-			// @TODO: 'scale' and 'rotation'
-			else
-			{
-				auto value = var->GetObjectValueAsString( component );
-				auto defaultValue = var->GetObjectValueAsString( defaultComponent );
-				if ( value != defaultValue )
-				{
-					propsOut->SetString( var->GetName(), value.c_str() );
-				}
-			}
-		}
-	};
-
-	levelOut->objects.Clear();
-	uint32_t editorObjectCount = m_objects.Length();
-	for ( uint32_t i = 0; i < editorObjectCount; i++ )
-	{
-		const EditorServerObject* editorObj = m_objects.GetValue( i );
-		const ae::Entity entityId = editorObj->entity;
-		EditorObject* levelObj = &levelOut->objects.Set( entityId, { m_tag } );
-		levelObj->id = entityId;
-		levelObj->name = m_registry.GetNameByEntity( entityId );
-		levelObj->transform = editorObj->GetTransform( nullptr );
-		
-		const uint32_t componentTypeCount = m_registry.GetTypeCount();
-		for( uint32_t i = 0; i < componentTypeCount; i++ )
-		{
-			const ae::Type* type = m_registry.GetTypeByIndex( i );
-			if( const ae::Component* component = m_registry.TryGetComponent( entityId, type ) )
-			{
-				EditorComponent& levelComponent = levelObj->components.Append( m_tag );
-				levelComponent.type = type->GetName();
-
-				// @TODO: StoreComponent()
-				const ae::Object* defaultComponent = defaults.Get( type->GetName(), nullptr );
-				if ( !defaultComponent )
-				{
-					auto c = (ae::Object*)ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() );
-					type->New( c );
-					defaultComponent = c;
-				}
-				readMembers( type, levelObj, component, defaultComponent, &levelComponent.members );
-			}
-		}
-	}
-	
-	for ( auto& _obj : defaults )
-	{
-		ae::Object* obj = _obj.value;
-		obj->~Object();
-		ae::Free( obj );
-	}
-}
-
-bool EditorServer::m_Load( EditorProgram* program )
-{
-	Unload();
-	const ae::EditorLevel* level = client->GetLevel();
-	
-	uint32_t objectCount = level->objects.Length();
-	// Create all components
-	for ( uint32_t i = 0; i < objectCount; i++ )
-	{
-		const EditorObject& levelObject = level->objects.GetValue( i );
-		EditorServerObject* editorObj = CreateObject( levelObject.id, levelObject.transform, levelObject.name.c_str() );
-		for ( const EditorComponent& levelComponent : levelObject.components )
-		{
-			AddComponent( program, editorObj, ae::GetTypeByName( levelComponent.type.c_str() ) );
-		}
-	}
-	// Serialize all components (second phase to handle references)
-	for ( uint32_t i = 0; i < objectCount; i++ )
-	{
-		const EditorObject& levelObject = level->objects.GetValue( i );
-		EditorServerObject* editorObj = GetObject( levelObject.id );
-		AE_ASSERT( editorObj );
-		for ( const EditorComponent& levelComponent : levelObject.components )
-		{
-			const char* typeName = levelComponent.type.c_str();
-			const ae::Type* type = ae::GetTypeByName( typeName );
-			if ( !type )
-			{
-				continue;
-			}
-			ae::Object* component = GetComponent( editorObj, type );
-			AE_ASSERT( component );
-			AE_ASSERT( ae::GetTypeFromObject( component ) == type );
-			uint32_t varCount = type->GetVarCount( true );
-			for ( uint32_t varIdx = 0; varIdx < varCount; varIdx++ )
-			{
-				const ae::Var* var = type->GetVarByIndex( varIdx, true );
-				if ( var->IsArray() )
-				{
-					uint32_t length = levelComponent.members.GetInt( var->GetName(), 0 );
-					if ( length )
-					{
-						length = var->SetArrayLength( component, length );
-						for ( uint32_t arrIdx = 0; arrIdx < length; arrIdx++ )
-						{
-							ae::Str32 key = ae::Str32::Format( "#::#", var->GetName(), arrIdx );
-							if ( const char* value = levelComponent.members.GetString( key.c_str(), nullptr ) )
-							{
-								var->SetObjectValueFromString( component, value, arrIdx );
-							}
-						}
-					}
-				}
-				else
-				{
-					const char* value = levelComponent.members.GetString( var->GetName(), nullptr );
-					if ( value )
-					{
-						var->SetObjectValueFromString( component, value );
-					}
-				}
-				editorObj->HandleVarChange( program, component, type, var );
-			}
-		}
-	}
-	return true;
-}
-
 bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::Var* var )
 {
 	if ( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
@@ -2434,27 +2310,21 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 		if ( !var->IsArrayFixedLength() )
 		{
 			bool arrayMaxLength = ( var->GetArrayLength( component ) >= var->GetArrayMaxLength() );
-			if ( arrayMaxLength )
-			{
-				ImGui::PushItemFlag( ImGuiItemFlags_Disabled, true );
-				ImGui::PushStyleVar( ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f );
-			}
+			ImGui::BeginDisabled( arrayMaxLength );
 			if ( ImGui::Button( "Add" ) )
 			{
 				var->SetArrayLength( component, arrayLength + 1 );
 				changed = true;
 			}
-			if ( arrayMaxLength )
-			{
-				ImGui::PopItemFlag();
-				ImGui::PopStyleVar();
-			}
+			ImGui::EndDisabled();
 			ImGui::SameLine();
-			if ( ImGui::Button( "Remove" ) && arrayLength )
+			ImGui::BeginDisabled( !arrayLength );
+			if ( ImGui::Button( "Remove" ) )
 			{
 				var->SetArrayLength( component, arrayLength - 1 );
 				changed = true;
 			}
+			ImGui::EndDisabled();
 		}
 	}
 	else
@@ -2467,12 +2337,13 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 
 bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx )
 {
+	ae::Str64 varName = ( idx < 0 ) ? var->GetName() : ae::Str64::Format( "#", idx );
 	switch ( var->GetType() )
 	{
 		case ae::BasicType::Enum:
 		{
 			auto currentStr = var->GetObjectValueAsString( component, idx );
-			auto valueStr = aeImGui_Enum( var->GetEnum(), var->GetName(), currentStr.c_str() );
+			auto valueStr = aeImGui_Enum( var->GetEnum(), varName.c_str(), currentStr.c_str() );
 			if ( var->SetObjectValueFromString( component, valueStr.c_str(), idx ) )
 			{
 				return ( currentStr != valueStr.c_str() );
@@ -2482,7 +2353,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 		{
 			bool b = false;
 			var->GetObjectValue( component, &b, idx );
-			if ( ImGui::Checkbox( var->GetName(), &b ) )
+			if ( ImGui::Checkbox( varName.c_str(), &b ) )
 			{
 				return var->SetObjectValue( component, b, idx );
 			}
@@ -2492,7 +2363,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 		{
 			float f = 0.0f;
 			var->GetObjectValue( component, &f, idx );
-			if ( ImGui::InputFloat( var->GetName(), &f ) )
+			if ( ImGui::InputFloat( varName.c_str(), &f ) )
 			{
 				return var->SetObjectValue( component, f, idx );
 			}
@@ -2503,8 +2374,8 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			char buf[ 256 ];
 			auto val = var->GetObjectValueAsString( component, idx );
 			strlcpy( buf, val.c_str(), sizeof(buf) );
-			ImGui::Text( "%s", var->GetName() );
-			if ( ImGui::InputTextMultiline( var->GetName(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
+			ImGui::Text( "%s", varName.c_str() );
+			if ( ImGui::InputTextMultiline( varName.c_str(), buf, sizeof(buf), ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4 ), 0 ) )
 			{
 				return var->SetObjectValueFromString( component, buf, idx );
 			}
@@ -2561,9 +2432,10 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 		{
 			if ( ImGui::Button( "Select" ) )
 			{
-				ae::Object* selectComp = nullptr;
-				if ( program->serializer.StringToObjectPointer( val.c_str(), &selectComp ) )
+				ae::Object* _selectComp = nullptr;
+				if ( program->serializer.StringToObjectPointer( val.c_str(), &_selectComp ) )
 				{
+					ae::Component* selectComp = ae::Cast< ae::Component >( _selectComp );
 					AE_ASSERT( selectComp );
 					const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
 					AE_ASSERT( selectObj );
@@ -2588,7 +2460,9 @@ std::string EditorProgram::Serializer::ObjectPointerToString( const ae::Object* 
 	}
 	const ae::Type* type = ae::GetTypeFromObject( obj );
 	AE_ASSERT( type );
-	const EditorServerObject* editorObj = program->editor.GetObjectFromComponent( obj );
+	const ae::Component* component = ae::Cast< ae::Component >( obj );
+	AE_ASSERT( component );
+	const EditorServerObject* editorObj = program->editor.GetObjectFromComponent( component );
 	AE_ASSERT( editorObj );
 	std::ostringstream str;
 	str << editorObj->entity << " " << type->GetName();
@@ -2718,6 +2592,138 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool lines ) const
 	return color;
 };
 
+void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >* prereqs )
+{
+	prereqs->Clear();
+	auto fn = [&]( auto& fn, const ae::Type* t ) -> void
+	{
+		if( t->GetParentType() )
+		{
+			fn( fn, t->GetParentType() );
+		}
+		const int32_t propIdx = t->GetPropertyIndex( "ae_editor_dep" );
+		const uint32_t propCount = ( propIdx >= 0 ) ? t->GetPropertyValueCount( propIdx ) : 0;
+		for( uint32_t i = 0; i < propCount; i++ )
+		{
+			const ae::Type* prereq = ae::GetTypeByName( t->GetPropertyValue( propIdx, i ) );
+			if( type != prereq && prereqs->Find( prereq ) < 0 )
+			{
+				// @TODO: Handle missing types
+				if( prereq )
+				{
+					prereqs->Append( prereq );
+				}
+			}
+		}
+	};
+	fn( fn, type );
+}
+
+void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component )
+{
+	const ae::Type* type = ae::GetTypeFromObject( component );
+	const uint32_t varCount = type->GetVarCount( true );
+	for( uint32_t i = 0; i < varCount; i++ )
+	{
+		const ae::Var* var = type->GetVarByIndex( i, true );
+		if( !jsonComponent.HasMember( var->GetName() ) )
+		{
+			continue;
+		}
+		const auto& jsonVar = jsonComponent[ var->GetName() ];
+		if( var->IsArray() && jsonVar.IsArray() )
+		{
+			const auto& jsonVarArray = jsonVar.GetArray();
+			const uint32_t arrayLen = var->SetArrayLength( component, jsonVarArray.Size() );
+			AE_ASSERT( arrayLen <= jsonVarArray.Size() );
+			for( uint32_t i = 0; i < arrayLen; i++ )
+			{
+				const auto& jsonVarArrayValue = jsonVarArray[ i ];
+				var->SetObjectValueFromString( component, jsonVarArrayValue.GetString(), i );
+			}
+		}
+		else if( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
+		{
+			var->SetObjectValue( component, transform );
+		}
+		else if( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "position" ) == 0 )
+		{
+			var->SetObjectValue( component, transform.GetTranslation() );
+		}
+		else if( var->GetType() == ae::BasicType::Vec3 && strcmp( var->GetName(), "scale" ) == 0 )
+		{
+			var->SetObjectValue( component, transform.GetScale() );
+		}
+		// @TODO: Add 'rotation'
+		else if( !jsonVar.IsObject() && !jsonVar.IsArray() )
+		{
+			var->SetObjectValueFromString( component, jsonVar.GetString() );
+		}
+	}
+}
+
+void JsonToRegistry( const rapidjson::Value& jsonObjects, ae::Registry* registry )
+{
+	// Serialize all components (second phase to handle references)
+	for( const auto& jsonObject : jsonObjects.GetArray() )
+	{
+		const ae::Entity entity = jsonObject[ "id" ].GetUint();
+		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
+		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		{
+			if( !componentIter.value.IsObject() )
+			{
+				continue;
+			}
+			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			if( !type )
+			{
+				continue;
+			}
+			const auto jsonComponent = componentIter.value.GetObject();
+			ae::Component* component = &registry->GetComponent( entity, type );
+			ae::JsonToComponent( transform, jsonComponent, component );
+		}
+	}
+}
+
+void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent )
+{
+	const ae::Type* type = ae::GetTypeFromObject( component );
+	const uint32_t varCount = type->GetVarCount( true );
+	for( uint32_t i = 0; i < varCount; i++ )
+	{
+		const ae::Var* var = type->GetVarByIndex( i, true );
+		const auto varName = rapidjson::StringRef( var->GetName() );
+		if( var->IsArray() )
+		{
+			if( const int32_t arrayLen = var->GetArrayLength( component ) )
+			{
+				rapidjson::Value jsonArray( rapidjson::kArrayType );
+				jsonArray.Reserve( arrayLen, allocator );
+				for( uint32_t j = 0; j < arrayLen; j++ )
+				{
+					rapidjson::Value jsonValue( rapidjson::kStringType );
+					jsonValue.SetString( var->GetObjectValueAsString( component, j ).c_str(), allocator );
+					jsonArray.PushBack( jsonValue, allocator );
+				}
+				jsonComponent->AddMember( varName, jsonArray, allocator );
+			}
+		}
+		else
+		{
+			const auto value = var->GetObjectValueAsString( component );
+			const auto defaultValue = var->GetObjectValueAsString( defaultComponent );
+			rapidjson::Value jsonValue( rapidjson::kStringType );
+			if( value != defaultValue )
+			{
+				jsonValue.SetString( value.c_str(), allocator );
+			}
+			jsonComponent->AddMember( varName, jsonValue, allocator );
+		}
+	}
+}
+
 } // End ae namespace
 
 #if _AE_APPLE_
@@ -2735,14 +2741,16 @@ void Editor::m_Fork()
 #if _AE_APPLE_
 	if ( !fork() )
 	{
-		char* execArgs[] =
+		ae::Array< char*, 8 > args;
+		args.Append( m_params->argv[ 0 ] );
+		args.Append( (char*)"--editor" );
+		if( !m_lastLoadedLevel.Empty() )
 		{
-			m_params.argv[ 0 ],
-			(char*)"--editor",
-			(char*)"--level", (char*)m_level.filePath.c_str(),
-			nullptr
-		};
-		execv( m_params.argv[ 0 ], execArgs );
+			args.Append( (char*)"--level" );
+			args.Append( (char*)m_lastLoadedLevel.c_str() );
+		}
+		args.Append( nullptr );
+		execv( args[ 0 ], args.Data() );
 	}
 #elif _AE_WINDOWS_
 	STARTUPINFOA startupInfo;
@@ -2751,11 +2759,11 @@ void Editor::m_Fork()
 	PROCESS_INFORMATION procInfo;
 	char args[ 256 ];
 	args[ 0 ] = 0;
-	strlcat( args, m_params.argv[ 0 ], sizeof(args) );
+	strlcat( args, m_params->argv[ 0 ], sizeof(args) );
 	strlcat( args, " --editor --level ", sizeof(args) );
 	strlcat( args, m_level.filePath.c_str(), sizeof(args) );
 	CreateProcessA(
-		m_params.argv[ 0 ],
+		m_params->argv[ 0 ],
 		args,
 		nullptr,
 		nullptr,

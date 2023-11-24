@@ -32,30 +32,6 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::EditorObject class
-//------------------------------------------------------------------------------
-class EditorObject
-{
-public:
-	EditorObject( const ae::Tag& tag ) : components( tag ) {}
-	ae::Entity id = kInvalidEntity;
-	ae::Str16 name;
-	ae::Matrix4 transform = ae::Matrix4::Identity();
-	ae::Array< EditorComponent > components;
-};
-
-//------------------------------------------------------------------------------
-// ae::EditorLevel class
-//------------------------------------------------------------------------------
-class EditorLevel
-{
-public:
-	EditorLevel( const ae::Tag& tag ) : objects( tag ) {}
-	ae::Str256 filePath;
-	ae::Map< ae::Entity, EditorObject > objects;
-};
-
-//------------------------------------------------------------------------------
 // ae::EditorMesh class
 //------------------------------------------------------------------------------
 class EditorMesh
@@ -68,8 +44,9 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::LoadEditorMeshFn
+// Editor callback functions
 //------------------------------------------------------------------------------
+typedef void(*OnLevelLoadStartFn)( void* userData, const char* levelPath );
 typedef ae::EditorMesh(*LoadEditorMeshFn)( void* userData, const char* resourceId );
 
 //------------------------------------------------------------------------------
@@ -77,8 +54,16 @@ typedef ae::EditorMesh(*LoadEditorMeshFn)( void* userData, const char* resourceI
 //------------------------------------------------------------------------------
 struct EditorParams
 {
+	EditorParams( int argc, char** argv, ae::Registry* registry ) : argc( argc ), argv( argv ), registry( registry ) {}
+	EditorParams( const EditorParams& ) = default;
+	
+	//! Program command line argument count
 	int argc = 0;
+	//! Program command line arguments
 	char** argv = nullptr;
+	//! @TODO
+	ae::Registry* registry = nullptr;
+
 	//! If true the editor will always run on initialization, ignoring the command line arguments.
 	bool run = false;
 	uint16_t port = 7200;
@@ -86,6 +71,11 @@ struct EditorParams
 	ae::Axis worldUp = ae::Axis::Z;
 	//! When ae::Editor is given a relative path it will use this instead of the current working directory
 	ae::Str256 dataDir;
+
+	//! @TODO
+	OnLevelLoadStartFn onLevelLoadStartFn = nullptr;
+	//! Provided to onLevelLoadStartFn() as the userData parameter
+	void* onLevelLoadStartUserData = nullptr;
 
 	//! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
 	//! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
@@ -104,17 +94,12 @@ public:
 	Editor( const ae::Tag& tag );
 	~Editor();
 	void Initialize( const EditorParams& params );
+	void Terminate();
+	void SetFunctionPointers( LoadEditorMeshFn loadMeshFn, void* loadMeshUserData );
 	void Update();
 	void Launch();
 	bool IsConnected() const { return m_sock.IsConnected(); }
-	bool Write() const;
 	void QueueRead( const char* levelPath );
-	
-	// @TODO: Editor message queue for: level loaded success/failure, mesh requested, object changed
-	ae::EditorLevel* GetWritableLevel() { return m_file ? nullptr : &m_level; }
-	const ae::EditorLevel* GetLevel() const { return &m_level; }
-	uint32_t GetLevelChangeSeq() const { return m_levelSeq; }
-	void SetFunctionPointers( LoadEditorMeshFn loadMeshFn, void* loadMeshUserData );
 
 private:
 	friend class EditorServer;
@@ -122,11 +107,10 @@ private:
 	void m_Connect();
 	void m_Read();
 	const ae::Tag m_tag;
-	EditorParams m_params;
+	EditorParams* m_params = nullptr;
+	ae::Str256 m_lastLoadedLevel;
 	ae::FileSystem m_fileSystem;
-	const ae::File* m_file = nullptr;
-	ae::EditorLevel m_level;
-	uint32_t m_levelSeq = 0;
+	const ae::File* m_pendingFile = nullptr;
 	ae::Socket m_sock;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 };
