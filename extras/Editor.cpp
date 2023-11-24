@@ -77,6 +77,7 @@ void ComponentToJson( const Component* component, const Component* defaultCompon
 enum class EditorMsg : uint8_t
 {
 	None,
+	Heartbeat,
 	Modification,
 	Load
 };
@@ -226,6 +227,7 @@ private:
 	ae::Map< const ae::Type*, bool > m_typeInvisible;
 	
 	// Connection to client
+	double m_nextHeartbeat = 0.0;
 	ae::Array< EditorConnection* > connections;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 	
@@ -824,6 +826,11 @@ void Editor::Update()
 		rStream.SerializeRaw( msgType );
 		switch ( msgType )
 		{
+			case EditorMsg::Heartbeat:
+			{
+				// Nothing
+				break;
+			}
 			case EditorMsg::Modification:
 			{
 				ae::Entity entity;
@@ -1207,10 +1214,26 @@ void EditorServer::Update( EditorProgram* program )
 			editorObj->ClearDirty();
 		}
 	}
-	
-	for ( EditorConnection* (&conn) : connections )
+
+	// Send a heartbeat to keep the connection alive, and to check if the client is still connected
+	if( ae::GetTime() > m_nextHeartbeat )
 	{
-		if ( conn->sock->IsConnected() )
+		for( EditorConnection* (&conn) : connections )
+		{
+			if( conn->sock->IsConnected() )
+			{
+				ae::BinaryStream wStream = ae::BinaryStream::Writer( m_msgBuffer, sizeof(m_msgBuffer) );
+				wStream.SerializeRaw( EditorMsg::Heartbeat );
+				AE_ASSERT( wStream.IsValid() );
+				conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+			}
+		}
+		m_nextHeartbeat = ae::GetTime() + 0.1;
+	}
+	
+	for( EditorConnection* (&conn) : connections )
+	{
+		if( conn->sock->IsConnected() )
 		{
 			conn->sock->SendAll();
 		}

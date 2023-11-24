@@ -17472,10 +17472,11 @@ void _CloseSocket( int sock )
 	}
 #if _AE_WINDOWS_
 	closesocket( sock );
-#elif _AE_EMSCRIPTEN_
-	shutdown( sock, SHUT_RDWR );
 #else
-	close( sock );
+	shutdown( sock, SHUT_RDWR );
+	#if !_AE_EMSCRIPTEN_
+		close( sock );
+	#endif
 #endif
 }
 
