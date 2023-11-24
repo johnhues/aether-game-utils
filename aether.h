@@ -4428,18 +4428,16 @@ public:
 	void SerializeBool( bool& v );
 	void SerializeBool( const bool& v );
 	
-	template < uint32_t N >
-	void SerializeString( Str< N >& str );
-	template < uint32_t N >
-	void SerializeString( const Str< N >& str );
+	template< uint32_t N > void SerializeString( Str< N >& str );
+	//! Writer mode only
+	template< uint32_t N > void SerializeString( const Str< N >& str );
+	//! Writer mode only
+	void SerializeString( const char* str );
 
-	template< typename T >
-	void SerializeObject( T& v );
-	template< typename T >
-	void SerializeObject( const T& v );
+	template< typename T > void SerializeObject( T& v );
+	template< typename T > void SerializeObject( const T& v );
 	// Use SerializeObjectConditional() when an object may not be available for serialization when writing or reading. This function correctly updates read/write offsets when skipping serialization. Sends slightly more data than SerializeObject().
-	template < typename T >
-	void SerializeObjectConditional( T* obj );
+	template< typename T > void SerializeObjectConditional( T* obj );
 
 	template< uint32_t N >
 	void SerializeArray( char (&str)[ N ] );
@@ -23520,6 +23518,14 @@ void BinaryStream::SerializeBool( const bool& v )
 {
 	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
+}
+
+void BinaryStream::SerializeString( const char* str )
+{
+	AE_ASSERT( m_mode == Mode::WriteBuffer );
+	const uint16_t len = (uint16_t)strlen( str );
+	SerializeUint16( len );
+	SerializeRaw( str, len );
 }
 
 void BinaryStream::m_SerializeArrayLength( uint32_t& length, uint32_t maxLength )
