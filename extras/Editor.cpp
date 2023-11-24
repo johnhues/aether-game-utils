@@ -114,9 +114,7 @@ public:
 	void SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
 	const ae::Matrix4& GetTransform( const class EditorProgram* program ) const;
 	
-	void HandleVarChange( class EditorProgram* program, ae::Object* component, const ae::Type* type, const ae::Var* var );
-	bool IsDirty() const { return m_dirty; } // @TODO: Rename, transform only
-	void ClearDirty() { m_dirty = false; } // @TODO: Rename, transform only
+	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::Type* type, const ae::Var* var );
 
 	ae::AABB GetAABB( class EditorProgram* program ) const;
 	
@@ -127,7 +125,6 @@ public:
 	
 private:
 	ae::Matrix4 m_transform = ae::Matrix4::Identity();
-	bool m_dirty = false;
 };
 
 //------------------------------------------------------------------------------
@@ -157,7 +154,7 @@ public:
 		m_meshVisibleVars( tag ),
 		m_typeMesh( tag ),
 		m_typeInvisible( tag ),
-		connections( tag )
+		m_connections( tag )
 	{}
 	void Initialize( class EditorProgram* program );
 	void Terminate( class EditorProgram* program );
@@ -184,6 +181,9 @@ public:
 	const ae::Var* GetMeshResourceVar( const ae::Type* componentType );
 	const ae::Var* GetMeshVisibleVar( const ae::Type* componentType );
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
+
+	void HandleTransformChange( class EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform );
+	void BroadcastVarChange( const ae::Var* var, const ae::Component* component );
 	
 	ae::ListenerSocket sock;
 	
@@ -228,7 +228,7 @@ private:
 	
 	// Connection to client
 	double m_nextHeartbeat = 0.0;
-	ae::Array< EditorConnection* > connections;
+	ae::Array< EditorConnection* > m_connections;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 	
 	// Selection
@@ -834,11 +834,26 @@ void Editor::Update()
 			case EditorMsg::Modification:
 			{
 				ae::Entity entity;
-				ae::Matrix4 transform;
+				ae::TypeId typeId;
+				ae::Str32 varName;
+				ae::Str256 varValue;
 				rStream.SerializeUint32( entity );
-				rStream.SerializeRaw( transform );
-				AE_ASSERT( rStream.IsValid() );
-				// @TODO: Apply transform to entity
+				rStream.SerializeUint32( typeId );
+				rStream.SerializeString( varName );
+				rStream.SerializeString( varValue );
+				if( rStream.IsValid() )
+				{
+					if( const ae::Type* type = ae::GetTypeById( typeId ) )
+					{
+						if( ae::Component* component = m_params->registry->TryGetComponent( entity, type ) )
+						{
+							if( const ae::Var* var = type->GetVarByName( varName.c_str(), true ) )
+							{
+								var->SetObjectValueFromString( component, varValue.c_str() );
+							}
+						}
+					}
+				}
 				break;
 			}
 			case EditorMsg::Load:
@@ -956,24 +971,20 @@ void EditorServerObject::Terminate()
 
 void EditorServerObject::SetTransform( const ae::Matrix4& transform, EditorProgram* program )
 {
-//	AE_ASSERT( entity != kInvalidEntity );
-//	program->registry.GetComponent< Transform >( entity );
+	AE_ASSERT( entity != kInvalidEntity );
 	if ( m_transform != transform )
 	{
 		m_transform = transform;
-		m_dirty = true;
+		program->editor.HandleTransformChange( program, entity, transform );
 	}
 }
 
 const ae::Matrix4& EditorServerObject::GetTransform( const EditorProgram* program ) const
 {
-//	AE_ASSERT( entity != kInvalidEntity );
-//	Registry* registry = const_cast< Registry* >( &program->registry );
-//	return registry->GetComponent< Transform >( entity ).transform;
 	return m_transform;
 }
 
-void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Object* component, const ae::Type* type, const ae::Var* var )
+void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::Type* type, const ae::Var* var )
 {
 	if ( var == program->editor.GetMeshResourceVar( type ) )
 	{
@@ -991,6 +1002,7 @@ void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Object* co
 	{
 		var->GetObjectValue( component, &opaque );
 	}
+	program->editor.BroadcastVarChange( var, component );
 }
 
 ae::AABB EditorServerObject::GetAABB( EditorProgram* program ) const
@@ -1164,6 +1176,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 				object->HandleVarChange( program, component, type, var );
 			}
 		}
+		// @TODO: Explicitly handle setting transform vars?
 	}
 
 	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
@@ -1172,12 +1185,12 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 
 void EditorServer::Terminate( EditorProgram* program )
 {
-	for ( EditorConnection* conn : connections )
+	for ( EditorConnection* conn : m_connections )
 	{
 		conn->Destroy( this );
 		ae::Delete( conn );
 	}
-	connections.Clear();
+	m_connections.Clear();
 }
 
 void EditorServer::Update( EditorProgram* program )
@@ -1191,34 +1204,16 @@ void EditorServer::Update( EditorProgram* program )
 	while ( ae::Socket* newConn = sock.Accept() )
 	{
 		AE_INFO( "ae::Editor client connected from #:#", newConn->GetResolvedAddress(), newConn->GetPort() );
-		EditorConnection* editorConn = connections.Append( ae::New< EditorConnection >( m_tag ) );
+		EditorConnection* editorConn = m_connections.Append( ae::New< EditorConnection >( m_tag ) );
 		editorConn->sock = newConn;
 	}
-	AE_ASSERT( connections.Length() == sock.GetConnectionCount() );
+	AE_ASSERT( m_connections.Length() == sock.GetConnectionCount() );
 	
-	for ( uint32_t i = 0; i < m_objects.Length(); i++ )
-	{
-		EditorServerObject* editorObj = m_objects.GetValue( i );
-		if ( editorObj->IsDirty() )
-		{
-			ae::Matrix4 transform = editorObj->GetTransform( program );
-			ae::BinaryStream wStream = ae::BinaryStream::Writer( m_msgBuffer, sizeof(m_msgBuffer) );
-			wStream.SerializeRaw( EditorMsg::Modification );
-			wStream.SerializeUint32( editorObj->entity );
-			wStream.SerializeRaw( transform );
-			AE_ASSERT( wStream.IsValid() );
-			for ( EditorConnection* conn : connections )
-			{
-				conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
-			}
-			editorObj->ClearDirty();
-		}
-	}
-
 	// Send a heartbeat to keep the connection alive, and to check if the client is still connected
-	if( ae::GetTime() > m_nextHeartbeat )
+	const double currentTime = ae::GetTime();
+	if( currentTime > m_nextHeartbeat )
 	{
-		for( EditorConnection* (&conn) : connections )
+		for( EditorConnection* (&conn) : m_connections )
 		{
 			if( conn->sock->IsConnected() )
 			{
@@ -1228,10 +1223,10 @@ void EditorServer::Update( EditorProgram* program )
 				conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
 			}
 		}
-		m_nextHeartbeat = ae::GetTime() + 0.1;
+		m_nextHeartbeat = currentTime + 0.1;
 	}
 	
-	for( EditorConnection* (&conn) : connections )
+	for( EditorConnection* (&conn) : m_connections )
 	{
 		if( conn->sock->IsConnected() )
 		{
@@ -1245,7 +1240,7 @@ void EditorServer::Update( EditorProgram* program )
 			conn = nullptr;
 		}
 	}
-	connections.RemoveAllFn( []( const EditorConnection* c ){ return !c; } );
+	m_connections.RemoveAllFn( []( const EditorConnection* c ){ return !c; } );
 }
 
 void EditorServer::Render( EditorProgram* program )
@@ -1652,16 +1647,16 @@ void EditorServer::ShowUI( EditorProgram* program )
 			Unload( program );
 		}
 		ImGui::SameLine();
-		ImGui::BeginDisabled( m_levelPath.Empty() || !connections.Length() );
-		if ( ImGui::Button( "Game Load" ) && connections.Length() )
+		ImGui::BeginDisabled( m_levelPath.Empty() || !m_connections.Length() );
+		if ( ImGui::Button( "Game Load" ) && m_connections.Length() )
 		{
 			uint8_t buffer[ kMaxEditorMessageSize ];
 			ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer );
 			wStream.SerializeRaw( EditorMsg::Load );
 			wStream.SerializeString( m_levelPath );
-			for ( uint32_t i = 0; i < connections.Length(); i++ )
+			for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 			{
-				connections[ i ]->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+				m_connections[ i ]->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
 			}
 		}
 		ImGui::EndDisabled();
@@ -1816,7 +1811,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 					ImGui::Separator();
 					if( ImGui::TreeNode( componentType->GetName() ) )
 					{
-						std::function< void(const ae::Type*, ae::Object*) > fn = [&]( const ae::Type* type, ae::Object* component )
+						auto fn = [&]( auto& fn, const ae::Type* type, ae::Component* component ) -> void
 						{
 							uint32_t varCount = type->GetVarCount( false );
 							if( varCount )
@@ -1832,10 +1827,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 							}
 							if( type->GetParentType() )
 							{
-								fn( type->GetParentType(), component );
+								fn( fn, type->GetParentType(), component );
 							}
 						};
-						fn( componentType, component );
+						fn( fn, componentType, component );
 						if( ImGui::Button( "Remove Component" ) )
 						{
 							deleteComponent = component;
@@ -2086,6 +2081,48 @@ ae::AABB EditorServer::GetSelectedAABB( EditorProgram* program ) const
 		aabb.Expand( m_objects.Get( entity )->GetAABB( program ) );
 	}
 	return aabb;
+}
+
+void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform )
+{
+	EditorServerObject* editorObject = GetObject( entity );
+	AE_ASSERT( editorObject );
+	const uint32_t typeCounts = m_registry.GetTypeCount();
+	for( uint32_t i = 0; i < typeCounts; i++ )
+	{
+		const ae::Type* type = m_registry.GetTypeByIndex( i );
+		if( ae::Component* component = m_registry.TryGetComponent( entity, type ) )
+		{
+			// @TODO: Update all transform, position, scale, rotation vars
+			if( const ae::Var* var = type->GetVarByName( "transform", true ) )
+			{
+				var->SetObjectValue( component, transform );
+				editorObject->HandleVarChange( program, component, type, var );
+			}
+		}
+	}
+}
+
+void EditorServer::BroadcastVarChange( const ae::Var* var, const ae::Component* component )
+{
+	ae::BinaryStream wStream = ae::BinaryStream::Writer( m_msgBuffer, sizeof(m_msgBuffer) );
+	wStream.SerializeRaw( EditorMsg::Modification );
+	wStream.SerializeUint32( component->GetEntity() );
+	wStream.SerializeUint32( ae::GetObjectTypeId( component ) );
+	wStream.SerializeString( var->GetName() );
+	wStream.SerializeString( var->GetObjectValueAsString( component ).c_str() );
+	if( wStream.IsValid() )
+	{
+		for ( EditorConnection* conn : m_connections )
+		{
+			conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+		}
+	}
+	else
+	{
+		AE_WARN( "Could not serialize modification message" );
+	}
+
 }
 
 bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
