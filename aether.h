@@ -249,6 +249,10 @@ template < typename T > const char* GetTypeName();
 double GetTime();
 //! Shows a generic message box
 void ShowMessage( const char* msg );
+//! Sets the systems clipboard text so it can be pasted into other applications.
+void SetClipboardText( const char* text );
+//! Gets the systems clipboard text.
+std::string GetClipboardText();
 //! @} End Platform defgroup
 
 //------------------------------------------------------------------------------
@@ -11130,6 +11134,58 @@ void ShowMessage( const char* msg )
 	[alert setMessageText: [NSString stringWithUTF8String: msg]];
 	[alert runModal];
 #endif
+}
+
+void SetClipboardText( const char* text )
+{
+#if _AE_WINDOWS_
+	// if( OpenClipboard( nullptr ) )
+	// {
+	// 	EmptyClipboard();
+	// 	HGLOBAL hglbCopy = GlobalAlloc( GMEM_MOVEABLE, strlen( text ) + 1 );
+	// 	if( hglbCopy )
+	// 	{
+	// 		if( char* buffer = (char*)GlobalLock( hglbCopy ) )
+	// 		{
+	// 			strcpy_s( buffer, strlen( text ) + 1, text );
+	// 			GlobalUnlock( hglbCopy );
+	// 			SetClipboardData( CF_TEXT, hglbCopy );
+	// 		}
+	// 	}
+	// 	CloseClipboard();
+	// }
+#elif _AE_OSX_
+	NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+	[pasteboard clearContents];
+	[pasteboard setString: [NSString stringWithUTF8String: text] forType: NSStringPboardType];
+#endif
+}
+
+std::string GetClipboardText()
+{
+	std::string result;
+#if _AE_WINDOWS_
+	// if( OpenClipboard( nullptr ) )
+	// {
+	// 	if( HANDLE hglb = GetClipboardData( CF_TEXT ) )
+	// 	{
+	// 		char* buffer = (char*)GlobalLock( hglb );
+	// 		if( buffer )
+	// 		{
+	// 			result = buffer;
+	// 			GlobalUnlock( hglb );
+	// 		}
+	// 	}
+	// 	CloseClipboard();
+	// }
+#elif _AE_OSX_
+	NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+	if( NSString* str = [pasteboard stringForType: NSStringPboardType] )
+	{
+		result = [str UTF8String];
+	}
+#endif
+	return result;
 }
 
 //------------------------------------------------------------------------------

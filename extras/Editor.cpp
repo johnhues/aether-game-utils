@@ -1725,7 +1725,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			m_selected.Clear();
 			m_selected.Append( editorObject->entity );
 		}
-		if ( ImGui::Button( "Delete" ) && selected.Length() )
+		if ( ImGui::Button( "Delete" ) && m_selected.Length() )
 		{
 			for ( ae::Entity entity : m_selected )
 			{
