@@ -241,7 +241,7 @@ const T& Registry::GetComponent( const char* entityName ) const
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
 	AE_ASSERT( entityName && entityName[ 0 ] );
-	T* t = TryGetComponent< T >( entityName );
+	const T* t = TryGetComponent< T >( entityName );
 	if ( !t )
 	{
 		AE_ASSERT_MSG( GetEntityByName( entityName ) != kInvalidEntity, "No entity named '#'", entityName );
