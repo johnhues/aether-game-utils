@@ -68,7 +68,7 @@ const float kEditorViewDistance = 1000.0f;
 //------------------------------------------------------------------------------
 void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >* prereqs );
 void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
-void JsonToRegistry( const rapidjson::Value& jsonObjects, ae::Registry* registry );
+void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry );
 void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
 
 //------------------------------------------------------------------------------
@@ -190,6 +190,9 @@ public:
 private:
 	// Serialization helpers
 	void m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::Type*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const;
+	// Tools
+	void m_CopySelected();
+	void m_PasteFromClipboard( class EditorProgram* program );
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
 	void m_SelectWithModifiers( class EditorProgram* program, ae::Entity entity );
@@ -210,7 +213,7 @@ private:
 	bool m_showInvisible = false;
 
 	// Manipulation
-	const ae::Type* m_selectedType = nullptr;
+	const ae::Type* m_objectListType = nullptr;
 	ae::Array< ae::Entity > m_selected;
 	ae::Entity hoverEntity = kInvalidEntity;
 	ae::Entity uiHoverEntity = kInvalidEntity;
@@ -926,11 +929,17 @@ void Editor::m_Read()
 
 	// Create all components
 	ae::Array< const ae::Type* > prereqs = m_tag;
+	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag; 
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
 		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
 		const ae::Matrix4 entityTransform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
-		const ae::Entity entity = m_params->registry->CreateEntity( jsonObject[ "id" ].GetUint(), entityName ); // @TODO: Handle patching references
+		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
+		const ae::Entity entity = m_params->registry->CreateEntity( jsonEntity, entityName );
+		if( entity != jsonEntity )
+		{
+			entityMap.Set( jsonEntity, entity );
+		}
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			AE_ASSERT( componentIter.value.IsObject() );
@@ -945,7 +954,7 @@ void Editor::m_Read()
 	}
 
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( jsonObjects, m_params->registry );
+	JsonToRegistry( entityMap, jsonObjects, m_params->registry );
 
 	AE_INFO( "Loaded level '#'", m_pendingFile->GetUrl() );
 }
@@ -1132,17 +1141,24 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 
 	// @TODO: Make sure that the existing level has no modifications before unloading
 	Unload( program );
+
+	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
 	
 	const auto& jsonObjects = document[ "objects" ];
 	AE_ASSERT( jsonObjects.IsArray() );
 	// Create all components
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
+		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
 		EditorServerObject* object = CreateObject(
-			jsonObject[ "id" ].GetUint(),
+			jsonEntity,
 			ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() ),
 			jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : ""
 		);
+		if( object->entity != jsonEntity )
+		{
+			entityMap.Set( jsonEntity, object->entity );
+		}
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			if( !componentIter.value.IsObject() )
@@ -1153,13 +1169,15 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		}
 	}
 	// Serialize all components (second phase to handle references)
-	JsonToRegistry( jsonObjects, &m_registry );
+	JsonToRegistry( entityMap, jsonObjects, &m_registry );
 	// Refresh editor objects
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
-		const ae::Entity entity = jsonObject[ "id" ].GetUint();
+		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
+		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
 		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
 		EditorServerObject* object = m_objects.Get( entity );
+		AE_ASSERT( object );
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			if( !componentIter.value.IsObject() )
@@ -1466,12 +1484,20 @@ void EditorServer::ShowUI( EditorProgram* program )
 	
 	if ( ImGui::GetIO().WantCaptureKeyboard )
 	{
-		// keyboard captured
+		// Keyboard captured
 	}
-	// Meta shortcuts
 	else if ( program->input.Get( ae::Key::LeftMeta ) )
 	{
-		if ( program->input.Get( ae::Key::S ) && !program->input.GetPrev( ae::Key::S ) )
+		// Meta+shift shortcuts
+		if( program->input.Get( ae::Key::Shift ) )
+		{
+			if( program->input.GetPress( ae::Key::Z ) )
+			{
+				// m_Redo();
+			}
+		}
+		// Meta shortcuts
+		else if ( program->input.Get( ae::Key::S ) && !program->input.GetPrev( ae::Key::S ) )
 		{
 			SaveLevel( program, program->input.Get( ae::Key::LeftShift ) );
 		}
@@ -1479,12 +1505,32 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			OpenLevelDialog( program );
 		}
-		else if( program->input.Get( ae::Key::D ) && !program->input.GetPrev( ae::Key::D ) )
+		else if( program->input.GetPress( ae::Key::D ) )
 		{
-
+			// m_DuplicateSelected();
+		}
+		else if( program->input.GetPress( ae::Key::C ) )
+		{
+			m_CopySelected();
+		}
+		else if( program->input.GetPress( ae::Key::V ) )
+		{
+			m_PasteFromClipboard( program );
+		}
+		else if( program->input.GetPress( ae::Key::X ) )
+		{
+			// m_CutSelected();
+		}
+		else if( program->input.GetPress( ae::Key::Z ) )
+		{
+			// m_Undo();
+		}
+		else if( program->input.GetPress( ae::Key::A ) )
+		{
+			// m_SelectAll();
 		}
 	}
-	// Tool selection shortcuts
+	// Single key shortcuts
 	else if ( program->input.Get( ae::Key::Q ) && !program->input.GetPrev( ae::Key::Q ) )
 	{
 		gizmoOperation = (ImGuizmo::OPERATION)0;
@@ -1540,7 +1586,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			program->camera.Refocus( m_mouseHover );
 		}
 	}
-	if ( program->input.Get( ae::Key::H ) && !program->input.GetPrev( ae::Key::H ) )
+	else if ( program->input.Get( ae::Key::H ) && !program->input.GetPrev( ae::Key::H ) )
 	{
 		if ( m_selected.Length() )
 		{
@@ -1725,13 +1771,23 @@ void EditorServer::ShowUI( EditorProgram* program )
 			m_selected.Clear();
 			m_selected.Append( editorObject->entity );
 		}
-		if ( ImGui::Button( "Delete" ) && m_selected.Length() )
+		ImGui::BeginDisabled( !m_selected.Length() );
+		if( ImGui::Button( "Delete" ) )
 		{
 			for ( ae::Entity entity : m_selected )
 			{
 				DestroyObject( entity );
 			}
 			m_selected.Clear();
+		}
+		if( ImGui::Button( "Copy" ) )
+		{
+			m_CopySelected();
+		}
+		ImGui::EndDisabled();
+		if( ImGui::Button( "Paste" ) )
+		{
+			m_PasteFromClipboard( program );
 		}
 		
 		if( ImGui::Button( "Reload Resources" ) )
@@ -1902,14 +1958,14 @@ void EditorServer::ShowUI( EditorProgram* program )
 	uiHoverEntity = kInvalidEntity;
 	if ( ImGui::TreeNode( "Object List" ) )
 	{
-		const char* selectedTypeName = m_selectedType ? m_selectedType->GetName() : "All";
+		const char* selectedTypeName = m_objectListType ? m_objectListType->GetName() : "All";
 		if ( ImGui::BeginCombo( "Type", selectedTypeName, 0 ) )
 		{
-			if ( ImGui::Selectable( "All", !m_selectedType ) )
+			if ( ImGui::Selectable( "All", !m_objectListType ) )
 			{
-				m_selectedType = nullptr;
+				m_objectListType = nullptr;
 			}
-			if ( !m_selectedType )
+			if ( !m_objectListType )
 			{
 				ImGui::SetItemDefaultFocus();
 			}
@@ -1917,10 +1973,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 			for ( uint32_t i = 0; i < componentTypesCount; i++ )
 			{
 				const ae::Type* type = m_registry.GetTypeByIndex( i );
-				const bool isSelected = ( m_selectedType == type );
+				const bool isSelected = ( m_objectListType == type );
 				if ( ImGui::Selectable( type->GetName(), isSelected ) )
 				{
-					m_selectedType = type;
+					m_objectListType = type;
 				}
 				if ( isSelected )
 				{
@@ -1956,9 +2012,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 				ImGui::PopID();
 			};
 			
-			if( m_selectedType )
+			if( m_objectListType )
 			{
-				const int32_t typeIndex = m_registry.GetTypeIndexByType( m_selectedType );
+				const int32_t typeIndex = m_registry.GetTypeIndexByType( m_objectListType );
 				AE_ASSERT( typeIndex >= 0 );
 				const uint32_t componentCount = m_registry.GetComponentCountByIndex( typeIndex );
 				for( uint32_t i = 0; i < componentCount; i++ )
@@ -1987,8 +2043,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 
 EditorServerObject* EditorServer::CreateObject( Entity entity, const ae::Matrix4& transform, const char* name )
 {
-	AE_ASSERT( !GetObject( entity ) );
-	entity = m_registry.CreateEntity( entity, name ); // @TODO: Handle patching references
+	entity = m_registry.CreateEntity( entity, name );
 	EditorServerObject* editorObject = ae::New< EditorServerObject >( m_tag, m_tag );
 	editorObject->Initialize( entity, transform );
 	m_objects.Set( entity, editorObject );
@@ -2232,7 +2287,7 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 
 void EditorServer::Unload( EditorProgram* program )
 {
-	m_selectedType = nullptr;
+	m_objectListType = nullptr;
 	m_selected.Clear();
 	hoverEntity = kInvalidEntity;
 	uiHoverEntity = kInvalidEntity;
@@ -2251,6 +2306,7 @@ void EditorServer::Unload( EditorProgram* program )
 
 void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::Type*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const
 {
+	AE_ASSERT( levelObject );
 	AE_ASSERT( jsonEntity->IsObject() );
 
 	// Id
@@ -2279,8 +2335,8 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 		const ae::Type* type = m_registry.GetTypeByIndex( i );
 		if( const ae::Component* component = m_registry.TryGetComponent( entity, type ) )
 		{
-			const ae::Component* defaultComponent = defaults->Get( type, nullptr );
-			if ( !defaultComponent )
+			const ae::Component* defaultComponent = defaults ? defaults->Get( type, nullptr ) : nullptr;
+			if ( defaults && !defaultComponent )
 			{
 				defaultComponent = type->New< ae::Component >( ae::Allocate( m_tag, type->GetSize(), type->GetAlignment() ) );
 				defaults->Set( type, const_cast< ae::Component* >( defaultComponent ) );
@@ -2292,6 +2348,120 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 		}
 	}
 	jsonEntity->AddMember( "components", jsonComponents, allocator );
+}
+
+void EditorServer::m_CopySelected()
+{
+	if( !m_selected.Length() )
+	{
+		ae::SetClipboardText( "" );
+		return;
+	}
+
+	rapidjson::Document document( rapidjson::kObjectType );
+	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+	{
+		rapidjson::Value jsonObjects( rapidjson::kArrayType );
+		jsonObjects.Reserve( m_selected.Length(), allocator );
+
+		for( ae::Entity entity : m_selected )
+		{
+			rapidjson::Value jsonObject( rapidjson::kObjectType );
+			m_EntityToJson( GetObject( entity ), allocator, nullptr, &jsonObject );
+			jsonObjects.PushBack( jsonObject, allocator );
+		}
+
+		document.AddMember( "objects", jsonObjects, allocator );
+	}
+
+	rapidjson::StringBuffer buffer;
+	rapidjson::PrettyWriter< rapidjson::StringBuffer > writer( buffer );
+	document.Accept( writer );
+	ae::SetClipboardText( buffer.GetString() );
+}
+
+void EditorServer::m_PasteFromClipboard( EditorProgram* program )
+{
+	const auto clipboardText = ae::GetClipboardText();
+	if( clipboardText.empty() )
+	{
+		return;
+	}
+
+	rapidjson::Document document;
+	if( document.Parse( clipboardText.c_str() ).HasParseError() )
+	{
+		AE_WARN( "Failed to parse clipboard text" );
+		return;
+	}
+	if( !document.IsObject() || !document.HasMember( "objects" ) )
+	{
+		AE_WARN( "Unexpected clipboard data format" );
+		return;
+	}
+	const auto& jsonObjects = document[ "objects" ];
+	if( !jsonObjects.IsArray() )
+	{
+		AE_WARN( "Unexpected clipboard object data" );
+		return;
+	}
+
+	m_selected.Clear();
+
+	// Create all components
+	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
+	for( const auto& jsonObject : jsonObjects.GetArray() )
+	{
+		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
+		const ae::Matrix4 entityTransform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
+		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
+		EditorServerObject* editorObject = CreateObject( jsonEntity, entityTransform, entityName );
+		if( editorObject->entity != jsonEntity )
+		{
+			entityMap.Set( jsonEntity, editorObject->entity );
+		}
+		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		{
+			AE_ASSERT( componentIter.value.IsObject() );
+			AddComponent( program, editorObject, ae::GetTypeByName( componentIter.name.GetString() ) );
+		}
+
+		// Select entity
+		m_selected.Append( editorObject->entity );
+	}
+
+	// Serialize all components (second phase to handle references)
+	JsonToRegistry( entityMap, jsonObjects, &m_registry );
+
+	// Refresh editor objects
+	for( const auto& jsonObject : jsonObjects.GetArray() )
+	{
+		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
+		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
+		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
+		EditorServerObject* object = m_objects.Get( entity );
+		AE_ASSERT( object );
+		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
+		{
+			if( !componentIter.value.IsObject() )
+			{
+				continue;
+			}
+			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			if( !type )
+			{
+				continue;
+			}
+			ae::Component* component = &m_registry.GetComponent( entity, type );
+			const uint32_t varCount = type->GetVarCount( true );
+			for ( uint32_t j = 0; j < varCount; j++ )
+			{
+				const ae::Var* var = type->GetVarByIndex( j, true );
+				object->HandleVarChange( program, component, type, var );
+			}
+		}
+		// @TODO: Explicitly handle setting transform vars?
+	}
 }
 
 void EditorServer::m_SetLevelPath( EditorProgram* program, const char* filePath )
@@ -2732,6 +2902,7 @@ void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& json
 			var->SetObjectValue( component, transform.GetScale() );
 		}
 		// @TODO: Add 'rotation'
+		// @TODO: Handle patching references
 		else if( !jsonVar.IsObject() && !jsonVar.IsArray() )
 		{
 			var->SetObjectValueFromString( component, jsonVar.GetString() );
@@ -2739,12 +2910,13 @@ void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& json
 	}
 }
 
-void JsonToRegistry( const rapidjson::Value& jsonObjects, ae::Registry* registry )
+void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry )
 {
 	// Serialize all components (second phase to handle references)
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
-		const ae::Entity entity = jsonObject[ "id" ].GetUint();
+		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
+		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
 		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
@@ -2790,13 +2962,21 @@ void ComponentToJson( const Component* component, const Component* defaultCompon
 		else
 		{
 			const auto value = var->GetObjectValueAsString( component );
-			const auto defaultValue = var->GetObjectValueAsString( defaultComponent );
 			rapidjson::Value jsonValue( rapidjson::kStringType );
-			if( value != defaultValue )
+			if( defaultComponent )
+			{
+				const auto defaultValue = var->GetObjectValueAsString( defaultComponent );
+				if( value != defaultValue )
+				{
+					jsonValue.SetString( value.c_str(), allocator );
+					jsonComponent->AddMember( varName, jsonValue, allocator );
+				}
+			}
+			else
 			{
 				jsonValue.SetString( value.c_str(), allocator );
+				jsonComponent->AddMember( varName, jsonValue, allocator );
 			}
-			jsonComponent->AddMember( varName, jsonValue, allocator );
 		}
 	}
 }
