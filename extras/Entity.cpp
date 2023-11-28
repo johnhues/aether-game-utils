@@ -65,7 +65,7 @@ void Registry::SetOnCreateFn( void* userData, void(*fn)(void*, Component*) )
 
 Entity Registry::CreateEntity( const char* name )
 {
-	AE_ASSERT_MSG( !m_destroying, "Cannot create entity while destroying" );
+	AE_ASSERT_MSG( !m_destroying, "Cannot create an entity while destroying" );
 	m_lastEntity++;
 	Entity entity = m_lastEntity;
 	
@@ -80,16 +80,21 @@ Entity Registry::CreateEntity( const char* name )
 
 Entity Registry::CreateEntity( Entity entity, const char* name )
 {
-	AE_ASSERT_MSG( !m_destroying, "Cannot create entity while destroying" );
-	for ( uint32_t i = 0; i < m_components.Length(); i++ )
+	AE_ASSERT_MSG( !m_destroying, "Cannot create an entity while destroying" );
+
+	if( entity >= m_lastEntity )
 	{
-		AE_ASSERT( !m_components.GetValue( i ).TryGet( entity ) );
+		m_lastEntity = entity;
+	}
+	else
+	{
+		m_lastEntity++;
+		entity = m_lastEntity;
 	}
 
-	m_lastEntity = ae::Max( m_lastEntity, entity );
-	
 	if ( name && name[ 0 ] )
 	{
+		// @TODO: Allow multiple entities to have the same name
 		AE_ASSERT_MSG( !m_entityNames.TryGet( name ), "Entity with name '#' already exists", name );
 		m_entityNames.Set( name, entity );
 	}
@@ -104,7 +109,7 @@ Component* Registry::AddComponent( Entity entity, const char* typeName )
 
 Component* Registry::AddComponent( Entity entity, const ae::Type* type )
 {
-	AE_ASSERT_MSG( !m_destroying, "Cannot add component while destroying" );
+	AE_ASSERT_MSG( !m_destroying, "Cannot add a component while destroying" );
 	if( !type )
 	{
 		return nullptr;
@@ -235,7 +240,7 @@ void Registry::SetEntityName( Entity entity, const char* name )
 		return;
 	}
 
-	AE_ASSERT_MSG( !m_destroying, "Cannot set entity name while destroying" );
+	AE_ASSERT_MSG( !m_destroying, "Cannot set an entities name while destroying" );
 	
 	for ( uint32_t i = 0; i < m_entityNames.Length(); i++ )
 	{
