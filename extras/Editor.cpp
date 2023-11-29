@@ -70,6 +70,7 @@ void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >
 void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
 void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry );
 void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
+bool ValidateLevel( const rapidjson::Value& jsonLevel );
 
 //------------------------------------------------------------------------------
 // EditorMsg
@@ -910,26 +911,27 @@ void Editor::m_Read()
 	{
 		return;
 	}
-	
-	// @TODO: Gracefully handle file parsing errors
+
 	const char* jsonBuffer = (const char*)m_pendingFile->GetData();
 	AE_ASSERT( jsonBuffer[ m_pendingFile->GetLength() ] == 0 );
 	rapidjson::Document document;
-	AE_ASSERT( !document.Parse( jsonBuffer ).HasParseError() );
-	AE_ASSERT( document.IsObject() );
-	const auto& jsonObjects = document[ "objects" ];
-	AE_ASSERT( jsonObjects.IsArray() );
-	
-	// @TODO: Check that all objects/components are valid before starting committing to level load
+	if( document.Parse( jsonBuffer ).HasParseError() || !ValidateLevel( document ) )
+	{
+		return;
+	}
+
 	m_lastLoadedLevel = m_pendingFile->GetUrl();
 	if( m_params->onLevelLoadStartFn )
 	{
 		m_params->onLevelLoadStartFn( m_params->onLevelLoadStartUserData, m_pendingFile->GetUrl() );
 	}
 
-	// Create all components
+	// State for loading
 	ae::Array< const ae::Type* > prereqs = m_tag;
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag; 
+	const auto& jsonObjects = document[ "objects" ];
+
+	// Create all components
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
 		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
@@ -1133,7 +1135,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	AE_ASSERT( jsonBuffer[ m_pendingLevel->GetLength() ] == 0 );
 	
 	rapidjson::Document document;
-	if( document.Parse( jsonBuffer ).HasParseError() || !document.IsObject() )
+	if( document.Parse( jsonBuffer ).HasParseError() || !ValidateLevel( document ) )
 	{
 		AE_ERR( "Could not parse level '#'", m_pendingLevel->GetUrl() );
 		return;
@@ -2388,28 +2390,25 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		return;
 	}
 
+	// Load / validate
 	rapidjson::Document document;
 	if( document.Parse( clipboardText.c_str() ).HasParseError() )
 	{
 		AE_WARN( "Failed to parse clipboard text" );
 		return;
 	}
-	if( !document.IsObject() || !document.HasMember( "objects" ) )
+	if( !ValidateLevel( document ) )
 	{
 		AE_WARN( "Unexpected clipboard data format" );
 		return;
 	}
-	const auto& jsonObjects = document[ "objects" ];
-	if( !jsonObjects.IsArray() )
-	{
-		AE_WARN( "Unexpected clipboard object data" );
-		return;
-	}
 
+	// State for loading
 	m_selected.Clear();
+	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
+	const auto& jsonObjects = document[ "objects" ];
 
 	// Create all components
-	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
 		const char* entityName = jsonObject.HasMember( "name" ) ? jsonObject[ "name" ].GetString() : "";
@@ -2979,6 +2978,49 @@ void ComponentToJson( const Component* component, const Component* defaultCompon
 			}
 		}
 	}
+}
+
+bool ValidateLevel( const rapidjson::Value& jsonLevel )
+{
+	if( !jsonLevel.IsObject() || !jsonLevel.HasMember( "objects" ) )
+	{
+		return false;
+	}
+	
+	const auto& jsonObjects = jsonLevel[ "objects" ];
+	if( !jsonObjects.IsArray() )
+	{
+		return false;
+	}
+
+	uint32_t prevId = 0;
+	for( const auto& jsonObject : jsonObjects.GetArray() )
+	{
+		if( !jsonObject.HasMember( "id" ) ) { return false; }
+		if( !jsonObject.HasMember( "transform" ) ) { return false; }
+		if( !jsonObject.HasMember( "components" ) ) { return false; }
+
+		const uint32_t id = jsonObject[ "id" ].GetUint();
+		if( id <= prevId )
+		{
+			return false;
+		}
+		prevId = id;
+
+		const auto& jsonComponents = jsonObject[ "components" ];
+		if( !jsonComponents.IsObject() )
+		{
+			return false;
+		}
+		for( const auto& componentIter : jsonComponents.GetObject() )
+		{
+			if( !componentIter.value.IsObject() )
+			{
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 } // End ae namespace
