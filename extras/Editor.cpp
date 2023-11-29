@@ -888,9 +888,11 @@ void Editor::QueueRead( const char* levelPath )
 	m_pendingFile = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
 }
 
-void Editor::SetFunctionPointers( LoadEditorMeshFn loadMeshFn, void* loadMeshUserData )
+void Editor::SetFunctionPointers( OnLevelLoadStartFn onLevelLoadStartFn, void* onLevelLoadStartUserData, LoadEditorMeshFn loadMeshFn, void* loadMeshUserData )
 {
 	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
+	m_params->onLevelLoadStartFn = onLevelLoadStartFn;
+	m_params->onLevelLoadStartUserData = onLevelLoadStartUserData;
 	m_params->loadMeshFn = loadMeshFn;
 	m_params->loadMeshUserData = loadMeshUserData;
 }

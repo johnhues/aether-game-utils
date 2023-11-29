@@ -95,7 +95,7 @@ public:
 	~Editor();
 	void Initialize( const EditorParams& params );
 	void Terminate();
-	void SetFunctionPointers( LoadEditorMeshFn loadMeshFn, void* loadMeshUserData );
+	void SetFunctionPointers( OnLevelLoadStartFn onLevelLoadStartFn, void* onLevelLoadStartUserData, LoadEditorMeshFn loadMeshFn, void* loadMeshUserData );
 	void Update();
 	void Launch();
 	bool IsConnected() const { return m_sock.IsConnected(); }
