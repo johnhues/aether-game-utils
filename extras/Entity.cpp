@@ -82,7 +82,7 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 {
 	AE_ASSERT_MSG( !m_destroying, "Cannot create an entity while destroying" );
 
-	if( entity >= m_lastEntity )
+	if( entity > m_lastEntity )
 	{
 		m_lastEntity = entity;
 	}

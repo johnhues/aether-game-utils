@@ -678,9 +678,9 @@ float EditorProgram::GetAspectRatio() const
 EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
 {
 	EditorServerMesh* mesh = m_meshes.Get( resourceId, nullptr );
-	if ( !mesh && params.loadMeshFn )
+	if ( !mesh && params.functionPointers.loadMeshFn )
 	{
-		ae::EditorMesh temp = params.loadMeshFn( params.loadMeshUserData, resourceId );
+		ae::EditorMesh temp = params.functionPointers.loadMeshFn( params.functionPointers.userData, resourceId );
 		if ( temp.verts.Length() )
 		{
 			mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
@@ -888,13 +888,10 @@ void Editor::QueueRead( const char* levelPath )
 	m_pendingFile = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
 }
 
-void Editor::SetFunctionPointers( OnLevelLoadStartFn onLevelLoadStartFn, void* onLevelLoadStartUserData, LoadEditorMeshFn loadMeshFn, void* loadMeshUserData )
+void Editor::SetFunctionPointers( const ae::EditorFunctionPointers& functionPointers )
 {
 	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
-	m_params->onLevelLoadStartFn = onLevelLoadStartFn;
-	m_params->onLevelLoadStartUserData = onLevelLoadStartUserData;
-	m_params->loadMeshFn = loadMeshFn;
-	m_params->loadMeshUserData = loadMeshUserData;
+	m_params->functionPointers = functionPointers;
 }
 
 void Editor::m_Read()
@@ -923,9 +920,9 @@ void Editor::m_Read()
 	}
 
 	m_lastLoadedLevel = m_pendingFile->GetUrl();
-	if( m_params->onLevelLoadStartFn )
+	if( m_params->functionPointers.onLevelLoadStartFn )
 	{
-		m_params->onLevelLoadStartFn( m_params->onLevelLoadStartUserData, m_pendingFile->GetUrl() );
+		m_params->functionPointers.onLevelLoadStartFn( m_params->functionPointers.userData, m_pendingFile->GetUrl() );
 	}
 
 	// State for loading
@@ -1131,6 +1128,15 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		AE_ERR( "Could not read level '#'", m_pendingLevel->GetUrl() );
 		return;
 	}
+
+	if( program->params.functionPointers.preFileEditFn
+		&& !program->params.functionPointers.preFileEditFn( program->params.functionPointers.userData, m_pendingLevel->GetUrl() ) )
+	{
+		ae::Str512 msg = ae::Str512::Format( "File may not be writable '#'", m_pendingLevel->GetUrl() );
+		AE_WARN( msg.c_str() );
+		ae::ShowMessage( msg.c_str() );
+	}
+
 	AE_INFO( "Loading level... '#'", m_pendingLevel->GetUrl() );
 	
 	const char* jsonBuffer = (const char*)m_pendingLevel->GetData();
@@ -2215,6 +2221,13 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 		return false;
 	}
 
+	if( program->params.functionPointers.preFileEditFn
+		&& !program->params.functionPointers.preFileEditFn( program->params.functionPointers.userData, m_levelPath.c_str() ) )
+	{
+		AE_ERR( "File failed per edit check '#'", m_levelPath );
+		return false;
+	}
+
 	AE_INFO( "Saving... '#'", m_levelPath );
 
 	ae::Map< const ae::Type*, ae::Component* > defaults = m_tag;
@@ -2252,7 +2265,9 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 	AE_ASSERT( writtenBytes == 0 || writtenBytes == buffer.GetSize() );
 	if( writtenBytes == 0 )
 	{
-		AE_WARN( "Failed to write level '#'", m_levelPath );
+		ae::Str256 msg = ae::Str256::Format( "Failed to write level '#'", m_levelPath );
+		AE_WARN( msg.c_str() );
+		ae::ShowMessage( msg.c_str() );
 		return false;
 	}
 	return true;
@@ -2838,7 +2853,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool lines ) const
 		color = color.Lerp( ae::Color::PicoOrange(), 0.75f );
 	}
 	return color;
-};
+}
 
 void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >* prereqs )
 {

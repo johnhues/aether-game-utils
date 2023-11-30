@@ -48,6 +48,25 @@ public:
 //------------------------------------------------------------------------------
 typedef void(*OnLevelLoadStartFn)( void* userData, const char* levelPath );
 typedef ae::EditorMesh(*LoadEditorMeshFn)( void* userData, const char* resourceId );
+typedef bool(*PreFileEditFn)( void* userData, const char* filePath );
+
+//------------------------------------------------------------------------------
+// ae::EditorFunctionPointers
+//------------------------------------------------------------------------------
+struct EditorFunctionPointers
+{
+	//! @TODO
+	ae::OnLevelLoadStartFn onLevelLoadStartFn = nullptr;
+	//! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
+	//! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
+	//! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
+	ae::LoadEditorMeshFn loadMeshFn = nullptr;
+	//! Called before a file is opened for editing. Return false to prevent the
+	//! file from being opened. Useful for checking out files from source control.
+	ae::PreFileEditFn preFileEditFn = nullptr;
+	//! Provided to all callback functions as the userData parameter
+	void* userData = nullptr;
+};
 
 //------------------------------------------------------------------------------
 // ae::EditorParams class
@@ -71,18 +90,8 @@ struct EditorParams
 	ae::Axis worldUp = ae::Axis::Z;
 	//! When ae::Editor is given a relative path it will use this instead of the current working directory
 	ae::Str256 dataDir;
-
-	//! @TODO
-	OnLevelLoadStartFn onLevelLoadStartFn = nullptr;
-	//! Provided to onLevelLoadStartFn() as the userData parameter
-	void* onLevelLoadStartUserData = nullptr;
-
-	//! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
-	//! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
-	//! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
-	LoadEditorMeshFn loadMeshFn = nullptr;
-	//! Provided to loadMeshFn() as the userData parameter
-	void* loadMeshUserData = nullptr;
+	//! Function pointers for editor callbacks
+	ae::EditorFunctionPointers functionPointers;
 };
 
 //------------------------------------------------------------------------------
@@ -95,7 +104,7 @@ public:
 	~Editor();
 	void Initialize( const EditorParams& params );
 	void Terminate();
-	void SetFunctionPointers( OnLevelLoadStartFn onLevelLoadStartFn, void* onLevelLoadStartUserData, LoadEditorMeshFn loadMeshFn, void* loadMeshUserData );
+	void SetFunctionPointers( const ae::EditorFunctionPointers& functionPointers );
 	void Update();
 	void Launch();
 	bool IsConnected() const { return m_sock.IsConnected(); }
