@@ -212,7 +212,7 @@ void Game::Initialize( int argc, char* argv[] )
 	fs.Initialize( "data", "ae", "editor" );
 	
 	ae::EditorParams editorParams( argc, argv, &registry );
-	editorParams.onLevelLoadStartFn = []( void* userData, const char* levelPath )
+	editorParams.functionPointers.onLevelLoadStartFn = []( void* userData, const char* levelPath )
 	{
 		Game* game = (Game*)userData;
 		if( game->registry.GetTypeCount() )
@@ -224,15 +224,14 @@ void Game::Initialize( int argc, char* argv[] )
 		AE_INFO( "Loading level: %s", levelPath );
 		
 	};
-	editorParams.onLevelLoadStartUserData = this;
-	editorParams.loadMeshFn = []( void* userData, const char* resourceId )
+	editorParams.functionPointers.loadMeshFn = []( void* userData, const char* resourceId )
 	{
 		Game* game = (Game*)userData;
 		ae::EditorMesh result = TAG_ALL;
 		LoadOBj( resourceId, &game->fs, nullptr, nullptr, &result );
 		return std::move( result );
 	};
-	editorParams.loadMeshUserData = this;
+	editorParams.functionPointers.userData = this;
 	editor.Initialize( editorParams );
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "Press '~' to Open the Editor" );

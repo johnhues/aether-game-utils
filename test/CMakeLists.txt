@@ -14,6 +14,19 @@ FetchContent_GetProperties(Catch2 SOURCE_DIR Catch2_SOURCE_DIR)
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
 add_executable(test ${TEST_SOURCES})
 
+if(EMSCRIPTEN)
+	set(_AE_EM_LINKER_FLAGS
+		"-s ALLOW_MEMORY_GROWTH"
+		"--emrun"
+	)
+	string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
+	set_target_properties(test PROPERTIES
+		LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
+		OUTPUT_NAME "index"
+		SUFFIX ".html"
+	)
+endif()
+
 # ae library
 target_link_libraries(test PRIVATE
 	ae_extras

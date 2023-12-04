@@ -280,7 +280,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
       {
         infoOut->msgId = header.msgId;
         // infoOut->player = nullptr;
-        infoOut->data.Append( data, length );
+        infoOut->data.AppendArray( data, length );
         return true;
       }
     }

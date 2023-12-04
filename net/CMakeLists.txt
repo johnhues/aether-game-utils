@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 include(FetchContent)
 
 # enet dependency
+if(EMSCRIPTEN)
+	add_compile_definitions(HAS_SOCKLEN_T=1) # Prevent enet from redefining socklen_t
+endif()
 FetchContent_Declare(
 	enet
 	GIT_REPOSITORY "https://github.com/lsalzman/enet.git"
