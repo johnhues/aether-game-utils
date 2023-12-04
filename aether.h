@@ -10189,10 +10189,10 @@ struct VarTypeBase
 	virtual std::string GetStringFromRef( const void* ) const { return ""; } // Reference types
 	virtual const char* GetSubTypeName() const { return ""; } // Array and Reference types
 };
-template < typename T > VarTypeBase* GetVarType(); // Forward declaration
+template < typename T > VarTypeBase* GetVarType(); // Forward declaration for VarType< T >::Get()
 template < typename T > struct VarType // Proxy for real VarType< T > if definition is not available
 {
-	static ae::VarTypeBase* Get() { return ae::GetVarType< T >(); }
+	static ae::VarTypeBase* Get( uint32_t _i = 0 ) { return ae::GetVarType< T >(); } // Param with default value so real VarType< T >::Get() will be prioritized if available
 };
 
 template < typename Parent, typename This >
