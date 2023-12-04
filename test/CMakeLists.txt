@@ -17,6 +17,7 @@ add_executable(test ${TEST_SOURCES})
 if(EMSCRIPTEN)
 	set(_AE_EM_LINKER_FLAGS
 		"-s ALLOW_MEMORY_GROWTH"
+		"-s STACK_SIZE=2097152"
 		"--emrun"
 	)
 	string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")

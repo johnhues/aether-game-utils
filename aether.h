@@ -9423,8 +9423,8 @@ ae::AABB BVH< T, N >::GetAABB() const
 //------------------------------------------------------------------------------
 // ae::GetHash helper
 //------------------------------------------------------------------------------
-template < typename T > uint32_t GetHash( T* key ) { return ae::Hash().HashBasicType( key ).Get(); }
-template < uint32_t N > uint32_t GetHash( ae::Str< N > key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
+template < typename T > uint32_t GetHash( T* value ) { return ae::Hash().HashBasicType( (uint64_t)value ).Get(); }
+template < uint32_t N > uint32_t GetHash( ae::Str< N > value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // HotLoader member functions
@@ -13993,26 +13993,26 @@ uint32_t Hash::Get() const
 //------------------------------------------------------------------------------
 // ae::GetHash helper
 //------------------------------------------------------------------------------
-template <> uint32_t GetHash( uint32_t key ) { return key; }
-template <> uint32_t GetHash( int32_t key ) { return (uint32_t)key; }
-template <> uint32_t GetHash( const char* key ) { return ae::Hash().HashString( key ).Get(); }
-template <> uint32_t GetHash( char* key ) { return ae::Hash().HashString( key ).Get(); }
-template <> uint32_t GetHash( std::string key ) { return ae::Hash().HashString( key.c_str() ).Get(); }
-template <> uint32_t GetHash( ae::Hash key ) { return key.Get(); }
-template <> uint32_t GetHash( ae::NetId key ) { return ae::Hash().HashBasicType( key.GetInternalId() ).Get(); }
-template <> uint32_t GetHash( ae::Int2 key )
+template <> uint32_t GetHash( uint32_t value ) { return value; }
+template <> uint32_t GetHash( int32_t value ) { return (uint32_t)value; }
+template <> uint32_t GetHash( const char* value ) { return ae::Hash().HashString( value ).Get(); }
+template <> uint32_t GetHash( char* value ) { return ae::Hash().HashString( value ).Get(); }
+template <> uint32_t GetHash( std::string value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
+template <> uint32_t GetHash( ae::Hash value ) { return value.Get(); }
+template <> uint32_t GetHash( ae::NetId value ) { return ae::Hash().HashBasicType( value.GetInternalId() ).Get(); }
+template <> uint32_t GetHash( ae::Int2 value )
 {
 	// NxN->N Pairing: https://stackoverflow.com/questions/919612/mapping-two-integers-to-one-in-a-unique-and-deterministic-way
-	uint32_t hash = (int16_t)key.x;
+	uint32_t hash = (int16_t)value.x;
 	hash = ( hash << 16 );
-	return hash + (int16_t)key.y;
+	return hash + (int16_t)value.y;
 }
-template <> uint32_t GetHash( ae::Int3 key )
+template <> uint32_t GetHash( ae::Int3 value )
 {
 	// Szudzik Pairing: https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
-	uint32_t i = ( key.x >= 0 ) ? ( 2 * key.x ) : ( -2 * key.x - 1 );
-	uint32_t j = ( key.y >= 0 ) ? ( 2 * key.y ) : ( -2 * key.y - 1 );
-	uint32_t k = ( key.z >= 0 ) ? ( 2 * key.z ) : ( -2 * key.z - 1 );
+	uint32_t i = ( value.x >= 0 ) ? ( 2 * value.x ) : ( -2 * value.x - 1 );
+	uint32_t j = ( value.y >= 0 ) ? ( 2 * value.y ) : ( -2 * value.y - 1 );
+	uint32_t k = ( value.z >= 0 ) ? ( 2 * value.z ) : ( -2 * value.z - 1 );
 	uint32_t ijk = ae::Max( i, j, k );
 	uint32_t hash = ijk * ijk * ijk + ( 2 * ijk * k ) + k;
 	if ( ijk == k ) { uint32_t ij = ae::Max( i, j ); hash += ij * ij; }
