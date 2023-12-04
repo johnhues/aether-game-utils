@@ -14334,6 +14334,16 @@ ae::Array< ae::Screen, 16 > GetScreens()
 	{
 		result.Clear();
 	}
+#elif _AE_EMSCRIPTEN_
+	{
+		float scale = emscripten_get_device_pixel_ratio();
+		Screen& s = result.Append( {} );
+		s.position = ae::Int2( 0, 0 );
+		s.size = ae::Int2(
+			EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetWidth; }) / scale,
+			EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetHeight; }) / scale
+		);
+	}
 #endif
 	return result;
 }

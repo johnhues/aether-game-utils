@@ -199,13 +199,12 @@ cl /std:c++17 -D_UNICODE -DUNICODE main.cpp
 ## Building with Emscripten
 Create a file called `main.cpp` with the above contents and download [aether.h](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/aether.h), [level.obj](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.obj), [level.tga](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/level.tga) and [index.html](https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/index.html) to the same folder. Change to the directory with the downloaded files. With `emsdk` activated run:
 ```
-emcc -s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3 main.cpp -o index.js
+emcc -s MIN_WEBGL_VERSION=3 -s MAX_WEBGL_VERSION=3 -s ALLOW_MEMORY_GROWTH main.cpp -o index.js
 ```
-You can start a local http server with python3 by running this command in the same folder:
+You can run and play the result of the above command by running this in the same folder:
 ```
-python3 -m http.server
+emrun index.html
 ```
-Once the server is running you can visit [localhost:8000](http://localhost:8000) in any web browser.
 
 ## Building on Linux
 All utilities are currently supported on Linux except for windowing and graphics. Full windowing and graphics support is planned.
