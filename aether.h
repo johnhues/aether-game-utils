@@ -14946,7 +14946,7 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 		s_keyMap[ 13 ] = ae::Key::Enter;
 		s_keyMap[ 16 ] = ae::Key::LeftShift;
 		s_keyMap[ 17 ] = ae::Key::LeftControl;
-		s_keyMap[ 18 ] = ae::Key::LeftControl;
+		s_keyMap[ 18 ] = ae::Key::LeftAlt;
 		s_keyMap[ 19 ] = ae::Key::Pause;
 		s_keyMap[ 20 ] = ae::Key::CapsLock;
 		s_keyMap[ 27 ] = ae::Key::Escape;
@@ -15009,6 +15009,9 @@ EM_BOOL _aeEmscriptenHandleKey( int eventType, const EmscriptenKeyboardEvent* ke
 		bool pressed = ( EMSCRIPTEN_EVENT_KEYUP != eventType );
 		input->m_keys[ (int)s_keyMap[ keyEvent->which ] ] = pressed;
 	}
+	input->m_keys[ (int)ae::Key::RightShift ] = input->m_keys[ (int)ae::Key::LeftShift ];
+	input->m_keys[ (int)ae::Key::RightControl ] = input->m_keys[ (int)ae::Key::LeftControl ];
+	input->m_keys[ (int)ae::Key::RightAlt ] = input->m_keys[ (int)ae::Key::LeftAlt ];
 	input->m_UpdateModifiers();
 	return true;
 }
@@ -15036,6 +15039,7 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 	input->m_SetMousePos( pos.FloorCopy() );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
+	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
 	
 	return true;
 }

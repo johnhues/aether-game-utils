@@ -137,7 +137,7 @@ int main()
 	float r1 = 0.0f;
 
 	AE_INFO( "Run" );
-	while ( !input.quit )
+	auto Update = [&]()
 	{
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
@@ -160,9 +160,14 @@ int main()
 		vertexData.DrawInstanced( 0, countof( kCubeIndices ) / 3, kMaxInstances );
 		
 		render.Present();
-
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while ( Update() ) {}
+#endif
 
 	AE_INFO( "Terminate" );
 	input.Terminate();

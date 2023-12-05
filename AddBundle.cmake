@@ -175,6 +175,7 @@ function(ae_add_bundle)
 			"-s MIN_IE_VERSION=0x7FFFFFFF" # Do not support Internet Explorer at all (this is the Emscripten default, shown here for posterity)
 			"-s MIN_EDGE_VERSION=79" # Require Chromium-based Edge browser
 			"-s MIN_CHROME_VERSION=80"
+			"-s ALLOW_MEMORY_GROWTH"
 		)
 		string(TOLOWER "${CMAKE_BUILD_TYPE}" cmake_build_type_tolower)
 		if (cmake_build_type_tolower STREQUAL "debug")
