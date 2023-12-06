@@ -5,7 +5,7 @@ const ae::Tag TAG_RESOURCE = "resource";
 extern const char* kVertexShader;
 extern const char* kFragmentShader;
 #ifndef DATA_DIR
-	#define DATA_DIR ""
+	#define DATA_DIR "data"
 #endif
 
 int main()
@@ -62,7 +62,7 @@ int main()
 		}
 
 		graphicsDevice.Activate();
-		graphicsDevice.Clear( ae::Color::Black() );
+		graphicsDevice.Clear( ae::Color::White() );
 		if ( fileSystem.GetFileStatusCount( ae::File::Status::Success ) == fileSystem.GetFileCount() )
 		{
 			// Input
@@ -94,7 +94,7 @@ int main()
 			// Rendering
 			ae::UniformList uniforms;
 			ae::Matrix4 worldToView = ae::Matrix4::WorldToView( player.sphere.center, forward, ae::Vec3( 0, 1, 0 ) );
-			ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, graphicsDevice.GetAspectRatio(), 0.5f, 1000.0f );
+			ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, graphicsDevice.GetAspectRatio(), 0.5f, 10.0f );
 			uniforms.Set( "u_worldToProj", viewToProj * worldToView );
 			uniforms.Set( "u_tex", &tex );
 			vertexData.Bind( &shader, uniforms );
@@ -124,19 +124,22 @@ const char* kVertexShader = R"(
 	AE_UNIFORM_HIGHP mat4 u_worldToProj;
 	AE_IN_HIGHP vec3 a_position;
 	AE_IN_HIGHP vec2 a_uv;
+	AE_OUT_HIGHP float v_depth;
 	AE_OUT_HIGHP vec2 v_uv;
 	void main()
 	{
 		v_uv = a_uv;
 		gl_Position = u_worldToProj * vec4( a_position, 1.0 );
+		v_depth = gl_Position.z / 10.0;
 	}
 )";
 
 const char* kFragmentShader = R"(
 	AE_UNIFORM sampler2D u_tex;
+	AE_IN_HIGHP float v_depth;
 	AE_IN_HIGHP vec2 v_uv;
 	void main()
 	{
-		AE_COLOR = AE_TEXTURE2D( u_tex, v_uv );
+		AE_COLOR = mix( AE_TEXTURE2D( u_tex, v_uv ), vec4( 1.0, 1.0, 1.0, 1.0 ), v_depth );
 	}
 )";

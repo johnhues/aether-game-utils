@@ -29,6 +29,9 @@
 // Constants
 //------------------------------------------------------------------------------
 const ae::Tag kObjAllocTag = "obj";
+#ifndef DATA_DIR
+	#define DATA_DIR "data"
+#endif
 
 //------------------------------------------------------------------------------
 // Shaders
@@ -91,7 +94,7 @@ int main()
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	fs.Initialize( "data", "ae", "obj_viewer" );
+	fs.Initialize( DATA_DIR, "ae", "obj_viewer" );
 	camera.SetDistanceLimits( 0.25f, 10.0f );
 	debugLines.Initialize( 1024 );
 	
@@ -196,12 +199,13 @@ int main()
 		
 		render.Present();
 		timeStep.Tick();
+		return !input.quit;
 	};
 
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( !input.quit ) { Update() }
+	while ( Update() ) {}
 #endif
 
 	AE_INFO( "Terminate" );

@@ -1,3 +1,0 @@
-Start Test.
-This is a test.
-End Test.

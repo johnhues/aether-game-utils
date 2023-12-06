@@ -42,14 +42,20 @@ int main()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.quit )
+	auto Update = [&]()
 	{
 		input.Pump();
 		graphicsDevice.Activate();
-		graphicsDevice.Clear( ae::Color::PicoDarkPurple() );
+		graphicsDevice.Clear( ae::Color::AetherDarkGray() );
 		graphicsDevice.Present();
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while ( Update() ) {}
+#endif
 
 	AE_LOG( "Terminate" );
 	input.Terminate();

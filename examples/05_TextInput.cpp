@@ -29,6 +29,9 @@
 // Constants
 //------------------------------------------------------------------------------
 const ae::Tag TAG_EXAMPLE = "example";
+#ifndef DATA_DIR
+	#define DATA_DIR "data"
+#endif
 
 //------------------------------------------------------------------------------
 // Main
@@ -37,45 +40,42 @@ int main()
 {
 	AE_LOG( "Initialize" );
 
+	ae::FileSystem fileSystem;
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
-	ae::FileSystem fileSystem;
 	ae::TextRender textRender = TAG_EXAMPLE;
+	ae::TimeStep timeStep;
 	
+	fileSystem.Initialize( DATA_DIR, "ae", "text_input" );
 	window.Initialize( 1280, 720, false, true );
 	window.SetTitle( "example" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	input.SetTextMode( true );
-	fileSystem.Initialize( "data", "ae", "text_input" );
-	
-	ae::Texture2D fontTexture;
-	{
-		const char* fileName = "font.tga";
-		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
-		ae::Scratch< uint8_t > fileBuffer( fileSize );
-		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
-		ae::TargaFile targa = TAG_EXAMPLE;
-		targa.Load( fileBuffer.Data(), fileSize );
-		targa.textureParams.filter = ae::Texture::Filter::Nearest;
-		fontTexture.Initialize( targa.textureParams );
-	}
-	textRender.Initialize( 1, 512, &fontTexture, 8, 1.0f );
-	
-	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	
+	const ae::File* fontFile = fileSystem.Read( ae::FileSystem::Root::Data, "font.tga", 2.5f );
+	ae::Texture2D fontTexture;
+
 	float textZoom = 4.0f;
 	const char* defaultText = "Try typing.\nCopy and paste should also work.\nYou can zoom by scrolling.\nPress 'ESC' to reset.";
 	input.SetText( defaultText );
 
-	while( !input.quit )
+	auto Update = [&]()
 	{
 		input.Pump();
-		render.Activate();
-		render.Clear( ae::Color::Green().ScaleRGB( 0.01f ) );
+		if( fontFile && fontFile->GetStatus() != ae::File::Status::Pending )
+		{
+			AE_ASSERT_MSG( fontFile->GetLength(), "Could not load #", fontFile->GetUrl() );
+			ae::TargaFile targa = TAG_EXAMPLE;
+			targa.Load( fontFile->GetData(), fontFile->GetLength() );
+			targa.textureParams.filter = ae::Texture::Filter::Nearest;
+			fontTexture.Initialize( targa.textureParams );
+			textRender.Initialize( 1, 512, &fontTexture, 8, 1.0f );
+			fileSystem.Destroy( fontFile );
+			fontFile = nullptr;
+		}
 		
 		if( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
 		{
@@ -116,16 +116,27 @@ int main()
 		}
 		displayText.Append( s_blink < 30 ? "_" : " " );
 		s_blink++;
-
-		// Render text in top left corner
-		int maxLineLength = render.GetWidth() / textRender.GetFontSize() - 2;
-		ae::Vec3 textPos( textRender.GetFontSize() / 2.0f, textRender.GetFontSize() / -2.0f, 0.0f );
-		textRender.Add( textPos, ae::Vec2( (float)textRender.GetFontSize() ), displayText.c_str(), ae::Color::Green(), maxLineLength, 0 );
-		textRender.Render( textToNdc );
-
+		
+		render.Activate();
+		render.Clear( ae::Color::Green().ScaleRGB( 0.01f ) );
+		if( textRender.GetFontSize() )
+		{
+			// Render text in top left corner
+			int maxLineLength = render.GetWidth() / textRender.GetFontSize() - 2;
+			ae::Vec3 textPos( textRender.GetFontSize() / 2.0f, textRender.GetFontSize() / -2.0f, 0.0f );
+			textRender.Add( textPos, ae::Vec2( (float)textRender.GetFontSize() ), displayText.c_str(), ae::Color::Green(), maxLineLength, 0 );
+			textRender.Render( textToNdc );
+		}
 		render.Present();
+
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while ( Update() ) {}
+#endif
 
 	AE_LOG( "Terminate" );
 
@@ -134,6 +145,7 @@ int main()
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();
+	fileSystem.DestroyAll();
 
 	return 0;
 }
