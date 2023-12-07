@@ -4030,6 +4030,17 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::CollisionExtra
+//! AE_COLLISION_EXTRA can be defined to provide extra vertex data returned
+//! from Raycasts and PushOuts.
+//------------------------------------------------------------------------------
+#ifdef AE_COLLISION_EXTRA
+	typedef AE_COLLISION_EXTRA CollisionExtra;
+#else
+	typedef uint32_t CollisionExtra;
+#endif
+
+//------------------------------------------------------------------------------
 // ae::RaycastParams
 //------------------------------------------------------------------------------
 struct RaycastParams
@@ -4056,6 +4067,7 @@ struct RaycastResult
 		ae::Vec3 normal = ae::Vec3( 0.0f );
 		float distance = 0.0f;
 		const void* userData = nullptr;
+		CollisionExtra extra;
 	};
 	ae::Array< Hit, 8 > hits;
 	
@@ -4085,6 +4097,7 @@ struct PushOutInfo
 	{
 		ae::Vec3 position;
 		ae::Vec3 normal;
+		CollisionExtra extra;
 	};
 	ae::Array< Hit, 8 > hits;
 
@@ -4102,6 +4115,21 @@ public:
 	CollisionMesh( ae::Tag tag ); //!< Dynamic (V != 0) && (T != 0) && (B != 0)
 	void Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount );
 
+	struct AddIndexedParams
+	{
+		ae::Matrix4 transform = ae::Matrix4::Identity();
+		
+		const float* vertexPositions = nullptr;
+		const CollisionExtra* vertexExtras = nullptr;
+		uint32_t vertexPositionStride = 0;
+		uint32_t vertexExtraStride = 0;
+		uint32_t vertexCount = 0;
+
+		const void* indices = nullptr;
+		uint32_t indexCount = 0;
+		uint32_t indexSize = 0;
+	};
+	void AddIndexed( const AddIndexedParams& params );
 	void AddIndexed( ae::Matrix4 transform, const float* positions, uint32_t positionCount, uint32_t positionStride, const void* indices, uint32_t indexCount, uint32_t indexSize );
 	
 	//! Must be called after AddIndexed() or Reserve() for Raycast() and PushOut()
@@ -4131,7 +4159,7 @@ private:
 	const ae::Tag m_tag;
 	ae::AABB m_aabb;
 	bool m_requiresRebuild = false;
-	ae::Array< ae::Vec3, VertMax > m_vertices;
+	ae::Array< ae::Pair< ae::Vec3, CollisionExtra >, VertMax > m_vertices;
 	ae::Array< BVHTri, TriMax > m_tris;
 	ae::BVH< BVHTri, BVHMax > m_bvh;
 };
@@ -9468,59 +9496,74 @@ void CollisionMesh< V, T, B >::Reserve( uint32_t vertCount, uint32_t triCount, u
 }
 
 template < uint32_t V, uint32_t T, uint32_t B >
-void CollisionMesh< V, T, B >::AddIndexed( ae::Matrix4 transform, const float* positions, uint32_t positionCount, uint32_t positionStride, const void* _indices, uint32_t indexCount, uint32_t indexSize )
+void CollisionMesh< V, T, B >::AddIndexed( const AddIndexedParams& params )
 {
 	AE_STATIC_ASSERT( sizeof(BVHTri) == sizeof(uint32_t) * 3 ); // Safe to cast BVHTri's to a uint32_t array
-	AE_ASSERT_MSG( positionStride >= sizeof(float) * 3, "Must specify the number of bytes between each position" );
-	AE_ASSERT( indexSize == 1 || indexSize == 2 || indexSize == 4 );
-	AE_ASSERT_MSG( positionCount || !indexCount, "Mesh indices supplied without vertex data" );
-	if ( !positions || !positionCount || !_indices || !indexCount )
+	AE_ASSERT_MSG( params.vertexPositionStride >= sizeof(float) * 3, "Must specify the number of bytes between each position" );
+	AE_ASSERT( params.indexSize == 1 || params.indexSize == 2 || params.indexSize == 4 );
+	AE_ASSERT_MSG( params.vertexCount || !params.indexCount, "Mesh indices supplied without vertex data" );
+	if ( !params.vertexPositions || !params.vertexCount || !params.indices || !params.indexCount )
 	{
 		return;
 	}
-	AE_ASSERT( indexCount % 3 == 0 );
+	AE_ASSERT( params.indexCount % 3 == 0 );
 
-	const bool identityTransform = ( transform == ae::Matrix4::Identity() );
+	const bool identityTransform = ( params.transform == ae::Matrix4::Identity() );
 	const uint32_t initialVertexCount = m_vertices.Length();
 	const uint32_t initialTriCount = m_tris.Length();
-	const uint32_t triCount = indexCount / 3;
+	const uint32_t triCount = params.indexCount / 3;
 	
-	m_vertices.Reserve( initialVertexCount + positionCount );
-	for ( uint32_t i = 0; i < positionCount; i++ )
+	m_vertices.Reserve( initialVertexCount + params.vertexCount );
+	for ( uint32_t i = 0; i < params.vertexCount; i++ )
 	{
-		ae::Vec3 pos( (const float*)( (const uint8_t*)positions + positionStride * i ) );
+		ae::Vec3 pos( (const float*)( (const uint8_t*)params.vertexPositions + params.vertexPositionStride * i ) );
+		CollisionExtra extra = params.vertexExtras ? *(const CollisionExtra*)( (const uint8_t*)params.vertexExtras + params.vertexExtraStride * i ) : CollisionExtra();
 		if ( !identityTransform )
 		{
-			pos = ( transform * ae::Vec4( pos, 1.0f ) ).GetXYZ();
+			pos = ( params.transform * ae::Vec4( pos, 1.0f ) ).GetXYZ();
 		}
 		m_aabb.Expand( pos ); // Expand root aabb before calling m_BuildBVH() for the first partition
-		m_vertices.Append( pos );
+		m_vertices.Append( { pos, extra } );
 	}
 	
 	m_tris.Reserve( m_tris.Length() + triCount );
 	// clang-format off
 #define COPY_INDICES( intType )\
 	BVHTri tri;\
-	const intType* indices = (const intType*)_indices;\
+	const intType* indices = (const intType*)params.indices;\
 	for ( uint32_t i = 0; i < triCount; i++ )\
 	{\
 		for ( uint32_t j = 0; j < 3; j++ )\
 		{\
 			uint32_t idx = (uint32_t)indices[ i * 3 + j ];\
-			AE_DEBUG_ASSERT_MSG( idx < positionCount, "Index out of bounds: # Vertex count: #", idx, positionCount );\
+			AE_DEBUG_ASSERT_MSG( idx < params.vertexCount, "Index out of bounds: # Vertex count: #", idx, params.vertexCount );\
 			tri.idx[ j ] = initialVertexCount + idx;\
 		}\
 		m_tris.Append( tri );\
 	}
-	if ( indexSize == 8 ) { COPY_INDICES( uint64_t ); }
-	else if ( indexSize == 4 ) { COPY_INDICES( uint32_t ); }
-	else if ( indexSize == 2 ) { COPY_INDICES( uint16_t ); }
-	else if ( indexSize == 1 ) { COPY_INDICES( uint8_t ); }
+	if ( params.indexSize == 8 ) { COPY_INDICES( uint64_t ); }
+	else if ( params.indexSize == 4 ) { COPY_INDICES( uint32_t ); }
+	else if ( params.indexSize == 2 ) { COPY_INDICES( uint16_t ); }
+	else if ( params.indexSize == 1 ) { COPY_INDICES( uint8_t ); }
 	else { AE_FAIL_MSG( "Invalid index size" ); }
 #undef COPY_INDICES
 	// clang-format on
 
 	m_requiresRebuild = true;
+}
+
+template < uint32_t V, uint32_t T, uint32_t B >
+void CollisionMesh< V, T, B >::AddIndexed( ae::Matrix4 transform, const float* positions, uint32_t positionCount, uint32_t positionStride, const void* indices, uint32_t indexCount, uint32_t indexSize )
+{
+	AddIndexedParams params;
+	params.transform = transform;
+	params.vertexPositions = positions;
+	params.vertexPositionStride = positionStride;
+	params.vertexCount = positionCount;
+	params.indices = indices;
+	params.indexCount = indexCount;
+	params.indexSize = indexSize;
+	AddIndexed( params );
 }
 
 template < uint32_t V, uint32_t T, uint32_t B >
@@ -9530,13 +9573,13 @@ void CollisionMesh< V, T, B >::BuildBVH()
 	{
 		AE_DEBUG_ASSERT( m_vertices.Length() );
 		AE_DEBUG_ASSERT( m_tris.Length() );
-		const ae::Vec3* verts = m_vertices.begin();
+		const auto* verts = m_vertices.begin();
 		auto aabbFn = [verts]( BVHTri tri )
 		{
 			ae::AABB aabb;
-			aabb.Expand( verts[ tri.idx[ 0 ] ] );
-			aabb.Expand( verts[ tri.idx[ 1 ] ] );
-			aabb.Expand( verts[ tri.idx[ 2 ] ] );
+			aabb.Expand( verts[ tri.idx[ 0 ] ].key );
+			aabb.Expand( verts[ tri.idx[ 1 ] ].key );
+			aabb.Expand( verts[ tri.idx[ 2 ] ].key );
 			return aabb;
 		};
 		m_bvh.Build( m_tris.begin(), m_tris.Length(), aabbFn, 32 );
@@ -9629,9 +9672,10 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
 				ae::Vec3 p, n;
-				ae::Vec3 a = m_vertices[ leaf->data[ i ].idx[ 0 ] ];
-				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ];
-				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ];
+				const uint32_t idx0 = leaf->data[ i ].idx[ 0 ];
+				ae::Vec3 a = m_vertices[ idx0 ].key;
+				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ].key;
+				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ].key;
 				if ( IntersectRayTriangle( source, ray, a, b, c, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit& outHit = hits[ hitCount ];
@@ -9643,6 +9687,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 					outHit.normal = ae::Vec3( normalTransform * ae::Vec4( n, 0.0f ) );
 					outHit.distance = ( outHit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
 					outHit.userData = params.userData;
+					outHit.extra = m_vertices[ idx0 ].value;
 
 					if ( hitCount > maxHits )
 					{
@@ -9757,9 +9802,11 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 		{
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
-				ae::Vec3 a = m_vertices[ leaf->data[ i ].idx[ 0 ] ];
-				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ];
-				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ];
+				const uint32_t idx0 = leaf->data[ i ].idx[ 0 ];
+				const CollisionExtra extra = m_vertices[ idx0 ].value;
+				ae::Vec3 a = m_vertices[ idx0 ].key;
+				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ].key;
+				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ].key;
 				if ( !hasIdentityTransform )
 				{
 					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
@@ -9767,8 +9814,8 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 					c = ae::Vec3( params.transform * ae::Vec4( c, 1.0f ) );
 				}
 		
-				ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
-				ae::Vec3 triCenter( ( a + b + c ) / 3.0f );
+				const ae::Vec3 triNormal = ( ( b - a ).Cross( c - a ) ).SafeNormalizeCopy();
+				const ae::Vec3 triCenter( ( a + b + c ) / 3.0f );
 		
 				ae::Vec3 triToSphereDir = ( result.sphere.center - triCenter );
 				if ( triNormal.Dot( triToSphereDir ) < 0.0f )
@@ -9795,7 +9842,10 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 					// @TODO: Sort. Shouldn't randomly discard hits.
 					if ( result.hits.Length() < result.hits.Size() )
 					{
-						result.hits.Append( { triHitPos, triNormal } );
+						ae::PushOutInfo::Hit& hitOut = result.hits.Append( {} );
+						hitOut.position = triHitPos;
+						hitOut.normal = triNormal;
+						hitOut.extra = extra;
 					}
 		
 					if ( ae::DebugLines* debug = params.debug )
