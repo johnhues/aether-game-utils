@@ -31,14 +31,12 @@
 int main()
 {
 	AE_LOG( "Initialize" );
-
 	ae::FileSystem fs;
 	ae::Window window;
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::Audio audio;
 	ae::TimeStep timeStep;
-	
 	fs.Initialize( "data", "ae", "audio" );
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "audio" );
@@ -47,63 +45,68 @@ int main()
 	audio.Initialize( 1, 3, 0, 2 );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	auto LoadWavFn = [&]( const char* fileName )
+	auto LoadAudio = [&fs, &audio]( const ae::File*& file, const ae::AudioData*& audioData )
 	{
-		uint32_t fileSize = fs.GetSize( ae::FileSystem::Root::Data, fileName );
-		AE_ASSERT( fileSize );
-		ae::Scratch< uint8_t > fileScratch( fileSize );
-		uint32_t readLen = fs.Read( ae::FileSystem::Root::Data, fileName, fileScratch.Data(), fileSize );
-		AE_ASSERT( readLen == fileSize );
-		return audio.LoadWavFile( fileScratch.Data(), fileSize );
+		if( file && file->GetStatus() != ae::File::Status::Pending )
+		{
+			audioData = audio.LoadWavFile( file->GetData(), file->GetLength() );
+			AE_INFO( audioData ? "Loaded audio file: '#'" : "Failed to load audio file: '#'", file->GetUrl() );
+			fs.Destroy( file );
+			file = nullptr;
+		}
 	};
-
-	const ae::AudioData* music = LoadWavFn( "music.wav" );
-	const ae::AudioData* sfx = LoadWavFn( "sound.wav" );
+	const ae::File* musicFile = fs.Read( ae::FileSystem::Root::Data, "music.wav", 5.0f );
+	const ae::File* sfxFile = fs.Read( ae::FileSystem::Root::Data, "sound.wav", 5.0f );
+	const ae::AudioData* music = nullptr;
+	const ae::AudioData* sfx = nullptr;
 
 	bool musicPlaying = false;
 	float musicTime = 0.0f;
 	float hitFade = 0.0f;
 
-	while ( !input.quit )
+	auto Update = [&]()
 	{
+		// Update
 		input.Pump();
-
-		if ( musicPlaying )
+		LoadAudio( musicFile, music );
+		LoadAudio( sfxFile, sfx );
+		if( musicPlaying )
 		{
-			musicTime += timeStep.GetTimeStep();
+			musicTime += timeStep.GetDt();
 		}
-
-		if ( hitFade > 0.0f )
+		if( hitFade > 0.0f )
 		{
-			hitFade = ae::Max( 0.0f, hitFade - timeStep.GetTimeStep() / 0.2f );
+			hitFade = ae::Max( 0.0f, hitFade - timeStep.GetDt() / 0.2f );
 		}
 		
-		if ( ( !input.mouse.rightButton && input.mousePrev.rightButton )
+		// Input
+		if( ( !input.mouse.rightButton && input.mousePrev.rightButton )
 			|| ( !input.Get( ae::Key::Space ) && input.GetPrev( ae::Key::Space ) )
 			|| ( !input.gamepads[ 0 ].y && input.gamepadsPrev[ 0 ].y ) )
 		{
-			if ( musicPlaying )
+			if( musicPlaying )
 			{
 				audio.StopMusic( 0 );
 				musicPlaying = false;
 			}
-			else
+			else if( music )
 			{
 				audio.PlayMusic( music, 0.5f, 0 );
 				musicPlaying = true;
 				musicTime = 0.0f;
 			}
 		}
-
-		if ( ( input.mouse.leftButton && !input.mousePrev.leftButton )
+		if( ( input.mouse.leftButton && !input.mousePrev.leftButton )
 			|| ( input.gamepads[ 0 ].a && !input.gamepadsPrev[ 0 ].a ) )
 		{
 			audio.PlaySfx( sfx, 1.0f, 0 );
 			hitFade = 1.0f;
 		}
 
+		// Render
+		render.Activate();
 		ae::Color color = ae::Color::PicoDarkGray();
-		if ( musicPlaying )
+		if( musicPlaying )
 		{
 			ae::Color beatColors[] =
 			{
@@ -112,26 +115,27 @@ int main()
 				ae::Color::PicoOrange(),
 				ae::Color::PicoDarkPurple()
 			};
-
-			uint32_t beat = musicTime / 0.75f;
+			const uint32_t beat = musicTime / 0.75f;
 			color = beatColors[ beat % countof( beatColors ) ];
 		}
-
 		float hitOpacity = ae::Min( 1.0f, hitFade / 0.8f );
 		hitOpacity *= hitOpacity;
-		render.Activate();
 		render.Clear( color.Lerp( ae::Color::PicoWhite(), hitOpacity * 0.8f ) );
 		render.Present();
-		
 		timeStep.Tick();
-	}
+		return !input.quit;
+	};
+#if _AE_EMSCRIPTEN_
+	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
+#else
+	while ( Update() ) {}
+#endif
 
 	AE_LOG( "Terminate" );
-
 	audio.Terminate();
 	input.Terminate();
 	render.Terminate();
 	window.Terminate();
-
+	fs.DestroyAll();
 	return 0;
 }

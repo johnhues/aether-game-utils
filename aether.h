@@ -10926,6 +10926,10 @@ T* ae::Cast( C* obj )
 	#ifndef AE_USE_OPENAL
 		#define AE_USE_OPENAL 0
 	#endif
+#elif _AE_EMSCRIPTEN_
+	#ifndef AE_USE_OPENAL
+		#define AE_USE_OPENAL 1
+	#endif
 #endif
 #include <inttypes.h>
 #include <thread>
