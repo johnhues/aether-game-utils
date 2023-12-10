@@ -3781,10 +3781,10 @@ public:
 	TextRender( const ae::Tag& tag );
 	~TextRender();
 	//! Initializes this TextRender. Must be called before other functions.
-	//! @param maxStringCount the maximum number of times TextRender::Add() can
-	//! be called between calls to TextRender::Render()
+	//! @param maxStringCount the maximum number of strings that can
+	//! be rendered per call to TextRender::Render()
 	//! @param maxGlyphCount the maximum number of total characters that can
-	//! be submitted with TextRender::Add() between calls to TextRender::Render()
+	//! be rendered per call to TextRender::Render()
 	//! @param texture a square texture with ascii characters evenly spaced from
 	//! top left to bottom right, the red channel of the texture can be used for
 	//! transparency
@@ -14692,6 +14692,10 @@ void Window::m_Initialize()
 	[nsWindow makeFirstResponder:glView];
 	[nsWindow setOpaque:YES];
 	[nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
+	if( NSString* appName = [[NSProcessInfo processInfo] processName] )
+	{
+		[nsWindow setFrameAutosaveName:appName];
+	}
 	
 	NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];
 	m_pos = ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y );
@@ -14855,6 +14859,9 @@ void Window::SetAlwaysOnTop( bool alwaysOnTop )
 {
 #if _AE_WINDOWS_
 	SetWindowPos( (HWND)window, alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+#elif _AE_OSX_
+	NSWindow* nsWindow = (NSWindow*)window;
+	[nsWindow setLevel:( alwaysOnTop ? NSFloatingWindowLevel : NSNormalWindowLevel )];
 #endif
 }
 
