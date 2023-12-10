@@ -104,7 +104,9 @@ public:
 	const Component& GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex ) const;
 	Component& GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex );
 	template < typename T, typename Fn > uint32_t CallFn( Fn fn );
+	template < typename T, typename Fn > uint32_t CallFn( Fn fn ) const;
 	template < typename T, typename Fn > uint32_t CallFn( Entity entity, Fn fn );
+	template < typename T, typename Fn > uint32_t CallFn( Entity entity, Fn fn ) const;
 
 	// Removal
 	void Destroy( Entity entity );
@@ -327,6 +329,27 @@ uint32_t Registry::CallFn( Fn fn )
 }
 
 template < typename T, typename Fn >
+uint32_t Registry::CallFn( Fn fn ) const
+{
+	uint32_t result = 0;
+	const ae::Type* type = ae::GetType< T >();
+	for ( uint32_t i = 0; i < m_components.Length(); i++ )
+	{
+		const ae::Type* componentType = ae::GetTypeById( m_components.GetKey( i ) );
+		if ( componentType->IsType( type ) )
+		{
+			// Get components each loop because m_components could grow at any iteration
+			for ( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
+			{
+				fn( (const T*)m_components.GetValue( i ).GetValue( j ) );
+				result++;
+			}
+		}
+	}
+	return result;
+}
+
+template < typename T, typename Fn >
 uint32_t Registry::CallFn( Entity entity, Fn fn )
 {
 	uint32_t result = 0;
@@ -336,6 +359,25 @@ uint32_t Registry::CallFn( Entity entity, Fn fn )
 		if( Component* _c = components->Get( entity, nullptr ) )
 		{
 			if( T* c = ae::Cast< T >( _c ) )
+			{
+				fn( c );
+				result++;
+			}
+		}
+	}
+	return result;
+}
+
+template < typename T, typename Fn >
+uint32_t Registry::CallFn( Entity entity, Fn fn ) const
+{
+	uint32_t result = 0;
+	for( uint32_t i = 0; i < m_components.Length(); i++ )
+	{
+		const ae::Map< Entity, Component* >* components = &m_components.GetValue( i );
+		if( Component* _c = components->Get( entity, nullptr ) )
+		{
+			if( const T* c = ae::Cast< T >( _c ) )
 			{
 				fn( c );
 				result++;
