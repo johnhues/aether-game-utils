@@ -1683,6 +1683,8 @@ public:
 	void SetVec4( const char* key, ae::Vec4 value );
 	void SetInt2( const char* key, ae::Int2 value );
 	void SetMatrix4( const char* key, const ae::Matrix4& value );
+
+	bool Remove( const char* key );
 	void Clear();
 
 	const char* GetString( const char* key, const char* defaultValue ) const;
@@ -1722,7 +1724,7 @@ private:
 	template < typename T > void SetVec4( const char*, T ) = delete;
 	template < typename T > void SetInt2( const char*, T ) = delete;
 	template < typename T > void SetMatrix4( const char*, T ) = delete;
-	ae::Map< ae::Str128, ae::Str128 > m_entries; // @TODO: Should support static allocation
+	ae::Map< ae::Str128, ae::Str128, 0, ae::MapMode::Stable > m_entries; // @TODO: Should support static allocation
 };
 
 inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
@@ -13463,6 +13465,11 @@ void Dict::SetMatrix4( const char* key, const ae::Matrix4& value )
 {
 	auto str = ToString( value );
 	m_entries.Set( key, str.c_str() );
+}
+
+bool Dict::Remove( const char* key )
+{
+	return m_entries.Remove( key );
 }
 
 void Dict::Clear()
