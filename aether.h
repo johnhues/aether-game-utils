@@ -2497,12 +2497,14 @@ struct RunOnDestroy
 //------------------------------------------------------------------------------
 // ae::Screen
 //------------------------------------------------------------------------------
-//! Screen information. ae::Streen member values are in the same coordinate
+//! Screen information. ae::Screen member values are in the same coordinate
 //! space as ae::Window.
 struct Screen
 {
 	ae::Int2 position;
 	ae::Int2 size;
+	bool isPrimary = false; //!< True for the display with the start menu, dock, etc
+	bool isExternal = false; //!< True if the screen is removable from the device
 };
 //! Returns an array of all available screens. If a system error is encountered
 //! the returned array will be empty.
@@ -14361,10 +14363,17 @@ ae::Array< ae::Screen, 16 > GetScreens()
 	NSArray< NSScreen* >* screens = [NSScreen screens];
 	for ( uint32_t i = 0; i < screens.count; i++ )
 	{
-		NSScreen* screen = screens[ i ];
+		const NSScreen* screen = screens[ i ];
 		Screen& s = result.Append( {} );
 		s.position = ae::Int2( screen.frame.origin.x, screen.frame.origin.y );
 		s.size = ae::Int2( screen.frame.size.width, screen.frame.size.height );
+
+		s.isPrimary = [screen isEqualTo:[NSScreen mainScreen]];
+
+		const NSDictionary* description = [screen deviceDescription];
+		const NSNumber* screenIDNumber = [description objectForKey:@"NSScreenNumber"];
+		const CGDirectDisplayID screenID = [screenIDNumber unsignedIntValue];
+		s.isExternal = !CGDisplayIsBuiltin( screenID );
 	}
 #elif _AE_WINDOWS_
 	auto monitorEnumProc = []( HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData ) -> BOOL
