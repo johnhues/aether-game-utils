@@ -116,6 +116,82 @@ ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 
 	return ae::Vec2( copysignf( a * tx, p[ 0 ] ), copysignf( b * ty, p[ 1 ] ) );
 }
 
+ae::Vec3 ClipJoint( const ae::Matrix4& j0, const float (&angleLimits)[ 4 ], float j01Len, ae::Vec3 j1, ae::DebugLines* debugLines = nullptr )
+{
+	// @TODO: Assumes j0 is oriented so z is the primary axis
+
+	const ae::Matrix4 j0Inv = j0.GetInverse();
+	const ae::Vec2 j1Flat = [&]()
+	{
+		ae::Vec3 p;
+		const ae::Plane plane = ae::Plane( ae::Vec3( 0, 0, j01Len ), ae::Vec3( 0, 0, 1 ) );
+		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1, 1.0f ) ).GetXYZ();
+		plane.IntersectLine( ae::Vec3( 0.0f ), j1Local, &p );
+		return p.GetXY();
+	}();
+	const float q[ 4 ] =
+	{
+		j01Len * ae::Tan( ae::Clip( angleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		j01Len * ae::Tan( ae::Clip( angleLimits[ 1 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		j01Len * ae::Tan( -ae::Clip( angleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		j01Len * ae::Tan( -ae::Clip( angleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
+	};
+
+	const ae::Vec2 quadrantEllipse = [q, j1Flat]()
+	{
+		if( j1Flat.x > 0.0f && j1Flat.y > 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
+		if( j1Flat.x < 0.0f && j1Flat.y > 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
+		if( j1Flat.x < 0.0f && j1Flat.y < 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
+		return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
+	}();
+	const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), j1Flat );
+	ae::Vec2 posClipped = j1Flat;
+	bool clipped = false;
+	if( posClipped.LengthSquared() > edge.LengthSquared() )
+	{
+		posClipped = edge;
+		clipped = true;
+	}
+	const ae::Vec3 resultLocal = ae::Vec3( posClipped, j01Len ).NormalizeCopy() * j01Len;
+	const ae::Vec3 resultWorld = ( j0 * ae::Vec4( resultLocal, 1.0f ) ).GetXYZ();
+
+	if( debugLines )
+	{
+		const ae::Matrix4 drawTransform = j0;
+		debugLines->AddSphere( ( drawTransform * ae::Vec4( j1Flat, j01Len, 1 ) ).GetXYZ(), 0.1f, ae::Color::Magenta(), 16 );
+		debugLines->AddSphere( ( drawTransform * ae::Vec4( posClipped, j01Len, 1 ) ).GetXYZ(), 0.1f, ae::Color::Green(), 16 );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 0 ], 0, j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 1 ], j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 2 ], 0, j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 3 ], j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		for ( uint32_t i = 0; i < 16; i++ )
+		{
+			const ae::Vec3 q0( q[ 0 ], q[ 1 ], 1 ); // +x +y
+			const ae::Vec3 q1( q[ 2 ], q[ 1 ], 1 ); // -x +y
+			const ae::Vec3 q2( q[ 2 ], q[ 3 ], 1 ); // -x -y
+			const ae::Vec3 q3( q[ 0 ], q[ 3 ], 1 ); // +x -y
+			const float step = ( ae::HalfPi / 16 );
+			const float angle = i * step;
+			const ae::Vec3 l0( ae::Cos( angle ), ae::Sin( angle ), j01Len );
+			const ae::Vec3 l1( ae::Cos( angle + step ), ae::Sin( angle + step ), j01Len );
+			const ae::Vec4 p0 = drawTransform * ae::Vec4( l0 * q0, 1.0f );
+			const ae::Vec4 p1 = drawTransform * ae::Vec4( l1 * q0, 1.0f );
+			const ae::Vec4 p2 = drawTransform * ae::Vec4( l0 * q1, 1.0f );
+			const ae::Vec4 p3 = drawTransform * ae::Vec4( l1 * q1, 1.0f );
+			const ae::Vec4 p4 = drawTransform * ae::Vec4( l0 * q2, 1.0f );
+			const ae::Vec4 p5 = drawTransform * ae::Vec4( l1 * q2, 1.0f );
+			const ae::Vec4 p6 = drawTransform * ae::Vec4( l0 * q3, 1.0f );
+			const ae::Vec4 p7 = drawTransform * ae::Vec4( l1 * q3, 1.0f );
+			debugLines->AddLine( p0.GetXYZ(), p1.GetXYZ(), ae::Color::Green() );
+			debugLines->AddLine( p2.GetXYZ(), p3.GetXYZ(), ae::Color::Green() );
+			debugLines->AddLine( p4.GetXYZ(), p5.GetXYZ(), ae::Color::Green() );
+			debugLines->AddLine( p6.GetXYZ(), p7.GetXYZ(), ae::Color::Green() );
+		}
+	}
+
+	return resultWorld;
+};
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -136,7 +212,7 @@ int main()
 
 	window.Initialize( 800, 600, false, true );
 	window.SetTitle( "17_IK" );
-	// window.SetAlwaysOnTop( ae::IsDebuggerAttached() );
+	window.SetAlwaysOnTop( ( ae::GetScreens().FindFn( []( const ae::Screen& s ){ return s.isExternal; } ) >= 0 ) && ae::IsDebuggerAttached() );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
@@ -216,31 +292,39 @@ int main()
 	const char* anchorBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
-	ae::Matrix4 targetTransform;
-	ae::Matrix4 testJointHandle;
+	ae::Matrix4 targetTransform, testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
-		testJointHandle = ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, 2.0f ) ) * ae::Matrix4::Scaling( 0.1f );
 		targetTransform = skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
+		testJoint0 = ae::Matrix4::Translation( 0.0f, 0.0f, -2.0f );// * ae::Matrix4::Scaling( 0.2f );
+		testJoint1 = ae::Matrix4::Translation( 0.0f, 0.0f, 2.0f );// * ae::Matrix4::Scaling( 0.2f );
 		currentPose.Initialize( &skin.GetBindPose() );
+		currentPose.SetTransform( currentPose.GetRoot(), ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, 1.0f ) ) );
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
-	bool drawMesh = true;
-	bool drawSkeleton = true;
+	bool drawMesh = false;
+	bool drawSkeleton = false;
 	bool autoIK = true;
-	bool moveTestJoint = false;
+	enum class TestJointId
+	{
+		None,
+		Zero,
+		One
+	};
+	TestJointId selTestJoint = TestJointId::One;
 	int selection = 1;
 	auto GetSelectedTransform = [&]() -> ae::Matrix4&
 	{
-		if ( moveTestJoint )
+		switch( selTestJoint )
 		{
-			return testJointHandle;
+			case TestJointId::Zero: return testJoint0;
+			case TestJointId::One: return testJoint1;
 		}
 		return targetTransform;
 	};
-	float angleLimit[ 4 ] = { ae::QuarterPi, ae::QuarterPi, ae::QuarterPi, ae::QuarterPi };
+	float angleLimit[ 4 ] = { ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f };
 	
 	AE_INFO( "Run" );
 	while ( !input.quit )
@@ -261,6 +345,7 @@ int main()
 		if ( ImGui::Begin( "Options" ) )
 		{
 			ImGui::Checkbox( "Draw Mesh", &drawMesh );
+			ImGui::Checkbox( "Draw Skeleton", &drawSkeleton );
 			ImGui::Checkbox( "Auto IK", &autoIK );
 			ImGui::SameLine();
 			ImGui::BeginDisabled( autoIK );
@@ -269,7 +354,6 @@ int main()
 				shouldStep = true;
 			}
 			ImGui::EndDisabled();
-			ImGui::Checkbox( "Draw Skeleton", &drawSkeleton );
 
 			ImGui::Separator();
 
@@ -295,7 +379,8 @@ int main()
 
 			ImGui::Separator();
 
-			ImGui::Checkbox( "Move Test Joint", &moveTestJoint );
+			const char* jointNames[] = { "Target", "0", "1" };
+			ImGui::ListBox( "Joint", (int*)&selTestJoint, jointNames, countof(jointNames), 4 );
 			ImGui::SliderFloat( "T0", &angleLimit[ 0 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "T1", &angleLimit[ 1 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "T2", &angleLimit[ 2 ], 0.0f, ae::HalfPi );
@@ -411,59 +496,12 @@ int main()
 			}
 		}
 
-		const ae::Vec3 testJoint( 0.0f, 0.0f, -2.0f );
-		const ae::Vec3 testJointNext( 0.0f, 0.0f, 2.0f );
-		const ae::Vec3 jointSegment = testJointNext - testJoint;
-		const float jointLen = jointSegment.Length();
-		const ae::Vec3 currJointDir = ( testJointHandle.GetTranslation() - testJoint );
-		ae::Vec3 jointProj( 0.0f );
-		ae::Plane( ae::Vec3( 0.0f ), ae::Vec3( 0, 0, 1 ) ).IntersectLine( testJointHandle.GetTranslation(), currJointDir, &jointProj );
-		const float q[ 4 ] = {
-			ae::Atan( ae::Max( angleLimit[ 0 ], 0.0001f ) ),
-			ae::Atan( ae::Max( angleLimit[ 1 ], 0.0001f ) ),
-			ae::Atan( -ae::Max( angleLimit[ 2 ], 0.0001f ) ),
-			ae::Atan( -ae::Max( angleLimit[ 3 ], 0.0001f ) )
-		};
-		ae::Color quadrantColor[ 4 ] = { ae::Color::Green(), ae::Color::Green(), ae::Color::Green(), ae::Color::Green() };
-		const ae::Vec2 quadrantEllipse = [q, jointProj, &quadrantColor](){
-			if( jointProj.x > 0.0f && jointProj.y > 0.0f ) { quadrantColor[ 0 ] = ae::Color::Red(); return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
-			if( jointProj.x < 0.0f && jointProj.y > 0.0f ) { quadrantColor[ 1 ] = ae::Color::Red(); return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
-			if( jointProj.x < 0.0f && jointProj.y < 0.0f ) { quadrantColor[ 2 ] = ae::Color::Red(); return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
-			quadrantColor[ 3 ] = ae::Color::Red();
-			return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
-		}();
-		const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), jointProj.GetXY() );
-		ae::Vec3 jointProjClipped = jointProj;
-		if( jointProjClipped.GetXY().LengthSquared() > edge.LengthSquared() )
-		{
-			jointProjClipped.SetXY( edge );
-		}
-		const ae::Vec3 jointEnd1 = testJoint + ( jointProjClipped - testJoint ).NormalizeCopy() * jointLen;
+		const ae::Vec3 jointClipped = ClipJoint( testJoint0, angleLimit, 2.0f, testJoint1.GetTranslation(), &debugLines );
 
 		// Joint limits
-		debugLines.AddOBB( testJointHandle, ae::Color::Magenta() );
-		debugLines.AddLine( testJoint, jointEnd1, ae::Color::PicoPink() );
-		debugLines.AddCircle( jointProj, ae::Vec3( 0, 0, 1 ), 0.1f, ae::Color::Magenta(), 16 );
-		debugLines.AddCircle( jointProjClipped, ae::Vec3( 0, 0, 1 ), 0.1f, ae::Color::Magenta(), 16 );
-		debugLines.AddLine( testJoint, ae::Vec3( q[ 0 ], 0.0f, 0.0f ), ae::Color::Green() );
-		debugLines.AddLine( testJoint, ae::Vec3( 0.0f, q[ 1 ], 0.0f ), ae::Color::Green() );
-		debugLines.AddLine( testJoint, ae::Vec3( q[ 2 ], 0.0f, 0.0f ), ae::Color::Green() );
-		debugLines.AddLine( testJoint, ae::Vec3( 0.0f, q[ 3 ], 0.0f ), ae::Color::Green() );
-		for ( uint32_t i = 0; i < 16; i++ )
-		{
-			const ae::Vec3 q0( q[ 0 ], q[ 1 ], 0 ); // +x +y
-			const ae::Vec3 q1( q[ 2 ], q[ 1 ], 0 ); // -x +y
-			const ae::Vec3 q2( q[ 2 ], q[ 3 ], 0 ); // -x -y
-			const ae::Vec3 q3( q[ 0 ], q[ 3 ], 0 ); // +x -y
-			const float step = ( ae::HalfPi / 16 );
-			const float angle = i * step;
-			const ae::Vec3 p0( ae::Cos( angle ), ae::Sin( angle ), 0 );
-			const ae::Vec3 p1( ae::Cos( angle + step ), ae::Sin( angle + step ), 0 );
-			debugLines.AddLine( p0 * q0, p1 * q0, quadrantColor[ 0 ] );
-			debugLines.AddLine( p0 * q1, p1 * q1, quadrantColor[ 1 ] );
-			debugLines.AddLine( p0 * q2, p1 * q2, quadrantColor[ 2 ] );
-			debugLines.AddLine( p0 * q3, p1 * q3, quadrantColor[ 3 ] );
-		}
+		debugLines.AddOBB( testJoint0, ae::Color::Magenta() );
+		debugLines.AddOBB( testJoint1, ae::Color::Magenta() );
+		debugLines.AddLine( testJoint0.GetTranslation(), jointClipped, ae::Color::PicoPink() );
 
 		// Add grid
 		gridLines.AddLine( ae::Vec3( -2, 0, 0 ), ae::Vec3( 2, 0, 0 ), ae::Color::Red() );
@@ -474,11 +512,39 @@ int main()
 			gridLines.AddLine( ae::Vec3( i, -2, 0 ), ae::Vec3( i, 2, 0 ), ae::Color::PicoLightGray() );
 			gridLines.AddLine( ae::Vec3( -2, i, 0 ), ae::Vec3( 2, i, 0 ), ae::Color::PicoLightGray() );
 		}
-		
+
 		// Start frame
-		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
-		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
-		ae::Matrix4 worldToProj = viewToProj * worldToView;
+		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
+		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
+		const ae::Matrix4 worldToProj = viewToProj * worldToView;
+		const ae::Matrix4 projToWorld = worldToProj.GetInverse();
+
+		// if( input.mouse.leftButton && input.mousePrev.leftButton )
+		{
+			const ae::Vec4 ndcPos = ae::Vec4( input.mouse.position.x / (float)window.GetWidth() * 2.0f - 1.0f, input.mouse.position.y / (float)window.GetHeight() * 2.0f - 1.0f, 0.0f, 1.0f );
+			ae::Vec4 worldPos = projToWorld * ndcPos;
+			worldPos /= worldPos.w;
+			const ae::Vec3 rayOrigin = camera.GetPosition();
+			const ae::Vec3 rayDir = ( worldPos.GetXYZ() - rayOrigin ).SafeNormalizeCopy();
+			const ae::Plane plane( ae::Vec3( 0.0f ), ae::Vec3( 0, 0, 1 ) );
+			ae::Vec3 intersection;
+			if ( plane.IntersectRay( rayOrigin, rayDir * 1000.0f, &intersection ) )
+			{
+				debugLines.AddCircle( intersection, -rayDir, 0.1f, ae::Color::Red(), 16 );
+			}
+
+			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			{
+				const ae::Bone* bone = currentPose.GetBoneByIndex( i );
+				const ae::Bone* parent = bone->parent;
+				if ( parent )
+				{
+					const ae::Vec3 pos = bone->transform.GetTranslation();
+					const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::PicoRed() : ae::Color::PicoBlue();
+					debugLines.AddCircle( pos, -rayDir, 0.1f, color, 16 );
+				}
+			}
+		}
 		
 		ImGuizmo::Manipulate(
 			worldToView.data,
