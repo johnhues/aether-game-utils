@@ -116,25 +116,32 @@ ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 
 	return ae::Vec2( copysignf( a * tx, p[ 0 ] ), copysignf( b * ty, p[ 1 ] ) );
 }
 
-ae::Vec3 ClipJoint( const ae::Matrix4& j0, const float (&angleLimits)[ 4 ], float j01Len, ae::Vec3 j1, ae::DebugLines* debugLines = nullptr )
+ae::Vec3 ClipJoint(
+	const ae::Matrix4& bind0,
+	const ae::Matrix4& bind1,
+	const ae::Matrix4& j0,
+	const ae::Matrix4& j0Inv,
+	const ae::Matrix4& j1,
+	const float (&j0AngleLimits)[ 4 ],
+	ae::DebugLines* debugLines = nullptr )
 {
 	// @TODO: Assumes j0 is oriented so z is the primary axis
 
-	const ae::Matrix4 j0Inv = j0.GetInverse();
+	const float b01Len = ( bind0.GetTranslation() - bind1.GetTranslation() ).Length();
 	const ae::Vec2 j1Flat = [&]()
 	{
 		ae::Vec3 p;
-		const ae::Plane plane = ae::Plane( ae::Vec3( 0, 0, j01Len ), ae::Vec3( 0, 0, 1 ) );
-		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1, 1.0f ) ).GetXYZ();
+		const ae::Plane plane = ae::Plane( ae::Vec3( 0, 0, b01Len ), ae::Vec3( 0, 0, 1 ) );
+		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1.GetTranslation(), 1.0f ) ).GetXYZ();
 		plane.IntersectLine( ae::Vec3( 0.0f ), j1Local, &p );
 		return p.GetXY();
 	}();
 	const float q[ 4 ] =
 	{
-		j01Len * ae::Tan( ae::Clip( angleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		j01Len * ae::Tan( ae::Clip( angleLimits[ 1 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		j01Len * ae::Tan( -ae::Clip( angleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		j01Len * ae::Tan( -ae::Clip( angleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
+		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 1 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
 	};
 
 	const ae::Vec2 quadrantEllipse = [q, j1Flat]()
@@ -152,18 +159,18 @@ ae::Vec3 ClipJoint( const ae::Matrix4& j0, const float (&angleLimits)[ 4 ], floa
 		posClipped = edge;
 		clipped = true;
 	}
-	const ae::Vec3 resultLocal = ae::Vec3( posClipped, j01Len ).NormalizeCopy() * j01Len;
+	const ae::Vec3 resultLocal = ae::Vec3( posClipped, b01Len ).NormalizeCopy() * b01Len;
 	const ae::Vec3 resultWorld = ( j0 * ae::Vec4( resultLocal, 1.0f ) ).GetXYZ();
 
 	if( debugLines )
 	{
 		const ae::Matrix4 drawTransform = j0;
-		debugLines->AddSphere( ( drawTransform * ae::Vec4( j1Flat, j01Len, 1 ) ).GetXYZ(), 0.1f, ae::Color::Magenta(), 16 );
-		debugLines->AddSphere( ( drawTransform * ae::Vec4( posClipped, j01Len, 1 ) ).GetXYZ(), 0.1f, ae::Color::Green(), 16 );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 0 ], 0, j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 1 ], j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 2 ], 0, j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 3 ], j01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		debugLines->AddSphere( ( drawTransform * ae::Vec4( j1Flat, b01Len, 1 ) ).GetXYZ(), 0.025f, ae::Color::Magenta(), 8 );
+		debugLines->AddSphere( ( drawTransform * ae::Vec4( posClipped, b01Len, 1 ) ).GetXYZ(), 0.025f, ae::Color::Green(), 8 );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 0 ], 0, b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 1 ], b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 2 ], 0, b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 3 ], b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
 		for ( uint32_t i = 0; i < 16; i++ )
 		{
 			const ae::Vec3 q0( q[ 0 ], q[ 1 ], 1 ); // +x +y
@@ -172,8 +179,8 @@ ae::Vec3 ClipJoint( const ae::Matrix4& j0, const float (&angleLimits)[ 4 ], floa
 			const ae::Vec3 q3( q[ 0 ], q[ 3 ], 1 ); // +x -y
 			const float step = ( ae::HalfPi / 16 );
 			const float angle = i * step;
-			const ae::Vec3 l0( ae::Cos( angle ), ae::Sin( angle ), j01Len );
-			const ae::Vec3 l1( ae::Cos( angle + step ), ae::Sin( angle + step ), j01Len );
+			const ae::Vec3 l0( ae::Cos( angle ), ae::Sin( angle ), b01Len );
+			const ae::Vec3 l1( ae::Cos( angle + step ), ae::Sin( angle + step ), b01Len );
 			const ae::Vec4 p0 = drawTransform * ae::Vec4( l0 * q0, 1.0f );
 			const ae::Vec4 p1 = drawTransform * ae::Vec4( l1 * q0, 1.0f );
 			const ae::Vec4 p2 = drawTransform * ae::Vec4( l0 * q1, 1.0f );
@@ -292,12 +299,14 @@ int main()
 	const char* anchorBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
+	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 0.0f );// * ae::Matrix4::Scaling( 0.2f );
+	const ae::Matrix4 testJoint1Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 2.0f );// * ae::Matrix4::Scaling( 0.2f );
 	ae::Matrix4 targetTransform, testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
 		targetTransform = skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
-		testJoint0 = ae::Matrix4::Translation( 0.0f, 0.0f, -2.0f );// * ae::Matrix4::Scaling( 0.2f );
-		testJoint1 = ae::Matrix4::Translation( 0.0f, 0.0f, 2.0f );// * ae::Matrix4::Scaling( 0.2f );
+		testJoint0 = testJoint0Bind;
+		testJoint1 = testJoint1Bind;
 		currentPose.Initialize( &skin.GetBindPose() );
 		currentPose.SetTransform( currentPose.GetRoot(), ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, 1.0f ) ) );
 	};
@@ -496,7 +505,15 @@ int main()
 			}
 		}
 
-		const ae::Vec3 jointClipped = ClipJoint( testJoint0, angleLimit, 2.0f, testJoint1.GetTranslation(), &debugLines );
+		const ae::Vec3 jointClipped = ClipJoint(
+			testJoint0Bind,
+			testJoint1Bind,
+			testJoint0,
+			testJoint0.GetInverse(),
+			testJoint1,
+			angleLimit,
+			&debugLines
+		);
 
 		// Joint limits
 		debugLines.AddOBB( testJoint0, ae::Color::Magenta() );
