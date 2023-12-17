@@ -127,7 +127,9 @@ ae::Vec3 ClipJoint(
 {
 	// @TODO: Assumes j0 is oriented so z is the primary axis
 
-	const float b01Len = ( bind0.GetTranslation() - bind1.GetTranslation() ).Length();
+	const ae::Vec3 b0 = ( j0Inv * ae::Vec4( bind0.GetTranslation(), 1.0f ) ).GetXYZ();
+	const ae::Vec3 b1 = ( j0Inv * ae::Vec4( bind1.GetTranslation(), 1.0f ) ).GetXYZ();
+	const float b01Len = ( b0 - b1 ).Length();
 	const ae::Vec2 j1Flat = [&]()
 	{
 		ae::Vec3 p;
@@ -299,8 +301,8 @@ int main()
 	const char* anchorBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
-	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 0.0f );// * ae::Matrix4::Scaling( 0.2f );
-	const ae::Matrix4 testJoint1Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 2.0f );// * ae::Matrix4::Scaling( 0.2f );
+	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 0.0f ) * ae::Matrix4::Scaling( 0.2f );
+	const ae::Matrix4 testJoint1Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 2.0f ) * ae::Matrix4::Scaling( 0.2f );
 	ae::Matrix4 targetTransform, testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
@@ -369,10 +371,15 @@ int main()
 			ImGui::RadioButton( "Translate", (int*)&gizmoOperation, ImGuizmo::TRANSLATE );
 			ImGui::SameLine();
 			ImGui::RadioButton( "Rotate", (int*)&gizmoOperation, ImGuizmo::ROTATE );
+			ImGui::SameLine();
+			ImGui::RadioButton( "Scale", (int*)&gizmoOperation, ImGuizmo::SCALE );
 
+			ImGui::BeginDisabled( gizmoOperation == ImGuizmo::SCALE );
 			ImGui::RadioButton( "World", (int*)&gizmoMode, ImGuizmo::WORLD );
 			ImGui::SameLine();
-			ImGui::RadioButton( "Local", (int*)&gizmoMode, ImGuizmo::LOCAL );
+			ImGuizmo::MODE scaleGizmoMode = ImGuizmo::LOCAL;
+			ImGui::RadioButton( "Local", (int*)( ( gizmoOperation == ImGuizmo::SCALE ) ? &scaleGizmoMode : &gizmoMode ), ImGuizmo::LOCAL );
+			ImGui::EndDisabled();
 
 			ImGui::Separator();
 
@@ -414,6 +421,10 @@ int main()
 			else { gizmoMode = ( gizmoMode == ImGuizmo::WORLD ) ? ImGuizmo::LOCAL : ImGuizmo::WORLD; }
 		}
 		if ( input.GetPress( ae::Key::R ) )
+		{
+			gizmoOperation = ImGuizmo::SCALE;
+		}
+		if ( input.GetPress( ae::Key::Space ) )
 		{
 			SetDefault();
 		}
@@ -567,7 +578,7 @@ int main()
 			worldToView.data,
 			viewToProj.data,
 			gizmoOperation,
-			gizmoMode,
+			( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode,
 			GetSelectedTransform().data
 		);
 		
