@@ -116,16 +116,70 @@ ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 
 	return ae::Vec2( copysignf( a * tx, p[ 0 ] ), copysignf( b * ty, p[ 1 ] ) );
 }
 
+ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true )
+{
+	if( negative )
+	{
+		switch( axis )
+		{
+			case ae::Axis::X: return ae::Vec3( 1, 0, 0 );
+			case ae::Axis::Y: return ae::Vec3( 0, 1, 0 );
+			case ae::Axis::Z: return ae::Vec3( 0, 0, 1 );
+			case ae::Axis::NegativeX: return ae::Vec3( -1, 0, 0 );
+			case ae::Axis::NegativeY: return ae::Vec3( 0, -1, 0 );
+			case ae::Axis::NegativeZ: return ae::Vec3( 0, 0, -1 );
+		}
+	}
+	else
+	{
+		switch( axis )
+		{
+			case ae::Axis::X:
+			case ae::Axis::NegativeX:
+				return ae::Vec3( 1, 0, 0 );
+			case ae::Axis::Y:
+			case ae::Axis::NegativeY:
+				return ae::Vec3( 0, 1, 0 );
+			case ae::Axis::Z:
+			case ae::Axis::NegativeZ:
+				return ae::Vec3( 0, 0, 1 );
+		}
+	}
+	return ae::Vec3( 0.0f );
+}
+
 ae::Vec3 ClipJoint(
 	const ae::Matrix4& bind0,
 	const ae::Matrix4& bind1,
 	const ae::Matrix4& j0,
 	const ae::Matrix4& j0Inv,
 	const ae::Matrix4& j1,
+	const ae::Axis ha,
+	const ae::Axis va,
+	const ae::Axis pa,
 	const float (&j0AngleLimits)[ 4 ],
 	ae::DebugLines* debugLines = nullptr )
 {
-	// @TODO: Assumes j0 is oriented so z is the primary axis
+	const auto Build3D = []( ae::Axis horizontalAxis, ae::Axis verticalAxis, ae::Axis primaryAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true ) -> ae::Vec3
+	{
+		ae::Vec3 result = GetAxisVector( horizontalAxis, negative ) * horizontalVal;
+		result += GetAxisVector( verticalAxis, negative ) * verticalVal;
+		result += GetAxisVector( primaryAxis, negative ) * primaryVal;
+		return result;
+	};
+	const auto GetAxis = []( ae::Axis axis, const ae::Vec3 v ) -> float
+	{
+		switch( axis )
+		{
+			case ae::Axis::X: return v.x;
+			case ae::Axis::Y: return v.y;
+			case ae::Axis::Z: return v.z;
+			case ae::Axis::NegativeX: return -v.x;
+			case ae::Axis::NegativeY: return -v.y;
+			case ae::Axis::NegativeZ: return -v.z;
+			default: return 0.0f;
+		}
+	};
 
 	const ae::Vec3 b0 = ( j0Inv * ae::Vec4( bind0.GetTranslation(), 1.0f ) ).GetXYZ();
 	const ae::Vec3 b1 = ( j0Inv * ae::Vec4( bind1.GetTranslation(), 1.0f ) ).GetXYZ();
@@ -133,10 +187,13 @@ ae::Vec3 ClipJoint(
 	const ae::Vec2 j1Flat = [&]()
 	{
 		ae::Vec3 p;
-		const ae::Plane plane = ae::Plane( ae::Vec3( 0, 0, b01Len ), ae::Vec3( 0, 0, 1 ) );
+		const ae::Plane plane = ae::Plane(
+			Build3D( ha, va, pa, 0, 0, b01Len ),
+			Build3D( ha, va, pa, 0, 0, 1 )
+		);
 		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1.GetTranslation(), 1.0f ) ).GetXYZ();
 		plane.IntersectLine( ae::Vec3( 0.0f ), j1Local, &p );
-		return p.GetXY();
+		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
 	}();
 	const float q[ 4 ] =
 	{
@@ -155,46 +212,46 @@ ae::Vec3 ClipJoint(
 	}();
 	const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), j1Flat );
 	ae::Vec2 posClipped = j1Flat;
-	bool clipped = false;
 	if( posClipped.LengthSquared() > edge.LengthSquared() )
 	{
 		posClipped = edge;
-		clipped = true;
 	}
-	const ae::Vec3 resultLocal = ae::Vec3( posClipped, b01Len ).NormalizeCopy() * b01Len;
+	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ).NormalizeCopy() * b01Len;
 	const ae::Vec3 resultWorld = ( j0 * ae::Vec4( resultLocal, 1.0f ) ).GetXYZ();
 
 	if( debugLines )
 	{
-		const ae::Matrix4 drawTransform = j0;
-		debugLines->AddSphere( ( drawTransform * ae::Vec4( j1Flat, b01Len, 1 ) ).GetXYZ(), 0.025f, ae::Color::Magenta(), 8 );
-		debugLines->AddSphere( ( drawTransform * ae::Vec4( posClipped, b01Len, 1 ) ).GetXYZ(), 0.025f, ae::Color::Green(), 8 );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 0 ], 0, b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 1 ], b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( q[ 2 ], 0, b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
-		debugLines->AddLine( j0.GetTranslation(), ( drawTransform * ae::Vec4( 0, q[ 3 ], b01Len, 1 ) ).GetXYZ(), ae::Color::Green() );
+		const ae::Vec3 j1FlatWorld = ( j0 * ae::Vec4( Build3D( ha, va, pa, j1Flat.x, j1Flat.y, b01Len ), 1 ) ).GetXYZ();
+		const ae::Vec3 j1FlatWorldClipped = ( j0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ), 1 ) ).GetXYZ();
+		debugLines->AddSphere( j1FlatWorld, 0.025f, ae::Color::Magenta(), 8 );
+		debugLines->AddSphere( j1FlatWorldClipped, 0.025f, ae::Color::Magenta(), 8 );
+		debugLines->AddLine( j1FlatWorld, j1FlatWorldClipped, ae::Color::Magenta() );
+		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 0 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
+		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 1 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
+		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 2 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
+		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 3 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
 		for ( uint32_t i = 0; i < 16; i++ )
 		{
-			const ae::Vec3 q0( q[ 0 ], q[ 1 ], 1 ); // +x +y
-			const ae::Vec3 q1( q[ 2 ], q[ 1 ], 1 ); // -x +y
-			const ae::Vec3 q2( q[ 2 ], q[ 3 ], 1 ); // -x -y
-			const ae::Vec3 q3( q[ 0 ], q[ 3 ], 1 ); // +x -y
+			const ae::Vec3 q0 = Build3D( ha, va, pa, q[ 0 ], q[ 1 ], 1 ); // +x +y
+			const ae::Vec3 q1 = Build3D( ha, va, pa, q[ 2 ], q[ 1 ], 1 ); // -x +y
+			const ae::Vec3 q2 = Build3D( ha, va, pa, q[ 2 ], q[ 3 ], 1 ); // -x -y
+			const ae::Vec3 q3 = Build3D( ha, va, pa, q[ 0 ], q[ 3 ], 1 ); // +x -y
 			const float step = ( ae::HalfPi / 16 );
 			const float angle = i * step;
-			const ae::Vec3 l0( ae::Cos( angle ), ae::Sin( angle ), b01Len );
-			const ae::Vec3 l1( ae::Cos( angle + step ), ae::Sin( angle + step ), b01Len );
-			const ae::Vec4 p0 = drawTransform * ae::Vec4( l0 * q0, 1.0f );
-			const ae::Vec4 p1 = drawTransform * ae::Vec4( l1 * q0, 1.0f );
-			const ae::Vec4 p2 = drawTransform * ae::Vec4( l0 * q1, 1.0f );
-			const ae::Vec4 p3 = drawTransform * ae::Vec4( l1 * q1, 1.0f );
-			const ae::Vec4 p4 = drawTransform * ae::Vec4( l0 * q2, 1.0f );
-			const ae::Vec4 p5 = drawTransform * ae::Vec4( l1 * q2, 1.0f );
-			const ae::Vec4 p6 = drawTransform * ae::Vec4( l0 * q3, 1.0f );
-			const ae::Vec4 p7 = drawTransform * ae::Vec4( l1 * q3, 1.0f );
-			debugLines->AddLine( p0.GetXYZ(), p1.GetXYZ(), ae::Color::Green() );
-			debugLines->AddLine( p2.GetXYZ(), p3.GetXYZ(), ae::Color::Green() );
-			debugLines->AddLine( p4.GetXYZ(), p5.GetXYZ(), ae::Color::Green() );
-			debugLines->AddLine( p6.GetXYZ(), p7.GetXYZ(), ae::Color::Green() );
+			const ae::Vec3 l0 = Build3D( ha, va, pa, ae::Cos( angle ), ae::Sin( angle ), b01Len, false );
+			const ae::Vec3 l1 = Build3D( ha, va, pa, ae::Cos( angle + step ), ae::Sin( angle + step ), b01Len, false );
+			const ae::Vec4 p0 = j0 * ae::Vec4( l0 * q0, 1.0f );
+			const ae::Vec4 p1 = j0 * ae::Vec4( l1 * q0, 1.0f );
+			const ae::Vec4 p2 = j0 * ae::Vec4( l0 * q1, 1.0f );
+			const ae::Vec4 p3 = j0 * ae::Vec4( l1 * q1, 1.0f );
+			const ae::Vec4 p4 = j0 * ae::Vec4( l0 * q2, 1.0f );
+			const ae::Vec4 p5 = j0 * ae::Vec4( l1 * q2, 1.0f );
+			const ae::Vec4 p6 = j0 * ae::Vec4( l0 * q3, 1.0f );
+			const ae::Vec4 p7 = j0 * ae::Vec4( l1 * q3, 1.0f );
+			debugLines->AddLine( p0.GetXYZ(), p1.GetXYZ(), ae::Color::Magenta() );
+			debugLines->AddLine( p2.GetXYZ(), p3.GetXYZ(), ae::Color::Magenta() );
+			debugLines->AddLine( p4.GetXYZ(), p5.GetXYZ(), ae::Color::Magenta() );
+			debugLines->AddLine( p6.GetXYZ(), p7.GetXYZ(), ae::Color::Magenta() );
 		}
 	}
 
@@ -316,26 +373,42 @@ int main()
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
 	bool drawMesh = false;
-	bool drawSkeleton = false;
+	bool drawSkeleton = true;
 	bool autoIK = true;
 	enum class TestJointId
 	{
 		None,
+		Target,
 		Zero,
 		One
 	};
-	TestJointId selTestJoint = TestJointId::One;
-	int selection = 1;
+	TestJointId selTestJoint = TestJointId::None;
+	static uint32_t s_selectedJointIndex = 4;
+	static ae::Axis s_ha = ae::Axis::NegativeZ;
+	static ae::Axis s_va = ae::Axis::NegativeY;
+	static ae::Axis s_pa = ae::Axis::X;
 	auto GetSelectedTransform = [&]() -> ae::Matrix4&
 	{
 		switch( selTestJoint )
 		{
 			case TestJointId::Zero: return testJoint0;
 			case TestJointId::One: return testJoint1;
+			default: break;
 		}
-		return targetTransform;
+		return targetTransform; // IK Handle
 	};
-	float angleLimit[ 4 ] = { ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f };
+	auto GetFocusPos = [&]() -> ae::Vec3
+	{
+		if( selTestJoint != TestJointId::None ) { return GetSelectedTransform().GetTranslation(); }
+		return currentPose.GetBoneByIndex( s_selectedJointIndex )->transform.GetTranslation();
+	};
+	float angleLimit[ 4 ] =//{ ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f };
+	{
+		0.14f,
+		0.52f,
+		0.38f,
+		0.24f
+	};
 	
 	AE_INFO( "Run" );
 	while ( !input.quit )
@@ -390,13 +463,32 @@ int main()
 			ImGui::SameLine();
 			if ( ImGui::Button( "Focus" ) )
 			{
-				camera.Refocus( GetSelectedTransform().GetTranslation() );
+				camera.Refocus( GetFocusPos() );
 			}
 
 			ImGui::Separator();
 
-			const char* jointNames[] = { "Target", "0", "1" };
-			ImGui::ListBox( "Joint", (int*)&selTestJoint, jointNames, countof(jointNames), 4 );
+			const char* jointNames[] = { "None", "Target", "0", "1" };
+			ImGui::ListBox( "Test Joints", (int*)&selTestJoint, jointNames, countof(jointNames), 4 );
+
+			if( ImGui::ListBoxHeader( "Joints" ) )
+			{
+				for( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+				{
+					const ae::Bone* bone = currentPose.GetBoneByIndex( i );
+					ImGui::PushID( i );
+					if( ImGui::Selectable( bone->name.c_str(), s_selectedJointIndex == i ) )
+					{
+						s_selectedJointIndex = i;
+					}
+					ImGui::PopID();
+				}
+				ImGui::ListBoxFooter();
+			}
+			const char* axisNames[] = { "None", "X", "Y", "Z", "NegativeX", "NegativeY", "NegativeZ" };
+			ImGui::ListBox( "Horizontal", (int*)&s_ha, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Vertical", (int*)&s_va, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Primary", (int*)&s_pa, axisNames, countof(axisNames), 3 );
 			ImGui::SliderFloat( "T0", &angleLimit[ 0 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "T1", &angleLimit[ 1 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "T2", &angleLimit[ 2 ], 0.0f, ae::HalfPi );
@@ -430,16 +522,12 @@ int main()
 		}
 		if ( input.GetPress( ae::Key::F ) )
 		{
-			camera.Refocus( GetSelectedTransform().GetTranslation() );
+			camera.Refocus( GetFocusPos() );
 		}
 		if ( input.GetPress( ae::Key::I ) )
 		{
 			autoIK = !autoIK;
 		}
-		if ( input.Get( ae::Key::Num1 ) ) { selection = 1; }
-		if ( input.Get( ae::Key::Num2 ) ) { selection = 2; }
-		if ( input.Get( ae::Key::Num3 ) ) { selection = 3; }
-		if ( input.Get( ae::Key::Num4 ) ) { selection = 4; }
 		if ( !autoIK && input.GetPress( ae::Key::Space ) )
 		{
 			shouldStep = true;
@@ -514,6 +602,27 @@ int main()
 					debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
 				}
 			}
+
+			if( s_selectedJointIndex < currentPose.GetBoneCount() )
+			{
+				const ae::Bone* childBone = currentPose.GetBoneByIndex( s_selectedJointIndex );
+				if( const ae::Bone* parentBone = childBone->parent )
+				{
+					const ae::Matrix4& childTransform = childBone->transform;
+					ClipJoint(
+						skin.GetBindPose().GetBoneByIndex( parentBone->index )->transform,
+						skin.GetBindPose().GetBoneByIndex( childBone->index )->transform,
+						parentBone->transform,
+						parentBone->inverseTransform,
+						childTransform,
+						s_ha,
+						s_va,
+						s_pa,
+						angleLimit,
+						&debugLines
+					);
+				}
+			}
 		}
 
 		const ae::Vec3 jointClipped = ClipJoint(
@@ -522,14 +631,17 @@ int main()
 			testJoint0,
 			testJoint0.GetInverse(),
 			testJoint1,
+			s_ha,
+			s_va,
+			s_pa,
 			angleLimit,
 			&debugLines
 		);
 
 		// Joint limits
-		debugLines.AddOBB( testJoint0, ae::Color::Magenta() );
-		debugLines.AddOBB( testJoint1, ae::Color::Magenta() );
-		debugLines.AddLine( testJoint0.GetTranslation(), jointClipped, ae::Color::PicoPink() );
+		debugLines.AddOBB( testJoint0, ae::Color::PicoBlue() );
+		debugLines.AddOBB( testJoint1, ae::Color::PicoBlue() );
+		debugLines.AddLine( testJoint0.GetTranslation(), jointClipped, ae::Color::PicoBlue() );
 
 		// Add grid
 		gridLines.AddLine( ae::Vec3( -2, 0, 0 ), ae::Vec3( 2, 0, 0 ), ae::Color::Red() );
@@ -561,17 +673,18 @@ int main()
 				debugLines.AddCircle( intersection, -rayDir, 0.1f, ae::Color::Red(), 16 );
 			}
 
-			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
-			{
-				const ae::Bone* bone = currentPose.GetBoneByIndex( i );
-				const ae::Bone* parent = bone->parent;
-				if ( parent )
-				{
-					const ae::Vec3 pos = bone->transform.GetTranslation();
-					const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::PicoRed() : ae::Color::PicoBlue();
-					debugLines.AddCircle( pos, -rayDir, 0.1f, color, 16 );
-				}
-			}
+			// @TODO: Picking
+			// for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
+			// {
+			// 	const ae::Bone* bone = currentPose.GetBoneByIndex( i );
+			// 	const ae::Bone* parent = bone->parent;
+			// 	if ( parent )
+			// 	{
+			// 		const ae::Vec3 pos = bone->transform.GetTranslation();
+			// 		const ae::Color color = ( ae::Line( rayOrigin, rayOrigin + rayDir ).GetDistance( pos ) < 0.3f ) ? ae::Color::PicoRed() : ae::Color::PicoBlue();
+			// 		debugLines.AddCircle( pos, -rayDir, 0.1f, color, 16 );
+			// 	}
+			// }
 		}
 		
 		ImGuizmo::Manipulate(
