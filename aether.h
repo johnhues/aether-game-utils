@@ -15209,8 +15209,8 @@ void Input::Initialize( Window* window )
 	// Do this here so input is ready to handle events
 	[nsWindow makeKeyAndOrderFront:nil]; // nil sender
 	[nsWindow orderFrontRegardless];
-
 	[GCController setShouldMonitorBackgroundEvents: YES];
+	[[NSApplication sharedApplication] run];
 #endif
 
 	Pump(); // Pump once to process any system window creation events
@@ -15437,15 +15437,17 @@ void Input::Pump()
 			}
 			
 			// Keyboard
-			switch ( event.type )
+			switch( event.type )
 			{
 				case NSEventTypeKeyDown:
-					if ( m_textMode )
+					if( m_textMode )
 					{
 						[(aeTextInputDelegate*)m_textInputHandler interpretKeyEvents:[NSArray arrayWithObject:event]];
 					}
-					continue; // Don't propagate keyboard events or OSX will make the clicking error sound
-				case NSEventTypeKeyUp:
+					if( event.keyCode == kVK_ANSI_Q && ( event.modifierFlags & NSEventModifierFlagCommand ) )
+					{
+						break; // All 'Quit' key combos should propagate to the system
+					}
 					continue; // Don't propagate keyboard events or OSX will make the clicking error sound
 				default:
 					break;
