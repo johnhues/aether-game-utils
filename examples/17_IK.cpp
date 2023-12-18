@@ -154,10 +154,7 @@ ae::Vec3 ClipJoint(
 	const ae::Matrix4& j0,
 	const ae::Matrix4& j0Inv,
 	const ae::Matrix4& j1,
-	const ae::Axis ha,
-	const ae::Axis va,
-	const ae::Axis pa,
-	const float (&j0AngleLimits)[ 4 ],
+	const ae::IKConstraints& j1Constraints,
 	ae::DebugLines* debugLines = nullptr )
 {
 	const auto Build3D = []( ae::Axis horizontalAxis, ae::Axis verticalAxis, ae::Axis primaryAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true ) -> ae::Vec3
@@ -180,6 +177,11 @@ ae::Vec3 ClipJoint(
 			default: return 0.0f;
 		}
 	};
+
+	const ae::Axis ha = j1Constraints.horizontalAxis;
+	const ae::Axis va = j1Constraints.verticalAxis;
+	const ae::Axis pa = j1Constraints.primaryAxis;
+	const float (&j0AngleLimits)[ 4 ] = j1Constraints.rotationLimits;
 
 	const ae::Vec3 b0 = ( j0Inv * ae::Vec4( bind0.GetTranslation(), 1.0f ) ).GetXYZ();
 	const ae::Vec3 b1 = ( j0Inv * ae::Vec4( bind1.GetTranslation(), 1.0f ) ).GetXYZ();
@@ -384,9 +386,14 @@ int main()
 	};
 	TestJointId selTestJoint = TestJointId::None;
 	static uint32_t s_selectedJointIndex = 4;
-	static ae::Axis s_ha = ae::Axis::NegativeZ;
-	static ae::Axis s_va = ae::Axis::NegativeY;
-	static ae::Axis s_pa = ae::Axis::X;
+	ae::IKConstraints testConstraints;
+	testConstraints.horizontalAxis = ae::Axis::NegativeZ;
+	testConstraints.verticalAxis = ae::Axis::NegativeY;
+	testConstraints.primaryAxis = ae::Axis::X;
+	testConstraints.rotationLimits[ 0 ] = 0.14f;
+	testConstraints.rotationLimits[ 1 ] = 0.52f;
+	testConstraints.rotationLimits[ 2 ] = 0.38f;
+	testConstraints.rotationLimits[ 3 ] = 0.24f;
 	auto GetSelectedTransform = [&]() -> ae::Matrix4&
 	{
 		switch( selTestJoint )
@@ -401,13 +408,6 @@ int main()
 	{
 		if( selTestJoint != TestJointId::None ) { return GetSelectedTransform().GetTranslation(); }
 		return currentPose.GetBoneByIndex( s_selectedJointIndex )->transform.GetTranslation();
-	};
-	float angleLimit[ 4 ] =//{ ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f, ae::Pi * 0.125f };
-	{
-		0.14f,
-		0.52f,
-		0.38f,
-		0.24f
 	};
 	
 	AE_INFO( "Run" );
@@ -468,7 +468,7 @@ int main()
 
 			ImGui::Separator();
 
-			const char* jointNames[] = { "None", "Target", "0", "1" };
+			const char* jointNames[] = { "None", "Target", "Test 0", "Test 1" };
 			ImGui::ListBox( "Test Joints", (int*)&selTestJoint, jointNames, countof(jointNames), 4 );
 
 			if( ImGui::ListBoxHeader( "Joints" ) )
@@ -485,14 +485,37 @@ int main()
 				}
 				ImGui::ListBoxFooter();
 			}
+			bool constraintsModified = false;
+			ae::IKConstraints constraints;
+			if( selTestJoint == TestJointId::None )
+			{
+				ImGui::Text( "Selected Joint: %s", currentPose.GetBoneByIndex( s_selectedJointIndex )->name.c_str() );
+				constraints = currentPose.GetBoneByIndex( s_selectedJointIndex )->constraints;
+			}
+			else
+			{
+				ImGui::Text( "Selected Joint: %s", jointNames[ (int)selTestJoint ] );
+				constraints = testConstraints;
+			}
 			const char* axisNames[] = { "None", "X", "Y", "Z", "NegativeX", "NegativeY", "NegativeZ" };
-			ImGui::ListBox( "Horizontal", (int*)&s_ha, axisNames, countof(axisNames), 3 );
-			ImGui::ListBox( "Vertical", (int*)&s_va, axisNames, countof(axisNames), 3 );
-			ImGui::ListBox( "Primary", (int*)&s_pa, axisNames, countof(axisNames), 3 );
-			ImGui::SliderFloat( "T0", &angleLimit[ 0 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "T1", &angleLimit[ 1 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "T2", &angleLimit[ 2 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "T3", &angleLimit[ 3 ], 0.0f, ae::HalfPi );
+			constraintsModified |= ImGui::ListBox( "Horizontal", (int*)&constraints.horizontalAxis, axisNames, countof(axisNames), 3 );
+			constraintsModified |= ImGui::ListBox( "Vertical", (int*)&constraints.verticalAxis, axisNames, countof(axisNames), 3 );
+			constraintsModified |= ImGui::ListBox( "Primary", (int*)&constraints.primaryAxis, axisNames, countof(axisNames), 3 );
+			constraintsModified |= ImGui::SliderFloat( "T0", &constraints.rotationLimits[ 0 ], 0.0f, ae::HalfPi );
+			constraintsModified |= ImGui::SliderFloat( "T1", &constraints.rotationLimits[ 1 ], 0.0f, ae::HalfPi );
+			constraintsModified |= ImGui::SliderFloat( "T2", &constraints.rotationLimits[ 2 ], 0.0f, ae::HalfPi );
+			constraintsModified |= ImGui::SliderFloat( "T3", &constraints.rotationLimits[ 3 ], 0.0f, ae::HalfPi );
+			if( constraintsModified )
+			{
+				if( selTestJoint == TestJointId::None )
+				{
+					skin.SetIKConstraints( currentPose.GetBoneByIndex( s_selectedJointIndex ), constraints );
+				}
+				else
+				{
+					testConstraints = constraints;
+				}
+			}
 		}
 		if ( input.GetPress( ae::Key::V ) )
 		{
@@ -608,17 +631,13 @@ int main()
 				const ae::Bone* childBone = currentPose.GetBoneByIndex( s_selectedJointIndex );
 				if( const ae::Bone* parentBone = childBone->parent )
 				{
-					const ae::Matrix4& childTransform = childBone->transform;
 					ClipJoint(
 						skin.GetBindPose().GetBoneByIndex( parentBone->index )->transform,
 						skin.GetBindPose().GetBoneByIndex( childBone->index )->transform,
 						parentBone->transform,
 						parentBone->inverseTransform,
-						childTransform,
-						s_ha,
-						s_va,
-						s_pa,
-						angleLimit,
+						childBone->transform,
+						childBone->constraints,
 						&debugLines
 					);
 				}
@@ -631,10 +650,7 @@ int main()
 			testJoint0,
 			testJoint0.GetInverse(),
 			testJoint1,
-			s_ha,
-			s_va,
-			s_pa,
-			angleLimit,
+			testConstraints,
 			&debugLines
 		);
 

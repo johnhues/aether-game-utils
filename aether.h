@@ -368,7 +368,7 @@ constexpr float TwoPi = 2.0f * PI;
 constexpr float HalfPi = 0.5f * PI;
 constexpr float QuarterPi = 0.25f * PI;
 
-enum class Axis { None, X, Y, Z };
+enum class Axis { None, X, Y, Z, NegativeX, NegativeY, NegativeZ };
 
 //------------------------------------------------------------------------------
 // Standard math operations
@@ -4184,6 +4184,17 @@ struct Keyframe
 };
 
 //------------------------------------------------------------------------------
+// ae::IKConstraints struct
+//------------------------------------------------------------------------------
+struct IKConstraints
+{
+	ae::Axis horizontalAxis = ae::Axis::X;
+	ae::Axis verticalAxis = ae::Axis::Y;
+	ae::Axis primaryAxis = ae::Axis::Z;
+	float rotationLimits[ 4 ] = { 0.0f, 0.0f, 0.0f, 0.0f };
+};
+
+//------------------------------------------------------------------------------
 // ae::Bone struct
 //------------------------------------------------------------------------------
 struct Bone
@@ -4196,6 +4207,7 @@ struct Bone
 	Bone* firstChild = nullptr;
 	Bone* nextSibling = nullptr;
 	Bone* parent = nullptr;
+	IKConstraints constraints;
 };
 
 //------------------------------------------------------------------------------
@@ -4224,11 +4236,12 @@ public:
 	Skeleton( const ae::Tag& tag ) : m_bones( tag ) {}
 	void Initialize( uint32_t maxBones );
 	void Initialize( const Skeleton* otherPose );
-	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
+	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform, const ae::IKConstraints& constraints );
 	void SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count );
 	void SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform );
 	void SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count );
 	void SetTransform( const Bone* target, const ae::Matrix4& transform );
+	void SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints );
 	
 	const Bone* GetRoot() const;
 	const Bone* GetBoneByName( const char* name ) const;
@@ -4307,6 +4320,7 @@ public:
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
 	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, bool positionsW, bool normalsW, uint32_t count ) const;
+	void SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints );
 	
 	uint32_t GetBoneCount() const { return m_bindPose.GetBoneCount(); }
 	uint32_t GetVertCount() const { return m_verts.Length(); }
@@ -21611,6 +21625,7 @@ uint32_t DebugLines::GetMaxVertexCount() const
 DebugCamera::DebugCamera( ae::Axis upAxis )
 {
 	m_worldUp = upAxis;
+	AE_ASSERT_MSG( m_worldUp == ae::Axis::Y || m_worldUp == ae::Axis::Z, "Only +Y and +Z world up axes are supported" );
 	m_Precalculate();
 }
 
@@ -22375,12 +22390,12 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 	{
 		const ae::Bone& otherBone = otherPose->m_bones[ i ];
 		const ae::Bone* parent = &m_bones[ otherBone.parent->index ];
-		AddBone( parent, otherBone.name.c_str(), otherBone.localTransform );
+		AddBone( parent, otherBone.name.c_str(), otherBone.localTransform, otherBone.constraints );
 	}
 	AE_ASSERT( beginCheck == m_bones.Data() );
 }
 
-const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& localTransform )
+const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& localTransform, const ae::IKConstraints& constraints )
 {
 	Bone* parent = const_cast< Bone* >( _parent );
 	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
@@ -22403,6 +22418,7 @@ const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::
 	bone->localTransform = localTransform;
 	bone->inverseTransform = bone->transform.GetInverse();
 	bone->parent = parent;
+	bone->constraints = constraints;
 	
 	Bone** children = &parent->firstChild;
 	while ( *children )
@@ -22474,6 +22490,16 @@ void Skeleton::SetLocalTransform( const Bone* target, const ae::Matrix4& localTr
 void Skeleton::SetTransform( const Bone* target, const ae::Matrix4& transform )
 {
 	SetTransforms( &target, &transform, 1 );
+}
+
+void Skeleton::SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints )
+{
+	AE_ASSERT( target );
+	AE_ASSERT( target->index < m_bones.Length() );
+	AE_ASSERT( target->index == 0 || target->parent );
+	AE_ASSERT( target->index == 0 || target->parent < target );
+
+	const_cast< Bone* >( target )->constraints = constraints;
 }
 
 const Bone* Skeleton::GetRoot() const
@@ -22669,6 +22695,11 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 		n[ 2 ] = normal.z;
 		if( normalsW ) { n[ 3 ] = 0.0f; }
 	}
+}
+
+void Skin::SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints )
+{
+	m_bindPose.SetIKConstraints( target, constraints );
 }
 
 //------------------------------------------------------------------------------

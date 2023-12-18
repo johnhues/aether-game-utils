@@ -268,7 +268,7 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 				{
 					ae::Matrix4 worldTransform = getBindPoseMatrix( ofbxSkin, ofbxBone );
 					ae::Matrix4 transform = parentInverseWorldTransform * worldTransform;
-					const ae::Bone* bone = bindPose.AddBone( parent, ofbxBone->name, transform );
+					const ae::Bone* bone = bindPose.AddBone( parent, ofbxBone->name, transform, {} );
 					AE_ASSERT( bone );
 					sceneBones.Append( ofbxBone );
 					skeletonBuilderFn( ofbxBone, bone );
