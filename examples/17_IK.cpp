@@ -81,185 +81,6 @@ const char* kFragShader = R"(
 		
 	})";
 
-ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p )
-{
-	// https://stackoverflow.com/a/46007540/2423134
-	// https://blog.chatfield.io/simple-method-for-distance-to-ellipse/
-	// https://github.com/0xfaded/ellipse_demo/issues/1
-	const float px = ae::Abs( p[ 0 ] );
-	const float py = ae::Abs( p[ 1 ] );
-	const float a = ae::Abs( halfSize.x );
-	const float b = ae::Abs( halfSize.y );
-
-	float tx = 0.707f;
-	float ty = 0.707f;
-	// Only 3 iterations should be needed for high quality results
-	for( uint32_t i = 0; i < 3; i++ )
-	{
-		const float x = a * tx;
-		const float y = b * ty;
-		const float ex = ( a * a - b * b ) * ( tx * tx * tx ) / a;
-		const float ey = ( b * b - a * a ) * ( ty * ty * ty ) / b;
-		const float rx = x - ex;
-		const float ry = y - ey;
-		const float qx = px - ex;
-		const float qy = py - ey;
-		const float r = hypotf( ry, rx );
-		const float q = hypotf( qy, qx );
-		tx = ae::Min( 1.0f, ae::Max( 0.0f, ( qx * r / q + ex ) / a ) );
-		ty = ae::Min( 1.0f, ae::Max( 0.0f, ( qy * r / q + ey ) / b ) );
-		const float t = hypotf( ty, tx );
-		tx /= t;
-		ty /= t;
-	}
-
-	return ae::Vec2( copysignf( a * tx, p[ 0 ] ), copysignf( b * ty, p[ 1 ] ) );
-}
-
-ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true )
-{
-	if( negative )
-	{
-		switch( axis )
-		{
-			case ae::Axis::X: return ae::Vec3( 1, 0, 0 );
-			case ae::Axis::Y: return ae::Vec3( 0, 1, 0 );
-			case ae::Axis::Z: return ae::Vec3( 0, 0, 1 );
-			case ae::Axis::NegativeX: return ae::Vec3( -1, 0, 0 );
-			case ae::Axis::NegativeY: return ae::Vec3( 0, -1, 0 );
-			case ae::Axis::NegativeZ: return ae::Vec3( 0, 0, -1 );
-		}
-	}
-	else
-	{
-		switch( axis )
-		{
-			case ae::Axis::X:
-			case ae::Axis::NegativeX:
-				return ae::Vec3( 1, 0, 0 );
-			case ae::Axis::Y:
-			case ae::Axis::NegativeY:
-				return ae::Vec3( 0, 1, 0 );
-			case ae::Axis::Z:
-			case ae::Axis::NegativeZ:
-				return ae::Vec3( 0, 0, 1 );
-		}
-	}
-	return ae::Vec3( 0.0f );
-}
-
-ae::Vec3 ClipJoint(
-	const ae::Matrix4& bind0,
-	const ae::Matrix4& bind1,
-	const ae::Matrix4& j0,
-	const ae::Matrix4& j0Inv,
-	const ae::Matrix4& j1,
-	const ae::IKConstraints& j1Constraints,
-	ae::DebugLines* debugLines = nullptr )
-{
-	const auto Build3D = []( ae::Axis horizontalAxis, ae::Axis verticalAxis, ae::Axis primaryAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true ) -> ae::Vec3
-	{
-		ae::Vec3 result = GetAxisVector( horizontalAxis, negative ) * horizontalVal;
-		result += GetAxisVector( verticalAxis, negative ) * verticalVal;
-		result += GetAxisVector( primaryAxis, negative ) * primaryVal;
-		return result;
-	};
-	const auto GetAxis = []( ae::Axis axis, const ae::Vec3 v ) -> float
-	{
-		switch( axis )
-		{
-			case ae::Axis::X: return v.x;
-			case ae::Axis::Y: return v.y;
-			case ae::Axis::Z: return v.z;
-			case ae::Axis::NegativeX: return -v.x;
-			case ae::Axis::NegativeY: return -v.y;
-			case ae::Axis::NegativeZ: return -v.z;
-			default: return 0.0f;
-		}
-	};
-
-	const ae::Axis ha = j1Constraints.horizontalAxis;
-	const ae::Axis va = j1Constraints.verticalAxis;
-	const ae::Axis pa = j1Constraints.primaryAxis;
-	const float (&j0AngleLimits)[ 4 ] = j1Constraints.rotationLimits;
-
-	const ae::Vec3 b0 = ( j0Inv * ae::Vec4( bind0.GetTranslation(), 1.0f ) ).GetXYZ();
-	const ae::Vec3 b1 = ( j0Inv * ae::Vec4( bind1.GetTranslation(), 1.0f ) ).GetXYZ();
-	const float b01Len = ( b0 - b1 ).Length();
-	const ae::Vec2 j1Flat = [&]()
-	{
-		ae::Vec3 p;
-		const ae::Plane plane = ae::Plane(
-			Build3D( ha, va, pa, 0, 0, b01Len ),
-			Build3D( ha, va, pa, 0, 0, 1 )
-		);
-		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1.GetTranslation(), 1.0f ) ).GetXYZ();
-		plane.IntersectLine( ae::Vec3( 0.0f ), j1Local, &p );
-		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
-	}();
-	const float q[ 4 ] =
-	{
-		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 1 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
-	};
-
-	const ae::Vec2 quadrantEllipse = [q, j1Flat]()
-	{
-		if( j1Flat.x > 0.0f && j1Flat.y > 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
-		if( j1Flat.x < 0.0f && j1Flat.y > 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
-		if( j1Flat.x < 0.0f && j1Flat.y < 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
-		return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
-	}();
-	const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), j1Flat );
-	ae::Vec2 posClipped = j1Flat;
-	if( posClipped.LengthSquared() > edge.LengthSquared() )
-	{
-		posClipped = edge;
-	}
-	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ).NormalizeCopy() * b01Len;
-	const ae::Vec3 resultWorld = ( j0 * ae::Vec4( resultLocal, 1.0f ) ).GetXYZ();
-
-	if( debugLines )
-	{
-		const ae::Vec3 j1FlatWorld = ( j0 * ae::Vec4( Build3D( ha, va, pa, j1Flat.x, j1Flat.y, b01Len ), 1 ) ).GetXYZ();
-		const ae::Vec3 j1FlatWorldClipped = ( j0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ), 1 ) ).GetXYZ();
-		debugLines->AddSphere( j1FlatWorld, 0.025f, ae::Color::Magenta(), 8 );
-		debugLines->AddSphere( j1FlatWorldClipped, 0.025f, ae::Color::Magenta(), 8 );
-		debugLines->AddLine( j1FlatWorld, j1FlatWorldClipped, ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 0 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 1 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 2 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 3 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		for ( uint32_t i = 0; i < 16; i++ )
-		{
-			const ae::Vec3 q0 = Build3D( ha, va, pa, q[ 0 ], q[ 1 ], 1 ); // +x +y
-			const ae::Vec3 q1 = Build3D( ha, va, pa, q[ 2 ], q[ 1 ], 1 ); // -x +y
-			const ae::Vec3 q2 = Build3D( ha, va, pa, q[ 2 ], q[ 3 ], 1 ); // -x -y
-			const ae::Vec3 q3 = Build3D( ha, va, pa, q[ 0 ], q[ 3 ], 1 ); // +x -y
-			const float step = ( ae::HalfPi / 16 );
-			const float angle = i * step;
-			const ae::Vec3 l0 = Build3D( ha, va, pa, ae::Cos( angle ), ae::Sin( angle ), b01Len, false );
-			const ae::Vec3 l1 = Build3D( ha, va, pa, ae::Cos( angle + step ), ae::Sin( angle + step ), b01Len, false );
-			const ae::Vec4 p0 = j0 * ae::Vec4( l0 * q0, 1.0f );
-			const ae::Vec4 p1 = j0 * ae::Vec4( l1 * q0, 1.0f );
-			const ae::Vec4 p2 = j0 * ae::Vec4( l0 * q1, 1.0f );
-			const ae::Vec4 p3 = j0 * ae::Vec4( l1 * q1, 1.0f );
-			const ae::Vec4 p4 = j0 * ae::Vec4( l0 * q2, 1.0f );
-			const ae::Vec4 p5 = j0 * ae::Vec4( l1 * q2, 1.0f );
-			const ae::Vec4 p6 = j0 * ae::Vec4( l0 * q3, 1.0f );
-			const ae::Vec4 p7 = j0 * ae::Vec4( l1 * q3, 1.0f );
-			debugLines->AddLine( p0.GetXYZ(), p1.GetXYZ(), ae::Color::Magenta() );
-			debugLines->AddLine( p2.GetXYZ(), p3.GetXYZ(), ae::Color::Magenta() );
-			debugLines->AddLine( p4.GetXYZ(), p5.GetXYZ(), ae::Color::Magenta() );
-			debugLines->AddLine( p6.GetXYZ(), p7.GetXYZ(), ae::Color::Magenta() );
-		}
-	}
-
-	return resultWorld;
-};
-
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
@@ -286,7 +107,7 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fileSystem.Initialize( "data", "ae", "ik" );
 	camera.Reset( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Vec3( 0.0f, 3.5f, 0.4f ) );
-	camera.SetDistanceLimits( 1.0f, 25.0f );
+	camera.SetDistanceLimits( 0.25f, 25.0f );
 	debugLines.Initialize( 4096 );
 	gridLines.Initialize( 4096 );
 	gridLines.SetXRayEnabled( false );
@@ -385,7 +206,7 @@ int main()
 		One
 	};
 	TestJointId selTestJoint = TestJointId::None;
-	static uint32_t s_selectedJointIndex = 4;
+	static uint32_t s_selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
 	ae::IKConstraints testConstraints;
 	testConstraints.horizontalAxis = ae::Axis::NegativeZ;
 	testConstraints.verticalAxis = ae::Axis::NegativeY;
@@ -584,7 +405,7 @@ int main()
 				joint.primaryAxis = right ? ae::Vec3( -1, 0, 0 ) : ae::Vec3( 1, 0, 0 );
 				ik.joints.Append( joint );
 			}
-			ik.Run( autoIK ? 10 : 1, &currentPose );
+			ik.Run( autoIK ? 10 : 1, &currentPose ); // &debugLines
 
 			// Debug
 			if ( drawSkeleton )
@@ -631,9 +452,12 @@ int main()
 				const ae::Bone* childBone = currentPose.GetBoneByIndex( s_selectedJointIndex );
 				if( const ae::Bone* parentBone = childBone->parent )
 				{
-					ClipJoint(
-						skin.GetBindPose().GetBoneByIndex( parentBone->index )->transform,
-						skin.GetBindPose().GetBoneByIndex( childBone->index )->transform,
+					const ae::Matrix4 j0Inv = parentBone->inverseTransform;
+					const ae::Vec3 b0 = ( j0Inv * ae::Vec4( skin.GetBindPose().GetBoneByIndex( parentBone->index )->transform.GetTranslation(), 1.0f ) ).GetXYZ();
+					const ae::Vec3 b1 = ( j0Inv * ae::Vec4( skin.GetBindPose().GetBoneByIndex( childBone->index )->transform.GetTranslation(), 1.0f ) ).GetXYZ();
+					const float b01Len = ( b0 - b1 ).Length();
+					ae::IK::ClipJoint(
+						b01Len,
 						parentBone->transform,
 						parentBone->inverseTransform,
 						childBone->transform,
@@ -644,20 +468,26 @@ int main()
 			}
 		}
 
-		const ae::Vec3 jointClipped = ClipJoint(
-			testJoint0Bind,
-			testJoint1Bind,
-			testJoint0,
-			testJoint0.GetInverse(),
-			testJoint1,
-			testConstraints,
-			&debugLines
-		);
+		const ae::Vec3 testJointClipped = [&]()
+		{
+			const ae::Matrix4 testJoint0Inv = testJoint0.GetInverse();
+			const ae::Vec3 b0 = ( testJoint0Inv * ae::Vec4( testJoint0Bind.GetTranslation(), 1.0f ) ).GetXYZ();
+			const ae::Vec3 b1 = ( testJoint0Inv * ae::Vec4( testJoint1Bind.GetTranslation(), 1.0f ) ).GetXYZ();
+			const float testJointLen = ( b0 - b1 ).Length();
+			return ae::IK::ClipJoint(
+				testJointLen,
+				testJoint0,
+				testJoint0Inv,
+				testJoint1,
+				testConstraints,
+				&debugLines
+			);
+		}();
 
 		// Joint limits
 		debugLines.AddOBB( testJoint0, ae::Color::PicoBlue() );
 		debugLines.AddOBB( testJoint1, ae::Color::PicoBlue() );
-		debugLines.AddLine( testJoint0.GetTranslation(), jointClipped, ae::Color::PicoBlue() );
+		debugLines.AddLine( testJoint0.GetTranslation(), testJointClipped, ae::Color::PicoBlue() );
 
 		// Add grid
 		gridLines.AddLine( ae::Vec3( -2, 0, 0 ), ae::Vec3( 2, 0, 0 ), ae::Color::Red() );
@@ -671,7 +501,7 @@ int main()
 
 		// Start frame
 		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
-		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.25f, 50.0f );
+		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), camera.GetMinDistance() * 0.5f, 50.0f );
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;
 		const ae::Matrix4 projToWorld = worldToProj.GetInverse();
 
