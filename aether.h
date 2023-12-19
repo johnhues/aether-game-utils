@@ -398,10 +398,12 @@ inline int32_t Abs( int32_t x );
 //------------------------------------------------------------------------------
 // Range functions
 //------------------------------------------------------------------------------
-template< typename T0, typename T1 > inline auto Min( T0 v0, T1 v1 );
-template< typename T0, typename T1 > inline auto Max( T0 v0, T1 v1 );
-template< typename T0, typename T1, typename T2 > inline auto Min( T0 v0, T1 v1, T2 v2 );
-template< typename T0, typename T1, typename T2 > inline auto Max( T0 v0, T1 v1, T2 v2 );
+template < typename T0, typename T1, typename... TTT >
+constexpr auto Min( const T0& v0, const T1& v1, const TTT&... tail );
+
+template < typename T0, typename T1, typename... TTT >
+constexpr auto Max( const T0& v0, const T1& v1, const TTT&... tail );
+
 template < typename T > inline T Clip( T x, T min, T max );
 inline float Clip01( float x );
 
@@ -5798,16 +5800,19 @@ inline T Abs( const VecT< T >& x )
 	return result;
 }
 
-template< typename T0, typename T1 >
-inline auto Min( T0 v0, T1 v1 )
+// https://stackoverflow.com/a/63330289/2423134
+template < typename T0, typename T1, typename... TTT >
+constexpr auto Min( const T0& v0, const T1& v1, const TTT&... tail )
 {
-	return ( v0 < v1 ) ? v0 : v1;
+	if constexpr( sizeof...(tail) == 0 ) { return v0 < v1 ? v0 : v1; }
+	else { return Min( Min( v0, v1 ), tail... ); }
 }
 
-template< typename T0, typename T1, typename T2 >
-inline auto Min( T0 v0, T1 v1, T2 v2 )
+template < typename T0, typename T1, typename... TTT >
+constexpr auto Max( const T0& v0, const T1& v1, const TTT&... tail )
 {
-	return Min( v0, Min( v1, v2 ) );
+	if constexpr( sizeof...(tail) == 0 ) { return v0 > v1 ? v0 : v1; }
+	else { return Max( Max( v0, v1 ), tail... ); }
 }
 
 inline ae::Vec2 Min( ae::Vec2 v0, ae::Vec2 v1 )
@@ -5820,16 +5825,9 @@ inline ae::Vec3 Min( ae::Vec3 v0, ae::Vec3 v1 )
 	return ae::Vec3( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ) );
 }
 
-template< typename T0, typename T1 >
-inline auto Max( T0 v0, T1 v1 )
+inline ae::Vec4 Min( ae::Vec4 v0, ae::Vec4 v1 )
 {
-	return ( v0 > v1 ) ? v0 : v1;
-}
-
-template< typename T0, typename T1, typename T2 >
-inline auto Max( T0 v0, T1 v1, T2 v2 )
-{
-	return Max( v0, Max( v1, v2 ) );
+	return ae::Vec4( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ), Min( v0.w, v1.w ) );
 }
 
 inline ae::Vec2 Max( ae::Vec2 v0, ae::Vec2 v1 )
@@ -5840,6 +5838,11 @@ inline ae::Vec2 Max( ae::Vec2 v0, ae::Vec2 v1 )
 inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
 {
 	return ae::Vec3( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ) );
+}
+
+inline ae::Vec4 Max( ae::Vec4 v0, ae::Vec4 v1 )
+{
+	return ae::Vec4( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ), Max( v0.w, v1.w ) );
 }
 
 template < typename T >
