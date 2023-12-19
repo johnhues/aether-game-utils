@@ -4188,17 +4188,6 @@ struct Keyframe
 };
 
 //------------------------------------------------------------------------------
-// ae::IKConstraints struct
-//------------------------------------------------------------------------------
-struct IKConstraints
-{
-	ae::Axis horizontalAxis = ae::Axis::X;
-	ae::Axis verticalAxis = ae::Axis::Y;
-	ae::Axis primaryAxis = ae::Axis::Z;
-	float rotationLimits[ 4 ] = { 0.0f, 0.0f, 0.0f, 0.0f };
-};
-
-//------------------------------------------------------------------------------
 // ae::Bone struct
 //------------------------------------------------------------------------------
 struct Bone
@@ -4211,7 +4200,6 @@ struct Bone
 	Bone* firstChild = nullptr;
 	Bone* nextSibling = nullptr;
 	Bone* parent = nullptr;
-	IKConstraints constraints;
 };
 
 //------------------------------------------------------------------------------
@@ -4240,12 +4228,11 @@ public:
 	Skeleton( const ae::Tag& tag ) : m_bones( tag ) {}
 	void Initialize( uint32_t maxBones );
 	void Initialize( const Skeleton* otherPose );
-	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform, const ae::IKConstraints& constraints );
+	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
 	void SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count );
 	void SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform );
 	void SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count );
 	void SetTransform( const Bone* target, const ae::Matrix4& transform );
-	void SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints );
 	
 	const Bone* GetRoot() const;
 	const Bone* GetBoneByName( const char* name ) const;
@@ -4259,24 +4246,24 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::IKJoint struct
+// ae::IKConstraints struct
 //------------------------------------------------------------------------------
-struct IKJoint
+struct IKConstraints
 {
 	//! The axis that points towards the next bone. A specific/prominent
 	//! industry auto-rigger will inconsistently orient bones so that the
 	//! negative x axis points towards the next bone for "Right" bones and
 	//! the positive x axis points towards the next bone for all center and
 	//! Left bones.
-	ae::Vec3 primaryAxis = ae::Vec3( -1.0f, 0.0f, 0.0f );
+	ae::Axis primaryAxis = ae::Axis::NegativeX;
 	//! The axis that corresponds to the 'vertical' rotation limits y component.
 	//! The implicitly specified tertiary axis corresponds to the horizontal
 	//! rotation limits x component.
-	ae::Vec3 secondaryAxis = ae::Vec3( 0.0f, 0.0f, 1.0f );
-	//! The half-range of motion of this joint in radians, or in other words
-	//! the maximum angle from the bind pose in either direction. See
-	//! secondaryAxis for more info.
-	ae::Vec2 rotationLimits = ae::Vec2( 0.0f );
+	ae::Axis verticalAxis = ae::Axis::Z;
+	// @TODO
+	ae::Axis horizontalAxis = ae::Axis::Y;
+	//! The half-range of motion of this joint in radians. @TODO: Array element details
+	float rotationLimits[ 4 ] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	//! The amount in radians that this joint is allowed to twist around the
 	//! primary axis in either direction.
 	float twistLimit = 0.0f;
@@ -4295,9 +4282,9 @@ struct IK
 	//! Bone indices. Ordered from root to extent.
 	ae::Array< uint32_t > chain;
 	//! Joint info for each bone in the skeleton. Leave this empty to use the
-	//! default ae::IKJoint, or append a single ae::IKJoint to use that for all
+	//! default ae::IKConstraints, or append a single ae::IKJoint to use that for all
 	//! bones. Otherwise this should be the same length as 'pose.GetBoneCount()'. 
-	ae::Array< ae::IKJoint > joints;
+	ae::Array< ae::IKConstraints > joints;
 	//! Used as the starting point for the IK.
 	ae::Skeleton pose;
 
@@ -4329,7 +4316,6 @@ public:
 	const ae::Matrix4& GetInvBindPose( const char* name ) const;
 	
 	void ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* normalsOut, uint32_t positionStride, uint32_t normalStride, bool positionsW, bool normalsW, uint32_t count ) const;
-	void SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints );
 	
 	uint32_t GetBoneCount() const { return m_bindPose.GetBoneCount(); }
 	uint32_t GetVertCount() const { return m_verts.Length(); }
@@ -22402,12 +22388,12 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 	{
 		const ae::Bone& otherBone = otherPose->m_bones[ i ];
 		const ae::Bone* parent = &m_bones[ otherBone.parent->index ];
-		AddBone( parent, otherBone.name.c_str(), otherBone.localTransform, otherBone.constraints );
+		AddBone( parent, otherBone.name.c_str(), otherBone.localTransform );
 	}
 	AE_ASSERT( beginCheck == m_bones.Data() );
 }
 
-const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& localTransform, const ae::IKConstraints& constraints )
+const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::Matrix4& localTransform )
 {
 	Bone* parent = const_cast< Bone* >( _parent );
 	AE_ASSERT_MSG( m_bones.Size(), "Must call ae::Skeleton::Initialize() before calling ae::Skeleton::AddBone()" );
@@ -22430,7 +22416,6 @@ const Bone* Skeleton::AddBone( const Bone* _parent, const char* name, const ae::
 	bone->localTransform = localTransform;
 	bone->inverseTransform = bone->transform.GetInverse();
 	bone->parent = parent;
-	bone->constraints = constraints;
 	
 	Bone** children = &parent->firstChild;
 	while ( *children )
@@ -22502,16 +22487,6 @@ void Skeleton::SetLocalTransform( const Bone* target, const ae::Matrix4& localTr
 void Skeleton::SetTransform( const Bone* target, const ae::Matrix4& transform )
 {
 	SetTransforms( &target, &transform, 1 );
-}
-
-void Skeleton::SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints )
-{
-	AE_ASSERT( target );
-	AE_ASSERT( target->index < m_bones.Length() );
-	AE_ASSERT( target->index == 0 || target->parent );
-	AE_ASSERT( target->index == 0 || target->parent < target );
-
-	const_cast< Bone* >( target )->constraints = constraints;
 }
 
 const Bone* Skeleton::GetRoot() const
@@ -22593,6 +22568,7 @@ ae::Vec3 IK::GetAxisVector( ae::Axis axis, bool negative )
 			case ae::Axis::NegativeX: return ae::Vec3( -1, 0, 0 );
 			case ae::Axis::NegativeY: return ae::Vec3( 0, -1, 0 );
 			case ae::Axis::NegativeZ: return ae::Vec3( 0, 0, -1 );
+			default: return ae::Vec3( 0.0f );
 		}
 	}
 	else
@@ -22608,14 +22584,13 @@ ae::Vec3 IK::GetAxisVector( ae::Axis axis, bool negative )
 			case ae::Axis::Z:
 			case ae::Axis::NegativeZ:
 				return ae::Vec3( 0, 0, 1 );
+			default:
+				return ae::Vec3( 0.0f );
 		}
 	}
-	return ae::Vec3( 0.0f );
 }
 
 ae::Vec3 IK::ClipJoint(
-	// const ae::Matrix4& bind0,
-	// const ae::Matrix4& bind1,
 	float bindBoneLength,
 	const ae::Matrix4& j0,
 	const ae::Matrix4& j0Inv,
@@ -22648,21 +22623,7 @@ ae::Vec3 IK::ClipJoint(
 	const ae::Axis va = j1Constraints.verticalAxis;
 	const ae::Axis pa = j1Constraints.primaryAxis;
 	const float (&j0AngleLimits)[ 4 ] = j1Constraints.rotationLimits;
-
-	// const ae::Vec3 b0 = ( j0Inv * ae::Vec4( bind0.GetTranslation(), 1.0f ) ).GetXYZ();
-	// const ae::Vec3 b1 = ( j0Inv * ae::Vec4( bind1.GetTranslation(), 1.0f ) ).GetXYZ();
 	const float b01Len = bindBoneLength;//( b0 - b1 ).Length();
-	const ae::Vec2 j1Flat = [&]()
-	{
-		ae::Vec3 p;
-		const ae::Plane plane = ae::Plane(
-			Build3D( ha, va, pa, 0, 0, b01Len ),
-			Build3D( ha, va, pa, 0, 0, 1 )
-		);
-		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1.GetTranslation(), 1.0f ) ).GetXYZ();
-		plane.IntersectLine( ae::Vec3( 0.0f ), j1Local, &p );
-		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
-	}();
 	const float q[ 4 ] =
 	{
 		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
@@ -22671,13 +22632,31 @@ ae::Vec3 IK::ClipJoint(
 		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
 	};
 
+	float t;
+	const ae::Vec2 j1Flat = [&]()
+	{
+		ae::Vec3 p;
+		const ae::Vec3 axisCenter = Build3D( ha, va, pa, 0, 0, b01Len );
+		const ae::Plane ellipsePlane = ae::Plane(
+			axisCenter,
+			Build3D( ha, va, pa, 0, 0, 1 )
+		);
+		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1.GetTranslation(), 1.0f ) ).GetXYZ();
+		if( !ellipsePlane.IntersectLine( ae::Vec3( 0.0f ), j1Local, &p, &t ) || t < 0.0f )
+		{
+			p = ellipsePlane.GetClosestPoint( j1Local );
+			p = axisCenter + ( p - axisCenter ).SafeNormalizeCopy() * ae::Max( q[ 0 ], q[ 1 ], q[ 2 ], q[ 3 ] );
+		}
+		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
+	}();
 	const ae::Vec2 quadrantEllipse = [q, j1Flat]()
 	{
-		if( j1Flat.x > 0.0f && j1Flat.y > 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
-		if( j1Flat.x < 0.0f && j1Flat.y > 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
-		if( j1Flat.x < 0.0f && j1Flat.y < 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
+		if( j1Flat.x >= 0.0f && j1Flat.y >= 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
+		if( j1Flat.x <= 0.0f && j1Flat.y >= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
+		if( j1Flat.x <= 0.0f && j1Flat.y <= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
 		return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
 	}();
+
 	const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), j1Flat );
 	ae::Vec2 posClipped = j1Flat;
 	if( posClipped.LengthSquared() > edge.LengthSquared() )
@@ -22742,7 +22721,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 		ae::Vec3 pos;
 		ae::Quaternion rotation;
 		float length;
-		IKConstraints constraints;
 	};
 	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
 	for ( uint32_t i = 0; i < chain.Length(); i++ )
@@ -22754,20 +22732,19 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 		ikBone.rotation = bone->transform.GetRotation();
 		// @TODO: Should be stored in child because parents can have multiple children with different bone lengths
 		ikBone.length = ( ikBone.pos - bone->parent->transform.GetTranslation() ).Length();
-		ikBone.constraints = bone->constraints;
 		bones.Append( ikBone );
 	}
 
 	const ae::Vec3 rootPos = bones[ 0 ].pos;
 	const ae::Vec3 targetPos = targetTransform.GetTranslation();
 	AE_ASSERT( joints.Length() == 0 || joints.Length() == 1 || joints.Length() == bones.Length() );
-	auto GetJointInfo = [ this ]( uint32_t idx ) -> const ae::IKJoint&
+	auto GetConstraints = [ this ]( uint32_t idx ) -> const ae::IKConstraints&
 	{
 		switch ( joints.Length() )
 		{
 			case 0:
 			{
-				static const ae::IKJoint s_default;
+				static const ae::IKConstraints s_default;
 				return s_default;
 			}
 			case 1: return joints[ 0 ];
@@ -22786,6 +22763,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 			const IKBone* parentBone = &bones[ i + 1 ];
 			const ae::Vec3 childPos = childBone->pos;
 			const ae::Vec3 parentPos = parentBone->pos;
+			const ae::IKConstraints& childConstraints = GetConstraints( i );
 			// @TODO: Should be stored in child because parents can have multiple children with different bone lengths
 			const float boneLen = parentBone->length;
 			const ae::Matrix4 parentTransform = ae::Matrix4::Translation( parentPos ) * parentBone->rotation.GetTransformMatrix();
@@ -22797,7 +22775,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 				parentTransform,
 				parentInvTransform,
 				childTransform,
-				childBone->constraints,
+				childConstraints,
 				debugLines
 			);
 		}
@@ -22807,8 +22785,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 		for ( uint32_t i = 0; i < bones.Length() - 1; i++ )
 		{
 			ae::Vec3 dir = ( bones[ i + 1 ].pos - bones[ i ].pos ).SafeNormalizeCopy();
-			const ae::IKJoint& joint = GetJointInfo( i );
-			const ae::Vec3 primaryAxis = joint.primaryAxis;
+			const ae::IKConstraints& constraints = GetConstraints( i );
+			const ae::Vec3 primaryAxis = GetAxisVector( constraints.primaryAxis );
 			
 			const ae::Quaternion invRot = bones[ i ].rotation.GetInverse();
 			const ae::Vec3 boneDir = invRot.Rotate( dir );
@@ -22906,11 +22884,6 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 		n[ 2 ] = normal.z;
 		if( normalsW ) { n[ 3 ] = 0.0f; }
 	}
-}
-
-void Skin::SetIKConstraints( const Bone* target, const ae::IKConstraints& constraints )
-{
-	m_bindPose.SetIKConstraints( target, constraints );
 }
 
 //------------------------------------------------------------------------------

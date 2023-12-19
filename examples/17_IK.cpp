@@ -181,6 +181,27 @@ int main()
 	const char* anchorBoneName = "QuickRigCharacter_RightShoulder";
 
 	ae::Skeleton currentPose = TAG_ALL;
+	ae::Array< ae::IKConstraints > ikConstraints = TAG_ALL;
+	ikConstraints.Reserve( skin.GetBindPose().GetBoneCount() );
+	for ( uint32_t i = 0; i < skin.GetBindPose().GetBoneCount(); i++ )
+	{
+		ae::IKConstraints constraints;
+		const ae::Bone* bone = skin.GetBindPose().GetBoneByIndex( i );
+		if( strncmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen("QuickRigCharacter_Right") ) == 0 )
+		{
+			constraints.primaryAxis = ae::Axis::NegativeX;
+			constraints.horizontalAxis = ae::Axis::NegativeZ;
+			constraints.verticalAxis = ae::Axis::Y;
+		}
+		else
+		{
+			constraints.primaryAxis = ae::Axis::X;
+			constraints.horizontalAxis = ae::Axis::NegativeZ;
+			constraints.verticalAxis = ae::Axis::NegativeY;
+		}
+		ikConstraints.Append( constraints );
+	}
+
 	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 0.0f ) * ae::Matrix4::Scaling( 0.2f );
 	const ae::Matrix4 testJoint1Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 2.0f ) * ae::Matrix4::Scaling( 0.2f );
 	ae::Matrix4 targetTransform, testJoint0, testJoint1;
@@ -208,8 +229,8 @@ int main()
 	TestJointId selTestJoint = TestJointId::None;
 	static uint32_t s_selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
 	ae::IKConstraints testConstraints;
-	testConstraints.horizontalAxis = ae::Axis::NegativeZ;
-	testConstraints.verticalAxis = ae::Axis::NegativeY;
+	testConstraints.horizontalAxis = ae::Axis::NegativeY;
+	testConstraints.verticalAxis = ae::Axis::Z;
 	testConstraints.primaryAxis = ae::Axis::X;
 	testConstraints.rotationLimits[ 0 ] = 0.14f;
 	testConstraints.rotationLimits[ 1 ] = 0.52f;
@@ -307,36 +328,24 @@ int main()
 				ImGui::ListBoxFooter();
 			}
 			bool constraintsModified = false;
-			ae::IKConstraints constraints;
-			if( selTestJoint == TestJointId::None )
-			{
-				ImGui::Text( "Selected Joint: %s", currentPose.GetBoneByIndex( s_selectedJointIndex )->name.c_str() );
-				constraints = currentPose.GetBoneByIndex( s_selectedJointIndex )->constraints;
-			}
-			else
-			{
-				ImGui::Text( "Selected Joint: %s", jointNames[ (int)selTestJoint ] );
-				constraints = testConstraints;
-			}
-			const char* axisNames[] = { "None", "X", "Y", "Z", "NegativeX", "NegativeY", "NegativeZ" };
-			constraintsModified |= ImGui::ListBox( "Horizontal", (int*)&constraints.horizontalAxis, axisNames, countof(axisNames), 3 );
-			constraintsModified |= ImGui::ListBox( "Vertical", (int*)&constraints.verticalAxis, axisNames, countof(axisNames), 3 );
-			constraintsModified |= ImGui::ListBox( "Primary", (int*)&constraints.primaryAxis, axisNames, countof(axisNames), 3 );
-			constraintsModified |= ImGui::SliderFloat( "T0", &constraints.rotationLimits[ 0 ], 0.0f, ae::HalfPi );
-			constraintsModified |= ImGui::SliderFloat( "T1", &constraints.rotationLimits[ 1 ], 0.0f, ae::HalfPi );
-			constraintsModified |= ImGui::SliderFloat( "T2", &constraints.rotationLimits[ 2 ], 0.0f, ae::HalfPi );
-			constraintsModified |= ImGui::SliderFloat( "T3", &constraints.rotationLimits[ 3 ], 0.0f, ae::HalfPi );
-			if( constraintsModified )
+			ae::IKConstraints* constraints = [&]()
 			{
 				if( selTestJoint == TestJointId::None )
 				{
-					skin.SetIKConstraints( currentPose.GetBoneByIndex( s_selectedJointIndex ), constraints );
+					ImGui::Text( "Selected Joint: %s", currentPose.GetBoneByIndex( s_selectedJointIndex )->name.c_str() );
+					return &ikConstraints[ s_selectedJointIndex ];
 				}
-				else
-				{
-					testConstraints = constraints;
-				}
-			}
+				ImGui::Text( "Selected Joint: %s", jointNames[ (int)selTestJoint ] );
+				return &testConstraints;
+			}();
+			const char* axisNames[] = { "None", "X", "Y", "Z", "NegativeX", "NegativeY", "NegativeZ" };
+			ImGui::ListBox( "Horizontal", (int*)&constraints->horizontalAxis, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Vertical", (int*)&constraints->verticalAxis, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Primary", (int*)&constraints->primaryAxis, axisNames, countof(axisNames), 3 );
+			ImGui::SliderFloat( "T0", &constraints->rotationLimits[ 0 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "T1", &constraints->rotationLimits[ 1 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "T2", &constraints->rotationLimits[ 2 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "T3", &constraints->rotationLimits[ 3 ], 0.0f, ae::HalfPi );
 		}
 		if ( input.GetPress( ae::Key::V ) )
 		{
@@ -388,6 +397,7 @@ int main()
 			for ( auto b = extentBone; b; b = b->parent )
 			{
 				ik.chain.Insert( 0, b->index );
+				ik.joints.Insert( 0, ikConstraints[ b->index ] );
 				if ( b->name == anchorBoneName )
 				{
 					break;
@@ -397,14 +407,6 @@ int main()
 			// chain->bones.Append( { extentBone->transform, extentBone->parent->transform.GetTranslation() } );
 			ik.targetTransform = targetTransform;
 			ik.pose.Initialize( &currentPose );
-			for ( uint32_t idx : ik.chain )
-			{
-				ae::IKJoint joint;
-				const ae::Bone* bone = ik.pose.GetBoneByIndex( idx );
-				const bool right = memcmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen( "QuickRigCharacter_Right" ) ) == 0;
-				joint.primaryAxis = right ? ae::Vec3( -1, 0, 0 ) : ae::Vec3( 1, 0, 0 );
-				ik.joints.Append( joint );
-			}
 			ik.Run( autoIK ? 10 : 1, &currentPose ); // &debugLines
 
 			// Debug
@@ -461,7 +463,7 @@ int main()
 						parentBone->transform,
 						parentBone->inverseTransform,
 						childBone->transform,
-						childBone->constraints,
+						ikConstraints[ childBone->index ],
 						&debugLines
 					);
 				}
