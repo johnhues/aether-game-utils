@@ -4291,7 +4291,30 @@ struct IK
 	// @TODO: Cleaup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
-	static ae::Vec3 ClipJoint( float bindBoneLength, const ae::Matrix4& j0, const ae::Matrix4& j0Inv, const ae::Matrix4& j1, const ae::IKConstraints& j1Constraints, ae::DebugLines* debugLines = nullptr );
+	static ae::Vec2 ClipJoint2D( ae::Vec3 joint, float boneLen, ae::Axis ha, ae::Axis va, ae::Axis pa, const float (&q)[ 4 ], ae::Vec2* unclippedOut );
+	static ae::Vec3 ClipJoint( float bindBoneLength, const ae::Matrix4& j0, const ae::Matrix4& j0Inv, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::DebugLines* debugLines = nullptr );
+
+	static float GetAxis( ae::Axis axis, const ae::Vec3 v )
+	{
+		switch( axis )
+		{
+			case ae::Axis::X: return v.x;
+			case ae::Axis::Y: return v.y;
+			case ae::Axis::Z: return v.z;
+			case ae::Axis::NegativeX: return -v.x;
+			case ae::Axis::NegativeY: return -v.y;
+			case ae::Axis::NegativeZ: return -v.z;
+			default: return 0.0f;
+		}
+	}
+
+	static ae::Vec3 Build3D( ae::Axis horizontalAxis, ae::Axis verticalAxis, ae::Axis primaryAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true )
+	{
+		ae::Vec3 result = GetAxisVector( horizontalAxis, negative ) * horizontalVal;
+		result += GetAxisVector( verticalAxis, negative ) * verticalVal;
+		result += GetAxisVector( primaryAxis, negative ) * primaryVal;
+		return result;
+	}
 };
 
 //------------------------------------------------------------------------------
@@ -22590,40 +22613,57 @@ ae::Vec3 IK::GetAxisVector( ae::Axis axis, bool negative )
 	}
 }
 
+ae::Vec2 IK::ClipJoint2D( ae::Vec3 joint, float boneLen, ae::Axis ha, ae::Axis va, ae::Axis pa, const float (&q)[ 4 ], ae::Vec2* unclippedOut )
+{
+	const ae::Vec2 unclipped = [&]()
+	{
+		float t;
+		ae::Vec3 p;
+		const ae::Vec3 axisCenter = Build3D( ha, va, pa, 0, 0, boneLen );
+		const ae::Plane ellipsePlane = ae::Plane(
+			axisCenter,
+			Build3D( ha, va, pa, 0, 0, 1 )
+		);
+		if( !ellipsePlane.IntersectLine( ae::Vec3( 0.0f ), joint, &p, &t ) || t < 0.0f )
+		{
+			p = ellipsePlane.GetClosestPoint( joint );
+			p = axisCenter + ( p - axisCenter ).SafeNormalizeCopy() * ae::Max( q[ 0 ], q[ 1 ], q[ 2 ], q[ 3 ] );
+		}
+		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
+	}();
+	const ae::Vec2 quadrantEllipse = [q, unclipped]()
+	{
+		if( unclipped.x >= 0.0f && unclipped.y >= 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
+		if( unclipped.x <= 0.0f && unclipped.y >= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
+		if( unclipped.x <= 0.0f && unclipped.y <= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
+		return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
+	}();
+
+	const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), unclipped );
+	if( unclippedOut )
+	{
+		*unclippedOut = unclipped;
+	}
+	if( unclipped.LengthSquared() > edge.LengthSquared() )
+	{
+		return edge;
+	}
+	return unclipped;
+}
+
 ae::Vec3 IK::ClipJoint(
 	float bindBoneLength,
 	const ae::Matrix4& j0,
 	const ae::Matrix4& j0Inv,
-	const ae::Matrix4& j1,
+	ae::Vec3 j1,
 	const ae::IKConstraints& j1Constraints,
 	ae::DebugLines* debugLines )
 {
-	const auto Build3D = []( ae::Axis horizontalAxis, ae::Axis verticalAxis, ae::Axis primaryAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true ) -> ae::Vec3
-	{
-		ae::Vec3 result = GetAxisVector( horizontalAxis, negative ) * horizontalVal;
-		result += GetAxisVector( verticalAxis, negative ) * verticalVal;
-		result += GetAxisVector( primaryAxis, negative ) * primaryVal;
-		return result;
-	};
-	const auto GetAxis = []( ae::Axis axis, const ae::Vec3 v ) -> float
-	{
-		switch( axis )
-		{
-			case ae::Axis::X: return v.x;
-			case ae::Axis::Y: return v.y;
-			case ae::Axis::Z: return v.z;
-			case ae::Axis::NegativeX: return -v.x;
-			case ae::Axis::NegativeY: return -v.y;
-			case ae::Axis::NegativeZ: return -v.z;
-			default: return 0.0f;
-		}
-	};
-
 	const ae::Axis ha = j1Constraints.horizontalAxis;
 	const ae::Axis va = j1Constraints.verticalAxis;
 	const ae::Axis pa = j1Constraints.primaryAxis;
 	const float (&j0AngleLimits)[ 4 ] = j1Constraints.rotationLimits;
-	const float b01Len = bindBoneLength;//( b0 - b1 ).Length();
+	const float b01Len = bindBoneLength;
 	const float q[ 4 ] =
 	{
 		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
@@ -22631,38 +22671,8 @@ ae::Vec3 IK::ClipJoint(
 		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
 		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
 	};
-
-	float t;
-	const ae::Vec2 j1Flat = [&]()
-	{
-		ae::Vec3 p;
-		const ae::Vec3 axisCenter = Build3D( ha, va, pa, 0, 0, b01Len );
-		const ae::Plane ellipsePlane = ae::Plane(
-			axisCenter,
-			Build3D( ha, va, pa, 0, 0, 1 )
-		);
-		const ae::Vec3 j1Local = ( j0Inv * ae::Vec4( j1.GetTranslation(), 1.0f ) ).GetXYZ();
-		if( !ellipsePlane.IntersectLine( ae::Vec3( 0.0f ), j1Local, &p, &t ) || t < 0.0f )
-		{
-			p = ellipsePlane.GetClosestPoint( j1Local );
-			p = axisCenter + ( p - axisCenter ).SafeNormalizeCopy() * ae::Max( q[ 0 ], q[ 1 ], q[ 2 ], q[ 3 ] );
-		}
-		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
-	}();
-	const ae::Vec2 quadrantEllipse = [q, j1Flat]()
-	{
-		if( j1Flat.x >= 0.0f && j1Flat.y >= 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
-		if( j1Flat.x <= 0.0f && j1Flat.y >= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
-		if( j1Flat.x <= 0.0f && j1Flat.y <= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
-		return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
-	}();
-
-	const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), j1Flat );
-	ae::Vec2 posClipped = j1Flat;
-	if( posClipped.LengthSquared() > edge.LengthSquared() )
-	{
-		posClipped = edge;
-	}
+	ae::Vec2 j1Flat( 0.0f );
+	const ae::Vec2 posClipped = ClipJoint2D( ( j0Inv * ae::Vec4( j1, 1.0f ) ).GetXYZ(), b01Len, ha, va, pa, q, &j1Flat );
 	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ).NormalizeCopy() * b01Len;
 	const ae::Vec3 resultWorld = ( j0 * ae::Vec4( resultLocal, 1.0f ) ).GetXYZ();
 
@@ -22768,13 +22778,12 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 			const float boneLen = parentBone->length;
 			const ae::Matrix4 parentTransform = ae::Matrix4::Translation( parentPos ) * parentBone->rotation.GetTransformMatrix();
 			const ae::Matrix4 parentInvTransform = parentTransform.GetInverse();
-			const ae::Matrix4 childTransform = ae::Matrix4::Translation( childPos ) * childBone->rotation.GetTransformMatrix();
 
 			childBone->pos = ClipJoint(
 				boneLen,
 				parentTransform,
 				parentInvTransform,
-				childTransform,
+				childPos,
 				childConstraints,
 				debugLines
 			);

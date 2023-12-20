@@ -462,7 +462,7 @@ int main()
 						b01Len,
 						parentBone->transform,
 						parentBone->inverseTransform,
-						childBone->transform,
+						childBone->transform.GetTranslation(),
 						ikConstraints[ childBone->index ],
 						&debugLines
 					);
@@ -480,7 +480,7 @@ int main()
 				testJointLen,
 				testJoint0,
 				testJoint0Inv,
-				testJoint1,
+				testJoint1.GetTranslation(),
 				testConstraints,
 				&debugLines
 			);
