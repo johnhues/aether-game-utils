@@ -108,7 +108,7 @@ int main()
 	fileSystem.Initialize( "data", "ae", "ik" );
 	camera.Reset( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Vec3( 0.0f, 3.5f, 0.4f ) );
 	camera.SetDistanceLimits( 0.25f, 25.0f );
-	debugLines.Initialize( 4096 );
+	debugLines.Initialize( 20 * 1024 );
 	gridLines.Initialize( 4096 );
 	gridLines.SetXRayEnabled( false );
 	ui.Initialize();
@@ -207,11 +207,12 @@ int main()
 	ae::Matrix4 targetTransform, testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
-		targetTransform = skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
+		const ae::Matrix4 skeletonTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
+		targetTransform = skeletonTransform * skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
 		testJoint0 = testJoint0Bind;
 		testJoint1 = testJoint1Bind;
 		currentPose.Initialize( &skin.GetBindPose() );
-		currentPose.SetTransform( currentPose.GetRoot(), ae::Matrix4::Translation( ae::Vec3( 0.0f, 0.0f, 1.0f ) ) );
+		currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
@@ -407,7 +408,7 @@ int main()
 			// chain->bones.Append( { extentBone->transform, extentBone->parent->transform.GetTranslation() } );
 			ik.targetTransform = targetTransform;
 			ik.pose.Initialize( &currentPose );
-			ik.Run( autoIK ? 10 : 1, &currentPose ); // &debugLines
+			ik.Run( autoIK ? 10 : 1, &currentPose, drawSkeleton ? &debugLines : nullptr );
 
 			// Debug
 			if ( drawSkeleton )
@@ -452,34 +453,16 @@ int main()
 			if( s_selectedJointIndex < currentPose.GetBoneCount() )
 			{
 				const ae::Bone* childBone = currentPose.GetBoneByIndex( s_selectedJointIndex );
-				if( const ae::Bone* parentBone = childBone->parent )
-				{
-					const ae::Matrix4 j0Inv = parentBone->inverseTransform;
-					const ae::Vec3 b0 = ( j0Inv * ae::Vec4( skin.GetBindPose().GetBoneByIndex( parentBone->index )->transform.GetTranslation(), 1.0f ) ).GetXYZ();
-					const ae::Vec3 b1 = ( j0Inv * ae::Vec4( skin.GetBindPose().GetBoneByIndex( childBone->index )->transform.GetTranslation(), 1.0f ) ).GetXYZ();
-					const float b01Len = ( b0 - b1 ).Length();
-					ae::IK::ClipJoint(
-						b01Len,
-						parentBone->transform,
-						parentBone->inverseTransform,
-						childBone->transform.GetTranslation(),
-						ikConstraints[ childBone->index ],
-						&debugLines
-					);
-				}
+				// @TODO: Show selected
 			}
 		}
 
 		const ae::Vec3 testJointClipped = [&]()
 		{
-			const ae::Matrix4 testJoint0Inv = testJoint0.GetInverse();
-			const ae::Vec3 b0 = ( testJoint0Inv * ae::Vec4( testJoint0Bind.GetTranslation(), 1.0f ) ).GetXYZ();
-			const ae::Vec3 b1 = ( testJoint0Inv * ae::Vec4( testJoint1Bind.GetTranslation(), 1.0f ) ).GetXYZ();
-			const float testJointLen = ( b0 - b1 ).Length();
 			return ae::IK::ClipJoint(
-				testJointLen,
-				testJoint0,
-				testJoint0Inv,
+				( testJoint0Bind.GetTranslation() - testJoint1Bind.GetTranslation() ).Length(),
+				testJoint0.GetTranslation(),
+				testJoint0.GetRotation(),
 				testJoint1.GetTranslation(),
 				testConstraints,
 				&debugLines
@@ -494,7 +477,7 @@ int main()
 		// Add grid
 		gridLines.AddLine( ae::Vec3( -2, 0, 0 ), ae::Vec3( 2, 0, 0 ), ae::Color::Red() );
 		gridLines.AddLine( ae::Vec3( 0, -2, 0 ), ae::Vec3( 0, 2, 0 ), ae::Color::Green() );
-		for ( float i = -2; i <= 2.00001f; i += 0.2f )
+		for ( float i = -2; i <= 2.00001f; i += 0.5f )
 		{
 			if ( ae::Abs( i ) < 0.0001f ) { continue; }
 			gridLines.AddLine( ae::Vec3( i, -2, 0 ), ae::Vec3( i, 2, 0 ), ae::Color::PicoLightGray() );

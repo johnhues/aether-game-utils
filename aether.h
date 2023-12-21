@@ -4263,7 +4263,7 @@ struct IKConstraints
 	// @TODO
 	ae::Axis horizontalAxis = ae::Axis::Y;
 	//! The half-range of motion of this joint in radians. @TODO: Array element details
-	float rotationLimits[ 4 ] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float rotationLimits[ 4 ] = { 0.5f, 0.5f, 0.5f, 0.5f };
 	//! The amount in radians that this joint is allowed to twist around the
 	//! primary axis in either direction.
 	float twistLimit = 0.0f;
@@ -4292,7 +4292,7 @@ struct IK
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
 	static ae::Vec2 ClipJoint2D( ae::Vec3 joint, float boneLen, ae::Axis ha, ae::Axis va, ae::Axis pa, const float (&q)[ 4 ], ae::Vec2* unclippedOut );
-	static ae::Vec3 ClipJoint( float bindBoneLength, const ae::Matrix4& j0, const ae::Matrix4& j0Inv, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::DebugLines* debugLines = nullptr );
+	static ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::DebugLines* debugLines = nullptr );
 
 	static float GetAxis( ae::Axis axis, const ae::Vec3 v )
 	{
@@ -22653,10 +22653,10 @@ ae::Vec2 IK::ClipJoint2D( ae::Vec3 joint, float boneLen, ae::Axis ha, ae::Axis v
 
 ae::Vec3 IK::ClipJoint(
 	float bindBoneLength,
-	const ae::Matrix4& j0,
-	const ae::Matrix4& j0Inv,
-	ae::Vec3 j1,
-	const ae::IKConstraints& j1Constraints,
+	ae::Vec3 j0Pos, // Parent
+	ae::Quaternion j0Ori, // Parent
+	ae::Vec3 j1, // Child
+	const ae::IKConstraints& j1Constraints, // Child
 	ae::DebugLines* debugLines )
 {
 	const ae::Axis ha = j1Constraints.horizontalAxis;
@@ -22672,28 +22672,30 @@ ae::Vec3 IK::ClipJoint(
 		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
 	};
 	ae::Vec2 j1Flat( 0.0f );
-	const ae::Vec2 posClipped = ClipJoint2D( ( j0Inv * ae::Vec4( j1, 1.0f ) ).GetXYZ(), b01Len, ha, va, pa, q, &j1Flat );
+
+	const ae::Vec2 posClipped = ClipJoint2D( j0Ori.GetInverse().Rotate( j1 - j0Pos ), b01Len, ha, va, pa, q, &j1Flat );
 	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ).NormalizeCopy() * b01Len;
-	const ae::Vec3 resultWorld = ( j0 * ae::Vec4( resultLocal, 1.0f ) ).GetXYZ();
+	const ae::Vec3 resultWorld = j0Pos + j0Ori.Rotate( resultLocal );
 
 	if( debugLines )
 	{
+		const ae::Matrix4 j0 = ae::Matrix4::Translation( j0Pos ) * j0Ori.GetTransformMatrix();
 		const ae::Vec3 j1FlatWorld = ( j0 * ae::Vec4( Build3D( ha, va, pa, j1Flat.x, j1Flat.y, b01Len ), 1 ) ).GetXYZ();
 		const ae::Vec3 j1FlatWorldClipped = ( j0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ), 1 ) ).GetXYZ();
-		debugLines->AddSphere( j1FlatWorld, 0.025f, ae::Color::Magenta(), 8 );
-		debugLines->AddSphere( j1FlatWorldClipped, 0.025f, ae::Color::Magenta(), 8 );
+		debugLines->AddSphere( j1FlatWorld, 0.025f, ae::Color::Magenta(), 4 );
+		debugLines->AddSphere( j1FlatWorldClipped, 0.025f, ae::Color::Magenta(), 4 );
 		debugLines->AddLine( j1FlatWorld, j1FlatWorldClipped, ae::Color::Magenta() );
 		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 0 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
 		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 1 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
 		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 2 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
 		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 3 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		for ( uint32_t i = 0; i < 16; i++ )
+		for ( uint32_t i = 0; i < 8; i++ )
 		{
 			const ae::Vec3 q0 = Build3D( ha, va, pa, q[ 0 ], q[ 1 ], 1 ); // +x +y
 			const ae::Vec3 q1 = Build3D( ha, va, pa, q[ 2 ], q[ 1 ], 1 ); // -x +y
 			const ae::Vec3 q2 = Build3D( ha, va, pa, q[ 2 ], q[ 3 ], 1 ); // -x -y
 			const ae::Vec3 q3 = Build3D( ha, va, pa, q[ 0 ], q[ 3 ], 1 ); // +x -y
-			const float step = ( ae::HalfPi / 16 );
+			const float step = ( ae::HalfPi / 8 );
 			const float angle = i * step;
 			const ae::Vec3 l0 = Build3D( ha, va, pa, ae::Cos( angle ), ae::Sin( angle ), b01Len, false );
 			const ae::Vec3 l1 = Build3D( ha, va, pa, ae::Cos( angle + step ), ae::Sin( angle + step ), b01Len, false );
@@ -22730,7 +22732,7 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 	{
 		ae::Vec3 pos;
 		ae::Quaternion rotation;
-		float length;
+		float length; // Fixed distance between pos and parent pos
 	};
 	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
 	for ( uint32_t i = 0; i < chain.Length(); i++ )
@@ -22740,7 +22742,6 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 		IKBone ikBone;
 		ikBone.pos = bone->transform.GetTranslation();
 		ikBone.rotation = bone->transform.GetRotation();
-		// @TODO: Should be stored in child because parents can have multiple children with different bone lengths
 		ikBone.length = ( ikBone.pos - bone->parent->transform.GetTranslation() ).Length();
 		bones.Append( ikBone );
 	}
@@ -22763,47 +22764,46 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 	};
 
 	uint32_t iters = 0;
-	while ( ( bones[ bones.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount )
+	while ( iters == 0 || ( ( bones[ bones.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount ) )
 	{
 		// Start from end and iterate to root to move toward target
 		bones[ bones.Length() - 1 ].pos = targetPos;
 		for ( int32_t i = bones.Length() - 2; i >= 0; i-- )
 		{
-			IKBone* childBone = &bones[ i ];
-			const IKBone* parentBone = &bones[ i + 1 ];
-			const ae::Vec3 childPos = childBone->pos;
-			const ae::Vec3 parentPos = parentBone->pos;
-			const ae::IKConstraints& childConstraints = GetConstraints( i );
-			// @TODO: Should be stored in child because parents can have multiple children with different bone lengths
-			const float boneLen = parentBone->length;
-			const ae::Matrix4 parentTransform = ae::Matrix4::Translation( parentPos ) * parentBone->rotation.GetTransformMatrix();
-			const ae::Matrix4 parentInvTransform = parentTransform.GetInverse();
-
-			childBone->pos = ClipJoint(
-				boneLen,
-				parentTransform,
-				parentInvTransform,
-				childPos,
-				childConstraints,
-				debugLines
-			);
+			IKBone* parentBone = &bones[ i ];
+			const IKBone* childBone = &bones[ i + 1 ];
+			parentBone->pos = childBone->pos + ( parentBone->pos - childBone->pos ).SafeNormalizeCopy() * childBone->length;
 		}
 		
 		// Iterate from root to reposition joints
 		bones[ 0 ].pos = rootPos;
 		for ( uint32_t i = 0; i < bones.Length() - 1; i++ )
 		{
-			ae::Vec3 dir = ( bones[ i + 1 ].pos - bones[ i ].pos ).SafeNormalizeCopy();
+			IKBone* parentBone = &bones[ i ];
+			IKBone* childBone = &bones[ i + 1 ];
+			const ae::IKConstraints& childConstraints = GetConstraints( i + 1 );
+			const ae::Vec3 childPos = childBone->pos;
+			const ae::Vec3 parentPos = parentBone->pos;
+
+			childBone->pos = ClipJoint(
+				childBone->length,
+				parentPos,
+				parentBone->rotation,
+				childPos,
+				childConstraints,
+				debugLines
+			);
+
+			ae::Vec3 dir = ( childBone->pos - parentBone->pos ).SafeNormalizeCopy();
 			const ae::IKConstraints& constraints = GetConstraints( i );
 			const ae::Vec3 primaryAxis = GetAxisVector( constraints.primaryAxis );
-			
-			const ae::Quaternion invRot = bones[ i ].rotation.GetInverse();
+			const ae::Quaternion invRot = parentBone->rotation.GetInverse();
 			const ae::Vec3 boneDir = invRot.Rotate( dir );
 			const ae::Vec3 axis = primaryAxis.Cross( boneDir );
 			const float angle = boneDir.GetAngleBetween( primaryAxis );
 			const ae::Quaternion boneRot( axis, angle );
-			bones[ i ].rotation *= boneRot;
-			bones[ i + 1 ].pos = bones[ i ].pos + bones[ i ].rotation.Rotate( primaryAxis ) * bones[ i + 1 ].length;
+			parentBone->rotation *= boneRot;
+			childBone->pos = parentBone->pos + parentBone->rotation.Rotate( primaryAxis ) * bones[ i + 1 ].length;
 		}
 		
 		iters++;
