@@ -343,10 +343,12 @@ int main()
 			ImGui::ListBox( "Horizontal", (int*)&constraints->horizontalAxis, axisNames, countof(axisNames), 3 );
 			ImGui::ListBox( "Vertical", (int*)&constraints->verticalAxis, axisNames, countof(axisNames), 3 );
 			ImGui::ListBox( "Primary", (int*)&constraints->primaryAxis, axisNames, countof(axisNames), 3 );
-			ImGui::SliderFloat( "T0", &constraints->rotationLimits[ 0 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "T1", &constraints->rotationLimits[ 1 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "T2", &constraints->rotationLimits[ 2 ], 0.0f, ae::HalfPi );
-			ImGui::SliderFloat( "T3", &constraints->rotationLimits[ 3 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "R0", &constraints->rotationLimits[ 0 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "R1", &constraints->rotationLimits[ 1 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "R2", &constraints->rotationLimits[ 2 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "R3", &constraints->rotationLimits[ 3 ], 0.0f, ae::HalfPi );
+			ImGui::SliderFloat( "T0", &constraints->twistLimits[ 0 ], -ae::Pi, 0.0f );
+			ImGui::SliderFloat( "T1", &constraints->twistLimits[ 1 ], 0.0f, ae::Pi );
 		}
 		if ( input.GetPress( ae::Key::V ) )
 		{
@@ -407,6 +409,7 @@ int main()
 			// ae::IKChain* chain = &ik.chains.Append();
 			// chain->bones.Append( { extentBone->transform, extentBone->parent->transform.GetTranslation() } );
 			ik.targetTransform = targetTransform;
+			ik.bindPose = &skin.GetBindPose();
 			ik.pose.Initialize( &currentPose );
 			ik.Run( autoIK ? 10 : 1, &currentPose, drawSkeleton ? &debugLines : nullptr );
 		}

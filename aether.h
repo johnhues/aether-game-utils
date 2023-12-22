@@ -778,6 +778,10 @@ public:
 	//! Returns a quaternion which rotates this quaternion to the given quaternion.
 	//! ie: this = reference * relative
 	Quaternion RelativeCopy( const Quaternion& reference ) const;
+	//! Returns the twist and swing components of this quaternion around the
+	//! given \p axis. The \p twistOut component is the rotation around the axis, and
+	//! the \p swingOut component is the rotation around the axis' orthogonal plane.
+	void GetTwistSwing( Vec3 axis, Quaternion* twistOut, Quaternion* swingOut ) const;
 
 #ifdef AE_QUAT_CLASS_EXTRA
 	AE_QUAT_CLASS_EXTRA // Define conversion functions for ae::Quaternion with AE_USER_CONFIG
@@ -4270,8 +4274,9 @@ struct IKConstraints
 	//! The half-range of motion of this joint in radians. @TODO: Array element details
 	float rotationLimits[ 4 ] = { 1.25f, 1.25f, 1.25f, 1.25f };
 	//! The amount in radians that this joint is allowed to twist around the
-	//! primary axis in either direction.
-	float twistLimit = 0.0f;
+	//! primary axis in either direction. Lower limit is negative, upper limit
+	//! is positive. Zero is no twist.
+	float twistLimits[ 2 ] = { -ae::QuarterPi, ae::QuarterPi };
 };
 
 //------------------------------------------------------------------------------
@@ -4290,6 +4295,8 @@ struct IK
 	//! default ae::IKConstraints, or append a single ae::IKJoint to use that for all
 	//! bones. Otherwise this should be the same length as 'pose.GetBoneCount()'. 
 	ae::Array< ae::IKConstraints > joints;
+	//! Referenced for bone lengths and joint limits
+	const ae::Skeleton* bindPose = nullptr;
 	//! Used as the starting point for the IK.
 	ae::Skeleton pose;
 
@@ -12299,6 +12306,21 @@ float Quaternion::Dot( const Quaternion& q ) const
 Quaternion Quaternion::RelativeCopy( const Quaternion& reference ) const
 {
 	return reference.GetInverse() * (*this);
+}
+
+void Quaternion::GetTwistSwing( Vec3 axis, Quaternion* twistOut, Quaternion* swingOut ) const
+{
+	// https://theorangeduck.com/page/joint-limits#swingtwist
+	const ae::Vec3 p = ae::Vec3( i, j, k ).Dot( axis ) * axis;
+	const ae::Quaternion twistRot = ae::Quaternion( p.x, p.y, p.z, r ).NormalizeCopy();
+	if( twistOut )
+	{
+		*twistOut = twistRot;
+	}
+	if( swingOut )
+	{
+		*swingOut = -( *this * twistRot.GetInverse() );
+	}
 }
 
 //------------------------------------------------------------------------------
@@ -22758,7 +22780,7 @@ ae::Vec3 IK::ClipJoint(
 	}
 
 	return resultWorld;
-};
+}
 
 IK::IK( ae::Tag tag ) :
 	tag( tag ),
@@ -22770,30 +22792,19 @@ IK::IK( ae::Tag tag ) :
 void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* debugLines )
 {
 	AE_ASSERT( !chain.Length() || pose.GetBoneCount() );
+	AE_ASSERT_MSG( bindPose, "A bind pose is required to run IK" );
+	// @TODO: More thorough validation
+	AE_ASSERT_MSG( bindPose->GetBoneCount() == pose.GetBoneCount(), "Bind pose and pose hierarchy must match" );
 
 	struct IKBone
 	{
 		ae::Vec3 pos;
 		ae::Quaternion rotation;
 		float length; // Fixed distance between pos and parent pos
+		float defaultTwist; // The bind pose twist angle between this bone and its parent
 	};
 
-	// (a) The initial configuration of the manipulator and the target
-	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
-	for ( uint32_t i = 0; i < chain.Length(); i++ )
-	{
-		const Bone* bone = pose.GetBoneByIndex( chain[ i ] );
-		AE_ASSERT( bone->parent );
-		IKBone ikBone;
-		ikBone.pos = bone->transform.GetTranslation();
-		ikBone.rotation = bone->transform.GetRotation();
-		ikBone.length = ( ikBone.pos - bone->parent->transform.GetTranslation() ).Length();
-		bones.Append( ikBone );
-	}
-
-	const ae::Vec3 rootPos = bones[ 0 ].pos;
-	const ae::Vec3 targetPos = targetTransform.GetTranslation();
-	AE_ASSERT( joints.Length() == 0 || joints.Length() == 1 || joints.Length() == bones.Length() );
+	//AE_ASSERT( joints.Length() == 0 || joints.Length() == 1 || joints.Length() == bones.Length() );
 	auto GetConstraints = [ this ]( uint32_t idx ) -> const ae::IKConstraints&
 	{
 		switch ( joints.Length() )
@@ -22807,6 +22818,32 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 			default: return joints[ idx ];
 		}
 	};
+
+	// (a) The initial configuration of the manipulator and the target
+	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
+	for ( uint32_t i = 0; i < chain.Length(); i++ )
+	{
+		const Bone* bindBone = bindPose->GetBoneByIndex( chain[ i ] );
+		const Bone* currentBone = pose.GetBoneByIndex( chain[ i ] );
+		AE_ASSERT( currentBone->parent );
+		AE_ASSERT( bindBone->parent );
+		IKBone ikBone;
+		ikBone.pos = currentBone->transform.GetTranslation();
+		ikBone.rotation = currentBone->transform.GetRotation();
+		ikBone.length = ( bindBone->transform.GetTranslation() - bindBone->parent->transform.GetTranslation() ).Length();
+
+		ae::Quaternion twist;
+		float twistAngle = 0.0f;
+		const ae::Vec3 primaryAxis = GetAxisVector( GetConstraints( i ).primaryAxis );
+		const ae::Quaternion bindRot = bindBone->transform.GetRotation().RelativeCopy( bindBone->parent->transform.GetRotation() );
+		bindRot.GetTwistSwing( primaryAxis, &twist, nullptr );
+		twist.GetAxisAngle( nullptr, &ikBone.defaultTwist );
+		
+		bones.Append( ikBone );
+	}
+
+	const ae::Vec3 rootPos = bones[ 0 ].pos;
+	const ae::Vec3 targetPos = targetTransform.GetTranslation();
 
 	uint32_t iters = 0;
 	while ( iters == 0 || ( ( bones[ bones.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount ) )
@@ -22865,22 +22902,18 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 				const ae::Quaternion boneRot( axis, angle );
 				currentBone->rotation *= boneRot;
 
-				// @TODO: Get default twist from bind pose
-				float defaultTwist = 0.0f;
-				if( i == 1 ) { defaultTwist = 5.498f; }
-				if( i == 2 ) { defaultTwist = 0.7854f; }
-
-				// Decompose rotation into twist and swing to twist can be limited
-				// https://theorangeduck.com/page/joint-limits#swingtwist
+				// Decompose rotation into twist and swing so twist can be limited
 				const ae::Quaternion relative0 = currentBone->rotation.RelativeCopy( parentBone->rotation );
-				const ae::Vec3 p = ae::Vec3( relative0.i, relative0.j, relative0.k ).Dot( primaryAxis ) * primaryAxis;
-				const ae::Quaternion twistRot0 = ae::Quaternion( p.x, p.y, p.z, relative0.r ).NormalizeCopy();
-				const ae::Quaternion swingRot = -( relative0 * twistRot0.GetInverse() );
+				ae::Quaternion twistRot0;
+				ae::Quaternion swingRot;
+				relative0.GetTwistSwing( primaryAxis, &twistRot0, &swingRot );
 				float twistAngle = 0.0f;
 				twistRot0.GetAxisAngle( nullptr, &twistAngle );
-				twistAngle -= defaultTwist;
-				twistAngle = ae::Clip( twistAngle, -ae::HalfPi * 0.5f, ae::HalfPi * 0.5f );
-				twistAngle += defaultTwist;
+
+				twistAngle -= currentBone->defaultTwist;
+				twistAngle = ae::Clip( twistAngle, currentConstraints.twistLimits[ 0 ], currentConstraints.twistLimits[ 1 ] );
+				twistAngle += currentBone->defaultTwist;
+
 				const ae::Quaternion twistRot1 = ae::Quaternion( primaryAxis, twistAngle );
 				const ae::Quaternion relative1 = swingRot * twistRot1;
 				currentBone->rotation = parentBone->rotation * relative1;
