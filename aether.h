@@ -755,12 +755,14 @@ public:
 	static Quaternion Identity() { return Quaternion( 0.0f, 0.0f, 0.0f, 1.0f ); }
 
 	void Normalize();
+	Quaternion NormalizeCopy() const;
 	bool operator==( const Quaternion& q ) const;
 	bool operator!=( const Quaternion& q ) const;
 	Quaternion& operator*= ( const Quaternion& q );
 	Quaternion operator* ( const Quaternion& q ) const;
+	Quaternion operator- () const;
 	float Dot( const Quaternion& q ) const;
-	Quaternion const operator* ( float s ) const;
+	Quaternion operator* ( float s ) const;
 	void AddScaledVector( const Vec3& v, float s );
 	void RotateByVector( const Vec3& v );
 	void SetDirectionXY( const Vec3& v );
@@ -773,6 +775,9 @@ public:
 	Quaternion GetInverse() const;
 	Quaternion& SetInverse();
 	Vec3 Rotate( Vec3 v ) const;
+	//! Returns a quaternion which rotates this quaternion to the given quaternion.
+	//! ie: this = reference * relative
+	Quaternion RelativeCopy( const Quaternion& reference ) const;
 
 #ifdef AE_QUAT_CLASS_EXTRA
 	AE_QUAT_CLASS_EXTRA // Define conversion functions for ae::Quaternion with AE_USER_CONFIG
@@ -4263,7 +4268,7 @@ struct IKConstraints
 	// @TODO
 	ae::Axis horizontalAxis = ae::Axis::Y;
 	//! The half-range of motion of this joint in radians. @TODO: Array element details
-	float rotationLimits[ 4 ] = { 0.5f, 0.5f, 0.5f, 0.5f };
+	float rotationLimits[ 4 ] = { 1.25f, 1.25f, 1.25f, 1.25f };
 	//! The amount in radians that this joint is allowed to twist around the
 	//! primary axis in either direction.
 	float twistLimit = 0.0f;
@@ -12076,6 +12081,13 @@ void Quaternion::Normalize()
 	k *= invMagnitude;
 }
 
+Quaternion Quaternion::NormalizeCopy() const
+{
+	Quaternion r = *this;
+	r.Normalize();
+	return r;
+}
+
 bool Quaternion::operator==( const Quaternion& q ) const
 {
 	return ( i == q.i ) && ( j == q.j ) && ( k == q.k ) && ( r == q.r );
@@ -12102,9 +12114,14 @@ Quaternion Quaternion::operator* ( const Quaternion& q ) const
 	return Quaternion( *this ) *= q;
 }
 
-Quaternion const Quaternion::operator*( float s ) const
+Quaternion Quaternion::operator*( float s ) const
 {
 	return Quaternion( s * i, s * j, s * k, s * r );
+}
+
+Quaternion Quaternion::operator- () const
+{
+	return Quaternion( -i, -j, -k, -r );
 }
 
 void Quaternion::AddScaledVector( const Vec3& v, float t )
@@ -12168,10 +12185,27 @@ void Quaternion::ZeroXY()
 
 void Quaternion::GetAxisAngle( Vec3* axis, float* angle ) const
 {
-	*angle = 2 * acos( r );
-	axis->x = i / sqrt( 1 - r * r );
-	axis->y = j / sqrt( 1 - r * r );
-	axis->z = k / sqrt( 1 - r * r );
+	if( angle )
+	{
+		*angle = 2 * acos( r );
+	}
+	if( axis )
+	{
+		const float s = sqrt( 1.0f - r * r );
+		// https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToAngle/index.htm
+		if( s >= 0.0001f )
+		{
+			axis->x = i / s;
+			axis->y = j / s;
+			axis->z = k / s;
+		}
+		else
+		{
+			axis->x = i;
+			axis->y = j;
+			axis->z = k;
+		}
+	}
 }
 
 void Quaternion::AddRotationXY( float rotation )
@@ -12260,6 +12294,11 @@ Vec3 Quaternion::Rotate( Vec3 v ) const
 float Quaternion::Dot( const Quaternion& q ) const
 {
 	return ( q.r * r ) + ( q.i * i ) + ( q.j * j ) + ( q.k * k );
+}
+
+Quaternion Quaternion::RelativeCopy( const Quaternion& reference ) const
+{
+	return reference.GetInverse() * (*this);
 }
 
 //------------------------------------------------------------------------------
@@ -22673,7 +22712,11 @@ ae::Vec3 IK::ClipJoint(
 	};
 	ae::Vec2 j1Flat( 0.0f );
 
+	// (f) the joint position p2 is relocated to a new position, p2^, which is
+	// the nearest point on that composite ellipsoidal shape from p2, ensuring
+	// that the new joint position p02 will be within the allowed rotational range
 	const ae::Vec2 posClipped = ClipJoint2D( j0Ori.GetInverse().Rotate( j1 - j0Pos ), b01Len, ha, va, pa, q, &j1Flat );
+	// (g) move p2^ to p2', to conserve bone length
 	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ).NormalizeCopy() * b01Len;
 	const ae::Vec3 resultWorld = j0Pos + j0Ori.Rotate( resultLocal );
 
@@ -22734,6 +22777,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 		ae::Quaternion rotation;
 		float length; // Fixed distance between pos and parent pos
 	};
+
+	// (a) The initial configuration of the manipulator and the target
 	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
 	for ( uint32_t i = 0; i < chain.Length(); i++ )
 	{
@@ -22767,43 +22812,80 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 	while ( iters == 0 || ( ( bones[ bones.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount ) )
 	{
 		// Start from end and iterate to root to move toward target
+		// (b) relocate and reorient joint p4 to target t
 		bones[ bones.Length() - 1 ].pos = targetPos;
 		for ( int32_t i = bones.Length() - 2; i >= 0; i-- )
 		{
 			IKBone* parentBone = &bones[ i ];
 			const IKBone* childBone = &bones[ i + 1 ];
+
+			// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
 			parentBone->pos = childBone->pos + ( parentBone->pos - childBone->pos ).SafeNormalizeCopy() * childBone->length;
+			// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
+			// (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
+			// (h) reorient the joint p-1' in order to satisfy the orientation limits
 		}
 		
 		// Iterate from root to reposition joints
 		bones[ 0 ].pos = rootPos;
 		for ( uint32_t i = 0; i < bones.Length() - 1; i++ )
 		{
-			IKBone* parentBone = &bones[ i ];
+			IKBone* parentBone = i ? &bones[ i - 1 ] : nullptr;
+			IKBone* currentBone = &bones[ i ];
 			IKBone* childBone = &bones[ i + 1 ];
+			const ae::IKConstraints& currentConstraints = GetConstraints( i );
 			const ae::IKConstraints& childConstraints = GetConstraints( i + 1 );
 			const ae::Vec3 childPos = childBone->pos;
-			const ae::Vec3 parentPos = parentBone->pos;
+			const ae::Vec3 currentPos = currentBone->pos;
 
-			childBone->pos = ClipJoint(
-				childBone->length,
-				parentPos,
-				parentBone->rotation,
-				childPos,
-				childConstraints,
-				debugLines
-			);
+			// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
+			childBone->pos = currentBone->pos + ( childBone->pos - currentBone->pos ).SafeNormalizeCopy() * childBone->length;
+			// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
+			// (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
+			// (h) reorient the joint p-1' in order to satisfy the orientation limits
 
-			ae::Vec3 dir = ( childBone->pos - parentBone->pos ).SafeNormalizeCopy();
-			const ae::IKConstraints& constraints = GetConstraints( i );
-			const ae::Vec3 primaryAxis = GetAxisVector( constraints.primaryAxis );
-			const ae::Quaternion invRot = parentBone->rotation.GetInverse();
-			const ae::Vec3 boneDir = invRot.Rotate( dir );
-			const ae::Vec3 axis = primaryAxis.Cross( boneDir );
-			const float angle = boneDir.GetAngleBetween( primaryAxis );
-			const ae::Quaternion boneRot( axis, angle );
-			parentBone->rotation *= boneRot;
-			childBone->pos = parentBone->pos + parentBone->rotation.Rotate( primaryAxis ) * bones[ i + 1 ].length;
+			const ae::Vec3 primaryAxis = GetAxisVector( currentConstraints.primaryAxis );
+			if( parentBone )
+			{
+				childBone->pos = ClipJoint(
+					childBone->length,
+					currentPos,
+					parentBone->rotation,
+					childPos,
+					childConstraints,
+					debugLines
+				);
+
+				// Reorient current joint to point toward child joint
+				const ae::Vec3 dir = ( childBone->pos - currentBone->pos ).SafeNormalizeCopy();
+				const ae::Quaternion invRot = currentBone->rotation.GetInverse();
+				const ae::Vec3 boneDir = invRot.Rotate( dir );
+				const ae::Vec3 axis = primaryAxis.Cross( boneDir );
+				const float angle = boneDir.GetAngleBetween( primaryAxis );
+				const ae::Quaternion boneRot( axis, angle );
+				currentBone->rotation *= boneRot;
+
+				// @TODO: Get default twist from bind pose
+				float defaultTwist = 0.0f;
+				if( i == 1 ) { defaultTwist = 5.498f; }
+				if( i == 2 ) { defaultTwist = 0.7854f; }
+
+				// Decompose rotation into twist and swing to twist can be limited
+				// https://theorangeduck.com/page/joint-limits#swingtwist
+				const ae::Quaternion relative0 = currentBone->rotation.RelativeCopy( parentBone->rotation );
+				const ae::Vec3 p = ae::Vec3( relative0.i, relative0.j, relative0.k ).Dot( primaryAxis ) * primaryAxis;
+				const ae::Quaternion twistRot0 = ae::Quaternion( p.x, p.y, p.z, relative0.r ).NormalizeCopy();
+				const ae::Quaternion swingRot = -( relative0 * twistRot0.GetInverse() );
+				float twistAngle = 0.0f;
+				twistRot0.GetAxisAngle( nullptr, &twistAngle );
+				twistAngle -= defaultTwist;
+				twistAngle = ae::Clip( twistAngle, -ae::HalfPi * 0.5f, ae::HalfPi * 0.5f );
+				twistAngle += defaultTwist;
+				const ae::Quaternion twistRot1 = ae::Quaternion( primaryAxis, twistAngle );
+				const ae::Quaternion relative1 = swingRot * twistRot1;
+				currentBone->rotation = parentBone->rotation * relative1;
+			}
+			childBone->pos = currentBone->pos + currentBone->rotation.Rotate( primaryAxis ) * childBone->length;
 		}
 		
 		iters++;

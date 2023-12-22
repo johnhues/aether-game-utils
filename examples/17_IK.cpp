@@ -409,15 +409,6 @@ int main()
 			ik.targetTransform = targetTransform;
 			ik.pose.Initialize( &currentPose );
 			ik.Run( autoIK ? 10 : 1, &currentPose, drawSkeleton ? &debugLines : nullptr );
-
-			// Debug
-			if ( drawSkeleton )
-			{
-				for ( uint32_t idx : ik.chain )
-				{
-					debugLines.AddOBB( currentPose.GetBoneByIndex( idx )->transform * ae::Matrix4::Scaling( 0.1f ), ae::Color::Magenta() );
-				}
-			}
 		}
 		
 		// Update mesh
@@ -434,9 +425,9 @@ int main()
 				ae::Vec3 xAxis = t.GetAxis( 0 );
 				ae::Vec3 yAxis = t.GetAxis( 1 );
 				ae::Vec3 zAxis = t.GetAxis( 2 );
-				debugLines.AddLine( p, p + xAxis * 0.2f, ae::Color::Red() );
-				debugLines.AddLine( p, p + yAxis * 0.2f, ae::Color::Green() );
-				debugLines.AddLine( p, p + zAxis * 0.2f, ae::Color::Blue() );
+				debugLines.AddLine( p, p + xAxis * 0.05f, ae::Color::Red() );
+				debugLines.AddLine( p, p + yAxis * 0.05f, ae::Color::Green() );
+				debugLines.AddLine( p, p + zAxis * 0.05f, ae::Color::Blue() );
 			}
 
 			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
