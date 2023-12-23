@@ -201,13 +201,29 @@ int main()
 		}
 		ikConstraints.Append( constraints );
 	}
+	{
+		const ae::Bone* handBone = skin.GetBindPose().GetBoneByName( rightHandBoneName );
+		// ikConstraints[ handBone->index ].rotationLimits[ 0 ] = 0.07f;
+		// ikConstraints[ handBone->index ].rotationLimits[ 1 ] = 0.07f;
+		// ikConstraints[ handBone->index ].rotationLimits[ 2 ] = 0.07f;
+		// ikConstraints[ handBone->index ].rotationLimits[ 3 ] = 1.25f;
+		ikConstraints[ handBone->index ].twistLimits[ 0 ] = -0.3f;
+		ikConstraints[ handBone->index ].twistLimits[ 1 ] = 0.3f;
+	}
+	{
+		const ae::Bone* foreArmBone = skin.GetBindPose().GetBoneByName( "QuickRigCharacter_RightForeArm" );
+		// ikConstraints[ foreArmBone->index ].rotationLimits[ 0 ] = 1.25f;
+		// ikConstraints[ foreArmBone->index ].rotationLimits[ 1 ] = 1.25f;
+		// ikConstraints[ foreArmBone->index ].rotationLimits[ 2 ] = 0.1f;
+		// ikConstraints[ foreArmBone->index ].rotationLimits[ 3 ] = 0.1f;
+	}
 
-	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 0.0f ) * ae::Matrix4::Scaling( 0.2f );
-	const ae::Matrix4 testJoint1Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 2.0f ) * ae::Matrix4::Scaling( 0.2f );
+	const ae::Matrix4 skeletonTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
+	const ae::Matrix4 testJoint0Bind = ae::Matrix4::Translation( -1.25f, 0.5f, 0.0f ) * ae::Matrix4::Scaling( 0.2f );
+	const ae::Matrix4 testJoint1Bind = ae::Matrix4::Translation( 0.0f, 0.0f, 0.8f ) * ae::Matrix4::Scaling( 0.2f );
 	ae::Matrix4 targetTransform, testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
-		const ae::Matrix4 skeletonTransform = ae::Matrix4::RotationY( ae::Pi ) * ae::Matrix4::RotationX( ae::Pi * -0.5f );
 		targetTransform = skeletonTransform * skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
 		testJoint0 = testJoint0Bind;
 		testJoint1 = testJoint1Bind;
@@ -220,6 +236,8 @@ int main()
 	bool drawMesh = false;
 	bool drawSkeleton = true;
 	bool autoIK = true;
+	bool fromBindPose = true;
+	bool drawIK = false;
 	enum class TestJointId
 	{
 		None,
@@ -273,6 +291,7 @@ int main()
 		{
 			ImGui::Checkbox( "Draw Mesh", &drawMesh );
 			ImGui::Checkbox( "Draw Skeleton", &drawSkeleton );
+			ImGui::Checkbox( "Draw IK", &drawIK );
 			ImGui::Checkbox( "Auto IK", &autoIK );
 			ImGui::SameLine();
 			ImGui::BeginDisabled( autoIK );
@@ -281,6 +300,7 @@ int main()
 				shouldStep = true;
 			}
 			ImGui::EndDisabled();
+			ImGui::Checkbox( "From Bind Pose", &fromBindPose );
 
 			ImGui::Separator();
 
@@ -393,7 +413,12 @@ int main()
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse && !ImGuizmo::IsUsing() );
 		camera.Update( &input, dt );
 		
-		if ( autoIK || shouldStep )
+		if( fromBindPose && autoIK )
+		{
+			currentPose.Initialize( &skin.GetBindPose() );
+			currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
+		}
+		if ( ( autoIK || shouldStep ) && ( drawSkeleton || drawMesh || drawIK ) )
 		{
 			ae::IK ik = TAG_ALL;
 			const ae::Bone* extentBone = currentPose.GetBoneByName( rightHandBoneName );
@@ -411,7 +436,7 @@ int main()
 			ik.targetTransform = targetTransform;
 			ik.bindPose = &skin.GetBindPose();
 			ik.pose.Initialize( &currentPose );
-			ik.Run( autoIK ? 10 : 1, &currentPose, drawSkeleton ? &debugLines : nullptr );
+			ik.Run( autoIK ? 10 : 1, &currentPose, drawIK ? &debugLines : nullptr );
 		}
 		
 		// Update mesh
@@ -451,17 +476,14 @@ int main()
 			}
 		}
 
-		const ae::Vec3 testJointClipped = [&]()
-		{
-			return ae::IK::ClipJoint(
-				( testJoint0Bind.GetTranslation() - testJoint1Bind.GetTranslation() ).Length(),
-				testJoint0.GetTranslation(),
-				testJoint0.GetRotation(),
-				testJoint1.GetTranslation(),
-				testConstraints,
-				&debugLines
-			);
-		}();
+		const ae::Vec3 testJointClipped = testJoint1.GetTranslation() + ae::IK::ClipJoint(
+			( testJoint0Bind.GetTranslation() - testJoint1Bind.GetTranslation() ).Length(),
+			testJoint0.GetTranslation(),
+			testJoint0.GetRotation(),
+			testJoint1.GetTranslation(),
+			testConstraints,
+			&debugLines
+		);
 
 		// Joint limits
 		debugLines.AddOBB( testJoint0, ae::Color::PicoBlue() );
