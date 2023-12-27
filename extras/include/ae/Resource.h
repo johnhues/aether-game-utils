@@ -55,23 +55,32 @@ public:
 	bool Add( const char* type, const char* name, const char* filePath );
 	//! Adds a manually loaded resource. ae::Resource::IsLoaded() will always
 	//! return true for this resource.
-	template < typename T > T* Add( const char* name );
+	template< typename T > T* Add( const char* name );
+	//! Reloads a resource that was previously added with Add().
+	void Reload( const ae::Resource* resource );
 
 	//! Loads all resources added with Add().
 	bool Load();
 	//! Returns true if any resources were added but have not yet loaded.
 	bool AnyPendingLoad() const;
 	
-	//! Returns a resource with the given \p name, or nullptr if it does not exist.
-	template < typename T > const T* TryGet( const char* name ) const;
-	//! Returns a resource with the given \p name, or asserts if it does not exist.
-	template < typename T > const T& Get( const char* name ) const;
+	//! Returns a resource with the given \p name and type, or nullptr if it
+	//! does not exist.
+	template< typename T = ae::Resource > const T* TryGet( const char* name ) const;
+	//! Returns a resource with the given \p name and type, or asserts if it
+	//! does not exist.
+	template< typename T = ae::Resource > const T& Get( const char* name ) const;
+	//! Returns a resource with the given \p index, or null if the resource type
+	//! does not match. Null is returned if the index is out of bounds.
+	template< typename T = ae::Resource > const T* GetByIndex( uint32_t index );
+	//! Returns the number of registered resources.
+	uint32_t GetCount() const;
 
 	//! Patches the vtable of ResourceManager and all added resources.
 	void HotLoad();
 	
 private:
-	Resource* m_Add( const char* type, const char* name );
+	Resource* m_Register( const char* type, const char* name );
 	const ae::Tag m_tag;
 	ae::FileSystem* m_fs = nullptr;
 	ae::Map< ae::Str64, Resource* > m_resources;
@@ -80,13 +89,13 @@ private:
 //------------------------------------------------------------------------------
 // ResourceManager member functions
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 T* ResourceManager::Add( const char* name )
 {
-	return (T*)m_Add( ae::GetTypeName< T >(), name );
+	return (T*)m_Register( ae::GetTypeName< T >(), name );
 }
 
-template < typename T >
+template< typename T >
 const T* ResourceManager::TryGet( const char* name ) const
 {
 	const Resource* resource = m_resources.Get( name, nullptr );
@@ -102,12 +111,18 @@ const T* ResourceManager::TryGet( const char* name ) const
 	return resourceT;
 }
 
-template < typename T >
+template< typename T >
 const T& ResourceManager::Get( const char* name ) const
 {
 	const T* resourceT = TryGet< T >( name );
 	AE_ASSERT_MSG( resourceT, "No resource '#' of type '#'", name, ae::GetTypeName< T >() );
 	return *resourceT;
+}
+
+template< typename T >
+const T* ResourceManager::GetByIndex( uint32_t index )
+{
+	return ae::Cast< T >( m_resources.GetValue( index ) );
 }
 
 } // ae namespace

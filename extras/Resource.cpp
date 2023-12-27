@@ -53,7 +53,7 @@ void ae::ResourceManager::Terminate()
 
 bool ae::ResourceManager::Add( const char* type, const char* name, ae::FileSystem::Root rootDir, const char* filePath )
 {
-	if( ae::Resource* resource = m_Add( type, name ) )
+	if( ae::Resource* resource = m_Register( type, name ) )
 	{
 		resource->m_file = m_fs->Read( rootDir, filePath, 1.0f );
 		AE_ASSERT( resource->m_file );
@@ -67,26 +67,18 @@ bool ae::ResourceManager::Add( const char* type, const char* name, const char* f
 	return Add( type, name, ae::FileSystem::Root::Data, filePath );
 }
 
-ae::Resource* ae::ResourceManager::m_Add( const char* type, const char* name )
+void ae::ResourceManager::Reload( const ae::Resource* _resource )
 {
-	ae::Str64 key( name );
-	if ( m_resources.Get( key, nullptr ) )
+	ae::Resource* resource = const_cast< ae::Resource* >( _resource );
+	resource->m_isLoaded = false;
+	if( resource->m_file )
 	{
-		AE_FAIL_MSG( "Resource '#' already exists", name );
-		return nullptr;
+		const ae::Str256 url = resource->m_file->GetUrl();
+		m_fs->Destroy( resource->m_file );
+		resource->m_file = m_fs->Read( url.c_str(), 1.0f );
+		AE_ASSERT( resource->m_file );
 	}
-	const ae::Type* resourceType = ae::GetTypeByName( type );
-	if ( !resourceType )
-	{
-		AE_FAIL_MSG( "Unknown resource type '#'", type );
-		return nullptr;
-	}
-	ae::Resource* resource = (ae::Resource*)ae::Allocate( m_tag, resourceType->GetSize(), resourceType->GetAlignment() );
-	resourceType->New( resource );
-	m_resources.Set( key, resource );
-	return resource;
 }
-
 
 bool ae::ResourceManager::Load()
 {
@@ -119,6 +111,11 @@ bool ae::ResourceManager::AnyPendingLoad() const
 	return false;
 }
 
+uint32_t ae::ResourceManager::GetCount() const
+{
+	return m_resources.Length();
+}
+
 void ae::ResourceManager::HotLoad()
 {
 	ae::ResourceManager temp = m_tag;
@@ -128,4 +125,24 @@ void ae::ResourceManager::HotLoad()
 		const ae::Type* type = ae::GetTypeFromObject( resource.value );
 		type->PatchVTable( resource.value );
 	}
+}
+
+ae::Resource* ae::ResourceManager::m_Register( const char* type, const char* name )
+{
+	ae::Str64 key( name );
+	if ( m_resources.Get( key, nullptr ) )
+	{
+		AE_FAIL_MSG( "Resource '#' already exists", name );
+		return nullptr;
+	}
+	const ae::Type* resourceType = ae::GetTypeByName( type );
+	if ( !resourceType )
+	{
+		AE_FAIL_MSG( "Unknown resource type '#'", type );
+		return nullptr;
+	}
+	ae::Resource* resource = (ae::Resource*)ae::Allocate( m_tag, resourceType->GetSize(), resourceType->GetAlignment() );
+	resourceType->New( resource );
+	m_resources.Set( key, resource );
+	return resource;
 }
