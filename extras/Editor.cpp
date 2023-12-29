@@ -61,7 +61,7 @@ const uint8_t kCogTextureData[] =
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 };
 
-const float kEditorViewDistance = 1000.0f;
+const float kEditorViewDistance = 25000.0f;
 
 //------------------------------------------------------------------------------
 // Serialization helpers
