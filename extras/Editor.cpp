@@ -149,6 +149,7 @@ public:
 		sock( tag ),
 		m_tag( tag ),
 		m_selected( tag ),
+		m_hoverEntities( tag ),
 		m_objects( tag ),
 		m_registry( tag ),
 		m_meshResourceVars( tag ),
@@ -178,6 +179,7 @@ public:
 	const ae::Component* GetComponent( const EditorServerObject* obj, const ae::Type* type );
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
 	EditorServerObject* GetObject( ae::Entity entity ) { return m_objects.Get( entity, nullptr ); }
+	const EditorServerObject* GetObject( ae::Entity entity ) const { return m_objects.Get( entity, nullptr ); }
 	const EditorServerObject* GetObjectFromComponent( const ae::Component* component );
 	const ae::Var* GetMeshResourceVar( const ae::Type* componentType );
 	const ae::Var* GetMeshVisibleVar( const ae::Type* componentType );
@@ -216,10 +218,11 @@ private:
 	// Manipulation
 	const ae::Type* m_objectListType = nullptr;
 	ae::Array< ae::Entity > m_selected;
-	ae::Entity hoverEntity = kInvalidEntity;
+	ae::Array< ae::Entity > m_hoverEntities;
 	ae::Entity uiHoverEntity = kInvalidEntity;
 	ae::Vec3 m_mouseHover = ae::Vec3( 0.0f );
 	ae::Vec3 m_mouseHoverNormal = ae::Vec3( 0, 1, 0 );
+	std::optional< ae::Vec2 > m_boxSelectStart;
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
 	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
 
@@ -1376,23 +1379,47 @@ void EditorServer::Render( EditorProgram* program )
 
 void EditorServer::ShowUI( EditorProgram* program )
 {
-	float dt = program->GetDt();
+	const float dt = program->GetDt();
+	const ae::Color cursorColor = ae::Color::PicoOrange();
 	
-	ae::Color cursorColor = ae::Color::PicoOrange();
-	if ( program->camera.GetMode() == ae::DebugCamera::Mode::None
-		&& !ImGuizmo::IsUsing() && ( !gizmoOperation || !ImGuizmo::IsOver() ) )
+	m_hoverEntities.Clear();
+	if( program->camera.GetMode() == ae::DebugCamera::Mode::None && !ImGui::GetIO().WantCaptureMouse )
 	{
-		hoverEntity = m_PickObject( program, cursorColor, &m_mouseHover, &m_mouseHoverNormal );
-	}
-	else
-	{
-		hoverEntity = kInvalidEntity;
-	}
-	
-	if ( !ImGui::GetIO().WantCaptureMouse && program->camera.GetMode() == ae::DebugCamera::Mode::None )
-	{
-		if ( !program->input.mouse.leftButton && program->input.mousePrev.leftButton ) // Release
+		const ae::Vec2 mousePos( ImGui::GetMousePos().x, ImGui::GetMousePos().y );
+		if( m_boxSelectStart )
 		{
+			const ImVec2 selectMin = ImVec2( ae::Min( m_boxSelectStart->x, mousePos.x ), ae::Min( m_boxSelectStart->y, mousePos.y ) );
+			const ImVec2 selectMax = ImVec2( ae::Max( m_boxSelectStart->x, mousePos.x ), ae::Max( m_boxSelectStart->y, mousePos.y ) );
+			const ae::Vec3 fColor = ae::Color::PicoOrange().GetLinearRGB() * 255.0f;
+			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawCornerFlags_All, 1.5f );
+			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawCornerFlags_All );
+		}
+
+		if( program->input.mouse.leftButton )
+		{
+			if( !program->input.mousePrev.leftButton ) // Press
+			{
+				m_boxSelectStart = ae::Vec2( mousePos.x, mousePos.y );
+			}
+			else
+			{
+				// Box hover logic
+			}
+		}
+		else
+		{
+			ae::Entity hoverEntity = m_PickObject( program, cursorColor, &m_mouseHover, &m_mouseHoverNormal );
+			if( hoverEntity )
+			{
+				m_hoverEntities.Append( hoverEntity );
+			}
+		}
+
+		if( !program->input.mouse.leftButton && program->input.mousePrev.leftButton ) // Release
+		{
+			m_boxSelectStart = std::nullopt;
+
+			ae::Entity hoverEntity = m_hoverEntities.Length() ? m_hoverEntities[ 0 ] : kInvalidEntity;
 			if( m_selectRef.enabled )
 			{
 				uint32_t matchCount = 0;
@@ -1433,6 +1460,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 			}
 		}
 	}
+	else
+	{
+		// Make sure box select is cleared when interrupted by other UI
+		m_boxSelectStart = std::nullopt;
+	}
 	
 	if ( m_selectRef.enabled && m_selectRef.pending )
 	{
@@ -1472,12 +1504,15 @@ void EditorServer::ShowUI( EditorProgram* program )
 			m_ShowEditorObject( program, entity, m_GetColor( entity, true ) );
 		}
 	}
-	if( hoverEntity )
+	if( m_hoverEntities.Length() )
 	{
 		program->debugLines.AddCircle( m_mouseHover + m_mouseHoverNormal * 0.025f, m_mouseHoverNormal, 0.5f, cursorColor, 8 );
-		if( m_selected.Find( hoverEntity ) < 0 )
+		for( Entity hoverEntity : m_hoverEntities )
 		{
-			m_ShowEditorObject( program, hoverEntity, ae::Color::PicoOrange() ); // m_GetColor( hoverEntity, true )
+			if( m_selected.Find( hoverEntity ) < 0 )
+			{
+				m_ShowEditorObject( program, hoverEntity, ae::Color::PicoOrange() ); // m_GetColor( hoverEntity, true )
+			}
 		}
 	}
 	if( uiHoverEntity && m_selected.Find( uiHoverEntity ) < 0 )
@@ -1591,7 +1626,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			program->camera.Refocus( GetSelectedAABB( program ).GetCenter() );
 		}
-		else if( hoverEntity )
+		else if( m_hoverEntities.Length() )
 		{
 			program->camera.Refocus( m_mouseHover );
 		}
@@ -1640,7 +1675,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		);
 		
 		ImGuiIO& io = ImGui::GetIO();
-		ImGuizmo::Enable( program->camera.GetMode() == ae::DebugCamera::Mode::None );
+		ImGuizmo::Enable( program->camera.GetMode() == ae::DebugCamera::Mode::None && !m_boxSelectStart );
 		ImGuizmo::SetOrthographic( false );
 		ImGuizmo::AllowAxisFlip( false );
 		ImGuizmo::BeginFrame();
@@ -1655,8 +1690,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			program->GetViewToProj().data,
 			gizmoOperation,
 			mode,
-			transform.data
-		) )
+			transform.data ) )
 		{
 			selectedObject->SetTransform( transform, program );
 
@@ -2308,7 +2342,7 @@ void EditorServer::Unload( EditorProgram* program )
 {
 	m_objectListType = nullptr;
 	m_selected.Clear();
-	hoverEntity = kInvalidEntity;
+	m_hoverEntities.Clear();
 	uiHoverEntity = kInvalidEntity;
 	m_selectRef = SelectRef();
 
