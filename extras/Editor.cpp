@@ -194,7 +194,7 @@ private:
 	// Serialization helpers
 	void m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::Type*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const;
 	// Tools
-	void m_CopySelected();
+	void m_CopySelected() const;
 	void m_PasteFromClipboard( class EditorProgram* program );
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
@@ -2403,7 +2403,7 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 	jsonEntity->AddMember( "components", jsonComponents, allocator );
 }
 
-void EditorServer::m_CopySelected()
+void EditorServer::m_CopySelected() const
 {
 	if( !m_selected.Length() )
 	{
@@ -2411,13 +2411,18 @@ void EditorServer::m_CopySelected()
 		return;
 	}
 
+	// Sort entities so they are pasted in the order they were created, not the
+	// order they were selected. ValidateLevel() expects this order.
+	ae::Array< ae::Entity > selectedSorted = m_selected;
+	std::sort( std::begin( selectedSorted ), std::end( selectedSorted ) );
+
 	rapidjson::Document document( rapidjson::kObjectType );
 	rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
 	{
 		rapidjson::Value jsonObjects( rapidjson::kArrayType );
-		jsonObjects.Reserve( m_selected.Length(), allocator );
+		jsonObjects.Reserve( selectedSorted.Length(), allocator );
 
-		for( ae::Entity entity : m_selected )
+		for( ae::Entity entity : selectedSorted )
 		{
 			rapidjson::Value jsonObject( rapidjson::kObjectType );
 			m_EntityToJson( GetObject( entity ), allocator, nullptr, &jsonObject );
