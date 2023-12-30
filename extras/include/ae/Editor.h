@@ -83,15 +83,24 @@ struct EditorParams
 	//! @TODO
 	ae::Registry* registry = nullptr;
 
-	//! If true the editor will always run on initialization, ignoring the command line arguments.
+	//! If true the editor will always run on initialization, ignoring the
+	//! command line arguments.
 	bool run = false;
+	//! The port used for connections between ae::Editor and the launched editor
+	//! application
 	uint16_t port = 7200;
 	//! Only ae::Axis::Z and ae::Axis::Y are supported
 	ae::Axis worldUp = ae::Axis::Z;
-	//! When ae::Editor is given a relative path it will use this instead of the current working directory
+	//! When ae::Editor is given a relative path it will use this instead of
+	//! the current working directory
 	ae::Str256 dataDir;
 	//! Function pointers for editor callbacks
 	ae::EditorFunctionPointers functionPointers;
+	//! If a level is specified it will be opened on editor launch. The path can
+	//! be absolute or relative. See 'dataDir' for more information on relative
+	//! paths. This field will be ignored if a level is specified on the command
+	//! line with '--level'.
+	ae::Str256 levelPath;
 };
 
 //------------------------------------------------------------------------------

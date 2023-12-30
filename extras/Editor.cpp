@@ -398,6 +398,7 @@ void EditorProgram::Initialize()
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
 	debugLines.Initialize( 20480 );
 	debugLines.SetXRayEnabled( false );
+	fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );
 	
 	const char* kVertShader = "\
 		AE_UNIFORM mat4 u_worldToProj;\
@@ -749,14 +750,14 @@ void Editor::Initialize( const EditorParams& params )
 	AE_ASSERT( params.worldUp == ae::Axis::Z || params.worldUp == ae::Axis::Y );
 	AE_ASSERT( params.port );
 	m_params = ae::New< EditorParams >( m_tag, params );
-	m_fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );	
+	m_fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );
 
 	bool run = params.run;
-	if ( !run )
+	if( !run )
 	{
-		for ( int i = 0; i < params.argc; i++ )
+		for( int i = 0; i < params.argc; i++ )
 		{
-			if ( strcmp( params.argv[ i ], "--editor" ) == 0 )
+			if( strcmp( params.argv[ i ], "--editor" ) == 0 )
 			{
 				run = true;
 				break;
@@ -764,23 +765,27 @@ void Editor::Initialize( const EditorParams& params )
 		}
 	}
 
-	if ( run )
+	if( run )
 	{
 		EditorProgram program( m_tag, params );
 		program.Initialize();
 
 		int32_t levelArg = -1;
-		for ( int i = 0; i < params.argc; i++ )
+		for( int i = 0; i < params.argc; i++ )
 		{
-			if ( strcmp( params.argv[ i ], "--level" ) == 0 )
+			if( strcmp( params.argv[ i ], "--level" ) == 0 )
 			{
 				levelArg = i + 1;
 				break;
 			}
 		}
-		if ( levelArg >= 0 )
+		if( levelArg >= 0 )
 		{
 			program.editor.OpenLevel( &program, params.argv[ levelArg ] );
+		}
+		else if( !params.levelPath.Empty() )
+		{
+			program.editor.OpenLevel( &program, params.levelPath.c_str() );
 		}
 
 		program.Run();
@@ -3093,16 +3098,26 @@ namespace ae {
 
 void Editor::m_Fork()
 {
+	const char* levelPath = "";
+	if( !m_params->levelPath.Empty() )
+	{
+		levelPath = m_params->levelPath.c_str();
+	}
+	else if( !m_lastLoadedLevel.Empty() )
+	{
+		levelPath = m_lastLoadedLevel.c_str();
+	}
+
 #if _AE_APPLE_
 	if ( !fork() )
 	{
 		ae::Array< char*, 8 > args;
 		args.Append( m_params->argv[ 0 ] );
 		args.Append( (char*)"--editor" );
-		if( !m_lastLoadedLevel.Empty() )
+		if( levelPath[ 0 ] )
 		{
 			args.Append( (char*)"--level" );
-			args.Append( (char*)m_lastLoadedLevel.c_str() );
+			args.Append( (char*)levelPath );
 		}
 		args.Append( nullptr );
 		execv( args[ 0 ], args.Data() );
@@ -3115,8 +3130,12 @@ void Editor::m_Fork()
 	char args[ 256 ];
 	args[ 0 ] = 0;
 	strlcat( args, m_params->argv[ 0 ], sizeof(args) );
-	strlcat( args, " --editor --level ", sizeof(args) );
-	strlcat( args, m_level.filePath.c_str(), sizeof(args) );
+	strlcat( args, " --editor", sizeof(args) );
+	if( levelPath[ 0 ] )
+	{
+		strlcat( args, " --level ", sizeof(args) );
+		strlcat( args, levelPath, sizeof(args) );
+	}
 	CreateProcessA(
 		m_params->argv[ 0 ],
 		args,
