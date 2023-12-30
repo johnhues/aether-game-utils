@@ -198,7 +198,7 @@ private:
 	void m_PasteFromClipboard( class EditorProgram* program );
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
-	void m_SelectWithModifiers( class EditorProgram* program, ae::Entity entity );
+	void m_SelectWithModifiers( class EditorProgram* program, const ae::Entity* entities, uint32_t count );
 	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
 	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
 	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
@@ -1461,7 +1461,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			}
 			else
 			{
-				m_SelectWithModifiers( program, hoverEntity );
+				m_SelectWithModifiers( program, m_hoverEntities.Data(), m_hoverEntities.Length() );
 			}
 		}
 	}
@@ -1675,11 +1675,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 		const float scaleFactor = program->window.GetScaleFactor();
 		const ae::RectInt renderRectInt = program->GetRenderRect();
 		const ae::Rect renderRect = ae::Rect::FromPoints(
-				ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
-				ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
+			ae::Vec2( renderRectInt.GetPos() ) / scaleFactor,
+			ae::Vec2( renderRectInt.GetPos() + renderRectInt.GetSize() ) / scaleFactor
 		);
-		
-		ImGuiIO& io = ImGui::GetIO();
+
 		ImGuizmo::Enable( program->camera.GetMode() == ae::DebugCamera::Mode::None && !m_boxSelectStart );
 		ImGuizmo::SetOrthographic( false );
 		ImGuizmo::AllowAxisFlip( false );
@@ -2048,7 +2047,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 				}
 				if ( ImGui::Selectable( name.c_str(), isSelected ) )
 				{
-					m_SelectWithModifiers( program, entity );
+					m_SelectWithModifiers( program, &entity, 1 );
 				}
 				if( ImGui::IsItemHovered() )
 				{
@@ -2538,43 +2537,55 @@ void EditorServer::m_SetLevelPath( EditorProgram* program, const char* filePath 
 	}
 }
 
-void EditorServer::m_SelectWithModifiers( EditorProgram* program, ae::Entity entity )
+void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Entity* entities, uint32_t count )
 {
 	bool shift = program->input.Get( ae::Key::LeftShift );
 	bool ctrl = program->input.Get( ae::Key::LeftControl );
-	if ( shift && ctrl )
+	if( shift && ctrl )
 	{
 		// Add
-		if ( entity != kInvalidEntity && m_selected.Find( entity ) < 0 )
+		for( uint32_t i = 0; i < count; i++ )
 		{
-			m_selected.Append( entity );
-		}
-	}
-	else if ( shift )
-	{
-		// Toggle
-		if ( entity != kInvalidEntity )
-		{
-			int32_t idx = m_selected.Find( entity );
-			if ( idx < 0 )
+			ae::Entity entity = entities[ i ];
+			if( entity != kInvalidEntity && m_selected.Find( entity ) < 0 )
 			{
 				m_selected.Append( entity );
 			}
-			else
+		}
+	}
+	else if( shift )
+	{
+		// Toggle
+		for( uint32_t i = 0; i < count; i++ )
+		{
+			ae::Entity entity = entities[ i ];
+			if( entity != kInvalidEntity )
 			{
-				m_selected.Remove( idx );
+				int32_t idx = m_selected.Find( entity );
+				if( idx < 0 )
+				{
+					m_selected.Append( entity );
+				}
+				else
+				{
+					m_selected.Remove( idx );
+				}
 			}
 		}
 	}
-	else if ( ctrl )
+	else if( ctrl )
 	{
 		// Remove
-		if ( entity != kInvalidEntity )
+		for( uint32_t i = 0; i < count; i++ )
 		{
-			int32_t idx = m_selected.Find( entity );
-			if ( idx >= 0 )
+			ae::Entity entity = entities[ i ];
+			if( entity != kInvalidEntity )
 			{
-				m_selected.Remove( idx );
+				int32_t idx = m_selected.Find( entity );
+				if( idx >= 0 )
+				{
+					m_selected.Remove( idx );
+				}
 			}
 		}
 	}
@@ -2582,9 +2593,13 @@ void EditorServer::m_SelectWithModifiers( EditorProgram* program, ae::Entity ent
 	{
 		// New selection
 		m_selected.Clear();
-		if ( entity != kInvalidEntity )
+		for( uint32_t i = 0; i < count; i++ )
 		{
-			m_selected.Append( entity );
+			ae::Entity entity = entities[ i ];
+			if( entity != kInvalidEntity )
+			{
+				m_selected.Append( entity );
+			}
 		}
 	}
 }
@@ -2746,7 +2761,7 @@ bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, 
 					AE_ASSERT( selectComp );
 					const EditorServerObject* selectObj = GetObjectFromComponent( selectComp );
 					AE_ASSERT( selectObj );
-					m_SelectWithModifiers( program, selectObj->entity );
+					m_SelectWithModifiers( program, &selectObj->entity, 1 );
 				}
 			}
 			ImGui::SameLine();
