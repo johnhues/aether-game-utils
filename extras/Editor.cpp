@@ -590,7 +590,7 @@ void EditorProgram::Run()
 		r0 += timeStep.GetDt() * 0.6f;
 		r1 += timeStep.GetDt() * 0.75f;
 
-		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse );
+		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse || ImGuizmo::IsOver() );
 		camera.Update( &input, GetDt() );
 		
 		if ( ImGui::Begin( "Dev" ) )
@@ -1387,39 +1387,15 @@ void EditorServer::ShowUI( EditorProgram* program )
 	const float dt = program->GetDt();
 	const ae::Color cursorColor = ae::Color::PicoOrange();
 	
-	m_hoverEntities.Clear();
-	if( program->camera.GetMode() == ae::DebugCamera::Mode::None && !ImGui::GetIO().WantCaptureMouse )
+	if( program->camera.GetMode() != ae::DebugCamera::Mode::None || ImGui::GetIO().WantCaptureMouse )
 	{
-		const ae::Vec2 mousePos( ImGui::GetMousePos().x, ImGui::GetMousePos().y );
-		if( m_boxSelectStart )
-		{
-			const ImVec2 selectMin = ImVec2( ae::Min( m_boxSelectStart->x, mousePos.x ), ae::Min( m_boxSelectStart->y, mousePos.y ) );
-			const ImVec2 selectMax = ImVec2( ae::Max( m_boxSelectStart->x, mousePos.x ), ae::Max( m_boxSelectStart->y, mousePos.y ) );
-			const ae::Vec3 fColor = ae::Color::PicoOrange().GetLinearRGB() * 255.0f;
-			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawCornerFlags_All, 1.5f );
-			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawCornerFlags_All );
-		}
-
-		if( program->input.mouse.leftButton )
-		{
-			if( !program->input.mousePrev.leftButton ) // Press
-			{
-				m_boxSelectStart = ae::Vec2( mousePos.x, mousePos.y );
-			}
-			else
-			{
-				// Box hover logic
-			}
-		}
-		else
-		{
-			ae::Entity hoverEntity = m_PickObject( program, cursorColor, &m_mouseHover, &m_mouseHoverNormal );
-			if( hoverEntity )
-			{
-				m_hoverEntities.Append( hoverEntity );
-			}
-		}
-
+		// Make sure box select is cleared when interrupted by other UI
+		m_boxSelectStart = std::nullopt;
+		m_hoverEntities.Clear();
+	}
+	else
+	{
+		// Handle selection release and box select before updating hovered entities
 		if( !program->input.mouse.leftButton && program->input.mousePrev.leftButton ) // Release
 		{
 			m_boxSelectStart = std::nullopt;
@@ -1464,11 +1440,96 @@ void EditorServer::ShowUI( EditorProgram* program )
 				m_SelectWithModifiers( program, m_hoverEntities.Data(), m_hoverEntities.Length() );
 			}
 		}
-	}
-	else
-	{
-		// Make sure box select is cleared when interrupted by other UI
-		m_boxSelectStart = std::nullopt;
+
+		// Update hovered entities and box select
+		bool doPickingHover = false;
+		m_hoverEntities.Clear();
+		const ae::Vec2 mousePos( ImGui::GetMousePos().x, ImGui::GetMousePos().y );
+		if( !program->input.mouse.leftButton )
+		{
+			doPickingHover = true;
+		}
+		else if( !program->input.mousePrev.leftButton ) // Press
+		{
+			m_boxSelectStart = mousePos;
+		}
+		else if( m_boxSelectStart ) // Drag
+		{
+			const ae::Rect uiRect = ae::Rect::FromPoints( m_boxSelectStart.value(), mousePos );
+			if( uiRect.GetSize().Length() < 4.0f )
+			{
+				doPickingHover = true;
+			}
+			else if( uiRect.GetWidth() > 2.0f && uiRect.GetHeight() > 2.0f )
+			{
+				const ae::Vec2 uiScale( ImGui::GetIO().DisplayFramebufferScale.x, ImGui::GetIO().DisplayFramebufferScale.y );
+				const ae::RectInt renderRect = program->GetRenderRect();
+				const ae::Vec2 selectStart = ( uiRect.GetMin() * uiScale - ae::Vec2( renderRect.GetPos() ) ) / ae::Vec2( renderRect.GetSize() );
+				const ae::Vec2 selectEnd = ( uiRect.GetMax() * uiScale - ae::Vec2( renderRect.GetPos() ) ) / ae::Vec2( renderRect.GetSize() );
+				const ae::Rect rect = ae::Rect::FromPoints( selectStart, selectEnd );
+				const ae::Vec2 rectPos = rect.GetMin();
+
+				// https://topic.alibabacloud.com/a/scissoring-by-projection-matrix_8_8_31885482.html
+				ae::Matrix4 projToScissor;
+				projToScissor.SetAxis( 0, ae::Vec4( 1.0f / rect.GetWidth(), 0.0f, 0.0f, 0.0f ) );
+				projToScissor.SetAxis( 1, ae::Vec4( 0.0f, 1.0f / rect.GetHeight(), 0.0f, 0.0f ) );
+				projToScissor.SetAxis( 2, ae::Vec4( 0.0f, 0.0f, 1.0f, 0.0f ) );
+				float tx = ( 1.0f - ( 2.0f * rectPos.x + rect.GetWidth() ) ) / rect.GetWidth();
+				float ty = ( -1.0f + ( 2.0f * rectPos.y + rect.GetHeight() ) ) / rect.GetHeight();
+				projToScissor.SetAxis( 3, ae::Vec4( tx, ty, 0.0f, 1.0f ) );
+				const ae::Matrix4 worldToScissor = projToScissor * program->GetWorldToProj();
+
+				const ae::Frustum frustum( worldToScissor );
+				const uint32_t entityCount = m_objects.Length();
+				for( uint32_t i = 0; i < entityCount; i++ )
+				{
+					const EditorServerObject* obj = m_objects.GetValue( i );
+					if( !obj->hidden )
+					{
+						const ae::AABB aabb = obj->GetAABB( program );
+						const ae::Vec3 aabbMin = aabb.GetMin();
+						const ae::Vec3 aabbMax = aabb.GetMax();
+						const ae::Vec3 aabbCorners[ 8 ] =
+						{
+							ae::Vec3( aabbMin.x, aabbMin.y, aabbMin.z ),
+							ae::Vec3( aabbMin.x, aabbMin.y, aabbMax.z ),
+							ae::Vec3( aabbMin.x, aabbMax.y, aabbMin.z ),
+							ae::Vec3( aabbMin.x, aabbMax.y, aabbMax.z ),
+							ae::Vec3( aabbMax.x, aabbMin.y, aabbMin.z ),
+							ae::Vec3( aabbMax.x, aabbMin.y, aabbMax.z ),
+							ae::Vec3( aabbMax.x, aabbMax.y, aabbMin.z ),
+							ae::Vec3( aabbMax.x, aabbMax.y, aabbMax.z )
+						};
+						bool inside = false;
+						for( uint32_t j = 0; j < 8; j++ )
+						{
+							if( frustum.Intersects( aabbCorners[ j ] ) )
+							{
+								inside = true;
+								break;
+							}
+						}
+						if( inside )
+						{
+							m_hoverEntities.Append( obj->entity );
+						}
+					}
+				}
+			}
+		}
+		
+		if( doPickingHover )
+		{
+			m_hoverEntities.Append( m_PickObject( program, cursorColor, &m_mouseHover, &m_mouseHoverNormal ) );
+		}
+		else if( m_boxSelectStart )
+		{
+			const ImVec2 selectMin = ImVec2( ae::Min( m_boxSelectStart->x, mousePos.x ), ae::Min( m_boxSelectStart->y, mousePos.y ) );
+			const ImVec2 selectMax = ImVec2( ae::Max( m_boxSelectStart->x, mousePos.x ), ae::Max( m_boxSelectStart->y, mousePos.y ) );
+			const ae::Vec3 fColor = ae::Color::PicoOrange().GetLinearRGB() * 255.0f;
+			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawCornerFlags_All, 1.5f );
+			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawCornerFlags_All );
+		}
 	}
 	
 	if ( m_selectRef.enabled && m_selectRef.pending )
