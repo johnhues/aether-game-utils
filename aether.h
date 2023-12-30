@@ -719,6 +719,7 @@ public:
 	
 	// Internal access
 	void SetAxis( uint32_t column, const Vec3& v );
+	void SetAxis( uint32_t column, const Vec4& v );
 	void SetRow( uint32_t row, const Vec3& v );
 	void SetRow( uint32_t row, const Vec4& v );
 	Vec3 GetAxis( uint32_t column ) const;
@@ -2123,6 +2124,8 @@ public:
 	Vec2 GetMax() const { return m_max; }
 	Vec2 GetSize() const { return m_max - m_min; }
 	Vec2 GetCenter() const { return ( m_min + m_max ) * 0.5f; }
+	float GetWidth() const { return m_max.x - m_min.x; }
+	float GetHeight() const { return m_max.y - m_min.y; }
 	bool Contains( Vec2 pos ) const;
 	Vec2 Clip( Vec2 pos ) const;
 	void ExpandPoint( Vec2 pos );
@@ -11890,6 +11893,14 @@ void Matrix4::SetAxis( uint32_t col, const Vec3& v )
 	data[ col * 4 ] = v.x;
 	data[ col * 4 + 1 ] = v.y;
 	data[ col * 4 + 2 ] = v.z;
+}
+
+void Matrix4::SetAxis( uint32_t col, const Vec4& v )
+{
+	data[ col * 4 ] = v.x;
+	data[ col * 4 + 1 ] = v.y;
+	data[ col * 4 + 2 ] = v.z;
+	data[ col * 4 + 3 ] = v.w;
 }
 
 Vec4 Matrix4::GetRow( uint32_t row ) const
