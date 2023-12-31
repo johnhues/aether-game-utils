@@ -117,6 +117,7 @@ public:
 	
 	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::Type* type, const ae::Var* var );
 
+	ae::OBB GetOBB( class EditorProgram* program ) const;
 	ae::AABB GetAABB( class EditorProgram* program ) const;
 	
 	ae::Entity entity = ae::kInvalidEntity;
@@ -1026,17 +1027,20 @@ void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component*
 	program->editor.BroadcastVarChange( var, component );
 }
 
-ae::AABB EditorServerObject::GetAABB( EditorProgram* program ) const
+ae::OBB EditorServerObject::GetOBB( EditorProgram* program ) const
 {
 	const ae::Matrix4& transform = GetTransform();
 	if( mesh )
 	{
-		return ae::OBB( transform * mesh->collision.GetAABB().GetTransform() ).GetAABB();
+		return ae::OBB( transform * mesh->collision.GetAABB().GetTransform() );
 	}
-	else
-	{
-		return ae::OBB( transform ).GetAABB();
-	}
+	return ae::OBB( transform );
+
+}
+
+ae::AABB EditorServerObject::GetAABB( EditorProgram* program ) const
+{
+	return GetOBB( program ).GetAABB();
 }
 
 //------------------------------------------------------------------------------
@@ -1484,34 +1488,41 @@ void EditorServer::ShowUI( EditorProgram* program )
 				for( uint32_t i = 0; i < entityCount; i++ )
 				{
 					const EditorServerObject* obj = m_objects.GetValue( i );
-					if( !obj->hidden )
+					if( !obj->hidden && frustum.Intersects( ae::Sphere( obj->GetOBB( program ) ) ) )
 					{
-						const ae::AABB aabb = obj->GetAABB( program );
-						const ae::Vec3 aabbMin = aabb.GetMin();
-						const ae::Vec3 aabbMax = aabb.GetMax();
-						const ae::Vec3 aabbCorners[ 8 ] =
+						const ae::Matrix4 modelToWorld = obj->GetTransform();
+						if( obj->mesh )
 						{
-							ae::Vec3( aabbMin.x, aabbMin.y, aabbMin.z ),
-							ae::Vec3( aabbMin.x, aabbMin.y, aabbMax.z ),
-							ae::Vec3( aabbMin.x, aabbMax.y, aabbMin.z ),
-							ae::Vec3( aabbMin.x, aabbMax.y, aabbMax.z ),
-							ae::Vec3( aabbMax.x, aabbMin.y, aabbMin.z ),
-							ae::Vec3( aabbMax.x, aabbMin.y, aabbMax.z ),
-							ae::Vec3( aabbMax.x, aabbMax.y, aabbMin.z ),
-							ae::Vec3( aabbMax.x, aabbMax.y, aabbMax.z )
-						};
-						bool inside = false;
-						for( uint32_t j = 0; j < 8; j++ )
-						{
-							if( frustum.Intersects( aabbCorners[ j ] ) )
+							for( const EditorServerMesh::Vertex& vertex : obj->mesh->vertices )
 							{
-								inside = true;
-								break;
+								if( frustum.Intersects( modelToWorld.TransformPoint3x4( ae::Vec3( vertex.position ) ) ) )
+								{
+									m_hoverEntities.Append( obj->entity );
+									break;
+								}
 							}
 						}
-						if( inside )
+						else
 						{
-							m_hoverEntities.Append( obj->entity );
+							ae::Vec3 obbCorners[] =
+							{
+								ae::Vec3( -0.5f, -0.5f, -0.5f ),
+								ae::Vec3(  0.5f, -0.5f, -0.5f ),
+								ae::Vec3( -0.5f,  0.5f, -0.5f ),
+								ae::Vec3(  0.5f,  0.5f, -0.5f ),
+								ae::Vec3( -0.5f, -0.5f,  0.5f ),
+								ae::Vec3(  0.5f, -0.5f,  0.5f ),
+								ae::Vec3( -0.5f,  0.5f,  0.5f ),
+								ae::Vec3(  0.5f,  0.5f,  0.5f )
+							};
+							for( const ae::Vec3& corner : obbCorners )
+							{
+								if( frustum.Intersects( modelToWorld.TransformPoint3x4( corner ) ) )
+								{
+									m_hoverEntities.Append( obj->entity );
+									break;
+								}
+							}
 						}
 					}
 				}
