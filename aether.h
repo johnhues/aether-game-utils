@@ -482,6 +482,7 @@ class Vec2;
 class Vec3;
 class Vec4;
 class Matrix4;
+class Quaternion;
 
 //------------------------------------------------------------------------------
 // ae::Vec2 shared member functions
@@ -536,7 +537,7 @@ struct VecT
 //------------------------------------------------------------------------------
 struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 {
-	Vec2() = default; // Trivial default constructor for performance of vertex arrays etc
+	Vec2() = default; //!< Trivial default constructor for performance of vertex arrays etc
 	Vec2( const Vec2& ) = default;
 	explicit Vec2( float v );
 	Vec2( float x, float y );
@@ -574,7 +575,7 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 //------------------------------------------------------------------------------
 struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 {
-	Vec3() = default; // Trivial constructor for performance of vertex arrays etc
+	Vec3() = default; //!< Trivial constructor for performance of vertex arrays etc
 	explicit Vec3( float v );
 	Vec3( float x, float y, float z );
 	explicit Vec3( const float* xyz );
@@ -634,7 +635,7 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 //------------------------------------------------------------------------------
 struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 {
-	Vec4() = default; // Trivial Empty default constructor for performance of vertex arrays etc
+	Vec4() = default; //!< Trivial default constructor for performance of vertex arrays etc
 	Vec4( const Vec4& ) = default;
 	explicit Vec4( float f );
 	explicit Vec4( float xyz, float w );
@@ -671,62 +672,83 @@ struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 //------------------------------------------------------------------------------
 // ae::Matrix4 struct
 //------------------------------------------------------------------------------
+//! Stored column major, ie. the elements of the basis vectors are stored
+//! contiguously in memory.
 class AE_ALIGN( 16 ) Matrix4
 {
 public:
-	Matrix4() = default;
-	Matrix4( const Matrix4& ) = default;
+	Matrix4() = default; //!< Trivial default constructor for performance
+	Matrix4( const ae::Matrix4& ) = default;
 
-	// Constructor helpers
-	static Matrix4 Identity();
-	static Matrix4 Translation( float tx, float ty, float tz );
-	static Matrix4 Translation( const Vec3& p );
-	static Matrix4 Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 );
-	static Matrix4 RotationX( float angle );
-	static Matrix4 RotationY( float angle );
-	static Matrix4 RotationZ( float angle );
-	static Matrix4 Scaling( float s );
-	static Matrix4 Scaling( const Vec3& s );
-	static Matrix4 Scaling( float sx, float sy, float sz );
-	static Matrix4 WorldToView( Vec3 position, Vec3 forward, Vec3 up );
-	static Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
+	// Construction helpers
+	static ae::Matrix4 Identity();
+	static ae::Matrix4 Translation( float tx, float ty, float tz );
+	static ae::Matrix4 Translation( const ae::Vec3& p );
+	static ae::Matrix4 Rotation( ae::Vec3 forward0, ae::Vec3 up0, ae::Vec3 forward1, ae::Vec3 up1 );
+	static ae::Matrix4 RotationX( float angle );
+	static ae::Matrix4 RotationY( float angle );
+	static ae::Matrix4 RotationZ( float angle );
+	static ae::Matrix4 Scaling( float s );
+	static ae::Matrix4 Scaling( const ae::Vec3& s );
+	static ae::Matrix4 Scaling( float sx, float sy, float sz );
+	static ae::Matrix4 WorldToView( ae::Vec3 position, ae::Vec3 forward, ae::Vec3 up );
+	static ae::Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
-	// Multiplication operators / helpers
-	bool operator==( const Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
-	bool operator!=( const Matrix4& o ) const { return !operator== ( o ); }
-	Vec4 operator*( const Vec4& v ) const;
-	Matrix4 operator*( const Matrix4& m ) const;
-	void operator*=( const Matrix4& m );
-	
-	// Modification helpers
+	// Set transformation properties
 	void SetTranslation( float x, float y, float z );
-	void SetTranslation( const Vec3& t );
-	void SetScale( const Vec3& s );
-	void SetRotation( const class Quaternion& r );
-	class Quaternion GetRotation() const;
+	void SetTranslation( const ae::Vec3& t );
+	void SetRotation( const ae::Quaternion& r );
+	void SetScale( const ae::Vec3& s );
 	void SetTranspose();
 	void SetInverse();
-	Vec3 GetTranslation() const;
-	Vec3 GetScale() const;
-	Matrix4 GetTranspose() const;
-	Matrix4 GetInverse() const; // @TODO: Handle non-inverseable matrices in API
-	Matrix4 GetNormalMatrix() const;
-	Matrix4 GetScaleRemoved() const;
+	void SetAxis( uint32_t column, const ae::Vec3& v );
+	void SetAxis( uint32_t column, const ae::Vec4& v );
+	void SetRow( uint32_t row, const ae::Vec3& v );
+	void SetRow( uint32_t row, const ae::Vec4& v );
+
+	// Get transformation properties
+	ae::Vec3 GetTranslation() const;
+	ae::Quaternion GetRotation() const;
+	ae::Vec3 GetScale() const;
+	ae::Matrix4 GetTranspose() const;
+	ae::Matrix4 GetInverse() const; // @TODO: Handle non-invertible matrices in API
+	ae::Matrix4 GetNormalMatrix() const;
+	ae::Matrix4 GetScaleRemoved() const;
+	ae::Vec3 GetAxis( uint32_t column ) const;
+	ae::Vec4 GetColumn( uint32_t column ) const;
+	ae::Vec4 GetRow( uint32_t row ) const;
+
+	//! Matrix multiplication
+	ae::Matrix4 operator*( const ae::Matrix4& m ) const;
+	//! Matrix multiplication
+	void operator*=( const ae::Matrix4& m );
+
+	//! Vector multiplication
+	ae::Vec4 operator*( const ae::Vec4& v ) const;
+	//! Transform the given vector as if it had a w component of 1. No perspective
+	//! divide is done on the result, instead use operator*(ae::Vec4) for
+	//! perspective transformations.
+	ae::Vec3 TransformPoint3x4( ae::Vec3 v ) const;
+	//! Transform the given vector as if it had a w component of 0. No perspective
+	//! divide is done on the result, instead use operator*(ae::Vec4) for
+	//! perspective transformations.
+	ae::Vec3 TransformVector3x4( ae::Vec3 v ) const;
+
+	// Comparison
+	bool operator==( const ae::Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
+	bool operator!=( const ae::Matrix4& o ) const { return !operator== ( o ); }
 
 #ifdef AE_MAT4_CLASS_EXTRA
 	AE_MAT4_CLASS_EXTRA // Define conversion functions for ae::Matrix4 with AE_USER_CONFIG
 #endif
-	
-	// Internal access
-	void SetAxis( uint32_t column, const Vec3& v );
-	void SetAxis( uint32_t column, const Vec4& v );
-	void SetRow( uint32_t row, const Vec3& v );
-	void SetRow( uint32_t row, const Vec4& v );
-	Vec3 GetAxis( uint32_t column ) const;
-	Vec4 GetRow( uint32_t row ) const;
-	float data[ 16 ];
+
+	union
+	{
+		ae::Vec4 columns[ 4 ];
+		float data[ 16 ];
+	};
 };
-inline std::ostream& operator << ( std::ostream& os, const Matrix4& mat );
+inline std::ostream& operator << ( std::ostream& os, const ae::Matrix4& mat );
 
 //------------------------------------------------------------------------------
 // ae::Quaternion class
@@ -11467,6 +11489,42 @@ Matrix4 Matrix4::Translation( const Vec3& t )
 	return r;
 }
 
+Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
+{
+	// Remove rotation
+	forward0.Normalize();
+	up0.Normalize();
+
+	Vec3 right0 = forward0.Cross( up0 );
+	right0.Normalize();
+	up0 = right0.Cross( forward0 );
+
+	Matrix4 removeRotation;
+	memset( &removeRotation, 0, sizeof( removeRotation ) );
+	removeRotation.SetRow( 0, right0 ); // right -> ( 1, 0, 0 )
+	removeRotation.SetRow( 1, forward0 ); // forward -> ( 0, 1, 0 )
+	removeRotation.SetRow( 2, up0 ); // up -> ( 0, 0, 1 )
+	removeRotation.data[ 15 ] = 1;
+
+	// Rotate
+	forward1.Normalize();
+	up1.Normalize();
+
+	Vec3 right1 = forward1.Cross( up1 );
+	right1.Normalize();
+	up1 = right1.Cross( forward1 );
+
+	Matrix4 newRotation;
+	memset( &newRotation, 0, sizeof( newRotation ) );
+	// Set axis vector to invert (transpose)
+	newRotation.SetAxis( 0, right1 ); // ( 1, 0, 0 ) -> right
+	newRotation.SetAxis( 1, forward1 ); // ( 0, 1, 0 ) -> forward
+	newRotation.SetAxis( 2, up1 ); // ( 0, 0, 1 ) -> up
+	newRotation.data[ 15 ] = 1;
+
+	return newRotation * removeRotation;
+}
+
 Matrix4 Matrix4::RotationX( float angle )
 {
 	Matrix4 r;
@@ -11507,42 +11565,6 @@ Matrix4 Matrix4::Scaling( float sx, float sy, float sz )
 	return r;
 }
 // clang-format on
-
-Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
-{
-	// Remove rotation
-	forward0.Normalize();
-	up0.Normalize();
-
-	Vec3 right0 = forward0.Cross( up0 );
-	right0.Normalize();
-	up0 = right0.Cross( forward0 );
-
-	Matrix4 removeRotation;
-	memset( &removeRotation, 0, sizeof( removeRotation ) );
-	removeRotation.SetRow( 0, right0 ); // right -> ( 1, 0, 0 )
-	removeRotation.SetRow( 1, forward0 ); // forward -> ( 0, 1, 0 )
-	removeRotation.SetRow( 2, up0 ); // up -> ( 0, 0, 1 )
-	removeRotation.data[ 15 ] = 1;
-
-	// Rotate
-	forward1.Normalize();
-	up1.Normalize();
-
-	Vec3 right1 = forward1.Cross( up1 );
-	right1.Normalize();
-	up1 = right1.Cross( forward1 );
-
-	Matrix4 newRotation;
-	memset( &newRotation, 0, sizeof( newRotation ) );
-	// Set axis vector to invert (transpose)
-	newRotation.SetAxis( 0, right1 ); // ( 1, 0, 0 ) -> right
-	newRotation.SetAxis( 1, forward1 ); // ( 0, 1, 0 ) -> forward
-	newRotation.SetAxis( 2, up1 ); // ( 0, 0, 1 ) -> up
-	newRotation.data[ 15 ] = 1;
-
-	return newRotation * removeRotation;
-}
 
 Matrix4 Matrix4::Scaling( float s )
 {
@@ -11626,45 +11648,174 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
 	return result;
 }
 
-Vec4 Matrix4::operator*(const Vec4& v) const
+void Matrix4::SetTranslation( float x, float y, float z )
 {
-	return Vec4(
-		v.x*data[0]  + v.y*data[4]  + v.z*data[8]  + v.w*data[12],
-		v.x*data[1]  + v.y*data[5]  + v.z*data[9]  + v.w*data[13],
-		v.x*data[2]  + v.y*data[6]  + v.z*data[10] + v.w*data[14],
-		v.x*data[3] + v.y*data[7] + v.z*data[11] + v.w*data[15]);
+	data[ 12 ] = x;
+	data[ 13 ] = y;
+	data[ 14 ] = z;
 }
 
-Matrix4 Matrix4::operator*(const Matrix4& m) const
+void Matrix4::SetTranslation( const Vec3& translation )
 {
-	Matrix4 r;
-	r.data[0]=(m.data[0]*data[0])+(m.data[1]*data[4])+(m.data[2]*data[8])+(m.data[3]*data[12]);
-	r.data[1]=(m.data[0]*data[1])+(m.data[1]*data[5])+(m.data[2]*data[9])+(m.data[3]*data[13]);
-	r.data[2]=(m.data[0]*data[2])+(m.data[1]*data[6])+(m.data[2]*data[10])+(m.data[3]*data[14]);
-	r.data[3]=(m.data[0]*data[3])+(m.data[1]*data[7])+(m.data[2]*data[11])+(m.data[3]*data[15]);
-	r.data[4]=(m.data[4]*data[0])+(m.data[5]*data[4])+(m.data[6]*data[8])+(m.data[7]*data[12]);
-	r.data[5]=(m.data[4]*data[1])+(m.data[5]*data[5])+(m.data[6]*data[9])+(m.data[7]*data[13]);
-	r.data[6]=(m.data[4]*data[2])+(m.data[5]*data[6])+(m.data[6]*data[10])+(m.data[7]*data[14]);
-	r.data[7]=(m.data[4]*data[3])+(m.data[5]*data[7])+(m.data[6]*data[11])+(m.data[7]*data[15]);
-	r.data[8]=(m.data[8]*data[0])+(m.data[9]*data[4])+(m.data[10]*data[8])+(m.data[11]*data[12]);
-	r.data[9]=(m.data[8]*data[1])+(m.data[9]*data[5])+(m.data[10]*data[9])+(m.data[11]*data[13]);
-	r.data[10]=(m.data[8]*data[2])+(m.data[9]*data[6])+(m.data[10]*data[10])+(m.data[11]*data[14]);
-	r.data[11]=(m.data[8]*data[3])+(m.data[9]*data[7])+(m.data[10]*data[11])+(m.data[11]*data[15]);
-	r.data[12]=(m.data[12]*data[0])+(m.data[13]*data[4])+(m.data[14]*data[8])+(m.data[15]*data[12]);
-	r.data[13]=(m.data[12]*data[1])+(m.data[13]*data[5])+(m.data[14]*data[9])+(m.data[15]*data[13]);
-	r.data[14]=(m.data[12]*data[2])+(m.data[13]*data[6])+(m.data[14]*data[10])+(m.data[15]*data[14]);
-	r.data[15]=(m.data[12]*data[3])+(m.data[13]*data[7])+(m.data[14]*data[11])+(m.data[15]*data[15]);
-	return r;
+	data[ 12 ] = translation.x;
+	data[ 13 ] = translation.y;
+	data[ 14 ] = translation.z;
 }
 
-void Matrix4::operator*=(const Matrix4& m)
+void Matrix4::SetRotation( const Quaternion& q2 )
 {
-	*this = (*this) * m;
+	Quaternion q = q2.GetInverse();
+	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
+	data[4] = 2*q.i*q.j + 2*q.k*q.r;
+	data[8] = 2*q.i*q.k - 2*q.j*q.r;
+	data[1] = 2*q.i*q.j - 2*q.k*q.r;
+	data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
+	data[9] = 2*q.j*q.k + 2*q.i*q.r;
+	data[2] = 2*q.i*q.k + 2*q.j*q.r;
+	data[6] = 2*q.j*q.k - 2*q.i*q.r;
+	data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+}
+
+void Matrix4::SetScale( const Vec3& s )
+{
+	for( uint32_t i = 0; i < 3; i++ )
+	{
+		SetAxis( i, GetAxis( i ).NormalizeCopy() * s[ i ] );
+	}
+}
+
+void Matrix4::SetTranspose( void )
+{
+	for( uint32_t i = 0; i < 4; i++ )
+	{
+		for( uint32_t j = i + 1; j < 4; j++ )
+		{
+			std::swap( data[ i * 4 + j ], data[ j * 4 + i ] );
+		}
+	}
 }
 
 void Matrix4::SetInverse()
 {
 	*this = GetInverse();
+}
+
+void Matrix4::SetAxis( uint32_t col, const Vec3& v )
+{
+	data[ col * 4 ] = v.x;
+	data[ col * 4 + 1 ] = v.y;
+	data[ col * 4 + 2 ] = v.z;
+}
+
+void Matrix4::SetAxis( uint32_t col, const Vec4& v )
+{
+	columns[ col ] = v;
+}
+
+void Matrix4::SetRow( uint32_t row, const Vec3 &v )
+{
+	data[ row ] = v.x;
+	data[ row + 4 ] = v.y;
+	data[ row + 8 ] = v.z;
+}
+
+void Matrix4::SetRow( uint32_t row, const Vec4 &v)
+{
+	data[ row ] = v.x;
+	data[ row + 4 ] = v.y;
+	data[ row + 8 ] = v.z;
+	data[ row + 12 ] = v.w;
+}
+
+Vec3 Matrix4::GetTranslation() const
+{
+	return Vec3( &data[ 12 ] );
+}
+
+Quaternion Matrix4::GetRotation() const
+{
+	// http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/
+
+	Matrix4 t = *this;
+	t.SetScale( Vec3( 1.0f ) );
+
+	#define m00 t.data[ 0 ]
+	#define m01 t.data[ 4 ]
+	#define m02 t.data[ 8 ]
+	#define m10 t.data[ 1 ]
+	#define m11 t.data[ 5 ]
+	#define m12 t.data[ 9 ]
+	#define m20 t.data[ 2 ]
+	#define m21 t.data[ 6 ]
+	#define m22 t.data[ 10 ]
+
+	float trace = m00 + m11 + m22;
+	if ( trace > 0.0f )
+	{
+		float s = sqrt( trace + 1.0f ) * 2.0f;
+		return Quaternion(
+			( m21 - m12 ) / s,
+			( m02 - m20 ) / s,
+			( m10 - m01 ) / s,
+			0.25f * s
+		);
+	}
+	else if ( ( m00 > m11 ) && ( m00 > m22 ) )
+	{
+		float s = sqrt( 1.0f + m00 - m11 - m22 ) * 2.0f;
+		return Quaternion(
+			0.25f * s,
+			( m01 + m10 ) / s,
+			( m02 + m20 ) / s,
+			( m21 - m12 ) / s
+		);
+	}
+	else if ( m11 > m22 )
+	{
+		float s = sqrt( 1.0f + m11 - m00 - m22 ) * 2.0f;
+		return Quaternion(
+			( m01 + m10 ) / s,
+			0.25f * s,
+			( m12 + m21 ) / s,
+			( m02 - m20 ) / s
+		);
+	}
+	else
+	{
+		float s = sqrt( 1.0f + m22 - m00 - m11 ) * 2.0f;
+		return Quaternion(
+			( m02 + m20 ) / s,
+			( m12 + m21 ) / s,
+			0.25f * s,
+			( m10 - m01 ) / s
+		);
+	}
+
+	#undef m00
+	#undef m01
+	#undef m02
+	#undef m10
+	#undef m11
+	#undef m12
+	#undef m20
+	#undef m21
+	#undef m22
+}
+
+Vec3 Matrix4::GetScale() const
+{
+	return Vec3(
+		Vec3( &data[ 0 ] ).Length(),
+		Vec3( &data[ 4 ] ).Length(),
+		Vec3( &data[ 8 ] ).Length()
+	);
+}
+
+Matrix4 Matrix4::GetTranspose() const
+{
+	Matrix4 r = *this;
+	r.SetTranspose();
+	return r;
 }
 
 // clang-format off
@@ -11799,184 +11950,6 @@ Matrix4 Matrix4::GetInverse() const
 }
 // clang-format on
 
-void Matrix4::SetRotation( const Quaternion& q2 )
-{
-	Quaternion q = q2.GetInverse();
-	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
-	data[4] = 2*q.i*q.j + 2*q.k*q.r;
-	data[8] = 2*q.i*q.k - 2*q.j*q.r;
-	data[1] = 2*q.i*q.j - 2*q.k*q.r;
-	data[5] = 1 - (2*q.i*q.i  + 2*q.k*q.k);
-	data[9] = 2*q.j*q.k + 2*q.i*q.r;
-	data[2] = 2*q.i*q.k + 2*q.j*q.r;
-	data[6] = 2*q.j*q.k - 2*q.i*q.r;
-	data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
-}
-
-Quaternion Matrix4::GetRotation() const
-{
-	// http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/
-
-	Matrix4 t = *this;
-	t.SetScale( Vec3( 1.0f ) );
-
-	#define m00 t.data[ 0 ]
-	#define m01 t.data[ 4 ]
-	#define m02 t.data[ 8 ]
-	#define m10 t.data[ 1 ]
-	#define m11 t.data[ 5 ]
-	#define m12 t.data[ 9 ]
-	#define m20 t.data[ 2 ]
-	#define m21 t.data[ 6 ]
-	#define m22 t.data[ 10 ]
-
-	float trace = m00 + m11 + m22;
-	if ( trace > 0.0f )
-	{
-		float s = sqrt( trace + 1.0f ) * 2.0f;
-		return Quaternion(
-			( m21 - m12 ) / s,
-			( m02 - m20 ) / s,
-			( m10 - m01 ) / s,
-			0.25f * s
-		);
-	}
-	else if ( ( m00 > m11 ) && ( m00 > m22 ) )
-	{
-		float s = sqrt( 1.0f + m00 - m11 - m22 ) * 2.0f;
-		return Quaternion(
-			0.25f * s,
-			( m01 + m10 ) / s,
-			( m02 + m20 ) / s,
-			( m21 - m12 ) / s
-		);
-	}
-	else if ( m11 > m22 )
-	{
-		float s = sqrt( 1.0f + m11 - m00 - m22 ) * 2.0f;
-		return Quaternion(
-			( m01 + m10 ) / s,
-			0.25f * s,
-			( m12 + m21 ) / s,
-			( m02 - m20 ) / s
-		);
-	}
-	else
-	{
-		float s = sqrt( 1.0f + m22 - m00 - m11 ) * 2.0f;
-		return Quaternion(
-			( m02 + m20 ) / s,
-			( m12 + m21 ) / s,
-			0.25f * s,
-			( m10 - m01 ) / s
-		);
-	}
-
-	#undef m00
-	#undef m01
-	#undef m02
-	#undef m10
-	#undef m11
-	#undef m12
-	#undef m20
-	#undef m21
-	#undef m22
-}
-
-Vec3 Matrix4::GetAxis( uint32_t col ) const
-{
-		return Vec3( data[ col * 4 ], data[ col * 4 + 1 ], data[ col * 4 + 2 ] );
-}
-
-void Matrix4::SetAxis( uint32_t col, const Vec3& v )
-{
-	data[ col * 4 ] = v.x;
-	data[ col * 4 + 1 ] = v.y;
-	data[ col * 4 + 2 ] = v.z;
-}
-
-void Matrix4::SetAxis( uint32_t col, const Vec4& v )
-{
-	data[ col * 4 ] = v.x;
-	data[ col * 4 + 1 ] = v.y;
-	data[ col * 4 + 2 ] = v.z;
-	data[ col * 4 + 3 ] = v.w;
-}
-
-Vec4 Matrix4::GetRow( uint32_t row ) const
-{
-	return Vec4( data[ row ], data[ row + 4 ], data[ row + 8 ], data[ row + 12 ] );
-}
-
-void Matrix4::SetRow( uint32_t row, const Vec3 &v )
-{
-	data[ row ] = v.x;
-	data[ row + 4 ] = v.y;
-	data[ row + 8 ] = v.z;
-}
-
-void Matrix4::SetRow( uint32_t row, const Vec4 &v)
-{
-	data[ row ] = v.x;
-	data[ row + 4 ] = v.y;
-	data[ row + 8 ] = v.z;
-	data[ row + 12 ] = v.w;
-}
-
-void Matrix4::SetTranslation( float x, float y, float z )
-{
-	data[ 12 ] = x;
-	data[ 13 ] = y;
-	data[ 14 ] = z;
-}
-
-void Matrix4::SetTranslation( const Vec3& translation )
-{
-	data[ 12 ] = translation.x;
-	data[ 13 ] = translation.y;
-	data[ 14 ] = translation.z;
-}
-
-Vec3 Matrix4::GetTranslation() const
-{
-	return Vec3( data[ 12 ], data[ 13 ], data[ 14 ] );
-}
-
-Vec3 Matrix4::GetScale() const
-{
-	return Vec3(
-		Vec3( data[ 0 ], data[ 1 ], data[ 2 ] ).Length(),
-		Vec3( data[ 4 ], data[ 5 ], data[ 6 ] ).Length(),
-		Vec3( data[ 8 ], data[ 9 ], data[ 10 ] ).Length()
-	);
-}
-
-void Matrix4::SetScale( const Vec3& s )
-{
-	for( uint32_t i = 0; i < 3; i++ )
-	{
-		SetAxis( i, GetAxis( i ).NormalizeCopy() * s[ i ] );
-	}
-}
-
-void Matrix4::SetTranspose( void )
-{
-	for( uint32_t i = 0; i < 4; i++ )
-	{
-		for( uint32_t j = i + 1; j < 4; j++ )
-		{
-			std::swap( data[ i * 4 + j ], data[ j * 4 + i ] );
-		}
-	}
-}
-
-Matrix4 Matrix4::GetTranspose() const
-{
-	Matrix4 r = *this;
-	r.SetTranspose();
-	return r;
-}
-
 Matrix4 Matrix4::GetNormalMatrix() const
 {
 	return GetInverse().GetTranspose();
@@ -11989,6 +11962,73 @@ Matrix4 Matrix4::GetScaleRemoved() const
 	r.SetAxis( 1, r.GetAxis( 1 ).NormalizeCopy() );
 	r.SetAxis( 2, r.GetAxis( 2 ).NormalizeCopy() );
 	return r;
+}
+
+Vec3 Matrix4::GetAxis( uint32_t col ) const
+{
+	return Vec3( columns[ col ] );
+}
+
+Vec4 Matrix4::GetColumn( uint32_t col ) const
+{
+	return columns[ col ];
+}
+
+Vec4 Matrix4::GetRow( uint32_t row ) const
+{
+	return Vec4( data[ row ], data[ row + 4 ], data[ row + 8 ], data[ row + 12 ] );
+}
+
+Matrix4 Matrix4::operator*(const Matrix4& m) const
+{
+	Matrix4 r;
+	r.data[0]=(m.data[0]*data[0])+(m.data[1]*data[4])+(m.data[2]*data[8])+(m.data[3]*data[12]);
+	r.data[1]=(m.data[0]*data[1])+(m.data[1]*data[5])+(m.data[2]*data[9])+(m.data[3]*data[13]);
+	r.data[2]=(m.data[0]*data[2])+(m.data[1]*data[6])+(m.data[2]*data[10])+(m.data[3]*data[14]);
+	r.data[3]=(m.data[0]*data[3])+(m.data[1]*data[7])+(m.data[2]*data[11])+(m.data[3]*data[15]);
+	r.data[4]=(m.data[4]*data[0])+(m.data[5]*data[4])+(m.data[6]*data[8])+(m.data[7]*data[12]);
+	r.data[5]=(m.data[4]*data[1])+(m.data[5]*data[5])+(m.data[6]*data[9])+(m.data[7]*data[13]);
+	r.data[6]=(m.data[4]*data[2])+(m.data[5]*data[6])+(m.data[6]*data[10])+(m.data[7]*data[14]);
+	r.data[7]=(m.data[4]*data[3])+(m.data[5]*data[7])+(m.data[6]*data[11])+(m.data[7]*data[15]);
+	r.data[8]=(m.data[8]*data[0])+(m.data[9]*data[4])+(m.data[10]*data[8])+(m.data[11]*data[12]);
+	r.data[9]=(m.data[8]*data[1])+(m.data[9]*data[5])+(m.data[10]*data[9])+(m.data[11]*data[13]);
+	r.data[10]=(m.data[8]*data[2])+(m.data[9]*data[6])+(m.data[10]*data[10])+(m.data[11]*data[14]);
+	r.data[11]=(m.data[8]*data[3])+(m.data[9]*data[7])+(m.data[10]*data[11])+(m.data[11]*data[15]);
+	r.data[12]=(m.data[12]*data[0])+(m.data[13]*data[4])+(m.data[14]*data[8])+(m.data[15]*data[12]);
+	r.data[13]=(m.data[12]*data[1])+(m.data[13]*data[5])+(m.data[14]*data[9])+(m.data[15]*data[13]);
+	r.data[14]=(m.data[12]*data[2])+(m.data[13]*data[6])+(m.data[14]*data[10])+(m.data[15]*data[14]);
+	r.data[15]=(m.data[12]*data[3])+(m.data[13]*data[7])+(m.data[14]*data[11])+(m.data[15]*data[15]);
+	return r;
+}
+
+void Matrix4::operator*=(const Matrix4& m)
+{
+	*this = (*this) * m;
+}
+
+Vec4 Matrix4::operator*(const Vec4& v) const
+{
+	return Vec4(
+		v.x*data[0] + v.y*data[4] + v.z*data[8] + v.w*data[12],
+		v.x*data[1] + v.y*data[5] + v.z*data[9] + v.w*data[13],
+		v.x*data[2] + v.y*data[6] + v.z*data[10] + v.w*data[14],
+		v.x*data[3] + v.y*data[7] + v.z*data[11] + v.w*data[15]);
+}
+
+ae::Vec3 Matrix4::TransformPoint3x4( ae::Vec3 v ) const
+{
+	return Vec3(
+		v.x * data[ 0 ] + v.y * data[ 4 ] + v.z * data[ 8 ] + data[ 12 ],
+		v.x * data[ 1 ] + v.y * data[ 5 ] + v.z * data[ 9 ] + data[ 13 ],
+		v.x * data[ 2 ] + v.y * data[ 6 ] + v.z * data[ 10 ] + data[ 14 ] );
+}
+
+ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
+{
+	return Vec3(
+		v.x * data[ 0 ] + v.y * data[ 1 ] + v.z * data[ 2 ],
+		v.x * data[ 4 ] + v.y * data[ 5 ] + v.z * data[ 6 ],
+		v.x * data[ 8 ] + v.y * data[ 9 ] + v.z * data[ 10 ] );
 }
 
 //------------------------------------------------------------------------------
