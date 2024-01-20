@@ -149,6 +149,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map> // @TODO: Remove. For meta system.
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
