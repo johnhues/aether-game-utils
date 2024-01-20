@@ -4208,6 +4208,50 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::AStarNode example interface
+// ae::AStar is a generic A* algorithm implementation. It requires a type T
+// which requires the following interface:
+//------------------------------------------------------------------------------
+template< uint32_t N = 0 >
+struct AStarNode
+{
+	AStarNode() : pos( 0.0f ) {}
+	AStarNode( const ae::Tag& tag ) : next( tag ), pos( 0.0f ) {}
+
+	// ae::AStar type T must implement these following functions:
+	//! Returns the next node in the path. \p index is the index of the next
+	//! node in the path. Edges between paths can be uni-directional or
+	//! bi-directional.
+	const ae::AStarNode< N >* GetNext( uint32_t index ) const { return next[ index ]; }
+	//! Returns the number of nodes directly visitable from this node.
+	uint32_t GetNextCount() const { return next.Length(); }
+	//! Returns the heuristic distance between this node and \p other. For
+	//! ae::AStar to return a least cost path, this function must be 'admissible'.
+	//! This means this function should never overestimate the cost of
+	//! traveling between this node and \p other.
+	float GetHeuristic( const ae::AStarNode< N >* other ) const { return ( pos - other->pos ).Length(); }
+
+	ae::Array< const ae::AStarNode< N >*, N > next;
+	ae::Vec3 pos = ae::Vec3( 0.0f );
+};
+
+//------------------------------------------------------------------------------
+// ae::AStar algorithm
+//! \brief A generic A* algorithm implementation. Requires a type T which
+//! implements the functions: GetNext(), GetNextCount(), and GetHeuristic().
+//! See ae::AStarNode for exact function signatures. \p startNode is the node
+//! to start the search from. \p nodes and \p nodeCount is the array of nodes to
+//! search through (including the start node and goals nodes). \p goalNodes and
+//! \p goalCount is the array of nodes to search for, the closest goal node will
+//! be found. \p pathOut is the array to write the path to, up to \p pathOutMax.
+//! Returns the number of nodes written to \p pathOut. If the path is longer
+//! than \p pathOutMax, the path is truncated from the end, so only the beginning
+//! of the path is written. If no path is found, 0 is returned.
+//------------------------------------------------------------------------------
+template< typename T >
+uint32_t AStar( const T* startNode, const T* nodes, uint32_t nodeCount, const T** goalNodes, uint32_t goalCount, const T** pathOut, uint32_t pathOutMax );
+
+//------------------------------------------------------------------------------
 // ae::Keyframe struct
 //------------------------------------------------------------------------------
 struct Keyframe
@@ -6861,7 +6905,7 @@ inline Color Color::AetherDarkRed() { static Color c = Color::SRGB8( 175, 65, 90
 inline Color Color::AetherRed() { static Color c = Color::SRGB8( 240, 75, 90 ); return c; }
 inline Color Color::AetherOrange() { static Color c = Color::SRGB8( 255, 150, 60 ); return c; }
 inline Color Color::AetherYellow() { static Color c = Color::SRGB8( 250, 205, 100 ); return c; }
-inline Color Color::AetherGreen() { static Color c = Color::SRGB8( 190, 225, 90 ); return c; }
+inline Color Color::AetherGreen() { static Color c = Color::SRGB8( 180, 240, 80 ); return c; }
 inline Color Color::AetherTeal() { static Color c = Color::SRGB8( 90, 195, 185 ); return c; }
 inline Color Color::AetherBlue() { static Color c = Color::SRGB8( 70, 120, 225 ); return c; }
 inline Color Color::AetherPurple() { static Color c = Color::SRGB8( 120, 90, 195 ); return c; }
@@ -9956,6 +10000,166 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 	{
 		return prevInfo;
 	}
+}
+
+//------------------------------------------------------------------------------
+// ae::AStar implementation
+//------------------------------------------------------------------------------
+template< typename T >
+uint32_t AStar( const T* _startNode,
+	const T* _nodes, uint32_t nodeCount,
+	const T** _goalNodes, uint32_t goalCount,
+	const T** pathOut, uint32_t pathOutMax )
+{
+	if( !_startNode || !nodeCount || !goalCount )
+	{
+		return 0;
+	}
+
+	struct Node
+	{
+		Node* prev;
+		Node* nextOpen;
+		Node* prevOpen;
+		float g; // Current cost of traversal from start to this node
+		float f; // Estimated total cost of traversal from start node to goal
+		bool closed;
+		bool isGoal;
+		const T* userData;
+	};
+
+	ae::Scratch< Node > nodeBuffer( nodeCount );
+	ae::Scratch< Node* > goalBuffer( nodeCount );
+	Node* nodes = nodeBuffer.Data();
+	Node** goals = goalBuffer.Data();
+	memset( nodes, 0, sizeof(*nodes) * nodeCount );
+	memset( goals, 0, sizeof(*goals) * nodeCount );
+	for( uint32_t i = 0; i < nodeCount; i++ )
+	{
+		nodes[ i ].userData = &_nodes[ i ];
+	}
+
+	// Estimates the cost to reach goal from node
+	auto GetFScore = [ goals, goalCount ]( const Node* from ) -> float
+	{
+		float h = INFINITY;
+		for( uint32_t i = 0; i < goalCount; i++ )
+		{
+			h = ae::Min( h, from->userData->GetHeuristic( goals[ i ]->userData ) );
+		}
+		return from->g + h;
+	};
+
+	for( uint32_t i = 0; i < goalCount; i++ )
+	{
+		const uint32_t goalIndex = ( _goalNodes[ i ] - _nodes );
+		AE_ASSERT( goalIndex < nodeCount );
+		goals[ i ] = &nodes[ goalIndex ];
+		goals[ i ]->isGoal = true;
+	}
+	
+	AE_ASSERT( ( _startNode - _nodes ) < nodeCount );
+	Node* startNode = &nodes[ _startNode - _nodes ];
+	startNode->f = GetFScore( startNode );
+
+	Node* openSet = startNode;
+	Node* current = nullptr;
+	while( openSet ) // While open set is not empty
+	{
+		current = [ openSet ]()
+		{
+			Node* result = openSet;
+			for( Node* node = openSet; node; node = node->nextOpen )
+			{
+				if( node->f == result->f )
+				{
+					result = ( node < result ) ? node : result;
+				}
+				else
+				{
+					result = ( node->f < result->f ) ? node : result;
+				}
+			}
+			return result;
+		}();
+		if( current->isGoal )
+		{
+			break;
+		}
+
+		// Process current and remove from open set
+		if( openSet == current ) { openSet = current->nextOpen; }
+		if( current->nextOpen ) { current->nextOpen->prevOpen = current->prevOpen; }
+		if( current->prevOpen ) { current->prevOpen->nextOpen = current->nextOpen; }
+		current->nextOpen = nullptr;
+		current->prevOpen = nullptr;
+		// Add current to closed set
+		current->closed = true;
+
+		for( uint32_t i = 0; i < current->userData->GetNextCount(); i++ )
+		{
+			const T* nextNode = current->userData->GetNext( i );
+			if( !nextNode )
+			{
+				continue;
+			}
+			const uint32_t neighborIndex = ( nextNode - _nodes );
+			AE_ASSERT( neighborIndex < nodeCount );
+			Node* neighbor = &nodes[ neighborIndex ];
+			if( neighbor->closed )
+			{
+				continue;
+			}
+
+			const float g = current->g + current->userData->GetHeuristic( neighbor->userData );
+			if( neighbor != openSet && !neighbor->nextOpen && !neighbor->prevOpen )
+			{
+				neighbor->prev = current;
+				neighbor->g = g;
+				neighbor->f = GetFScore( neighbor );
+				if( openSet )
+				{
+					neighbor->nextOpen = openSet;
+					neighbor->nextOpen->prevOpen = neighbor;
+				}
+				openSet = neighbor;
+			}
+			else if( g < neighbor->g )
+			{
+				neighbor->prev = current;
+				neighbor->g = g;
+				neighbor->f = GetFScore( neighbor );
+			}
+		}
+	}
+
+	AE_ASSERT( current );
+	if( current->isGoal )
+	{
+		const uint32_t pathLength = [ current, startNode ]()
+		{
+			uint32_t length = 0;
+			for( Node* iter = current; iter; iter = iter->prev )
+			{
+				length++;
+			}
+			return length;
+		}();
+
+		const uint32_t result = ae::Min( pathLength, pathOutMax );
+		uint32_t i = ( result - 1 );
+		for( Node* iter = current; iter; iter = iter->prev )
+		{
+			if( i < result )
+			{
+				pathOut[ i ] = iter->userData;
+			}
+			i--;
+		}
+		return result;
+	}
+	
+	return 0;
 }
 
 //------------------------------------------------------------------------------
