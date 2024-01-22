@@ -2544,6 +2544,7 @@ struct Screen
 	ae::Int2 size;
 	bool isPrimary = false; //!< True for the display with the start menu, dock, etc
 	bool isExternal = false; //!< True if the screen is removable from the device
+	// @TODO: pixel scale factor
 };
 //! Returns an array of all available screens. If a system error is encountered
 //! the returned array will be empty.
@@ -14714,6 +14715,16 @@ namespace ae {
 //------------------------------------------------------------------------------
 // ae::Screen functions
 //------------------------------------------------------------------------------
+#if _AE_EMSCRIPTEN_
+// @TODO: Remove and replace internal usage with GetScreens(), once ae::Screen has pixel scale factor
+void _aeEmscriptenGetScreenInfo( int32_t* widthOut, int32_t* heightOut, float* scaleOut )
+{
+	if( widthOut ) { *widthOut = EM_ASM_INT({ return window.innerWidth; }); }
+	if( heightOut ) { *heightOut = EM_ASM_INT({ return window.innerHeight; }); }
+	if( scaleOut ) { *scaleOut = emscripten_get_device_pixel_ratio(); }
+}
+#endif
+
 ae::Array< ae::Screen, 16 > GetScreens()
 {
 	ae::Array< Screen, 16 > result;
@@ -14757,13 +14768,9 @@ ae::Array< ae::Screen, 16 > GetScreens()
 	}
 #elif _AE_EMSCRIPTEN_
 	{
-		float scale = emscripten_get_device_pixel_ratio();
 		Screen& s = result.Append( {} );
 		s.position = ae::Int2( 0, 0 );
-		s.size = ae::Int2(
-			EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetWidth; }) / scale,
-			EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetHeight; }) / scale
-		);
+		_aeEmscriptenGetScreenInfo( &s.size.x, &s.size.y, nullptr );
 	}
 #endif
 	return result;
@@ -14772,15 +14779,6 @@ ae::Array< ae::Screen, 16 > GetScreens()
 //------------------------------------------------------------------------------
 // ae::Window member functions
 //------------------------------------------------------------------------------
-#if _AE_EMSCRIPTEN_
-void _aeEmscriptenGetCanvasInfo( uint32_t* widthOut, uint32_t* heightOut, float* scaleOut )
-{
-	*scaleOut = emscripten_get_device_pixel_ratio();
-	*widthOut = EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetWidth; }) / *scaleOut;
-	*heightOut = EM_ASM_INT({ return document.getElementsByTagName('canvas')[0].offsetHeight; }) / *scaleOut;
-}
-#endif
-
 Window::Window()
 {
 	window = nullptr;
@@ -15074,7 +15072,7 @@ void Window::m_Initialize()
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
-	_aeEmscriptenGetCanvasInfo( (uint32_t*)&m_width, (uint32_t*)&m_height, &m_scaleFactor );
+	_aeEmscriptenGetScreenInfo( &m_width, &m_height, &m_scaleFactor );
 #endif
 }
 
@@ -15462,8 +15460,7 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 			break;
 	}
 	
-	ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, mouseEvent->targetY ) / input->m_window->GetScaleFactor();
-	pos.y = input->m_window->GetHeight() - pos.y;
+	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
 	input->m_SetMousePos( pos.FloorCopy() );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
@@ -15794,9 +15791,9 @@ void Input::Pump()
 	}
 #elif _AE_EMSCRIPTEN_
 	{
-		uint32_t width, height;
+		int32_t width, height;
 		float scale;
-		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
+		_aeEmscriptenGetScreenInfo( &width, &height, &scale );
 		m_window->m_UpdateSize( width, height, scale );
 	}
 #endif
