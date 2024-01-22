@@ -403,16 +403,17 @@ if(NOT EMSCRIPTEN)
 		# @TODO
 	endif()
 
-	# A Star
-	ae_add_bundle(
-		BUNDLE_NAME "A Star"
-		EXECUTABLE_NAME "25_a_star"
-		BUNDLE_ID "ae.25_a_star"
-		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
-		MAJOR_MINOR_PATCH_VERSION "0.0.0"
-		ICNS_FILE "data/Icon.icns"
-		SRC_FILES "25_AStar.cpp"
-		RESOURCES "${AE_EXAMPLE_RESOURCES}"
-		LIBS "ae"
-	)
 endif()
+
+# A Star
+ae_add_bundle(
+	BUNDLE_NAME "A Star"
+	EXECUTABLE_NAME "25_a_star"
+	BUNDLE_ID "ae.25_a_star"
+	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "25_AStar.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES}"
+	LIBS "ae"
+)
