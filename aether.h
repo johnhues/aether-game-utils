@@ -2209,6 +2209,8 @@ struct RectInt
 
 	ae::Int2 GetPos() const { return ae::Int2( x, y ); }
 	ae::Int2 GetSize() const { return ae::Int2( w, h ); }
+	uint32_t GetWidth() const { return (uint32_t)w; }
+	uint32_t GetHeight() const { return (uint32_t)h; }
 	bool Contains( ae::Int2 pos ) const;
 	bool Intersects( RectInt other ) const;
 	//! Expand ae::RectInt by point (inclusive), ie. ae::RectInt::Contains()
@@ -2574,6 +2576,7 @@ public:
 	void SetSize( uint32_t width, uint32_t height );
 	void SetMaximized( bool maximized );
 	void SetAlwaysOnTop( bool alwaysOnTop );
+	// void SetMode( ae::WindowMode mode ); // @TODO: Replace SetFullScreen() and SetMaximized() with this
 
 	const char* GetTitle() const { return m_windowTitle.c_str(); }
 	bool GetFullScreen() const { return m_fullScreen; }
@@ -2610,9 +2613,11 @@ public:
 	void m_UpdatePos( Int2 pos ) { m_pos = pos; }
 	void m_UpdateSize( int32_t width, int32_t height, float scaleFactor );
 	void m_UpdateMaximized( bool maximized ) { m_maximized = maximized; }
+	void m_UpdateFullScreen( bool fullScreen ) { m_fullScreen = fullScreen; }
 	void m_UpdateFocused( bool focused );
 	ae::Int2 m_aeToNative( ae::Int2 pos, ae::Int2 size );
 	ae::Int2 m_nativeToAe( ae::Int2 pos, ae::Int2 size );
+	bool m_fixCanvasStyle = false;
 	void* window = nullptr;
 	class GraphicsDevice* graphicsDevice = nullptr;
 	class Input* input = nullptr;
@@ -14716,11 +14721,15 @@ namespace ae {
 // ae::Screen functions
 //------------------------------------------------------------------------------
 #if _AE_EMSCRIPTEN_
-// @TODO: Remove and replace internal usage with GetScreens(), once ae::Screen has pixel scale factor
-void _aeEmscriptenGetScreenInfo( int32_t* widthOut, int32_t* heightOut, float* scaleOut )
+void _aeEmscriptenGetCanvasInfo( int32_t* widthOut, int32_t* heightOut, float* scaleOut )
 {
-	if( widthOut ) { *widthOut = EM_ASM_INT({ return window.innerWidth; }); }
-	if( heightOut ) { *heightOut = EM_ASM_INT({ return window.innerHeight; }); }
+	double width, height;
+	if( emscripten_get_element_css_size( "#canvas", &width, &height ) != EMSCRIPTEN_RESULT_SUCCESS )
+	{
+		AE_FAIL_MSG( "Failed to get canvas size" );
+	}
+	if( widthOut ) { *widthOut = width + 0.5; }
+	if( heightOut ) { *heightOut = height + 0.5; }
 	if( scaleOut ) { *scaleOut = emscripten_get_device_pixel_ratio(); }
 }
 #endif
@@ -14770,7 +14779,7 @@ ae::Array< ae::Screen, 16 > GetScreens()
 	{
 		Screen& s = result.Append( {} );
 		s.position = ae::Int2( 0, 0 );
-		_aeEmscriptenGetScreenInfo( &s.size.x, &s.size.y, nullptr );
+		_aeEmscriptenGetCanvasInfo( &s.size.x, &s.size.y, nullptr );
 	}
 #endif
 	return result;
@@ -15072,7 +15081,12 @@ void Window::m_Initialize()
 	// as a console app.
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 #elif _AE_EMSCRIPTEN_
-	_aeEmscriptenGetScreenInfo( &m_width, &m_height, &m_scaleFactor );
+	_aeEmscriptenGetCanvasInfo( &m_width, &m_height, &m_scaleFactor );
+	if( m_width == 300 && m_height == 150 )
+	{
+		AE_WARN( "Canvas size was not configured. Defaulting to WxH 100\%." );
+		m_fixCanvasStyle = true;
+	}
 #endif
 }
 
@@ -15169,19 +15183,23 @@ void Window::SetFullScreen( bool fullScreen )
 		}
 	}
 #elif _AE_EMSCRIPTEN_
-	m_fullScreen = fullScreen;
-	if ( m_fullScreen )
+	if( m_fullScreen != fullScreen )
 	{
-		EmscriptenFullscreenStrategy strategy;
-		memset( &strategy, 0, sizeof(strategy) );
-		strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
-		strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
-		strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
-		emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
-	}
-	else
-	{
-		emscripten_exit_fullscreen();
+		if ( fullScreen )
+		{
+			if ( GetLoggingEnabled() ) { AE_INFO( "request full screen" ); }
+			EmscriptenFullscreenStrategy strategy;
+			memset( &strategy, 0, sizeof(strategy) );
+			strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_SCALE_DEFAULT;
+			strategy.canvasResolutionScaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_HIDEF;
+			strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
+			emscripten_request_fullscreen_strategy( "canvas", true, &strategy );
+		}
+		else
+		{
+			if ( GetLoggingEnabled() ) { AE_INFO( "exit full screen" ); }
+			emscripten_exit_fullscreen();
+		}
 	}
 #endif
 }
@@ -15495,6 +15513,17 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 
 	return true;
 }
+
+EM_BOOL _aeEmscriptenHandleFullScreen( int eventType, const EmscriptenFullscreenChangeEvent* fullscreenChangeEvent, void* userData )
+{
+	AE_ASSERT( userData );
+	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_FULLSCREENCHANGE );
+	ae::Window* window = ( (Input*)userData )->m_window;
+	if ( window->GetLoggingEnabled() ) { AE_INFO( "full screen # -> #", ( window->GetFullScreen() ? "true" : "false" ), ( fullscreenChangeEvent->isFullscreen ? "true" : "false" ) ); }
+	window->m_UpdateFullScreen( fullscreenChangeEvent->isFullscreen );
+	return true;
+}
+
 #endif
 
 Input::Input()
@@ -15532,6 +15561,7 @@ void Input::Initialize( Window* window )
 	emscripten_set_touchend_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
+	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -15791,9 +15821,21 @@ void Input::Pump()
 	}
 #elif _AE_EMSCRIPTEN_
 	{
+		if( m_window->m_fixCanvasStyle )
+		{
+			// @NOTE: This is a hack to fix the canvas style when the size is
+			// not specified by the web page. This is needed in particular for
+			// the default Emscripten template.
+			EM_ASM( { document.getElementById('canvas').style.width = '100%'; } );
+			EM_ASM( { document.getElementById('canvas').style.height = '100%'; } );
+			// This is needed in addition to the width and height above to fix the
+			// aspect ratio when the canvas is resized so the height is not zero.
+			EM_ASM( { document.getElementById('canvas').style.aspectRatio = '2 / 1'; } );
+		}
+
 		int32_t width, height;
 		float scale;
-		_aeEmscriptenGetScreenInfo( &width, &height, &scale );
+		_aeEmscriptenGetCanvasInfo( &width, &height, &scale );
 		m_window->m_UpdateSize( width, height, scale );
 	}
 #endif
@@ -21167,9 +21209,9 @@ void GraphicsDevice::Activate()
 	AE_ASSERT( m_window );
 	AE_ASSERT( m_context );
 
-	float scaleFactor = m_window->GetScaleFactor();
-	int32_t contentWidth = m_window->GetWidth() * scaleFactor;
-	int32_t contentHeight = m_window->GetHeight() * scaleFactor;
+	const float scaleFactor = m_window->GetScaleFactor();
+	const int32_t contentWidth = m_window->GetWidth() * scaleFactor;
+	const int32_t contentHeight = m_window->GetHeight() * scaleFactor;
 	if ( contentWidth != m_canvas.GetWidth() || contentHeight != m_canvas.GetHeight() )
 	{
 #if _AE_EMSCRIPTEN_
@@ -21182,16 +21224,17 @@ void GraphicsDevice::Activate()
 		}
 		// Quarter second delay before resizing so it doesn't change every frame
 		if ( m_lastResize + 0.25 < currentTime || ( m_canvas.GetWidth() * m_canvas.GetHeight() == 0 ) )
-#endif
 		{
-#if _AE_EMSCRIPTEN_
 			// @NOTE: The window size is the 'real' size of the canvas dom, which
 			// is determined by the web page. This function sets the emscripten
 			// managed backbuffer size.
+			if ( m_window->GetLoggingEnabled() ) { AE_INFO( "resize #x#", contentWidth, contentHeight ); }
 			emscripten_set_canvas_element_size( "canvas", contentWidth, contentHeight );
-#endif
 			m_HandleResize( contentWidth, contentHeight );
 		}
+#else
+		m_HandleResize( contentWidth, contentHeight );
+#endif
 	}
 
 	if ( m_canvas.GetWidth() * m_canvas.GetHeight() )

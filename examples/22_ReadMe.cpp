@@ -1,5 +1,5 @@
 #define AE_MAIN
-#define AE_USE_MODULES 1
+#define AE_USE_MODULES
 #include "aether.h"
 const ae::Tag TAG_RESOURCE = "resource";
 extern const char* kVertexShader;
@@ -43,6 +43,10 @@ int main()
 	{
 		const float dt = ae::Min( timeStep.GetDt(), 0.03f );
 		input.Pump();
+		if( input.GetPress( ae::Key::F ) )
+		{
+			window.SetFullScreen( !window.GetFullScreen() );
+		}
 
 		// Async load for web
 		if ( geoFile && geoFile->GetStatus() == ae::File::Status::Success )
