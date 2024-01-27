@@ -57,6 +57,7 @@ bool ae::ResourceManager::Add( const char* type, const char* name, ae::FileSyste
 	{
 		resource->m_file = m_fs->Read( rootDir, filePath, 1.0f );
 		AE_ASSERT( resource->m_file );
+		AE_INFO( "Queuing load '#'...", resource->m_file->GetUrl() );
 		return true;
 	}
 	return false;
@@ -83,12 +84,27 @@ void ae::ResourceManager::Reload( const ae::Resource* _resource )
 bool ae::ResourceManager::Load()
 {
 	bool allLoaded = true;
-	for ( const auto& resource : m_resources )
+	for( const auto& resource : m_resources )
 	{
 		const ae::File* file = resource.value->GetFile();
-		if ( !resource.value->IsLoaded() && ( !file || file->GetStatus() == ae::File::Status::Success ) )
+		if( !resource.value->IsLoaded() && ( !file || file->GetStatus() == ae::File::Status::Success ) )
 		{
+			if( file )
+			{
+				AE_INFO( "Loading '#'...", file->GetUrl() );
+			}
 			resource.value->m_isLoaded = resource.value->Load();
+			if( file )
+			{
+				if( resource.value->m_isLoaded )
+				{
+					AE_INFO( "Loaded '#'", file->GetUrl() );
+				}
+				else
+				{
+					AE_WARN( "Failed to load '#'", file->GetUrl() );
+				}
+			}
 		}
 
 		if ( !resource.value->IsLoaded() )

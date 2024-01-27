@@ -893,8 +893,8 @@ void Editor::QueueRead( const char* levelPath )
 		AE_WARN( "Cancelling level read '#'", m_pendingFile->GetUrl() );
 		m_fileSystem.Destroy( m_pendingFile );
 	}
-	AE_INFO( "Queuing level load '#'", levelPath );
 	m_pendingFile = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
+	AE_INFO( "Queuing level load '#'", m_pendingFile->GetUrl() );
 }
 
 void Editor::SetFunctionPointers( const ae::EditorFunctionPointers& functionPointers )
@@ -954,6 +954,7 @@ void Editor::m_Read()
 		{
 			AE_ASSERT( componentIter.value.IsObject() );
 			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			AE_ASSERT_MSG( type, "Type '#' not found. Register with AE_REGISTER_CLASS(), or if the class isn't directly referenced you may need to use AE_FORCE_LINK().", componentIter.name.GetString() );
 			GetComponentTypePrereqs( type, &prereqs );
 			for( const ae::Type* prereq : prereqs )
 			{
@@ -2988,6 +2989,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool lines ) const
 
 void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >* prereqs )
 {
+	AE_ASSERT( type );
 	prereqs->Clear();
 	auto fn = [&]( auto& fn, const ae::Type* t ) -> void
 	{
