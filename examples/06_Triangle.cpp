@@ -94,11 +94,11 @@ int main()
 		input.Pump();
 		rotation += timeStep.GetDt();
 
-		if ( input.mouse.leftButton && !input.mousePrev.leftButton )
+		if ( input.GetMousePressLeft() )
 		{
-			input.SetMouseCaptured( true );
+			input.SetMouseCaptured( !input.GetMouseCaptured() );
 		}
-		if ( input.Get( ae::Key::Escape ) && !input.GetPrev( ae::Key::Escape ) )
+		if ( input.GetPress( ae::Key::Escape ) )
 		{
 			input.SetMouseCaptured( false );
 		}

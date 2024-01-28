@@ -2890,7 +2890,9 @@ public:
 // private:
 	Input( const Input& ) = delete;
 	void m_SetMousePos( ae::Int2 pos );
+	void m_SetMousePos( ae::Int2 pos, ae::Int2 movement );
 	void m_SetCursorPos( ae::Int2 pos );
+	void m_SetMouseCaptured( bool captured );
 	void m_UpdateModifiers();
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
@@ -15479,11 +15481,19 @@ EM_BOOL _aeEmscriptenHandleMouse( int32_t eventType, const EmscriptenMouseEvent*
 	}
 	
 	const ae::Vec2 pos = ae::Vec2( mouseEvent->targetX, input->m_window->GetHeight() - mouseEvent->targetY );
-	input->m_SetMousePos( pos.FloorCopy() );
+	input->m_SetMousePos( pos.FloorCopy(), ae::Int2( mouseEvent->movementX, -mouseEvent->movementY ) );
 	input->mouse.leftButton = ( mouseEvent->buttons & 1 );
 	input->mouse.rightButton = ( mouseEvent->buttons & 2 );
 	input->mouse.middleButton = ( mouseEvent->buttons & 4 );
 	
+	return true;
+}
+
+EM_BOOL _aeEmscriptenHandleLockChange( int eventType, const EmscriptenPointerlockChangeEvent* pointerlockChangeEvent, void* userData )
+{
+	AE_ASSERT( eventType == EMSCRIPTEN_EVENT_POINTERLOCKCHANGE );
+	Input* input = (Input*)userData;
+	input->m_SetMouseCaptured( pointerlockChangeEvent->isActive );
 	return true;
 }
 
@@ -15562,6 +15572,7 @@ void Input::Initialize( Window* window )
 	emscripten_set_touchmove_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_touchcancel_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleTouch );
 	emscripten_set_fullscreenchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleFullScreen );
+	emscripten_set_pointerlockchange_callback( EMSCRIPTEN_EVENT_TARGET_WINDOW, this, true, &_aeEmscriptenHandleLockChange );
 #elif _AE_OSX_
 	aeTextInputDelegate* textInput = [[aeTextInputDelegate alloc] initWithFrame: NSMakeRect(0.0, 0.0, 0.0, 0.0)];
 	textInput.aeinput = this;
@@ -15840,6 +15851,7 @@ void Input::Pump()
 	}
 #endif
 
+#if !_AE_EMSCRIPTEN_
 	// Mouse capture
 	if ( m_captureMouse )
 	{
@@ -15855,6 +15867,7 @@ void Input::Pump()
 			mouse.movement = -mouse.movement;
 		}
 	}
+#endif
 
 #if _AE_WINDOWS_
 #define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk ] & ( 1 << 7 )
@@ -16363,6 +16376,7 @@ void Input::Pump()
 
 void Input::SetMouseCaptured( bool enable )
 {
+#if !_AE_EMSCRIPTEN_
 	if ( !m_window )
 	{
 		return;
@@ -16372,6 +16386,7 @@ void Input::SetMouseCaptured( bool enable )
 		AE_ASSERT( !m_captureMouse );
 		return;
 	}
+#endif
 	
 	if( enable != m_captureMouse )
 	{
@@ -16383,6 +16398,8 @@ void Input::SetMouseCaptured( bool enable )
 			ShowCursor( FALSE );
 #elif _AE_APPLE_
 			CGDisplayHideCursor( kCGDirectMainDisplay );
+#elif _AE_EMSCRIPTEN_
+			emscripten_request_pointerlock( "canvas", true );
 #endif
 		}
 		else
@@ -16397,6 +16414,8 @@ void Input::SetMouseCaptured( bool enable )
 			ShowCursor( TRUE );
 #elif _AE_APPLE_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
+#elif _AE_EMSCRIPTEN_
+			emscripten_exit_pointerlock();
 #endif
 		}
 		
@@ -16448,6 +16467,14 @@ void Input::m_SetMousePos( ae::Int2 pos )
 	m_mousePosSet = true;
 }
 
+void Input::m_SetMousePos( ae::Int2 pos, ae::Int2 movement )
+{
+	AE_ASSERT( m_window );
+	mouse.movement += movement;
+	mouse.position = pos;
+	m_mousePosSet = true;
+}
+
 void Input::m_SetCursorPos( ae::Int2 pos )
 {
 #if _AE_WINDOWS_
@@ -16469,6 +16496,11 @@ void Input::m_SetCursorPos( ae::Int2 pos )
 		CGAssociateMouseAndMouseCursorPosition( true );
 	}
 #endif
+}
+
+void Input::m_SetMouseCaptured( bool captured )
+{
+	m_captureMouse = captured;
 }
 
 void Input::m_UpdateModifiers()
