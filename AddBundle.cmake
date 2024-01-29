@@ -190,9 +190,17 @@ function(ae_add_bundle)
 			list(APPEND _AE_EM_LINKER_FLAGS
 				"--closure=1" # Enable Closure compiler for aggressive JS size minification
 				"-O3"
+				# "-Wl,-u,htonl" # Workaround for -flto issue
+				# "-flto"
+				# "-fno-exceptions"
 			)
+			# list(APPEND _AE_EM_COMPILER_FLAGS
+			# 	"-flto"
+			# 	"-fno-exceptions"
+			# )
 		endif()
 		string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
+		string (REPLACE ";" " " _AE_EM_COMPILER_FLAGS "${_AE_EM_COMPILER_FLAGS}")
 
 		set_target_properties(${ADD_BUNDLE_EXECUTABLE_NAME} PROPERTIES
 			ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${ADD_BUNDLE_EXECUTABLE_NAME}"
@@ -208,6 +216,7 @@ function(ae_add_bundle)
 
 		set_target_properties(${ADD_BUNDLE_EXECUTABLE_NAME} PROPERTIES
 			LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
+			COMPILE_FLAGS "${_AE_EM_COMPILER_FLAGS}"
 			OUTPUT_NAME "index"
 			SUFFIX ${_AE_EM_OUT_SUFFIX}
 		)

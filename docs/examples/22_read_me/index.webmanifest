@@ -4,7 +4,7 @@
 	"display": "fullscreen",
 	"icons": [
 		{
-			"src": "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/Icon.png",
+			"src": "https://raw.githubusercontent.com/johnhues/aether-game-utils/master/examples/data/WebIcon.png",
 			"type": "image/png",
 			"sizes": "512x512"
 		}

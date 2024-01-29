@@ -1,10 +1,10 @@
 {
 	"name": "Example",
-	"start_url": "http://localhost:8000/examples",
+	"start_url": "http://localhost:8000/em/examples",
 	"display": "fullscreen",
 	"icons": [
 		{
-			"src": "http://localhost:8000/examples/data/Icon.png",
+			"src": "http://localhost:8000/examples/data/WebIcon.png",
 			"type": "image/png",
 			"sizes": "512x512"
 		}
