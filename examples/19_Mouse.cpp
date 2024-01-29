@@ -147,6 +147,7 @@ void Program::Initialize()
 	m_window.SetTitle( "aeOS" );
 	m_gfx.Initialize( &m_window );
 	m_input.Initialize( &m_window );
+	m_input.SetCursorHidden( true );
 	m_timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	m_shader.Initialize( kVertShader, kFragShader, nullptr, 0 );

@@ -2846,6 +2846,10 @@ public:
 	void SetGamepadRequiresFocus( bool enable ) { m_gamepadRequiresFocus = enable; }
 	//! Returns the current value of SetGamepadRequiresFocus().
 	bool GetGamepadRequiresFocus() const { return m_gamepadRequiresFocus; }
+	//! Hides the cursor
+	void SetCursorHidden( bool hidden ) { m_hideCursor = hidden; }
+	//! Returns true if the cursor is hidden
+	bool GetCursorHidden() const { return m_hideCursor; }
 	
 	void SetTextMode( bool enabled );
 	bool GetTextMode() const { return m_textMode; }
@@ -2899,6 +2903,7 @@ public:
 	bool m_captureMouse = false;
 	ae::Int2 m_capturedMousePos = ae::Int2( 0, 0 );
 	bool m_mousePosSet = false;
+	bool m_hideCursor = false;
 	bool m_keys[ 256 ];
 	bool m_keysPrev[ 256 ];
 	bool m_textMode = false;
@@ -15842,6 +15847,15 @@ void Input::Pump()
 			// This is needed in addition to the width and height above to fix the
 			// aspect ratio when the canvas is resized so the height is not zero.
 			EM_ASM( { document.getElementById('canvas').style.aspectRatio = '2 / 1'; } );
+		}
+
+		if( m_hideCursor )
+		{
+			EM_ASM( { document.getElementById('canvas').style.cursor = 'none'; } );
+		}
+		else
+		{
+			EM_ASM( { document.getElementById('canvas').style.cursor = 'auto'; } );
 		}
 
 		int32_t width, height;
