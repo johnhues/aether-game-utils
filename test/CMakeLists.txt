@@ -18,13 +18,14 @@ if(EMSCRIPTEN)
 	set(_AE_EM_LINKER_FLAGS
 		"-s ALLOW_MEMORY_GROWTH"
 		"-s STACK_SIZE=2097152"
-		"--emrun"
+		"-s WASM=1"
+		"-s ASSERTIONS=1"
+		"-s DISABLE_EXCEPTION_CATCHING=0"
 	)
 	string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
 	set_target_properties(test PROPERTIES
 		LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
-		OUTPUT_NAME "index"
-		SUFFIX ".html"
+		SUFFIX ".js"
 	)
 endif()
 
