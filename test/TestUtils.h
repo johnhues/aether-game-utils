@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-// RefTest.cpp
+// TestUtils.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2021 John Hughes
+// Copyright (c) 2020 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -21,14 +21,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
+#ifndef AE_TEST_UTILS_H
+#define AE_TEST_UTILS_H
+
+//------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
 #include "aether.h"
-#include "catch2/catch.hpp"
 
-TEST_CASE( "enum registration 2", "[aeRef]" )
+namespace ae {
+
+//------------------------------------------------------------------------------
+// LifeTimeTester class
+//------------------------------------------------------------------------------
+class LifetimeTester
 {
-  bool something = true;
-  
-  REQUIRE( something );
-}
+public:
+	LifetimeTester(); // default
+	LifetimeTester( const LifetimeTester& ); // copy
+	LifetimeTester( LifetimeTester&& ) noexcept; // move
+	LifetimeTester& operator=( const LifetimeTester& ); // copy assignment
+	LifetimeTester& operator=( LifetimeTester&& ) noexcept; // move assignment
+	~LifetimeTester();
+	
+	static const uint32_t kConstructed;
+	static const uint32_t kMoved;
+	
+	uint32_t check;
+	uint32_t value;
+	
+	static void ClearStats();
+	
+	static int32_t ctorCount;
+	static int32_t copyCount;
+	static int32_t moveCount;
+	static int32_t copyAssignCount;
+	static int32_t moveAssignCount;
+	static int32_t dtorCount;
+	static int32_t currentCount;
+};
+
+} // ae end
+
+#endif

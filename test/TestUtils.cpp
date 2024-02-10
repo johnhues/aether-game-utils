@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeTesting.cpp
+// TestUtils.cpp
 //------------------------------------------------------------------------------
 // Copyright (c) 2020 John Hughes
 //
@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#include "aeTesting.h"
+#include "TestUtils.h"
 namespace ae {
 
 //------------------------------------------------------------------------------
@@ -45,76 +45,76 @@ int32_t LifetimeTester::currentCount = 0;
 //------------------------------------------------------------------------------
 LifetimeTester::LifetimeTester()
 {
-  check = kConstructed;
-  value = 0;
-  
-  ctorCount++;
-  currentCount++;
+	check = kConstructed;
+	value = 0;
+	
+	ctorCount++;
+	currentCount++;
 }
 
 LifetimeTester::LifetimeTester( const LifetimeTester& o ) // copy ctor
 {
-  AE_ASSERT( o.check == kConstructed );
-  check = o.check;
-  value = o.value;
-  
-  copyCount++;
-  currentCount++;
+	AE_ASSERT( o.check == kConstructed );
+	check = o.check;
+	value = o.value;
+	
+	copyCount++;
+	currentCount++;
 }
 
 LifetimeTester::LifetimeTester( LifetimeTester&& o ) noexcept // move ctor
 {
-  AE_ASSERT( o.check == kConstructed );
-  check = o.check;
-  value = o.value;
-  o.check = kMoved;
-  
-  moveCount++;
-  currentCount++;
+	AE_ASSERT( o.check == kConstructed );
+	check = o.check;
+	value = o.value;
+	o.check = kMoved;
+	
+	moveCount++;
+	currentCount++;
 }
 
 LifetimeTester& LifetimeTester::operator=( const LifetimeTester& o ) // copy assignment
 {
-  AE_ASSERT( check == kConstructed || check == kMoved );
-  AE_ASSERT( o.check == kConstructed );
-  check = o.check;
-  value = o.value;
-  
-  copyAssignCount++;
-  
-  return *this;
+	AE_ASSERT( check == kConstructed || check == kMoved );
+	AE_ASSERT( o.check == kConstructed );
+	check = o.check;
+	value = o.value;
+	
+	copyAssignCount++;
+	
+	return *this;
 }
 
 LifetimeTester& LifetimeTester::operator=( LifetimeTester&& o ) noexcept // move assignment
 {
-  AE_ASSERT( check == kConstructed || check == kMoved );
-  AE_ASSERT( o.check == kConstructed );
-  check = o.check;
-  value = o.value;
-  o.check = kMoved;
-  
-  moveAssignCount++;
-  
-  return *this;
+	AE_ASSERT( check == kConstructed || check == kMoved );
+	AE_ASSERT( o.check == kConstructed );
+	check = o.check;
+	value = o.value;
+	o.check = kMoved;
+	
+	moveAssignCount++;
+	
+	return *this;
 }
 
 LifetimeTester::~LifetimeTester()
 {
-  AE_ASSERT( check == kConstructed || check == kMoved );
+	AE_ASSERT( check == kConstructed || check == kMoved );
 
-  dtorCount++;
-  currentCount--;
+	dtorCount++;
+	currentCount--;
 }
 
 void LifetimeTester::ClearStats()
 {
-  ctorCount = 0;
-  copyCount = 0;
-  moveCount = 0;
-  copyAssignCount = 0;
-  moveAssignCount = 0;
-  dtorCount = 0;
-  currentCount = 0;
+	ctorCount = 0;
+	copyCount = 0;
+	moveCount = 0;
+	copyAssignCount = 0;
+	moveAssignCount = 0;
+	dtorCount = 0;
+	currentCount = 0;
 }
 
 } // ae end
