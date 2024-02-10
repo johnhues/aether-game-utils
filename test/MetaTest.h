@@ -30,6 +30,11 @@
 #include "aether.h"
 
 //------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const ae::Tag AE_ALLOC_TAG_META_TEST = "MetaTest";
+
+//------------------------------------------------------------------------------
 // TestEnumClass
 //------------------------------------------------------------------------------
 AE_DEFINE_ENUM_CLASS( TestEnumClass, int32_t,
@@ -93,11 +98,11 @@ class ArrayClass : public ae::Inheritor< ae::Object, ArrayClass >
 public:
 	int32_t intArray[ 3 ];
 	ae::Array< int32_t, 4 > intArray2;
-	ae::Array< int32_t > intArray3 = AE_ALLOC_TAG_FIXME;
+	ae::Array< int32_t > intArray3 = AE_ALLOC_TAG_META_TEST;
 
 	SomeClass someClassArray[ 3 ];
 	ae::Array< SomeClass, 4 > someClassArray2;
-	ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_FIXME;
+	ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_META_TEST;
 };
 
 //------------------------------------------------------------------------------
@@ -225,14 +230,14 @@ class RefTesterManager
 {
 public:
 	template < typename T >
-	T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::New< T >( AE_ALLOC_TAG_FIXME ) ); o->id = m_nextId; m_nextId++; return o; }
+	T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::New< T >( AE_ALLOC_TAG_META_TEST ) ); o->id = m_nextId; m_nextId++; return o; }
 	void Destroy( RefTester* object );
 	
 	RefTester* GetObjectById( uint32_t id );
 
 private:
 	uint32_t m_nextId = 1;
-	ae::Map< uint32_t, RefTester* > m_objectMap = AE_ALLOC_TAG_FIXME;
+	ae::Map< uint32_t, RefTester* > m_objectMap = AE_ALLOC_TAG_META_TEST;
 };
 
 #endif

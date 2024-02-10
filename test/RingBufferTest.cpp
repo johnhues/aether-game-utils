@@ -6,7 +6,7 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 #include "TestUtils.h"
-#include "catch2/catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //------------------------------------------------------------------------------
 // Consants

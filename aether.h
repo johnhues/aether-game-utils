@@ -5477,7 +5477,7 @@ void PatchVTable( T* obj, Args... ctorArgs )
 //------------------------------------------------------------------------------
 // Internal ae::_DefaultAllocator
 //------------------------------------------------------------------------------
-class _DefaultAllocator final : public Allocator
+class _DefaultAllocator : public Allocator
 {
 public:
 	void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override;

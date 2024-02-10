@@ -107,8 +107,8 @@ private:
   aeRefable& operator= ( const aeRefable& ) = delete;
 
   // uint32_t s_sequence = 1; @TODO: Increment a 'dirty' sequence number whenever a T is destroyed so aeRef can keep a pointer to the referenced object and avoid a lookup
-  typedef ae::Map< aeId< T >, T* > RefMap;
-  static RefMap* s_GetMap() { static RefMap s_map = AE_ALLOC_TAG_FIXME; return &s_map; }
+  typedef ae::Map< aeId< T >, T*, 512 > RefMap;
+  static RefMap* s_GetMap() { static RefMap s_map; return &s_map; }
 
   aeId< T > m_id;
 };

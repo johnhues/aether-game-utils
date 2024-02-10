@@ -24,7 +24,7 @@
 // Headers
 //------------------------------------------------------------------------------
 #include "ae/aeSignal.h"
-#include "catch2/catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 //------------------------------------------------------------------------------
 // Test helpers
@@ -137,7 +137,7 @@ TEST_CASE( "signal send should result in the correct functions being called", "[
 
 	SECTION( "destroying referenced object should result in removal on send" )
 	{
-		Thing* thingP = ae::New< Thing >( AE_ALLOC_TAG_FIXME );
+		Thing* thingP = ae::New< Thing >( AE_ALLOC_TAG_SIGNALS );
 		aeRef< Thing > thingRef( thingP );
 		
 		signal.Add( thingRef, &Thing::Fn );

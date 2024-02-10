@@ -31,6 +31,11 @@
 #include "aeRef.h"
 
 //------------------------------------------------------------------------------
+// Constants
+//------------------------------------------------------------------------------
+const ae::Tag AE_ALLOC_TAG_SIGNALS = "signals";
+
+//------------------------------------------------------------------------------
 // aeSignalBase class
 //------------------------------------------------------------------------------
 class aeSignalBase
@@ -123,7 +128,7 @@ public:
   uint32_t Length() const;
 
 private:
-  ae::Array< aeSignalValue< V >* > m_signals = AE_ALLOC_TAG_FIXME;
+  ae::Array< aeSignalValue< V >* > m_signals = AE_ALLOC_TAG_SIGNALS;
 };
 
 //------------------------------------------------------------------------------
@@ -318,7 +323,7 @@ void aeSignalList< V >::Add( T* obj, Fn fn )
     return;
   }
 
-  m_signals.Append( ae::New< aeSignal< T, V > >( AE_ALLOC_TAG_FIXME, obj, fn ) );
+  m_signals.Append( ae::New< aeSignal< T, V > >( AE_ALLOC_TAG_SIGNALS, obj, fn ) );
 }
 
 template < typename V >
@@ -343,7 +348,7 @@ void aeSignalList< V >::Add( aeRef< T > ref, Fn fn )
     return;
   }
 
-  m_signals.Append( ae::New< aeSignal< T, V > >( AE_ALLOC_TAG_FIXME, ref, fn ) );
+  m_signals.Append( ae::New< aeSignal< T, V > >( AE_ALLOC_TAG_SIGNALS, ref, fn ) );
 }
 
 template < typename V >
