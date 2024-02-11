@@ -417,3 +417,16 @@ ae_add_bundle(
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
 	LIBS "ae"
 )
+
+# Gamepad
+ae_add_bundle(
+	BUNDLE_NAME "Gamepad"
+	EXECUTABLE_NAME "26_gamepad"
+	BUNDLE_ID "ae.26_gamepad"
+	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "26_Gamepad.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES}"
+	LIBS "ae"
+)

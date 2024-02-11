@@ -2781,7 +2781,7 @@ struct MouseState
 // ae::GamepadState struct
 //------------------------------------------------------------------------------
 // @TODO: Add or replace this with ae::Button/ae::Stick/ae::Trigger like ae::Key
-struct GamepadState
+struct GamepadState // @TODO: Rename Gamepad
 {
 	int32_t playerIndex = -1;
 	bool connected = false;
@@ -3740,12 +3740,12 @@ public:
 	uint32_t GetHeight() const;
 
 	//! Get the ndc space rect of this target within another target (fill but
-	//! maintain aspect ratio). Use this function by providing the width and height
-	//! of the target that this texture will be written to. In other words call this
-	//! function on the source ae::RenderTarget and provide the width and height of
-	//! the ae::RenderTarget being written to.
-	//! GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(),  GraphicsDevice::GetWindow()::Height() )
-	//! GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(),  GraphicsDeviceTarget()::Height() )
+	//! maintain aspect ratio). Use this function by providing the width and
+	//! height of the target that this texture will be written to. One use case
+	//! is to call this function on the source ae::RenderTarget and provide the
+	//! width and height of the ae::RenderTarget being written to.
+	//! GetNDCFillRectForTarget( GraphicsDevice::GetWindow()::GetWidth(), GraphicsDevice::GetWindow()::Height() )
+	//! GetNDCFillRectForTarget( GraphicsDeviceTarget()::GetWidth(), GraphicsDeviceTarget()::Height() )
 	Rect GetNDCFillRectForTarget( uint32_t otherWidth, uint32_t otherHeight ) const;
 
 	//! Other target to local transform (pixels->pixels). Useful for transforming
@@ -3919,7 +3919,7 @@ public:
 	//! Adds a \p color rectangle with center \p pos facing \p normal rotated so the top line is
 	//! perpendicular to \p up to be transformed and drawn with ae::DebugLines::Render().
 	//! Returns false and the rectangle is not added if ae::DebugLines::GetMaxVertexCount() would be exceeded.
-	uint32_t AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color );
+	uint32_t AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 halfSize, float cornerRadius, uint32_t cornerPointCount, Color color );
 	//! Adds a \p color circle with center \p pos facing \p normal to be transformed and drawn with
 	//! ae::DebugLines::Render(). \p pointCount determines the number of points along the circumference.
 	//! Returns false and the circle is not added if ae::DebugLines::GetMaxVertexCount() would be exceeded.
@@ -16319,6 +16319,20 @@ void Input::Pump()
 					if ( !GetAppleControllerFn( j ) )
 					{
 						appleController.playerIndex = GCControllerPlayerIndex( j );
+						// This makes sure that the Options button doesn't activate the 'record'/Share
+						// system gesture on controllers without a dedicated share button
+						if( @available(macOS 11.0, iOS 14.0, tvOS 14.0, *) )
+						{
+							const GCController* appleController = GetAppleControllerFn( j );
+							if( appleController && appleController.extendedGamepad )
+							{
+								GCExtendedGamepad *gamepad = appleController.extendedGamepad;
+								if( [gamepad.buttonOptions isBoundToSystemGesture] )
+								{
+									gamepad.buttonOptions.preferredSystemGestureState = GCSystemGestureStateDisabled;
+								}
+							}
+						}
 						break;
 					}
 				}
@@ -16366,6 +16380,44 @@ void Input::Pump()
 					case GCDeviceBatteryStateFull: gp.batteryState = GamepadState::BatteryState::Full; break;
 					default: gp.batteryState = GamepadState::BatteryState::None; break;
 				};
+			}
+		}
+	}
+#elif _AE_EMSCRIPTEN_
+	if( emscripten_sample_gamepad_data() == EMSCRIPTEN_RESULT_SUCCESS )
+	{
+		const uint32_t gamepadCount = emscripten_get_num_gamepads();
+		for( uint32_t i = 0; i < gamepadCount; i++ )
+		{
+			GamepadState& gp = gamepads[ i ];
+			EmscriptenGamepadEvent gamepadState;
+			if( emscripten_get_gamepad_status( i, &gamepadState ) == EMSCRIPTEN_RESULT_SUCCESS )
+			{
+				gp.connected = true;
+				gp.leftAnalog = Vec2( gamepadState.axis[ 0 ], -gamepadState.axis[ 1 ] );
+				gp.rightAnalog = Vec2( gamepadState.axis[ 2 ], -gamepadState.axis[ 3 ] );
+				gp.up = gamepadState.digitalButton[ 12 ];
+				gp.down = gamepadState.digitalButton[ 13 ];
+				gp.left = gamepadState.digitalButton[ 14 ];
+				gp.right = gamepadState.digitalButton[ 15 ];
+				gp.start = gamepadState.digitalButton[ 9 ];
+				gp.select = gamepadState.digitalButton[ 8 ];
+				gp.a = gamepadState.digitalButton[ 0 ];
+				gp.b = gamepadState.digitalButton[ 1 ];
+				gp.x = gamepadState.digitalButton[ 2 ];
+				gp.y = gamepadState.digitalButton[ 3 ];
+				gp.leftBumper = gamepadState.digitalButton[ 4 ];
+				gp.rightBumper = gamepadState.digitalButton[ 5 ];
+				gp.leftTrigger = gamepadState.analogButton[ 6 ];
+				gp.rightTrigger = gamepadState.analogButton[ 7 ];
+				gp.leftAnalogClick = gamepadState.digitalButton[ 10 ];
+				gp.rightAnalogClick = gamepadState.digitalButton[ 11 ];
+				gp.batteryLevel = 1.0f;
+				gp.batteryState = GamepadState::BatteryState::Wired;
+			}
+			else
+			{
+				gp.connected = false;
 			}
 		}
 	}
@@ -21758,7 +21810,7 @@ uint32_t DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance, ae::Col
 	return countof( verts );
 }
 
-uint32_t DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color color )
+uint32_t DebugLines::AddRect( ae::Vec3 pos, ae::Vec3 up, ae::Vec3 normal, ae::Vec2 halfSize, float cornerRadius, uint32_t cornerPointCount, ae::Color color )
 {
 	if ( m_vertexArray.GetVertexCount() + 8 > m_vertexArray.GetMaxVertexCount()
 		|| up.LengthSquared() < 0.001f
@@ -21772,31 +21824,55 @@ uint32_t DebugLines::AddRect( Vec3 pos, Vec3 up, Vec3 normal, Vec2 size, Color c
 	{
 		return 0;
 	}
-	
-	size *= 0.5f;
-	ae::Quaternion rotation( normal, up );
-	ae::Vec3 positions[] =
+	cornerRadius = ae::Min( cornerRadius, halfSize.x, halfSize.y );
+	const ae::Vec2 innerSize = halfSize - ae::Vec2( cornerRadius );
+	const ae::Quaternion r( normal, up );
+
+	if( cornerRadius > 0.0f )
 	{
-		pos + rotation.Rotate( Vec3( -size.x, 0.0f, -size.y ) ), // Bottom Left
-		pos + rotation.Rotate( Vec3( size.x, 0.0f, -size.y ) ), // Bottom Right
-		pos + rotation.Rotate( Vec3( size.x, 0.0f, size.y ) ), // Top Right
-		pos + rotation.Rotate( Vec3( -size.x, 0.0f, size.y ) ), // Top Left
-	};
+		const ae::Vec2 is[] =
+		{
+			{ innerSize.x, innerSize.y },
+			{ -innerSize.x, innerSize.y },
+			{ -innerSize.x, -innerSize.y },
+			{ innerSize.x, -innerSize.y }
+		};
+		const float angles[] = { 0.0f, ae::HALF_PI, ae::PI, ae::PI * 1.5f };
+		for( uint32_t i = 0; i < 4; i++ )
+		{
+			for( uint32_t j = 0; j < cornerPointCount + 1; j++ )
+			{
+				const float a0 = angles[ i ] + ( j * ae::HALF_PI ) / ( cornerPointCount + 1 );
+				const float a1 = angles[ i ] + ( ( j + 1 ) * ae::HALF_PI ) / ( cornerPointCount + 1 );
+				const ae::Vec3 p0 = r.Rotate( ae::Vec3( is[ i ].x + ae::Cos( a0 ) * cornerRadius, 0.0f, is[ i ].y + ae::Sin( a0 ) * cornerRadius ) );
+				const ae::Vec3 p1 = r.Rotate( ae::Vec3( is[ i ].x + ae::Cos( a1 ) * cornerRadius, 0.0f, is[ i ].y + ae::Sin( a1 ) * cornerRadius ) );
+				const DebugVertex verts[] =
+				{
+					{ pos + p0, color },
+					{ pos + p1, color }
+				};
+				m_vertexArray.AppendVertices( verts, countof( verts ) );
+			}
+		}
+	}
 
 	DebugVertex verts[] =
 	{
-		{ positions[ 0 ], color },
-		{ positions[ 1 ], color },
-		{ positions[ 1 ], color },
-		{ positions[ 2 ], color },
-		{ positions[ 2 ], color },
-		{ positions[ 3 ], color },
-		{ positions[ 3 ], color },
-		{ positions[ 0 ], color },
+		// Top
+		{ pos + r.Rotate( ae::Vec3( -innerSize.x, 0.0f, innerSize.y + cornerRadius ) ), color },
+		{ pos + r.Rotate( ae::Vec3( innerSize.x, 0.0f, innerSize.y + cornerRadius ) ), color },
+		// Bottom
+		{ pos + r.Rotate( ae::Vec3( -innerSize.x, 0.0f, -innerSize.y - cornerRadius ) ), color },
+		{ pos + r.Rotate( ae::Vec3( innerSize.x, 0.0f, -innerSize.y - cornerRadius ) ), color },
+		// Left
+		{ pos + r.Rotate( ae::Vec3( -innerSize.x - cornerRadius, 0.0f, innerSize.y ) ), color },
+		{ pos + r.Rotate( ae::Vec3( -innerSize.x - cornerRadius, 0.0f, -innerSize.y ) ), color },
+		// Right
+		{ pos + r.Rotate( ae::Vec3( innerSize.x + cornerRadius, 0.0f, innerSize.y ) ), color },
+		{ pos + r.Rotate( ae::Vec3( innerSize.x + cornerRadius, 0.0f, -innerSize.y ) ), color }
 	};
 	m_vertexArray.AppendVertices( verts, countof( verts ) );
-	
-	return countof( verts );
+	return 10 + 2 * cornerPointCount;
 }
 
 uint32_t DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount )
