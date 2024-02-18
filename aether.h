@@ -14707,8 +14707,12 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
 	_aeWindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
 	
-	NSPoint mouseScreenPos = [NSEvent mouseLocation];
-	_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+	// Check for input, because windowDidMove can be indirectly called by calling [nsWindow setFrameAutosaveName]
+	if( _aeWindow->input )
+	{
+		NSPoint mouseScreenPos = [NSEvent mouseLocation];
+		_aeWindow->input->m_SetMousePos( ae::Int2( mouseScreenPos.x, mouseScreenPos.y ) );
+	}
 }
 - (void)windowDidBecomeKey:(NSNotification *)notification
 {
@@ -15075,6 +15079,8 @@ void Window::m_Initialize()
 	[nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
 	if( NSString* appName = [[NSProcessInfo processInfo] processName] )
 	{
+		// @TODO: Doesn't work on external monitors
+		// https://stackoverflow.com/a/36992518/2423134
 		[nsWindow setFrameAutosaveName:appName];
 	}
 	
