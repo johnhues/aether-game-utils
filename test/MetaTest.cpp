@@ -228,6 +228,43 @@ TEST_CASE( "Aggregate vars", "[aeMeta]" )
 	}
 }
 
+TEST_CASE( "Var::GetObjectValue()", "[aeMeta]" )
+{
+	SomeClass _c;
+	_c.intMember = 123;
+	_c.boolMember = true;
+	_c.enumTest = TestEnumClass::Five;
+	const SomeClass& c = _c;
+	const ae::Type* type = ae::GetTypeFromObject( &c );
+	REQUIRE( type );
+	REQUIRE( type->GetVarCount( false ) == 3 );
+
+	{
+		int32_t intMember = 0;
+		const ae::Var* intVar = type->GetVarByName( "intMember", false );
+		REQUIRE( intVar );
+		REQUIRE( intVar->GetType() == ae::BasicType::Int32 );
+		REQUIRE( intVar->GetObjectValue< int32_t >( &c, &intMember ) );
+		REQUIRE( intMember == 123 );
+	}
+	{
+		bool boolMember = false;
+		const ae::Var* boolVar = type->GetVarByName( "boolMember", false );
+		REQUIRE( boolVar );
+		REQUIRE( boolVar->GetType() == ae::BasicType::Bool );
+		REQUIRE( boolVar->GetObjectValue< bool >( &c, &boolMember ) );
+		REQUIRE( boolMember == true );
+	}
+	{
+		TestEnumClass enumTest = TestEnumClass::Zero;
+		const ae::Var* enumVar = type->GetVarByName( "enumTest", false );
+		REQUIRE( enumVar );
+		REQUIRE( enumVar->GetType() == ae::BasicType::Enum );
+		REQUIRE( enumVar->GetObjectValue< TestEnumClass >( &c, &enumTest ) );
+		REQUIRE( enumTest == TestEnumClass::Five );
+	}
+}
+
 TEST_CASE( "Array vars", "[aeMeta]" )
 {
 	const ae::Type* type = ae::GetType< ArrayClass >();

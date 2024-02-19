@@ -5254,7 +5254,7 @@ public:
 	//! specifies which array element to return. Must be a valid array index,
 	//! less than ae::Var::GetGetArrayLength().
 	//! @return Returns true if \p valueOut was set, and false otherwise.
-	template < typename T > bool GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
+	template < typename T > bool GetObjectValue( const ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
 
 	//! Set the value of this variable on the given \p obj. If the type of this
 	//! variable is a reference then ae::SetSerializer() must be called in
@@ -11094,19 +11094,20 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 }
 
 template < typename T >
-bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) const
+bool ae::Var::GetObjectValue( const ae::Object* _obj, T* valueOut, int32_t arrayIdx ) const
 {
 	// @TODO: Use GetPointer()
-	if ( !obj )
+	if ( !_obj )
 	{
 		return false;
 	}
 	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
 	
+	const uint8_t* obj = reinterpret_cast< const uint8_t* >( _obj );
 	const void* varData = nullptr;
 	if ( m_arrayAdapter )
 	{
-		void* arr = (uint8_t*)obj + m_offset;
+		const void* arr = obj + m_offset;
 		if ( arrayIdx >= 0 && m_arrayAdapter->GetLength( arr ) )
 		{
 			varData = m_arrayAdapter->GetElement( arr, arrayIdx );
@@ -11118,7 +11119,7 @@ bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) c
 	}
 	else if ( arrayIdx < 0 )
 	{
-		varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
+		varData = obj + m_offset;
 	}
 	else
 	{
@@ -11133,7 +11134,7 @@ bool ae::Var::GetObjectValue( ae::Object* obj, T* valueOut, int32_t arrayIdx ) c
 	}
 	else
 	{
-		*valueOut = *(const T*)varData;
+		*valueOut = *reinterpret_cast< const T* >( varData );
 		return true;
 	}
 }
