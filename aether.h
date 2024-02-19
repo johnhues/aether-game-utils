@@ -648,6 +648,7 @@ struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 	explicit operator Vec3() const;
 	Vec4( const float* xyz, float w );
 	explicit Vec4( const float* xyzw );
+	void SetXYZ( Vec3 xyz ) { x = xyz.x; y = xyz.y; z = xyz.z; }
 	Vec2 GetXY() const;
 	Vec2 GetZW() const;
 	Vec3 GetXYZ() const;
@@ -3939,7 +3940,7 @@ public:
 private:
 	struct DebugVertex
 	{
-		Vec3 pos;
+		Vec4 pos;
 		Color color;
 	};
 	VertexArray m_vertexArray;
@@ -14707,7 +14708,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 	NSRect contentScreenRect = [window convertRectToScreen:[window contentLayoutRect]];
 	_aeWindow->m_UpdatePos( ae::Int2( contentScreenRect.origin.x, contentScreenRect.origin.y ) );
 	
-	// Check for input, because windowDidMove can be indirectly called by calling [nsWindow setFrameAutosaveName]
+	// Check for input, because windowDidMove can be indirectly called by 
 	if( _aeWindow->input )
 	{
 		NSPoint mouseScreenPos = [NSEvent mouseLocation];
@@ -21723,21 +21724,21 @@ DebugLines::~DebugLines()
 void DebugLines::Initialize( uint32_t maxVerts )
 {
 	m_vertexArray.Initialize( sizeof(DebugVertex), 0, maxVerts, 0, Vertex::Primitive::Line, Vertex::Usage::Dynamic, Vertex::Usage::Static );
-	m_vertexArray.AddAttribute( "a_position", 3, Vertex::Type::Float, offsetof(DebugVertex, pos) );
+	m_vertexArray.AddAttribute( "a_position", 4, Vertex::Type::Float, offsetof(DebugVertex, pos) );
 	m_vertexArray.AddAttribute( "a_color", 4, Vertex::Type::Float, offsetof(DebugVertex, color) );
 
 	// Load shader
 	const char* vertexStr = R"(
 		AE_UNIFORM_HIGHP mat4 u_worldToNdc;
 		AE_UNIFORM float u_saturation;
-		AE_IN_HIGHP vec3 a_position;
+		AE_IN_HIGHP vec4 a_position;
 		AE_IN_HIGHP vec4 a_color;
 		AE_OUT_HIGHP vec4 v_color;
 		void main()
 		{
 			float bw = ( min( a_color.r, min( a_color.g, a_color.b ) ) + max( a_color.r, max( a_color.g, a_color.b ) ) ) * 0.5;
 			v_color = vec4( mix( vec3(bw), a_color.rgb, u_saturation ), a_color.a );
-			gl_Position = u_worldToNdc * vec4( a_position, 1.0 );
+			gl_Position = u_worldToNdc * a_position;
 		})";
 	const char* fragStr = R"(
 		AE_IN_HIGHP vec4 v_color;
@@ -21793,8 +21794,8 @@ uint32_t DebugLines::AddLine( Vec3 p0, Vec3 p1, Color color )
 	}
 	DebugVertex verts[] =
 	{
-		{ p0, color },
-		{ p1, color }
+		{ Vec4( p0, 1.0f ), color },
+		{ Vec4( p1, 1.0f ), color }
 	};
 	m_vertexArray.AppendVertices( verts, countof( verts ) );
 	return countof( verts );
@@ -21809,8 +21810,8 @@ uint32_t DebugLines::AddDistanceCheck( Vec3 p0, Vec3 p1, float distance, ae::Col
 	ae::Color color = ( ( p1 - p0 ).Length() <= distance ) ? successColor : failColor;
 	DebugVertex verts[] =
 	{
-		{ p0, color },
-		{ p1, color }
+		{ Vec4( p0, 1.0f ), color },
+		{ Vec4( p1, 1.0f ), color }
 	};
 	m_vertexArray.AppendVertices( verts, countof( verts ) );
 	return countof( verts );
@@ -21854,8 +21855,8 @@ uint32_t DebugLines::AddRect( ae::Vec3 pos, ae::Vec3 up, ae::Vec3 normal, ae::Ve
 				const ae::Vec3 p1 = r.Rotate( ae::Vec3( is[ i ].x + ae::Cos( a1 ) * cornerRadius, 0.0f, is[ i ].y + ae::Sin( a1 ) * cornerRadius ) );
 				const DebugVertex verts[] =
 				{
-					{ pos + p0, color },
-					{ pos + p1, color }
+					{ Vec4( pos + p0, 1.0f ), color },
+					{ Vec4( pos + p1, 1.0f ), color }
 				};
 				m_vertexArray.AppendVertices( verts, countof( verts ) );
 			}
@@ -21865,17 +21866,17 @@ uint32_t DebugLines::AddRect( ae::Vec3 pos, ae::Vec3 up, ae::Vec3 normal, ae::Ve
 	DebugVertex verts[] =
 	{
 		// Top
-		{ pos + r.Rotate( ae::Vec3( -innerSize.x, 0.0f, innerSize.y + cornerRadius ) ), color },
-		{ pos + r.Rotate( ae::Vec3( innerSize.x, 0.0f, innerSize.y + cornerRadius ) ), color },
+		{ Vec4( pos + r.Rotate( ae::Vec3( -innerSize.x, 0.0f, innerSize.y + cornerRadius ) ), 1.0f ), color },
+		{ Vec4( pos + r.Rotate( ae::Vec3( innerSize.x, 0.0f, innerSize.y + cornerRadius ) ), 1.0f ), color },
 		// Bottom
-		{ pos + r.Rotate( ae::Vec3( -innerSize.x, 0.0f, -innerSize.y - cornerRadius ) ), color },
-		{ pos + r.Rotate( ae::Vec3( innerSize.x, 0.0f, -innerSize.y - cornerRadius ) ), color },
+		{ Vec4( pos + r.Rotate( ae::Vec3( -innerSize.x, 0.0f, -innerSize.y - cornerRadius ) ), 1.0f ), color },
+		{ Vec4( pos + r.Rotate( ae::Vec3( innerSize.x, 0.0f, -innerSize.y - cornerRadius ) ), 1.0f ), color },
 		// Left
-		{ pos + r.Rotate( ae::Vec3( -innerSize.x - cornerRadius, 0.0f, innerSize.y ) ), color },
-		{ pos + r.Rotate( ae::Vec3( -innerSize.x - cornerRadius, 0.0f, -innerSize.y ) ), color },
+		{ Vec4( pos + r.Rotate( ae::Vec3( -innerSize.x - cornerRadius, 0.0f, innerSize.y ) ), 1.0f ), color },
+		{ Vec4( pos + r.Rotate( ae::Vec3( -innerSize.x - cornerRadius, 0.0f, -innerSize.y ) ), 1.0f ), color },
 		// Right
-		{ pos + r.Rotate( ae::Vec3( innerSize.x + cornerRadius, 0.0f, innerSize.y ) ), color },
-		{ pos + r.Rotate( ae::Vec3( innerSize.x + cornerRadius, 0.0f, -innerSize.y ) ), color }
+		{ Vec4( pos + r.Rotate( ae::Vec3( innerSize.x + cornerRadius, 0.0f, innerSize.y ) ), 1.0f ), color },
+		{ Vec4( pos + r.Rotate( ae::Vec3( innerSize.x + cornerRadius, 0.0f, -innerSize.y ) ), 1.0f ), color }
 	};
 	m_vertexArray.AppendVertices( verts, countof( verts ) );
 	return 10 + 2 * cornerPointCount;
@@ -21901,12 +21902,10 @@ uint32_t DebugLines::AddCircle( Vec3 pos, Vec3 normal, float radius, Color color
 		float angle1 = angleInc * ( i + 1 );
 		
 		DebugVertex verts[ 2 ];
-		verts[ 0 ].pos = Vec3( cosf( angle0 ) * radius, 0.0f, sinf( angle0 ) * radius );
-		verts[ 1 ].pos = Vec3( cosf( angle1 ) * radius, 0.0f, sinf( angle1 ) * radius );
-		verts[ 0 ].pos = rotation.Rotate( verts[ 0 ].pos );
-		verts[ 1 ].pos = rotation.Rotate( verts[ 1 ].pos );
-		verts[ 0 ].pos += pos;
-		verts[ 1 ].pos += pos;
+		verts[ 0 ].pos = Vec4( cosf( angle0 ) * radius, 0.0f, sinf( angle0 ) * radius, 1.0f );
+		verts[ 1 ].pos = Vec4( cosf( angle1 ) * radius, 0.0f, sinf( angle1 ) * radius, 1.0f );
+		verts[ 0 ].pos.SetXYZ( pos + rotation.Rotate( verts[ 0 ].pos.GetXYZ() ) );
+		verts[ 1 ].pos.SetXYZ( pos + rotation.Rotate( verts[ 1 ].pos.GetXYZ() ) );
 		verts[ 0 ].color = color;
 		verts[ 1 ].color = color;
 		m_vertexArray.AppendVertices( verts, countof( verts ) );
@@ -21920,16 +21919,16 @@ uint32_t DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
 	{
 		return 0;
 	}
-	Vec3 c[] =
+	Vec4 c[] =
 	{
-		pos + Vec3( -halfSize.x, halfSize.y, halfSize.z ),
-		pos + halfSize,
-		pos + Vec3( halfSize.x, -halfSize.y, halfSize.z ),
-		pos + Vec3( -halfSize.x, -halfSize.y, halfSize.z ),
-		pos + Vec3( -halfSize.x, halfSize.y, -halfSize.z ),
-		pos + Vec3( halfSize.x, halfSize.y, -halfSize.z ),
-		pos + Vec3( halfSize.x, -halfSize.y, -halfSize.z ),
-		pos + Vec3( -halfSize.x, -halfSize.y, -halfSize.z ),
+		Vec4( pos + Vec3( -halfSize.x, halfSize.y, halfSize.z ), 1.0f ),
+		Vec4( pos + halfSize, 1.0f ),
+		Vec4( pos + Vec3( halfSize.x, -halfSize.y, halfSize.z ), 1.0f ),
+		Vec4( pos + Vec3( -halfSize.x, -halfSize.y, halfSize.z ), 1.0f ),
+		Vec4( pos + Vec3( -halfSize.x, halfSize.y, -halfSize.z ), 1.0f ),
+		Vec4( pos + Vec3( halfSize.x, halfSize.y, -halfSize.z ), 1.0f ),
+		Vec4( pos + Vec3( halfSize.x, -halfSize.y, -halfSize.z ), 1.0f ),
+		Vec4( pos + Vec3( -halfSize.x, -halfSize.y, -halfSize.z ), 1.0f ),
 	};
 	AE_STATIC_ASSERT( countof( c ) == 8 );
 	DebugVertex verts[] =
@@ -21973,16 +21972,16 @@ uint32_t DebugLines::AddOBB( Matrix4 transform, Color color )
 	{
 		return 0;
 	}
-	Vec3 c[] =
+	Vec4 c[] =
 	{
-		( transform * Vec4( -0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( 0.5f, 0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( 0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( -0.5f, -0.5f, 0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( -0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( 0.5f, 0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( 0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
-		( transform * Vec4( -0.5f, -0.5f, -0.5f, 1.0f ) ).GetXYZ(),
+		transform * Vec4( -0.5f, 0.5f, 0.5f, 1.0f ),
+		transform * Vec4( 0.5f, 0.5f, 0.5f, 1.0f ),
+		transform * Vec4( 0.5f, -0.5f, 0.5f, 1.0f ),
+		transform * Vec4( -0.5f, -0.5f, 0.5f, 1.0f ),
+		transform * Vec4( -0.5f, 0.5f, -0.5f, 1.0f ),
+		transform * Vec4( 0.5f, 0.5f, -0.5f, 1.0f ),
+		transform * Vec4( 0.5f, -0.5f, -0.5f, 1.0f ),
+		transform * Vec4( -0.5f, -0.5f, -0.5f, 1.0f ),
 	};
 	AE_STATIC_ASSERT( countof( c ) == 8 );
 	DebugVertex verts[] =
@@ -22043,17 +22042,17 @@ uint32_t DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint
 	bool identity = ( transform == ae::Matrix4::Identity() );
 	for ( uint32_t i = 0; i < count; i += 3 )
 	{
-		ae::Vec3 p[] =
+		ae::Vec4 p[] =
 		{
-			*(const Vec3*)( vertices + i * vertexStride ),
-			*(const Vec3*)( vertices + ( i + 1 ) * vertexStride ),
-			*(const Vec3*)( vertices + ( i + 2 ) * vertexStride ),
+			ae::Vec4( *(const Vec3*)( vertices + i * vertexStride ), 1.0f ),
+			ae::Vec4( *(const Vec3*)( vertices + ( i + 1 ) * vertexStride ), 1.0f ),
+			ae::Vec4( *(const Vec3*)( vertices + ( i + 2 ) * vertexStride ), 1.0f ),
 		};
 		if ( !identity )
 		{
-			p[ 0 ] = ( transform * ae::Vec4( p[ 0 ], 1.0f ) ).GetXYZ();
-			p[ 1 ] = ( transform * ae::Vec4( p[ 1 ], 1.0f ) ).GetXYZ();
-			p[ 2 ] = ( transform * ae::Vec4( p[ 2 ], 1.0f ) ).GetXYZ();
+			p[ 0 ] = transform * p[ 0 ];
+			p[ 1 ] = transform * p[ 1 ];
+			p[ 2 ] = transform * p[ 2 ];
 		}
 		DebugVertex verts[] =
 		{
@@ -22090,17 +22089,17 @@ uint32_t DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint
 		AE_ASSERT( index0 < vertexCount );
 		AE_ASSERT( index1 < vertexCount );
 		AE_ASSERT( index2 < vertexCount );
-		ae::Vec3 p[] =
+		ae::Vec4 p[] =
 		{
-			*(const Vec3*)( vertices + index0 * vertexStride ),
-			*(const Vec3*)( vertices + index1 * vertexStride ),
-			*(const Vec3*)( vertices + index2 * vertexStride ),
+			ae::Vec4( *(const Vec3*)( vertices + index0 * vertexStride ), 1.0f ),
+			ae::Vec4( *(const Vec3*)( vertices + index1 * vertexStride ), 1.0f ),
+			ae::Vec4( *(const Vec3*)( vertices + index2 * vertexStride ), 1.0f ),
 		};
 		if ( !identity )
 		{
-			p[ 0 ] = ( transform * ae::Vec4( p[ 0 ], 1.0f ) ).GetXYZ();
-			p[ 1 ] = ( transform * ae::Vec4( p[ 1 ], 1.0f ) ).GetXYZ();
-			p[ 2 ] = ( transform * ae::Vec4( p[ 2 ], 1.0f ) ).GetXYZ();
+			p[ 0 ] = transform * p[ 0 ];
+			p[ 1 ] = transform * p[ 1 ];
+			p[ 2 ] = transform * p[ 2 ];
 		}
 		DebugVertex verts[] =
 		{
