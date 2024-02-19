@@ -4795,6 +4795,7 @@ private:
 class NetObjectClient
 {
 public:
+	~NetObjectClient();
 	// The following sequence should be performed each frame
 	
 	//! 1) Handle raw data from server (call once when new data arrives)
@@ -24758,6 +24759,20 @@ void NetObject::m_UpdateHash()
 //------------------------------------------------------------------------------
 // ae::NetObjectClient member functions
 //------------------------------------------------------------------------------
+NetObjectClient::~NetObjectClient()
+{
+	AE_ASSERT_MSG( m_netObjects.Length() == m_created.Length(), "Not all ae::NetObjects were cleaned up correctly before destroying ae::NetObjectClient" );
+	while( PumpCreate() ) {}
+	while( m_netObjects.Length() )
+	{
+		Destroy( m_netObjects.GetValue( m_netObjects.Length() - 1 ) );
+	}
+	AE_DEBUG_ASSERT( !m_netObjects.Length() );
+	AE_DEBUG_ASSERT( !m_remoteToLocalIdMap.Length() );
+	AE_DEBUG_ASSERT( !m_localToRemoteIdMap.Length() );
+	AE_DEBUG_ASSERT( !m_created.Length() );
+}
+
 void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 {
 	BinaryStream rStream = BinaryStream::Reader( data, length );
