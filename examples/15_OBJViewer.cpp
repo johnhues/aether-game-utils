@@ -130,7 +130,7 @@ int main()
 		render.Clear( ae::Color::PicoDarkPurple() );
 		
 		ae::UniformList uniformList;
-		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
+		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 100.0f );
 
 		if( file && file->GetStatus() != ae::File::Status::Pending )
@@ -155,7 +155,7 @@ int main()
 					vertexData.UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
 					vertexData.UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
 					
-					ae::Vec3 offset = camera.GetPosition() - camera.GetFocus();
+					ae::Vec3 offset = camera.GetPosition() - camera.GetPivot();
 					offset = offset.SafeNormalizeCopy() * 3.0f;
 					ae::Vec3 focus = aabb.GetCenter() / aabb.GetHalfSize().Length();
 					camera.Reset( focus, focus + offset );

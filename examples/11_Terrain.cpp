@@ -365,7 +365,7 @@ int main()
         {
           ae::SdfBox* box = terrain->sdf.CreateSdf< ae::SdfBox >();
           box->SetTransform(
-            ae::Matrix4::Translation( camera.GetFocus() ) *
+            ae::Matrix4::Translation( camera.GetPivot() ) *
             ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
 
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Box", box ) );
@@ -375,7 +375,7 @@ int main()
         {
           ae::SdfCylinder* cylinder = terrain->sdf.CreateSdf< ae::SdfCylinder >();
           cylinder->SetTransform(
-            ae::Matrix4::Translation( camera.GetFocus() ) *
+            ae::Matrix4::Translation( camera.GetPivot() ) *
             ae::Matrix4::Scaling( ae::Vec3( 10.0f ) ) );
 
           currentObject = objects.Append( ae::New< Object >( TAG_EXAMPLE, "Cylinder", cylinder ) );
@@ -517,7 +517,7 @@ int main()
       ae::TerrainParams params;
       params.debug = s_showTerrainDebug ? &debug : nullptr;
       terrain->SetParams( params );
-      terrain->Update( camera.GetFocus(), 512.0f );
+      terrain->Update( camera.GetPivot(), 512.0f );
     }
 
     // Camera input

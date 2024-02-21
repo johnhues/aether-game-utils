@@ -501,7 +501,7 @@ int main()
 		}
 
 		// Start frame
-		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
+		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), camera.GetMinDistance() * 0.5f, 50.0f );
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;
 		const ae::Matrix4 projToWorld = worldToProj.GetInverse();

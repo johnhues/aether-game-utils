@@ -615,7 +615,7 @@ void EditorProgram::Run()
 		m_gameTarget.Activate();
 		m_gameTarget.Clear( ae::Color::AetherBlack() );
 
-		m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
+		m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, kEditorViewDistance );
 		m_worldToProj = m_viewToProj * m_worldToView;
 		m_projToWorld = m_worldToProj.GetInverse();
@@ -1291,7 +1291,7 @@ void EditorServer::Render( EditorProgram* program )
 {
 	// Constants
 	const ae::Vec3 camPos = program->camera.GetPosition();
-	const ae::Vec3 camUp = program->camera.GetLocalUp();
+	const ae::Vec3 camUp = program->camera.GetUp();
 	const ae::Matrix4 worldToProj = program->GetWorldToProj();
 	const ae::Vec3 lightDir = ( ( program->params.worldUp == ae::Axis::Z ) ? ae::Vec3( -2.0f, -3.0f, -4.0f ) : ae::Vec3( -2.0f, -4.0f, -3.0f ) ).SafeNormalizeCopy();
 	
@@ -1599,7 +1599,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 	}
 	
 	ae::Vec3 debugRefocus( 0.0f );
-	program->debugLines.AddSphere( program->camera.GetFocus(), 0.1f, ae::Color::PicoOrange(), 6 );
+	program->debugLines.AddSphere( program->camera.GetPivot(), 0.1f, ae::Color::PicoOrange(), 6 );
 //	if ( program->camera->GetDebugRefocusTarget( &debugRefocus ) )
 //	{
 //		program->debugLines.AddSphere( debugRefocus, 0.1f, ae::Color::PicoOrange(), 6 );
@@ -1887,7 +1887,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		if( ImGui::Button( "Create" ) )
 		{
-			ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetFocus() );
+			ae::Matrix4 transform = ae::Matrix4::Translation( program->camera.GetPivot() );
 			EditorServerObject* editorObject = CreateObject( kInvalidEntity, transform, "" );
 			m_selected.Clear();
 			m_selected.Append( editorObject->entity );

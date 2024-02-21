@@ -89,7 +89,7 @@ int main()
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
 		
-		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetLocalUp() );
+		ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( ae::QUARTER_PI, render.GetAspectRatio(), 0.25f, 100.0f );
 		ae::Matrix4 worldToProj = viewToProj * worldToView;
 

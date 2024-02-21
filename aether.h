@@ -581,16 +581,15 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 	Vec3( float x, float y, float z );
 	explicit Vec3( const float* xyz );
 	explicit Vec3( struct Int3 i3 );
-	Vec3( Vec2 xy, float z ); // @TODO: Support Y up
+	Vec3( Vec2 xy, float z );
 	explicit Vec3( Vec2 xy );
 	explicit operator Vec2() const;
+	static Vec3 XZY( Vec2 xz, float y );
 	
-	Vec2 GetXY() const;
-	Vec2 GetXZ() const;
-	Vec2 GetZY() const;
 	void SetXY( Vec2 xy );
 	void SetXZ( Vec2 xz );
-	void SetYZ( Vec2 yz );
+	Vec2 GetXY() const;
+	Vec2 GetXZ() const;
 	
 	struct Int3 NearestCopy() const;
 	struct Int3 FloorCopy() const;
@@ -648,8 +647,13 @@ struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 	explicit operator Vec3() const;
 	Vec4( const float* xyz, float w );
 	explicit Vec4( const float* xyzw );
-	void SetXYZ( Vec3 xyz ) { x = xyz.x; y = xyz.y; z = xyz.z; }
+	
+	void SetXY( Vec2 xy );
+	void SetXZ( Vec2 xz );
+	void SetZW( Vec2 zw );
+	void SetXYZ( Vec3 xyz );
 	Vec2 GetXY() const;
+	Vec2 GetXZ() const;
 	Vec2 GetZW() const;
 	Vec3 GetXYZ() const;
 
@@ -896,6 +900,9 @@ struct AE_ALIGN( 16 ) Int3 : public IntT< Int3 >
 	explicit Int3( const int32_t*& v );
 	// @NOTE: No conversion from ae::Vec3 because rounding type should be explicit!
 	Int2 GetXY() const;
+	Int2 GetXZ() const;
+	void SetXY( Int2 xy );
+	void SetXZ( Int2 xz );
 };
 
 //------------------------------------------------------------------------------
@@ -3963,10 +3970,10 @@ public:
 	enum class Mode { None, Rotate, Pan, Zoom };
 	
 	DebugCamera( ae::Axis upAxis );
-	//! Interupts refocus. Does not affect in progress input.
-	void Reset( ae::Vec3 focus, ae::Vec3 pos );
-	//! Prevents the position of the camera from being less than \p min distance from the focus point and
-	//! greater than \p max distance from the focus point. May affect the current position of the camera.
+	//! Interrupts refocus. Does not affect in progress input.
+	void Reset( ae::Vec3 pivot, ae::Vec3 pos );
+	//! Prevents the position of the camera from being less than \p min distance from the pivot point and
+	//! greater than \p max distance from the pivot point. May affect the current position of the camera.
 	void SetDistanceLimits( float min, float max );
 	//! Updates the cameras position. Does not affect in progress input or refocus.
 	void SetDistanceFromFocus( float distance );
@@ -3974,27 +3981,31 @@ public:
 	void SetInputEnabled( bool enabled );
 	//! Sets the yaw and pitch of the camera. Updates the cameras position.
 	void SetRotation( ae::Vec2 angles );
-	//! Updates focus and position over time
-	void Refocus( ae::Vec3 focus );
+	//! Updates pivot and position over time
+	void Refocus( ae::Vec3 pivot );
 	//! Call this every frame even when no input has taken place so refocus works as expected.
 	//! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
 	void Update( const ae::Input* input, float dt );
 
 	//! Check if this returns ae::DebugCamera::Mode::None to see if mouse clicks should be ignored by other systems
 	Mode GetMode() const;
-	ae::Vec3 GetPosition() const { return m_focusPos + m_offset; }
-	ae::Vec3 GetFocus() const { return m_focusPos; }
+	ae::Vec3 GetPosition() const { return m_pivot + m_offset; }
+	ae::Vec3 GetPivot() const { return m_pivot; }
 	ae::Vec3 GetForward() const { return m_forward; }
 	ae::Vec3 GetRight() const { return m_right; }
-	ae::Vec3 GetLocalUp() const { return m_up; }
-	ae::Vec3 GetWorldUp() const { return ( m_worldUp == Axis::Z ) ? ae::Vec3(0,0,1) : ae::Vec3(0,1,0); }
-	ae::Axis GetUpAxis() const { return m_worldUp; }
-	float GetDistanceFromFocus() const { return m_dist; }
-	ae::Vec2 GetRotation() const { return ae::Vec2( m_yaw, m_pitch ); }
+	ae::Vec3 GetUp() const { return m_up; }
+	float GetYaw() const { return m_yaw; }
+	float GetPitch() const { return m_pitch; }
+	float GetDistanceFromPivot() const { return m_dist; }
+	
 	bool GetRefocusTarget( ae::Vec3* targetOut ) const;
-	ae::Vec3 RotationToForward( ae::Vec2 rotation ) const;
 	float GetMinDistance() const { return m_min; }
 	float GetMaxDistance() const { return m_max; }
+	ae::Vec3 GetWorldUp() const { return GetWorldUp( m_worldUp ); }
+	ae::Axis GetWorldUpAxis() const { return m_worldUp; }
+
+	static ae::Vec3 RotationToForward( ae::Axis up, float yaw, float pitch );
+	static ae::Vec3 GetWorldUp( ae::Axis up ) { return ( up == Axis::Z ) ? ae::Vec3(0,0,1) : ae::Vec3(0,1,0); }
 
 private:
 	void m_Precalculate();
@@ -4010,7 +4021,7 @@ private:
 	float m_moveAccum = 0.0f;
 	uint32_t m_preventModeExitImm = 0;
 	// Positioning
-	ae::Vec3 m_focusPos = ae::Vec3( 0.0f );
+	ae::Vec3 m_pivot = ae::Vec3( 0.0f );
 	float m_dist = 5.0f;
 	// Rotation
 	float m_yaw = 0.77f;
@@ -6593,12 +6604,11 @@ inline Vec3::Vec3( struct Int3 i3 ) : x( (float)i3.x ), y( (float)i3.y ), z( (fl
 inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
-inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
-inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
-inline Vec2 Vec3::GetZY() const { return Vec2( z, y ); }
+inline Vec3 XZY( Vec2 xz, float y ) { return Vec3( xz.x, y, xz.y ); }
 inline void Vec3::SetXY( Vec2 xy ) { x = xy.x; y = xy.y; }
 inline void Vec3::SetXZ( Vec2 xz ) { x = xz.x; z = xz.y; }
-inline void Vec3::SetYZ( Vec2 yz ) { y = yz.x; z = yz.y; }
+inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
+inline Vec2 Vec3::GetXZ() const { return Vec2( x, z ); }
 inline Int3 Vec3::NearestCopy() const { return Int3( (int32_t)(x + 0.5f), (int32_t)(y + 0.5f), (int32_t)(z + 0.5f) ); }
 inline Int3 Vec3::FloorCopy() const { return Int3( (int32_t)floorf( x ), (int32_t)floorf( y ), (int32_t)floorf( z ) ); }
 inline Int3 Vec3::CeilCopy() const { return Int3( (int32_t)ceilf( x ), (int32_t)ceilf( y ), (int32_t)ceilf( z ) ); }
@@ -6658,7 +6668,12 @@ inline Vec4::operator Vec2() const { return Vec2( x, y ); }
 inline Vec4::operator Vec3() const { return Vec3( x, y, z ); }
 inline Vec4::Vec4( const float* xyz, float w ) : x( xyz[ 0 ] ), y( xyz[ 1 ] ), z( xyz[ 2 ] ), w( w ) {}
 inline Vec4::Vec4( const float* xyzw ) : x( xyzw[ 0 ] ), y( xyzw[ 1 ] ), z( xyzw[ 2 ] ), w( xyzw[ 3 ] ) {}
+inline void Vec4::SetXY( Vec2 xy ) { x = xy.x; y = xy.y; }
+inline void Vec4::SetXZ( Vec2 xz ) { x = xz.x; z = xz.y; }
+inline void Vec4::SetZW( Vec2 zw ) { z = zw.x; w = zw.y; }
+inline void Vec4::SetXYZ( Vec3 xyz ) { x = xyz.x; y = xyz.y; z = xyz.z; }
 inline Vec2 Vec4::GetXY() const { return Vec2( x, y ); }
+inline Vec2 Vec4::GetXZ() const { return Vec2( x, z ); }
 inline Vec2 Vec4::GetZW() const { return Vec2( z, w ); }
 inline Vec3 Vec4::GetXYZ() const { return Vec3( x, y, z ); }
 
@@ -6894,6 +6909,9 @@ inline Int3::Int3( const int32_t( &v )[ 4 ] ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 
 inline Int3::Int3( int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
 inline Int3::Int3( const int32_t*& v ) : x( v[ 0 ] ), y( v[ 1 ] ), z( v[ 2 ] ), pad( 0 ) {}
 inline Int2 Int3::GetXY() const { return Int2( x, y ); }
+inline Int2 Int3::GetXZ() const { return Int2( x, z ); }
+inline void Int3::SetXY( Int2 xy ) { x = xy.x; y = xy.y; }
+inline void Int3::SetXZ( Int2 xz ) { x = xz.x; z = xz.y; }
 
 //------------------------------------------------------------------------------
 // ae::Colors
@@ -17193,9 +17211,11 @@ void FileSystem::m_Read( ae::File* file, float timeoutSec ) const
 
 void FileSystem::Destroy( const File* file )
 {
-	if ( file )
+	if( file )
 	{
-		m_files.Remove( m_files.Find( file ) );
+		const int32_t idx = m_files.Find( file );
+		AE_ASSERT_MSG( idx >= 0, "Unknown file pointer provided for destruction" );
+		m_files.Remove( idx );
 		ae::Free( file->m_data );
 		ae::Delete( file );
 	}
@@ -22237,12 +22257,12 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	// Don't zoom when scrolling with touch, that's reserved for panning
 	if ( !usingTouch || !modifier )
 	{
-		m_focusPos += m_right * ( scroll.x * panSpeed );
+		m_pivot += m_right * ( scroll.x * panSpeed );
 		m_dist += scroll.y * 2.5f * zoomSpeed; // Natural scroll dir to match pan
 	}
 	m_dist = ae::Clip( m_dist, m_min, m_max );
 
-	// Recalculate camera offset from focus and local axis'
+	// Recalculate camera offset from pivot and local axis'
 	m_Precalculate();
 
 	// Pan
@@ -22252,14 +22272,14 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	
 		if ( usingTouch )
 		{
-			m_focusPos += m_right * ( scroll.x * panSpeed );
-			m_focusPos -= m_up * ( scroll.y * panSpeed );
+			m_pivot += m_right * ( scroll.x * panSpeed );
+			m_pivot -= m_up * ( scroll.y * panSpeed );
 		}
 		else
 		{
 			float panSpeed = m_dist / 1000.0f;
-			m_focusPos -= m_right * ( movement.x * panSpeed );
-			m_focusPos -= m_up * ( movement.y * panSpeed );
+			m_pivot -= m_right * ( movement.x * panSpeed );
+			m_pivot -= m_up * ( movement.y * panSpeed );
 		}
 	}
 
@@ -22267,29 +22287,29 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	if ( m_refocus )
 	{
 		AE_ASSERT( m_mode != Mode::Pan );
-		m_focusPos = ae::DtLerp( m_focusPos, 4.0f, dt, m_refocusPos );
-		if ( ( m_refocusPos - m_focusPos ).Length() < 0.01f )
+		m_pivot = ae::DtLerp( m_pivot, 4.0f, dt, m_refocusPos );
+		if ( ( m_refocusPos - m_pivot ).Length() < 0.01f )
 		{
 			m_refocus = false;
-			m_focusPos = m_refocusPos;
+			m_pivot = m_refocusPos;
 		}
 	}
 }
 
-void DebugCamera::Reset( ae::Vec3 focus, ae::Vec3 pos )
+void DebugCamera::Reset( ae::Vec3 pivot, ae::Vec3 pos )
 {
 	m_refocus = false;
-	m_refocusPos = focus;
-	m_focusPos = focus;
+	m_refocusPos = pivot;
+	m_pivot = pivot;
 	
-	ae::Vec3 diff = focus - pos;
+	ae::Vec3 diff = pivot - pos;
 	m_dist = diff.Length();
 	
 	if ( m_worldUp == Axis::Y )
 	{
 		ae::Vec2 xz = diff.GetXZ();
 #if _AE_DEBUG_
-		AE_ASSERT( focus.x != pos.x || focus.z != pos.z );
+		AE_ASSERT( pivot.x != pos.x || pivot.z != pos.z );
 #else
 		if ( xz != ae::Vec2( 0.0f ) )
 #endif
@@ -22303,7 +22323,7 @@ void DebugCamera::Reset( ae::Vec3 focus, ae::Vec3 pos )
 	{
 		ae::Vec2 xy = diff.GetXY();
 #if _AE_DEBUG_
-		AE_ASSERT( focus.x != pos.x || focus.y != pos.y );
+		AE_ASSERT( pivot.x != pos.x || pivot.y != pos.y );
 #else
 		if ( xy != ae::Vec2( 0.0f ) )
 #endif
@@ -22322,10 +22342,10 @@ void DebugCamera::SetDistanceFromFocus( float distance )
 	m_Precalculate();
 }
 
-void DebugCamera::Refocus( ae::Vec3 focus )
+void DebugCamera::Refocus( ae::Vec3 pivot )
 {
 	m_refocus = true;
-	m_refocusPos = focus;
+	m_refocusPos = pivot;
 	if ( m_mode == Mode::Pan )
 	{
 		m_mode = Mode::None;
@@ -22359,26 +22379,27 @@ bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
 	return true;
 }
 
-ae::Vec3 DebugCamera::RotationToForward( ae::Vec2 rotation ) const
+ae::Vec3 DebugCamera::RotationToForward( ae::Axis up, float yaw, float pitch )
 {
+	AE_ASSERT_MSG( ( up == Axis::Y || up == Axis::Z ), "Only +Y and +Z world up axes are supported");
 	ae::Vec3 forward;
-	if ( m_worldUp == Axis::Y )
+	if ( up == Axis::Y )
 	{
-		forward = ae::Vec3( ae::Cos( rotation.x ), 0.0f, -ae::Sin( rotation.x ) );
+		forward = ae::Vec3( ae::Cos( yaw ), 0.0f, -ae::Sin( yaw ) );
 	}
-	else if ( m_worldUp == Axis::Z )
+	else if ( up == Axis::Z )
 	{
-		forward = ae::Vec3( ae::Cos( rotation.x ), ae::Sin( rotation.x ), 0.0f );
+		forward = ae::Vec3( ae::Cos( yaw ), ae::Sin( yaw ), 0.0f );
 	}
-	forward *= ae::Cos( rotation.y );
-	forward += GetWorldUp() * ae::Sin( rotation.y );
+	forward *= ae::Cos( pitch );
+	forward += GetWorldUp( up ) * ae::Sin( pitch );
 	return forward;
 }
 
 void DebugCamera::m_Precalculate()
 {
 	m_dist = ae::Clip( m_dist, m_min, m_max );
-	m_forward = RotationToForward( ae::Vec2( m_yaw, m_pitch ) );
+	m_forward = RotationToForward( m_worldUp, m_yaw, m_pitch );
 	m_offset = -m_forward;
 	m_offset *= m_dist;
 	m_right = m_forward.Cross( GetWorldUp() ).SafeNormalizeCopy();
