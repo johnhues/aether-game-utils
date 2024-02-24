@@ -54,7 +54,7 @@ int main()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fileSystem.Initialize( "data", "ae", "geometry" );
-	debug.Initialize( 512 );
+	debug.Initialize( 2048 );
 	{
 		const char* fileName = "font.tga";
 		uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
@@ -199,7 +199,6 @@ int main()
 			case 1:
 			{
 				infoText.Append( "Sphere-Ray\n" );
-				
 				doRay( true );
 				
 				debug.AddSphere( ae::Vec3( 0.0f ), 1.0f, ae::Color::Blue(), 16 );
@@ -224,6 +223,36 @@ int main()
 				break;
 			}
 			case 2:
+			{
+				static ae::Vec3 s_spherePos( 0.0f, 0.0f, 0.0f );
+				static float s_sphereRadius = 1.0f;
+				infoText.Append( "Sphere Distance\n" );
+				doRay( true );
+				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
+				infoText.Append( "Radius: 3-4\n" );
+				
+				if ( input.Get( ae::Key::D ) ) { s_spherePos.x += 0.01f; }
+				if ( input.Get( ae::Key::A ) ) { s_spherePos.x -= 0.01f; }
+				if ( input.Get( ae::Key::W ) ) { s_spherePos.y += 0.01f; }
+				if ( input.Get( ae::Key::S ) ) { s_spherePos.y -= 0.01f; }
+				if ( input.Get( ae::Key::E ) ) { s_spherePos.z += 0.01f; }
+				if ( input.Get( ae::Key::Q ) ) { s_spherePos.z -= 0.01f; }
+				if( input.Get( ae::Key::Num3 ) ) s_sphereRadius -= timeStep.GetDt();
+				if( input.Get( ae::Key::Num4 ) ) s_sphereRadius += timeStep.GetDt();
+				s_sphereRadius = ae::Max( 0.01f, s_sphereRadius );
+				
+				const ae::Vec3 pos = raySource + ray;
+				const ae::Sphere sphere( s_spherePos, s_sphereRadius );
+				debug.AddSphere( sphere.center, sphere.radius, ae::Color::Blue(), 32 );
+
+				float signedDist = 0.0f;
+				const ae::Vec3 closest = sphere.GetNearestPointOnSurface( pos, &signedDist );
+				const ae::Color color = ( signedDist > 0.0f ) ? ae::Color::Green() : ae::Color::Red();
+				debug.AddLine( pos, closest, color );
+
+				break;
+			}
+			case 3:
 			{
 				infoText.Append( "Cylinder-Ray\n" );
 				
@@ -298,7 +327,7 @@ int main()
 
 				break;
 			}
-			case 3:
+			case 4:
 			{
 				infoText.Append( "Sphere-Triangle\n" );
 				
@@ -340,7 +369,7 @@ int main()
 				}
 				break;
 			}
-			case 4:
+			case 5:
 			{
 				static bool rayTest = true;
 				static float a0 = ae::HalfPi;
@@ -427,7 +456,7 @@ int main()
 				
 				break;
 			}
-			case 5:
+			case 6:
 			{
 				infoText.Append( "AABB-Ray/Point\n" );
 				doRay( false );
@@ -500,7 +529,7 @@ int main()
 				}
 				break;
 			}
-			case 6:
+			case 7:
 			{
 				infoText.Append( "OBB-Ray/Point\n" );
 				doRay( false );
@@ -600,7 +629,7 @@ int main()
 				}
 				break;
 			}
-			case 7:
+			case 8:
 			{
 				infoText.Append( "Angle Lerp\n" );
 				infoText.Append( "Rotate Speed: 1-2\n" );

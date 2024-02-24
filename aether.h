@@ -919,6 +919,7 @@ public:
 	// @TODO: IntersectLine() which should have hit0Out and hit1Out
 	bool IntersectRay( ae::Vec3 origin, ae::Vec3 direction, ae::Vec3* pOut = nullptr, float* tOut = nullptr ) const;
 	bool IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3* outNearestIntersectionPoint ) const;
+	ae::Vec3 GetNearestPointOnSurface( ae::Vec3 p, float* signedDistOut = nullptr ) const;
 
 	ae::Vec3 center = ae::Vec3( 0.0f );
 	float radius = 0.5f;
@@ -12690,6 +12691,17 @@ bool Sphere::IntersectTriangle( ae::Vec3 t0, ae::Vec3 t1, ae::Vec3 t2, ae::Vec3*
 	return true;
 	}
 	return false;
+}
+
+ae::Vec3 Sphere::GetNearestPointOnSurface( ae::Vec3 p, float* signedDistOut ) const
+{
+	ae::Vec3 v = ( p - center );
+	const float d = v.SafeNormalize();
+	if( signedDistOut )
+	{
+		*signedDistOut = ( d - radius );
+	}
+	return center + v * radius;
 }
 
 //------------------------------------------------------------------------------

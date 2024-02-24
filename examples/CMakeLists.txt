@@ -4,31 +4,37 @@ Include(${AE_ROOT_DIR}/AddBundle.cmake)
 
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
-FetchContent_Declare(
-	imgui
-	GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
-	GIT_TAG 7a4fe3d930fcc93d9579df06f046d0738ef06391
-)
-FetchContent_MakeAvailable(imgui)
+if(NOT imgui_FOUND)
+	FetchContent_Declare(
+		imgui
+		GIT_REPOSITORY "https://github.com/johnhues/imgui.git"
+		GIT_TAG 7a4fe3d930fcc93d9579df06f046d0738ef06391
+	)
+	FetchContent_MakeAvailable(imgui)
+endif()
 
 # imguizmo
-FetchContent_Declare(
-	imguizmo
-	GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
-	GIT_TAG 6e1ea45af646c06bee0e70d93d8cc5d3f2ae45c2
-)
-FetchContent_MakeAvailable(imguizmo)
+if(NOT imguizmo_FOUND)
+	FetchContent_Declare(
+		imguizmo
+		GIT_REPOSITORY "https://github.com/johnhues/ImGuizmo.git"
+		GIT_TAG 6e1ea45af646c06bee0e70d93d8cc5d3f2ae45c2
+	)
+	FetchContent_MakeAvailable(imguizmo)
+endif()
 
 # rapidjson
-FetchContent_Declare(
-	rapidjson
-	GIT_REPOSITORY "https://github.com/Tencent/rapidjson.git"
-	GIT_TAG 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
-)
-FetchContent_Populate(rapidjson) # Download but don't build
-file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/include/*")
-add_library(rapidjson INTERFACE) # Header only
-target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
+if(NOT rapidjson_FOUND)
+	FetchContent_Declare(
+		rapidjson
+		GIT_REPOSITORY "https://github.com/Tencent/rapidjson.git"
+		GIT_TAG 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
+	)
+	FetchContent_Populate(rapidjson) # Download but don't build
+	file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/include/*")
+	add_library(rapidjson INTERFACE) # Header only
+	target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
+endif()
 
 # Config
 set(AE_EXAMPLE_DEVELOPMENT_TEAM "" CACHE STRING "Apple Development Team ID for aether examples")
