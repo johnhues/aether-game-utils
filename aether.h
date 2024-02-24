@@ -25738,7 +25738,7 @@ bool ae::Var::IsArray() const
 
 bool ae::Var::IsArrayFixedLength() const
 {
-	return IsArray() && ( m_arrayAdapter->IsFixedLength() );
+	return IsArray() && m_arrayAdapter->IsFixedLength();
 }
 
 uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
@@ -25771,8 +25771,7 @@ uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 
 uint32_t ae::Var::GetArrayMaxLength() const
 {
-	AE_ASSERT( IsArray() );
-	return m_arrayAdapter->GetMaxLength();
+	return IsArray() ? m_arrayAdapter->GetMaxLength() : 0;
 }
 
 //------------------------------------------------------------------------------
