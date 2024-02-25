@@ -548,7 +548,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	ae::LifetimeTester* objects[ kNumElements ];
 	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kNumElements, false );
 	REQUIRE( pool.PageSize() == kNumElements );
-	REQUIRE( pool.Size() == 0 );
+	REQUIRE( pool.Size() == kNumElements );
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
@@ -707,7 +707,7 @@ TEST_CASE( "aeOpaquePool Pages can be checked for objects", "[aeOpaquePool]" )
 	const uint32_t kNumElements = 10;
 	ae::OpaquePool pool( TAG_POOL, sizeof(int32_t), alignof(int32_t), kNumElements, false );
 	REQUIRE( pool.PageSize() == kNumElements );
-	REQUIRE( pool.Size() == 0 );
+	REQUIRE( pool.Size() == kNumElements );
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
@@ -729,7 +729,7 @@ TEST_CASE( "aeOpaquePool can allocate objects after clear", "[aeOpaquePool]" )
 	const uint32_t kNumElements = 10;
 	ae::OpaquePool pool( TAG_POOL, sizeof(int32_t), alignof(int32_t), kNumElements, false );
 	REQUIRE( pool.PageSize() == kNumElements );
-	REQUIRE( pool.Size() == 0 );
+	REQUIRE( pool.Size() == kNumElements );
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
@@ -753,7 +753,7 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 	ae::LifetimeTester* objects[ kNumElements ];
 	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kPageSize, true );
 	REQUIRE( pool.PageSize() == kPageSize );
-	REQUIRE( pool.Size() == 0 );
+	REQUIRE( pool.Size() == INT32_MAX );
 	// REQUIRE( pool.Iterate< ae::LifetimeTester >().begin() == pool.Iterate< ae::LifetimeTester >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 

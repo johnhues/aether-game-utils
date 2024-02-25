@@ -1918,13 +1918,14 @@ public:
 	//! Returns true if the given \p idx is currently allocated. \p idx must be
 	//! negative or less than N.
 	bool IsAllocated( int32_t idx ) const;
-	//! Returns true if the next Allocate() will succeed.
+	//! Returns true if the next Allocate() will succeed. Is constant time.
 	bool HasFree() const;
-	//! Returns the number of allocated elements.
+	//! Returns the number of allocated elements. Is constant time.
 	uint32_t Length() const;
-	//! Returns the maximum length of the list (constxpr for static ae::FreeList's).
+	//! Returns the maximum length of the list (constxpr for static
+	//! ae::FreeList's). Is constant time.
 	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
-	//! Returns the maximum length of the list.
+	//! Returns the maximum length of the list. Is constant time.
 	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_pool.Length(); }
 
 private:
@@ -1971,15 +1972,14 @@ public:
 	//! Null will be returned if \p obj is null.
 	T* GetNext( T* obj );
 
-	//! Returns true if the pool has any unallocated objects available. This
-	//! always returns true for paged pools.
+	//! Returns true if the next ae::ObjectPool::New() will succeed. Is constant time.
 	bool HasFree() const;
-	//! Returns the number of allocated objects.
+	//! Returns the number of allocated objects. Is constant time.
 	uint32_t Length() const;
-	//! Returns the total number of objects in the pool.
+	//! Returns the total number of available objects in the pool. Is constant time.
 	_AE_FIXED_POOL static constexpr uint32_t Size() { return N; }
-	//! Returns the total number of objects in the pool.
-	_AE_PAGED_POOL uint32_t Size(...) const { return N * m_pages.Length(); }
+	//! Returns INT32_MAX max, as paged pools can grow indefinitely. Is constant time.
+	_AE_PAGED_POOL uint32_t Size(...) const { return INT32_MAX; }
 
 private:
 	// @TODO: Disable copy constructor etc or fix list on copy.
@@ -2032,12 +2032,12 @@ public:
 	//! Constructs an ae::OpaquePool with dynamic internal storage. \p tag will
 	//! be used for all internal allocations. All objects returned by the pool
 	//! will have \p objectSize and \p objectAlignment. If the pool is \p paged
-	//! it will allocate pages of size \p poolSize as necessary. If the pool is
-	//! not \p paged, then \p objects can be allocated at a time. It may be
+	//! it will allocate pages of \p size as necessary. If the pool is
+	//! not \p paged, then \p size objects can be allocated at a time. It may be
 	//! useful to use this in conjunction with registered ae::Type's, passing the
 	//! results of ae::Type::GetSize() to \p objectSize and ae::Type::GetAlignment()
 	//! to \p objectAlignment.
-	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged );
+	OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged );
 	//! All objects allocated with ae::OpaquePool::Allocate/New() must be destroyed before
 	//! the ae::OpaquePool is destroyed.
 	~OpaquePool();
@@ -2068,14 +2068,14 @@ public:
 	//! THIS FUNCTION DOES NOT CALL THE OBJECTS DESTRUCTORS, so please use with caution!
 	void FreeAll();
 
-	//! Returns true if the pool has any unallocated objects available.
+	//! Returns true if the next ae::OpaquePool::New() will succeed. Is constant time.
 	bool HasFree() const;
-	//! Returns the number of allocated objects.
+	//! Returns the number of allocated objects. Is constant time.
 	uint32_t Length() const { return m_length; }
-	//! Returns the total number of objects in the pool. Note that this number
-	//! can grow and shrink for paged pools.
-	uint32_t Size() const { return m_pageSize * m_pages.Length(); }
-	//! Returns the maximum number of objects per page.
+	//! Returns the max number of objects that can be allocated, or INT32_MAX
+	//! for paged pools as they can grow indefinitely. Is constant time.
+	uint32_t Size() const { return m_paged ? INT32_MAX : m_pageSize; }
+	//! Returns the maximum number of objects per page. Is constant time.
 	uint32_t PageSize() const { return m_pageSize; }
 
 private:
@@ -2387,7 +2387,9 @@ void SetLogColorsEnabled( bool enabled );
 #define AE_TRACE(...) ae::LogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_DEBUG(...) ae::LogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
 #define AE_INFO(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
+// @TODO: AE_WARNING
 #define AE_WARN(...) ae::LogInternal( _AE_LOG_WARN_, __FILE__, __LINE__, "", __VA_ARGS__ )
+// @TODO: AE_ERROR
 #define AE_ERR(...) ae::LogInternal( _AE_LOG_ERROR_, __FILE__, __LINE__, "", __VA_ARGS__ )
 
 //------------------------------------------------------------------------------
@@ -4736,41 +4738,41 @@ public:
 	//------------------------------------------------------------------------------
 	// True until SetInitData() is called
 	bool IsPendingInit() const;
-	// Call once after ae::NetObjectServer::CreateNetObject(), will trigger Create event
-	// on clients. You can pass 'nullptr' and '0' as params, but you still must call
-	// before the object will be created remotely. Clients can call ae::NetObject::GetInitData()
-	// to get the data set here.
+	//! Call once after ae::NetObjectServer::CreateNetObject(), will trigger Create
+	//! event on clients. You can pass 'nullptr' and '0' as params, but you still
+	//! must call this before the object will be created remotely. Clients can
+	//! call ae::NetObject::GetInitData() to get the data set here.
 	void SetInitData( const void* initData, uint32_t initDataLength );
-	// Call SetSyncData each frame to update that state of the clients NetObject.
-	// Only the most recent data is sent. Data is only sent when changed.
+	//! Call SetSyncData each frame to update that state of the clients NetObject.
+	//! Only the most recent data is sent. Data is only sent when changed.
 	void SetSyncData( const void* data, uint32_t length );
-	// Call as many times as necessary each tick
+	//! Call as many times as necessary each tick
 	void SendMessage( const void* data, uint32_t length );
 
 	//------------------------------------------------------------------------------
 	// Client
 	//------------------------------------------------------------------------------
-	// Use GetInitData() after receiving a new NetObject from NetObjectClient::PumpCreate()
-	// to construct the object. Retrieves the data set by NetObject::SetInitData() on
-	// the server.
+	//! Use GetInitData() after receiving a new NetObject from NetObjectClient::PumpCreate()
+	//! to construct the object. Retrieves the data set by NetObject::SetInitData() on
+	//! the server.
 	const uint8_t* GetInitData() const;
-	// Retrieves the length of the data set by NetObject::SetInitData() on the server.
-	// Use in conjunction with NetObject::GetInitData().
+	//! Retrieves the length of the data set by NetObject::SetInitData() on the server.
+	//! Use in conjunction with NetObject::GetInitData().
 	uint32_t InitDataLength() const;
 
-	// Only the latest sync data is ever available, so there's no need to read this
-	// data as if it was a stream.
+	//! Only the latest sync data is ever available, so there's no need to read this
+	//! data as if it was a stream.
 	const uint8_t* GetSyncData() const;
-	// Check for new data from server
+	//! Check for new data from server
 	uint32_t SyncDataLength() const;
-	// (Optional) Call to clear SyncDataLength() until new data is received
+	//! (Optional) Call to clear SyncDataLength() until new data is received
 	void ClearSyncData();
 
-	// Get messages sent from the server. Call repeatedly until false is returned
+	//! Get messages sent from the server. Call repeatedly until false is returned
 	bool PumpMessages( Msg* msgOut );
 
-	// True once the NetObject has been deleted on the server.
-	// Call NetObjectClient::Destroy() when you're done with it.
+	//! Returns true once the NetObject has been deleted on the server.
+	//! Call NetObjectClient::Destroy() when you're done with it.
 	bool IsPendingDestroy() const;
 
 	//------------------------------------------------------------------------------
@@ -9220,7 +9222,7 @@ T* ObjectPool< T, N, Paged >::GetNext( T* obj )
 template < typename T, uint32_t N, bool Paged >
 bool ObjectPool< T, N, Paged >::HasFree() const
 {
-	return Paged || m_firstPage.Get()->freeList.HasFree();
+	return Length() < Size();
 }
 
 template < typename T, uint32_t N, bool Paged >
@@ -14022,13 +14024,13 @@ std::ostream& operator<<( std::ostream& os, const Dict& dict )
 //------------------------------------------------------------------------------
 #define _AE_POOL_ELEMENT( _arr, _idx ) ( (uint8_t*)_arr + (intptr_t)_idx * m_objectSize )
 
-OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t poolSize, bool paged ) :
-	m_firstPage( tag, poolSize )
+OpaquePool::OpaquePool( const ae::Tag& tag, uint32_t objectSize, uint32_t objectAlignment, uint32_t size, bool paged ) :
+	m_firstPage( tag, size )
 {
 	AE_ASSERT( tag != ae::Tag() );
-	AE_ASSERT( poolSize > 0 );
+	AE_ASSERT( size > 0 );
 	m_tag = tag;
-	m_pageSize = poolSize;
+	m_pageSize = size;
 	m_paged = paged;
 	m_objectSize = objectSize;
 	m_objectAlignment = objectAlignment;
@@ -14143,7 +14145,7 @@ void OpaquePool::FreeAll()
 
 bool OpaquePool::HasFree() const
 {
-	return m_paged || !m_pages.Length() || m_pages.GetFirst()->freeList.HasFree();
+	return Length() < Size();
 }
 
 const void* OpaquePool::m_GetFirst() const
