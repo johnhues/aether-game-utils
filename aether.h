@@ -525,6 +525,8 @@ struct VecT
 	T NormalizeCopy() const;
 	T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
 	float Trim( float length );
+
+	bool IsNAN() const;
 };
 
 #pragma warning(disable:26495) // Vecs are left uninitialized for performance
@@ -6398,6 +6400,21 @@ float VecT< T >::Trim( float trimLength )
 		return trimLength;
 	}
 	return length;
+}
+
+template < typename T >
+bool VecT< T >::IsNAN() const
+{
+	auto&& self = *(T*)this;
+	for ( uint32_t i = 0; i < countof(self.data); i++ )
+	{
+		if ( std::isnan( self.data[ i ] ) )
+		{
+			return true;
+		}
+	}
+	return false;
+
 }
 
 template < typename T >
@@ -12989,60 +13006,61 @@ AABB OBB::GetAABB() const
 //------------------------------------------------------------------------------
 bool IntersectRayTriangle( Vec3 p, Vec3 ray, Vec3 a, Vec3 b, Vec3 c, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut )
 {
-	ae::Vec3 ab = b - a;
-	ae::Vec3 ac = c - a;
-	ae::Vec3 n = ab.Cross( ac );
-	ae::Vec3 qp = -ray;
+	const ae::Vec3 ab = b - a;
+	const ae::Vec3 ac = c - a;
+	const ae::Vec3 n = ab.Cross( ac );
+	const ae::Vec3 qp = -ray;
 	
 	// Compute denominator d
-	float d = qp.Dot( n );
-	if ( !ccw && d > 0.0f )
+	const float d = qp.Dot( n );
+	if( !ccw && d > 0.001f )
 	{
 		return false;
 	}
-	if ( !cw && d < 0.0f )
+	if( !cw && d < 0.001f )
 	{
 		return false;
 	}
 	// Parallel
-	if ( d * d <= 0.0f )
+	if( ae::Abs( d ) < 0.001f )
 	{
 		return false;
 	}
-	float ood = 1.0f / d;
+	const float ood = 1.0f / d;
 	
 	// Compute intersection t value of pq with plane of triangle
-	ae::Vec3 ap = p - a;
-	float t = ap.Dot( n ) * ood;
+	const ae::Vec3 ap = p - a;
+	const float t = ap.Dot( n ) * ood;
 	// Ray intersects if 0 <= t <= 1
-	if ( t < 0.0f || t > 1.0f )
+	if( t < 0.0f || t > 1.0f )
 	{
 		return false;
 	}
 	
 	// Compute barycentric coordinate components and test if within bounds
-	ae::Vec3 e = qp.Cross( ap );
-	float v = ac.Dot( e ) * ood;
-	if ( v < 0.0f || v > 1.0f )
+	const ae::Vec3 e = qp.Cross( ap );
+	const float v = ac.Dot( e ) * ood;
+	if( v < 0.0f || v > 1.0f )
 	{
 		return false;
 	}
-	float w = -ab.Dot( e ) * ood;
-	if ( w < 0.0f || v + w > 1.0f )
+	const float w = -ab.Dot( e ) * ood;
+	if( w < 0.0f || v + w > 1.0f )
 	{
 		return false;
 	}
 	
 	// Result
-	if ( pOut )
+	AE_DEBUG_ASSERT( !p.IsNAN() );
+	if( pOut )
 	{
 		*pOut = p + ray * t;
 	}
-	if ( nOut )
+	if( nOut )
 	{
 		*nOut = n.SafeNormalizeCopy();
 	}
-	if ( tOut )
+	if( tOut )
 	{
 		*tOut = t;
 	}
