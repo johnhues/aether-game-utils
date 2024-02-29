@@ -1982,7 +1982,49 @@ public:
 	_AE_PAGED_POOL uint32_t Size(...) const { return INT32_MAX; }
 
 private:
-	// @TODO: Disable copy constructor etc or fix list on copy.
+	struct Page; // Internal forward declaration
+public:
+	template< typename T2 > // Templated for T and const T
+	class Iterator
+	{
+	public:
+		using iterator_category = std::forward_iterator_tag;
+		using difference_type = std::ptrdiff_t;
+		using value_type = T2;
+		using const_value_type = const T2;
+		using reference = T2&;
+		using pointer = T2*;
+		Iterator() = default;
+		Iterator( Iterator& ) = default;
+		Iterator( const ObjectPool* pool, const struct Page* page, pointer ptr );
+		operator Iterator< const_value_type >() const { return Iterator< const_value_type >( m_pool, m_page, m_ptr ); } //!< Allow auto cast to const
+		reference operator*() { return *m_ptr; }
+		pointer operator->() { return m_ptr; }
+		const T2& operator*() const { return *m_ptr; }
+		const pointer operator->() const { return m_ptr; }
+		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
+		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
+		Iterator& operator++();
+		Iterator operator++( int );
+		Iterator begin();
+		Iterator end();
+	private:
+		pointer m_ptr = nullptr;
+		const struct Page* m_page = nullptr;
+		const ObjectPool* m_pool = nullptr;
+	};
+	//! Returns an stl conformant ae::OpaquePool::Iterator pointing to the first element.
+	Iterator< T > begin();
+	//! Returns an stl conformant ae::OpaquePool::Iterator pointing to one beyond the end of the pool.
+	Iterator< T > end();
+	//! Returns an stl conformant const ae::OpaquePool::Iterator pointing to the first element.
+	Iterator< const T > begin() const;
+	//! Returns an stl conformant const ae::OpaquePool::Iterator pointing to one beyond the end of the pool.
+	Iterator< const T > end() const;
+
+private:
+	ObjectPool( ObjectPool& other ) = delete;
+	void operator=( ObjectPool& other ) = delete;
 	typedef typename std::aligned_storage< sizeof(T), alignof(T) >::type AlignedStorageT;
 	struct Page
 	{
@@ -2081,7 +2123,6 @@ public:
 private:
 	struct Page; // Internal forward declaration
 public:
-	//! TODO
 	template < typename T >
 	class Iterator
 	{
@@ -2089,15 +2130,15 @@ public:
 		using iterator_category = std::forward_iterator_tag;
 		using difference_type = std::ptrdiff_t;
 		using value_type = T;
-		using pointer = T*;
 		using reference = T&;
+		using pointer = T*;
 		Iterator() = default;
 		Iterator( Iterator& ) = default;
 		Iterator( const OpaquePool* pool, const struct Page* page, pointer ptr );
 		reference operator*() { return *m_ptr; }
 		pointer operator->() { return m_ptr; }
 		const T& operator*() const { return *m_ptr; }
-		const T* operator->() const { return m_ptr; }
+		const pointer operator->() const { return m_ptr; }
 		friend bool operator== ( const Iterator& a, const Iterator& b ) { return a.m_ptr == b.m_ptr; };
 		friend bool operator!= ( const Iterator& a, const Iterator& b ) { return !( a == b ); };
 		Iterator& operator++();
@@ -9229,6 +9270,84 @@ template < typename T, uint32_t N, bool Paged >
 uint32_t ObjectPool< T, N, Paged >::Length() const
 {
 	return m_length;
+}
+
+template < typename T, uint32_t N, bool Paged >
+typename ObjectPool< T, N, Paged >::template Iterator< T > ObjectPool< T, N, Paged >::begin()
+{
+	return Iterator< T >( this, m_pages.GetFirst(), GetFirst() );
+}
+
+template < typename T, uint32_t N, bool Paged >
+typename ObjectPool< T, N, Paged >::template Iterator< T > ObjectPool< T, N, Paged >::end()
+{
+	return begin().end();
+}
+
+template < typename T, uint32_t N, bool Paged >
+typename ObjectPool< T, N, Paged >::template Iterator< const T > ObjectPool< T, N, Paged >::begin() const
+{
+	return Iterator< const T >( this, m_pages.GetFirst(), GetFirst() );
+}
+
+template < typename T, uint32_t N, bool Paged >
+typename ObjectPool< T, N, Paged >::template Iterator< const T > ObjectPool< T, N, Paged >::end() const
+{
+	return begin().end();
+}
+
+//------------------------------------------------------------------------------
+// ae::ObjectPool::Iterator member functions
+//------------------------------------------------------------------------------
+template < typename T, uint32_t N, bool Paged >
+template< typename T2 >
+ObjectPool< T, N, Paged >::template Iterator< T2 >::Iterator( const ObjectPool* pool, const struct Page* page, pointer ptr ) :
+	m_pool( pool ),
+	m_page( page ),
+	m_ptr( ptr )
+{}
+
+template < typename T, uint32_t N, bool Paged >
+template< typename T2 >
+typename ObjectPool< T, N, Paged >::template Iterator< T2 >& ObjectPool< T, N, Paged >::template Iterator< T2 >::operator++()
+{
+	if ( m_pool )
+	{
+		m_ptr = const_cast< T* >( m_pool->GetNext( m_ptr ) ); // @TODO: More efficient m_GetNext( m_page, m_ptr )
+		if ( !m_ptr )
+		{
+			*this = end();
+		}
+	}
+	return *this;
+}
+
+template < typename T, uint32_t N, bool Paged >
+template< typename T2 >
+typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::template Iterator< T2 >::operator++( int )
+{
+	Iterator result = *this;
+	++(*this);
+	return result;
+}
+
+template < typename T, uint32_t N, bool Paged >
+template< typename T2 >
+typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::template Iterator< T2 >::begin()
+{
+	return m_pool ? const_cast< ObjectPool* >( m_pool )->Iterate() : Iterator< T2 >();
+}
+
+template < typename T, uint32_t N, bool Paged >
+template< typename T2 >
+typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::template Iterator< T2 >::end()
+{
+	if ( const Page* lastPage = ( m_pool ? m_pool->m_pages.GetLast() : nullptr ) )
+	{
+		T* endPtr = const_cast< T* >( reinterpret_cast< const T* >( &lastPage->objects[ N ] ) );
+		return Iterator< T2 >( m_pool, lastPage, endPtr );
+	}
+	return Iterator< T2 >();
 }
 
 //------------------------------------------------------------------------------

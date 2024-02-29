@@ -528,6 +528,75 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 		REQUIRE( ae::LifetimeTester::currentCount == kNumElements - 3 );
 	}
 
+	SECTION( "can create const iterator from non-const iterator" )
+	{
+		decltype(pool)::Iterator< const ae::LifetimeTester > constIter = pool.begin();
+	}
+
+	SECTION( "can iterate over allocated objects with a range-based for loop" )
+	{
+		uint32_t i = 0;
+		for ( ae::LifetimeTester& obj : pool )
+		{
+			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
+			REQUIRE( obj.value == 'a' + i );
+			i++;
+		}
+		REQUIRE( i == kNumElements );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+	}
+
+	SECTION( "can iterate over allocated objects with a range-based for loop (const)" )
+	{
+		const auto& constPool = pool;
+		uint32_t i = 0;
+		for ( const ae::LifetimeTester& obj : constPool )
+		{
+			REQUIRE( std::is_const_v< std::remove_reference_t< decltype( obj ) > > );
+			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
+			REQUIRE( obj.value == 'a' + i );
+			i++;
+		}
+		REQUIRE( i == kNumElements );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements );
+	}
+
+	SECTION( "can iterate over allocated objects with a range-based for loop after freeing some" )
+	{
+		pool.Delete( objects[ 0 ] );
+		pool.Delete( objects[ kNumElements / 2 ] );
+		pool.Delete( objects[ kNumElements - 1 ] );
+
+		uint32_t count = 0;
+		for ( const ae::LifetimeTester& obj : pool )
+		{
+			count++;
+		}
+		REQUIRE( count == kNumElements - 3 );
+
+		REQUIRE( ae::LifetimeTester::ctorCount == kNumElements );
+		REQUIRE( ae::LifetimeTester::copyCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveCount == 0 );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::dtorCount == 3 );
+		REQUIRE( ae::LifetimeTester::currentCount == kNumElements - 3 );
+	}
+
 	pool.DeleteAll();
 	REQUIRE( ae::LifetimeTester::ctorCount == ae::LifetimeTester::dtorCount );
 	REQUIRE( ae::LifetimeTester::copyCount == 0 );
@@ -630,7 +699,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	SECTION( "can iterate over allocated objects" )
 	{
 		uint32_t i = 0;
-		for ( auto& obj : pool.Iterate< ae::LifetimeTester >() )
+		for ( ae::LifetimeTester& obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
 			REQUIRE( obj.value == 'a' + i );
@@ -651,7 +720,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	{
 		const auto* constPool = &pool;
 		uint32_t i = 0;
-		for ( auto& obj : constPool->Iterate< ae::LifetimeTester >() )
+		for ( const ae::LifetimeTester& obj : constPool->Iterate< ae::LifetimeTester >() )
 		{
 			REQUIRE( std::is_const_v< std::remove_reference_t< decltype( obj ) > > );
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
@@ -676,7 +745,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const auto& obj : pool.Iterate< ae::LifetimeTester >() )
+		for ( const ae::LifetimeTester& obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			count++;
 		}

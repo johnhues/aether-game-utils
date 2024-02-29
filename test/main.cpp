@@ -59,9 +59,10 @@ int main( int argc, char* argv[] )
 	{
 		for( auto& alloc : allocator.allocs )
 		{
-			AE_WARN( "An allocation with tag '#' leaked", alloc.value );
+			AE_ERR( "An allocation with tag '#' leaked", alloc.value );
 		}
-		AE_FAIL_MSG( "Memory leak detected!" );
+		AE_ERR( "Memory leak detected!" );
+		return result -1;
 	}
 	return result;
 }
