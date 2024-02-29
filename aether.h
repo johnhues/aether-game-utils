@@ -448,18 +448,18 @@ template<> constexpr double MinValue< double >();
 //------------------------------------------------------------------------------
 extern uint64_t _randomSeed;
 void RandomSeed();
-inline float Random01( uint64_t& seed = _randomSeed );
-inline bool RandomBool( uint64_t& seed = _randomSeed );
-inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t& seed = _randomSeed );
-inline float Random( float min, float max, uint64_t& seed = _randomSeed );
+inline float Random01( uint64_t* seed = &_randomSeed );
+inline bool RandomBool( uint64_t* seed = &_randomSeed );
+inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t* seed = &_randomSeed );
+inline float Random( float min, float max, uint64_t* seed = &_randomSeed );
 
 template < typename T >
 class RandomValue
 {
 public:
-	RandomValue( uint64_t& seed = _randomSeed ) : m_seed( seed ) {}
-	RandomValue( T min, T max, uint64_t& seed = _randomSeed );
-	RandomValue( T value, uint64_t& seed = _randomSeed );
+	RandomValue( uint64_t* seed = &_randomSeed ) : m_seed( seed ) {}
+	RandomValue( T min, T max, uint64_t* seed = &_randomSeed );
+	RandomValue( T value, uint64_t* seed = &_randomSeed );
 	
 	void SetMin( T min );
 	void SetMax( T max );
@@ -471,7 +471,7 @@ public:
 	operator T() const;
 	
 private:
-	uint64_t& m_seed;
+	uint64_t* m_seed = nullptr;
 	T m_min = T();
 	T m_max = T();
 };
@@ -1005,7 +1005,7 @@ public:
 	void SetRadius( float radius ) { m_radius = radius; }
 
 	bool Intersect( const Circle& other, ae::Vec2* out ) const;
-	ae::Vec2 GetRandomPoint( uint64_t& seed = _randomSeed ) const;
+	ae::Vec2 GetRandomPoint( uint64_t* seed = &_randomSeed ) const;
 
 private:
 	ae::Vec2 m_point;
@@ -6194,26 +6194,26 @@ namespace Interpolation
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
-inline uint32_t _Random( uint64_t& seed )
+inline uint32_t _Random( uint64_t* seed )
 {
 	// splitmix https://arvid.io/2018/07/02/better-cxx-prng/
-	uint64_t z = ( seed += UINT64_C( 0x9E3779B97F4A7C15 ) );
+	uint64_t z = ( *seed += UINT64_C( 0x9E3779B97F4A7C15 ) );
 	z = ( z ^ ( z >> 30 ) ) * UINT64_C( 0xBF58476D1CE4E5B9 );
 	z = ( z ^ ( z >> 27 ) ) * UINT64_C( 0x94D049BB133111EB );
 	return uint32_t( ( z ^ ( z >> 31 ) ) >> 31 );
 }
 
-inline float Random01( uint64_t& seed )
+inline float Random01( uint64_t* seed )
 {
 	return ae::_Random( seed ) / (float)ae::MaxValue< uint32_t >();
 }
 
-inline bool RandomBool( uint64_t& seed )
+inline bool RandomBool( uint64_t* seed )
 {
 	return Random( 0, 2, seed );
 }
 
-inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t& seed )
+inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t* seed )
 {
 	if ( minInclusive >= maxExclusive )
 	{
@@ -6222,7 +6222,7 @@ inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t& see
 	return minInclusive + ( ae::_Random( seed ) % ( maxExclusive - minInclusive ) );
 }
 
-inline float Random( float min, float max, uint64_t& seed )
+inline float Random( float min, float max, uint64_t* seed )
 {
 	if ( min >= max )
 	{
@@ -6235,10 +6235,10 @@ inline float Random( float min, float max, uint64_t& seed )
 // RandomValue member functions
 //------------------------------------------------------------------------------
 template < typename T >
-inline ae::RandomValue< T >::RandomValue( T min, T max, uint64_t& seed ) : m_seed( seed ), m_min(min), m_max(max) {}
+inline ae::RandomValue< T >::RandomValue( T min, T max, uint64_t* seed ) : m_seed( seed ), m_min(min), m_max(max) {}
 
 template < typename T >
-inline ae::RandomValue< T >::RandomValue( T value, uint64_t& seed ) : m_seed( seed ), m_min(value), m_max(value) {}
+inline ae::RandomValue< T >::RandomValue( T value, uint64_t* seed ) : m_seed( seed ), m_min(value), m_max(value) {}
 
 template < typename T >
 inline void ae::RandomValue< T >::SetMin( T min )
@@ -12924,7 +12924,7 @@ bool Circle::Intersect( const Circle& other, ae::Vec2* out ) const
 	return true;
 }
 
-ae::Vec2 Circle::GetRandomPoint( uint64_t& seed ) const
+ae::Vec2 Circle::GetRandomPoint( uint64_t* seed ) const
 {
 	float r = m_radius * sqrt( ae::Random01( seed ) );
 	float theta = ae::Random( 0.0f, ae::TWO_PI, seed );

@@ -2975,7 +2975,7 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool lines ) const
 {
 	const bool isSelected = ( m_selected.Find( entity ) >= 0 );
 	uint64_t seed = entity * 43313;
-	ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, seed ), 0.5, 0.75 );
+	ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, &seed ), 0.5, 0.75 );
 	if ( isSelected && lines )
 	{
 		color = ae::Color::PicoOrange();
