@@ -743,6 +743,7 @@ public:
 	// Comparison
 	bool operator==( const ae::Matrix4& o ) const { return memcmp( o.data, data, sizeof(data) ) == 0; }
 	bool operator!=( const ae::Matrix4& o ) const { return !operator== ( o ); }
+	bool IsNAN() const;
 
 #ifdef AE_MAT4_CLASS_EXTRA
 	AE_MAT4_CLASS_EXTRA // Define conversion functions for ae::Matrix4 with AE_USER_CONFIG
@@ -1100,6 +1101,8 @@ public:
 	OBB() = default;
 	OBB( const OBB& ) = default;
 	OBB( const Matrix4& transform );
+	bool operator == ( const OBB& obb ) const;
+	bool operator != ( const OBB& obb ) const;
 
 	void SetTransform( const Matrix4& transform );
 	Matrix4 GetTransform() const;
@@ -12393,6 +12396,18 @@ ae::Vec3 Matrix4::TransformVector3x4( ae::Vec3 v ) const
 		v.x * data[ 8 ] + v.y * data[ 9 ] + v.z * data[ 10 ] );
 }
 
+bool Matrix4::IsNAN() const
+{
+	for( float f : data )
+	{
+		if( f != f )
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 //------------------------------------------------------------------------------
 // ae::Quaternion member functions
 //------------------------------------------------------------------------------
@@ -13312,6 +13327,20 @@ std::ostream& operator<<( std::ostream& os, AABB aabb )
 OBB::OBB( const ae::Matrix4& transform )
 {
 	SetTransform( transform );
+}
+
+bool OBB::operator == ( const OBB& obb ) const
+{
+	return ( obb.m_center == m_center )
+		&& ( obb.m_axes[ 0 ] == m_axes[ 0 ] )
+		&& ( obb.m_axes[ 1 ] == m_axes[ 1 ] )
+		&& ( obb.m_axes[ 2 ] == m_axes[ 2 ] )
+		&& ( obb.m_halfSize == m_halfSize );
+}
+
+bool OBB::operator != ( const OBB& obb ) const
+{
+	return !( operator == ( obb ) );
 }
 
 void OBB::SetTransform( const ae::Matrix4& transform )
