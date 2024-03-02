@@ -88,11 +88,8 @@ TEST_CASE( "Class properties", "[aeMeta]" )
 
 	REQUIRE( !type->HasProperty( "someProp3" ) );
 	REQUIRE( type->GetPropertyIndex( "someProp3" ) == -1 );
-	// REQUIRE_THROWS_AS( type->GetPropertyName( 3 ), std::runtime_error );
-	// REQUIRE_THROWS( type->GetPropertyValueCount( 3 ) );
-	// REQUIRE( type->GetPropertyValueCount( "someProp3" ) == 3 );
-	// REQUIRE( strcmp( type->GetPropertyValue( 3, 0 ), "" ) == 0 );
-	// REQUIRE( strcmp( type->GetPropertyValue( "someProp3", 0 ), "" ) == 0 );
+	REQUIRE_THROWS( type->GetPropertyName( 3 ) );
+	REQUIRE_THROWS( type->GetPropertyValueCount( 3 ) );
 }
 
 TEST_CASE( "Class vars", "[aeMeta]" )

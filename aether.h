@@ -181,16 +181,18 @@
 //------------------------------------------------------------------------------
 // Platform Utils
 //------------------------------------------------------------------------------
-#if _AE_WINDOWS_
-	#define aeAssert() __debugbreak()
-#elif _AE_APPLE_
-	#define aeAssert() __builtin_trap()
-#elif _AE_EMSCRIPTEN_
-	#define aeAssert() assert( 0 )
-#elif defined( __aarch64__ )
-	#define aeAssert() asm( "brk #0" )
-#else
-	#define aeAssert() asm( "int $3" )
+#ifndef aeAssert
+	#if _AE_WINDOWS_
+		#define aeAssert() __debugbreak()
+	#elif _AE_APPLE_
+		#define aeAssert() __builtin_trap()
+	#elif _AE_EMSCRIPTEN_
+		#define aeAssert() assert( 0 )
+	#elif defined( __aarch64__ )
+		#define aeAssert() asm( "brk #0" )
+	#else
+		#define aeAssert() asm( "int $3" )
+	#endif
 #endif
 
 #if _AE_WINDOWS_
