@@ -211,9 +211,9 @@
 #endif
 
 #if _AE_WINDOWS_
-	#define AE_PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
+	#define AE_PACK( ... ) __pragma( pack(push, 1) ) __VA_ARGS__ __pragma( pack(pop))
 #else
-	#define AE_PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+	#define AE_PACK( ... ) __VA_ARGS__ __attribute__((__packed__))
 #endif
 
 //------------------------------------------------------------------------------
