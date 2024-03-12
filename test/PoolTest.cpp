@@ -370,14 +370,14 @@ TEST_CASE( "Pages can be checked for objects", "[aeObjectPool]" )
 	REQUIRE( pool.Size() == kNumElements );
 	REQUIRE( !pool.GetFirst() );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
-	{
-		int32_t* p = pool.New();
-		//REQUIRE( pool.IsInPool( p ) );
-		//REQUIRE( !pool.IsInPool( (int32_t*)( (uint8_t*)p + 1 ) ) );
-	}
+	// for ( uint32_t i = 0; i < kNumElements; i++ )
+	// {
+	// 	int32_t* p = pool.New();
+	// 	REQUIRE( pool.IsInPool( p ) );
+	// 	REQUIRE( !pool.IsInPool( (int32_t*)( (uint8_t*)p + 1 ) ) );
+	// }
 	
-	int32_t something = 0;
+	// int32_t something = 0;
 	//REQUIRE( !pool.IsInPool( &something ) );
 
 	pool.DeleteAll();
@@ -676,7 +676,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const auto& obj : pool.Iterate< ae::LifetimeTester >() )
+		for ( const auto& _obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			count++;
 		}
@@ -711,15 +711,15 @@ TEST_CASE( "aeOpaquePool Pages can be checked for objects", "[aeOpaquePool]" )
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
-	{
-		int32_t* p = pool.New< int32_t >();
-		//REQUIRE( pool.IsInPool( p ) );
-		//REQUIRE( !pool.IsInPool( (int32_t*)( (uint8_t*)p + 1 ) ) );
-	}
+	// for ( uint32_t i = 0; i < kNumElements; i++ )
+	// {
+	// 	int32_t* p = pool.New< int32_t >();
+	// 	REQUIRE( pool.IsInPool( p ) );
+	// 	REQUIRE( !pool.IsInPool( (int32_t*)( (uint8_t*)p + 1 ) ) );
+	// }
 	
-	int32_t something = 0;
-	//REQUIRE( !pool.IsInPool( &something ) );
+	// int32_t something = 0;
+	// REQUIRE( !pool.IsInPool( &something ) );
 
 	pool.DeleteAll< int32_t >();
 }
@@ -857,7 +857,7 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const auto& obj : pool.Iterate< ae::LifetimeTester >() )
+		for ( const auto& _obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			count++;
 		}

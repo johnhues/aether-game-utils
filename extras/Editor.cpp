@@ -16,9 +16,11 @@
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
 
-#pragma warning( disable : 4018 ) // signed/unsigned mismatch
-#pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
-#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
+#if _AE_WINDOWS_
+	#pragma warning( disable : 4018 ) // signed/unsigned mismatch
+	#pragma warning( disable : 4244 ) // conversion from 'float' to 'int32_t'
+	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
+#endif
 
 namespace ae {
 
@@ -1185,7 +1187,6 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	{
 		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
 		const ae::Entity entity = entityMap.Get( jsonEntity, jsonEntity );
-		const ae::Matrix4 transform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
 		EditorServerObject* object = m_objects.Get( entity );
 		AE_ASSERT( object );
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )

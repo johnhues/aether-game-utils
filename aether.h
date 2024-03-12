@@ -476,9 +476,9 @@ private:
 //------------------------------------------------------------------------------
 // Vector math utilities
 //------------------------------------------------------------------------------
-class Vec2;
-class Vec3;
-class Vec4;
+struct Vec2;
+struct Vec3;
+struct Vec4;
 class Matrix4;
 
 //------------------------------------------------------------------------------
@@ -529,7 +529,9 @@ struct VecT
 	bool IsNAN() const;
 };
 
-#pragma warning(disable:26495) // Vecs are left uninitialized for performance
+#if _AE_WINDOWS_
+	#pragma warning(disable:26495) // Vecs are left uninitialized for performance
+#endif
 
 //------------------------------------------------------------------------------
 // ae::Vec2 struct
@@ -1225,7 +1227,9 @@ private:
 	template < typename T > Color SRGBA( T r, T g, T b, T a ) = delete;
 };
 
-#pragma warning(default:26495) // Re-enable uninitialized variable warning
+#if _AE_WINDOWS_
+	#pragma warning(default:26495) // Re-enable uninitialized variable warning
+#endif
 
 //------------------------------------------------------------------------------
 // ae::TimeStep
@@ -6434,7 +6438,9 @@ inline std::ostream& operator<<( std::ostream& os, const VecT< T >& v )
 	return os << v[ count - 1 ];
 }
 
-#pragma warning(disable:26495) // Hide incorrect Vec2 initialization warning due to union
+#if _AE_WINDOWS_
+	#pragma warning(disable:26495) // Hide incorrect Vec2 initialization warning due to union
+#endif
 
 //------------------------------------------------------------------------------
 // ae::Vec2 member functions
@@ -6922,7 +6928,9 @@ inline Color Color::SetA( float alpha ) const { return Color( r, g, b, alpha ); 
 inline float Color::SRGBToRGB( float x ) { return powf( x , 2.2f ); }
 inline float Color::RGBToSRGB( float x ) { return powf( x, 1.0f / 2.2f ); }
 
-#pragma warning(default:26495) // Re-enable uninitialized variable warning
+#if _AE_WINDOWS_
+	#pragma warning(default:26495) // Re-enable uninitialized variable warning
+#endif
 
 //------------------------------------------------------------------------------
 // ae::ToString functions
@@ -7971,9 +7979,9 @@ T& Array< T, N >::operator[]( int32_t index )
 //------------------------------------------------------------------------------
 template < uint32_t N >
 HashMap< N >::HashMap() :
-	m_length( 0 ),
+	m_entries( (Entry*)&m_storage ),
 	m_size( N ),
-	m_entries( (Entry*)&m_storage )
+	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 }
@@ -7981,9 +7989,9 @@ HashMap< N >::HashMap() :
 template < uint32_t N >
 HashMap< N >::HashMap( ae::Tag tag ) :
 	m_tag( tag ),
-	m_length( 0 ),
+	m_entries( nullptr ),
 	m_size( 0 ),
-	m_entries( nullptr )
+	m_length( 0 )
 {
 	AE_STATIC_ASSERT_MSG( N == 0, "Do not provide allocator for static arrays" );
 	AE_ASSERT( tag != ae::Tag() );
@@ -8021,8 +8029,8 @@ void HashMap< N >::Reserve( uint32_t size )
 
 template < uint32_t N >
 HashMap< N >::HashMap( const HashMap< N >& other ) :
-	m_length( 0 ),
-	m_size( N )
+	m_size( N ),
+	m_length( 0 )
 {
 	if ( N )
 	{
@@ -9158,9 +9166,9 @@ OpaquePool::Iterator< const T > OpaquePool::Iterate() const
 //------------------------------------------------------------------------------
 template < typename T >
 OpaquePool::Iterator< T >::Iterator( const OpaquePool* pool, const struct Page* page, pointer ptr ) :
-	m_pool( pool ),
+	m_ptr( ptr ),
 	m_page( page ),
-	m_ptr( ptr )
+	m_pool( pool )
 {}
 
 template < typename T >
@@ -9532,7 +9540,6 @@ void CollisionMesh< V, T, B >::AddIndexed( const AddIndexedParams& params )
 
 	const bool identityTransform = ( params.transform == ae::Matrix4::Identity() );
 	const uint32_t initialVertexCount = m_vertices.Length();
-	const uint32_t initialTriCount = m_tris.Length();
 	const uint32_t triCount = params.indexCount / 3;
 	
 	m_vertices.Reserve( initialVertexCount + params.vertexCount );
@@ -17779,10 +17786,10 @@ Socket::Socket( ae::Tag tag ) :
 {}
 
 Socket::Socket( ae::Tag tag, int s, Protocol proto, const char* addr, uint16_t port ) :
-	m_sock( s ),
 	m_protocol( proto ),
 	m_address( addr ),
 	m_port( port ),
+	m_sock( s ),
 	m_isConnected( true ),
 	m_resolvedAddress( addr ),
 	m_sendData( tag ),
@@ -18304,7 +18311,6 @@ ae::Socket* ListenerSocket::Accept()
 			}
 			char addrStr[ INET6_ADDRSTRLEN ];
 			_GetAddressString( (sockaddr*)&listenSockAddr, addrStr );
-			uint16_t portTest = _GetPort( (sockaddr*)&listenSockAddr );
 			
 			// Connect and give old listening socket to new ae::Socket
 			newSock = listenSock;
@@ -19434,13 +19440,16 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 		return;
 	}
 	
-	GLenum mode = 0;
-	uint32_t primitiveSize = 0;
-	const char* primitiveTypeName = "";
-	if ( m_primitive == Vertex::Primitive::Triangle ) { mode = GL_TRIANGLES; primitiveSize = 3; primitiveTypeName = "Triangle"; }
-	else if ( m_primitive == Vertex::Primitive::Line ) { mode = GL_LINES; primitiveSize = 2; primitiveTypeName = "Line"; }
-	else if ( m_primitive == Vertex::Primitive::Point ) { mode = GL_POINTS; primitiveSize = 1; primitiveTypeName = "Point"; }
-	else { AE_FAIL(); return; }
+	switch( m_primitive )
+	{
+		case Vertex::Primitive::Triangle:
+		case Vertex::Primitive::Line:
+		case Vertex::Primitive::Point:
+			break;
+		default:
+			AE_FAIL();
+			return;
+	}
 
 	shader->m_Activate( uniforms );
 
@@ -21890,9 +21899,9 @@ Spline::Spline( ae::Tag tag ) :
 {}
 
 Spline::Spline( ae::Tag tag, const ae::Vec3* controlPoints, uint32_t count, bool loop ) :
+	m_loop( loop ),
 	m_controlPoints( tag ),
-	m_segments( tag ),
-	m_loop( loop )
+	m_segments( tag )
 {
 	Reserve( count );
 	for ( uint32_t i = 0; i < count; i++ )
