@@ -9311,8 +9311,8 @@ void BVH< T, N >::m_Build( T* data, uint32_t count, AABBFn aabbFn, uint32_t targ
 			return false;
 		}
 	});
-	uint32_t leftCount = middle - data;
-	uint32_t rightCount = ( data + count ) - middle;
+	uint32_t leftCount = (uint32_t)( middle - data );
+	uint32_t rightCount = (uint32_t)( ( data + count ) - middle );
 
 	if ( !leftCount || !rightCount )
 	{
@@ -11115,7 +11115,7 @@ const char* ae::_Globals::Demangle( const char* typeName )
 	typeNameBuf = abi::__cxa_demangle( typeName, typeNameBuf, &typeNameBufLength, &status );
 	if ( status == 0 )
 	{
-		int32_t len = strlen( typeNameBuf );
+		int32_t len = (int32_t)strlen( typeNameBuf );
 		while ( typeNameBuf[ len - 1 ] == '*' )
 		{
 			typeNameBuf[ len - 1 ] = 0;
@@ -13525,7 +13525,7 @@ uint32_t Dict::GetUint( const char* key, uint32_t defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return strtoul( value->c_str(), nullptr, 10 );
+		return (uint32_t)strtoul( value->c_str(), nullptr, 10 );
 	}
 	return defaultValue;
 }
@@ -13710,7 +13710,7 @@ void OpaquePool::Free( void* obj )
 	Page* page = m_pages.GetFirst();
 	while ( page )
 	{
-		index = ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;
+		index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
 		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
 		if ( found )
 		{
@@ -13795,7 +13795,7 @@ const void* OpaquePool::m_GetNext( const Page*& page, const void* obj ) const
 	{
 		AE_DEBUG_ASSERT( m_length > 0 );
 		AE_DEBUG_ASSERT( page->freeList.Length() );
-		int32_t index = ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize;
+		int32_t index = (int32_t)( ( (uint8_t*)obj - (uint8_t*)page->objects ) / m_objectSize );
 		bool found = ( 0 <= index && index < (int32_t)m_pageSize );
 		if ( found )
 		{
@@ -15902,7 +15902,7 @@ void Input::Pump()
 #elif _AE_APPLE_
 	{
 		const NSArray< GCController* >* controllers = [GCController controllers];
-		const uint32_t controllerCount = [controllers count];
+		const uint32_t controllerCount = (uint32_t)[controllers count];
 		auto GetAppleControllerFn = [&]( int32_t playerIndex ) -> const GCController*
 		{
 			for ( uint32_t i = 0; i < controllerCount; i++ )
@@ -16875,7 +16875,7 @@ uint32_t FileSystem::Read( const char* filePath, void* buffer, uint32_t bufferSi
 
 		if ( resultLen <= bufferSize )
 		{
-			resultLen = fread( buffer, sizeof(uint8_t), resultLen, file );
+			resultLen = (uint32_t)fread( buffer, sizeof(uint8_t), resultLen, file );
 		}
 		else
 		{
@@ -17156,7 +17156,7 @@ const char* FileSystem::GetFileExtFromPath( const char* filePath )
 Str256 FileSystem::GetDirectoryFromPath( const char* filePath )
 {
 	const char* fileName = GetFileNameFromPath( filePath );
-	return Str256( fileName - filePath, filePath );
+	return Str256( (uint32_t)( fileName - filePath ), filePath );
 }
 
 void FileSystem::AppendToPath( Str256* path, const char* str )
@@ -17233,7 +17233,7 @@ bool ae::FileSystem::SetExtension( Str256* path, const char* ext )
 
 bool ae::FileSystem::IsDirectory( const char* path )
 {
-	uint32_t length = strlen( path );
+	uint32_t length = (uint32_t)strlen( path );
 	if ( length == 0 )
 	{
 		return false;
@@ -17970,7 +17970,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 			else if ( m_protocol == Protocol::UDP )
 			{
 				_ae_sock_buff_t buffer;
-				int result = recv( m_sock, &buffer, 1, MSG_PEEK );
+				int32_t result = (int32_t)recv( m_sock, &buffer, 1, MSG_PEEK );
 				if ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN )
 				{
 					Disconnect();
@@ -17995,7 +17995,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
 		AE_ASSERT( buffer == (_ae_sock_buff_t*)m_recvData.end() - readSize );
 		
-		int32_t result = recv( m_sock, buffer, readSize, 0 );
+		int32_t result = (int32_t)recv( m_sock, buffer, readSize, 0 );
 		if ( result < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) )
 		{
 			return false;
@@ -18119,7 +18119,7 @@ uint32_t Socket::SendAll()
 #if !_AE_WINDOWS_
 	sendFlags |= MSG_NOSIGNAL;
 #endif
-	int result = send( m_sock, (const _ae_sock_buff_t*)m_sendData.Data(), m_sendData.Length(), sendFlags );
+	int32_t result = (int32_t)send( m_sock, (const _ae_sock_buff_t*)m_sendData.Data(), m_sendData.Length(), sendFlags );
 	if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
 	{
 		Disconnect();
@@ -18282,7 +18282,7 @@ ae::Socket* ListenerSocket::Accept()
 			if ( m_connections.Length() >= m_maxConnections )
 			{
 				_ae_sock_buff_t buffer;
-				int result = recv( listenSock, &buffer, sizeof(buffer), 0 );
+				int32_t result = (int32_t)recv( listenSock, &buffer, sizeof(buffer), 0 );
 				if ( result == -1 && errno != EAGAIN && errno != EWOULDBLOCK )
 				{
 					StopListening();
@@ -18292,7 +18292,7 @@ ae::Socket* ListenerSocket::Accept()
 			}
 			
 			_ae_sock_buff_t buffer;
-			int numbytes = recvfrom( listenSock, &buffer, sizeof(buffer), MSG_PEEK, (sockaddr*)&sockAddr, &sockAddrLen );
+			int32_t numbytes = (int32_t)recvfrom( listenSock, &buffer, sizeof(buffer), MSG_PEEK, (sockaddr*)&sockAddr, &sockAddrLen );
 			if ( numbytes == -1 )
 			{
 				if ( errno != EAGAIN && errno != EWOULDBLOCK )
@@ -21233,7 +21233,7 @@ uint32_t TextRender::m_ParseText( const char* str, uint32_t lineLength, uint32_t
 	}
 	if ( outStr && lenOut )
 	{
-		*lenOut = ( outStr - *_outStr );
+		*lenOut = (uint32_t)( outStr - *_outStr );
 	}
 
 	return lineCount;
@@ -22718,9 +22718,9 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 	};
 	struct FaceIndex
 	{
-		int position = -1;
-		int texture = -1;
-		int normal = -1;
+		int32_t position = -1;
+		int32_t texture = -1;
+		int32_t normal = -1;
 	};
 	ae::Array< ae::Vec4 > positions = allocTag;
 	ae::Array< ae::Vec2 > uvs = allocTag;
@@ -22819,19 +22819,19 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 				while ( line < lineEnd )
 				{
 					FaceIndex faceIndex;
-					faceIndex.position = strtoul( line, (char**)&line, 10 ) - 1;
+					faceIndex.position = (int32_t)strtoul( line, (char**)&line, 10 ) - 1;
 					if ( line[ 0 ] == '/' )
 					{
 						line++;
 						if ( line[ 0 ] != '/' )
 						{
-							faceIndex.texture = strtoul( line, (char**)&line, 10 ) - 1;
+							faceIndex.texture = (int32_t)strtoul( line, (char**)&line, 10 ) - 1;
 						}
 					}
 					if ( line[ 0 ] == '/' )
 					{
 						line++;
-						faceIndex.normal = strtoul( line, (char**)&line, 10 ) - 1;
+						faceIndex.normal = (int32_t)strtoul( line, (char**)&line, 10 ) - 1;
 					}
 					if ( faceIndex.position < 0 )
 					{
@@ -23494,7 +23494,7 @@ void Audio::Log()
 			// soundNameEnd = soundNameEnd ? soundNameEnd : soundName + strlen( soundName );
 			// uint32_t soundNameLen = (uint32_t)(soundNameEnd - soundName);
 			const char* soundName = "unknown";
-			uint32_t soundNameLen = strlen( soundName );
+			uint32_t soundNameLen = (uint32_t)strlen( soundName );
 
 			char buffer[ 512 ];
 			snprintf( buffer, sizeof(buffer), "channel:%u name:%.*s offset:%.2fs length:%.2fs", i, soundNameLen, soundName, playOffset, playLength );
@@ -25122,7 +25122,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 						auto v = *reinterpret_cast< const int64_t* >( varData );
 						AE_DEBUG_ASSERT( v <= (int64_t)INT32_MAX );
 						AE_DEBUG_ASSERT( v >= (int64_t)INT32_MIN );
-						value = v;
+						value = (int32_t)v;
 						break;
 					}
 					default: AE_FAIL();
@@ -25145,7 +25145,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 					{
 						auto v = *reinterpret_cast< const uint64_t* >( varData );
 						AE_DEBUG_ASSERT( v <= (uint64_t)INT32_MAX );
-						value = v;
+						value = (int32_t)v;
 						break;
 					}
 					default: AE_FAIL();
