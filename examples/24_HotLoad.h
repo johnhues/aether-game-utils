@@ -25,7 +25,7 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 
-typedef bool (*GameFn)( class Game* );
+typedef bool (*GameFn)( struct Game* );
 
 struct Game
 {

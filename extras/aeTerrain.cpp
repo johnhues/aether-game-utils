@@ -1479,8 +1479,6 @@ void Terrain::Update( ae::Vec3 center, float radius )
   int32_t chunkViewRadius = radius / kChunkSize;
   const int32_t kChunkViewDiam = chunkViewRadius + chunkViewRadius;
 
-  double currentTime = ae::GetTime();
-
   m_center = center;
   m_radius = radius;
 

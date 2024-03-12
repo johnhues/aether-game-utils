@@ -229,7 +229,7 @@ void Game::Initialize( int argc, char* argv[] )
 		Game* game = (Game*)userData;
 		ae::EditorMesh result = TAG_ALL;
 		LoadOBj( resourceId, &game->fs, nullptr, nullptr, &result );
-		return std::move( result );
+		return result;
 	};
 	editorParams.functionPointers.userData = this;
 	editor.Initialize( editorParams );

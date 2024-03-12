@@ -97,7 +97,6 @@ private:
 
 	bool m_init = false;
 	bool m_headless = false;
-	ae::GraphicsDevice* m_render = nullptr;
 	bool m_pendingRender = false;
 	// Globals
 	ImGuiContext* m_globalContext = nullptr;
