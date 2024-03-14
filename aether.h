@@ -26185,8 +26185,16 @@ const ae::Type* ae::Type::GetTypeWithProperty( const char* property ) const
 }
 int32_t ae::Type::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
 int32_t ae::Type::GetPropertyCount() const { return m_props.Length(); }
-const char* ae::Type::GetPropertyName( int32_t propIndex ) const { return m_props.GetKey( propIndex ).c_str(); }
-uint32_t ae::Type::GetPropertyValueCount( int32_t propIndex ) const { return m_props.GetValue( propIndex ).Length(); }
+const char* ae::Type::GetPropertyName( int32_t propIndex ) const
+{
+	AE_ASSERT( 0 <= propIndex && propIndex < m_props.Length() );
+	return m_props.GetKey( propIndex ).c_str();
+}
+uint32_t ae::Type::GetPropertyValueCount( int32_t propIndex ) const
+{
+	AE_ASSERT( 0 <= propIndex && propIndex < m_props.Length() );
+	return m_props.GetValue( propIndex ).Length();
+}
 uint32_t ae::Type::GetPropertyValueCount( const char* propName ) const { auto* props = m_props.TryGet( propName ); return props ? props->Length() : 0; }
 const char* ae::Type::GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const
 {

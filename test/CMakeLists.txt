@@ -19,18 +19,14 @@ else()
 	list(APPEND TEST_SOURCES "${AE_ROOT_DIR}/aether.cpp")
 endif()
 add_executable(test ${TEST_SOURCES})
-target_compile_options(test PRIVATE
-	"-fmodules"
-	"-fcxx-modules"
-	"-Wno-exceptions" # All asserts throw exceptions for unit tests
-)
+target_link_libraries(test PRIVATE ${AE_DEPS_LIBRARIES})
+target_compile_options(test PRIVATE "-Wno-exceptions") # All asserts throw exceptions for unit tests
 target_include_directories(test PRIVATE
 	"${AE_ROOT_DIR}"
 	"${AE_ROOT_DIR}/extras/include"
 	"${CURRENT_SOURCE_DIR}"
 )
 target_compile_definitions(test PRIVATE
-	AE_USE_MODULES
 	AE_USER_CONFIG="TestConfig.h" # All asserts throw exceptions for unit tests
 )
 target_link_libraries(test PRIVATE
