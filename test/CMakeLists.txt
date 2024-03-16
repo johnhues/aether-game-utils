@@ -35,7 +35,14 @@ endif()
 # unit test executable
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
 add_executable(test ${TEST_SOURCES})
-if(EMSCRIPTEN)
+if(CMAKE_GENERATOR STREQUAL Xcode)
+	add_custom_command(TARGET test
+		POST_BUILD
+		COMMAND codesign --force -s - "$<TARGET_FILE:test>"
+		DEPENDS test
+		VERBATIM
+	)
+elseif(EMSCRIPTEN)
 	set_target_properties(test PROPERTIES SUFFIX ".js")
 endif()
 target_link_libraries(test PRIVATE
