@@ -10,42 +10,36 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 FetchContent_GetProperties(Catch2 SOURCE_DIR Catch2_SOURCE_DIR)
 
-# unit test executable
-file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
-list(APPEND TEST_SOURCES "${AE_ROOT_DIR}/aether.h")
-if(APPLE)
-	list(APPEND TEST_SOURCES "${AE_ROOT_DIR}/aether.mm")
-else()
-	list(APPEND TEST_SOURCES "${AE_ROOT_DIR}/aether.cpp")
-endif()
-add_executable(test ${TEST_SOURCES})
-target_link_libraries(test PRIVATE ${AE_DEPS_LIBRARIES})
-target_compile_options(test PRIVATE "-Wno-exceptions") # All asserts throw exceptions for unit tests
-target_include_directories(test PRIVATE
-	"${AE_ROOT_DIR}"
+# test library (asserts throw exceptions for unit tests)
+add_ae_library(ae_test STATIC)
+target_compile_options(ae_test PUBLIC "-Wno-exceptions") # All asserts throw exceptions for unit tests
+target_compile_definitions(ae_test PUBLIC AE_USER_CONFIG="TestConfig.h") # All asserts throw exceptions for unit tests
+target_include_directories(ae_test PUBLIC
 	"${AE_ROOT_DIR}/extras/include"
 	"${CURRENT_SOURCE_DIR}"
 )
-target_compile_definitions(test PRIVATE
-	AE_USER_CONFIG="TestConfig.h" # All asserts throw exceptions for unit tests
-)
-target_link_libraries(test PRIVATE
-	Catch2::Catch2
-)
 if(EMSCRIPTEN)
-	set(_AE_EM_LINKER_FLAGS
-		"-s ALLOW_MEMORY_GROWTH"
-		"-s STACK_SIZE=2097152"
-		"-s WASM=1"
-		"-s ASSERTIONS=1"
-		"-s DISABLE_EXCEPTION_CATCHING=0"
+	target_compile_options(ae_test PUBLIC
+		-sDISABLE_EXCEPTION_CATCHING=0
 	)
-	string (REPLACE ";" " " _AE_EM_LINKER_FLAGS "${_AE_EM_LINKER_FLAGS}")
-	set_target_properties(test PROPERTIES
-		LINK_FLAGS "${_AE_EM_LINKER_FLAGS}"
-		SUFFIX ".js"
+	target_link_options(ae_test PUBLIC
+		-sALLOW_MEMORY_GROWTH
+		-sINITIAL_MEMORY=26214400
+		-sSTACK_SIZE=2097152
+		-sWASM=1
+		-sASSERTIONS=0
+		-sDISABLE_EXCEPTION_CATCHING=0
 	)
 endif()
+
+# unit test executable
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
+add_executable(test ${TEST_SOURCES})
+set_target_properties(test PROPERTIES SUFFIX ".js")
+target_link_libraries(test PRIVATE
+	ae_test
+	Catch2::Catch2
+)
 
 # run tests
 list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/contrib)

@@ -70,7 +70,8 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 endif()
 
 # ae library
-function(add_ae_library NAME)
+function(add_ae_library NAME LIB_TYPE)
+	add_library(${NAME} ${LIB_TYPE} "")
 	if (APPLE)
 		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET 13.0) # See Professional CMake 24.5.3 Deployment Target
 		# @TODO: Other Apple platforms
@@ -84,9 +85,9 @@ function(add_ae_library NAME)
 	if (AE_DEPS_INCLUDE)
 		target_include_directories(${NAME} PUBLIC ${AE_DEPS_INCLUDE})
 	endif()
-	target_include_directories(${NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+	target_include_directories(${NAME} PUBLIC ${AE_ROOT_DIR})
 	if(APPLE)
-		target_sources(${NAME} PRIVATE aether.h aether.mm)
+		target_sources(${NAME} PRIVATE ${AE_ROOT_DIR}/aether.h ${AE_ROOT_DIR}/aether.mm)
 		if (AE_USE_MODULES)
 			target_compile_definitions(${NAME} PUBLIC AE_USE_MODULES)
 			target_compile_options(${NAME} PUBLIC "-fmodules;-fcxx-modules")
@@ -102,14 +103,12 @@ function(add_ae_library NAME)
 		if(UNIX)
 			target_compile_options(${NAME} PRIVATE -fPIC) # Fixes errors linking static ae into shared libraries: relocation against symbol 'X' which may bind externally 
 		endif()
-		target_sources(${NAME} PRIVATE aether.h aether.cpp)
+		target_sources(${NAME} PRIVATE ${AE_ROOT_DIR}/aether.h ${AE_ROOT_DIR}/aether.cpp)
 	endif()
 endfunction()
-add_library(ae STATIC "") # static library
-add_library(ae_shared SHARED "") # shared library (for hot loading)
+add_ae_library(ae STATIC) # static library
+add_ae_library(ae_shared SHARED) # shared library (for hot loading)
 set_target_properties(ae_shared PROPERTIES OUTPUT_NAME ae)
-add_ae_library(ae)
-add_ae_library(ae_shared)
 
 # Examples, extra utilities, and tests
 add_subdirectory(loaders)
