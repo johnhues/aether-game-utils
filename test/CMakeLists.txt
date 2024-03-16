@@ -35,7 +35,9 @@ endif()
 # unit test executable
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
 add_executable(test ${TEST_SOURCES})
-set_target_properties(test PROPERTIES SUFFIX ".js")
+if(EMSCRIPTEN)
+	set_target_properties(test PROPERTIES SUFFIX ".js")
+endif()
 target_link_libraries(test PRIVATE
 	ae_test
 	Catch2::Catch2
