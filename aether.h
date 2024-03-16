@@ -181,20 +181,6 @@
 //------------------------------------------------------------------------------
 // Platform Utils
 //------------------------------------------------------------------------------
-#ifndef aeAssert
-	#if _AE_WINDOWS_
-		#define aeAssert() __debugbreak()
-	#elif _AE_APPLE_
-		#define aeAssert() __builtin_trap()
-	#elif _AE_EMSCRIPTEN_
-		#define aeAssert() assert( 0 )
-	#elif defined( __aarch64__ )
-		#define aeAssert() asm( "brk #0" )
-	#else
-		#define aeAssert() asm( "int $3" )
-	#endif
-#endif
-
 #if _AE_WINDOWS_
 	#define aeCompilationWarning( _msg ) _Pragma( message _msg )
 #else
@@ -2447,13 +2433,26 @@ void SetLogColorsEnabled( bool enabled );
 //------------------------------------------------------------------------------
 // Assertion functions
 //------------------------------------------------------------------------------
+#ifndef aeAssert
+	#if _AE_WINDOWS_
+		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } __debugbreak(); }
+	#elif _AE_APPLE_
+		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } __builtin_trap(); }
+	#elif _AE_EMSCRIPTEN_
+		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } assert( 0 ); }
+	#elif defined( __aarch64__ )
+		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } asm( "brk #0" ); }
+	#else
+		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } asm( "int $3" ); }
+	#endif
+#endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
-#define AE_ASSERT( _x ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
-#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
-#define AE_DEBUG_ASSERT( _x ) do { if ( _AE_DEBUG_ && !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert(); } } while (0)
-#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( _AE_DEBUG_ && !(_x) ) { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert(); } } while (0)
-#define AE_FAIL() do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert(); } while (0)
-#define AE_FAIL_MSG( ... ) do { ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert(); } while (0)
+#define AE_ASSERT( _x ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert( msgStr.c_str() ); } } while (0)
+#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert( msgStr.c_str() ); } } while (0)
+#define AE_DEBUG_ASSERT( _x ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert( msgStr.c_str() ); } } while (0)
+#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert( msgStr.c_str() ); } } while (0)
+#define AE_FAIL() do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert( msgStr.c_str() ); } while (0)
+#define AE_FAIL_MSG( ... ) do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert( msgStr.c_str() ); } while (0)
 
 //------------------------------------------------------------------------------
 // Static assertion functions
@@ -5664,23 +5663,20 @@ const char* GetTypeName()
 #define _AE_LOG_WARN_ 3
 #define _AE_LOG_ERROR_ 4
 #define _AE_LOG_FATAL_ 5
-void LogInternal( std::stringstream& os, const char* message );
+void LogInternalImpl( std::stringstream& os, const char* message );
 void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
 template < typename T, typename... Args >
-void LogInternal( std::stringstream& os, const char* format, T value, Args... args );
+void LogInternalImpl( std::stringstream& os, const char* format, T value, Args... args );
 template < typename... Args >
-void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
+std::string LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
 extern const char* LogLevelNames[ 6 ];
 extern const char* LogLevelColors[ 6 ];
 
 //------------------------------------------------------------------------------
 // Internal Logging functions internal implementation
 //------------------------------------------------------------------------------
-void LogInternal( std::stringstream& os, const char* message );
-void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
-
 template < typename T, typename... Args >
-void LogInternal( std::stringstream& os, const char* format, T value, Args... args )
+void LogInternalImpl( std::stringstream& os, const char* format, T value, Args... args )
 {
 	if ( !(*format) )
 	{
@@ -5704,24 +5700,24 @@ void LogInternal( std::stringstream& os, const char* format, T value, Args... ar
 		head++;
 	}
 
-	LogInternal( os, head, args... );
+	LogInternalImpl( os, head, args... );
 }
 
 template < typename... Args >
-void LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
+std::string LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
 {
 	std::stringstream os;
 	os << std::setprecision( 4 );
 	os << std::boolalpha;
 	LogFormat( os, severity, filePath, line, assertInfo, format );
-	LogInternal( os, format, args... );
+	LogInternalImpl( os, format, args... );
 	if ( severity == _AE_LOG_FATAL_ && !ae::IsDebuggerAttached() )
 	{
 		std::stringstream ss;
 		ss << os.rdbuf();
-		std::string str = ss.str();
-		ShowMessage( str.c_str() );
+		return ss.str();
 	}
+	return "";
 }
 
 //------------------------------------------------------------------------------
@@ -13706,7 +13702,7 @@ const char* LogLevelColors[] =
 bool _ae_logColors = false;
 
 #if _AE_WINDOWS_
-void LogInternal( std::stringstream& os, const char* message )
+void LogInternalImpl( std::stringstream& os, const char* message )
 {
 	static bool s_logStdOut = !ae::IsDebuggerAttached();
 	os << message << std::endl;
@@ -13720,7 +13716,7 @@ void LogInternal( std::stringstream& os, const char* message )
 	}
 }
 #else
-void LogInternal( std::stringstream& os, const char* message )
+void LogInternalImpl( std::stringstream& os, const char* message )
 {
 	std::cout << os.str() << message << std::endl;
 }

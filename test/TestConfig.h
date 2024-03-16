@@ -5,6 +5,6 @@
 #ifndef TESTCONFIG_H
 #define TESTCONFIG_H
 
-#define aeAssert() throw "assert"
+#define aeAssert( _msg ) throw "assert"
 
 #endif // TESTCONFIG_H
