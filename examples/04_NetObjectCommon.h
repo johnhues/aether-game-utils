@@ -139,7 +139,8 @@ public:
     {
       m_netPos = m_pos;
       m_netRotation = m_rotation;
-      ae::BinaryStream wStream = ae::BinaryStream::Writer();
+      ae::Array< uint8_t > buffer = TAG_EXAMPLE;
+      ae::BinaryStream wStream = ae::BinaryStream::Writer( &buffer );
       Serialize( &wStream );
       netObject->SetSyncData( wStream.GetData(), wStream.GetOffset() );
     }
@@ -155,7 +156,7 @@ public:
 
   void Serialize( ae::BinaryStream* stream )
   {
-    stream->SerializeRaw( playerId );
+    stream->SerializeRaw( &playerId, sizeof( playerId ) );
     stream->SerializeFloat( m_netPos.x );
     stream->SerializeFloat( m_netPos.y );
     stream->SerializeFloat( m_netRotation );

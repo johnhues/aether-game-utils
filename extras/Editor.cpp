@@ -841,7 +841,7 @@ void Editor::Update()
 	{
 		EditorMsg msgType = EditorMsg::None;
 		ae::BinaryStream rStream = ae::BinaryStream::Reader( m_msgBuffer, sizeof(m_msgBuffer) );
-		rStream.SerializeRaw( msgType );
+		rStream.SerializeEnum( msgType );
 		switch ( msgType )
 		{
 			case EditorMsg::Heartbeat:
@@ -1263,7 +1263,7 @@ void EditorServer::Update( EditorProgram* program )
 			if( conn->sock->IsConnected() )
 			{
 				ae::BinaryStream wStream = ae::BinaryStream::Writer( m_msgBuffer, sizeof(m_msgBuffer) );
-				wStream.SerializeRaw( EditorMsg::Heartbeat );
+				wStream.SerializeEnum( EditorMsg::Heartbeat );
 				AE_ASSERT( wStream.IsValid() );
 				conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
 			}
@@ -1822,8 +1822,8 @@ void EditorServer::ShowUI( EditorProgram* program )
 		if ( ImGui::Button( "Game Load" ) && m_connections.Length() )
 		{
 			uint8_t buffer[ kMaxEditorMessageSize ];
-			ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer );
-			wStream.SerializeRaw( EditorMsg::Load );
+			ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer, sizeof(buffer) );
+			wStream.SerializeEnum( EditorMsg::Load );
 			wStream.SerializeString( m_levelPath );
 			for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 			{
@@ -2291,7 +2291,7 @@ void EditorServer::BroadcastVarChange( const ae::Var* var, const ae::Component* 
 		return;
 	}
 	ae::BinaryStream wStream = ae::BinaryStream::Writer( m_msgBuffer, sizeof(m_msgBuffer) );
-	wStream.SerializeRaw( EditorMsg::Modification );
+	wStream.SerializeEnum( EditorMsg::Modification );
 	wStream.SerializeUint32( component->GetEntity() );
 	wStream.SerializeUint32( ae::GetObjectTypeId( component ) );
 	wStream.SerializeString( var->GetName() );

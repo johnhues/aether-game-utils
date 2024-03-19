@@ -167,12 +167,12 @@ void Object::Serialize( ae::BinaryStream* stream )
   {
     if ( stream->IsWriter() )
     {
-      stream->SerializeRaw( shape->GetTransform() );
+      stream->SerializeRaw( &shape->GetTransform(), sizeof( shape->GetTransform() ) );
     }
     else
     {
       ae::Matrix4 transform;
-      stream->SerializeRaw( transform );
+      stream->SerializeRaw( &transform, sizeof( shape->GetTransform() ) );
       shape->SetTransform( transform );
     }
   }
@@ -191,7 +191,8 @@ void Object::Serialize( ae::BinaryStream* stream )
 
 void WriteObjects( ae::FileSystem* fileSystem, const ae::Array< Object* >& objects )
 {
-  ae::BinaryStream wStream = ae::BinaryStream::Writer();
+  ae::Array< uint8_t > buffer = TAG_EXAMPLE;
+  ae::BinaryStream wStream = ae::BinaryStream::Writer( &buffer );
   wStream.SerializeUint32( kCurrentFileVersion );
 
   wStream.SerializeUint32( objects.Length() );
