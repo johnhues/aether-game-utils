@@ -97,7 +97,7 @@ AE_PACK( struct TestStruct
 		stream->SerializeRaw( rawData, sizeof(rawData) );
 	}
 
-	void DoSerialize( ae::BinaryStream* stream ) const
+	void DoSerialize( ae::BinaryWriter* stream ) const
 	{
 		stream->SerializeUint8( uint8 );
 		stream->SerializeUint16( uint16 );
@@ -125,7 +125,7 @@ public:
 	{
 		stream->SerializeUint32( data );
 	}
-	void Serialize( ae::BinaryStream* stream ) const
+	void Serialize( ae::BinaryWriter* stream ) const
 	{
 		stream->SerializeUint32( data );
 	}
@@ -145,7 +145,7 @@ void Serialize( ae::BinaryStream* stream, StaticSerializeClass* obj )
 {
 	stream->SerializeUint32( obj->data );
 }
-void Serialize( ae::BinaryStream* stream, const StaticSerializeClass* obj )
+void Serialize( ae::BinaryWriter* stream, const StaticSerializeClass* obj )
 {
 	stream->SerializeUint32( obj->data );
 }
@@ -156,7 +156,7 @@ void Serialize( ae::BinaryStream* stream, const StaticSerializeClass* obj )
 class ConstMemberSerializeClass
 {
 public:
-	void Serialize( ae::BinaryStream* stream ) const
+	void Serialize( ae::BinaryWriter* stream ) const
 	{
 		stream->SerializeUint32( data );
 	}
@@ -167,65 +167,61 @@ public:
 //------------------------------------------------------------------------------
 // ae::BinaryStream
 //------------------------------------------------------------------------------
-TEST_CASE( "BinaryStream::Writer( void* data, uint32_t length )", "[ae::BinaryStream]" )
+TEST_CASE( "BinaryWriter( void* data, uint32_t length )", "[ae::BinaryStream]" )
 {
 	SECTION( "Create writer with a valid data pointer and length" )
 	{
 		uint8_t buffer[ 10 ];
-		ae::BinaryStream writer = ae::BinaryStream::Writer( buffer, sizeof(buffer) );
-		REQUIRE( writer.IsWriter() );
-		REQUIRE( writer.IsValid() );
-		REQUIRE( writer.GetData() == buffer );
-		REQUIRE( writer.GetOffset() == 0 );
-		REQUIRE( writer.GetRemainingBytes() == sizeof(buffer) );
-		REQUIRE( writer.GetSize() == sizeof(buffer) );
-		REQUIRE_THROWS( writer.PeekReadData() ); // Stream is writer
-		REQUIRE_THROWS( writer.DiscardReadData( 1 ) ); // Stream is writer
+		ae::BinaryWriter wStream( buffer, sizeof(buffer) );
+		REQUIRE( wStream.AsWriter() == &wStream );
+		REQUIRE( !wStream.AsReader() );
+		REQUIRE( wStream.IsValid() );
+		REQUIRE( wStream.GetData() == buffer );
+		REQUIRE( wStream.GetOffset() == 0 );
+		REQUIRE( wStream.GetRemainingBytes() == sizeof(buffer) );
+		REQUIRE( wStream.GetSize() == sizeof(buffer) );
 	}
 	
 	SECTION( "Create writer with a null data pointer with length 0" )
 	{
-		ae::BinaryStream writer = ae::BinaryStream::Writer( nullptr, 0 );
-		REQUIRE( writer.IsWriter() );
-		REQUIRE( !writer.IsValid() );
-		REQUIRE( writer.GetData() == nullptr );
-		REQUIRE( writer.GetOffset() == 0 );
-		REQUIRE( writer.GetRemainingBytes() == 0 );
-		REQUIRE( writer.GetSize() == 0 );
-		REQUIRE_THROWS( writer.PeekReadData() ); // Stream is writer
-		REQUIRE_THROWS( writer.DiscardReadData( 1 ) ); // Stream is writer
+		ae::BinaryWriter wStream( nullptr, 0 );
+		REQUIRE( wStream.AsWriter() == &wStream );
+		REQUIRE( !wStream.AsReader() );
+		REQUIRE( !wStream.IsValid() );
+		REQUIRE( wStream.GetData() == nullptr );
+		REQUIRE( wStream.GetOffset() == 0 );
+		REQUIRE( wStream.GetRemainingBytes() == 0 );
+		REQUIRE( wStream.GetSize() == 0 );
 	}
 	
 	SECTION( "Writing with a valid data pointer and 0 length" )
 	{
 		uint8_t buffer[ 10 ];
-		ae::BinaryStream writer = ae::BinaryStream::Writer( buffer, 0 );
-		REQUIRE( writer.IsWriter() );
-		REQUIRE( !writer.IsValid() );
-		REQUIRE( writer.GetData() == buffer );
-		REQUIRE( writer.GetOffset() == 0 );
-		REQUIRE( writer.GetRemainingBytes() == 0 ); // Stream is invalid
-		REQUIRE( writer.GetSize() == 0 );
-		REQUIRE_THROWS( writer.PeekReadData() ); // Stream is writer
-		REQUIRE_THROWS( writer.DiscardReadData( 1 ) ); // Stream is writer
+		ae::BinaryWriter wStream( buffer, 0 );
+		REQUIRE( wStream.AsWriter() == &wStream );
+		REQUIRE( !wStream.AsReader() );
+		REQUIRE( !wStream.IsValid() );
+		REQUIRE( wStream.GetData() == buffer );
+		REQUIRE( wStream.GetOffset() == 0 );
+		REQUIRE( wStream.GetRemainingBytes() == 0 ); // Stream is invalid
+		REQUIRE( wStream.GetSize() == 0 );
 	}
 }
 
-TEST_CASE( "BinaryStream::Writer( Array< uint8_t >* array )", "[ae::BinaryStream]" )
+TEST_CASE( "BinaryWriter( Array< uint8_t >* array )", "[ae::BinaryStream]" )
 {
 	SECTION( "Create writer with a valid empty array" )
 	{
 		ae::Array< uint8_t > buffer = TAG_TEST;
-		ae::BinaryStream writer = ae::BinaryStream::Writer( &buffer );
-		REQUIRE( writer.IsWriter() );
-		REQUIRE( writer.IsValid() );
-		REQUIRE( writer.GetData() == buffer.Data() );
-		REQUIRE( writer.GetOffset() == 0 );
-		REQUIRE( writer.GetRemainingBytes() == 0 ); // Stream storage is dynamic
-		REQUIRE( writer.GetSize() == 0 ); // Stream storage is dynamic
-		REQUIRE( writer.GetSize() == buffer.Size() ); // Stream storage is dynamic
-		REQUIRE_THROWS( writer.PeekReadData() ); // Stream is writer
-		REQUIRE_THROWS( writer.DiscardReadData( 1 ) ); // Stream is writer
+		ae::BinaryWriter wStream( &buffer );
+		REQUIRE( wStream.AsWriter() == &wStream );
+		REQUIRE( !wStream.AsReader() );
+		REQUIRE( wStream.IsValid() );
+		REQUIRE( wStream.GetData() == buffer.Data() );
+		REQUIRE( wStream.GetOffset() == 0 );
+		REQUIRE( wStream.GetRemainingBytes() == 0 ); // Stream storage is dynamic
+		REQUIRE( wStream.GetSize() == 0 ); // Stream storage is dynamic
+		REQUIRE( wStream.GetSize() == buffer.Size() ); // Stream storage is dynamic
 	}
 
 	SECTION( "Create writer with a valid non-zero length array" )
@@ -234,72 +230,87 @@ TEST_CASE( "BinaryStream::Writer( Array< uint8_t >* array )", "[ae::BinaryStream
 		buffer.Append( 1 );
 		buffer.Append( 2 );
 		buffer.Append( 3 );
-		ae::BinaryStream writer = ae::BinaryStream::Writer( &buffer );
-		REQUIRE( writer.IsWriter() );
-		REQUIRE( writer.IsValid() );
-		REQUIRE( writer.GetData() == buffer.Data() ); // Stream storage is dynamic
-		REQUIRE( writer.GetOffset() == buffer.Length() ); // Stream storage is dynamic
-		REQUIRE( writer.GetRemainingBytes() == buffer.Size() - buffer.Length() ); // Stream storage is dynamic
-		REQUIRE( writer.GetSize() == buffer.Size() ); // Stream storage is dynamic
-		REQUIRE_THROWS( writer.PeekReadData() ); // Stream is writer
-		REQUIRE_THROWS( writer.DiscardReadData( 1 ) ); // Stream is writer
+		ae::BinaryWriter wStream( &buffer );
+		REQUIRE( wStream.AsWriter() == &wStream );
+		REQUIRE( !wStream.AsReader() );
+		REQUIRE( wStream.IsValid() );
+		REQUIRE( wStream.GetData() == buffer.Data() ); // Stream storage is dynamic
+		REQUIRE( wStream.GetOffset() == buffer.Length() ); // Stream storage is dynamic
+		REQUIRE( wStream.GetRemainingBytes() == buffer.Size() - buffer.Length() ); // Stream storage is dynamic
+		REQUIRE( wStream.GetSize() == buffer.Size() ); // Stream storage is dynamic
+	}
+
+	SECTION( "Create writer with a null array" )
+	{
+		ae::BinaryWriter wStream( nullptr );
+		REQUIRE( wStream.AsWriter() == &wStream );
+		REQUIRE( !wStream.AsReader() );
+		REQUIRE( !wStream.IsValid() );
+		REQUIRE( wStream.GetData() == nullptr ); // Stream storage is dynamic
+		REQUIRE( wStream.GetOffset() == 0 ); // Stream storage is dynamic
+		REQUIRE( wStream.GetRemainingBytes() == 0 ); // Stream storage is dynamic
+		REQUIRE( wStream.GetSize() == 0 ); // Stream storage is dynamic
 	}
 }
 
-TEST_CASE( "BinaryStream::Reader( const void* data, uint32_t length )", "[ae::BinaryStream]" )
+TEST_CASE( "BinaryReader( const void* data, uint32_t length )", "[ae::BinaryStream]" )
 {
 	SECTION( "Create reader with a valid data pointer and length" )
 	{
 		uint8_t buffer[ 10 ];
-		ae::BinaryStream reader = ae::BinaryStream::Reader( buffer, sizeof(buffer) );
-		REQUIRE( reader.IsReader() );
-		REQUIRE( reader.IsValid() );
-		REQUIRE( reader.GetData() == buffer );
-		REQUIRE( reader.GetOffset() == 0 );
-		REQUIRE( reader.GetSize() == sizeof(buffer) );
-		REQUIRE( reader.PeekReadData() == buffer );
-		REQUIRE( reader.GetRemainingBytes() == sizeof(buffer) );
+		ae::BinaryReader rStream( buffer, sizeof(buffer) );
+		REQUIRE( rStream.AsReader() == &rStream );
+		REQUIRE( !rStream.AsWriter() );
+		REQUIRE( rStream.IsValid() );
+		REQUIRE( rStream.GetData() == buffer );
+		REQUIRE( rStream.GetOffset() == 0 );
+		REQUIRE( rStream.GetSize() == sizeof(buffer) );
+		REQUIRE( rStream.PeekReadData() == buffer );
+		REQUIRE( rStream.GetRemainingBytes() == sizeof(buffer) );
 	}
 	
 	SECTION( "Create reader with a null data pointer with length 0" )
 	{
-		ae::BinaryStream reader = ae::BinaryStream::Reader( nullptr, 0 );
-		REQUIRE( reader.IsReader() );
-		REQUIRE( !reader.IsValid() );
-		REQUIRE( reader.GetData() == nullptr );
-		REQUIRE( reader.GetOffset() == 0 );
-		REQUIRE( reader.GetSize() == 0 );
-		REQUIRE( reader.PeekReadData() == nullptr );
-		REQUIRE( reader.GetRemainingBytes() == 0 );
+		ae::BinaryReader rStream( nullptr, 0 );
+		REQUIRE( rStream.AsReader() == &rStream );
+		REQUIRE( !rStream.AsWriter() );
+		REQUIRE( !rStream.IsValid() );
+		REQUIRE( rStream.GetData() == nullptr );
+		REQUIRE( rStream.GetOffset() == 0 );
+		REQUIRE( rStream.GetSize() == 0 );
+		REQUIRE( rStream.PeekReadData() == nullptr );
+		REQUIRE( rStream.GetRemainingBytes() == 0 );
 	}
 	
 	SECTION( "Reading with a valid data pointer and 0 length" )
 	{
 		uint8_t buffer[ 10 ];
-		ae::BinaryStream reader = ae::BinaryStream::Reader( buffer, 0 );
-		REQUIRE( reader.IsReader() );
-		REQUIRE( !reader.IsValid() );
-		REQUIRE( reader.GetData() == buffer );
-		REQUIRE( reader.GetOffset() == 0 );
-		REQUIRE( reader.GetSize() == 0 );
-		REQUIRE( reader.PeekReadData() == nullptr );
-		REQUIRE( reader.GetRemainingBytes() == 0 );
+		ae::BinaryReader rStream( buffer, 0 );
+		REQUIRE( rStream.AsReader() == &rStream );
+		REQUIRE( !rStream.AsWriter() );
+		REQUIRE( !rStream.IsValid() );
+		REQUIRE( rStream.GetData() == buffer );
+		REQUIRE( rStream.GetOffset() == 0 );
+		REQUIRE( rStream.GetSize() == 0 );
+		REQUIRE( rStream.PeekReadData() == nullptr );
+		REQUIRE( rStream.GetRemainingBytes() == 0 );
 	}
 }
 
-TEST_CASE( "BinaryStream::Reader( const Array< uint8_t >& data )", "[ae::BinaryStream]" )
+TEST_CASE( "BinaryReader( const Array< uint8_t >& data )", "[ae::BinaryStream]" )
 {
 	SECTION( "Create reader with a valid empty array" )
 	{
 		ae::Array< uint8_t > buffer = TAG_TEST;
-		ae::BinaryStream reader = ae::BinaryStream::Reader( buffer );
-		REQUIRE( reader.IsReader() );
-		REQUIRE( !reader.IsValid() );
-		REQUIRE( reader.GetData() == buffer.Data() );
-		REQUIRE( reader.GetOffset() == 0 );
-		REQUIRE( reader.GetSize() == buffer.Size() );
-		REQUIRE( reader.PeekReadData() == nullptr );
-		REQUIRE( reader.GetRemainingBytes() == 0 );
+		ae::BinaryReader rStream( buffer );
+		REQUIRE( rStream.AsReader() == &rStream );
+		REQUIRE( !rStream.AsWriter() );
+		REQUIRE( !rStream.IsValid() );
+		REQUIRE( rStream.GetData() == buffer.Data() );
+		REQUIRE( rStream.GetOffset() == 0 );
+		REQUIRE( rStream.GetSize() == buffer.Size() );
+		REQUIRE( rStream.PeekReadData() == nullptr );
+		REQUIRE( rStream.GetRemainingBytes() == 0 );
 	}
 
 	SECTION( "Create reader with a valid non-zero length array" )
@@ -309,30 +320,30 @@ TEST_CASE( "BinaryStream::Reader( const Array< uint8_t >& data )", "[ae::BinaryS
 		_buffer.Append( 2 );
 		_buffer.Append( 3 );
 		const ae::Array< uint8_t >& buffer = _buffer;
-		ae::BinaryStream reader = ae::BinaryStream::Reader( buffer );
-		REQUIRE( reader.IsReader() );
-		REQUIRE( reader.IsValid() );
-		REQUIRE( reader.GetData() == buffer.Data() );
-		REQUIRE( reader.GetOffset() == 0 );
-		REQUIRE( reader.GetSize() == buffer.Length() );
-		REQUIRE( reader.PeekReadData() == buffer.Data() );
-		REQUIRE( reader.GetRemainingBytes() == buffer.Length() );
+		ae::BinaryReader rStream( buffer );
+		REQUIRE( rStream.AsReader() == &rStream );
+		REQUIRE( !rStream.AsWriter() );
+		REQUIRE( rStream.IsValid() );
+		REQUIRE( rStream.GetData() == buffer.Data() );
+		REQUIRE( rStream.GetOffset() == 0 );
+		REQUIRE( rStream.GetSize() == buffer.Length() );
+		REQUIRE( rStream.PeekReadData() == buffer.Data() );
+		REQUIRE( rStream.GetRemainingBytes() == buffer.Length() );
 	}
 }
 
 TEST_CASE( "BinaryStream writer serialize basic values", "ae::BinaryStream" )
 {
-
 	TestStruct _test;
 	_test.Initialize();
 
 	ae::Array< uint8_t > buffer = TAG_TEST;
-	ae::BinaryStream writer = ae::BinaryStream::Writer( &buffer );
+	ae::BinaryWriter wStream( &buffer );
 	const TestStruct& test = _test;
-	test.DoSerialize( &writer );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == sizeof(TestStruct) );
-	REQUIRE( buffer.Data() == writer.GetData() );
+	test.DoSerialize( &wStream );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == sizeof(TestStruct) );
+	REQUIRE( buffer.Data() == wStream.GetData() );
 	REQUIRE( buffer.Length() == sizeof(TestStruct) );
 
 	for( uint32_t i = 0; i < sizeof(TestStruct); i++ )
@@ -349,36 +360,36 @@ TEST_CASE( "BinaryStream reader serialize basic values", "ae::BinaryStream" )
 	buffer.AppendArray( reinterpret_cast< const uint8_t* >( &test0 ), sizeof(TestStruct) );
 
 	TestStruct test1;
-	ae::BinaryStream reader = ae::BinaryStream::Reader( buffer );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetData() == buffer.Data() );
-	REQUIRE( reader.GetOffset() == 0 );
-	REQUIRE( reader.GetSize() == buffer.Size() );
-	REQUIRE( reader.PeekReadData() == buffer.Data() );
-	REQUIRE( reader.GetRemainingBytes() == buffer.Length() );
-	test1.DoSerialize( &reader );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetOffset() == sizeof(TestStruct) );
-	REQUIRE( reader.PeekReadData() == buffer.Data() + sizeof(TestStruct) );
-	REQUIRE( reader.GetRemainingBytes() == 0 );
+	ae::BinaryReader rStream( buffer );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetData() == buffer.Data() );
+	REQUIRE( rStream.GetOffset() == 0 );
+	REQUIRE( rStream.GetSize() == buffer.Size() );
+	REQUIRE( rStream.PeekReadData() == buffer.Data() );
+	REQUIRE( rStream.GetRemainingBytes() == buffer.Length() );
+	test1.DoSerialize( &rStream );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == sizeof(TestStruct) );
+	REQUIRE( rStream.PeekReadData() == buffer.Data() + sizeof(TestStruct) );
+	REQUIRE( rStream.GetRemainingBytes() == 0 );
 	REQUIRE( memcmp( &test0, &test1, sizeof(TestStruct) ) == 0 );
 }
 
 TEST_CASE( "Try to write past end of data buffer", "ae::BinaryStream" )
 {
 	uint8_t buffer[ 10 ] = { 0 };
-	ae::BinaryStream writer = ae::BinaryStream::Writer( buffer, sizeof(buffer) );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == 0 );
-	writer.SerializeUint32( 0x12345678u );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == sizeof(uint32_t) );
-	writer.SerializeUint32( 0x12345678u );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == sizeof(uint32_t) * 2 );
-	writer.SerializeUint32( 0x12345678u );
-	REQUIRE( !writer.IsValid() );
-	REQUIRE( writer.GetOffset() == sizeof(uint32_t) * 2 );
+	ae::BinaryWriter wStream( buffer, sizeof(buffer) );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == 0 );
+	wStream.SerializeUint32( 0x12345678u );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) );
+	wStream.SerializeUint32( 0x12345678u );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
+	wStream.SerializeUint32( 0x12345678u );
+	REQUIRE( !wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
 
 	REQUIRE( buffer[ 0 ] == 0x78 );
 	REQUIRE( buffer[ 1 ] == 0x56 );
@@ -396,49 +407,49 @@ TEST_CASE( "Try to read past end of data buffer", "ae::BinaryStream" )
 {
 	uint8_t buffer[ 10 ];
 	memset( buffer, 0x22, sizeof(buffer) );
-	ae::BinaryStream reader = ae::BinaryStream::Reader( buffer, sizeof(buffer) );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetOffset() == 0 );
+	ae::BinaryReader rStream( buffer, sizeof(buffer) );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == 0 );
 
 	uint32_t check = 0xEFEFEFEF;
-	reader.SerializeUint32( check );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetOffset() == sizeof(uint32_t) );
+	rStream.SerializeUint32( check );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) );
 	REQUIRE( check == 0x22222222 );
 
 	check = 0xEFEFEFEF;
-	reader.SerializeUint32( check );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetOffset() == sizeof(uint32_t) * 2 );
+	rStream.SerializeUint32( check );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) * 2 );
 	REQUIRE( check == 0x22222222 );
 
 	check = 0xEFEFEFEF;
-	reader.SerializeUint32( check );
-	REQUIRE( !reader.IsValid() );
-	REQUIRE( reader.GetOffset() == sizeof(uint32_t) * 2 );
+	rStream.SerializeUint32( check );
+	REQUIRE( !rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == sizeof(uint32_t) * 2 );
 	REQUIRE( check == 0xEFEFEFEF );
 }
 
 TEST_CASE( "C string test", "ae::BinaryStream" )
 {
 	ae::Array< uint8_t > buffer = TAG_TEST;
-	ae::BinaryStream writer = ae::BinaryStream::Writer( &buffer );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == 0 );
-	writer.SerializeString( "Hello, World!" );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == buffer.Length() );
-	REQUIRE( writer.GetOffset() == sizeof("Hello, World!") ); // Length of string + null terminator
+	ae::BinaryWriter wStream( &buffer );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == 0 );
+	wStream.SerializeString( "Hello, World!" );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == buffer.Length() );
+	REQUIRE( wStream.GetOffset() == sizeof("Hello, World!") ); // Length of string + null terminator
 
-	ae::BinaryStream reader = ae::BinaryStream::Reader( buffer );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetOffset() == 0 );
-	REQUIRE( reader.GetRemainingBytes() == buffer.Length() );
+	ae::BinaryReader rStream( buffer );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == 0 );
+	REQUIRE( rStream.GetRemainingBytes() == buffer.Length() );
 	char str[ sizeof("Hello, World!") ];
 	memset( str, 0xAB, sizeof(str) );
-	reader.SerializeString( str, sizeof(str) );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetOffset() == sizeof("Hello, World!") );
+	rStream.SerializeString( str, sizeof(str) );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == sizeof("Hello, World!") );
 	REQUIRE( strcmp( str, "Hello, World!" ) == 0 );
 }
 
@@ -447,99 +458,106 @@ TEST_CASE( "C string test with buffer length 0", "ae::BinaryStream" )
 	ae::Array< uint8_t > buffer = TAG_TEST;
 	char str[ sizeof("Hello, World!") ];
 	strcpy( str, "Hello, World!" );
-	ae::BinaryStream writer = ae::BinaryStream::Writer( &buffer );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == 0 );
-	REQUIRE_THROWS( writer.SerializeString( str, 0 ) );
+	ae::BinaryWriter wStream( &buffer );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == 0 );
+	REQUIRE_THROWS( wStream.SerializeString( str, 0 ) );
 
-	ae::BinaryStream reader = ae::BinaryStream::Reader( buffer );
-	REQUIRE_THROWS( reader.SerializeString( str, 0 ) );
+	ae::BinaryReader rStream( buffer );
+	REQUIRE_THROWS( rStream.SerializeString( str, 0 ) );
 }
 
 TEST_CASE( "C string target buffer too small", "ae::BinaryStream" )
 {
 	char str[ 5 ];
-	ae::BinaryStream writer = ae::BinaryStream::Writer( str, sizeof(str) );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == 0 );
-	writer.SerializeString( "Hello, World!" );
-	REQUIRE( !writer.IsValid() );
+	ae::BinaryWriter wStream( str, sizeof(str) );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == 0 );
+	wStream.SerializeString( "Hello, World!" );
+	REQUIRE( !wStream.IsValid() );
 }
 
 TEST_CASE( "C string write buffer too small", "ae::BinaryStream" )
 {
 	ae::Array< uint8_t > buffer = TAG_TEST;
-	ae::BinaryStream writer = ae::BinaryStream::Writer( &buffer );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == 0 );
+	ae::BinaryWriter wStream( &buffer );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == 0 );
 	char str[ sizeof("Hello, World!") ];
 	strcpy( str, "Hello, World!" );
-	writer.SerializeString( str, 5 );
-	REQUIRE( !writer.IsValid() );
+	wStream.SerializeString( str, 5 );
+	REQUIRE( !wStream.IsValid() );
 }
 
 TEST_CASE( "C string read buffer too small", "ae::BinaryStream" )
 {
-	ae::Array< uint8_t > buffer = TAG_TEST;
-	ae::BinaryStream writer = ae::BinaryStream::Writer( &buffer );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == 0 );
-	writer.SerializeString( "Hello, World!" );
-	REQUIRE( writer.IsValid() );
-	REQUIRE( writer.GetOffset() == buffer.Length() );
-	REQUIRE( writer.GetOffset() == sizeof("Hello, World!") ); // Length of string + null terminator
-
-	ae::BinaryStream reader = ae::BinaryStream::Reader( buffer );
-	REQUIRE( reader.IsValid() );
-	REQUIRE( reader.GetOffset() == 0 );
-	REQUIRE( reader.GetRemainingBytes() == buffer.Length() );
 	char str[ sizeof("Hello, World!") ];
-	memset( str, 0xAB, sizeof(str) );
-	reader.SerializeString( str, 5 ); // Too small
-	REQUIRE( !reader.IsValid() );
-	REQUIRE( str[ 0 ] == 0 );
+	ae::Array< uint8_t > buffer = TAG_TEST;
+	ae::BinaryWriter wStream( &buffer );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == 0 );
+	wStream.SerializeString( "Hello, World!" );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == buffer.Length() );
+	REQUIRE( wStream.GetOffset() == sizeof("Hello, World!") );
+	strcpy( str, "Hello, World!" );
+	wStream.SerializeString( str, sizeof(str) );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == buffer.Length() );
+	REQUIRE( wStream.GetOffset() == sizeof("Hello, World!") * 2 );
+
+	SECTION( "Success" )
+	{
+		ae::BinaryReader rStream( buffer );
+		ae::Str64 check;
+		rStream.SerializeString( check );
+		REQUIRE( rStream.IsValid() );
+		REQUIRE( rStream.GetOffset() == countof(str) );
+		REQUIRE( check == "Hello, World!" );
+		check = "";
+		rStream.SerializeString( check );
+		REQUIRE( rStream.IsValid() );
+		REQUIRE( rStream.GetOffset() == countof(str) * 2 );
+		REQUIRE( check == "Hello, World!" );
+	}
+
+	SECTION( "Out buffer too small" )
+	{
+		ae::BinaryReader rStream( buffer );
+		REQUIRE( rStream.IsValid() );
+		REQUIRE( rStream.GetOffset() == 0 );
+		REQUIRE( rStream.GetRemainingBytes() == buffer.Length() );
+		memset( str, 0xAB, sizeof(str) );
+		rStream.SerializeString( str, 5 ); // Too small
+		REQUIRE( !rStream.IsValid() );
+		REQUIRE( str[ 0 ] == 0 );
+	}
 }
 
-#if 0
+TEST_CASE( "BinaryStream ae::Str serialization", "ae::BinaryStream" )
+{
+	ae::Str64 str = "Hello, World!";
+	uint8_t buffer[ 32 ];
+	ae::BinaryWriter wStream( buffer, sizeof(buffer) );
+	wStream.BinaryStream::SerializeString( str );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == ( str.Length() + 1 ) );
+	wStream.SerializeString( *const_cast< const ae::Str64* >( &str ) );
+	REQUIRE( wStream.IsValid() );
+	REQUIRE( wStream.GetOffset() == ( str.Length() + 1 ) * 2 );
 
-template< uint32_t N > void SerializeString( Str< N >& str );
-//! Writer mode only
-template< uint32_t N > void SerializeString( const Str< N >& str );
-//! Writer mode only
-void SerializeString( const char* str );
-
-//! Use SerializeObjectConditional() when an object may not be available for
-//! serialization when writing or reading. This function correctly updates
-//! read/write offsets when skipping serialization. Sends slightly more data
-//! than SerializeObject().
-template< typename T > void SerializeObjectConditional( T* obj );
-
-template< uint32_t N > void SerializeArray( char (&str)[ N ] );
-template< uint32_t N > void SerializeArray( const char (&str)[ N ] );
-void SerializeArray( Array< uint8_t >& array, uint32_t maxLength = 65535 );
-void SerializeArray( const Array< uint8_t >& array, uint32_t maxLength = 65535 );
-
-void SerializeRaw( Array< uint8_t >& array );
-void SerializeRaw( const Array< uint8_t >& array );
-
-// Once the stream is invalid serialization calls will result in silent no-ops
-void Invalidate() { m_isValid = false; }
-
-//! Returns the data at the current read head. One use case is with
-//! ae::BinaryStream::GetRemainingBytes() and ae::BinaryStream::DiscardReadData()
-//! to read chunks of data into another binary stream, so individual chunks
-//! can be invalidated separately. Returns null if called on an invalid or
-//! writer stream.
-const uint8_t* PeekReadData() const;
-//! Returns the number of bytes remaining in the buffer. Returns 0 if called
-//! on an invalid or writer stream.
-uint32_t GetRemainingBytes() const;
-//! Advances the read/write head by \p length bytes. If the end of the buffer
-//! is reached the stream is invalidated. Has no effect if called on an
-//! invalid or writer stream.
-void DiscardReadData( uint32_t length );
-
-#endif
+	ae::BinaryReader rStream( wStream.GetData(), wStream.GetOffset() );
+	ae::Str64 check;
+	rStream.SerializeString( check );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == ( str.Length() + 1 ) );
+	REQUIRE( check == str );
+	check = "";
+	rStream.SerializeString( check );
+	REQUIRE( rStream.IsValid() );
+	REQUIRE( rStream.GetOffset() == ( str.Length() + 1 ) * 2 );
+	REQUIRE( check == str );
+}
 
 TEST_CASE( "Member serialize function should be successfully detected", "[ae::BinaryStream]" )
 {
@@ -559,8 +577,9 @@ TEST_CASE( "Writer: Member and static function Serialize() should be called by S
 	StaticSerializeClass s;
 
 	uint8_t buffer[ 32 ];
-	ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer, sizeof(buffer) );
-	REQUIRE( wStream.IsWriter() );
+	ae::BinaryWriter wStream( buffer, sizeof(buffer) );
+	REQUIRE( wStream.AsWriter() == &wStream );
+	REQUIRE( !wStream.AsReader() );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == 0 );
 	REQUIRE( wStream.GetSize() == sizeof(buffer) );
@@ -568,11 +587,11 @@ TEST_CASE( "Writer: Member and static function Serialize() should be called by S
 	wStream.SerializeObject( m );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) );
-	wStream.SerializeObject( s );
+	wStream.BinaryStream::SerializeObject( s );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
 
-	ae::BinaryStream rStream = ae::BinaryStream::Reader( wStream.GetData(), wStream.GetOffset() );
+	ae::BinaryReader rStream( wStream.GetData(), wStream.GetOffset() );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == 0 );
 
@@ -596,8 +615,9 @@ TEST_CASE( "Writer: Const member and static function Serialize() should be calle
 	StaticSerializeClass s;
 
 	uint8_t buffer[ 32 ];
-	ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer, sizeof(buffer) );
-	REQUIRE( wStream.IsWriter() );
+	ae::BinaryWriter wStream( buffer, sizeof(buffer) );
+	REQUIRE( wStream.AsWriter() == &wStream );
+	REQUIRE( !wStream.AsReader() );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == 0 );
 	REQUIRE( wStream.GetSize() == sizeof(buffer) );
@@ -609,7 +629,7 @@ TEST_CASE( "Writer: Const member and static function Serialize() should be calle
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
 
-	ae::BinaryStream rStream = ae::BinaryStream::Reader( wStream.GetData(), wStream.GetOffset() );
+	ae::BinaryReader rStream( wStream.GetData(), wStream.GetOffset() );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == 0 );
 
@@ -632,8 +652,9 @@ TEST_CASE( "Writer: Support only having a const Serialize() that is called by Se
 	ConstMemberSerializeClass c;
 
 	uint8_t buffer[ 32 ];
-	ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer, sizeof(buffer) );
-	REQUIRE( wStream.IsWriter() );
+	ae::BinaryWriter wStream( buffer, sizeof(buffer) );
+	REQUIRE( wStream.AsWriter() == &wStream );
+	REQUIRE( !wStream.AsReader() );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == 0 );
 	REQUIRE( wStream.GetSize() == sizeof(buffer) );
@@ -645,7 +666,7 @@ TEST_CASE( "Writer: Support only having a const Serialize() that is called by Se
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
 
-	ae::BinaryStream rStream = ae::BinaryStream::Reader( wStream.GetData(), wStream.GetOffset() );
+	ae::BinaryReader rStream( wStream.GetData(), wStream.GetOffset() );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == 0 );
 
@@ -669,8 +690,9 @@ TEST_CASE( "Reader: Member and static function Serialize() should be called by S
 	StaticSerializeClass s;
 
 	uint8_t buffer[ 32 ];
-	ae::BinaryStream wStream = ae::BinaryStream::Writer( buffer, sizeof(buffer) );
-	REQUIRE( wStream.IsWriter() );
+	ae::BinaryWriter wStream( buffer, sizeof(buffer) );
+	REQUIRE( wStream.AsWriter() == &wStream );
+	REQUIRE( !wStream.AsReader() );
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == 0 );
 	REQUIRE( wStream.GetSize() == sizeof(buffer) );
@@ -684,7 +706,7 @@ TEST_CASE( "Reader: Member and static function Serialize() should be called by S
 	REQUIRE( wStream.IsValid() );
 	REQUIRE( wStream.GetOffset() == sizeof(uint32_t) * 2 );
 
-	ae::BinaryStream rStream = ae::BinaryStream::Reader( wStream.GetData(), wStream.GetOffset() );
+	ae::BinaryReader rStream( wStream.GetData(), wStream.GetOffset() );
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == 0 );
 
@@ -699,3 +721,9 @@ TEST_CASE( "Reader: Member and static function Serialize() should be called by S
 
 	REQUIRE( rStream.GetOffset() == rStream.GetSize() );
 }
+
+//! Use SerializeObjectConditional() when an object may not be available for
+//! serialization when writing or reading. This function correctly updates
+//! read/write offsets when skipping serialization. Sends slightly more data
+//! than SerializeObject().
+template< typename T > void SerializeObjectConditional( T* objInOut );

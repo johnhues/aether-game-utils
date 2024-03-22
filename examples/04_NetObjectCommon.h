@@ -113,7 +113,7 @@ public:
     // Client - read net data
     if ( !netObject->IsAuthority() )
     {
-      ae::BinaryStream rStream = ae::BinaryStream::Reader( netObject->GetSyncData(), netObject->SyncDataLength() );
+      ae::BinaryReader rStream( netObject->GetSyncData(), netObject->SyncDataLength() );
       Serialize( &rStream );
       if ( ( m_pos - m_netPos ).Length() > 2.5f )
       {
@@ -140,7 +140,7 @@ public:
       m_netPos = m_pos;
       m_netRotation = m_rotation;
       ae::Array< uint8_t > buffer = TAG_EXAMPLE;
-      ae::BinaryStream wStream = ae::BinaryStream::Writer( &buffer );
+      ae::BinaryWriter wStream( &buffer );
       Serialize( &wStream );
       netObject->SetSyncData( wStream.GetData(), wStream.GetOffset() );
     }

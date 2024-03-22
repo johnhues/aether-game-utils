@@ -83,12 +83,12 @@ int main()
 				
 				// Receive message data
 				ae::Str32 recvMsg;
-				ae::BinaryStream rStream = ae::BinaryStream::Reader( messageData, messageLen );
+				ae::BinaryReader rStream( messageData, messageLen );
 				rStream.SerializeString( recvMsg );
 				
 				// Send response
 				ae::Str32 sendMsg = "pong";
-				ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, sizeof(messageData) );
+				ae::BinaryWriter wStream( messageData, sizeof(messageData) );
 				wStream.SerializeString( sendMsg );
 				if ( conn->QueueMsg( wStream.GetData(), wStream.GetOffset() ) )
 				{

@@ -73,7 +73,7 @@ int main()
 			}
 
 			ae::Str32 msg;
-			ae::BinaryStream rStream = ae::BinaryStream::Reader( messageData, messageLen );
+			ae::BinaryReader rStream( messageData, messageLen );
 			rStream.SerializeString( msg );
 			AE_INFO( "Received '#'", msg );
 		}
@@ -88,7 +88,7 @@ int main()
 		{
 			ae::Str32 msg = "ping";
 			uint8_t messageData[ 64 ];
-			ae::BinaryStream wStream = ae::BinaryStream::Writer( messageData, sizeof(messageData) );
+			ae::BinaryWriter wStream( messageData, sizeof(messageData) );
 			wStream.SerializeString( msg );
 			if ( conn.QueueMsg( wStream.GetData(), wStream.GetOffset() ) )
 			{
