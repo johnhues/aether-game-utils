@@ -77,7 +77,7 @@ int main()
     // Create new replicated objects
     while ( ae::NetObject* netObject = netObjectClient.PumpCreate() )
     {
-      ae::BinaryStream readStream = ae::BinaryStream::Reader( netObject->GetSyncData(), netObject->SyncDataLength() );
+      ae::BinaryReader readStream( netObject->GetSyncData(), netObject->SyncDataLength() );
       GameObject* obj = &gameObjects.Append( GameObject( ae::Color::White() ) );
       obj->netObject = netObject;
       obj->Serialize( &readStream );
@@ -116,7 +116,7 @@ int main()
       if ( obj )
       {
         uint8_t buffer[ 64 ];
-        ae::BinaryStream stream = ae::BinaryStream::Writer( buffer, countof(buffer) );
+        ae::BinaryWriter stream( buffer, countof(buffer) );
         obj->input = InputInfo();
         obj->input.accel += game.input.Get( ae::Key::Up ) ? 1.0f : 0.0f;
         obj->input.accel -= game.input.Get( ae::Key::Down ) ? 1.0f : 0.0f;

@@ -4619,117 +4619,110 @@ private:
 	ae::Array< Channel > m_sfxLoopChannels = AE_ALLOC_TAG_AUDIO;
 };
 
+class BinaryWriter;
+class BinaryReader;
 //------------------------------------------------------------------------------
-// ae::BinaryStream class
+// ae::BinaryStream base class
 //------------------------------------------------------------------------------
 class BinaryStream
 {
 public:
-	static BinaryStream Writer( uint8_t* data, uint32_t length );
-	static BinaryStream Writer( Array< uint8_t >* array );
-	static BinaryStream Writer();
-	static BinaryStream Reader( const uint8_t* data, uint32_t length );
-	static BinaryStream Reader( const Array< uint8_t >& data );
-	template < uint32_t N > static BinaryStream Writer( uint8_t (&data)[ N ] );
+	//! BinaryStream can't be constructed directly, see ae::BinaryWriter and
+	//! ae::BinaryReader. Use this function to check if this is a writer stream
+	//! or to call writer only serialization functions. Returns this as an
+	//! ae::BinaryWriter if the stream is configured to write to the given
+	//! buffer, otherwise returns nullptr.
+	ae::BinaryWriter* AsWriter() { return ( m_mode == Mode::WriteBuffer ) ? reinterpret_cast< ae::BinaryWriter* >( this ) : nullptr; }
+	//! BinaryStream can't be constructed directly, see ae::BinaryWriter and
+	//! ae::BinaryReader. Use this function to check if this is a reader stream
+	//! or to call reader only serialization functions. Returns this as an
+	//! ae::BinaryReader if the stream is configured to read from the given
+	//! buffer, otherwise returns nullptr.
+	ae::BinaryReader* AsReader() { return ( m_mode == Mode::ReadBuffer ) ? reinterpret_cast< ae::BinaryReader* >( this ) : nullptr; }
+	//! BinaryStream can't be constructed directly, see ae::BinaryWriter and
+	//! ae::BinaryReader. Use this function to check if this is a writer stream
+	//! or to call writer only serialization functions. Returns this as an
+	//! ae::BinaryWriter if the stream is configured to write to the given
+	//! buffer, otherwise returns nullptr.
+	const ae::BinaryWriter* AsWriter() const { return ( m_mode == Mode::WriteBuffer ) ? reinterpret_cast< const ae::BinaryWriter* >( this ) : nullptr; }
+	//! BinaryStream can't be constructed directly, see ae::BinaryWriter and
+	//! ae::BinaryReader. Use this function to check if this is a reader stream
+	//! or to call reader only serialization functions. Returns this as an
+	//! ae::BinaryReader if the stream is configured to read from the given
+	//! buffer, otherwise returns nullptr.
+	const ae::BinaryReader* AsReader() const { return ( m_mode == Mode::ReadBuffer ) ? reinterpret_cast< const ae::BinaryReader* >( this ) : nullptr; }
 
-	void SerializeUint8( uint8_t& v );
-	void SerializeUint8( const uint8_t& v );
-	void SerializeUint16( uint16_t& v );
-	void SerializeUint16( const uint16_t& v );
-	void SerializeUint32( uint32_t& v );
-	void SerializeUint32( const uint32_t& v );
-	void SerializeUint64( uint64_t& v );
-	void SerializeUint64( const uint64_t& v );
+	void SerializeUint8( uint8_t& valInOut );
+	void SerializeUint16( uint16_t& valInOut );
+	void SerializeUint32( uint32_t& valInOut );
+	void SerializeUint64( uint64_t& valInOut );
+	void SerializeInt8( int8_t& valInOut );
+	void SerializeInt16( int16_t& valInOut );
+	void SerializeInt32( int32_t& valInOut );
+	void SerializeInt64( int64_t& valInOut );
+	void SerializeFloat( float& valInOut );
+	void SerializeDouble( double& valInOut );
+	void SerializeBool( bool& valInOut );
+	template< typename E > void SerializeEnum( E& valInOut );
+	template< uint32_t N > void SerializeString( Str< N >& strInOut );
+	//! \p bufferSize should include room for the null terminator, so the maximum
+	//! string length is \p bufferSize - 1. In write mode the null terminator is
+	//! always written to \p strInOut if bufferSize is greater than 0. If the
+	//! string is longer than \p bufferSize - 1 the stream will be invalidated.
+	void SerializeString( char* strInOut, uint32_t bufferSize );
+	//! Calls 'T ::Serialize( ae::BinaryStream* )' on \p valInOut, or
+	//! void Serialize( ae::BinaryStream*, T& ) if a member function serialize
+	//! is not found. If the stream is a writer stream or T is const, this
+	//! can fallback to calling 'T ::Serialize( ae::BinaryWriter* ) const' if
+	//! it exists or 'void Serialize( ae::BinaryWriter*, T& )' if it does not.
+	template< typename T > void SerializeObject( T& valInOut );
+	//! Serialize \p data to or from the stream. The \p length of the data is
+	//! not serialized, and so the same length must be used for reading and
+	//! writing. Use this with caution as platforms will have different struct
+	//! packing, byte order, and alignment.
+	void SerializeRaw( void* dataInOut, uint32_t length );
 
-	void SerializeInt8( int8_t& v );
-	void SerializeInt8( const int8_t& v );
-	void SerializeInt16( int16_t& v );
-	void SerializeInt16( const int16_t& v );
-	void SerializeInt32( int32_t& v );
-	void SerializeInt32( const int32_t& v );
-	void SerializeInt64( int64_t& v );
-	void SerializeInt64( const int64_t& v );
-
-	void SerializeFloat( float& v );
-	void SerializeFloat( const float& v );
-	void SerializeDouble( double& v );
-	void SerializeDouble( const double& v );
-
-	void SerializeBool( bool& v );
-	void SerializeBool( const bool& v );
-	
-	template< uint32_t N > void SerializeString( Str< N >& str );
-	//! Writer mode only
-	template< uint32_t N > void SerializeString( const Str< N >& str );
-	//! Writer mode only
-	void SerializeString( const char* str );
-
-	template< typename T > void SerializeObject( T& v );
-	template< typename T > void SerializeObject( const T& v );
-	// Use SerializeObjectConditional() when an object may not be available for serialization when writing or reading. This function correctly updates read/write offsets when skipping serialization. Sends slightly more data than SerializeObject().
-	template< typename T > void SerializeObjectConditional( T* obj );
-
-	template< uint32_t N >
-	void SerializeArray( char (&str)[ N ] );
-	template< uint32_t N >
-	void SerializeArray( const char (&str)[ N ] );
-	void SerializeArray( Array< uint8_t>& array, uint32_t maxLength = 65535 );
-	void SerializeArray( const Array< uint8_t>& array, uint32_t maxLength = 65535 );
-
-	// @NOTE: Be careful when using SerializeRaw() functions, different platforms
-	// will have different struct packing and alignment schemes.
-	template< typename T >
-	void SerializeRaw( T& v );
-	template< typename T >
-	void SerializeRaw( const T& v );
-	void SerializeRaw( void* data, uint32_t length );
-	void SerializeRaw( const void* data, uint32_t length );
-	void SerializeRaw( Array< uint8_t >& array );
-	void SerializeRaw( const Array< uint8_t >& array );
-
-	// Once the stream is invalid serialization calls will result in silent no-ops
+	//! Invalidates the stream for future reading and writing. Use this when
+	//! a serialization issue is detected. Use in conjunction with IsValid().
+	//! Once the stream is invalid serialization calls will result in silent no-ops.
 	void Invalidate() { m_isValid = false; }
+	//! Returns true if the stream is valid for reading and writing. Once the
+	//! stream is invalid serialization calls will result in silent no-ops.
 	bool IsValid() const { return m_isValid; }
-	
-	// Get mode
-	bool IsWriter() const { return m_mode == Mode::WriteBuffer; }
-	bool IsReader() const { return m_mode == Mode::ReadBuffer; }
 
-	// Get data buffer
-	const uint8_t* GetData() const { return ( m_data || m_GetArray().Length() == 0 ) ? m_data : &m_GetArray()[ 0 ]; }
+	//! Get the data buffer provided on construction. Valid only until the next
+	//! serialization call for writer streams initialized with an ae::Array,
+	//! otherwise the data buffer location is constant.
+	const uint8_t* GetData() const { return m_extArray ? m_extArray->Data() : m_data; }
+	//! Current read/write head position in bytes. When writing to a file or
+	//! socket etc call this function and ae::BinaryStream::GetData() to get the
+	//! contained binary data.
 	uint32_t GetOffset() const { return m_offset; }
-	uint32_t GetLength() const { return m_length; }
+	//! Returns the number of bytes remaining after GetOffset() in the read/write
+	//! buffer. Returns 0 if called on an invalid stream.
+	uint32_t GetRemainingBytes() const { return IsValid() ? ( m_length - m_offset ) : 0; }
+	//! Total length in bytes of the data buffer. This can grow when in write
+	//! mode with initialized with an ae::Array, but will otherwise stay
+	//! consistent across the lifetime of the stream.
+	uint32_t GetSize() const { return m_length; }
 
-	// Get data past the current read head
-	const uint8_t* PeekData() const { return GetData() + m_offset; }
-	uint32_t GetRemaining() const { return m_length - m_offset; }
-	void Discard( uint32_t length );
-
-	// Internal
+protected:
 	enum class Mode
 	{
 		None,
 		ReadBuffer,
 		WriteBuffer,
 	};
-private:
-	Array< uint8_t >& m_GetArray() { return m_extArray ? *m_extArray : m_array; }
-	const Array< uint8_t >& m_GetArray() const { return m_extArray ? *m_extArray : m_array; }
-	void m_SerializeArrayLength( uint32_t& length, uint32_t maxLength );
 	Mode m_mode = Mode::None;
 	bool m_isValid = false;
 	uint8_t* m_data = nullptr;
 	uint32_t m_length = 0;
 	uint32_t m_offset = 0;
 	Array< uint8_t >* m_extArray = nullptr;
-	Array< uint8_t > m_array = AE_ALLOC_TAG_NET;
-
 	BinaryStream() = default;
-	BinaryStream( Mode mode, uint8_t * data, uint32_t length );
-	BinaryStream( Mode mode, const uint8_t * data, uint32_t length );
-	BinaryStream( Mode mode );
-	BinaryStream( Array< uint8_t >*array );
-
+	BinaryStream( Mode mode, void* data, uint32_t size ); // Read or write
+	BinaryStream( Mode mode, const void* data, uint32_t size ); // Read only
+	BinaryStream( Array< uint8_t >*array ); // Write only
 	// Prevent Serialize functions from being called accidentally through automatic conversions
 	template < typename T > void SerializeUint8( T ) = delete;
 	template < typename T > void SerializeUint16( T ) = delete;
@@ -4746,6 +4739,80 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::BinaryWriter class
+//------------------------------------------------------------------------------
+class BinaryWriter : public ae::BinaryStream
+{
+public:
+	//! Creates a stream where all serialization calls will write to \p data, up
+	//! to \p length bytes. The stream will be invalidated if \p data is nullptr
+	//! or \p length is 0. The lifetime of \p data must exceed the lifetime of
+	//! the stream.
+	BinaryWriter( void* data, uint32_t length );
+	//! Creates a stream where all serialization calls will write to \p data. The
+	//! internal buffer will grow as needed. The stream will be invalidated if
+	//! \p data is nullptr. The lifetime of \p data must exceed the lifetime of
+	//! the stream.
+	BinaryWriter( ae::Array< uint8_t >* data );
+
+	void SerializeUint8( const uint8_t& valIn );
+	void SerializeUint16( const uint16_t& valIn );
+	void SerializeUint32( const uint32_t& valIn );
+	void SerializeUint64( const uint64_t& valIn );
+	void SerializeInt8( const int8_t& valIn );
+	void SerializeInt16( const int16_t& valIn );
+	void SerializeInt32( const int32_t& valIn );
+	void SerializeInt64( const int64_t& valIn );
+	void SerializeFloat( const float& valIn );
+	void SerializeDouble( const double& valIn );
+	void SerializeBool( const bool& valIn );
+	template< typename E > void SerializeEnum( const E& valIn );
+	template< uint32_t N > void SerializeString( const Str< N >& strIn );
+	void SerializeString( const char* strIn );
+	//! Calls 'T ::Serialize( ae::BinaryWriter* ) const' on \p valIn if it
+	//! exists or 'void Serialize( ae::BinaryWriter*, T& )' if it does not.
+	template< typename T > void SerializeObject( const T& valIn );
+	//! Serialize \p data to the stream. The \p length of the data is not
+	//! serialized, and so the same length must be used for reading and writing.
+	//! Use this with caution as platforms will have different struct packing,
+	//! byte order, and alignment.
+	void SerializeRaw( const void* dataIn, uint32_t length );
+
+	//! See ae::BinaryStream::SerializeString(). This function only prevents
+	//! shadowing of the base class function.
+	void SerializeString( char* strInOut, uint32_t bufferSize ) { BinaryStream::SerializeString( strInOut, bufferSize ); }
+	//! See ae::BinaryStream::SerializeObject(). This function only prevents
+	//! shadowing of the base class function.
+	template< typename T > void SerializeObject( T& valInOut );
+};
+
+//------------------------------------------------------------------------------
+// ae::BinaryReader class
+//------------------------------------------------------------------------------
+class BinaryReader : public ae::BinaryStream
+{
+public:
+	//! Creates a stream where all serialization calls will read from \p data,
+	//! up to \p length bytes. The stream will be invalidated if \p data is
+	//! nullptr or \p length is 0. The lifetime of \p data must exceed the
+	//! lifetime of the stream.
+	BinaryReader( const void* data, uint32_t length );
+	//! Creates a stream where all serialization calls will read from \p data.
+	//! The lifetime of \p data must exceed the lifetime of the stream.
+	BinaryReader( const ae::Array< uint8_t >& data );
+
+	//! Returns the data at the current read head. Can be used with
+	//! ae::BinaryStream::GetRemainingBytes() and ae::BinaryStream::DiscardReadData()
+	//! to read chunks of data from the stream. Returns null if called on an
+	//! invalid stream.
+	const uint8_t* PeekReadData() const;
+	//! Advances the read head by \p length bytes. If the end of the buffer
+	//! is reached the stream is invalidated. Has no effect if called on an
+	//! invalid stream.
+	void DiscardReadData( uint32_t length );
+};
+
+//------------------------------------------------------------------------------
 // ae::NetId struct
 //------------------------------------------------------------------------------
 struct NetId
@@ -4758,7 +4825,7 @@ struct NetId
 	explicit operator bool () const { return m_id != 0; }
 	uint32_t GetInternalId() const { return m_id; }
 	void Serialize( BinaryStream* s ) { s->SerializeUint32( m_id ); }
-	void Serialize( BinaryStream* s ) const { s->SerializeUint32( m_id ); }
+	void Serialize( BinaryWriter* w ) const { w->SerializeUint32( m_id ); }
 private:
 	uint32_t m_id = 0;
 };
@@ -4879,7 +4946,7 @@ public:
 	RemoteId GetRemoteId( NetId localId ) const { return m_localToRemoteIdMap.Get( localId, {} ); }
 
 private:
-	NetObject* m_CreateNetObject( BinaryStream* rStream, bool allowResolve );
+	NetObject* m_CreateNetObject( ae::BinaryReader* rStream, bool allowResolve );
 	void m_StartNetObjectDestruction( NetObject* netObject );
 	uint32_t m_serverSignature = 0;
 	uint32_t m_lastNetId = 0;
@@ -10390,49 +10457,53 @@ const T* VertexArray::GetIndices() const
 //------------------------------------------------------------------------------
 // ae::BinaryStream member functions
 //------------------------------------------------------------------------------
-template < uint32_t N >
-BinaryStream BinaryStream::Writer( uint8_t (&data)[ N ] )
+template< typename E >
+void BinaryStream::SerializeEnum( E& v )
 {
-	return BinaryStream( Mode::WriteBuffer, data, N );
+	AE_STATIC_ASSERT( std::is_enum< E >::value );
+	SerializeRaw( &v, sizeof( E ) );
+}
+
+template< typename E >
+void BinaryWriter::SerializeEnum( const E& v )
+{
+	AE_STATIC_ASSERT( std::is_enum< E >::value );
+	SerializeRaw( &v, sizeof( E ) );
 }
 
 template < uint32_t N >
-void BinaryStream::SerializeString( Str< N >& str )
+void BinaryStream::SerializeString( Str< N >& strInOut )
 {
-	if ( IsWriter() )
+	if( ae::BinaryReader* reader = AsReader() )
 	{
-		const uint16_t len = str.Length();
-		SerializeUint16( len );
-		SerializeRaw( str.c_str(), len );
-	}
-	else if ( IsReader() )
-	{
-		uint16_t len = 0;
-		SerializeUint16( len );
-		if ( !IsValid() )
+		if( auto end = (const uint8_t*)memchr( reader->PeekReadData(), '\0', GetRemainingBytes() ) )
 		{
-			return;
-		}
-
-		if ( len > Str< N >::MaxLength() || GetRemaining() < len )
-		{
-			Invalidate();
+			const uint32_t strLength = (uint32_t)( end - reader->PeekReadData() );
+			if( strLength < strInOut.MaxLength() )
+			{
+				strInOut = Str< N >( strLength, (const char*)reader->PeekReadData() );
+				reader->DiscardReadData( strLength + 1 );
+			}
+			else
+			{
+				Invalidate();
+			}
 		}
 		else
 		{
-			str = Str< N >( len, (const char*)PeekData() );
-			Discard( len );
+			Invalidate();
 		}
+	}
+	else if( ae::BinaryWriter* writer = AsWriter() )
+	{
+		writer->SerializeRaw( strInOut.c_str(), strInOut.Length() + 1 );
 	}
 }
 
 template < uint32_t N >
-void BinaryStream::SerializeString( const Str< N >& str )
+void BinaryWriter::SerializeString( const Str< N >& strIn )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
-	const uint16_t len = str.Length();
-	SerializeUint16( len );
-	SerializeRaw( str.c_str(), len );
+	SerializeRaw( strIn.c_str(), strIn.Length() + 1 );
 }
 
 template < class C >
@@ -10447,15 +10518,22 @@ struct HasSerializeMethod
 template < class C >
 struct HasConstSerializeMethod
 {
-	template < class T > static std::true_type testSignature(void (T::*)( ae::BinaryStream* ) const);
+	template < class T > static std::true_type testSignature(void (T::*)( ae::BinaryWriter* ) const);
 	template < class T > static decltype(testSignature(&T::Serialize)) test(std::nullptr_t);
 	template < class T > static std::false_type test(...);
 	static const bool value = decltype(test<C>(nullptr))::value;
 };
 
 template< typename T >
-typename std::enable_if< HasSerializeMethod< T >::value || HasConstSerializeMethod< T >::value >::type
+typename std::enable_if< HasSerializeMethod< T >::value >::type
 BinaryStream_SerializeObjectInternal( ae::BinaryStream* stream, T& v )
+{
+	v.Serialize( stream );
+}
+
+template< typename T >
+typename std::enable_if< !HasSerializeMethod< T >::value && HasConstSerializeMethod< T >::value >::type
+BinaryStream_SerializeObjectInternal( ae::BinaryWriter* stream, T& v )
 {
 	v.Serialize( stream );
 }
@@ -10468,185 +10546,35 @@ BinaryStream_SerializeObjectInternal( ae::BinaryStream* stream, T& v, ... )
 }
 
 template< typename T >
+typename std::enable_if< HasConstSerializeMethod< T >::value >::type
+BinaryStream_SerializeObjectInternalConst( ae::BinaryWriter* stream, const T& v )
+{
+	v.Serialize( stream );
+}
+
+template< typename T >
+typename std::enable_if< !HasConstSerializeMethod< T >::value >::type
+BinaryStream_SerializeObjectInternalConst( ae::BinaryWriter* stream, const T& v, ... )
+{
+	Serialize( stream, &v );
+}
+
+template< typename T >
+void BinaryWriter::SerializeObject( T& v )
+{
+	BinaryStream_SerializeObjectInternal< T >( this, v );
+}
+
+template< typename T >
 void BinaryStream::SerializeObject( T& v )
 {
-	BinaryStream_SerializeObjectInternal( this, v );
+	BinaryStream_SerializeObjectInternal< T >( this, v );
 }
 
 template< typename T >
-void BinaryStream::SerializeObject( const T& v )
+void BinaryWriter::SerializeObject( const T& v )
 {
-	BinaryStream_SerializeObjectInternal( this, v );
-}
-
-template< typename T >
-void BinaryStream::SerializeRaw( T& v )
-{
-	if ( !m_isValid )
-	{
-		return;
-	}
-	else if ( m_mode == Mode::ReadBuffer )
-	{
-		AE_ASSERT( m_offset + sizeof(T) <= m_length );
-		memcpy( &v, m_data + m_offset, sizeof(T) );
-		m_offset += sizeof(T);
-	}
-	else if ( m_mode == Mode::WriteBuffer )
-	{
-		if ( m_data )
-		{
-			AE_ASSERT( sizeof(T) <= m_length - m_offset );
-			memcpy( m_data + m_offset, &v, sizeof(T) );
-			m_offset += sizeof(T);
-		}
-		else
-		{
-			Array< uint8_t >& array = m_GetArray();
-			array.AppendArray( (uint8_t*)&v, sizeof(T) );
-			m_offset = array.Length();
-			m_length = array.Size();
-		}
-	}
-	else
-	{
-		AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
-	}
-}
-
-template< typename T >
-void BinaryStream::SerializeRaw( const T& v )
-{
-	AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const type." );
-	SerializeRaw( *const_cast< T* >( &v ) );
-}
-
-template< uint32_t N >
-void BinaryStream::SerializeArray( char (&str)[ N ] )
-{
-	// @TODO: Cleanup and use m_SerializeArrayLength()
-	uint16_t len = 0;
-	if ( !m_isValid )
-	{
-		return;
-	}
-	else if ( m_mode == Mode::ReadBuffer )
-	{
-		AE_ASSERT( m_offset + sizeof(len) <= m_length ); // @TODO: Remove this and invalidate stream instead
-		memcpy( &len, m_data + m_offset, sizeof(len) );
-		m_offset += sizeof(len);
-
-		AE_ASSERT( m_offset + len + 1 <= m_length ); // @TODO: Remove this and invalidate stream instead
-		memcpy( str, m_data + m_offset, len );
-		str[ len ] = 0;
-		m_offset += len;
-	}
-	else if ( m_mode == Mode::WriteBuffer )
-	{
-		len = strlen( str );
-
-		if ( m_data )
-		{
-			AE_ASSERT( sizeof(len) <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
-			memcpy( m_data + m_offset, &len, sizeof(len) );
-			m_offset += sizeof(len);
-
-			AE_ASSERT( len <= m_length - m_offset ); // @TODO: Remove this and invalidate stream instead
-			memcpy( m_data + m_offset, str, len );
-			m_offset += len;
-		}
-		else
-		{
-			Array< uint8_t >& array = m_GetArray();
-			array.AppendArray( (uint8_t*)&len, sizeof(len) );
-			array.AppendArray( (uint8_t*)&str, len );
-			m_offset = array.Length();
-			m_length = array.Size();
-		}
-	}
-	else
-	{
-		AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
-	}
-}
-
-template< uint32_t N >
-void BinaryStream::SerializeArray( const char (&str)[ N ] )
-{
-	AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
-	SerializeArray( const_cast< char[ N ] >( str ) );
-}
-
-template < typename T >
-void BinaryStream::SerializeObjectConditional( T* obj )
-{
-	if ( !m_isValid )
-	{
-		return;
-	}
-	else if ( m_mode == Mode::ReadBuffer )
-	{
-		uint16_t length = 0;
-		SerializeRaw( &length, sizeof( length ) );
-
-		if ( length )
-		{
-			if ( obj )
-			{
-				// Read object
-				uint32_t prevOffset = m_offset;
-				SerializeObject( *obj );
-
-				// Object should always read everything it wrote
-				if ( prevOffset + length != m_offset )
-				{
-					Invalidate();
-				}
-			}
-			else
-			{
-				Discard( length );
-			}
-		}
-	}
-	else if ( m_mode == Mode::WriteBuffer )
-	{
-		if ( obj )
-		{
-			// Reserve length
-			uint32_t lengthOffset = m_offset;
-			uint16_t lengthFake = 0xCDCD;
-			SerializeRaw( &lengthFake, sizeof( lengthFake ) ); // Raw to avoid compression
-
-			// Write object
-			uint32_t prevOffset = m_offset;
-			SerializeObject( *obj );
-
-			// Rewrite previously serialized value
-			uint32_t writeLength = m_offset - prevOffset;
-			if ( writeLength > MaxValue< uint16_t >() )
-			{
-				Invalidate(); // Object is too large to serialize
-			}
-			else if ( IsValid() ) // Can become invalid while writing by running out of memory
-			{
-				// @NOTE: Use length offset from above (and not a pointer into the data buffer) because the data buffer may not yet bet allocated or may be reallocated while serializing
-				AE_ASSERT( GetData() );
-				uint16_t* length = (uint16_t*)( GetData() + lengthOffset );
-				AE_ASSERT( *length == 0xCDCD );
-				*length = writeLength;
-			}
-		}
-		else
-		{
-			uint16_t length = 0;
-			SerializeRaw( &length, sizeof( length ) ); // Raw to avoid compression
-		}
-	}
-	else
-	{
-		AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
-	}
+	BinaryStream_SerializeObjectInternalConst< T >( this, v );
 }
 
 //------------------------------------------------------------------------------
@@ -23954,21 +23882,21 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 		uint8_t imageDescriptor;
 	} );
 
-	ae::BinaryStream stream = ae::BinaryStream::Reader( data, length );
+	ae::BinaryReader rStream( data, length );
 	TargaHeader header;
-	stream.SerializeRaw( header );
+	rStream.SerializeRaw( &header, sizeof(header) );
 	AE_ASSERT_MSG( header.imageType == 2 || header.imageType == 3, "Targa image type '#' is not supported", (int)header.imageType );
 	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
 	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
 	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
 	AE_ASSERT_MSG( header.bitsPerPixel != 32 || header.imageDescriptor == 8, "Alpha mode not supported" );
 
-	stream.Discard( header.idLength );
-	stream.Discard( header.colorMapLength );
+	rStream.DiscardReadData( header.idLength );
+	rStream.DiscardReadData( header.colorMapLength );
 
-	const uint8_t* pixels = stream.GetData() + stream.GetOffset();
+	const uint8_t* pixels = rStream.GetData() + rStream.GetOffset();
 	uint32_t dataLength = header.width * header.height * ( header.bitsPerPixel / 8 );
-	AE_ASSERT( stream.GetRemaining() >= dataLength );
+	AE_ASSERT( rStream.GetRemainingBytes() >= dataLength );
 	m_data.AppendArray( pixels, dataLength );
 	textureParams.data = m_data.Data();
 	textureParams.width = header.width;
@@ -24506,28 +24434,21 @@ void Audio::Log()
 //------------------------------------------------------------------------------
 // ae::BinaryStream member functions
 //------------------------------------------------------------------------------
-BinaryStream::BinaryStream( Mode mode, uint8_t* data, uint32_t length )
+BinaryStream::BinaryStream( Mode mode, void* data, uint32_t length )
 {
 	m_mode = mode;
-	m_data = data;
+	m_data = static_cast< uint8_t* >( data );
 	m_length = length;
 	m_isValid = m_data && m_length;
 }
 
-BinaryStream::BinaryStream( Mode mode, const uint8_t* data, uint32_t length )
+BinaryStream::BinaryStream( Mode mode, const void* data, uint32_t length )
 {
 	AE_ASSERT_MSG( mode == Mode::ReadBuffer, "Only read mode can be used with a constant data buffer." );
 	m_mode = mode;
-	m_data = const_cast< uint8_t* >( data );
+	m_data = const_cast< uint8_t* >( static_cast< const uint8_t* >( data ) );
 	m_length = length;
 	m_isValid = m_data && m_length;
-}
-
-BinaryStream::BinaryStream( Mode mode )
-{
-	AE_ASSERT_MSG( mode == Mode::WriteBuffer, "Only write mode can be used when a data buffer is not provided." );
-	m_mode = mode;
-	m_isValid = true;
 }
 
 BinaryStream::BinaryStream( Array< uint8_t >* array )
@@ -24542,43 +24463,29 @@ BinaryStream::BinaryStream( Array< uint8_t >* array )
 	}
 }
 
-BinaryStream BinaryStream::Writer( uint8_t* data, uint32_t length )
-{
-	return BinaryStream( Mode::WriteBuffer, data, length );
-}
+BinaryWriter::BinaryWriter( void* data, uint32_t length ) :
+	BinaryStream( Mode::WriteBuffer, data, length )
+{}
 
-BinaryStream BinaryStream::Writer( Array< uint8_t >* array )
-{
-	return BinaryStream( array );
-}
+BinaryWriter::BinaryWriter( ae::Array< uint8_t >* array ) :
+	BinaryStream( array )
+{}
 
-BinaryStream BinaryStream::Writer()
-{
-	return BinaryStream( Mode::WriteBuffer );
-}
+BinaryReader::BinaryReader( const void* data, uint32_t length ) :
+	BinaryStream( Mode::ReadBuffer, data, length )
+{}
 
-BinaryStream BinaryStream::Reader( const uint8_t* data, uint32_t length )
-{
-	return BinaryStream( Mode::ReadBuffer, const_cast< uint8_t* >( data ), length );
-}
-
-BinaryStream BinaryStream::Reader( const Array< uint8_t >& data )
-{
-	if ( !data.Length() )
-	{
-		return BinaryStream::Reader( nullptr, 0 );
-	}
-	return BinaryStream( Mode::ReadBuffer, &data[ 0 ], data.Length() );
-}
+BinaryReader::BinaryReader( const ae::Array< uint8_t >& data ) :
+	BinaryStream( Mode::ReadBuffer, data.Data(), data.Length() )
+{}
 
 void BinaryStream::SerializeUint8( uint8_t& v )
 {
 	SerializeRaw( &v, sizeof(v) );
 }
 
-void BinaryStream::SerializeUint8( const uint8_t& v )
+void BinaryWriter::SerializeUint8( const uint8_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( &v, sizeof(v) );
 }
 
@@ -24587,9 +24494,8 @@ void BinaryStream::SerializeUint16( uint16_t& v )
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeUint16( const uint16_t& v )
+void BinaryWriter::SerializeUint16( const uint16_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -24598,9 +24504,8 @@ void BinaryStream::SerializeUint32( uint32_t& v )
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeUint32( const uint32_t& v )
+void BinaryWriter::SerializeUint32( const uint32_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -24609,9 +24514,8 @@ void BinaryStream::SerializeUint64( uint64_t& v )
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeUint64( const uint64_t& v )
+void BinaryWriter::SerializeUint64( const uint64_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -24620,9 +24524,8 @@ void BinaryStream::SerializeInt8( int8_t& v )
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeInt8( const int8_t& v )
+void BinaryWriter::SerializeInt8( const int8_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -24631,9 +24534,8 @@ void BinaryStream::SerializeInt16( int16_t& v )
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeInt16( const int16_t& v )
+void BinaryWriter::SerializeInt16( const int16_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -24642,9 +24544,8 @@ void BinaryStream::SerializeInt32( int32_t& v )
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeInt32( const int32_t& v )
+void BinaryWriter::SerializeInt32( const int32_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
@@ -24653,9 +24554,8 @@ void BinaryStream::SerializeInt64( int64_t& v )
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeInt64( const int64_t& v )
+void BinaryWriter::SerializeInt64( const int64_t& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
 }
 
@@ -24664,9 +24564,8 @@ void BinaryStream::SerializeFloat( float& v )
 	SerializeRaw( (uint8_t*)&v, sizeof( v ) );
 }
 
-void BinaryStream::SerializeFloat( const float& v )
+void BinaryWriter::SerializeFloat( const float& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
 }
 
@@ -24675,9 +24574,8 @@ void BinaryStream::SerializeDouble( double& v )
 	SerializeRaw( (uint8_t*)&v, sizeof( v ) );
 }
 
-void BinaryStream::SerializeDouble( const double& v )
+void BinaryWriter::SerializeDouble( const double& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof( v ) );
 }
 
@@ -24686,97 +24584,66 @@ void BinaryStream::SerializeBool( bool& v )
 	SerializeRaw( (uint8_t*)&v, sizeof( v ) );
 }
 
-void BinaryStream::SerializeBool( const bool& v )
+void BinaryWriter::SerializeBool( const bool& v )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeString( const char* str )
+void BinaryStream::SerializeString( char* strInOut, uint32_t bufferSize )
 {
-	AE_ASSERT( m_mode == Mode::WriteBuffer );
-	const uint16_t len = (uint16_t)strlen( str );
-	SerializeUint16( len );
-	SerializeRaw( str, len );
-}
-
-void BinaryStream::m_SerializeArrayLength( uint32_t& length, uint32_t maxLength )
-{
-	if ( maxLength <= ae::MaxValue< uint8_t >() )
+	AE_ASSERT( bufferSize );
+	if( ae::BinaryReader* reader = AsReader() )
 	{
-		uint8_t len = (uint8_t)length;
-		SerializeUint8( len );
-		length = len;
-	}
-	else if ( maxLength <= ae::MaxValue< uint16_t >() )
-	{
-		uint16_t len = (uint16_t)length;
-		SerializeUint16( len );
-		length = len;
-	}
-	else
-	{
-		uint32_t len = length;
-		SerializeUint32( len );
-		length = len;
-	}
-}
-
-void BinaryStream::SerializeArray( Array< uint8_t >& array, uint32_t maxLength )
-{
-	if ( !m_isValid )
-	{
-		return;
-	}
-	else if ( m_mode == Mode::ReadBuffer )
-	{
-		uint32_t length = 0;
-		m_SerializeArrayLength( length, maxLength );
-		if ( !m_isValid || length == 0 )
+		if( auto end = (const uint8_t*)memchr( reader->PeekReadData(), '\0', GetRemainingBytes() ) )
 		{
-			return;
+			const uint32_t strLength = (uint32_t)( end - reader->PeekReadData() );
+			if( strLength < bufferSize )
+			{
+				SerializeRaw( strInOut, strLength + 1 );
+			}
+			else
+			{
+				Invalidate();
+			}
 		}
-		else if ( GetRemaining() < length )
+		else
 		{
 			Invalidate();
-			return;
 		}
-		
-		array.AppendArray( PeekData(), length );
-		Discard( length );
-	}
-	else if ( m_mode == Mode::WriteBuffer )
-	{
-		uint32_t length = array.Length();
-		m_SerializeArrayLength( length, maxLength );
-		if ( length )
+		if( !IsValid() )
 		{
-			SerializeRaw( &array[ 0 ], length );
+			strInOut[ 0 ] = '\0';
+		}
+	}
+	else if( AsWriter() )
+	{
+		const uint32_t strLength = (uint32_t)strlen( strInOut );
+		if( strLength < bufferSize )
+		{
+			SerializeRaw( strInOut, strLength + 1 );
+		}
+		else
+		{
+			Invalidate();
 		}
 	}
 }
 
-void BinaryStream::SerializeArray( const Array< uint8_t >& array, uint32_t maxLength )
+void BinaryWriter::SerializeString( const char* strIn )
 {
-	AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
-	
-	uint32_t length = array.Length();
-	m_SerializeArrayLength( length, maxLength );
-	if ( length )
-	{
-		SerializeRaw( &array[ 0 ], length );
-	}
+	const uint32_t strLength = (uint32_t)strlen( strIn );
+	SerializeRaw( strIn, strLength + 1 );
 }
 
 void BinaryStream::SerializeRaw( void* data, uint32_t length )
 {
-	if ( !m_isValid )
+	if( !m_isValid )
 	{
 		return;
 	}
-	else if ( m_mode == Mode::ReadBuffer )
+	else if( m_mode == Mode::ReadBuffer )
 	{
-		if ( m_offset + length <= m_length )
+		if( m_offset + length <= m_length )
 		{
 			memcpy( data, m_data + m_offset, length );
 			m_offset += length;
@@ -24786,11 +24653,11 @@ void BinaryStream::SerializeRaw( void* data, uint32_t length )
 			Invalidate();
 		}
 	}
-	else if ( m_mode == Mode::WriteBuffer )
+	else if( m_mode == Mode::WriteBuffer )
 	{
-		if ( m_data )
+		if( m_data )
 		{
-			if ( length <= m_length - m_offset )
+			if( length <= GetRemainingBytes() )
 			{
 				memcpy( m_data + m_offset, data, length );
 				m_offset += length;
@@ -24802,41 +24669,31 @@ void BinaryStream::SerializeRaw( void* data, uint32_t length )
 		}
 		else
 		{
-			Array< uint8_t >& array = m_GetArray();
-			array.AppendArray( (uint8_t*)data, length );
-			m_offset = array.Length();
-			m_length = array.Size();
+			AE_ASSERT( m_extArray );
+			m_extArray->AppendArray( (uint8_t*)data, length );
+			m_offset = m_extArray->Length();
+			m_length = m_extArray->Size();
 		}
 	}
-	else
-	{
-		AE_FAIL_MSG( "Binary stream must be initialized with ae::BinaryStream::Writer or ae::BinaryStream::Reader static functions." );
-	}
 }
 
-void BinaryStream::SerializeRaw( const void* data, uint32_t length )
+void BinaryWriter::SerializeRaw( const void* data, uint32_t length )
 {
-	AE_ASSERT_MSG( m_mode == Mode::WriteBuffer, "Only write mode can be used when serializing a const array." );
-	SerializeRaw( (void*)data, length );
+	BinaryStream::SerializeRaw( const_cast< void* >( data ), length );
 }
 
-void BinaryStream::SerializeRaw( Array< uint8_t>& array )
+const uint8_t* BinaryReader::PeekReadData() const
 {
-	AE_FAIL_MSG( "Not implemented" );
+	return IsValid() ? GetData() + m_offset : nullptr;
 }
 
-void BinaryStream::SerializeRaw( const Array< uint8_t>& array )
+void BinaryReader::DiscardReadData( uint32_t length )
 {
-	AE_FAIL_MSG( "Not implemented" );
-}
-
-void BinaryStream::Discard( uint32_t length )
-{
-	if ( !length )
+	if ( !length || !IsValid() )
 	{
 		return;
 	}
-	else if ( GetRemaining() < length )
+	else if ( GetRemainingBytes() < length )
 	{
 		Invalidate();
 	}
@@ -24984,11 +24841,11 @@ NetObjectClient::~NetObjectClient()
 
 void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 {
-	BinaryStream rStream = BinaryStream::Reader( data, length );
-	while ( rStream.GetOffset() < rStream.GetLength() )
+	ae::BinaryReader rStream( data, length );
+	while ( rStream.GetOffset() < rStream.GetSize() )
 	{
 		NetObjectConnection::EventType type;
-		rStream.SerializeRaw( type );
+		rStream.SerializeEnum( type );
 		if ( !rStream.IsValid() )
 		{
 			break;
@@ -25078,9 +24935,9 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 						&& m_remoteToLocalIdMap.TryGet( remoteId, &localId )
 						&& m_netObjects.TryGet( localId, &netObject ) )
 					{
-						if ( rStream.GetRemaining() >= dataLen )
+						if ( rStream.GetRemainingBytes() >= dataLen )
 						{
-							netObject->m_SetClientData( rStream.PeekData(), dataLen );
+							netObject->m_SetClientData( rStream.PeekReadData(), dataLen );
 						}
 						else
 						{
@@ -25088,7 +24945,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 						}
 					}
 
-					rStream.Discard( dataLen );
+					rStream.DiscardReadData( dataLen );
 				}
 				break;
 			}
@@ -25109,9 +24966,9 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 						&& m_remoteToLocalIdMap.TryGet( remoteId, &localId )
 						&& m_netObjects.TryGet( localId, &netObject ) )
 					{
-						if ( rStream.GetRemaining() >= dataLen )
+						if ( rStream.GetRemainingBytes() >= dataLen )
 						{
-							netObject->m_ReceiveMessages( rStream.PeekData(), dataLen );
+							netObject->m_ReceiveMessages( rStream.PeekReadData(), dataLen );
 						}
 						else
 						{
@@ -25119,7 +24976,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 						}
 					}
 
-					rStream.Discard( dataLen );
+					rStream.DiscardReadData( dataLen );
 				}
 				break;
 			}
@@ -25176,9 +25033,9 @@ void NetObjectClient::Destroy( NetObject* pendingDestroy )
 #endif
 }
 
-NetObject* NetObjectClient::m_CreateNetObject( BinaryStream* rStream, bool allowResolve )
+NetObject* NetObjectClient::m_CreateNetObject( ae::BinaryReader* rStream, bool allowResolve )
 {
-	AE_ASSERT( rStream->IsReader() );
+	// @TODO: rStream validation
 
 	RemoteId remoteId;
 	rStream->SerializeObject( remoteId );
@@ -25190,6 +25047,15 @@ NetObject* NetObjectClient::m_CreateNetObject( BinaryStream* rStream, bool allow
 		if ( localId )
 		{
 			netObject = m_netObjects.Get( localId );
+			AE_ASSERT( netObject );
+			uint16_t initDataLength = 0;
+			rStream->SerializeUint16( initDataLength );
+			if( rStream->IsValid() )
+			{
+				AE_ASSERT( netObject->m_initData.Length() == initDataLength );
+				AE_ASSERT( memcmp( netObject->m_initData.Data(), rStream->PeekReadData(), initDataLength ) == 0 );
+				rStream->DiscardReadData( initDataLength );
+			}
 		}
 	}
 
@@ -25203,10 +25069,14 @@ NetObject* NetObjectClient::m_CreateNetObject( BinaryStream* rStream, bool allow
 		m_remoteToLocalIdMap.Set( remoteId, localId );
 		m_localToRemoteIdMap.Set( localId, remoteId );
 		m_created.Append( netObject );
-	}
-	
-	rStream->SerializeArray( netObject->m_initData );
 
+		uint16_t initDataLength = 0;
+		rStream->SerializeUint16( initDataLength );
+		netObject->m_initData.Append( {}, initDataLength );
+		rStream->SerializeRaw( netObject->m_initData.Data(), initDataLength );
+	}
+
+	// @TODO: Handle invalid rStream
 	return netObject;
 }
 
@@ -25249,11 +25119,11 @@ void NetObjectConnection::m_UpdateSendData()
 		}
 	}
 
-	BinaryStream wStream = BinaryStream::Writer( &m_connData );
+	ae::BinaryWriter wStream( &m_connData );
 
 	if ( toSync.Length() )
 	{
-		wStream.SerializeRaw( NetObjectConnection::EventType::Update );
+		wStream.SerializeEnum( NetObjectConnection::EventType::Update );
 		wStream.SerializeUint32( toSync.Length() );
 		for ( uint32_t i = 0; i < toSync.Length(); i++ )
 		{
@@ -25266,7 +25136,7 @@ void NetObjectConnection::m_UpdateSendData()
 
 	if ( netObjectMessageCount )
 	{
-		wStream.SerializeRaw( NetObjectConnection::EventType::Messages );
+		wStream.SerializeEnum( NetObjectConnection::EventType::Messages );
 		wStream.SerializeUint32( netObjectMessageCount );
 		for ( uint32_t i = 0; i < m_replicaDB->GetNetObjectCount(); i++ )
 		{
@@ -25347,8 +25217,8 @@ void NetObjectServer::DestroyNetObject( NetObject* netObject )
 	{
 		NetObjectConnection* conn = m_connections[ i ];
 		conn->m_ClearPending(); // @TODO: Should this queue up like m_pendingCreate?
-		BinaryStream wStream = BinaryStream::Writer( &conn->m_connData );
-		wStream.SerializeRaw( NetObjectConnection::EventType::Destroy );
+		ae::BinaryWriter wStream( &conn->m_connData );
+		wStream.SerializeEnum( NetObjectConnection::EventType::Destroy );
 		wStream.SerializeObject( id );
 	}
 
@@ -25362,15 +25232,19 @@ NetObjectConnection* NetObjectServer::CreateConnection()
 	conn->m_replicaDB = this;
 
 	// Send initial net datas
-	BinaryStream wStream = BinaryStream::Writer( &conn->m_connData );
-	wStream.SerializeRaw( NetObjectConnection::EventType::Connect );
+	ae::BinaryWriter wStream( &conn->m_connData );
+	wStream.SerializeEnum( NetObjectConnection::EventType::Connect );
 	wStream.SerializeUint32( m_signature );
 	wStream.SerializeUint32( m_netObjects.Length() );
 	for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
 	{
 		const NetObject* netObject = m_netObjects.GetValue( i );
 		wStream.SerializeObject( netObject->GetId() );
-		wStream.SerializeArray( netObject->m_initData );
+
+		AE_ASSERT( netObject->m_initData.Length() <= ae::MaxValue< uint16_t >() );
+		const uint16_t initDataLength = (uint16_t)netObject->m_initData.Length();
+		wStream.SerializeUint16( initDataLength );
+		wStream.SerializeRaw( netObject->m_initData.Data(), initDataLength );
 	}
 
 	return conn;
@@ -25410,10 +25284,13 @@ void NetObjectServer::UpdateSendData()
 			// Send create messages on existing server connections
 			for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 			{
-				BinaryStream wStream = BinaryStream::Writer( &m_connections[ i ]->m_connData );
-				wStream.SerializeRaw( NetObjectConnection::EventType::Create );
+				ae::BinaryWriter wStream( &m_connections[ i ]->m_connData );
+				wStream.SerializeEnum( NetObjectConnection::EventType::Create );
 				wStream.SerializeObject( netObject->GetId() );
-				wStream.SerializeArray( netObject->m_initData );
+				AE_ASSERT( netObject->m_initData.Length() <= ae::MaxValue< uint16_t >() );
+				const uint16_t initDataLength = (uint16_t)netObject->m_initData.Length();
+				wStream.SerializeUint16( initDataLength );
+				wStream.SerializeRaw( netObject->m_initData.Data(), initDataLength );
 			}
 		}
 	}

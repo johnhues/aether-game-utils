@@ -59,7 +59,7 @@ inline void Serialize( ae::BinaryStream* stream, AetherUuid* uuid )
 	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }
 
-inline void Serialize( ae::BinaryStream* stream, const AetherUuid* uuid )
+inline void Serialize( ae::BinaryWriter* stream, const AetherUuid* uuid )
 {
 	stream->SerializeRaw( uuid->uuid, sizeof( uuid->uuid ) );
 }

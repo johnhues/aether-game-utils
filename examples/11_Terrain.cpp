@@ -165,14 +165,14 @@ void Object::Serialize( ae::BinaryStream* stream )
   
   if ( shape )
   {
-    if ( stream->IsWriter() )
+    if ( ae::BinaryWriter* wStream = stream->AsWriter() )
     {
-      stream->SerializeRaw( shape->GetTransform() );
+      wStream->SerializeRaw( &shape->GetTransform(), sizeof( shape->GetTransform() ) );
     }
     else
     {
       ae::Matrix4 transform;
-      stream->SerializeRaw( transform );
+      stream->SerializeRaw( &transform, sizeof( shape->GetTransform() ) );
       shape->SetTransform( transform );
     }
   }
@@ -191,7 +191,8 @@ void Object::Serialize( ae::BinaryStream* stream )
 
 void WriteObjects( ae::FileSystem* fileSystem, const ae::Array< Object* >& objects )
 {
-  ae::BinaryStream wStream = ae::BinaryStream::Writer();
+  ae::Array< uint8_t > buffer = TAG_EXAMPLE;
+  ae::BinaryWriter wStream( &buffer );
   wStream.SerializeUint32( kCurrentFileVersion );
 
   wStream.SerializeUint32( objects.Length() );
@@ -215,7 +216,7 @@ bool ReadObjects( ae::FileSystem* fileSystem, ae::Terrain* terrain, ae::Image* h
 {
   ae::Scratch< uint8_t > scratch( fileSystem->GetSize( ae::FileSystem::Root::User, kFileName ) );
   fileSystem->Read( ae::FileSystem::Root::User, kFileName, scratch.Data(), scratch.Length() );
-  ae::BinaryStream rStream = ae::BinaryStream::Reader( scratch.Data(), scratch.Length() );
+  ae::BinaryReader rStream( scratch.Data(), scratch.Length() );
 
   uint32_t version = 0;
   rStream.SerializeUint32( version );

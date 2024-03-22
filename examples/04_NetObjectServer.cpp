@@ -94,7 +94,7 @@ int main()
         {
           if ( obj )
           {
-            ae::BinaryStream stream = ae::BinaryStream::Reader( receiveInfo.data );
+            ae::BinaryReader stream( receiveInfo.data );
             stream.SerializeObject( obj->input );
           }
           break;
