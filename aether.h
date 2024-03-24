@@ -206,7 +206,7 @@
 // Helpers
 //------------------------------------------------------------------------------
 template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
-#define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) )
+#define countof( _x ) ( (uint32_t)sizeof( countof_helper( _x ) ) ) // @TODO: AE_COUNT_OF
 #define AE_CALL_CONST( _tx, _x, _tfn, _fn ) const_cast< _tfn* >( const_cast< const _tx* >( _x )->_fn() );
 #define _AE_STATIC_STORAGE template < uint32_t NN = N, typename = std::enable_if_t< NN != 0 > >
 #define _AE_DYNAMIC_STORAGE template < uint32_t NN = N, typename = std::enable_if_t< NN == 0 > >
@@ -219,6 +219,7 @@ template < typename T, int N > char( &countof_helper( T(&)[ N ] ) )[ N ];
 	#define AE_DISABLE_INVALID_OFFSET_WARNING
 	#define AE_ENABLE_INVALID_OFFSET_WARNING
 #endif
+#define AE_DISABLE_COPY_ASSIGNMENT( _t ) _t( const _t& ) = delete; _t& operator=( const _t& ) = delete
 
 namespace ae {
 
@@ -400,6 +401,7 @@ inline float Clip01( float x );
 // Interpolation
 //------------------------------------------------------------------------------
 template< typename T0, typename T1 > T0 Lerp( T0 start, T0 end, T1 t );
+inline float AngleDifference( float end, float start );
 inline float LerpAngle( float start, float end, float t );
 inline float Delerp( float start, float end, float value );
 inline float Delerp01( float start, float end, float value );
@@ -1951,7 +1953,7 @@ public:
 	//! are no free objects. Call ae::ObjectPool::Delete() to destroy the object.
 	//! ae::ObjectPool::Delete() must be called on every object returned
 	//! by ae::ObjectPool::New().
-	T* New();
+	template < typename ... Args > T* New( Args ... args );
 	//! Destructs and releases the object \p obj for future use by ae::ObjectPool::New().
 	//! It is safe for the \p obj parameter to be null.
 	void Delete( T* obj );
@@ -4723,6 +4725,7 @@ protected:
 	BinaryStream( Mode mode, void* data, uint32_t size ); // Read or write
 	BinaryStream( Mode mode, const void* data, uint32_t size ); // Read only
 	BinaryStream( Array< uint8_t >*array ); // Write only
+	AE_DISABLE_COPY_ASSIGNMENT( BinaryStream );
 	// Prevent Serialize functions from being called accidentally through automatic conversions
 	template < typename T > void SerializeUint8( T ) = delete;
 	template < typename T > void SerializeUint16( T ) = delete;
@@ -6241,10 +6244,14 @@ T0 Lerp( T0 start, T0 end, T1 t )
 	return start + ( end - start ) * t;
 }
 
+inline float AngleDifference( float end, float start )
+{
+	return ae::Mod( ( end - start ) + ae::PI, ae::TWO_PI ) - ae::PI;
+}
+
 inline float LerpAngle( float start, float end, float t )
 {
-	end = start + ae::Mod( ( end - start ) + ae::PI, ae::TWO_PI ) - ae::PI;
-	return ae::Lerp( start, end, t );
+	return ae::Lerp( start, start + AngleDifference( end, start ), t );
 }
 
 inline float Delerp( float start, float end, float value )
@@ -6275,8 +6282,7 @@ T DtSlerp( T start, float snappiness, float dt, T end )
 
 inline float DtLerpAngle( float start, float snappiness, float dt, float end )
 {
-	end = start + ae::Mod( ( end - start ) + ae::PI, ae::TWO_PI ) - ae::PI;
-	return ae::DtLerp( start, snappiness, dt, end );
+	return ae::DtLerp( start, snappiness, dt, start + ae::AngleDifference( end, start ) );
 }
 
 template< typename T >
@@ -9200,7 +9206,8 @@ ObjectPool< T, N, Paged >::~ObjectPool()
 }
 
 template < typename T, uint32_t N, bool Paged >
-T* ObjectPool< T, N, Paged >::New()
+template < typename ... Args >
+T* ObjectPool< T, N, Paged >::New( Args ... args )
 {
 	Page* page = m_pages.FindFn( []( const Page* page ) { return page->freeList.HasFree(); } );
 	if ( Paged && !page )
@@ -9214,7 +9221,7 @@ T* ObjectPool< T, N, Paged >::New()
 		if ( index >= 0 )
 		{
 			m_length++;
-			return new ( &page->objects[ index ] ) T();
+			return new ( &page->objects[ index ] ) T( args ... );
 		}
 	}
 	return nullptr;
