@@ -90,12 +90,12 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
   uint16_t* indices = scratch.Data();
   for ( uint32_t i = 0; i < m_maxCount; i++ )
   {
-    indices[ i * aeQuadIndexCount + 0 ] = i * aeQuadVertCount + aeQuadIndices[ 0 ];
-    indices[ i * aeQuadIndexCount + 1 ] = i * aeQuadVertCount + aeQuadIndices[ 1 ];
-    indices[ i * aeQuadIndexCount + 2 ] = i * aeQuadVertCount + aeQuadIndices[ 2 ];
-    indices[ i * aeQuadIndexCount + 3 ] = i * aeQuadVertCount + aeQuadIndices[ 3 ];
-    indices[ i * aeQuadIndexCount + 4 ] = i * aeQuadVertCount + aeQuadIndices[ 4 ];
-    indices[ i * aeQuadIndexCount + 5 ] = i * aeQuadVertCount + aeQuadIndices[ 5 ];
+    indices[ i * aeQuadIndexCount + 0 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 0 ] );
+    indices[ i * aeQuadIndexCount + 1 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 1 ] );
+    indices[ i * aeQuadIndexCount + 2 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 2 ] );
+    indices[ i * aeQuadIndexCount + 3 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 3 ] );
+    indices[ i * aeQuadIndexCount + 4 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 4 ] );
+    indices[ i * aeQuadIndexCount + 5 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 5 ] );
   }
   m_vertexData.UploadIndices( 0, indices, m_maxCount * aeQuadIndexCount );
 }

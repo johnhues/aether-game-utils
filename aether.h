@@ -7460,7 +7460,7 @@ template < uint32_t N >
 Str< N >::Str( uint32_t length, const char* str )
 {
 	AE_ASSERT( length <= (uint16_t)MaxLength() );
-	m_length = length;
+	m_length = (uint16_t)length;
 	memcpy( m_str, str, m_length );
 	m_str[ length ] = 0;
 }
@@ -7469,7 +7469,7 @@ template < uint32_t N >
 Str< N >::Str( uint32_t length, char c )
 {
 	AE_ASSERT( length <= (uint16_t)MaxLength() );
-	m_length = length;
+	m_length = (uint16_t)length;
 	memset( m_str, c, m_length );
 	m_str[ length ] = 0;
 }
@@ -7705,7 +7705,7 @@ void Str< N >::Trim( uint32_t len )
 	}
 
 	AE_ASSERT( len < m_length );
-	m_length = len;
+	m_length = (uint16_t)len;
 	m_str[ m_length ] = 0;
 }
 
@@ -7740,7 +7740,7 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 	}
 	if ( head > format )
 	{
-		*this += Str< N >( head - format, format );
+		*this += Str< N >( (uint32_t)( head - format ), format );
 	}
 
 	if ( *head == '#' )
@@ -9740,8 +9740,8 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 
 	BVHNode* parent = &m_nodes[ parentIdx ];
 	AE_ASSERT( parent->leftIdx == -1 && parent->rightIdx == -1 );
-	parent->leftIdx = m_nodes.Length();
-	parent->rightIdx = m_nodes.Length() + 1;
+	parent->leftIdx = (int16_t)m_nodes.Length();
+	parent->rightIdx = (int16_t)( m_nodes.Length() + 1 );
 	parent->aabb = leftAABB;
 	parent->aabb.Expand( rightAABB );
 
@@ -9753,9 +9753,9 @@ std::pair< int32_t, int32_t > BVH< T, N >::AddNodes( int32_t parentIdx, const ae
 	BVHNode* right = &m_nodes[ rightIdx ];
 	
 	left->aabb = leftAABB;
-	left->parentIdx = parentIdx;
+	left->parentIdx = (int16_t)parentIdx;
 	right->aabb = rightAABB;
-	right->parentIdx = parentIdx;
+	right->parentIdx = (int16_t)parentIdx;
 
 #if _AE_DEBUG_ && ( N == 0 )
 	if ( m_limit )
@@ -9778,7 +9778,7 @@ void BVH< T, N >::SetLeaf( int32_t nodeIdx, T* data, uint32_t count )
 	}
 	else
 	{
-		node->leafIdx = m_leaves.Length();
+		node->leafIdx = (int16_t)m_leaves.Length();
 		leaf = &m_leaves.Append( {} );
 	}
 	leaf->data = data;
@@ -20459,7 +20459,8 @@ void VertexArray::AppendIndices( const void* indices, uint32_t count, uint32_t _
 	{
 		case 1:
 		{
-			uint8_t indexOffset = _indexOffset;
+			AE_ASSERT( _indexOffset <= ae::MaxValue< uint8_t >() );
+			uint8_t indexOffset = (uint8_t)_indexOffset;
 			uint8_t* target = (uint8_t*)m_indexReadable + m_indexCount;
 			uint8_t* source = (uint8_t*)indices;
 			for ( uint32_t i = 0; i < count; i++ )
@@ -20470,7 +20471,8 @@ void VertexArray::AppendIndices( const void* indices, uint32_t count, uint32_t _
 		}
 		case 2:
 		{
-			uint16_t indexOffset = _indexOffset;
+			AE_ASSERT( _indexOffset <= ae::MaxValue< uint16_t >() );
+			uint16_t indexOffset = (uint16_t)_indexOffset;
 			uint16_t* target = (uint16_t*)m_indexReadable + m_indexCount;
 			uint16_t* source = (uint16_t*)indices;
 			for ( uint32_t i = 0; i < count; i++ )
@@ -21683,7 +21685,7 @@ void TextRender::Render( const ae::Matrix4& uiToScreen )
 
 				for ( uint32_t j = 0; j < _kQuadIndexCount; j++ )
 				{
-					indices.GetSafe( indexCount ) = _kQuadIndices[ j ] + vertCount;
+					indices.GetSafe( indexCount ) = (uint16_t)( _kQuadIndices[ j ] + vertCount );
 					indexCount++;
 				}
 
@@ -23778,7 +23780,7 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 						line++;
 					}
 				}
-				faces.Append( faceVertexCount );
+				faces.Append( (uint8_t)faceVertexCount );
 				break;
 			}
 			default:
@@ -24726,7 +24728,7 @@ void NetObject::SetSyncData( const void* data, uint32_t length )
 #endif
 void NetObject::SendMessage( const void* data, uint32_t length )
 {
-	uint16_t lengthU16 = length;
+	uint16_t lengthU16 = (uint16_t)length;
 	m_messageDataOut.Reserve( m_messageDataOut.Length() + sizeof( lengthU16 ) + length );
 	m_messageDataOut.AppendArray( (uint8_t*)&lengthU16, sizeof( lengthU16 ) );
 	m_messageDataOut.AppendArray( (const uint8_t*)data, length );

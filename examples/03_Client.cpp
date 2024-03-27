@@ -90,7 +90,7 @@ int main()
 			uint8_t messageData[ 64 ];
 			ae::BinaryWriter wStream( messageData, sizeof(messageData) );
 			wStream.SerializeString( msg );
-			if ( conn.QueueMsg( wStream.GetData(), wStream.GetOffset() ) )
+			if ( conn.QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() ) )
 			{
 				AE_INFO( "Send '#'", msg );
 			}

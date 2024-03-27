@@ -90,7 +90,7 @@ int main()
 				ae::Str32 sendMsg = "pong";
 				ae::BinaryWriter wStream( messageData, sizeof(messageData) );
 				wStream.SerializeString( sendMsg );
-				if ( conn->QueueMsg( wStream.GetData(), wStream.GetOffset() ) )
+				if ( conn->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() ) )
 				{
 					AE_INFO( "Received '#'. Send '#'.", recvMsg, sendMsg );
 				}

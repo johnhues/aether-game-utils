@@ -338,7 +338,7 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 		for ( uint32_t j = 0; j < indexCount; j++ )
 		{
 			ae::Skin::Vertex* vertex = &skinVerts[ clusterIndices[ j ] ];
-			const uint8_t clusterWeight = ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
+			const uint8_t clusterWeight = (uint8_t)ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
 			const uint32_t weightCount = [&](){ uint32_t c = 0; while ( c < kMaxSkinWeights && vertex->weights[ c ] ) { c++; } return c; }();
 			
 			if ( weightCount == kMaxSkinWeights )
@@ -355,13 +355,13 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 						lowestWeight = weight;
 					}
 				}
-				vertex->bones[ lowestIdx ] = boneIndex;
+				vertex->bones[ lowestIdx ] = (uint16_t)boneIndex;
 				vertex->weights[ lowestIdx ] = clusterWeight;
 			}
 			else
 			{
-				vertex->bones[ weightCount ] = boneIndex;
-				vertex->weights[ weightCount ] = ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
+				vertex->bones[ weightCount ] = (uint16_t)boneIndex;
+				vertex->weights[ weightCount ] = (uint8_t)ae::Clip( (int)( clusterWeights[ j ] * 256.5 ), 0, 255 );
 			}
 		}
 	}

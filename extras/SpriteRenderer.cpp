@@ -116,9 +116,9 @@ void SpriteRenderer::Initialize( uint32_t maxGroups, uint32_t maxCount )
 
 	const uint16_t indices[] = { 3, 0, 1, 3, 1, 2 };
 	ae::Scratch< _SpriteIndex > indexBuffer( 6 * maxCount );
-	for ( uint32_t i = 0; i < maxCount; i++ )
+	for ( uint16_t i = 0; i < maxCount; i++ )
 	{
-		const uint32_t offset = 4 * i;
+		const uint16_t offset = 4 * i;
 		indexBuffer[ i * 6 ] = offset + indices[ 0 ];
 		indexBuffer[ i * 6 + 1 ] = offset + indices[ 1 ];
 		indexBuffer[ i * 6 + 2 ] = offset + indices[ 2 ];

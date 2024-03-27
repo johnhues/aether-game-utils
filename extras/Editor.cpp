@@ -1265,7 +1265,7 @@ void EditorServer::Update( EditorProgram* program )
 				ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
 				wStream.SerializeEnum( EditorMsg::Heartbeat );
 				AE_ASSERT( wStream.IsValid() );
-				conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+				conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
 			}
 		}
 		m_nextHeartbeat = currentTime + 0.1;
@@ -1827,7 +1827,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			wStream.SerializeString( m_levelPath );
 			for ( uint32_t i = 0; i < m_connections.Length(); i++ )
 			{
-				m_connections[ i ]->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+				m_connections[ i ]->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
 			}
 		}
 		ImGui::EndDisabled();
@@ -2300,7 +2300,7 @@ void EditorServer::BroadcastVarChange( const ae::Var* var, const ae::Component* 
 	{
 		for ( EditorConnection* conn : m_connections )
 		{
-			conn->sock->QueueMsg( wStream.GetData(), wStream.GetOffset() );
+			conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
 		}
 	}
 	else
@@ -2743,6 +2743,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 			{
 				return ( currentStr != valueStr.c_str() );
 			}
+			return false;
 		}
 		case ae::BasicType::Bool:
 		{
