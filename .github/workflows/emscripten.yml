@@ -17,7 +17,7 @@ jobs:
       - name: Create Build Directory
         run: cmake -E make_directory build
       - name: Configure
-        run: export EMSDK_QUIET=1 && source emsdk/emsdk_env.sh && emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF
+        run: export EMSDK_QUIET=1 && source emsdk/emsdk_env.sh && emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAE_LEAN_AND_MEAN=OFF -DAE_WERROR=ON
       - name: Build
         run: export EMSDK_QUIET=1 && source emsdk/emsdk_env.sh && emmake make -C build all -j$(nproc)
       - name: Test

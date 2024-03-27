@@ -24011,7 +24011,7 @@ void _LoadWavFile( const uint8_t* fileBuffer, uint32_t fileSize, uint32_t* buffe
 				ALsizei frequency = waveFormat.sampleRate;
 				dataSize = size;
 				
-				ALenum format;
+				ALenum format = 0;
 				if ( waveFormat.numChannels == 1 )
 				{
 					if ( waveFormat.bitsPerSample == 8 ) { format = AL_FORMAT_MONO8; }

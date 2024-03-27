@@ -15,6 +15,7 @@ option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
 option(AE_EXTRAS "Enables experimental utilities" OFF)
 option(AE_LOADERS_OFBX "Enables aether FBX loader and ofbx dependency" OFF)
 option(AE_LOADERS_STB "Enables aether PNG loader and stb dependency" OFF)
+option(AE_WERROR "Enables some -Werror's for targets that link the aether library" OFF)
 
 # Configuration for building ae on its own
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
@@ -104,6 +105,16 @@ function(add_ae_library NAME LIB_TYPE)
 			target_compile_options(${NAME} PRIVATE -fPIC) # Fixes errors linking static ae into shared libraries: relocation against symbol 'X' which may bind externally 
 		endif()
 		target_sources(${NAME} PRIVATE ${AE_ROOT_DIR}/aether.h ${AE_ROOT_DIR}/aether.cpp)
+	endif()
+	if(${AE_WERROR} AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU|AppleClang"))
+		target_compile_options(${NAME} PUBLIC
+			-Werror=return-type
+			-Werror=implicit-fallthrough
+			-Werror=implicit-int-conversion
+			-Werror=narrowing
+			-Werror=uninitialized
+			-Werror=pointer-to-int-cast
+		)
 	endif()
 endfunction()
 add_ae_library(ae STATIC) # static library
