@@ -26,7 +26,7 @@
 #include "ae/aeNet.h"
 #include <vector>
 #include <algorithm>
-#include <enet/enet.h>
+#include "enet/enet.h"
 // #include "HVN_WebConn.h"
 
 //------------------------------------------------------------------------------
@@ -539,7 +539,7 @@ void AetherServer_QueueSend( AetherServer* _as, const ServerSendInfo* info )
       memcpy( enetPacket->data, &header, sizeof( header ) );
       memcpy( enetPacket->data + sizeof( header ), info->data, info->length );
     }
-    enet_peer_send( peers + i , channel, enetPacket );
+    enet_peer_send( peers + i , (uint8_t)channel, enetPacket );
 
     if ( info->player )
     {

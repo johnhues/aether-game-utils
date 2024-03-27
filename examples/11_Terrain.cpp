@@ -116,7 +116,7 @@ public:
     }
     for ( uint32_t i = 0; i < aeQuadIndexCount; i++ )
     {
-      bgIndices[ i ] = aeQuadIndices[ i ];
+      bgIndices[ i ] = (uint8_t)aeQuadIndices[ i ];
     }
 
     m_bgVertexData.Initialize( sizeof( BGVertex ), sizeof( uint8_t ), countof( bgVertices ), countof( bgIndices ), ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Static, ae::Vertex::Usage::Static );

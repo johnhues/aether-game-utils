@@ -28,7 +28,7 @@
 #include <emscripten.h>
 #include "ae/EmSocket.h"
 #else
-#include <enet/enet.h>
+#include "enet/enet.h"
 #endif
 
 //------------------------------------------------------------------------------
@@ -431,7 +431,7 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
   memcpy( p->data, &header, sizeof(header) );
   memcpy( p->data + sizeof(AetherClientHeader), info->data, info->length );
 
-  enet_peer_send( peer, channel, p );
+  enet_peer_send( peer, (uint8_t)channel, p );
 #endif
 }
 

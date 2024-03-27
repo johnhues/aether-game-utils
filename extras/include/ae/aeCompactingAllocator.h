@@ -95,7 +95,7 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
   {
     Header* next = (Header*)( (uint8_t*)m_tail + sizeof( Header ) + m_tail->size );
     AE_ASSERT( (uint8_t*)next - m_data + size + sizeof( Header ) < m_size ); // @TODO: Should return null
-    next->size = size;
+    next->size = (uint16_t)size;
     next->next = nullptr;
     next->external = p;
     next->dbgTypeId = ae::Hash().HashString( ae::GetTypeName< T >() ).Get();
@@ -108,7 +108,7 @@ void aeCompactingAllocator::Allocate( T** _p, uint32_t size )
   else
   {
     m_tail = (Header*)m_data;
-    m_tail->size = size;
+    m_tail->size = (uint16_t)size;
     m_tail->next = nullptr;
     m_tail->prev = nullptr;
     m_tail->external = p;

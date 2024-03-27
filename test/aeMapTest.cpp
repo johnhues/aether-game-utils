@@ -278,7 +278,7 @@ TEST_CASE( "hash map compaction (wrapping 3)", "[ae::HashMap]" )
 TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 {
 	ae::Map< int, char, 10 > map;
-	for ( uint32_t i = 0; i < 10; i++ )
+	for ( char i = 0; i < 10; i++ )
 	{
 		map.Set( i, 'a' + i );
 	}
@@ -300,7 +300,7 @@ TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 
 	SECTION( "existing values are correctly set" )
 	{
-		for ( uint32_t i = 0; i < 10; i++ )
+		for ( char i = 0; i < 10; i++ )
 		{
 			map.Set( i, 'A' + i );
 		}

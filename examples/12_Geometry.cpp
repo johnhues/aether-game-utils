@@ -647,6 +647,7 @@ int main()
 				ae::Vec3 t = camera.GetRight();
 				t = t.RotateCopy( camera.GetPosition(), s_turnerAngle );
 				debug.AddLine( ae::Vec3( 0.0f ), t, ae::Color::Red() );
+				break;
 			}
 			default:
 				break;
