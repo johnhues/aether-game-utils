@@ -18602,7 +18602,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		}
 
 		AE_ASSERT( readSize );
-		const uint32_t totalSize = m_recvData.Length() + readSize;
+		uint32_t totalSize = m_recvData.Length() + readSize;
 		m_recvData.Reserve( totalSize );
 		_ae_sock_buff_t* buffer = (_ae_sock_buff_t*)m_recvData.end();
 		while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
