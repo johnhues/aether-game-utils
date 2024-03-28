@@ -9401,7 +9401,7 @@ typename ObjectPool< T, N, Paged >::template Iterator< const T > ObjectPool< T, 
 //------------------------------------------------------------------------------
 template < typename T, uint32_t N, bool Paged >
 template< typename T2 >
-ObjectPool< T, N, Paged >::template Iterator< T2 >::Iterator( const ObjectPool* pool, const struct Page* page, pointer ptr ) :
+ObjectPool< T, N, Paged >::Iterator< T2 >::Iterator( const ObjectPool* pool, const struct Page* page, pointer ptr ) :
 	m_pool( pool ),
 	m_page( page ),
 	m_ptr( ptr )
@@ -9409,7 +9409,7 @@ ObjectPool< T, N, Paged >::template Iterator< T2 >::Iterator( const ObjectPool* 
 
 template < typename T, uint32_t N, bool Paged >
 template< typename T2 >
-typename ObjectPool< T, N, Paged >::template Iterator< T2 >& ObjectPool< T, N, Paged >::template Iterator< T2 >::operator++()
+typename ObjectPool< T, N, Paged >::template Iterator< T2 >& ObjectPool< T, N, Paged >::Iterator< T2 >::operator++()
 {
 	if ( m_pool )
 	{
@@ -9424,7 +9424,7 @@ typename ObjectPool< T, N, Paged >::template Iterator< T2 >& ObjectPool< T, N, P
 
 template < typename T, uint32_t N, bool Paged >
 template< typename T2 >
-typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::template Iterator< T2 >::operator++( int )
+typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::Iterator< T2 >::operator++( int )
 {
 	Iterator result = *this;
 	++(*this);
@@ -9433,14 +9433,14 @@ typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Pa
 
 template < typename T, uint32_t N, bool Paged >
 template< typename T2 >
-typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::template Iterator< T2 >::begin()
+typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::Iterator< T2 >::begin()
 {
 	return m_pool ? const_cast< ObjectPool* >( m_pool )->Iterate() : Iterator< T2 >();
 }
 
 template < typename T, uint32_t N, bool Paged >
 template< typename T2 >
-typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::template Iterator< T2 >::end()
+typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::Iterator< T2 >::end()
 {
 	if ( const Page* lastPage = ( m_pool ? m_pool->m_pages.GetLast() : nullptr ) )
 	{
