@@ -7538,7 +7538,7 @@ Array< T, N >::Array( std::initializer_list< T > initList )
 	AE_STATIC_ASSERT_MSG( N != 0, "Must provide allocator for non-static arrays" );
 	AE_ASSERT_MSG( N >= initList.size(), "Initializer list is longer than max length (# >= #)", N, initList.size() );
 	
-	m_length = initList.size();
+	m_length = (uint32_t)initList.size();
 	m_size = N;
 	m_array = (T*)&m_storage;
 	uint32_t i = 0;
@@ -17961,7 +17961,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 			if ( m_protocol == Protocol::TCP )
 			{
 				_ae_sock_buff_t buffer;
-				int result = recv( m_sock, &buffer, 1, MSG_PEEK );
+				const int32_t result = (int32_t)recv( m_sock, &buffer, 1, MSG_PEEK );
 				if ( result == 0 || ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN ) )
 				{
 					Disconnect();
@@ -17970,7 +17970,7 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 			else if ( m_protocol == Protocol::UDP )
 			{
 				_ae_sock_buff_t buffer;
-				int32_t result = (int32_t)recv( m_sock, &buffer, 1, MSG_PEEK );
+				const int32_t result = (int32_t)recv( m_sock, &buffer, 1, MSG_PEEK );
 				if ( result == -1 && errno != EWOULDBLOCK && errno != EAGAIN )
 				{
 					Disconnect();
@@ -17989,13 +17989,13 @@ bool Socket::PeekData( void* dataOut, uint16_t length, uint32_t offset )
 		}
 
 		AE_ASSERT( readSize );
-		uint32_t totalSize = m_recvData.Length() + readSize;
+		const uint32_t totalSize = m_recvData.Length() + readSize;
 		m_recvData.Reserve( totalSize );
 		_ae_sock_buff_t* buffer = (_ae_sock_buff_t*)m_recvData.end();
 		while ( m_recvData.Length() < totalSize ) { m_recvData.Append( {} ); } // @TODO: Should be single function call
 		AE_ASSERT( buffer == (_ae_sock_buff_t*)m_recvData.end() - readSize );
 		
-		int32_t result = (int32_t)recv( m_sock, buffer, readSize, 0 );
+		const int32_t result = (int32_t)recv( m_sock, buffer, readSize, 0 );
 		if ( result < 0 && ( errno == EWOULDBLOCK || errno == EAGAIN ) )
 		{
 			return false;
