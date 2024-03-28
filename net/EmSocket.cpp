@@ -164,7 +164,7 @@ void EmSocket::Close()
 
 void EmSocket::Send( const void* data, uint32_t length )
 {
-  uint16_t msgLen = htons( length );
+  const uint16_t msgLen = htons( (uint16_t)length );
   if ( m_sendCurrent + sizeof(msgLen) + length > m_sendLength )
   {
     Close();
