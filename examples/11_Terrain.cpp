@@ -492,7 +492,7 @@ int main()
         for ( uint32_t i = 0; i < objects.Length(); i++ )
         {
           Object* object = objects[ i ];
-          ae::Str32 displayName( "(#) #", i, object->name );
+          ae::Str32 displayName = ae::Str32::Format( "(#) #", i, object->name );
           if ( ImGui::Selectable( displayName.c_str(), object == currentObject ) )
           {
             currentObject = object;

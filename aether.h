@@ -1322,8 +1322,9 @@ public:
 	template < uint32_t N2 > Str( const Str<N2>& str );
 	Str( const char* str );
 	Str( uint32_t length, const char* str );
+	//! Construct a string from a range of characters: [begining, end).
+	Str( const char* begin, const char* end );
 	Str( uint32_t length, char c );
-	template < typename... Args > Str( const char* format, Args... args );
 	template < typename... Args > static Str< N > Format( const char* format, Args... args );
 	explicit operator const char*() const;
 	
@@ -3140,7 +3141,10 @@ public:
 	static Str256 GetAbsolutePath( const char* filePath );
 	static bool IsAbsolutePath( const char* filePath );
 	static const char* GetFileNameFromPath( const char* filePath );
-	static const char* GetFileExtFromPath( const char* filePath );
+	//! Returns the entire file extension in the case of multiple dots. If
+	//! \p includeDot is true the returned string will include the first dot,
+	//! which can be useful for creating a substring of the file name.
+	static const char* GetFileExtFromPath( const char* filePath, bool includeDot = false );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
 	//! Replaces the extension of the given path with \p ext. If the given path
@@ -7466,21 +7470,21 @@ Str< N >::Str( uint32_t length, const char* str )
 }
 
 template < uint32_t N >
+Str< N >::Str( const char* begin, const char* end )
+{
+	m_length = (uint16_t)( end - begin );
+	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", begin, m_length, MaxLength() );
+	memcpy( m_str, begin, m_length );
+	m_str[ m_length ] = 0;
+}
+
+template < uint32_t N >
 Str< N >::Str( uint32_t length, char c )
 {
 	AE_ASSERT( length <= (uint16_t)MaxLength() );
 	m_length = (uint16_t)length;
 	memset( m_str, c, m_length );
 	m_str[ length ] = 0;
-}
-
-template < uint32_t N >
-template < typename... Args >
-Str< N >::Str( const char* format, Args... args )
-{
-	m_length = 0;
-	m_str[ 0 ] = 0;
-	m_Format( format, args... );
 }
 
 template < uint32_t N >
@@ -17750,13 +17754,14 @@ const char* FileSystem::GetFileNameFromPath( const char* filePath )
 	}
 }
 
-const char* FileSystem::GetFileExtFromPath( const char* filePath )
+const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDot )
 {
+	// Find first dot after last separator
 	const char* fileName = GetFileNameFromPath( filePath );
 	const char* s = strchr( fileName, '.' );
 	if ( s )
 	{
-		return s + 1;
+		return ( includeDot ? s : s + 1 );
 	}
 	else
 	{
