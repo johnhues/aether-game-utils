@@ -320,6 +320,15 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         AetherServerHeader header = *(AetherServerHeader*)e.packet->data;
         uint8_t* data = e.packet->data + sizeof(header);
         uint32_t length = (uint32_t)e.packet->dataLength - sizeof(header);
+
+        if ( e.packet->flags & ENET_PACKET_FLAG_RELIABLE )
+        {
+          ac->pub.receivedReliableBytes += length;
+        }
+        else
+        {
+          ac->pub.receivedUnreliableBytes += length;
+        }
         
         bool success = false;
         if ( header.msgId & kSysMsgMask )

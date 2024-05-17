@@ -92,6 +92,8 @@ struct AetherClient
   
   AetherAddress serverAddress;
   bool isConnected;
+  uint32_t receivedReliableBytes = 0; // It's safe to check this and 0 it out every frame. Not cleared on disconnect.
+  uint32_t receivedUnreliableBytes = 0; // It's safe to check this and 0 it out every frame. Not cleared on disconnect.
 
   bool IsConnected() { return isConnected; }
   bool IsConnecting() { return m_isConnecting; }
