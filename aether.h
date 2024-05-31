@@ -180,16 +180,19 @@
 //------------------------------------------------------------------------------
 // Platform Utils
 //------------------------------------------------------------------------------
+#ifndef AE_ASSERT_EXTRA
+	#define AE_ASSERT_EXTRA
+#endif
 #if _AE_WINDOWS_
-	#define aeAssert() __debugbreak()
+	#define aeAssert() { AE_ASSERT_EXTRA } __debugbreak()
 #elif _AE_APPLE_
-	#define aeAssert() __builtin_trap()
+	#define aeAssert() { AE_ASSERT_EXTRA } __builtin_trap()
 #elif _AE_EMSCRIPTEN_
-	#define aeAssert() assert( 0 )
+	#define aeAssert() { AE_ASSERT_EXTRA } assert( 0 )
 #elif defined( __aarch64__ )
-	#define aeAssert() asm( "brk #0" )
+	#define aeAssert() { AE_ASSERT_EXTRA } asm( "brk #0" )
 #else
-	#define aeAssert() asm( "int $3" )
+	#define aeAssert() { AE_ASSERT_EXTRA } asm( "int $3" )
 #endif
 
 #if _AE_WINDOWS_
