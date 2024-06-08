@@ -181,6 +181,20 @@
 //------------------------------------------------------------------------------
 // Platform Utils
 //------------------------------------------------------------------------------
+#ifndef AE_BREAK
+	#if _AE_WINDOWS_
+		#define AE_BREAK() __debugbreak()
+	#elif _AE_APPLE_
+		#define AE_BREAK() __builtin_trap()
+	#elif _AE_EMSCRIPTEN_
+		#define AE_BREAK() assert( 0 )
+	#elif defined( __aarch64__ )
+		#define AE_BREAK() asm( "brk #0" )
+	#else
+		#define AE_BREAK() asm( "int $3" )
+	#endif
+#endif
+
 #if _AE_WINDOWS_
 	#define aeCompilationWarning( _msg ) _Pragma( message _msg )
 #else
@@ -2436,26 +2450,16 @@ void SetLogColorsEnabled( bool enabled );
 //------------------------------------------------------------------------------
 // Assertion functions
 //------------------------------------------------------------------------------
-#ifndef aeAssert
-	#if _AE_WINDOWS_
-		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } __debugbreak(); }
-	#elif _AE_APPLE_
-		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } __builtin_trap(); }
-	#elif _AE_EMSCRIPTEN_
-		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } assert( 0 ); }
-	#elif defined( __aarch64__ )
-		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } asm( "brk #0" ); }
-	#else
-		inline void aeAssert( const char* msgStr ) { if( msgStr[ 0 ] ) { ae::ShowMessage( msgStr ); } asm( "int $3" ); }
-	#endif
+#ifndef AE_ASSERT_IMPL
+	#define AE_ASSERT_IMPL( msgStr ) { if( (msgStr)[ 0 ] ) { ae::ShowMessage( msgStr ); } AE_BREAK(); }
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
-#define AE_ASSERT( _x ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert( msgStr.c_str() ); } } while (0)
-#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert( msgStr.c_str() ); } } while (0)
-#define AE_DEBUG_ASSERT( _x ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); aeAssert( msgStr.c_str() ); } } while (0)
-#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); aeAssert( msgStr.c_str() ); } } while (0)
-#define AE_FAIL() do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); aeAssert( msgStr.c_str() ); } while (0)
-#define AE_FAIL_MSG( ... ) do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); aeAssert( msgStr.c_str() ); } while (0)
+#define AE_ASSERT( _x ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_DEBUG_ASSERT( _x ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_FAIL() do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
+#define AE_FAIL_MSG( ... ) do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
 
 //------------------------------------------------------------------------------
 // Static assertion functions
