@@ -528,6 +528,7 @@ struct VecT
 	T NormalizeCopy() const;
 	T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
 	float Trim( float length );
+	T TrimCopy( float length ) const;
 
 	bool IsNAN() const;
 };
@@ -772,7 +773,7 @@ public:
 	Vec3 GetDirectionXY() const;
 	void ZeroXY();
 	void GetAxisAngle( Vec3* axis, float* angle ) const;
-	void AddRotationXY( float rotation);
+	void AddRotationXY( float rotation );
 	Quaternion Nlerp( Quaternion end, float t ) const;
 	Matrix4 GetTransformMatrix() const;
 	Quaternion GetInverse() const;
@@ -6400,13 +6401,24 @@ T VecT< T >::SafeNormalizeCopy( float epsilon ) const
 template < typename T >
 float VecT< T >::Trim( float trimLength )
 {
-	float length = Length();
-	if ( trimLength < length )
+	const float length = Length();
+	if( length > trimLength )
 	{
 		*(T*)this *= ( trimLength / length );
 		return trimLength;
 	}
 	return length;
+}
+
+template < typename T >
+T VecT< T >::TrimCopy( float trimLength ) const
+{
+	const float length = Length();
+	if( length > trimLength )
+	{
+		return *((T*)this) * ( trimLength / length );
+	}
+	return *((T*)this);
 }
 
 template < typename T >
@@ -6476,6 +6488,10 @@ inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n )
 }
 inline Vec2 Vec2::DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon ) const
 {
+	if ( snappiness == 0.0f || dt == 0.0f )
+	{
+		return *this;
+	}
 	return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
 }
 
@@ -6923,6 +6939,10 @@ inline Color Color::Lerp( const Color& end, float t ) const
 }
 inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) const
 {
+	if ( snappiness == 0.0f || dt == 0.0f )
+	{
+		return *this;
+	}
 	return target.Lerp( *this, exp2( -exp2( snappiness ) * dt ) );
 }
 inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
@@ -11393,23 +11413,23 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 	{
 		return v1 * ae::Lerp( 0.0f, l1, t );
 	}
-	float d = ae::Clip( v0.Dot( v1 ), -1.0f, 1.0f );
+	const float l = ae::Lerp( l0, l1, t );
+	const float d = ae::Clip( v0.Dot( v1 ), -1.0f + epsilon, 1.0f ); // Don't allow vector to directly apose
 	if ( d > ( 1.0f - epsilon ) )
 	{
-		return v1;
+		return v1 * l; // Vectors almost directly align, so just lerp length
 	}
-	if ( d < -( 1.0f - epsilon ) )
-	{
-		return v0;
-	}
-	float angle = std::acos( d ) * t;
-	Vec3 v2 = v1 - v0 * d;
-	v2.Normalize();
-	return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) );
+	const float angle = std::acos( d ) * t;
+	const Vec3 v2 = ( v1 - v0 * d ).NormalizeCopy();
+	return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) ) * l;
 }
 
 Vec3 Vec3::DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon ) const
 {
+	if ( snappiness == 0.0f || dt == 0.0f )
+	{
+		return *this;
+	}
 	return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
 }
 
@@ -12488,20 +12508,11 @@ ae::Vec3 LineSegment::GetClosest( ae::Vec3 p, float* distanceOut ) const
 
 float LineSegment::GetDistance( ae::Vec3 p, ae::Vec3* closestOut ) const
 {
-	float lenSq = ( m_p1 - m_p0 ).LengthSquared();
-	if ( lenSq <= 0.001f )
-	{
-		if ( closestOut )
-		{
-			*closestOut = m_p0;
-		}
-		return ( p - m_p0 ).Length();
-	}
-
-	float t = ae::Clip01( ( p - m_p0 ).Dot( m_p1 - m_p0 ) / lenSq );
-	ae::Vec3 linePos = ae::Lerp( m_p0, m_p1, t );
-
-	if ( closestOut )
+	const ae::Vec3 n = ( m_p1 - m_p0 );
+	const float lengthSq = n.LengthSquared();
+	const float t = ( lengthSq > 0.001f ) ? ae::Clip01( ( p - m_p0 ).Dot( n ) / lengthSq ) : 0.0f;
+	const ae::Vec3 linePos = ae::Lerp( m_p0, m_p1, t );
+	if( closestOut )
 	{
 		*closestOut = linePos;
 	}
