@@ -7216,7 +7216,7 @@ Str< N >::Str( const char* str )
 template < uint32_t N >
 Str< N >::Str( uint32_t length, const char* str )
 {
-	AE_ASSERT( length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( length <= (uint16_t)MaxLength(), "'#' > #", str, MaxLength() );
 	m_length = (uint16_t)length;
 	memcpy( m_str, str, m_length );
 	m_str[ length ] = 0;
@@ -7225,7 +7225,7 @@ Str< N >::Str( uint32_t length, const char* str )
 template < uint32_t N >
 Str< N >::Str( uint32_t length, char c )
 {
-	AE_ASSERT( length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( length <= (uint16_t)MaxLength(), "# > #", length, MaxLength() );
 	m_length = (uint16_t)length;
 	memset( m_str, c, m_length );
 	m_str[ length ] = 0;
@@ -7256,7 +7256,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 void Str< N >::operator =( const Str<N2>& str )
 {
-	AE_ASSERT( str.m_length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "'#' > #", str, MaxLength() );
 	m_length = str.m_length;
 	memcpy( m_str, str.m_str, str.m_length + 1u );
 }
@@ -7282,7 +7282,7 @@ template < uint32_t N >
 void Str< N >::operator +=( const char* str )
 {
 	uint32_t len = (uint32_t)strlen( str );
-	AE_ASSERT( m_length + len <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( m_length + len <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
 	memcpy( m_str + m_length, str, len + 1u );
 	m_length += len;
 }
@@ -7291,7 +7291,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 void Str< N >::operator +=( const Str<N2>& str )
 {
-	AE_ASSERT( m_length + str.m_length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( m_length + str.m_length <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
 	memcpy( m_str + m_length, str.c_str(), str.m_length + 1u );
 	m_length += str.m_length;
 }
@@ -7413,13 +7413,15 @@ bool operator >=( const char* str0, const Str<N>& str1 )
 template < uint32_t N >
 char& Str< N >::operator[]( uint32_t i )
 {
-	AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
+	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
+	return m_str[ i ];
 }
 
 template < uint32_t N >
 const char Str< N >::operator[]( uint32_t i ) const
 {
-	AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
+	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
+	return m_str[ i ];
 }
 
 template < uint32_t N >
@@ -7456,12 +7458,10 @@ void Str< N >::Append( const char* str )
 template < uint32_t N >
 void Str< N >::Trim( uint32_t len )
 {
-	if ( len == m_length )
+	if ( len >= m_length )
 	{
-		return;
+		return; // Not longer than desired length
 	}
-
-	AE_ASSERT( len < m_length );
 	m_length = (uint16_t)len;
 	m_str[ m_length ] = 0;
 }
