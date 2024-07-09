@@ -433,15 +433,59 @@ inline float DegToRad( float degrees );
 inline float RadToDeg( float radians );
 
 //------------------------------------------------------------------------------
-// Type specific limits
+// ae::MaxValue
 //------------------------------------------------------------------------------
-template< typename T > constexpr T MaxValue();
-template< typename T > constexpr T MinValue();
-// Forward declare to avoid https://stackoverflow.com/questions/7774188/explicit-specialization-after-instantiation
-template<> constexpr float MaxValue< float >();
-template<> constexpr float MinValue< float >();
-template<> constexpr double MaxValue< double >();
-template<> constexpr double MinValue< double >();
+template< typename T > constexpr T MaxValue() { return std::numeric_limits< T >::max(); }
+template<> constexpr float MaxValue< float >() { return std::numeric_limits< float >::infinity(); }
+template<> constexpr double MaxValue< double >() { return std::numeric_limits< double >::infinity(); }
+
+//------------------------------------------------------------------------------
+// ae::MinValue
+//------------------------------------------------------------------------------
+template< typename T > constexpr T MinValue() { return std::numeric_limits< T >::min(); }
+template<> constexpr float MinValue< float >() { return -1 * std::numeric_limits< float >::infinity(); }
+template<> constexpr double MinValue< double >() { return -1 * std::numeric_limits< double >::infinity(); }
+
+//------------------------------------------------------------------------------
+// ae::UnsignedInt class
+//! A templated helper class for selecting the smallest of: uint8_t, uint16_t,
+//! uint32_t, or uint64_t that can store values up to and including 'N'. The
+//! 'Default' template parameter is used to select the type when N is 0.
+//------------------------------------------------------------------------------
+template< uint64_t N, typename Default = void >
+class UnsignedInt
+{
+public:
+	//! Smallest type to store N
+	using Type = std::conditional_t< N == 0, Default, // If 0
+		// @NOTE: Don't use equivalence here, so value + 1 doesn't overflow
+		std::conditional_t< ( N < ae::MaxValue< uint8_t >() ), uint8_t, // If < max value of uint8_t
+			std::conditional_t< ( N < ae::MaxValue< uint16_t >() ), uint16_t, // If < max value of uint16_t
+				std::conditional_t< ( N < ae::MaxValue< uint32_t >() ), uint32_t, // If < max value of uint32_t
+					uint64_t // If > max value of uint32_t
+				>
+			>
+		>
+	>;
+
+	UnsignedInt() = default;
+	explicit UnsignedInt( Type v ) : value( v ) {}
+	UnsignedInt& operator =( Type v ) { value = v; return *this; }
+	operator Type() const { return value; }
+
+	UnsignedInt& operator +=( Type v ) { value += v; return *this; }
+	UnsignedInt& operator -=( Type v ) { value -= v; return *this; }
+	UnsignedInt& operator *=( Type v ) { value *= v; return *this; }
+	UnsignedInt& operator /=( Type v ) { value /= v; return *this; }
+	UnsignedInt& operator %=( Type v ) { value %= v; return *this; }
+	UnsignedInt operator ++( int ) { return value++; }
+	UnsignedInt operator --( int ) { return value--; }
+	UnsignedInt& operator ++() { return ++value; }
+	UnsignedInt& operator --() { return --value; }
+
+	Type value;
+};
+template< uint64_t N, typename Default > std::ostream& operator<<( std::ostream& os, UnsignedInt< N, Default > i ) { return os << (uint64_t)i; } // Don't print uint8's as characters
 
 //------------------------------------------------------------------------------
 // ae::Random functions
@@ -1277,33 +1321,33 @@ private:
 //! @{
 
 //------------------------------------------------------------------------------
-// ae::Str class
-//! A fixed length string class. The templated value is the total size of
-//! the string in memory.
+// ae::String class
+//! A null-terminated string class with a fixed maximum size. The templated
+//! value is the maximum length of the string (not including the null terminator).
 //------------------------------------------------------------------------------
-template < uint32_t N >
-class Str
+template< uint32_t N >
+class String
 {
 public:
-	Str();
-	template < uint32_t N2 > Str( const Str<N2>& str );
-	Str( const char* str );
-	Str( uint32_t length, const char* str );
-	Str( uint32_t length, char c );
-	template < typename... Args > Str( const char* format, Args... args );
-	template < typename... Args > static Str< N > Format( const char* format, Args... args );
+	String();
+	template< uint32_t N2 > String( const String< N2 >& str );
+	explicit String( const char* str );
+	String( uint32_t length, const char* str );
+	String( uint32_t length, char c );
+	template< typename... Args > String( const char* format, Args... args );
+	template< typename... Args > static String< N > Format( const char* format, Args... args );
 	explicit operator const char*() const;
 	
-	template < uint32_t N2 > void operator =( const Str<N2>& str );
-	template < uint32_t N2 > Str<N> operator +( const Str<N2>& str ) const;
-	template < uint32_t N2 > void operator +=( const Str<N2>& str );
-	template < uint32_t N2 > bool operator ==( const Str<N2>& str ) const;
-	template < uint32_t N2 > bool operator !=( const Str<N2>& str ) const;
-	template < uint32_t N2 > bool operator <( const Str<N2>& str ) const;
-	template < uint32_t N2 > bool operator >( const Str<N2>& str ) const;
-	template < uint32_t N2 > bool operator <=( const Str<N2>& str ) const;
-	template < uint32_t N2 > bool operator >=( const Str<N2>& str ) const;
-	Str<N> operator +( const char* str ) const;
+	template< uint32_t N2 > void operator =( const String< N2 >& str );
+	template< uint32_t N2 > String< N > operator +( const String< N2 >& str ) const;
+	template< uint32_t N2 > void operator +=( const String< N2 >& str );
+	template< uint32_t N2 > bool operator ==( const String< N2 >& str ) const;
+	template< uint32_t N2 > bool operator !=( const String< N2 >& str ) const;
+	template< uint32_t N2 > bool operator <( const String< N2 >& str ) const;
+	template< uint32_t N2 > bool operator >( const String< N2 >& str ) const;
+	template< uint32_t N2 > bool operator <=( const String< N2 >& str ) const;
+	template< uint32_t N2 > bool operator >=( const String< N2 >& str ) const;
+	String< N > operator +( const char* str ) const;
 	void operator +=( const char* str );
 	bool operator ==( const char* str ) const;
 	bool operator !=( const char* str ) const;
@@ -1316,38 +1360,38 @@ public:
 	const char operator[]( uint32_t i ) const;
 	const char* c_str() const;
 
-	template < uint32_t N2 >
-	void Append( const Str<N2>& str );
+	template< uint32_t N2 >
+	void Append( const String< N2 >& str );
 	void Append( const char* str );
 	void Trim( uint32_t len );
 
 	uint32_t Length() const;
 	uint32_t Size() const;
 	bool Empty() const;
-	static constexpr uint32_t MaxLength() { return N - 3u; } // Leave room for length var and null terminator
+	static constexpr uint32_t MaxLength() { return N; }
 
 private:
-	template < uint32_t N2 > friend class Str;
-	template < uint32_t N2 > friend bool operator ==( const char*, const Str< N2 >& );
-	template < uint32_t N2 > friend bool operator !=( const char*, const Str< N2 >& );
-	template < uint32_t N2 > friend bool operator <( const char*, const Str< N2 >& );
-	template < uint32_t N2 > friend bool operator >( const char*, const Str< N2 >& );
-	template < uint32_t N2 > friend bool operator <=( const char*, const Str< N2 >& );
-	template < uint32_t N2 > friend bool operator >=( const char*, const Str< N2 >& );
-	template < uint32_t N2 > friend std::istream& operator>>( std::istream&, Str< N2 >& );
+	template< uint32_t N2 > friend class String;
+	template< uint32_t N2 > friend bool operator ==( const char*, const String< N2 >& );
+	template< uint32_t N2 > friend bool operator !=( const char*, const String< N2 >& );
+	template< uint32_t N2 > friend bool operator <( const char*, const String< N2 >& );
+	template< uint32_t N2 > friend bool operator >( const char*, const String< N2 >& );
+	template< uint32_t N2 > friend bool operator <=( const char*, const String< N2 >& );
+	template< uint32_t N2 > friend bool operator >=( const char*, const String< N2 >& );
+	template< uint32_t N2 > friend std::istream& operator>>( std::istream&, String< N2 >& );
 	void m_Format( const char* format );
-	template < typename T, typename... Args >
+	template< typename T, typename... Args >
 	void m_Format( const char* format, T value, Args... args );
-	uint16_t m_length;
+	ae::UnsignedInt< N, uint16_t > m_length;
 	char m_str[ MaxLength() + 1u ];
 };
 // Predefined lengths
-using Str16 = Str< 16 >;
-using Str32 = Str< 32 >;
-using Str64 = Str< 64 >;
-using Str128 = Str< 128 >;
-using Str256 = Str< 256 >;
-using Str512 = Str< 512 >;
+using Str16 = String< 16 >;
+using Str32 = String< 32 >;
+using Str64 = String< 64 >;
+using Str128 = String< 128 >;
+using Str256 = String< 256 >;
+using Str512 = String< 512 >;
 
 //------------------------------------------------------------------------------
 // ae::Pair class
@@ -1485,8 +1529,8 @@ public:
 	ae::Tag Tag() const { return m_tag; }
 
 private:
-	uint32_t m_length;
-	uint32_t m_size;
+	ae::UnsignedInt< N, uint32_t > m_length;
+	ae::UnsignedInt< N, uint32_t > m_size;
 	T* m_array;
 	ae::Tag m_tag;
 	// clang-format off
@@ -2329,7 +2373,7 @@ template <> uint32_t GetHash( int32_t key );
 template < typename T > uint32_t GetHash( T* key );
 template <> uint32_t GetHash( const char* key );
 template <> uint32_t GetHash( char* key );
-template < uint32_t N > uint32_t GetHash( ae::Str< N > key );
+template < uint32_t N > uint32_t GetHash( ae::String< N > key );
 template <> uint32_t GetHash( std::string key );
 template <> uint32_t GetHash( ae::Hash key );
 template <> uint32_t GetHash( ae::Int3 key );
@@ -4474,9 +4518,9 @@ public:
 	void SerializeBool( bool& v );
 	void SerializeBool( const bool& v );
 	
-	template< uint32_t N > void SerializeString( Str< N >& str );
+	template< uint32_t N > void SerializeString( String< N >& str );
 	//! Writer mode only
-	template< uint32_t N > void SerializeString( const Str< N >& str );
+	template< uint32_t N > void SerializeString( const String< N >& str );
 	//! Writer mode only
 	void SerializeString( const char* str );
 
@@ -5950,42 +5994,6 @@ inline float Sqrt( float x )
 	return sqrtf( x );
 }
 
-template< typename T >
-constexpr T MaxValue()
-{
-	return std::numeric_limits< T >::max();
-}
-
-template< typename T >
-constexpr T MinValue()
-{
-	return std::numeric_limits< T >::min();
-}
-
-template<>
-constexpr float MaxValue< float >()
-{
-	return std::numeric_limits< float >::infinity();
-}
-
-template<>
-constexpr float MinValue< float >()
-{
-	return -1 * std::numeric_limits< float >::infinity();
-}
-
-template<>
-constexpr double MaxValue< double >()
-{
-	return std::numeric_limits< double >::infinity();
-}
-
-template<>
-constexpr double MinValue< double >()
-{
-	return -1 * std::numeric_limits< double >::infinity();
-}
-
 template< typename T0, typename T1 >
 T0 Lerp( T0 start, T0 end, T1 t )
 {
@@ -6965,7 +6973,7 @@ template < typename T > std::string ToString( T value ); // @TODO: Add ref
 
 // template <> // @TODO: Where should this empty template parameter list go?
 template < uint32_t N >
-std::string ToString( Str< N > value )
+std::string ToString( String< N > value )
 {
 	return value;
 }
@@ -7171,50 +7179,49 @@ inline bool FromString( const char* str, const bool& defaultValue )
 }
 
 //------------------------------------------------------------------------------
-// ae::Str functions
+// ae::String functions
 //------------------------------------------------------------------------------
 template < uint32_t N >
-std::ostream& operator<<( std::ostream& out, const Str< N >& str )
+std::ostream& operator<<( std::ostream& out, const String< N >& str )
 {
 	return out << str.c_str();
 }
 
 template < uint32_t N >
-std::istream& operator>>( std::istream& in, Str< N >& str )
+std::istream& operator>>( std::istream& in, String< N >& str )
 {
-	in.getline( str.m_str, Str< N >::MaxLength() );
+	in.getline( str.m_str, String< N >::MaxLength() );
 	str.m_length = in.gcount();
 	str.m_str[ str.m_length ] = 0;
 	return in;
 }
 
 template < uint32_t N >
-Str< N >::Str()
+String< N >::String()
 {
-	AE_STATIC_ASSERT_MSG( sizeof( *this ) == N, "Incorrect Str size" );
 	m_length = 0;
 	m_str[ 0 ] = 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-Str< N >::Str( const Str<N2>& str )
+String< N >::String( const String< N2 >& str )
 {
-	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, str.m_length, MaxLength() );
+	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "'#' Length:# Max:#", str, str.m_length, MaxLength() );
 	m_length = str.m_length;
 	memcpy( m_str, str.m_str, m_length + 1u );
 }
 
 template < uint32_t N >
-Str< N >::Str( const char* str )
+String< N >::String( const char* str )
 {
 	m_length = (uint16_t)strlen( str );
-	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "Str:'#' Length:# Max:#", str, m_length, MaxLength() );
+	AE_ASSERT_MSG( m_length <= (uint16_t)MaxLength(), "'#' Length:# Max:#", str, m_length, MaxLength() );
 	memcpy( m_str, str, m_length + 1u );
 }
 
 template < uint32_t N >
-Str< N >::Str( uint32_t length, const char* str )
+String< N >::String( uint32_t length, const char* str )
 {
 	AE_ASSERT_MSG( length <= (uint16_t)MaxLength(), "'#' > #", str, MaxLength() );
 	m_length = (uint16_t)length;
@@ -7223,7 +7230,7 @@ Str< N >::Str( uint32_t length, const char* str )
 }
 
 template < uint32_t N >
-Str< N >::Str( uint32_t length, char c )
+String< N >::String( uint32_t length, char c )
 {
 	AE_ASSERT_MSG( length <= (uint16_t)MaxLength(), "# > #", length, MaxLength() );
 	m_length = (uint16_t)length;
@@ -7233,7 +7240,7 @@ Str< N >::Str( uint32_t length, char c )
 
 template < uint32_t N >
 template < typename... Args >
-Str< N >::Str( const char* format, Args... args )
+String< N >::String( const char* format, Args... args )
 {
 	m_length = 0;
 	m_str[ 0 ] = 0;
@@ -7241,20 +7248,20 @@ Str< N >::Str( const char* format, Args... args )
 }
 
 template < uint32_t N >
-Str< N >::operator const char*() const
+String< N >::operator const char*() const
 {
 	return m_str;
 }
 
 template < uint32_t N >
-const char* Str< N >::c_str() const
+const char* String< N >::c_str() const
 {
 	return m_str;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-void Str< N >::operator =( const Str<N2>& str )
+void String< N >::operator =( const String< N2 >& str )
 {
 	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "'#' > #", str, MaxLength() );
 	m_length = str.m_length;
@@ -7262,24 +7269,24 @@ void Str< N >::operator =( const Str<N2>& str )
 }
 
 template < uint32_t N >
-Str<N> Str< N >::operator +( const char* str ) const
+String< N > String< N >::operator +( const char* str ) const
 {
-	Str<N> out( *this );
+	String< N > out( *this );
 	out += str;
 	return out;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-Str<N> Str< N >::operator +( const Str<N2>& str ) const
+String< N > String< N >::operator +( const String< N2 >& str ) const
 {
-	Str<N> out( *this );
+	String< N > out( *this );
 	out += str;
 	return out;
 }
 
 template < uint32_t N >
-void Str< N >::operator +=( const char* str )
+void String< N >::operator +=( const char* str )
 {
 	uint32_t len = (uint32_t)strlen( str );
 	AE_ASSERT_MSG( m_length + len <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
@@ -7289,7 +7296,7 @@ void Str< N >::operator +=( const char* str )
 
 template < uint32_t N >
 template < uint32_t N2 >
-void Str< N >::operator +=( const Str<N2>& str )
+void String< N >::operator +=( const String< N2 >& str )
 {
 	AE_ASSERT_MSG( m_length + str.m_length <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
 	memcpy( m_str + m_length, str.c_str(), str.m_length + 1u );
@@ -7298,165 +7305,165 @@ void Str< N >::operator +=( const Str<N2>& str )
 
 template < uint32_t N >
 template < uint32_t N2 >
-bool Str< N >::operator ==( const Str<N2>& str ) const
+bool String< N >::operator ==( const String< N2 >& str ) const
 {
 	return strcmp( m_str, str.c_str() ) == 0;
 }
 
 template < uint32_t N >
-bool Str< N >::operator ==( const char* str ) const
+bool String< N >::operator ==( const char* str ) const
 {
 	return strcmp( m_str, str ) == 0;
 }
 
 template < uint32_t N >
-bool operator ==( const char* str0, const Str<N>& str1 )
+bool operator ==( const char* str0, const String< N >& str1 )
 {
 	return strcmp( str0, str1.m_str ) == 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-bool Str< N >::operator !=( const Str<N2>& str ) const
+bool String< N >::operator !=( const String< N2 >& str ) const
 {
 	return !operator==( str );
 }
 
 template < uint32_t N >
-bool Str< N >::operator !=( const char* str ) const
+bool String< N >::operator !=( const char* str ) const
 {
 	return !operator==( str );
 }
 
 template < uint32_t N >
-bool operator !=( const char* str0, const Str<N>& str1 )
+bool operator !=( const char* str0, const String< N >& str1 )
 {
 	return !operator==( str0, str1 );
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-bool Str< N >::operator <( const Str<N2>& str ) const
+bool String< N >::operator <( const String< N2 >& str ) const
 {
 	return strcmp( m_str, str.c_str() ) < 0;
 }
 
 template < uint32_t N >
-bool Str< N >::operator <( const char* str ) const
+bool String< N >::operator <( const char* str ) const
 {
 	return strcmp( m_str, str ) < 0;
 }
 
 template < uint32_t N >
-bool operator <( const char* str0, const Str<N>& str1 )
+bool operator <( const char* str0, const String< N >& str1 )
 {
 	return strcmp( str0, str1.m_str ) < 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-bool Str< N >::operator >( const Str<N2>& str ) const
+bool String< N >::operator >( const String< N2 >& str ) const
 {
 	return strcmp( m_str, str.c_str() ) > 0;
 }
 
 template < uint32_t N >
-bool Str< N >::operator >( const char* str ) const
+bool String< N >::operator >( const char* str ) const
 {
 	return strcmp( m_str, str ) > 0;
 }
 
 template < uint32_t N >
-bool operator >( const char* str0, const Str<N>& str1 )
+bool operator >( const char* str0, const String< N >& str1 )
 {
 	return strcmp( str0, str1.m_str ) > 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-bool Str< N >::operator <=( const Str<N2>& str ) const
+bool String< N >::operator <=( const String< N2 >& str ) const
 {
 	return strcmp( m_str, str.c_str() ) <= 0;
 }
 
 template < uint32_t N >
-bool Str< N >::operator <=( const char* str ) const
+bool String< N >::operator <=( const char* str ) const
 {
 	return strcmp( m_str, str ) <= 0;
 }
 
 template < uint32_t N >
-bool operator <=( const char* str0, const Str<N>& str1 )
+bool operator <=( const char* str0, const String< N >& str1 )
 {
 	return strcmp( str0, str1.m_str ) <= 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-bool Str< N >::operator >=( const Str<N2>& str ) const
+bool String< N >::operator >=( const String< N2 >& str ) const
 {
 	return strcmp( m_str, str.c_str() ) >= 0;
 }
 
 template < uint32_t N >
-bool Str< N >::operator >=( const char* str ) const
+bool String< N >::operator >=( const char* str ) const
 {
 	return strcmp( m_str, str ) >= 0;
 }
 
 template < uint32_t N >
-bool operator >=( const char* str0, const Str<N>& str1 )
+bool operator >=( const char* str0, const String< N >& str1 )
 {
 	return strcmp( str0, str1.m_str ) >= 0;
 }
 
 template < uint32_t N >
-char& Str< N >::operator[]( uint32_t i )
+char& String< N >::operator[]( uint32_t i )
 {
 	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
 	return m_str[ i ];
 }
 
 template < uint32_t N >
-const char Str< N >::operator[]( uint32_t i ) const
+const char String< N >::operator[]( uint32_t i ) const
 {
 	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
 	return m_str[ i ];
 }
 
 template < uint32_t N >
-uint32_t Str< N >::Length() const
+uint32_t String< N >::Length() const
 {
 	return m_length;
 }
 
 template < uint32_t N >
-uint32_t Str< N >::Size() const
+uint32_t String< N >::Size() const
 {
 	return MaxLength();
 }
 
 template < uint32_t N >
-bool Str< N >::Empty() const
+bool String< N >::Empty() const
 {
 	return m_length == 0;
 }
 
 template < uint32_t N >
 template < uint32_t N2 >
-void Str< N >::Append( const Str<N2>& str )
+void String< N >::Append( const String< N2 >& str )
 {
 	*this += str;
 }
 
 template < uint32_t N >
-void Str< N >::Append( const char* str )
+void String< N >::Append( const char* str )
 {
 	*this += str;
 }
 
 template < uint32_t N >
-void Str< N >::Trim( uint32_t len )
+void String< N >::Trim( uint32_t len )
 {
 	if ( len >= m_length )
 	{
@@ -7468,22 +7475,22 @@ void Str< N >::Trim( uint32_t len )
 
 template < uint32_t N >
 template < typename... Args >
-Str< N > Str< N >::Format( const char* format, Args... args )
+String< N > String< N >::Format( const char* format, Args... args )
 {
-	Str< N > result( "" );
+	String< N > result( "" );
 	result.m_Format( format, args... );
 	return result;
 }
 
 template < uint32_t N >
-void Str< N >::m_Format( const char* format )
+void String< N >::m_Format( const char* format )
 {
 	*this += format;
 }
 
 template < uint32_t N >
 template < typename T, typename... Args >
-void Str< N >::m_Format( const char* format, T value, Args... args )
+void String< N >::m_Format( const char* format, T value, Args... args )
 {
 	if ( !*format )
 	{
@@ -7497,7 +7504,7 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 	}
 	if ( head > format )
 	{
-		*this += Str< N >( (uint32_t)( head - format ), format );
+		*this += String< N >( (uint32_t)( head - format ), format );
 	}
 
 	if ( *head == '#' )
@@ -7718,12 +7725,12 @@ T& Array< T, N >::Append( const T& value )
 template < typename T, uint32_t N >
 T* Array< T, N >::Append( const T& value, uint32_t count )
 {
-	Reserve( m_length + count );
-	T* result = m_array + m_length;
+	Reserve( m_length.value + count );
+	T* result = m_array + m_length.value;
 	for ( uint32_t i = 0; i < count; i++ )
 	{
-		new ( &m_array[ m_length ] ) T ( value );
-		m_length++;
+		new ( &m_array[ m_length.value ] ) T ( value );
+		m_length.value++;
 	}
 	return result;
 }
@@ -7737,7 +7744,7 @@ T* Array< T, N >::AppendArray( const T* values, uint32_t count )
 	for ( uint32_t i = 0; i < count; i++ )
 	{
 		new ( &m_array[ m_length ] ) T ( values[ i ] );
-		m_length++;
+		m_length.value++;
 	}
 	return result;
 }
@@ -7757,7 +7764,7 @@ T* Array< T, N >::Insert( uint32_t index, const T& value, uint32_t count )
 	const int32_t indexCount = index + count;
 	const uint32_t pivot0 = ae::Min( (uint32_t)indexCount, m_length );
 	const int32_t pivot1 = ae::Max( indexCount, (int32_t)m_length );
-	m_length += count;
+	m_length.value += count;
 	// Move elements back
 	for ( int32_t i = m_length - 1; i >= pivot1; i-- )
 	{
@@ -7818,7 +7825,7 @@ void Array< T, N >::Remove( uint32_t index, uint32_t count )
 	AE_DEBUG_ASSERT( index < m_length );
 	AE_DEBUG_ASSERT( index + count <= m_length );
 
-	m_length -= count;
+	m_length.value -= count;
 	for ( uint32_t i = index; i < m_length; i++ )
 	{
 		m_array[ i ] = std::move( m_array[ i + count ] );
@@ -7924,11 +7931,11 @@ void Array< T, N >::Reserve( uint32_t size )
 		AE_ASSERT_MSG( N >= size, "# >= #", N, size );
 		return;
 	}
-	else if ( size <= m_size )
+	else if ( size <= m_size.value )
 	{
 		return;
 	}
-	else if ( m_size == 0 )
+	else if ( m_size.value == 0 )
 	{
 		// Initially allocate at least 64 bytes (rounded down) of type
 		size = ae::Max( size, 64u / (uint32_t)sizeof(T) );
@@ -7941,7 +7948,7 @@ void Array< T, N >::Reserve( uint32_t size )
 	
 	AE_DEBUG_ASSERT( m_tag != ae::Tag() );
 	
-	if ( m_size )
+	if ( (bool)m_size )
 	{
 		// Next power of two
 		size--;
@@ -9505,7 +9512,7 @@ ae::AABB BVH< T, N >::GetAABB() const
 // ae::GetHash helper
 //------------------------------------------------------------------------------
 template < typename T > uint32_t GetHash( T* value ) { return ae::Hash().HashBasicType( (uint64_t)value ).Get(); }
-template < uint32_t N > uint32_t GetHash( ae::Str< N > value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
+template < uint32_t N > uint32_t GetHash( ae::String< N > value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // HotLoader member functions
@@ -9989,7 +9996,7 @@ BinaryStream BinaryStream::Writer( uint8_t (&data)[ N ] )
 }
 
 template < uint32_t N >
-void BinaryStream::SerializeString( Str< N >& str )
+void BinaryStream::SerializeString( String< N >& str )
 {
 	if ( IsWriter() )
 	{
@@ -10006,20 +10013,20 @@ void BinaryStream::SerializeString( Str< N >& str )
 			return;
 		}
 
-		if ( len > Str< N >::MaxLength() || GetRemaining() < len )
+		if ( len > String< N >::MaxLength() || GetRemaining() < len )
 		{
 			Invalidate();
 		}
 		else
 		{
-			str = Str< N >( len, (const char*)PeekData() );
+			str = String< N >( len, (const char*)PeekData() );
 			Discard( len );
 		}
 	}
 }
 
 template < uint32_t N >
-void BinaryStream::SerializeString( const Str< N >& str )
+void BinaryStream::SerializeString( const String< N >& str )
 {
 	AE_ASSERT( m_mode == Mode::WriteBuffer );
 	const uint16_t len = str.Length();

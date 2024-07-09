@@ -74,7 +74,7 @@ public:
 	void Discard();
 
 	template < uint32_t N >
-	static bool InputText( const char* label, ae::Str< N >* str, ImGuiInputTextFlags flags = 0 );
+	static bool InputText( const char* label, ae::String< N >* str, ImGuiInputTextFlags flags = 0 );
 
 	static void BeginGroupPanel( const char* name, const ImVec2& size = ImVec2( -1.0f, 0.0f ) );
 	static void EndGroupPanel();
@@ -89,8 +89,8 @@ private:
 	{
 		if ( data->EventFlag == ImGuiInputTextFlags_CallbackEdit )
 		{
-			ae::Str< N >* str = ( ae::Str< N >* )data->UserData;
-			*str = ae::Str< N >( data->BufTextLen, 'x' ); // Set Length() of string
+			ae::String< N >* str = ( ae::String< N >* )data->UserData;
+			*str = ae::String< N >( data->BufTextLen, 'x' ); // Set Length() of string
 		}
 		return 0;
 	}
@@ -154,12 +154,12 @@ bool aeImGui_Enum( const char* varName, T* valueOut, uint32_t showSearchCount = 
 }
 
 template < uint32_t N >
-bool aeImGui::InputText( const char* label, ae::Str< N >* str, ImGuiInputTextFlags flags )
+bool aeImGui::InputText( const char* label, ae::String< N >* str, ImGuiInputTextFlags flags )
 {
 	IM_ASSERT( ( flags & ImGuiInputTextFlags_CallbackEdit ) == 0 );
 	flags |= ImGuiInputTextFlags_CallbackEdit;
 	char* buffer = const_cast<char*>( str->c_str() );
-	size_t maxSize = ae::Str< N >::MaxLength() + 1;
+	size_t maxSize = ae::String< N >::MaxLength() + 1;
 	return ImGui::InputText( label, buffer, maxSize, flags, aeImGui::m_StringCallback< N >, (void*)str );
 }
 

@@ -24,8 +24,8 @@ TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap]
 	REQUIRE( ae::GetHash( (const char*)"777" ) == 2344304364 );
 	REQUIRE( ae::GetHash( (char*)"777" ) == 2344304364 );
 	REQUIRE( ae::GetHash( "777" ) == 2344304364 );
-	REQUIRE( ae::GetHash( ae::Str< 32 >( "777" ) ) == 2344304364 );
-	REQUIRE( ae::GetHash( ae::Str< 128 >( "777" ) ) == 2344304364 );
+	REQUIRE( ae::GetHash( ae::String< 32 >( "777" ) ) == 2344304364 );
+	REQUIRE( ae::GetHash( ae::String< 128 >( "777" ) ) == 2344304364 );
 	REQUIRE( ae::GetHash( std::string(  "777"  ) ) == 2344304364 );
 	REQUIRE( ae::GetHash( ae::Hash().HashString(  "777"  ) ) == 2344304364 );
 	REQUIRE( ae::GetHash( ae::Int3( 1, 2, 3 ) ) == 316 );
