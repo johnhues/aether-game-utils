@@ -5527,7 +5527,8 @@ constexpr auto _GetTypeName() // @TODO: Return ae::Str
 template< typename T >
 const char* GetTypeName()
 {
-	static constexpr auto name = ae::_GetTypeName< T >();
+	using BaseT = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
+	static constexpr auto name = ae::_GetTypeName< BaseT >();
 	return name.data();
 }
 
