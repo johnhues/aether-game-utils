@@ -136,6 +136,7 @@
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
+#include <array> // @TODO: Remove when ae::Str supports constexpr for GetTypeName()
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -246,8 +247,14 @@ uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
 //! Returns true if attached to Visual Studio or Xcode.
 bool IsDebuggerAttached();
-//! Returns the name of the given class or basic type.
+//! Returns the name of the given class or basic type from an instance. Note
+//! that this does not return the name of the derived class if the instance is
+//! a base class (get the ae::Type of an ae::Object in that case).
 template < typename T > const char* GetTypeName();
+//! Returns the name of the given class or basic type from an instance. Note
+//! that this does not return the name of the derived class if the instance is
+//! a base class (get the ae::Type of an ae::Object in that case).
+template < typename T > const char* GetTypeName( const T& );
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 double GetTime();
 //! Shows a generic message box
@@ -1280,6 +1287,9 @@ private:
 // ae::Str class
 //! A fixed length string class. The templated value is the total size of
 //! the string in memory.
+// @TODO: Fix usage in constexpr function: 'Str< N >' is not literal because it
+// is not an aggregate and has no constexpr constructors other than copy or move
+// constructors.
 //------------------------------------------------------------------------------
 template < uint32_t N >
 class Str
@@ -5457,18 +5467,75 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// Type name internal implementation
+// GetTypeName() internal implementation
+// https://stackoverflow.com/a/59522794
 //------------------------------------------------------------------------------
-template < typename T >
-const char* GetTypeName()
+template< typename T >
+constexpr const auto& _RawTypeName()
 {
-	return _Globals::Get()->Demangle( typeid( T ).name() );
+#ifdef _MSC_VER
+	return __FUNCSIG__;
+#else
+	return __PRETTY_FUNCTION__;
+#endif
 }
 
-#if defined(__aarch64__) && _AE_OSX_
-	// @NOTE: Typeinfo appears to be missing for float16_t
-	template <> const char* GetTypeName< float16_t >();
-#endif
+struct _RawTypeNameFormat
+{
+	std::size_t leadingJunk = 0;
+	std::size_t trailingJunk = 0;
+};
+
+inline constexpr bool _GetRawTypeNameFormat( ae::_RawTypeNameFormat* format )
+{
+	const auto& str = ae::_RawTypeName< int >();
+	for( std::size_t i = 0; str[ i ]; i++ )
+	{
+		if( str[ i ] == 'i' && str[ i + 1 ] == 'n' && str[ i + 2 ] == 't' )
+		{
+			if( format )
+			{
+				format->leadingJunk = i;
+				format->trailingJunk = sizeof( str ) - i - sizeof( "int" );
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+inline static constexpr _RawTypeNameFormat _rawTypeNameFormat = []
+{
+	static_assert( ae::_GetRawTypeNameFormat( nullptr ), "Unable to figure out how to generate type names on this compiler." );
+	ae::_RawTypeNameFormat format;
+	ae::_GetRawTypeNameFormat( &format );
+	return format;
+}();
+
+template< typename T >
+constexpr auto _GetTypeName() // @TODO: Return ae::Str
+{
+	constexpr std::size_t len = sizeof( ae::_RawTypeName< T >() ) - ae::_rawTypeNameFormat.leadingJunk - ae::_rawTypeNameFormat.trailingJunk;
+	std::array< char, len > name{};
+	for( std::size_t i = 0; i < len - 1; i++ )
+	{
+		name[ i ] = ae::_RawTypeName< T >()[ i + ae::_rawTypeNameFormat.leadingJunk ];
+	}
+	return name;
+}
+
+template< typename T >
+const char* GetTypeName()
+{
+	static constexpr auto name = ae::_GetTypeName< T >();
+	return name.data();
+}
+
+template< typename T >
+const char* GetTypeName( const T& )
+{
+	return ae::GetTypeName< T >();
+}
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation

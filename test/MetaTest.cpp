@@ -31,7 +31,11 @@
 //------------------------------------------------------------------------------
 TEST_CASE( "Can get base type by name", "[aeMeta]" )
 {
-	REQUIRE( ae::GetTypeByName( "ae::Object" ) );
+	const ae::Type* objType = ae::GetType< ae::Object >();
+	const ae::Str32 objTypeName = objType->GetName();
+	REQUIRE( objType );
+	REQUIRE( objTypeName == "ae::Object" );
+	REQUIRE( ae::GetTypeByName( "ae::Object" ) == objType );
 }
 
 TEST_CASE( "Can get base type with templates", "[aeMeta]" )
