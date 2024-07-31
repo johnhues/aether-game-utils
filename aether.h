@@ -136,6 +136,7 @@
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
+#include <array> // @TODO: Remove when ae::Str supports constexpr for GetTypeName()
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -247,8 +248,14 @@ uint32_t GetPID();
 uint32_t GetMaxConcurrentThreads();
 //! Returns true if attached to Visual Studio or Xcode.
 bool IsDebuggerAttached();
-//! Returns the name of the given class or basic type.
+//! Returns the name of the given class or basic type from an instance. Note
+//! that this does not return the name of the derived class if the instance is
+//! a base class (get the ae::Type of an ae::Object in that case).
 template < typename T > const char* GetTypeName();
+//! Returns the name of the given class or basic type from an instance. Note
+//! that this does not return the name of the derived class if the instance is
+//! a base class (get the ae::Type of an ae::Object in that case).
+template < typename T > const char* GetTypeName( const T& );
 //! Returns a monotonically increasing time in seconds, useful for calculating high precision deltas. Time '0' is undefined.
 double GetTime();
 //! Shows a generic message box
@@ -533,6 +540,7 @@ struct VecT
 	T NormalizeCopy() const;
 	T SafeNormalizeCopy( float epsilon = 0.000001f ) const;
 	float Trim( float length );
+	T TrimCopy( float length ) const;
 
 	bool IsNAN() const;
 };
@@ -807,7 +815,7 @@ public:
 	Vec3 GetDirectionXY() const;
 	void ZeroXY();
 	void GetAxisAngle( Vec3* axis, float* angle ) const;
-	void AddRotationXY( float rotation);
+	void AddRotationXY( float rotation );
 	Quaternion Nlerp( Quaternion end, float t ) const;
 	Matrix4 GetTransformMatrix() const;
 	Quaternion GetInverse() const;
@@ -1327,6 +1335,9 @@ private:
 // ae::Str class
 //! A fixed length string class. The templated value is the total size of
 //! the string in memory.
+// @TODO: Fix usage in constexpr function: 'Str< N >' is not literal because it
+// is not an aggregate and has no constexpr constructors other than copy or move
+// constructors.
 //------------------------------------------------------------------------------
 template < uint32_t N >
 class Str
@@ -5719,18 +5730,76 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// Type name internal implementation
+// GetTypeName() internal implementation
+// https://stackoverflow.com/a/59522794
 //------------------------------------------------------------------------------
-template < typename T >
-const char* GetTypeName()
+template< typename T >
+constexpr const auto& _RawTypeName()
 {
-	return _Globals::Get()->Demangle( typeid( T ).name() );
+#ifdef _MSC_VER
+	return __FUNCSIG__;
+#else
+	return __PRETTY_FUNCTION__;
+#endif
 }
 
-#if defined(__aarch64__) && _AE_OSX_
-	// @NOTE: Typeinfo appears to be missing for float16_t
-	template <> const char* GetTypeName< float16_t >();
-#endif
+struct _RawTypeNameFormat
+{
+	std::size_t leadingJunk = 0;
+	std::size_t trailingJunk = 0;
+};
+
+inline constexpr bool _GetRawTypeNameFormat( ae::_RawTypeNameFormat* format )
+{
+	const auto& str = ae::_RawTypeName< int >();
+	for( std::size_t i = 0; str[ i ]; i++ )
+	{
+		if( str[ i ] == 'i' && str[ i + 1 ] == 'n' && str[ i + 2 ] == 't' )
+		{
+			if( format )
+			{
+				format->leadingJunk = i;
+				format->trailingJunk = sizeof( str ) - i - sizeof( "int" );
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+inline static constexpr _RawTypeNameFormat _rawTypeNameFormat = []
+{
+	static_assert( ae::_GetRawTypeNameFormat( nullptr ), "Unable to figure out how to generate type names on this compiler." );
+	ae::_RawTypeNameFormat format;
+	ae::_GetRawTypeNameFormat( &format );
+	return format;
+}();
+
+template< typename T >
+constexpr auto _GetTypeName() // @TODO: Return ae::Str
+{
+	constexpr std::size_t len = sizeof( ae::_RawTypeName< T >() ) - ae::_rawTypeNameFormat.leadingJunk - ae::_rawTypeNameFormat.trailingJunk;
+	std::array< char, len > name{};
+	for( std::size_t i = 0; i < len - 1; i++ )
+	{
+		name[ i ] = ae::_RawTypeName< T >()[ i + ae::_rawTypeNameFormat.leadingJunk ];
+	}
+	return name;
+}
+
+template< typename T >
+const char* GetTypeName()
+{
+	using BaseT = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
+	static constexpr auto name = ae::_GetTypeName< BaseT >();
+	return name.data();
+}
+
+template< typename T >
+const char* GetTypeName( const T& )
+{
+	return ae::GetTypeName< T >();
+}
 
 //------------------------------------------------------------------------------
 // Log levels internal implementation
@@ -6664,13 +6733,24 @@ T VecT< T >::SafeNormalizeCopy( float epsilon ) const
 template < typename T >
 float VecT< T >::Trim( float trimLength )
 {
-	float length = Length();
-	if ( trimLength < length )
+	const float length = Length();
+	if( length > trimLength )
 	{
 		*(T*)this *= ( trimLength / length );
 		return trimLength;
 	}
 	return length;
+}
+
+template < typename T >
+T VecT< T >::TrimCopy( float trimLength ) const
+{
+	const float length = Length();
+	if( length > trimLength )
+	{
+		return *((T*)this) * ( trimLength / length );
+	}
+	return *((T*)this);
 }
 
 template < typename T >
@@ -6740,6 +6820,10 @@ inline Vec2 Vec2::Reflect( Vec2 v, Vec2 n )
 }
 inline Vec2 Vec2::DtSlerp( const Vec2& end, float snappiness, float dt, float epsilon ) const
 {
+	if ( snappiness == 0.0f || dt == 0.0f )
+	{
+		return *this;
+	}
 	return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
 }
 
@@ -7194,6 +7278,10 @@ inline Color Color::Lerp( const Color& end, float t ) const
 }
 inline Color Color::DtLerp( float snappiness, float dt, const Color& target ) const
 {
+	if ( snappiness == 0.0f || dt == 0.0f )
+	{
+		return *this;
+	}
 	return target.Lerp( *this, exp2( -exp2( snappiness ) * dt ) );
 }
 inline Color Color::ScaleRGB( float s ) const { return Color( r * s, g * s, b * s, a ); }
@@ -7467,7 +7555,7 @@ Str< N >::Str( const char* str )
 template < uint32_t N >
 Str< N >::Str( uint32_t length, const char* str )
 {
-	AE_ASSERT( length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( length <= (uint16_t)MaxLength(), "'#' > #", str, MaxLength() );
 	m_length = (uint16_t)length;
 	memcpy( m_str, str, m_length );
 	m_str[ length ] = 0;
@@ -7485,7 +7573,7 @@ Str< N >::Str( const char* begin, const char* end )
 template < uint32_t N >
 Str< N >::Str( uint32_t length, char c )
 {
-	AE_ASSERT( length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( length <= (uint16_t)MaxLength(), "# > #", length, MaxLength() );
 	m_length = (uint16_t)length;
 	memset( m_str, c, m_length );
 	m_str[ length ] = 0;
@@ -7507,7 +7595,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 void Str< N >::operator =( const Str<N2>& str )
 {
-	AE_ASSERT( str.m_length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( str.m_length <= (uint16_t)MaxLength(), "'#' > #", str, MaxLength() );
 	m_length = str.m_length;
 	memcpy( m_str, str.m_str, str.m_length + 1u );
 }
@@ -7533,7 +7621,7 @@ template < uint32_t N >
 void Str< N >::operator +=( const char* str )
 {
 	uint32_t len = (uint32_t)strlen( str );
-	AE_ASSERT( m_length + len <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( m_length + len <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
 	memcpy( m_str + m_length, str, len + 1u );
 	m_length += len;
 }
@@ -7542,7 +7630,7 @@ template < uint32_t N >
 template < uint32_t N2 >
 void Str< N >::operator +=( const Str<N2>& str )
 {
-	AE_ASSERT( m_length + str.m_length <= (uint16_t)MaxLength() );
+	AE_ASSERT_MSG( m_length + str.m_length <= (uint16_t)MaxLength(), "'#' + '#' > #", m_str, str, MaxLength() );
 	memcpy( m_str + m_length, str.c_str(), str.m_length + 1u );
 	m_length += str.m_length;
 }
@@ -7664,13 +7752,15 @@ bool operator >=( const char* str0, const Str<N>& str1 )
 template < uint32_t N >
 char& Str< N >::operator[]( uint32_t i )
 {
-	AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
+	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
+	return m_str[ i ];
 }
 
 template < uint32_t N >
 const char Str< N >::operator[]( uint32_t i ) const
 {
-	AE_ASSERT( i <= m_length ); return m_str[ i ]; // @NOTE: Allow indexing null, one past length
+	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
+	return m_str[ i ];
 }
 
 template < uint32_t N >
@@ -7707,12 +7797,10 @@ void Str< N >::Append( const char* str )
 template < uint32_t N >
 void Str< N >::Trim( uint32_t len )
 {
-	if ( len == m_length )
+	if ( len >= m_length )
 	{
-		return;
+		return; // Not longer than desired length
 	}
-
-	AE_ASSERT( len < m_length );
 	m_length = (uint16_t)len;
 	m_str[ m_length ] = 0;
 }
@@ -11765,23 +11853,23 @@ Vec3 Vec3::Slerp( const Vec3& end, float t, float epsilon ) const
 	{
 		return v1 * ae::Lerp( 0.0f, l1, t );
 	}
-	float d = ae::Clip( v0.Dot( v1 ), -1.0f, 1.0f );
+	const float l = ae::Lerp( l0, l1, t );
+	const float d = ae::Clip( v0.Dot( v1 ), -1.0f + epsilon, 1.0f ); // Don't allow vector to directly apose
 	if ( d > ( 1.0f - epsilon ) )
 	{
-		return v1;
+		return v1 * l; // Vectors almost directly align, so just lerp length
 	}
-	if ( d < -( 1.0f - epsilon ) )
-	{
-		return v0;
-	}
-	float angle = std::acos( d ) * t;
-	Vec3 v2 = v1 - v0 * d;
-	v2.Normalize();
-	return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) );
+	const float angle = std::acos( d ) * t;
+	const Vec3 v2 = ( v1 - v0 * d ).NormalizeCopy();
+	return ( ( v0 * std::cos( angle ) ) + ( v2 * std::sin( angle ) ) ) * l;
 }
 
 Vec3 Vec3::DtSlerp( const Vec3& end, float snappiness, float dt, float epsilon ) const
 {
+	if ( snappiness == 0.0f || dt == 0.0f )
+	{
+		return *this;
+	}
 	return Slerp( end, 1.0f - exp2( -exp2( snappiness ) * dt ), epsilon );
 }
 
@@ -12958,20 +13046,11 @@ ae::Vec3 LineSegment::GetClosest( ae::Vec3 p, float* distanceOut ) const
 
 float LineSegment::GetDistance( ae::Vec3 p, ae::Vec3* closestOut ) const
 {
-	float lenSq = ( m_p1 - m_p0 ).LengthSquared();
-	if ( lenSq <= 0.001f )
-	{
-		if ( closestOut )
-		{
-			*closestOut = m_p0;
-		}
-		return ( p - m_p0 ).Length();
-	}
-
-	float t = ae::Clip01( ( p - m_p0 ).Dot( m_p1 - m_p0 ) / lenSq );
-	ae::Vec3 linePos = ae::Lerp( m_p0, m_p1, t );
-
-	if ( closestOut )
+	const ae::Vec3 n = ( m_p1 - m_p0 );
+	const float lengthSq = n.LengthSquared();
+	const float t = ( lengthSq > 0.001f ) ? ae::Clip01( ( p - m_p0 ).Dot( n ) / lengthSq ) : 0.0f;
+	const ae::Vec3 linePos = ae::Lerp( m_p0, m_p1, t );
+	if( closestOut )
 	{
 		*closestOut = linePos;
 	}

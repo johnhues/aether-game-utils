@@ -31,7 +31,20 @@
 //------------------------------------------------------------------------------
 TEST_CASE( "Can get base type by name", "[aeMeta]" )
 {
-	REQUIRE( ae::GetTypeByName( "ae::Object" ) );
+	const ae::Type* objType = ae::GetType< ae::Object >();
+	const ae::Str32 objTypeName = objType->GetName();
+	REQUIRE( objType );
+	REQUIRE( objTypeName == "ae::Object" );
+	REQUIRE( ae::GetTypeByName( "ae::Object" ) == objType );
+
+	REQUIRE( ae::GetTypeName< ae::Object >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::Object* >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::Object& >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::Object[] >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object* >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object& >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object[] >() == ae::Str32( "ae::Object" ) );
 }
 
 TEST_CASE( "Can get base type with templates", "[aeMeta]" )

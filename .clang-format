@@ -18,6 +18,8 @@ SpacesInLineCommentPrefix:
   Minimum: 0
   Maximum: -1
 SpacesInAngles: Always
+SpaceAfterTemplateKeyword: false
+SpaceBeforeParens: false
 AlignTrailingComments: false
 PointerAlignment: Left
 AllowShortIfStatementsOnASingleLine: WithoutElse
@@ -25,7 +27,7 @@ AllowShortFunctionsOnASingleLine: All
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 BreakConstructorInitializers: AfterColon
 AllowAllConstructorInitializersOnNextLine: true
-AlwaysBreakTemplateDeclarations: MultiLine
+AlwaysBreakTemplateDeclarations: true
 AlignEscapedNewlines: DontAlign
 FixNamespaceComments: false
 Cpp11BracedListStyle: false
