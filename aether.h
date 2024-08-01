@@ -1838,17 +1838,52 @@ public:
 	//! Constructor for a ring buffer with dynamically allocated storage (N == 0).
 	RingBuffer( ae::Tag tag, uint32_t size );
 	//! Appends an element to the current end of the ring buffer. It's safe to
-	//! call this when the ring buffer is full, although in this case the element
-	//! previously at index 0 to be destroyed.
+	//! call this when the ring buffer is full, although in this case the
+	//! element previously at index 0 to be destroyed. Does not affect
+	//! ae::RingBuffer::Size().
 	T& Append( const T& val );
-	//! Resets Length() to 0. Does not affect Size().
+	//! Resets ae::RingBuffer::Length() and ae::RingBuffer::GetOffset() to 0.
+	//! Does not affect ae::RingBuffer::Size().
 	void Clear();
 
-	//! Returns the element at the given \p index, which must be less than Length().
+	//! Returns the element at the given \p index, which must be less than
+	//! ae::RingBuffer::Length(). The oldest appended element that has not been
+	//! 'pushed out' of the buffer is at index 0, while the most recently
+	//! appended element is at length - 1.
 	T& Get( uint32_t index );
-	//! Returns the element at the given \p index, which must be less than Length().
+	//! Returns the element at the given \p index, which must be less than
+	//! ae::RingBuffer::Length(). The oldest appended element that has not been
+	//! 'pushed out' of the buffer is at index 0, while the most recently
+	//! appended element is at length - 1.
 	const T& Get( uint32_t index ) const;
-	//! Returns the number of appended entries up to Size().
+	
+	//! Returns a pointer to the internal buffer, but can return null when the
+	//! length is zero. See ae::RingBuffer::GetOffset() for information on how
+	//! to iterate over the returned buffer.
+	T* Data() { return m_buffer.Data(); }
+	//! Returns a pointer to the internal buffer, but can return null when the
+	//! length is zero. See ae::RingBuffer::GetOffset() for information on how
+	//! to iterate over the returned buffer.
+	const T* Data() const { return m_buffer.Data(); }
+	//! Returns the current index of the first element in the internal buffer
+	//! (or 0 when the buffer is empty). Use this in conjunction with
+	//! ae::RingBuffer::Data() to get a pointer to the the first element in the
+	//! buffer, iterate 0 to ae::RingBuffer::Length() elements, and reduce the
+	//! iteration index modulo ae::RingBuffer::Size() when indexing the buffer.
+	//! This is a more complicated approach than using ae::RingBuffer::Get() but
+	//! can be useful to avoid copying data for APIs that accept generic ring
+	//! buffer data, such as ImGui.
+	//! Eg.:
+	//! \code
+	//! for( uint32_t i = 0; i < ringBuffer.Length(); i++ )
+	//! {
+	//!     const uint32_t index = ( ringBuffer.GetOffset() + i ) % ringBuffer.Size();
+	//!     const T& element = ringBuffer.Data()[ index ];
+	//! }
+	//! \endcode
+	uint32_t GetOffset() const { return m_first; }
+
+	//! Returns the number of appended entries up to ae::RingBuffer::Size().
 	uint32_t Length() const { return m_buffer.Length(); }
 	//! Returns the max number of entries.
 	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
