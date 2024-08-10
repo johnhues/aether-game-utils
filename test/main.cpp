@@ -17,6 +17,7 @@ public:
 	void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override
 	{
 		void* result = _DefaultAllocator::Allocate( tag, bytes, alignment );
+		AE_ASSERT_MSG( allocs.Length() < allocs.Size(), "Too many concurrent test allocations (# max)", allocs.Size() );
 		allocs.Set( result, tag );
 		return result;
 	}
@@ -44,7 +45,7 @@ public:
 		return false;
 	}
 
-	ae::Map< void*, ae::Tag, 512 > allocs;
+	ae::Map< void*, ae::Tag, 2048 > allocs;
 };
 
 //------------------------------------------------------------------------------
