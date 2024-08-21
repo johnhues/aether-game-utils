@@ -5252,14 +5252,29 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 // Meta constants
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
-const ae::TypeId kInvalidTypeId = 0;
-const uint32_t kMaxMetaProps = 32;
-const uint32_t kMaxMetaPropListLength = 32;
-const uint32_t kMetaMaxVars = 64;
-const uint32_t kMetaEnumValues = 512;
-const uint32_t kMetaEnumTypes = 128;
 class Type;
 struct VarTypeBase;
+const ae::TypeId kInvalidTypeId = 0;
+#ifndef AE_MAX_META_PROPS_CONFIG
+	#define AE_MAX_META_PROPS_CONFIG 32;
+#endif
+#ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
+	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 32;
+#endif
+#ifndef AE_MAX_META_VARS_CONFIG
+	#define AE_MAX_META_VARS_CONFIG 64;
+#endif
+#ifndef AE_MAX_META_ENUM_VALUES_CONFIG
+	#define AE_MAX_META_ENUM_VALUES_CONFIG 512;
+#endif
+#ifndef AE_MAX_META_ENUM_TYPES_CONFIG
+	#define AE_MAX_META_ENUM_TYPES_CONFIG 128;
+#endif
+const uint32_t kMaxMetaProps = AE_MAX_META_PROPS_CONFIG;
+const uint32_t kMaxMetaPropListLength = AE_MAX_META_PROP_LIST_LENGTH_CONFIG;
+const uint32_t kMaxMetaVars = AE_MAX_META_VARS_CONFIG;
+const uint32_t kMaxMetaEnumValues = AE_MAX_META_ENUM_VALUES_CONFIG;
+const uint32_t kMaxMetaEnumTypes = AE_MAX_META_ENUM_TYPES_CONFIG;
 
 //------------------------------------------------------------------------------
 // ae::Object
@@ -5339,8 +5354,8 @@ private:
 	ae::Str32 m_name;
 	uint32_t m_size;
 	bool m_isSigned;
-	ae::Map< int32_t, std::string, kMetaEnumValues > m_enumValueToName;
-	ae::Map< std::string, int32_t, kMetaEnumValues > m_enumNameToValue;
+	ae::Map< int32_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
+	ae::Map< std::string, int32_t, kMaxMetaEnumValues > m_enumNameToValue;
 public: // Internal
 	Enum( const char* name, uint32_t size, bool isSigned );
 	void m_AddValue( const char* name, int32_t value );
@@ -5602,7 +5617,7 @@ private:
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-	ae::Array< Var, kMetaMaxVars > m_vars;
+	ae::Array< Var, kMaxMetaVars > m_vars;
 	ae::Str32 m_parent;
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
@@ -5717,7 +5732,7 @@ struct _Globals
 
 	// Reflection
 	uint32_t metaCacheSeq = 0;
-	ae::Map< std::string, Enum, kMetaEnumTypes > enums;
+	ae::Map< std::string, Enum, kMaxMetaEnumTypes > enums;
 	std::map< ae::Str64, Type* > typeNameMap;
 	std::map< ae::TypeId, Type* > typeIdMap;
 	std::vector< ae::Type* > types;
@@ -25852,7 +25867,7 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 		return &m_vars[ i ];
 	}
 	// @HACK: This whole function should be re-written to avoid recreating this array and all of this recursion
-	ae::Array< const ae::Var*, kMetaMaxVars > vars;
+	ae::Array< const ae::Var*, kMaxMetaVars > vars;
 	auto fn = [&vars]( auto fn, const ae::Type* type ) -> void
 	{
 		if ( const ae::Type* parent = type->GetParentType() )
