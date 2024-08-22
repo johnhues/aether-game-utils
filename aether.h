@@ -5862,10 +5862,8 @@ const char* GetTypeName( const T& )
 #define _AE_LOG_FATAL_ 5
 void LogInternalImpl( std::stringstream& os, const char* message );
 void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format );
-template < typename T, typename... Args >
-void LogInternalImpl( std::stringstream& os, const char* format, T value, Args... args );
-template < typename... Args >
-std::string LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
+template < typename T, typename... Args > void LogInternalImpl( std::stringstream& os, const char* format, T value, Args... args );
+template < typename... Args > std::string LogInternal( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
 extern const char* LogLevelNames[ 6 ];
 extern const char* LogLevelColors[ 6 ];
 
@@ -5875,12 +5873,6 @@ extern const char* LogLevelColors[ 6 ];
 template < typename T, typename... Args >
 void LogInternalImpl( std::stringstream& os, const char* format, T value, Args... args )
 {
-	if ( !(*format) )
-	{
-		os << std::endl;
-		return;
-	}
-	
 	const char* head = format;
 	while ( *head && *head != '#' )
 	{
@@ -5897,7 +5889,14 @@ void LogInternalImpl( std::stringstream& os, const char* format, T value, Args..
 		head++;
 	}
 
-	LogInternalImpl( os, head, args... );
+	if( *head )
+	{
+		LogInternalImpl( os, head, args... );
+	}
+	else
+	{
+		LogInternalImpl( os, "" );
+	}
 }
 
 template < typename... Args >
