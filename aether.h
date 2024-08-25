@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
-//! @file aether.h
+//! aether.h
 //------------------------------------------------------------------------------
-// Copyright (c) 2023 John Hughes
+// Copyright (c) 2024 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
@@ -5718,7 +5718,6 @@ public:
 struct _Globals
 {
 	static _Globals* Get();
-	const char* Demangle( const char* typeName );
 	
 	// Allocation
 	bool allocatorInitialized = false;
@@ -5829,7 +5828,7 @@ template< typename T >
 constexpr auto _GetTypeName() // @TODO: Return ae::Str
 {
 	constexpr std::size_t len = sizeof( ae::_RawTypeName< T >() ) - ae::_rawTypeNameFormat.leadingJunk - ae::_rawTypeNameFormat.trailingJunk;
-	std::array< char, len > name{};
+	std::array< char, len > name{}; // @TODO: Compile time ae::Array
 	for( std::size_t i = 0; i < len - 1; i++ )
 	{
 		name[ i ] = ae::_RawTypeName< T >()[ i + ae::_rawTypeNameFormat.leadingJunk ];
@@ -9726,8 +9725,8 @@ BVH< T, N >::BVH( const ae::Tag& allocTag, uint32_t nodeLimit ) :
 template < typename T, uint32_t N >
 BVH< T, N >::BVH( const BVH< T, N >& other ) :
 	m_limit( other.m_limit ),
-	m_nodes( other.m_nodes.GetTag(), m_limit ),
-	m_leaves( other.m_leaves.GetTag(), (m_limit + 1)/2 )
+	m_nodes( other.m_nodes.Tag(), m_limit ),
+	m_leaves( other.m_leaves.Tag(), (m_limit + 1)/2 )
 {
 	m_nodes = other.m_nodes;
 	m_leaves = other.m_leaves;
@@ -11597,46 +11596,6 @@ ae::_Globals* ae::_Globals::Get()
 {
 	static ae::_Globals s_globals;
 	return &s_globals;
-}
-
-const char* ae::_Globals::Demangle( const char* typeName )
-{
-	// @TODO: This should be thread safe
-#ifdef _MSC_VER
-	// @TODO: Should use a real demangler
-	if ( strncmp( typeName, "class ", 6 ) == 0 )
-	{
-		typeName += 6;
-	}
-	else if ( strncmp( typeName, "struct ", 7 ) == 0 )
-	{
-		typeName += 7;
-	}
-	if ( strcpy_s( typeNameBuf, sizeof(typeNameBuf), typeName ) == 0 )
-	{
-		if ( char* space = strchr( typeNameBuf, ' ' ) )
-		{
-			*space = 0;
-		}
-		return typeNameBuf;
-	}
-#else
-	// @NOTE: Demangle calls realloc on given buffer
-	int status = 1;
-	// @TODO: This should be thread safe!!!
-	typeNameBuf = abi::__cxa_demangle( typeName, typeNameBuf, &typeNameBufLength, &status );
-	if ( status == 0 )
-	{
-		int32_t len = (int32_t)strlen( typeNameBuf );
-		while ( typeNameBuf[ len - 1 ] == '*' )
-		{
-			typeNameBuf[ len - 1 ] = 0;
-			len--;
-		}
-		return typeNameBuf;
-	}
-#endif
-	return typeName;
 }
 
 //------------------------------------------------------------------------------
@@ -19870,7 +19829,7 @@ void Shader::m_Activate( const UniformList& uniforms ) const
 		}
 		else
 		{
-			AE_ASSERT_MSG( false, "Invalid uniform type '#': #", uniformVarName, uniformVar->type );
+			AE_FAIL_MSG( "Invalid uniform type '#': #", uniformVarName, uniformVar->type );
 		}
 
 		AE_CHECK_GL_ERROR();
@@ -25612,7 +25571,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 #undef CASE_STRING
 				default:
 				{
-					AE_ASSERT_MSG( false, "Invalid string size '#'", m_size );
+					AE_FAIL_MSG( "Invalid string size '#'", m_size );
 					return false;
 				}
 			}

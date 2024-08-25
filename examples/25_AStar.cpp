@@ -97,7 +97,7 @@ int main()
 	ae::DebugLines debugLines = TAG_EXAMPLE;
 	ae::TimeStep timeStep;
 	window.Initialize( 1280, 1280, false, true );
-	window.SetTitle( "A*" );
+	window.SetTitle( "A*: Press arrow keys to move, space to randomize." );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	debugLines.Initialize( 2048 );
