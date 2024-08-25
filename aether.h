@@ -51,10 +51,16 @@
 #ifndef AE_AETHER_H
 #define AE_AETHER_H
 
-#ifdef AE_USER_CONFIG
-	// Something like: AE_USER_CONFIG="aeConfig.h"
-	// Use with AE_VEC3_CLASS_EXTRA etc.
-	#include AE_USER_CONFIG
+//! The path to a user defined configuration header file, something like
+//! AE_CONFIG_FILE="aeConfig.h". Should contain defines such as
+//! AE_VEC3_CLASS_CONFIG, AE_MAX_META_TYPES_CONFIG, etc (any AE_*_CONFIG's
+//! below), which can be used to define custom conversion functions, or override
+//! default limits. These defines MUST be consistent for all translation units
+//! in a project. It's advised that an AE_CONFIG_FILE is provided globally as a
+//! compiler definition to limit the opportunity for any configuration issues.
+//! If AE_CONFIG_FILE is not defined, the default configuration will be used.
+#ifdef AE_CONFIG_FILE
+	#include AE_CONFIG_FILE
 #endif
 
 //------------------------------------------------------------------------------
@@ -136,7 +142,7 @@
 // System Headers
 //------------------------------------------------------------------------------
 #include <algorithm>
-#include <array> // @TODO: Remove when ae::Str supports constexpr for GetTypeName()
+#include <array> // @TODO: Remove. For _GetTypeName().
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -149,7 +155,6 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
-#include <map> // @TODO: Remove. For meta system.
 #include <optional>
 #include <ostream>
 #include <sstream>
@@ -157,7 +162,7 @@
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
-#include <vector> // @TODO: Remove. For meta system.
+#include <vector> // @TODO: Remove. For _EnumCreator.
 
 //------------------------------------------------------------------------------
 // Platform headers
@@ -572,8 +577,9 @@ struct AE_ALIGN( 8 ) Vec2 : public VecT< Vec2 >
 	Vec2 Slerp( const Vec2& end, float t, float epsilon = 0.0001f ) const;
 	static Vec2 Reflect( Vec2 v, Vec2 n );
 
-#ifdef AE_VEC2_CLASS_EXTRA
-	AE_VEC2_CLASS_EXTRA // Define conversion functions for ae::Vec2 with AE_USER_CONFIG
+	//! Define conversion functions etc for ae::Vec2. See AE_CONFIG_FILE for more info.
+#ifdef AE_VEC2_CLASS_CONFIG
+	AE_VEC2_CLASS_CONFIG
 #endif
 
 	union
@@ -629,8 +635,9 @@ struct AE_ALIGN( 16 ) Vec3 : public VecT< Vec3 >
 
 	static Vec3 ProjectPoint( const class Matrix4& projection, Vec3 p );
 
-#ifdef AE_VEC3_CLASS_EXTRA
-	AE_VEC3_CLASS_EXTRA // Define conversion functions for ae::Vec3 with AE_USER_CONFIG
+	//! Define conversion functions etc for ae::Vec3. See AE_CONFIG_FILE for more info.
+#ifdef AE_VEC3_CLASS_CONFIG
+	AE_VEC3_CLASS_CONFIG
 #endif
 	
 	union
@@ -673,8 +680,9 @@ struct AE_ALIGN( 16 ) Vec4 : public VecT< Vec4 >
 	Vec2 GetZW() const;
 	Vec3 GetXYZ() const;
 
-#ifdef AE_VEC4_CLASS_EXTRA
-	AE_VEC4_CLASS_EXTRA // Define conversion functions for ae::Vec4 with AE_USER_CONFIG
+	//! Define conversion functions etc for ae::Vec4. See AE_CONFIG_FILE for more info.
+#ifdef AE_VEC4_CLASS_CONFIG
+	AE_VEC4_CLASS_CONFIG
 #endif
 
 	union
@@ -761,8 +769,9 @@ public:
 	bool operator!=( const ae::Matrix4& o ) const { return !operator== ( o ); }
 	bool IsNAN() const;
 
-#ifdef AE_MAT4_CLASS_EXTRA
-	AE_MAT4_CLASS_EXTRA // Define conversion functions for ae::Matrix4 with AE_USER_CONFIG
+	//! Define conversion functions etc for ae::Matrix4. See AE_CONFIG_FILE for more info.
+#ifdef AE_MAT4_CLASS_CONFIG
+	AE_MAT4_CLASS_CONFIG
 #endif
 
 	union
@@ -829,8 +838,9 @@ public:
 	//! the \p swingOut component is the rotation around the axis' orthogonal plane.
 	void GetTwistSwing( Vec3 axis, Quaternion* twistOut, Quaternion* swingOut ) const;
 
-#ifdef AE_QUAT_CLASS_EXTRA
-	AE_QUAT_CLASS_EXTRA // Define conversion functions for ae::Quaternion with AE_USER_CONFIG
+	//! Define conversion functions etc for ae::Quaternion. See AE_CONFIG_FILE for more info.
+#ifdef AE_QUAT_CLASS_CONFIG
+	AE_QUAT_CLASS_CONFIG
 #endif
 };
 inline std::ostream& operator << ( std::ostream& os, const Quaternion& quat );
@@ -1259,8 +1269,9 @@ struct Color
 	static Color PicoPink();
 	static Color PicoPeach();
 
-#ifdef AE_COLOR_CLASS_EXTRA
-	AE_COLOR_CLASS_EXTRA // Define conversion functions for ae::Color with AE_USER_CONFIG
+	//! Define conversion functions etc for ae::Color. See AE_CONFIG_FILE for more info.
+#ifdef AE_COLOR_CLASS_CONFIG
+	AE_COLOR_CLASS_CONFIG
 #endif
 
 	union
@@ -2278,8 +2289,9 @@ public:
 	void operator*=( const Vec2& v );
 	void operator/=( const Vec2& v );
 
-#ifdef AE_RECT_CLASS_EXTRA
-	AE_RECT_CLASS_EXTRA
+	//! Define conversion functions etc for ae::Rect. See AE_CONFIG_FILE for more info.
+#ifdef AE_RECT_CLASS_CONFIG
+	AE_RECT_CLASS_CONFIG
 #endif
 	
 private:
@@ -4209,11 +4221,11 @@ private:
 
 //------------------------------------------------------------------------------
 // ae::CollisionExtra
-//! AE_COLLISION_EXTRA can be defined to provide extra vertex data returned
-//! from Raycasts and PushOuts.
+//! AE_COLLISION_EXTRA_CONFIG can be defined to provide extra vertex data returned
+//! from Raycasts and PushOuts. See AE_CONFIG_FILE for more info.
 //------------------------------------------------------------------------------
-#ifdef AE_COLLISION_EXTRA
-	typedef AE_COLLISION_EXTRA CollisionExtra;
+#ifdef AE_COLLISION_EXTRA_CONFIG
+	typedef AE_COLLISION_EXTRA_CONFIG CollisionExtra;
 #else
 	typedef uint32_t CollisionExtra;
 #endif
@@ -5255,26 +5267,50 @@ using TypeId = uint32_t;
 class Type;
 struct VarTypeBase;
 const ae::TypeId kInvalidTypeId = 0;
-#ifndef AE_MAX_META_PROPS_CONFIG
-	#define AE_MAX_META_PROPS_CONFIG 32;
-#endif
-#ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
-	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 32;
+#ifndef AE_MAX_META_TYPES_CONFIG
+	#define AE_MAX_META_TYPES_CONFIG 128;
 #endif
 #ifndef AE_MAX_META_VARS_CONFIG
-	#define AE_MAX_META_VARS_CONFIG 64;
-#endif
-#ifndef AE_MAX_META_ENUM_VALUES_CONFIG
-	#define AE_MAX_META_ENUM_VALUES_CONFIG 512;
+	#define AE_MAX_META_VARS_CONFIG 16;
 #endif
 #ifndef AE_MAX_META_ENUM_TYPES_CONFIG
-	#define AE_MAX_META_ENUM_TYPES_CONFIG 128;
+	#define AE_MAX_META_ENUM_TYPES_CONFIG 32;
 #endif
-const uint32_t kMaxMetaProps = AE_MAX_META_PROPS_CONFIG;
-const uint32_t kMaxMetaPropListLength = AE_MAX_META_PROP_LIST_LENGTH_CONFIG;
+#ifndef AE_MAX_META_ENUM_VALUES_CONFIG
+	#define AE_MAX_META_ENUM_VALUES_CONFIG 64;
+#endif
+#ifndef AE_MAX_META_PROPS_CONFIG
+	#define AE_MAX_META_PROPS_CONFIG 8;
+#endif
+#ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
+	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 8;
+#endif
+//! The maximum number of types that can be registered with AE_REGISTER_CLASS().
+//! This value can be overridden by defining AE_MAX_META_TYPES_CONFIG. See
+//! AE_CONFIG_FILE for more details.
+const uint32_t kMaxMetaTypes = AE_MAX_META_TYPES_CONFIG;
+//! The maximum number of variables that can be registered per type with
+//! AE_REGISTER_CLASS_VAR(). This value can be overridden by defining
+//! AE_MAX_META_VARS_CONFIG. See AE_CONFIG_FILE for more details.
 const uint32_t kMaxMetaVars = AE_MAX_META_VARS_CONFIG;
-const uint32_t kMaxMetaEnumValues = AE_MAX_META_ENUM_VALUES_CONFIG;
+//! The maximum number of enum types that can be registered with the
+//! AE_REGISTER_ENUM*() functions. This value can be overridden by defining
+//! AE_MAX_META_ENUM_TYPES_CONFIG. See AE_CONFIG_FILE for more details.
 const uint32_t kMaxMetaEnumTypes = AE_MAX_META_ENUM_TYPES_CONFIG;
+//! The maximum number of enum values allowed per registered enum type. This
+//! value can be overridden by defining AE_MAX_META_ENUM_VALUES_CONFIG. See
+//! AE_CONFIG_FILE for more details.
+const uint32_t kMaxMetaEnumValues = AE_MAX_META_ENUM_VALUES_CONFIG;
+//! The maximum number of properties that can be registered with the
+//! AE_REGISTER_*_PROPERTY() functions per class, var, enum, etc. This value
+//! can be overridden by defining AE_MAX_META_PROPS_CONFIG. See AE_CONFIG_FILE
+//! for more details.
+const uint32_t kMaxMetaProps = AE_MAX_META_PROPS_CONFIG;
+//! The maximum number of values that can be registered per property with the
+//! AE_REGISTER_*_PROPERTY_VALUE() functions. This value can be
+//! overridden by defining AE_MAX_META_PROP_LIST_LENGTH_CONFIG. See
+//! AE_CONFIG_FILE for more details.
+const uint32_t kMaxMetaPropListLength = AE_MAX_META_PROP_LIST_LENGTH_CONFIG;
 
 //------------------------------------------------------------------------------
 // ae::Object
@@ -5293,6 +5329,7 @@ public:
 
 //------------------------------------------------------------------------------
 // ae::Inheritor
+//! See ae::Object and AE_REGISTER_CLASS() for usage.
 //------------------------------------------------------------------------------
 template < typename Parent, typename This >
 class Inheritor : public Parent
@@ -5732,9 +5769,9 @@ struct _Globals
 	// Reflection
 	uint32_t metaCacheSeq = 0;
 	ae::Map< std::string, Enum, kMaxMetaEnumTypes > enums;
-	std::map< ae::Str64, Type* > typeNameMap;
-	std::map< ae::TypeId, Type* > typeIdMap;
-	std::vector< ae::Type* > types;
+	ae::Map< ae::Str64, Type*, kMaxMetaTypes > typeNameMap;
+	ae::Map< ae::TypeId, Type*, kMaxMetaTypes > typeIdMap;
+	ae::Array< ae::Type*, kMaxMetaTypes > types;
 	const ae::Var::Serializer* varSerializer = nullptr;
 	bool varSerializerInitialized = false;
 #ifdef _MSC_VER
@@ -10817,22 +10854,18 @@ struct _TypeCreator
 	{
 		_Globals* globals = _Globals::Get();
 		_DefineType< T >( &m_type, 0 );
-		globals->typeNameMap[ typeName ] = &m_type;
-		globals->typeIdMap[ m_type.GetId() ] = &m_type; // @TODO: Should check for hash collision
-		globals->types.push_back( &m_type );
+		globals->typeNameMap.Set( typeName, &m_type );
+		globals->typeIdMap.Set( m_type.GetId(), &m_type ); // @TODO: Should check for hash collision
+		globals->types.Append( &m_type );
 		globals->metaCacheSeq++;
 	}
 	~_TypeCreator()
 	{
 		const char* typeName = m_type.GetName();
 		_Globals* globals = _Globals::Get();
-		globals->typeNameMap.erase( typeName );
-		globals->typeIdMap.erase( m_type.GetId() );
-		auto it = std::find( globals->types.begin(), globals->types.end(), &m_type );
-		if( it != globals->types.end() )
-		{
-			globals->types.erase( it );
-		}
+		globals->typeNameMap.Remove( typeName );
+		globals->typeIdMap.Remove( m_type.GetId() );
+		globals->types.Remove( globals->types.Find( &m_type ) );
 		globals->metaCacheSeq++;
 	}
 	Type m_type;
@@ -10844,7 +10877,7 @@ struct _PropCreator
 	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
 	_PropCreator( ae::_TypeCreator< C >&, const char* typeName, const char* propName, const char* propValue )
 	{
-		ae::Type* type = _Globals::Get()->typeNameMap.find( typeName )->second;
+		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
 		type->m_AddProp( propName, propValue );
 	}
 };
@@ -10855,7 +10888,7 @@ struct _VarCreator
 	// Take _TypeCreator param as a safety check that _VarCreator typeName is provided correctly
 	_VarCreator( ae::_TypeCreator< C >&, const char* typeName, const char* varName )
 	{
-		ae::Type* type = _Globals::Get()->typeNameMap.find( typeName )->second;
+		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
 		AE_ASSERT( type );
 		
 		Var var;
@@ -11169,17 +11202,9 @@ const ae::Type* ae::GetType()
 		// @TODO: Conditionally enable this check when T is not a forward declaration
 		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
 		const char* typeName = ae::GetTypeName< T >();
-		auto it = globals->typeNameMap.find( typeName );
-		if ( it != globals->typeNameMap.end() )
-		{
-			s_type = it->second;
-			return it->second;
-		}
-		else
-		{
-			AE_ASSERT_MSG( false, "No meta info for type name: #", typeName );
-			return nullptr;
-		}
+		s_type = globals->typeNameMap.Get( typeName, nullptr );
+		AE_ASSERT_MSG( s_type, "No meta info for type name: #", typeName );
+		return s_type;
 	}
 }
 
@@ -25429,7 +25454,7 @@ AE_REGISTER_CLASS( ae, Object );
 
 uint32_t ae::GetTypeCount()
 {
-	return (uint32_t)_Globals::Get()->types.size();
+	return _Globals::Get()->types.Length();
 }
 
 const ae::Type* ae::GetTypeByIndex( uint32_t i )
@@ -25439,20 +25464,18 @@ const ae::Type* ae::GetTypeByIndex( uint32_t i )
 
 const ae::Type* ae::GetTypeById( ae::TypeId id )
 {
-	return _Globals::Get()->typeIdMap[ id ];
+	return _Globals::Get()->typeIdMap.Get( id, nullptr );
 }
 
 const ae::Type* ae::GetTypeByName( const char* typeName )
 {
 	if ( !typeName[ 0 ] ) { return nullptr; }
-	auto it = _Globals::Get()->typeNameMap.find( typeName );
-	if ( it != _Globals::Get()->typeNameMap.end() ) { return it->second; }
-	else { return nullptr; }
+	return _Globals::Get()->typeNameMap.Get( typeName, nullptr );
 }
 
 const ae::Type* ae::GetTypeFromObject( const ae::Object& obj )
 {
-	return GetTypeFromObject( &obj );
+	return GetTypeById( GetObjectTypeId( &obj ) );
 }
 
 const ae::Enum* ae::GetEnum( const char* enumName )
@@ -25462,22 +25485,7 @@ const ae::Enum* ae::GetEnum( const char* enumName )
 
 const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 {
-	if ( !obj )
-	{
-		return nullptr;
-	}
-	
-	ae::TypeId id = GetObjectTypeId( obj );
-	auto it = _Globals::Get()->typeIdMap.find( id );
-	if ( it != _Globals::Get()->typeIdMap.end() )
-	{
-		return it->second;
-	}
-	else
-	{
-		AE_ASSERT_MSG( false, "No meta info for object '#' type id: #", obj, (uint32_t)id );
-		return nullptr;
-	}
+	return obj ? GetTypeFromObject( *obj ) : nullptr;
 }
 
 //------------------------------------------------------------------------------

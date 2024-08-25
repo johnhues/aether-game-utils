@@ -13,7 +13,7 @@ FetchContent_GetProperties(Catch2 SOURCE_DIR Catch2_SOURCE_DIR)
 # test library (asserts throw exceptions for unit tests)
 add_ae_library(ae_test STATIC)
 target_compile_options(ae_test PUBLIC "-Wno-exceptions") # All asserts throw exceptions for unit tests
-target_compile_definitions(ae_test PUBLIC AE_USER_CONFIG="TestConfig.h") # All asserts throw exceptions for unit tests
+target_compile_definitions(ae_test PUBLIC AE_CONFIG_FILE="TestConfig.h") # All asserts throw exceptions for unit tests
 target_include_directories(ae_test PUBLIC
 	"${AE_ROOT_DIR}/extras/include"
 	"${CURRENT_SOURCE_DIR}"
