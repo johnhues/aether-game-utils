@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // 21_Instancing.cpp
 //------------------------------------------------------------------------------
-// Copyright (c) 2022 John Hughes
+// Copyright (c) 2024 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
