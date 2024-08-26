@@ -157,20 +157,20 @@ void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
 
 void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 {
-	uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
+	const uint32_t tile = world->GetTile( HotSpotWorld::_GetTilePos( m_body->GetPosition() ) );
 	
-	bool up = input->Get( ae::Key::Up ) || input->gamepads[ 0 ].leftAnalog.y > 0.1f || input->gamepads[ 0 ].dpad.y > 0;
-	bool down = input->Get( ae::Key::Down ) || input->gamepads[ 0 ].leftAnalog.y < -0.1f || input->gamepads[ 0 ].dpad.y < 0;
-	bool left = input->Get( ae::Key::Left ) || input->gamepads[ 0 ].leftAnalog.x < -0.1f || input->gamepads[ 0 ].dpad.x < 0;
-	bool right = input->Get( ae::Key::Right ) || input->gamepads[ 0 ].leftAnalog.x > 0.1f || input->gamepads[ 0 ].dpad.x > 0;
-	bool jumpButton = ( up || input->Get( ae::Key::Space ) || input->Get( ae::Key::A ) );
+	const bool up = input->Get( ae::Key::Up ) || input->gamepads[ 0 ].leftAnalog.y > 0.1f || input->gamepads[ 0 ].dpad.y > 0;
+	const bool down = input->Get( ae::Key::Down ) || input->gamepads[ 0 ].leftAnalog.y < -0.1f || input->gamepads[ 0 ].dpad.y < 0;
+	const bool left = input->Get( ae::Key::Left ) || input->gamepads[ 0 ].leftAnalog.x < -0.1f || input->gamepads[ 0 ].dpad.x < 0;
+	const bool right = input->Get( ae::Key::Right ) || input->gamepads[ 0 ].leftAnalog.x > 0.1f || input->gamepads[ 0 ].dpad.x > 0;
+	const bool jumpButton = ( input->Get( ae::Key::Up ) || input->Get( ae::Key::Space ) || input->gamepads[ 0 ].a );
 
 	m_canJumpTimer -= dt;
 
 	// Water
 	if ( tile == kTile_Water )
 	{
-		if ( up || jumpButton ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
+		if ( jumpButton || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
 		if ( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kSwimDown ) ); }
 
 		if ( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
