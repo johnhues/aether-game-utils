@@ -53,6 +53,7 @@ class Registry
 public:
 	Registry( const ae::Tag& tag );
 	void SetOnCreateFn( void* userData, void(*fn)(void*, Component*) );
+	void SetOnDestroyFn( void* userData, void(*fn)(void*, Component*) );
 	
 	// Creation
 	Entity CreateEntity( const char* name = "" );
@@ -120,6 +121,8 @@ private:
 	ae::Map< ae::TypeId, ae::Map< Entity, Component* > > m_components;
 	void(*m_onCreateFn)(void*, Component*) = nullptr;
 	void* m_onCreateUserData = nullptr;
+	void(*m_onDestroyFn)(void*, Component*) = nullptr;
+	void* m_onDestroyUserData = nullptr;
 	bool m_destroying = false;
 };
 

@@ -63,6 +63,12 @@ void Registry::SetOnCreateFn( void* userData, void(*fn)(void*, Component*) )
 	m_onCreateUserData = userData;
 }
 
+void Registry::SetOnDestroyFn( void* userData, void(*fn)(void*, Component*) )
+{
+	m_onDestroyFn = fn;
+	m_onDestroyUserData = userData;
+}
+
 Entity Registry::CreateEntity( const char* name )
 {
 	AE_ASSERT_MSG( !m_destroying, "Cannot create an entity while destroying" );
@@ -301,11 +307,6 @@ void Registry::Destroy( Entity entity )
 	AE_ASSERT_MSG( !m_destroying, "Recursive destruction of objects or components is not supported" );
 	m_destroying = true;
 
-	const char* name = GetNameByEntity( entity );
-	if ( name && name[ 0 ] )
-	{
-		m_entityNames.Remove( name );
-	}
 	// Get components each loop because m_components could grow at any iteration
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
@@ -313,9 +314,18 @@ void Registry::Destroy( Entity entity )
 		ae::Map< Entity, Component* >* components = &m_components.GetValue( i );
 		if ( components->Remove( entity, &c ) )
 		{
+			if( m_onDestroyFn )
+			{
+				m_onDestroyFn( m_onDestroyUserData, c );
+			}
 			c->~Component();
 			ae::Free( c );
 		}
+	}
+	const char* name = GetNameByEntity( entity );
+	if ( name && name[ 0 ] )
+	{
+		m_entityNames.Remove( name );
 	}
 
 	m_destroying = false;
