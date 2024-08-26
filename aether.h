@@ -1437,22 +1437,27 @@ template < typename T, uint32_t N = 0 >
 class Array
 {
 public:
-	//! Static array (N > 0) only
+	//! Static array (N > 0) only. Constructs an empty array, where
+	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
 	Array();
-	//! Static array (N > 0) only. Appends 'length' number of 'val's
+	//! Static array (N > 0) only. Appends 'length' number of 'val's, so that
+	//! ae::Array::Length() == 'length' and ae::Array::Size() == N.
 	Array( const T& val, uint32_t length );
-	//! Static array (N > 0) only. Construct from a standard initializer list.
+	//! Static array (N > 0) only. Constructs from a standard initializer list,
+	//! so that ae::Array::Length() == 'initList.size()' and ae::Array::Size() == N.
 	Array( std::initializer_list< T > initList );
 
-	//! Dynamic array (N == 0) only
+	//! Dynamic array (N == 0) only. Constructs an empty array, where
+	//! ae::Array::Length() == 0 and ae::Array::Size() == N.
 	Array( ae::Tag tag );
-	//! Dynamic array (N == 0) only. Reserve size (with length of 0).
+	//! Dynamic array (N == 0) only. Constructs an empty array, while reserving
+	//! 'size' elements. ae::Array::Length() == 0 and ae::Array::Size() == 'size'.
 	Array( ae::Tag tag, uint32_t size );
 	//! Dynamic array (N == 0) only. Reserves 'length' and appends 'length'
-	//! number of 'val's.
+	//! number of 'val's. ae::Array::Length() == 'length' and ae::Array::Size() >= 'length'.
 	Array( ae::Tag tag, const T& val, uint32_t length );
 	//! Dynamic array (N == 0) only. Expands the internal array storage to avoid
-	//! copying data unneccesarily on Append(). This does not affect the number
+	//! copying data unnecessarily on Append(). This does not affect the number
 	//! of elements returned by Length(). Retrieve the current storage limit
 	//! with Size().
 	void Reserve( uint32_t total );
