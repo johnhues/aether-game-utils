@@ -5273,22 +5273,22 @@ class Type;
 struct VarTypeBase;
 const ae::TypeId kInvalidTypeId = 0;
 #ifndef AE_MAX_META_TYPES_CONFIG
-	#define AE_MAX_META_TYPES_CONFIG 128;
+	#define AE_MAX_META_TYPES_CONFIG 128
 #endif
 #ifndef AE_MAX_META_VARS_CONFIG
-	#define AE_MAX_META_VARS_CONFIG 16;
+	#define AE_MAX_META_VARS_CONFIG 16
 #endif
 #ifndef AE_MAX_META_ENUM_TYPES_CONFIG
-	#define AE_MAX_META_ENUM_TYPES_CONFIG 32;
+	#define AE_MAX_META_ENUM_TYPES_CONFIG 32
 #endif
 #ifndef AE_MAX_META_ENUM_VALUES_CONFIG
-	#define AE_MAX_META_ENUM_VALUES_CONFIG 64;
+	#define AE_MAX_META_ENUM_VALUES_CONFIG 64
 #endif
 #ifndef AE_MAX_META_PROPS_CONFIG
-	#define AE_MAX_META_PROPS_CONFIG 8;
+	#define AE_MAX_META_PROPS_CONFIG 8
 #endif
 #ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
-	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 8;
+	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 8
 #endif
 //! The maximum number of types that can be registered with AE_REGISTER_CLASS().
 //! This value can be overridden by defining AE_MAX_META_TYPES_CONFIG. See
@@ -10855,6 +10855,7 @@ struct _TypeCreator
 	{
 		_Globals* globals = _Globals::Get();
 		_DefineType< T >( &m_type, 0 );
+		AE_ASSERT_MSG( globals->typeNameMap.Length() < globals->typeNameMap.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->typeNameMap.Size() );
 		globals->typeNameMap.Set( typeName, &m_type );
 		globals->typeIdMap.Set( m_type.GetId(), &m_type ); // @TODO: Should check for hash collision
 		globals->types.Append( &m_type );
@@ -10940,7 +10941,6 @@ struct _EnumCreator
 
 	_EnumCreator( const char* typeName, std::string strMap )
 	{
-		//AE_INFO( "Create enum '#'", typeName );
 		m_enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
 			
 		// Remove whitespace
@@ -25978,6 +25978,7 @@ ae::Enum::Enum( const char* name, uint32_t size, bool isSigned ) :
 
 void ae::Enum::m_AddValue( const char* name, int32_t value )
 {
+	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Size(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Size() );
 	m_enumValueToName.Set( value, name );
 	m_enumNameToValue.Set( name, value );
 }
@@ -25987,6 +25988,7 @@ ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, boo
 	auto&& enums = ae::_Globals::Get()->enums;
 	if ( create )
 	{
+		AE_ASSERT_MSG( enums.Length() < enums.Size(), "Set/increase AE_MAX_META_ENUM_TYPES_CONFIG (Currently: #)", enums.Size() );
 		AE_ASSERT( !enums.TryGet( enumName ) );
 		ae::_Globals::Get()->metaCacheSeq++;
 		return &enums.Set( enumName, Enum( enumName, size, isSigned ) );
@@ -26232,6 +26234,7 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 
 void ae::Type::m_AddVar( const Var& var )
 {
+	AE_ASSERT_MSG( m_vars.Length() < m_vars.Size(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Size() );
 	m_vars.Append( var );
 	std::sort( m_vars.begin(), m_vars.end(), []( const auto& a, const auto& b )
 	{
