@@ -1736,9 +1736,11 @@ private:
 //------------------------------------------------------------------------------
 // ae::Dict class
 //------------------------------------------------------------------------------
+template< uint32_t N = 0 >
 class Dict
 {
 public:
+	Dict() = default;
 	Dict( ae::Tag tag );
 	void SetString( const char* key, const char* value );
 	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
@@ -1772,6 +1774,10 @@ public:
 	const char* GetKey( uint32_t idx ) const;
 	const char* GetValue( uint32_t idx ) const;
 	uint32_t Length() const { return m_entries.Length(); }
+	//! Returns the max number of entries.
+	_AE_STATIC_STORAGE static constexpr uint32_t Size() { return N; }
+	//! Returns the max number of entries.
+	_AE_DYNAMIC_STORAGE uint32_t Size(...) const { return m_entries.Size(); }
 	
 	// Ranged-based loop. Lowercase to match c++ standard
 	ae::Pair< ae::Str128, ae::Str128 >* begin() { return m_entries.begin(); }
@@ -1780,7 +1786,6 @@ public:
 	const ae::Pair< ae::Str128, ae::Str128 >* end() const { return m_entries.end(); }
 
 private:
-	Dict() = delete;
 	// Prevent the above functions from being called accidentally through automatic conversions
 	template < typename T > void SetString( const char*, T ) = delete;
 	template < typename T > void SetInt( const char*, T ) = delete;
@@ -1793,10 +1798,10 @@ private:
 	template < typename T > void SetVec4( const char*, T ) = delete;
 	template < typename T > void SetInt2( const char*, T ) = delete;
 	template < typename T > void SetMatrix4( const char*, T ) = delete;
-	ae::Map< ae::Str128, ae::Str128, 0, ae::MapMode::Stable > m_entries; // @TODO: Should support static allocation
+	ae::Map< ae::Str128, ae::Str128, N, ae::MapMode::Stable > m_entries;
 };
 
-inline std::ostream& operator<<( std::ostream& os, const ae::Dict& dict );
+template< uint32_t N > std::ostream& operator<<( std::ostream& os, const ae::Dict< N >& dict );
 
 //------------------------------------------------------------------------------
 // ae::ListNode class
@@ -8891,6 +8896,268 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N, M >& map )
 }
 
 //------------------------------------------------------------------------------
+// ae::Dict members
+//------------------------------------------------------------------------------
+// @TODO: These should use ToString and FromString
+template< uint32_t N >
+Dict< N >::Dict( ae::Tag tag ) :
+	m_entries( tag )
+{}
+
+template< uint32_t N >
+void Dict< N >::SetString( const char* key, const char* value )
+{
+	m_entries.Set( key, value );
+}
+
+template< uint32_t N >
+void Dict< N >::SetInt( const char* key, int32_t value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%d", value );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetUint( const char* key, uint32_t value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%u", value );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetFloat( const char* key, float value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%f", value );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetDouble( const char* key, double value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%lf", value );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetBool( const char* key, bool value )
+{
+	SetString( key, value ? "true" : "false" );
+}
+
+template< uint32_t N >
+void Dict< N >::SetVec2( const char* key, ae::Vec2 value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%.3f %.3f", value.x, value.y );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetVec3( const char* key, ae::Vec3 value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f", value.x, value.y, value.z );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetVec4( const char* key, ae::Vec4 value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f %.3f", value.x, value.y, value.z, value.w );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetInt2( const char* key, ae::Int2 value )
+{
+	char buf[ 128 ];
+	snprintf( buf, sizeof(buf), "%d %d", value.x, value.y );
+	SetString( key, buf );
+}
+
+template< uint32_t N >
+void Dict< N >::SetMatrix4( const char* key, const ae::Matrix4& value )
+{
+	auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
+}
+
+template< uint32_t N >
+bool Dict< N >::Remove( const char* key )
+{
+	return m_entries.Remove( key );
+}
+
+template< uint32_t N >
+void Dict< N >::Clear()
+{
+	m_entries.Clear();
+}
+
+template< uint32_t N >
+const char* Dict< N >::GetString( const char* key, const char* defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return value->c_str();
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+int32_t Dict< N >::GetInt( const char* key, int32_t defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return atoi( value->c_str() );
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+uint32_t Dict< N >::GetUint( const char* key, uint32_t defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return (uint32_t)strtoul( value->c_str(), nullptr, 10 );
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+float Dict< N >::GetFloat( const char* key, float defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return (float)atof( value->c_str() );
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+double Dict< N >::GetDouble( const char* key, double defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return (double)atof( value->c_str() );
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+bool Dict< N >::GetBool( const char* key, bool defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		if ( *value == "true" )
+		{
+			return true;
+		}
+		else if ( *value == "false" )
+		{
+			return false;
+		}
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+ae::Vec2 Dict< N >::GetVec2( const char* key, ae::Vec2 defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		ae::Vec2 result( 0.0f );
+		sscanf( value->c_str(), "%f %f", &result.x, &result.y );
+		return result;
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+ae::Vec3 Dict< N >::GetVec3( const char* key, ae::Vec3 defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		ae::Vec3 result( 0.0f );
+		sscanf( value->c_str(), "%f %f %f", &result.x, &result.y, &result.z );
+		return result;
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+ae::Vec4 Dict< N >::GetVec4( const char* key, ae::Vec4 defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		ae::Vec4 result( 0.0f );
+		sscanf( value->c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
+		return result;
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+ae::Int2 Dict< N >::GetInt2( const char* key, ae::Int2 defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		ae::Int2 result( 0.0f );
+		sscanf( value->c_str(), "%d %d", &result.x, &result.y );
+		return result;
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+ae::Matrix4 Dict< N >::GetMatrix4( const char* key, const ae::Matrix4& defaultValue ) const
+{
+	if ( const ae::Str128* value = m_entries.TryGet( key ) )
+	{
+		return ae::FromString< ae::Matrix4 >( value->c_str(), defaultValue );
+	}
+	return defaultValue;
+}
+
+template< uint32_t N >
+bool Dict< N >::Has( const char* key ) const
+{
+	return m_entries.TryGet( key ) != nullptr;
+}
+
+template< uint32_t N >
+const char* Dict< N >::GetKey( uint32_t idx ) const
+{
+	return m_entries.GetKey( idx ).c_str();
+}
+
+template< uint32_t N >
+const char* Dict< N >::GetValue( uint32_t idx ) const
+{
+	return m_entries.GetValue( idx ).c_str();
+}
+
+template< uint32_t N >
+std::ostream& operator<<( std::ostream& os, const Dict< N >& dict )
+{
+	os << "[";
+	for ( uint32_t i = 0; i < dict.Length(); i++ )
+	{
+		if ( i )
+		{
+			os << ",";
+		}
+		os << "<'" << dict.GetKey( i ) << "','" << dict.GetValue( i ) << "'>";
+	}
+	return os << "]";
+}
+
+//------------------------------------------------------------------------------
 // ae::ListNode member functions
 //------------------------------------------------------------------------------
 template < typename T >
@@ -14026,239 +14293,6 @@ void TimeStep::Tick()
 	}
 	
 	m_stepCount++;
-}
-
-//------------------------------------------------------------------------------
-// ae::Dict members
-//------------------------------------------------------------------------------
-// @TODO: These should use ToString and FromString
-Dict::Dict( ae::Tag tag ) :
-	m_entries( tag )
-{}
-
-void Dict::SetString( const char* key, const char* value )
-{
-	m_entries.Set( key, value );
-}
-
-void Dict::SetInt( const char* key, int32_t value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%d", value );
-	SetString( key, buf );
-}
-
-void Dict::SetUint( const char* key, uint32_t value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%u", value );
-	SetString( key, buf );
-}
-
-void Dict::SetFloat( const char* key, float value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%f", value );
-	SetString( key, buf );
-}
-
-void Dict::SetDouble( const char* key, double value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%lf", value );
-	SetString( key, buf );
-}
-
-void Dict::SetBool( const char* key, bool value )
-{
-	SetString( key, value ? "true" : "false" );
-}
-
-void Dict::SetVec2( const char* key, ae::Vec2 value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%.3f %.3f", value.x, value.y );
-	SetString( key, buf );
-}
-
-void Dict::SetVec3( const char* key, ae::Vec3 value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f", value.x, value.y, value.z );
-	SetString( key, buf );
-}
-
-void Dict::SetVec4( const char* key, ae::Vec4 value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f %.3f", value.x, value.y, value.z, value.w );
-	SetString( key, buf );
-}
-
-void Dict::SetInt2( const char* key, ae::Int2 value )
-{
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%d %d", value.x, value.y );
-	SetString( key, buf );
-}
-
-void Dict::SetMatrix4( const char* key, const ae::Matrix4& value )
-{
-	auto str = ToString( value );
-	m_entries.Set( key, str.c_str() );
-}
-
-bool Dict::Remove( const char* key )
-{
-	return m_entries.Remove( key );
-}
-
-void Dict::Clear()
-{
-	m_entries.Clear();
-}
-
-const char* Dict::GetString( const char* key, const char* defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		return value->c_str();
-	}
-	return defaultValue;
-}
-
-int32_t Dict::GetInt( const char* key, int32_t defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		return atoi( value->c_str() );
-	}
-	return defaultValue;
-}
-
-uint32_t Dict::GetUint( const char* key, uint32_t defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		return (uint32_t)strtoul( value->c_str(), nullptr, 10 );
-	}
-	return defaultValue;
-}
-
-float Dict::GetFloat( const char* key, float defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		return (float)atof( value->c_str() );
-	}
-	return defaultValue;
-}
-
-double Dict::GetDouble( const char* key, double defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		return (double)atof( value->c_str() );
-	}
-	return defaultValue;
-}
-
-bool Dict::GetBool( const char* key, bool defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		if ( *value == "true" )
-		{
-			return true;
-		}
-		else if ( *value == "false" )
-		{
-			return false;
-		}
-	}
-	return defaultValue;
-}
-
-ae::Vec2 Dict::GetVec2( const char* key, ae::Vec2 defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		ae::Vec2 result( 0.0f );
-		sscanf( value->c_str(), "%f %f", &result.x, &result.y );
-		return result;
-	}
-	return defaultValue;
-}
-
-ae::Vec3 Dict::GetVec3( const char* key, ae::Vec3 defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		ae::Vec3 result( 0.0f );
-		sscanf( value->c_str(), "%f %f %f", &result.x, &result.y, &result.z );
-		return result;
-	}
-	return defaultValue;
-}
-
-ae::Vec4 Dict::GetVec4( const char* key, ae::Vec4 defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		ae::Vec4 result( 0.0f );
-		sscanf( value->c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
-		return result;
-	}
-	return defaultValue;
-}
-
-ae::Int2 Dict::GetInt2( const char* key, ae::Int2 defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		ae::Int2 result( 0.0f );
-		sscanf( value->c_str(), "%d %d", &result.x, &result.y );
-		return result;
-	}
-	return defaultValue;
-}
-
-ae::Matrix4 Dict::GetMatrix4( const char* key, const ae::Matrix4& defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		return ae::FromString< ae::Matrix4 >( value->c_str(), defaultValue );
-	}
-	return defaultValue;
-}
-
-bool Dict::Has( const char* key ) const
-{
-	return m_entries.TryGet( key ) != nullptr;
-}
-
-const char* Dict::GetKey( uint32_t idx ) const
-{
-	return m_entries.GetKey( idx ).c_str();
-}
-
-const char* Dict::GetValue( uint32_t idx ) const
-{
-	return m_entries.GetValue( idx ).c_str();
-}
-
-std::ostream& operator<<( std::ostream& os, const Dict& dict )
-{
-	os << "[";
-	for ( uint32_t i = 0; i < dict.Length(); i++ )
-	{
-		if ( i )
-		{
-			os << ",";
-		}
-		os << "<'" << dict.GetKey( i ) << "','" << dict.GetValue( i ) << "'>";
-	}
-	return os << "]";
 }
 
 //------------------------------------------------------------------------------
