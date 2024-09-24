@@ -949,3 +949,40 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
 	REQUIRE( ae::LifetimeTester::currentCount == 0 );
 }
+
+TEST_CASE( "aeOpaquePool can iterate after modification", "[aeOpaquePool]" )
+{
+	const uint32_t kPageSize = 3;
+	ae::OpaquePool pool( TAG_POOL, sizeof(ae::LifetimeTester), alignof(ae::LifetimeTester), kPageSize, true );
+	REQUIRE( pool.PageSize() == kPageSize );
+	REQUIRE( pool.Length() == 0 );
+
+	for( uint32_t i = 0; i < kPageSize; i++ )
+	{
+		pool.New< ae::LifetimeTester >()->value = i;
+	}
+	REQUIRE( pool.Length() == kPageSize );
+
+	uint32_t idx = 0;
+	for ( auto& obj : pool.Iterate< ae::LifetimeTester >() )
+	{
+		REQUIRE( obj.value == idx );
+		idx++;
+	}
+	REQUIRE( idx == kPageSize );
+
+	idx = 0;
+	for ( auto& obj : pool.Iterate< ae::LifetimeTester >() )
+	{
+		REQUIRE( obj.value == idx );
+		idx++;
+		if( idx == kPageSize )
+		{
+			// Allocate at end of page
+			pool.New< ae::LifetimeTester >()->value = kPageSize;
+		}
+	}
+	REQUIRE( idx == kPageSize + 1 );
+
+	pool.DeleteAll< ae::LifetimeTester >();
+}
