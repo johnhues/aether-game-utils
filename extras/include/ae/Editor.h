@@ -28,7 +28,7 @@ class EditorComponent
 public:
 	EditorComponent( const ae::Tag& tag ) : members( tag ) {}
 	ae::Str32 type;
-	ae::Dict members;
+	ae::Dict<> members;
 };
 
 //------------------------------------------------------------------------------
