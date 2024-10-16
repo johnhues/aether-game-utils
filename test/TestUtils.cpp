@@ -29,9 +29,6 @@ namespace ae {
 //------------------------------------------------------------------------------
 // LifetimeTester static members
 //------------------------------------------------------------------------------
-const uint32_t LifetimeTester::kConstructed = 0xABABABAB;
-const uint32_t LifetimeTester::kMoved = 0xBCBCBCBC;
-
 int32_t LifetimeTester::ctorCount = 0;
 int32_t LifetimeTester::copyCount = 0;
 int32_t LifetimeTester::moveCount = 0;

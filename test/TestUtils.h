@@ -44,8 +44,11 @@ public:
 	LifetimeTester& operator=( LifetimeTester&& ) noexcept; // move assignment
 	~LifetimeTester();
 	
-	static const uint32_t kConstructed;
-	static const uint32_t kMoved;
+	enum
+	{
+		kConstructed = 0xABABABAB,
+		kMoved = 0xBCBCBCBC
+	};
 	
 	uint32_t check;
 	uint32_t value;
@@ -59,6 +62,7 @@ public:
 	static int32_t moveAssignCount;
 	static int32_t dtorCount;
 	static int32_t currentCount;
+	// static int32_t validCount; // @TODO: Current minus moved from objects
 };
 
 } // ae end

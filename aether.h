@@ -155,7 +155,6 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
-#include <optional>
 #include <ostream>
 #include <sstream>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
@@ -1429,6 +1428,34 @@ struct Pair
 	K key;
 	V value;
 };
+
+//------------------------------------------------------------------------------
+// ae::Optional class
+//------------------------------------------------------------------------------
+template < typename T >
+class Optional
+{
+public:
+	Optional() = default;
+	Optional( const T& value );
+	Optional( const Optional< T >& other );
+	Optional( T&& value ) noexcept;
+	Optional( Optional< T >&& other ) noexcept;
+	void operator =( const T& value );
+	void operator =( const Optional< T >& other );
+	void operator =( T&& value ) noexcept;
+	void operator =( Optional< T >&& other ) noexcept;
+	~Optional();
+
+	T* TryGet();
+	const T* TryGet() const;
+	void Clear();
+
+private:
+	bool m_hasValue = false;
+	alignas(T) std::byte m_value[ sizeof(T) ];
+};
+
 
 //------------------------------------------------------------------------------
 // ae::Array class
@@ -7927,6 +7954,132 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 		head++;
 	}
 	m_Format( head, args... );
+}
+
+//------------------------------------------------------------------------------
+// ae::Optional functions
+//------------------------------------------------------------------------------
+template< typename T >
+Optional< T >::Optional( const T& value ) : m_hasValue( false )
+{
+	*this = value;
+}
+
+template< typename T >
+Optional< T >::Optional( const Optional< T >& other ) : m_hasValue( false )
+{
+	*this = other;
+}
+
+template< typename T >
+Optional< T >::Optional( T&& value ) noexcept : m_hasValue( false )
+{
+	*this = std::move( value );
+}
+
+template< typename T >
+Optional< T >::Optional( Optional< T >&& other ) noexcept : m_hasValue( false )
+{
+	*this = std::move( other );
+}
+
+template< typename T >
+Optional< T >::~Optional()
+{
+	Clear();
+}
+
+template< typename T >
+void Optional< T >::operator =( const T& value )
+{
+	if( reinterpret_cast< T* >( &m_value ) == &value )
+	{
+		return;
+	}
+	else if( m_hasValue )
+	{
+		*reinterpret_cast< T* >( &m_value ) = value;
+	}
+	else
+	{
+		new( &m_value ) T( value );
+		m_hasValue = true;
+	}
+}
+
+template< typename T >
+void Optional< T >::operator =( const Optional< T >& other )
+{
+	if( this == &other )
+	{
+		return;
+	}
+	else if( other.m_hasValue )
+	{
+		*this = *reinterpret_cast< const T* >( &other.m_value );
+	}
+	else
+	{
+		Clear();
+	}
+}
+
+template< typename T >
+void Optional< T >::operator =( T&& value ) noexcept
+{
+	if( reinterpret_cast< T* >( &m_value ) == &value )
+	{
+		return;
+	}
+	else if( m_hasValue )
+	{
+		*reinterpret_cast< T* >( &m_value ) = std::move( value );
+	}
+	else
+	{
+		new( &m_value ) T( std::move( value ) );
+		m_hasValue = true;
+	}
+}
+
+template< typename T >
+void Optional< T >::operator =( Optional< T >&& other ) noexcept
+{
+	if( this == &other )
+	{
+		return;
+	}
+	else if( other.m_hasValue )
+	{
+		*this = std::move( *reinterpret_cast< T* >( &other.m_value ) );
+		other.Clear();
+	}
+	else
+	{
+		Clear();
+	}
+}
+
+template< typename T >
+void Optional< T >::Clear()
+{
+	if( m_hasValue )
+	{
+		reinterpret_cast< T* >( &m_value )->~T();
+		m_hasValue = false;
+	}
+}
+
+template< typename T >
+T* Optional< T >::TryGet()
+{
+	return m_hasValue ? reinterpret_cast< T* >( &m_value ) : nullptr;
+}
+
+template< typename T >
+const T* Optional< T >::TryGet() const
+{
+	return m_hasValue ? reinterpret_cast< const T* >( &m_value ) : nullptr;
 }
 
 //------------------------------------------------------------------------------
