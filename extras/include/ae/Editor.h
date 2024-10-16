@@ -47,7 +47,7 @@ public:
 // Editor callback functions
 //------------------------------------------------------------------------------
 typedef void(*OnLevelLoadStartFn)( void* userData, const char* levelPath );
-typedef ae::EditorMesh(*LoadEditorMeshFn)( void* userData, const char* resourceId );
+typedef ae::Optional< ae::EditorMesh >(*LoadEditorMeshFn)( void* userData, const char* resourceId );
 typedef bool(*PreFileEditFn)( void* userData, const char* filePath );
 
 //------------------------------------------------------------------------------
@@ -57,9 +57,12 @@ struct EditorFunctionPointers
 {
 	//! @TODO
 	ae::OnLevelLoadStartFn onLevelLoadStartFn = nullptr;
-	//! Implement this so ae::Editor can display editor object meshes. Register a variable with the following tag
-	//! to display a mesh: AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
-	//! The contents of 'myVar' will be converted to a string and passed to loadMeshFn() as the resourceId.
+	//! Implement this so ae::Editor can display editor object meshes. Register
+	//! a variable with the following tag to display a mesh:
+	//! AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
+	//! The contents of 'myVar' will be converted to a string and passed to
+	//! loadMeshFn() as the resourceId. The given function should return a
+	//! complete ae::Optional< ae::EditorMesh >.
 	ae::LoadEditorMeshFn loadMeshFn = nullptr;
 	//! Called before a file is opened for editing. Return false to prevent the
 	//! file from being opened. Useful for checking out files from source control.
@@ -128,7 +131,7 @@ private:
 	EditorParams* m_params = nullptr;
 	ae::Str256 m_lastLoadedLevel;
 	ae::FileSystem m_fileSystem;
-	const ae::File* m_pendingFile = nullptr;
+	const ae::File* m_pendingLevel = nullptr;
 	ae::Socket m_sock;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
 };

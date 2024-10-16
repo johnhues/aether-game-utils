@@ -13,6 +13,8 @@
 #include "ImGuizmo.h"
 // @TODO: Remove rapidjson dependency
 #include "rapidjson/document.h"
+#include "rapidjson/error/en.h"
+#include "rapidjson/error/error.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
 
@@ -335,15 +337,24 @@ public:
 void EditorServerMesh::Initialize( const ae::EditorMesh* _mesh )
 {
 	vertices.Clear();
-	if ( _mesh->indices.Length() )
+	const uint32_t vertexCount = _mesh->verts.Length();
+	const uint32_t indexCount = _mesh->indices.Length();
+	if( indexCount )
 	{
-		uint32_t triangleCount = _mesh->indices.Length() / 3;
-		vertices.Reserve( triangleCount * 3 );
-		for ( uint32_t i = 0; i < triangleCount; i++ )
+		vertices.Reserve( indexCount );
+		for( uint32_t i = 0; i < indexCount; i += 3 )
 		{
-			ae::Vec3 p0 = _mesh->verts[ _mesh->indices[ i * 3 ] ];
-			ae::Vec3 p1 = _mesh->verts[ _mesh->indices[ i * 3 + 1 ] ];
-			ae::Vec3 p2 = _mesh->verts[ _mesh->indices[ i * 3 + 2 ] ];
+			ae::OBJFile::Index index0 = _mesh->indices[ i ];
+			ae::OBJFile::Index index1 = _mesh->indices[ i + 1 ];
+			ae::OBJFile::Index index2 = _mesh->indices[ i + 2 ];
+			if( index0 >= vertexCount || index1 >= vertexCount || index2 >= vertexCount )
+			{
+				AE_WARN( "Invalid index in editor mesh" );
+				continue;
+			}
+			ae::Vec3 p0 = _mesh->verts[ index0 ];
+			ae::Vec3 p1 = _mesh->verts[ index1 ];
+			ae::Vec3 p2 = _mesh->verts[ index2 ];
 			ae::Vec4 n( ( p2 - p1 ).Cross( p0 - p1 ).SafeNormalizeCopy(), 0.0f );
 			vertices.Append( { ae::Vec4( p0, 1.0f ), n } );
 			vertices.Append( { ae::Vec4( p1, 1.0f ), n } );
@@ -352,13 +363,12 @@ void EditorServerMesh::Initialize( const ae::EditorMesh* _mesh )
 	}
 	else
 	{
-		uint32_t triangleCount = _mesh->verts.Length() / 3;
-		vertices.Reserve( triangleCount * 3 );
-		for ( uint32_t i = 0; i < triangleCount; i++ )
+		vertices.Reserve( vertexCount );
+		for( uint32_t i = 0; i < vertexCount; i += 3 )
 		{
-			ae::Vec3 p0 = _mesh->verts[ i * 3 ];
-			ae::Vec3 p1 = _mesh->verts[ i * 3 + 1 ];
-			ae::Vec3 p2 = _mesh->verts[ i * 3 + 2 ];
+			ae::Vec3 p0 = _mesh->verts[ i ];
+			ae::Vec3 p1 = _mesh->verts[ i + 1 ];
+			ae::Vec3 p2 = _mesh->verts[ i + 2 ];
 			ae::Vec4 n( ( p2 - p1 ).Cross( p0 - p1 ).SafeNormalizeCopy(), 0.0f );
 			vertices.Append( { ae::Vec4( p0, 1.0f ), n } );
 			vertices.Append( { ae::Vec4( p1, 1.0f ), n } );
@@ -684,14 +694,15 @@ float EditorProgram::GetAspectRatio() const
 
 EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
 {
+	AE_INFO( "Loading mesh... '#'", resourceId );
 	EditorServerMesh* mesh = m_meshes.Get( resourceId, nullptr );
 	if ( !mesh && params.functionPointers.loadMeshFn )
 	{
-		ae::EditorMesh temp = params.functionPointers.loadMeshFn( params.functionPointers.userData, resourceId );
-		if ( temp.verts.Length() )
+		ae::Optional< ae::EditorMesh > temp = params.functionPointers.loadMeshFn( params.functionPointers.userData, resourceId );
+		if ( ae::EditorMesh* editorMesh = temp.TryGet() )
 		{
 			mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
-			mesh->Initialize( &temp );
+			mesh->Initialize( editorMesh );
 			m_meshes.Set( resourceId, mesh );
 		}
 	}
@@ -804,10 +815,10 @@ void Editor::Terminate()
 	m_sock.Disconnect();
 #endif
 
-	if( m_pendingFile )
+	if( m_pendingLevel )
 	{
-		m_fileSystem.Destroy( m_pendingFile );
-		m_pendingFile = nullptr;
+		m_fileSystem.Destroy( m_pendingLevel );
+		m_pendingLevel = nullptr;
 	}
 
 	ae::Delete( m_params );
@@ -890,13 +901,13 @@ void Editor::Update()
 void Editor::QueueRead( const char* levelPath )
 {
 	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
-	if ( m_pendingFile )
+	if ( m_pendingLevel )
 	{
-		AE_WARN( "Cancelling level read '#'", m_pendingFile->GetUrl() );
-		m_fileSystem.Destroy( m_pendingFile );
+		AE_WARN( "Cancelling level read '#'", m_pendingLevel->GetUrl() );
+		m_fileSystem.Destroy( m_pendingLevel );
 	}
-	m_pendingFile = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
-	AE_INFO( "Queuing level load '#'", m_pendingFile->GetUrl() );
+	m_pendingLevel = m_fileSystem.Read( ae::FileSystem::Root::Data, levelPath, 2.0f );
+	AE_INFO( "Queuing level load '#'", m_pendingLevel->GetUrl() );
 }
 
 void Editor::SetFunctionPointers( const ae::EditorFunctionPointers& functionPointers )
@@ -905,35 +916,48 @@ void Editor::SetFunctionPointers( const ae::EditorFunctionPointers& functionPoin
 	m_params->functionPointers = functionPointers;
 }
 
+// @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
 void Editor::m_Read()
 {
-	if ( !m_pendingFile || m_pendingFile->GetStatus() == ae::File::Status::Pending )
+	if ( !m_pendingLevel || m_pendingLevel->GetStatus() == ae::File::Status::Pending )
 	{
 		return;
 	}
 	ae::RunOnDestroy destroyFile{ [this]()
 	{
-		m_fileSystem.Destroy( m_pendingFile );
-		m_pendingFile = nullptr;
+		m_fileSystem.Destroy( m_pendingLevel );
+		m_pendingLevel = nullptr;
 	} };
-	uint32_t fileSize = m_pendingFile->GetLength();
+	uint32_t fileSize = m_pendingLevel->GetLength();
 	if ( !fileSize )
 	{
 		return;
 	}
 
-	const char* jsonBuffer = (const char*)m_pendingFile->GetData();
-	AE_ASSERT( jsonBuffer[ m_pendingFile->GetLength() ] == 0 );
+	const char* jsonBuffer = (const char*)m_pendingLevel->GetData();
+	AE_ASSERT( jsonBuffer[ m_pendingLevel->GetLength() ] == 0 );
 	rapidjson::Document document;
-	if( document.Parse( jsonBuffer ).HasParseError() || !ValidateLevel( document ) )
+	rapidjson::ParseResult parseResult = document.Parse( jsonBuffer );
+	if( parseResult.IsError() )
 	{
+		AE_ERR( "Could not parse json '#' Error:# (#)",
+			m_pendingLevel->GetUrl(),
+			rapidjson::GetParseError_En( parseResult.Code() ),
+			parseResult.Offset()
+		);
 		return;
 	}
 
-	m_lastLoadedLevel = m_pendingFile->GetUrl();
+	if( !ValidateLevel( document ) )
+	{
+		AE_ERR( "Invalid level data format '#'", m_pendingLevel->GetUrl() );
+		return;
+	}
+
+	m_lastLoadedLevel = m_pendingLevel->GetUrl();
 	if( m_params->functionPointers.onLevelLoadStartFn )
 	{
-		m_params->functionPointers.onLevelLoadStartFn( m_params->functionPointers.userData, m_pendingFile->GetUrl() );
+		m_params->functionPointers.onLevelLoadStartFn( m_params->functionPointers.userData, m_pendingLevel->GetUrl() );
 	}
 
 	// State for loading
@@ -969,7 +993,7 @@ void Editor::m_Read()
 	// Serialize all components (second phase to handle references)
 	JsonToRegistry( entityMap, jsonObjects, m_params->registry );
 
-	AE_INFO( "Loaded level '#'", m_pendingFile->GetUrl() );
+	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
 }
 
 void Editor::m_Connect()
@@ -1124,6 +1148,7 @@ void EditorServer::Initialize( EditorProgram* program )
 	m_SetLevelPath( program, "" );
 }
 
+// @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
 void EditorServer::m_LoadLevel( EditorProgram* program )
 {
 	if( !m_pendingLevel || m_pendingLevel->GetStatus() == ae::File::Status::Pending )
@@ -1155,12 +1180,23 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	AE_INFO( "Loading level... '#'", m_pendingLevel->GetUrl() );
 	
 	const char* jsonBuffer = (const char*)m_pendingLevel->GetData();
-	AE_ASSERT( jsonBuffer[ m_pendingLevel->GetLength() ] == 0 );
+	AE_ASSERT( jsonBuffer[ m_pendingLevel->GetLength() ] == 0 ); // ae::File::Read() should always add a null terminator
 	
 	rapidjson::Document document;
-	if( document.Parse( jsonBuffer ).HasParseError() || !ValidateLevel( document ) )
+	rapidjson::ParseResult parseResult = document.Parse( jsonBuffer );
+	if( parseResult.IsError() )
 	{
-		AE_ERR( "Could not parse level '#'", m_pendingLevel->GetUrl() );
+		AE_ERR( "Could not parse json '#' Error:# (#)",
+			m_pendingLevel->GetUrl(),
+			rapidjson::GetParseError_En( parseResult.Code() ),
+			parseResult.Offset()
+		);
+		return;
+	}
+
+	if( !ValidateLevel( document ) )
+	{
+		AE_ERR( "Invalid level data format '#'", m_pendingLevel->GetUrl() );
 		return;
 	}
 
@@ -2515,6 +2551,7 @@ void EditorServer::m_CopySelected() const
 	ae::SetClipboardText( buffer.GetString() );
 }
 
+// @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
 void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 {
 	const auto clipboardText = ae::GetClipboardText();
@@ -2525,11 +2562,16 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 
 	// Load / validate
 	rapidjson::Document document;
-	if( document.Parse( clipboardText.c_str() ).HasParseError() )
+	rapidjson::ParseResult parseResult = document.Parse( clipboardText.c_str() );
+	if( parseResult.IsError() )
 	{
-		AE_WARN( "Failed to parse clipboard text" );
+		AE_ERR( "Could not parse clipboard json. Error:# (#)",
+			rapidjson::GetParseError_En( parseResult.Code() ),
+			parseResult.Offset()
+		);
 		return;
 	}
+
 	if( !ValidateLevel( document ) )
 	{
 		AE_WARN( "Unexpected clipboard data format" );
@@ -3135,6 +3177,7 @@ bool ValidateLevel( const rapidjson::Value& jsonLevel )
 {
 	if( !jsonLevel.IsObject() || !jsonLevel.HasMember( "objects" ) )
 	{
+		AE_ERR( "Invalid 'objects' array" );
 		return false;
 	}
 	
@@ -3147,26 +3190,46 @@ bool ValidateLevel( const rapidjson::Value& jsonLevel )
 	uint32_t prevId = 0;
 	for( const auto& jsonObject : jsonObjects.GetArray() )
 	{
-		if( !jsonObject.HasMember( "id" ) ) { return false; }
-		if( !jsonObject.HasMember( "transform" ) ) { return false; }
-		if( !jsonObject.HasMember( "components" ) ) { return false; }
-
-		const uint32_t id = jsonObject[ "id" ].GetUint();
-		if( id <= prevId )
+		if( !jsonObject.HasMember( "id" ) )
 		{
+			// @TODO
+			return false;
+		}
+		const uint32_t id = jsonObject[ "id" ].GetUint();
+		if( id == prevId )
+		{
+			AE_ERR( "Duplicate entity id '#'", id );
+			return false;
+		}
+		if( id < prevId )
+		{
+			AE_ERR( "Entity id '#' out of sequence (# > #)", id, prevId, id );
 			return false;
 		}
 		prevId = id;
 
+		if( !jsonObject.HasMember( "transform" ) )
+		{
+			AE_ERR( "Entity '#' has no transform data", id );
+			return false;
+		}
+
+		if( !jsonObject.HasMember( "components" ) )
+		{
+			AE_ERR( "Entity '#' has no components", id );
+			return false;
+		}
 		const auto& jsonComponents = jsonObject[ "components" ];
 		if( !jsonComponents.IsObject() )
 		{
+			AE_ERR( "Unexpected data when reading entity '#' 'components'", id );
 			return false;
 		}
 		for( const auto& componentIter : jsonComponents.GetObject() )
 		{
 			if( !componentIter.value.IsObject() )
 			{
+				AE_ERR( "Entity '#' has unexpected component data", id );
 				return false;
 			}
 		}

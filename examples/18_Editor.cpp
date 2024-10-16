@@ -224,7 +224,7 @@ void Game::Initialize( int argc, char* argv[] )
 		AE_INFO( "Loading level: %s", levelPath );
 		
 	};
-	editorParams.functionPointers.loadMeshFn = []( void* userData, const char* resourceId )
+	editorParams.functionPointers.loadMeshFn = []( void* userData, const char* resourceId ) -> ae::Optional< ae::EditorMesh >
 	{
 		Game* game = (Game*)userData;
 		ae::EditorMesh result = TAG_ALL;
