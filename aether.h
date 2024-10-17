@@ -31,12 +31,12 @@
 // as OpenGL will be handled for you.
 //
 // Recommendations:
-// For bigger projects it's worth defining AE_MAIN in it's own module to limit the
-// number of dependencies brought into your own code. For instance 'Windows.h'
-// is included with AE_MAIN and this can easily cause naming conflicts with
-// gameplay/engine code. The following could be compiled into a single module
-// and linked with the application.
-// Usage inside a cpp/mm file could be something like:
+// For bigger projects it's worth defining AE_MAIN in it's own module to limit
+// the number of dependencies brought into your own code. For instance
+// 'Windows.h' is included with AE_MAIN and this can easily cause naming
+// conflicts with gameplay/engine code. The following example could be compiled
+// into a single file/module and linked with the application.
+// Usage inside of a cpp/mm file could be something like:
 #if 0 // ae.cpp/ae.mm start
 
 #define AE_MAIN
@@ -51,6 +51,9 @@
 #ifndef AE_AETHER_H
 #define AE_AETHER_H
 
+//------------------------------------------------------------------------------
+// AE_CONFIG_FILE define
+//------------------------------------------------------------------------------
 //! The path to a user defined configuration header file, something like
 //! AE_CONFIG_FILE="aeConfig.h". Should contain defines such as
 //! AE_VEC3_CLASS_CONFIG, AE_MAX_META_TYPES_CONFIG, etc (any AE_*_CONFIG's
@@ -61,6 +64,22 @@
 //! If AE_CONFIG_FILE is not defined, the default configuration will be used.
 #ifdef AE_CONFIG_FILE
 	#include AE_CONFIG_FILE
+#endif
+
+//------------------------------------------------------------------------------
+// AE_MEMORY_CHECKS define
+//------------------------------------------------------------------------------
+//! If you define AE_MEMORY_CHECKS=1, all allocations through aether will be
+//! tracked and checked for leaks, double-frees, etc. If you use
+//! ae::SetGlobalAllocator() the usefulness of AE_MEMORY_CHECKS will be very
+//! limited, so it might be worth temporarily disabling your custom allocator to
+//! get the full benefits of AE_MEMORY_CHECKS. AE_MEMORY_CHECKS is a heavy
+//! diagnostic tool and may have a large performance impact. AE_MEMORY_CHECKS
+//! must be defined for all files that include aether.h (using AE_CONFIG_FILE is
+//! a great way to do this).
+//------------------------------------------------------------------------------
+#ifndef AE_MEMORY_CHECKS
+	#define AE_MEMORY_CHECKS 0
 #endif
 
 //------------------------------------------------------------------------------
@@ -160,6 +179,9 @@
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
 #include <type_traits>
 #include <typeinfo>
+#if AE_MEMORY_CHECKS
+	#include <unordered_map>
+#endif
 #include <utility>
 #include <vector> // @TODO: Remove. For _EnumCreator.
 
@@ -286,12 +308,18 @@ using Tag = std::string; // @TODO: Fixed length string
 //------------------------------------------------------------------------------
 //! \defgroup Allocation
 //! Allocation utilities.
-//! By default aether-game-utils uses system allocations (malloc / free), which may
-//! be fine for your use case. If not, it's advised that you implement your own
-//! ae::Allocator with dlmalloc or similar and then call ae::SetGlobalAllocator()
-//! with your allocator at program start. All allocations are tagged, (@TODO)
-//! they can be inspected through the current ae::Allocator with ae::GetGlobalAllocator().
+//! By default aether-game-utils uses system allocations (malloc / free). The
+//! default allocator is thread safe. If this is not okay for your use case,
+//! it's advised that you implement your own ae::Allocator with dlmalloc or
+//! similar and then call ae::SetGlobalAllocator() with your allocator at
+//! program start.
 //! @{
+//------------------------------------------------------------------------------
+//! ae::Allocator base class
+//! Inherit from this to manage how allocations are handled. ALL ALLOCATIONS are
+//! made through the ae::Allocator interface. This allows for custom memory
+//! management, such as pooling, tracking, etc. See ae::_DefaultAllocator for a
+//! simple example of how to implement an allocator.
 //------------------------------------------------------------------------------
 class Allocator
 {
@@ -5742,10 +5770,17 @@ void PatchVTable( T* obj, Args... ctorArgs )
 class _DefaultAllocator : public Allocator
 {
 public:
+	~_DefaultAllocator() override;
 	void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment ) override;
 	void* Reallocate( void* data, uint32_t bytes, uint32_t alignment ) override;
 	void Free( void* data ) override;
 	bool IsThreadSafe() const override;
+#if AE_MEMORY_CHECKS
+private:
+	enum class AllocStatus : uint8_t { Allocated, Freed };
+	std::mutex m_allocLock;
+	std::unordered_map< void*, AllocStatus > m_allocations;
+#endif
 };
 
 //------------------------------------------------------------------------------
@@ -8525,6 +8560,7 @@ void Array< T, N >::Reserve( uint32_t size )
 	AE_DEBUG_ASSERT( size );
 	m_size = size;
 	
+	// @TODO: Try to use realloc
 	T* arr = (T*)ae::Allocate( m_tag, m_size * sizeof(T), alignof(T) );
 	for ( uint32_t i = 0; i < m_length; i++ )
 	{
@@ -14257,35 +14293,98 @@ void SetLogColorsEnabled( bool enabled )
 //------------------------------------------------------------------------------
 // _DefaultAllocator class
 //------------------------------------------------------------------------------
+_DefaultAllocator::~_DefaultAllocator()
+{
+#if AE_MEMORY_CHECKS
+	std::lock_guard< std::mutex > lock( m_allocLock );
+	if( m_allocations.size() )
+	{
+		uint32_t leakCount = 0;
+		for( const auto& allocation : m_allocations )
+		{
+			if( allocation.second == AllocStatus::Allocated )
+			{
+				leakCount++;
+				if( leakCount >= 32 )
+				{
+					break;
+				}
+			}
+		}
+		if( leakCount )
+		{
+			AE_FAIL_MSG( "Memory leaks detected: #", leakCount ); // @TODO: More Info here
+		}
+	}
+#endif
+}
+
 void* _DefaultAllocator::Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment )
 {
 	alignment = ae::Max( 2u, alignment );
 #if _AE_WINDOWS_
-	return _aligned_malloc( bytes, alignment );
+	void* result = _aligned_malloc( bytes, alignment );
 #elif _AE_OSX_
 	// @HACK: macosx clang c++11 does not have aligned alloc
-	return malloc( bytes );
+	void* result = malloc( bytes );
 #elif _AE_EMSCRIPTEN_
 	// Emscripten malloc always uses 8 byte alignment https://github.com/emscripten-core/emscripten/issues/10072
-	return malloc( bytes );
+	void* result = malloc( bytes );
 #else
-	return aligned_alloc( alignment, bytes );
+	void* result = aligned_alloc( alignment, bytes );
 #endif
+#if AE_MEMORY_CHECKS
+	std::lock_guard< std::mutex > lock( m_allocLock );
+	auto iter = m_allocations.find( result );
+	if( iter == m_allocations.end() )
+	{
+		m_allocations.emplace( result, AllocStatus::Allocated );
+	}
+	else
+	{
+		AE_ASSERT_MSG( iter->second == AllocStatus::Freed, "Memory already allocated: #", result );
+		iter->second = AllocStatus::Allocated;
+	}
+#endif
+	return result;
 }
 
 void* _DefaultAllocator::Reallocate( void* data, uint32_t bytes, uint32_t alignment )
 {
 	alignment = ae::Max( 2u, alignment );
-#if _AE_WINDOWS_
-	return _aligned_realloc( data, bytes, alignment );
-#else
-	aeCompilationWarning( "Aligned realloc() not determined on this platform" )
-	return nullptr;
+#if AE_MEMORY_CHECKS
+	std::lock_guard< std::mutex > lock( m_allocLock );
+	auto iter = m_allocations.find( data );
+	AE_ASSERT_MSG( iter != m_allocations.end(), "Can't realloc, not allocated: #", data );
+	AE_ASSERT_MSG( iter->second == AllocStatus::Allocated, "Can't realloc, already freed: #", data );
 #endif
+#if _AE_WINDOWS_
+	void* result = _aligned_realloc( data, bytes, alignment );
+#else
+	void* result = realloc( data, bytes );
+#endif
+#if AE_MEMORY_CHECKS
+	if( result != data )
+	{
+		iter->second = AllocStatus::Freed;
+		AE_ASSERT_MSG( m_allocations.find( result ) == m_allocations.end(), "Memory already allocated: #", result );
+		m_allocations.emplace( result, AllocStatus::Allocated );
+	}
+#endif
+	return result;
 }
 
 void _DefaultAllocator::Free( void* data )
 {
+#if AE_MEMORY_CHECKS
+	{
+		std::lock_guard< std::mutex > lock( m_allocLock );
+		auto iter = m_allocations.find( data );
+		AE_ASSERT_MSG( iter != m_allocations.end(), "Tried to free unallocated memory: #", data );
+		AE_ASSERT_MSG( iter->second == AllocStatus::Allocated, "Double freed: #", data );
+		iter->second = AllocStatus::Freed;
+	}
+#endif
 #if _AE_WINDOWS_
 	_aligned_free( data );
 #else
