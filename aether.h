@@ -5791,8 +5791,16 @@ public:
 #if AE_MEMORY_CHECKS
 private:
 	enum class AllocStatus : uint8_t { Allocated, Freed };
+	struct AllocInfo
+	{
+		AllocInfo() = default;
+		AllocInfo( ae::Tag tag, uint32_t bytes, AllocStatus status ) : tag( tag ), bytes( bytes ), status( status ) {}
+		ae::Tag tag;
+		uint32_t bytes;
+		AllocStatus status;
+	};
 	std::mutex m_allocLock;
-	std::unordered_map< void*, AllocStatus > m_allocations;
+	std::unordered_map< void*, AllocInfo > m_allocations;
 #endif
 };
 
@@ -14319,10 +14327,18 @@ _DefaultAllocator::~_DefaultAllocator()
 		uint32_t leakCount = 0;
 		for( const auto& allocation : m_allocations )
 		{
-			if( allocation.second == AllocStatus::Allocated )
+			if( allocation.second.status == AllocStatus::Allocated )
 			{
 				leakCount++;
-				if( leakCount >= 32 )
+				if( leakCount == 1 )
+				{
+					AE_ERR( "Memory leak(s) detected:" );
+				}
+				if( leakCount <= 32 )
+				{
+					AE_ERR( "Leak tagged [#] (#B)", allocation.second.tag, allocation.second.bytes );
+				}
+				else
 				{
 					break;
 				}
@@ -14330,7 +14346,12 @@ _DefaultAllocator::~_DefaultAllocator()
 		}
 		if( leakCount )
 		{
-			AE_FAIL_MSG( "Memory leaks detected: #", leakCount ); // @TODO: More Info here
+			const uint32_t displayCount = ae::Min( leakCount, 32u );
+			AE_ERR( "Leak count ##", displayCount, ( displayCount <= leakCount ) ? "+" : "" ); // @TODO: More Info here
+		}
+		else
+		{
+			AE_INFO( "No memory leaks detected" );
 		}
 	}
 #endif
@@ -14342,11 +14363,9 @@ void* _DefaultAllocator::Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignme
 #if _AE_WINDOWS_
 	void* result = _aligned_malloc( bytes, alignment );
 #elif _AE_OSX_
-	// @HACK: macosx clang c++11 does not have aligned alloc
-	void* result = malloc( bytes );
+	void* result = malloc( bytes ); // @HACK: macosx clang c++11 does not have aligned alloc
 #elif _AE_EMSCRIPTEN_
-	// Emscripten malloc always uses 8 byte alignment https://github.com/emscripten-core/emscripten/issues/10072
-	void* result = malloc( bytes );
+	void* result = malloc( bytes ); // Emscripten malloc always uses 8 byte alignment https://github.com/emscripten-core/emscripten/issues/10072
 #else
 	void* result = aligned_alloc( alignment, bytes );
 #endif
@@ -14355,12 +14374,14 @@ void* _DefaultAllocator::Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignme
 	auto iter = m_allocations.find( result );
 	if( iter == m_allocations.end() )
 	{
-		m_allocations.emplace( result, AllocStatus::Allocated );
+		m_allocations.insert( { result, AllocInfo( tag, bytes, AllocStatus::Allocated ) } );
 	}
 	else
 	{
-		AE_ASSERT_MSG( iter->second == AllocStatus::Freed, "Memory already allocated: #", result );
-		iter->second = AllocStatus::Allocated;
+		AE_ASSERT_MSG( iter->second.status == AllocStatus::Freed, "Memory already allocated: #", result );
+		iter->second.tag = tag;
+		iter->second.bytes = bytes;
+		iter->second.status = AllocStatus::Allocated;
 	}
 #endif
 	return result;
@@ -14373,7 +14394,7 @@ void* _DefaultAllocator::Reallocate( void* data, uint32_t bytes, uint32_t alignm
 	std::lock_guard< std::mutex > lock( m_allocLock );
 	auto iter = m_allocations.find( data );
 	AE_ASSERT_MSG( iter != m_allocations.end(), "Can't realloc, not allocated: #", data );
-	AE_ASSERT_MSG( iter->second == AllocStatus::Allocated, "Can't realloc, already freed: #", data );
+	AE_ASSERT_MSG( iter->second.status == AllocStatus::Allocated, "Can't realloc, already freed: #", data );
 #endif
 #if _AE_WINDOWS_
 	void* result = _aligned_realloc( data, bytes, alignment );
@@ -14383,9 +14404,13 @@ void* _DefaultAllocator::Reallocate( void* data, uint32_t bytes, uint32_t alignm
 #if AE_MEMORY_CHECKS
 	if( result != data )
 	{
-		iter->second = AllocStatus::Freed;
+		iter->second.status = AllocStatus::Freed;
 		AE_ASSERT_MSG( m_allocations.find( result ) == m_allocations.end(), "Memory already allocated: #", result );
-		m_allocations.emplace( result, AllocStatus::Allocated );
+		m_allocations.insert( { result, AllocInfo( iter->second.tag, bytes, AllocStatus::Allocated ) } );
+	}
+	else
+	{
+		iter->second.bytes = bytes;
 	}
 #endif
 	return result;
@@ -14398,8 +14423,8 @@ void _DefaultAllocator::Free( void* data )
 		std::lock_guard< std::mutex > lock( m_allocLock );
 		auto iter = m_allocations.find( data );
 		AE_ASSERT_MSG( iter != m_allocations.end(), "Tried to free unallocated memory: #", data );
-		AE_ASSERT_MSG( iter->second == AllocStatus::Allocated, "Double freed: #", data );
-		iter->second = AllocStatus::Freed;
+		AE_ASSERT_MSG( iter->second.status == AllocStatus::Allocated, "Double freed: #", data );
+		iter->second.status = AllocStatus::Freed;
 	}
 #endif
 #if _AE_WINDOWS_
