@@ -76,10 +76,22 @@
 //! get the full benefits of AE_MEMORY_CHECKS. AE_MEMORY_CHECKS is a heavy
 //! diagnostic tool and may have a large performance impact. AE_MEMORY_CHECKS
 //! must be defined for all files that include aether.h (using AE_CONFIG_FILE is
-//! a great way to do this).
+//! one way to do this).
 //------------------------------------------------------------------------------
 #ifndef AE_MEMORY_CHECKS
 	#define AE_MEMORY_CHECKS 0
+#endif
+
+//------------------------------------------------------------------------------
+// AE_ENABLE_SOURCE_INFO define
+//------------------------------------------------------------------------------
+//! Includes additional info about source files and line numbers in logs and
+//! asserts. This could be useful to enable in dev builds to get extra
+//! information about logged events. AE_ENABLE_SOURCE_INFO must be defined for
+//! all files that include aether.h (using AE_CONFIG_FILE is one way to do
+//! this).
+#ifndef AE_ENABLE_SOURCE_INFO
+	#define AE_ENABLE_SOURCE_INFO 0
 #endif
 
 //------------------------------------------------------------------------------
@@ -2560,15 +2572,16 @@ void SetLogColorsEnabled( bool enabled );
 //------------------------------------------------------------------------------
 // Logging functions
 //------------------------------------------------------------------------------
+#define _AE_SRCCHK( _v, _d ) ( AE_ENABLE_SOURCE_INFO ? _v : _d ) // Internal usage
 // clang-format off
-#define AE_LOG(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_TRACE(...) ae::LogInternal( _AE_LOG_TRACE_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_DEBUG(...) ae::LogInternal( _AE_LOG_DEBUG_, __FILE__, __LINE__, "", __VA_ARGS__ )
-#define AE_INFO(...) ae::LogInternal( _AE_LOG_INFO_, __FILE__, __LINE__, "", __VA_ARGS__ )
-// @TODO: AE_WARNING
-#define AE_WARN(...) ae::LogInternal( _AE_LOG_WARN_, __FILE__, __LINE__, "", __VA_ARGS__ )
-// @TODO: AE_ERROR
-#define AE_ERR(...) ae::LogInternal( _AE_LOG_ERROR_, __FILE__, __LINE__, "", __VA_ARGS__ )
+#define AE_LOG(...) ae::LogInternal( _AE_LOG_INFO_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+#define AE_TRACE(...) ae::LogInternal( _AE_LOG_TRACE_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+#define AE_DEBUG(...) ae::LogInternal( _AE_LOG_DEBUG_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+#define AE_INFO(...) ae::LogInternal( _AE_LOG_INFO_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+#define AE_WARN(...) ae::LogInternal( _AE_LOG_WARN_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+#define AE_WARNING(...) ae::LogInternal( _AE_LOG_WARN_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+#define AE_ERR(...) ae::LogInternal( _AE_LOG_ERROR_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
+#define AE_ERROR(...) ae::LogInternal( _AE_LOG_ERROR_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ )
 
 //------------------------------------------------------------------------------
 // Assertion functions
@@ -2577,12 +2590,12 @@ void SetLogColorsEnabled( bool enabled );
 	#define AE_ASSERT_IMPL( msgStr ) { if( (msgStr)[ 0 ] ) { ae::ShowMessage( msgStr ); } AE_BREAK(); }
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
-#define AE_ASSERT( _x ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
-#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
-#define AE_DEBUG_ASSERT( _x ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
-#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
-#define AE_FAIL() do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
-#define AE_FAIL_MSG( ... ) do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, __FILE__, __LINE__, "", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
+#define AE_ASSERT( _x ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_ASSERT_MSG( _x, ... ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_DEBUG_ASSERT( _x ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if ( _AE_DEBUG_ && !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
+#define AE_FAIL() do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
+#define AE_FAIL_MSG( ... ) do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
 
 //------------------------------------------------------------------------------
 // Static assertion functions
@@ -14255,14 +14268,18 @@ void LogFormat( std::stringstream& os, uint32_t severity, const char* filePath, 
 		os << "\x1b[90m" << timeBuf;
 		os << " [" << ae::GetPID() << "] ";
 		os << LogLevelColors[ severity ] << LogLevelNames[ severity ];
+#if AE_ENABLE_SOURCE_INFO
 		os << " \x1b[90m" << fileName << ":" << line;
+#endif
 	}
 	else
 	{
 		os << timeBuf;
 		os << " [" << ae::GetPID() << "] ";
 		os << LogLevelNames[ severity ];
+#if AE_ENABLE_SOURCE_INFO
 		os << " " << fileName << ":" << line;
+#endif
 	}
 
 	bool hasAssertInfo = ( assertInfo && assertInfo[ 0 ] );
