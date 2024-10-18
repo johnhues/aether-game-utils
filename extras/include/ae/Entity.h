@@ -52,6 +52,7 @@ class Registry
 {
 public:
 	Registry( const ae::Tag& tag );
+	~Registry();
 	void SetOnCreateFn( void* userData, void(*fn)(void*, Component*) );
 	void SetOnDestroyFn( void* userData, void(*fn)(void*, Component*) );
 	

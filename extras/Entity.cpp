@@ -57,6 +57,18 @@ Registry::Registry( const ae::Tag& tag ) :
 	m_components( tag )
 {}
 
+Registry::~Registry()
+{
+	bool error = false;
+	for( const auto& componentMap : m_components )
+	{
+		if( componentMap.value.Length() )
+		{
+			AE_ERR( "Component type '#' not properly cleaned up", ae::GetTypeById( componentMap.key )->GetName() );
+		}
+	}
+}
+
 void Registry::SetOnCreateFn( void* userData, void(*fn)(void*, Component*) )
 {
 	m_onCreateFn = fn;
