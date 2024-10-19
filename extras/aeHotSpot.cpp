@@ -352,12 +352,13 @@ bool HotSpotObject::m_CheckCollision( const HotSpotWorld* world, ae::Int2 _dir )
 
 
     CollisionInfo info;
+    info.object = this;
     info.position = tilePos;
     info.normal = -_dir;
     info.tile = world->GetTile( tilePos );
     info.properties = world->GetTileProperties( info.tile );
     AE_ASSERT( info.properties & world->GetCollisionMask() );
-    onCollision.Send( &info );
+    m_onCollisionCallback( info, m_onCollisionUserData );
 
     return true;
   }

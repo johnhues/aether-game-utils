@@ -128,6 +128,7 @@ public:
 	bool CanJump() const { return m_canJumpTimer > 0.0f; }
 
 private:
+	static void s_OnCollision( const HotSpotObject::CollisionInfo& info, void* userData ) { ((Player*)userData)->OnCollision( &info ); }
 	HotSpotObject* m_body = nullptr;
 	float m_canJumpTimer = 0.0f;
 	float m_jumpHoldTimer = 0.0f;
@@ -141,7 +142,7 @@ void Player::Initialize( HotSpotWorld* world, ae::Vec2 startPos )
 	m_body = world->CreateObject();
 	m_body->SetMass( kPlayerMass );
 	m_body->SetVolume( kPlayerMass / kPlayerDensity );
-	m_body->onCollision.Add( this, &Player::OnCollision );
+	m_body->SetOnCollisionCallback( s_OnCollision, this );
 	m_body->Warp( startPos );
 }
 
