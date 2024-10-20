@@ -5511,6 +5511,15 @@ enum class BasicType
 	Pointer,
 	CustomRef
 };
+
+//------------------------------------------------------------------------------
+// ae::VarAdapterType enum
+//------------------------------------------------------------------------------
+enum class VarAdapterType
+{
+	None,
+	Array
+};
 	
 //------------------------------------------------------------------------------
 // ae::Var class
@@ -5639,6 +5648,8 @@ public:
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
+	const class VarTypeArray* m_TryGetArrayAdapter() const;
+	void m_AddProp( const char* prop, const char* value );
 	const ae::Type* m_owner = nullptr;
 	ae::Str32 m_name = "";
 	BasicType m_type;
@@ -5648,8 +5659,6 @@ public:
 	const ae::VarTypeBase* m_varType = nullptr;
 	ae::TypeId m_subTypeId = ae::kInvalidTypeId;
 	mutable const class Enum* m_enum = nullptr;
-
-	void m_AddProp( const char* prop, const char* value );
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
 };
 
@@ -11284,11 +11293,11 @@ struct _TypeName
 {
 	static const char* Get();
 };
-
 struct VarTypeBase
 {
 	virtual ~VarTypeBase() {}
 	virtual BasicType GetType() const = 0; // All types
+	virtual VarAdapterType GetAdapterType() const { return ae::VarAdapterType::None; }; // All types
 	virtual const char* GetName() const = 0; // All types
 	virtual uint32_t GetSize() const = 0; // All types
 	virtual const char* GetPrefix() const { return ""; } // Enum types
@@ -11572,8 +11581,9 @@ struct ae::VarType< T* > : public ae::VarTypeBase
 	ae::BasicType GetType() const override
 	{
 		static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR pointers must have base type ae::Object" );
-		return ae::BasicType::Pointer;
+		return ae::BasicType::Pointer; // @TODO: Remove this and allow pointers to all ae::VarTypeBase types?
 	}
+	ae::VarAdapterType GetAdapterType() const override { return ae::VarAdapterType::None; } // @TODO: Pointer?
 	const char* GetName() const override { return "Ref"; }
 	uint32_t GetSize() const override { return sizeof(T*); }
 	const char* GetSubTypeName() const override { return ae::GetTypeName< T >(); }
@@ -11585,6 +11595,7 @@ namespace ae {
 class VarTypeArray : public ae::VarTypeBase
 {
 public:
+	ae::VarAdapterType GetAdapterType() const override { return ae::VarAdapterType::Array; }
 	virtual void* GetElement( void* a, uint32_t idx ) const = 0;
 	virtual const void* GetElement( const void* a, uint32_t idx ) const = 0;
 	virtual uint32_t Resize( void* a, uint32_t size ) const = 0;
@@ -11813,10 +11824,10 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 	}
 	
 	T* varData = nullptr;
-	if ( const ae::VarTypeArray* adapter = ae::Cast< ae::VarTypeArray >( m_varType ) )
+	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		int32_t arrayLen = adapter->GetLength( arr );
+		const int32_t arrayLen = arrayAdapter->GetLength( arr );
 		if ( arrayIdx == -1 )
 		{
 			AE_FAIL_MSG( "Attempted to set array var '#' without specifying an index", m_name );
@@ -11824,7 +11835,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 		}
 		else if ( arrayIdx >= 0 && arrayIdx < arrayLen )
 		{
-			varData = (T*)adapter->GetElement( arr, arrayIdx );
+			varData = (T*)arrayAdapter->GetElement( arr, arrayIdx );
 		}
 		else
 		{
@@ -11866,12 +11877,12 @@ bool ae::Var::GetObjectValue( const ae::Object* _obj, T* valueOut, int32_t array
 	
 	const uint8_t* obj = reinterpret_cast< const uint8_t* >( _obj );
 	const void* varData = nullptr;
-	if ( const ae::VarTypeArray* adapter = ae::Cast< ae::VarTypeArray >( m_varType ) )
+	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
 	{
 		const void* arr = obj + m_offset;
-		if ( arrayIdx >= 0 && adapter->GetLength( arr ) )
+		if ( arrayIdx >= 0 && arrayAdapter->GetLength( arr ) )
 		{
-			varData = adapter->GetElement( arr, arrayIdx );
+			varData = arrayAdapter->GetElement( arr, arrayIdx );
 		}
 		else
 		{
@@ -11915,15 +11926,14 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 	}
 	
 	// @TODO: Safety checks
-	
-	if ( const ae::VarTypeArray* adapter = ae::Cast< ae::VarTypeArray >( m_varType ) )
+	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		const uint32_t arrayLen = adapter->GetLength( arr );
+		const uint32_t arrayLen = arrayAdapter->GetLength( arr );
 		if ( arrayIdx >= 0 && arrayLen )
 		{
 			AE_ASSERT_MSG( arrayIdx < arrayLen, "Attempted to get array var '#' (length #) with out of bounds index '#'", m_name, arrayLen, arrayIdx );
-			return (T*)( adapter->GetElement( arr, arrayIdx ) );
+			return (T*)( arrayAdapter->GetElement( arr, arrayIdx ) );
 		}
 		else
 		{
@@ -11940,15 +11950,16 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 template< typename T, typename C >
 const T* ae::Cast( const C* obj )
 {
+	static_assert( std::is_base_of< ae::Object, T >::value, "Cast only works with types derived from ae::Object" );
+	static_assert( std::is_base_of< ae::Object, C >::value, "Cast only works with types derived from ae::Object" );
 	static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
-	return dynamic_cast<const T*>( obj );
+	return ae::GetType< T >()->IsType( ae::GetType< C >() ) ? static_cast< const T* >( obj ) : nullptr; // No use of RTTI
 }
 
 template< typename T, typename C >
 T* ae::Cast( C* obj )
 {
-	static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
-	return dynamic_cast<T*>( obj );
+	return const_cast< T* >( ae::Cast< T >( const_cast< const C* >( obj ) ) );
 }
 
 #endif // AE_AETHER_H
@@ -25885,12 +25896,12 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
 	
 	void* varData = nullptr;
-	if ( const ae::VarTypeArray* adapter = ae::Cast< ae::VarTypeArray >( m_varType ) )
+	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		if ( arrayIdx >= 0 && arrayIdx < (int32_t)adapter->GetLength( arr ) )
+		if ( arrayIdx >= 0 && arrayIdx < (int32_t)arrayAdapter->GetLength( arr ) )
 		{
-			varData = adapter->GetElement( arr, arrayIdx );
+			varData = arrayAdapter->GetElement( arr, arrayIdx );
 		}
 		else
 		{
@@ -26165,6 +26176,12 @@ const char* ae::Var::GetPropertyValue( const char* propName, uint32_t valueIndex
 	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
 }
 
+const ae::VarTypeArray* ae::Var::m_TryGetArrayAdapter() const
+{
+	const bool isArray = ( m_varType->GetAdapterType() == ae::VarAdapterType::Array );
+	return isArray ? static_cast< const ae::VarTypeArray* >( m_varType ) : nullptr;
+}
+
 void ae::Var::m_AddProp( const char* prop, const char* value )
 {
 	auto* props = m_props.TryGet( prop );
@@ -26268,12 +26285,13 @@ const ae::Type* ae::Var::GetSubType() const
 
 bool ae::Var::IsArray() const
 {
-	return !!ae::Cast< ae::VarTypeArray >( m_varType );
+	return ( m_varType->GetAdapterType() == ae::VarAdapterType::Array );
 }
 
 bool ae::Var::IsArrayFixedLength() const
 {
-	return IsArray() && ae::Cast< ae::VarTypeArray >( m_varType )->IsFixedLength();
+	const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter();
+	return arrayAdapter && arrayAdapter->IsFixedLength();
 }
 
 uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
@@ -26288,7 +26306,7 @@ uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
 	}
 	
 	void* arr = (uint8_t*)obj + m_offset;
-	return ae::Cast< ae::VarTypeArray >( m_varType )->Resize( arr, length );
+	return static_cast< const ae::VarTypeArray* >( m_varType )->Resize( arr, length );
 }
 
 uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
@@ -26301,12 +26319,13 @@ uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 	}
 	
 	void* arr = (uint8_t*)obj + m_offset;
-	return ae::Cast< ae::VarTypeArray >( m_varType )->GetLength( arr );
+	return static_cast< const ae::VarTypeArray* >( m_varType )->GetLength( arr );
 }
 
 uint32_t ae::Var::GetArrayMaxLength() const
 {
-	return IsArray() ? ae::Cast< ae::VarTypeArray >( m_varType )->GetMaxLength() : 0;
+	const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter();
+	return arrayAdapter ? arrayAdapter->GetMaxLength() : 0;
 }
 
 //------------------------------------------------------------------------------
@@ -26366,13 +26385,13 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
 	
 	const void* varData = nullptr;
-	if ( const ae::VarTypeArray* adapter = ae::Cast< ae::VarTypeArray >( m_varType ) )
+	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
-		int32_t arrayLength = (int32_t)adapter->GetLength( arr );
+		int32_t arrayLength = (int32_t)arrayAdapter->GetLength( arr );
 		if ( arrayIdx >= 0 && arrayIdx < arrayLength )
 		{
-			varData = adapter->GetElement( arr, arrayIdx );
+			varData = arrayAdapter->GetElement( arr, arrayIdx );
 		}
 		else
 		{

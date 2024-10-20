@@ -167,11 +167,10 @@ float SdfSmoothSubtraction( float d1, float d2, float k );
 //------------------------------------------------------------------------------
 // Sdf class
 //------------------------------------------------------------------------------
-class Sdf
+class Sdf : public ae::Inheritor< ae::Object, Sdf >
 {
 public:
   Sdf();
-  virtual ~Sdf() {}
   
   float GetValue( ae::Vec3 p ) const;
 
@@ -229,7 +228,7 @@ public:
 //------------------------------------------------------------------------------
 // SdfBox class
 //------------------------------------------------------------------------------
-class SdfBox : public Sdf
+class SdfBox : public ae::Inheritor< Sdf, SdfBox >
 {
 public:
   Sdf* Clone() const override;
@@ -242,7 +241,7 @@ public:
 //------------------------------------------------------------------------------
 // SdfCylinder class
 //------------------------------------------------------------------------------
-class SdfCylinder : public Sdf
+class SdfCylinder : public ae::Inheritor< Sdf, SdfCylinder >
 {
 public:
   Sdf* Clone() const override;
@@ -257,7 +256,7 @@ public:
 //------------------------------------------------------------------------------
 // SdfHeightmap class
 //------------------------------------------------------------------------------
-class SdfHeightmap : public Sdf
+class SdfHeightmap : public ae::Inheritor< Sdf, SdfHeightmap >
 {
 public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }

@@ -1,24 +1,21 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
-if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
-	set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
-	set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
-	if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-		set(CMAKE_OSX_DEPLOYMENT_TARGET "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)")
-	endif()
-endif()
-
-# aether-game-utils project
-project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 
 # Configuration variables intended for external use
-option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
+option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON) # @TODO: This could be combined with AE_STANDALONE
 option(AE_EXTRAS "Enables experimental utilities" OFF)
 option(AE_LOADERS_OFBX "Enables aether FBX loader and ofbx dependency" OFF)
 option(AE_LOADERS_STB "Enables aether PNG loader and stb dependency" OFF)
 option(AE_WERROR "Enables some -Werror's for targets that link the aether library" OFF)
 
-# Configuration for building ae on its own
+# AE_STANDALONE mode is enabled when building aether on its own
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
+	set(AE_STANDALONE ON)
+else()
+	set(AE_STANDALONE OFF)
+endif()
+
+# Configuration for building ae on its own
+if(${AE_STANDALONE})
 	# Safeguard against in-source builds
 	set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 	set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
@@ -30,16 +27,31 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
 	if (NOT GENERATOR_IS_MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
 		set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 	endif()
+
+	# Xcode specific settings
+	if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
+		set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+		set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE STRING "") # See Professional CMake 24.8.1. Device-only Bundles
+		if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+			set(CMAKE_OSX_DEPLOYMENT_TARGET "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)")
+		endif()
+	endif()
 endif()
 
-# Defines and configuration
-set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+# aether-game-utils project
+project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
+
+# C++ defines and configuration
 set(CMAKE_CXX_STANDARD 17) # use c++17
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if(MSVC)
+if(MSVC) # @TODO: Move to AE_STANDALONE check
 	add_definitions(-D_UNICODE -DUNICODE) # use unicode
 	add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
 	list(APPEND AE_DEPS_LIBRARIES version Winmm Imm32 Setupapi Ws2_32)
+endif()
+if(${AE_STANDALONE})
+	# Disable RTTI (not used in aether)
+	add_compile_options(-fno-rtti)
 endif()
 
 # OpenGL dependency
@@ -71,6 +83,7 @@ if (IOS_TOOLCHAIN_HAS_RUN)
 endif()
 
 # ae library
+set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 function(add_ae_library NAME LIB_TYPE)
 	add_library(${NAME} ${LIB_TYPE} "")
 	if (APPLE)
@@ -120,6 +133,11 @@ endfunction()
 add_ae_library(ae STATIC) # static library
 add_ae_library(ae_shared SHARED) # shared library (for hot loading)
 set_target_properties(ae_shared PROPERTIES OUTPUT_NAME ae)
+if(${AE_STANDALONE})
+	# Disable exceptions (not used in aether outside of unit tests)
+	target_compile_options(ae PUBLIC -fno-exceptions)
+	target_compile_options(ae_shared PUBLIC -fno-exceptions)
+endif()
 
 # Examples, extra utilities, and tests
 add_subdirectory(loaders)

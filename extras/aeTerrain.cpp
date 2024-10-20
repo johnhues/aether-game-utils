@@ -1470,9 +1470,11 @@ void Terrain::Terminate()
   }
   m_terrainJobs.Clear();
 
-  for ( TerrainChunk* chunk = m_chunkPool.GetFirst(); chunk; chunk = m_chunkPool.GetNext( chunk ) )
+  for ( TerrainChunk* next = m_chunkPool.GetFirst(); next;  )
   {
-    FreeChunk( chunk );
+    TerrainChunk* current = next;
+    next = m_chunkPool.GetNext( next );
+    FreeChunk( current );
   }
   AE_ASSERT( m_chunkPool.Length() == 0 );
 }
