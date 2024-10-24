@@ -5340,6 +5340,22 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 // #define AE_REGISTER_ENUM_VALUE_PROPERTY( E, V, P )
 // #define AE_REGISTER_ENUM_VALUE_PROPERTY_VALUE( E, V, P, PV )
 
+//------------------------------------------------------------------------------
+// ae::Attribute registration
+//------------------------------------------------------------------------------
+//! Registers a class that directly or indirectly inherits from ae::Attribute.
+//! That attribute type can then be used with AE_REGISTER_CLASS_ATTRIBUTE(),
+//! AE_REGISTER_CLASS_VAR_ATTRIBUTE(), and AE_REGISTER_ENUM_ATTRIBUTE().
+#define AE_REGISTER_ATTRIBUTE(...) int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0; template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }
+//! Registers an instance of an attribute with a class. The attribute type must
+//! be registered with AE_REGISTER_ATTRIBUTE() before this is called.
+#define AE_REGISTER_CLASS_ATTRIBUTE( C, A, attributeArgs ) static A ae_attrib_##C##_##A attributeArgs; static ae::_AttributeCreator< C > ae_attrib_creator_##C##_##A( _ae_type_creator_##C, &ae_attrib_##C##_##A );
+//! Registers an instance of an attribute with a class variable. The attribute
+//! must be registered with AE_REGISTER_ATTRIBUTE() before this is called.
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( C, V, A, attributeArgs ) static A ae_attrib_##C##_##V##_##A attributeArgs; static ae::_AttributeCreator< C > ae_attrib_creator_##C##_##V##_##A( ae_var_creator_##C##_##V, &ae_attrib_##C##_##V##_##A );
+//! @TODO
+#define AE_REGISTER_ENUM_ATTRIBUTE( E, A, attributeArgs )
+
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -5367,6 +5383,9 @@ const ae::TypeId kInvalidTypeId = 0;
 #ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
 	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 8
 #endif
+#ifndef AE_MAX_META_ATTRIBUTES_CONFIG
+	#define AE_MAX_META_ATTRIBUTES_CONFIG 8
+#endif
 //! The maximum number of types that can be registered with AE_REGISTER_CLASS().
 //! This value can be overridden by defining AE_MAX_META_TYPES_CONFIG. See
 //! AE_CONFIG_FILE for more details.
@@ -5393,6 +5412,12 @@ const uint32_t kMaxMetaProps = AE_MAX_META_PROPS_CONFIG;
 //! overridden by defining AE_MAX_META_PROP_LIST_LENGTH_CONFIG. See
 //! AE_CONFIG_FILE for more details.
 const uint32_t kMaxMetaPropListLength = AE_MAX_META_PROP_LIST_LENGTH_CONFIG;
+//! The maximum number of attributes that can be registered with
+//! AE_REGISTER_CLASS_ATTRIBUTE(), AE_REGISTER_CLASS_VAR_ATTRIBUTE(), and
+//! AE_REGISTER_ENUM_ATTRIBUTE() per class, var, or enum. This value can
+//! be overridden by defining AE_MAX_META_ATTRIBUTES_CONFIG. See AE_CONFIG_FILE
+//! for more details.
+const uint32_t kMaxMetaAttributes = AE_MAX_META_ATTRIBUTES_CONFIG;
 
 //------------------------------------------------------------------------------
 // ae::Object
@@ -5446,7 +5471,39 @@ const class Enum* GetEnum( const char* enumName );
 ae::TypeId GetObjectTypeId( const ae::Object* obj );
 //! Get a registered ae::TypeId from a type name
 ae::TypeId GetTypeIdFromName( const char* name );
-	
+
+//------------------------------------------------------------------------------
+// ae::Attribute class
+//------------------------------------------------------------------------------
+class Attribute
+{
+public:
+	static const char* GetParentTypeName() { return ""; }
+	static const ae::Type* GetParentType() { return nullptr; }
+	ae::TypeId GetTypeId() const { return _metaTypeId; }
+	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
+};
+
+//------------------------------------------------------------------------------
+// ae::AttributeList class
+//! Contains attributes registered with AE_REGISTER_CLASS_ATTRIBUTE(),
+//! AE_REGISTER_CLASS_VAR_ATTRIBUTE(), or AE_REGISTER_ENUM_ATTRIBUTE()
+//! functions. Define AE_MAX_META_ATTRIBUTES_CONFIG in aeConfig.h to change the
+//! maximum number of attributes that can be registered per class, var, and
+//! enum. Note that attributes must be registered with AE_REGISTER_ATTRIBUTE().
+//------------------------------------------------------------------------------
+class AttributeList
+{
+public:
+	template< typename T > const T* TryGet() const;
+	template< typename T > bool Has() const;
+
+private:
+	template< typename T > friend class _AttributeCreator;
+	void m_Add( const ae::Attribute* attribute );
+	ae::Map< ae::TypeId, const ae::Attribute*, kMaxMetaAttributes, ae::MapMode::Stable > m_attributes;
+};
+
 //------------------------------------------------------------------------------
 // ae::Enum class
 //------------------------------------------------------------------------------
@@ -5465,6 +5522,11 @@ public:
 	int32_t GetValueByIndex( int32_t index ) const;
 	std::string GetNameByIndex( int32_t index ) const;
 	uint32_t Length() const;
+
+	//--------------------------------------------------------------------------
+	// Attributes
+	//--------------------------------------------------------------------------
+	ae::AttributeList attributes;
 		
 	//------------------------------------------------------------------------------
 	// Internal
@@ -5645,6 +5707,11 @@ public:
 	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
 
+	//--------------------------------------------------------------------------
+	// Attributes
+	//--------------------------------------------------------------------------
+	ae::AttributeList attributes;
+
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
@@ -5687,6 +5754,9 @@ public:
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
 	//bool HasPropertyValue( int32_t propIndex, const char* value ) const; // @TODO
 	//bool HasPropertyValue( const char* propName, const char* value ) const; // @TODO
+
+	// Attributes
+	ae::AttributeList attributes;
 		
 	// Vars
 	uint32_t GetVarCount( bool parents ) const;
@@ -11311,7 +11381,7 @@ Inheritor< Parent, This >::Inheritor()
 {
 	// @NOTE: Don't get type here because this object could be constructed
 	// before meta types are constructed.
-	ae::Object::_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
+	this->_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
 }
 
 template < typename Parent, typename This >
@@ -11533,6 +11603,16 @@ public:
 		m_enumType = nullptr;
 		globals->metaCacheSeq++;
 	}
+};
+
+template< typename T >
+class _AttributeCreator
+{
+public:
+	_AttributeCreator( ae::_TypeCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_type.attributes.m_Add( attribute ); }
+	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& creator, const ae::Attribute* attribute ) { creator.m_var.attributes.m_Add( attribute ); }
+	// _AttributeCreator( ae::_EnumCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
+	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
 
 } // ae end
@@ -11800,6 +11880,27 @@ ae::Type::Init( const char* name, uint32_t index )
 	m_isFinal = std::is_final< T >::value;
 }
 
+//------------------------------------------------------------------------------
+// ae::AttributeList templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+const T* ae::AttributeList::TryGet() const
+{
+	const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() );
+	const ae::Attribute* attribute = m_attributes.Get( attributeType, nullptr );
+	AE_DEBUG_ASSERT( !attribute || attribute->_metaTypeId == attributeType );
+	return static_cast< const T* >( attribute );
+}
+
+template< typename T >
+bool ae::AttributeList::Has() const
+{
+	return (bool)TryGet< T >();
+}
+
+//------------------------------------------------------------------------------
+// ae::Var templated member functions
+//------------------------------------------------------------------------------
 template < typename T >
 bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
 {
@@ -25823,9 +25924,10 @@ void NetObjectServer::UpdateSendData()
 } // ae end
 
 //------------------------------------------------------------------------------
-// Meta register base object
+// Meta register base objects
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( ae, Object );
+AE_REGISTER_ATTRIBUTE( ae, Attribute );
 
 uint32_t ae::GetTypeCount()
 {
@@ -26625,6 +26727,16 @@ void ae::Type::m_AddVar( const Var* var )
 	{
 		return a->GetOffset() < b->GetOffset();
 	} );
+}
+
+//------------------------------------------------------------------------------
+// ae::AttributeList member functions
+//------------------------------------------------------------------------------
+void ae::AttributeList::m_Add( const Attribute* attribute )
+{
+	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Size(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Size() );
+	m_attributes.Set( attribute->GetTypeId(), attribute );
+	_Globals::Get()->metaCacheSeq++;
 }
 
 #endif // AE_MAIN
