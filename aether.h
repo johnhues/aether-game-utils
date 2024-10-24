@@ -5723,7 +5723,7 @@ public:
 	typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
 	Init( const char* name, uint32_t index );
 	void m_AddProp( const char* prop, const char* value );
-	void m_AddVar( const Var& var );
+	void m_AddVar( const Var* var );
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
 	ae::Str64 m_name;
@@ -5731,7 +5731,7 @@ private:
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-	ae::Array< Var, kMaxMetaVars > m_vars;
+	ae::Array< const ae::Var*, kMaxMetaVars > m_vars;
 	ae::Str32 m_parent;
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
@@ -5862,12 +5862,6 @@ struct _Globals
 	ae::Array< ae::Type*, kMaxMetaTypes > types;
 	const ae::Var::Serializer* varSerializer = nullptr;
 	bool varSerializerInitialized = false;
-#ifdef _MSC_VER
-	char typeNameBuf[ 64 ];
-#else
-	size_t typeNameBufLength = 0;
-	char* typeNameBuf = nullptr;
-#endif
 
 	// Graphics
 	class GraphicsDevice* graphicsDevice = nullptr;
@@ -11367,9 +11361,10 @@ template< typename C >
 struct _PropCreator
 {
 	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
-	_PropCreator( ae::_TypeCreator< C >&, const char* typeName, const char* propName, const char* propValue )
+	_PropCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
 	{
 		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
+		AE_ASSERT( type == &typeCreator.m_type );
 		type->m_AddProp( propName, propValue );
 	}
 };
@@ -11378,30 +11373,31 @@ template< typename C, typename V, uint32_t Offset >
 struct _VarCreator
 {
 	// Take _TypeCreator param as a safety check that _VarCreator typeName is provided correctly
-	_VarCreator( ae::_TypeCreator< C >&, const char* typeName, const char* varName )
+	_VarCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* varName )
 	{
 		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
 		AE_ASSERT( type );
-		
-		Var var;
-		var.m_owner = type;
-		var.m_name = varName;
-		var.m_varType = ae::VarType< V >::Get();
-		var.m_type = var.m_varType->GetType();
-		var.m_typeName = var.m_varType->GetName();
-		var.m_subTypeId = GetTypeIdFromName( var.m_varType->GetSubTypeName() );
+		AE_ASSERT( type == &typeCreator.m_type );
+
+		m_var.m_owner = type;
+		m_var.m_name = varName;
+		m_var.m_varType = ae::VarType< V >::Get();
+		m_var.m_type = m_var.m_varType->GetType();
+		m_var.m_typeName = m_var.m_varType->GetName();
+		m_var.m_subTypeId = GetTypeIdFromName( m_var.m_varType->GetSubTypeName() );
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic push
 	#pragma clang diagnostic ignored "-Winvalid-offsetof"
 #endif
-		var.m_offset = Offset; // @TODO: Verify var is not member of base class
+		m_var.m_offset = Offset; // @TODO: Verify var is not member of base class
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic pop
 #endif
-		var.m_size = var.m_varType->GetSize();
+		m_var.m_size = m_var.m_varType->GetSize();
 
-		type->m_AddVar( var );
+		type->m_AddVar( &m_var );
 	}
+	Var m_var;
 };
 
 template< typename C, typename V, uint32_t Offset >
@@ -11424,9 +11420,10 @@ template < typename T >
 const Enum* GetEnum();
 	
 template < typename E, typename T = typename std::underlying_type< E >::type >
-struct _EnumCreator
+class _EnumCreator
 {
-	ae::Enum* m_enumType = nullptr;
+public:
+	ae::Enum* m_enumType = nullptr; // @TODO: Should be statically allocated
 
 	_EnumCreator( const char* typeName, std::string strMap )
 	{
@@ -11485,8 +11482,8 @@ struct _EnumCreator
 	~_EnumCreator()
 	{
 		auto&& enums = ae::_Globals::Get()->enums;
-		//AE_INFO( "Destroy enum '#'", m_enumType->GetName() );
 		enums.Remove( m_enumType->GetName() );
+		m_enumType = nullptr;
 		ae::_Globals::Get()->metaCacheSeq++;
 	}
 		
@@ -11510,9 +11507,11 @@ template < typename T >
 class _EnumCreator2
 {
 public:
+	ae::Enum* m_enumType = nullptr; // @TODO: Should be statically allocated
+
 	_EnumCreator2( const char* typeName )
 	{
-		ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+		m_enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
 	}
 		
 	_EnumCreator2( const char* valueName, T value )
@@ -11522,15 +11521,16 @@ public:
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
 			
-		ae::Enum* enumType = const_cast< ae::Enum* >( ae::GetEnum< T >() );
-		AE_ASSERT_MSG( enumType, "Could not register enum value '#'. No registered Enum.", valueName );
-		enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
+		m_enumType = const_cast< ae::Enum* >( ae::GetEnum< T >() );
+		AE_ASSERT_MSG( m_enumType, "Could not register enum value '#'. No registered Enum.", valueName );
+		m_enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
 	}
 
 	~_EnumCreator2()
 	{
 		ae::_Globals* globals = ae::_Globals::Get();
 		globals->enums.Remove( ae::GetTypeName< T >() );
+		m_enumType = nullptr;
 		globals->metaCacheSeq++;
 	}
 };
@@ -11711,6 +11711,9 @@ const ae::Type* ae::GetType()
 	}
 }
 
+//------------------------------------------------------------------------------
+// ae::Enum templated member functions
+//------------------------------------------------------------------------------
 template < typename T >
 std::string ae::Enum::GetNameByValue( T value ) const
 {
@@ -11751,6 +11754,9 @@ bool ae::Enum::HasValue( T value ) const
 	return m_enumValueToName.TryGet( value );
 }
 
+//------------------------------------------------------------------------------
+// ae::Type templated member functions
+//------------------------------------------------------------------------------
 template < typename T >
 T* ae::Type::New( void* obj ) const
 {
@@ -26205,7 +26211,7 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 {
 	if ( !parents )
 	{
-		return &m_vars[ i ];
+		return m_vars[ i ];
 	}
 	// @HACK: This whole function should be re-written to avoid recreating this array and all of this recursion
 	ae::Array< const ae::Var*, kMaxMetaVars > vars;
@@ -26215,9 +26221,9 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 		{
 			fn( fn, parent );
 		}
-		for ( const ae::Var& v : type->m_vars )
+		for ( const ae::Var* v : type->m_vars )
 		{
-			vars.Append( &v );
+			vars.Append( v );
 		}
 	};
 	fn( fn, this );
@@ -26226,13 +26232,13 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 
 const ae::Var* ae::Type::GetVarByName( const char* name, bool parents ) const
 {
-	int32_t i = m_vars.FindFn( [name]( const ae::Var& v )
+	int32_t i = m_vars.FindFn( [name]( const ae::Var* v )
 	{
-		return v.m_name == name;
+		return v->m_name == name;
 	} );
 	if ( i >= 0 )
 	{
-		return &m_vars[ i ];
+		return m_vars[ i ];
 	}
 	else if ( const ae::Type* parent = ( parents ? GetParentType() : nullptr ) )
 	{
@@ -26342,6 +26348,9 @@ ae::TypeId ae::GetTypeIdFromName( const char* name )
 	return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
+//------------------------------------------------------------------------------
+// ae::Enum member functions
+//------------------------------------------------------------------------------
 int32_t ae::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
 std::string ae::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
 uint32_t ae::Enum::Length() const { return m_enumValueToName.Length(); }
@@ -26608,13 +26617,13 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 	}
 }
 
-void ae::Type::m_AddVar( const Var& var )
+void ae::Type::m_AddVar( const Var* var )
 {
 	AE_ASSERT_MSG( m_vars.Length() < m_vars.Size(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Size() );
 	m_vars.Append( var );
-	std::sort( m_vars.begin(), m_vars.end(), []( const auto& a, const auto& b )
+	std::sort( m_vars.begin(), m_vars.end(), []( const ae::Var* a, const ae::Var* b )
 	{
-		return a.GetOffset() < b.GetOffset();
+		return a->GetOffset() < b->GetOffset();
 	} );
 }
 

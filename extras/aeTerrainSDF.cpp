@@ -29,6 +29,11 @@
   #pragma warning( disable : 4244 )
 #endif
 
+AE_REGISTER_CLASS( ae, Sdf );
+AE_REGISTER_CLASS( ae, SdfBox );
+AE_REGISTER_CLASS( ae, SdfCylinder );
+AE_REGISTER_CLASS( ae, SdfHeightmap );
+
 namespace ae {
 
 //------------------------------------------------------------------------------
@@ -64,8 +69,6 @@ inline float SdfSmoothSubtraction( float d1, float d2, float k )
 //------------------------------------------------------------------------------
 // Sdf member functions
 //------------------------------------------------------------------------------
-AE_REGISTER_CLASS( ae, Sdf );
-
 Sdf::Sdf() :
   m_aabb( ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ) ),
   m_halfSize( 0.5f ),
@@ -203,8 +206,6 @@ ae::Hash Sdf::GetBaseHash( ae::Hash hash ) const
 //------------------------------------------------------------------------------
 // SdfBox member functions
 //------------------------------------------------------------------------------
-AE_REGISTER_CLASS( ae, SdfBox );
-
 Sdf* SdfBox::Clone() const
 {
   SdfBox* box = ae::New< SdfBox >( AE_ALLOC_TAG_TERRAIN );
@@ -228,8 +229,6 @@ float SdfBox::GetValue( ae::Vec3 p, int ) const
 //------------------------------------------------------------------------------
 // SdfCylinder member functions
 //------------------------------------------------------------------------------
-AE_REGISTER_CLASS( ae, SdfCylinder );
-
 Sdf* SdfCylinder::Clone() const
 {
   SdfCylinder* cylinder = ae::New< SdfCylinder >( AE_ALLOC_TAG_TERRAIN );
@@ -277,8 +276,6 @@ float SdfCylinder::GetValue( ae::Vec3 p, int ) const
 //------------------------------------------------------------------------------
 // SdfHeightmap member functions
 //------------------------------------------------------------------------------
-AE_REGISTER_CLASS( ae, SdfHeightmap );
-
 Sdf* SdfHeightmap::Clone() const
 {
   SdfHeightmap* heightmap = ae::New< ae::SdfHeightmap >( AE_ALLOC_TAG_TERRAIN );
