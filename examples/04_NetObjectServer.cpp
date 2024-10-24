@@ -36,6 +36,11 @@ int main()
   Game game;
   game.Initialize();
   AetherServer* server = AetherServer_New( 3500, 0, 16 );
+  if( !server )
+  {
+    AE_LOG( "Failed to create server. The port may already be in use." );
+    return 1;
+  }
   ae::NetObjectServer netObjectServer;
   ae::Map< AetherUuid, ae::NetObjectConnection* > netObjectConnections = TAG_EXAMPLE;
   ae::Array< GameObject > gameObjects = TAG_EXAMPLE;
