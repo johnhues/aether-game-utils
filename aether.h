@@ -11953,7 +11953,16 @@ const T* ae::Cast( const C* obj )
 	static_assert( std::is_base_of< ae::Object, T >::value, "Cast only works with types derived from ae::Object" );
 	static_assert( std::is_base_of< ae::Object, C >::value, "Cast only works with types derived from ae::Object" );
 	static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
-	return ae::GetType< T >()->IsType( ae::GetType< C >() ) ? static_cast< const T* >( obj ) : nullptr; // No use of RTTI
+	if( !obj )
+	{
+		return nullptr;
+	}
+	const ae::Type* type = ae::GetType< T >();
+	if( type->GetId() == obj->_metaTypeId )
+	{
+		return static_cast< const T* >( obj );
+	}
+	return ae::GetTypeFromObject( obj )->IsType( type ) ? static_cast< const T* >( obj ) : nullptr; // No use of RTTI
 }
 
 template< typename T, typename C >
