@@ -5214,7 +5214,8 @@ public:
 		const char* GetSubTypeName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 		static ae::VarTypeBase* Get() { static ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
 	};\
-	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }
+	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
+	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
 //! Register a class property
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
 //! Register a class property with an additional value. Multiple values can be
@@ -5225,6 +5226,7 @@ public:
 #define AE_REGISTER_CLASS_VAR( c, v )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( _ae_type_creator_##c, #c, #v );\
+	static ae::SourceFileAttribute ae_attrib_##c##v##_ae_SourceFileAttribute { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::c > ae_attrib_creator_##c##v##_ae_SourceFileAttribute( ae_var_creator_##c##_##v, _AE_SRCCHK(&ae_attrib_##c##v##_ae_SourceFileAttribute, nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 //! Register a property for a specific class variable
 #define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
@@ -5474,6 +5476,7 @@ ae::TypeId GetTypeIdFromName( const char* name );
 
 //------------------------------------------------------------------------------
 // ae::Attribute class
+//! Register with AE_REGISTER_ATTRIBUTE()
 //------------------------------------------------------------------------------
 class Attribute
 {
@@ -5483,6 +5486,17 @@ public:
 	ae::TypeId GetTypeId() const { return _metaTypeId; }
 	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
 };
+
+//------------------------------------------------------------------------------
+// ae::SourceFileAttribute class
+//------------------------------------------------------------------------------
+class SourceFileAttribute : public ae::Inheritor< ae::Attribute, SourceFileAttribute >
+{
+public:
+	ae::Str256 path;
+	uint32_t line = 0;
+};
+inline std::ostream& operator << ( std::ostream& os, const ae::SourceFileAttribute& attribute ) { os << attribute.path.c_str() << ":" << attribute.line; return os; }
 
 //------------------------------------------------------------------------------
 // ae::AttributeList class
@@ -11609,8 +11623,8 @@ template< typename T >
 class _AttributeCreator
 {
 public:
-	_AttributeCreator( ae::_TypeCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_type.attributes.m_Add( attribute ); }
-	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& creator, const ae::Attribute* attribute ) { creator.m_var.attributes.m_Add( attribute ); }
+	_AttributeCreator( ae::_TypeCreator< T >& creator, const ae::Attribute* attribute ) { if( attribute ){ creator.m_type.attributes.m_Add( attribute ); } }
+	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& creator, const ae::Attribute* attribute ) { if( attribute ){ creator.m_var.attributes.m_Add( attribute ); } }
 	// _AttributeCreator( ae::_EnumCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
 	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
@@ -25937,6 +25951,7 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( ae, Object );
 AE_REGISTER_ATTRIBUTE( ae, Attribute );
+AE_REGISTER_ATTRIBUTE( ae, SourceFileAttribute );
 
 uint32_t ae::GetTypeCount()
 {

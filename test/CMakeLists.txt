@@ -33,7 +33,7 @@ if(EMSCRIPTEN)
 endif()
 
 # unit test executable
-file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
+file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "*.h" "*.cpp")
 add_executable(test ${TEST_SOURCES})
 if(CMAKE_GENERATOR STREQUAL Xcode)
 	add_custom_command(TARGET test
@@ -55,6 +55,4 @@ list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/contrib)
 include(Catch)
 catch_discover_tests(test)
 
-# Attributes (temp)
-add_executable(attributes Attributes.cpp)
-target_link_libraries(attributes PRIVATE ae)
+add_subdirectory(Attributes)

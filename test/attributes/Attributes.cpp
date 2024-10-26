@@ -1,4 +1,3 @@
-
 #include "aether.h"
 
 struct Attribute : public ae::Inheritor< ae::Attribute, Attribute >
@@ -45,11 +44,21 @@ AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, AssetType, ( "ba.texture_asset"
 
 int main()
 {
-	GameObject obj;
-	obj.id = 1;
 
 	const ae::Type* gameObjectType = ae::GetType< GameObject >();
+	if( const ae::SourceFileAttribute* sourceFileAttrib = gameObjectType->attributes.TryGet< ae::SourceFileAttribute >() )
+	{
+		AE_INFO( "# source: '#'", gameObjectType->GetName(), *sourceFileAttrib );
+	}
 	const ae::Var* idVar = gameObjectType->GetVarByName( "id", false );
+
+	if( const ae::SourceFileAttribute* sourceFileAttrib = idVar->attributes.TryGet< ae::SourceFileAttribute >() )
+	{
+		AE_INFO( "#::#: '#'", gameObjectType->GetName(), idVar->GetName(), *sourceFileAttrib );
+	}
+
+	GameObject obj;
+	obj.id = 1;
 	AE_INFO( "id:#", idVar->GetObjectValueAsString( &obj ) );
 
 	if( const AssetType* assetTypeAttrib = gameObjectType->attributes.TryGet< AssetType >() )
