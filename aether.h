@@ -11866,7 +11866,7 @@ template < typename T >
 typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
 ae::Type::Init( const char* name, uint32_t index )
 {
-	if constexpr( std::is_same_v< T, ae::Object > )
+	if constexpr( std::is_base_of_v< ae::Object, T > )
 	{
 		m_placementNew = &( _PlacementNew< T > );
 	}
@@ -11881,7 +11881,7 @@ ae::Type::Init( const char* name, uint32_t index )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = false;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
-	m_isDefaultConstructible = true;
+	m_isDefaultConstructible = (bool)m_placementNew;
 	m_isFinal = std::is_final< T >::value;
 }
 template < typename T >
@@ -11896,7 +11896,7 @@ ae::Type::Init( const char* name, uint32_t index )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = std::is_abstract< T >::value;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
-	m_isDefaultConstructible = std::is_default_constructible< T >::value;
+	m_isDefaultConstructible = (bool)m_placementNew;
 	m_isFinal = std::is_final< T >::value;
 }
 
