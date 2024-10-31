@@ -36,10 +36,13 @@ public:
 };
 AE_REGISTER_CLASS( GameObject );
 AE_REGISTER_CLASS_ATTRIBUTE( GameObject, RequiresAttrib, ( "Something" ) );
-// AE_REGISTER_CLASS_ATTRIBUTE( GameObject, RequiresAttrib, ( "SomethingElse" ) );
+AE_REGISTER_CLASS_ATTRIBUTE( GameObject, RequiresAttrib, ( "SomethingElse" ) );
+AE_REGISTER_CLASS_ATTRIBUTE( GameObject, RequiresAttrib, ( "SomethingSomethingElse" ) );
+AE_REGISTER_CLASS_ATTRIBUTE( GameObject, RequiresAttrib, ( "SomethingSomethingElseElse" ) );
 AE_REGISTER_CLASS_VAR( GameObject, id );
 AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, CategoryInfoAttribute, ({ .sortOrder = 1, .name = "General" }) );
 AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, DisplayName, ({ .name = "ID" }) );
+AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, DisplayName, ({ .name = "ID2" }) );
 
 int main()
 {
@@ -73,6 +76,14 @@ int main()
 		const ae::Attribute* attribute = gameObjectType->attributes.TryGet< ae::Attribute >( i );
 		const ae::Type* attributeType = ae::GetTypeById( attribute->_metaTypeId ); // @TODO: ae::GetTypeFromObject( attribute );
 		AE_LOG( "# attribute: '#'", gameObjectType->GetName(), attributeType->GetName() );
+		if( const RequiresAttrib* requiresAttrib = ae::Cast< RequiresAttrib >( attribute ) )
+		{
+			AE_INFO( "RequiresAttrib::name: '#'", requiresAttrib->name );
+		}
+		else if( const ae::SourceFileAttribute* sourceFileAttrib = ae::Cast< ae::SourceFileAttribute >( attribute ) )
+		{
+			AE_INFO( "SourceFileAttribute::path: '#:#'", sourceFileAttrib->path, sourceFileAttrib->line );
+		}
 	}
 
 	for( uint32_t i = 0; i < idVar->attributes.GetCount< ae::Attribute >(); i++ )
@@ -84,6 +95,10 @@ int main()
 		{
 			AE_INFO( "CategoryInfoAttribute::name: '#'", categoryInfoAttrib->name );
 			AE_INFO( "CategoryInfoAttribute::sortOrder: '#'", categoryInfoAttrib->sortOrder );
+		}
+		else if( const ae::SourceFileAttribute* sourceFileAttrib = ae::Cast< ae::SourceFileAttribute >( attribute ) )
+		{
+			AE_INFO( "SourceFileAttribute::path: '#:#'", sourceFileAttrib->path, sourceFileAttrib->line );
 		}
 	}
 

@@ -5347,10 +5347,10 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_CLASS_ATTRIBUTE( C, A, attributeArgs ) static A ae_attrib_##C##_##A attributeArgs; static ae::_AttributeCreator< C > ae_attrib_creator_##C##_##A( _ae_type_creator_##C, &ae_attrib_##C##_##A );
+#define AE_REGISTER_CLASS_ATTRIBUTE( C, A, attributeArgs ) static A AE_GLUE(ae_attrib_##C##_##A,__LINE__) attributeArgs; static ae::_AttributeCreator< C > AE_GLUE(ae_attrib_creator_##C##_##A,__LINE__)( _ae_type_creator_##C, &AE_GLUE(ae_attrib_##C##_##A,__LINE__) );
 //! Registers an instance of an attribute with a class variable. The attribute
 //! must be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( C, V, A, attributeArgs ) static A ae_attrib_##C##_##V##_##A attributeArgs; static ae::_AttributeCreator< C > ae_attrib_creator_##C##_##V##_##A( ae_var_creator_##C##_##V, &ae_attrib_##C##_##V##_##A );
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( C, V, A, attributeArgs ) static A AE_GLUE(ae_attrib_##C##_##V##_##A,__LINE__) attributeArgs; static ae::_AttributeCreator< C > AE_GLUE(ae_attrib_creator_##C##_##V##_##A,__LINE__)( ae_var_creator_##C##_##V, &AE_GLUE(ae_attrib_##C##_##V##_##A,__LINE__) );
 //! @TODO
 #define AE_REGISTER_ENUM_ATTRIBUTE( E, A, attributeArgs )
 
