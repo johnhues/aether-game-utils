@@ -11944,7 +11944,7 @@ uint32_t ae::AttributeList::GetCount() const
 template< typename T >
 bool ae::AttributeList::Has() const
 {
-	return m_attributeTypes.Get( ae::GetTypeIdFromName( ae::_TypeName< T >::Get() ), nullptr ); // @TODO: Compile time
+	return (bool)GetCount< T >();
 }
 
 //------------------------------------------------------------------------------

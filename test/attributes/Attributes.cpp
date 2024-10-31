@@ -71,6 +71,8 @@ int main()
 		AE_INFO( "CategoryInfoAttribute::sortOrder: '#'", categoryInfoAttrib->sortOrder );
 	}
 
+	gameObjectType->attributes.Has< RequiresAttrib >();
+
 	for( uint32_t i = 0; i < gameObjectType->attributes.GetCount< ae::Attribute >(); i++ )
 	{
 		const ae::Attribute* attribute = gameObjectType->attributes.TryGet< ae::Attribute >( i );
