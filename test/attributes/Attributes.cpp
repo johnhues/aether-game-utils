@@ -3,32 +3,31 @@
 struct Attribute : public ae::Inheritor< ae::Attribute, Attribute >
 {
 	Attribute() = default;
-	std::string fieldPath;
+	ae::Str128 fieldPath;
 };
-AE_REGISTER_ATTRIBUTE( Attribute );
+AE_REGISTER_CLASS( Attribute );
 
-struct CategoryInfoAttribute : public ae::Inheritor< ae::Attribute, CategoryInfoAttribute >
+struct CategoryInfoAttribute final : public ae::Inheritor< ae::Attribute, CategoryInfoAttribute >
 {
 	int sortOrder;
-	std::string name;
+	ae::Str128 name;
 };
-AE_REGISTER_ATTRIBUTE( CategoryInfoAttribute );
+AE_REGISTER_CLASS( CategoryInfoAttribute );
+AE_REGISTER_CLASS_VAR( CategoryInfoAttribute, sortOrder );
+AE_REGISTER_CLASS_VAR( CategoryInfoAttribute, name );
 
-struct DisplayName : public ae::Inheritor< Attribute, DisplayName >
+struct DisplayName final : public ae::Inheritor< Attribute, DisplayName >
 {
-	std::string name;
+	ae::Str128 name;
 };
-AE_REGISTER_ATTRIBUTE( DisplayName );
+AE_REGISTER_CLASS( DisplayName );
 
-struct AssetType : public ae::Inheritor< ae::Attribute, AssetType >
+struct RequiresAttrib final : public ae::Inheritor< Attribute, RequiresAttrib >
 {
-	AssetType() = default;
-	AssetType( const char* assetType ) : assetType( assetType ) {}
-	AssetType( const char* assetType, uint32_t idx ) : assetType( assetType ), idx( idx ) {}
-	std::string assetType;
-	uint32_t idx = 0;
+	RequiresAttrib( const char* name ) : name( name ) {}
+	ae::Str128 name;
 };
-AE_REGISTER_ATTRIBUTE( AssetType );
+AE_REGISTER_CLASS( RequiresAttrib );
 
 class GameObject : public ae::Inheritor< ae::Object, GameObject >
 {
@@ -36,15 +35,14 @@ public:
 	uint32_t id = 0;
 };
 AE_REGISTER_CLASS( GameObject );
-AE_REGISTER_CLASS_ATTRIBUTE( GameObject, AssetType, ( "ba.texture_asset" ) );
+AE_REGISTER_CLASS_ATTRIBUTE( GameObject, RequiresAttrib, ( "Something" ) );
+// AE_REGISTER_CLASS_ATTRIBUTE( GameObject, RequiresAttrib, ( "SomethingElse" ) );
 AE_REGISTER_CLASS_VAR( GameObject, id );
 AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, CategoryInfoAttribute, ({ .sortOrder = 1, .name = "General" }) );
 AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, DisplayName, ({ .name = "ID" }) );
-AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, AssetType, ( "ba.texture_asset" ) );
 
 int main()
 {
-
 	const ae::Type* gameObjectType = ae::GetType< GameObject >();
 	if( const ae::SourceFileAttribute* sourceFileAttrib = gameObjectType->attributes.TryGet< ae::SourceFileAttribute >() )
 	{
@@ -61,11 +59,6 @@ int main()
 	obj.id = 1;
 	AE_INFO( "id:#", idVar->GetObjectValueAsString( &obj ) );
 
-	if( const AssetType* assetTypeAttrib = gameObjectType->attributes.TryGet< AssetType >() )
-	{
-		AE_INFO( "AssetType: '#'", assetTypeAttrib->assetType );
-	}
-
 	const CategoryInfoAttribute* categoryInfoAttrib = gameObjectType->attributes.TryGet< CategoryInfoAttribute >();
 	AE_LOG( "GameObject # a 'CategoryInfoAttribute'", categoryInfoAttrib ? "has" : "does not have" );
 
@@ -73,6 +66,25 @@ int main()
 	{
 		AE_INFO( "CategoryInfoAttribute::name: '#'", categoryInfoAttrib->name );
 		AE_INFO( "CategoryInfoAttribute::sortOrder: '#'", categoryInfoAttrib->sortOrder );
+	}
+
+	for( uint32_t i = 0; i < gameObjectType->attributes.GetCount< ae::Attribute >(); i++ )
+	{
+		const ae::Attribute* attribute = gameObjectType->attributes.TryGet< ae::Attribute >( i );
+		const ae::Type* attributeType = ae::GetTypeById( attribute->_metaTypeId ); // @TODO: ae::GetTypeFromObject( attribute );
+		AE_LOG( "# attribute: '#'", gameObjectType->GetName(), attributeType->GetName() );
+	}
+
+	for( uint32_t i = 0; i < idVar->attributes.GetCount< ae::Attribute >(); i++ )
+	{
+		const ae::Attribute* attribute = idVar->attributes.TryGet< ae::Attribute >( i );
+		const ae::Type* attributeType = ae::GetTypeById( attribute->_metaTypeId ); // @TODO: ae::GetTypeFromObject( attribute );
+		AE_LOG( "# attribute: '#'", idVar->GetName(), attributeType->GetName() );
+		if( const CategoryInfoAttribute* categoryInfoAttrib = ae::Cast< CategoryInfoAttribute >( attribute ) )
+		{
+			AE_INFO( "CategoryInfoAttribute::name: '#'", categoryInfoAttrib->name );
+			AE_INFO( "CategoryInfoAttribute::sortOrder: '#'", categoryInfoAttrib->sortOrder );
+		}
 	}
 
 	return 0;
