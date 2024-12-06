@@ -5214,7 +5214,8 @@ public:
 		const char* GetSubTypeName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 		static ae::VarTypeBase* Get() { static ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
 	};\
-	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }
+	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
+	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
 //! Register a class property
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
 //! Register a class property with an additional value. Multiple values can be
@@ -5225,6 +5226,7 @@ public:
 #define AE_REGISTER_CLASS_VAR( c, v )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( _ae_type_creator_##c, #c, #v );\
+	static ae::SourceFileAttribute ae_attrib_##c##v##_ae_SourceFileAttribute { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::c > ae_attrib_creator_##c##v##_ae_SourceFileAttribute( ae_var_creator_##c##_##v, _AE_SRCCHK(&ae_attrib_##c##v##_ae_SourceFileAttribute, nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 //! Register a property for a specific class variable
 #define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
@@ -5340,6 +5342,18 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 // #define AE_REGISTER_ENUM_VALUE_PROPERTY( E, V, P )
 // #define AE_REGISTER_ENUM_VALUE_PROPERTY_VALUE( E, V, P, PV )
 
+//------------------------------------------------------------------------------
+// ae::Attribute registration
+//------------------------------------------------------------------------------
+//! Registers an instance of an attribute with a class. The attribute type must
+//! be registered with AE_REGISTER_CLASS() before this is called.
+#define AE_REGISTER_CLASS_ATTRIBUTE( C, A, attributeArgs ) static A AE_GLUE(ae_attrib_##C##_##A,__LINE__) attributeArgs; static ae::_AttributeCreator< C > AE_GLUE(ae_attrib_creator_##C##_##A,__LINE__)( _ae_type_creator_##C, &AE_GLUE(ae_attrib_##C##_##A,__LINE__) );
+//! Registers an instance of an attribute with a class variable. The attribute
+//! must be registered with AE_REGISTER_CLASS() before this is called.
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( C, V, A, attributeArgs ) static A AE_GLUE(ae_attrib_##C##_##V##_##A,__LINE__) attributeArgs; static ae::_AttributeCreator< C > AE_GLUE(ae_attrib_creator_##C##_##V##_##A,__LINE__)( ae_var_creator_##C##_##V, &AE_GLUE(ae_attrib_##C##_##V##_##A,__LINE__) );
+//! @TODO
+#define AE_REGISTER_ENUM_ATTRIBUTE( E, A, attributeArgs )
+
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -5367,6 +5381,9 @@ const ae::TypeId kInvalidTypeId = 0;
 #ifndef AE_MAX_META_PROP_LIST_LENGTH_CONFIG
 	#define AE_MAX_META_PROP_LIST_LENGTH_CONFIG 8
 #endif
+#ifndef AE_MAX_META_ATTRIBUTES_CONFIG
+	#define AE_MAX_META_ATTRIBUTES_CONFIG 8
+#endif
 //! The maximum number of types that can be registered with AE_REGISTER_CLASS().
 //! This value can be overridden by defining AE_MAX_META_TYPES_CONFIG. See
 //! AE_CONFIG_FILE for more details.
@@ -5393,6 +5410,12 @@ const uint32_t kMaxMetaProps = AE_MAX_META_PROPS_CONFIG;
 //! overridden by defining AE_MAX_META_PROP_LIST_LENGTH_CONFIG. See
 //! AE_CONFIG_FILE for more details.
 const uint32_t kMaxMetaPropListLength = AE_MAX_META_PROP_LIST_LENGTH_CONFIG;
+//! The maximum number of attributes that can be registered with
+//! AE_REGISTER_CLASS_ATTRIBUTE(), AE_REGISTER_CLASS_VAR_ATTRIBUTE(), and
+//! AE_REGISTER_ENUM_ATTRIBUTE() per class, var, or enum. This value can
+//! be overridden by defining AE_MAX_META_ATTRIBUTES_CONFIG. See AE_CONFIG_FILE
+//! for more details.
+const uint32_t kMaxMetaAttributes = AE_MAX_META_ATTRIBUTES_CONFIG;
 
 //------------------------------------------------------------------------------
 // ae::Object
@@ -5446,7 +5469,54 @@ const class Enum* GetEnum( const char* enumName );
 ae::TypeId GetObjectTypeId( const ae::Object* obj );
 //! Get a registered ae::TypeId from a type name
 ae::TypeId GetTypeIdFromName( const char* name );
-	
+
+//------------------------------------------------------------------------------
+// ae::Attribute class
+//! Register with AE_REGISTER_CLASS()
+//------------------------------------------------------------------------------
+class Attribute
+{
+public:
+	static const char* GetParentTypeName() { return ""; }
+	static const ae::Type* GetParentType() { return nullptr; }
+	ae::TypeId GetTypeId() const { return _metaTypeId; }
+	ae::TypeId _metaTypeId = ae::kInvalidTypeId;
+};
+
+//------------------------------------------------------------------------------
+// ae::SourceFileAttribute class
+//------------------------------------------------------------------------------
+class SourceFileAttribute final : public ae::Inheritor< ae::Attribute, SourceFileAttribute >
+{
+public:
+	ae::Str256 path;
+	uint32_t line = 0;
+};
+inline std::ostream& operator << ( std::ostream& os, const ae::SourceFileAttribute& attribute ) { os << attribute.path.c_str() << ":" << attribute.line; return os; }
+
+//------------------------------------------------------------------------------
+// ae::AttributeList class
+//! Contains attributes registered with AE_REGISTER_CLASS_ATTRIBUTE(),
+//! AE_REGISTER_CLASS_VAR_ATTRIBUTE(), or AE_REGISTER_ENUM_ATTRIBUTE()
+//! functions. Define AE_MAX_META_ATTRIBUTES_CONFIG in aeConfig.h to change the
+//! maximum number of attributes that can be registered per class, var, and
+//! enum. Note that attributes must be registered with AE_REGISTER_CLASS().
+//------------------------------------------------------------------------------
+class AttributeList
+{
+public:
+	template< typename T > const T* TryGet( uint32_t idx = 0 ) const;
+	template< typename T > uint32_t GetCount() const;
+	template< typename T > bool Has() const;
+
+private:
+	template< typename T > friend class _AttributeCreator;
+	void m_Add( ae::Attribute* attribute );
+	struct _Info { uint32_t start; uint32_t count; };
+	ae::Map< ae::TypeId, _Info, kMaxMetaAttributes > m_attributeTypes;
+	ae::Array< ae::Attribute*, kMaxMetaAttributes > m_attributes;
+};
+
 //------------------------------------------------------------------------------
 // ae::Enum class
 //------------------------------------------------------------------------------
@@ -5465,6 +5535,11 @@ public:
 	int32_t GetValueByIndex( int32_t index ) const;
 	std::string GetNameByIndex( int32_t index ) const;
 	uint32_t Length() const;
+
+	//--------------------------------------------------------------------------
+	// Attributes
+	//--------------------------------------------------------------------------
+	ae::AttributeList attributes;
 		
 	//------------------------------------------------------------------------------
 	// Internal
@@ -5645,6 +5720,11 @@ public:
 	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
 
+	//--------------------------------------------------------------------------
+	// Attributes
+	//--------------------------------------------------------------------------
+	ae::AttributeList attributes;
+
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
@@ -5687,6 +5767,9 @@ public:
 	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
 	//bool HasPropertyValue( int32_t propIndex, const char* value ) const; // @TODO
 	//bool HasPropertyValue( const char* propName, const char* value ) const; // @TODO
+
+	// Attributes
+	ae::AttributeList attributes;
 		
 	// Vars
 	uint32_t GetVarCount( bool parents ) const;
@@ -5723,7 +5806,7 @@ public:
 	typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
 	Init( const char* name, uint32_t index );
 	void m_AddProp( const char* prop, const char* value );
-	void m_AddVar( const Var& var );
+	void m_AddVar( const Var* var );
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
 	ae::Str64 m_name;
@@ -5731,7 +5814,7 @@ private:
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-	ae::Array< Var, kMaxMetaVars > m_vars;
+	ae::Array< const ae::Var*, kMaxMetaVars > m_vars;
 	ae::Str32 m_parent;
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
@@ -5862,12 +5945,6 @@ struct _Globals
 	ae::Array< ae::Type*, kMaxMetaTypes > types;
 	const ae::Var::Serializer* varSerializer = nullptr;
 	bool varSerializerInitialized = false;
-#ifdef _MSC_VER
-	char typeNameBuf[ 64 ];
-#else
-	size_t typeNameBufLength = 0;
-	char* typeNameBuf = nullptr;
-#endif
 
 	// Graphics
 	class GraphicsDevice* graphicsDevice = nullptr;
@@ -11317,7 +11394,7 @@ Inheritor< Parent, This >::Inheritor()
 {
 	// @NOTE: Don't get type here because this object could be constructed
 	// before meta types are constructed.
-	ae::Object::_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
+	this->_metaTypeId = ae::GetTypeIdFromName( ae::_TypeName< This >::Get() );
 }
 
 template < typename Parent, typename This >
@@ -11367,9 +11444,10 @@ template< typename C >
 struct _PropCreator
 {
 	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
-	_PropCreator( ae::_TypeCreator< C >&, const char* typeName, const char* propName, const char* propValue )
+	_PropCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
 	{
 		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
+		AE_ASSERT( type == &typeCreator.m_type );
 		type->m_AddProp( propName, propValue );
 	}
 };
@@ -11378,30 +11456,31 @@ template< typename C, typename V, uint32_t Offset >
 struct _VarCreator
 {
 	// Take _TypeCreator param as a safety check that _VarCreator typeName is provided correctly
-	_VarCreator( ae::_TypeCreator< C >&, const char* typeName, const char* varName )
+	_VarCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* varName )
 	{
 		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
 		AE_ASSERT( type );
-		
-		Var var;
-		var.m_owner = type;
-		var.m_name = varName;
-		var.m_varType = ae::VarType< V >::Get();
-		var.m_type = var.m_varType->GetType();
-		var.m_typeName = var.m_varType->GetName();
-		var.m_subTypeId = GetTypeIdFromName( var.m_varType->GetSubTypeName() );
+		AE_ASSERT( type == &typeCreator.m_type );
+
+		m_var.m_owner = type;
+		m_var.m_name = varName;
+		m_var.m_varType = ae::VarType< V >::Get();
+		m_var.m_type = m_var.m_varType->GetType();
+		m_var.m_typeName = m_var.m_varType->GetName();
+		m_var.m_subTypeId = GetTypeIdFromName( m_var.m_varType->GetSubTypeName() );
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic push
 	#pragma clang diagnostic ignored "-Winvalid-offsetof"
 #endif
-		var.m_offset = Offset; // @TODO: Verify var is not member of base class
+		m_var.m_offset = Offset; // @TODO: Verify var is not member of base class
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic pop
 #endif
-		var.m_size = var.m_varType->GetSize();
+		m_var.m_size = m_var.m_varType->GetSize();
 
-		type->m_AddVar( var );
+		type->m_AddVar( &m_var );
 	}
+	Var m_var;
 };
 
 template< typename C, typename V, uint32_t Offset >
@@ -11424,9 +11503,10 @@ template < typename T >
 const Enum* GetEnum();
 	
 template < typename E, typename T = typename std::underlying_type< E >::type >
-struct _EnumCreator
+class _EnumCreator
 {
-	ae::Enum* m_enumType = nullptr;
+public:
+	ae::Enum* m_enumType = nullptr; // @TODO: Should be statically allocated
 
 	_EnumCreator( const char* typeName, std::string strMap )
 	{
@@ -11485,8 +11565,8 @@ struct _EnumCreator
 	~_EnumCreator()
 	{
 		auto&& enums = ae::_Globals::Get()->enums;
-		//AE_INFO( "Destroy enum '#'", m_enumType->GetName() );
 		enums.Remove( m_enumType->GetName() );
+		m_enumType = nullptr;
 		ae::_Globals::Get()->metaCacheSeq++;
 	}
 		
@@ -11510,9 +11590,11 @@ template < typename T >
 class _EnumCreator2
 {
 public:
+	ae::Enum* m_enumType = nullptr; // @TODO: Should be statically allocated
+
 	_EnumCreator2( const char* typeName )
 	{
-		ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+		m_enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
 	}
 		
 	_EnumCreator2( const char* valueName, T value )
@@ -11522,17 +11604,28 @@ public:
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
 			
-		ae::Enum* enumType = const_cast< ae::Enum* >( ae::GetEnum< T >() );
-		AE_ASSERT_MSG( enumType, "Could not register enum value '#'. No registered Enum.", valueName );
-		enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
+		m_enumType = const_cast< ae::Enum* >( ae::GetEnum< T >() );
+		AE_ASSERT_MSG( m_enumType, "Could not register enum value '#'. No registered Enum.", valueName );
+		m_enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
 	}
 
 	~_EnumCreator2()
 	{
 		ae::_Globals* globals = ae::_Globals::Get();
 		globals->enums.Remove( ae::GetTypeName< T >() );
+		m_enumType = nullptr;
 		globals->metaCacheSeq++;
 	}
+};
+
+template< typename T >
+class _AttributeCreator
+{
+public:
+	_AttributeCreator( ae::_TypeCreator< T >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_type.attributes.m_Add( attribute ); } }
+	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_var.attributes.m_Add( attribute ); } }
+	// _AttributeCreator( ae::_EnumCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
+	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
 
 } // ae end
@@ -11711,6 +11804,9 @@ const ae::Type* ae::GetType()
 	}
 }
 
+//------------------------------------------------------------------------------
+// ae::Enum templated member functions
+//------------------------------------------------------------------------------
 template < typename T >
 std::string ae::Enum::GetNameByValue( T value ) const
 {
@@ -11751,6 +11847,9 @@ bool ae::Enum::HasValue( T value ) const
 	return m_enumValueToName.TryGet( value );
 }
 
+//------------------------------------------------------------------------------
+// ae::Type templated member functions
+//------------------------------------------------------------------------------
 template < typename T >
 T* ae::Type::New( void* obj ) const
 {
@@ -11767,7 +11866,14 @@ template < typename T >
 typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
 ae::Type::Init( const char* name, uint32_t index )
 {
-	m_placementNew = &( _PlacementNew< T > );
+	if constexpr( std::is_base_of_v< ae::Object, T > )
+	{
+		m_placementNew = &( _PlacementNew< T > );
+	}
+	else
+	{
+		m_placementNew = nullptr;
+	}
 	m_name = name;
 	m_id = GetTypeIdFromName( name );
 	m_size = sizeof( T );
@@ -11775,7 +11881,7 @@ ae::Type::Init( const char* name, uint32_t index )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = false;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
-	m_isDefaultConstructible = true;
+	m_isDefaultConstructible = (bool)m_placementNew;
 	m_isFinal = std::is_final< T >::value;
 }
 template < typename T >
@@ -11790,10 +11896,60 @@ ae::Type::Init( const char* name, uint32_t index )
 	m_parent = T::GetParentTypeName();
 	m_isAbstract = std::is_abstract< T >::value;
 	m_isPolymorphic = std::is_polymorphic< T >::value;
-	m_isDefaultConstructible = std::is_default_constructible< T >::value;
+	m_isDefaultConstructible = (bool)m_placementNew;
 	m_isFinal = std::is_final< T >::value;
 }
 
+//------------------------------------------------------------------------------
+// ae::AttributeList templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+const T* ae::AttributeList::TryGet( uint32_t idx ) const
+{
+	if constexpr( std::is_same_v< ae::Attribute, T > )
+	{
+		return m_attributes[ idx ];
+	}
+	else
+	{
+		static_assert( std::is_final_v< T >, "ae::AttributeList::TryGet() does not support intermediate levels of inheritance." );
+		const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() ); // @TODO: Compile time
+		const _Info* info = m_attributeTypes.TryGet( attributeType );
+		if( info && idx < info->count )
+		{
+			const ae::Attribute* result = m_attributes[ info->start + idx ];
+			AE_DEBUG_ASSERT( !result || result->_metaTypeId == attributeType );
+			return static_cast< const T* >( result );
+		}
+	}
+	return nullptr;
+}
+
+template< typename T >
+uint32_t ae::AttributeList::GetCount() const
+{
+	if constexpr( std::is_same_v< ae::Attribute, T > )
+	{
+		return m_attributes.Length();
+	}
+	else
+	{
+		static_assert( std::is_final_v< T >, "ae::AttributeList::TryGet() does not support intermediate levels of inheritance." );
+		const ae::TypeId attributeType = ae::GetTypeIdFromName( ae::_TypeName< T >::Get() ); // @TODO: Compile time
+		const _Info* info = m_attributeTypes.TryGet( attributeType );
+		return info ? info->count : 0;
+	}
+}
+
+template< typename T >
+bool ae::AttributeList::Has() const
+{
+	return (bool)GetCount< T >();
+}
+
+//------------------------------------------------------------------------------
+// ae::Var templated member functions
+//------------------------------------------------------------------------------
 template < typename T >
 bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
 {
@@ -11950,8 +12106,6 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 template< typename T, typename C >
 const T* ae::Cast( const C* obj )
 {
-	static_assert( std::is_base_of< ae::Object, T >::value, "Cast only works with types derived from ae::Object" );
-	static_assert( std::is_base_of< ae::Object, C >::value, "Cast only works with types derived from ae::Object" );
 	static_assert( std::is_base_of< C, T >::value || std::is_base_of< T, C >::value, "Unrelated types" );
 	if( !obj )
 	{
@@ -11962,7 +12116,9 @@ const T* ae::Cast( const C* obj )
 	{
 		return static_cast< const T* >( obj );
 	}
-	return ae::GetTypeFromObject( obj )->IsType( type ) ? static_cast< const T* >( obj ) : nullptr; // No use of RTTI
+	const ae::Type* objType = ae::GetTypeById( obj->_metaTypeId );
+	AE_ASSERT( objType );
+	return objType->IsType( type ) ? static_cast< const T* >( obj ) : nullptr; // No use of RTTI
 }
 
 template< typename T, typename C >
@@ -25826,9 +25982,11 @@ void NetObjectServer::UpdateSendData()
 } // ae end
 
 //------------------------------------------------------------------------------
-// Meta register base object
+// Meta register base objects
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( ae, Object );
+AE_REGISTER_CLASS( ae, Attribute );
+AE_REGISTER_CLASS( ae, SourceFileAttribute );
 
 uint32_t ae::GetTypeCount()
 {
@@ -26214,7 +26372,7 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 {
 	if ( !parents )
 	{
-		return &m_vars[ i ];
+		return m_vars[ i ];
 	}
 	// @HACK: This whole function should be re-written to avoid recreating this array and all of this recursion
 	ae::Array< const ae::Var*, kMaxMetaVars > vars;
@@ -26224,9 +26382,9 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 		{
 			fn( fn, parent );
 		}
-		for ( const ae::Var& v : type->m_vars )
+		for ( const ae::Var* v : type->m_vars )
 		{
-			vars.Append( &v );
+			vars.Append( v );
 		}
 	};
 	fn( fn, this );
@@ -26235,13 +26393,13 @@ const ae::Var* ae::Type::GetVarByIndex( uint32_t i, bool parents ) const
 
 const ae::Var* ae::Type::GetVarByName( const char* name, bool parents ) const
 {
-	int32_t i = m_vars.FindFn( [name]( const ae::Var& v )
+	int32_t i = m_vars.FindFn( [name]( const ae::Var* v )
 	{
-		return v.m_name == name;
+		return v->m_name == name;
 	} );
 	if ( i >= 0 )
 	{
-		return &m_vars[ i ];
+		return m_vars[ i ];
 	}
 	else if ( const ae::Type* parent = ( parents ? GetParentType() : nullptr ) )
 	{
@@ -26351,6 +26509,9 @@ ae::TypeId ae::GetTypeIdFromName( const char* name )
 	return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
+//------------------------------------------------------------------------------
+// ae::Enum member functions
+//------------------------------------------------------------------------------
 int32_t ae::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
 std::string ae::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
 uint32_t ae::Enum::Length() const { return m_enumValueToName.Length(); }
@@ -26617,14 +26778,45 @@ void ae::Type::m_AddProp( const char* prop, const char* value )
 	}
 }
 
-void ae::Type::m_AddVar( const Var& var )
+void ae::Type::m_AddVar( const Var* var )
 {
 	AE_ASSERT_MSG( m_vars.Length() < m_vars.Size(), "Set/increase AE_MAX_META_VARS_CONFIG (Currently: #)", m_vars.Size() );
 	m_vars.Append( var );
-	std::sort( m_vars.begin(), m_vars.end(), []( const auto& a, const auto& b )
+	std::sort( m_vars.begin(), m_vars.end(), []( const ae::Var* a, const ae::Var* b )
 	{
-		return a.GetOffset() < b.GetOffset();
+		return a->GetOffset() < b->GetOffset();
 	} );
+}
+
+//------------------------------------------------------------------------------
+// ae::AttributeList member functions
+//------------------------------------------------------------------------------
+void ae::AttributeList::m_Add( Attribute* attribute )
+{
+	AE_ASSERT_MSG( m_attributes.Length() < m_attributes.Size(), "Set/increase AE_MAX_META_ATTRIBUTES_CONFIG (Currently: #)", m_attributes.Size() );
+	
+	m_attributes.Append( attribute );
+	std::stable_sort( m_attributes.begin(), m_attributes.end(), []( const ae::Attribute* a, const ae::Attribute* b )
+	{
+		return a->_metaTypeId < b->_metaTypeId;
+	} );
+
+	m_attributeTypes.Clear();
+	for( uint32_t i = 0; i < m_attributes.Length(); i++ )
+	{
+		const Attribute* attribute = m_attributes[ i ];
+		const ae::TypeId attributeType = attribute->GetTypeId();
+		if( _Info* info = m_attributeTypes.TryGet( attributeType ) )
+		{
+			info->count++;
+		}
+		else
+		{
+			m_attributeTypes.Set( attributeType, { i, 1 } );
+		}
+	}
+
+	_Globals::Get()->metaCacheSeq++;
 }
 
 #endif // AE_MAIN
