@@ -8530,9 +8530,8 @@ T* Array< T, N >::InsertArray( uint32_t index, const T* values, uint32_t count )
 template < typename T, uint32_t N >
 void Array< T, N >::Remove( uint32_t index, uint32_t count )
 {
-	AE_DEBUG_ASSERT( index < m_length );
+	AE_DEBUG_ASSERT( index <= m_length );
 	AE_DEBUG_ASSERT( index + count <= m_length );
-
 	m_length -= count;
 	for ( uint32_t i = index; i < m_length; i++ )
 	{
