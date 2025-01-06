@@ -66,6 +66,13 @@ AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray2 );
 AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray3 );
 
 //------------------------------------------------------------------------------
+// OptionalClass
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( OptionalClass );
+AE_REGISTER_CLASS_VAR( OptionalClass, intOptional );
+AE_REGISTER_CLASS_VAR( OptionalClass, someClassOptional );
+
+//------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
 AE_REGISTER_ENUM( SomeOldEnum );

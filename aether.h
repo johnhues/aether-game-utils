@@ -1476,14 +1476,15 @@ template < typename T >
 class Optional
 {
 public:
+	// @TODO: Handle assignment of {} when T is default constructible
 	Optional() = default;
 	Optional( const T& value );
-	Optional( const Optional< T >& other );
 	Optional( T&& value ) noexcept;
+	Optional( const Optional< T >& other );
 	Optional( Optional< T >&& other ) noexcept;
-	void operator =( const T& value );
+	T& operator =( const T& value );
+	T& operator =( T&& value ) noexcept;
 	void operator =( const Optional< T >& other );
-	void operator =( T&& value ) noexcept;
 	void operator =( Optional< T >&& other ) noexcept;
 	~Optional();
 
@@ -5469,6 +5470,11 @@ const class Enum* GetEnum( const char* enumName );
 ae::TypeId GetObjectTypeId( const ae::Object* obj );
 //! Get a registered ae::TypeId from a type name
 ae::TypeId GetTypeIdFromName( const char* name );
+//! Thoroughly removes all qualifiers from a type. Usage:
+//! using T = typename ae::StripType< U >::T;
+template < typename U > struct StripType { using T = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< U > > > >; };
+//! Returns an integer id for the given type
+template < typename T > ae::TypeId GetTypeId();
 
 //------------------------------------------------------------------------------
 // ae::Attribute class
@@ -5588,13 +5594,10 @@ enum class BasicType
 };
 
 //------------------------------------------------------------------------------
-// ae::VarAdapterType enum
+// ae::VarAdapterType
 //------------------------------------------------------------------------------
-enum class VarAdapterType
-{
-	None,
-	Array
-};
+using VarAdapterType = TypeId;
+const VarAdapterType kVarAdapterTypeNone = 0;
 	
 //------------------------------------------------------------------------------
 // ae::Var class
@@ -5725,10 +5728,15 @@ public:
 	//--------------------------------------------------------------------------
 	ae::AttributeList attributes;
 
+	//--------------------------------------------------------------------------
+	// Adapter
+	//--------------------------------------------------------------------------
+	template < typename T > const T* TryGetAdapter() const;
+	ae::VarAdapterType GetAdapterType() const;
+
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
-	const class VarTypeArray* m_TryGetArrayAdapter() const;
 	void m_AddProp( const char* prop, const char* value );
 	const ae::Type* m_owner = nullptr;
 	ae::Str32 m_name = "";
@@ -6041,8 +6049,7 @@ constexpr auto _GetTypeName() // @TODO: Return ae::Str
 template< typename T >
 const char* GetTypeName()
 {
-	using BaseT = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
-	static constexpr auto name = ae::_GetTypeName< BaseT >();
+	static constexpr auto name = ae::_GetTypeName< typename ae::StripType< T >::T >();
 	return name.data();
 }
 
@@ -8112,15 +8119,15 @@ Optional< T >::Optional( const T& value ) : m_hasValue( false )
 }
 
 template< typename T >
-Optional< T >::Optional( const Optional< T >& other ) : m_hasValue( false )
-{
-	*this = other;
-}
-
-template< typename T >
 Optional< T >::Optional( T&& value ) noexcept : m_hasValue( false )
 {
 	*this = std::move( value );
+}
+
+template< typename T >
+Optional< T >::Optional( const Optional< T >& other ) : m_hasValue( false )
+{
+	*this = other;
 }
 
 template< typename T >
@@ -8136,21 +8143,43 @@ Optional< T >::~Optional()
 }
 
 template< typename T >
-void Optional< T >::operator =( const T& value )
+T& Optional< T >::operator =( const T& value )
 {
-	if( reinterpret_cast< T* >( &m_value ) == &value )
+	T* result = reinterpret_cast< T* >( &m_value );
+	if( result == &value )
 	{
-		return;
+		return *result;
 	}
 	else if( m_hasValue )
 	{
-		*reinterpret_cast< T* >( &m_value ) = value;
+		*result = value;
 	}
 	else
 	{
-		new( &m_value ) T( value );
+		new( result ) T( value );
 		m_hasValue = true;
 	}
+	return *result;
+}
+
+template< typename T >
+T& Optional< T >::operator =( T&& value ) noexcept
+{
+	T* result = reinterpret_cast< T* >( &m_value );
+	if( result == &value )
+	{
+		return *result;
+	}
+	else if( m_hasValue )
+	{
+		*result = std::move( value );
+	}
+	else
+	{
+		new( &m_value ) T( std::move( value ) );
+		m_hasValue = true;
+	}
+	return *result;
 }
 
 template< typename T >
@@ -8167,24 +8196,6 @@ void Optional< T >::operator =( const Optional< T >& other )
 	else
 	{
 		Clear();
-	}
-}
-
-template< typename T >
-void Optional< T >::operator =( T&& value ) noexcept
-{
-	if( reinterpret_cast< T* >( &m_value ) == &value )
-	{
-		return;
-	}
-	else if( m_hasValue )
-	{
-		*reinterpret_cast< T* >( &m_value ) = std::move( value );
-	}
-	else
-	{
-		new( &m_value ) T( std::move( value ) );
-		m_hasValue = true;
 	}
 }
 
@@ -11365,16 +11376,22 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
 //------------------------------------------------------------------------------
+template < typename T > ae::TypeId GetTypeId()
+{
+	return ae::GetTypeIdFromName( ae::_GetTypeName< typename ae::StripType< T >::T >().data() );
+}
+
 template < typename T >
 struct _TypeName
 {
 	static const char* Get();
 };
+// @TODO: ae::VarAdapter?
 struct VarTypeBase
 {
 	virtual ~VarTypeBase() {}
 	virtual BasicType GetType() const = 0; // All types
-	virtual VarAdapterType GetAdapterType() const { return ae::VarAdapterType::None; }; // All types
+	virtual VarAdapterType GetAdapterType() const { return kVarAdapterTypeNone; }; // All types
 	virtual const char* GetName() const = 0; // All types
 	virtual uint32_t GetSize() const = 0; // All types
 	virtual const char* GetPrefix() const { return ""; } // Enum types
@@ -11676,7 +11693,7 @@ struct ae::VarType< T* > : public ae::VarTypeBase
 		static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR pointers must have base type ae::Object" );
 		return ae::BasicType::Pointer; // @TODO: Remove this and allow pointers to all ae::VarTypeBase types?
 	}
-	ae::VarAdapterType GetAdapterType() const override { return ae::VarAdapterType::None; } // @TODO: Pointer?
+	ae::VarAdapterType GetAdapterType() const override { return kVarAdapterTypeNone; } // @TODO: Pointer?
 	const char* GetName() const override { return "Ref"; }
 	uint32_t GetSize() const override { return sizeof(T*); }
 	const char* GetSubTypeName() const override { return ae::GetTypeName< T >(); }
@@ -11688,7 +11705,7 @@ namespace ae {
 class VarTypeArray : public ae::VarTypeBase
 {
 public:
-	ae::VarAdapterType GetAdapterType() const override { return ae::VarAdapterType::Array; }
+	ae::VarAdapterType GetAdapterType() const override { return ae::GetTypeId< decltype(this) >(); }
 	virtual void* GetElement( void* a, uint32_t idx ) const = 0;
 	virtual const void* GetElement( const void* a, uint32_t idx ) const = 0;
 	virtual uint32_t Resize( void* a, uint32_t size ) const = 0;
@@ -11742,6 +11759,14 @@ public:
 	uint32_t GetLength( const void* a ) const override { return N; }
 	uint32_t GetMaxLength() const override { return N; }
 	uint32_t IsFixedLength() const override { return true; }
+};
+
+class VarTypeOptional : public ae::VarTypeBase
+{
+public:
+	ae::VarAdapterType GetAdapterType() const override { return ae::GetTypeId< decltype(this) >(); }
+	virtual void* TryGetValue( void* opt ) const = 0;
+	virtual const void* TryGetValue( const void* opt ) const = 0;
 };
 
 } // ae end
@@ -11980,7 +12005,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 	}
 	
 	T* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+	if ( const ae::VarTypeArray* arrayAdapter = TryGetAdapter< ae::VarTypeArray >() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
 		const int32_t arrayLen = arrayAdapter->GetLength( arr );
@@ -12033,7 +12058,7 @@ bool ae::Var::GetObjectValue( const ae::Object* _obj, T* valueOut, int32_t array
 	
 	const uint8_t* obj = reinterpret_cast< const uint8_t* >( _obj );
 	const void* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+	if ( const ae::VarTypeArray* arrayAdapter = TryGetAdapter< ae::VarTypeArray >() )
 	{
 		const void* arr = obj + m_offset;
 		if ( arrayIdx >= 0 && arrayAdapter->GetLength( arr ) )
@@ -12047,7 +12072,19 @@ bool ae::Var::GetObjectValue( const ae::Object* _obj, T* valueOut, int32_t array
 	}
 	else if ( arrayIdx < 0 )
 	{
-		varData = obj + m_offset;
+		if( const ae::VarTypeOptional* optionalAdapter = TryGetAdapter< ae::VarTypeOptional >() )
+		{
+			void* opt = (uint8_t*)obj + m_offset;
+			varData = optionalAdapter->TryGetValue( opt );
+			if( !varData )
+			{
+				return false;
+			}
+		}
+		else
+		{
+			varData = obj + m_offset;
+		}
 	}
 	else
 	{
@@ -12082,7 +12119,7 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 	}
 	
 	// @TODO: Safety checks
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+	if ( const ae::VarTypeArray* arrayAdapter = TryGetAdapter< ae::VarTypeArray >() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
 		const uint32_t arrayLen = arrayAdapter->GetLength( arr );
@@ -12103,6 +12140,18 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 	return nullptr;
 }
 
+template < typename T >
+const T* ae::Var::TryGetAdapter() const
+{
+	using U = typename ae::StripType< T >::T;
+	static_assert( std::is_base_of< ae::VarTypeBase, U >::value, "T must be inherit from ae::VarTypeBase" );
+	const bool isAdapterT = ( GetAdapterType() == ae::GetTypeId< U >() );
+	return isAdapterT ? static_cast< const U* >( m_varType ) : nullptr;
+}
+
+//------------------------------------------------------------------------------
+// ae::Cast implementation
+//------------------------------------------------------------------------------
 template< typename T, typename C >
 const T* ae::Cast( const C* obj )
 {
@@ -26063,7 +26112,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
 	
 	void* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+	if ( const ae::VarTypeArray* arrayAdapter = TryGetAdapter< ae::VarTypeArray >() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
 		if ( arrayIdx >= 0 && arrayIdx < (int32_t)arrayAdapter->GetLength( arr ) )
@@ -26075,9 +26124,21 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 			return false;
 		}
 	}
-	else if ( arrayIdx < 0 )
+	else if( arrayIdx < 0 )
 	{
-		varData = (uint8_t*)obj + m_offset;
+		if( const ae::VarTypeOptional* optionalAdapter = TryGetAdapter< ae::VarTypeOptional >() )
+		{
+			void* opt = (uint8_t*)obj + m_offset;
+			varData = optionalAdapter->TryGetValue( opt );
+			if( !varData )
+			{
+				return false;
+			}
+		}
+		else
+		{
+			varData = (uint8_t*)obj + m_offset;
+		}
 	}
 	else
 	{
@@ -26342,11 +26403,9 @@ const char* ae::Var::GetPropertyValue( const char* propName, uint32_t valueIndex
 	const auto* vals = m_props.TryGet( propName );
 	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
 }
-
-const ae::VarTypeArray* ae::Var::m_TryGetArrayAdapter() const
+ae::VarAdapterType ae::Var::GetAdapterType() const
 {
-	const bool isArray = ( m_varType->GetAdapterType() == ae::VarAdapterType::Array );
-	return isArray ? static_cast< const ae::VarTypeArray* >( m_varType ) : nullptr;
+	return m_varType->GetAdapterType();
 }
 
 void ae::Var::m_AddProp( const char* prop, const char* value )
@@ -26452,12 +26511,12 @@ const ae::Type* ae::Var::GetSubType() const
 
 bool ae::Var::IsArray() const
 {
-	return ( m_varType->GetAdapterType() == ae::VarAdapterType::Array );
+	return ( GetAdapterType() == ae::GetTypeId< ae::VarTypeArray >() );
 }
 
 bool ae::Var::IsArrayFixedLength() const
 {
-	const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter();
+	const ae::VarTypeArray* arrayAdapter = TryGetAdapter< ae::VarTypeArray >();
 	return arrayAdapter && arrayAdapter->IsFixedLength();
 }
 
@@ -26491,7 +26550,7 @@ uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 
 uint32_t ae::Var::GetArrayMaxLength() const
 {
-	const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter();
+	const ae::VarTypeArray* arrayAdapter = TryGetAdapter< ae::VarTypeArray >();
 	return arrayAdapter ? arrayAdapter->GetMaxLength() : 0;
 }
 
@@ -26555,7 +26614,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
 	
 	const void* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+	if ( const ae::VarTypeArray* arrayAdapter = TryGetAdapter< ae::VarTypeArray >() )
 	{
 		void* arr = (uint8_t*)obj + m_offset;
 		int32_t arrayLength = (int32_t)arrayAdapter->GetLength( arr );

@@ -410,6 +410,66 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 	}
 }
 
+TEST_CASE("Optional test present", "[aeMeta]")
+{
+	const ae::Type* type = ae::GetType< OptionalClass >();
+	REQUIRE( type );
+
+	const ae::Var* intOptional = type->GetVarByName( "intOptional", false );
+	REQUIRE( intOptional );
+	REQUIRE( intOptional->GetType() == ae::BasicType::Int32 );
+
+	const ae::Var* someClassOptional = type->GetVarByName( "someClassOptional", false );
+	REQUIRE( someClassOptional );
+	REQUIRE( someClassOptional->GetType() == ae::BasicType::Class );
+
+	OptionalClass c;
+	c.intOptional = 123;
+	c.someClassOptional = SomeClass();
+	// c.someClassOptional = {}; // @TODO: Fix more than one operator matches operands
+
+	{
+		int32_t value = 0;
+		REQUIRE( intOptional->GetObjectValue( &c, &value ) );
+		REQUIRE( value == 123 );
+	}
+
+	{
+		SomeClass value;
+		REQUIRE( someClassOptional->GetObjectValue( &c, &value ) );
+		REQUIRE( value.intMember == 123 );
+		REQUIRE( value.boolMember == true );
+		REQUIRE( value.enumTest == TestEnumClass::Five );
+	}
+}
+
+TEST_CASE("Optional test no value", "[aeMeta]")
+{
+	const ae::Type* type = ae::GetType< OptionalClass >();
+	REQUIRE( type );
+
+	const ae::Var* intOptional = type->GetVarByName( "intOptional", false );
+	REQUIRE( intOptional );
+	REQUIRE( intOptional->GetType() == ae::BasicType::Int32 );
+
+	const ae::Var* someClassOptional = type->GetVarByName( "someClassOptional", false );
+	REQUIRE( someClassOptional );
+	REQUIRE( someClassOptional->GetType() == ae::BasicType::Class );
+
+	OptionalClass c;
+
+	{
+		int32_t value = 0;
+		REQUIRE( !intOptional->GetObjectValue( &c, &value ) );
+		REQUIRE( value == 123 );
+	}
+
+	{
+		SomeClass value;
+		REQUIRE( !someClassOptional->GetObjectValue( &c, &value ) );
+	}
+}
+
 TEST_CASE( "enum string conversions", "[aeMeta]" )
 {
 	const ae::Enum* playerStateEnum = ae::GetEnum( "PlayerState" );
