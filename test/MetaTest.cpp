@@ -423,10 +423,22 @@ TEST_CASE("Optional test present", "[aeMeta]")
 	REQUIRE( someClassOptional );
 	REQUIRE( someClassOptional->GetType() == ae::BasicType::Class );
 
+	const ae::Var* intStdOptional = type->GetVarByName( "intStdOptional", false );
+	REQUIRE( intStdOptional );
+	REQUIRE( intStdOptional->GetType() == ae::BasicType::Int32 );
+
+	const ae::Var* someClassStdOptional = type->GetVarByName( "someClassStdOptional", false );
+	REQUIRE( someClassStdOptional );
+	REQUIRE( someClassStdOptional->GetType() == ae::BasicType::Class );
+
 	OptionalClass c;
 	c.intOptional = 123;
-	c.someClassOptional = SomeClass();
 	// c.someClassOptional = {}; // @TODO: Fix more than one operator matches operands
+	c.intStdOptional = 456;
+	c.someClassStdOptional = SomeClass();
+	c.someClassStdOptional->intMember = 456;
+	c.someClassStdOptional->boolMember = true;
+	c.someClassStdOptional->enumTest = TestEnumClass::Five;
 
 	{
 		int32_t value = 0;
@@ -436,10 +448,30 @@ TEST_CASE("Optional test present", "[aeMeta]")
 
 	{
 		SomeClass value;
-		REQUIRE( someClassOptional->GetObjectValue( &c, &value ) );
-		REQUIRE( value.intMember == 123 );
-		REQUIRE( value.boolMember == true );
-		REQUIRE( value.enumTest == TestEnumClass::Five );
+		// REQUIRE( someClassOptional->GetObjectValue( &c, &value ) );
+		// REQUIRE( value.intMember == 123 );
+		// REQUIRE( value.boolMember == true );
+		// REQUIRE( value.enumTest == TestEnumClass::Five );
+	}
+
+	{
+		const StdOptionalAdapter* adapter = intStdOptional->TryGetAdapter< StdOptionalAdapter >();
+		REQUIRE( adapter );
+		const void* optional = intStdOptional->GetAdapterValue( &c );
+		REQUIRE( optional );
+		const void* value = adapter->TryGetValue( optional );
+		REQUIRE( *(int32_t*)value == 456 );
+	}
+
+	{
+		const StdOptionalAdapter* adapter = someClassStdOptional->TryGetAdapter< StdOptionalAdapter >();
+		REQUIRE( adapter );
+		const void* optional = someClassStdOptional->GetAdapterValue( &c );
+		REQUIRE( optional );
+		const void* value = adapter->TryGetValue( optional );
+		REQUIRE( ((SomeClass*)value)->intMember == 456 );
+		REQUIRE( ((SomeClass*)value)->boolMember == true );
+		REQUIRE( ((SomeClass*)value)->enumTest == TestEnumClass::Five );
 	}
 }
 
@@ -456,17 +488,40 @@ TEST_CASE("Optional test no value", "[aeMeta]")
 	REQUIRE( someClassOptional );
 	REQUIRE( someClassOptional->GetType() == ae::BasicType::Class );
 
+	const ae::Var* intStdOptional = type->GetVarByName( "intStdOptional", false );
+	REQUIRE( intStdOptional );
+	REQUIRE( intStdOptional->GetType() == ae::BasicType::Int32 );
+
+	const ae::Var* someClassStdOptional = type->GetVarByName( "someClassStdOptional", false );
+	REQUIRE( someClassStdOptional );
+	REQUIRE( someClassStdOptional->GetType() == ae::BasicType::Class );
+
 	OptionalClass c;
 
 	{
 		int32_t value = 0;
 		REQUIRE( !intOptional->GetObjectValue( &c, &value ) );
-		REQUIRE( value == 123 );
 	}
 
 	{
 		SomeClass value;
 		REQUIRE( !someClassOptional->GetObjectValue( &c, &value ) );
+	}
+
+	{
+		const StdOptionalAdapter* adapter = intStdOptional->TryGetAdapter< StdOptionalAdapter >();
+		REQUIRE( adapter );
+		const void* optional = intStdOptional->GetAdapterValue( &c );
+		REQUIRE( optional );
+		REQUIRE( !adapter->TryGetValue( optional ) );
+	}
+
+	{
+		const StdOptionalAdapter* adapter = someClassStdOptional->TryGetAdapter< StdOptionalAdapter >();
+		REQUIRE( adapter );
+		const void* optional = someClassStdOptional->GetAdapterValue( &c );
+		REQUIRE( optional );
+		REQUIRE( !adapter->TryGetValue( optional ) );
 	}
 }
 

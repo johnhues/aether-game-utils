@@ -123,6 +123,50 @@ public:
 	const void* TryGetValue( const void* opt ) const override { return static_cast< const ae::Optional< T >* >( opt )->TryGet(); }
 };
 
+class StdOptionalAdapter : public ae::VarTypeBase
+{
+public:
+	ae::VarAdapterType GetAdapterType() const override { return ae::GetTypeId< decltype(this) >(); }
+	virtual void* TryGetValue( void* opt ) const = 0;
+	virtual const void* TryGetValue( const void* opt ) const = 0;
+	virtual void SetValue( void* opt, const void* value ) const = 0;
+};
+
+template < typename T >
+class ae::VarType< std::optional< T > > : public StdOptionalAdapter
+{
+public:
+	uint32_t GetSize() const override { return sizeof(T); }
+	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
+	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
+	static ae::VarTypeBase* Get() { static ae::VarType< std::optional< T > > s_type; return &s_type; }
+
+	void* TryGetValue( void* _opt ) const override
+	{
+		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt );
+		return opt->has_value() ? &opt->value() : nullptr;
+	}
+	const void* TryGetValue( const void* _opt ) const override
+	{
+		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt );
+		return opt->has_value() ? &opt->value() : nullptr;
+	}
+	void SetValue( void* _opt, const void* value ) const override
+	{
+		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt );
+		if ( value )
+		{
+			opt->emplace( *static_cast< const T* >( value ) );
+		}
+		else
+		{
+			opt->reset();
+		}
+	}
+};
+
 //------------------------------------------------------------------------------
 // OptionalClass
 //------------------------------------------------------------------------------
@@ -131,6 +175,9 @@ class OptionalClass : public ae::Inheritor< ae::Object, OptionalClass >
 public:
 	ae::Optional< int32_t > intOptional;
 	ae::Optional < SomeClass > someClassOptional;
+
+	std::optional< int32_t > intStdOptional;
+	std::optional< SomeClass > someClassStdOptional;
 };
 
 //------------------------------------------------------------------------------

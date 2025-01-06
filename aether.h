@@ -5731,8 +5731,15 @@ public:
 	//--------------------------------------------------------------------------
 	// Adapter
 	//--------------------------------------------------------------------------
+	std::string GetAsString( const void* data ) const;
+	bool SetFromString( void* data, const char* value ) const;
+	template < typename T > bool Get( const void* data, T* valueOut ) const;
+	template < typename T > bool Set( void* data, const T& value ) const;
+	
 	template < typename T > const T* TryGetAdapter() const;
 	ae::VarAdapterType GetAdapterType() const;
+	void* GetAdapterValue( ae::Object* obj ) const;
+	const void* GetAdapterValue( const ae::Object* obj ) const;
 
 	//------------------------------------------------------------------------------
 	// Internal
@@ -12024,6 +12031,10 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 			return false;
 		}
 	}
+	else if( GetAdapterType() )
+	{
+		AE_FAIL_MSG( "Use TryGetAdapter() function with ae::Var::SetValue() instead" );
+	}
 	else if ( arrayIdx == -1 )
 	{
 		varData = reinterpret_cast< T* >( (uint8_t*)obj + m_offset );
@@ -12034,14 +12045,30 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 		return false;
 	}
 	AE_ASSERT( varData );
+	return Set( varData, value );
+}
 
+template < typename T >
+bool ae::Var::Set( void* varData, const T& value ) const
+{
+	ae::Object* valueObj = nullptr;
+	if ( m_type == BasicType::Pointer || m_type == BasicType::CustomRef )
+	{
+		valueObj = *(ae::Object**)&value;
+		const ae::Type* refType = GetSubType();
+		const ae::Type* valueType = ae::GetTypeFromObject( valueObj );
+		AE_ASSERT( valueType );
+		AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
+	}
+
+	// @TODO: Could be cleaned by having own VarAdapterType
 	if ( m_type == BasicType::CustomRef )
 	{
 		return m_varType->SetRef( varData, valueObj );
 	}
 	else
 	{
-		*varData = value;
+		*reinterpret_cast< T* >( varData ) = value;
 	}
 	return true;
 }
@@ -12081,6 +12108,10 @@ bool ae::Var::GetObjectValue( const ae::Object* _obj, T* valueOut, int32_t array
 				return false;
 			}
 		}
+		else if( GetAdapterType() )
+		{
+			AE_FAIL_MSG( "Use TryGetAdapter() function with ae::Var::GetValue() instead" );
+		}
 		else
 		{
 			varData = obj + m_offset;
@@ -12091,7 +12122,12 @@ bool ae::Var::GetObjectValue( const ae::Object* _obj, T* valueOut, int32_t array
 		return false;
 	}
 	AE_ASSERT( varData );
-	
+	return Get( varData, valueOut );
+}
+
+template < typename T >
+bool ae::Var::Get( const void* varData, T* valueOut ) const
+{
 	if ( m_type == BasicType::CustomRef )
 	{
 		AE_FAIL_MSG( "Getting the value of registered CustomRefs is currently not supported. Try GetObjectValueAsString()." );
@@ -12132,6 +12168,10 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 		{
 			return nullptr;
 		}
+	}
+	else if( GetAdapterType() )
+	{
+		AE_FAIL_MSG( "Use TryGetAdapter() instead" );
 	}
 	else if ( arrayIdx < 0 )
 	{
@@ -26145,7 +26185,11 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 		return false;
 	}
 	AE_ASSERT( varData );
-	
+	return SetFromString( varData, value );
+}
+
+bool ae::Var::SetFromString( void* varData, const char* value ) const
+{
 	switch ( m_type )
 	{
 		case BasicType::Class:
@@ -26407,6 +26451,14 @@ ae::VarAdapterType ae::Var::GetAdapterType() const
 {
 	return m_varType->GetAdapterType();
 }
+void* ae::Var::GetAdapterValue( ae::Object* obj ) const
+{
+	return (uint8_t*)obj + m_offset;
+}
+const void* ae::Var::GetAdapterValue( const ae::Object* obj ) const
+{
+	return (const uint8_t*)obj + m_offset;
+}
 
 void ae::Var::m_AddProp( const char* prop, const char* value )
 {
@@ -26633,7 +26685,12 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 		varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
 	}
 	AE_ASSERT( varData );
+	return GetAsString( varData );
 	
+}
+
+std::string ae::Var::GetAsString( const void* varData ) const
+{
 	switch ( m_type )
 	{
 		case BasicType::Class:
