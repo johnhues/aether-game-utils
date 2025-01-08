@@ -5208,14 +5208,14 @@ public:
 	template <> void ae::_DefineType< ::AE_GLUE_TYPE(__VA_ARGS__) >( ae::Type *type, uint32_t index ) { type->Init< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)), index ); }\
 	static ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
 	template <>\
-	struct ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::VarTypeBase {\
+	struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::VarType {\
 		ae::BasicType GetType() const override { return ae::BasicType::Class; }\
 		const char* GetName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 		uint32_t GetSize() const override { return sizeof(::AE_GLUE_TYPE(__VA_ARGS__)); }\
 		const char* GetSubTypeName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-		static ae::VarTypeBase* Get() { static ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
+		static ae::VarType* Get() { static ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
 	};\
-	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
+	template<> ae::VarType* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
 //! Register a class property
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
@@ -5244,11 +5244,11 @@ public:
 		__VA_ARGS__ \
 	}; \
 	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
+	struct ae::VarTypeT< E > : public ae::VarType { \
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(T); } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; }\
 	}; \
 	struct AE_ENUM_##E {\
 		AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ) : ec( name, def ) {}\
@@ -5274,11 +5274,11 @@ public:
 //! Register an already defined c-style enum type
 #define AE_REGISTER_ENUM( E ) \
 	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
+	struct ae::VarTypeT< E > : public ae::VarType { \
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; }\
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -5292,12 +5292,12 @@ public:
 //! Register an already defined c-style enum type where each value has a prefix
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) \
 	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
+	struct ae::VarTypeT< E > : public ae::VarType { \
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
 		const char* GetPrefix() const override { return #PREFIX; } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; }\
 	}; \
 	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -5320,11 +5320,11 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //! Register an already defined enum class type
 #define AE_REGISTER_ENUM_CLASS2( E ) \
 	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
+	struct ae::VarTypeT< E > : public ae::VarType { \
 		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
 		const char* GetName() const override { return #E; } \
 		uint32_t GetSize() const override { return sizeof(E); } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; }\
 	}; \
 	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
@@ -5362,7 +5362,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 class Type;
-struct VarTypeBase;
+struct VarType;
 const ae::TypeId kInvalidTypeId = 0;
 #ifndef AE_MAX_META_TYPES_CONFIG
 	#define AE_MAX_META_TYPES_CONFIG 128
@@ -5751,7 +5751,7 @@ public:
 	ae::Str32 m_typeName = "";
 	uint32_t m_offset = 0;
 	uint32_t m_size = 0;
-	const ae::VarTypeBase* m_varType = nullptr;
+	const ae::VarType* m_varType = nullptr;
 	ae::TypeId m_subTypeId = ae::kInvalidTypeId;
 	mutable const class Enum* m_enum = nullptr;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
@@ -11393,10 +11393,9 @@ struct _TypeName
 {
 	static const char* Get();
 };
-// @TODO: ae::VarAdapter?
-struct VarTypeBase
+struct VarType
 {
-	virtual ~VarTypeBase() {}
+	virtual ~VarType() {}
 	virtual BasicType GetType() const = 0; // All types
 	virtual VarAdapterType GetAdapterType() const { return kVarAdapterTypeNone; }; // All types
 	virtual const char* GetName() const = 0; // All types
@@ -11407,10 +11406,10 @@ struct VarTypeBase
 	virtual std::string GetStringFromRef( const void* ) const { return ""; } // Reference types
 	virtual const char* GetSubTypeName() const { return ""; } // Array and Reference types
 };
-template < typename T > VarTypeBase* GetVarType(); // Forward declaration for VarType< T >::Get()
-template < typename T > struct VarType // Proxy for real VarType< T > if definition is not available
+template < typename T > VarType* GetVarType(); // Forward declaration for VarTypeT< T >::Get()
+template < typename T > struct VarTypeT // Proxy for real VarTypeT< T > if definition is not available
 {
-	static ae::VarTypeBase* Get( uint32_t _i = 0 ) { return ae::GetVarType< T >(); } // Param with default value so real VarType< T >::Get() will be prioritized if available
+	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetVarType< T >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
 };
 
 template < typename Parent, typename This >
@@ -11488,7 +11487,7 @@ struct _VarCreator
 
 		m_var.m_owner = type;
 		m_var.m_name = varName;
-		m_var.m_varType = ae::VarType< V >::Get();
+		m_var.m_varType = ae::VarTypeT< V >::Get();
 		m_var.m_type = m_var.m_varType->GetType();
 		m_var.m_typeName = m_var.m_varType->GetName();
 		m_var.m_subTypeId = GetTypeIdFromName( m_var.m_varType->GetSubTypeName() );
@@ -11623,7 +11622,7 @@ public:
 		
 	_EnumCreator2( const char* valueName, T value )
 	{
-		const char* prefix = ae::VarType< T >::Get()->GetPrefix();
+		const char* prefix = ae::VarTypeT< T >::Get()->GetPrefix();
 		uint32_t prefixLen = (uint32_t)strlen( prefix );
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
@@ -11659,11 +11658,11 @@ public:
 //------------------------------------------------------------------------------
 #define _ae_DefineMetaVarType( t, s, e ) \
 template <> \
-struct ae::VarType< t > : public ae::VarTypeBase { \
+struct ae::VarTypeT< t > : public ae::VarType { \
 	ae::BasicType GetType() const override { return ae::BasicType::e; } \
 	const char* GetName() const override { return s; } \
 	uint32_t GetSize() const override { return sizeof(t); } \
-	static ae::VarTypeBase* Get() { static ae::VarType< t > s_type; return &s_type; }\
+	static ae::VarType* Get() { static ae::VarTypeT< t > s_type; return &s_type; }\
 };
 
 // @TODO: Should these names be the actual type or enum? eg. int32_t has multiple aliases
@@ -11693,23 +11692,23 @@ _ae_DefineMetaVarType( ae::Str256, "String", String );
 _ae_DefineMetaVarType( ae::Str512, "String", String );
 
 template < typename T >
-struct ae::VarType< T* > : public ae::VarTypeBase
+struct ae::VarTypeT< T* > : public ae::VarType
 {
 	ae::BasicType GetType() const override
 	{
 		static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR pointers must have base type ae::Object" );
-		return ae::BasicType::Pointer; // @TODO: Remove this and allow pointers to all ae::VarTypeBase types?
+		return ae::BasicType::Pointer; // @TODO: Remove this and allow pointers to all ae::VarType types?
 	}
 	ae::VarAdapterType GetAdapterType() const override { return kVarAdapterTypeNone; } // @TODO: Pointer?
 	const char* GetName() const override { return "Ref"; }
 	uint32_t GetSize() const override { return sizeof(T*); }
 	const char* GetSubTypeName() const override { return ae::GetTypeName< T >(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< T* > s_type; return &s_type; }
+	static ae::VarType* Get() { static ae::VarTypeT< T* > s_type; return &s_type; }
 };
 
 namespace ae {
 
-class VarTypeArray : public ae::VarTypeBase
+class VarTypeArray : public ae::VarType
 {
 public:
 	ae::VarAdapterType GetAdapterType() const override { return ae::GetTypeId< decltype(this) >(); }
@@ -11768,7 +11767,7 @@ public:
 	uint32_t IsFixedLength() const override { return true; }
 };
 
-class VarTypeOptional : public ae::VarTypeBase
+class VarTypeOptional : public ae::VarType
 {
 public:
 	ae::VarAdapterType GetAdapterType() const override { return ae::GetTypeId< decltype(this) >(); }
@@ -11779,33 +11778,33 @@ public:
 } // ae end
 
 template < typename T, uint32_t N >
-struct ae::VarType< ae::Array< T, N > > : public ae::VarTypeDynamicArray< T, N >
+struct ae::VarTypeT< ae::Array< T, N > > : public ae::VarTypeDynamicArray< T, N >
 {
 	uint32_t GetSize() const override { return sizeof(T); }
 	// Use sub-type
-	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override{ return ae::VarType< T >::Get()->SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< ae::Array< T, N > > s_type; return &s_type; }
+	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarTypeT< T >::Get()->GetPrefix(); }
+	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarTypeT< T >::Get()->SetRef( varData, value, var ); }
+	bool SetRef( void* varData, ae::Object* value ) const override{ return ae::VarTypeT< T >::Get()->SetRef( varData, value ); }
+	std::string GetStringFromRef( const void* ref ) const override { return ae::VarTypeT< T >::Get()->GetStringFromRef( ref ); }
+	const char* GetSubTypeName() const override { return ae::VarTypeT< T >::Get()->GetSubTypeName(); }
+	static ae::VarType* Get() { static ae::VarTypeT< ae::Array< T, N > > s_type; return &s_type; }
 };
 
 template < typename T, uint32_t N >
-struct ae::VarType< T[ N ] > : public ae::VarTypeStaticArray< T, N >
+struct ae::VarTypeT< T[ N ] > : public ae::VarTypeStaticArray< T, N >
 {
 	uint32_t GetSize() const override { return sizeof(T); }
 	// Use sub-type
-	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override { return ae::VarType< T >::Get()->SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< T[ N ] > s_type; return &s_type; }
+	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarTypeT< T >::Get()->GetPrefix(); }
+	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarTypeT< T >::Get()->SetRef( varData, value, var ); }
+	bool SetRef( void* varData, ae::Object* value ) const override { return ae::VarTypeT< T >::Get()->SetRef( varData, value ); }
+	std::string GetStringFromRef( const void* ref ) const override { return ae::VarTypeT< T >::Get()->GetStringFromRef( ref ); }
+	const char* GetSubTypeName() const override { return ae::VarTypeT< T >::Get()->GetSubTypeName(); }
+	static ae::VarType* Get() { static ae::VarTypeT< T[ N ] > s_type; return &s_type; }
 };
 
 template < typename T >
@@ -12184,7 +12183,7 @@ template < typename T >
 const T* ae::Var::TryGetAdapter() const
 {
 	using U = typename ae::StripType< T >::T;
-	static_assert( std::is_base_of< ae::VarTypeBase, U >::value, "T must be inherit from ae::VarTypeBase" );
+	static_assert( std::is_base_of< ae::VarType, U >::value, "T must be inherit from ae::VarType" );
 	const bool isAdapterT = ( GetAdapterType() == ae::GetTypeId< U >() );
 	return isAdapterT ? static_cast< const U* >( m_varType ) : nullptr;
 }

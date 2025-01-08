@@ -106,24 +106,24 @@ public:
 };
 
 template < typename T >
-class ae::VarType< ae::Optional< T > > : public ae::VarTypeOptional
+class ae::VarTypeT< ae::Optional< T > > : public ae::VarTypeOptional
 {
 public:
 	uint32_t GetSize() const override { return sizeof(T); }
-	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
+	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarTypeT< T >::Get()->GetPrefix(); }
 	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { AE_FAIL(); return false; }
 	bool SetRef( void* varData, ae::Object* value ) const override{ AE_FAIL(); return false; }
 	std::string GetStringFromRef( const void* ref ) const override { AE_FAIL(); return ""; }
-	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< ae::Optional< T > > s_type; return &s_type; }
+	const char* GetSubTypeName() const override { return ae::VarTypeT< T >::Get()->GetSubTypeName(); }
+	static ae::VarType* Get() { static ae::VarTypeT< ae::Optional< T > > s_type; return &s_type; }
 
 	void* TryGetValue( void* opt ) const override { return static_cast< ae::Optional< T >* >( opt )->TryGet(); }
 	const void* TryGetValue( const void* opt ) const override { return static_cast< const ae::Optional< T >* >( opt )->TryGet(); }
 };
 
-class StdOptionalAdapter : public ae::VarTypeBase
+class StdOptionalAdapter : public ae::VarType
 {
 public:
 	ae::VarAdapterType GetAdapterType() const override { return ae::GetTypeId< decltype(this) >(); }
@@ -133,15 +133,15 @@ public:
 };
 
 template < typename T >
-class ae::VarType< std::optional< T > > : public StdOptionalAdapter
+class ae::VarTypeT< std::optional< T > > : public StdOptionalAdapter
 {
 public:
 	uint32_t GetSize() const override { return sizeof(T); }
-	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
-	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< std::optional< T > > s_type; return &s_type; }
+	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
+	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }
+	const char* GetPrefix() const override { return ae::VarTypeT< T >::Get()->GetPrefix(); }
+	const char* GetSubTypeName() const override { return ae::VarTypeT< T >::Get()->GetSubTypeName(); }
+	static ae::VarType* Get() { static ae::VarTypeT< std::optional< T > > s_type; return &s_type; }
 
 	void* TryGetValue( void* _opt ) const override
 	{
