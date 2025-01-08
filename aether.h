@@ -11391,6 +11391,7 @@ template < typename T > ae::TypeId GetTypeId()
 template < typename T >
 struct _TypeName
 {
+	// @TODO: Can this be replaced by ae::GetTypeName< T >()?
 	static const char* Get();
 };
 struct VarType
@@ -11401,6 +11402,7 @@ struct VarType
 	virtual const char* GetName() const = 0; // All types
 	virtual uint32_t GetSize() const = 0; // All types
 	virtual const char* GetPrefix() const { return ""; } // Enum types
+	// @TODO: Reference types should be handled like array and map adapters
 	virtual bool SetRef( void* varData, const char* value, const ae::Var* var ) const { return false; } // Reference types
 	virtual bool SetRef( void* varData, ae::Object* value ) const { return false; } // Reference types
 	virtual std::string GetStringFromRef( const void* ) const { return ""; } // Reference types
@@ -11656,13 +11658,13 @@ public:
 //------------------------------------------------------------------------------
 // Internal meta var registration
 //------------------------------------------------------------------------------
-#define _ae_DefineMetaVarType( t, s, e ) \
+#define _ae_DefineMetaVarType( T, s, e ) \
 template <> \
-struct ae::VarTypeT< t > : public ae::VarType { \
+struct ae::VarTypeT< T > : public ae::VarType { \
 	ae::BasicType GetType() const override { return ae::BasicType::e; } \
 	const char* GetName() const override { return s; } \
-	uint32_t GetSize() const override { return sizeof(t); } \
-	static ae::VarType* Get() { static ae::VarTypeT< t > s_type; return &s_type; }\
+	uint32_t GetSize() const override { return sizeof(T); } \
+	static ae::VarType* Get() { static ae::VarTypeT< T > s_type; return &s_type; }\
 };
 
 // @TODO: Should these names be the actual type or enum? eg. int32_t has multiple aliases
