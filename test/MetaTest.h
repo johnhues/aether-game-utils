@@ -109,6 +109,7 @@ template < typename T >
 class ae::VarTypeT< ae::Optional< T > > : public ae::VarTypeOptional
 {
 public:
+	const ae::VarType* GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
 	uint32_t GetSize() const override { return sizeof(T); }
 	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
 	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }
@@ -136,6 +137,7 @@ template < typename T >
 class ae::VarTypeT< std::optional< T > > : public StdOptionalAdapter
 {
 public:
+	const ae::VarType* GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
 	uint32_t GetSize() const override { return sizeof(T); }
 	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
 	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }

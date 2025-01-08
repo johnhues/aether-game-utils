@@ -11397,6 +11397,7 @@ struct _TypeName
 struct VarType
 {
 	virtual ~VarType() {}
+	virtual const ae::VarType* GetInnerVarType() const { return nullptr; }
 	virtual BasicType GetType() const = 0; // All types
 	virtual VarAdapterType GetAdapterType() const { return kVarAdapterTypeNone; }; // All types
 	virtual const char* GetName() const = 0; // All types
@@ -11696,6 +11697,7 @@ _ae_DefineMetaVarType( ae::Str512, "String", String );
 template < typename T >
 struct ae::VarTypeT< T* > : public ae::VarType
 {
+	const ae::VarType* GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
 	ae::BasicType GetType() const override
 	{
 		static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR pointers must have base type ae::Object" );
@@ -11782,6 +11784,7 @@ public:
 template < typename T, uint32_t N >
 struct ae::VarTypeT< ae::Array< T, N > > : public ae::VarTypeDynamicArray< T, N >
 {
+	const ae::VarType* GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
 	uint32_t GetSize() const override { return sizeof(T); }
 	// Use sub-type
 	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
@@ -11797,6 +11800,7 @@ struct ae::VarTypeT< ae::Array< T, N > > : public ae::VarTypeDynamicArray< T, N 
 template < typename T, uint32_t N >
 struct ae::VarTypeT< T[ N ] > : public ae::VarTypeStaticArray< T, N >
 {
+	const ae::VarType* GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
 	uint32_t GetSize() const override { return sizeof(T); }
 	// Use sub-type
 	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
