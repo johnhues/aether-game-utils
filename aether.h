@@ -10183,7 +10183,7 @@ template < typename T, uint32_t N, bool Paged >
 template< typename T2 >
 typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::Iterator< T2 >::begin()
 {
-	return m_pool ? const_cast< ObjectPool* >( m_pool )->Iterate() : Iterator< T2 >();
+	return m_pool ? const_cast< ObjectPool* >( m_pool )->begin() : Iterator< T2 >();
 }
 
 template < typename T, uint32_t N, bool Paged >
