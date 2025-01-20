@@ -26594,6 +26594,7 @@ ae::ConstVarData ae::Var::GetVarData( const ae::Object* obj ) const
 
 void ae::Var::m_AddProp( const char* prop, const char* value )
 {
+	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
 	auto* props = m_props.TryGet( prop );
 	if ( !props )
 	{
