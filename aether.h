@@ -5610,6 +5610,7 @@ class VarData
 {
 public:
 	VarData() = default;
+	template< typename T > VarData( T* data );
 	VarData( const ae::VarType* caller, void* data );
 	VarData( const ae::Var* caller, void* data );
 	void* Get( const ae::VarType* caller ) const;
@@ -11949,8 +11950,8 @@ template < typename T, uint32_t N >
 class DynamicArrayVarType : public ae::ArrayVarType
 {
 public:
-	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { this, ( array && idx >= 0 ) ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
-	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { this, ( array && idx >= 0 ) ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { this, array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { this, array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
 	uint32_t Resize( ae::VarData array, uint32_t length ) const override
 	{
 		if( !array )
@@ -11986,8 +11987,8 @@ template < typename T, uint32_t N >
 class StaticArrayVarType : public ae::ArrayVarType
 {
 public:
-	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { this, ( array && idx >= 0 ) ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
-	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { this, ( array && idx >= 0 ) ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
+	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { this, array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
+	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { this, array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
 	uint32_t Resize( ae::VarData a, uint32_t length ) const override { return N; }
 	uint32_t GetLength( ae::ConstVarData a ) const override { return N; }
 	uint32_t GetMaxLength() const override { return N; }
@@ -12079,6 +12080,18 @@ template < typename T >
 bool ae::Enum::HasValue( T value ) const
 {
 	return m_enumValueToName.TryGet( value );
+}
+
+//------------------------------------------------------------------------------
+// ae::VarData templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+ae::VarData::VarData( T* data )
+{
+	m_data = data;
+	const ae::VarType* t = ae::VarTypeT< T >::Get();
+	AE_ASSERT( t );
+	m_typeCheck = t->GetVarTypeId();
 }
 
 //------------------------------------------------------------------------------
@@ -12347,7 +12360,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 		{
 			return enumVarType->SetVarData( varData, value );
 		}
-		else if constexpr( std::is_pointer_v< T > )
+		else if constexpr( std::is_pointer_v< T > || std::is_null_pointer_v< T > )
 		{
 			const ae::PointerVarType* pointerVarType = varType->AsVarType< ae::PointerVarType >();
 			return pointerVarType ? pointerVarType->SetRef( varData, (ae::Object*)value ) : false;
