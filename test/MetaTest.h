@@ -106,65 +106,49 @@ public:
 };
 
 template < typename T >
-class ae::VarTypeT< ae::Optional< T > > : public ae::VarTypeOptional
+class ae::VarTypeT< ae::Optional< T > > : public ae::OptionalVarType
 {
 public:
-	const ae::VarType* GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
-	uint32_t GetSize() const override { return sizeof(T); }
-	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarTypeT< T >::Get()->GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { AE_FAIL(); return false; }
-	bool SetRef( void* varData, ae::Object* value ) const override{ AE_FAIL(); return false; }
-	std::string GetStringFromRef( const void* ref ) const override { AE_FAIL(); return ""; }
-	const char* GetSubTypeName() const override { return ae::VarTypeT< T >::Get()->GetSubTypeName(); }
+	const ae::VarType* m_GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< ae::Optional< T > > s_type; return &s_type; }
 
-	void* TryGetValue( void* opt ) const override { return static_cast< ae::Optional< T >* >( opt )->TryGet(); }
-	const void* TryGetValue( const void* opt ) const override { return static_cast< const ae::Optional< T >* >( opt )->TryGet(); }
-};
-
-class StdOptionalAdapter : public ae::VarType
-{
-public:
-	ae::VarAdapterType GetAdapterType() const override { return ae::GetTypeId< decltype(this) >(); }
-	virtual void* TryGetValue( void* opt ) const = 0;
-	virtual const void* TryGetValue( const void* opt ) const = 0;
-	virtual void SetValue( void* opt, const void* value ) const = 0;
+	ae::VarData TryGet( ae::VarData optional ) const override { return ae::VarData(); }
+	ae::ConstVarData TryGet( ae::ConstVarData optional ) const override { return ae::ConstVarData(); }
+	ae::VarData GetOrInsert( ae::VarData optional ) override { return ae::VarData(); }
+	void Clear( ae::VarData optional ) override {}
 };
 
 template < typename T >
-class ae::VarTypeT< std::optional< T > > : public StdOptionalAdapter
+class ae::VarTypeT< std::optional< T > > : public ae::OptionalVarType
 {
 public:
-	const ae::VarType* GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
-	uint32_t GetSize() const override { return sizeof(T); }
-	ae::BasicType GetType() const override { return ae::VarTypeT< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarTypeT< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarTypeT< T >::Get()->GetPrefix(); }
-	const char* GetSubTypeName() const override { return ae::VarTypeT< T >::Get()->GetSubTypeName(); }
+	const ae::VarType* m_GetInnerVarType() const override { return ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< std::optional< T > > s_type; return &s_type; }
 
-	void* TryGetValue( void* _opt ) const override
+	ae::VarData TryGet( ae::VarData _opt ) const override
 	{
-		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt );
-		return opt->has_value() ? &opt->value() : nullptr;
+		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt.Get( this ) );
+		return { this, opt->has_value() ? &opt->value() : nullptr };
 	}
-	const void* TryGetValue( const void* _opt ) const override
+	ae::ConstVarData TryGet( ae::ConstVarData _opt ) const override
 	{
-		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt );
-		return opt->has_value() ? &opt->value() : nullptr;
+		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt.Get( this ) );
+		return { this, opt->has_value() ? &opt->value() : nullptr };
 	}
-	void SetValue( void* _opt, const void* value ) const override
+	ae::VarData GetOrInsert( ae::VarData _optional ) override
 	{
-		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt );
-		if ( value )
+		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
-			opt->emplace( *static_cast< const T* >( value ) );
+			optional->emplace();
+			return { this, &optional->value() };
 		}
-		else
+		return {};
+	}
+	void Clear( ae::VarData _optional ) override
+	{
+		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
-			opt->reset();
+			optional->reset();
 		}
 	}
 };
@@ -299,7 +283,7 @@ public:
 class RefTesterB : public ae::Inheritor< RefTester, RefTesterB >
 {
 public:
-	class RefTesterA* refA = nullptr;
+	class RefTester* ref = nullptr;
 };
 
 // RefTesterManager

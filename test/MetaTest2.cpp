@@ -130,4 +130,4 @@ AE_REGISTER_CLASS_VAR( RefTesterA, refA );
 AE_REGISTER_CLASS_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered after this, but it has to still work
 
 AE_REGISTER_CLASS( RefTesterB );
-AE_REGISTER_CLASS_VAR( RefTesterB, refA );
+AE_REGISTER_CLASS_VAR( RefTesterB, ref );
