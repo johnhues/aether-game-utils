@@ -8548,9 +8548,8 @@ T* Array< T, N >::InsertArray( uint32_t index, const T* values, uint32_t count )
 template < typename T, uint32_t N >
 void Array< T, N >::Remove( uint32_t index, uint32_t count )
 {
-	AE_DEBUG_ASSERT( index < m_length );
+	AE_DEBUG_ASSERT( index <= m_length );
 	AE_DEBUG_ASSERT( index + count <= m_length );
-
 	m_length -= count;
 	for ( uint32_t i = index; i < m_length; i++ )
 	{
@@ -10202,7 +10201,7 @@ template < typename T, uint32_t N, bool Paged >
 template< typename T2 >
 typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Paged >::Iterator< T2 >::begin()
 {
-	return m_pool ? const_cast< ObjectPool* >( m_pool )->Iterate() : Iterator< T2 >();
+	return m_pool ? const_cast< ObjectPool* >( m_pool )->begin() : Iterator< T2 >();
 }
 
 template < typename T, uint32_t N, bool Paged >
@@ -12288,8 +12287,12 @@ T* ae::Cast( C* obj )
 		@import OpenAL;
 		@import GameController;
 	#else
+		#if _AE_IOS_
+		#import <Foundation/Foundation.h>
+		#else
 		#include <Cocoa/Cocoa.h>
 		#include <Carbon/Carbon.h>
+		#endif
 		#include <GameController/GameController.h>
 	#endif
 	#ifndef AE_USE_OPENAL
@@ -15358,6 +15361,9 @@ void HotLoader::Initialize( const char* buildCmd, const char* postBuildCmd, cons
 void HotLoader::Reload()
 {
 	bool reload = true;
+#if _AE_IOS_
+	reload = false;
+#else
 	if ( m_buildCmd.Length() )
 	{
 		AE_INFO( m_buildCmd.c_str() );
@@ -15368,6 +15374,7 @@ void HotLoader::Reload()
 		AE_INFO( m_postBuildCmd.c_str() );
 		reload = reload && ( system( m_postBuildCmd.c_str() ) == 0 );
 	}
+#endif
 
 	if ( reload )
 	{
@@ -17241,7 +17248,11 @@ void Input::Pump()
 			const GCController* appleController = GetAppleControllerFn( gp.playerIndex );
 			const GCExtendedGamepad* appleGamepad = appleController ? [appleController extendedGamepad] : nullptr;
 			gp.connected = (bool)appleGamepad;
-			if ( gp.connected && ( !m_gamepadRequiresFocus || [(NSWindow*)m_window->window isMainWindow] ) )
+			if ( gp.connected && ( !m_gamepadRequiresFocus 
+				#if !_AE_IOS_
+					 || [(NSWindow*)m_window->window isMainWindow] 
+			 	#endif
+			 ) )
 			{
 				auto leftAnalog = [appleGamepad leftThumbstick];
 				auto rightAnalog = [appleGamepad rightThumbstick];
@@ -17357,7 +17368,7 @@ void Input::SetMouseCaptured( bool enable )
 			m_capturedMousePos = m_mousePosSet ? mouse.position : ae::Int2( INT_MAX );
 #if _AE_WINDOWS_
 			ShowCursor( FALSE );
-#elif _AE_APPLE_
+#elif _AE_OSX_
 			CGDisplayHideCursor( kCGDirectMainDisplay );
 #elif _AE_EMSCRIPTEN_
 			emscripten_request_pointerlock( "canvas", true );
@@ -17373,7 +17384,7 @@ void Input::SetMouseCaptured( bool enable )
 			}
 #if _AE_WINDOWS_
 			ShowCursor( TRUE );
-#elif _AE_APPLE_
+#elif _AE_OSX_
 			CGDisplayShowCursor( kCGDirectMainDisplay );
 #elif _AE_EMSCRIPTEN_
 			emscripten_exit_pointerlock();
@@ -17391,7 +17402,7 @@ void Input::SetTextMode( bool enabled )
 	if ( m_textMode != enabled )
 	{
 		m_textMode = enabled;
-#if _AE_APPLE_
+#if _AE_OSX_
 		NSWindow* nsWindow = (NSWindow*)m_window->window;
 		if ( m_textMode )
 		{
@@ -18796,7 +18807,7 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 	return "";
 }
 
-#elif _AE_APPLE_
+#elif _AE_OSX_
 
 //------------------------------------------------------------------------------
 // OpenDialog not implemented
@@ -19914,7 +19925,7 @@ void ( *glDrawArraysInstanced )( GLenum mode, GLint first, GLsizei count, GLsize
 void ( *glDebugMessageCallback ) ( GLDEBUGPROC callback, const void* userParam ) = nullptr;
 #endif
 
-#if _AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_ || _AE_IOS_
 #define glClearDepth glClearDepthf
 #endif
 
@@ -20899,7 +20910,7 @@ void VertexBuffer::Bind( const Shader* shader, const UniformList& uniforms, cons
 		AE_CHECK_GL_ERROR();
 	}
 
-	#if !_AE_EMSCRIPTEN_
+	#if !_AE_EMSCRIPTEN_ && !_AE_IOS_
 	if ( m_primitive == Vertex::Primitive::Point )
 	{
 		glEnable( GL_VERTEX_PROGRAM_POINT_SIZE );
@@ -21470,7 +21481,7 @@ void Texture2D::Initialize( const TextureParams& params )
 {
 	Texture::Initialize( GL_TEXTURE_2D );
 
-#if _AE_EMSCRIPTEN_
+#if _AE_EMSCRIPTEN_ || _AE_IOS_
 	const auto GL_BGR = GL_RGB;
 	const auto GL_BGRA = GL_RGBA;
 #endif
@@ -22025,7 +22036,7 @@ void GraphicsDevice::Initialize( class Window* window )
 		AE_FAIL_MSG( "Failed to make OpenGL Rendering Context current" );
 	}
 	m_context = hglrc;
-#elif _AE_APPLE_
+#elif _AE_OSX_ 
 	m_context = ((NSOpenGLView*)((NSWindow*)window->window).contentView).openGLContext;
 #elif _AE_EMSCRIPTEN_
 	EmscriptenWebGLContextAttributes attrs;
@@ -22293,7 +22304,7 @@ void GraphicsDevice::Present()
 	AE_CHECK_GL_ERROR();
 
 	// Swap Buffers
-#if _AE_APPLE_
+#if _AE_OSX_
 	[(NSOpenGLContext*)m_context flushBuffer];
 #elif _AE_WINDOWS_
 	AE_ASSERT( m_window );

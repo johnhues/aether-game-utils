@@ -31,6 +31,8 @@ AlwaysBreakTemplateDeclarations: true
 AlignEscapedNewlines: DontAlign
 FixNamespaceComments: false
 Cpp11BracedListStyle: false
+AllowShortCaseLabelsOnASingleLine: true
+BreakTemplateDeclarations: Leave
 
 ## DEFAULT LLVM VALUES
 # AccessModifierOffset: -2
