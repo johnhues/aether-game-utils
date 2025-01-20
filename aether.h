@@ -5592,7 +5592,9 @@ enum class BasicType
 	Vec4,
 	// @TODO: Quaternion
 	Matrix4,
-	Color
+	Color,
+	Enum, // @TODO: Remove
+	Pointer, // @TODO: Remove
 };
 
 //------------------------------------------------------------------------------
@@ -5896,6 +5898,7 @@ public:
 	//------------------------------------------------------------------------------
 	// @TODO: Remove, use GetOuterVarType() interface instead
 	//------------------------------------------------------------------------------
+	ae::BasicType GetType() const;
 	const class Enum* GetEnum() const;
 	//! For Class, Ref, and Array types
 	const ae::Type* GetSubType() const;
@@ -11562,7 +11565,8 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 template < typename T > ae::VarType* GetVarType(); // Forward declaration for VarTypeT< T >::Get()
 template < typename T > struct VarTypeT // Proxy for real VarTypeT< T > if definition is not available
 {
-	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetVarType< T >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
+	// @TODO: Use const instead of discarding it
+	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetVarType< std::remove_const_t< T > >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
 };
 
 template < typename T > ae::TypeId GetTypeId()
@@ -12089,7 +12093,14 @@ const T* ae::VarType::AsVarType() const
 template< typename T >
 bool ae::VarType::IsVarType() const
 {
-	return GetVarTypeId() == ae::GetTypeId< T >();
+	if constexpr( std::is_same_v< T, ae::VarType > )
+	{
+		return true;
+	}
+	else
+	{
+		return GetVarTypeId() == ae::GetTypeId< T >();
+	}
 }
 
 template< typename T >
@@ -12336,9 +12347,10 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 		{
 			return enumVarType->SetVarData( varData, value );
 		}
-		else if( const ae::PointerVarType* pointerVarType = varType->AsVarType< ae::PointerVarType >() )
+		else if constexpr( std::is_pointer_v< T > )
 		{
-			return pointerVarType->SetRef( varData, value );
+			const ae::PointerVarType* pointerVarType = varType->AsVarType< ae::PointerVarType >();
+			return pointerVarType ? pointerVarType->SetRef( varData, (ae::Object*)value ) : false;
 		}
 	}
 	return false;
@@ -26658,6 +26670,25 @@ bool ae::Type::IsType( const Type* otherType ) const
 }
 
 // @TODO: Remove
+ae::BasicType ae::Var::GetType() const
+{
+	if( const ae::BasicVarType* basicType = m_HACK_FindInnerVarType< ae::BasicVarType >() )
+	{
+		return basicType->GetType();
+	}
+	else if( m_HACK_FindInnerVarType< ae::EnumVarType >() )
+	{
+		return ae::BasicType::Enum;
+	}
+	else if( m_HACK_FindInnerVarType< ae::PointerVarType >() )
+	{
+		return ae::BasicType::Pointer;
+	}
+	AE_FAIL();
+	return ae::BasicType::Int32;
+}
+
+// @TODO: Remove
 const class ae::Enum* ae::Var::GetEnum() const
 {
 	const ae::EnumVarType* enumType = m_HACK_FindInnerVarType< ae::EnumVarType >();
@@ -26805,6 +26836,8 @@ std::string ae::BasicVarType::GetVarDataAsString( ae::ConstVarData _varData ) co
 		case BasicType::Vec4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
+		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
+		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
 	}
 	return "";
 }
@@ -26974,6 +27007,8 @@ bool ae::BasicVarType::SetVarDataFromString( ae::VarData _varData, const char* v
 			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
 			return true;
 		}
+		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
+		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
 	}
 }
 
