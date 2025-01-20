@@ -52,6 +52,15 @@
 #define AE_AETHER_H
 
 //------------------------------------------------------------------------------
+// Debug build define
+//------------------------------------------------------------------------------
+#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) ) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
+	#define _AE_DEBUG_ 1
+#else
+	#define _AE_DEBUG_ 0
+#endif
+
+//------------------------------------------------------------------------------
 // AE_CONFIG_FILE define
 //------------------------------------------------------------------------------
 //! The path to a user defined configuration header file, something like
@@ -91,7 +100,7 @@
 //! all files that include aether.h (using AE_CONFIG_FILE is one way to do
 //! this).
 #ifndef AE_ENABLE_SOURCE_INFO
-	#define AE_ENABLE_SOURCE_INFO 0
+	#define AE_ENABLE_SOURCE_INFO _AE_DEBUG_
 #endif
 
 //------------------------------------------------------------------------------
@@ -127,12 +136,6 @@
 	#define _AE_LINUX_ 1
 #else
 	#error "Platform not supported"
-#endif
-
-#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) ) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
-	#define _AE_DEBUG_ 1
-#else
-	#define _AE_DEBUG_ 0
 #endif
 
 //------------------------------------------------------------------------------
