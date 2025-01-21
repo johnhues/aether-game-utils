@@ -5593,8 +5593,11 @@ enum class BasicType
 	// @TODO: Quaternion
 	Matrix4,
 	Color,
+
+	Class, // @TODO: Remove
 	Enum, // @TODO: Remove
 	Pointer, // @TODO: Remove
+	CustomRef, // @TODO: Remove
 };
 
 //------------------------------------------------------------------------------
@@ -5732,9 +5735,12 @@ class PointerVarType : public ae::VarType
 {
 public:
 	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
-	virtual bool SetRef( ae::VarData varData, ae::Object* value ) const;
-	virtual bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const;
-	virtual std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const;
+	virtual bool SetRef( ae::VarData varData, ae::Object* value ) const = 0;
+	virtual bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
+	virtual std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const = 0;
+
+	// @HACK: Remove
+	virtual ae::BasicType GetBasicType() const { return ae::BasicType::Pointer; }
 };
 
 //------------------------------------------------------------------------------
@@ -5901,6 +5907,7 @@ public:
 	//------------------------------------------------------------------------------
 	ae::BasicType GetType() const;
 	const class Enum* GetEnum() const;
+	const char* GetTypeName() const;
 	//! For Class, Ref, and Array types
 	const ae::Type* GetSubType() const;
 	bool IsArray() const;
@@ -26694,12 +26701,64 @@ ae::BasicType ae::Var::GetType() const
 	{
 		return ae::BasicType::Enum;
 	}
-	else if( m_HACK_FindInnerVarType< ae::PointerVarType >() )
+	else if( const ae::PointerVarType* pointerType = m_HACK_FindInnerVarType< ae::PointerVarType >() )
 	{
-		return ae::BasicType::Pointer;
+		return pointerType->GetBasicType();
+	}
+	else if( m_HACK_FindInnerVarType< ae::ClassVarType >() )
+	{
+		return ae::BasicType::Class;
 	}
 	AE_FAIL();
 	return ae::BasicType::Int32;
+}
+
+const char* ae::Var::GetTypeName() const
+{
+	if( const ae::BasicVarType* basicType = m_HACK_FindInnerVarType< ae::BasicVarType >() )
+	{
+		switch( basicType->GetType() )
+		{
+			case ae::BasicType::UInt8: return "uint8_t";
+			case ae::BasicType::UInt16: return "uint16_t";
+			case ae::BasicType::UInt32: return "uint32_t";
+			case ae::BasicType::UInt64: return "uint64_t";
+			case ae::BasicType::Int8: return "int8_t";
+			case ae::BasicType::Int16: return "int16_t";
+			case ae::BasicType::Int32: return "int32_t";
+			case ae::BasicType::Int64: return "int64_t";
+			case ae::BasicType::Int2: return "ae::Int2";
+			case ae::BasicType::Int3: return "ae::Int3";
+			case ae::BasicType::Bool: return "bool";
+			case ae::BasicType::Float: return "float";
+			case ae::BasicType::Double: return "double";
+			case ae::BasicType::Vec2: return "ae::Vec2";
+			case ae::BasicType::Vec3: return "ae::Vec3";
+			case ae::BasicType::Vec4: return "ae::Vec4";
+			case ae::BasicType::Color: return "ae::Color";
+			case ae::BasicType::Matrix4: return "ae::Matrix4";
+			case ae::BasicType::String: return "String";
+			case ae::BasicType::Class:
+			{
+				const ae::Type* type = GetSubType();
+				AE_ASSERT( type );
+				return type->GetName();
+			}
+			case ae::BasicType::Enum:
+			{
+				const ae::Enum* enumType = GetEnum();
+				AE_ASSERT( enumType );
+				return enumType->GetName();
+			}
+			case ae::BasicType::Pointer:
+			case ae::BasicType::CustomRef:
+			{
+				return "ref";
+			}
+		}
+	}
+	AE_FAIL();
+	return "";
 }
 
 // @TODO: Remove
@@ -26850,8 +26909,10 @@ std::string ae::BasicVarType::GetVarDataAsString( ae::ConstVarData _varData ) co
 		case BasicType::Vec4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
+		case BasicType::Class: AE_FAIL(); // @TODO: Remove
 		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
 		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
+		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
 	}
 	return "";
 }
@@ -27021,8 +27082,10 @@ bool ae::BasicVarType::SetVarDataFromString( ae::VarData _varData, const char* v
 			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
 			return true;
 		}
+		case BasicType::Class: AE_FAIL(); // @TODO: Remove
 		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
 		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
+		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
 	}
 }
 
