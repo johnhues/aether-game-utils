@@ -5614,36 +5614,47 @@ class VarData
 public:
 	VarData() = default;
 	template< typename T > VarData( T* data );
-	VarData( const ae::VarType* caller, void* data );
-	VarData( const ae::Var* caller, void* data );
-	void* Get( const ae::VarType* caller ) const;
+	VarData( const ae::VarType* varType, void* data );
+	VarData( const ae::Var* var, ae::Object* object );
+
+	const ae::VarType* GetType() const { return m_varType; }
+	//! Returns data pointer, optionally provide the type of the caller to
+	//! perform a type check.
+	void* Get( const ae::VarType* caller = nullptr ) const;
+	
 	explicit operator bool() const { return m_data != nullptr; }
+	bool operator == ( const ae::VarData& other ) const;
+	bool operator != ( const ae::VarData& other ) const;
 
 private:
 	friend class ConstVarData;
-	friend class Var; // @HACK: Remove with Var::GetPointer()
-	ae::VarTypeId m_typeCheck = kVarTypeIdNone;
+	const ae::VarType* m_varType = nullptr;
 	void* m_data = nullptr;
 };
 
 //------------------------------------------------------------------------------
 // ae::ConstVarData
-// @TODO: Try to merge this class into VarType (add void* to VarType)
 //------------------------------------------------------------------------------
 class ConstVarData
 {
 public:
 	ConstVarData() = default;
-	template< typename T > ConstVarData( const T* data );
-	ConstVarData( const ae::VarType* caller, const void* data );
-	ConstVarData( const ae::Var* caller, const void* data );
 	ConstVarData( VarData varData );
-	const void* Get( const ae::VarType* caller ) const;
+	template< typename T > ConstVarData( const T* data );
+	ConstVarData( const ae::VarType* varType, const void* data );
+	ConstVarData( const ae::Var* var, const ae::Object* object );
+	
+	const ae::VarType* GetType() const { return m_varType; }
+	//! Returns data pointer, optionally provide the type of the caller to
+	//! perform a type check.
+	const void* Get( const ae::VarType* caller = nullptr ) const;
+
 	explicit operator bool() const { return m_data != nullptr; }
+	bool operator == ( const ae::ConstVarData& other ) const;
+	bool operator != ( const ae::ConstVarData& other ) const;
 
 private:
-	friend class Var; // @HACK: Remove with Var::GetPointer()
-	ae::VarTypeId m_typeCheck = kVarTypeIdNone;
+	const ae::VarType* m_varType = nullptr;
 	const void* m_data = nullptr;
 };
 
@@ -5764,11 +5775,11 @@ class ArrayVarType : public ae::VarType
 {
 public:
 	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
-	virtual ae::VarData GetElement( ae::VarData a, uint32_t idx ) const = 0;
+	virtual ae::VarData GetElement( ae::VarData array, uint32_t idx ) const = 0;
 	virtual ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const = 0;
-	virtual uint32_t Resize( ae::VarData a, uint32_t size ) const = 0;
+	virtual uint32_t Resize( ae::VarData array, uint32_t size ) const = 0;
 	//! Current array length
-	virtual uint32_t GetLength( ae::ConstVarData a ) const = 0;
+	virtual uint32_t GetLength( ae::ConstVarData array ) const = 0;
 	//! Return uint max for no hard limit
 	virtual uint32_t GetMaxLength() const = 0;
 	virtual uint32_t IsFixedLength() const = 0;
@@ -5879,12 +5890,6 @@ public:
 	//! Returns the 'outermost' type of this var, eg. if this is an array of ints
 	//! the outer type would be ArrayVarType
 	template< typename T = ae::VarType > const T* GetOuterVarType() const;
-
-	//--------------------------------------------------------------------------
-	// ae::VarData
-	//--------------------------------------------------------------------------
-	ae::VarData GetVarData( ae::Object* obj ) const;
-	ae::ConstVarData GetVarData( const ae::Object* obj ) const;
 
 	//------------------------------------------------------------------------------
 	// Properties
@@ -11949,17 +11954,17 @@ struct VarTypeT< std::nullptr_t > : public ae::PointerVarType
 {
 	const ae::VarType* m_GetInnerVarType() const override { return nullptr; }
 	static ae::VarType* Get() { static ae::VarTypeT< std::nullptr_t > s_type; return &s_type; }
-	bool SetRef( ae::VarData _varData, ae::Object* value ) const override { return false; }
-	bool SetRefFromString( ae::VarData _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { return false; }
-	std::string GetStringFromRef( ae::ConstVarData _varData, ObjectPointerToStringFn fn, const void* userData ) const override { return ""; }
+	bool SetRef( ae::VarData varData, ae::Object* value ) const override { return false; }
+	bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { return false; }
+	std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const override { return ""; }
 };
 
 template < typename T, uint32_t N >
 class DynamicArrayVarType : public ae::ArrayVarType
 {
 public:
-	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { this, array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
-	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { this, array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { m_GetInnerVarType(), array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { m_GetInnerVarType(), array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
 	uint32_t Resize( ae::VarData array, uint32_t length ) const override
 	{
 		if( !array )
@@ -11995,10 +12000,10 @@ template < typename T, uint32_t N >
 class StaticArrayVarType : public ae::ArrayVarType
 {
 public:
-	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { this, array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
-	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { this, array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
-	uint32_t Resize( ae::VarData a, uint32_t length ) const override { return N; }
-	uint32_t GetLength( ae::ConstVarData a ) const override { return N; }
+	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { m_GetInnerVarType(), array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
+	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { m_GetInnerVarType(), array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
+	uint32_t Resize( ae::VarData array, uint32_t length ) const override { return N; }
+	uint32_t GetLength( ae::ConstVarData array ) const override { return N; }
 	uint32_t GetMaxLength() const override { return N; }
 	uint32_t IsFixedLength() const override { return true; }
 };
@@ -12101,9 +12106,7 @@ template< typename T >
 ae::VarData::VarData( T* data )
 {
 	m_data = data;
-	const ae::VarType* t = ae::VarTypeT< T >::Get();
-	AE_ASSERT( t );
-	m_typeCheck = t->GetVarTypeId();
+	m_varType = ae::VarTypeT< T >::Get();
 }
 
 //------------------------------------------------------------------------------
@@ -12113,9 +12116,7 @@ template< typename T >
 ae::ConstVarData::ConstVarData( const T* data )
 {
 	m_data = data;
-	const ae::VarType* t = ae::VarTypeT< T >::Get();
-	AE_ASSERT( t );
-	m_typeCheck = t->GetVarTypeId();
+	m_varType = ae::VarTypeT< T >::Get();
 }
 
 //------------------------------------------------------------------------------
@@ -12398,7 +12399,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
 
 	const ae::VarType* varType = GetOuterVarType();
-	ae::VarData varData = GetVarData( obj );
+	ae::VarData varData( this, obj );
 	if ( const ae::ArrayVarType* arrayVarType = varType->AsVarType< ae::ArrayVarType >() )
 	{
 		if( arrayIdx < 0 )
@@ -12448,13 +12449,13 @@ bool ae::Var::GetObjectValue( const ae::Object* object, T* valueOut, int32_t arr
 		{
 			return false;
 		}
-		ae::ConstVarData array = GetVarData( object );
+		ae::ConstVarData array( this, object );
 		varData = arrayType->GetElement( array, arrayIdx );
 		varType = arrayType->GetInnerVarType< ae::BasicVarType >();
 	}
 	else if ( arrayIdx < 0 )
 	{
-		varData = GetVarData( object );
+		varData = { this, object };
 		varType = GetOuterVarType();
 	}
 
@@ -12484,7 +12485,7 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 	}
 	
 	const ae::VarType* varType = GetOuterVarType();
-	ae::ConstVarData varData = GetVarData( obj );
+	ae::ConstVarData varData( this, obj );
 	if( const ae::ArrayVarType* arrayVarType = varType->AsVarType< ae::ArrayVarType >() )
 	{
 		if( arrayIdx < 0 )
@@ -26462,60 +26463,96 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 //------------------------------------------------------------------------------
 // ae::VarData member functions
 //------------------------------------------------------------------------------
-ae::VarData::VarData( const ae::VarType* caller, void* data ) : m_data( data )
+ae::VarData::VarData( const ae::VarType* varType, void* data )
 {
-	const ae::VarType* t = caller->m_GetInnerVarType();
-	AE_ASSERT( t );
-	m_typeCheck = t->GetVarTypeId();
+	m_varType = varType;
 	m_data = data;
 }
-ae::VarData::VarData( const ae::Var* caller, void* data ) : m_data( data )
+ae::VarData::VarData( const ae::Var* var, ae::Object* object )
 {
-	const ae::VarType* t = caller->GetOuterVarType();
-	AE_ASSERT( t );
-	m_typeCheck = t->GetVarTypeId();
-	m_data = data;
+	m_varType = var->GetOuterVarType();
+	m_data = (uint8_t*)object + var->GetOffset();
+	if constexpr( _AE_DEBUG_ )
+	{
+		const ae::Type* type = ae::GetTypeFromObject( object );
+		AE_ASSERT_MSG( type == var->m_owner, "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+	}
 }
 void* ae::VarData::Get( const ae::VarType* caller ) const
 {
-	if( m_typeCheck == kVarTypeIdNone )
+	if( !m_varType )
 	{
 		return nullptr;
 	}
-	AE_ASSERT( m_typeCheck == caller->GetVarTypeId() );
+	if( caller && m_varType != caller )
+	{
+		AE_DEBUG_ASSERT_MSG( false, "Bad VarData access" );
+		return nullptr;
+	}
 	return m_data;
+}
+bool ae::VarData::operator == ( const ae::VarData& other ) const
+{
+	if( m_data == other.m_data )
+	{
+		AE_DEBUG_ASSERT( m_varType == other.m_varType );
+		return true;
+	}
+	return false;
+}
+bool ae::VarData::operator != ( const ae::VarData& other ) const
+{
+	return m_data == other.m_data;
 }
 
 //------------------------------------------------------------------------------
 // ae::ConstVarData member functions
 //------------------------------------------------------------------------------
-ae::ConstVarData::ConstVarData( const ae::VarType* caller, const void* data )
+ae::ConstVarData::ConstVarData( const ae::VarType* varType, const void* data )
 {
-	const ae::VarType* t = caller->m_GetInnerVarType();
-	AE_ASSERT( t );
-	m_typeCheck = t->GetVarTypeId();
-	m_data = data;
-}
-ae::ConstVarData::ConstVarData( const ae::Var* caller, const void* data )
-{
-	const ae::VarType* t = caller->GetOuterVarType();
-	AE_ASSERT( t );
-	m_typeCheck = t->GetVarTypeId();
+	m_varType = varType;
 	m_data = data;
 }
 ae::ConstVarData::ConstVarData( VarData varData )
 {
-	m_typeCheck = varData.m_typeCheck;
+	m_varType = varData.m_varType;
 	m_data = varData.m_data;
+}
+ae::ConstVarData::ConstVarData( const ae::Var* var, const ae::Object* object )
+{
+	m_varType = var->GetOuterVarType();
+	m_data = (uint8_t*)object + var->GetOffset();
+	if constexpr( _AE_DEBUG_ )
+	{
+		const ae::Type* type = ae::GetTypeFromObject( object );
+		AE_ASSERT_MSG( type == var->m_owner, "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+	}
 }
 const void* ae::ConstVarData::Get( const ae::VarType* caller ) const
 {
-	if( m_typeCheck == kVarTypeIdNone )
+	if( !m_varType )
 	{
 		return nullptr;
 	}
-	AE_ASSERT( m_typeCheck == caller->GetVarTypeId() );
+	if( caller && m_varType != caller )
+	{
+		AE_DEBUG_ASSERT_MSG( false, "Bad VarData access" );
+		return nullptr;
+	}
 	return m_data;
+}
+bool ae::ConstVarData::operator == ( const ae::ConstVarData& other ) const
+{
+	if( m_data == other.m_data )
+	{
+		AE_DEBUG_ASSERT( m_varType == other.m_varType );
+		return true;
+	}
+	return false;
+}
+bool ae::ConstVarData::operator != ( const ae::ConstVarData& other ) const
+{
+	return m_data == other.m_data;
 }
 
 //------------------------------------------------------------------------------
@@ -26547,7 +26584,7 @@ std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arra
 	{
 		return "";
 	}
-	ae::ConstVarData varData = GetVarData( obj );
+	ae::ConstVarData varData( this, obj );
 	const ae::VarType* varType = GetOuterVarType();
 	if( const ae::ArrayVarType* arrayType = varType->AsVarType< ae::ArrayVarType >() )
 	{
@@ -26600,7 +26637,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
 	
 	const ae::VarType* varType = GetOuterVarType();
-	ae::VarData varData = GetVarData( obj );
+	ae::VarData varData( this, obj );
 	if( const ae::ArrayVarType* arrayType = varType->AsVarType< ae::ArrayVarType >() )
 	{
 		if( arrayIdx < 0 )
@@ -26659,15 +26696,6 @@ ae::VarTypeId ae::Var::m_GetVarTypeId() const
 {
 	return m_varType->GetVarTypeId();
 }
-ae::VarData ae::Var::GetVarData( ae::Object* obj ) const
-{
-	return ae::VarData( this, (uint8_t*)obj + m_offset );
-}
-ae::ConstVarData ae::Var::GetVarData( const ae::Object* obj ) const
-{
-	return ae::ConstVarData( this, (const uint8_t*)obj + m_offset );
-}
-
 void ae::Var::m_AddProp( const char* prop, const char* value )
 {
 	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
@@ -26850,7 +26878,7 @@ uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
 		return 0;
 	}
 	const ae::ArrayVarType* arrayAdapter = GetOuterVarType< ae::ArrayVarType >();
-	return arrayAdapter ? arrayAdapter->Resize( GetVarData( obj ), length ) : 0;
+	return arrayAdapter ? arrayAdapter->Resize( { this, obj }, length ) : 0;
 }
 
 // @TODO: Remove
@@ -26861,7 +26889,7 @@ uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 		return 0;
 	}
 	const ae::ArrayVarType* arrayAdapter = GetOuterVarType< ae::ArrayVarType >();
-	return arrayAdapter ? arrayAdapter->GetLength( GetVarData( obj ) ) : 0;
+	return arrayAdapter ? arrayAdapter->GetLength( { this, obj } ) : 0;
 }
 
 // @TODO: Remove

@@ -128,19 +128,19 @@ public:
 	ae::VarData TryGet( ae::VarData _opt ) const override
 	{
 		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt.Get( this ) );
-		return { this, opt->has_value() ? &opt->value() : nullptr };
+		return { m_GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
 	}
 	ae::ConstVarData TryGet( ae::ConstVarData _opt ) const override
 	{
 		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt.Get( this ) );
-		return { this, opt->has_value() ? &opt->value() : nullptr };
+		return { m_GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
 	}
 	ae::VarData GetOrInsert( ae::VarData _optional ) override
 	{
 		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
 			optional->emplace();
-			return { this, &optional->value() };
+			return { m_GetInnerVarType(), &optional->value() };
 		}
 		return {};
 	}
