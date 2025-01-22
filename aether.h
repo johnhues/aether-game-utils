@@ -5634,6 +5634,7 @@ class ConstVarData
 {
 public:
 	ConstVarData() = default;
+	template< typename T > ConstVarData( const T* data );
 	ConstVarData( const ae::VarType* caller, const void* data );
 	ConstVarData( const ae::Var* caller, const void* data );
 	ConstVarData( VarData varData );
@@ -12058,6 +12059,10 @@ std::string ae::Enum::GetNameByValue( T value ) const
 template < typename T >
 bool ae::Enum::GetValueFromString( const char* str, T* valueOut ) const
 {
+	if( !str )
+	{
+		return false;
+	}
 	int32_t value = 0;
 	if ( m_enumNameToValue.TryGet( str, &value ) ) // Set object var with named enum value
 	{
@@ -12094,6 +12099,18 @@ bool ae::Enum::HasValue( T value ) const
 //------------------------------------------------------------------------------
 template< typename T >
 ae::VarData::VarData( T* data )
+{
+	m_data = data;
+	const ae::VarType* t = ae::VarTypeT< T >::Get();
+	AE_ASSERT( t );
+	m_typeCheck = t->GetVarTypeId();
+}
+
+//------------------------------------------------------------------------------
+// ae::ConstVarData templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+ae::ConstVarData::ConstVarData( const T* data )
 {
 	m_data = data;
 	const ae::VarType* t = ae::VarTypeT< T >::Get();
@@ -12174,16 +12191,36 @@ bool ae::BasicVarType::SetVarData( ae::VarData _varData, const T& value ) const
 template < typename T >
 bool ae::EnumVarType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
 {
-	if( valueOut )
+	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
+	{
+		AE_DEBUG_ASSERT_MSG( false, "Invalid type conversion attempted" );
+		return false;
+	}
+	else if( valueOut )
 	{
 		if( const void* varData = _varData.Get( this ) )
 		{
-			const ae::VarType* varType = ae::VarTypeT< T >::Get();
-			const ae::EnumVarType* enumVarType = varType ? varType->AsVarType< ae::EnumVarType >() : nullptr;
-			if( enumVarType && enumVarType->GetEnum() == GetEnum() )
+			const ae::Enum* enumType = GetEnum();
+			AE_ASSERT( enumType );
+			if( enumType->TypeIsSigned() )
 			{
-				*valueOut = *static_cast< const T* >( varData );
-				return true;
+				switch( enumType->TypeSize() )
+				{
+					case 1: { *valueOut = static_cast< T >( *static_cast< const int8_t* >( varData ) ); return true; }
+					case 2: { *valueOut = static_cast< T >( *static_cast< const int16_t* >( varData ) ); return true; }
+					case 4: { *valueOut = static_cast< T >( *static_cast< const int32_t* >( varData ) ); return true; }
+					case 8: { *valueOut = static_cast< T >( *static_cast< const int64_t* >( varData ) ); return true; }
+				}
+			}
+			else
+			{
+				switch( enumType->TypeSize() )
+				{
+					case 1: { *valueOut = static_cast< T >( *static_cast< const uint8_t* >( varData ) ); return true; }
+					case 2: { *valueOut = static_cast< T >( *static_cast< const uint16_t* >( varData ) ); return true; }
+					case 4: { *valueOut = static_cast< T >( *static_cast< const uint32_t* >( varData ) ); return true; }
+					case 8: { *valueOut = static_cast< T >( *static_cast< const uint64_t* >( varData ) ); return true; }
+				}
 			}
 		}
 	}
@@ -12193,14 +12230,34 @@ bool ae::EnumVarType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
 template < typename T >
 bool ae::EnumVarType::SetVarData( ae::VarData _varData, const T& value ) const
 {
-	if( void* varData = _varData.Get( this ) )
+	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
 	{
-		const ae::VarType* varType = ae::VarTypeT< T >::Get();
-		const ae::EnumVarType* enumVarType = varType ? varType->AsVarType< ae::EnumVarType >() : nullptr;
-		if( enumVarType && enumVarType->GetEnum() == GetEnum() )
+		AE_DEBUG_ASSERT_MSG( false, "Invalid type conversion attempted" );
+		return false;
+	}
+	else if( void* varData = _varData.Get( this ) )
+	{
+		const ae::Enum* enumType = GetEnum();
+		AE_ASSERT( enumType );
+		if( enumType->TypeIsSigned() )
 		{
-			*static_cast< T* >( varData ) = value;
-			return true;
+			switch( enumType->TypeSize() )
+			{
+				case 1: { *static_cast< int8_t* >( varData ) = static_cast< int8_t >( value ); return true; }
+				case 2: { *static_cast< int16_t* >( varData ) = static_cast< int16_t >( value ); return true; }
+				case 4: { *static_cast< int32_t* >( varData ) = static_cast< int32_t >( value ); return true; }
+				case 8: { *static_cast< int64_t* >( varData ) = static_cast< int64_t >( value ); return true; }
+			}
+		}
+		else
+		{
+			switch( enumType->TypeSize() )
+			{
+				case 1: { *static_cast< uint8_t* >( varData ) = static_cast< uint8_t >( value ); return true; }
+				case 2: { *static_cast< uint16_t* >( varData ) = static_cast< uint16_t >( value ); return true; }
+				case 4: { *static_cast< uint32_t* >( varData ) = static_cast< uint32_t >( value ); return true; }
+				case 8: { *static_cast< uint64_t* >( varData ) = static_cast< uint64_t >( value ); return true; }
+			}
 		}
 	}
 	return false;
@@ -12218,8 +12275,7 @@ T* ae::ClassVarType::TryGet( ae::VarData varData ) const
 template< typename T >
 const T* ae::ClassVarType::TryGet( ae::ConstVarData varData ) const
 {
-	const ae::Type* type = ae::GetType< T >();
-	if( type && GetType() == type )
+	if( GetType()->IsType< T >() )
 	{
 		return static_cast< const T* >( varData.Get( this ) );
 	}
@@ -26715,50 +26771,47 @@ ae::BasicType ae::Var::GetType() const
 
 const char* ae::Var::GetTypeName() const
 {
-	if( const ae::BasicVarType* basicType = m_HACK_FindInnerVarType< ae::BasicVarType >() )
+	switch( GetType() )
 	{
-		switch( basicType->GetType() )
+		case ae::BasicType::UInt8: return "uint8_t";
+		case ae::BasicType::UInt16: return "uint16_t";
+		case ae::BasicType::UInt32: return "uint32_t";
+		case ae::BasicType::UInt64: return "uint64_t";
+		case ae::BasicType::Int8: return "int8_t";
+		case ae::BasicType::Int16: return "int16_t";
+		case ae::BasicType::Int32: return "int32_t";
+		case ae::BasicType::Int64: return "int64_t";
+		case ae::BasicType::Int2: return "ae::Int2";
+		case ae::BasicType::Int3: return "ae::Int3";
+		case ae::BasicType::Bool: return "bool";
+		case ae::BasicType::Float: return "float";
+		case ae::BasicType::Double: return "double";
+		case ae::BasicType::Vec2: return "ae::Vec2";
+		case ae::BasicType::Vec3: return "ae::Vec3";
+		case ae::BasicType::Vec4: return "ae::Vec4";
+		case ae::BasicType::Color: return "ae::Color";
+		case ae::BasicType::Matrix4: return "ae::Matrix4";
+		case ae::BasicType::String: return "String";
+		case ae::BasicType::Class:
 		{
-			case ae::BasicType::UInt8: return "uint8_t";
-			case ae::BasicType::UInt16: return "uint16_t";
-			case ae::BasicType::UInt32: return "uint32_t";
-			case ae::BasicType::UInt64: return "uint64_t";
-			case ae::BasicType::Int8: return "int8_t";
-			case ae::BasicType::Int16: return "int16_t";
-			case ae::BasicType::Int32: return "int32_t";
-			case ae::BasicType::Int64: return "int64_t";
-			case ae::BasicType::Int2: return "ae::Int2";
-			case ae::BasicType::Int3: return "ae::Int3";
-			case ae::BasicType::Bool: return "bool";
-			case ae::BasicType::Float: return "float";
-			case ae::BasicType::Double: return "double";
-			case ae::BasicType::Vec2: return "ae::Vec2";
-			case ae::BasicType::Vec3: return "ae::Vec3";
-			case ae::BasicType::Vec4: return "ae::Vec4";
-			case ae::BasicType::Color: return "ae::Color";
-			case ae::BasicType::Matrix4: return "ae::Matrix4";
-			case ae::BasicType::String: return "String";
-			case ae::BasicType::Class:
-			{
-				const ae::Type* type = GetSubType();
-				AE_ASSERT( type );
-				return type->GetName();
-			}
-			case ae::BasicType::Enum:
-			{
-				const ae::Enum* enumType = GetEnum();
-				AE_ASSERT( enumType );
-				return enumType->GetName();
-			}
-			case ae::BasicType::Pointer:
-			case ae::BasicType::CustomRef:
-			{
-				return "ref";
-			}
+			const ae::Type* type = GetSubType();
+			AE_ASSERT( type );
+			return type->GetName();
+		}
+		case ae::BasicType::Enum:
+		{
+			const ae::Enum* enumType = GetEnum();
+			AE_ASSERT( enumType );
+			return enumType->GetName();
+		}
+		case ae::BasicType::Pointer:
+		case ae::BasicType::CustomRef:
+		{
+			return "ref";
 		}
 	}
 	AE_FAIL();
-	return "";
+	return "unknown_type";
 }
 
 // @TODO: Remove
@@ -26919,7 +26972,10 @@ std::string ae::BasicVarType::GetVarDataAsString( ae::ConstVarData _varData ) co
 
 bool ae::BasicVarType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
 {
-	// @TODO: Check if value is invalid, eg. empty
+	if( !value || !value[ 0 ] )
+	{
+		return false;
+	}
 	void* varData = _varData.Get( this );
 	if( !varData )
 	{
@@ -27151,7 +27207,7 @@ std::string ae::EnumVarType::GetVarDataAsString( ae::ConstVarData _varData ) con
 bool ae::EnumVarType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
 {
 	void* varData = _varData.Get( this );
-	if( !value[ 0 ] || !varData )
+	if( !value || !value[ 0 ] || !varData )
 	{
 		return false;
 	}
