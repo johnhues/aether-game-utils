@@ -5732,9 +5732,15 @@ class ClassVarType : public ae::VarType
 {
 public:
 	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	//! Gets the class type associated with this variable. Note that if this
+	//! is accessed along with an ae::VarData or ae::ConstVarData that the
+	//! actual type of the object may be inherited from this type.
 	const ae::Type* GetType() const { return ae::GetTypeById( GetTypeId() ); }
 	template< typename T > T* TryGet( ae::VarData varData ) const;
 	template< typename T > const T* TryGet( ae::ConstVarData varData ) const;
+	//! Gets the class type id associated with this variable. Note that if this
+	//! is accessed along with an ae::VarData or ae::ConstVarData that the
+	//! actual type of the object may be inherited from this type.
 	virtual ae::TypeId GetTypeId() const = 0;
 	virtual const char* GetName() const = 0; // @TODO: Delete and replace with GetType()
 	virtual uint32_t GetSize() const = 0; // @TODO: Delete and replace with GetType()
@@ -26475,7 +26481,7 @@ ae::VarData::VarData( const ae::Var* var, ae::Object* object )
 	if constexpr( _AE_DEBUG_ )
 	{
 		const ae::Type* type = ae::GetTypeFromObject( object );
-		AE_ASSERT_MSG( type == var->m_owner, "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+		AE_ASSERT_MSG( type->IsType( var->m_owner ), "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
 	}
 }
 void* ae::VarData::Get( const ae::VarType* caller ) const
@@ -26525,7 +26531,7 @@ ae::ConstVarData::ConstVarData( const ae::Var* var, const ae::Object* object )
 	if constexpr( _AE_DEBUG_ )
 	{
 		const ae::Type* type = ae::GetTypeFromObject( object );
-		AE_ASSERT_MSG( type == var->m_owner, "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+		AE_ASSERT_MSG( type->IsType( var->m_owner ), "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
 	}
 }
 const void* ae::ConstVarData::Get( const ae::VarType* caller ) const
@@ -27265,6 +27271,9 @@ bool ae::EnumVarType::SetVarDataFromString( ae::VarData _varData, const char* va
 	return false;
 }
 
+//------------------------------------------------------------------------------
+// ae::Type member functions
+//------------------------------------------------------------------------------
 ae::TypeId ae::Type::GetId() const { return m_id; }
 bool ae::Type::HasProperty( const char* property ) const { return GetPropertyIndex( property ) >= 0; }
 const ae::Type* ae::Type::GetTypeWithProperty( const char* property ) const
