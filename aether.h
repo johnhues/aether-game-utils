@@ -27035,7 +27035,7 @@ std::string ae::BasicVarType::GetVarDataAsString( ae::ConstVarData _varData ) co
 
 bool ae::BasicVarType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
 {
-	if( !value || !value[ 0 ] )
+	if( !value ) // Only check for null here. Zero length strings are valid depending on the type.
 	{
 		return false;
 	}
@@ -27206,6 +27206,7 @@ bool ae::BasicVarType::SetVarDataFromString( ae::VarData _varData, const char* v
 		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
 		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
 	}
+	return false;
 }
 
 //------------------------------------------------------------------------------
