@@ -32,38 +32,41 @@
 TEST_CASE( "ArrayVarType", "[aeMeta]" )
 {
 	ae::Array< int32_t, 5 > _array;
-	ae::VarData array = &_array;
-	const ae::VarType* varType = array.GetType();
+	ae::VarData array( &_array );
+	REQUIRE( array.GetType().IsVarType< ae::ArrayVarType >() );
+	// @TODO: Remove template fn, make return type a const ref
+	const ae::ArrayVarType* varType = array.GetType().AsVarType< ae::ArrayVarType >();
+	REQUIRE( varType );
+	REQUIRE( varType->GetInnerVarType().IsVarType< ae::BasicVarType >() );
+	const ae::BasicVarType* innerVarType = varType->GetInnerVarType().AsVarType< ae::BasicVarType >();
+	REQUIRE( innerVarType );
 
-	REQUIRE( varType->IsVarType< ae::ArrayVarType >() );
-	REQUIRE( varType->AsVarType< ae::ArrayVarType >() );
-	REQUIRE( varType->AsVarType< ae::ArrayVarType >()->IsFixedLength() == false );
-	REQUIRE( varType->AsVarType< ae::ArrayVarType >()->GetMaxLength() == 5 );
-	REQUIRE( varType->GetInnerVarType< ae::BasicVarType >() );
-	REQUIRE( varType->GetInnerVarType< ae::BasicVarType >()->GetType() == ae::BasicType::Int32 );
+	REQUIRE( varType->IsFixedLength() == false );
+	REQUIRE( varType->GetMaxLength() == 5 );
+	REQUIRE( innerVarType->GetType() == ae::BasicType::Int32 );
 
 	// Set array length
 	REQUIRE( _array.Length() == 0 );
-	REQUIRE( varType->AsVarType< ae::ArrayVarType >()->Resize( array, 2 ) == 2 );
+	REQUIRE( varType->Resize( array, 2 ) == 2 );
 	REQUIRE( _array.Length() == 2 );
 
 	// Access elements
 	REQUIRE( _array[ 0 ] == 0 );
 	REQUIRE( _array[ 1 ] == 0 );
-	REQUIRE_THROWS( varType->AsVarType< ae::ArrayVarType >()->GetElement( array, -1 ) );
-	ae::VarData elem0 = varType->AsVarType< ae::ArrayVarType >()->GetElement( array, 0 );
-	ae::VarData elem1 = varType->AsVarType< ae::ArrayVarType >()->GetElement( array, 1 );
-	REQUIRE_THROWS( varType->AsVarType< ae::ArrayVarType >()->GetElement( array, 2 ) );
+	REQUIRE_THROWS( varType->GetElement( array, -1 ) );
+	ae::VarData elem0 = varType->GetElement( array, 0 );
+	ae::VarData elem1 = varType->GetElement( array, 1 );
+	REQUIRE_THROWS( varType->GetElement( array, 2 ) );
 	REQUIRE( elem0 );
 	REQUIRE( elem1 );
 	// Set elements
-	REQUIRE( varType->GetInnerVarType< ae::BasicVarType >()->SetVarData( elem0, 1000 ) );
-	REQUIRE( varType->GetInnerVarType< ae::BasicVarType >()->SetVarDataFromString( elem1, "1001" ) );
+	REQUIRE( innerVarType->SetVarData( elem0, 1000 ) );
+	REQUIRE( innerVarType->SetVarDataFromString( elem1, "1001" ) );
 	REQUIRE( _array[ 0 ] == 1000 );
 	REQUIRE( _array[ 1 ] == 1001 );
 	// Get elements
 	int32_t val0 = 0;
-	REQUIRE( varType->GetInnerVarType< ae::BasicVarType >()->GetVarData( elem0, &val0 ) );
+	REQUIRE( innerVarType->GetVarData( elem0, &val0 ) );
 	REQUIRE( val0 == 1000 );
-	REQUIRE( varType->GetInnerVarType< ae::BasicVarType >()->GetVarDataAsString( elem1 ) == "1001" );
+	REQUIRE( innerVarType->GetVarDataAsString( elem1 ) == "1001" );
 }
