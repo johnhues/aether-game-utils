@@ -5210,11 +5210,8 @@ public:
 	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 	template <> void ae::_DefineType< ::AE_GLUE_TYPE(__VA_ARGS__) >( ae::Type *type, uint32_t index ) { type->Init< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)), index ); }\
 	static ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
-	template <>\
-	struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::ClassVarType {\
-		const char* GetName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
+	template <> struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::ClassVarType {\
 		ae::TypeId GetTypeId() const override { return ae::GetTypeId< ::AE_GLUE_TYPE(__VA_ARGS__) >(); }\
-		uint32_t GetSize() const override { return sizeof(::AE_GLUE_TYPE(__VA_ARGS__)); }\
 		static ae::VarType* Get() { static ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
 	};\
 	template<> ae::VarType* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
@@ -5742,8 +5739,6 @@ public:
 	//! is accessed along with an ae::VarData or ae::ConstVarData that the
 	//! actual type of the object may be inherited from this type.
 	virtual ae::TypeId GetTypeId() const = 0;
-	virtual const char* GetName() const = 0; // @TODO: Delete and replace with GetType()
-	virtual uint32_t GetSize() const = 0; // @TODO: Delete and replace with GetType()
 };
 
 //------------------------------------------------------------------------------
