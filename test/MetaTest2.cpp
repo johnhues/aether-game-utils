@@ -66,6 +66,15 @@ AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray2 );
 AE_REGISTER_CLASS_VAR( ArrayClass, someClassArray3 );
 
 //------------------------------------------------------------------------------
+// OptionalClass
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( OptionalClass );
+AE_REGISTER_CLASS_VAR( OptionalClass, intOptional );
+AE_REGISTER_CLASS_VAR( OptionalClass, someClassOptional );
+AE_REGISTER_CLASS_VAR( OptionalClass, intStdOptional );
+AE_REGISTER_CLASS_VAR( OptionalClass, someClassStdOptional );
+
+//------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
 AE_REGISTER_ENUM( SomeOldEnum );
@@ -121,4 +130,4 @@ AE_REGISTER_CLASS_VAR( RefTesterA, refA );
 AE_REGISTER_CLASS_VAR( RefTesterA, refB ); // @NOTE: RefTesterB is registered after this, but it has to still work
 
 AE_REGISTER_CLASS( RefTesterB );
-AE_REGISTER_CLASS_VAR( RefTesterB, refA );
+AE_REGISTER_CLASS_VAR( RefTesterB, ref );

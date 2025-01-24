@@ -105,6 +105,67 @@ public:
 	ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_META_TEST;
 };
 
+template < typename T >
+class ae::VarTypeT< ae::Optional< T > > : public ae::OptionalVarType
+{
+public:
+	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
+	static ae::VarType* Get() { static ae::VarTypeT< ae::Optional< T > > s_type; return &s_type; }
+
+	ae::VarData TryGet( ae::VarData optional ) const override { return ae::VarData(); }
+	ae::ConstVarData TryGet( ae::ConstVarData optional ) const override { return ae::ConstVarData(); }
+	ae::VarData GetOrInsert( ae::VarData optional ) override { return ae::VarData(); }
+	void Clear( ae::VarData optional ) override {}
+};
+
+template < typename T >
+class ae::VarTypeT< std::optional< T > > : public ae::OptionalVarType
+{
+public:
+	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
+	static ae::VarType* Get() { static ae::VarTypeT< std::optional< T > > s_type; return &s_type; }
+
+	ae::VarData TryGet( ae::VarData _opt ) const override
+	{
+		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt.Get( this ) );
+		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
+	}
+	ae::ConstVarData TryGet( ae::ConstVarData _opt ) const override
+	{
+		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt.Get( this ) );
+		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
+	}
+	ae::VarData GetOrInsert( ae::VarData _optional ) override
+	{
+		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
+		{
+			optional->emplace();
+			return { GetInnerVarType(), &optional->value() };
+		}
+		return {};
+	}
+	void Clear( ae::VarData _optional ) override
+	{
+		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
+		{
+			optional->reset();
+		}
+	}
+};
+
+//------------------------------------------------------------------------------
+// OptionalClass
+//------------------------------------------------------------------------------
+class OptionalClass : public ae::Inheritor< ae::Object, OptionalClass >
+{
+public:
+	ae::Optional< int32_t > intOptional;
+	ae::Optional < SomeClass > someClassOptional;
+
+	std::optional< int32_t > intStdOptional;
+	std::optional< SomeClass > someClassStdOptional;
+};
+
 //------------------------------------------------------------------------------
 // SomeOldEnum
 //------------------------------------------------------------------------------
@@ -222,7 +283,7 @@ public:
 class RefTesterB : public ae::Inheritor< RefTester, RefTesterB >
 {
 public:
-	class RefTesterA* refA = nullptr;
+	class RefTester* ref = nullptr;
 };
 
 // RefTesterManager

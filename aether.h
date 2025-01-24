@@ -1479,14 +1479,15 @@ template < typename T >
 class Optional
 {
 public:
+	// @TODO: Handle assignment of {} when T is default constructible
 	Optional() = default;
 	Optional( const T& value );
-	Optional( const Optional< T >& other );
 	Optional( T&& value ) noexcept;
+	Optional( const Optional< T >& other );
 	Optional( Optional< T >&& other ) noexcept;
-	void operator =( const T& value );
+	T& operator =( const T& value );
+	T& operator =( T&& value ) noexcept;
 	void operator =( const Optional< T >& other );
-	void operator =( T&& value ) noexcept;
 	void operator =( Optional< T >&& other ) noexcept;
 	~Optional();
 
@@ -5209,15 +5210,11 @@ public:
 	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 	template <> void ae::_DefineType< ::AE_GLUE_TYPE(__VA_ARGS__) >( ae::Type *type, uint32_t index ) { type->Init< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)), index ); }\
 	static ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
-	template <>\
-	struct ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::VarTypeBase {\
-		ae::BasicType GetType() const override { return ae::BasicType::Class; }\
-		const char* GetName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-		uint32_t GetSize() const override { return sizeof(::AE_GLUE_TYPE(__VA_ARGS__)); }\
-		const char* GetSubTypeName() const override { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-		static ae::VarTypeBase* Get() { static ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
+	template <> struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::ClassVarType {\
+		ae::TypeId GetTypeId() const override { return ae::GetTypeId< ::AE_GLUE_TYPE(__VA_ARGS__) >(); }\
+		static ae::VarType* Get() { static ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
 	};\
-	template<> ae::VarTypeBase* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarType< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
+	template<> ae::VarType* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
 //! Register a class property
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
@@ -5245,18 +5242,19 @@ public:
 	enum class E : T { \
 		__VA_ARGS__ \
 	}; \
+	template <> const ae::Enum* ae::GetEnum< E >(); \
 	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
-		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
-		const char* GetName() const override { return #E; } \
+	struct ae::VarTypeT< E > : public ae::EnumVarType { \
+		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
 		uint32_t GetSize() const override { return sizeof(T); } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
+		const char* GetName() const override { return #E; } \
+		const char* GetPrefix() const override { return ""; } \
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
 	}; \
 	struct AE_ENUM_##E {\
 		AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ) : ec( name, def ) {}\
 		ae::_EnumCreator< E > ec;\
 	};\
-	template <> const ae::Enum* ae::GetEnum< E >(); \
 	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); return os; } \
 	namespace ae { template <> inline std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> inline E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } } \
@@ -5275,38 +5273,39 @@ public:
 //------------------------------------------------------------------------------
 //! Register an already defined c-style enum type
 #define AE_REGISTER_ENUM( E ) \
-	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
-		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
-		const char* GetName() const override { return #E; } \
-		uint32_t GetSize() const override { return sizeof(E); } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
-	}; \
-	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
 		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
 		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
 		return s_enum;\
 	}\
+	template <> \
+	struct ae::VarTypeT< E > : public ae::EnumVarType { \
+		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
+		const char* GetName() const override { return #E; } \
+		uint32_t GetSize() const override { return sizeof(E); } \
+		const char* GetPrefix() const override { return ""; } \
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; }\
+	}; \
+	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	namespace ae { template <> std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
 //! Register an already defined c-style enum type where each value has a prefix
 #define AE_REGISTER_ENUM_PREFIX( E, PREFIX ) \
-	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
-		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
-		const char* GetName() const override { return #E; } \
-		uint32_t GetSize() const override { return sizeof(E); } \
-		const char* GetPrefix() const override { return #PREFIX; } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
-	}; \
-	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
 		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
 		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
 		return s_enum;\
-	}
+	} \
+	template <> \
+	struct ae::VarTypeT< E > : public ae::EnumVarType { \
+		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
+		const char* GetName() const override { return #E; } \
+		uint32_t GetSize() const override { return sizeof(E); } \
+		const char* GetPrefix() const override { return #PREFIX; } \
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; }\
+	}; \
+	ae::_EnumCreator2< E > ae_enum_creator_##E( #E );
 
 //! Register c-style enum value
 #define AE_REGISTER_ENUM_VALUE( E, V ) \
@@ -5321,19 +5320,20 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 //! Register an already defined enum class type
 #define AE_REGISTER_ENUM_CLASS2( E ) \
-	template <> \
-	struct ae::VarType< E > : public ae::VarTypeBase { \
-		ae::BasicType GetType() const override { return ae::BasicType::Enum; } \
-		const char* GetName() const override { return #E; } \
-		uint32_t GetSize() const override { return sizeof(E); } \
-		static ae::VarTypeBase* Get() { static ae::VarType< E > s_type; return &s_type; }\
-	}; \
-	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); } \
 	template <> const ae::Enum* ae::GetEnum< E >() {\
 		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
 		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
 		return s_enum;\
-	}
+	} \
+	template <> \
+	struct ae::VarTypeT< E > : public ae::EnumVarType { \
+		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
+		const char* GetName() const override { return #E; } \
+		uint32_t GetSize() const override { return sizeof(E); } \
+		const char* GetPrefix() const override { return ""; } \
+		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; }\
+	}; \
+	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); }
 	// @NOTE: Nested namespace declaration requires C++17
 
 //! Register enum class value
@@ -5364,7 +5364,8 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 class Type;
-struct VarTypeBase;
+class Var;
+struct VarType;
 const ae::TypeId kInvalidTypeId = 0;
 #ifndef AE_MAX_META_TYPES_CONFIG
 	#define AE_MAX_META_TYPES_CONFIG 128
@@ -5472,6 +5473,11 @@ const class Enum* GetEnum( const char* enumName );
 ae::TypeId GetObjectTypeId( const ae::Object* obj );
 //! Get a registered ae::TypeId from a type name
 ae::TypeId GetTypeIdFromName( const char* name );
+//! Thoroughly removes all qualifiers from a type. Usage:
+//! using T = typename ae::StripType< U >::T;
+template < typename U > struct StripType { using T = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< U > > > >; };
+//! Returns an integer id for the given type
+template < typename T > ae::TypeId GetTypeId();
 
 //------------------------------------------------------------------------------
 // ae::Attribute class
@@ -5564,7 +5570,6 @@ public: // Internal
 //------------------------------------------------------------------------------
 enum class BasicType
 {
-	Class,
 	String,
 	UInt8,
 	UInt16,
@@ -5585,20 +5590,253 @@ enum class BasicType
 	// @TODO: Quaternion
 	Matrix4,
 	Color,
-	Enum,
-	Pointer,
-	CustomRef
+
+	Class, // @TODO: Remove
+	Enum, // @TODO: Remove
+	Pointer, // @TODO: Remove
+	CustomRef, // @TODO: Remove
 };
 
 //------------------------------------------------------------------------------
-// ae::VarAdapterType enum
+// ae::VarTypeId
 //------------------------------------------------------------------------------
-enum class VarAdapterType
+using VarTypeId = TypeId;
+const VarTypeId kVarTypeIdNone = 0;
+
+//------------------------------------------------------------------------------
+// ae::VarData
+//------------------------------------------------------------------------------
+class VarData
 {
-	None,
-	Array
-};
+public:
+	VarData() = default;
+	template< typename T > explicit VarData( T* data );
+	VarData( const ae::VarType& varType, void* data );
+	VarData( const ae::Var* var, ae::Object* object );
+
+	//! Returns true if the data is valid.
+	explicit operator bool() const;
+	//! Returns the ae::VarType of the data. Must have valid data.
+	const ae::VarType& GetType() const;
+	//! Returns data pointer, optionally provide the type of the caller to
+	//! perform a type check.
+	void* Get( const ae::VarType* caller = nullptr ) const;
 	
+	bool operator == ( const ae::VarData& other ) const;
+	bool operator != ( const ae::VarData& other ) const;
+
+private:
+	friend class ConstVarData;
+	const ae::VarType* m_varType = nullptr;
+	void* m_data = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// ae::ConstVarData
+//------------------------------------------------------------------------------
+class ConstVarData
+{
+public:
+	ConstVarData() = default;
+	ConstVarData( VarData varData );
+	template< typename T > explicit ConstVarData( const T* data );
+	ConstVarData( const ae::VarType& varType, const void* data );
+	ConstVarData( const ae::Var* var, const ae::Object* object );
+	
+	//! Returns true if the data is valid.
+	explicit operator bool() const;
+	//! Returns the ae::VarType of the data. Must have valid data.
+	const ae::VarType& GetType() const;
+	//! Returns data pointer, optionally provide the type of the caller to
+	//! perform a type check.
+	const void* Get( const ae::VarType* caller = nullptr ) const;
+
+	bool operator == ( const ae::ConstVarData& other ) const;
+	bool operator != ( const ae::ConstVarData& other ) const;
+
+private:
+	const ae::VarType* m_varType = nullptr;
+	const void* m_data = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// ae::ObjectPointerToStringFn
+//! Used with ae::PointerVarType to convert object pointers to strings, most
+//! useful when serializing references to game objects to json etc. Should be
+//! implemented with an encoding that matches ae::StringToObjectPointerFn.
+//------------------------------------------------------------------------------
+using ObjectPointerToStringFn = std::string ( * )( const void* userData, const ae::Object* obj );
+
+//------------------------------------------------------------------------------
+// ae::StringToObjectPointerFn
+//! Used with ae::PointerVarType to convert strings to object pointers, most
+//! useful when serializing game objects from json etc. Should be implemented
+//! with a lookup into the game object system. The encoding of the given string
+//! should match ae::ObjectPointerToStringFn.
+//------------------------------------------------------------------------------
+using StringToObjectPointerFn = bool ( * )( const void* userData, const char* pointerVal, ae::Object** objOut );
+
+//------------------------------------------------------------------------------
+// ae::VarType
+//------------------------------------------------------------------------------
+struct VarType
+{
+	virtual ~VarType() {}
+	template< typename T > const T* AsVarType() const;
+	template< typename T > bool IsVarType() const;
+
+	virtual VarTypeId GetVarTypeId() const { return kVarTypeIdNone; };
+protected:
+	VarType() = default;
+	VarType( const VarType& ) = delete;
+	VarType( VarType&& ) = delete;
+	VarType& operator=( const VarType& ) = delete;
+	VarType& operator=( VarType&& ) = delete;
+};
+
+//------------------------------------------------------------------------------
+// ae::BasicVarType
+//------------------------------------------------------------------------------
+class BasicVarType : public ae::VarType
+{
+public:
+	virtual BasicType GetType() const = 0;
+	virtual uint32_t GetSize() const = 0;
+
+	std::string GetVarDataAsString( ae::ConstVarData varData ) const;
+	bool SetVarDataFromString( ae::VarData varData, const char* value ) const;
+	template< typename T > bool GetVarData( ae::ConstVarData varData, T* valueOut ) const;
+	template< typename T > bool SetVarData( ae::VarData varData, const T& value ) const;
+	
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+};
+
+//------------------------------------------------------------------------------
+// ae::EnumVarType
+//------------------------------------------------------------------------------
+class EnumVarType : public ae::VarType
+{
+public:
+	virtual const ae::Enum* GetEnum() const = 0;
+	virtual const char* GetPrefix() const = 0; // @TODO: Can prefix be part of ae::Enum?
+	virtual const char* GetName() const = 0; // @TODO: Delete and replace with GetEnum()
+	virtual uint32_t GetSize() const = 0; // @TODO: Delete and replace with GetEnum()
+
+	std::string GetVarDataAsString( ae::ConstVarData varData ) const;
+	bool SetVarDataFromString( ae::VarData varData, const char* value ) const;
+	template< typename T > bool GetVarData( ae::ConstVarData varData, T* valueOut ) const;
+	template< typename T > bool SetVarData( ae::VarData varData, const T& value ) const;
+
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+};
+
+//------------------------------------------------------------------------------
+// ae::ClassVarType
+//------------------------------------------------------------------------------
+class ClassVarType : public ae::VarType
+{
+public:
+	//! Gets the class type id associated with this variable. Note that if this
+	//! is accessed along with an ae::VarData or ae::ConstVarData that the
+	//! actual type of the object may be inherited from this type.
+	virtual ae::TypeId GetTypeId() const = 0;
+	//! Gets the class type associated with this variable. Note that if this
+	//! is accessed along with an ae::VarData or ae::ConstVarData that the
+	//! actual type of the object may be inherited from this type.
+	const ae::Type* GetType() const { return ae::GetTypeById( GetTypeId() ); }
+
+	template< typename T > T* TryGet( ae::VarData varData ) const;
+	template< typename T > const T* TryGet( ae::ConstVarData varData ) const;
+
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+};
+
+//------------------------------------------------------------------------------
+// ae::PointerVarType
+//------------------------------------------------------------------------------
+class PointerVarType : public ae::VarType
+{
+public:
+	virtual const ae::VarType& GetInnerVarType() const = 0;
+
+	virtual bool SetRef( ae::VarData varData, ae::Object* value ) const = 0;
+	virtual bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
+	virtual std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const = 0;
+
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	// @HACK: Remove
+	virtual ae::BasicType GetBasicType() const { return ae::BasicType::Pointer; }
+};
+
+//------------------------------------------------------------------------------
+// ae::OptionalVarType
+//------------------------------------------------------------------------------
+class OptionalVarType : public ae::VarType
+{
+public:
+	virtual const ae::VarType& GetInnerVarType() const = 0;
+
+	virtual ae::VarData TryGet( ae::VarData optional ) const = 0;
+	virtual ae::ConstVarData TryGet( ae::ConstVarData optional ) const = 0;
+	virtual ae::VarData GetOrInsert( ae::VarData optional ) = 0;
+	virtual void Clear( ae::VarData optional ) = 0;
+
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+};
+
+//------------------------------------------------------------------------------
+// ae::ArrayVarType
+//------------------------------------------------------------------------------
+class ArrayVarType : public ae::VarType
+{
+public:
+	virtual const ae::VarType& GetInnerVarType() const = 0;
+
+	virtual ae::VarData GetElement( ae::VarData array, uint32_t idx ) const = 0;
+	virtual ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const = 0;
+	virtual uint32_t Resize( ae::VarData array, uint32_t size ) const = 0;
+	//! Current array length
+	virtual uint32_t GetLength( ae::ConstVarData array ) const = 0;
+	//! Return uint max for no hard limit
+	virtual uint32_t GetMaxLength() const = 0;
+	virtual uint32_t IsFixedLength() const = 0;
+
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+};
+
+//------------------------------------------------------------------------------
+// ae::MapVarType
+//------------------------------------------------------------------------------
+class MapVarType : public ae::VarType
+{
+public:
+	virtual const ae::VarType& GetKeyVarType() const = 0;
+	virtual const ae::VarType& GetValueVarType() const = 0;
+
+	//! Gets a value in the map by key, inserts a new value if the key does not
+	//! exist. Will return an empty value if there is a type mismatch with
+	//! either parameter or the map is full.
+	virtual ae::VarData Get( ae::VarData map, ae::ConstVarData key ) const = 0;
+	//! Gets a value in the map by key, returns an empty value if the key does not exist.
+	virtual ae::VarData TryGet( ae::VarData map, ae::ConstVarData key ) const = 0;
+	//! Gets a value in the map by key, returns an empty value if the key does  not exist.
+	virtual ae::ConstVarData TryGet( ae::ConstVarData map, ae::ConstVarData key ) const = 0;
+
+	//! Current number of map elements
+	virtual uint32_t GetLength( ae::ConstVarData a ) const = 0;
+	//! Return uint max for no hard limit
+	virtual uint32_t GetMaxLength() const = 0;
+
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+};
+
 //------------------------------------------------------------------------------
 // ae::Var class
 //! Information about a member variable registered with AE_REGISTER_CLASS_VAR().
@@ -5606,13 +5844,11 @@ enum class VarAdapterType
 class Var
 {
 public:
-	class Serializer
+	class Serializer // @TODO: Remove
 	{
 	public:
-		// @TODO: It's easy to miss patching this when hot loading, this interface should be improved
 		virtual ~Serializer();
 		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
-		//! Return false when mapping should fail so SetObjectValueFromString() will not overwrite existing value.
 		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
 	};
 	static void SetSerializer( const ae::Var::Serializer* serializer );
@@ -5621,13 +5857,10 @@ public:
 	// Info
 	//------------------------------------------------------------------------------
 	const char* GetName() const;
-	BasicType GetType() const;
-	const char* GetTypeName() const;
 	uint32_t GetOffset() const;
-	uint32_t GetSize() const;
-	
+
 	//------------------------------------------------------------------------------
-	// Get and set value functions
+	// @TODO: Remove, use GetOuterVarType() interface instead
 	//------------------------------------------------------------------------------
 	//! Get the value of this variable from the given \p obj. If the type of this
 	//! variable is a reference then ae::SetSerializer() must be called in
@@ -5697,19 +5930,13 @@ public:
 	//! than ae::Var::GetGetArrayLength().
 	//! @return A pointer to the member variable of \p obj.
 	template < typename T > const T* GetPointer( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	
-	//------------------------------------------------------------------------------
-	// Types
-	//------------------------------------------------------------------------------
-	const class Enum* GetEnum() const;
-	//! For Class, Ref, and Array types
-	const ae::Type* GetSubType() const;
-	bool IsArray() const;
-	bool IsArrayFixedLength() const;
-	//! Returns new length of array.
-	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
-	uint32_t GetArrayLength( const ae::Object* obj ) const;
-	uint32_t GetArrayMaxLength() const;
+
+	//--------------------------------------------------------------------------
+	// ae::VarType
+	//--------------------------------------------------------------------------
+	//! Returns the 'outermost' type of this var, eg. if this is an array of ints
+	//! the outer type would be ArrayVarType
+	const ae::VarType& GetOuterVarType() const;
 
 	//------------------------------------------------------------------------------
 	// Properties
@@ -5729,20 +5956,56 @@ public:
 	ae::AttributeList attributes;
 
 	//------------------------------------------------------------------------------
+	// @TODO: Remove, use GetOuterVarType() interface instead
+	//------------------------------------------------------------------------------
+	ae::BasicType GetType() const;
+	const class Enum* GetEnum() const;
+	const char* GetTypeName() const;
+	//! For Class, Ref, and Array types
+	const ae::Type* GetSubType() const;
+	bool IsArray() const;
+	bool IsArrayFixedLength() const;
+	//! Returns new length of array.
+	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
+	uint32_t GetArrayLength( const ae::Object* obj ) const;
+	uint32_t GetArrayMaxLength() const;
+
+	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
-	const class VarTypeArray* m_TryGetArrayAdapter() const;
 	void m_AddProp( const char* prop, const char* value );
 	const ae::Type* m_owner = nullptr;
 	ae::Str32 m_name = "";
-	BasicType m_type;
-	ae::Str32 m_typeName = "";
 	uint32_t m_offset = 0;
-	uint32_t m_size = 0;
-	const ae::VarTypeBase* m_varType = nullptr;
-	ae::TypeId m_subTypeId = ae::kInvalidTypeId;
-	mutable const class Enum* m_enum = nullptr;
+	const ae::VarType* m_varType = nullptr;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
+	// @TODO: Delete with SetObjectValue() etc
+	template< typename T >
+	const T* m_HACK_FindInnerVarType() const
+	{
+		static_assert( std::is_base_of_v< ae::VarType, T >, "" );
+		const ae::VarType* iter = m_varType;
+		while( iter )
+		{
+			if( const T* innerType = iter->AsVarType< T >() )
+			{
+				return innerType;
+			}
+			else if( const ae::PointerVarType* pointerVarType = iter->AsVarType< ae::PointerVarType >() )
+			{
+				iter = &pointerVarType->GetInnerVarType();
+			}
+			else if( const ae::ArrayVarType* arrayVarType = iter->AsVarType< ae::ArrayVarType >() )
+			{
+				iter = &arrayVarType->GetInnerVarType();
+			}
+			else
+			{
+				iter = nullptr;
+			}
+		}
+		return nullptr;
+	}
 };
 
 //------------------------------------------------------------------------------
@@ -6044,8 +6307,7 @@ constexpr auto _GetTypeName() // @TODO: Return ae::Str
 template< typename T >
 const char* GetTypeName()
 {
-	using BaseT = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
-	static constexpr auto name = ae::_GetTypeName< BaseT >();
+	static constexpr auto name = ae::_GetTypeName< typename ae::StripType< T >::T >();
 	return name.data();
 }
 
@@ -8115,15 +8377,15 @@ Optional< T >::Optional( const T& value ) : m_hasValue( false )
 }
 
 template< typename T >
-Optional< T >::Optional( const Optional< T >& other ) : m_hasValue( false )
-{
-	*this = other;
-}
-
-template< typename T >
 Optional< T >::Optional( T&& value ) noexcept : m_hasValue( false )
 {
 	*this = std::move( value );
+}
+
+template< typename T >
+Optional< T >::Optional( const Optional< T >& other ) : m_hasValue( false )
+{
+	*this = other;
 }
 
 template< typename T >
@@ -8139,21 +8401,43 @@ Optional< T >::~Optional()
 }
 
 template< typename T >
-void Optional< T >::operator =( const T& value )
+T& Optional< T >::operator =( const T& value )
 {
-	if( reinterpret_cast< T* >( &m_value ) == &value )
+	T* result = reinterpret_cast< T* >( &m_value );
+	if( result == &value )
 	{
-		return;
+		return *result;
 	}
 	else if( m_hasValue )
 	{
-		*reinterpret_cast< T* >( &m_value ) = value;
+		*result = value;
 	}
 	else
 	{
-		new( &m_value ) T( value );
+		new( result ) T( value );
 		m_hasValue = true;
 	}
+	return *result;
+}
+
+template< typename T >
+T& Optional< T >::operator =( T&& value ) noexcept
+{
+	T* result = reinterpret_cast< T* >( &m_value );
+	if( result == &value )
+	{
+		return *result;
+	}
+	else if( m_hasValue )
+	{
+		*result = std::move( value );
+	}
+	else
+	{
+		new( &m_value ) T( std::move( value ) );
+		m_hasValue = true;
+	}
+	return *result;
 }
 
 template< typename T >
@@ -8170,24 +8454,6 @@ void Optional< T >::operator =( const Optional< T >& other )
 	else
 	{
 		Clear();
-	}
-}
-
-template< typename T >
-void Optional< T >::operator =( T&& value ) noexcept
-{
-	if( reinterpret_cast< T* >( &m_value ) == &value )
-	{
-		return;
-	}
-	else if( m_hasValue )
-	{
-		*reinterpret_cast< T* >( &m_value ) = std::move( value );
-	}
-	else
-	{
-		new( &m_value ) T( std::move( value ) );
-		m_hasValue = true;
 	}
 }
 
@@ -11367,30 +11633,28 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
 //------------------------------------------------------------------------------
+template < typename T > ae::VarType* GetVarType(); // Forward declaration for VarTypeT< T >::Get()
+template < typename T > struct VarTypeT // Proxy for real VarTypeT< T > if definition is not available
+{
+	// @TODO: Use const instead of discarding it
+	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetVarType< std::remove_const_t< T > >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
+};
+
+template < typename T > ae::TypeId GetTypeId()
+{
+	return ae::GetTypeIdFromName( ae::_GetTypeName< typename ae::StripType< T >::T >().data() );
+}
+
 template < typename T >
 struct _TypeName
 {
+	// @TODO: Can this be replaced by ae::GetTypeName< T >()?
 	static const char* Get();
 };
-struct VarTypeBase
-{
-	virtual ~VarTypeBase() {}
-	virtual BasicType GetType() const = 0; // All types
-	virtual VarAdapterType GetAdapterType() const { return ae::VarAdapterType::None; }; // All types
-	virtual const char* GetName() const = 0; // All types
-	virtual uint32_t GetSize() const = 0; // All types
-	virtual const char* GetPrefix() const { return ""; } // Enum types
-	virtual bool SetRef( void* varData, const char* value, const ae::Var* var ) const { return false; } // Reference types
-	virtual bool SetRef( void* varData, ae::Object* value ) const { return false; } // Reference types
-	virtual std::string GetStringFromRef( const void* ) const { return ""; } // Reference types
-	virtual const char* GetSubTypeName() const { return ""; } // Array and Reference types
-};
-template < typename T > VarTypeBase* GetVarType(); // Forward declaration for VarType< T >::Get()
-template < typename T > struct VarType // Proxy for real VarType< T > if definition is not available
-{
-	static ae::VarTypeBase* Get( uint32_t _i = 0 ) { return ae::GetVarType< T >(); } // Param with default value so real VarType< T >::Get() will be prioritized if available
-};
 
+//------------------------------------------------------------------------------
+// Internal meta (Inheritor)
+//------------------------------------------------------------------------------
 template < typename Parent, typename This >
 Inheritor< Parent, This >::Inheritor()
 {
@@ -11466,10 +11730,7 @@ struct _VarCreator
 
 		m_var.m_owner = type;
 		m_var.m_name = varName;
-		m_var.m_varType = ae::VarType< V >::Get();
-		m_var.m_type = m_var.m_varType->GetType();
-		m_var.m_typeName = m_var.m_varType->GetName();
-		m_var.m_subTypeId = GetTypeIdFromName( m_var.m_varType->GetSubTypeName() );
+		m_var.m_varType = ae::VarTypeT< V >::Get();
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic push
 	#pragma clang diagnostic ignored "-Winvalid-offsetof"
@@ -11478,8 +11739,6 @@ struct _VarCreator
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic pop
 #endif
-		m_var.m_size = m_var.m_varType->GetSize();
-
 		type->m_AddVar( &m_var );
 	}
 	Var m_var;
@@ -11601,7 +11860,11 @@ public:
 		
 	_EnumCreator2( const char* valueName, T value )
 	{
-		const char* prefix = ae::VarType< T >::Get()->GetPrefix();
+		const ae::VarType* varType = ae::VarTypeT< T >::Get();
+		AE_ASSERT( varType );
+		const ae::EnumVarType* enumType = varType->AsVarType< ae::EnumVarType >();
+		AE_ASSERT( enumType );
+		const char* prefix = enumType->GetPrefix();
 		uint32_t prefixLen = (uint32_t)strlen( prefix );
 		AE_ASSERT( prefixLen < strlen( valueName ) );
 		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
@@ -11635,81 +11898,137 @@ public:
 //------------------------------------------------------------------------------
 // Internal meta var registration
 //------------------------------------------------------------------------------
-#define _ae_DefineMetaVarType( t, s, e ) \
+#define _ae_DefineBasicVarType( T, e ) \
 template <> \
-struct ae::VarType< t > : public ae::VarTypeBase { \
+struct ae::VarTypeT< T > : public ae::BasicVarType { \
 	ae::BasicType GetType() const override { return ae::BasicType::e; } \
-	const char* GetName() const override { return s; } \
-	uint32_t GetSize() const override { return sizeof(t); } \
-	static ae::VarTypeBase* Get() { static ae::VarType< t > s_type; return &s_type; }\
+	uint32_t GetSize() const override { return sizeof(T); } \
+	static ae::VarType* Get() { static ae::VarTypeT< T > s_type; return &s_type; }\
 };
 
-// @TODO: Should these names be the actual type or enum? eg. int32_t has multiple aliases
-_ae_DefineMetaVarType( uint8_t, "uint8_t", UInt8 );
-_ae_DefineMetaVarType( uint16_t, "uint16_t", UInt16 );
-_ae_DefineMetaVarType( uint32_t, "uint32_t", UInt32 );
-_ae_DefineMetaVarType( uint64_t, "uint64_t", UInt64 );
-_ae_DefineMetaVarType( int8_t, "int8_t", Int8 );
-_ae_DefineMetaVarType( int16_t, "int16_t", Int16 );
-_ae_DefineMetaVarType( int32_t, "int32_t", Int32 );
-_ae_DefineMetaVarType( int64_t, "int64_t", Int64 );
-_ae_DefineMetaVarType( ae::Int2, "ae::Int2", Int2 );
-_ae_DefineMetaVarType( ae::Int3, "ae::Int3", Int3 );
-_ae_DefineMetaVarType( bool, "bool", Bool );
-_ae_DefineMetaVarType( float, "float", Float );
-_ae_DefineMetaVarType( double, "double", Double );
-_ae_DefineMetaVarType( ae::Vec2, "ae::Vec2", Vec2 );
-_ae_DefineMetaVarType( ae::Vec3, "ae::Vec3", Vec3 );
-_ae_DefineMetaVarType( ae::Vec4, "ae::Vec4", Vec4 );
-_ae_DefineMetaVarType( ae::Color, "ae::Color", Color );
-_ae_DefineMetaVarType( ae::Matrix4, "ae::Matrix4", Matrix4 );
-_ae_DefineMetaVarType( ae::Str16, "String", String );
-_ae_DefineMetaVarType( ae::Str32, "String", String );
-_ae_DefineMetaVarType( ae::Str64, "String", String );
-_ae_DefineMetaVarType( ae::Str128, "String", String );
-_ae_DefineMetaVarType( ae::Str256, "String", String );
-_ae_DefineMetaVarType( ae::Str512, "String", String );
-
-template < typename T >
-struct ae::VarType< T* > : public ae::VarTypeBase
-{
-	ae::BasicType GetType() const override
-	{
-		static_assert( std::is_base_of< ae::Object, T >::value, "AE_REGISTER_CLASS_VAR pointers must have base type ae::Object" );
-		return ae::BasicType::Pointer; // @TODO: Remove this and allow pointers to all ae::VarTypeBase types?
-	}
-	ae::VarAdapterType GetAdapterType() const override { return ae::VarAdapterType::None; } // @TODO: Pointer?
-	const char* GetName() const override { return "Ref"; }
-	uint32_t GetSize() const override { return sizeof(T*); }
-	const char* GetSubTypeName() const override { return ae::GetTypeName< T >(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< T* > s_type; return &s_type; }
-};
+// @TODO: Split into C++ basic types and aether basic types?
+_ae_DefineBasicVarType( uint8_t, UInt8 );
+_ae_DefineBasicVarType( uint16_t, UInt16 );
+_ae_DefineBasicVarType( uint32_t, UInt32 );
+_ae_DefineBasicVarType( uint64_t, UInt64 );
+_ae_DefineBasicVarType( int8_t, Int8 );
+_ae_DefineBasicVarType( int16_t, Int16 );
+_ae_DefineBasicVarType( int32_t, Int32 );
+_ae_DefineBasicVarType( int64_t, Int64 );
+_ae_DefineBasicVarType( ae::Int2, Int2 );
+_ae_DefineBasicVarType( ae::Int3, Int3 );
+_ae_DefineBasicVarType( bool, Bool );
+_ae_DefineBasicVarType( float, Float );
+_ae_DefineBasicVarType( double, Double );
+_ae_DefineBasicVarType( ae::Vec2, Vec2 );
+_ae_DefineBasicVarType( ae::Vec3, Vec3 );
+_ae_DefineBasicVarType( ae::Vec4, Vec4 );
+_ae_DefineBasicVarType( ae::Color, Color );
+_ae_DefineBasicVarType( ae::Matrix4, Matrix4 );
+_ae_DefineBasicVarType( ae::Str16, String );
+_ae_DefineBasicVarType( ae::Str32, String );
+_ae_DefineBasicVarType( ae::Str64, String );
+_ae_DefineBasicVarType( ae::Str128, String );
+_ae_DefineBasicVarType( ae::Str256, String );
+_ae_DefineBasicVarType( ae::Str512, String );
 
 namespace ae {
 
-class VarTypeArray : public ae::VarTypeBase
+//------------------------------------------------------------------------------
+// ae::PointerVarType
+//------------------------------------------------------------------------------
+template < typename T >
+struct VarTypeT< T* > : public ae::PointerVarType
 {
-public:
-	ae::VarAdapterType GetAdapterType() const override { return ae::VarAdapterType::Array; }
-	virtual void* GetElement( void* a, uint32_t idx ) const = 0;
-	virtual const void* GetElement( const void* a, uint32_t idx ) const = 0;
-	virtual uint32_t Resize( void* a, uint32_t size ) const = 0;
-	//! Current array length
-	virtual uint32_t GetLength( const void* a ) const = 0;
-	//! Return uint max for no hard limit
-	virtual uint32_t GetMaxLength() const = 0;
-	virtual uint32_t IsFixedLength() const = 0;
+	static_assert( std::is_base_of< ae::Object, T >::value, "T must be derived from ae::Object" );
+
+	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
+	static ae::VarType* Get() { static ae::VarTypeT< T* > s_type; return &s_type; }
+
+	bool SetRef( ae::VarData _varData, ae::Object* value ) const override
+	{
+		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
+		{
+			if( !value )
+			{
+				*varData = nullptr;
+				return true;
+			}
+			else
+			{
+				const ae::Type* varType = GetType< T >();
+				const ae::Type* valueType = ae::GetTypeFromObject( value );
+				if( varType && valueType && valueType->IsType( varType ) )
+				{
+					*varData = static_cast< T* >( value );
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	bool SetRefFromString( ae::VarData _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override
+	{
+		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
+		{
+			ae::Object* obj = nullptr;
+			if( fn && fn( userData, value, &obj ) )
+			{
+				if( !obj )
+				{
+					// When fn return true and null, clear pointer value
+					*varData = nullptr;
+					return true;
+				}
+				const ae::Type* varType = GetType< T >();
+				const ae::Type* valueType = ae::GetTypeFromObject( obj );
+				if( varType && valueType && valueType->IsType( varType ) )
+				{
+					*varData = static_cast< T* >( obj );
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	std::string GetStringFromRef( ae::ConstVarData _varData, ObjectPointerToStringFn fn, const void* userData ) const override
+	{
+		if( fn )
+		{
+			// @TODO: Type compatibility checks
+			if( T* const* varData = static_cast< T* const* >( _varData.Get( this ) ) )
+			{
+				return fn( userData, *varData );
+			}
+		}
+		return "";
+	}
+};
+template<>
+struct VarTypeT< std::nullptr_t > : public ae::PointerVarType
+{
+	const ae::VarType& GetInnerVarType() const override { AE_FAIL(); return *(ae::VarType*)nullptr; }
+	static ae::VarType* Get() { static ae::VarTypeT< std::nullptr_t > s_type; return &s_type; }
+	bool SetRef( ae::VarData varData, ae::Object* value ) const override { AE_FAIL(); return false; }
+	bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
+	std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
 };
 
 template < typename T, uint32_t N >
-class VarTypeDynamicArray : public ae::VarTypeArray
+class DynamicArrayVarType : public ae::ArrayVarType
 {
 public:
-	void* GetElement( void* a, uint32_t idx ) const override { return &((Arr*)a)->operator[]( idx ); }
-	const void* GetElement( const void* a, uint32_t idx ) const override { return &((Arr*)a)->operator[]( idx ); }
-	uint32_t Resize( void* _a, uint32_t length ) const override
+	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	uint32_t Resize( ae::VarData array, uint32_t length ) const override
 	{
-		Arr& a = *(Arr*)_a;
+		if( !array )
+		{
+			return 0;
+		}
+		Arr& a = *(Arr*)array.Get( this );
 		if ( a.Length() < length )
 		{
 			a.Reserve( length );
@@ -11727,7 +12046,7 @@ public:
 		}
 		return a.Length();
 	}
-	uint32_t GetLength( const void* a ) const override { return ((Arr*)a)->Length(); }
+	uint32_t GetLength( ae::ConstVarData array ) const override { return array ? ((Arr*)array.Get( this ))->Length() : 0; }
 	uint32_t GetMaxLength() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
 	uint32_t IsFixedLength() const override { return false; }
 
@@ -11735,13 +12054,13 @@ public:
 };
 
 template < typename T, uint32_t N >
-class VarTypeStaticArray : public ae::VarTypeArray
+class StaticArrayVarType : public ae::ArrayVarType
 {
 public:
-	void* GetElement( void* a, uint32_t idx ) const override { return &((T*)a)[ idx ]; }
-	const void* GetElement( const void* a, uint32_t idx ) const override { return &((T*)a)[ idx ]; }
-	uint32_t Resize( void* a, uint32_t length ) const override { return N; }
-	uint32_t GetLength( const void* a ) const override { return N; }
+	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
+	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((T*)array.Get( this ))[ idx ] : nullptr }; }
+	uint32_t Resize( ae::VarData array, uint32_t length ) const override { return N; }
+	uint32_t GetLength( ae::ConstVarData array ) const override { return N; }
 	uint32_t GetMaxLength() const override { return N; }
 	uint32_t IsFixedLength() const override { return true; }
 };
@@ -11749,33 +12068,82 @@ public:
 } // ae end
 
 template < typename T, uint32_t N >
-struct ae::VarType< ae::Array< T, N > > : public ae::VarTypeDynamicArray< T, N >
+struct ae::VarTypeT< ae::Array< T, N > > : public ae::DynamicArrayVarType< T, N >
 {
-	uint32_t GetSize() const override { return sizeof(T); }
-	// Use sub-type
-	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override{ return ae::VarType< T >::Get()->SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< ae::Array< T, N > > s_type; return &s_type; }
+	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
+	static ae::VarType* Get() { static ae::VarTypeT< ae::Array< T, N > > s_type; return &s_type; }
 };
 
 template < typename T, uint32_t N >
-struct ae::VarType< T[ N ] > : public ae::VarTypeStaticArray< T, N >
+struct ae::VarTypeT< T[ N ] > : public ae::StaticArrayVarType< T, N >
 {
-	uint32_t GetSize() const override { return sizeof(T); }
-	// Use sub-type
-	ae::BasicType GetType() const override { return ae::VarType< T >::Get()->GetType(); }
-	const char* GetName() const override { return ae::VarType< T >::Get()->GetName(); }
-	const char* GetPrefix() const override { return ae::VarType< T >::Get()->GetPrefix(); }
-	bool SetRef( void* varData, const char* value, const ae::Var* var ) const override { return ae::VarType< T >::Get()->SetRef( varData, value, var ); }
-	bool SetRef( void* varData, ae::Object* value ) const override { return ae::VarType< T >::Get()->SetRef( varData, value ); }
-	std::string GetStringFromRef( const void* ref ) const override { return ae::VarType< T >::Get()->GetStringFromRef( ref ); }
-	const char* GetSubTypeName() const override { return ae::VarType< T >::Get()->GetSubTypeName(); }
-	static ae::VarTypeBase* Get() { static ae::VarType< T[ N ] > s_type; return &s_type; }
+	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
+	static ae::VarType* Get() { static ae::VarTypeT< T[ N ] > s_type; return &s_type; }
+};
+
+//------------------------------------------------------------------------------
+// ae::MapVarType template implementation
+//------------------------------------------------------------------------------
+template < typename K, typename V, uint32_t N >
+struct ae::VarTypeT< ae::Map< K, V, N > > : public ae::MapVarType
+{
+	typedef ae::Map< K, V, N > MapType;
+	static ae::VarType* Get() { static ae::VarTypeT< MapType > s_type; return &s_type; }
+
+	const ae::VarType& GetKeyVarType() const override { return *ae::VarTypeT< K >::Get(); }
+	const ae::VarType& GetValueVarType() const override { return *ae::VarTypeT< V >::Get(); }
+
+	ae::VarData Get( ae::VarData _map, ae::ConstVarData _key ) const override
+	{
+		if( MapType* map = static_cast< MapType* >( _map.Get( this ) ) )
+		{
+			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
+			{
+				V* value = map->TryGet( *key );
+				if( !value && map->Length() < map->Size() )
+				{
+					value = &map->Set( *key, {} );
+				}
+				return { GetValueVarType(), value };
+			}
+		}
+		return {};
+	}
+
+	ae::VarData TryGet( ae::VarData _map, ae::ConstVarData _key ) const override
+	{
+		if( MapType* map = static_cast< MapType* >( _map.Get( this ) ) )
+		{
+			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
+			{
+				return { GetValueVarType(), map->TryGet( *key ) };
+			}
+		}
+		return {};
+	}
+
+	ae::ConstVarData TryGet( ae::ConstVarData _map, ae::ConstVarData _key ) const override
+	{
+		if( const MapType* map = static_cast< const MapType* >( _map.Get( this ) ) )
+		{
+			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
+			{
+				return { GetValueVarType(), map->TryGet( *key ) };
+			}
+		}
+		return {};
+	}
+
+	uint32_t GetLength( ae::ConstVarData _map ) const override
+	{
+		const MapType* map = static_cast< const MapType* >( _map.Get( this ) );
+		return map ? map->Length() : 0;
+	}
+
+	uint32_t GetMaxLength() const override
+	{
+		return N ? N : ae::MaxValue< uint32_t >();
+	}
 };
 
 template < typename T >
@@ -11818,6 +12186,10 @@ std::string ae::Enum::GetNameByValue( T value ) const
 template < typename T >
 bool ae::Enum::GetValueFromString( const char* str, T* valueOut ) const
 {
+	if( !str )
+	{
+		return false;
+	}
 	int32_t value = 0;
 	if ( m_enumNameToValue.TryGet( str, &value ) ) // Set object var with named enum value
 	{
@@ -11847,6 +12219,187 @@ template < typename T >
 bool ae::Enum::HasValue( T value ) const
 {
 	return m_enumValueToName.TryGet( value );
+}
+
+//------------------------------------------------------------------------------
+// ae::VarData templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+ae::VarData::VarData( T* data )
+{
+	m_data = data;
+	m_varType = ae::VarTypeT< T >::Get();
+	AE_ASSERT( m_varType );
+}
+
+//------------------------------------------------------------------------------
+// ae::ConstVarData templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+ae::ConstVarData::ConstVarData( const T* data )
+{
+	m_data = data;
+	m_varType = ae::VarTypeT< T >::Get();
+	AE_ASSERT( m_varType );
+}
+
+//------------------------------------------------------------------------------
+// ae::VarType templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+const T* ae::VarType::AsVarType() const
+{
+	return IsVarType< T >() ? static_cast< const T* >( this ) : nullptr;
+}
+
+template< typename T >
+bool ae::VarType::IsVarType() const
+{
+	using U = typename ae::StripType< T >::T;
+	if constexpr( std::is_same_v< ae::VarType, U > )
+	{
+		return true;
+	}
+	else
+	{
+		static_assert( std::is_base_of_v< ae::VarType, U >, "T must inherit from ae::VarType" );
+		return GetVarTypeId() == ae::GetTypeId< U >();
+	}
+}
+
+//------------------------------------------------------------------------------
+// ae::BasicVarType templated member functions
+//------------------------------------------------------------------------------
+template < typename T >
+bool ae::BasicVarType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
+{
+	if( valueOut )
+	{
+		if( const void* varData = _varData.Get( this ) )
+		{
+			const ae::VarType* varType = ae::VarTypeT< T >::Get();
+			const ae::BasicVarType* basicVarType = varType ? varType->AsVarType< ae::BasicVarType >() : nullptr;
+			if( basicVarType && basicVarType->GetType() == GetType() )
+			{
+				*valueOut = *static_cast< const T* >( varData );
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+template < typename T >
+bool ae::BasicVarType::SetVarData( ae::VarData _varData, const T& value ) const
+{
+	if( void* varData = _varData.Get( this ) )
+	{
+		const ae::VarType* varType = ae::VarTypeT< T >::Get();
+		const ae::BasicVarType* basicVarType = varType ? varType->AsVarType< ae::BasicVarType >() : nullptr;
+		if( basicVarType && basicVarType->GetType() == GetType() )
+		{
+			*static_cast< T* >( varData ) = value;
+			return true;
+		}
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::EnumVarType templated member functions
+//------------------------------------------------------------------------------
+template < typename T >
+bool ae::EnumVarType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
+{
+	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
+	{
+		AE_DEBUG_ASSERT_MSG( false, "Invalid type conversion attempted" );
+		return false;
+	}
+	else if( valueOut )
+	{
+		if( const void* varData = _varData.Get( this ) )
+		{
+			const ae::Enum* enumType = GetEnum();
+			AE_ASSERT( enumType );
+			if( enumType->TypeIsSigned() )
+			{
+				switch( enumType->TypeSize() )
+				{
+					case 1: { *valueOut = static_cast< T >( *static_cast< const int8_t* >( varData ) ); return true; }
+					case 2: { *valueOut = static_cast< T >( *static_cast< const int16_t* >( varData ) ); return true; }
+					case 4: { *valueOut = static_cast< T >( *static_cast< const int32_t* >( varData ) ); return true; }
+					case 8: { *valueOut = static_cast< T >( *static_cast< const int64_t* >( varData ) ); return true; }
+				}
+			}
+			else
+			{
+				switch( enumType->TypeSize() )
+				{
+					case 1: { *valueOut = static_cast< T >( *static_cast< const uint8_t* >( varData ) ); return true; }
+					case 2: { *valueOut = static_cast< T >( *static_cast< const uint16_t* >( varData ) ); return true; }
+					case 4: { *valueOut = static_cast< T >( *static_cast< const uint32_t* >( varData ) ); return true; }
+					case 8: { *valueOut = static_cast< T >( *static_cast< const uint64_t* >( varData ) ); return true; }
+				}
+			}
+		}
+	}
+	return false;
+}
+
+template < typename T >
+bool ae::EnumVarType::SetVarData( ae::VarData _varData, const T& value ) const
+{
+	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
+	{
+		AE_DEBUG_ASSERT_MSG( false, "Invalid type conversion attempted" );
+		return false;
+	}
+	else if( void* varData = _varData.Get( this ) )
+	{
+		const ae::Enum* enumType = GetEnum();
+		AE_ASSERT( enumType );
+		if( enumType->TypeIsSigned() )
+		{
+			switch( enumType->TypeSize() )
+			{
+				case 1: { *static_cast< int8_t* >( varData ) = static_cast< int8_t >( value ); return true; }
+				case 2: { *static_cast< int16_t* >( varData ) = static_cast< int16_t >( value ); return true; }
+				case 4: { *static_cast< int32_t* >( varData ) = static_cast< int32_t >( value ); return true; }
+				case 8: { *static_cast< int64_t* >( varData ) = static_cast< int64_t >( value ); return true; }
+			}
+		}
+		else
+		{
+			switch( enumType->TypeSize() )
+			{
+				case 1: { *static_cast< uint8_t* >( varData ) = static_cast< uint8_t >( value ); return true; }
+				case 2: { *static_cast< uint16_t* >( varData ) = static_cast< uint16_t >( value ); return true; }
+				case 4: { *static_cast< uint32_t* >( varData ) = static_cast< uint32_t >( value ); return true; }
+				case 8: { *static_cast< uint64_t* >( varData ) = static_cast< uint64_t >( value ); return true; }
+			}
+		}
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::ClassVarType templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+T* ae::ClassVarType::TryGet( ae::VarData varData ) const
+{
+	return const_cast< T* >( TryGet< T >( (ae::ConstVarData)varData ) );
+}
+
+template< typename T >
+const T* ae::ClassVarType::TryGet( ae::ConstVarData varData ) const
+{
+	if( GetType()->IsType< T >() )
+	{
+		return static_cast< const T* >( varData.Get( this ) );
+	}
+	return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -11955,7 +12508,6 @@ bool ae::AttributeList::Has() const
 template < typename T >
 bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx ) const
 {
-	// @TODO: Use GetPointer()
 	if ( !obj )
 	{
 		return false;
@@ -11964,109 +12516,77 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 	const ae::Type* objType = ae::GetTypeFromObject( obj );
 	AE_ASSERT( objType );
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
-	
-	ae::Object* valueObj = nullptr;
-	if ( m_type == BasicType::Pointer || m_type == BasicType::CustomRef )
+
+	ae::VarData varData( this, obj );
+	if ( const ae::ArrayVarType* arrayVarType = varData.GetType().AsVarType< ae::ArrayVarType >() )
 	{
-		valueObj = *(ae::Object**)&value;
-		const ae::Type* refType = GetSubType();
-		const ae::Type* valueType = ae::GetTypeFromObject( valueObj );
-		AE_ASSERT( valueType );
-		AE_ASSERT_MSG( valueType->IsType( refType ), "Attempting to set ref type '#' with unrelated type '#'", refType->GetName(), valueType->GetName() );
-	}
-	else
-	{
-		BasicType typeCheck = m_varType->GetType();
-		AE_ASSERT( typeCheck == m_type );
-		AE_ASSERT( m_size == sizeof( T ) );
-	}
-	
-	T* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
-	{
-		void* arr = (uint8_t*)obj + m_offset;
-		const int32_t arrayLen = arrayAdapter->GetLength( arr );
-		if ( arrayIdx == -1 )
+		if( arrayIdx < 0 )
 		{
-			AE_FAIL_MSG( "Attempted to set array var '#' without specifying an index", m_name );
 			return false;
 		}
-		else if ( arrayIdx >= 0 && arrayIdx < arrayLen )
-		{
-			varData = (T*)arrayAdapter->GetElement( arr, arrayIdx );
-		}
-		else
-		{
-			AE_FAIL_MSG( "Attempted to set array var '#' (length #) with out of bounds index '#'", m_name, arrayLen, arrayIdx );
-			return false;
-		}
+		varData = arrayVarType->GetElement( varData, arrayIdx );
 	}
-	else if ( arrayIdx == -1 )
+	else if( arrayIdx >= 0 )
 	{
-		varData = reinterpret_cast< T* >( (uint8_t*)obj + m_offset );
-	}
-	else
-	{
-		AE_FAIL_MSG( "Attempted to set non-array var '#' with index '#'", m_name, arrayIdx );
 		return false;
 	}
-	AE_ASSERT( varData );
 
-	if ( m_type == BasicType::CustomRef )
+	if( varData )
 	{
-		return m_varType->SetRef( varData, valueObj );
+		const ae::VarType* varType = &varData.GetType();
+		if( const ae::BasicVarType* basicVarType = varType->AsVarType< ae::BasicVarType >() )
+		{
+			return basicVarType->SetVarData( varData, value );
+		}
+		else if( const ae::EnumVarType* enumVarType = varType->AsVarType< ae::EnumVarType >() )
+		{
+			return enumVarType->SetVarData( varData, value );
+		}
+		else if constexpr( std::is_pointer_v< T > || std::is_null_pointer_v< T > )
+		{
+			const ae::PointerVarType* pointerVarType = varType->AsVarType< ae::PointerVarType >();
+			return pointerVarType ? pointerVarType->SetRef( varData, (ae::Object*)value ) : false;
+		}
 	}
-	else
-	{
-		*varData = value;
-	}
-	return true;
+	return false;
 }
 
 template < typename T >
-bool ae::Var::GetObjectValue( const ae::Object* _obj, T* valueOut, int32_t arrayIdx ) const
+bool ae::Var::GetObjectValue( const ae::Object* object, T* valueOut, int32_t arrayIdx ) const
 {
-	// @TODO: Use GetPointer()
-	if ( !_obj )
+	if ( !object )
 	{
 		return false;
 	}
-	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
-	
-	const uint8_t* obj = reinterpret_cast< const uint8_t* >( _obj );
-	const void* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+
+	ae::ConstVarData varData;
+	if ( const ae::ArrayVarType* arrayType = GetOuterVarType().AsVarType< ae::ArrayVarType >() )
 	{
-		const void* arr = obj + m_offset;
-		if ( arrayIdx >= 0 && arrayAdapter->GetLength( arr ) )
-		{
-			varData = arrayAdapter->GetElement( arr, arrayIdx );
-		}
-		else
+		if( arrayIdx < 0 )
 		{
 			return false;
 		}
+		ae::ConstVarData array( this, object );
+		varData = arrayType->GetElement( array, arrayIdx );
 	}
 	else if ( arrayIdx < 0 )
 	{
-		varData = obj + m_offset;
+		varData = { this, object };
 	}
-	else
+
+	if( varData )
 	{
-		return false;
+		const ae::VarType* varType = &varData.GetType();
+		if( const ae::BasicVarType* basicType = varType->AsVarType< ae::BasicVarType >() )
+		{
+			return basicType->GetVarData( varData, valueOut );
+		}
+		else if( const ae::EnumVarType* enumType = varType->AsVarType< ae::EnumVarType >() )
+		{
+			return enumType->GetVarData( varData, valueOut );
+		}
 	}
-	AE_ASSERT( varData );
-	
-	if ( m_type == BasicType::CustomRef )
-	{
-		AE_FAIL_MSG( "Getting the value of registered CustomRefs is currently not supported. Try GetObjectValueAsString()." );
-		return false;
-	}
-	else
-	{
-		*valueOut = *reinterpret_cast< const T* >( varData );
-		return true;
-	}
+	return false;
 }
 
 template < typename T >
@@ -12078,33 +12598,36 @@ T* ae::Var::GetPointer( ae::Object* obj, int32_t arrayIdx ) const
 template < typename T >
 const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 {
-	if ( !obj )
+	if( !obj )
 	{
 		return nullptr;
 	}
-	
-	// @TODO: Safety checks
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+
+	ae::ConstVarData varData( this, obj );
+	if( const ae::ArrayVarType* arrayVarType = varData.GetType().AsVarType< ae::ArrayVarType >() )
 	{
-		void* arr = (uint8_t*)obj + m_offset;
-		const uint32_t arrayLen = arrayAdapter->GetLength( arr );
-		if ( arrayIdx >= 0 && arrayLen )
-		{
-			AE_ASSERT_MSG( arrayIdx < arrayLen, "Attempted to get array var '#' (length #) with out of bounds index '#'", m_name, arrayLen, arrayIdx );
-			return (T*)( arrayAdapter->GetElement( arr, arrayIdx ) );
-		}
-		else
+		if( arrayIdx < 0 )
 		{
 			return nullptr;
 		}
+		varData = arrayVarType->GetElement( varData, arrayIdx );
 	}
-	else if ( arrayIdx < 0 )
+	else if( arrayIdx >= 0 )
 	{
-		return (T*)( reinterpret_cast< const uint8_t* >( obj ) + m_offset );
+		return nullptr;
+	}
+
+	if( varData )
+	{
+		const ae::ClassVarType* classVarType = varData.GetType().AsVarType< ae::ClassVarType >();
+		return classVarType ? classVarType->TryGet< T >( varData ) : nullptr;
 	}
 	return nullptr;
 }
 
+//------------------------------------------------------------------------------
+// ae::Cast implementation
+//------------------------------------------------------------------------------
 template< typename T, typename C >
 const T* ae::Cast( const C* obj )
 {
@@ -26039,6 +26562,121 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
 }
 
 //------------------------------------------------------------------------------
+// ae::VarData member functions
+//------------------------------------------------------------------------------
+ae::VarData::VarData( const ae::VarType& varType, void* data )
+{
+	m_varType = &varType;
+	m_data = data;
+}
+ae::VarData::VarData( const ae::Var* var, ae::Object* object )
+{
+	m_varType = &var->GetOuterVarType();
+	m_data = (uint8_t*)object + var->GetOffset();
+	if constexpr( _AE_DEBUG_ )
+	{
+		const ae::Type* type = ae::GetTypeFromObject( object );
+		AE_ASSERT_MSG( type->IsType( var->m_owner ), "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+	}
+}
+ae::VarData::operator bool() const
+{
+	return m_data != nullptr;
+}
+const ae::VarType& ae::VarData::GetType() const
+{
+	AE_ASSERT_MSG( m_data, "Check VarData before calling GetType()" );
+	AE_ASSERT( m_varType );
+	return *m_varType;
+}
+void* ae::VarData::Get( const ae::VarType* caller ) const
+{
+	if( !m_varType )
+	{
+		return nullptr;
+	}
+	if( caller && m_varType != caller )
+	{
+		AE_DEBUG_ASSERT_MSG( false, "Bad VarData access" );
+		return nullptr;
+	}
+	return m_data;
+}
+bool ae::VarData::operator == ( const ae::VarData& other ) const
+{
+	if( m_data == other.m_data )
+	{
+		AE_DEBUG_ASSERT( m_varType == other.m_varType );
+		return true;
+	}
+	return false;
+}
+bool ae::VarData::operator != ( const ae::VarData& other ) const
+{
+	return m_data == other.m_data;
+}
+
+//------------------------------------------------------------------------------
+// ae::ConstVarData member functions
+//------------------------------------------------------------------------------
+ae::ConstVarData::ConstVarData( const ae::VarType& varType, const void* data )
+{
+	m_varType = &varType;
+	m_data = data;
+}
+ae::ConstVarData::ConstVarData( VarData varData )
+{
+	m_varType = varData.m_varType;
+	m_data = varData.m_data;
+}
+ae::ConstVarData::ConstVarData( const ae::Var* var, const ae::Object* object )
+{
+	m_varType = &var->GetOuterVarType();
+	m_data = (uint8_t*)object + var->GetOffset();
+	if constexpr( _AE_DEBUG_ )
+	{
+		const ae::Type* type = ae::GetTypeFromObject( object );
+		AE_ASSERT_MSG( type->IsType( var->m_owner ), "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+	}
+}
+ae::ConstVarData::operator bool() const
+{
+	return m_data != nullptr;
+}
+const ae::VarType& ae::ConstVarData::GetType() const
+{
+	AE_ASSERT_MSG( m_data, "Check ConstVarData before calling GetType()" );
+	AE_ASSERT( m_varType );
+	return *m_varType;
+}
+const void* ae::ConstVarData::Get( const ae::VarType* caller ) const
+{
+	if( !m_varType )
+	{
+		return nullptr;
+	}
+	if( caller && m_varType != caller )
+	{
+		AE_DEBUG_ASSERT_MSG( false, "Bad VarData access" );
+		return nullptr;
+	}
+	return m_data;
+}
+bool ae::ConstVarData::operator == ( const ae::ConstVarData& other ) const
+{
+	if( m_data == other.m_data )
+	{
+		AE_DEBUG_ASSERT( m_varType == other.m_varType );
+		return true;
+	}
+	return false;
+}
+bool ae::ConstVarData::operator != ( const ae::ConstVarData& other ) const
+{
+	return m_data == other.m_data;
+}
+
+//------------------------------------------------------------------------------
 // ae::Var member functions
 //------------------------------------------------------------------------------
 ae::Var::Serializer::~Serializer()
@@ -26059,10 +26697,53 @@ void ae::Var::SetSerializer( const ae::Var::Serializer* serializer )
 }
 
 const char* ae::Var::GetName() const { return m_name.c_str(); }
-ae::BasicType ae::Var::GetType() const { return m_type; }
-const char* ae::Var::GetTypeName() const { return m_typeName.c_str(); }
 uint32_t ae::Var::GetOffset() const { return m_offset; }
-uint32_t ae::Var::GetSize() const { return m_size; }
+
+std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx ) const
+{
+	if ( !obj )
+	{
+		return "";
+	}
+	ae::ConstVarData varData( this, obj );
+	const ae::VarType* varType = &GetOuterVarType();
+	if( const ae::ArrayVarType* arrayType = varType->AsVarType< ae::ArrayVarType >() )
+	{
+		if( arrayIdx < 0 )
+		{
+			return "";
+		}
+		varData = arrayType->GetElement( varData, arrayIdx );
+		varType = &arrayType->GetInnerVarType();
+	}
+	else if( arrayIdx >= 0 )
+	{
+		return "";
+	}
+
+	if( varData )
+	{
+		if( const ae::BasicVarType* basicVarType = varType->AsVarType< ae::BasicVarType >() )
+		{
+			return basicVarType->GetVarDataAsString( varData );
+		}
+		else if( const ae::EnumVarType* enumVarType = varType->AsVarType< ae::EnumVarType >() )
+		{
+			return enumVarType->GetVarDataAsString( varData );
+		}
+		else if( const ae::PointerVarType* pointerVarType = varType->AsVarType< ae::PointerVarType >() )
+		{
+			ObjectPointerToStringFn fn = []( const void* userData, const ae::Object* obj ) -> std::string
+			{
+				const ae::Var::Serializer* serializer = (const ae::Var::Serializer*)userData;
+				AE_ASSERT( serializer );
+				return serializer->ObjectPointerToString( obj );
+			};
+			return pointerVarType->GetStringFromRef( varData, fn, _Globals::Get()->varSerializer );
+		}
+	}
+	return "";
+}
 
 bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx ) const
 {
@@ -26076,270 +26757,51 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	AE_ASSERT( objType );
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
 	
-	void* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+	const ae::VarType* varType = &GetOuterVarType();
+	ae::VarData varData( this, obj );
+	if( const ae::ArrayVarType* arrayType = varType->AsVarType< ae::ArrayVarType >() )
 	{
-		void* arr = (uint8_t*)obj + m_offset;
-		if ( arrayIdx >= 0 && arrayIdx < (int32_t)arrayAdapter->GetLength( arr ) )
-		{
-			varData = arrayAdapter->GetElement( arr, arrayIdx );
-		}
-		else
+		if( arrayIdx < 0 )
 		{
 			return false;
 		}
+		varType = &arrayType->GetInnerVarType();
+		varData = arrayType->GetElement( varData, arrayIdx );
 	}
-	else if ( arrayIdx < 0 )
-	{
-		varData = (uint8_t*)obj + m_offset;
-	}
-	else
+	else if( arrayIdx >= 0 )
 	{
 		return false;
 	}
-	AE_ASSERT( varData );
-	
-	switch ( m_type )
-	{
-		case BasicType::Class:
-		{
-			const ae::Type* subType = GetSubType();
-			AE_ASSERT( subType );
-			AE_ASSERT_MSG( "Can't set member '#' with string '#'", subType->GetName(), value );
-			return false;
-		}
-		case BasicType::String:
-		{
-			switch ( m_size )
-			{
-#define CASE_STRING( _size ) \
-				case _size:\
-				{\
-					ae::Str##_size* str = (ae::Str##_size*)varData;\
-					if ( strlen( value ) > str->MaxLength() ) { return false; }\
-					*str = value;\
-					return true;\
-				}
-				CASE_STRING( 16 )
-				CASE_STRING( 32 )
-				CASE_STRING( 64 )
-				CASE_STRING( 128 )
-				CASE_STRING( 256 )
-				CASE_STRING( 512 )
-#undef CASE_STRING
-				default:
-				{
-					AE_FAIL_MSG( "Invalid string size '#'", m_size );
-					return false;
-				}
-			}
-		}
-		case BasicType::UInt8:
-		{
-			AE_ASSERT( m_size == sizeof(uint8_t) );
-			uint8_t* u8 = (uint8_t*)varData;
-			sscanf( value, "%" SCNu8, u8 );
-			return true;
-		}
-		case BasicType::UInt16:
-		{
-			AE_ASSERT( m_size == sizeof(uint16_t) );
-			uint16_t* u16 = (uint16_t*)varData;
-			sscanf( value, "%" SCNu16, u16 );
-			return true;
-		}
-		case BasicType::UInt32:
-		{
-			AE_ASSERT( m_size == sizeof(uint32_t) );
-			uint32_t* u32 = (uint32_t*)varData;
-			sscanf( value, "%" SCNu32, u32 );
-			return true;
-		}
-		case BasicType::UInt64:
-		{
-			AE_ASSERT( m_size == sizeof(uint64_t) );
-			uint64_t* u64 = (uint64_t*)varData;
-			sscanf( value, "%" SCNu64, u64 );
-			return true;
-		}
-		case BasicType::Int8:
-		{
-			AE_ASSERT( m_size == sizeof(int8_t) );
-			int8_t* i8 = (int8_t*)varData;
-			sscanf( value, "%" SCNi8, i8 );
-			return true;
-		}
-		case BasicType::Int16:
-		{
-			AE_ASSERT( m_size == sizeof(int16_t) );
-			int16_t* i16 = (int16_t*)varData;
-			sscanf( value, "%" SCNi16, i16 );
-			return true;
-		}
-		case BasicType::Int32:
-		{
-			AE_ASSERT( m_size == sizeof(int32_t) );
-			int32_t* i32 = (int32_t*)varData;
-			sscanf( value, "%" SCNi32, i32 );
-			return true;
-		}
-		case BasicType::Int64:
-		{
-			AE_ASSERT( m_size == sizeof(int64_t) );
-			int64_t* i64 = (int64_t*)varData;
-			sscanf( value, "%" SCNi64, i64 );
-			return true;
-		}
-		case BasicType::Int2:
-		{
-			AE_ASSERT( m_size == sizeof( ae::Int2 ) );
-			ae::Int2* v = (ae::Int2*)varData;
-			*v = ae::FromString< ae::Int2 >( value, ae::Int2( 0.0f ) );
-			return true;
-		}
-		case BasicType::Int3:
-		{
-			AE_ASSERT( m_size == sizeof( ae::Int3 ) );
-			ae::Int3* v = (ae::Int3*)varData;
-			*v = ae::FromString< ae::Int3 >( value, ae::Int3( 0.0f ) );
-			return true;
-		}
-		case BasicType::Bool:
-		{
-			*(bool*)varData = ae::FromString< bool >( value, false );
-			return true;
-		}
-		case BasicType::Float:
-		{
-			AE_ASSERT( m_size == sizeof(float) );
-			float* f = (float*)varData;
-			sscanf( value, "%f", f );
-			return true;
-		}
-		case BasicType::Double:
-		{
-			AE_ASSERT( m_size == sizeof(double) );
-			double* f = (double*)varData;
-			sscanf( value, "%lf", f );
-			return true;
-		}
-		case BasicType::Vec2:
-		{
-			AE_ASSERT( m_size == sizeof(ae::Vec2) );
-			ae::Vec2* v = (ae::Vec2*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
-			return true;
-		}
-		case BasicType::Vec3:
-		{
-			AE_ASSERT( m_size == sizeof(ae::Vec3) );
-			ae::Vec3* v = (ae::Vec3*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
-			return true;
-		}
-		case BasicType::Vec4:
-		{
-			AE_ASSERT( m_size == sizeof(ae::Vec4) );
-			ae::Vec4* v = (ae::Vec4*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
-			return true;
-		}
-		case BasicType::Matrix4:
-		{
-			AE_ASSERT( m_size == sizeof(ae::Matrix4) );
-			ae::Matrix4* v = (ae::Matrix4*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
-			return true;
-		}
-		case BasicType::Color:
-		{
-			AE_ASSERT( m_size == sizeof(ae::Color) );
-			ae::Color* v = (ae::Color*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
-			return true;
-		}
-		case BasicType::Enum:
-		{
-			if ( !value[ 0 ] )
-			{
-				return false;
-			}
-			
-			const class Enum* enumType = GetEnum();
-			
-			if ( enumType->TypeIsSigned() )
-			{
-				switch ( enumType->TypeSize() )
-				{
-				case 1:
-					return enumType->GetValueFromString( value, reinterpret_cast< int8_t* >( varData ) );
-				case 2:
-					return enumType->GetValueFromString( value, reinterpret_cast< int16_t* >( varData ) );
-				case 4:
-					return enumType->GetValueFromString( value, reinterpret_cast< int32_t* >( varData ) );
-				case 8:
-					return enumType->GetValueFromString( value, reinterpret_cast< int64_t* >( varData ) );
-				default:
-					AE_FAIL();
-					return false;
-				}
-			}
-			else
-			{
-				switch ( enumType->TypeSize() )
-				{
-				case 1:
-					return enumType->GetValueFromString( value, reinterpret_cast< uint8_t* >( varData ) );
-				case 2:
-					return enumType->GetValueFromString( value, reinterpret_cast< uint16_t* >( varData ) );
-				case 4:
-					return enumType->GetValueFromString( value, reinterpret_cast< uint32_t* >( varData ) );
-				case 8:
-					return enumType->GetValueFromString( value, reinterpret_cast< uint64_t* >( varData ) );
-				default:
-					AE_FAIL();
-					return false;
-				}
-			}
-			return false;
-		}
-		case BasicType::Pointer:
-		{
-			AE_ASSERT_MSG( _Globals::Get()->varSerializerInitialized, "Must provide mapping function with ae::Var::SetSerializer() for pointer types when calling SetObjectValueFromString" );
-			AE_ASSERT_MSG( _Globals::Get()->varSerializer, "ae::Var::Serializer was set, but has been destroyed" );
 
-			class ae::Object* obj = nullptr;
-			if ( _Globals::Get()->varSerializer->StringToObjectPointer( value, &obj ) )
-			{
-				if ( obj )
-				{
-					const ae::Type* refType = GetSubType();
-					const ae::Type* objType = ae::GetTypeFromObject( obj );
-					AE_ASSERT( objType );
-					if ( !objType->IsType( refType ) )
-					{
-						return false;
-					}
-				}
-				class ae::Object** varPtr = reinterpret_cast< class ae::Object** >( varData );
-				*varPtr = obj;
-				return true;
-			}
-			return false;
-		}
-		case BasicType::CustomRef:
+	if( varData )
+	{
+		if( const ae::BasicVarType* basicVarType = varType->AsVarType< ae::BasicVarType >() )
 		{
-			return m_varType->SetRef( varData, value, this );
+			return basicVarType->SetVarDataFromString( varData, value );
+		}
+		else if( const ae::EnumVarType* enumVarType = varType->AsVarType< ae::EnumVarType >() )
+		{
+			return enumVarType->SetVarDataFromString( varData, value );
+		}
+		else if( const ae::PointerVarType* pointerVarType = varType->AsVarType< ae::PointerVarType >() )
+		{
+			StringToObjectPointerFn fn = []( const void* userData, const char* pointerVal, ae::Object** objOut ) -> bool
+			{
+				const ae::Var::Serializer* serializer = (const ae::Var::Serializer*)userData;
+				AE_ASSERT( serializer );
+				return serializer->StringToObjectPointer( pointerVal, objOut );
+			};
+			return pointerVarType->SetRefFromString( varData, value, fn, _Globals::Get()->varSerializer );
 		}
 	}
 	return false;
 }
 
+const ae::VarType& ae::Var::GetOuterVarType() const
+{
+	AE_ASSERT( m_varType );
+	return *m_varType;
+}
 bool ae::Var::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
 int32_t ae::Var::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
 int32_t ae::Var::GetPropertyCount() const { return m_props.Length(); }
@@ -26356,13 +26818,6 @@ const char* ae::Var::GetPropertyValue( const char* propName, uint32_t valueIndex
 	const auto* vals = m_props.TryGet( propName );
 	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
 }
-
-const ae::VarTypeArray* ae::Var::m_TryGetArrayAdapter() const
-{
-	const bool isArray = ( m_varType->GetAdapterType() == ae::VarAdapterType::Array );
-	return isArray ? static_cast< const ae::VarTypeArray* >( m_varType ) : nullptr;
-}
-
 void ae::Var::m_AddProp( const char* prop, const char* value )
 {
 	AE_ASSERT_MSG( m_props.Length() < m_props.Size(), "Set/increase AE_MAX_META_PROP_LIST_LENGTH_CONFIG (Currently: #)", m_props.Size() );
@@ -26441,72 +26896,128 @@ bool ae::Type::IsType( const Type* otherType ) const
 	return false;
 }
 
+// @TODO: Remove
+ae::BasicType ae::Var::GetType() const
+{
+	if( const ae::BasicVarType* basicType = m_HACK_FindInnerVarType< ae::BasicVarType >() )
+	{
+		return basicType->GetType();
+	}
+	else if( m_HACK_FindInnerVarType< ae::EnumVarType >() )
+	{
+		return ae::BasicType::Enum;
+	}
+	else if( const ae::PointerVarType* pointerType = m_HACK_FindInnerVarType< ae::PointerVarType >() )
+	{
+		return pointerType->GetBasicType();
+	}
+	else if( m_HACK_FindInnerVarType< ae::ClassVarType >() )
+	{
+		return ae::BasicType::Class;
+	}
+	AE_FAIL();
+	return ae::BasicType::Int32;
+}
+
+const char* ae::Var::GetTypeName() const
+{
+	switch( GetType() )
+	{
+		case ae::BasicType::UInt8: return "uint8_t";
+		case ae::BasicType::UInt16: return "uint16_t";
+		case ae::BasicType::UInt32: return "uint32_t";
+		case ae::BasicType::UInt64: return "uint64_t";
+		case ae::BasicType::Int8: return "int8_t";
+		case ae::BasicType::Int16: return "int16_t";
+		case ae::BasicType::Int32: return "int32_t";
+		case ae::BasicType::Int64: return "int64_t";
+		case ae::BasicType::Int2: return "ae::Int2";
+		case ae::BasicType::Int3: return "ae::Int3";
+		case ae::BasicType::Bool: return "bool";
+		case ae::BasicType::Float: return "float";
+		case ae::BasicType::Double: return "double";
+		case ae::BasicType::Vec2: return "ae::Vec2";
+		case ae::BasicType::Vec3: return "ae::Vec3";
+		case ae::BasicType::Vec4: return "ae::Vec4";
+		case ae::BasicType::Color: return "ae::Color";
+		case ae::BasicType::Matrix4: return "ae::Matrix4";
+		case ae::BasicType::String: return "String";
+		case ae::BasicType::Class:
+		{
+			const ae::Type* type = GetSubType();
+			AE_ASSERT( type );
+			return type->GetName();
+		}
+		case ae::BasicType::Enum:
+		{
+			const ae::Enum* enumType = GetEnum();
+			AE_ASSERT( enumType );
+			return enumType->GetName();
+		}
+		case ae::BasicType::Pointer:
+		case ae::BasicType::CustomRef:
+		{
+			return "ref";
+		}
+	}
+	AE_FAIL();
+	return "unknown_type";
+}
+
+// @TODO: Remove
 const class ae::Enum* ae::Var::GetEnum() const
 {
-	if ( !m_enum )
-	{
-		if ( m_type != BasicType::Enum )
-		{
-			return nullptr;
-		}
-		m_enum = ae::GetEnum( m_typeName.c_str() );
-	}
-	return m_enum;
+	const ae::EnumVarType* enumType = m_HACK_FindInnerVarType< ae::EnumVarType >();
+	return enumType ? ae::GetEnum( enumType->GetName() ) : nullptr;
 }
 
+// @TODO: Remove
 const ae::Type* ae::Var::GetSubType() const
 {
-	if ( m_subTypeId == ae::kInvalidTypeId )
-	{
-		return nullptr;
-	}
-	const ae::Type* type = GetTypeById( m_subTypeId );
-	AE_ASSERT( type );
-	return type;
+	const ae::ClassVarType* classVarType = m_HACK_FindInnerVarType< ae::ClassVarType >();
+	return classVarType ? ae::GetTypeById( classVarType->GetTypeId() ) : nullptr;
 }
 
+// @TODO: Remove
 bool ae::Var::IsArray() const
 {
-	return ( m_varType->GetAdapterType() == ae::VarAdapterType::Array );
+	return GetOuterVarType().AsVarType< ae::ArrayVarType >();
 }
 
+// @TODO: Remove
 bool ae::Var::IsArrayFixedLength() const
 {
-	const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter();
+	const ae::ArrayVarType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayVarType >();
 	return arrayAdapter && arrayAdapter->IsFixedLength();
 }
 
+// @TODO: Remove
 uint32_t ae::Var::SetArrayLength( ae::Object* obj, uint32_t length ) const
 {
 	AE_ASSERT( length != ae::MaxValue< uint32_t >() );
-	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
-	AE_ASSERT( IsArray() );
-	
 	if ( !obj )
 	{
 		return 0;
 	}
-	
-	void* arr = (uint8_t*)obj + m_offset;
-	return static_cast< const ae::VarTypeArray* >( m_varType )->Resize( arr, length );
+	const ae::ArrayVarType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayVarType >();
+	return arrayAdapter ? arrayAdapter->Resize( { this, obj }, length ) : 0;
 }
 
+// @TODO: Remove
 uint32_t ae::Var::GetArrayLength( const ae::Object* obj ) const
 {
-	AE_ASSERT( IsArray() );
-	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
 	if ( !obj )
 	{
 		return 0;
 	}
-	
-	void* arr = (uint8_t*)obj + m_offset;
-	return static_cast< const ae::VarTypeArray* >( m_varType )->GetLength( arr );
+	const ae::ArrayVarType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayVarType >();
+	return arrayAdapter ? arrayAdapter->GetLength( { this, obj } ) : 0;
 }
 
+// @TODO: Remove
 uint32_t ae::Var::GetArrayMaxLength() const
 {
-	const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter();
+	const ae::ArrayVarType* arrayAdapter = GetOuterVarType().AsVarType< ae::ArrayVarType >();
 	return arrayAdapter ? arrayAdapter->GetMaxLength() : 0;
 }
 
@@ -26560,164 +27071,326 @@ ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, boo
 	}
 }
 
-// @TODO: Replace return type with a dynamic ae::Str
-std::string ae::Var::GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx ) const
+//------------------------------------------------------------------------------
+// ae::BasicVarType member functions
+//------------------------------------------------------------------------------
+std::string ae::BasicVarType::GetVarDataAsString( ae::ConstVarData _varData ) const
 {
-	if ( !obj )
+	const void* varData = _varData.Get( this );
+	if( !varData )
 	{
 		return "";
 	}
-	// @TODO: Add debug safety check to make sure 'this' Var belongs to 'obj' ae::Type
-	
-	const void* varData = nullptr;
-	if ( const ae::VarTypeArray* arrayAdapter = m_TryGetArrayAdapter() )
+	switch( GetType() )
 	{
-		void* arr = (uint8_t*)obj + m_offset;
-		int32_t arrayLength = (int32_t)arrayAdapter->GetLength( arr );
-		if ( arrayIdx >= 0 && arrayIdx < arrayLength )
+		case BasicType::String:
+			switch ( GetSize() )
+			{
+				case 16: return reinterpret_cast< const ae::Str16* >( varData )->c_str();
+				case 32: return reinterpret_cast< const ae::Str32* >( varData )->c_str();
+				case 64: return reinterpret_cast< const ae::Str64* >( varData )->c_str();
+				case 128: return reinterpret_cast< const ae::Str128* >( varData )->c_str();
+				case 256: return reinterpret_cast< const ae::Str256* >( varData )->c_str();
+				case 512: return reinterpret_cast< const ae::Str512* >( varData )->c_str();
+				default: return "";
+			}
+		case BasicType::UInt8: return ae::Str32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str(); // Prevent char formatting
+		case BasicType::UInt16: return ae::Str32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
+		case BasicType::UInt32: return ae::Str32::Format( "#", *reinterpret_cast< const uint32_t* >( varData ) ).c_str();
+		case BasicType::UInt64: return ae::Str32::Format( "#", *reinterpret_cast< const uint64_t* >( varData ) ).c_str();
+		case BasicType::Int8: return ae::Str32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str(); // Prevent char formatting
+		case BasicType::Int16: return ae::Str32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
+		case BasicType::Int32: return ae::Str32::Format( "#", *reinterpret_cast< const int32_t* >( varData ) ).c_str();
+		case BasicType::Int64: return ae::Str32::Format( "#", *reinterpret_cast< const int64_t* >( varData ) ).c_str();
+		case BasicType::Int2: return ae::Str256::Format( "#", *reinterpret_cast<const ae::Int2*>( varData ) ).c_str();
+		case BasicType::Int3: return ae::Str256::Format( "#", *reinterpret_cast<const ae::Int3*>( varData ) ).c_str();
+		case BasicType::Bool: return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
+		case BasicType::Float: return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
+		case BasicType::Double: return ae::Str32::Format( "#", *reinterpret_cast< const double* >( varData ) ).c_str();
+		case BasicType::Vec2: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec2* >( varData ) ).c_str();
+		case BasicType::Vec3: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec3* >( varData ) ).c_str();
+		case BasicType::Vec4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
+		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
+		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
+		case BasicType::Class: AE_FAIL(); // @TODO: Remove
+		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
+		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
+		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
+	}
+	return "";
+}
+
+bool ae::BasicVarType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
+{
+	if( !value ) // Only check for null here. Zero length strings are valid depending on the type.
+	{
+		return false;
+	}
+	void* varData = _varData.Get( this );
+	if( !varData )
+	{
+		return false;
+	}
+	const uint32_t typeSize = GetSize();
+	switch ( GetType() )
+	{
+		case BasicType::String:
 		{
-			varData = arrayAdapter->GetElement( arr, arrayIdx );
+			switch ( typeSize )
+			{
+#define CASE_STRING( _size ) \
+				case _size:\
+				{\
+					ae::Str##_size* str = (ae::Str##_size*)varData;\
+					if ( strlen( value ) > str->MaxLength() ) { return false; }\
+					*str = value;\
+					return true;\
+				}
+				CASE_STRING( 16 )
+				CASE_STRING( 32 )
+				CASE_STRING( 64 )
+				CASE_STRING( 128 )
+				CASE_STRING( 256 )
+				CASE_STRING( 512 )
+#undef CASE_STRING
+				default:
+				{
+					return false;
+				}
+			}
 		}
-		else
+		case BasicType::UInt8:
 		{
-			AE_FAIL_MSG( "Array index '#' out of bounds (length: #).", arrayIdx, arrayLength );
+			AE_ASSERT( typeSize == sizeof(uint8_t) );
+			uint8_t* u8 = (uint8_t*)varData;
+			sscanf( value, "%" SCNu8, u8 );
+			return true;
+		}
+		case BasicType::UInt16:
+		{
+			AE_ASSERT( typeSize == sizeof(uint16_t) );
+			uint16_t* u16 = (uint16_t*)varData;
+			sscanf( value, "%" SCNu16, u16 );
+			return true;
+		}
+		case BasicType::UInt32:
+		{
+			AE_ASSERT( typeSize == sizeof(uint32_t) );
+			uint32_t* u32 = (uint32_t*)varData;
+			sscanf( value, "%" SCNu32, u32 );
+			return true;
+		}
+		case BasicType::UInt64:
+		{
+			AE_ASSERT( typeSize == sizeof(uint64_t) );
+			uint64_t* u64 = (uint64_t*)varData;
+			sscanf( value, "%" SCNu64, u64 );
+			return true;
+		}
+		case BasicType::Int8:
+		{
+			AE_ASSERT( typeSize == sizeof(int8_t) );
+			int8_t* i8 = (int8_t*)varData;
+			sscanf( value, "%" SCNi8, i8 );
+			return true;
+		}
+		case BasicType::Int16:
+		{
+			AE_ASSERT( typeSize == sizeof(int16_t) );
+			int16_t* i16 = (int16_t*)varData;
+			sscanf( value, "%" SCNi16, i16 );
+			return true;
+		}
+		case BasicType::Int32:
+		{
+			AE_ASSERT( typeSize == sizeof(int32_t) );
+			int32_t* i32 = (int32_t*)varData;
+			sscanf( value, "%" SCNi32, i32 );
+			return true;
+		}
+		case BasicType::Int64:
+		{
+			AE_ASSERT( typeSize == sizeof(int64_t) );
+			int64_t* i64 = (int64_t*)varData;
+			sscanf( value, "%" SCNi64, i64 );
+			return true;
+		}
+		case BasicType::Int2:
+		{
+			AE_ASSERT( typeSize == sizeof( ae::Int2 ) );
+			ae::Int2* v = (ae::Int2*)varData;
+			*v = ae::FromString< ae::Int2 >( value, ae::Int2( 0.0f ) );
+			return true;
+		}
+		case BasicType::Int3:
+		{
+			AE_ASSERT( typeSize == sizeof( ae::Int3 ) );
+			ae::Int3* v = (ae::Int3*)varData;
+			*v = ae::FromString< ae::Int3 >( value, ae::Int3( 0.0f ) );
+			return true;
+		}
+		case BasicType::Bool:
+		{
+			*(bool*)varData = ae::FromString< bool >( value, false );
+			return true;
+		}
+		case BasicType::Float:
+		{
+			AE_ASSERT( typeSize == sizeof(float) );
+			float* f = (float*)varData;
+			sscanf( value, "%f", f );
+			return true;
+		}
+		case BasicType::Double:
+		{
+			AE_ASSERT( typeSize == sizeof(double) );
+			double* f = (double*)varData;
+			sscanf( value, "%lf", f );
+			return true;
+		}
+		case BasicType::Vec2:
+		{
+			AE_ASSERT( typeSize == sizeof(ae::Vec2) );
+			ae::Vec2* v = (ae::Vec2*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
+			return true;
+		}
+		case BasicType::Vec3:
+		{
+			AE_ASSERT( typeSize == sizeof(ae::Vec3) );
+			ae::Vec3* v = (ae::Vec3*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
+			return true;
+		}
+		case BasicType::Vec4:
+		{
+			AE_ASSERT( typeSize == sizeof(ae::Vec4) );
+			ae::Vec4* v = (ae::Vec4*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
+			return true;
+		}
+		case BasicType::Matrix4:
+		{
+			AE_ASSERT( typeSize == sizeof(ae::Matrix4) );
+			ae::Matrix4* v = (ae::Matrix4*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
+			return true;
+		}
+		case BasicType::Color:
+		{
+			AE_ASSERT( typeSize == sizeof(ae::Color) );
+			ae::Color* v = (ae::Color*)varData;
+			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
+			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
+			return true;
+		}
+		case BasicType::Class: AE_FAIL(); // @TODO: Remove
+		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
+		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
+		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::EnumVarType member functions
+//------------------------------------------------------------------------------
+std::string ae::EnumVarType::GetVarDataAsString( ae::ConstVarData _varData ) const
+{
+	const void* varData = _varData.Get( this );
+	if( !varData )
+	{
+		return "";
+	}
+	
+	// @NOTE: Enums with very large or small values (outside the range of int32) are not currently supported
+	const class Enum* enumType = GetEnum();
+	AE_ASSERT( enumType );
+	int32_t value = 0;
+	if ( enumType->TypeIsSigned() )
+	{
+		switch ( enumType->TypeSize() )
+		{
+			case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
+			case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
+			case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
+			case 8:
+			{
+				auto v = *reinterpret_cast< const int64_t* >( varData );
+				AE_DEBUG_ASSERT( v <= (int64_t)INT32_MAX );
+				AE_DEBUG_ASSERT( v >= (int64_t)INT32_MIN );
+				value = (int32_t)v;
+				break;
+			}
+			default: AE_FAIL();
 		}
 	}
 	else
 	{
-		AE_ASSERT_MSG( arrayIdx < 0, "Can't index into non-array type, 'arrayIdx' must be negative (default value)." );
-		varData = reinterpret_cast< const uint8_t* >( obj ) + m_offset;
-	}
-	AE_ASSERT( varData );
-	
-	switch ( m_type )
-	{
-		case BasicType::Class:
+		switch ( enumType->TypeSize() )
 		{
-			const ae::Type* subType = GetSubType();
-			AE_ASSERT( subType );
-			AE_ASSERT_MSG( "Can't get member '#' value as string", subType->GetName() );
-			return "";
-		}
-		case BasicType::String:
-			switch ( m_size )
+			case 1: value = *reinterpret_cast< const uint8_t* >( varData ); break;
+			case 2: value = *reinterpret_cast< const uint16_t* >( varData ); break;
+			case 4:
 			{
-				case 16:
-					return reinterpret_cast< const ae::Str16* >( varData )->c_str();
-				case 32:
-					return reinterpret_cast< const ae::Str32* >( varData )->c_str();
-				case 64:
-					return reinterpret_cast< const ae::Str64* >( varData )->c_str();
-				case 128:
-					return reinterpret_cast< const ae::Str128* >( varData )->c_str();
-				case 256:
-					return reinterpret_cast< const ae::Str256* >( varData )->c_str();
-				case 512:
-					return reinterpret_cast< const ae::Str512* >( varData )->c_str();
-				default:
-					AE_FAIL_MSG( "Invalid string size '#'", m_size );
-					return "";
+				auto v = *reinterpret_cast< const uint32_t* >( varData );
+				AE_DEBUG_ASSERT( v <= (uint32_t)INT32_MAX );
+				value = v;
+				break;
 			}
-		case BasicType::UInt8:
-			return ae::Str32::Format( "#", (uint32_t)*reinterpret_cast< const uint8_t* >( varData ) ).c_str(); // Prevent char formatting
-		case BasicType::UInt16:
-			return ae::Str32::Format( "#", *reinterpret_cast< const uint16_t* >( varData ) ).c_str();
-		case BasicType::UInt32:
-			return ae::Str32::Format( "#", *reinterpret_cast< const uint32_t* >( varData ) ).c_str();
-		case BasicType::UInt64:
-			return ae::Str32::Format( "#", *reinterpret_cast< const uint64_t* >( varData ) ).c_str();
-		case BasicType::Int8:
-			return ae::Str32::Format( "#", (int32_t)*reinterpret_cast< const int8_t* >( varData ) ).c_str(); // Prevent char formatting
-		case BasicType::Int16:
-			return ae::Str32::Format( "#", *reinterpret_cast< const int16_t* >( varData ) ).c_str();
-		case BasicType::Int32:
-			return ae::Str32::Format( "#", *reinterpret_cast< const int32_t* >( varData ) ).c_str();
-		case BasicType::Int64:
-			return ae::Str32::Format( "#", *reinterpret_cast< const int64_t* >( varData ) ).c_str();
-		case BasicType::Int2:
-			return ae::Str256::Format( "#", *reinterpret_cast<const ae::Int2*>( varData ) ).c_str();
-		case BasicType::Int3:
-			return ae::Str256::Format( "#", *reinterpret_cast<const ae::Int3*>( varData ) ).c_str();
-		case BasicType::Bool:
-			return ae::Str32::Format( "#", *reinterpret_cast< const bool* >( varData ) ).c_str();
-		case BasicType::Float:
-			return ae::Str32::Format( "#", *reinterpret_cast< const float* >( varData ) ).c_str();
-		case BasicType::Double:
-			return ae::Str32::Format( "#", *reinterpret_cast< const double* >( varData ) ).c_str();
-		case BasicType::Vec2:
-			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec2* >( varData ) ).c_str();
-		case BasicType::Vec3:
-			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec3* >( varData ) ).c_str();
-		case BasicType::Vec4:
-			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
-		case BasicType::Matrix4:
-			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
-		case BasicType::Color:
-			return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
-		case BasicType::Enum:
-		{
-			// @NOTE: Enums with very large or small values (outside the range of int32) are not currently supported
-			const class Enum* enumType = GetEnum();
-			AE_ASSERT_MSG( enumType, "Enum '#' is not registered", GetTypeName() );
-			int32_t value = 0;
-			if ( enumType->TypeIsSigned() )
+			case 8:
 			{
-				switch ( enumType->TypeSize() )
-				{
-					case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
-					case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
-					case 4: value = *reinterpret_cast< const int32_t* >( varData ); break;
-					case 8:
-					{
-						auto v = *reinterpret_cast< const int64_t* >( varData );
-						AE_DEBUG_ASSERT( v <= (int64_t)INT32_MAX );
-						AE_DEBUG_ASSERT( v >= (int64_t)INT32_MIN );
-						value = (int32_t)v;
-						break;
-					}
-					default: AE_FAIL();
-				}
+				auto v = *reinterpret_cast< const uint64_t* >( varData );
+				AE_DEBUG_ASSERT( v <= (uint64_t)INT32_MAX );
+				value = (int32_t)v;
+				break;
 			}
-			else
-			{
-				switch ( enumType->TypeSize() )
-				{
-					case 1: value = *reinterpret_cast< const uint8_t* >( varData ); break;
-					case 2: value = *reinterpret_cast< const uint16_t* >( varData ); break;
-					case 4:
-					{
-						auto v = *reinterpret_cast< const uint32_t* >( varData );
-						AE_DEBUG_ASSERT( v <= (uint32_t)INT32_MAX );
-						value = v;
-						break;
-					}
-					case 8:
-					{
-						auto v = *reinterpret_cast< const uint64_t* >( varData );
-						AE_DEBUG_ASSERT( v <= (uint64_t)INT32_MAX );
-						value = (int32_t)v;
-						break;
-					}
-					default: AE_FAIL();
-				}
-			}
-			return enumType->GetNameByValue( value );
-		}
-		case BasicType::Pointer:
-		{
-			AE_ASSERT_MSG( _Globals::Get()->varSerializer, "Must provide mapping function with ae::Var::SetSerializer() for pointer types when calling GetObjectValueAsString" );
-			const ae::Object* obj = *reinterpret_cast< const ae::Object* const * >( varData );
-			return _Globals::Get()->varSerializer->ObjectPointerToString( obj ).c_str();
-		}
-		case BasicType::CustomRef:
-		{
-			return m_varType->GetStringFromRef( varData );
+			default: AE_FAIL();
 		}
 	}
-	
-	return "";
+	return enumType->GetNameByValue( value );
 }
 
+bool ae::EnumVarType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
+{
+	void* varData = _varData.Get( this );
+	if( !value || !value[ 0 ] || !varData )
+	{
+		return false;
+	}
+	const class Enum* enumType = GetEnum();
+	if ( enumType->TypeIsSigned() )
+	{
+		switch( enumType->TypeSize() )
+		{
+			case 1: return enumType->GetValueFromString( value, reinterpret_cast< int8_t* >( varData ) );
+			case 2: return enumType->GetValueFromString( value, reinterpret_cast< int16_t* >( varData ) );
+			case 4: return enumType->GetValueFromString( value, reinterpret_cast< int32_t* >( varData ) );
+			case 8: return enumType->GetValueFromString( value, reinterpret_cast< int64_t* >( varData ) );
+			default: AE_FAIL(); return false;
+		}
+	}
+	else
+	{
+		switch( enumType->TypeSize() )
+		{
+			case 1: return enumType->GetValueFromString( value, reinterpret_cast< uint8_t* >( varData ) );
+			case 2: return enumType->GetValueFromString( value, reinterpret_cast< uint16_t* >( varData ) );
+			case 4: return enumType->GetValueFromString( value, reinterpret_cast< uint32_t* >( varData ) );
+			case 8: return enumType->GetValueFromString( value, reinterpret_cast< uint64_t* >( varData ) );
+			default: AE_FAIL(); return false;
+		}
+	}
+	return false;
+}
+
+//------------------------------------------------------------------------------
+// ae::Type member functions
+//------------------------------------------------------------------------------
 ae::TypeId ae::Type::GetId() const { return m_id; }
 bool ae::Type::HasProperty( const char* property ) const { return GetPropertyIndex( property ) >= 0; }
 const ae::Type* ae::Type::GetTypeWithProperty( const char* property ) const
