@@ -5595,6 +5595,7 @@ enum class BasicType
 	Enum, // @TODO: Remove
 	Pointer, // @TODO: Remove
 	CustomRef, // @TODO: Remove
+	None, // @TODO: Remove
 };
 
 //------------------------------------------------------------------------------
@@ -26915,8 +26916,7 @@ ae::BasicType ae::Var::GetType() const
 	{
 		return ae::BasicType::Class;
 	}
-	AE_FAIL();
-	return ae::BasicType::Int32;
+	return ae::BasicType::None;
 }
 
 const char* ae::Var::GetTypeName() const
@@ -26958,6 +26958,10 @@ const char* ae::Var::GetTypeName() const
 		case ae::BasicType::CustomRef:
 		{
 			return "ref";
+		}
+		case ae::BasicType::None:
+		{
+			return "none_type";
 		}
 	}
 	AE_FAIL();
@@ -27116,6 +27120,7 @@ std::string ae::BasicVarType::GetVarDataAsString( ae::ConstVarData _varData ) co
 		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
 		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
 		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
+		case BasicType::None: AE_FAIL(); // @TODO: Remove
 	}
 	return "";
 }
@@ -27292,6 +27297,7 @@ bool ae::BasicVarType::SetVarDataFromString( ae::VarData _varData, const char* v
 		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
 		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
 		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
+		case BasicType::None: AE_FAIL(); // @TODO: Remove
 	}
 	return false;
 }
