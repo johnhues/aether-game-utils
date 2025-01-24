@@ -5813,7 +5813,29 @@ public:
 //------------------------------------------------------------------------------
 // ae::MapVarType
 //------------------------------------------------------------------------------
-// @TODO: Implement!
+class MapVarType : public ae::VarType
+{
+public:
+	virtual const ae::VarType& GetKeyVarType() const = 0;
+	virtual const ae::VarType& GetValueVarType() const = 0;
+
+	//! Gets a value in the map by key, inserts a new value if the key does not
+	//! exist. Will return an empty value if there is a type mismatch with
+	//! either parameter or the map is full.
+	virtual ae::VarData Get( ae::VarData map, ae::ConstVarData key ) const = 0;
+	//! Gets a value in the map by key, returns an empty value if the key does not exist.
+	virtual ae::VarData TryGet( ae::VarData map, ae::ConstVarData key ) const = 0;
+	//! Gets a value in the map by key, returns an empty value if the key does  not exist.
+	virtual ae::ConstVarData TryGet( ae::ConstVarData map, ae::ConstVarData key ) const = 0;
+
+	//! Current number of map elements
+	virtual uint32_t GetLength( ae::ConstVarData a ) const = 0;
+	//! Return uint max for no hard limit
+	virtual uint32_t GetMaxLength() const = 0;
+
+	// Internal
+	ae::VarTypeId GetVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+};
 
 //------------------------------------------------------------------------------
 // ae::Var class
@@ -12057,6 +12079,71 @@ struct ae::VarTypeT< T[ N ] > : public ae::StaticArrayVarType< T, N >
 {
 	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< T[ N ] > s_type; return &s_type; }
+};
+
+//------------------------------------------------------------------------------
+// ae::MapVarType template implementation
+//------------------------------------------------------------------------------
+template < typename K, typename V, uint32_t N >
+struct ae::VarTypeT< ae::Map< K, V, N > > : public ae::MapVarType
+{
+	typedef ae::Map< K, V, N > MapType;
+	static ae::VarType* Get() { static ae::VarTypeT< MapType > s_type; return &s_type; }
+
+	const ae::VarType& GetKeyVarType() const override { return *ae::VarTypeT< K >::Get(); }
+	const ae::VarType& GetValueVarType() const override { return *ae::VarTypeT< V >::Get(); }
+
+	ae::VarData Get( ae::VarData _map, ae::ConstVarData _key ) const override
+	{
+		if( MapType* map = static_cast< MapType* >( _map.Get( this ) ) )
+		{
+			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
+			{
+				V* value = map->TryGet( *key );
+				if( !value && map->Length() < map->Size() )
+				{
+					value = &map->Set( *key, {} );
+				}
+				return { GetValueVarType(), value };
+			}
+		}
+		return {};
+	}
+
+	ae::VarData TryGet( ae::VarData _map, ae::ConstVarData _key ) const override
+	{
+		if( MapType* map = static_cast< MapType* >( _map.Get( this ) ) )
+		{
+			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
+			{
+				return { GetValueVarType(), map->TryGet( *key ) };
+			}
+		}
+		return {};
+	}
+
+	ae::ConstVarData TryGet( ae::ConstVarData _map, ae::ConstVarData _key ) const override
+	{
+		if( const MapType* map = static_cast< const MapType* >( _map.Get( this ) ) )
+		{
+			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
+			{
+				return { GetValueVarType(), map->TryGet( *key ) };
+			}
+		}
+		return {};
+	}
+
+	uint32_t GetLength( ae::ConstVarData _map ) const override
+	{
+		const MapType* map = static_cast< const MapType* >( _map.Get( this ) );
+		return map ? map->Length() : 0;
+	}
+
+	uint32_t GetMaxLength() const override
+	{
+		return N ? N : ae::MaxValue< uint32_t >();
+	}
 };
 
 template < typename T >
