@@ -290,7 +290,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 	REQUIRE( type->GetVarCount( false ) == 6 );
 
 	ArrayClass c;
-	ae::VarData varData( &c );
+	ae::VarData varData( c );
 
 	// int32_t intArray[ 3 ];
 	{
@@ -298,7 +298,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( intArrayVar );
 
 		ae::VarData intArray( intArrayVar, &c );
-		ae::VarData _intArray( &c.intArray );
+		ae::VarData _intArray( c.intArray );
 		REQUIRE( intArray );
 		REQUIRE( _intArray );
 		REQUIRE( intArray == _intArray );
@@ -330,7 +330,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( intArray2Var );
 
 		ae::VarData intArray2( intArray2Var, &c );
-		ae::VarData _intArray2( &c.intArray2 );
+		ae::VarData _intArray2( c.intArray2 );
 		REQUIRE( intArray2 );
 		REQUIRE( _intArray2 );
 		REQUIRE( intArray2 == _intArray2 );
@@ -368,7 +368,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( intArray3Var );
 		
 		ae::VarData intArray3( intArray3Var, &c );
-		ae::VarData _intArray3( &c.intArray3 );
+		ae::VarData _intArray3( c.intArray3 );
 		REQUIRE( intArray3 );
 		REQUIRE( _intArray3 );
 		REQUIRE( intArray3 == _intArray3 );
@@ -410,7 +410,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArrayVar );
 
 		ae::VarData someClassArray( someClassArrayVar, &c );
-		ae::VarData _someClassArray( &c.someClassArray );
+		ae::VarData _someClassArray( c.someClassArray );
 		REQUIRE( someClassArray );
 		REQUIRE( _someClassArray );
 		REQUIRE( someClassArray == _someClassArray );
@@ -443,7 +443,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArray2Var );
 
 		ae::VarData someClassArray2( someClassArray2Var, &c );
-		ae::VarData _someClassArray2( &c.someClassArray2 );
+		ae::VarData _someClassArray2( c.someClassArray2 );
 		REQUIRE( someClassArray2 );
 		REQUIRE( _someClassArray2 );
 		REQUIRE( someClassArray2 == _someClassArray2 );
@@ -483,7 +483,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArray3Var );
 
 		ae::VarData someClassArray3( someClassArray3Var, &c );
-		ae::VarData _someClassArray3( &c.someClassArray3 );
+		ae::VarData _someClassArray3( c.someClassArray3 );
 		REQUIRE( someClassArray3 );
 		REQUIRE( _someClassArray3 );
 		REQUIRE( someClassArray3 == _someClassArray3 );

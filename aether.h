@@ -5611,7 +5611,7 @@ class VarData
 {
 public:
 	VarData() = default;
-	template< typename T > explicit VarData( T* data );
+	template< typename T > explicit VarData( T& data );
 	VarData( const ae::VarType& varType, void* data );
 	VarData( const ae::Var* var, ae::Object* object );
 
@@ -5640,7 +5640,7 @@ class ConstVarData
 public:
 	ConstVarData() = default;
 	ConstVarData( VarData varData );
-	template< typename T > explicit ConstVarData( const T* data );
+	template< typename T > explicit ConstVarData( const T& data );
 	ConstVarData( const ae::VarType& varType, const void* data );
 	ConstVarData( const ae::Var* var, const ae::Object* object );
 	
@@ -11638,7 +11638,7 @@ template < typename T > ae::VarType* GetVarType(); // Forward declaration for Va
 template < typename T > struct VarTypeT // Proxy for real VarTypeT< T > if definition is not available
 {
 	// @TODO: Use const instead of discarding it
-	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetVarType< std::remove_const_t< T > >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
+	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetVarType< T >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
 };
 
 template < typename T > ae::TypeId GetTypeId()
@@ -12021,15 +12021,17 @@ template < typename T, uint32_t N >
 class DynamicArrayVarType : public ae::ArrayVarType
 {
 public:
-	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
-	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((Arr*)array.Get( this ))->operator[]( idx ) : nullptr }; }
-	uint32_t Resize( ae::VarData array, uint32_t length ) const override
+	typedef ae::Array< T, N > ArrayType;
+	ae::VarData GetElement( ae::VarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((ArrayType*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const override { return { GetInnerVarType(), array ? &((ArrayType*)array.Get( this ))->operator[]( idx ) : nullptr }; }
+	uint32_t Resize( ae::VarData _array, uint32_t length ) const override
 	{
+		ArrayType* array = static_cast< ArrayType* >( _array.Get( this ) );
 		if( !array )
 		{
 			return 0;
 		}
-		Arr& a = *(Arr*)array.Get( this );
+		ArrayType& a = *array;
 		if ( a.Length() < length )
 		{
 			a.Reserve( length );
@@ -12047,11 +12049,9 @@ public:
 		}
 		return a.Length();
 	}
-	uint32_t GetLength( ae::ConstVarData array ) const override { return array ? ((Arr*)array.Get( this ))->Length() : 0; }
+	uint32_t GetLength( ae::ConstVarData array ) const override { return array ? ((ArrayType*)array.Get( this ))->Length() : 0; }
 	uint32_t GetMaxLength() const override { return ( N == 0 ) ? ae::MaxValue< uint32_t >() : N; }
 	uint32_t IsFixedLength() const override { return false; }
-
-	typedef ae::Array< T, N > Arr;
 };
 
 template < typename T, uint32_t N >
@@ -12226,9 +12226,9 @@ bool ae::Enum::HasValue( T value ) const
 // ae::VarData templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-ae::VarData::VarData( T* data )
+ae::VarData::VarData( T& data )
 {
-	m_data = data;
+	m_data = &data;
 	m_varType = ae::VarTypeT< T >::Get();
 	AE_ASSERT( m_varType );
 }
@@ -12237,9 +12237,9 @@ ae::VarData::VarData( T* data )
 // ae::ConstVarData templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-ae::ConstVarData::ConstVarData( const T* data )
+ae::ConstVarData::ConstVarData( const T& data )
 {
-	m_data = data;
+	m_data = &data;
 	m_varType = ae::VarTypeT< T >::Get();
 	AE_ASSERT( m_varType );
 }

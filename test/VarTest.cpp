@@ -32,7 +32,7 @@
 TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 {
 	ae::Array< int32_t, 5 > _array;
-	ae::VarData array( &_array );
+	ae::VarData array( _array );
 	REQUIRE( array.GetVarType().IsVarType< ae::ArrayVarType >() );
 	const ae::ArrayVarType* varType = array.GetVarType().AsVarType< ae::ArrayVarType >();
 	REQUIRE( varType );
@@ -73,7 +73,7 @@ TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 TEST_CASE( "MapVarType", "[aeMeta]" )
 {
 	ae::Map< ae::Str32, int32_t, 2 > _map;
-	ae::VarData map( &_map );
+	ae::VarData map( _map );
 
 	REQUIRE( map.GetVarType().IsVarType< ae::MapVarType >() );
 	const ae::MapVarType* mapVarType = map.GetVarType().AsVarType< ae::MapVarType >();
@@ -89,7 +89,7 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 
 	const ae::Str32 keyStr0 = "Something1000";
 	{
-		ae::VarData valueVarData = mapVarType->Get( map, ae::ConstVarData( &keyStr0 ) );
+		ae::VarData valueVarData = mapVarType->Get( map, ae::ConstVarData( keyStr0 ) );
 		REQUIRE( _map.Length() == 1 );
 		REQUIRE( valueVarData );
 		REQUIRE( valueVarType->SetVarData( valueVarData, 1000 ) );
@@ -97,7 +97,7 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 	}
 	{
 		int32_t value = -777;
-		ae::VarData valueVarData = mapVarType->TryGet( map, ae::ConstVarData( &keyStr0 ) );
+		ae::VarData valueVarData = mapVarType->TryGet( map, ae::ConstVarData( keyStr0 ) );
 		REQUIRE( _map.Length() == 1 );
 		REQUIRE( valueVarData );
 		REQUIRE( valueVarType->GetVarData( valueVarData, &value ) );
@@ -105,7 +105,7 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 	}
 	{
 		int32_t value = -777;
-		ae::ConstVarData valueVarData = mapVarType->TryGet( ae::ConstVarData( map ), ae::ConstVarData( &keyStr0 ) );
+		ae::ConstVarData valueVarData = mapVarType->TryGet( ae::ConstVarData( map ), ae::ConstVarData( keyStr0 ) );
 		REQUIRE( _map.Length() == 1 );
 		REQUIRE( valueVarData );
 		REQUIRE( valueVarType->GetVarData( valueVarData, &value ) );
@@ -115,14 +115,14 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 	const ae::Str32 keyStr1 = "Something1001";
 	{
 		int32_t value = -777;
-		ae::ConstVarData valueVarData = mapVarType->TryGet( ae::ConstVarData( map ), ae::ConstVarData( &keyStr1 ) );
+		ae::ConstVarData valueVarData = mapVarType->TryGet( ae::ConstVarData( map ), ae::ConstVarData( keyStr1 ) );
 		REQUIRE( _map.Length() == 1 );
 		REQUIRE( !valueVarData );
 		REQUIRE( !valueVarType->GetVarData( valueVarData, &value ) );
 		REQUIRE( value == -777 );
 	}
 	{
-		ae::VarData valueVarData = mapVarType->Get( map, ae::ConstVarData( &keyStr1 ) );
+		ae::VarData valueVarData = mapVarType->Get( map, ae::ConstVarData( keyStr1 ) );
 		REQUIRE( _map.Length() == 2 );
 		REQUIRE( valueVarData );
 		REQUIRE( valueVarType->SetVarData( valueVarData, 1001 ) );
@@ -130,7 +130,7 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 		REQUIRE( _map.Get( "Something1001" ) == 1001 );
 	}
 	{
-		ae::VarData valueVarData = mapVarType->TryGet( map, ae::ConstVarData( &keyStr1 ) );
+		ae::VarData valueVarData = mapVarType->TryGet( map, ae::ConstVarData( keyStr1 ) );
 		REQUIRE( _map.Length() == 2 );
 		REQUIRE( valueVarData );
 		REQUIRE( valueVarType->SetVarData( valueVarData, 1101 ) );
@@ -140,7 +140,7 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 
 	const ae::Str32 keyStr2 = "Something1002";
 	{
-		ae::VarData valueVarData = mapVarType->Get( map, ae::ConstVarData( &keyStr2 ) );
+		ae::VarData valueVarData = mapVarType->Get( map, ae::ConstVarData( keyStr2 ) );
 		REQUIRE( _map.Length() == 2 );
 		REQUIRE( !valueVarData );
 		REQUIRE( !valueVarType->SetVarData( valueVarData, 1002 ) );
