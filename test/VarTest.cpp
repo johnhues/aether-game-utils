@@ -33,9 +33,8 @@ TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 {
 	ae::Array< int32_t, 5 > _array;
 	ae::VarData array( &_array );
-	REQUIRE( array.GetType().IsVarType< ae::ArrayVarType >() );
-	// @TODO: Remove template fn, make return type a const ref
-	const ae::ArrayVarType* varType = array.GetType().AsVarType< ae::ArrayVarType >();
+	REQUIRE( array.GetVarType().IsVarType< ae::ArrayVarType >() );
+	const ae::ArrayVarType* varType = array.GetVarType().AsVarType< ae::ArrayVarType >();
 	REQUIRE( varType );
 	REQUIRE( varType->GetInnerVarType().IsVarType< ae::BasicVarType >() );
 	const ae::BasicVarType* innerVarType = varType->GetInnerVarType().AsVarType< ae::BasicVarType >();
@@ -76,8 +75,8 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 	ae::Map< ae::Str32, int32_t, 2 > _map;
 	ae::VarData map( &_map );
 
-	REQUIRE( map.GetType().IsVarType< ae::MapVarType >() );
-	const ae::MapVarType* mapVarType = map.GetType().AsVarType< ae::MapVarType >();
+	REQUIRE( map.GetVarType().IsVarType< ae::MapVarType >() );
+	const ae::MapVarType* mapVarType = map.GetVarType().AsVarType< ae::MapVarType >();
 	REQUIRE( mapVarType );
 	REQUIRE( mapVarType->GetMaxLength() == 2 );
 	

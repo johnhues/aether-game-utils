@@ -5618,7 +5618,7 @@ public:
 	//! Returns true if the data is valid.
 	explicit operator bool() const;
 	//! Returns the ae::VarType of the data. Must have valid data.
-	const ae::VarType& GetType() const;
+	const ae::VarType& GetVarType() const;
 	//! Returns data pointer, optionally provide the type of the caller to
 	//! perform a type check.
 	void* Get( const ae::VarType* caller = nullptr ) const;
@@ -5647,7 +5647,7 @@ public:
 	//! Returns true if the data is valid.
 	explicit operator bool() const;
 	//! Returns the ae::VarType of the data. Must have valid data.
-	const ae::VarType& GetType() const;
+	const ae::VarType& GetVarType() const;
 	//! Returns data pointer, optionally provide the type of the caller to
 	//! perform a type check.
 	const void* Get( const ae::VarType* caller = nullptr ) const;
@@ -12519,7 +12519,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
 
 	ae::VarData varData( this, obj );
-	if ( const ae::ArrayVarType* arrayVarType = varData.GetType().AsVarType< ae::ArrayVarType >() )
+	if ( const ae::ArrayVarType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayVarType >() )
 	{
 		if( arrayIdx < 0 )
 		{
@@ -12534,7 +12534,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 
 	if( varData )
 	{
-		const ae::VarType* varType = &varData.GetType();
+		const ae::VarType* varType = &varData.GetVarType();
 		if( const ae::BasicVarType* basicVarType = varType->AsVarType< ae::BasicVarType >() )
 		{
 			return basicVarType->SetVarData( varData, value );
@@ -12577,7 +12577,7 @@ bool ae::Var::GetObjectValue( const ae::Object* object, T* valueOut, int32_t arr
 
 	if( varData )
 	{
-		const ae::VarType* varType = &varData.GetType();
+		const ae::VarType* varType = &varData.GetVarType();
 		if( const ae::BasicVarType* basicType = varType->AsVarType< ae::BasicVarType >() )
 		{
 			return basicType->GetVarData( varData, valueOut );
@@ -12605,7 +12605,7 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 	}
 
 	ae::ConstVarData varData( this, obj );
-	if( const ae::ArrayVarType* arrayVarType = varData.GetType().AsVarType< ae::ArrayVarType >() )
+	if( const ae::ArrayVarType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayVarType >() )
 	{
 		if( arrayIdx < 0 )
 		{
@@ -12620,7 +12620,7 @@ const T* ae::Var::GetPointer( const ae::Object* obj, int32_t arrayIdx ) const
 
 	if( varData )
 	{
-		const ae::ClassVarType* classVarType = varData.GetType().AsVarType< ae::ClassVarType >();
+		const ae::ClassVarType* classVarType = varData.GetVarType().AsVarType< ae::ClassVarType >();
 		return classVarType ? classVarType->TryGet< T >( varData ) : nullptr;
 	}
 	return nullptr;
@@ -26584,7 +26584,7 @@ ae::VarData::operator bool() const
 {
 	return m_data != nullptr;
 }
-const ae::VarType& ae::VarData::GetType() const
+const ae::VarType& ae::VarData::GetVarType() const
 {
 	AE_ASSERT_MSG( m_data, "Check VarData before calling GetType()" );
 	AE_ASSERT( m_varType );
@@ -26644,7 +26644,7 @@ ae::ConstVarData::operator bool() const
 {
 	return m_data != nullptr;
 }
-const ae::VarType& ae::ConstVarData::GetType() const
+const ae::VarType& ae::ConstVarData::GetVarType() const
 {
 	AE_ASSERT_MSG( m_data, "Check ConstVarData before calling GetType()" );
 	AE_ASSERT( m_varType );

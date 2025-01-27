@@ -302,7 +302,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( intArray );
 		REQUIRE( _intArray );
 		REQUIRE( intArray == _intArray );
-		REQUIRE( &intArray.GetType() == &intArrayVar->GetOuterVarType() );
+		REQUIRE( &intArray.GetVarType() == &intArrayVar->GetOuterVarType() );
 		const ae::ArrayVarType* arrayVarType = intArrayVar->GetOuterVarType().AsVarType< ae::ArrayVarType >();
 		REQUIRE( arrayVarType );
 		REQUIRE( arrayVarType->IsFixedLength() );
@@ -334,7 +334,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( intArray2 );
 		REQUIRE( _intArray2 );
 		REQUIRE( intArray2 == _intArray2 );
-		REQUIRE( &intArray2.GetType() == &intArray2Var->GetOuterVarType() );
+		REQUIRE( &intArray2.GetVarType() == &intArray2Var->GetOuterVarType() );
 		const ae::ArrayVarType* arrayVarType = intArray2Var->GetOuterVarType().AsVarType< ae::ArrayVarType >();
 		REQUIRE( arrayVarType );
 
@@ -372,7 +372,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( intArray3 );
 		REQUIRE( _intArray3 );
 		REQUIRE( intArray3 == _intArray3 );
-		REQUIRE( &intArray3.GetType() == &intArray3Var->GetOuterVarType() );
+		REQUIRE( &intArray3.GetVarType() == &intArray3Var->GetOuterVarType() );
 		const ae::ArrayVarType* arrayVarType = intArray3Var->GetOuterVarType().AsVarType< ae::ArrayVarType >();
 		REQUIRE( arrayVarType );
 
@@ -414,7 +414,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArray );
 		REQUIRE( _someClassArray );
 		REQUIRE( someClassArray == _someClassArray );
-		REQUIRE( &someClassArray.GetType() == &someClassArrayVar->GetOuterVarType() );
+		REQUIRE( &someClassArray.GetVarType() == &someClassArrayVar->GetOuterVarType() );
 		const ae::ArrayVarType* arrayVarType = someClassArrayVar->GetOuterVarType().AsVarType< ae::ArrayVarType >();
 		REQUIRE( arrayVarType );
 
@@ -447,7 +447,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArray2 );
 		REQUIRE( _someClassArray2 );
 		REQUIRE( someClassArray2 == _someClassArray2 );
-		REQUIRE( &someClassArray2.GetType() == &someClassArray2Var->GetOuterVarType() );
+		REQUIRE( &someClassArray2.GetVarType() == &someClassArray2Var->GetOuterVarType() );
 		const ae::ArrayVarType* arrayVarType = someClassArray2Var->GetOuterVarType().AsVarType< ae::ArrayVarType >();
 		REQUIRE( arrayVarType );
 
@@ -487,7 +487,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( someClassArray3 );
 		REQUIRE( _someClassArray3 );
 		REQUIRE( someClassArray3 == _someClassArray3 );
-		REQUIRE( &someClassArray3.GetType() == &someClassArray3Var->GetOuterVarType() );
+		REQUIRE( &someClassArray3.GetVarType() == &someClassArray3Var->GetOuterVarType() );
 		const ae::ArrayVarType* arrayVarType = someClassArray3Var->GetOuterVarType().AsVarType< ae::ArrayVarType >();
 		REQUIRE( arrayVarType );
 
