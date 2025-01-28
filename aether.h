@@ -5362,6 +5362,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 // Meta constants
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
+using TypeName = ae::Str64;
 class Type;
 class Var;
 struct VarType;
@@ -5553,7 +5554,7 @@ public:
 	// Internal
 	//------------------------------------------------------------------------------
 private:
-	ae::Str32 m_name;
+	ae::TypeName m_name;
 	uint32_t m_size;
 	bool m_isSigned;
 	ae::Map< int32_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
@@ -5975,7 +5976,7 @@ public:
 	//------------------------------------------------------------------------------
 	void m_AddProp( const char* prop, const char* value );
 	const ae::Type* m_owner = nullptr;
-	ae::Str32 m_name = "";
+	ae::TypeName m_name;
 	uint32_t m_offset = 0;
 	const ae::VarType* m_varType = nullptr;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
@@ -6076,13 +6077,13 @@ public:
 	void m_AddVar( const Var* var );
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
-	ae::Str64 m_name;
+	ae::TypeName m_name;
 	ae::TypeId m_id = ae::kInvalidTypeId;
 	uint32_t m_size = 0;
 	uint32_t m_align = 0;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
 	ae::Array< const ae::Var*, kMaxMetaVars > m_vars;
-	ae::Str32 m_parent;
+	ae::TypeName m_parent;
 	bool m_isAbstract = false;
 	bool m_isPolymorphic = false;
 	bool m_isDefaultConstructible = false;
@@ -6206,8 +6207,8 @@ struct _Globals
 
 	// Reflection
 	uint32_t metaCacheSeq = 0;
-	ae::Map< std::string, Enum, kMaxMetaEnumTypes > enums;
-	ae::Map< ae::Str64, Type*, kMaxMetaTypes > typeNameMap;
+	ae::Map< std::string, Enum, kMaxMetaEnumTypes > enums; // @TODO: ae::TypeName
+	ae::Map< ae::TypeName, Type*, kMaxMetaTypes > typeNameMap;
 	ae::Map< ae::TypeId, Type*, kMaxMetaTypes > typeIdMap;
 	ae::Array< ae::Type*, kMaxMetaTypes > types;
 	const ae::Var::Serializer* varSerializer = nullptr;
