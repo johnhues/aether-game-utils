@@ -5208,13 +5208,12 @@ public:
 #define AE_REGISTER_CLASS(...)\
 	int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0;\
 	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-	template <> void ae::_DefineType< ::AE_GLUE_TYPE(__VA_ARGS__) >( ae::Type *type, uint32_t index ) { type->Init< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)), index ); }\
-	static ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
+	ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
 	template <> struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::ClassVarType {\
 		ae::TypeId GetTypeId() const override { return ae::GetTypeId< ::AE_GLUE_TYPE(__VA_ARGS__) >(); }\
 		static ae::VarType* Get() { static ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
 	};\
-	template<> ae::VarType* ae::GetVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
+	template<> ae::VarType* ae::GetLinkedVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
 //! Register a class property
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
@@ -6068,10 +6067,10 @@ public:
 	//------------------------------------------------------------------------------
 	template < typename T >
 	typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
-	Init( const char* name, uint32_t index );
+	Init( const char* name );
 	template < typename T >
 	typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
-	Init( const char* name, uint32_t index );
+	Init( const char* name );
 	void m_AddProp( const char* prop, const char* value );
 	void m_AddVar( const Var* var );
 private:
@@ -11634,11 +11633,14 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
 //------------------------------------------------------------------------------
-template < typename T > ae::VarType* GetVarType(); // Forward declaration for VarTypeT< T >::Get()
+template < typename T > ae::VarType* GetLinkedVarType(); // Forward declaration for VarTypeT< T >::Get()
+// This version of VarTypeT< T >::Get() will be called when the real VarTypeT< T >::Get()
+// is not available, calls will instead fallback to calling GetLinkedVarType< T >()
+// which will search compilation units for the real VarTypeT< T >::Get() implementation.
 template < typename T > struct VarTypeT // Proxy for real VarTypeT< T > if definition is not available
 {
 	// @TODO: Use const instead of discarding it
-	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetVarType< std::remove_const_t< T > >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
+	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetLinkedVarType< std::remove_const_t< T > >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
 };
 
 template < typename T > ae::TypeId GetTypeId()
@@ -11679,16 +11681,13 @@ const ae::Type* Inheritor< Parent, This >::GetParentType()
 //------------------------------------------------------------------------------
 // Internal meta initialization functions
 //------------------------------------------------------------------------------
-template< typename T >
-void _DefineType( Type* type, uint32_t index );
-
 template < typename T >
 struct _TypeCreator
 {
 	_TypeCreator( const char* typeName )
 	{
 		_Globals* globals = _Globals::Get();
-		_DefineType< T >( &m_type, 0 );
+		m_type.Init< T >( typeName );
 		AE_ASSERT_MSG( globals->typeNameMap.Length() < globals->typeNameMap.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->typeNameMap.Size() );
 		globals->typeNameMap.Set( typeName, &m_type );
 		globals->typeIdMap.Set( m_type.GetId(), &m_type ); // @TODO: Should check for hash collision
@@ -12420,7 +12419,7 @@ T* ae::Type::New( void* obj ) const
 
 template < typename T >
 typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
-ae::Type::Init( const char* name, uint32_t index )
+ae::Type::Init( const char* name )
 {
 	if constexpr( std::is_base_of_v< ae::Object, T > )
 	{
@@ -12442,7 +12441,7 @@ ae::Type::Init( const char* name, uint32_t index )
 }
 template < typename T >
 typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
-ae::Type::Init( const char* name, uint32_t index )
+ae::Type::Init( const char* name )
 {
 	m_placementNew = nullptr;
 	m_name = name;
