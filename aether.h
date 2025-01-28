@@ -5208,7 +5208,7 @@ public:
 #define AE_REGISTER_CLASS(...)\
 	int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0;\
 	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-	ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
+	ae::_TypeStorage< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
 	template <> struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::ClassVarType {\
 		ae::TypeId GetTypeId() const override { return ae::GetTypeId< ::AE_GLUE_TYPE(__VA_ARGS__) >(); }\
 		static ae::VarType* Get() { static ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
@@ -6065,6 +6065,7 @@ public:
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
+	virtual ~Type() {}
 	template < typename T >
 	typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
 	Init( const char* name );
@@ -11681,83 +11682,6 @@ const ae::Type* Inheritor< Parent, This >::GetParentType()
 //------------------------------------------------------------------------------
 // Internal meta initialization functions
 //------------------------------------------------------------------------------
-template < typename T >
-struct _TypeCreator
-{
-	_TypeCreator( const char* typeName )
-	{
-		_Globals* globals = _Globals::Get();
-		m_type.Init< T >( typeName );
-		AE_ASSERT_MSG( globals->typeNameMap.Length() < globals->typeNameMap.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->typeNameMap.Size() );
-		globals->typeNameMap.Set( typeName, &m_type );
-		globals->typeIdMap.Set( m_type.GetId(), &m_type ); // @TODO: Should check for hash collision
-		globals->types.Append( &m_type );
-		globals->metaCacheSeq++;
-	}
-	~_TypeCreator()
-	{
-		const char* typeName = m_type.GetName();
-		_Globals* globals = _Globals::Get();
-		globals->typeNameMap.Remove( typeName );
-		globals->typeIdMap.Remove( m_type.GetId() );
-		globals->types.Remove( globals->types.Find( &m_type ) );
-		globals->metaCacheSeq++;
-	}
-	Type m_type;
-};
-
-template< typename C >
-struct _PropCreator
-{
-	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
-	_PropCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
-	{
-		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
-		AE_ASSERT( type == &typeCreator.m_type );
-		type->m_AddProp( propName, propValue );
-	}
-};
-
-template< typename C, typename V, uint32_t Offset >
-struct _VarCreator
-{
-	// Take _TypeCreator param as a safety check that _VarCreator typeName is provided correctly
-	_VarCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* varName )
-	{
-		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
-		AE_ASSERT( type );
-		AE_ASSERT( type == &typeCreator.m_type );
-
-		m_var.m_owner = type;
-		m_var.m_name = varName;
-		m_var.m_varType = ae::VarTypeT< V >::Get();
-#if !_AE_WINDOWS_
-	#pragma clang diagnostic push
-	#pragma clang diagnostic ignored "-Winvalid-offsetof"
-#endif
-		m_var.m_offset = Offset; // @TODO: Verify var is not member of base class
-#if !_AE_WINDOWS_
-	#pragma clang diagnostic pop
-#endif
-		type->m_AddVar( &m_var );
-	}
-	Var m_var;
-};
-
-template< typename C, typename V, uint32_t Offset >
-struct _VarPropCreator
-{
-	// Take _VarCreator param as a safety check
-	_VarPropCreator( ae::_VarCreator< C, V, Offset >&, const char* varName, const char* propName, const char* propValue )
-	{
-		ae::Type* type = const_cast< ae::Type* >( ae::GetType< C >() );
-		AE_ASSERT( type );
-		ae::Var* var = const_cast< ae::Var* >( type->GetVarByName( varName, false ) );
-		AE_ASSERT( var );
-		var->m_AddProp( propName, propValue );
-	}
-};
-	
 // @NOTE: Internal. Non-specialized GetEnum() has no implementation so templated GetEnum() calls (defined
 // with AE_DEFINE_ENUM_CLASS, AE_META_ENUM, and AE_META_ENUM_PREFIX) will call the specialized function.
 template < typename T >
@@ -11881,16 +11805,6 @@ public:
 		m_enumType = nullptr;
 		globals->metaCacheSeq++;
 	}
-};
-
-template< typename T >
-class _AttributeCreator
-{
-public:
-	_AttributeCreator( ae::_TypeCreator< T >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_type.attributes.m_Add( attribute ); } }
-	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_var.attributes.m_Add( attribute ); } }
-	// _AttributeCreator( ae::_EnumCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
-	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
 
 } // ae end
@@ -12063,6 +11977,103 @@ public:
 	uint32_t GetLength( ae::ConstVarData array ) const override { return N; }
 	uint32_t GetMaxLength() const override { return N; }
 	uint32_t IsFixedLength() const override { return true; }
+};
+
+//------------------------------------------------------------------------------
+// ae::TypeT class
+//------------------------------------------------------------------------------
+template< typename T >
+class TypeT : public Type
+{
+public:
+	TypeT( const char* typeName )
+	{
+		_Globals* globals = _Globals::Get();
+		AE_ASSERT_MSG( globals->typeNameMap.Length() < globals->typeNameMap.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->typeNameMap.Size() );
+		Init< T >( typeName );
+		globals->typeNameMap.Set( typeName, this );
+		globals->typeIdMap.Set( GetId(), this ); // @TODO: Should check for hash collision
+		globals->types.Append( this );
+		globals->metaCacheSeq++;
+	}
+	~TypeT()
+	{
+		_Globals* globals = _Globals::Get();
+		globals->typeNameMap.Remove( GetName() );
+		globals->typeIdMap.Remove( GetId() );
+		globals->types.Remove( globals->types.Find( this ) );
+		globals->metaCacheSeq++;
+	}
+};
+template < typename T >
+struct _TypeStorage
+{
+	_TypeStorage( const char* typeName ) : m_type( typeName ) {}
+	ae::TypeT< T > m_type;
+};
+template< typename C >
+struct _PropCreator
+{
+	// Take _TypeStorage param as a safety check that _PropCreator typeName is provided correctly
+	_PropCreator( ae::_TypeStorage< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
+	{
+		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
+		AE_ASSERT( type == &typeCreator.m_type );
+		type->m_AddProp( propName, propValue );
+	}
+};
+
+template< typename C, typename V, uint32_t Offset >
+struct _VarCreator
+{
+	// Take _TypeStorage param as a safety check that _VarCreator typeName is provided correctly
+	_VarCreator( ae::_TypeStorage< C >& typeCreator, const char* typeName, const char* varName )
+	{
+		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
+		AE_ASSERT( type );
+		AE_ASSERT( type == &typeCreator.m_type );
+
+		m_var.m_owner = type;
+		m_var.m_name = varName;
+		m_var.m_varType = ae::VarTypeT< V >::Get();
+#if !_AE_WINDOWS_
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Winvalid-offsetof"
+#endif
+		m_var.m_offset = Offset; // @TODO: Verify var is not member of base class
+#if !_AE_WINDOWS_
+	#pragma clang diagnostic pop
+#endif
+		type->m_AddVar( &m_var );
+	}
+	Var m_var;
+};
+
+template< typename C, typename V, uint32_t Offset >
+struct _VarPropCreator
+{
+	// Take _VarCreator param as a safety check
+	_VarPropCreator( ae::_VarCreator< C, V, Offset >&, const char* varName, const char* propName, const char* propValue )
+	{
+		ae::Type* type = const_cast< ae::Type* >( ae::GetType< C >() );
+		AE_ASSERT( type );
+		ae::Var* var = const_cast< ae::Var* >( type->GetVarByName( varName, false ) );
+		AE_ASSERT( var );
+		var->m_AddProp( propName, propValue );
+	}
+};
+
+//------------------------------------------------------------------------------
+// _AttributeCreator class
+//------------------------------------------------------------------------------
+template< typename T >
+class _AttributeCreator
+{
+public:
+	_AttributeCreator( ae::_TypeStorage< T >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_type.attributes.m_Add( attribute ); } }
+	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_var.attributes.m_Add( attribute ); } }
+	// _AttributeCreator( ae::_EnumCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
+	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
 
 } // ae end
