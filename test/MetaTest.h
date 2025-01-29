@@ -111,6 +111,7 @@ class ae::VarTypeT< ae::Optional< T > > : public ae::OptionalVarType
 public:
 	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< ae::Optional< T > > s_type; return &s_type; }
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 
 	ae::VarData TryGet( ae::VarData optional ) const override { return ae::VarData(); }
 	ae::ConstVarData TryGet( ae::ConstVarData optional ) const override { return ae::ConstVarData(); }
@@ -124,6 +125,7 @@ class ae::VarTypeT< std::optional< T > > : public ae::OptionalVarType
 public:
 	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< std::optional< T > > s_type; return &s_type; }
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 
 	ae::VarData TryGet( ae::VarData _opt ) const override
 	{
