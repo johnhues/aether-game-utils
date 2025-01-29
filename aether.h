@@ -26701,7 +26701,7 @@ bool ae::VarData::operator == ( const ae::VarData& other ) const
 {
 	if( m_data == other.m_data )
 	{
-		AE_DEBUG_ASSERT( m_varType->IsSameExactVarType( *other.m_varType ) );
+		AE_DEBUG_ASSERT( !m_varType || m_varType->IsSameExactVarType( *other.m_varType ) );
 		return true;
 	}
 	return false;
@@ -26761,7 +26761,7 @@ bool ae::ConstVarData::operator == ( const ae::ConstVarData& other ) const
 {
 	if( m_data == other.m_data )
 	{
-		AE_DEBUG_ASSERT( m_varType->IsSameExactVarType( *other.m_varType ) );
+		AE_DEBUG_ASSERT( !m_varType || m_varType->IsSameExactVarType( *other.m_varType ) );
 		return true;
 	}
 	return false;

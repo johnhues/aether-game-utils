@@ -29,6 +29,12 @@
 //------------------------------------------------------------------------------
 // Types
 //------------------------------------------------------------------------------
+TEST_CASE( "VarData", "[aeMeta]" )
+{
+	REQUIRE( ae::VarData() == ae::VarData() );
+	REQUIRE( ae::ConstVarData() == ae::ConstVarData() );
+}
+
 TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 {
 	ae::Array< int32_t, 5 > _array;
