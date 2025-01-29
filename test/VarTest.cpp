@@ -33,10 +33,10 @@ TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 {
 	ae::Array< int32_t, 5 > _array;
 	ae::VarData array( &_array );
-	REQUIRE( array.GetVarType().IsVarType< ae::ArrayVarType >() );
+	REQUIRE( array.GetVarType().IsSameBaseVarType< ae::ArrayVarType >() );
 	const ae::ArrayVarType* varType = array.GetVarType().AsVarType< ae::ArrayVarType >();
 	REQUIRE( varType );
-	REQUIRE( varType->GetInnerVarType().IsVarType< ae::BasicVarType >() );
+	REQUIRE( varType->GetInnerVarType().IsSameBaseVarType< ae::BasicVarType >() );
 	const ae::BasicVarType* innerVarType = varType->GetInnerVarType().AsVarType< ae::BasicVarType >();
 	REQUIRE( innerVarType );
 
@@ -52,10 +52,10 @@ TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 	// Access elements
 	REQUIRE( _array[ 0 ] == 0 );
 	REQUIRE( _array[ 1 ] == 0 );
-	REQUIRE_THROWS( varType->GetElement( array, -1 ) );
+	REQUIRE( varType->GetElement( array, -1 ) == ae::VarData() );
 	ae::VarData elem0 = varType->GetElement( array, 0 );
 	ae::VarData elem1 = varType->GetElement( array, 1 );
-	REQUIRE_THROWS( varType->GetElement( array, 2 ) );
+	REQUIRE( varType->GetElement( array, 2 ) == ae::VarData() );
 	REQUIRE( elem0 );
 	REQUIRE( elem1 );
 	// Set elements
@@ -75,7 +75,7 @@ TEST_CASE( "MapVarType", "[aeMeta]" )
 	ae::Map< ae::Str32, int32_t, 2 > _map;
 	ae::VarData map( &_map );
 
-	REQUIRE( map.GetVarType().IsVarType< ae::MapVarType >() );
+	REQUIRE( map.GetVarType().IsSameBaseVarType< ae::MapVarType >() );
 	const ae::MapVarType* mapVarType = map.GetVarType().AsVarType< ae::MapVarType >();
 	REQUIRE( mapVarType );
 	REQUIRE( mapVarType->GetMaxLength() == 2 );
