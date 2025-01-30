@@ -5208,12 +5208,8 @@ public:
 #define AE_REGISTER_CLASS(...)\
 	int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0;\
 	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-	ae::_TypeStorage< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__)( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) );\
-	template <> struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::ClassVarType {\
-		ae::TypeId GetTypeId() const override { return ae::GetTypeId< ::AE_GLUE_TYPE(__VA_ARGS__) >(); }\
-		static ae::VarType* Get() { static ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > s_type; return &s_type; }\
-		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }\
-	};\
+	template <> struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > { VarTypeT() : TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) ) {} };\
+	ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__);\
 	template<> ae::VarType* ae::GetLinkedVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
 //! Register a class property
@@ -5229,10 +5225,10 @@ public:
 	static ae::SourceFileAttribute ae_attrib_##c##v##_ae_SourceFileAttribute { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::c > ae_attrib_creator_##c##v##_ae_SourceFileAttribute( ae_var_creator_##c##_##v, _AE_SRCCHK(&ae_attrib_##c##v##_ae_SourceFileAttribute, nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 //! Register a property for a specific class variable
-#define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #v, #p, "" );
+#define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #p, "" );
 //! Register a property for a specific class variable with an additional value.
 //! Multiple values can be specified per property.
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #v, #p, #pv );
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #p, #pv );
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -5368,7 +5364,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 using TypeName = ae::Str64;
-class Type;
+using Type = class ClassVarType;
 class Var;
 struct VarType;
 const ae::TypeId kInvalidTypeId = 0;
@@ -5743,32 +5739,6 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::ClassVarType
-//------------------------------------------------------------------------------
-class ClassVarType : public ae::VarType
-{
-public:
-	//! Gets the class type id associated with this variable. Note that if this
-	//! is accessed along with an ae::VarData or ae::ConstVarData that the
-	//! actual type of the object may be inherited from this type.
-	virtual ae::TypeId GetTypeId() const = 0;
-	//! Gets the class type associated with this variable. Note that if this
-	//! is accessed along with an ae::VarData or ae::ConstVarData that the
-	//! actual type of the object may be inherited from this type.
-	const ae::Type* GetType() const;
-	//! Gets the class type of the given VarData if possible.
-	const ae::Type* GetType( ae::ConstVarData varData ) const;
-
-	template< typename T > T* TryGet( ae::VarData varData ) const;
-	template< typename T > const T* TryGet( ae::ConstVarData varData ) const;
-	ae::VarData GetVarData( const ae::Var* var, ae::VarData varData ) const;
-	ae::ConstVarData GetVarData( const ae::Var* var, ae::ConstVarData varData ) const;
-
-	// Internal
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
-};
-
-//------------------------------------------------------------------------------
 // ae::PointerVarType
 //------------------------------------------------------------------------------
 class PointerVarType : public ae::VarType
@@ -5994,18 +5964,36 @@ public:
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
+	struct _TypePointer
+	{
+		_TypePointer() : type( Null ) {}
+		_TypePointer( const ae::VarType& varType );
+		_TypePointer( const ae::ClassVarType* type );
+		_TypePointer( const ae::TypeId typeId );
+		const ae::VarType* GetVarType() const;
+		const ae::Type* GetClassType() const;
+		const ae::VarType* Get() const;
+		bool IsValid() const { return type != Null; }
+		enum { Static, Class, Null } type; // @TODO: Enum
+		union
+		{
+			const ae::VarType* varType;
+			ae::TypeId typeId;
+			// @TODO: Enum
+		};
+	};
 	void m_AddProp( const char* prop, const char* value );
-	const ae::Type* m_owner = nullptr;
+	_TypePointer m_owner;
+	_TypePointer m_varType;
 	ae::TypeName m_name;
 	uint32_t m_offset = 0;
-	const ae::VarType* m_varType = nullptr;
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
 	// @TODO: Delete with SetObjectValue() etc
 	template< typename T >
 	const T* m_HACK_FindInnerVarType() const
 	{
 		static_assert( std::is_base_of_v< ae::VarType, T >, "" );
-		const ae::VarType* iter = m_varType;
+		const ae::VarType* iter = m_varType.Get();
 		while( iter )
 		{
 			if( const T* innerType = iter->AsVarType< T >() )
@@ -6030,12 +6018,14 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::Type class
+// ae::ClassVarType
 //------------------------------------------------------------------------------
-class Type
+class ClassVarType : public ae::VarType
 {
 public:
+	// ae::Type
 	ae::TypeId GetId() const;
+	virtual ae::TypeId GetTypeId() const = 0;
 
 	//! Check if this ae::Type has a \p property registered with
 	//! AE_REGISTER_CLASS_PROPERTY() or AE_REGISTER_CLASS_PROPERTY_VALUE().
@@ -6057,7 +6047,7 @@ public:
 
 	// Attributes
 	ae::AttributeList attributes;
-		
+
 	// Vars
 	uint32_t GetVarCount( bool parents ) const;
 	const ae::Var* GetVarByIndex( uint32_t i, bool parents ) const;
@@ -6082,11 +6072,18 @@ public:
 	const Type* GetParentType() const;
 	bool IsType( const Type* otherType ) const;
 	template < typename T > bool IsType() const;
-		
+
+	// ae::VarData
+	//! Gets the class type of the given VarData if possible.
+	const ae::Type* GetType( ae::ConstVarData varData ) const;
+	template< typename T > T* TryGet( ae::VarData varData ) const;
+	template< typename T > const T* TryGet( ae::ConstVarData varData ) const;
+	ae::VarData GetVarData( const ae::Var* var, ae::VarData varData ) const;
+	ae::ConstVarData GetVarData( const ae::Var* var, ae::ConstVarData varData ) const;
+
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
-	virtual ~Type() {}
 	template < typename T >
 	typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
 	Init( const char* name );
@@ -6095,6 +6092,8 @@ public:
 	Init( const char* name );
 	void m_AddProp( const char* prop, const char* value );
 	void m_AddVar( const Var* var );
+	// Internal VarType
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
 	ae::TypeName m_name;
@@ -12076,38 +12075,37 @@ public:
 		globals->types.Remove( globals->types.Find( this ) );
 		globals->metaCacheSeq++;
 	}
+	ae::TypeId GetTypeId() const override { return ae::GetTypeId< T >(); }
+	static ae::VarType* Get() { static ae::VarTypeT< T > s_type; return &s_type; }
+	ae::VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 };
-template < typename T >
-struct _TypeStorage
+
+template< typename T >
+struct _TypeCreator
 {
-	_TypeStorage( const char* typeName ) : m_type( typeName ) {}
-	ae::TypeT< T > m_type;
+	_TypeCreator() { Get(); }
+	ae::ClassVarType* Get() { return static_cast< ae::ClassVarType* >( ae::VarTypeT< T >::Get() ); }
 };
+
 template< typename C >
 struct _PropCreator
 {
-	// Take _TypeStorage param as a safety check that _PropCreator typeName is provided correctly
-	_PropCreator( ae::_TypeStorage< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
+	// Take _TypeCreator param as a safety check that _PropCreator typeName is provided correctly
+	_PropCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* propName, const char* propValue )
 	{
-		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
-		AE_ASSERT( type == &typeCreator.m_type );
-		type->m_AddProp( propName, propValue );
+		typeCreator.Get()->m_AddProp( propName, propValue );
 	}
 };
 
 template< typename C, typename V, uint32_t Offset >
 struct _VarCreator
 {
-	// Take _TypeStorage param as a safety check that _VarCreator typeName is provided correctly
-	_VarCreator( ae::_TypeStorage< C >& typeCreator, const char* typeName, const char* varName )
+	// Take _TypeCreator param as a safety check that _VarCreator typeName is provided correctly
+	_VarCreator( ae::_TypeCreator< C >& typeCreator, const char* typeName, const char* varName )
 	{
-		ae::Type* type = _Globals::Get()->typeNameMap.Get( typeName );
-		AE_ASSERT( type );
-		AE_ASSERT( type == &typeCreator.m_type );
-
-		m_var.m_owner = type;
+		m_var.m_owner = typeCreator.Get();
+		m_var.m_varType = *ae::VarTypeT< V >::Get();
 		m_var.m_name = varName;
-		m_var.m_varType = ae::VarTypeT< V >::Get();
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic push
 	#pragma clang diagnostic ignored "-Winvalid-offsetof"
@@ -12116,7 +12114,7 @@ struct _VarCreator
 #if !_AE_WINDOWS_
 	#pragma clang diagnostic pop
 #endif
-		type->m_AddVar( &m_var );
+		typeCreator.Get()->m_AddVar( &m_var );
 	}
 	Var m_var;
 };
@@ -12125,13 +12123,9 @@ template< typename C, typename V, uint32_t Offset >
 struct _VarPropCreator
 {
 	// Take _VarCreator param as a safety check
-	_VarPropCreator( ae::_VarCreator< C, V, Offset >&, const char* varName, const char* propName, const char* propValue )
+	_VarPropCreator( ae::_VarCreator< C, V, Offset >& varCreator, const char* propName, const char* propValue )
 	{
-		ae::Type* type = const_cast< ae::Type* >( ae::GetType< C >() );
-		AE_ASSERT( type );
-		ae::Var* var = const_cast< ae::Var* >( type->GetVarByName( varName, false ) );
-		AE_ASSERT( var );
-		var->m_AddProp( propName, propValue );
+		varCreator.m_var.m_AddProp( propName, propValue );
 	}
 };
 
@@ -12142,8 +12136,8 @@ template< typename T >
 class _AttributeCreator
 {
 public:
-	_AttributeCreator( ae::_TypeStorage< T >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_type.attributes.m_Add( attribute ); } }
-	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& creator, ae::Attribute* attribute ) { if( attribute ){ creator.m_var.attributes.m_Add( attribute ); } }
+	_AttributeCreator( ae::_TypeCreator< T >& typeCreator, ae::Attribute* attribute ) { if( attribute ){ typeCreator.Get()->attributes.m_Add( attribute ); } }
+	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& varCreator, ae::Attribute* attribute ) { if( attribute ){ varCreator.m_var.attributes.m_Add( attribute ); } }
 	// _AttributeCreator( ae::_EnumCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
 	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
@@ -12235,7 +12229,7 @@ struct ae::VarTypeT< ae::Map< K, V, N > > : public ae::MapVarType
 template < typename T >
 bool ae::Type::IsType() const
 {
-	const Type* type = GetType< T >();
+	const Type* type = ::ae::GetType< T >();
 	AE_ASSERT( type );
 	return IsType( type );
 }
@@ -12490,16 +12484,13 @@ T* ae::ClassVarType::TryGet( ae::VarData varData ) const
 template< typename T >
 const T* ae::ClassVarType::TryGet( ae::ConstVarData varData ) const
 {
-	if( GetType()->IsType< T >() )
+	if( IsType< T >() )
 	{
 		return static_cast< const T* >( varData.Get( this ) );
 	}
 	return nullptr;
 }
 
-//------------------------------------------------------------------------------
-// ae::Type templated member functions
-//------------------------------------------------------------------------------
 template < typename T >
 T* ae::Type::New( void* obj ) const
 {
@@ -12610,7 +12601,7 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 
 	const ae::Type* objType = ae::GetTypeFromObject( obj );
 	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner->GetName() );
+	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner.GetClassType()->GetName() );
 
 	ae::VarData varData( this, obj );
 	if ( const ae::ArrayVarType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayVarType >() )
@@ -26616,6 +26607,11 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 // Meta register base objects
 //------------------------------------------------------------------------------
+// template <> struct ae::VarTypeT< ae::Object > : public ae::ClassVarType {
+// 	ae::TypeId GetTypeId() const override { return ae::GetTypeId< ae::Object >(); }
+// 	static ae::VarType* Get() { return reinterpret_cast< ae::VarType* >( const_cast< ae::ClassVarType* >( ae::GetType< ae::Object >() ) ); }
+// 	ae::VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+// };
 AE_REGISTER_CLASS( ae, Object );
 AE_REGISTER_CLASS( ae, Attribute );
 AE_REGISTER_CLASS( ae, SourceFileAttribute );
@@ -26671,7 +26667,7 @@ ae::VarData::VarData( const ae::Var* var, ae::Object* object )
 	if constexpr( _AE_DEBUG_ )
 	{
 		const ae::Type* type = ae::GetTypeFromObject( object );
-		AE_ASSERT_MSG( type->IsType( var->m_owner ), "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+		AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
 	}
 }
 ae::VarData::operator bool() const
@@ -26731,7 +26727,7 @@ ae::ConstVarData::ConstVarData( const ae::Var* var, const ae::Object* object )
 	if constexpr( _AE_DEBUG_ )
 	{
 		const ae::Type* type = ae::GetTypeFromObject( object );
-		AE_ASSERT_MSG( type->IsType( var->m_owner ), "Attempting to access '#::#' on object with type '#'", var->m_owner->GetName(), var->GetName(), type->GetName() );
+		AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
 	}
 }
 ae::ConstVarData::operator bool() const
@@ -26850,7 +26846,7 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	// Safety check to make sure 'this' Var belongs to 'obj' ae::Type
 	const ae::Type* objType = ae::GetTypeFromObject( obj );
 	AE_ASSERT( objType );
-	AE_ASSERT_MSG( objType->IsType( m_owner ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner->GetName(), GetName() );
+	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner.GetClassType()->GetName(), GetName() );
 	
 	const ae::VarType* varType = &GetOuterVarType();
 	ae::VarData varData( this, obj );
@@ -26894,8 +26890,8 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 
 const ae::VarType& ae::Var::GetOuterVarType() const
 {
-	AE_ASSERT( m_varType );
-	return *m_varType;
+	AE_ASSERT( m_varType.Get() );
+	return *m_varType.Get();
 }
 bool ae::Var::HasProperty( const char* prop ) const { return GetPropertyIndex( prop ) >= 0; }
 int32_t ae::Var::GetPropertyIndex( const char* prop ) const { return m_props.GetIndex( prop ); }
@@ -26912,6 +26908,32 @@ const char* ae::Var::GetPropertyValue( const char* propName, uint32_t valueIndex
 {
 	const auto* vals = m_props.TryGet( propName );
 	return ( vals && valueIndex < vals->Length() ) ? (*vals)[ valueIndex ].c_str() : "";
+}
+ae::Var::_TypePointer::_TypePointer( const ae::VarType& _varType )
+{
+	if( const ae::ClassVarType* classType = _varType.AsVarType< ae::ClassVarType >() )
+	{
+		type = Class;
+		typeId = classType->GetTypeId();
+	}
+	else
+	{
+		type = Static;
+		this->varType = &_varType;
+	}
+}
+ae::Var::_TypePointer::_TypePointer( const ae::ClassVarType* type ) : type( type ? Class : Null ), typeId( type ? type->GetTypeId() : kInvalidTypeId ) {}
+ae::Var::_TypePointer::_TypePointer( const ae::TypeId typeId ) : type( ( typeId != kInvalidTypeId ) ? Class : Null ), typeId( typeId ) {}
+const ae::VarType* ae::Var::_TypePointer::GetVarType() const { return ( type == Static ) ? varType : nullptr; }
+const ae::Type* ae::Var::_TypePointer::GetClassType() const { return ( type == Class ) ? ae::GetTypeById( typeId ) : nullptr; }
+const ae::VarType* ae::Var::_TypePointer::Get() const
+{
+	switch( type )
+	{
+		case Static: return GetVarType();
+		case Class: return GetClassType();
+		default: return nullptr;
+	}
 }
 void ae::Var::m_AddProp( const char* prop, const char* value )
 {
@@ -27516,11 +27538,6 @@ ae::VarData ae::PointerVarType::Dereference( ae::ConstVarData varData ) const
 //------------------------------------------------------------------------------
 // ae::ClassVarType member functions
 //------------------------------------------------------------------------------
-const ae::Type* ae::ClassVarType::GetType() const
-{
-	return ae::GetTypeById( GetTypeId() );
-}
-
 const ae::Type* ae::ClassVarType::GetType( ae::ConstVarData varData ) const
 {
 	if( const ae::Object* data = static_cast< const ae::Object* >( varData.Get( this ) ) )
