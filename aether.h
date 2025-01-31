@@ -11987,7 +11987,7 @@ struct VarTypeT< T* > : public ae::PointerVarType
 template<>
 struct VarTypeT< std::nullptr_t > : public ae::PointerVarType
 {
-	const ae::VarType& GetInnerVarType() const override { AE_FAIL(); return *(ae::VarType*)nullptr; }
+	const ae::VarType& GetInnerVarType() const override { AE_FAIL(); return *Get(); } // @TODO: Must return something, add Void type
 	static ae::VarType* Get() { static ae::VarTypeT< std::nullptr_t > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 	bool SetRef( ae::VarData varData, ae::Object* value ) const override { AE_FAIL(); return false; }
