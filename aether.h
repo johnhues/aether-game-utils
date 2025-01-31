@@ -1764,7 +1764,7 @@ public:
 	const Value& Get( const Key& key ) const;
 	//! Returns the value set with \p key. Returns \p defaultValue otherwise
 	//! when the key/value pair is missing.
-	const Value& Get( const Key& key, const Value& defaultValue ) const;
+	template< typename V = Value > Value Get( const Key& key, V&& defaultValue ) const&;
 	//! Returns a pointer to the value set with \p key. Returns null otherwise
 	//! when the key/value pair is missing.
 	Value* TryGet( const Key& key );
@@ -5773,8 +5773,8 @@ public:
 
 	virtual ae::VarData TryGet( ae::VarData optional ) const = 0;
 	virtual ae::ConstVarData TryGet( ae::ConstVarData optional ) const = 0;
-	virtual ae::VarData GetOrInsert( ae::VarData optional ) = 0;
-	virtual void Clear( ae::VarData optional ) = 0;
+	virtual ae::VarData GetOrInsert( ae::VarData optional ) const = 0;
+	virtual void Clear( ae::VarData optional ) const = 0;
 
 	// Internal
 	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
@@ -9350,10 +9350,11 @@ const V& Map< K, V, N, M >::Get( const K& key ) const
 }
 
 template < typename K, typename V, uint32_t N, MapMode M >
-const V& Map< K, V, N, M >::Get( const K& key, const V& defaultValue ) const
+template< typename V2 > 
+V Map< K, V, N, M >::Get( const K& key, V2&& defaultValue ) const&
 {
 	int32_t index = GetIndex( key );
-	return ( index >= 0 ) ? m_pairs[ index ].value : defaultValue;
+	return ( index >= 0 ) ? m_pairs[ index ].value : static_cast< V >( std::forward< V2 >( defaultValue ) );
 }
 
 template < typename K, typename V, uint32_t N, MapMode M >
