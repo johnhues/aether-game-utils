@@ -5364,7 +5364,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 //------------------------------------------------------------------------------
 using TypeId = uint32_t;
 using TypeName = ae::Str64;
-using Type = class ClassVarType;
+using ClassVarType = class Type;
 class Var;
 struct VarType;
 const ae::TypeId kInvalidTypeId = 0;
@@ -5925,6 +5925,8 @@ public:
 	//--------------------------------------------------------------------------
 	// ae::VarType
 	//--------------------------------------------------------------------------
+	//! Returns the class type that this member variable belongs too.
+	const ae::ClassVarType& GetClassType() const;
 	//! Returns the 'outermost' type of this var, eg. if this is an array of ints
 	//! the outer type would be ArrayVarType
 	const ae::VarType& GetOuterVarType() const;
@@ -5970,9 +5972,8 @@ public:
 		_TypePointer( const ae::VarType& varType );
 		_TypePointer( const ae::ClassVarType* type );
 		_TypePointer( const ae::TypeId typeId );
-		const ae::VarType* GetVarType() const;
-		const ae::Type* GetClassType() const;
-		const ae::VarType* Get() const;
+		const ae::Type* GetClassType() const; // Returns a value for Class only
+		const ae::VarType* Get() const; // Returns a value for all types except Null
 		bool IsValid() const { return type != Null; }
 		enum { Static, Class, Null } type; // @TODO: Enum
 		union
@@ -6018,9 +6019,9 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::ClassVarType
+// ae::Type @TODO: ae::ClassVarType
 //------------------------------------------------------------------------------
-class ClassVarType : public ae::VarType
+class Type : public ae::VarType
 {
 public:
 	// ae::Type
@@ -6075,6 +6076,7 @@ public:
 
 	// ae::VarData
 	//! Gets the class type of the given VarData if possible.
+	const ae::Type* GetType() const { return this; } // For backwards compatibility
 	const ae::Type* GetType( ae::ConstVarData varData ) const;
 	template< typename T > T* TryGet( ae::VarData varData ) const;
 	template< typename T > const T* TryGet( ae::ConstVarData varData ) const;
@@ -26607,11 +26609,6 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 // Meta register base objects
 //------------------------------------------------------------------------------
-// template <> struct ae::VarTypeT< ae::Object > : public ae::ClassVarType {
-// 	ae::TypeId GetTypeId() const override { return ae::GetTypeId< ae::Object >(); }
-// 	static ae::VarType* Get() { return reinterpret_cast< ae::VarType* >( const_cast< ae::ClassVarType* >( ae::GetType< ae::Object >() ) ); }
-// 	ae::VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
-// };
 AE_REGISTER_CLASS( ae, Object );
 AE_REGISTER_CLASS( ae, Attribute );
 AE_REGISTER_CLASS( ae, SourceFileAttribute );
@@ -26888,6 +26885,13 @@ bool ae::Var::SetObjectValueFromString( ae::Object* obj, const char* value, int3
 	return false;
 }
 
+const ae::ClassVarType& ae::Var::GetClassType() const
+{
+	const ae::ClassVarType* type = m_owner.GetClassType();
+	AE_ASSERT_MSG( type, "Member variable # has no class type", m_name );
+	return *classType;
+
+}
 const ae::VarType& ae::Var::GetOuterVarType() const
 {
 	AE_ASSERT( m_varType.Get() );
@@ -26924,14 +26928,16 @@ ae::Var::_TypePointer::_TypePointer( const ae::VarType& _varType )
 }
 ae::Var::_TypePointer::_TypePointer( const ae::ClassVarType* type ) : type( type ? Class : Null ), typeId( type ? type->GetTypeId() : kInvalidTypeId ) {}
 ae::Var::_TypePointer::_TypePointer( const ae::TypeId typeId ) : type( ( typeId != kInvalidTypeId ) ? Class : Null ), typeId( typeId ) {}
-const ae::VarType* ae::Var::_TypePointer::GetVarType() const { return ( type == Static ) ? varType : nullptr; }
-const ae::Type* ae::Var::_TypePointer::GetClassType() const { return ( type == Class ) ? ae::GetTypeById( typeId ) : nullptr; }
+const ae::ClassVarType* ae::Var::_TypePointer::GetClassType() const
+{
+	return ( type == Class ) ? ae::GetTypeById( typeId ) : nullptr;
+}
 const ae::VarType* ae::Var::_TypePointer::Get() const
 {
 	switch( type )
 	{
-		case Static: return GetVarType();
-		case Class: return GetClassType();
+		case Static: return varType;
+		case Class: return ae::GetTypeById( typeId );
 		default: return nullptr;
 	}
 }
