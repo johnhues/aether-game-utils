@@ -5208,7 +5208,7 @@ public:
 #define AE_REGISTER_CLASS(...)\
 	int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0;\
 	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-	template <> struct ae::TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::ClassTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > { TypeT() : ClassTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) ) {} };\
+	template <> struct ae::TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::_ClassTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > { TypeT() : _ClassTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) ) {} };\
 	ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__);\
 	template<> ae::Type* ae::FindMetaRegistrationFor< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
@@ -12049,13 +12049,13 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::ClassTypeT class
+// ae::_ClassTypeT class
 //------------------------------------------------------------------------------
 template< typename T >
-class ClassTypeT : public ae::ClassType
+class _ClassTypeT : public ae::ClassType
 {
 public:
-	ClassTypeT( const char* typeName )
+	_ClassTypeT( const char* typeName )
 	{
 		_Globals* globals = _Globals::Get();
 		AE_ASSERT_MSG( globals->typeNameMap.Length() < globals->typeNameMap.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->typeNameMap.Size() );
@@ -12065,7 +12065,7 @@ public:
 		globals->types.Append( this );
 		globals->metaCacheSeq++;
 	}
-	~ClassTypeT()
+	~_ClassTypeT()
 	{
 		_Globals* globals = _Globals::Get();
 		globals->typeNameMap.Remove( GetName() );
