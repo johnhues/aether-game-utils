@@ -5210,7 +5210,7 @@ public:
 	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
 	template <> struct ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > { VarTypeT() : TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) ) {} };\
 	ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__);\
-	template<> ae::VarType* ae::GetLinkedVarType< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
+	template<> ae::VarType* ae::FindMetaRegistrationFor< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::VarTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
 	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
 //! Register a class property
 #define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
@@ -11657,14 +11657,34 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
 //------------------------------------------------------------------------------
-template < typename T > ae::VarType* GetLinkedVarType(); // Forward declaration for VarTypeT< T >::Get()
-// This version of VarTypeT< T >::Get() will be called when the real VarTypeT< T >::Get()
-// is not available, calls will instead fallback to calling GetLinkedVarType< T >()
-// which will search compilation units for the real VarTypeT< T >::Get() implementation.
-template < typename T > struct VarTypeT // Proxy for real VarTypeT< T > if definition is not available
+// Forward declaration for VarTypeT< T >::Get()
+template < typename T > ae::VarType* FindMetaRegistrationFor();
+// Proxy for the real VarTypeT< T > if its definition is not available. This
+// version of VarTypeT< T >::Get() will be called when the real one is not
+// included (like for meta registered classes). Calls will instead fallback to
+// FindMetaRegistrationFor< T >() where the linker will have searched the
+// compilation units for the real VarTypeT< T >::Get() implementation. This is
+// required because meta registered classes are registered within their own
+// compilation units so they can be hotloaded and have registered vars and
+// attributes.
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// An unexpected linker error here likely means that you have not included the
+// real implementation of the ae::VarTypeT<> class for the type you are using.
+// Try including the file that registers the type you are using.
+/* Eg.
+	Undefined symbol:
+		"ae::VarType* ae::FindMetaRegistrationFor< MyCustomArray< int > >()"
+		Referenced from Game.cpp
+
+// Try including the header with the definition of this in Game.cpp:
+	template< typename T >
+	ae::VarTypeT< MyCustomArray< T > > : ae::ArrayVarType
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+template < typename T > struct VarTypeT
 {
+	// Param with default value so real VarTypeT< T >::Get() will be prioritized if available
 	// @TODO: Use const instead of discarding it
-	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::GetLinkedVarType< std::remove_const_t< T > >(); } // Param with default value so real VarTypeT< T >::Get() will be prioritized if available
+	static ae::VarType* Get( uint32_t _i = 0 ) { return ae::FindMetaRegistrationFor< std::remove_const_t< T > >(); }
 };
 
 template < typename T > ae::TypeId GetTypeId()
@@ -11968,7 +11988,7 @@ struct VarTypeT< T* > : public ae::PointerVarType
 template<>
 struct VarTypeT< std::nullptr_t > : public ae::PointerVarType
 {
-	const ae::VarType& GetInnerVarType() const override { AE_FAIL(); return *(ae::VarType*)nullptr; }
+	const ae::VarType& GetInnerVarType() const override { AE_FAIL(); return *Get(); } // @TODO: Must return something, add Void type
 	static ae::VarType* Get() { static ae::VarTypeT< std::nullptr_t > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 	bool SetRef( ae::VarData varData, ae::Object* value ) const override { AE_FAIL(); return false; }
