@@ -198,7 +198,7 @@
 	#include <unordered_map>
 #endif
 #include <utility>
-#include <vector> // @TODO: Remove. For _EnumCreator.
+#include <vector> // @TODO: Remove. For _RegisterEnum.
 
 //------------------------------------------------------------------------------
 // Platform headers
@@ -5240,18 +5240,12 @@ public:
 	}; \
 	template <> const ae::Enum* ae::GetEnum< E >(); \
 	template <> \
-	struct ae::VarTypeT< E > : public ae::EnumVarType { \
-		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
-		uint32_t GetSize() const override { return sizeof(T); } \
-		const char* GetName() const override { return #E; } \
-		const char* GetPrefix() const override { return ""; } \
+	struct ae::VarTypeT< E > : public ae::Enum { \
+		VarTypeT() : Enum( #E, "", sizeof(E), std::is_signed_v< T > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
 		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
 	}; \
-	struct AE_ENUM_##E {\
-		AE_ENUM_##E( const char* name = #E, const char* def = #__VA_ARGS__ ) : ec( name, def ) {}\
-		ae::_EnumCreator< E > ec;\
-	};\
+	struct _EnumValues##E { _EnumValues##E( const char* values = #__VA_ARGS__ ) : values( values ) {} const char* values; };\
 	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); return os; } \
 	namespace ae { template <> inline std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> inline E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } } \
@@ -5259,7 +5253,8 @@ public:
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E )\
-	AE_ENUM_##E ae_enum_creator_##E;\
+	ae::_RegisterEnum< E > ae_enum_creator_##E( #E, _EnumValues##E().values );\
+	template<> ae::VarType* ae::FindMetaRegistrationFor< E >() { return ae::VarTypeT< E >::Get(); }\
 	template <> const ae::Enum* ae::GetEnum< E >(){\
 		static _StaticCacheVar< const ae::Enum* > s_enum = nullptr;\
 		if ( !s_enum ) { s_enum = GetEnum( #E ); }\
@@ -5277,14 +5272,12 @@ public:
 	}\
 	template <> \
 	struct ae::VarTypeT< E > : public ae::EnumVarType { \
-		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
-		const char* GetName() const override { return #E; } \
-		uint32_t GetSize() const override { return sizeof(E); } \
-		const char* GetPrefix() const override { return ""; } \
+		VarTypeT() : Enum( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
 		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
 	}; \
-	ae::_EnumCreator2< E > ae_enum_creator_##E( #E ); \
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E; \
+	template<> ae::VarType* ae::FindMetaRegistrationFor< E >() { return ae::VarTypeT< E >::Get(); }\
 	namespace ae { template <> std::string ToString( E e ) { return ae::GetEnum< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> E FromString( const char* str, const E& e ) { return ae::GetEnum< E >()->GetValueFromString( str, e ); } }
 
@@ -5297,22 +5290,20 @@ public:
 	} \
 	template <> \
 	struct ae::VarTypeT< E > : public ae::EnumVarType { \
-		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
-		const char* GetName() const override { return #E; } \
-		uint32_t GetSize() const override { return sizeof(E); } \
-		const char* GetPrefix() const override { return #PREFIX; } \
+		VarTypeT() : Enum( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
 		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
 	}; \
-	ae::_EnumCreator2< E > ae_enum_creator_##E( #E );
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
+	template<> ae::VarType* ae::FindMetaRegistrationFor< E >() { return ae::VarTypeT< E >::Get(); }\
 
 //! Register c-style enum value
 #define AE_REGISTER_ENUM_VALUE( E, V ) \
-	ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #V, V );
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #V, V );
 
 //! Register c-style enum value with a manually specified name
 #define AE_REGISTER_ENUM_VALUE_NAME( E, V, N ) \
-ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
+	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E##_##V( #N, V );
 
 //------------------------------------------------------------------------------
 // External enum class registerer
@@ -5326,19 +5317,17 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 	} \
 	template <> \
 	struct ae::VarTypeT< E > : public ae::EnumVarType { \
-		const ae::Enum* GetEnum() const override { return ae::GetEnum< E >(); } \
-		const char* GetName() const override { return #E; } \
-		uint32_t GetSize() const override { return sizeof(E); } \
-		const char* GetPrefix() const override { return ""; } \
+		VarTypeT() : Enum( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
 		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
 	}; \
-	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator( #E ); }
+	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
+	template<> ae::VarType* ae::FindMetaRegistrationFor< E >() { return ae::VarTypeT< E >::Get(); }
 	// @NOTE: Nested namespace declaration requires C++17
 
 //! Register enum class value
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
-	namespace aeEnums::_##E { ae::_EnumCreator2< E > ae_enum_creator_##V( #V, E::V ); }
+	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
 // #define AE_REGISTER_ENUM_PROPERTY( E, P )
 // #define AE_REGISTER_ENUM_PROPERTY_VALUE( E, P, PV )
@@ -5365,6 +5354,7 @@ ae::_EnumCreator2< E > ae_enum_creator_##E##_##V( #N, V );
 using TypeId = uint32_t;
 using TypeName = ae::Str64;
 using ClassVarType = class Type;
+using EnumVarType = class Enum;
 class Var;
 struct VarType;
 const ae::TypeId kInvalidTypeId = 0;
@@ -5528,45 +5518,6 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::Enum class
-//------------------------------------------------------------------------------
-class Enum
-{
-public:
-	const char* GetName() const { return m_name.c_str(); }
-	uint32_t TypeSize() const { return m_size; }
-	bool TypeIsSigned() const { return m_isSigned; }
-		
-	template < typename T > std::string GetNameByValue( T value ) const;
-	template < typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
-	template < typename T > T GetValueFromString( const char* str, T defaultValue ) const;
-	template < typename T > bool HasValue( T value ) const;
-		
-	int32_t GetValueByIndex( int32_t index ) const;
-	std::string GetNameByIndex( int32_t index ) const;
-	uint32_t Length() const;
-
-	//--------------------------------------------------------------------------
-	// Attributes
-	//--------------------------------------------------------------------------
-	ae::AttributeList attributes;
-		
-	//------------------------------------------------------------------------------
-	// Internal
-	//------------------------------------------------------------------------------
-private:
-	ae::TypeName m_name;
-	uint32_t m_size;
-	bool m_isSigned;
-	ae::Map< int32_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
-	ae::Map< std::string, int32_t, kMaxMetaEnumValues > m_enumNameToValue;
-public: // Internal
-	Enum( const char* name, uint32_t size, bool isSigned );
-	void m_AddValue( const char* name, int32_t value );
-	static Enum* s_Get( const char* enumName, bool create, uint32_t size, bool isSigned );
-};
-
-//------------------------------------------------------------------------------
 // ae::BasicType enum
 //------------------------------------------------------------------------------
 enum class BasicType
@@ -5719,22 +5670,50 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::EnumVarType
+// ae::Enum class @TODO: ae::EnumType
 //------------------------------------------------------------------------------
-class EnumVarType : public ae::VarType
+class Enum : public ae::VarType
 {
 public:
-	virtual const ae::Enum* GetEnum() const = 0;
-	virtual const char* GetPrefix() const = 0; // @TODO: Can prefix be part of ae::Enum?
-	virtual const char* GetName() const = 0; // @TODO: Delete and replace with GetEnum()
-	virtual uint32_t GetSize() const = 0; // @TODO: Delete and replace with GetEnum()
+	// Type info
+	const char* GetName() const { return m_name.c_str(); }
+	const char* GetPrefix() const { return m_prefix.c_str(); }
+	uint32_t TypeSize() const { return m_size; }
+	bool TypeIsSigned() const { return m_isSigned; }
 
+	// Enum values
+	template < typename T > std::string GetNameByValue( T value ) const;
+	template < typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
+	template < typename T > T GetValueFromString( const char* str, T defaultValue ) const;
+	template < typename T > bool HasValue( T value ) const;
+	int32_t GetValueByIndex( int32_t index ) const;
+	std::string GetNameByIndex( int32_t index ) const;
+	uint32_t Length() const;
+
+	// ae::VarData
 	std::string GetVarDataAsString( ae::ConstVarData varData ) const;
 	bool SetVarDataFromString( ae::VarData varData, const char* value ) const;
 	template< typename T > bool GetVarData( ae::ConstVarData varData, T* valueOut ) const;
 	template< typename T > bool SetVarData( ae::VarData varData, const T& value ) const;
 
+	// Attributes
+	ae::AttributeList attributes;
+
+	//------------------------------------------------------------------------------
 	// Internal
+	//------------------------------------------------------------------------------
+private:
+	ae::TypeName m_name;
+	ae::TypeName m_prefix;
+	uint32_t m_size;
+	bool m_isSigned;
+	ae::Map< int32_t, std::string, kMaxMetaEnumValues > m_enumValueToName;
+	ae::Map< std::string, int32_t, kMaxMetaEnumValues > m_enumNameToValue;
+protected:
+	Enum( const char* name, const char* prefix, uint32_t size, bool isSigned );
+public:
+	const ae::Enum* GetEnum() const { return this; } // @TODO: Remove
+	void m_AddValue( const char* name, int32_t value );
 	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 };
 
@@ -6019,7 +5998,7 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::Type @TODO: ae::ClassVarType
+// ae::Type @TODO: ae::ClassType
 //------------------------------------------------------------------------------
 class Type : public ae::VarType
 {
@@ -6215,6 +6194,7 @@ public:
 struct _Globals
 {
 	static _Globals* Get();
+	~_Globals();
 	
 	// Allocation
 	bool allocatorInitialized = false;
@@ -6228,7 +6208,7 @@ struct _Globals
 
 	// Reflection
 	uint32_t metaCacheSeq = 0;
-	ae::Map< std::string, Enum, kMaxMetaEnumTypes > enums; // @TODO: ae::TypeName
+	ae::Map< std::string, const Enum*, kMaxMetaEnumTypes > enums; // @TODO: ae::TypeName instead of string
 	ae::Map< ae::TypeName, Type*, kMaxMetaTypes > typeNameMap;
 	ae::Map< ae::TypeId, Type*, kMaxMetaTypes > typeIdMap;
 	ae::Array< ae::Type*, kMaxMetaTypes > types;
@@ -11730,15 +11710,16 @@ const ae::Type* Inheritor< Parent, This >::GetParentType()
 template < typename T >
 const Enum* GetEnum();
 	
-template < typename E, typename T = typename std::underlying_type< E >::type >
-class _EnumCreator
+template < typename E >
+class _RegisterEnum
 {
 public:
-	ae::Enum* m_enumType = nullptr; // @TODO: Should be statically allocated
-
-	_EnumCreator( const char* typeName, std::string strMap )
+	using T = typename std::underlying_type_t< E >;
+	_RegisterEnum( const char* typeName, std::string strMap )
 	{
-		m_enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
+		ae::_Globals* globals = ae::_Globals::Get();
+		ae::Enum* enumType = const_cast< ae::Enum* >( ae::VarTypeT< E >::Get()->template AsVarType< ae::EnumVarType >() );
+		globals->enums.Set( ae::GetTypeName< E >(), enumType );
 			
 		// Remove whitespace
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
@@ -11785,17 +11766,17 @@ public:
 				}
 			}
 				
-			m_enumType->m_AddValue( enumName.c_str(), currentValue );
+			enumType->m_AddValue( enumName.c_str(), currentValue );
 			currentValue++;
 		}
+		globals->metaCacheSeq++;
 	}
 
-	~_EnumCreator()
+	~_RegisterEnum()
 	{
-		auto&& enums = ae::_Globals::Get()->enums;
-		enums.Remove( m_enumType->GetName() );
-		m_enumType = nullptr;
-		ae::_Globals::Get()->metaCacheSeq++;
+		ae::_Globals* globals = ae::_Globals::Get();
+		globals->enums.Remove( ae::GetTypeName< E >() );
+		globals->metaCacheSeq++;
 	}
 		
 private:
@@ -11814,39 +11795,35 @@ private:
 	}
 };
 	
-template < typename T >
-class _EnumCreator2
+template < typename E >
+class _RegisterExistingEnumOrValue
 {
 public:
-	ae::Enum* m_enumType = nullptr; // @TODO: Should be statically allocated
-
-	_EnumCreator2( const char* typeName )
-	{
-		m_enumType = ae::Enum::s_Get( typeName, true, sizeof( T ), std::is_signed< T >::value );
-	}
-		
-	_EnumCreator2( const char* valueName, T value )
-	{
-		const ae::VarType* varType = ae::VarTypeT< T >::Get();
-		AE_ASSERT( varType );
-		const ae::EnumVarType* enumType = varType->AsVarType< ae::EnumVarType >();
-		AE_ASSERT( enumType );
-		const char* prefix = enumType->GetPrefix();
-		uint32_t prefixLen = (uint32_t)strlen( prefix );
-		AE_ASSERT( prefixLen < strlen( valueName ) );
-		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
-			
-		m_enumType = const_cast< ae::Enum* >( ae::GetEnum< T >() );
-		AE_ASSERT_MSG( m_enumType, "Could not register enum value '#'. No registered Enum.", valueName );
-		m_enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
-	}
-
-	~_EnumCreator2()
+	// Enum types
+	_RegisterExistingEnumOrValue()
 	{
 		ae::_Globals* globals = ae::_Globals::Get();
-		globals->enums.Remove( ae::GetTypeName< T >() );
-		m_enumType = nullptr;
+		globals->enums.Set( ae::GetTypeName< E >(), ae::VarTypeT< E >::Get()->template AsVarType< ae::EnumVarType >() );
 		globals->metaCacheSeq++;
+	}
+	~_RegisterExistingEnumOrValue()
+	{
+		ae::_Globals* globals = ae::_Globals::Get();
+		globals->enums.Remove( ae::GetTypeName< E >() );
+		globals->metaCacheSeq++;
+	}
+	
+	// Enum values
+	_RegisterExistingEnumOrValue( const char* valueName, E value )
+	{
+		ae::Enum* enumType = const_cast< ae::Enum* >( ae::VarTypeT< E >::Get()->template AsVarType< ae::EnumVarType >() );
+		AE_ASSERT( enumType );
+		const char* prefix = enumType->GetPrefix();
+		const uint32_t prefixLen = (uint32_t)strlen( prefix );
+		AE_ASSERT( prefixLen < strlen( valueName ) );
+		AE_ASSERT( memcmp( prefix, valueName, prefixLen ) == 0 );
+		enumType->m_AddValue( valueName + prefixLen, (int32_t)value );
+		ae::_Globals::Get()->metaCacheSeq++;
 	}
 };
 
@@ -12161,7 +12138,7 @@ class _AttributeCreator
 public:
 	_AttributeCreator( ae::_TypeCreator< T >& typeCreator, ae::Attribute* attribute ) { if( attribute ){ typeCreator.Get()->attributes.m_Add( attribute ); } }
 	template< typename T1, uint32_t T2 > _AttributeCreator( ae::_VarCreator< T, T1, T2 >& varCreator, ae::Attribute* attribute ) { if( attribute ){ varCreator.m_var.attributes.m_Add( attribute ); } }
-	// _AttributeCreator( ae::_EnumCreator< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
+	// _AttributeCreator( ae::_RegisterEnum< T >& creator, const ae::Attribute* attribute ) { creator.m_enum.attributes.m_Add( attribute ); }
 	// @NOTE: No need to remove added attributes on hotload because they must be in the same compilation unit as types etc.
 };
 
@@ -12432,11 +12409,9 @@ bool ae::EnumVarType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
 	{
 		if( const void* varData = _varData.Get( this ) )
 		{
-			const ae::Enum* enumType = GetEnum();
-			AE_ASSERT( enumType );
-			if( enumType->TypeIsSigned() )
+			if( TypeIsSigned() )
 			{
-				switch( enumType->TypeSize() )
+				switch( TypeSize() )
 				{
 					case 1: { *valueOut = static_cast< T >( *static_cast< const int8_t* >( varData ) ); return true; }
 					case 2: { *valueOut = static_cast< T >( *static_cast< const int16_t* >( varData ) ); return true; }
@@ -12446,7 +12421,7 @@ bool ae::EnumVarType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
 			}
 			else
 			{
-				switch( enumType->TypeSize() )
+				switch( TypeSize() )
 				{
 					case 1: { *valueOut = static_cast< T >( *static_cast< const uint8_t* >( varData ) ); return true; }
 					case 2: { *valueOut = static_cast< T >( *static_cast< const uint16_t* >( varData ) ); return true; }
@@ -12469,11 +12444,9 @@ bool ae::EnumVarType::SetVarData( ae::VarData _varData, const T& value ) const
 	}
 	else if( void* varData = _varData.Get( this ) )
 	{
-		const ae::Enum* enumType = GetEnum();
-		AE_ASSERT( enumType );
-		if( enumType->TypeIsSigned() )
+		if( TypeIsSigned() )
 		{
-			switch( enumType->TypeSize() )
+			switch( TypeSize() )
 			{
 				case 1: { *static_cast< int8_t* >( varData ) = static_cast< int8_t >( value ); return true; }
 				case 2: { *static_cast< int16_t* >( varData ) = static_cast< int16_t >( value ); return true; }
@@ -12483,7 +12456,7 @@ bool ae::EnumVarType::SetVarData( ae::VarData _varData, const T& value ) const
 		}
 		else
 		{
-			switch( enumType->TypeSize() )
+			switch( TypeSize() )
 			{
 				case 1: { *static_cast< uint8_t* >( varData ) = static_cast< uint8_t >( value ); return true; }
 				case 2: { *static_cast< uint16_t* >( varData ) = static_cast< uint16_t >( value ); return true; }
@@ -12895,6 +12868,17 @@ T* ae::Cast( C* obj )
 #endif
 
 namespace ae {
+
+//------------------------------------------------------------------------------
+// ae::_Globals
+//------------------------------------------------------------------------------
+ae::_Globals::~_Globals()
+{
+	AE_ASSERT( !enums.Length() );
+	AE_ASSERT( !typeNameMap.Length() );
+	AE_ASSERT( !typeIdMap.Length() );
+	AE_ASSERT( !types.Length() );
+}
 
 //------------------------------------------------------------------------------
 // Internal ae::_ScratchBuffer storage
@@ -26662,7 +26646,7 @@ const ae::Type* ae::GetTypeFromObject( const ae::Object& obj )
 
 const ae::Enum* ae::GetEnum( const char* enumName )
 {
-	return Enum::s_Get( enumName, false, 0 , false );
+	return ae::_Globals::Get()->enums.Get( enumName, nullptr );
 }
 
 const ae::Type* ae::GetTypeFromObject( const ae::Object* obj )
@@ -27185,37 +27169,21 @@ ae::TypeId ae::GetTypeIdFromName( const char* name )
 //------------------------------------------------------------------------------
 // ae::Enum member functions
 //------------------------------------------------------------------------------
-int32_t ae::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
-std::string ae::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
-uint32_t ae::Enum::Length() const { return m_enumValueToName.Length(); }
-
-ae::Enum::Enum( const char* name, uint32_t size, bool isSigned ) :
+ae::Enum::Enum( const char* name, const char* prefix, uint32_t size, bool isSigned ) :
 	m_name( name ),
+	m_prefix( prefix ),
 	m_size( size ),
 	m_isSigned( isSigned )
 {}
+int32_t ae::Enum::GetValueByIndex( int32_t index ) const { return m_enumValueToName.GetKey( index ); }
+std::string ae::Enum::GetNameByIndex( int32_t index ) const { return m_enumValueToName.GetValue( index ); }
+uint32_t ae::Enum::Length() const { return m_enumValueToName.Length(); }
 
 void ae::Enum::m_AddValue( const char* name, int32_t value )
 {
 	AE_ASSERT_MSG( m_enumValueToName.Length() < m_enumValueToName.Size(), "Set/increase AE_MAX_META_ENUM_VALUES_CONFIG (Currently: #)", m_enumValueToName.Size() );
 	m_enumValueToName.Set( value, name );
 	m_enumNameToValue.Set( name, value );
-}
-
-ae::Enum* ae::Enum::s_Get( const char* enumName, bool create, uint32_t size, bool isSigned )
-{
-	auto&& enums = ae::_Globals::Get()->enums;
-	if ( create )
-	{
-		AE_ASSERT_MSG( enums.Length() < enums.Size(), "Set/increase AE_MAX_META_ENUM_TYPES_CONFIG (Currently: #)", enums.Size() );
-		AE_ASSERT( !enums.TryGet( enumName ) );
-		ae::_Globals::Get()->metaCacheSeq++;
-		return &enums.Set( enumName, Enum( enumName, size, isSigned ) );
-	}
-	else
-	{
-		return enums.TryGet( enumName );
-	}
 }
 
 //------------------------------------------------------------------------------
@@ -27470,12 +27438,10 @@ std::string ae::EnumVarType::GetVarDataAsString( ae::ConstVarData _varData ) con
 	}
 	
 	// @NOTE: Enums with very large or small values (outside the range of int32) are not currently supported
-	const class Enum* enumType = GetEnum();
-	AE_ASSERT( enumType );
 	int32_t value = 0;
-	if ( enumType->TypeIsSigned() )
+	if ( TypeIsSigned() )
 	{
-		switch ( enumType->TypeSize() )
+		switch ( TypeSize() )
 		{
 			case 1: value = *reinterpret_cast< const int8_t* >( varData ); break;
 			case 2: value = *reinterpret_cast< const int16_t* >( varData ); break;
@@ -27493,7 +27459,7 @@ std::string ae::EnumVarType::GetVarDataAsString( ae::ConstVarData _varData ) con
 	}
 	else
 	{
-		switch ( enumType->TypeSize() )
+		switch ( TypeSize() )
 		{
 			case 1: value = *reinterpret_cast< const uint8_t* >( varData ); break;
 			case 2: value = *reinterpret_cast< const uint16_t* >( varData ); break;
@@ -27514,7 +27480,7 @@ std::string ae::EnumVarType::GetVarDataAsString( ae::ConstVarData _varData ) con
 			default: AE_FAIL();
 		}
 	}
-	return enumType->GetNameByValue( value );
+	return GetNameByValue( value );
 }
 
 bool ae::EnumVarType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
@@ -27524,26 +27490,25 @@ bool ae::EnumVarType::SetVarDataFromString( ae::VarData _varData, const char* va
 	{
 		return false;
 	}
-	const class Enum* enumType = GetEnum();
-	if ( enumType->TypeIsSigned() )
+	if ( TypeIsSigned() )
 	{
-		switch( enumType->TypeSize() )
+		switch( TypeSize() )
 		{
-			case 1: return enumType->GetValueFromString( value, reinterpret_cast< int8_t* >( varData ) );
-			case 2: return enumType->GetValueFromString( value, reinterpret_cast< int16_t* >( varData ) );
-			case 4: return enumType->GetValueFromString( value, reinterpret_cast< int32_t* >( varData ) );
-			case 8: return enumType->GetValueFromString( value, reinterpret_cast< int64_t* >( varData ) );
+			case 1: return GetValueFromString( value, reinterpret_cast< int8_t* >( varData ) );
+			case 2: return GetValueFromString( value, reinterpret_cast< int16_t* >( varData ) );
+			case 4: return GetValueFromString( value, reinterpret_cast< int32_t* >( varData ) );
+			case 8: return GetValueFromString( value, reinterpret_cast< int64_t* >( varData ) );
 			default: AE_FAIL(); return false;
 		}
 	}
 	else
 	{
-		switch( enumType->TypeSize() )
+		switch( TypeSize() )
 		{
-			case 1: return enumType->GetValueFromString( value, reinterpret_cast< uint8_t* >( varData ) );
-			case 2: return enumType->GetValueFromString( value, reinterpret_cast< uint16_t* >( varData ) );
-			case 4: return enumType->GetValueFromString( value, reinterpret_cast< uint32_t* >( varData ) );
-			case 8: return enumType->GetValueFromString( value, reinterpret_cast< uint64_t* >( varData ) );
+			case 1: return GetValueFromString( value, reinterpret_cast< uint8_t* >( varData ) );
+			case 2: return GetValueFromString( value, reinterpret_cast< uint16_t* >( varData ) );
+			case 4: return GetValueFromString( value, reinterpret_cast< uint32_t* >( varData ) );
+			case 8: return GetValueFromString( value, reinterpret_cast< uint64_t* >( varData ) );
 			default: AE_FAIL(); return false;
 		}
 	}

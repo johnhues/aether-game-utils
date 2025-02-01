@@ -181,6 +181,7 @@ TEST_CASE( "Class registration in namespaces", "[aeMeta]" )
 TEST_CASE( "enum registration", "[aeMeta]" )
 {
 	const ae::Enum* playerStateEnum = ae::GetEnum( "PlayerState" );
+	REQUIRE( playerStateEnum );
 	REQUIRE( playerStateEnum->GetName() == ae::Str32( "PlayerState" ) );
 	
 	REQUIRE( playerStateEnum->TypeSize() == 2 );
