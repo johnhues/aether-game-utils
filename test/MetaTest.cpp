@@ -291,15 +291,15 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 	REQUIRE( type->GetVarCount( false ) == 6 );
 
 	ArrayClass c;
-	ae::VarData varData( &c );
+	ae::DataPointer varData( &c );
 
 	// int32_t intArray[ 3 ];
 	{
 		const ae::ClassVar* intArrayVar = type->GetVarByName( "intArray", false );
 		REQUIRE( intArrayVar );
 
-		ae::VarData intArray( intArrayVar, &c );
-		ae::VarData _intArray( &c.intArray );
+		ae::DataPointer intArray( intArrayVar, &c );
+		ae::DataPointer _intArray( &c.intArray );
 		REQUIRE( intArray );
 		REQUIRE( _intArray );
 		REQUIRE( intArray == _intArray );
@@ -330,8 +330,8 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		const ae::ClassVar* intArray2Var = type->GetVarByName( "intArray2", false );
 		REQUIRE( intArray2Var );
 
-		ae::VarData intArray2( intArray2Var, &c );
-		ae::VarData _intArray2( &c.intArray2 );
+		ae::DataPointer intArray2( intArray2Var, &c );
+		ae::DataPointer _intArray2( &c.intArray2 );
 		REQUIRE( intArray2 );
 		REQUIRE( _intArray2 );
 		REQUIRE( intArray2 == _intArray2 );
@@ -368,8 +368,8 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		const ae::ClassVar* intArray3Var = type->GetVarByName( "intArray3", false );
 		REQUIRE( intArray3Var );
 		
-		ae::VarData intArray3( intArray3Var, &c );
-		ae::VarData _intArray3( &c.intArray3 );
+		ae::DataPointer intArray3( intArray3Var, &c );
+		ae::DataPointer _intArray3( &c.intArray3 );
 		REQUIRE( intArray3 );
 		REQUIRE( _intArray3 );
 		REQUIRE( intArray3 == _intArray3 );
@@ -410,8 +410,8 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		const ae::ClassVar* someClassArrayVar = type->GetVarByName( "someClassArray", false );
 		REQUIRE( someClassArrayVar );
 
-		ae::VarData someClassArray( someClassArrayVar, &c );
-		ae::VarData _someClassArray( &c.someClassArray );
+		ae::DataPointer someClassArray( someClassArrayVar, &c );
+		ae::DataPointer _someClassArray( &c.someClassArray );
 		REQUIRE( someClassArray );
 		REQUIRE( _someClassArray );
 		REQUIRE( someClassArray == _someClassArray );
@@ -443,8 +443,8 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		const ae::ClassVar* someClassArray2Var = type->GetVarByName( "someClassArray2", false );
 		REQUIRE( someClassArray2Var );
 
-		ae::VarData someClassArray2( someClassArray2Var, &c );
-		ae::VarData _someClassArray2( &c.someClassArray2 );
+		ae::DataPointer someClassArray2( someClassArray2Var, &c );
+		ae::DataPointer _someClassArray2( &c.someClassArray2 );
 		REQUIRE( someClassArray2 );
 		REQUIRE( _someClassArray2 );
 		REQUIRE( someClassArray2 == _someClassArray2 );
@@ -483,8 +483,8 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		const ae::ClassVar* someClassArray3Var = type->GetVarByName( "someClassArray3", false );
 		REQUIRE( someClassArray3Var );
 
-		ae::VarData someClassArray3( someClassArray3Var, &c );
-		ae::VarData _someClassArray3( &c.someClassArray3 );
+		ae::DataPointer someClassArray3( someClassArray3Var, &c );
+		ae::DataPointer _someClassArray3( &c.someClassArray3 );
 		REQUIRE( someClassArray3 );
 		REQUIRE( _someClassArray3 );
 		REQUIRE( someClassArray3 == _someClassArray3 );
@@ -584,9 +584,9 @@ TEST_CASE("Optional test present", "[aeMeta]")
 	// 	REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
 
 	// 	int32_t value = 0;
-	// 	const ae::ConstVarData optional = intStdOptional->GetVarData( &c );
+	// 	const ae::ConstDataPointer optional = intStdOptional->GetVarData( &c );
 	// 	REQUIRE( optional );
-	// 	ae::ConstVarData basic = optionalType->TryGet( optional );
+	// 	ae::ConstDataPointer basic = optionalType->TryGet( optional );
 	// 	REQUIRE( basicVarType->GetVarData( basic, &value ) );
 	// 	REQUIRE( value == 456 );
 	// }
@@ -601,9 +601,9 @@ TEST_CASE("Optional test present", "[aeMeta]")
 	// 	REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 	// 	REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
-	// 	ae::ConstVarData optional = someClassStdOptional->GetVarData( &c );
+	// 	ae::ConstDataPointer optional = someClassStdOptional->GetVarData( &c );
 	// 	REQUIRE( optional );
-	// 	ae::ConstVarData _class = optionalType->TryGet( optional );
+	// 	ae::ConstDataPointer _class = optionalType->TryGet( optional );
 	// 	REQUIRE( _class );
 	// 	const ae::ClassType* type = classVarType->GetType();
 	// 	const SomeClass* someClass = classVarType->TryGet< SomeClass >( _class );
@@ -630,7 +630,7 @@ TEST_CASE("Optional test no value", "[aeMeta]")
 		const ae::BasicType* basicVarType = optionalType->GetInnerVarType().AsVarType< ae::BasicType >();
 		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
 
-		ae::ConstVarData optional( intOptional, &c );
+		ae::ConstDataPointer optional( intOptional, &c );
 		REQUIRE( optional );
 		REQUIRE( !optionalType->TryGet( optional ) );
 	}
@@ -645,7 +645,7 @@ TEST_CASE("Optional test no value", "[aeMeta]")
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
-		ae::ConstVarData optional( someClassOptional, &c );
+		ae::ConstDataPointer optional( someClassOptional, &c );
 		REQUIRE( optional );
 		REQUIRE( !optionalType->TryGet( optional ) );
 	}
@@ -658,7 +658,7 @@ TEST_CASE("Optional test no value", "[aeMeta]")
 		const ae::BasicType* basicVarType = optionalType->GetInnerVarType().AsVarType< ae::BasicType >();
 		REQUIRE( basicVarType->GetType() == ae::BasicType::Int32 );
 
-		ae::ConstVarData optional( intStdOptional, &c );
+		ae::ConstDataPointer optional( intStdOptional, &c );
 		REQUIRE( optional );
 		REQUIRE( !optionalType->TryGet( optional ) );
 	}
@@ -673,7 +673,7 @@ TEST_CASE("Optional test no value", "[aeMeta]")
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
-		ae::ConstVarData optional( someClassStdOptional, &c );
+		ae::ConstDataPointer optional( someClassStdOptional, &c );
 		REQUIRE( optional );
 		REQUIRE( !optionalType->TryGet( optional ) );
 	}
@@ -735,7 +735,7 @@ TEST_CASE( "can read enum values from object using meta definition", "[aeMeta]" 
 	const ae::EnumType* enumVarType = enumTestVar->GetOuterVarType().AsVarType< ae::EnumType >();
 	REQUIRE( enumVarType );
 	
-	ae::ConstVarData varData( enumTestVar, &c );
+	ae::ConstDataPointer varData( enumTestVar, &c );
 	
 	c.enumTest = TestEnumClass::Five;
 	REQUIRE( enumVarType->GetVarDataAsString( varData ) == "Five" );

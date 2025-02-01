@@ -5524,15 +5524,15 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::VarData
+// ae::DataPointer
 //------------------------------------------------------------------------------
-class VarData
+class DataPointer
 {
 public:
-	VarData() = default;
-	template< typename T > explicit VarData( T* data );
-	VarData( const ae::Type& varType, void* data );
-	VarData( const ae::ClassVar* var, ae::Object* object );
+	DataPointer() = default;
+	template< typename T > explicit DataPointer( T* data );
+	DataPointer( const ae::Type& varType, void* data );
+	DataPointer( const ae::ClassVar* var, ae::Object* object );
 
 	//! Returns true if the data is valid.
 	explicit operator bool() const;
@@ -5542,26 +5542,26 @@ public:
 	//! perform a type check.
 	void* Get( const ae::Type* caller = nullptr ) const;
 	
-	bool operator == ( const ae::VarData& other ) const;
-	bool operator != ( const ae::VarData& other ) const;
+	bool operator == ( const ae::DataPointer& other ) const;
+	bool operator != ( const ae::DataPointer& other ) const;
 
 private:
-	friend class ConstVarData;
+	friend class ConstDataPointer;
 	const ae::Type* m_varType = nullptr;
 	void* m_data = nullptr;
 };
 
 //------------------------------------------------------------------------------
-// ae::ConstVarData
+// ae::ConstDataPointer
 //------------------------------------------------------------------------------
-class ConstVarData
+class ConstDataPointer
 {
 public:
-	ConstVarData() = default;
-	ConstVarData( VarData varData );
-	template< typename T > explicit ConstVarData( const T* data );
-	ConstVarData( const ae::Type& varType, const void* data );
-	ConstVarData( const ae::ClassVar* var, const ae::Object* object );
+	ConstDataPointer() = default;
+	ConstDataPointer( DataPointer varData );
+	template< typename T > explicit ConstDataPointer( const T* data );
+	ConstDataPointer( const ae::Type& varType, const void* data );
+	ConstDataPointer( const ae::ClassVar* var, const ae::Object* object );
 	
 	//! Returns true if the data is valid.
 	explicit operator bool() const;
@@ -5571,8 +5571,8 @@ public:
 	//! perform a type check.
 	const void* Get( const ae::Type* caller = nullptr ) const;
 
-	bool operator == ( const ae::ConstVarData& other ) const;
-	bool operator != ( const ae::ConstVarData& other ) const;
+	bool operator == ( const ae::ConstDataPointer& other ) const;
+	bool operator != ( const ae::ConstDataPointer& other ) const;
 
 private:
 	const ae::Type* m_varType = nullptr;
@@ -5658,10 +5658,10 @@ public:
 	virtual ae::BasicType::Type GetType() const = 0;
 	virtual uint32_t GetSize() const = 0;
 
-	std::string GetVarDataAsString( ae::ConstVarData varData ) const;
-	bool SetVarDataFromString( ae::VarData varData, const char* value ) const;
-	template< typename T > bool GetVarData( ae::ConstVarData varData, T* valueOut ) const;
-	template< typename T > bool SetVarData( ae::VarData varData, const T& value ) const;
+	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
+	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
+	template< typename T > bool GetVarData( ae::ConstDataPointer varData, T* valueOut ) const;
+	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 	
 	// Internal
 	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
@@ -5688,11 +5688,11 @@ public:
 	std::string GetNameByIndex( int32_t index ) const;
 	uint32_t Length() const;
 
-	// ae::VarData
-	std::string GetVarDataAsString( ae::ConstVarData varData ) const;
-	bool SetVarDataFromString( ae::VarData varData, const char* value ) const;
-	template< typename T > bool GetVarData( ae::ConstVarData varData, T* valueOut ) const;
-	template< typename T > bool SetVarData( ae::VarData varData, const T& value ) const;
+	// ae::DataPointer
+	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
+	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
+	template< typename T > bool GetVarData( ae::ConstDataPointer varData, T* valueOut ) const;
+	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 
 	// Attributes
 	ae::AttributeList attributes;
@@ -5723,17 +5723,17 @@ class PointerType : public ae::Type
 public:
 	virtual const ae::Type& GetInnerVarType() const = 0;
 
-	// ae::VarData
-	ae::VarData Dereference( ae::ConstVarData varData ) const;
+	// ae::DataPointer
+	ae::DataPointer Dereference( ae::ConstDataPointer varData ) const;
 
 	// Set and get directly
-	virtual bool SetRef( ae::VarData varData, ae::Object* value ) const = 0;
-	template< typename T > T** GetRef( ae::VarData varData ) const;
-	template< typename T > T*const* GetRef( ae::ConstVarData varData ) const;
+	virtual bool SetRef( ae::DataPointer varData, ae::Object* value ) const = 0;
+	template< typename T > T** GetRef( ae::DataPointer varData ) const;
+	template< typename T > T*const* GetRef( ae::ConstDataPointer varData ) const;
 
 	// String manipulation
-	virtual bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
-	virtual std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const = 0;
+	virtual bool SetRefFromString( ae::DataPointer varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
+	virtual std::string GetStringFromRef( ae::ConstDataPointer varData, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
 	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
@@ -5748,10 +5748,10 @@ class OptionalType : public ae::Type
 public:
 	virtual const ae::Type& GetInnerVarType() const = 0;
 
-	virtual ae::VarData TryGet( ae::VarData optional ) const = 0;
-	virtual ae::ConstVarData TryGet( ae::ConstVarData optional ) const = 0;
-	virtual ae::VarData GetOrInsert( ae::VarData optional ) const = 0;
-	virtual void Clear( ae::VarData optional ) const = 0;
+	virtual ae::DataPointer TryGet( ae::DataPointer optional ) const = 0;
+	virtual ae::ConstDataPointer TryGet( ae::ConstDataPointer optional ) const = 0;
+	virtual ae::DataPointer GetOrInsert( ae::DataPointer optional ) const = 0;
+	virtual void Clear( ae::DataPointer optional ) const = 0;
 
 	// Internal
 	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
@@ -5765,11 +5765,11 @@ class ArrayType : public ae::Type
 public:
 	virtual const ae::Type& GetInnerVarType() const = 0;
 
-	virtual ae::VarData GetElement( ae::VarData array, uint32_t idx ) const = 0;
-	virtual ae::ConstVarData GetElement( ae::ConstVarData array, uint32_t idx ) const = 0;
-	virtual uint32_t Resize( ae::VarData array, uint32_t size ) const = 0;
+	virtual ae::DataPointer GetElement( ae::DataPointer array, uint32_t idx ) const = 0;
+	virtual ae::ConstDataPointer GetElement( ae::ConstDataPointer array, uint32_t idx ) const = 0;
+	virtual uint32_t Resize( ae::DataPointer array, uint32_t size ) const = 0;
 	//! Current array length
-	virtual uint32_t GetLength( ae::ConstVarData array ) const = 0;
+	virtual uint32_t GetLength( ae::ConstDataPointer array ) const = 0;
 	//! Return uint max for no hard limit
 	virtual uint32_t GetMaxLength() const = 0;
 	virtual uint32_t IsFixedLength() const = 0;
@@ -5790,14 +5790,14 @@ public:
 	//! Gets a value in the map by key, inserts a new value if the key does not
 	//! exist. Will return an empty value if there is a type mismatch with
 	//! either parameter or the map is full.
-	virtual ae::VarData Get( ae::VarData map, ae::ConstVarData key ) const = 0;
+	virtual ae::DataPointer Get( ae::DataPointer map, ae::ConstDataPointer key ) const = 0;
 	//! Gets a value in the map by key, returns an empty value if the key does not exist.
-	virtual ae::VarData TryGet( ae::VarData map, ae::ConstVarData key ) const = 0;
+	virtual ae::DataPointer TryGet( ae::DataPointer map, ae::ConstDataPointer key ) const = 0;
 	//! Gets a value in the map by key, returns an empty value if the key does  not exist.
-	virtual ae::ConstVarData TryGet( ae::ConstVarData map, ae::ConstVarData key ) const = 0;
+	virtual ae::ConstDataPointer TryGet( ae::ConstDataPointer map, ae::ConstDataPointer key ) const = 0;
 
 	//! Current number of map elements
-	virtual uint32_t GetLength( ae::ConstVarData a ) const = 0;
+	virtual uint32_t GetLength( ae::ConstDataPointer a ) const = 0;
 	//! Return uint max for no hard limit
 	virtual uint32_t GetMaxLength() const = 0;
 
@@ -6051,14 +6051,14 @@ public:
 	bool IsType( const ae::ClassType* otherType ) const;
 	template < typename T > bool IsType() const;
 
-	// ae::VarData
-	//! Gets the class type of the given VarData if possible.
+	// ae::DataPointer
+	//! Gets the class type of the given DataPointer if possible.
 	const ae::ClassType* GetClassType() const { return this; } // For backwards compatibility
-	const ae::ClassType* GetClassType( ae::ConstVarData varData ) const;
-	template< typename T > T* TryGet( ae::VarData varData ) const;
-	template< typename T > const T* TryGet( ae::ConstVarData varData ) const;
-	ae::VarData GetVarData( const ae::ClassVar* var, ae::VarData varData ) const;
-	ae::ConstVarData GetVarData( const ae::ClassVar* var, ae::ConstVarData varData ) const;
+	const ae::ClassType* GetClassType( ae::ConstDataPointer varData ) const;
+	template< typename T > T* TryGet( ae::DataPointer varData ) const;
+	template< typename T > const T* TryGet( ae::ConstDataPointer varData ) const;
+	ae::DataPointer GetVarData( const ae::ClassVar* var, ae::DataPointer varData ) const;
+	ae::ConstDataPointer GetVarData( const ae::ClassVar* var, ae::ConstDataPointer varData ) const;
 
 	//------------------------------------------------------------------------------
 	// Internal
@@ -11871,7 +11871,7 @@ namespace ae {
 // ae::PointerType templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-T** ae::PointerType::GetRef( ae::VarData varData ) const
+T** ae::PointerType::GetRef( ae::DataPointer varData ) const
 {
 	if( GetInnerVarType().IsSameExactVarType< T >() )
 	{
@@ -11881,7 +11881,7 @@ T** ae::PointerType::GetRef( ae::VarData varData ) const
 }
 
 template< typename T >
-T*const* ae::PointerType::GetRef( ae::ConstVarData varData ) const
+T*const* ae::PointerType::GetRef( ae::ConstDataPointer varData ) const
 {
 	if( GetInnerVarType().IsSameExactVarType< T >() )
 	{
@@ -11899,7 +11899,7 @@ struct TypeT< T* > : public ae::PointerType
 	static ae::Type* Get() { static ae::TypeT< T* > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 
-	bool SetRef( ae::VarData _varData, ae::Object* value ) const override
+	bool SetRef( ae::DataPointer _varData, ae::Object* value ) const override
 	{
 		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
 		{
@@ -11922,7 +11922,7 @@ struct TypeT< T* > : public ae::PointerType
 		return false;
 	}
 
-	bool SetRefFromString( ae::VarData _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override
+	bool SetRefFromString( ae::DataPointer _varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override
 	{
 		if( T** varData = static_cast< T** >( _varData.Get( this ) ) )
 		{
@@ -11947,7 +11947,7 @@ struct TypeT< T* > : public ae::PointerType
 		return false;
 	}
 
-	std::string GetStringFromRef( ae::ConstVarData _varData, ObjectPointerToStringFn fn, const void* userData ) const override
+	std::string GetStringFromRef( ae::ConstDataPointer _varData, ObjectPointerToStringFn fn, const void* userData ) const override
 	{
 		if( fn )
 		{
@@ -11966,9 +11966,9 @@ struct TypeT< std::nullptr_t > : public ae::PointerType
 	const ae::Type& GetInnerVarType() const override { AE_FAIL(); return *Get(); } // @TODO: Must return something, add Void type
 	static ae::Type* Get() { static ae::TypeT< std::nullptr_t > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
-	bool SetRef( ae::VarData varData, ae::Object* value ) const override { AE_FAIL(); return false; }
-	bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
-	std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
+	bool SetRef( ae::DataPointer varData, ae::Object* value ) const override { AE_FAIL(); return false; }
+	bool SetRefFromString( ae::DataPointer varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
+	std::string GetStringFromRef( ae::ConstDataPointer varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
 };
 
 template < typename T, uint32_t N >
@@ -11977,7 +11977,7 @@ class DynamicArrayVarType : public ae::ArrayType
 public:
 	typedef ae::Array< T, N > Array;
 
-	ae::VarData GetElement( ae::VarData _array, uint32_t idx ) const override
+	ae::DataPointer GetElement( ae::DataPointer _array, uint32_t idx ) const override
 	{
 		Array* array = static_cast< Array* >( _array.Get( this ) );
 		if( array && idx < array->Length() )
@@ -11986,7 +11986,7 @@ public:
 		}
 		return {};
 	}
-	ae::ConstVarData GetElement( ae::ConstVarData _array, uint32_t idx ) const override
+	ae::ConstDataPointer GetElement( ae::ConstDataPointer _array, uint32_t idx ) const override
 	{
 		const Array* array = static_cast< const Array* >( _array.Get( this ) );
 		if( array && idx < array->Length() )
@@ -11995,7 +11995,7 @@ public:
 		}
 		return {};
 	}
-	uint32_t Resize( ae::VarData _array, uint32_t length ) const override
+	uint32_t Resize( ae::DataPointer _array, uint32_t length ) const override
 	{
 		Array* array = static_cast< Array* >( _array.Get( this ) );
 		if( !array )
@@ -12019,7 +12019,7 @@ public:
 		}
 		return array->Length();
 	}
-	uint32_t GetLength( ae::ConstVarData _array ) const override
+	uint32_t GetLength( ae::ConstDataPointer _array ) const override
 	{
 		const Array* array = static_cast< const Array* >( _array.Get( this ) );
 		return array ? array->Length() : 0;
@@ -12032,18 +12032,18 @@ template < typename T, uint32_t N >
 class StaticArrayVarType : public ae::ArrayType
 {
 public:
-	ae::VarData GetElement( ae::VarData _array, uint32_t idx ) const override
+	ae::DataPointer GetElement( ae::DataPointer _array, uint32_t idx ) const override
 	{
 		T* array = static_cast< T* >( _array.Get( this ) );
 		return { GetInnerVarType(), ( array && idx < N ) ? &array[ idx ] : nullptr };
 	}
-	ae::ConstVarData GetElement( ae::ConstVarData _array, uint32_t idx ) const override
+	ae::ConstDataPointer GetElement( ae::ConstDataPointer _array, uint32_t idx ) const override
 	{
 		const T* array = static_cast< const T* >( _array.Get( this ) );
 		return { GetInnerVarType(), ( array && idx < N ) ? &array[ idx ] : nullptr };
 	}
-	uint32_t Resize( ae::VarData array, uint32_t length ) const override { return N; }
-	uint32_t GetLength( ae::ConstVarData array ) const override { return N; }
+	uint32_t Resize( ae::DataPointer array, uint32_t length ) const override { return N; }
+	uint32_t GetLength( ae::ConstDataPointer array ) const override { return N; }
 	uint32_t GetMaxLength() const override { return N; }
 	uint32_t IsFixedLength() const override { return true; }
 };
@@ -12171,7 +12171,7 @@ struct ae::TypeT< ae::Map< K, V, N > > : public ae::MapType
 	const ae::Type& GetKeyVarType() const override { return *ae::TypeT< K >::Get(); }
 	const ae::Type& GetValueVarType() const override { return *ae::TypeT< V >::Get(); }
 
-	ae::VarData Get( ae::VarData _map, ae::ConstVarData _key ) const override
+	ae::DataPointer Get( ae::DataPointer _map, ae::ConstDataPointer _key ) const override
 	{
 		if( MapType* map = static_cast< MapType* >( _map.Get( this ) ) )
 		{
@@ -12188,7 +12188,7 @@ struct ae::TypeT< ae::Map< K, V, N > > : public ae::MapType
 		return {};
 	}
 
-	ae::VarData TryGet( ae::VarData _map, ae::ConstVarData _key ) const override
+	ae::DataPointer TryGet( ae::DataPointer _map, ae::ConstDataPointer _key ) const override
 	{
 		if( MapType* map = static_cast< MapType* >( _map.Get( this ) ) )
 		{
@@ -12200,7 +12200,7 @@ struct ae::TypeT< ae::Map< K, V, N > > : public ae::MapType
 		return {};
 	}
 
-	ae::ConstVarData TryGet( ae::ConstVarData _map, ae::ConstVarData _key ) const override
+	ae::ConstDataPointer TryGet( ae::ConstDataPointer _map, ae::ConstDataPointer _key ) const override
 	{
 		if( const MapType* map = static_cast< const MapType* >( _map.Get( this ) ) )
 		{
@@ -12212,7 +12212,7 @@ struct ae::TypeT< ae::Map< K, V, N > > : public ae::MapType
 		return {};
 	}
 
-	uint32_t GetLength( ae::ConstVarData _map ) const override
+	uint32_t GetLength( ae::ConstDataPointer _map ) const override
 	{
 		const MapType* map = static_cast< const MapType* >( _map.Get( this ) );
 		return map ? map->Length() : 0;
@@ -12300,10 +12300,10 @@ bool ae::EnumType::HasValue( T value ) const
 }
 
 //------------------------------------------------------------------------------
-// ae::VarData templated member functions
+// ae::DataPointer templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-ae::VarData::VarData( T* data )
+ae::DataPointer::DataPointer( T* data )
 {
 	m_data = data;
 	m_varType = ae::TypeT< T >::Get();
@@ -12311,10 +12311,10 @@ ae::VarData::VarData( T* data )
 }
 
 //------------------------------------------------------------------------------
-// ae::ConstVarData templated member functions
+// ae::ConstDataPointer templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-ae::ConstVarData::ConstVarData( const T* data )
+ae::ConstDataPointer::ConstDataPointer( const T* data )
 {
 	m_data = data;
 	m_varType = ae::TypeT< T >::Get();
@@ -12358,7 +12358,7 @@ bool ae::Type::IsSameExactVarType() const
 // ae::BasicType templated member functions
 //------------------------------------------------------------------------------
 template < typename T >
-bool ae::BasicType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
+bool ae::BasicType::GetVarData( ae::ConstDataPointer _varData, T* valueOut ) const
 {
 	if( valueOut )
 	{
@@ -12377,7 +12377,7 @@ bool ae::BasicType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
 }
 
 template < typename T >
-bool ae::BasicType::SetVarData( ae::VarData _varData, const T& value ) const
+bool ae::BasicType::SetVarData( ae::DataPointer _varData, const T& value ) const
 {
 	if( void* varData = _varData.Get( this ) )
 	{
@@ -12396,7 +12396,7 @@ bool ae::BasicType::SetVarData( ae::VarData _varData, const T& value ) const
 // ae::EnumType templated member functions
 //------------------------------------------------------------------------------
 template < typename T >
-bool ae::EnumType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
+bool ae::EnumType::GetVarData( ae::ConstDataPointer _varData, T* valueOut ) const
 {
 	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
 	{
@@ -12433,7 +12433,7 @@ bool ae::EnumType::GetVarData( ae::ConstVarData _varData, T* valueOut ) const
 }
 
 template < typename T >
-bool ae::EnumType::SetVarData( ae::VarData _varData, const T& value ) const
+bool ae::EnumType::SetVarData( ae::DataPointer _varData, const T& value ) const
 {
 	if constexpr( !std::is_integral_v< T > && !std::is_enum_v< T > )
 	{
@@ -12470,13 +12470,13 @@ bool ae::EnumType::SetVarData( ae::VarData _varData, const T& value ) const
 // ae::ClassType templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
-T* ae::ClassType::TryGet( ae::VarData varData ) const
+T* ae::ClassType::TryGet( ae::DataPointer varData ) const
 {
-	return const_cast< T* >( TryGet< T >( (ae::ConstVarData)varData ) );
+	return const_cast< T* >( TryGet< T >( (ae::ConstDataPointer)varData ) );
 }
 
 template< typename T >
-const T* ae::ClassType::TryGet( ae::ConstVarData varData ) const
+const T* ae::ClassType::TryGet( ae::ConstDataPointer varData ) const
 {
 	if( IsType< T >() )
 	{
@@ -12597,7 +12597,7 @@ bool ae::ClassVar::SetObjectValue( ae::Object* obj, const T& value, int32_t arra
 	AE_ASSERT( objType );
 	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to set var on '#' with unrelated type '#'", objType->GetName(), m_owner.GetClassType()->GetName() );
 
-	ae::VarData varData( this, obj );
+	ae::DataPointer varData( this, obj );
 	if ( const ae::ArrayType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayType >() )
 	{
 		if( arrayIdx < 0 )
@@ -12639,14 +12639,14 @@ bool ae::ClassVar::GetObjectValue( const ae::Object* object, T* valueOut, int32_
 		return false;
 	}
 
-	ae::ConstVarData varData;
+	ae::ConstDataPointer varData;
 	if ( const ae::ArrayType* arrayType = GetOuterVarType().AsVarType< ae::ArrayType >() )
 	{
 		if( arrayIdx < 0 )
 		{
 			return false;
 		}
-		ae::ConstVarData array( this, object );
+		ae::ConstDataPointer array( this, object );
 		varData = arrayType->GetElement( array, arrayIdx );
 	}
 	else if ( arrayIdx < 0 )
@@ -12683,7 +12683,7 @@ const T* ae::ClassVar::GetPointer( const ae::Object* obj, int32_t arrayIdx ) con
 		return nullptr;
 	}
 
-	ae::ConstVarData varData( this, obj );
+	ae::ConstDataPointer varData( this, obj );
 	if( const ae::ArrayType* arrayVarType = varData.GetVarType().AsVarType< ae::ArrayType >() )
 	{
 		if( arrayIdx < 0 )
@@ -26653,14 +26653,14 @@ const ae::ClassType* ae::GetClassTypeFromObject( const ae::Object* obj )
 }
 
 //------------------------------------------------------------------------------
-// ae::VarData member functions
+// ae::DataPointer member functions
 //------------------------------------------------------------------------------
-ae::VarData::VarData( const ae::Type& varType, void* data )
+ae::DataPointer::DataPointer( const ae::Type& varType, void* data )
 {
 	m_varType = &varType;
 	m_data = data;
 }
-ae::VarData::VarData( const ae::ClassVar* var, ae::Object* object )
+ae::DataPointer::DataPointer( const ae::ClassVar* var, ae::Object* object )
 {
 	m_varType = &var->GetOuterVarType();
 	m_data = (uint8_t*)object + var->GetOffset();
@@ -26670,17 +26670,17 @@ ae::VarData::VarData( const ae::ClassVar* var, ae::Object* object )
 		AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
 	}
 }
-ae::VarData::operator bool() const
+ae::DataPointer::operator bool() const
 {
 	return m_data != nullptr;
 }
-const ae::Type& ae::VarData::GetVarType() const
+const ae::Type& ae::DataPointer::GetVarType() const
 {
-	AE_ASSERT_MSG( m_data, "Check VarData before calling GetType()" );
+	AE_ASSERT_MSG( m_data, "Check DataPointer before calling GetType()" );
 	AE_ASSERT( m_varType );
 	return *m_varType;
 }
-void* ae::VarData::Get( const ae::Type* caller ) const
+void* ae::DataPointer::Get( const ae::Type* caller ) const
 {
 	if( !m_varType )
 	{
@@ -26688,12 +26688,12 @@ void* ae::VarData::Get( const ae::Type* caller ) const
 	}
 	if( caller && !m_varType->IsSameBaseVarType( *caller ) )
 	{
-		AE_DEBUG_ASSERT_MSG( false, "Bad VarData access" );
+		AE_DEBUG_ASSERT_MSG( false, "Bad DataPointer access" );
 		return nullptr;
 	}
 	return m_data;
 }
-bool ae::VarData::operator == ( const ae::VarData& other ) const
+bool ae::DataPointer::operator == ( const ae::DataPointer& other ) const
 {
 	if( m_data == other.m_data )
 	{
@@ -26702,25 +26702,25 @@ bool ae::VarData::operator == ( const ae::VarData& other ) const
 	}
 	return false;
 }
-bool ae::VarData::operator != ( const ae::VarData& other ) const
+bool ae::DataPointer::operator != ( const ae::DataPointer& other ) const
 {
 	return !( m_data == other.m_data );
 }
 
 //------------------------------------------------------------------------------
-// ae::ConstVarData member functions
+// ae::ConstDataPointer member functions
 //------------------------------------------------------------------------------
-ae::ConstVarData::ConstVarData( const ae::Type& varType, const void* data )
+ae::ConstDataPointer::ConstDataPointer( const ae::Type& varType, const void* data )
 {
 	m_varType = &varType;
 	m_data = data;
 }
-ae::ConstVarData::ConstVarData( VarData varData )
+ae::ConstDataPointer::ConstDataPointer( DataPointer varData )
 {
 	m_varType = varData.m_varType;
 	m_data = varData.m_data;
 }
-ae::ConstVarData::ConstVarData( const ae::ClassVar* var, const ae::Object* object )
+ae::ConstDataPointer::ConstDataPointer( const ae::ClassVar* var, const ae::Object* object )
 {
 	m_varType = &var->GetOuterVarType();
 	m_data = (uint8_t*)object + var->GetOffset();
@@ -26730,17 +26730,17 @@ ae::ConstVarData::ConstVarData( const ae::ClassVar* var, const ae::Object* objec
 		AE_ASSERT_MSG( type->IsType( var->m_owner.GetClassType() ), "Attempting to access '#::#' on object with type '#'", var->m_owner.GetClassType()->GetName(), var->GetName(), type->GetName() );
 	}
 }
-ae::ConstVarData::operator bool() const
+ae::ConstDataPointer::operator bool() const
 {
 	return m_data != nullptr;
 }
-const ae::Type& ae::ConstVarData::GetVarType() const
+const ae::Type& ae::ConstDataPointer::GetVarType() const
 {
-	AE_ASSERT_MSG( m_data, "Check ConstVarData before calling GetType()" );
+	AE_ASSERT_MSG( m_data, "Check ConstDataPointer before calling GetType()" );
 	AE_ASSERT( m_varType );
 	return *m_varType;
 }
-const void* ae::ConstVarData::Get( const ae::Type* caller ) const
+const void* ae::ConstDataPointer::Get( const ae::Type* caller ) const
 {
 	if( !m_varType )
 	{
@@ -26748,12 +26748,12 @@ const void* ae::ConstVarData::Get( const ae::Type* caller ) const
 	}
 	if( caller && !m_varType->IsSameBaseVarType( *caller ) )
 	{
-		AE_DEBUG_ASSERT_MSG( false, "Bad VarData access" );
+		AE_DEBUG_ASSERT_MSG( false, "Bad DataPointer access" );
 		return nullptr;
 	}
 	return m_data;
 }
-bool ae::ConstVarData::operator == ( const ae::ConstVarData& other ) const
+bool ae::ConstDataPointer::operator == ( const ae::ConstDataPointer& other ) const
 {
 	if( m_data == other.m_data )
 	{
@@ -26762,7 +26762,7 @@ bool ae::ConstVarData::operator == ( const ae::ConstVarData& other ) const
 	}
 	return false;
 }
-bool ae::ConstVarData::operator != ( const ae::ConstVarData& other ) const
+bool ae::ConstDataPointer::operator != ( const ae::ConstDataPointer& other ) const
 {
 	return !( m_data == other.m_data );
 }
@@ -26796,7 +26796,7 @@ std::string ae::ClassVar::GetObjectValueAsString( const ae::Object* obj, int32_t
 	{
 		return "";
 	}
-	ae::ConstVarData varData( this, obj );
+	ae::ConstDataPointer varData( this, obj );
 	const ae::Type* varType = &GetOuterVarType();
 	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
 	{
@@ -26849,7 +26849,7 @@ bool ae::ClassVar::SetObjectValueFromString( ae::Object* obj, const char* value,
 	AE_ASSERT_MSG( objType->IsType( m_owner.GetClassType() ), "Attempting to modify object '#' with var '#::#'", objType->GetName(), m_owner.GetClassType()->GetName(), GetName() );
 	
 	const ae::Type* varType = &GetOuterVarType();
-	ae::VarData varData( this, obj );
+	ae::DataPointer varData( this, obj );
 	if( const ae::ArrayType* arrayType = varType->AsVarType< ae::ArrayType >() )
 	{
 		if( arrayIdx < 0 )
@@ -27200,7 +27200,7 @@ bool ae::Type::IsSameExactVarType( const ae::Type& other ) const
 //------------------------------------------------------------------------------
 // ae::BasicType member functions
 //------------------------------------------------------------------------------
-std::string ae::BasicType::GetVarDataAsString( ae::ConstVarData _varData ) const
+std::string ae::BasicType::GetVarDataAsString( ae::ConstDataPointer _varData ) const
 {
 	const void* varData = _varData.Get( this );
 	if( !varData )
@@ -27247,7 +27247,7 @@ std::string ae::BasicType::GetVarDataAsString( ae::ConstVarData _varData ) const
 	return "";
 }
 
-bool ae::BasicType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
+bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* value ) const
 {
 	if( !value ) // Only check for null here. Zero length strings are valid depending on the type.
 	{
@@ -27427,7 +27427,7 @@ bool ae::BasicType::SetVarDataFromString( ae::VarData _varData, const char* valu
 //------------------------------------------------------------------------------
 // ae::EnumType member functions
 //------------------------------------------------------------------------------
-std::string ae::EnumType::GetVarDataAsString( ae::ConstVarData _varData ) const
+std::string ae::EnumType::GetVarDataAsString( ae::ConstDataPointer _varData ) const
 {
 	const void* varData = _varData.Get( this );
 	if( !varData )
@@ -27481,7 +27481,7 @@ std::string ae::EnumType::GetVarDataAsString( ae::ConstVarData _varData ) const
 	return GetNameByValue( value );
 }
 
-bool ae::EnumType::SetVarDataFromString( ae::VarData _varData, const char* value ) const
+bool ae::EnumType::SetVarDataFromString( ae::DataPointer _varData, const char* value ) const
 {
 	void* varData = _varData.Get( this );
 	if( !value || !value[ 0 ] || !varData )
@@ -27516,7 +27516,7 @@ bool ae::EnumType::SetVarDataFromString( ae::VarData _varData, const char* value
 //------------------------------------------------------------------------------
 // ae::PointerType
 //------------------------------------------------------------------------------
-ae::VarData ae::PointerType::Dereference( ae::ConstVarData varData ) const
+ae::DataPointer ae::PointerType::Dereference( ae::ConstDataPointer varData ) const
 {
 	if( void*const* data = static_cast< void*const* >( varData.Get( this ) ) )
 	{
@@ -27528,7 +27528,7 @@ ae::VarData ae::PointerType::Dereference( ae::ConstVarData varData ) const
 //------------------------------------------------------------------------------
 // ae::ClassType member functions
 //------------------------------------------------------------------------------
-const ae::ClassType* ae::ClassType::GetClassType( ae::ConstVarData varData ) const
+const ae::ClassType* ae::ClassType::GetClassType( ae::ConstDataPointer varData ) const
 {
 	if( const ae::Object* data = static_cast< const ae::Object* >( varData.Get( this ) ) )
 	{
@@ -27537,7 +27537,7 @@ const ae::ClassType* ae::ClassType::GetClassType( ae::ConstVarData varData ) con
 	return nullptr;
 }
 
-ae::VarData ae::ClassType::GetVarData( const ae::ClassVar* var, ae::VarData varData ) const
+ae::DataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::DataPointer varData ) const
 {
 	if( ae::Object* data = static_cast< ae::Object* >( varData.Get( this ) ) )
 	{
@@ -27546,7 +27546,7 @@ ae::VarData ae::ClassType::GetVarData( const ae::ClassVar* var, ae::VarData varD
 	return {};
 }
 
-ae::ConstVarData ae::ClassType::GetVarData( const ae::ClassVar* var, ae::ConstVarData varData ) const
+ae::ConstDataPointer ae::ClassType::GetVarData( const ae::ClassVar* var, ae::ConstDataPointer varData ) const
 {
 	if( const ae::Object* data = static_cast< const ae::Object* >( varData.Get( this ) ) )
 	{

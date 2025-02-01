@@ -113,10 +113,10 @@ public:
 	static ae::Type* Get() { static ae::TypeT< ae::Optional< T > > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 
-	ae::VarData TryGet( ae::VarData optional ) const override { return ae::VarData(); }
-	ae::ConstVarData TryGet( ae::ConstVarData optional ) const override { return ae::ConstVarData(); }
-	ae::VarData GetOrInsert( ae::VarData optional ) const override { return ae::VarData(); }
-	void Clear( ae::VarData optional ) const override {}
+	ae::DataPointer TryGet( ae::DataPointer optional ) const override { return ae::DataPointer(); }
+	ae::ConstDataPointer TryGet( ae::ConstDataPointer optional ) const override { return ae::ConstDataPointer(); }
+	ae::DataPointer GetOrInsert( ae::DataPointer optional ) const override { return ae::DataPointer(); }
+	void Clear( ae::DataPointer optional ) const override {}
 };
 
 template < typename T >
@@ -127,17 +127,17 @@ public:
 	static ae::Type* Get() { static ae::TypeT< std::optional< T > > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 
-	ae::VarData TryGet( ae::VarData _opt ) const override
+	ae::DataPointer TryGet( ae::DataPointer _opt ) const override
 	{
 		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt.Get( this ) );
 		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
 	}
-	ae::ConstVarData TryGet( ae::ConstVarData _opt ) const override
+	ae::ConstDataPointer TryGet( ae::ConstDataPointer _opt ) const override
 	{
 		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt.Get( this ) );
 		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
 	}
-	ae::VarData GetOrInsert( ae::VarData _optional ) const override
+	ae::DataPointer GetOrInsert( ae::DataPointer _optional ) const override
 	{
 		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
@@ -146,7 +146,7 @@ public:
 		}
 		return {};
 	}
-	void Clear( ae::VarData _optional ) const override
+	void Clear( ae::DataPointer _optional ) const override
 	{
 		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
