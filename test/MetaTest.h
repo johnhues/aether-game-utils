@@ -115,8 +115,8 @@ public:
 
 	ae::VarData TryGet( ae::VarData optional ) const override { return ae::VarData(); }
 	ae::ConstVarData TryGet( ae::ConstVarData optional ) const override { return ae::ConstVarData(); }
-	ae::VarData GetOrInsert( ae::VarData optional ) override { return ae::VarData(); }
-	void Clear( ae::VarData optional ) override {}
+	ae::VarData GetOrInsert( ae::VarData optional ) const override { return ae::VarData(); }
+	void Clear( ae::VarData optional ) const override {}
 };
 
 template < typename T >
@@ -137,7 +137,7 @@ public:
 		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt.Get( this ) );
 		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
 	}
-	ae::VarData GetOrInsert( ae::VarData _optional ) override
+	ae::VarData GetOrInsert( ae::VarData _optional ) const override
 	{
 		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
@@ -146,7 +146,7 @@ public:
 		}
 		return {};
 	}
-	void Clear( ae::VarData _optional ) override
+	void Clear( ae::VarData _optional ) const override
 	{
 		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{

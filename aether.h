@@ -26890,7 +26890,7 @@ const ae::ClassVarType& ae::Var::GetClassType() const
 {
 	const ae::ClassVarType* type = m_owner.GetClassType();
 	AE_ASSERT_MSG( type, "Member variable # has no class type", m_name );
-	return *classType;
+	return *type;
 
 }
 const ae::VarType& ae::Var::GetOuterVarType() const
