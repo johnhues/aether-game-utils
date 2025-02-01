@@ -106,11 +106,11 @@ public:
 };
 
 template < typename T >
-class ae::VarTypeT< ae::Optional< T > > : public ae::OptionalVarType
+class ae::TypeT< ae::Optional< T > > : public ae::OptionalType
 {
 public:
-	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
-	static ae::VarType* Get() { static ae::VarTypeT< ae::Optional< T > > s_type; return &s_type; }
+	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
+	static ae::Type* Get() { static ae::TypeT< ae::Optional< T > > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 
 	ae::VarData TryGet( ae::VarData optional ) const override { return ae::VarData(); }
@@ -120,11 +120,11 @@ public:
 };
 
 template < typename T >
-class ae::VarTypeT< std::optional< T > > : public ae::OptionalVarType
+class ae::TypeT< std::optional< T > > : public ae::OptionalType
 {
 public:
-	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
-	static ae::VarType* Get() { static ae::VarTypeT< std::optional< T > > s_type; return &s_type; }
+	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
+	static ae::Type* Get() { static ae::TypeT< std::optional< T > > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
 
 	ae::VarData TryGet( ae::VarData _opt ) const override

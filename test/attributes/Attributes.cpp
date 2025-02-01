@@ -46,12 +46,12 @@ AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, DisplayName, ({ .name = "ID2" }
 
 int main()
 {
-	const ae::Type* gameObjectType = ae::GetType< GameObject >();
+	const ae::ClassType* gameObjectType = ae::GetClassType< GameObject >();
 	if( const ae::SourceFileAttribute* sourceFileAttrib = gameObjectType->attributes.TryGet< ae::SourceFileAttribute >() )
 	{
 		AE_INFO( "# source: '#'", gameObjectType->GetName(), *sourceFileAttrib );
 	}
-	const ae::Var* idVar = gameObjectType->GetVarByName( "id", false );
+	const ae::ClassVar* idVar = gameObjectType->GetVarByName( "id", false );
 
 	if( const ae::SourceFileAttribute* sourceFileAttrib = idVar->attributes.TryGet< ae::SourceFileAttribute >() )
 	{
@@ -76,7 +76,7 @@ int main()
 	for( uint32_t i = 0; i < gameObjectType->attributes.GetCount< ae::Attribute >(); i++ )
 	{
 		const ae::Attribute* attribute = gameObjectType->attributes.TryGet< ae::Attribute >( i );
-		const ae::Type* attributeType = ae::GetTypeById( attribute->_metaTypeId ); // @TODO: ae::GetTypeFromObject( attribute );
+		const ae::ClassType* attributeType = ae::GetClassTypeById( attribute->_metaTypeId ); // @TODO: ae::GetClassTypeFromObject( attribute );
 		AE_LOG( "# attribute: '#'", gameObjectType->GetName(), attributeType->GetName() );
 		if( const RequiresAttrib* requiresAttrib = ae::Cast< RequiresAttrib >( attribute ) )
 		{
@@ -91,7 +91,7 @@ int main()
 	for( uint32_t i = 0; i < idVar->attributes.GetCount< ae::Attribute >(); i++ )
 	{
 		const ae::Attribute* attribute = idVar->attributes.TryGet< ae::Attribute >( i );
-		const ae::Type* attributeType = ae::GetTypeById( attribute->_metaTypeId ); // @TODO: ae::GetTypeFromObject( attribute );
+		const ae::ClassType* attributeType = ae::GetClassTypeById( attribute->_metaTypeId ); // @TODO: ae::GetClassTypeFromObject( attribute );
 		AE_LOG( "# attribute: '#'", idVar->GetName(), attributeType->GetName() );
 		if( const CategoryInfoAttribute* categoryInfoAttrib = ae::Cast< CategoryInfoAttribute >( attribute ) )
 		{

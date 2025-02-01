@@ -39,11 +39,11 @@ TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 {
 	ae::Array< int32_t, 5 > _array;
 	ae::VarData array( &_array );
-	REQUIRE( array.GetVarType().IsSameBaseVarType< ae::ArrayVarType >() );
-	const ae::ArrayVarType* varType = array.GetVarType().AsVarType< ae::ArrayVarType >();
+	REQUIRE( array.GetVarType().IsSameBaseVarType< ae::ArrayType >() );
+	const ae::ArrayType* varType = array.GetVarType().AsVarType< ae::ArrayType >();
 	REQUIRE( varType );
-	REQUIRE( varType->GetInnerVarType().IsSameBaseVarType< ae::BasicVarType >() );
-	const ae::BasicVarType* innerVarType = varType->GetInnerVarType().AsVarType< ae::BasicVarType >();
+	REQUIRE( varType->GetInnerVarType().IsSameBaseVarType< ae::BasicType >() );
+	const ae::BasicType* innerVarType = varType->GetInnerVarType().AsVarType< ae::BasicType >();
 	REQUIRE( innerVarType );
 
 	REQUIRE( varType->IsFixedLength() == false );
@@ -76,18 +76,18 @@ TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 	REQUIRE( innerVarType->GetVarDataAsString( elem1 ) == "1001" );
 }
 
-TEST_CASE( "MapVarType", "[aeMeta]" )
+TEST_CASE( "MapType", "[aeMeta]" )
 {
 	ae::Map< ae::Str32, int32_t, 2 > _map;
 	ae::VarData map( &_map );
 
-	REQUIRE( map.GetVarType().IsSameBaseVarType< ae::MapVarType >() );
-	const ae::MapVarType* mapVarType = map.GetVarType().AsVarType< ae::MapVarType >();
+	REQUIRE( map.GetVarType().IsSameBaseVarType< ae::MapType >() );
+	const ae::MapType* mapVarType = map.GetVarType().AsVarType< ae::MapType >();
 	REQUIRE( mapVarType );
 	REQUIRE( mapVarType->GetMaxLength() == 2 );
 	
-	const ae::BasicVarType* keyVarType = mapVarType->GetKeyVarType().AsVarType< ae::BasicVarType >();
-	const ae::BasicVarType* valueVarType = mapVarType->GetValueVarType().AsVarType< ae::BasicVarType >();
+	const ae::BasicType* keyVarType = mapVarType->GetKeyVarType().AsVarType< ae::BasicType >();
+	const ae::BasicType* valueVarType = mapVarType->GetValueVarType().AsVarType< ae::BasicType >();
 	REQUIRE( keyVarType );
 	REQUIRE( valueVarType );
 	REQUIRE( keyVarType->GetType() == ae::BasicType::String );
