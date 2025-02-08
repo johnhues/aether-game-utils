@@ -38,13 +38,22 @@ TEST_CASE( "Can get base type by name", "[aeMeta]" )
 	REQUIRE( ae::GetTypeByName( "ae::Object" ) == objType );
 
 	REQUIRE( ae::GetTypeName< ae::Object >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::Object* >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::Object& >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::Object[] >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< const ae::Object >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< const ae::Object* >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< const ae::Object& >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< const ae::Object[] >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::Object* >() == ae::Str32( "ae::Object *" ) );
+	REQUIRE( ae::GetTypeName< ae::Object& >() == ae::Str32( "ae::Object &" ) );
+	REQUIRE( ae::GetTypeName< ae::Object[ 3 ] >() == ae::Str32( "ae::Object[3]" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object >() == ae::Str32( "const ae::Object" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object* >() == ae::Str32( "const ae::Object *" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object& >() == ae::Str32( "const ae::Object &" ) );
+	REQUIRE( ae::GetTypeName< const ae::Object[ 3 ] >() == ae::Str32( "const ae::Object[3]" ) );
+
+	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object* > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object& > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object* > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object& > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
 }
 
 TEST_CASE( "Can get base type with templates", "[aeMeta]" )

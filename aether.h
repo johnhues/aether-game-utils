@@ -5243,7 +5243,7 @@ public:
 	struct ae::VarTypeT< E > : public ae::Enum { \
 		VarTypeT() : Enum( #E, "", sizeof(E), std::is_signed_v< T > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
-		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
+		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< E >(); } \
 	}; \
 	struct _EnumValues##E { _EnumValues##E( const char* values = #__VA_ARGS__ ) : values( values ) {} const char* values; };\
 	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnum< E >()->GetNameByValue( (int32_t)e ); return os; } \
@@ -5274,7 +5274,7 @@ public:
 	struct ae::VarTypeT< E > : public ae::EnumVarType { \
 		VarTypeT() : Enum( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
-		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
+		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< E >(); } \
 	}; \
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E; \
 	template<> ae::VarType* ae::FindMetaRegistrationFor< E >() { return ae::VarTypeT< E >::Get(); }\
@@ -5292,7 +5292,7 @@ public:
 	struct ae::VarTypeT< E > : public ae::EnumVarType { \
 		VarTypeT() : Enum( #E, #PREFIX, sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
-		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
+		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< E >(); } \
 	}; \
 	ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##E;\
 	template<> ae::VarType* ae::FindMetaRegistrationFor< E >() { return ae::VarTypeT< E >::Get(); }\
@@ -5319,7 +5319,7 @@ public:
 	struct ae::VarTypeT< E > : public ae::EnumVarType { \
 		VarTypeT() : Enum( #E, "", sizeof(E), std::is_signed_v< std::underlying_type_t< E > > ) {}\
 		static ae::VarType* Get() { static ae::VarTypeT< E > s_type; return &s_type; } \
-		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); } \
+		VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< E >(); } \
 	}; \
 	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator; }\
 	template<> ae::VarType* ae::FindMetaRegistrationFor< E >() { return ae::VarTypeT< E >::Get(); }
@@ -5465,8 +5465,8 @@ ae::TypeId GetObjectTypeId( const ae::Object* obj );
 //! Get a registered ae::TypeId from a type name
 ae::TypeId GetTypeIdFromName( const char* name );
 //! Thoroughly removes all qualifiers from a type. Usage:
-//! using T = typename ae::StripType< U >::T;
-template < typename U > struct StripType { using T = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< U > > > >; };
+//! using U = typename ae::StripType< T >;
+template< typename T > using StripType = std::remove_cv_t< std::remove_reference_t< std::remove_pointer_t< std::decay_t< T > > > >;
 //! Returns an integer id for the given type
 template < typename T > ae::TypeId GetTypeId();
 
@@ -5666,7 +5666,7 @@ public:
 	template< typename T > bool SetVarData( ae::VarData varData, const T& value ) const;
 	
 	// Internal
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< BasicVarType >(); }
 };
 
 //------------------------------------------------------------------------------
@@ -5714,7 +5714,7 @@ protected:
 public:
 	const ae::Enum* GetEnum() const { return this; } // @TODO: Remove
 	void m_AddValue( const char* name, int32_t value );
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< Enum >(); }
 };
 
 //------------------------------------------------------------------------------
@@ -5738,7 +5738,7 @@ public:
 	virtual std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< PointerVarType >(); }
 	virtual ae::BasicType GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
 };
 
@@ -5756,7 +5756,7 @@ public:
 	virtual void Clear( ae::VarData optional ) const = 0;
 
 	// Internal
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< OptionalVarType >(); }
 };
 
 //------------------------------------------------------------------------------
@@ -5777,7 +5777,7 @@ public:
 	virtual uint32_t IsFixedLength() const = 0;
 
 	// Internal
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< ArrayVarType >(); }
 };
 
 //------------------------------------------------------------------------------
@@ -5804,7 +5804,7 @@ public:
 	virtual uint32_t GetMaxLength() const = 0;
 
 	// Internal
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< MapVarType >(); }
 };
 
 //------------------------------------------------------------------------------
@@ -6074,7 +6074,7 @@ public:
 	void m_AddProp( const char* prop, const char* value );
 	void m_AddVar( const Var* var );
 	// Internal VarType
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< Type >(); }
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
 	ae::TypeName m_name;
@@ -6310,7 +6310,7 @@ constexpr auto _GetTypeName() // @TODO: Return ae::Str
 template< typename T >
 const char* GetTypeName()
 {
-	static constexpr auto name = ae::_GetTypeName< typename ae::StripType< T >::T >();
+	static constexpr auto name = ae::_GetTypeName< T >();
 	return name.data();
 }
 
@@ -11669,7 +11669,7 @@ template < typename T > struct VarTypeT
 
 template < typename T > ae::TypeId GetTypeId()
 {
-	return ae::GetTypeIdFromName( ae::_GetTypeName< typename ae::StripType< T >::T >().data() );
+	return ae::GetTypeIdFromName( ae::_GetTypeName< T >().data() );
 }
 
 template < typename T >
@@ -11838,7 +11838,7 @@ struct ae::VarTypeT< T > : public ae::BasicVarType {\
 	ae::BasicType GetType() const override { return ae::BasicType::e; }\
 	uint32_t GetSize() const override { return sizeof(T); }\
 	static ae::VarType* Get() { static ae::VarTypeT< T > s_type; return &s_type; }\
-	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }\
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< T >(); }\
 };
 
 // @TODO: Split into C++ basic types and aether basic types?
@@ -11899,7 +11899,7 @@ struct VarTypeT< T* > : public ae::PointerVarType
 
 	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< T* > s_type; return &s_type; }
-	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< T* >(); }
 
 	bool SetRef( ae::VarData _varData, ae::Object* value ) const override
 	{
@@ -11967,7 +11967,7 @@ struct VarTypeT< std::nullptr_t > : public ae::PointerVarType
 {
 	const ae::VarType& GetInnerVarType() const override { AE_FAIL(); return *Get(); } // @TODO: Must return something, add Void type
 	static ae::VarType* Get() { static ae::VarTypeT< std::nullptr_t > s_type; return &s_type; }
-	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< std::nullptr_t >(); }
 	bool SetRef( ae::VarData varData, ae::Object* value ) const override { AE_FAIL(); return false; }
 	bool SetRefFromString( ae::VarData varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const override { AE_FAIL(); return false; }
 	std::string GetStringFromRef( ae::ConstVarData varData, ObjectPointerToStringFn fn, const void* userData ) const override { AE_FAIL(); return ""; }
@@ -12077,7 +12077,7 @@ public:
 	}
 	ae::TypeId GetTypeId() const override { return ae::GetTypeId< T >(); }
 	static ae::VarType* Get() { static ae::VarTypeT< T > s_type; return &s_type; }
-	ae::VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	ae::VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< T >(); }
 };
 
 template< typename T >
@@ -12149,7 +12149,7 @@ struct ae::VarTypeT< ae::Array< T, N > > : public ae::DynamicArrayVarType< T, N 
 {
 	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< ae::Array< T, N > > s_type; return &s_type; }
-	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< ae::Array< T, N > >(); }
 };
 
 template < typename T, uint32_t N >
@@ -12157,7 +12157,7 @@ struct ae::VarTypeT< T[ N ] > : public ae::StaticArrayVarType< T, N >
 {
 	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
 	static ae::VarType* Get() { static ae::VarTypeT< T[ N ] > s_type; return &s_type; }
-	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< T[ N ] >(); }
 };
 
 //------------------------------------------------------------------------------
@@ -12168,7 +12168,7 @@ struct ae::VarTypeT< ae::Map< K, V, N > > : public ae::MapVarType
 {
 	typedef ae::Map< K, V, N > MapType;
 	static ae::VarType* Get() { static ae::VarTypeT< MapType > s_type; return &s_type; }
-	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< decltype( this ) >(); }
+	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< MapType >(); }
 
 	const ae::VarType& GetKeyVarType() const override { return *ae::VarTypeT< K >::Get(); }
 	const ae::VarType& GetValueVarType() const override { return *ae::VarTypeT< V >::Get(); }
@@ -12335,7 +12335,7 @@ const T* ae::VarType::AsVarType() const
 template< typename T >
 bool ae::VarType::IsSameBaseVarType() const
 {
-	using U = typename ae::StripType< T >::T;
+	using U = typename ae::StripType< T >;
 	if constexpr( std::is_same_v< ae::VarType, U > )
 	{
 		return true;
@@ -12350,7 +12350,7 @@ bool ae::VarType::IsSameBaseVarType() const
 template< typename T >
 bool ae::VarType::IsSameExactVarType() const
 {
-	using U = typename ae::StripType< T >::T;
+	using U = typename ae::StripType< T >;
 	static_assert( !std::is_same_v< ae::VarType, U > );
 	static_assert( std::is_base_of_v< ae::VarType, U >, "T must inherit from ae::VarType" );
 	return GetExactVarTypeId() == ae::GetTypeId< U >();

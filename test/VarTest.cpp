@@ -35,6 +35,14 @@ TEST_CASE( "VarData", "[aeMeta]" )
 	REQUIRE( ae::ConstVarData() == ae::ConstVarData() );
 }
 
+TEST_CASE( "ClassType", "[aeMeta]" )
+{
+	SomeClass someClass;
+	ae::VarData someClassPointer( &someClass );
+	REQUIRE( someClassPointer.GetVarType().AsVarType< ae::ClassVarType >()->GetType() == ae::GetType< SomeClass >() );
+	REQUIRE( someClassPointer.GetVarType().GetExactVarTypeId() == ae::GetType< SomeClass >()->GetId() );
+}
+
 TEST_CASE( "StaticArrayVarType", "[aeMeta]" )
 {
 	ae::Array< int32_t, 5 > _array;
