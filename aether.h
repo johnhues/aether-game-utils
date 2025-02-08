@@ -12624,6 +12624,14 @@ bool ae::Var::SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx 
 		{
 			return enumVarType->SetVarData( varData, value );
 		}
+		else if( const ae::ClassVarType* classType = varType->AsVarType< ae::ClassVarType >() )
+		{
+			if( T* innerObject = classType->TryGet< T >( varData ) )
+			{
+				*innerObject = value;
+				return true;
+			}
+		}
 		else if constexpr( std::is_pointer_v< T > || std::is_null_pointer_v< T > )
 		{
 			const ae::PointerVarType* pointerVarType = varType->AsVarType< ae::PointerVarType >();
@@ -12666,6 +12674,17 @@ bool ae::Var::GetObjectValue( const ae::Object* object, T* valueOut, int32_t arr
 		else if( const ae::EnumVarType* enumType = varType->AsVarType< ae::EnumVarType >() )
 		{
 			return enumType->GetVarData( varData, valueOut );
+		}
+		else if( const ae::ClassVarType* classType = varType->AsVarType< ae::ClassVarType >() )
+		{
+			if( valueOut )
+			{
+				if( const T* innerObject = classType->TryGet< T >( varData ) )
+				{
+					*valueOut = *innerObject;
+					return true;
+				}
+			}
 		}
 	}
 	return false;
