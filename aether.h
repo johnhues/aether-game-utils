@@ -12245,7 +12245,7 @@ const ae::ClassType* ae::GetClassType()
 		_Globals* globals = _Globals::Get();
 		// @TODO: Conditionally enable this check when T is not a forward declaration
 		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
-		const char* typeName = ae::GetTypeName< T >();
+		const char* typeName = ae::GetTypeName< ae::StripType< T > >();
 		s_type = globals->typeNameMap.Get( typeName, nullptr );
 		AE_ASSERT_MSG( s_type, "No meta info for type name: #", typeName );
 		return s_type;
