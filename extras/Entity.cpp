@@ -24,25 +24,25 @@ const char* Component::GetEntityName() const
 	return m_reg->GetNameByEntity( m_entity );
 }
 
-Component& Component::GetComponent( const ae::Type* type )
+Component& Component::GetComponent( const ae::ClassType* type )
 {
 	AE_ASSERT( m_reg );
 	return m_reg->GetComponent( m_entity, type );
 }
 
-Component* Component::TryGetComponent( const ae::Type* type )
+Component* Component::TryGetComponent( const ae::ClassType* type )
 {
 	AE_ASSERT( m_reg );
 	return m_reg->TryGetComponent( m_entity, type );
 }
 
-const Component& Component::GetComponent( const ae::Type* type ) const
+const Component& Component::GetComponent( const ae::ClassType* type ) const
 {
 	AE_ASSERT( m_reg );
 	return m_reg->GetComponent( m_entity, type );
 }
 
-const Component* Component::TryGetComponent( const ae::Type* type ) const
+const Component* Component::TryGetComponent( const ae::ClassType* type ) const
 {
 	AE_ASSERT( m_reg );
 	return m_reg->TryGetComponent( m_entity, type );
@@ -64,7 +64,7 @@ Registry::~Registry()
 	{
 		if( componentMap.value.Length() )
 		{
-			AE_ERR( "Component type '#' not properly cleaned up", ae::GetTypeById( componentMap.key )->GetName() );
+			AE_ERR( "Component type '#' not properly cleaned up", ae::GetClassTypeById( componentMap.key )->GetName() );
 		}
 	}
 }
@@ -122,10 +122,10 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 
 Component* Registry::AddComponent( Entity entity, const char* typeName )
 {
-	return AddComponent( entity, ae::GetTypeByName( typeName ) );
+	return AddComponent( entity, ae::GetClassTypeByName( typeName ) );
 }
 
-Component* Registry::AddComponent( Entity entity, const ae::Type* type )
+Component* Registry::AddComponent( Entity entity, const ae::ClassType* type )
 {
 	AE_ASSERT_MSG( !m_destroying, "Cannot add a component while destroying" );
 	if( !type )
@@ -160,7 +160,7 @@ Component* Registry::AddComponent( Entity entity, const ae::Type* type )
 	return component;
 }
 
-Component& Registry::GetComponent( Entity entity, const ae::Type* type )
+Component& Registry::GetComponent( Entity entity, const ae::ClassType* type )
 {
 	AE_ASSERT_MSG( type, "No type specified" );
 	Component* component = TryGetComponent( entity, type );
@@ -168,12 +168,12 @@ Component& Registry::GetComponent( Entity entity, const ae::Type* type )
 	return *component;
 }
 
-Component* Registry::TryGetComponent( Entity entity, const ae::Type* type )
+Component* Registry::TryGetComponent( Entity entity, const ae::ClassType* type )
 {
 	return const_cast< Component* >( const_cast< const Registry* >( this )->TryGetComponent( entity, type ) );
 }
 
-Component& Registry::GetComponent( const char* name, const ae::Type* type )
+Component& Registry::GetComponent( const char* name, const ae::ClassType* type )
 {
 	AE_ASSERT_MSG( name && name[ 0 ], "No name specified" );
 	AE_ASSERT_MSG( type, "No type specified" );
@@ -182,7 +182,7 @@ Component& Registry::GetComponent( const char* name, const ae::Type* type )
 	return *component;
 }
 
-Component* Registry::TryGetComponent( const char* name, const ae::Type* type )
+Component* Registry::TryGetComponent( const char* name, const ae::ClassType* type )
 {
 	AE_ASSERT( name );
 	if( !name[ 0 ] )
@@ -192,7 +192,7 @@ Component* Registry::TryGetComponent( const char* name, const ae::Type* type )
 	return TryGetComponent( m_entityNames.Get( name, kInvalidEntity ), type );
 }
 
-const Component& Registry::GetComponent( Entity entity, const ae::Type* type ) const
+const Component& Registry::GetComponent( Entity entity, const ae::ClassType* type ) const
 {
 	AE_ASSERT_MSG( entity != kInvalidEntity, "Invalid entity" );
 	AE_ASSERT_MSG( type, "No type specified" );
@@ -201,7 +201,7 @@ const Component& Registry::GetComponent( Entity entity, const ae::Type* type ) c
 	return *component;
 }
 
-const Component* Registry::TryGetComponent( Entity entity, const ae::Type* type ) const
+const Component* Registry::TryGetComponent( Entity entity, const ae::ClassType* type ) const
 {
 	if ( entity == kInvalidEntity || !type )
 	{
@@ -216,7 +216,7 @@ const Component* Registry::TryGetComponent( Entity entity, const ae::Type* type 
 	return nullptr;
 }
 
-const Component& Registry::GetComponent( const char* name, const ae::Type* type ) const
+const Component& Registry::GetComponent( const char* name, const ae::ClassType* type ) const
 {
 	AE_ASSERT_MSG( name && name[ 0 ], "No name specified" );
 	const Component* component = TryGetComponent( name, type );
@@ -224,7 +224,7 @@ const Component& Registry::GetComponent( const char* name, const ae::Type* type 
 	return *component;
 }
 
-const Component* Registry::TryGetComponent( const char* name, const ae::Type* type ) const
+const Component* Registry::TryGetComponent( const char* name, const ae::ClassType* type ) const
 {
 	AE_ASSERT( name );
 	if( !name[ 0 ] )
@@ -279,12 +279,12 @@ uint32_t Registry::GetTypeCount() const
 	return m_components.Length();
 }
 
-const ae::Type* Registry::GetTypeByIndex( uint32_t index ) const
+const ae::ClassType* Registry::GetTypeByIndex( uint32_t index ) const
 {
-	return ae::GetTypeById( m_components.GetKey( index ) );
+	return ae::GetClassTypeById( m_components.GetKey( index ) );
 }
 
-int32_t Registry::GetTypeIndexByType( const ae::Type* type ) const
+int32_t Registry::GetTypeIndexByType( const ae::ClassType* type ) const
 {
 	if ( !type )
 	{

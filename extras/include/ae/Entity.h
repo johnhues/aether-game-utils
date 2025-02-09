@@ -29,14 +29,14 @@ public:
 	Entity GetEntity() const { return m_entity; }
 	const char* GetEntityName() const;
 	
-	Component& GetComponent( const ae::Type* type );
+	Component& GetComponent( const ae::ClassType* type );
 	template < typename T > T& GetComponent();
-	const Component& GetComponent( const ae::Type* type ) const;
+	const Component& GetComponent( const ae::ClassType* type ) const;
 	template < typename T > const T& GetComponent() const;
 	
-	Component* TryGetComponent( const ae::Type* type );
+	Component* TryGetComponent( const ae::ClassType* type );
 	template < typename T > T* TryGetComponent();
-	const Component* TryGetComponent( const ae::Type* type ) const;
+	const Component* TryGetComponent( const ae::ClassType* type ) const;
 	template < typename T > const T* TryGetComponent() const;
 	
 private:
@@ -62,25 +62,25 @@ public:
 	//! Returns nullptr if the entity/component pair already exists or if the type is not default constructible
 	Component* AddComponent( Entity entity, const char* typeName );
 	//! Returns nullptr if the entity/component pair already exists or if the type is not default constructible
-	Component* AddComponent( Entity entity, const ae::Type* type );
+	Component* AddComponent( Entity entity, const ae::ClassType* type );
 	//! Returns nullptr if the entity/component pair already exists or if the type is not default constructible
 	template < typename T > T* AddComponent( Entity entity );
 	
 	// Get component
-	Component& GetComponent( Entity entity, const ae::Type* type );
-	Component* TryGetComponent( Entity entity, const ae::Type* type );
-	Component& GetComponent( const char* name, const ae::Type* type );
-	Component* TryGetComponent( const char* name, const ae::Type* type );
+	Component& GetComponent( Entity entity, const ae::ClassType* type );
+	Component* TryGetComponent( Entity entity, const ae::ClassType* type );
+	Component& GetComponent( const char* name, const ae::ClassType* type );
+	Component* TryGetComponent( const char* name, const ae::ClassType* type );
 	template < typename T > T& GetComponent( Entity entity );
 	template < typename T > T* TryGetComponent( Entity entity );
 	template < typename T > T& GetComponent( const char* entityName );
 	template < typename T > T* TryGetComponent( const char* entityName );
 	
 	// Const get component
-	const Component& GetComponent( Entity entity, const ae::Type* type ) const;
-	const Component* TryGetComponent( Entity entity, const ae::Type* type ) const;
-	const Component& GetComponent( const char* name, const ae::Type* type ) const;
-	const Component* TryGetComponent( const char* name, const ae::Type* type ) const;
+	const Component& GetComponent( Entity entity, const ae::ClassType* type ) const;
+	const Component* TryGetComponent( Entity entity, const ae::ClassType* type ) const;
+	const Component& GetComponent( const char* name, const ae::ClassType* type ) const;
+	const Component* TryGetComponent( const char* name, const ae::ClassType* type ) const;
 	template < typename T > const T& GetComponent( Entity entity ) const;
 	template < typename T > const T* TryGetComponent( Entity entity ) const;
 	template < typename T > const T& GetComponent( const char* entityName ) const;
@@ -99,8 +99,8 @@ public:
 	
 	// Iterate over all entities/components
 	uint32_t GetTypeCount() const;
-	const ae::Type* GetTypeByIndex( uint32_t typeIndex ) const;
-	int32_t GetTypeIndexByType( const ae::Type* type ) const;
+	const ae::ClassType* GetTypeByIndex( uint32_t typeIndex ) const;
+	int32_t GetTypeIndexByType( const ae::ClassType* type ) const;
 	template < typename T > int32_t GetTypeIndexByType() const;
 	uint32_t GetComponentCountByIndex( int32_t typeIndex ) const;
 	const Component& GetComponentByIndex( int32_t typeIndex, uint32_t componentIndex ) const;
@@ -138,7 +138,7 @@ T& Component::GetComponent()
 	T* t = m_reg->TryGetComponent< T >( m_entity );
 	if ( !t )
 	{
-		AE_FAIL_MSG( "Component '#' has no sibling '#'", ae::GetTypeFromObject( this )->GetName(), ae::GetType< T >()->GetName() );
+		AE_FAIL_MSG( "Component '#' has no sibling '#'", ae::GetClassTypeFromObject( this )->GetName(), ae::GetClassType< T >()->GetName() );
 	}
 	return *t;
 }
@@ -159,7 +159,7 @@ const T& Component::GetComponent() const
 	T* t = m_reg->TryGetComponent< T >( m_entity );
 	if ( !t )
 	{
-		AE_FAIL_MSG( "Component '#' has no sibling '#'", ae::GetTypeFromObject( this )->GetName(), ae::GetType< T >()->GetName() );
+		AE_FAIL_MSG( "Component '#' has no sibling '#'", ae::GetClassTypeFromObject( this )->GetName(), ae::GetClassType< T >()->GetName() );
 	}
 	return *t;
 }
@@ -179,7 +179,7 @@ template< typename T >
 T* Registry::AddComponent( Entity entity )
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	const ae::Type* type = ae::GetType< T >();
+	const ae::ClassType* type = ae::GetClassType< T >();
 	AE_ASSERT( type );
 	return (T*)AddComponent( entity, type );
 }
@@ -233,7 +233,7 @@ const T* Registry::TryGetComponent( Entity entity ) const
 		return nullptr;
 	}
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	const ae::Type* type = ae::GetType< T >();
+	const ae::ClassType* type = ae::GetClassType< T >();
 	AE_ASSERT_MSG( type, "No registered type" );
 	if ( const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
 	{
@@ -251,7 +251,7 @@ const T& Registry::GetComponent( const char* entityName ) const
 	if ( !t )
 	{
 		AE_ASSERT_MSG( GetEntityByName( entityName ) != kInvalidEntity, "No entity named '#'", entityName );
-		AE_ASSERT_MSG( t, "No component '#' attached to entity '#'", ae::GetType< T >()->GetName(), entityName );
+		AE_ASSERT_MSG( t, "No component '#' attached to entity '#'", ae::GetClassType< T >()->GetName(), entityName );
 	}
 	return *t;
 }
@@ -271,7 +271,7 @@ template < typename T >
 uint32_t Registry::GetComponentCount() const
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	const ae::Type* type = ae::GetType< T >();
+	const ae::ClassType* type = ae::GetClassType< T >();
 	AE_ASSERT_MSG( type, "No registered type" );
 	const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
 	return components ? components->Length() : 0;
@@ -281,7 +281,7 @@ template < typename T >
 Entity Registry::GetEntityByIndex( uint32_t index )
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	const ae::Type* type = ae::GetType< T >();
+	const ae::ClassType* type = ae::GetClassType< T >();
 	AE_ASSERT_MSG( type, "No registered type" );
 	const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
 	AE_ASSERT_MSG( "No components of type '#'", type->GetName() );
@@ -298,7 +298,7 @@ template < typename T >
 const T& Registry::GetComponentByIndex( uint32_t index ) const
 {
 	AE_STATIC_ASSERT( (std::is_base_of< Component, T >::value) );
-	const ae::Type* type = ae::GetType< T >();
+	const ae::ClassType* type = ae::GetClassType< T >();
 	AE_ASSERT_MSG( type, "No registered type" );
 	const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() );
 	AE_ASSERT_MSG( "No components of type '#'", type->GetName() );
@@ -308,17 +308,17 @@ const T& Registry::GetComponentByIndex( uint32_t index ) const
 template < typename T >
 int32_t Registry::GetTypeIndexByType() const
 {
-	return GetTypeIndexByType( ae::GetType< T >() );
+	return GetTypeIndexByType( ae::GetClassType< T >() );
 }
 
 template < typename T, typename Fn >
 uint32_t Registry::CallFn( Fn fn )
 {
 	uint32_t result = 0;
-	const ae::Type* type = ae::GetType< T >();
+	const ae::ClassType* type = ae::GetClassType< T >();
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
-		const ae::Type* componentType = ae::GetTypeById( m_components.GetKey( i ) );
+		const ae::ClassType* componentType = ae::GetClassTypeById( m_components.GetKey( i ) );
 		if ( componentType->IsType( type ) )
 		{
 			// Get components each loop because m_components could grow at any iteration
@@ -336,10 +336,10 @@ template < typename T, typename Fn >
 uint32_t Registry::CallFn( Fn fn ) const
 {
 	uint32_t result = 0;
-	const ae::Type* type = ae::GetType< T >();
+	const ae::ClassType* type = ae::GetClassType< T >();
 	for ( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
-		const ae::Type* componentType = ae::GetTypeById( m_components.GetKey( i ) );
+		const ae::ClassType* componentType = ae::GetClassTypeById( m_components.GetKey( i ) );
 		if ( componentType->IsType( type ) )
 		{
 			// Get components each loop because m_components could grow at any iteration

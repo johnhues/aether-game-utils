@@ -70,7 +70,7 @@ const float kEditorViewDistance = 25000.0f;
 //------------------------------------------------------------------------------
 // Serialization helpers
 //------------------------------------------------------------------------------
-void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >* prereqs );
+void GetComponentTypePrereqs( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs );
 void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
 void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry );
 void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
@@ -119,7 +119,7 @@ public:
 	void SetTransform( const ae::Matrix4& transform, class EditorProgram* program );
 	const ae::Matrix4& GetTransform() const;
 	
-	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::Type* type, const ae::Var* var );
+	void HandleVarChange( class EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var );
 
 	ae::OBB GetOBB( class EditorProgram* program ) const;
 	ae::AABB GetAABB( class EditorProgram* program ) const;
@@ -178,35 +178,35 @@ public:
 	
 	EditorServerObject* CreateObject( ae::Entity entity, const ae::Matrix4& transform, const char* name );
 	void DestroyObject( ae::Entity entity );
-	ae::Component* AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::Type* type );
+	ae::Component* AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::ClassType* type );
 	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, ae::Component* component );
-	ae::Component* GetComponent( EditorServerObject* obj, const ae::Type* type );
-	const ae::Component* GetComponent( const EditorServerObject* obj, const ae::Type* type );
+	ae::Component* GetComponent( EditorServerObject* obj, const ae::ClassType* type );
+	const ae::Component* GetComponent( const EditorServerObject* obj, const ae::ClassType* type );
 	uint32_t GetObjectCount() const { return m_objects.Length(); }
 	EditorServerObject* GetObject( ae::Entity entity ) { return m_objects.Get( entity, nullptr ); }
 	const EditorServerObject* GetObject( ae::Entity entity ) const { return m_objects.Get( entity, nullptr ); }
 	const EditorServerObject* GetObjectFromComponent( const ae::Component* component );
-	const ae::Var* GetMeshResourceVar( const ae::Type* componentType );
-	const ae::Var* GetMeshVisibleVar( const ae::Type* componentType );
+	const ae::ClassVar* GetMeshResourceVar( const ae::ClassType* componentType );
+	const ae::ClassVar* GetMeshVisibleVar( const ae::ClassType* componentType );
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
 
 	void HandleTransformChange( class EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform );
-	void BroadcastVarChange( const ae::Var* var, const ae::Component* component );
+	void BroadcastVarChange( const ae::ClassVar* var, const ae::Component* component );
 	
 	ae::ListenerSocket sock;
 	
 private:
 	// Serialization helpers
-	void m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::Type*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const;
+	void m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::ClassType*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const;
 	// Tools
 	void m_CopySelected() const;
 	void m_PasteFromClipboard( class EditorProgram* program );
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
 	void m_SelectWithModifiers( class EditorProgram* program, const ae::Entity* entities, uint32_t count );
-	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::Var* var );
-	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
-	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx = -1 );
+	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var );
+	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
+	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
 	ae::Entity m_PickObject( class EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut );
 	void m_ShowEditorObject( EditorProgram* program, ae::Entity entity, ae::Color color );
 	ae::Color m_GetColor( ae::Entity entity, bool lines ) const;
@@ -221,7 +221,7 @@ private:
 	bool m_showInvisible = false;
 
 	// Manipulation
-	const ae::Type* m_objectListType = nullptr;
+	const ae::ClassType* m_objectListType = nullptr;
 	ae::Array< ae::Entity > m_selected;
 	ae::Array< ae::Entity > m_hoverEntities;
 	ae::Entity uiHoverEntity = kInvalidEntity;
@@ -236,10 +236,10 @@ private:
 	ae::Registry m_registry;
 
 	// Configuration
-	ae::Map< const ae::Type*, const ae::Var* > m_meshResourceVars;
-	ae::Map< const ae::Type*, const ae::Var* > m_meshVisibleVars;
-	ae::Map< const ae::Type*, ae::Str32 > m_typeMesh;
-	ae::Map< const ae::Type*, bool > m_typeInvisible;
+	ae::Map< const ae::ClassType*, const ae::ClassVar* > m_meshResourceVars;
+	ae::Map< const ae::ClassType*, const ae::ClassVar* > m_meshVisibleVars;
+	ae::Map< const ae::ClassType*, ae::Str32 > m_typeMesh;
+	ae::Map< const ae::ClassType*, bool > m_typeInvisible;
 	
 	// Connection to client
 	double m_nextHeartbeat = 0.0;
@@ -251,7 +251,7 @@ private:
 	{
 		bool enabled = false;
 		ae::Object* component = nullptr;
-		const ae::Var* componentVar = nullptr;
+		const ae::ClassVar* componentVar = nullptr;
 		int32_t varIdx = -1;
 		
 		ae::Entity pending = kInvalidEntity;
@@ -300,10 +300,10 @@ public:
 	const EditorParams params;
 	
 	// Serialization
-	class Serializer : public ae::Var::Serializer
+	class Serializer : public ae::ClassVar::Serializer
 	{
 	public:
-		Serializer( EditorProgram* program ) : program( program ) { ae::Var::SetSerializer( this ); }
+		Serializer( EditorProgram* program ) : program( program ) { ae::ClassVar::SetSerializer( this ); }
 		std::string ObjectPointerToString( const ae::Object* obj ) const override;
 		bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const override;
 		EditorProgram* program = nullptr;
@@ -872,11 +872,11 @@ void Editor::Update()
 				rStream.SerializeString( varValue );
 				if( rStream.IsValid() )
 				{
-					if( const ae::Type* type = ae::GetTypeById( typeId ) )
+					if( const ae::ClassType* type = ae::GetClassTypeById( typeId ) )
 					{
 						if( ae::Component* component = m_params->registry->TryGetComponent( entity, type ) )
 						{
-							if( const ae::Var* var = type->GetVarByName( varName.c_str(), true ) )
+							if( const ae::ClassVar* var = type->GetVarByName( varName.c_str(), true ) )
 							{
 								var->SetObjectValueFromString( component, varValue.c_str() );
 							}
@@ -961,7 +961,7 @@ void Editor::m_Read()
 	}
 
 	// State for loading
-	ae::Array< const ae::Type* > prereqs = m_tag;
+	ae::Array< const ae::ClassType* > prereqs = m_tag;
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag; 
 	const auto& jsonObjects = document[ "objects" ];
 
@@ -979,10 +979,10 @@ void Editor::m_Read()
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			AE_ASSERT( componentIter.value.IsObject() );
-			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
 			AE_ASSERT_MSG( type, "Type '#' not found. Register with AE_REGISTER_CLASS(), or if the class isn't directly referenced you may need to use AE_FORCE_LINK().", componentIter.name.GetString() );
 			GetComponentTypePrereqs( type, &prereqs );
-			for( const ae::Type* prereq : prereqs )
+			for( const ae::ClassType* prereq : prereqs )
 			{
 				m_params->registry->AddComponent( entity, prereq );
 			}
@@ -1033,7 +1033,7 @@ const ae::Matrix4& EditorServerObject::GetTransform() const
 	return m_transform;
 }
 
-void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::Type* type, const ae::Var* var )
+void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var )
 {
 	if ( var == program->editor.GetMeshResourceVar( type ) )
 	{
@@ -1089,10 +1089,10 @@ void EditorConnection::Destroy( EditorServer* editor )
 //------------------------------------------------------------------------------
 void EditorServer::Initialize( EditorProgram* program )
 {
-	uint32_t typeCount = ae::GetTypeCount();
+	uint32_t typeCount = ae::GetClassTypeCount();
 	for ( uint32_t i = 0; i < typeCount; i++ )
 	{
-		const ae::Type* type = ae::GetTypeByIndex( i );
+		const ae::ClassType* type = ae::GetClassTypeByIndex( i );
 		int32_t resourcePropIdx = type->GetPropertyIndex( "ae_mesh_resource" );
 		if ( resourcePropIdx >= 0 )
 		{
@@ -1101,7 +1101,7 @@ void EditorServer::Initialize( EditorProgram* program )
 			AE_ASSERT_MSG( type->GetPropertyValueCount( resourcePropIdx ), mustRegisterErr, type->GetName() );
 			const char* varName = type->GetPropertyValue( resourcePropIdx, 0 );
 			AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
-			const ae::Var* var = type->GetVarByName( varName, false );
+			const ae::ClassVar* var = type->GetVarByName( varName, false );
 			AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
 			m_meshResourceVars.Set( type, var );
 		}
@@ -1114,7 +1114,7 @@ void EditorServer::Initialize( EditorProgram* program )
 			AE_ASSERT_MSG( type->GetPropertyValueCount( visiblePropIdx ), mustRegisterErr, type->GetName() );
 			const char* varName = type->GetPropertyValue( visiblePropIdx, 0 );
 			AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
-			const ae::Var* var = type->GetVarByName( varName, false );
+			const ae::ClassVar* var = type->GetVarByName( varName, false );
 			AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
 			m_meshVisibleVars.Set( type, var );
 		}
@@ -1126,7 +1126,7 @@ void EditorServer::Initialize( EditorProgram* program )
 			for ( uint32_t i = 0; i < depCount; i++ )
 			{
 				const char* depName = type->GetPropertyValue( depPropIdx, i );
-				const ae::Type* depType = ae::GetTypeByName( depName );
+				const ae::ClassType* depType = ae::GetClassTypeByName( depName );
 				AE_ASSERT_MSG( depType, "Type '#' has invalid dependency '#'", type->GetName(), depName );
 				AE_ASSERT_MSG( depType->HasProperty( "ae_editor_type" ), "Type '#' has dependency '#' which is not an editor type. It must have property 'ae_editor_type'.", type->GetName(), depName );
 			}
@@ -1226,7 +1226,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 			{
 				continue;
 			}
-			AddComponent( program, object, ae::GetTypeByName( componentIter.name.GetString() ) );
+			AddComponent( program, object, ae::GetClassTypeByName( componentIter.name.GetString() ) );
 		}
 	}
 	// Serialize all components (second phase to handle references)
@@ -1244,7 +1244,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 			{
 				continue;
 			}
-			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
 			if( !type )
 			{
 				continue;
@@ -1253,7 +1253,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 			const uint32_t varCount = type->GetVarCount( true );
 			for ( uint32_t j = 0; j < varCount; j++ )
 			{
-				const ae::Var* var = type->GetVarByIndex( j, true );
+				const ae::ClassVar* var = type->GetVarByIndex( j, true );
 				object->HandleVarChange( program, component, type, var );
 			}
 		}
@@ -1448,11 +1448,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 				uint32_t matchCount = 0;
 				const ae::Object* lastMatch = nullptr;
 				
-				const ae::Type* refType = m_selectRef.componentVar->GetSubType();
+				const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
 				const uint32_t componentTypeCount = m_registry.GetTypeCount();
 				for( uint32_t i = 0; i < componentTypeCount; i++ )
 				{
-					const ae::Type* hoverType = m_registry.GetTypeByIndex( i );
+					const ae::ClassType* hoverType = m_registry.GetTypeByIndex( i );
 					if( hoverType->IsType( refType ) )
 					{
 						if( const ae::Component* hoverComponent = m_registry.TryGetComponent( hoverEntity, hoverType ) )
@@ -1587,7 +1587,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 	}
 	if ( ImGui::BeginPopup( "ref_select_popup" ) )
 	{
-		const ae::Type* refType = m_selectRef.componentVar->GetSubType();
+		const ae::ClassType* refType = m_selectRef.componentVar->GetSubType();
 		ImGui::Text( "Select %s", refType->GetName() );
 		ImGui::Separator();
 		const EditorServerObject* pendingObj = GetObject( m_selectRef.pending );
@@ -1595,7 +1595,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		const uint32_t componentTypeCount = m_registry.GetTypeCount();
 		for( uint32_t i = 0; i < componentTypeCount; i++ )
 		{
-			const ae::Type* pendingType = m_registry.GetTypeByIndex( i );
+			const ae::ClassType* pendingType = m_registry.GetTypeByIndex( i );
 			if( pendingType->IsType( refType ) && ImGui::Selectable( pendingType->GetName(), false ) )
 			{
 				const uint32_t componentCount = m_registry.GetComponentCountByIndex( i );
@@ -1954,11 +1954,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 			const uint32_t componentTypeCount = m_registry.GetTypeCount();
 			for( uint32_t i = 0; i < componentTypeCount; i++ )
 			{
-				const ae::Type* type = m_registry.GetTypeByIndex( i );
+				const ae::ClassType* type = m_registry.GetTypeByIndex( i );
 				const uint32_t componentCount = m_registry.GetComponentCountByIndex( i );
 				for( uint32_t j = 0; j < componentCount; j++ )
 				{
-					if( const ae::Var* var = GetMeshResourceVar( type ) )
+					if( const ae::ClassVar* var = GetMeshResourceVar( type ) )
 					{
 						ae::Component* component = &m_registry.GetComponentByIndex( i, j );
 						EditorServerObject* object = GetObject( component->GetEntity() );
@@ -2021,21 +2021,21 @@ void EditorServer::ShowUI( EditorProgram* program )
 			const uint32_t componentTypesCount = m_registry.GetTypeCount();
 			for( uint32_t i = 0; i < componentTypesCount; i++ )
 			{
-				const ae::Type* componentType = m_registry.GetTypeByIndex( i );
+				const ae::ClassType* componentType = m_registry.GetTypeByIndex( i );
 				ae::Component* component = m_registry.TryGetComponent( selectedObject->entity, componentType );
 				if( component )
 				{
 					ImGui::Separator();
 					if( ImGui::TreeNode( componentType->GetName() ) )
 					{
-						auto fn = [&]( auto& fn, const ae::Type* type, ae::Component* component ) -> void
+						auto fn = [&]( auto& fn, const ae::ClassType* type, ae::Component* component ) -> void
 						{
 							uint32_t varCount = type->GetVarCount( false );
 							if( varCount )
 							{
 								for( uint32_t i = 0; i < varCount; i++ )
 								{
-									const ae::Var* var = type->GetVarByIndex( i, false );
+									const ae::ClassVar* var = type->GetVarByIndex( i, false );
 									if( m_ShowVar( program, component, var ) )
 									{
 										selectedObject->HandleVarChange( program, component, type, var );
@@ -2066,10 +2066,10 @@ void EditorServer::ShowUI( EditorProgram* program )
 				bool anyValid = false;
 				bool foundAny = false;
 				const char* editorTypeProperty = "ae_editor_type";
-				uint32_t typeCount = ae::GetTypeCount();
+				uint32_t typeCount = ae::GetClassTypeCount();
 				for ( uint32_t i = 0; i < typeCount; i++ )
 				{
-					const ae::Type* type = ae::GetTypeByIndex( i );
+					const ae::ClassType* type = ae::GetClassTypeByIndex( i );
 					if ( !type->HasProperty( editorTypeProperty ) || !type->IsDefaultConstructible() )
 					{
 						continue;
@@ -2130,7 +2130,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			const uint32_t componentTypesCount = m_registry.GetTypeCount();
 			for ( uint32_t i = 0; i < componentTypesCount; i++ )
 			{
-				const ae::Type* type = m_registry.GetTypeByIndex( i );
+				const ae::ClassType* type = m_registry.GetTypeByIndex( i );
 				const bool isSelected = ( m_objectListType == type );
 				if ( ImGui::Selectable( type->GetName(), isSelected ) )
 				{
@@ -2219,7 +2219,7 @@ void EditorServer::DestroyObject( ae::Entity entity )
 	}
 }
 
-ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const ae::Type* type )
+ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerObject* obj, const ae::ClassType* type )
 {
 	if ( !type )
 	{
@@ -2231,9 +2231,9 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 		return component;
 	}
 
-	ae::Array< const ae::Type* > prereqs = m_tag;
+	ae::Array< const ae::ClassType* > prereqs = m_tag;
 	GetComponentTypePrereqs( type, &prereqs );
-	for( const ae::Type* prereq : prereqs )
+	for( const ae::ClassType* prereq : prereqs )
 	{
 		if( !GetComponent( obj, prereq ) )
 		{
@@ -2264,12 +2264,12 @@ void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* 
 	}
 }
 
-ae::Component* EditorServer::GetComponent( EditorServerObject* obj, const ae::Type* type )
+ae::Component* EditorServer::GetComponent( EditorServerObject* obj, const ae::ClassType* type )
 {
 	return const_cast< ae::Component* >( GetComponent( const_cast< const EditorServerObject* >( obj ), type ) );
 }
 
-const ae::Component* EditorServer::GetComponent( const EditorServerObject* obj, const ae::Type* type )
+const ae::Component* EditorServer::GetComponent( const EditorServerObject* obj, const ae::ClassType* type )
 {
 	return obj ? m_registry.TryGetComponent( obj->entity, type ) : nullptr;
 }
@@ -2279,12 +2279,12 @@ const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Compon
 	return component ? GetObject( component->GetEntity() ) : nullptr;
 }
 
-const ae::Var* EditorServer::GetMeshResourceVar( const ae::Type* componentType )
+const ae::ClassVar* EditorServer::GetMeshResourceVar( const ae::ClassType* componentType )
 {
 	return m_meshResourceVars.Get( componentType, nullptr );
 }
 
-const ae::Var* EditorServer::GetMeshVisibleVar( const ae::Type* componentType )
+const ae::ClassVar* EditorServer::GetMeshVisibleVar( const ae::ClassType* componentType )
 {
 	return m_meshVisibleVars.Get( componentType, nullptr );
 }
@@ -2306,11 +2306,11 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 	const uint32_t typeCounts = m_registry.GetTypeCount();
 	for( uint32_t i = 0; i < typeCounts; i++ )
 	{
-		const ae::Type* type = m_registry.GetTypeByIndex( i );
+		const ae::ClassType* type = m_registry.GetTypeByIndex( i );
 		if( ae::Component* component = m_registry.TryGetComponent( entity, type ) )
 		{
 			// @TODO: Update all transform, position, scale, rotation vars
-			if( const ae::Var* var = type->GetVarByName( "transform", true ) )
+			if( const ae::ClassVar* var = type->GetVarByName( "transform", true ) )
 			{
 				var->SetObjectValue( component, transform );
 				editorObject->HandleVarChange( program, component, type, var );
@@ -2319,7 +2319,7 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 	}
 }
 
-void EditorServer::BroadcastVarChange( const ae::Var* var, const ae::Component* component )
+void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Component* component )
 {
 	if( var->IsArray() )
 	{
@@ -2377,7 +2377,7 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 
 	AE_INFO( "Saving... '#'", m_levelPath );
 
-	ae::Map< const ae::Type*, ae::Component* > defaults = m_tag;
+	ae::Map< const ae::ClassType*, ae::Component* > defaults = m_tag;
 	ae::RunOnDestroy destroyDefaults = [&]()
 	{
 		for ( auto& _component : defaults )
@@ -2470,7 +2470,7 @@ void EditorServer::Unload( EditorProgram* program )
 	m_registry.Clear();
 }
 
-void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::Type*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const
+void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::ClassType*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const
 {
 	AE_ASSERT( levelObject );
 	AE_ASSERT( jsonEntity->IsObject() );
@@ -2498,7 +2498,7 @@ void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidj
 	const uint32_t componentTypeCount = m_registry.GetTypeCount();
 	for( uint32_t i = 0; i < componentTypeCount; i++ )
 	{
-		const ae::Type* type = m_registry.GetTypeByIndex( i );
+		const ae::ClassType* type = m_registry.GetTypeByIndex( i );
 		if( const ae::Component* component = m_registry.TryGetComponent( entity, type ) )
 		{
 			const ae::Component* defaultComponent = defaults ? defaults->Get( type, nullptr ) : nullptr;
@@ -2597,7 +2597,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 		for( const auto& componentIter : jsonObject[ "components" ].GetObject() )
 		{
 			AE_ASSERT( componentIter.value.IsObject() );
-			AddComponent( program, editorObject, ae::GetTypeByName( componentIter.name.GetString() ) );
+			AddComponent( program, editorObject, ae::GetClassTypeByName( componentIter.name.GetString() ) );
 		}
 
 		// Select entity
@@ -2621,7 +2621,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 			{
 				continue;
 			}
-			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
 			if( !type )
 			{
 				continue;
@@ -2630,7 +2630,7 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 			const uint32_t varCount = type->GetVarCount( true );
 			for ( uint32_t j = 0; j < varCount; j++ )
 			{
-				const ae::Var* var = type->GetVarByIndex( j, true );
+				const ae::ClassVar* var = type->GetVarByIndex( j, true );
 				object->HandleVarChange( program, component, type, var );
 			}
 		}
@@ -2719,7 +2719,7 @@ void EditorServer::m_SelectWithModifiers( EditorProgram* program, const ae::Enti
 	}
 }
 
-bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::Var* var )
+bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, const ae::ClassVar* var )
 {
 	if ( var->GetType() == ae::BasicType::Matrix4 && strcmp( var->GetName(), "transform" ) == 0 )
 	{
@@ -2772,7 +2772,7 @@ bool EditorServer::m_ShowVar( EditorProgram* program, ae::Object* component, con
 	return changed;
 }
 
-bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx )
+bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx )
 {
 	ae::Str64 varName = ( idx < 0 ) ? var->GetName() : ae::Str64::Format( "#", idx );
 	switch ( var->GetType() )
@@ -2780,7 +2780,7 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 		case ae::BasicType::Enum:
 		{
 			auto currentStr = var->GetObjectValueAsString( component, idx );
-			auto valueStr = aeImGui_Enum( var->GetEnum(), varName.c_str(), currentStr.c_str() );
+			auto valueStr = aeImGui_Enum( var->GetEnumType(), varName.c_str(), currentStr.c_str() );
 			if ( var->SetObjectValueFromString( component, valueStr.c_str(), idx ) )
 			{
 				return ( currentStr != valueStr.c_str() );
@@ -2831,16 +2831,16 @@ bool EditorServer::m_ShowVarValue( EditorProgram* program, ae::Object* component
 	return false;
 }
 
-bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, const ae::Var* var, int32_t idx )
+bool EditorServer::m_ShowRefVar( EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx )
 {
-	const ae::Type* componentType = ae::GetTypeFromObject( component );
+	const ae::ClassType* componentType = ae::GetClassTypeFromObject( component );
 	auto val = var->GetObjectValueAsString( component, idx );
 	
 	if ( idx < 0 )
 	{
 		ImGui::Text( "%s", var->GetName() );
 	}
-	const ae::Type* refType = var->GetSubType();
+	const ae::ClassType* refType = var->GetSubType();
 	AE_ASSERT( refType );
 	if ( m_selectRef.enabled
 		&& m_selectRef.component == component
@@ -2896,7 +2896,7 @@ std::string EditorProgram::Serializer::ObjectPointerToString( const ae::Object* 
 	{
 		return "NULL";
 	}
-	const ae::Type* type = ae::GetTypeFromObject( obj );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( obj );
 	AE_ASSERT( type );
 	const ae::Component* component = ae::Cast< ae::Component >( obj );
 	AE_ASSERT( component );
@@ -2921,7 +2921,7 @@ bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, a
 	{
 		if ( EditorServerObject* editorObj = program->editor.GetObject( entity ) )
 		{
-			*objOut = program->editor.GetComponent( editorObj, ae::GetTypeByName( typeName ) );
+			*objOut = program->editor.GetComponent( editorObj, ae::GetClassTypeByName( typeName ) );
 		}
 		return true;
 	}
@@ -3030,11 +3030,11 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool lines ) const
 	return color;
 }
 
-void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >* prereqs )
+void GetComponentTypePrereqs( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs )
 {
 	AE_ASSERT( type );
 	prereqs->Clear();
-	auto fn = [&]( auto& fn, const ae::Type* t ) -> void
+	auto fn = [&]( auto& fn, const ae::ClassType* t ) -> void
 	{
 		if( t->GetParentType() )
 		{
@@ -3044,7 +3044,7 @@ void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >
 		const uint32_t propCount = ( propIdx >= 0 ) ? t->GetPropertyValueCount( propIdx ) : 0;
 		for( uint32_t i = 0; i < propCount; i++ )
 		{
-			const ae::Type* prereq = ae::GetTypeByName( t->GetPropertyValue( propIdx, i ) );
+			const ae::ClassType* prereq = ae::GetClassTypeByName( t->GetPropertyValue( propIdx, i ) );
 			if( type != prereq && prereqs->Find( prereq ) < 0 )
 			{
 				// @TODO: Handle missing types
@@ -3060,11 +3060,11 @@ void GetComponentTypePrereqs( const ae::Type* type, ae::Array< const ae::Type* >
 
 void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component )
 {
-	const ae::Type* type = ae::GetTypeFromObject( component );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( component );
 	const uint32_t varCount = type->GetVarCount( true );
 	for( uint32_t i = 0; i < varCount; i++ )
 	{
-		const ae::Var* var = type->GetVarByIndex( i, true );
+		const ae::ClassVar* var = type->GetVarByIndex( i, true );
 		if( !jsonComponent.HasMember( var->GetName() ) )
 		{
 			continue;
@@ -3116,7 +3116,7 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 			{
 				continue;
 			}
-			const ae::Type* type = ae::GetTypeByName( componentIter.name.GetString() );
+			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
 			if( !type )
 			{
 				continue;
@@ -3130,11 +3130,11 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent )
 {
 	AE_ASSERT( jsonComponent->IsObject() );
-	const ae::Type* type = ae::GetTypeFromObject( component );
+	const ae::ClassType* type = ae::GetClassTypeFromObject( component );
 	const uint32_t varCount = type->GetVarCount( true );
 	for( uint32_t i = 0; i < varCount; i++ )
 	{
-		const ae::Var* var = type->GetVarByIndex( i, true );
+		const ae::ClassVar* var = type->GetVarByIndex( i, true );
 		const auto varName = rapidjson::StringRef( var->GetName() );
 		if( var->IsArray() )
 		{

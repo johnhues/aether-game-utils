@@ -106,38 +106,38 @@ public:
 };
 
 template < typename T >
-class ae::VarTypeT< ae::Optional< T > > : public ae::OptionalVarType
+class ae::TypeT< ae::Optional< T > > : public ae::OptionalType
 {
 public:
-	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
-	static ae::VarType* Get() { static ae::VarTypeT< ae::Optional< T > > s_type; return &s_type; }
+	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
+	static ae::Type* Get() { static ae::TypeT< ae::Optional< T > > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< ae::Optional< T > >(); }
 
-	ae::VarData TryGet( ae::VarData optional ) const override { return ae::VarData(); }
-	ae::ConstVarData TryGet( ae::ConstVarData optional ) const override { return ae::ConstVarData(); }
-	ae::VarData GetOrInsert( ae::VarData optional ) const override { return ae::VarData(); }
-	void Clear( ae::VarData optional ) const override {}
+	ae::DataPointer TryGet( ae::DataPointer optional ) const override { return ae::DataPointer(); }
+	ae::ConstDataPointer TryGet( ae::ConstDataPointer optional ) const override { return ae::ConstDataPointer(); }
+	ae::DataPointer GetOrInsert( ae::DataPointer optional ) const override { return ae::DataPointer(); }
+	void Clear( ae::DataPointer optional ) const override {}
 };
 
 template < typename T >
-class ae::VarTypeT< std::optional< T > > : public ae::OptionalVarType
+class ae::TypeT< std::optional< T > > : public ae::OptionalType
 {
 public:
-	const ae::VarType& GetInnerVarType() const override { return *ae::VarTypeT< T >::Get(); }
-	static ae::VarType* Get() { static ae::VarTypeT< std::optional< T > > s_type; return &s_type; }
+	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
+	static ae::Type* Get() { static ae::TypeT< std::optional< T > > s_type; return &s_type; }
 	VarTypeId GetExactVarTypeId() const override { return ae::GetTypeId< std::optional< T > >(); }
 
-	ae::VarData TryGet( ae::VarData _opt ) const override
+	ae::DataPointer TryGet( ae::DataPointer _opt ) const override
 	{
 		std::optional< T >* opt = static_cast< std::optional< T >* >( _opt.Get( this ) );
 		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
 	}
-	ae::ConstVarData TryGet( ae::ConstVarData _opt ) const override
+	ae::ConstDataPointer TryGet( ae::ConstDataPointer _opt ) const override
 	{
 		const std::optional< T >* opt = static_cast< const std::optional< T >* >( _opt.Get( this ) );
 		return { GetInnerVarType(), opt->has_value() ? &opt->value() : nullptr };
 	}
-	ae::VarData GetOrInsert( ae::VarData _optional ) const override
+	ae::DataPointer GetOrInsert( ae::DataPointer _optional ) const override
 	{
 		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
@@ -146,7 +146,7 @@ public:
 		}
 		return {};
 	}
-	void Clear( ae::VarData _optional ) const override
+	void Clear( ae::DataPointer _optional ) const override
 	{
 		if( std::optional< T >* optional = static_cast< std::optional< T >* >( _optional.Get( this ) ) )
 		{
