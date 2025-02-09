@@ -138,7 +138,7 @@ void ae::ResourceManager::HotLoad()
 	memcpy( this, &temp, sizeof(void*) );
 	for( const auto& resource : m_resources )
 	{
-		const ae::Type* type = ae::GetTypeFromObject( resource.value );
+		const ae::ClassType* type = ae::GetClassTypeFromObject( resource.value );
 		type->PatchVTable( resource.value );
 	}
 }
@@ -151,7 +151,7 @@ ae::Resource* ae::ResourceManager::m_Register( const char* type, const char* nam
 		AE_FAIL_MSG( "Resource '#' already exists", name );
 		return nullptr;
 	}
-	const ae::Type* resourceType = ae::GetTypeByName( type );
+	const ae::ClassType* resourceType = ae::GetClassTypeByName( type );
 	if ( !resourceType )
 	{
 		AE_FAIL_MSG( "Unknown resource type '#'", type );

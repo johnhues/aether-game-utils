@@ -108,7 +108,7 @@ private:
 //------------------------------------------------------------------------------
 // Var helpers
 //------------------------------------------------------------------------------
-static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, const char* currentValue, uint32_t showSearchCount = 16 )
+static ae::Str32 aeImGui_Enum( const ae::EnumType* enumType, const char* varName, const char* currentValue, uint32_t showSearchCount = 16 )
 {
 	ae::Str32 result = currentValue;
 	if ( ImGui::BeginCombo( varName, currentValue ) )
@@ -138,7 +138,7 @@ static ae::Str32 aeImGui_Enum( const ae::Enum* enumType, const char* varName, co
 template < typename T >
 bool aeImGui_Enum( const char* varName, T* valueOut, uint32_t showSearchCount = 16 )
 {
-	const ae::Enum* enumType = ae::GetEnum< T >();
+	const ae::EnumType* enumType = ae::GetEnumType< T >();
 	auto currentValue = enumType->GetNameByValue( *valueOut );
 	auto resultName = aeImGui_Enum( enumType, varName, currentValue.c_str(), showSearchCount );
 	
