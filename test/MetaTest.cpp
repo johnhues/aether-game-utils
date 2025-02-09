@@ -66,6 +66,10 @@ TEST_CASE( "Class registration", "[aeMeta]" )
 	REQUIRE( ae::GetType< SomeClass >() );
 	REQUIRE( ae::GetTypeByName( "SomeClass" ) );
 	REQUIRE( ae::GetType< SomeClass >() == ae::GetTypeByName( "SomeClass" ) );
+	REQUIRE( ae::GetType< const SomeClass >() );
+	REQUIRE( ae::GetType< const SomeClass >() == ae::GetType< SomeClass >() );
+	REQUIRE( ae::GetType< SomeClass* >() );
+	REQUIRE( ae::GetType< SomeClass* >() == ae::GetType< SomeClass >() );
 }
 
 TEST_CASE( "Class properties", "[aeMeta]" )
