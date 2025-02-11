@@ -5673,13 +5673,17 @@ public:
 class EnumType : public ae::Type
 {
 public:
+	//--------------------------------------------------------------------------
 	// Type info
+	//--------------------------------------------------------------------------
 	const char* GetName() const { return m_name.c_str(); }
 	const char* GetPrefix() const { return m_prefix.c_str(); }
 	uint32_t TypeSize() const { return m_size; }
 	bool TypeIsSigned() const { return m_isSigned; }
 
+	//--------------------------------------------------------------------------
 	// Enum values
+	//--------------------------------------------------------------------------
 	template < typename T > std::string GetNameByValue( T value ) const;
 	template < typename T > bool GetValueFromString( const char* str, T* valueOut ) const;
 	template < typename T > T GetValueFromString( const char* str, T defaultValue ) const;
@@ -5688,18 +5692,22 @@ public:
 	std::string GetNameByIndex( int32_t index ) const;
 	uint32_t Length() const;
 
+	//--------------------------------------------------------------------------
 	// ae::DataPointer
+	//--------------------------------------------------------------------------
 	std::string GetVarDataAsString( ae::ConstDataPointer varData ) const;
 	bool SetVarDataFromString( ae::DataPointer varData, const char* value ) const;
 	template< typename T > bool GetVarData( ae::ConstDataPointer varData, T* valueOut ) const;
 	template< typename T > bool SetVarData( ae::DataPointer varData, const T& value ) const;
 
+	//--------------------------------------------------------------------------
 	// Attributes
+	//--------------------------------------------------------------------------
 	ae::AttributeList attributes;
 
-	//------------------------------------------------------------------------------
+	//--------------------------------------------------------------------------
 	// Internal
-	//------------------------------------------------------------------------------
+	//--------------------------------------------------------------------------
 private:
 	ae::TypeName m_name;
 	ae::TypeName m_prefix;
@@ -5721,23 +5729,27 @@ public:
 class PointerType : public ae::Type
 {
 public:
+	//! Returns the type pointed to by this type
 	virtual const ae::Type& GetInnerVarType() const = 0;
 
-	// ae::DataPointer
-	ae::DataPointer Dereference( ae::ConstDataPointer varData ) const;
+	//! Returns a pointer to the data referenced by the given \p varData. Note
+	//! that like a normal C-pointer dereference, the const-ness of the
+	//! referenced value is separate from the const-ness of the pointer.
+	ae::DataPointer Dereference( ae::ConstDataPointer pointer ) const;
 
-	// Set and get directly
-	virtual bool SetRef( ae::DataPointer varData, ae::Object* value ) const = 0;
-	template< typename T > T** GetRef( ae::DataPointer varData ) const;
-	template< typename T > T*const* GetRef( ae::ConstDataPointer varData ) const;
+	//! Writes \p value to the given \p pointer, returning true on success.
+	virtual bool SetRef( ae::DataPointer pointer, ae::Object* value ) const = 0;
+	//! Returns a pointer to the inner value of \p pointer, unless given null.
+	template< typename T > T** GetRef( ae::DataPointer pointer ) const;
+	//! Returns a pointer to the inner value of \p pointer, unless given null.
+	template< typename T > T*const* GetRef( ae::ConstDataPointer pointer ) const;
 
-	// String manipulation
-	virtual bool SetRefFromString( ae::DataPointer varData, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
-	virtual std::string GetStringFromRef( ae::ConstDataPointer varData, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 
 	// Internal
 	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< PointerType >(); }
 	virtual ae::BasicType::Type GetBasicType() const { return ae::BasicType::Pointer; } // @HACK: Remove
+	virtual bool SetRefFromString( ae::DataPointer pointer, const char* value, StringToObjectPointerFn fn, const void* userData ) const = 0;
+	virtual std::string GetStringFromRef( ae::ConstDataPointer pointer, ObjectPointerToStringFn fn, const void* userData ) const = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -5746,11 +5758,24 @@ public:
 class OptionalType : public ae::Type
 {
 public:
+	//! Returns the type contained by this optional type
 	virtual const ae::Type& GetInnerVarType() const = 0;
-
+	
+	//! Conditionally returns a pointer to the value held by \p optional, or
+	//! or null if the underlying optional type holds no valid data. Returns
+	//! null if \p optional is null.
 	virtual ae::DataPointer TryGet( ae::DataPointer optional ) const = 0;
+	//! Conditionally returns a pointer to the value contained by \p optional,
+	//! or null if the underlying optional type holds no valid data. Returns
+	//! null if \p optional is null.
 	virtual ae::ConstDataPointer TryGet( ae::ConstDataPointer optional ) const = 0;
+	//! This function attempts to return a pointer to the value contained by
+	//! \p optional, otherwise a value will be constructed if possible and
+	//! returned. Return null if \p optional is null.
 	virtual ae::DataPointer GetOrInsert( ae::DataPointer optional ) const = 0;
+	
+	//! Destroys the contained value if \p optional is not null, otherwise does
+	//! nothing.
 	virtual void Clear( ae::DataPointer optional ) const = 0;
 
 	// Internal
@@ -5763,15 +5788,34 @@ public:
 class ArrayType : public ae::Type
 {
 public:
+	//! Returns the type contained by this array type
 	virtual const ae::Type& GetInnerVarType() const = 0;
-
+	
+	//! Returns a pointer into the given \p array if \p idx is valid (less than
+	//! the result of ae::ArrayType::GetLength()), otherwise returns a null
+	//! data pointer. Note that depending on the implementation of the
+	//! underlying array, it may be unsafe to hold a pointer to an element after
+	//! modifying the array.
 	virtual ae::DataPointer GetElement( ae::DataPointer array, uint32_t idx ) const = 0;
+	//! Returns a pointer into the given \p array if \p idx is valid (less than
+	//! the result of ae::ArrayType::GetLength()), otherwise returns a null
+	//! data pointer. Note that depending on the implementation of the
+	//! underlying array, it may be unsafe to hold a pointer to an element after
+	//! modifying the array.
 	virtual ae::ConstDataPointer GetElement( ae::ConstDataPointer array, uint32_t idx ) const = 0;
+	
+	//! Attempts to resize the underlying \p array to \p size, returning the new
+	//! length. Resizing to the given \p size may not be possible depending on
+	//! the its type, so take care to check the return value.
 	virtual uint32_t Resize( ae::DataPointer array, uint32_t size ) const = 0;
-	//! Current array length
+	//! Returns the current number of elements contained by the array
 	virtual uint32_t GetLength( ae::ConstDataPointer array ) const = 0;
-	//! Return uint max for no hard limit
+	
+	//! Returns the largest size this array type could grow to, or uint max for
+	//! no hard limit.
 	virtual uint32_t GetMaxLength() const = 0;
+	//! Returns true if the number of elements that this array type can hold
+	//! can be modified.
 	virtual uint32_t IsFixedLength() const = 0;
 
 	// Internal
@@ -5808,141 +5852,35 @@ public:
 //------------------------------------------------------------------------------
 // ae::ClassVar class
 //! Information about a member variable registered with AE_REGISTER_CLASS_VAR().
+//! To set and get variable data construct an ae::DataPointer or
+//! ae::ConstDataPointer with an ae::ClassVar.
 //------------------------------------------------------------------------------
 class ClassVar
 {
 public:
-	class Serializer // @TODO: Remove
-	{
-	public:
-		virtual ~Serializer();
-		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
-		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
-	};
-	static void SetSerializer( const ae::ClassVar::Serializer* serializer );
-
-	//------------------------------------------------------------------------------
-	// Info
-	//------------------------------------------------------------------------------
+	//--------------------------------------------------------------------------
+	// Basic Info
+	//--------------------------------------------------------------------------
+	//! The name of this data member in the class type given by
+	//! ae::ClassVar::GetClassType().
 	const char* GetName() const;
+	//! Byte offset of this data member into the class type returned by
+	//! ae::ClassVar::GetClassType().
 	uint32_t GetOffset() const;
-
-	//------------------------------------------------------------------------------
-	// @TODO: Remove, use GetOuterVarType() interface instead
-	//------------------------------------------------------------------------------
-	//! Get the value of this variable from the given \p obj. If the type of this
-	//! variable is a reference then ae::SetSerializer() must be called in
-	//! advance, otherwise this function will assert.
-	//! @param obj The object to get the value from.
-	//! @param arrayIdx Must be negative for non-array types. For array types this
-	//! specifies which array element to return. Must be a valid array index,
-	//! less than ae::ClassVar::GetGetArrayLength().
-	//! @return Returns a string representation of the value of this variable
-	//! from the given \p obj.
-	std::string GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
-
-	//! Set the value of this variable on the given \p obj. If the type of this
-	//! variable is a reference then ae::SetSerializer() must be called in
-	//! advance, otherwise this function will assert.
-	//! @param obj The object to set the value on.
-	//! @param value A string representation of the value to set.
-	//! @param arrayIdx Must be negative for non-array types. For array types this
-	//! specifies which array element to set. Must be a valid array index, less
-	//! than ae::ClassVar::GetGetArrayLength().
-	//! @return True if \p obj was modified, and false otherwise. Reference
-	//! types fail to be set if the value does not represent null or a valid
-	//! reference to an existing object of the correct type.
-	bool SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx = -1 ) const;
-
-	//! Get the value of this variable from the given \p obj. If the type of this
-	//! variable is a reference then ae::SetSerializer() must be called in
-	//! advance, otherwise this function will assert.
-	//! @tparam T The type of the value to return.
-	//! @param obj The object to get the value from.
-	//! @param valueOut A pointer to the value to set. Will only be set if the
-	//! type matches this variable's type.
-	//! @param arrayIdx Must be negative for non-array types. For array types this
-	//! specifies which array element to return. Must be a valid array index,
-	//! less than ae::ClassVar::GetGetArrayLength().
-	//! @return Returns true if \p valueOut was set, and false otherwise.
-	template < typename T > bool GetObjectValue( const ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
-
-	//! Set the value of this variable on the given \p obj. If the type of this
-	//! variable is a reference then ae::SetSerializer() must be called in
-	//! advance, otherwise this function will assert.
-	//! @tparam T The type of the value to set.
-	//! @param obj The object to set the value on.
-	//! @param value The value to set.
-	//! @param arrayIdx Must be negative for non-array types. For array types this
-	//! specifies which array element to set. Must be a valid array index, less
-	//! than ae::ClassVar::GetGetArrayLength().
-	//! @return True if \p obj was modified, and false otherwise. Reference
-	//! types fail to be set if the value does not represent null or a valid
-	//! reference to an existing object of the correct type.
-	template < typename T > bool SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx = -1 ) const;
-
-	//! Gets a pointer to the value of this variable from the given \p obj.
-	//! @tparam T The type of the pointer to get.
-	//! @param obj The object to get the pointer from.
-	//! @param arrayIdx Must be negative for non-array types. For array types this
-	//! specifies which array element to get. Must be a valid array index, less
-	//! than ae::ClassVar::GetGetArrayLength().
-	//! @return A pointer to the member variable of \p obj.
-	template < typename T > T* GetPointer( ae::Object* obj, int32_t arrayIdx = -1 ) const;
-	
-	//! Gets a pointer to the value of this variable from the given \p obj.
-	//! @tparam T The type of the pointer to get.
-	//! @param obj The object to get the pointer from.
-	//! @param arrayIdx Must be negative for non-array types. For array types this
-	//! specifies which array element to get. Must be a valid array index, less
-	//! than ae::ClassVar::GetGetArrayLength().
-	//! @return A pointer to the member variable of \p obj.
-	template < typename T > const T* GetPointer( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
-
-	//--------------------------------------------------------------------------
-	// ae::Type
-	//--------------------------------------------------------------------------
 	//! Returns the class type that this member variable belongs too.
 	const ae::ClassType& GetClassType() const;
 	//! Returns the 'outermost' type of this var, eg. if this is an array of ints
 	//! the outer type would be ArrayType
 	const ae::Type& GetOuterVarType() const;
 
-	//------------------------------------------------------------------------------
-	// Properties
-	//------------------------------------------------------------------------------
-	bool HasProperty( const char* prop ) const;
-	int32_t GetPropertyIndex( const char* prop ) const;
-	int32_t GetPropertyCount() const;
-	const char* GetPropertyName( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( const char* propName ) const;
-	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
-	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
-
 	//--------------------------------------------------------------------------
-	// Attributes
+	// ae::AttributeList
 	//--------------------------------------------------------------------------
 	ae::AttributeList attributes;
 
-	//------------------------------------------------------------------------------
-	// @TODO: Remove, use GetOuterVarType() interface instead
-	//------------------------------------------------------------------------------
-	ae::BasicType::Type GetType() const;
-	const class ae::EnumType* GetEnumType() const;
-	const char* GetTypeName() const;
-	//! For Class, Ref, and Array types
-	const ae::ClassType* GetSubType() const;
-	bool IsArray() const;
-	bool IsArrayFixedLength() const;
-	//! Returns new length of array.
-	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
-	uint32_t GetArrayLength( const ae::Object* obj ) const;
-	uint32_t GetArrayMaxLength() const;
-
-	//------------------------------------------------------------------------------
+	//--------------------------------------------------------------------------
 	// Internal
-	//------------------------------------------------------------------------------
+	//--------------------------------------------------------------------------
 	struct _TypePointer
 	{
 		_TypePointer() : type( Null ) {}
@@ -5960,13 +5898,44 @@ public:
 			// @TODO: Enum
 		};
 	};
-	void m_AddProp( const char* prop, const char* value );
 	_TypePointer m_owner;
 	_TypePointer m_varType;
 	ae::TypeName m_name;
 	uint32_t m_offset = 0;
+	// Deprecated
 	ae::Map< ae::Str32, ae::Array< ae::Str32, kMaxMetaPropListLength >, kMaxMetaProps > m_props;
-	// @TODO: Delete with SetObjectValue() etc
+	void m_AddProp( const char* prop, const char* value );
+	class Serializer
+	{
+	public:
+		virtual ~Serializer();
+		virtual std::string ObjectPointerToString( const ae::Object* obj ) const = 0;
+		virtual bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const = 0;
+	};
+	static void SetSerializer( const ae::ClassVar::Serializer* serializer );
+	std::string GetObjectValueAsString( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
+	bool SetObjectValueFromString( ae::Object* obj, const char* value, int32_t arrayIdx = -1 ) const;
+	template < typename T > bool GetObjectValue( const ae::Object* obj, T* valueOut, int32_t arrayIdx = -1 ) const;
+	template < typename T > bool SetObjectValue( ae::Object* obj, const T& value, int32_t arrayIdx = -1 ) const;
+	template < typename T > T* GetPointer( ae::Object* obj, int32_t arrayIdx = -1 ) const;
+	template < typename T > const T* GetPointer( const ae::Object* obj, int32_t arrayIdx = -1 ) const;
+	bool HasProperty( const char* prop ) const;
+	int32_t GetPropertyIndex( const char* prop ) const;
+	int32_t GetPropertyCount() const;
+	const char* GetPropertyName( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( const char* propName ) const;
+	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
+	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
+	ae::BasicType::Type GetType() const;
+	const class ae::EnumType* GetEnumType() const;
+	const char* GetTypeName() const;
+	const ae::ClassType* GetSubType() const;
+	bool IsArray() const;
+	bool IsArrayFixedLength() const;
+	uint32_t SetArrayLength( ae::Object* obj, uint32_t length ) const;
+	uint32_t GetArrayLength( const ae::Object* obj ) const;
+	uint32_t GetArrayMaxLength() const;
 	template< typename T >
 	const T* m_HACK_FindInnerVarType() const
 	{
@@ -5974,22 +5943,10 @@ public:
 		const ae::Type* iter = m_varType.Get();
 		while( iter )
 		{
-			if( const T* innerType = iter->AsVarType< T >() )
-			{
-				return innerType;
-			}
-			else if( const ae::PointerType* pointerVarType = iter->AsVarType< ae::PointerType >() )
-			{
-				iter = &pointerVarType->GetInnerVarType();
-			}
-			else if( const ae::ArrayType* arrayVarType = iter->AsVarType< ae::ArrayType >() )
-			{
-				iter = &arrayVarType->GetInnerVarType();
-			}
-			else
-			{
-				iter = nullptr;
-			}
+			if( const T* innerType = iter->AsVarType< T >() ) { return innerType; }
+			else if( const ae::PointerType* pointerVarType = iter->AsVarType< ae::PointerType >() ) { iter = &pointerVarType->GetInnerVarType(); }
+			else if( const ae::ArrayType* arrayVarType = iter->AsVarType< ae::ArrayType >() ) { iter = &arrayVarType->GetInnerVarType(); }
+			else { iter = nullptr; }
 		}
 		return nullptr;
 	}
@@ -6001,38 +5958,12 @@ public:
 class ClassType : public ae::Type
 {
 public:
-	// ae::ClassType
-	ae::TypeId GetId() const;
 	virtual ae::TypeId GetTypeId() const = 0;
 
-	//! Check if this ae::ClassType has a \p property registered with
-	//! AE_REGISTER_CLASS_PROPERTY() or AE_REGISTER_CLASS_PROPERTY_VALUE().
-	//! @return True if \p property is found.
-	bool HasProperty( const char* property ) const;
-	//! Search for an inherited type (starting from this one) that has a \p property
-	//! registered with AE_REGISTER_CLASS_PROPERTY() or AE_REGISTER_CLASS_PROPERTY_VALUE().
-	//! @return The first ae::ClassType found with \p property.
-	const ae::ClassType* GetTypeWithProperty( const char* property ) const;
-	int32_t GetPropertyIndex( const char* prop ) const;
-	int32_t GetPropertyCount() const;
-	const char* GetPropertyName( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
-	uint32_t GetPropertyValueCount( const char* propName ) const;
-	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
-	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
-	//bool HasPropertyValue( int32_t propIndex, const char* value ) const; // @TODO
-	//bool HasPropertyValue( const char* propName, const char* value ) const; // @TODO
-
-	// Attributes
-	ae::AttributeList attributes;
-
-	// Vars
-	uint32_t GetVarCount( bool parents ) const;
-	const ae::ClassVar* GetVarByIndex( uint32_t i, bool parents ) const;
-	const ae::ClassVar* GetVarByName( const char* name, bool parents ) const;
-
+	//--------------------------------------------------------------------------
 	// C++ type info
-	template < typename T = ae::Object > T* New( void* obj ) const;
+	//--------------------------------------------------------------------------
+	template< typename T = ae::Object > T* New( void* obj ) const;
 	//! Creates a temporary instance of this type and copies the vtable from
 	//! the instance. This type must be default constructible.
 	void PatchVTable( ae::Object* obj ) const;
@@ -6045,34 +5976,39 @@ public:
 	bool IsDefaultConstructible() const;
 	bool IsFinal() const;
 
-	// Inheritance info
+	//--------------------------------------------------------------------------
+	// Inheritance
+	//--------------------------------------------------------------------------
 	const char* GetParentTypeName() const;
 	const ae::ClassType* GetParentType() const;
 	bool IsType( const ae::ClassType* otherType ) const;
-	template < typename T > bool IsType() const;
+	template< typename T > bool IsType() const;
 
+	//--------------------------------------------------------------------------
 	// ae::DataPointer
+	//--------------------------------------------------------------------------
 	//! Gets the class type of the given DataPointer if possible.
-	const ae::ClassType* GetClassType() const { return this; } // For backwards compatibility
 	const ae::ClassType* GetClassType( ae::ConstDataPointer varData ) const;
 	template< typename T > T* TryGet( ae::DataPointer varData ) const;
 	template< typename T > const T* TryGet( ae::ConstDataPointer varData ) const;
 	ae::DataPointer GetVarData( const ae::ClassVar* var, ae::DataPointer varData ) const;
 	ae::ConstDataPointer GetVarData( const ae::ClassVar* var, ae::ConstDataPointer varData ) const;
 
+	//--------------------------------------------------------------------------
+	// ae::ClassVar
+	//--------------------------------------------------------------------------
+	uint32_t GetVarCount( bool parents ) const;
+	const ae::ClassVar* GetVarByIndex( uint32_t i, bool parents ) const;
+	const ae::ClassVar* GetVarByName( const char* name, bool parents ) const;
+
+	//--------------------------------------------------------------------------
+	// ae::AttributeList
+	//--------------------------------------------------------------------------
+	ae::AttributeList attributes;
+
 	//------------------------------------------------------------------------------
 	// Internal
 	//------------------------------------------------------------------------------
-	template < typename T >
-	typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type
-	Init( const char* name );
-	template < typename T >
-	typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type
-	Init( const char* name );
-	void m_AddProp( const char* prop, const char* value );
-	void m_AddVar( const ae::ClassVar* var );
-	// Internal Type
-	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< ClassType >(); }
 private:
 	ae::Object* ( *m_placementNew )( ae::Object* ) = nullptr;
 	ae::TypeName m_name;
@@ -6086,6 +6022,24 @@ private:
 	bool m_isPolymorphic = false;
 	bool m_isDefaultConstructible = false;
 	bool m_isFinal = false;
+public:
+	template< typename T > typename std::enable_if< !std::is_abstract< T >::value && std::is_default_constructible< T >::value, void >::type Init( const char* name );
+	template< typename T > typename std::enable_if< std::is_abstract< T >::value || !std::is_default_constructible< T >::value, void >::type Init( const char* name );
+	void m_AddProp( const char* prop, const char* value );
+	void m_AddVar( const ae::ClassVar* var );
+	ae::VarTypeId GetBaseVarTypeId() const override { return ae::GetTypeId< ClassType >(); }
+	// Deprecated
+	ae::TypeId GetId() const;
+	const ae::ClassType* GetClassType() const { return this; }
+	bool HasProperty( const char* property ) const;
+	const ae::ClassType* GetTypeWithProperty( const char* property ) const;
+	int32_t GetPropertyIndex( const char* prop ) const;
+	int32_t GetPropertyCount() const;
+	const char* GetPropertyName( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( int32_t propIndex ) const;
+	uint32_t GetPropertyValueCount( const char* propName ) const;
+	const char* GetPropertyValue( int32_t propIndex, uint32_t valueIndex ) const;
+	const char* GetPropertyValue( const char* propName, uint32_t valueIndex ) const;
 };
 
 //------------------------------------------------------------------------------
