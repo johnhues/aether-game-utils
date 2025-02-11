@@ -48,7 +48,7 @@ int main()
 	ae::TextRender text = TAG_EXAMPLE;
 	ae::DebugCamera camera = ae::Axis::Z;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "geometry" );
 	render.Initialize( &window );
 	input.Initialize( &window );

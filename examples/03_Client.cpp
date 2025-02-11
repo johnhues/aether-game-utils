@@ -39,7 +39,7 @@ int main()
 	ae::Input input;
 	ae::Socket conn = kClientAllocTag;
 	
-	window.Initialize( 400, 300, false, true );
+	window.Initialize( 400, 300, false, true, true );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	

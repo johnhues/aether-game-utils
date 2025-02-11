@@ -98,7 +98,7 @@ int main()
 	ae::VertexBuffer vertexData;
 	ae::InstanceData instanceData;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "instancing" );
 	render.Initialize( &window );
 	input.Initialize( &window );

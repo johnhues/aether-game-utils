@@ -109,7 +109,7 @@ int main()
 	ae::Shader shader;
 	ae::VertexBuffer cube, cursor;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "render target" );
 	render.Initialize( &window );
 	input.Initialize( &window );

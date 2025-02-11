@@ -31,7 +31,7 @@ int main()
   ae::Input input;
   ae::GraphicsDevice device;
   ae::FileSystem fs;
-  window.Initialize( 800, 600, false, true );
+  window.Initialize( 800, 600, false, true, true );
   window.SetTitle( "Press Cmd+S or Cmd+O" );
   input.Initialize( &window );
   device.Initialize( &window );

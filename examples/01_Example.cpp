@@ -36,7 +36,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "example" );
 	graphicsDevice.Initialize( &window );
 	input.Initialize( &window );

@@ -2759,7 +2759,7 @@ struct Screen
 	ae::Int2 size;
 	bool isPrimary = false; //!< True for the display with the start menu, dock, etc
 	bool isExternal = false; //!< True if the screen is removable from the device
-	// @TODO: pixel scale factor
+	float scaleFactor = 1.0f; //!< Display scale factor
 };
 //! Returns an array of all available screens. If a system error is encountered
 //! the returned array will be empty.
@@ -2777,9 +2777,9 @@ class Window
 public:
 	Window();
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
-	bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor );
+	bool Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, bool rememberPosition );
 	//! Window size is specified in virtual DPI units, content size is subject to the displays scale factor
-	bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor );
+	bool Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, bool rememberPosition );
 	void Terminate();
 
 	void SetTitle( const char* title );
@@ -2810,7 +2810,7 @@ public:
 
 private:
 	Window( const Window& ) = delete;
-	void m_Initialize();
+	void m_Initialize( bool rememberPosition );
 	Int2 m_pos = Int2( 0 );
 	int32_t m_width = 0;
 	int32_t m_height = 0;
@@ -3114,7 +3114,7 @@ public:
 	ae::TimeStep m_timeStep;
 	ae::Window* m_window = nullptr;
 	bool m_captureMouse = false;
-	ae::Int2 m_capturedMousePos = ae::Int2( 0, 0 );
+	ae::Int2 m_capturedMousePos = ae::Int2( INT_MAX );
 	bool m_mousePosSet = false;
 	bool m_hideCursor = false;
 	bool m_keys[ 256 ];
@@ -16148,6 +16148,7 @@ ae::Array< ae::Screen, 16 > GetScreens()
 		Screen& s = result.Append( {} );
 		s.position = ae::Int2( screen.frame.origin.x, screen.frame.origin.y );
 		s.size = ae::Int2( screen.frame.size.width, screen.frame.size.height );
+		s.scaleFactor = screen.backingScaleFactor;
 
 		s.isPrimary = [screen isEqualTo:[NSScreen mainScreen]];
 
@@ -16205,7 +16206,7 @@ Window::Window()
 	m_scaleFactor = 1.0f;
 }
 
-bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor )
+bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool showCursor, bool rememberPosition )
 {
 	AE_ASSERT( !window );
 
@@ -16219,7 +16220,7 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	m_pos = ( screens[ 0 ].size - ae::Int2( width, height ) ) / 2;
 	m_pos += screens[ 0 ].position;
 
-	m_Initialize();
+	m_Initialize( rememberPosition );
 
 	if ( fullScreen )
 	{
@@ -16229,7 +16230,7 @@ bool Window::Initialize( uint32_t width, uint32_t height, bool fullScreen, bool 
 	return true;
 }
 
-bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor )
+bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCursor, bool rememberPosition )
 {
 	AE_ASSERT( !window );
 
@@ -16238,7 +16239,7 @@ bool Window::Initialize( Int2 pos, uint32_t width, uint32_t height, bool showCur
 	m_height = height;
 	m_fullScreen = false;
 
-	m_Initialize();
+	m_Initialize( rememberPosition );
 
 	return true;
 }
@@ -16283,7 +16284,7 @@ ae::Int2 Window::m_nativeToAe( ae::Int2 pos, ae::Int2 size )
 #endif
 }
 
-void Window::m_Initialize()
+void Window::m_Initialize( bool rememberPosition )
 {
 #if _AE_WINDOWS_
 #define WNDCLASSNAME L"wndclass"
@@ -16469,11 +16470,14 @@ void Window::m_Initialize()
 	[nsWindow makeFirstResponder:glView];
 	[nsWindow setOpaque:YES];
 	[nsWindow setContentMinSize:NSMakeSize(150.0, 100.0)];
-	if( NSString* appName = [[NSProcessInfo processInfo] processName] )
+	if( rememberPosition )
 	{
-		// @TODO: Doesn't work on external monitors
-		// https://stackoverflow.com/a/36992518/2423134
-		[nsWindow setFrameAutosaveName:appName];
+		if( NSString* appName = [[NSProcessInfo processInfo] processName] )
+		{
+			// @TODO: Doesn't work on external monitors
+			// https://stackoverflow.com/a/36992518/2423134
+			[nsWindow setFrameAutosaveName:appName];
+		}
 	}
 	
 	NSRect contentScreenRect = [nsWindow convertRectToScreen:[nsWindow contentLayoutRect]];
@@ -17869,6 +17873,9 @@ void Input::SetMouseCaptured( bool enable )
 #elif _AE_EMSCRIPTEN_
 			emscripten_request_pointerlock( "canvas", true );
 #endif
+			ae::Int2 localCenter( m_window->GetWidth() / 2, m_window->GetHeight() / 2 );
+			m_SetCursorPos( localCenter );
+			m_mousePosSet = false;
 		}
 		else
 		{
@@ -17888,8 +17895,6 @@ void Input::SetMouseCaptured( bool enable )
 		}
 		
 		m_captureMouse = enable;
-		m_mousePosSet = false; // Disable so movement isn't considered when changing capture states
-		mouse.movement = ae::Int2( 0 );
 	}
 }
 

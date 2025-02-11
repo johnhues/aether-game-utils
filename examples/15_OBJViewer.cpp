@@ -89,7 +89,7 @@ int main()
 	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines = kObjAllocTag;
 	
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "OBJ Viewer" );
 	render.Initialize( &window );
 	input.Initialize( &window );

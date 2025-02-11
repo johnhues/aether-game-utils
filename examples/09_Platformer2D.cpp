@@ -232,7 +232,7 @@ struct Game
 	void Initialize()
 	{
 		AE_LOG( "Initialize" );
-		window.Initialize( 800, 600, false, true );
+		window.Initialize( 800, 600, false, true, true );
 		window.SetTitle( "Platformer 2D" );
 		render.Initialize( &window );
 		input.Initialize( &window );

@@ -233,7 +233,7 @@ void Game::Initialize( int argc, char* argv[] )
 	};
 	editorParams.functionPointers.userData = this;
 	editor.Initialize( editorParams );
-	window.Initialize( 1280, 720, false, true );
+	window.Initialize( 1280, 720, false, true, true );
 	window.SetTitle( "Press '~' to Open the Editor" );
 	input.Initialize( &window );
 	gfx.Initialize( &window );

@@ -143,7 +143,7 @@ private:
 //------------------------------------------------------------------------------
 void Program::Initialize()
 {
-	m_window.Initialize( 800, 600, false, true );
+	m_window.Initialize( 800, 600, false, true, true );
 	m_window.SetTitle( "aeOS" );
 	m_gfx.Initialize( &m_window );
 	m_input.Initialize( &m_window );

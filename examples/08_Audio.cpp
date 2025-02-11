@@ -38,7 +38,7 @@ int main()
 	ae::Audio audio;
 	ae::TimeStep timeStep;
 	fs.Initialize( "data", "ae", "audio" );
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "audio" );
 	render.Initialize( &window );
 	input.Initialize( &window );

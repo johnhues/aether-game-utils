@@ -402,7 +402,7 @@ void EditorProgram::Initialize()
 	AE_INFO( "Editor Initialize (port: #)", params.port );
 
 	const ae::Array< ae::Screen, 16 > screens = ae::GetScreens();
-	window.Initialize( screens[ 0 ].position, screens[ 0 ].size.x, screens[ 0 ].size.y, true );
+	window.Initialize( screens[ 0 ].position, screens[ 0 ].size.x, screens[ 0 ].size.y, true, true );
 	window.SetMaximized( true );
 	render.Initialize( &window );
 	input.Initialize( &window );

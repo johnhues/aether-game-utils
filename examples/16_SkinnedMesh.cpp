@@ -95,7 +95,7 @@ int main()
 	ae::DebugCamera camera = ae::Axis::Y;
 	ae::DebugLines debugLines = TAG_ALL;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "16_SkinnedMesh" );
 	render.Initialize( &window );
 	input.Initialize( &window );

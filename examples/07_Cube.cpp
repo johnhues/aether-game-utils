@@ -35,7 +35,7 @@ int main()
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "Cube" );
 	render.Initialize( &window );
 	input.Initialize( &window );

@@ -76,7 +76,7 @@ int main()
   ae::SpriteRenderer spriteRender = TAG_EXAMPLE;
   ae::Shader spriteShader;
   
-  window.Initialize( 800, 600, false, true );
+  window.Initialize( 800, 600, false, true, true );
   window.SetTitle( "splines" );
   render.Initialize( &window );
   input.Initialize( &window );

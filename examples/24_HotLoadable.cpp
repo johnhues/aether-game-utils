@@ -53,7 +53,7 @@ uint16_t kTriangleIndices[] = { 0, 1, 2 };
 //------------------------------------------------------------------------------
 bool Game::Initialize()
 {
-	window.Initialize( 640, 480, false, true );
+	window.Initialize( 640, 480, false, true, true );
 	window.SetTitle( "Hot Load" );
 	render.Initialize( &window );
 	input.Initialize( &window );

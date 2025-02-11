@@ -53,7 +53,7 @@ int main()
 	ae::GraphicsDevice render;
 	ae::Input input;
 	ae::TimeStep timeStep;
-	window.Initialize( 1280, 720, false, true );
+	window.Initialize( 1280, 720, false, true, true );
 	window.SetTitle( "triangle" );
 	render.Initialize( &window );
 	input.Initialize( &window );

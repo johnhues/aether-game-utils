@@ -41,7 +41,7 @@ int main()
 	ae::Input input;
 	ae::TimeStep timeStep;
 	ae::DebugLines debug = TAG_EXAMPLE;
-	window.Initialize( 640, 640, false, true );
+	window.Initialize( 640, 640, false, true, true );
 	window.SetTitle( "Gamepad" );
 	render.Initialize( &window );
 	input.Initialize( &window );

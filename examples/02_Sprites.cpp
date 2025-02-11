@@ -75,7 +75,7 @@ int main()
 	ae::Shader spriteShader;
 
 	fileSystem.Initialize( "data", "ae", "sprites" );
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "sprites" );
 	render.Initialize( &window );
 	input.Initialize( &window );

@@ -48,7 +48,7 @@ int main()
 	ae::TimeStep timeStep;
 	
 	fileSystem.Initialize( DATA_DIR, "ae", "text_input" );
-	window.Initialize( 1280, 720, false, true );
+	window.Initialize( 1280, 720, false, true, true );
 	window.SetTitle( "example" );
 	render.Initialize( &window );
 	input.Initialize( &window );

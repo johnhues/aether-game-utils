@@ -46,7 +46,7 @@ class Game
 public:
   void Initialize()
   {
-    window.Initialize( 800, 600, false, true );
+    window.Initialize( 800, 600, false, true, true );
     render.Initialize( &window );
     debugLines.Initialize( 32 );
     input.Initialize( &window );

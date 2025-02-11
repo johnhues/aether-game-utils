@@ -99,7 +99,7 @@ int main()
 	ae::DebugLines gridLines = TAG_ALL;
 	aeImGui ui;
 
-	window.Initialize( 800, 600, false, true );
+	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "17_IK" );
 	window.SetAlwaysOnTop( ( ae::GetScreens().FindFn( []( const ae::Screen& s ){ return s.isExternal; } ) >= 0 ) && ae::IsDebuggerAttached() );
 	render.Initialize( &window );
