@@ -11460,7 +11460,7 @@ void BinaryStream::SerializeString( Str< N >& strInOut )
 		if( auto end = (const uint8_t*)memchr( reader->PeekReadData(), '\0', GetRemainingBytes() ) )
 		{
 			const uint32_t strLength = (uint32_t)( end - reader->PeekReadData() );
-			if( strLength < strInOut.MaxLength() )
+			if( strLength <= strInOut.MaxLength() )
 			{
 				strInOut = Str< N >( strLength, (const char*)reader->PeekReadData() );
 				reader->DiscardReadData( strLength + 1 );

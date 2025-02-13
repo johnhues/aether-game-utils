@@ -447,7 +447,7 @@ TEST_CASE( "C string test", "ae::BinaryStream" )
 	REQUIRE( rStream.GetRemainingBytes() == buffer.Length() );
 	char str[ sizeof("Hello, World!") ];
 	memset( str, 0xAB, sizeof(str) );
-	rStream.SerializeString( str, sizeof(str) );
+	rStream.SerializeString( str, sizeof(str) ); // Test reading into buffer with exact required size
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == sizeof("Hello, World!") );
 	REQUIRE( strcmp( str, "Hello, World!" ) == 0 );
@@ -557,6 +557,31 @@ TEST_CASE( "BinaryStream ae::Str serialization", "ae::BinaryStream" )
 	REQUIRE( rStream.IsValid() );
 	REQUIRE( rStream.GetOffset() == ( str.Length() + 1 ) * 2 );
 	REQUIRE( check == str );
+}
+
+TEST_CASE( "BinaryStream ae::Str serialization (max length)", "ae::BinaryStream" )
+{
+	const ae::Str16 check = "Hello, World!";
+	ae::Str16 str = check;
+	REQUIRE( str.Length() == str.MaxLength() );
+	ae::Array< uint8_t > buffer = TAG_TEST;
+
+	{
+		ae::BinaryWriter wStream( &buffer );
+		wStream.BinaryStream::SerializeString( str );
+		REQUIRE( wStream.IsValid() );
+		REQUIRE( wStream.GetOffset() == ( str.Length() + 1 ) );
+	}
+
+	str = "";
+
+	{
+		ae::BinaryReader rStream( buffer );
+		rStream.SerializeString( str );
+		REQUIRE( rStream.IsValid() );
+		REQUIRE( rStream.GetOffset() == ( str.Length() + 1 ) );
+		REQUIRE( check == str );
+	}
 }
 
 TEST_CASE( "Member serialize function should be successfully detected", "[ae::BinaryStream]" )
