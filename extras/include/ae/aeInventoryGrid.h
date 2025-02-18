@@ -2,7 +2,7 @@
 // aeInventoryGrid.h
 // 2D sparse grid which stores elements that occupy an arbitrary number of cells
 //------------------------------------------------------------------------------
-// Copyright (c) 2024 John Hughes
+// Copyright (c) 2025 John Hughes
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files( the "Software" ), to deal
