@@ -179,6 +179,7 @@
 #include <array> // @TODO: Remove. For _GetTypeName().
 #include <cassert>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -4859,6 +4860,13 @@ public:
 	//! mode with initialized with an ae::Array, but will otherwise stay
 	//! consistent across the lifetime of the stream.
 	uint32_t GetSize() const { return m_length; }
+
+	template< typename T > void SetUserData( T* userData );
+	template< typename T > T* GetUserData();
+
+	void* m_userData = nullptr;
+	uint32_t m_userDataTypeId = 0; // ae::TypeId
+	uint32_t m_userDataConstTypeId = 0; // ae::TypeId
 
 protected:
 	enum class Mode
@@ -11438,6 +11446,28 @@ const T* VertexArray::GetIndices() const
 //------------------------------------------------------------------------------
 // ae::BinaryStream member functions
 //------------------------------------------------------------------------------
+template< typename T >
+void BinaryStream::SetUserData( T* userData )
+{
+	m_userData = const_cast< void* >( reinterpret_cast< const void* >( userData ) );
+	m_userDataTypeId = std::is_const_v< T > ? 0 : ae::GetTypeId< T >(); // Don't allow removal of const with GetUserData()
+	m_userDataConstTypeId = ae::GetTypeId< const T >();
+}
+template< typename T >
+T* BinaryStream::GetUserData()
+{
+	const ae::TypeId returnTypeId = ae::GetTypeId< T >();
+	if( m_userDataTypeId == returnTypeId )
+	{
+		return reinterpret_cast< T* >( m_userData );
+	}
+	else if( m_userDataConstTypeId == returnTypeId )
+	{
+		return reinterpret_cast< T* >( m_userData );
+	}
+	return nullptr;
+}
+
 template< typename E >
 void BinaryStream::SerializeEnum( E& v )
 {
