@@ -711,13 +711,13 @@ float EditorProgram::GetAspectRatio() const
 
 EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
 {
-	AE_INFO( "Loading mesh... '#'", resourceId );
 	EditorServerMesh* mesh = m_meshes.Get( resourceId, nullptr );
 	if ( !mesh && params.functionPointers.loadMeshFn )
 	{
 		ae::Optional< ae::EditorMesh > temp = params.functionPointers.loadMeshFn( params.functionPointers.userData, resourceId );
 		if ( ae::EditorMesh* editorMesh = temp.TryGet() )
 		{
+			AE_INFO( "Loading mesh... '#'", resourceId );
 			mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
 			mesh->Initialize( editorMesh );
 			m_meshes.Set( resourceId, mesh );

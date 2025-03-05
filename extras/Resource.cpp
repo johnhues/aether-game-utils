@@ -35,6 +35,7 @@ AE_REGISTER_CLASS( ae, Resource );
 //------------------------------------------------------------------------------
 ae::ResourceManager::ResourceManager( const ae::Tag& tag ) :
 	m_tag( tag ),
+	m_files( tag ),
 	m_resources( tag )
 {}
 
@@ -50,16 +51,21 @@ void ae::ResourceManager::Initialize( ae::FileSystem* fileSystem )
 
 void ae::ResourceManager::Terminate()
 {
-	if ( m_fs )
+	if( m_fs )
 	{
-		for ( const auto& resource : m_resources )
+		for( const auto& resource : m_resources )
 		{
-			const ae::File* file = resource.value->m_file;
+			const ae::Object* params = resource.value->m_params;
 			resource.value->~Resource();
 			ae::Free( resource.value );
-			m_fs->Destroy( file );
+			ae::Delete( params );
 		}
 		m_resources.Clear();
+		for( const auto& file : m_files )
+		{
+			m_fs->Destroy( file.key );
+		}
+		m_files.Clear();
 		m_fs = nullptr;
 	}
 	else
@@ -68,68 +74,85 @@ void ae::ResourceManager::Terminate()
 	}
 }
 
-bool ae::ResourceManager::Add( const char* type, const char* name, ae::FileSystem::Root rootDir, const char* filePath )
+bool ae::ResourceManager::Add( const char* typeName, ResourceId id, ae::FileSystem::Root rootDir, const char* filePath )
 {
-	if( ae::Resource* resource = m_Register( type, name ) )
+	const ae::ClassType* type = ae::GetClassTypeByName( typeName );
+	if ( !type )
 	{
-		resource->m_file = m_fs->Read( rootDir, filePath, 1.0f );
-		AE_ASSERT( resource->m_file );
-		AE_INFO( "Queuing load '#'...", resource->m_file->GetUrl() );
+		AE_FAIL_MSG( "Unknown resource type '#'", typeName );
+		return false;
+	}
+	if( m_Register( type, id, rootDir, filePath ) )
+	{
+		AE_INFO( "Queuing load '#'...", filePath );
 		return true;
 	}
 	return false;
 }
 
-bool ae::ResourceManager::Add( const char* type, const char* name, const char* filePath )
+bool ae::ResourceManager::Add( const char* type, ResourceId id, const char* filePath )
 {
-	return Add( type, name, ae::FileSystem::Root::Data, filePath );
+	return Add( type, id, ae::FileSystem::Root::Data, filePath );
 }
 
 void ae::ResourceManager::Reload( const ae::Resource* _resource )
 {
 	ae::Resource* resource = const_cast< ae::Resource* >( _resource );
-	resource->m_isLoaded = false;
-	if( resource->m_file )
+	if( resource->m_path.Empty() )
 	{
-		const ae::Str256 url = resource->m_file->GetUrl();
-		m_fs->Destroy( resource->m_file );
-		resource->m_file = m_fs->Read( url.c_str(), 1.0f );
-		AE_ASSERT( resource->m_file );
+		m_resourcesToLoad.Append( resource->m_node );
+	}
+	else
+	{
+		const ae::File* file = m_fs->Read( resource->m_path.c_str(), 1.0f );
+		AE_ASSERT( file );
+		FileInfo* fileInfo = m_files.Get( file, nullptr );
+		if( !fileInfo )
+		{
+			fileInfo = m_files.Set( file, ae::New< FileInfo >( m_tag ) );
+		}
+		fileInfo->resources.Append( resource->m_node );
 	}
 }
 
 bool ae::ResourceManager::Load()
 {
-	bool allLoaded = true;
-	for( const auto& resource : m_resources )
+	for( ae::Resource* r = m_resourcesToLoad.GetFirst(); r; r = r->m_node.GetNext() )
 	{
-		const ae::File* file = resource.value->GetFile();
-		if( !resource.value->IsLoaded() && ( !file || file->GetStatus() == ae::File::Status::Success ) )
-		{
-			if( file )
-			{
-				AE_INFO( "Loading '#'...", file->GetUrl() );
-			}
-			resource.value->m_isLoaded = resource.value->Load();
-			if( file )
-			{
-				if( resource.value->m_isLoaded )
-				{
-					AE_INFO( "Loaded '#'", file->GetUrl() );
-				}
-				else
-				{
-					AE_WARN( "Failed to load '#'", file->GetUrl() );
-				}
-			}
-		}
+		r->m_isLoaded = r->Load( nullptr );
+	}
+	m_resourcesToLoad.Clear();
 
-		if ( !resource.value->IsLoaded() )
+	for( int32_t fileIdx = m_files.Length() - 1; fileIdx >= 0; fileIdx-- )
+	{
+		const ae::File* file = m_files.GetKey( fileIdx );
+		if( file->GetStatus() == ae::File::Status::Success )
 		{
-			allLoaded = false;
+			bool allLoaded = true;
+			AE_INFO( "Loading '#'...", file->GetUrl() );
+			FileInfo* fileInfo = m_files.GetValue( fileIdx );
+			for( ae::Resource* r = fileInfo->resources.GetFirst(); r; r = r->m_node.GetNext() )
+			{
+				r->m_isLoaded = r->Load( file );
+				if( !r->m_isLoaded )
+				{
+					allLoaded = false;
+				}
+			}
+			if( allLoaded )
+			{
+				AE_INFO( "Loaded '#'", file->GetUrl() );
+			}
+			else
+			{
+				AE_WARN( "Failed to load '#'", file->GetUrl() );
+			}
+			m_fs->Destroy( file );
+			m_files.RemoveIndex( fileIdx );
+			ae::Delete( fileInfo );
 		}
 	}
-	return allLoaded;
+	return !(bool)m_files.Length();
 }
 
 bool ae::ResourceManager::AnyPendingLoad() const
@@ -160,22 +183,22 @@ void ae::ResourceManager::HotLoad()
 	}
 }
 
-ae::Resource* ae::ResourceManager::m_Register( const char* type, const char* name )
+ae::Resource* ae::ResourceManager::m_Register( const ae::ClassType* resourceType, ResourceId id, ae::FileSystem::Root rootDir, const char* filePath )
 {
-	ae::Str64 key( name );
-	if ( m_resources.Get( key, nullptr ) )
+	if ( m_resources.Get( id, nullptr ) )
 	{
-		AE_FAIL_MSG( "Resource '#' already exists", name );
+		AE_FAIL_MSG( "Resource '#' already exists", id );
 		return nullptr;
 	}
-	const ae::ClassType* resourceType = ae::GetClassTypeByName( type );
-	if ( !resourceType )
-	{
-		AE_FAIL_MSG( "Unknown resource type '#'", type );
-		return nullptr;
-	}
+
 	ae::Resource* resource = (ae::Resource*)ae::Allocate( m_tag, resourceType->GetSize(), resourceType->GetAlignment() );
 	resourceType->New( resource );
-	m_resources.Set( key, resource );
+	m_resources.Set( id, resource );
+	if( filePath )
+	{
+		m_fs->GetAbsolutePath( rootDir, filePath, &resource->m_path );
+	}
+	Reload( resource );
+
 	return resource;
 }

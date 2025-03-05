@@ -31,6 +31,8 @@
 
 namespace ae {
 
+using ResourceId = ae::Str64;
+
 //------------------------------------------------------------------------------
 // ae::Resource class
 //------------------------------------------------------------------------------
@@ -38,8 +40,9 @@ class Resource : public ae::Inheritor< ae::Object, Resource >
 {
 public:
 	virtual ~Resource() {}
-	virtual bool Load() = 0;
-	const ae::File* GetFile() const { return m_file; }
+	virtual bool Load( const ae::File* file ) = 0;
+	template< typename T > const T* GetParams() const { return ae::Cast< T >( m_params ); }
+	const char* GetPath() const { return m_path.c_str(); }
 	bool IsLoaded() const { return m_isLoaded; }
 protected:
 	Resource() = default;
@@ -47,8 +50,10 @@ private:
 	friend class ResourceManager;
 	Resource( const Resource& ) = delete;
 	void operator=( const Resource& ) = delete;
-	const ae::File* m_file = nullptr;
+	const ae::Object* m_params = nullptr;
+	ae::ListNode< Resource > m_node = this;
 	bool m_isLoaded = false;
+	ae::Str256 m_path;
 };
 
 //------------------------------------------------------------------------------
@@ -66,27 +71,32 @@ public:
 	//! Adds a resource to be later loaded by Load(). After loading the resource
 	//! it can be accessed by the given \p name. The given \p filePath is relative
 	//! to \p rootDir.
-	bool Add( const char* type, const char* name, ae::FileSystem::Root rootDir, const char* filePath );
+	bool Add( const char* type, ResourceId id, ae::FileSystem::Root rootDir, const char* filePath );
 	//! Adds a resource to be later loaded by Load(). After loading the resource
 	//! it can be accessed by the given \p name. Prefer specifying a root directory.
-	bool Add( const char* type, const char* name, const char* filePath );
+	bool Add( const char* type, ResourceId id, const char* filePath );
+	//! ...
+	template< typename T, typename P > bool Add( ResourceId id, ae::FileSystem::Root rootDir, const char* filePath, const P& params );
+	//! ...
+	template< typename T, typename P > bool Add( ResourceId id, const char* filePath, const P& params );
 	//! Adds a manually loaded resource. ae::Resource::IsLoaded() will always
 	//! return true for this resource.
-	template< typename T > T* Add( const char* name );
+	template< typename T > T* Add( ResourceId id );
 	//! Reloads a resource that was previously added with Add().
 	void Reload( const ae::Resource* resource );
 
-	//! Loads all resources added with Add().
+	//! Loads all resources added with Add(). Returns true if there are no
+	//! resources pending load.
 	bool Load();
 	//! Returns true if any resources were added but have not yet loaded.
 	bool AnyPendingLoad() const;
 	
 	//! Returns a resource with the given \p name and type, or nullptr if it
 	//! does not exist.
-	template< typename T = ae::Resource > const T* TryGet( const char* name ) const;
+	template< typename T = ae::Resource > const T* TryGet( ResourceId id ) const;
 	//! Returns a resource with the given \p name and type, or asserts if it
 	//! does not exist.
-	template< typename T = ae::Resource > const T& Get( const char* name ) const;
+	template< typename T = ae::Resource > const T& Get( ResourceId id ) const;
 	//! Returns a resource with the given \p index, or null if the resource type
 	//! does not match. Null is returned if the index is out of bounds.
 	template< typename T = ae::Resource > const T* GetByIndex( uint32_t index );
@@ -97,25 +107,46 @@ public:
 	void HotLoad();
 	
 private:
-	Resource* m_Register( const char* type, const char* name );
+	struct FileInfo { ae::List< Resource > resources; };
+	Resource* m_Register( const ae::ClassType* resourceType, ResourceId id, ae::FileSystem::Root rootDir, const char* filePath );
 	const ae::Tag m_tag;
 	ae::FileSystem* m_fs = nullptr;
-	ae::Map< ae::Str64, Resource* > m_resources;
+	ae::Map< const ae::File*, FileInfo* > m_files;
+	ae::Map< ResourceId, Resource* > m_resources;
+	ae::List< Resource > m_resourcesToLoad; // Resources that aren't associated with a file
 };
 
 //------------------------------------------------------------------------------
 // ResourceManager member functions
 //------------------------------------------------------------------------------
 template< typename T >
-T* ResourceManager::Add( const char* name )
+T* ResourceManager::Add( ResourceId id )
 {
-	return (T*)m_Register( ae::GetTypeName< T >(), name );
+	return (T*)m_Register( ae::GetClassType< T >(), id, ae::FileSystem::Root::Data, "" );
+}
+
+template< typename T, typename P >
+bool ResourceManager::Add( ResourceId id, ae::FileSystem::Root rootDir, const char* filePath, const P& params )
+{
+	if( T* resource = (T*)m_Register( ae::GetClassType< T >(), id, rootDir, filePath ) )
+	{
+		resource->m_params = ae::New< P >( m_tag, params );
+		AE_INFO( "Queuing load '#'...", filePath );
+		return true;
+	}
+	return false;
+}
+
+template< typename T, typename P >
+bool ResourceManager::Add( ResourceId id, const char* filePath, const P& params )
+{
+	return Add< T >( id, ae::FileSystem::Root::Data, filePath, params );
 }
 
 template< typename T >
-const T* ResourceManager::TryGet( const char* name ) const
+const T* ResourceManager::TryGet( ResourceId id ) const
 {
-	const Resource* resource = m_resources.Get( name, nullptr );
+	const Resource* resource = m_resources.Get( id, nullptr );
 	if ( !resource )
 	{
 		return nullptr;
@@ -123,16 +154,16 @@ const T* ResourceManager::TryGet( const char* name ) const
 	const T* resourceT = ae::Cast< T >( resource );
 	if ( !resourceT )
 	{
-		AE_WARN( "Resource '#' does not match requested type '#'", name, ae::GetTypeName< T >() );
+		AE_WARN( "Resource '#' does not match requested type '#'", id, ae::GetTypeName< T >() );
 	}
 	return resourceT;
 }
 
 template< typename T >
-const T& ResourceManager::Get( const char* name ) const
+const T& ResourceManager::Get( ResourceId id ) const
 {
-	const T* resourceT = TryGet< T >( name );
-	AE_ASSERT_MSG( resourceT, "No resource '#' of type '#'", name, ae::GetTypeName< T >() );
+	const T* resourceT = TryGet< T >( id );
+	AE_ASSERT_MSG( resourceT, "No resource '#' of type '#'", id, ae::GetTypeName< T >() );
 	return *resourceT;
 }
 
