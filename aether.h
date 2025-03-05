@@ -104,6 +104,16 @@
 #endif
 
 //------------------------------------------------------------------------------
+// AE_MAX_SCRATCH_BYTES_CONFIG define
+//! The cumulative maximum bytes of all currently allocated ae::ScratchBuffers.
+//! Note that ae::ScratchBuffer memory is always released in the reverse order
+//! that it was allocated, so this limit should accomodate the worst case.
+//------------------------------------------------------------------------------
+#ifndef AE_MAX_SCRATCH_BYTES_CONFIG
+	#define AE_MAX_SCRATCH_BYTES_CONFIG ( 4 * 1024 *1024 )
+#endif
+
+//------------------------------------------------------------------------------
 // Platform defines
 //------------------------------------------------------------------------------
 #define _AE_IOS_ 0
@@ -406,7 +416,7 @@ public:
 	const T& GetSafe( int32_t index ) const;
 
 	//! The max cumulative size of the internal scratch stack
-	static const uint32_t kMaxScratchSize = 4 * 1024 * 1024;
+	static const uint32_t kMaxScratchSize = AE_MAX_SCRATCH_BYTES_CONFIG;
 
 private:
 	T* m_data;
@@ -6526,7 +6536,7 @@ Scratch< T >::Scratch( uint32_t count )
 	AE_DEBUG_ASSERT( ( (intptr_t)m_data % ae::_ScratchBuffer::kScratchAlignment ) == 0 );
 	m_prevOffsetCheck = globalScratch->offset;
 	globalScratch->offset += bytes;
-	AE_ASSERT_MSG( globalScratch->offset <= globalScratch->size, "Global scratch buffer size exceeded: # bytes / (# bytes)", globalScratch->offset, globalScratch->size );
+	AE_ASSERT_MSG( globalScratch->offset <= globalScratch->size, "Global scratch buffer size exceeded: # bytes / (# bytes). The global max can be set with AE_MAX_SCRATCH_BYTES_CONFIG.", globalScratch->offset, globalScratch->size );
 	
 #if _AE_DEBUG_
 	memset( m_data, 0xCD, m_size * sizeof(T) );
