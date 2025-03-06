@@ -119,7 +119,16 @@ bool ae::ResourceManager::Load()
 {
 	for( ae::Resource* r = m_resourcesToLoad.GetFirst(); r; r = r->m_node.GetNext() )
 	{
+		const ae::ClassType* type = ae::GetClassTypeFromObject( r );
 		r->m_isLoaded = r->Load( nullptr );
+		if( r->m_isLoaded )
+		{
+			AE_INFO( "Loaded #::#", type->GetName(), r->GetId() );
+		}
+		else
+		{
+			AE_WARN( "Failed to load #::#", type->GetName(), r->GetId() );
+		}
 	}
 	m_resourcesToLoad.Clear();
 
@@ -133,19 +142,25 @@ bool ae::ResourceManager::Load()
 			FileInfo* fileInfo = m_files.GetValue( fileIdx );
 			for( ae::Resource* r = fileInfo->resources.GetFirst(); r; r = r->m_node.GetNext() )
 			{
+				const ae::ClassType* type = ae::GetClassTypeFromObject( r );
 				r->m_isLoaded = r->Load( file );
-				if( !r->m_isLoaded )
+				if( r->m_isLoaded )
 				{
+					AE_INFO( "\t#::#", type->GetName(), r->GetId() );
+				}
+				else
+				{
+					AE_WARN( "\tFailed to load #::#", type->GetName(), r->GetId() );
 					allLoaded = false;
 				}
 			}
 			if( allLoaded )
 			{
-				AE_INFO( "Loaded '#'", file->GetUrl() );
+				AE_INFO( "\tSuccess", file->GetUrl() );
 			}
 			else
 			{
-				AE_WARN( "Failed to load '#'", file->GetUrl() );
+				AE_WARN( "\tFailed to load '#'", file->GetUrl() );
 			}
 			m_fs->Destroy( file );
 			m_files.RemoveIndex( fileIdx );
@@ -193,11 +208,12 @@ ae::Resource* ae::ResourceManager::m_Register( const ae::ClassType* resourceType
 
 	ae::Resource* resource = (ae::Resource*)ae::Allocate( m_tag, resourceType->GetSize(), resourceType->GetAlignment() );
 	resourceType->New( resource );
-	m_resources.Set( id, resource );
-	if( filePath )
+	resource->m_id = id;
+	if( filePath[ 0 ] )
 	{
 		m_fs->GetAbsolutePath( rootDir, filePath, &resource->m_path );
 	}
+	m_resources.Set( id, resource );
 	Reload( resource );
 
 	return resource;

@@ -42,14 +42,18 @@ public:
 	virtual ~Resource() {}
 	virtual bool Load( const ae::File* file ) = 0;
 	template< typename T > const T* GetParams() const { return ae::Cast< T >( m_params ); }
+
+	ResourceId GetId() const { return m_id; }
 	const char* GetPath() const { return m_path.c_str(); }
 	bool IsLoaded() const { return m_isLoaded; }
+
 protected:
 	Resource() = default;
 private:
 	friend class ResourceManager;
 	Resource( const Resource& ) = delete;
 	void operator=( const Resource& ) = delete;
+	ResourceId m_id;
 	const ae::Object* m_params = nullptr;
 	ae::ListNode< Resource > m_node = this;
 	bool m_isLoaded = false;
