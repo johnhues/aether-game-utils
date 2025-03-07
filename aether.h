@@ -23647,29 +23647,39 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	}
 
 	// Input
-	const bool modifier = input ? input->Get( ae::Key::LeftAlt ) : false;
-	const bool usingTouch = input ? input->mouse.usingTouch : false;
-	const bool lmb = input ? input->mouse.leftButton : false;
-	const bool mmb = input ? input->mouse.middleButton : false;
-	const bool rmb = input ? input->mouse.rightButton : false;
 	const ae::Vec2 movement = input ? ae::Vec2( input->mouse.movement ) : ae::Vec2( 0.0f );
 	const ae::Vec2 scroll = input ? input->mouse.scroll : ae::Vec2( 0.0f );
+	const bool alt = input ? input->Get( ae::Key::LeftAlt ) : false;
+	const bool shift = input ? input->Get( ae::Key::LeftShift ) : false;
+	const bool control = input ? input->Get( ae::Key::LeftControl ) : false;
+	const bool command = input ? input->Get( ae::Key::LeftSuper ) : false;
+	const bool modifier = input ? ( ( control || command ) && ( !control || !command ) ) : false; // Either but not both
+	const bool usingTouch = input ? input->mouse.usingTouch : false;
+	const bool lmb = ( input && !usingTouch ) ? input->mouse.leftButton : false;
+	const bool mmb = ( input && !usingTouch ) ? input->mouse.middleButton : false;
+	const bool rmb = ( input && !usingTouch ) ? input->mouse.rightButton : false;
+	const bool isTouching = usingTouch && ( input->mouse.leftButton || input->mouse.middleButton || input->mouse.rightButton );
+	const bool isTouchScrolling = usingTouch && scroll.LengthSquared();
 
 	// Update mode
 	Mode nextMode = m_mode;
-	if ( modifier && ( mmb || ( usingTouch && scroll.LengthSquared() ) ) )
-	{
-		nextMode = Mode::Pan;
-	}
-	else if ( modifier && lmb )
-	{
-		nextMode = Mode::Rotate;
-	}
-	else if ( modifier && rmb )
+	if( modifier && isTouchScrolling ) // It's possible to right click
 	{
 		nextMode = Mode::Zoom;
 	}
-	else if ( ( m_mode == Mode::Pan && mmb )
+	else if( ( alt && mmb ) || ( shift && isTouchScrolling ) )
+	{
+		nextMode = Mode::Pan;
+	}
+	else if( ( alt && lmb ) || isTouchScrolling )
+	{
+		nextMode = Mode::Rotate;
+	}
+	else if( alt && rmb )
+	{
+		nextMode = Mode::Zoom;
+	}
+	else if( ( m_mode == Mode::Pan && mmb )
 		|| ( m_mode == Mode::Rotate && lmb )
 		|| ( m_mode == Mode::Zoom && rmb ) )
 	{
@@ -23711,12 +23721,20 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	}
 	
 	// Rotation
-	if ( m_mode == Mode::Rotate )
+	if( m_mode == Mode::Rotate )
 	{
 		// Assume right handed coordinate system
 		// The focal point should move in the direction that the users hand is moving
-		m_yaw -= movement.x * 0.005f; // Positive horizontal input should result in clockwise rotation around the z axis
-		m_pitch += movement.y * 0.005f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
+		if( usingTouch )
+		{
+			m_yaw += scroll.x * 0.35f;
+			m_pitch += scroll.y * 0.35f;
+		}
+		else
+		{
+			m_yaw -= movement.x * 0.005f; // Positive horizontal input should result in clockwise rotation around the z axis
+			m_pitch += movement.y * 0.005f; // Positive vertical input should result in counter clockwise rotation around cameras right vector
+		}
 		m_pitch = ae::Clip( m_pitch, -ae::HALF_PI * 0.99f, ae::HALF_PI * 0.99f ); // Don't let camera flip
 	}
 
@@ -23724,15 +23742,22 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	float panSpeed = m_dist / 100.0f;
 
 	// Zoom
-	if ( m_mode == Mode::Zoom )
+	if( m_mode == Mode::Zoom )
 	{
-		m_dist += movement.y * 0.1f * zoomSpeed;
-		m_dist -= movement.x * 0.1f * zoomSpeed;
+		if( usingTouch )
+		{
+			m_dist -= scroll.y * 12.0f * zoomSpeed;
+			m_dist += scroll.x * 12.0f * zoomSpeed;
+		}
+		else
+		{
+			m_dist += movement.y * 0.1f * zoomSpeed;
+			m_dist -= movement.x * 0.1f * zoomSpeed;
+		}
 	}
-	// Don't zoom when scrolling with touch, that's reserved for panning
-	if ( !usingTouch || !modifier )
+	// Don't zoom when scrolling with touch
+	if ( !usingTouch )
 	{
-		m_pivot += m_right * ( scroll.x * panSpeed );
 		m_dist += scroll.y * 2.5f * zoomSpeed; // Natural scroll dir to match pan
 	}
 	m_dist = ae::Clip( m_dist, m_min, m_max );
@@ -23747,8 +23772,8 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	
 		if ( usingTouch )
 		{
-			m_pivot += m_right * ( scroll.x * panSpeed );
-			m_pivot -= m_up * ( scroll.y * panSpeed );
+			m_pivot -= m_right * ( scroll.x * 2.0f * panSpeed );
+			m_pivot += m_up * ( scroll.y * 2.0f * panSpeed );
 		}
 		else
 		{
