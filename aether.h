@@ -2590,25 +2590,26 @@ private:
 //------------------------------------------------------------------------------
 // ae::GetHash helper
 //------------------------------------------------------------------------------
-template <> inline uint32_t GetHash( const bool& value ) { return (uint32_t)value; }
-template <> inline uint32_t GetHash( const int8_t& value ) { return (uint32_t)value; }
-template <> inline uint32_t GetHash( const int16_t& value ) { return (uint32_t)value; }
-template <> inline uint32_t GetHash( const int32_t& value ) { return (uint32_t)value; }
-template <> inline uint32_t GetHash( const int64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template <> inline uint32_t GetHash( const uint8_t& value ) { return (uint32_t)value; }
-template <> inline uint32_t GetHash( const uint16_t& value ) { return (uint32_t)value; }
-template <> inline uint32_t GetHash( const uint32_t& value ) { return value; }
-template <> inline uint32_t GetHash( const uint64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template <> inline uint32_t GetHash( const float& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template <> inline uint32_t GetHash( const double& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template <> inline uint32_t GetHash( const char* const& value ) { return ae::Hash().HashString( value ).Get(); }
-template <> inline uint32_t GetHash( char* const& value ) { return ae::Hash().HashString( value ).Get(); }
-template <> inline uint32_t GetHash( const std::string& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
-template <> inline uint32_t GetHash( const ae::Hash& value ) { return value.Get(); }
-template <> inline uint32_t GetHash( const ae::Vec2& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template <> inline uint32_t GetHash( const ae::Vec3& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template <> inline uint32_t GetHash( const ae::Vec4& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template <> inline uint32_t GetHash( const ae::Matrix4& value ) { return ae::Hash().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const bool& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int8_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int16_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int32_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const uint8_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const uint16_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const uint32_t& value ) { return value; }
+template<> inline uint32_t GetHash( const uint64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const float& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const double& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const ae::Vec2& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const ae::Vec3& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const ae::Vec4& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const ae::Matrix4& value ) { return ae::Hash().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const char* const& value ) { return ae::Hash().HashString( value ).Get(); }
+template<> inline uint32_t GetHash( char* const& value ) { return ae::Hash().HashString( value ).Get(); }
+template< uint32_t N > inline uint32_t GetHash( const char (&value)[ N ] ) { return ae::Hash().HashString( value ).Get(); }
+template<> inline uint32_t GetHash( const std::string& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
+template<> inline uint32_t GetHash( const ae::Hash& value ) { return value.Get(); }
 
 //------------------------------------------------------------------------------
 // Log settings
@@ -10848,7 +10849,7 @@ ae::AABB BVH< T, N >::GetAABB() const
 //------------------------------------------------------------------------------
 // ae::GetHash helper
 //------------------------------------------------------------------------------
-template < typename T > uint32_t GetHash( T* const& value ) { return ae::Hash().HashBasicType( (uint64_t)value ).Get(); }
+template < typename T > uint32_t GetHash( T* const& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
 template < uint32_t N > uint32_t GetHash( const ae::Str< N >& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
