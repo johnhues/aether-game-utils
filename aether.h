@@ -3334,6 +3334,13 @@ public:
 	//! \p includeDot is true the returned string will include the first dot,
 	//! which can be useful for creating a substring of the file name.
 	static const char* GetFileExtFromPath( const char* filePath, bool includeDot = false );
+	//! Returns a range within \p filePath to the first section of a path. Eg.
+	//! "/User/Documents/file.txt" will allow the extraction of the directory
+	//! "User" by returning a pointer to both "User/Documents/file.txt" and
+	//! /Documents/file.txt". No exceptions are made for file names (ie. files
+	//! with a '.' in the name). The path can be separated by forward or
+	//! backward slashes.
+	static std::pair< const char*, const char* > TraversePath( const char* filePath );
 	static Str256 GetDirectoryFromPath( const char* filePath );
 	static void AppendToPath( Str256* path, const char* str );
 	//! Replaces the extension of the given path with \p ext. If the given path
@@ -19090,6 +19097,24 @@ const char* FileSystem::GetFileExtFromPath( const char* filePath, bool includeDo
 		uint32_t len = (uint32_t)strlen( fileName );
 		return fileName + len;
 	}
+}
+
+std::pair< const char*, const char* > FileSystem::TraversePath( const char* filePath )
+{
+	const char delimeters[] = "/\\";
+	const char* filePathEnd = filePath + strlen( filePath );
+	const char* start = filePath;
+	while( start[ 0 ] == delimeters[ 0 ] || start[ 0 ] == delimeters[ 1 ] )
+	{
+		start++;
+	}
+	const char* end = std::find_first_of(
+		start,
+		filePathEnd,
+		delimeters,
+		delimeters + 2
+	);
+	return std::make_pair( start, end );
 }
 
 Str256 FileSystem::GetDirectoryFromPath( const char* filePath )

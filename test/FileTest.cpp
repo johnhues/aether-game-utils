@@ -124,4 +124,23 @@ TEST_CASE( "Replace extension", "[ae::FileSystem]" )
 		REQUIRE( !ae::FileSystem::SetExtension( &dir, "cpp" ) );
 		REQUIRE( dir == "something/1.1.1999/test/" );
 	}
+
+	SECTION( "Traversal" )
+	{
+		auto require = []( std::pair< const char*, const char* > _result, const char* expected )
+		{
+			ae::Str256 result( _result.first, _result.second );
+			REQUIRE( result == expected );
+		};
+		require( ae::FileSystem::TraversePath( "Something/Else/level.obj" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/Something/Else/level.obj" ), "Something" );
+		require( ae::FileSystem::TraversePath( "///Something///Else/level.obj" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/Something" ), "Something" );
+		require( ae::FileSystem::TraversePath( "///Something" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/Something/" ), "Something" );
+		require( ae::FileSystem::TraversePath( "/level.obj" ), "level.obj" );
+		require( ae::FileSystem::TraversePath( "level.obj" ), "level.obj" );
+		require( ae::FileSystem::TraversePath( "/" ), "" );
+		require( ae::FileSystem::TraversePath( "" ), "" );
+	}
 }
