@@ -27197,7 +27197,12 @@ uint32_t ae::ClassVar::GetArrayMaxLength() const
 //------------------------------------------------------------------------------
 ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 {
-	return obj ? obj->_metaTypeId : ae::kInvalidTypeId;
+	if( obj )
+	{
+		AE_DEBUG_ASSERT_MSG( obj->_metaTypeId, "Object has no meta type, it's possible this object has not been constructed." );
+		return obj->_metaTypeId;
+	}
+	return ae::kInvalidTypeId;
 }
 
 ae::TypeId ae::GetTypeIdFromName( const char* name )
