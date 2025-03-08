@@ -2516,7 +2516,7 @@ public:
 	void Clear();
 	
 	//! Returns the aabb that contains all node aabbs
-	ae::AABB GetAABB() const;
+	ae::Optional< ae::AABB > GetAABB() const;
 	//! Returns the root node or null if ae::BVH::AddNodes() has not been called yet.
 	const BVHNode* GetRoot() const;
 	//! Get the node at \p nodeIdx. Corresponds to ae::BVHNode::parentIdx,
@@ -4472,7 +4472,7 @@ public:
 	RaycastResult Raycast( const RaycastParams& params, const RaycastResult& prevResult = RaycastResult() ) const;
 	PushOutInfo PushOut( const PushOutParams& params, const PushOutInfo& prevInfo ) const;
 	// @TODO: GetClosestPoint()
-	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
+	ae::Optional< ae::AABB > GetAABB() const { return m_bvh.GetAABB(); }
 	
 	const ae::Vec3* GetVertices() const { return m_vertices.Data(); }
 	const uint32_t* GetIndices() const { return (uint32_t*)m_tris.Data(); }
@@ -10848,9 +10848,13 @@ const BVHLeaf< T >* BVH< T, N >::TryGetLeaf( int32_t leafIdx ) const
 }
 
 template < typename T, uint32_t N >
-ae::AABB BVH< T, N >::GetAABB() const
+ae::Optional< ae::AABB > BVH< T, N >::GetAABB() const
 {
-	return GetRoot()->aabb;
+	if( const BVHNode* root = GetRoot() )
+	{
+		return root->aabb;
+	}
+	return {};
 }
 
 //------------------------------------------------------------------------------
