@@ -151,6 +151,7 @@ private:
 	const ae::File* m_pendingLevel = nullptr;
 	ae::Socket m_sock;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
+	ae::Map< ae::Entity, bool > m_editorEntities;
 };
 
 } // end ae namespace

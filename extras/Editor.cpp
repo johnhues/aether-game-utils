@@ -764,7 +764,8 @@ void ae::EditorMesh::Load( const ae::OBJFile& file )
 //------------------------------------------------------------------------------
 Editor::Editor( const ae::Tag& tag ) :
 	m_tag( tag ),
-	m_sock( tag )
+	m_sock( tag ),
+	m_editorEntities( tag )
 {
 	AE_ASSERT( m_tag != ae::Tag() );
 }
@@ -889,13 +890,18 @@ void Editor::Update()
 				rStream.SerializeString( varValue );
 				if( rStream.IsValid() )
 				{
-					if( const ae::ClassType* type = ae::GetClassTypeById( typeId ) )
+					// Make sure the entity being modified was created by the
+					// editor, and is not just another game entity with the same id
+					if( m_editorEntities.TryGet( entity ) )
 					{
-						if( ae::Component* component = m_params->registry->TryGetComponent( entity, type ) )
+						if( const ae::ClassType* type = ae::GetClassTypeById( typeId ) )
 						{
-							if( const ae::ClassVar* var = type->GetVarByName( varName.c_str(), true ) )
+							if( ae::Component* component = m_params->registry->TryGetComponent( entity, type ) )
 							{
-								var->SetObjectValueFromString( component, varValue.c_str() );
+								if( const ae::ClassVar* var = type->GetVarByName( varName.c_str(), true ) )
+								{
+									var->SetObjectValueFromString( component, varValue.c_str() );
+								}
 							}
 						}
 					}
@@ -977,9 +983,12 @@ void Editor::m_Read()
 		m_params->functionPointers.onLevelLoadStartFn( m_params->functionPointers.userData, m_pendingLevel->GetUrl() );
 	}
 
+	// Clear previous level
+	m_editorEntities.Clear();
+
 	// State for loading
 	ae::Array< const ae::ClassType* > prereqs = m_tag;
-	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag; 
+	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
 	const auto& jsonObjects = document[ "objects" ];
 
 	// Create all components
@@ -989,6 +998,10 @@ void Editor::m_Read()
 		const ae::Matrix4 entityTransform = ae::FromString< ae::Matrix4 >( jsonObject[ "transform" ].GetString(), ae::Matrix4::Identity() );
 		const ae::Entity jsonEntity = jsonObject[ "id" ].GetUint();
 		const ae::Entity entity = m_params->registry->CreateEntity( jsonEntity, entityName );
+		
+		// Record which entities have been created by the editor
+		m_editorEntities.Set( entity, true );
+		
 		if( entity != jsonEntity )
 		{
 			entityMap.Set( jsonEntity, entity );
