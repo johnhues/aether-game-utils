@@ -622,16 +622,6 @@ void EditorProgram::Run()
 
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse || ImGuizmo::IsOver() );
 		camera.Update( &input, GetDt() );
-		
-		if ( ImGui::Begin( "Dev" ) )
-		{
-			editor.ShowUI( this );
-			ImGui::End();
-		}
-		if ( const ImGuiWindow* imWin = ImGui::FindWindowByName( "Dev" ) )
-		{
-			m_barWidth = imWin->Size.x * ImGui::GetIO().DisplayFramebufferScale.x;
-		}
 
 		ae::Int2 oldSize( m_gameTarget.GetWidth(), m_gameTarget.GetHeight() );
 		ae::Int2 targetSize = GetRenderRect().GetSize();
@@ -669,6 +659,16 @@ void EditorProgram::Run()
 			worldPos = m_projToWorld * worldPos;
 			worldPos /= worldPos.w;
 			m_mouseRay = ( worldPos.GetXYZ() - camera.GetPosition() ).SafeNormalizeCopy();
+		}
+
+		if ( ImGui::Begin( "Dev" ) )
+		{
+			editor.ShowUI( this );
+			ImGui::End();
+		}
+		if ( const ImGuiWindow* imWin = ImGui::FindWindowByName( "Dev" ) )
+		{
+			m_barWidth = imWin->Size.x * ImGui::GetIO().DisplayFramebufferScale.x;
 		}
 		
 		if ( !editor.GetObjectCount() )
