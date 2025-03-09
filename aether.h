@@ -6939,20 +6939,24 @@ inline bool RandomBool( uint64_t* seed )
 
 inline int32_t Random( int32_t minInclusive, int32_t maxExclusive, uint64_t* seed )
 {
+	// Before check so random call count is not based on params
+	const uint32_t r = ae::_Random( seed );
 	if ( minInclusive >= maxExclusive )
 	{
 		return minInclusive;
 	}
-	return minInclusive + ( ae::_Random( seed ) % ( maxExclusive - minInclusive ) );
+	return minInclusive + ( r % ( maxExclusive - minInclusive ) );
 }
 
 inline float Random( float min, float max, uint64_t* seed )
 {
+	// Before check so random call count is not based on params
+	const uint32_t r = ae::_Random( seed );
 	if ( min >= max )
 	{
 		return min;
 	}
-	return min + ( ( ae::_Random( seed ) / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
+	return min + ( ( r / (float)ae::MaxValue< uint32_t >() ) * ( max - min ) );
 }
 
 //------------------------------------------------------------------------------
