@@ -177,7 +177,7 @@ public:
 		m_meshResourceVars( tag ),
 		m_meshVisibleVars( tag ),
 		m_typeMesh( tag ),
-		m_typeInvisible( tag ),
+		m_typeTransparent( tag ),
 		m_connections( tag )
 	{}
 	void Initialize( class EditorProgram* program );
@@ -191,7 +191,7 @@ public:
 	void OpenLevel( class EditorProgram* program, const char* path );
 	void Unload( class EditorProgram* program );
 	
-	bool GetShowInvisible() const { return m_showInvisible; }
+	bool GetShowTransparent() const { return m_showTransparent; }
 	
 	EditorServerObject* CreateObject( ae::Entity entity, const ae::Matrix4& transform, const char* name );
 	void DestroyObject( ae::Entity entity );
@@ -224,9 +224,8 @@ private:
 	bool m_ShowVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var );
 	bool m_ShowVarValue( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
 	bool m_ShowRefVar( class EditorProgram* program, ae::Object* component, const ae::ClassVar* var, int32_t idx = -1 );
-	ae::Entity m_PickObject( class EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut );
-	void m_ShowEditorObject( EditorProgram* program, ae::Entity entity, ae::Color color );
-	ae::Color m_GetColor( ae::Entity entity, bool lines ) const;
+	ae::Entity m_PickObject( class EditorProgram* program, ae::Vec3* hitOut, ae::Vec3* normalOut );
+	ae::Color m_GetColor( ae::Entity entity, bool objectLineColor ) const;
 	void m_LoadLevel( class EditorProgram* program );
 	
 	const ae::Tag m_tag;
@@ -235,7 +234,7 @@ private:
 	ae::Str256 m_levelPath;
 	const ae::File* m_pendingLevel = nullptr;
 
-	bool m_showInvisible = false;
+	bool m_showTransparent = true;
 
 	// Manipulation
 	const ae::ClassType* m_objectListType = nullptr;
@@ -252,17 +251,26 @@ private:
 	ae::Map< ae::Entity, EditorServerObject* > m_objects;
 	ae::Registry m_registry;
 
-	// Configuration
+	// Type information
 	ae::Map< const ae::ClassType*, const ae::ClassVar* > m_meshResourceVars;
 	ae::Map< const ae::ClassType*, const ae::ClassVar* > m_meshVisibleVars;
 	ae::Map< const ae::ClassType*, ae::Str32 > m_typeMesh;
-	ae::Map< const ae::ClassType*, bool > m_typeInvisible;
-	
+	ae::Map< const ae::ClassType*, bool > m_typeTransparent;
+
+	// UI configuration
+	ae::Color m_selectionColor = ae::Color::PicoOrange();
+	float m_objectHue = 3.7f;
+	float m_objectHueRange = 0.3f;
+	float m_objectSaturation = 1.0f;
+	float m_objectSaturationRange = 0.0f;
+	float m_objectValue = 0.6f;
+	float m_objectValueRange = 0.3f;
+
 	// Connection to client
 	double m_nextHeartbeat = 0.0;
 	ae::Array< EditorConnection* > m_connections;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
-	
+
 	// Selection
 	struct SelectRef
 	{
@@ -601,16 +609,16 @@ void EditorProgram::Run()
 
 		input.Pump();
 		ui.NewFrame( &render, &input, GetDt() );
-		ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
+		const ImGuiID mainDockSpace = ImGui::DockSpaceOverViewport( ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode );
 		static bool s_once = true;
-		static ImGuiID dock_left_id;
 		if ( s_once )
 		{
-			dock_left_id = ImGui::DockBuilderSplitNode( mainDockSpace, ImGuiDir_Left, 0.2f, nullptr, &mainDockSpace );
-			ImGui::DockBuilderDockWindow( "Dev", dock_left_id );
-			
-			ImGuiDockNode* node = ImGui::DockBuilderGetNode( dock_left_id );
-			node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+			const ImGuiID dockTopId = ImGui::DockBuilderSplitNode( mainDockSpace, ImGuiDir_Left, 0.2f, nullptr, nullptr );
+			ImGui::DockBuilderDockWindow( "Dev", dockTopId );
+			ImGui::DockBuilderGetNode( dockTopId )->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+			const ImGuiID dockBottomId = ImGui::DockBuilderSplitNode( dockTopId, ImGuiDir_Down, 0.2f, nullptr, nullptr );
+			ImGui::DockBuilderDockWindow( "Settings", dockBottomId );
+			ImGui::DockBuilderGetNode( dockBottomId )->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
 			
 			s_once = false;
 		}
@@ -1172,10 +1180,10 @@ void EditorServer::Initialize( EditorProgram* program )
 			m_typeMesh.Set( type, type->GetPropertyValue( typeMeshIdx, 0 ) );
 		}
 		
-		int32_t typeInvisibleIdx = type->GetPropertyIndex( "ae_type_invisible" );
-		if ( typeInvisibleIdx >= 0 )
+		int32_t typeTransparentIdx = type->GetPropertyIndex( "ae_type_transparent" );
+		if ( typeTransparentIdx >= 0 )
 		{
-			m_typeInvisible.Set( type, true );
+			m_typeTransparent.Set( type, true );
 		}
 	}
 
@@ -1385,7 +1393,7 @@ void EditorServer::Render( EditorProgram* program )
 		{
 			float distanceSq = ( camPos - obj->GetTransform().GetTranslation() ).LengthSquared();
 			if ( obj->mesh && obj->opaque ) { opaqueObjects.Append( { obj, distanceSq } ); }
-			else if ( obj->mesh && GetShowInvisible() ) { transparentObjects.Append( { obj, distanceSq } ); }
+			else if ( obj->mesh && GetShowTransparent() ) { transparentObjects.Append( { obj, distanceSq } ); }
 			else { logicObjects.Append( { obj, distanceSq } ); }
 		}
 	}
@@ -1453,7 +1461,7 @@ void EditorServer::Render( EditorProgram* program )
 	for ( const RenderObj& renderObj : transparentObjects )
 	{
 		const EditorServerObject& obj = *renderObj.obj;
-		ae::Color color = m_GetColor( obj.entity, false ).ScaleA( 0.5f );
+		ae::Color color = m_GetColor( obj.entity, false ).ScaleA( 0.4f );
 		renderMesh( renderObj, color );
 	}
 }
@@ -1461,7 +1469,18 @@ void EditorServer::Render( EditorProgram* program )
 void EditorServer::ShowUI( EditorProgram* program )
 {
 	const float dt = program->GetDt();
-	const ae::Color cursorColor = ae::Color::PicoOrange();
+
+	if( ImGui::Begin( "Settings" ) )
+	{
+		ImGui::ColorEdit3( "Selection", m_selectionColor.data );
+		ImGui::SliderFloat( "Hue", &m_objectHue, 0.0f, ae::TwoPi );
+		ImGui::SliderFloat( "Hue Range", &m_objectHueRange, 0.0f, ae::TwoPi );
+		ImGui::SliderFloat( "Saturation", &m_objectSaturation, 0.0f, 1.0f );
+		ImGui::SliderFloat( "Saturation Range", &m_objectSaturationRange, 0.0f, 1.0f );
+		ImGui::SliderFloat( "Value", &m_objectValue, 0.0f, 1.0f );
+		ImGui::SliderFloat( "Value Range", &m_objectValueRange, 0.0f, 1.0f );
+		ImGui::End();
+	}
 	
 	if( program->camera.GetMode() != ae::DebugCamera::Mode::None || ImGui::GetIO().WantCaptureMouse )
 	{
@@ -1603,13 +1622,17 @@ void EditorServer::ShowUI( EditorProgram* program )
 		
 		if( doPickingHover )
 		{
-			m_hoverEntities.Append( m_PickObject( program, cursorColor, &m_mouseHover, &m_mouseHoverNormal ) );
+			const ae::Entity hoverEntity = m_PickObject( program, &m_mouseHover, &m_mouseHoverNormal );
+			if( hoverEntity )
+			{
+				m_hoverEntities.Append( hoverEntity );
+			}
 		}
 		else if( m_boxSelectStart )
 		{
 			const ImVec2 selectMin = ImVec2( ae::Min( m_boxSelectStart->x, mousePos.x ), ae::Min( m_boxSelectStart->y, mousePos.y ) );
 			const ImVec2 selectMax = ImVec2( ae::Max( m_boxSelectStart->x, mousePos.x ), ae::Max( m_boxSelectStart->y, mousePos.y ) );
-			const ae::Vec3 fColor = ae::Color::PicoOrange().GetLinearRGB() * 255.0f;
+			const ae::Vec3 fColor = m_selectionColor.GetLinearRGB() * 255.0f;
 			ImGui::GetBackgroundDrawList()->AddRect( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 255 ), 1.0f, ImDrawCornerFlags_All, 1.5f );
 			ImGui::GetBackgroundDrawList()->AddRectFilled( selectMin, selectMax, IM_COL32( fColor.x, fColor.y, fColor.z, 100 ), 1.0f, ImDrawCornerFlags_All );
 		}
@@ -1644,37 +1667,75 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGui::EndPopup();
 	}
 	
-	if( m_selected.Length() )
+	// Debug lines
+	ae::Optional< ae::Vec3 > gridLineCenter;
+	const ae::Vec3 pivot = program->camera.GetPivot();
 	{
-		const ae::AABB selectedAABB = GetSelectedAABB( program );
-		program->debugLines.AddAABB( selectedAABB.GetCenter(), selectedAABB.GetHalfSize(), ae::Color::PicoOrange() );
-		for ( ae::Entity entity : m_selected )
+		const float distance = program->camera.GetDistanceFromPivot();
+		const ae::Vec3 showPivot = pivot - program->camera.GetForward() * ( distance / 1000.0f );
+		program->debugLines.AddSphere( showPivot, distance / 55.0f, m_selectionColor, 4 );
+		for( int i = -10; i <= 10; i++ )
 		{
-			m_ShowEditorObject( program, entity, m_GetColor( entity, true ) );
+			const ae::Color gridColor = m_selectionColor.SetA( ae::Delerp01( 60.0f, 50.0f, distance ) );
+			program->debugLines.AddLine( showPivot + ae::Vec3( i, -10, 0 ), showPivot + ae::Vec3( i, 10, 0 ), gridColor );
+			program->debugLines.AddLine( showPivot + ae::Vec3( -10, i, 0 ), showPivot + ae::Vec3( 10, i, 0 ), gridColor );
 		}
+	}
+	if ( m_selected.Length() )
+	{
+		const ae::Vec3 center = GetSelectedAABB( program ).GetCenter();
+		const float distance = ( program->camera.GetPosition() - center ).Length();
+		gridLineCenter = center - program->camera.GetForward() * ( distance / 1000.0f);
 	}
 	if( m_hoverEntities.Length() )
 	{
-		program->debugLines.AddCircle( m_mouseHover + m_mouseHoverNormal * 0.025f, m_mouseHoverNormal, 0.5f, cursorColor, 8 );
-		for( Entity hoverEntity : m_hoverEntities )
+		const float distance = ( program->camera.GetPosition() - m_mouseHover ).Length();
+		const ae::Vec3 pushOut = ( m_mouseHoverNormal * distance ) / 1000.0f;
+		const ae::Vec3 mousePoint = m_mouseHover + pushOut;
+		program->debugLines.AddCircle( mousePoint, m_mouseHoverNormal, distance / 55.0f, m_selectionColor, 4 );
+		if( !m_selected.Length() )
 		{
-			if( m_selected.Find( hoverEntity ) < 0 )
+			gridLineCenter = mousePoint;
+		}
+	}
+	if( ae::Vec3* gridCenter = gridLineCenter.TryGet() )
+	{
+		const float lineLength = 500.0f;
+		program->debugLines.AddLine( *gridCenter + ae::Vec3( lineLength, 0, 0 ), *gridCenter - ae::Vec3( lineLength, 0, 0 ), ae::Color::Red() );
+		program->debugLines.AddLine( *gridCenter + ae::Vec3( 0, lineLength, 0 ), *gridCenter - ae::Vec3( 0, lineLength, 0 ), ae::Color::Green() );
+		program->debugLines.AddLine( *gridCenter + ae::Vec3( 0, 0, lineLength ), *gridCenter - ae::Vec3( 0, 0, lineLength ), ae::Color::Blue() );
+
+		const ae::Vec3 cursorClosestToGrid( pivot.x, pivot.y, gridCenter->z );
+		program->debugLines.AddLine( pivot, cursorClosestToGrid, m_selectionColor );
+		program->debugLines.AddLine( *gridCenter, cursorClosestToGrid, m_selectionColor );
+	}
+	if( m_selected.Length() )
+	{
+		const ae::AABB selectedAABB = GetSelectedAABB( program );
+		program->debugLines.AddAABB( selectedAABB.GetCenter(), selectedAABB.GetHalfSize(), m_selectionColor );
+	}
+	for ( ae::Pair< ae::Entity, EditorServerObject* > pair : m_objects )
+	{
+		const ae::Color color = m_GetColor( pair.key, true );
+		const EditorServerObject* editorObj = m_objects.Get( pair.key );
+		if ( color.a && editorObj && !editorObj->hidden )
+		{
+			if ( editorObj->mesh )
 			{
-				m_ShowEditorObject( program, hoverEntity, ae::Color::PicoOrange() ); // m_GetColor( hoverEntity, true )
+				const ae::VertexBuffer* meshData = &editorObj->mesh->data;
+				ae::Matrix4 transform = editorObj->GetTransform();
+				uint32_t vertexCount = editorObj->mesh->vertices.Length();
+				ae::EditorServerMesh::Vertex* verts = editorObj->mesh->vertices.Data();
+				program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, transform, color );
+			}
+			else
+			{
+				ae::Vec3 pos = editorObj->GetTransform().GetTranslation();
+				ae::Vec3 normal = program->camera.GetPosition() - pos;
+				program->debugLines.AddCircle( pos, normal, 0.475f, color, 16 );
 			}
 		}
 	}
-	if( uiHoverEntity && m_selected.Find( uiHoverEntity ) < 0 )
-	{
-		m_ShowEditorObject( program, uiHoverEntity, ae::Color::PicoOrange() ); // m_GetColor( hoverEntity, true )
-	}
-	
-	ae::Vec3 debugRefocus( 0.0f );
-	program->debugLines.AddSphere( program->camera.GetPivot(), 0.1f, ae::Color::PicoOrange(), 6 );
-//	if ( program->camera->GetDebugRefocusTarget( &debugRefocus ) )
-//	{
-//		program->debugLines.AddSphere( debugRefocus, 0.1f, ae::Color::PicoOrange(), 6 );
-//	}
 	
 	if ( ImGui::GetIO().WantCaptureKeyboard )
 	{
@@ -1757,7 +1818,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 	}
 	else if ( program->input.Get( ae::Key::I ) && !program->input.GetPrev( ae::Key::I ) )
 	{
-		m_showInvisible = !m_showInvisible;
+		m_showTransparent = !m_showTransparent;
 	}
 	// Action shortcuts
 	else if ( ( program->input.Get( ae::Key::Delete ) && !program->input.GetPrev( ae::Key::Delete ) )
@@ -1769,13 +1830,13 @@ void EditorServer::ShowUI( EditorProgram* program )
 		}
 		m_selected.Clear();
 	}
-	else if ( program->input.Get( ae::Key::F ) && !program->input.GetPrev( ae::Key::F ) )
+	else if ( program->input.Get( ae::Key::F ) )
 	{
-		if ( m_selected.Length() )
+		if ( m_selected.Length() && program->input.Get( ae::Key::Control ) )
 		{
 			program->camera.Refocus( GetSelectedAABB( program ).GetCenter() );
 		}
-		else if( m_hoverEntities.Length() )
+		else if( m_hoverEntities.Length() && !program->input.Get( ae::Key::Control ) )
 		{
 			program->camera.Refocus( m_mouseHover );
 		}
@@ -1946,7 +2007,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			gizmoMode = ImGuizmo::LOCAL;
 		}
-		ImGui::Checkbox( "Show Invisible", &m_showInvisible );
+		ImGui::Checkbox( "Show Transparent", &m_showTransparent );
 		
 		ImGui::TreePop();
 	}
@@ -2282,7 +2343,7 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 		{
 			obj->mesh = program->GetMesh( meshName.c_str() );
 		}
-		if ( m_typeInvisible.Get( type, false ) )
+		if ( m_typeTransparent.Get( type, false ) )
 		{
 			obj->opaque = false;
 		}
@@ -2965,7 +3026,7 @@ bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, a
 //------------------------------------------------------------------------------
 // EditorPicking functions
 //------------------------------------------------------------------------------
-ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, ae::Vec3* hitOut, ae::Vec3* normalOut )
+ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut, ae::Vec3* normalOut )
 {
 	ae::Vec3 mouseRay = program->GetMouseRay();
 	ae::Vec3 mouseRaySrc = program->camera.GetPosition();
@@ -2983,7 +3044,7 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, 
 		const EditorServerObject* editorObj = m_objects.GetValue( i );
 		if( !editorObj->hidden )
 		{
-			if ( editorObj->mesh && ( editorObj->opaque || GetShowInvisible() ) )
+			if ( editorObj->mesh && ( editorObj->opaque || GetShowTransparent() ) )
 			{
 				raycastParams.userData = editorObj;
 				raycastParams.transform = editorObj->GetTransform();
@@ -3021,47 +3082,47 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Color color, 
 	return kInvalidEntity;
 }
 
-void EditorServer::m_ShowEditorObject( EditorProgram* program, ae::Entity entity, ae::Color color )
+ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) const
 {
-	if ( entity )
-	{
-		const EditorServerObject* editorObj = m_objects.Get( entity );
-		// if( editorObj->hidden )
-		// {
-		// 	return;
-		// }
-		// else
-		if ( editorObj->mesh )
-		{
-			const ae::VertexBuffer* meshData = &editorObj->mesh->data;
-			ae::Matrix4 transform = editorObj->GetTransform();
-			uint32_t vertexCount = editorObj->mesh->vertices.Length();
-			ae::EditorServerMesh::Vertex* verts = editorObj->mesh->vertices.Data();
-			program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, transform, color );
-		}
-		else
-		{
-			ae::Vec3 pos = editorObj->GetTransform().GetTranslation();
-			ae::Vec3 normal = program->camera.GetPosition() - pos;
-			program->debugLines.AddCircle( pos, normal, 0.475f, color, 16 );
-		}
-	}
-}
-
-ae::Color EditorServer::m_GetColor( ae::Entity entity, bool lines ) const
-{
+	const bool isHovered = ( m_hoverEntities.Find( entity ) >= 0 );
 	const bool isSelected = ( m_selected.Find( entity ) >= 0 );
 	uint64_t seed = entity * 43313;
-	ae::Color color = ae::Color::HSV( ae::Random( 0.0f, 1.0f, &seed ), 0.5, 0.75 );
-	if ( isSelected && lines )
+	// @TODO: This is isn't working properly when the range is two pi
+	const float hueMin = m_objectHue - m_objectHueRange * 0.5f;
+	const float hueMax = m_objectHue + m_objectHueRange * 0.5f;
+	const float hue = ae::Mod( ae::Random( hueMin, hueMax, &seed ), ae::TwoPi ) / ae::TwoPi;
+	const float saturationMin = ae::Clip01( m_objectSaturation - m_objectSaturationRange * 0.5f );
+	const float saturationMax = ae::Clip01( m_objectSaturation + m_objectSaturationRange * 0.5f );
+	const float saturation = ae::Random( saturationMin, saturationMax, &seed );
+	const float valueMin = ae::Clip01( m_objectValue - m_objectValueRange * 0.5f );
+	const float valueMax = ae::Clip01( m_objectValue + m_objectValueRange * 0.5f );
+	const float value = ae::Random( m_objectValue, m_objectValueRange, &seed );
+	if( objectLineColor )
 	{
-		color = ae::Color::PicoOrange();
+		const ae::Color baseColor = ae::Color::HSV( hue, 1.0f, 1.0f );
+		if( isHovered )
+		{
+			return m_selectionColor;
+		}
+		return baseColor.SetA( isSelected ? 1.0f : 0.0f );
 	}
-	else if ( isSelected )
+	else
 	{
-		color = color.Lerp( ae::Color::PicoOrange(), 0.75f );
+		const ae::Color baseColor = ae::Color::HSV( hue, saturation, value );
+		if( isHovered && isSelected )
+		{
+			return m_selectionColor;
+		}
+		else if ( isSelected )
+		{
+			return baseColor.Lerp( m_selectionColor, 0.65f );
+		}
+		else if( isHovered )
+		{
+			return baseColor.Lerp( m_selectionColor, 0.35f );
+		}
+		return baseColor;
 	}
-	return color;
 }
 
 void GetComponentTypePrereqs( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs )

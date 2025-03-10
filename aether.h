@@ -23795,7 +23795,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	if ( m_refocus )
 	{
 		AE_ASSERT( m_mode != Mode::Pan );
-		m_pivot = ae::DtLerp( m_pivot, 4.0f, dt, m_refocusPos );
+		m_pivot = ae::DtLerp( m_pivot, 2.5f, dt, m_refocusPos );
 		if ( ( m_refocusPos - m_pivot ).Length() < 0.01f )
 		{
 			m_refocus = false;
@@ -23883,7 +23883,10 @@ bool DebugCamera::GetRefocusTarget( ae::Vec3* targetOut ) const
 	{
 		return false;
 	}
-	*targetOut = m_refocusPos;
+	if( targetOut )
+	{
+		*targetOut = m_refocusPos;
+	}
 	return true;
 }
 
