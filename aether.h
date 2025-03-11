@@ -5897,7 +5897,19 @@ public:
 	virtual ae::ConstDataPointer TryGet( ae::ConstDataPointer map, ae::ConstDataPointer key ) const = 0;
 
 	//! Current number of map elements
-	virtual uint32_t GetLength( ae::ConstDataPointer a ) const = 0;
+	virtual uint32_t GetLength( ae::ConstDataPointer map ) const = 0;
+	//! Get the key at the given index. Keys are always const because
+	//! modification would require re-indexing. Returns null if the index is out
+	//! of bounds.
+	virtual ae::ConstDataPointer GetKey( ae::ConstDataPointer map, uint32_t index ) const = 0;
+	//! Returns a const pointer to the value at the given index. Returns null if
+	//! the index is out of bounds.
+	virtual ae::ConstDataPointer GetValue( ae::ConstDataPointer map, uint32_t index ) const = 0;
+	//! Returns a pointer to the value at the given index. The value can be
+	//! safely modified with this pointer. Returns null if the index is out of
+	//! bounds.
+	virtual ae::DataPointer GetValue( ae::DataPointer map, uint32_t index ) const = 0;
+	
 	//! Return uint max for no hard limit
 	virtual uint32_t GetMaxLength() const = 0;
 
@@ -12256,6 +12268,36 @@ struct ae::TypeT< ae::Map< K, V, N > > : public ae::MapType
 	{
 		const MapType* map = static_cast< const MapType* >( _map.Get( this ) );
 		return map ? map->Length() : 0;
+	}
+
+	ae::ConstDataPointer GetKey( ae::ConstDataPointer _map, uint32_t index ) const override
+	{
+		const MapType* map = static_cast< const MapType* >( _map.Get( this ) );
+		if( map && map->Length() > index )
+		{
+			return { GetKeyVarType(), &map->GetKey( index ) };
+		}
+		return {};
+	}
+
+	ae::ConstDataPointer GetValue( ae::ConstDataPointer _map, uint32_t index ) const override
+	{
+		const MapType* map = static_cast< const MapType* >( _map.Get( this ) );
+		if( map && map->Length() > index )
+		{
+			return { GetValueVarType(), &map->GetValue( index ) };
+		}
+		return {};
+	}
+
+	ae::DataPointer GetValue( ae::DataPointer _map, uint32_t index ) const override
+	{
+		MapType* map = static_cast< MapType* >( _map.Get( this ) );
+		if( map && map->Length() > index )
+		{
+			return { GetValueVarType(), &map->GetValue( index ) };
+		}
+		return {};
 	}
 
 	uint32_t GetMaxLength() const override

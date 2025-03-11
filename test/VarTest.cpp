@@ -162,4 +162,44 @@ TEST_CASE( "MapType", "[aeMeta]" )
 		REQUIRE( _map.Get( "Something1000" ) == 1000 );
 		REQUIRE( _map.Get( "Something1001" ) == 1101 );
 	}
+
+}
+
+TEST_CASE( "MapType Iteration", "[aeMeta]" )
+{
+	ae::Map< ae::Str32, int32_t, 4 > _map;
+	_map.Set( "Something1000", 1000 );
+	_map.Set( "Something1001", 1001 );
+	_map.Set( "Something1002", 1002 );
+	_map.Set( "Something1003", 1003 );
+
+	ae::DataPointer map( &_map );
+	ae::ConstDataPointer constMap( &_map );
+	const ae::MapType* mapVarType = map.GetVarType().AsVarType< ae::MapType >();
+	REQUIRE( mapVarType );
+
+	const int32_t mapLength = mapVarType->GetLength( map );
+	REQUIRE( mapLength == 4 );
+
+	for( int32_t i = 0; i < mapLength; i++ )
+	{
+		const ae::Str32 actualKey = _map.GetKey( i );
+		const int32_t actualValue = _map.GetValue( i );
+		
+		ae::ConstDataPointer constKey = mapVarType->GetKey( constMap, i );
+		ae::ConstDataPointer constValue = mapVarType->GetValue( constMap, i );
+		REQUIRE( *reinterpret_cast< const ae::Str32* >( constKey.Get() ) == actualKey );
+		REQUIRE( *reinterpret_cast< const int32_t* >( constValue.Get() ) == actualValue );
+		
+		ae::DataPointer value = mapVarType->GetValue( map, i );
+		REQUIRE( *reinterpret_cast< int32_t* >( value.Get() ) == actualValue );
+	}
+
+	REQUIRE( mapVarType->GetKey( constMap, -1 ) == ae::ConstDataPointer() );
+	REQUIRE( mapVarType->GetValue( constMap, -1 ) == ae::ConstDataPointer() );
+	REQUIRE( mapVarType->GetValue( map, -1 ) == ae::DataPointer() );
+	
+	REQUIRE( mapVarType->GetKey( constMap, mapLength ) == ae::ConstDataPointer() );
+	REQUIRE( mapVarType->GetValue( constMap, mapLength ) == ae::ConstDataPointer() );
+	REQUIRE( mapVarType->GetValue( map, mapLength ) == ae::DataPointer() );
 }
