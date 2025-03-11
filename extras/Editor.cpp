@@ -1097,11 +1097,7 @@ ae::OBB EditorServerObject::GetOBB( EditorProgram* program ) const
 	const ae::Matrix4& transform = GetTransform();
 	if( mesh )
 	{
-		const ae::Optional< ae::AABB > aabb = mesh->collision.GetAABB();
-		if( aabb.TryGet() )
-		{
-			return ae::OBB( transform * aabb.TryGet()->GetTransform() );
-		}
+		return ae::OBB( transform * mesh->collision.GetAABB().GetTransform() );
 	}
 	return ae::OBB( transform );
 
