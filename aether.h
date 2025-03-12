@@ -12226,7 +12226,7 @@ struct ae::TypeT< ae::Map< K, V, N > > : public ae::MapType
 			if( const K* key = static_cast< const K* >( _key.Get( &GetKeyVarType() ) ) )
 			{
 				V* value = map->TryGet( *key );
-				if( !value && map->Length() < map->Size() )
+				if( !value && ( ( N == 0 ) || ( map->Length() < map->Size() ) ) )
 				{
 					value = &map->Set( *key, {} );
 				}
