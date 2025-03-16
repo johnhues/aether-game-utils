@@ -4406,6 +4406,7 @@ struct RaycastResult
 struct PushOutParams
 {
 	ae::Matrix4 transform = ae::Matrix4::Identity();
+	const void* userData = nullptr;
 	ae::DebugLines* debug = nullptr; // Draw collision results
 	ae::Color debugColor = ae::Color::Red();
 };
@@ -4593,7 +4594,6 @@ public:
 	const Bone* AddBone( const Bone* parent, const char* name, const ae::Matrix4& localTransform );
 	void SetLocalTransforms( const Bone** targets, const ae::Matrix4* localTransforms, uint32_t count );
 	void SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform );
-	void SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count );
 	void SetTransform( const Bone* target, const ae::Matrix4& transform );
 	
 	const Bone* GetRoot() const;
@@ -4689,12 +4689,13 @@ const uint32_t kMaxSkinWeights = 4;
 class Skin
 {
 public:
+	//! ae::SkinVertex has no constructor, so take care to initialize all member variables
 	struct Vertex
 	{
 		ae::Vec3 position;
 		ae::Vec3 normal;
 		uint16_t bones[ kMaxSkinWeights ];
-		uint8_t weights[ kMaxSkinWeights ] = { 0 };
+		uint8_t weights[ kMaxSkinWeights ];
 	};
 	
 	Skin( const ae::Tag& tag ) : m_bindPose( tag ), m_verts( tag ) {}
@@ -24464,6 +24465,11 @@ void Skeleton::Initialize( const Skeleton* otherPose )
 	Initialize( otherPose->GetBoneCount() );
 	
 	const void* beginCheck = m_bones.Data();
+	ae::Bone* root = &m_bones[ 0 ];
+	const ae::Bone* otherRoot = otherPose->GetRoot();
+	root->transform = otherRoot->transform;
+	root->localTransform = otherRoot->localTransform;
+	root->inverseTransform = otherRoot->inverseTransform;
 	for ( uint32_t i = 1; i < otherPose->m_bones.Length(); i++ ) // Skip root
 	{
 		const ae::Bone& otherBone = otherPose->m_bones[ i ];
@@ -24533,40 +24539,32 @@ void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* loca
 	}
 }
 
-void Skeleton::SetTransforms( const Bone** targets, const ae::Matrix4* transforms, uint32_t count )
+void Skeleton::SetTransform( const Bone* _target, const ae::Matrix4& transform )
 {
-	if ( !count )
+	const intptr_t index = ( _target - m_bones.Data() );
+	AE_ASSERT( index >= 0 && index < m_bones.Length() );
+	ae::Bone* target = &m_bones[ index ];
+	target->transform = transform;
+	target->inverseTransform = transform.GetInverse();
+	if( !target->parent )
 	{
-		return;
+		target->localTransform = transform;
 	}
-	
-	for ( uint32_t i = 0; i < count; i++ )
+	else
 	{
-		ae::Bone* bone = const_cast< ae::Bone* >( targets[ i ] );
-		AE_ASSERT_MSG( bone, "Null bone passed to skeleton when setting transforms" );
-		AE_ASSERT_MSG( m_bones.begin() <= bone && bone < m_bones.end(), "Transform target '#' is not part of this skeleton", bone->name );
-		bone->transform = transforms[ i ];
-		bone->inverseTransform = bone->transform.GetInverse();
+		target->localTransform = target->parent->inverseTransform * transform;
 	}
-	
-	m_bones[ 0 ].transform = m_bones[ 0 ].localTransform;
-	for ( uint32_t i = 1; i < m_bones.Length(); i++ )
+	for( uint32_t i = index + 1; i < m_bones.Length(); i++ )
 	{
 		ae::Bone* bone = &m_bones[ i ];
-		AE_ASSERT( bone->parent );
-		AE_ASSERT( bone->parent < bone );
-		bone->localTransform = bone->parent->inverseTransform * bone->transform;
+		bone->transform = bone->parent->transform * bone->localTransform;
+		bone->inverseTransform = bone->transform.GetInverse();
 	}
 }
 
 void Skeleton::SetLocalTransform( const Bone* target, const ae::Matrix4& localTransform )
 {
 	SetLocalTransforms( &target, &localTransform, 1 );
-}
-
-void Skeleton::SetTransform( const Bone* target, const ae::Matrix4& transform )
-{
-	SetTransforms( &target, &transform, 1 );
 }
 
 const Bone* Skeleton::GetRoot() const
@@ -24992,7 +24990,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 	*finalTransform = targetTransform;
 	// @TODO: Maintain the old bones scale
 	finalTransform->SetTranslation( bones[ bones.Length() - 1 ].pos );
-	poseOut->SetTransforms( outBones.Data(), outTransforms.Data(), chain.Length() );
+
+	for( uint32_t i = 0; i < chain.Length(); i++ )
+	{
+		poseOut->SetTransform( poseOut->GetBoneByIndex( chain[ i ] ), outTransforms[ i ] );
+	}
 }
 
 //------------------------------------------------------------------------------

@@ -224,11 +224,11 @@ int main()
 	ae::Matrix4 targetTransform, testJoint0, testJoint1;
 	auto SetDefault = [&]()
 	{
-		targetTransform = skeletonTransform * skin.GetBindPose().GetBoneByName( rightHandBoneName )->transform;
-		testJoint0 = testJoint0Bind;
-		testJoint1 = testJoint1Bind;
 		currentPose.Initialize( &skin.GetBindPose() );
 		currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
+		targetTransform = currentPose.GetBoneByName( rightHandBoneName )->transform;
+		testJoint0 = testJoint0Bind;
+		testJoint1 = testJoint1Bind;
 	};
 	SetDefault();
 	ImGuizmo::OPERATION gizmoOperation = ImGuizmo::TRANSLATE;
