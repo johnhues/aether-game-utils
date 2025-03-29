@@ -29,6 +29,7 @@
 //------------------------------------------------------------------------------
 #include <atomic>
 #include <map>
+#include <type_traits>
 #include "aether.h"
 #include "ae/aeCompactingAllocator.h"
 #include "ae/aeImage.h"
@@ -224,6 +225,7 @@ public:
   bool m_dirty = false;
   ae::AABB m_aabbPrev;
 };
+template<> inline uint32_t GetHash( const Sdf::Type& value ) { return (std::underlying_type_t< Sdf::Type >)value; }
 
 //------------------------------------------------------------------------------
 // SdfBox class
