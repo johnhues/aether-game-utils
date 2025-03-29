@@ -27387,11 +27387,11 @@ std::string ae::BasicType::GetVarDataAsString( ae::ConstDataPointer _varData ) c
 		case BasicType::Vec4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Vec4* >( varData ) ).c_str();
 		case BasicType::Matrix4: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Matrix4* >( varData ) ).c_str();
 		case BasicType::Color: return ae::Str256::Format( "#", *reinterpret_cast< const ae::Color* >( varData ) ).c_str();
-		case BasicType::Class: AE_FAIL(); // @TODO: Remove
-		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
-		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
-		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
-		case BasicType::None: AE_FAIL(); // @TODO: Remove
+		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
 	}
 	return "";
 }
@@ -27564,11 +27564,11 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
 			return true;
 		}
-		case BasicType::Class: AE_FAIL(); // @TODO: Remove
-		case BasicType::Enum: AE_FAIL(); // @TODO: Remove
-		case BasicType::Pointer: AE_FAIL(); // @TODO: Remove
-		case BasicType::CustomRef: AE_FAIL(); // @TODO: Remove
-		case BasicType::None: AE_FAIL(); // @TODO: Remove
+		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::Enum: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::Pointer: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::CustomRef: AE_FAIL(); break; // @TODO: Remove
+		case BasicType::None: AE_FAIL(); break; // @TODO: Remove
 	}
 	return false;
 }

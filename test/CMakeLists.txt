@@ -57,4 +57,4 @@ list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/contrib)
 include(Catch)
 catch_discover_tests(test)
 
-add_subdirectory(Attributes)
+add_subdirectory(attributes)
