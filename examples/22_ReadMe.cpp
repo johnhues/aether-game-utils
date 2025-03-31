@@ -36,20 +36,16 @@ int main()
 	ae::PushOutInfo player;
 	player.sphere.radius = 0.7f;
 	player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
-	float angle = 0.0f;
-	float angularVel = 0.0f;
+	float yaw = 0.0f;
+	float pitch = 0.0f;
 
 	auto Update = [&]()
 	{
 		const float dt = ae::Min( timeStep.GetDt(), 0.03f );
 		input.Pump();
-		if( input.GetPress( ae::Key::F ) )
-		{
-			window.SetFullScreen( !window.GetFullScreen() );
-		}
 
-		// Async load for web
-		if ( geoFile && geoFile->GetStatus() == ae::File::Status::Success )
+		// Async resource loading for web
+		if( geoFile && geoFile->GetStatus() == ae::File::Status::Success )
 		{
 			ae::OBJFile obj = TAG_RESOURCE;
 			obj.Load( geoFile->GetData(), geoFile->GetLength() );
@@ -57,7 +53,7 @@ int main()
 			obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
 			geoFile = nullptr;
 		}
-		if ( textureFile && textureFile->GetStatus() == ae::File::Status::Success )
+		if( textureFile && textureFile->GetStatus() == ae::File::Status::Success )
 		{
 			ae::TargaFile tga = TAG_RESOURCE;
 			tga.Load( textureFile->GetData(), textureFile->GetLength() );
@@ -67,29 +63,33 @@ int main()
 
 		graphicsDevice.Activate();
 		graphicsDevice.Clear( ae::Color::White() );
-		if ( fileSystem.GetFileStatusCount( ae::File::Status::Success ) == fileSystem.GetFileCount() )
+		if( fileSystem.GetFileStatusCount( ae::File::Status::Success ) == fileSystem.GetFileCount() )
 		{
 			// Input
-			const ae::Vec3 forward( -cosf( angle ), 0.0f, sinf( angle ) );
-			const ae::Vec2 mouse = ( ae::Vec2( input.mouse.position ) / window.GetWidth() ) - ae::Vec2( 0.5f, 0.15f );
-			if ( input.Get( ae::Key::Up ) || ( input.mouse.leftButton && mouse.y > 0.1f ) ) { player.velocity += forward * dt * 20.0f; }
-			if ( input.Get( ae::Key::Down ) || ( input.mouse.leftButton && mouse.y < -0.1f ) ) { player.velocity -= forward * dt * 20.0f; }
-			if ( input.Get( ae::Key::Left ) || ( input.mouse.leftButton && mouse.x < -0.2f ) ) { angularVel += dt * 10.0f; }
-			if ( input.Get( ae::Key::Right ) || ( input.mouse.leftButton && mouse.x > 0.2f ) ) { angularVel -= dt * 10.0f; }
-			if ( input.Get( ae::Key::Meta ) && input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); }
-
+			const ae::Vec3 forward( -cosf( yaw ) * cosf( pitch ), sinf( pitch ), sinf( yaw ) * cosf( pitch ) );
+			const ae::Vec3 right( forward.z, 0.0f, -forward.x );
+			if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
+			if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); }
+			if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
+			if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch = ae::Clip( pitch + input.mouse.movement.y * 0.001f, -1.5f, 1.5f ); }
+			ae::Vec3 accel = ae::Vec3( 0.0f );
+			if( input.Get( ae::Key::W ) ) { accel += forward; }
+			if( input.Get( ae::Key::A ) ) { accel += right; }
+			if( input.Get( ae::Key::S ) ) { accel -= forward; }
+			if( input.Get( ae::Key::D ) ) { accel -= right; }
+			accel = accel.SafeNormalizeCopy() * ( input.Get( ae::Key::Shift ) ? 30.0f : 10.0f );
+			
 			// Physics
+			player.velocity += accel * dt;
 			player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
-			angularVel = ae::DtLerp( angularVel, 3.5f, dt, 0.0f );
 			player.velocity.y -= dt * 20.0f;
 			player.sphere.center += player.velocity * dt;
-			angle += angularVel * dt;
 			player = collisionMesh.PushOut( ae::PushOutParams(), player );
 			ae::RaycastParams raycastParams;
 			raycastParams.source = player.sphere.center;
 			raycastParams.ray = ae::Vec3( 0, player.sphere.radius * -1.1f, 0 );
 			ae::RaycastResult r = collisionMesh.Raycast( raycastParams );
-			if ( r.hits.Length() )
+			if( r.hits.Length() )
 			{
 				player.sphere.center = r.hits[ 0 ].position +  ae::Vec3( 0, player.sphere.radius * 1.1f, 0 );
 				player.velocity.y = ae::Max( 0.0f, player.velocity.y );
@@ -113,7 +113,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 
 	// Terminate
