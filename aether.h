@@ -3079,6 +3079,20 @@ struct GamepadState // @TODO: Rename Gamepad
 };
 
 //------------------------------------------------------------------------------
+// ae::Touch struct
+//------------------------------------------------------------------------------
+struct Touch
+{
+	uint32_t id = 0;
+	// @TODO: Should these be ints to match mouse input?
+	ae::Vec2 startPosition = ae::Vec2( 0.0f );
+	ae::Vec2 position = ae::Vec2( 0.0f );
+	ae::Vec2 movement = ae::Vec2( 0.0f );
+};
+const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
+using TouchArray = ae::Array< ae::Touch, ae::kMaxTouches >;
+
+//------------------------------------------------------------------------------
 // ae::Input class
 //------------------------------------------------------------------------------
 class Input
@@ -3138,6 +3152,23 @@ public:
 	inline bool GetGamepadPressDown( uint32_t idx = 0 ) const { return gamepads[ idx ].down && !gamepadsPrev[ idx ].down; }
 	inline bool GetGamepadPressLeft( uint32_t idx = 0 ) const { return gamepads[ idx ].left && !gamepadsPrev[ idx ].left; }
 	inline bool GetGamepadPressRight( uint32_t idx = 0 ) const { return gamepads[ idx ].right && !gamepadsPrev[ idx ].right; }
+
+	//! Returns an active touch with the given \p id or nullptr if it does not
+	//! exist
+	const ae::Touch* GetTouchById( uint32_t id ) const;
+	//! Returns a touch that was just released with the given \p id or nullptr
+	//! if it does not exist
+	const ae::Touch* GetFinishedTouchById( uint32_t id ) const;
+	//! Returns all touches that have stated since the last ae::Input::Pump()
+	//! call
+	ae::TouchArray GetNewTouches() const;
+	//! Returns all touches that have been released since the last
+	//! ae::Input::Pump() call
+	ae::TouchArray GetFinishedTouches() const;
+	//! Returns all touches that are currently active
+	const ae::TouchArray& GetTouches() const;
+	//! Returns all touches that were active in the previous frame
+	const ae::TouchArray& GetPreviousTouches() const;
 	
 	MouseState mouse;
 	MouseState mousePrev;
@@ -3167,6 +3198,11 @@ public:
 	float m_leftAnalogThreshold = 0.1f;
 	float m_rightAnalogThreshold = 0.1f;
 	bool m_gamepadRequiresFocus = true;
+	// Touch
+	ae::TouchArray m_touches;
+	ae::TouchArray m_touchesPrev;
+	uint32_t m_touchIndex = 0; // 0 is invalid
+	// Emscripten
 	bool newFrame_HACK = false;
 };
 
@@ -7380,7 +7416,7 @@ inline Vec3::Vec3( struct Int3 i3 ) : x( (float)i3.x ), y( (float)i3.y ), z( (fl
 inline Vec3::Vec3( Vec2 xy, float z ) : x( xy.x ), y( xy.y ), z( z ), pad( 0.0f ) {}
 inline Vec3::Vec3( Vec2 xy ) : x( xy.x ), y( xy.y ), z( 0.0f ), pad( 0.0f ) {}
 inline Vec3::operator Vec2() const { return Vec2( x, y ); }
-inline Vec3 XZY( Vec2 xz, float y ) { return Vec3( xz.x, y, xz.y ); }
+inline Vec3 Vec3::XZY( Vec2 xz, float y ) { return Vec3( xz.x, y, xz.y ); }
 inline void Vec3::SetXY( Vec2 xy ) { x = xy.x; y = xy.y; }
 inline void Vec3::SetXZ( Vec2 xz ) { x = xz.x; z = xz.y; }
 inline Vec2 Vec3::GetXY() const { return Vec2( x, y ); }
@@ -16900,6 +16936,11 @@ void _aeEmscriptenTryNewFrame( Input* input )
 		memcpy( input->m_keysPrev, input->m_keys, sizeof(input->m_keys) );
 		input->mousePrev = input->mouse;
 		input->mouse.movement = ae::Int2( 0 );
+		input->m_touchesPrev = input->m_touches;
+		for( ae::Touch& touch : input->m_touches )
+		{
+			touch.movement = ae::Vec2( 0.0f );
+		}
 		input->newFrame_HACK = false;
 	}
 }
@@ -17029,22 +17070,63 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 	Input* input = (Input*)userData;
 	_aeEmscriptenTryNewFrame( input );
 
-	AE_ASSERT( touchEvent->numTouches );
-	const EmscriptenTouchPoint* touch = touchEvent->touches;
-	ae::Vec2 pos = ae::Vec2( touch->targetX, touch->targetY ) / input->m_window->GetScaleFactor();
-	pos.y = input->m_window->GetHeight() - pos.y;
-	input->m_SetMousePos( pos.FloorCopy() );
-
-	switch ( eventType )
+	for( uint32_t i = 0; i < touchEvent->numTouches; i++ )
 	{
-		case EMSCRIPTEN_EVENT_TOUCHSTART:
-			input->mouse.leftButton = true;
-			break;
-		case EMSCRIPTEN_EVENT_TOUCHEND:
-			input->mouse.leftButton = false;
-			break;
-		default:
-			break;
+		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
+		if( emTouch->isChanged )
+		{
+			ae::Vec2 pos = ae::Vec2( emTouch->targetX, emTouch->targetY );
+			pos.y = input->m_window->GetHeight() - pos.y;
+			pos.FloorCopy();
+			switch( eventType )
+			{
+				case EMSCRIPTEN_EVENT_TOUCHSTART:
+				{
+					if( input->m_touches.Length() < input->m_touches.Size() )
+					{
+						ae::Touch* touch = &input->m_touches.Append( {} );
+						touch->id = emTouch->identifier;
+						touch->startPosition = pos;
+						touch->position = pos;
+					}
+					// AE_INFO( "_aeEmscriptenHandleTouch idx:# start: # len:#", i, emTouch->identifier, input->m_touches.Length() );
+					break;
+				}
+				case EMSCRIPTEN_EVENT_TOUCHEND:
+				{
+					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
+					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
+					// AE_INFO( "_aeEmscriptenHandleTouch idx:# end: # len:#", i, emTouch->identifier, input->m_touches.Length() );
+					break;
+				}
+				case EMSCRIPTEN_EVENT_TOUCHCANCEL:
+				{
+					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
+					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
+					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
+					if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
+					// AE_INFO( "_aeEmscriptenHandleTouch idx:# cancel: # len:#", i, emTouch->identifier, input->m_touches.Length() );
+					break;
+				}
+				case EMSCRIPTEN_EVENT_TOUCHMOVE:
+				{
+					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
+					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
+					if( touchIdx >= 0 )
+					{
+						input->m_touches[ touchIdx ].position = pos;
+						if( prevTouchIdx >= 0 )
+						{
+							input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
+						}
+					}
+					// AE_INFO( "_aeEmscriptenHandleTouch idx:# move: # len:#", i, emTouch->identifier, input->m_touches.Length() );
+					break;
+				}
+				default:
+					break;
+			}
+		}
 	}
 
 	return true;
@@ -17134,6 +17216,11 @@ void Input::Pump()
 	mousePrev = mouse;
 	mouse.movement = ae::Int2( 0 );
 	mouse.scroll = ae::Vec2( 0.0f );
+	m_touchesPrev = m_touches;
+	for( ae::Touch& touch : m_touches )
+	{
+		touch.movement = ae::Vec2( 0.0f );
+	}
 #endif
 	m_textInput = ""; // Clear last frames text input
 
@@ -18040,12 +18127,70 @@ void Input::SetTextMode( bool enabled )
 
 bool Input::Get( ae::Key key ) const
 {
-	return m_keys[ static_cast< int >( key ) ];
+	const bool result = m_keys[ static_cast< int >( key ) ];
+#if _AE_EMSCRIPTEN_ && _AE_DEBUG_
+	if( key == ae::Key::Escape && result && !GetPrev( key ) )
+	{
+		AE_WARN( "The escape key is reserved in browsers to release the cursor and exit fullscreen" );
+	}
+#endif
+	return result;
 }
 
 bool Input::GetPrev( ae::Key key ) const
 {
 	return m_keysPrev[ static_cast< int >( key ) ];
+}
+
+const ae::Touch* Input::GetTouchById( uint32_t id ) const
+{
+	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+	return ( touchIdx >= 0 ) ? &m_touches[ touchIdx ] : nullptr;
+}
+
+const ae::Touch* Input::GetFinishedTouchById( uint32_t id ) const
+{
+	const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+	const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == id; } );
+	return ( touchIdx < 0 && prevTouchIdx >= 0 ) ? &m_touchesPrev[ prevTouchIdx ] : nullptr;
+}
+
+ae::TouchArray Input::GetNewTouches() const
+{
+	ae::TouchArray result;
+	for( const ae::Touch& touch : m_touches )
+	{
+		const int32_t prevTouchIdx = m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
+		if( prevTouchIdx < 0 )
+		{
+			result.Append( touch );
+		}
+	}
+	return result;
+}
+
+ae::TouchArray Input::GetFinishedTouches() const
+{
+	ae::TouchArray result;
+	for( const ae::Touch& touch : m_touchesPrev )
+	{
+		const int32_t touchIdx = m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == touch.id; } );
+		if( touchIdx < 0 )
+		{
+			result.Append( touch );
+		}
+	}
+	return result;
+}
+
+const ae::TouchArray& Input::GetTouches() const
+{
+	return m_touches;
+}
+
+const ae::TouchArray& Input::GetPreviousTouches() const
+{
+	return m_touchesPrev;
 }
 
 void Input::m_SetMousePos( ae::Int2 pos )

@@ -38,6 +38,8 @@ int main()
 	player.sphere.center = ae::Vec3( 0.0f, player.sphere.radius, 0.0f );
 	float yaw = 0.0f;
 	float pitch = 0.0f;
+	uint32_t moveTouchId = 0;
+	uint32_t lookTouchId = 0;
 
 	auto Update = [&]()
 	{
@@ -65,22 +67,48 @@ int main()
 		graphicsDevice.Clear( ae::Color::White() );
 		if( fileSystem.GetFileStatusCount( ae::File::Status::Success ) == fileSystem.GetFileCount() )
 		{
-			// Input
+			// Misc input
+			const ae::Array< ae::Touch, ae::kMaxTouches > newTouches = input.GetNewTouches();
+			const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
 			const ae::Vec3 forward( -cosf( yaw ) * cosf( pitch ), sinf( pitch ), sinf( yaw ) * cosf( pitch ) );
 			const ae::Vec3 right( forward.z, 0.0f, -forward.x );
 			if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
 			if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); }
 			if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
-			if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch = ae::Clip( pitch + input.mouse.movement.y * 0.001f, -1.5f, 1.5f ); }
-			ae::Vec3 accel = ae::Vec3( 0.0f );
-			if( input.Get( ae::Key::W ) ) { accel += forward; }
-			if( input.Get( ae::Key::A ) ) { accel += right; }
-			if( input.Get( ae::Key::S ) ) { accel -= forward; }
-			if( input.Get( ae::Key::D ) ) { accel -= right; }
-			accel = accel.SafeNormalizeCopy() * ( input.Get( ae::Key::Shift ) ? 30.0f : 10.0f );
+			if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
+
+			// Camera input
+			const ae::Touch* lookTouch = input.GetTouchById( lookTouchId );
+			const ae::Touch* moveTouch = input.GetTouchById( moveTouchId );
+			if( !lookTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return moveTouch || ( t.startPosition.x >= window.GetWidth() / 2.0f ); } ); if( idx >= 0 ) { lookTouchId = newTouches[ idx ].id; } }
+			yaw -= input.gamepads[ 0 ].rightAnalog.x * 2.0f * dt;
+			pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
+			if( lookTouch )
+			{
+				const ae::Vec2 touchDir = lookTouch->movement / ( displaySize * 0.35f );
+				yaw -= touchDir.x;
+				pitch += touchDir.y;
+			}
+			pitch = ae::Clip( pitch, -1.0f, 1.0f );
+			
+			// Movement input
+			if( !moveTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return t.startPosition.x < window.GetWidth() / 2.0f; } ); if( idx >= 0 ) { moveTouchId = newTouches[ idx ].id; } }
+			ae::Vec3 dir = ae::Vec3( 0.0f );
+			if( input.Get( ae::Key::W ) ) { dir += forward; }
+			if( input.Get( ae::Key::A ) ) { dir += right; }
+			if( input.Get( ae::Key::S ) ) { dir -= forward; }
+			if( input.Get( ae::Key::D ) ) { dir -= right; }
+			dir += forward * input.gamepads[ 0 ].leftAnalog.y;
+			dir -= right * input.gamepads[ 0 ].leftAnalog.x;
+			if( moveTouch )
+			{
+				const ae::Vec2 touchDir = ( ( moveTouch->position - moveTouch->startPosition ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
+				dir += forward * touchDir.y;
+				dir -= right * touchDir.x;
+			}
 			
 			// Physics
-			player.velocity += accel * dt;
+			player.velocity += dir.TrimCopy( 1.0f ) * dt * 15.0f;
 			player.velocity.SetXZ( ae::DtSlerp( player.velocity.GetXZ(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
 			player.velocity.y -= dt * 20.0f;
 			player.sphere.center += player.velocity * dt;
@@ -144,6 +172,9 @@ const char* kFragmentShader = R"(
 	AE_IN_HIGHP vec2 v_uv;
 	void main()
 	{
+		float fog = 1.0 - v_depth;
+		fog = fog * fog * fog;
+		fog = 1.0 - fog;
 		AE_COLOR = mix( AE_TEXTURE2D( u_tex, v_uv ), vec4( 1.0, 1.0, 1.0, 1.0 ), v_depth );
 	}
 )";
