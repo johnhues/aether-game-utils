@@ -85,7 +85,7 @@ int main()
 			pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
 			if( lookTouch )
 			{
-				const ae::Vec2 touchDir = lookTouch->movement / ( displaySize * 0.35f );
+				const ae::Vec2 touchDir = ae::Vec2( lookTouch->movement ) / ( displaySize * 0.35f );
 				yaw -= touchDir.x;
 				pitch += touchDir.y;
 			}
@@ -102,7 +102,7 @@ int main()
 			dir -= right * input.gamepads[ 0 ].leftAnalog.x;
 			if( moveTouch )
 			{
-				const ae::Vec2 touchDir = ( ( moveTouch->position - moveTouch->startPosition ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
+				const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->position - moveTouch->startPosition ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
 				dir += forward * touchDir.y;
 				dir -= right * touchDir.x;
 			}

@@ -3084,10 +3084,9 @@ struct GamepadState // @TODO: Rename Gamepad
 struct Touch
 {
 	uint32_t id = 0;
-	// @TODO: Should these be ints to match mouse input?
-	ae::Vec2 startPosition = ae::Vec2( 0.0f );
-	ae::Vec2 position = ae::Vec2( 0.0f );
-	ae::Vec2 movement = ae::Vec2( 0.0f );
+	ae::Int2 startPosition = ae::Int2( 0.0f );
+	ae::Int2 position = ae::Int2( 0.0f );
+	ae::Int2 movement = ae::Int2( 0.0f );
 };
 const uint32_t kMaxTouches = 32; //!< Max number of touches supported by ae::Input
 using TouchArray = ae::Array< ae::Touch, ae::kMaxTouches >;
@@ -16940,7 +16939,7 @@ void _aeEmscriptenTryNewFrame( Input* input )
 		input->m_touchesPrev = input->m_touches;
 		for( ae::Touch& touch : input->m_touches )
 		{
-			touch.movement = ae::Vec2( 0.0f );
+			touch.movement = ae::Int2( 0 );
 		}
 		input->newFrame_HACK = false;
 	}
@@ -17076,9 +17075,8 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 		const EmscriptenTouchPoint* emTouch = &touchEvent->touches[ i ];
 		if( emTouch->isChanged )
 		{
-			ae::Vec2 pos = ae::Vec2( emTouch->targetX, emTouch->targetY );
+			ae::Int2 pos( emTouch->targetX, emTouch->targetY );
 			pos.y = input->m_window->GetHeight() - pos.y;
-			pos.FloorCopy();
 			switch( eventType )
 			{
 				case EMSCRIPTEN_EVENT_TOUCHSTART:
@@ -17090,14 +17088,12 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 						touch->startPosition = pos;
 						touch->position = pos;
 					}
-					// AE_INFO( "_aeEmscriptenHandleTouch idx:# start: # len:#", i, emTouch->identifier, input->m_touches.Length() );
 					break;
 				}
 				case EMSCRIPTEN_EVENT_TOUCHEND:
 				{
 					const int32_t touchIdx = input->m_touches.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
 					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
-					// AE_INFO( "_aeEmscriptenHandleTouch idx:# end: # len:#", i, emTouch->identifier, input->m_touches.Length() );
 					break;
 				}
 				case EMSCRIPTEN_EVENT_TOUCHCANCEL:
@@ -17106,7 +17102,6 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 					const int32_t prevTouchIdx = input->m_touchesPrev.FindFn( [&]( const ae::Touch& t ){ return t.id == emTouch->identifier; } );
 					if( touchIdx >= 0 ) { input->m_touches.Remove( touchIdx ); }
 					if( prevTouchIdx >= 0 ) { input->m_touchesPrev.Remove( prevTouchIdx ); }
-					// AE_INFO( "_aeEmscriptenHandleTouch idx:# cancel: # len:#", i, emTouch->identifier, input->m_touches.Length() );
 					break;
 				}
 				case EMSCRIPTEN_EVENT_TOUCHMOVE:
@@ -17121,7 +17116,6 @@ EM_BOOL _aeEmscriptenHandleTouch( int eventType, const EmscriptenTouchEvent* tou
 							input->m_touches[ touchIdx ].movement += pos - input->m_touchesPrev[ prevTouchIdx ].position;
 						}
 					}
-					// AE_INFO( "_aeEmscriptenHandleTouch idx:# move: # len:#", i, emTouch->identifier, input->m_touches.Length() );
 					break;
 				}
 				default:
@@ -17220,7 +17214,7 @@ void Input::Pump()
 	m_touchesPrev = m_touches;
 	for( ae::Touch& touch : m_touches )
 	{
-		touch.movement = ae::Vec2( 0.0f );
+		touch.movement = ae::Int2( 0 );
 	}
 #endif
 	m_textInput = ""; // Clear last frames text input
