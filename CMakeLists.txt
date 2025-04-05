@@ -53,6 +53,7 @@ if(${AE_STANDALONE})
 	# Disable RTTI (not used in aether)
 	add_compile_options(-fno-rtti)
 endif()
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # OpenGL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
