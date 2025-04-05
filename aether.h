@@ -16692,7 +16692,8 @@ void Window::SetFullScreen( bool fullScreen )
 	{
 		m_fullScreen = fullScreen;
 		NSWindow* nsWindow = (NSWindow*)window;
-		if ( m_fullScreen != nsWindow.zoomed )
+		const bool isFullScreen = ( ( [nsWindow styleMask] & NSFullScreenWindowMask ) == NSFullScreenWindowMask );
+		if ( m_fullScreen != isFullScreen )
 		{
 			[nsWindow toggleFullScreen:[NSApplication sharedApplication]];
 		}
@@ -17336,42 +17337,39 @@ void Input::Pump()
 				break;
 			}
 			
-			// Mouse
+			// Cursor
+			const ae::RectInt windowRect = ae::RectInt::FromPointAndSize(
+				0,
+				0,
+				m_window->GetWidth(),
+				m_window->GetHeight() - 4 );
+			const NSPoint cursorScreenPos = [NSEvent mouseLocation];
+			const ae::Int2 cursorLocalPos = ae::Int2( cursorScreenPos.x, cursorScreenPos.y ) - m_window->GetPosition();
+			const bool cursorWithinWindow = windowRect.Contains( cursorLocalPos );
+			if( cursorWithinWindow )
 			{
-				NSPoint p = [NSEvent mouseLocation];
-				ae::Int2 windowPos = m_window->GetPosition();
-				m_SetMousePos( ae::Int2( p.x, p.y ) - windowPos );
+				m_SetMousePos( cursorLocalPos );
 			}
-			
-			// @TODO: ae::Window uses NSWindow::contentLayoutRect which represents
-			// the visible content size, but it does not account for the window
-			// manipulation control boundaries (resize and drag). Can this boundary
-			// be calculated somehow?
-			const int32_t kBorder = 3;
-			const bool mouseWithinWindow = mouse.position.x > kBorder
-				&& mouse.position.y > kBorder
-				&& mouse.position.x < m_window->GetWidth() - kBorder
-				&& mouse.position.y < m_window->GetHeight() - kBorder;
-			
-			bool clicked = false;
+
+			bool anyClick = false;
 			switch ( event.type )
 			{
 				// @NOTE: Move events are not sent if any mouse button is clicked
 				case NSEventTypeMouseMoved:
-				{
-					if( mouseWithinWindow )
+				case NSEventTypeLeftMouseDragged:
+				case NSEventTypeRightMouseDragged:
+				case NSEventTypeOtherMouseDragged:
+					if( cursorWithinWindow )
 					{
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 					}
 					break;
-				}
 				case NSEventTypeLeftMouseDown:
-				case NSEventTypeLeftMouseDragged:
-					if( mouseWithinWindow )
+					if( cursorWithinWindow )
 					{
 						mouse.leftButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
+						anyClick = true;
 					}
 					break;
 				case NSEventTypeLeftMouseUp:
@@ -17379,12 +17377,11 @@ void Input::Pump()
 					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 					break;
 				case NSEventTypeRightMouseDown:
-				case NSEventTypeRightMouseDragged:
-					if( mouseWithinWindow )
+					if( cursorWithinWindow )
 					{
 						mouse.rightButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
+						anyClick = true;
 					}
 					break;
 				case NSEventTypeRightMouseUp:
@@ -17392,12 +17389,11 @@ void Input::Pump()
 					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 					break;
 				case NSEventTypeOtherMouseDown:
-				case NSEventTypeOtherMouseDragged:
-					if( mouseWithinWindow )
+					if( cursorWithinWindow )
 					{
 						mouse.middleButton = true;
 						mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
-						clicked = true;
+						anyClick = true;
 					}
 					break;
 				case NSEventTypeOtherMouseUp:
@@ -17405,21 +17401,20 @@ void Input::Pump()
 					mouse.usingTouch = ( event.subtype == NSEventSubtypeTouch );
 					break;
 				case NSEventTypeScrollWheel:
-					if( mouseWithinWindow )
+					if( cursorWithinWindow )
 					{
-						mouse.usingTouch = [event hasPreciseScrollingDeltas];
+						mouse.usingTouch = [event hasPreciseScrollingDeltas]; // @NOTE: Scroll is never NSEventSubtypeTouch
 						float mult = mouse.usingTouch ? m_timeStep.GetDt() : 1.0f;
 						mouse.scroll.x += event.scrollingDeltaX * mult;
 						mouse.scroll.y += event.scrollingDeltaY * mult;
 					}
-					// @NOTE: Scroll is never NSEventSubtypeTouch
 					break;
 				default:
 					break;
 			}
 			
 			// By default only left click activates the window, so force activation on middle and right click
-			if ( mouseWithinWindow && clicked && !m_window->GetFocused() )
+			if ( cursorWithinWindow && anyClick && !m_window->GetFocused() )
 			{
 				[NSApp activateIgnoringOtherApps:YES];
 			}

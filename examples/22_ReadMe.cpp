@@ -73,7 +73,7 @@ int main()
 			const ae::Vec3 forward( -cosf( yaw ) * cosf( pitch ), sinf( pitch ), sinf( yaw ) * cosf( pitch ) );
 			const ae::Vec3 right( forward.z, 0.0f, -forward.x );
 			if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
-			if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); }
+			if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
 			if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
 			if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
 
