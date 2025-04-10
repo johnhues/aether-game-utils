@@ -136,10 +136,10 @@ int main()
 		if( file && file->GetStatus() != ae::File::Status::Pending )
 		{
 			AE_INFO( "Load obj" );
-			ae::OBJFile objFile = kObjAllocTag;
+			ae::OBJLoader objFile = kObjAllocTag;
 			if( const uint32_t fileSize = file->GetLength() )
 			{
-				objFile.Load( file->GetData(), fileSize );
+				objFile.Load( { file->GetData(), fileSize, ae::Matrix4::Scaling( 10.0f ), true } );
 				if( objFile.vertices.Length() )
 				{
 					aabb = objFile.aabb;
@@ -149,9 +149,9 @@ int main()
 						ae::Vertex::Primitive::Triangle,
 						ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
 					);
-					vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
-					vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
-					vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
+					vertexData.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, position ) );
+					vertexData.AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, normal ) );
+					vertexData.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, color ) );
 					vertexData.UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
 					vertexData.UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
 					

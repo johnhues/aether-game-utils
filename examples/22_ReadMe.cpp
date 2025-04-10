@@ -49,10 +49,10 @@ int main()
 		// Async resource loading for web
 		if( geoFile && geoFile->GetStatus() == ae::File::Status::Success )
 		{
-			ae::OBJFile obj = TAG_RESOURCE;
-			obj.Load( geoFile->GetData(), geoFile->GetLength() );
+			ae::OBJLoader obj = TAG_RESOURCE;
+			obj.Load( { geoFile->GetData(), geoFile->GetLength() } );
 			obj.InitializeVertexData( { &vertexData } );
-			obj.InitializeCollisionMesh( &collisionMesh, ae::Matrix4::Identity() );
+			obj.InitializeCollisionMesh( &collisionMesh );
 			geoFile = nullptr;
 		}
 		if( textureFile && textureFile->GetStatus() == ae::File::Status::Success )

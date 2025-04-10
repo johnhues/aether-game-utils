@@ -4751,11 +4751,12 @@ private:
 };
 
 //------------------------------------------------------------------------------
-// ae::OBJFile class // @TODO: ae::OBJLoader
+// ae::OBJLoader class
 //------------------------------------------------------------------------------
-class OBJFile
+class OBJLoader
 {
 public:
+	//! Vertex storage for loaded OBJ mesh
 	struct Vertex
 	{
 		ae::Vec4 position;
@@ -4763,30 +4764,47 @@ public:
 		ae::Vec4 normal;
 		ae::Vec4 color;
 	};
+	//! Index type for loaded OBJ mesh
 	typedef uint32_t Index;
-	
-	OBJFile( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
-	bool Load( const uint8_t* data, uint32_t length ); // @TODO: const ae::Matrix4& localToWorld
-	
+	//! Parameters to OBJLoader::Initialize()
+	struct InitializeParams
+	{
+		//! OBJ file data
+		const uint8_t* data = nullptr;
+		//! Length of the OBJ file data
+		uint32_t length = 0;
+		//! All loaded vertex positions and normals are transformed by this
+		//! matrix on load. This is useful for rotating the mesh or changing
+		//! units etc (eg. meters to centimeters).
+		ae::Matrix4 localToWorld = ae::Matrix4::Identity();
+		//! Setting this to true will flip the winding order of all triangles
+		//! loaded from the OBJ file.
+		bool flipWinding = false;
+	};
 	//! Helper struct to load OBJ files directly into an ae::VertexArray
 	struct VertexDataParams
 	{
 		ae::VertexBuffer* vertexData = nullptr;
-		//ae::Matrix4 localToWorld; // @TODO: implement
 		const char* posAttrib = "a_position";
 		const char* normalAttrib = "a_normal";
 		const char* colorAttrib = "a_color";
 		const char* uvAttrib = "a_uv";
 	};
+	
+	//! The given tag is used for all internal of the loaded OBJ mesh data
+	OBJLoader( ae::Tag allocTag ) : allocTag( allocTag ), vertices( allocTag ), indices( allocTag ) {}
+	//! Loads an OBJ file from memory. See ae::OBJLoader::InitializeParams for
+	//! details. Returns false if the OBJ file could not be loaded.
+	bool Load( ae::OBJLoader::InitializeParams params );
 	//! Helper function to load OBJ files directly into an ae::VertexArray
-	void InitializeVertexData( const ae::OBJFile::VertexDataParams& params );
+	void InitializeVertexData( const ae::OBJLoader::VertexDataParams& params );
 	//! Helper function to load OBJ files directly into an ae::CollisionMesh
 	template < uint32_t V, uint32_t T, uint32_t B >
-	void InitializeCollisionMesh( ae::CollisionMesh< V, T, B >* mesh, const ae::Matrix4& localToWorld );
+	void InitializeCollisionMesh( ae::CollisionMesh< V, T, B >* mesh );
 	
 	ae::Tag allocTag;
-	ae::Array< ae::OBJFile::Vertex > vertices;
-	ae::Array< ae::OBJFile::Index > indices;
+	ae::Array< ae::OBJLoader::Vertex > vertices;
+	ae::Array< ae::OBJLoader::Index > indices;
 	ae::AABB aabb;
 };
 
@@ -11500,10 +11518,10 @@ uint32_t AStar( const T* _startNode,
 }
 
 //------------------------------------------------------------------------------
-// ae::OBJFile member functions
+// ae::OBJLoader member functions
 //------------------------------------------------------------------------------
 template < uint32_t V, uint32_t T, uint32_t B >
-void OBJFile::InitializeCollisionMesh( ae::CollisionMesh< V, T, B >* mesh, const ae::Matrix4& localToWorld )
+void OBJLoader::InitializeCollisionMesh( ae::CollisionMesh< V, T, B >* mesh )
 {
 	if ( !mesh )
 	{
@@ -11512,7 +11530,7 @@ void OBJFile::InitializeCollisionMesh( ae::CollisionMesh< V, T, B >* mesh, const
 
 	mesh->Clear();
 	mesh->AddIndexed(
-		localToWorld,
+		ae::Matrix4::Identity(),
 		vertices[ 0 ].position.data,
 		vertices.Length(),
 		sizeof( Vertex ),
@@ -25195,9 +25213,9 @@ void Skin::ApplyPoseToMesh( const Skeleton* pose, float* positionsOut, float* no
 }
 
 //------------------------------------------------------------------------------
-// ae::OBJFile member functions
+// ae::OBJLoader member functions
 //------------------------------------------------------------------------------
-bool OBJFile::Load( const uint8_t* _data, uint32_t length )
+bool OBJLoader::Load( ae::OBJLoader::InitializeParams params )
 {
 	vertices.Clear();
 	indices.Clear();
@@ -25223,8 +25241,9 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 	ae::Array< FaceIndex > faceIndices = allocTag;
 	ae::Array< uint8_t > faces = allocTag;
 	
-	const char* data = (const char*)_data;
-	const char* dataEnd = (const char*)_data + length;
+	const bool hasWorldTransform = ( params.localToWorld != ae::Matrix4::Identity() );
+	const char* data = (const char*)params.data;
+	const char* dataEnd = (const char*)params.data + params.length;
 	while ( data < dataEnd )
 	{
 		uint32_t lineLen = 0;
@@ -25285,6 +25304,10 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 				p.y = strtof( line, (char**)&line );
 				p.z = strtof( line, (char**)&line );
 				p.w = 1.0f;
+				if ( hasWorldTransform )
+				{
+					p = params.localToWorld * p;
+				}
 				// @TODO: Unofficially OBJ can list 3 extra (0-1) values here representing vertex R,G,B values
 				positions.Append( p );
 				aabb.Expand( p.GetXYZ() );
@@ -25305,6 +25328,10 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 				n.y = strtof( line, (char**)&line );
 				n.z = strtof( line, (char**)&line );
 				n.w = 0.0f;
+				if ( hasWorldTransform )
+				{
+					n = params.localToWorld.GetNormalMatrix() * n;
+				}
 				normals.Append( n.SafeNormalizeCopy() );
 				break;
 			}
@@ -25371,6 +25398,10 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 			tri[ 0 ] = currentFaceIdx[ 0 ];
 			tri[ 1 ] = currentFaceIdx[ i + 1 ];
 			tri[ 2 ] = currentFaceIdx[ i + 2 ];
+			if( params.flipWinding )
+			{
+				std::swap( tri[ 1 ], tri[ 2 ] );
+			}
 			for ( uint32_t j = 0; j < 3; j++ )
 			{
 				int posIdx = tri[ j ].position;
@@ -25402,7 +25433,7 @@ bool OBJFile::Load( const uint8_t* _data, uint32_t length )
 	return true;
 }
 
-void OBJFile::InitializeVertexData( const ae::OBJFile::VertexDataParams& params )
+void OBJLoader::InitializeVertexData( const ae::OBJLoader::VertexDataParams& params )
 {
 	if ( !params.vertexData )
 	{

@@ -369,9 +369,9 @@ void EditorServerMesh::Initialize( const ae::EditorMesh* _mesh )
 		vertices.Reserve( indexCount );
 		for( uint32_t i = 0; i < indexCount; i += 3 )
 		{
-			ae::OBJFile::Index index0 = _mesh->indices[ i ];
-			ae::OBJFile::Index index1 = _mesh->indices[ i + 1 ];
-			ae::OBJFile::Index index2 = _mesh->indices[ i + 2 ];
+			ae::OBJLoader::Index index0 = _mesh->indices[ i ];
+			ae::OBJLoader::Index index1 = _mesh->indices[ i + 1 ];
+			ae::OBJLoader::Index index2 = _mesh->indices[ i + 2 ];
 			if( index0 >= vertexCount || index1 >= vertexCount || index2 >= vertexCount )
 			{
 				AE_WARN( "Invalid index in editor mesh" );
@@ -751,7 +751,7 @@ ae::EditorMesh::EditorMesh( const ae::Tag& tag ) :
 	indices( tag )
 {}
 
-void ae::EditorMesh::Load( const ae::OBJFile& file )
+void ae::EditorMesh::Load( const ae::OBJLoader& file )
 {
 	verts.Clear();
 	indices.Clear();

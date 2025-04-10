@@ -55,7 +55,7 @@ class EditorMesh
 {
 public:
 	EditorMesh( const ae::Tag& tag );
-	void Load( const ae::OBJFile& file );
+	void Load( const ae::OBJLoader& file );
 	ae::Array< ae::Vec3 > verts;
 	ae::Array< uint32_t > indices;
 };

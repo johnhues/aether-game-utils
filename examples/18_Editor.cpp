@@ -156,11 +156,11 @@ const char* kFragShader = R"(
 
 void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
 {
-	ae::OBJFile objFile = TAG_ALL;
+	ae::OBJLoader objFile = TAG_ALL;
 	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
 	ae::Scratch< uint8_t > fileBuffer( fileSize );
 	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
-	objFile.Load( fileBuffer.Data(), fileBuffer.Length() );
+	objFile.Load( { fileBuffer.Data(), fileBuffer.Length() } );
 	
 	if ( objFile.vertices.Length() )
 	{
@@ -172,15 +172,15 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* 
 				ae::Vertex::Primitive::Triangle,
 				ae::Vertex::Usage::Static, ae::Vertex::Usage::Static
 			);
-			vertexDataOut->AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, position ) );
-			vertexDataOut->AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, normal ) );
-			vertexDataOut->AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, texture ) );
-			vertexDataOut->AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJFile::Vertex, color ) );
+			vertexDataOut->AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, position ) );
+			vertexDataOut->AddAttribute( "a_normal", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, normal ) );
+			vertexDataOut->AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, texture ) );
+			vertexDataOut->AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof( ae::OBJLoader::Vertex, color ) );
 			vertexDataOut->UploadVertices( 0, objFile.vertices.Data(), objFile.vertices.Length() );
 			vertexDataOut->UploadIndices( 0, objFile.indices.Data(), objFile.indices.Length() );
 		}
 		
-		objFile.InitializeCollisionMesh( collisionOut, ae::Matrix4::Identity() );
+		objFile.InitializeCollisionMesh( collisionOut );
 		
 		if ( editorMeshOut )
 		{
