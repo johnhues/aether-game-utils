@@ -136,7 +136,7 @@ typedef aeUnit< uint32_t > VertexCount;
 
 typedef uint32_t IsosurfaceIndex;
 const IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
-const uint32_t kChunkSize = 100; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
+const uint32_t kChunkSize = 10; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
 const VertexCount kChunkCountEmpty = VertexCount( 0 );
@@ -150,20 +150,21 @@ public:
 	IsosurfaceExtractorCache();
 	~IsosurfaceExtractorCache();
 
-	template < typename Fn > void Generate( const IsosurfaceParams& params, ae::Int3 chunk, Fn fn );
+	template < typename Fn > void Generate( const IsosurfaceParams& params, ae::Int3 offset, Fn fn );
 	float GetValue( ae::Vec3 pos ) const;
 	float GetValue( ae::Int3 pos ) const;
 	ae::Vec3 GetDerivative( ae::Vec3 p ) const;
+	ae::Vec3 GetOffset() const { return m_offset; }
 
 private:
 	float m_GetValue( ae::Int3 pos ) const;
 
+	ae::Vec3 m_offset;
+
 	const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to 'chunkPlus'
 	static const int32_t kOffset = 2;
-	
-	ae::Int3 m_chunk;
-	ae::Int3 m_offseti; // Pre-computed chunk integer offset
-	ae::Vec3 m_offsetf; // Pre-computed chunk float offset
+	ae::Int3 m_offseti_REMOVE; // Pre-computed chunk integer offset
+	ae::Vec3 m_offsetf_REMOVE; // Pre-computed chunk float offset
 	IsosurfaceParams m_p;
 
 	// @TODO: Replace this with aeStaticImage3D
@@ -202,6 +203,77 @@ private:
 	static void m_GetQuadVertexOffsetsFromEdge( uint32_t edgeBit, int32_t( &offsets )[ 4 ][ 3 ] );
 };
 
+//------------------------------------------------------------------------------
+// ae::SDFBox
+// Valid range is 0-1
+//------------------------------------------------------------------------------
+inline float SDFBox( ae::Vec3 p, ae::Vec3 halfSize, float cornerRadius = 0.0f )
+{
+	const ae::Vec3 q = ae::Abs( p ) - ( halfSize - ae::Vec3( cornerRadius ) );
+	return ( ae::Max( q, ae::Vec3( 0.0f ) ) ).Length() + ae::Min( ae::Max( q.x, ae::Max( q.y, q.z ) ), 0.0f ) - cornerRadius;
+}
+
+//------------------------------------------------------------------------------
+// ae::SDFCylinder
+// @TODO: Valid range
+//------------------------------------------------------------------------------
+inline float SDFCylinder( ae::Vec3 p, ae::Vec3 halfSize, float top = 1.0f, float bottom = 1.0f )
+{
+	float scale;
+	if ( halfSize.x > halfSize.y )
+	{
+		scale = halfSize.x;
+		p.y *= halfSize.x / halfSize.y;
+	}
+	else
+	{
+		scale = halfSize.y;
+		p.x *= halfSize.y / halfSize.x;
+	}
+
+	const float r1 = ae::Clip01( bottom ) * scale;
+	const float r2 = ae::Clip01( top ) * scale;
+	const float h = halfSize.z;
+
+	const ae::Vec2 q( p.GetXY().Length(), p.z );
+	const ae::Vec2 k1(r2,h);
+	const ae::Vec2 k2(r2-r1,2.0*h);
+	const ae::Vec2 ca(q.x-ae::Min(q.x,(q.y<0.0)?r1:r2), ae::Abs(q.y)-h);
+	const ae::Vec2 cb = q - k1 + k2*ae::Clip01( (k1-q).Dot(k2)/k2.Dot(k2) );
+	const float s = (cb.x<0.0 && ca.y<0.0) ? -1.0 : 1.0;
+	return s*sqrt( ae::Min(ca.Dot(ca),cb.Dot(cb)) );
+}
+
+//------------------------------------------------------------------------------
+// SDF helpers
+//------------------------------------------------------------------------------
+inline float SDFUnion( float d1, float d2 )
+{
+	return ae::Min( d1, d2 );
+}
+
+inline float SDFSubtraction( float d1, float d2 )
+{
+	return ae::Max( -d1, d2 );
+}
+
+inline float SDFIntersection( float d1, float d2 )
+{
+	return ae::Max( d1, d2 );
+}
+
+inline float SDFSmoothUnion( float d1, float d2, float k )
+{
+	const float h = ae::Clip01( 0.5f + 0.5f * ( d2 - d1 ) / k );
+	return ae::Lerp( d2, d1, h ) - k * h * ( 1.0f - h );
+}
+
+inline float SDFSmoothSubtraction( float d1, float d2, float k )
+{
+	const float h = ae::Clip01( 0.5f - 0.5f * ( d2 + d1 ) / k );
+	return ae::Lerp( d2, -d1, h ) + k * h * ( 1.0f - h );
+}
+
 const char* kVertShader = R"(
 AE_UNIFORM_HIGHP mat4 u_worldToProj;
 AE_IN_HIGHP vec4 a_position;
@@ -214,14 +286,15 @@ void main()
 }
 )";
 const char* kFragShader = R"(
+AE_UNIFORM vec3 u_color;
 AE_IN_HIGHP vec3 v_normal;
 void main()
 {
 	vec3 light = normalize( vec3( -1.0, -1.0, -1.0 ) );
 	vec3 ambient = vec3( 0.1, 0.1, 0.1 );
 	float diffuse = max( 0.0, -dot( v_normal, light ) );
-	vec3 color = ambient + vec3( 1.0, 1.0, 1.0 ) * diffuse;
-	AE_COLOR = vec4( color, 1.0 );
+	vec3 color = u_color * ( ambient + vec3( 1.0, 1.0, 1.0 ) * diffuse );
+	AE_COLOR = vec4( color, 0.5 );
 }
 )";
 
@@ -235,7 +308,43 @@ int main()
 	ae::TimeStep timeStep;
 	ae::DebugLines debugLines = TAG_ISOSURFACE;
 	ae::DebugCamera camera = ae::Axis::Z;
-	window.Initialize( 1280, 720, false, true, true );
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 20.0f ) );
+	// window.Initialize( 1280, 720, false, true, true );
+	{
+		ae::Int2 windowPos( 0, 0 );
+		ae::Int2 windowSize( 1280, 720 );
+		const auto screens = ae::GetScreens();
+		auto GetSmallestScreen = [&]() -> const ae::Screen*
+		{
+			const ae::Screen* result = nullptr;
+			for( const ae::Screen& screen : screens )
+			{
+				if( !result || screen.size.x * screen.scaleFactor <= result->size.x * result->scaleFactor )
+				{
+					result = &screen;
+				}
+			}
+			return result;
+		};
+		if ( screens.Length() )
+		{
+			const ae::Screen* targetScreen = ae::IsDebuggerAttached() ? GetSmallestScreen() : &screens[ 0 ];
+			windowPos = targetScreen->position + targetScreen->size / 2;
+			windowPos -= windowSize / 2;
+		}
+		window.Initialize( windowPos, windowSize.x, windowSize.y, true, false );
+		if( ae::IsDebuggerAttached() )
+		{
+			if( screens.Length() >= 2 )
+			{
+				window.SetFullScreen( true );
+			}
+			else if( screens.Length() == 1 )
+			{
+				window.SetAlwaysOnTop( true );
+			}
+		}
+	}
 	window.SetTitle( "SDF to Mesh" );
 	render.Initialize( &window );
 	input.Initialize( &window );
@@ -244,67 +353,164 @@ int main()
 
 	ae::Shader shader;
 	shader.Initialize( kVertShader, kFragShader );
-	shader.SetCulling( ae::Culling::CounterclockwiseFront );
+	auto SetOpaque = [&]()
+	{
+		shader.SetCulling( ae::Culling::CounterclockwiseFront );
+		shader.SetBlending( false );
+		shader.SetDepthWrite( true );
+		shader.SetDepthTest( true );
+	};
+	auto SetTransparent = [&]()
+	{
+		shader.SetCulling( ae::Culling::None );
+		shader.SetBlending( true );
+		shader.SetDepthWrite( false );
+		shader.SetDepthTest( false );
+	};
+	SetOpaque();
 
-	const uint32_t kMaxVerts = 2000; // @TODO: Dynamic array
+	const uint32_t kMaxVerts = 500; // @TODO: Dynamic array
 	const uint32_t kMaxIndices = 2000;
-	VertexCount vertexCount = VertexCount( 0 );
-	uint32_t indexCount = 0;
-	IsosurfaceVertex* vertices = ae::NewArray< IsosurfaceVertex >( TAG_ISOSURFACE, kMaxVerts );
-	IsosurfaceIndex* indices = ae::NewArray< IsosurfaceIndex >( TAG_ISOSURFACE, kMaxIndices );
-	IsosurfaceExtractor* extractor = ae::New< IsosurfaceExtractor >( TAG_ISOSURFACE );
-	IsosurfaceExtractorCache* cache = ae::New< IsosurfaceExtractorCache >( TAG_ISOSURFACE );
-	ae::RunOnDestroy onExit( [=]()
+	class SDFToMesh
 	{
-		ae::Delete( indices );
-		ae::Delete( vertices );
-		ae::Delete( cache );
-		ae::Delete( extractor );
-	} );
-	AE_INFO( "Caching SDF..." );
-	const double cacheStart = ae::GetTime();
-	cache->Generate( {}, ae::Int3( 0 ), []( ae::Vec3 p )
+	public:
+		ae::Str32 name;
+		ae::Color color;
+		SDFToMesh( const char* name, ae::Color color ) :
+			name( name ),
+			color( color )
+		{}
+
+		VertexCount vertexCount = VertexCount( 0 );
+		uint32_t indexCount = 0;
+		IsosurfaceVertex* vertices = ae::NewArray< IsosurfaceVertex >( TAG_ISOSURFACE, kMaxVerts );
+		IsosurfaceIndex* indices = ae::NewArray< IsosurfaceIndex >( TAG_ISOSURFACE, kMaxIndices );
+		IsosurfaceExtractor* extractor = ae::New< IsosurfaceExtractor >( TAG_ISOSURFACE );
+		IsosurfaceExtractorCache* cache = ae::New< IsosurfaceExtractorCache >( TAG_ISOSURFACE );
+		void Run( ae::Int3 offset )
+		{
+			// Cache
+			AE_INFO( "[#] Caching SDF...", name );
+			const double cacheStart = ae::GetTime();
+			cache->Generate( {}, offset, []( ae::Vec3 p )
+			{
+				float r = SDFBox( p, ae::Vec3( 8.0f, 4.0f, 4.0f ) );
+				r = SDFUnion( r, SDFBox( p, ae::Vec3( 4.0f, 8.0f, 4.0f ) ) );
+				r = SDFUnion( r, SDFBox( p, ae::Vec3( 4.0f, 4.0f, 8.0f ) ) );
+				return r;
+				// return ( p - ae::Vec3( 0.7f ) ).Length() - 4.0f;
+			} );
+			const double cacheEnd = ae::GetTime();
+			AE_INFO( "[#] SDF cache complete. sec:#", name, cacheEnd - cacheStart );
+			
+			// Mesh
+			AE_INFO( "[#] Start mesh generation...", name );
+			const double isosurfaceStart = ae::GetTime();
+			extractor->Generate(
+				cache,
+				vertices,
+				indices,
+				&vertexCount,
+				&indexCount,
+				kMaxVerts,
+				kMaxIndices
+			);
+			const double isosurfaceEnd = ae::GetTime();
+			AE_INFO( "[#] Mesh generation complete. sec:# verts:# indices:# [#]",
+				name,
+				isosurfaceEnd - isosurfaceStart,
+				vertexCount.Get(),
+				indexCount,
+				extractor->GetAABB().GetHalfSize() * 2.0f );
+			if ( vertexCount == kChunkCountEmpty )
+			{
+				AE_INFO( "[#] No mesh generated" );
+				return;
+			}
+			extractor->m_SetVertexData( vertices, indices, vertexCount, indexCount );
+		}
+
+		bool show = true;
+		void Draw( ae::Shader* shader, ae::UniformList& uniforms )
+		{
+			if ( !show || vertexCount == kChunkCountEmpty )
+			{
+				return;
+			}
+			uniforms.Set( "u_color", color.GetLinearRGB() );
+			extractor->m_data.Bind( shader, uniforms );
+			extractor->m_data.Draw();
+		}
+
+		~SDFToMesh()
+		{
+			ae::Delete( indices );
+			ae::Delete( vertices );
+			ae::Delete( cache );
+			ae::Delete( extractor );
+		}
+	};
+	SDFToMesh sdfToMesh[] =
 	{
-		return ( p - ae::Vec3( 5.0f ) ).Length() - 4.0f;
-	} );
-	const double cacheEnd = ae::GetTime();
-	AE_INFO( "SDF cache complete. sec:#", cacheEnd - cacheStart );
-	AE_INFO( "Start mesh generation..." );
-	const double isosurfaceStart = ae::GetTime();
-	extractor->Generate(
-		cache,
-		vertices,
-		indices,
-		&vertexCount,
-		&indexCount,
-		kMaxVerts,
-		kMaxIndices
-	);
-	const double isosurfaceEnd = ae::GetTime();
-	AE_INFO( "Mesh generation complete. sec:# verts:# indices:# [#]",
-		isosurfaceEnd - isosurfaceStart,
-		vertexCount.Get(),
-		indexCount,
-		extractor->GetAABB().GetHalfSize() * 2.0f );
-	extractor->m_SetVertexData( vertices, indices, vertexCount, indexCount );
+		{ "SDF to Mesh 0", ae::Color::HSV(0.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "SDF to Mesh 1", ae::Color::HSV(1.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "SDF to Mesh 2", ae::Color::HSV(2.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "SDF to Mesh 3", ae::Color::HSV(3.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "SDF to Mesh 4", ae::Color::HSV(4.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "SDF to Mesh 5", ae::Color::HSV(5.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "SDF to Mesh 6", ae::Color::HSV(6.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "SDF to Mesh 7", ae::Color::HSV(7.0f / 8.0f, 0.7f, 0.5f ) },
+	};
+	sdfToMesh[ 0 ].Run( ae::Int3( -1, -1, -1 ) * kChunkSize );
+	sdfToMesh[ 1 ].Run( ae::Int3( -1, -1, 0 ) * kChunkSize );
+	sdfToMesh[ 2 ].Run( ae::Int3( -1,0, -1 ) * kChunkSize );
+	sdfToMesh[ 3 ].Run( ae::Int3( -1,0,0 ) * kChunkSize );
+	sdfToMesh[ 4 ].Run( ae::Int3(0, -1, -1 ) * kChunkSize );
+	sdfToMesh[ 5 ].Run( ae::Int3(0, -1,0 ) * kChunkSize );
+	sdfToMesh[ 6 ].Run( ae::Int3(0,0, -1 ) * kChunkSize );
+	sdfToMesh[ 7 ].Run( ae::Int3(0,0,0 ) * kChunkSize );
 
 	auto Update = [&]() -> bool
 	{
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
+		for( uint32_t i = 0; i < countof(sdfToMesh); i++ )
+		{
+			if( input.GetPress( ae::Key( (uint32_t)ae::Key::Num1 + i ) ) )
+			{
+				sdfToMesh[ i ].show = !sdfToMesh[ i ].show;
+			}
+		}
+		if( input.GetPress( ae::Key::Num0 ) )
+		{
+			for( uint32_t i = 0; i < countof(sdfToMesh); i++ )
+			{
+				sdfToMesh[ i ].show = false;
+			}
+		}
+		if( input.GetPress( ae::Key::Z ) )
+		{
+			SetOpaque();
+		}
+		if( input.GetPress( ae::Key::X ) )
+		{
+			SetTransparent();
+		}
 		
 		render.Activate();
 		render.Clear( ae::Color::AetherGray() );
 		debugLines.AddAABB( ae::Vec3( 0.0f ), ae::Vec3( 0.5f ), ae::Color::AetherWhite() );
 		
 		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
-		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 100.0f );
+		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 1000.0f );
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;
 		
 		ae::UniformList uniforms;
 		uniforms.Set( "u_worldToProj", worldToProj );
-		extractor->m_data.Bind( &shader, uniforms );
-		extractor->m_data.Draw();
+		for( auto& sdf : sdfToMesh )
+		{
+			sdf.Draw( &shader, uniforms );
+		}
 		debugLines.Render( worldToProj );
 		
 		render.Present();
@@ -326,21 +532,20 @@ int main()
 // Private / template implementation
 //------------------------------------------------------------------------------
 template < typename Fn >
-void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params, ae::Int3 chunk, Fn fn )
+void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params, ae::Int3 offset, Fn fn )
 {
-	m_chunk = chunk;
-
-	m_offseti = ae::Int3( kOffset ) - ae::Int3( m_chunk * kChunkSize );
-	m_offsetf = ae::Vec3( (float)kOffset ) - ae::Vec3( m_chunk * kChunkSize );
+	m_offset = ae::Vec3( offset );
+	m_offseti_REMOVE = ae::Int3( kOffset );
+	m_offsetf_REMOVE = ae::Vec3( (float)kOffset );
 	m_p = params;
 
-	ae::Int3 offset = m_chunk * kChunkSize - ae::Int3( kOffset );
+	ae::Int3 offset2 = offset - ae::Int3( kOffset );
 	for ( int32_t z = 0; z < kDim; z++ )
 	for ( int32_t y = 0; y < kDim; y++ )
 	for ( int32_t x = 0; x < kDim; x++ )
 	{
 		uint32_t index = x + kDim * ( y + kDim * z );
-		ae::Vec3 pos( offset.x + x, offset.y + y, offset.z + z );
+		ae::Vec3 pos( offset2.x + x, offset2.y + y, offset2.z + z );
 		m_values[ index ] = (float)fn( pos );
 	}
 }
@@ -405,7 +610,6 @@ ae::Vec3 GetIntersection( const ae::Vec3* p, const ae::Vec3* n, uint32_t ic )
 //------------------------------------------------------------------------------
 IsosurfaceExtractorCache::IsosurfaceExtractorCache()
 {
-	m_chunk = ae::Int3( 0 );
 	m_values = ae::NewArray< float >( AE_ALLOC_TAG_TERRAIN, kDim * kDim * kDim );
 }
 
@@ -417,7 +621,7 @@ IsosurfaceExtractorCache::~IsosurfaceExtractorCache()
 
 float IsosurfaceExtractorCache::GetValue( ae::Vec3 pos ) const
 {
-	pos += m_offsetf;
+	pos += m_offsetf_REMOVE; // m_offseti_REMOVE
 
 	const ae::Int3 cornerPos = pos.FloorCopy();
 	pos.x -= cornerPos.x;
@@ -447,7 +651,7 @@ float IsosurfaceExtractorCache::GetValue( ae::Vec3 pos ) const
 
 float IsosurfaceExtractorCache::GetValue( ae::Int3 pos ) const
 {
-	return m_GetValue( pos + m_offseti );
+	return m_GetValue( pos + m_offseti_REMOVE );
 }
 
 ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
@@ -1038,7 +1242,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 		position.x = chunkOffsetX + x + position.x;
 		position.y = chunkOffsetY + y + position.y;
 		position.z = chunkOffsetZ + z + position.z;
-		vertex->position = ae::Vec4( position, 1.0f );
+		vertex->position = ae::Vec4( position + sdf->GetOffset(), 1.0f );
 	}
 
 #if AE_TERRAIN_FANCY_NORMALS
