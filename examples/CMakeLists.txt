@@ -436,3 +436,16 @@ ae_add_bundle(
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
 	LIBS "ae"
 )
+
+# SDF to Mesh
+ae_add_bundle(
+	BUNDLE_NAME "SDF to Mesh"
+	EXECUTABLE_NAME "27_sdf_to_mesh"
+	BUNDLE_ID "ae.27_sdf_to_mesh"
+	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
+	MAJOR_MINOR_PATCH_VERSION "0.0.0"
+	ICNS_FILE "data/Icon.icns"
+	SRC_FILES "27_SDFToMesh.cpp"
+	RESOURCES "${AE_EXAMPLE_RESOURCES}"
+	LIBS "ae"
+)
