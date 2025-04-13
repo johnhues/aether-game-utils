@@ -136,7 +136,7 @@ typedef aeUnit< uint32_t > VertexCount;
 
 typedef uint32_t IsosurfaceIndex;
 const IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
-const uint32_t kChunkSize = 10; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
+const uint32_t kChunkSize = 100; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
 const VertexCount kChunkCountEmpty = VertexCount( 0 );
@@ -350,27 +350,40 @@ int main()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	debugLines.Initialize( 16384 );
+	debugLines.SetXRayEnabled( false );
 
 	ae::Shader shader;
 	shader.Initialize( kVertShader, kFragShader );
-	auto SetOpaque = [&]()
+	bool opaque = false;
+	auto ToggleOpacity = [&]()
 	{
-		shader.SetCulling( ae::Culling::CounterclockwiseFront );
-		shader.SetBlending( false );
-		shader.SetDepthWrite( true );
-		shader.SetDepthTest( true );
+		opaque = !opaque;
+		if( opaque )
+		{
+			shader.SetCulling( ae::Culling::CounterclockwiseFront );
+			shader.SetBlending( false );
+			shader.SetDepthWrite( true );
+			shader.SetDepthTest( true );
+		}
+		else
+		{
+			shader.SetCulling( ae::Culling::None );
+			shader.SetBlending( true );
+			shader.SetDepthWrite( false );
+			shader.SetDepthTest( false );
+		}
 	};
-	auto SetTransparent = [&]()
+	ToggleOpacity();
+	bool wireframe = true;
+	auto ToggleWireframe = [&]()
 	{
-		shader.SetCulling( ae::Culling::None );
-		shader.SetBlending( true );
-		shader.SetDepthWrite( false );
-		shader.SetDepthTest( false );
+		wireframe = !wireframe;
+		shader.SetWireframe( wireframe );
 	};
-	SetOpaque();
+	ToggleWireframe();
 
-	const uint32_t kMaxVerts = 500; // @TODO: Dynamic array
-	const uint32_t kMaxIndices = 2000;
+	const uint32_t kMaxVerts = 5000; // @TODO: Dynamic array
+	const uint32_t kMaxIndices = 10000;
 	class SDFToMesh
 	{
 	public:
@@ -394,9 +407,10 @@ int main()
 			const double cacheStart = ae::GetTime();
 			cache->Generate( {}, offset, []( ae::Vec3 p )
 			{
-				float r = SDFBox( p, ae::Vec3( 8.0f, 4.0f, 4.0f ) );
-				r = SDFUnion( r, SDFBox( p, ae::Vec3( 4.0f, 8.0f, 4.0f ) ) );
-				r = SDFUnion( r, SDFBox( p, ae::Vec3( 4.0f, 4.0f, 8.0f ) ) );
+				const float k = 10.0f;
+				float r = SDFBox( p, ae::Vec3( 2.0f, 1.0f, 1.0f ) * k );
+				r = SDFUnion( r, SDFBox( p, ae::Vec3( 1.0f, 2.0f, 1.0f ) * k ) );
+				r = SDFUnion( r, SDFBox( p, ae::Vec3( 1.0f, 1.0f, 2.0f ) * k ) );
 				return r;
 				// return ( p - ae::Vec3( 0.7f ) ).Length() - 4.0f;
 			} );
@@ -424,7 +438,7 @@ int main()
 				extractor->GetAABB().GetHalfSize() * 2.0f );
 			if ( vertexCount == kChunkCountEmpty )
 			{
-				AE_INFO( "[#] No mesh generated" );
+				AE_INFO( "[#] No mesh generated", name );
 				return;
 			}
 			extractor->m_SetVertexData( vertices, indices, vertexCount, indexCount );
@@ -452,14 +466,14 @@ int main()
 	};
 	SDFToMesh sdfToMesh[] =
 	{
-		{ "SDF to Mesh 0", ae::Color::HSV(0.0f / 8.0f, 0.7f, 0.5f ) },
-		{ "SDF to Mesh 1", ae::Color::HSV(1.0f / 8.0f, 0.7f, 0.5f ) },
-		{ "SDF to Mesh 2", ae::Color::HSV(2.0f / 8.0f, 0.7f, 0.5f ) },
-		{ "SDF to Mesh 3", ae::Color::HSV(3.0f / 8.0f, 0.7f, 0.5f ) },
-		{ "SDF to Mesh 4", ae::Color::HSV(4.0f / 8.0f, 0.7f, 0.5f ) },
-		{ "SDF to Mesh 5", ae::Color::HSV(5.0f / 8.0f, 0.7f, 0.5f ) },
-		{ "SDF to Mesh 6", ae::Color::HSV(6.0f / 8.0f, 0.7f, 0.5f ) },
-		{ "SDF to Mesh 7", ae::Color::HSV(7.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh0", ae::Color::HSV(0.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh1", ae::Color::HSV(1.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh2", ae::Color::HSV(2.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh3", ae::Color::HSV(3.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh4", ae::Color::HSV(4.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh5", ae::Color::HSV(5.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh6", ae::Color::HSV(6.0f / 8.0f, 0.7f, 0.5f ) },
+		{ "Mesh7", ae::Color::HSV(7.0f / 8.0f, 0.7f, 0.5f ) },
 	};
 	sdfToMesh[ 0 ].Run( ae::Int3( -1, -1, -1 ) * kChunkSize );
 	sdfToMesh[ 1 ].Run( ae::Int3( -1, -1, 0 ) * kChunkSize );
@@ -490,16 +504,19 @@ int main()
 		}
 		if( input.GetPress( ae::Key::Z ) )
 		{
-			SetOpaque();
+			ToggleOpacity();
 		}
 		if( input.GetPress( ae::Key::X ) )
 		{
-			SetTransparent();
+			ToggleWireframe();
 		}
 		
 		render.Activate();
-		render.Clear( ae::Color::AetherGray() );
-		debugLines.AddAABB( ae::Vec3( 0.0f ), ae::Vec3( 0.5f ), ae::Color::AetherWhite() );
+		render.Clear( ae::Color::AetherDarkGray() );
+		debugLines.AddAABB( ae::Vec3( 0.5f ), ae::Vec3( 0.5f ), ae::Color::AetherWhite() );
+		debugLines.AddLine( ae::Vec3( -1, 0, 0 ) * 1000.0f, ae::Vec3( 1, 0, 0 ) * 1000.0f, ae::Color::AetherRed() );
+		debugLines.AddLine( ae::Vec3( 0, -1, 0 ) * 1000.0f, ae::Vec3( 0, 1, 0 ) * 1000.0f, ae::Color::AetherGreen() );
+		debugLines.AddLine( ae::Vec3( 0, 0, -1 ) * 1000.0f, ae::Vec3( 0, 0, 1 ) * 1000.0f, ae::Color::AetherBlue() );
 		
 		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 1000.0f );
