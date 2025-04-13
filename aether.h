@@ -767,6 +767,7 @@ public:
 	static ae::Matrix4 Identity();
 	static ae::Matrix4 Translation( float tx, float ty, float tz );
 	static ae::Matrix4 Translation( const ae::Vec3& p );
+	static ae::Matrix4 Rotation( ae::Quaternion q );
 	static ae::Matrix4 Rotation( ae::Vec3 forward0, ae::Vec3 up0, ae::Vec3 forward1, ae::Vec3 up1 );
 	static ae::Matrix4 RotationX( float angle );
 	static ae::Matrix4 RotationY( float angle );
@@ -774,20 +775,21 @@ public:
 	static ae::Matrix4 Scaling( float s );
 	static ae::Matrix4 Scaling( const ae::Vec3& s );
 	static ae::Matrix4 Scaling( float sx, float sy, float sz );
+	static ae::Matrix4 LocalToWorld( ae::Vec3 position, ae::Quaternion rotation, ae::Vec3 scale );
 	static ae::Matrix4 WorldToView( ae::Vec3 position, ae::Vec3 forward, ae::Vec3 up );
 	static ae::Matrix4 ViewToProjection( float fov, float aspectRatio, float nearPlane, float farPlane );
 
 	// Set transformation properties
-	void SetTranslation( float x, float y, float z );
-	void SetTranslation( const ae::Vec3& t );
-	void SetRotation( const ae::Quaternion& r );
-	void SetScale( const ae::Vec3& s );
-	void SetTranspose();
-	void SetInverse();
-	void SetAxis( uint32_t column, const ae::Vec3& v );
-	void SetAxis( uint32_t column, const ae::Vec4& v );
-	void SetRow( uint32_t row, const ae::Vec3& v );
-	void SetRow( uint32_t row, const ae::Vec4& v );
+	ae::Matrix4& SetTranslation( float x, float y, float z );
+	ae::Matrix4& SetTranslation( const ae::Vec3& t );
+	ae::Matrix4& SetRotation( const ae::Quaternion& r );
+	ae::Matrix4& SetScale( const ae::Vec3& s );
+	ae::Matrix4& SetTranspose();
+	ae::Matrix4& SetInverse();
+	ae::Matrix4& SetAxis( uint32_t column, const ae::Vec3& v );
+	ae::Matrix4& SetAxis( uint32_t column, const ae::Vec4& v );
+	ae::Matrix4& SetRow( uint32_t row, const ae::Vec3& v );
+	ae::Matrix4& SetRow( uint32_t row, const ae::Vec4& v );
 
 	// Get transformation properties
 	ae::Vec3 GetTranslation() const;
@@ -13415,6 +13417,11 @@ Matrix4 Matrix4::Rotation( Vec3 forward0, Vec3 up0, Vec3 forward1, Vec3 up1 )
 	return newRotation * removeRotation;
 }
 
+Matrix4 Matrix4::Rotation( ae::Quaternion q )
+{
+	return q.GetTransformMatrix();
+}
+
 Matrix4 Matrix4::RotationX( float angle )
 {
 	Matrix4 r;
@@ -13464,6 +13471,11 @@ Matrix4 Matrix4::Scaling( float s )
 Matrix4 Matrix4::Scaling( const Vec3& s )
 {
 	return Scaling( s.x, s.y, s.z );
+}
+
+Matrix4 Matrix4::LocalToWorld( ae::Vec3 position, ae::Quaternion rotation, ae::Vec3 scale )
+{
+	return Matrix4::Rotation( rotation ).SetScale( scale ).SetTranslation( position );
 }
 
 Matrix4 Matrix4::WorldToView( Vec3 position, Vec3 forward, Vec3 up )
@@ -13538,21 +13550,23 @@ Matrix4 Matrix4::ViewToProjection( float fov, float aspectRatio, float nearPlane
 	return result;
 }
 
-void Matrix4::SetTranslation( float x, float y, float z )
+Matrix4& Matrix4::SetTranslation( float x, float y, float z )
 {
 	data[ 12 ] = x;
 	data[ 13 ] = y;
 	data[ 14 ] = z;
+	return *this;
 }
 
-void Matrix4::SetTranslation( const Vec3& translation )
+Matrix4& Matrix4::SetTranslation( const Vec3& translation )
 {
 	data[ 12 ] = translation.x;
 	data[ 13 ] = translation.y;
 	data[ 14 ] = translation.z;
+	return *this;
 }
 
-void Matrix4::SetRotation( const Quaternion& q2 )
+Matrix4& Matrix4::SetRotation( const Quaternion& q2 )
 {
 	Quaternion q = q2.GetInverse();
 	data[0] = 1 - (2*q.j*q.j + 2*q.k*q.k);
@@ -13564,17 +13578,19 @@ void Matrix4::SetRotation( const Quaternion& q2 )
 	data[2] = 2*q.i*q.k + 2*q.j*q.r;
 	data[6] = 2*q.j*q.k - 2*q.i*q.r;
 	data[10] = 1 - (2*q.i*q.i  + 2*q.j*q.j);
+	return *this;
 }
 
-void Matrix4::SetScale( const Vec3& s )
+Matrix4& Matrix4::SetScale( const Vec3& s )
 {
 	for( uint32_t i = 0; i < 3; i++ )
 	{
 		SetAxis( i, GetAxis( i ).NormalizeCopy() * s[ i ] );
 	}
+	return *this;
 }
 
-void Matrix4::SetTranspose( void )
+Matrix4& Matrix4::SetTranspose()
 {
 	for( uint32_t i = 0; i < 4; i++ )
 	{
@@ -13583,38 +13599,44 @@ void Matrix4::SetTranspose( void )
 			std::swap( data[ i * 4 + j ], data[ j * 4 + i ] );
 		}
 	}
+	return *this;
 }
 
-void Matrix4::SetInverse()
+Matrix4& Matrix4::SetInverse()
 {
 	*this = GetInverse();
+	return *this;
 }
 
-void Matrix4::SetAxis( uint32_t col, const Vec3& v )
+Matrix4& Matrix4::SetAxis( uint32_t col, const Vec3& v )
 {
 	data[ col * 4 ] = v.x;
 	data[ col * 4 + 1 ] = v.y;
 	data[ col * 4 + 2 ] = v.z;
+	return *this;
 }
 
-void Matrix4::SetAxis( uint32_t col, const Vec4& v )
+Matrix4& Matrix4::SetAxis( uint32_t col, const Vec4& v )
 {
 	columns[ col ] = v;
+	return *this;
 }
 
-void Matrix4::SetRow( uint32_t row, const Vec3 &v )
+Matrix4& Matrix4::SetRow( uint32_t row, const Vec3 &v )
 {
 	data[ row ] = v.x;
 	data[ row + 4 ] = v.y;
 	data[ row + 8 ] = v.z;
+	return *this;
 }
 
-void Matrix4::SetRow( uint32_t row, const Vec4 &v)
+Matrix4& Matrix4::SetRow( uint32_t row, const Vec4 &v)
 {
 	data[ row ] = v.x;
 	data[ row + 4 ] = v.y;
 	data[ row + 8 ] = v.z;
 	data[ row + 12 ] = v.w;
+	return *this;
 }
 
 Vec3 Matrix4::GetTranslation() const
@@ -16227,6 +16249,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
 	AE_ASSERT( _aeWindow );
 	AE_ASSERT( _aeWindow->input );
+	// @TODO: Prevent Q from being sent to the window?
 	_aeWindow->input->quit = true;
 	return NSTerminateCancel;
 }
