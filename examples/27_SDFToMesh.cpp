@@ -39,7 +39,7 @@ struct IsosurfaceParams
 {
 	ae::DebugLines* debug = nullptr;
 	float normalSampleOffset = 0.25f;
-	float smoothingAmount = 0.05f;
+	float smoothingAmount = 0.05f; // @TODO: This does nothing yet
 };
 struct TempEdges
 {
@@ -163,8 +163,6 @@ private:
 
 	const int32_t kDim = kChunkSize + 5; // TODO: What should this value actually be? Corresponds to 'chunkPlus'
 	static const int32_t kOffset = 2;
-	ae::Int3 m_offseti_REMOVE; // Pre-computed chunk integer offset
-	ae::Vec3 m_offsetf_REMOVE; // Pre-computed chunk float offset
 	IsosurfaceParams m_p;
 
 	// @TODO: Replace this with aeStaticImage3D
@@ -182,8 +180,6 @@ struct IsosurfaceExtractor
 	ae::VertexBuffer m_data; // @TODO: Remove
 	
 	TempEdges m_tempEdges[ kTempChunkSize3 ];
-	Block::Type m_t[ kChunkSize ][ kChunkSize ][ kChunkSize ];
-	float m_l[ kChunkSize ][ kChunkSize ][ kChunkSize ];
 	IsosurfaceIndex m_i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
 
 private:
@@ -381,7 +377,6 @@ int main()
 			color( color )
 		{}
 
-		bool dirty = true;
 		ae::Int3 offset = ae::Int3( 0 );
 		VertexCount vertexCount = VertexCount( 0 );
 		uint32_t indexCount = 0;
@@ -389,21 +384,21 @@ int main()
 		IsosurfaceIndex* indices = ae::NewArray< IsosurfaceIndex >( TAG_ISOSURFACE, kMaxIndices );
 		IsosurfaceExtractor* extractor = ae::New< IsosurfaceExtractor >( TAG_ISOSURFACE );
 		IsosurfaceExtractorCache* cache = ae::New< IsosurfaceExtractorCache >( TAG_ISOSURFACE );
-		void Run( const ae::Matrix4 transform )
+		void Run( ae::Matrix4 transform )
 		{
-			dirty = false;
-
 			// Cache
 			AE_INFO( "[#] Caching SDF...", name );
 			const double cacheStart = ae::GetTime();
+			const ae::Vec3 scale = transform.GetScale();
+			transform = transform.GetScaleRemoved();
 			const ae::Matrix4 inverseTransform = transform.GetInverse();
-			cache->Generate( {}, offset, [&inverseTransform]( ae::Vec3 _p )
+			cache->Generate( {}, offset, [&inverseTransform, &scale]( ae::Vec3 _p )
 			{
+				const float smooth = 2.0f; // World space because scale is applied separately from transform
 				const ae::Vec3 p = inverseTransform.TransformPoint3x4( _p );
-				const float k = 4.0f;
-				float r = SDFBox( p, ae::Vec3( 2.0f, 1.0f, 1.0f ) * k );
-				r = SDFUnion( r, SDFBox( p, ae::Vec3( 1.0f, 2.0f, 1.0f ) * k ) );
-				r = SDFUnion( r, SDFBox( p, ae::Vec3( 1.0f, 1.0f, 2.0f ) * k ) );
+				float r = SDFBox( p, ae::Vec3( 0.5f, 0.25f, 0.25f ) * scale, smooth );
+				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.5f, 0.25f ) * scale, smooth ), smooth );
+				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.25f, 0.5f ) * scale, smooth ), smooth );
 				return r;
 				// return ( p - ae::Vec3( 0.7f ) ).Length() - 4.0f;
 			} );
@@ -480,12 +475,12 @@ int main()
 	ae::Vec3 translation;
 	ae::Vec3 rotation;
 	ae::Vec3 scale;
-	ae::Matrix4 prevTransform = ae::Matrix4::Identity();
+	ae::Matrix4 prevTransform = ae::Matrix4::Scaling( 0.0f ); // Different than transform on frame 1
 	auto ResetTransform = [&]()
 	{
 		translation = ae::Vec3( 0.0f );
 		rotation = ae::Vec3( 0.0f );
-		scale = ae::Vec3( 1.0f );
+		scale = ae::Vec3( 20.0f );
 	};
 	ResetTransform();
 
@@ -514,48 +509,37 @@ int main()
 		// Reset
 		if( input.GetPress( ae::Key::R ) ) { ResetTransform(); }
 		// Translation
-		const float moveSpeed = 4.0f * ( scale.x + scale.y + scale.z ) / 3.0f;
-		if ( input.Get( ae::Key::D ) ) { translation.x += moveSpeed * dt; }
-		if ( input.Get( ae::Key::A ) ) { translation.x -= moveSpeed * dt; }
-		if ( input.Get( ae::Key::W ) ) { translation.y += moveSpeed * dt; }
-		if ( input.Get( ae::Key::S ) ) { translation.y -= moveSpeed * dt; }
-		if ( input.Get( ae::Key::E ) ) { translation.z += moveSpeed * dt; }
-		if ( input.Get( ae::Key::Q ) ) { translation.z -= moveSpeed * dt; }
+		const float transformSpeed = 2.0f * ( scale.x + scale.y + scale.z ) / 3.0f;
+		if ( input.Get( ae::Key::D ) ) { translation.x += transformSpeed * dt; }
+		if ( input.Get( ae::Key::A ) ) { translation.x -= transformSpeed * dt; }
+		if ( input.Get( ae::Key::W ) ) { translation.y += transformSpeed * dt; }
+		if ( input.Get( ae::Key::S ) ) { translation.y -= transformSpeed * dt; }
+		if ( input.Get( ae::Key::E ) ) { translation.z += transformSpeed * dt; }
+		if ( input.Get( ae::Key::Q ) ) { translation.z -= transformSpeed * dt; }
 		// Rotation
 		if ( input.Get( ae::Key::Z ) ) { rotation.x += 1.0f * dt; }
 		if ( input.Get( ae::Key::X ) ) { rotation.y += 1.0f * dt; }
 		if ( input.Get( ae::Key::C ) ) { rotation.z += 1.0f * dt; }
 		// Scale
-		if ( input.Get( ae::Key::L ) ) { scale.x += 1.0f * dt; }
-		if ( input.Get( ae::Key::J ) ) { scale.x -= 1.0f * dt; }
-		if ( input.Get( ae::Key::I ) ) { scale.y += 1.0f * dt; }
-		if ( input.Get( ae::Key::K ) ) { scale.y -= 1.0f * dt; }
-		if ( input.Get( ae::Key::O ) ) { scale.z += 1.0f * dt; }
-		if ( input.Get( ae::Key::U ) ) { scale.z -= 1.0f * dt; }
+		if ( input.Get( ae::Key::L ) ) { scale.x += transformSpeed * dt; }
+		if ( input.Get( ae::Key::J ) ) { scale.x -= transformSpeed * dt; }
+		if ( input.Get( ae::Key::I ) ) { scale.y += transformSpeed * dt; }
+		if ( input.Get( ae::Key::K ) ) { scale.y -= transformSpeed * dt; }
+		if ( input.Get( ae::Key::O ) ) { scale.z += transformSpeed * dt; }
+		if ( input.Get( ae::Key::U ) ) { scale.z -= transformSpeed * dt; }
 		scale = ae::Max( ae::Vec3( 0.01f ), scale );
 		// ZYX rotation
 		const ae::Quaternion orientation =
 			ae::Quaternion( ae::Vec3( 1, 0, 0 ), rotation.x ) *
 			ae::Quaternion( ae::Vec3( 0, 1, 0 ), rotation.y ) *
 			ae::Quaternion( ae::Vec3( 0, 0, 1 ), rotation.z );
+		// Generate SDF when transform changes
 		const ae::Matrix4 transform = ae::Matrix4::LocalToWorld( translation, orientation, scale );
-		if( prevTransform == transform )
+		if( prevTransform != transform )
 		{
 			for( SDFToMesh& sdf : sdfToMesh )
 			{
-				if( sdf.dirty )
-				{
-					sdf.Run( transform );
-					break;
-				}
-			}
-		}
-		else
-		{
-			prevTransform = transform;
-			for( SDFToMesh& sdf : sdfToMesh )
-			{
-				sdf.dirty = true;
+				sdf.Run( transform );
 			}
 		}
 
@@ -565,7 +549,7 @@ int main()
 		debugLines.AddLine( ae::Vec3( -1, 0, 0 ) * 1000.0f, ae::Vec3( 1, 0, 0 ) * 1000.0f, ae::Color::AetherRed() );
 		debugLines.AddLine( ae::Vec3( 0, -1, 0 ) * 1000.0f, ae::Vec3( 0, 1, 0 ) * 1000.0f, ae::Color::AetherGreen() );
 		debugLines.AddLine( ae::Vec3( 0, 0, -1 ) * 1000.0f, ae::Vec3( 0, 0, 1 ) * 1000.0f, ae::Color::AetherBlue() );
-		debugLines.AddOBB( transform * ae::Matrix4::Scaling( 16.0f ), ae::Color::AetherPurple() );
+		debugLines.AddOBB( transform * ae::Matrix4::Scaling( 1.0f ), ae::Color::AetherPurple() );
 		
 		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 1000.0f );
@@ -601,8 +585,6 @@ template < typename Fn >
 void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params, ae::Int3 offset, Fn fn )
 {
 	m_offset = ae::Vec3( offset );
-	m_offseti_REMOVE = ae::Int3( kOffset );
-	m_offsetf_REMOVE = ae::Vec3( (float)kOffset );
 	m_p = params;
 
 	ae::Int3 offset2 = offset - ae::Int3( kOffset );
@@ -687,7 +669,7 @@ IsosurfaceExtractorCache::~IsosurfaceExtractorCache()
 
 float IsosurfaceExtractorCache::GetValue( ae::Vec3 pos ) const
 {
-	pos += m_offsetf_REMOVE; // m_offseti_REMOVE
+	pos += ae::Vec3( kOffset );
 
 	const ae::Int3 cornerPos = pos.FloorCopy();
 	pos.x -= cornerPos.x;
@@ -717,7 +699,16 @@ float IsosurfaceExtractorCache::GetValue( ae::Vec3 pos ) const
 
 float IsosurfaceExtractorCache::GetValue( ae::Int3 pos ) const
 {
-	return m_GetValue( pos + m_offseti_REMOVE );
+	return m_GetValue( pos + ae::Int3( kOffset ) );
+}
+
+float IsosurfaceExtractorCache::m_GetValue( ae::Int3 pos ) const
+{
+#if _AE_DEBUG_
+	AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
+	AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
+#endif
+	return m_values[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
 }
 
 ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
@@ -757,27 +748,15 @@ ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
 	return ( normal1 + normal0 ).SafeNormalizeCopy();
 }
 
-float IsosurfaceExtractorCache::m_GetValue( ae::Int3 pos ) const
-{
-#if _AE_DEBUG_
-	AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
-	AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
-#endif
-	return m_values[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
-}
-
 //------------------------------------------------------------------------------
 // IsosurfaceExtractor member functions
 //------------------------------------------------------------------------------
-
 void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, IsosurfaceVertex* verticesOut, IsosurfaceIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut, uint32_t _maxVerts, uint32_t maxIndices )
 {
 	const VertexCount maxVerts( _maxVerts );
 	VertexCount vertexCount = VertexCount( 0 );
 	uint32_t indexCount = 0;
 
-	memset( m_t, 0, sizeof( m_t ) );
-	memset( m_l, 0, sizeof( m_l ) );
 	memset( m_i, ~(uint8_t)0, sizeof( m_i ) );
 	memset( m_tempEdges, 0, kTempChunkSize3 * sizeof( *m_tempEdges ) );
 	
@@ -829,27 +808,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 		if ( cornerValues[ 0 ][ 0 ] * cornerValues[ 0 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
 		if ( cornerValues[ 1 ][ 0 ] * cornerValues[ 1 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
 		if ( cornerValues[ 2 ][ 0 ] * cornerValues[ 2 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
-		
-		// Store block type
-		// @TODO: Remove this when raycasting uses triangle mesh
-		if ( edgeBits == 0 )
-		{
-			if ( x >= 0 && y >= 0 && z >= 0 && x < kChunkSize && y < kChunkSize && z < kChunkSize )
-			{
-				if ( m_i[ x ][ y ][ z ] != kInvalidIsosurfaceIndex )
-				{
-					continue;
-				}
-				
-				ae::Vec3 g;
-				g.x = x + 0.5f;
-				g.y = y + 0.5f;
-				g.z = z + 0.5f;
-				// @TODO: This is really expensive and might not be needed. Investigate removing 'Block' type altogether
-				m_t[ x ][ y ][ z ] = ( sdf->GetValue( g ) > 0.0f ) ? Block::Exterior : Block::Interior;
-			}
-			continue;
-		}
 		
 		uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
 		AE_ASSERT( edgeIndex < kTempChunkSize3 );
@@ -967,7 +925,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 					if ( inCurrentChunk )
 					{
 						m_i[ ox ][ oy ][ oz ] = index;
-						m_t[ ox ][ oy ][ oz ] = Block::Surface;
 					}
 				}
 				else
@@ -977,7 +934,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 					AE_ASSERT( ox < kChunkSize );
 					AE_ASSERT( oy < kChunkSize );
 					AE_ASSERT( oz < kChunkSize );
-					AE_ASSERT( m_t[ ox ][ oy ][ oz ] == Block::Surface );
 					ind[ j ] = index;
 				}
 			}
