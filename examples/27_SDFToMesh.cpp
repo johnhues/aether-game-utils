@@ -53,42 +53,6 @@ struct TempEdges
 	ae::Vec3 p[ 3 ];
 	ae::Vec3 n[ 3 ];
 };
-struct Block
-{
-	enum Type : uint8_t
-	{
-		Exterior,
-		Interior,
-		Surface,
-		Blocking,
-		Unloaded,
-		COUNT
-	};
-};
-const uint16_t EDGE_TOP_FRONT_INDEX = 0;
-const uint16_t EDGE_TOP_RIGHT_INDEX = 1;
-const uint16_t EDGE_TOP_BACK_INDEX = 2;
-const uint16_t EDGE_TOP_LEFT_INDEX = 3;
-const uint16_t EDGE_SIDE_FRONTLEFT_INDEX = 4;
-const uint16_t EDGE_SIDE_FRONTRIGHT_INDEX = 5;
-const uint16_t EDGE_SIDE_BACKRIGHT_INDEX = 6;
-const uint16_t EDGE_SIDE_BACKLEFT_INDEX = 7;
-const uint16_t EDGE_BOTTOM_FRONT_INDEX = 8;
-const uint16_t EDGE_BOTTOM_RIGHT_INDEX = 9;
-const uint16_t EDGE_BOTTOM_BACK_INDEX = 10;
-const uint16_t EDGE_BOTTOM_LEFT_INDEX = 11;
-const uint16_t EDGE_TOP_FRONT_BIT = 1 << EDGE_TOP_FRONT_INDEX;
-const uint16_t EDGE_TOP_RIGHT_BIT = 1 << EDGE_TOP_RIGHT_INDEX;
-const uint16_t EDGE_TOP_BACK_BIT = 1 << EDGE_TOP_BACK_INDEX;
-const uint16_t EDGE_TOP_LEFT_BIT = 1 << EDGE_TOP_LEFT_INDEX;
-const uint16_t EDGE_SIDE_FRONTLEFT_BIT = 1 << EDGE_SIDE_FRONTLEFT_INDEX;
-const uint16_t EDGE_SIDE_FRONTRIGHT_BIT = 1 << EDGE_SIDE_FRONTRIGHT_INDEX;
-const uint16_t EDGE_SIDE_BACKRIGHT_BIT = 1 << EDGE_SIDE_BACKRIGHT_INDEX;
-const uint16_t EDGE_SIDE_BACKLEFT_BIT = 1 << EDGE_SIDE_BACKLEFT_INDEX;
-const uint16_t EDGE_BOTTOM_FRONT_BIT = 1 << EDGE_BOTTOM_FRONT_INDEX;
-const uint16_t EDGE_BOTTOM_RIGHT_BIT = 1 << EDGE_BOTTOM_RIGHT_INDEX;
-const uint16_t EDGE_BOTTOM_BACK_BIT = 1 << EDGE_BOTTOM_BACK_INDEX;
-const uint16_t EDGE_BOTTOM_LEFT_BIT = 1 << EDGE_BOTTOM_LEFT_INDEX;
 
 //------------------------------------------------------------------------------
 // aeUnit
@@ -136,7 +100,7 @@ typedef aeUnit< uint32_t > VertexCount;
 
 typedef uint32_t IsosurfaceIndex;
 const IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
-const uint32_t kChunkSize = 20; // @NOTE: This can't be too high or kMaxChunkVerts will be hit
+const uint32_t kChunkSize = 50;
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
 const VertexCount kChunkCountEmpty = VertexCount( 0 );
@@ -174,12 +138,14 @@ private:
 //------------------------------------------------------------------------------
 struct IsosurfaceExtractor
 {
-	void Generate( const IsosurfaceExtractorCache* sdf, IsosurfaceVertex* verticesOut, IsosurfaceIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut, uint32_t maxVerts, uint32_t maxIndices );
+	IsosurfaceExtractor( ae::Tag tag );
+	void Generate( const IsosurfaceExtractorCache* sdf, uint32_t maxVerts, uint32_t maxIndices );
+	
+	ae::Array< IsosurfaceVertex > vertices;
+	ae::Array< IsosurfaceIndex > indices;
+
 	TempEdges m_tempEdges[ kTempChunkSize3 ];
 	IsosurfaceIndex m_i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
-
-private:
-	static void m_GetQuadVertexOffsetsFromEdge( uint32_t edgeBit, int32_t( &offsets )[ 4 ][ 3 ] );
 };
 
 //------------------------------------------------------------------------------
@@ -361,8 +327,6 @@ int main()
 	};
 	ToggleWireframe();
 
-	const uint32_t kMaxVerts = 5000; // @TODO: Dynamic array
-	const uint32_t kMaxIndices = 10000;
 	class SDFToMesh
 	{
 	public:
@@ -374,11 +338,7 @@ int main()
 		{}
 
 		ae::Int3 offset = ae::Int3( 0 );
-		VertexCount vertexCount = VertexCount( 0 );
-		uint32_t indexCount = 0;
-		IsosurfaceVertex* vertices = ae::NewArray< IsosurfaceVertex >( TAG_ISOSURFACE, kMaxVerts );
-		IsosurfaceIndex* indices = ae::NewArray< IsosurfaceIndex >( TAG_ISOSURFACE, kMaxIndices );
-		IsosurfaceExtractor* extractor = ae::New< IsosurfaceExtractor >( TAG_ISOSURFACE );
+		IsosurfaceExtractor* extractor = ae::New< IsosurfaceExtractor >( TAG_ISOSURFACE, TAG_ISOSURFACE );
 		IsosurfaceExtractorCache* cache = ae::New< IsosurfaceExtractorCache >( TAG_ISOSURFACE );
 		ae::VertexBuffer sdfVertexBuffer;
 		void Run( ae::Matrix4 transform )
@@ -405,58 +365,56 @@ int main()
 			// Mesh
 			AE_INFO( "[#] Start mesh generation...", name );
 			const double isosurfaceStart = ae::GetTime();
-			extractor->Generate(
-				cache,
-				vertices,
-				indices,
-				&vertexCount,
-				&indexCount,
-				kMaxVerts,
-				kMaxIndices
-			);
+			extractor->Generate( cache, 0, 0 );
 			const double isosurfaceEnd = ae::GetTime();
 			AE_INFO( "[#] Mesh generation complete. sec:# verts:# indices:# [#]",
 				name,
 				isosurfaceEnd - isosurfaceStart,
-				vertexCount.Get(),
-				indexCount,
+				extractor->vertices.Length(),
+				extractor->indices.Length(),
 				"@TODO:aabb" );
-			if ( vertexCount == kChunkCountEmpty )
+			if ( !extractor->vertices.Length() )
 			{
 				AE_INFO( "[#] No mesh generated", name );
 				return;
 			}
 			// (Re)Initialize ae::VertexArray here only when needed
 			if ( !sdfVertexBuffer.GetMaxVertexCount() // Not initialized
-				|| VertexCount( sdfVertexBuffer.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
-				|| sdfVertexBuffer.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
+				|| sdfVertexBuffer.GetMaxVertexCount() < extractor->vertices.Length() // Too little storage for verts
+				|| sdfVertexBuffer.GetMaxIndexCount() < extractor->indices.Length() ) // Too little storage for t_chunkIndices
 			{
-				sdfVertexBuffer.Initialize( sizeof( IsosurfaceVertex ), sizeof( IsosurfaceIndex ), (uint32_t)vertexCount, indexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+				sdfVertexBuffer.Initialize(
+					sizeof( IsosurfaceVertex ),
+					sizeof( IsosurfaceIndex ),
+					extractor->vertices.Length(),
+					extractor->indices.Length(),
+					ae::Vertex::Primitive::Triangle,
+					ae::Vertex::Usage::Dynamic,
+					ae::Vertex::Usage::Dynamic
+				 );
 				sdfVertexBuffer.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( IsosurfaceVertex, position ) );
 				sdfVertexBuffer.AddAttribute( "a_normal", 3, ae::Vertex::Type::Float, offsetof( IsosurfaceVertex, normal ) );
 			}
 
 			// Set vertices
-			sdfVertexBuffer.UploadVertices( 0, vertices, (uint32_t)vertexCount );
-			sdfVertexBuffer.UploadIndices( 0, indices, indexCount );
+			sdfVertexBuffer.UploadVertices( 0, extractor->vertices.Data(), extractor->vertices.Length() );
+			sdfVertexBuffer.UploadIndices( 0, extractor->indices.Data(), extractor->indices.Length() );
 		}
 
 		bool show = true;
 		void Draw( ae::Shader* shader, ae::UniformList& uniforms )
 		{
-			if ( !show || vertexCount == kChunkCountEmpty )
+			if ( !show || !extractor->indices.Length() )
 			{
 				return;
 			}
 			uniforms.Set( "u_color", color.GetLinearRGB() );
 			sdfVertexBuffer.Bind( shader, uniforms );
-			sdfVertexBuffer.Draw( 0, indexCount / 3 );
+			sdfVertexBuffer.Draw( 0, extractor->indices.Length() / 3 );
 		}
 
 		~SDFToMesh()
 		{
-			ae::Delete( indices );
-			ae::Delete( vertices );
 			ae::Delete( cache );
 			ae::Delete( extractor );
 		}
@@ -550,6 +508,7 @@ int main()
 			{
 				sdf.Run( transform );
 			}
+			prevTransform = transform;
 		}
 
 		render.Activate();
@@ -760,12 +719,39 @@ ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
 //------------------------------------------------------------------------------
 // IsosurfaceExtractor member functions
 //------------------------------------------------------------------------------
-void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, IsosurfaceVertex* verticesOut, IsosurfaceIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut, uint32_t _maxVerts, uint32_t maxIndices )
-{
-	const VertexCount maxVerts( _maxVerts );
-	VertexCount vertexCount = VertexCount( 0 );
-	uint32_t indexCount = 0;
+IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
+	vertices( tag ),
+	indices( tag )
+{}
 
+void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_t _maxVerts, uint32_t maxIndices )
+{
+	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
+	const uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
+	const uint16_t EDGE_TOP_BACK_BIT = ( 1 << 2 );
+	const uint16_t EDGE_TOP_LEFT_BIT = ( 1 << 3 );
+	const uint16_t EDGE_SIDE_FRONTLEFT_BIT = ( 1 << 4 );
+	const uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 5 );
+	const uint16_t EDGE_SIDE_BACKRIGHT_BIT = ( 1 << 6 );
+	const uint16_t EDGE_SIDE_BACKLEFT_BIT = ( 1 << 7 );
+	const uint16_t EDGE_BOTTOM_FRONT_BIT = ( 1 << 8 );
+	const uint16_t EDGE_BOTTOM_RIGHT_BIT = ( 1 << 9 );
+	const uint16_t EDGE_BOTTOM_BACK_BIT = ( 1 << 10 );
+	const uint16_t EDGE_BOTTOM_LEFT_BIT = ( 1 << 11 );
+
+	if( _maxVerts == 0 )
+	{
+		_maxVerts = ae::MaxValue< uint32_t >();
+	}
+	if( maxIndices == 0 )
+	{
+		maxIndices = ae::MaxValue< uint32_t >();
+	}
+	const VertexCount maxVerts( _maxVerts );
+	VertexCount vertexCount = VertexCount( 0 ); // @TODO: Replace with vertices.Length()
+
+	vertices.Clear();
+	indices.Clear();
 	memset( m_i, ~(uint8_t)0, sizeof( m_i ) );
 	memset( m_tempEdges, 0, kTempChunkSize3 * sizeof( *m_tempEdges ) );
 	
@@ -830,10 +816,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 		for ( int32_t e = 0; e < 3; e++ )
 		if ( edgeBits & mask[ e ] )
 		{
-			if ( vertexCount + VertexCount( 4 ) > maxVerts || indexCount + 6 > maxIndices )
+			if ( vertexCount + VertexCount( 4 ) > maxVerts || indices.Length() + 6 > maxIndices )
 			{
-				*vertexCountOut = VertexCount( 0 );
-				*indexCountOut = 0;
+				vertices.Clear();
+				indices.Clear();
 				return;
 			}
 
@@ -895,14 +881,114 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 				continue;
 			}
 			
-			IsosurfaceIndex ind[ 4 ];
 			int32_t offsets[ 4 ][ 3 ];
-			m_GetQuadVertexOffsetsFromEdge( mask[ e ], offsets );
+			switch( mask[ e ] )
+			{
+				case EDGE_TOP_FRONT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
+					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 1;
+					break;
+				}
+				case EDGE_TOP_RIGHT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
+					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = 1;
+					break;
+				}
+				case EDGE_TOP_BACK_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
+					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 1;
+					break;
+				}
+				case EDGE_TOP_LEFT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = -1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
+					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = 1;
+					break;
+				}
+				case EDGE_SIDE_FRONTLEFT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = -1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
+					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 0;
+					break;
+				}
+				case EDGE_SIDE_FRONTRIGHT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
+					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 0;
+					break;
+				}
+				case EDGE_SIDE_BACKRIGHT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
+					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 0;
+					break;
+				}
+				case EDGE_SIDE_BACKLEFT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = -1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
+					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 0;
+					break;
+				}
+				case EDGE_BOTTOM_FRONT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
+					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = -1;
+					break;
+				}
+				case EDGE_BOTTOM_RIGHT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
+					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = -1;
+					break;
+				}
+				case EDGE_BOTTOM_BACK_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
+					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = -1;
+					break;
+				}
+				case EDGE_BOTTOM_LEFT_BIT:
+				{
+					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
+					offsets[ 1 ][ 0 ] = -1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
+					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
+					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = -1;
+					break;
+				}
+				default:
+					AE_FAIL();
+			}
 			
 			// @NOTE: Expand edge into two triangles. Add new vertices for each edge
 			// intersection (centered in voxels at this point). Edges are eventually expanded
 			// into quads, so each edge needs 4 vertices. This does some of the work
 			// for adjacent voxels.
+			IsosurfaceIndex ind[ 4 ];
 			for ( int32_t j = 0; j < 4; j++ )
 			{
 				int32_t ox = x + offsets[ j ][ 0 ];
@@ -927,7 +1013,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 					AE_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
 
 					IsosurfaceIndex index = (IsosurfaceIndex)vertexCount;
-					verticesOut[ (uint32_t)vertexCount ] = vertex;
+					vertices.Append( vertex );
 					vertexCount++;
 					ind[ j ] = index;
 					
@@ -959,41 +1045,38 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 			if ( flip )
 			{
 				// tri0
-				indexOut[ indexCount++ ] = ind[ 0 ];
-				indexOut[ indexCount++ ] = ind[ 1 ];
-				indexOut[ indexCount++ ] = ind[ 2 ];
+				indices.Append( ind[ 0 ] );
+				indices.Append( ind[ 1 ] );
+				indices.Append( ind[ 2 ] );
 				// tri1
-				indexOut[ indexCount++ ] = ind[ 1 ];
-				indexOut[ indexCount++ ] = ind[ 3 ];
-				indexOut[ indexCount++ ] = ind[ 2 ];
+				indices.Append( ind[ 1 ] );
+				indices.Append( ind[ 3 ] );
+				indices.Append( ind[ 2 ] );
 			}
 			else
 			{
 				// tri2
-				indexOut[ indexCount++ ] = ind[ 0 ];
-				indexOut[ indexCount++ ] = ind[ 2 ];
-				indexOut[ indexCount++ ] = ind[ 1 ];
-				//tri3
-				indexOut[ indexCount++ ] = ind[ 1 ];
-				indexOut[ indexCount++ ] = ind[ 2 ];
-				indexOut[ indexCount++ ] = ind[ 3 ];
+				indices.Append( ind[ 0 ] );
+				indices.Append( ind[ 2 ] );
+				indices.Append( ind[ 1 ] );
+				// tri3
+				indices.Append( ind[ 1 ] );
+				indices.Append( ind[ 2 ] );
+				indices.Append( ind[ 3 ] );
 			}
 		}
 	}
 	
-	if ( indexCount == 0 )
+	if ( indices.Length() == 0 )
 	{
-		// @TODO: Should differentiate between empty chunk and full chunk. It's possible though that
-		// Chunk::t's are good enough for this though.
-		*vertexCountOut = kChunkCountEmpty;
-		*indexCountOut = 0;
+		vertices.Clear();
 		return;
 	}
 	
 	const uint32_t vc = (int32_t)vertexCount;
 	for ( uint32_t i = 0; i < vc; i++ )
 	{
-		IsosurfaceVertex* vertex = &verticesOut[ i ];
+		IsosurfaceVertex* vertex = &vertices[ i ];
 		int32_t x = ae::Floor( vertex->position.x );
 		int32_t y = ae::Floor( vertex->position.y );
 		int32_t z = ae::Floor( vertex->position.z );
@@ -1153,101 +1236,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 		vertex->position = ae::Vec4( position + sdf->GetOffset(), 1.0f );
 	}
 
-	// @TODO: Support kChunkCountInterior for raycasting
 	AE_ASSERT( vertexCount <= maxVerts );
-	AE_ASSERT( indexCount <= maxIndices );
-	*vertexCountOut = vertexCount;
-	*indexCountOut = indexCount;
-}
-
-void IsosurfaceExtractor::m_GetQuadVertexOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] )
-{
-	if ( edgeBit == EDGE_TOP_FRONT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-		offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 1;
-	}
-	else if ( edgeBit == EDGE_TOP_RIGHT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-		offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = 1;
-	}
-	else if ( edgeBit == EDGE_TOP_BACK_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-		offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 1;
-	}
-	else if ( edgeBit == EDGE_TOP_LEFT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = -1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-		offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = 1;
-	}
-	else if ( edgeBit == EDGE_SIDE_FRONTLEFT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = -1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-		offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 0;
-	}
-	else if ( edgeBit == EDGE_SIDE_FRONTRIGHT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-		offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 0;
-	}
-	else if ( edgeBit == EDGE_SIDE_BACKRIGHT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-		offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 0;
-	}
-	else if ( edgeBit == EDGE_SIDE_BACKLEFT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = -1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-		offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 0;
-	}
-	else if ( edgeBit == EDGE_BOTTOM_FRONT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-		offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = -1;
-	}
-	else if ( edgeBit == EDGE_BOTTOM_RIGHT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-		offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = -1;
-	}
-	else if ( edgeBit == EDGE_BOTTOM_BACK_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-		offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = -1;
-	}
-	else if ( edgeBit == EDGE_BOTTOM_LEFT_BIT )
-	{
-		offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-		offsets[ 1 ][ 0 ] = -1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-		offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-		offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = -1;
-	}
-	else
-	{
-		AE_FAIL();
-	}
+	AE_ASSERT( indices.Length() <= maxIndices );
 }
