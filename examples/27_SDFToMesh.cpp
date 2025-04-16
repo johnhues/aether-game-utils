@@ -175,10 +175,6 @@ private:
 struct IsosurfaceExtractor
 {
 	void Generate( const IsosurfaceExtractorCache* sdf, IsosurfaceVertex* verticesOut, IsosurfaceIndex* indexOut, VertexCount* vertexCountOut, uint32_t* indexCountOut, uint32_t maxVerts, uint32_t maxIndices );
-	void m_SetVertexData( const IsosurfaceVertex* verts, const IsosurfaceIndex* indices, VertexCount vertexCount, uint32_t indexCount );
-
-	ae::VertexBuffer m_data; // @TODO: Remove
-	
 	TempEdges m_tempEdges[ kTempChunkSize3 ];
 	IsosurfaceIndex m_i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
 
@@ -384,6 +380,7 @@ int main()
 		IsosurfaceIndex* indices = ae::NewArray< IsosurfaceIndex >( TAG_ISOSURFACE, kMaxIndices );
 		IsosurfaceExtractor* extractor = ae::New< IsosurfaceExtractor >( TAG_ISOSURFACE );
 		IsosurfaceExtractorCache* cache = ae::New< IsosurfaceExtractorCache >( TAG_ISOSURFACE );
+		ae::VertexBuffer sdfVertexBuffer;
 		void Run( ae::Matrix4 transform )
 		{
 			// Cache
@@ -429,7 +426,19 @@ int main()
 				AE_INFO( "[#] No mesh generated", name );
 				return;
 			}
-			extractor->m_SetVertexData( vertices, indices, vertexCount, indexCount );
+			// (Re)Initialize ae::VertexArray here only when needed
+			if ( !sdfVertexBuffer.GetMaxVertexCount() // Not initialized
+				|| VertexCount( sdfVertexBuffer.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
+				|| sdfVertexBuffer.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
+			{
+				sdfVertexBuffer.Initialize( sizeof( IsosurfaceVertex ), sizeof( IsosurfaceIndex ), (uint32_t)vertexCount, indexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
+				sdfVertexBuffer.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( IsosurfaceVertex, position ) );
+				sdfVertexBuffer.AddAttribute( "a_normal", 3, ae::Vertex::Type::Float, offsetof( IsosurfaceVertex, normal ) );
+			}
+
+			// Set vertices
+			sdfVertexBuffer.UploadVertices( 0, vertices, (uint32_t)vertexCount );
+			sdfVertexBuffer.UploadIndices( 0, indices, indexCount );
 		}
 
 		bool show = true;
@@ -440,8 +449,8 @@ int main()
 				return;
 			}
 			uniforms.Set( "u_color", color.GetLinearRGB() );
-			extractor->m_data.Bind( shader, uniforms );
-			extractor->m_data.Draw( 0, indexCount / 3 );
+			sdfVertexBuffer.Bind( shader, uniforms );
+			sdfVertexBuffer.Draw( 0, indexCount / 3 );
 		}
 
 		~SDFToMesh()
@@ -1149,23 +1158,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, Isosurf
 	AE_ASSERT( indexCount <= maxIndices );
 	*vertexCountOut = vertexCount;
 	*indexCountOut = indexCount;
-}
-
-void IsosurfaceExtractor::m_SetVertexData( const IsosurfaceVertex* verts, const IsosurfaceIndex* indices, VertexCount vertexCount, uint32_t indexCount )
-{
-	// (Re)Initialize ae::VertexArray here only when needed
-	if ( !m_data.GetMaxVertexCount() // Not initialized
-		|| VertexCount( m_data.GetMaxVertexCount() ) < vertexCount // Too little storage for verts
-		|| m_data.GetMaxIndexCount() < indexCount ) // Too little storage for t_chunkIndices
-	{
-		m_data.Initialize( sizeof( IsosurfaceVertex ), sizeof( IsosurfaceIndex ), (uint32_t)vertexCount, indexCount, ae::Vertex::Primitive::Triangle, ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Dynamic );
-		m_data.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( IsosurfaceVertex, position ) );
-		m_data.AddAttribute( "a_normal", 3, ae::Vertex::Type::Float, offsetof( IsosurfaceVertex, normal ) );
-	}
-
-	// Set vertices
-	m_data.UploadVertices( 0, verts, (uint32_t)vertexCount );
-	m_data.UploadIndices( 0, indices, indexCount );
 }
 
 void IsosurfaceExtractor::m_GetQuadVertexOffsetsFromEdge( uint32_t edgeBit, int32_t (&offsets)[ 4 ][ 3 ] )
