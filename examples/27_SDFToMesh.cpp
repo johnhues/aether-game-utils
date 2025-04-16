@@ -524,6 +524,7 @@ void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params, ae::Int
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
+// @TODO: Shouldn't be external to IsosurfaceExtractor
 ae::Vec3 GetIntersection( const ae::Vec3* p, const ae::Vec3* n, uint32_t ic )
 {
 #if AE_TERRAIN_SIMD
@@ -681,19 +682,6 @@ IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
 
 void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_t maxVerts, uint32_t maxIndices )
 {
-	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
-	const uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
-	const uint16_t EDGE_TOP_BACK_BIT = ( 1 << 2 );
-	const uint16_t EDGE_TOP_LEFT_BIT = ( 1 << 3 );
-	const uint16_t EDGE_SIDE_FRONTLEFT_BIT = ( 1 << 4 );
-	const uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 5 );
-	const uint16_t EDGE_SIDE_BACKRIGHT_BIT = ( 1 << 6 );
-	const uint16_t EDGE_SIDE_BACKLEFT_BIT = ( 1 << 7 );
-	const uint16_t EDGE_BOTTOM_FRONT_BIT = ( 1 << 8 );
-	const uint16_t EDGE_BOTTOM_RIGHT_BIT = ( 1 << 9 );
-	const uint16_t EDGE_BOTTOM_BACK_BIT = ( 1 << 10 );
-	const uint16_t EDGE_BOTTOM_LEFT_BIT = ( 1 << 11 );
-
 	if( maxVerts == 0 )
 	{
 		maxVerts = ae::MaxValue< uint32_t >();
@@ -707,25 +695,43 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	indices.Clear();
 	memset( m_i, ~(uint8_t)0, sizeof( m_i ) );
 	memset( m_tempEdges, 0, kTempChunkSize3 * sizeof( *m_tempEdges ) );
-	
-	uint16_t mask[ 3 ];
-	mask[ 0 ] = EDGE_TOP_FRONT_BIT;
-	mask[ 1 ] = EDGE_TOP_RIGHT_BIT;
-	mask[ 2 ] = EDGE_SIDE_FRONTRIGHT_BIT;
-	
+
+	// @TODO: Description
+	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
+	const uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
+	const uint16_t EDGE_TOP_BACK_BIT = ( 1 << 2 );
+	const uint16_t EDGE_TOP_LEFT_BIT = ( 1 << 3 );
+	const uint16_t EDGE_SIDE_FRONTLEFT_BIT = ( 1 << 4 );
+	const uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 5 );
+	const uint16_t EDGE_SIDE_BACKRIGHT_BIT = ( 1 << 6 );
+	const uint16_t EDGE_SIDE_BACKLEFT_BIT = ( 1 << 7 );
+	const uint16_t EDGE_BOTTOM_FRONT_BIT = ( 1 << 8 );
+	const uint16_t EDGE_BOTTOM_RIGHT_BIT = ( 1 << 9 );
+	const uint16_t EDGE_BOTTOM_BACK_BIT = ( 1 << 10 );
+	const uint16_t EDGE_BOTTOM_LEFT_BIT = ( 1 << 11 );
+	// For expansion of edge intersections into triangles
+	const ae::Int3 offsets_EDGE_TOP_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1, 1 } };
+	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
+	const ae::Int3 offsets_EDGE_TOP_BACK_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, -1, 1 } };
+	const ae::Int3 offsets_EDGE_TOP_LEFT_BIT[ 4 ] = { { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { -1, 0, 1 } };
+	const ae::Int3 offsets_EDGE_SIDE_FRONTLEFT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { -1, 0, 0 }, { -1, 1, 0 } };
+	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
+	const ae::Int3 offsets_EDGE_SIDE_BACKRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { 1, 0, 0 }, { 1, -1, 0 } };
+	const ae::Int3 offsets_EDGE_SIDE_BACKLEFT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { -1, 0, 0 }, { -1, -1, 0 } };
+	const ae::Int3 offsets_EDGE_BOTTOM_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }, { 0, 1, -1 } };
+	const ae::Int3 offsets_EDGE_BOTTOM_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }, { 1, 0, -1 } };
+	const ae::Int3 offsets_EDGE_BOTTOM_BACK_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }, { 0, -1, -1 } };
+	const ae::Int3 offsets_EDGE_BOTTOM_LEFT_BIT[ 4 ] = { { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }, { -1, 0, -1 } };
+	// @TODO: Description
+	const uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
 	// 3 new edges to test
-	ae::Vec3 cornerOffsets[ 3 ][ 2 ];
-	// EDGE_TOP_FRONT_BIT
-	cornerOffsets[ 0 ][ 0 ] = ae::Vec3( 0, 1, 1 );
-	cornerOffsets[ 0 ][ 1 ] = ae::Vec3( 1, 1, 1 );
-	// EDGE_TOP_RIGHT_BIT
-	cornerOffsets[ 1 ][ 0 ] = ae::Vec3( 1, 0, 1 );
-	cornerOffsets[ 1 ][ 1 ] = ae::Vec3( 1, 1, 1 );
-	// EDGE_SIDE_FRONTRIGHT_BIT
-	cornerOffsets[ 2 ][ 0 ] = ae::Vec3( 1, 1, 0 );
-	cornerOffsets[ 2 ][ 1 ] = ae::Vec3( 1, 1, 1 );
+	const ae::Vec3 cornerOffsets[ 3 ][ 2 ] = {
+		{ { 0, 1, 1 }, { 1, 1, 1 } }, // EDGE_TOP_FRONT_BIT
+		{ { 1, 0, 1 }, { 1, 1, 1 } }, // EDGE_TOP_RIGHT_BIT
+		{ { 1, 1, 0 }, { 1, 1, 1 } } // EDGE_SIDE_FRONTRIGHT_BIT
+	};
 	
-	// @NOTE: This phase generates the surface mesh for the current chunk. The vertex
+	// This phase generates the surface mesh for the current chunk. The vertex
 	// positions will be centered at the end of this phase, and will be nudged later
 	// to the correct position within the voxel.
 	const int32_t chunkPlus = kChunkSize + 1;
@@ -757,7 +763,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		if ( cornerValues[ 1 ][ 0 ] * cornerValues[ 1 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
 		if ( cornerValues[ 2 ][ 0 ] * cornerValues[ 2 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
 		
-		uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
+		const uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
 		AE_ASSERT( edgeIndex < kTempChunkSize3 );
 		TempEdges* te = &m_tempEdges[ edgeIndex ];
 		te->b = edgeBits;
@@ -834,107 +840,22 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				continue;
 			}
 			
-			int32_t offsets[ 4 ][ 3 ];
+			const ae::Int3* offsets;
 			switch( mask[ e ] )
 			{
-				case EDGE_TOP_FRONT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 1;
-					break;
-				}
-				case EDGE_TOP_RIGHT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = 1;
-					break;
-				}
-				case EDGE_TOP_BACK_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 1;
-					break;
-				}
-				case EDGE_TOP_LEFT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = -1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 1;
-					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = 1;
-					break;
-				}
-				case EDGE_SIDE_FRONTLEFT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = -1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 0;
-					break;
-				}
-				case EDGE_SIDE_FRONTRIGHT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = 0;
-					break;
-				}
-				case EDGE_SIDE_BACKRIGHT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 0;
-					break;
-				}
-				case EDGE_SIDE_BACKLEFT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = -1; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = 0;
-					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = 0;
-					break;
-				}
-				case EDGE_BOTTOM_FRONT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = 1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = 1; offsets[ 3 ][ 2 ] = -1;
-					break;
-				}
-				case EDGE_BOTTOM_RIGHT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-					offsets[ 3 ][ 0 ] = 1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = -1;
-					break;
-				}
-				case EDGE_BOTTOM_BACK_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = 0; offsets[ 1 ][ 1 ] = -1; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-					offsets[ 3 ][ 0 ] = 0; offsets[ 3 ][ 1 ] = -1; offsets[ 3 ][ 2 ] = -1;
-					break;
-				}
-				case EDGE_BOTTOM_LEFT_BIT:
-				{
-					offsets[ 0 ][ 0 ] = 0; offsets[ 0 ][ 1 ] = 0; offsets[ 0 ][ 2 ] = 0;
-					offsets[ 1 ][ 0 ] = -1; offsets[ 1 ][ 1 ] = 0; offsets[ 1 ][ 2 ] = 0;
-					offsets[ 2 ][ 0 ] = 0; offsets[ 2 ][ 1 ] = 0; offsets[ 2 ][ 2 ] = -1;
-					offsets[ 3 ][ 0 ] = -1; offsets[ 3 ][ 1 ] = 0; offsets[ 3 ][ 2 ] = -1;
-					break;
-				}
-				default:
-					AE_FAIL();
+				case EDGE_TOP_FRONT_BIT: offsets = offsets_EDGE_TOP_FRONT_BIT; break;
+				case EDGE_TOP_RIGHT_BIT: offsets = offsets_EDGE_TOP_RIGHT_BIT; break;
+				case EDGE_TOP_BACK_BIT: offsets = offsets_EDGE_TOP_BACK_BIT; break;
+				case EDGE_TOP_LEFT_BIT: offsets = offsets_EDGE_TOP_LEFT_BIT; break;
+				case EDGE_SIDE_FRONTLEFT_BIT: offsets = offsets_EDGE_SIDE_FRONTLEFT_BIT; break;
+				case EDGE_SIDE_FRONTRIGHT_BIT: offsets = offsets_EDGE_SIDE_FRONTRIGHT_BIT; break;
+				case EDGE_SIDE_BACKRIGHT_BIT: offsets = offsets_EDGE_SIDE_BACKRIGHT_BIT; break;
+				case EDGE_SIDE_BACKLEFT_BIT: offsets = offsets_EDGE_SIDE_BACKLEFT_BIT; break;
+				case EDGE_BOTTOM_FRONT_BIT: offsets = offsets_EDGE_BOTTOM_FRONT_BIT; break;
+				case EDGE_BOTTOM_RIGHT_BIT: offsets = offsets_EDGE_BOTTOM_RIGHT_BIT; break;
+				case EDGE_BOTTOM_BACK_BIT: offsets = offsets_EDGE_BOTTOM_BACK_BIT; break;
+				case EDGE_BOTTOM_LEFT_BIT: offsets = offsets_EDGE_BOTTOM_LEFT_BIT; break;
+				default: AE_FAIL(); offsets = nullptr; break;
 			}
 			
 			// @NOTE: Expand edge into two triangles. Add new vertices for each edge
@@ -944,9 +865,9 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			IsosurfaceIndex ind[ 4 ];
 			for ( int32_t j = 0; j < 4; j++ )
 			{
-				int32_t ox = x + offsets[ j ][ 0 ];
-				int32_t oy = y + offsets[ j ][ 1 ];
-				int32_t oz = z + offsets[ j ][ 2 ];
+				const int32_t ox = x + offsets[ j ][ 0 ];
+				const int32_t oy = y + offsets[ j ][ 1 ];
+				const int32_t oz = z + offsets[ j ][ 2 ];
 				
 				// This check allows coordinates to be one out of chunk high end
 				if ( ox < 0 || oy < 0 || oz < 0 || ox > kChunkSize || oy > kChunkSize || oz > kChunkSize )
@@ -954,7 +875,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					continue;
 				}
 				
-				bool inCurrentChunk = ox < kChunkSize && oy < kChunkSize && oz < kChunkSize;
+				const bool inCurrentChunk = ox < kChunkSize && oy < kChunkSize && oz < kChunkSize;
 				if ( !inCurrentChunk || m_i[ ox ][ oy ][ oz ] == kInvalidIsosurfaceIndex )
 				{
 					IsosurfaceVertex vertex;
@@ -1027,9 +948,9 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	
 	for ( IsosurfaceVertex& vertex : vertices )
 	{
-		int32_t x = ae::Floor( vertex.position.x );
-		int32_t y = ae::Floor( vertex.position.y );
-		int32_t z = ae::Floor( vertex.position.z );
+		const int32_t x = ae::Floor( vertex.position.x );
+		const int32_t y = ae::Floor( vertex.position.y );
+		const int32_t z = ae::Floor( vertex.position.z );
 		AE_ASSERT( x >= 0 && y >= 0 && z >= 0 );
 		AE_ASSERT( x <= kChunkSize && y <= kChunkSize && z <= kChunkSize );
 		
