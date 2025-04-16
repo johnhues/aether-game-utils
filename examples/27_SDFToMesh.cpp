@@ -54,56 +54,11 @@ struct TempEdges
 	ae::Vec3 n[ 3 ];
 };
 
-//------------------------------------------------------------------------------
-// aeUnit
-//------------------------------------------------------------------------------
-template < typename T >
-class aeUnit
-{
-public:
-	constexpr aeUnit() : m_v() { AE_STATIC_ASSERT( sizeof(*this) == sizeof(T) ); }
-	constexpr aeUnit( const aeUnit& o ) : m_v( o.m_v ) {}
-	constexpr explicit aeUnit( const T& vertexCount ) : m_v( vertexCount ) {}
-
-	template < typename U > constexpr explicit operator U () const { return (U)m_v; }
-
-	constexpr bool operator == ( const aeUnit& o ) const { return m_v == o.m_v; }
-	constexpr bool operator != ( const aeUnit& o ) const { return m_v != o.m_v; }
-	constexpr bool operator < ( const aeUnit& o ) const { return m_v < o.m_v; }
-	constexpr bool operator > ( const aeUnit& o ) const { return m_v > o.m_v; }
-	constexpr bool operator <= ( const aeUnit& o ) const { return m_v <= o.m_v; }
-	constexpr bool operator >= ( const aeUnit& o ) const { return m_v >= o.m_v; }
-	
-	constexpr aeUnit< T > operator + ( const aeUnit& v ) const { return aeUnit( m_v + v.m_v ); }
-	constexpr aeUnit< T > operator - ( const aeUnit& v ) const { return aeUnit( m_v - v.m_v ); }
-	constexpr aeUnit< T >& operator ++ () { m_v++; return *this; }
-	constexpr aeUnit< T >& operator -- () { m_v--; return *this; }
-	constexpr aeUnit< T > operator ++ ( int ) { aeUnit< T > temp = *this; ++*this; return temp; }
-	constexpr aeUnit< T > operator -- ( int ) { aeUnit< T > temp = *this; --*this; return temp; }
-	constexpr aeUnit< T >& operator += ( const T& v ) { m_v += v; return *this; }
-	constexpr aeUnit< T >& operator -= ( const T& v ) { m_v -= v; return *this; }
-	
-	constexpr T& Get() { return m_v; }
-	constexpr T Get() const { return m_v; }
-
-private:
-	operator bool () const = delete;
-	T m_v;
-};
-
-template < typename T >
-inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
-{
-	return os << (T)u;
-}
-typedef aeUnit< uint32_t > VertexCount;
-
 typedef uint32_t IsosurfaceIndex;
 const IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
 const uint32_t kChunkSize = 50;
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
-const VertexCount kChunkCountEmpty = VertexCount( 0 );
 
 //------------------------------------------------------------------------------
 // IsosurfaceExtractorCache class
@@ -724,7 +679,7 @@ IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
 	indices( tag )
 {}
 
-void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_t _maxVerts, uint32_t maxIndices )
+void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_t maxVerts, uint32_t maxIndices )
 {
 	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
 	const uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
@@ -739,16 +694,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	const uint16_t EDGE_BOTTOM_BACK_BIT = ( 1 << 10 );
 	const uint16_t EDGE_BOTTOM_LEFT_BIT = ( 1 << 11 );
 
-	if( _maxVerts == 0 )
+	if( maxVerts == 0 )
 	{
-		_maxVerts = ae::MaxValue< uint32_t >();
+		maxVerts = ae::MaxValue< uint32_t >();
 	}
 	if( maxIndices == 0 )
 	{
 		maxIndices = ae::MaxValue< uint32_t >();
 	}
-	const VertexCount maxVerts( _maxVerts );
-	VertexCount vertexCount = VertexCount( 0 ); // @TODO: Replace with vertices.Length()
 
 	vertices.Clear();
 	indices.Clear();
@@ -816,7 +769,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		for ( int32_t e = 0; e < 3; e++ )
 		if ( edgeBits & mask[ e ] )
 		{
-			if ( vertexCount + VertexCount( 4 ) > maxVerts || indices.Length() + 6 > maxIndices )
+			if ( vertices.Length() + 4 > maxVerts || indices.Length() + 6 > maxIndices )
 			{
 				vertices.Clear();
 				indices.Clear();
@@ -1012,9 +965,8 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					
 					AE_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
 
-					IsosurfaceIndex index = (IsosurfaceIndex)vertexCount;
+					IsosurfaceIndex index = (IsosurfaceIndex)vertices.Length();
 					vertices.Append( vertex );
-					vertexCount++;
 					ind[ j ] = index;
 					
 					if ( inCurrentChunk )
@@ -1025,7 +977,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				else
 				{
 					IsosurfaceIndex index = m_i[ ox ][ oy ][ oz ];
-					AE_ASSERT_MSG( index < (IsosurfaceIndex)vertexCount, "# < # ox:# oy:# oz:#", index, vertexCount, ox, oy, oz );
+					AE_ASSERT_MSG( index < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
 					AE_ASSERT( ox < kChunkSize );
 					AE_ASSERT( oy < kChunkSize );
 					AE_ASSERT( oz < kChunkSize );
@@ -1073,13 +1025,11 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		return;
 	}
 	
-	const uint32_t vc = (int32_t)vertexCount;
-	for ( uint32_t i = 0; i < vc; i++ )
+	for ( IsosurfaceVertex& vertex : vertices )
 	{
-		IsosurfaceVertex* vertex = &vertices[ i ];
-		int32_t x = ae::Floor( vertex->position.x );
-		int32_t y = ae::Floor( vertex->position.y );
-		int32_t z = ae::Floor( vertex->position.z );
+		int32_t x = ae::Floor( vertex.position.x );
+		int32_t y = ae::Floor( vertex.position.y );
+		int32_t z = ae::Floor( vertex.position.z );
 		AE_ASSERT( x >= 0 && y >= 0 && z >= 0 );
 		AE_ASSERT( x <= kChunkSize && y <= kChunkSize && z <= kChunkSize );
 		
@@ -1205,12 +1155,12 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		}
 
 		// Normal
-		vertex->normal = ae::Vec3( 0.0f );
+		vertex.normal = ae::Vec3( 0.0f );
 		for ( int32_t j = 0; j < ec; j++ )
 		{
-			vertex->normal += n[ j ];
+			vertex.normal += n[ j ];
 		}
-		vertex->normal.SafeNormalize();
+		vertex.normal.SafeNormalize();
 		
 		// Position
 		ae::Vec3 position = GetIntersection( p, n, ec );
@@ -1233,9 +1183,9 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		position.x = x + position.x;
 		position.y = y + position.y;
 		position.z = z + position.z;
-		vertex->position = ae::Vec4( position + sdf->GetOffset(), 1.0f );
+		vertex.position = ae::Vec4( position + sdf->GetOffset(), 1.0f );
 	}
 
-	AE_ASSERT( vertexCount <= maxVerts );
+	AE_ASSERT( vertices.Length() <= maxVerts );
 	AE_ASSERT( indices.Length() <= maxIndices );
 }
