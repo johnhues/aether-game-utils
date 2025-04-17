@@ -57,11 +57,7 @@ struct IsosurfaceParams
 };
 struct TempEdges
 {
-	int32_t x;
-	int32_t y;
-	int32_t z;
 	uint16_t b;
-
 	// 3 planes whose intersections are used to position vertices within voxel
 	// EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
 	ae::Vec3 p[ 3 ];
@@ -657,77 +653,62 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	// @TODO: Description
 	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
 	const uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
-	const uint16_t EDGE_TOP_BACK_BIT = ( 1 << 2 );
-	const uint16_t EDGE_TOP_LEFT_BIT = ( 1 << 3 );
-	const uint16_t EDGE_SIDE_FRONTLEFT_BIT = ( 1 << 4 );
 	const uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 5 );
-	const uint16_t EDGE_SIDE_BACKRIGHT_BIT = ( 1 << 6 );
-	const uint16_t EDGE_SIDE_BACKLEFT_BIT = ( 1 << 7 );
-	const uint16_t EDGE_BOTTOM_FRONT_BIT = ( 1 << 8 );
-	const uint16_t EDGE_BOTTOM_RIGHT_BIT = ( 1 << 9 );
-	const uint16_t EDGE_BOTTOM_BACK_BIT = ( 1 << 10 );
-	const uint16_t EDGE_BOTTOM_LEFT_BIT = ( 1 << 11 );
 	// For expansion of edge intersections into triangles
 	const ae::Int3 offsets_EDGE_TOP_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1, 1 } };
 	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
-	const ae::Int3 offsets_EDGE_TOP_BACK_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, -1, 1 } };
-	const ae::Int3 offsets_EDGE_TOP_LEFT_BIT[ 4 ] = { { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { -1, 0, 1 } };
-	const ae::Int3 offsets_EDGE_SIDE_FRONTLEFT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { -1, 0, 0 }, { -1, 1, 0 } };
 	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
-	const ae::Int3 offsets_EDGE_SIDE_BACKRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { 1, 0, 0 }, { 1, -1, 0 } };
-	const ae::Int3 offsets_EDGE_SIDE_BACKLEFT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { -1, 0, 0 }, { -1, -1, 0 } };
-	const ae::Int3 offsets_EDGE_BOTTOM_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }, { 0, 1, -1 } };
-	const ae::Int3 offsets_EDGE_BOTTOM_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }, { 1, 0, -1 } };
-	const ae::Int3 offsets_EDGE_BOTTOM_BACK_BIT[ 4 ] = { { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }, { 0, -1, -1 } };
-	const ae::Int3 offsets_EDGE_BOTTOM_LEFT_BIT[ 4 ] = { { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }, { -1, 0, -1 } };
 	// @TODO: Description
 	const uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
 	// 3 new edges to test
-	const ae::Vec3 cornerOffsets[ 3 ][ 2 ] = {
-		{ { 0, 1, 1 }, { 1, 1, 1 } }, // EDGE_TOP_FRONT_BIT
-		{ { 1, 0, 1 }, { 1, 1, 1 } }, // EDGE_TOP_RIGHT_BIT
-		{ { 1, 1, 0 }, { 1, 1, 1 } } // EDGE_SIDE_FRONTRIGHT_BIT
+	const ae::Vec3 cornerOffsets[ 3 ] = {
+		{ 0, 1, 1 }, // EDGE_TOP_FRONT_BIT
+		{ 1, 0, 1 }, // EDGE_TOP_RIGHT_BIT
+		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
 	};
 	
-	// This phase generates the surface mesh for the current chunk. The vertex
-	// positions will be centered at the end of this phase, and will be nudged later
-	// to the correct position within the voxel.
+	// This phase finds the surface of the SDF and generates the list of
+	// vertices along with all of the 'lattice' edge intersections. The vertex
+	// positions will be centered within their voxels at the end of this phase,
+	// and will be nudged later to the correct position based on the SDF
+	// surface.
 	const int32_t chunkPlus = kChunkSize + 1;
 	for( int32_t z = -1; z < chunkPlus; z++ )
 	for( int32_t y = -1; y < chunkPlus; y++ )
 	for( int32_t x = -1; x < chunkPlus; x++ )
 	{
-		float cornerValues[ 3 ][ 2 ];
+		float sharedCornerValue = sdf->GetValue( ae::Int3( x + 1, y + 1, z + 1 ) );
+		if ( sharedCornerValue == 0.0f )
+		{
+			// Never let a terrain value be exactly 0, or else the surface will
+			// end up with multiple vertices for the same point in the sdf
+			sharedCornerValue = 0.0001f;
+		}
+		float cornerValues[ 3 ];
 		for ( int32_t i = 0; i < 3; i++ )
 		{
-			for ( int32_t j = 0; j < 2; j++ )
+			const int32_t gx = x + cornerOffsets[ i ].x;
+			const int32_t gy = y + cornerOffsets[ i ].y;
+			const int32_t gz = z + cornerOffsets[ i ].z;
+			cornerValues[ i ] = sdf->GetValue( ae::Int3( gx, gy, gz ) );
+			if ( cornerValues[ i ] == 0.0f )
 			{
-				int32_t gx = x + cornerOffsets[ i ][ j ].x;
-				int32_t gy = y + cornerOffsets[ i ][ j ].y;
-				int32_t gz = z + cornerOffsets[ i ][ j ].z;
-				// @TODO: Should pre-calculate, or at least only look up corner (1,1,1) once
-				cornerValues[ i ][ j ] = sdf->GetValue( ae::Int3( gx, gy, gz ) );
-				if ( cornerValues[ i ][ j ] == 0.0f )
-				{
-					// @NOTE: Never let a terrain value be exactly 0, or else surface will end up with multiple vertices for the same point in the sdf
-					cornerValues[ i ][ j ] = 0.0001f;
-				}
+				// Never let a terrain value be exactly 0, or else the surface
+				// will end up with multiple vertices for the same point in the sdf
+				cornerValues[ i ] = 0.0001f;
 			}
 		}
 		
 		// Detect if any of the 3 new edges being tested intersect the implicit surface
 		uint16_t edgeBits = 0;
-		if ( cornerValues[ 0 ][ 0 ] * cornerValues[ 0 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
-		if ( cornerValues[ 1 ][ 0 ] * cornerValues[ 1 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
-		if ( cornerValues[ 2 ][ 0 ] * cornerValues[ 2 ][ 1 ] <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
+		if ( cornerValues[ 0 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
+		if ( cornerValues[ 1 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
+		if ( cornerValues[ 2 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
 		
 		const uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
 		AE_ASSERT( edgeIndex < kTempChunkSize3 );
 		TempEdges* te = &m_tempEdges[ edgeIndex ];
 		te->b = edgeBits;
-		te->x = x;
-		te->y = y;
-		te->z = z;
 		
 		// Iterate over voxel edges (only 3 for TempEdges)
 		for ( int32_t e = 0; e < 3; e++ )
@@ -746,18 +727,18 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			{
 				// Determine which end of edge is inside/outside
 				ae::Vec3 c0, c1;
-				if ( cornerValues[ e ][ 0 ] < cornerValues[ e ][ 1 ] )
+				if ( cornerValues[ e ] < sharedCornerValue )
 				{
-					c0 = cornerOffsets[ e ][ 0 ]; // Inside surface
-					c1 = cornerOffsets[ e ][ 1 ]; // Outside surface
+					c0 = cornerOffsets[ e ]; // Inside surface
+					c1 = ae::Vec3( 1, 1, 1 ); // Outside surface
 				}
 				else
 				{
-					c0 = cornerOffsets[ e ][ 1 ]; // Inside surface
-					c1 = cornerOffsets[ e ][ 0 ]; // Outside surface
+					c0 = ae::Vec3( 1, 1, 1 ); // Inside surface
+					c1 = cornerOffsets[ e ]; // Outside surface
 				}
 
-				// Find actual surface intersection point
+				// Find actual surface intersection point for edge
 				ae::Vec3 ch( x, y, z );
 				// @TODO: This should probably be adjustable
 				for ( int32_t i = 0; i < 16; i++ )
@@ -803,16 +784,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			{
 				case EDGE_TOP_FRONT_BIT: offsets = offsets_EDGE_TOP_FRONT_BIT; break;
 				case EDGE_TOP_RIGHT_BIT: offsets = offsets_EDGE_TOP_RIGHT_BIT; break;
-				case EDGE_TOP_BACK_BIT: offsets = offsets_EDGE_TOP_BACK_BIT; break;
-				case EDGE_TOP_LEFT_BIT: offsets = offsets_EDGE_TOP_LEFT_BIT; break;
-				case EDGE_SIDE_FRONTLEFT_BIT: offsets = offsets_EDGE_SIDE_FRONTLEFT_BIT; break;
 				case EDGE_SIDE_FRONTRIGHT_BIT: offsets = offsets_EDGE_SIDE_FRONTRIGHT_BIT; break;
-				case EDGE_SIDE_BACKRIGHT_BIT: offsets = offsets_EDGE_SIDE_BACKRIGHT_BIT; break;
-				case EDGE_SIDE_BACKLEFT_BIT: offsets = offsets_EDGE_SIDE_BACKLEFT_BIT; break;
-				case EDGE_BOTTOM_FRONT_BIT: offsets = offsets_EDGE_BOTTOM_FRONT_BIT; break;
-				case EDGE_BOTTOM_RIGHT_BIT: offsets = offsets_EDGE_BOTTOM_RIGHT_BIT; break;
-				case EDGE_BOTTOM_BACK_BIT: offsets = offsets_EDGE_BOTTOM_BACK_BIT; break;
-				case EDGE_BOTTOM_LEFT_BIT: offsets = offsets_EDGE_BOTTOM_LEFT_BIT; break;
 				default: AE_FAIL(); offsets = nullptr; break;
 			}
 			
@@ -864,15 +836,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				}
 			}
 			
-			bool flip = false;
-			// 0 - EDGE_TOP_FRONT_BIT
-			// 1 - EDGE_TOP_RIGHT_BIT
-			// 2 - EDGE_SIDE_FRONTRIGHT_BIT
-			if ( e == 0 ) { flip = ( cornerValues[ 2 ][ 1 ] > 0.0f ); }
-			else if ( e == 1 ) { flip = ( cornerValues[ 2 ][ 1 ] < 0.0f ); }
-			else { flip = ( cornerValues[ 2 ][ 1 ] < 0.0f ); }
-
 			// @TODO: This assumes counter clockwise culling
+			bool flip = false;
+			if ( e == 0 ) { flip = ( sharedCornerValue > 0.0f ); } // EDGE_TOP_FRONT_BIT
+			else { flip = ( sharedCornerValue < 0.0f ); } // EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
 			if ( flip )
 			{
 				// tri0
