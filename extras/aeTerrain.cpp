@@ -59,7 +59,7 @@
 #if AE_TERRAIN_SIMD && __aarch64__ && _AE_APPLE_
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Wimplicit-int-conversion"
-  #include "sse2neon.h"
+  #include "ae/sse2neon.h"
   #pragma clang diagnostic pop
 #endif
 

@@ -447,5 +447,5 @@ ae_add_bundle(
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "27_SDFToMesh.cpp"
 	RESOURCES "${AE_EXAMPLE_RESOURCES}"
-	LIBS "ae"
+	LIBS "ae;ae_extras"
 )

@@ -21,6 +21,7 @@ target_sources(ae_extras PRIVATE
 	include/ae/Editor.h
 	include/ae/Entity.h
 	include/ae/SpriteRenderer.h
+	include/ae/sse2neon.h
 	aeCommonRender.cpp
 	aeCompactingAllocator.cpp
 	aeHotSpot.cpp
@@ -31,5 +32,4 @@ target_sources(ae_extras PRIVATE
 	# Editor.cpp
 	# Entity.cpp
 	SpriteRenderer.cpp
-	sse2neon.h
 )

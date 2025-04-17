@@ -25,6 +25,20 @@
 //------------------------------------------------------------------------------
 #include "aether.h"
 
+#ifndef AE_TERRAIN_SIMD
+	#if _AE_LINUX_ || _AE_EMSCRIPTEN_
+		#define AE_TERRAIN_SIMD 0
+	#else
+		#define AE_TERRAIN_SIMD 1
+	#endif
+#endif
+#if AE_TERRAIN_SIMD && __aarch64__ && _AE_APPLE_
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
+	#include "ae/sse2neon.h"
+	#pragma clang diagnostic pop
+#endif
+
 //------------------------------------------------------------------------------
 // Types / constants
 //------------------------------------------------------------------------------
@@ -519,62 +533,6 @@ void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params, ae::Int
 		ae::Vec3 pos( offset2.x + x, offset2.y + y, offset2.z + z );
 		m_values[ index ] = (float)fn( pos );
 	}
-}
-
-//------------------------------------------------------------------------------
-// Helpers
-//------------------------------------------------------------------------------
-// @TODO: Shouldn't be external to IsosurfaceExtractor
-ae::Vec3 GetIntersection( const ae::Vec3* p, const ae::Vec3* n, uint32_t ic )
-{
-#if AE_TERRAIN_SIMD
-	__m128 c128 = _mm_setzero_ps();
-	for ( uint32_t i = 0; i < ic; i++ )
-	{
-		__m128 p128 = _mm_load_ps( (float*)( p + i ) );
-		c128 = _mm_add_ps( c128, p128 );
-	}
-	__m128 div = _mm_set1_ps( 1.0f / ic );
-	c128 = _mm_mul_ps( c128, div );
-	
-	for ( uint32_t i = 0; i < 10; i++ )
-	for ( uint32_t j = 0; j < ic; j++ )
-	{
-		__m128 p128 = _mm_load_ps( (float*)( p + j ) );
-		p128 = _mm_sub_ps( p128, c128 );
-		__m128 n128 = _mm_load_ps( (float*)( n + j ) );
-		
-		__m128 d = _mm_mul_ps( p128, n128 );
-		d = _mm_hadd_ps( d, d );
-		d = _mm_hadd_ps( d, d );
-		
-		__m128 s = _mm_set1_ps( 0.5f );
-		s = _mm_mul_ps( s, n128 );
-		s = _mm_mul_ps( s, d );
-		c128 = _mm_add_ps( c128, s );
-	}
-	ae::Vec3 v;
-	_mm_store_ps( (float*)&v, c128 );
-	return v;
-#else
-	ae::Vec3 c( 0.0f );
-	for ( uint32_t i = 0; i < ic; i++ )
-	{
-		c += p[ i ];
-	}
-	c /= ic;
-
-	for ( uint32_t i = 0; i < 10; i++ )
-	{
-		for ( uint32_t j = 0; j < ic; j++ )
-		{
-			float d = n[ j ].Dot( p[ j ] - c );
-			c += n[ j ] * ( d * 0.5f );
-		}
-	}
-
-	return c;
-#endif
 }
 
 //------------------------------------------------------------------------------
@@ -1084,8 +1042,52 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		vertex.normal.SafeNormalize();
 		
 		// Position
-		ae::Vec3 position = GetIntersection( p, n, ec );
+		ae::Vec3 position;
+		// Get intersection of edge planes
 		{
+#if AE_TERRAIN_SIMD
+			__m128 c128 = _mm_setzero_ps();
+			for ( uint32_t i = 0; i < ec; i++ )
+			{
+				__m128 p128 = _mm_load_ps( (float*)( p + i ) );
+				c128 = _mm_add_ps( c128, p128 );
+			}
+			__m128 div = _mm_set1_ps( 1.0f / ec );
+			c128 = _mm_mul_ps( c128, div );
+			
+			for ( uint32_t i = 0; i < 10; i++ )
+			for ( uint32_t j = 0; j < ec; j++ )
+			{
+				__m128 p128 = _mm_load_ps( (float*)( p + j ) );
+				p128 = _mm_sub_ps( p128, c128 );
+				__m128 n128 = _mm_load_ps( (float*)( n + j ) );
+				
+				__m128 d = _mm_mul_ps( p128, n128 );
+				d = _mm_hadd_ps( d, d );
+				d = _mm_hadd_ps( d, d );
+				
+				__m128 s = _mm_set1_ps( 0.5f );
+				s = _mm_mul_ps( s, n128 );
+				s = _mm_mul_ps( s, d );
+				c128 = _mm_add_ps( c128, s );
+			}
+			_mm_store_ps( (float*)&position, c128 );
+#else
+			position = ae::Vec3( 0.0f );
+			for ( uint32_t i = 0; i < ec; i++ )
+			{
+				position += p[ i ];
+			}
+			position /= ec;
+			for ( uint32_t i = 0; i < 10; i++ )
+			{
+				for ( uint32_t j = 0; j < ec; j++ )
+				{
+					float d = n[ j ].Dot( p[ j ] - position );
+					position += n[ j ] * ( d * 0.5f );
+				}
+			}
+#endif
 			AE_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
 			// @NOTE: Bias towards average of intersection points. This solves some intersecting triangles on sharp edges.
 			// Based on notes here: https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
@@ -1095,7 +1097,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				averagePos += p[ i ];
 			}
 			averagePos /= (float)ec;
-			position = ae::Lerp( position, averagePos, 0.75f );
+			position = ae::Lerp( position, averagePos, 0.75f ); // @TODO: This bias should be removed or be adjustable
 		}
 		// @NOTE: Do not clamp position values to voxel boundary. It's valid for a vertex to be placed
 		// outside of the voxel is was generated from. This happens when a voxel has all corners inside
