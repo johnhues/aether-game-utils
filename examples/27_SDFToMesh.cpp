@@ -582,10 +582,8 @@ float IsosurfaceExtractorCache::GetValue( ae::Int3 pos ) const
 
 float IsosurfaceExtractorCache::m_GetValue( ae::Int3 pos ) const
 {
-#if _AE_DEBUG_
-	AE_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
-	AE_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
-#endif
+	AE_DEBUG_ASSERT( pos.x >= 0 && pos.y >= 0 && pos.z >= 0 );
+	AE_DEBUG_ASSERT( pos.x < kDim && pos.y < kDim && pos.z < kDim );
 	return m_values[ pos.x + kDim * ( pos.y + kDim * pos.z ) ];
 }
 
@@ -600,13 +598,13 @@ ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
 		nt[ i ] += m_p.normalSampleOffset;
 		normal0[ i ] = GetValue( nt );
 	}
-	AE_ASSERT( normal0 != ae::Vec3( 0.0f ) );
+	AE_DEBUG_ASSERT( normal0 != ae::Vec3( 0.0f ) );
 	// This should be really close to 0 because it's really
 	// close to the surface but not close enough to ignore.
 	normal0 -= pv;
-	AE_ASSERT( normal0 != ae::Vec3( 0.0f ) );
+	AE_DEBUG_ASSERT( normal0 != ae::Vec3( 0.0f ) );
 	normal0 /= normal0.Length();
-	AE_ASSERT( normal0 == normal0 );
+	AE_DEBUG_ASSERT( normal0 == normal0 );
 
 	ae::Vec3 normal1;
 	for ( int32_t i = 0; i < 3; i++ )
@@ -615,13 +613,13 @@ ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
 		nt[ i ] -= m_p.normalSampleOffset;
 		normal1[ i ] = GetValue( nt );
 	}
-	AE_ASSERT( normal1 != ae::Vec3( 0.0f ) );
+	AE_DEBUG_ASSERT( normal1 != ae::Vec3( 0.0f ) );
 	// This should be really close to 0 because it's really
 	// close to the surface but not close enough to ignore.
 	normal1 = pv - normal1;
-	AE_ASSERT( normal1 != ae::Vec3( 0.0f ) );
+	AE_DEBUG_ASSERT( normal1 != ae::Vec3( 0.0f ) );
 	normal1 /= normal1.Length();
-	AE_ASSERT( normal1 == normal1 );
+	AE_DEBUG_ASSERT( normal1 == normal1 );
 
 	return ( normal1 + normal0 ).SafeNormalizeCopy();
 }
@@ -706,7 +704,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		if ( cornerValues[ 2 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
 		
 		const uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		TempEdges* te = &m_tempEdges[ edgeIndex ];
 		te->b = edgeBits;
 		
@@ -762,10 +760,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					}
 				}
 			}
-			AE_ASSERT( edgeVoxelPos.x == edgeVoxelPos.x && edgeVoxelPos.y == edgeVoxelPos.y && edgeVoxelPos.z == edgeVoxelPos.z );
-			AE_ASSERT( edgeVoxelPos.x >= 0.0f && edgeVoxelPos.x <= 1.0f );
-			AE_ASSERT( edgeVoxelPos.y >= 0.0f && edgeVoxelPos.y <= 1.0f );
-			AE_ASSERT( edgeVoxelPos.z >= 0.0f && edgeVoxelPos.z <= 1.0f );
+			AE_DEBUG_ASSERT( edgeVoxelPos.x == edgeVoxelPos.x && edgeVoxelPos.y == edgeVoxelPos.y && edgeVoxelPos.z == edgeVoxelPos.z );
+			AE_DEBUG_ASSERT( edgeVoxelPos.x >= 0.0f && edgeVoxelPos.x <= 1.0f );
+			AE_DEBUG_ASSERT( edgeVoxelPos.y >= 0.0f && edgeVoxelPos.y <= 1.0f );
+			AE_DEBUG_ASSERT( edgeVoxelPos.z >= 0.0f && edgeVoxelPos.z <= 1.0f );
 			// End edgeVoxelPos calculation
 			
 			ae::Vec3 edgeWorldPos( x, y, z );
@@ -814,7 +812,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					vertex.position.z = oz + 0.5f;
 					vertex.position.w = 1.0f;
 					
-					AE_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
+					AE_DEBUG_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
 
 					IsosurfaceIndex index = (IsosurfaceIndex)vertices.Length();
 					vertices.Append( vertex );
@@ -828,10 +826,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				else
 				{
 					IsosurfaceIndex index = m_i[ ox ][ oy ][ oz ];
-					AE_ASSERT_MSG( index < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
-					AE_ASSERT( ox < kChunkSize );
-					AE_ASSERT( oy < kChunkSize );
-					AE_ASSERT( oz < kChunkSize );
+					AE_DEBUG_ASSERT_MSG( index < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
+					AE_DEBUG_ASSERT( ox < kChunkSize );
+					AE_DEBUG_ASSERT( oy < kChunkSize );
+					AE_DEBUG_ASSERT( oz < kChunkSize );
 					ind[ j ] = index;
 				}
 			}
@@ -876,15 +874,15 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		const int32_t x = ae::Floor( vertex.position.x );
 		const int32_t y = ae::Floor( vertex.position.y );
 		const int32_t z = ae::Floor( vertex.position.z );
-		AE_ASSERT( x >= 0 && y >= 0 && z >= 0 );
-		AE_ASSERT( x <= kChunkSize && y <= kChunkSize && z <= kChunkSize );
+		AE_DEBUG_ASSERT( x >= 0 && y >= 0 && z >= 0 );
+		AE_DEBUG_ASSERT( x <= kChunkSize && y <= kChunkSize && z <= kChunkSize );
 		
 		int32_t ec = 0;
 		ae::Vec3 p[ 12 ];
 		ae::Vec3 n[ 12 ];
 		
 		uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		TempEdges te = m_tempEdges[ edgeIndex ];
 		if ( te.b & EDGE_TOP_FRONT_BIT )
 		{
@@ -905,7 +903,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			ec++;
 		}
 		edgeIndex = x + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
 		if ( te.b & EDGE_TOP_RIGHT_BIT )
 		{
@@ -922,7 +920,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			ec++;
 		}
 		edgeIndex = x + 1 + kTempChunkSize * ( y + ( z + 1 ) * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
 		if ( te.b & EDGE_TOP_FRONT_BIT )
 		{
@@ -939,7 +937,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			ec++;
 		}
 		edgeIndex = x + kTempChunkSize * ( y + ( z + 1 ) * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
 		if ( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
@@ -950,7 +948,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			ec++;
 		}
 		edgeIndex = x + kTempChunkSize * ( y + 1 + z * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
 		if ( te.b & EDGE_TOP_RIGHT_BIT )
 		{
@@ -961,7 +959,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			ec++;
 		}
 		edgeIndex = x + 1 + kTempChunkSize * ( y + z * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
 		if ( te.b & EDGE_TOP_FRONT_BIT )
 		{
@@ -972,7 +970,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			ec++;
 		}
 		edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + z * kTempChunkSize );
-		AE_ASSERT( edgeIndex < kTempChunkSize3 );
+		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
 		if ( te.b & EDGE_TOP_FRONT_BIT )
 		{
@@ -990,14 +988,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		}
 		
 		// Validation
-		AE_ASSERT( ec != 0 );
+		AE_DEBUG_ASSERT( ec != 0 );
 		for ( int32_t j = 0; j < ec; j++ )
 		{
-			AE_ASSERT( p[ j ] == p[ j ] );
-			AE_ASSERT( p[ j ].x >= 0.0f && p[ j ].x <= 1.0f );
-			AE_ASSERT( p[ j ].y >= 0.0f && p[ j ].y <= 1.0f );
-			AE_ASSERT( p[ j ].z >= 0.0f && p[ j ].z <= 1.0f );
-			AE_ASSERT( n[ j ] == n[ j ] );
+			AE_DEBUG_ASSERT( p[ j ] == p[ j ] );
+			AE_DEBUG_ASSERT( p[ j ].x >= 0.0f && p[ j ].x <= 1.0f );
+			AE_DEBUG_ASSERT( p[ j ].y >= 0.0f && p[ j ].y <= 1.0f );
+			AE_DEBUG_ASSERT( p[ j ].z >= 0.0f && p[ j ].z <= 1.0f );
+			AE_DEBUG_ASSERT( n[ j ] == n[ j ] );
 		}
 
 		// Normal
@@ -1055,7 +1053,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				}
 			}
 #endif
-			AE_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
+			AE_DEBUG_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
 			// @NOTE: Bias towards average of intersection points. This solves some intersecting triangles on sharp edges.
 			// Based on notes here: https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
 			ae::Vec3 averagePos( 0.0f );
@@ -1076,6 +1074,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		vertex.position = ae::Vec4( position + sdf->GetOffset(), 1.0f );
 	}
 
-	AE_ASSERT( vertices.Length() <= maxVerts );
-	AE_ASSERT( indices.Length() <= maxIndices );
+	AE_DEBUG_ASSERT( vertices.Length() <= maxVerts );
+	AE_DEBUG_ASSERT( indices.Length() <= maxIndices );
 }
