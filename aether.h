@@ -24721,8 +24721,9 @@ void Skeleton::SetLocalTransforms( const Bone** targets, const ae::Matrix4* loca
 
 void Skeleton::SetTransform( const Bone* _target, const ae::Matrix4& transform )
 {
-	const intptr_t index = ( _target - m_bones.Data() );
-	AE_ASSERT( index >= 0 && index < m_bones.Length() );
+	const intptr_t _index = ( _target - m_bones.Data() );
+	AE_ASSERT( _index >= 0 && _index < (intptr_t)m_bones.Length() );
+	const uint32_t index = (uint32_t)_index;
 	ae::Bone* target = &m_bones[ index ];
 	target->transform = transform;
 	target->inverseTransform = transform.GetInverse();
