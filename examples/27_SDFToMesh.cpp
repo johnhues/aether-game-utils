@@ -647,6 +647,8 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	indices.Clear();
 	memset( m_i, ~(uint8_t)0, sizeof( m_i ) );
 	memset( m_tempEdges, 0, kTempChunkSize3 * sizeof( *m_tempEdges ) );
+	AE_STATIC_ASSERT( std::is_pod_v< decltype(m_i) > );
+	AE_STATIC_ASSERT( std::is_pod_v< ae::StripType< decltype(*m_tempEdges) > > );
 
 	// @TODO: Description
 	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
@@ -676,10 +678,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	for( int32_t x = -1; x < chunkPlus; x++ )
 	{
 		float sharedCornerValue = sdf->GetValue( ae::Int3( x + 1, y + 1, z + 1 ) );
-		if ( sharedCornerValue == 0.0f )
+		if( sharedCornerValue == 0.0f )
 		{
-			// Never let a terrain value be exactly 0, or else the surface will
-			// end up with multiple vertices for the same point in the sdf
+			// @TODO: This fixes some missing faces that lie exactly on voxel
+			// boundaries, but further investigation is needed.
 			sharedCornerValue = 0.0001f;
 		}
 		float cornerValues[ 3 ];
@@ -689,10 +691,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			const int32_t gy = y + cornerOffsets[ i ].y;
 			const int32_t gz = z + cornerOffsets[ i ].z;
 			cornerValues[ i ] = sdf->GetValue( ae::Int3( gx, gy, gz ) );
-			if ( cornerValues[ i ] == 0.0f )
+			if( cornerValues[ i ] == 0.0f )
 			{
-				// Never let a terrain value be exactly 0, or else the surface
-				// will end up with multiple vertices for the same point in the sdf
+				// @TODO: This fixes some missing faces that lie exactly on
+				// voxel boundaries, but further investigation is needed.
 				cornerValues[ i ] = 0.0001f;
 			}
 		}
@@ -702,13 +704,16 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		if ( cornerValues[ 0 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
 		if ( cornerValues[ 1 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
 		if ( cornerValues[ 2 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
+		// @TODO: Is it possible to early out here if there's no edge intersection,
+		// or would the other edges would need to be checked too?
 		
 		const uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		TempEdges* te = &m_tempEdges[ edgeIndex ];
 		te->b = edgeBits;
 		
-		// Iterate over voxel edges (only 3 for TempEdges)
+		// Iterate over the 3 edges that this voxel is responsible for. The
+		// remaining 9 are handled by adjacent voxels.
 		for ( int32_t e = 0; e < 3; e++ )
 		if ( edgeBits & mask[ e ] )
 		{
@@ -721,7 +726,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 
 			// Get intersection of edge and implicit surface
 			ae::Vec3 edgeVoxelPos;
-			// Start edgeVoxelPos calculation
 			{
 				// Determine which end of edge is inside/outside
 				ae::Vec3 c0, c1;
@@ -764,11 +768,9 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			AE_DEBUG_ASSERT( edgeVoxelPos.x >= 0.0f && edgeVoxelPos.x <= 1.0f );
 			AE_DEBUG_ASSERT( edgeVoxelPos.y >= 0.0f && edgeVoxelPos.y <= 1.0f );
 			AE_DEBUG_ASSERT( edgeVoxelPos.z >= 0.0f && edgeVoxelPos.z <= 1.0f );
-			// End edgeVoxelPos calculation
 			
 			ae::Vec3 edgeWorldPos( x, y, z );
 			edgeWorldPos += edgeVoxelPos;
-
 			te->p[ e ] = edgeVoxelPos;
 			te->n[ e ] = sdf->GetDerivative( edgeWorldPos );
 			
@@ -777,7 +779,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				continue;
 			}
 			
-			const ae::Int3* offsets;
+			const ae::Int3* offsets; // Array of 4 sampling offsets for this edge
 			switch( mask[ e ] )
 			{
 				case EDGE_TOP_FRONT_BIT: offsets = offsets_EDGE_TOP_FRONT_BIT; break;
@@ -786,11 +788,11 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				default: AE_FAIL(); offsets = nullptr; break;
 			}
 			
-			// @NOTE: Expand edge into two triangles. Add new vertices for each edge
-			// intersection (centered in voxels at this point). Edges are eventually expanded
-			// into quads, so each edge needs 4 vertices. This does some of the work
-			// for adjacent voxels.
-			IsosurfaceIndex ind[ 4 ];
+			// Expand edge intersection into two triangles. New vertices are
+			// added as needed for each edge intersection, so this does some of
+			// the work for adjacent voxels. Vertices are centered in voxels at
+			// this point at this stage.
+			IsosurfaceIndex quad[ 4 ];
 			for ( int32_t j = 0; j < 4; j++ )
 			{
 				const int32_t ox = x + offsets[ j ][ 0 ];
@@ -798,11 +800,13 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				const int32_t oz = z + offsets[ j ][ 2 ];
 				
 				// This check allows coordinates to be one out of chunk high end
+				// @TODO: It looks like a very similar check is already done above?
 				if ( ox < 0 || oy < 0 || oz < 0 || ox > kChunkSize || oy > kChunkSize || oz > kChunkSize )
 				{
 					continue;
 				}
 				
+				// @TODO: Remove this 'in chunk' check, all indices should be recorded
 				const bool inCurrentChunk = ox < kChunkSize && oy < kChunkSize && oz < kChunkSize;
 				if ( !inCurrentChunk || m_i[ ox ][ oy ][ oz ] == kInvalidIsosurfaceIndex )
 				{
@@ -813,13 +817,18 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					vertex.position.w = 1.0f;
 					
 					AE_DEBUG_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
-
+					
 					IsosurfaceIndex index = (IsosurfaceIndex)vertices.Length();
 					vertices.Append( vertex );
-					ind[ j ] = index;
+					quad[ j ] = index;
 					
+					// @TODO: Always store indices that are outside of the
+					// chunk, because they are they should be included in the
+					// final mesh only once.
 					if ( inCurrentChunk )
 					{
+						// Record the index of the vertex in the chunk so it can
+						// be reused by adjacent quads
 						m_i[ ox ][ oy ][ oz ] = index;
 					}
 				}
@@ -830,7 +839,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					AE_DEBUG_ASSERT( ox < kChunkSize );
 					AE_DEBUG_ASSERT( oy < kChunkSize );
 					AE_DEBUG_ASSERT( oz < kChunkSize );
-					ind[ j ] = index;
+					quad[ j ] = index;
 				}
 			}
 			
@@ -841,24 +850,24 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			if ( flip )
 			{
 				// tri0
-				indices.Append( ind[ 0 ] );
-				indices.Append( ind[ 1 ] );
-				indices.Append( ind[ 2 ] );
+				indices.Append( quad[ 0 ] );
+				indices.Append( quad[ 1 ] );
+				indices.Append( quad[ 2 ] );
 				// tri1
-				indices.Append( ind[ 1 ] );
-				indices.Append( ind[ 3 ] );
-				indices.Append( ind[ 2 ] );
+				indices.Append( quad[ 1 ] );
+				indices.Append( quad[ 3 ] );
+				indices.Append( quad[ 2 ] );
 			}
 			else
 			{
 				// tri2
-				indices.Append( ind[ 0 ] );
-				indices.Append( ind[ 2 ] );
-				indices.Append( ind[ 1 ] );
+				indices.Append( quad[ 0 ] );
+				indices.Append( quad[ 2 ] );
+				indices.Append( quad[ 1 ] );
 				// tri3
-				indices.Append( ind[ 1 ] );
-				indices.Append( ind[ 2 ] );
-				indices.Append( ind[ 3 ] );
+				indices.Append( quad[ 1 ] );
+				indices.Append( quad[ 2 ] );
+				indices.Append( quad[ 3 ] );
 			}
 		}
 	}
