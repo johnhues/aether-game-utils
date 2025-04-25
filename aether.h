@@ -2652,6 +2652,13 @@ void SetLogColorsEnabled( bool enabled );
 #endif
 #define AE_FAIL() do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
 #define AE_FAIL_MSG( ... ) do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
+#if _AE_DEBUG_
+	#define AE_DEBUG_FAIL() do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
+	#define AE_DEBUG_FAIL_MSG( ... ) do { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } while (0)
+#else
+	#define AE_DEBUG_FAIL() do {} while (0)
+	#define AE_DEBUG_FAIL_MSG( ... ) do {} while (0)
+#endif
 
 //------------------------------------------------------------------------------
 // Static assertion functions
@@ -6758,6 +6765,26 @@ inline ae::Vec3 Max( ae::Vec3 v0, ae::Vec3 v1 )
 inline ae::Vec4 Max( ae::Vec4 v0, ae::Vec4 v1 )
 {
 	return ae::Vec4( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ), Max( v0.w, v1.w ) );
+}
+
+inline ae::Int2 Min( ae::Int2 v0, ae::Int2 v1 )
+{
+	return ae::Int2( Min( v0.x, v1.x ), Min( v0.y, v1.y ) );
+}
+
+inline ae::Int3 Min( ae::Int3 v0, ae::Int3 v1 )
+{
+	return ae::Int3( Min( v0.x, v1.x ), Min( v0.y, v1.y ), Min( v0.z, v1.z ) );
+}
+
+inline ae::Int2 Max( ae::Int2 v0, ae::Int2 v1 )
+{
+	return ae::Int2( Max( v0.x, v1.x ), Max( v0.y, v1.y ) );
+}
+
+inline ae::Int3 Max( ae::Int3 v0, ae::Int3 v1 )
+{
+	return ae::Int3( Max( v0.x, v1.x ), Max( v0.y, v1.y ), Max( v0.z, v1.z ) );
 }
 
 template < typename T >
