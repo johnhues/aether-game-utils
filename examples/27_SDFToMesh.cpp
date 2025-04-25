@@ -789,32 +789,19 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	for( int32_t y = -1; y < chunkPlus; y++ )
 	for( int32_t x = -1; x < chunkPlus; x++ )
 	{
-		float sharedCornerValue = sdf->GetValue( cornerOffset + ae::Vec3( x + 1, y + 1, z + 1 ) );
-		if( sharedCornerValue == 0.0f )
-		{
-			// @TODO: This fixes some missing faces that lie exactly on voxel
-			// boundaries, but further investigation is needed.
-			sharedCornerValue = 0.0001f;
-		}
+		const ae::Vec3 voxelPos( x, y, z );
+		const float sharedCornerValue = sdf->GetValue( cornerOffset + voxelPos + ae::Vec3( 1.0f ) );
 		if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be problematic
 		{
 			// Early out of edge intersections if far from the surface
 			continue;
 		}
-		float cornerValues[ 3 ];
-		for ( int32_t i = 0; i < 3; i++ )
+		const float cornerValues[ 3 ] =
 		{
-			const int32_t gx = x + cornerOffsets[ i ].x;
-			const int32_t gy = y + cornerOffsets[ i ].y;
-			const int32_t gz = z + cornerOffsets[ i ].z;
-			cornerValues[ i ] = sdf->GetValue( cornerOffset + ae::Vec3( gx, gy, gz ) );
-			if( cornerValues[ i ] == 0.0f )
-			{
-				// @TODO: This fixes some missing faces that lie exactly on
-				// voxel boundaries, but further investigation is needed.
-				cornerValues[ i ] = 0.0001f;
-			}
-		}
+			sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 0 ] ),
+			sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 1 ] ),
+			sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 2 ] )
+		};
 		
 		// Detect if any of the 3 new edges being tested intersect the implicit surface
 		uint16_t edgeBits = 0;
@@ -858,13 +845,12 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				}
 
 				// Find actual surface intersection point for edge
-				ae::Vec3 ch( x, y, z );
 				// @TODO: This should probably be adjustable
 				for ( int32_t i = 0; i < 16; i++ )
 				{
 					// @TODO: This can be simplified by lerping and using the t value to do a binary search
 					edgeVoxelPos = ( c0 + c1 ) * 0.5f;
-					ae::Vec3 cw = ch + edgeVoxelPos;
+					ae::Vec3 cw = voxelPos + edgeVoxelPos;
 					
 					float v = sdf->GetValue( cornerOffset + cw );
 					if ( ae::Abs( v ) < 0.001f )
@@ -886,8 +872,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			AE_DEBUG_ASSERT( edgeVoxelPos.y >= 0.0f && edgeVoxelPos.y <= 1.0f );
 			AE_DEBUG_ASSERT( edgeVoxelPos.z >= 0.0f && edgeVoxelPos.z <= 1.0f );
 			
-			ae::Vec3 edgeWorldPos( x, y, z );
-			edgeWorldPos += edgeVoxelPos;
+			const ae::Vec3 edgeWorldPos = voxelPos + edgeVoxelPos;
 			te->p[ e ] = edgeVoxelPos;
 			te->n[ e ] = sdf->GetDerivative( cornerOffset + edgeWorldPos );
 			
