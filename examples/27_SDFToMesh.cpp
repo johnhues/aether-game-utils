@@ -63,7 +63,7 @@ struct IsosurfaceParams
 
 typedef uint32_t IsosurfaceIndex;
 const IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
-const uint32_t kChunkSize = 50;
+const uint32_t kChunkSize = 200;
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
 
@@ -544,7 +544,7 @@ int main()
 	{
 		translation = ae::Vec3( 0.0f );
 		rotation = ae::Vec3( 0.0f );
-		scale = ae::Vec3( 20.0f );
+		scale = ae::Vec3( 150.0f );
 	};
 	ResetTransform();
 
