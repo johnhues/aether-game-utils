@@ -339,41 +339,42 @@ int main()
 	ae::DebugLines debugLines = TAG_ISOSURFACE;
 	ae::DebugCamera camera = ae::Axis::Z;
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 20.0f ) );
-	// window.Initialize( 1280, 720, false, true, true );
+	if( ae::IsDebuggerAttached() )
 	{
 		ae::Int2 windowPos( 0, 0 );
 		ae::Int2 windowSize( 1280, 720 );
 		const auto screens = ae::GetScreens();
-		auto GetSmallestScreen = [&]() -> const ae::Screen*
-		{
-			const ae::Screen* result = nullptr;
-			for( const ae::Screen& screen : screens )
-			{
-				if( !result || screen.size.x * screen.scaleFactor <= result->size.x * result->scaleFactor )
-				{
-					result = &screen;
-				}
-			}
-			return result;
-		};
 		if ( screens.Length() )
 		{
-			const ae::Screen* targetScreen = ae::IsDebuggerAttached() ? GetSmallestScreen() : &screens[ 0 ];
+			const ae::Screen* targetScreen = [&]() -> const ae::Screen*
+			{
+				const ae::Screen* result = nullptr;
+				for( const ae::Screen& screen : screens )
+				{
+					// Smallest screen
+					if( !result || screen.size.x * screen.scaleFactor <= result->size.x * result->scaleFactor )
+					{
+						result = &screen;
+					}
+				}
+				return result;
+			}();
 			windowPos = targetScreen->position + targetScreen->size / 2;
 			windowPos -= windowSize / 2;
-		}
-		window.Initialize( windowPos, windowSize.x, windowSize.y, true, false );
-		if( ae::IsDebuggerAttached() )
-		{
 			if( screens.Length() >= 2 )
 			{
-				window.SetFullScreen( true );
-			}
-			else if( screens.Length() == 1 )
-			{
-				window.SetAlwaysOnTop( true );
+				windowSize = targetScreen->size;
 			}
 		}
+		window.Initialize( windowPos, windowSize.x, windowSize.y, true, false );
+		if( screens.Length() == 1 )
+		{
+			window.SetAlwaysOnTop( true );
+		}
+	}
+	else
+	{
+		window.Initialize( 1280, 720, false, true, true );
 	}
 	window.SetTitle( "SDF to Mesh" );
 	render.Initialize( &window );
