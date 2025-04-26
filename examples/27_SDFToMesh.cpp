@@ -819,7 +819,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		te->b |= EDGE_VISITED;
 
 		const ae::Vec3 voxelPos( x, y, z );
-		const float sharedCornerValue = sdf->GetValue( cornerOffset + voxelPos + ae::Vec3( 1.0f ) );
+		// This nudge is needed to prevent the SDF from ever being exactly on
+		// the voxel grid boundaries (imagine a plane at the origin with a
+		// normal facing along a cardinal axis, do the vertices belong to the
+		// voxels on the front or back of the plane?). Without this nudge, any
+		// vertices exactly on the grid boundary would be skipped resulting in
+		// holes in the mesh.
+		auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
+		const float sharedCornerValue = Nudge( sdf->GetValue( cornerOffset + voxelPos + ae::Vec3( 1.0f ) ) );
 		if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be problematic
 		{
 			// Early out of additional edge intersections if far from the surface
@@ -827,18 +834,16 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		}
 		const float cornerValues[ 3 ] =
 		{
-			sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 0 ] ),
-			sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 1 ] ),
-			sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 2 ] )
+			Nudge( sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 0 ] ) ),
+			Nudge( sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 1 ] ) ),
+			Nudge( sdf->GetValue( cornerOffset + voxelPos + cornerOffsets[ 2 ] ) )
 		};
 		
 		// Detect if any of the 3 new edges being tested intersect the implicit surface
 		uint16_t edgeBits = 0;
-		if( cornerValues[ 0 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
-		if( cornerValues[ 1 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
-		if( cornerValues[ 2 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
-		// @TODO: Is it possible to early out here if there's no edge intersection,
-		// or would the other edges would need to be checked too?
+		if( cornerValues[ 0 ] * sharedCornerValue < 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
+		if( cornerValues[ 1 ] * sharedCornerValue < 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
+		if( cornerValues[ 2 ] * sharedCornerValue < 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
 		te->b = edgeBits;
 		
 		// Iterate over the 3 edges that this voxel is responsible for. The
