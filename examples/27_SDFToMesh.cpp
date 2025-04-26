@@ -264,7 +264,7 @@ inline float SDFBox( ae::Vec3 p, ae::Vec3 halfSize, float cornerRadius = 0.0f )
 inline float SDFCylinder( ae::Vec3 p, ae::Vec3 halfSize, float top = 1.0f, float bottom = 1.0f )
 {
 	float scale;
-	if ( halfSize.x > halfSize.y )
+	if( halfSize.x > halfSize.y )
 	{
 		scale = halfSize.x;
 		p.y *= halfSize.x / halfSize.y;
@@ -358,7 +358,7 @@ int main()
 		ae::Int2 windowPos( 0, 0 );
 		ae::Int2 windowSize( 1280, 720 );
 		const auto screens = ae::GetScreens();
-		if ( screens.Length() )
+		if( screens.Length() )
 		{
 			const ae::Screen* targetScreen = [&]() -> const ae::Screen*
 			{
@@ -479,13 +479,13 @@ int main()
 				extractor->vertices.Length(),
 				extractor->indices.Length(),
 				"@TODO:aabb" );
-			if ( !extractor->vertices.Length() )
+			if( !extractor->vertices.Length() )
 			{
 				AE_INFO( "[#] No mesh generated", name );
 				return;
 			}
 			// (Re)Initialize ae::VertexArray here only when needed
-			if ( !sdfVertexBuffer.GetMaxVertexCount() // Not initialized
+			if( !sdfVertexBuffer.GetMaxVertexCount() // Not initialized
 				|| sdfVertexBuffer.GetMaxVertexCount() < extractor->vertices.Length() // Too little storage for verts
 				|| sdfVertexBuffer.GetMaxIndexCount() < extractor->indices.Length() ) // Too little storage for t_chunkIndices
 			{
@@ -510,7 +510,7 @@ int main()
 		bool show = true;
 		void Draw( ae::Shader* shader, ae::UniformList& uniforms )
 		{
-			if ( !show || !extractor->indices.Length() )
+			if( !show || !extractor->indices.Length() )
 			{
 				return;
 			}
@@ -588,23 +588,23 @@ int main()
 		if( input.GetPress( ae::Key::R ) ) { ResetTransform(); }
 		// Translation
 		const float transformSpeed = 2.0f * ( scale.x + scale.y + scale.z ) / 3.0f;
-		if ( input.Get( ae::Key::D ) ) { translation.x += transformSpeed * dt; }
-		if ( input.Get( ae::Key::A ) ) { translation.x -= transformSpeed * dt; }
-		if ( input.Get( ae::Key::W ) ) { translation.y += transformSpeed * dt; }
-		if ( input.Get( ae::Key::S ) ) { translation.y -= transformSpeed * dt; }
-		if ( input.Get( ae::Key::E ) ) { translation.z += transformSpeed * dt; }
-		if ( input.Get( ae::Key::Q ) ) { translation.z -= transformSpeed * dt; }
+		if( input.Get( ae::Key::D ) ) { translation.x += transformSpeed * dt; }
+		if( input.Get( ae::Key::A ) ) { translation.x -= transformSpeed * dt; }
+		if( input.Get( ae::Key::W ) ) { translation.y += transformSpeed * dt; }
+		if( input.Get( ae::Key::S ) ) { translation.y -= transformSpeed * dt; }
+		if( input.Get( ae::Key::E ) ) { translation.z += transformSpeed * dt; }
+		if( input.Get( ae::Key::Q ) ) { translation.z -= transformSpeed * dt; }
 		// Rotation
-		if ( input.Get( ae::Key::Z ) ) { rotation.x += 1.0f * dt; }
-		if ( input.Get( ae::Key::X ) ) { rotation.y += 1.0f * dt; }
-		if ( input.Get( ae::Key::C ) ) { rotation.z += 1.0f * dt; }
+		if( input.Get( ae::Key::Z ) ) { rotation.x += 1.0f * dt; }
+		if( input.Get( ae::Key::X ) ) { rotation.y += 1.0f * dt; }
+		if( input.Get( ae::Key::C ) ) { rotation.z += 1.0f * dt; }
 		// Scale
-		if ( input.Get( ae::Key::L ) ) { scale.x += transformSpeed * dt; }
-		if ( input.Get( ae::Key::J ) ) { scale.x -= transformSpeed * dt; }
-		if ( input.Get( ae::Key::I ) ) { scale.y += transformSpeed * dt; }
-		if ( input.Get( ae::Key::K ) ) { scale.y -= transformSpeed * dt; }
-		if ( input.Get( ae::Key::O ) ) { scale.z += transformSpeed * dt; }
-		if ( input.Get( ae::Key::U ) ) { scale.z -= transformSpeed * dt; }
+		if( input.Get( ae::Key::L ) ) { scale.x += transformSpeed * dt; }
+		if( input.Get( ae::Key::J ) ) { scale.x -= transformSpeed * dt; }
+		if( input.Get( ae::Key::I ) ) { scale.y += transformSpeed * dt; }
+		if( input.Get( ae::Key::K ) ) { scale.y -= transformSpeed * dt; }
+		if( input.Get( ae::Key::O ) ) { scale.z += transformSpeed * dt; }
+		if( input.Get( ae::Key::U ) ) { scale.z -= transformSpeed * dt; }
 		scale = ae::Max( ae::Vec3( 0.01f ), scale );
 		// ZYX rotation
 		const ae::Quaternion orientation =
@@ -688,7 +688,7 @@ ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
 	AE_DEBUG_ASSERT( pv == pv );
 	
 	ae::Vec3 normal0;
-	for ( int32_t i = 0; i < 3; i++ )
+	for( int32_t i = 0; i < 3; i++ )
 	{
 		ae::Vec3 nt = p;
 		nt[ i ] += m_params.normalSampleOffset;
@@ -703,7 +703,7 @@ ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
 	AE_DEBUG_ASSERT( normal0 == normal0 );
 
 	ae::Vec3 normal1;
-	for ( int32_t i = 0; i < 3; i++ )
+	for( int32_t i = 0; i < 3; i++ )
 	{
 		ae::Vec3 nt = p;
 		nt[ i ] -= m_params.normalSampleOffset;
@@ -812,7 +812,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		const uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		TempEdges* te = &m_tempEdges[ edgeIndex ];
-		if ( te->b & EDGE_VISITED )
+		if( te->b & EDGE_VISITED )
 		{
 			return true;
 		}
@@ -834,19 +834,19 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		
 		// Detect if any of the 3 new edges being tested intersect the implicit surface
 		uint16_t edgeBits = 0;
-		if ( cornerValues[ 0 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
-		if ( cornerValues[ 1 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
-		if ( cornerValues[ 2 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
+		if( cornerValues[ 0 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_FRONT_BIT; }
+		if( cornerValues[ 1 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_TOP_RIGHT_BIT; }
+		if( cornerValues[ 2 ] * sharedCornerValue <= 0.0f ) { edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
 		// @TODO: Is it possible to early out here if there's no edge intersection,
 		// or would the other edges would need to be checked too?
 		te->b = edgeBits;
 		
 		// Iterate over the 3 edges that this voxel is responsible for. The
 		// remaining 9 are handled by adjacent voxels.
-		for ( int32_t e = 0; e < 3; e++ )
-		if ( edgeBits & mask[ e ] )
+		for( int32_t e = 0; e < 3; e++ )
+		if( edgeBits & mask[ e ] )
 		{
-			if ( vertices.Length() + 4 > maxVerts || indices.Length() + 6 > maxIndices )
+			if( vertices.Length() + 4 > maxVerts || indices.Length() + 6 > maxIndices )
 			{
 				return false;
 			}
@@ -856,7 +856,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			{
 				// Determine which end of edge is inside/outside
 				ae::Vec3 c0, c1;
-				if ( cornerValues[ e ] < sharedCornerValue )
+				if( cornerValues[ e ] < sharedCornerValue )
 				{
 					c0 = cornerOffsets[ e ]; // Inside surface
 					c1 = ae::Vec3( 1, 1, 1 ); // Outside surface
@@ -869,18 +869,18 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 
 				// Find actual surface intersection point for edge
 				// @TODO: This should probably be adjustable
-				for ( int32_t i = 0; i < 16; i++ )
+				for( int32_t i = 0; i < 16; i++ )
 				{
 					// @TODO: This can be simplified by lerping and using the t value to do a binary search
 					edgeVoxelPos = ( c0 + c1 ) * 0.5f;
 					ae::Vec3 cw = voxelPos + edgeVoxelPos;
 					
 					float v = sdf->GetValue( cornerOffset + cw );
-					if ( ae::Abs( v ) < 0.001f )
+					if( ae::Abs( v ) < 0.001f )
 					{
 						break;
 					}
-					else if ( v < 0.0f )
+					else if( v < 0.0f )
 					{
 						c0 = edgeVoxelPos;
 					}
@@ -899,7 +899,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			te->p[ e ] = edgeVoxelPos;
 			te->n[ e ] = sdf->GetDerivative( cornerOffset + edgeWorldPos );
 			
-			if ( x < 0 || y < 0 || z < 0 || x >= kChunkSize || y >= kChunkSize || z >= kChunkSize )
+			if( x < 0 || y < 0 || z < 0 || x >= kChunkSize || y >= kChunkSize || z >= kChunkSize )
 			{
 				continue;
 			}
@@ -918,7 +918,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			// the work for adjacent voxels. Vertices are centered in voxels at
 			// this point at this stage.
 			IsosurfaceIndex quad[ 4 ];
-			for ( int32_t j = 0; j < 4; j++ )
+			for( int32_t j = 0; j < 4; j++ )
 			{
 				const int32_t ox = x + offsets[ j ][ 0 ];
 				const int32_t oy = y + offsets[ j ][ 1 ];
@@ -926,7 +926,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				
 				// This check allows coordinates to be one out of chunk high end
 				// @TODO: It looks like a very similar check is already done above?
-				if ( ox < 0 || oy < 0 || oz < 0 || ox > kChunkSize || oy > kChunkSize || oz > kChunkSize )
+				if( ox < 0 || oy < 0 || oz < 0 || ox > kChunkSize || oy > kChunkSize || oz > kChunkSize )
 				{
 					continue;
 				}
@@ -939,7 +939,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 #else
 				IsosurfaceIndex vertexIndex = m_i[ ox ][ oy ][ oz ];
 #endif
-				if ( !inCurrentChunk || vertexIndex == kInvalidIsosurfaceIndex )
+				if( !inCurrentChunk || vertexIndex == kInvalidIsosurfaceIndex )
 				{
 					IsosurfaceVertex vertex;
 					vertex.position.x = ox + 0.5f;
@@ -956,7 +956,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					// @TODO: Always store indices that are outside of the
 					// chunk, because they are they should be included in the
 					// final mesh only once.
-					if ( inCurrentChunk )
+					if( inCurrentChunk )
 					{
 						// Record the index of the vertex in the chunk so it can
 						// be reused by adjacent quads
@@ -979,9 +979,9 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			
 			// @TODO: This assumes counter clockwise culling
 			bool flip = false;
-			if ( e == 0 ) { flip = ( sharedCornerValue > 0.0f ); } // EDGE_TOP_FRONT_BIT
+			if( e == 0 ) { flip = ( sharedCornerValue > 0.0f ); } // EDGE_TOP_FRONT_BIT
 			else { flip = ( sharedCornerValue < 0.0f ); } // EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
-			if ( flip )
+			if( flip )
 			{
 				// tri0
 				indices.Append( quad[ 0 ] );
@@ -1015,15 +1015,15 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	for( uint32_t i = 0; i < octree->GetOctantCount(); i++ )
 	{
 		const SDFOctant* octant = octree->GetOctant( i );
-		if ( octant->IntersectsZero() && !octant->GetChildCount() )
+		if( octant->IntersectsZero() && !octant->GetChildCount() )
 		{
 			const ae::AABB aabb = octant->GetAABB();
 			const ae::Int3 min = ae::Max( generationMin, aabb.GetMin().FloorCopy() - cornerOffsetInt );
 			const ae::Int3 max = ae::Min( generationMax, aabb.GetMax().CeilCopy() - cornerOffsetInt );
-			for ( int32_t z = min.z; z < max.z; z++ )
-			for ( int32_t y = min.y; y < max.y; y++ )
-			for ( int32_t x = min.x; x < max.x; x++ )
-			if ( !DoVoxel( x, y, z ) )
+			for( int32_t z = min.z; z < max.z; z++ )
+			for( int32_t y = min.y; y < max.y; y++ )
+			for( int32_t x = min.x; x < max.x; x++ )
+			if( !DoVoxel( x, y, z ) )
 			{
 				vertices.Clear();
 				indices.Clear();
@@ -1038,7 +1038,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	for( int32_t y = generationMin.y; y < generationMax.y; y++ )
 	for( int32_t x = generationMin.x; x < generationMax.x; x++ )
 	{
-		if ( !DoVoxel( x, y, z ) )
+		if( !DoVoxel( x, y, z ) )
 		{
 			vertices.Clear();
 			indices.Clear();
@@ -1047,13 +1047,13 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	}
 #endif
 	
-	if ( indices.Length() == 0 )
+	if( indices.Length() == 0 )
 	{
 		vertices.Clear();
 		return;
 	}
 	
-	for ( IsosurfaceVertex& vertex : vertices )
+	for( IsosurfaceVertex& vertex : vertices )
 	{
 		const int32_t x = ae::Floor( vertex.position.x );
 		const int32_t y = ae::Floor( vertex.position.y );
@@ -1068,19 +1068,19 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		uint32_t edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		TempEdges te = m_tempEdges[ edgeIndex ];
-		if ( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.b & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.p[ 0 ];
 			n[ ec ] = te.n[ 0 ];
 			ec++;
 		}
-		if ( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.b & EDGE_TOP_RIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 1 ];
 			n[ ec ] = te.n[ 1 ];
 			ec++;
 		}
-		if ( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 2 ];
 			n[ ec ] = te.n[ 2 ];
@@ -1089,14 +1089,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		edgeIndex = x + kTempChunkSize * ( y + 1 + ( z + 1 ) * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
-		if ( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.b & EDGE_TOP_RIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 1 ];
 			p[ ec ].x -= 1.0f;
 			n[ ec ] = te.n[ 1 ];
 			ec++;
 		}
-		if ( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 2 ];
 			p[ ec ].x -= 1.0f;
@@ -1106,14 +1106,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		edgeIndex = x + 1 + kTempChunkSize * ( y + ( z + 1 ) * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
-		if ( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.b & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.p[ 0 ];
 			p[ ec ].y -= 1.0f;
 			n[ ec ] = te.n[ 0 ];
 			ec++;
 		}
-		if ( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 2 ];
 			p[ ec ].y -= 1.0f;
@@ -1123,7 +1123,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		edgeIndex = x + kTempChunkSize * ( y + ( z + 1 ) * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
-		if ( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 2 ];
 			p[ ec ].x -= 1.0f;
@@ -1134,7 +1134,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		edgeIndex = x + kTempChunkSize * ( y + 1 + z * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
-		if ( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.b & EDGE_TOP_RIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 1 ];
 			p[ ec ].x -= 1.0f;
@@ -1145,7 +1145,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		edgeIndex = x + 1 + kTempChunkSize * ( y + z * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
-		if ( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.b & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.p[ 0 ];
 			p[ ec ].y -= 1.0f;
@@ -1156,14 +1156,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		edgeIndex = x + 1 + kTempChunkSize * ( y + 1 + z * kTempChunkSize );
 		AE_DEBUG_ASSERT( edgeIndex < kTempChunkSize3 );
 		te = m_tempEdges[ edgeIndex ];
-		if ( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.b & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.p[ 0 ];
 			p[ ec ].z -= 1.0f;
 			n[ ec ] = te.n[ 0 ];
 			ec++;
 		}
-		if ( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.b & EDGE_TOP_RIGHT_BIT )
 		{
 			p[ ec ] = te.p[ 1 ];
 			p[ ec ].z -= 1.0f;
@@ -1173,7 +1173,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		
 		// Validation
 		AE_DEBUG_ASSERT( ec != 0 );
-		for ( int32_t j = 0; j < ec; j++ )
+		for( int32_t j = 0; j < ec; j++ )
 		{
 			AE_DEBUG_ASSERT( p[ j ] == p[ j ] );
 			AE_DEBUG_ASSERT( p[ j ].x >= 0.0f && p[ j ].x <= 1.0f );
@@ -1184,7 +1184,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 
 		// Normal
 		vertex.normal = ae::Vec3( 0.0f );
-		for ( int32_t j = 0; j < ec; j++ )
+		for( int32_t j = 0; j < ec; j++ )
 		{
 			vertex.normal += n[ j ];
 		}
@@ -1196,7 +1196,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		{
 #if AE_TERRAIN_SIMD
 			__m128 c128 = _mm_setzero_ps();
-			for ( uint32_t i = 0; i < ec; i++ )
+			for( uint32_t i = 0; i < ec; i++ )
 			{
 				__m128 p128 = _mm_load_ps( (float*)( p + i ) );
 				c128 = _mm_add_ps( c128, p128 );
@@ -1204,8 +1204,8 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			__m128 div = _mm_set1_ps( 1.0f / ec );
 			c128 = _mm_mul_ps( c128, div );
 			
-			for ( uint32_t i = 0; i < 10; i++ )
-			for ( uint32_t j = 0; j < ec; j++ )
+			for( uint32_t i = 0; i < 10; i++ )
+			for( uint32_t j = 0; j < ec; j++ )
 			{
 				__m128 p128 = _mm_load_ps( (float*)( p + j ) );
 				p128 = _mm_sub_ps( p128, c128 );
@@ -1223,14 +1223,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			_mm_store_ps( (float*)&position, c128 );
 #else
 			position = ae::Vec3( 0.0f );
-			for ( uint32_t i = 0; i < ec; i++ )
+			for( uint32_t i = 0; i < ec; i++ )
 			{
 				position += p[ i ];
 			}
 			position /= ec;
-			for ( uint32_t i = 0; i < 10; i++ )
+			for( uint32_t i = 0; i < 10; i++ )
 			{
-				for ( uint32_t j = 0; j < ec; j++ )
+				for( uint32_t j = 0; j < ec; j++ )
 				{
 					float d = n[ j ].Dot( p[ j ] - position );
 					position += n[ j ] * ( d * 0.5f );
@@ -1241,7 +1241,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			// @NOTE: Bias towards average of intersection points. This solves some intersecting triangles on sharp edges.
 			// Based on notes here: https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
 			ae::Vec3 averagePos( 0.0f );
-			for ( int32_t i = 0; i < ec; i++ )
+			for( int32_t i = 0; i < ec; i++ )
 			{
 				averagePos += p[ i ];
 			}
