@@ -39,7 +39,8 @@
 	#pragma clang diagnostic pop
 #endif
 
-#define AE_TERRAIN_ITERATE_OCTREE_LEAVES 1
+#define AE_TERRAIN_ITERATE_OCTREE_LEAVES 0
+#define AE_TERRAIN_USE_VERTEX_MAP 1
 
 //------------------------------------------------------------------------------
 // Types / constants
@@ -68,6 +69,12 @@ const IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
 const uint32_t kChunkSize = 200;
 const int32_t kTempChunkSize = kChunkSize + 2; // Include a 1 voxel border
 const int32_t kTempChunkSize3 = kTempChunkSize * kTempChunkSize * kTempChunkSize; // Temp voxel count
+
+inline uint32_t GetInt3Hash( uint32_t x, uint32_t y, uint32_t z )
+{
+	const uint32_t gridSize = 1625; // UINT32_MAX ^ (1/3)
+	return ( x + gridSize * ( y + z * gridSize ) );
+}
 
 static constexpr float kMinOctantHalfSize = 0.6f; // @TODO: Remove constant, and pass as parameter to SDFOctree
 struct SDFOctant
@@ -233,7 +240,11 @@ struct IsosurfaceExtractor
 		ae::Vec3 n[ 3 ];
 	};
 	TempEdges m_tempEdges[ kTempChunkSize3 ];
+#if AE_TERRAIN_USE_VERTEX_MAP
+	ae::Map< uint32_t, IsosurfaceIndex > m_voxelToVertex;
+#else
 	IsosurfaceIndex m_i[ kChunkSize ][ kChunkSize ][ kChunkSize ];
+#endif
 };
 
 //------------------------------------------------------------------------------
@@ -742,6 +753,9 @@ void IsosurfaceExtractorCache::DrawOctree( ae::DebugLines* debugLines )
 IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
 	vertices( tag ),
 	indices( tag )
+#if AE_TERRAIN_USE_VERTEX_MAP
+	,m_voxelToVertex( tag )
+#endif
 {}
 
 void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_t maxVerts, uint32_t maxIndices )
@@ -757,9 +771,13 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 
 	vertices.Clear();
 	indices.Clear();
+#if AE_TERRAIN_USE_VERTEX_MAP
+	m_voxelToVertex.Clear();
+#else
 	memset( m_i, ~(uint8_t)0, sizeof( m_i ) );
-	memset( m_tempEdges, 0, kTempChunkSize3 * sizeof( *m_tempEdges ) );
 	AE_STATIC_ASSERT( std::is_pod_v< decltype(m_i) > );
+#endif
+	memset( m_tempEdges, 0, kTempChunkSize3 * sizeof( *m_tempEdges ) );
 	AE_STATIC_ASSERT( std::is_pod_v< ae::StripType< decltype(*m_tempEdges) > > );
 
 	// @TODO: Description
@@ -780,7 +798,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
 	};
 
-	// @OTOD: This is definitely wrong...
+	// @TODO: This is definitely wrong...
 	const ae::Vec3 cornerOffset = ae::Vec3( kChunkSize / -2.0f );//;-ae::Vec3( sdf->GetHalfSize() ); // -sdf->GetCenter();// 
 	const ae::Int3 cornerOffsetInt = ae::Int3( (int32_t)kChunkSize / -2 );
 	
@@ -915,7 +933,13 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				
 				// @TODO: Remove this 'in chunk' check, all indices should be recorded
 				const bool inCurrentChunk = ox < kChunkSize && oy < kChunkSize && oz < kChunkSize;
-				if ( !inCurrentChunk || m_i[ ox ][ oy ][ oz ] == kInvalidIsosurfaceIndex )
+				const uint32_t vertexLookupHash = GetInt3Hash( ox, oy, oz );
+#if AE_TERRAIN_USE_VERTEX_MAP
+				IsosurfaceIndex vertexIndex = m_voxelToVertex.Get( vertexLookupHash, kInvalidIsosurfaceIndex );
+#else
+				IsosurfaceIndex vertexIndex = m_i[ ox ][ oy ][ oz ];
+#endif
+				if ( !inCurrentChunk || vertexIndex == kInvalidIsosurfaceIndex )
 				{
 					IsosurfaceVertex vertex;
 					vertex.position.x = ox + 0.5f;
@@ -925,7 +949,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					
 					AE_DEBUG_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
 					
-					IsosurfaceIndex vertexIndex = (IsosurfaceIndex)vertices.Length();
+					vertexIndex = (IsosurfaceIndex)vertices.Length();
 					vertices.Append( vertex );
 					quad[ j ] = vertexIndex;
 					
@@ -936,12 +960,15 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 					{
 						// Record the index of the vertex in the chunk so it can
 						// be reused by adjacent quads
+#if AE_TERRAIN_USE_VERTEX_MAP
+						m_voxelToVertex.Set( vertexLookupHash, vertexIndex );
+#else
 						m_i[ ox ][ oy ][ oz ] = vertexIndex;
+#endif
 					}
 				}
 				else
 				{
-					IsosurfaceIndex vertexIndex = m_i[ ox ][ oy ][ oz ];
 					AE_DEBUG_ASSERT_MSG( vertexIndex < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
 					AE_DEBUG_ASSERT( ox < kChunkSize );
 					AE_DEBUG_ASSERT( oy < kChunkSize );
