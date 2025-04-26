@@ -106,6 +106,7 @@ public:
 		m_fn = fn;
 		m_userData = userData;
 		m_octants.Clear();
+		m_aabb = ae::AABB();
 		m_Build( -1, center, halfSize );
 	}
 	//! Returns an approximate signed distance to the surface of the SDF at the
@@ -122,6 +123,7 @@ public:
 	}
 	// @TODO: ae::Array< float, N > GetValues( ae::Array< ae::Vec3, N > pos, ae::Array< float, N >& resultsOut ) const;
 	
+	inline const ae::AABB& GetAABB() const { return m_aabb; }
 	inline uint32_t GetOctantCount() const { return m_octants.Length() + 1; } // +1 for root m_octant
 	inline const SDFOctant* GetOctant( uint32_t index ) const { return ( index == 0 ) ? &m_octant : &m_octants[ index - 1 ]; }
 
@@ -154,6 +156,11 @@ private:
 		}
 		else
 		{
+			if( octant->m_intersects )
+			{
+				const ae::Vec3 halfSize3( halfSize );
+				m_aabb.Expand( ae::AABB( center - halfSize3, center + halfSize3 ) );
+			}
 			octant->m_childrenBaseIndex = -1;
 		}
 	}
@@ -197,6 +204,7 @@ private:
 	ae::Array< SDFOctant > m_octants = TAG_ISOSURFACE;
 	IsosurfaceFn m_fn = nullptr;
 	const void* m_userData = nullptr;
+	ae::AABB m_aabb;
 };
 
 //------------------------------------------------------------------------------
@@ -723,6 +731,8 @@ ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
 void IsosurfaceExtractorCache::DrawOctree( ae::DebugLines* debugLines )
 {
 	const uint32_t octantCount = m_octree.GetOctantCount();
+	const ae::AABB aabb = m_octree.GetAABB();
+	debugLines->AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), ae::Color::AetherWhite() );
 	for( uint32_t i = 0; i < octantCount; i++ )
 	{
 		const SDFOctant* octant = m_octree.GetOctant( i );
@@ -1013,18 +1023,23 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	};
 	const ae::Int3 generationMin( -1 );
 	const ae::Int3 generationMax( kChunkSize + 1 );
+	const SDFOctree* octree = sdf->GetOctree();
+	const ae::Int3 octreeMin = ae::Max( generationMin, octree->GetAABB().GetMin().FloorCopy() - cornerOffsetInt );
+	const ae::Int3 octreeMax = ae::Min( generationMax, octree->GetAABB().GetMax().CeilCopy() - cornerOffsetInt );
 #if AE_TERRAIN_ITERATE_OCTREE_LEAVES
 	// Iterate over octree nodes instead of voxels, relying on EDGE_VISITED to
-	// skip voxels that are already processed.
-	const SDFOctree* octree = sdf->GetOctree();
+	// skip voxels that are already processed. This can be slow since individual
+	// octree nodes overlap each other slightly when they are quantized to the
+	// voxel grid, the cost of iterating over the octree can be higher than just
+	// iterating over all of the voxels exactly once.
 	for( uint32_t i = 0; i < octree->GetOctantCount(); i++ )
 	{
 		const SDFOctant* octant = octree->GetOctant( i );
 		if( octant->IntersectsZero() && !octant->GetChildCount() )
 		{
 			const ae::AABB aabb = octant->GetAABB();
-			const ae::Int3 min = ae::Max( generationMin, aabb.GetMin().FloorCopy() - cornerOffsetInt );
-			const ae::Int3 max = ae::Min( generationMax, aabb.GetMax().CeilCopy() - cornerOffsetInt );
+			const ae::Int3 min = ae::Max( octreeMin, aabb.GetMin().FloorCopy() - cornerOffsetInt );
+			const ae::Int3 max = ae::Min( octreeMax, aabb.GetMax().CeilCopy() - cornerOffsetInt );
 			for( int32_t z = min.z; z < max.z; z++ )
 			for( int32_t y = min.y; y < max.y; y++ )
 			for( int32_t x = min.x; x < max.x; x++ )
@@ -1035,13 +1050,11 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				return;
 			}
 		}
-		
 	}
 #else
-	const int32_t chunkPlus = kChunkSize + 1;
-	for( int32_t z = generationMin.z; z < generationMax.z; z++ )
-	for( int32_t y = generationMin.y; y < generationMax.y; y++ )
-	for( int32_t x = generationMin.x; x < generationMax.x; x++ )
+	for( int32_t z = octreeMin.z; z < octreeMax.z; z++ )
+	for( int32_t y = octreeMin.y; y < octreeMax.y; y++ )
+	for( int32_t x = octreeMin.x; x < octreeMax.x; x++ )
 	{
 		if( !DoVoxel( x, y, z ) )
 		{
