@@ -52,15 +52,6 @@
 #define AE_AETHER_H
 
 //------------------------------------------------------------------------------
-// Debug build define
-//------------------------------------------------------------------------------
-#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) ) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
-	#define _AE_DEBUG_ 1
-#else
-	#define _AE_DEBUG_ 0
-#endif
-
-//------------------------------------------------------------------------------
 // AE_CONFIG_FILE define
 //------------------------------------------------------------------------------
 //! The path to a user defined configuration header file, something like
@@ -71,8 +62,26 @@
 //! in a project. It's advised that an AE_CONFIG_FILE is provided globally as a
 //! compiler definition to limit the opportunity for any configuration issues.
 //! If AE_CONFIG_FILE is not defined, the default configuration will be used.
+//! Be aware that no aether specific defines are provided in advance of
+//! including this file, so it's not possible to check for _AE_DEBUG_ etc.
 #ifdef AE_CONFIG_FILE
 	#include AE_CONFIG_FILE
+#endif
+
+//------------------------------------------------------------------------------
+// _AE_DEBUG_ define
+//------------------------------------------------------------------------------
+// Enables extra checks, asserts, and memory patterns for allocations, etc. It
+// is automatically enabled based on platform specific flags. This is okay to
+// manually enable for optimized builds by defining _AE_DEBUG_ in your
+// AE_CONFIG_FILE. It is not recommended for public release builds.
+//------------------------------------------------------------------------------
+#ifndef _AE_DEBUG_
+	#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) ) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
+		#define _AE_DEBUG_ 1
+	#else
+		#define _AE_DEBUG_ 0
+	#endif
 #endif
 
 //------------------------------------------------------------------------------
