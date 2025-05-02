@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------
 // Headers
 //------------------------------------------------------------------------------
-#define _AE_DEBUG_ 0
+// #define _AE_DEBUG_ 1
 #include "aether.h"
 #if _AE_DEBUG_
 	#define AE_DEBUG_IF( _expr ) if( _expr )
@@ -91,6 +91,7 @@ class IsosurfaceExtractorCache
 public:
 	IsosurfaceExtractorCache();
 	void Generate( const IsosurfaceParams& params );
+	void Reset();
 	void Draw( ae::DebugLines* debugLines );
 	
 	//! Returns an approximate signed distance to the surface of the SDF at the
@@ -136,18 +137,27 @@ struct IsosurfaceExtractor
 	ae::Array< IsosurfaceVertex > vertices;
 	ae::Array< IsosurfaceIndex > indices;
 
+	struct Stats
+	{
+		uint32_t iterationCount = 0;
+		uint32_t workingCount = 0;
+		uint32_t sampleCount = 0;
+	};
+	const Stats& GetStats() const { return m_stats; }
+
 private:
 	static constexpr IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
 	struct Voxel
 	{
-		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
-		uint16_t b = 0;
 		// 3 planes whose intersections are used to position vertices within voxel
 		// EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
-		ae::Vec3 p[ 3 ];
-		ae::Vec3 n[ 3 ];
+		ae::Vec3 edgeNormal[ 3 ];
+		ae::Vec3 edgePos[ 3 ];
+		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
+		uint16_t edgeBits = 0;
 	};
 	ae::Map< uint32_t, Voxel > m_voxels;
+	Stats m_stats;
 };
 
 //------------------------------------------------------------------------------
@@ -549,6 +559,9 @@ int main()
 			double meshTime = 0.0;
 			float vertCount = 0;
 			float indexCount = 0;
+			float iterationCount = 0.0f;
+			float workingCount = 0.0f;
+			float sampleCount = 0.0f;
 			for( SDFToMesh* sdf : sdfToMesh )
 			{
 				sdf->Run( transform );
@@ -556,6 +569,9 @@ int main()
 				meshTime += sdf->meshTime;
 				vertCount += sdf->extractor->vertices.Length();
 				indexCount += sdf->extractor->indices.Length();
+				iterationCount += sdf->extractor->GetStats().iterationCount;
+				workingCount += sdf->extractor->GetStats().workingCount;
+				sampleCount += sdf->extractor->GetStats().sampleCount;
 			}
 			const double endTime = ae::GetTime();
 
@@ -564,14 +580,38 @@ int main()
 			uint32_t countIndex = 0;
 			const char* timeUnits[] = { "s", "ms" };
 			const char* counts[] = { "", "K", "M", "B" };
-			while( totalTime < 1.0 ) { totalTime *= 1000.0; meshTime *= 1000.0; cacheTime *= 1000.0; timeIndex++; }
-			while( indexCount > 1000.0f ) { indexCount /= 1000.0f; vertCount /= 1000.0f; countIndex++; }
+			while( totalTime < 1.0 )
+			{
+				totalTime *= 1000.0;
+				meshTime *= 1000.0;
+				cacheTime *= 1000.0;
+				timeIndex++;
+			}
+			while( indexCount > 1000.0f )
+			{
+				indexCount /= 1000.0f;
+				vertCount /= 1000.0f;
+				countIndex++;
+			}
 			AE_INFO( "Total:## Cache:## Mesh:## Verts:## Indices:##",
 				totalTime, timeUnits[ timeIndex ],
 				cacheTime, timeUnits[ timeIndex ],
 				meshTime, timeUnits[ timeIndex ],
 				vertCount, counts[ countIndex ],
 				indexCount, counts[ countIndex ]
+			);
+			uint32_t countIndex2 = 0;
+			while( iterationCount > 1000.0f )
+			{
+				sampleCount /= 1000.0f;
+				workingCount /= 1000.0f;
+				iterationCount /= 1000.0f;
+				countIndex2++;
+			}
+			AE_INFO( "Iters:## Working:## Samples:##",
+				iterationCount, counts[ countIndex2 ],
+				workingCount, counts[ countIndex2 ],
+				sampleCount, counts[ countIndex2 ]
 			);
 			prevTransform = transform;
 		}
@@ -619,21 +659,31 @@ int main()
 //------------------------------------------------------------------------------
 IsosurfaceExtractorCache::IsosurfaceExtractorCache()
 {
+	Reset();
+}
+
+void IsosurfaceExtractorCache::Reset()
+{
 	m_octant.m_center = ae::Vec3( 0.0f );
 	m_octant.m_halfSize = ae::Vec3( 0.0f );
 	m_octant.m_signedSurfaceDistance = NAN;
 	m_octant.m_childrenBaseIndex = -1;
+	m_surfaceAABB = ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ); // 0 size by default, the position shouldn't matter
+	m_octants.Clear();
 }
 
 void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params )
 {
+	Reset();
 	if( params.aabb.Contains( params.aabb.GetCenter() ) )
 	{
-		// Ignore AE_TERRAIN_USE_CACHE here, just so the AABB generates
 		m_params = params;
-		m_octants.Clear();
-		m_surfaceAABB = ae::AABB();
+		m_surfaceAABB = ae::AABB(); // Default (and not 0 size!) so that ae::AABB::Expand() functions work as expected
 		m_Generate( -1, m_params.aabb.GetCenter(), params.aabb.GetHalfSize() );
+		if( m_surfaceAABB == ae::AABB() )
+		{
+			Reset(); // Reset octree and aabb so an empty SDF is as simple as possible
+		}
 	}
 }
 
@@ -797,10 +847,11 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	{
 		maxIndices = ae::MaxValue< uint32_t >();
 	}
-
+	
 	vertices.Clear();
 	indices.Clear();
 	m_voxels.Clear();
+	m_stats = {};
 
 	// @TODO: Description
 	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
@@ -825,8 +876,20 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	const ae::Int3 cornerOffsetInt = generationOffset.FloorCopy();
 	const ae::Int3 generationMin( -1 );
 	const ae::Int3 generationMax = sdf->GetParams().aabb.GetMax().CeilCopy() + ae::Int3( 1 ) - cornerOffsetInt;
-	const ae::Int3 sdfMin = ae::Max( generationMin, sdf->GetOctreeAABB().GetMin().FloorCopy() - cornerOffsetInt );
-	const ae::Int3 sdfMax = ae::Min( generationMax, sdf->GetOctreeAABB().GetMax().CeilCopy() - cornerOffsetInt );
+	const ae::Int3 sdfMin = ae::Clip( sdf->GetOctreeAABB().GetMin().FloorCopy() - cornerOffsetInt, generationMin, generationMax );
+	const ae::Int3 sdfMax = ae::Clip( sdf->GetOctreeAABB().GetMax().CeilCopy() - cornerOffsetInt, generationMin, generationMax );
+	AE_DEBUG_ASSERT( ( sdfMax.x - sdfMin.x ) >= 0 );
+	AE_DEBUG_ASSERT( ( sdfMax.y - sdfMin.y ) >= 0 );
+	AE_DEBUG_ASSERT( ( sdfMax.z - sdfMin.z ) >= 0 );
+	const uint32_t sdfSize = ( sdfMax.x - sdfMin.x ) * ( sdfMax.y - sdfMin.y ) * ( sdfMax.z - sdfMin.z );
+	if( !sdfSize )
+	{
+		return; // Zero size generation region
+	}
+	else if( sdfSize > ( uint32MaxGridSize * uint32MaxGridSize * uint32MaxGridSize ) )
+	{
+		return; // SDF volume is too large, and can't be indexed
+	}
 	// This phase finds the surface of the SDF and generates the list of
 	// vertices along with all of the 'lattice' edge intersections. The vertex
 	// positions will be centered within their voxels at the end of this phase,
@@ -844,6 +907,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
 		const ae::Vec3 sharedCornerOffset( 1.0f );
 		const float sharedCornerValue = Nudge( sdf->GetValue( generationOffset + voxelPos + sharedCornerOffset ) );
+		m_stats.sampleCount++;
 		if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be smaller
 		{
 			// Early out of additional edge intersections if far from the surface
@@ -855,6 +919,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			Nudge( sdf->GetValue( generationOffset + voxelPos + cornerOffsets[ 1 ] ) ),
 			Nudge( sdf->GetValue( generationOffset + voxelPos + cornerOffsets[ 2 ] ) )
 		};
+		m_stats.sampleCount += 3;
 		AE_DEBUG_IF( !errors )
 		{
 			AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) );
@@ -871,14 +936,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		
 		Voxel voxel;
 		// Detect if any of the 3 new edges being tested intersect the implicit surface
-		if( cornerValues[ 0 ] * sharedCornerValue < 0.0f ) { voxel.b |= EDGE_TOP_FRONT_BIT; }
-		if( cornerValues[ 1 ] * sharedCornerValue < 0.0f ) { voxel.b |= EDGE_TOP_RIGHT_BIT; }
-		if( cornerValues[ 2 ] * sharedCornerValue < 0.0f ) { voxel.b |= EDGE_SIDE_FRONTRIGHT_BIT; }
+		if( cornerValues[ 0 ] * sharedCornerValue < 0.0f ) { voxel.edgeBits |= EDGE_TOP_FRONT_BIT; }
+		if( cornerValues[ 1 ] * sharedCornerValue < 0.0f ) { voxel.edgeBits |= EDGE_TOP_RIGHT_BIT; }
+		if( cornerValues[ 2 ] * sharedCornerValue < 0.0f ) { voxel.edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT; }
 		
 		// Iterate over the 3 edges that this voxel is responsible for. The
 		// remaining 9 are handled by adjacent voxels.
 		for( int32_t e = 0; e < 3; e++ )
-		if( voxel.b & mask[ e ] )
+		if( voxel.edgeBits & mask[ e ] )
 		{
 			if( vertices.Length() + 4 > maxVerts || indices.Length() + 6 > maxIndices )
 			{
@@ -898,6 +963,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				{
 					edgeOffset01 = start + rayDir * depth;
 					const float closestSurfaceDist = sdf->GetValue( generationOffset + voxelPos + edgeOffset01 );
+					m_stats.sampleCount++;
 					if( closestSurfaceDist < 0.01f )
 					{
 						break; // Hit the surface
@@ -916,9 +982,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			AE_DEBUG_ASSERT( edgeOffset01.y >= 0.0f && edgeOffset01.y <= 1.0f );
 			AE_DEBUG_ASSERT( edgeOffset01.z >= 0.0f && edgeOffset01.z <= 1.0f );
 			
-			voxel.p[ e ] = edgeOffset01;
-			voxel.n[ e ] = sdf->GetDerivative( generationOffset + voxelPos + edgeOffset01 );
-			AE_DEBUG_IF( errors && voxel.n[ e ] == ae::Vec3( 0.0f ) ) { errors->Append( generationOffset + voxelPos + edgeOffset01 ); }
+			voxel.edgePos[ e ] = edgeOffset01;
+			voxel.edgeNormal[ e ] = sdf->GetDerivative( generationOffset + voxelPos + edgeOffset01 );
+			m_stats.sampleCount += 7;
+			AE_DEBUG_IF( errors && voxel.edgeNormal[ e ] == ae::Vec3( 0.0f ) ) { errors->Append( generationOffset + voxelPos + edgeOffset01 ); }
 
 			// Don't allow verts to be added on the very edge of the generation
 			// area. A border of at least 1 voxel is needed so that vertices can
@@ -1013,6 +1080,8 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			return;
 		}
 	}
+	m_stats.iterationCount = ( sdfMax.x - sdfMin.x ) * ( sdfMax.y - sdfMin.y ) * ( sdfMax.z - sdfMin.z );
+	m_stats.workingCount = m_voxels.Length();
 	
 	if( indices.Length() == 0 )
 	{
@@ -1032,94 +1101,94 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		ae::Vec3 p[ 12 ];
 		ae::Vec3 n[ 12 ];
 		Voxel te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y + 1, z + 1 ), {} );
-		if( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
-			p[ ec ] = te.p[ 0 ];
-			n[ ec ] = te.n[ 0 ];
+			p[ ec ] = te.edgePos[ 0 ];
+			n[ ec ] = te.edgeNormal[ 0 ];
 			ec++;
 		}
-		if( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 1 ];
-			n[ ec ] = te.n[ 1 ];
+			p[ ec ] = te.edgePos[ 1 ];
+			n[ ec ] = te.edgeNormal[ 1 ];
 			ec++;
 		}
-		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 2 ];
-			n[ ec ] = te.n[ 2 ];
+			p[ ec ] = te.edgePos[ 2 ];
+			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
 		te = m_voxels.Get( AE_GET_VOXEL_HASH( x, y + 1, z + 1 ), {} );
-		if( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 1 ];
+			p[ ec ] = te.edgePos[ 1 ];
 			p[ ec ].x -= 1.0f;
-			n[ ec ] = te.n[ 1 ];
+			n[ ec ] = te.edgeNormal[ 1 ];
 			ec++;
 		}
-		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 2 ];
+			p[ ec ] = te.edgePos[ 2 ];
 			p[ ec ].x -= 1.0f;
-			n[ ec ] = te.n[ 2 ];
+			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
 		te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y, z + 1 ), {} );
-		if( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
-			p[ ec ] = te.p[ 0 ];
+			p[ ec ] = te.edgePos[ 0 ];
 			p[ ec ].y -= 1.0f;
-			n[ ec ] = te.n[ 0 ];
+			n[ ec ] = te.edgeNormal[ 0 ];
 			ec++;
 		}
-		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 2 ];
+			p[ ec ] = te.edgePos[ 2 ];
 			p[ ec ].y -= 1.0f;
-			n[ ec ] = te.n[ 2 ];
+			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
 		te = m_voxels.Get( AE_GET_VOXEL_HASH( x, y, z + 1 ), {} );
-		if( te.b & EDGE_SIDE_FRONTRIGHT_BIT )
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 2 ];
+			p[ ec ] = te.edgePos[ 2 ];
 			p[ ec ].x -= 1.0f;
 			p[ ec ].y -= 1.0f;
-			n[ ec ] = te.n[ 2 ];
+			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
 		te = m_voxels.Get( AE_GET_VOXEL_HASH( x, y + 1, z ), {} );
-		if( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 1 ];
+			p[ ec ] = te.edgePos[ 1 ];
 			p[ ec ].x -= 1.0f;
 			p[ ec ].z -= 1.0f;
-			n[ ec ] = te.n[ 1 ];
+			n[ ec ] = te.edgeNormal[ 1 ];
 			ec++;
 		}
 		te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y, z ), {} );
-		if( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
-			p[ ec ] = te.p[ 0 ];
+			p[ ec ] = te.edgePos[ 0 ];
 			p[ ec ].y -= 1.0f;
 			p[ ec ].z -= 1.0f;
-			n[ ec ] = te.n[ 0 ];
+			n[ ec ] = te.edgeNormal[ 0 ];
 			ec++;
 		}
 		te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y + 1, z ), {} );
-		if( te.b & EDGE_TOP_FRONT_BIT )
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
-			p[ ec ] = te.p[ 0 ];
+			p[ ec ] = te.edgePos[ 0 ];
 			p[ ec ].z -= 1.0f;
-			n[ ec ] = te.n[ 0 ];
+			n[ ec ] = te.edgeNormal[ 0 ];
 			ec++;
 		}
-		if( te.b & EDGE_TOP_RIGHT_BIT )
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
 		{
-			p[ ec ] = te.p[ 1 ];
+			p[ ec ] = te.edgePos[ 1 ];
 			p[ ec ].z -= 1.0f;
-			n[ ec ] = te.n[ 1 ];
+			n[ ec ] = te.edgeNormal[ 1 ];
 			ec++;
 		}
 		
