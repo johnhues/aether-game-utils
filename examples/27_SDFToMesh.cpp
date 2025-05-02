@@ -357,10 +357,11 @@ int main()
 		IsosurfaceExtractorCache* cache = ae::New< IsosurfaceExtractorCache >( TAG_ISOSURFACE );
 		ae::VertexBuffer sdfVertexBuffer;
 		ae::Array< ae::Vec3 > errors = TAG_ISOSURFACE;
+		double cacheTime = 0.0;
+		double meshTime = 0.0;
 		void Run( ae::Matrix4 transform )
 		{
 			// Cache
-			AE_INFO( "[#] Caching SDF...", name );
 			const double cacheStart = ae::GetTime();
 			const ae::Vec3 scale = transform.GetScale();
 			transform = transform.GetScaleRemoved();
@@ -381,23 +382,16 @@ int main()
 				.aabb=region
 			} );
 			const double cacheEnd = ae::GetTime();
-			AE_INFO( "[#] SDF cache complete. sec:#", name, cacheEnd - cacheStart );
+			cacheTime = ( cacheEnd - cacheStart );
 			
 			// Mesh
 			errors.Clear();
-			AE_INFO( "[#] Start mesh generation...", name );
-			const double isosurfaceStart = ae::GetTime();
+			const double meshStart = ae::GetTime();
 			extractor->Generate( cache, 0, 0, &errors );
-			const double isosurfaceEnd = ae::GetTime();
-			AE_INFO( "[#] Mesh generation complete. sec:# verts:# indices:# [#]",
-				name,
-				isosurfaceEnd - isosurfaceStart,
-				extractor->vertices.Length(),
-				extractor->indices.Length(),
-				"@TODO:aabb" );
+			const double meshEnd = ae::GetTime();
+			meshTime = ( meshEnd - meshStart );
 			if( !extractor->vertices.Length() )
 			{
-				AE_INFO( "[#] No mesh generated", name );
 				return;
 			}
 			// (Re)Initialize ae::VertexArray here only when needed
@@ -465,17 +459,18 @@ int main()
 	// sdfToMesh[ 6 ].center = ae::Vec3( 1, 1, -1 ) * ( kChunkSize * 0.5f );
 	// sdfToMesh[ 7 ].center = ae::Vec3( 1, 1, 1 ) * ( kChunkSize * 0.5f );
 	
+	/*/
 	// Single region
-	// SDFToMesh* sdfToMesh[] =
-	// {
-	// 	ae::New< SDFToMesh >(
-	// 		TAG_ISOSURFACE,
-	// 		"Mesh0",
-	// 		ae::Color::HSV(0.0f, 0.7f, 0.5f ),
-	// 		ae::AABB( ae::Vec3( -1000 ), ae::Vec3( 1000 ) )
-	// 	)
-	// };
-
+	SDFToMesh* sdfToMesh[] =
+	{
+		ae::New< SDFToMesh >(
+			TAG_ISOSURFACE,
+			"Mesh0",
+			ae::Color::HSV(0.0f, 0.7f, 0.5f ),
+			ae::AABB( ae::Vec3( -1000 ), ae::Vec3( 1000 ) )
+		)
+	};
+	/*/
 	// Columns
 	const uint32_t gridCount = 8;
 	const float gridSize = 200.0f;
@@ -495,6 +490,7 @@ int main()
 			ae::AABB( min, max )
 		) );
 	}
+	//*/
 
 	ae::Vec3 translation;
 	ae::Vec3 rotation;
@@ -504,7 +500,7 @@ int main()
 	{
 		translation = ae::Vec3( 0.0f );
 		rotation = ae::Vec3( 0.0f );
-		scale = ae::Vec3( 150.0f );
+		scale = ae::Vec3( 600.0f, 150.0f, 150.0f );
 	};
 	ResetTransform();
 
@@ -549,12 +545,34 @@ int main()
 		if( prevTransform != transform )
 		{
 			const double startTime = ae::GetTime();
+			double cacheTime = 0.0;
+			double meshTime = 0.0;
+			float vertCount = 0;
+			float indexCount = 0;
 			for( SDFToMesh* sdf : sdfToMesh )
 			{
 				sdf->Run( transform );
+				cacheTime += sdf->cacheTime;
+				meshTime += sdf->meshTime;
+				vertCount += sdf->extractor->vertices.Length();
+				indexCount += sdf->extractor->indices.Length();
 			}
 			const double endTime = ae::GetTime();
-			AE_INFO( "[Total] SDF to mesh generation complete. sec:#", endTime - startTime );
+
+			double totalTime = ( endTime - startTime );
+			uint32_t timeIndex = 0;
+			uint32_t countIndex = 0;
+			const char* timeUnits[] = { "s", "ms" };
+			const char* counts[] = { "", "K", "M", "B" };
+			while( totalTime < 1.0 ) { totalTime *= 1000.0; meshTime *= 1000.0; cacheTime *= 1000.0; timeIndex++; }
+			while( indexCount > 1000.0f ) { indexCount /= 1000.0f; vertCount /= 1000.0f; countIndex++; }
+			AE_INFO( "Total:## Cache:## Mesh:## Verts:## Indices:##",
+				totalTime, timeUnits[ timeIndex ],
+				cacheTime, timeUnits[ timeIndex ],
+				meshTime, timeUnits[ timeIndex ],
+				vertCount, counts[ countIndex ],
+				indexCount, counts[ countIndex ]
+			);
 			prevTransform = transform;
 		}
 
