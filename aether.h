@@ -9136,6 +9136,10 @@ void HashMap< N >::Reserve( uint32_t size )
 		AE_ASSERT( m_size >= size );
 		return;
 	}
+	else if( m_size >= size )
+	{
+		return;
+	}
 	
 	Entry* prevEntries = m_entries;
 	uint32_t prevSize = m_size;
@@ -9186,7 +9190,7 @@ void HashMap< N >::operator =( const HashMap< N >& other )
 	}
 	Clear();
 	Reserve( other.m_size );
-	if ( N )
+	if ( N ) // @TODO: Remove this and support assigning different sizes
 	{
 		std::copy_n( other.m_entries, N, m_entries );
 		m_length = other.m_length;
@@ -9201,7 +9205,10 @@ void HashMap< N >::operator =( const HashMap< N >& other )
 		for ( uint32_t i = 0; i < other.m_size; i++ )
 		{
 			Entry e = other.m_entries[ i ];
-			m_Insert( e.key, e.index );
+			if( e.index >= 0 )
+			{
+				m_Insert( e.key, e.index );
+			}
 		}
 	}
 }
@@ -9363,6 +9370,7 @@ uint32_t HashMap< N >::Length() const
 template < uint32_t N >
 bool HashMap< N >::m_Insert( uint32_t key, int32_t index )
 {
+	AE_DEBUG_ASSERT( index >= 0 );
 	uint32_t startIdx = ( key % m_size );
 	for ( uint32_t i = 0; i < m_size; i++ )
 	{

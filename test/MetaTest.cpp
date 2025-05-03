@@ -970,7 +970,7 @@ std::string RefTester::GetIdString( const RefTester* obj )
 bool RefTester::StringToId( const char* str, uint32_t* idOut )
 {
 	char* endPtr = nullptr;
-	uint32_t id = strtoul( str, &endPtr, 10 );
+	const uint32_t id = (uint32_t)strtoul( str, &endPtr, 10 );
 	if ( endPtr != str )
 	{
 		*idOut = id;
