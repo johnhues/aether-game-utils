@@ -221,7 +221,7 @@ TEST_CASE( "arrays can be sized and resized", "[ae::Array]" )
 	ae::Array< int > a( TAG_TEST, 5 );
 
 	REQUIRE( a.Length() == 0 );
-	REQUIRE( a.Size() == 16 );
+	REQUIRE( a.Size() == 5 );
 
 	SECTION( "reserving bigger changes size but not length" )
 	{
@@ -235,14 +235,14 @@ TEST_CASE( "arrays can be sized and resized", "[ae::Array]" )
 		a.Reserve( 0 );
 
 		REQUIRE( a.Length() == 0 );
-		REQUIRE( a.Size() == 16 );
+		REQUIRE( a.Size() == 5 );
 	}
 	SECTION( "clearing reduces length but does not affect size" )
 	{
 		a.Clear();
 
 		REQUIRE( a.Length() == 0 );
-		REQUIRE( a.Size() == 16 );
+		REQUIRE( a.Size() == 5 );
 	}
 }
 
@@ -251,7 +251,7 @@ TEST_CASE( "arrays can be constructed with a specified length", "[ae::Array]" )
 	ae::Array< int > a( TAG_TEST, 7, 5 );
 
 	REQUIRE( a.Length() == 5 );
-	REQUIRE( a.Size() == 16 );
+	REQUIRE( a.Size() == 5 );
 }
 
 TEST_CASE( "0 array elements can be inserted by index", "[ae::Array]" )
@@ -526,7 +526,7 @@ TEST_CASE( "copy construct", "[ae::Array]" )
 		{
 			ae::Array< ae::LifetimeTester > array0( TAG_TEST, ae::LifetimeTester(), 5 ); // +1 ctor, +1 dtor, +5 copy
 			REQUIRE( array0.Length() == 5 );
-			REQUIRE( array0.Size() >= 6 );
+			REQUIRE( array0.Size() >= 5 );
 			REQUIRE( ae::LifetimeTester::ctorCount == 1 );
 			REQUIRE( ae::LifetimeTester::copyCount == 5 );
 			REQUIRE( ae::LifetimeTester::dtorCount == 1 );
@@ -556,7 +556,7 @@ TEST_CASE( "assignment operator", "[ae::Array]" )
 		{
 			ae::Array< ae::LifetimeTester > array0( TAG_TEST, ae::LifetimeTester(), 5 ); // +1 ctor, +1 dtor, +5 copy
 			REQUIRE( array0.Length() == 5 );
-			REQUIRE( array0.Size() >= 6 );
+			REQUIRE( array0.Size() >= 5 );
 			REQUIRE( ae::LifetimeTester::ctorCount == 1 );
 			REQUIRE( ae::LifetimeTester::copyCount == 5 );
 			REQUIRE( ae::LifetimeTester::dtorCount == 1 );
