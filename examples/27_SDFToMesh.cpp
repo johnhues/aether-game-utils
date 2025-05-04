@@ -52,6 +52,22 @@
 //------------------------------------------------------------------------------
 const ae::Tag TAG_ISOSURFACE = "isosurface";
 
+struct VoxelIndex
+{
+	VoxelIndex() {}
+	VoxelIndex( int32_t x, int32_t y, int32_t z ) : x( x ), y( y ), z( z ) {}
+	bool operator==( const VoxelIndex& other ) const { return x == other.x && y == other.y && z == other.z; }
+	int32_t x;
+	int32_t y;
+	int32_t z;
+};
+namespace ae { template <> uint32_t GetHash( const VoxelIndex& index )
+{
+	// Create a hash using the index as a seed to prevent large consecutive map
+	// entries, where collisions become very expensive to handle.
+	constexpr uint32_t uint32MaxGridSize = 1625; // UINT32_MAX ^ (1/3)
+	return ae::Hash().HashBasicType( index.x + uint32MaxGridSize * ( index.y + index.z * uint32MaxGridSize ) ).Get();
+} }
 struct IsosurfaceVertex
 {
 	ae::Vec4 position;
@@ -159,7 +175,7 @@ private:
 		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
 		uint16_t edgeBits = 0;
 	};
-	ae::Map< uint32_t, Voxel > m_voxels;
+	ae::Map< VoxelIndex, Voxel > m_voxels;
 	Stats m_stats;
 };
 
@@ -883,11 +899,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		{ 1, 0, 1 }, // EDGE_TOP_RIGHT_BIT
 		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
 	};
-	const uint32_t uint32MaxGridSize = 1625; // UINT32_MAX ^ (1/3)
-	// Actually create a hash using the index as a seed to prevent large consecutive
-	// map entries, where collisions become very expensive to handle.
-#define AE_GET_VOXEL_HASH( _vx, _vy, _vz ) ( ae::Hash().HashBasicType( (_vx) + uint32MaxGridSize * ( (_vy) + (_vz) * uint32MaxGridSize ) ).Get() )
-
+	
 	const ae::Vec3 generationOffset = sdf->GetParams().aabb.GetMin();
 	const ae::Int3 cornerOffsetInt = generationOffset.FloorCopy();
 	const ae::Int3 generationMin( -1 );
@@ -901,10 +913,6 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	if( !sdfSize )
 	{
 		return; // Zero size generation region
-	}
-	else if( sdfSize > ( uint32MaxGridSize * uint32MaxGridSize * uint32MaxGridSize ) )
-	{
-		return; // SDF volume is too large, and can't be indexed
 	}
 	// This phase finds the surface of the SDF and generates the list of
 	// vertices along with all of the 'lattice' edge intersections. The vertex
@@ -1032,9 +1040,8 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				const int32_t oy = y + offsets[ j ][ 1 ];
 				const int32_t oz = z + offsets[ j ][ 2 ];
 
-				const uint32_t vertexLookupHash = AE_GET_VOXEL_HASH( ox, oy, oz );
-				Voxel* quadVoxel = m_voxels.TryGet( vertexLookupHash );
-				quadVoxel = quadVoxel ? quadVoxel : &m_voxels.Set( vertexLookupHash, {} );
+				Voxel* quadVoxel = m_voxels.TryGet( { ox, oy, oz } );
+				quadVoxel = quadVoxel ? quadVoxel : &m_voxels.Set( { ox, oy, oz }, {} );
 				IsosurfaceIndex* vertexIndex = &quadVoxel->index;
 				if( *vertexIndex == kInvalidIsosurfaceIndex )
 				{
@@ -1081,8 +1088,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 				indices.Append( quad[ 3 ] );
 			}
 		}
-		const uint32_t currentVoxelHash = AE_GET_VOXEL_HASH( x + 1, y + 1, z + 1 );
-		m_voxels.Set( currentVoxelHash, voxel );
+		m_voxels.Set( { x + 1, y + 1, z + 1 }, voxel );
 		return true;
 	};
 	for( int32_t z = sdfMin.z; z < sdfMax.z; z++ )
@@ -1116,7 +1122,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		int32_t ec = 0;
 		ae::Vec3 p[ 12 ];
 		ae::Vec3 n[ 12 ];
-		Voxel te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y + 1, z + 1 ), {} );
+		Voxel te = m_voxels.Get( { x + 1, y + 1, z + 1 }, {} );
 		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.edgePos[ 0 ];
@@ -1135,7 +1141,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
-		te = m_voxels.Get( AE_GET_VOXEL_HASH( x, y + 1, z + 1 ), {} );
+		te = m_voxels.Get( { x, y + 1, z + 1 }, {} );
 		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
 		{
 			p[ ec ] = te.edgePos[ 1 ];
@@ -1150,7 +1156,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
-		te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y, z + 1 ), {} );
+		te = m_voxels.Get( { x + 1, y, z + 1 }, {} );
 		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.edgePos[ 0 ];
@@ -1165,7 +1171,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
-		te = m_voxels.Get( AE_GET_VOXEL_HASH( x, y, z + 1 ), {} );
+		te = m_voxels.Get( { x, y, z + 1 }, {} );
 		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
 		{
 			p[ ec ] = te.edgePos[ 2 ];
@@ -1174,7 +1180,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			n[ ec ] = te.edgeNormal[ 2 ];
 			ec++;
 		}
-		te = m_voxels.Get( AE_GET_VOXEL_HASH( x, y + 1, z ), {} );
+		te = m_voxels.Get( { x, y + 1, z }, {} );
 		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
 		{
 			p[ ec ] = te.edgePos[ 1 ];
@@ -1183,7 +1189,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			n[ ec ] = te.edgeNormal[ 1 ];
 			ec++;
 		}
-		te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y, z ), {} );
+		te = m_voxels.Get( { x + 1, y, z }, {} );
 		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.edgePos[ 0 ];
@@ -1192,7 +1198,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 			n[ ec ] = te.edgeNormal[ 0 ];
 			ec++;
 		}
-		te = m_voxels.Get( AE_GET_VOXEL_HASH( x + 1, y + 1, z ), {} );
+		te = m_voxels.Get( { x + 1, y + 1, z }, {} );
 		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
 		{
 			p[ ec ] = te.edgePos[ 0 ];
