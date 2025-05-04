@@ -870,7 +870,9 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
 	};
 	const uint32_t uint32MaxGridSize = 1625; // UINT32_MAX ^ (1/3)
-#define AE_GET_VOXEL_HASH( _vx, _vy, _vz ) ( (_vx) + uint32MaxGridSize * ( (_vy) + (_vz) * uint32MaxGridSize ) )
+	// Actually create a hash using the index as a seed to prevent large consecutive
+	// map entries, where collisions become very expensive to handle.
+#define AE_GET_VOXEL_HASH( _vx, _vy, _vz ) ( ae::Hash().HashBasicType( (_vx) + uint32MaxGridSize * ( (_vy) + (_vz) * uint32MaxGridSize ) ).Get() )
 
 	const ae::Vec3 generationOffset = sdf->GetParams().aabb.GetMin();
 	const ae::Int3 cornerOffsetInt = generationOffset.FloorCopy();
