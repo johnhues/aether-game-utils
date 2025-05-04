@@ -857,6 +857,15 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 	indices.Clear();
 	m_voxels.Clear();
 	m_stats = {};
+	vertices.Reserve( sdf->GetEstimatedVertexCount() );
+	// This multiplier is very well established, the average indexed mesh
+	// has 6 indices per vertex.
+	indices.Reserve( sdf->GetEstimatedVertexCount() * 6 );
+	// This multiplier can make a huge difference, if it's too large then
+	// too big of a map will be allocated which will be expensive to access
+	// and if it's too small then the map will need to be reallocated during
+	// generation.
+	m_voxels.Reserve( sdf->GetEstimatedVertexCount() * 3.25f );
 
 	// @TODO: Description
 	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
