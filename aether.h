@@ -4248,7 +4248,9 @@ public:
 	//! Returns false and the circle is not added if ae::DebugLines::GetMaxVertexCount() would be exceeded.
 	uint32_t AddCircle( Vec3 pos, Vec3 normal, float radius, Color color, uint32_t pointCount );
 	uint32_t AddAABB( Vec3 pos, Vec3 halfSize, Color color );
-	uint32_t AddOBB( Matrix4 transform, Color color );
+	uint32_t AddAABB( AABB aabb, Color color );
+	uint32_t AddOBB( const Matrix4& transform, Color color );
+	uint32_t AddOBB( const OBB& obb, Color color );
 	uint32_t AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount );
 	uint32_t AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color );
 	uint32_t AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t vertexCount, const void* indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color );
@@ -11153,7 +11155,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 		if ( ae::DebugLines* debug = params.debug )
 		{
 			// Ray intersects obb
-			debug->AddOBB( obb.GetTransform(), params.debugColor );
+			debug->AddOBB( obb, params.debugColor );
 		}
 		if ( !obb.IntersectRay( params.source, params.ray, nullptr, nullptr, &t ) )
 		{
@@ -11190,7 +11192,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 		if ( params.debug )
 		{
 			ae::OBB obb( params.transform * current->aabb.GetTransform() );
-			params.debug->AddOBB( obb.GetTransform(), params.debugColor );
+			params.debug->AddOBB( obb, params.debugColor );
 		}
 		if ( const BVHLeaf< BVHTri >* leaf = bvh->TryGetLeaf( current->leafIdx ) )
 		{
@@ -11287,7 +11289,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 	if ( ae::DebugLines* debug = params.debug )
 	{
 		// Sphere intersects obb
-		debug->AddOBB( obb.GetTransform(), params.debugColor );
+		debug->AddOBB( obb, params.debugColor );
 	}
 	
 	PushOutInfo result;
@@ -11319,7 +11321,7 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 			}
 			if ( params.debug )
 			{
-				params.debug->AddOBB( obb.GetTransform(), params.debugColor );
+				params.debug->AddOBB( obb, params.debugColor );
 			}
 		}
 		// Triangle checks
@@ -23734,7 +23736,12 @@ uint32_t DebugLines::AddAABB( Vec3 pos, Vec3 halfSize, Color color )
 	return countof( verts );
 }
 
-uint32_t DebugLines::AddOBB( Matrix4 transform, Color color )
+uint32_t DebugLines::AddAABB( AABB aabb, Color color )
+{
+	return AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), color );
+}
+
+uint32_t DebugLines::AddOBB( const Matrix4& transform, Color color )
 {
 	if ( m_vertexArray.GetVertexCount() + 24 > m_vertexArray.GetMaxVertexCount() )
 	{
@@ -23785,6 +23792,11 @@ uint32_t DebugLines::AddOBB( Matrix4 transform, Color color )
 	AE_STATIC_ASSERT( countof( c ) * 3 == countof( verts ) );
 	m_vertexArray.AppendVertices( verts, countof( verts ) );
 	return countof( verts );
+}
+
+uint32_t DebugLines::AddOBB( const OBB& obb, Color color )
+{
+	return AddOBB( obb.GetTransform(), color );
 }
 
 uint32_t DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount )
