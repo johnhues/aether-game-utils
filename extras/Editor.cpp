@@ -2499,7 +2499,7 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 	rapidjson::PrettyWriter< rapidjson::StringBuffer > writer( buffer );
 	document.Accept( writer );
 
-	const uint32_t writtenBytes = program->fileSystem.Write( ae::FileSystem::Root::Data, m_levelPath.c_str(), buffer.GetString(), buffer.GetSize(), false );
+	const uint32_t writtenBytes = program->fileSystem.Write( ae::FileSystem::Root::Data, m_levelPath.c_str(), buffer.GetString(), (uint32_t)buffer.GetSize(), false );
 	AE_ASSERT( writtenBytes == 0 || writtenBytes == buffer.GetSize() );
 	if( writtenBytes == 0 )
 	{

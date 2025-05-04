@@ -9025,33 +9025,39 @@ int32_t Array< T, N >::FindLastFn( Fn testFn ) const
 }
 
 template < typename T, uint32_t N >
-void Array< T, N >::Reserve( uint32_t size )
+void Array< T, N >::Reserve( uint32_t _size )
 {
 	if ( N > 0 )
 	{
 		AE_DEBUG_ASSERT_MSG( m_array == (T*)&m_storage, "Static array reference has been overwritten" );
-		AE_ASSERT_MSG( N >= size, "# >= #", N, size );
+		AE_ASSERT_MSG( N >= _size, "# >= #", N, _size );
 		return;
 	}
-	else if ( size <= m_size )
+	else if ( _size <= m_size )
 	{
 		return;
-	}
-	else if ( m_size == 0 )
-	{
-		// Initially allocate at least 64 bytes (rounded down) of type
-		size = ae::Max( size, 64u / (uint32_t)sizeof(T) );
-	}
-	else
-	{
-		// At least double the size, to reduce the number of resizes
-		size = ae::Max( size, m_size * 2 );
 	}
 	
 	AE_DEBUG_ASSERT( m_tag != ae::Tag() );
 	
-	if ( m_size )
+	constexpr uint32_t maxExponentialSize = ( 1 << 18 );
+	uint32_t size = _size;
+	if ( m_size == 0 && size > 1 )
 	{
+		// Exact amount specified, so use that
+	}
+	else if( size <= maxExponentialSize )
+	{
+		if ( m_size == 0 )
+		{
+			// Initially allocate at least 64 bytes (rounded down) of type
+			size = ae::Max( size, 64u / (uint32_t)sizeof(T) );
+		}
+		else
+		{
+			// At least double the size, to reduce the number of resizes
+			size = ae::Max( size, m_size * 2 );
+		}
 		// Next power of two
 		size--;
 		size |= size >> 1;
@@ -9061,8 +9067,15 @@ void Array< T, N >::Reserve( uint32_t size )
 		size |= size >> 16;
 		size++;
 	}
-	
+	else
+	{
+		// Don't double the size or use powers of two here, as the array will
+		// become very very large. At this point the user should be manually
+		// calling reserve with the expected needed size.
+		size = ( size / maxExponentialSize + 1 ) * maxExponentialSize;
+	}
 	AE_DEBUG_ASSERT( size );
+	AE_DEBUG_ASSERT( size >= _size );
 	m_size = size;
 	
 	// @TODO: Try to use realloc
@@ -9143,6 +9156,7 @@ void HashMap< N >::Reserve( uint32_t size )
 		return;
 	}
 	
+	AE_ASSERT( size > m_size );
 	Entry* prevEntries = m_entries;
 	uint32_t prevSize = m_size;
 	uint32_t prevLength = m_length;
@@ -9564,8 +9578,9 @@ bool Map< K, V, N, M >::m_RemoveIndex( int32_t index, V* valueOut )
 template < typename K, typename V, uint32_t N, MapMode M >
 void Map< K, V, N, M >::Reserve( uint32_t count )
 {
-	m_hashMap.Reserve( count );
 	m_pairs.Reserve( count );
+	m_hashMap.Reserve( m_pairs.Size() ); // @TODO: Should this be bigger than storage, so it's faster to do lookups?
+	AE_DEBUG_ASSERT( m_pairs.Length() == m_hashMap.Length() );
 }
 
 template < typename K, typename V, uint32_t N, MapMode M >
@@ -11460,7 +11475,7 @@ uint32_t AStar( const T* _startNode,
 
 	for( uint32_t i = 0; i < goalCount; i++ )
 	{
-		const uint32_t goalIndex = ( _goalNodes[ i ] - _nodes );
+		const uint32_t goalIndex = (uint32_t)( _goalNodes[ i ] - _nodes );
 		AE_ASSERT( goalIndex < nodeCount );
 		goals[ i ] = &nodes[ goalIndex ];
 		goals[ i ]->isGoal = true;
@@ -11511,7 +11526,7 @@ uint32_t AStar( const T* _startNode,
 			{
 				continue;
 			}
-			const uint32_t neighborIndex = ( nextNode - _nodes );
+			const uint32_t neighborIndex = (uint32_t)( nextNode - _nodes );
 			AE_ASSERT( neighborIndex < nodeCount );
 			Node* neighbor = &nodes[ neighborIndex ];
 			if( neighbor->closed )
