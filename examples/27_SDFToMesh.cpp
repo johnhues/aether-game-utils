@@ -26,9 +26,9 @@
 // #define _AE_DEBUG_ 1
 #include "aether.h"
 #if _AE_DEBUG_
-	#define AE_DEBUG_IF( _expr ) if( _expr )
+#define AE_DEBUG_IF( _expr ) if( _expr )
 #else
-	#define AE_DEBUG_IF( _expr ) if constexpr( false )
+#define AE_DEBUG_IF( _expr ) if constexpr( false )
 #endif
 
 #ifndef AE_TERRAIN_SIMD
@@ -106,6 +106,8 @@ public:
 	inline uint32_t GetOctantCount() const { return m_octants.Length() + 1; } // +1 for root m_octant
 	inline const IsosurfaceExtractorCacheOctant* GetOctant( uint32_t index ) const { return ( index == 0 ) ? &m_octant : &m_octants[ index - 1 ]; }
 
+	inline uint32_t GetEstimatedVertexCount() const { return m_estimatedVertexCount; }
+
 private:
 	void m_Generate( int32_t index, ae::Vec3 center, ae::Vec3 halfSize );
 	float m_GetValue( const IsosurfaceExtractorCacheOctant* octant, ae::Vec3 position ) const;
@@ -124,6 +126,7 @@ private:
 	IsosurfaceExtractorCacheOctant m_octant;
 	ae::Array< IsosurfaceExtractorCacheOctant > m_octants = TAG_ISOSURFACE;
 	ae::AABB m_surfaceAABB;
+	float m_estimatedVertexCount = 0.0f;
 };
 
 //------------------------------------------------------------------------------
@@ -469,7 +472,7 @@ int main()
 	// sdfToMesh[ 6 ].center = ae::Vec3( 1, 1, -1 ) * ( kChunkSize * 0.5f );
 	// sdfToMesh[ 7 ].center = ae::Vec3( 1, 1, 1 ) * ( kChunkSize * 0.5f );
 	
-	/*/
+	//*/
 	// Single region
 	SDFToMesh* sdfToMesh[] =
 	{
@@ -557,8 +560,9 @@ int main()
 			const double startTime = ae::GetTime();
 			double cacheTime = 0.0;
 			double meshTime = 0.0;
+			float estimatedVertexCount = 0;
 			float vertCount = 0;
-			float indexCount = 0;
+			float triCount = 0;
 			float iterationCount = 0.0f;
 			float workingCount = 0.0f;
 			float sampleCount = 0.0f;
@@ -568,12 +572,14 @@ int main()
 				cacheTime += sdf->cacheTime;
 				meshTime += sdf->meshTime;
 				vertCount += sdf->extractor->vertices.Length();
-				indexCount += sdf->extractor->indices.Length();
+				estimatedVertexCount += sdf->cache->GetEstimatedVertexCount();
+				triCount += sdf->extractor->indices.Length() / 3.0f;
 				iterationCount += sdf->extractor->GetStats().iterationCount;
 				workingCount += sdf->extractor->GetStats().workingCount;
 				sampleCount += sdf->extractor->GetStats().sampleCount;
 			}
 			const double endTime = ae::GetTime();
+			const float vertSamples = ( sampleCount / vertCount );
 
 			double totalTime = ( endTime - startTime );
 			uint32_t timeIndex = 0;
@@ -587,18 +593,20 @@ int main()
 				cacheTime *= 1000.0;
 				timeIndex++;
 			}
-			while( indexCount > 1000.0f )
+			while( triCount > 1000.0f )
 			{
-				indexCount /= 1000.0f;
+				triCount /= 1000.0f;
 				vertCount /= 1000.0f;
+				estimatedVertexCount /= 1000.0f;
 				countIndex++;
 			}
-			AE_INFO( "Total:## Cache:## Mesh:## Verts:## Indices:##",
+			AE_INFO( "Total:## Cache:## Mesh:## Verts:## Est.:## Tris:##",
 				totalTime, timeUnits[ timeIndex ],
 				cacheTime, timeUnits[ timeIndex ],
 				meshTime, timeUnits[ timeIndex ],
 				vertCount, counts[ countIndex ],
-				indexCount, counts[ countIndex ]
+				estimatedVertexCount, counts[ countIndex ],
+				triCount, counts[ countIndex ]
 			);
 			uint32_t countIndex2 = 0;
 			while( iterationCount > 1000.0f )
@@ -608,10 +616,11 @@ int main()
 				iterationCount /= 1000.0f;
 				countIndex2++;
 			}
-			AE_INFO( "Iters:## Working:## Samples:##",
-				iterationCount, counts[ countIndex2 ],
+			AE_INFO( "VertSamples:# Working:## Samples:## Iters:##",
+				vertSamples,
 				workingCount, counts[ countIndex2 ],
-				sampleCount, counts[ countIndex2 ]
+				sampleCount, counts[ countIndex2 ],
+				iterationCount, counts[ countIndex2 ]
 			);
 			prevTransform = transform;
 		}
@@ -670,6 +679,7 @@ void IsosurfaceExtractorCache::Reset()
 	m_octant.m_childrenBaseIndex = -1;
 	m_surfaceAABB = ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ); // 0 size by default, the position shouldn't matter
 	m_octants.Clear();
+	m_estimatedVertexCount = 0.0f;
 }
 
 void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params )
@@ -687,9 +697,11 @@ void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params )
 	}
 }
 
+const float kLeafMult = 1.0f;
+
 void IsosurfaceExtractorCache::m_Generate( int32_t index, ae::Vec3 center, ae::Vec3 halfSize )
 {
-	static constexpr float minOctantHalfSize = 1.05f; // A little more than a voxel on each side of the surface
+	constexpr float minOctantHalfSize = 0.55f;
 	// Use index instead of pointer to handle m_octants array expansion
 	IsosurfaceExtractorCacheOctant* octant = ( index == -1 ) ? &m_octant : &m_octants[ index ];
 	octant->m_center = center;
@@ -719,12 +731,14 @@ void IsosurfaceExtractorCache::m_Generate( int32_t index, ae::Vec3 center, ae::V
 	}
 	else
 	{
+		octant->m_childrenBaseIndex = -1;
 		if( octant->m_intersects )
 		{
-			const ae::Vec3 halfSize3( halfSize );
-			m_surfaceAABB.Expand( ae::AABB( center - halfSize3, center + halfSize3 ) );
+			const ae::AABB leafAABB = octant->GetAABB();
+			const ae::Vec3 size = ( leafAABB.GetMax() - leafAABB.GetMin() );
+			m_surfaceAABB.Expand( leafAABB );
+			m_estimatedVertexCount += ( size.x * size.y * size.z ) * 0.4f; // @HACK: What should this actually be?
 		}
-		octant->m_childrenBaseIndex = -1;
 	}
 }
 
@@ -732,37 +746,28 @@ void IsosurfaceExtractorCache::Draw( ae::DebugLines* debugLines )
 {
 	const ae::AABB aabb = GetOctreeAABB();
 	debugLines->AddAABB( aabb.GetCenter(), aabb.GetHalfSize(), ae::Color::AetherWhite() );
-#if AE_TERRAIN_USE_CACHE
-	const uint32_t octantCount = GetOctantCount();
-	for( uint32_t i = 0; i < octantCount; i++ )
-	{
-		const IsosurfaceExtractorCacheOctant* octant = GetOctant( i );
-		const ae::AABB aabb = octant->GetAABB();
-		const ae::Vec3 min = aabb.GetMin();
-		const ae::Vec3 max = aabb.GetMax();
-		const ae::Vec3 center = aabb.GetCenter();
-		if( octant->IntersectsZero() && !octant->GetChildCount() )
-		{
-			const ae::Color color = ae::Color::AetherRed();
-			debugLines->AddLine( ae::Vec3( center.x, center.y, min.z ), ae::Vec3( center.x, center.y, max.z ), color );
-			debugLines->AddLine( ae::Vec3( min.x, center.y, center.z ), ae::Vec3( max.x, center.y, center.z ), color );
-			debugLines->AddLine( ae::Vec3( center.x, min.y, center.z ), ae::Vec3( center.x, max.y, center.z ), color );
-		}
-	}
-#endif
+//	// Draw surface debug
+//	const uint32_t octantCount = GetOctantCount();
+//	for( uint32_t i = 0; i < octantCount; i++ )
+//	{
+//		const IsosurfaceExtractorCacheOctant* octant = GetOctant( i );
+//		const ae::AABB aabb = octant->GetAABB();
+//		const ae::Vec3 min = aabb.GetMin();
+//		const ae::Vec3 max = aabb.GetMax();
+//		const ae::Vec3 center = aabb.GetCenter();
+//		if( octant->IntersectsZero() && !octant->GetChildCount() )
+//		{
+//			const ae::Color color = ae::Color::AetherRed();
+//			debugLines->AddLine( ae::Vec3( center.x, center.y, min.z ), ae::Vec3( center.x, center.y, max.z ), color );
+//			debugLines->AddLine( ae::Vec3( min.x, center.y, center.z ), ae::Vec3( max.x, center.y, center.z ), color );
+//			debugLines->AddLine( ae::Vec3( center.x, min.y, center.z ), ae::Vec3( center.x, max.y, center.z ), color );
+//		}
+//	}
 }
 
 float IsosurfaceExtractorCache::GetValue( ae::Vec3 position ) const
 {
-#if AE_TERRAIN_USE_CACHE
-	if( m_octant.GetAABB().Contains( position ) )
-	{
-		return m_GetValue( &m_octant, position );
-	}
-	AE_FAIL(); // @TODO: This should actually fall through but this helps debugging
-#else
 	return m_params.fn( position, m_params.userData );
-#endif
 }
 
 float IsosurfaceExtractorCache::m_GetValue( const IsosurfaceExtractorCacheOctant* octant, ae::Vec3 position ) const
@@ -778,7 +783,7 @@ float IsosurfaceExtractorCache::m_GetValue( const IsosurfaceExtractorCacheOctant
 				return m_GetValue( child, position );
 			}
 		}
-		AE_FAIL();
+		AE_FAIL(); // @TODO: This should actually fall through but this helps debugging
 		return m_params.fn( position, m_params.userData );
 	}
 	else if( octant->m_intersects ) // Leaf nodes only, because of child check above
