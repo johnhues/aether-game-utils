@@ -1515,6 +1515,7 @@ public:
 
 	T* TryGet();
 	const T* TryGet() const;
+	T Get( T defaultValue ) const;
 	void Clear();
 
 private:
@@ -4536,9 +4537,9 @@ public:
 	// @TODO: GetClosestPoint()
 	ae::AABB GetAABB() const { return m_bvh.GetAABB(); }
 	
-	const ae::Vec3* GetVertices() const { return m_vertices.Data(); }
+	const ae::Vec3* GetVertices() const { return m_positions.Data(); }
 	const uint32_t* GetIndices() const { return (uint32_t*)m_tris.Data(); }
-	uint32_t GetVertexCount() const { return m_vertices.Length(); }
+	uint32_t GetVertexCount() const { return m_positions.Length(); }
 	uint32_t GetIndexCount() const { return m_tris.Length() * 3; }
 
 private:
@@ -4547,7 +4548,8 @@ private:
 	const ae::Tag m_tag;
 	ae::AABB m_aabb;
 	bool m_requiresRebuild = false;
-	ae::Array< ae::Pair< ae::Vec3, CollisionExtra >, VertMax > m_vertices;
+	ae::Array< ae::Vec3, VertMax > m_positions;
+	ae::Array< CollisionExtra, VertMax > m_collisionExtras;
 	ae::Array< BVHTri, TriMax > m_tris;
 	ae::BVH< BVHTri, BVHMax > m_bvh;
 };
@@ -8624,6 +8626,16 @@ const T* Optional< T >::TryGet() const
 	return m_hasValue ? reinterpret_cast< const T* >( &m_value ) : nullptr;
 }
 
+template< typename T >
+T Optional< T >::Get( T defaultValue ) const
+{
+	if( m_hasValue )
+	{
+		return *reinterpret_cast< const T* >( &m_value );
+	}
+	return defaultValue;
+}
+
 //------------------------------------------------------------------------------
 // ae::Array functions
 //------------------------------------------------------------------------------
@@ -11029,7 +11041,8 @@ CollisionMesh< V, T, B >::CollisionMesh()
 template < uint32_t V, uint32_t T, uint32_t B >
 CollisionMesh< V, T, B >::CollisionMesh( ae::Tag tag ) :
 	m_tag( tag ),
-	m_vertices( tag ),
+	m_positions( tag ),
+	m_collisionExtras( tag ),
 	m_tris( tag ),
 	m_bvh( tag )
 {}
@@ -11037,9 +11050,11 @@ CollisionMesh< V, T, B >::CollisionMesh( ae::Tag tag ) :
 template < uint32_t V, uint32_t T, uint32_t B >
 void CollisionMesh< V, T, B >::Reserve( uint32_t vertCount, uint32_t triCount, uint32_t bvhNodeCount )
 {
-	if ( m_vertices.Size() < vertCount || m_tris.Size() < triCount || m_bvh.GetLimit() < bvhNodeCount )
+	AE_DEBUG_ASSERT( m_positions.Length() == m_collisionExtras.Length() );
+	if ( m_positions.Size() < vertCount || m_tris.Size() < triCount || m_bvh.GetLimit() < bvhNodeCount )
 	{
-		m_vertices.Reserve( vertCount );
+		m_positions.Reserve( vertCount );
+		m_collisionExtras.Reserve( vertCount );
 		m_tris.Reserve( triCount );
 		m_bvh = std::move( ae::BVH< BVHTri, B >( m_tag, bvhNodeCount ) ); // Clear bvh because pointers into m_tris could be invalid after Reserve()
 		m_requiresRebuild = true;
@@ -11060,10 +11075,12 @@ void CollisionMesh< V, T, B >::AddIndexed( const AddIndexedParams& params )
 	AE_ASSERT( params.indexCount % 3 == 0 );
 
 	const bool identityTransform = ( params.transform == ae::Matrix4::Identity() );
-	const uint32_t initialVertexCount = m_vertices.Length();
+	AE_DEBUG_ASSERT( m_positions.Length() == m_collisionExtras.Length() );
+	const uint32_t initialVertexCount = m_positions.Length();
 	const uint32_t triCount = params.indexCount / 3;
 	
-	m_vertices.Reserve( initialVertexCount + params.vertexCount );
+	m_positions.Reserve( initialVertexCount + params.vertexCount );
+	m_collisionExtras.Reserve( initialVertexCount + params.vertexCount );
 	for ( uint32_t i = 0; i < params.vertexCount; i++ )
 	{
 		ae::Vec3 pos( (const float*)( (const uint8_t*)params.vertexPositions + params.vertexPositionStride * i ) );
@@ -11073,7 +11090,8 @@ void CollisionMesh< V, T, B >::AddIndexed( const AddIndexedParams& params )
 			pos = ( params.transform * ae::Vec4( pos, 1.0f ) ).GetXYZ();
 		}
 		m_aabb.Expand( pos ); // Expand root aabb before calling m_BuildBVH() for the first partition
-		m_vertices.Append( { pos, extra } );
+		m_positions.Append( pos );
+		m_collisionExtras.Append( extra );
 	}
 	
 	m_tris.Reserve( m_tris.Length() + triCount );
@@ -11121,15 +11139,15 @@ void CollisionMesh< V, T, B >::BuildBVH()
 {
 	if ( m_requiresRebuild )
 	{
-		AE_DEBUG_ASSERT( m_vertices.Length() );
+		AE_DEBUG_ASSERT( m_positions.Length() );
 		AE_DEBUG_ASSERT( m_tris.Length() );
-		const auto* verts = m_vertices.begin();
+		const ae::Vec3* verts = m_positions.begin();
 		auto aabbFn = [verts]( BVHTri tri )
 		{
 			ae::AABB aabb;
-			aabb.Expand( verts[ tri.idx[ 0 ] ].key );
-			aabb.Expand( verts[ tri.idx[ 1 ] ].key );
-			aabb.Expand( verts[ tri.idx[ 2 ] ].key );
+			aabb.Expand( verts[ tri.idx[ 0 ] ] );
+			aabb.Expand( verts[ tri.idx[ 1 ] ] );
+			aabb.Expand( verts[ tri.idx[ 2 ] ] );
 			return aabb;
 		};
 		m_bvh.Build( m_tris.begin(), m_tris.Length(), aabbFn, 32 );
@@ -11142,7 +11160,8 @@ void CollisionMesh< V, T, B >::Clear()
 {
 	m_aabb = ae::AABB();
 	m_requiresRebuild = false;
-	m_vertices.Clear();
+	m_positions.Clear();
+	m_collisionExtras.Clear();
 	m_tris.Clear();
 	m_bvh.Clear();
 }
@@ -11223,9 +11242,9 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 			{
 				ae::Vec3 p, n;
 				const uint32_t idx0 = leaf->data[ i ].idx[ 0 ];
-				ae::Vec3 a = m_vertices[ idx0 ].key;
-				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ].key;
-				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ].key;
+				ae::Vec3 a = m_positions[ idx0 ];
+				ae::Vec3 b = m_positions[ leaf->data[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
 				if ( IntersectRayTriangle( source, ray, a, b, c, ccw, cw, &p, &n, nullptr ) )
 				{
 					RaycastResult::Hit& outHit = hits[ hitCount ];
@@ -11237,7 +11256,7 @@ RaycastResult CollisionMesh< V, T, B >::Raycast( const RaycastParams& params, co
 					outHit.normal = ae::Vec3( normalTransform * ae::Vec4( n, 0.0f ) );
 					outHit.distance = ( outHit.position - params.source ).Length(); // Calculate here because transform might not have uniform scale
 					outHit.userData = params.userData;
-					outHit.extra = m_vertices[ idx0 ].value;
+					outHit.extra = m_collisionExtras[ idx0 ];
 
 					if ( hitCount > maxHits )
 					{
@@ -11353,10 +11372,10 @@ PushOutInfo CollisionMesh< V, T, B >::PushOut( const PushOutParams& params, cons
 			for ( uint32_t i = 0; i < leaf->count; i++ )
 			{
 				const uint32_t idx0 = leaf->data[ i ].idx[ 0 ];
-				const CollisionExtra extra = m_vertices[ idx0 ].value;
-				ae::Vec3 a = m_vertices[ idx0 ].key;
-				ae::Vec3 b = m_vertices[ leaf->data[ i ].idx[ 1 ] ].key;
-				ae::Vec3 c = m_vertices[ leaf->data[ i ].idx[ 2 ] ].key;
+				const CollisionExtra extra = m_collisionExtras[ idx0 ];
+				ae::Vec3 a = m_positions[ idx0 ];
+				ae::Vec3 b = m_positions[ leaf->data[ i ].idx[ 1 ] ];
+				ae::Vec3 c = m_positions[ leaf->data[ i ].idx[ 2 ] ];
 				if ( !hasIdentityTransform )
 				{
 					a = ae::Vec3( params.transform * ae::Vec4( a, 1.0f ) );
