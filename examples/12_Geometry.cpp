@@ -149,7 +149,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = ae::Mod( currentTest, 8 );
+		currentTest = ae::Mod( currentTest, 10 );
 
 		// Geometry calculations / rendering
 		switch ( currentTest )
@@ -676,6 +676,44 @@ int main()
 				ae::Vec3 t = camera.GetRight();
 				t = t.RotateCopy( camera.GetPosition(), s_turnerAngle );
 				debug.AddLine( ae::Vec3( 0.0f ), t, ae::Color::Red() );
+				break;
+			}
+			case 9:
+			{
+				infoText.Append( "AABB Overlap\n" );
+				static bool s_first = true;
+				static ae::AABB s_aabb0;
+				static ae::AABB s_aabb1;
+				if ( s_first || input.Get( ae::Key::R ) )
+				{
+					s_aabb0 = ae::AABB( ae::Vec3( 0.5f ), ae::Vec3( 1.5f ) );
+					s_aabb1 = ae::AABB( ae::Vec3( -0.5f ), ae::Vec3( 0.5f ) );
+					s_first = false;
+				}
+				auto TranslateAABB = []( ae::AABB& aabb, const ae::Vec3& translation )
+				{
+					aabb = ae::AABB( aabb.GetMin() + translation, aabb.GetMax() + translation );
+				};
+				auto ScaleAABB = []( ae::AABB& aabb, const ae::Vec3& scale )
+				{
+					const ae::Vec3 halfSize = aabb.GetHalfSize() * scale;
+					aabb = ae::AABB( aabb.GetCenter() - halfSize, aabb.GetCenter() + halfSize );
+				};
+				if( input.Get( ae::Key::W ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::S ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, -0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::A ) ) { TranslateAABB( s_aabb0, ae::Vec3( -0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::D ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::Q ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, -0.5f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::E ) ) { TranslateAABB( s_aabb0, ae::Vec3( 0.0f, 0.0f, 0.5f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::I ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::K ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, -0.5f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::J ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( -0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::L ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.5f, 0.0f, 0.0f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::U ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, -0.5f ) * timeStep.GetTimeStep() ); }
+				if( input.Get( ae::Key::O ) ) { ScaleAABB( s_aabb0, ae::Vec3( 1.0f ) + ae::Vec3( 0.0f, 0.0f, 0.5f ) * timeStep.GetTimeStep() ); }
+				const bool overlap = s_aabb0.Intersect( s_aabb1 );
+				debug.AddAABB( s_aabb0, overlap ? ae::Color::Red() : ae::Color::Green() );
+				debug.AddAABB( s_aabb1, overlap ? ae::Color::Red() : ae::Color::Green() );
 				break;
 			}
 			default:

@@ -9435,21 +9435,6 @@ bool HashMap< Key, N >::m_Insert( Key key, uint32_t hash, int32_t index ) // Thi
 //------------------------------------------------------------------------------
 // ae::Map member functions
 //------------------------------------------------------------------------------
-template < typename K >
-bool Map_IsEqual( const K& k0, const K& k1 );
-
-template <>
-inline bool Map_IsEqual( const char* const & k0, const char* const & k1 )
-{
-	return strcmp( k0, k1 ) == 0;
-}
-
-template < typename K >
-bool Map_IsEqual( const K& k0, const K& k1 )
-{
-	return k0 == k1;
-}
-
 template < typename K, typename V, uint32_t N, MapMode M >
 Map< K, V, N, M >::Map()
 {
@@ -14817,15 +14802,13 @@ bool AABB::Contains( Vec3 p ) const
 
 bool AABB::Intersect( AABB other ) const
 {
-	if ( m_max.x >= other.m_min.x && m_max.y >= other.m_min.y && m_max.z >= other.m_min.z )
+	if( m_min.x > other.m_max.x || m_max.x < other.m_min.x
+		|| m_min.y > other.m_max.y || m_max.y < other.m_min.y
+		|| m_min.z > other.m_max.z || m_max.z < other.m_min.z )
 	{
-		return true;
+		return false;
 	}
-	else if ( other.m_max.x >= m_min.x && other.m_max.y >= m_min.y && other.m_max.z >= m_min.z )
-	{
-		return true;
-	}
-	return false;
+	return true;
 }
 
 Vec3 AABB::GetClosestPointOnSurface( Vec3 p, bool* containsOut ) const
