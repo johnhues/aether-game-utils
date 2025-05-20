@@ -44,6 +44,24 @@ AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, CategoryInfoAttribute, ({ .sort
 AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, DisplayName, ({ .name = "ID" }) );
 AE_REGISTER_CLASS_VAR_ATTRIBUTE( GameObject, id, DisplayName, ({ .name = "ID2" }) );
 
+namespace xyz
+{
+	class Util : public ae::Inheritor< ae::Object, Util >
+	{
+	public:
+		uint32_t id = 0;
+	};
+}
+AE_REGISTER_CLASS( xyz, Util );
+AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "Something" ) );
+AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "SomethingElse" ) );
+AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "SomethingSomethingElse" ) );
+AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "SomethingSomethingElseElse" ) );
+AE_REGISTER_CLASS_VAR( xyz, Util, id );
+AE_REGISTER_CLASS_VAR_ATTRIBUTE( xyz, Util, id, CategoryInfoAttribute, ({ .sortOrder = 1, .name = "General" }) );
+AE_REGISTER_CLASS_VAR_ATTRIBUTE( xyz, Util, id, DisplayName, ({ .name = "ID" }) );
+AE_REGISTER_CLASS_VAR_ATTRIBUTE( xyz, Util, id, DisplayName, ({ .name = "ID2" }) );
+
 int main()
 {
 	const ae::ClassType* gameObjectType = ae::GetClassType< GameObject >();

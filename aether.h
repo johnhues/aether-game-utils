@@ -5335,44 +5335,69 @@ public:
 // External macros to force module linking
 //------------------------------------------------------------------------------
 // clang-format off
-//! Call signature: AE_FORCE_LINK_CLASS( Namespace0, NameSpace1, ..., MyType );
+//! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
 #define AE_FORCE_LINK_CLASS(...) \
-	extern int AE_GLUE(_ae_force_link, __VA_ARGS__); \
-	struct AE_GLUE(_ae_ForceLink, __VA_ARGS__) { AE_GLUE(_ae_ForceLink, __VA_ARGS__)() { AE_GLUE(_ae_force_link, __VA_ARGS__) = 1; } }; \
-	AE_GLUE(_ae_ForceLink, __VA_ARGS__) AE_GLUE(_ae_forceLink, __VA_ARGS__);
+	extern int AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__); \
+	struct AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) { AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__)() { AE_GLUE_UNDERSCORE(_ae_force_link, __VA_ARGS__) = 1; } }; \
+	AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) AE_GLUE_UNDERSCORE(_ae_forceLink, __VA_ARGS__);
 
 //------------------------------------------------------------------------------
-// External meta class registerer
+// External meta class registration macros
 //------------------------------------------------------------------------------
-//! Call signature: AE_REGISTER_CLASS( Namespace0, NameSpace1, ..., MyType );
+
+//! Call signature: AE_REGISTER_CLASS( Namespace0, ..., NameSpaceN, MyType );
 //! Registers a new type that can be retrieved with ae::GetClassType( "Namespace0::NameSpace1::MyType" )
 //! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in the
 //! global scope of any cpp file. The class must indirectly inherit from from
 //! ae::Inheritor< ae::Object, MyType >.
-#define AE_REGISTER_CLASS(...)\
-	int AE_GLUE(_ae_force_link, __VA_ARGS__) = 0;\
-	template <> const char* ae::_TypeName< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get() { return AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)); }\
-	template <> struct ae::TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > : public ae::_ClassTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) > { TypeT() : _ClassTypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >( AE_STRINGIFY(AE_GLUE_TYPE(__VA_ARGS__)) ) {} };\
-	ae::_TypeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(_ae_type_creator_, __VA_ARGS__);\
-	template<> ae::Type* ae::FindMetaRegistrationFor< ::AE_GLUE_TYPE(__VA_ARGS__) >() { return ae::TypeT< ::AE_GLUE_TYPE(__VA_ARGS__) >::Get(); }\
-	static ae::SourceFileAttribute AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::AE_GLUE_TYPE(__VA_ARGS__) > AE_GLUE(AE_GLUE(ae_attrib_creator_, __VA_ARGS__), _ae_SourceFileAttribute)( AE_GLUE(_ae_type_creator_, __VA_ARGS__), _AE_SRCCHK(&AE_GLUE(AE_GLUE(ae_attrib_, __VA_ARGS__), _ae_SourceFileAttribute), nullptr) );
+#define AE_REGISTER_CLASS_IMPL( _N, _T )\
+	int AE_GLUE_UNDERSCORE(_ae_force_link, _N) = 0;\
+	template <> const char* ae::_TypeName< ::_T >::Get() { return AE_STRINGIFY(_T); }\
+	template <> struct ae::TypeT< ::_T > : public ae::_ClassTypeT< ::_T > { TypeT() : _ClassTypeT< ::_T >( AE_STRINGIFY(_T) ) {} };\
+	ae::_TypeCreator< ::_T > AE_GLUE_UNDERSCORE(_ae_type_creator, _N);\
+	template<> ae::Type* ae::FindMetaRegistrationFor< ::_T >() { return ae::TypeT< ::_T >::Get(); }\
+	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, SourceFileAttribute)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, SourceFileAttribute), nullptr) );
+#define AE_REGISTER_CLASS( ... ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(__VA_ARGS__), AE_GLUE_TYPE(__VA_ARGS__) )
+
 //! Register a class property
-#define AE_REGISTER_CLASS_PROPERTY( c, p ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p( _ae_type_creator_##c, #c, #p, "" );
+//! Call signature: AE_REGISTER_CLASS_PROPERTY( Namespace0, ..., NameSpaceN, MyType, typeProperty );
+#define AE_REGISTER_CLASS_PROPERTY_IMPL_IMPL( _N, _T, _P ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N , _P)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, "" );
+#define AE_REGISTER_CLASS_PROPERTY_IMPL( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _P );
+#define AE_REGISTER_CLASS_PROPERTY( ... ) AE_REGISTER_CLASS_PROPERTY_IMPL(AE_DROP_LAST(__VA_ARGS__), AE_GET_LAST(__VA_ARGS__));
+
 //! Register a class property with an additional value. Multiple values can be
 //! specified per property.
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( c, p, v ) static ae::_PropCreator< ::c > ae_prop_creator_##c##_##p##_##v( _ae_type_creator_##c, #c, #p, #v );
-//! Call signature: AE_REGISTER_CLASS_VAR( MyType, classVar );
-//! Registers the class variable 'MyType::classVar'
-#define AE_REGISTER_CLASS_VAR( c, v )\
+//! Call signature: AE_REGISTER_CLASS_PROPERTY_VALUE( Namespace0, ..., NameSpaceN, MyType, typeProperty, typePropertyValue );
+#define AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL_IMPL( _N, _T, _P, _V ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N, _P, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, #_V );
+#define AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( _C, _P, _V ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _P, _V );
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( ... ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__));
+
+//! Call signature: AE_REGISTER_CLASS_VAR( Namespace0, ..., NameSpaceN, MyType, classVar );
+//! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
+#define AE_REGISTER_CLASS_VAR_IMPL_IMPL( _N, _T, _V )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
-	static ae::_VarCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_creator_##c##_##v( _ae_type_creator_##c, #c, #v );\
-	static ae::SourceFileAttribute ae_attrib_##c##v##_ae_SourceFileAttribute { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::c > ae_attrib_creator_##c##v##_ae_SourceFileAttribute( ae_var_creator_##c##_##v, _AE_SRCCHK(&ae_attrib_##c##v##_ae_SourceFileAttribute, nullptr) );\
+	static ae::_VarCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_V );\
+	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
+#define AE_REGISTER_CLASS_VAR_IMPL( _C, _V ) AE_REGISTER_CLASS_VAR_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V )
+#define AE_REGISTER_CLASS_VAR( ... )  AE_REGISTER_CLASS_VAR_IMPL(AE_DROP_LAST(__VA_ARGS__), AE_GET_LAST(__VA_ARGS__));
+
 //! Register a property for a specific class variable
-#define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #p, "" );
+#define AE_REGISTER_CLASS_VAR_PROPERTY_IMPL_IMPL( _N, _T, _V, _P )\
+	AE_DISABLE_INVALID_OFFSET_WARNING\
+	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, "" );\
+	AE_ENABLE_INVALID_OFFSET_WARNING
+#define AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( _C, _V, _P ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V, _P )
+#define AE_REGISTER_CLASS_VAR_PROPERTY( ... ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__));
+
 //! Register a property for a specific class variable with an additional value.
 //! Multiple values can be specified per property.
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #p, #pv );
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL_IMPL( _N, _T, _V, _P, _PV )\
+	AE_DISABLE_INVALID_OFFSET_WARNING\
+	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P, _PV)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, #_PV );\
+	AE_ENABLE_INVALID_OFFSET_WARNING
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V, _P, _PV )
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( ... ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL(AE_DROP_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__));
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -5483,10 +5508,19 @@ public:
 //------------------------------------------------------------------------------
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_CLASS_ATTRIBUTE( C, A, attributeArgs ) static A AE_GLUE(ae_attrib_##C##_##A,__LINE__) attributeArgs; static ae::_AttributeCreator< C > AE_GLUE(ae_attrib_creator_##C##_##A,__LINE__)( _ae_type_creator_##C, &AE_GLUE(ae_attrib_##C##_##A,__LINE__) );
+#define AE_REGISTER_CLASS_ATTRIBUTE_IMPL_IMPL( _N, _T, _A, _ARGS )\
+	static _A AE_GLUE_UNDERSCORE(ae_attrib, _N, _A, __LINE__) _ARGS;\
+	static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _A, __LINE__)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), &AE_GLUE_UNDERSCORE(ae_attrib, _N, _A, __LINE__) );
+#define AE_REGISTER_CLASS_ATTRIBUTE_IMPL( _C, _A, _ARGS ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _A, _ARGS )
+#define AE_REGISTER_CLASS_ATTRIBUTE( ... ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__))
+
 //! Registers an instance of an attribute with a class variable. The attribute
 //! must be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( C, V, A, attributeArgs ) static A AE_GLUE(ae_attrib_##C##_##V##_##A,__LINE__) attributeArgs; static ae::_AttributeCreator< C > AE_GLUE(ae_attrib_creator_##C##_##V##_##A,__LINE__)( ae_var_creator_##C##_##V, &AE_GLUE(ae_attrib_##C##_##V##_##A,__LINE__) );
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL_IMPL( _N, _T, _V, _A, _ARGS )\
+	static _A AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _A, __LINE__) _ARGS;\
+	static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, _A,__LINE__)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), &AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _A, __LINE__) );
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( _C, _V, _A, _ARGS ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V, _A, _ARGS )
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( ... ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL(AE_DROP_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__))
 //! @TODO
 #define AE_REGISTER_ENUM_ATTRIBUTE( E, A, attributeArgs )
 

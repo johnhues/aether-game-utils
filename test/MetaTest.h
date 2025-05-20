@@ -67,6 +67,7 @@ public:
 	TestEnumClass enumTest;
 };
 
+
 //------------------------------------------------------------------------------
 // NamespaceClass
 //------------------------------------------------------------------------------
@@ -75,7 +76,9 @@ namespace Namespace0 {
 		class NamespaceClass : public ae::Inheritor< SomeClass, NamespaceClass >
 		{
 		public:
+			int32_t intMember;
 			bool boolMember;
+			TestEnumClass enumTest;
 		};
 	}
 }
