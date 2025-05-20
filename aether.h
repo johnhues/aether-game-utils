@@ -177,19 +177,25 @@
 // Macro helpers
 //------------------------------------------------------------------------------
 //! Returns the number of arguments passed to this macro
-#define AE_NARGS(...) AE_EVAL(AE_NARGS_I(__VA_ARGS__,9,8,7,6,5,4,3,2,1,))
+#define AE_VA_ARGS_COUNT(...) AE_EVAL(AE_VA_ARGS_COUNT_IMPL(__VA_ARGS__,9,8,7,6,5,4,3,2,1,))
 //! Combines each argument into a single token
-#define AE_GLUE(...) AE_GLUE_I(AE_GLUE_,AE_NARGS(__VA_ARGS__))(__VA_ARGS__)
+#define AE_GLUE(...) AE_GLUE_IMPL(AE_GLUE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
 //! Combines each argument into a single token, but arguments are separated by
 //! '::' (double colons).
-#define AE_GLUE_TYPE(...) AE_GLUE(AE_GLUE_TYPE_,AE_NARGS(__VA_ARGS__))(__VA_ARGS__)
+#define AE_GLUE_TYPE(...) AE_GLUE(AE_GLUE_TYPE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
+//! Combines each argument into a single token with an underscore between each
+//! argument. This is useful for creating unique names for variables, functions,
+//! etc. from a list of arguments.
+#define AE_GLUE_UNDERSCORE(...) AE_GLUE(AE_GLUE_UNDERSCORE_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
 //! Converts the given argument to a string. Useful for converting the result of
 //! another macro invocation into a string.
-#define AE_STRINGIFY(S) AE_STRINGIFY_I(S)
+#define AE_STRINGIFY(S) AE_STRINGIFY_IMPL(S)
 //! Returns the Nth element of __VA_ARGS__
 #define AE_GET_ELEM(N, ...) AE_GLUE(AE_GET_ELEM_, N)(__VA_ARGS__)
 //! Returns the last argument passed to this macro
-#define AE_GET_LAST(...) AE_GET_ELEM(AE_NARGS(__VA_ARGS__), _, __VA_ARGS__ ,,,,,,,,,,,) // Get last argument - placeholder decrements by one
+#define AE_GET_LAST(...) AE_GET_ELEM(AE_VA_ARGS_COUNT(__VA_ARGS__), _, __VA_ARGS__ ,,,,,,,,,,,) // Get last argument - placeholder decrements by one
+//! Returns all of the arguments passed to this macro except the last one
+#define AE_DROP_LAST(...) AE_GLUE(AE_DROP_LAST_,AE_VA_ARGS_COUNT(__VA_ARGS__))(__VA_ARGS__)
 
 //------------------------------------------------------------------------------
 // System Headers
@@ -11791,17 +11797,40 @@ void BinaryWriter::SerializeObject( const T& v )
 //------------------------------------------------------------------------------
 template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( d ) T(); }
 #define AE_EVAL(...) __VA_ARGS__
-#define AE_NARGS_I(_,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
-#define AE_GLUE_I(X,Y) AE_GLUE_II(X,Y)
-#define AE_GLUE_II(X,Y) X##Y
+#define AE_STRINGIFY_IMPL(S) #S
+#define AE_VA_ARGS_COUNT_IMPL(_,_9,_8,_7,_6,_5,_4,_3,_2,X_,...) X_
+#define AE_GLUE_IMPL(X,Y) AE_GLUE_IMPL_IMPL(X,Y)
+#define AE_GLUE_IMPL_IMPL(X,Y) X##Y
+#define AE_GLUE_1(X) X
 #define AE_GLUE_2(X,Y) X##Y
 #define AE_GLUE_3(X,Y,Z) X##Y##Z
 #define AE_GLUE_4(X,Y,Z,W) X##Y##Z##W
+#define AE_GLUE_5(X,Y,Z,W,V) X##Y##Z##W##V
+#define AE_GLUE_6(X,Y,Z,W,V,U) X##Y##Z##W##V##U
+#define AE_GLUE_7(X,Y,Z,W,V,U,T) X##Y##Z##W##V##U##T
+#define AE_GLUE_8(X,Y,Z,W,V,U,T,S) X##Y##Z##W##V##U##T##S
+#define AE_GLUE_9(X,Y,Z,W,V,U,T,S,R) X##Y##Z##W##V##U##T##S##R
+#define AE_GLUE_10(X,Y,Z,W,V,U,T,S,R,Q) X##Y##Z##W##V##U##T##S##R##Q
 #define AE_GLUE_TYPE_1(T) T
 #define AE_GLUE_TYPE_2(N0, T) N0::T
 #define AE_GLUE_TYPE_3(N0, N1, T) N0::N1::T
 #define AE_GLUE_TYPE_4(N0, N1, N2, T) N0::N1::N2::T
-#define AE_STRINGIFY_I(S) #S
+#define AE_GLUE_TYPE_5(N0, N1, N2, N3, T) N0::N1::N2::N3::T
+#define AE_GLUE_TYPE_6(N0, N1, N2, N3, N4, T) N0::N1::N2::N3::N4::T
+#define AE_GLUE_TYPE_7(N0, N1, N2, N3, N4, N5, T) N0::N1::N2::N3::N4::N5::T
+#define AE_GLUE_TYPE_8(N0, N1, N2, N3, N4, N5, N6, T) N0::N1::N2::N3::N4::N5::N6::T
+#define AE_GLUE_TYPE_9(N0, N1, N2, N3, N4, N5, N6, N7, T) N0::N1::N2::N3::N4::N5::N6::N7::T
+#define AE_GLUE_TYPE_10(N0, N1, N2, N3, N4, N5, N6, N7, N8, T) N0::N1::N2::N3::N4::N5::N6::N7::N8::T
+#define AE_GLUE_UNDERSCORE_1(X) X
+#define AE_GLUE_UNDERSCORE_2(X,Y) X##_##Y
+#define AE_GLUE_UNDERSCORE_3(X,Y,Z) X##_##Y##_##Z
+#define AE_GLUE_UNDERSCORE_4(X,Y,Z,W) X##_##Y##_##Z##_##W
+#define AE_GLUE_UNDERSCORE_5(X,Y,Z,W,V) X##_##Y##_##Z##_##W##_##V
+#define AE_GLUE_UNDERSCORE_6(X,Y,Z,W,V,U) X##_##Y##_##Z##_##W##_##V##_##U
+#define AE_GLUE_UNDERSCORE_7(X,Y,Z,W,V,U,T) X##_##Y##_##Z##_##W##_##V##_##U##_##T
+#define AE_GLUE_UNDERSCORE_8(X,Y,Z,W,V,U,T,S) X##_##Y##_##Z##_##W##_##V##_##U##_##T##_##S
+#define AE_GLUE_UNDERSCORE_9(X,Y,Z,W,V,U,T,S,R) X##_##Y##_##Z##_##W##_##V##_##U##_##T##_##S##_##R
+#define AE_GLUE_UNDERSCORE_10(X,Y,Z,W,V,U,T,S,R,Q) X##_##Y##_##Z##_##W##_##V##_##U##_##T##_##S##_##R##_##Q
 #define AE_GET_ELEM_0(_0, ...) _0
 #define AE_GET_ELEM_1(_0, _1, ...) _1
 #define AE_GET_ELEM_2(_0, _1, _2, ...) _2
@@ -11813,6 +11842,16 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 #define AE_GET_ELEM_8(_0, _1, _2, _3, _4, _5, _6, _7, _8, ...) _8
 #define AE_GET_ELEM_9(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ...) _9
 #define AE_GET_ELEM_10(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, ...) _10
+#define AE_DROP_LAST_1(_1)
+#define AE_DROP_LAST_2(_1,_2) _1
+#define AE_DROP_LAST_3(_1,_2,_3) _1,_2
+#define AE_DROP_LAST_4(_1,_2,_3,_4) _1,_2,_3
+#define AE_DROP_LAST_5(_1,_2,_3,_4,_5) _1,_2,_3,_4
+#define AE_DROP_LAST_6(_1,_2,_3,_4,_5,_6) _1,_2,_3,_4,_5
+#define AE_DROP_LAST_7(_1,_2,_3,_4,_5,_6,_7) _1,_2,_3,_4,_5,_6
+#define AE_DROP_LAST_8(_1,_2,_3,_4,_5,_6,_7,_8) _1,_2,_3,_4,_5,_6,_7
+#define AE_DROP_LAST_9(_1,_2,_3,_4,_5,_6,_7,_8,_9) _1,_2,_3,_4,_5,_6,_7,_8
+#define AE_DROP_LAST_10(_1,_2,_3,_4,_5,_6,_7,_8,_9,_10) _1,_2,_3,_4,_5,_6,_7,_8,_9
 
 //------------------------------------------------------------------------------
 // External meta initialization helpers
