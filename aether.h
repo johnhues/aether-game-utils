@@ -5332,7 +5332,7 @@ public:
 //! @{
 
 //------------------------------------------------------------------------------
-// External macros to force module linking
+// Macros to force module linking
 //------------------------------------------------------------------------------
 // clang-format off
 //! Call signature: AE_FORCE_LINK_CLASS( Namespace0, ..., NameSpaceN, MyType );
@@ -5342,49 +5342,37 @@ public:
 	AE_GLUE_UNDERSCORE(_ae_ForceLink, __VA_ARGS__) AE_GLUE_UNDERSCORE(_ae_forceLink, __VA_ARGS__);
 
 //------------------------------------------------------------------------------
-// External meta class registration macros
+// Meta class registration macros
 //------------------------------------------------------------------------------
 //! Registers a new type that can be retrieved with ae::GetClassType( "Namespace0::NameSpace1::MyType" )
 //! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in the
 //! global scope of any cpp file. The class must indirectly inherit from from
 //! ae::Inheritor< ae::Object, MyType >.
-//! Call signature: AE_REGISTER_CLASS( Namespace0, ..., NameSpaceN, MyType );
-#define AE_REGISTER_CLASS( ... ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(__VA_ARGS__), AE_GLUE_TYPE(__VA_ARGS__) )
-
-//! Register a class property
-//! Call signature: AE_REGISTER_CLASS_PROPERTY( (Namespace0, ..., NameSpaceN, MyType), typeProperty );
-#define AE_REGISTER_NAMESPACECLASS_PROPERTY( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P )
-#define AE_REGISTER_CLASS_PROPERTY( _C, _P ) AE_REGISTER_NAMESPACECLASS_PROPERTY( (_C), _P )
-
-//! Register a class property with an additional value. Multiple values can be
-//! specified per property.
-//! Call signature: AE_REGISTER_CLASS_PROPERTY_VALUE( (Namespace0, ..., NameSpaceN, MyType), typeProperty, typePropertyValue );
-#define AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P, _V )
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (_C), _P, _V )
-
+#define AE_REGISTER_CLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(_CLASS), AE_GLUE_TYPE(_CLASS) )
 //! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
-//! Call signature: AE_REGISTER_CLASS_VAR( (Namespace0, ..., NameSpaceN, MyType), classVar );
-#define AE_REGISTER_NAMESPACECLASS_VAR( _C, _V ) AE_REGISTER_CLASS_VAR_IMPL(AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V)
-#define AE_REGISTER_CLASS_VAR( _C, _V ) AE_REGISTER_NAMESPACECLASS_VAR( (_C), _V )
-
-//! Register a property for a specific class variable
-#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P )
-#define AE_REGISTER_CLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (_C), _V, _P )
-
-//! Register a property for a specific class variable with an additional value.
-//! Multiple values can be specified per property.
-#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P, _PV )
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (_C), _V, _P, _PV )
-
+#define AE_REGISTER_CLASS_VAR( _CLASS, _V ) AE_REGISTER_NAMESPACECLASS_VAR( (_CLASS), _V )
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( _C, _A, _ARGS ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
-#define AE_REGISTER_CLASS_ATTRIBUTE( _C, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (_C), (_A), _ARGS )
-
+#define AE_REGISTER_CLASS_ATTRIBUTE( _CLASS, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (_CLASS), (_A), _ARGS )
 //! Registers an instance of an attribute with a class variable. The attribute
 //! must be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( _C, _V, _A, _ARGS ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
-#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( _C, _V, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (_C), _V, (_A), _ARGS )
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( _CLASS, _V, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (_CLASS), _V, (_A), _ARGS )
+
+//! Registers a new type that can be retrieved with ae::GetClassType( "Namespace0::NameSpace1::MyType" )
+//! or ae::GetClassType< Namespace0::NameSpace1::MyType >(). Call this once in the
+//! global scope of any cpp file. The class must indirectly inherit from from
+//! ae::Inheritor< ae::Object, MyType >.
+//! Call signature: AE_REGISTER_NAMESPACECLASS( (Namespace0, ..., NameSpaceN, MyType) );
+#define AE_REGISTER_NAMESPACECLASS( _CLASS ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS)
+//! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
+//! Call signature: AE_REGISTER_NAMESPACECLASS_VAR( (Namespace0, ..., NameSpaceN, MyType), classVar );
+#define AE_REGISTER_NAMESPACECLASS_VAR( _CLASS, _V ) AE_REGISTER_CLASS_VAR_IMPL(AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, _V)
+//! Registers an instance of an attribute with a class. The attribute type must
+//! be registered with AE_REGISTER_NAMESPACECLASS() before this is called.
+#define AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( _CLASS, _A, _ARGS ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
+//! Registers an instance of an attribute with a class variable. The attribute
+//! must be registered with AE_REGISTER_NAMESPACECLASS() before this is called.
+#define AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( _CLASS, _V, _A, _ARGS ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _CLASS, AE_GLUE_TYPE _CLASS, _V, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -11847,6 +11835,29 @@ template< typename T > ae::Object* _PlacementNew( ae::Object* d ) { return new( 
 #define AE_DROP_LAST_8(_1,_2,_3,_4,_5,_6,_7,_8) _1,_2,_3,_4,_5,_6,_7
 #define AE_DROP_LAST_9(_1,_2,_3,_4,_5,_6,_7,_8,_9) _1,_2,_3,_4,_5,_6,_7,_8
 #define AE_DROP_LAST_10(_1,_2,_3,_4,_5,_6,_7,_8,_9,_10) _1,_2,_3,_4,_5,_6,_7,_8,_9
+
+//------------------------------------------------------------------------------
+// Deprecated meta class property registration macros
+//------------------------------------------------------------------------------
+//! Register a class property
+//! Call signature: AE_REGISTER_CLASS_PROPERTY( (Namespace0, ..., NameSpaceN, MyType), typeProperty );
+#define AE_REGISTER_NAMESPACECLASS_PROPERTY( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P )
+#define AE_REGISTER_CLASS_PROPERTY( _C, _P ) AE_REGISTER_NAMESPACECLASS_PROPERTY( (_C), _P )
+
+//! Register a class property with an additional value. Multiple values can be
+//! specified per property.
+//! Call signature: AE_REGISTER_CLASS_PROPERTY_VALUE( (Namespace0, ..., NameSpaceN, MyType), typeProperty, typePropertyValue );
+#define AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P, _V )
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (_C), _P, _V )
+
+//! Register a property for a specific class variable
+#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P )
+#define AE_REGISTER_CLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (_C), _V, _P )
+
+//! Register a property for a specific class variable with an additional value.
+//! Multiple values can be specified per property.
+#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P, _PV )
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (_C), _V, _P, _PV )
 
 //------------------------------------------------------------------------------
 // Internal meta class registration macros
@@ -27104,9 +27115,9 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 // Meta register base objects
 //------------------------------------------------------------------------------
-AE_REGISTER_CLASS( ae, Object );
-AE_REGISTER_CLASS( ae, Attribute );
-AE_REGISTER_CLASS( ae, SourceFileAttribute );
+AE_REGISTER_NAMESPACECLASS( (ae, Object) );
+AE_REGISTER_NAMESPACECLASS( (ae, Attribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, SourceFileAttribute) );
 
 uint32_t ae::GetClassTypeCount()
 {

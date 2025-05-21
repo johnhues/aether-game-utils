@@ -44,7 +44,7 @@ AE_REGISTER_ENUM_CLASS( TestEnumClass );
 // Namespace0::Namespace1::NamespaceClass registration
 //------------------------------------------------------------------------------
 AE_FORCE_LINK_CLASS( Namespace0, Namespace1, NamespaceClass );
-AE_REGISTER_CLASS( Namespace0, Namespace1, NamespaceClass );
+AE_REGISTER_NAMESPACECLASS( (Namespace0, Namespace1, NamespaceClass) );
 
 AE_REGISTER_NAMESPACECLASS_PROPERTY( (Namespace0, Namespace1, NamespaceClass), someProp0 );
 

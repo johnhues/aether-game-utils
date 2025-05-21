@@ -29,10 +29,10 @@
   #pragma warning( disable : 4244 )
 #endif
 
-AE_REGISTER_CLASS( ae, Sdf );
-AE_REGISTER_CLASS( ae, SdfBox );
-AE_REGISTER_CLASS( ae, SdfCylinder );
-AE_REGISTER_CLASS( ae, SdfHeightmap );
+AE_REGISTER_NAMESPACECLASS( (ae, Sdf) );
+AE_REGISTER_NAMESPACECLASS( (ae, SdfBox) );
+AE_REGISTER_NAMESPACECLASS( (ae, SdfCylinder) );
+AE_REGISTER_NAMESPACECLASS( (ae, SdfHeightmap) );
 
 namespace ae {
 

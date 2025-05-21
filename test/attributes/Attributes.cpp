@@ -52,7 +52,7 @@ namespace xyz
 		uint32_t id = 0;
 	};
 }
-AE_REGISTER_CLASS( xyz, Util );
+AE_REGISTER_NAMESPACECLASS( (xyz, Util) );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (xyz, Util), (RequiresAttrib), ( "Something" ) );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (xyz, Util), (RequiresAttrib), ( "SomethingElse" ) );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (xyz, Util), (RequiresAttrib), ( "SomethingSomethingElse" ) );

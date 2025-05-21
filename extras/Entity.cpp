@@ -29,7 +29,7 @@
 //------------------------------------------------------------------------------
 // Registration
 //------------------------------------------------------------------------------
-AE_REGISTER_CLASS( ae, Component );
+AE_REGISTER_NAMESPACECLASS( (ae, Component) );
 
 namespace ae {
 
