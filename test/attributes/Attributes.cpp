@@ -53,14 +53,14 @@ namespace xyz
 	};
 }
 AE_REGISTER_CLASS( xyz, Util );
-AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "Something" ) );
-AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "SomethingElse" ) );
-AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "SomethingSomethingElse" ) );
-AE_REGISTER_CLASS_ATTRIBUTE( xyz, Util, RequiresAttrib, ( "SomethingSomethingElseElse" ) );
-AE_REGISTER_CLASS_VAR( xyz, Util, id );
-AE_REGISTER_CLASS_VAR_ATTRIBUTE( xyz, Util, id, CategoryInfoAttribute, ({ .sortOrder = 1, .name = "General" }) );
-AE_REGISTER_CLASS_VAR_ATTRIBUTE( xyz, Util, id, DisplayName, ({ .name = "ID" }) );
-AE_REGISTER_CLASS_VAR_ATTRIBUTE( xyz, Util, id, DisplayName, ({ .name = "ID2" }) );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (xyz, Util), (RequiresAttrib), ( "Something" ) );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (xyz, Util), (RequiresAttrib), ( "SomethingElse" ) );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (xyz, Util), (RequiresAttrib), ( "SomethingSomethingElse" ) );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (xyz, Util), (RequiresAttrib), ( "SomethingSomethingElseElse" ) );
+AE_REGISTER_NAMESPACECLASS_VAR( (xyz, Util), id );
+AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (xyz, Util), id, (CategoryInfoAttribute), ({ .sortOrder = 1, .name = "General" }) );
+AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (xyz, Util), id, (DisplayName), ({ .name = "ID" }) );
+AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (xyz, Util), id, (DisplayName), ({ .name = "ID2" }) );
 
 int main()
 {

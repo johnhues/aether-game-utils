@@ -5360,44 +5360,44 @@ public:
 #define AE_REGISTER_CLASS( ... ) AE_REGISTER_CLASS_IMPL( AE_GLUE_UNDERSCORE(__VA_ARGS__), AE_GLUE_TYPE(__VA_ARGS__) )
 
 //! Register a class property
-//! Call signature: AE_REGISTER_CLASS_PROPERTY( Namespace0, ..., NameSpaceN, MyType, typeProperty );
-#define AE_REGISTER_CLASS_PROPERTY_IMPL_IMPL( _N, _T, _P ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N , _P)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, "" );
-#define AE_REGISTER_CLASS_PROPERTY_IMPL( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _P );
-#define AE_REGISTER_CLASS_PROPERTY( ... ) AE_REGISTER_CLASS_PROPERTY_IMPL(AE_DROP_LAST(__VA_ARGS__), AE_GET_LAST(__VA_ARGS__));
+//! Call signature: AE_REGISTER_CLASS_PROPERTY( (Namespace0, ..., NameSpaceN, MyType), typeProperty );
+#define AE_REGISTER_CLASS_PROPERTY_IMPL( _N, _T, _P ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N , _P)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, "" )
+#define AE_REGISTER_NAMESPACECLASS_PROPERTY( _C, _P ) AE_REGISTER_CLASS_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P )
+#define AE_REGISTER_CLASS_PROPERTY( _C, _P ) AE_REGISTER_NAMESPACECLASS_PROPERTY( (_C), _P )
 
 //! Register a class property with an additional value. Multiple values can be
 //! specified per property.
-//! Call signature: AE_REGISTER_CLASS_PROPERTY_VALUE( Namespace0, ..., NameSpaceN, MyType, typeProperty, typePropertyValue );
-#define AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL_IMPL( _N, _T, _P, _V ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N, _P, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, #_V );
-#define AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( _C, _P, _V ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _P, _V );
-#define AE_REGISTER_CLASS_PROPERTY_VALUE( ... ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__));
+//! Call signature: AE_REGISTER_CLASS_PROPERTY_VALUE( (Namespace0, ..., NameSpaceN, MyType), typeProperty, typePropertyValue );
+#define AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( _N, _T, _P, _V ) static ae::_PropCreator< ::_T > AE_GLUE_UNDERSCORE(ae_prop_creator, _N, _P, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_P, #_V )
+#define AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_CLASS_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _P, _V )
+#define AE_REGISTER_CLASS_PROPERTY_VALUE( _C, _P, _V ) AE_REGISTER_NAMESPACECLASS_PROPERTY_VALUE( (_C), _P, _V )
 
-//! Call signature: AE_REGISTER_CLASS_VAR( Namespace0, ..., NameSpaceN, MyType, classVar );
+//! Call signature: AE_REGISTER_CLASS_VAR( (Namespace0, ..., NameSpaceN, MyType), classVar );
 //! Registers the class variable 'Namespace0::...::NamespaceN::MyType::classVar'
 #define AE_REGISTER_CLASS_VAR_IMPL_IMPL( _N, _T, _V )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), #_T, #_V );\
 	static ae::SourceFileAttribute AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute) { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, SourceFileAttribute)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), _AE_SRCCHK(&AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, SourceFileAttribute), nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
-#define AE_REGISTER_CLASS_VAR_IMPL( _C, _V ) AE_REGISTER_CLASS_VAR_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V )
-#define AE_REGISTER_CLASS_VAR( ... )  AE_REGISTER_CLASS_VAR_IMPL(AE_DROP_LAST(__VA_ARGS__), AE_GET_LAST(__VA_ARGS__));
+#define AE_REGISTER_NAMESPACECLASS_VAR( _C, _V ) AE_REGISTER_CLASS_VAR_IMPL_IMPL(AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V)
+#define AE_REGISTER_CLASS_VAR( _C, _V ) AE_REGISTER_NAMESPACECLASS_VAR( (_C), _V )
 
 //! Register a property for a specific class variable
-#define AE_REGISTER_CLASS_VAR_PROPERTY_IMPL_IMPL( _N, _T, _V, _P )\
+#define AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( _N, _T, _V, _P )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, "" );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
-#define AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( _C, _V, _P ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V, _P )
-#define AE_REGISTER_CLASS_VAR_PROPERTY( ... ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__));
+#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_CLASS_VAR_PROPERTY_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P )
+#define AE_REGISTER_CLASS_VAR_PROPERTY( _C, _V, _P ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY( (_C), _V, _P )
 
 //! Register a property for a specific class variable with an additional value.
 //! Multiple values can be specified per property.
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL_IMPL( _N, _T, _V, _P, _PV )\
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( _N, _T, _V, _P, _PV )\
 	AE_DISABLE_INVALID_OFFSET_WARNING\
 	static ae::_VarPropCreator< ::_T, decltype(::_T::_V), offsetof( ::_T, _V ) > AE_GLUE_UNDERSCORE(ae_var_prop_creator, _N, _V, _P, _PV)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), #_P, #_PV );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V, _P, _PV )
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( ... ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL(AE_DROP_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__));
+#define AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_CLASS_VAR_PROPERTY_VALUE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, _P, _PV )
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( _C, _V, _P, _PV ) AE_REGISTER_NAMESPACECLASS_VAR_PROPERTY_VALUE( (_C), _V, _P, _PV )
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
@@ -5498,31 +5498,26 @@ public:
 #define AE_REGISTER_ENUM_CLASS2_VALUE( E, V ) \
 	namespace aeEnums::_##E { ae::_RegisterExistingEnumOrValue< E > ae_enum_creator_##V( #V, E::V ); }
 
-// #define AE_REGISTER_ENUM_PROPERTY( E, P )
-// #define AE_REGISTER_ENUM_PROPERTY_VALUE( E, P, PV )
-// #define AE_REGISTER_ENUM_VALUE_PROPERTY( E, V, P )
-// #define AE_REGISTER_ENUM_VALUE_PROPERTY_VALUE( E, V, P, PV )
-
 //------------------------------------------------------------------------------
 // ae::Attribute registration
 //------------------------------------------------------------------------------
 //! Registers an instance of an attribute with a class. The attribute type must
 //! be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_CLASS_ATTRIBUTE_IMPL_IMPL( _N, _T, _A, _ARGS )\
-	static _A AE_GLUE_UNDERSCORE(ae_attrib, _N, _A, __LINE__) _ARGS;\
-	static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _A, __LINE__)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), &AE_GLUE_UNDERSCORE(ae_attrib, _N, _A, __LINE__) );
-#define AE_REGISTER_CLASS_ATTRIBUTE_IMPL( _C, _A, _ARGS ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _A, _ARGS )
-#define AE_REGISTER_CLASS_ATTRIBUTE( ... ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__))
+#define AE_REGISTER_CLASS_ATTRIBUTE_IMPL( _N, _T, _AN, _AT, _ARGS )\
+	static ::_AT AE_GLUE_UNDERSCORE(ae_attrib, _N, _AN, __LINE__) _ARGS;\
+	static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _AN, __LINE__)( AE_GLUE_UNDERSCORE(_ae_type_creator, _N), &AE_GLUE_UNDERSCORE(ae_attrib, _N, _AN, __LINE__) )
+#define AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( _C, _A, _ARGS ) AE_REGISTER_CLASS_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
+#define AE_REGISTER_CLASS_ATTRIBUTE( _C, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (_C), (_A), _ARGS )
 
 //! Registers an instance of an attribute with a class variable. The attribute
 //! must be registered with AE_REGISTER_CLASS() before this is called.
-#define AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL_IMPL( _N, _T, _V, _A, _ARGS )\
-	static _A AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _A, __LINE__) _ARGS;\
-	static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, _A,__LINE__)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), &AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _A, __LINE__) );
-#define AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( _C, _V, _A, _ARGS ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL_IMPL( AE_GLUE_UNDERSCORE( _C ), AE_GLUE_TYPE( _C ), _V, _A, _ARGS )
-#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( ... ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL(AE_DROP_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(AE_DROP_LAST(__VA_ARGS__))), AE_GET_LAST(AE_DROP_LAST(__VA_ARGS__)), AE_GET_LAST(__VA_ARGS__))
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( _N, _T, _V, _AN, _AT, _ARGS )\
+	static ::_AT AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _AN, __LINE__) _ARGS;\
+	static ae::_AttributeCreator< ::_T > AE_GLUE_UNDERSCORE(ae_attrib_creator, _N, _V, _AN,__LINE__)( AE_GLUE_UNDERSCORE(ae_var_creator, _N, _V), &AE_GLUE_UNDERSCORE(ae_attrib, _N, _V, _AN, __LINE__) )
+#define AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( _C, _V, _A, _ARGS ) AE_REGISTER_CLASS_VAR_ATTRIBUTE_IMPL( AE_GLUE_UNDERSCORE _C, AE_GLUE_TYPE _C, _V, AE_GLUE_UNDERSCORE _A, AE_GLUE_TYPE _A, _ARGS )
+#define AE_REGISTER_CLASS_VAR_ATTRIBUTE( _C, _V, _A, _ARGS ) AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (_C), _V, (_A), _ARGS )
 //! @TODO
-#define AE_REGISTER_ENUM_ATTRIBUTE( E, A, attributeArgs )
+#define AE_REGISTER_ENUM_ATTRIBUTE( E, A, attributeArgs ) AE_STATIC_FAIL( "AE_REGISTER_ENUM_ATTRIBUTE() is not implemented" )
 
 // clang-format on
 
