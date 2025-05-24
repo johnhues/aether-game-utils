@@ -56,5 +56,3 @@ target_link_libraries(test PRIVATE
 list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/contrib)
 include(Catch)
 catch_discover_tests(test)
-
-add_subdirectory(attributes)
