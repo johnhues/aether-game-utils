@@ -19783,13 +19783,20 @@ std::string FileSystem::SaveDialog( const FileDialogParams& params )
 #elif _AE_OSX_
 
 //------------------------------------------------------------------------------
-// OpenDialog not implemented
+// OpenDialog
 //------------------------------------------------------------------------------
 ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params )
 {
 	NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
+	ae::RunOnDestroy poolCleanup( [&]() { [pool release]; } );
+	
 	NSWindow* window = (NSWindow*)( params.window ? params.window->window : nullptr );
-	NSOpenPanel* dialog = [NSOpenPanel openPanel];
+	NSOpenPanel* dialog = [NSOpenPanel openPanel]; // https://developer.apple.com/forums/thread/782271
+	if( !dialog )
+	{
+		AE_ERR( "Failed to create NSOpenPanel" );
+		return ae::Array< std::string >( AE_ALLOC_TAG_FILE );
+	}
 	dialog.canChooseFiles = YES;
 	dialog.canChooseDirectories = NO;
 	dialog.allowsMultipleSelection = params.allowMultiselect;
@@ -19864,7 +19871,6 @@ ae::Array< std::string > FileSystem::OpenDialog( const FileDialogParams& params 
 		}
 	}
 	
-	[pool release];
 	return result;
 }
 
