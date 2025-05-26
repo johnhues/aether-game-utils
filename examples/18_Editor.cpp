@@ -48,7 +48,7 @@ public:
 	ae::Vec3 inputDir = ae::Vec3( 0.0f );
 };
 AE_REGISTER_CLASS( Avatar );
-AE_REGISTER_CLASS_PROPERTY( Avatar, ae_editor_type );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Avatar), (ae, EditorTypeAttribute), {} );
 AE_REGISTER_CLASS_VAR( Avatar, position );
 AE_REGISTER_CLASS_VAR( Avatar, radius );
 
@@ -62,9 +62,9 @@ public:
 	ae::Matrix4 transform;
 };
 AE_REGISTER_CLASS( Mesh );
-AE_REGISTER_CLASS_PROPERTY( Mesh, ae_editor_type );
-AE_REGISTER_CLASS_PROPERTY_VALUE( Mesh, ae_mesh_resource, name );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Mesh), (ae, EditorTypeAttribute), {} );
 AE_REGISTER_CLASS_VAR( Mesh, name );
+AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (Mesh), name, (ae, EditorMeshResourceAttribute), {} );
 AE_REGISTER_CLASS_VAR( Mesh, transform );
 
 //------------------------------------------------------------------------------
@@ -222,7 +222,6 @@ void Game::Initialize( int argc, char* argv[] )
 			game->registry.Clear();
 		}
 		AE_INFO( "Loading level: %s", levelPath );
-		
 	};
 	editorParams.functionPointers.loadMeshFn = []( void* userData, const char* resourceId ) -> ae::Optional< ae::EditorMesh >
 	{

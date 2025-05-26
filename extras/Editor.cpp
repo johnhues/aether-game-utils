@@ -41,6 +41,11 @@
 	#pragma warning( disable : 4267 ) // conversion from 'size_t' to 'uint32_t'
 #endif
 
+AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
+AE_REGISTER_NAMESPACECLASS( (ae, EditorMeshResourceAttribute) );
+
 namespace ae {
 
 class EditorServer;
@@ -85,13 +90,14 @@ const uint8_t kCogTextureData[] =
 const float kEditorViewDistance = 25000.0f;
 
 //------------------------------------------------------------------------------
-// Serialization helpers
+// Helpers
 //------------------------------------------------------------------------------
-void GetComponentTypePrereqs( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs );
+void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs );
 void JsonToComponent( const ae::Matrix4& transform, const rapidjson::Value& jsonComponent, Component* component );
 void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const rapidjson::Value& jsonObjects, ae::Registry* registry );
 void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
 bool ValidateLevel( const rapidjson::Value& jsonLevel );
+template< typename T > const T* TryGetClassOrVarAttribute( const ae::ClassType* type );
 
 //------------------------------------------------------------------------------
 // EditorMsg
@@ -143,6 +149,7 @@ public:
 	
 	ae::Entity entity = ae::kInvalidEntity;
 	bool hidden = false;
+	bool renderDisabled = false;
 	EditorServerMesh* mesh = nullptr;
 	bool opaque = true;
 	
@@ -174,10 +181,6 @@ public:
 		m_hoverEntities( tag ),
 		m_objects( tag ),
 		m_registry( tag ),
-		m_meshResourceVars( tag ),
-		m_meshVisibleVars( tag ),
-		m_typeMesh( tag ),
-		m_typeTransparent( tag ),
 		m_connections( tag )
 	{}
 	void Initialize( class EditorProgram* program );
@@ -204,7 +207,7 @@ public:
 	const EditorServerObject* GetObject( ae::Entity entity ) const { return m_objects.Get( entity, nullptr ); }
 	const EditorServerObject* GetObjectFromComponent( const ae::Component* component );
 	const ae::ClassVar* GetMeshResourceVar( const ae::ClassType* componentType );
-	const ae::ClassVar* GetMeshVisibleVar( const ae::ClassType* componentType );
+	bool GetRenderDisabled( ae::Entity entity ) const;
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
 
 	void HandleTransformChange( class EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform );
@@ -250,12 +253,6 @@ private:
 	// Object state
 	ae::Map< ae::Entity, EditorServerObject* > m_objects;
 	ae::Registry m_registry;
-
-	// Type information
-	ae::Map< const ae::ClassType*, const ae::ClassVar* > m_meshResourceVars;
-	ae::Map< const ae::ClassType*, const ae::ClassVar* > m_meshVisibleVars;
-	ae::Map< const ae::ClassType*, ae::Str32 > m_typeMesh;
-	ae::Map< const ae::ClassType*, bool > m_typeTransparent;
 
 	// UI configuration
 	ae::Color m_selectionColor = ae::Color::PicoOrange();
@@ -434,7 +431,7 @@ void EditorProgram::Initialize()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	ui.Initialize();
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 10.0f ) );
-	debugLines.Initialize( 20480 );
+	debugLines.Initialize( 2048 * 100 );
 	debugLines.SetXRayEnabled( false );
 	fileSystem.Initialize( params.dataDir.c_str(), "ae", "editor" );
 	
@@ -719,6 +716,10 @@ float EditorProgram::GetAspectRatio() const
 
 EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
 {
+	if( !resourceId[ 0 ] )
+	{
+		return nullptr;
+	}
 	EditorServerMesh* mesh = m_meshes.Get( resourceId, nullptr );
 	if ( !mesh && params.functionPointers.loadMeshFn )
 	{
@@ -995,7 +996,7 @@ void Editor::m_Read()
 	m_editorEntities.Clear();
 
 	// State for loading
-	ae::Array< const ae::ClassType* > prereqs = m_tag;
+	ae::Array< const ae::ClassType* > requirements = m_tag;
 	ae::Map< ae::Entity, ae::Entity > entityMap = m_tag;
 	const auto& jsonObjects = document[ "objects" ];
 
@@ -1019,10 +1020,10 @@ void Editor::m_Read()
 			AE_ASSERT( componentIter.value.IsObject() );
 			const ae::ClassType* type = ae::GetClassTypeByName( componentIter.name.GetString() );
 			AE_ASSERT_MSG( type, "Type '#' not found. Register with AE_REGISTER_CLASS(), or if the class isn't directly referenced you may need to use AE_FORCE_LINK().", componentIter.name.GetString() );
-			GetComponentTypePrereqs( type, &prereqs );
-			for( const ae::ClassType* prereq : prereqs )
+			GetComponentTypeRequirements( type, &requirements );
+			for( const ae::ClassType* requirement : requirements )
 			{
-				m_params->registry->AddComponent( entity, prereq );
+				m_params->registry->AddComponent( entity, requirement );
 			}
 			m_params->registry->AddComponent( entity, type );
 		}
@@ -1073,8 +1074,15 @@ const ae::Matrix4& EditorServerObject::GetTransform() const
 
 void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var )
 {
+	ae::DataPointer varData( var, component );
 	if ( var == program->editor.GetMeshResourceVar( type ) )
 	{
+		const ae::BasicType* varType = varData.GetVarType().AsVarType< ae::BasicType >();
+		if( varType && varType->GetType() != ae::BasicType::String )
+		{
+			AE_ERR( "Mesh resource variable '#' must be of type String", var->GetName() );
+			return;
+		}
 		auto varStr = var->GetObjectValueAsString( component );
 		if ( varStr != "" )
 		{
@@ -1085,10 +1093,7 @@ void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component*
 			mesh = nullptr;
 		}
 	}
-	else if ( var == program->editor.GetMeshVisibleVar( type ) )
-	{
-		var->GetObjectValue( component, &opaque );
-	}
+	renderDisabled = program->editor.GetRenderDisabled( component->GetEntity() );
 	program->editor.BroadcastVarChange( var, component );
 }
 
@@ -1131,55 +1136,39 @@ void EditorServer::Initialize( EditorProgram* program )
 	for ( uint32_t i = 0; i < typeCount; i++ )
 	{
 		const ae::ClassType* type = ae::GetClassTypeByIndex( i );
-		int32_t resourcePropIdx = type->GetPropertyIndex( "ae_mesh_resource" );
-		if ( resourcePropIdx >= 0 )
+		const bool isEditorType = type->attributes.Has< ae::EditorTypeAttribute >();
+		const ae::Str128 typeMessage = ae::Str128::Format( isEditorType ? "Type '#'" : "Non-editor type '#'", type->GetName() );
+
+		const uint32_t requiredCount = type->attributes.GetCount< ae::EditorRequiredAttribute >();
+		for ( uint32_t i = 0; i < requiredCount; i++ )
 		{
-			// @TODO: This should be a class variable property instead
-			const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_resource, memberVar );";
-			AE_ASSERT_MSG( type->GetPropertyValueCount( resourcePropIdx ), mustRegisterErr, type->GetName() );
-			const char* varName = type->GetPropertyValue( resourcePropIdx, 0 );
-			AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
-			const ae::ClassVar* var = type->GetVarByName( varName, false );
-			AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
-			m_meshResourceVars.Set( type, var );
-		}
-		
-		int32_t visiblePropIdx = type->GetPropertyIndex( "ae_mesh_visible" );
-		if ( visiblePropIdx >= 0 )
-		{
-			// @TODO: This should be a class variable property instead
-			const char* mustRegisterErr = "Must register a mesh resource member variable with AE_REGISTER_CLASS_PROPERTY_VALUE( #, ae_mesh_visible, memberVar );";
-			AE_ASSERT_MSG( type->GetPropertyValueCount( visiblePropIdx ), mustRegisterErr, type->GetName() );
-			const char* varName = type->GetPropertyValue( visiblePropIdx, 0 );
-			AE_ASSERT_MSG( varName[ 0 ], mustRegisterErr, type->GetName() );
-			const ae::ClassVar* var = type->GetVarByName( varName, false );
-			AE_ASSERT_MSG( var, "Type '#' does not have a member variable named '#'", type->GetName(), varName );
-			m_meshVisibleVars.Set( type, var );
-		}
-		
-		int32_t depPropIdx = type->GetPropertyIndex( "ae_editor_dep" );
-		if ( depPropIdx >= 0 )
-		{
-			uint32_t depCount = type->GetPropertyValueCount( depPropIdx );
-			for ( uint32_t i = 0; i < depCount; i++ )
+			const ae::EditorRequiredAttribute* required = type->attributes.TryGet< ae::EditorRequiredAttribute >( i );
+			const char* requiredName = required->className.c_str();
+			if( !ae::GetClassTypeByName( requiredName ) )
 			{
-				const char* depName = type->GetPropertyValue( depPropIdx, i );
-				const ae::ClassType* depType = ae::GetClassTypeByName( depName );
-				AE_ASSERT_MSG( depType, "Type '#' has invalid dependency '#'", type->GetName(), depName );
-				AE_ASSERT_MSG( depType->HasProperty( "ae_editor_type" ), "Type '#' has dependency '#' which is not an editor type. It must have property 'ae_editor_type'.", type->GetName(), depName );
+				AE_ERR( "# has unknown dependency '#'", typeMessage, type->GetName(), requiredName );
 			}
 		}
-		
-		int32_t typeMeshIdx = type->GetPropertyIndex( "ae_type_mesh" );
-		if ( typeMeshIdx >= 0 && type->GetPropertyValueCount( typeMeshIdx ) )
+
+		const uint32_t varCount = type->GetVarCount( true );
+		for ( uint32_t j = 0; j < varCount; j++ )
 		{
-			m_typeMesh.Set( type, type->GetPropertyValue( typeMeshIdx, 0 ) );
-		}
-		
-		int32_t typeTransparentIdx = type->GetPropertyIndex( "ae_type_transparent" );
-		if ( typeTransparentIdx >= 0 )
-		{
-			m_typeTransparent.Set( type, true );
+			const ae::ClassVar* var = type->GetVarByIndex( j, true );
+			const ae::BasicType* varType = var->GetOuterVarType().AsVarType< ae::BasicType >();
+			if ( var->attributes.Has< ae::EditorMeshResourceAttribute >() )
+			{
+				if( !varType || varType->GetType() != ae::BasicType::String )
+				{
+					AE_ERR( "ae::EditorMeshResourceAttribute variable '#' must be of type String", var->GetName() );
+				}
+			}
+			else if ( var->attributes.Has< ae::EditorVisibilityAttribute >() )
+			{
+				if( !varType || varType->GetType() != ae::BasicType::Bool )
+				{
+					AE_ERR( "ae::EditorVisibilityAttribute variable '#' must be of type Bool", var->GetName() );
+				}
+			}
 		}
 	}
 
@@ -1385,7 +1374,7 @@ void EditorServer::Render( EditorProgram* program )
 	for ( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
 		const EditorServerObject* obj = m_objects.GetValue( i );
-		if( !obj->hidden )
+		if( !obj->renderDisabled && !obj->hidden )
 		{
 			float distanceSq = ( camPos - obj->GetTransform().GetTranslation() ).LengthSquared();
 			if ( obj->mesh && obj->opaque ) { opaqueObjects.Append( { obj, distanceSq } ); }
@@ -1714,14 +1703,14 @@ void EditorServer::ShowUI( EditorProgram* program )
 	{
 		const ae::Color color = m_GetColor( pair.key, true );
 		const EditorServerObject* editorObj = m_objects.Get( pair.key );
-		if ( color.a && editorObj && !editorObj->hidden )
+		if ( color.a && editorObj )
 		{
 			if ( editorObj->mesh )
 			{
 				const ae::VertexBuffer* meshData = &editorObj->mesh->data;
-				ae::Matrix4 transform = editorObj->GetTransform();
-				uint32_t vertexCount = editorObj->mesh->vertices.Length();
-				ae::EditorServerMesh::Vertex* verts = editorObj->mesh->vertices.Data();
+				const ae::Matrix4 transform = editorObj->GetTransform();
+				const uint32_t vertexCount = editorObj->mesh->vertices.Length();
+				const ae::EditorServerMesh::Vertex* verts = editorObj->mesh->vertices.Data();
 				program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, transform, color );
 			}
 			else
@@ -2156,12 +2145,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 			{
 				bool anyValid = false;
 				bool foundAny = false;
-				const char* editorTypeProperty = "ae_editor_type";
 				uint32_t typeCount = ae::GetClassTypeCount();
 				for ( uint32_t i = 0; i < typeCount; i++ )
 				{
 					const ae::ClassType* type = ae::GetClassTypeByIndex( i );
-					if ( !type->HasProperty( editorTypeProperty ) || !type->IsDefaultConstructible() )
+					if ( !type->attributes.Has< EditorTypeAttribute >() || !type->IsDefaultConstructible() )
 					{
 						continue;
 					}
@@ -2181,7 +2169,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 				}
 				if ( !anyValid )
 				{
-					ImGui::Text( "Use AE_REGISTER_CLASS_PROPERTY( MyComponent, %s ) to register new types", editorTypeProperty );
+					ImGui::Text( "Use AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (MyComponent), (ae, EditorTypeAttribute), {} ) to register new types" );
 				}
 				else if ( !foundAny )
 				{
@@ -2323,7 +2311,7 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 	}
 
 	ae::Array< const ae::ClassType* > prereqs = m_tag;
-	GetComponentTypePrereqs( type, &prereqs );
+	GetComponentTypeRequirements( type, &prereqs );
 	for( const ae::ClassType* prereq : prereqs )
 	{
 		if( !GetComponent( obj, prereq ) )
@@ -2334,14 +2322,10 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 	component = m_registry.AddComponent( obj->entity, type );
 	if( component )
 	{
-		const auto& meshName = m_typeMesh.Get( type, "" );
-		if ( meshName.Length() )
+		if( const ae::EditorMeshResourceAttribute* meshAttribute = TryGetClassOrVarAttribute< ae::EditorMeshResourceAttribute >( type ) )
 		{
-			obj->mesh = program->GetMesh( meshName.c_str() );
-		}
-		if ( m_typeTransparent.Get( type, false ) )
-		{
-			obj->opaque = false;
+			obj->mesh = program->GetMesh( meshAttribute->resourceMesh.c_str() );
+			obj->opaque = !meshAttribute->transparent;
 		}
 	}
 	return component;
@@ -2372,12 +2356,60 @@ const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Compon
 
 const ae::ClassVar* EditorServer::GetMeshResourceVar( const ae::ClassType* componentType )
 {
-	return m_meshResourceVars.Get( componentType, nullptr );
+	const uint32_t variableCount = componentType->GetVarCount( true );
+	for( uint32_t i = 0; i < variableCount; i++ )
+	{
+		const ae::ClassVar* var = componentType->GetVarByIndex( i, true );
+		if( var->attributes.TryGet< ae::EditorMeshResourceAttribute >() )
+		{
+			return var;
+		}
+	}
+	return nullptr;
 }
 
-const ae::ClassVar* EditorServer::GetMeshVisibleVar( const ae::ClassType* componentType )
+bool EditorServer::GetRenderDisabled( ae::Entity entity ) const
 {
-	return m_meshVisibleVars.Get( componentType, nullptr );
+	const ae::ClassType* meshComponentType = nullptr;
+	const ae::Component* meshComponent = nullptr;
+	{
+		const uint32_t typeCounts = m_registry.GetTypeCount();
+		for( uint32_t i = 0; i < typeCounts; i++ )
+		{
+			const ae::ClassType* type = m_registry.GetTypeByIndex( i );
+			const ae::Component* component = m_registry.TryGetComponent( entity, type );
+			if( component && (bool)TryGetClassOrVarAttribute< ae::EditorMeshResourceAttribute >( type ) )
+			{
+				meshComponentType = type;
+				meshComponent = component;
+				break;
+			}
+		}
+	}
+	if( !meshComponentType || !meshComponent )
+	{
+		return false;
+	}
+
+	const uint32_t variableCount = meshComponentType->GetVarCount( true );
+	for( uint32_t i = 0; i < variableCount; i++ )
+	{
+		const ae::ClassVar* var = meshComponentType->GetVarByIndex( i, true );
+		if( var->attributes.TryGet< ae::EditorVisibilityAttribute >() )
+		{
+			const ae::ConstDataPointer varData( var, meshComponent );
+			const ae::BasicType* basicType = varData.GetVarType().AsVarType< ae::BasicType >();
+			if( basicType && basicType->GetType() == ae::BasicType::Type::Bool )
+			{
+				bool visible = true;
+				if( basicType->GetVarData( varData, &visible ) && !visible )
+				{
+					return true;
+				}
+			}
+		}
+	}
+	return false;
 }
 
 ae::AABB EditorServer::GetSelectedAABB( EditorProgram* program ) const
@@ -3080,6 +3112,8 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 
 ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) const
 {
+	const EditorServerObject* editorObj = GetObject( entity );
+	AE_ASSERT( editorObj );
 	const bool isHovered = ( m_hoverEntities.Find( entity ) >= 0 );
 	const bool isSelected = ( m_selected.Find( entity ) >= 0 );
 	uint64_t seed = entity * 43313;
@@ -3100,7 +3134,17 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) co
 		{
 			return m_selectionColor;
 		}
-		return baseColor.SetA( isSelected ? 1.0f : 0.0f );
+		else if( editorObj->renderDisabled )
+		{
+			if( isSelected )
+			{
+				// Modify line color when selected only when 'renderDisabled',
+				// normally selection would be indicated by the mesh color.
+				return baseColor.Lerp( m_selectionColor, 0.65f );
+			}
+			return baseColor;
+		}
+		return baseColor.SetA( 0.0f );
 	}
 	else
 	{
@@ -3121,29 +3165,33 @@ ae::Color EditorServer::m_GetColor( ae::Entity entity, bool objectLineColor ) co
 	}
 }
 
-void GetComponentTypePrereqs( const ae::ClassType* type, ae::Array< const ae::ClassType* >* prereqs )
+void GetComponentTypeRequirements( const ae::ClassType* type, ae::Array< const ae::ClassType* >* requirementsOut )
 {
+	if( !type || !requirementsOut )
+	{
+		return;
+	}
 	AE_ASSERT( type );
-	prereqs->Clear();
+	requirementsOut->Clear();
 	auto fn = [&]( auto& fn, const ae::ClassType* t ) -> void
 	{
 		if( t->GetParentType() )
 		{
 			fn( fn, t->GetParentType() );
 		}
-		const int32_t propIdx = t->GetPropertyIndex( "ae_editor_dep" );
-		const uint32_t propCount = ( propIdx >= 0 ) ? t->GetPropertyValueCount( propIdx ) : 0;
-		for( uint32_t i = 0; i < propCount; i++ )
+		const uint32_t requiredCount = type->attributes.GetCount< EditorRequiredAttribute >();
+		for( uint32_t i = 0; i < requiredCount; i++ )
 		{
-			const ae::ClassType* prereq = ae::GetClassTypeByName( t->GetPropertyValue( propIdx, i ) );
-			if( type != prereq && prereqs->Find( prereq ) < 0 )
+			const EditorRequiredAttribute* requiredAttribute = type->attributes.TryGet< EditorRequiredAttribute >( i );
+			const ae::ClassType* requiredType = ae::GetClassTypeByName( requiredAttribute->className.c_str() );
+			if( requiredType &&
+				type != requiredType &&
+				requiredType->attributes.Has< ae::EditorTypeAttribute >() &&
+				requirementsOut->Find( requiredType ) < 0 )
 			{
-				// @TODO: Handle missing types
-				if( prereq )
-				{
-					prereqs->Append( prereq );
-				}
+				requirementsOut->Append( requiredType );
 			}
+			// @TODO: Log missing types
 		}
 	};
 	fn( fn, type );
@@ -3326,6 +3374,30 @@ bool ValidateLevel( const rapidjson::Value& jsonLevel )
 		}
 	}
 	return true;
+}
+
+template< typename T >
+const T* TryGetClassOrVarAttribute( const ae::ClassType* type )
+{
+	const ae::ClassType* currentType = type;
+	while( currentType )
+	{
+		if( const T* classAttribute = currentType->attributes.TryGet< T >() )
+		{
+			return classAttribute;
+		}
+		const uint32_t varCount = currentType->GetVarCount( false );
+		for( uint32_t i = 0; i < varCount; i++ )
+		{
+			const ae::ClassVar* var = currentType->GetVarByIndex( i, false );
+			if( const T* varAttribute = var->attributes.TryGet< T >() )
+			{
+				return varAttribute;
+			}
+		}
+		currentType = currentType->GetParentType();
+	}
+	return nullptr;
 }
 
 } // End ae namespace

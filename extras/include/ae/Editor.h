@@ -61,6 +61,63 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// ae::EditorTypeAttribute class
+//------------------------------------------------------------------------------
+//! This attribute is used to mark an ae::Component type as available for
+//! authoring in the editor.
+//------------------------------------------------------------------------------
+class EditorTypeAttribute final : public ae::Inheritor< ae::Attribute, EditorTypeAttribute >
+{
+public:
+};
+
+//------------------------------------------------------------------------------
+// ae::EditorRequiredAttribute class
+//------------------------------------------------------------------------------
+//! This attribute should be added to an ae::Component to mark other components
+//! as required. Components in this list will be added automatically when the
+//! component is added to an entity.
+//------------------------------------------------------------------------------
+class EditorRequiredAttribute final : public ae::Inheritor< ae::Attribute, EditorRequiredAttribute >
+{
+public:
+	EditorRequiredAttribute( const char* className ) : className( className ) {}
+	ae::Str64 className;
+};
+
+//------------------------------------------------------------------------------
+// ae::EditorMeshResourceAttribute class
+//------------------------------------------------------------------------------
+//! This attribute should be added to an ae::Component or to a registered
+//! variable when a component needs to display a custom mesh in the editor.
+//------------------------------------------------------------------------------
+class EditorMeshResourceAttribute final : public ae::Inheritor< ae::Attribute, EditorMeshResourceAttribute >
+{
+public:
+	//! When this attribute is added to a component, this string will be used to
+	//! look up a mesh resource with ae::EditorFunctionPointers::loadMeshFn().
+	//! This value will be ignored if the attribute is attached to a class
+	//! variable, and the contents of that variable will be used instead.
+	ae::Str64 resourceMesh;
+
+	//! If true, the mesh will be displayed differently in the editor. This
+	//! is useful for triggers, bounding volumes, or water volumes, etc.
+	bool transparent = false;
+};
+
+//------------------------------------------------------------------------------
+// ae::EditorVisibilityAttribute class
+//------------------------------------------------------------------------------
+//! This attribute should be added to a registered class member variable bool
+//! when the mesh rendering for instances of its class should be controlled by
+//! the variable's value.
+//------------------------------------------------------------------------------
+class EditorVisibilityAttribute final : public ae::Inheritor< ae::Attribute, EditorVisibilityAttribute >
+{
+public:
+};
+
+//------------------------------------------------------------------------------
 // Editor callback functions
 //------------------------------------------------------------------------------
 typedef void(*OnLevelLoadStartFn)( void* userData, const char* levelPath );
