@@ -221,6 +221,8 @@ private:
 	// Tools
 	void m_CopySelected() const;
 	void m_PasteFromClipboard( class EditorProgram* program );
+	void m_DeleteSelected();
+	void m_HideSelected();
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
 	void m_SelectWithModifiers( class EditorProgram* program, const ae::Entity* entities, uint32_t count );
@@ -1721,143 +1723,119 @@ void EditorServer::ShowUI( EditorProgram* program )
 			}
 		}
 	}
+
 	
 	if ( ImGui::GetIO().WantCaptureKeyboard )
 	{
 		// Keyboard captured
 	}
-	else if ( program->input.Get( ae::Key::LeftMeta ) )
+	else
 	{
-		// Meta+shift shortcuts
-		if( program->input.Get( ae::Key::Shift ) )
+		struct Command
 		{
-			if( program->input.GetPress( ae::Key::Z ) )
+			ae::Array< ae::Key, 4 > modifiers;
+			ae::Key key;
+			void (*fn)( EditorProgram* );
+			bool continuous = false; // If true, the command will be executed continuously while the keys are pressed
+		};
+		Command commands[] =
+		{
+			/* Save */ { { ae::Key::Meta }, ae::Key::S, []( EditorProgram* program ) { program->editor.SaveLevel( program, false ); } },
+			/* Save  As*/ { { ae::Key::Meta, ae::Key::Shift }, ae::Key::S, []( EditorProgram* program ) { program->editor.SaveLevel( program, true ); } },
+			/* Open */ { { ae::Key::Meta }, ae::Key::O, []( EditorProgram* program ) { program->editor.OpenLevelDialog( program ); } },
+			/* Copy */ { { ae::Key::Meta }, ae::Key::C, []( EditorProgram* program ) { program->editor.m_CopySelected(); } },
+			/* Paste */ { { ae::Key::Meta }, ae::Key::V, []( EditorProgram* program ) { program->editor.m_PasteFromClipboard( program ); } },
+			/* Select */ { {}, ae::Key::Q, []( EditorProgram* program ) { program->editor.gizmoOperation = ImGuizmo::OPERATION( 0 ); } },
+			// Translate
 			{
-				// m_Redo();
-			}
-		}
-		// Meta shortcuts
-		else if ( program->input.Get( ae::Key::S ) && !program->input.GetPrev( ae::Key::S ) )
-		{
-			SaveLevel( program, program->input.Get( ae::Key::LeftShift ) );
-		}
-		else if ( program->input.Get( ae::Key::O ) && !program->input.GetPrev( ae::Key::O ) )
-		{
-			OpenLevelDialog( program );
-		}
-		else if( program->input.GetPress( ae::Key::D ) )
-		{
-			// m_DuplicateSelected();
-		}
-		else if( program->input.GetPress( ae::Key::C ) )
-		{
-			m_CopySelected();
-		}
-		else if( program->input.GetPress( ae::Key::V ) )
-		{
-			m_PasteFromClipboard( program );
-		}
-		else if( program->input.GetPress( ae::Key::X ) )
-		{
-			// m_CutSelected();
-		}
-		else if( program->input.GetPress( ae::Key::Z ) )
-		{
-			// m_Undo();
-		}
-		else if( program->input.GetPress( ae::Key::A ) )
-		{
-			// m_SelectAll();
-		}
-	}
-	// Single key shortcuts
-	else if ( program->input.Get( ae::Key::Q ) && !program->input.GetPrev( ae::Key::Q ) )
-	{
-		gizmoOperation = (ImGuizmo::OPERATION)0;
-	}
-	else if ( program->input.Get( ae::Key::W ) && !program->input.GetPrev( ae::Key::W ) )
-	{
-		if ( gizmoOperation == ImGuizmo::TRANSLATE )
-		{
-			gizmoMode = ( gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
-		}
-		else
-		{
-			gizmoOperation = ImGuizmo::TRANSLATE;
-		}
-	}
-	else if ( program->input.Get( ae::Key::E ) && !program->input.GetPrev( ae::Key::E ) )
-	{
-		if ( gizmoOperation == ImGuizmo::ROTATE )
-		{
-			gizmoMode = ( gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
-		}
-		else
-		{
-			gizmoOperation = ImGuizmo::ROTATE;
-		}
-	}
-	else if ( program->input.Get( ae::Key::R ) && !program->input.GetPrev( ae::Key::R ) )
-	{
-		gizmoOperation = ImGuizmo::SCALE;
-	}
-	else if ( program->input.Get( ae::Key::I ) && !program->input.GetPrev( ae::Key::I ) )
-	{
-		m_showTransparent = !m_showTransparent;
-	}
-	// Action shortcuts
-	else if ( ( program->input.Get( ae::Key::Delete ) && !program->input.GetPrev( ae::Key::Delete ) )
-		|| ( program->input.Get( ae::Key::Backspace ) && !program->input.GetPrev( ae::Key::Backspace ) ) )
-	{
-		for( ae::Entity entity : m_selected )
-		{
-			DestroyObject( entity );
-		}
-		m_selected.Clear();
-	}
-	else if ( program->input.Get( ae::Key::F ) )
-	{
-		if ( m_selected.Length() && program->input.Get( ae::Key::Control ) )
-		{
-			program->camera.Refocus( GetSelectedAABB( program ).GetCenter() );
-		}
-		else if( m_hoverEntities.Length() && !program->input.Get( ae::Key::Control ) )
-		{
-			program->camera.Refocus( m_mouseHover );
-		}
-	}
-	else if ( program->input.Get( ae::Key::H ) && !program->input.GetPrev( ae::Key::H ) )
-	{
-		if ( m_selected.Length() )
-		{
-			bool anyHidden = false;
-			bool anyVisible = false;
-			for( ae::Entity entity : m_selected )
-			{
-				EditorServerObject* editorObject = m_objects.Get( entity );
-				if( editorObject->hidden )
+				{}, ae::Key::W,
+				[]( EditorProgram* program )
 				{
-					anyHidden = true;
+					if ( program->editor.gizmoOperation == ImGuizmo::TRANSLATE )
+					{
+						program->editor.gizmoMode = ( program->editor.gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+					}
+					else
+					{
+						program->editor.gizmoOperation = ImGuizmo::TRANSLATE;
+					}
 				}
-				else
+			},
+			// Rotate
+		{
+				{}, ae::Key::E,
+				[]( EditorProgram* program )
 				{
-					anyVisible = true;
+					if ( program->editor.gizmoOperation == ImGuizmo::ROTATE )
+					{
+						program->editor.gizmoMode = ( program->editor.gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+					}
+					else
+					{
+						program->editor.gizmoOperation = ImGuizmo::ROTATE;
+					}
+				}
+			},
+			// Scale
+		{
+				{}, ae::Key::R,
+				[]( EditorProgram* program )
+				{
+					if ( program->editor.gizmoOperation == ImGuizmo::SCALE )
+					{
+						program->editor.gizmoMode = ( program->editor.gizmoMode == ImGuizmo::LOCAL ) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+					}
+					else
+					{
+						program->editor.gizmoOperation = ImGuizmo::SCALE;
+					}
+				}
+			},
+			/* Toggle transparent */ { {}, ae::Key::I, []( EditorProgram* program ) { program->editor.m_showTransparent = !program->editor.m_showTransparent; } },
+			/* Delete */ { {}, ae::Key::Delete, []( EditorProgram* program ) { program->editor.m_DeleteSelected(); } },
+			/* Delete */ { {}, ae::Key::Backspace, []( EditorProgram* program ) { program->editor.m_DeleteSelected(); } },
+			/* Focus selection */ { { ae::Key::Meta }, ae::Key::F, []( EditorProgram* program ) { if ( program->editor.m_selected.Length() ) { program->camera.Refocus( program->editor.GetSelectedAABB( program ).GetCenter() ); } } },
+			/* Focus cursor */ { {}, ae::Key::F, []( EditorProgram* program ) { if ( program->editor.m_hoverEntities.Length() ) { program->camera.Refocus( program->editor.m_mouseHover ); } }, true },
+			/* Hide */ { {}, ae::Key::H, []( EditorProgram* program ) { program->editor.m_HideSelected(); } },
+			/* Select none */ { {}, ae::Key::Escape, []( EditorProgram* program ) { program->editor.m_selected.Clear(); } },
+		};
+		// Longer combos first
+		std::sort( std::begin( commands ), std::end( commands ),
+			[]( const Command& a, const Command& b )
+			{
+				return a.modifiers.Length() > b.modifiers.Length();
+			}
+		);
+		// Check for commands with more keys first to handle potential conflicts
+		const uint32_t modifierCount =
+			(uint32_t)program->input.Get( ae::Key::Meta ) +
+			(uint32_t)program->input.Get( ae::Key::Shift ) +
+			(uint32_t)program->input.Get( ae::Key::Control ) +
+			(uint32_t)program->input.Get( ae::Key::Alt );
+		for( const Command& command : commands )
+		{
+			if( modifierCount == command.modifiers.Length() ) // Exact match only
+			{
+				if( program->input.GetPress( command.key ) ||
+					( command.continuous && program->input.Get( command.key ) ) )
+				{
+					bool allPressed = true;
+					for( const ae::Key& modifier : command.modifiers )
+					{
+						if( !program->input.Get( modifier ) )
+						{
+							allPressed = false;
+							break;
+						}
+					}
+					if( allPressed )
+					{
+						command.fn( program );
+						break; // Only execute the first matching command
+					}
 				}
 			}
-			const bool setHidden = !anyHidden || anyVisible;
-			for( ae::Entity entity : m_selected )
-			{
-				m_objects.Get( entity )->hidden = setHidden;
-			}
 		}
-		else
-		{
-			AE_INFO( "No objects selected" );
-		}
-	}
-	else if( program->input.Get( ae::Key::Escape ) && !program->input.GetPrev( ae::Key::Escape ) )
-	{
-		m_selected.Clear();
 	}
 	
 	if ( m_selected.Length() && gizmoOperation )
@@ -2758,6 +2736,45 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 			}
 		}
 		// @TODO: Explicitly handle setting transform vars?
+	}
+}
+
+void EditorServer::m_DeleteSelected()
+{
+	for( ae::Entity entity : m_selected )
+	{
+		DestroyObject( entity );
+	}
+	m_selected.Clear();
+}
+
+void EditorServer::m_HideSelected()
+{
+	if ( m_selected.Length() )
+	{
+		bool anyHidden = false;
+		bool anyVisible = false;
+		for( ae::Entity entity : m_selected )
+		{
+			EditorServerObject* editorObject = m_objects.Get( entity );
+			if( editorObject->hidden )
+			{
+				anyHidden = true;
+			}
+			else
+			{
+				anyVisible = true;
+			}
+		}
+		const bool setHidden = !anyHidden || anyVisible;
+		for( ae::Entity entity : m_selected )
+		{
+			m_objects.Get( entity )->hidden = setHidden;
+		}
+	}
+	else
+	{
+		AE_INFO( "No objects selected" );
 	}
 }
 

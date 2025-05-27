@@ -17873,10 +17873,9 @@ void Input::Pump()
 #elif _AE_OSX_
 	if ( [(NSWindow*)m_window->window isMainWindow] )
 	{
-#define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk / 32 ] & ( 1 << ( _vk % 32 ) )
-		KeyMap _keyStates;
-		GetKeys(_keyStates);
-		uint32_t* keyStates = (uint32_t*)_keyStates;
+#define AE_UPDATE_KEY( _aek, _vk ) m_keys[ (int)ae::Key::_aek ] = keyStates[ _vk / 32 ].bigEndianValue & ( 1 << ( _vk % 32 ) )
+		KeyMap keyStates;
+		GetKeys( keyStates );
 		AE_UPDATE_KEY( A, kVK_ANSI_A );
 		AE_UPDATE_KEY( S, kVK_ANSI_S );
 		AE_UPDATE_KEY( D, kVK_ANSI_D );
