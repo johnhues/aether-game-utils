@@ -70,6 +70,8 @@ public:
 	~ResourceManager();
 	//! \p fileSystem must outlive this object.
 	void Initialize( ae::FileSystem* fileSystem );
+	//! Cleans up and invalidates all resources. This should be called before
+	//! the file system is destroyed.
 	void Terminate();
 
 	//! Adds a resource to be later loaded by Load(). After loading the resource

@@ -41,6 +41,7 @@ ae::ResourceManager::ResourceManager( const ae::Tag& tag ) :
 
 ae::ResourceManager::~ResourceManager()
 {
+	AE_DEBUG_ASSERT( !m_resources.Length() );
 	Terminate();
 }
 
@@ -64,14 +65,12 @@ void ae::ResourceManager::Terminate()
 		for( const auto& file : m_files )
 		{
 			m_fs->Destroy( file.key );
+			ae::Delete( file.value );
 		}
 		m_files.Clear();
 		m_fs = nullptr;
 	}
-	else
-	{
-		AE_ASSERT( !m_resources.Length() );
-	}
+	AE_ASSERT( !m_resources.Length() );
 }
 
 bool ae::ResourceManager::Add( const char* typeName, ResourceId id, ae::FileSystem::Root rootDir, const char* filePath )
