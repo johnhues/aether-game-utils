@@ -21301,7 +21301,10 @@ void Shader::Initialize( const char* vertexStr, const char* fragStr, const char*
 
 void Shader::Terminate()
 {
-	AE_CHECK_GL_ERROR();
+	if( m_program )
+	{
+		AE_CHECK_GL_ERROR();
+	}
 
 	m_attributes.Clear();
 	m_uniforms.Clear();
@@ -21322,9 +21325,8 @@ void Shader::Terminate()
 	{
 		glDeleteProgram( m_program );
 		m_program = 0;
+		AE_CHECK_GL_ERROR();
 	}
-
-	AE_CHECK_GL_ERROR();
 }
 
 void Shader::m_Activate( const UniformList& uniforms ) const
@@ -21646,7 +21648,10 @@ void VertexBuffer::AddAttribute( const char *name, uint32_t componentCount, ae::
 
 void VertexBuffer::Terminate()
 {
-	AE_CHECK_GL_ERROR();
+	if( m_vertexSize )
+	{
+		AE_CHECK_GL_ERROR();
+	}
 
 	if ( m_array )
 	{
@@ -21676,7 +21681,10 @@ void VertexBuffer::Terminate()
 	m_vertices = ~0;
 	m_indices = ~0;
 	
-	AE_CHECK_GL_ERROR();
+	if( m_vertexSize )
+	{
+		AE_CHECK_GL_ERROR();
+	}
 }
 
 void VertexBuffer::UploadVertices( uint32_t startIdx, const void* vertices, uint32_t count )
