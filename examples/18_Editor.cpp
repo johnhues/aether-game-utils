@@ -73,7 +73,7 @@ AE_REGISTER_CLASS_VAR( Mesh, transform );
 class Game
 {
 public:
-	void Initialize( int argc, char* argv[] );
+	bool Initialize( int argc, char* argv[] );
 	void Run();
 	
 	float GetDt() const { return m_dt; }
@@ -207,7 +207,7 @@ void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* t
 //------------------------------------------------------------------------------
 // Game member functions
 //------------------------------------------------------------------------------
-void Game::Initialize( int argc, char* argv[] )
+bool Game::Initialize( int argc, char* argv[] )
 {
 	fs.Initialize( "data", "ae", "editor" );
 	
@@ -231,7 +231,11 @@ void Game::Initialize( int argc, char* argv[] )
 		return result;
 	};
 	editorParams.functionPointers.userData = this;
-	editor.Initialize( editorParams );
+	if( editor.Initialize( editorParams ) )
+	{
+		// Exit, the editor has forked, ran, closed, and returned gracefully
+		return false;
+	}
 	window.Initialize( 1280, 720, false, true, true );
 	window.SetTitle( "Press '~' to Open the Editor" );
 	input.Initialize( &window );
@@ -259,6 +263,7 @@ void Game::Initialize( int argc, char* argv[] )
 		ae::FileSystem::AppendToPath( &levelPath, "example.level" );
 		editor.QueueRead( levelPath.c_str() );
 	}
+	return true;
 }
 
 void Game::Run()
@@ -496,8 +501,10 @@ int main( int argc, char* argv[] )
 	AE_INFO( "Init" );
 
 	Game game;
-	game.Initialize( argc, argv );
-	game.Run();
+	if( game.Initialize( argc, argv ) )
+	{
+		game.Run();
+	}
 
 	return 0;
 }

@@ -183,6 +183,7 @@ public:
 		m_registry( tag ),
 		m_connections( tag )
 	{}
+	~EditorServer();
 	void Initialize( class EditorProgram* program );
 	void Terminate( class EditorProgram* program );
 	void Update( class EditorProgram* program );
@@ -786,7 +787,7 @@ Editor::~Editor()
 	Terminate();
 }
 
-void Editor::Initialize( const EditorParams& params )
+bool Editor::Initialize( const EditorParams& params )
 {
 	AE_ASSERT( params.argc && params.argv );
 	AE_ASSERT( params.registry );
@@ -833,9 +834,10 @@ void Editor::Initialize( const EditorParams& params )
 
 		program.Run();
 		program.Terminate();
-		exit( 0 );
+		return true;
 	}
 	m_Connect();
+	return false;
 }
 
 void Editor::Terminate()
@@ -1132,6 +1134,13 @@ void EditorConnection::Destroy( EditorServer* editor )
 //------------------------------------------------------------------------------
 // EditorServer member functions
 //------------------------------------------------------------------------------
+EditorServer::~EditorServer()
+{
+	AE_DEBUG_ASSERT( !m_objects.Length() );
+	// AE_DEBUG_ASSERT( !m_registry.GetEntityCount() ); // @TODO
+	AE_DEBUG_ASSERT( !m_connections.Length() );
+}
+
 void EditorServer::Initialize( EditorProgram* program )
 {
 	uint32_t typeCount = ae::GetClassTypeCount();
@@ -1295,6 +1304,7 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 
 void EditorServer::Terminate( EditorProgram* program )
 {
+	Unload( program );
 	for ( EditorConnection* conn : m_connections )
 	{
 		conn->Destroy( this );

@@ -188,7 +188,9 @@ class Editor
 public:
 	Editor( const ae::Tag& tag );
 	~Editor();
-	void Initialize( const EditorParams& params );
+	//! If this returns true the editor will have successfully forked, run, and
+	//! been closed gracefully. The caller should exit the program in this case.
+	bool Initialize( const EditorParams& params );
 	void Terminate();
 	void SetFunctionPointers( const ae::EditorFunctionPointers& functionPointers );
 	void Update();
