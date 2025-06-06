@@ -387,20 +387,21 @@ void SetGlobalAllocator( Allocator* alloc );
 //! default ae::Allocator which uses malloc / free. If ae::SetGlobalAllocator() has
 //! never been called and no allocations have been made, this will return nullptr.
 Allocator* GetGlobalAllocator();
-//! Allocates and constructs an array of 'count' elements of type T. an ae::Tag
-//! must be specifed and should represent the allocation type. Type T must have a
-//! default constructor. All arrays allocated with this function should be freed with
-//! ae::Delete(). Uses ae::GetGlobalAllocator() and ae::Allocator::Allocate() internally.
-template < typename T > T* NewArray( ae::Tag tag, uint32_t count );
+//! Allocates and constructs an array of 'count' elements of type T. An ae::Tag
+//! must be specified and should represent the allocation type. All 'args' are
+//! passed to the constructor of T. All arrays allocated with this function
+//! should be freed with ae::Delete(). Uses ae::GetGlobalAllocator() and
+//! ae::Allocator::Allocate() internally.
+template< typename T, typename ... Args > T* NewArray( ae::Tag tag, uint32_t count, Args ... args );
 //! Allocates and constructs a single element of type T. an ae::Tag must be specified
 //! and should represent the allocation type. All 'args' are passed to the constructor
 //! of T. All allocations should be freed with ae::Delete(). Uses ae::GetGlobalAllocator()
 //! and ae::Allocator::Allocate() internally.
-template < typename T, typename ... Args > T* New( ae::Tag tag, Args ... args );
+template< typename T, typename ... Args > T* New( ae::Tag tag, Args ... args );
 //! Should be called to destruct and free all allocations made with ae::New()
 //! and ae::NewArray(). Uses ae::GetGlobalAllocator() and ae::Allocator::Free()
 //! internally.
-template < typename T > void Delete( T* obj );
+template< typename T > void Delete( T* obj );
 // C style allocations
 void* Allocate( ae::Tag tag, uint32_t bytes, uint32_t alignment );
 void* Reallocate( void* data, uint32_t bytes, uint32_t alignment );
@@ -6494,8 +6495,8 @@ struct _Header
 	uint32_t typeSize;
 };
 
-template < typename T >
-T* NewArray( ae::Tag tag, uint32_t count )
+template < typename T, typename ... Args >
+T* NewArray( ae::Tag tag, uint32_t count, Args ... args )
 {
 	AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
 	AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
@@ -6521,7 +6522,7 @@ T* NewArray( ae::Tag tag, uint32_t count )
 	{
 		for ( uint32_t i = 0; i < count; i++ )
 		{
-			new( &result[ i ] ) T();
+			new( &result[ i ] ) T( args ... ); // Can't std::forward args multiple times
 		}
 	}
 	
@@ -6546,7 +6547,7 @@ T* New( ae::Tag tag, Args ... args )
 	header->size = size;
 	header->typeSize = sizeof( T );
 
-	return new( (T*)( base + _kHeaderSize ) ) T( args ... );
+	return new( (T*)( base + _kHeaderSize ) ) T( std::forward< Args >( args ) ... );
 }
 
 template < typename T >
@@ -10382,7 +10383,7 @@ T* ObjectPool< T, N, Paged >::New( Args ... args )
 		if ( index >= 0 )
 		{
 			m_length++;
-			return new ( &page->objects[ index ] ) T( args ... );
+			return new ( &page->objects[ index ] ) T( std::forward< Args >( args ) ... );
 		}
 	}
 	return nullptr;
@@ -10622,7 +10623,7 @@ T* OpaquePool::New( Args ... args )
 	void* obj = Allocate();
 	if( obj )
 	{
-		return new( obj ) T( args ... );
+		return new( obj ) T( std::forward< Args >( args ) ... );
 	}
 	return nullptr;
 }

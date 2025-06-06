@@ -27,11 +27,309 @@
 #include "TestUtils.h"
 #include <catch2/catch_test_macros.hpp>
 
+const ae::Tag TAG_TEST = "test";
+
+//------------------------------------------------------------------------------
+// ae::New tests
+//------------------------------------------------------------------------------
+TEST_CASE( "new with no params", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+
+	ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST );
+	ae::LifetimeTester* tester9 = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 9 );
+	
+	REQUIRE( tester != nullptr );
+	REQUIRE( tester->check == ae::LifetimeTester::kConstructed );
+	REQUIRE( tester9 != nullptr );
+	for( uint32_t i = 0; i < 9; i++ )
+	{
+		REQUIRE( tester9[ i ].check == ae::LifetimeTester::kConstructed );
+	}
+
+	REQUIRE( ae::LifetimeTester::ctorCount == 10 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 10 );
+	
+	ae::Delete( tester );
+	ae::Delete( tester9 );
+
+	REQUIRE( ae::LifetimeTester::ctorCount == 10 );
+	REQUIRE( ae::LifetimeTester::dtorCount == 10 );
+	REQUIRE( ae::LifetimeTester::moveCount == 0 );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == 0 );
+}
+
+TEST_CASE( "new param test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 101;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST, param );
+		copyCount += 1; // Param
+		moveCount += 1; // New
+		dtorCount += 1; // Param
+		currentCount += 1;
+		
+		REQUIRE( tester != nullptr );
+		REQUIRE( tester->check == ae::LifetimeTester::kConstructed );
+		REQUIRE( tester->value == 101 );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 1;
+		currentCount -= 1;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
+TEST_CASE( "new move test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 101;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST, std::move( param ) );
+		moveCount += 2; // New + param
+		dtorCount += 1; // Param
+		currentCount += 1;
+		
+		REQUIRE( tester != nullptr );
+		REQUIRE( tester->check == ae::LifetimeTester::kConstructed );
+		REQUIRE( tester->value == 101 );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 1;
+		currentCount -= 1;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
+TEST_CASE( "new array param test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 109;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 10, param );
+		copyCount += 11; // Param + new
+		dtorCount += 1; // Param
+		currentCount += 10;
+		
+		REQUIRE( tester != nullptr );
+		for( uint32_t i = 0; i < 9; i++ )
+		{
+			REQUIRE( tester[ i ].check == ae::LifetimeTester::kConstructed );
+			REQUIRE( tester[ i ].value == 109 );
+		}
+		// REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 10;
+		currentCount -= 10;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
+TEST_CASE( "new array move test", "[ae::New]" )
+{
+	ae::LifetimeTester::ClearStats();
+	uint32_t ctorCount = 0;
+	uint32_t copyCount = 0;
+	uint32_t moveCount = 0;
+	uint32_t dtorCount = 0;
+	uint32_t currentCount = 0;
+
+	{
+		ae::LifetimeTester param;
+		param.value = 109;
+		ctorCount += 1;
+		currentCount += 1;
+	
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	
+		ae::LifetimeTester* tester = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 10, std::move( param ) );
+		copyCount += 10; // New
+		moveCount += 1; // Param
+		dtorCount += 1; // Param
+		currentCount += 10;
+		
+		REQUIRE( tester != nullptr );
+		for( uint32_t i = 0; i < 9; i++ )
+		{
+			REQUIRE( tester[ i ].check == ae::LifetimeTester::kConstructed );
+			REQUIRE( tester[ i ].value == 109 );
+		}
+		// REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+		
+		ae::Delete( tester );
+		dtorCount += 10;
+		currentCount -= 10;
+
+		REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+		REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+		REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+		REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+		REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+	}
+	dtorCount += 1;
+	currentCount -= 1;
+
+	REQUIRE( ae::LifetimeTester::ctorCount == ctorCount );
+	REQUIRE( ae::LifetimeTester::copyCount == copyCount );
+	REQUIRE( ae::LifetimeTester::moveCount == moveCount );
+	REQUIRE( ae::LifetimeTester::dtorCount == dtorCount );
+	REQUIRE( ae::LifetimeTester::copyAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::moveAssignCount == 0 );
+	REQUIRE( ae::LifetimeTester::currentCount == currentCount );
+}
+
 //------------------------------------------------------------------------------
 // ae::Array tests
 //------------------------------------------------------------------------------
-const ae::Tag TAG_TEST = "test";
-
 TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
