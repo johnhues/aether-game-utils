@@ -1252,8 +1252,7 @@ Vec3 ClosestPointOnTriangle( ae::Vec3 p, ae::Vec3 a, ae::Vec3 b, ae::Vec3 c );
 //------------------------------------------------------------------------------
 struct Color
 {
-	//! Empty default constructor for performance of vertex arrays etc
-	Color() {}
+	Color() : r( 0.0f ), g( 0.0f ), b( 0.0f ), a( 1.0f ) {} //!< Defaults to black
 	Color( const Color& ) = default;
 	Color( float rgb ); // @TODO: Delete. Color space should be explicit
 	Color( float r, float g, float b ); // @TODO: Delete. Color space should be explicit
