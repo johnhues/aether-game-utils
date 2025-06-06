@@ -15512,7 +15512,7 @@ _DefaultAllocator::~_DefaultAllocator()
 		if( leakCount )
 		{
 			const uint32_t displayCount = ae::Min( leakCount, 32u );
-			AE_ERR( "Leak count ##", displayCount, ( displayCount <= leakCount ) ? "+" : "" ); // @TODO: More Info here
+			AE_ERR( "Leak count: ##", displayCount, ( displayCount < leakCount ) ? "+" : "" ); // @TODO: More Info here
 		}
 		else
 		{
