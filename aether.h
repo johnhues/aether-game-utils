@@ -800,6 +800,7 @@ public:
 	ae::Matrix4& SetTranslation( const ae::Vec3& t );
 	ae::Matrix4& SetRotation( const ae::Quaternion& r );
 	ae::Matrix4& SetScale( const ae::Vec3& s );
+	ae::Matrix4& SetScale( float s );
 	ae::Matrix4& SetTranspose();
 	ae::Matrix4& SetInverse();
 	ae::Matrix4& SetAxis( uint32_t column, const ae::Vec3& v );
@@ -13748,6 +13749,15 @@ Matrix4& Matrix4::SetScale( const Vec3& s )
 	for( uint32_t i = 0; i < 3; i++ )
 	{
 		SetAxis( i, GetAxis( i ).NormalizeCopy() * s[ i ] );
+	}
+	return *this;
+}
+
+Matrix4& Matrix4::SetScale( float s )
+{
+	for( uint32_t i = 0; i < 3; i++ )
+	{
+		SetAxis( i, GetAxis( i ).NormalizeCopy() * s );
 	}
 	return *this;
 }
