@@ -107,7 +107,7 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	fileSystem.Initialize( "data", "ae", "ik" );
 	camera.Reset( ae::Vec3( 0.0f, 0.0f, 1.0f ), ae::Vec3( 0.0f, 3.5f, 0.4f ) );
-	camera.SetDistanceLimits( 0.25f, 25.0f );
+	camera.SetDistanceLimits( 0.01f, 25.0f );
 	debugLines.Initialize( 20 * 1024 );
 	gridLines.Initialize( 4096 );
 	gridLines.SetXRayEnabled( false );
@@ -189,15 +189,15 @@ int main()
 		const ae::Bone* bone = skin.GetBindPose().GetBoneByIndex( i );
 		if( strncmp( "QuickRigCharacter_Right", bone->name.c_str(), strlen("QuickRigCharacter_Right") ) == 0 )
 		{
-			constraints.primaryAxis = ae::Axis::NegativeX;
+			constraints.twistAxis = ae::Axis::NegativeX;
 			constraints.horizontalAxis = ae::Axis::NegativeZ;
-			constraints.verticalAxis = ae::Axis::Y;
+			constraints.bendAxis = ae::Axis::Y;
 		}
 		else
 		{
-			constraints.primaryAxis = ae::Axis::X;
+			constraints.twistAxis = ae::Axis::X;
 			constraints.horizontalAxis = ae::Axis::NegativeZ;
-			constraints.verticalAxis = ae::Axis::NegativeY;
+			constraints.bendAxis = ae::Axis::NegativeY;
 		}
 		ikConstraints.Append( constraints );
 	}
@@ -238,6 +238,9 @@ int main()
 	bool autoIK = true;
 	bool fromBindPose = true;
 	bool drawIK = false;
+	int32_t iterCount = 5;
+	float ikJointScale = 0.1f;
+	bool rotationIK = true;
 	enum class TestJointId
 	{
 		None,
@@ -249,8 +252,8 @@ int main()
 	static uint32_t s_selectedJointIndex = skin.GetBindPose().GetBoneByName( rightHandBoneName )->index;
 	ae::IKConstraints testConstraints;
 	testConstraints.horizontalAxis = ae::Axis::NegativeY;
-	testConstraints.verticalAxis = ae::Axis::Z;
-	testConstraints.primaryAxis = ae::Axis::X;
+	testConstraints.bendAxis = ae::Axis::Z;
+	testConstraints.twistAxis = ae::Axis::X;
 	testConstraints.rotationLimits[ 0 ] = 0.14f;
 	testConstraints.rotationLimits[ 1 ] = 0.52f;
 	testConstraints.rotationLimits[ 2 ] = 0.38f;
@@ -301,6 +304,9 @@ int main()
 			}
 			ImGui::EndDisabled();
 			ImGui::Checkbox( "From Bind Pose", &fromBindPose );
+			ImGui::SliderInt( "Iterations", &iterCount, 0, 10 );
+			ImGui::SliderFloat( "Joint Scale", &ikJointScale, 0.01f, 1.0f );
+			ImGui::Checkbox( "IK Rotation Limits", &rotationIK );
 
 			ImGui::Separator();
 
@@ -361,8 +367,8 @@ int main()
 			}();
 			const char* axisNames[] = { "None", "X", "Y", "Z", "NegativeX", "NegativeY", "NegativeZ" };
 			ImGui::ListBox( "Horizontal", (int*)&constraints->horizontalAxis, axisNames, countof(axisNames), 3 );
-			ImGui::ListBox( "Vertical", (int*)&constraints->verticalAxis, axisNames, countof(axisNames), 3 );
-			ImGui::ListBox( "Primary", (int*)&constraints->primaryAxis, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Vertical", (int*)&constraints->bendAxis, axisNames, countof(axisNames), 3 );
+			ImGui::ListBox( "Primary", (int*)&constraints->twistAxis, axisNames, countof(axisNames), 3 );
 			ImGui::SliderFloat( "R0", &constraints->rotationLimits[ 0 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "R1", &constraints->rotationLimits[ 1 ], 0.0f, ae::HalfPi );
 			ImGui::SliderFloat( "R2", &constraints->rotationLimits[ 2 ], 0.0f, ae::HalfPi );
@@ -436,7 +442,10 @@ int main()
 			ik.targetTransform = targetTransform;
 			ik.bindPose = &skin.GetBindPose();
 			ik.pose.Initialize( &currentPose );
-			ik.Run( autoIK ? 10 : 1, &currentPose, drawIK ? &debugLines : nullptr );
+			ik.debugLines = drawIK ? &debugLines : nullptr;
+			ik.debugJointScale = ikJointScale;
+			ik.enableRotationLimits = rotationIK;
+			ik.Run( autoIK ? iterCount : 1, &currentPose );
 		}
 		
 		// Update mesh
@@ -476,13 +485,17 @@ int main()
 			}
 		}
 
-		const ae::Vec3 testJointClipped = testJoint1.GetTranslation() + ae::IK::ClipJoint(
+		ae::IK ik = TAG_ALL;
+		ik.debugLines = &debugLines;
+		ik.debugJointScale = ikJointScale;
+		ik.enableRotationLimits = rotationIK;
+		const ae::Vec3 testJointClipped = testJoint1.GetTranslation() + ik.ClipJoint(
 			( testJoint0Bind.GetTranslation() - testJoint1Bind.GetTranslation() ).Length(),
 			testJoint0.GetTranslation(),
 			testJoint0.GetRotation(),
 			testJoint1.GetTranslation(),
 			testConstraints,
-			&debugLines
+			ae::Color::PicoBlue()
 		);
 
 		// Joint limits
@@ -534,13 +547,16 @@ int main()
 			// }
 		}
 		
-		ImGuizmo::Manipulate(
-			worldToView.data,
-			viewToProj.data,
-			gizmoOperation,
-			( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode,
-			GetSelectedTransform().data
-		);
+		if( camera.GetMode() == ae::DebugCamera::Mode::None )
+		{
+			ImGuizmo::Manipulate(
+				worldToView.data,
+				viewToProj.data,
+				gizmoOperation,
+				( gizmoOperation == ImGuizmo::SCALE ) ? ImGuizmo::LOCAL : gizmoMode,
+				GetSelectedTransform().data
+			);
+		}
 		
 		render.Activate();
 		render.Clear( window.GetFocused() ? ae::Color::AetherBlack() : ae::Color::PicoBlack() );

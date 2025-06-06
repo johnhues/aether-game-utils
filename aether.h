@@ -4687,18 +4687,19 @@ struct IKConstraints
 	//! negative x axis points towards the next bone for "Right" bones and
 	//! the positive x axis points towards the next bone for all center and
 	//! Left bones.
-	ae::Axis primaryAxis = ae::Axis::NegativeX;
+	ae::Axis twistAxis = ae::Axis::NegativeX;
 	//! The axis that corresponds to the 'vertical' rotation limits y component.
 	//! The implicitly specified tertiary axis corresponds to the horizontal
 	//! rotation limits x component.
-	ae::Axis verticalAxis = ae::Axis::Z;
+	ae::Axis bendAxis = ae::Axis::Z;
 	// @TODO
 	ae::Axis horizontalAxis = ae::Axis::Y;
-	//! The half-range of motion of this joint in radians. @TODO: Array element details
+	//! The half-range of motion of this joint in radians. @TODO: Array element
+	//! details. @TODO: Should support no limits.
 	float rotationLimits[ 4 ] = { 1.25f, 1.25f, 1.25f, 1.25f };
 	//! The amount in radians that this joint is allowed to twist around the
 	//! primary axis in either direction. Lower limit is negative, upper limit
-	//! is positive. Zero is no twist.
+	//! is positive. Zero is no twist. @TODO: Should support no limits.
 	float twistLimits[ 2 ] = { -ae::QuarterPi, ae::QuarterPi };
 };
 
@@ -4708,7 +4709,7 @@ struct IKConstraints
 struct IK
 {
 	IK( ae::Tag tag );
-	void Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* debugLines = nullptr );
+	void Run( uint32_t iterationCount, ae::Skeleton* poseOut );
 
 	const ae::Tag tag;
 	ae::Matrix4 targetTransform = ae::Matrix4::Identity();
@@ -4722,12 +4723,18 @@ struct IK
 	const ae::Skeleton* bindPose = nullptr;
 	//! Used as the starting point for the IK.
 	ae::Skeleton pose;
+	//! If false, the IK will not respect joint limits
+	bool enableRotationLimits = true;
+
+	ae::DebugLines* debugLines = nullptr;
+	ae::Matrix4 debugLocalToWorld = ae::Matrix4::Identity();
+	float debugJointScale = 0.1f; //!< Useful default when working in meters
 
 	// @TODO: Cleaup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
 	static ae::Vec2 ClipJoint2D( ae::Vec3 joint, float boneLen, ae::Axis ha, ae::Axis va, ae::Axis pa, const float (&q)[ 4 ], ae::Vec2* unclippedOut );
-	static ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::DebugLines* debugLines = nullptr );
+	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::Color debugColor );
 
 	static float GetAxis( ae::Axis axis, const ae::Vec3 v )
 	{
@@ -4743,11 +4750,11 @@ struct IK
 		}
 	}
 
-	static ae::Vec3 Build3D( ae::Axis horizontalAxis, ae::Axis verticalAxis, ae::Axis primaryAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true )
+	static ae::Vec3 Build3D( ae::Axis horizontalAxis, ae::Axis bendAxis, ae::Axis twistAxis, float horizontalVal, float verticalVal, float primaryVal, bool negative = true )
 	{
 		ae::Vec3 result = GetAxisVector( horizontalAxis, negative ) * horizontalVal;
-		result += GetAxisVector( verticalAxis, negative ) * verticalVal;
-		result += GetAxisVector( primaryAxis, negative ) * primaryVal;
+		result += GetAxisVector( bendAxis, negative ) * verticalVal;
+		result += GetAxisVector( twistAxis, negative ) * primaryVal;
 		return result;
 	}
 };
@@ -25081,43 +25088,49 @@ ae::Vec3 IK::ClipJoint(
 	ae::Quaternion j0Ori, // Parent
 	ae::Vec3 j1Pos, // Child
 	const ae::IKConstraints& j1Constraints, // Child
-	ae::DebugLines* debugLines )
+	ae::Color debugColor )
 {
 	const ae::Axis ha = j1Constraints.horizontalAxis;
-	const ae::Axis va = j1Constraints.verticalAxis;
-	const ae::Axis pa = j1Constraints.primaryAxis;
+	const ae::Axis va = j1Constraints.bendAxis;
+	const ae::Axis pa = j1Constraints.twistAxis;
 	const float (&j0AngleLimits)[ 4 ] = j1Constraints.rotationLimits;
-	const float b01Len = bindBoneLength;
+	const float clipLen = debugLines ? ( bindBoneLength * debugJointScale ) : bindBoneLength;
 	const float q[ 4 ] =
 	{
-		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		b01Len * ae::Tan( ae::Clip( j0AngleLimits[ 1 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
-		b01Len * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
+		clipLen * ae::Tan( ae::Clip( j0AngleLimits[ 0 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		clipLen * ae::Tan( ae::Clip( j0AngleLimits[ 1 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		clipLen * ae::Tan( -ae::Clip( j0AngleLimits[ 2 ], 0.01f, ae::HalfPi - 0.01f ) ),
+		clipLen * ae::Tan( -ae::Clip( j0AngleLimits[ 3 ], 0.01f, ae::HalfPi - 0.01f ) )
 	};
-	ae::Vec2 j1Flat( 0.0f );
-
+	
 	// (f) the joint position p2 is relocated to a new position, p2^, which is
 	// the nearest point on that composite ellipsoidal shape from p2, ensuring
 	// that the new joint position p02 will be within the allowed rotational range
-	const ae::Vec2 posClipped = ClipJoint2D( j0Ori.GetInverse().Rotate( j1Pos - j0Pos ), b01Len, ha, va, pa, q, &j1Flat );
+	ae::Vec2 j1Flat( 0.0f );
+	const ae::Vec2 posClipped = ClipJoint2D( j0Ori.GetInverse().Rotate( j1Pos - j0Pos ), clipLen, ha, va, pa, q, &j1Flat );
 	// (g) move p2^ to p2', to conserve bone length
-	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ).NormalizeCopy() * b01Len;
+	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, clipLen ).NormalizeCopy() * bindBoneLength;
 	// Returns the offset to the child or parent bone so that the constraints are satisfied
 	const ae::Vec3 resultWorldOffset = ( j0Pos + j0Ori.Rotate( resultLocal ) ) - j1Pos;
 
 	if( debugLines )
 	{
+		// debugLines->AddSphere( j0Pos, bindBoneLength, debugColor, 16 ); // Bone length debug
+		auto t = [&]( ae::Vec3 p )
+		{
+			return debugLocalToWorld.TransformPoint3x4( p );
+		};
 		const ae::Matrix4 j0 = ae::Matrix4::Translation( j0Pos ) * j0Ori.GetTransformMatrix();
-		const ae::Vec3 j1FlatWorld = ( j0 * ae::Vec4( Build3D( ha, va, pa, j1Flat.x, j1Flat.y, b01Len ), 1 ) ).GetXYZ();
-		const ae::Vec3 j1FlatWorldClipped = ( j0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, b01Len ), 1 ) ).GetXYZ();
-		debugLines->AddSphere( j1FlatWorld, 0.025f, ae::Color::Magenta(), 4 );
-		debugLines->AddSphere( j1FlatWorldClipped, 0.025f, ae::Color::Magenta(), 4 );
-		debugLines->AddLine( j1FlatWorld, j1FlatWorldClipped, ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 0 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 1 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, q[ 2 ], 0, b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
-		debugLines->AddLine( j0.GetTranslation(), ( j0 * ae::Vec4( Build3D( ha, va, pa, 0, q[ 3 ], b01Len ), 1 ) ).GetXYZ(), ae::Color::Magenta() );
+		const ae::Matrix4 tj0 = debugLocalToWorld * j0;
+		const ae::Vec3 j1FlatWorld = ( tj0 * ae::Vec4( Build3D( ha, va, pa, j1Flat.x, j1Flat.y, clipLen ), 1 ) ).GetXYZ();
+		const ae::Vec3 j1FlatWorldClipped = ( tj0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, clipLen ), 1 ) ).GetXYZ();
+		debugLines->AddSphere( j1FlatWorld, debugJointScale * 0.025f, debugColor, 4 );
+		debugLines->AddSphere( j1FlatWorldClipped, debugJointScale * 0.025f, debugColor, 4 );
+		debugLines->AddLine( j1FlatWorld, j1FlatWorldClipped, debugColor );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, q[ 0 ], 0, clipLen ) ), debugColor );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, 0, q[ 1 ], clipLen ) ), debugColor );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, q[ 2 ], 0, clipLen ) ), debugColor );
+		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, 0, q[ 3 ], clipLen ) ), debugColor );
 		for ( uint32_t i = 0; i < 8; i++ )
 		{
 			const ae::Vec3 q0 = Build3D( ha, va, pa, q[ 0 ], q[ 1 ], 1 ); // +x +y
@@ -25126,20 +25139,20 @@ ae::Vec3 IK::ClipJoint(
 			const ae::Vec3 q3 = Build3D( ha, va, pa, q[ 0 ], q[ 3 ], 1 ); // +x -y
 			const float step = ( ae::HalfPi / 8 );
 			const float angle = i * step;
-			const ae::Vec3 l0 = Build3D( ha, va, pa, ae::Cos( angle ), ae::Sin( angle ), b01Len, false );
-			const ae::Vec3 l1 = Build3D( ha, va, pa, ae::Cos( angle + step ), ae::Sin( angle + step ), b01Len, false );
-			const ae::Vec4 p0 = j0 * ae::Vec4( l0 * q0, 1.0f );
-			const ae::Vec4 p1 = j0 * ae::Vec4( l1 * q0, 1.0f );
-			const ae::Vec4 p2 = j0 * ae::Vec4( l0 * q1, 1.0f );
-			const ae::Vec4 p3 = j0 * ae::Vec4( l1 * q1, 1.0f );
-			const ae::Vec4 p4 = j0 * ae::Vec4( l0 * q2, 1.0f );
-			const ae::Vec4 p5 = j0 * ae::Vec4( l1 * q2, 1.0f );
-			const ae::Vec4 p6 = j0 * ae::Vec4( l0 * q3, 1.0f );
-			const ae::Vec4 p7 = j0 * ae::Vec4( l1 * q3, 1.0f );
-			debugLines->AddLine( p0.GetXYZ(), p1.GetXYZ(), ae::Color::Magenta() );
-			debugLines->AddLine( p2.GetXYZ(), p3.GetXYZ(), ae::Color::Magenta() );
-			debugLines->AddLine( p4.GetXYZ(), p5.GetXYZ(), ae::Color::Magenta() );
-			debugLines->AddLine( p6.GetXYZ(), p7.GetXYZ(), ae::Color::Magenta() );
+			const ae::Vec3 l0 = Build3D( ha, va, pa, ae::Cos( angle ), ae::Sin( angle ), clipLen, false );
+			const ae::Vec3 l1 = Build3D( ha, va, pa, ae::Cos( angle + step ), ae::Sin( angle + step ), clipLen, false );
+			const ae::Vec4 p0 = tj0 * ae::Vec4( l0 * q0, 1.0f );
+			const ae::Vec4 p1 = tj0 * ae::Vec4( l1 * q0, 1.0f );
+			const ae::Vec4 p2 = tj0 * ae::Vec4( l0 * q1, 1.0f );
+			const ae::Vec4 p3 = tj0 * ae::Vec4( l1 * q1, 1.0f );
+			const ae::Vec4 p4 = tj0 * ae::Vec4( l0 * q2, 1.0f );
+			const ae::Vec4 p5 = tj0 * ae::Vec4( l1 * q2, 1.0f );
+			const ae::Vec4 p6 = tj0 * ae::Vec4( l0 * q3, 1.0f );
+			const ae::Vec4 p7 = tj0 * ae::Vec4( l1 * q3, 1.0f );
+			debugLines->AddLine( p0.GetXYZ(), p1.GetXYZ(), debugColor );
+			debugLines->AddLine( p2.GetXYZ(), p3.GetXYZ(), debugColor );
+			debugLines->AddLine( p4.GetXYZ(), p5.GetXYZ(), debugColor );
+			debugLines->AddLine( p6.GetXYZ(), p7.GetXYZ(), debugColor );
 		}
 	}
 
@@ -25153,7 +25166,7 @@ IK::IK( ae::Tag tag ) :
 	pose( tag )
 {}
 
-void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* debugLines )
+void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 {
 	AE_ASSERT( !chain.Length() || pose.GetBoneCount() );
 	AE_ASSERT_MSG( bindPose, "A bind pose is required to run IK" );
@@ -25183,8 +25196,15 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 		}
 	};
 
+	if( debugLines )
+	{
+		ae::Matrix4 debugTarget = debugLocalToWorld * targetTransform;
+		debugTarget.SetScale( debugJointScale );
+		debugLines->AddOBB( debugTarget, ae::Color::Red() );
+	}
+
 	// (a) The initial configuration of the manipulator and the target
-	ae::Array< IKBone > bones( tag, pose.GetBoneCount() );
+	ae::Array< IKBone > bones( tag, chain.Length() );
 	for ( uint32_t i = 0; i < chain.Length(); i++ )
 	{
 		const Bone* bindBone = bindPose->GetBoneByIndex( chain[ i ] );
@@ -25198,9 +25218,9 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 
 		ae::Quaternion twist;
 		float twistAngle = 0.0f;
-		const ae::Vec3 primaryAxis = GetAxisVector( GetConstraints( i ).primaryAxis );
+		const ae::Vec3 twistAxis = GetAxisVector( GetConstraints( i ).twistAxis );
 		const ae::Quaternion bindRot = bindBone->transform.GetRotation().RelativeCopy( bindBone->parent->transform.GetRotation() );
-		bindRot.GetTwistSwing( primaryAxis, &twist, nullptr );
+		bindRot.GetTwistSwing( twistAxis, &twist, nullptr );
 		twist.GetAxisAngle( nullptr, &ikBone.defaultTwist );
 		
 		bones.Append( ikBone );
@@ -25211,7 +25231,8 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 	const ae::Quaternion targetRot = targetTransform.GetRotation();
 
 	uint32_t iters = 0;
-	while ( iters == 0 || ( ( bones[ bones.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount ) )
+	// Always allow one iteration when debugging to see rotation limits
+	while ( ( iters == 0 && debugLines ) || ( ( bones[ bones.Length() - 1 ].pos - targetPos ).Length() > 0.001f && iters < iterationCount ) )
 	{
 		// Start from end and iterate to root to move toward target
 		// (b) relocate and reorient joint p4 to target t
@@ -25224,39 +25245,43 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 			IKBone* childBone = &bones[ i + 1 ];
 			const ae::IKConstraints& currentConstraints = GetConstraints( i );
 			const ae::IKConstraints& childConstraints = GetConstraints( i + 1 );
-			const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.primaryAxis );
+			const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.twistAxis );
 
 			// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
 			currentBone->pos = childBone->pos + ( currentBone->pos - childBone->pos ).SafeNormalizeCopy() * childBone->length;
 
 			if( parentBone )
 			{
-				// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
-				// Decompose rotation into twist and swing so twist can be limited
-				const ae::Quaternion relative0 = childBone->rotation.RelativeCopy( currentBone->rotation );
-				ae::Quaternion twistRot0;
-				ae::Quaternion swingRot;
-				relative0.GetTwistSwing( currentPrimaryAxis, &twistRot0, &swingRot );
-				float twistAngle = 0.0f;
-				twistRot0.GetAxisAngle( nullptr, &twistAngle );
+				if( enableRotationLimits )
+				{
+					// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
+					// Decompose rotation into twist and swing so twist can be limited
+					const ae::Quaternion relative0 = childBone->rotation.RelativeCopy( currentBone->rotation );
+					ae::Quaternion twistRot0;
+					ae::Quaternion swingRot;
+					relative0.GetTwistSwing( currentPrimaryAxis, &twistRot0, &swingRot );
+					float twistAngle = 0.0f;
+					twistRot0.GetAxisAngle( nullptr, &twistAngle );
 
-				twistAngle -= currentBone->defaultTwist;
-				twistAngle = ae::Clip( twistAngle, currentConstraints.twistLimits[ 0 ], currentConstraints.twistLimits[ 1 ] );
-				twistAngle += currentBone->defaultTwist;
+					twistAngle -= currentBone->defaultTwist;
+					twistAngle = ae::Clip( twistAngle, currentConstraints.twistLimits[ 0 ], currentConstraints.twistLimits[ 1 ] );
+					twistAngle += currentBone->defaultTwist;
 
-				const ae::Quaternion twistRot1 = ae::Quaternion( currentPrimaryAxis, twistAngle );
-				const ae::Quaternion relative1 = swingRot * twistRot1;
-				currentBone->rotation = parentBone->rotation * relative1;
+					const ae::Quaternion twistRot1 = ae::Quaternion( currentPrimaryAxis, twistAngle );
+					const ae::Quaternion relative1 = swingRot * twistRot1;
+					currentBone->rotation = parentBone->rotation * relative1;
 
-				// (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
-				currentBone->pos -= ClipJoint(
-					childBone->length,
-					currentBone->pos,
-					parentBone->rotation,
-					childBone->pos,
-					childConstraints,
-					debugLines
-				);
+					// (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
+					currentBone->pos -= ClipJoint(
+						childBone->length,
+						currentBone->pos,
+						parentBone->rotation,
+						childBone->pos,
+						currentConstraints,
+						ae::Color::Magenta()
+					);
+				}
+				
 				// Reorient current joint to point toward child joint
 				const ae::Vec3 dir = ( childBone->pos - currentBone->pos ).SafeNormalizeCopy();
 				const ae::Quaternion invRot = currentBone->rotation.GetInverse();
@@ -25271,7 +25296,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 
 			if( debugLines )
 			{
-				debugLines->AddLine( childBone->pos, currentBone->pos, ae::Color::Orange() );
+				debugLines->AddLine(
+					debugLocalToWorld.TransformPoint3x4( childBone->pos ),
+					debugLocalToWorld.TransformPoint3x4( currentBone->pos ),
+					ae::Color::Magenta()
+				);
 			}
 		}
 		
@@ -25284,40 +25313,46 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 			IKBone* childBone = &bones[ i + 1 ];
 			const ae::IKConstraints& currentConstraints = GetConstraints( i );
 			const ae::IKConstraints& childConstraints = GetConstraints( i + 1 );
-			const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.primaryAxis );
+			const ae::Vec3 currentPrimaryAxis = GetAxisVector( currentConstraints.twistAxis );
 
 			// (c) move joint p0 to p0', which lies on the line that passes through the points p1' and p0 and has distance d0 from p1'
 			childBone->pos = currentBone->pos + ( childBone->pos - currentBone->pos ).SafeNormalizeCopy() * childBone->length;
 
 			if( parentBone )
 			{
-				// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
-				// Decompose rotation into twist and swing so twist can be limited
-				const ae::Quaternion relative0 = currentBone->rotation.RelativeCopy( parentBone->rotation );
-				ae::Quaternion twistRot0;
-				ae::Quaternion swingRot;
-				relative0.GetTwistSwing( currentPrimaryAxis, &twistRot0, &swingRot );
-				float twistAngle = 0.0f;
-				twistRot0.GetAxisAngle( nullptr, &twistAngle );
+				if( enableRotationLimits )
+				{
+					// (d) reorient joint p0' in such a way that the rotor expressing the rotation between the orientation frames at joints p0' and p1' is within the motion range bounds
+					// Decompose rotation into twist and swing so twist can be limited
+					const ae::Quaternion relative0 = currentBone->rotation.RelativeCopy( parentBone->rotation );
+					ae::Quaternion twistRot0;
+					ae::Quaternion swingRot;
+					relative0.GetTwistSwing( currentPrimaryAxis, &twistRot0, &swingRot );
+					float twistAngle = 0.0f;
+					twistRot0.GetAxisAngle( nullptr, &twistAngle );
 
-				twistAngle -= currentBone->defaultTwist;
-				twistAngle = ae::Clip( twistAngle, currentConstraints.twistLimits[ 0 ], currentConstraints.twistLimits[ 1 ] );
-				twistAngle += currentBone->defaultTwist;
+					twistAngle -= currentBone->defaultTwist;
+					twistAngle = ae::Clip( twistAngle, currentConstraints.twistLimits[ 0 ], currentConstraints.twistLimits[ 1 ] );
+					twistAngle += currentBone->defaultTwist;
 
-				const ae::Quaternion twistRot1 = ae::Quaternion( currentPrimaryAxis, twistAngle );
-				const ae::Quaternion relative1 = swingRot * twistRot1;
-				currentBone->rotation = parentBone->rotation * relative1;
-				childBone->pos = currentBone->pos + currentBone->rotation.Rotate( currentPrimaryAxis ) * childBone->length;
+					const ae::Quaternion twistRot1 = ae::Quaternion( currentPrimaryAxis, twistAngle );
+					const ae::Quaternion relative1 = swingRot * twistRot1;
+					currentBone->rotation = parentBone->rotation * relative1;
+					// Move the child bone based on its parents new rotation, so
+					// that it doesn't "move" in local space
+					childBone->pos = currentBone->pos + currentBone->rotation.Rotate( currentPrimaryAxis ) * childBone->length;
 
-				// // (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
-				childBone->pos += ClipJoint(
-					childBone->length,
-					currentBone->pos,
-					parentBone->rotation,
-					childBone->pos,
-					childConstraints,
-					debugLines
-				);
+					// // (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
+					childBone->pos += ClipJoint(
+						childBone->length,
+						currentBone->pos,
+						parentBone->rotation,
+						childBone->pos,
+						currentConstraints,
+						ae::Color::PicoPink()
+					);
+				}
+
 				// Reorient current joint to point toward child joint
 				const ae::Vec3 dir = ( childBone->pos - currentBone->pos ).SafeNormalizeCopy();
 				const ae::Quaternion invRot = currentBone->rotation.GetInverse();
@@ -25332,7 +25367,11 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 
 			if( debugLines )
 			{
-				debugLines->AddLine( childBone->pos, currentBone->pos, ae::Color::Red() );
+				debugLines->AddLine(
+					debugLocalToWorld.TransformPoint3x4( childBone->pos ),
+					debugLocalToWorld.TransformPoint3x4( currentBone->pos ),
+					ae::Color::PicoPink()
+				);
 			}
 		}
 		
@@ -25355,14 +25394,40 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut, ae::DebugLines* de
 		outTransforms.Append( transform );
 	}
 
-	ae::Matrix4* finalTransform = &outTransforms[ outTransforms.Length() - 1 ];
-	*finalTransform = targetTransform;
-	// @TODO: Maintain the old bones scale
-	finalTransform->SetTranslation( bones[ bones.Length() - 1 ].pos );
-
-	for( uint32_t i = 0; i < chain.Length(); i++ )
+	// Don't apply any results when iteration is disabled, only display debug
+	// info. Skip debug lines also, there are no results.
+	if( iterationCount )
 	{
-		poseOut->SetTransform( poseOut->GetBoneByIndex( chain[ i ] ), outTransforms[ i ] );
+		ae::Matrix4* finalTransform = &outTransforms[ outTransforms.Length() - 1 ];
+		*finalTransform = targetTransform;
+		// @TODO: Maintain the old bones scale
+		finalTransform->SetTranslation( bones[ bones.Length() - 1 ].pos );
+
+		for( uint32_t i = 0; i < chain.Length(); i++ )
+		{
+			poseOut->SetTransform( poseOut->GetBoneByIndex( chain[ i ] ), outTransforms[ i ] );
+			if( debugLines )
+			{
+				ae::Matrix4 worldTransform = debugLocalToWorld * outTransforms[ i ];
+				worldTransform.SetScale( debugJointScale );
+				debugLines->AddLine(
+					worldTransform.GetTranslation(),
+					worldTransform.GetTranslation() + worldTransform.GetAxis( 0 ),
+					ae::Color::Red()
+				);
+				debugLines->AddLine(
+					worldTransform.GetTranslation(),
+					worldTransform.GetTranslation() + worldTransform.GetAxis( 1 ),
+					ae::Color::Green()
+				);
+				debugLines->AddLine(
+					worldTransform.GetTranslation(),
+					worldTransform.GetTranslation() + worldTransform.GetAxis( 2 ),
+					ae::Color::Blue()
+				);
+				debugLines->AddOBB( worldTransform, ae::Color::Yellow() ); 
+			}
+		}
 	}
 }
 
