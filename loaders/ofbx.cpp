@@ -466,9 +466,9 @@ bool FbxLoader::Load( const char* meshName, const ae::FbxLoaderParams& params ) 
 						if ( j == 0 )
 						{
 							// @HACK: Should have this bind pose skeleton in advance
-							ae::Matrix4 parentTransform = bone->parent ? bone->parent->transform : ae::Matrix4::Identity();
-							((ae::Bone*)bone)->localTransform = animTransform;
-							((ae::Bone*)bone)->transform = parentTransform * animTransform;
+							ae::Matrix4 parentTransform = bone->parent ? bone->parent->modelToBone : ae::Matrix4::Identity();
+							((ae::Bone*)bone)->parentToChild = animTransform;
+							((ae::Bone*)bone)->modelToBone = parentTransform * animTransform;
 						}
 						ae::Matrix4 offsetTransform = animTransform;
 						keyframe.translation = offsetTransform.GetTranslation();

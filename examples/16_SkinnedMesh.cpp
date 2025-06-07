@@ -241,8 +241,8 @@ int main()
 			const ae::Bone* parent = bone->parent;
 			if ( parent )
 			{
-				debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::Red() );
-				debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::Red() );
+				debugLines.AddLine( parent->modelToBone.GetTranslation(), bone->modelToBone.GetTranslation(), ae::Color::Red() );
+				debugLines.AddOBB( bone->modelToBone * ae::Matrix4::Scaling( 0.05f ), ae::Color::Red() );
 			}
 		}
 		

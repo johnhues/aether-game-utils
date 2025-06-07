@@ -226,7 +226,7 @@ int main()
 	{
 		currentPose.Initialize( &skin.GetBindPose() );
 		currentPose.SetTransform( currentPose.GetRoot(), skeletonTransform );
-		targetTransform = currentPose.GetBoneByName( rightHandBoneName )->transform;
+		targetTransform = currentPose.GetBoneByName( rightHandBoneName )->modelToBone;
 		testJoint0 = testJoint0Bind;
 		testJoint1 = testJoint1Bind;
 	};
@@ -271,7 +271,7 @@ int main()
 	auto GetFocusPos = [&]() -> ae::Vec3
 	{
 		if( selTestJoint != TestJointId::None ) { return GetSelectedTransform().GetTranslation(); }
-		return currentPose.GetBoneByIndex( s_selectedJointIndex )->transform.GetTranslation();
+		return currentPose.GetBoneByIndex( s_selectedJointIndex )->modelToBone.GetTranslation();
 	};
 	
 	AE_INFO( "Run" );
@@ -457,7 +457,7 @@ int main()
 		{
 			for ( uint32_t i = 0; i < currentPose.GetBoneCount(); i++ )
 			{
-				const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->transform;
+				const ae::Matrix4& t = currentPose.GetBoneByIndex( i )->modelToBone;
 				ae::Vec3 p = t.GetTranslation();
 				ae::Vec3 xAxis = t.GetAxis( 0 );
 				ae::Vec3 yAxis = t.GetAxis( 1 );
@@ -473,8 +473,8 @@ int main()
 				const ae::Bone* parent = bone->parent;
 				if ( parent )
 				{
-					debugLines.AddLine( parent->transform.GetTranslation(), bone->transform.GetTranslation(), ae::Color::PicoBlue() );
-					debugLines.AddOBB( bone->transform * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
+					debugLines.AddLine( parent->modelToBone.GetTranslation(), bone->modelToBone.GetTranslation(), ae::Color::PicoBlue() );
+					debugLines.AddOBB( bone->modelToBone * ae::Matrix4::Scaling( 0.05f ), ae::Color::PicoBlue() );
 				}
 			}
 
