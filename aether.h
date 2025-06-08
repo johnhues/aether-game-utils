@@ -4733,7 +4733,6 @@ struct IK
 	// @TODO: Cleaup IK helpers
 	static ae::Vec2 GetNearestPointOnEllipse( ae::Vec2 halfSize, ae::Vec2 center, ae::Vec2 p );
 	static ae::Vec3 GetAxisVector( ae::Axis axis, bool negative = true );
-	static ae::Vec2 ClipJoint2D( ae::Vec3 joint, float boneLen, ae::Axis ha, ae::Axis va, ae::Axis pa, const float (&q)[ 4 ], ae::Vec2* unclippedOut );
 	ae::Vec3 ClipJoint( float bindBoneLength, ae::Vec3 j0Pos, ae::Quaternion j0Ori, ae::Vec3 j1, const ae::IKConstraints& j1Constraints, ae::Color debugColor );
 
 	static float GetAxis( ae::Axis axis, const ae::Vec3 v )
@@ -25044,44 +25043,6 @@ ae::Vec3 IK::GetAxisVector( ae::Axis axis, bool negative )
 	}
 }
 
-ae::Vec2 IK::ClipJoint2D( ae::Vec3 joint, float boneLen, ae::Axis ha, ae::Axis va, ae::Axis pa, const float (&q)[ 4 ], ae::Vec2* unclippedOut )
-{
-	const ae::Vec2 unclipped = [&]()
-	{
-		float t;
-		ae::Vec3 p;
-		const ae::Vec3 axisCenter = Build3D( ha, va, pa, 0, 0, boneLen );
-		const ae::Plane ellipsePlane = ae::Plane(
-			axisCenter,
-			Build3D( ha, va, pa, 0, 0, 1 )
-		);
-		if( !ellipsePlane.IntersectLine( ae::Vec3( 0.0f ), joint, &p, &t ) || t < 0.0f )
-		{
-			p = ellipsePlane.GetClosestPoint( joint );
-			p = axisCenter + ( p - axisCenter ).SafeNormalizeCopy() * ae::Max( q[ 0 ], q[ 1 ], q[ 2 ], q[ 3 ] );
-		}
-		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
-	}();
-	const ae::Vec2 quadrantEllipse = [q, unclipped]()
-	{
-		if( unclipped.x >= 0.0f && unclipped.y >= 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
-		if( unclipped.x <= 0.0f && unclipped.y >= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
-		if( unclipped.x <= 0.0f && unclipped.y <= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
-		return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
-	}();
-
-	const ae::Vec2 edge = GetNearestPointOnEllipse( quadrantEllipse, ae::Vec2( 0.0f ), unclipped );
-	if( unclippedOut )
-	{
-		*unclippedOut = unclipped;
-	}
-	if( unclipped.LengthSquared() > edge.LengthSquared() )
-	{
-		return edge;
-	}
-	return unclipped;
-}
-
 ae::Vec3 IK::ClipJoint(
 	float bindBoneLength,
 	ae::Vec3 j0Pos, // Parent
@@ -25106,8 +25067,31 @@ ae::Vec3 IK::ClipJoint(
 	// (f) the joint position p2 is relocated to a new position, p2^, which is
 	// the nearest point on that composite ellipsoidal shape from p2, ensuring
 	// that the new joint position p02 will be within the allowed rotational range
-	ae::Vec2 j1Flat( 0.0f );
-	const ae::Vec2 posClipped = ClipJoint2D( j0Ori.GetInverse().Rotate( j1Pos - j0Pos ), clipLen, ha, va, pa, q, &j1Flat );
+	const ae::Vec2 unclipped = [&]()
+	{
+		const ae::Vec3 axis = Build3D( ha, va, pa, 0, 0, 1 );
+		const ae::Vec3 bonePos = axis * clipLen;
+		const ae::Plane ellipsePlane = ae::Plane( bonePos, axis );
+		const ae::Vec3 joint = j0Ori.GetInverse().Rotate( j1Pos - j0Pos );
+		float t;
+		ae::Vec3 p;
+		if( !ellipsePlane.IntersectLine( ae::Vec3( 0.0f ), joint, &p, &t ) || t < 0.0f )
+		{
+			p = ellipsePlane.GetClosestPoint( joint );
+			p = bonePos + ( p - bonePos ).SafeNormalizeCopy() * ae::Max( q[ 0 ], q[ 1 ], q[ 2 ], q[ 3 ] );
+		}
+		return ae::Vec2( GetAxis( ha, p ), GetAxis( va, p ) );
+	}();
+	const ae::Vec2 quadrantEllipseSize = [q, unclipped]()
+	{
+		if( unclipped.x >= 0.0f && unclipped.y >= 0.0f ) { return ae::Vec2( q[ 0 ], q[ 1 ] ); } // +x +y
+		if( unclipped.x <= 0.0f && unclipped.y >= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 1 ] ); } // -x +y
+		if( unclipped.x <= 0.0f && unclipped.y <= 0.0f ) { return ae::Vec2( q[ 2 ], q[ 3 ] ); } // -x -y
+		return ae::Vec2( q[ 0 ], q[ 3 ] ); // +x -y
+	}();
+
+	const ae::Vec2 ellipseEdge = GetNearestPointOnEllipse( quadrantEllipseSize, ae::Vec2( 0.0f ), unclipped );
+	const ae::Vec2 posClipped = ( unclipped.LengthSquared() > ellipseEdge.LengthSquared() ) ? ellipseEdge : unclipped;
 	// (g) move p2^ to p2', to conserve bone length
 	const ae::Vec3 resultLocal = Build3D( ha, va, pa, posClipped.x, posClipped.y, clipLen ).NormalizeCopy() * bindBoneLength;
 	// Returns the offset to the child or parent bone so that the constraints are satisfied
@@ -25122,11 +25106,11 @@ ae::Vec3 IK::ClipJoint(
 		};
 		const ae::Matrix4 j0 = ae::Matrix4::Translation( j0Pos ) * j0Ori.GetTransformMatrix();
 		const ae::Matrix4 tj0 = debugModelToWorld * j0;
-		const ae::Vec3 j1FlatWorld = ( tj0 * ae::Vec4( Build3D( ha, va, pa, j1Flat.x, j1Flat.y, clipLen ), 1 ) ).GetXYZ();
-		const ae::Vec3 j1FlatWorldClipped = ( tj0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, clipLen ), 1 ) ).GetXYZ();
-		debugLines->AddSphere( j1FlatWorld, debugJointScale * 0.025f, debugColor, 4 );
-		debugLines->AddSphere( j1FlatWorldClipped, debugJointScale * 0.025f, debugColor, 4 );
-		debugLines->AddLine( j1FlatWorld, j1FlatWorldClipped, debugColor );
+		const ae::Vec3 unclippedWorld = ( tj0 * ae::Vec4( Build3D( ha, va, pa, unclipped.x, unclipped.y, clipLen ), 1 ) ).GetXYZ();
+		const ae::Vec3 unclippedWorldClipped = ( tj0 * ae::Vec4( Build3D( ha, va, pa, posClipped.x, posClipped.y, clipLen ), 1 ) ).GetXYZ();
+		debugLines->AddSphere( unclippedWorld, debugJointScale * 0.025f, debugColor, 4 );
+		debugLines->AddSphere( unclippedWorldClipped, debugJointScale * 0.025f, debugColor, 4 );
+		debugLines->AddLine( unclippedWorld, unclippedWorldClipped, debugColor );
 		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, q[ 0 ], 0, clipLen ) ), debugColor );
 		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, 0, q[ 1 ], clipLen ) ), debugColor );
 		debugLines->AddLine( tj0.GetTranslation(), tj0.TransformPoint3x4( Build3D( ha, va, pa, q[ 2 ], 0, clipLen ) ), debugColor );
@@ -25343,10 +25327,13 @@ void IK::Run( uint32_t iterationCount, ae::Skeleton* poseOut )
 					childBone->modelPos = currentBone->modelPos + currentBone->modelToBoneRot.Rotate( currentPrimaryAxis ) * childBone->length;
 
 					// // (e) the rotational constraints: the allowed regions shown as a shaded composite ellipsoidal shape
+					const ae::Quaternion currentBindModelToBone = bindPose->GetBoneByIndex( chain[ i ] )->modelToBone.GetRotation();
+					const ae::Quaternion parentBindModelToBone = bindPose->GetBoneByIndex( chain[ i - 1 ] )->modelToBone.GetRotation();
+					const ae::Quaternion bindRelative = currentBindModelToBone.RelativeCopy( parentBindModelToBone );
 					childBone->modelPos += ClipJoint(
 						childBone->length,
 						currentBone->modelPos,
-						parentBone->modelToBoneRot,
+						( parentBone->modelToBoneRot * bindRelative ),
 						childBone->modelPos,
 						currentConstraints,
 						ae::Color::PicoPink()
