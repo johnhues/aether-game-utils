@@ -2648,7 +2648,7 @@ void SetLogColorsEnabled( bool enabled );
 // Assertion functions
 //------------------------------------------------------------------------------
 #ifndef AE_ASSERT_IMPL
-	#define AE_ASSERT_IMPL( msgStr ) { if( (msgStr)[ 0 ] ) { ae::ShowMessage( msgStr ); } AE_BREAK(); }
+	#define AE_ASSERT_IMPL( msgStr ) { if( (msgStr)[ 0 ] && !ae::IsDebuggerAttached() ) { ae::ShowMessage( msgStr ); } AE_BREAK(); }
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if ( !(_x) ) { auto msgStr = ae::LogInternal( _AE_LOG_FATAL_, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while (0)
@@ -6477,7 +6477,7 @@ std::string LogInternal( uint32_t severity, const char* filePath, uint32_t line,
 	os << std::boolalpha;
 	LogFormat( os, severity, filePath, line, assertInfo, format );
 	LogInternalImpl( os, format, args... );
-	if ( severity == _AE_LOG_FATAL_ && !ae::IsDebuggerAttached() )
+	if ( severity == _AE_LOG_FATAL_ )
 	{
 		std::stringstream ss;
 		ss << os.rdbuf();
@@ -13227,9 +13227,16 @@ void ShowMessage( const char* msg )
 #if _AE_WINDOWS_
 	MessageBoxA( nullptr, msg, nullptr, MB_OK );
 #elif _AE_OSX_
-	NSAlert* alert = [[NSAlert alloc] init];
-	[alert setMessageText: [NSString stringWithUTF8String: msg]];
-	[alert runModal];
+	if( [NSThread isMainThread] )
+	{
+		NSAlert* alert = [[NSAlert alloc] init];
+		[alert setMessageText: [NSString stringWithUTF8String: msg]];
+		[alert runModal];
+	}
+	else
+	{
+		AE_WARN( "ae::ShowMessage() called from non-main thread, ignoring." );
+	}
 #endif
 }
 
