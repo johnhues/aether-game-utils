@@ -5378,10 +5378,16 @@ public:
 	static ae::SourceFileAttribute ae_attrib_##c##v##_ae_SourceFileAttribute { .path=_AE_SRCCHK(__FILE__,""), .line=_AE_SRCCHK(__LINE__, 0) }; static ae::_AttributeCreator< ::c > ae_attrib_creator_##c##v##_ae_SourceFileAttribute( ae_var_creator_##c##_##v, _AE_SRCCHK(&ae_attrib_##c##v##_ae_SourceFileAttribute, nullptr) );\
 	AE_ENABLE_INVALID_OFFSET_WARNING
 //! Register a property for a specific class variable
-#define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #p, "" );
+#define AE_REGISTER_CLASS_VAR_PROPERTY( c, v, p )\
+	AE_DISABLE_INVALID_OFFSET_WARNING\
+	static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p( ae_var_creator_##c##_##v, #p, "" );\
+	AE_ENABLE_INVALID_OFFSET_WARNING
 //! Register a property for a specific class variable with an additional value.
 //! Multiple values can be specified per property.
-#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv ) static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #p, #pv );
+#define AE_REGISTER_CLASS_VAR_PROPERTY_VALUE( c, v, p, pv )\
+	AE_DISABLE_INVALID_OFFSET_WARNING\
+	static ae::_VarPropCreator< ::c, decltype(::c::v), offsetof( ::c, v ) > ae_var_prop_creator_##c##_##v##_##p##_##pv( ae_var_creator_##c##_##v, #p, #pv );\
+	AE_ENABLE_INVALID_OFFSET_WARNING
 
 //------------------------------------------------------------------------------
 // External enum definer and registerer
