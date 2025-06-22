@@ -2641,16 +2641,16 @@ template<> inline uint32_t GetHash( const ae::Hash& value ) { return value.Get()
 //! consoles render escaped characters instead of interpreting them, so this
 //! should only be used when the output is known to support color codes.
 void SetLogColorsEnabled( bool enabled );
-//! Prepends the given \p prefix to all following log messages on the current
-//! thread until ae::PopLog() is called. This is useful for grouping log
-//! messages together or for adding a prefix to all log messages in a specific
-//! scope. Multiple calls to ae::PushLog() will stack, so all prefixes will be
-//! prepended to the log messages in the order they were pushed. Take care to
-//! match every call to ae::PushLog() with a call to ae::PopLog().
-void PushLog( const char* prefix );
-//! Pops the last log prefix set by ae::PushLog() on the current thread. Take
-//! care to match every call to ae::PushLog() with a call to ae::PopLog().
-void PopLog();
+//! Prepends the given message to all following logs and asserts on the current
+//! thread until ae::PopLogTag() is called. Multiple calls to ae::PushLogTag() will
+//! stack, so all messages will be prepended to the log messages in the order
+//! they were pushed, separated by spaces. This is useful for grouping logs
+//! together or tagging all logs in a specific scope. Take care to match every
+//! call to ae::PushLogTag() with a call to ae::PopLogTag().
+template< typename... Args > void PushLogTag( const char* format, Args... args );
+//! Pops the last log prefix set by ae::PushLogTag() on the current thread. Take
+//! care to match every call to ae::PushLogTag() with a call to ae::PopLogTag().
+void PopLogTag();
 
 //------------------------------------------------------------------------------
 // ae::LogFn type
@@ -6362,7 +6362,7 @@ struct _ThreadLocals
 {
 	static _ThreadLocals* Get();
 
-	ae::Array< ae::Str32, 8 > logTagStack;
+	ae::Array< ae::Str64, 8 > logTagStack;
 };
 
 //------------------------------------------------------------------------------
@@ -6481,11 +6481,32 @@ extern const char* LogLevelColors[ 6 ];
 template< typename... Args > std::string _Log( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args );
 template< typename T, typename... Args > void _BuildLogMessage( std::stringstream& os, const char* format, T value, Args... args );
 static void _BuildLogMessage( std::stringstream& os, const char* message ) { os << message; } // Recursive base case for _BuildLogMessage()
-void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const char* message );
+void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const char** tags, uint32_t tagCount, const char* message );
 
 //------------------------------------------------------------------------------
-// Internal Logging functions internal implementation
+// Logging functions implementation
 //------------------------------------------------------------------------------
+static void _ApplyLogStreamSettings( std::ostream& os )
+{
+	os << std::setprecision( 4 );
+	os << std::boolalpha;
+}
+
+template< typename... Args >
+void PushLogTag( const char* format, Args... args )
+{
+	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
+	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Size() );
+	AE_DEBUG_ASSERT( canAppendMessage );
+	if( canAppendMessage )
+	{
+		std::stringstream os;
+		_ApplyLogStreamSettings( os );
+		_BuildLogMessage( os, format, args... );
+		threadLocals->logTagStack.Append( os.str().c_str() );
+	}
+}
+
 template < typename T, typename... Args >
 void _BuildLogMessage( std::stringstream& os, const char* format, T value, Args... args )
 {
@@ -6520,18 +6541,24 @@ std::string _Log( uint32_t severity, const char* filePath, uint32_t line, const 
 {
 	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
 	std::stringstream os;
-	os << std::setprecision( 4 );
-	os << std::boolalpha;
-	for( const auto& tag : threadLocals->logTagStack )
-	{
-		os << tag.c_str() << " ";
-	}
+	_ApplyLogStreamSettings( os );
 	if( assertInfo[ 0 ] )
 	{
 		os << assertInfo << " ";
 	}
 	_BuildLogMessage( os, format, args... );
-	( AE_LOG_FUNCTION_CONFIG )( severity, filePath, line, os.str().c_str() );
+	const char* tags[ decltype(threadLocals->logTagStack)::Size() ];
+	for( uint32_t i = 0; i < threadLocals->logTagStack.Length(); i++ )
+	{
+		tags[ i ] = threadLocals->logTagStack[ i ].c_str();
+	}
+	( AE_LOG_FUNCTION_CONFIG )
+	(
+		severity,
+		filePath, line,
+		tags, threadLocals->logTagStack.Length(),
+		os.str().c_str()
+	);
 	if ( severity == _AE_LOG_FATAL_ )
 	{
 		std::stringstream ss;
@@ -15363,7 +15390,7 @@ const char* LogLevelColors[] =
 //------------------------------------------------------------------------------
 bool _ae_logColors = false;
 
-void _LogFormat( std::ostream& os, uint32_t severity, const char* filePath, uint32_t line, const char* message )
+void _LogFormat( std::ostream& os, uint32_t severity, const char* filePath, uint32_t line, const char** tags, uint32_t tagCount, const char* message )
 {
 	char timeBuf[ 16 ];
 	time_t t = time( nullptr );
@@ -15388,8 +15415,16 @@ void _LogFormat( std::ostream& os, uint32_t severity, const char* filePath, uint
 	{
 		os << "\x1b[90m";
 	}
-	os << timeBuf;
-	os << " [" << ae::GetPID() << "] ";
+	os << timeBuf << " [" << ae::GetPID() << "] [";
+	for( uint32_t i = 0; i < tagCount; i++ )
+	{
+		if( i > 0 )
+		{
+			os << " ";
+		}
+		os << tags[ i ];
+	}
+	os << "] ";
 
 	if ( _ae_logColors )
 	{
@@ -15419,10 +15454,10 @@ void _LogFormat( std::ostream& os, uint32_t severity, const char* filePath, uint
 }
 
 #if _AE_WINDOWS_
-void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const char* message )
+void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const char** tags, uint32_t tagCount, const char* message )
 {
 	std::stringstream os;
-	_LogFormat( os, severity, filePath, line, message );
+	_LogFormat( os, severity, filePath, line, tags, tagCount, message );
 	static bool s_logStdOut = !ae::IsDebuggerAttached();
 	if( s_logStdOut )
 	{
@@ -15434,10 +15469,10 @@ void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const cha
 	}
 }
 #else
-void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const char* message )
+void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const char** tags, uint32_t tagCount, const char* message )
 {
 	// @TODO: os_log_error() etc on OSX?
-	_LogFormat( std::cout, severity, filePath, line, message );
+	_LogFormat( std::cout, severity, filePath, line, tags, tagCount, message );
 	std::cout << std::endl;
 }
 #endif
@@ -15447,18 +15482,7 @@ void SetLogColorsEnabled( bool enabled )
 	_ae_logColors = enabled;
 }
 
-void PushLog( const char* str )
-{
-	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
-	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Size() );
-	AE_DEBUG_ASSERT( canAppendMessage );
-	if( canAppendMessage )
-	{
-		threadLocals->logTagStack.Append( str );
-	}
-}
-
-void PopLog()
+void PopLogTag()
 {
 	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
 	const bool canPopMessage = ( threadLocals->logTagStack.Length() > 0 );
