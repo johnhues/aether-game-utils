@@ -2635,9 +2635,22 @@ template<> inline uint32_t GetHash( const std::string& value ) { return ae::Hash
 template<> inline uint32_t GetHash( const ae::Hash& value ) { return value.Get(); }
 
 //------------------------------------------------------------------------------
-// Log settings
+// Log utilities
 //------------------------------------------------------------------------------
+//! Enables output color codes in all logs. This is off by default as many debug
+//! consoles render escaped characters instead of interpreting them, so this
+//! should only be used when the output is known to support color codes.
 void SetLogColorsEnabled( bool enabled );
+//! Prepends the given \p prefix to all following log messages on the current
+//! thread until ae::PopLog() is called. This is useful for grouping log
+//! messages together or for adding a prefix to all log messages in a specific
+//! scope. Multiple calls to ae::PushLog() will stack, so all prefixes will be
+//! prepended to the log messages in the order they were pushed. Take care to
+//! match every call to ae::PushLog() with a call to ae::PopLog().
+void PushLog( const char* prefix );
+//! Pops the last log prefix set by ae::PushLog() on the current thread. Take
+//! care to match every call to ae::PushLog() with a call to ae::PopLog().
+void PopLog();
 
 //------------------------------------------------------------------------------
 // ae::LogFn type
@@ -6343,6 +6356,16 @@ struct _Globals
 };
 
 //------------------------------------------------------------------------------
+// Internal ae::_ThreadLocals
+//------------------------------------------------------------------------------
+struct _ThreadLocals
+{
+	static _ThreadLocals* Get();
+
+	ae::Array< ae::Str32, 8 > logTagStack;
+};
+
+//------------------------------------------------------------------------------
 // Internal ae::_StaticCacheVar
 // This is used to cache static meta variables that are expensive to
 // find/compute. All cached variables are reset to their initial value when
@@ -6495,9 +6518,14 @@ void _BuildLogMessage( std::stringstream& os, const char* format, T value, Args.
 template < typename... Args >
 std::string _Log( uint32_t severity, const char* filePath, uint32_t line, const char* assertInfo, const char* format, Args... args )
 {
+	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
 	std::stringstream os;
 	os << std::setprecision( 4 );
 	os << std::boolalpha;
+	for( const auto& tag : threadLocals->logTagStack )
+	{
+		os << tag.c_str() << " ";
+	}
 	if( assertInfo[ 0 ] )
 	{
 		os << assertInfo << " ";
@@ -13169,6 +13197,15 @@ ae::_Globals* ae::_Globals::Get()
 }
 
 //------------------------------------------------------------------------------
+// Internal ae::_ThreadLocals functions
+//------------------------------------------------------------------------------
+ae::_ThreadLocals* ae::_ThreadLocals::Get()
+{
+	static thread_local ae::_ThreadLocals s_threadLocals;
+	return &s_threadLocals;
+}
+
+//------------------------------------------------------------------------------
 // Platform functions internal implementation
 //------------------------------------------------------------------------------
 uint32_t GetPID()
@@ -15349,22 +15386,23 @@ void _LogFormat( std::ostream& os, uint32_t severity, const char* filePath, uint
 
 	if ( _ae_logColors )
 	{
-		os << "\x1b[90m" << timeBuf;
-		os << " [" << ae::GetPID() << "] ";
-		os << LogLevelColors[ severity ] << LogLevelNames[ severity ];
-#if AE_ENABLE_SOURCE_INFO
-		os << " \x1b[90m" << fileName << ":" << line;
-#endif
+		os << "\x1b[90m";
 	}
-	else
+	os << timeBuf;
+	os << " [" << ae::GetPID() << "] ";
+
+	if ( _ae_logColors )
 	{
-		os << timeBuf;
-		os << " [" << ae::GetPID() << "] ";
-		os << LogLevelNames[ severity ];
-#if AE_ENABLE_SOURCE_INFO
-		os << " " << fileName << ":" << line;
-#endif
+		os << LogLevelColors[ severity ];
 	}
+	os << LogLevelNames[ severity ];
+#if AE_ENABLE_SOURCE_INFO
+	if ( _ae_logColors )
+	{
+		os << "\x1b[90m";
+	}
+	os << " " << fileName << ":" << line;
+#endif
 
 	if ( message && message[ 0 ] )
 	{
@@ -15398,6 +15436,7 @@ void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const cha
 #else
 void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const char* message )
 {
+	// @TODO: os_log_error() etc on OSX?
 	_LogFormat( std::cout, severity, filePath, line, message );
 	std::cout << std::endl;
 }
@@ -15406,6 +15445,28 @@ void _LogImpl( uint32_t severity, const char* filePath, uint32_t line, const cha
 void SetLogColorsEnabled( bool enabled )
 {
 	_ae_logColors = enabled;
+}
+
+void PushLog( const char* str )
+{
+	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
+	const bool canAppendMessage = ( threadLocals->logTagStack.Length() < threadLocals->logTagStack.Size() );
+	AE_DEBUG_ASSERT( canAppendMessage );
+	if( canAppendMessage )
+	{
+		threadLocals->logTagStack.Append( str );
+	}
+}
+
+void PopLog()
+{
+	ae::_ThreadLocals* threadLocals = ae::_ThreadLocals::Get();
+	const bool canPopMessage = ( threadLocals->logTagStack.Length() > 0 );
+	AE_DEBUG_ASSERT( canPopMessage );
+	if( canPopMessage )
+	{
+		threadLocals->logTagStack.Remove( threadLocals->logTagStack.Length() - 1 );
+	}
 }
 
 //------------------------------------------------------------------------------
