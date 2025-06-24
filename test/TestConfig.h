@@ -23,8 +23,19 @@
 //------------------------------------------------------------------------------
 #ifndef TESTCONFIG_H
 #define TESTCONFIG_H
+//------------------------------------------------------------------------------
+// Headers
+//------------------------------------------------------------------------------
+#include <cstdint>
 
+//------------------------------------------------------------------------------
+// Config defines
+//------------------------------------------------------------------------------
 #define AE_ASSERT_IMPL( msgStr ) throw "assert" // Throw exceptions so unit tests can test asserts
 #define AE_MEMORY_CHECKS 1 // Enable strict memory checks for unit tests
+
+#define AE_LOG_FUNCTION_CONFIG TestLogger
+namespace ae { enum class LogSeverity; }
+void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, const char** tags, uint32_t tagCount, const char* message );
 
 #endif // TESTCONFIG_H
