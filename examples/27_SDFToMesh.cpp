@@ -53,6 +53,9 @@
 //------------------------------------------------------------------------------
 const ae::Tag TAG_ISOSURFACE = "isosurface";
 
+//------------------------------------------------------------------------------
+// Internal IsosurfaceExtractor types
+//------------------------------------------------------------------------------
 struct VoxelIndex
 {
 	VoxelIndex() {}
@@ -69,6 +72,9 @@ namespace ae { template <> uint32_t GetHash( const VoxelIndex& index )
 	constexpr uint32_t uint32MaxGridSize = 1625; // UINT32_MAX ^ (1/3)
 	return ae::Hash().HashBasicType( index.x + uint32MaxGridSize * ( index.y + index.z * uint32MaxGridSize ) ).Get();
 } }
+//------------------------------------------------------------------------------
+// IsosurfaceExtractor types
+//------------------------------------------------------------------------------
 struct IsosurfaceVertex
 {
 	ae::Vec4 position;
@@ -81,61 +87,10 @@ struct IsosurfaceParams
 	IsosurfaceFn fn = nullptr;
 	const void* userData = nullptr;
 	ae::AABB aabb = ae::AABB();
+	uint32_t maxVerts = 0;
+	uint32_t maxIndices = 0;
 	float normalSampleOffset = 0.1f;
 	ae::DebugLines* debug = nullptr;
-};
-
-//------------------------------------------------------------------------------
-// IsosurfaceExtractorCache class
-//------------------------------------------------------------------------------
-class IsosurfaceExtractorCache
-{
-public:
-	class Zone
-	{
-	public:
-		static constexpr int32_t Dim = 256;
-		static ae::Int3 GetSize() { return ae::Int3( Dim, Dim, Dim ); }
-		void SetOffset( ae::Int3 offset ) { m_offset = offset; }
-		ae::Int3 GetOffset() const { return m_offset; }
-		void Set( ae::Int3 pos, uint8_t value ) { m_values[ pos.z ][ pos.y ][ pos.x ] = value; }
-		uint8_t Get( ae::Int3 pos ) const { return m_values[ pos.z ][ pos.y ][ pos.x ]; }
-	private:
-		ae::Int3 m_offset = ae::Int3( 0 );
-		uint8_t m_values[ Dim ][ Dim ][ Dim ] = {}; // Default initialization
-	};
-	
-	IsosurfaceExtractorCache();
-	void Generate( const IsosurfaceParams& params );
-	void Reset();
-	
-	float GetValue( ae::Vec3 position ) const;
-	ae::Vec3 GetDerivative( ae::Vec3 p ) const;
-
-	const Zone* GetZone( uint32_t i ) const { return m_zones.GetValue( i ); }
-	uint32_t GetZoneCount() const { return m_zones.Length(); }
-	
-	inline const IsosurfaceParams& GetParams() const { return m_params; }
-	inline const ae::AABB& GetOctreeAABB() const { return m_surfaceAABB; }
-	inline uint32_t GetEstimatedVertexCount() const { return m_estimatedVertexCount; }
-
-private:
-	void m_Generate( ae::Vec3 center, ae::Vec3 halfSize );
-	IsosurfaceParams m_params;
-	const ae::Vec3 kChildOffsets[ 8 ] =
-	{
-		{ -1, -1, -1 },
-		{ 1, -1, -1 },
-		{ -1, 1, -1 },
-		{ 1, 1, -1 },
-		{ -1, -1, 1 },
-		{ 1, -1, 1 },
-		{ -1, 1, 1 },
-		{ 1, 1, 1 }
-	};
-	ae::AABB m_surfaceAABB;
-	float m_estimatedVertexCount = 0.0f;
-	ae::Map< ae::Int3, Zone* > m_zones = AE_ALLOC_TAG_FIXME;
 };
 
 //------------------------------------------------------------------------------
@@ -144,7 +99,8 @@ private:
 struct IsosurfaceExtractor
 {
 	IsosurfaceExtractor( ae::Tag tag );
-	void Generate( const IsosurfaceParams& params, uint32_t maxVerts, uint32_t maxIndices, ae::Array< ae::Vec3 >* errors );
+	void Generate( IsosurfaceParams params, ae::Array< ae::Vec3 >* errors );
+	void Reset();
 	
 	ae::Array< IsosurfaceVertex > vertices;
 	ae::Array< IsosurfaceIndex > indices;
@@ -160,6 +116,17 @@ struct IsosurfaceExtractor
 
 private:
 	static constexpr IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
+	const ae::Vec3 kChildOffsets[ 8 ] =
+	{
+		{ -1, -1, -1 },
+		{ 1, -1, -1 },
+		{ -1, 1, -1 },
+		{ 1, 1, -1 },
+		{ -1, -1, 1 },
+		{ 1, -1, 1 },
+		{ -1, 1, 1 },
+		{ 1, 1, 1 }
+	};
 	struct Voxel
 	{
 		// 3 planes whose intersections are used to position vertices within voxel
@@ -169,9 +136,25 @@ private:
 		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
 		uint16_t edgeBits = 0;
 	};
+	class Zone
+	{
+	public:
+		static constexpr int32_t Dim = 256;
+		static ae::Int3 GetSize() { return ae::Int3( Dim, Dim, Dim ); }
+		void SetOffset( ae::Int3 offset ) { m_offset = offset; }
+		ae::Int3 GetOffset() const { return m_offset; }
+		void Set( ae::Int3 pos, uint8_t value ) { m_values[ pos.z ][ pos.y ][ pos.x ] = value; }
+		uint8_t Get( ae::Int3 pos ) const { return m_values[ pos.z ][ pos.y ][ pos.x ]; }
+	private:
+		ae::Int3 m_offset = ae::Int3( 0 );
+		uint8_t m_values[ Dim ][ Dim ][ Dim ] = {}; // Default initialization
+	};
+	void m_Generate( const IsosurfaceParams& params, ae::Vec3 center, ae::Vec3 halfSize );
 	Stats m_stats;
+	ae::AABB m_surfaceAABB;
+	float m_estimatedVertexCount = 0.0f;
 	ae::Map< VoxelIndex, Voxel > m_voxels;
-	IsosurfaceExtractorCache m_sdf;
+	ae::Map< ae::Int3, Zone* > m_zones = AE_ALLOC_TAG_FIXME;
 };
 
 //------------------------------------------------------------------------------
@@ -407,12 +390,16 @@ int main()
 			// Mesh
 			errors.Clear();
 			const double meshStart = ae::GetTime();
-			extractor->Generate( {
-				.fn=[]( ae::Vec3 position, const void* userData ) { return (*(decltype(surfaceFn)*)userData)( position ); },
-				.userData=&surfaceFn,
-				.aabb=region
-			},
-			0, 0, &errors );
+			extractor->Generate(
+				{
+					.fn=[]( ae::Vec3 position, const void* userData ) { return (*(decltype(surfaceFn)*)userData)( position ); },
+					.userData=&surfaceFn,
+					.aabb=region,
+					.maxVerts=0,
+					.maxIndices=0,
+				},
+				&errors
+			);
 			const double meshEnd = ae::GetTime();
 			meshTime = ( meshEnd - meshStart );
 			if( !extractor->vertices.Length() )
@@ -463,26 +450,6 @@ int main()
 			ae::Delete( extractor );
 		}
 	};
-	
-	// SDFToMesh sdfToMesh[] =
-	// {
-	// 	{ "Mesh0", ae::Color::HSV( 0.0f / 8.0f, 0.7f, 0.5f ) },
-	// 	{ "Mesh1", ae::Color::HSV( 1.0f / 8.0f, 0.7f, 0.5f ) },
-	// 	{ "Mesh2", ae::Color::HSV( 2.0f / 8.0f, 0.7f, 0.5f ) },
-	// 	{ "Mesh3", ae::Color::HSV( 3.0f / 8.0f, 0.7f, 0.5f ) },
-	// 	{ "Mesh4", ae::Color::HSV( 4.0f / 8.0f, 0.7f, 0.5f ) },
-	// 	{ "Mesh5", ae::Color::HSV( 5.0f / 8.0f, 0.7f, 0.5f ) },
-	// 	{ "Mesh6", ae::Color::HSV( 6.0f / 8.0f, 0.7f, 0.5f ) },
-	// 	{ "Mesh7", ae::Color::HSV( 7.0f / 8.0f, 0.7f, 0.5f ) },
-	// };
-	// sdfToMesh[ 0 ].center = ae::Vec3( -1, -1, -1 ) * ( kChunkSize * 0.5f );
-	// sdfToMesh[ 1 ].center = ae::Vec3( -1, -1, 1 ) * ( kChunkSize * 0.5f );
-	// sdfToMesh[ 2 ].center = ae::Vec3( -1, 1, -1 ) * ( kChunkSize * 0.5f );
-	// sdfToMesh[ 3 ].center = ae::Vec3( -1, 1, 1 ) * ( kChunkSize * 0.5f );
-	// sdfToMesh[ 4 ].center = ae::Vec3( 1, -1, -1 ) * ( kChunkSize * 0.5f );
-	// sdfToMesh[ 5 ].center = ae::Vec3( 1, -1, 1 ) * ( kChunkSize * 0.5f );
-	// sdfToMesh[ 6 ].center = ae::Vec3( 1, 1, -1 ) * ( kChunkSize * 0.5f );
-	// sdfToMesh[ 7 ].center = ae::Vec3( 1, 1, 1 ) * ( kChunkSize * 0.5f );
 	
 	//*/
 	// Single region
@@ -673,17 +640,24 @@ int main()
 }
 
 //------------------------------------------------------------------------------
-// IsosurfaceExtractorCache member functions
+// IsosurfaceExtractor member functions
 //------------------------------------------------------------------------------
-IsosurfaceExtractorCache::IsosurfaceExtractorCache()
+IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
+	vertices( tag ),
+	indices( tag ),
+	m_voxels( tag )
 {
 	Reset();
 }
 
-void IsosurfaceExtractorCache::Reset()
+void IsosurfaceExtractor::Reset()
 {
+	vertices.Clear();
+	indices.Clear();
+	m_stats = {};
 	m_surfaceAABB = ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ); // 0 size by default, the position shouldn't matter
 	m_estimatedVertexCount = 0.0f;
+	m_voxels.Clear();
 	
 	const uint32_t zoneCount = m_zones.Length();
 	for ( uint32_t i = 0; i < zoneCount; i++ )
@@ -693,24 +667,9 @@ void IsosurfaceExtractorCache::Reset()
 	m_zones.Clear();
 }
 
-void IsosurfaceExtractorCache::Generate( const IsosurfaceParams& params )
+void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Vec3 center, ae::Vec3 halfSize )
 {
-	Reset();
-	if( params.aabb.Contains( params.aabb.GetCenter() ) )
-	{
-		m_params = params;
-		m_surfaceAABB = ae::AABB(); // Default (and not 0 size!) so that ae::AABB::Expand() functions work as expected
-		m_Generate( m_params.aabb.GetCenter(), params.aabb.GetHalfSize() );
-		if( m_surfaceAABB == ae::AABB() )
-		{
-			Reset(); // Reset octree and aabb so an empty SDF is as simple as possible
-		}
-	}
-}
-
-void IsosurfaceExtractorCache::m_Generate( ae::Vec3 center, ae::Vec3 halfSize )
-{
-	const float signedSurfaceDistance = m_params.fn( center, m_params.userData );
+	const float signedSurfaceDistance = params.fn( center, params.userData );
 	const float diagonal = halfSize.Length();
 	if( diagonal <= ae::Abs( signedSurfaceDistance ) )
 	{
@@ -726,6 +685,7 @@ void IsosurfaceExtractorCache::m_Generate( ae::Vec3 center, ae::Vec3 halfSize )
 		for( uint32_t i = 0; i < 8; i++ )
 		{
 			m_Generate(
+				params,
 				center + kChildOffsets[ i ] * nextHalfSize,
 				nextHalfSize
 			);
@@ -773,84 +733,38 @@ void IsosurfaceExtractorCache::m_Generate( ae::Vec3 center, ae::Vec3 halfSize )
 	}
 }
 
-float IsosurfaceExtractorCache::GetValue( ae::Vec3 position ) const
+void IsosurfaceExtractor::Generate( IsosurfaceParams params, ae::Array< ae::Vec3 >* errors )
 {
-	return m_params.fn( position, m_params.userData );
-}
-
-ae::Vec3 IsosurfaceExtractorCache::GetDerivative( ae::Vec3 p ) const
-{
-	// @TODO: GetValues( ae::Array< ae::Vec3, N > pos, ae::Array< float, N >& resultsOut );
-	ae::Vec3 pv( GetValue( p ) );
-	AE_DEBUG_IF( pv != pv ) { return ae::Vec3( 0.0f ); }
-	
-	ae::Vec3 normal0;
-	for( int32_t i = 0; i < 3; i++ )
+	if( params.maxVerts == 0 )
 	{
-		ae::Vec3 nt = p;
-		nt[ i ] += m_params.normalSampleOffset;
-		normal0[ i ] = GetValue( nt );
+		params.maxVerts = ae::MaxValue< uint32_t >();
 	}
-	// This should be really close to 0 because it's really
-	// close to the surface but not close enough to ignore.
-	normal0 -= pv;
-	AE_DEBUG_IF( normal0 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
-	normal0 /= normal0.Length();
-	AE_DEBUG_IF( normal0 != normal0 ) { return ae::Vec3( 0.0f ); }
-
-	ae::Vec3 normal1;
-	for( int32_t i = 0; i < 3; i++ )
+	if( params.maxIndices == 0 )
 	{
-		ae::Vec3 nt = p;
-		nt[ i ] -= m_params.normalSampleOffset;
-		normal1[ i ] = GetValue( nt );
+		params.maxIndices = ae::MaxValue< uint32_t >();
 	}
-	// This should be really close to 0 because it's really
-	// close to the surface but not close enough to ignore.
-	normal1 = pv - normal1;
-	AE_DEBUG_IF( normal1 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
-	normal1 /= normal1.Length();
-	AE_DEBUG_IF( normal1 != normal1 ) { return ae::Vec3( 0.0f ); }
-
-	return ( normal1 + normal0 ).SafeNormalizeCopy();
-}
-
-//------------------------------------------------------------------------------
-// IsosurfaceExtractor member functions
-//------------------------------------------------------------------------------
-IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
-	vertices( tag ),
-	indices( tag ),
-	m_voxels( tag )
-{}
-
-void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t maxVerts, uint32_t maxIndices, ae::Array< ae::Vec3 >* errors )
-{
-	if( maxVerts == 0 )
+	Reset();
+	if( !params.aabb.Contains( params.aabb.GetCenter() ) )
 	{
-		maxVerts = ae::MaxValue< uint32_t >();
+		return;
 	}
-	if( maxIndices == 0 )
+	m_surfaceAABB = ae::AABB(); // Default (and not 0 size!) so that ae::AABB::Expand() functions work as expected
+	m_Generate( params, params.aabb.GetCenter(), params.aabb.GetHalfSize() );
+	if( m_surfaceAABB == ae::AABB() )
 	{
-		maxIndices = ae::MaxValue< uint32_t >();
+		Reset();
+		return;
 	}
-
-	
-	vertices.Clear();
-	indices.Clear();
-	m_voxels.Clear();
-	m_stats = {};
-	m_sdf.Generate( params );
-	m_stats.estimatedVertexCount = m_sdf.GetEstimatedVertexCount();
-	vertices.Reserve( m_sdf.GetEstimatedVertexCount() );
+	m_stats.estimatedVertexCount = (uint32_t)m_estimatedVertexCount;
+	vertices.Reserve( (uint32_t)m_estimatedVertexCount );
 	// This multiplier is very well established, the average indexed mesh
 	// has 6 indices per vertex.
-	indices.Reserve( m_sdf.GetEstimatedVertexCount() * 6 );
+	indices.Reserve( (uint32_t)( m_estimatedVertexCount * 6.0f ) );
 	// This multiplier can make a huge difference, if it's too large then
 	// too big of a map will be allocated which will be expensive to access
 	// and if it's too small then the map will need to be reallocated during
 	// generation.
-	m_voxels.Reserve( m_sdf.GetEstimatedVertexCount() * 3.25f );
+	m_voxels.Reserve( (uint32_t)( m_estimatedVertexCount * 3.25f ) );
 
 	// @TODO: Description
 	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
@@ -869,12 +783,12 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
 	};
 	
-	const ae::Vec3 generationOffset = m_sdf.GetParams().aabb.GetMin();
+	const ae::Vec3 generationOffset = params.aabb.GetMin();
 	const ae::Int3 cornerOffsetInt = generationOffset.FloorCopy();
 	const ae::Int3 generationMin( -1 );
-	const ae::Int3 generationMax = m_sdf.GetParams().aabb.GetMax().CeilCopy() + ae::Int3( 1 ) - cornerOffsetInt;
-	const ae::Int3 sdfMin = ae::Clip( m_sdf.GetOctreeAABB().GetMin().FloorCopy() - cornerOffsetInt, generationMin, generationMax );
-	const ae::Int3 sdfMax = ae::Clip( m_sdf.GetOctreeAABB().GetMax().CeilCopy() - cornerOffsetInt, generationMin, generationMax );
+	const ae::Int3 generationMax = params.aabb.GetMax().CeilCopy() + ae::Int3( 1 ) - cornerOffsetInt;
+	const ae::Int3 sdfMin = ae::Clip( m_surfaceAABB.GetMin().FloorCopy() - cornerOffsetInt, generationMin, generationMax );
+	const ae::Int3 sdfMax = ae::Clip( m_surfaceAABB.GetMax().CeilCopy() - cornerOffsetInt, generationMin, generationMax );
 	AE_DEBUG_ASSERT( ( sdfMax.x - sdfMin.x ) >= 0 );
 	AE_DEBUG_ASSERT( ( sdfMax.y - sdfMin.y ) >= 0 );
 	AE_DEBUG_ASSERT( ( sdfMax.z - sdfMin.z ) >= 0 );
@@ -883,6 +797,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 	{
 		return; // Zero size generation region
 	}
+#define _AE_GET_VALUE( _pos ) params.fn( (_pos), params.userData )
 	// This phase finds the surface of the SDF and generates the list of
 	// vertices along with all of the 'lattice' edge intersections. The vertex
 	// positions will be centered within their voxels at the end of this phase,
@@ -899,7 +814,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 		// holes in the mesh.
 		auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
 		const ae::Vec3 sharedCornerOffset( 1.0f );
-		const float sharedCornerValue = Nudge( m_sdf.GetValue( generationOffset + voxelPos + sharedCornerOffset ) );
+		const float sharedCornerValue = Nudge( _AE_GET_VALUE( generationOffset + voxelPos + sharedCornerOffset ) );
 		m_stats.sampleCount++;
 		if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be smaller
 		{
@@ -908,9 +823,9 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 		}
 		const float cornerValues[ 3 ] =
 		{
-			Nudge( m_sdf.GetValue( generationOffset + voxelPos + cornerOffsets[ 0 ] ) ),
-			Nudge( m_sdf.GetValue( generationOffset + voxelPos + cornerOffsets[ 1 ] ) ),
-			Nudge( m_sdf.GetValue( generationOffset + voxelPos + cornerOffsets[ 2 ] ) )
+			Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 0 ] ) ),
+			Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 1 ] ) ),
+			Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 2 ] ) )
 		};
 		m_stats.sampleCount += 3;
 		AE_DEBUG_IF( !errors )
@@ -938,7 +853,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 		for( int32_t e = 0; e < 3; e++ )
 		if( voxel.edgeBits & mask[ e ] )
 		{
-			if( vertices.Length() + 4 > maxVerts || indices.Length() + 6 > maxIndices )
+			if( vertices.Length() + 4 > params.maxVerts || indices.Length() + 6 > params.maxIndices )
 			{
 				return false;
 			}
@@ -955,7 +870,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 				for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
 				{
 					edgeOffset01 = start + rayDir * depth;
-					const float closestSurfaceDist = m_sdf.GetValue( generationOffset + voxelPos + edgeOffset01 );
+					const float closestSurfaceDist = _AE_GET_VALUE( generationOffset + voxelPos + edgeOffset01 );
 					m_stats.sampleCount++;
 					if( closestSurfaceDist < 0.01f )
 					{
@@ -975,9 +890,44 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 			AE_DEBUG_ASSERT( edgeOffset01.y >= 0.0f && edgeOffset01.y <= 1.0f );
 			AE_DEBUG_ASSERT( edgeOffset01.z >= 0.0f && edgeOffset01.z <= 1.0f );
 			
+			auto getDerivative = [&]( ae::Vec3 p )
+			{
+				ae::Vec3 pv( _AE_GET_VALUE( p ) );
+				AE_DEBUG_IF( pv != pv ) { return ae::Vec3( 0.0f ); }
+				
+				ae::Vec3 normal0;
+				for( int32_t i = 0; i < 3; i++ )
+				{
+					ae::Vec3 nt = p;
+					nt[ i ] += params.normalSampleOffset;
+					normal0[ i ] = _AE_GET_VALUE( nt );
+				}
+				// This should be really close to 0 because it's really
+				// close to the surface but not close enough to ignore.
+				normal0 -= pv;
+				AE_DEBUG_IF( normal0 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
+				normal0 /= normal0.Length();
+				AE_DEBUG_IF( normal0 != normal0 ) { return ae::Vec3( 0.0f ); }
+
+				ae::Vec3 normal1;
+				for( int32_t i = 0; i < 3; i++ )
+				{
+					ae::Vec3 nt = p;
+					nt[ i ] -= params.normalSampleOffset;
+					normal1[ i ] = _AE_GET_VALUE( nt );
+				}
+				// This should be really close to 0 because it's really
+				// close to the surface but not close enough to ignore.
+				normal1 = pv - normal1;
+				AE_DEBUG_IF( normal1 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
+				normal1 /= normal1.Length();
+				AE_DEBUG_IF( normal1 != normal1 ) { return ae::Vec3( 0.0f ); }
+				
+				m_stats.sampleCount += 7;
+				return ( normal1 + normal0 ).SafeNormalizeCopy();
+			};
 			voxel.edgePos[ e ] = edgeOffset01;
-			voxel.edgeNormal[ e ] = m_sdf.GetDerivative( generationOffset + voxelPos + edgeOffset01 );
-			m_stats.sampleCount += 7;
+			voxel.edgeNormal[ e ] = getDerivative( generationOffset + voxelPos + edgeOffset01 );
 			AE_DEBUG_IF( errors && voxel.edgeNormal[ e ] == ae::Vec3( 0.0f ) ) { errors->Append( generationOffset + voxelPos + edgeOffset01 ); }
 
 			// Don't allow verts to be added on the very edge of the generation
@@ -1060,10 +1010,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 		m_voxels.Set( { x + 1, y + 1, z + 1 }, voxel );
 		return true;
 	};
-	const uint32_t zoneCount = m_sdf.GetZoneCount();
+	const uint32_t zoneCount = m_zones.Length();
 	for( uint32_t i = 0; i < zoneCount; i++ )
 	{
-		const IsosurfaceExtractorCache::Zone* zone = m_sdf.GetZone( i );
+		const IsosurfaceExtractor::Zone* zone = m_zones.GetValue( i );
 		const ae::Int3 zoneOffset = zone->GetOffset() - cornerOffsetInt;
 		const ae::Int3 zoneMin = ae::Clip( zoneOffset, sdfMin, sdfMax );
 		const ae::Int3 zoneMax = ae::Clip( zoneOffset + zone->GetSize(), sdfMin, sdfMax );
@@ -1282,4 +1232,5 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& params, uint32_t max
 
 	AE_DEBUG_ASSERT( vertices.Length() <= maxVerts );
 	AE_DEBUG_ASSERT( indices.Length() <= maxIndices );
+#undef _AE_GET_VALUE
 }
