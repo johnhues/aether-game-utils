@@ -9540,12 +9540,12 @@ bool Map< K, V, N, M >::Remove( const K& key, V* valueOut )
 template < typename K, typename V, uint32_t N, MapMode M >
 void Map< K, V, N, M >::RemoveIndex( uint32_t index, V* valueOut )
 {
-	uint32_t hash = ae::GetHash( m_pairs[ index ].key );
+	const K& key = m_pairs[ index ].key;
 #if _AE_DEBUG_
-	int32_t checkIdx = m_hashMap.Remove( hash );
-	AE_ASSERT( checkIdx == checkIdx );
+	const int32_t checkIdx = m_hashMap.Remove( key );
+	AE_ASSERT( checkIdx == index );
 #else
-	m_hashMap.Remove( hash );
+	m_hashMap.Remove( key );
 #endif
 	m_RemoveIndex( index, valueOut );
 }

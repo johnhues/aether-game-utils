@@ -30,6 +30,7 @@
 #else
 #define AE_DEBUG_IF( _expr ) if constexpr( false )
 #endif
+#include "ae/aeSparseGrid.h"
 
 #ifndef AE_TERRAIN_SIMD
 	#if _AE_LINUX_ || _AE_EMSCRIPTEN_
@@ -114,6 +115,7 @@ public:
 	//! given position. If the lookup position is outside the octree it will
 	//! sample the given SDF.
 	float GetValue( ae::Vec3 position ) const;
+	bool Intersects( ae::Vec3 position ) const;
 	ae::Vec3 GetDerivative( ae::Vec3 p ) const;
 	// @TODO: ae::Array< float, N > GetValues( ae::Array< ae::Vec3, N > pos, ae::Array< float, N >& resultsOut ) const;
 	
@@ -124,9 +126,12 @@ public:
 
 	inline uint32_t GetEstimatedVertexCount() const { return m_estimatedVertexCount; }
 
+	aeSparseGrid< aeSparseGridZone< uint8_t, 256, 256, 256 > > m_surfaceIntersections;
+
 private:
 	void m_Generate( int32_t index, ae::Vec3 center, ae::Vec3 halfSize );
 	float m_GetValue( const IsosurfaceExtractorCacheOctant* octant, ae::Vec3 position ) const;
+	bool m_Intersects( const IsosurfaceExtractorCacheOctant* octant, ae::Vec3 position ) const;
 	IsosurfaceParams m_params;
 	const ae::Vec3 kChildOffsets[ 8 ] =
 	{
@@ -695,6 +700,7 @@ void IsosurfaceExtractorCache::Reset()
 	m_octant.m_childrenBaseIndex = -1;
 	m_surfaceAABB = ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ); // 0 size by default, the position shouldn't matter
 	m_octants.Clear();
+	m_surfaceIntersections.Clear();
 	m_estimatedVertexCount = 0.0f;
 }
 
@@ -751,9 +757,21 @@ void IsosurfaceExtractorCache::m_Generate( int32_t index, ae::Vec3 center, ae::V
 		if( octant->m_intersects )
 		{
 			const ae::AABB leafAABB = octant->GetAABB();
-			const ae::Vec3 size = ( leafAABB.GetMax() - leafAABB.GetMin() );
+			const ae::Vec3 leafSize = ( leafAABB.GetMax() - leafAABB.GetMin() );
+			const ae::Int3 leafGridMin = ( leafAABB.GetMin() / kLeafMult ).FloorCopy();
+			const ae::Int3 leafGridMax = ( leafAABB.GetMax() / kLeafMult ).CeilCopy();
+			
 			m_surfaceAABB.Expand( leafAABB );
-			m_estimatedVertexCount += ( size.x * size.y * size.z ) * 0.4f; // @HACK: What should this actually be?
+			
+			// @TODO: Bounded region Set() function
+			for( int32_t z = leafGridMin.z; z <= leafGridMax.z; z++ )
+			for( int32_t y = leafGridMin.y; y <= leafGridMax.y; y++ )
+			for( int32_t x = leafGridMin.x; x <= leafGridMax.x; x++ )
+			{
+				m_surfaceIntersections.Set( ae::Int3( x, y, z ), 1 );
+			}
+			
+			m_estimatedVertexCount += ( leafSize.x * leafSize.y * leafSize.z ) * 0.4f; // @HACK: What should this actually be?
 		}
 	}
 }
@@ -809,6 +827,34 @@ float IsosurfaceExtractorCache::m_GetValue( const IsosurfaceExtractorCacheOctant
 	else
 	{
 		return octant->m_signedSurfaceDistance;
+	}
+}
+
+bool IsosurfaceExtractorCache::Intersects( ae::Vec3 position ) const
+{
+	const uint8_t* value = m_surfaceIntersections.TryGet( position.FloorCopy() / kLeafMult );
+	return ( value != nullptr && *value != 0 );
+}
+
+bool IsosurfaceExtractorCache::m_Intersects( const IsosurfaceExtractorCacheOctant* octant, ae::Vec3 position ) const
+{
+	// Intersection check for this 'octant' has already been done by caller
+	if( octant->m_childrenBaseIndex < 0 )
+	{
+		return true;
+	}
+	else
+	{
+		const IsosurfaceExtractorCacheOctant* children = &m_octants[ octant->m_childrenBaseIndex ];
+		for( uint32_t i = 0; i < 8; i++ )
+		{
+			const IsosurfaceExtractorCacheOctant* child = &children[ i ];
+			if( child->m_intersects && child->GetAABB().Contains( position ) && m_Intersects( child, position ) )
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 }
 
@@ -1091,18 +1137,28 @@ void IsosurfaceExtractor::Generate( const IsosurfaceExtractorCache* sdf, uint32_
 		m_voxels.Set( { x + 1, y + 1, z + 1 }, voxel );
 		return true;
 	};
-	for( int32_t z = sdfMin.z; z < sdfMax.z; z++ )
-	for( int32_t y = sdfMin.y; y < sdfMax.y; y++ )
-	for( int32_t x = sdfMin.x; x < sdfMax.x; x++ )
+	const uint32_t zoneCount = sdf->m_surfaceIntersections.Length();
+	for( uint32_t i = 0; i < zoneCount; i++ )
 	{
-		if( !DoVoxel( x, y, z ) )
+		const auto* zone = sdf->m_surfaceIntersections.GetZone( i );
+		const ae::Int3 zoneOffset = zone->GetOffset() - cornerOffsetInt;
+		const ae::Int3 zoneMin = ae::Clip( zoneOffset, sdfMin, sdfMax );
+		const ae::Int3 zoneMax = ae::Clip( zoneOffset + zone->GetSize(), sdfMin, sdfMax );
+		const ae::AABB zoneAABB( (ae::Vec3)zoneMin, (ae::Vec3)zoneMax );
+		for( int32_t z = zoneMin.z; z < zoneMax.z; z++ )
+		for( int32_t y = zoneMin.y; y < zoneMax.y; y++ )
+		for( int32_t x = zoneMin.x; x < zoneMax.x; x++ )
 		{
-			vertices.Clear();
-			indices.Clear();
-			return;
+			const ae::Int3 zonePos = ae::Int3( x, y, z ) - zoneOffset;
+			if( zone->Get( zonePos ) && !DoVoxel( x, y, z ) )
+			{
+				vertices.Clear();
+				indices.Clear();
+				return;
+			}
 		}
+		m_stats.iterationCount += ( zoneMax.x - zoneMin.x ) * ( zoneMax.y - zoneMin.y ) * ( zoneMax.z - zoneMin.z );
 	}
-	m_stats.iterationCount = ( sdfMax.x - sdfMin.x ) * ( sdfMax.y - sdfMin.y ) * ( sdfMax.z - sdfMin.z );
 	m_stats.workingCount = m_voxels.Length();
 	
 	if( indices.Length() == 0 )

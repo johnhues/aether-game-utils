@@ -37,7 +37,8 @@ class aeSparseGridZone
 {
 public:
   // aeSparseGrid interface start
-  void SetZoneInfo( ae::Int3 offset ) {}
+  void SetOffset( ae::Int3 offset ) { m_offset = offset; }
+  ae::Int3 GetOffset() const { return m_offset; }
 
   void Set( ae::Int3 pos, const T& value ) { m_values[ pos.z ][ pos.y ][ pos.x ] = value; }
   T& Get( ae::Int3 pos ) { return m_values[ pos.z ][ pos.y ][ pos.x ]; }
@@ -48,32 +49,33 @@ public:
   // aeSparseGrid interface end
 
 private:
+  ae::Int3 m_offset = ae::Int3( 0 );
   T m_values[ DimZ ][ DimY ][ DimX ] = {}; // Default initialization
 };
 
 //------------------------------------------------------------------------------
 // aeSparseGrid class
 //------------------------------------------------------------------------------
-template < typename Z >
+template < typename Zone >
 class aeSparseGrid
 {
 public:
   aeSparseGrid() {}
-  aeSparseGrid( aeInitInfo< Z > initInfo ) : m_initInfo( initInfo ) {}
+  aeSparseGrid( aeInitInfo< Zone > initInfo ) : m_initInfo( initInfo ) {}
   ~aeSparseGrid() { Clear(); }
 
-  void Reset( const aeInitInfo< Z >& initInfo ) { Clear(); m_initInfo = initInfo; }
+  void Reset( const aeInitInfo< Zone >& initInfo ) { Clear(); m_initInfo = initInfo; }
   void Clear();
 
-  void Set( ae::Int3 pos, const typename Z::GridType& value );
-  typename Z::GridType* TryGet( ae::Int3 pos );
-  const typename Z::GridType* TryGet( ae::Int3 pos ) const;
+  void Set( ae::Int3 pos, const typename Zone::GridType& value );
+  typename Zone::GridType* TryGet( ae::Int3 pos );
+  const typename Zone::GridType* TryGet( ae::Int3 pos ) const;
 
   uint32_t Length() const;
-  Z* GetZone( uint32_t i );
-  const Z* GetZone( uint32_t i ) const;
-  Z* GetZone( ae::Int3 pos );
-  const Z* GetZone( ae::Int3 pos ) const;
+  Zone* GetZone( uint32_t i );
+  const Zone* GetZone( uint32_t i ) const;
+  Zone* GetZone( ae::Int3 pos );
+  const Zone* GetZone( ae::Int3 pos ) const;
 
 private:
   aeSparseGrid( const aeSparseGrid& ) = delete;
@@ -82,8 +84,8 @@ private:
   ae::Int3 m_GetSlot( ae::Int3 pos ) const;
   ae::Int3 m_GetLocal( ae::Int3 pos ) const;
 
-  aeInitInfo< Z > m_initInfo;
-  ae::Map< ae::Int3, aeInitializer< Z >* > m_zones = AE_ALLOC_TAG_FIXME;
+  aeInitInfo< Zone > m_initInfo;
+  ae::Map< ae::Int3, aeInitializer< Zone >* > m_zones = AE_ALLOC_TAG_FIXME;
 };
 
 //------------------------------------------------------------------------------
@@ -111,8 +113,8 @@ ae::Int3 aeSparseGrid< Z >::m_GetLocal( ae::Int3 pos ) const
   );
 }
 
-template < typename Z >
-void aeSparseGrid< Z >::Clear()
+template < typename Zone >
+void aeSparseGrid< Zone >::Clear()
 {
   uint32_t zoneCount = m_zones.Length();
   for ( uint32_t i = 0; i < zoneCount; i++ )
@@ -122,16 +124,16 @@ void aeSparseGrid< Z >::Clear()
   m_zones.Clear();
 }
 
-template < typename Z >
-void aeSparseGrid< Z >::Set( ae::Int3 pos, const typename Z::GridType& value )
+template < typename Zone >
+void aeSparseGrid< Zone >::Set( ae::Int3 pos, const typename Zone::GridType& value )
 {
   ae::Int3 slot = m_GetSlot( pos );
-  aeInitializer< Z >* zone = nullptr;
+  aeInitializer< Zone >* zone = nullptr;
   if ( !m_zones.TryGet( slot, &zone ) )
   {
-    const ae::Int3 size = Z::GetSize();
-    zone = ae::New< aeInitializer< Z > >( AE_ALLOC_TAG_FIXME, m_initInfo );
-    zone->Get().SetZoneInfo( slot * size );
+    const ae::Int3 size = Zone::GetSize();
+    zone = ae::New< aeInitializer< Zone > >( AE_ALLOC_TAG_FIXME, m_initInfo );
+    zone->Get().SetOffset( slot * size );
     m_zones.Set( slot, zone );
   }
 
@@ -140,12 +142,12 @@ void aeSparseGrid< Z >::Set( ae::Int3 pos, const typename Z::GridType& value )
 }
 
 // @NOTE: const and non-const TryGet() must be implemented seprately so the correct Z::GridType::Get() is called
-template < typename Z >
-typename Z::GridType* aeSparseGrid< Z >::TryGet( ae::Int3 pos )
+template < typename Zone >
+typename Zone::GridType* aeSparseGrid< Zone >::TryGet( ae::Int3 pos )
 {
   ae::Int3 slot = m_GetSlot( pos );
 
-  aeInitializer< Z >* zone = nullptr;
+  aeInitializer< Zone >* zone = nullptr;
   if ( m_zones.TryGet( slot, &zone ) )
   {
     ae::Int3 localPos = m_GetLocal( pos );
@@ -155,12 +157,12 @@ typename Z::GridType* aeSparseGrid< Z >::TryGet( ae::Int3 pos )
   return nullptr;
 }
 
-template < typename Z >
-const typename Z::GridType* aeSparseGrid< Z >::TryGet( ae::Int3 pos ) const
+template < typename Zone >
+const typename Zone::GridType* aeSparseGrid< Zone >::TryGet( ae::Int3 pos ) const
 {
   ae::Int3 slot = m_GetSlot( pos );
 
-  aeInitializer< Z >* zone = nullptr;
+  aeInitializer< Zone >* zone = nullptr;
   if ( m_zones.TryGet( slot, &zone ) )
   {
     ae::Int3 localPos = m_GetLocal( pos );
@@ -170,38 +172,38 @@ const typename Z::GridType* aeSparseGrid< Z >::TryGet( ae::Int3 pos ) const
   return nullptr;
 }
 
-template < typename Z >
-uint32_t aeSparseGrid< Z >::Length() const
+template < typename Zone >
+uint32_t aeSparseGrid< Zone >::Length() const
 {
   return m_zones.Length();
 }
 
-template < typename Z >
-Z* aeSparseGrid< Z >::GetZone( uint32_t i )
+template < typename Zone >
+Zone* aeSparseGrid< Zone >::GetZone( uint32_t i )
 {
   return &m_zones.GetValue( i )->Get();
 }
 
-template < typename Z >
-const Z* aeSparseGrid< Z >::GetZone( uint32_t i ) const
+template < typename Zone >
+const Zone* aeSparseGrid< Zone >::GetZone( uint32_t i ) const
 {
   return &m_zones.GetValue( i )->Get();
 }
 
-template < typename Z >
-Z* aeSparseGrid< Z >::GetZone( ae::Int3 pos )
+template < typename Zone >
+Zone* aeSparseGrid< Zone >::GetZone( ae::Int3 pos )
 {
   ae::Int3 slot = m_GetSlot( pos );
-  aeInitializer< Z >* zone = nullptr;
+  aeInitializer< Zone >* zone = nullptr;
   m_zones.TryGet( slot, &zone );
   return zone ? &zone->Get() : nullptr;
 }
 
-template < typename Z >
-const Z* aeSparseGrid< Z >::GetZone( ae::Int3 pos ) const
+template < typename Zone >
+const Zone* aeSparseGrid< Zone >::GetZone( ae::Int3 pos ) const
 {
   ae::Int3 slot = m_GetSlot( pos );
-  aeInitializer< Z >* zone = nullptr;
+  aeInitializer< Zone >* zone = nullptr;
   m_zones.TryGet( slot, &zone );
   return zone ? &zone->Get() : nullptr;
 }
