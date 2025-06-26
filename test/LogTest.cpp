@@ -36,14 +36,19 @@ static int32_t s_runningTestIndex = -1;
 //------------------------------------------------------------------------------
 void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, const char** tags, uint32_t tagCount, const char* message )
 {
+#if AE_ENABLE_SOURCE_INFO
+	REQUIRE( filePath[ 0 ] );
+	REQUIRE( line >= 0 );
+#else
+	REQUIRE( !filePath[ 0 ] );
+	REQUIRE( line == 0 );
+#endif
 	switch( s_runningTestIndex )
 	{
 		case 0:
 		{
 			REQUIRE( ae::Str32( "Test [0]" ) == message );
 			REQUIRE( severity == ae::LogSeverity::Info );
-			REQUIRE( filePath[ 0 ] );
-			REQUIRE( line >= 0 );
 			REQUIRE( tagCount == 0 );
 			break;
 		}
@@ -51,8 +56,6 @@ void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, 
 		{
 			REQUIRE( ae::Str32( "Test [1]" ) == message );
 			REQUIRE( severity == ae::LogSeverity::Debug );
-			REQUIRE( filePath[ 0 ] );
-			REQUIRE( line >= 0 );
 			REQUIRE( tagCount == 1 );
 			REQUIRE( ae::Str32( "TestTag" ) == tags[ 0 ] );
 			break;
@@ -61,8 +64,6 @@ void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, 
 		{
 			REQUIRE( ae::Str32( "Test [2]" ) == message );
 			REQUIRE( severity == ae::LogSeverity::Warning );
-			REQUIRE( filePath[ 0 ] );
-			REQUIRE( line >= 0 );
 			REQUIRE( tagCount == 2 );
 			REQUIRE( ae::Str32( "TestTag0" ) == tags[ 0 ] );
 			REQUIRE( ae::Str32( "TestTag1" ) == tags[ 1 ] );
@@ -72,8 +73,6 @@ void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, 
 		{
 			REQUIRE( ae::Str32( "Test [3]" ) == message );
 			REQUIRE( severity == ae::LogSeverity::Error );
-			REQUIRE( filePath[ 0 ] );
-			REQUIRE( line >= 0 );
 			REQUIRE( tagCount == 1 );
 			REQUIRE( ae::Str32( "TestTag0" ) == tags[ 0 ] );
 			break;
@@ -82,8 +81,6 @@ void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, 
 		{
 			REQUIRE( ae::Str32( "AE_ASSERT( false ) Test [4]" ) == message );
 			REQUIRE( severity == ae::LogSeverity::Fatal );
-			REQUIRE( filePath[ 0 ] );
-			REQUIRE( line >= 0 );
 			REQUIRE( tagCount == 1 );
 			REQUIRE( ae::Str32( "AssertTag" ) == tags[ 0 ] );
 			break;

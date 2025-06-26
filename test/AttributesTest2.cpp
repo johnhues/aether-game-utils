@@ -36,15 +36,20 @@ TEST_CASE( "Registered class attributes", "[Attributes]" )
 	REQUIRE( type );
 	const ae::ClassVar* var = type->GetVarByName( "id", false );
 	REQUIRE( var );
-	REQUIRE( type->attributes.GetCount< ae::Attribute >() == 6 );
-	REQUIRE( var->attributes.GetCount< ae::Attribute >() == 4 );
+	REQUIRE( type->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 6 : 5 ) );
+	REQUIRE( var->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 4 : 3 ) );
 
 	GameObject obj;
 	obj.id = 1;
 	REQUIRE( var->GetObjectValueAsString( &obj ) == "1" );
 
+#if AE_ENABLE_SOURCE_INFO
 	REQUIRE( type->attributes.Has< ae::SourceFileAttribute >() );
 	REQUIRE( type->attributes.GetCount< ae::SourceFileAttribute >() == 1 );
+#else
+	REQUIRE( !type->attributes.Has< ae::SourceFileAttribute >() );
+	REQUIRE( type->attributes.GetCount< ae::SourceFileAttribute >() == 0 );
+#endif
 
 	REQUIRE( type->attributes.Has< EmptyAttrib >() );
 	REQUIRE( type->attributes.GetCount< EmptyAttrib >() == 1 );
@@ -65,7 +70,11 @@ TEST_CASE( "Registered class attributes", "[Attributes]" )
 	REQUIRE( requiresAttrib3->name == "SomethingSomethingElseElse" );
 	REQUIRE( requiresAttrib4 == nullptr );
 
+#if AE_ENABLE_SOURCE_INFO
 	REQUIRE( var->attributes.Has< ae::SourceFileAttribute >() );
+#else
+	REQUIRE( !var->attributes.Has< ae::SourceFileAttribute >() );
+#endif
 
 	const CategoryInfoAttribute* categoryInfoAttrib = var->attributes.TryGet< CategoryInfoAttribute >();
 	REQUIRE( categoryInfoAttrib );
@@ -89,15 +98,20 @@ TEST_CASE( "Registered namespace class attributes", "[Attributes]" )
 	REQUIRE( type );
 	const ae::ClassVar* var = type->GetVarByName( "id", false );
 	REQUIRE( var );
-	REQUIRE( type->attributes.GetCount< ae::Attribute >() == 6 );
-	REQUIRE( var->attributes.GetCount< ae::Attribute >() == 4 );
+	REQUIRE( type->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 6 : 5 ) );
+	REQUIRE( var->attributes.GetCount< ae::Attribute >() == ( AE_ENABLE_SOURCE_INFO ? 4 : 3 ) );
 
 	xyz::Util obj;
 	obj.id = 1;
 	REQUIRE( var->GetObjectValueAsString( &obj ) == "1" );
 
+#if AE_ENABLE_SOURCE_INFO
 	REQUIRE( type->attributes.Has< ae::SourceFileAttribute >() );
 	REQUIRE( type->attributes.GetCount< ae::SourceFileAttribute >() == 1 );
+#else
+	REQUIRE( !type->attributes.Has< ae::SourceFileAttribute >() );
+	REQUIRE( type->attributes.GetCount< ae::SourceFileAttribute >() == 0 );
+#endif
 
 	REQUIRE( type->attributes.Has< EmptyAttrib >() );
 	REQUIRE( type->attributes.GetCount< EmptyAttrib >() == 1 );
@@ -118,7 +132,11 @@ TEST_CASE( "Registered namespace class attributes", "[Attributes]" )
 	REQUIRE( requiresAttrib3->name == "SomethingSomethingElseElse" );
 	REQUIRE( requiresAttrib4 == nullptr );
 
+#if AE_ENABLE_SOURCE_INFO
 	REQUIRE( var->attributes.Has< ae::SourceFileAttribute >() );
+#else
+	REQUIRE( !var->attributes.Has< ae::SourceFileAttribute >() );
+#endif
 
 	const CategoryInfoAttribute* categoryInfoAttrib = var->attributes.TryGet< CategoryInfoAttribute >();
 	REQUIRE( categoryInfoAttrib );
