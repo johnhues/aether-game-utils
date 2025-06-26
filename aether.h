@@ -2722,6 +2722,15 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 #define AE_STATIC_ASSERT( _x ) static_assert( _x, "static assert" )
 #define AE_STATIC_ASSERT_MSG( _x, _m ) static_assert( _x, _m )
 #define AE_STATIC_FAIL( _m ) static_assert( 0, _m )
+
+//------------------------------------------------------------------------------
+// AE_DEBUG_IF
+//------------------------------------------------------------------------------
+#if _AE_DEBUG_
+	#define AE_DEBUG_IF( _expr ) if( _expr )
+#else
+	#define AE_DEBUG_IF( _expr ) if constexpr( false )
+#endif
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -5371,6 +5380,110 @@ public:
 	// Internal
 	NetObject* GetNetObject( uint32_t index ) { return m_netObjects.GetValue( index ); }
 	uint32_t GetNetObjectCount() const { return m_netObjects.Length(); }
+};
+
+//------------------------------------------------------------------------------
+// Internal ae::IsosurfaceExtractor types
+//------------------------------------------------------------------------------
+struct VoxelIndex
+{
+	VoxelIndex() {}
+	VoxelIndex( int32_t x, int32_t y, int32_t z ) : x( x ), y( y ), z( z ) {}
+	bool operator==( const VoxelIndex& other ) const { return x == other.x && y == other.y && z == other.z; }
+	int32_t x;
+	int32_t y;
+	int32_t z;
+};
+template <> inline uint32_t GetHash( const VoxelIndex& index )
+{
+	// Create a hash using the index as a seed to prevent large consecutive map
+	// entries, where collisions become very expensive to handle.
+	constexpr uint32_t uint32MaxGridSize = 1625; // UINT32_MAX ^ (1/3)
+	return ae::Hash().HashBasicType( index.x + uint32MaxGridSize * ( index.y + index.z * uint32MaxGridSize ) ).Get();
+}
+//------------------------------------------------------------------------------
+// ae::IsosurfaceExtractor types
+//------------------------------------------------------------------------------
+struct IsosurfaceVertex
+{
+	ae::Vec4 position;
+	ae::Vec3 normal;
+};
+typedef uint32_t IsosurfaceIndex;
+using IsosurfaceFn = float( * )( ae::Vec3, const void* );
+struct IsosurfaceParams
+{
+	IsosurfaceFn fn = nullptr;
+	const void* userData = nullptr;
+	ae::AABB aabb = ae::AABB();
+	uint32_t maxVerts = 0;
+	uint32_t maxIndices = 0;
+	float normalSampleOffset = 0.1f;
+	ae::DebugLines* debug = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// ae::IsosurfaceExtractor class
+//------------------------------------------------------------------------------
+struct IsosurfaceExtractor
+{
+	IsosurfaceExtractor( ae::Tag tag );
+	void Generate( IsosurfaceParams params, ae::Array< ae::Vec3 >* errors );
+	void Reset();
+	
+	ae::Array< IsosurfaceVertex > vertices;
+	ae::Array< IsosurfaceIndex > indices;
+
+	struct Stats
+	{
+		uint32_t estimatedVertexCount = 0;
+		uint32_t iterationCount = 0;
+		uint32_t workingCount = 0;
+		uint32_t sampleCount = 0;
+	};
+	const Stats& GetStats() const { return m_stats; }
+
+private:
+	static constexpr IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
+	const ae::Vec3 kChildOffsets[ 8 ] =
+	{
+		{ -1, -1, -1 },
+		{ 1, -1, -1 },
+		{ -1, 1, -1 },
+		{ 1, 1, -1 },
+		{ -1, -1, 1 },
+		{ 1, -1, 1 },
+		{ -1, 1, 1 },
+		{ 1, 1, 1 }
+	};
+	struct Voxel
+	{
+		// 3 planes whose intersections are used to position vertices within voxel
+		// EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
+		ae::Vec3 edgeNormal[ 3 ];
+		ae::Vec3 edgePos[ 3 ];
+		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
+		uint16_t edgeBits = 0;
+	};
+	class Zone
+	{
+	public:
+		static constexpr int32_t Dim = 256;
+		static ae::Int3 GetSize() { return ae::Int3( Dim, Dim, Dim ); }
+		void SetOffset( ae::Int3 offset ) { m_offset = offset; }
+		ae::Int3 GetOffset() const { return m_offset; }
+		void Set( ae::Int3 pos, uint8_t value ) { m_values[ pos.z ][ pos.y ][ pos.x ] = value; }
+		uint8_t Get( ae::Int3 pos ) const { return m_values[ pos.z ][ pos.y ][ pos.x ]; }
+	private:
+		ae::Int3 m_offset = ae::Int3( 0 );
+		uint8_t m_values[ Dim ][ Dim ][ Dim ] = {}; // Default initialization
+	};
+	void m_Generate( const IsosurfaceParams& params, ae::Vec3 center, ae::Vec3 halfSize );
+	Stats m_stats;
+	ae::AABB m_surfaceAABB;
+	float m_estimatedVertexCount = 0.0f;
+	ae::Map< VoxelIndex, Voxel > m_voxels;
+	ae::Map< ae::Int3, Zone* > m_zones;
 };
 
 //! \defgroup Meta
@@ -27291,6 +27404,599 @@ void NetObjectServer::UpdateSendData()
 		netObject->m_prevHash = netObject->m_hash;
 		netObject->m_messageDataOut.Clear();
 	}
+}
+
+//------------------------------------------------------------------------------
+// ae::IsosurfaceExtractor member functions
+//------------------------------------------------------------------------------
+IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) : vertices( tag ), indices( tag ), m_voxels( tag ), m_zones( tag ) { Reset(); }
+
+void IsosurfaceExtractor::Reset()
+{
+	vertices.Clear();
+	indices.Clear();
+	m_stats = {};
+	m_surfaceAABB = ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ); // 0 size by default, the position shouldn't matter
+	m_estimatedVertexCount = 0.0f;
+	m_voxels.Clear();
+
+	const uint32_t zoneCount = m_zones.Length();
+	for( uint32_t i = 0; i < zoneCount; i++ )
+	{
+		ae::Delete( m_zones.GetValue( i ) );
+	}
+	m_zones.Clear();
+}
+
+void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Vec3 center, ae::Vec3 halfSize )
+{
+	const float signedSurfaceDistance = params.fn( center, params.userData );
+	const float diagonal = halfSize.Length();
+	if( diagonal <= ae::Abs( signedSurfaceDistance ) )
+	{
+		return; // No intersection, no need to split further
+	}
+
+	const ae::Vec3 nextHalfSize = halfSize * 0.5f;
+	constexpr float minOctantHalfSize = 0.55f;
+	if( nextHalfSize.x > minOctantHalfSize && nextHalfSize.y > minOctantHalfSize && nextHalfSize.z > minOctantHalfSize ) // Only split if next octant is large enough
+	{
+		for( uint32_t i = 0; i < 8; i++ )
+		{
+			m_Generate( params, center + kChildOffsets[ i ] * nextHalfSize, nextHalfSize );
+		}
+	}
+	else
+	{
+		const float leafMult = 1.0f;
+		const ae::Vec3 halfSize3( halfSize );
+		const ae::AABB leafAABB = ae::AABB( center - halfSize3, center + halfSize3 );
+		const ae::Vec3 leafSize = ( leafAABB.GetMax() - leafAABB.GetMin() );
+		const ae::Int3 leafGridMin = ( leafAABB.GetMin() / leafMult ).FloorCopy();
+		const ae::Int3 leafGridMax = ( leafAABB.GetMax() / leafMult ).CeilCopy();
+
+		m_surfaceAABB.Expand( leafAABB );
+
+		// @TODO: Bounded region Set() function
+		const ae::Int3 zoneSize = Zone::GetSize();
+		for( int32_t z = leafGridMin.z; z <= leafGridMax.z; z++ )
+		{
+			for( int32_t y = leafGridMin.y; y <= leafGridMax.y; y++ )
+			{
+				for( int32_t x = leafGridMin.x; x <= leafGridMax.x; x++ )
+				{
+					const ae::Int3 pos( x, y, z );
+					const ae::Int3 slot = ae::Int3( ae::Floor( (float)pos.x / zoneSize.x ), ae::Floor( (float)pos.y / zoneSize.y ), ae::Floor( (float)pos.z / zoneSize.z ) );
+					const ae::Int3 localPos = ae::Int3( ae::Mod( pos.x, zoneSize.x ), ae::Mod( pos.y, zoneSize.y ), ae::Mod( pos.z, zoneSize.z ) );
+					Zone* zone = nullptr;
+					if( !m_zones.TryGet( slot, &zone ) )
+					{
+						zone = ae::New< Zone >( AE_ALLOC_TAG_FIXME );
+						zone->SetOffset( slot * zoneSize );
+						m_zones.Set( slot, zone );
+					}
+					zone->Set( localPos, 1 );
+				}
+			}
+		}
+
+		m_estimatedVertexCount += ( leafSize.x * leafSize.y * leafSize.z ) * 0.4f; // @HACK: What should this actually be?
+	}
+}
+
+void IsosurfaceExtractor::Generate( IsosurfaceParams params, ae::Array< ae::Vec3 >* errors )
+{
+	if( params.maxVerts == 0 )
+	{
+		params.maxVerts = ae::MaxValue< uint32_t >();
+	}
+	if( params.maxIndices == 0 )
+	{
+		params.maxIndices = ae::MaxValue< uint32_t >();
+	}
+	Reset();
+	if( !params.aabb.Contains( params.aabb.GetCenter() ) )
+	{
+		return;
+	}
+	m_surfaceAABB = ae::AABB(); // Default (and not 0 size!) so that ae::AABB::Expand() functions work as expected
+	m_Generate( params, params.aabb.GetCenter(), params.aabb.GetHalfSize() );
+	if( m_surfaceAABB == ae::AABB() )
+	{
+		Reset();
+		return;
+	}
+	m_stats.estimatedVertexCount = (uint32_t)m_estimatedVertexCount;
+	vertices.Reserve( (uint32_t)m_estimatedVertexCount );
+	// This multiplier is very well established, the average indexed mesh
+	// has 6 indices per vertex.
+	indices.Reserve( (uint32_t)( m_estimatedVertexCount * 6.0f ) );
+	// This multiplier can make a huge difference, if it's too large then
+	// too big of a map will be allocated which will be expensive to access
+	// and if it's too small then the map will need to be reallocated during
+	// generation.
+	m_voxels.Reserve( (uint32_t)( m_estimatedVertexCount * 3.25f ) );
+
+	// @TODO: Description
+	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
+	const uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
+	const uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 2 );
+	// For expansion of edge intersections into triangles
+	const ae::Int3 offsets_EDGE_TOP_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1, 1 } };
+	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
+	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
+	// @TODO: Description
+	const uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
+	// 3 new edges to test
+	const ae::Vec3 cornerOffsets[ 3 ] = {
+		{ 0, 1, 1 }, // EDGE_TOP_FRONT_BIT
+		{ 1, 0, 1 }, // EDGE_TOP_RIGHT_BIT
+		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
+	};
+
+	const ae::Vec3 generationOffset = params.aabb.GetMin();
+	const ae::Int3 cornerOffsetInt = generationOffset.FloorCopy();
+	const ae::Int3 generationMin( -1 );
+	const ae::Int3 generationMax = params.aabb.GetMax().CeilCopy() + ae::Int3( 1 ) - cornerOffsetInt;
+	const ae::Int3 sdfMin = ae::Clip( m_surfaceAABB.GetMin().FloorCopy() - cornerOffsetInt, generationMin, generationMax );
+	const ae::Int3 sdfMax = ae::Clip( m_surfaceAABB.GetMax().CeilCopy() - cornerOffsetInt, generationMin, generationMax );
+	AE_DEBUG_ASSERT( ( sdfMax.x - sdfMin.x ) >= 0 );
+	AE_DEBUG_ASSERT( ( sdfMax.y - sdfMin.y ) >= 0 );
+	AE_DEBUG_ASSERT( ( sdfMax.z - sdfMin.z ) >= 0 );
+	const uint32_t sdfSize = ( sdfMax.x - sdfMin.x ) * ( sdfMax.y - sdfMin.y ) * ( sdfMax.z - sdfMin.z );
+	if( !sdfSize )
+	{
+		return; // Zero size generation region
+	}
+#define _AE_GET_VALUE( _pos ) params.fn( ( _pos ), params.userData )
+	// This phase finds the surface of the SDF and generates the list of
+	// vertices along with all of the 'lattice' edge intersections. The vertex
+	// positions will be centered within their voxels at the end of this phase,
+	// and will be nudged later to the correct position based on the SDF
+	// surface.
+	auto DoVoxel = [ & ]( int32_t x, int32_t y, int32_t z )
+	{
+		const ae::Vec3 voxelPos( x, y, z );
+		// This nudge is needed to prevent the SDF from ever being exactly on
+		// the voxel grid boundaries (imagine a plane at the origin with a
+		// normal facing along a cardinal axis, do the vertices belong to the
+		// voxels on the front or back of the plane?). Without this nudge, any
+		// vertices exactly on the grid boundary would be skipped resulting in
+		// holes in the mesh.
+		auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
+		const ae::Vec3 sharedCornerOffset( 1.0f );
+		const float sharedCornerValue = Nudge( _AE_GET_VALUE( generationOffset + voxelPos + sharedCornerOffset ) );
+		m_stats.sampleCount++;
+		if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be smaller
+		{
+			// Early out of additional edge intersections if far from the surface
+			return true;
+		}
+		const float cornerValues[ 3 ] = { Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 0 ] ) ), Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 1 ] ) ), Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 2 ] ) ) };
+		m_stats.sampleCount += 3;
+		AE_DEBUG_IF( !errors )
+		{
+			AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) );
+			AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) );
+			AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) );
+		}
+		else AE_DEBUG_IF( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f )
+		{
+			errors->Append( generationOffset + voxelPos );
+			return true;
+		}
+
+		Voxel voxel;
+		// Detect if any of the 3 new edges being tested intersect the implicit surface
+		if( cornerValues[ 0 ] * sharedCornerValue < 0.0f )
+		{
+			voxel.edgeBits |= EDGE_TOP_FRONT_BIT;
+		}
+		if( cornerValues[ 1 ] * sharedCornerValue < 0.0f )
+		{
+			voxel.edgeBits |= EDGE_TOP_RIGHT_BIT;
+		}
+		if( cornerValues[ 2 ] * sharedCornerValue < 0.0f )
+		{
+			voxel.edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT;
+		}
+
+		// Iterate over the 3 edges that this voxel is responsible for. The
+		// remaining 9 are handled by adjacent voxels.
+		for( int32_t e = 0; e < 3; e++ )
+		{
+			if( voxel.edgeBits & mask[ e ] )
+			{
+				if( vertices.Length() + 4 > params.maxVerts || indices.Length() + 6 > params.maxIndices )
+				{
+					return false;
+				}
+
+				// Sphere trace the voxel edge from the outside corner to the inside
+				// corner to find the intersection with the SDF surface
+				ae::Vec3 edgeOffset01;
+				{
+					const bool sharedCornerInside = ( sharedCornerValue < cornerValues[ e ] );
+					const ae::Vec3 start = ( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
+					const ae::Vec3 end = ( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
+					const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel size is 1
+					float depth = 0.0f;
+					for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
+					{
+						edgeOffset01 = start + rayDir * depth;
+						const float closestSurfaceDist = _AE_GET_VALUE( generationOffset + voxelPos + edgeOffset01 );
+						m_stats.sampleCount++;
+						if( closestSurfaceDist < 0.01f )
+						{
+							break; // Hit the surface
+						}
+						depth += closestSurfaceDist;
+						if( depth >= 1.0f )
+						{
+							AE_DEBUG_FAIL_MSG( "depth >= 1", "depth:#", depth );
+							depth = 1.0f;
+							break;
+						}
+					}
+				}
+				AE_DEBUG_ASSERT( edgeOffset01.x == edgeOffset01.x && edgeOffset01.y == edgeOffset01.y && edgeOffset01.z == edgeOffset01.z );
+				AE_DEBUG_ASSERT( edgeOffset01.x >= 0.0f && edgeOffset01.x <= 1.0f );
+				AE_DEBUG_ASSERT( edgeOffset01.y >= 0.0f && edgeOffset01.y <= 1.0f );
+				AE_DEBUG_ASSERT( edgeOffset01.z >= 0.0f && edgeOffset01.z <= 1.0f );
+
+				auto getDerivative = [ & ]( ae::Vec3 p )
+				{
+					ae::Vec3 pv( _AE_GET_VALUE( p ) );
+					AE_DEBUG_IF( pv != pv ) { return ae::Vec3( 0.0f ); }
+
+					ae::Vec3 normal0;
+					for( int32_t i = 0; i < 3; i++ )
+					{
+						ae::Vec3 nt = p;
+						nt[ i ] += params.normalSampleOffset;
+						normal0[ i ] = _AE_GET_VALUE( nt );
+					}
+					// This should be really close to 0 because it's really
+					// close to the surface but not close enough to ignore.
+					normal0 -= pv;
+					AE_DEBUG_IF( normal0 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
+					normal0 /= normal0.Length();
+					AE_DEBUG_IF( normal0 != normal0 ) { return ae::Vec3( 0.0f ); }
+
+					ae::Vec3 normal1;
+					for( int32_t i = 0; i < 3; i++ )
+					{
+						ae::Vec3 nt = p;
+						nt[ i ] -= params.normalSampleOffset;
+						normal1[ i ] = _AE_GET_VALUE( nt );
+					}
+					// This should be really close to 0 because it's really
+					// close to the surface but not close enough to ignore.
+					normal1 = pv - normal1;
+					AE_DEBUG_IF( normal1 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
+					normal1 /= normal1.Length();
+					AE_DEBUG_IF( normal1 != normal1 ) { return ae::Vec3( 0.0f ); }
+
+					m_stats.sampleCount += 7;
+					return ( normal1 + normal0 ).SafeNormalizeCopy();
+				};
+				voxel.edgePos[ e ] = edgeOffset01;
+				voxel.edgeNormal[ e ] = getDerivative( generationOffset + voxelPos + edgeOffset01 );
+				AE_DEBUG_IF( errors && voxel.edgeNormal[ e ] == ae::Vec3( 0.0f ) ) { errors->Append( generationOffset + voxelPos + edgeOffset01 ); }
+
+				// Don't allow verts to be added on the very edge of the generation
+				// area. A border of at least 1 voxel is needed so that vertices can
+				// be positioned, since voxel edges are stored in neighbors to
+				// avoid duplication.
+				if( x >= sdfMax.x || y >= sdfMax.y || z >= sdfMax.z )
+				{
+					continue;
+				}
+
+				const ae::Int3* offsets; // Array of 4 sampling offsets for this edge
+				switch( e )
+				{
+					case 0: offsets = offsets_EDGE_TOP_FRONT_BIT; break;
+					case 1: offsets = offsets_EDGE_TOP_RIGHT_BIT; break;
+					case 2: offsets = offsets_EDGE_SIDE_FRONTRIGHT_BIT; break;
+					default:
+						AE_FAIL();
+						offsets = nullptr;
+						break;
+				}
+
+				// Expand edge intersection into two triangles. New vertices are
+				// added as needed for each edge intersection, so this does some of
+				// the work for adjacent voxels. Vertices are centered in voxels at
+				// this point at this stage.
+				IsosurfaceIndex quad[ 4 ];
+				for( int32_t j = 0; j < 4; j++ )
+				{
+					const int32_t ox = x + offsets[ j ][ 0 ];
+					const int32_t oy = y + offsets[ j ][ 1 ];
+					const int32_t oz = z + offsets[ j ][ 2 ];
+
+					Voxel* quadVoxel = m_voxels.TryGet( { ox, oy, oz } );
+					quadVoxel = quadVoxel ? quadVoxel : &m_voxels.Set( { ox, oy, oz }, {} );
+					IsosurfaceIndex* vertexIndex = &quadVoxel->index;
+					if( *vertexIndex == kInvalidIsosurfaceIndex )
+					{
+						IsosurfaceVertex vertex;
+						vertex.position.x = ox + 0.5f;
+						vertex.position.y = oy + 0.5f;
+						vertex.position.z = oz + 0.5f;
+						vertex.position.w = 1.0f;
+						AE_DEBUG_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
+
+						// Record the index of the vertex in the chunk so it can
+						// be reused by adjacent quads
+						*vertexIndex = (IsosurfaceIndex)vertices.Length();
+						vertices.Append( vertex );
+					}
+					AE_DEBUG_ASSERT_MSG( *vertexIndex < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
+					quad[ j ] = *vertexIndex;
+				}
+
+				// @TODO: This assumes counter clockwise culling
+				bool flip = false;
+				if( e == 0 )
+				{
+					flip = ( sharedCornerValue > 0.0f );
+				} // EDGE_TOP_FRONT_BIT
+				else
+				{
+					flip = ( sharedCornerValue < 0.0f );
+				} // EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
+				if( flip )
+				{
+					// tri0
+					indices.Append( quad[ 0 ] );
+					indices.Append( quad[ 1 ] );
+					indices.Append( quad[ 2 ] );
+					// tri1
+					indices.Append( quad[ 1 ] );
+					indices.Append( quad[ 3 ] );
+					indices.Append( quad[ 2 ] );
+				}
+				else
+				{
+					// tri2
+					indices.Append( quad[ 0 ] );
+					indices.Append( quad[ 2 ] );
+					indices.Append( quad[ 1 ] );
+					// tri3
+					indices.Append( quad[ 1 ] );
+					indices.Append( quad[ 2 ] );
+					indices.Append( quad[ 3 ] );
+				}
+			}
+		}
+		m_voxels.Set( { x + 1, y + 1, z + 1 }, voxel );
+		return true;
+	};
+	const uint32_t zoneCount = m_zones.Length();
+	for( uint32_t i = 0; i < zoneCount; i++ )
+	{
+		const IsosurfaceExtractor::Zone* zone = m_zones.GetValue( i );
+		const ae::Int3 zoneOffset = zone->GetOffset() - cornerOffsetInt;
+		const ae::Int3 zoneMin = ae::Clip( zoneOffset, sdfMin, sdfMax );
+		const ae::Int3 zoneMax = ae::Clip( zoneOffset + zone->GetSize(), sdfMin, sdfMax );
+		const ae::AABB zoneAABB( (ae::Vec3)zoneMin, (ae::Vec3)zoneMax );
+		for( int32_t z = zoneMin.z; z < zoneMax.z; z++ )
+			for( int32_t y = zoneMin.y; y < zoneMax.y; y++ )
+				for( int32_t x = zoneMin.x; x < zoneMax.x; x++ )
+				{
+					const ae::Int3 zonePos = ae::Int3( x, y, z ) - zoneOffset;
+					if( zone->Get( zonePos ) && !DoVoxel( x, y, z ) )
+					{
+						vertices.Clear();
+						indices.Clear();
+						return;
+					}
+				}
+		m_stats.iterationCount += ( zoneMax.x - zoneMin.x ) * ( zoneMax.y - zoneMin.y ) * ( zoneMax.z - zoneMin.z );
+	}
+	m_stats.workingCount = m_voxels.Length();
+
+	if( indices.Length() == 0 )
+	{
+		vertices.Clear();
+		return;
+	}
+
+	for( IsosurfaceVertex& vertex : vertices )
+	{
+		const int32_t x = ae::Floor( vertex.position.x );
+		const int32_t y = ae::Floor( vertex.position.y );
+		const int32_t z = ae::Floor( vertex.position.z );
+		AE_DEBUG_ASSERT( x >= sdfMin.x && sdfMin.y >= 0 && sdfMin.z >= 0 );
+		AE_DEBUG_ASSERT( x <= sdfMax.x && y <= sdfMax.y && z <= sdfMax.z );
+
+		int32_t ec = 0;
+		ae::Vec3 p[ 12 ];
+		ae::Vec3 n[ 12 ];
+		Voxel te = m_voxels.Get( { x + 1, y + 1, z + 1 }, {} );
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 0 ];
+			n[ ec ] = te.edgeNormal[ 0 ];
+			ec++;
+		}
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 1 ];
+			n[ ec ] = te.edgeNormal[ 1 ];
+			ec++;
+		}
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 2 ];
+			n[ ec ] = te.edgeNormal[ 2 ];
+			ec++;
+		}
+		te = m_voxels.Get( { x, y + 1, z + 1 }, {} );
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 1 ];
+			p[ ec ].x -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 1 ];
+			ec++;
+		}
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 2 ];
+			p[ ec ].x -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 2 ];
+			ec++;
+		}
+		te = m_voxels.Get( { x + 1, y, z + 1 }, {} );
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 0 ];
+			p[ ec ].y -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 0 ];
+			ec++;
+		}
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 2 ];
+			p[ ec ].y -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 2 ];
+			ec++;
+		}
+		te = m_voxels.Get( { x, y, z + 1 }, {} );
+		if( te.edgeBits & EDGE_SIDE_FRONTRIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 2 ];
+			p[ ec ].x -= 1.0f;
+			p[ ec ].y -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 2 ];
+			ec++;
+		}
+		te = m_voxels.Get( { x, y + 1, z }, {} );
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 1 ];
+			p[ ec ].x -= 1.0f;
+			p[ ec ].z -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 1 ];
+			ec++;
+		}
+		te = m_voxels.Get( { x + 1, y, z }, {} );
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 0 ];
+			p[ ec ].y -= 1.0f;
+			p[ ec ].z -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 0 ];
+			ec++;
+		}
+		te = m_voxels.Get( { x + 1, y + 1, z }, {} );
+		if( te.edgeBits & EDGE_TOP_FRONT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 0 ];
+			p[ ec ].z -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 0 ];
+			ec++;
+		}
+		if( te.edgeBits & EDGE_TOP_RIGHT_BIT )
+		{
+			p[ ec ] = te.edgePos[ 1 ];
+			p[ ec ].z -= 1.0f;
+			n[ ec ] = te.edgeNormal[ 1 ];
+			ec++;
+		}
+
+		// Validation
+		AE_DEBUG_ASSERT( ec != 0 );
+		for( int32_t j = 0; j < ec; j++ )
+		{
+			AE_DEBUG_ASSERT( p[ j ] == p[ j ] );
+			AE_DEBUG_ASSERT( p[ j ].x >= 0.0f && p[ j ].x <= 1.0f );
+			AE_DEBUG_ASSERT( p[ j ].y >= 0.0f && p[ j ].y <= 1.0f );
+			AE_DEBUG_ASSERT( p[ j ].z >= 0.0f && p[ j ].z <= 1.0f );
+			AE_DEBUG_ASSERT( n[ j ] == n[ j ] );
+		}
+
+		// Normal
+		vertex.normal = ae::Vec3( 0.0f );
+		for( int32_t j = 0; j < ec; j++ )
+		{
+			vertex.normal += n[ j ];
+		}
+		vertex.normal.SafeNormalize();
+
+		// Position
+		ae::Vec3 position;
+		// Get intersection of edge planes
+		{
+#if AE_TERRAIN_SIMD
+			__m128 c128 = _mm_setzero_ps();
+			for( uint32_t i = 0; i < ec; i++ )
+			{
+				__m128 p128 = _mm_load_ps( (float*)( p + i ) );
+				c128 = _mm_add_ps( c128, p128 );
+			}
+			__m128 div = _mm_set1_ps( 1.0f / ec );
+			c128 = _mm_mul_ps( c128, div );
+
+			for( uint32_t i = 0; i < 10; i++ )
+				for( uint32_t j = 0; j < ec; j++ )
+				{
+					__m128 p128 = _mm_load_ps( (float*)( p + j ) );
+					p128 = _mm_sub_ps( p128, c128 );
+					__m128 n128 = _mm_load_ps( (float*)( n + j ) );
+
+					__m128 d = _mm_mul_ps( p128, n128 );
+					d = _mm_hadd_ps( d, d );
+					d = _mm_hadd_ps( d, d );
+
+					__m128 s = _mm_set1_ps( 0.5f );
+					s = _mm_mul_ps( s, n128 );
+					s = _mm_mul_ps( s, d );
+					c128 = _mm_add_ps( c128, s );
+				}
+			_mm_store_ps( (float*)&position, c128 );
+#else
+			position = ae::Vec3( 0.0f );
+			for( uint32_t i = 0; i < ec; i++ )
+			{
+				position += p[ i ];
+			}
+			position /= ec;
+			for( uint32_t i = 0; i < 10; i++ )
+			{
+				for( uint32_t j = 0; j < ec; j++ )
+				{
+					float d = n[ j ].Dot( p[ j ] - position );
+					position += n[ j ] * ( d * 0.5f );
+				}
+			}
+#endif
+			AE_DEBUG_ASSERT( position.x == position.x && position.y == position.y && position.z == position.z );
+			// @NOTE: Bias towards average of intersection points. This solves some intersecting triangles on sharp edges.
+			// Based on notes here: https://www.boristhebrave.com/2018/04/15/dual-contouring-tutorial/
+			ae::Vec3 averagePos( 0.0f );
+			for( int32_t i = 0; i < ec; i++ )
+			{
+				averagePos += p[ i ];
+			}
+			averagePos /= (float)ec;
+			position = ae::Lerp( position, averagePos, 0.1f ); // @TODO: This bias should be removed or be adjustable
+		}
+		// @NOTE: Do not clamp position values to voxel boundary. It's valid for a vertex to be placed
+		// outside of the voxel is was generated from. This happens when a voxel has all corners inside
+		// or outside of the sdf boundary, while also still having intersections (normally two per edge)
+		// on one or more edges of the voxel.
+		position.x = x + position.x;
+		position.y = y + position.y;
+		position.z = z + position.z;
+		vertex.position = ae::Vec4( position + generationOffset, 1.0f );
+	}
+
+	AE_DEBUG_ASSERT( vertices.Length() <= params.maxVerts );
+	AE_DEBUG_ASSERT( indices.Length() <= params.maxIndices );
+#undef _AE_GET_VALUE
 }
 
 } // ae end
