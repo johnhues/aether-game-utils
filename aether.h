@@ -15625,10 +15625,6 @@ _DefaultAllocator::~_DefaultAllocator()
 			const uint32_t displayCount = ae::Min( leakCount, 32u );
 			AE_ERR( "Leak count: ##", displayCount, ( displayCount < leakCount ) ? "+" : "" ); // @TODO: More Info here
 		}
-		else
-		{
-			AE_INFO( "No memory leaks detected" );
-		}
 	}
 #endif
 }
