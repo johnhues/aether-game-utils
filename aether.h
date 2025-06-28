@@ -491,6 +491,8 @@ inline int32_t Round( float f );
 inline float Abs( float x );
 inline int32_t Abs( int32_t x );
 
+constexpr uint32_t NextPowerOfTwo( uint32_t x );
+
 //------------------------------------------------------------------------------
 // Range functions
 //------------------------------------------------------------------------------
@@ -5445,7 +5447,7 @@ struct IsosurfaceExtractor
 
 private:
 	static constexpr IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
-	const ae::Vec3 kChildOffsets[ 8 ] =
+	const ae::Int3 kChildOffsets[ 8 ] =
 	{
 		{ -1, -1, -1 },
 		{ 1, -1, -1 },
@@ -5478,7 +5480,7 @@ private:
 		ae::Int3 m_offset = ae::Int3( 0 );
 		uint8_t m_values[ Dim ][ Dim ][ Dim ] = {}; // Default initialization
 	};
-	void m_Generate( const IsosurfaceParams& params, ae::Vec3 center, ae::Vec3 halfSize );
+	void m_Generate( const IsosurfaceParams& params, ae::Int3 center, uint32_t halfSize );
 	Stats m_stats;
 	ae::AABB m_surfaceAABB;
 	float m_estimatedVertexCount = 0.0f;
@@ -7141,6 +7143,18 @@ template<>
 constexpr double MinValue< double >()
 {
 	return -1 * std::numeric_limits< double >::infinity();
+}
+
+constexpr uint32_t NextPowerOfTwo( uint32_t x )
+{
+	x--;
+	x |= x >> 1;
+	x |= x >> 2;
+	x |= x >> 4;
+	x |= x >> 8;
+	x |= x >> 16;
+	x++;
+	return x;
 }
 
 template< typename T0, typename T1 >
@@ -9259,14 +9273,7 @@ void Array< T, N >::Reserve( uint32_t _size )
 			// At least double the size, to reduce the number of resizes
 			size = ae::Max( size, m_size * 2 );
 		}
-		// Next power of two
-		size--;
-		size |= size >> 1;
-		size |= size >> 2;
-		size |= size >> 4;
-		size |= size >> 8;
-		size |= size >> 16;
-		size++;
+		size = ae::NextPowerOfTwo( size );
 	}
 	else
 	{
@@ -27428,18 +27435,18 @@ void IsosurfaceExtractor::Reset()
 	m_zones.Clear();
 }
 
-void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Vec3 center, ae::Vec3 halfSize )
+void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Int3 center, uint32_t halfSize )
 {
-	const float signedSurfaceDistance = params.fn( center, params.userData );
-	const float diagonal = halfSize.Length();
+	AE_DEBUG_ASSERT( halfSize % 2 == 0 );
+	const float signedSurfaceDistance = params.fn( ae::Vec3( center ), params.userData );
+	const float diagonal = ae::Vec3( halfSize ).Length();
 	if( diagonal <= ae::Abs( signedSurfaceDistance ) )
 	{
 		return; // No intersection, no need to split further
 	}
 
-	const ae::Vec3 nextHalfSize = halfSize * 0.5f;
-	constexpr float minOctantHalfSize = 0.55f;
-	if( nextHalfSize.x > minOctantHalfSize && nextHalfSize.y > minOctantHalfSize && nextHalfSize.z > minOctantHalfSize ) // Only split if next octant is large enough
+	const uint32_t nextHalfSize = ( halfSize / 2 );
+	if( nextHalfSize )
 	{
 		for( uint32_t i = 0; i < 8; i++ )
 		{
@@ -27448,26 +27455,25 @@ void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Vec3 c
 	}
 	else
 	{
-		const float leafMult = 1.0f;
-		const ae::Vec3 halfSize3( halfSize );
-		const ae::AABB leafAABB = ae::AABB( center - halfSize3, center + halfSize3 );
-		const ae::Vec3 leafSize = ( leafAABB.GetMax() - leafAABB.GetMin() );
-		const ae::Int3 leafGridMin = ( leafAABB.GetMin() / leafMult ).FloorCopy();
-		const ae::Int3 leafGridMax = ( leafAABB.GetMax() / leafMult ).CeilCopy();
+		const ae::Int3 halfSize3( halfSize );
+		const ae::Int3 leafGridMin = center - halfSize3;
+		const ae::Int3 leafGridMax = center + halfSize3;
+		m_surfaceAABB.Expand( ae::AABB( (ae::Vec3)leafGridMin, (ae::Vec3)leafGridMax ) );
 
-		m_surfaceAABB.Expand( leafAABB );
-
-		// @TODO: Bounded region Set() function
+		ae::Int3 pos;
 		const ae::Int3 zoneSize = Zone::GetSize();
-		for( int32_t z = leafGridMin.z; z <= leafGridMax.z; z++ )
+		for( pos.z = leafGridMin.z; pos.z <= leafGridMax.z; pos.z++ )
 		{
-			for( int32_t y = leafGridMin.y; y <= leafGridMax.y; y++ )
+			for( pos.y = leafGridMin.y; pos.y <= leafGridMax.y; pos.y++ )
 			{
-				for( int32_t x = leafGridMin.x; x <= leafGridMax.x; x++ )
+				for( pos.x = leafGridMin.x; pos.x <= leafGridMax.x; pos.x++ )
 				{
-					const ae::Int3 pos( x, y, z );
-					const ae::Int3 slot = ae::Int3( ae::Floor( (float)pos.x / zoneSize.x ), ae::Floor( (float)pos.y / zoneSize.y ), ae::Floor( (float)pos.z / zoneSize.z ) );
-					const ae::Int3 localPos = ae::Int3( ae::Mod( pos.x, zoneSize.x ), ae::Mod( pos.y, zoneSize.y ), ae::Mod( pos.z, zoneSize.z ) );
+					const ae::Int3 slot = ( ae::Vec3(pos) / ae::Vec3(zoneSize) ).FloorCopy(); // @TODO: Integer floor
+					const ae::Int3 localPos(
+						ae::Mod( pos.x, zoneSize.x ),
+						ae::Mod( pos.y, zoneSize.y ),
+						ae::Mod( pos.z, zoneSize.z )
+					);
 					Zone* zone = nullptr;
 					if( !m_zones.TryGet( slot, &zone ) )
 					{
@@ -27480,7 +27486,7 @@ void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Vec3 c
 			}
 		}
 
-		m_estimatedVertexCount += ( leafSize.x * leafSize.y * leafSize.z ) * 0.4f; // @HACK: What should this actually be?
+		m_estimatedVertexCount += 8.0f;
 	}
 }
 
@@ -27500,7 +27506,10 @@ void IsosurfaceExtractor::Generate( IsosurfaceParams params, ae::Array< ae::Vec3
 		return;
 	}
 	m_surfaceAABB = ae::AABB(); // Default (and not 0 size!) so that ae::AABB::Expand() functions work as expected
-	m_Generate( params, params.aabb.GetCenter(), params.aabb.GetHalfSize() );
+	const ae::Vec3 paramHalfSize = params.aabb.GetHalfSize();
+	const float maxHalfSize = ae::Max( paramHalfSize.x, paramHalfSize.y, paramHalfSize.z );
+	const uint32_t halfSize = ae::NextPowerOfTwo( maxHalfSize * 2.0f + 0.5f ) / 2;
+	m_Generate( params, params.aabb.GetCenter().FloorCopy(), halfSize );
 	if( m_surfaceAABB == ae::AABB() )
 	{
 		Reset();
