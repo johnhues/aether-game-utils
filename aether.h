@@ -5430,7 +5430,7 @@ struct IsosurfaceParams
 struct IsosurfaceExtractor
 {
 	IsosurfaceExtractor( ae::Tag tag );
-	void Generate( IsosurfaceParams params, ae::Array< ae::Vec3 >* errors );
+	void Generate( const IsosurfaceParams& params, ae::Array< ae::Vec3 >* errors );
 	void Reset();
 	
 	ae::Array< IsosurfaceVertex > vertices;
@@ -5458,6 +5458,22 @@ private:
 		{ -1, 1, 1 },
 		{ 1, 1, 1 }
 	};
+	// 3 new edges to test
+	const ae::Vec3 cornerOffsets[ 3 ] = {
+		{ 0, 1, 1 }, // EDGE_TOP_FRONT_BIT
+		{ 1, 0, 1 }, // EDGE_TOP_RIGHT_BIT
+		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
+	};
+	// @TODO: Description
+	static constexpr uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
+	static constexpr uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
+	static constexpr uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 2 );
+	// For expansion of edge intersections into triangles
+	const ae::Int3 offsets_EDGE_TOP_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1, 1 } };
+	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
+	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
+	// @TODO: Description
+	static constexpr uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
 	struct Voxel
 	{
 		// 3 planes whose intersections are used to position vertices within voxel
@@ -5467,25 +5483,11 @@ private:
 		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
 		uint16_t edgeBits = 0;
 	};
-	class Zone
-	{
-	public:
-		static constexpr int32_t Dim = 256;
-		static ae::Int3 GetSize() { return ae::Int3( Dim, Dim, Dim ); }
-		void SetOffset( ae::Int3 offset ) { m_offset = offset; }
-		ae::Int3 GetOffset() const { return m_offset; }
-		void Set( ae::Int3 pos, uint8_t value ) { m_values[ pos.z ][ pos.y ][ pos.x ] = value; }
-		uint8_t Get( ae::Int3 pos ) const { return m_values[ pos.z ][ pos.y ][ pos.x ]; }
-	private:
-		ae::Int3 m_offset = ae::Int3( 0 );
-		uint8_t m_values[ Dim ][ Dim ][ Dim ] = {}; // Default initialization
-	};
-	void m_Generate( const IsosurfaceParams& params, ae::Int3 center, uint32_t halfSize );
+	void m_Generate( ae::Int3 center, uint32_t halfSize, ae::Array< ae::Vec3 >* errors );
+	bool m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array< ae::Vec3 >* errors );
 	Stats m_stats;
-	ae::AABB m_surfaceAABB;
-	float m_estimatedVertexCount = 0.0f;
+	IsosurfaceParams m_params;
 	ae::Map< VoxelIndex, Voxel > m_voxels;
-	ae::Map< ae::Int3, Zone* > m_zones;
 };
 
 //! \defgroup Meta
@@ -27416,29 +27418,23 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 // ae::IsosurfaceExtractor member functions
 //------------------------------------------------------------------------------
-IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) : vertices( tag ), indices( tag ), m_voxels( tag ), m_zones( tag ) { Reset(); }
+IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) : vertices( tag ), indices( tag ), m_voxels( tag ) { Reset(); }
 
 void IsosurfaceExtractor::Reset()
 {
 	vertices.Clear();
 	indices.Clear();
 	m_stats = {};
-	m_surfaceAABB = ae::AABB( ae::Vec3( 0.0f ), ae::Vec3( 0.0f ) ); // 0 size by default, the position shouldn't matter
-	m_estimatedVertexCount = 0.0f;
+	m_params = {};
 	m_voxels.Clear();
-
-	const uint32_t zoneCount = m_zones.Length();
-	for( uint32_t i = 0; i < zoneCount; i++ )
-	{
-		ae::Delete( m_zones.GetValue( i ) );
-	}
-	m_zones.Clear();
 }
 
-void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Int3 center, uint32_t halfSize )
+#define _AE_GET_VALUE( _pos ) m_params.fn( ( _pos ), m_params.userData )
+
+void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize, ae::Array< ae::Vec3 >* errors )
 {
-	AE_DEBUG_ASSERT( halfSize % 2 == 0 );
-	const float signedSurfaceDistance = params.fn( ae::Vec3( center ), params.userData );
+	AE_DEBUG_ASSERT( halfSize % 2 == 0 || halfSize == 1 );
+	const float signedSurfaceDistance = _AE_GET_VALUE( ae::Vec3( center ) );
 	const float diagonal = ae::Vec3( halfSize ).Length();
 	if( diagonal <= ae::Abs( signedSurfaceDistance ) )
 	{
@@ -27450,7 +27446,7 @@ void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Int3 c
 	{
 		for( uint32_t i = 0; i < 8; i++ )
 		{
-			m_Generate( params, center + kChildOffsets[ i ] * nextHalfSize, nextHalfSize );
+			m_Generate( center + kChildOffsets[ i ] * nextHalfSize, nextHalfSize, errors );
 		}
 	}
 	else
@@ -27458,367 +27454,277 @@ void IsosurfaceExtractor::m_Generate( const IsosurfaceParams& params, ae::Int3 c
 		const ae::Int3 halfSize3( halfSize );
 		const ae::Int3 leafGridMin = center - halfSize3;
 		const ae::Int3 leafGridMax = center + halfSize3;
-		m_surfaceAABB.Expand( ae::AABB( (ae::Vec3)leafGridMin, (ae::Vec3)leafGridMax ) );
-
-		ae::Int3 pos;
-		const ae::Int3 zoneSize = Zone::GetSize();
-		for( pos.z = leafGridMin.z; pos.z <= leafGridMax.z; pos.z++ )
+		for( int32_t z = leafGridMin.z; z < leafGridMax.z; z++ )
 		{
-			for( pos.y = leafGridMin.y; pos.y <= leafGridMax.y; pos.y++ )
+			for( int32_t y = leafGridMin.y; y < leafGridMax.y; y++ )
 			{
-				for( pos.x = leafGridMin.x; pos.x <= leafGridMax.x; pos.x++ )
+				for( int32_t x = leafGridMin.x; x < leafGridMax.x; x++ )
 				{
-					const ae::Int3 slot = ( ae::Vec3(pos) / ae::Vec3(zoneSize) ).FloorCopy(); // @TODO: Integer floor
-					const ae::Int3 localPos(
-						ae::Mod( pos.x, zoneSize.x ),
-						ae::Mod( pos.y, zoneSize.y ),
-						ae::Mod( pos.z, zoneSize.z )
-					);
-					Zone* zone = nullptr;
-					if( !m_zones.TryGet( slot, &zone ) )
-					{
-						zone = ae::New< Zone >( AE_ALLOC_TAG_FIXME );
-						zone->SetOffset( slot * zoneSize );
-						m_zones.Set( slot, zone );
-					}
-					zone->Set( localPos, 1 );
+					m_DoVoxel( x, y, z, errors );
 				}
 			}
 		}
-
-		m_estimatedVertexCount += 8.0f;
 	}
 }
 
-void IsosurfaceExtractor::Generate( IsosurfaceParams params, ae::Array< ae::Vec3 >* errors )
+bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array< ae::Vec3 >* errors )
 {
-	if( params.maxVerts == 0 )
+	const ae::Vec3 voxelPos( x, y, z );
+	const ae::Int3 sdfMin = m_params.aabb.GetMin().FloorCopy();
+	const ae::Int3 sdfMax = m_params.aabb.GetMax().CeilCopy();
+	// This nudge is needed to prevent the SDF from ever being exactly on
+	// the voxel grid boundaries (imagine a plane at the origin with a
+	// normal facing along a cardinal axis, do the vertices belong to the
+	// voxels on the front or back of the plane?). Without this nudge, any
+	// vertices exactly on the grid boundary would be skipped resulting in
+	// holes in the mesh.
+	auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
+	const ae::Vec3 sharedCornerOffset( 1.0f );
+	const float sharedCornerValue = Nudge( _AE_GET_VALUE( voxelPos + sharedCornerOffset ) );
+	m_stats.sampleCount++;
+	if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be smaller
 	{
-		params.maxVerts = ae::MaxValue< uint32_t >();
+		// Early out of additional edge intersections if far from the surface
+		return true;
 	}
-	if( params.maxIndices == 0 )
+	const float cornerValues[ 3 ] = { Nudge( _AE_GET_VALUE( voxelPos + cornerOffsets[ 0 ] ) ), Nudge( _AE_GET_VALUE( voxelPos + cornerOffsets[ 1 ] ) ), Nudge( _AE_GET_VALUE( voxelPos + cornerOffsets[ 2 ] ) ) };
+	m_stats.sampleCount += 3;
+	AE_DEBUG_IF( !errors )
 	{
-		params.maxIndices = ae::MaxValue< uint32_t >();
+		AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) );
+		AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) );
+		AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) );
 	}
-	Reset();
-	if( !params.aabb.Contains( params.aabb.GetCenter() ) )
+	else AE_DEBUG_IF( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f )
 	{
-		return;
+		errors->Append( voxelPos );
+		return true;
 	}
-	m_surfaceAABB = ae::AABB(); // Default (and not 0 size!) so that ae::AABB::Expand() functions work as expected
-	const ae::Vec3 paramHalfSize = params.aabb.GetHalfSize();
-	const float maxHalfSize = ae::Max( paramHalfSize.x, paramHalfSize.y, paramHalfSize.z );
-	const uint32_t halfSize = ae::NextPowerOfTwo( maxHalfSize * 2.0f + 0.5f ) / 2;
-	m_Generate( params, params.aabb.GetCenter().FloorCopy(), halfSize );
-	if( m_surfaceAABB == ae::AABB() )
-	{
-		Reset();
-		return;
-	}
-	m_stats.estimatedVertexCount = (uint32_t)m_estimatedVertexCount;
-	vertices.Reserve( (uint32_t)m_estimatedVertexCount );
-	// This multiplier is very well established, the average indexed mesh
-	// has 6 indices per vertex.
-	indices.Reserve( (uint32_t)( m_estimatedVertexCount * 6.0f ) );
-	// This multiplier can make a huge difference, if it's too large then
-	// too big of a map will be allocated which will be expensive to access
-	// and if it's too small then the map will need to be reallocated during
-	// generation.
-	m_voxels.Reserve( (uint32_t)( m_estimatedVertexCount * 3.25f ) );
 
-	// @TODO: Description
-	const uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
-	const uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
-	const uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 2 );
-	// For expansion of edge intersections into triangles
-	const ae::Int3 offsets_EDGE_TOP_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1, 1 } };
-	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
-	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
-	// @TODO: Description
-	const uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
-	// 3 new edges to test
-	const ae::Vec3 cornerOffsets[ 3 ] = {
-		{ 0, 1, 1 }, // EDGE_TOP_FRONT_BIT
-		{ 1, 0, 1 }, // EDGE_TOP_RIGHT_BIT
-		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
-	};
-
-	const ae::Vec3 generationOffset = params.aabb.GetMin();
-	const ae::Int3 cornerOffsetInt = generationOffset.FloorCopy();
-	const ae::Int3 generationMin( -1 );
-	const ae::Int3 generationMax = params.aabb.GetMax().CeilCopy() + ae::Int3( 1 ) - cornerOffsetInt;
-	const ae::Int3 sdfMin = ae::Clip( m_surfaceAABB.GetMin().FloorCopy() - cornerOffsetInt, generationMin, generationMax );
-	const ae::Int3 sdfMax = ae::Clip( m_surfaceAABB.GetMax().CeilCopy() - cornerOffsetInt, generationMin, generationMax );
-	AE_DEBUG_ASSERT( ( sdfMax.x - sdfMin.x ) >= 0 );
-	AE_DEBUG_ASSERT( ( sdfMax.y - sdfMin.y ) >= 0 );
-	AE_DEBUG_ASSERT( ( sdfMax.z - sdfMin.z ) >= 0 );
-	const uint32_t sdfSize = ( sdfMax.x - sdfMin.x ) * ( sdfMax.y - sdfMin.y ) * ( sdfMax.z - sdfMin.z );
-	if( !sdfSize )
+	Voxel voxel;
+	// Detect if any of the 3 new edges being tested intersect the implicit surface
+	if( cornerValues[ 0 ] * sharedCornerValue < 0.0f )
 	{
-		return; // Zero size generation region
+		voxel.edgeBits |= EDGE_TOP_FRONT_BIT;
 	}
-#define _AE_GET_VALUE( _pos ) params.fn( ( _pos ), params.userData )
-	// This phase finds the surface of the SDF and generates the list of
-	// vertices along with all of the 'lattice' edge intersections. The vertex
-	// positions will be centered within their voxels at the end of this phase,
-	// and will be nudged later to the correct position based on the SDF
-	// surface.
-	auto DoVoxel = [ & ]( int32_t x, int32_t y, int32_t z )
+	if( cornerValues[ 1 ] * sharedCornerValue < 0.0f )
 	{
-		const ae::Vec3 voxelPos( x, y, z );
-		// This nudge is needed to prevent the SDF from ever being exactly on
-		// the voxel grid boundaries (imagine a plane at the origin with a
-		// normal facing along a cardinal axis, do the vertices belong to the
-		// voxels on the front or back of the plane?). Without this nudge, any
-		// vertices exactly on the grid boundary would be skipped resulting in
-		// holes in the mesh.
-		auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
-		const ae::Vec3 sharedCornerOffset( 1.0f );
-		const float sharedCornerValue = Nudge( _AE_GET_VALUE( generationOffset + voxelPos + sharedCornerOffset ) );
-		m_stats.sampleCount++;
-		if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be smaller
-		{
-			// Early out of additional edge intersections if far from the surface
-			return true;
-		}
-		const float cornerValues[ 3 ] = { Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 0 ] ) ), Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 1 ] ) ), Nudge( _AE_GET_VALUE( generationOffset + voxelPos + cornerOffsets[ 2 ] ) ) };
-		m_stats.sampleCount += 3;
-		AE_DEBUG_IF( !errors )
-		{
-			AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) );
-			AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) );
-			AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) );
-		}
-		else AE_DEBUG_IF( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f )
-		{
-			errors->Append( generationOffset + voxelPos );
-			return true;
-		}
+		voxel.edgeBits |= EDGE_TOP_RIGHT_BIT;
+	}
+	if( cornerValues[ 2 ] * sharedCornerValue < 0.0f )
+	{
+		voxel.edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT;
+	}
 
-		Voxel voxel;
-		// Detect if any of the 3 new edges being tested intersect the implicit surface
-		if( cornerValues[ 0 ] * sharedCornerValue < 0.0f )
+	// Iterate over the 3 edges that this voxel is responsible for. The
+	// remaining 9 are handled by adjacent voxels.
+	for( int32_t e = 0; e < 3; e++ )
+	{
+		if( voxel.edgeBits & mask[ e ] )
 		{
-			voxel.edgeBits |= EDGE_TOP_FRONT_BIT;
-		}
-		if( cornerValues[ 1 ] * sharedCornerValue < 0.0f )
-		{
-			voxel.edgeBits |= EDGE_TOP_RIGHT_BIT;
-		}
-		if( cornerValues[ 2 ] * sharedCornerValue < 0.0f )
-		{
-			voxel.edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT;
-		}
-
-		// Iterate over the 3 edges that this voxel is responsible for. The
-		// remaining 9 are handled by adjacent voxels.
-		for( int32_t e = 0; e < 3; e++ )
-		{
-			if( voxel.edgeBits & mask[ e ] )
+			if( vertices.Length() + 4 > m_params.maxVerts || indices.Length() + 6 > m_params.maxIndices )
 			{
-				if( vertices.Length() + 4 > params.maxVerts || indices.Length() + 6 > params.maxIndices )
-				{
-					return false;
-				}
+				return false;
+			}
 
-				// Sphere trace the voxel edge from the outside corner to the inside
-				// corner to find the intersection with the SDF surface
-				ae::Vec3 edgeOffset01;
+			// Sphere trace the voxel edge from the outside corner to the inside
+			// corner to find the intersection with the SDF surface
+			ae::Vec3 edgeOffset01;
+			{
+				const bool sharedCornerInside = ( sharedCornerValue < cornerValues[ e ] );
+				const ae::Vec3 start = ( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
+				const ae::Vec3 end = ( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
+				const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel size is 1
+				float depth = 0.0f;
+				for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
 				{
-					const bool sharedCornerInside = ( sharedCornerValue < cornerValues[ e ] );
-					const ae::Vec3 start = ( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
-					const ae::Vec3 end = ( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
-					const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel size is 1
-					float depth = 0.0f;
-					for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
+					edgeOffset01 = start + rayDir * depth;
+					const float closestSurfaceDist = _AE_GET_VALUE( voxelPos + edgeOffset01 );
+					m_stats.sampleCount++;
+					if( closestSurfaceDist < 0.01f )
 					{
-						edgeOffset01 = start + rayDir * depth;
-						const float closestSurfaceDist = _AE_GET_VALUE( generationOffset + voxelPos + edgeOffset01 );
-						m_stats.sampleCount++;
-						if( closestSurfaceDist < 0.01f )
-						{
-							break; // Hit the surface
-						}
-						depth += closestSurfaceDist;
-						if( depth >= 1.0f )
-						{
-							AE_DEBUG_FAIL_MSG( "depth >= 1", "depth:#", depth );
-							depth = 1.0f;
-							break;
-						}
+						break; // Hit the surface
 					}
-				}
-				AE_DEBUG_ASSERT( edgeOffset01.x == edgeOffset01.x && edgeOffset01.y == edgeOffset01.y && edgeOffset01.z == edgeOffset01.z );
-				AE_DEBUG_ASSERT( edgeOffset01.x >= 0.0f && edgeOffset01.x <= 1.0f );
-				AE_DEBUG_ASSERT( edgeOffset01.y >= 0.0f && edgeOffset01.y <= 1.0f );
-				AE_DEBUG_ASSERT( edgeOffset01.z >= 0.0f && edgeOffset01.z <= 1.0f );
-
-				auto getDerivative = [ & ]( ae::Vec3 p )
-				{
-					ae::Vec3 pv( _AE_GET_VALUE( p ) );
-					AE_DEBUG_IF( pv != pv ) { return ae::Vec3( 0.0f ); }
-
-					ae::Vec3 normal0;
-					for( int32_t i = 0; i < 3; i++ )
+					depth += closestSurfaceDist;
+					if( depth >= 1.0f )
 					{
-						ae::Vec3 nt = p;
-						nt[ i ] += params.normalSampleOffset;
-						normal0[ i ] = _AE_GET_VALUE( nt );
-					}
-					// This should be really close to 0 because it's really
-					// close to the surface but not close enough to ignore.
-					normal0 -= pv;
-					AE_DEBUG_IF( normal0 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
-					normal0 /= normal0.Length();
-					AE_DEBUG_IF( normal0 != normal0 ) { return ae::Vec3( 0.0f ); }
-
-					ae::Vec3 normal1;
-					for( int32_t i = 0; i < 3; i++ )
-					{
-						ae::Vec3 nt = p;
-						nt[ i ] -= params.normalSampleOffset;
-						normal1[ i ] = _AE_GET_VALUE( nt );
-					}
-					// This should be really close to 0 because it's really
-					// close to the surface but not close enough to ignore.
-					normal1 = pv - normal1;
-					AE_DEBUG_IF( normal1 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
-					normal1 /= normal1.Length();
-					AE_DEBUG_IF( normal1 != normal1 ) { return ae::Vec3( 0.0f ); }
-
-					m_stats.sampleCount += 7;
-					return ( normal1 + normal0 ).SafeNormalizeCopy();
-				};
-				voxel.edgePos[ e ] = edgeOffset01;
-				voxel.edgeNormal[ e ] = getDerivative( generationOffset + voxelPos + edgeOffset01 );
-				AE_DEBUG_IF( errors && voxel.edgeNormal[ e ] == ae::Vec3( 0.0f ) ) { errors->Append( generationOffset + voxelPos + edgeOffset01 ); }
-
-				// Don't allow verts to be added on the very edge of the generation
-				// area. A border of at least 1 voxel is needed so that vertices can
-				// be positioned, since voxel edges are stored in neighbors to
-				// avoid duplication.
-				if( x >= sdfMax.x || y >= sdfMax.y || z >= sdfMax.z )
-				{
-					continue;
-				}
-
-				const ae::Int3* offsets; // Array of 4 sampling offsets for this edge
-				switch( e )
-				{
-					case 0: offsets = offsets_EDGE_TOP_FRONT_BIT; break;
-					case 1: offsets = offsets_EDGE_TOP_RIGHT_BIT; break;
-					case 2: offsets = offsets_EDGE_SIDE_FRONTRIGHT_BIT; break;
-					default:
-						AE_FAIL();
-						offsets = nullptr;
+						AE_DEBUG_FAIL_MSG( "depth >= 1", "depth:#", depth );
+						depth = 1.0f;
 						break;
-				}
-
-				// Expand edge intersection into two triangles. New vertices are
-				// added as needed for each edge intersection, so this does some of
-				// the work for adjacent voxels. Vertices are centered in voxels at
-				// this point at this stage.
-				IsosurfaceIndex quad[ 4 ];
-				for( int32_t j = 0; j < 4; j++ )
-				{
-					const int32_t ox = x + offsets[ j ][ 0 ];
-					const int32_t oy = y + offsets[ j ][ 1 ];
-					const int32_t oz = z + offsets[ j ][ 2 ];
-
-					Voxel* quadVoxel = m_voxels.TryGet( { ox, oy, oz } );
-					quadVoxel = quadVoxel ? quadVoxel : &m_voxels.Set( { ox, oy, oz }, {} );
-					IsosurfaceIndex* vertexIndex = &quadVoxel->index;
-					if( *vertexIndex == kInvalidIsosurfaceIndex )
-					{
-						IsosurfaceVertex vertex;
-						vertex.position.x = ox + 0.5f;
-						vertex.position.y = oy + 0.5f;
-						vertex.position.z = oz + 0.5f;
-						vertex.position.w = 1.0f;
-						AE_DEBUG_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
-
-						// Record the index of the vertex in the chunk so it can
-						// be reused by adjacent quads
-						*vertexIndex = (IsosurfaceIndex)vertices.Length();
-						vertices.Append( vertex );
 					}
-					AE_DEBUG_ASSERT_MSG( *vertexIndex < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
-					quad[ j ] = *vertexIndex;
-				}
-
-				// @TODO: This assumes counter clockwise culling
-				bool flip = false;
-				if( e == 0 )
-				{
-					flip = ( sharedCornerValue > 0.0f );
-				} // EDGE_TOP_FRONT_BIT
-				else
-				{
-					flip = ( sharedCornerValue < 0.0f );
-				} // EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
-				if( flip )
-				{
-					// tri0
-					indices.Append( quad[ 0 ] );
-					indices.Append( quad[ 1 ] );
-					indices.Append( quad[ 2 ] );
-					// tri1
-					indices.Append( quad[ 1 ] );
-					indices.Append( quad[ 3 ] );
-					indices.Append( quad[ 2 ] );
-				}
-				else
-				{
-					// tri2
-					indices.Append( quad[ 0 ] );
-					indices.Append( quad[ 2 ] );
-					indices.Append( quad[ 1 ] );
-					// tri3
-					indices.Append( quad[ 1 ] );
-					indices.Append( quad[ 2 ] );
-					indices.Append( quad[ 3 ] );
 				}
 			}
-		}
-		m_voxels.Set( { x + 1, y + 1, z + 1 }, voxel );
-		return true;
-	};
-	const uint32_t zoneCount = m_zones.Length();
-	for( uint32_t i = 0; i < zoneCount; i++ )
-	{
-		const IsosurfaceExtractor::Zone* zone = m_zones.GetValue( i );
-		const ae::Int3 zoneOffset = zone->GetOffset() - cornerOffsetInt;
-		const ae::Int3 zoneMin = ae::Clip( zoneOffset, sdfMin, sdfMax );
-		const ae::Int3 zoneMax = ae::Clip( zoneOffset + zone->GetSize(), sdfMin, sdfMax );
-		const ae::AABB zoneAABB( (ae::Vec3)zoneMin, (ae::Vec3)zoneMax );
-		for( int32_t z = zoneMin.z; z < zoneMax.z; z++ )
-			for( int32_t y = zoneMin.y; y < zoneMax.y; y++ )
-				for( int32_t x = zoneMin.x; x < zoneMax.x; x++ )
-				{
-					const ae::Int3 zonePos = ae::Int3( x, y, z ) - zoneOffset;
-					if( zone->Get( zonePos ) && !DoVoxel( x, y, z ) )
-					{
-						vertices.Clear();
-						indices.Clear();
-						return;
-					}
-				}
-		m_stats.iterationCount += ( zoneMax.x - zoneMin.x ) * ( zoneMax.y - zoneMin.y ) * ( zoneMax.z - zoneMin.z );
-	}
-	m_stats.workingCount = m_voxels.Length();
+			AE_DEBUG_ASSERT( edgeOffset01.x == edgeOffset01.x && edgeOffset01.y == edgeOffset01.y && edgeOffset01.z == edgeOffset01.z );
+			AE_DEBUG_ASSERT( edgeOffset01.x >= 0.0f && edgeOffset01.x <= 1.0f );
+			AE_DEBUG_ASSERT( edgeOffset01.y >= 0.0f && edgeOffset01.y <= 1.0f );
+			AE_DEBUG_ASSERT( edgeOffset01.z >= 0.0f && edgeOffset01.z <= 1.0f );
 
+			auto getDerivative = [ & ]( ae::Vec3 p )
+			{
+				ae::Vec3 pv( _AE_GET_VALUE( p ) );
+				AE_DEBUG_IF( pv != pv ) { return ae::Vec3( 0.0f ); }
+
+				ae::Vec3 normal0;
+				for( int32_t i = 0; i < 3; i++ )
+				{
+					ae::Vec3 nt = p;
+					nt[ i ] += m_params.normalSampleOffset;
+					normal0[ i ] = _AE_GET_VALUE( nt );
+				}
+				// This should be really close to 0 because it's really
+				// close to the surface but not close enough to ignore.
+				normal0 -= pv;
+				AE_DEBUG_IF( normal0 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
+				normal0 /= normal0.Length();
+				AE_DEBUG_IF( normal0 != normal0 ) { return ae::Vec3( 0.0f ); }
+
+				ae::Vec3 normal1;
+				for( int32_t i = 0; i < 3; i++ )
+				{
+					ae::Vec3 nt = p;
+					nt[ i ] -= m_params.normalSampleOffset;
+					normal1[ i ] = _AE_GET_VALUE( nt );
+				}
+				// This should be really close to 0 because it's really
+				// close to the surface but not close enough to ignore.
+				normal1 = pv - normal1;
+				AE_DEBUG_IF( normal1 == ae::Vec3( 0.0f ) ) { return ae::Vec3( 0.0f ); }
+				normal1 /= normal1.Length();
+				AE_DEBUG_IF( normal1 != normal1 ) { return ae::Vec3( 0.0f ); }
+
+				m_stats.sampleCount += 7;
+				return ( normal1 + normal0 ).SafeNormalizeCopy();
+			};
+			voxel.edgePos[ e ] = edgeOffset01;
+			voxel.edgeNormal[ e ] = getDerivative( voxelPos + edgeOffset01 );
+			AE_DEBUG_IF( errors && voxel.edgeNormal[ e ] == ae::Vec3( 0.0f ) ) { errors->Append( voxelPos + edgeOffset01 ); }
+
+			// Don't allow verts to be added on the very edge of the generation
+			// area. A border of at least 1 voxel is needed so that vertices can
+			// be positioned, since voxel edges are stored in neighbors to
+			// avoid duplication.
+			if( x >= sdfMax.x || y >= sdfMax.y || z >= sdfMax.z )
+			{
+				continue;
+			}
+
+			const ae::Int3* offsets; // Array of 4 sampling offsets for this edge
+			switch( e )
+			{
+				case 0: offsets = offsets_EDGE_TOP_FRONT_BIT; break;
+				case 1: offsets = offsets_EDGE_TOP_RIGHT_BIT; break;
+				case 2: offsets = offsets_EDGE_SIDE_FRONTRIGHT_BIT; break;
+				default:
+					AE_FAIL();
+					offsets = nullptr;
+					break;
+			}
+
+			// Expand edge intersection into two triangles. New vertices are
+			// added as needed for each edge intersection, so this does some of
+			// the work for adjacent voxels. Vertices are centered in voxels at
+			// this point at this stage.
+			IsosurfaceIndex quad[ 4 ];
+			for( int32_t j = 0; j < 4; j++ )
+			{
+				const int32_t ox = x + offsets[ j ][ 0 ];
+				const int32_t oy = y + offsets[ j ][ 1 ];
+				const int32_t oz = z + offsets[ j ][ 2 ];
+
+				Voxel* quadVoxel = m_voxels.TryGet( { ox, oy, oz } );
+				quadVoxel = quadVoxel ? quadVoxel : &m_voxels.Set( { ox, oy, oz }, {} );
+				IsosurfaceIndex* vertexIndex = &quadVoxel->index;
+				if( *vertexIndex == kInvalidIsosurfaceIndex )
+				{
+					IsosurfaceVertex vertex;
+					vertex.position.x = ox + 0.5f;
+					vertex.position.y = oy + 0.5f;
+					vertex.position.z = oz + 0.5f;
+					vertex.position.w = 1.0f;
+					AE_DEBUG_ASSERT( vertex.position.x == vertex.position.x && vertex.position.y == vertex.position.y && vertex.position.z == vertex.position.z );
+
+					// Record the index of the vertex in the chunk so it can
+					// be reused by adjacent quads
+					*vertexIndex = (IsosurfaceIndex)vertices.Length();
+					vertices.Append( vertex );
+				}
+				AE_DEBUG_ASSERT_MSG( *vertexIndex < (IsosurfaceIndex)vertices.Length(), "# < # ox:# oy:# oz:#", index, vertices.Length(), ox, oy, oz );
+				quad[ j ] = *vertexIndex;
+			}
+
+			// @TODO: This assumes counter clockwise culling
+			bool flip = false;
+			if( e == 0 )
+			{
+				flip = ( sharedCornerValue > 0.0f );
+			} // EDGE_TOP_FRONT_BIT
+			else
+			{
+				flip = ( sharedCornerValue < 0.0f );
+			} // EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT
+			if( flip )
+			{
+				// tri0
+				indices.Append( quad[ 0 ] );
+				indices.Append( quad[ 1 ] );
+				indices.Append( quad[ 2 ] );
+				// tri1
+				indices.Append( quad[ 1 ] );
+				indices.Append( quad[ 3 ] );
+				indices.Append( quad[ 2 ] );
+			}
+			else
+			{
+				// tri2
+				indices.Append( quad[ 0 ] );
+				indices.Append( quad[ 2 ] );
+				indices.Append( quad[ 1 ] );
+				// tri3
+				indices.Append( quad[ 1 ] );
+				indices.Append( quad[ 2 ] );
+				indices.Append( quad[ 3 ] );
+			}
+		}
+	}
+	m_voxels.Set( { x + 1, y + 1, z + 1 }, voxel );
+	return true;
+}
+
+void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params, ae::Array< ae::Vec3 >* errors )
+{
+	if( !_params.aabb.Contains( _params.aabb.GetCenter() ) )
+	{
+		return;
+	}
+	Reset();
+	m_params = _params;
+	if( m_params.maxVerts == 0 )
+	{
+		m_params.maxVerts = ae::MaxValue< uint32_t >();
+	}
+	if( m_params.maxIndices == 0 )
+	{
+		m_params.maxIndices = ae::MaxValue< uint32_t >();
+	}
+	const ae::Vec3 paramHalfSize = m_params.aabb.GetHalfSize();
+	const float maxHalfSize = ae::Max( paramHalfSize.x, paramHalfSize.y, paramHalfSize.z );
+	const uint32_t halfSize = ae::NextPowerOfTwo( maxHalfSize * 2.0f + 0.5f ) / 2;
+	m_Generate( m_params.aabb.GetCenter().FloorCopy(), halfSize, errors );
+	m_stats.workingCount = m_voxels.Length();
 	if( indices.Length() == 0 )
 	{
 		vertices.Clear();
 		return;
 	}
 
+	const ae::Int3 sdfMin = m_params.aabb.GetMin().FloorCopy();
+	const ae::Int3 sdfMax = m_params.aabb.GetMax().CeilCopy();
 	for( IsosurfaceVertex& vertex : vertices )
 	{
 		const int32_t x = ae::Floor( vertex.position.x );
 		const int32_t y = ae::Floor( vertex.position.y );
 		const int32_t z = ae::Floor( vertex.position.z );
-		AE_DEBUG_ASSERT( x >= sdfMin.x && sdfMin.y >= 0 && sdfMin.z >= 0 );
+		AE_DEBUG_ASSERT( x >= sdfMin.x && y >= sdfMin.y && z >= sdfMin.z );
 		AE_DEBUG_ASSERT( x <= sdfMax.x && y <= sdfMax.y && z <= sdfMax.z );
 
 		int32_t ec = 0;
@@ -28000,11 +27906,11 @@ void IsosurfaceExtractor::Generate( IsosurfaceParams params, ae::Array< ae::Vec3
 		position.x = x + position.x;
 		position.y = y + position.y;
 		position.z = z + position.z;
-		vertex.position = ae::Vec4( position + generationOffset, 1.0f );
+		vertex.position = ae::Vec4( position, 1.0f );
 	}
 
-	AE_DEBUG_ASSERT( vertices.Length() <= params.maxVerts );
-	AE_DEBUG_ASSERT( indices.Length() <= params.maxIndices );
+	AE_DEBUG_ASSERT( vertices.Length() <= m_params.maxVerts );
+	AE_DEBUG_ASSERT( indices.Length() <= m_params.maxIndices );
 #undef _AE_GET_VALUE
 }
 
