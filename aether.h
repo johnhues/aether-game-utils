@@ -27845,7 +27845,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params, ae::Array< 
 		ae::Vec3 position;
 		// Get intersection of edge planes
 		{
-#if AE_TERRAIN_SIMD
+#if defined(__SSE2__) || defined(_M_SSE2)
 			__m128 c128 = _mm_setzero_ps();
 			for( uint32_t i = 0; i < ec; i++ )
 			{
@@ -27856,6 +27856,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params, ae::Array< 
 			c128 = _mm_mul_ps( c128, div );
 
 			for( uint32_t i = 0; i < 10; i++ )
+			{
 				for( uint32_t j = 0; j < ec; j++ )
 				{
 					__m128 p128 = _mm_load_ps( (float*)( p + j ) );
@@ -27871,7 +27872,38 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params, ae::Array< 
 					s = _mm_mul_ps( s, d );
 					c128 = _mm_add_ps( c128, s );
 				}
+			}
 			_mm_store_ps( (float*)&position, c128 );
+#elif defined(__ARM_NEON__) || defined(__ARM_NEON)
+			float32x4_t c128 = vdupq_n_f32( 0.0f );
+			for( uint32_t i = 0; i < ec; i++ )
+			{
+				const float32x4_t p128 = vld1q_f32( (float*)( p + i ) );
+				c128 = vaddq_f32( c128, p128 );
+			}
+			float32x4_t div = vdupq_n_f32( 1.0f / ec );
+			c128 = vmulq_f32( c128, div );
+
+			for( uint32_t i = 0; i < 10; i++ )
+			{
+				for( uint32_t j = 0; j < ec; j++ )
+				{
+					float32x4_t p128 = vld1q_f32( (float*)( p + j ) );
+					p128 = vsubq_f32( p128, c128 );
+					const float32x4_t n128 = vld1q_f32( (float*)( n + j ) );
+
+					// Dot product (p128 . n128)
+					const float32x4_t d = vmulq_f32( p128, n128 );
+					const float32x2_t d_low = vget_low_f32( d );
+					const float32x2_t d_high = vget_high_f32( d );
+					const float32x2_t sum = vpadd_f32( d_low, d_high );
+					const float32_t dot = vget_lane_f32( sum, 0 ) + vget_lane_f32( sum, 1 );
+
+					const float32x4_t s = vmulq_n_f32( n128, 0.5f * dot );
+					c128 = vaddq_f32( c128, s );
+				}
+			}
+			vst1q_f32( (float*)&position, c128 );
 #else
 			position = ae::Vec3( 0.0f );
 			for( uint32_t i = 0; i < ec; i++ )
