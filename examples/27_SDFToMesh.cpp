@@ -27,22 +27,6 @@
 #include "aether.h"
 #include <cstdint>
 
-#ifndef AE_TERRAIN_SIMD
-	#if _AE_LINUX_ || _AE_EMSCRIPTEN_
-		#define AE_TERRAIN_SIMD 0
-	#else
-		#define AE_TERRAIN_SIMD 1
-	#endif
-#endif
-#if AE_TERRAIN_SIMD && __aarch64__ && _AE_APPLE_
-	#pragma clang diagnostic push
-	#pragma clang diagnostic ignored "-Wimplicit-int-conversion"
-	#include "ae/sse2neon.h"
-	#pragma clang diagnostic pop
-#endif
-
-#define AE_TERRAIN_USE_CACHE 0
-
 //------------------------------------------------------------------------------
 // Types / constants
 //------------------------------------------------------------------------------
@@ -156,6 +140,12 @@ void ToggleDirectionalLight()
 	s_directionalLight = !s_directionalLight;
 };
 
+bool s_debugLines = false;
+void ToggleDebugLines()
+{
+	s_debugLines = !s_debugLines;
+};
+
 int main()
 {
 	AE_LOG( "Initialize (debug #)", (int)_AE_DEBUG_ );
@@ -208,7 +198,7 @@ int main()
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	debugLines.Initialize( 32768 );
+	debugLines.Initialize( ae::NextPowerOfTwo( 1000000 ) );
 	debugLines.SetXRayEnabled( false );
 
 	ae::Shader shader;
@@ -262,14 +252,14 @@ int main()
 		ae::Array< ae::Vec3 > errors = TAG_ISOSURFACE;
 		double cacheTime = 0.0;
 		double meshTime = 0.0;
-		void Run( ae::Matrix4 transform )
+		void Run( ae::Matrix4 transform, ae::DebugLines* debugLines )
 		{
 			const ae::Vec3 scale = transform.GetScale();
 			transform = transform.GetScaleRemoved();
 			const ae::Matrix4 inverseTransform = transform.GetInverse();
 			const auto surfaceFn = [&inverseTransform, &scale]( ae::Vec3 _p )
 			{
-				const float smooth = 0.0f; // World space because scale is applied separately from transform
+				const float smooth = 2.5f; // World space because scale is applied separately from transform
 				const ae::Vec3 p = inverseTransform.TransformPoint3x4( _p );
 				float r = SDFBox( p, ae::Vec3( 0.5f, 0.25f, 0.25f ) * scale, smooth );
 				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.5f, 0.25f ) * scale, smooth ), smooth );
@@ -288,6 +278,7 @@ int main()
 					.aabb=region,
 					.maxVerts=0,
 					.maxIndices=0,
+					.debug=( s_debugLines ? debugLines : nullptr )
 				},
 				&errors
 			);
@@ -322,7 +313,7 @@ int main()
 
 		void Draw( ae::Shader* shader, ae::UniformList& uniforms, ae::DebugLines* debugLines )
 		{
-			debugLines->AddAABB( region.GetCenter(), region.GetHalfSize(), color );
+			debugLines->AddAABB( region.GetCenter(), region.GetHalfSize(), s_debugLines ? ae::Color::AetherRed() : color );
 			if( extractor->indices.Length() )
 			{
 				uniforms.Set( "u_light", ae::Vec2( (float)s_directionalLight, (float)s_ambientLight ) );
@@ -349,7 +340,7 @@ int main()
 		ae::New< SDFToMesh >(
 			TAG_ISOSURFACE,
 			"Mesh0",
-			ae::Color::HSV(0.0f, 0.7f, 0.5f ),
+			ae::Color::HSV(0.5f, 0.8f, 0.5f ),
 			ae::AABB( ae::Vec3( -1000 ), ae::Vec3( 1000 ) )
 		)
 	};
@@ -393,10 +384,11 @@ int main()
 		input.Pump();
 		camera.Update( &input, dt );
 		// Rendering
-		if( input.GetPress( ae::Key::LeftBracket ) ) { ToggleOpacity(); }
-		if( input.GetPress( ae::Key::RightBracket ) ) { ToggleWireframe(); }
-		if( input.GetPress( ae::Key::Comma ) ) { ToggleAmbientLight(); }
-		if( input.GetPress( ae::Key::Period ) ) { ToggleDirectionalLight(); }
+		if( input.GetPress( ae::Key::Num1 ) ) { ToggleOpacity(); }
+		if( input.GetPress( ae::Key::Num2 ) ) { ToggleWireframe(); }
+		if( input.GetPress( ae::Key::Num3 ) ) { ToggleAmbientLight(); }
+		if( input.GetPress( ae::Key::Num4 ) ) { ToggleDirectionalLight(); }
+		if( input.GetPress( ae::Key::Num5 ) ) { ToggleDebugLines(); }
 		// Reset
 		if( input.GetPress( ae::Key::R ) ) { ResetTransform(); }
 		// Translation
@@ -439,7 +431,7 @@ int main()
 			float sampleCount = 0.0f;
 			for( SDFToMesh* sdf : sdfToMesh )
 			{
-				sdf->Run( transform );
+				sdf->Run( transform, &debugLines );
 				cacheTime += sdf->cacheTime;
 				meshTime += sdf->meshTime;
 				vertCount += sdf->extractor->vertices.Length();

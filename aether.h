@@ -27645,6 +27645,11 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize, ae::Ar
 			}
 		}
 	}
+
+	if( m_params.debug )
+	{
+		m_params.debug->AddAABB( ae::Vec3( center ), ae::Vec3( halfSize ), ae::Color::AetherRed() );
+	}
 }
 
 bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array< ae::Vec3 >* errors )
