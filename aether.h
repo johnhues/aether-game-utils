@@ -215,6 +215,7 @@
 #include <array> // @TODO: Remove. For _GetTypeName().
 #include <cassert>
 #include <chrono>
+#include <cinttypes>
 #include <climits>
 #include <cmath>
 #include <cstddef>
@@ -1875,8 +1876,8 @@ public:
 	Dict( ae::Tag tag );
 	void SetString( const char* key, const char* value );
 	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
-	void SetInt( const char* key, int32_t value );
-	void SetUInt( const char* key, uint32_t value );
+	void SetInt( const char* key, int64_t value );
+	void SetUInt( const char* key, uint64_t value );
 	void SetFloat( const char* key, float value );
 	void SetDouble( const char* key, double value );
 	void SetBool( const char* key, bool value );
@@ -1890,8 +1891,8 @@ public:
 	void Clear();
 
 	const char* GetString( const char* key, const char* defaultValue ) const;
-	int32_t GetInt( const char* key, int32_t defaultValue ) const;
-	uint32_t GetUInt( const char* key, uint32_t defaultValue ) const;
+	int64_t GetInt( const char* key, int64_t defaultValue ) const;
+	uint64_t GetUInt( const char* key, uint64_t defaultValue ) const;
 	float GetFloat( const char* key, float defaultValue ) const;
 	double GetDouble( const char* key, double defaultValue ) const;
 	bool GetBool( const char* key, bool defaultValue ) const;
@@ -8178,34 +8179,88 @@ inline std::string ToString( char const * value )
 }
 
 template <>
+inline std::string ToString( std::string value )
+{
+	return value;
+}
+
+template <>
+inline std::string ToString( int8_t value )
+{
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId8, value );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( int16_t value )
+{
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId16, value );
+	return std::string( str, length );
+}
+
+template <>
 inline std::string ToString( int32_t value )
 {
-	char str[ 16 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%d", value );
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId32, value );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( int64_t value )
+{
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId64, value );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( uint8_t value )
+{
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu8, value );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( uint16_t value )
+{
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu16, value );
 	return std::string( str, length );
 }
 
 template <>
 inline std::string ToString( uint32_t value )
 {
-	char str[ 16 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%u", value );
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu32, value );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( uint64_t value )
+{
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu64, value );
 	return std::string( str, length );
 }
 
 template <>
 inline std::string ToString( float value )
 {
-	char str[ 16 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
 	return std::string( str, length );
 }
 
 template <>
 inline std::string ToString( double value )
 {
-	char str[ 16 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	char str[ 32 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.6lf", value );
 	return std::string( str, length );
 }
 
@@ -8219,7 +8274,7 @@ template <>
 inline std::string ToString( ae::Vec2 v )
 {
 	char str[ 128 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f", v.x, v.y );
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f", v.x, v.y );
 	return std::string( str, length );
 }
 
@@ -8227,7 +8282,7 @@ template <>
 inline std::string ToString( ae::Vec3 v )
 {
 	char str[ 128 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f", v.x, v.y, v.z );
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f", v.x, v.y, v.z );
 	return std::string( str, length );
 }
 
@@ -8235,7 +8290,23 @@ template <>
 inline std::string ToString( ae::Vec4 v )
 {
 	char str[ 128 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Int2 value )
+{
+	char str[ 128 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d", value.x, value.y );
+	return std::string( str, length );
+}
+
+template <>
+inline std::string ToString( ae::Int3 value )
+{
+	char str[ 128 ];
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d %d", value.x, value.y, value.z );
 	return std::string( str, length );
 }
 
@@ -8243,7 +8314,7 @@ template <>
 inline std::string ToString( ae::Color v )
 {
 	char str[ 128 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
+	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
 	return std::string( str, length );
 }
 
@@ -8251,7 +8322,7 @@ template <>
 inline std::string ToString( ae::Matrix4 v )
 {
 	char str[ 128 ];
-	uint32_t length = snprintf( str, sizeof( str ) - 1,
+	const uint32_t length = snprintf( str, sizeof( str ) - 1,
 		"%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
 		v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ],
 		v.data[ 4 ], v.data[ 5 ], v.data[ 6 ], v.data[ 7 ],
@@ -8264,16 +8335,133 @@ inline std::string ToString( ae::Matrix4 v )
 //------------------------------------------------------------------------------
 // ae::FromString functions
 //------------------------------------------------------------------------------
-// No implementation so this acts as a forward declaration. Also a default
-// templated ae::ToString function would prevent the compiler/linker from looking
-// for ae::ToString implementations in other modules.
+// No implementation so this acts as a forward declaration. A default templated
+// ae::ToString implementation would prevent the compiler/linker from looking
+// for ae::ToString definitions in other modules.
 template < typename T > T FromString( const char* str, const T& defaultValue );
+
+template <>
+inline std::string FromString( const char* str, const std::string& )
+{
+	return std::string( str );
+}
+
+template <>
+inline int8_t FromString( const char* str, const int8_t& defaultValue )
+{
+	int8_t v;
+	if( sscanf( str, "%" SCNi8, &v ) == 1 )
+	{
+		return v;
+	}
+
+	return defaultValue;
+}
+
+template <>
+inline int16_t FromString( const char* str, const int16_t& defaultValue )
+{
+	int16_t v;
+	if( sscanf( str, "%" SCNi16, &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline int32_t FromString( const char* str, const int32_t& defaultValue )
+{
+	int32_t v;
+	if( sscanf( str, "%" SCNi32, &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline int64_t FromString( const char* str, const int64_t& defaultValue )
+{
+	int64_t v;
+	if( sscanf( str, "%" SCNi64, &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline uint8_t FromString( const char* str, const uint8_t& defaultValue )
+{
+	uint8_t v;
+	if( sscanf( str, "%" SCNu8, &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline uint16_t FromString( const char* str, const uint16_t& defaultValue )
+{
+	uint16_t v;
+	if( sscanf( str, "%" SCNu16, &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline uint32_t FromString( const char* str, const uint32_t& defaultValue )
+{
+	uint32_t v;
+	if( sscanf( str, "%" SCNu32, &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline uint64_t FromString( const char* str, const uint64_t& defaultValue )
+{
+	uint64_t v;
+	if( sscanf( str, "%" SCNu64, &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline float FromString( const char* str, const float& defaultValue )
+{
+	float v;
+	if( sscanf( str, "%f", &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
+
+template <>
+inline double FromString( const char* str, const double& defaultValue )
+{
+	double v;
+	if( sscanf( str, "%lf", &v ) == 1 )
+	{
+		return v;
+	}
+	return defaultValue;
+}
 
 template <>
 inline ae::Int2 FromString( const char* str, const ae::Int2& defaultValue )
 {
 	ae::Int2 r;
-	if ( sscanf( str, "%d %d", r.data, r.data + 1 ) == 2 )
+	if( sscanf( str, "%d %d", r.data, r.data + 1 ) == 2 )
 	{
 		return r;
 	}
@@ -8284,7 +8472,7 @@ template <>
 inline ae::Int3 FromString( const char* str, const ae::Int3& defaultValue )
 {
 	ae::Int3 r;
-	if ( sscanf( str, "%d %d %d", r.data, r.data + 1, r.data + 2 ) == 3 )
+	if( sscanf( str, "%d %d %d", r.data, r.data + 1, r.data + 2 ) == 3 )
 	{
 		return r;
 	}
@@ -8295,7 +8483,7 @@ template <>
 inline ae::Vec2 FromString( const char* str, const ae::Vec2& defaultValue )
 {
 	ae::Vec2 r;
-	if ( sscanf( str, "%f %f", r.data, r.data + 1 ) == 2 )
+	if( sscanf( str, "%f %f", r.data, r.data + 1 ) == 2 )
 	{
 		return r;
 	}
@@ -8306,7 +8494,7 @@ template <>
 inline ae::Vec3 FromString( const char* str, const ae::Vec3& defaultValue )
 {
 	ae::Vec3 r;
-	if ( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) == 3 )
+	if( sscanf( str, "%f %f %f", r.data, r.data + 1, r.data + 2 ) == 3 )
 	{
 		return r;
 	}
@@ -8317,7 +8505,7 @@ template <>
 inline ae::Vec4 FromString( const char* str, const ae::Vec4& defaultValue )
 {
 	ae::Vec4 r;
-	if ( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
 	{
 		return r;
 	}
@@ -8328,7 +8516,7 @@ template <>
 inline ae::Matrix4 FromString( const char* str, const ae::Matrix4& defaultValue )
 {
 	ae::Matrix4 r;
-	if ( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
+	if( sscanf( str, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",
 		r.data, r.data + 1, r.data + 2, r.data + 3,
 		r.data + 4, r.data + 5, r.data + 6, r.data + 7,
 		r.data + 8, r.data + 9, r.data + 10, r.data + 11,
@@ -8343,7 +8531,7 @@ template <>
 inline ae::Color FromString( const char* str, const ae::Color& defaultValue )
 {
 	ae::Color r;
-	if ( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
+	if( sscanf( str, "%f %f %f %f", r.data, r.data + 1, r.data + 2, r.data + 3 ) == 4 )
 	{
 		return r;
 	}
@@ -8355,9 +8543,9 @@ inline bool FromString( const char* str, const bool& defaultValue )
 {
 	auto StrCmp = []( const char* boolStr, const char* inputStr )
 	{
-		while ( *boolStr && *inputStr )
+		while( *boolStr && *inputStr )
 		{
-			if ( *boolStr != tolower( *inputStr ) ) { return false; }
+			if( *boolStr != tolower( *inputStr ) ) { return false; }
 			boolStr++;
 			inputStr++;
 		}
@@ -8365,9 +8553,10 @@ inline bool FromString( const char* str, const bool& defaultValue )
 	};
 	
 	float f;
-	if ( StrCmp( "true", str ) ) { return true; }
-	if ( StrCmp( "false", str ) ) { return false; }
-	if ( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
+	if( StrCmp( "true", str ) ) { return true; }
+	if( StrCmp( "false", str ) ) { return false; }
+	// @TODO: Check int first
+	if( sscanf( str, "%f", &f ) == 1 ) { return (bool)f; }
 	return defaultValue;
 }
 
@@ -8703,7 +8892,7 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 
 	if ( *head == '#' )
 	{
-		// @TODO: Replace with ToString()?
+		// @TODO: Replace with ae::ToString()
 		std::ostringstream stream;
 		stream << std::setprecision( 4 );
 		stream << std::boolalpha;
@@ -9855,7 +10044,6 @@ std::ostream& operator<<( std::ostream& os, const Map< K, V, N, M >& map )
 //------------------------------------------------------------------------------
 // ae::Dict members
 //------------------------------------------------------------------------------
-// @TODO: These should use ToString and FromString
 template< uint32_t N >
 Dict< N >::Dict( ae::Tag tag ) :
 	m_entries( tag )
@@ -9868,79 +10056,72 @@ void Dict< N >::SetString( const char* key, const char* value )
 }
 
 template< uint32_t N >
-void Dict< N >::SetInt( const char* key, int32_t value )
+void Dict< N >::SetInt( const char* key, int64_t value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%d", value );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
-void Dict< N >::SetUInt( const char* key, uint32_t value )
+void Dict< N >::SetUInt( const char* key, uint64_t value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%u", value );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetFloat( const char* key, float value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%f", value );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetDouble( const char* key, double value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%lf", value );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetBool( const char* key, bool value )
 {
-	SetString( key, value ? "true" : "false" );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetVec2( const char* key, ae::Vec2 value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%.3f %.3f", value.x, value.y );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetVec3( const char* key, ae::Vec3 value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f", value.x, value.y, value.z );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetVec4( const char* key, ae::Vec4 value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%.3f %.3f %.3f %.3f", value.x, value.y, value.z, value.w );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetInt2( const char* key, ae::Int2 value )
 {
-	char buf[ 128 ];
-	snprintf( buf, sizeof(buf), "%d %d", value.x, value.y );
-	SetString( key, buf );
+	const auto str = ToString( value );
+	m_entries.Set( key, str.c_str() );
 }
 
 template< uint32_t N >
 void Dict< N >::SetMatrix4( const char* key, const ae::Matrix4& value )
 {
-	auto str = ToString( value );
+	const auto str = ToString( value );
 	m_entries.Set( key, str.c_str() );
 }
 
@@ -9967,21 +10148,21 @@ const char* Dict< N >::GetString( const char* key, const char* defaultValue ) co
 }
 
 template< uint32_t N >
-int32_t Dict< N >::GetInt( const char* key, int32_t defaultValue ) const
+int64_t Dict< N >::GetInt( const char* key, int64_t defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return atoi( value->c_str() );
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
 
 template< uint32_t N >
-uint32_t Dict< N >::GetUInt( const char* key, uint32_t defaultValue ) const
+uint64_t Dict< N >::GetUInt( const char* key, uint64_t defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return (uint32_t)strtoul( value->c_str(), nullptr, 10 );
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -9991,7 +10172,7 @@ float Dict< N >::GetFloat( const char* key, float defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return (float)atof( value->c_str() );
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -10001,7 +10182,7 @@ double Dict< N >::GetDouble( const char* key, double defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return (double)atof( value->c_str() );
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -10011,14 +10192,7 @@ bool Dict< N >::GetBool( const char* key, bool defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		if ( *value == "true" )
-		{
-			return true;
-		}
-		else if ( *value == "false" )
-		{
-			return false;
-		}
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -10028,9 +10202,7 @@ ae::Vec2 Dict< N >::GetVec2( const char* key, ae::Vec2 defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		ae::Vec2 result( 0.0f );
-		sscanf( value->c_str(), "%f %f", &result.x, &result.y );
-		return result;
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -10040,9 +10212,7 @@ ae::Vec3 Dict< N >::GetVec3( const char* key, ae::Vec3 defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		ae::Vec3 result( 0.0f );
-		sscanf( value->c_str(), "%f %f %f", &result.x, &result.y, &result.z );
-		return result;
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -10052,9 +10222,7 @@ ae::Vec4 Dict< N >::GetVec4( const char* key, ae::Vec4 defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		ae::Vec4 result( 0.0f );
-		sscanf( value->c_str(), "%f %f %f %f", &result.x, &result.y, &result.z, &result.w );
-		return result;
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -10064,9 +10232,7 @@ ae::Int2 Dict< N >::GetInt2( const char* key, ae::Int2 defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		ae::Int2 result( 0.0f );
-		sscanf( value->c_str(), "%d %d", &result.x, &result.y );
-		return result;
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -10076,7 +10242,7 @@ ae::Matrix4 Dict< N >::GetMatrix4( const char* key, const ae::Matrix4& defaultVa
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
-		return ae::FromString< ae::Matrix4 >( value->c_str(), defaultValue );
+		return ae::FromString( value->c_str(), defaultValue );
 	}
 	return defaultValue;
 }
@@ -28647,71 +28813,61 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 		case BasicType::UInt8:
 		{
 			AE_ASSERT( typeSize == sizeof(uint8_t) );
-			uint8_t* u8 = (uint8_t*)varData;
-			sscanf( value, "%" SCNu8, u8 );
+			*(uint8_t*)varData = ae::FromString< uint8_t >( value, 0 );
 			return true;
 		}
 		case BasicType::UInt16:
 		{
 			AE_ASSERT( typeSize == sizeof(uint16_t) );
-			uint16_t* u16 = (uint16_t*)varData;
-			sscanf( value, "%" SCNu16, u16 );
+			*(uint16_t*)varData = ae::FromString< uint16_t >( value, 0 );
 			return true;
 		}
 		case BasicType::UInt32:
 		{
 			AE_ASSERT( typeSize == sizeof(uint32_t) );
-			uint32_t* u32 = (uint32_t*)varData;
-			sscanf( value, "%" SCNu32, u32 );
+			*(uint32_t*)varData = ae::FromString< uint32_t >( value, 0 );
 			return true;
 		}
 		case BasicType::UInt64:
 		{
 			AE_ASSERT( typeSize == sizeof(uint64_t) );
-			uint64_t* u64 = (uint64_t*)varData;
-			sscanf( value, "%" SCNu64, u64 );
+			*(uint64_t*)varData = ae::FromString< uint64_t >( value, 0 );
 			return true;
 		}
 		case BasicType::Int8:
 		{
 			AE_ASSERT( typeSize == sizeof(int8_t) );
-			int8_t* i8 = (int8_t*)varData;
-			sscanf( value, "%" SCNi8, i8 );
+			*(int8_t*)varData = ae::FromString< int8_t >( value, 0 );
 			return true;
 		}
 		case BasicType::Int16:
 		{
 			AE_ASSERT( typeSize == sizeof(int16_t) );
-			int16_t* i16 = (int16_t*)varData;
-			sscanf( value, "%" SCNi16, i16 );
+			*(int16_t*)varData = ae::FromString< int16_t >( value, 0 );
 			return true;
 		}
 		case BasicType::Int32:
 		{
 			AE_ASSERT( typeSize == sizeof(int32_t) );
-			int32_t* i32 = (int32_t*)varData;
-			sscanf( value, "%" SCNi32, i32 );
+			*(int32_t*)varData = ae::FromString< int32_t >( value, 0 );
 			return true;
 		}
 		case BasicType::Int64:
 		{
 			AE_ASSERT( typeSize == sizeof(int64_t) );
-			int64_t* i64 = (int64_t*)varData;
-			sscanf( value, "%" SCNi64, i64 );
+			*(int64_t*)varData = ae::FromString< int64_t >( value, 0 );
 			return true;
 		}
 		case BasicType::Int2:
 		{
 			AE_ASSERT( typeSize == sizeof( ae::Int2 ) );
-			ae::Int2* v = (ae::Int2*)varData;
-			*v = ae::FromString< ae::Int2 >( value, ae::Int2( 0.0f ) );
+			*(ae::Int2*)varData = ae::FromString< ae::Int2 >( value, ae::Int2( 0.0f ) );
 			return true;
 		}
 		case BasicType::Int3:
 		{
 			AE_ASSERT( typeSize == sizeof( ae::Int3 ) );
-			ae::Int3* v = (ae::Int3*)varData;
-			*v = ae::FromString< ae::Int3 >( value, ae::Int3( 0.0f ) );
+			*(ae::Int3*)varData = ae::FromString< ae::Int3 >( value, ae::Int3( 0.0f ) );
 			return true;
 		}
 		case BasicType::Bool:
@@ -28722,55 +28878,43 @@ bool ae::BasicType::SetVarDataFromString( ae::DataPointer _varData, const char* 
 		case BasicType::Float:
 		{
 			AE_ASSERT( typeSize == sizeof(float) );
-			float* f = (float*)varData;
-			sscanf( value, "%f", f );
+			*(float*)varData = ae::FromString< float >( value, 0.0f );
 			return true;
 		}
 		case BasicType::Double:
 		{
 			AE_ASSERT( typeSize == sizeof(double) );
-			double* f = (double*)varData;
-			sscanf( value, "%lf", f );
+			*(double*)varData = ae::FromString< double >( value, 0.0 );
 			return true;
 		}
 		case BasicType::Vec2:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec2) );
-			ae::Vec2* v = (ae::Vec2*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
+			*(ae::Vec2*)varData = ae::FromString< ae::Vec2 >( value, ae::Vec2( 0.0f ) );
 			return true;
 		}
 		case BasicType::Vec3:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec3) );
-			ae::Vec3* v = (ae::Vec3*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
+			*(ae::Vec3*)varData = ae::FromString< ae::Vec3 >( value, ae::Vec3( 0.0f ) );
 			return true;
 		}
 		case BasicType::Vec4:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Vec4) );
-			ae::Vec4* v = (ae::Vec4*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
+			*(ae::Vec4*)varData = ae::FromString< ae::Vec4 >( value, ae::Vec4( 0.0f ) );
 			return true;
 		}
 		case BasicType::Matrix4:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Matrix4) );
-			ae::Matrix4* v = (ae::Matrix4*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
+			*(ae::Matrix4*)varData = ae::FromString< ae::Matrix4 >( value, ae::Matrix4::Identity() );
 			return true;
 		}
 		case BasicType::Color:
 		{
 			AE_ASSERT( typeSize == sizeof(ae::Color) );
-			ae::Color* v = (ae::Color*)varData;
-			// @TODO: Should match GetObjectValueAsString() which uses ae::Str::Format
-			*v = ae::FromString< ae::Color >( value, ae::Color::Black() );
+			*(ae::Color*)varData = ae::FromString( value, ae::Color::Black() );
 			return true;
 		}
 		case BasicType::Class: AE_FAIL(); break; // @TODO: Remove
