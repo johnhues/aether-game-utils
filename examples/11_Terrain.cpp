@@ -185,7 +185,7 @@ void Object::Serialize( ae::BinaryStream* stream )
     stream->SerializeFloat( rayDir.y );
     stream->SerializeFloat( rayDir.z );
     stream->SerializeFloat( rayLength );
-    stream->SerializeUint32( rayType );
+    stream->SerializeUInt32( rayType );
   }
 }
 
@@ -193,9 +193,9 @@ void WriteObjects( ae::FileSystem* fileSystem, const ae::Array< Object* >& objec
 {
   ae::Array< uint8_t > buffer = TAG_EXAMPLE;
   ae::BinaryWriter wStream( &buffer );
-  wStream.SerializeUint32( kCurrentFileVersion );
+  wStream.SerializeUInt32( kCurrentFileVersion );
 
-  wStream.SerializeUint32( objects.Length() );
+  wStream.SerializeUInt32( objects.Length() );
   for ( uint32_t i = 0; i < objects.Length(); i++ )
   {
     Object* object = objects[ i ];
@@ -219,14 +219,14 @@ bool ReadObjects( ae::FileSystem* fileSystem, ae::Terrain* terrain, ae::Image* h
   ae::BinaryReader rStream( scratch.Data(), scratch.Length() );
 
   uint32_t version = 0;
-  rStream.SerializeUint32( version );
+  rStream.SerializeUInt32( version );
   if ( version < kMinSupportedFileVersion )
   {
     return false;
   }
   
   uint32_t len = 0;
-  rStream.SerializeUint32( len );
+  rStream.SerializeUInt32( len );
   if ( !len )
   {
     return false;

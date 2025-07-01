@@ -571,7 +571,7 @@ void EditorProgram::Initialize()
 	m_iconShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
 	AE_STATIC_ASSERT( sizeof(kCogTextureData) == kCogTextureDataSize * kCogTextureDataSize );
-	m_cogTexture.Initialize( kCogTextureData, kCogTextureDataSize, kCogTextureDataSize, ae::Texture::Format::R8, ae::Texture::Type::Uint8, ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp, true );
+	m_cogTexture.Initialize( kCogTextureData, kCogTextureDataSize, kCogTextureDataSize, ae::Texture::Format::R8, ae::Texture::Type::UInt8, ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp, true );
 
 	editor.Initialize( this );
 }
@@ -897,8 +897,8 @@ void Editor::Update()
 				ae::TypeId typeId;
 				ae::Str32 varName;
 				ae::Str256 varValue;
-				rStream.SerializeUint32( entity );
-				rStream.SerializeUint32( typeId );
+				rStream.SerializeUInt32( entity );
+				rStream.SerializeUInt32( typeId );
 				rStream.SerializeString( varName );
 				rStream.SerializeString( varValue );
 				if( rStream.IsValid() )
@@ -2439,8 +2439,8 @@ void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Compon
 	}
 	ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
 	wStream.SerializeEnum( EditorMsg::Modification );
-	wStream.SerializeUint32( component->GetEntity() );
-	wStream.SerializeUint32( ae::GetObjectTypeId( component ) );
+	wStream.SerializeUInt32( component->GetEntity() );
+	wStream.SerializeUInt32( ae::GetObjectTypeId( component ) );
 	wStream.SerializeString( var->GetName() );
 	wStream.SerializeString( var->GetObjectValueAsString( component ).c_str() );
 	if( wStream.IsValid() )

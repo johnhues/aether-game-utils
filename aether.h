@@ -1876,7 +1876,7 @@ public:
 	void SetString( const char* key, const char* value );
 	void SetString( const char* key, char* value ) { SetString( key, (const char*)value ); }
 	void SetInt( const char* key, int32_t value );
-	void SetUint( const char* key, uint32_t value );
+	void SetUInt( const char* key, uint32_t value );
 	void SetFloat( const char* key, float value );
 	void SetDouble( const char* key, double value );
 	void SetBool( const char* key, bool value );
@@ -1891,7 +1891,7 @@ public:
 
 	const char* GetString( const char* key, const char* defaultValue ) const;
 	int32_t GetInt( const char* key, int32_t defaultValue ) const;
-	uint32_t GetUint( const char* key, uint32_t defaultValue ) const;
+	uint32_t GetUInt( const char* key, uint32_t defaultValue ) const;
 	float GetFloat( const char* key, float defaultValue ) const;
 	double GetDouble( const char* key, double defaultValue ) const;
 	bool GetBool( const char* key, bool defaultValue ) const;
@@ -1920,7 +1920,7 @@ private:
 	// Prevent the above functions from being called accidentally through automatic conversions
 	template < typename T > void SetString( const char*, T ) = delete;
 	template < typename T > void SetInt( const char*, T ) = delete;
-	template < typename T > void SetUint( const char*, T ) = delete;
+	template < typename T > void SetUInt( const char*, T ) = delete;
 	template < typename T > void SetFloat( const char*, T ) = delete;
 	template < typename T > void SetDouble( const char*, T ) = delete;
 	template < typename T > void SetBool( const char*, T ) = delete;
@@ -4035,8 +4035,8 @@ public:
 	};
 	enum class Type
 	{
-		Uint8,
-		Uint16,
+		UInt8,
+		UInt16,
 		HalfFloat,
 		Float
 	};
@@ -4068,7 +4068,7 @@ struct TextureParams
 	uint32_t width = 0;
 	uint32_t height = 0;
 	Texture::Format format = Texture::Format::RGBA8;
-	Texture::Type type = Texture::Type::Uint8;
+	Texture::Type type = Texture::Type::UInt8;
 	Texture::Filter filter = Texture::Filter::Linear;
 	Texture::Wrap wrap = Texture::Wrap::Repeat;
 	bool autoGenerateMipmaps = true;
@@ -4999,10 +4999,10 @@ public:
 	//! buffer, otherwise returns nullptr.
 	const ae::BinaryReader* AsReader() const { return ( m_mode == Mode::ReadBuffer ) ? reinterpret_cast< const ae::BinaryReader* >( this ) : nullptr; }
 
-	void SerializeUint8( uint8_t& valInOut );
-	void SerializeUint16( uint16_t& valInOut );
-	void SerializeUint32( uint32_t& valInOut );
-	void SerializeUint64( uint64_t& valInOut );
+	void SerializeUInt8( uint8_t& valInOut );
+	void SerializeUInt16( uint16_t& valInOut );
+	void SerializeUInt32( uint32_t& valInOut );
+	void SerializeUInt64( uint64_t& valInOut );
 	void SerializeInt8( int8_t& valInOut );
 	void SerializeInt16( int16_t& valInOut );
 	void SerializeInt32( int32_t& valInOut );
@@ -5079,10 +5079,10 @@ protected:
 	BinaryStream( Array< uint8_t >*array ); // Write only
 	AE_DISABLE_COPY_ASSIGNMENT( BinaryStream );
 	// Prevent Serialize functions from being called accidentally through automatic conversions
-	template < typename T > void SerializeUint8( T ) = delete;
-	template < typename T > void SerializeUint16( T ) = delete;
-	template < typename T > void SerializeUint32( T ) = delete;
-	template < typename T > void SerializeUint64( T ) = delete;
+	template < typename T > void SerializeUInt8( T ) = delete;
+	template < typename T > void SerializeUInt16( T ) = delete;
+	template < typename T > void SerializeUInt32( T ) = delete;
+	template < typename T > void SerializeUInt64( T ) = delete;
 	template < typename T > void SerializeInt8( T ) = delete;
 	template < typename T > void SerializeInt16( T ) = delete;
 	template < typename T > void SerializeInt32( T ) = delete;
@@ -5110,10 +5110,10 @@ public:
 	//! the stream.
 	BinaryWriter( ae::Array< uint8_t >* data );
 
-	void SerializeUint8( const uint8_t& valIn );
-	void SerializeUint16( const uint16_t& valIn );
-	void SerializeUint32( const uint32_t& valIn );
-	void SerializeUint64( const uint64_t& valIn );
+	void SerializeUInt8( const uint8_t& valIn );
+	void SerializeUInt16( const uint16_t& valIn );
+	void SerializeUInt32( const uint32_t& valIn );
+	void SerializeUInt64( const uint64_t& valIn );
 	void SerializeInt8( const int8_t& valIn );
 	void SerializeInt16( const int16_t& valIn );
 	void SerializeInt32( const int32_t& valIn );
@@ -5141,10 +5141,10 @@ public:
 	template< typename T > void SerializeObject( T& valInOut );
 private:
 	// Prevent Serialize functions from being called accidentally through automatic conversions
-	template < typename T > void SerializeUint8( T ) = delete;
-	template < typename T > void SerializeUint16( T ) = delete;
-	template < typename T > void SerializeUint32( T ) = delete;
-	template < typename T > void SerializeUint64( T ) = delete;
+	template < typename T > void SerializeUInt8( T ) = delete;
+	template < typename T > void SerializeUInt16( T ) = delete;
+	template < typename T > void SerializeUInt32( T ) = delete;
+	template < typename T > void SerializeUInt64( T ) = delete;
 	template < typename T > void SerializeInt8( T ) = delete;
 	template < typename T > void SerializeInt16( T ) = delete;
 	template < typename T > void SerializeInt32( T ) = delete;
@@ -5193,8 +5193,8 @@ struct NetId
 	bool operator!=( const NetId& o ) const { return o.m_id != m_id; }
 	explicit operator bool () const { return m_id != 0; }
 	uint32_t GetInternalId() const { return m_id; }
-	void Serialize( BinaryStream* s ) { s->SerializeUint32( m_id ); }
-	void Serialize( BinaryWriter* w ) const { w->SerializeUint32( m_id ); }
+	void Serialize( BinaryStream* s ) { s->SerializeUInt32( m_id ); }
+	void Serialize( BinaryWriter* w ) const { w->SerializeUInt32( m_id ); }
 private:
 	uint32_t m_id = 0;
 };
@@ -9876,7 +9876,7 @@ void Dict< N >::SetInt( const char* key, int32_t value )
 }
 
 template< uint32_t N >
-void Dict< N >::SetUint( const char* key, uint32_t value )
+void Dict< N >::SetUInt( const char* key, uint32_t value )
 {
 	char buf[ 128 ];
 	snprintf( buf, sizeof(buf), "%u", value );
@@ -9977,7 +9977,7 @@ int32_t Dict< N >::GetInt( const char* key, int32_t defaultValue ) const
 }
 
 template< uint32_t N >
-uint32_t Dict< N >::GetUint( const char* key, uint32_t defaultValue ) const
+uint32_t Dict< N >::GetUInt( const char* key, uint32_t defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
@@ -22755,10 +22755,10 @@ void Texture2D::Initialize( const TextureParams& params )
 	GLenum glType = 0;
 	switch ( params.type )
 	{
-		case Type::Uint8:
+		case Type::UInt8:
 			glType = GL_UNSIGNED_BYTE;
 			break;
-		case Type::Uint16:
+		case Type::UInt16:
 			glType = GL_UNSIGNED_SHORT;
 			break;
 		case Type::HalfFloat:
@@ -22952,8 +22952,8 @@ void Texture2D::Initialize( const TextureParams& params )
 		}
 		switch ( params.type )
 		{
-			case Type::Uint8: _AE_BGR_TO_RGB_COPY( uint8_t ); break;
-			case Type::Uint16: _AE_BGR_TO_RGB_COPY( uint16_t ); break;
+			case Type::UInt8: _AE_BGR_TO_RGB_COPY( uint8_t ); break;
+			case Type::UInt16: _AE_BGR_TO_RGB_COPY( uint16_t ); break;
 			case Type::HalfFloat: _AE_BGR_TO_RGB_COPY( uint16_t ); break; // Use uint16_t for data copy
 			case Type::Float: _AE_BGR_TO_RGB_COPY( float ); break;
 			default: AE_FAIL();
@@ -23055,7 +23055,7 @@ void RenderTarget::AddTexture( Texture::Filter filter, Texture::Wrap wrap )
 
 #if _AE_EMSCRIPTEN_
 	Texture::Format format = Texture::Format::RGBA8;
-	Texture::Type type = Texture::Type::Uint8;
+	Texture::Type type = Texture::Type::UInt8;
 #else
 	Texture::Format format = Texture::Format::RGBA16F;
 	Texture::Type type = Texture::Type::HalfFloat;
@@ -23082,7 +23082,7 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 
 #if _AE_EMSCRIPTEN_
 	Texture::Format format = Texture::Format::Depth16;
-	Texture::Type type = Texture::Type::Uint16;
+	Texture::Type type = Texture::Type::UInt16;
 #else
 	Texture::Format format = Texture::Format::Depth32F;
 	Texture::Type type = Texture::Type::Float;
@@ -26593,42 +26593,42 @@ BinaryReader::BinaryReader( const ae::Array< uint8_t >& data ) :
 	BinaryStream( Mode::ReadBuffer, data.Data(), data.Length() )
 {}
 
-void BinaryStream::SerializeUint8( uint8_t& v )
+void BinaryStream::SerializeUInt8( uint8_t& v )
 {
 	SerializeRaw( &v, sizeof(v) );
 }
 
-void BinaryWriter::SerializeUint8( const uint8_t& v )
+void BinaryWriter::SerializeUInt8( const uint8_t& v )
 {
 	SerializeRaw( &v, sizeof(v) );
 }
 
-void BinaryStream::SerializeUint16( uint16_t& v )
+void BinaryStream::SerializeUInt16( uint16_t& v )
 {
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryWriter::SerializeUint16( const uint16_t& v )
+void BinaryWriter::SerializeUInt16( const uint16_t& v )
 {
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeUint32( uint32_t& v )
+void BinaryStream::SerializeUInt32( uint32_t& v )
 {
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryWriter::SerializeUint32( const uint32_t& v )
+void BinaryWriter::SerializeUInt32( const uint32_t& v )
 {
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryStream::SerializeUint64( uint64_t& v )
+void BinaryStream::SerializeUInt64( uint64_t& v )
 {
 	SerializeRaw( (uint8_t*)&v, sizeof(v) );
 }
 
-void BinaryWriter::SerializeUint64( const uint64_t& v )
+void BinaryWriter::SerializeUInt64( const uint64_t& v )
 {
 	SerializeRaw( (const uint8_t*)&v, sizeof(v) );
 }
@@ -26969,7 +26969,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 			case NetObjectConnection::EventType::Connect:
 			{
 				uint32_t signature = 0;
-				rStream.SerializeUint32( signature );
+				rStream.SerializeUInt32( signature );
 				AE_ASSERT( signature );
 
 				ae::Map< NetObject*, int > toDestroy = AE_ALLOC_TAG_NET;
@@ -26997,7 +26997,7 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 				}
 				
 				uint32_t length = 0;
-				rStream.SerializeUint32( length );
+				rStream.SerializeUInt32( length );
 				for ( uint32_t i = 0; i < length && rStream.IsValid(); i++ )
 				{
 					NetObject* created = m_CreateNetObject( &rStream, allowResolve );
@@ -27035,13 +27035,13 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 			case NetObjectConnection::EventType::Update:
 			{
 				uint32_t netObjectCount = 0;
-				rStream.SerializeUint32( netObjectCount );
+				rStream.SerializeUInt32( netObjectCount );
 				for ( uint32_t i = 0; i < netObjectCount; i++ )
 				{
 					RemoteId remoteId;
 					uint32_t dataLen = 0;
 					rStream.SerializeObject( remoteId );
-					rStream.SerializeUint32( dataLen );
+					rStream.SerializeUInt32( dataLen );
 
 					NetId localId;
 					NetObject* netObject = nullptr;
@@ -27066,13 +27066,13 @@ void NetObjectClient::ReceiveData( const uint8_t* data, uint32_t length )
 			case NetObjectConnection::EventType::Messages:
 			{
 				uint32_t netObjectCount = 0;
-				rStream.SerializeUint32( netObjectCount );
+				rStream.SerializeUInt32( netObjectCount );
 				for ( uint32_t i = 0; i < netObjectCount; i++ )
 				{
 					RemoteId remoteId;
 					uint32_t dataLen = 0;
 					rStream.SerializeObject( remoteId );
-					rStream.SerializeUint32( dataLen );
+					rStream.SerializeUInt32( dataLen );
 
 					NetId localId;
 					NetObject* netObject = nullptr;
@@ -27163,7 +27163,7 @@ NetObject* NetObjectClient::m_CreateNetObject( ae::BinaryReader* rStream, bool a
 			netObject = m_netObjects.Get( localId );
 			AE_ASSERT( netObject );
 			uint16_t initDataLength = 0;
-			rStream->SerializeUint16( initDataLength );
+			rStream->SerializeUInt16( initDataLength );
 			if( rStream->IsValid() )
 			{
 				AE_ASSERT( netObject->m_initData.Length() == initDataLength );
@@ -27185,7 +27185,7 @@ NetObject* NetObjectClient::m_CreateNetObject( ae::BinaryReader* rStream, bool a
 		m_created.Append( netObject );
 
 		uint16_t initDataLength = 0;
-		rStream->SerializeUint16( initDataLength );
+		rStream->SerializeUInt16( initDataLength );
 		netObject->m_initData.Append( {}, initDataLength );
 		rStream->SerializeRaw( netObject->m_initData.Data(), initDataLength );
 	}
@@ -27238,12 +27238,12 @@ void NetObjectConnection::m_UpdateSendData()
 	if ( toSync.Length() )
 	{
 		wStream.SerializeEnum( NetObjectConnection::EventType::Update );
-		wStream.SerializeUint32( toSync.Length() );
+		wStream.SerializeUInt32( toSync.Length() );
 		for ( uint32_t i = 0; i < toSync.Length(); i++ )
 		{
 			NetObject* netObject = toSync[ i ];
 			wStream.SerializeObject( netObject->GetId() );
-			wStream.SerializeUint32( netObject->SyncDataLength() );
+			wStream.SerializeUInt32( netObject->SyncDataLength() );
 			wStream.SerializeRaw( netObject->GetSyncData(), netObject->SyncDataLength() );
 		}
 	}
@@ -27251,14 +27251,14 @@ void NetObjectConnection::m_UpdateSendData()
 	if ( netObjectMessageCount )
 	{
 		wStream.SerializeEnum( NetObjectConnection::EventType::Messages );
-		wStream.SerializeUint32( netObjectMessageCount );
+		wStream.SerializeUInt32( netObjectMessageCount );
 		for ( uint32_t i = 0; i < m_replicaDB->GetNetObjectCount(); i++ )
 		{
 			NetObject* netObject = m_replicaDB->GetNetObject( i );
 			if ( netObject->m_messageDataOut.Length() )
 			{
 				wStream.SerializeObject( netObject->GetId() );
-				wStream.SerializeUint32( netObject->m_messageDataOut.Length() );
+				wStream.SerializeUInt32( netObject->m_messageDataOut.Length() );
 				wStream.SerializeRaw( &netObject->m_messageDataOut[ 0 ], netObject->m_messageDataOut.Length() );
 			}
 		}
@@ -27348,8 +27348,8 @@ NetObjectConnection* NetObjectServer::CreateConnection()
 	// Send initial net datas
 	ae::BinaryWriter wStream( &conn->m_connData );
 	wStream.SerializeEnum( NetObjectConnection::EventType::Connect );
-	wStream.SerializeUint32( m_signature );
-	wStream.SerializeUint32( m_netObjects.Length() );
+	wStream.SerializeUInt32( m_signature );
+	wStream.SerializeUInt32( m_netObjects.Length() );
 	for ( uint32_t i = 0; i < m_netObjects.Length(); i++ )
 	{
 		const NetObject* netObject = m_netObjects.GetValue( i );
@@ -27357,7 +27357,7 @@ NetObjectConnection* NetObjectServer::CreateConnection()
 
 		AE_ASSERT( netObject->m_initData.Length() <= ae::MaxValue< uint16_t >() );
 		const uint16_t initDataLength = (uint16_t)netObject->m_initData.Length();
-		wStream.SerializeUint16( initDataLength );
+		wStream.SerializeUInt16( initDataLength );
 		wStream.SerializeRaw( netObject->m_initData.Data(), initDataLength );
 	}
 
@@ -27403,7 +27403,7 @@ void NetObjectServer::UpdateSendData()
 				wStream.SerializeObject( netObject->GetId() );
 				AE_ASSERT( netObject->m_initData.Length() <= ae::MaxValue< uint16_t >() );
 				const uint16_t initDataLength = (uint16_t)netObject->m_initData.Length();
-				wStream.SerializeUint16( initDataLength );
+				wStream.SerializeUInt16( initDataLength );
 				wStream.SerializeRaw( netObject->m_initData.Data(), initDataLength );
 			}
 		}

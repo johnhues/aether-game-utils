@@ -418,8 +418,8 @@ void TerrainJob::Do()
     ae::Scratch< uint8_t > fileData( fileSize );
     m_p.vfs->Read( ae::FileSystem::Root::Cache, filePath.c_str(), fileData.Data(), fileSize );
     ae::BinaryReader rStream( fileData.Data(), fileSize );
-    rStream.SerializeUint32( m_vertexCount.Get() );
-    rStream.SerializeUint32( m_indexCount );
+    rStream.SerializeUInt32( m_vertexCount.Get() );
+    rStream.SerializeUInt32( m_indexCount );
     rStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
     rStream.SerializeRaw( &m_indices[ 0 ], m_indexCount * sizeof(m_indices[ 0 ]) );
     rStream.SerializeObject( *m_chunk );
@@ -447,8 +447,8 @@ void TerrainJob::Do()
       // Write result
       ae::Array< uint8_t > data = AE_ALLOC_TAG_TERRAIN;
       ae::BinaryWriter wStream( &data );
-      wStream.SerializeUint32( m_vertexCount.Get() );
-      wStream.SerializeUint32( m_indexCount );
+      wStream.SerializeUInt32( m_vertexCount.Get() );
+      wStream.SerializeUInt32( m_indexCount );
       wStream.SerializeRaw( &m_vertices[ 0 ], (uint32_t)m_vertexCount * sizeof(m_vertices[ 0 ]) );
       wStream.SerializeRaw( &m_indices[ 0 ], m_indexCount * sizeof(m_indices[ 0 ]) );
       wStream.SerializeObject( *m_chunk );
@@ -1104,7 +1104,7 @@ const uint32_t kChunkFormatVersion = 1;
 void TerrainChunk::Serialize( ae::BinaryStream* stream )
 {
   uint32_t version = kChunkFormatVersion;
-  stream->SerializeUint32( version );
+  stream->SerializeUInt32( version );
   if ( version != kChunkFormatVersion )
   {
     stream->Invalidate();
