@@ -5139,6 +5139,20 @@ public:
 	//! See ae::BinaryStream::SerializeObject(). This function only prevents
 	//! shadowing of the base class function.
 	template< typename T > void SerializeObject( T& valInOut );
+private:
+	// Prevent Serialize functions from being called accidentally through automatic conversions
+	template < typename T > void SerializeUint8( T ) = delete;
+	template < typename T > void SerializeUint16( T ) = delete;
+	template < typename T > void SerializeUint32( T ) = delete;
+	template < typename T > void SerializeUint64( T ) = delete;
+	template < typename T > void SerializeInt8( T ) = delete;
+	template < typename T > void SerializeInt16( T ) = delete;
+	template < typename T > void SerializeInt32( T ) = delete;
+	template < typename T > void SerializeInt64( T ) = delete;
+	template < typename T > void SerializeFloat( T ) = delete;
+	template < typename T > void SerializeDouble( T ) = delete;
+	template < typename T > void SerializeBool( T ) = delete;
+	template < typename T > void SerializeString( T ) = delete;
 };
 
 //------------------------------------------------------------------------------
