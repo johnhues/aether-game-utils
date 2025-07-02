@@ -1516,6 +1516,45 @@ struct Pair
 };
 
 //------------------------------------------------------------------------------
+// ae::GetHash helper
+//! Implement this helper for types that are used as ae::Map< Key, ...> or with
+//! ae::Hash::HashType().
+//------------------------------------------------------------------------------
+template < typename T > uint32_t GetHash( const T& key );
+template < uint32_t N > uint32_t GetHash( const ae::Str< N >& key );
+template < typename T > uint32_t GetHash( T* const& key );
+template <> uint32_t GetHash( const char* const& key );
+template <> uint32_t GetHash( char* const& key );
+
+//------------------------------------------------------------------------------
+// ae::Hash class (fnv1a)
+//! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
+//! hash to zero.
+//------------------------------------------------------------------------------
+class Hash
+{
+public:
+	Hash() = default;
+	explicit Hash( uint32_t initialValue );
+	
+	bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
+	bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
+
+	Hash& HashString( const char* str );
+	Hash& HashData( const void* data, uint32_t length );
+	template < typename T > Hash& HashBasicType( const T& v );
+	template < typename T > Hash& HashType( const T& v );
+	template < typename T, uint32_t N > Hash& HashType( const T (&array)[ N ] );
+	
+	void Set( uint32_t hash );
+	uint32_t Get() const;
+	
+private:
+	template < typename T > Hash& m_HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
+	uint32_t m_hash = 0x811c9dc5;
+};
+
+//------------------------------------------------------------------------------
 // ae::Optional class
 //------------------------------------------------------------------------------
 template < typename T >
@@ -2574,76 +2613,6 @@ private:
 	ae::Array< BVHNode, N > m_nodes;
 	ae::Array< BVHLeaf< T >, (N + 1)/2 > m_leaves;
 };
-
-//------------------------------------------------------------------------------
-// ae::GetHash helper
-//! Implement this helper for types that are used as ae::Map< Key, ...> or with
-//! ae::Hash::HashType().
-//------------------------------------------------------------------------------
-template < typename T > uint32_t GetHash( const T& key );
-template < uint32_t N > uint32_t GetHash( const ae::Str< N >& key );
-template < typename T > uint32_t GetHash( T* const& key );
-template <> uint32_t GetHash( const char* const& key );
-template <> uint32_t GetHash( char* const& key );
-
-//------------------------------------------------------------------------------
-// ae::Hash class (fnv1a)
-//! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
-//! hash to zero.
-//------------------------------------------------------------------------------
-class Hash
-{
-public:
-	Hash() = default;
-	explicit Hash( uint32_t initialValue );
-	
-	bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
-	bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
-
-	Hash& HashString( const char* str );
-	Hash& HashData( const void* data, uint32_t length );
-	template < typename T > Hash& HashBasicType( const T& v ) { return HashType( v ); }
-	template < typename T > Hash& HashType( const T& v ) { return m_HashBasicType( ae::GetHash( v ) ); }
-	template < typename T, uint32_t N > Hash& HashType( const T (&array)[N ] )
-	{
-		for( const T& v : array )
-		{
-			m_HashBasicType( ae::GetHash( v ) );
-		}
-		return *this;
-	}
-	
-	void Set( uint32_t hash );
-	uint32_t Get() const;
-	
-private:
-	template < typename T > Hash& m_HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
-	uint32_t m_hash = 0x811c9dc5;
-};
-
-//------------------------------------------------------------------------------
-// ae::GetHash helper
-//------------------------------------------------------------------------------
-template<> inline uint32_t GetHash( const bool& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int8_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int16_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int32_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const uint8_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const uint16_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const uint32_t& value ) { return value; }
-template<> inline uint32_t GetHash( const uint64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const float& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const double& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const ae::Vec2& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const ae::Vec3& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const ae::Vec4& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const ae::Matrix4& value ) { return ae::Hash().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const char* const& value ) { return ae::Hash().HashString( value ).Get(); }
-template<> inline uint32_t GetHash( char* const& value ) { return ae::Hash().HashString( value ).Get(); }
-template< uint32_t N > inline uint32_t GetHash( const char (&value)[ N ] ) { return ae::Hash().HashString( value ).Get(); }
-template<> inline uint32_t GetHash( const std::string& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
-template<> inline uint32_t GetHash( const ae::Hash& value ) { return value.Get(); }
 
 //------------------------------------------------------------------------------
 // Log utilities
@@ -8904,7 +8873,50 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 }
 
 //------------------------------------------------------------------------------
-// ae::Optional functions
+// ae::GetHash inline helpers
+//------------------------------------------------------------------------------
+template<> inline uint32_t GetHash( const bool& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int8_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int16_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int32_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const int64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const uint8_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const uint16_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash( const uint32_t& value ) { return value; }
+template<> inline uint32_t GetHash( const uint64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const float& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const double& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash( const ae::Vec2& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const ae::Vec3& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const ae::Vec4& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const ae::Matrix4& value ) { return ae::Hash().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash( const char* const& value ) { return ae::Hash().HashString( value ).Get(); }
+template<> inline uint32_t GetHash( char* const& value ) { return ae::Hash().HashString( value ).Get(); }
+template< uint32_t N > inline uint32_t GetHash( const char (&value)[ N ] ) { return ae::Hash().HashString( value ).Get(); }
+template<> inline uint32_t GetHash( const std::string& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
+template<> inline uint32_t GetHash( const ae::Hash& value ) { return value.Get(); }
+
+//------------------------------------------------------------------------------
+// ae::Hash templated member functions
+//------------------------------------------------------------------------------
+template< typename T >
+Hash& Hash::HashBasicType( const T& v ) { return HashType( v ); }
+
+template< typename T >
+Hash& Hash::HashType( const T& v ) { return m_HashBasicType( ae::GetHash( v ) ); }
+
+template< typename T, uint32_t N >
+Hash& Hash::HashType( const T (&array)[ N ] )
+{
+	for( const T& v : array )
+	{
+		m_HashBasicType( ae::GetHash( v ) );
+	}
+	return *this;
+}
+
+//------------------------------------------------------------------------------
+// ae::Optional templated member functions
 //------------------------------------------------------------------------------
 template< typename T >
 Optional< T >::Optional( const T& value ) : m_hasValue( false )
@@ -11372,12 +11384,6 @@ ae::AABB BVH< T, N >::GetAABB() const
 {
 	return GetRoot()->aabb;
 }
-
-//------------------------------------------------------------------------------
-// ae::GetHash helper
-//------------------------------------------------------------------------------
-template < typename T > uint32_t GetHash( T* const& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template < uint32_t N > uint32_t GetHash( const ae::Str< N >& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // HotLoader member functions
@@ -16144,6 +16150,75 @@ void TimeStep::Tick()
 }
 
 //------------------------------------------------------------------------------
+// ae::GetHash helper
+//------------------------------------------------------------------------------
+template < typename T > uint32_t GetHash( T* const& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
+template < uint32_t N > uint32_t GetHash( const ae::Str< N >& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
+template <> uint32_t GetHash( const ae::Int2& value )
+{
+	// NxN->N Pairing: https://stackoverflow.com/questions/919612/mapping-two-integers-to-one-in-a-unique-and-deterministic-way
+	uint32_t hash = (int16_t)value.x;
+	hash = ( hash << 16 );
+	return hash + (int16_t)value.y;
+}
+template <> uint32_t GetHash( const ae::Int3& value )
+{
+	// Szudzik Pairing: https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
+	uint32_t i = ( value.x >= 0 ) ? ( 2 * value.x ) : ( -2 * value.x - 1 );
+	uint32_t j = ( value.y >= 0 ) ? ( 2 * value.y ) : ( -2 * value.y - 1 );
+	uint32_t k = ( value.z >= 0 ) ? ( 2 * value.z ) : ( -2 * value.z - 1 );
+	uint32_t ijk = ae::Max( i, j, k );
+	uint32_t hash = ijk * ijk * ijk + ( 2 * ijk * k ) + k;
+	if ( ijk == k ) { uint32_t ij = ae::Max( i, j ); hash += ij * ij; }
+	if ( j >= i ) { hash += i + j; }
+	else { hash += j; }
+	return hash;
+}
+template<> uint32_t GetHash( const ae::Color& v ) { return ae::Hash().HashType( v.data ).Get(); }
+
+//------------------------------------------------------------------------------
+// ae::Hash member functions
+//------------------------------------------------------------------------------
+Hash::Hash( uint32_t initialValue )
+{
+	m_hash = initialValue;
+}
+
+Hash& Hash::HashString( const char* str )
+{
+	while ( *str )
+	{
+		m_hash = m_hash ^ str[ 0 ];
+		m_hash *= 0x1000193;
+		str++;
+	}
+
+	return *this;
+}
+
+Hash& Hash::HashData( const void* _data, uint32_t length )
+{
+	const uint8_t* data = (const uint8_t*)_data;
+	for ( uint32_t i = 0; i < length; i++ )
+	{
+		m_hash = m_hash ^ data[ i ];
+		m_hash *= 0x1000193;
+	}
+
+	return *this;
+}
+
+void Hash::Set( uint32_t hash )
+{
+	m_hash = hash;
+}
+
+uint32_t Hash::Get() const
+{
+	return m_hash;
+}
+
+//------------------------------------------------------------------------------
 // ae::OpaquePool member functions
 //------------------------------------------------------------------------------
 #define _AE_POOL_ELEMENT( _arr, _idx ) ( (uint8_t*)_arr + (intptr_t)_idx * m_objectSize )
@@ -16548,73 +16623,6 @@ void RectInt::Expand( ae::Int2 pos )
 		h = y1 - y;
 	}
 }
-
-//------------------------------------------------------------------------------
-// ae::Hash member functions
-//------------------------------------------------------------------------------
-Hash::Hash( uint32_t initialValue )
-{
-	m_hash = initialValue;
-}
-
-Hash& Hash::HashString( const char* str )
-{
-	while ( *str )
-	{
-		m_hash = m_hash ^ str[ 0 ];
-		m_hash *= 0x1000193;
-		str++;
-	}
-
-	return *this;
-}
-
-Hash& Hash::HashData( const void* _data, uint32_t length )
-{
-	const uint8_t* data = (const uint8_t*)_data;
-	for ( uint32_t i = 0; i < length; i++ )
-	{
-		m_hash = m_hash ^ data[ i ];
-		m_hash *= 0x1000193;
-	}
-
-	return *this;
-}
-
-void Hash::Set( uint32_t hash )
-{
-	m_hash = hash;
-}
-
-uint32_t Hash::Get() const
-{
-	return m_hash;
-}
-
-//------------------------------------------------------------------------------
-// ae::GetHash helper
-//------------------------------------------------------------------------------
-template <> uint32_t GetHash( const ae::Int2& value )
-{
-	// NxN->N Pairing: https://stackoverflow.com/questions/919612/mapping-two-integers-to-one-in-a-unique-and-deterministic-way
-	uint32_t hash = (int16_t)value.x;
-	hash = ( hash << 16 );
-	return hash + (int16_t)value.y;
-}
-template <> uint32_t GetHash( const ae::Int3& value )
-{
-	// Szudzik Pairing: https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
-	uint32_t i = ( value.x >= 0 ) ? ( 2 * value.x ) : ( -2 * value.x - 1 );
-	uint32_t j = ( value.y >= 0 ) ? ( 2 * value.y ) : ( -2 * value.y - 1 );
-	uint32_t k = ( value.z >= 0 ) ? ( 2 * value.z ) : ( -2 * value.z - 1 );
-	uint32_t ijk = ae::Max( i, j, k );
-	uint32_t hash = ijk * ijk * ijk + ( 2 * ijk * k ) + k;
-	if ( ijk == k ) { uint32_t ij = ae::Max( i, j ); hash += ij * ij; }
-	if ( j >= i ) { hash += i + j; }
-	else { hash += j; }
-	return hash;
-}
-template<> uint32_t GetHash( const ae::Color& v ) { return ae::Hash().HashType( v.data ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::HotLoader member functions
