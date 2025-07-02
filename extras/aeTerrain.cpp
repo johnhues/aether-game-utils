@@ -396,14 +396,14 @@ void TerrainJob::Do()
   AE_ASSERT( m_chunk );
   
   // Hash
-  m_parameterHash = ae::Hash();
+  m_parameterHash = ae::Hash32();
   
   m_parameterHash = m_p.GetHash( m_parameterHash );
   
   ae::Int3 chunkPos = m_chunk->m_pos;
-  m_parameterHash = m_parameterHash.HashBasicType( chunkPos.x );
-  m_parameterHash = m_parameterHash.HashBasicType( chunkPos.y );
-  m_parameterHash = m_parameterHash.HashBasicType( chunkPos.z );
+  m_parameterHash = m_parameterHash.HashType( chunkPos.x );
+  m_parameterHash = m_parameterHash.HashType( chunkPos.y );
+  m_parameterHash = m_parameterHash.HashType( chunkPos.z );
   
   for ( ae::Sdf* shape : m_shapes )
   {

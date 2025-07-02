@@ -1516,43 +1516,58 @@ struct Pair
 };
 
 //------------------------------------------------------------------------------
-// ae::GetHash helper
+// ae::GetHash32 helper
 //! Implement this helper for types that are used as ae::Map< Key, ...> or with
-//! ae::Hash::HashType().
+//! ae::Hash32.
 //------------------------------------------------------------------------------
-template < typename T > uint32_t GetHash( const T& key );
-template < uint32_t N > uint32_t GetHash( const ae::Str< N >& key );
-template < typename T > uint32_t GetHash( T* const& key );
-template <> uint32_t GetHash( const char* const& key );
-template <> uint32_t GetHash( char* const& key );
+template< typename T > uint32_t GetHash32( const T& key );
+template< uint32_t N > uint32_t GetHash32( const ae::Str< N >& key );
+template< typename T > uint32_t GetHash32( T* const& key );
+template<> uint32_t GetHash32( const char* const& key );
+template<> uint32_t GetHash32( char* const& key );
 
 //------------------------------------------------------------------------------
-// ae::Hash class (fnv1a)
+// ae::GetHash64 helper
+//! Implement this helper for types that are used with ae::Hash64.
+//------------------------------------------------------------------------------
+template< typename T > uint64_t GetHash64( const T& key );
+template< uint32_t N > uint64_t GetHash64( const ae::Str< N >& key );
+template< typename T > uint64_t GetHash64( T* const& key );
+template<> uint64_t GetHash64( const char* const& key );
+template<> uint64_t GetHash64( char* const& key );
+
+//------------------------------------------------------------------------------
+// ae::Hash32 class
+// ae::Hash64 class
 //! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
 //! hash to zero.
 //------------------------------------------------------------------------------
+template< typename U >
 class Hash
 {
 public:
 	Hash() = default;
-	explicit Hash( uint32_t initialValue );
+	explicit Hash( U initialValue );
 	
 	bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
 	bool operator != ( Hash o ) const { return m_hash != o.m_hash; }
 
 	Hash& HashString( const char* str );
 	Hash& HashData( const void* data, uint32_t length );
-	template < typename T > Hash& HashBasicType( const T& v );
-	template < typename T > Hash& HashType( const T& v );
-	template < typename T, uint32_t N > Hash& HashType( const T (&array)[ N ] );
+	template< typename T, uint32_t N > Hash& HashType( const T (&array)[ N ] );
+	template< typename T > Hash& HashType( const T& v );
 	
-	void Set( uint32_t hash );
-	uint32_t Get() const;
+	void Set( U hash );
+	U Get() const;
 	
 private:
-	template < typename T > Hash& m_HashBasicType( const T& v ) { return HashData( &v, sizeof(v) ); }
-	uint32_t m_hash = 0x811c9dc5;
+	template< typename T > Hash( T initialValue ) = delete;
+	template< typename T > void Set( T hash ) = delete;
+	template< typename T > Hash& m_HashType( const T& v ) { return HashData( &v, sizeof(v) ); }
+	U m_hash = (U)0xcbf29ce484222325ull;
 };
+using Hash32 = Hash< uint32_t >;
+using Hash64 = Hash< uint64_t >;
 
 //------------------------------------------------------------------------------
 // ae::Optional class
@@ -3668,11 +3683,11 @@ public:
 	void Set( const char* name, const class Texture* tex );
 
 	const Value* Get( const char* name ) const;
-	ae::Hash GetHash() const { return m_hash; }
+	ae::Hash32 GetHash() const { return m_hash; }
 
 private:
 	ae::Map< Str32, Value, 64 > m_uniforms;
-	ae::Hash m_hash;
+	ae::Hash32 m_hash;
 };
 
 //------------------------------------------------------------------------------
@@ -3718,7 +3733,7 @@ const uint32_t _kMaxShaderAttributeNameLength = 16;
 const uint32_t _kMaxShaderDefines = 32;
 class InstanceData;
 enum class Culling { None, ClockwiseFront, CounterclockwiseFront };
-template<> inline uint32_t GetHash( const Culling& v ) { return (uint32_t)v; } 
+template<> inline uint32_t GetHash32( const Culling& v ) { return (uint32_t)v; } 
 
 class Shader
 {
@@ -5169,7 +5184,7 @@ private:
 	uint32_t m_id = 0;
 };
 using RemoteId = NetId;
-template <> inline uint32_t GetHash( const ae::NetId& value ) { return ae::Hash().HashBasicType( value.GetInternalId() ).Get(); }
+template <> inline uint32_t GetHash32( const ae::NetId& value ) { return ae::Hash32().HashType( value.GetInternalId() ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::NetObject class
@@ -5380,12 +5395,12 @@ struct VoxelIndex
 	int32_t y;
 	int32_t z;
 };
-template <> inline uint32_t GetHash( const VoxelIndex& index )
+template <> inline uint32_t GetHash32( const VoxelIndex& index )
 {
 	// Create a hash using the index as a seed to prevent large consecutive map
 	// entries, where collisions become very expensive to handle.
 	constexpr uint32_t uint32MaxGridSize = 1625; // UINT32_MAX ^ (1/3)
-	return ae::Hash().HashBasicType( index.x + uint32MaxGridSize * ( index.y + index.z * uint32MaxGridSize ) ).Get();
+	return ae::Hash32().HashType( index.x + uint32MaxGridSize * ( index.y + index.z * uint32MaxGridSize ) ).Get();
 }
 //------------------------------------------------------------------------------
 // ae::IsosurfaceExtractor types
@@ -5539,7 +5554,7 @@ private:
 	inline std::ostream &operator << ( std::ostream &os, E e ) { os << ae::GetEnumType< E >()->GetNameByValue( (int32_t)e ); return os; } \
 	namespace ae { template <> inline std::string ToString( E e ) { return ae::GetEnumType< E >()->GetNameByValue( e ); } } \
 	namespace ae { template <> inline E FromString( const char* str, const E& e ) { return ae::GetEnumType< E >()->GetValueFromString( str, e ); } } \
-	namespace ae { template <> inline uint32_t GetHash( const E& e ) { return (uint32_t)e; } }
+	namespace ae { template <> inline uint32_t GetHash32( const E& e ) { return (uint32_t)e; } }
 
 //! Register an enum defined with AE_DEFINE_ENUM_CLASS
 #define AE_REGISTER_ENUM_CLASS( E )\
@@ -8873,46 +8888,132 @@ void Str< N >::m_Format( const char* format, T value, Args... args )
 }
 
 //------------------------------------------------------------------------------
-// ae::GetHash inline helpers
+// ae::GetHash32 inline helpers
 //------------------------------------------------------------------------------
-template<> inline uint32_t GetHash( const bool& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int8_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int16_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int32_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const int64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const uint8_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const uint16_t& value ) { return (uint32_t)value; }
-template<> inline uint32_t GetHash( const uint32_t& value ) { return value; }
-template<> inline uint32_t GetHash( const uint64_t& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const float& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const double& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template<> inline uint32_t GetHash( const ae::Vec2& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const ae::Vec3& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const ae::Vec4& value ) { return ae::Hash().HashBasicType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const ae::Matrix4& value ) { return ae::Hash().HashType( value.data ).Get(); }
-template<> inline uint32_t GetHash( const char* const& value ) { return ae::Hash().HashString( value ).Get(); }
-template<> inline uint32_t GetHash( char* const& value ) { return ae::Hash().HashString( value ).Get(); }
-template< uint32_t N > inline uint32_t GetHash( const char (&value)[ N ] ) { return ae::Hash().HashString( value ).Get(); }
-template<> inline uint32_t GetHash( const std::string& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
-template<> inline uint32_t GetHash( const ae::Hash& value ) { return value.Get(); }
+template<> inline uint32_t GetHash32( const bool& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int8_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int16_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int32_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const int64_t& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const uint8_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const uint16_t& value ) { return (uint32_t)value; }
+template<> inline uint32_t GetHash32( const uint32_t& value ) { return value; }
+template<> inline uint32_t GetHash32( const uint64_t& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const float& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const double& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec2& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec3& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Vec4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Matrix4& value ) { return ae::Hash32().HashType( value.data ).Get(); }
+template<> inline uint32_t GetHash32( const char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( char* const& value ) { return ae::Hash32().HashString( value ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const char (&value)[ N ] ) { return ae::Hash32().HashString( value ).Get(); }
+template<> inline uint32_t GetHash32( const std::string& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+template<> inline uint32_t GetHash32( const ae::Hash32& value ) { return value.Get(); }
+template< typename T > inline uint32_t GetHash32( T* const& value ) { return ae::Hash32().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint32_t GetHash32( const ae::Str< N >& value ) { return ae::Hash32().HashString( value.c_str() ).Get(); }
+
+//------------------------------------------------------------------------------
+// ae::GetHash64 inline helpers
+//------------------------------------------------------------------------------
+template<> inline uint64_t GetHash64( const bool& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int8_t& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int16_t& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int32_t& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const int64_t& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const uint8_t& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const uint16_t& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const uint32_t& value ) { return (uint64_t)value; }
+template<> inline uint64_t GetHash64( const uint64_t& value ) { return value; }
+template<> inline uint64_t GetHash64( const float& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const double& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec2& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec3& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Vec4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Matrix4& value ) { return ae::Hash64().HashType( value.data ).Get(); }
+template<> inline uint64_t GetHash64( const char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( char* const& value ) { return ae::Hash64().HashString( value ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const char (&value)[ N ] ) { return ae::Hash64().HashString( value ).Get(); }
+template<> inline uint64_t GetHash64( const std::string& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
+template<> inline uint64_t GetHash64( const ae::Hash64& value ) { return value.Get(); }
+template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae::Hash64().HashData( &value, sizeof(value) ).Get(); }
+template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::Hash templated member functions
 //------------------------------------------------------------------------------
-template< typename T >
-Hash& Hash::HashBasicType( const T& v ) { return HashType( v ); }
+template< typename U >
+Hash< U >::Hash( U initialValue )
+{
+	m_hash = initialValue;
+}
 
-template< typename T >
-Hash& Hash::HashType( const T& v ) { return m_HashBasicType( ae::GetHash( v ) ); }
-
+template< typename U >
 template< typename T, uint32_t N >
-Hash& Hash::HashType( const T (&array)[ N ] )
+Hash< U >& Hash< U >::HashType( const T (&array)[ N ] )
 {
 	for( const T& v : array )
 	{
-		m_HashBasicType( ae::GetHash( v ) );
+		HashType( v );
 	}
 	return *this;
+}
+
+template< typename U >
+template< typename T >
+Hash< U >& Hash< U >::HashType( const T& v )
+{
+	if constexpr( sizeof(U) == 4 )
+	{
+		m_HashType( ae::GetHash32( v ) );
+	}
+	else if constexpr( sizeof(U) == 8 )
+	{
+		m_HashType( ae::GetHash64( v ) );
+	}
+	else
+	{
+		AE_STATIC_FAIL( "Unsupported Hash< T >" );
+	}
+	return *this;
+}
+
+template< typename U >
+Hash< U >& Hash< U >::HashString( const char* str )
+{
+	while ( *str )
+	{
+		m_hash = m_hash ^ str[ 0 ];
+		m_hash *= (U)0x100000001b3ull;
+		str++;
+	}
+
+	return *this;
+}
+
+template< typename U >
+Hash< U >& Hash< U >::HashData( const void* _data, uint32_t length )
+{
+	const uint8_t* data = (const uint8_t*)_data;
+	for ( uint32_t i = 0; i < length; i++ )
+	{
+		m_hash = m_hash ^ data[ i ];
+		m_hash *= (U)0x100000001b3ull;
+	}
+
+	return *this;
+}
+
+template< typename U >
+void Hash< U >::Set( U hash )
+{
+	m_hash = hash;
+}
+
+template< typename U >
+U Hash< U >::Get() const
+{
+	return m_hash;
 }
 
 //------------------------------------------------------------------------------
@@ -9666,7 +9767,7 @@ template < typename Key, uint32_t N >
 bool HashMap< Key, N >::Set( Key key, uint32_t index )
 {
 	// Find existing
-	const uint32_t hash = ae::GetHash( key );
+	const uint32_t hash = ae::GetHash32( key );
 	if ( m_length )
 	{
 		AE_DEBUG_ASSERT( m_size );
@@ -9709,7 +9810,7 @@ int32_t HashMap< Key, N >::Remove( Key key )
 	Entry* entry = nullptr;
 	{
 		AE_DEBUG_ASSERT( m_size );
-		const uint32_t hash = ae::GetHash( key );
+		const uint32_t hash = ae::GetHash32( key );
 		const uint32_t startIdx = hash % m_size;
 		for ( uint32_t i = 0; i < m_size; i++ )
 		{
@@ -9774,7 +9875,7 @@ int32_t HashMap< Key, N >::Get( Key key ) const
 	if ( m_length )
 	{
 		AE_DEBUG_ASSERT( m_size );
-		const uint32_t hash = ae::GetHash( key );
+		const uint32_t hash = ae::GetHash32( key );
 		const uint32_t startIdx = hash % m_size;
 		for ( uint32_t i = 0; i < m_size; i++ )
 		{
@@ -9815,7 +9916,7 @@ template < typename Key, uint32_t N >
 bool HashMap< Key, N >::m_Insert( Key key, uint32_t hash, int32_t index ) // This could also take the hash as an optimization
 {
 	AE_DEBUG_ASSERT( index >= 0 );
-	AE_DEBUG_ASSERT( ae::GetHash( key ) == hash );
+	AE_DEBUG_ASSERT( ae::GetHash32( key ) == hash );
 	// 'hash' is modified in loop
 	const uint32_t startIdx = ( hash % m_size );
 	for ( uint32_t i = 0; i < m_size; i++ )
@@ -16150,73 +16251,54 @@ void TimeStep::Tick()
 }
 
 //------------------------------------------------------------------------------
-// ae::GetHash helper
+// ae::GetHash32 helper
 //------------------------------------------------------------------------------
-template < typename T > uint32_t GetHash( T* const& value ) { return ae::Hash().HashData( &value, sizeof(value) ).Get(); }
-template < uint32_t N > uint32_t GetHash( const ae::Str< N >& value ) { return ae::Hash().HashString( value.c_str() ).Get(); }
-template <> uint32_t GetHash( const ae::Int2& value )
+template<> uint32_t GetHash32( const ae::Int2& value )
 {
 	// NxN->N Pairing: https://stackoverflow.com/questions/919612/mapping-two-integers-to-one-in-a-unique-and-deterministic-way
 	uint32_t hash = (int16_t)value.x;
 	hash = ( hash << 16 );
 	return hash + (int16_t)value.y;
 }
-template <> uint32_t GetHash( const ae::Int3& value )
+template<> uint32_t GetHash32( const ae::Int3& value )
 {
 	// Szudzik Pairing: https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
-	uint32_t i = ( value.x >= 0 ) ? ( 2 * value.x ) : ( -2 * value.x - 1 );
-	uint32_t j = ( value.y >= 0 ) ? ( 2 * value.y ) : ( -2 * value.y - 1 );
-	uint32_t k = ( value.z >= 0 ) ? ( 2 * value.z ) : ( -2 * value.z - 1 );
-	uint32_t ijk = ae::Max( i, j, k );
+	const uint32_t i = ( value.x >= 0 ) ? ( 2 * value.x ) : ( -2 * value.x - 1 );
+	const uint32_t j = ( value.y >= 0 ) ? ( 2 * value.y ) : ( -2 * value.y - 1 );
+	const uint32_t k = ( value.z >= 0 ) ? ( 2 * value.z ) : ( -2 * value.z - 1 );
+	const uint32_t ijk = ae::Max( i, j, k );
 	uint32_t hash = ijk * ijk * ijk + ( 2 * ijk * k ) + k;
-	if ( ijk == k ) { uint32_t ij = ae::Max( i, j ); hash += ij * ij; }
+	if ( ijk == k ) { const uint32_t ij = ae::Max( i, j ); hash += ij * ij; }
 	if ( j >= i ) { hash += i + j; }
 	else { hash += j; }
 	return hash;
 }
-template<> uint32_t GetHash( const ae::Color& v ) { return ae::Hash().HashType( v.data ).Get(); }
+template<> uint32_t GetHash32( const ae::Color& v ) { return ae::Hash32().HashType( v.data ).Get(); }
 
 //------------------------------------------------------------------------------
-// ae::Hash member functions
+// ae::GetHash64 helper
 //------------------------------------------------------------------------------
-Hash::Hash( uint32_t initialValue )
+template<> uint64_t GetHash64( const ae::Int2& value )
 {
-	m_hash = initialValue;
+	// NxN->N Pairing: https://stackoverflow.com/questions/919612/mapping-two-integers-to-one-in-a-unique-and-deterministic-way
+	uint64_t hash = (uint32_t)value.x;
+	hash = ( hash << 32ull );
+	return hash + (uint32_t)value.y;
 }
-
-Hash& Hash::HashString( const char* str )
+template<> uint64_t GetHash64( const ae::Int3& value )
 {
-	while ( *str )
-	{
-		m_hash = m_hash ^ str[ 0 ];
-		m_hash *= 0x1000193;
-		str++;
-	}
-
-	return *this;
+	// Szudzik Pairing: https://dmauro.com/post/77011214305/a-hashing-function-for-x-y-z-coordinates
+	const uint64_t i = ( value.x >= 0 ) ? ( 2 * value.x ) : ( -2 * value.x - 1 );
+	const uint64_t j = ( value.y >= 0 ) ? ( 2 * value.y ) : ( -2 * value.y - 1 );
+	const uint64_t k = ( value.z >= 0 ) ? ( 2 * value.z ) : ( -2 * value.z - 1 );
+	const uint64_t ijk = ae::Max( i, j, k );
+	uint64_t hash = ijk * ijk * ijk + ( 2 * ijk * k ) + k;
+	if ( ijk == k ) { const uint64_t ij = ae::Max( i, j ); hash += ij * ij; }
+	if ( j >= i ) { hash += i + j; }
+	else { hash += j; }
+	return hash;
 }
-
-Hash& Hash::HashData( const void* _data, uint32_t length )
-{
-	const uint8_t* data = (const uint8_t*)_data;
-	for ( uint32_t i = 0; i < length; i++ )
-	{
-		m_hash = m_hash ^ data[ i ];
-		m_hash *= 0x1000193;
-	}
-
-	return *this;
-}
-
-void Hash::Set( uint32_t hash )
-{
-	m_hash = hash;
-}
-
-uint32_t Hash::Get() const
-{
-	return m_hash;
-}
+template<> uint64_t GetHash64( const ae::Color& v ) { return ae::Hash64().HashType( v.data ).Get(); }
 
 //------------------------------------------------------------------------------
 // ae::OpaquePool member functions
@@ -21540,7 +21622,7 @@ void UniformList::Set( const char* name, float value )
 	uniform.size = 1;
 	uniform.value.data[ 0 ] = value;
 	m_hash.HashString( name );
-	m_hash.HashBasicType( value );
+	m_hash.HashType( value );
 }
 
 void UniformList::Set( const char* name, Vec2 value )
@@ -21553,7 +21635,7 @@ void UniformList::Set( const char* name, Vec2 value )
 	uniform.value.data[ 0 ] = value.x;
 	uniform.value.data[ 1 ] = value.y;
 	m_hash.HashString( name );
-	m_hash.HashBasicType( value.data );
+	m_hash.HashType( value.data );
 }
 
 void UniformList::Set( const char* name, Vec3 value )
@@ -21567,7 +21649,7 @@ void UniformList::Set( const char* name, Vec3 value )
 	uniform.value.data[ 1 ] = value.y;
 	uniform.value.data[ 2 ] = value.z;
 	m_hash.HashString( name );
-	m_hash.HashBasicType( value.data );
+	m_hash.HashType( value.data );
 }
 
 void UniformList::Set( const char* name, Vec4 value )
@@ -21582,7 +21664,7 @@ void UniformList::Set( const char* name, Vec4 value )
 	uniform.value.data[ 2 ] = value.z;
 	uniform.value.data[ 3 ] = value.w;
 	m_hash.HashString( name );
-	m_hash.HashBasicType( value.data );
+	m_hash.HashType( value.data );
 }
 
 void UniformList::Set( const char* name, const Matrix4& value )
@@ -21594,7 +21676,7 @@ void UniformList::Set( const char* name, const Matrix4& value )
 	uniform.size = 16;
 	uniform.value = value;
 	m_hash.HashString( name );
-	m_hash.HashBasicType( value.data );
+	m_hash.HashType( value.data );
 }
 
 void UniformList::Set( const char* name, const Texture* tex )
@@ -21608,8 +21690,8 @@ void UniformList::Set( const char* name, const Texture* tex )
 	uniform.sampler = tex->GetTexture();
 	uniform.target = tex->GetTarget();
 	m_hash.HashString( name );
-	m_hash.HashBasicType( tex->GetTexture() );
-	m_hash.HashBasicType( tex->GetTarget() );
+	m_hash.HashType( tex->GetTexture() );
+	m_hash.HashType( tex->GetTarget() );
 }
 
 const UniformList::Value* UniformList::Get( const char* name ) const
@@ -21620,8 +21702,8 @@ const UniformList::Value* UniformList::Get( const char* name ) const
 //------------------------------------------------------------------------------
 // ae::Shader member functions
 //------------------------------------------------------------------------------
-ae::Hash s_shaderHash;
-ae::Hash s_uniformHash;
+ae::Hash32 s_shaderHash;
+ae::Hash32 s_uniformHash;
 
 Shader::~Shader()
 {
@@ -21765,14 +21847,14 @@ void Shader::Terminate()
 
 void Shader::m_Activate( const UniformList& uniforms ) const
 {
-	ae::Hash shaderHash;
-	shaderHash.HashBasicType( this );
-	shaderHash.HashBasicType( m_blending );
-	shaderHash.HashBasicType( m_blendingPremul );
-	shaderHash.HashBasicType( m_depthWrite );
-	shaderHash.HashBasicType( m_depthTest );
-	shaderHash.HashBasicType( m_culling );
-	shaderHash.HashBasicType( m_wireframe );
+	ae::Hash32 shaderHash;
+	shaderHash.HashType( this );
+	shaderHash.HashType( m_blending );
+	shaderHash.HashType( m_blendingPremul );
+	shaderHash.HashType( m_depthWrite );
+	shaderHash.HashType( m_depthTest );
+	shaderHash.HashType( m_culling );
+	shaderHash.HashType( m_wireframe );
 	bool shaderDirty = ( s_shaderHash != shaderHash );
 	if ( shaderDirty )
 	{
@@ -23757,8 +23839,8 @@ void GraphicsDevice::m_HandleResize( uint32_t width, uint32_t height )
 	m_canvas.AddDepth( Texture::Filter::Nearest, Texture::Wrap::Clamp );
 	
 	// Force refresh uniforms for new canvas
-	s_shaderHash = ae::Hash();
-	s_uniformHash = ae::Hash();
+	s_shaderHash = ae::Hash32();
+	s_uniformHash = ae::Hash32();
 }
 
 //------------------------------------------------------------------------------
@@ -27102,7 +27184,7 @@ void NetObject::m_UpdateHash()
 {
 	if ( m_data.Length() )
 	{
-		m_hash = ae::Hash().HashData( &m_data[ 0 ], m_data.Length() ).Get();
+		m_hash = ae::Hash32().HashData( &m_data[ 0 ], m_data.Length() ).Get();
 	}
 	else
 	{
@@ -28698,7 +28780,7 @@ ae::TypeId ae::GetObjectTypeId( const ae::Object* obj )
 ae::TypeId ae::GetTypeIdFromName( const char* name )
 {
 	// @TODO: Look into https://en.cppreference.com/w/cpp/types/type_info/hash_code
-	return name[ 0 ] ? ae::Hash().HashString( name ).Get() : ae::kInvalidTypeId;
+	return name[ 0 ] ? ae::Hash32().HashString( name ).Get() : ae::kInvalidTypeId;
 }
 
 //------------------------------------------------------------------------------

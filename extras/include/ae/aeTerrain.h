@@ -186,7 +186,7 @@ public:
   void Dirty() { m_dirty = true; } // Must be be explicitly called if object is modified after creation
 
   virtual Sdf* Clone() const = 0;
-  virtual ae::Hash Hash( ae::Hash hash ) const = 0;
+  virtual ae::Hash32 Hash( ae::Hash32 hash ) const = 0;
   virtual float GetValue( ae::Vec3 p, int ) const = 0;
 
   enum class Type
@@ -211,7 +211,7 @@ public:
   ae::Vec3 noiseScale = ae::Vec3( 1.0f );
 
 protected:
-  ae::Hash GetBaseHash( ae::Hash hash ) const;
+  ae::Hash32 GetBaseHash( ae::Hash32 hash ) const;
   const ae::Matrix4& GetRemoveTRMatrix() const { return m_removeTR; }
 
 private:
@@ -225,7 +225,7 @@ public:
   bool m_dirty = false;
   ae::AABB m_aabbPrev;
 };
-template<> inline uint32_t GetHash( const Sdf::Type& value ) { return (std::underlying_type_t< Sdf::Type >)value; }
+template<> inline uint32_t GetHash32( const Sdf::Type& value ) { return (std::underlying_type_t< Sdf::Type >)value; }
 
 //------------------------------------------------------------------------------
 // SdfBox class
@@ -234,7 +234,7 @@ class SdfBox : public ae::Inheritor< Sdf, SdfBox >
 {
 public:
   Sdf* Clone() const override;
-  ae::Hash Hash( ae::Hash hash ) const override;
+  ae::Hash32 Hash( ae::Hash32 hash ) const override;
   float GetValue( ae::Vec3 p, int ) const override;
 
   float cornerRadius = 0.0f;
@@ -247,7 +247,7 @@ class SdfCylinder : public ae::Inheritor< Sdf, SdfCylinder >
 {
 public:
   Sdf* Clone() const override;
-  ae::Hash Hash( ae::Hash hash ) const override;
+  ae::Hash32 Hash( ae::Hash32 hash ) const override;
   float GetValue( ae::Vec3 p, int ) const override;
 
   // Valid range is 0-1, are multiplied by obb size
@@ -263,7 +263,7 @@ class SdfHeightmap : public ae::Inheritor< Sdf, SdfHeightmap >
 public:
   void SetImage( ae::Image* heightMap ) { m_heightMap = heightMap; }
   Sdf* Clone() const override;
-  ae::Hash Hash( ae::Hash hash ) const override;
+  ae::Hash32 Hash( ae::Hash32 hash ) const override;
   float GetValue( ae::Vec3 p, int ) const override;
 
 private:
@@ -282,11 +282,11 @@ struct TerrainParams
   float normalSampleOffset = 0.25f;
   float smoothingAmount = 0.05f;
   
-  ae::Hash GetHash( ae::Hash hash = ae::Hash() ) const
+  ae::Hash32 GetHash( ae::Hash32 hash = ae::Hash32() ) const
   {
     // @NOTE: Only hash parameters that affect final terrain output
-    hash = hash.HashBasicType( normalSampleOffset );
-    hash = hash.HashBasicType( smoothingAmount );
+    hash = hash.HashType( normalSampleOffset );
+    hash = hash.HashType( smoothingAmount );
     return hash;
   }
 };
@@ -395,7 +395,7 @@ private:
   std::atomic_bool m_running;
 
   // Input
-  ae::Hash m_parameterHash;
+  ae::Hash32 m_parameterHash;
   ae::Array< Sdf* > m_shapes = AE_ALLOC_TAG_TERRAIN;
   struct TerrainChunk* m_chunk;
   TerrainParams m_p;

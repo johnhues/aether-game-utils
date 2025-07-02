@@ -33,22 +33,22 @@ const ae::Tag TAG_TEST = "test";
 //------------------------------------------------------------------------------
 TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap]" )
 {
-	REQUIRE( ae::GetHash( 777u ) == 777u );
-	REQUIRE( ae::GetHash( 777 ) == 777u );
-	REQUIRE( ae::GetHash( -777 ) == 4294966519 );
-	REQUIRE( ae::GetHash( (const void*)777u ) == 3331007037u );
-	REQUIRE( ae::GetHash( (const float*)777u ) == 3331007037u );
-	REQUIRE( ae::GetHash( (void*)777u ) == 3331007037u );
-	REQUIRE( ae::GetHash( (float*)777u ) == 3331007037u );
-	REQUIRE( ae::GetHash( (const char*)"777" ) == 2344304364 );
-	REQUIRE( ae::GetHash( (char*)"777" ) == 2344304364 );
-	REQUIRE( ae::GetHash( "777" ) == 2344304364 );
-	REQUIRE( ae::GetHash( ae::Str< 32 >( "777" ) ) == 2344304364 );
-	REQUIRE( ae::GetHash( ae::Str< 128 >( "777" ) ) == 2344304364 );
-	REQUIRE( ae::GetHash( std::string(  "777"  ) ) == 2344304364 );
-	REQUIRE( ae::GetHash( ae::Hash().HashString(  "777"  ) ) == 2344304364 );
-	REQUIRE( ae::GetHash( ae::Int3( 1, 2, 3 ) ) == 316 );
-	REQUIRE( ae::GetHash( ae::Int3( -1, 0, 1 ) ) == 19 );
+	REQUIRE( ae::GetHash32( 777u ) == 777u );
+	REQUIRE( ae::GetHash32( 777 ) == 777u );
+	REQUIRE( ae::GetHash32( -777 ) == 4294966519 );
+	REQUIRE( ae::GetHash32( (const void*)777u ) == 0x6a20b93du );
+	REQUIRE( ae::GetHash32( (const float*)777u ) == 0x6a20b93du );
+	REQUIRE( ae::GetHash32( (void*)777u ) == 0x6a20b93du );
+	REQUIRE( ae::GetHash32( (float*)777u ) == 0x6a20b93du );
+	REQUIRE( ae::GetHash32( (const char*)"777" ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( (char*)"777" ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( "777" ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( ae::Str< 32 >( "777" ) ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( ae::Str< 128 >( "777" ) ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( std::string(  "777"  ) ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( ae::Hash32().HashString(  "777"  ) ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( ae::Int3( 1, 2, 3 ) ) == 316 );
+	REQUIRE( ae::GetHash32( ae::Int3( -1, 0, 1 ) ) == 19 );
 	//REQUIRE( ae::Vec3( 0.0f ) ) == 0 ); // Should fail to link
 }
 
@@ -345,7 +345,7 @@ struct BadHash
 	bool operator==( const BadHash& other ) const { return value == other.value; }
 	uint32_t value;
 };
-namespace ae { template <> uint32_t GetHash( const BadHash& badHash )
+namespace ae { template <> uint32_t GetHash32( const BadHash& badHash )
 {
 	return badHash.value % 2;
 } }

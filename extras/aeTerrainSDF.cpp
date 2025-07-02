@@ -184,22 +184,22 @@ void Sdf::SetTransform( const ae::Matrix4& transform )
   }
 }
 
-ae::Hash Sdf::GetBaseHash( ae::Hash hash ) const
+ae::Hash32 Sdf::GetBaseHash( ae::Hash32 hash ) const
 {
-  hash = hash.HashBasicType( type );
-  hash = hash.HashBasicType( materialId );
-  hash = hash.HashBasicType( smoothing );
-  hash = hash.HashBasicType( order );
+  hash = hash.HashType( type );
+  hash = hash.HashType( materialId );
+  hash = hash.HashType( smoothing );
+  hash = hash.HashType( order );
   
-  hash = hash.HashBasicType( topNoiseStrength );
-  hash = hash.HashBasicType( topNoiseOffset );
-  hash = hash.HashBasicType( topNoiseScale );
+  hash = hash.HashType( topNoiseStrength );
+  hash = hash.HashType( topNoiseOffset );
+  hash = hash.HashType( topNoiseScale );
   
-  hash = hash.HashBasicType( noiseStrength );
-  hash = hash.HashBasicType( noiseOffset );
-  hash = hash.HashBasicType( noiseScale );
+  hash = hash.HashType( noiseStrength );
+  hash = hash.HashType( noiseOffset );
+  hash = hash.HashType( noiseScale );
   
-  hash = hash.HashBasicType( m_localToWorld );
+  hash = hash.HashType( m_localToWorld );
   return hash;
 }
 
@@ -213,10 +213,10 @@ Sdf* SdfBox::Clone() const
   return box;
 }
 
-ae::Hash SdfBox::Hash( ae::Hash hash ) const
+ae::Hash32 SdfBox::Hash( ae::Hash32 hash ) const
 {
   hash = GetBaseHash( hash );
-  hash = hash.HashBasicType( cornerRadius );
+  hash = hash.HashType( cornerRadius );
   return hash;
 }
 
@@ -236,11 +236,11 @@ Sdf* SdfCylinder::Clone() const
   return cylinder;
 }
 
-ae::Hash SdfCylinder::Hash( ae::Hash hash ) const
+ae::Hash32 SdfCylinder::Hash( ae::Hash32 hash ) const
 {
   hash = GetBaseHash( hash );
-  hash = hash.HashBasicType( top );
-  hash = hash.HashBasicType( bottom );
+  hash = hash.HashType( top );
+  hash = hash.HashType( bottom );
   return hash;
 }
 
@@ -283,7 +283,7 @@ Sdf* SdfHeightmap::Clone() const
   return heightmap;
 }
 
-ae::Hash SdfHeightmap::Hash( ae::Hash hash ) const
+ae::Hash32 SdfHeightmap::Hash( ae::Hash32 hash ) const
 {
   return GetBaseHash( hash );
 }
