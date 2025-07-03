@@ -47,3 +47,4 @@ em
 .DS_Store
 deps/dawn
 .vscode/settings.json
+.cache

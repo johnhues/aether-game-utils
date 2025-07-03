@@ -134,6 +134,22 @@
 #endif
 
 //------------------------------------------------------------------------------
+// AE_FNV1A_*_CONFIG defines
+//------------------------------------------------------------------------------
+#ifndef AE_HASH32_FNV1A_OFFSET_BASIS_CONFIG
+	#define AE_HASH32_FNV1A_OFFSET_BASIS_CONFIG 0x811c9dc5
+#endif
+#ifndef AE_HASH32_FNV1A_PRIME_CONFIG
+	#define AE_HASH32_FNV1A_PRIME_CONFIG 0x1000193
+#endif
+#ifndef AE_HASH64_FNV1A_OFFSET_BASIS_CONFIG
+	#define AE_HASH64_FNV1A_OFFSET_BASIS_CONFIG 0xCBF29CE484222325ull
+#endif
+#ifndef AE_HASH64_FNV1A_PRIME_CONFIG
+	#define AE_HASH64_FNV1A_PRIME_CONFIG 0x100000001B3ull
+#endif
+
+//------------------------------------------------------------------------------
 // Platform defines
 //------------------------------------------------------------------------------
 #define _AE_IOS_ 0
@@ -1549,7 +1565,7 @@ public:
 	using UInt = U;
 	template< typename T > static U GetTypeHash( const T& v );
 
-	Hash() = default;
+	Hash();
 	explicit Hash( U initialValue );
 	
 	bool operator == ( Hash o ) const { return m_hash == o.m_hash; }
@@ -1566,7 +1582,8 @@ public:
 private:
 	template< typename T > Hash( T initialValue ) = delete;
 	template< typename T > void Set( T hash ) = delete;
-	U m_hash = (U)0xcbf29ce484222325ull;
+	static constexpr U m_GetPrime();
+	U m_hash;
 };
 using Hash32 = Hash< uint32_t >;
 using Hash64 = Hash< uint64_t >;
@@ -8961,9 +8978,38 @@ U Hash< U >::GetTypeHash( const T& v )
 }
 
 template< typename U >
+Hash< U >::Hash()
+{
+	if constexpr( sizeof(U) == 4 )
+	{
+		m_hash = (U)AE_HASH32_FNV1A_OFFSET_BASIS_CONFIG;
+	}
+	else if constexpr( sizeof(U) == 8 )
+	{
+		m_hash = (U)AE_HASH64_FNV1A_OFFSET_BASIS_CONFIG;
+	}
+	else
+	{
+		m_hash = 0;
+	}
+}
+
+template< typename U >
 Hash< U >::Hash( U initialValue )
 {
 	m_hash = initialValue;
+}
+
+template<>
+constexpr uint32_t Hash< uint32_t >::m_GetPrime()
+{
+	return AE_HASH32_FNV1A_PRIME_CONFIG;
+}
+
+template<>
+constexpr uint64_t Hash< uint64_t >::m_GetPrime()
+{
+	return AE_HASH64_FNV1A_PRIME_CONFIG;
 }
 
 template< typename U >
@@ -8982,7 +9028,7 @@ template< typename T >
 Hash< U >& Hash< U >::HashType( const T& v )
 {
 	m_hash = m_hash ^ GetTypeHash( v );
-	m_hash *= (U)0x100000001b3ull;
+	m_hash *= m_GetPrime();
 	return *this;
 }
 
@@ -8992,7 +9038,7 @@ Hash< U >& Hash< U >::HashString( const char* str )
 	while( *str )
 	{
 		m_hash = m_hash ^ str[ 0 ];
-		m_hash *= (U)0x100000001b3ull;
+		m_hash *= m_GetPrime();
 		str++;
 	}
 
@@ -9006,7 +9052,7 @@ Hash< U >& Hash< U >::HashData( const void* _data, uint32_t length )
 	for( uint32_t i = 0; i < length; i++ )
 	{
 		m_hash = m_hash ^ data[ i ];
-		m_hash *= (U)0x100000001b3ull;
+		m_hash *= m_GetPrime();
 	}
 
 	return *this;
@@ -13664,6 +13710,9 @@ T* ae::Cast( C* obj )
 #endif
 #if !_AE_EMSCRIPTEN_
 #define EMSCRIPTEN_KEEPALIVE
+#endif
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
+	#include <arm_neon.h>
 #endif
 
 namespace ae {
