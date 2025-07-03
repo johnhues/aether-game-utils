@@ -703,7 +703,7 @@ TEST_CASE( "fast full map stress test", "[ae::Map]" )
 TEST_CASE( "stable stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 0, ae::MapMode::Stable > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, ae::Hash32, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
 		for ( uint32_t i = 1; i < map.Length(); i++ )
@@ -729,7 +729,7 @@ TEST_CASE( "stable stress test", "[ae::Map]" )
 TEST_CASE( "stable stress test 2", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 0, ae::MapMode::Stable > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, ae::Hash32, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
 		for ( auto& pair : map )
@@ -804,7 +804,7 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 TEST_CASE( "stable full map stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 10000, ae::MapMode::Stable > map;
+	ae::Map< uint32_t, uint32_t, 10000, ae::Hash32, ae::MapMode::Stable > map;
 	auto validateFn = [&]()
 	{
 		for ( uint32_t i = 1; i < map.Length(); i++ )
