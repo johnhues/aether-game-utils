@@ -156,7 +156,7 @@ int main()
 	ae::TimeStep timeStep;
 	ae::DebugLines debugLines = TAG_ISOSURFACE;
 	ae::DebugCamera camera = ae::Axis::Z;
-	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 20.0f ) );
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 500.0f ) );
 	if( ae::IsDebuggerAttached() )
 	{
 		ae::Int2 windowPos( 0, 0 );
