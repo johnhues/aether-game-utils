@@ -138,7 +138,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 
 	AE_INFO( "Terminate" );

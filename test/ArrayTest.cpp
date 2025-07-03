@@ -333,7 +333,7 @@ TEST_CASE( "new array move test", "[ae::New]" )
 TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 16; i++ )
+	for( uint32_t i = 0; i < 16; i++ )
 	{
 		REQUIRE( array.Append( 100 + i ) == 100 + i );
 		REQUIRE( array.Length() == i + 1 );
@@ -343,7 +343,7 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 
 	SECTION( "elements can be queried" )
 	{
-		for ( uint32_t i = 0; i < 16; i++ )
+		for( uint32_t i = 0; i < 16; i++ )
 		{
 			REQUIRE( array[ i ] == 100 + i );
 		}
@@ -351,7 +351,7 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 
 	SECTION( "array can be resized and elements can be queried" )
 	{
-		for ( uint32_t i = array.Length(); i < 19; i++ )
+		for( uint32_t i = array.Length(); i < 19; i++ )
 		{
 			REQUIRE( array.Append( 100 + i ) == 100 + i );
 			REQUIRE( array.Length() == i + 1 );
@@ -359,7 +359,7 @@ TEST_CASE( "arrays elements can be appended and queried", "[ae::Array]" )
 		}
 		REQUIRE( array.Length() == 19 );
 
-		for ( uint32_t i = 0; i < 19; i++ )
+		for( uint32_t i = 0; i < 19; i++ )
 		{
 			REQUIRE( array[ i ] == 100 + i );
 		}
@@ -378,7 +378,7 @@ TEST_CASE( "array will assert if too many elements are appended" )
 TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 5; i++ )
+	for( uint32_t i = 0; i < 5; i++ )
 	{
 		REQUIRE( array.Append( 100 + i ) == 100 + i );
 		int* p = array.Append( 1000 + i, 2 );
@@ -392,7 +392,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 
 	SECTION( "elements can be queried" )
 	{
-		for ( uint32_t i = 0; i < 5; i++ )
+		for( uint32_t i = 0; i < 5; i++ )
 		{
 			REQUIRE( array[ i * 3 ] == 100 + i );
 			REQUIRE( array[ i * 3 + 1 ] == 1000 + i );
@@ -402,7 +402,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 
 	SECTION( "array can be resized and elements can be queried" )
 	{
-		for ( uint32_t i = array.Length() / 3; i < 8; i++ )
+		for( uint32_t i = array.Length() / 3; i < 8; i++ )
 		{
 			REQUIRE( array.Append( 100 + i ) == 100 + i );
 			int* p = array.Append( 1000 + i, 2 );
@@ -414,7 +414,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 		}
 		REQUIRE( array.Length() == 24 );
 
-		for ( uint32_t i = 0; i < 8; i++ )
+		for( uint32_t i = 0; i < 8; i++ )
 		{
 			REQUIRE( array[ i * 3 ] == 100 + i );
 			REQUIRE( array[ i * 3 + 1 ] == 1000 + i );
@@ -426,7 +426,7 @@ TEST_CASE( "multiple arrays elements can be appended and queried", "[ae::Array]"
 TEST_CASE( "arrays can be constructed from initializer lists", "[ae::Array]" )
 {
 	ae::Array< int, 8 > array = { 100, 101, 102, 103, 104, 105, 106, 107 };
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
@@ -439,13 +439,13 @@ TEST_CASE( "arrays can be appended to other arrays", "[ae::Array]" )
 	ae::Array< int > array = TAG_TEST;
 
 	array.AppendArray( first, countof(first) );
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
 
 	array.AppendArray( second, countof(second) );
-	for ( uint32_t i = 0; i < 16; i++ )
+	for( uint32_t i = 0; i < 16; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
@@ -454,7 +454,7 @@ TEST_CASE( "arrays can be appended to other arrays", "[ae::Array]" )
 TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]" ) // @NOTE: This isn't 100% true, there's a minimum number of bytes allocated for the array
 {
 	ae::Array< int > array( TAG_TEST, 111 );
-	for ( uint32_t i = 0; i < 111; i++ )
+	for( uint32_t i = 0; i < 111; i++ )
 	{
 		array.Append( 100 + i );
 		REQUIRE( array.Length() == i + 1 );
@@ -464,7 +464,7 @@ TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]
 
 	SECTION( "elements can be queried" )
 	{
-		for ( uint32_t i = 0; i < 111; i++ )
+		for( uint32_t i = 0; i < 111; i++ )
 		{
 			REQUIRE( array[ i ] == 100 + i );
 		}
@@ -476,7 +476,7 @@ TEST_CASE( "initial size of dynamic array is exact when specified", "[ae::Array]
 TEST_CASE( "arrays elements can be removed by value", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 10; i++ )
+	for( uint32_t i = 0; i < 10; i++ )
 	{
 		array.Append( i );
 		array.Append( 0 );
@@ -558,7 +558,7 @@ TEST_CASE( "0 array elements can be inserted by index", "[ae::Array]" )
 	REQUIRE( empty.Length() == 0 );
 
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 1; i <= 5; i++ )
+	for( uint32_t i = 1; i <= 5; i++ )
 	{
 		array.Append( i );
 	}
@@ -610,7 +610,7 @@ TEST_CASE( "array elements can be inserted by index", "[ae::Array]" )
 	REQUIRE( empty.Length() == 0 );
 
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 1; i <= 5; i++ )
+	for( uint32_t i = 1; i <= 5; i++ )
 	{
 		array.Append( i );
 	}
@@ -663,15 +663,15 @@ TEST_CASE( "array elements can be inserted by index", "[ae::Array]" )
 TEST_CASE( "multiple array elements can be inserted by index", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		array.Append( 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		int val = 1000 + i;
 		int* p = array.Insert( i * 4 + 1, val, 3 );
@@ -679,7 +679,7 @@ TEST_CASE( "multiple array elements can be inserted by index", "[ae::Array]" )
 		REQUIRE( p[ 1 ] == val );
 		REQUIRE( p[ 2 ] == val );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i * 4 ] == 100 + i );
 		REQUIRE( array[ i * 4 + 1 ] == 1000 + i );
@@ -691,15 +691,15 @@ TEST_CASE( "multiple array elements can be inserted by index", "[ae::Array]" )
 TEST_CASE( "arrays can be inserted into other arrays by index", "[ae::Array]" )
 {
 	ae::Array< uint32_t > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		array.Append( 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i ] == 100 + i );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		uint32_t vals[] = { 200 + i, 300 + i, 400 + i };
 		uint32_t* p = array.InsertArray( i * 4 + 1, vals, countof(vals) );
@@ -707,7 +707,7 @@ TEST_CASE( "arrays can be inserted into other arrays by index", "[ae::Array]" )
 		REQUIRE( p[ 1 ] == vals[ 1 ] );
 		REQUIRE( p[ 2 ] == vals[ 2 ] );
 	}
-	for ( uint32_t i = 0; i < 128; i++ )
+	for( uint32_t i = 0; i < 128; i++ )
 	{
 		REQUIRE( array[ i * 4 ] == 100 + i );
 		REQUIRE( array[ i * 4 + 1 ] == 200 + i );
@@ -975,7 +975,7 @@ TEST_CASE( "append to non-empty array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 111; i++ )
+		for( uint32_t i = 0; i < 111; i++ )
 		{
 			array5.Append( ae::LifetimeTester() );
 			ctor++;
@@ -1020,7 +1020,7 @@ TEST_CASE( "append array to empty array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 25; i++ )
+		for( uint32_t i = 0; i < 25; i++ )
 		{
 			{
 				ae::LifetimeTester* t = new ae::LifetimeTester[ i ];
@@ -1080,7 +1080,7 @@ TEST_CASE( "append array to array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 25; i++ )
+		for( uint32_t i = 0; i < 25; i++ )
 		{
 			{
 				ae::LifetimeTester* t = new ae::LifetimeTester[ i ];
@@ -1136,7 +1136,7 @@ TEST_CASE( "insert element at end of array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 123; i++ )
+		for( uint32_t i = 0; i < 123; i++ )
 		{
 			array.Insert( i, ae::LifetimeTester() );
 			ctor++;
@@ -1195,7 +1195,7 @@ TEST_CASE( "insert element at beginning of array", "[ae::Array]" )
 		REQUIRE( ae::LifetimeTester::dtorCount == dtor + ae::LifetimeTester::moveCount );
 		REQUIRE( ae::LifetimeTester::currentCount == current );
 		
-		for ( uint32_t i = 0; i < 123; i++ )
+		for( uint32_t i = 0; i < 123; i++ )
 		{
 			uint32_t prevSize = array.Size();
 			array.Insert( 0, ae::LifetimeTester() );
@@ -1204,7 +1204,7 @@ TEST_CASE( "insert element at beginning of array", "[ae::Array]" )
 			assign++;
 			moveAssign += current - 1;
 			dtor++;
-			if ( prevSize != array.Size() )
+			if( prevSize != array.Size() )
 			{
 				move += current;
 				dtor += current;
@@ -1253,7 +1253,7 @@ TEST_CASE( "remove all elements from array", "[ae::Array]" )
 	REQUIRE( ae::LifetimeTester::dtorCount == dtor );
 	REQUIRE( ae::LifetimeTester::currentCount == current );
 	
-	while ( array.Length() )
+	while( array.Length() )
 	{
 		array.Remove( 0 );
 		current--;
@@ -1273,18 +1273,18 @@ TEST_CASE( "remove all elements from array", "[ae::Array]" )
 TEST_CASE( "array elements can be removed by index", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
-	for ( uint32_t i = 0; i < 16; i++ )
+	for( uint32_t i = 0; i < 16; i++ )
 	{
 		array.Append( i );
 	}
 	REQUIRE( array.Length() == 16 );
 
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		array.Remove( i + 1 );
 	}
 	REQUIRE( array.Length() == 8 );
-	for ( uint32_t i = 0; i < 8; i++ )
+	for( uint32_t i = 0; i < 8; i++ )
 	{
 		REQUIRE( array[ i ] == i * 2 );
 	}
@@ -1307,7 +1307,7 @@ TEST_CASE( "arrays support range based loop", "[ae::Array]" )
 {
 	ae::Array< int > array = TAG_TEST;
 	const ae::Array< int >& constArray = array;
-	for ( uint32_t i = 0; i < 10; i++ )
+	for( uint32_t i = 0; i < 10; i++ )
 	{
 		array.Append( i );
 		array.Append( 0 );
@@ -1318,7 +1318,7 @@ TEST_CASE( "arrays support range based loop", "[ae::Array]" )
 	SECTION( "can iterate over non-const array" )
 	{
 		int i = 0;
-		for ( int& v : array )
+		for( int& v : array )
 		{
 			REQUIRE( v == array[ i ] );
 			REQUIRE( v == compare[ i ] );
@@ -1329,7 +1329,7 @@ TEST_CASE( "arrays support range based loop", "[ae::Array]" )
 	SECTION( "can iterate over const array" )
 	{
 		int i = 0;
-		for ( const int& v : constArray )
+		for( const int& v : constArray )
 		{
 			REQUIRE( v == constArray[ i ] );
 			REQUIRE( v == compare[ i ] );

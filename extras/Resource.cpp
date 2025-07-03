@@ -76,7 +76,7 @@ void ae::ResourceManager::Terminate()
 bool ae::ResourceManager::Add( const char* typeName, ResourceId id, ae::FileSystem::Root rootDir, const char* filePath )
 {
 	const ae::ClassType* type = ae::GetClassTypeByName( typeName );
-	if ( !type )
+	if( !type )
 	{
 		AE_FAIL_MSG( "Unknown resource type '#'", typeName );
 		return false;
@@ -173,7 +173,7 @@ bool ae::ResourceManager::AnyPendingLoad() const
 {
 	for( const auto& resource : m_resources )
 	{
-		if ( !resource.value->IsLoaded() )
+		if( !resource.value->IsLoaded() )
 		{
 			return true;
 		}
@@ -199,7 +199,7 @@ void ae::ResourceManager::HotLoad()
 
 ae::Resource* ae::ResourceManager::m_Register( const ae::ClassType* resourceType, ResourceId id, ae::FileSystem::Root rootDir, const char* filePath )
 {
-	if ( m_resources.Get( id, nullptr ) )
+	if( m_resources.Get( id, nullptr ) )
 	{
 		AE_FAIL_MSG( "Resource '#' already exists", id );
 		return nullptr;

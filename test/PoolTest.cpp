@@ -40,7 +40,7 @@ TEST_CASE( "Static indices can be allocated and deallocated", "[ae::FreeList (st
 	REQUIRE( freeList.Size() == kNumElements );
 	REQUIRE( freeList.GetFirst() < 0 );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		objects[ i ] = freeList.Allocate();
 		REQUIRE( objects[ i ] >= 0 );
@@ -55,7 +55,7 @@ TEST_CASE( "Static indices can be allocated and deallocated", "[ae::FreeList (st
 
 	SECTION( "can free objects" )
 	{
-		for ( uint32_t i = 0; i < kNumElements; i++ )
+		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
 			int32_t idx = objects[ i ];
 			uint32_t remaining = kNumElements - ( i + 1 );
@@ -76,7 +76,7 @@ TEST_CASE( "Static indices can be allocated and deallocated", "[ae::FreeList (st
 	SECTION( "can iterate over allocated objects" )
 	{
 		uint32_t count = 0;
-		for ( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
+		for( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
 		{
 			REQUIRE( 0 <= idx );
 			REQUIRE( idx < kNumElements );
@@ -96,7 +96,7 @@ TEST_CASE( "Static indices can be allocated and deallocated", "[ae::FreeList (st
 		REQUIRE( !freeList.IsAllocated( objects[ kNumElements - 1 ] ) );
 
 		uint32_t count = 0;
-		for ( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
+		for( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
 		{
 			REQUIRE( 0 <= idx );
 			REQUIRE( idx < kNumElements );
@@ -126,14 +126,14 @@ TEST_CASE( "can allocate objects after FreeAll", "[ae::FreeList (static)]" )
 	REQUIRE( freeList.Length() == 0 );
 
 	int32_t objects[ kNumElements ];
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		objects[ i ] = freeList.Allocate();
 		REQUIRE( objects[ i ] >= 0 );
 		REQUIRE( freeList.Length() == i + 1 );
 	}
 	REQUIRE( freeList.Length() == kNumElements );
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		freeList.Free( objects[ i ] );
 		REQUIRE( freeList.Length() == kNumElements - ( i + 1 ) );
@@ -152,7 +152,7 @@ TEST_CASE( "Dynamic indices can be allocated and deallocated", "[ae::FreeList (d
 	REQUIRE( freeList.Size() == kNumElements );
 	REQUIRE( freeList.GetFirst() < 0 );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		objects[ i ] = freeList.Allocate();
 		REQUIRE( objects[ i ] >= 0 );
@@ -167,7 +167,7 @@ TEST_CASE( "Dynamic indices can be allocated and deallocated", "[ae::FreeList (d
 
 	SECTION( "can free objects" )
 	{
-		for ( uint32_t i = 0; i < kNumElements; i++ )
+		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
 			int32_t idx = objects[ i ];
 			uint32_t remaining = kNumElements - ( i + 1 );
@@ -188,7 +188,7 @@ TEST_CASE( "Dynamic indices can be allocated and deallocated", "[ae::FreeList (d
 	SECTION( "can iterate over allocated objects" )
 	{
 		uint32_t count = 0;
-		for ( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
+		for( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
 		{
 			REQUIRE( 0 <= idx );
 			REQUIRE( idx < kNumElements );
@@ -208,7 +208,7 @@ TEST_CASE( "Dynamic indices can be allocated and deallocated", "[ae::FreeList (d
 		REQUIRE( !freeList.IsAllocated( objects[ kNumElements - 1 ] ) );
 
 		uint32_t count = 0;
-		for ( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
+		for( int32_t idx = freeList.GetFirst(); idx >= 0; idx = freeList.GetNext( idx ) )
 		{
 			REQUIRE( 0 <= idx );
 			REQUIRE( idx < kNumElements );
@@ -240,7 +240,7 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
 	REQUIRE( ae::LifetimeTester::currentCount == 0 );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		objects[ i ] = pool.New();
 		REQUIRE( objects[ i ] );
@@ -275,7 +275,7 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 	{
 		REQUIRE( pool.Length() == pool.Size() );
 		REQUIRE( pool.Length() == kNumElements );
-		for ( uint32_t i = 0; i < kNumElements; i++ )
+		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
 			auto* p = objects[ i ];
 			uint32_t remaining = kNumElements - ( i + 1 );
@@ -310,7 +310,7 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 	SECTION( "can iterate over allocated objects" )
 	{
 		uint32_t i = 0;
-		for ( auto* p = pool.GetFirst(); p; p = pool.GetNext( p ) )
+		for( auto* p = pool.GetFirst(); p; p = pool.GetNext( p ) )
 		{
 			REQUIRE( p->check == ae::LifetimeTester::kConstructed );
 			REQUIRE( p->value == 'a' + i );
@@ -331,7 +331,7 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 	{
 		const auto* constPool = &pool;
 		uint32_t i = 0;
-		for ( auto* p = constPool->GetFirst(); p; p = constPool->GetNext( p ) )
+		for( auto* p = constPool->GetFirst(); p; p = constPool->GetNext( p ) )
 		{
 			REQUIRE( std::is_const_v< std::remove_pointer_t< decltype( p ) > > );
 			REQUIRE( p->check == ae::LifetimeTester::kConstructed );
@@ -356,7 +356,7 @@ TEST_CASE( "Objects can be allocated and deallocated", "[aeObjectPool]" )
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const auto* obj = pool.GetFirst(); obj; obj = pool.GetNext( obj ) )
+		for( const auto* obj = pool.GetFirst(); obj; obj = pool.GetNext( obj ) )
 		{
 			count++;
 		}
@@ -389,7 +389,7 @@ TEST_CASE( "Pages can be checked for objects", "[aeObjectPool]" )
 	REQUIRE( pool.Size() == kNumElements );
 	REQUIRE( !pool.GetFirst() );
 
-	// for ( uint32_t i = 0; i < kNumElements; i++ )
+	// for( uint32_t i = 0; i < kNumElements; i++ )
 	// {
 	// 	int32_t* p = pool.New();
 	// 	REQUIRE( pool.IsInPool( p ) );
@@ -440,7 +440,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
 	REQUIRE( ae::LifetimeTester::currentCount == 0 );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		objects[ i ] = pool.New();
 		REQUIRE( objects[ i ] );
@@ -458,7 +458,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 
 	SECTION( "can free objects" )
 	{
-		for ( uint32_t i = 0; i < kNumElements; i++ )
+		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
 			auto* p = objects[ i ];
 			uint32_t remaining = kNumElements - ( i + 1 );
@@ -486,7 +486,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 	SECTION( "can iterate over allocated objects" )
 	{
 		uint32_t i = 0;
-		for ( auto* p = pool.GetFirst(); p; p = pool.GetNext( p ) )
+		for( auto* p = pool.GetFirst(); p; p = pool.GetNext( p ) )
 		{
 			REQUIRE( p->check == ae::LifetimeTester::kConstructed );
 			REQUIRE( p->value == 'a' + i );
@@ -507,7 +507,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 	{
 		const auto* constPool = &pool;
 		uint32_t i = 0;
-		for ( auto* p = constPool->GetFirst(); p; p = constPool->GetNext( p ) )
+		for( auto* p = constPool->GetFirst(); p; p = constPool->GetNext( p ) )
 		{
 			REQUIRE( std::is_const_v< std::remove_pointer_t< decltype( p ) > > );
 			REQUIRE( p->check == ae::LifetimeTester::kConstructed );
@@ -532,7 +532,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const auto* obj = pool.GetFirst(); obj; obj = pool.GetNext( obj ) )
+		for( const auto* obj = pool.GetFirst(); obj; obj = pool.GetNext( obj ) )
 		{
 			count++;
 		}
@@ -555,7 +555,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 	SECTION( "can iterate over allocated objects with a range-based for loop" )
 	{
 		uint32_t i = 0;
-		for ( ae::LifetimeTester& obj : pool )
+		for( ae::LifetimeTester& obj : pool )
 		{
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
 			REQUIRE( obj.value == 'a' + i );
@@ -576,7 +576,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 	{
 		const auto& constPool = pool;
 		uint32_t i = 0;
-		for ( const ae::LifetimeTester& obj : constPool )
+		for( const ae::LifetimeTester& obj : constPool )
 		{
 			REQUIRE( std::is_const_v< std::remove_reference_t< decltype( obj ) > > );
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
@@ -601,7 +601,7 @@ TEST_CASE( "Paged pool objects can be allocated and deallocated", "[aePagedObjec
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const ae::LifetimeTester& obj : pool )
+		for( const ae::LifetimeTester& obj : pool )
 		{
 			count++;
 		}
@@ -648,7 +648,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
 	REQUIRE( ae::LifetimeTester::currentCount == 0 );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		objects[ i ] = pool.New< ae::LifetimeTester >();
 		REQUIRE( objects[ i ] );
@@ -683,7 +683,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	{
 		REQUIRE( pool.Length() == pool.Size() );
 		REQUIRE( pool.Length() == kNumElements );
-		for ( uint32_t i = 0; i < kNumElements; i++ )
+		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
 			auto* p = objects[ i ];
 			uint32_t remaining = kNumElements - ( i + 1 );
@@ -718,7 +718,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	SECTION( "can iterate over allocated objects" )
 	{
 		uint32_t i = 0;
-		for ( ae::LifetimeTester& obj : pool.Iterate< ae::LifetimeTester >() )
+		for( ae::LifetimeTester& obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
 			REQUIRE( obj.value == 'a' + i );
@@ -739,7 +739,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 	{
 		const auto* constPool = &pool;
 		uint32_t i = 0;
-		for ( const ae::LifetimeTester& obj : constPool->Iterate< ae::LifetimeTester >() )
+		for( const ae::LifetimeTester& obj : constPool->Iterate< ae::LifetimeTester >() )
 		{
 			REQUIRE( std::is_const_v< std::remove_reference_t< decltype( obj ) > > );
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
@@ -764,7 +764,7 @@ TEST_CASE( "aeOpaquePool Objects can be allocated and deallocated", "[aeOpaquePo
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const ae::LifetimeTester& obj : pool.Iterate< ae::LifetimeTester >() )
+		for( const ae::LifetimeTester& obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			count++;
 		}
@@ -799,7 +799,7 @@ TEST_CASE( "aeOpaquePool Pages can be checked for objects", "[aeOpaquePool]" )
 	// REQUIRE( pool.Iterate< int32_t >().begin() == pool.Iterate< int32_t >().end() ); // @TODO: Catch can't convert this to a string
 	REQUIRE( pool.Length() == 0 );
 
-	// for ( uint32_t i = 0; i < kNumElements; i++ )
+	// for( uint32_t i = 0; i < kNumElements; i++ )
 	// {
 	// 	int32_t* p = pool.New< int32_t >();
 	// 	REQUIRE( pool.IsInPool( p ) );
@@ -853,7 +853,7 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 	REQUIRE( ae::LifetimeTester::dtorCount == 0 );
 	REQUIRE( ae::LifetimeTester::currentCount == 0 );
 
-	for ( uint32_t i = 0; i < kNumElements; i++ )
+	for( uint32_t i = 0; i < kNumElements; i++ )
 	{
 		objects[ i ] = pool.New< ae::LifetimeTester >();
 		REQUIRE( objects[ i ] );
@@ -871,7 +871,7 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 
 	SECTION( "can free objects" )
 	{
-		for ( uint32_t i = 0; i < kNumElements; i++ )
+		for( uint32_t i = 0; i < kNumElements; i++ )
 		{
 			auto* p = objects[ i ];
 			uint32_t remaining = kNumElements - ( i + 1 );
@@ -899,7 +899,7 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 	SECTION( "can iterate over allocated objects" )
 	{
 		uint32_t i = 0;
-		for ( auto& obj : pool.Iterate< ae::LifetimeTester >() )
+		for( auto& obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
 			REQUIRE( obj.value == 'a' + i );
@@ -920,7 +920,7 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 	{
 		const auto* constPool = &pool;
 		uint32_t i = 0;
-		for ( auto& obj : constPool->Iterate< ae::LifetimeTester >() )
+		for( auto& obj : constPool->Iterate< ae::LifetimeTester >() )
 		{
 			REQUIRE( std::is_const_v< std::remove_reference_t< decltype( obj ) > > );
 			REQUIRE( obj.check == ae::LifetimeTester::kConstructed );
@@ -945,7 +945,7 @@ TEST_CASE( "Paged aeOpaquePool pool objects can be allocated and deallocated", "
 		pool.Delete( objects[ kNumElements - 1 ] );
 
 		uint32_t count = 0;
-		for ( const auto& _obj : pool.Iterate< ae::LifetimeTester >() )
+		for( const auto& _obj : pool.Iterate< ae::LifetimeTester >() )
 		{
 			count++;
 		}
@@ -983,7 +983,7 @@ TEST_CASE( "aeOpaquePool can iterate after modification", "[aeOpaquePool]" )
 	REQUIRE( pool.Length() == kPageSize );
 
 	uint32_t idx = 0;
-	for ( auto& obj : pool.Iterate< ae::LifetimeTester >() )
+	for( auto& obj : pool.Iterate< ae::LifetimeTester >() )
 	{
 		REQUIRE( obj.value == idx );
 		idx++;
@@ -991,7 +991,7 @@ TEST_CASE( "aeOpaquePool can iterate after modification", "[aeOpaquePool]" )
 	REQUIRE( idx == kPageSize );
 
 	idx = 0;
-	for ( auto& obj : pool.Iterate< ae::LifetimeTester >() )
+	for( auto& obj : pool.Iterate< ae::LifetimeTester >() )
 	{
 		REQUIRE( obj.value == idx );
 		idx++;

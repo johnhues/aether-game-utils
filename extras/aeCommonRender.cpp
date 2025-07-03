@@ -88,7 +88,7 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
 
   ae::Scratch< uint16_t > scratch( m_maxCount * aeQuadIndexCount );
   uint16_t* indices = scratch.Data();
-  for ( uint32_t i = 0; i < m_maxCount; i++ )
+  for( uint32_t i = 0; i < m_maxCount; i++ )
   {
     indices[ i * aeQuadIndexCount + 0 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 0 ] );
     indices[ i * aeQuadIndexCount + 1 ] = (uint16_t)( i * aeQuadVertCount + aeQuadIndices[ 1 ] );
@@ -102,19 +102,19 @@ void aeSpriteRender::Initialize( uint32_t maxCount )
 
 void aeSpriteRender::Destroy()
 {
-  if ( m_shaderAll )
+  if( m_shaderAll )
   {
     ae::Delete( m_shaderAll );
     m_shaderAll = nullptr;
   }
   
-  if ( m_shaderOpaque )
+  if( m_shaderOpaque )
   {
     ae::Delete( m_shaderOpaque );
     m_shaderOpaque = nullptr;
   }
   
-  if ( m_shaderTransparent )
+  if( m_shaderTransparent )
   {
     ae::Delete( m_shaderTransparent );
     m_shaderTransparent = nullptr;
@@ -130,15 +130,15 @@ void aeSpriteRender::Destroy()
 
 void aeSpriteRender::Render( const ae::Matrix4& localToProjection )
 {
-  if ( m_count == 0 )
+  if( m_count == 0 )
   {
     return;
   }
   
-  if ( m_sorting )
+  if( m_sorting )
   {
     ae::Vec3 cameraView = localToProjection.GetRow( 2 ).GetXYZ();
-    for ( uint32_t i = 0; i < m_count; i++ )
+    for( uint32_t i = 0; i < m_count; i++ )
     {
       m_sprites[ i ].sort = cameraView.Dot( m_sprites[ i ].transform.GetTranslation() );
     }
@@ -150,14 +150,14 @@ void aeSpriteRender::Render( const ae::Matrix4& localToProjection )
     std::stable_sort( m_sprites, m_sprites + m_count, sortFn );
   }
   
-  if ( m_depthWrite && m_blending )
+  if( m_depthWrite && m_blending )
   {
-    if ( !m_shaderOpaque )
+    if( !m_shaderOpaque )
     {
       m_LoadShaderOpaque();
       m_shaderOpaque->SetDepthWrite( true );
     }
-    if ( !m_shaderTransparent )
+    if( !m_shaderTransparent )
     {
       m_LoadShaderTransparent();
       m_shaderTransparent->SetBlending( true );
@@ -171,7 +171,7 @@ void aeSpriteRender::Render( const ae::Matrix4& localToProjection )
   }
   else
   {
-    if ( !m_shaderAll )
+    if( !m_shaderAll )
     {
       m_LoadShaderAll();
     }
@@ -187,7 +187,7 @@ void aeSpriteRender::Render( const ae::Matrix4& localToProjection )
 
 void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader* shader )
 {
-  for ( uint32_t i = 0; i < m_count; i++ )
+  for( uint32_t i = 0; i < m_count; i++ )
   {
     Sprite* sprite = &m_sprites[ i ];
 
@@ -213,11 +213,11 @@ void aeSpriteRender::m_Render( const ae::Matrix4& localToProjection, ae::Shader*
   }
   m_vertexData.UploadVertices( 0, m_vertices, m_count * 4 );
 
-  for ( uint32_t i = 0; i < m_count; i++ )
+  for( uint32_t i = 0; i < m_count; i++ )
   {
     uint32_t start = i;
     const ae::Texture2D* currentTexture = m_sprites[ start ].texture;
-    for (; i + 1 < m_count && m_sprites[ i + 1 ].texture == currentTexture; i++ ) {}
+    for(; i + 1 < m_count && m_sprites[ i + 1 ].texture == currentTexture; i++ ) {}
     uint32_t count = 1 + ( i - start );
 
     ae::UniformList uniforms;
@@ -251,12 +251,12 @@ void aeSpriteRender::AddSprite( const ae::Texture2D* texture, ae::Matrix4 transf
 {
   AE_ASSERT_MSG( m_maxCount, "aeSpriteRender is not initialized" );
 
-  if ( !texture )
+  if( !texture )
   {
     return;
   }
 
-  if ( m_count < m_maxCount )
+  if( m_count < m_maxCount )
   {
     Sprite* sprite = &m_sprites[ m_count ];
     sprite->transform = transform;
@@ -276,7 +276,7 @@ void aeSpriteRender::Clear()
 
 void aeSpriteRender::m_LoadShaderAll()
 {
-  if ( m_shaderAll )
+  if( m_shaderAll )
   {
     return;
   }
@@ -309,7 +309,7 @@ void aeSpriteRender::m_LoadShaderAll()
 
 void aeSpriteRender::m_LoadShaderOpaque()
 {
-  if ( m_shaderOpaque )
+  if( m_shaderOpaque )
   {
     return;
   }
@@ -334,7 +334,7 @@ void aeSpriteRender::m_LoadShaderOpaque()
     void main()\
     {\
       vec4 color = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
-      if ( color.a < 0.99 ) { discard; }\
+      if( color.a < 0.99 ) { discard; }\
       AE_COLOR = color;\
     }";
   
@@ -344,7 +344,7 @@ void aeSpriteRender::m_LoadShaderOpaque()
 
 void aeSpriteRender::m_LoadShaderTransparent()
 {
-  if ( m_shaderTransparent )
+  if( m_shaderTransparent )
   {
     return;
   }
@@ -369,7 +369,7 @@ void aeSpriteRender::m_LoadShaderTransparent()
     void main()\
     {\
       vec4 color = AE_TEXTURE2D( u_tex, v_uv ) * v_color;\
-      if ( color.a >= 0.99 ) { discard; }\
+      if( color.a >= 0.99 ) { discard; }\
       AE_COLOR = color;\
     }";
   

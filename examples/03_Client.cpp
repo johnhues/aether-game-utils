@@ -47,12 +47,12 @@ int main()
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
 	bool wasConnected = false;
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		input.Pump();
 		window.SetTitle( conn.IsConnected() ? "Client (Connected)" : "Client (Connecting...)" );
 
-		if ( !conn.IsConnected() && conn.Connect( ae::Socket::Protocol::TCP, "localhost", 7230 ) )
+		if( !conn.IsConnected() && conn.Connect( ae::Socket::Protocol::TCP, "localhost", 7230 ) )
 		{
 			AE_LOG( "Connected to '#(#):#'",
 				conn.GetAddress(),
@@ -63,9 +63,9 @@ int main()
 		
 		uint16_t messageLen = 0;
 		uint8_t messageData[ 64 ];
-		while ( ( messageLen = conn.ReceiveMsg( messageData, sizeof(messageData) ) ) )
+		while( ( messageLen = conn.ReceiveMsg( messageData, sizeof(messageData) ) ) )
 		{
-			if ( messageLen > sizeof( messageData ) )
+			if( messageLen > sizeof( messageData ) )
 			{
 				AE_LOG( "Received unexpected large message. Disconnect." );
 				conn.Disconnect();
@@ -78,19 +78,19 @@ int main()
 			AE_INFO( "Received '#'", msg );
 		}
 		
-		if ( wasConnected && !conn.IsConnected() )
+		if( wasConnected && !conn.IsConnected() )
 		{
 			AE_INFO( "Disconnected" );
 			wasConnected = false;
 		}
 
-		if ( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
+		if( input.Get( ae::Key::Space ) && !input.GetPrev( ae::Key::Space ) )
 		{
 			ae::Str32 msg = "ping";
 			uint8_t messageData[ 64 ];
 			ae::BinaryWriter wStream( messageData, sizeof(messageData) );
 			wStream.SerializeString( msg );
-			if ( conn.QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() ) )
+			if( conn.QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() ) )
 			{
 				AE_INFO( "Send '#'", msg );
 			}

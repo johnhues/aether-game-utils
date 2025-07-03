@@ -94,29 +94,29 @@ int main()
 		input.Pump();
 		rotation += timeStep.GetDt();
 
-		if ( input.GetMousePressLeft() )
+		if( input.GetMousePressLeft() )
 		{
 			input.SetMouseCaptured( !input.GetMouseCaptured() );
 		}
-		if ( input.GetPress( ae::Key::Escape ) )
+		if( input.GetPress( ae::Key::Escape ) )
 		{
 			input.SetMouseCaptured( false );
 		}
 
 		ae::Vec3 dir( 0.0f );
-		if ( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
-		if ( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
-		if ( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
-		if ( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
+		if( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
+		if( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
+		if( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
+		if( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
 		dir.SafeNormalize();
 		pos += dir * 0.01f;
 
-		if ( input.GetMouseCaptured() )
+		if( input.GetMouseCaptured() )
 		{
 			pos.x += input.mouse.movement.x * 0.001f;
 			pos.y += input.mouse.movement.y * 0.001f;
 		}
-		else if ( input.mouse.usingTouch )
+		else if( input.mouse.usingTouch )
 		{
 			pos.x += input.mouse.scroll.x * 0.01f;
 			pos.y += input.mouse.scroll.y * -0.01f;
@@ -148,7 +148,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* fn ) { (*(decltype(Update)*)fn)(); }, &Update, 0, 1 );
 #else
-	while ( Update() ) {}
+	while( Update() ) {}
 #endif
 	return 0;
 }

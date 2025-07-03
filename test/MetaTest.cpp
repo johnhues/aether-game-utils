@@ -971,7 +971,7 @@ bool RefTester::StringToId( const char* str, uint32_t* idOut )
 {
 	char* endPtr = nullptr;
 	const uint32_t id = (uint32_t)strtoul( str, &endPtr, 10 );
-	if ( endPtr != str )
+	if( endPtr != str )
 	{
 		*idOut = id;
 		return true;
@@ -1025,7 +1025,7 @@ TEST_CASE( "meta system can manipulate registered reference vars", "[aeMeta]" )
 		bool StringToObjectPointer( const char* pointerVal, ae::Object** objOut ) const override
 		{
 			uint32_t id = 0;
-			if ( RefTester::StringToId( pointerVal, &id ) )
+			if( RefTester::StringToId( pointerVal, &id ) )
 			{
 				*objOut = m_manager->GetObjectById( id );
 				return true;

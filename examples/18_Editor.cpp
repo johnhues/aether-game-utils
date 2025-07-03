@@ -162,9 +162,9 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* 
 	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
 	objFile.Load( { fileBuffer.Data(), fileBuffer.Length() } );
 	
-	if ( objFile.vertices.Length() )
+	if( objFile.vertices.Length() )
 	{
-		if ( vertexDataOut )
+		if( vertexDataOut )
 		{
 			vertexDataOut->Initialize(
 				sizeof(*objFile.vertices.Data()), sizeof(*objFile.indices.Data()),
@@ -182,10 +182,10 @@ void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* 
 		
 		objFile.InitializeCollisionMesh( collisionOut );
 		
-		if ( editorMeshOut )
+		if( editorMeshOut )
 		{
 			editorMeshOut->verts.Reserve( objFile.vertices.Length() );
-			for ( uint32_t i = 0; i < objFile.vertices.Length(); i++ )
+			for( uint32_t i = 0; i < objFile.vertices.Length(); i++ )
 			{
 				editorMeshOut->verts.Append( objFile.vertices[ i ].position.GetXYZ() );
 			}
@@ -258,7 +258,7 @@ bool Game::Initialize( int argc, char* argv[] )
 	LoadTarga( "character.tga", &fs, &spacesuitTex );
 	
 	ae::Str256 levelPath;
-	if ( fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
+	if( fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
 	{
 		ae::FileSystem::AppendToPath( &levelPath, "example.level" );
 		editor.QueueRead( levelPath.c_str() );
@@ -268,14 +268,14 @@ bool Game::Initialize( int argc, char* argv[] )
 
 void Game::Run()
 {
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		m_dt = timeStep.GetDt();
-		if ( m_dt > timeStep.GetTimeStep() * 5.0f )
+		if( m_dt > timeStep.GetTimeStep() * 5.0f )
 		{
 			m_dt = 0.00001f;
 		}
-		if ( slowDt )
+		if( slowDt )
 		{
 			m_dt *= 0.1f;
 		}
@@ -283,18 +283,18 @@ void Game::Run()
 		input.Pump();
 		editor.Update();
 		
-		if ( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) )
+		if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) )
 		{
 			editor.Launch();
 		}
-		if ( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
+		if( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
 		{
 			slowDt = !slowDt;
 		}
 		
 		registry.CallFn< Component >( [&]( Component* o )
 		{
-			if ( !o->initialized )
+			if( !o->initialized )
 			{
 				o->Initialize( this );
 				o->initialized = true;
@@ -305,7 +305,7 @@ void Game::Run()
 		gfx.Activate();
 		gfx.Clear( skyColor );
 		
-		if ( avatar && ( avatar->inputDir.Length() > 0.1f || avatar->velocity.Length() > 0.5f ) )
+		if( avatar && ( avatar->inputDir.Length() > 0.1f || avatar->velocity.Length() > 0.5f ) )
 		{
 			ae::Vec3 camOffset = ae::Vec3( 6.0f, 6.0f, 4.0f );
 			ae::Vec3 camTarget = avatar->position + ae::Vec3( 0.0f, 0.0f, 2.0f );
@@ -360,7 +360,7 @@ void Avatar::Terminate( Game* game )
 
 void Avatar::Update( Game* game )
 {
-	if ( game->input.Get( ae::Key::R ) && !game->input.GetPrev( ae::Key::R ) )
+	if( game->input.Get( ae::Key::R ) && !game->input.GetPrev( ae::Key::R ) )
 	{
 		position = initialPos;
 		velocity = ae::Vec3( 0.0f );
@@ -375,16 +375,16 @@ void Avatar::Update( Game* game )
 	ae::Vec3 cameraFlat = ae::Vec3( game->cameraDir.x, game->cameraDir.y, 0.0f );
 	inputDir.AddRotationXY( cameraFlat.GetAngleBetween( ae::Vec3( 1.0f, 0.0f, 0.0f ) ) );
 	
-	if ( inputDir.Length() > 0.01f )
+	if( inputDir.Length() > 0.01f )
 	{
 		float targetFacingAngle = inputDir.GetXY().GetAngle() + ae::HALF_PI;
 		facingAngle = ae::DtLerpAngle( facingAngle, 2.5f, game->GetDt(), targetFacingAngle );
 	}
 	
-	if ( onGround )
+	if( onGround )
 	{
 		onGround = ( ae::GetTime() - lastTouchedGround ) < 0.15;
-		if ( onGround && game->input.Get( ae::Key::Space ) )
+		if( onGround && game->input.Get( ae::Key::Space ) )
 		{
 			velocity.z += 7.5f;
 			onGround = false;
@@ -396,11 +396,11 @@ void Avatar::Update( Game* game )
 	ae::Vec3 accel( inputDir.x * speed, inputDir.y * speed, -10.0f );
 	velocity += game->GetDt() * accel;
 	float friction;
-	if ( !onGround )
+	if( !onGround )
 	{
 		friction = 0.2f;
 	}
-	else if ( ( inputDir.Length() < 0.1f || inputDir.GetXY().Dot( velocity.GetXY() ) < 0.5f ) )
+	else if( ( inputDir.Length() < 0.1f || inputDir.GetXY().Dot( velocity.GetXY() ) < 0.5f ) )
 	{
 		friction = 3.5f;
 	}
@@ -434,11 +434,11 @@ void Avatar::Update( Game* game )
 	} );
 	
 	ae::Vec4 finalPos( 0.0f );
-	if ( pushOutInfo.hits.Length() )
+	if( pushOutInfo.hits.Length() )
 	{
-		for ( const auto& hit : pushOutInfo.hits )
+		for( const auto& hit : pushOutInfo.hits )
 		{
-			if ( hit.normal.Dot( ae::Vec3( 0.0f, 0.0f, 1.0f ) ) > 0.75f )
+			if( hit.normal.Dot( ae::Vec3( 0.0f, 0.0f, 1.0f ) ) > 0.75f )
 			{
 				lastTouchedGround = ae::GetTime();
 				onGround = true;
@@ -447,9 +447,9 @@ void Avatar::Update( Game* game )
 		finalPos += ae::Vec4( pushOutInfo.sphere.center, 1.0f );
 		velocity = pushOutInfo.velocity;
 	}
-	if ( outResult.hits.Length() )
+	if( outResult.hits.Length() )
 	{
-		if ( outResult.hits[ 0 ].distance < rayLength )
+		if( outResult.hits[ 0 ].distance < rayLength )
 		{
 			finalPos += ae::Vec4( outResult.hits[ 0 ].position + ae::Vec3( 0.0f, 0.0f, rayLength ), 1.0f );
 			velocity.z = ae::Max( 0.0f, velocity.z );
@@ -465,7 +465,7 @@ void Avatar::Update( Game* game )
 		groundPos = position;
 		groundPos.z = -INFINITY;
 	}
-	if ( finalPos.w )
+	if( finalPos.w )
 	{
 		position = finalPos.GetXYZ() / finalPos.w;
 	}

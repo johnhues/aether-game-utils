@@ -191,15 +191,15 @@ bool Program::Tick()
 	Folder* hoverFolder = ( hoverIdx >= 0 ) ? m_currentFolder->subFolders[ hoverIdx ] : nullptr;
 	bool hoverFolderIsSelected = ( m_selected.Find( hoverFolder ) >= 0 );
 
-	if ( m_input.mouse.leftButton && !m_input.mousePrev.leftButton ) // Start left click
+	if( m_input.mouse.leftButton && !m_input.mousePrev.leftButton ) // Start left click
 	{
-		if ( m_rightClick && m_rightClickRect.Contains( currentCursorPos ) )
+		if( m_rightClick && m_rightClickRect.Contains( currentCursorPos ) )
 		{
-			if ( m_selected.Length() )
+			if( m_selected.Length() )
 			{
-				for ( Folder* folder : m_selected )
+				for( Folder* folder : m_selected )
 				{
-					if ( hoverFolder )
+					if( hoverFolder )
 					{
 						hoverFolder = nullptr;
 						hoverFolderIsSelected = false;
@@ -214,11 +214,11 @@ bool Program::Tick()
 				m_currentFolder->subFolders.Append( ae::New< Folder >( TAG_FOLDER ) )->pos = m_rightClickPos;
 			}
 		}
-		else if ( hoverFolder )
+		else if( hoverFolder )
 		{
 			m_state = State::Dragging;
 			m_dragStart = currentCursorPos;
-			if ( !hoverFolderIsSelected )
+			if( !hoverFolderIsSelected )
 			{
 				m_selected.Clear();
 				m_selected.Append( hoverFolder );
@@ -232,9 +232,9 @@ bool Program::Tick()
 		}
 		m_rightClick = false;
 	}
-	else if ( !m_input.mouse.leftButton && m_input.mouse.rightButton && !m_input.mousePrev.rightButton ) // Right click
+	else if( !m_input.mouse.leftButton && m_input.mouse.rightButton && !m_input.mousePrev.rightButton ) // Right click
 	{
-		if ( !m_rightClick || !m_rightClickRect.Contains( currentCursorPos ) )
+		if( !m_rightClick || !m_rightClickRect.Contains( currentCursorPos ) )
 		{
 			m_rightClick = true;
 			m_rightClickPos = currentCursorPos;
@@ -242,11 +242,11 @@ bool Program::Tick()
 			float offsetY = ( currentCursorPos.y > m_gfx.GetHeight() * 0.5f ) ? kRightClickMenuSize.y : -kRightClickMenuSize.y;
 			m_rightClickRect = ae::Rect::FromCenterAndSize( currentCursorPos + ae::Vec2( offsetX, offsetY ) * 0.5f, kRightClickMenuSize );
 
-			if ( !hoverFolder || !hoverFolderIsSelected )
+			if( !hoverFolder || !hoverFolderIsSelected )
 			{
 				m_selected.Clear();
 			}
-			if ( hoverFolder && !hoverFolderIsSelected )
+			if( hoverFolder && !hoverFolderIsSelected )
 			{
 				m_selected.Append( hoverFolder );
 				hoverFolder->selectionIdx = m_selectionIdx++;
@@ -267,9 +267,9 @@ bool Program::Tick()
 	} );
 	DrawFolders();
 
-	if ( m_input.mouse.leftButton ) // Holding mouse left
+	if( m_input.mouse.leftButton ) // Holding mouse left
 	{
-		if ( m_state == State::BoxSelect )
+		if( m_state == State::BoxSelect )
 		{
 			m_selectRect = ae::Rect();
 			m_selectRect.ExpandPoint( m_selectStart );
@@ -277,25 +277,25 @@ bool Program::Tick()
 			DrawRect( m_selectRect, ae::Color::PicoBlue().ScaleA( 0.5f ) );
 		}
 	}
-	else if ( m_input.mousePrev.leftButton ) // Release mouse left
+	else if( m_input.mousePrev.leftButton ) // Release mouse left
 	{
-		if ( m_state == State::BoxSelect )
+		if( m_state == State::BoxSelect )
 		{
 			m_selected.Clear();
-			for ( Folder* folder : m_currentFolder->subFolders )
+			for( Folder* folder : m_currentFolder->subFolders )
 			{
 				ae::Rect folderRect = ae::Rect::FromCenterAndSize( folder->pos, kFolderIconSize );
-				if ( m_selectRect.GetIntersection( folderRect ) )
+				if( m_selectRect.GetIntersection( folderRect ) )
 				{
 					m_selected.Append( folder );
 					folder->selectionIdx = m_selectionIdx++;
 				}
 			}
 		}
-		else if ( m_state == State::Dragging )
+		else if( m_state == State::Dragging )
 		{
 			const ae::Vec2 dragOffset = currentCursorPos - m_dragStart;
-			for ( Folder* folder : m_selected )
+			for( Folder* folder : m_selected )
 			{
 				folder->pos += dragOffset;
 			}
@@ -303,7 +303,7 @@ bool Program::Tick()
 		m_state = State::Idle;
 	}
 
-	if ( m_rightClick )
+	if( m_rightClick )
 	{
 		ae::Rect shadowRect = ae::Rect::FromCenterAndSize( m_rightClickRect.GetCenter() + ae::Vec2( 5.0f, -5.0f ), m_rightClickRect.GetSize() );
 		DrawRect( shadowRect, ae::Color::PicoDarkGray() );
@@ -364,13 +364,13 @@ void Program::DrawFolders()
 {
 	const ae::Vec2 currentCursorPos = ae::Vec2( m_input.mouse.position ) * m_window.GetScaleFactor();
 	const ae::Vec2 dragOffset = currentCursorPos - m_dragStart;
-	for ( const Folder* folder : m_currentFolder->subFolders )
+	for( const Folder* folder : m_currentFolder->subFolders )
 	{
 		ae::Vec2 pos = folder->pos;
 		ae::Color color = ae::Color::PicoPeach();
-		if ( m_selected.Find( folder ) >= 0 )
+		if( m_selected.Find( folder ) >= 0 )
 		{
-			if ( m_state == State::Dragging )
+			if( m_state == State::Dragging )
 			{
 				pos += dragOffset;
 			}
@@ -393,7 +393,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* program ) { ((Program*)program)->Tick(); }, &program, 0, 1 );
 #else
-	while ( program.Tick() ) {}
+	while( program.Tick() ) {}
 #endif
 	program.Terminate();
 	return 0;

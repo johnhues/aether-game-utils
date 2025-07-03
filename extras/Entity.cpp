@@ -103,7 +103,7 @@ Entity Registry::CreateEntity( const char* name )
 	m_lastEntity++;
 	Entity entity = m_lastEntity;
 	
-	if ( name && name[ 0 ] )
+	if( name && name[ 0 ] )
 	{
 		AE_ASSERT_MSG( !m_entityNames.TryGet( name ), "Entity with name '#' already exists", name );
 		m_entityNames.Set( name, entity );
@@ -126,7 +126,7 @@ Entity Registry::CreateEntity( Entity entity, const char* name )
 		entity = m_lastEntity;
 	}
 
-	if ( name && name[ 0 ] )
+	if( name && name[ 0 ] )
 	{
 		// @TODO: Allow multiple entities to have the same name
 		AE_ASSERT_MSG( !m_entityNames.TryGet( name ), "Entity with name '#' already exists", name );
@@ -219,12 +219,12 @@ const Component& Registry::GetComponent( Entity entity, const ae::ClassType* typ
 
 const Component* Registry::TryGetComponent( Entity entity, const ae::ClassType* type ) const
 {
-	if ( entity == kInvalidEntity || !type )
+	if( entity == kInvalidEntity || !type )
 	{
 		return nullptr;
 	}
 	
-	if ( const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
+	if( const ae::Map< Entity, Component* >* components = m_components.TryGet( type->GetId() ) )
 	{
 		return components->Get( entity, nullptr );
 	}
@@ -257,9 +257,9 @@ Entity Registry::GetEntityByName( const char* name ) const
 
 const char* Registry::GetNameByEntity( Entity entity ) const
 {
-	for ( uint32_t i = 0; i < m_entityNames.Length(); i++ )
+	for( uint32_t i = 0; i < m_entityNames.Length(); i++ )
 	{
-		if ( m_entityNames.GetValue( i ) == entity )
+		if( m_entityNames.GetValue( i ) == entity )
 		{
 			return m_entityNames.GetKey( i ).c_str();
 		}
@@ -269,22 +269,22 @@ const char* Registry::GetNameByEntity( Entity entity ) const
 
 void Registry::SetEntityName( Entity entity, const char* name )
 {
-	if ( !entity )
+	if( !entity )
 	{
 		return;
 	}
 
 	AE_ASSERT_MSG( !m_destroying, "Cannot set an entities name while destroying" );
 	
-	for ( uint32_t i = 0; i < m_entityNames.Length(); i++ )
+	for( uint32_t i = 0; i < m_entityNames.Length(); i++ )
 	{
-		if ( m_entityNames.GetValue( i ) == entity )
+		if( m_entityNames.GetValue( i ) == entity )
 		{
 			m_entityNames.Remove( m_entityNames.GetKey( i ) );
 		}
 	}
 	
-	if ( name[ 0 ] )
+	if( name[ 0 ] )
 	{
 		m_entityNames.Set( name, entity );
 	}
@@ -302,7 +302,7 @@ const ae::ClassType* Registry::GetTypeByIndex( uint32_t index ) const
 
 int32_t Registry::GetTypeIndexByType( const ae::ClassType* type ) const
 {
-	if ( !type )
+	if( !type )
 	{
 		return -1;
 	}
@@ -311,7 +311,7 @@ int32_t Registry::GetTypeIndexByType( const ae::ClassType* type ) const
 
 uint32_t Registry::GetComponentCountByIndex( int32_t typeIndex ) const
 {
-	if ( typeIndex < 0 || typeIndex >= m_components.Length() )
+	if( typeIndex < 0 || typeIndex >= m_components.Length() )
 	{
 		return 0;
 	}
@@ -336,11 +336,11 @@ void Registry::Destroy( Entity entity )
 	m_destroying = true;
 
 	// Get components each loop because m_components could grow at any iteration
-	for ( uint32_t i = 0; i < m_components.Length(); i++ )
+	for( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
 		Component* c;
 		ae::Map< Entity, Component* >* components = &m_components.GetValue( i );
-		if ( components->Remove( entity, &c ) )
+		if( components->Remove( entity, &c ) )
 		{
 			if( m_onDestroyFn )
 			{
@@ -351,7 +351,7 @@ void Registry::Destroy( Entity entity )
 		}
 	}
 	const char* name = GetNameByEntity( entity );
-	if ( name && name[ 0 ] )
+	if( name && name[ 0 ] )
 	{
 		m_entityNames.Remove( name );
 	}
@@ -384,9 +384,9 @@ void Registry::Clear()
 	m_destroying = true;
 
 	// Get components each loop because m_components could grow at any iteration
-	for ( uint32_t i = 0; i < m_components.Length(); i++ )
+	for( uint32_t i = 0; i < m_components.Length(); i++ )
 	{
-		for ( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
+		for( uint32_t j = 0; j < m_components.GetValue( i ).Length(); j++ )
 		{
 			Component* c = m_components.GetValue( i ).GetValue( j );
 			c->~Component();

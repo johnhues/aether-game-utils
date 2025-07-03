@@ -46,35 +46,35 @@ int main()
 	ae::TimeStep timeStep;
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		input.Pump();
 
 		ae::Str64 title = ae::Str64::Format( "Server (Connections: #)", listener.GetConnectionCount() );
 		window.SetTitle( title.c_str() );
 
-		if ( !listener.IsListening() )
+		if( !listener.IsListening() )
 		{
-			if ( listener.Listen( ae::Socket::Protocol::TCP, false, 7230, 2 ) )
+			if( listener.Listen( ae::Socket::Protocol::TCP, false, 7230, 2 ) )
 			{
 				AE_LOG( "Listening for connections on port '#'", listener.GetPort() );
 			}
 		}
-		while ( ae::Socket* newConn = listener.Accept() )
+		while( ae::Socket* newConn = listener.Accept() )
 		{
 			AE_LOG( "New connection established from #:#", newConn->GetAddress(), newConn->GetPort() );
 		}
 		
-		for ( uint32_t i = 0; i < listener.GetConnectionCount(); i++ )
+		for( uint32_t i = 0; i < listener.GetConnectionCount(); i++ )
 		{
 			ae::Socket* conn = listener.GetConnection( i );
 
 			// Handle messages
 			uint16_t messageLen = 0;
 			uint8_t messageData[ 64 ];
-			while ( ( messageLen = conn->ReceiveMsg( messageData, sizeof(messageData) ) ) )
+			while( ( messageLen = conn->ReceiveMsg( messageData, sizeof(messageData) ) ) )
 			{
-				if ( messageLen > sizeof( messageData ) )
+				if( messageLen > sizeof( messageData ) )
 				{
 					AE_LOG( "Received # unexpected large message. Disconnect.", 0 );
 					conn->Disconnect();
@@ -90,14 +90,14 @@ int main()
 				ae::Str32 sendMsg = "pong";
 				ae::BinaryWriter wStream( messageData, sizeof(messageData) );
 				wStream.SerializeString( sendMsg );
-				if ( conn->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() ) )
+				if( conn->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() ) )
 				{
 					AE_INFO( "Received '#'. Send '#'.", recvMsg, sendMsg );
 				}
 			}
 			conn->SendAll();
 			
-			if ( !conn->IsConnected() )
+			if( !conn->IsConnected() )
 			{
 				AE_LOG( "Connection  from #:# terminated", conn->GetAddress(), conn->GetPort() );
 				listener.Destroy( conn );

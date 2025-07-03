@@ -111,11 +111,11 @@ public:
     const float dt = game->timeStep.GetDt();
     
     // Client - read net data
-    if ( !netObject->IsAuthority() )
+    if( !netObject->IsAuthority() )
     {
       ae::BinaryReader rStream( netObject->GetSyncData(), netObject->SyncDataLength() );
       Serialize( &rStream );
-      if ( ( m_pos - m_netPos ).Length() > 2.5f )
+      if( ( m_pos - m_netPos ).Length() > 2.5f )
       {
         m_pos = m_netPos;
       }
@@ -135,7 +135,7 @@ public:
     m_rotation += m_rotationVel * game->timeStep.GetDt();
 
     // Server - write net data
-    if ( netObject->IsAuthority() )
+    if( netObject->IsAuthority() )
     {
       m_netPos = m_pos;
       m_netRotation = m_rotation;

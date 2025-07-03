@@ -108,7 +108,7 @@ public:
 	ae::Array< SomeClass > someClassArray3 = AE_ALLOC_TAG_META_TEST;
 };
 
-template < typename T >
+template< typename T >
 class ae::TypeT< ae::Optional< T > > : public ae::OptionalType
 {
 public:
@@ -122,7 +122,7 @@ public:
 	void Clear( ae::DataPointer optional ) const override {}
 };
 
-template < typename T >
+template< typename T >
 class ae::TypeT< std::optional< T > > : public ae::OptionalType
 {
 public:
@@ -295,7 +295,7 @@ public:
 class RefTesterManager
 {
 public:
-	template < typename T >
+	template< typename T >
 	T* Create() { T* o = (T*)m_objectMap.Set( m_nextId, ae::New< T >( AE_ALLOC_TAG_META_TEST ) ); o->id = m_nextId; m_nextId++; return o; }
 	void Destroy( RefTester* object );
 	

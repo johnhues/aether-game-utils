@@ -36,14 +36,14 @@ int main()
   input.Initialize( &window );
   device.Initialize( &window );
   fs.Initialize( "data", "ae", "file_dialogs" );
-  while ( !input.quit )
+  while( !input.quit )
   {
     input.Pump();
     device.Activate();
     device.Clear( ae::Color::PicoBlue() );
     device.Present();
 
-    if ( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )
+    if( !input.GetPrev( ae::Key::Num1 ) && input.Get( ae::Key::Num1 ) )
     {
       ae::Str256 path = "unknown";
       fs.GetRootDir( ae::FileSystem::Root::Data, &path );
@@ -51,7 +51,7 @@ int main()
       fs.ShowFolder( ae::FileSystem::Root::Data, "" );
     }
 
-    if ( !input.GetPrev( ae::Key::Num2 ) && input.Get( ae::Key::Num2 ) )
+    if( !input.GetPrev( ae::Key::Num2 ) && input.Get( ae::Key::Num2 ) )
     {
       ae::Str256 path = "unknown";
       fs.GetRootDir( ae::FileSystem::Root::User, &path );
@@ -59,7 +59,7 @@ int main()
       fs.ShowFolder( ae::FileSystem::Root::User, "" );
     }
 
-    if ( !input.GetPrev( ae::Key::Num3 ) && input.Get( ae::Key::Num3 ) )
+    if( !input.GetPrev( ae::Key::Num3 ) && input.Get( ae::Key::Num3 ) )
     {
       ae::Str256 path = "unknown";
       fs.GetRootDir( ae::FileSystem::Root::Cache, &path );
@@ -67,7 +67,7 @@ int main()
       fs.ShowFolder( ae::FileSystem::Root::Cache, "" );
     }
 
-    if ( input.Get( ae::Key::LeftMeta ) && !input.GetPrev( ae::Key::O ) && input.Get( ae::Key::O ) )
+    if( input.Get( ae::Key::LeftMeta ) && !input.GetPrev( ae::Key::O ) && input.Get( ae::Key::O ) )
     {
       ae::FileDialogParams params;
       //params.filters.Append( ae::FileFilter( "All Files", "*" ) );
@@ -77,10 +77,10 @@ int main()
       params.windowTitle = "Open Some File To Do Things With";
       params.allowMultiselect = true;
       ae::Array< std::string > result = fs.OpenDialog( params );
-      if ( result.Length() )
+      if( result.Length() )
       {
         AE_INFO( "Open dialog success" );
-        for ( auto&& r : result )
+        for( auto&& r : result )
         {
           AE_INFO( "file #", r );
         }
@@ -91,13 +91,13 @@ int main()
       }
     }
 
-    if ( input.Get( ae::Key::LeftMeta ) && !input.GetPrev( ae::Key::S ) && input.Get( ae::Key::S ) )
+    if( input.Get( ae::Key::LeftMeta ) && !input.GetPrev( ae::Key::S ) && input.Get( ae::Key::S ) )
     {
       ae::FileDialogParams params;
       params.window = &window;
       params.filters.Append( ae::FileFilter( "Text Files", "txt" ) );
       std::string result = fs.SaveDialog( params );
-      if ( !result.empty() )
+      if( !result.empty() )
       {
         AE_INFO( "Save dialog success #", result );
       }

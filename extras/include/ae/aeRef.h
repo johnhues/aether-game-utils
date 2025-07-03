@@ -40,7 +40,7 @@ aeRefable< _C > m_refable = this;
 //------------------------------------------------------------------------------
 // aeId class
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 class aeId
 {
 public:
@@ -68,10 +68,10 @@ public:
   explicit aeId( const aeId< U >& other ) { m_id = other.m_id; }
 
 private:
-  template < typename T2 >
+  template< typename T2 >
   friend class aeId;
 
-  template < typename T2 >
+  template< typename T2 >
   friend std::ostream& operator<<( std::ostream& os, const aeId< T2 >& id );
 #endif
 
@@ -83,7 +83,7 @@ public:
   uint32_t GetInternalId() const { return m_id; }
 };
 
-template < typename T >
+template< typename T >
 inline std::ostream& operator<<( std::ostream& os, const aeId< T >& id )
 {
   return os << id.m_id;
@@ -92,7 +92,7 @@ inline std::ostream& operator<<( std::ostream& os, const aeId< T >& id )
 //------------------------------------------------------------------------------
 // aeRefable class
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 class aeRefable
 {
 public:
@@ -116,7 +116,7 @@ private:
 //------------------------------------------------------------------------------
 // aeRef class
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 class aeRef
 {
 public:
@@ -140,16 +140,16 @@ public:
 
 private:
   // Provide m_Get() defaults to allow templated types that don't support T::GetById()
-  template < typename U, bool result = std::is_same< decltype( ((U*)nullptr)->GetById( aeId< U >() ) ), U* >::value >
+  template< typename U, bool result = std::is_same< decltype( ((U*)nullptr)->GetById( aeId< U >() ) ), U* >::value >
   const U* m_Get( int ) const;
   
-  template < typename U, bool result = std::is_same< decltype( ((U*)nullptr)->GetById( aeId< U >() ) ), U* >::value >
+  template< typename U, bool result = std::is_same< decltype( ((U*)nullptr)->GetById( aeId< U >() ) ), U* >::value >
   U* m_Get( int );
   
-  template < typename U >
+  template< typename U >
   const U* m_Get( ... ) const;
   
-  template < typename U >
+  template< typename U >
   U* m_Get( ... );
 
   aeId< T > m_id;
@@ -160,7 +160,7 @@ private:
 //------------------------------------------------------------------------------
 // aeRefPair class
 //------------------------------------------------------------------------------
-template < typename T, typename S >
+template< typename T, typename S >
 class aeRefPair
 {
 public:
@@ -182,13 +182,13 @@ private:
 //------------------------------------------------------------------------------
 // aeRef member functions
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 aeRef< T >::aeRef( T* obj )
 {
   // Make sure T::GetById() is implemented for T at compile time only if a ref is ever actually constructed
   auto GetByID_NotImplemented = &T::GetById;
 
-  if ( obj )
+  if( obj )
   {
     m_id = aeId< T >( obj->GetId() );
     AE_ASSERT( m_id );
@@ -199,42 +199,42 @@ aeRef< T >::aeRef( T* obj )
   }
 }
 
-template < typename T >
+template< typename T >
 aeRef< T >::aeRef( aeId< T > id )
   : m_id( id )
 {}
 
-template < typename T >
+template< typename T >
 aeRef< T >::operator bool() const
 {
   return m_Get< T >( 0 ) != nullptr;
 }
 
-template < typename T >
+template< typename T >
 aeRef< T >::operator const T*() const
 {
   return m_Get< T >( 0 );
 }
 
-template < typename T >
+template< typename T >
 aeRef< T >::operator T*()
 {
   return m_Get< T >( 0 );
 }
 
-template < typename T >
+template< typename T >
 const T* aeRef< T >::operator ->() const
 {
   return &(operator *());
 }
 
-template < typename T >
+template< typename T >
 T* aeRef< T >::operator ->()
 {
   return &(operator *());
 }
 
-template < typename T >
+template< typename T >
 const T& aeRef< T >::operator *() const
 {
   AE_ASSERT( m_id );
@@ -243,7 +243,7 @@ const T& aeRef< T >::operator *() const
   return *ae::Cast< T >( obj );
 }
 
-template < typename T >
+template< typename T >
 T& aeRef< T >::operator *()
 {
   AE_ASSERT( m_id );
@@ -252,35 +252,35 @@ T& aeRef< T >::operator *()
   return *ae::Cast< T >( obj );
 }
 
-template < typename T >
+template< typename T >
 bool aeRef< T >::Lost() const
 {
   return m_Get< T >( 0 ) == nullptr && m_id != aeId< T >();
 }
 
-template < typename T >
-template < typename U, bool >
+template< typename T >
+template< typename U, bool >
 const U* aeRef< T >::m_Get( int ) const
 {
   return m_id ? ae::Cast< T >( T::GetById( m_id ) ) : nullptr;
 }
 
-template < typename T >
-template < typename U, bool >
+template< typename T >
+template< typename U, bool >
 U* aeRef< T >::m_Get( int )
 {
   return m_id ? ae::Cast< T >( T::GetById( m_id ) ) : nullptr;
 }
 
-template < typename T >
-template < typename U >
+template< typename T >
+template< typename U >
 const U* aeRef< T >::m_Get( ... ) const
 {
   return nullptr;
 }
 
-template < typename T >
-template < typename U >
+template< typename T >
+template< typename U >
 U* aeRef< T >::m_Get( ... )
 {
   return nullptr;
@@ -289,7 +289,7 @@ U* aeRef< T >::m_Get( ... )
 //------------------------------------------------------------------------------
 // aeRefPair member functions
 //------------------------------------------------------------------------------
-template < typename T, typename S >
+template< typename T, typename S >
 aeRefPair< T, S >::aeRefPair( T* self ) :
   m_self( self ),
   m_other( nullptr )
@@ -297,21 +297,21 @@ aeRefPair< T, S >::aeRefPair( T* self ) :
   AE_ASSERT( self );
 }
 
-template < typename T, typename S >
+template< typename T, typename S >
 aeRefPair< T, S >::~aeRefPair()
 {
   Clear();
 }
 
-template < typename T, typename S >
+template< typename T, typename S >
 void aeRefPair< T, S >::Pair( aeRefPair< S, T >& other )
 {
-  if ( m_other == &other )
+  if( m_other == &other )
   {
     return;
   }
   
-  if ( m_other )
+  if( m_other )
   {
     m_other->Clear();
   }
@@ -321,23 +321,23 @@ void aeRefPair< T, S >::Pair( aeRefPair< S, T >& other )
   other.m_other = this;
 }
 
-template < typename T, typename S >
+template< typename T, typename S >
 void aeRefPair< T, S >::Clear()
 {
-  if ( m_other )
+  if( m_other )
   {
     m_other->m_other = nullptr;
     m_other = nullptr;
   }
 }
 
-template < typename T, typename S >
+template< typename T, typename S >
 S* aeRefPair< T, S >::Get()
 {
   return m_other ? m_other->m_self : nullptr;
 }
 
-template < typename T, typename S >
+template< typename T, typename S >
 const S* aeRefPair< T, S >::Get() const
 {
   return m_other ? m_other->m_self : nullptr;

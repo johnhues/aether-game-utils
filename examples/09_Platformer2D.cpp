@@ -148,7 +148,7 @@ void Player::Initialize( HotSpotWorld* world, ae::Vec2 startPos )
 
 void Player::OnCollision( const HotSpotObject::CollisionInfo* info )
 {
-	if ( info->normal.y > 0 )
+	if( info->normal.y > 0 )
 	{
 		// Reset jump when touching ground
 		m_canJumpTimer = kJumpMaxAirTime;
@@ -169,13 +169,13 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 	m_canJumpTimer -= dt;
 
 	// Water
-	if ( tile == kTile_Water )
+	if( tile == kTile_Water )
 	{
-		if ( jumpButton || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
-		if ( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kSwimDown ) ); }
+		if( jumpButton || up ) { m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kSwimUp ) ); }
+		if( down ) { m_body->AddForce( ae::Vec2( 0.0f, -kPlayerMass * kSwimDown ) ); }
 
-		if ( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
-		if ( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
+		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kSwimHorizontal, 0.0f ) ); }
+		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kSwimHorizontal, 0.0f ) );  }
 
 		// Always reset jump so a jump is possible immediately after leaving water
 		m_canJumpTimer = kJumpMaxAirTime;
@@ -183,10 +183,10 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 	}
 	else // Air / ground
 	{
-		if ( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
-		if ( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+		if( left ) { m_body->AddForce( ae::Vec2( -kPlayerMass * kMoveHorizontal, 0.0f ) ); }
+		if( right ) { m_body->AddForce( ae::Vec2( kPlayerMass * kMoveHorizontal, 0.0f ) ); }
 
-		if ( CanJump() && jumpButton )
+		if( CanJump() && jumpButton )
 		{
 			// Cancel previous downward velocity for last kJumpMaxAirTime seconds
 			// to get full jump height
@@ -199,7 +199,7 @@ void Player::Update( HotSpotWorld* world, ae::Input* input, float dt )
 			m_body->AddImpulse( ae::Vec2( 0.0f, kPlayerMass * kJumpInitial ) );
 		}
 
-		if ( m_jumpHoldTimer > 0.0f && jumpButton )
+		if( m_jumpHoldTimer > 0.0f && jumpButton )
 		{
 			m_jumpHoldTimer -= dt;
 			m_body->AddForce( ae::Vec2( 0.0f, kPlayerMass * kJumpHold ) );
@@ -263,11 +263,11 @@ struct Game
 		render.Clear( ae::Color::PicoDarkBlue() );
 		spriteRender.Clear();
 
-		for ( uint32_t y = 0; y < world.GetHeight(); y++ )
-		for ( uint32_t x = 0; x < world.GetWidth(); x++ )
+		for( uint32_t y = 0; y < world.GetHeight(); y++ )
+		for( uint32_t x = 0; x < world.GetWidth(); x++ )
 		{
 			ae::Color color;
-			switch ( world.GetTile( ae::Int2( x, y ) ) )
+			switch( world.GetTile( ae::Int2( x, y ) ) )
 			{
 				case kTile_Air: color = ae::Color::PicoPeach(); break;
 				case kTile_Water: color = ae::Color::PicoPink(); break;
@@ -312,7 +312,7 @@ int main()
 #if _AE_EMSCRIPTEN_
 	emscripten_set_main_loop_arg( []( void* game ) { ((Game*)game)->Tick(); }, &game, 0, 1 );
 #else
-	while ( game.Tick() ) {}
+	while( game.Tick() ) {}
 #endif
 	game.Terminate();
 	return 0;

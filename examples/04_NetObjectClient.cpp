@@ -40,7 +40,7 @@ int main()
   double nextSend = 0.0;
 
   // Update
-  while ( !game.input.quit )
+  while( !game.input.quit )
   {
     double time = ae::GetTime();
     game.input.Pump();
@@ -50,16 +50,16 @@ int main()
     // Net update
     //--------------------------------------------------------------------------
     // Update connection to server
-    if ( !client->IsConnected() && !client->IsConnecting() )
+    if( !client->IsConnected() && !client->IsConnecting() )
     {
       AE_LOG( "Connecting to server" );
       AetherClient_Connect( client );
     }
     // Handle messages from server
     ReceiveInfo receiveInfo;
-    while ( AetherClient_Receive( client, &receiveInfo ) )
+    while( AetherClient_Receive( client, &receiveInfo ) )
     {
-      switch ( receiveInfo.msgId )
+      switch( receiveInfo.msgId )
       {
         case kSysMsgServerConnect:
           AE_LOG( "Connected to server" );
@@ -75,7 +75,7 @@ int main()
       }
     }
     // Create new replicated objects
-    while ( ae::NetObject* netObject = netObjectClient.PumpCreate() )
+    while( ae::NetObject* netObject = netObjectClient.PumpCreate() )
     {
       ae::BinaryReader readStream( netObject->GetSyncData(), netObject->SyncDataLength() );
       GameObject* obj = &gameObjects.Append( GameObject( ae::Color::White() ) );
@@ -86,7 +86,7 @@ int main()
     //------------------------------------------------------------------------------
     // Game Update
     //------------------------------------------------------------------------------
-    for ( GameObject& obj : gameObjects )
+    for( GameObject& obj : gameObjects )
     {
       obj.Update( &game );
     }
@@ -94,9 +94,9 @@ int main()
     //------------------------------------------------------------------------------
     // Delete networked objects
     //------------------------------------------------------------------------------
-    for ( GameObject& obj : gameObjects )
+    for( GameObject& obj : gameObjects )
     {
-      if ( obj.netObject->IsPendingDestroy() )
+      if( obj.netObject->IsPendingDestroy() )
       {
         netObjectClient.Destroy( obj.netObject );
         obj.netObject = nullptr;
@@ -108,12 +108,12 @@ int main()
     //------------------------------------------------------------------------------
     // Send input to server
     //------------------------------------------------------------------------------
-    if ( client->IsConnected() && nextSend < time )
+    if( client->IsConnected() && nextSend < time )
     {
       AetherUuid playerId = client->localPlayer->uuid;
       int32_t objIdx = gameObjects.FindFn( [ playerId ]( const GameObject& o ){ return o.playerId == playerId; } );
       GameObject* obj = ( objIdx >= 0 ) ? &gameObjects[ objIdx ] : nullptr;
-      if ( obj )
+      if( obj )
       {
         uint8_t buffer[ 64 ];
         ae::BinaryWriter stream( buffer, countof(buffer) );

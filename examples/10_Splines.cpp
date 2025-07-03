@@ -110,7 +110,7 @@ int main()
   float t = 0.0f;
   float angle = 0.0f;
 
-  while ( !input.quit )
+  while( !input.quit )
   {
     input.Pump();
     render.Activate();
@@ -120,14 +120,14 @@ int main()
     ae::Matrix4 transform;
 
     float splineLen = spline.GetLength();
-    for ( float d = 0.0f; d < splineLen; d += 0.25f )
+    for( float d = 0.0f; d < splineLen; d += 0.25f )
     {
       transform = ae::Matrix4::Translation( spline.GetPoint( d ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.1f ) );
       spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::Blue() );
     }
     
-    for ( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
+    for( uint32_t i = 0; i < spline.GetControlPointCount(); i++ )
     {
       transform = ae::Matrix4::Translation( spline.GetControlPoint( i ) - ae::Vec3( 0.0f, 0.0f, 0.1f ) );
       transform *= ae::Matrix4::Scaling( ae::Vec3( 0.2f ) );
@@ -143,7 +143,7 @@ int main()
     spriteRender.AddSprite( 0, transform, ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 1.0f ) ), ae::Color::White() );
 
     t += timeStep.GetTimeStep();
-    if ( t > splineLen )
+    if( t > splineLen )
     {
       t -= splineLen;
     }

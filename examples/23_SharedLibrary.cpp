@@ -42,7 +42,7 @@ int Run()
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		input.Pump();
 		graphicsDevice.Activate();

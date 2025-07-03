@@ -59,12 +59,12 @@ TEST_CASE( "hash map elements can be set and retrieved", "[ae::HashMap]" )
 {
 	ae::HashMap< uint32_t, 10 > map;
 	REQUIRE( map.Size() == 10 );
-	for ( uint32_t i = 0; i < 10; i++ )
+	for( uint32_t i = 0; i < 10; i++ )
 	{
 		REQUIRE( map.Set( 100 + i, i ) );
 	}
 	REQUIRE( map.Length() == 10 );
-	for ( uint32_t i = 0; i < 10; i++ )
+	for( uint32_t i = 0; i < 10; i++ )
 	{
 		REQUIRE( !map.Set( 1000 + i, i ) );
 	}
@@ -297,7 +297,7 @@ TEST_CASE( "hash map compaction (wrapping 3)", "[ae::HashMap]" )
 TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 {
 	ae::Map< int, char, 10 > map;
-	for ( char i = 0; i < 10; i++ )
+	for( char i = 0; i < 10; i++ )
 	{
 		map.Set( i, 'a' + i );
 	}
@@ -319,7 +319,7 @@ TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 
 	SECTION( "existing values are correctly set" )
 	{
-		for ( char i = 0; i < 10; i++ )
+		for( char i = 0; i < 10; i++ )
 		{
 			map.Set( i, 'A' + i );
 		}
@@ -345,7 +345,7 @@ struct BadHash
 	bool operator==( const BadHash& other ) const { return value == other.value; }
 	uint32_t value;
 };
-namespace ae { template <> uint32_t GetHash32( const BadHash& badHash )
+namespace ae { template<> uint32_t GetHash32( const BadHash& badHash )
 {
 	return badHash.value % 2;
 } }
@@ -390,7 +390,7 @@ TEST_CASE( "map handles collisions", "[ae::HashMap]" )
 TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap]" )
 {
 	ae::HashMap< uint32_t > map = TAG_TEST;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map.Set( 1000 + i, i ) );
 	}
@@ -399,7 +399,7 @@ TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap]"
 	SECTION( "can retrieve previously set values" )
 	{
 		REQUIRE( map.Get( -1 ) == -1 );
-		for ( uint32_t i = 0; i < 100; i++ )
+		for( uint32_t i = 0; i < 100; i++ )
 		{
 			REQUIRE( map.Get( 1000 + i ) == i );
 		}
@@ -410,7 +410,7 @@ TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap]"
 TEST_CASE( "can access elements after reserve", "[ae::HashMap]" )
 {
 	ae::HashMap< uint32_t > map = TAG_TEST;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map.Set( 1000 + i, i ) );
 	}
@@ -422,7 +422,7 @@ TEST_CASE( "can access elements after reserve", "[ae::HashMap]" )
 	SECTION( "can retrieve previously set values" )
 	{
 		REQUIRE( map.Get( -1 ) == -1 );
-		for ( uint32_t i = 0; i < 100; i++ )
+		for( uint32_t i = 0; i < 100; i++ )
 		{
 			REQUIRE( map.Get( 1000 + i ) == i );
 		}
@@ -433,7 +433,7 @@ TEST_CASE( "can access elements after reserve", "[ae::HashMap]" )
 TEST_CASE( "copy construct static hash map", "[ae::HashMap]" )
 {
 	ae::HashMap<  uint32_t, 128 > map0;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
@@ -450,7 +450,7 @@ TEST_CASE( "copy construct static hash map", "[ae::HashMap]" )
 	{
 		REQUIRE( map0.Get( -1 ) == -1 );
 		REQUIRE( map1.Get( -1 ) == -1 );
-		for ( uint32_t i = 0; i < 100; i++ )
+		for( uint32_t i = 0; i < 100; i++ )
 		{
 			REQUIRE( map0.Get( 1000 + i ) == i );
 			REQUIRE( map1.Get( 1000 + i ) == i );
@@ -463,7 +463,7 @@ TEST_CASE( "copy construct static hash map", "[ae::HashMap]" )
 TEST_CASE( "copy assign static hash map", "[ae::HashMap]" )
 {
 	ae::HashMap< uint32_t, 128 > map0;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
@@ -483,7 +483,7 @@ TEST_CASE( "copy assign static hash map", "[ae::HashMap]" )
 	{
 		REQUIRE( map0.Get( -1 ) == -1 );
 		REQUIRE( map1.Get( -1 ) == -1 );
-		for ( uint32_t i = 0; i < 100; i++ )
+		for( uint32_t i = 0; i < 100; i++ )
 		{
 			REQUIRE( map0.Get( 1000 + i ) == i );
 			REQUIRE( map1.Get( 1000 + i ) == i );
@@ -496,7 +496,7 @@ TEST_CASE( "copy assign static hash map", "[ae::HashMap]" )
 TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMap]" )
 {
 	ae::HashMap< uint32_t > map0 = TAG_TEST;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
@@ -519,7 +519,7 @@ TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMa
 	{
 		REQUIRE( map0.Get( -1 ) == -1 );
 		REQUIRE( map1.Get( -1 ) == -1 );
-		for ( uint32_t i = 0; i < 100; i++ )
+		for( uint32_t i = 0; i < 100; i++ )
 		{
 			REQUIRE( map0.Get( 1000 + i ) == i );
 			REQUIRE( map1.Get( 1000 + i ) == i );
@@ -533,7 +533,7 @@ TEST_CASE( "can access elements after assignment of smaller map", "[ae::HashMap]
 {
 	ae::HashMap< uint32_t > map0 = TAG_TEST;
 	ae::HashMap< uint32_t > map1 = TAG_TEST;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
@@ -556,7 +556,7 @@ TEST_CASE( "can access elements after assignment of smaller map", "[ae::HashMap]
 	{
 		REQUIRE( map0.Get( -1 ) == -1 );
 		REQUIRE( map1.Get( -1 ) == -1 );
-		for ( uint32_t i = 0; i < 100; i++ )
+		for( uint32_t i = 0; i < 100; i++ )
 		{
 			REQUIRE( map0.Get( 1000 + i ) == i );
 			REQUIRE( map1.Get( 1000 + i ) == i );
@@ -570,7 +570,7 @@ TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap]"
 {
 	ae::HashMap< uint32_t > map0 = TAG_TEST;
 	ae::HashMap< uint32_t > map1 = TAG_TEST;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
 	}
@@ -593,7 +593,7 @@ TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap]"
 	{
 		REQUIRE( map0.Get( -1 ) == -1 );
 		REQUIRE( map1.Get( -1 ) == -1 );
-		for ( uint32_t i = 0; i < 100; i++ )
+		for( uint32_t i = 0; i < 100; i++ )
 		{
 			REQUIRE( map0.Get( 1000 + i ) == i );
 			REQUIRE( map1.Get( 1000 + i ) == i );
@@ -607,12 +607,12 @@ TEST_CASE( "fast stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
 	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
 	}
 	REQUIRE( map.Length() == count );
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 	}
@@ -625,7 +625,7 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
-		for ( auto& pair : map )
+		for( auto& pair : map )
 		{
 			uint32_t* v = map.TryGet( pair.key );
 			AE_ASSERT( v );
@@ -633,7 +633,7 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 		}
 	};
 
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
 		validateFn();
@@ -641,10 +641,10 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 	REQUIRE( map.Length() == count );
 
 	uint64_t r = 543534;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		uint32_t removeCount = ae::Random( 0, map.Length(), &r );
-		for ( uint32_t j = 0; j < removeCount; j++ )
+		for( uint32_t j = 0; j < removeCount; j++ )
 		{
 			uint32_t idx = ae::Random( 0, map.Length(), &r );
 			uint32_t key = map.GetKey( idx );
@@ -656,7 +656,7 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 		}
 		
 		removeCount = ae::Random( 0, map.Length(), &r );
-		for ( uint32_t j = 0; j < removeCount; j++ )
+		for( uint32_t j = 0; j < removeCount; j++ )
 		{
 			uint32_t idx = ae::Random( 0, map.Length(), &r );
 			uint32_t value = map.GetValue( idx );
@@ -667,14 +667,14 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 		}
 
 		uint32_t addCount = ae::Random( 0, map.Length(), &r );
-		for ( uint32_t j = 0; j < addCount; j++ )
+		for( uint32_t j = 0; j < addCount; j++ )
 		{
 			map.Set( ae::Random( 0, 100000, &r ), 0 );
 			validateFn();
 		}
 	}
 
-	while ( map.Length() )
+	while( map.Length() )
 	{
 		uint32_t idx = ae::Random( 0, map.Length(), &r );
 		uint32_t key = map.GetKey( idx );
@@ -688,12 +688,12 @@ TEST_CASE( "fast full map stress test", "[ae::Map]" )
 {
 	const uint32_t count = 10000;
 	ae::Map< uint32_t, uint32_t, 10000 > map;
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
 	}
 	REQUIRE( map.Length() == count );
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 	}
@@ -706,19 +706,19 @@ TEST_CASE( "stable stress test", "[ae::Map]" )
 	ae::Map< uint32_t, uint32_t, 0, ae::Hash32, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
-		for ( uint32_t i = 1; i < map.Length(); i++ )
+		for( uint32_t i = 1; i < map.Length(); i++ )
 		{
 			AE_ASSERT( map.GetValue( i - 1 ) < map.GetValue( i ) );
 		}
 	};
 
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
 	}
 	validateFn();
 	REQUIRE( map.Length() == count );
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 		validateFn();
@@ -732,19 +732,19 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 	ae::Map< uint32_t, uint32_t, 0, ae::Hash32, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
-		for ( auto& pair : map )
+		for( auto& pair : map )
 		{
 			uint32_t* v = map.TryGet( pair.key );
 			AE_ASSERT( v );
 			AE_ASSERT( *v == pair.value );
 		}
-		for ( uint32_t i = 1; i < map.Length(); i++ )
+		for( uint32_t i = 1; i < map.Length(); i++ )
 		{
 			AE_ASSERT( map.GetValue( i - 1 ) < map.GetValue( i ) );
 		}
 	};
 
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
 		validateFn();
@@ -752,10 +752,10 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 	REQUIRE( map.Length() == count );
 
 	uint64_t r = 543534;
-	for ( uint32_t i = 0; i < 100; i++ )
+	for( uint32_t i = 0; i < 100; i++ )
 	{
 		uint32_t removeCount = ae::Random( 0, map.Length(), &r );
-		for ( uint32_t j = 0; j < removeCount; j++ )
+		for( uint32_t j = 0; j < removeCount; j++ )
 		{
 			uint32_t idx = ae::Random( 0, map.Length(), &r );
 			uint32_t key = map.GetKey( idx );
@@ -767,7 +767,7 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 		}
 		
 		removeCount = ae::Random( 0, map.Length(), &r );
-		for ( uint32_t j = 0; j < removeCount; j++ )
+		for( uint32_t j = 0; j < removeCount; j++ )
 		{
 			uint32_t idx = ae::Random( 0, map.Length(), &r );
 			uint32_t value = map.GetValue( idx );
@@ -778,9 +778,9 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 		}
 
 		uint32_t addCount = ae::Random( 0, map.Length(), &r );
-		for ( uint32_t j = 0; j < addCount; j++ )
+		for( uint32_t j = 0; j < addCount; j++ )
 		{
-			for (uint32_t k = 0; k < map.Length(); k++ )
+			for(uint32_t k = 0; k < map.Length(); k++ )
 			{
 				map.GetValue( k ) = k;
 			}
@@ -791,7 +791,7 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 		}
 	}
 
-	while ( map.Length() )
+	while( map.Length() )
 	{
 		uint32_t idx = ae::Random( 0, map.Length(), &r );
 		uint32_t key = map.GetKey( idx );
@@ -807,20 +807,20 @@ TEST_CASE( "stable full map stress test", "[ae::Map]" )
 	ae::Map< uint32_t, uint32_t, 10000, ae::Hash32, ae::MapMode::Stable > map;
 	auto validateFn = [&]()
 	{
-		for ( uint32_t i = 1; i < map.Length(); i++ )
+		for( uint32_t i = 1; i < map.Length(); i++ )
 		{
 			AE_ASSERT( map.GetValue( i - 1 ) < map.GetValue( i ) );
 		}
 	};
 
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
 		validateFn();
 	}
 	REQUIRE( map.Length() == count );
 
-	for ( uint32_t i = 0; i < count; i++ )
+	for( uint32_t i = 0; i < count; i++ )
 	{
 		AE_ASSERT( map.Remove( ( i * 5437 ) % count ) );
 		validateFn();

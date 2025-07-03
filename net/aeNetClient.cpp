@@ -36,7 +36,7 @@
 //------------------------------------------------------------------------------
 bool AetherAddress::IsLocalhost() const
 {
-	if ( strcmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 || strcmp(host, "::1") == 0 )
+	if( strcmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 || strcmp(host, "::1") == 0 )
 	{
 		return true;
 	}
@@ -69,10 +69,10 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info );
 AetherPlayer* AetherClient_GetPlayer( AetherClientInternal* ac, AetherUuid uuid )
 {
   int32_t playerCount = ac->pub.allPlayers.Length();
-  for ( int32_t i = 0; i < playerCount; i++ )
+  for( int32_t i = 0; i < playerCount; i++ )
   {
     AetherPlayer* p = ac->pub.allPlayers[ i ];
-    if ( memcmp( &p->uuid, &uuid, sizeof(uuid) ) == 0 ) { return p; }
+    if( memcmp( &p->uuid, &uuid, sizeof(uuid) ) == 0 ) { return p; }
   }
   
   AE_FAIL();
@@ -98,7 +98,7 @@ void AetherClient_Connect( AetherClient* _ac )
 {
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
 
-  if ( ac->pub.IsConnected() || ac->pub.IsConnecting() )
+  if( ac->pub.IsConnected() || ac->pub.IsConnecting() )
   {
     return;
   }
@@ -143,14 +143,14 @@ AetherClient* AetherClient_New( AetherUuid uuid, const char* ip, uint16_t port )
 void AetherClient_Disconnect( AetherClient* _ac )
 {
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
-  if ( !ac )
+  if( !ac )
   {
 	return;
   }
 	
 #ifndef __EMSCRIPTEN__
   ENetPeer* peer = ac->priv.host->peerCount ? ac->priv.host->peers : nullptr;
-  if ( peer && peer->state == ENET_PEER_STATE_CONNECTED )
+  if( peer && peer->state == ENET_PEER_STATE_CONNECTED )
   {
 	// @TODO: Make sure all queued packets are sent
 	enet_peer_disconnect( ac->priv.host->peers, 0 );
@@ -162,12 +162,12 @@ void AetherClient_Disconnect( AetherClient* _ac )
 void AetherClient_Delete( AetherClient* _ac )
 {
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
-  if ( !ac )
+  if( !ac )
   {
     return;
   }
 
-  for ( uint32_t i = 0; i < ac->pub.allPlayers.Length(); i++ )
+  for( uint32_t i = 0; i < ac->pub.allPlayers.Length(); i++ )
   {
     ae::Delete( ac->pub.allPlayers[ i ] );
   }
@@ -175,7 +175,7 @@ void AetherClient_Delete( AetherClient* _ac )
 
 #ifndef __EMSCRIPTEN__
   ENetPeer* peer = ac->priv.host->peerCount ? ac->priv.host->peers : nullptr;
-  if ( peer && peer->state == ENET_PEER_STATE_CONNECTED )
+  if( peer && peer->state == ENET_PEER_STATE_CONNECTED )
   {
     // @TODO: Make sure all queued packets are sent
     enet_peer_disconnect( ac->priv.host->peers, 0 );
@@ -191,7 +191,7 @@ void AetherClient_Delete( AetherClient* _ac )
 
 bool AetherClient_SystemReceive( AetherClientInternal* ac, AetherServerHeader header, const uint8_t* data, int32_t length, ReceiveInfo* infoOut )
 {
-  switch ( header.msgId )
+  switch( header.msgId )
   {
     case kSysMsgPlayerConnect:
     {
@@ -222,15 +222,15 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
   ac->priv.prevTime = t;
 
   EmSocket* s = &ac->priv.sock;
-  if ( !s->IsOpen() )
+  if( !s->IsOpen() )
   {
     ac->pub.isConnected = false;
     ac->pub.m_isConnecting = false;
     return false;
   }
-  else if ( s->Service( dt ) )
+  else if( s->Service( dt ) )
   {
-    if ( ac->pub.m_isConnecting )
+    if( ac->pub.m_isConnecting )
     {
       ac->pub.isConnected = true;
       ac->pub.m_isConnecting = false;
@@ -255,10 +255,10 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
     }
 
     uint8_t msg[ kEmMaxMessageSize ];
-    while ( 1 )
+    while( 1 )
     {
       uint32_t msgLength = s->Recv( msg, sizeof(msg) );
-      if ( msgLength == 0 )
+      if( msgLength == 0 )
       {
         break;
       }
@@ -269,9 +269,9 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
 
       // AE_LOG( "server seq %u", header.msgSeq );
       
-      if ( header.msgId & kSysMsgMask )
+      if( header.msgId & kSysMsgMask )
       {
-        if ( AetherClient_SystemReceive( ac, header, data, length, infoOut ) )
+        if( AetherClient_SystemReceive( ac, header, data, length, infoOut ) )
         {
           return true;
         }
@@ -290,7 +290,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
 
   ENetEvent e;
   memset( &e, 0, sizeof(e) );
-  while ( enet_host_service( ac->priv.host, &e, 0 ) > 0 )
+  while( enet_host_service( ac->priv.host, &e, 0 ) > 0 )
   {
     switch( e.type )
     {
@@ -321,7 +321,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         uint8_t* data = e.packet->data + sizeof(header);
         uint32_t length = (uint32_t)e.packet->dataLength - sizeof(header);
 
-        if ( e.packet->flags & ENET_PACKET_FLAG_RELIABLE )
+        if( e.packet->flags & ENET_PACKET_FLAG_RELIABLE )
         {
           ac->pub.receivedReliableBytes += length;
         }
@@ -331,9 +331,9 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         }
         
         bool success = false;
-        if ( header.msgId & kSysMsgMask )
+        if( header.msgId & kSysMsgMask )
         {
-          if ( AetherClient_SystemReceive( ac, header, data, length, infoOut ) )
+          if( AetherClient_SystemReceive( ac, header, data, length, infoOut ) )
           {
             success = true;
           }
@@ -347,7 +347,7 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
         }
 
         enet_packet_destroy( e.packet );
-        if ( success )
+        if( success )
         {
           return true;
         }
@@ -356,14 +356,14 @@ bool AetherClient_Receive( AetherClient* _ac, ReceiveInfo* infoOut )
       }
       case ENET_EVENT_TYPE_DISCONNECT:
       {
-        if ( ac->pub.isConnected )
+        if( ac->pub.isConnected )
         {
           // AE_LOG( "ENET Disconnect" );
 
           AE_ASSERT( ac->pub.allPlayers.Length() );
           AE_ASSERT( ac->pub.allPlayers[ 0 ] == ac->pub.localPlayer );
 
-          for ( uint32_t i = ac->pub.allPlayers.Length() - 1; i > 1; i-- )
+          for( uint32_t i = ac->pub.allPlayers.Length() - 1; i > 1; i-- )
           {
             ae::Delete( ac->pub.allPlayers[ i ] );
             ac->pub.allPlayers.Remove( i );
@@ -406,13 +406,13 @@ void AetherClient_QueueSend( AetherClient* _ac, const SendInfo* info )
 
   AetherClientInternal* ac = (AetherClientInternal*)_ac;
 #ifdef __EMSCRIPTEN__
-  if ( !ac->pub.isConnected )
+  if( !ac->pub.isConnected )
   {
     return;
   }
 #else
   ENetPeer* peer = ac->priv.host->peers;
-  if ( peer->state != ENET_PEER_STATE_CONNECTED )
+  if( peer->state != ENET_PEER_STATE_CONNECTED )
   {
     return;
   }

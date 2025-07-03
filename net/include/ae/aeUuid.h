@@ -47,7 +47,7 @@ struct AetherUuid
 
 	uint8_t uuid[ 16 ];
 };
-namespace ae { template <> inline uint32_t GetHash32( const AetherUuid& e )
+namespace ae { template<> inline uint32_t GetHash32( const AetherUuid& e )
 {
 	return ae::Hash32().HashData( e.uuid, sizeof(e.uuid) ).Get();
 } }

@@ -30,7 +30,7 @@
 //------------------------------------------------------------------------------
 aeCompactingAllocator::aeCompactingAllocator( uint32_t bytes )
 {
-  if ( bytes == 0 )
+  if( bytes == 0 )
   {
     return;
   }
@@ -41,12 +41,12 @@ aeCompactingAllocator::aeCompactingAllocator( uint32_t bytes )
 
 void aeCompactingAllocator::Expand( uint32_t totalBytes )
 {
-  if ( totalBytes <= m_size )
+  if( totalBytes <= m_size )
   {
     return;
   }
 
-  if ( !m_data )
+  if( !m_data )
   {
     m_size = totalBytes;
     m_data = (uint8_t*)ae::Allocate( AE_ALLOC_TAG_FIXME, totalBytes, kAlignment );
@@ -63,7 +63,7 @@ aeCompactingAllocator::~aeCompactingAllocator()
 {
   AE_ASSERT_MSG( !m_tail, "Cannot be safely destroyed with existing allocations" );
 
-  if ( m_data )
+  if( m_data )
   {
     ae::Free( m_data );
   }
@@ -73,7 +73,7 @@ void aeCompactingAllocator::m_Compact()
 {
   AE_ASSERT( m_data );
 
-  if ( m_isCompact )
+  if( m_isCompact )
   {
     return;
   }
@@ -83,7 +83,7 @@ void aeCompactingAllocator::m_Compact()
   // Get first
   Header* first = m_tail;
   AE_ASSERT( first->check == 0xABABABAB );
-  while ( first->prev )
+  while( first->prev )
   {
     AE_ASSERT( first->prev->check == 0xABABABAB );
     first = first->prev;
@@ -92,18 +92,18 @@ void aeCompactingAllocator::m_Compact()
   m_tail = nullptr;
 
   uint8_t* open = m_data;
-  for ( Header* current = first; current; current = current->next )
+  for( Header* current = first; current; current = current->next )
   {
     // Only compact current allocations. Freed headers will be squashed in Compact()
-    if ( !current->external )
+    if( !current->external )
     {
       Header* prev = current->prev;
       Header* next = current->next;
-      if ( prev )
+      if( prev )
       {
         prev->next = next;
       }
-      if ( next )
+      if( next )
       {
         next->prev = prev;
       }
@@ -111,7 +111,7 @@ void aeCompactingAllocator::m_Compact()
     }
 
     // Check if already compact
-    if ( open != (uint8_t*)current )
+    if( open != (uint8_t*)current )
     {
       // Move entry to front of open
       AE_ASSERT( open >= m_data );
@@ -122,7 +122,7 @@ void aeCompactingAllocator::m_Compact()
       
       // Update linked list
       current->prev = m_tail;
-      if ( current->prev )
+      if( current->prev )
       {
         current->prev->next = current;
       }
@@ -142,7 +142,7 @@ void aeCompactingAllocator::m_Compact()
   
   m_isCompact = true;
 
-  if ( !m_tail )
+  if( !m_tail )
   {
     return;
   }
@@ -163,13 +163,13 @@ void aeCompactingAllocator::m_Verify()
   AE_ASSERT( m_tail->check == 0xABABABAB );
 
   Header* first = m_tail;
-  while ( first->prev )
+  while( first->prev )
   {
     AE_ASSERT( first->prev->check == 0xABABABAB );
     first = first->prev;
   }
 
-  for ( Header* current = first; current; current = current->next )
+  for( Header* current = first; current; current = current->next )
   {
     AE_ASSERT( current->check == 0xABABABAB );
   }

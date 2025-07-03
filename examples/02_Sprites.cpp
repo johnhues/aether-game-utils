@@ -93,7 +93,7 @@ int main()
 		spriteTex.Initialize( targa.textureParams );
 	}
 	
-	while ( !input.quit )
+	while( !input.quit )
 	{
 		input.Pump();
 		render.Activate();

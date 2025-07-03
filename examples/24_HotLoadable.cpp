@@ -94,10 +94,10 @@ bool Game::Update()
 	rotation += timeStep.GetDt();
 
 	ae::Vec3 dir( 0.0f );
-	if ( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
-	if ( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
-	if ( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
-	if ( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
+	if( input.Get( ae::Key::Up ) ) { dir.y += 1.0f; }
+	if( input.Get( ae::Key::Down ) ) { dir.y -= 1.0f; }
+	if( input.Get( ae::Key::Left ) ) { dir.x -= 1.0f; }
+	if( input.Get( ae::Key::Right ) ) { dir.x += 1.0f; }
 	dir.SafeNormalize();
 	pos += dir * 0.01f;
 

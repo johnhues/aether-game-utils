@@ -153,12 +153,12 @@ template< typename T >
 const T* ResourceManager::TryGet( ResourceId id ) const
 {
 	const Resource* resource = m_resources.Get( id, nullptr );
-	if ( !resource )
+	if( !resource )
 	{
 		return nullptr;
 	}
 	const T* resourceT = ae::Cast< T >( resource );
-	if ( !resourceT )
+	if( !resourceT )
 	{
 		AE_WARN( "Resource '#' does not match requested type '#'", id, ae::GetTypeName< T >() );
 	}

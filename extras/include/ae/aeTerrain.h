@@ -38,7 +38,7 @@
 //------------------------------------------------------------------------------
 // aeUnit
 //------------------------------------------------------------------------------
-template < typename T >
+template< typename T >
 class aeUnit
 {
 public:
@@ -46,7 +46,7 @@ public:
   aeUnit( const aeUnit& o ) : m_v( o.m_v ) {}
   explicit aeUnit( const T& vertexCount ) : m_v( vertexCount ) {}
 
-  template < typename U >
+  template< typename U >
   explicit operator U () const { return (U)m_v; }
 
   bool operator == ( const aeUnit& o ) const { return m_v == o.m_v; }
@@ -73,7 +73,7 @@ private:
   T m_v;
 };
 
-template < typename T >
+template< typename T >
 inline std::ostream& operator<<( std::ostream& os, const aeUnit< T >& u )
 {
   return os << (T)u;
@@ -299,7 +299,7 @@ class TerrainSdf
 public:
   TerrainSdf( class Terrain* terrain );
 
-  template < typename T >
+  template< typename T >
   T* CreateSdf();
   void DestroySdf( Sdf* sdf );
 
@@ -322,7 +322,7 @@ private:
   ae::Array< Sdf* > m_pendingDestroy = AE_ALLOC_TAG_TERRAIN;
 };
 
-template < typename T >
+template< typename T >
 T* TerrainSdf::CreateSdf()
 {
   Sdf* sdf = ae::New< T >( AE_ALLOC_TAG_TERRAIN );
