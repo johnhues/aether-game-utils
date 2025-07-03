@@ -8945,6 +8945,7 @@ template< typename U >
 template< typename T >
 U Hash< U >::GetTypeHash( const T& v )
 {
+	AE_STATIC_ASSERT_MSG( sizeof(U) == 4 || sizeof(U) == 8, "Unsupported Hash< T >" );
 	if constexpr( sizeof(U) == 4 )
 	{
 		return ae::GetHash32( v );
@@ -8955,7 +8956,6 @@ U Hash< U >::GetTypeHash( const T& v )
 	}
 	else
 	{
-		AE_STATIC_FAIL( "Unsupported Hash< T >" );
 		return 0;
 	}
 }
