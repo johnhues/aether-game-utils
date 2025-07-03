@@ -1935,7 +1935,6 @@ public:
 	void SetInt( const char* key, int64_t value );
 	void SetUInt( const char* key, uint64_t value );
 	void SetFloat( const char* key, float value );
-	void SetDouble( const char* key, double value );
 	void SetBool( const char* key, bool value );
 	void SetVec2( const char* key, ae::Vec2 value );
 	void SetVec3( const char* key, ae::Vec3 value );
@@ -1950,7 +1949,6 @@ public:
 	int64_t GetInt( const char* key, int64_t defaultValue ) const;
 	uint64_t GetUInt( const char* key, uint64_t defaultValue ) const;
 	float GetFloat( const char* key, float defaultValue ) const;
-	double GetDouble( const char* key, double defaultValue ) const;
 	bool GetBool( const char* key, bool defaultValue ) const;
 	ae::Vec2 GetVec2( const char* key, ae::Vec2 defaultValue ) const;
 	ae::Vec3 GetVec3( const char* key, ae::Vec3 defaultValue ) const;
@@ -1975,17 +1973,16 @@ public:
 
 private:
 	// Prevent the above functions from being called accidentally through automatic conversions
-	template < typename T > void SetString( const char*, T ) = delete;
-	template < typename T > void SetInt( const char*, T ) = delete;
-	template < typename T > void SetUInt( const char*, T ) = delete;
-	template < typename T > void SetFloat( const char*, T ) = delete;
-	template < typename T > void SetDouble( const char*, T ) = delete;
-	template < typename T > void SetBool( const char*, T ) = delete;
-	template < typename T > void SetVec2( const char*, T ) = delete;
-	template < typename T > void SetVec3( const char*, T ) = delete;
-	template < typename T > void SetVec4( const char*, T ) = delete;
-	template < typename T > void SetInt2( const char*, T ) = delete;
-	template < typename T > void SetMatrix4( const char*, T ) = delete;
+	template< typename T > void SetString( const char*, T ) = delete;
+	template< typename T, typename = std::enable_if_t< !std::is_signed_v< T > > > void SetInt( const char*, T ) = delete;
+	template< typename T, typename = std::enable_if_t< std::is_signed_v< T > > > void SetUInt( const char*, T ) = delete;
+	template< typename T, typename = std::enable_if_t< !std::is_floating_point_v< T > > > void SetFloat( const char*, T ) = delete;
+	template< typename T > void SetBool( const char*, T ) = delete;
+	template< typename T > void SetVec2( const char*, T ) = delete;
+	template< typename T > void SetVec3( const char*, T ) = delete;
+	template< typename T > void SetVec4( const char*, T ) = delete;
+	template< typename T > void SetInt2( const char*, T ) = delete;
+	template< typename T > void SetMatrix4( const char*, T ) = delete;
 	ae::Map< ae::Str128, ae::Str128, N, ae::Hash32, ae::MapMode::Stable > m_entries;
 };
 
@@ -10201,13 +10198,6 @@ void Dict< N >::SetFloat( const char* key, float value )
 }
 
 template< uint32_t N >
-void Dict< N >::SetDouble( const char* key, double value )
-{
-	const auto str = ToString( value );
-	m_entries.Set( key, str.c_str() );
-}
-
-template< uint32_t N >
 void Dict< N >::SetBool( const char* key, bool value )
 {
 	const auto str = ToString( value );
@@ -10293,16 +10283,6 @@ uint64_t Dict< N >::GetUInt( const char* key, uint64_t defaultValue ) const
 
 template< uint32_t N >
 float Dict< N >::GetFloat( const char* key, float defaultValue ) const
-{
-	if ( const ae::Str128* value = m_entries.TryGet( key ) )
-	{
-		return ae::FromString( value->c_str(), defaultValue );
-	}
-	return defaultValue;
-}
-
-template< uint32_t N >
-double Dict< N >::GetDouble( const char* key, double defaultValue ) const
 {
 	if ( const ae::Str128* value = m_entries.TryGet( key ) )
 	{
