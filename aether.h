@@ -5427,7 +5427,17 @@ struct IsosurfaceVertex
 	ae::Vec3 normal;
 };
 typedef uint32_t IsosurfaceIndex;
-using IsosurfaceFn = float( * )( ae::Vec3, const void* );
+struct IsosurfaceValue
+{
+	//! Signed distance to the isosurface
+	float distance = INFINITY;
+	//! Error margin (in the same units as distance), that will be checked near
+	//! the surface during mesh extraction/generation. This would typically be
+	//! the distance from the isosurface that non-strictly-SDF deformations are
+	//! applied. Eg. Noise applied to the surface of a sphere.
+	float errorDistanceMargin = 0.0f;
+};
+using IsosurfaceFn = ae::IsosurfaceValue(*)( const void* userData, ae::Vec3 position );
 struct IsosurfaceParams
 {
 	IsosurfaceFn fn = nullptr;
@@ -5436,7 +5446,8 @@ struct IsosurfaceParams
 	uint32_t maxVerts = 0;
 	uint32_t maxIndices = 0;
 	float normalSampleOffset = 0.1f;
-	ae::DebugLines* debug = nullptr;
+	ae::Array< ae::AABB >* octree = nullptr;
+	ae::Array< ae::Vec3 >* errors = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -5445,7 +5456,7 @@ struct IsosurfaceParams
 struct IsosurfaceExtractor
 {
 	IsosurfaceExtractor( ae::Tag tag );
-	void Generate( const IsosurfaceParams& params, ae::Array< ae::Vec3 >* errors );
+	void Generate( const IsosurfaceParams& params );
 	void Reset();
 	
 	ae::Array< IsosurfaceVertex > vertices;
@@ -5498,8 +5509,8 @@ private:
 		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
 		uint16_t edgeBits = 0;
 	};
-	void m_Generate( ae::Int3 center, uint32_t halfSize, ae::Array< ae::Vec3 >* errors );
-	bool m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array< ae::Vec3 >* errors );
+	void m_Generate( ae::Int3 center, uint32_t halfSize );
+	bool m_DoVoxel( int32_t x, int32_t y, int32_t z );
 	Stats m_stats;
 	IsosurfaceParams m_params;
 	ae::Map< VoxelIndex, Voxel > m_voxels;
@@ -27728,7 +27739,13 @@ void NetObjectServer::UpdateSendData()
 //------------------------------------------------------------------------------
 // ae::IsosurfaceExtractor member functions
 //------------------------------------------------------------------------------
-IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) : vertices( tag ), indices( tag ), m_voxels( tag ) { Reset(); }
+IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
+	vertices( tag ),
+	indices( tag ),
+	m_voxels( tag )
+{
+	Reset();
+}
 
 void IsosurfaceExtractor::Reset()
 {
@@ -27739,14 +27756,15 @@ void IsosurfaceExtractor::Reset()
 	m_voxels.Clear();
 }
 
-#define _AE_GET_VALUE( _pos ) m_params.fn( ( _pos ), m_params.userData )
+#define _AE_GET_VALUE( _pos ) m_params.fn( m_params.userData, ( _pos ) ).distance
 
-void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize, ae::Array< ae::Vec3 >* errors )
+void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 {
 	AE_DEBUG_ASSERT( halfSize % 2 == 0 || halfSize == 1 );
-	const float signedSurfaceDistance = _AE_GET_VALUE( ae::Vec3( center ) );
-	const float diagonal = ae::Vec3( halfSize ).Length();
-	if( diagonal <= ae::Abs( signedSurfaceDistance ) )
+	const ae::IsosurfaceValue sample = m_params.fn( m_params.userData, ae::Vec3( center ) );
+	const float diagonalHalfSize = sqrtf( halfSize * halfSize * 3.0f ) + sample.errorDistanceMargin;
+	const float surfaceDistance = ae::Abs( sample.distance );
+	if( diagonalHalfSize <= surfaceDistance )
 	{
 		return; // No intersection, no need to split further
 	}
@@ -27756,7 +27774,7 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize, ae::Ar
 	{
 		for( uint32_t i = 0; i < 8; i++ )
 		{
-			m_Generate( center + kChildOffsets[ i ] * nextHalfSize, nextHalfSize, errors );
+			m_Generate( center + kChildOffsets[ i ] * nextHalfSize, nextHalfSize );
 		}
 	}
 	else
@@ -27770,19 +27788,19 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize, ae::Ar
 			{
 				for( int32_t x = leafGridMin.x; x < leafGridMax.x; x++ )
 				{
-					m_DoVoxel( x, y, z, errors );
+					m_DoVoxel( x, y, z );
 				}
 			}
 		}
 	}
 
-	if( m_params.debug )
+	if( m_params.octree )
 	{
-		m_params.debug->AddAABB( ae::Vec3( center ), ae::Vec3( halfSize ), ae::Color::AetherRed() );
+		m_params.octree->Append( ae::AABB( ae::Vec3( center ) - ae::Vec3( halfSize ), ae::Vec3( center ) + ae::Vec3( halfSize ) ) );
 	}
 }
 
-bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array< ae::Vec3 >* errors )
+bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 {
 	const ae::Vec3 voxelPos( x, y, z );
 	const ae::Int3 sdfMin = m_params.aabb.GetMin().FloorCopy();
@@ -27795,25 +27813,23 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array<
 	// holes in the mesh.
 	auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
 	const ae::Vec3 sharedCornerOffset( 1.0f );
-	const float sharedCornerValue = Nudge( _AE_GET_VALUE( voxelPos + sharedCornerOffset ) );
+	const ae::IsosurfaceValue sharedCornerSample = m_params.fn( m_params.userData, voxelPos + sharedCornerOffset );
+	const float sharedCornerValue = Nudge( sharedCornerSample.distance );
 	m_stats.sampleCount++;
-	if( ae::Abs( sharedCornerValue ) > 2.0f ) // @TODO: This value could be smaller
+	if( ae::Abs( sharedCornerValue ) > ae::Max( 1.0f, sharedCornerSample.errorDistanceMargin ) )
 	{
-		// Early out of additional edge intersections if far from the surface
+		// Early out of additional edge intersections if voxel doesn't overlap
+		// the surface
 		return true;
 	}
 	const float cornerValues[ 3 ] = { Nudge( _AE_GET_VALUE( voxelPos + cornerOffsets[ 0 ] ) ), Nudge( _AE_GET_VALUE( voxelPos + cornerOffsets[ 1 ] ) ), Nudge( _AE_GET_VALUE( voxelPos + cornerOffsets[ 2 ] ) ) };
 	m_stats.sampleCount += 3;
-	AE_DEBUG_IF( !errors )
+	if( m_params.errors && (
+		ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f ||
+		ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f ||
+		ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f ) )
 	{
-		AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) );
-		AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) );
-		AE_DEBUG_ASSERT_MSG( ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) <= 1.01f, "A valid signed distance function is required. The distance detected between two adjacent voxels can't be '#'", ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) );
-	}
-	else AE_DEBUG_IF( ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f || ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f )
-	{
-		errors->Append( voxelPos );
-		return true;
+		m_params.errors->Append( voxelPos );
 	}
 
 	Voxel voxel;
@@ -27844,30 +27860,44 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array<
 
 			// Sphere trace the voxel edge from the outside corner to the inside
 			// corner to find the intersection with the SDF surface
-			ae::Vec3 edgeOffset01;
+			ae::Vec3 edgeOffset01 = ( cornerOffsets[ e ] + sharedCornerOffset ) * 0.5f;
 			{
-				const bool sharedCornerInside = ( sharedCornerValue < cornerValues[ e ] );
-				const ae::Vec3 start = ( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
-				const ae::Vec3 end = ( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
-				const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel size is 1
-				float depth = 0.0f;
-				for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
+				if( sharedCornerSample.errorDistanceMargin < 1.0f )
 				{
-					edgeOffset01 = start + rayDir * depth;
-					const float closestSurfaceDist = _AE_GET_VALUE( voxelPos + edgeOffset01 );
-					m_stats.sampleCount++;
-					if( closestSurfaceDist < 0.01f )
+					const bool sharedCornerInside = ( sharedCornerValue < cornerValues[ e ] );
+					const ae::Vec3 start = ( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
+					const ae::Vec3 end = ( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
+					const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel size is 1
+					float depth = 0.0f;
+					for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
 					{
-						break; // Hit the surface
-					}
-					depth += closestSurfaceDist;
-					if( depth >= 1.0f )
-					{
-						AE_DEBUG_FAIL_MSG( "depth >= 1", "depth:#", depth );
-						depth = 1.0f;
-						break;
+						edgeOffset01 = start + rayDir * depth;
+						const float closestSurfaceDist = _AE_GET_VALUE( voxelPos + edgeOffset01 );
+						m_stats.sampleCount++;
+						if( closestSurfaceDist < 0.01f )
+						{
+							break; // Hit the surface
+						}
+						depth += closestSurfaceDist;
+						if( depth >= 1.0f )
+						{
+							AE_DEBUG_FAIL_MSG( "depth >= 1", "depth:#", depth );
+							depth = 1.0f;
+							break;
+						}
 					}
 				}
+				// Assume a linear function for the SDF between the between the
+				// two corners, and find where the value equals 0 (the surface).
+				// "0 = A + (B - A) * s" -> "s = -A / (B - A)"
+				const float s = -sharedCornerValue / ( cornerValues[ e ] - sharedCornerValue );
+				AE_DEBUG_ASSERT( s >= 0.0f && s <= 1.0f );
+				const ae::Vec3 linearOffset = ae::Lerp( sharedCornerOffset, cornerOffsets[ e ], s );
+				// If the error margin of the sampled value is greater than a
+				// full voxel width then an approximate offset must be used,
+				// because there may be no clean intersection point. If its less
+				// than a full voxel width then blend the two results.
+				edgeOffset01 = ae::Lerp( edgeOffset01, linearOffset, ae::Clip01( sharedCornerSample.errorDistanceMargin ) );
 			}
 			AE_DEBUG_ASSERT( edgeOffset01.x == edgeOffset01.x && edgeOffset01.y == edgeOffset01.y && edgeOffset01.z == edgeOffset01.z );
 			AE_DEBUG_ASSERT( edgeOffset01.x >= 0.0f && edgeOffset01.x <= 1.0f );
@@ -27912,7 +27942,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array<
 			};
 			voxel.edgePos[ e ] = edgeOffset01;
 			voxel.edgeNormal[ e ] = getDerivative( voxelPos + edgeOffset01 );
-			AE_DEBUG_IF( errors && voxel.edgeNormal[ e ] == ae::Vec3( 0.0f ) ) { errors->Append( voxelPos + edgeOffset01 ); }
+			if( m_params.errors && voxel.edgeNormal[ e ] == ae::Vec3( 0.0f ) ) { m_params.errors->Append( voxelPos + edgeOffset01 ); }
 
 			// Don't allow verts to be added on the very edge of the generation
 			// area. A border of at least 1 voxel is needed so that vertices can
@@ -28005,7 +28035,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z, ae::Array<
 	return true;
 }
 
-void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params, ae::Array< ae::Vec3 >* errors )
+void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
 {
 	if( !_params.aabb.Contains( _params.aabb.GetCenter() ) )
 	{
@@ -28024,7 +28054,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params, ae::Array< 
 	const ae::Vec3 paramHalfSize = m_params.aabb.GetHalfSize();
 	const float maxHalfSize = ae::Max( paramHalfSize.x, paramHalfSize.y, paramHalfSize.z );
 	const uint32_t halfSize = ae::NextPowerOfTwo( maxHalfSize * 2.0f + 0.5f ) / 2;
-	m_Generate( m_params.aabb.GetCenter().FloorCopy(), halfSize, errors );
+	m_Generate( m_params.aabb.GetCenter().FloorCopy(), halfSize );
 	m_stats.workingCount = m_voxels.Length();
 	if( indices.Length() == 0 )
 	{
@@ -28258,8 +28288,8 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params, ae::Array< 
 
 	AE_DEBUG_ASSERT( vertices.Length() <= m_params.maxVerts );
 	AE_DEBUG_ASSERT( indices.Length() <= m_params.maxIndices );
-#undef _AE_GET_VALUE
 }
+#undef _AE_GET_VALUE
 
 } // ae end
 

@@ -198,7 +198,7 @@ int main()
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
-	debugLines.Initialize( ae::NextPowerOfTwo( 1000000 ) );
+	debugLines.Initialize( ae::NextPowerOfTwo( 4000000 ) );
 	debugLines.SetXRayEnabled( false );
 
 	ae::Shader shader;
@@ -249,6 +249,7 @@ int main()
 
 		ae::IsosurfaceExtractor* extractor = ae::New< ae::IsosurfaceExtractor >( TAG_ISOSURFACE, TAG_ISOSURFACE );
 		ae::VertexBuffer sdfVertexBuffer;
+		ae::Array< ae::AABB > octree = TAG_ISOSURFACE;
 		ae::Array< ae::Vec3 > errors = TAG_ISOSURFACE;
 		double cacheTime = 0.0;
 		double meshTime = 0.0;
@@ -269,18 +270,22 @@ int main()
 			};
 			
 			// Mesh
+			octree.Clear();
 			errors.Clear();
 			const double meshStart = ae::GetTime();
 			extractor->Generate(
 				{
-					.fn=[]( ae::Vec3 position, const void* userData ) { return (*(decltype(surfaceFn)*)userData)( position ); },
+					.fn=[]( const void* userData, ae::Vec3 position ) -> ae::IsosurfaceValue
+					{
+						return { (*(decltype(surfaceFn)*)userData)( position ), 0.0f };
+					},
 					.userData=&surfaceFn,
 					.aabb=region,
 					.maxVerts=0,
 					.maxIndices=0,
-					.debug=( s_debugLines ? debugLines : nullptr )
-				},
-				&errors
+					.octree=&octree,
+					.errors=&errors
+				}
 			);
 			const double meshEnd = ae::GetTime();
 			meshTime = ( meshEnd - meshStart );
@@ -313,13 +318,23 @@ int main()
 
 		void Draw( ae::Shader* shader, ae::UniformList& uniforms, ae::DebugLines* debugLines )
 		{
-			debugLines->AddAABB( region.GetCenter(), region.GetHalfSize(), s_debugLines ? ae::Color::AetherRed() : color );
+			debugLines->AddAABB( region.GetCenter(), region.GetHalfSize(), color );
 			if( extractor->indices.Length() )
 			{
 				uniforms.Set( "u_light", ae::Vec2( (float)s_directionalLight, (float)s_ambientLight ) );
 				uniforms.Set( "u_color", color.GetLinearRGB() );
 				sdfVertexBuffer.Bind( shader, uniforms );
 				sdfVertexBuffer.Draw( 0, extractor->indices.Length() / 3 );
+			}
+			if( s_debugLines )
+			{
+				for( ae::AABB octant : octree )
+				{
+					int exponent;
+					frexp( octant.GetHalfSize().Length(), &exponent );
+					const float distance01 = ae::Delerp01( 8.0f, 0.0f, exponent );
+					debugLines->AddAABB( octant, ae::Color::AetherWhite().Lerp( ae::Color::AetherRed(), distance01 ) );
+				}
 			}
 			for( ae::Vec3 error : errors )
 			{
@@ -518,6 +533,10 @@ int main()
 	while( Update() ) {}
 #endif
 
+	for( SDFToMesh* sdf : sdfToMesh )
+	{
+		ae::Delete( sdf );
+	}
 	AE_LOG( "Terminate" );
 	return 0;
 }
