@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// aeMapTest.cpp
+// MapTest.h
 //------------------------------------------------------------------------------
 // Copyright (c) 2025 John Hughes
 //
@@ -21,43 +21,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-// Headers
+// Constants
 //------------------------------------------------------------------------------
-#include <catch2/catch_test_macros.hpp>
-#include "aether.h"
-
 const ae::Tag TAG_TEST = "test";
-
-//------------------------------------------------------------------------------
-// ae::GetHash tests
-//------------------------------------------------------------------------------
-TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap]" )
-{
-	REQUIRE( ae::GetHash32( 777u ) == 777u );
-	REQUIRE( ae::GetHash32( 777 ) == 777u );
-	REQUIRE( ae::GetHash32( -777 ) == (uint32_t)-777 );
-	REQUIRE( ae::GetHash32( (const void*)777u ) == 0xc68b223du );
-	REQUIRE( ae::GetHash32( (const float*)777u ) == 0xc68b223du );
-	REQUIRE( ae::GetHash32( (void*)777u ) == 0xc68b223du );
-	REQUIRE( ae::GetHash32( (float*)777u ) == 0xc68b223du );
-	REQUIRE( ae::GetHash32( (const char*)"777" ) == 0x8bbb3eecu );
-	REQUIRE( ae::GetHash32( (char*)"777" ) == 0x8bbb3eecu );
-	REQUIRE( ae::GetHash32( "777" ) == 0x8bbb3eecu );
-	REQUIRE( ae::GetHash32( ae::Str< 32 >( "777" ) ) == 0x8bbb3eecu );
-	REQUIRE( ae::GetHash32( ae::Str< 128 >( "777" ) ) == 0x8bbb3eecu );
-	REQUIRE( ae::GetHash32( std::string(  "777"  ) ) == 0x8bbb3eecu );
-	REQUIRE( ae::GetHash32( ae::Hash32().HashString(  "777"  ) ) == 0x8bbb3eecu );
-	REQUIRE( ae::GetHash32( ae::Int3( 1, 2, 3 ) ) == 316 );
-	REQUIRE( ae::GetHash32( ae::Int3( -1, 0, 1 ) ) == 19 );
-	//REQUIRE( ae::Vec3( 0.0f ) ) == 0 ); // Should fail to link
-}
 
 //------------------------------------------------------------------------------
 // ae::HashMap tests
 //------------------------------------------------------------------------------
-TEST_CASE( "hash map elements can be set and retrieved", "[ae::HashMap]" )
+TEST_CASE( "hash map elements can be set and retrieved", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 10 > map;
+	ae::HashMap< uint32_t, 10, aeHashN > map;
 	REQUIRE( map.Size() == 10 );
 	for( uint32_t i = 0; i < 10; i++ )
 	{
@@ -133,9 +106,9 @@ TEST_CASE( "hash map elements can be set and retrieved", "[ae::HashMap]" )
 	}
 }
 
-TEST_CASE( "hash map handles collisions", "[ae::HashMap]" )
+TEST_CASE( "hash map handles collisions", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 5 > map;
+	ae::HashMap< uint32_t, 5, aeHashN > map;
 	REQUIRE( map.Size() == 5 );
 	REQUIRE( map.Set( -2, 776 ) );
 	REQUIRE( map.Set( 4, 777 ) );
@@ -201,9 +174,9 @@ TEST_CASE( "hash map handles collisions", "[ae::HashMap]" )
 	}
 }
 
-TEST_CASE( "hash map compaction", "[ae::HashMap]" )
+TEST_CASE( "hash map compaction", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 5 > map;
+	ae::HashMap< uint32_t, 5, aeHashN > map;
 	REQUIRE( map.Size() == 5 );
 	REQUIRE( map.Set( 0, 0 ) );
 	REQUIRE( map.Set( 1, 1 ) );
@@ -219,9 +192,9 @@ TEST_CASE( "hash map compaction", "[ae::HashMap]" )
 	REQUIRE( map.Get( 6 ) == 1 );
 }
 
-TEST_CASE( "hash map compaction 2", "[ae::HashMap]" )
+TEST_CASE( "hash map compaction 2", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 5 > map;
+	ae::HashMap< uint32_t, 5, aeHashN > map;
 	REQUIRE( map.Size() == 5 );
 	REQUIRE( map.Set( 0, 0 ) );
 	REQUIRE( map.Set( 1, 0 ) );
@@ -237,9 +210,9 @@ TEST_CASE( "hash map compaction 2", "[ae::HashMap]" )
 	REQUIRE( map.Get( 5 ) == 0 );
 }
 
-TEST_CASE( "hash map compaction (wrapping)", "[ae::HashMap]" )
+TEST_CASE( "hash map compaction (wrapping)", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 5 > map;
+	ae::HashMap< uint32_t, 5, aeHashN > map;
 	REQUIRE( map.Size() == 5 );
 	REQUIRE( map.Set( 3, 0 ) );
 	REQUIRE( map.Set( 4, 0 ) );
@@ -255,9 +228,9 @@ TEST_CASE( "hash map compaction (wrapping)", "[ae::HashMap]" )
 	REQUIRE( map.Get( 9 ) == 0 );
 }
 
-TEST_CASE( "hash map compaction (wrapping 2)", "[ae::HashMap]" )
+TEST_CASE( "hash map compaction (wrapping 2)", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 5 > map;
+	ae::HashMap< uint32_t, 5, aeHashN > map;
 	REQUIRE( map.Size() == 5 );
 	REQUIRE( map.Set( 3, 0 ) );
 	REQUIRE( map.Set( 4, 0 ) );
@@ -273,9 +246,9 @@ TEST_CASE( "hash map compaction (wrapping 2)", "[ae::HashMap]" )
 	REQUIRE( map.Get( 8 ) == 0 );
 }
 
-TEST_CASE( "hash map compaction (wrapping 3)", "[ae::HashMap]" )
+TEST_CASE( "hash map compaction (wrapping 3)", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 5 > map;
+	ae::HashMap< uint32_t, 5, aeHashN > map;
 	REQUIRE( map.Size() == 5 );
 	REQUIRE( map.Set( 3, 0 ) );
 	REQUIRE( map.Set( 4, 0 ) );
@@ -294,9 +267,9 @@ TEST_CASE( "hash map compaction (wrapping 3)", "[ae::HashMap]" )
 //------------------------------------------------------------------------------
 // aeMap tests
 //------------------------------------------------------------------------------
-TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
+TEST_CASE( "map elements can be set and retrieved", "[aeMap" AE_HASH_N "]" )
 {
-	ae::Map< int, char, 10 > map;
+	ae::Map< int, char, 10, aeHashN > map;
 	for( char i = 0; i < 10; i++ )
 	{
 		map.Set( i, 'a' + i );
@@ -338,20 +311,26 @@ TEST_CASE( "map elements can be set and retrieved", "[aeMap]" )
 	}
 }
 
+template< typename T >
 struct BadHash
 {
 	BadHash() {}
-	BadHash( uint32_t value ) : value( value ) {}
+	BadHash( T value ) : value( value ) {}
 	bool operator==( const BadHash& other ) const { return value == other.value; }
-	uint32_t value;
+	T value;
 };
-namespace ae { template<> uint32_t GetHash32( const BadHash& badHash )
+namespace ae { template<> aeHashUInt AE_GET_HASH( const BadHash< aeHashUInt >& badHash )
 {
 	return badHash.value % 2;
 } }
-TEST_CASE( "map handles collisions", "[ae::HashMap]" )
+// @TODO: Templated GetHash functions should work with ae::GetTypeHash()
+// namespace ae { template< typename T > T AE_GET_HASH( const BadHash< T >& badHash )
+// {
+// 	return badHash.value % 2;
+// } }
+TEST_CASE( "map handles collisions", "[ae::Map" AE_HASH_N "]" )
 {
-	ae::Map< BadHash, char, 5 > map;
+	ae::Map< BadHash< aeHashUInt >, char, 5, aeHashN > map;
 	REQUIRE( map.Size() == 5 );
 	REQUIRE( map.Set( -2, 'A' ) );
 	REQUIRE( map.Set( 4, 'B' ) );
@@ -387,9 +366,9 @@ TEST_CASE( "map handles collisions", "[ae::HashMap]" )
 	REQUIRE( map.Get( 1004 ) == 'E' );
 }
 
-TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap]" )
+TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t > map = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map = TAG_TEST;
 	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map.Set( 1000 + i, i ) );
@@ -407,9 +386,9 @@ TEST_CASE( "dynamic hash map elements can be set and retrieved", "[ae::HashMap]"
 	}
 }
 
-TEST_CASE( "can access elements after reserve", "[ae::HashMap]" )
+TEST_CASE( "can access elements after reserve", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t > map = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map = TAG_TEST;
 	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map.Set( 1000 + i, i ) );
@@ -430,9 +409,9 @@ TEST_CASE( "can access elements after reserve", "[ae::HashMap]" )
 	}
 }
 
-TEST_CASE( "copy construct static hash map", "[ae::HashMap]" )
+TEST_CASE( "copy construct static hash map", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap<  uint32_t, 128 > map0;
+	ae::HashMap<  uint32_t, 128, aeHashN > map0;
 	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
@@ -442,7 +421,7 @@ TEST_CASE( "copy construct static hash map", "[ae::HashMap]" )
 	REQUIRE( map0.Length() == 100 );
 	REQUIRE( map0.Size() == 128 );
 	
-	ae::HashMap< uint32_t, 128 > map1 = map0;
+	ae::HashMap< uint32_t, 128, aeHashN > map1 = map0;
 	REQUIRE( map1.Length() == 100 );
 	REQUIRE( map1.Size() == 128 );
 
@@ -460,9 +439,9 @@ TEST_CASE( "copy construct static hash map", "[ae::HashMap]" )
 	}
 }
 
-TEST_CASE( "copy assign static hash map", "[ae::HashMap]" )
+TEST_CASE( "copy assign static hash map", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t, 128 > map0;
+	ae::HashMap< uint32_t, 128, aeHashN > map0;
 	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
@@ -472,7 +451,7 @@ TEST_CASE( "copy assign static hash map", "[ae::HashMap]" )
 	REQUIRE( map0.Length() == 100 );
 	REQUIRE( map0.Size() == 128 );
 	
-	ae::HashMap< uint32_t, 128 > map1;
+	ae::HashMap< uint32_t, 128, aeHashN > map1;
 	REQUIRE( map1.Length() == 0 );
 	REQUIRE( map1.Size() == 128 );
 	map1 = map0;
@@ -493,9 +472,9 @@ TEST_CASE( "copy assign static hash map", "[ae::HashMap]" )
 	}
 }
 
-TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMap]" )
+TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t > map0 = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map0 = TAG_TEST;
 	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
@@ -503,7 +482,7 @@ TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMa
 	REQUIRE( map0.Length() == 100 );
 	REQUIRE( map0.Size() >= 100 );
 	
-	ae::HashMap< uint32_t > map1 = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map1 = TAG_TEST;
 	REQUIRE( map1.Length() == 0 );
 	REQUIRE( map1.Size() == 0 );
 	map1.Reserve( map0.Size() );
@@ -529,10 +508,10 @@ TEST_CASE( "can access elements after assignment of same size map", "[ae::HashMa
 	}
 }
 
-TEST_CASE( "can access elements after assignment of smaller map", "[ae::HashMap]" )
+TEST_CASE( "can access elements after assignment of smaller map", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t > map0 = TAG_TEST;
-	ae::HashMap< uint32_t > map1 = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map0 = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map1 = TAG_TEST;
 	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
@@ -566,10 +545,10 @@ TEST_CASE( "can access elements after assignment of smaller map", "[ae::HashMap]
 	}
 }
 
-TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap]" )
+TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap" AE_HASH_N "]" )
 {
-	ae::HashMap< uint32_t > map0 = TAG_TEST;
-	ae::HashMap< uint32_t > map1 = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map0 = TAG_TEST;
+	ae::HashMap< uint32_t, 0, aeHashN > map1 = TAG_TEST;
 	for( uint32_t i = 0; i < 100; i++ )
 	{
 		REQUIRE( map0.Set( 1000 + i, i ) );
@@ -603,10 +582,10 @@ TEST_CASE( "can access elements after assignment of bigger map", "[ae::HashMap]"
 	}
 }
 
-TEST_CASE( "fast stress test", "[ae::Map]" )
+TEST_CASE( "fast stress test", "[ae::Map" AE_HASH_N "]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, aeHashN > map = TAG_TEST;
 	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
@@ -619,10 +598,10 @@ TEST_CASE( "fast stress test", "[ae::Map]" )
 	REQUIRE( map.Length() == 0 );
 }
 
-TEST_CASE( "fast stress test 2", "[ae::Map]" )
+TEST_CASE( "fast stress test 2", "[ae::Map" AE_HASH_N "]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, aeHashN > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
 		for( auto& pair : map )
@@ -684,10 +663,10 @@ TEST_CASE( "fast stress test 2", "[ae::Map]" )
 	REQUIRE( map.Length() == 0 );
 }
 
-TEST_CASE( "fast full map stress test", "[ae::Map]" )
+TEST_CASE( "fast full map stress test", "[ae::Map" AE_HASH_N "]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 10000 > map;
+	ae::Map< uint32_t, uint32_t, 10000, aeHashN > map;
 	for( uint32_t i = 0; i < count; i++ )
 	{
 		map.Set( ( i * 1669 ) % count, i );
@@ -700,10 +679,10 @@ TEST_CASE( "fast full map stress test", "[ae::Map]" )
 	REQUIRE( map.Length() == 0 );
 }
 
-TEST_CASE( "stable stress test", "[ae::Map]" )
+TEST_CASE( "stable stress test", "[ae::Map" AE_HASH_N "]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 0, ae::Hash32, ae::MapMode::Stable > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, aeHashN, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
 		for( uint32_t i = 1; i < map.Length(); i++ )
@@ -726,10 +705,10 @@ TEST_CASE( "stable stress test", "[ae::Map]" )
 	REQUIRE( map.Length() == 0 );
 }
 
-TEST_CASE( "stable stress test 2", "[ae::Map]" )
+TEST_CASE( "stable stress test 2", "[ae::Map" AE_HASH_N "]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 0, ae::Hash32, ae::MapMode::Stable > map = TAG_TEST;
+	ae::Map< uint32_t, uint32_t, 0, aeHashN, ae::MapMode::Stable > map = TAG_TEST;
 	auto validateFn = [&]()
 	{
 		for( auto& pair : map )
@@ -801,10 +780,10 @@ TEST_CASE( "stable stress test 2", "[ae::Map]" )
 	REQUIRE( map.Length() == 0 );
 }
 
-TEST_CASE( "stable full map stress test", "[ae::Map]" )
+TEST_CASE( "stable full map stress test", "[ae::Map" AE_HASH_N "]" )
 {
 	const uint32_t count = 10000;
-	ae::Map< uint32_t, uint32_t, 10000, ae::Hash32, ae::MapMode::Stable > map;
+	ae::Map< uint32_t, uint32_t, 10000, aeHashN, ae::MapMode::Stable > map;
 	auto validateFn = [&]()
 	{
 		for( uint32_t i = 1; i < map.Length(); i++ )

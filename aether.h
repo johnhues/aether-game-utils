@@ -9832,7 +9832,7 @@ template< typename Key, uint32_t N, typename Hash >
 bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 {
 	// Find existing
-	const uint32_t hash = Hash::GetTypeHash( key );
+	const typename Hash::UInt hash = Hash::GetTypeHash( key );
 	if( m_length )
 	{
 		AE_DEBUG_ASSERT( m_size );
@@ -9875,7 +9875,7 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 	Entry* entry = nullptr;
 	{
 		AE_DEBUG_ASSERT( m_size );
-		const uint32_t hash = Hash::GetTypeHash( key );
+		const typename Hash::UInt hash = Hash::GetTypeHash( key );
 		const uint32_t startIdx = hash % m_size;
 		for( uint32_t i = 0; i < m_size; i++ )
 		{
@@ -9940,7 +9940,7 @@ int32_t HashMap< Key, N, Hash >::Get( Key key ) const
 	if( m_length )
 	{
 		AE_DEBUG_ASSERT( m_size );
-		const uint32_t hash = Hash::GetTypeHash( key );
+		const typename Hash::UInt hash = Hash::GetTypeHash( key );
 		const uint32_t startIdx = hash % m_size;
 		for( uint32_t i = 0; i < m_size; i++ )
 		{
@@ -9978,7 +9978,7 @@ uint32_t HashMap< Key, N, Hash >::Length() const
 }
 
 template< typename Key, uint32_t N, typename Hash >
-bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32_t index ) // This could also take the hash as an optimization
+bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32_t index )
 {
 	AE_DEBUG_ASSERT( index >= 0 );
 	AE_DEBUG_ASSERT( Hash::GetTypeHash( key ) == hash );
