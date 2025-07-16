@@ -35,18 +35,18 @@ TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap]
 {
 	REQUIRE( ae::GetHash32( 777u ) == 777u );
 	REQUIRE( ae::GetHash32( 777 ) == 777u );
-	REQUIRE( ae::GetHash32( -777 ) == 4294966519 );
-	REQUIRE( ae::GetHash32( (const void*)777u ) == 0x6a20b93du );
-	REQUIRE( ae::GetHash32( (const float*)777u ) == 0x6a20b93du );
-	REQUIRE( ae::GetHash32( (void*)777u ) == 0x6a20b93du );
-	REQUIRE( ae::GetHash32( (float*)777u ) == 0x6a20b93du );
-	REQUIRE( ae::GetHash32( (const char*)"777" ) == 0xef728acu );
-	REQUIRE( ae::GetHash32( (char*)"777" ) == 0xef728acu );
-	REQUIRE( ae::GetHash32( "777" ) == 0xef728acu );
-	REQUIRE( ae::GetHash32( ae::Str< 32 >( "777" ) ) == 0xef728acu );
-	REQUIRE( ae::GetHash32( ae::Str< 128 >( "777" ) ) == 0xef728acu );
-	REQUIRE( ae::GetHash32( std::string(  "777"  ) ) == 0xef728acu );
-	REQUIRE( ae::GetHash32( ae::Hash32().HashString(  "777"  ) ) == 0xef728acu );
+	REQUIRE( ae::GetHash32( -777 ) == (uint32_t)-777 );
+	REQUIRE( ae::GetHash32( (const void*)777u ) == 0xc68b223du );
+	REQUIRE( ae::GetHash32( (const float*)777u ) == 0xc68b223du );
+	REQUIRE( ae::GetHash32( (void*)777u ) == 0xc68b223du );
+	REQUIRE( ae::GetHash32( (float*)777u ) == 0xc68b223du );
+	REQUIRE( ae::GetHash32( (const char*)"777" ) == 0x8bbb3eecu );
+	REQUIRE( ae::GetHash32( (char*)"777" ) == 0x8bbb3eecu );
+	REQUIRE( ae::GetHash32( "777" ) == 0x8bbb3eecu );
+	REQUIRE( ae::GetHash32( ae::Str< 32 >( "777" ) ) == 0x8bbb3eecu );
+	REQUIRE( ae::GetHash32( ae::Str< 128 >( "777" ) ) == 0x8bbb3eecu );
+	REQUIRE( ae::GetHash32( std::string(  "777"  ) ) == 0x8bbb3eecu );
+	REQUIRE( ae::GetHash32( ae::Hash32().HashString(  "777"  ) ) == 0x8bbb3eecu );
 	REQUIRE( ae::GetHash32( ae::Int3( 1, 2, 3 ) ) == 316 );
 	REQUIRE( ae::GetHash32( ae::Int3( -1, 0, 1 ) ) == 19 );
 	//REQUIRE( ae::Vec3( 0.0f ) ) == 0 ); // Should fail to link
