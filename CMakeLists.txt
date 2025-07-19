@@ -1,21 +1,18 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
 # Configuration variables intended for external use
-option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON) # @TODO: This could be combined with AE_STANDALONE
+# AE_LEAN_AND_MEAN mode is disabled when building aether on its own
+if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
+	option(AE_LEAN_AND_MEAN "Disables building tests and examples" OFF)
+else()
+	option(AE_LEAN_AND_MEAN "Disables building tests and examples" ON)
+endif()
 option(AE_EXTRAS "Enables experimental utilities" OFF)
 option(AE_LOADERS_OFBX "Enables aether FBX loader and ofbx dependency" OFF)
 option(AE_LOADERS_STB "Enables aether PNG loader and stb dependency" OFF)
-option(AE_WERROR "Enables some -Werror's for targets that link the aether library" OFF)
-
-# AE_STANDALONE mode is enabled when building aether on its own
-if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
-	set(AE_STANDALONE ON)
-else()
-	set(AE_STANDALONE OFF)
-endif()
 
 # Configuration for building ae on its own
-if(${AE_STANDALONE})
+if(NOT ${AE_LEAN_AND_MEAN})
 	# Safeguard against in-source builds
 	set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 	set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
@@ -27,6 +24,9 @@ if(${AE_STANDALONE})
 	if (NOT GENERATOR_IS_MULTI_CONFIG AND (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL ""))
 		set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 	endif()
+
+	# Enable generation of compile_commands.json for intellisense and clangd
+	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 	# Xcode specific settings
 	if (("${CMAKE_GENERATOR}" STREQUAL "Xcode"))
@@ -42,18 +42,16 @@ endif()
 project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
 
 # C++ defines and configuration
-set(CMAKE_CXX_STANDARD 17) # use c++17
+set(CMAKE_CXX_STANDARD 17) # use at least c++17
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-if(MSVC) # @TODO: Move to AE_STANDALONE check
-	add_definitions(-D_UNICODE -DUNICODE) # use unicode
-	add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
-	list(APPEND AE_DEPS_LIBRARIES version Winmm Imm32 Setupapi Ws2_32)
-endif()
-if(${AE_STANDALONE})
+if(NOT ${AE_LEAN_AND_MEAN})
+	if(MSVC)
+		add_definitions(-D_UNICODE -DUNICODE) # use unicode
+		add_definitions(-D_CRT_SECURE_NO_WARNINGS) # disable standard library warnings on windows
+	endif()
 	# Disable RTTI (not used in aether)
 	add_compile_options(-fno-rtti)
 endif()
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # OpenGL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
@@ -114,13 +112,15 @@ function(add_ae_library NAME LIB_TYPE)
 			target_link_libraries(${NAME} ${AE_OPENAL_LIBRARY} ${AE_CARBON_LIBRARY} ${AE_APPKIT_LIBRARY} ${AE_GAMECONTROLLER_LIBRARY})
 		endif()
 		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_SKIP_INSTALL "YES") # See Professional CMake 24.7. Creating And Exporting Archives
+	elseif(MSVC)
+		target_link_libraries(${NAME} version Winmm Imm32 Setupapi Ws2_32)
 	else()
 		if(UNIX)
 			target_compile_options(${NAME} PRIVATE -fPIC) # Fixes errors linking static ae into shared libraries: relocation against symbol 'X' which may bind externally 
 		endif()
 		target_sources(${NAME} PRIVATE ${AE_ROOT_DIR}/aether.h ${AE_ROOT_DIR}/aether.cpp)
 	endif()
-	if(${AE_WERROR} AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU|AppleClang"))
+	if(NOT ${AE_LEAN_AND_MEAN} AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU|AppleClang"))
 		target_compile_options(${NAME} PUBLIC
 			-Werror=return-type
 			-Werror=implicit-fallthrough
@@ -134,7 +134,7 @@ endfunction()
 add_ae_library(ae STATIC) # static library
 add_ae_library(ae_shared SHARED) # shared library (for hot loading)
 set_target_properties(ae_shared PROPERTIES OUTPUT_NAME ae)
-if(${AE_STANDALONE})
+if(NOT ${AE_LEAN_AND_MEAN})
 	# Disable exceptions (not used in aether outside of unit tests)
 	target_compile_options(ae PUBLIC -fno-exceptions)
 	target_compile_options(ae_shared PUBLIC -fno-exceptions)
