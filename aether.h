@@ -1532,6 +1532,14 @@ struct Pair
 };
 
 //------------------------------------------------------------------------------
+// ae::GetHash helper
+//! Internally selects between T::GetHash{U}() and ae::GetHash{U}( const T& )
+//! automatically based on availability. The member function is prioritized
+//! if both are defined.
+//------------------------------------------------------------------------------
+template< typename U, typename T > U GetHash( const T& v );
+
+//------------------------------------------------------------------------------
 // ae::GetHash32 helper
 //! Implement this helper for types that are used as ae::Map< Key, ...> or with
 //! ae::Hash32.
@@ -1563,7 +1571,6 @@ class Hash
 {
 public:
 	using UInt = U;
-	template< typename T > static U GetTypeHash( const T& v );
 
 	Hash();
 	explicit Hash( U initialValue );
@@ -1784,6 +1791,8 @@ public:
 
 //------------------------------------------------------------------------------
 // ae::HashMap class
+//! Internally calls ae::GetHash< 32 or 64 >( const Key& ) depending on the
+//! 'Hash' template parameter.
 //------------------------------------------------------------------------------
 template< typename Key, uint32_t N = 0, typename Hash = ae::Hash32 >
 class HashMap
@@ -1851,12 +1860,14 @@ private:
 	// clang-format on
 };
 
-//------------------------------------------------------------------------------
-// ae::Map class
-//------------------------------------------------------------------------------
 //! Set ae::Map to Fast mode to allow reording of elements. Stable to maintain
 //! the order of inserted elements.
 enum class MapMode { Fast, Stable };
+//------------------------------------------------------------------------------
+// ae::Map class
+//! Internally calls ae::GetHash< 32 or 64 >( const Key& ) depending on the
+//! 'Hash' template parameter.
+//------------------------------------------------------------------------------
 template< typename Key, typename Value, uint32_t N = 0, typename Hash = ae::Hash32, ae::MapMode Mode = ae::MapMode::Fast >
 class Map
 {
@@ -8967,27 +8978,44 @@ template< typename T > inline uint64_t GetHash64( T* const& value ) { return ae:
 template< uint32_t N > inline uint64_t GetHash64( const ae::Str< N >& value ) { return ae::Hash64().HashString( value.c_str() ).Get(); }
 
 //------------------------------------------------------------------------------
-// ae::Hash templated member functions
+// ae::GetHash
 //------------------------------------------------------------------------------
-template< typename U >
-template< typename T >
-U Hash< U >::GetTypeHash( const T& v )
+template< class C >
+struct _HasMethodHash32
+{
+	template< class T > static std::true_type TestSignature( uint32_t ( T::* )() const );
+	template< class T > static decltype( TestSignature( &T::GetHash32 ) ) Test( std::nullptr_t );
+	template< class T > static std::false_type Test( ... );
+	static const bool value = decltype( Test< C >( nullptr ) )::value;
+};
+template< class C >
+struct _HasMethodHash64
+{
+	template< class T > static std::true_type TestSignature( uint64_t ( T::* )() const );
+	template< class T > static decltype( TestSignature( &T::GetHash64 ) ) Test( std::nullptr_t );
+	template< class T > static std::false_type Test( ... );
+	static const bool value = decltype( Test< C >( nullptr ) )::value;
+};
+template< typename U, typename T >
+U GetHash( const T& v )
 {
 	AE_STATIC_ASSERT_MSG( sizeof(U) == 4 || sizeof(U) == 8, "Unsupported Hash< T >" );
 	if constexpr( sizeof(U) == 4 )
 	{
-		return ae::GetHash32( v );
+		if constexpr( _HasMethodHash32< T >::value ){ return v.GetHash32(); }
+		else{ return ae::GetHash32( v ); }
 	}
 	else if constexpr( sizeof(U) == 8 )
 	{
-		return ae::GetHash64( v );
+		if constexpr( _HasMethodHash64< T >::value ){ return v.GetHash64(); }
+		else{ return ae::GetHash64( v ); }
 	}
-	else
-	{
-		return 0;
-	}
+	return 0;
 }
 
+//------------------------------------------------------------------------------
+// ae::Hash templated member functions
+//------------------------------------------------------------------------------
 template< typename U >
 Hash< U >::Hash()
 {
@@ -9038,7 +9066,7 @@ template< typename U >
 template< typename T >
 Hash< U >& Hash< U >::HashType( const T& v )
 {
-	m_hash = m_hash ^ GetTypeHash( v );
+	m_hash = m_hash ^ ae::GetHash< U >( v );
 	m_hash *= m_GetPrime();
 	return *this;
 }
@@ -9832,7 +9860,7 @@ template< typename Key, uint32_t N, typename Hash >
 bool HashMap< Key, N, Hash >::Set( Key key, uint32_t index )
 {
 	// Find existing
-	const typename Hash::UInt hash = Hash::GetTypeHash( key );
+	const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
 	if( m_length )
 	{
 		AE_DEBUG_ASSERT( m_size );
@@ -9875,7 +9903,7 @@ int32_t HashMap< Key, N, Hash >::Remove( Key key )
 	Entry* entry = nullptr;
 	{
 		AE_DEBUG_ASSERT( m_size );
-		const typename Hash::UInt hash = Hash::GetTypeHash( key );
+		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
 		const uint32_t startIdx = hash % m_size;
 		for( uint32_t i = 0; i < m_size; i++ )
 		{
@@ -9940,7 +9968,7 @@ int32_t HashMap< Key, N, Hash >::Get( Key key ) const
 	if( m_length )
 	{
 		AE_DEBUG_ASSERT( m_size );
-		const typename Hash::UInt hash = Hash::GetTypeHash( key );
+		const typename Hash::UInt hash = ae::GetHash< typename Hash::UInt >( key );
 		const uint32_t startIdx = hash % m_size;
 		for( uint32_t i = 0; i < m_size; i++ )
 		{
@@ -9981,7 +10009,7 @@ template< typename Key, uint32_t N, typename Hash >
 bool HashMap< Key, N, Hash >::m_Insert( Key key, typename Hash::UInt hash, int32_t index )
 {
 	AE_DEBUG_ASSERT( index >= 0 );
-	AE_DEBUG_ASSERT( Hash::GetTypeHash( key ) == hash );
+	AE_DEBUG_ASSERT( ae::GetHash< typename Hash::UInt >( key ) == hash );
 	// 'hash' is modified in loop
 	const uint32_t startIdx = ( hash % m_size );
 	for( uint32_t i = 0; i < m_size; i++ )

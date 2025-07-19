@@ -316,18 +316,11 @@ struct BadHash
 {
 	BadHash() {}
 	BadHash( T value ) : value( value ) {}
+	uint32_t GetHash32() const { return (uint32_t)value % 2; }
+	uint64_t GetHash64() const { return (uint64_t)value % 2; }
 	bool operator==( const BadHash& other ) const { return value == other.value; }
 	T value;
 };
-namespace ae { template<> aeHashUInt AE_GET_HASH( const BadHash< aeHashUInt >& badHash )
-{
-	return badHash.value % 2;
-} }
-// @TODO: Templated GetHash functions should work with ae::GetTypeHash()
-// namespace ae { template< typename T > T AE_GET_HASH( const BadHash< T >& badHash )
-// {
-// 	return badHash.value % 2;
-// } }
 TEST_CASE( "map handles collisions", "[ae::Map" AE_HASH_N "]" )
 {
 	ae::Map< BadHash< aeHashUInt >, char, 5, aeHashN > map;

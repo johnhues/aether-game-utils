@@ -55,3 +55,8 @@ TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap6
 }
 
 #include "MapTest.h"
+
+TEST_CASE( "HasMethodHash64", "[ae::GetHash64]" )
+{
+	REQUIRE( ae::_HasMethodHash64< BadHash< uint64_t > >::value );
+}
