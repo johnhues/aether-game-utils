@@ -25253,13 +25253,13 @@ float Spline::Segment::GetMinDistance( ae::Vec3 p, ae::Vec3* pOut, float* tOut )
 //------------------------------------------------------------------------------
 void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult& prev, RaycastResult* next )
 {
+	if( !next )
+	{
+		return;
+	}
+	constexpr uint32_t hitsSize = decltype(next->hits)::Size();
 	uint32_t accumHitCount = 0;
-#if _AE_WINDOWS_
-	constexpr uint32_t kMaxHits = next->hits.Size() * 2;
-	Hit accumHits[ kMaxHits ];
-#else
-	Hit accumHits[ next->hits.Size() * 2 ];
-#endif
+	Hit accumHits[ hitsSize * 2 ];
 	
 	for( uint32_t i = 0; i < next->hits.Length(); i++ )
 	{
@@ -25274,7 +25274,7 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 	std::sort( accumHits, accumHits + accumHitCount, []( const Hit& h0, const Hit& h1 ){ return h0.distance < h1.distance; } );
 	
 	next->hits.Clear();
-	accumHitCount = ae::Min( accumHitCount, params.maxHits, next->hits.Size() );
+	accumHitCount = ae::Min( accumHitCount, params.maxHits, hitsSize );
 	for( uint32_t i = 0; i < accumHitCount; i++ )
 	{
 		next->hits.Append( accumHits[ i ] );
@@ -25286,6 +25286,10 @@ void RaycastResult::Accumulate( const RaycastParams& params, const RaycastResult
 //------------------------------------------------------------------------------
 void PushOutInfo::Accumulate( const PushOutParams& params, const PushOutInfo& prev, PushOutInfo* next )
 {
+	if( !next )
+	{
+		return;
+	}
 	// @NOTE: Leave next::position/velocity unchanged since it's the latest
 	// @TODO: Params are currently not used, but they could be used for sorting later
 	auto&& nHits = next->hits;
