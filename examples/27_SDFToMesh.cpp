@@ -251,7 +251,6 @@ int main()
 		ae::VertexBuffer sdfVertexBuffer;
 		ae::Array< ae::AABB > octree = TAG_ISOSURFACE;
 		ae::Array< ae::Vec3 > errors = TAG_ISOSURFACE;
-		double cacheTime = 0.0;
 		double meshTime = 0.0;
 		void Run( ae::Matrix4 transform, ae::DebugLines* debugLines )
 		{
@@ -275,9 +274,16 @@ int main()
 			const double meshStart = ae::GetTime();
 			extractor->Generate(
 				{
-					.fn=[]( const void* userData, ae::Vec3 position ) -> ae::IsosurfaceValue
+					.sampleFn=[]( const void* userData, ae::Vec3 position ) -> ae::IsosurfaceValue
 					{
 						return { (*(decltype(surfaceFn)*)userData)( position ), 0.0f };
+					},
+					.progressFn=[]( const void*, const ae::IsosurfaceProgress& progress )
+					{
+						AE_INFO( "Voxel: #% Vertex: #%",
+							(int32_t)( progress.voxel01 * 100.0f ),
+							(int32_t)( progress.vertex01 * 100.0f )
+						);
 					},
 					.userData=&surfaceFn,
 					.aabb=region,
@@ -356,7 +362,7 @@ int main()
 			TAG_ISOSURFACE,
 			"Mesh0",
 			ae::Color::HSV(0.5f, 0.8f, 0.5f ),
-			ae::AABB( ae::Vec3( -1000 ), ae::Vec3( 1000 ) )
+			ae::AABB( ae::Vec3( -300, -300, -1000 ), ae::Vec3( 300, 300, 1000 ) )
 		)
 	};
 	/*/
@@ -393,11 +399,60 @@ int main()
 	};
 	ResetTransform();
 
+	bool collisionMeshDirty = true;
+	ae::CollisionMesh<> collisionMesh = TAG_ISOSURFACE;
+	auto GenerateCollision = [&]()
+	{
+		if( collisionMeshDirty )
+		{
+			for( SDFToMesh* sdf : sdfToMesh )
+			{
+				collisionMesh.AddIndexed( {
+					.vertexPositions = sdf->extractor->vertices.Data()->position.data,
+					.vertexPositionStride = sizeof( ae::IsosurfaceVertex ),
+					.vertexCount = sdf->extractor->vertices.Length(),
+					.indices = sdf->extractor->indices.Data(),
+					.indexCount = sdf->extractor->indices.Length(),
+					.indexSize = sizeof( ae::IsosurfaceIndex )
+				} );
+			}
+			collisionMesh.BuildBVH();
+			collisionMeshDirty = false;
+		}
+	};
+
 	auto Update = [&]() -> bool
 	{
 		const float dt = ae::Min( 0.1f, timeStep.GetDt() );
 		input.Pump();
 		camera.Update( &input, dt );
+		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
+		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 10000.0f );
+		const ae::Matrix4 worldToProj = viewToProj * worldToView;
+		const ae::Vec2 mousePosition = (ae::Vec2)input.mouse.position;
+		const ae::Vec4 ndc(
+			( (float)mousePosition.x / (float)render.GetWidth() ) * 2.0f - 1.0f,
+			( (float)mousePosition.y / (float)render.GetHeight() ) * 2.0f - 1.0f,
+			0.0f,
+			1.0f
+		);
+		const ae::Vec4 clipPos = worldToProj.GetInverse() * ndc;
+		const ae::Vec3 worldPos = ( clipPos.GetXYZ() / clipPos.w );
+		const ae::Vec3 rayDir = ( worldPos - camera.GetPosition() ).SafeNormalizeCopy();
+		const ae::RaycastResult result = collisionMesh.Raycast( {
+			.source=camera.GetPosition(),
+			.ray=( rayDir * 10000.0f ),
+		} );
+
+		// Camera
+		if( result.hits.Length() && ( camera.GetMode() == ae::DebugCamera::Mode::None ) )
+		{
+			debugLines.AddSphere( result.hits[ 0 ].position, 5.0f, ae::Color::Red(), 12 );
+			if( input.GetMousePressLeft() )
+			{
+				camera.Refocus( result.hits[ 0 ].position );
+			}
+		}
 		// Rendering
 		if( input.GetPress( ae::Key::Num1 ) ) { ToggleOpacity(); }
 		if( input.GetPress( ae::Key::Num2 ) ) { ToggleWireframe(); }
@@ -433,13 +488,16 @@ int main()
 			ae::Quaternion( ae::Vec3( 0, 0, 1 ), rotation.z );
 		// Generate SDF when transform changes
 		const ae::Matrix4 transform = ae::Matrix4::LocalToWorld( translation, orientation, scale );
-		if( prevTransform != transform )
+		if( prevTransform == transform )
+		{
+			GenerateCollision();
+		}
+		else
 		{
 			const double startTime = ae::GetTime();
-			double cacheTime = 0.0;
 			double meshTime = 0.0;
 			float vertCount = 0;
-			float triCount = 0;
+			float indexCount = 0;
 			float estimatedVertexCount = 0;
 			float iterationCount = 0.0f;
 			float workingCount = 0.0f;
@@ -447,44 +505,42 @@ int main()
 			for( SDFToMesh* sdf : sdfToMesh )
 			{
 				sdf->Run( transform, &debugLines );
-				cacheTime += sdf->cacheTime;
 				meshTime += sdf->meshTime;
 				vertCount += sdf->extractor->vertices.Length();
-				triCount += sdf->extractor->indices.Length() / 3.0f;
+				indexCount += sdf->extractor->indices.Length();
 				estimatedVertexCount += sdf->extractor->GetStats().estimatedVertexCount;
 				iterationCount += sdf->extractor->GetStats().iterationCount;
 				workingCount += sdf->extractor->GetStats().workingCount;
 				sampleCount += sdf->extractor->GetStats().sampleCount;
 			}
 			const double endTime = ae::GetTime();
-			const float vertSamples = ( sampleCount / vertCount );
+			const float vertSamples = vertCount ? ( sampleCount / vertCount ) : 0.0f;
 
 			double totalTime = ( endTime - startTime );
 			uint32_t timeIndex = 0;
 			uint32_t countIndex = 0;
-			const char* timeUnits[] = { "s", "ms" };
+			const char* timeUnits[] = { "s", "ms", "us", "ns" };
 			const char* counts[] = { "", "K", "M", "B" };
 			while( totalTime < 1.0 )
 			{
 				totalTime *= 1000.0;
 				meshTime *= 1000.0;
-				cacheTime *= 1000.0;
 				timeIndex++;
 			}
-			while( triCount > 1000.0f )
+			while( indexCount * 3.0f > 1000.0f )
 			{
-				triCount /= 1000.0f;
+				indexCount /= 1000.0f;
 				vertCount /= 1000.0f;
 				estimatedVertexCount /= 1000.0f;
 				countIndex++;
 			}
-			AE_INFO( "Total:## Cache:## Mesh:## Verts:## Est.:## Tris:##",
+			AE_INFO( "Total:## Mesh:## Verts:## Est.:## Tris:## Ratio:#",
 				totalTime, timeUnits[ timeIndex ],
-				cacheTime, timeUnits[ timeIndex ],
 				meshTime, timeUnits[ timeIndex ],
 				vertCount, counts[ countIndex ],
 				estimatedVertexCount, counts[ countIndex ],
-				triCount, counts[ countIndex ]
+				( indexCount / 3.0f ), counts[ countIndex ],
+				( vertCount > 0.0f ) ? ( indexCount / vertCount ) : 0.0f
 			);
 			uint32_t countIndex2 = 0;
 			while( iterationCount > 1000.0f )
@@ -500,6 +556,9 @@ int main()
 				sampleCount, counts[ countIndex2 ],
 				iterationCount, counts[ countIndex2 ]
 			);
+
+			collisionMesh.Clear();
+			collisionMeshDirty = true;
 			prevTransform = transform;
 		}
 
@@ -509,10 +568,6 @@ int main()
 		debugLines.AddLine( ae::Vec3( 0, -1, 0 ) * 1000.0f, ae::Vec3( 0, 1, 0 ) * 1000.0f, ae::Color::AetherGreen() );
 		debugLines.AddLine( ae::Vec3( 0, 0, -1 ) * 1000.0f, ae::Vec3( 0, 0, 1 ) * 1000.0f, ae::Color::AetherBlue() );
 		debugLines.AddOBB( transform * ae::Matrix4::Scaling( 1.0f ), ae::Color::AetherPurple() );
-		
-		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
-		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 10000.0f );
-		const ae::Matrix4 worldToProj = viewToProj * worldToView;
 		
 		ae::UniformList uniforms;
 		uniforms.Set( "u_worldToProj", worldToProj );
