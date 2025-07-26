@@ -561,7 +561,7 @@ template<> constexpr double MinValue< double >();
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
-extern uint64_t _randomSeed;
+extern thread_local uint64_t _randomSeed;
 void RandomSeed();
 inline float Random01( uint64_t* seed = &_randomSeed );
 inline bool RandomBool( uint64_t* seed = &_randomSeed );
@@ -5448,19 +5448,30 @@ struct IsosurfaceValue
 	//! applied. Eg. Noise applied to the surface of a sphere.
 	float distanceErrorMargin = 0.0f;
 };
-struct IsosurfaceProgress
+struct IsosurfaceStats
 {
-	uint64_t processedVoxelCount = 0;
-	uint64_t aabbVoxelCount = 0;
-	float voxel01 = 0.0f;
-	float vertex01 = 0.0f;
+	double elapsedTime = 0.0; //!< The time it took to generate the mesh so far in seconds
+	double voxelTime = 0.0; //!< The time it took to locate surface voxels so far in seconds
+	double meshTime = 0.0; //!< The time it took to create the vertex data from the voxels so far in seconds
+	float voxelProgress01 = 0.0f; //!< The progress of the voxel search in percent, from 0.0 to 1.0
+	float meshProgress01 = 0.0f; //!< The progress of the vertex generation in percent, from 0.0 to 1.0
+	// 64bit because some values are dealing with volumes that could be 2000^3 voxels
+	uint64_t vertexCount = 0; //!< The number of vertices generated
+	uint64_t indexCount = 0; //!< The number of indices generated
+	uint64_t sampleRawCount = 0; //!< The number of samples done against IsosurfaceParams::samplefn
+	uint64_t sampleCacheCount = 0; //!< The number of samples against the cache instead of IsosurfaceParams::samplefn
+	uint64_t voxelCheckCount = 0; //!< The number of voxels processed
+	uint64_t voxelMissCount = 0; //!< The number of voxels processed resulting in no vertex
+	uint64_t voxelWorkingSize = 0; //!< The number of "duals" stored for work on edges
+	uint64_t voxelSearchProgress = 0; //!< The number of voxels of the input bounds searched so far
+	uint64_t voxelAABBSize = 0; //!< The total number of voxels that could have been processed given the input bounds
 };
 using IsosurfaceSampleFn = ae::IsosurfaceValue(*)( const void* userData, ae::Vec3 position );
-using IsosurfaceProgressFn = void(*)( const void* userData, const ae::IsosurfaceProgress& progress );
+using IsosurfaceStatsFn = void(*)( const void* userData, const ae::IsosurfaceStats& stats );
 struct IsosurfaceParams
 {
 	IsosurfaceSampleFn sampleFn = nullptr;
-	IsosurfaceProgressFn progressFn = nullptr;
+	IsosurfaceStatsFn statsFn = nullptr;
 	const void* userData = nullptr;
 	ae::AABB aabb = ae::AABB();
 	uint32_t maxVerts = 0;
@@ -5483,18 +5494,10 @@ struct IsosurfaceExtractor
 	IsosurfaceExtractor( ae::Tag tag );
 	void Generate( const IsosurfaceParams& params );
 	void Reset();
+	const IsosurfaceStats& GetStats() const { return m_stats; }
 	
 	ae::Array< IsosurfaceVertex > vertices;
 	ae::Array< IsosurfaceIndex > indices;
-
-	struct Stats
-	{
-		uint32_t estimatedVertexCount = 0;
-		uint32_t iterationCount = 0;
-		uint32_t workingCount = 0;
-		uint32_t sampleCount = 0;
-	};
-	const Stats& GetStats() const { return m_stats; }
 
 private:
 	static constexpr IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
@@ -5510,7 +5513,7 @@ private:
 		{ 1, 1, 1 }
 	};
 	// 3 new edges to test
-	const ae::Vec3 cornerOffsets[ 3 ] = {
+	const ae::Int3 cornerOffsets[ 3 ] = {
 		{ 0, 1, 1 }, // EDGE_TOP_FRONT_BIT
 		{ 1, 0, 1 }, // EDGE_TOP_RIGHT_BIT
 		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
@@ -5536,14 +5539,18 @@ private:
 	};
 	void m_Generate( ae::Int3 center, uint32_t halfSize );
 	bool m_DoVoxel( int32_t x, int32_t y, int32_t z );
-	void m_UpdateProgress();
-	Stats m_stats;
+	inline IsosurfaceValue m_DualSample( ae::Int3 pos );
+	inline IsosurfaceValue m_Sample( ae::Vec3 pos );
+	void m_UpdateStats();
 	IsosurfaceParams m_params;
-	IsosurfaceProgress m_progress;
-	IsosurfaceProgress m_lastProgress;
 	ae::Int3 m_minInclusive = ae::Int3( 0 );
 	ae::Int3 m_maxInclusive = ae::Int3( 0 );
+	double m_startVoxelTime = 0.0;
+	double m_startMeshTime = 0.0;
+	IsosurfaceStats m_stats;
+	IsosurfaceStats m_statsPrev;
 	ae::Map< VoxelIndex, Voxel > m_voxels;
+	ae::Map< VoxelIndex, IsosurfaceValue > m_dualSamples;
 };
 
 //! \defgroup Meta
@@ -13982,7 +13989,7 @@ std::string GetClipboardText()
 //------------------------------------------------------------------------------
 // ae::Random functions
 //------------------------------------------------------------------------------
-uint64_t _randomSeed = 0;
+thread_local uint64_t _randomSeed = 0;
 
 void RandomSeed()
 {
@@ -27794,7 +27801,8 @@ void NetObjectServer::UpdateSendData()
 IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
 	vertices( tag ),
 	indices( tag ),
-	m_voxels( tag )
+	m_voxels( tag ),
+	m_dualSamples( tag )
 {
 	Reset();
 }
@@ -27803,22 +27811,23 @@ void IsosurfaceExtractor::Reset()
 {
 	vertices.Clear();
 	indices.Clear();
-	m_stats = {};
 	m_params = {};
+	m_stats = {};
+	m_statsPrev = {};
 	m_voxels.Clear();
+	m_dualSamples.Clear();
 }
 
 void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 {
 	AE_DEBUG_ASSERT( halfSize % 2 == 0 || halfSize == 1 );
-	const ae::IsosurfaceValue sample = m_params.sampleFn( m_params.userData, ae::Vec3( center ) );
-	m_stats.sampleCount++;
+	const ae::IsosurfaceValue sample = m_DualSample( center );
 	const float diagonalHalfSize = sqrtf( halfSize * halfSize * 3.0f );
 	const float surfaceDistance = ae::Abs( sample.distance ) - sample.distanceErrorMargin;
 	if( diagonalHalfSize < surfaceDistance )
 	{
-		m_progress.processedVoxelCount += ( (uint64_t)halfSize * halfSize * halfSize * 8 );
-		m_UpdateProgress();
+		m_stats.voxelSearchProgress += ( (uint64_t)halfSize * halfSize * halfSize * 8 );
+		m_UpdateStats();
 		return; // No intersection, no need to split further
 	}
 	
@@ -27840,8 +27849,8 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 			}
 			else
 			{
-				m_progress.processedVoxelCount += ( (uint64_t)nextHalfSize * nextHalfSize * nextHalfSize * 8 );
-				m_UpdateProgress();
+				m_stats.voxelSearchProgress += ( (uint64_t)nextHalfSize * nextHalfSize * nextHalfSize * 8 );
+				m_UpdateStats();
 			}
 		}
 	}
@@ -27868,8 +27877,8 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 				}
 			}
 		}
-		m_progress.processedVoxelCount += 8;
-		m_UpdateProgress();
+		m_stats.voxelSearchProgress += 8;
+		m_UpdateStats();
 	}
 
 	if( m_params.octree )
@@ -27880,7 +27889,7 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 
 bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 {
-	const ae::Vec3 voxelPos( x, y, z );
+	const ae::Int3 voxelPos( x, y, z );
 	const ae::Int3 sdfMin = m_params.aabb.GetMin().FloorCopy();
 	const ae::Int3 sdfMax = m_params.aabb.GetMax().CeilCopy();
 	// This nudge is needed to prevent the SDF from ever being exactly on
@@ -27890,28 +27899,31 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 	// vertices exactly on the grid boundary would be skipped resulting in
 	// holes in the mesh.
 	auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
-	auto Sample = [&]( ae::Vec3 pos )
-	{
-		m_stats.sampleCount++;
-		return m_params.sampleFn( m_params.userData, ( pos ) ).distance;
-	};
-	const ae::Vec3 sharedCornerOffset( 1.0f );
-	const ae::IsosurfaceValue sharedCornerSample = m_params.sampleFn( m_params.userData, voxelPos + sharedCornerOffset );
+
+	m_stats.voxelCheckCount++;
+
+	const ae::Int3 sharedCornerOffset( 1 );
+	const ae::IsosurfaceValue sharedCornerSample = m_DualSample( voxelPos + sharedCornerOffset );
 	const float sharedCornerValue = Nudge( sharedCornerSample.distance );
-	m_stats.sampleCount++;
 	if( ae::Abs( sharedCornerValue ) > ae::Max( 1.0f, sharedCornerSample.distanceErrorMargin ) )
 	{
 		// Early out of additional edge intersections if voxel doesn't overlap
 		// the surface
+		m_stats.voxelMissCount++;
 		return true;
 	}
-	const float cornerValues[ 3 ] = { Nudge( Sample( voxelPos + cornerOffsets[ 0 ] ) ), Nudge( Sample( voxelPos + cornerOffsets[ 1 ] ) ), Nudge( Sample( voxelPos + cornerOffsets[ 2 ] ) ) };
+
+	const float cornerValues[ 3 ] = {
+		Nudge( m_DualSample( voxelPos + cornerOffsets[ 0 ] ).distance ),
+		Nudge( m_DualSample( voxelPos + cornerOffsets[ 1 ] ).distance ),
+		Nudge( m_DualSample( voxelPos + cornerOffsets[ 2 ] ).distance )
+	};
 	if( m_params.errors && (
 		ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f ||
 		ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f ||
 		ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f ) )
 	{
-		m_params.errors->Append( voxelPos );
+		m_params.errors->Append( ae::Vec3( voxelPos ) );
 	}
 
 	// @TODO: Should this get the current value of the voxel, in case it's been partially generated by adjacents?
@@ -27949,7 +27961,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 			// "0 = A + s * (B - A)" -> "s = -A / (B - A) = A / (A - B)"
 			const float s = sharedCornerValue / ( sharedCornerValue - cornerValues[ e ] );
 			AE_DEBUG_ASSERT( s >= 0.0f && s <= 1.0f );
-			const ae::Vec3 linearOffset = ae::Lerp( sharedCornerOffset, cornerOffsets[ e ], s );
+			const ae::Vec3 linearOffset = ae::Lerp( ae::Vec3( sharedCornerOffset ), ae::Vec3( cornerOffsets[ e ] ), s );
 			ae::Vec3 edgeOffset01 = linearOffset;
 			{
 				// Sphere trace the voxel edge from the outside corner to the inside
@@ -27959,14 +27971,14 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 				if( m_params.dualContouring && sharedCornerSample.distanceErrorMargin < 1.0f )
 				{
 					const bool sharedCornerInside = ( sharedCornerValue < cornerValues[ e ] );
-					const ae::Vec3 start = ( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
-					const ae::Vec3 end = ( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
+					const ae::Vec3 start = ae::Vec3( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
+					const ae::Vec3 end = ae::Vec3( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
 					const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel size is 1
 					float depth = 0.0f;
 					for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
 					{
 						edgeOffset01 = start + rayDir * depth;
-						const float closestSurfaceDist = Sample( voxelPos + edgeOffset01 );
+						const float closestSurfaceDist = m_Sample( ae::Vec3( voxelPos ) + edgeOffset01 ).distance;
 						if( closestSurfaceDist < 0.01f )
 						{
 							break; // Hit the surface
@@ -27995,8 +28007,8 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 			// Calculate gradient at edge intersection
 			if( m_params.dualContouring )
 			{
-				const ae::Vec3 p( voxelPos + edgeOffset01 );
-				const ae::Vec3 pv( Sample( p ) );
+				const ae::Vec3 p( ae::Vec3( voxelPos ) + edgeOffset01 );
+				const ae::Vec3 pv( m_Sample( p ).distance );
 				AE_DEBUG_IF( m_params.errors && pv != pv ) { m_params.errors->Append( p ); }
 
 				ae::Vec3 normal0;
@@ -28004,7 +28016,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 				{
 					ae::Vec3 nt = p;
 					nt[ i ] += m_params.normalSampleOffset;
-					normal0[ i ] = Sample( nt );
+					normal0[ i ] = m_Sample( nt ).distance;
 				}
 				// This should be close to 0 because it's really close to the
 				// surface but not close enough to ignore.
@@ -28018,7 +28030,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 				{
 					ae::Vec3 nt = p;
 					nt[ i ] -= m_params.normalSampleOffset;
-					normal1[ i ] = Sample( nt );
+					normal1[ i ] = m_Sample( nt ).distance;
 				}
 				// This should be close to 0 because it's really close to the
 				// surface but not close enough to ignore.
@@ -28128,20 +28140,47 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 	return true;
 }
 
-void IsosurfaceExtractor::m_UpdateProgress()
+IsosurfaceValue IsosurfaceExtractor::m_DualSample( ae::Int3 pos )
 {
-	if( m_params.progressFn )
+	const VoxelIndex v( pos.x, pos.y, pos.z );
+	IsosurfaceValue* sample = m_dualSamples.TryGet( v );
+	if( sample )
 	{
-		m_progress.voxel01 = ( m_progress.processedVoxelCount / (float)m_progress.aabbVoxelCount );
-		if( int32_t( m_lastProgress.voxel01 * 100.0f ) == int32_t( m_progress.voxel01 * 100.0f ) &&
-			int32_t( m_lastProgress.vertex01 * 100.0f ) == int32_t( m_progress.vertex01 * 100.0f ) )
+		m_stats.sampleCacheCount++;
+		return *sample;
+	}
+	else
+	{
+		m_stats.sampleRawCount++;
+		return m_dualSamples.Set( v, m_Sample( ae::Vec3( pos ) ) );
+	}
+}
+
+IsosurfaceValue IsosurfaceExtractor::m_Sample( ae::Vec3 pos )
+{
+	m_stats.sampleRawCount++;
+	return m_params.sampleFn( m_params.userData, ( pos ) );
+}
+
+void IsosurfaceExtractor::m_UpdateStats()
+{
+	if( m_params.statsFn )
+	{
+		m_stats.voxelProgress01 = ( m_stats.voxelSearchProgress / (float)m_stats.voxelAABBSize );
+		const bool voxelProgressChanged = int32_t( m_statsPrev.voxelProgress01 * 100.0f ) != int32_t( m_stats.voxelProgress01 * 100.0f );
+		const bool meshProgressChanged = int32_t( m_statsPrev.meshProgress01 * 100.0f ) != int32_t( m_stats.meshProgress01 * 100.0f );
+		if( voxelProgressChanged || meshProgressChanged )
 		{
-			return;
+			const double currentTime = ae::GetTime();
+			const double voxelEndTime = m_startMeshTime ? ae::Min( currentTime, m_startMeshTime ) : currentTime;
+			m_stats.voxelProgress01 = ae::Min( m_stats.voxelProgress01, 1.0f );
+			m_stats.meshProgress01 = ae::Min( m_stats.meshProgress01, 1.0f );
+			m_stats.elapsedTime = ( currentTime - m_startVoxelTime );
+			m_stats.voxelTime = ( voxelEndTime - m_startVoxelTime );
+			m_stats.meshTime = m_startMeshTime ? ( currentTime - m_startMeshTime ) : 0.0;
+			m_params.statsFn( m_params.userData, m_stats );
+			m_statsPrev = m_stats;
 		}
-		m_progress.voxel01 = ae::Min( m_progress.voxel01, 1.0f );
-		m_progress.vertex01 = ae::Min( m_progress.vertex01, 1.0f );
-		m_params.progressFn( m_params.userData, m_progress );
-		m_lastProgress = m_progress;
 	}
 }
 
@@ -28153,8 +28192,10 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
 	}
 	Reset();
 	m_params = _params;
-	m_progress = {};
-	m_lastProgress = {};
+	m_stats = {};
+	m_statsPrev = {};
+	m_startVoxelTime = ae::GetTime();
+	m_startMeshTime = 0.0;
 	if( m_params.maxVerts == 0 )
 	{
 		m_params.maxVerts = ae::MaxValue< uint32_t >();
@@ -28169,16 +28210,19 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
 	const ae::Vec3 paramHalfSize = m_params.aabb.GetHalfSize();
 	const float maxHalfSize = ae::Max( paramHalfSize.x, paramHalfSize.y, paramHalfSize.z );
 	const uint32_t halfSize = ae::NextPowerOfTwo( maxHalfSize * 2.0f + 0.5f ) / 2;
-	m_progress.aabbVoxelCount = (uint64_t)halfSize * halfSize * halfSize * 8;
+	m_stats.voxelAABBSize = (uint64_t)halfSize * halfSize * halfSize * 8;
 	m_Generate( m_params.aabb.GetCenter().FloorCopy(), halfSize );
-	m_UpdateProgress();
-	m_stats.workingCount = m_voxels.Length();
+	m_stats.vertexCount = vertices.Length();
+	m_stats.indexCount = indices.Length();
+	m_stats.voxelWorkingSize = m_voxels.Length();
+	m_UpdateStats();
 	if( indices.Length() == 0 )
 	{
 		vertices.Clear();
 		return;
 	}
 
+	m_startMeshTime = ae::GetTime();
 	const float progressPerVert = 1.0f / vertices.Length();
 	const ae::Int3 sdfMin = m_params.aabb.GetMin().FloorCopy();
 	const ae::Int3 sdfMax = m_params.aabb.GetMax().CeilCopy();
@@ -28405,8 +28449,32 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
 			}
 			position /= (float)ec;
 
-			// @TODO: Calculate the normal from the 8 dual corner samples
+			// Calculate the normal from the 8 dual corner samples
+			const float cornerSamples[ 8 ] =
+			{
+				m_DualSample( ae::Int3( x, y, z ) ).distance, // 0, left, back, bottom
+				m_DualSample( ae::Int3( x + 1, y, z ) ).distance, // 1, right, back, bottom
+				m_DualSample( ae::Int3( x, y + 1, z ) ).distance, // 2, left, front, bottom
+				m_DualSample( ae::Int3( x + 1, y + 1, z ) ).distance, // 3, right, front, bottom
+				m_DualSample( ae::Int3( x, y, z + 1 ) ).distance, // 4, left, back, top
+				m_DualSample( ae::Int3( x + 1, y, z + 1 ) ).distance, // 5, right, back, top
+				m_DualSample( ae::Int3( x, y + 1, z + 1 ) ).distance, // 6, left, front, top
+				m_DualSample( ae::Int3( x + 1, y + 1, z + 1 ) ).distance // 7, right, front, top
+			};
 			vertex.normal = ae::Vec3( 0.0f );
+			vertex.normal.x += ( cornerSamples[ 1 ] - cornerSamples[ 0 ] ); // back, bottom
+			vertex.normal.x += ( cornerSamples[ 3 ] - cornerSamples[ 2 ] ); // front, bottom
+			vertex.normal.x += ( cornerSamples[ 5 ] - cornerSamples[ 4 ] ); // back, top
+			vertex.normal.x += ( cornerSamples[ 7 ] - cornerSamples[ 6 ] ); // front, top
+			vertex.normal.y += ( cornerSamples[ 2 ] - cornerSamples[ 0 ] ); // left, bottom
+			vertex.normal.y += ( cornerSamples[ 3 ] - cornerSamples[ 1 ] ); // right, bottom
+			vertex.normal.y += ( cornerSamples[ 6 ] - cornerSamples[ 4 ] ); // left, top
+			vertex.normal.y += ( cornerSamples[ 7 ] - cornerSamples[ 5 ] ); // right, top
+			vertex.normal.z += ( cornerSamples[ 4 ] - cornerSamples[ 0 ] ); // left, back
+			vertex.normal.z += ( cornerSamples[ 5 ] - cornerSamples[ 1 ] ); // right, back
+			vertex.normal.z += ( cornerSamples[ 6 ] - cornerSamples[ 2 ] ); // left, front
+			vertex.normal.z += ( cornerSamples[ 7 ] - cornerSamples[ 3 ] ); // right, front
+			vertex.normal.SafeNormalize();
 		}
 		// @NOTE: Do not clamp position values to voxel boundary. It's valid for a vertex to be placed
 		// outside of the voxel is was generated from. This happens when a voxel has all corners inside
@@ -28417,14 +28485,14 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
 		position.z = z + position.z;
 		vertex.position = ae::Vec4( position, 1.0f );
 
-		m_progress.vertex01 += 1.0f / (float)vertices.Length();
-		m_UpdateProgress();
+		m_stats.meshProgress01 += 1.0f / (float)vertices.Length();
+		m_UpdateStats();
 	}
 
 	AE_DEBUG_ASSERT( vertices.Length() <= m_params.maxVerts );
 	AE_DEBUG_ASSERT( indices.Length() <= m_params.maxIndices );
-	m_progress.vertex01 = 1.0f;
-	m_UpdateProgress();
+	m_stats.meshProgress01 = 1.0f;
+	m_UpdateStats();
 }
 
 } // ae end

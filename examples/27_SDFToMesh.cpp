@@ -128,23 +128,91 @@ void main()
 }
 )";
 
-bool s_ambientLight = true;
-void ToggleAmbientLight()
+void LogStats( const ae::IsosurfaceStats& stats )
 {
-	s_ambientLight = !s_ambientLight;
-};
+	float vertCount = stats.vertexCount;
+	double elapsedTime = stats.elapsedTime;
+	double voxelTime = stats.voxelTime;
+	double meshTime = stats.meshTime;
+	float triCount = stats.indexCount / 3.0f;
+	float voxelWorkingSize = stats.voxelWorkingSize;
+	float sampleRawCount = stats.sampleRawCount;
+	float sampleCacheCount = stats.sampleCacheCount;
+	float voxelMissCount = stats.voxelMissCount;
+	float voxelCheckCount = stats.voxelCheckCount;
+	const float samplesPerVert = vertCount ? ( sampleRawCount / vertCount ) : 0.0f;
 
-bool s_directionalLight = true;
-void ToggleDirectionalLight()
-{
-	s_directionalLight = !s_directionalLight;
-};
+	// Timing stats
+	const char* timeUnits[] = { "s", "ms", "us", "ns" };
+	double maxTime = ae::Max(
+		elapsedTime,
+		voxelTime,
+		meshTime
+	);
+	uint32_t timeIndex = 0;
+	while( maxTime < 1.0 )
+	{
+		elapsedTime *= 1000.0;
+		voxelTime *= 1000.0;
+		meshTime *= 1000.0;
 
-bool s_debugLines = false;
-void ToggleDebugLines()
-{
-	s_debugLines = !s_debugLines;
-};
+		maxTime *= 1000.0;
+		timeIndex++;
+	}
+	
+	// Count stats
+	const char* counts[] = { "", "K", "M", "B" };
+	float maxCount = ae::Max(
+		triCount,
+		vertCount,
+		voxelWorkingSize,
+		sampleRawCount,
+		sampleCacheCount,
+		voxelMissCount,
+		voxelCheckCount
+	);
+	uint32_t countIndex = 0;
+	while( maxCount > 1000.0f )
+	{
+		triCount /= 1000.0f;
+		vertCount /= 1000.0f;
+		voxelWorkingSize /= 1000.0f;
+		sampleRawCount /= 1000.0f;
+		sampleCacheCount /= 1000.0f;
+		voxelMissCount /= 1000.0f;
+		voxelCheckCount /= 1000.0f;
+		
+		maxCount /= 1000.0f;
+		countIndex++;
+	}
+	
+	// Log stats
+	AE_INFO( "Total:## Voxel:## Mesh:## Verts:## Tris:## Miss:## Checked:##",
+		elapsedTime, timeUnits[ timeIndex ],
+		voxelTime, timeUnits[ timeIndex ],
+		meshTime, timeUnits[ timeIndex ],
+		vertCount, counts[ countIndex ],
+		triCount, counts[ countIndex ],
+		voxelMissCount, counts[ countIndex ],
+		voxelCheckCount, counts[ countIndex ]
+	);
+	AE_INFO( "Samples/Vert:# Voxel:## Samples:## Cached:##",
+		samplesPerVert,
+		voxelWorkingSize, counts[ countIndex ],
+		sampleRawCount, counts[ countIndex ],
+		sampleCacheCount, counts[ countIndex ]
+	);
+
+	// Mesh index ratio warning
+	if( vertCount > 0.0f )
+	{
+		const float indexRatio = ( 3.0f * triCount / vertCount );
+		if( indexRatio < 5.98 || 6.02 < indexRatio )
+		{
+			AE_WARN( "Index ratio is #, should be ~6.0", indexRatio );
+		}
+	}
+}
 
 int main()
 {
@@ -156,7 +224,7 @@ int main()
 	ae::TimeStep timeStep;
 	ae::DebugLines debugLines = TAG_ISOSURFACE;
 	ae::DebugCamera camera = ae::Axis::Z;
-	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 500.0f ) );
+	ae::Shader shader;
 	if( ae::IsDebuggerAttached() )
 	{
 		ae::Int2 windowPos( 0, 0 );
@@ -194,199 +262,28 @@ int main()
 	{
 		window.Initialize( 1280, 720, false, true, true );
 	}
-	window.SetTitle( "SDF to Mesh" );
 	render.Initialize( &window );
 	input.Initialize( &window );
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	debugLines.Initialize( ae::NextPowerOfTwo( 4000000 ) );
 	debugLines.SetXRayEnabled( false );
-
-	ae::Shader shader;
+	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 500.0f ) );
 	shader.Initialize( kVertShader, kFragShader );
 
-	// Opacity setting
-	bool opaque = false;
-	auto ToggleOpacity = [&]()
-	{
-		opaque = !opaque;
-		if( opaque )
-		{
-			shader.SetCulling( ae::Culling::CounterclockwiseFront );
-			shader.SetBlending( false );
-			shader.SetDepthWrite( true );
-			shader.SetDepthTest( true );
-		}
-		else
-		{
-			shader.SetCulling( ae::Culling::None );
-			shader.SetBlending( true );
-			shader.SetDepthWrite( false );
-			shader.SetDepthTest( false );
-		}
-	};
-	ToggleOpacity();
-	
-	// Wireframe setting
-	bool wireframe = true;
-	auto ToggleWireframe = [&]()
-	{
-		wireframe = !wireframe;
-		shader.SetWireframe( wireframe );
-	};
-	ToggleWireframe();
-
-	class SDFToMesh
-	{
-	public:
-		ae::Str32 name;
-		ae::Color color;
-		ae::AABB region;
-		SDFToMesh( const char* name, ae::Color color, ae::AABB region ) :
-			name( name ),
-			color( color ),
-			region( region )
-		{}
-
-		ae::IsosurfaceExtractor* extractor = ae::New< ae::IsosurfaceExtractor >( TAG_ISOSURFACE, TAG_ISOSURFACE );
-		ae::VertexBuffer sdfVertexBuffer;
-		ae::Array< ae::AABB > octree = TAG_ISOSURFACE;
-		ae::Array< ae::Vec3 > errors = TAG_ISOSURFACE;
-		double meshTime = 0.0;
-		void Run( ae::Matrix4 transform, ae::DebugLines* debugLines )
-		{
-			const ae::Vec3 scale = transform.GetScale();
-			transform = transform.GetScaleRemoved();
-			const ae::Matrix4 inverseTransform = transform.GetInverse();
-			const auto surfaceFn = [&inverseTransform, &scale]( ae::Vec3 _p )
-			{
-				const float smooth = 2.5f; // World space because scale is applied separately from transform
-				const ae::Vec3 p = inverseTransform.TransformPoint3x4( _p );
-				float r = SDFBox( p, ae::Vec3( 0.5f, 0.25f, 0.25f ) * scale, smooth );
-				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.5f, 0.25f ) * scale, smooth ), smooth );
-				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.25f, 0.5f ) * scale, smooth ), smooth );
-				return r;
-				// return ( ae::Vec3( scale.z ) - p ).Length();
-			};
-			
-			// Mesh
-			octree.Clear();
-			errors.Clear();
-			const double meshStart = ae::GetTime();
-			extractor->Generate(
-				{
-					.sampleFn=[]( const void* userData, ae::Vec3 position ) -> ae::IsosurfaceValue
-					{
-						return { (*(decltype(surfaceFn)*)userData)( position ), 0.0f };
-					},
-					.progressFn=[]( const void*, const ae::IsosurfaceProgress& progress )
-					{
-						AE_INFO( "Voxel: #% Vertex: #%",
-							(int32_t)( progress.voxel01 * 100.0f ),
-							(int32_t)( progress.vertex01 * 100.0f )
-						);
-					},
-					.userData=&surfaceFn,
-					.aabb=region,
-					.maxVerts=0,
-					.maxIndices=0,
-					.octree=&octree,
-					.errors=&errors
-				}
-			);
-			const double meshEnd = ae::GetTime();
-			meshTime = ( meshEnd - meshStart );
-			if( !extractor->vertices.Length() )
-			{
-				return;
-			}
-			// (Re)Initialize ae::VertexArray here only when needed
-			if( !sdfVertexBuffer.GetMaxVertexCount() // Not initialized
-				|| sdfVertexBuffer.GetMaxVertexCount() < extractor->vertices.Length() // Too little storage for verts
-				|| sdfVertexBuffer.GetMaxIndexCount() < extractor->indices.Length() ) // Too little storage for t_chunkIndices
-			{
-				sdfVertexBuffer.Initialize(
-					sizeof( ae::IsosurfaceVertex ),
-					sizeof( ae::IsosurfaceIndex ),
-					extractor->vertices.Length(),
-					extractor->indices.Length(),
-					ae::Vertex::Primitive::Triangle,
-					ae::Vertex::Usage::Dynamic,
-					ae::Vertex::Usage::Dynamic
-				 );
-				sdfVertexBuffer.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::IsosurfaceVertex, position ) );
-				sdfVertexBuffer.AddAttribute( "a_normal", 3, ae::Vertex::Type::Float, offsetof( ae::IsosurfaceVertex, normal ) );
-			}
-
-			// Set vertices
-			sdfVertexBuffer.UploadVertices( 0, extractor->vertices.Data(), extractor->vertices.Length() );
-			sdfVertexBuffer.UploadIndices( 0, extractor->indices.Data(), extractor->indices.Length() );
-		}
-
-		void Draw( ae::Shader* shader, ae::UniformList& uniforms, ae::DebugLines* debugLines )
-		{
-			debugLines->AddAABB( region.GetCenter(), region.GetHalfSize(), color );
-			if( extractor->indices.Length() )
-			{
-				uniforms.Set( "u_light", ae::Vec2( (float)s_directionalLight, (float)s_ambientLight ) );
-				uniforms.Set( "u_color", color.GetLinearRGB() );
-				sdfVertexBuffer.Bind( shader, uniforms );
-				sdfVertexBuffer.Draw( 0, extractor->indices.Length() / 3 );
-			}
-			if( s_debugLines )
-			{
-				for( ae::AABB octant : octree )
-				{
-					int exponent;
-					frexp( octant.GetHalfSize().Length(), &exponent );
-					const float distance01 = ae::Delerp01( 8.0f, 0.0f, exponent );
-					debugLines->AddAABB( octant, ae::Color::AetherWhite().Lerp( ae::Color::AetherRed(), distance01 ) );
-				}
-			}
-			for( ae::Vec3 error : errors )
-			{
-				debugLines->AddSphere( error, 0.5f, ae::Color::AetherRed(), 4 );
-			}
-		}
-
-		~SDFToMesh()
-		{
-			ae::Delete( extractor );
-		}
-	};
-	
-	//*/
-	// Single region
-	SDFToMesh* sdfToMesh[] =
-	{
-		ae::New< SDFToMesh >(
-			TAG_ISOSURFACE,
-			"Mesh0",
-			ae::Color::HSV(0.5f, 0.8f, 0.5f ),
-			ae::AABB( ae::Vec3( -300, -300, -1000 ), ae::Vec3( 300, 300, 1000 ) )
-		)
-	};
-	/*/
-	// Columns
-	const uint32_t gridCount = 8;
-	const float gridSize = 200.0f;
-	const float gridHeight = 1000.0f;
-	ae::Array< SDFToMesh* > sdfToMesh = TAG_ISOSURFACE;
-	for( uint32_t gridY = 0; gridY < gridCount; gridY++ )
-	for( uint32_t gridX = 0; gridX < gridCount; gridX++ )
-	{
-		const int32_t x = ( gridX - gridCount / 2 );
-		const int32_t y = ( gridY - gridCount / 2 );
-		const ae::Vec3 min( x * gridSize, y * gridSize, gridHeight * -0.5f );
-		const ae::Vec3 max = min + ae::Vec3( gridSize, gridSize, gridHeight ) + ae::Vec3( 1.0f, 1.0f, 0.0f );
-		sdfToMesh.Append( ae::New< SDFToMesh >(
-			TAG_ISOSURFACE,
-			"Mesh",
-			ae::Color::HSV( (float)( gridX + gridY ) / (float)( gridCount * 2 ), 0.7f, 0.5f ),
-			ae::AABB( min, max )
-		) );
-	}
-	//*/
-
+	ae::VertexBuffer sdfVertexBuffer;
+	ae::Array< ae::AABB > octree = TAG_ISOSURFACE;
+	ae::Array< ae::Vec3 > errors = TAG_ISOSURFACE;
+	ae::IsosurfaceExtractor* extractor = ae::New< ae::IsosurfaceExtractor >( TAG_ISOSURFACE, TAG_ISOSURFACE );
+	ae::CollisionMesh<> collisionMesh = TAG_ISOSURFACE;
+	bool collisionMeshDirty = true;
+	bool opaqueMeshEnabled = true;
+	bool wireframeMeshEnabled = false;
+	bool ambientLightEnabled = true;
+	bool directionalLightEnabled = true;
+	bool debugLinesEnabled = false;
+	bool tightBoundsEnabled = true;
+	bool dualContouringEnabled = false;
+	const ae::Color color = ae::Color::HSV(0.5f, 0.8f, 0.5f );
 	ae::Vec3 translation;
 	ae::Vec3 rotation;
 	ae::Vec3 scale;
@@ -399,33 +296,9 @@ int main()
 	};
 	ResetTransform();
 
-	bool collisionMeshDirty = true;
-	ae::CollisionMesh<> collisionMesh = TAG_ISOSURFACE;
-	auto GenerateCollision = [&]()
-	{
-		if( collisionMeshDirty )
-		{
-			for( SDFToMesh* sdf : sdfToMesh )
-			{
-				collisionMesh.AddIndexed( {
-					.vertexPositions = sdf->extractor->vertices.Data()->position.data,
-					.vertexPositionStride = sizeof( ae::IsosurfaceVertex ),
-					.vertexCount = sdf->extractor->vertices.Length(),
-					.indices = sdf->extractor->indices.Data(),
-					.indexCount = sdf->extractor->indices.Length(),
-					.indexSize = sizeof( ae::IsosurfaceIndex )
-				} );
-			}
-			collisionMesh.BuildBVH();
-			collisionMeshDirty = false;
-		}
-	};
-
 	auto Update = [&]() -> bool
 	{
 		const float dt = ae::Min( 0.1f, timeStep.GetDt() );
-		input.Pump();
-		camera.Update( &input, dt );
 		const ae::Matrix4 worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		const ae::Matrix4 viewToProj = ae::Matrix4::ViewToProjection( 0.9f, render.GetAspectRatio(), 0.1f, 10000.0f );
 		const ae::Matrix4 worldToProj = viewToProj * worldToView;
@@ -443,6 +316,8 @@ int main()
 			.source=camera.GetPosition(),
 			.ray=( rayDir * 10000.0f ),
 		} );
+		input.Pump();
+		camera.Update( &input, dt );
 
 		// Camera
 		if( result.hits.Length() && ( camera.GetMode() == ae::DebugCamera::Mode::None ) )
@@ -454,11 +329,13 @@ int main()
 			}
 		}
 		// Rendering
-		if( input.GetPress( ae::Key::Num1 ) ) { ToggleOpacity(); }
-		if( input.GetPress( ae::Key::Num2 ) ) { ToggleWireframe(); }
-		if( input.GetPress( ae::Key::Num3 ) ) { ToggleAmbientLight(); }
-		if( input.GetPress( ae::Key::Num4 ) ) { ToggleDirectionalLight(); }
-		if( input.GetPress( ae::Key::Num5 ) ) { ToggleDebugLines(); }
+		if( input.GetPress( ae::Key::Num1 ) ) { opaqueMeshEnabled = !opaqueMeshEnabled; }
+		if( input.GetPress( ae::Key::Num2 ) ) { wireframeMeshEnabled = !wireframeMeshEnabled; }
+		if( input.GetPress( ae::Key::Num3 ) ) { ambientLightEnabled = !ambientLightEnabled; }
+		if( input.GetPress( ae::Key::Num4 ) ) { directionalLightEnabled = !directionalLightEnabled; }
+		if( input.GetPress( ae::Key::Num5 ) ) { debugLinesEnabled = !debugLinesEnabled; }
+		if( input.GetPress( ae::Key::Num6 ) ) { tightBoundsEnabled = !tightBoundsEnabled; }
+		if( input.GetPress( ae::Key::Num7 ) ) { dualContouringEnabled = !dualContouringEnabled; prevTransform = ae::Matrix4::Scaling( 0.0f ); }
 		// Reset
 		if( input.GetPress( ae::Key::R ) ) { ResetTransform(); }
 		// Translation
@@ -481,85 +358,105 @@ int main()
 		if( input.Get( ae::Key::O ) ) { scale.z += transformSpeed * dt; }
 		if( input.Get( ae::Key::U ) ) { scale.z -= transformSpeed * dt; }
 		scale = ae::Max( ae::Vec3( 0.01f ), scale );
-		// ZYX rotation
-		const ae::Quaternion orientation =
+
+		window.SetTitle( ae::Str256::Format(
+			"SDF to Mesh [1]opaque:# [2]wireframe:# [3]ambient:# [4]directional:# [5]debug:# [6]bounds:# [7]dual:#",
+			(uint32_t)opaqueMeshEnabled,
+			(uint32_t)wireframeMeshEnabled,
+			(uint32_t)ambientLightEnabled,
+			(uint32_t)directionalLightEnabled,
+			(uint32_t)debugLinesEnabled,
+			(uint32_t)tightBoundsEnabled,
+			(uint32_t)dualContouringEnabled
+		).c_str() );
+
+		const ae::Quaternion orientation = // ZYX rotation
 			ae::Quaternion( ae::Vec3( 1, 0, 0 ), rotation.x ) *
 			ae::Quaternion( ae::Vec3( 0, 1, 0 ), rotation.y ) *
 			ae::Quaternion( ae::Vec3( 0, 0, 1 ), rotation.z );
-		// Generate SDF when transform changes
 		const ae::Matrix4 transform = ae::Matrix4::LocalToWorld( translation, orientation, scale );
-		if( prevTransform == transform )
+		const ae::AABB region = tightBoundsEnabled ? ae::OBB( transform ).GetAABB() : ae::AABB( ae::Vec3( -300, -300, -1000 ), ae::Vec3( 300, 300, 1000 ) );
+		if( prevTransform != transform )
 		{
-			GenerateCollision();
-		}
-		else
-		{
-			const double startTime = ae::GetTime();
-			double meshTime = 0.0;
-			float vertCount = 0;
-			float indexCount = 0;
-			float estimatedVertexCount = 0;
-			float iterationCount = 0.0f;
-			float workingCount = 0.0f;
-			float sampleCount = 0.0f;
-			for( SDFToMesh* sdf : sdfToMesh )
-			{
-				sdf->Run( transform, &debugLines );
-				meshTime += sdf->meshTime;
-				vertCount += sdf->extractor->vertices.Length();
-				indexCount += sdf->extractor->indices.Length();
-				estimatedVertexCount += sdf->extractor->GetStats().estimatedVertexCount;
-				iterationCount += sdf->extractor->GetStats().iterationCount;
-				workingCount += sdf->extractor->GetStats().workingCount;
-				sampleCount += sdf->extractor->GetStats().sampleCount;
-			}
-			const double endTime = ae::GetTime();
-			const float vertSamples = vertCount ? ( sampleCount / vertCount ) : 0.0f;
-
-			double totalTime = ( endTime - startTime );
-			uint32_t timeIndex = 0;
-			uint32_t countIndex = 0;
-			const char* timeUnits[] = { "s", "ms", "us", "ns" };
-			const char* counts[] = { "", "K", "M", "B" };
-			while( totalTime < 1.0 )
-			{
-				totalTime *= 1000.0;
-				meshTime *= 1000.0;
-				timeIndex++;
-			}
-			while( indexCount * 3.0f > 1000.0f )
-			{
-				indexCount /= 1000.0f;
-				vertCount /= 1000.0f;
-				estimatedVertexCount /= 1000.0f;
-				countIndex++;
-			}
-			AE_INFO( "Total:## Mesh:## Verts:## Est.:## Tris:## Ratio:#",
-				totalTime, timeUnits[ timeIndex ],
-				meshTime, timeUnits[ timeIndex ],
-				vertCount, counts[ countIndex ],
-				estimatedVertexCount, counts[ countIndex ],
-				( indexCount / 3.0f ), counts[ countIndex ],
-				( vertCount > 0.0f ) ? ( indexCount / vertCount ) : 0.0f
-			);
-			uint32_t countIndex2 = 0;
-			while( iterationCount > 1000.0f )
-			{
-				sampleCount /= 1000.0f;
-				workingCount /= 1000.0f;
-				iterationCount /= 1000.0f;
-				countIndex2++;
-			}
-			AE_INFO( "VertSamples:# Working:## Samples:## Iters:##",
-				vertSamples,
-				workingCount, counts[ countIndex2 ],
-				sampleCount, counts[ countIndex2 ],
-				iterationCount, counts[ countIndex2 ]
-			);
-
+			const ae::Matrix4 transformNoScale = transform.GetScaleRemoved();
+			const ae::Matrix4 inverseTransform = transformNoScale.GetInverse();
+			octree.Clear();
+			errors.Clear();
 			collisionMesh.Clear();
 			collisionMeshDirty = true;
 			prevTransform = transform;
+			
+			// Generate
+			const auto surfaceFn = [&inverseTransform, &scale]( ae::Vec3 _p )
+			{
+				const float smooth = 2.5f; // World space because scale is applied separately from transform
+				const ae::Vec3 p = inverseTransform.TransformPoint3x4( _p );
+				float r = SDFBox( p, ae::Vec3( 0.5f, 0.25f, 0.25f ) * scale, smooth );
+				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.5f, 0.25f ) * scale, smooth ), smooth );
+				r = SDFSmoothUnion( r, SDFBox( p, ae::Vec3( 0.25f, 0.25f, 0.5f ) * scale, smooth ), smooth );
+				return r;
+			};
+			extractor->Generate( {
+				.sampleFn=[]( const void* userData, ae::Vec3 position ) -> ae::IsosurfaceValue
+				{
+					return { (*(decltype(surfaceFn)*)userData)( position ), 0.0f };
+				},
+				.statsFn=[]( const void*, const ae::IsosurfaceStats& stats )
+				{
+					AE_INFO( "Voxel: #%(#ms) Mesh: #%(#ms)",
+						(int32_t)( stats.voxelProgress01 * 100.0f ),
+						(int32_t)( stats.voxelTime * 1000.0 ),
+						(int32_t)( stats.meshProgress01 * 100.0f ),
+						(int32_t)( stats.meshTime * 1000.0 )
+					);
+				},
+				.userData=&surfaceFn,
+				.dualContouring=dualContouringEnabled,
+				.aabb=region,
+				.maxVerts=0,
+				.maxIndices=0,
+				.octree=&octree,
+				.errors=&errors
+			} );
+			if( extractor->vertices.Length() )
+			{
+				// (Re)Initialize ae::VertexArray here only when needed
+				if( !sdfVertexBuffer.GetMaxVertexCount() // Not initialized
+					|| sdfVertexBuffer.GetMaxVertexCount() < extractor->vertices.Length() // Too little storage for verts
+					|| sdfVertexBuffer.GetMaxIndexCount() < extractor->indices.Length() ) // Too little storage for t_chunkIndices
+				{
+					sdfVertexBuffer.Initialize(
+						sizeof( ae::IsosurfaceVertex ),
+						sizeof( ae::IsosurfaceIndex ),
+						extractor->vertices.Length(),
+						extractor->indices.Length(),
+						ae::Vertex::Primitive::Triangle,
+						ae::Vertex::Usage::Dynamic,
+						ae::Vertex::Usage::Dynamic
+					);
+					sdfVertexBuffer.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof( ae::IsosurfaceVertex, position ) );
+					sdfVertexBuffer.AddAttribute( "a_normal", 3, ae::Vertex::Type::Float, offsetof( ae::IsosurfaceVertex, normal ) );
+				}
+	
+				// Set vertices
+				sdfVertexBuffer.UploadVertices( 0, extractor->vertices.Data(), extractor->vertices.Length() );
+				sdfVertexBuffer.UploadIndices( 0, extractor->indices.Data(), extractor->indices.Length() );
+			}
+
+			LogStats( extractor->GetStats() );
+		}
+		else if( collisionMeshDirty )
+		{
+			collisionMesh.AddIndexed( {
+				.vertexPositions = extractor->vertices.Data()->position.data,
+				.vertexPositionStride = sizeof( ae::IsosurfaceVertex ),
+				.vertexCount = extractor->vertices.Length(),
+				.indices = extractor->indices.Data(),
+				.indexCount = extractor->indices.Length(),
+				.indexSize = sizeof( ae::IsosurfaceIndex )
+			} );
+			collisionMesh.BuildBVH();
+			collisionMeshDirty = false;
 		}
 
 		render.Activate();
@@ -571,9 +468,32 @@ int main()
 		
 		ae::UniformList uniforms;
 		uniforms.Set( "u_worldToProj", worldToProj );
-		for( SDFToMesh* sdf : sdfToMesh )
+		debugLines.AddAABB( region.GetCenter(), region.GetHalfSize(), color );
+		if( extractor->indices.Length() )
 		{
-			sdf->Draw( &shader, uniforms, &debugLines );
+			uniforms.Set( "u_light", ae::Vec2( (float)directionalLightEnabled, (float)ambientLightEnabled ) );
+			uniforms.Set( "u_color", color.GetLinearRGB() );
+			shader.SetCulling( opaqueMeshEnabled ? ae::Culling::CounterclockwiseFront : ae::Culling::None );
+			shader.SetBlending( !opaqueMeshEnabled );
+			shader.SetDepthWrite( opaqueMeshEnabled );
+			shader.SetDepthTest( opaqueMeshEnabled );
+			shader.SetWireframe( wireframeMeshEnabled );
+			sdfVertexBuffer.Bind( &shader, uniforms );
+			sdfVertexBuffer.Draw( 0, extractor->indices.Length() / 3 );
+		}
+		if( debugLinesEnabled )
+		{
+			for( ae::AABB octant : octree )
+			{
+				int exponent;
+				frexp( octant.GetHalfSize().Length(), &exponent );
+				const float distance01 = ae::Delerp01( 8.0f, 0.0f, exponent );
+				debugLines.AddAABB( octant, ae::Color::AetherWhite().Lerp( ae::Color::AetherRed(), distance01 ) );
+			}
+		}
+		for( ae::Vec3 error : errors )
+		{
+			debugLines.AddSphere( error, 0.5f, ae::Color::AetherRed(), 4 );
 		}
 		debugLines.Render( worldToProj );
 		
@@ -588,10 +508,7 @@ int main()
 	while( Update() ) {}
 #endif
 
-	for( SDFToMesh* sdf : sdfToMesh )
-	{
-		ae::Delete( sdf );
-	}
+	ae::Delete( extractor );
 	AE_LOG( "Terminate" );
 	return 0;
 }
