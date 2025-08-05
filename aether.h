@@ -1179,9 +1179,9 @@ public:
 	bool operator == ( const AABB& aabb ) const;
 	bool operator != ( const AABB& aabb ) const;
 
-	void Expand( Vec3 p );
-	void Expand( AABB other );
-	void Expand( float boundary );
+	AABB& Expand( Vec3 p );
+	AABB& Expand( AABB other );
+	AABB& Expand( float boundary );
 
 	Vec3 GetMin() const { return m_min; }
 	Vec3 GetMax() const { return m_max; }
@@ -5412,6 +5412,7 @@ public:
 
 //------------------------------------------------------------------------------
 // Internal ae::IsosurfaceExtractor types
+// @TODO: Move to IsosurfaceExtractor::VoxelIndex, and friend this gethash?
 //------------------------------------------------------------------------------
 struct VoxelIndex
 {
@@ -5484,6 +5485,7 @@ struct IsosurfaceParams
 	bool dualContouring = false;
 	ae::Array< ae::AABB >* octree = nullptr;
 	ae::Array< ae::Vec3 >* errors = nullptr;
+	std::optional< ae::Vec3 > debugPos;
 };
 
 //------------------------------------------------------------------------------
@@ -15471,22 +15473,25 @@ bool AABB::operator != ( const AABB& aabb ) const
 	return !( operator == ( aabb ) );
 }
 
-void AABB::Expand( ae::Vec3 p )
+AABB& AABB::Expand( ae::Vec3 p )
 {
 	m_min = ae::Min( p, m_min );
 	m_max = ae::Max( p, m_max );
+	return *this;
 }
 
-void AABB::Expand( AABB other )
+AABB& AABB::Expand( AABB other )
 {
 	m_min = ae::Min( other.m_min, m_min );
 	m_max = ae::Max( other.m_max, m_max );
+	return *this;
 }
 
-void AABB::Expand( float boundary )
+AABB& AABB::Expand( float boundary )
 {
 	m_min -= ae::Vec3( boundary );
 	m_max += ae::Vec3( boundary );
+	return *this;
 }
 
 ae::Matrix4 AABB::GetTransform() const
@@ -27821,6 +27826,16 @@ void IsosurfaceExtractor::Reset()
 void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 {
 	AE_DEBUG_ASSERT( halfSize % 2 == 0 || halfSize == 1 );
+
+	AE_DEBUG_IF( m_params.debugPos.has_value() )
+	{
+		const ae::AABB debugAABB( ae::Vec3( center ) - ae::Vec3( halfSize ), ae::Vec3( center ) + ae::Vec3( halfSize ) );
+		if( debugAABB.Contains( m_params.debugPos.value() ) )
+		{
+			int breakPointHere = 0;
+		}
+	}
+
 	const ae::IsosurfaceValue sample = m_DualSample( center );
 	const float diagonalHalfSize = sqrtf( halfSize * halfSize * 3.0f );
 	const float surfaceDistance = ae::Abs( sample.distance ) - sample.distanceErrorMargin;
@@ -27828,7 +27843,7 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 	{
 		m_stats.voxelSearchProgress += ( (uint64_t)halfSize * halfSize * halfSize * 8 );
 		m_UpdateStats();
-		return; // No intersection, no need to split further
+ 		return; // No intersection, no need to split further
 	}
 	
 	// Check if octant is outside of the given AABB
@@ -27892,20 +27907,23 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 	const ae::Int3 voxelPos( x, y, z );
 	const ae::Int3 sdfMin = m_params.aabb.GetMin().FloorCopy();
 	const ae::Int3 sdfMax = m_params.aabb.GetMax().CeilCopy();
-	// This nudge is needed to prevent the SDF from ever being exactly on
-	// the voxel grid boundaries (imagine a plane at the origin with a
-	// normal facing along a cardinal axis, do the vertices belong to the
-	// voxels on the front or back of the plane?). Without this nudge, any
-	// vertices exactly on the grid boundary would be skipped resulting in
-	// holes in the mesh.
-	auto Nudge = []( float v ) { return ( v == 0.0f ) ? 0.0001f : v; };
+	
+	AE_DEBUG_IF( m_params.debugPos.has_value() )
+	{
+		const ae::Int3 debugVoxel = m_params.debugPos.value().FloorCopy();
+		if( debugVoxel == voxelPos )
+		{
+			int breakPointHere = 0;
+		}
+	}
 
 	m_stats.voxelCheckCount++;
 
 	const ae::Int3 sharedCornerOffset( 1 );
 	const ae::IsosurfaceValue sharedCornerSample = m_DualSample( voxelPos + sharedCornerOffset );
-	const float sharedCornerValue = Nudge( sharedCornerSample.distance );
-	if( ae::Abs( sharedCornerValue ) > ae::Max( 1.0f, sharedCornerSample.distanceErrorMargin ) )
+	const float sharedCornerValue = sharedCornerSample.distance;
+	static const float voxelDiagonal = sqrtf( 3.0f ); // Diagonal of a voxel with size 1
+	if( ae::Abs( sharedCornerValue ) > ( voxelDiagonal + sharedCornerSample.distanceErrorMargin ) )
 	{
 		// Early out of additional edge intersections if voxel doesn't overlap
 		// the surface
@@ -27914,17 +27932,10 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 	}
 
 	const float cornerValues[ 3 ] = {
-		Nudge( m_DualSample( voxelPos + cornerOffsets[ 0 ] ).distance ),
-		Nudge( m_DualSample( voxelPos + cornerOffsets[ 1 ] ).distance ),
-		Nudge( m_DualSample( voxelPos + cornerOffsets[ 2 ] ).distance )
+		m_DualSample( voxelPos + cornerOffsets[ 0 ] ).distance,
+		m_DualSample( voxelPos + cornerOffsets[ 1 ] ).distance,
+		m_DualSample( voxelPos + cornerOffsets[ 2 ] ).distance
 	};
-	if( m_params.errors && (
-		ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f ||
-		ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f ||
-		ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f ) )
-	{
-		m_params.errors->Append( ae::Vec3( voxelPos ) );
-	}
 
 	// @TODO: Should this get the current value of the voxel, in case it's been partially generated by adjacents?
 	AE_DEBUG_ASSERT( !m_voxels.TryGet( { x + 1, y + 1, z + 1 } ) );
@@ -27942,6 +27953,13 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 	if( cornerValues[ 2 ] * sharedCornerValue < 0.0f )
 	{
 		voxel.edgeBits |= EDGE_SIDE_FRONTRIGHT_BIT;
+	}
+	if( voxel.edgeBits && m_params.errors && (
+		ae::Abs( cornerValues[ 0 ] - sharedCornerValue ) > 1.01f ||
+		ae::Abs( cornerValues[ 1 ] - sharedCornerValue ) > 1.01f ||
+		ae::Abs( cornerValues[ 2 ] - sharedCornerValue ) > 1.01f ) )
+	{
+		m_params.errors->Append( ae::Vec3( voxelPos ) );
 	}
 
 	// Iterate over the 3 edges that this voxel is responsible for. The
@@ -28159,7 +28177,15 @@ IsosurfaceValue IsosurfaceExtractor::m_DualSample( ae::Int3 pos )
 IsosurfaceValue IsosurfaceExtractor::m_Sample( ae::Vec3 pos )
 {
 	m_stats.sampleRawCount++;
-	return m_params.sampleFn( m_params.userData, ( pos ) );
+	IsosurfaceValue v = m_params.sampleFn( m_params.userData, ( pos ) );
+	// This nudge is needed to prevent the SDF from ever being exactly on
+	// the voxel grid boundaries (imagine a plane at the origin with a
+	// normal facing along a cardinal axis, do the vertices belong to the
+	// voxels on the front or back of the plane?). Without this nudge, any
+	// vertices exactly on the grid boundary would be skipped resulting in
+	// holes in the mesh.
+	if( v.distance == 0.0f ) { v.distance += 0.0001f; }
+	return v;
 }
 
 void IsosurfaceExtractor::m_UpdateStats()
