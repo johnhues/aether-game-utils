@@ -96,7 +96,9 @@ function(ae_add_bundle)
 	elseif(APPLE)
 		# Only add resource files to Apple bundles
 		# Adding resources on Windows causes an issue where files are copied only once on configure
-		target_sources(${ADD_BUNDLE_EXECUTABLE_NAME} PRIVATE "${ADD_BUNDLE_RESOURCES}")
+		if(ADD_BUNDLE_RESOURCES)
+			target_sources(${ADD_BUNDLE_EXECUTABLE_NAME} PRIVATE "${ADD_BUNDLE_RESOURCES}")
+		endif()
 		set_source_files_properties(${ADD_BUNDLE_RESOURCES} PROPERTIES HEADER_FILE_ONLY TRUE)
 		foreach(resource ${ADD_BUNDLE_RESOURCES})
 			get_filename_component(resource_path ${resource} ABSOLUTE) # First get absolute path to resource
