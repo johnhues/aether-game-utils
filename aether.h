@@ -243,6 +243,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
