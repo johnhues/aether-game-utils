@@ -9751,20 +9751,16 @@ void Array< T, N >::Clear()
 template< typename T, uint32_t N >
 const T& Array< T, N >::operator[]( int32_t index ) const
 {
-#if _AE_DEBUG_
-	AE_ASSERT( index >= 0 );
-	AE_ASSERT( index < (int32_t)m_length );
-#endif
+	AE_DEBUG_ASSERT( index >= 0 );
+	AE_DEBUG_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
 	return m_array[ index ];
 }
 
 template< typename T, uint32_t N >
 T& Array< T, N >::operator[]( int32_t index )
 {
-#if _AE_DEBUG_
-	AE_ASSERT( index >= 0 );
-	AE_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
-#endif
+	AE_DEBUG_ASSERT( index >= 0 );
+	AE_DEBUG_ASSERT_MSG( index < (int32_t)m_length, "index: # length: #", index, m_length );
 	return m_array[ index ];
 }
 
@@ -9796,7 +9792,7 @@ void HashMap< Key, N, Hash >::Reserve( uint32_t size )
 {
 	if( N )
 	{
-		AE_ASSERT( m_size >= size );
+		AE_DEBUG_ASSERT_MSG( m_size >= size, "Static array size is fixed (# >= #)", m_size, size );
 		return;
 	}
 	else if( m_size >= size )
@@ -9804,7 +9800,6 @@ void HashMap< Key, N, Hash >::Reserve( uint32_t size )
 		return;
 	}
 	
-	AE_ASSERT( size > m_size );
 	Entry* prevEntries = m_entries;
 	const uint32_t prevSize = m_size;
 	const uint32_t prevLength = m_length;
