@@ -2713,10 +2713,10 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 #endif
 // @TODO: Use __analysis_assume( x ); on windows to prevent warning C6011 (Dereferencing NULL pointer)
 #define AE_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
-#define AE_ASSERT_MSG( _x, ... ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
+#define AE_ASSERT_MSG( _x, ... ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT_MSG( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
 #if _AE_DEBUG_
-	#define AE_DEBUG_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
-	#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_ASSERT( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
+	#define AE_DEBUG_ASSERT( _x ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_DEBUG_ASSERT( " #_x " )", "" ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
+	#define AE_DEBUG_ASSERT_MSG( _x, ... ) do { if( !(_x) ) { auto msgStr = ae::_Log( ae::LogSeverity::Fatal, _AE_SRCCHK(__FILE__,""), _AE_SRCCHK(__LINE__,0), "AE_DEBUG_ASSERT_MSG( " #_x " )", __VA_ARGS__ ); AE_ASSERT_IMPL( msgStr.c_str() ); } } while(0)
 #else
 	#define AE_DEBUG_ASSERT( _x ) do {} while(0)
 	#define AE_DEBUG_ASSERT_MSG( _x, ... ) do {} while(0)
