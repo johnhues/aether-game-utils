@@ -77,7 +77,7 @@
 // AE_CONFIG_FILE. It is not recommended for public release builds.
 //------------------------------------------------------------------------------
 #ifndef _AE_DEBUG_
-	#if defined(_DEBUG) || defined(DEBUG) || ( _AE_APPLE_ && !defined(NDEBUG) ) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
+	#if defined(_DEBUG) || defined(DEBUG) || (defined(__GNUC__) && !defined(__OPTIMIZE__))
 		#define _AE_DEBUG_ 1
 	#else
 		#define _AE_DEBUG_ 0
