@@ -421,12 +421,12 @@ Allocator* GetGlobalAllocator();
 //! passed to the constructor of T. All arrays allocated with this function
 //! should be freed with ae::Delete(). Uses ae::GetGlobalAllocator() and
 //! ae::Allocator::Allocate() internally.
-template< typename T, typename ... Args > T* NewArray( ae::Tag tag, uint32_t count, Args ... args );
+template< typename T, typename ... Args > T* NewArray( ae::Tag tag, uint32_t count, Args&& ... args );
 //! Allocates and constructs a single element of type T. an ae::Tag must be specified
 //! and should represent the allocation type. All 'args' are passed to the constructor
 //! of T. All allocations should be freed with ae::Delete(). Uses ae::GetGlobalAllocator()
 //! and ae::Allocator::Allocate() internally.
-template< typename T, typename ... Args > T* New( ae::Tag tag, Args ... args );
+template< typename T, typename ... Args > T* New( ae::Tag tag, Args&& ... args );
 //! Should be called to destruct and free all allocations made with ae::New()
 //! and ae::NewArray(). Uses ae::GetGlobalAllocator() and ae::Allocator::Free()
 //! internally.
@@ -2235,7 +2235,7 @@ public:
 	//! are no free objects. Call ae::ObjectPool::Delete() to destroy the object.
 	//! ae::ObjectPool::Delete() must be called on every object returned
 	//! by ae::ObjectPool::New().
-	template< typename ... Args > T* New( Args ... args );
+	template< typename ... Args > T* New( Args&& ... args );
 	//! Destructs and releases the object \p obj for future use by ae::ObjectPool::New().
 	//! It is safe for the \p obj parameter to be null.
 	void Delete( T* obj );
@@ -2372,7 +2372,7 @@ public:
 	//! it is safe to mix calls to ae::OpaquePool::Allocate/New() and
 	//! ae::OpaquePool::Free/Delete() as long as constructors and destructors are
 	//! called manually with ae::OpaquePool::Allocate() and ae::OpaquePool::Free().
-	template< typename T, typename ... Args > T* New( Args ... args );
+	template< typename T, typename ... Args > T* New( Args&& ... args );
 	//! Destructs and releases the object \p obj for future use. It is safe for \p obj to be null.
 	template< typename T > void Delete( T* obj );
 	//! Destructs and releases all objects for future use.
@@ -6764,7 +6764,7 @@ struct _Header
 };
 
 template< typename T, typename ... Args >
-T* NewArray( ae::Tag tag, uint32_t count, Args ... args )
+T* NewArray( ae::Tag tag, uint32_t count, Args&& ... args )
 {
 	AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
 	AE_STATIC_ASSERT( sizeof( T ) % alignof( T ) == 0 ); // All elements in array should have correct alignment
@@ -6798,7 +6798,7 @@ T* NewArray( ae::Tag tag, uint32_t count, Args ... args )
 }
 
 template< typename T, typename ... Args >
-T* New( ae::Tag tag, Args ... args )
+T* New( ae::Tag tag, Args&& ... args )
 {
 	AE_STATIC_ASSERT( alignof( T ) <= _kDefaultAlignment );
 
@@ -10969,7 +10969,7 @@ ObjectPool< T, N, Paged >::~ObjectPool()
 
 template< typename T, uint32_t N, bool Paged >
 template< typename ... Args >
-T* ObjectPool< T, N, Paged >::New( Args ... args )
+T* ObjectPool< T, N, Paged >::New( Args&& ... args )
 {
 	Page* page = m_pages.FindFn( []( const Page* page ) { return page->freeList.HasFree(); } );
 	if( Paged && !page )
@@ -11216,7 +11216,7 @@ typename ObjectPool< T, N, Paged >::template Iterator< T2 > ObjectPool< T, N, Pa
 // ae::OpaquePool member functions
 //------------------------------------------------------------------------------
 template< typename T, typename ... Args >
-T* OpaquePool::New( Args ... args )
+T* OpaquePool::New( Args&& ... args )
 {
 	AE_DEBUG_ASSERT( sizeof( T ) == m_objectSize );
 	AE_DEBUG_ASSERT( alignof( T ) == m_objectAlignment );

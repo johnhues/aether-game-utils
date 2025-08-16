@@ -89,9 +89,7 @@ TEST_CASE( "new param test", "[ae::New]" )
 		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
 	
 		ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST, param );
-		copyCount += 1; // Param
-		moveCount += 1; // New
-		dtorCount += 1; // Param
+		copyCount += 1; // New
 		currentCount += 1;
 		
 		REQUIRE( tester != nullptr );
@@ -153,8 +151,7 @@ TEST_CASE( "new move test", "[ae::New]" )
 		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
 	
 		ae::LifetimeTester* tester = ae::New< ae::LifetimeTester >( TAG_TEST, std::move( param ) );
-		moveCount += 2; // New + param
-		dtorCount += 1; // Param
+		moveCount += 1; // New
 		currentCount += 1;
 		
 		REQUIRE( tester != nullptr );
@@ -216,8 +213,7 @@ TEST_CASE( "new array param test", "[ae::New]" )
 		REQUIRE( ae::LifetimeTester::currentCount == currentCount );
 	
 		ae::LifetimeTester* tester = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 10, param );
-		copyCount += 11; // Param + new
-		dtorCount += 1; // Param
+		copyCount += 10; // New
 		currentCount += 10;
 		
 		REQUIRE( tester != nullptr );
@@ -284,8 +280,6 @@ TEST_CASE( "new array move test", "[ae::New]" )
 	
 		ae::LifetimeTester* tester = ae::NewArray< ae::LifetimeTester >( TAG_TEST, 10, std::move( param ) );
 		copyCount += 10; // New
-		moveCount += 1; // Param
-		dtorCount += 1; // Param
 		currentCount += 10;
 		
 		REQUIRE( tester != nullptr );
