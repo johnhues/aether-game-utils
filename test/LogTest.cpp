@@ -79,7 +79,7 @@ void TestLogger( ae::LogSeverity severity, const char* filePath, uint32_t line, 
 		}
 		case 4:
 		{
-			REQUIRE( ae::Str32( "AE_ASSERT( false ) Test [4]" ) == message );
+			REQUIRE( ae::Str64( "AE_ASSERT_MSG( false ) Test [4]" ) == message );
 			REQUIRE( severity == ae::LogSeverity::Fatal );
 			REQUIRE( tagCount == 1 );
 			REQUIRE( ae::Str32( "AssertTag" ) == tags[ 0 ] );
