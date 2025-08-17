@@ -114,7 +114,7 @@ class ae::TypeT< ae::Optional< T > > : public ae::OptionalType
 public:
 	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
 	static ae::Type* Get() { static ae::TypeT< ae::Optional< T > > s_type; return &s_type; }
-	VarTypeId GetExactVarTypeId() const override { return ae::GetExactTypeId< ae::Optional< T > >(); }
+	ExactTypeId GetExactVarTypeId() const override { return ae::GetExactTypeId< ae::Optional< T > >(); }
 
 	ae::DataPointer TryGet( ae::DataPointer optional ) const override { return ae::DataPointer(); }
 	ae::ConstDataPointer TryGet( ae::ConstDataPointer optional ) const override { return ae::ConstDataPointer(); }
@@ -128,7 +128,7 @@ class ae::TypeT< std::optional< T > > : public ae::OptionalType
 public:
 	const ae::Type& GetInnerVarType() const override { return *ae::TypeT< T >::Get(); }
 	static ae::Type* Get() { static ae::TypeT< std::optional< T > > s_type; return &s_type; }
-	VarTypeId GetExactVarTypeId() const override { return ae::GetExactTypeId< std::optional< T > >(); }
+	ExactTypeId GetExactVarTypeId() const override { return ae::GetExactTypeId< std::optional< T > >(); }
 
 	ae::DataPointer TryGet( ae::DataPointer _opt ) const override
 	{
