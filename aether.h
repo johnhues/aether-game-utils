@@ -6531,10 +6531,8 @@ struct _Globals
 
 	// Reflection
 	uint32_t metaCacheSeq = 0;
-	ae::Map< std::string, const ae::EnumType*, kMaxMetaEnumTypes > enums; // @TODO: ae::TypeName instead of string
-	ae::Map< ae::TypeName, ae::ClassType*, kMaxMetaTypes > typeNameMap;
-	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes > typeIdMap;
-	ae::Array< ae::ClassType*, kMaxMetaTypes > types;
+	ae::Map< ae::TypeId, const ae::EnumType*, kMaxMetaEnumTypes, ae::Hash32, ae::MapMode::Stable > enumTypes;
+	ae::Map< ae::TypeId, ae::ClassType*, kMaxMetaTypes, ae::Hash32, ae::MapMode::Stable > classTypes;
 	const ae::ClassVar::Serializer* varSerializer = nullptr;
 	bool varSerializerInitialized = false;
 
@@ -12587,7 +12585,7 @@ public:
 	{
 		ae::_Globals* globals = ae::_Globals::Get();
 		ae::EnumType* enumType = const_cast< ae::EnumType* >( ae::TypeT< E >::Get()->template AsVarType< ae::EnumType >() );
-		globals->enums.Set( ae::GetTypeName< E >(), enumType );
+		globals->enumTypes.Set( ae::GetTypeId< E >(), enumType );
 			
 		// Remove whitespace
 		strMap.erase( std::remove( strMap.begin(), strMap.end(), ' ' ), strMap.end() );
@@ -12643,7 +12641,7 @@ public:
 	~_RegisterEnum()
 	{
 		ae::_Globals* globals = ae::_Globals::Get();
-		globals->enums.Remove( ae::GetTypeName< E >() );
+		globals->enumTypes.Remove( ae::GetTypeId< E >() );
 		globals->metaCacheSeq++;
 	}
 		
@@ -12671,13 +12669,13 @@ public:
 	_RegisterExistingEnumOrValue()
 	{
 		ae::_Globals* globals = ae::_Globals::Get();
-		globals->enums.Set( ae::GetTypeName< E >(), ae::TypeT< E >::Get()->template AsVarType< ae::EnumType >() );
+		globals->enumTypes.Set( ae::GetTypeId< E >(), ae::TypeT< E >::Get()->template AsVarType< ae::EnumType >() );
 		globals->metaCacheSeq++;
 	}
 	~_RegisterExistingEnumOrValue()
 	{
 		ae::_Globals* globals = ae::_Globals::Get();
-		globals->enums.Remove( ae::GetTypeName< E >() );
+		globals->enumTypes.Remove( ae::GetTypeId< E >() );
 		globals->metaCacheSeq++;
 	}
 	
@@ -12928,19 +12926,15 @@ public:
 	_ClassTypeT( const char* typeName )
 	{
 		_Globals* globals = _Globals::Get();
-		AE_ASSERT_MSG( globals->typeNameMap.Length() < globals->typeNameMap.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->typeNameMap.Size() );
+		AE_ASSERT_MSG( globals->classTypes.Length() < globals->classTypes.Size(), "Set/increase AE_MAX_META_TYPES_CONFIG (Currently: #)", globals->classTypes.Size() );
 		Init< T >( typeName );
-		globals->typeNameMap.Set( typeName, this );
-		globals->typeIdMap.Set( GetId(), this ); // @TODO: Should check for hash collision
-		globals->types.Append( this );
+		globals->classTypes.Set( GetId(), this ); // @TODO: Should check for hash collision
 		globals->metaCacheSeq++;
 	}
 	~_ClassTypeT()
 	{
 		_Globals* globals = _Globals::Get();
-		globals->typeNameMap.Remove( GetName() );
-		globals->typeIdMap.Remove( GetId() );
-		globals->types.Remove( globals->types.Find( this ) );
+		globals->classTypes.Remove( GetId() );
 		globals->metaCacheSeq++;
 	}
 	ae::TypeId GetTypeId() const override { return ae::GetExactTypeId< T >(); }
@@ -13145,9 +13139,8 @@ const ae::ClassType* ae::GetClassType()
 		_Globals* globals = _Globals::Get();
 		// @TODO: Conditionally enable this check when T is not a forward declaration
 		//AE_STATIC_ASSERT( (std::is_base_of< ae::Object, T >::value) );
-		const char* typeName = ae::GetTypeName< ae::StripType< T > >();
-		s_type = globals->typeNameMap.Get( typeName, nullptr );
-		AE_ASSERT_MSG( s_type, "No meta info for type name: #", typeName );
+		s_type = globals->classTypes.Get( ae::GetTypeId< T >(), nullptr );
+		AE_ASSERT_MSG( s_type, "No meta info for type name: #", ae::GetTypeName< ae::StripType< T > >() );
 		return s_type;
 	}
 }
@@ -13794,10 +13787,9 @@ namespace ae {
 //------------------------------------------------------------------------------
 ae::_Globals::~_Globals()
 {
-	AE_ASSERT( !enums.Length() );
-	AE_ASSERT( !typeNameMap.Length() );
-	AE_ASSERT( !typeIdMap.Length() );
-	AE_ASSERT( !types.Length() );
+	AE_ASSERT( !enumTypes.Length() );
+	AE_ASSERT( !classTypes.Length() );
+	AE_ASSERT( !scratchBuffer.offset );
 }
 
 //------------------------------------------------------------------------------
@@ -23632,9 +23624,14 @@ void GraphicsDevice::Initialize( class Window* window )
 {
 	AE_ASSERT_MSG( !m_context, "GraphicsDevice already initialized" );
 
+	_Globals* globals = ae::_Globals::Get();
+	AE_ASSERT_MSG( !globals->graphicsDevice, "Only one instance of ae::GraphicsDevice is supported" );
+	globals->graphicsDevice = this;
+
 	AE_ASSERT( window );
 	AE_ASSERT( window->GetWidth() && window->GetHeight() );
 	m_window = window;
+	AE_ASSERT( !window->graphicsDevice );
 	window->graphicsDevice = this;
 
 #if !_AE_EMSCRIPTEN_
@@ -23792,10 +23789,6 @@ void GraphicsDevice::Initialize( class Window* window )
 	m_renderShaderRGB.SetBlending( true );  // This is required on some implementations of OpenGL for GL_FRAMEBUFFER_SRGB to work
 	m_renderShaderSRGB.Initialize( vertexStr, fragStr, &srgbDefine, 1 ); // Do not blend when manually converting to srgb without GL_FRAMEBUFFER_SRGB
 	AE_CHECK_GL_ERROR();
-	
-	_Globals* globals = ae::_Globals::Get();
-	AE_ASSERT_MSG( !globals->graphicsDevice, "Only one instance of ae::GraphicsDevice is supported" );
-	globals->graphicsDevice = this;
 	
 	Activate(); // Init primary render target
 	AE_ASSERT( GetWidth() && GetHeight() );
@@ -28537,23 +28530,24 @@ AE_REGISTER_NAMESPACECLASS( (ae, SourceFileAttribute) );
 
 uint32_t ae::GetClassTypeCount()
 {
-	return _Globals::Get()->types.Length();
+	return _Globals::Get()->classTypes.Length();
 }
 
 const ae::ClassType* ae::GetClassTypeByIndex( uint32_t i )
 {
-	return _Globals::Get()->types[ i ];
+	return _Globals::Get()->classTypes.GetValue( i );
 }
 
 const ae::ClassType* ae::GetClassTypeById( ae::TypeId id )
 {
-	return _Globals::Get()->typeIdMap.Get( id, nullptr );
+	return _Globals::Get()->classTypes.Get( id, nullptr );
 }
 
 const ae::ClassType* ae::GetClassTypeByName( const char* typeName )
 {
 	if( !typeName[ 0 ] ) { return nullptr; }
-	return _Globals::Get()->typeNameMap.Get( typeName, nullptr );
+	const ae::TypeId typeId = (ae::TypeId)ae::GetTypeIdFromName( typeName );
+	return _Globals::Get()->classTypes.Get( typeId, nullptr );
 }
 
 const ae::ClassType* ae::GetClassTypeFromObject( const ae::Object& obj )
@@ -28563,7 +28557,8 @@ const ae::ClassType* ae::GetClassTypeFromObject( const ae::Object& obj )
 
 const ae::EnumType* ae::GetEnumType( const char* enumName )
 {
-	return ae::_Globals::Get()->enums.Get( enumName, nullptr );
+	const ae::TypeId typeId = (ae::TypeId)ae::GetTypeIdFromName( enumName );
+	return ae::_Globals::Get()->enumTypes.Get( typeId, nullptr );
 }
 
 const ae::ClassType* ae::GetClassTypeFromObject( const ae::Object* obj )
