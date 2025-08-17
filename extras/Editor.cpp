@@ -898,7 +898,7 @@ void Editor::Update()
 				ae::Str32 varName;
 				ae::Str256 varValue;
 				rStream.SerializeUInt32( entity );
-				rStream.SerializeObject( typeId );
+				rStream.SerializeUInt32( typeId );
 				rStream.SerializeString( varName );
 				rStream.SerializeString( varValue );
 				if( rStream.IsValid() )
@@ -2440,7 +2440,7 @@ void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Compon
 	ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
 	wStream.SerializeEnum( EditorMsg::Modification );
 	wStream.SerializeUInt32( component->GetEntity() );
-	wStream.SerializeObject( ae::GetObjectTypeId( component ) );
+	wStream.SerializeUInt32( ae::GetObjectTypeId( component ) );
 	wStream.SerializeString( var->GetName() );
 	wStream.SerializeString( var->GetObjectValueAsString( component ).c_str() );
 	if( wStream.IsValid() )
