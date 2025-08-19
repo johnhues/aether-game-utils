@@ -46,14 +46,14 @@ TEST_CASE( "Can get base type by name", "[aeMeta]" )
 	REQUIRE( ae::GetTypeName< const ae::Object& >() == ae::Str32( "const ae::Object &" ) );
 	REQUIRE( ae::GetTypeName< const ae::Object[ 3 ] >() == ae::Str32( "const ae::Object[3]" ) );
 
-	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object > >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object* > >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object& > >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::StripType< ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object > >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object* > >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object& > >() == ae::Str32( "ae::Object" ) );
-	REQUIRE( ae::GetTypeName< ae::StripType< const ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object* > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object& > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object* > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object& > >() == ae::Str32( "ae::Object" ) );
+	REQUIRE( ae::GetTypeName< ae::RemoveTypeQualifiers< const ae::Object[ 3 ] > >() == ae::Str32( "ae::Object" ) );
 }
 
 TEST_CASE( "Can get base type with templates", "[aeMeta]" )
@@ -437,7 +437,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( arrayVarType->GetMaxLength() == 3 );
 		const ae::ClassType* classVarType = arrayVarType->GetInnerVarType().AsVarType< ae::ClassType >();
 		REQUIRE( classVarType );
-		REQUIRE( classVarType->GetTypeId() == ae::GetExactTypeId< SomeClass >() );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
@@ -470,7 +470,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( arrayVarType->GetMaxLength() == 4 );
 		const ae::ClassType* classVarType = arrayVarType->GetInnerVarType().AsVarType< ae::ClassType >();
 		REQUIRE( classVarType );
-		REQUIRE( classVarType->GetTypeId() == ae::GetExactTypeId< SomeClass >() );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
@@ -510,7 +510,7 @@ TEST_CASE( "Array vars", "[aeMeta]" )
 		REQUIRE( arrayVarType->GetMaxLength() == ae::MaxValue< uint32_t >() );
 		const ae::ClassType* classVarType = arrayVarType->GetInnerVarType().AsVarType< ae::ClassType >();
 		REQUIRE( classVarType );
-		REQUIRE( classVarType->GetTypeId() == ae::GetExactTypeId< SomeClass >() );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
@@ -577,7 +577,7 @@ TEST_CASE("Optional test present", "[aeMeta]")
 		const ae::OptionalType* optionalType = someClassOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
 		REQUIRE( optionalType );
 		const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
-		REQUIRE( classVarType->GetTypeId() == ae::GetExactTypeId< SomeClass >() );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
@@ -610,7 +610,7 @@ TEST_CASE("Optional test present", "[aeMeta]")
 	// 	const ae::OptionalType* optionalType = someClassStdOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
 	// 	REQUIRE( optionalType );
 	// 	const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
-	// 	REQUIRE( classVarType->GetTypeId() == ae::GetTypeId< SomeClass >() );
+	// 	REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
 	// 	REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 	// 	REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
@@ -654,7 +654,7 @@ TEST_CASE("Optional test no value", "[aeMeta]")
 		const ae::OptionalType* optionalType = someClassOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
 		REQUIRE( optionalType );
 		const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
-		REQUIRE( classVarType->GetTypeId() == ae::GetExactTypeId< SomeClass >() );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
@@ -682,7 +682,7 @@ TEST_CASE("Optional test no value", "[aeMeta]")
 		const ae::OptionalType* optionalType = someClassStdOptional->GetOuterVarType().AsVarType< ae::OptionalType >();
 		REQUIRE( optionalType );
 		const ae::ClassType* classVarType = optionalType->GetInnerVarType().AsVarType< ae::ClassType >();
-		REQUIRE( classVarType->GetTypeId() == ae::GetExactTypeId< SomeClass >() );
+		REQUIRE( classVarType->GetTypeId() == ae::GetTypeIdWithoutQualifiers< SomeClass >() );
 		REQUIRE( classVarType->GetName() == ae::Str32( "SomeClass" ) );
 		REQUIRE( classVarType->GetSize() == sizeof(SomeClass) );
 
