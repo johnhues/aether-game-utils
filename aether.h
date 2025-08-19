@@ -12507,21 +12507,29 @@ template< typename T > ae::Type* FindMetaRegistrationFor();
 // compilation units so they can be hotloaded and have registered vars and
 // attributes.
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// An unexpected linker error here likely means that you have not included the
-// real implementation of the ae::TypeT<> class for the type you are using.
-// Try including the file that registers the type you are using.
-/* Eg.
-	Undefined symbol:
+// AN UNEXPECTED LINKER ERROR HERE LIKELY MEANS THAT YOU HAVE NOT INCLUDED THE
+// REAL IMPLEMENTATION OF THE ae::TypeT<> CLASS FOR THE TYPE YOU ARE USING.
+// TRY INCLUDING THE FILE THAT REGISTERS THE TYPE YOU ARE USING. SEE BELOW.
+/* Undefined symbol:
 		"ae::Type* ae::FindMetaRegistrationFor< MyCustomArray< int > >()"
-		Referenced from Game.cpp
+		Referenced from Foo.cpp
 
-// Try including the header with the definition of this in Game.cpp:
+// Try including the header with the definition of this in Foo.cpp:
 	template< typename T >
 	ae::TypeT< MyCustomArray< T > > : ae::ArrayType
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
 template< typename T > struct TypeT
 {
-	// Param with default value so real TypeT< T >::Get() will be prioritized if available
+	// Param with default value so real TypeT< T >::Get() will be prioritized if
+	// available. Using a templated class with a static member function here is
+	// needed to work around ODR (One Definition Rule) for type definitions. Its
+	// possible for a member function of a a templated class to be static, but
+	// its not possible for a free templated function to be static. Generated
+	// templated types like TypeT< T* > (implicitly defined in headers) need
+	// storage for their ae::Type, and a static member function of a templated
+	// class (with a fall back to FindMetaRegistrationFor<> for classes and
+	// enums) is the best solution, where one instance will be compiled into
+	// each compilation unit.
 	// @TODO: Use const instead of discarding it
 	static ae::Type* Get( uint32_t _i = 0 ) { return ae::FindMetaRegistrationFor< std::remove_const_t< T > >(); }
 };
