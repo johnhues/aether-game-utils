@@ -5457,9 +5457,9 @@ struct IsosurfaceStats
 	double meshTime = 0.0; //!< The time it took to create the vertex data from the voxels so far in seconds
 	float voxelProgress01 = 0.0f; //!< The progress of the voxel search in percent, from 0.0 to 1.0
 	float meshProgress01 = 0.0f; //!< The progress of the vertex generation in percent, from 0.0 to 1.0
-	// 64bit because some values are dealing with volumes that could be 2000^3 voxels
-	uint64_t vertexCount = 0; //!< The number of vertices generated
-	uint64_t indexCount = 0; //!< The number of indices generated
+	// 64bit because some values are dealing with volumes that could be 2000 voxels cubed (or 8*10^9)
+	uint64_t vertexCount = 0; //!< The max number of vertices to generate or 0 for no limit.
+	uint64_t indexCount = 0; //!< The max number of indices to generate or 0 for no limit.
 	uint64_t sampleRawCount = 0; //!< The number of samples done against IsosurfaceParams::samplefn
 	uint64_t sampleCacheCount = 0; //!< The number of samples against the cache instead of IsosurfaceParams::samplefn
 	uint64_t voxelCheckCount = 0; //!< The number of voxels processed
@@ -5475,15 +5475,26 @@ struct IsosurfaceParams
 	IsosurfaceSampleFn sampleFn = nullptr;
 	IsosurfaceStatsFn statsFn = nullptr;
 	const void* userData = nullptr;
+	
+	//! The bounds for sampling the sdf function and mesh generation
 	ae::AABB aabb = ae::AABB();
+	
+	//! The maximum number of vertices that will be generated
 	uint32_t maxVerts = 0;
+	//! The maximum number of indices that will be generated
 	uint32_t maxIndices = 0;
+	
+	//! The offset from a particular positional sample for its normals to be
+	//! sampled. Low values will be more accurate, but higher values will take
+	//! the average of a larger area. This should be low for an SDF with high
+	//! frequency noise.
 	float normalSampleOffset = 0.1f;
 	//! Performs extra dual contouring operations when true. The curves,
 	//! corners, and edges of the results will be more precise, but the mesh
 	//! generation will be slower. The vertex count and triangle indices will be
 	//! nearly identical.
 	bool dualContouring = false;
+
 	ae::Array< ae::AABB >* octree = nullptr;
 	ae::Array< ae::Vec3 >* errors = nullptr;
 	std::optional< ae::Vec3 > debugPos;
@@ -5495,8 +5506,23 @@ struct IsosurfaceParams
 struct IsosurfaceExtractor
 {
 	IsosurfaceExtractor( ae::Tag tag );
-	void Generate( const IsosurfaceParams& params );
+	//! Optionally call this to pre-allocate internal vertex and index storage.
+	//! This can dramatically speed up one-off mesh generation, as internal buffers
+	//! use standard dynamic array growth mechanisms. When an ae::IsosurfaceExtractor
+	//! is used multiple times, the effect of this reserve will be very minimal
+	//! as buffer sizes are maintained between calls to ae::IsosurfaceExtractor::Generate().
+	void Reserve( uint32_t vertexCount, uint32_t indexCount );
+	//! Generates the isosurface mesh, writing it to ae::IsosurfaceExtractor::vertices
+	//! and ae::IsosurfaceExtractor::indices. Returns true on completion, unless
+	//! ae::IsosurfaceParams::maxVerts or ae::IsosurfaceParams::maxIndices are
+	//! set and a limit is reached. Partial mesh data will not be available on
+	//! failure, but ae::IsosurfaceStats can be retrieved with ae::IsosurfaceExtractor::GetStats().
+	bool Generate( const ae::IsosurfaceParams& params );
+	//! Clears all results from ae::IsosurfaceExtractor::Generate(), including
+	//! from ae::IsosurfaceStats. Note that buffer sizes will be maintained even
+	//! if this is called.
 	void Reset();
+	//! Returns stats from the previous call to ae::IsosurfaceExtractor::Generate()
 	const IsosurfaceStats& GetStats() const { return m_stats; }
 	
 	ae::Array< IsosurfaceVertex > vertices;
@@ -5504,32 +5530,14 @@ struct IsosurfaceExtractor
 
 private:
 	static constexpr IsosurfaceIndex kInvalidIsosurfaceIndex = ~0;
-	const ae::Int3 kChildOffsets[ 8 ] =
-	{
-		{ -1, -1, -1 },
-		{ 1, -1, -1 },
-		{ -1, 1, -1 },
-		{ 1, 1, -1 },
-		{ -1, -1, 1 },
-		{ 1, -1, 1 },
-		{ -1, 1, 1 },
-		{ 1, 1, 1 }
-	};
-	// 3 new edges to test
-	const ae::Int3 cornerOffsets[ 3 ] = {
-		{ 0, 1, 1 }, // EDGE_TOP_FRONT_BIT
-		{ 1, 0, 1 }, // EDGE_TOP_RIGHT_BIT
-		{ 1, 1, 0 } // EDGE_SIDE_FRONTRIGHT_BIT
-	};
-	// @TODO: Description
+	const ae::Int3 kChildOffsets[ 8 ] = { { -1, -1, -1 }, { 1, -1, -1 }, { -1, 1, -1 }, { 1, 1, -1 }, { -1, -1, 1 }, { 1, -1, 1 }, { -1, 1, 1 }, { 1, 1, 1 } };
+	const ae::Int3 cornerOffsets[ 3 ] = { { 0, 1, 1 }, /* EDGE_TOP_FRONT_BIT */ { 1, 0, 1 }, /* EDGE_TOP_RIGHT_BIT */ { 1, 1, 0 } /* EDGE_SIDE_FRONTRIGHT_BIT */ };
 	static constexpr uint16_t EDGE_TOP_FRONT_BIT = ( 1 << 0 );
 	static constexpr uint16_t EDGE_TOP_RIGHT_BIT = ( 1 << 1 );
 	static constexpr uint16_t EDGE_SIDE_FRONTRIGHT_BIT = ( 1 << 2 );
-	// For expansion of edge intersections into triangles
 	const ae::Int3 offsets_EDGE_TOP_FRONT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 1, 1 } };
 	const ae::Int3 offsets_EDGE_TOP_RIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 0, 1 } };
 	const ae::Int3 offsets_EDGE_SIDE_FRONTRIGHT_BIT[ 4 ] = { { 0, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1, 0 } };
-	// @TODO: Description
 	static constexpr uint16_t mask[ 3 ] = { EDGE_TOP_FRONT_BIT, EDGE_TOP_RIGHT_BIT, EDGE_SIDE_FRONTRIGHT_BIT };
 	struct Voxel
 	{
@@ -5540,7 +5548,7 @@ private:
 		IsosurfaceIndex index = kInvalidIsosurfaceIndex;
 		uint16_t edgeBits = 0;
 	};
-	void m_Generate( ae::Int3 center, uint32_t halfSize );
+	bool m_Generate( ae::Int3 center, uint32_t halfSize );
 	bool m_DoVoxel( int32_t x, int32_t y, int32_t z );
 	inline IsosurfaceValue m_DualSample( ae::Int3 pos );
 	inline IsosurfaceValue m_Sample( ae::Vec3 pos );
@@ -27816,6 +27824,14 @@ IsosurfaceExtractor::IsosurfaceExtractor( ae::Tag tag ) :
 	Reset();
 }
 
+void IsosurfaceExtractor::Reserve( uint32_t vertexCount, uint32_t indexCount )
+{
+	vertices.Reserve( vertexCount );
+	indices.Reserve( indexCount );
+	m_voxels.Reserve( vertexCount * 1.25f ); // Leave 20% of array free
+	m_dualSamples.Reserve( vertexCount * 1.25f ); // Leave 20% of array free
+}
+
 void IsosurfaceExtractor::Reset()
 {
 	vertices.Clear();
@@ -27827,7 +27843,7 @@ void IsosurfaceExtractor::Reset()
 	m_dualSamples.Clear();
 }
 
-void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
+bool IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 {
 	AE_DEBUG_ASSERT( halfSize % 2 == 0 || halfSize == 1 );
 
@@ -27847,7 +27863,7 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 	{
 		m_stats.voxelSearchProgress += ( (uint64_t)halfSize * halfSize * halfSize * 8 );
 		m_UpdateStats();
- 		return; // No intersection, no need to split further
+ 		return true; // No intersection, no need to split further
 	}
 	
 	// Check if octant is outside of the given AABB
@@ -27864,7 +27880,10 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 				m_minInclusive.y < maxExclusive.y && minInclusive.y <= m_maxInclusive.y &&
 				m_minInclusive.z < maxExclusive.z && minInclusive.z <= m_maxInclusive.z )
 			{
-				m_Generate( nextCenter, nextHalfSize );
+				if( !m_Generate( nextCenter, nextHalfSize ) )
+				{
+					return false;
+				}
 			}
 			else
 			{
@@ -27891,7 +27910,10 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 						m_minInclusive.y <= y && y <= m_maxInclusive.y &&
 						m_minInclusive.z <= z && z <= m_maxInclusive.z )
 					{
-						m_DoVoxel( x, y, z ); // @TODO: Check return value
+						if( !m_DoVoxel( x, y, z ) )
+						{
+							return false;
+						}
 					}
 				}
 			}
@@ -27904,6 +27926,8 @@ void IsosurfaceExtractor::m_Generate( ae::Int3 center, uint32_t halfSize )
 	{
 		m_params.octree->Append( ae::AABB( ae::Vec3( center ) - ae::Vec3( halfSize ), ae::Vec3( center ) + ae::Vec3( halfSize ) ) );
 	}
+
+	return true;
 }
 
 bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
@@ -27995,7 +28019,7 @@ bool IsosurfaceExtractor::m_DoVoxel( int32_t x, int32_t y, int32_t z )
 					const bool sharedCornerInside = ( sharedCornerValue < cornerValues[ e ] );
 					const ae::Vec3 start = ae::Vec3( sharedCornerInside ? cornerOffsets[ e ] : sharedCornerOffset );
 					const ae::Vec3 end = ae::Vec3( sharedCornerInside ? sharedCornerOffset : cornerOffsets[ e ] );
-					const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel size is 1
+					const ae::Vec3 rayDir = ( end - start ); // No need to normalize since voxel/ray length is 1
 					float depth = 0.0f;
 					for( int32_t i = 0; i < 8; i++ ) // @TODO: This should probably be adjustable
 					{
@@ -28214,11 +28238,11 @@ void IsosurfaceExtractor::m_UpdateStats()
 	}
 }
 
-void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
+bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
 {
 	if( !_params.aabb.Contains( _params.aabb.GetCenter() ) )
 	{
-		return;
+		return true;
 	}
 	Reset();
 	m_params = _params;
@@ -28249,7 +28273,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
 	if( indices.Length() == 0 )
 	{
 		vertices.Clear();
-		return;
+		return false;
 	}
 
 	m_startMeshTime = ae::GetTime();
@@ -28523,6 +28547,7 @@ void IsosurfaceExtractor::Generate( const IsosurfaceParams& _params )
 	AE_DEBUG_ASSERT( indices.Length() <= m_params.maxIndices );
 	m_stats.meshProgress01 = 1.0f;
 	m_UpdateStats();
+	return true;
 }
 
 } // ae end
