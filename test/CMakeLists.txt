@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 include(FetchContent)
 
-set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
+message("")
+message("aether-game-utils test")
+message("")
 
 # Catch2
+set(CMAKE_CATCH_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 FetchContent_Declare(
 	Catch2
 	GIT_REPOSITORY "https://github.com/catchorg/Catch2.git"
@@ -11,6 +14,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 FetchContent_GetProperties(Catch2 SOURCE_DIR Catch2_SOURCE_DIR)
+
+message("")
 
 # test library (asserts throw exceptions for unit tests)
 add_ae_library(ae_test STATIC)

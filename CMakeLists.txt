@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 
+message("") # Empty line to separate aether logs from others
+message("aether-game-utils")
+message("")
+
 # Configuration variables intended for external use
 # AE_LEAN_AND_MEAN mode is disabled when building aether on its own
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
@@ -39,10 +43,11 @@ if(NOT ${AE_LEAN_AND_MEAN})
 endif()
 
 # aether-game-utils project
-project(aether-game-utils LANGUAGES CXX C VERSION 0.1.0)
+project(aether-game-utils LANGUAGES CXX C VERSION 1.0.0)
 
-# C++ defines and configuration
-set(CMAKE_CXX_STANDARD 17) # use at least c++17
+set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(AE_NAMESPACE aether-game-utils)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT ${AE_LEAN_AND_MEAN})
 	if(MSVC)
@@ -52,12 +57,13 @@ if(NOT ${AE_LEAN_AND_MEAN})
 	# Disable RTTI (not used in aether)
 	add_compile_options(-fno-rtti)
 endif()
+Include(${AE_ROOT_DIR}/AddBundle.cmake)
 
 # OpenGL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OPENGL_FRAMEWORK "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenGLES.framework")
 	if (EXISTS ${OPENGL_FRAMEWORK})
-		message(STATUS "Found OpenGLES")
+		message("Found OpenGLES")
 		list(APPEND AE_DEPS_LIBRARIES ${OPENGL_FRAMEWORK})
 	else()
 		message(SEND_ERROR "Could not find OpenGLES")
@@ -74,17 +80,23 @@ endif()
 if (IOS_TOOLCHAIN_HAS_RUN)
 	set(OPENAL_LIBRARY "${CMAKE_OSX_SYSROOT_INT}/System/Library/Frameworks/OpenAL.framework")
 	if (EXISTS ${OPENAL_LIBRARY})
-		message(STATUS "Found OpenAL")
+		message("Found OpenAL")
 		list(APPEND AE_DEPS_LIBRARIES ${OPENAL_LIBRARY})
 	else()
 		message(SEND_ERROR "Could not find OpenAL")
 	endif()
 endif()
 
+message("")
+
 # ae library
-set(AE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 function(add_ae_library NAME LIB_TYPE)
+	set(NAME_ALIAS ${AE_NAMESPACE}::${NAME})
+	message("Added target ${NAME}")
+	message("  ${NAME} alias:")
+	message("    ${NAME_ALIAS}")
 	add_library(${NAME} ${LIB_TYPE} "")
+	add_library(${NAME_ALIAS} ALIAS ${NAME})
 	if (APPLE)
 		set_target_properties(${NAME} PROPERTIES XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET 13.0) # See Professional CMake 24.5.3 Deployment Target
 		# @TODO: Other Apple platforms
@@ -130,6 +142,9 @@ function(add_ae_library NAME LIB_TYPE)
 			-Werror=pointer-to-int-cast
 		)
 	endif()
+	message("  ${NAME} properties:")
+	ae_print_target_properties(${NAME} PREFIX "    ")
+	message("")
 endfunction()
 add_ae_library(ae STATIC) # static library
 add_ae_library(ae_shared SHARED) # shared library (for hot loading)

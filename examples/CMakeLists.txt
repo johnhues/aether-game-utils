@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 Include(FetchContent)
 Include(${AE_ROOT_DIR}/AddBundle.cmake)
 
+message("")
+message("aether-game-utils examples")
+message("")
+
 # imgui
 add_definitions(-DSTB_TEXTEDIT_memmove=memmove) # This fixes a c++ modules issue where std string.h is included inside another namespace causing a conflict
 if(NOT imgui_FOUND)
@@ -48,10 +52,11 @@ elseif(APPLE)
 	set(AE_EXAMPLE_RESOURCES "data/Icon.icns")
 endif()
 
+message("")
+
 # Window
-ae_add_bundle(
-	BUNDLE_NAME "Example"
-	EXECUTABLE_NAME "01_example"
+ae_add_bundle("Example"
+	TARGET_NAME "01_example"
 	BUNDLE_ID "ae.01_example"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -62,9 +67,8 @@ ae_add_bundle(
 )
 
 # Sprites
-ae_add_bundle(
-	BUNDLE_NAME "Sprites"
-	EXECUTABLE_NAME "02_sprites"
+ae_add_bundle("Sprites"
+	TARGET_NAME "02_sprites"
 	BUNDLE_ID "ae.02_sprites"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -75,9 +79,8 @@ ae_add_bundle(
 )
 
 # Client / Server
-ae_add_bundle(
-	BUNDLE_NAME "Client"
-	EXECUTABLE_NAME "03_client"
+ae_add_bundle("Client"
+	TARGET_NAME "03_client"
 	BUNDLE_ID "ae.03_client"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -87,9 +90,8 @@ ae_add_bundle(
 	LIBS "ae"
 )
 if(NOT EMSCRIPTEN)
-	ae_add_bundle(
-		BUNDLE_NAME "Server"
-		EXECUTABLE_NAME "03_server"
+	ae_add_bundle("Server"
+		TARGET_NAME "03_server"
 		BUNDLE_ID "ae.03_server"
 		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -101,9 +103,8 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # Network Objects
-ae_add_bundle(
-	BUNDLE_NAME "NetObject Client"
-	EXECUTABLE_NAME "04_net_object_client"
+ae_add_bundle("NetObject Client"
+	TARGET_NAME "04_net_object_client"
 	BUNDLE_ID "ae.04_net_object_client"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -113,9 +114,8 @@ ae_add_bundle(
 	LIBS "ae_net"
 )
 if(NOT EMSCRIPTEN)
-	ae_add_bundle(
-		BUNDLE_NAME "NetObject Server"
-		EXECUTABLE_NAME "04_net_object_server"
+	ae_add_bundle("NetObject Server"
+		TARGET_NAME "04_net_object_server"
 		BUNDLE_ID "ae.04_net_object_server"
 		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -127,9 +127,8 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # Text Input
-ae_add_bundle(
-	BUNDLE_NAME "Text Input"
-	EXECUTABLE_NAME "05_text_input"
+ae_add_bundle("Text Input"
+	TARGET_NAME "05_text_input"
 	BUNDLE_ID "ae.05_text_input"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -140,9 +139,8 @@ ae_add_bundle(
 )
 
 # Triangle
-ae_add_bundle(
-	BUNDLE_NAME "Triangle"
-	EXECUTABLE_NAME "06_triangle"
+ae_add_bundle("Triangle"
+	TARGET_NAME "06_triangle"
 	BUNDLE_ID "ae.06_triangle"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -153,9 +151,8 @@ ae_add_bundle(
 )
 
 # Cube
-ae_add_bundle(
-	BUNDLE_NAME "Cube"
-	EXECUTABLE_NAME "07_cube"
+ae_add_bundle("Cube"
+	TARGET_NAME "07_cube"
 	BUNDLE_ID "ae.07_cube"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -166,9 +163,8 @@ ae_add_bundle(
 )
 
 # Audio
-ae_add_bundle(
-	BUNDLE_NAME "Audio"
-	EXECUTABLE_NAME "08_audio"
+ae_add_bundle("Audio"
+	TARGET_NAME "08_audio"
 	BUNDLE_ID "ae.08_audio"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -179,9 +175,8 @@ ae_add_bundle(
 )
 
 # Platformer2D
-ae_add_bundle(
-	BUNDLE_NAME "Platformer2D"
-	EXECUTABLE_NAME "09_platformer2d"
+ae_add_bundle("Platformer2D"
+	TARGET_NAME "09_platformer2d"
 	BUNDLE_ID "ae.09_platformer2d"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -192,9 +187,8 @@ ae_add_bundle(
 )
 
 # Splines
-ae_add_bundle(
-	BUNDLE_NAME "Splines"
-	EXECUTABLE_NAME "10_splines"
+ae_add_bundle("Splines"
+	TARGET_NAME "10_splines"
 	BUNDLE_ID "ae.10_splines"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -205,9 +199,8 @@ ae_add_bundle(
 )
 
 # Terrain
-ae_add_bundle(
-	BUNDLE_NAME "Terrain"
-	EXECUTABLE_NAME "11_terrain"
+ae_add_bundle("Terrain"
+	TARGET_NAME "11_terrain"
 	BUNDLE_ID "ae.11_terrain"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -218,9 +211,8 @@ ae_add_bundle(
 )
 
 # Geometry
-ae_add_bundle(
-	BUNDLE_NAME "Geometry"
-	EXECUTABLE_NAME "12_geometry"
+ae_add_bundle("Geometry"
+	TARGET_NAME "12_geometry"
 	BUNDLE_ID "ae.12_geometry"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -232,9 +224,8 @@ ae_add_bundle(
 
 if(NOT EMSCRIPTEN)
 	# FileDialogs
-	ae_add_bundle(
-		BUNDLE_NAME "File Dialogs"
-		EXECUTABLE_NAME "13_file_dialogs"
+	ae_add_bundle("File Dialogs"
+		TARGET_NAME "13_file_dialogs"
 		BUNDLE_ID "ae.13_file_dialogs"
 		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -246,9 +237,8 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # OBJViewer
-ae_add_bundle(
-	BUNDLE_NAME "OBJViewer"
-	EXECUTABLE_NAME "15_obj_viewer"
+ae_add_bundle("OBJViewer"
+	TARGET_NAME "15_obj_viewer"
 	BUNDLE_ID "ae.15_obj_viewer"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -260,9 +250,8 @@ ae_add_bundle(
 
 # SkinnedMesh
 if(AE_LOADERS_OFBX)
-	ae_add_bundle(
-		BUNDLE_NAME "SkinnedMesh"
-		EXECUTABLE_NAME "16_skinned_mesh"
+	ae_add_bundle("SkinnedMesh"
+		TARGET_NAME "16_skinned_mesh"
 		BUNDLE_ID "ae.16_skinned_mesh"
 		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -273,9 +262,8 @@ if(AE_LOADERS_OFBX)
 	)
 
 	# IK
-	ae_add_bundle(
-		BUNDLE_NAME "IK"
-		EXECUTABLE_NAME "17_ik"
+	ae_add_bundle("IK"
+		TARGET_NAME "17_ik"
 		BUNDLE_ID "ae.17_ik"
 		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -287,9 +275,8 @@ if(AE_LOADERS_OFBX)
 endif()
 
 # Editor
-ae_add_bundle(
-	BUNDLE_NAME "Editor"
-	EXECUTABLE_NAME "18_editor"
+ae_add_bundle("Editor"
+	TARGET_NAME "18_editor"
 	BUNDLE_ID "ae.18_editor"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -300,9 +287,8 @@ ae_add_bundle(
 )
 
 # Mouse
-ae_add_bundle(
-	BUNDLE_NAME "Mouse"
-	EXECUTABLE_NAME "19_mouse"
+ae_add_bundle("Mouse"
+	TARGET_NAME "19_mouse"
 	BUNDLE_ID "ae.19_mouse"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -313,9 +299,8 @@ ae_add_bundle(
 )
 
 # Render Target
-ae_add_bundle(
-	BUNDLE_NAME "Render Target"
-	EXECUTABLE_NAME "20_render_target"
+ae_add_bundle("Render Target"
+	TARGET_NAME "20_render_target"
 	BUNDLE_ID "ae.20_render_target"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -326,9 +311,8 @@ ae_add_bundle(
 )
 
 # Instancing
-ae_add_bundle(
-	BUNDLE_NAME "Instancing"
-	EXECUTABLE_NAME "21_instancing"
+ae_add_bundle("Instancing"
+	TARGET_NAME "21_instancing"
 	BUNDLE_ID "ae.21_instancing"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -339,9 +323,8 @@ ae_add_bundle(
 )
 
 # Read Me
-ae_add_bundle(
-	BUNDLE_NAME "Read Me"
-	EXECUTABLE_NAME "22_read_me"
+ae_add_bundle("Read Me"
+	TARGET_NAME "22_read_me"
 	BUNDLE_ID "ae.22_read_me"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -367,9 +350,8 @@ if(NOT EMSCRIPTEN)
 		SRC_FILES "23_SharedLibrary.cpp"
 		LIBS "ae"
 	)
-	ae_add_bundle(
-		BUNDLE_NAME "Shared Library"
-		EXECUTABLE_NAME "23_shared_library"
+	ae_add_bundle("Shared Library"
+		TARGET_NAME "23_shared_library"
 		BUNDLE_ID "ae.23_shared_library"
 		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -384,9 +366,8 @@ if(NOT EMSCRIPTEN)
 	target_compile_options(HotLoadable PUBLIC "-fvisibility=hidden") # See AE_EXPORT for more info
 	set_target_properties(HotLoadable PROPERTIES PREFIX "")
 	target_link_libraries(HotLoadable PUBLIC ae_shared) # Use shared library version of aether so symbols aren't duplicated
-	ae_add_bundle(
-		BUNDLE_NAME "Hot Load"
-		EXECUTABLE_NAME "24_hot_load"
+	ae_add_bundle("Hot Load"
+		TARGET_NAME "24_hot_load"
 		BUNDLE_ID "ae.24_hot_load"
 		APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 		MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -412,9 +393,8 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # A Star
-ae_add_bundle(
-	BUNDLE_NAME "A Star"
-	EXECUTABLE_NAME "25_a_star"
+ae_add_bundle("A Star"
+	TARGET_NAME "25_a_star"
 	BUNDLE_ID "ae.25_a_star"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -425,9 +405,8 @@ ae_add_bundle(
 )
 
 # Gamepad
-ae_add_bundle(
-	BUNDLE_NAME "Gamepad"
-	EXECUTABLE_NAME "26_gamepad"
+ae_add_bundle("Gamepad"
+	TARGET_NAME "26_gamepad"
 	BUNDLE_ID "ae.26_gamepad"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
@@ -438,9 +417,8 @@ ae_add_bundle(
 )
 
 # SDF to Mesh
-ae_add_bundle(
-	BUNDLE_NAME "SDF to Mesh"
-	EXECUTABLE_NAME "27_sdf_to_mesh"
+ae_add_bundle("SDF to Mesh"
+	TARGET_NAME "27_sdf_to_mesh"
 	BUNDLE_ID "ae.27_sdf_to_mesh"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
