@@ -26,7 +26,6 @@
 #include "aether.h"
 #include "ae/aeImGui.h"
 #include "ae/aeTerrain.h"
-#include "ae/SpriteRenderer.h"
 #include "ImGuizmo.h"
 
 const char* kFileName = "objects.dat";

@@ -20,7 +20,6 @@ target_sources(ae_extras PRIVATE
 	include/ae/aeTerrain.h
 	include/ae/Editor.h
 	include/ae/Entity.h
-	include/ae/SpriteRenderer.h
 	include/ae/sse2neon.h
 	aeCommonRender.cpp
 	aeCompactingAllocator.cpp
@@ -31,5 +30,4 @@ target_sources(ae_extras PRIVATE
 	ctpl_stl.h
 	# Editor.cpp
 	# Entity.cpp
-	SpriteRenderer.cpp
 )

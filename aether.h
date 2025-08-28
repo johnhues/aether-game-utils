@@ -4344,6 +4344,95 @@ private:
 };
 
 //------------------------------------------------------------------------------
+// ae::SpriteFont class
+//------------------------------------------------------------------------------
+class SpriteFont
+{
+public:
+	void SetGlyph( char c, ae::Rect quad, ae::Rect uvs, float advance );
+	bool GetGlyph( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const;
+	float GetTextWidth( const char* text, float uiSize ) const;
+
+private:
+	struct GlyphData
+	{
+		GlyphData();
+		ae::Rect quad;
+		ae::Rect uvs;
+		float advance;
+	};
+	GlyphData m_glyphs[ 96 ];
+};
+
+//------------------------------------------------------------------------------
+// ae::SpriteRenderer class
+//------------------------------------------------------------------------------
+//! Vertex attributes: a_position (4 floats), a_color (4 floats), a_uv
+//! (2 floats) are all provided to the vertex shader. See example.
+// Example vertex shader:
+/*
+	AE_IN_HIGHP vec4 a_position;
+	AE_IN_HIGHP vec4 a_color;
+	AE_IN_HIGHP vec2 a_uv;
+
+	AE_OUT_HIGHP vec4 v_color;
+	AE_OUT_HIGHP vec2 v_uv;
+
+	void main()
+	{
+		v_color = a_color;
+		v_uv = a_uv;
+		gl_Position = a_position;
+	}
+*/
+// Example fragment shader:
+/*
+	AE_UNIFORM sampler2D u_tex;
+
+	AE_IN_HIGHP vec4 v_color;
+	AE_IN_HIGHP vec2 v_uv;
+
+	void main()
+	{
+		AE_COLOR = v_color * AE_TEXTURE2D( u_tex, v_uv );
+	}
+*/
+//------------------------------------------------------------------------------
+class SpriteRenderer
+{
+public:
+	SpriteRenderer( const ae::Tag& tag );
+	void Initialize( uint32_t maxGroups, uint32_t maxCount );
+	void Terminate();
+
+	void AddSprite( uint32_t group, ae::Vec2 pos, ae::Vec2 size, ae::Rect uvs, ae::Color color );
+	void AddSprite( uint32_t group, ae::Rect quad, ae::Rect uvs, ae::Color color );
+	void AddSprite( uint32_t group, const ae::Matrix4& transform, ae::Rect uvs, ae::Color color );
+	void AddText( uint32_t group, const char* text, const SpriteFont* font, ae::Rect region, float fontSize, float lineHeight, ae::Color color );
+
+	void SetParams( uint32_t group, const ae::Shader* shader, const ae::UniformList& uniforms );
+	void Render();
+	void Clear();
+
+private:
+	struct GroupParams
+	{
+		const ae::Shader* shader = nullptr;
+		ae::UniformList uniforms;
+	};
+	struct SpriteVertex
+	{
+		ae::Vec4 pos;
+		ae::Vec4 color;
+		ae::Vec2 uv;
+	};
+	using SpriteIndex = uint16_t;
+	ae::Array< GroupParams > m_params;
+	ae::Array< uint32_t > m_spriteGroups;
+	ae::VertexArray m_vertexArray;
+};
+
+//------------------------------------------------------------------------------
 // ae::DebugCamera class
 //! A camera utility which provides basic functionality for mouse and keyboard
 //! navigation. These controls mimic some popular CAD software, but are still
@@ -24664,6 +24753,220 @@ uint32_t DebugLines::GetVertexCount() const
 uint32_t DebugLines::GetMaxVertexCount() const
 {
 	return m_vertexArray.GetVertexCount();
+}
+
+//------------------------------------------------------------------------------
+// ae::SpriteFont
+//------------------------------------------------------------------------------
+SpriteFont::GlyphData::GlyphData()
+{
+	quad = ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 0.0f ) );
+	uvs = ae::Rect::FromPoints( ae::Vec2( 0.0f ), ae::Vec2( 0.0f ) );
+	advance = 0.0f;
+}
+
+void SpriteFont::SetGlyph( char c, ae::Rect quad, ae::Rect uvs, float advance )
+{
+	if( c < 32 || c >= 32 + countof(m_glyphs) )
+	{
+		return;
+	}
+	m_glyphs[ c - 32 ].quad = quad;
+	m_glyphs[ c - 32 ].uvs = uvs;
+	m_glyphs[ c - 32 ].advance = advance;
+}
+
+bool SpriteFont::GetGlyph( char c, ae::Rect* quad, ae::Rect* uv, float* advance, float uiSize ) const
+{
+	if( c < 32 || c >= 32 + countof(m_glyphs) )
+	{
+		return false;
+	}
+	if( quad ) { *quad = m_glyphs[ c - 32 ].quad * uiSize; }
+	if( uv ) { *uv = m_glyphs[ c - 32 ].uvs; }
+	if( advance ) { *advance = m_glyphs[ c - 32 ].advance * uiSize; }
+	return true;
+}
+
+float SpriteFont::GetTextWidth( const char* text, float uiSize ) const
+{
+	float width = 0.0f;
+	float advance = 0.0f;
+	while( *text )
+	{
+		if( *text == '\r' || *text == '\n' )
+		{
+			width = std::max( width, advance );
+			advance = 0.0f;
+		}
+		else
+		{
+			GetGlyph( *text, nullptr, nullptr, &advance, uiSize );
+		}
+		text++;
+	}
+	return std::max( width, advance );
+}
+
+//------------------------------------------------------------------------------
+// ae::SpriteRenderer member functions
+//------------------------------------------------------------------------------
+SpriteRenderer::SpriteRenderer( const ae::Tag& tag ) :
+	m_params( tag ),
+	m_spriteGroups( tag ),
+	m_vertexArray( tag )
+{}
+
+void SpriteRenderer::Initialize( uint32_t maxGroups, uint32_t maxCount )
+{
+	m_params.Append( {}, maxGroups );
+	m_spriteGroups.Reserve( maxCount );
+
+	m_vertexArray.Initialize(
+		sizeof(SpriteVertex), sizeof(SpriteIndex),
+		4 * maxCount, 6 * maxCount,
+		ae::Vertex::Primitive::Triangle,
+		ae::Vertex::Usage::Dynamic, ae::Vertex::Usage::Static
+	);
+	m_vertexArray.AddAttribute( "a_position", 4, ae::Vertex::Type::Float, offsetof(SpriteVertex, pos) );
+	m_vertexArray.AddAttribute( "a_color", 4, ae::Vertex::Type::Float, offsetof(SpriteVertex, color) );
+	m_vertexArray.AddAttribute( "a_uv", 2, ae::Vertex::Type::Float, offsetof(SpriteVertex, uv) );
+
+	const uint16_t indices[] = { 3, 0, 1, 3, 1, 2 };
+	ae::Scratch< SpriteIndex > indexBuffer( 6 * maxCount );
+	for( uint16_t i = 0; i < maxCount; i++ )
+	{
+		const uint16_t offset = 4 * i;
+		indexBuffer[ i * 6 ] = offset + indices[ 0 ];
+		indexBuffer[ i * 6 + 1 ] = offset + indices[ 1 ];
+		indexBuffer[ i * 6 + 2 ] = offset + indices[ 2 ];
+		indexBuffer[ i * 6 + 3 ] = offset + indices[ 3 ];
+		indexBuffer[ i * 6 + 4 ] = offset + indices[ 4 ];
+		indexBuffer[ i * 6 + 5 ] = offset + indices[ 5 ];
+	}
+	m_vertexArray.SetIndices( indexBuffer.Data(), indexBuffer.Length() );
+}
+
+void SpriteRenderer::Terminate()
+{
+	m_vertexArray.Terminate();
+	m_vertexArray.Terminate();
+	m_spriteGroups.Clear();
+	m_params.Clear();
+}
+
+void SpriteRenderer::AddSprite( uint32_t group, ae::Vec2 pos, ae::Vec2 size, ae::Rect uvs, ae::Color color )
+{
+	ae::Matrix4 localToScreen = ae::Matrix4::Translation( pos.x, pos.y, 0.0f ) * ae::Matrix4::Scaling( size.x, size.y, 1.0f );
+	AddSprite( group, localToScreen, uvs, color );
+}
+
+void SpriteRenderer::AddSprite( uint32_t group, ae::Rect quad, ae::Rect uvs, ae::Color color )
+{
+	ae::Vec2 pos = quad.GetMin() + quad.GetSize() * 0.5f;
+	ae::Vec2 size = quad.GetSize();
+	ae::Matrix4 localToScreen = ae::Matrix4::Translation( pos.x, pos.y, 0.0f ) * ae::Matrix4::Scaling( size.x, size.y, 1.0f );
+	AddSprite( group, localToScreen, uvs, color );
+}
+
+void SpriteRenderer::AddSprite( uint32_t group, const ae::Matrix4& transform, ae::Rect uvs, ae::Color color )
+{
+	if( m_vertexArray.GetVertexCount() >= m_vertexArray.GetMaxVertexCount() )
+	{
+		return;
+	}
+	
+	ae::Vec2 min = uvs.GetMin();
+	ae::Vec2 max = uvs.GetMax();
+	SpriteVertex verts[] =
+	{
+		{ transform * ae::Vec4( -0.5f, -0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( min.x, min.y ) },
+		{ transform * ae::Vec4( 0.5f, -0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( max.x, min.y ) },
+		{ transform * ae::Vec4( 0.5f, 0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( max.x, max.y ) },
+		{ transform * ae::Vec4( -0.5f, 0.5f, 0.0f, 1.0f ), color.GetLinearRGBA(), ae::Vec2( min.x, max.y ) }
+	};
+	m_vertexArray.AppendVertices( verts, countof(verts) );
+	m_spriteGroups.Append( group );
+}
+
+void SpriteRenderer::AddText( uint32_t group, const char* text, const SpriteFont* font, ae::Rect region, float fontSize, float lineHeight, ae::Color color )
+{
+	ae::Vec2 offset( region.GetMin().x, region.GetMax().y - lineHeight );
+	while( *text )
+	{
+		const char c = *text;
+		const bool isSpace = isspace( c );
+		ae::Rect quad, uv;
+		float advance;
+		font->GetGlyph( *text, &quad, &uv, &advance, fontSize );
+		if( !isSpace )
+		{
+			AddSprite( group, quad + offset, uv, color );
+		}
+		offset.x += advance;
+		text++;
+
+		bool newline = false;
+		if( isSpace && !isspace( *text ) )
+		{
+			const char* word = text;
+			float wordSize = 0.0f;
+			while( *word && !isspace( *word ) )
+			{
+				float advance2 = 0.0f;
+				font->GetGlyph( *word, nullptr, nullptr, &advance2, fontSize );
+				wordSize += advance2;
+				word++;
+			}
+			if( offset.x + wordSize > region.GetMax().x )
+			{
+				newline = true;
+			}
+		}
+		else if( c == '\r' || c == '\n' )
+		{
+			newline = true;
+		}
+		if( newline )
+		{
+			offset.x = region.GetMin().x;
+			offset.y -= lineHeight;
+		}
+	}
+}
+
+void SpriteRenderer::SetParams( uint32_t group, const ae::Shader* shader, const ae::UniformList& uniforms )
+{
+	m_params[ group ] = { shader, uniforms };
+}
+
+void SpriteRenderer::Render()
+{
+	m_vertexArray.Upload();
+
+	const uint32_t spriteCount = m_spriteGroups.Length();
+	for( uint32_t i = 0; i < spriteCount; i++ )
+	{
+		const uint32_t group = m_spriteGroups[ i ];
+		const GroupParams& params = m_params[ group ];
+		// @TODO: Combine draw calls when consecutive sprites are the same group
+		if( params.shader )
+		{
+			m_vertexArray.Draw( params.shader, params.uniforms, i * 2, 2 );
+		}
+	}
+
+	Clear();
+}
+
+void SpriteRenderer::Clear()
+{
+	m_vertexArray.ClearVertices();
+	m_spriteGroups.Clear();
+	for( auto& p : m_params )
+	{
+		p = {};
+	}
 }
 
 //------------------------------------------------------------------------------
