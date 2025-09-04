@@ -1485,7 +1485,7 @@ public:
 	bool operator >=( const char* str ) const;
 
 	char& operator[]( uint32_t i );
-	const char operator[]( uint32_t i ) const;
+	char operator[]( uint32_t i ) const;
 	const char* c_str() const;
 
 	template< uint32_t N2 >
@@ -8956,7 +8956,7 @@ char& Str< N >::operator[]( uint32_t i )
 }
 
 template< uint32_t N >
-const char Str< N >::operator[]( uint32_t i ) const
+char Str< N >::operator[]( uint32_t i ) const
 {
 	AE_ASSERT_MSG( i <= m_length, "'#'[ # ]", m_str, i ); // @NOTE: Allow indexing null (length + 1)
 	return m_str[ i ];
