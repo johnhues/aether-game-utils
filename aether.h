@@ -8336,80 +8336,80 @@ template<>
 inline std::string ToString( int8_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId8, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRId8, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( int16_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId16, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRId16, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( int32_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId32, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRId32, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( int64_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId64, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRId64, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( uint8_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu8, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRIu8, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( uint16_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu16, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRIu16, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( uint32_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu32, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRIu32, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( uint64_t value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu64, value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%" PRIu64, value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( float value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%.3f", value );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( double value )
 {
 	char str[ 32 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.6lf", value );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%.6lf", value );
+	return std::string( str );
 }
 
 template<>
@@ -8422,62 +8422,62 @@ template<>
 inline std::string ToString( ae::Vec2 v )
 {
 	char str[ 128 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f", v.x, v.y );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%.3f %.3f", v.x, v.y );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( ae::Vec3 v )
 {
 	char str[ 128 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f", v.x, v.y, v.z );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%.3f %.3f %.3f", v.x, v.y, v.z );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( ae::Vec4 v )
 {
 	char str[ 128 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( ae::Int2 value )
 {
 	char str[ 128 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d", value.x, value.y );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%d %d", value.x, value.y );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( ae::Int3 value )
 {
 	char str[ 128 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d %d", value.x, value.y, value.z );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%d %d %d", value.x, value.y, value.z );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( ae::Color v )
 {
 	char str[ 128 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
-	return std::string( str, length );
+	snprintf( str, sizeof( str ), "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
+	return std::string( str );
 }
 
 template<>
 inline std::string ToString( ae::Matrix4 v )
 {
 	char str[ 128 ];
-	const uint32_t length = snprintf( str, sizeof( str ) - 1,
+	snprintf( str, sizeof( str ),
 		"%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
 		v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ],
 		v.data[ 4 ], v.data[ 5 ], v.data[ 6 ], v.data[ 7 ],
 		v.data[ 8 ], v.data[ 9 ], v.data[ 10 ], v.data[ 11 ],
 		v.data[ 12 ], v.data[ 13 ], v.data[ 14 ], v.data[ 15 ]
 	);
-	return std::string( str, length );
+	return std::string( str );
 }
 
 //------------------------------------------------------------------------------
