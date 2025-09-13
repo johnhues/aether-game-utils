@@ -240,6 +240,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -3479,6 +3480,10 @@ public:
 	//! Returns true if the given path is a directory. This function does not
 	//! access the underlying filesystem to see if the directory exists.
 	static bool IsDirectory( const char* path );
+	//! Removes redundant slashes and up-level references from the given path.
+	//! This does not access the underlying filesystem to resolve symbolic links
+	//! or verify the path exists.
+	static void NormalizePath( Str256* path );
 
 	// File dialogs
 	static ae::Array< std::string > OpenDialog( const FileDialogParams& params );
@@ -19806,13 +19811,13 @@ bool FileSystem::GetAbsolutePath( Root root, const char* filePath, Str256* outPa
 	if( IsAbsolutePath( filePath ) )
 	{
 		*outPath = filePath;
-		// @TODO: 'normalize' the path to remove '..'s etc
+		NormalizePath( outPath );
 		return true;
 	}
 	else if( GetRootDir( root, outPath ) )
 	{
 		AppendToPath( outPath, filePath );
-		// @TODO: 'normalize' the path to remove '..'s etc
+		NormalizePath( outPath );
 		return true;
 	}
 	return false;
@@ -20311,6 +20316,16 @@ bool ae::FileSystem::IsDirectory( const char* path )
 		return false;
 	}
 	return path[ length - 1 ] == '/' || path[ length - 1 ] == '\\';
+}
+
+void ae::FileSystem::NormalizePath( Str256* path )
+{
+	if( !path || !path->Length() )
+	{
+		return;
+	}
+	std::filesystem::path fsPath = std::filesystem::path( path->c_str() ).lexically_normal();
+	*path = fsPath.string().c_str();
 }
 
 #if _AE_WINDOWS_
