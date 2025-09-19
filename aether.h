@@ -8342,6 +8342,7 @@ inline std::string ToString( int8_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId8, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8350,6 +8351,7 @@ inline std::string ToString( int16_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId16, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8358,6 +8360,7 @@ inline std::string ToString( int32_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId32, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8366,6 +8369,7 @@ inline std::string ToString( int64_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId64, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8374,6 +8378,7 @@ inline std::string ToString( uint8_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu8, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8382,6 +8387,7 @@ inline std::string ToString( uint16_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu16, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8390,6 +8396,7 @@ inline std::string ToString( uint32_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu32, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8398,6 +8405,7 @@ inline std::string ToString( uint64_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu64, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8406,6 +8414,7 @@ inline std::string ToString( float value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8414,6 +8423,7 @@ inline std::string ToString( double value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.6lf", value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8428,6 +8438,7 @@ inline std::string ToString( ae::Vec2 v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f", v.x, v.y );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8436,6 +8447,7 @@ inline std::string ToString( ae::Vec3 v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f", v.x, v.y, v.z );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8444,6 +8456,7 @@ inline std::string ToString( ae::Vec4 v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8452,6 +8465,7 @@ inline std::string ToString( ae::Int2 value )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d", value.x, value.y );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8460,6 +8474,7 @@ inline std::string ToString( ae::Int3 value )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d %d", value.x, value.y, value.z );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8468,13 +8483,14 @@ inline std::string ToString( ae::Color v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
 template<>
 inline std::string ToString( ae::Matrix4 v )
 {
-	char str[ 128 ];
+	char str[ 256 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1,
 		"%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
 		v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ],
@@ -8482,6 +8498,7 @@ inline std::string ToString( ae::Matrix4 v )
 		v.data[ 8 ], v.data[ 9 ], v.data[ 10 ], v.data[ 11 ],
 		v.data[ 12 ], v.data[ 13 ], v.data[ 14 ], v.data[ 15 ]
 	);
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
