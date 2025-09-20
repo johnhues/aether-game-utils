@@ -33,8 +33,9 @@ if(NOT rapidjson_FOUND)
 		rapidjson
 		GIT_REPOSITORY "https://github.com/Tencent/rapidjson.git"
 		GIT_TAG 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
+		SOURCE_SUBDIR "NO-SUBDIRECTORY" # Use a non-existent subdirectory name to skip add_subdirectory()
 	)
-	FetchContent_Populate(rapidjson) # Download but don't build
+	FetchContent_MakeAvailable(rapidjson)
 	file(GLOB_RECURSE rapidjson_SOURCES CONFIGURE_DEPENDS "${rapidjson_SOURCE_DIR}/include/*")
 	add_library(rapidjson INTERFACE) # Header only
 	target_include_directories(rapidjson INTERFACE "${rapidjson_SOURCE_DIR}/include")
