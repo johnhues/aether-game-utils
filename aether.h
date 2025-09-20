@@ -263,8 +263,6 @@
 #if _AE_APPLE_
 	#ifdef __aarch64__
 		#include <arm_neon.h>
-	#else
-		#include <x86intrin.h>
 	#endif
 #elif _AE_WINDOWS_
 	#include <intrin.h>
@@ -275,9 +273,9 @@
 #endif
 #if !_AE_WINDOWS_
 	#include <cxxabi.h>
-#endif
-#if defined(__SSE2__) || defined(_M_SSE2)
-	#include <xmmintrin.h>
+	#if defined(__SSE3__)
+		#include <pmmintrin.h>
+	#endif
 #endif
 
 //------------------------------------------------------------------------------
@@ -28738,7 +28736,7 @@ bool IsosurfaceExtractor::Generate( const ae::IsosurfaceParams& _params )
 		{
 			// Get intersection of edge planes for vertex positioning
 			{
-#if defined(__SSE2__) || defined(_M_SSE2)
+#if defined(__SSE3__)
 				__m128 c128 = _mm_setzero_ps();
 				for( uint32_t i = 0; i < ec; i++ )
 				{
