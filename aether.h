@@ -240,6 +240,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -3480,6 +3481,10 @@ public:
 	//! Returns true if the given path is a directory. This function does not
 	//! access the underlying filesystem to see if the directory exists.
 	static bool IsDirectory( const char* path );
+	//! Removes redundant slashes and up-level references from the given path.
+	//! This does not access the underlying filesystem to resolve symbolic links
+	//! or verify the path exists.
+	static void NormalizePath( Str256* path );
 
 	// File dialogs
 	static ae::Array< std::string > OpenDialog( const FileDialogParams& params );
@@ -8338,6 +8343,7 @@ inline std::string ToString( int8_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId8, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8346,6 +8352,7 @@ inline std::string ToString( int16_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId16, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8354,6 +8361,7 @@ inline std::string ToString( int32_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId32, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8362,6 +8370,7 @@ inline std::string ToString( int64_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRId64, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8370,6 +8379,7 @@ inline std::string ToString( uint8_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu8, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8378,6 +8388,7 @@ inline std::string ToString( uint16_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu16, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8386,6 +8397,7 @@ inline std::string ToString( uint32_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu32, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8394,6 +8406,7 @@ inline std::string ToString( uint64_t value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%" PRIu64, value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8402,6 +8415,7 @@ inline std::string ToString( float value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f", value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8410,6 +8424,7 @@ inline std::string ToString( double value )
 {
 	char str[ 32 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.6lf", value );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8424,6 +8439,7 @@ inline std::string ToString( ae::Vec2 v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f", v.x, v.y );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8432,6 +8448,7 @@ inline std::string ToString( ae::Vec3 v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f", v.x, v.y, v.z );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8440,6 +8457,7 @@ inline std::string ToString( ae::Vec4 v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.x, v.y, v.z, v.w );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8448,6 +8466,7 @@ inline std::string ToString( ae::Int2 value )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d", value.x, value.y );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8456,6 +8475,7 @@ inline std::string ToString( ae::Int3 value )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%d %d %d", value.x, value.y, value.z );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -8464,13 +8484,14 @@ inline std::string ToString( ae::Color v )
 {
 	char str[ 128 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1, "%.3f %.3f %.3f %.3f", v.r, v.g, v.b, v.a );
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
 template<>
 inline std::string ToString( ae::Matrix4 v )
 {
-	char str[ 128 ];
+	char str[ 256 ];
 	const uint32_t length = snprintf( str, sizeof( str ) - 1,
 		"%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f",
 		v.data[ 0 ], v.data[ 1 ], v.data[ 2 ], v.data[ 3 ],
@@ -8478,6 +8499,7 @@ inline std::string ToString( ae::Matrix4 v )
 		v.data[ 8 ], v.data[ 9 ], v.data[ 10 ], v.data[ 11 ],
 		v.data[ 12 ], v.data[ 13 ], v.data[ 14 ], v.data[ 15 ]
 	);
+	AE_ASSERT( length < sizeof(str) );
 	return std::string( str, length );
 }
 
@@ -19807,13 +19829,13 @@ bool FileSystem::GetAbsolutePath( Root root, const char* filePath, Str256* outPa
 	if( IsAbsolutePath( filePath ) )
 	{
 		*outPath = filePath;
-		// @TODO: 'normalize' the path to remove '..'s etc
+		NormalizePath( outPath );
 		return true;
 	}
 	else if( GetRootDir( root, outPath ) )
 	{
 		AppendToPath( outPath, filePath );
-		// @TODO: 'normalize' the path to remove '..'s etc
+		NormalizePath( outPath );
 		return true;
 	}
 	return false;
@@ -20312,6 +20334,16 @@ bool ae::FileSystem::IsDirectory( const char* path )
 		return false;
 	}
 	return path[ length - 1 ] == '/' || path[ length - 1 ] == '\\';
+}
+
+void ae::FileSystem::NormalizePath( Str256* path )
+{
+	if( !path || !path->Length() )
+	{
+		return;
+	}
+	std::filesystem::path fsPath = std::filesystem::path( path->c_str() ).lexically_normal();
+	*path = fsPath.string().c_str();
 }
 
 #if _AE_WINDOWS_
