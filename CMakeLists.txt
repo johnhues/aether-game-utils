@@ -57,7 +57,7 @@ if(NOT ${AE_LEAN_AND_MEAN})
 	# Disable RTTI (not used in aether)
 	add_compile_options(-fno-rtti)
 endif()
-Include(${AE_ROOT_DIR}/AddBundle.cmake)
+Include("${AE_ROOT_DIR}/AddBundle.cmake")
 
 # OpenGL dependency
 if (IOS_TOOLCHAIN_HAS_RUN)
@@ -110,10 +110,9 @@ function(add_ae_library NAME LIB_TYPE)
 	if (AE_DEPS_INCLUDE)
 		target_include_directories(${NAME} PUBLIC ${AE_DEPS_INCLUDE})
 	endif()
-	target_include_directories(${NAME} PUBLIC ${AE_ROOT_DIR})
-	target_precompile_headers(${NAME} PUBLIC "${AE_ROOT_DIR}/aether.h")
+	target_include_directories(${NAME} PUBLIC "${AE_ROOT_DIR}")
 	if(APPLE)
-		target_sources(${NAME} PRIVATE ${AE_ROOT_DIR}/aether.h ${AE_ROOT_DIR}/aether.mm)
+		target_sources(${NAME} PRIVATE "${AE_ROOT_DIR}/aether.h" "${AE_ROOT_DIR}/aether.mm")
 		if (AE_USE_MODULES)
 			target_compile_definitions(${NAME} PUBLIC AE_USE_MODULES)
 			target_compile_options(${NAME} PUBLIC "-fmodules;-fcxx-modules")
@@ -131,17 +130,21 @@ function(add_ae_library NAME LIB_TYPE)
 		if(UNIX)
 			target_compile_options(${NAME} PRIVATE -fPIC) # Fixes errors linking static ae into shared libraries: relocation against symbol 'X' which may bind externally 
 		endif()
-		target_sources(${NAME} PRIVATE ${AE_ROOT_DIR}/aether.h ${AE_ROOT_DIR}/aether.cpp)
+		target_sources(${NAME} PRIVATE "${AE_ROOT_DIR}/aether.h" "${AE_ROOT_DIR}/aether.cpp")
 	endif()
 	if(NOT ${AE_LEAN_AND_MEAN} AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU|AppleClang"))
 		target_compile_options(${NAME} PUBLIC
 			-Werror=return-type
 			-Werror=implicit-fallthrough
-			-Werror=implicit-int-conversion
 			-Werror=narrowing
 			-Werror=uninitialized
 			-Werror=pointer-to-int-cast
 		)
+		if((CMAKE_CXX_COMPILER_ID MATCHES "AppleClang"))
+			target_compile_options(${NAME} PUBLIC
+				-Werror=implicit-int-conversion
+			)
+		endif()
 	endif()
 	message("  ${NAME} properties:")
 	ae_print_target_properties(${NAME} PREFIX "    ")
