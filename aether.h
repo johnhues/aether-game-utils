@@ -276,6 +276,9 @@
 #if !_AE_WINDOWS_
 	#include <cxxabi.h>
 #endif
+#if defined(__SSE2__) || defined(_M_SSE2)
+	#include <xmmintrin.h>
+#endif
 
 //------------------------------------------------------------------------------
 // Platform Utils

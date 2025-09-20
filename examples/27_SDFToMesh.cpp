@@ -411,10 +411,10 @@ int main()
 					);
 				},
 				.userData=&surfaceFn,
-				.dualContouring=dualContouringEnabled,
 				.aabb=region,
 				.maxVerts=0,
 				.maxIndices=0,
+				.dualContouring=dualContouringEnabled,
 				.octree=&octree,
 				.errors=&errors
 			} );
