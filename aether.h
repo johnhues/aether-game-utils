@@ -246,6 +246,7 @@
 #include <optional>
 #include <ostream>
 #include <sstream>
+#include <mutex>
 #include <thread> // @TODO: Remove. For Globals::allocatorThread.
 #include <type_traits>
 #include <typeinfo>
