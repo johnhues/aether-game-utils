@@ -38,10 +38,20 @@ TEST_CASE( "GetHash() template function hashes values correctly", "[ae::HashMap6
 	REQUIRE( ae::GetHash64( 777u ) == 777ull );
 	REQUIRE( ae::GetHash64( 777 ) == 777ull );
 	REQUIRE( ae::GetHash64( -777 ) == (uint64_t)-777 );
-	REQUIRE( ae::GetHash64( (const void*)777u ) == 0xd19adc106a20b93dull );
-	REQUIRE( ae::GetHash64( (const float*)777u ) == 0xd19adc106a20b93dull );
-	REQUIRE( ae::GetHash64( (void*)777u ) == 0xd19adc106a20b93dull );
-	REQUIRE( ae::GetHash64( (float*)777u ) == 0xd19adc106a20b93dull );
+	if( sizeof( void* ) == 8 )
+	{
+		REQUIRE( ae::GetHash64( (const void*)777u ) == 0xd19adc106a20b93dull );
+		REQUIRE( ae::GetHash64( (const float*)777u ) == 0xd19adc106a20b93dull );
+		REQUIRE( ae::GetHash64( (void*)777u ) == 0xd19adc106a20b93dull );
+		REQUIRE( ae::GetHash64( (float*)777u ) == 0xd19adc106a20b93dull );
+	}
+	else if( sizeof( void* ) == 4 )
+	{
+		REQUIRE( ae::GetHash64( (const void*)777u ) == 0xc6fc9bba07fe37ed );
+		REQUIRE( ae::GetHash64( (const float*)777u ) == 0xc6fc9bba07fe37ed );
+		REQUIRE( ae::GetHash64( (void*)777u ) == 0xc6fc9bba07fe37ed );
+		REQUIRE( ae::GetHash64( (float*)777u ) == 0xc6fc9bba07fe37ed );
+	}
 	REQUIRE( ae::GetHash64( (const char*)"777" ) == 0x34de64180ef728acull );
 	REQUIRE( ae::GetHash64( (char*)"777" ) == 0x34de64180ef728acull );
 	REQUIRE( ae::GetHash64( "777" ) == 0x34de64180ef728acull );
