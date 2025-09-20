@@ -2751,55 +2751,6 @@ typedef void (*LogFn)( ae::LogSeverity severity, const char* filePath, uint32_t 
 #endif
 // clang-format on
 
-//------------------------------------------------------------------------------
-// Handle missing 'standard' C functions
-//------------------------------------------------------------------------------
-#ifndef HAVE_STRLCAT
-inline size_t strlcat( char* dst, const char* src, size_t size )
-{
-	size_t dstlen = strlen( dst );
-	size -= dstlen + 1;
-
-	if( !size )
-	{
-		return dstlen;
-	}
-
-	size_t srclen = strlen( src );
-	if( srclen > size )
-	{
-		srclen = size;
-	}
-
-	memcpy( dst + dstlen, src, srclen );
-	dst[ dstlen + srclen ] = '\0';
-
-	return ( dstlen + srclen );
-}
-#endif
-
-#ifndef HAVE_STRLCPY
-inline size_t strlcpy( char* dst, const char* src, size_t size )
-{
-	size--;
-
-	size_t srclen = strlen( src );
-	if( srclen > size )
-	{
-		srclen = size;
-	}
-
-	memcpy( dst, src, srclen );
-	dst[ srclen ] = '\0';
-
-	return srclen;
-}
-#endif
-
-#ifdef _MSC_VER
-# define strtok_r strtok_s
-#endif
-
 namespace ae {
 
 //------------------------------------------------------------------------------
