@@ -213,6 +213,8 @@ public:
 
 	void HandleTransformChange( class EditorProgram* program, ae::Entity entity, const ae::Matrix4& transform );
 	void BroadcastVarChange( const ae::ClassVar* var, const ae::Component* component );
+
+	void ActiveRefocus( EditorProgram* program );
 	
 	ae::ListenerSocket sock;
 	
@@ -282,6 +284,12 @@ private:
 		ae::Entity pending = kInvalidEntity;
 	};
 	SelectRef m_selectRef;
+
+	// Interpolation
+	int32_t m_doRefocusImm = 0;
+	bool m_doRefocusPrev = false;
+	float m_refocusSize = 1.0f;
+	float m_refocusHeldTime = 0.0f;
 };
 
 class EditorProgram
@@ -495,23 +503,39 @@ void EditorProgram::Initialize()
 	
 	const char* meshVertShader = R"(
 		AE_UNIFORM mat4 u_localToProj;
+		AE_UNIFORM mat4 u_localToWorld;
 		AE_UNIFORM mat4 u_normalToWorld;
 		AE_IN_HIGHP vec4 a_position;
 		AE_IN_HIGHP vec4 a_normal;
-		AE_OUT_HIGHP vec4 v_normal;
+		AE_OUT_HIGHP vec3 v_position;
+		AE_OUT_HIGHP vec3 v_normal;
 		void main()
 		{
-			v_normal = u_normalToWorld * a_normal;
+			v_position = ( u_localToWorld * a_position ).xyz;
+			v_normal = ( u_normalToWorld * a_normal ).xyz;
 			gl_Position = u_localToProj * a_position;
 		})";
 	const char* meshFragShader = R"(
+		AE_UNIFORM vec3 u_cameraPos;
 		AE_UNIFORM vec3 u_lightDir;
 		AE_UNIFORM vec4 u_color;
-		AE_IN_HIGHP vec4 v_normal;
+		AE_IN_HIGHP vec3 v_position;
+		AE_IN_HIGHP vec3 v_normal;
 		void main()
 		{
-			float light = dot( -u_lightDir, normalize( v_normal.xyz ) );
+			float light = dot( -u_lightDir, normalize( v_normal ) );
 			light = 0.6 + 0.4 * max( 0.0, light );
+
+			// Unit scale 3D checker grid
+			vec3 p = v_position;
+			vec3 ip = floor( p );
+			vec3 fp = p - ip;
+			float checker = mod( ip.x + ip.y + ip.z, 2.0 );
+			float dist = length( u_cameraPos - v_position );
+			float fade = 1.0 - clamp( ( dist - 100.0 ) / 100.0, 0.0, 1.0 );
+			checker = 1.0 - 0.2 * checker * fade;
+			light *= checker;
+
 			AE_COLOR.rgb = u_color.rgb * light;
 			AE_COLOR.a = u_color.a;
 		})";
@@ -1315,6 +1339,7 @@ void EditorServer::Terminate( EditorProgram* program )
 
 void EditorServer::Update( EditorProgram* program )
 {
+	const double currentTime = ae::GetTime();
 	m_LoadLevel( program ); // Checks if a pending level is ready to load
 	
 	if( !sock.IsListening() )
@@ -1330,7 +1355,6 @@ void EditorServer::Update( EditorProgram* program )
 	AE_ASSERT( m_connections.Length() == sock.GetConnectionCount() );
 	
 	// Send a heartbeat to keep the connection alive, and to check if the client is still connected
-	const double currentTime = ae::GetTime();
 	if( currentTime > m_nextHeartbeat )
 	{
 		for( EditorConnection* (&conn) : m_connections )
@@ -1361,6 +1385,48 @@ void EditorServer::Update( EditorProgram* program )
 		}
 	}
 	m_connections.RemoveAllFn( []( const EditorConnection* c ){ return !c; } );
+
+	// Camera update
+	const float kTapTime = 0.15f;
+	const bool couldSnapRefocus = ( m_refocusHeldTime < kTapTime );
+	ae::DebugCamera* camera = &program->camera;
+	if( m_doRefocusImm > 0 )
+	{
+		const float dt = program->timeStep.GetDt();
+		const ae::Vec3 cameraPivot = camera->GetPivot();
+		const float posDiff = ( cameraPivot - m_mouseHover ).Length();
+		const float resize = posDiff - m_refocusSize;
+		if( resize > 0.0001f )
+		{
+			// Linearly grow refocus speed based on zoom level
+			m_refocusSize += camera->GetDistanceFromPivot() * 0.1f * dt;
+		}
+		else
+		{
+			// Exponentially shrink refocus speed based on pivot distance from the target
+			m_refocusSize = ae::DtLerp( m_refocusSize, 2.5f, dt, posDiff );
+		}
+		m_refocusSize = ae::Max( m_refocusSize, 0.0f );
+		const ae::Sphere sphere( cameraPivot, m_refocusSize );
+		const ae::Vec3 nearestPoint = sphere.GetNearestPointOnSurface( m_mouseHover );
+		if( !couldSnapRefocus )
+		{
+			camera->Refocus( nearestPoint, 0.5f );
+		}
+
+		m_refocusHeldTime += dt;
+		m_doRefocusImm--;
+		if( m_doRefocusImm == 0 )
+		{
+			camera->Reset( camera->GetPivot(), camera->GetPosition() );
+		}
+	}
+	
+	if( !m_doRefocusImm && m_doRefocusPrev && couldSnapRefocus )
+	{
+		camera->Refocus( program->editor.m_selected.Length() ? program->editor.GetSelectedAABB( program ).GetCenter() : m_mouseHover );
+	}
+	m_doRefocusPrev = ( m_doRefocusImm > 0 );
 }
 
 void EditorServer::Render( EditorProgram* program )
@@ -1402,7 +1468,9 @@ void EditorServer::Render( EditorProgram* program )
 		ae::Matrix4 transform = obj.GetTransform();
 		ae::UniformList uniformList;
 		uniformList.Set( "u_localToProj", worldToProj * transform );
+		uniformList.Set( "u_localToWorld", transform );
 		uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
+		uniformList.Set( "u_cameraPos", program->camera.GetPosition() );
 		uniformList.Set( "u_lightDir", lightDir );
 		uniformList.Set( "u_color", color.GetLinearRGBA() );
 		obj.mesh->data.Bind( &program->m_meshShader, uniformList );
@@ -1667,13 +1735,13 @@ void EditorServer::ShowUI( EditorProgram* program )
 	// Debug lines
 	ae::Optional< ae::Vec3 > gridLineCenter;
 	const ae::Vec3 pivot = program->camera.GetPivot();
+	const float zoom = program->camera.GetDistanceFromPivot();
 	{
-		const float distance = program->camera.GetDistanceFromPivot();
-		const ae::Vec3 showPivot = pivot - program->camera.GetForward() * ( distance / 1000.0f );
-		program->debugLines.AddSphere( showPivot, distance / 55.0f, m_selectionColor, 4 );
+		const ae::Vec3 showPivot = pivot - program->camera.GetForward() * ( zoom / 1000.0f );
+		program->debugLines.AddSphere( showPivot, zoom / 55.0f, m_selectionColor, 4 );
 		for( int i = -10; i <= 10; i++ )
 		{
-			const ae::Color gridColor = m_selectionColor.SetA( ae::Delerp01( 60.0f, 50.0f, distance ) );
+			const ae::Color gridColor = m_selectionColor.SetA( ae::Delerp01( 60.0f, 50.0f, zoom ) );
 			program->debugLines.AddLine( showPivot + ae::Vec3( i, -10, 0 ), showPivot + ae::Vec3( i, 10, 0 ), gridColor );
 			program->debugLines.AddLine( showPivot + ae::Vec3( -10, i, 0 ), showPivot + ae::Vec3( 10, i, 0 ), gridColor );
 		}
@@ -1684,12 +1752,27 @@ void EditorServer::ShowUI( EditorProgram* program )
 		const float distance = ( program->camera.GetPosition() - center ).Length();
 		gridLineCenter = center - program->camera.GetForward() * ( distance / 1000.0f);
 	}
+	auto DrawBoxLocator = []( ae::DebugLines* debugLines, ae::Vec3 from, ae::Vec3 to, ae::Color color )
+	{
+		debugLines->AddLine( from, to, color );
+		const ae::Vec3 cursorClosest0( from.x, from.y, to.z );
+		debugLines->AddLine( from, cursorClosest0, color );
+		debugLines->AddLine( to, cursorClosest0, color );
+		const ae::Vec3 cursorClosest1( to.x, to.y, from.z );
+		debugLines->AddLine( from, cursorClosest1, color );
+		debugLines->AddLine( to, cursorClosest1, color );
+	};
 	if( m_hoverEntities.Length() )
 	{
 		const float distance = ( program->camera.GetPosition() - m_mouseHover ).Length();
 		const ae::Vec3 pushOut = ( m_mouseHoverNormal * distance ) / 1000.0f;
 		const ae::Vec3 mousePoint = m_mouseHover + pushOut;
-		program->debugLines.AddCircle( mousePoint, m_mouseHoverNormal, distance / 55.0f, m_selectionColor, 4 );
+		if( m_selected.Length() )
+		{
+			const ae::Vec3 selected = GetSelectedAABB( program ).GetCenter();
+			DrawBoxLocator( &program->debugLines, mousePoint, selected, m_selectionColor );
+		}
+		program->debugLines.AddCircle( mousePoint, m_mouseHoverNormal, zoom / 55.0f, m_selectionColor, 4 );
 		if( !m_selected.Length() )
 		{
 			gridLineCenter = mousePoint;
@@ -1702,9 +1785,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		program->debugLines.AddLine( *gridCenter + ae::Vec3( 0, lineLength, 0 ), *gridCenter - ae::Vec3( 0, lineLength, 0 ), ae::Color::Green() );
 		program->debugLines.AddLine( *gridCenter + ae::Vec3( 0, 0, lineLength ), *gridCenter - ae::Vec3( 0, 0, lineLength ), ae::Color::Blue() );
 
-		const ae::Vec3 cursorClosestToGrid( pivot.x, pivot.y, gridCenter->z );
-		program->debugLines.AddLine( pivot, cursorClosestToGrid, m_selectionColor );
-		program->debugLines.AddLine( *gridCenter, cursorClosestToGrid, m_selectionColor );
+		DrawBoxLocator( &program->debugLines, pivot, *gridCenter, m_selectionColor );
 	}
 	if( m_selected.Length() )
 	{
@@ -1804,8 +1885,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 			/* Toggle transparent */ { {}, ae::Key::I, []( EditorProgram* program ) { program->editor.m_showTransparent = !program->editor.m_showTransparent; } },
 			/* Delete */ { {}, ae::Key::Delete, []( EditorProgram* program ) { program->editor.m_DeleteSelected(); } },
 			/* Delete */ { {}, ae::Key::Backspace, []( EditorProgram* program ) { program->editor.m_DeleteSelected(); } },
-			/* Focus selection */ { { ae::Key::Meta }, ae::Key::F, []( EditorProgram* program ) { if( program->editor.m_selected.Length() ) { program->camera.Refocus( program->editor.GetSelectedAABB( program ).GetCenter() ); } } },
-			/* Focus cursor */ { {}, ae::Key::F, []( EditorProgram* program ) { if( program->editor.m_hoverEntities.Length() ) { program->camera.Refocus( program->editor.m_mouseHover ); } }, true },
+			/* Focus */ { {}, ae::Key::F, []( EditorProgram* program ) { program->editor.ActiveRefocus( program ); }, true },
 			/* Hide */ { {}, ae::Key::H, []( EditorProgram* program ) { program->editor.m_HideSelected(); } },
 			/* Select none */ { {}, ae::Key::Escape, []( EditorProgram* program ) { program->editor.m_selected.Clear(); } },
 		};
@@ -2453,6 +2533,18 @@ void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Compon
 	else
 	{
 		AE_WARN( "Could not serialize modification message" );
+	}
+}
+
+void EditorServer::ActiveRefocus( EditorProgram* program )
+{
+	if( m_selected.Length() || m_hoverEntities.Length() )
+	{
+		if( !m_doRefocusImm )
+		{
+			m_refocusHeldTime = 0.0f;
+		}
+		m_doRefocusImm = 2;
 	}
 }
 

@@ -4281,6 +4281,7 @@ public:
 	uint32_t AddOBB( const Matrix4& transform, Color color );
 	uint32_t AddOBB( const OBB& obb, Color color );
 	uint32_t AddSphere( Vec3 pos, float radius, Color color, uint32_t pointCount );
+	uint32_t AddSphere( const Sphere& sphere, Color color, uint32_t pointCount );
 	uint32_t AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color );
 	uint32_t AddMesh( const Vec3* vertices, uint32_t vertexStride, uint32_t vertexCount, const void* indices, uint32_t indexSize, uint32_t indexCount, Matrix4 transform, Color color );
 	
@@ -4417,7 +4418,7 @@ public:
 	//! Sets the yaw and pitch of the camera. Updates the cameras position.
 	void SetRotation( ae::Vec2 angles );
 	//! Updates pivot and position over time
-	void Refocus( ae::Vec3 pivot );
+	void Refocus( ae::Vec3 pivot, float snappiness = 2.5f );
 	//! Call this every frame even when no input has taken place so refocus works as expected.
 	//! See ae::DebugCamera::SetInputEnabled() if you would like to prevent the camera from moving.
 	void Update( const ae::Input* input, float dt );
@@ -4452,6 +4453,7 @@ private:
 	bool m_inputEnabled = true;
 	Mode m_mode = Mode::None;
 	ae::Vec3 m_refocusPos = ae::Vec3( 0.0f );
+	float m_refocusSnappiness = 0.0f;
 	bool m_refocus = false;
 	float m_moveAccum = 0.0f;
 	uint32_t m_preventModeExitImm = 0;
@@ -24645,6 +24647,11 @@ uint32_t DebugLines::AddSphere( Vec3 pos, float radius, Color color, uint32_t po
 		+ AddCircle( pos, Vec3(0,0,1), radius, color, pointCount );
 }
 
+uint32_t DebugLines::AddSphere( const Sphere& sphere, Color color, uint32_t pointCount )
+{
+	return AddSphere( sphere.center, sphere.radius, color, pointCount );
+}
+
 uint32_t DebugLines::AddMesh( const Vec3* _vertices, uint32_t vertexStride, uint32_t count, Matrix4 transform, Color color )
 {
 	uint32_t startVerts = m_vertexArray.GetVertexCount();
@@ -25119,7 +25126,7 @@ void DebugCamera::Update( const ae::Input* input, float dt )
 	if( m_refocus )
 	{
 		AE_ASSERT( m_mode != Mode::Pan );
-		m_pivot = ae::DtLerp( m_pivot, 2.5f, dt, m_refocusPos );
+		m_pivot = ae::DtLerp( m_pivot, m_refocusSnappiness, dt, m_refocusPos );
 		if( ( m_refocusPos - m_pivot ).Length() < 0.01f )
 		{
 			m_refocus = false;
@@ -25174,10 +25181,11 @@ void DebugCamera::SetDistanceFromFocus( float distance )
 	m_Precalculate();
 }
 
-void DebugCamera::Refocus( ae::Vec3 pivot )
+void DebugCamera::Refocus( ae::Vec3 pivot, float snappiness )
 {
 	m_refocus = true;
 	m_refocusPos = pivot;
+	m_refocusSnappiness = snappiness;
 	if( m_mode == Mode::Pan )
 	{
 		m_mode = Mode::None;
