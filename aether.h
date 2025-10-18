@@ -1569,6 +1569,7 @@ template<> uint64_t GetHash64( char* const& key );
 // ae::Hash64 class
 //! A FNV1a hash utility class. Empty strings and zero-length data buffers do not
 //! hash to zero.
+//@TODO: constexpr
 //------------------------------------------------------------------------------
 template< typename U >
 class Hash
@@ -2677,6 +2678,9 @@ template< typename... Args > void PushLogTag( const char* format, Args... args )
 //! Pops the last log prefix set by ae::PushLogTag() on the current thread. Take
 //! care to match every call to ae::PushLogTag() with a call to ae::PopLogTag().
 void PopLogTag();
+//! A helper macro that calls ae::PushLogTag(), and then ae::PopLogTag()
+//! automatically at the end of the current scope.
+#define AE_LOG_TAG( _tag ) ae::PushLogTag( #_tag ); ae::RunOnDestroy _ae_logTag_##_tag( []() { ae::PopLogTag(); } )
 
 //------------------------------------------------------------------------------
 // Logging types
@@ -3396,6 +3400,9 @@ public:
 	uint32_t Write( Root root, const char* filePath, const void* buffer, uint32_t bufferSize, bool createIntermediateDirs ) const;
 	bool CreateFolder( Root root, const char* folderPath ) const;
 	void ShowFolder( Root root, const char* folderPath ) const;
+	//! Returns true if the given path is a file. This function accesses the
+	//! underlying filesystem to see if the file exists and is not a directory.
+	bool IsWritable( Root root, const char* filePath );
 
 	// Static member functions intended to be used when not creating a instance
 	static uint32_t GetSize( const char* filePath );
@@ -3433,6 +3440,9 @@ public:
 	//! Returns true if the given path is a directory. This function does not
 	//! access the underlying filesystem to see if the directory exists.
 	static bool IsDirectory( const char* path );
+	//! Returns true if the given path is a file. This function accesses the
+	//! underlying filesystem to see if the file exists and is not a directory.
+	static bool IsWritable( const char* path );
 	//! Removes redundant slashes and up-level references from the given path.
 	//! This does not access the underlying filesystem to resolve symbolic links
 	//! or verify the path exists.
@@ -5879,6 +5889,7 @@ const class ae::EnumType* GetEnumType( const char* enumName );
 //! Get a registered ae::TypeId from an ae::Object
 ae::TypeId GetObjectTypeId( const ae::Object* obj );
 //! Get a registered ae::TypeId from a type name
+//@TODO: Constexpr
 ae::TypeId GetTypeIdFromName( const char* name );
 //! Removes const, pointer, and reference qualifiers from a type. Usage:
 //! using U = typename ae::RemoveTypeQualifiers< T >;
@@ -13782,6 +13793,7 @@ T* ae::Cast( C* obj )
 	#include <pwd.h>
 	#include <dlfcn.h>
 	#include <mach-o/dyld.h>
+	#include <sys/stat.h>
 	#ifdef AE_USE_MODULES
 		@import AppKit;
 		@import Carbon;
@@ -19636,6 +19648,17 @@ void FileSystem::ShowFolder( Root root, const char* folderPath ) const
 	}
 }
 
+bool FileSystem::IsWritable( Root root, const char* filePath )
+{
+	Str256 fullName;
+	if( IsAbsolutePath( filePath ) || GetRootDir( root, &fullName ) )
+	{
+		fullName += filePath;
+		return IsWritable( fullName.c_str() );
+	}
+	return false;
+}
+
 const File* FileSystem::Read( Root root, const char* url, float timeoutSec )
 {
 	Str256 fullName;
@@ -20288,6 +20311,18 @@ bool ae::FileSystem::IsDirectory( const char* path )
 		return false;
 	}
 	return path[ length - 1 ] == '/' || path[ length - 1 ] == '\\';
+}
+
+bool ae::FileSystem::IsWritable( const char* path )
+{
+#if _AE_LINUX_ || _AE_APPLE_
+	struct stat pathStat;
+	if( stat( path, &pathStat ) == 0 )
+	{
+		return ( pathStat.st_mode & S_IWUSR ) != 0;
+	}
+#endif
+	return false;
 }
 
 void ae::FileSystem::NormalizePath( Str256* path )
