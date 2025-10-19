@@ -2073,6 +2073,7 @@ public:
 	~List();
 
 	void Append( ListNode< T >& node );
+	void Remove( ListNode< T >& node );
 	void Clear();
 
 	T* GetFirst();
@@ -10728,6 +10729,14 @@ void List< T >::Append( ListNode< T >& node )
 		m_first = &node;
 		node.m_root = this;
 	}
+}
+
+template< typename T >
+void List< T >::Remove( ListNode< T >& node )
+{
+	AE_ASSERT_MSG( m_first, "Can't remove node from an empty List" );
+	AE_ASSERT_MSG( node.m_root == this, "Can't remove node from another List" );
+	node.Remove();
 }
 
 template< typename T >
