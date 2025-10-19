@@ -4,6 +4,7 @@
 #include "aether.h"
 #include "ae/Editor.h"
 #include "ae/Entity.h"
+#include "ae/MeshEditorPlugin.h"
 
 //------------------------------------------------------------------------------
 // Constants
@@ -58,8 +59,9 @@ AE_REGISTER_CLASS_VAR( Avatar, radius );
 class Mesh : public ae::Inheritor< Component, Mesh >
 {
 public:
+	void Render( class Game* game ) override;
 	ae::Str32 name;
-	ae::Matrix4 transform;
+	ae::Matrix4 transform = ae::Matrix4::Identity();
 };
 AE_REGISTER_CLASS( Mesh );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Mesh), (ae, EditorTypeAttribute), {} );
@@ -75,7 +77,6 @@ class Game
 public:
 	bool Initialize( int argc, char* argv[] );
 	void Run();
-	
 	float GetDt() const { return m_dt; }
 	void GetUniforms( ae::UniformList* uniformList );
 	
@@ -98,7 +99,6 @@ public:
 	ae::Texture2D spacesuitTex;
 
 	// Gameplay
-	bool slowDt = false;
 	ae::Vec3 cameraPos = ae::Vec3( 10.0f );
 	ae::Vec3 cameraDir = ae::Vec3( -1.0f ).SafeNormalizeCopy();
 	ae::Color skyColor = ae::Color::PicoBlue().ScaleRGB( 1.0f );
@@ -109,6 +109,19 @@ public:
 	
 private:
 	float m_dt = 0.0f;
+};
+
+//------------------------------------------------------------------------------
+// GameEditorPlugin
+//------------------------------------------------------------------------------
+class GameEditorPlugin : public ae::MeshEditorPlugin
+{
+public:
+	GameEditorPlugin( Game* game ) : ae::MeshEditorPlugin( TAG_ALL ), m_game( game ) {}
+	void OnEvent( const ae::EditorEvent& event ) override;
+	ae::Optional< ae::EditorMesh > TryLoad( const char* resourceStr ) override;
+private:
+	Game* m_game = nullptr;
 };
 
 //------------------------------------------------------------------------------
@@ -154,7 +167,7 @@ const char* kFragShader = R"(
 		AE_COLOR.a = v_color.a;
 	})";
 
-void LoadOBj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
+void LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
 {
 	ae::OBJLoader objFile = TAG_ALL;
 	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
@@ -212,25 +225,8 @@ bool Game::Initialize( int argc, char* argv[] )
 	fs.Initialize( "data", "ae", "editor" );
 	
 	ae::EditorParams editorParams( argc, argv, &registry );
-	editorParams.functionPointers.onLevelLoadStartFn = []( void* userData, const char* levelPath )
-	{
-		Game* game = (Game*)userData;
-		if( game->registry.GetTypeCount() )
-		{
-			AE_INFO( "Unloading previous level" );
-			game->registry.CallFn< Component >( [&]( Component* o ){ o->Terminate( game ); } );
-			game->registry.Clear();
-		}
-		AE_INFO( "Loading level: %s", levelPath );
-	};
-	editorParams.functionPointers.loadMeshFn = []( void* userData, const char* resourceId ) -> ae::Optional< ae::EditorMesh >
-	{
-		Game* game = (Game*)userData;
-		ae::EditorMesh result = TAG_ALL;
-		LoadOBj( resourceId, &game->fs, nullptr, nullptr, &result );
-		return result;
-	};
-	editorParams.functionPointers.userData = this;
+	// editorParams.run = true;
+	editor.AddPlugin< GameEditorPlugin >( this );
 	if( editor.Initialize( editorParams ) )
 	{
 		// Exit, the editor has forked, ran, closed, and returned gracefully
@@ -243,13 +239,13 @@ bool Game::Initialize( int argc, char* argv[] )
 	timeStep.SetTimeStep( 1.0f / 60.0f );
 	debugLines.Initialize( 10 * 1024 );
 	
-	LoadOBj( "bunny.obj", &fs, &bunnyVertexData, &bunnyCollision, nullptr );
+	LoadObj( "bunny.obj", &fs, &bunnyVertexData, &bunnyCollision, nullptr );
 	meshShader.Initialize( kVertShader, kFragShader, nullptr, 0 );
 	meshShader.SetDepthTest( true );
 	meshShader.SetDepthWrite( true );
 	meshShader.SetCulling( ae::Culling::CounterclockwiseFront );
 	
-	LoadOBj( "character.obj", &fs, &avatarVertexData, nullptr, nullptr );
+	LoadObj( "character.obj", &fs, &avatarVertexData, nullptr, nullptr );
 	const char* avatarShaderDefines[] = { "#define DIFFUSE 1" };
 	avatarShader.Initialize( kVertShader, kFragShader, avatarShaderDefines, countof(avatarShaderDefines) );
 	avatarShader.SetDepthTest( true );
@@ -270,28 +266,14 @@ void Game::Run()
 {
 	while( !input.quit )
 	{
+		// Update
 		m_dt = timeStep.GetDt();
-		if( m_dt > timeStep.GetTimeStep() * 5.0f )
-		{
-			m_dt = 0.00001f;
-		}
-		if( slowDt )
-		{
-			m_dt *= 0.1f;
-		}
-		
 		input.Pump();
 		editor.Update();
-		
 		if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) )
 		{
 			editor.Launch();
 		}
-		if( input.Get( ae::Key::Q ) && !input.GetPrev( ae::Key::Q ) )
-		{
-			slowDt = !slowDt;
-		}
-		
 		registry.CallFn< Component >( [&]( Component* o )
 		{
 			if( !o->initialized )
@@ -301,10 +283,6 @@ void Game::Run()
 			}
 		} );
 		registry.CallFn< Component >( [&]( Component* o ){ o->Update( this ); } );
-		
-		gfx.Activate();
-		gfx.Clear( skyColor );
-		
 		if( avatar && ( avatar->inputDir.Length() > 0.1f || avatar->velocity.Length() > 0.5f ) )
 		{
 			ae::Vec3 camOffset = ae::Vec3( 6.0f, 6.0f, 4.0f );
@@ -314,23 +292,13 @@ void Game::Run()
 			cameraDir.SafeNormalize();
 		}
 		
+		// Render
+		gfx.Activate();
+		gfx.Clear( skyColor );
 		worldToView = ae::Matrix4::WorldToView( cameraPos, cameraDir, ae::Vec3( 0.0f, 0.0f, 1.0f ) );
 		viewToProj = ae::Matrix4::ViewToProjection( 0.9f, gfx.GetAspectRatio(), 1.0f, 1000.0f );
 		worldToProj = viewToProj * worldToView;
-		
-		ae::UniformList uniformList;
-		GetUniforms( &uniformList );
-		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		registry.CallFn< Mesh >( [&]( Mesh* m )
-		{
-			uniformList.Set( "u_worldToProj", worldToProj * m->transform );
-			uniformList.Set( "u_normalToWorld", m->transform.GetNormalMatrix() );
-			bunnyVertexData.Bind( &meshShader, uniformList );
-			bunnyVertexData.Draw();
-		} );
-		
 		registry.CallFn< Component >( [&]( Component* o ){ o->Render( this ); } );
-		
 		debugLines.Render( worldToProj );
 		gfx.Present();
 		timeStep.Tick();
@@ -342,6 +310,26 @@ void Game::GetUniforms( ae::UniformList* uniformList )
 	uniformList->Set( "u_lightColor", ae::Color::PicoPeach().ScaleRGB( 1.0f ).GetLinearRGB() );
 	uniformList->Set( "u_lightDir", ae::Vec3( -7.0f, 5.0f, -3.0f ).NormalizeCopy() );
 	uniformList->Set( "u_ambLight", skyColor.GetLinearRGB() );
+}
+
+//------------------------------------------------------------------------------
+// GameEditorPlugin member functions
+//------------------------------------------------------------------------------
+void GameEditorPlugin::OnEvent( const ae::EditorEvent& event )
+{
+	ae::MeshEditorPlugin::OnEvent( event );
+	if( event.type == ae::EditorEventType::LevelUnload )
+	{
+		m_game->registry.CallFn< Component >( [&]( Component* o ){ o->Terminate( m_game ); } );
+		m_game->registry.Clear();
+	}
+}
+
+ae::Optional< ae::EditorMesh > GameEditorPlugin::TryLoad( const char* resourceStr )
+{
+	ae::EditorMesh result = TAG_ALL;
+	LoadObj( resourceStr, &m_game->fs, nullptr, nullptr, &result );
+	return result;
 }
 
 //------------------------------------------------------------------------------
@@ -493,18 +481,27 @@ void Avatar::Render( Game* game )
 	game->avatarVertexData.Draw();
 }
 
+void Mesh::Render( Game* game )
+{
+	ae::UniformList uniformList;
+	game->GetUniforms( &uniformList );
+	uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
+	uniformList.Set( "u_worldToProj", game->worldToProj * transform );
+	uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
+	game->bunnyVertexData.Bind( &game->meshShader, uniformList );
+	game->bunnyVertexData.Draw();
+}
+
 //------------------------------------------------------------------------------
 // Main
 //------------------------------------------------------------------------------
 int main( int argc, char* argv[] )
 {
-	AE_INFO( "Init" );
-
+	AE_INFO( "Init #", ae::FileSystem::GetFileNameFromPath( argv[ 0 ] ) );
 	Game game;
 	if( game.Initialize( argc, argv ) )
 	{
 		game.Run();
 	}
-
 	return 0;
 }

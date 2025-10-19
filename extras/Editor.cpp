@@ -44,11 +44,11 @@
 AE_REGISTER_NAMESPACECLASS( (ae, EditorTypeAttribute) );
 AE_REGISTER_NAMESPACECLASS( (ae, EditorRequiredAttribute) );
 AE_REGISTER_NAMESPACECLASS( (ae, EditorVisibilityAttribute) );
-AE_REGISTER_NAMESPACECLASS( (ae, EditorMeshResourceAttribute) );
 
 namespace ae {
 
 class EditorServer;
+using EditorPluginArray = ae::Array< std::pair< EditorPluginConfig, EditorPlugin* > >;
 
 const uint32_t kCogTextureDataSize = 32;
 const uint8_t kCogTextureData[] =
@@ -89,6 +89,13 @@ const uint8_t kCogTextureData[] =
 
 const float kEditorViewDistance = 25000.0f;
 
+enum class PickingType
+{
+	Disabled,
+	Mesh,
+	Logic
+};
+
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
@@ -98,6 +105,7 @@ void JsonToRegistry( const ae::Map< ae::Entity, ae::Entity >& entityMap, const r
 void ComponentToJson( const Component* component, const Component* defaultComponent, rapidjson::Document::AllocatorType& allocator, rapidjson::Value* jsonComponent );
 bool ValidateLevel( const rapidjson::Value& jsonLevel );
 template< typename T > const T* TryGetClassOrVarAttribute( const ae::ClassType* type );
+void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event );
 
 //------------------------------------------------------------------------------
 // EditorMsg
@@ -150,8 +158,6 @@ public:
 	ae::Entity entity = ae::kInvalidEntity;
 	bool hidden = false;
 	bool renderDisabled = false;
-	EditorServerMesh* mesh = nullptr;
-	bool opaque = true;
 	
 private:
 	ae::Matrix4 m_transform = ae::Matrix4::Identity();
@@ -181,7 +187,8 @@ public:
 		m_hoverEntities( tag ),
 		m_objects( tag ),
 		m_registry( tag ),
-		m_connections( tag )
+		m_connections( tag ),
+		m_framePickableEntities( tag )
 	{}
 	~EditorServer();
 	void Initialize( class EditorProgram* program );
@@ -198,7 +205,7 @@ public:
 	bool GetShowTransparent() const { return m_showTransparent; }
 	
 	EditorServerObject* CreateObject( ae::Entity entity, const ae::Matrix4& transform, const char* name );
-	void DestroyObject( ae::Entity entity );
+	void DestroyObject( class EditorProgram* program, ae::Entity entity );
 	ae::Component* AddComponent( class EditorProgram* program, EditorServerObject* obj, const ae::ClassType* type );
 	void RemoveComponent( class EditorProgram* program, EditorServerObject* obj, ae::Component* component );
 	ae::Component* GetComponent( EditorServerObject* obj, const ae::ClassType* type );
@@ -207,7 +214,6 @@ public:
 	EditorServerObject* GetObject( ae::Entity entity ) { return m_objects.Get( entity, nullptr ); }
 	const EditorServerObject* GetObject( ae::Entity entity ) const { return m_objects.Get( entity, nullptr ); }
 	const EditorServerObject* GetObjectFromComponent( const ae::Component* component );
-	const ae::ClassVar* GetMeshResourceVar( const ae::ClassType* componentType );
 	bool GetRenderDisabled( ae::Entity entity ) const;
 	ae::AABB GetSelectedAABB( class EditorProgram* program ) const;
 
@@ -224,7 +230,7 @@ private:
 	// Tools
 	void m_CopySelected() const;
 	void m_PasteFromClipboard( class EditorProgram* program );
-	void m_DeleteSelected();
+	void m_DeleteSelected( class EditorProgram* program );
 	void m_HideSelected();
 	// Misc helpers
 	void m_SetLevelPath( class EditorProgram* program, const char* path );
@@ -290,18 +296,21 @@ private:
 	bool m_doRefocusPrev = false;
 	float m_refocusSize = 1.0f;
 	float m_refocusHeldTime = 0.0f;
+
+	// Misc
+	ae::Map< ae::Entity, PickingType > m_framePickableEntities;
 };
 
 class EditorProgram
 {
 public:
-	EditorProgram( const ae::Tag& tag, const EditorParams& params ) :
+	EditorProgram( const ae::Tag& tag, const EditorParams& params, EditorPluginArray& plugins ) :
 		m_tag( tag ),
 		camera( params.worldUp ),
 		debugLines( tag ),
 		editor( tag ),
 		params( params ),
-		m_meshes( tag )
+		plugins( plugins )
 	{}
 	void Initialize();
 	void Terminate();
@@ -317,8 +326,8 @@ public:
 	void SetFOV( float fov ) { m_fov = fov; }
 	float GetFOV() const { return m_fov; }
 	ae::Vec3 GetMouseRay() const { return m_mouseRay; } // Is normalized
-	EditorServerMesh* GetMesh( const char* resourceId );
-	void UnloadMeshes();
+
+	bool MakeWritable( const char* path ) const;
 	
 	ae::Window window;
 	ae::GraphicsDevice render;
@@ -329,6 +338,7 @@ public:
 	ae::DebugLines debugLines;
 	ae::FileSystem fileSystem;
 	EditorServer editor;
+	EditorPluginArray& plugins;
 
 	const EditorParams params;
 	
@@ -354,7 +364,6 @@ private:
 	float m_barWidth = 0.0f;
 	
 	ae::RenderTarget m_gameTarget;
-	ae::Map< std::string, EditorServerMesh* > m_meshes; // @TODO: Dynamic ae::Str
 public:
 	ae::VertexBuffer m_introMesh;
 	ae::VertexBuffer m_quad;
@@ -524,7 +533,13 @@ void EditorProgram::Initialize()
 		void main()
 		{
 			float light = dot( -u_lightDir, normalize( v_normal ) );
-			light = 0.6 + 0.4 * max( 0.0, light );
+			light = 0.3 + 0.7 * max( 0.0, light );
+			
+			// Blinn-Phong specular
+			vec3 viewDir = normalize( u_cameraPos - v_position );
+			vec3 halfDir = normalize( -u_lightDir + viewDir );
+			float spec = pow( max( dot( halfDir, normalize( v_normal ) ), 0.0 ), 32.0 );
+			light += spec;
 
 			// Unit scale 3D checker grid
 			vec3 p = v_position;
@@ -603,7 +618,20 @@ void EditorProgram::Initialize()
 void EditorProgram::Terminate()
 {
 	AE_INFO( "Terminate" );
-	UnloadMeshes();
+	editor.Unload( this );
+	
+	{
+		EditorEvent event;
+		event.type = EditorEventType::Terminate;
+		SendPluginEvent( plugins, event );
+	}
+	for( auto& [ config, plugin ] : plugins )
+	{
+		AE_ASSERT_MSG( !plugin->m_meshRefs.Length(), "Plugin '#' still has mesh refs on level unload", config.name );
+		AE_ASSERT_MSG( !plugin->m_instances.Length(), "Plugin '#' still has instances on level unload", config.name );
+		AE_ASSERT_MSG( !plugin->m_entityInstances.Length(), "Plugin '#' still has entity instances on level unload", config.name );
+	}
+	
 	m_gameTarget.Terminate();
 	editor.Terminate( this );
 	debugLines.Terminate();
@@ -655,8 +683,8 @@ void EditorProgram::Run()
 		camera.SetInputEnabled( !ImGui::GetIO().WantCaptureMouse || ImGuizmo::IsOver() );
 		camera.Update( &input, GetDt() );
 
-		ae::Int2 oldSize( m_gameTarget.GetWidth(), m_gameTarget.GetHeight() );
-		ae::Int2 targetSize = GetRenderRect().GetSize();
+		const ae::Int2 oldSize( m_gameTarget.GetWidth(), m_gameTarget.GetHeight() );
+		const ae::Int2 targetSize = GetRenderRect().GetSize();
 		if( oldSize != targetSize )
 		{
 			m_gameTarget.Initialize( targetSize.x, targetSize.y );
@@ -741,34 +769,26 @@ float EditorProgram::GetAspectRatio() const
 	return size.x / (float)size.y;
 }
 
-EditorServerMesh* EditorProgram::GetMesh( const char* resourceId )
+bool EditorProgram::MakeWritable( const char* path ) const
 {
-	if( !resourceId[ 0 ] )
+	ae::Str256 absolutePath;
+	if( !path ||
+		!path[ 0 ] ||
+		!fileSystem.GetAbsolutePath( ae::FileSystem::Root::Data, path, &absolutePath ) )
 	{
-		return nullptr;
+		return false;
 	}
-	EditorServerMesh* mesh = m_meshes.Get( resourceId, nullptr );
-	if( !mesh && params.functionPointers.loadMeshFn )
+	else if( fileSystem.IsWritable( absolutePath.c_str() ) )
 	{
-		ae::Optional< ae::EditorMesh > temp = params.functionPointers.loadMeshFn( params.functionPointers.userData, resourceId );
-		if( ae::EditorMesh* editorMesh = temp.TryGet() )
-		{
-			AE_INFO( "Loading mesh... '#'", resourceId );
-			mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
-			mesh->Initialize( editorMesh );
-			m_meshes.Set( resourceId, mesh );
-		}
+		return true;
 	}
-	return mesh;
-}
 
-void EditorProgram::UnloadMeshes()
-{
-	for( uint32_t i = 0; i < m_meshes.Length(); i++ )
-	{
-		ae::Delete( m_meshes.GetValue( i ) );
-	}
-	m_meshes.Clear();
+	ae::EditorEvent event;
+	event.type = ae::EditorEventType::FileEdit;
+	event.path = path;
+	SendPluginEvent( plugins, event );
+	
+	return fileSystem.IsWritable( absolutePath.c_str() );
 }
 
 //------------------------------------------------------------------------------
@@ -796,11 +816,116 @@ void ae::EditorMesh::Load( const ae::OBJLoader& file )
 }
 
 //------------------------------------------------------------------------------
+// ae::EditorPlugin member functions
+//------------------------------------------------------------------------------
+EditorPlugin::EditorPlugin( const ae::Tag& tag ) :
+	m_tag( tag ),
+	m_meshRefs( tag ),
+	m_instances( tag ),
+	m_entityInstances( tag )
+{}
+
+EditorMeshInstance* EditorPlugin::CreateMesh( const EditorMesh& _mesh, ae::Entity selectEntity )
+{
+	if( !_mesh.verts.Length() )
+	{
+		return nullptr;
+	}
+	EditorServerMesh* mesh = ae::New< EditorServerMesh >( m_tag, m_tag );
+	mesh->Initialize( &_mesh );
+	AE_DEBUG_ASSERT( !m_meshRefs.TryGet( mesh ) );
+	m_meshRefs.Set( mesh, 1 );
+	
+	EditorMeshInstance* instance = ae::New< EditorMeshInstance >( m_tag );
+	instance->m_mesh = mesh;
+	instance->m_selectEntity = selectEntity;
+	if( selectEntity )
+	{
+		ae::List< EditorMeshInstance >* entityInstances = m_entityInstances.Get( selectEntity, nullptr );
+		if( !entityInstances )
+		{
+			entityInstances = ae::New< ae::List< EditorMeshInstance > >( m_tag );
+			m_entityInstances.Set( selectEntity, entityInstances );
+		}
+		entityInstances->Append( instance->m_entityInstance );
+	}
+	m_instances.Set( instance, true );
+	//AE_DEBUG( "Create mesh-># entity:# refs:1", instance, selectEntity );
+	return instance;
+}
+
+EditorMeshInstance* EditorPlugin::CloneMesh( const EditorMeshInstance* _instance, ae::Entity selectEntity )
+{
+	if( !_instance )
+	{
+		return nullptr;
+	}
+
+	EditorServerMesh* mesh = _instance->m_mesh;
+	int32_t& refCount = m_meshRefs.Get( mesh );
+	AE_ASSERT( refCount >= 1 );
+	refCount++;
+
+	EditorMeshInstance* instance = ae::New< EditorMeshInstance >( m_tag );
+	instance->m_mesh = mesh;
+	instance->m_selectEntity = selectEntity;
+	if( selectEntity )
+	{
+		ae::List< EditorMeshInstance >* entityInstances = m_entityInstances.Get( selectEntity, nullptr );
+		if( !entityInstances )
+		{
+			entityInstances = ae::New< ae::List< EditorMeshInstance > >( m_tag );
+			m_entityInstances.Set( selectEntity, entityInstances );
+		}
+		entityInstances->Append( instance->m_entityInstance );
+	}
+	m_instances.Set( instance, true );
+	//AE_DEBUG( "Clone mesh-># source:# entity:# refs:#", instance, _instance, selectEntity, refCount );
+	return instance;
+}
+
+void EditorPlugin::DestroyMesh( EditorMeshInstance* instance )
+{
+	if( !instance )
+	{
+		return;
+	}
+
+	const ae::Entity entity = instance->m_selectEntity;
+	const bool removed = m_instances.Remove( instance );
+	AE_ASSERT( removed );
+	if( entity )
+	{
+		ae::List< EditorMeshInstance >* entityInstances = m_entityInstances.Get( entity, nullptr );
+		AE_ASSERT( entityInstances );
+		entityInstances->Remove( instance->m_entityInstance );
+		if( !entityInstances->Length() )
+		{
+			m_entityInstances.Remove( entity );
+			ae::Delete( entityInstances );
+		}
+	}
+
+	EditorServerMesh* mesh = instance->m_mesh;
+	int32_t& refCount = m_meshRefs.Get( mesh );
+	AE_ASSERT( refCount >= 1 );
+	refCount--;
+	if( refCount == 0 )
+	{
+		m_meshRefs.Remove( mesh );
+		ae::Delete( mesh );
+	}
+	ae::Delete( instance );
+	//AE_DEBUG( "Destroy mesh entity:# refs:#", entity, refCount );
+}
+
+//------------------------------------------------------------------------------
 // Editor member functions
 //------------------------------------------------------------------------------
 Editor::Editor( const ae::Tag& tag ) :
 	m_tag( tag ),
 	m_sock( tag ),
+	m_plugins( tag ),
 	m_editorEntities( tag )
 {
 	AE_ASSERT( m_tag != ae::Tag() );
@@ -835,7 +960,7 @@ bool Editor::Initialize( const EditorParams& params )
 
 	if( run )
 	{
-		EditorProgram program( m_tag, params );
+		EditorProgram program( m_tag, params, m_plugins );
 		program.Initialize();
 
 		int32_t levelArg = -1;
@@ -875,6 +1000,12 @@ void Editor::Terminate()
 		m_fileSystem.Destroy( m_pendingLevel );
 		m_pendingLevel = nullptr;
 	}
+
+	for( auto& [ _, plugin ] : m_plugins )
+	{
+		ae::Delete( plugin );
+	}
+	m_plugins.Clear();
 
 	ae::Delete( m_params );
 	m_params = nullptr;
@@ -970,12 +1101,6 @@ void Editor::QueueRead( const char* levelPath )
 	AE_INFO( "Queuing level load '#'", m_pendingLevel->GetUrl() );
 }
 
-void Editor::SetFunctionPointers( const ae::EditorFunctionPointers& functionPointers )
-{
-	AE_ASSERT_MSG( m_params, "Must call Editor::Initialize()" );
-	m_params->functionPointers = functionPointers;
-}
-
 // @TODO: Combine. EditorServer::m_LoadLevel(), Editor::m_Read(), and EditorServer::m_PasteFromClipboard() are very similar
 void Editor::m_Read()
 {
@@ -1015,9 +1140,13 @@ void Editor::m_Read()
 	}
 
 	m_lastLoadedLevel = m_pendingLevel->GetUrl();
-	if( m_params->functionPointers.onLevelLoadStartFn )
+
+	// @HACK: Currently two LevelUnload are sent
 	{
-		m_params->functionPointers.onLevelLoadStartFn( m_params->functionPointers.userData, m_pendingLevel->GetUrl() );
+		EditorEvent event;
+		event.type = EditorEventType::LevelUnload;
+		event.path = m_lastLoadedLevel.c_str();
+		SendPluginEvent( m_plugins, event );
 	}
 
 	// Clear previous level
@@ -1061,6 +1190,13 @@ void Editor::m_Read()
 	JsonToRegistry( entityMap, jsonObjects, m_params->registry );
 
 	AE_INFO( "Loaded level '#'", m_pendingLevel->GetUrl() );
+
+	{
+		EditorEvent event;
+		event.type = EditorEventType::LevelLoad;
+		event.path = m_pendingLevel->GetUrl();
+		SendPluginEvent( m_plugins, event );
+	}
 }
 
 void Editor::m_Connect()
@@ -1102,38 +1238,42 @@ const ae::Matrix4& EditorServerObject::GetTransform() const
 
 void EditorServerObject::HandleVarChange( EditorProgram* program, ae::Component* component, const ae::ClassType* type, const ae::ClassVar* var )
 {
-	ae::DataPointer varData( var, component );
-	if( var == program->editor.GetMeshResourceVar( type ) )
-	{
-		const ae::BasicType* varType = varData.GetVarType().AsVarType< ae::BasicType >();
-		if( varType && varType->GetType() != ae::BasicType::String )
-		{
-			AE_ERR( "Mesh resource variable '#' must be of type String", var->GetName() );
-			return;
-		}
-		auto varStr = var->GetObjectValueAsString( component );
-		if( varStr != "" )
-		{
-			mesh = program->GetMesh( varStr.c_str() );
-		}
-		else
-		{
-			mesh = nullptr;
-		}
-	}
 	renderDisabled = program->editor.GetRenderDisabled( component->GetEntity() );
 	program->editor.BroadcastVarChange( var, component );
+
+	EditorEvent event;
+	event.type = EditorEventType::ComponentEdit;
+	event.entity = component->GetEntity();
+	event.transform = GetTransform();
+	event.component = component;
+	event.var = var;
+	SendPluginEvent( program->plugins, event );
 }
 
 ae::OBB EditorServerObject::GetOBB( EditorProgram* program ) const
 {
-	const ae::Matrix4& transform = GetTransform();
-	if( mesh )
+	ae::AABB result;
+	for( auto& [ _, plugin ] : program->plugins )
 	{
-		return ae::OBB( transform * mesh->collision.GetAABB().GetTransform() );
+		ae::List< EditorMeshInstance >* entityInstances = plugin->m_entityInstances.Get( entity, nullptr );
+		if( entityInstances )
+		{
+			for( const EditorMeshInstance* instance = entityInstances->GetFirst(); instance; instance = instance->m_entityInstance.GetNext() )
+			{
+				AE_ASSERT( instance->m_mesh );
+				const ae::OBB obb = instance->transform * instance->m_mesh->collision.GetAABB().GetTransform();
+				result.Expand( obb.GetAABB() );
+			}
+		}
 	}
-	return ae::OBB( transform );
-
+	if( result != ae::AABB() )
+	{
+		return ae::OBB( result.GetTransform() );
+	}
+	else
+	{
+		return ae::OBB( GetTransform() ); // Don't include the pivot
+	}
 }
 
 ae::AABB EditorServerObject::GetAABB( EditorProgram* program ) const
@@ -1190,14 +1330,7 @@ void EditorServer::Initialize( EditorProgram* program )
 		{
 			const ae::ClassVar* var = type->GetVarByIndex( j, true );
 			const ae::BasicType* varType = var->GetOuterVarType().AsVarType< ae::BasicType >();
-			if( var->attributes.Has< ae::EditorMeshResourceAttribute >() )
-			{
-				if( !varType || varType->GetType() != ae::BasicType::String )
-				{
-					AE_ERR( "ae::EditorMeshResourceAttribute variable '#' must be of type String", var->GetName() );
-				}
-			}
-			else if( var->attributes.Has< ae::EditorVisibilityAttribute >() )
+			if( var->attributes.Has< ae::EditorVisibilityAttribute >() )
 			{
 				if( !varType || varType->GetType() != ae::BasicType::Bool )
 				{
@@ -1231,10 +1364,9 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 		return;
 	}
 
-	if( program->params.functionPointers.preFileEditFn
-		&& !program->params.functionPointers.preFileEditFn( program->params.functionPointers.userData, m_pendingLevel->GetUrl() ) )
+	if( !program->MakeWritable( m_pendingLevel->GetUrl() ) )
 	{
-		ae::Str512 msg = ae::Str512::Format( "File may not be writable '#'", m_pendingLevel->GetUrl() );
+		const ae::Str512 msg = ae::Str512::Format( "File may not be writable '#'", m_pendingLevel->GetUrl() );
 		AE_WARN( msg.c_str() );
 		ae::ShowMessage( msg.c_str() );
 	}
@@ -1436,85 +1568,122 @@ void EditorServer::Render( EditorProgram* program )
 	const ae::Vec3 camUp = program->camera.GetUp();
 	const ae::Matrix4 worldToProj = program->GetWorldToProj();
 	const ae::Vec3 lightDir = ( ( program->params.worldUp == ae::Axis::Z ) ? ae::Vec3( -2.0f, -3.0f, -4.0f ) : ae::Vec3( -2.0f, -4.0f, -3.0f ) ).SafeNormalizeCopy();
-	
+
+	// Reset entities for picking
+	m_framePickableEntities.Clear();
+
 	// Categories
 	struct RenderObj
 	{
-		const EditorServerObject* obj = nullptr;
-		float distanceSq = INFINITY;
+		ae::Matrix4 transform;
+		ae::Color color;
+		const EditorServerMesh* mesh;
+		float distanceSq;
 	};
 	ae::Array< RenderObj > opaqueObjects = m_tag;
 	ae::Array< RenderObj > transparentObjects = m_tag;
 	ae::Array< RenderObj > logicObjects = m_tag;
-	
+
+	// @TODO: Frustum culling
+
 	// Split up render passes
-	uint32_t editorObjectCount = m_objects.Length();
+	for( auto& [ _, plugin ] : program->plugins )
+	{
+		for( auto& [ instance, _ ] : plugin->m_instances )
+		{
+			if( instance->color.a > 0.01f && instance->m_mesh )
+			{
+				const EditorServerObject* obj = m_objects.Get( instance->m_selectEntity, nullptr );
+				if( obj && obj->hidden )
+				{
+					continue;
+				}
+
+				ae::Array< RenderObj >* meshes = nullptr;
+				if( instance->color.a > 0.99f )
+				{
+					meshes = &opaqueObjects;
+				}
+				else if( GetShowTransparent() )
+				{
+					meshes = &transparentObjects;
+				}
+
+				if( meshes )
+				{
+					RenderObj& renderObj = meshes->Append( {} );
+					renderObj.transform = instance->transform;
+					renderObj.color = instance->color;
+					renderObj.mesh = instance->m_mesh;
+					renderObj.distanceSq = ( camPos - instance->transform.GetTranslation() ).LengthSquared();
+	
+					// To enable picking for the next frame
+					m_framePickableEntities.Set( instance->m_selectEntity, PickingType::Mesh );
+				}
+			}
+		}
+	}
+
+	// @TODO: Add logic object cubes
+	const uint32_t editorObjectCount = m_objects.Length();
 	for( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
 		const EditorServerObject* obj = m_objects.GetValue( i );
-		if( !obj->renderDisabled && !obj->hidden )
+		if( !obj->renderDisabled && !obj->hidden && !m_framePickableEntities.TryGet( obj->entity ) )
 		{
-			float distanceSq = ( camPos - obj->GetTransform().GetTranslation() ).LengthSquared();
-			if( obj->mesh && obj->opaque ) { opaqueObjects.Append( { obj, distanceSq } ); }
-			else if( obj->mesh && GetShowTransparent() ) { transparentObjects.Append( { obj, distanceSq } ); }
-			else { logicObjects.Append( { obj, distanceSq } ); }
+			RenderObj& renderObj = logicObjects.Append( {} );
+			renderObj.transform = obj->GetTransform();
+			renderObj.color = m_GetColor( obj->entity, false );
+			renderObj.mesh = nullptr;
+			renderObj.distanceSq = ( camPos - obj->GetTransform().GetTranslation() ).LengthSquared();
+
+			// To enable picking for the next frame
+			m_framePickableEntities.Set( obj->entity, PickingType::Logic );
 		}
 	}
-	
+
 	// Opaque and transparent meshes helper
-	auto renderMesh = [program, worldToProj, lightDir]( const RenderObj& renderObj, ae::Color color )
+	auto renderMesh = [ program, worldToProj, lightDir ]( const RenderObj& renderObj )
 	{
-		const EditorServerObject& obj = *renderObj.obj;
-		ae::Matrix4 transform = obj.GetTransform();
+		const ae::Matrix4& transform = renderObj.transform;
 		ae::UniformList uniformList;
 		uniformList.Set( "u_localToProj", worldToProj * transform );
 		uniformList.Set( "u_localToWorld", transform );
 		uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
 		uniformList.Set( "u_cameraPos", program->camera.GetPosition() );
 		uniformList.Set( "u_lightDir", lightDir );
-		uniformList.Set( "u_color", color.GetLinearRGBA() );
-		obj.mesh->data.Bind( &program->m_meshShader, uniformList );
-		obj.mesh->data.Draw();
+		uniformList.Set( "u_color", renderObj.color.GetLinearRGBA() );
+		renderObj.mesh->data.Bind( &program->m_meshShader, uniformList );
+		renderObj.mesh->data.Draw();
 	};
-	
+
 	// Opaque objects
-	std::sort( opaqueObjects.begin(), opaqueObjects.end(), []( const RenderObj& a, const RenderObj& b )
-	{
-		return a.distanceSq < b.distanceSq;
-	} );
+	std::sort( opaqueObjects.begin(), opaqueObjects.end(), []( const RenderObj& a, const RenderObj& b ) { return a.distanceSq < b.distanceSq; } );
 	program->m_meshShader.SetDepthTest( true );
 	program->m_meshShader.SetDepthWrite( true );
 	program->m_meshShader.SetBlending( false );
 	for( const RenderObj& renderObj : opaqueObjects )
 	{
-		const EditorServerObject& obj = *renderObj.obj;
-		ae::Color color = m_GetColor( obj.entity, false );
-		renderMesh( renderObj, color );
+		renderMesh( renderObj );
 	}
-	
+
 	// Logic objects
-	std::sort( logicObjects.begin(), logicObjects.end(), []( const RenderObj& a, const RenderObj& b )
-	{
-		return a.distanceSq > b.distanceSq;
-	} );
+	std::sort( logicObjects.begin(), logicObjects.end(), []( const RenderObj& a, const RenderObj& b ) { return a.distanceSq > b.distanceSq; } );
 	for( const RenderObj& renderObj : logicObjects )
 	{
-		const EditorServerObject& obj = *renderObj.obj;
-		const ae::Matrix4 transform = obj.GetTransform();
-		const ae::Color color = m_GetColor( obj.entity, false );
 		ae::UniformList uniformList;
-		ae::Vec3 objPos = transform.GetTranslation();
+		ae::Vec3 objPos = renderObj.transform.GetTranslation();
 		ae::Vec3 toCamera = camPos - objPos;
-		ae::Matrix4 modelToWorld = ae::Matrix4::Rotation( ae::Vec3(0,0,1), ae::Vec3(0,1,0), toCamera, camUp );
+		ae::Matrix4 modelToWorld = ae::Matrix4::Rotation( ae::Vec3( 0, 0, 1 ), ae::Vec3( 0, 1, 0 ), toCamera, camUp );
 		modelToWorld.SetTranslation( objPos );
 		uniformList.Set( "u_worldToProj", worldToProj * modelToWorld );
 		uniformList.Set( "u_tex", &program->m_cogTexture );
-		uniformList.Set( "u_color", color.GetLinearRGBA() );
+		uniformList.Set( "u_color", renderObj.color.GetLinearRGBA() );
 		program->m_quad.Bind( &program->m_iconShader, uniformList );
 		program->m_quad.Draw();
-		program->debugLines.AddOBB( transform, color );
+		program->debugLines.AddOBB( renderObj.transform, renderObj.color );
 	}
-	
+
 	// Transparent objects
 	std::sort( transparentObjects.begin(), transparentObjects.end(), []( const RenderObj& a, const RenderObj& b )
 	{
@@ -1525,9 +1694,7 @@ void EditorServer::Render( EditorProgram* program )
 	program->m_meshShader.SetBlending( true );
 	for( const RenderObj& renderObj : transparentObjects )
 	{
-		const EditorServerObject& obj = *renderObj.obj;
-		ae::Color color = m_GetColor( obj.entity, false ).ScaleA( 0.4f );
-		renderMesh( renderObj, color );
+		renderMesh( renderObj );
 	}
 }
 
@@ -1605,11 +1772,11 @@ void EditorServer::ShowUI( EditorProgram* program )
 		bool doPickingHover = false;
 		m_hoverEntities.Clear();
 		const ae::Vec2 mousePos( ImGui::GetMousePos().x, ImGui::GetMousePos().y );
-		if( !program->input.mouse.leftButton )
+		if( !program->input.mouse.leftButton ) // No press, just cursor hover
 		{
 			doPickingHover = true;
 		}
-		else if( !program->input.mousePrev.leftButton ) // Press
+		else if( !program->input.mousePrev.leftButton ) // Initial press
 		{
 			m_boxSelectStart = mousePos;
 		}
@@ -1638,46 +1805,64 @@ void EditorServer::ShowUI( EditorProgram* program )
 				float ty = ( -1.0f + ( 2.0f * rectPos.y + rect.GetHeight() ) ) / rect.GetHeight();
 				projToScissor.SetAxis( 3, ae::Vec4( tx, ty, 0.0f, 1.0f ) );
 				const ae::Matrix4 worldToScissor = projToScissor * program->GetWorldToProj();
-
 				const ae::Frustum frustum( worldToScissor );
+
+				// Mesh overlap
+				for( auto&[_, plugin] : program->plugins )
+				{
+					for( auto&[instance, _] : plugin->m_instances )
+					{
+						AE_DEBUG_ASSERT( instance->m_mesh );
+						if( !instance->m_mesh ||
+							instance->color.a < 0.01f || // Skip invisible objects
+							( instance->color.a < 0.99f && !GetShowTransparent() ) ) // Skip transparent objects
+						{
+							continue;
+						}
+						const EditorServerObject* editorObj = GetObject( instance->m_selectEntity ); // May be null
+						if( editorObj && editorObj->hidden )
+						{
+							continue;
+						}
+						// @TODO: Triangle overlap instead of just vertices
+						for( const EditorServerMesh::Vertex& vertex : instance->m_mesh->vertices )
+						{
+							if( frustum.Intersects( instance->transform.TransformPoint3x4( ae::Vec3( vertex.position ) ) ) )
+							{
+								m_hoverEntities.Append( instance->m_selectEntity );
+								break;
+							}
+						}
+					}
+				}
+
 				const uint32_t entityCount = m_objects.Length();
 				for( uint32_t i = 0; i < entityCount; i++ )
 				{
 					const EditorServerObject* obj = m_objects.GetValue( i );
-					if( !obj->hidden && frustum.Intersects( ae::Sphere( obj->GetOBB( program ) ) ) )
+					if( !obj->hidden &&
+						( m_framePickableEntities.Get( obj->entity, PickingType::Disabled ) == PickingType::Logic ) &&
+						frustum.Intersects( ae::Sphere( obj->GetOBB( program ) ) ) )
 					{
 						const ae::Matrix4 modelToWorld = obj->GetTransform();
-						if( obj->mesh )
+						const ae::Vec3 obbCorners[] =
 						{
-							for( const EditorServerMesh::Vertex& vertex : obj->mesh->vertices )
-							{
-								if( frustum.Intersects( modelToWorld.TransformPoint3x4( ae::Vec3( vertex.position ) ) ) )
-								{
-									m_hoverEntities.Append( obj->entity );
-									break;
-								}
-							}
-						}
-						else
+							ae::Vec3( -0.5f, -0.5f, -0.5f ),
+							ae::Vec3(  0.5f, -0.5f, -0.5f ),
+							ae::Vec3( -0.5f,  0.5f, -0.5f ),
+							ae::Vec3(  0.5f,  0.5f, -0.5f ),
+							ae::Vec3( -0.5f, -0.5f,  0.5f ),
+							ae::Vec3(  0.5f, -0.5f,  0.5f ),
+							ae::Vec3( -0.5f,  0.5f,  0.5f ),
+							ae::Vec3(  0.5f,  0.5f,  0.5f )
+						};
+						// @TODO: Cube face overlap instead of just corners
+						for( const ae::Vec3& corner : obbCorners )
 						{
-							ae::Vec3 obbCorners[] =
+							if( frustum.Intersects( modelToWorld.TransformPoint3x4( corner ) ) )
 							{
-								ae::Vec3( -0.5f, -0.5f, -0.5f ),
-								ae::Vec3(  0.5f, -0.5f, -0.5f ),
-								ae::Vec3( -0.5f,  0.5f, -0.5f ),
-								ae::Vec3(  0.5f,  0.5f, -0.5f ),
-								ae::Vec3( -0.5f, -0.5f,  0.5f ),
-								ae::Vec3(  0.5f, -0.5f,  0.5f ),
-								ae::Vec3( -0.5f,  0.5f,  0.5f ),
-								ae::Vec3(  0.5f,  0.5f,  0.5f )
-							};
-							for( const ae::Vec3& corner : obbCorners )
-							{
-								if( frustum.Intersects( modelToWorld.TransformPoint3x4( corner ) ) )
-								{
-									m_hoverEntities.Append( obj->entity );
-									break;
-								}
+								m_hoverEntities.Append( obj->entity );
+								break;
 							}
 						}
 					}
@@ -1738,12 +1923,22 @@ void EditorServer::ShowUI( EditorProgram* program )
 	const float zoom = program->camera.GetDistanceFromPivot();
 	{
 		const ae::Vec3 showPivot = pivot - program->camera.GetForward() * ( zoom / 1000.0f );
+		ae::Vec3 gridPivot = showPivot;
+		gridPivot.x = ae::Floor( gridPivot.x );
+		if( program->params.worldUp == ae::Axis::Z )
+		{
+			gridPivot.y = ae::Floor( gridPivot.y );
+		}
+		else
+		{
+			gridPivot.z = ae::Floor( gridPivot.z );
+		}
 		program->debugLines.AddSphere( showPivot, zoom / 55.0f, m_selectionColor, 4 );
 		for( int i = -10; i <= 10; i++ )
 		{
 			const ae::Color gridColor = m_selectionColor.SetA( ae::Delerp01( 60.0f, 50.0f, zoom ) );
-			program->debugLines.AddLine( showPivot + ae::Vec3( i, -10, 0 ), showPivot + ae::Vec3( i, 10, 0 ), gridColor );
-			program->debugLines.AddLine( showPivot + ae::Vec3( -10, i, 0 ), showPivot + ae::Vec3( 10, i, 0 ), gridColor );
+			program->debugLines.AddLine( gridPivot + ae::Vec3( i, -10, 0 ), gridPivot + ae::Vec3( i, 10, 0 ), gridColor );
+			program->debugLines.AddLine( gridPivot + ae::Vec3( -10, i, 0 ), gridPivot + ae::Vec3( 10, i, 0 ), gridColor );
 		}
 	}
 	if( m_selected.Length() )
@@ -1792,25 +1987,40 @@ void EditorServer::ShowUI( EditorProgram* program )
 		const ae::AABB selectedAABB = GetSelectedAABB( program );
 		program->debugLines.AddAABB( selectedAABB.GetCenter(), selectedAABB.GetHalfSize(), m_selectionColor );
 	}
-	for( ae::Pair< ae::Entity, EditorServerObject* > pair : m_objects )
+	for( auto&[ entity, _ ] : m_objects )
 	{
-		const ae::Color color = m_GetColor( pair.key, true );
-		const EditorServerObject* editorObj = m_objects.Get( pair.key );
-		if( color.a && editorObj )
+		const ae::Color color = m_GetColor( entity, true );
+		const EditorServerObject* editorObj = m_objects.Get( entity );
+		if( ( color.a >= 0.001f ) && editorObj )
 		{
-			if( editorObj->mesh )
+			switch( m_framePickableEntities.Get( entity, PickingType::Disabled ) )
 			{
-				const ae::VertexBuffer* meshData = &editorObj->mesh->data;
-				const ae::Matrix4 transform = editorObj->GetTransform();
-				const uint32_t vertexCount = editorObj->mesh->vertices.Length();
-				const ae::EditorServerMesh::Vertex* verts = editorObj->mesh->vertices.Data();
-				program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, transform, color );
-			}
-			else
-			{
-				ae::Vec3 pos = editorObj->GetTransform().GetTranslation();
-				ae::Vec3 normal = program->camera.GetPosition() - pos;
-				program->debugLines.AddCircle( pos, normal, 0.475f, color, 16 );
+				case PickingType::Mesh:
+				{
+					for( auto&[_, plugin] : program->plugins )
+					{
+						for( auto&[instance, _] : plugin->m_instances )
+						{
+							if( instance->m_selectEntity == entity && instance->m_mesh )
+							{
+								const ae::Matrix4 transform = instance->transform;
+								const uint32_t vertexCount = instance->m_mesh->vertices.Length();
+								const ae::EditorServerMesh::Vertex* verts = instance->m_mesh->vertices.Data();
+								program->debugLines.AddMesh( (const ae::Vec3*)&verts->position, sizeof(*verts), vertexCount, transform, color );
+							}
+						}
+					}
+					break;
+				}
+				case PickingType::Logic:
+				{
+					ae::Vec3 pos = editorObj->GetTransform().GetTranslation();
+					ae::Vec3 normal = program->camera.GetPosition() - pos;
+					program->debugLines.AddCircle( pos, normal, 0.475f, color, 16 );
+					break;
+				}
+				case PickingType::Disabled:
+					continue;
 			}
 		}
 	}
@@ -1883,8 +2093,8 @@ void EditorServer::ShowUI( EditorProgram* program )
 				}
 			},
 			/* Toggle transparent */ { {}, ae::Key::I, []( EditorProgram* program ) { program->editor.m_showTransparent = !program->editor.m_showTransparent; } },
-			/* Delete */ { {}, ae::Key::Delete, []( EditorProgram* program ) { program->editor.m_DeleteSelected(); } },
-			/* Delete */ { {}, ae::Key::Backspace, []( EditorProgram* program ) { program->editor.m_DeleteSelected(); } },
+			/* Delete */ { {}, ae::Key::Delete, []( EditorProgram* program ) { program->editor.m_DeleteSelected( program ); } },
+			/* Delete */ { {}, ae::Key::Backspace, []( EditorProgram* program ) { program->editor.m_DeleteSelected( program ); } },
 			/* Focus */ { {}, ae::Key::F, []( EditorProgram* program ) { program->editor.ActiveRefocus( program ); }, true },
 			/* Hide */ { {}, ae::Key::H, []( EditorProgram* program ) { program->editor.m_HideSelected(); } },
 			/* Select none */ { {}, ae::Key::Escape, []( EditorProgram* program ) { program->editor.m_selected.Clear(); } },
@@ -2082,7 +2292,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			for( ae::Entity entity : m_selected )
 			{
-				DestroyObject( entity );
+				DestroyObject( program, entity );
 			}
 			m_selected.Clear();
 		}
@@ -2098,22 +2308,9 @@ void EditorServer::ShowUI( EditorProgram* program )
 		
 		if( ImGui::Button( "Reload Resources" ) )
 		{
-			program->UnloadMeshes();
-			const uint32_t componentTypeCount = m_registry.GetTypeCount();
-			for( uint32_t i = 0; i < componentTypeCount; i++ )
-			{
-				const ae::ClassType* type = m_registry.GetTypeByIndex( i );
-				const uint32_t componentCount = m_registry.GetComponentCountByIndex( i );
-				for( uint32_t j = 0; j < componentCount; j++ )
-				{
-					if( const ae::ClassVar* var = GetMeshResourceVar( type ) )
-					{
-						ae::Component* component = &m_registry.GetComponentByIndex( i, j );
-						EditorServerObject* object = GetObject( component->GetEntity() );
-						object->HandleVarChange( program, component, type, var );
-					}
-				}
-			}
+			EditorEvent event;
+			event.type = EditorEventType::ReloadResources;
+			SendPluginEvent( program->plugins, event );
 		}
 		
 		static bool s_imGuiDemo = false;
@@ -2355,9 +2552,26 @@ EditorServerObject* EditorServer::CreateObject( Entity entity, const ae::Matrix4
 	return editorObject;
 }
 
-void EditorServer::DestroyObject( ae::Entity entity )
+void EditorServer::DestroyObject( EditorProgram* program, ae::Entity entity )
 {
-	EditorServerObject* editorObject = nullptr;
+	const uint32_t idx = m_objects.GetIndex( entity );
+	if( idx < 0 )
+	{
+		return;
+	}
+	EditorServerObject* editorObject = m_objects.GetValue( idx );
+	AE_ASSERT( editorObject );
+
+	const uint32_t componentTypesCount = m_registry.GetTypeCount();
+	for( uint32_t i = 0; i < componentTypesCount; i++ )
+	{
+		const ae::ClassType* componentType = m_registry.GetTypeByIndex( i );
+		if( ae::Component* component = m_registry.TryGetComponent( entity, componentType ) )
+		{
+			RemoveComponent( program, editorObject, component );
+		}
+	}
+
 	if( m_objects.Remove( entity, &editorObject ) )
 	{
 		m_registry.Destroy( entity );
@@ -2390,11 +2604,12 @@ ae::Component* EditorServer::AddComponent( EditorProgram* program, EditorServerO
 	component = m_registry.AddComponent( obj->entity, type );
 	if( component )
 	{
-		if( const ae::EditorMeshResourceAttribute* meshAttribute = TryGetClassOrVarAttribute< ae::EditorMeshResourceAttribute >( type ) )
-		{
-			obj->mesh = program->GetMesh( meshAttribute->resourceMesh.c_str() );
-			obj->opaque = !meshAttribute->transparent;
-		}
+		EditorEvent event;
+		event.type = EditorEventType::ComponentCreate;
+		event.entity = obj->entity;
+		event.transform = obj->GetTransform();
+		event.component = component;
+		SendPluginEvent( program->plugins, event );
 	}
 	return component;
 }
@@ -2403,6 +2618,13 @@ void EditorServer::RemoveComponent( EditorProgram* program, EditorServerObject* 
 {
 	if( obj && component )
 	{
+		EditorEvent event;
+		event.type = EditorEventType::ComponentDestroy;
+		event.entity = obj->entity;
+		event.transform = obj->GetTransform();
+		event.component = component;
+		SendPluginEvent( program->plugins, event );
+		
 		m_registry.DestroyComponent( component );
 	}
 }
@@ -2422,61 +2644,27 @@ const EditorServerObject* EditorServer::GetObjectFromComponent( const ae::Compon
 	return component ? GetObject( component->GetEntity() ) : nullptr;
 }
 
-const ae::ClassVar* EditorServer::GetMeshResourceVar( const ae::ClassType* componentType )
-{
-	const uint32_t variableCount = componentType->GetVarCount( true );
-	for( uint32_t i = 0; i < variableCount; i++ )
-	{
-		const ae::ClassVar* var = componentType->GetVarByIndex( i, true );
-		if( var->attributes.TryGet< ae::EditorMeshResourceAttribute >() )
-		{
-			return var;
-		}
-	}
-	return nullptr;
-}
-
 bool EditorServer::GetRenderDisabled( ae::Entity entity ) const
 {
-	const ae::ClassType* meshComponentType = nullptr;
-	const ae::Component* meshComponent = nullptr;
-	{
-		const uint32_t typeCounts = m_registry.GetTypeCount();
-		for( uint32_t i = 0; i < typeCounts; i++ )
-		{
-			const ae::ClassType* type = m_registry.GetTypeByIndex( i );
-			const ae::Component* component = m_registry.TryGetComponent( entity, type );
-			if( component && (bool)TryGetClassOrVarAttribute< ae::EditorMeshResourceAttribute >( type ) )
-			{
-				meshComponentType = type;
-				meshComponent = component;
-				break;
-			}
-		}
-	}
-	if( !meshComponentType || !meshComponent )
-	{
-		return false;
-	}
-
-	const uint32_t variableCount = meshComponentType->GetVarCount( true );
-	for( uint32_t i = 0; i < variableCount; i++ )
-	{
-		const ae::ClassVar* var = meshComponentType->GetVarByIndex( i, true );
-		if( var->attributes.TryGet< ae::EditorVisibilityAttribute >() )
-		{
-			const ae::ConstDataPointer varData( var, meshComponent );
-			const ae::BasicType* basicType = varData.GetVarType().AsVarType< ae::BasicType >();
-			if( basicType && basicType->GetType() == ae::BasicType::Type::Bool )
-			{
-				bool visible = true;
-				if( basicType->GetVarData( varData, &visible ) && !visible )
-				{
-					return true;
-				}
-			}
-		}
-	}
+	// @TODO: Gather 'ae::EditorVisibilityAttribute' from all entity components
+	// const uint32_t variableCount = meshComponentType->GetVarCount( true );
+	// for( uint32_t i = 0; i < variableCount; i++ )
+	// {
+	// 	const ae::ClassVar* var = meshComponentType->GetVarByIndex( i, true );
+	// 	if( var->attributes.TryGet< ae::EditorVisibilityAttribute >() )
+	// 	{
+	// 		const ae::ConstDataPointer varData( var, meshComponent );
+	// 		const ae::BasicType* basicType = varData.GetVarType().AsVarType< ae::BasicType >();
+	// 		if( basicType && basicType->GetType() == ae::BasicType::Type::Bool )
+	// 		{
+	// 			bool visible = true;
+	// 			if( basicType->GetVarData( varData, &visible ) && !visible )
+	// 			{
+	// 				return true;
+	// 			}
+	// 		}
+	// 	}
+	// }
 	return false;
 }
 
@@ -2494,6 +2682,13 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 {
 	EditorServerObject* editorObject = GetObject( entity );
 	AE_ASSERT( editorObject );
+
+	EditorEvent event;
+	event.type = EditorEventType::ComponentEdit;
+	event.entity = entity;
+	event.transform = editorObject->GetTransform();
+	SendPluginEvent( program->plugins, event );
+
 	const uint32_t typeCounts = m_registry.GetTypeCount();
 	for( uint32_t i = 0; i < typeCounts; i++ )
 	{
@@ -2508,6 +2703,9 @@ void EditorServer::HandleTransformChange( EditorProgram* program, ae::Entity ent
 			}
 		}
 	}
+
+	// @TODO: Broadcast transform change here?
+	//@TODO: Plugin event here?
 }
 
 void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Component* component )
@@ -2571,10 +2769,11 @@ bool EditorServer::SaveLevel( EditorProgram* program, bool saveAs )
 		return false;
 	}
 
-	if( program->params.functionPointers.preFileEditFn
-		&& !program->params.functionPointers.preFileEditFn( program->params.functionPointers.userData, m_levelPath.c_str() ) )
+	if( !program->MakeWritable( m_levelPath.c_str() ) )
 	{
-		AE_ERR( "File failed per edit check '#'", m_levelPath );
+		ae::Str512 msg = ae::Str512::Format( "Failed to make file writable '#'", m_levelPath );
+		AE_ERR( msg.c_str() );
+		ae::ShowMessage( msg.c_str() );
 		return false;
 	}
 
@@ -2656,21 +2855,38 @@ void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
 
 void EditorServer::Unload( EditorProgram* program )
 {
+	// @HACK: Currently two LevelUnload's are sent
+	EditorEvent event;
+	event.type = EditorEventType::LevelUnload;
+	event.path = m_levelPath.c_str();
+	SendPluginEvent( program->plugins, event );
+
 	m_objectListType = nullptr;
 	m_selected.Clear();
 	m_hoverEntities.Clear();
 	uiHoverEntity = kInvalidEntity;
 	m_selectRef = SelectRef();
+	m_framePickableEntities.Clear();
 
 	m_SetLevelPath( program, "" );
 
 	while( m_objects.Length() )
 	{
-		DestroyObject( m_objects.GetKey( m_objects.Length() - 1 ) );
+		DestroyObject( program, m_objects.GetKey( m_objects.Length() - 1 ) );
 	}
 	AE_ASSERT( m_objects.Length() == 0 );
 
 	m_registry.Clear();
+
+	// @TODO: Enable cleanup validation
+	for( auto& [ config, plugin ] : program->plugins )
+	{
+		for( auto& [ instance, _ ] : plugin->m_instances )
+		{
+			// AE_ASSERT_MSG( !instance->m_selectEntity, "Plugin '#' has entity references on level unload", config.name );
+		}
+		AE_ASSERT_MSG( !plugin->m_entityInstances.Length(), "Plugin '#' still has entity instances on level unload", config.name );
+	}
 }
 
 void EditorServer::m_EntityToJson( const EditorServerObject* levelObject, rapidjson::Document::AllocatorType& allocator, ae::Map< const ae::ClassType*, ae::Component* >* defaults, rapidjson::Value* jsonEntity ) const
@@ -2841,11 +3057,11 @@ void EditorServer::m_PasteFromClipboard( EditorProgram* program )
 	}
 }
 
-void EditorServer::m_DeleteSelected()
+void EditorServer::m_DeleteSelected( EditorProgram* program )
 {
 	for( ae::Entity entity : m_selected )
 	{
-		DestroyObject( entity );
+		DestroyObject( program, entity );
 	}
 	m_selected.Clear();
 }
@@ -3175,45 +3391,58 @@ bool EditorProgram::Serializer::StringToObjectPointer( const char* pointerVal, a
 //------------------------------------------------------------------------------
 ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut, ae::Vec3* normalOut )
 {
-	ae::Vec3 mouseRay = program->GetMouseRay();
-	ae::Vec3 mouseRaySrc = program->camera.GetPosition();
-	
+	const ae::Vec3 mouseRay = program->GetMouseRay();
+	const ae::Vec3 mouseRaySrc = program->camera.GetPosition();
+
+	// @TODO: Frustum culling
+
 	ae::RaycastParams raycastParams;
 	raycastParams.source = mouseRaySrc;
 	raycastParams.ray = mouseRay * kEditorViewDistance;
 	raycastParams.hitClockwise = false;
 	raycastParams.hitCounterclockwise = true;
-	//raycastParams.debug = &program->debugLines;
+	// raycastParams.debug = &program->debugLines; // Debug only
 	ae::RaycastResult result;
-	uint32_t editorObjectCount = m_objects.Length();
+	for( auto& [ _, plugin ] : program->plugins )
+	{
+		for( auto& [ instance, _ ] : plugin->m_instances )
+		{
+			AE_DEBUG_ASSERT( instance->m_mesh );
+			if( !instance->m_mesh || instance->color.a < 0.01f || // Skip invisible objects
+				( instance->color.a < 0.99f && !GetShowTransparent() ) ) // Skip transparent objects
+			{
+				continue;
+			}
+			const EditorServerObject* editorObj = GetObject( instance->m_selectEntity ); // May be null
+			if( editorObj && editorObj->hidden )
+			{
+				continue;
+			}
+			raycastParams.userData = editorObj;
+			raycastParams.transform = instance->transform;
+			result = instance->m_mesh->collision.Raycast( raycastParams, result );
+		}
+	}
+	const uint32_t editorObjectCount = m_objects.Length();
 	for( uint32_t i = 0; i < editorObjectCount; i++ )
 	{
 		const EditorServerObject* editorObj = m_objects.GetValue( i );
-		if( !editorObj->hidden )
+		if( !editorObj->hidden && m_framePickableEntities.Get( editorObj->entity, PickingType::Disabled ) == PickingType::Logic )
 		{
-			if( editorObj->mesh && ( editorObj->opaque || GetShowTransparent() ) )
+			float hitT = INFINITY;
+			ae::Vec3 hitPos( 0.0f );
+			const ae::Sphere sphere( editorObj->GetTransform().GetTranslation(), 0.5f );
+			if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, &hitT ) )
 			{
-				raycastParams.userData = editorObj;
-				raycastParams.transform = editorObj->GetTransform();
-				result = editorObj->mesh->collision.Raycast( raycastParams, result );
-			}
-			else
-			{
-				float hitT = INFINITY;
-				ae::Vec3 hitPos( 0.0f );
-				ae::Sphere sphere( editorObj->GetTransform().GetTranslation(), 0.5f );
-				if( sphere.IntersectRay( mouseRaySrc, mouseRay, &hitPos, &hitT ) )
-				{
-					raycastParams.userData = nullptr;
-					raycastParams.transform = ae::Matrix4::Identity();
-					ae::RaycastResult sphereResult;
-					auto* hit = &sphereResult.hits.Append( {} );
-					hit->position = hitPos;
-					hit->normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
-					hit->distance = hitT;
-					hit->userData = editorObj;
-					ae::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
-				}
+				raycastParams.userData = nullptr;
+				raycastParams.transform = ae::Matrix4::Identity();
+				ae::RaycastResult sphereResult;
+				auto* hit = &sphereResult.hits.Append( {} );
+				hit->position = hitPos;
+				hit->normal = ( mouseRaySrc - hitPos ).SafeNormalizeCopy();
+				hit->distance = hitT;
+				hit->userData = editorObj;
+				ae::RaycastResult::Accumulate( raycastParams, sphereResult, &result );
 			}
 		}
 	}
@@ -3222,10 +3451,9 @@ ae::Entity EditorServer::m_PickObject( EditorProgram* program, ae::Vec3* hitOut,
 		*hitOut = result.hits[ 0 ].position;
 		*normalOut = result.hits[ 0 ].normal;
 		const EditorServerObject* editorObj = (const EditorServerObject*)result.hits[ 0 ].userData;
-		AE_ASSERT( editorObj );
-		return editorObj->entity;
+		return editorObj ? editorObj->entity : kInvalidEntity;
 	}
-	
+
 	return kInvalidEntity;
 }
 
@@ -3517,6 +3745,14 @@ const T* TryGetClassOrVarAttribute( const ae::ClassType* type )
 		currentType = currentType->GetParentType();
 	}
 	return nullptr;
+}
+
+void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event )
+{
+	for( auto& [ _, plugin ] : plugins )
+	{
+		plugin->OnEvent( event );
+	}
 }
 
 } // End ae namespace

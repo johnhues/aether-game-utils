@@ -282,7 +282,7 @@ ae_add_bundle("Editor"
 	APPLE_DEVELOPMENT_TEAM "${AE_EXAMPLE_DEVELOPMENT_TEAM}"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
-	SRC_FILES "18_Editor.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
+	SRC_FILES "18_Editor.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
 	RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
 	LIBS "ae_extras;imgui;imguizmo;rapidjson"
 )

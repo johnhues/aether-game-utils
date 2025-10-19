@@ -80,7 +80,7 @@ Registry::~Registry()
 	{
 		if( componentMap.value.Length() )
 		{
-			AE_ERR( "Component type '#' not properly cleaned up", ae::GetClassTypeById( componentMap.key )->GetName() );
+			AE_ERR( "Component type '#' not properly cleaned up. Some allocations remain.", ae::GetClassTypeById( componentMap.key )->GetName() );
 		}
 	}
 }

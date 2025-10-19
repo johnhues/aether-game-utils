@@ -21,8 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //------------------------------------------------------------------------------
-#ifndef EDITORCLIENT_H
-#define EDITORCLIENT_H
+#ifndef AE_EDITOR_CLIENT_H
+#define AE_EDITOR_CLIENT_H
 
 //------------------------------------------------------------------------------
 // Headers
@@ -36,17 +36,7 @@
 namespace ae {
 
 const uint32_t kMaxEditorMessageSize = 1024;
-
-//------------------------------------------------------------------------------
-// ae::EditorComponent class
-//------------------------------------------------------------------------------
-class EditorComponent
-{
-public:
-	EditorComponent( const ae::Tag& tag ) : members( tag ) {}
-	ae::Str32 type;
-	ae::Dict<> members;
-};
+class Editor;
 
 //------------------------------------------------------------------------------
 // ae::EditorMesh class
@@ -58,6 +48,23 @@ public:
 	void Load( const ae::OBJLoader& file );
 	ae::Array< ae::Vec3 > verts;
 	ae::Array< uint32_t > indices;
+};
+
+//------------------------------------------------------------------------------
+// ae::EditorMeshInstance class
+//------------------------------------------------------------------------------
+class EditorMeshInstance
+{
+public:
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	ae::Color color = ae::Color::AetherGray();
+private:
+	friend class EditorPlugin;
+	friend class EditorServer;
+	friend class EditorServerObject;
+	class EditorServerMesh* m_mesh = nullptr;
+	ae::Entity m_selectEntity = kInvalidEntity;
+	ae::ListNode< EditorMeshInstance > m_entityInstance = this;
 };
 
 //------------------------------------------------------------------------------
@@ -86,31 +93,10 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// ae::EditorMeshResourceAttribute class
-//------------------------------------------------------------------------------
-//! This attribute should be added to an ae::Component or to a registered
-//! variable when a component needs to display a custom mesh in the editor.
-//------------------------------------------------------------------------------
-class EditorMeshResourceAttribute final : public ae::Inheritor< ae::Attribute, EditorMeshResourceAttribute >
-{
-public:
-	//! When this attribute is added to a component, this string will be used to
-	//! look up a mesh resource with ae::EditorFunctionPointers::loadMeshFn().
-	//! This value will be ignored if the attribute is attached to a class
-	//! variable, and the contents of that variable will be used instead.
-	ae::Str64 resourceMesh;
-
-	//! If true, the mesh will be displayed differently in the editor. This
-	//! is useful for triggers, bounding volumes, or water volumes, etc.
-	bool transparent = false;
-};
-
-//------------------------------------------------------------------------------
 // ae::EditorVisibilityAttribute class
 //------------------------------------------------------------------------------
-//! This attribute should be added to a registered class member variable bool
-//! when the mesh rendering for instances of its class should be controlled by
-//! the variable's value.
+//! This attribute should be added to a component variable (a meta registered
+//! bool) to control rendering in the editor.
 //------------------------------------------------------------------------------
 class EditorVisibilityAttribute final : public ae::Inheritor< ae::Attribute, EditorVisibilityAttribute >
 {
@@ -118,31 +104,72 @@ public:
 };
 
 //------------------------------------------------------------------------------
-// Editor callback functions
+// ae::EditorEventType
 //------------------------------------------------------------------------------
-typedef void(*OnLevelLoadStartFn)( void* userData, const char* levelPath );
-typedef ae::Optional< ae::EditorMesh >(*LoadEditorMeshFn)( void* userData, const char* resourceId );
-typedef bool(*PreFileEditFn)( void* userData, const char* filePath );
+enum class EditorEventType
+{
+	None,
+
+	FileEdit, //!< Received before a file is opened for editing
+	
+	Update, //!< Received once each editor frame
+	Terminate, //!< Received when the editor is shutting down
+	LevelLoad, //!< Received right after a level has been loaded
+	LevelUnload, //!< Received right before a level will be unloaded
+	ReloadResources, //!< Received when the user has requested a resource reload
+	
+	ComponentCreate, //!< Received when a component has been created
+	ComponentDestroy, //!< Received when a component has been destroyed
+	ComponentEdit, //!< Received when a component variable has been modified
+	ComponentSelect, //!< Received when a component has been selected in the editor
+	ComponentDeselect, //!< Received when a component has been deselected in the editor
+};
 
 //------------------------------------------------------------------------------
-// ae::EditorFunctionPointers
+// ae::EditorEvent
 //------------------------------------------------------------------------------
-struct EditorFunctionPointers
+struct EditorEvent
 {
-	//! @TODO
-	ae::OnLevelLoadStartFn onLevelLoadStartFn = nullptr;
-	//! Implement this so ae::Editor can display editor object meshes. Register
-	//! a variable with the following tag to display a mesh:
-	//! AE_REGISTER_CLASS_PROPERTY_VALUE( MyClass, ae_mesh_resource, myVar );
-	//! The contents of 'myVar' will be converted to a string and passed to
-	//! loadMeshFn() as the resourceId. The given function should return a
-	//! complete ae::Optional< ae::EditorMesh >.
-	ae::LoadEditorMeshFn loadMeshFn = nullptr;
-	//! Called before a file is opened for editing. Return false to prevent the
-	//! file from being opened. Useful for checking out files from source control.
-	ae::PreFileEditFn preFileEditFn = nullptr;
-	//! Provided to all callback functions as the userData parameter
-	void* userData = nullptr;
+	ae::EditorEventType type = ae::EditorEventType::None;
+	const char* path = "";
+	ae::Entity entity = kInvalidEntity;
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	const ae::Component* component = nullptr;
+	const ae::ClassVar* var = nullptr;
+};
+
+//------------------------------------------------------------------------------
+// ae::EditorPlugin class
+//------------------------------------------------------------------------------
+struct EditorPluginConfig
+{
+	EditorPluginConfig( ae::Tag tag ) {}
+	ae::Str64 name;
+};
+
+//------------------------------------------------------------------------------
+// ae::EditorPlugin class
+//------------------------------------------------------------------------------
+class EditorPlugin
+{
+public:
+	EditorPlugin( const ae::Tag& tag );
+	virtual ~EditorPlugin() {}
+	virtual EditorPluginConfig GetConfig() = 0;
+	virtual void OnEvent( const ae::EditorEvent& event ) = 0; // @TODO: Should this return an enum code?
+
+	EditorMeshInstance* CreateMesh( const EditorMesh& mesh, ae::Entity selectEntity = kInvalidEntity );
+	EditorMeshInstance* CloneMesh( const EditorMeshInstance* mesh, ae::Entity selectEntity = kInvalidEntity );
+	void DestroyMesh( EditorMeshInstance* mesh );
+
+private:
+	friend class EditorServer;
+	friend class EditorProgram;
+	friend class EditorServerObject;
+	const ae::Tag m_tag;
+	ae::Map< class EditorServerMesh*, int32_t > m_meshRefs;
+	ae::Map< EditorMeshInstance*, bool > m_instances;
+	ae::Map< ae::Entity, ae::List< EditorMeshInstance >* > m_entityInstances;
 };
 
 //------------------------------------------------------------------------------
@@ -171,8 +198,6 @@ struct EditorParams
 	//! When ae::Editor is given a relative path it will use this instead of
 	//! the current working directory
 	ae::Str256 dataDir;
-	//! Function pointers for editor callbacks
-	ae::EditorFunctionPointers functionPointers;
 	//! If a level is specified it will be opened on editor launch. The path can
 	//! be absolute or relative. See 'dataDir' for more information on relative
 	//! paths. This field will be ignored if a level is specified on the command
@@ -188,11 +213,12 @@ class Editor
 public:
 	Editor( const ae::Tag& tag );
 	~Editor();
+	// @TODO: AddAsyncPlugin()? Multi-threaded plugins should be encouraged
+	template< typename T, typename ... Args > T* AddPlugin( Args&& ... args );
 	//! If this returns true the editor will have successfully forked, run, and
 	//! been closed gracefully. The caller should exit the program in this case.
-	bool Initialize( const EditorParams& params );
+	bool Initialize( const ae::EditorParams& params );
 	void Terminate();
-	void SetFunctionPointers( const ae::EditorFunctionPointers& functionPointers );
 	void Update();
 	void Launch();
 	bool IsConnected() const { return m_sock.IsConnected(); }
@@ -200,6 +226,7 @@ public:
 
 private:
 	friend class EditorServer;
+	friend class EditorPlugin;
 	void m_Fork();
 	void m_Connect();
 	void m_Read();
@@ -210,8 +237,28 @@ private:
 	const ae::File* m_pendingLevel = nullptr;
 	ae::Socket m_sock;
 	uint8_t m_msgBuffer[ kMaxEditorMessageSize ];
+	ae::Array< std::pair< EditorPluginConfig, EditorPlugin* > > m_plugins;
 	ae::Map< ae::Entity, bool > m_editorEntities;
 };
+
+//------------------------------------------------------------------------------
+// ae::Editor class
+//------------------------------------------------------------------------------
+template< typename T, typename ... Args >
+T* Editor::AddPlugin( Args&& ... args )
+{
+	AE_STATIC_ASSERT_MSG( (std::is_base_of< ae::EditorPlugin, T >::value), "T must be derived from ae::EditorPlugin" );
+	auto& plugin = m_plugins.Append( { m_tag, {} } );
+	plugin.second = ae::New< T >( m_tag, std::forward< Args >( args )... );
+	plugin.first = plugin.second->GetConfig();
+	if( plugin.first.name.Empty() )
+	{
+		AE_ERROR( "EditorPluginConfig must provide a name" );
+		return nullptr;
+	}
+	AE_INFO( "Registered plugin '#'", plugin.first.name );
+	return static_cast< T* >( plugin.second );
+}
 
 } // end ae namespace
 #endif
