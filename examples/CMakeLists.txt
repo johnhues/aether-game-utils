@@ -219,7 +219,7 @@ ae_add_bundle("Geometry"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "12_Geometry.cpp"
-	RESOURCES "${AE_EXAMPLE_RESOURCES};data/font.tga"
+	RESOURCES "${AE_EXAMPLE_RESOURCES};data/font.tga;data/bunny.obj"
 	LIBS "ae;ae_extras"
 )
 

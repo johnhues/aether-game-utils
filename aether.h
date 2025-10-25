@@ -3694,35 +3694,36 @@ private:
 //        convenient helper functions to convert between linear and srgb color
 //        spaces. It's not necessary to use any of these helpers and basic valid
 //        GLSL can be provided instead.
-// Example vertex shader:
+// Example vertex and fragment shader:
 /*
-AE_UNIFORM_HIGHP mat4 u_worldToProj;
+const char* kVertexShader = R"(
+	AE_UNIFORM_HIGHP mat4 u_modelToProj;
 
-AE_IN_HIGHP vec3 a_position;
-AE_IN_HIGHP vec2 a_uv;
-AE_IN_HIGHP vec4 a_color;
+	AE_IN_HIGHP vec3 a_position;
+	AE_IN_HIGHP vec2 a_uv;
+	AE_IN_HIGHP vec4 a_color;
 
-AE_OUT_HIGHP vec2 v_uv;
-AE_OUT_HIGHP vec4 v_color;
+	AE_OUT_HIGHP vec2 v_uv;
+	AE_OUT_HIGHP vec4 v_color;
 
-void main()
-{
-	v_uv = a_uv;
-	v_color = a_color;
-	gl_Position = u_worldToProj * vec4( a_position, 1.0 );
-}
-*/
-// Example fragment shader:
-/*
-AE_UNIFORM sampler2D u_tex;
+	void main()
+	{
+		v_uv = a_uv;
+		v_color = a_color;
+		gl_Position = u_modelToProj * vec4( a_position, 1.0 );
+	}
+)";
+const char* kFragmentShader = R"(
+	AE_UNIFORM sampler2D u_tex;
 
-AE_IN_HIGHP vec2 v_uv;
-AE_IN_HIGHP vec4 v_color;
+	AE_IN_HIGHP vec2 v_uv;
+	AE_IN_HIGHP vec4 v_color;
 
-void main()
-{
-	AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;
-}
+	void main()
+	{
+		AE_COLOR = AE_TEXTURE2D( u_tex, v_uv ) * v_color;
+	}
+)";
 */
 //------------------------------------------------------------------------------
 const uint32_t _kMaxShaderAttributeCount = 16;
@@ -15962,59 +15963,58 @@ AABB OBB::GetAABB() const
 //------------------------------------------------------------------------------
 bool IntersectRayTriangle( Vec3 p, Vec3 ray, Vec3 a, Vec3 b, Vec3 c, bool ccw, bool cw, Vec3* pOut, Vec3* nOut, float* tOut )
 {
-	const ae::Vec3 ab = b - a;
-	const ae::Vec3 ac = c - a;
-	const ae::Vec3 n = ab.Cross( ac );
-	const ae::Vec3 qp = -ray;
-	
-	// Compute denominator d
-	const float d = qp.Dot( n );
-	if( !ccw && d > 0.001f )
+	// Möller–Trumbore ray-triangle intersection
+	const ae::Vec3 edge1 = b - a;
+	const ae::Vec3 edge2 = c - a;
+	const float epsilon = 1e-8f;
+	const ae::Vec3 h = ray.Cross( edge2 );
+	const float det = edge1.Dot( h );
+	// Parallel or nearly parallel
+	if( det > -epsilon && det < epsilon )
 	{
 		return false;
 	}
-	if( !cw && d < 0.001f )
+	// Backface / frontface handling based on det sign
+	const bool detPos = det > 0.0f;
+	if( detPos && !ccw )
 	{
 		return false;
 	}
-	// Parallel
-	if( ae::Abs( d ) < 0.001f )
+	if( !detPos && !cw )
 	{
 		return false;
 	}
-	const float ood = 1.0f / d;
-	
-	// Compute intersection t value of pq with plane of triangle
-	const ae::Vec3 ap = p - a;
-	const float t = ap.Dot( n ) * ood;
-	// Ray intersects if 0 <= t <= 1
+
+	const float invDet = 1.0f / det;
+	const ae::Vec3 s = p - a;
+	const float u = s.Dot( h ) * invDet;
+	if( u < 0.0f || u > 1.0f )
+	{
+		return false;
+	}
+	const ae::Vec3 q = s.Cross( edge1 );
+	const float v = ray.Dot( q ) * invDet;
+	if( v < 0.0f || u + v > 1.0f )
+	{
+		return false;
+	}
+
+	const float t = edge2.Dot( q ) * invDet;
+	// Ray segment check
 	if( t < 0.0f || t > 1.0f )
 	{
 		return false;
 	}
-	
-	// Compute barycentric coordinate components and test if within bounds
-	const ae::Vec3 e = qp.Cross( ap );
-	const float v = ac.Dot( e ) * ood;
-	if( v < 0.0f || v > 1.0f )
-	{
-		return false;
-	}
-	const float w = -ab.Dot( e ) * ood;
-	if( w < 0.0f || v + w > 1.0f )
-	{
-		return false;
-	}
-	
-	// Result
-	AE_DEBUG_ASSERT( !p.IsNAN() );
+
 	if( pOut )
 	{
 		*pOut = p + ray * t;
 	}
 	if( nOut )
 	{
-		*nOut = n.SafeNormalizeCopy();
+		const ae::Vec3 normal = edge1.Cross( edge2 ).SafeNormalizeCopy();
+		// Ensure normal orientation is consistent with det sign
+		*nOut = ( ray.Dot( normal ) > 0.0f ) ? -normal : normal;
 	}
 	if( tOut )
 	{

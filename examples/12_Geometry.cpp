@@ -43,10 +43,13 @@ int main()
 	ae::TimeStep timeStep;
 	ae::FileSystem fileSystem;
 	ae::DebugLines debug = TAG_EXAMPLE;
-	ae::Texture2D fontTexture;
 	ae::TextRender text = TAG_EXAMPLE;
 	ae::DebugCamera camera = ae::Axis::Z;
-
+	ae::Texture2D fontTexture;
+	ae::Shader meshShader;
+	ae::VertexBuffer meshVertexData;
+	ae::CollisionMesh<> meshCollision = TAG_EXAMPLE;
+	
 	window.Initialize( 800, 600, false, true, true );
 	window.SetTitle( "geometry" );
 	render.Initialize( &window );
@@ -64,6 +67,43 @@ int main()
 		targa.Load( fileBuffer.Data(), fileSize );
 		fontTexture.Initialize( targa.textureParams );
 	}
+	meshShader.Initialize(
+		R"(
+			AE_UNIFORM_HIGHP mat4 u_modelToProj;
+			AE_UNIFORM_HIGHP mat4 u_normalToWorld;
+			AE_IN_HIGHP vec3 a_position;
+			AE_IN_HIGHP vec3 a_normal;
+			AE_OUT_HIGHP vec3 v_normal;
+			void main()
+			{
+				v_normal = ( u_normalToWorld * vec4( a_normal, 0.0 ) ).xyz;
+				gl_Position = u_modelToProj * vec4( a_position, 1.0 );
+			}
+		)",
+		R"(
+			AE_IN_HIGHP vec3 v_normal;
+			void main()
+			{
+				float light = 0.5 + 0.5 * max( dot( normalize( v_normal ), vec3( 0.577, 0.577, 0.577 ) ), 0.0 );
+				AE_COLOR = vec4( vec3( 0.8, 0.5, 0.6 ) * light, 1.0 );
+			}
+		)"
+	);
+	meshShader.SetDepthWrite( true );
+	meshShader.SetDepthTest( true );
+	{
+		const char* fileName = "bunny.obj";
+		ae::OBJLoader objLoader = TAG_EXAMPLE;
+		const uint32_t fileSize = fileSystem.GetSize( ae::FileSystem::Root::Data, fileName );
+		AE_ASSERT_MSG( fileSize, "Could not load #", fileName );
+		ae::Scratch< uint8_t > fileBuffer( fileSize );
+		fileSystem.Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileSize );
+		const ae::OBJLoader::InitializeParams initParams = { .data = fileBuffer.Data(), .length = fileBuffer.Length() };
+		const ae::OBJLoader::VertexDataParams vertexParams = { .vertexData = &meshVertexData };
+		objLoader.Load( initParams );
+		objLoader.InitializeVertexData( vertexParams );
+		objLoader.InitializeCollisionMesh( &meshCollision );
+	}
 	text.Initialize( 16, 512, &fontTexture, 8, 1.0f );
 	camera.Reset( ae::Vec3( 0.0f ), ae::Vec3( 5.0f, 5.0f, 5.0f ) );
 	
@@ -77,13 +117,14 @@ int main()
 	AE_INFO( "Run" );
 	while( !input.quit )
 	{
+		const float dt = timeStep.GetTimeStep();
 		input.Pump();
 
 		if( input.Get( ae::Key::F ) && !input.GetPrev( ae::Key::F ) )
 		{
 			camera.Refocus( ae::Vec3( 0.0f ) );
 		}
-		camera.Update( &input, timeStep.GetTimeStep() );
+		camera.Update( &input, dt );
 
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
@@ -117,7 +158,7 @@ int main()
 			
 			static ae::Vec3 s_raySource( 2.0f, 0.6f, 2.0f );
 			static ae::Vec3 s_rayDir = -s_raySource.SafeNormalizeCopy();
-			static float s_rayLength = 4.0f;
+			static float s_rayLength = 12.0f;
 			
 			if( input.Get( ae::Key::Num1 ) ) s_rayLength -= 0.016f;
 			if( input.Get( ae::Key::Num2 ) ) s_rayLength += 0.016f;
@@ -148,7 +189,7 @@ int main()
 		{
 			currentTest++;
 		}
-		currentTest = ae::Mod( currentTest, 10 );
+		currentTest = ae::Mod( currentTest, 11 );
 
 		// Geometry calculations / rendering
 		switch( currentTest )
@@ -236,8 +277,8 @@ int main()
 				if( input.Get( ae::Key::S ) ) { s_spherePos.y -= 0.01f; }
 				if( input.Get( ae::Key::E ) ) { s_spherePos.z += 0.01f; }
 				if( input.Get( ae::Key::Q ) ) { s_spherePos.z -= 0.01f; }
-				if( input.Get( ae::Key::Num3 ) ) s_sphereRadius -= timeStep.GetDt();
-				if( input.Get( ae::Key::Num4 ) ) s_sphereRadius += timeStep.GetDt();
+				if( input.Get( ae::Key::Num3 ) ) s_sphereRadius -= dt;
+				if( input.Get( ae::Key::Num4 ) ) s_sphereRadius += dt;
 				s_sphereRadius = ae::Max( 0.01f, s_sphereRadius );
 				
 				const ae::Vec3 pos = raySource + ray;
@@ -574,7 +615,7 @@ int main()
 				p += ae::Vec3( cosf( s_pa ), sinf( s_pa ), 0.0f );
 				p += ae::Vec3( cosf( s_pb ), 0.0f, sinf( s_pb ) );
 				
-				float dist = obb.GetSignedDistanceFromSurface( p );
+				const float dist = obb.GetSignedDistanceFromSurface( p );
 				debug.AddSphere( p, 0.05f, ae::Color::PicoPink(), 8 );
 				
 				ae::Color nearestColor = ( dist > 0.0f ) ? ae::Color::PicoGreen() : ae::Color::PicoRed();
@@ -680,6 +721,8 @@ int main()
 			case 9:
 			{
 				infoText.Append( "AABB Overlap\n" );
+				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
+				infoText.Append( "Scale: I,J,K,L,U,O\n" );
 				static bool s_first = true;
 				static ae::AABB s_aabb0;
 				static ae::AABB s_aabb1;
@@ -713,6 +756,91 @@ int main()
 				const bool overlap = s_aabb0.Intersect( s_aabb1 );
 				debug.AddAABB( s_aabb0, overlap ? ae::Color::Red() : ae::Color::Green() );
 				debug.AddAABB( s_aabb1, overlap ? ae::Color::Red() : ae::Color::Green() );
+				break;
+			}
+			case 10:
+			{
+				infoText.Append( "Mesh-Ray/Point\n" );
+				doRay( false );
+				infoText.Append( "Rotate Point: Space\n" );
+				infoText.Append( "Translate: W,A,S,D,E,Q\n" );
+				infoText.Append( "Scale: I,J,K,L,U,O\n" );
+				infoText.Append( "Rotate: Z,X,C\n" );
+				
+				if( input.Get( ae::Key::D ) ) { s_translation.x += 0.01f; }
+				if( input.Get( ae::Key::A ) ) { s_translation.x -= 0.01f; }
+				if( input.Get( ae::Key::W ) ) { s_translation.y += 0.01f; }
+				if( input.Get( ae::Key::S ) ) { s_translation.y -= 0.01f; }
+				if( input.Get( ae::Key::E ) ) { s_translation.z += 0.01f; }
+				if( input.Get( ae::Key::Q ) ) { s_translation.z -= 0.01f; }
+				
+				if( input.Get( ae::Key::L ) ) { s_scale.x += 0.07f; }
+				if( input.Get( ae::Key::J ) ) { s_scale.x -= 0.07f; }
+				if( input.Get( ae::Key::I ) ) { s_scale.y += 0.07f; }
+				if( input.Get( ae::Key::K ) ) { s_scale.y -= 0.07f; }
+				if( input.Get( ae::Key::O ) ) { s_scale.z += 0.07f; }
+				if( input.Get( ae::Key::U ) ) { s_scale.z -= 0.07f; }
+				s_scale = ae::Max( ae::Vec3( 0.1f ), s_scale );
+				
+				if( input.Get( ae::Key::Z ) ) { s_rotation.x += 0.01f; }
+				if( input.Get( ae::Key::X ) ) { s_rotation.y += 0.01f; }
+				if( input.Get( ae::Key::C ) ) { s_rotation.z += 0.01f; }
+				
+				ae::Matrix4 modelToWorld = ae::Matrix4::Translation( s_translation );
+				modelToWorld *= ae::Matrix4::RotationX( s_rotation.x );
+				modelToWorld *= ae::Matrix4::RotationY( s_rotation.y );
+				modelToWorld *= ae::Matrix4::RotationZ( s_rotation.z );
+				modelToWorld *= ae::Matrix4::Scaling( s_scale );
+				// Model to 'local' space. Do this here because the bunny model
+				// is very small, not centered and is y-up. Additionally keeping
+				// it small tests raycasts against very small triangles, which
+				// is a good test.
+				modelToWorld *= ae::Matrix4::Scaling( 15.0f ) * ae::Matrix4::Translation( 0.0f, 0.0f, -0.05f ) * ae::Matrix4::RotationX( ae::HalfPi );
+				ae::UniformList meshUniforms;
+				meshUniforms.Set( "u_modelToProj", worldToProj * modelToWorld );
+				meshUniforms.Set( "u_normalToWorld", modelToWorld.GetNormalMatrix() );
+				meshVertexData.Bind( &meshShader, meshUniforms );
+				meshVertexData.Draw();
+				
+				const auto drawRaycast = [ &debug, &meshCollision ]( const ae::RaycastParams& params, ae::Color color )
+				{
+					const ae::Vec3 scale = params.transform.GetScale();
+					const float radius = 0.002f * ae::Max( scale.x, scale.y, scale.z );
+					const float normLength = 0.02f * ae::Max( scale.x, scale.y, scale.z );
+					debug.AddLine( params.source, params.source + params.ray, color );
+					const ae::RaycastResult result = meshCollision.Raycast( params );
+					if( result.hits.Length() )
+					{
+						const auto hit = result.hits[ 0 ];
+						debug.AddLine( hit.position, hit.position + hit.normal.SafeNormalizeCopy() * normLength, color );
+						debug.AddSphere( hit.position, radius, color, 16 );
+					}
+					else
+					{
+						debug.AddSphere( params.source + params.ray, radius, color, 16 );
+					}
+				};
+
+				struct
+				{
+					ae::Vec3 source;
+					ae::Color color;
+				} rays[] = {
+					{ .source = ae::Vec3( 10.0f, 0.0f, 0.0f ), .color = ae::Color::PicoRed() },
+					{ .source = ae::Vec3( 0.0f, 10.0f, 0.0f ), .color = ae::Color::PicoGreen() },
+					{ .source = ae::Vec3( 0.0f, 0.0f, 10.0f ), .color = ae::Color::PicoBlue() },
+					{ .source = ae::Vec3( -10.0f, 0.0f, 0.0f ), .color = ae::Color::PicoRed() },
+					{ .source = ae::Vec3( 0.0f, -10.0f, 0.0f ), .color = ae::Color::PicoGreen() },
+					{ .source = ae::Vec3( 0.0f, 0.0f, -10.0f ), .color = ae::Color::PicoBlue() },
+				};
+				for( uint32_t i = 0; i < countof(rays); i++ )
+				{
+					const ae::RaycastParams params = { .transform = modelToWorld, .source = rays[ i ].source, .ray = -rays[ i ].source };
+					drawRaycast( params, rays[ i ].color );
+				}
+
+				const ae::RaycastParams params = { .transform = modelToWorld, .source = raySource, .ray = ray };
+				drawRaycast( params, ae::Color::PicoPink() );
 				break;
 			}
 			default:
