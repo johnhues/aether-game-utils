@@ -31,27 +31,22 @@ AE_REGISTER_CLASS( Component );
 class Avatar : public ae::Inheritor< Component, Avatar >
 {
 public:
-	void Initialize( class Game* game ) override;
-	void Terminate( class Game* game ) override;
 	void Update( class Game* game ) override;
-	void Render( class Game* game ) override;
-	
+
 	ae::Vec3 position = ae::Vec3( 0.0f );
 	ae::Vec3 velocity = ae::Vec3( 0.0f );
-	float facingAngle = 0.0f;
-	float radius = 0.5f;
-	double lastTouchedGround = 0.0;
-	bool onGround = false;
-	ae::Vec3 initialPos = ae::Vec3( 0.0f );
-	ae::Vec3 bottomPos = ae::Vec3( 0.0f );
-	ae::Vec3 groundPos = ae::Vec3( 0.0f, 0.0f, -INFINITY );
-	ae::Vec3 groundNormal = ae::Vec3( 0.0f );
-	ae::Vec3 inputDir = ae::Vec3( 0.0f );
+	float yaw = 0.0f;
+	float pitch = 0.0f;
+	uint32_t moveTouchId = 0;
+	uint32_t lookTouchId = 0;
+
+	ae::Vec3 m_src = ae::Vec3( 0.0f );
+	ae::Vec3 m_ray = ae::Vec3( 0.0f );
+	ae::Optional< ae::RaycastResult::Hit > m_hit;
 };
 AE_REGISTER_CLASS( Avatar );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Avatar), (ae, EditorTypeAttribute), {} );
 AE_REGISTER_CLASS_VAR( Avatar, position );
-AE_REGISTER_CLASS_VAR( Avatar, radius );
 
 //------------------------------------------------------------------------------
 // Mesh
@@ -77,7 +72,6 @@ class Game
 public:
 	bool Initialize( int argc, char* argv[] );
 	void Run();
-	float GetDt() const { return m_dt; }
 	void GetUniforms( ae::UniformList* uniformList );
 	
 	// System
@@ -92,23 +86,16 @@ public:
 
 	// Resources
 	ae::VertexBuffer bunnyVertexData;
-	ae::VertexBuffer avatarVertexData;
 	ae::CollisionMesh<> bunnyCollision = TAG_ALL;
 	ae::Shader meshShader;
-	ae::Shader avatarShader;
-	ae::Texture2D spacesuitTex;
 
 	// Gameplay
 	ae::Vec3 cameraPos = ae::Vec3( 10.0f );
 	ae::Vec3 cameraDir = ae::Vec3( -1.0f ).SafeNormalizeCopy();
-	ae::Color skyColor = ae::Color::PicoBlue().ScaleRGB( 1.0f );
+	ae::Color skyColor = ae::Color::PicoBlue();
 	ae::Matrix4 worldToView = ae::Matrix4::Identity();
 	ae::Matrix4 viewToProj = ae::Matrix4::Identity();
 	ae::Matrix4 worldToProj = ae::Matrix4::Identity();
-	class Avatar* avatar = nullptr;
-	
-private:
-	float m_dt = 0.0f;
 };
 
 //------------------------------------------------------------------------------
@@ -159,7 +146,7 @@ const char* kFragShader = R"(
 	void main()
 	{
 		vec3 light = u_lightColor * max( 0.0, dot( -u_lightDir, normalize( v_normal ) ) );
-		light += u_ambLight;
+		light += u_ambLight + u_lightColor * 0.2;
 		AE_COLOR.rgb = v_color.rgb * light;
 #ifdef DIFFUSE
 		AE_COLOR.rgb *= AE_TEXTURE2D( u_tex, v_uv ).rgb;
@@ -170,11 +157,10 @@ const char* kFragShader = R"(
 void LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* vertexDataOut, ae::CollisionMesh<>* collisionOut, ae::EditorMesh* editorMeshOut )
 {
 	ae::OBJLoader objFile = TAG_ALL;
-	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
+	const uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
 	ae::Scratch< uint8_t > fileBuffer( fileSize );
 	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
 	objFile.Load( { fileBuffer.Data(), fileBuffer.Length() } );
-	
 	if( objFile.vertices.Length() )
 	{
 		if( vertexDataOut )
@@ -210,7 +196,7 @@ void LoadObj( const char* fileName, const ae::FileSystem* fs, ae::VertexBuffer* 
 void LoadTarga( const char* fileName, const ae::FileSystem* fs, ae::Texture2D* tex )
 {
 	ae::TargaFile tgaFile = TAG_ALL;
-	uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
+	const uint32_t fileSize = fs->GetSize( ae::FileSystem::Root::Data, fileName );
 	ae::Scratch< uint8_t > fileBuffer( fileSize );
 	fs->Read( ae::FileSystem::Root::Data, fileName, fileBuffer.Data(), fileBuffer.Length() );
 	tgaFile.Load( fileBuffer.Data(), fileBuffer.Length() );
@@ -229,8 +215,7 @@ bool Game::Initialize( int argc, char* argv[] )
 	editor.AddPlugin< GameEditorPlugin >( this );
 	if( editor.Initialize( editorParams ) )
 	{
-		// Exit, the editor has forked, ran, closed, and returned gracefully
-		return false;
+		return false; // Exit, the editor has forked, ran, closed, and returned gracefully
 	}
 	window.Initialize( 1280, 720, false, true, true );
 	window.SetTitle( "Press '~' to Open the Editor" );
@@ -244,15 +229,7 @@ bool Game::Initialize( int argc, char* argv[] )
 	meshShader.SetDepthTest( true );
 	meshShader.SetDepthWrite( true );
 	meshShader.SetCulling( ae::Culling::CounterclockwiseFront );
-	
-	LoadObj( "character.obj", &fs, &avatarVertexData, nullptr, nullptr );
-	const char* avatarShaderDefines[] = { "#define DIFFUSE 1" };
-	avatarShader.Initialize( kVertShader, kFragShader, avatarShaderDefines, countof(avatarShaderDefines) );
-	avatarShader.SetDepthTest( true );
-	avatarShader.SetDepthWrite( true );
-	avatarShader.SetCulling( ae::Culling::CounterclockwiseFront );
-	LoadTarga( "character.tga", &fs, &spacesuitTex );
-	
+
 	ae::Str256 levelPath;
 	if( fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
 	{
@@ -267,38 +244,29 @@ void Game::Run()
 	while( !input.quit )
 	{
 		// Update
-		m_dt = timeStep.GetDt();
 		input.Pump();
 		editor.Update();
-		if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) )
+		if( input.GetMousePressLeft() ) { input.SetMouseCaptured( true ); }
+		if( input.GetPress( ae::Key::F ) ) { window.SetFullScreen( !window.GetFullScreen() ); input.SetMouseCaptured( window.GetFullScreen() ); }
+		if( input.GetPress( ae::Key::Escape ) ) { input.SetMouseCaptured( false ); window.SetFullScreen( false ); }
+		if( input.Get( ae::Key::Tilde ) && !input.GetPrev( ae::Key::Tilde ) ) { editor.Launch(); }
+		registry.CallFn< Component >( [&]( Component* component )
 		{
-			editor.Launch();
-		}
-		registry.CallFn< Component >( [&]( Component* o )
-		{
-			if( !o->initialized )
+			if( !component->initialized )
 			{
-				o->Initialize( this );
-				o->initialized = true;
+				component->Initialize( this );
+				component->initialized = true;
 			}
 		} );
-		registry.CallFn< Component >( [&]( Component* o ){ o->Update( this ); } );
-		if( avatar && ( avatar->inputDir.Length() > 0.1f || avatar->velocity.Length() > 0.5f ) )
-		{
-			ae::Vec3 camOffset = ae::Vec3( 6.0f, 6.0f, 4.0f );
-			ae::Vec3 camTarget = avatar->position + ae::Vec3( 0.0f, 0.0f, 2.0f );
-			cameraPos = ae::DtLerp( cameraPos, 1.0f, GetDt(), camTarget + camOffset );
-			cameraDir = ae::DtLerp( cameraDir, 1.0f, GetDt(), camTarget - cameraPos );
-			cameraDir.SafeNormalize();
-		}
+		registry.CallFn< Component >( [&]( Component* c ){ c->Update( this ); } );
 		
 		// Render
 		gfx.Activate();
 		gfx.Clear( skyColor );
 		worldToView = ae::Matrix4::WorldToView( cameraPos, cameraDir, ae::Vec3( 0.0f, 0.0f, 1.0f ) );
-		viewToProj = ae::Matrix4::ViewToProjection( 0.9f, gfx.GetAspectRatio(), 1.0f, 1000.0f );
+		viewToProj = ae::Matrix4::ViewToProjection( 1.1f, gfx.GetAspectRatio(), 0.5f, 500.0f );
 		worldToProj = viewToProj * worldToView;
-		registry.CallFn< Component >( [&]( Component* o ){ o->Render( this ); } );
+		registry.CallFn< Component >( [&]( Component* c ){ c->Render( this ); } );
 		debugLines.Render( worldToProj );
 		gfx.Present();
 		timeStep.Tick();
@@ -320,7 +288,7 @@ void GameEditorPlugin::OnEvent( const ae::EditorEvent& event )
 	ae::MeshEditorPlugin::OnEvent( event );
 	if( event.type == ae::EditorEventType::LevelUnload )
 	{
-		m_game->registry.CallFn< Component >( [&]( Component* o ){ o->Terminate( m_game ); } );
+		m_game->registry.CallFn< Component >( [&]( Component* c ){ c->Terminate( m_game ); } );
 		m_game->registry.Clear();
 	}
 }
@@ -335,150 +303,65 @@ ae::Optional< ae::EditorMesh > GameEditorPlugin::TryLoad( const char* resourceSt
 //------------------------------------------------------------------------------
 // Avatar member functions
 //------------------------------------------------------------------------------
-void Avatar::Initialize( Game* game )
-{
-	initialPos = position;
-	game->avatar = this;
-}
-
-void Avatar::Terminate( Game* game )
-{
-	game->avatar = nullptr;
-}
-
 void Avatar::Update( Game* game )
 {
-	if( game->input.Get( ae::Key::R ) && !game->input.GetPrev( ae::Key::R ) )
+	const float dt = game->timeStep.GetDt();
+	ae::Input& input = game->input;
+	ae::Window& window = game->window;
+
+	// Camera Input
+	const ae::Array< ae::Touch, ae::kMaxTouches > newTouches = input.GetNewTouches();
+	const float displaySize = ae::Min( window.GetWidth(), window.GetHeight() );
+	const ae::Vec3 forward( cosf( yaw ) * cosf( pitch ), sinf( yaw ) * cosf( pitch ), sinf( pitch ) );
+	const ae::Vec3 right( forward.y, -forward.x, 0.0f );
+	const ae::Touch* lookTouch = input.GetTouchById( lookTouchId );
+	const ae::Touch* moveTouch = input.GetTouchById( moveTouchId );
+	if( input.GetMouseCaptured() ) { yaw -= input.mouse.movement.x * 0.001f; pitch += input.mouse.movement.y * 0.001f; }
+	if( !lookTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return moveTouch || ( t.startPosition.x >= window.GetWidth() / 2.0f ); } ); if( idx >= 0 ) { lookTouchId = newTouches[ idx ].id; } }
+	yaw -= input.gamepads[ 0 ].rightAnalog.x * 2.0f * dt;
+	pitch += input.gamepads[ 0 ].rightAnalog.y * 2.0f * dt;
+	if( lookTouch )
 	{
-		position = initialPos;
-		velocity = ae::Vec3( 0.0f );
+		const ae::Vec2 touchDir = ae::Vec2( lookTouch->movement ) / ( displaySize * 0.35f );
+		yaw -= touchDir.x;
+		pitch += touchDir.y;
+	}
+	pitch = ae::Clip( pitch, -1.0f, 1.0f );
+	
+	// Movement input
+	if( !moveTouch ){ const int32_t idx = newTouches.FindFn( [&]( const ae::Touch& t ){ return t.startPosition.x < window.GetWidth() / 2.0f; } ); if( idx >= 0 ) { moveTouchId = newTouches[ idx ].id; } }
+	ae::Vec3 dir = ae::Vec3( 0.0f );
+	dir += ( forward * ( input.Get( ae::Key::W ) - input.Get( ae::Key::S ) ) + right * ( input.Get( ae::Key::D ) - input.Get( ae::Key::A ) ) ).SafeNormalizeCopy() * ( input.Get( ae::Key::LeftShift ) ? 0.333f : 1.0f );
+	dir += ( forward * input.gamepads[ 0 ].leftAnalog.y - right * input.gamepads[ 0 ].leftAnalog.x );
+	if( moveTouch )
+	{
+		const ae::Vec2 touchDir = ( ae::Vec2( moveTouch->position - moveTouch->startPosition ) / ( displaySize * 0.15f ) ).TrimCopy( 1.0f );
+		dir += ( forward * touchDir.y - right * touchDir.x );
 	}
 
-	inputDir = ae::Vec3( 0.0f );
-	inputDir.x -= ( game->input.Get( ae::Key::A ) || game->input.Get( ae::Key::Left ) ) ? 1.0f : 0.0f;
-	inputDir.x += ( game->input.Get( ae::Key::D ) || game->input.Get( ae::Key::Right ) ) ? 1.0f : 0.0f;
-	inputDir.y += ( game->input.Get( ae::Key::W ) || game->input.Get( ae::Key::Up ) ) ? 1.0f : 0.0f;
-	inputDir.y -= ( game->input.Get( ae::Key::S ) || game->input.Get( ae::Key::Down ) ) ? 1.0f : 0.0f;
-	inputDir.SafeNormalize();
-	ae::Vec3 cameraFlat = ae::Vec3( game->cameraDir.x, game->cameraDir.y, 0.0f );
-	inputDir.AddRotationXY( cameraFlat.GetAngleBetween( ae::Vec3( 1.0f, 0.0f, 0.0f ) ) );
-	
-	if( inputDir.Length() > 0.01f )
+	// Physics
+	velocity += ae::Vec3( dir.x, dir.y, 0.0f ).TrimCopy( 1.0f ) * dt * 15.0f;
+	velocity.SetXY( ae::DtSlerp( velocity.GetXY(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
+	position += velocity * dt;
+	ae::RaycastResult raycastResult;
+	game->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { raycastResult = game->bunnyCollision.Raycast( ae::RaycastParams{ .transform = m->transform, .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) }, raycastResult ); } );
+	if( raycastResult.hits.Length() )
 	{
-		float targetFacingAngle = inputDir.GetXY().GetAngle() + ae::HALF_PI;
-		facingAngle = ae::DtLerpAngle( facingAngle, 2.5f, game->GetDt(), targetFacingAngle );
-	}
-	
-	if( onGround )
-	{
-		onGround = ( ae::GetTime() - lastTouchedGround ) < 0.15;
-		if( onGround && game->input.Get( ae::Key::Space ) )
-		{
-			velocity.z += 7.5f;
-			onGround = false;
-		}
-	}
-	
-	float rayLength = 1.0f;
-	float speed = onGround ? 20.0f : 10.0f;
-	ae::Vec3 accel( inputDir.x * speed, inputDir.y * speed, -10.0f );
-	velocity += game->GetDt() * accel;
-	float friction;
-	if( !onGround )
-	{
-		friction = 0.2f;
-	}
-	else if( ( inputDir.Length() < 0.1f || inputDir.GetXY().Dot( velocity.GetXY() ) < 0.5f ) )
-	{
-		friction = 3.5f;
+		position.z = raycastResult.hits[ 0 ].position.z + 0.8f;
+		velocity.z = ae::Max( 0.0f, velocity.z );
 	}
 	else
 	{
-		friction = 1.0f;
+		velocity.z -= dt * 10.0f;
 	}
-	velocity.x = ae::DtLerp( velocity.x, friction, game->GetDt(), 0.0f );
-	velocity.y = ae::DtLerp( velocity.y, friction, game->GetDt(), 0.0f );
-	position += game->GetDt() * velocity;
-	
-	ae::RaycastParams rayParams;
-	rayParams.source = ae::Vec3( position );
-	rayParams.ray = ae::Vec3( 0.0f, 0.0f, -1.0f );
-	//rayParams.debug = &game->debugLines;
-	ae::RaycastResult outResult;
-	
-	ae::PushOutParams pushOutParams;
-	ae::PushOutInfo pushOutInfo;
-	pushOutInfo.sphere.center = position;
-	pushOutInfo.sphere.radius = radius;
-	pushOutInfo.velocity = velocity;
-	
-	game->registry.CallFn< Mesh >( [&]( Mesh* m )
-	{
-		rayParams.transform = m->transform;
-		outResult = game->bunnyCollision.Raycast( rayParams, outResult );
 
-		pushOutParams.transform = m->transform;
-		pushOutInfo = game->bunnyCollision.PushOut( pushOutParams, pushOutInfo );
-	} );
-	
-	ae::Vec4 finalPos( 0.0f );
-	if( pushOutInfo.hits.Length() )
-	{
-		for( const auto& hit : pushOutInfo.hits )
-		{
-			if( hit.normal.Dot( ae::Vec3( 0.0f, 0.0f, 1.0f ) ) > 0.75f )
-			{
-				lastTouchedGround = ae::GetTime();
-				onGround = true;
-			}
-		}
-		finalPos += ae::Vec4( pushOutInfo.sphere.center, 1.0f );
-		velocity = pushOutInfo.velocity;
-	}
-	if( outResult.hits.Length() )
-	{
-		if( outResult.hits[ 0 ].distance < rayLength )
-		{
-			finalPos += ae::Vec4( outResult.hits[ 0 ].position + ae::Vec3( 0.0f, 0.0f, rayLength ), 1.0f );
-			velocity.z = ae::Max( 0.0f, velocity.z );
-			lastTouchedGround = ae::GetTime();
-			onGround = true;
-		}
-		
-		groundPos = outResult.hits[ 0 ].position;
-		groundNormal = outResult.hits[ 0 ].normal;
-	}
-	else
-	{
-		groundPos = position;
-		groundPos.z = -INFINITY;
-	}
-	if( finalPos.w )
-	{
-		position = finalPos.GetXYZ() / finalPos.w;
-	}
-	
-	bottomPos = position - ae::Vec3( 0.0f, 0.0f, rayLength );
-	
-	game->debugLines.AddSphere( position, radius, ae::Color::Red(), 16 );
-	game->debugLines.AddLine( position, position - ae::Vec3( 0.0f, 0.0f, rayLength ), ae::Color::Red() );
-	game->debugLines.AddCircle( groundPos, groundNormal, radius, ae::Color::Black(), 16 );
-}
+	ae::PushOutInfo pushOutInfo = { .sphere = ae::Sphere( position, 0.6f ), .velocity = velocity };
+	game->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { pushOutInfo = game->bunnyCollision.PushOut( ae::PushOutParams{ .transform = m->transform }, pushOutInfo ); } );
+	position = pushOutInfo.sphere.center;
 
-void Avatar::Render( Game* game )
-{
-	ae::Matrix4 transform = ae::Matrix4::Translation( bottomPos );
-	transform *= ae::Matrix4::RotationZ( facingAngle );
-	transform *= ae::Matrix4::RotationX( ae::HALF_PI );
-	transform *= ae::Matrix4::Scaling( 0.015f );
-	ae::UniformList uniformList;
-	game->GetUniforms( &uniformList );
-	uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-	uniformList.Set( "u_worldToProj", game->worldToProj * transform );
-	uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
-	uniformList.Set( "u_tex", &game->spacesuitTex );
-	game->avatarVertexData.Bind( &game->avatarShader, uniformList );
-	game->avatarVertexData.Draw();
+	// Update game camera
+	game->cameraPos = position + ae::Vec3( 0.0f, 0.0f, 0.02f * cos( ae::GetTime() * 15.0 ) * velocity.GetXY().Length() );
+	game->cameraDir = forward;
 }
 
 void Mesh::Render( Game* game )
@@ -497,7 +380,6 @@ void Mesh::Render( Game* game )
 //------------------------------------------------------------------------------
 int main( int argc, char* argv[] )
 {
-	AE_INFO( "Init #", ae::FileSystem::GetFileNameFromPath( argv[ 0 ] ) );
 	Game game;
 	if( game.Initialize( argc, argv ) )
 	{
