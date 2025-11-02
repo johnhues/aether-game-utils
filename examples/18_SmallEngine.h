@@ -51,11 +51,11 @@ public:
 class SmallEngine
 {
 public:
+	~SmallEngine();
+
+	// System
 	bool Initialize( int argc, char* argv[] );
 	void Run();
-	void GetUniforms( ae::UniformList* uniformList );
-	
-	// System
 	ae::Registry registry = TAG_SMALL_ENGINE;
 	ae::Editor editor = TAG_SMALL_ENGINE;
 	ae::Window window;
@@ -66,11 +66,18 @@ public:
 	ae::DebugLines debugLines = TAG_SMALL_ENGINE;
 
 	// Resources
-	ae::VertexBuffer bunnyVertexData;
-	ae::CollisionMesh<> bunnyCollision = TAG_SMALL_ENGINE;
+	struct MeshResource
+	{
+		ae::VertexBuffer vertexData;
+		ae::CollisionMesh<> collision = TAG_SMALL_ENGINE;
+	};
+	const struct MeshResource* GetMeshResource( const char* name );
+	ae::Map< ae::Str128, MeshResource* > meshResources = TAG_SMALL_ENGINE;
+	ae::Texture2D defaultTexture;
 	ae::Shader meshShader;
 
 	// Rendering
+	void GetUniforms( ae::UniformList* uniformList );
 	ae::Vec3 cameraPos = ae::Vec3( 10.0f );
 	ae::Vec3 cameraDir = ae::Vec3( -1.0f ).SafeNormalizeCopy();
 	ae::Color skyColor = ae::Color::PicoBlue();

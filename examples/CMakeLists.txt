@@ -283,7 +283,7 @@ ae_add_bundle("Small Engine"
 	MAJOR_MINOR_PATCH_VERSION "0.0.0"
 	ICNS_FILE "data/Icon.icns"
 	SRC_FILES "18_SmallEngine.h;18_SmallEngine.cpp;18_Game.cpp;${AE_ROOT_DIR}/extras/Editor.cpp;${AE_ROOT_DIR}/extras/Entity.cpp;${AE_ROOT_DIR}/extras/MeshEditorPlugin.cpp;${AE_ROOT_DIR}/extras/aeImGui.cpp"
-	RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/character.obj;data/character.tga"
+	RESOURCES "${AE_EXAMPLE_RESOURCES};data/example.level;data/bunny.obj;data/tall_tree.obj;data/BlobCube.obj;data/level.tga"
 	LIBS "ae_extras;imgui;imguizmo;rapidjson"
 )
 

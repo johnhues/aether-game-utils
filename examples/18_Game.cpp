@@ -32,8 +32,11 @@
 class Player : public ae::Inheritor< Component, Player >
 {
 public:
+	void Initialize( class SmallEngine* engine ) override;
 	void Update( class SmallEngine* engine ) override;
 
+	bool enabled = true;
+	ae::Matrix4 transform = ae::Matrix4::Identity(); // Initial spawn transform
 	ae::Vec3 position = ae::Vec3( 0.0f );
 	ae::Vec3 velocity = ae::Vec3( 0.0f );
 	float yaw = 0.0f;
@@ -48,9 +51,11 @@ public:
 class Mesh : public ae::Inheritor< Component, Mesh >
 {
 public:
+	void Initialize( class SmallEngine* engine ) override;
 	void Render( class SmallEngine* engine ) override;
+	const SmallEngine::MeshResource* meshResource = nullptr; // Set in Initialize()
 
-	ae::Str32 name;
+	ae::Str128 name;
 	ae::Matrix4 transform = ae::Matrix4::Identity();
 };
 
@@ -59,10 +64,22 @@ public:
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( Player );
 AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (Player), (ae, EditorTypeAttribute), {} );
-AE_REGISTER_CLASS_VAR( Player, position );
+AE_REGISTER_CLASS_VAR( Player, enabled );
+AE_REGISTER_CLASS_VAR( Player, transform );
+
+void Player::Initialize( SmallEngine* engine )
+{
+	const ae::Vec4 forward = transform.GetColumn( 1 );
+	position = transform.GetTranslation();
+	yaw = atan2f( forward.y, forward.x );
+}
 
 void Player::Update( SmallEngine* engine )
 {
+	if( !enabled )
+	{
+		return;
+	}
 	const float dt = engine->timeStep.GetDt();
 	ae::Input& input = engine->input;
 	ae::Window& window = engine->window;
@@ -102,7 +119,7 @@ void Player::Update( SmallEngine* engine )
 	velocity.SetXY( ae::DtSlerp( velocity.GetXY(), 2.5f, dt, ae::Vec2( 0.0f ) ) );
 	position += velocity * dt;
 	ae::RaycastResult raycastResult;
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { raycastResult = engine->bunnyCollision.Raycast( ae::RaycastParams{ .transform = m->transform, .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) }, raycastResult ); } );
+	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { raycastResult = m->meshResource ? m->meshResource->collision.Raycast( ae::RaycastParams{ .transform = m->transform, .source = position, .ray = ae::Vec3( 0.0f, 0.0f, -0.9f ) }, raycastResult ) : raycastResult; } );
 	if( raycastResult.hits.Length() )
 	{
 		position.z = raycastResult.hits[ 0 ].position.z + 0.8f;
@@ -113,7 +130,7 @@ void Player::Update( SmallEngine* engine )
 		velocity.z -= dt * 10.0f;
 	}
 	ae::PushOutInfo pushOutInfo = { .sphere = ae::Sphere( position, 0.6f ), .velocity = velocity };
-	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { pushOutInfo = engine->bunnyCollision.PushOut( ae::PushOutParams{ .transform = m->transform }, pushOutInfo ); } );
+	engine->registry.CallFn< Mesh >( [ & ]( Mesh* m ) { pushOutInfo = m->meshResource ? m->meshResource->collision.PushOut( ae::PushOutParams{ .transform = m->transform }, pushOutInfo ) : pushOutInfo; } );
 	position = pushOutInfo.sphere.center;
 
 	// Update engine camera
@@ -130,13 +147,41 @@ AE_REGISTER_CLASS_VAR( Mesh, name );
 AE_REGISTER_NAMESPACECLASS_VAR_ATTRIBUTE( (Mesh), name, (ae, EditorMeshResourceAttribute), {} );
 AE_REGISTER_CLASS_VAR( Mesh, transform );
 
+void Mesh::Initialize( SmallEngine* engine )
+{
+	meshResource = engine->GetMeshResource( name.c_str() );
+}
+
 void Mesh::Render( SmallEngine* engine )
 {
-	ae::UniformList uniformList;
-	engine->GetUniforms( &uniformList );
-	uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-	uniformList.Set( "u_worldToProj", engine->worldToProj * transform );
-	uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
-	engine->bunnyVertexData.Bind( &engine->meshShader, uniformList );
-	engine->bunnyVertexData.Draw();
+	if( meshResource )
+	{
+		ae::UniformList uniformList;
+		engine->GetUniforms( &uniformList );
+		uniformList.Set( "u_tex", &engine->defaultTexture );
+		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
+		uniformList.Set( "u_worldToProj", engine->worldToProj * transform );
+		uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
+		meshResource->vertexData.Bind( &engine->meshShader, uniformList );
+		meshResource->vertexData.Draw();
+	}
+}
+
+//------------------------------------------------------------------------------
+// Main
+//------------------------------------------------------------------------------
+int main( int argc, char* argv[] )
+{
+	SmallEngine engine;
+	if( engine.Initialize( argc, argv ) )
+	{
+		ae::Str256 levelPath;
+		if( engine.fs.GetRootDir( ae::FileSystem::Root::Data, &levelPath ) )
+		{
+			ae::FileSystem::AppendToPath( &levelPath, "example.level" );
+			engine.editor.QueueRead( levelPath.c_str() );
+		}
+		engine.Run();
+	}
+	return 0;
 }
