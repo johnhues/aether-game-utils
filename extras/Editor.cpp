@@ -108,14 +108,33 @@ template< typename T > const T* TryGetClassOrVarAttribute( const ae::ClassType* 
 void SendPluginEvent( EditorPluginArray& plugins, const EditorEvent& event );
 
 //------------------------------------------------------------------------------
-// EditorMsg
+// EditorNetMsg
 //------------------------------------------------------------------------------
-enum class EditorMsg : uint8_t
+enum class EditorNetMsg : uint8_t
 {
 	None,
 	Heartbeat,
 	Modification,
 	Load
+};
+
+//------------------------------------------------------------------------------
+// EditorDialog
+//------------------------------------------------------------------------------
+struct EditorDialog
+{
+	virtual bool ShowUIAndWaitForButton() = 0;
+	uint32_t id = 0;
+};
+
+//------------------------------------------------------------------------------
+// AppBundleWarningDialog
+//------------------------------------------------------------------------------
+struct AppBundleWarningDialog : public EditorDialog
+{
+	bool ShowUIAndWaitForButton() override;
+	class EditorProgram* program = nullptr;
+	std::string path;
 };
 
 //------------------------------------------------------------------------------
@@ -188,7 +207,8 @@ public:
 		m_objects( tag ),
 		m_registry( tag ),
 		m_connections( tag ),
-		m_framePickableEntities( tag )
+		m_framePickableEntities( tag ),
+		m_dialogs( tag )
 	{}
 	~EditorServer();
 	void Initialize( class EditorProgram* program );
@@ -199,10 +219,12 @@ public:
 	
 	bool SaveLevel( class EditorProgram* program, bool saveAs );
 	void OpenLevelDialog( class EditorProgram* program );
-	void OpenLevel( class EditorProgram* program, const char* path );
+	void OpenLevelWithPrompts( class EditorProgram* program, const char* path );
+	void OpenLevel( EditorProgram* program, const char* filePath );
 	void Unload( class EditorProgram* program );
 	
 	bool GetShowTransparent() const { return m_showTransparent; }
+	ae::Color GetBackgroundColor() const { return m_backgroundColor; }
 	
 	EditorServerObject* CreateObject( ae::Entity entity, const ae::Matrix4& transform, const char* name );
 	void DestroyObject( class EditorProgram* program, ae::Entity entity );
@@ -242,6 +264,10 @@ private:
 	ae::Color m_GetColor( ae::Entity entity, bool objectLineColor ) const;
 	void m_LoadLevel( class EditorProgram* program );
 	
+	template< typename T > uint32_t m_PushDialog( const T& dialog );
+	template< typename T > T* m_GetDialog( uint32_t id );
+	void m_RemoveDialog( uint32_t id );
+	
 	const ae::Tag m_tag;
 	bool m_first = true;
 
@@ -273,6 +299,7 @@ private:
 	float m_objectSaturationRange = 0.0f;
 	float m_objectValue = 0.6f;
 	float m_objectValueRange = 0.3f;
+	ae::Color m_backgroundColor = ae::Color::AetherBlack();
 
 	// Connection to client
 	double m_nextHeartbeat = 0.0;
@@ -299,6 +326,11 @@ private:
 
 	// Misc
 	ae::Map< ae::Entity, PickingType > m_framePickableEntities;
+
+	// UI
+	uint32_t m_dialogNextId = 1;
+	ae::Array< EditorDialog* > m_dialogs;
+	uint32_t m_appBundleWarningDialogId = 0;
 };
 
 class EditorProgram
@@ -372,6 +404,43 @@ public:
 	ae::Shader m_iconShader;
 	ae::Texture2D m_cogTexture;
 };
+
+//------------------------------------------------------------------------------
+// AppBundleWarningDialog
+//------------------------------------------------------------------------------
+bool AppBundleWarningDialog::ShowUIAndWaitForButton()
+{
+	const char* title = "Warning";
+	const char* message = "Loading a level from within an app bundle is dangerous and may cause data loss. Are you sure you want to continue?";
+	const char* buttonConfirm = "Yes";
+	const char* buttonCancel = "No";
+
+	bool press = false;
+	ImGui::OpenPopup( title );
+	if( ImGui::BeginPopupModal( title, nullptr, ImGuiWindowFlags_AlwaysAutoResize ) )
+	{
+		ImGui::TextWrapped( "%s", message );
+		ImGui::Separator();
+		if( ImGui::Button( buttonConfirm ) )
+		{
+			press = true;
+			ImGui::CloseCurrentPopup();
+
+			program->editor.OpenLevel( program, path.c_str() );
+		}
+		if( buttonCancel[ 0 ] )
+		{
+			ImGui::SameLine();
+			if( ImGui::Button( buttonCancel ) )
+			{
+				press = true;
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::EndPopup();
+	}
+	return press;
+}
 
 //------------------------------------------------------------------------------
 // EditorServerMesh member functions
@@ -692,7 +761,7 @@ void EditorProgram::Run()
 			m_gameTarget.AddDepth( ae::Texture::Filter::Linear, ae::Texture::Wrap::Clamp );
 		}
 		m_gameTarget.Activate();
-		m_gameTarget.Clear( ae::Color::AetherBlack() );
+		m_gameTarget.Clear( editor.GetBackgroundColor() );
 
 		m_worldToView = ae::Matrix4::WorldToView( camera.GetPosition(), camera.GetForward(), camera.GetUp() );
 		m_viewToProj = ae::Matrix4::ViewToProjection( GetFOV(), GetAspectRatio(), 0.25f, kEditorViewDistance );
@@ -974,11 +1043,11 @@ bool Editor::Initialize( const EditorParams& params )
 		}
 		if( levelArg >= 0 )
 		{
-			program.editor.OpenLevel( &program, params.argv[ levelArg ] );
+			program.editor.OpenLevelWithPrompts( &program, params.argv[ levelArg ] );
 		}
 		else if( !params.levelPath.Empty() )
 		{
-			program.editor.OpenLevel( &program, params.levelPath.c_str() );
+			program.editor.OpenLevelWithPrompts( &program, params.levelPath.c_str() );
 		}
 
 		program.Run();
@@ -1036,17 +1105,17 @@ void Editor::Update()
 	uint32_t msgLength = 0;
 	while( ( msgLength = m_sock.ReceiveMsg( m_msgBuffer, sizeof(m_msgBuffer) ) ) )
 	{
-		EditorMsg msgType = EditorMsg::None;
+		EditorNetMsg msgType = EditorNetMsg::None;
 		ae::BinaryReader rStream( m_msgBuffer, sizeof(m_msgBuffer) );
 		rStream.SerializeEnum( msgType );
 		switch( msgType )
 		{
-			case EditorMsg::Heartbeat:
+			case EditorNetMsg::Heartbeat:
 			{
 				// Nothing
 				break;
 			}
-			case EditorMsg::Modification:
+			case EditorNetMsg::Modification:
 			{
 				ae::Entity entity;
 				ae::TypeId typeId;
@@ -1076,7 +1145,7 @@ void Editor::Update()
 				}
 				break;
 			}
-			case EditorMsg::Load:
+			case EditorNetMsg::Load:
 			{
 				ae::Str256 levelPath;
 				rStream.SerializeString( levelPath );
@@ -1458,6 +1527,42 @@ void EditorServer::m_LoadLevel( EditorProgram* program )
 	m_SetLevelPath( program, m_pendingLevel->GetUrl() );
 }
 
+template< typename T >
+uint32_t EditorServer::m_PushDialog( const T& _dialog )
+{
+	T* dialog = ae::New< T >( m_tag, _dialog );
+	m_dialogs.Append( dialog );
+	dialog->id = m_dialogNextId;
+	m_dialogNextId++;
+	return dialog->id;
+}
+
+template< typename T >
+T* EditorServer::m_GetDialog( uint32_t id )
+{
+	for( EditorDialog* dialog : m_dialogs )
+	{
+		if( dialog->id == id )
+		{
+			return static_cast< T* >( dialog );
+		}
+	}
+	return nullptr;
+}
+
+void EditorServer::m_RemoveDialog( uint32_t id )
+{
+	if( id )
+	{
+		const int32_t index = m_dialogs.FindFn( [ id ]( const EditorDialog* d ) { return d->id == id; } );
+		if( index >= 0 )
+		{
+			ae::Delete( m_dialogs[ index ] );
+			m_dialogs.Remove( index );
+		}
+	}
+}
+
 void EditorServer::Terminate( EditorProgram* program )
 {
 	Unload( program );
@@ -1494,7 +1599,7 @@ void EditorServer::Update( EditorProgram* program )
 			if( conn->sock->IsConnected() )
 			{
 				ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
-				wStream.SerializeEnum( EditorMsg::Heartbeat );
+				wStream.SerializeEnum( EditorNetMsg::Heartbeat );
 				AE_ASSERT( wStream.IsValid() );
 				conn->sock->QueueMsg( wStream.GetData(), (uint16_t)wStream.GetOffset() );
 			}
@@ -1611,9 +1716,10 @@ void EditorServer::Render( EditorProgram* program )
 
 				if( meshes )
 				{
+					const ae::Color editorColor = m_GetColor( obj->entity, false );
 					RenderObj& renderObj = meshes->Append( {} );
 					renderObj.transform = instance->transform;
-					renderObj.color = instance->color;
+					renderObj.color = editorColor;//instance->color.SetA( 1.0f ).Lerp( editorColor, editorColor.a ).SetA( instance->color.a );
 					renderObj.mesh = instance->m_mesh;
 					renderObj.distanceSq = ( camPos - instance->transform.GetTranslation() ).LengthSquared();
 	
@@ -1711,7 +1817,17 @@ void EditorServer::ShowUI( EditorProgram* program )
 		ImGui::SliderFloat( "Saturation Range", &m_objectSaturationRange, 0.0f, 1.0f );
 		ImGui::SliderFloat( "Value", &m_objectValue, 0.0f, 1.0f );
 		ImGui::SliderFloat( "Value Range", &m_objectValueRange, 0.0f, 1.0f );
+		ImGui::ColorEdit3( "Background", m_backgroundColor.data );
 		ImGui::End();
+	}
+
+	if( m_dialogs.Length() )
+	{
+		EditorDialog* dialog = m_dialogs[ 0 ];
+		if( dialog->ShowUIAndWaitForButton() )
+		{
+			m_RemoveDialog( dialog->id );
+		}
 	}
 	
 	if( program->camera.GetMode() != ae::DebugCamera::Mode::None || ImGui::GetIO().WantCaptureMouse )
@@ -2217,7 +2333,7 @@ void EditorServer::ShowUI( EditorProgram* program )
 		{
 			uint8_t buffer[ kMaxEditorMessageSize ];
 			ae::BinaryWriter wStream( buffer, sizeof(buffer) );
-			wStream.SerializeEnum( EditorMsg::Load );
+			wStream.SerializeEnum( EditorNetMsg::Load );
 			wStream.SerializeString( m_levelPath );
 			for( uint32_t i = 0; i < m_connections.Length(); i++ )
 			{
@@ -2716,7 +2832,7 @@ void EditorServer::BroadcastVarChange( const ae::ClassVar* var, const ae::Compon
 		return;
 	}
 	ae::BinaryWriter wStream( m_msgBuffer, sizeof(m_msgBuffer) );
-	wStream.SerializeEnum( EditorMsg::Modification );
+	wStream.SerializeEnum( EditorNetMsg::Modification );
 	wStream.SerializeUInt32( component->GetEntity() );
 	wStream.SerializeUInt32( ae::GetObjectTypeId( component ) );
 	wStream.SerializeString( var->GetName() );
@@ -2830,7 +2946,7 @@ void EditorServer::OpenLevelDialog( EditorProgram* program )
 	auto filePath = ae::FileSystem::OpenDialog( params );
 	if( filePath.Length() )
 	{
-		return OpenLevel( program, filePath[ 0 ].c_str() );
+		return OpenLevelWithPrompts( program, filePath[ 0 ].c_str() );
 	}
 	else
 	{
@@ -2838,17 +2954,41 @@ void EditorServer::OpenLevelDialog( EditorProgram* program )
 	}
 }
 
-void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
+void EditorServer::OpenLevelWithPrompts( EditorProgram* program, const char* filePath )
 {
 	if( !filePath || !filePath[ 0 ] )
 	{
 		return;
 	}
+
+	if( m_appBundleWarningDialogId )
+	{
+		m_RemoveDialog( m_appBundleWarningDialogId );
+		m_appBundleWarningDialogId = 0;
+	}
+
+	if( strstr( filePath, ".app/Contents/Resources" ) )
+	{
+		AppBundleWarningDialog dialog;
+		dialog.program = program;
+		dialog.path = filePath;
+		m_appBundleWarningDialogId = m_PushDialog( dialog );
+	}
+	else
+	{
+		OpenLevel( program, filePath );
+	}
+}
+
+void EditorServer::OpenLevel( EditorProgram* program, const char* filePath )
+{
 	if( m_pendingLevel )
 	{
 		AE_WARN( "Cancelling level read '#'", m_pendingLevel->GetUrl() );
 		program->fileSystem.Destroy( m_pendingLevel );
+		m_pendingLevel = nullptr;
 	}
+
 	AE_INFO( "Reading... '#'", filePath );
 	m_pendingLevel = program->fileSystem.Read( ae::FileSystem::Root::Data, filePath, 2.0f );
 }
