@@ -60,6 +60,21 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// PointLight
+//------------------------------------------------------------------------------
+class PointLight : public ae::Inheritor< Component, PointLight >
+{
+public:
+	void Update( class SmallEngine* engine ) override;
+
+	ae::Matrix4 transform = ae::Matrix4::Identity();
+	float r = 1.0f;
+	float g = 1.0f;
+	float b = 1.0f;
+	float intensity = 1.0f;
+};
+
+//------------------------------------------------------------------------------
 // Player
 //------------------------------------------------------------------------------
 AE_REGISTER_CLASS( Player );
@@ -134,7 +149,9 @@ void Player::Update( SmallEngine* engine )
 	position = pushOutInfo.sphere.center;
 
 	// Update engine camera
-	engine->cameraPos = position + ae::Vec3( 0.0f, 0.0f, 0.015f * cos( ae::GetTime() * 15.0 ) * ae::Clip( velocity.GetXY().Length() - velocity.z, 0.0f, 2.0f ) + ae::Max( 0.0f, velocity.z ) );
+	engine->cameraPos = position;
+	engine->cameraPos.z += 0.6f;
+	engine->cameraPos.z += 0.015f * cos( ae::GetTime() * 15.0 ) * ae::Clip( velocity.GetXY().Length() - velocity.z, 0.0f, 2.0f ) + ae::Max( 0.0f, velocity.z );
 	engine->cameraDir = forward;
 }
 
@@ -160,11 +177,30 @@ void Mesh::Render( SmallEngine* engine )
 		engine->GetUniforms( &uniformList );
 		uniformList.Set( "u_tex", &engine->defaultTexture );
 		uniformList.Set( "u_color", ae::Color::White().GetLinearRGBA() );
-		uniformList.Set( "u_worldToProj", engine->worldToProj * transform );
+		uniformList.Set( "u_modelToProj", engine->worldToProj * transform );
+		uniformList.Set( "u_modelToWorld", transform );
 		uniformList.Set( "u_normalToWorld", transform.GetNormalMatrix() );
 		meshResource->vertexData.Bind( &engine->meshShader, uniformList );
 		meshResource->vertexData.Draw();
 	}
+}
+
+//------------------------------------------------------------------------------
+// PointLight
+//------------------------------------------------------------------------------
+AE_REGISTER_CLASS( PointLight );
+AE_REGISTER_NAMESPACECLASS_ATTRIBUTE( (PointLight), (ae, EditorTypeAttribute), {} );
+AE_REGISTER_CLASS_VAR( PointLight, transform );
+AE_REGISTER_CLASS_VAR( PointLight, r );
+AE_REGISTER_CLASS_VAR( PointLight, g );
+AE_REGISTER_CLASS_VAR( PointLight, b );
+AE_REGISTER_CLASS_VAR( PointLight, intensity );
+
+void PointLight::Update( SmallEngine* engine )
+{
+	engine->light.position = transform.GetTranslation();
+	engine->light.color = ae::Color::RGB( r, g, b );
+	engine->light.intensity = intensity;
 }
 
 //------------------------------------------------------------------------------

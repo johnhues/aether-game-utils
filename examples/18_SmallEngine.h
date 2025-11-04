@@ -84,4 +84,12 @@ public:
 	ae::Matrix4 worldToView = ae::Matrix4::Identity();
 	ae::Matrix4 viewToProj = ae::Matrix4::Identity();
 	ae::Matrix4 worldToProj = ae::Matrix4::Identity();
+	// Lights
+	struct Light
+	{
+		ae::Vec3 position = ae::Vec3( 0.0f );
+		ae::Color color = ae::Color::White();
+		float intensity = 1.0f;
+	};
+	Light light;
 };
