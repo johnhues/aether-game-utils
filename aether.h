@@ -23525,7 +23525,7 @@ void RenderTarget::Terminate()
 {
 	if( m_fbo )
 	{
-		// On Emscripten it seems to matter that the framebuffer is deleted
+		// With WebGL it seems to matter that the framebuffer is deleted
 		// first so it's not referencing its textures.
 		glDeleteFramebuffers( 1, (uint32_t*)&m_fbo );
 		m_fbo = 0;
@@ -23595,7 +23595,7 @@ void RenderTarget::AddDepth( Texture::Filter filter, Texture::Wrap wrap )
 void RenderTarget::Activate()
 {
 	AE_ASSERT_MSG( GetWidth() && GetHeight(), "ae::RenderTarget is not initialized" );
-	AE_ASSERT_MSG( m_targets.Length(), "ae::RenderTarget is not complete. Call AddTexture() before Activate()." );
+	AE_ASSERT_MSG( m_targets.Length() || m_depth.GetTexture(), "ae::RenderTarget is not complete. Call AddTexture() and/or AddDepth() before Activate()." );
 	AE_CHECK_GL_ERROR();
 	
 	CheckFramebufferComplete( m_fbo );
@@ -23607,6 +23607,15 @@ void RenderTarget::Activate()
 		buffers[ i ] = GL_COLOR_ATTACHMENT0 + i;
 	}
 	glDrawBuffers( m_targets.Length(), buffers );
+
+	if( m_depth.GetTexture() )
+	{
+		glBindFramebuffer( GL_READ_FRAMEBUFFER, m_fbo );
+	}
+	else
+	{
+		glClear( GL_DEPTH_BUFFER_BIT );
+	}
 
 	glViewport( 0, 0, GetWidth(), GetHeight() );
 	AE_CHECK_GL_ERROR();

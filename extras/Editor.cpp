@@ -123,6 +123,7 @@ enum class EditorNetMsg : uint8_t
 //------------------------------------------------------------------------------
 struct EditorDialog
 {
+	virtual ~EditorDialog() = default;
 	virtual bool ShowUIAndWaitForButton() = 0;
 	uint32_t id = 0;
 };
@@ -288,7 +289,7 @@ private:
 	ImGuizmo::MODE gizmoMode = ImGuizmo::WORLD;
 
 	// Object state
-	ae::Map< ae::Entity, EditorServerObject* > m_objects;
+	ae::Map< ae::Entity, EditorServerObject*, 0, ae::Hash32, ae::MapMode::Stable > m_objects;
 	ae::Registry m_registry;
 
 	// UI configuration
