@@ -4048,6 +4048,7 @@ struct TextureParams
 {
 	const void* data = nullptr;
 	bool bgrData = false;
+	bool bottomToTopData = false;
 	uint32_t width = 0;
 	uint32_t height = 0;
 	Texture::Format format = Texture::Format::RGBA8;
@@ -23223,16 +23224,11 @@ void Texture2D::Initialize( const void* data, uint32_t width, uint32_t height, F
 
 void Texture2D::Initialize( const TextureParams& params )
 {
+	AE_ASSERT( params.width > 0 && params.height > 0 );
+
 	Texture::Initialize( GL_TEXTURE_2D );
-
-#if _AE_EMSCRIPTEN_ || _AE_IOS_
-	const auto GL_BGR = GL_RGB;
-	const auto GL_BGRA = GL_RGBA;
-#endif
-
 	m_width = params.width;
 	m_height = params.height;
-
 	glBindTexture( GetTarget(), GetTexture() );
 
 	const bool mipmapsEnabled = _AE_EMSCRIPTEN_ ? false : params.autoGenerateMipmaps;
@@ -23250,20 +23246,29 @@ void Texture2D::Initialize( const TextureParams& params )
 	glTexParameteri( GetTarget(), GL_TEXTURE_WRAP_T, ( params.wrap == Wrap::Clamp ) ? GL_CLAMP_TO_EDGE : GL_REPEAT );
 
 	// this is the type of data passed in, conflating with internal format type
+#if _AE_EMSCRIPTEN_ || _AE_IOS_
+	const auto GL_BGR = GL_RGB;
+	const auto GL_BGRA = GL_RGBA;
+#endif
 	GLenum glType = 0;
+	uint32_t bytesPerComponent = 0;
 	switch( params.type )
 	{
 		case Type::UInt8:
 			glType = GL_UNSIGNED_BYTE;
+			bytesPerComponent = 1;
 			break;
 		case Type::UInt16:
 			glType = GL_UNSIGNED_SHORT;
+			bytesPerComponent = 2;
 			break;
 		case Type::HalfFloat:
 			glType = GL_HALF_FLOAT;
+			bytesPerComponent = 3;
 			break;
 		case Type::Float:
 			glType = GL_FLOAT;
+			bytesPerComponent = 4;
 			break;
 		default:
 			AE_FAIL_MSG( "Invalid texture type #", (int)params.type );
@@ -23432,34 +23437,60 @@ void Texture2D::Initialize( const TextureParams& params )
 	}
 #endif
 
+	const uint32_t totalComponents = params.width * params.height * components;
 	const void* data = params.data;
 	void* tempData = nullptr;
-#if _AE_EMSCRIPTEN_
-	if( params.bgrData && components >= 3 )
-	{
-		const uint32_t totalComponents = params.width * params.height * components;
-#define _AE_BGR_TO_RGB_COPY( _type )\
-		tempData = ae::Allocate( AE_ALLOC_TAG_RENDER, totalComponents * sizeof(_type), 16 );\
-		data = tempData;\
-		for( uint32_t i = 0; i < totalComponents; i += components )\
-		{\
-			((_type*)data)[ i + 0 ] = ((_type*)params.data)[ i + 2 ];\
-			((_type*)data)[ i + 1 ] = ((_type*)params.data)[ i + 1 ];\
-			((_type*)data)[ i + 2 ] = ((_type*)params.data)[ i + 0 ];\
-			if( components == 4 ) { ((_type*)data)[ i + 3 ] = ((_type*)params.data)[ i + 3 ]; }\
-		}
-		switch( params.type )
-		{
-			case Type::UInt8: _AE_BGR_TO_RGB_COPY( uint8_t ); break;
-			case Type::UInt16: _AE_BGR_TO_RGB_COPY( uint16_t ); break;
-			case Type::HalfFloat: _AE_BGR_TO_RGB_COPY( uint16_t ); break; // Use uint16_t for data copy
-			case Type::Float: _AE_BGR_TO_RGB_COPY( float ); break;
-			default: AE_FAIL();
-		}
-#undef _AE_BGR_TO_RGB_COPY
-	}
-#endif
 	
+	// Handle vertical flip and/or BGR conversion if needed
+	const bool needsFlip = !params.bottomToTopData; // UV 0,0 corresponds to the bottom-left corner in OpenGL
+#if _AE_EMSCRIPTEN_
+	const bool needsBGRConversion = ( params.bgrData && components >= 3 );
+#else
+	const bool needsBGRConversion = false;
+#endif
+	if( params.data && ( needsFlip || needsBGRConversion ) )
+	{
+		tempData = ae::Allocate( AE_ALLOC_TAG_RENDER, totalComponents * bytesPerComponent, 16 );
+		data = tempData;
+
+		const uint32_t rowBytes = params.width * components * bytesPerComponent;
+		for( uint32_t y = 0; y < params.height; y++ )
+		{
+			const uint32_t srcY = needsFlip ? ( params.height - 1 - y ) : y;
+			const uint8_t* srcRow = (const uint8_t*)params.data + srcY * rowBytes;
+			uint8_t* dstRow = (uint8_t*)tempData + y * rowBytes;
+
+			if( needsBGRConversion )
+			{
+#define _AE_COPY_PIXEL( _type )\
+				for( uint32_t x = 0; x < params.width; x++ )\
+				{\
+					const uint32_t pixelOffset = x * components;\
+					( (_type*)dstRow )[ pixelOffset + 0 ] = ( (_type*)srcRow )[ pixelOffset + 2 ];\
+					( (_type*)dstRow )[ pixelOffset + 1 ] = ( (_type*)srcRow )[ pixelOffset + 1 ];\
+					( (_type*)dstRow )[ pixelOffset + 2 ] = ( (_type*)srcRow )[ pixelOffset + 0 ];\
+					if( components == 4 )\
+					{\
+						( (_type*)dstRow )[ pixelOffset + 3 ] = ( (_type*)srcRow )[ pixelOffset + 3 ];\
+					}\
+				}
+				switch( params.type )
+				{
+					case Type::UInt8: _AE_COPY_PIXEL( uint8_t ); break;
+					case Type::UInt16: _AE_COPY_PIXEL( uint16_t ); break;
+					case Type::HalfFloat: _AE_COPY_PIXEL( uint16_t ); break;
+					case Type::Float: _AE_COPY_PIXEL( float ); break;
+					default: AE_FAIL();
+				}
+#undef _AE_COPY_PIXEL
+			}
+			else
+			{
+				memcpy( dstRow, srcRow, rowBytes );
+			}
+		}
+	}
+
 	if( data )
 	{
 		// upload the first mipmap
@@ -26735,7 +26766,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 	AE_ASSERT_MSG( !header.colorMapLength, "Targa color map is not supported" );
 	AE_ASSERT_MSG( !header.xOrigin && !header.yOrigin, "Targa non-zero origin is not supported" );
 	AE_ASSERT_MSG( header.bitsPerPixel == 8 || header.bitsPerPixel == 24 || header.bitsPerPixel == 32, "Targa bit depth is unsupported" );
-	AE_ASSERT_MSG( header.bitsPerPixel != 32 || header.imageDescriptor == 8, "Alpha mode not supported" );
+	AE_ASSERT_MSG( header.bitsPerPixel != 32 || ( header.imageDescriptor & 0b0001 ), "Alpha mode not supported" );
 
 	rStream.DiscardReadData( header.idLength );
 	rStream.DiscardReadData( header.colorMapLength );
@@ -26760,6 +26791,7 @@ bool TargaFile::Load( const uint8_t* data, uint32_t length )
 		textureParams.format = ae::Texture::Format::R8;
 	}
 	textureParams.bgrData = true;
+	textureParams.bottomToTopData = !( header.imageDescriptor & 0x20 ); // TGAs are flipped by default, so this bit indicates that the data should be interpreted top to bottom
 
 	return true;
 }
