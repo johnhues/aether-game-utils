@@ -119,13 +119,15 @@ int main()
 	AE_INFO( "Start loading '#'", file->GetUrl() );
 
 	float spin = 0.0f;
+	float spinVelocity = 0.0f;
 
 	AE_INFO( "Run" );
 	auto Update = [&]()
 	{
 		input.Pump();
 		camera.Update( &input, timeStep.GetDt() );
-		spin += timeStep.GetDt() * 0.75f;
+		spinVelocity = input.Get( ae::Key::Space ) ? ( spinVelocity + timeStep.GetDt() ) : ae::Max( 0.0f, spinVelocity - timeStep.GetDt() * 2.0f );
+		spin += timeStep.GetDt() * spinVelocity;
 		render.Activate();
 		render.Clear( ae::Color::PicoDarkPurple() );
 		
@@ -139,7 +141,7 @@ int main()
 			ae::OBJLoader objFile = kObjAllocTag;
 			if( const uint32_t fileSize = file->GetLength() )
 			{
-				objFile.Load( { file->GetData(), fileSize, ae::Matrix4::Scaling( 10.0f ), true } );
+				objFile.Load( { file->GetData(), fileSize, ae::Matrix4::Scaling( 10.0f ) } );
 				if( objFile.vertices.Length() )
 				{
 					aabb = objFile.aabb;
@@ -195,6 +197,9 @@ int main()
 			// Debug
 			debugLines.AddOBB( modelToWorld * aabb.GetTransform(), ae::Color::PicoPink() );
 		}
+		debugLines.AddLine( ae::Vec3( 10.0f, 0.0f, 0.0f ), ae::Vec3( -10.0f, 0.0f, 0.0f ), ae::Color::PicoRed() );
+		debugLines.AddLine( ae::Vec3( 0.0f, 10.0f, 0.0f ), ae::Vec3( 0.0f, 0.0f, 0.0f ), ae::Color::PicoGreen() );
+		debugLines.AddLine( ae::Vec3( 0.0f, 0.0f, 10.0f ), ae::Vec3( 0.0f, 0.0f, -10.0f ), ae::Color::PicoBlue() );
 		debugLines.Render( viewToProj * worldToView );
 		
 		render.Present();

@@ -4312,7 +4312,7 @@ private:
 	};
 	VertexArray m_vertexArray;
 	Shader m_shader;
-	bool m_xray = true;
+	bool m_xray = false;
 };
 
 //------------------------------------------------------------------------------
